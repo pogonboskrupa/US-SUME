@@ -2097,7 +2097,7 @@ function addPt(i, la, lo, al) {
   v.pts.push({la, lo, al});
   v.poly.addLatLng([la, lo]);
   scheduleVlakaSave(i);
-  if (v.pts.length === 2) updateVlakaLabel(i);
+  if (v.pts.length === 2 || (v.kr > 0 && v.pts.length === 1)) updateVlakaLabel(i);
   updBan(); updOvl(); rndList();
   // Only redraw buffers when not actively drawing (expensive per-point)
   if (bufLayers.length > 0 && activeTool !== 'addline' && activeTool !== 'addpoint' && !recOn) {
@@ -2222,12 +2222,12 @@ function ptAtFrac(pts, frac) {
   return pts[pts.length-1];
 }
 
-// Odabir pozicija labela: 1 na sredini, 2 ili 3 za duže vlake
+// Odabir pozicija labela: 1 na sredini za kratke (<300m), 2 ili 3 za duže
 function _labelFracs(pts) {
   let total = 0;
   for (let i = 1; i < pts.length; i++) total += ptDist(pts[i-1], pts[i]);
-  if (total < 200) return [0.5];
-  if (total < 450) return [0.33, 0.67];
+  if (total < 300) return [0.5];
+  if (total < 600) return [0.33, 0.67];
   return [0.25, 0.5, 0.75];
 }
 
@@ -2238,7 +2238,18 @@ function updateVlakaLabel(i) {
   if (v.lagerMk) { map.removeLayer(v.lagerMk); v.lagerMk = null; }
   (v.extraLabels || []).forEach(m => map.removeLayer(m));
   v.extraLabels = [];
-  if (!v.pts || v.pts.length < 2) return;
+  if (!v.pts || v.pts.length < 1) return;
+
+  // Krak s jednom točkom — prikaži labelu odmah na početku (spoju s vlakam)
+  if (v.kr > 0 && v.pts.length === 1) {
+    v.labelMk = L.marker([v.pts[0].la, v.pts[0].lo], {
+      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
+      interactive: false, zIndexOffset: 500
+    }).addTo(map);
+    return;
+  }
+
+  if (v.pts.length < 2) return;
 
   // Labele na ravnomjernim pozicijama duž vlake
   _labelFracs(v.pts).forEach((frac, idx) => {
