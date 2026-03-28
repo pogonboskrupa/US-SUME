@@ -3247,43 +3247,58 @@ const PAPER = {
   A3L: { w: 400, h: 277, label: 'A3 Landscape' }
 };
 
+// Fuzzy match naziv odjela u graniceOdjeli (KML bounds)
+function findGraniceOdjel(naziv) {
+  if (!naziv || !graniceOdjeli.length) return null;
+  const q = naziv.trim().toLowerCase();
+  let best = null, bestScore = 0;
+  graniceOdjeli.forEach(o => {
+    const kml = o.name.toLowerCase();
+    let score = 0;
+    if (kml === q) score = 100;
+    else if (kml.includes(q) || q.includes(kml)) score = 50;
+    else {
+      const pw = q.split(/\s+/), kw = kml.split(/\s+/);
+      score = pw.filter(w => w.length > 1 && kw.some(k => k.includes(w) || w.includes(k))).length * 10;
+    }
+    if (score > bestScore) { bestScore = score; best = o; }
+  });
+  return bestScore >= 10 ? best : null;
+}
+
+// Bounds za odjel: KML → vlake tog odjela → null
+function getOdjelBounds(naziv) {
+  const kml = findGraniceOdjel(naziv);
+  if (kml) return kml.bounds;
+  // Fallback: bounds iz vlastitih vlaka tog odjela
+  const pts = vlake.filter(v => v.odjel === naziv || !naziv).flatMap(v => v.pts.map(p => [p.la, p.lo]));
+  if (pts.length > 1) { try { return L.latLngBounds(pts); } catch(e) {} }
+  return null;
+}
+
 function showPrintModal() {
-  // Popuni dropdown odjela
   const sel = document.getElementById('print-odjel');
   sel.innerHTML = '<option value="">— Sve vlake (trenutni prikaz) —</option>';
-  graniceOdjeli.forEach((o, i) => {
+
+  // Odjeli iz projekat tabele (shared datalist)
+  const names = Array.from(document.querySelectorAll('#odjeli-list option'))
+    .map(o => o.value).filter(Boolean);
+  // Dodaj trenutni odjel ako već nije u listi
+  const cur = getOdjel().trim();
+  if (cur && !names.includes(cur)) names.unshift(cur);
+
+  names.forEach(naziv => {
     const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = o.name;
+    opt.value = naziv;
+    const hasKml = !!findGraniceOdjel(naziv);
+    opt.textContent = naziv + (hasKml ? ' 📍' : '');
     sel.appendChild(opt);
   });
 
-  // Auto-odabir na osnovu naziva odjela iz projekta
-  const projOdjel = getOdjel().trim().toLowerCase();
-  if (projOdjel && graniceOdjeli.length > 0) {
-    // Tražimo po nekoliko strategija: exact → contains → words overlap
-    let bestIdx = -1;
-    let bestScore = 0;
-    graniceOdjeli.forEach((o, i) => {
-      const kml = o.name.toLowerCase();
-      let score = 0;
-      if (kml === projOdjel) {
-        score = 100;
-      } else if (kml.includes(projOdjel) || projOdjel.includes(kml)) {
-        score = 50;
-      } else {
-        // Overlap po riječima (npr. "46" i "RISOVAC" u oba stringa)
-        const pw = projOdjel.split(/\s+/);
-        const kw = kml.split(/\s+/);
-        const common = pw.filter(w => w.length > 1 && kw.some(k => k.includes(w) || w.includes(k)));
-        score = common.length * 10;
-      }
-      if (score > bestScore) { bestScore = score; bestIdx = i; }
-    });
-    if (bestIdx >= 0 && bestScore >= 10) {
-      sel.value = bestIdx;
-      onPrintOdjelChange();
-    }
+  // Auto-odabir trenutnog odjela
+  if (cur) {
+    sel.value = cur;
+    onPrintOdjelChange();
   }
 
   document.getElementById('print-modal').classList.add('show');
@@ -3293,19 +3308,15 @@ function showPrintModal() {
 function onPrintOdjelChange() {
   const sel = document.getElementById('print-odjel');
   const info = document.getElementById('print-odjel-info');
-  const idx = sel.value;
-  if (idx === '') {
-    info.textContent = '';
-    return;
-  }
-  const o = graniceOdjeli[+idx];
-  if (!o) return;
-  // Izračunaj površinu bounds-a u ha
-  const sw = o.bounds.getSouthWest(), ne = o.bounds.getNorthEast();
+  const naziv = sel.value;
+  if (!naziv) { info.textContent = ''; return; }
+  const bounds = getOdjelBounds(naziv);
+  if (!bounds || !bounds.isValid()) { info.textContent = ''; return; }
+  const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
   const wM = Math.abs(ne.lng - sw.lng) * 111320 * Math.cos(((ne.lat+sw.lat)/2) * Math.PI/180);
   const hM = Math.abs(ne.lat - sw.lat) * 111320;
   const ha = Math.round(wM * hM / 10000);
-  info.textContent = `Dimenzije odjela: ≈ ${Math.round(wM)} m × ${Math.round(hM)} m · ${ha} ha`;
+  info.textContent = `Dimenzije: ≈ ${Math.round(wM)} m × ${Math.round(hM)} m · ${ha} ha`;
   updatePrintInfo();
 }
 function closePrintModal() {
@@ -3350,9 +3361,8 @@ function updatePrintInfo() {
   const realH_km = (realH_m / 1000).toFixed(2);
   const areaHa = ((realW_m * realH_m) / 10000).toFixed(0);
 
-  const odjelIdx = document.getElementById('print-odjel')?.value;
-  const odjelNm = (odjelIdx !== '' && odjelIdx !== undefined && graniceOdjeli[+odjelIdx])
-    ? `<br>Odjel: <b>${graniceOdjeli[+odjelIdx].name}</b>` : '';
+  const odjelNaziv = document.getElementById('print-odjel')?.value || '';
+  const odjelNm = odjelNaziv ? `<br>Odjel: <b>${odjelNaziv}</b>` : '';
   document.getElementById('print-info').innerHTML =
     `Razmjera: <b>1 : ${printScale.toLocaleString('bs')}</b><br>` +
     `Format: <b>${p.label}</b> (${p.w} × ${p.h} mm)<br>` +
@@ -3366,12 +3376,11 @@ function doPrint() {
   const p = PAPER[paperFmt];
 
   // Odabrani odjel ili fallback na vlake / trenutni prikaz
-  const odjelIdx = document.getElementById('print-odjel').value;
-  if (odjelIdx !== '') {
-    // Centar na odabrani odjel
-    const o = graniceOdjeli[+odjelIdx];
-    if (o && o.bounds.isValid()) {
-      map.setView(o.bounds.getCenter(), map.getZoom(), { animate: false });
+  const odjelNaziv = document.getElementById('print-odjel').value;
+  if (odjelNaziv) {
+    const bounds = getOdjelBounds(odjelNaziv);
+    if (bounds && bounds.isValid()) {
+      map.setView(bounds.getCenter(), map.getZoom(), { animate: false });
     }
   } else if (document.getElementById('print-fit-bounds').checked && vlake.length > 0) {
     const allPts = vlake.flatMap(v => v.pts.map(pt => [pt.la, pt.lo]));
