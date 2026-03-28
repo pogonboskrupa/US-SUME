@@ -86,6 +86,17 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
 }
 
 .sec { padding:12px; border-bottom:1px solid #0f3460; }
+#vlaka-popup {
+  display:none; position:fixed; z-index:9500;
+  background:#1e293b; border:1px solid #334155; border-radius:10px;
+  padding:14px 16px; min-width:210px; max-width:270px;
+  box-shadow:0 6px 24px rgba(0,0,0,0.75); color:#e2e8f0; font-size:13px;
+  pointer-events:all;
+}
+#vlaka-popup .vp-row { display:flex; align-items:center; gap:6px; padding:3px 0; color:#94a3b8; font-size:12px; }
+#vlaka-popup .vp-row b { color:#e2e8f0; }
+#vlaka-popup .vp-btns { display:flex; gap:8px; margin-top:12px; }
+#vlaka-popup .vp-btns button { flex:1; padding:7px 6px; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-weight:bold; }
 .sec-t {
   font-size:11px; font-weight:bold; color:#64748b;
   text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;
@@ -1179,9 +1190,10 @@ async function sbLoadVlake() {
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
-    const v = { nm: row.nm, br: row.br, kr: row.kr, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: [], sbId: row.id, labelMk: null, lagerMk: null, extraLabels: [] };
+    const v = { nm: row.nm, br: row.br, kr: row.kr, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: [], sbId: row.id, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
+    attachPolyClick(poly);
   });
   rndList();
   vlake.forEach((v, i) => updateVlakaLabel(i));
@@ -1208,7 +1220,7 @@ async function sbFlushVlaka(i) {
     pts: v.pts,
     updated_at: new Date().toISOString()
   }, { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single();
-  if (!error && data) v.sbId = data.id;
+  if (!error && data) { v.sbId = data.id; v.updatedAt = new Date().toISOString(); }
   if (error) console.error('Greška vlaka:', error);
 }
 
@@ -1552,6 +1564,7 @@ let _dblClickGuard = false;
 
 map.on('click', e => {
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
+  closeVlakaPopup();
   if (textToolOn) { openTextDialog(e.latlng.lat, e.latlng.lng, null); return; }
   if (activeTool === 'edit' || activeTool === 'delnode') return;
   if (activeTool === 'merge') return;
@@ -1870,7 +1883,8 @@ function addV() {
   const lager = document.getElementById('ilager').value || '';
   const poly  = L.polyline([],{color,weight:4,opacity:0.9}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
-  vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[]});
+  attachPolyClick(poly);
+  vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
   sbFlushVlaka(vlake.length-1);
   // Reset lager checkbox
   document.getElementById('ilager-chk').checked = false;
@@ -2190,6 +2204,76 @@ function dlV(i) {
   }
   stopRec();
   rndList(); updOvl();
+}
+
+// === VLAKA POPUP ===
+let _vpIdx = null;
+
+function attachPolyClick(poly) {
+  poly.on('click', function(e) {
+    if (activeTool !== 'select') return; // ne presreći tokom crtanja/editovanja
+    L.DomEvent.stopPropagation(e);
+    const idx = vlake.findIndex(vv => vv.poly === poly);
+    if (idx >= 0) showVlakaPopup(idx, e.latlng);
+  });
+}
+
+function showVlakaPopup(i, latlng) {
+  const v = vlake[i];
+  _vpIdx = i;
+  const len = calcL(v.pts);
+  const ime = getIme();
+  const dat = v.updatedAt ? fmtDate(v.updatedAt.slice(0,10)) : fmtDate(todayStr());
+  document.getElementById('vp-nm').textContent = v.nm + (v.kr > 0 ? ' (krak)' : '');
+  document.getElementById('vp-nm').style.color = v.color;
+  document.getElementById('vp-info').innerHTML = `
+    <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
+    <div class="vp-row">📍 Tačaka: <b>${v.pts.length}</b></div>
+    <div class="vp-row">👤 Projektant: <b>${ime}</b></div>
+    <div class="vp-row">📅 Ažurirano: <b>${dat}</b></div>
+    ${v.lager ? `<div class="vp-row">🪵 Lager: <b style="color:#f59e0b;">${v.lager}</b></div>` : ''}
+  `;
+  const popup = document.getElementById('vlaka-popup');
+  popup.style.display = 'block';
+  // Pozicioniraj uz klik na mapi
+  const cp = map.latLngToContainerPoint(latlng);
+  const mapEl = document.getElementById('map');
+  const mr = mapEl.getBoundingClientRect();
+  let left = mr.left + cp.x + 12;
+  let top  = mr.top  + cp.y - 20;
+  const pw = 270, ph = 200;
+  if (left + pw > window.innerWidth  - 8) left = mr.left + cp.x - pw - 12;
+  if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
+  if (top < 60) top = 60;
+  if (left < 6) left = 6;
+  popup.style.left = left + 'px';
+  popup.style.top  = top  + 'px';
+}
+
+function closeVlakaPopup() {
+  document.getElementById('vlaka-popup').style.display = 'none';
+  _vpIdx = null;
+}
+
+function vpEdit() {
+  if (_vpIdx === null) return;
+  const i = _vpIdx;
+  closeVlakaPopup();
+  selI(i);
+  switchTab('vlake');
+  togEdit();
+}
+
+function vpZoom() {
+  if (_vpIdx === null) return;
+  zmV(_vpIdx);
+}
+
+function vpDelete() {
+  if (_vpIdx === null) return;
+  const i = _vpIdx;
+  closeVlakaPopup();
+  dlV(i);
 }
 
 // === VLAKA LABELE ===
@@ -3696,6 +3780,19 @@ let graniceOdjeli = []; // [{ name, bounds }]
       <button class="btn b" id="offline-dl-btn" onclick="startOfflineDownload()">📥 Preuzmi</button>
       <button class="btn gr" onclick="closeOfflineModal()">Zatvori</button>
     </div>
+  </div>
+</div>
+<!-- VLAKA INFO POPUP -->
+<div id="vlaka-popup">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <span id="vp-nm" style="font-size:14px;font-weight:bold;color:#60a5fa;"></span>
+    <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;">✕</button>
+  </div>
+  <div id="vp-info"></div>
+  <div class="vp-btns">
+    <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;">🔧 Edituj</button>
+    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.6;">🎯</button>
+    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.6;">✕ Briši</button>
   </div>
 </div>
 </body>
