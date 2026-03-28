@@ -550,7 +550,15 @@ select:focus { outline:none; border-color:#3b82f6; }
       <span class="lbl">Prezime *</span>
       <input class="pinput" id="reg-prezime" placeholder="Vaše prezime">
       <span class="lbl">Šumarija / Gazdinstvo *</span>
-      <input class="pinput" id="reg-sumarija" placeholder="Naziv šumarije">
+      <select class="pinput" id="reg-sumarija">
+        <option value="">— Odaberi šumariju —</option>
+        <option>ŠUMARIJA BOS.KRUPA</option>
+        <option>ŠUMARIJA BOS.PETROVAC</option>
+        <option>ŠUMARIJA SANSKI MOST</option>
+        <option>ŠUMARIJA BIHAĆ</option>
+        <option>ŠUMARIJA CAZIN</option>
+        <option>ŠUMARIJA KLJUČ</option>
+      </select>
       <span class="lbl">PIN * (4–8 cifara)</span>
       <input class="pinput" id="reg-pin" type="password" inputmode="numeric" placeholder="Odaberite PIN" maxlength="8">
       <span class="lbl">Potvrda PIN-a *</span>
