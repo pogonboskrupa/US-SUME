@@ -1249,23 +1249,16 @@ async function sbLoadKolegeVlake() {
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
     kolegeVlake.push(poly);
 
-    // Labele duž kolega vlake (svakih 120m, počev od prve tačke)
+    // Labele na ravnomjernim pozicijama (isti sistem kao vlastite vlake)
     const pts = row.pts;
-    const addKolLabel = (pt) => {
+    _labelFracs(pts).forEach(frac => {
+      const pt = ptAtFrac(pts, frac);
       const mk = L.marker([pt.la, pt.lo], {
-        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [3,8],
-          html: _labelHtml(`${info.ime.split(' ')[0]}: ${row.nm}`, color) }),
+        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(row.nm) }),
         interactive: false, zIndexOffset: 498
       }).addTo(map);
       kolegeLabels.push(mk);
-    };
-    addKolLabel(pts[0]);
-    const INTERVAL = 120;
-    let accDist = 0, nextAt = INTERVAL;
-    for (let j = 1; j < pts.length; j++) {
-      accDist += ptDist(pts[j-1], pts[j]);
-      if (accDist >= nextAt) { nextAt += INTERVAL; addKolLabel(pts[j]); }
-    }
+    });
   });
 }
 
@@ -2207,52 +2200,66 @@ function ptDist(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// Kreira label HTML div za vlaku (bez strelice)
-function _labelHtml(nm, color) {
-  return `<div style="background:rgba(15,23,42,0.82);border-left:3px solid ${color};color:#fff;font-size:11px;font-weight:bold;padding:2px 5px 2px 3px;border-radius:0 4px 4px 0;white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.65);font-family:Arial,sans-serif;">${nm}</div>`;
+// Čist tekstualni label — samo naziv, bijelo s crnim outline-om
+function _labelHtml(nm) {
+  return `<div style="color:#fff;font-size:12px;font-weight:bold;font-family:Arial,sans-serif;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${nm}</div>`;
+}
+
+// Točka na danom udjelu (0–1) ukupne dužine linije
+function ptAtFrac(pts, frac) {
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += ptDist(pts[i-1], pts[i]);
+  const target = total * frac;
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = ptDist(pts[i-1], pts[i]);
+    if (acc + d >= target) {
+      const t = (target - acc) / d;
+      return { la: pts[i-1].la + t*(pts[i].la-pts[i-1].la), lo: pts[i-1].lo + t*(pts[i].lo-pts[i-1].lo) };
+    }
+    acc += d;
+  }
+  return pts[pts.length-1];
+}
+
+// Odabir pozicija labela: 1 na sredini, 2 ili 3 za duže vlake
+function _labelFracs(pts) {
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += ptDist(pts[i-1], pts[i]);
+  if (total < 200) return [0.5];
+  if (total < 450) return [0.33, 0.67];
+  return [0.25, 0.5, 0.75];
 }
 
 function updateVlakaLabel(i) {
   const v = vlake[i];
   if (!v) return;
-  if (v.labelMk)  { map.removeLayer(v.labelMk);  v.labelMk  = null; }
-  if (v.lagerMk)  { map.removeLayer(v.lagerMk);  v.lagerMk  = null; }
+  if (v.labelMk) { map.removeLayer(v.labelMk); v.labelMk = null; }
+  if (v.lagerMk) { map.removeLayer(v.lagerMk); v.lagerMk = null; }
   (v.extraLabels || []).forEach(m => map.removeLayer(m));
   v.extraLabels = [];
   if (!v.pts || v.pts.length < 2) return;
 
-  // Smjer strelice: pts[1]→pts[0] = prema putu
-  const p0 = v.pts[0], p1 = v.pts[1];
-  const bearing = Math.atan2(p0.lo - p1.lo, p0.la - p1.la) * 180 / Math.PI;
-  const dirIcon = L.divIcon({
-    className: '', iconSize: [0,0], iconAnchor: [3,10],
-    html: `<div style="display:flex;align-items:center;gap:2px;background:rgba(15,23,42,0.82);border-left:3px solid ${v.color};color:#fff;font-size:11px;font-weight:bold;padding:2px 5px 2px 3px;border-radius:0 4px 4px 0;white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.65);font-family:Arial,sans-serif;">${v.nm}<span style="transform:rotate(${Math.round(bearing)}deg);display:inline-block;font-size:12px;line-height:1;margin-left:2px;">↑</span></div>`
+  // Labele na ravnomjernim pozicijama duž vlake
+  _labelFracs(v.pts).forEach((frac, idx) => {
+    const pt = ptAtFrac(v.pts, frac);
+    const mk = L.marker([pt.la, pt.lo], {
+      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
+      interactive: false, zIndexOffset: 500
+    }).addTo(map);
+    if (idx === 0) v.labelMk = mk; else v.extraLabels.push(mk);
   });
-  v.labelMk = L.marker([p0.la, p0.lo], { icon: dirIcon, interactive: false, zIndexOffset: 500 }).addTo(map);
-
-  // Dodatne labele svakih 120m duž vlake
-  const INTERVAL = 120;
-  let accDist = 0, nextAt = INTERVAL;
-  for (let j = 1; j < v.pts.length; j++) {
-    accDist += ptDist(v.pts[j-1], v.pts[j]);
-    if (accDist >= nextAt) {
-      nextAt += INTERVAL;
-      const mk = L.marker([v.pts[j].la, v.pts[j].lo], {
-        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [3,8], html: _labelHtml(v.nm, v.color) }),
-        interactive: false, zIndexOffset: 499
-      }).addTo(map);
-      v.extraLabels.push(mk);
-    }
-  }
 
   // Lager marker
   if (v.lager) {
     const pLast = v.pts[v.pts.length - 1];
-    const lagerIcon = L.divIcon({
-      className: '', iconSize: [0,0], iconAnchor: [14,14],
-      html: `<div style="background:#f59e0b;color:#000;font-size:12px;font-weight:bold;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);pointer-events:none;font-family:Arial,sans-serif;">${v.lager}</div>`
-    });
-    v.lagerMk = L.marker([pLast.la, pLast.lo], { icon: lagerIcon, interactive: false, zIndexOffset: 600 }).addTo(map);
+    v.lagerMk = L.marker([pLast.la, pLast.lo], {
+      icon: L.divIcon({
+        className: '', iconSize: [0,0], iconAnchor: [14,14],
+        html: `<div style="background:#f59e0b;color:#000;font-size:12px;font-weight:bold;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);pointer-events:none;font-family:Arial,sans-serif;">${v.lager}</div>`
+      }),
+      interactive: false, zIndexOffset: 600
+    }).addTo(map);
   }
 }
 
