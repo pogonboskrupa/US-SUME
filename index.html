@@ -193,31 +193,35 @@ input:focus { outline:none; border-color:#3b82f6; }
 #banner {
   position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
   background:rgba(10,17,35,0.96); border:1.5px solid #fbbf24;
-  border-radius:10px; padding:5px 8px 5px 10px;
-  display:none; align-items:center; gap:6px;
+  border-radius:12px; padding:8px 12px 10px 12px;
+  display:none; flex-direction:column; gap:8px;
   z-index:500; font-family:monospace; white-space:nowrap;
   box-shadow:0 4px 18px rgba(0,0,0,0.6);
-  max-width:96vw;
+  max-width:96vw; min-width:260px;
 }
 #banner.show { display:flex; }
 #banner.paused { border-color:#f59e0b; }
+#banner-row1 { display:flex; align-items:center; gap:8px; }
+#banner-row2 { display:flex; align-items:center; gap:5px; }
 .rdot {
-  width:8px; height:8px; border-radius:50%; background:#ef4444;
+  width:9px; height:9px; border-radius:50%; background:#ef4444;
   animation:bl 1s infinite; flex-shrink:0;
 }
 #banner.paused .rdot { background:#f59e0b; animation:none; }
-#bn { font-size:13px; font-weight:bold; color:#fbbf24; max-width:90px; overflow:hidden; text-overflow:ellipsis; }
-#bl2 { font-size:11px; color:#94a3b8; }
-.brec-sep { width:1px; background:#1e3a5f; height:20px; margin:0 2px; flex-shrink:0; }
+#bn { font-size:15px; font-weight:bold; color:#fbbf24; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+#bl2 { font-size:12px; color:#94a3b8; flex:1; }
+.brec-sep { width:1px; background:#1e3a5f; height:22px; margin:0 1px; flex-shrink:0; }
 .brec-btn {
-  border:none; border-radius:6px; cursor:pointer;
-  font-size:12px; font-weight:bold; padding:4px 9px;
-  transition:opacity 0.15s; white-space:nowrap; flex-shrink:0;
+  border:none; border-radius:7px; cursor:pointer;
+  font-size:13px; font-weight:bold; padding:6px 12px;
+  transition:opacity 0.15s; white-space:nowrap; flex-shrink:0; flex:1;
 }
 .brec-btn:hover { opacity:0.8; }
 .brec-btn.pause { background:#f59e0b; color:#000; }
 .brec-btn.flip  { background:#7c3aed; color:#fff; }
 .brec-btn.stop  { background:#ef4444; color:#fff; }
+.brec-btn.krak  { background:#0ea5e9; color:#fff; }
+.brec-btn.back  { background:#334155; color:#94a3b8; }
 
 /* Export modal */
 #modal {
@@ -925,8 +929,14 @@ select:focus { outline:none; border-color:#3b82f6; }
       <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:8px;min-width:180px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
         <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;padding:0 4px;">Odaberi krak</div>
         <div id="krak-picker-list"></div>
-        <div style="border-top:1px solid #1e3a5f;margin-top:6px;padding-top:6px;">
-          <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:bold;cursor:pointer;">⊕ Novi krak</button>
+        <div style="border-top:1px solid #1e3a5f;margin-top:6px;padding-top:8px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:5px;">Broj novog kraka:</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div id="krak-novi-prefix" style="font-size:13px;font-weight:bold;color:#94a3b8;white-space:nowrap;"></div>
+            <input id="krak-novi-br" type="number" min="1" max="99" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:14px;font-weight:bold;padding:5px 8px;text-align:center;" oninput="updKrakNoviPrev()">
+            <div id="krak-novi-prev" style="font-size:12px;color:#0ea5e9;font-weight:bold;flex:1;"></div>
+          </div>
+          <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:7px;">⊕ Kreiraj krak</button>
         </div>
       </div>
       <!-- N.V. badge top-right -->
@@ -935,17 +945,22 @@ select:focus { outline:none; border-color:#3b82f6; }
         <span id="nv-val">— m</span>
       </div>
       <div id="banner">
-        <div class="rdot"></div>
-        <div id="bn">T1</div>
-        <div id="bn-parent" style="display:none;font-size:10px;color:#94a3b8;margin-left:-4px;"></div>
-        <div class="brec-sep"></div>
-        <div id="bl2">0 m · 0 tač.</div>
-        <div class="brec-sep"></div>
-        <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
-        <button class="brec-btn" id="btn-krak" onclick="startKrakOdOvdje()" title="Dodaj krak od trenutne pozicije" style="background:#0ea5e9;color:#fff;">⊕</button>
-        <button class="brec-btn" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="background:#334155;color:#94a3b8;display:none;">↩</button>
-        <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
-        <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
+        <!-- Red 1: info -->
+        <div id="banner-row1">
+          <div class="rdot"></div>
+          <div id="bn">T1</div>
+          <div id="bn-parent" style="display:none;font-size:11px;color:#94a3b8;"></div>
+          <div class="brec-sep"></div>
+          <div id="bl2">0 m · 0 tač.</div>
+        </div>
+        <!-- Red 2: dugmad -->
+        <div id="banner-row2">
+          <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
+          <button class="brec-btn krak" id="btn-krak" onclick="startKrakOdOvdje()" title="Krak">⊕ Krak</button>
+          <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">↩ Nazad</button>
+          <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
+          <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹ Stop</button>
+        </div>
       </div>
 
       <div id="ovl">
@@ -2479,25 +2494,39 @@ function toggleRecPause() {
 function startKrakOdOvdje() {
   if (!recOn || actI === null) return;
   const parentV = vlake[actI];
-  // Pronađi postojeće krakove ove vlake
   const postojeci = vlake
     .map((v, i) => ({ v, i }))
     .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.K'));
 
-  if (postojeci.length === 0) {
-    // Nema krakova — odmah kreiraj novi
-    startNoviKrak(); return;
-  }
-  // Prikaži picker s postojećim krakovima + opcija novi
+  // Popuni listu postojećih
   const list = document.getElementById('krak-picker-list');
-  list.innerHTML = postojeci.map(({ v, i }) => {
-    const m = Math.round(v.pts.length > 1 ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
-    return `<button onclick="odaberiKrak(${i})" style="display:block;width:100%;text-align:left;background:rgba(14,165,233,0.12);border:1px solid #0ea5e9;border-radius:6px;color:#e2e8f0;padding:7px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
-      <span style="color:#0ea5e9;">${v.nm}</span>
-      <span style="font-size:11px;color:#64748b;margin-left:8px;">${v.pts.length} tač. · ${m} m</span>
-    </button>`;
-  }).join('');
+  list.innerHTML = postojeci.length === 0
+    ? `<div style="font-size:11px;color:#475569;text-align:center;padding:4px 0;">Nema krakova za ${parentV.nm}</div>`
+    : postojeci.map(({ v, i }) => {
+        const m = Math.round(v.pts.length > 1 ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
+        return `<button onclick="odaberiKrak(${i})" style="display:block;width:100%;text-align:left;background:rgba(14,165,233,0.12);border:1px solid #0ea5e9;border-radius:6px;color:#e2e8f0;padding:7px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
+          <span style="color:#0ea5e9;">${v.nm}</span>
+          <span style="font-size:11px;color:#64748b;margin-left:8px;">${v.pts.length} tač. · ${m} m</span>
+        </button>`;
+      }).join('');
+
+  // Postavi prefix i default broj za novi krak
+  let nextNum = 1;
+  while (vlake.find(v => v.nm === parentV.nm + '.K' + nextNum)) nextNum++;
+  document.getElementById('krak-novi-prefix').textContent = parentV.nm + '.K';
+  document.getElementById('krak-novi-br').value = nextNum;
+  updKrakNoviPrev();
   document.getElementById('krak-picker').style.display = '';
+}
+
+function updKrakNoviPrev() {
+  const prefix = document.getElementById('krak-novi-prefix').textContent;
+  const br = document.getElementById('krak-novi-br').value;
+  const nm = prefix + br;
+  const prev = document.getElementById('krak-novi-prev');
+  const exists = vlake.find(v => v.nm === nm);
+  prev.textContent = exists ? '⚠ već postoji' : '→ ' + nm;
+  prev.style.color = exists ? '#f87171' : '#0ea5e9';
 }
 
 function _closeKrakPicker() {
@@ -2524,9 +2553,9 @@ function startNoviKrak() {
   const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
   if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
 
-  let krakNum = 1;
-  while (vlake.find(v => v.nm === parentV.nm + '.K' + krakNum)) krakNum++;
-  const krakNm = parentV.nm + '.K' + krakNum;
+  const br = parseInt(document.getElementById('krak-novi-br').value) || 1;
+  const krakNm = parentV.nm + '.K' + br;
+  if (vlake.find(v => v.nm === krakNm)) { showToast('Krak ' + krakNm + ' već postoji! Odaberi drugi broj.'); startKrakOdOvdje(); return; }
 
   const color = parentV.color;
   const poly = L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map);
