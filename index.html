@@ -920,6 +920,15 @@ select:focus { outline:none; border-color:#3b82f6; }
     <div id="map">
       <!-- Center crosshair dot -->
       <div id="map-center-dot"><div id="mcd-ring"></div></div>
+
+      <!-- Krak picker popup -->
+      <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:8px;min-width:180px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
+        <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;padding:0 4px;">Odaberi krak</div>
+        <div id="krak-picker-list"></div>
+        <div style="border-top:1px solid #1e3a5f;margin-top:6px;padding-top:6px;">
+          <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:bold;cursor:pointer;">⊕ Novi krak</button>
+        </div>
+      </div>
       <!-- N.V. badge top-right -->
       <div id="nv-badge">
         <span class="nv-icon">⛰</span>
@@ -2043,10 +2052,12 @@ map.on('moveend', () => {
 // Inicijalni fetch N.V. pri učitavanju
 (function() { const c = map.getCenter(); updMGI(c.lat, c.lng); debouncedUpdElev(c.lat, c.lng, 800); })();
 
-// Close dropdown when clicking outside
+// Close dropdowns when clicking outside
 document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
   if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) dd.style.display = 'none';
+  const kp = document.getElementById('krak-picker');
+  if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak')) kp.style.display = 'none';
 });
 
 // Keyboard shortcuts
@@ -2467,21 +2478,56 @@ function toggleRecPause() {
 
 function startKrakOdOvdje() {
   if (!recOn || actI === null) return;
+  const parentV = vlake[actI];
+  // Pronađi postojeće krakove ove vlake
+  const postojeci = vlake
+    .map((v, i) => ({ v, i }))
+    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.K'));
+
+  if (postojeci.length === 0) {
+    // Nema krakova — odmah kreiraj novi
+    startNoviKrak(); return;
+  }
+  // Prikaži picker s postojećim krakovima + opcija novi
+  const list = document.getElementById('krak-picker-list');
+  list.innerHTML = postojeci.map(({ v, i }) => {
+    const m = Math.round(v.pts.length > 1 ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
+    return `<button onclick="odaberiKrak(${i})" style="display:block;width:100%;text-align:left;background:rgba(14,165,233,0.12);border:1px solid #0ea5e9;border-radius:6px;color:#e2e8f0;padding:7px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
+      <span style="color:#0ea5e9;">${v.nm}</span>
+      <span style="font-size:11px;color:#64748b;margin-left:8px;">${v.pts.length} tač. · ${m} m</span>
+    </button>`;
+  }).join('');
+  document.getElementById('krak-picker').style.display = '';
+}
+
+function _closeKrakPicker() {
+  document.getElementById('krak-picker').style.display = 'none';
+}
+
+function odaberiKrak(krakIdx) {
+  _closeKrakPicker();
+  if (!recOn || actI === null) return;
+  _recParentIdx = actI;
+  actI = krakIdx;
+  _gpsBuf = [];
+  selI(krakIdx);
+  _updBanner();
+  showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
+}
+
+function startNoviKrak() {
+  _closeKrakPicker();
+  if (!recOn || actI === null) return;
   const parentIdx = actI;
   const parentV = vlake[parentIdx];
 
-  // Uzmi zadnju snimljenu tačku (= tačka spoja na vlaci)
-  const junctionPt = parentV.pts.length > 0
-    ? parentV.pts[parentV.pts.length - 1]
-    : null;
+  const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
   if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
 
-  // Auto-ime kraka: T5.K1, T5.K2...
   let krakNum = 1;
   while (vlake.find(v => v.nm === parentV.nm + '.K' + krakNum)) krakNum++;
   const krakNm = parentV.nm + '.K' + krakNum;
 
-  // Kreiraj krak s bojom (malo tamnija nijansa roditeljske)
   const color = parentV.color;
   const poly = L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map);
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
@@ -2490,11 +2536,9 @@ function startKrakOdOvdje() {
   vlake.push(krak);
   const krakIdx = vlake.length - 1;
 
-  // Postavi junction tačku kao pts[0] — spoj na roditeljsku vlaku
   addPt(krakIdx, junctionPt.la, junctionPt.lo, junctionPt.al || 0);
   updateVlakaLabel(krakIdx);
 
-  // Prebaci snimanje na krak
   _recParentIdx = parentIdx;
   actI = krakIdx;
   _gpsBuf = [];
@@ -2502,7 +2546,7 @@ function startKrakOdOvdje() {
   _updBanner();
   sbFlushVlaka(krakIdx);
   rndList();
-  showToast('⊕ Krak ' + krakNm + ' — kreni snimati');
+  showToast('⊕ Novi krak ' + krakNm);
 }
 
 function vratiSeNaRoditelja() {
