@@ -928,10 +928,13 @@ select:focus { outline:none; border-color:#3b82f6; }
       <div id="banner">
         <div class="rdot"></div>
         <div id="bn">T1</div>
+        <div id="bn-parent" style="display:none;font-size:10px;color:#94a3b8;margin-left:-4px;"></div>
         <div class="brec-sep"></div>
         <div id="bl2">0 m · 0 tač.</div>
         <div class="brec-sep"></div>
         <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
+        <button class="brec-btn" id="btn-krak" onclick="startKrakOdOvdje()" title="Dodaj krak od trenutne pozicije" style="background:#0ea5e9;color:#fff;">⊕</button>
+        <button class="brec-btn" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="background:#334155;color:#94a3b8;display:none;">↩</button>
         <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
         <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
       </div>
@@ -1901,7 +1904,7 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 })();
 
 // === STATE ===
-let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false;
+let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
 // Tool states — only one active at a time
 let activeTool = 'select'; // 'select' | 'addline' | 'addpoint' | 'edit' | 'delnode' | 'merge'
 let editOn=false, mergeMode=false, mergeFirst=null;
@@ -2392,33 +2395,59 @@ function selI(i) {
   });
 }
 
+function _updBanner() {
+  if (!recOn || actI === null) return;
+  const v = vlake[actI];
+  const bnEl = document.getElementById('bn');
+  const bnParent = document.getElementById('bn-parent');
+  const btnNazad = document.getElementById('btn-nazad-roditelj');
+  const btnKrak = document.getElementById('btn-krak');
+  bnEl.textContent = v.nm;
+  if (_recParentIdx !== null && vlake[_recParentIdx]) {
+    bnParent.textContent = '← ' + vlake[_recParentIdx].nm;
+    bnParent.style.display = '';
+    btnNazad.style.display = '';
+    btnNazad.title = 'Vrati se na ' + vlake[_recParentIdx].nm;
+    btnKrak.style.display = 'none'; // nema kraka na kraku
+  } else {
+    bnParent.style.display = 'none';
+    btnNazad.style.display = 'none';
+    btnKrak.style.display = '';
+  }
+}
+
 function togRec() {
   if (!recOn) {
     if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
-    recOn = true; recPaused = false;
+    recOn = true; recPaused = false; _recParentIdx = null;
     _gpsBuf = [];
     const b = document.getElementById('brec');
     if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
     const banner = document.getElementById('banner');
     banner.classList.add('show'); banner.classList.remove('paused');
-    document.getElementById('bn').textContent = vlake[actI].nm;
-    document.getElementById('bl2').textContent = '0 m · 0 tač.';
     document.getElementById('btn-pause').textContent = '⏸';
+    document.getElementById('bl2').textContent = '0 m · 0 tač.';
+    _updBanner();
     if (!gpsOn) toggleGPS();
   } else {
     stopRec();
   }
 }
+
 function stopRec() {
-  recOn = false; recPaused = false;
+  recOn = false; recPaused = false; _recParentIdx = null;
   _gpsBuf = [];
   const b = document.getElementById('brec');
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
   const banner = document.getElementById('banner');
   banner.classList.remove('show'); banner.classList.remove('paused');
+  document.getElementById('bn-parent').style.display = 'none';
+  document.getElementById('btn-nazad-roditelj').style.display = 'none';
+  document.getElementById('btn-krak').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
 }
+
 function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
@@ -2427,15 +2456,65 @@ function toggleRecPause() {
   const btn = document.getElementById('btn-pause');
   if (recPaused) {
     banner.classList.add('paused');
-    btn.textContent = '▶';
-    btn.title = 'Nastavi snimanje';
+    btn.textContent = '▶'; btn.title = 'Nastavi snimanje';
     showToast('⏸ Snimanje pauzirano');
   } else {
     banner.classList.remove('paused');
-    btn.textContent = '⏸';
-    btn.title = 'Pauza';
+    btn.textContent = '⏸'; btn.title = 'Pauza';
     showToast('▶ Snimanje nastavljeno');
   }
+}
+
+function startKrakOdOvdje() {
+  if (!recOn || actI === null) return;
+  const parentIdx = actI;
+  const parentV = vlake[parentIdx];
+
+  // Uzmi zadnju snimljenu tačku (= tačka spoja na vlaci)
+  const junctionPt = parentV.pts.length > 0
+    ? parentV.pts[parentV.pts.length - 1]
+    : null;
+  if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+
+  // Auto-ime kraka: T5.K1, T5.K2...
+  let krakNum = 1;
+  while (vlake.find(v => v.nm === parentV.nm + '.K' + krakNum)) krakNum++;
+  const krakNm = parentV.nm + '.K' + krakNum;
+
+  // Kreiraj krak s bojom (malo tamnija nijansa roditeljske)
+  const color = parentV.color;
+  const poly = L.polyline([], { color, weight: 4, opacity: 0.9 }).addTo(map);
+  poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
+  attachPolyClick(poly);
+  const krak = { nm: krakNm, br: parentV.br, kr: 1, color, lager: '', pts: [], poly, wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() };
+  vlake.push(krak);
+  const krakIdx = vlake.length - 1;
+
+  // Postavi junction tačku kao pts[0] — spoj na roditeljsku vlaku
+  addPt(krakIdx, junctionPt.la, junctionPt.lo, junctionPt.al || 0);
+  updateVlakaLabel(krakIdx);
+
+  // Prebaci snimanje na krak
+  _recParentIdx = parentIdx;
+  actI = krakIdx;
+  _gpsBuf = [];
+  selI(krakIdx);
+  _updBanner();
+  sbFlushVlaka(krakIdx);
+  rndList();
+  showToast('⊕ Krak ' + krakNm + ' — kreni snimati');
+}
+
+function vratiSeNaRoditelja() {
+  if (!recOn || _recParentIdx === null) return;
+  const krakIdx = actI;
+  if (krakIdx !== null) updateVlakaLabel(krakIdx);
+  actI = _recParentIdx;
+  _recParentIdx = null;
+  _gpsBuf = [];
+  selI(actI);
+  _updBanner();
+  showToast('↩ Nastavak snimanja ' + vlake[actI].nm);
 }
 
 // === DRAW PREVIEW (used by addline tool) ===
