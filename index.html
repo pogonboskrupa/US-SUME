@@ -52,18 +52,17 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
 #topbar {
   background:#16213e;
   border-bottom:2px solid #0f3460;
-  padding:8px 12px;
-  display:flex; align-items:center; gap:8px;
-  flex-shrink:0; flex-wrap:wrap;
+  padding:5px 10px;
+  display:flex; align-items:center; gap:6px;
+  flex-shrink:0; flex-wrap:nowrap; overflow-x:auto;
   position:relative; z-index:100;
 }
-.app-title { font-size:18px; font-weight:bold; color:#4ade80; white-space:nowrap; }
-#gps-info { font-size:11px; color:#94a3b8; font-family:monospace; flex:1; min-width:100px; }
+#gps-info { font-size:11px; color:#94a3b8; font-family:monospace; flex:1; min-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .tbtn {
-  padding:7px 14px; border-radius:6px; border:none;
+  padding:5px 11px; border-radius:6px; border:none;
   font-size:13px; font-weight:bold; cursor:pointer;
-  white-space:nowrap; transition:opacity 0.15s;
+  white-space:nowrap; transition:opacity 0.15s; flex-shrink:0;
 }
 .tbtn:hover { opacity:0.8; }
 .tbtn-blue   { background:#1d4ed8; color:#fff; }
@@ -631,15 +630,14 @@ select:focus { outline:none; border-color:#3b82f6; }
 <div id="wrapper" style="display:none;">
 
   <div id="topbar">
-    <div class="app-title">🌲 Vlake</div>
     <div id="gps-info">GPS: isključen</div>
-    <button class="tbtn tbtn-blue" onclick="toggleGPS()">📡 GPS</button>
     <button class="tbtn tbtn-gray" onclick="centerMap()">🎯 Centar</button>
     <!-- MENI DROPDOWN -->
-    <div style="position:relative;display:inline-block;">
+    <div style="position:relative;display:inline-block;flex-shrink:0;">
       <button class="tbtn tbtn-gray" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)" id="menu-btn">☰ Meni ▾</button>
     </div>
     <button id="mbtn" class="tbtn tbtn-gray" style="display:none;" onclick="togglePanel()">🗺 MAP</button>
+    <button class="tbtn tbtn-blue" onclick="toggleGPS()">📡 GPS</button>
   </div>
 
   <div id="tab-bar">
