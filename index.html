@@ -390,6 +390,24 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
 }
 
+/* === PROJEKTI LISTA === */
+.proj-card {
+  background:rgba(15,23,42,0.7); border:1px solid #1e3a5f;
+  border-radius:7px; padding:9px 11px; margin-bottom:7px; cursor:pointer;
+  transition:border-color 0.15s;
+}
+.proj-card:hover { border-color:#3b82f6; }
+.proj-card.aktivan { border-color:#4ade80; background:rgba(74,222,128,0.06); }
+.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; }
+.proj-card-sub { font-size:11px; color:#64748b; line-height:1.6; }
+.proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+.clan-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1e3a5f; }
+.clan-row:last-child { border-bottom:none; }
+.clan-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.clan-name { font-size:12px; color:#e2e8f0; flex:1; }
+.clan-del { background:none; border:none; color:#475569; cursor:pointer; font-size:14px; padding:0 4px; }
+.clan-del:hover { color:#f87171; }
+
 /* === N.V. BADGE (gornji lijevi ugao) === */
 #nv-badge {
   position:absolute; top:10px; left:10px;
@@ -775,41 +793,76 @@ select:focus { outline:none; border-color:#3b82f6; }
     <!-- PROJEKAT PANEL -->
     <div id="proj-panel">
 
-      <!-- INFO O ODJELU -->
-      <div class="sec">
-        <div class="sec-t">📁 Podaci o projektu</div>
+      <!-- Hidden inputs — auto-filled by active project, used by saveProj/getOdjel/etc. -->
+      <input type="hidden" id="p-odjel">
+      <input type="hidden" id="p-sumarija">
+      <input type="hidden" id="p-povrsina">
+      <input type="hidden" id="p-datum">
+      <input type="hidden" id="p-ime">
+      <datalist id="odjeli-list"></datalist>
+
+      <!-- LISTA PROJEKATA -->
+      <div class="sec" id="proj-list-sec">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="sec-t" style="margin:0;">📁 Projekti</div>
+          <button class="btn b" style="margin:0;padding:5px 12px;font-size:12px;" onclick="showNovProjektForm()">+ Novi</button>
+        </div>
+        <div id="projekti-list">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Učitavam projekte...</div>
+        </div>
+      </div>
+
+      <!-- FORMA ZA NOVI PROJEKAT -->
+      <div class="sec" id="nov-proj-sec" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="sec-t" style="margin:0;">➕ Novi Projekat</div>
+          <button onclick="hideNovProjektForm()" style="background:none;border:none;color:#475569;font-size:20px;cursor:pointer;line-height:1;">✕</button>
+        </div>
         <span class="lbl">Odjel</span>
-        <input class="pinput" id="p-odjel" oninput="saveProj()" onchange="onOdjelChange()" list="odjeli-list" autocomplete="off" placeholder="npr. RISOVAC KRUPA 45">
-        <datalist id="odjeli-list"></datalist>
-        <span class="lbl">G.J.</span>
-        <input class="pinput" id="p-sumarija" oninput="saveProj()">
+        <input class="pinput" id="np-odjel" list="odjeli-list" autocomplete="off" placeholder="npr. RISOVAC KRUPA 45">
+        <span class="lbl">G.J. (Gospodarska Jedinica)</span>
+        <input class="pinput" id="np-gj" placeholder="npr. Risovac">
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
             <span class="lbl">Površina (ha)</span>
-            <input class="pinput" id="p-povrsina" type="number" step="0.1" oninput="saveProj();updProjStats()">
+            <input class="pinput" id="np-povrsina" type="number" step="0.1" min="0">
           </div>
           <div style="flex:1;">
             <span class="lbl">Datum početka</span>
-            <input class="pinput" id="p-datum" type="date" oninput="saveProj()">
+            <input class="pinput" id="np-datum" type="date">
           </div>
         </div>
-        <span class="lbl">Vaše ime (projektant)</span>
-        <input class="pinput" id="p-ime" oninput="saveProj();updProjStats()">
+        <button class="btn g" style="margin-top:10px;" onclick="saveNovProjekt()">✅ Sačuvaj projekat</button>
+      </div>
+
+      <!-- DETALJI PROJEKTA -->
+      <div class="sec" id="proj-detalji-sec" style="display:none;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <button onclick="showProjektiList()" style="background:none;border:none;color:#60a5fa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid #1e3a5f;">← Nazad</button>
+          <div class="sec-t" style="margin:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pd-title">—</div>
+        </div>
+        <div id="pd-info" style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.9;background:rgba(15,23,42,0.6);border-radius:6px;padding:9px 11px;border:1px solid #1e3a5f;"></div>
+        <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">👥 Projektanti</div>
+        <div id="pd-clanovi" style="margin-bottom:12px;"></div>
+        <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Dodaj projektanta</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <select id="pd-add-select" class="pinput" style="flex:1;margin:0;"></select>
+          <button class="btn b" style="margin:0;padding:7px 14px;font-size:13px;" onclick="addProjektClanUI()">+</button>
+        </div>
+        <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
+        <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;">🗑 Obriši projekat</button>
       </div>
 
       <!-- REKAP -->
       <div class="sec">
         <div class="sec-t">📊 Rekap Projekta</div>
         <div class="stat-card" id="rekap-card">
-          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Unesite podatke o odjelu</div>
+          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za rekap</div>
         </div>
       </div>
 
-      <!-- KOLEGE -->
-      <div class="sec">
-        <div class="sec-t">👥 Projektanti na Odjelu</div>
-        <div id="kolege-list"></div>
-      </div>
+      <!-- KOLEGE (skriveno, vodi se u detalji projekta) -->
+      <div id="kolege-list" style="display:none;"></div>
 
       <!-- DNEVNIK RADOVA -->
       <div class="sec">
@@ -1198,7 +1251,7 @@ let kolegeLabels = []; // label markers za kolege vlake
 async function sbInitData() {
   if (!sbProfile) return;
   await Promise.all([
-    sbLoadProj(),
+    sbLoadProjekti(),
     sbLoadVlake(),
     sbLoadLog(),
     sbLoadTextLabelsDB()
@@ -1209,32 +1262,237 @@ async function sbInitData() {
   sbStartRealtime();
 }
 
-// ─── PROJEKAT ────────────────────────────────────────────────────────────────
-async function sbLoadProj() {
-  const { data } = await sb.from('projekti')
-    .select('*').eq('korisnik_id', sbUser.id).maybeSingle();
-  if (data) {
-    document.getElementById('p-odjel').value    = data.odjel    || '';
-    if (data.povrsina) document.getElementById('p-povrsina').value = data.povrsina;
-    if (data.datum)    document.getElementById('p-datum').value    = data.datum;
-    // Registruj odjel u dijeljeni popis
-    if (data.odjel) sbSaveOdjel(data.odjel);
+// ─── PROJEKTI ────────────────────────────────────────────────────────────────
+let _projekti = [];
+let _aktivniProjektId = localStorage.getItem('tvlake_akt_proj') || null;
+let _pdProjektId = null;
+
+async function sbLoadProjekti() {
+  if (!sbUser) return;
+  // Load my projects
+  const { data: moji } = await sb.from('projekti')
+    .select('*').eq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+
+  // Load projects I'm a member of
+  const { data: clanstva } = await sb.from('projekt_clanovi')
+    .select('projekt_id').eq('korisnik_id', sbUser.id);
+  let dijeljeni = [];
+  if (clanstva && clanstva.length > 0) {
+    const ids = clanstva.map(c => c.projekt_id);
+    const { data } = await sb.from('projekti').select('*').in('id', ids)
+      .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+    dijeljeni = data || [];
   }
-  rndKolege(); rndLog(); updProjStats();
+  _projekti = [...(moji || []), ...dijeljeni];
+
+  // Load clanovi for each project
+  for (const p of _projekti) {
+    const { data: cl } = await sb.from('projekt_clanovi')
+      .select('korisnik_id, added_by').eq('projekt_id', p.id);
+    p.clanovi = cl || [];
+  }
+
+  // Validate _aktivniProjektId still exists
+  if (_aktivniProjektId && !_projekti.find(p => p.id === _aktivniProjektId)) {
+    _aktivniProjektId = null;
+    localStorage.removeItem('tvlake_akt_proj');
+  }
+
+  // Apply active project fields for rest of app
+  const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  if (akt) _applyProjektFields(akt);
+
+  rndProjektiList();
+  rndLog(); updProjStats();
+  if (akt && akt.odjel) sbSaveOdjel(akt.odjel);
 }
 
-async function sbSaveProj() {
-  if (!sbUser || !sbProfile) return;
-  sb.from('projekti').upsert({
-    korisnik_id: sbUser.id,
-    sumarija:    sbProfile.sumarija || '',
-    odjel:       document.getElementById('p-odjel').value,
-    povrsina:    parseFloat(document.getElementById('p-povrsina').value) || 0,
-    datum:       document.getElementById('p-datum').value || todayStr(),
-    updated_at:  new Date().toISOString()
-  }, { onConflict: 'korisnik_id,sumarija' })
-  .then(({error}) => { if (error) console.error('Greška projekat:', error); });
+function _applyProjektFields(p) {
+  document.getElementById('p-odjel').value    = p.odjel    || '';
+  document.getElementById('p-sumarija').value = p.gj       || '';
+  document.getElementById('p-povrsina').value = p.povrsina || '';
+  document.getElementById('p-datum').value    = p.datum    || '';
+  document.getElementById('p-ime').value      = sbProfile ? (sbProfile.ime + ' ' + sbProfile.prezime) : '';
 }
+
+// Compatibility stubs (old code calls these)
+function saveProj() { /* no-op: project data managed via sbLoadProjekti/saveNovProjekt */ }
+function onOdjelChange() { sbLoadKolegeVlake(); }
+
+function rndProjektiList() {
+  const el = document.getElementById('projekti-list');
+  if (!el) return;
+  if (_projekti.length === 0) {
+    el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema projekata.<br>Klikni <b style="color:#60a5fa;">+ Novi</b> da kreneš.</div>`;
+    return;
+  }
+  el.innerHTML = _projekti.map(p => {
+    const isAkt = p.id === _aktivniProjektId;
+    const isVlasnik = p.korisnik_id === sbUser.id;
+    const nClan = (p.clanovi || []).length;
+    return `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
+      <div class="proj-card-title">
+        ${p.odjel || '—'}
+        ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
+        ${!isVlasnik ? '<span style="font-size:10px;color:#64748b;margin-left:4px;">(podijeljen)</span>' : ''}
+      </div>
+      <div class="proj-card-sub">
+        ${p.gj ? 'GJ: ' + p.gj + ' &nbsp;|&nbsp; ' : ''}${p.povrsina ? p.povrsina + ' ha &nbsp;|&nbsp; ' : ''}Počeo: ${p.datum ? fmtDate(p.datum) : '—'}${nClan ? ' &nbsp;|&nbsp; 👥 ' + nClan : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showNovProjektForm() {
+  document.getElementById('proj-list-sec').style.display = 'none';
+  document.getElementById('proj-detalji-sec').style.display = 'none';
+  document.getElementById('nov-proj-sec').style.display = '';
+  document.getElementById('np-odjel').value = '';
+  document.getElementById('np-gj').value = '';
+  document.getElementById('np-povrsina').value = '';
+  document.getElementById('np-datum').value = todayStr();
+}
+function hideNovProjektForm() {
+  document.getElementById('nov-proj-sec').style.display = 'none';
+  document.getElementById('proj-list-sec').style.display = '';
+}
+
+async function saveNovProjekt() {
+  const odjel = document.getElementById('np-odjel').value.trim();
+  if (!odjel) { showToast('Unesite naziv odjela!'); return; }
+  const payload = {
+    korisnik_id: sbUser.id,
+    sumarija:    sbProfile?.sumarija || '',
+    odjel,
+    gj:       document.getElementById('np-gj').value.trim(),
+    povrsina: parseFloat(document.getElementById('np-povrsina').value) || null,
+    datum:    document.getElementById('np-datum').value || todayStr(),
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await sb.from('projekti').insert(payload).select('id').single();
+  if (error) { showToast('Greška: ' + error.message); return; }
+  showToast('Projekat sačuvan!');
+  hideNovProjektForm();
+  await sbLoadProjekti();
+  if (data?.id) { _aktivniProjektId = data.id; localStorage.setItem('tvlake_akt_proj', data.id); await sbLoadProjekti(); }
+}
+
+function showProjektiList() {
+  _pdProjektId = null;
+  document.getElementById('proj-detalji-sec').style.display = 'none';
+  document.getElementById('nov-proj-sec').style.display = 'none';
+  document.getElementById('proj-list-sec').style.display = '';
+  rndProjektiList();
+}
+
+function showProjektDetalji(id) {
+  _pdProjektId = id;
+  const p = _projekti.find(x => x.id === id);
+  if (!p) return;
+  const isVlasnik = p.korisnik_id === sbUser.id;
+  const isAkt = p.id === _aktivniProjektId;
+  document.getElementById('proj-list-sec').style.display = 'none';
+  document.getElementById('nov-proj-sec').style.display = 'none';
+  document.getElementById('proj-detalji-sec').style.display = '';
+  document.getElementById('pd-title').textContent = p.odjel || '—';
+  document.getElementById('pd-info').innerHTML = [
+    p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
+    p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${p.povrsina} ha` : '',
+    p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
+    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : '—'}`
+  ].filter(Boolean).join('<br>');
+
+  // Clanovi
+  const clanEl = document.getElementById('pd-clanovi');
+  const allMembers = [
+    { korisnik_id: p.korisnik_id, isVlasnik: true },
+    ...(p.clanovi || []).map(c => ({ korisnik_id: c.korisnik_id, isVlasnik: false, canDel: isVlasnik && c.korisnik_id !== sbUser.id }))
+  ];
+  clanEl.innerHTML = allMembers.map(m => {
+    const info = kolegeMap[m.korisnik_id];
+    const color = m.isVlasnik ? (sbProfile?.boja || '#4ade80') : (info?.color || '#94a3b8');
+    const name  = m.isVlasnik ? (sbProfile ? sbProfile.ime + ' ' + sbProfile.prezime : 'Ti') : (info?.ime || m.korisnik_id.slice(0,8));
+    const tag   = m.korisnik_id === sbUser.id ? ' <span style="font-size:10px;color:#64748b;">(ti)</span>' : '';
+    const del   = m.canDel ? `<button class="clan-del" onclick="removeProjektClan('${id}','${m.korisnik_id}')" title="Ukloni">✕</button>` : '';
+    return `<div class="clan-row"><div class="clan-dot" style="background:${color}"></div><div class="clan-name">${name}${tag}</div>${del}</div>`;
+  }).join('');
+
+  // Dropdown za dodavanje
+  const sel = document.getElementById('pd-add-select');
+  const existingIds = new Set(allMembers.map(m => m.korisnik_id));
+  const available = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
+  sel.innerHTML = '<option value="">— Odaberi projektanta —</option>' +
+    available.map(([kid, info]) => `<option value="${kid}">${info.ime}</option>`).join('');
+
+  // Aktiviraj button
+  const btn = document.getElementById('pd-aktiviraj-btn');
+  btn.textContent = isAkt ? '✅ Aktivan projekat' : '⚡ Aktiviraj ovaj projekat';
+  btn.className = isAkt ? 'btn g' : 'btn b';
+  btn.style.width = '100%'; btn.style.marginBottom = '6px';
+
+  // Hide delete if not vlasnik
+  document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
+}
+
+async function addProjektClanUI() {
+  const id = _pdProjektId;
+  const korisnik_id = document.getElementById('pd-add-select').value;
+  if (!id || !korisnik_id) { showToast('Odaberi projektanta!'); return; }
+  const { error } = await sb.from('projekt_clanovi').insert({
+    projekt_id: id, korisnik_id, added_by: sbUser.id
+  });
+  if (error) { showToast('Greška: ' + error.message); return; }
+  showToast('Projektant dodan!');
+  await sbLoadProjekti();
+  showProjektDetalji(id);
+  await sbLoadKolegeVlake();
+}
+
+async function removeProjektClan(projekt_id, korisnik_id) {
+  if (!confirm('Ukloniti projektanta iz projekta?')) return;
+  await sb.from('projekt_clanovi').delete()
+    .eq('projekt_id', projekt_id).eq('korisnik_id', korisnik_id);
+  await sbLoadProjekti();
+  showProjektDetalji(projekt_id);
+  await sbLoadKolegeVlake();
+}
+
+async function aktivirajProjekt() {
+  const id = _pdProjektId;
+  const p = _projekti.find(x => x.id === id);
+  if (!p) return;
+  _aktivniProjektId = id;
+  localStorage.setItem('tvlake_akt_proj', id);
+  _applyProjektFields(p);
+  if (p.odjel) sbSaveOdjel(p.odjel);
+  showProjektDetalji(id); // refresh button state
+  rndProjektiList();
+  updProjStats(); rndLog();
+  await sbLoadKolegeVlake();
+  showToast('Projekat aktiviran: ' + p.odjel);
+}
+
+async function deleteProjektUI() {
+  const id = _pdProjektId;
+  const p = _projekti.find(x => x.id === id);
+  if (!p || p.korisnik_id !== sbUser.id) return;
+  if (!confirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove.`)) return;
+  await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
+  await sb.from('projekti').delete().eq('id', id);
+  if (_aktivniProjektId === id) {
+    _aktivniProjektId = null;
+    localStorage.removeItem('tvlake_akt_proj');
+    document.getElementById('p-odjel').value = '';
+  }
+  showToast('Projekat obrisan.');
+  await sbLoadProjekti();
+  showProjektiList();
+  await sbLoadKolegeVlake();
+}
+
+// Legacy compat
+async function sbLoadProj() { return sbLoadProjekti(); }
+async function sbSaveProj() { /* handled by saveNovProjekt */ }
 
 // ─── VLAKE ───────────────────────────────────────────────────────────────────
 async function sbLoadVlake() {
@@ -1274,6 +1532,7 @@ async function sbFlushVlaka(i) {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
+    projekt_id:  _aktivniProjektId || null,
     nm: v.nm, br: v.br, kr: v.kr, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
@@ -1338,16 +1597,35 @@ function _placeLabelMarkers(pts, nm, zOff) {
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
 async function sbLoadKolegeVlake() {
   if (!sbProfile?.sumarija || !sbUser) return;
-  const odjel = getOdjel();
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = [];
-  if (!odjel) return;
-  const { data } = await sb.from('vlake')
-    .select('nm, korisnik_id, pts, boja')
-    .eq('sumarija', sbProfile.sumarija)
-    .eq('odjel', odjel)
-    .neq('korisnik_id', sbUser.id);
+
+  let memberIds = [];
+  const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  if (akt) {
+    // Collect all member IDs of the active project (vlasnik + clanovi), excluding self
+    const all = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
+    memberIds = all.filter(id => id !== sbUser.id);
+  }
+
+  let data;
+  if (memberIds.length > 0) {
+    // Filter by explicit project members
+    ({ data } = await sb.from('vlake')
+      .select('nm, korisnik_id, pts, boja')
+      .in('korisnik_id', memberIds)
+      .eq('sumarija', sbProfile.sumarija));
+  } else {
+    // Fallback: filter by same odjel text (backwards compat)
+    const odjel = getOdjel();
+    if (!odjel) return;
+    ({ data } = await sb.from('vlake')
+      .select('nm, korisnik_id, pts, boja')
+      .eq('sumarija', sbProfile.sumarija)
+      .eq('odjel', odjel)
+      .neq('korisnik_id', sbUser.id));
+  }
   if (!data) return;
 
   const seenIds = [];
@@ -1366,7 +1644,6 @@ async function sbLoadKolegeVlake() {
     ).addTo(map);
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
     kolegeVlake.push(poly);
-
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
   });
 }
