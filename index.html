@@ -2728,8 +2728,28 @@ function updateVlakaLabel(i) {
   }
   if (v.pts.length < 2) return;
 
-  const mks = _placeLabelMarkers(v.pts, v.nm, 500);
-  if (mks.length > 0) { v.labelMk = mks[0]; v.extraLabels = mks.slice(1); }
+  // Krak — labela uvijek na početku (pts[0]), + dodatni ako je dugačak
+  if (v.kr > 0) {
+    v.labelMk = L.marker([v.pts[0].la, v.pts[0].lo], {
+      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
+      interactive: false, zIndexOffset: 500
+    }).addTo(map);
+    // Za duže krakove dodaj još labela
+    const extraFracs = _labelFracs(v.pts).filter(f => f > 0.1);
+    const extra = [];
+    extraFracs.forEach(frac => {
+      const pt = ptAtFrac(v.pts, frac);
+      if (!pt || isNaN(pt.la) || isNaN(pt.lo)) return;
+      extra.push(L.marker([pt.la, pt.lo], {
+        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
+        interactive: false, zIndexOffset: 498
+      }).addTo(map));
+    });
+    v.extraLabels = extra;
+  } else {
+    const mks = _placeLabelMarkers(v.pts, v.nm, 500);
+    if (mks.length > 0) { v.labelMk = mks[0]; v.extraLabels = mks.slice(1); }
+  }
 
   if (v.lager) {
     const pLast = v.pts[v.pts.length - 1];
