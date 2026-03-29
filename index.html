@@ -3743,11 +3743,14 @@ function _setMapUIVisible(toolbar, mapOnly) {
 function _updMcdDist() {
   const el = document.getElementById('mcd-dist');
   if (!el) return;
-  if (!gpsOn || !lastP) { el.style.display = 'none'; return; }
+  const dot = document.getElementById('map-center-dot');
+  if (!gpsOn || !lastP || !dot || dot.style.display === 'none') {
+    el.style.display = 'none'; return;
+  }
   const c = map.getCenter();
   const d = dst(c.lat, c.lng, lastP.la, lastP.lo);
   el.textContent = d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(2) + ' km';
-  el.style.display = '';
+  el.style.display = 'block';
 }
 
 function switchTab(tab) {
