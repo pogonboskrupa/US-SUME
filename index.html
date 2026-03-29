@@ -191,16 +191,33 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Banner */
 #banner {
-  position:absolute; top:10px; left:50%; transform:translateX(-50%);
-  background:rgba(15,23,42,0.95); border:1px solid #fbbf24;
-  border-radius:20px; padding:6px 18px;
-  display:none; align-items:center; gap:12px;
-  z-index:500; font-family:monospace;
+  position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
+  background:rgba(10,17,35,0.96); border:1.5px solid #fbbf24;
+  border-radius:10px; padding:5px 8px 5px 10px;
+  display:none; align-items:center; gap:6px;
+  z-index:500; font-family:monospace; white-space:nowrap;
+  box-shadow:0 4px 18px rgba(0,0,0,0.6);
+  max-width:96vw;
 }
 #banner.show { display:flex; }
-.rdot { width:9px; height:9px; border-radius:50%; background:#ef4444; animation:bl 1s infinite; }
-#bn { font-size:16px; font-weight:bold; color:#fbbf24; }
+#banner.paused { border-color:#f59e0b; }
+.rdot {
+  width:8px; height:8px; border-radius:50%; background:#ef4444;
+  animation:bl 1s infinite; flex-shrink:0;
+}
+#banner.paused .rdot { background:#f59e0b; animation:none; }
+#bn { font-size:13px; font-weight:bold; color:#fbbf24; max-width:90px; overflow:hidden; text-overflow:ellipsis; }
 #bl2 { font-size:11px; color:#94a3b8; }
+.brec-sep { width:1px; background:#1e3a5f; height:20px; margin:0 2px; flex-shrink:0; }
+.brec-btn {
+  border:none; border-radius:6px; cursor:pointer;
+  font-size:12px; font-weight:bold; padding:4px 9px;
+  transition:opacity 0.15s; white-space:nowrap; flex-shrink:0;
+}
+.brec-btn:hover { opacity:0.8; }
+.brec-btn.pause { background:#f59e0b; color:#000; }
+.brec-btn.flip  { background:#7c3aed; color:#fff; }
+.brec-btn.stop  { background:#ef4444; color:#fff; }
 
 /* Export modal */
 #modal {
@@ -910,12 +927,13 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
       <div id="banner">
         <div class="rdot"></div>
-        <div style="flex:1;min-width:0;">
-          <div id="bn">T1</div>
-          <div id="bl2">0 m · 0 tač.</div>
-        </div>
-        <button id="btn-flip-dir" style="display:none;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;white-space:nowrap;" onclick="flipVlakaDir()">↔ Smjer</button>
-        <button class="btn r" style="width:auto;padding:5px 12px;margin:0;font-size:12px;" onclick="stopActiveTool()">■ STOP</button>
+        <div id="bn">T1</div>
+        <div class="brec-sep"></div>
+        <div id="bl2">0 m · 0 tač.</div>
+        <div class="brec-sep"></div>
+        <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
+        <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
+        <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
       </div>
 
       <div id="ovl">
@@ -1883,7 +1901,7 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 })();
 
 // === STATE ===
-let vlake=[], actI=null, recOn=false, gpsOn=false;
+let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false;
 // Tool states — only one active at a time
 let activeTool = 'select'; // 'select' | 'addline' | 'addpoint' | 'edit' | 'delnode' | 'merge'
 let editOn=false, mergeMode=false, mergeFirst=null;
@@ -2377,28 +2395,47 @@ function selI(i) {
 function togRec() {
   if (!recOn) {
     if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
-    recOn = true;
+    recOn = true; recPaused = false;
     _gpsBuf = [];
     const b = document.getElementById('brec');
-    b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec');
-    document.getElementById('banner').classList.add('show');
-    document.getElementById('bn').textContent = '⏺ ' + vlake[actI].nm;
-    document.getElementById('bl2').textContent = 'GPS snimanje u toku...';
-    document.getElementById('btn-flip-dir').style.display = 'inline-block';
+    if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
+    const banner = document.getElementById('banner');
+    banner.classList.add('show'); banner.classList.remove('paused');
+    document.getElementById('bn').textContent = vlake[actI].nm;
+    document.getElementById('bl2').textContent = '0 m · 0 tač.';
+    document.getElementById('btn-pause').textContent = '⏸';
     if (!gpsOn) toggleGPS();
   } else {
     stopRec();
   }
 }
 function stopRec() {
-  recOn = false;
+  recOn = false; recPaused = false;
   _gpsBuf = [];
   const b = document.getElementById('brec');
-  b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec');
-  document.getElementById('banner').classList.remove('show');
-  document.getElementById('btn-flip-dir').style.display = 'none';
+  if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
+  const banner = document.getElementById('banner');
+  banner.classList.remove('show'); banner.classList.remove('paused');
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
+}
+function toggleRecPause() {
+  if (!recOn) return;
+  recPaused = !recPaused;
+  _gpsBuf = [];
+  const banner = document.getElementById('banner');
+  const btn = document.getElementById('btn-pause');
+  if (recPaused) {
+    banner.classList.add('paused');
+    btn.textContent = '▶';
+    btn.title = 'Nastavi snimanje';
+    showToast('⏸ Snimanje pauzirano');
+  } else {
+    banner.classList.remove('paused');
+    btn.textContent = '⏸';
+    btn.title = 'Pauza';
+    showToast('▶ Snimanje nastavljeno');
+  }
 }
 
 // === DRAW PREVIEW (used by addline tool) ===
@@ -2490,8 +2527,8 @@ function onP(p) {
     posCr.setLatLng([la, lo]).setRadius(ac);
   }
 
-  // Only record if actively recording
-  if (!recOn || actI === null) return;
+  // Only record if actively recording and not paused
+  if (!recOn || recPaused || actI === null) return;
 
   // Skip fixes with poor accuracy
   if (ac > GPS_MAX_ACC) return;
