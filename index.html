@@ -842,6 +842,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div class="or"><span>X (N)</span><b id="omgi-x" style="color:#38bdf8;">—</b></div>
           <div style="border-top:1px solid #1e3a5f;margin:5px 0;"></div>
           <div class="or"><span>GPS tačnost</span><b id="oacc">—</b></div>
+          <div class="or"><span>N.V.</span><b id="onv" style="color:#22d3ee;">—</b></div>
           <div style="border-top:1px solid #1e3a5f;margin:5px 0;"></div>
           <div style="font-size:10px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:5px;">Dužine vlaka</div>
           <div id="ovl-lines" style="font-family:monospace;font-size:12px;"></div>
@@ -1521,6 +1522,41 @@ function updMGI(lat, lon) {
   }
 }
 
+// === NADMORSKA VISINA ===
+let _elevTimer = null, _elevLat = null, _elevLng = null, _gpsAlt = false;
+
+function debouncedUpdElev(lat, lng, ms) {
+  _elevLat = lat; _elevLng = lng;
+  clearTimeout(_elevTimer);
+  _elevTimer = setTimeout(fetchElev, ms || 450);
+}
+
+async function fetchElev() {
+  const lat = _elevLat, lng = _elevLng;
+  if (lat == null) return;
+  try {
+    const r = await fetch(
+      `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    const d = await r.json();
+    const nv = d.elevation?.[0];
+    if (nv != null && !_gpsAlt) {
+      document.getElementById('onv').textContent = Math.round(nv) + ' m';
+    }
+  } catch(e) { /* ignore */ }
+}
+
+// Ažuriraj N.V. pri pomicanju karte (panning)
+map.on('moveend', () => {
+  if (_gpsAlt) return; // GPS altitude ima prednost
+  const c = map.getCenter();
+  debouncedUpdElev(c.lat, c.lng, 450);
+});
+
+// Inicijalni fetch pri učitavanju
+(function() { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 800); })();
+
 // === COLORS ===
 // Zelene boje (#22c55e, #4ade80, #34d399) isključene — ista boja kao poligon GRANICE
 const PAL = ['#60a5fa','#f87171','#fbbf24','#a78bfa','#fb923c','#38bdf8','#f472b6','#e879f9','#94a3b8','#f59e0b'];
@@ -1668,6 +1704,7 @@ map.on('dblclick', e => {
 
 map.on('mousemove', e => {
   updMGI(e.latlng.lat, e.latlng.lng);
+  if (!_gpsAlt) debouncedUpdElev(e.latlng.lat, e.latlng.lng, 300);
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
@@ -2097,6 +2134,7 @@ function startGPS() {
 function stopGPS() {
   if (wid) navigator.geolocation.clearWatch(wid);
   gpsOn = false; wid = null;
+  _gpsAlt = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
 }
 
@@ -2115,6 +2153,14 @@ function onP(p) {
     `GPS: ±${Math.round(ac)}m | ${la.toFixed(5)}, ${lo.toFixed(5)}`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   updMGI(la, lo);
+  // GPS altitude — tačnije od API-ja kad dostupno
+  if (al != null) {
+    _gpsAlt = true;
+    document.getElementById('onv').textContent = Math.round(al) + ' m 📡';
+  } else {
+    _gpsAlt = false;
+    debouncedUpdElev(la, lo, 200);
+  }
 
   // Update position marker always
   if (!posMk) {
