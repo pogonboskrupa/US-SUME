@@ -3030,10 +3030,12 @@ function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').v
 // === PANEL MOBILE ===
 function togglePanel(){
   const pproj=document.getElementById('proj-panel');
-  // Ako je otvoren Projekat tab, vrati na mapu (Vlake tab)
   if (pproj.style.display==='flex') { switchTab('vlake'); return; }
   const p=document.getElementById('panel');
-  p.style.display=(p.style.display==='flex')?'none':'flex';
+  const showing = p.style.display==='flex';
+  p.style.display = showing ? 'none' : 'flex';
+  // Na mobilnom: kad je panel sakriven → mapa vidljiva → prikaži map UI
+  _setMapUIVisible(!showing);
 }
 function chkMob(){const m=window.innerWidth<580;document.getElementById('mbtn').style.display=m?'block':'none';}
 chkMob(); window.addEventListener('resize',chkMob);
@@ -3711,15 +3713,27 @@ function showKmlInfo(msg) {
 }
 
 // Tab switching
+function _setMapUIVisible(vis) {
+  const d = vis ? '' : 'none';
+  const tb = document.getElementById('map-toolbar');
+  const nv = document.getElementById('nv-badge');
+  const lc = document.querySelector('.leaflet-control-layers');
+  if (tb) tb.style.display = d;
+  if (nv) nv.style.display = d;
+  if (lc) lc.style.display = d;
+}
+
 function switchTab(tab) {
   const panel=document.getElementById('panel'), pproj=document.getElementById('proj-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
     b.classList.toggle('active',(i===0&&tab==='vlake')||(i===1&&tab==='projekat')));
   if (tab==='vlake') {
     panel.style.display='flex'; pproj.style.display='none';
+    _setMapUIVisible(true);
   } else {
     panel.style.display='none'; pproj.style.display='flex';
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
+    _setMapUIVisible(false);
   }
 }
 
