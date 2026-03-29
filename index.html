@@ -313,6 +313,25 @@ select:focus { outline:none; border-color:#3b82f6; }
 .stat-val.yellow { color:#fbbf24; }
 .stat-val.blue   { color:#60a5fa; }
 
+/* Odjeli rekap */
+.orek-card {
+  background:#0f172a; border:1px solid #1e293b;
+  border-radius:8px; margin-bottom:8px; overflow:hidden;
+}
+.orek-hdr {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 12px; cursor:pointer; user-select:none;
+}
+.orek-hdr:hover { background:#1e293b; }
+.orek-nm { font-size:13px; font-weight:bold; color:#fbbf24; }
+.orek-tot { font-size:13px; color:#4ade80; font-family:monospace; font-weight:bold; }
+.orek-body { padding:4px 12px 10px; display:none; }
+.orek-body.open { display:block; }
+.orek-vrow { display:flex; justify-content:space-between; padding:3px 0;
+  border-bottom:1px solid #1e293b; font-size:12px; }
+.orek-vrow:last-child { border-bottom:none; }
+.orek-meta { font-size:11px; color:#475569; margin-bottom:6px; }
+
 /* Day log */
 .day-row {
   background:#0f172a; border:1px solid #1e293b;
@@ -746,6 +765,12 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="btn gr" style="margin:0;width:auto;padding:8px 12px;font-size:13px;" onclick="clearLog()" title="Obriši log">🗑</button>
         </div>
         <div id="dnevni-log"></div>
+      </div>
+
+      <!-- IZVJEŠTAJI PO ODJELIMA -->
+      <div class="sec">
+        <div class="sec-t">📋 Izvještaji po Odjelima</div>
+        <div id="odjeli-rekap"></div>
       </div>
 
       <!-- ADMIN PANEL -->
@@ -1326,19 +1351,21 @@ async function sbLoadLog() {
     grouped[row.datum].entries.push({
       projektant: row.projektant,
       meters:     row.meters,
+      odjel:      row.odjel || '',
       vlake:      row.vlake_snapshot || [],
       vlakeNm:    (row.vlake_snapshot || []).map(v => v.nm)
     });
   });
   dnevniLog = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
-  rndLog(); updProjStats();
+  rndLog(); updProjStats(); rndOdjeliRekap();
 }
 
-async function sbSaveLogEntry(date, ime, totalM, vSnap) {
+async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel) {
   if (!sbUser || !sbProfile) return;
   const { error } = await sb.from('dnevni_log').upsert({
     korisnik_id:    sbUser.id,
     sumarija:       sbProfile.sumarija || '',
+    odjel:          odjel || '',
     datum:          date,
     projektant:     ime,
     meters:         totalM,
@@ -2938,18 +2965,18 @@ function rndKolege() {
 
 // === DNEVNIK ===
 function logDan() {
-  const date=todayStr(), ime=getIme();
+  const date=todayStr(), ime=getIme(), odjel=getOdjel();
   const totalM=Math.round(calcL(vlake.flatMap(v=>v.pts)));
   const vSnap=vlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
   if (vlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
   let day=dnevniLog.find(d=>d.date===date);
   if (!day) { day={date,entries:[]}; dnevniLog.unshift(day); }
   const entry=day.entries.find(e=>e.projektant===ime);
-  if (entry) { entry.meters=totalM; entry.vlake=vSnap; entry.vlakeNm=vSnap.map(v=>v.nm); }
-  else        { day.entries.push({projektant:ime,meters:totalM,vlake:vSnap,vlakeNm:vSnap.map(v=>v.nm)}); }
+  if (entry) { entry.meters=totalM; entry.odjel=odjel; entry.vlake=vSnap; entry.vlakeNm=vSnap.map(v=>v.nm); }
+  else        { day.entries.push({projektant:ime,meters:totalM,odjel,vlake:vSnap,vlakeNm:vSnap.map(v=>v.nm)}); }
   localStorage.setItem('tvlake_log', JSON.stringify(dnevniLog));
-  sbSaveLogEntry(date, ime, totalM, vSnap);
-  rndLog(); updProjStats();
+  sbSaveLogEntry(date, ime, totalM, vSnap, odjel);
+  rndLog(); updProjStats(); rndOdjeliRekap();
   const b=document.getElementById('proj-panel').querySelector('[onclick="logDan()"]');
   if(b){const t=b.textContent;b.textContent='✅ Zabilježeno!';setTimeout(()=>b.textContent=t,1800);}
 }
@@ -2957,7 +2984,7 @@ function clearLog() {
   if (!confirm('Obrisati cijeli dnevnik radova?')) return;
   dnevniLog=[]; localStorage.removeItem('tvlake_log');
   sbClearLog();
-  rndLog(); updProjStats();
+  rndLog(); updProjStats(); rndOdjeliRekap();
 }
 
 function rndLog() {
@@ -2997,6 +3024,72 @@ function rndLog() {
         <span style="color:#38bdf8;font-family:monospace;">${fmtL(cumMap[day.date])}</span>
       </div></div>`;
   }).join('');
+}
+
+// === IZVJEŠTAJI PO ODJELIMA ===
+function rndOdjeliRekap() {
+  const el = document.getElementById('odjeli-rekap');
+  if (!el) return;
+
+  // Grupiši sve log unose po odjelu
+  const byOdjel = {};
+  dnevniLog.forEach(day => {
+    day.entries.forEach(e => {
+      const od = e.odjel || '—';
+      if (!byOdjel[od]) byOdjel[od] = { vlake: {}, projektanti: new Set(), dates: new Set() };
+      const o = byOdjel[od];
+      o.projektanti.add(e.projektant);
+      o.dates.add(day.date);
+      (e.vlake || []).forEach(v => {
+        if (v.m > 0 && (!o.vlake[v.nm] || v.m > o.vlake[v.nm])) o.vlake[v.nm] = v.m;
+      });
+    });
+  });
+
+  const odjeli = Object.keys(byOdjel);
+  if (odjeli.length === 0) {
+    el.innerHTML = `<div style="font-size:12px;color:#475569;text-align:center;padding:12px;">Nema evidentiranih odjela.<br>Unesi odjel i klikni <b style="color:#60a5fa;">Zabilježi danas</b>.</div>`;
+    return;
+  }
+
+  el.innerHTML = odjeli.sort().map(od => {
+    const o = byOdjel[od];
+    const vEntries = Object.entries(o.vlake).sort((a,b) => a[0].localeCompare(b[0], 'bs'));
+    const total = vEntries.reduce((s, [,m]) => s + m, 0);
+    const dates = [...o.dates].sort();
+    const proj = [...o.projektanti].join(', ');
+    const id = 'orek-' + od.replace(/\W/g,'_');
+    const vRows = vEntries.map(([nm, m]) =>
+      `<div class="orek-vrow">
+        <span style="color:#94a3b8;">${nm}</span>
+        <span style="color:#4ade80;font-family:monospace;">${fmtL(m)}</span>
+      </div>`).join('');
+    return `<div class="orek-card">
+      <div class="orek-hdr" onclick="this.nextElementSibling.classList.toggle('open')">
+        <span class="orek-nm">${od}</span>
+        <span class="orek-tot">${fmtL(total)}</span>
+      </div>
+      <div class="orek-body" id="${id}">
+        <div class="orek-meta">
+          👤 ${proj}<br>
+          📅 ${dates.length} dana · ${fmtDate(dates[0])}${dates.length>1?' → '+fmtDate(dates[dates.length-1]):''}
+        </div>
+        ${vRows}
+        <div class="orek-vrow" style="border-top:1px solid #334155;margin-top:4px;padding-top:4px;">
+          <span style="font-weight:bold;color:#e2e8f0;">Ukupno vlaka</span>
+          <span style="color:#fbbf24;font-family:monospace;font-weight:bold;">${fmtL(total)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Auto-otvori odjel koji je trenutno aktivan
+  const cur = getOdjel().trim();
+  if (cur) {
+    const id = 'orek-' + cur.replace(/\W/g,'_');
+    const body = document.getElementById(id);
+    if (body) body.classList.add('open');
+  }
 }
 
 // === KML DIJELJENJE ===
