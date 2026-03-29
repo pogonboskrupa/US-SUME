@@ -636,13 +636,13 @@ select:focus { outline:none; border-color:#3b82f6; }
     </div>
     <button id="mbtn" class="tbtn tbtn-gray" style="display:none;" onclick="togglePanel()">🗺 MAP</button>
     <button class="tbtn tbtn-blue" onclick="toggleGPS()">📡 GPS</button>
+    <div id="gps-info">GPS: isključen</div>
   </div>
 
   <div id="tab-bar">
     <button class="tab-btn active" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <div style="flex:1;"></div>
-    <div id="gps-info" style="margin-right:4px;">GPS: isključen</div>
     <button class="tbtn tbtn-gray" style="padding:3px 9px;font-size:12px;margin-bottom:3px;" onclick="centerMap()">🎯 Centar</button>
   </div>
 
@@ -2186,8 +2186,7 @@ function onP(p) {
   lastP = {la, lo, al: al||0, ac};
 
   // Update display always
-  document.getElementById('gps-info').textContent =
-    `GPS: ±${Math.round(ac)}m | ${la.toFixed(5)}, ${lo.toFixed(5)}`;
+  document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   updMGI(la, lo);
   // GPS altitude — tačnije od API-ja kad dostupno
