@@ -57,7 +57,7 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
   flex-shrink:0; flex-wrap:nowrap; overflow-x:auto;
   position:relative; z-index:100;
 }
-#gps-info { font-size:11px; color:#94a3b8; font-family:monospace; flex:1; min-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#gps-info { font-size:11px; color:#94a3b8; font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
 
 .tbtn {
   padding:5px 11px; border-radius:6px; border:none;
@@ -256,9 +256,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* TABS */
 #tab-bar {
-  display:flex; gap:2px; padding:0 12px;
+  display:flex; gap:2px; padding:0 8px;
   background:#16213e; border-bottom:2px solid #0f3460;
-  flex-shrink:0;
+  flex-shrink:0; align-items:center;
 }
 .tab-btn {
   padding:8px 16px; border:none; border-radius:6px 6px 0 0;
@@ -630,8 +630,6 @@ select:focus { outline:none; border-color:#3b82f6; }
 <div id="wrapper" style="display:none;">
 
   <div id="topbar">
-    <div id="gps-info">GPS: isključen</div>
-    <button class="tbtn tbtn-gray" onclick="centerMap()">🎯 Centar</button>
     <!-- MENI DROPDOWN -->
     <div style="position:relative;display:inline-block;flex-shrink:0;">
       <button class="tbtn tbtn-gray" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)" id="menu-btn">☰ Meni ▾</button>
@@ -643,6 +641,9 @@ select:focus { outline:none; border-color:#3b82f6; }
   <div id="tab-bar">
     <button class="tab-btn active" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
+    <div style="flex:1;"></div>
+    <div id="gps-info" style="margin-right:4px;">GPS: isključen</div>
+    <button class="tbtn tbtn-gray" style="padding:3px 9px;font-size:12px;margin-bottom:3px;" onclick="centerMap()">🎯 Centar</button>
   </div>
 
   <!-- QGIS-STIL MAP TOOLBAR -->
