@@ -391,9 +391,9 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
 }
 
-/* === N.V. BADGE (gornji desni ugao) === */
+/* === N.V. BADGE (gornji lijevi ugao) === */
 #nv-badge {
-  position:absolute; top:10px; right:10px;
+  position:absolute; top:10px; left:10px;
   z-index:900; pointer-events:none;
   background:rgba(15,23,42,0.82);
   border:1px solid rgba(255,255,255,0.15);
@@ -438,27 +438,25 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* === QGIS-STIL TOOLBAR NA MAPI === */
 #map-toolbar {
-  position:absolute; top:10px; left:50%; transform:translateX(-50%);
-  display:flex;gap:2px;
-  background:rgba(15,23,42,0.95);border:1px solid #1e3a5f;
-  border-radius:10px;padding:4px 6px;
-  z-index:600;box-shadow:0 4px 16px rgba(0,0,0,0.5);
+  display:flex; gap:1px; flex-shrink:0; flex-wrap:nowrap; overflow-x:auto;
+  background:#16213e; border-bottom:2px solid #0f3460;
+  padding:2px 6px;
 }
 .mt-btn {
   display:flex;flex-direction:column;align-items:center;
-  padding:6px 10px;border-radius:7px;border:none;
+  padding:4px 8px;border-radius:6px;border:none;
   background:transparent;color:#94a3b8;
   font-size:10px;font-weight:bold;cursor:pointer;
-  transition:all 0.15s;gap:2px;min-width:48px;
-  letter-spacing:0.3px;
+  transition:all 0.15s;gap:1px;min-width:44px;
+  letter-spacing:0.3px; white-space:nowrap;
 }
-.mt-btn .mt-ico { font-size:18px;line-height:1; }
+.mt-btn .mt-ico { font-size:16px;line-height:1; }
 .mt-btn:hover { background:rgba(59,130,246,0.18);color:#e2e8f0; }
 .mt-btn.active { background:rgba(99,102,241,0.28);color:#a5b4fc;border:1px solid #6366f1; }
 .mt-btn.active-green { background:rgba(74,222,128,0.2);color:#4ade80;border:1px solid #4ade80; }
 .mt-btn.active-orange { background:rgba(234,88,12,0.22);color:#fb923c;border:1px solid #fb923c; }
 .mt-btn.active-red { background:rgba(220,38,38,0.22);color:#f87171;border:1px solid #ef4444; }
-.mt-sep { width:1px;background:#1e3a5f;margin:4px 2px; }
+.mt-sep { width:1px;background:#1e3a5f;margin:3px 2px; }
 .mt-btn:disabled { opacity:0.35;cursor:not-allowed; }
 .mt-btn:disabled:hover { background:transparent;color:#94a3b8; }
 
@@ -546,7 +544,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
   #topbar, #tab-bar, #panel, #proj-panel, #ovl, #banner, #modal, #print-modal,
-  #print-toolbar, #map-center-dot, #nv-badge, .leaflet-control-container { display:none !important; }
+  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -647,6 +645,34 @@ select:focus { outline:none; border-color:#3b82f6; }
   <div id="tab-bar">
     <button class="tab-btn active" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
+  </div>
+
+  <!-- QGIS-STIL MAP TOOLBAR -->
+  <div id="map-toolbar">
+    <button class="mt-btn" id="mt-select" onclick="mtSelect()" title="Odabir / Pan">
+      <span class="mt-ico">🖱</span><span>Odabir</span>
+    </button>
+    <div class="mt-sep"></div>
+    <button class="mt-btn" id="mt-addline" onclick="mtAddLine()" title="Dodaj liniju vlake (klikaj tačke, dbl-klik za kraj)">
+      <span class="mt-ico">✏️</span><span>Dodaj liniju</span>
+    </button>
+    <button class="mt-btn" id="mt-addpt" onclick="mtAddPoint()" title="Dodaj waypoint (GPS tačka)">
+      <span class="mt-ico">📍</span><span>Dodaj tačku</span>
+    </button>
+    <div class="mt-sep"></div>
+    <button class="mt-btn" id="mt-edit" onclick="mtEditLine()" title="Edituj tačke linije — drag, desni klik = briši, klik na segment = ubaci">
+      <span class="mt-ico">🔧</span><span>Edit</span>
+    </button>
+    <button class="mt-btn" id="mt-delnode" onclick="mtDeleteNode()" title="Klikni na tačku linije da je obrišeš">
+      <span class="mt-ico">✂️</span><span>Briši tačku</span>
+    </button>
+    <button class="mt-btn" id="mt-undo" onclick="mtUndo()" title="Poništi zadnju tačku (Ctrl+Z)">
+      <span class="mt-ico">↩️</span><span>Undo</span>
+    </button>
+    <div class="mt-sep"></div>
+    <button class="mt-btn" id="mt-merge" onclick="startMergeMode()" title="Spoji dvije vlake">
+      <span class="mt-ico">🔗</span><span>Spoji</span>
+    </button>
   </div>
 
   <div id="main">
@@ -838,34 +864,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <button id="btn-flip-dir" style="display:none;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;white-space:nowrap;" onclick="flipVlakaDir()">↔ Smjer</button>
         <button class="btn r" style="width:auto;padding:5px 12px;margin:0;font-size:12px;" onclick="stopActiveTool()">■ STOP</button>
-      </div>
-
-      <!-- QGIS-STIL MAP TOOLBAR -->
-      <div id="map-toolbar">
-        <button class="mt-btn" id="mt-select" onclick="mtSelect()" title="Odabir / Pan">
-          <span class="mt-ico">🖱</span><span>Odabir</span>
-        </button>
-        <div class="mt-sep"></div>
-        <button class="mt-btn" id="mt-addline" onclick="mtAddLine()" title="Dodaj liniju vlake (klikaj tačke, dbl-klik za kraj)">
-          <span class="mt-ico">✏️</span><span>Dodaj liniju</span>
-        </button>
-        <button class="mt-btn" id="mt-addpt" onclick="mtAddPoint()" title="Dodaj waypoint (GPS tačka)">
-          <span class="mt-ico">📍</span><span>Dodaj tačku</span>
-        </button>
-        <div class="mt-sep"></div>
-        <button class="mt-btn" id="mt-edit" onclick="mtEditLine()" title="Edituj tačke linije — drag, desni klik = briši, klik na segment = ubaci">
-          <span class="mt-ico">🔧</span><span>Edit</span>
-        </button>
-        <button class="mt-btn" id="mt-delnode" onclick="mtDeleteNode()" title="Klikni na tačku linije da je obrišeš">
-          <span class="mt-ico">✂️</span><span>Briši tačku</span>
-        </button>
-        <button class="mt-btn" id="mt-undo" onclick="mtUndo()" title="Poništi zadnju tačku (Ctrl+Z)">
-          <span class="mt-ico">↩️</span><span>Undo</span>
-        </button>
-        <div class="mt-sep"></div>
-        <button class="mt-btn" id="mt-merge" onclick="startMergeMode()" title="Spoji dvije vlake">
-          <span class="mt-ico">🔗</span><span>Spoji</span>
-        </button>
       </div>
 
       <div id="ovl">
@@ -1681,8 +1679,8 @@ const TL = {
 TL['⛰ Topo'].addTo(map);  // Default: TOPO
 L.control.layers(TL,{},{position:'topright'}).addTo(map);
 
-// Prevent toolbar, overlay, and banner from passing events to Leaflet map
-['map-toolbar','ovl','banner'].forEach(id => {
+// Prevent overlay and banner from passing events to Leaflet map
+['ovl','banner'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     L.DomEvent.disableClickPropagation(el);
