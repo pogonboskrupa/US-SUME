@@ -612,7 +612,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <div style="position:relative;display:inline-block;">
       <button class="tbtn tbtn-gray" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)" id="menu-btn">☰ Meni ▾</button>
     </div>
-    <button id="mbtn" class="tbtn tbtn-gray" style="display:none;" onclick="togglePanel()">☰ Panel</button>
+    <button id="mbtn" class="tbtn tbtn-gray" style="display:none;" onclick="togglePanel()">🗺 MAP</button>
   </div>
 
   <div id="tab-bar">
@@ -2458,6 +2458,9 @@ function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').v
 
 // === PANEL MOBILE ===
 function togglePanel(){
+  const pproj=document.getElementById('proj-panel');
+  // Ako je otvoren Projekat tab, vrati na mapu (Vlake tab)
+  if (pproj.style.display==='flex') { switchTab('vlake'); return; }
   const p=document.getElementById('panel');
   p.style.display=(p.style.display==='flex')?'none':'flex';
 }
