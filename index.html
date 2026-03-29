@@ -403,12 +403,21 @@ select:focus { outline:none; border-color:#3b82f6; }
   position:absolute; top:50%; left:50%;
   transform:translate(-50%,-50%);
   z-index:900; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
 }
 #mcd-ring {
   width:12px; height:12px; border-radius:50%;
   background:rgba(255,255,255,0.9);
   border:2px solid rgba(0,0,0,0.4);
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
+}
+#mcd-dist {
+  display:none;
+  background:rgba(10,17,35,0.82); border:1px solid rgba(255,255,255,0.18);
+  border-radius:5px; padding:2px 7px;
+  font-size:11px; font-family:monospace; font-weight:bold;
+  color:#fbbf24; white-space:nowrap;
+  backdrop-filter:blur(3px);
 }
 
 /* === PROJEKTI LISTA === */
@@ -922,8 +931,11 @@ select:focus { outline:none; border-color:#3b82f6; }
 
     <!-- MAP -->
     <div id="map">
-      <!-- Center crosshair dot -->
-      <div id="map-center-dot"><div id="mcd-ring"></div></div>
+      <!-- Center crosshair dot (visible only in full-map / MAP mode) -->
+      <div id="map-center-dot" style="display:none;">
+        <div id="mcd-ring"></div>
+        <div id="mcd-dist"></div>
+      </div>
 
       <!-- Krak picker popup -->
       <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:8px;min-width:180px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
@@ -2057,7 +2069,8 @@ map.on('mousemove', e => {
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
-// Ažuriraj N.V. pri pomicanju karte (panning)
+// Ažuriraj N.V. i GPS distancu pri pomicanju karte
+map.on('move', () => { _updMcdDist(); });
 map.on('moveend', () => {
   if (_gpsAlt) return;
   const c = map.getCenter();
@@ -2636,9 +2649,10 @@ function startGPS() {
 }
 function stopGPS() {
   if (wid) navigator.geolocation.clearWatch(wid);
-  gpsOn = false; wid = null;
+  gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
+  _updMcdDist();
 }
 
 // GPS smoothing — simple running average of last N positions
@@ -2650,6 +2664,7 @@ let _gpsBuf = [];        // circular buffer for smoothing
 function onP(p) {
   const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
   lastP = {la, lo, al: al||0, ac};
+  _updMcdDist();
 
   // Update display always
   document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m`;
@@ -3717,9 +3732,22 @@ function _setMapUIVisible(toolbar, mapOnly) {
   const tb = document.getElementById('map-toolbar');
   const nv = document.getElementById('nv-badge');
   const lc = document.querySelector('.leaflet-control-layers');
+  const cd = document.getElementById('map-center-dot');
   if (tb) tb.style.display = toolbar ? '' : 'none';
   if (nv) nv.style.display = mapOnly ? '' : 'none';
   if (lc) lc.style.display = mapOnly ? '' : 'none';
+  if (cd) cd.style.display = mapOnly ? 'flex' : 'none';
+  if (!mapOnly) _updMcdDist(); // reset dist label
+}
+
+function _updMcdDist() {
+  const el = document.getElementById('mcd-dist');
+  if (!el) return;
+  if (!gpsOn || !lastP) { el.style.display = 'none'; return; }
+  const c = map.getCenter();
+  const d = dst(c.lat, c.lng, lastP.la, lastP.lo);
+  el.textContent = d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(2) + ' km';
+  el.style.display = '';
 }
 
 function switchTab(tab) {
