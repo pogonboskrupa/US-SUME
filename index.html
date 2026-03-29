@@ -1535,9 +1535,10 @@ async function fetchElev() {
   const lat = _elevLat, lng = _elevLng;
   if (lat == null) return;
   try {
+    const ctrl = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(4000) : undefined;
     const r = await fetch(
       `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
-      { signal: AbortSignal.timeout(4000) }
+      ctrl ? { signal: ctrl } : {}
     );
     const d = await r.json();
     const nv = d.elevation?.[0];
@@ -1546,16 +1547,6 @@ async function fetchElev() {
     }
   } catch(e) { /* ignore */ }
 }
-
-// Ažuriraj N.V. pri pomicanju karte (panning)
-map.on('moveend', () => {
-  if (_gpsAlt) return; // GPS altitude ima prednost
-  const c = map.getCenter();
-  debouncedUpdElev(c.lat, c.lng, 450);
-});
-
-// Inicijalni fetch pri učitavanju
-(function() { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 800); })();
 
 // === COLORS ===
 // Zelene boje (#22c55e, #4ade80, #34d399) isključene — ista boja kao poligon GRANICE
@@ -1707,6 +1698,16 @@ map.on('mousemove', e => {
   if (!_gpsAlt) debouncedUpdElev(e.latlng.lat, e.latlng.lng, 300);
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
+
+// Ažuriraj N.V. pri pomicanju karte (panning)
+map.on('moveend', () => {
+  if (_gpsAlt) return;
+  const c = map.getCenter();
+  debouncedUpdElev(c.lat, c.lng, 450);
+});
+
+// Inicijalni fetch N.V. pri učitavanju
+(function() { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 800); })();
 
 // Close dropdown when clicking outside
 document.addEventListener('click', e => {
