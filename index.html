@@ -2496,7 +2496,7 @@ function startKrakOdOvdje() {
   const parentV = vlake[actI];
   const postojeci = vlake
     .map((v, i) => ({ v, i }))
-    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.K'));
+    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.'));
 
   // Popuni listu postojećih
   const list = document.getElementById('krak-picker-list');
@@ -2512,8 +2512,8 @@ function startKrakOdOvdje() {
 
   // Postavi prefix i default broj za novi krak
   let nextNum = 1;
-  while (vlake.find(v => v.nm === parentV.nm + '.K' + nextNum)) nextNum++;
-  document.getElementById('krak-novi-prefix').textContent = parentV.nm + '.K';
+  while (vlake.find(v => v.nm === parentV.nm + '.' + nextNum)) nextNum++;
+  document.getElementById('krak-novi-prefix').textContent = parentV.nm + '.';
   document.getElementById('krak-novi-br').value = nextNum;
   updKrakNoviPrev();
   document.getElementById('krak-picker').style.display = '';
@@ -2554,7 +2554,7 @@ function startNoviKrak() {
   if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
 
   const br = parseInt(document.getElementById('krak-novi-br').value) || 1;
-  const krakNm = parentV.nm + '.K' + br;
+  const krakNm = parentV.nm + '.' + br;
   if (vlake.find(v => v.nm === krakNm)) { showToast('Krak ' + krakNm + ' već postoji! Odaberi drugi broj.'); startKrakOdOvdje(); return; }
 
   const color = parentV.color;
