@@ -378,6 +378,30 @@ select:focus { outline:none; border-color:#3b82f6; }
 .mdrop-item:hover { background:#0f3460;color:#fff; }
 .mdrop-sep { height:1px;background:#0f3460;margin:2px 0; }
 
+/* === CENTER DOT === */
+#map-center-dot {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  z-index:900; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+}
+#mcd-ring {
+  width:12px; height:12px; border-radius:50%;
+  background:rgba(255,255,255,0.9);
+  border:2px solid rgba(0,0,0,0.4);
+  box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
+}
+#mcd-info {
+  background:rgba(15,23,42,0.78);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:5px;
+  padding:3px 7px;
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+  font-size:10px; font-family:monospace; white-space:nowrap;
+  color:#e2e8f0;
+  backdrop-filter:blur(3px);
+}
+
 /* === OVERLAY MINIMIZACIJA === */
 #ovl {
   position:fixed; bottom:0; right:0;
@@ -517,7 +541,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
   #topbar, #tab-bar, #panel, #proj-panel, #ovl, #banner, #modal, #print-modal,
-  #print-toolbar, .leaflet-control-container { display:none !important; }
+  #print-toolbar, #map-center-dot, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -794,6 +818,14 @@ select:focus { outline:none; border-color:#3b82f6; }
 
     <!-- MAP -->
     <div id="map">
+      <!-- Center crosshair dot -->
+      <div id="map-center-dot">
+        <div id="mcd-ring"></div>
+        <div id="mcd-info">
+          <span id="mcd-coords">—</span>
+          <span id="mcd-nv" style="color:#22d3ee;">—</span>
+        </div>
+      </div>
       <div id="banner">
         <div class="rdot"></div>
         <div style="flex:1;min-width:0;">
@@ -1520,6 +1552,8 @@ function updMGI(lat, lon) {
     document.getElementById('omgi-y').textContent = c.y.toLocaleString('bs');
     document.getElementById('omgi-x').textContent = c.x.toLocaleString('bs');
   }
+  const mcdCoords = document.getElementById('mcd-coords');
+  if (mcdCoords) mcdCoords.textContent = lat.toFixed(5) + ', ' + lon.toFixed(5);
 }
 
 // === NADMORSKA VISINA ===
@@ -1543,7 +1577,10 @@ async function fetchElev() {
     const d = await r.json();
     const nv = d.elevation?.[0];
     if (nv != null && !_gpsAlt) {
-      document.getElementById('onv').textContent = Math.round(nv) + ' m';
+      const nvTxt = Math.round(nv) + ' m';
+      document.getElementById('onv').textContent = nvTxt;
+      const mcdNv = document.getElementById('mcd-nv');
+      if (mcdNv) mcdNv.textContent = nvTxt;
     }
   } catch(e) { /* ignore */ }
 }
@@ -1699,7 +1736,12 @@ map.on('mousemove', e => {
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
-// Ažuriraj N.V. pri pomicanju karte (panning)
+// Ažuriraj coords + N.V. pri pomicanju karte (panning)
+map.on('move', () => {
+  const c = map.getCenter();
+  const mcdCoords = document.getElementById('mcd-coords');
+  if (mcdCoords) mcdCoords.textContent = c.lat.toFixed(5) + ', ' + c.lng.toFixed(5);
+});
 map.on('moveend', () => {
   if (_gpsAlt) return;
   const c = map.getCenter();
@@ -1707,7 +1749,7 @@ map.on('moveend', () => {
 });
 
 // Inicijalni fetch N.V. pri učitavanju
-(function() { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 800); })();
+(function() { const c = map.getCenter(); updMGI(c.lat, c.lng); debouncedUpdElev(c.lat, c.lng, 800); })();
 
 // Close dropdown when clicking outside
 document.addEventListener('click', e => {
@@ -2157,7 +2199,10 @@ function onP(p) {
   // GPS altitude — tačnije od API-ja kad dostupno
   if (al != null) {
     _gpsAlt = true;
-    document.getElementById('onv').textContent = Math.round(al) + ' m 📡';
+    const nvGpsTxt = Math.round(al) + ' m 📡';
+    document.getElementById('onv').textContent = nvGpsTxt;
+    const mcdNv = document.getElementById('mcd-nv');
+    if (mcdNv) mcdNv.textContent = nvGpsTxt;
   } else {
     _gpsAlt = false;
     debouncedUpdElev(la, lo, 200);
