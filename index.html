@@ -1540,16 +1540,22 @@ async function deleteProjektUI() {
   const p = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser.id) return;
   if (!confirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove.`)) return;
-  await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
-  await sb.from('projekti').delete().eq('id', id);
+
+  // Odmah ukloni lokalno i prikaži listu — ne čekaj Supabase
+  _projekti = _projekti.filter(x => x.id !== id);
+  _pdProjektId = null;
   if (_aktivniProjektId === id) {
     _aktivniProjektId = null;
     localStorage.removeItem('tvlake_akt_proj');
     document.getElementById('p-odjel').value = '';
   }
-  showToast('Projekat obrisan.');
-  await sbLoadProjekti();
   showProjektiList();
+  showToast('Projekat obrisan.');
+
+  // Briši iz Supabase u pozadini
+  await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
+  await sb.from('projekti').delete().eq('id', id);
+  await sbLoadProjekti();
   await sbLoadKolegeVlake();
 }
 
