@@ -181,12 +181,15 @@ input:focus { outline:none; border-color:#3b82f6; }
 }
 #kml-drop:hover, #kml-drop.over { border-color:#3b82f6; color:#93c5fd; background:rgba(59,130,246,0.06); }
 .krow {
-  display:flex; align-items:center; gap:6px;
+  display:flex; align-items:center; gap:5px;
   padding:6px 8px; border-radius:5px;
   background:#0f172a; border:1px solid #1e293b;
   margin-bottom:4px; font-size:12px;
 }
-.knam { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; }
+.knam { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; min-width:0; }
+.kswatch { width:14px;height:14px;border-radius:3px;border:1px solid #374151;flex-shrink:0;cursor:pointer;display:block; }
+.kdbtn { background:none;border:1px solid #374151;border-radius:3px;color:#64748b;font-size:10px;padding:2px 5px;cursor:pointer;flex-shrink:0;line-height:1.2;font-family:monospace; }
+.kdbtn.on { border-color:#60a5fa;color:#60a5fa;background:rgba(59,130,246,0.14); }
 
 /* MAP */
 #map { flex:1; position:relative; }
@@ -3042,7 +3045,7 @@ function ldK(file) {
       const col=KCOLS[kmlCI%KCOLS.length]; kmlCI++;
       const doc=new DOMParser().parseFromString(ev.target.result,'text/xml');
       const grp=pkml(doc,col); grp.addTo(map);
-      kmlLs.push({name:file.name,grp,col,vis:true}); rndKml();
+      kmlLs.push({name:file.name,grp,col,dash:'',weight:2,vis:true}); rndKml();
       try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
     } catch(x){alert('Greška KML: '+x.message);}
   };
@@ -3138,7 +3141,7 @@ async function autoLoadOdjeliOdsjeci() {
       const doc = new DOMParser().parseFromString(txt, 'text/xml');
       const grp = pkmlStyled(doc, opts);
       grp.addTo(map);
-      kmlLs.push({ name: file.name, grp, col: opts.color, vis: true });
+      kmlLs.push({ name: file.name, grp, col: opts.color, dash: opts.dashArray||'', weight: opts.weight||2, vis: true });
     }
     rndKml();
   } catch(e) {
@@ -3149,15 +3152,34 @@ async function autoLoadOdjeliOdsjeci() {
 function rndKml() {
   const el=document.getElementById('kl'); el.innerHTML='';
   kmlLs.forEach((k,i)=>{
+    const d=k.dash||'';
     const row=document.createElement('div'); row.className='krow';
-    row.innerHTML=`<div style="width:10px;height:10px;border-radius:50%;background:${k.col};flex-shrink:0;"></div>
+    row.innerHTML=`
+      <label style="position:relative;flex-shrink:0;cursor:pointer;" title="Promijeni boju">
+        <span class="kswatch" style="background:${k.col};"></span>
+        <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)"
+          style="position:absolute;opacity:0;width:14px;height:14px;top:0;left:0;cursor:pointer;">
+      </label>
+      <button class="kdbtn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
+      <button class="kdbtn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
+      <button class="kdbtn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
       <div class="knam" title="${k.name}">${k.name}</div>
-      <button class="mb bl" onclick="togK(${i})" title="Sakrij/pokaži">👁</button>
+      <button class="mb bl" onclick="togK(${i})" title="${k.vis?'Sakrij':'Pokaži'}" style="opacity:${k.vis?1:0.4}">👁</button>
       <button class="mb" onclick="delK(${i})" title="Ukloni">✕</button>`;
     el.appendChild(row);
   });
 }
-function togK(i){const k=kmlLs[i];k.vis?map.removeLayer(k.grp):k.grp.addTo(map);k.vis=!k.vis;}
+function applyKmlStyle(i) {
+  const k=kmlLs[i];
+  const opts={color:k.col, weight:k.weight||2, opacity:0.9};
+  if(k.dash) opts.dashArray=k.dash;
+  k.grp.eachLayer(l=>{
+    if(l.setStyle) l.setStyle(opts);
+  });
+}
+function setKmlColor(i,col){kmlLs[i].col=col;applyKmlStyle(i);rndKml();}
+function setKmlDash(i,dash){kmlLs[i].dash=dash;applyKmlStyle(i);rndKml();}
+function togK(i){const k=kmlLs[i];k.vis?map.removeLayer(k.grp):k.grp.addTo(map);k.vis=!k.vis;rndKml();}
 function delK(i){map.removeLayer(kmlLs[i].grp);kmlLs.splice(i,1);rndKml();}
 
 // === EXPORT ===
@@ -4608,7 +4630,7 @@ let graniceOdjeli = []; // [{ name, bounds }]
     const doc = new DOMParser().parseFromString(txt, 'text/xml');
     const grp = pkml(doc, col);
     grp.addTo(map);
-    kmlLs.push({ name: 'GRANICE.KML', grp, col, vis: true });
+    kmlLs.push({ name: 'GRANICE.KML', grp, col, dash: '6 4', weight: 2, vis: true });
     rndKml();
 
     // Izvuci svaki Placemark kao poseban odjel s bounds-om
