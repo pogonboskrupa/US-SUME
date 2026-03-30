@@ -1490,8 +1490,8 @@ function showProjektDetalji(id) {
   btn.className = isAkt ? 'btn g' : 'btn b';
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
-  // Hide add-clan and delete sections if not vlasnik
-  document.getElementById('pd-add-clan-sec').style.display = isVlasnik ? '' : 'none';
+  // All members can add new clan; only vlasnik can delete project
+  document.getElementById('pd-add-clan-sec').style.display = '';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
 }
 
