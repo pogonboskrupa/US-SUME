@@ -4606,18 +4606,33 @@ function _extractGraniceOdjeli(doc) {
 // extractOdjeli: true → ekstrakcija placemark bounds za print/offline
 async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
   try {
-    const { data: files, error } = await sb.storage.from(bucketName).list('', { limit: 200 });
-    if (error) {
-      showToast(`⚠ KML "${bucketName}": ${error.message}`);
+    // Direktni REST API poziv — zaobilazi SDK RLS ograničenja za listing
+    const sess = (await sb.auth.getSession()).data?.session;
+    const bearer = sess?.access_token || SUPA_KEY;
+    const listResp = await fetch(
+      `${SUPA_URL}/storage/v1/object/list/${encodeURIComponent(bucketName)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': `Bearer ${bearer}`
+        },
+        body: JSON.stringify({ limit: 200, offset: 0, prefix: '', sortBy: { column: 'name', order: 'asc' } })
+      }
+    );
+    if (!listResp.ok) {
+      showToast(`⚠ KML listing "${bucketName}": HTTP ${listResp.status}`);
       return;
     }
-    if (!files?.length) {
+    const files = await listResp.json();
+    if (!Array.isArray(files) || !files.length) {
       showToast(`⚠ KML "${bucketName}": nema fajlova`);
       return;
     }
-    const kmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.kml'));
+    const kmlFiles = files.filter(f => f.name && f.name.toLowerCase().endsWith('.kml'));
     if (!kmlFiles.length) {
-      showToast(`⚠ KML "${bucketName}": nema .kml fajlova (${files.map(f=>f.name).join(', ')})`);
+      showToast(`⚠ KML "${bucketName}": fajlovi: ${files.map(f=>f.name).join(', ')}`);
       return;
     }
 
