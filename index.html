@@ -4043,6 +4043,19 @@ function _msrHaversine(lat1,lng1,lat2,lng2) {
   const a=Math.sin(dlat/2)**2+Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dlng/2)**2;
   return 2*R*Math.asin(Math.sqrt(a));
 }
+// Spherical excess formula — geodetska površina poligona u m²
+function _msrSphericalArea(pts) {
+  const R = 6371000, toR = Math.PI / 180;
+  const n = pts.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const lat1 = pts[i].lat * toR, lng1 = pts[i].lng * toR;
+    const lat2 = pts[j].lat * toR, lng2 = pts[j].lng * toR;
+    area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+  }
+  return Math.abs(area * R * R / 2);
+}
 async function _msrFetchElev(lat, lng) {
   const key = lat.toFixed(5)+','+lng.toFixed(5);
   if (_msrElevCache[key] != null) return _msrElevCache[key];
@@ -4073,6 +4086,21 @@ function _msrRedraw() {
   if (pts.length > 1) {
     const latlngs = pts.map(p => [p.lat, p.lng]);
     _msrLayer.addLayer(L.polyline(latlngs, {color:'#fbbf24', weight:2, dashArray:'6 4', opacity:0.9}));
+    // Zatvoreni poligon (ispunjen) kad ≥3 tačaka
+    if (pts.length >= 3) {
+      const areaM2 = _msrSphericalArea(pts);
+      const areaLbl = areaM2 >= 10000
+        ? (areaM2/10000).toFixed(2)+' ha'
+        : Math.round(areaM2).toLocaleString('bs')+' m²';
+      _msrLayer.addLayer(L.polygon(latlngs, {color:'#a78bfa', weight:1.5, dashArray:'4 4', fillColor:'#a78bfa', fillOpacity:0.08}));
+      // Label u centroidu
+      const cLat = pts.reduce((s,p)=>s+p.lat,0)/pts.length;
+      const cLng = pts.reduce((s,p)=>s+p.lng,0)/pts.length;
+      _msrLayer.addLayer(L.marker([cLat,cLng],{
+        icon:L.divIcon({className:'',html:`<div style="background:rgba(15,23,42,0.85);color:#a78bfa;font-size:12px;font-family:monospace;padding:3px 8px;border-radius:5px;border:1px solid #7c3aed;white-space:nowrap;pointer-events:none;font-weight:bold;">◻ ${areaLbl}</div>`,iconAnchor:[0,0]}),
+        interactive:false
+      }));
+    }
     // Label po svakom segmentu
     for (let i = 0; i < pts.length-1; i++) {
       const a=pts[i], b=pts[i+1];
@@ -4143,6 +4171,16 @@ function _msrUpdPanel() {
     document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
     document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
     document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
+    // Površina — prikazuje se kad ima ≥3 tačaka
+    const areaRow = document.getElementById('msr-area-row');
+    if (pts.length >= 3) {
+      const areaM2 = _msrSphericalArea(pts);
+      areaRow.style.display = 'block';
+      document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
+      document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
+    } else {
+      areaRow.style.display = 'none';
+    }
   }
 }
 
@@ -4996,9 +5034,16 @@ async function autoLoadAllKmlBuckets() {
             <span style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Ukupno</span>
             <b id="msr-total-dist" style="color:#4ade80;font-size:15px;font-family:monospace;">0 m</b>
           </div>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
             <div style="font-size:11px;color:#94a3b8;">⬆ Uspona: <b id="msr-total-up" style="color:#34d399;">0 m</b></div>
             <div style="font-size:11px;color:#94a3b8;">⬇ Silaza: <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
+          </div>
+          <div id="msr-area-row" style="display:none;border-top:1px solid #1e3a5f;padding-top:6px;margin-top:4px;">
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Površina (zatvoreni poligon)</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;">
+              <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-m2" style="color:#a78bfa;font-family:monospace;">—</b> m²</div>
+              <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-ha" style="color:#a78bfa;font-family:monospace;">—</b> ha</div>
+            </div>
           </div>
         </div>
 
