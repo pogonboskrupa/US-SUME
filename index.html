@@ -10,6 +10,8 @@
 <meta name="theme-color" content="#16213e">
 <title>Traktorske Vlake</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
@@ -4428,11 +4430,14 @@ async function startOfflineDownload() {
 (function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('./sw.js').then(reg => {
-    // Provjeri odmah i periodično svakih 60 min
-    reg.update();
-    setInterval(() => reg.update(), 60 * 60 * 1000);
+    // Ako je SW već čekao pri učitavanju stranice → odmah pokaži toast
+    if (reg.waiting) { showUpdateToast(); }
 
-    // Novi SW čeka → prikaži toast s dugmetom za reload
+    // Provjeri update odmah i svakih 30 min
+    reg.update();
+    setInterval(() => reg.update(), 30 * 60 * 1000);
+
+    // Novi SW instalira se → čekaj 'installed' stanje
     reg.addEventListener('updatefound', () => {
       const newSW = reg.installing;
       newSW.addEventListener('statechange', () => {
@@ -4443,7 +4448,7 @@ async function startOfflineDownload() {
     });
   }).catch(e => console.warn('SW registracija nije uspjela:', e));
 
-  // Kad SW preuzme kontrolu → reload da bude čista nova verzija
+  // Kad SW preuzme kontrolu nakon skipWaiting → reload za čistu novu verziju
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) { refreshing = true; window.location.reload(); }

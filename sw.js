@@ -1,25 +1,27 @@
 // =====================================================================
 // Service Worker — Traktorske Vlake
-// Verzija se mijenja pri svakom deploymentu da bi se okidao update
+// Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.1.0';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
-const TILE_CACHE  = 'tvlake-tiles-v1';   // dijeli se s glavnom stranicom
+const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 
-// Fajlovi koji se uvijek cacheiraju pri instalaciji
+// App shell koji se uvijek precachira
 const APP_SHELL = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // ─── INSTALL ─────────────────────────────────────────────────────────
+// NE pozivamo skipWaiting ovdje — čekamo da korisnik potvrdi update
 self.addEventListener('install', event => {
-  // skipWaiting → odmah postane aktivan (ne čeka zatvaranje tabova)
-  self.skipWaiting();
   event.waitUntil(
     caches.open(APP_CACHE).then(cache => cache.addAll(APP_SHELL))
   );
+  // Ne preuzimamo kontrolu automatski — toast u aplikaciji nudi izbor
 });
 
 // ─── ACTIVATE ────────────────────────────────────────────────────────
@@ -29,9 +31,9 @@ self.addEventListener('activate', event => {
       Promise.all(
         keys
           .filter(k => k.startsWith('tvlake-app-') && k !== APP_CACHE)
-          .map(k => caches.delete(k))   // briše stare app cacheove
+          .map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())  // preuzme kontrolu nad svim tabovima odmah
+    ).then(() => self.clients.claim())
   );
 });
 
@@ -39,7 +41,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = event.request.url;
 
-  // Tile zahtjevi → cache-first (offline karta)
+  // Map tile zahtjevi → cache-first (omogućuje offline kartu)
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
@@ -61,18 +63,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Supabase i vanjski API pozivi → uvijek network (nikad cache)
+  // Supabase, CDN i vanjski API → uvijek mreža (nikad cache)
   if (
     url.includes('supabase.co') ||
     url.includes('cdnjs.cloudflare') ||
-    url.includes('unpkg.com')
+    url.includes('unpkg.com') ||
+    url.includes('api.open-meteo.com')
   ) {
-    return; // default browser handling
+    return;
   }
 
-  // App shell (index.html, manifest) → network-first s fallback na cache
+  // App shell (index.html, manifest, ikone) → network-first, fallback na cache
   if (
-    url.includes(self.location.origin) ||
+    url.startsWith(self.location.origin) ||
     event.request.mode === 'navigate'
   ) {
     event.respondWith(
@@ -89,6 +92,7 @@ self.addEventListener('fetch', event => {
 });
 
 // ─── MESSAGE ─────────────────────────────────────────────────────────
+// Stranica šalje 'skipWaiting' kada korisnik klikne "Ažuriraj"
 self.addEventListener('message', event => {
   if (event.data === 'skipWaiting') self.skipWaiting();
 });
