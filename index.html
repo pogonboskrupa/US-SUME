@@ -948,10 +948,12 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:7px;">⊕ Kreiraj krak</button>
         </div>
       </div>
-      <!-- N.V. badge top-right -->
+      <!-- N.V. + razmjera badge top-left -->
       <div id="nv-badge">
         <span class="nv-icon">⛰</span>
         <span id="nv-val">— m</span>
+        <span style="color:#475569;margin:0 3px;">|</span>
+        <span style="color:#94a3b8;font-size:11px;">1:</span><span id="map-scale-val" style="color:#fbbf24;font-weight:bold;">—</span>
       </div>
       <div id="banner">
         <!-- Red 1: info -->
@@ -2102,8 +2104,26 @@ map.on('moveend', () => {
   debouncedUpdElev(c.lat, c.lng, 450);
 });
 
+// === RAZMJERA KARTE (live) ===
+function _updMapScale() {
+  const el = document.getElementById('map-scale-val');
+  if (!el) return;
+  const zoom = map.getZoom();
+  const lat  = map.getCenter().lat;
+  // Broj piksela po metru na ovom zoom-u i latitudi
+  const metersPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+  // Pretpostavljamo 96 dpi → 1px = 0.2646 mm → razmjera = metersPerPx / 0.0002646
+  const scale = Math.round(metersPerPx / 0.0002646);
+  // Zaokruži na "lijepu" vrijednost
+  const nice = [250,500,1000,1250,2000,2500,4000,5000,7500,10000,12500,15000,20000,25000,30000,50000,75000,100000,150000,200000,250000,500000];
+  const closest = nice.reduce((a,b) => Math.abs(b-scale)<Math.abs(a-scale)?b:a);
+  el.textContent = closest.toLocaleString('bs');
+}
+map.on('zoomend', _updMapScale);
+map.on('moveend', _updMapScale);
+
 // Inicijalni fetch N.V. pri učitavanju
-(function() { const c = map.getCenter(); updMGI(c.lat, c.lng); debouncedUpdElev(c.lat, c.lng, 800); })();
+(function() { const c = map.getCenter(); updMGI(c.lat, c.lng); debouncedUpdElev(c.lat, c.lng, 800); _updMapScale(); })();
 
 // Close dropdowns when clicking outside
 document.addEventListener('click', e => {
