@@ -2387,16 +2387,12 @@ function nacrtajVlaku() {
   setTimeout(() => { if (actI !== null) mtAddLine(); }, 30);
 }
 
-async function addV() {
+function addV() {
   const {nm,br,kr} = updPrev();
   if (vlake.find(v=>v.nm===nm)) { alert(`Vlaka "${nm}" već postoji!`); return; }
   const color = selC;
-  // Glavna vlaka (kr=0) automatski dobiva lager; krakovi nemaju
-  let lager = '';
-  if (kr === 0) {
-    const { lbl } = await nextLagerNum();
-    lager = lbl;
-  }
+  // Glavna vlaka (kr=0) automatski dobiva lager čiji broj = broj vlake; krakovi nemaju
+  const lager = (kr === 0) ? ('L' + br) : '';
   const poly  = L.polyline([],{color,weight:4,opacity:0.9}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
   attachPolyClick(poly);
