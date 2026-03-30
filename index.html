@@ -309,6 +309,31 @@ select:focus { outline:none; border-color:#3b82f6; }
   overscroll-behavior:contain;
   touch-action:pan-y;
 }
+#izmjeri-panel {
+  width:270px; flex-shrink:0;
+  background:#16213e;
+  border-right:2px solid #0f3460;
+  flex-direction:column;
+  overflow-y:auto;
+  display:none;
+  min-height:0;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+}
+.msr-seg {
+  background:#0f172a; border:1px solid #1e3a5f;
+  border-radius:7px; padding:8px 10px; margin-bottom:6px;
+  font-size:12px; font-family:monospace;
+}
+.msr-seg-hdr {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:4px;
+}
+.msr-seg-num { font-size:11px; color:#475569; font-weight:bold; }
+.msr-seg-dist { color:#60a5fa; font-weight:bold; font-size:13px; }
+.msr-seg-row { display:flex; gap:10px; flex-wrap:wrap; color:#94a3b8; }
+.msr-seg-row b { color:#e2e8f0; }
 
 /* Projekat form inputs */
 .pinput {
@@ -387,7 +412,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* Mobile */
 @media (max-width:580px) {
-  #panel, #proj-panel {
+  #panel, #proj-panel, #izmjeri-panel {
     width:100%; position:absolute; top:0; bottom:0;
     z-index:700;
   }
@@ -595,7 +620,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
-  #topbar, #tab-bar, #panel, #proj-panel, #ovl, #banner, #modal, #print-modal,
+  #topbar, #tab-bar, #panel, #proj-panel, #izmjeri-panel, #ovl, #banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
@@ -695,6 +720,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   <div id="tab-bar">
     <button class="tab-btn active" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
+    <button class="tab-btn" onclick="switchTab('izmjeri')">📏 Izmjeri</button>
     <div style="flex:1;"></div>
     <button class="tbtn tbtn-gray" style="padding:3px 9px;font-size:12px;margin-bottom:3px;" onclick="centerMap()">🎯 Centar</button>
   </div>
@@ -925,6 +951,33 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
 
     </div><!-- /proj-panel -->
+
+    <!-- IZMJERI PANEL -->
+    <div id="izmjeri-panel">
+      <div class="sec">
+        <div class="sec-t">📏 Izmjera na terenu</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+          <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;min-width:120px;">▶ Počni izmjeru</button>
+          <button class="btn" style="background:#374151;color:#e2e8f0;flex:0 0 auto;" onclick="msrClear()" title="Obriši sve tačke">🗑</button>
+        </div>
+        <div id="msr-hint" style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.</div>
+
+        <!-- Ukupno -->
+        <div id="msr-total-box" style="display:none;background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Ukupno</span>
+            <b id="msr-total-dist" style="color:#4ade80;font-size:15px;font-family:monospace;">0 m</b>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:11px;color:#94a3b8;">⬆ Uspona: <b id="msr-total-up" style="color:#34d399;">0 m</b></div>
+            <div style="font-size:11px;color:#94a3b8;">⬇ Silaza: <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
+          </div>
+        </div>
+
+        <!-- Segmenti -->
+        <div id="msr-segs"></div>
+      </div>
+    </div><!-- /izmjeri-panel -->
 
     <!-- MAP -->
     <div id="map">
@@ -2033,6 +2086,7 @@ L.control.layers(TL,{},{position:'topright'}).addTo(map);
 let _dblClickGuard = false;
 
 map.on('click', e => {
+  if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   if (!_vpJustOpened) closeVlakaPopup();
   if (textToolOn) { openTextDialog(e.latlng.lat, e.latlng.lng, null); return; }
@@ -3948,20 +4002,212 @@ function _updMcdDist() {
 }
 
 function switchTab(tab) {
-  const panel=document.getElementById('panel'), pproj=document.getElementById('proj-panel');
+  const panel   = document.getElementById('panel');
+  const pproj   = document.getElementById('proj-panel');
+  const pizmjeri= document.getElementById('izmjeri-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
-    b.classList.toggle('active',(i===0&&tab==='vlake')||(i===1&&tab==='projekat')));
+    b.classList.toggle('active',(i===0&&tab==='vlake')||(i===1&&tab==='projekat')||(i===2&&tab==='izmjeri')));
+  panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
+  pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
+  pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
   if (tab==='vlake') {
-    panel.style.display='flex'; pproj.style.display='none';
     _mapFullScreen = false;
-    // Toolbar vidljiv samo ako je aktivan alat za crtanje
     const tbVis = activeTool !== 'select';
     _setMapUIVisible(tbVis, false);
-  } else {
-    panel.style.display='none'; pproj.style.display='flex';
+  } else if (tab==='projekat') {
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
-    _setMapUIVisible(false, false); // sve skriveno
+    _setMapUIVisible(false, false);
+  } else if (tab==='izmjeri') {
+    _setMapUIVisible(false, false);
+    msrActivateIfNeeded();
   }
+}
+
+// =====================================================================
+// === IZMJERA (mjerenje udaljenosti, nagiba, azimuta) ===
+// =====================================================================
+let _msrOn    = false;     // aktivan mod mjerenja
+let _msrPts   = [];        // [{lat,lng,elev}]
+let _msrLayer = null;      // L.layerGroup na mapi
+let _msrElevCache = {};    // "lat,lng" → m
+
+function _msrFmt(m) {
+  return m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+}
+function _msrBearing(lat1, lng1, lat2, lng2) {
+  const toR = Math.PI/180;
+  const dL = (lng2 - lng1) * toR;
+  const y = Math.sin(dL) * Math.cos(lat2*toR);
+  const x = Math.cos(lat1*toR)*Math.sin(lat2*toR) - Math.sin(lat1*toR)*Math.cos(lat2*toR)*Math.cos(dL);
+  return ((Math.atan2(y,x)*180/Math.PI) + 360) % 360;
+}
+function _msrHaversine(lat1,lng1,lat2,lng2) {
+  const R=6371000, toR=Math.PI/180;
+  const dlat=(lat2-lat1)*toR, dlng=(lng2-lng1)*toR;
+  const a=Math.sin(dlat/2)**2+Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dlng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+async function _msrFetchElev(lat, lng) {
+  const key = lat.toFixed(5)+','+lng.toFixed(5);
+  if (_msrElevCache[key] != null) return _msrElevCache[key];
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`);
+    const d = await r.json();
+    const v = d.elevation?.[0];
+    if (v != null) _msrElevCache[key] = v;
+    return v ?? null;
+  } catch { return null; }
+}
+
+function _msrRedraw() {
+  if (!_msrLayer) return;
+  _msrLayer.clearLayers();
+  const pts = _msrPts;
+  if (!pts.length) return;
+  // Markerji za tačke
+  pts.forEach((p, i) => {
+    const color = i === 0 ? '#4ade80' : (i === pts.length-1 ? '#f87171' : '#60a5fa');
+    const mk = L.circleMarker([p.lat, p.lng], {
+      radius:6, color:'#fff', weight:2, fillColor:color, fillOpacity:1, pane:'markerPane'
+    });
+    mk.bindTooltip(`${i+1}${p.elev != null ? ' · '+Math.round(p.elev)+' m' : ''}`, {permanent:false, direction:'top'});
+    _msrLayer.addLayer(mk);
+  });
+  // Linije između tačaka
+  if (pts.length > 1) {
+    const latlngs = pts.map(p => [p.lat, p.lng]);
+    _msrLayer.addLayer(L.polyline(latlngs, {color:'#fbbf24', weight:2, dashArray:'6 4', opacity:0.9}));
+    // Label po svakom segmentu
+    for (let i = 0; i < pts.length-1; i++) {
+      const a=pts[i], b=pts[i+1];
+      const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
+      const az   = _msrBearing(a.lat,a.lng,b.lat,b.lng);
+      let slopeTxt = '';
+      if (a.elev != null && b.elev != null && dist > 0) {
+        const pct = ((b.elev - a.elev) / dist * 100).toFixed(1);
+        slopeTxt = ` · ${pct>0?'+':''}${pct}%`;
+      }
+      const midLat = (a.lat+b.lat)/2, midLng = (a.lng+b.lng)/2;
+      const lbl = L.marker([midLat, midLng], {
+        icon: L.divIcon({
+          className:'',
+          html:`<div style="background:rgba(15,23,42,0.85);color:#fbbf24;font-size:11px;font-family:monospace;
+                            padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;white-space:nowrap;
+                            pointer-events:none;">
+                  ${_msrFmt(dist)} · ${az.toFixed(0)}°${slopeTxt}
+                </div>`,
+          iconAnchor:[0,0]
+        }),
+        interactive:false
+      });
+      _msrLayer.addLayer(lbl);
+    }
+  }
+}
+
+function _msrUpdPanel() {
+  const segsEl  = document.getElementById('msr-segs');
+  const totalBox = document.getElementById('msr-total-box');
+  if (!segsEl) return;
+  const pts = _msrPts;
+  if (pts.length < 2) { segsEl.innerHTML=''; if(totalBox) totalBox.style.display='none'; return; }
+  let html = '', totalDist = 0, totalUp = 0, totalDn = 0;
+  for (let i = 0; i < pts.length-1; i++) {
+    const a=pts[i], b=pts[i+1];
+    const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
+    const az   = _msrBearing(a.lat,a.lng,b.lat,b.lng);
+    totalDist += dist;
+    let slopeHtml = '<span style="color:#475569;">—</span>';
+    if (a.elev != null && b.elev != null) {
+      const dh = b.elev - a.elev;
+      const pct = dist > 0 ? (dh/dist*100).toFixed(1) : '0.0';
+      const col = dh > 0 ? '#34d399' : (dh < 0 ? '#f87171' : '#94a3b8');
+      slopeHtml = `<b style="color:${col};">${pct>0?'+':''}${pct}%</b>`;
+      if (dh > 0) totalUp += dh; else totalDn -= dh;
+    }
+    const azDir = ['S','SSI','SI','ISI','I','IIJ','IJ','JIJ','J','JJZ','JZ','ZJZ','Z','ZSZ','SZ','SSZ'][Math.round(az/22.5)%16];
+    html += `<div class="msr-seg">
+      <div class="msr-seg-hdr">
+        <span class="msr-seg-num">Tačka ${i+1} → ${i+2}</span>
+        <span class="msr-seg-dist">${_msrFmt(dist)}</span>
+      </div>
+      <div class="msr-seg-row">
+        <div>🧭 Az: <b>${az.toFixed(1)}° ${azDir}</b></div>
+        <div>📐 Nagib: ${slopeHtml}</div>
+      </div>
+      ${(a.elev!=null||b.elev!=null)?`<div class="msr-seg-row" style="margin-top:3px;">
+        <div>⛰ NV₁: <b>${a.elev!=null?Math.round(a.elev)+' m':'—'}</b></div>
+        <div>⛰ NV₂: <b>${b.elev!=null?Math.round(b.elev)+' m':'—'}</b></div>
+      </div>`:''}
+    </div>`;
+  }
+  segsEl.innerHTML = html;
+  if (totalBox) {
+    totalBox.style.display = 'block';
+    document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
+    document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
+    document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
+  }
+}
+
+async function _msrAddPoint(latlng) {
+  const pt = { lat: latlng.lat, lng: latlng.lng, elev: null };
+  _msrPts.push(pt);
+  _msrRedraw();
+  _msrUpdPanel();
+  // Fetch visine u pozadini pa ažuriraj
+  const elev = await _msrFetchElev(latlng.lat, latlng.lng);
+  pt.elev = elev;
+  _msrRedraw();
+  _msrUpdPanel();
+}
+
+function _msrMapClick(e) {
+  if (!_msrOn) return;
+  _msrAddPoint(e.latlng);
+}
+function _msrMapDblClick(e) {
+  if (!_msrOn) return;
+  // dvostruki klik → završi (zadnja tačka je već dodana na click, ignorisati)
+  L.DomEvent.stopPropagation(e);
+  msrStop();
+}
+
+function msrToggle() {
+  if (_msrOn) msrStop(); else msrStart();
+}
+function msrStart() {
+  _msrOn = true;
+  if (!_msrLayer) { _msrLayer = L.layerGroup().addTo(map); }
+  map.getContainer().style.cursor = 'crosshair';
+  map.on('click', _msrMapClick);
+  map.on('dblclick', _msrMapDblClick);
+  const btn = document.getElementById('btn-msr-start');
+  if (btn) { btn.textContent='⏹ Završi izmjeru'; btn.style.background='#dc2626'; }
+  const hint = document.getElementById('msr-hint');
+  if (hint) hint.textContent = 'Klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
+}
+function msrStop() {
+  _msrOn = false;
+  map.getContainer().style.cursor = '';
+  map.off('click', _msrMapClick);
+  map.off('dblclick', _msrMapDblClick);
+  const btn = document.getElementById('btn-msr-start');
+  if (btn) { btn.textContent='▶ Počni izmjeru'; btn.style.background=''; }
+  const hint = document.getElementById('msr-hint');
+  if (hint) hint.textContent = _msrPts.length ? 'Izmjera završena. Pritisni 🗑 za brisanje.' : 'Pritisni dugme pa klikaj tačke na karti.';
+}
+function msrClear() {
+  msrStop();
+  _msrPts = [];
+  if (_msrLayer) _msrLayer.clearLayers();
+  _msrUpdPanel();
+  const hint = document.getElementById('msr-hint');
+  if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
+}
+function msrActivateIfNeeded() {
+  // Poziva se kad se otvori tab — ništa ne radi automatski, samo osvježi panel
+  _msrUpdPanel();
 }
 
 initAuth();
