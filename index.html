@@ -2902,8 +2902,7 @@ function _activateVlakaEdit(idx) {
   setTimeout(() => { _vpJustOpened = false; }, 80);
   selI(idx);
   switchTab('vlake');
-  // small delay so switchTab renders before edit mode activates
-  setTimeout(() => { if (actI === idx) mtEditLine(); }, 60);
+  // Samo selektuj i prikaži u listi — toolbar se otvara samo kroz Nacrtaj vlaku
 }
 
 function attachPolyClick(poly) {
@@ -3114,8 +3113,14 @@ function togglePanel(){
   const p=document.getElementById('panel');
   const showing = p.style.display==='flex';
   p.style.display = showing ? 'none' : 'flex';
-  _mapFullScreen = showing; // panel sakriven → full screen
-  _setMapUIVisible(true, showing);
+  _mapFullScreen = showing;
+  if (showing) {
+    // Ulazak u full-screen: toolbar vidljiv ako se crta
+    _setMapUIVisible(activeTool !== 'select', true);
+  } else {
+    // Izlazak iz full-screen: toolbar samo ako se crta
+    _setMapUIVisible(activeTool !== 'select', false);
+  }
 }
 function chkMob(){const m=window.innerWidth<580;document.getElementById('mbtn').style.display=m?'block':'none';}
 chkMob(); window.addEventListener('resize',chkMob);
