@@ -755,11 +755,8 @@ select:focus { outline:none; border-color:#3b82f6; }
           </label>
           <input type="hidden" id="ilager" value="">
         </div>
-        <button class="btn g" onclick="addV()">➕ DODAJ VLAKU</button>
+        <button class="btn g" onclick="nacrtajVlaku()">✏️ NACRTAJ VLAKU</button>
         <button class="btn o" id="brec" onclick="togRec()">⏺ POČNI GPS SNIMANJE</button>
-        <div style="font-size:11px;color:#475569;text-align:center;margin-top:4px;line-height:1.5;">
-          Za crtanje i editovanje koristi<br><b style="color:#94a3b8;">toolbar na vrhu karte ↑</b>
-        </div>
       </div>
 
       <!-- SPAJANJE VLAKA -->
@@ -1953,6 +1950,7 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
+let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
 // Tool states — only one active at a time
 let activeTool = 'select'; // 'select' | 'addline' | 'addpoint' | 'edit' | 'delnode' | 'merge'
 let editOn=false, mergeMode=false, mergeFirst=null;
@@ -2260,6 +2258,10 @@ function setActiveTool(tool) {
     const btn = document.getElementById(ids[tool]);
     if (btn) btn.classList.add(cls[tool] || 'active');
   }
+
+  // Toolbar vidljiv samo dok se crta/edituje, ili u full-screen mapi
+  const tb = document.getElementById('map-toolbar');
+  if (tb) tb.style.display = (tool !== 'select' || _mapFullScreen) ? '' : 'none';
 }
 
 function mtSelect() {
@@ -2383,6 +2385,12 @@ function updPrev() {
 updPrev();
 
 // === VLAKA ===
+function nacrtajVlaku() {
+  addV(); // kreira vlaku i selektuje je (actI se postavi)
+  // Kratki delay da se rndList() završi, pa aktiviraj crtanje
+  setTimeout(() => { if (actI !== null) mtAddLine(); }, 30);
+}
+
 function addV() {
   const {nm,br,kr} = updPrev();
   if (vlake.find(v=>v.nm===nm)) { alert(`Vlaka "${nm}" već postoji!`); return; }
@@ -3106,7 +3114,7 @@ function togglePanel(){
   const p=document.getElementById('panel');
   const showing = p.style.display==='flex';
   p.style.display = showing ? 'none' : 'flex';
-  // Panel sakriven = mapa full screen → prikaži sve; panel vidljiv = samo toolbar
+  _mapFullScreen = showing; // panel sakriven → full screen
   _setMapUIVisible(true, showing);
 }
 function chkMob(){const m=window.innerWidth<580;document.getElementById('mbtn').style.display=m?'block':'none';}
@@ -3879,7 +3887,10 @@ function switchTab(tab) {
     b.classList.toggle('active',(i===0&&tab==='vlake')||(i===1&&tab==='projekat')));
   if (tab==='vlake') {
     panel.style.display='flex'; pproj.style.display='none';
-    _setMapUIVisible(true, false); // toolbar da, nv+karte ne
+    _mapFullScreen = false;
+    // Toolbar vidljiv samo ako je aktivan alat za crtanje
+    const tbVis = activeTool !== 'select';
+    _setMapUIVisible(tbVis, false);
   } else {
     panel.style.display='none'; pproj.style.display='flex';
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
