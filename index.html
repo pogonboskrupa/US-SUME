@@ -4642,20 +4642,13 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
 
       const opts = typeof getOpts === 'function' ? getOpts(file.name) : getOpts;
 
-      // Public URL (bucket mora biti public u Supabase)
-      const { data: pubData } = sb.storage.from(bucketName).getPublicUrl(file.name);
-      const fetchUrl = pubData?.publicUrl;
+      // Direktan enkodiran URL — getPublicUrl ne enkodira razmake u bucket imenu
+      const fetchUrl = `${SUPA_URL}/storage/v1/object/public/${encodeURIComponent(bucketName)}/${encodeURIComponent(file.name)}`;
 
       let txt;
       try {
-        let r = await fetch(fetchUrl);
-        if (!r.ok) {
-          // Fallback: signed URL
-          const { data: sd, error: se } = await sb.storage.from(bucketName).createSignedUrl(file.name, 31536000);
-          if (se || !sd?.signedUrl) { showToast(`⚠ ${file.name}: ${se?.message||'nema URL-a'}`); continue; }
-          r = await fetch(sd.signedUrl);
-          if (!r.ok) { showToast(`⚠ ${file.name}: HTTP ${r.status}`); continue; }
-        }
+        const r = await fetch(fetchUrl, { headers: { 'apikey': SUPA_KEY } });
+        if (!r.ok) { showToast(`⚠ ${file.name}: HTTP ${r.status}`); continue; }
         txt = await r.text();
       } catch(fe) { showToast(`⚠ ${file.name}: ${fe.message}`); continue; }
 
@@ -4682,10 +4675,7 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
 async function autoLoadAllKmlBuckets() {
   const graniceStyle = { color: '#22c55e', weight: 2, dashArray: '6 4', opacity: 0.9 };
   await autoLoadStorageBucket('Granice odjela', graniceStyle, true);
-  await autoLoadStorageBucket('ODJELI_ODSJECI', nm => {
-    const u = nm.toUpperCase();
-    return (u.includes('ODSJEC') || u.includes('ODSJEK')) ? _ODSJEK_STYLE : _ODJEL_STYLE;
-  });
+  await autoLoadStorageBucket('ODJELI_ODSJECI', _ODJEL_STYLE);
 }
 </script>
 
