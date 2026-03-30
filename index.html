@@ -2051,6 +2051,25 @@ map.on('click', e => {
     showToast(`📍 Tačka dodana — ${v.nm} (${v.pts.length} uk.)`);
     return;
   }
+  // Proximity fallback: find nearest vlaka if click missed polyline SVG hit area
+  if (!recOn && activeTool !== 'edit' && activeTool !== 'delnode' && activeTool !== 'merge' && activeTool !== 'addline' && activeTool !== 'addpoint') {
+    const HIT_PX = 22; // touch-friendly threshold in pixels
+    const clickPx = map.latLngToContainerPoint(e.latlng);
+    let bestI = -1, bestD = Infinity;
+    vlake.forEach((v, i) => {
+      if (!v.poly || v.pts.length < 2) return;
+      for (let j = 0; j < v.pts.length - 1; j++) {
+        const a = map.latLngToContainerPoint(L.latLng(v.pts[j].la, v.pts[j].lo));
+        const b = map.latLngToContainerPoint(L.latLng(v.pts[j+1].la, v.pts[j+1].lo));
+        const d = _distToSegPx(clickPx, a, b);
+        if (d < bestD) { bestD = d; bestI = i; }
+      }
+    });
+    if (bestI >= 0 && bestD <= HIT_PX) {
+      _activateVlakaEdit(bestI);
+      return;
+    }
+  }
   // NOTE: GPS recording (recOn) is handled entirely by onP() — never by map clicks
 });
 
@@ -2423,9 +2442,17 @@ function selI(i) {
   // Try fast highlight first; fall back to full rebuild if rows don't match
   const rows = document.querySelectorAll('#vl .vrow');
   if (rows.length === vlake.length) {
-    rows.forEach((row, idx) => row.classList.toggle('act', idx === i));
+    rows.forEach((row, idx) => {
+      row.classList.toggle('act', idx === i);
+      if (idx === i) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   } else {
     rndList(); // rows not built yet (e.g. called from addV before rndList)
+    // scroll after render
+    setTimeout(() => {
+      const r = document.querySelectorAll('#vl .vrow')[i];
+      if (r) r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 50);
   }
   updOvl();
   // Enable toolbar buttons that require a selected vlaka
@@ -2840,15 +2867,33 @@ function dlV(i) {
 // === VLAKA POPUP ===
 let _vpIdx = null, _vpJustOpened = false;
 
+// Pixel-space distance from point p to segment p1-p2
+function _distToSegPx(p, p1, p2) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const lenSq = dx*dx + dy*dy;
+  if (lenSq === 0) return Math.hypot(p.x - p1.x, p.y - p1.y);
+  let t = ((p.x - p1.x)*dx + (p.y - p1.y)*dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (p1.x + t*dx), p.y - (p1.y + t*dy));
+}
+
+function _activateVlakaEdit(idx) {
+  _vpJustOpened = true;
+  setTimeout(() => { _vpJustOpened = false; }, 80);
+  selI(idx);
+  switchTab('vlake');
+  // small delay so switchTab renders before edit mode activates
+  setTimeout(() => { if (actI === idx) mtEditLine(); }, 60);
+}
+
 function attachPolyClick(poly) {
-  // Povećaj interaktivnu zonu s nevidljivim debelim potezom
-  poly.options.weight = Math.max(poly.options.weight || 4, 4);
   poly.on('click', function(e) {
-    if (activeTool !== 'select') return;
+    if (recOn) return;
+    if (activeTool === 'edit' || activeTool === 'delnode' || activeTool === 'merge') return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv.poly === poly);
-    if (idx >= 0) showVlakaPopup(idx, e.latlng);
+    if (idx >= 0) _activateVlakaEdit(idx);
   });
 }
 
