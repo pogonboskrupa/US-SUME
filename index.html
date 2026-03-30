@@ -874,12 +874,15 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="pd-info" style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.9;background:rgba(15,23,42,0.6);border-radius:6px;padding:9px 11px;border:1px solid #1e3a5f;"></div>
         <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">👥 Projektanti</div>
         <div id="pd-clanovi" style="margin-bottom:12px;"></div>
-        <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Dodaj projektanta</div>
-        <div style="display:flex;gap:6px;margin-bottom:12px;">
-          <select id="pd-add-select" class="pinput" style="flex:1;margin:0;"></select>
-          <button class="btn b" style="margin:0;padding:7px 14px;font-size:13px;" onclick="addProjektClanUI()">+</button>
+        <div id="pd-add-clan-sec">
+          <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Dodaj projektanta</div>
+          <div style="display:flex;gap:6px;margin-bottom:12px;">
+            <select id="pd-add-select" class="pinput" style="flex:1;margin:0;"></select>
+            <button class="btn b" style="margin:0;padding:7px 14px;font-size:13px;" onclick="addProjektClanUI()">+</button>
+          </div>
         </div>
         <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
+        <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;">📥 Izvezi projekat kao KML</button>
         <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;">🗑 Obriši projekat</button>
       </div>
 
@@ -1487,7 +1490,8 @@ function showProjektDetalji(id) {
   btn.className = isAkt ? 'btn g' : 'btn b';
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
-  // Hide delete if not vlasnik
+  // Hide add-clan and delete sections if not vlasnik
+  document.getElementById('pd-add-clan-sec').style.display = isVlasnik ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
 }
 
@@ -3105,6 +3109,66 @@ function dst(la1,lo1,la2,lo2){const R=6371000,a=Math.sin((la2-la1)*Math.PI/360)*
 function calcL(pts){let s=0;for(let i=1;i<pts.length;i++)s+=dst(pts[i-1].la,pts[i-1].lo,pts[i].la,pts[i].lo);return s;}
 function fmtL(m){return m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(2)} km`;}
 
+// === KML EXPORT ===
+function _escXml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function _hexToKmlColor(hex){
+  const h=(hex||'#3b82f6').replace('#','').padEnd(6,'0');
+  const r=h.slice(0,2),g=h.slice(2,4),b=h.slice(4,6);
+  return `ff${b}${g}${r}`;
+}
+function _makeKml(title, vlakeArr) {
+  const placemarks = vlakeArr.filter(v=>v.pts.length>=2).map(v=>{
+    const coords=v.pts.map(p=>`${p.lo},${p.la},0`).join('\n              ');
+    return `  <Placemark>
+    <name>${_escXml(v.nm)}</name>
+    <Style><LineStyle><color>${_hexToKmlColor(v.color)}</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
+    <LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString>
+  </Placemark>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document><name>${_escXml(title)}</name>
+${placemarks}
+</Document></kml>`;
+}
+function _downloadKml(filename, content) {
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:'application/vnd.google-earth.kml+xml'}));
+  a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
+}
+
+function exportDnevniKml(date) {
+  const day=dnevniLog.find(d=>d.date===date);
+  if (!day) return;
+  const names=new Set(day.entries.flatMap(e=>(e.vlakeNm||(e.vlake||[]).map(v=>v.nm))));
+  const toExp=vlake.filter(v=>names.has(v.nm));
+  if (toExp.length===0){showToast('Nema geometrije za ovaj dan u memoriji.');return;}
+  const kml=_makeKml(`Vlake ${fmtDate(date)}`,toExp);
+  _downloadKml(`vlake_${date}.kml`,kml);
+  showToast(`📥 KML: ${toExp.length} vlak${toExp.length===1?'a':'e'}`);
+}
+
+function exportProjektKml() {
+  const p=_pdProjektId?_projekti.find(x=>x.id===_pdProjektId):null;
+  const title=p?`Projekat — Odjel ${p.odjel||'?'}`:`Vlake ${getOdjel()||'export'}`;
+  const toExp=[...vlake];
+  // Dodaj kolege vlake sa mape
+  kolegeVlake.forEach(poly=>{
+    const lls=poly.getLatLngs();
+    if(!lls||lls.length<2)return;
+    const tip=poly.getTooltip();
+    const nm=tip?tip.getContent():'Kolega';
+    const color='#94a3b8';
+    toExp.push({nm,color,pts:lls.map(ll=>({la:ll.lat,lo:ll.lng}))});
+  });
+  if(toExp.length===0){showToast('Nema vlaka za izvoz.');return;}
+  const kml=_makeKml(title,toExp);
+  const fname=(p?.odjel||'projekat').replace(/[^a-zA-Z0-9čćžšđČĆŽŠĐ_-]/g,'_');
+  _downloadKml(`vlake_${fname}.kml`,kml);
+  showToast(`📥 KML: ${toExp.filter(v=>v.pts.length>=2).length} vlak${toExp.filter(v=>v.pts.length>=2).length===1?'a':'e'}`);
+}
+
 rndList();
 
 // === EDIT MODE ===
@@ -3652,7 +3716,10 @@ function rndLog() {
         </div>${vRows}</div>`;
     }).join('');
     return `<div class="day-row">
-      <div class="day-date">📅 ${dayName}</div>
+      <div class="day-date" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📅 ${dayName}</span>
+        <button onclick="exportDnevniKml('${day.date}')" title="Izvezi ovaj dan kao KML" style="background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">📥 KML</button>
+      </div>
       <div class="day-entries">${entries}</div>
       <div class="day-total"><span style="color:#64748b;">Dan ukupno</span><span style="color:#fbbf24;font-family:monospace;">${fmtL(dayTotal)}</span></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px;">
