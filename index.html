@@ -750,14 +750,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <span class="lbl">Boja trase</span>
         <div class="colors" id="clrs"></div>
-        <div style="margin-bottom:8px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#94a3b8;">
-            <input type="checkbox" id="ilager-chk" onchange="updLagerPreview()"
-              style="width:15px;height:15px;accent-color:#f59e0b;">
-            <span>Izlaz na put <span id="ilager-preview" style="color:#f59e0b;font-weight:bold;"></span></span>
-          </label>
-          <input type="hidden" id="ilager" value="">
-        </div>
         <button class="btn g" onclick="nacrtajVlaku()">✏️ NACRTAJ VLAKU</button>
         <button class="btn o" id="brec" onclick="togRec()">⏺ POČNI GPS SNIMANJE</button>
       </div>
@@ -2395,20 +2387,21 @@ function nacrtajVlaku() {
   setTimeout(() => { if (actI !== null) mtAddLine(); }, 30);
 }
 
-function addV() {
+async function addV() {
   const {nm,br,kr} = updPrev();
   if (vlake.find(v=>v.nm===nm)) { alert(`Vlaka "${nm}" već postoji!`); return; }
   const color = selC;
-  const lager = document.getElementById('ilager').value || '';
+  // Glavna vlaka (kr=0) automatski dobiva lager; krakovi nemaju
+  let lager = '';
+  if (kr === 0) {
+    const { lbl } = await nextLagerNum();
+    lager = lbl;
+  }
   const poly  = L.polyline([],{color,weight:4,opacity:0.9}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
   attachPolyClick(poly);
   vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
   sbFlushVlaka(vlake.length-1);
-  // Reset lager checkbox
-  document.getElementById('ilager-chk').checked = false;
-  document.getElementById('ilager').value = '';
-  document.getElementById('ilager-preview').textContent = '';
   cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
   document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
   rndList();
@@ -2435,20 +2428,6 @@ async function nextLagerNum() {
   return { lbl: 'L' + n, offline };
 }
 
-async function updLagerPreview() {
-  const chk = document.getElementById('ilager-chk');
-  const prev = document.getElementById('ilager-preview');
-  const inp = document.getElementById('ilager');
-  if (chk.checked) {
-    prev.textContent = '→ ...';
-    const { lbl, offline } = await nextLagerNum();
-    prev.innerHTML = `→ <b>${lbl}</b>${offline ? ' <span style="color:#f87171;font-size:10px;">(offline)</span>' : ''}`;
-    inp.value = lbl;
-  } else {
-    prev.textContent = '';
-    inp.value = '';
-  }
-}
 
 function flipVlakaDir() {
   if (actI === null) return;
