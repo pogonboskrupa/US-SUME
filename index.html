@@ -4608,36 +4608,41 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
   try {
     const { data: files, error } = await sb.storage.from(bucketName).list('', { limit: 200 });
     if (error) {
-      console.warn(`Bucket "${bucketName}":`, error.message);
-      showToast(`⚠ KML bucket "${bucketName}": ${error.message}`);
+      showToast(`⚠ KML "${bucketName}": ${error.message}`);
       return;
     }
-    if (!files?.length) return;
+    if (!files?.length) {
+      showToast(`⚠ KML "${bucketName}": nema fajlova`);
+      return;
+    }
+    const kmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.kml'));
+    if (!kmlFiles.length) {
+      showToast(`⚠ KML "${bucketName}": nema .kml fajlova (${files.map(f=>f.name).join(', ')})`);
+      return;
+    }
 
     let didFit = false;
-    for (const file of files) {
-      if (!file.name.toLowerCase().endsWith('.kml')) continue;
+    for (const file of kmlFiles) {
       if (kmlLs.find(k => k._bucket === bucketName && k.name === file.name)) continue; // dedup
 
       const opts = typeof getOpts === 'function' ? getOpts(file.name) : getOpts;
 
-      // Pokušaj public URL (bucket mora biti public), fallback na signed URL
-      let fetchUrl;
+      // Public URL (bucket mora biti public u Supabase)
       const { data: pubData } = sb.storage.from(bucketName).getPublicUrl(file.name);
-      fetchUrl = pubData?.publicUrl;
+      const fetchUrl = pubData?.publicUrl;
 
       let txt;
       try {
         let r = await fetch(fetchUrl);
         if (!r.ok) {
-          // Fallback: generiši signed URL (za privatne bucketove s politikama)
-          const { data: sd } = await sb.storage.from(bucketName).createSignedUrl(file.name, 31536000);
-          if (!sd?.signedUrl) { console.warn('Nema pristupa:', file.name); continue; }
+          // Fallback: signed URL
+          const { data: sd, error: se } = await sb.storage.from(bucketName).createSignedUrl(file.name, 31536000);
+          if (se || !sd?.signedUrl) { showToast(`⚠ ${file.name}: ${se?.message||'nema URL-a'}`); continue; }
           r = await fetch(sd.signedUrl);
-          if (!r.ok) { console.warn('Fetch greška:', file.name, r.status); continue; }
+          if (!r.ok) { showToast(`⚠ ${file.name}: HTTP ${r.status}`); continue; }
         }
         txt = await r.text();
-      } catch(fe) { console.warn('Fetch exception:', file.name, fe.message); continue; }
+      } catch(fe) { showToast(`⚠ ${file.name}: ${fe.message}`); continue; }
 
       const doc = new DOMParser().parseFromString(txt, 'text/xml');
       if (extractOdjeli) _extractGraniceOdjeli(doc);
