@@ -1319,6 +1319,7 @@ async function sbInitData() {
   sbLoadOdjeli();
   await sbLoadKolegeVlake();
   sbStartRealtime();
+  autoLoadOdjeliOdsjeci(); // učitaj granice odjela/odsjeka iz storage
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -3077,6 +3078,74 @@ function pcs(s) {
   if(!s) return [];
   return s.trim().split(/\s+/).map(c=>{const p=c.split(',');return p.length>=2?[parseFloat(p[1]),parseFloat(p[0])]:null;}).filter(Boolean);
 }
+
+// Stilizovani KML parser — prima options za boju/debljinu/crtanje
+function pkmlStyled(doc, opts) {
+  const g = L.featureGroup();
+  doc.querySelectorAll('Placemark').forEach(pm => {
+    const name = pm.querySelector('name')?.textContent?.trim() || '';
+    pm.querySelectorAll('Polygon').forEach(pg => {
+      const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
+      if (cs.length > 2) {
+        const l = L.polyline([...cs, cs[0]], opts);
+        if (name) l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+        l.addTo(g);
+      }
+    });
+    pm.querySelectorAll('LineString').forEach(ls => {
+      const cs = pcs(ls.querySelector('coordinates')?.textContent);
+      if (cs.length > 1) {
+        const l = L.polyline(cs, opts);
+        if (name) l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+        l.addTo(g);
+      }
+    });
+    pm.querySelectorAll('Point').forEach(pt => {
+      const cs = pcs(pt.querySelector('coordinates')?.textContent);
+      if (cs.length > 0) {
+        const m = L.circleMarker(cs[0], { radius: 4, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
+        if (name) m.bindTooltip(name, { sticky: true });
+        m.addTo(g);
+      }
+    });
+  });
+  return g;
+}
+
+// Stilovi za odjele i odsjeke
+const _ODJEL_STYLE  = { color: '#ffffff', weight: 3, opacity: 0.85, dashArray: '10 6' };
+const _ODSJEK_STYLE = { color: '#fbbf24', weight: 1.5, opacity: 0.8 };
+
+async function autoLoadOdjeliOdsjeci() {
+  try {
+    const { data: files, error } = await sb.storage.from('ODJELI_ODSJECI').list('', { limit: 100 });
+    if (error || !files?.length) { console.warn('ODJELI_ODSJECI:', error?.message || 'nema fajlova'); return; }
+
+    for (const file of files) {
+      if (!file.name.toLowerCase().endsWith('.kml')) continue;
+      const nm = file.name.toUpperCase();
+      const isOdsjeci = nm.includes('ODSJEC') || nm.includes('ODSJEK');
+      const opts = isOdsjeci ? _ODSJEK_STYLE : _ODJEL_STYLE;
+
+      // Generiši privremeni signed URL (1 god)
+      const { data: urlData, error: urlErr } = await sb.storage
+        .from('ODJELI_ODSJECI').createSignedUrl(file.name, 31536000);
+      if (urlErr || !urlData?.signedUrl) { console.warn('URL greška za', file.name, urlErr?.message); continue; }
+
+      const r = await fetch(urlData.signedUrl);
+      if (!r.ok) { console.warn('Fetch greška:', file.name, r.status); continue; }
+      const txt = await r.text();
+      const doc = new DOMParser().parseFromString(txt, 'text/xml');
+      const grp = pkmlStyled(doc, opts);
+      grp.addTo(map);
+      kmlLs.push({ name: file.name, grp, col: opts.color, vis: true });
+    }
+    rndKml();
+  } catch(e) {
+    console.warn('autoLoadOdjeliOdsjeci greška:', e.message);
+  }
+}
+
 function rndKml() {
   const el=document.getElementById('kl'); el.innerHTML='';
   kmlLs.forEach((k,i)=>{
