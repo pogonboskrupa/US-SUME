@@ -633,6 +633,13 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gl-opacity-row { display:flex; align-items:center; gap:6px; font-size:11px; color:#64748b; flex:1; min-width:120px; }
 .gl-opacity-row input[type=range] { flex:1; accent-color:#60a5fa; }
 .gl-sep { flex:1; }
+.gl-preset {
+  width:16px; height:16px; border-radius:3px; border:2px solid transparent;
+  cursor:pointer; flex-shrink:0; transition:transform 0.1s, border-color 0.1s;
+  display:inline-block;
+}
+.gl-preset:hover { transform:scale(1.25); border-color:#60a5fa; }
+.gl-preset.active { border-color:#fff; transform:scale(1.15); }
 
 /* Print modal */
 #print-modal {
@@ -3377,10 +3384,12 @@ function rndGraniceModal() {
       html += `<div class="gl-row${k.vis ? '' : ' hidden-layer'}">
         <div class="gl-name">${folderPart}${shortName}</div>
         <div class="gl-controls">
-          <div class="gl-swatch-wrap" title="Boja">
+          <div class="gl-swatch-wrap" title="Odaberi boju">
             <span class="gl-swatch" style="background:${k.col};"></span>
             <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)">
           </div>
+          ${['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'].map(c=>`<span class="gl-preset${k.col===c?' active':''}" style="background:${c};" onclick="setKmlColor(${i},'${c}')" title="${c}"></span>`).join('')}
+          <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
           <button class="gl-btn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
           <button class="gl-btn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
           <button class="gl-btn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
