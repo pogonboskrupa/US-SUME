@@ -3352,14 +3352,34 @@ async function saveGlobalKmlStyles() {
     weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
     updated_by: sbUser.id, updated_at: new Date().toISOString()
   }));
-  if (rows.length === 0) { showToast('Nema slojeva za sačuvati.'); return; }
+  if (rows.length === 0) { _graniceStatus('Nema slojeva za sačuvati.', 'warn'); return; }
+
+  const btn = document.querySelector('#granice-list button[onclick="saveGlobalKmlStyles()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Čuvam...'; }
+
   const { error } = await sb.from('kml_styles_global').upsert(rows, { onConflict: 'key' });
-  if (error) { showToast('Greška pri čuvanju: ' + error.message); return; }
+
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Sačuvaj kao default za sve'; }
+
+  if (error) {
+    console.error('saveGlobalKmlStyles error:', error);
+    _graniceStatus('❌ Greška: ' + error.message, 'error');
+    return;
+  }
   rows.forEach(r => { _globalKmlStyles[r.key] = r; });
-  // Clear all user local overrides on admin devices too
   localStorage.removeItem(_KML_USER_STYLES_KEY);
-  showToast('✓ Stilovi sačuvani kao default za sve korisnike.');
+  _graniceStatus(`✓ Sačuvano ${rows.length} sloj${rows.length === 1 ? '' : 'a'} kao default za sve korisnike.`, 'ok');
   rndGraniceModal();
+}
+
+function _graniceStatus(msg, type) {
+  const el = document.getElementById('granice-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? '#4ade80' : type === 'error' ? '#f87171' : '#fbbf24';
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
 // Save user personal overrides to localStorage
@@ -5611,6 +5631,7 @@ async function autoLoadAllKmlBuckets() {
         <button onclick="closeGraniceModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
       </div>
     </div>
+    <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 14px;border-radius:0;text-align:center;background:rgba(0,0,0,0.3);"></div>
     <div id="granice-list">
       <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
     </div>
