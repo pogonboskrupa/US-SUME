@@ -3356,8 +3356,18 @@ function loadKmlStyleFor(key, defaults) {
     const userMap = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
     const user = userMap[key] || {};
     // Merge: defaults → global (admin) → user override
-    return { ...defaults, ...global, ...user };
+    const merged = { ...defaults, ...global, ...user };
+    // Translate internal keys → Leaflet keys
+    return _kmlStyleToLeaflet(merged);
   } catch { return defaults; }
+}
+
+// Prevodi interne ključeve (col/dash) u Leaflet ključeve (color/dashArray)
+function _kmlStyleToLeaflet(s) {
+  const out = { ...s };
+  if (s.col)  { out.color = s.col; }
+  if (s.dash !== undefined) { if (s.dash) out.dashArray = s.dash; else delete out.dashArray; }
+  return out;
 }
 
 function applyKmlStyle(i) {
