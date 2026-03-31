@@ -594,11 +594,20 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gmhdr h2 { font-size:15px; font-weight:bold; color:#60a5fa; margin:0; }
 #granice-list { padding:10px 12px; }
 .gl-group-hdr {
-  font-size:10px; font-weight:bold; color:#475569;
-  text-transform:uppercase; letter-spacing:0.8px;
-  padding:6px 4px 4px; margin-top:6px; border-top:1px solid #1e3a5f;
+  display:flex; align-items:center; gap:6px;
+  font-size:11px; font-weight:bold; color:#60a5fa;
+  padding:7px 6px 5px; margin-top:8px;
+  border-top:1px solid #1e3a5f; border-radius:4px;
+  cursor:pointer; user-select:none;
+  background:rgba(15,52,96,0.25);
+  transition:background 0.12s;
 }
+.gl-group-hdr:hover { background:rgba(59,130,246,0.1); }
 .gl-group-hdr:first-child { border-top:none; margin-top:0; }
+.gl-fold-arrow { font-size:9px; color:#475569; flex-shrink:0; }
+.gl-group-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gl-group-meta { font-size:10px; color:#475569; font-weight:normal; flex-shrink:0; }
+.gl-grp-vis { padding:1px 7px !important; font-size:13px !important; }
 .gl-row {
   background:#0f172a; border:1px solid #1e3a5f; border-radius:8px;
   padding:8px 10px; margin-bottom:6px;
@@ -3350,6 +3359,25 @@ async function reloadGraniceSlojevi() {
   openGraniceModal();
 }
 
+// Collapsed folder groups (persist across re-renders, reset on modal open)
+const _glCollapsed = new Set();
+
+function togGlGroup(gk) {
+  _glCollapsed.has(gk) ? _glCollapsed.delete(gk) : _glCollapsed.add(gk);
+  rndGraniceModal();
+}
+
+// Show/hide all layers in a folder group
+function togGlGroupVis(indices) {
+  const allVis = indices.every(i => kmlLs[i].vis);
+  indices.forEach(i => {
+    kmlLs[i].vis = !allVis;
+    allVis ? map.removeLayer(kmlLs[i].grp) : kmlLs[i].grp.addTo(map);
+  });
+  saveKmlStyles();
+  rndGraniceModal();
+}
+
 function rndGraniceModal() {
   const el = document.getElementById('granice-list');
   if (!el) return;
@@ -3373,43 +3401,58 @@ function rndGraniceModal() {
   let html = '';
 
   Object.entries(groups).forEach(([groupName, items]) => {
-    html += `<div class="gl-group-hdr">${groupName}</div>`;
-    items.forEach(({ k, i }) => {
-      const d = k.dash || '';
-      const w = k.weight || 2;
-      const op = Math.round((k.opacity ?? 0.9) * 100);
-      const shortName = k.name.includes('/') ? k.name.split('/').slice(1).join('/') : k.name;
-      const folderPart = k.name.includes('/') ? `<span>${k.name.split('/')[0]} / </span>` : '';
+    const collapsed = _glCollapsed.has(groupName);
+    const indices = items.map(x => x.i);
+    const allVis = indices.every(i => kmlLs[i].vis);
+    const anyVis = indices.some(i => kmlLs[i].vis);
+    const visIcon = allVis ? '👁' : anyVis ? '◑' : '🚫';
+    const visTip  = allVis ? 'Sakrij cijeli folder' : 'Prikaži cijeli folder';
+    const gkEsc   = groupName.replace(/'/g, "\\'");
 
-      html += `<div class="gl-row${k.vis ? '' : ' hidden-layer'}">
-        <div class="gl-name">${folderPart}${shortName}</div>
-        <div class="gl-controls">
-          <div class="gl-swatch-wrap" title="Odaberi boju">
-            <span class="gl-swatch" style="background:${k.col};"></span>
-            <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)">
+    html += `<div class="gl-group-hdr" onclick="togGlGroup('${gkEsc}')">
+      <span class="gl-fold-arrow">${collapsed ? '▶' : '▼'}</span>
+      <span class="gl-group-name">${groupName}</span>
+      <span class="gl-group-meta">${items.length} sloj${items.length===1?'':'a'}</span>
+      <button class="gl-btn gl-grp-vis${allVis?' on':''}" onclick="event.stopPropagation();togGlGroupVis([${indices}])" title="${visTip}" style="margin-left:auto;font-size:13px;padding:1px 7px;">${visIcon}</button>
+    </div>`;
+
+    if (!collapsed) {
+      items.forEach(({ k, i }) => {
+        const d = k.dash || '';
+        const w = k.weight || 2;
+        const op = Math.round((k.opacity ?? 0.9) * 100);
+        const shortName = k.name.includes('/') ? k.name.split('/').slice(1).join('/') : k.name;
+
+        html += `<div class="gl-row${k.vis ? '' : ' hidden-layer'}">
+          <div class="gl-name">${shortName}</div>
+          <div class="gl-controls">
+            <div class="gl-swatch-wrap" title="Odaberi boju">
+              <span class="gl-swatch" style="background:${k.col};"></span>
+              <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)">
+            </div>
+            ${['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'].map(c=>`<span class="gl-preset${k.col===c?' active':''}" style="background:${c};" onclick="setKmlColor(${i},'${c}')" title="${c}"></span>`).join('')}
+            <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
+            <button class="gl-btn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
+            <button class="gl-btn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
+            <button class="gl-btn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
+            <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
+            <div class="gl-weight-row" title="Debljina linije">
+              ${WEIGHTS.map(ww=>`<button class="gl-btn ${w===ww?'on':''}" onclick="setKmlWeight(${i},${ww})">${ww}</button>`).join('')}
+            </div>
           </div>
-          ${['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'].map(c=>`<span class="gl-preset${k.col===c?' active':''}" style="background:${c};" onclick="setKmlColor(${i},'${c}')" title="${c}"></span>`).join('')}
-          <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
-          <button class="gl-btn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
-          <button class="gl-btn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
-          <button class="gl-btn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
-          <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
-          <div class="gl-weight-row" title="Debljina linije">
-            ${WEIGHTS.map(ww=>`<button class="gl-btn ${w===ww?'on':''}" onclick="setKmlWeight(${i},${ww})">${ww}</button>`).join('')}
+          <div class="gl-controls" style="margin-top:6px;">
+            <div class="gl-opacity-row">
+              <span>Providnost</span>
+              <input type="range" min="10" max="100" value="${op}" oninput="setKmlOpacity(${i},this.value/100)" onchange="setKmlOpacity(${i},this.value/100)">
+              <span style="min-width:28px;text-align:right;color:#e2e8f0;">${op}%</span>
+            </div>
+            <div class="gl-sep"></div>
+            <button class="gl-btn" onclick="togK(${i})" title="${k.vis?'Sakrij sloj':'Prikaži sloj'}" style="font-size:14px;padding:2px 8px;">${k.vis?'👁':'🚫'}</button>
+            <button class="gl-btn danger" onclick="if(confirm('Ukloniti sloj?'))delK(${i})" title="Ukloni sloj">✕</button>
           </div>
-        </div>
-        <div class="gl-controls" style="margin-top:6px;">
-          <div class="gl-opacity-row">
-            <span>Providnost</span>
-            <input type="range" min="10" max="100" value="${op}" oninput="setKmlOpacity(${i},this.value/100)" onchange="setKmlOpacity(${i},this.value/100)">
-            <span style="min-width:28px;text-align:right;color:#e2e8f0;">${op}%</span>
-          </div>
-          <div class="gl-sep"></div>
-          <button class="gl-btn" onclick="togK(${i})" title="${k.vis?'Sakrij sloj':'Prikaži sloj'}" style="font-size:14px;padding:2px 8px;">${k.vis?'👁':'🚫'}</button>
-          <button class="gl-btn danger" onclick="if(confirm('Ukloniti sloj?'))delK(${i})" title="Ukloni sloj">✕</button>
-        </div>
-      </div>`;
-    });
+        </div>`;
+      });
+    }
   });
 
   el.innerHTML = html;
