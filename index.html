@@ -2594,7 +2594,9 @@ function toggleRecPause() {
   } else {
     banner.classList.remove('paused');
     btn.textContent = '⏸'; btn.title = 'Pauza';
-    showToast('▶ Snimanje nastavljeno');
+    // Obnovi normalni prikaz dužine/tačaka
+    _updBl2();
+    showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
 }
 
@@ -2685,6 +2687,13 @@ function startNoviKrak() {
   showToast('⊕ Novi krak ' + krakNm);
 }
 
+function _updBl2() {
+  if (actI === null) return;
+  const v = vlake[actI];
+  if (!v) return;
+  document.getElementById('bl2').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
+}
+
 function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
   const krakIdx = actI;
@@ -2693,8 +2702,22 @@ function vratiSeNaRoditelja() {
   _recParentIdx = null;
   _gpsBuf = [];
   selI(actI);
+
+  // Auto-pauziraj — povratak se ne snima
+  recPaused = true;
+  const banner = document.getElementById('banner');
+  const btn = document.getElementById('btn-pause');
+  banner.classList.add('paused');
+  btn.textContent = '▶';
+  btn.title = 'Nastavi snimanje na vlaci';
+
   _updBanner();
-  showToast('↩ Nastavak snimanja ' + vlake[actI].nm);
+
+  // Prikaži poruku u baner redu
+  const bl2 = document.getElementById('bl2');
+  bl2.innerHTML = '<span style="color:#f59e0b;font-weight:bold;">⏸ Vraćanje — pritisni ▶ kad stigneš</span>';
+
+  showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
 }
 
 // === DRAW PREVIEW (used by addline tool) ===
