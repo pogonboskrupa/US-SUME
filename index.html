@@ -2573,6 +2573,7 @@ function _stopAddLine(fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
     setActiveTool('select');
+    document.getElementById('fab-gps').style.display = '';
   }
 }
 
@@ -2800,6 +2801,7 @@ function stopRec() {
   document.getElementById('btn-krak').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
+  document.getElementById('fab-gps').style.display = '';
 }
 
 function toggleRecPause() {
@@ -3169,6 +3171,7 @@ function fabSnimVlaku() {
     showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
     return;
   }
+  document.getElementById('fab-gps').style.display = 'none';
   switchTab('vlake');
   nacrtajVlaku();
   showToast('🚜 Vlaka kreirana — pritisni GPS snimanje ili crtaj liniju');
