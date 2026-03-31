@@ -2182,9 +2182,9 @@ function _updMapScale() {
   const closest = nice.reduce((a,b) => Math.abs(b-scale)<Math.abs(a-scale)?b:a);
   el.textContent = closest.toLocaleString('bs');
   // Sakrij tekstualne labele (brojevi odjela) pri razmjeri > 1:50 000
-  map.getContainer().classList.toggle('labels-hidden', scale > 50000);
+  map.getContainer().classList.toggle('labels-hidden', closest > 50000);
   // Sakrij vlake (linije + labele) pri razmjeri > 1:25 000
-  const hideVlake = scale > 25000;
+  const hideVlake = closest > 25000;
   const pLines  = map.getPane('vlakeLines');
   const pLabels = map.getPane('vlakeLabels');
   if (pLines)  pLines.style.display  = hideVlake ? 'none' : '';
