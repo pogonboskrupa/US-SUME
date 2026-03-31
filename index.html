@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/shapefile@0.6.6/dist/shapefile.min.js"></script>
 <style>
 
 /* === AUTH SCREEN === */
@@ -4930,43 +4931,170 @@ function _extractGraniceOdjeli(doc) {
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
 }
 
-// Učitaj sve KML fajlove iz jednog bucketa
-// getOpts: style objekt ILI funkcija(filename) → style objekt
-// extractOdjeli: true → ekstrakcija placemark bounds za print/offline
+// ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
+proj4.defs('EPSG:31276', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
+proj4.defs('EPSG:31275', '+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9999 +x_0=5500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
+proj4.defs('EPSG:3908',  '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
+// MGI 1901 Balkans Zone 6 i Zone 5 (alias)
+proj4.defs('MGI_Z6', proj4.defs('EPSG:31276'));
+proj4.defs('MGI_Z5', proj4.defs('EPSG:31275'));
+
+// ── PRJ → proj4 string parser ─────────────────────────────────────────────────
+function _prjToProj4(prjText) {
+  if (!prjText) return null;
+  // Ako je već WGS84
+  if (/WGS.?84|EPSG.*4326/i.test(prjText)) return null; // null = već WGS84, nema potrebe
+  if (/Zone_6|6500000|31276|3908/i.test(prjText)) return 'EPSG:31276';
+  if (/Zone_5|5500000|31275/i.test(prjText)) return 'EPSG:31275';
+  return null; // nepoznat → pretpostavi WGS84
+}
+
+// ── Rekurzivno listanje Supabase bucketa (root + svi podfolderi) ──────────────
+async function _listBucketAll(bucketName, path = '') {
+  const { data, error } = await sb.storage.from(bucketName).list(path, { limit: 500 });
+  if (error || !data) return [];
+  const results = [];
+  for (const item of data) {
+    const fullPath = path ? `${path}/${item.name}` : item.name;
+    if (!item.id && !item.metadata) {
+      // To je folder — rekurzivno
+      const sub = await _listBucketAll(bucketName, fullPath);
+      results.push(...sub);
+    } else {
+      results.push({ name: item.name, path: fullPath, folder: path });
+    }
+  }
+  return results;
+}
+
+// ── URL za fajl u bucketu ────────────────────────────────────────────────────
+function _bucketFileUrl(bucketName, filePath) {
+  const parts = filePath.split('/').map(encodeURIComponent).join('/');
+  return `${SUPA_URL}/storage/v1/object/public/${encodeURIComponent(bucketName)}/${parts}`;
+}
+
+// ── Fetch helper ──────────────────────────────────────────────────────────────
+async function _fetchBucketFile(bucketName, filePath, type = 'text') {
+  const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { 'apikey': SUPA_KEY } });
+  if (!r.ok) return null;
+  return type === 'arraybuffer' ? r.arrayBuffer() : r.text();
+}
+
+// ── Učitaj jedan KML fajl ────────────────────────────────────────────────────
+async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
+  const key = bucketName + '/' + file.path;
+  if (kmlLs.find(k => k._key === key)) return null; // dedup
+  const txt = await _fetchBucketFile(bucketName, file.path, 'text');
+  if (!txt) { console.warn('KML fetch fail:', file.path); return null; }
+  const doc = new DOMParser().parseFromString(txt, 'text/xml');
+  if (extractOdjeli) _extractGraniceOdjeli(doc);
+  const grp = pkmlStyled(doc, opts);
+  grp.addTo(map);
+  const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
+  kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
+    col: opts.color, dash: opts.dashArray || '', weight: opts.weight || 2, vis: true });
+  return grp;
+}
+
+// ── Učitaj jedan SHP fajl (+ .dbf + .prj ako postoje) ───────────────────────
+async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
+  if (typeof shapefile === 'undefined') { console.warn('shapefile.js nije učitan'); return null; }
+  const key = bucketName + '/' + file.path;
+  if (kmlLs.find(k => k._key === key)) return null; // dedup
+
+  const basePath = file.path.replace(/\.shp$/i, '');
+  const [shpBuf, dbfBuf, prjTxt] = await Promise.all([
+    _fetchBucketFile(bucketName, file.path, 'arraybuffer'),
+    _fetchBucketFile(bucketName, basePath + '.dbf', 'arraybuffer'),
+    _fetchBucketFile(bucketName, basePath + '.prj', 'text'),
+  ]);
+  if (!shpBuf) { console.warn('SHP fetch fail:', file.path); return null; }
+
+  // Odredi projekciju iz .prj
+  const fromCrs = _prjToProj4(prjTxt);
+
+  let geojson;
+  try {
+    geojson = await shapefile.read(shpBuf, dbfBuf || undefined);
+  } catch(e) { console.warn('SHP parse error:', file.name, e.message); return null; }
+
+  // Reprojekcija koordinata ako nije WGS84
+  if (fromCrs) {
+    geojson.features.forEach(f => {
+      _reprojectGeometry(f.geometry, fromCrs);
+    });
+  }
+
+  // Ime featurea iz .dbf atributa (pokušaj česta polja)
+  const NAME_FIELDS = ['NAZIV', 'NAME', 'OznakaOdj', 'Oznaka', 'Broj', 'ID', 'OBJECTID'];
+
+  const grp = L.featureGroup();
+  geojson.features.forEach(f => {
+    const nm = NAME_FIELDS.map(k => f.properties?.[k]).find(v => v != null) ?? '';
+    const styleOpts = { ...opts };
+    try {
+      const layer = L.geoJSON(f, {
+        style: () => styleOpts,
+        pointToLayer: (_, ll) => L.circleMarker(ll, { radius: 4, ...styleOpts }),
+      });
+      if (nm) layer.bindTooltip(String(nm), { sticky: true, opacity: 0.9 });
+      layer.addTo(grp);
+
+      // Ekstrakcija bounds za odjele
+      if (extractOdjeli && nm) {
+        const nmStr = String(nm);
+        if (!graniceOdjeli.find(o => o.name === nmStr)) {
+          try {
+            const b = layer.getBounds();
+            if (b.isValid()) graniceOdjeli.push({ name: nmStr, bounds: b });
+          } catch {}
+        }
+      }
+    } catch {}
+  });
+  if (extractOdjeli) graniceOdjeli.sort((a,b) => a.name.localeCompare(b.name, 'bs'));
+
+  grp.addTo(map);
+  const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
+  kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
+    col: opts.color, dash: opts.dashArray || '', weight: opts.weight || 2, vis: true });
+  return grp;
+}
+
+// ── Reprojekcija geometrije in-place (GeoJSON coords) ────────────────────────
+function _reprojectGeometry(geom, fromCrs) {
+  if (!geom) return;
+  const conv = c => proj4(fromCrs, 'WGS84', c); // [x,y] → [lon,lat]
+  const reprCoords = arr => {
+    if (!Array.isArray(arr)) return arr;
+    if (typeof arr[0] === 'number') return conv(arr);
+    return arr.map(reprCoords);
+  };
+  if (geom.coordinates) geom.coordinates = reprCoords(geom.coordinates);
+  if (geom.geometries)  geom.geometries.forEach(g => _reprojectGeometry(g, fromCrs));
+}
+
+// ── Glavna funkcija: učitaj cijeli bucket (root + podfolderi, KML + SHP) ─────
 async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
   try {
-    const { data: files, error: listErr } = await sb.storage.from(bucketName).list('', { limit: 200 });
-    if (listErr) { console.warn(`KML "${bucketName}":`, listErr.message); return; }
-    if (!files?.length) { console.warn(`KML "${bucketName}": bucket prazan`); return; }
-    const kmlFiles = files.filter(f => f.name && /\.kml$/i.test(f.name));
-    if (!kmlFiles.length) { console.warn(`KML "${bucketName}": nema .kml fajlova`, files.map(f=>f.name)); return; }
+    const allFiles = await _listBucketAll(bucketName);
+    if (!allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
+
+    const supported = allFiles.filter(f => /\.(kml|shp)$/i.test(f.name));
+    if (!supported.length) { console.warn(`Bucket "${bucketName}": nema KML/SHP fajlova`); return; }
 
     let didFit = false;
-    for (const file of kmlFiles) {
-      if (kmlLs.find(k => k._bucket === bucketName && k.name === file.name)) continue; // dedup
+    for (const file of supported) {
+      const opts = typeof getOpts === 'function' ? getOpts(file.name) : { ...getOpts };
+      let grp = null;
 
-      const opts = typeof getOpts === 'function' ? getOpts(file.name) : getOpts;
+      if (/\.kml$/i.test(file.name)) {
+        grp = await _loadOneKml(bucketName, file, opts, extractOdjeli);
+      } else if (/\.shp$/i.test(file.name)) {
+        grp = await _loadOneShp(bucketName, file, opts, extractOdjeli);
+      }
 
-      // Direktan enkodiran URL — getPublicUrl ne enkodira razmake u bucket imenu
-      const fetchUrl = `${SUPA_URL}/storage/v1/object/public/${encodeURIComponent(bucketName)}/${encodeURIComponent(file.name)}`;
-
-      let txt;
-      try {
-        const r = await fetch(fetchUrl, { headers: { 'apikey': SUPA_KEY } });
-        if (!r.ok) { console.warn(`KML ${file.name}: HTTP ${r.status}`); continue; }
-        txt = await r.text();
-      } catch(fe) { console.warn(`KML ${file.name}:`, fe.message); continue; }
-
-      const doc = new DOMParser().parseFromString(txt, 'text/xml');
-      if (extractOdjeli) _extractGraniceOdjeli(doc);
-
-      const grp = pkmlStyled(doc, opts);
-      grp.addTo(map);
-      kmlLs.push({ name: file.name, _bucket: bucketName, grp,
-        col: opts.color, dash: opts.dashArray || '', weight: opts.weight || 2, vis: true });
-
-      // Fituj kartu na prvi učitani sloj
-      if (!didFit && extractOdjeli) {
+      if (grp && !didFit && extractOdjeli) {
         try { const b = grp.getBounds(); if (b.isValid()) { map.fitBounds(b, { padding: [30,30] }); didFit = true; } } catch {}
       }
     }
