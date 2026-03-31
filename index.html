@@ -673,6 +673,76 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gl-preset:hover { transform:scale(1.25); border-color:#60a5fa; }
 .gl-preset.active { border-color:#fff; transform:scale(1.15); }
 
+/* ── GPS FAB (Floating Action Button) ───────────────────── */
+#fab-gps {
+  position: fixed;
+  bottom: 24px;
+  left: 16px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: none;
+}
+#fab-gps > * { pointer-events: auto; }
+#fab-main {
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  background: #dc2626;
+  border: 3px solid rgba(255,255,255,0.2);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+  font-size: 26px;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.25s, background 0.2s;
+  line-height: 1;
+  padding: 0;
+}
+#fab-main.open { transform: rotate(45deg); background: #7f1d1d; }
+#fab-main.gps-active { background: #16a34a; }
+#fab-main.gps-active.open { background: #14532d; }
+.fab-item {
+  display: flex; align-items: center; gap: 10px;
+  opacity: 0; transform: translateY(12px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.fab-item:nth-child(2) { transition-delay: 0.00s; }
+.fab-item:nth-child(3) { transition-delay: 0.05s; }
+.fab-item:nth-child(4) { transition-delay: 0.10s; }
+#fab-gps.open .fab-item {
+  opacity: 1; transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.fab-item-btn {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: #1e3a5f;
+  border: 2px solid #334155;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.fab-item-btn:hover { background: #1e40af; border-color: #3b82f6; }
+.fab-item-btn.active { background: #7f1d1d; border-color: #ef4444; }
+.fab-item-lbl {
+  background: rgba(10,17,35,0.92);
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 5px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  order: -1;
+}
+
 /* Print modal */
 #print-modal {
   display:none; position:fixed; inset:0;
@@ -2930,6 +3000,7 @@ let _gpsBuf = [];        // circular buffer for smoothing
 function onP(p) {
   const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
   lastP = {la, lo, al: al||0, ac};
+  _addTragPoint(la, lo, al);
   _updMcdDist();
 
   // Update display always
@@ -2993,6 +3064,112 @@ function onPE(e) {
 function centerMap() {
   if (lastP) map.setView([lastP.la,lastP.lo],18);
   else startGPS();
+}
+
+// ── GPS FAB ───────────────────────────────────────────────────────────────────
+let _fabOpen = false;
+let _tragOn   = false;
+let _tragLine = null;
+let _tragPts  = [];
+
+function toggleFabGps() {
+  _fabOpen = !_fabOpen;
+  const fab = document.getElementById('fab-gps');
+  const btn = document.getElementById('fab-main');
+  fab.classList.toggle('open', _fabOpen);
+  btn.classList.toggle('open', _fabOpen);
+}
+
+function _closeFab() {
+  _fabOpen = false;
+  document.getElementById('fab-gps').classList.remove('open');
+  document.getElementById('fab-main').classList.remove('open');
+}
+
+function fabLokacija() {
+  _closeFab();
+  if (lastP) {
+    map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
+    showToast('📍 Centrirana na tvoju lokaciju');
+  } else {
+    showToast('⏳ Pokretanje GPS-a...');
+    startGPS();
+    // čekaj prvu poziciju pa centriranje
+    const wait = setInterval(() => {
+      if (lastP) { clearInterval(wait); map.setView([lastP.la, lastP.lo], 16); }
+    }, 500);
+    setTimeout(() => clearInterval(wait), 15000);
+  }
+}
+
+function fabSnimTrag() {
+  _closeFab();
+  if (_tragOn) {
+    // Zaustavi snimanje traga
+    _tragOn = false;
+    const btn = document.getElementById('fab-trag-btn');
+    const lbl = document.getElementById('fab-trag-lbl');
+    if (btn) { btn.classList.remove('active'); btn.textContent = '🔴'; }
+    if (lbl) lbl.textContent = 'Snimi trag';
+    document.getElementById('fab-main').classList.remove('gps-active');
+    if (_tragPts.length > 1) {
+      const dlLink = document.createElement('a');
+      const gpx = _tragToGpx(_tragPts);
+      dlLink.href = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
+      dlLink.download = 'trag_' + new Date().toISOString().slice(0,10) + '.gpx';
+      dlLink.click();
+      showToast(`✓ Trag sačuvan — ${_tragPts.length} tačaka`);
+    } else {
+      showToast('Trag nije snimljen (premalo tačaka)');
+    }
+    _tragPts = [];
+  } else {
+    // Počni snimanje traga
+    if (!gpsOn) startGPS();
+    _tragOn = true;
+    _tragPts = [];
+    if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
+    _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
+    const btn = document.getElementById('fab-trag-btn');
+    const lbl = document.getElementById('fab-trag-lbl');
+    if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
+    if (lbl) lbl.textContent = 'Zaustavi trag';
+    document.getElementById('fab-main').classList.add('gps-active');
+    showToast('🔴 Snimanje traga pokrenuto');
+  }
+}
+
+function _addTragPoint(la, lo, al) {
+  if (!_tragOn) return;
+  if (_tragPts.length > 0) {
+    const last = _tragPts[_tragPts.length - 1];
+    if (dst(last[0], last[1], la, lo) < 2) return; // min 2m između tačaka
+  }
+  _tragPts.push([la, lo, al]);
+  if (_tragLine) _tragLine.addLatLng([la, lo]);
+}
+
+function _tragToGpx(pts) {
+  const trkpts = pts.map(p =>
+    `    <trkpt lat="${p[0].toFixed(7)}" lon="${p[1].toFixed(7)}">${p[2] != null ? `<ele>${p[2].toFixed(1)}</ele>` : ''}</trkpt>`
+  ).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="TVlake App">
+  <trk><name>Trag ${new Date().toLocaleString('bs-BA')}</name>
+    <trkseg>\n${trkpts}\n    </trkseg>
+  </trk>
+</gpx>`;
+}
+
+function fabSnimVlaku() {
+  _closeFab();
+  if (!_aktivniProjektId) {
+    showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
+    return;
+  }
+  switchTab('vlake');
+  nacrtajVlaku();
+  showToast('🚜 Vlaka kreirana — pritisni GPS snimanje ili crtaj liniju');
 }
 
 // === POINTS ===
@@ -5701,6 +5878,23 @@ async function autoLoadAllKmlBuckets() {
         <div id="msr-segs"></div>
       </div>
     </div><!-- /izmjeri-panel -->
+
+<!-- GPS FAB -->
+<div id="fab-gps">
+  <button id="fab-main" onclick="toggleFabGps()" title="GPS akcije">📍</button>
+  <div class="fab-item" id="fab-item-vlaka">
+    <span class="fab-item-lbl">Snimi vlaku</span>
+    <button class="fab-item-btn" onclick="fabSnimVlaku()" title="Snimi vlaku">🚜</button>
+  </div>
+  <div class="fab-item" id="fab-item-trag">
+    <span class="fab-item-lbl" id="fab-trag-lbl">Snimi trag</span>
+    <button class="fab-item-btn" id="fab-trag-btn" onclick="fabSnimTrag()" title="Snimi trag kretanja">🔴</button>
+  </div>
+  <div class="fab-item" id="fab-item-loc">
+    <span class="fab-item-lbl">Moja lokacija</span>
+    <button class="fab-item-btn" onclick="fabLokacija()" title="Prikaži moju lokaciju">🎯</button>
+  </div>
+</div>
 
 <!-- GRANICE ODJELA MODAL -->
 <div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
