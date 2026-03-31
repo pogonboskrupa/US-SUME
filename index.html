@@ -1366,6 +1366,7 @@ async function sbInitData() {
 let _projekti = [];
 let _aktivniProjektId = localStorage.getItem('tvlake_akt_proj') || null;
 let _pdProjektId = null;
+const _deletedProjektIds = new Set(); // guard: ne dozvoli sbLoadProjekti da ih vrati
 
 async function sbLoadProjekti() {
   if (!sbUser) return;
@@ -1383,7 +1384,8 @@ async function sbLoadProjekti() {
       .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
     dijeljeni = data || [];
   }
-  _projekti = [...(moji || []), ...dijeljeni];
+  // Nikad ne vraćaj lokalno obrisane projekte (DB propagacija može kasniti)
+  _projekti = [...(moji || []), ...dijeljeni].filter(p => !_deletedProjektIds.has(p.id));
 
   // Load clanovi for each project
   for (const p of _projekti) {
@@ -1589,20 +1591,23 @@ async function deleteProjektUI() {
   }
   showProjektiList();
 
-  // Briši iz Supabase — provjeri greške
-  const { error: errCl } = await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
-  const { error: errPr } = await sb.from('projekti').delete().eq('id', id).eq('korisnik_id', sbUser.id);
+  // Dodaj u guard set PRIJE poziva — sbLoadProjekti nikad ga neće vratiti
+  _deletedProjektIds.add(id);
 
-  if (errPr) {
-    // Vraćanje nije uspjelo — vrati lokalno stanje i obavijesti
-    showToast('⚠ Brisanje nije uspjelo: ' + errPr.message);
-    await sbLoadProjekti(); // re-sync jer je stanje nepoznato
+  // .select('id') nam vraća stvarno obrisane redove — RLS blokada = prazan array bez errora
+  await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
+  const { data: deleted, error: errPr } = await sb.from('projekti')
+    .delete().eq('id', id).eq('korisnik_id', sbUser.id).select('id');
+
+  if (errPr || !deleted || deleted.length === 0) {
+    const msg = errPr?.message || 'Nema dozvole za brisanje (RLS policy).';
+    showToast('⚠ Brisanje nije uspjelo: ' + msg);
+    _deletedProjektIds.delete(id); // poništi guard
+    await sbLoadProjekti();
     return;
   }
 
   showToast('Projekat obrisan.');
-  // Ne pozivaj sbLoadProjekti() — lokalni _projekti je već tačan.
-  // Samo osvježi kolege vlake.
   await sbLoadKolegeVlake();
 }
 
