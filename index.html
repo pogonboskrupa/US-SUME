@@ -893,8 +893,12 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <span class="lbl">Boja trase</span>
         <div class="colors" id="clrs"></div>
-        <button class="btn g" onclick="nacrtajVlaku()">✏️ NACRTAJ VLAKU</button>
+        <button class="btn g" onclick="addV()">➕ DODAJ VLAKU</button>
+        <button class="btn g" onclick="nacrtajVlaku()" style="background:#0f3460;">✏️ NACRTAJ VLAKU</button>
         <button class="btn o" id="brec" onclick="togRec()">⏺ POČNI GPS SNIMANJE</button>
+        <div style="font-size:11px;color:#475569;text-align:center;margin-top:4px;line-height:1.5;">
+          Za crtanje i editovanje koristi<br><b style="color:#94a3b8;">toolbar na vrhu karte ↑</b>
+        </div>
       </div>
 
       <!-- SPAJANJE VLAKA -->
