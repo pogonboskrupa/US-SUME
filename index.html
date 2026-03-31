@@ -4927,10 +4927,10 @@ function _extractGraniceOdjeli(doc) {
 async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
   try {
     const { data: files, error: listErr } = await sb.storage.from(bucketName).list('', { limit: 200 });
-    if (listErr) { showToast(`⚠ KML "${bucketName}": ${listErr.message}`); return; }
-    if (!files?.length) { showToast(`⚠ KML "${bucketName}": bucket prazan`); return; }
+    if (listErr) { console.warn(`KML "${bucketName}":`, listErr.message); return; }
+    if (!files?.length) { console.warn(`KML "${bucketName}": bucket prazan`); return; }
     const kmlFiles = files.filter(f => f.name && /\.kml$/i.test(f.name));
-    if (!kmlFiles.length) { showToast(`⚠ KML "${bucketName}": fajlovi: ${files.map(f=>f.name).join(', ')}`); return; }
+    if (!kmlFiles.length) { console.warn(`KML "${bucketName}": nema .kml fajlova`, files.map(f=>f.name)); return; }
 
     let didFit = false;
     for (const file of kmlFiles) {
@@ -4944,9 +4944,9 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
       let txt;
       try {
         const r = await fetch(fetchUrl, { headers: { 'apikey': SUPA_KEY } });
-        if (!r.ok) { showToast(`⚠ ${file.name}: HTTP ${r.status}`); continue; }
+        if (!r.ok) { console.warn(`KML ${file.name}: HTTP ${r.status}`); continue; }
         txt = await r.text();
-      } catch(fe) { showToast(`⚠ ${file.name}: ${fe.message}`); continue; }
+      } catch(fe) { console.warn(`KML ${file.name}:`, fe.message); continue; }
 
       const doc = new DOMParser().parseFromString(txt, 'text/xml');
       if (extractOdjeli) _extractGraniceOdjeli(doc);
