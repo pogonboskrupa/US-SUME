@@ -576,6 +576,64 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* Sakrij tekstualne labele pri krupnoj razmjeri */
 #map.labels-hidden .map-text-label { visibility: hidden; pointer-events: none; }
 
+/* ── Granice Odjela Modal ─────────────────────────────── */
+#granice-modal {
+  display:none; position:fixed; inset:0; z-index:99500;
+  background:rgba(0,0,0,0.7); overflow-y:auto;
+}
+#granice-modal.show { display:flex; align-items:flex-start; justify-content:center; padding:20px 10px; }
+#granice-mbox {
+  background:#16213e; border:1px solid #1e3a5f; border-radius:12px;
+  width:100%; max-width:520px; padding:0; overflow:hidden;
+}
+.gmhdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px; border-bottom:1px solid #1e3a5f;
+  background:#0f172a;
+}
+.gmhdr h2 { font-size:15px; font-weight:bold; color:#60a5fa; margin:0; }
+#granice-list { padding:10px 12px; }
+.gl-group-hdr {
+  font-size:10px; font-weight:bold; color:#475569;
+  text-transform:uppercase; letter-spacing:0.8px;
+  padding:6px 4px 4px; margin-top:6px; border-top:1px solid #1e3a5f;
+}
+.gl-group-hdr:first-child { border-top:none; margin-top:0; }
+.gl-row {
+  background:#0f172a; border:1px solid #1e3a5f; border-radius:8px;
+  padding:8px 10px; margin-bottom:6px;
+}
+.gl-row.hidden-layer { opacity:0.45; }
+.gl-name {
+  font-size:12px; color:#e2e8f0; font-weight:bold;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  margin-bottom:7px; max-width:100%;
+}
+.gl-name span { color:#64748b; font-weight:normal; font-size:11px; }
+.gl-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.gl-swatch-wrap { position:relative; flex-shrink:0; cursor:pointer; }
+.gl-swatch {
+  width:22px; height:22px; border-radius:4px;
+  border:2px solid #374151; cursor:pointer; display:block;
+}
+.gl-swatch-wrap input[type=color] {
+  position:absolute; opacity:0; width:22px; height:22px; top:0; left:0; cursor:pointer;
+}
+.gl-btn {
+  background:none; border:1px solid #334155; border-radius:5px;
+  color:#64748b; font-size:11px; padding:3px 7px; cursor:pointer;
+  font-family:monospace; line-height:1.4; flex-shrink:0;
+  transition: all 0.12s;
+}
+.gl-btn:hover { border-color:#3b82f6; color:#60a5fa; }
+.gl-btn.on { border-color:#60a5fa; color:#60a5fa; background:rgba(59,130,246,0.15); }
+.gl-btn.danger { border-color:#7f1d1d; color:#f87171; }
+.gl-btn.danger:hover { background:#7f1d1d; }
+.gl-weight-row { display:flex; align-items:center; gap:4px; }
+.gl-opacity-row { display:flex; align-items:center; gap:6px; font-size:11px; color:#64748b; flex:1; min-width:120px; }
+.gl-opacity-row input[type=range] { flex:1; accent-color:#60a5fa; }
+.gl-sep { flex:1; }
+
 /* Print modal */
 #print-modal {
   display:none; position:fixed; inset:0;
@@ -3214,38 +3272,139 @@ const _ODJEL_STYLE  = { color: '#ffffff', weight: 3, opacity: 0.85, dashArray: '
 const _ODSJEK_STYLE = { color: '#fbbf24', weight: 1.5, opacity: 0.8 };
 
 
-function rndKml() {
-  const el=document.getElementById('kl'); el.innerHTML='';
-  kmlLs.forEach((k,i)=>{
-    const d=k.dash||'';
-    const row=document.createElement('div'); row.className='krow';
-    row.innerHTML=`
-      <label style="position:relative;flex-shrink:0;cursor:pointer;" title="Promijeni boju">
-        <span class="kswatch" style="background:${k.col};"></span>
-        <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)"
-          style="position:absolute;opacity:0;width:14px;height:14px;top:0;left:0;cursor:pointer;">
-      </label>
-      <button class="kdbtn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
-      <button class="kdbtn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
-      <button class="kdbtn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
-      <div class="knam" title="${k.name}">${k.name}</div>
-      <button class="mb bl" onclick="togK(${i})" title="${k.vis?'Sakrij':'Pokaži'}" style="opacity:${k.vis?1:0.4}">👁</button>
-      <button class="mb" onclick="delK(${i})" title="Ukloni">✕</button>`;
-    el.appendChild(row);
+// ── KML/SHP style persistence ─────────────────────────────────────────────────
+const _KML_STYLES_KEY = 'tvlake_kml_styles_v2';
+
+function saveKmlStyles() {
+  const map = {};
+  kmlLs.forEach(k => {
+    if (!k._key) return;
+    map[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis };
   });
+  localStorage.setItem(_KML_STYLES_KEY, JSON.stringify(map));
 }
+
+function loadKmlStyleFor(key, defaults) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(_KML_STYLES_KEY) || '{}');
+    return saved[key] ? { ...defaults, ...saved[key] } : defaults;
+  } catch { return defaults; }
+}
+
 function applyKmlStyle(i) {
-  const k=kmlLs[i];
-  const opts={color:k.col, weight:k.weight||2, opacity:0.9};
-  if(k.dash) opts.dashArray=k.dash;
-  k.grp.eachLayer(l=>{
-    if(l.setStyle) l.setStyle(opts);
-  });
+  const k = kmlLs[i];
+  if (!k) return;
+  const opts = { color: k.col, weight: k.weight || 2, opacity: k.opacity ?? 0.9 };
+  if (k.dash) opts.dashArray = k.dash;
+  else delete opts.dashArray;
+  k.grp.eachLayer(l => { if (l.setStyle) l.setStyle(opts); });
 }
-function setKmlColor(i,col){kmlLs[i].col=col;applyKmlStyle(i);rndKml();}
-function setKmlDash(i,dash){kmlLs[i].dash=dash;applyKmlStyle(i);rndKml();}
-function togK(i){const k=kmlLs[i];k.vis?map.removeLayer(k.grp):k.grp.addTo(map);k.vis=!k.vis;rndKml();}
-function delK(i){map.removeLayer(kmlLs[i].grp);kmlLs.splice(i,1);rndKml();}
+
+function setKmlColor(i, col)    { kmlLs[i].col = col;               applyKmlStyle(i); saveKmlStyles(); rndGraniceModal(); }
+function setKmlDash(i, dash)    { kmlLs[i].dash = dash;             applyKmlStyle(i); saveKmlStyles(); rndGraniceModal(); }
+function setKmlWeight(i, w)     { kmlLs[i].weight = w;              applyKmlStyle(i); saveKmlStyles(); rndGraniceModal(); }
+function setKmlOpacity(i, val)  { kmlLs[i].opacity = parseFloat(val); applyKmlStyle(i); saveKmlStyles(); rndGraniceModal(); }
+function togK(i) {
+  const k = kmlLs[i];
+  k.vis ? map.removeLayer(k.grp) : k.grp.addTo(map);
+  k.vis = !k.vis;
+  saveKmlStyles();
+  rndGraniceModal();
+}
+function delK(i) {
+  map.removeLayer(kmlLs[i].grp);
+  kmlLs.splice(i, 1);
+  saveKmlStyles();
+  rndGraniceModal();
+}
+
+// ── Old rndKml (still used in panel — keep minimal) ───────────────────────────
+function rndKml() {
+  // Panel "kl" element still shows layers (compact)
+  const el = document.getElementById('kl');
+  if (!el) return;
+  el.innerHTML = kmlLs.length === 0
+    ? '<div style="font-size:11px;color:#475569;padding:6px 0;">Nema učitanih slojeva.</div>'
+    : `<div style="font-size:11px;color:#64748b;padding:4px 0;">${kmlLs.length} sloj${kmlLs.length===1?'':'eva'} — <a href="#" onclick="openGraniceModal();return false;" style="color:#60a5fa;">uredi stilove</a></div>`;
+}
+
+// ── Granice Odjela Modal ───────────────────────────────────────────────────────
+function openGraniceModal() {
+  document.getElementById('granice-modal').classList.add('show');
+  rndGraniceModal();
+}
+function closeGraniceModal() {
+  document.getElementById('granice-modal').classList.remove('show');
+}
+
+async function reloadGraniceSlojevi() {
+  closeGraniceModal();
+  await autoLoadAllKmlBuckets();
+  openGraniceModal();
+}
+
+function rndGraniceModal() {
+  const el = document.getElementById('granice-list');
+  if (!el) return;
+  if (kmlLs.length === 0) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Nema učitanih slojeva.<br>Slojevi se učitavaju automatski pri prijavi.</div>';
+    return;
+  }
+
+  // Grupiraj po bucketu/folderu
+  const groups = {};
+  kmlLs.forEach((k, i) => {
+    const bucket = k._bucket || 'Lokalni';
+    const nameParts = k.name.split('/');
+    const folder = nameParts.length > 1 ? nameParts[0] : '—';
+    const groupKey = `${bucket} / ${folder}`;
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push({ k, i });
+  });
+
+  const WEIGHTS = [1, 1.5, 2, 3, 4, 5];
+  let html = '';
+
+  Object.entries(groups).forEach(([groupName, items]) => {
+    html += `<div class="gl-group-hdr">${groupName}</div>`;
+    items.forEach(({ k, i }) => {
+      const d = k.dash || '';
+      const w = k.weight || 2;
+      const op = Math.round((k.opacity ?? 0.9) * 100);
+      const shortName = k.name.includes('/') ? k.name.split('/').slice(1).join('/') : k.name;
+      const folderPart = k.name.includes('/') ? `<span>${k.name.split('/')[0]} / </span>` : '';
+
+      html += `<div class="gl-row${k.vis ? '' : ' hidden-layer'}">
+        <div class="gl-name">${folderPart}${shortName}</div>
+        <div class="gl-controls">
+          <div class="gl-swatch-wrap" title="Boja">
+            <span class="gl-swatch" style="background:${k.col};"></span>
+            <input type="color" value="${k.col}" oninput="setKmlColor(${i},this.value)">
+          </div>
+          <button class="gl-btn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
+          <button class="gl-btn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
+          <button class="gl-btn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
+          <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
+          <div class="gl-weight-row" title="Debljina linije">
+            ${WEIGHTS.map(ww=>`<button class="gl-btn ${w===ww?'on':''}" onclick="setKmlWeight(${i},${ww})">${ww}</button>`).join('')}
+          </div>
+        </div>
+        <div class="gl-controls" style="margin-top:6px;">
+          <div class="gl-opacity-row">
+            <span>Providnost</span>
+            <input type="range" min="10" max="100" value="${op}" oninput="setKmlOpacity(${i},this.value/100)" onchange="setKmlOpacity(${i},this.value/100)">
+            <span style="min-width:28px;text-align:right;color:#e2e8f0;">${op}%</span>
+          </div>
+          <div class="gl-sep"></div>
+          <button class="gl-btn" onclick="togK(${i})" title="${k.vis?'Sakrij sloj':'Prikaži sloj'}" style="font-size:14px;padding:2px 8px;">${k.vis?'👁':'🚫'}</button>
+          <button class="gl-btn danger" onclick="if(confirm('Ukloniti sloj?'))delK(${i})" title="Ukloni sloj">✕</button>
+        </div>
+      </div>`;
+    });
+  });
+
+  el.innerHTML = html;
+}
 
 // === EXPORT ===
 function mkKML() {
@@ -4988,11 +5147,17 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
   if (!txt) { console.warn('KML fetch fail:', file.path); return null; }
   const doc = new DOMParser().parseFromString(txt, 'text/xml');
   if (extractOdjeli) _extractGraniceOdjeli(doc);
-  const grp = pkmlStyled(doc, opts);
+  const saved = loadKmlStyleFor(key, {});
+  const finalOpts = { ...opts, ...saved };
+  const grp = pkmlStyled(doc, finalOpts);
   grp.addTo(map);
   const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
   kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
-    col: opts.color, dash: opts.dashArray || '', weight: opts.weight || 2, vis: true });
+    col: finalOpts.col || finalOpts.color, dash: finalOpts.dashArray || finalOpts.dash || '',
+    weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
+    vis: finalOpts.vis !== false });
+  // Apply visibility
+  if (finalOpts.vis === false) map.removeLayer(grp);
   return grp;
 }
 
@@ -5028,10 +5193,20 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
   // Ime featurea iz .dbf atributa (pokušaj česta polja)
   const NAME_FIELDS = ['NAZIV', 'NAME', 'OznakaOdj', 'Oznaka', 'Broj', 'ID', 'OBJECTID'];
 
+  const savedShp = loadKmlStyleFor(key, {});
+  const finalOptsShp = { ...opts, ...savedShp };
+  // Build Leaflet style from merged options
+  const shpStyle = {
+    color: finalOptsShp.col || finalOptsShp.color || (opts.col || opts.color),
+    weight: finalOptsShp.weight || opts.weight || 2,
+    opacity: finalOptsShp.opacity ?? opts.opacity ?? 0.9,
+  };
+  if (finalOptsShp.dash || finalOptsShp.dashArray) shpStyle.dashArray = finalOptsShp.dash || finalOptsShp.dashArray;
+
   const grp = L.featureGroup();
   geojson.features.forEach(f => {
     const nm = NAME_FIELDS.map(k => f.properties?.[k]).find(v => v != null) ?? '';
-    const styleOpts = { ...opts };
+    const styleOpts = { ...shpStyle };
     try {
       const layer = L.geoJSON(f, {
         style: () => styleOpts,
@@ -5054,10 +5229,13 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
   });
   if (extractOdjeli) graniceOdjeli.sort((a,b) => a.name.localeCompare(b.name, 'bs'));
 
-  grp.addTo(map);
+  if (finalOptsShp.vis === false) map.removeLayer(grp);
+  else grp.addTo(map);
   const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
   kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
-    col: opts.color, dash: opts.dashArray || '', weight: opts.weight || 2, vis: true });
+    col: shpStyle.color, dash: shpStyle.dashArray || '',
+    weight: shpStyle.weight, opacity: shpStyle.opacity,
+    vis: finalOptsShp.vis !== false });
   return grp;
 }
 
@@ -5125,6 +5303,7 @@ async function autoLoadAllKmlBuckets() {
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
   <div class="mdrop-sep"></div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
@@ -5229,6 +5408,22 @@ async function autoLoadAllKmlBuckets() {
         <div id="msr-segs"></div>
       </div>
     </div><!-- /izmjeri-panel -->
+
+<!-- GRANICE ODJELA MODAL -->
+<div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
+  <div id="granice-mbox">
+    <div class="gmhdr">
+      <h2>🗺 Granice Odjela — Slojevi</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Ponovo učitaj iz bucketa" style="font-size:13px;padding:4px 10px;">↺ Reload</button>
+        <button onclick="closeGraniceModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
+      </div>
+    </div>
+    <div id="granice-list">
+      <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
