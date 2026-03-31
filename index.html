@@ -576,6 +576,29 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* Sakrij tekstualne labele pri krupnoj razmjeri */
 #map.labels-hidden .map-text-label { visibility: hidden; pointer-events: none; }
 
+/* ── KML/SHP permanentne oznake odjela ──────────────────── */
+.kml-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+.kml-label div {
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  font-family: Arial, sans-serif;
+  text-shadow:
+    1px 1px 2px rgba(0,0,0,0.95),
+   -1px -1px 2px rgba(0,0,0,0.95),
+    1px -1px 2px rgba(0,0,0,0.95),
+   -1px  1px 2px rgba(0,0,0,0.95);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  display: block;
+}
+#map.labels-hidden .kml-label { visibility: hidden; }
+
 /* ── Granice Odjela Modal ─────────────────────────────── */
 #granice-modal {
   display:none; position:fixed; inset:0; z-index:99500;
@@ -3252,6 +3275,20 @@ function pcs(s) {
   return s.trim().split(/\s+/).map(c=>{const p=c.split(',');return p.length>=2?[parseFloat(p[1]),parseFloat(p[0])]:null;}).filter(Boolean);
 }
 
+// Centroid niza [lat,lng] koordinata (prosti prosjek — dovoljno za labele)
+function _coordsCentroid(cs) {
+  const n = cs.length;
+  return cs.reduce((a, p) => [a[0] + p[0] / n, a[1] + p[1] / n], [0, 0]);
+}
+
+// Kreira L.marker sa permanentnom labelom na datoj poziciji
+function _kmlLabelMarker(pos, text) {
+  return L.marker(pos, {
+    icon: L.divIcon({ className: 'kml-label', html: `<div>${text}</div>`, iconSize: null, iconAnchor: [0, 0] }),
+    interactive: false, zIndexOffset: 100
+  });
+}
+
 // Stilizovani KML parser — prima options za boju/debljinu/crtanje
 function pkmlStyled(doc, opts) {
   const g = L.featureGroup();
@@ -3261,8 +3298,11 @@ function pkmlStyled(doc, opts) {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
         const l = L.polyline([...cs, cs[0]], opts);
-        if (name) l.bindTooltip(name, { sticky: true, opacity: 0.85 });
         l.addTo(g);
+        if (name) {
+          l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+          _kmlLabelMarker(_coordsCentroid(cs), name).addTo(g);
+        }
       }
     });
     pm.querySelectorAll('LineString').forEach(ls => {
@@ -5347,6 +5387,13 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
       });
       if (nm) layer.bindTooltip(String(nm), { sticky: true, opacity: 0.9 });
       layer.addTo(grp);
+      // Permanentna labela na centru poligona
+      if (nm && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+        try {
+          const center = layer.getBounds().getCenter();
+          _kmlLabelMarker([center.lat, center.lng], String(nm)).addTo(grp);
+        } catch {}
+      }
 
       // Ekstrakcija bounds za odjele
       if (extractOdjeli && nm) {
