@@ -1162,32 +1162,58 @@ select:focus { outline:none; border-color:#3b82f6; }
   <div class="print-mbox">
     <h3>🖨 Štampanje Karte</h3>
 
-    <div style="margin-bottom:12px;">
-      <div class="lbl" style="margin-bottom:6px;">📍 Odsjek / Odjel</div>
+    <!-- Mod izbora -->
+    <div style="display:flex;gap:6px;margin-bottom:14px;">
+      <button class="scale-btn sel" id="pm-gj"   onclick="setPrintMode('gj')"   style="flex:1;">📂 Po G.J. / Odjelu</button>
+      <button class="scale-btn"     id="pm-view" onclick="setPrintMode('view')" style="flex:1;">🗺 Trenutni prikaz</button>
+    </div>
+
+    <!-- MOD 1: G.J. / Odjel -->
+    <div id="print-gj-section">
+      <div class="lbl" style="margin-bottom:5px;">Gospodarska Jedinica</div>
+      <select id="print-gj" onchange="onPrintGJChange()"
+        style="width:100%;padding:8px 10px;background:#0f172a;border:1px solid #374151;
+               border-radius:5px;color:#eee;font-size:13px;margin-bottom:10px;">
+        <option value="">— Odaberi G.J. —</option>
+      </select>
+
+      <div class="lbl" style="margin-bottom:5px;">Odjel / Odsjek</div>
       <select id="print-odjel" onchange="onPrintOdjelChange()"
         style="width:100%;padding:8px 10px;background:#0f172a;border:1px solid #374151;
                border-radius:5px;color:#eee;font-size:13px;">
-        <option value="">— Sve vlake (trenutni prikaz) —</option>
+        <option value="">— Cijela G.J. —</option>
       </select>
-      <div id="print-odjel-info" style="font-size:11px;color:#64748b;margin-top:4px;"></div>
+      <div id="print-odjel-info" style="font-size:11px;color:#64748b;margin-top:4px;min-height:16px;"></div>
     </div>
 
-    <div style="margin-bottom:10px;">
+    <!-- MOD 2: Trenutni prikaz -->
+    <div id="print-view-section" style="display:none;">
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:10px 12px;font-size:12px;color:#94a3b8;margin-bottom:4px;">
+        🗺 Štampa tačno ono što je trenutno vidljivo na karti.<br>
+        Postavi kadriranje na mapi, pa odaberi razmjeru i format.
+      </div>
+      <div id="print-view-info" style="font-size:11px;color:#64748b;margin-top:4px;min-height:16px;"></div>
+    </div>
+
+    <!-- Format papira -->
+    <div style="margin:12px 0 10px;">
       <div class="lbl" style="margin-bottom:6px;">Format papira</div>
       <div style="display:flex;gap:6px;">
         <button class="scale-btn sel" id="pfmt-a4l" onclick="setPaperFmt('A4L')">A4 Landscape</button>
-        <button class="scale-btn" id="pfmt-a4p" onclick="setPaperFmt('A4P')">A4 Portrait</button>
-        <button class="scale-btn" id="pfmt-a3l" onclick="setPaperFmt('A3L')">A3 Landscape</button>
+        <button class="scale-btn"     id="pfmt-a4p" onclick="setPaperFmt('A4P')">A4 Portrait</button>
+        <button class="scale-btn"     id="pfmt-a3l" onclick="setPaperFmt('A3L')">A3 Landscape</button>
       </div>
     </div>
 
+    <!-- Razmjera -->
     <div style="margin-bottom:12px;">
       <div class="lbl" style="margin-bottom:6px;">Razmjera karte</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="scale-btn sel" id="pscl-10k" onclick="setScale(10000)">1:10 000</button>
-        <button class="scale-btn" id="pscl-5k" onclick="setScale(5000)">1:5 000</button>
-        <button class="scale-btn" id="pscl-25k" onclick="setScale(25000)">1:25 000</button>
-        <button class="scale-btn" id="pscl-cust" onclick="setScale('custom')">Prilagođena</button>
+        <button class="scale-btn"     id="pscl-5k"   onclick="setScale(5000)">1:5 000</button>
+        <button class="scale-btn sel" id="pscl-10k"  onclick="setScale(10000)">1:10 000</button>
+        <button class="scale-btn"     id="pscl-25k"  onclick="setScale(25000)">1:25 000</button>
+        <button class="scale-btn"     id="pscl-50k"  onclick="setScale(50000)">1:50 000</button>
+        <button class="scale-btn"     id="pscl-cust" onclick="setScale('custom')">Prilagođena</button>
       </div>
       <div id="custom-scale-row" style="display:none;margin-top:8px;align-items:center;gap:8px;">
         <span style="font-size:13px;color:#94a3b8;">1 :</span>
@@ -1198,24 +1224,16 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
     </div>
 
-    <div id="print-info">Učitavanje informacija...</div>
+    <div id="print-info" style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Učitavanje...</div>
 
     <div class="print-preview-bar">
-      <span>📐 Dimenzije mape na papiru:</span>
+      <span>📐 Dimenzije:</span>
       <b id="pi-dims">—</b>
       <span style="margin-left:auto;">Površina:</span>
       <b id="pi-area">—</b>
     </div>
 
-    <div style="margin-bottom:12px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#94a3b8;">
-        <input type="checkbox" id="print-fit-bounds" checked
-          style="width:15px;height:15px;accent-color:#4ade80;">
-        <span>Automatski prilagodi prikaz svim vlakama</span>
-      </label>
-    </div>
-
-    <div class="mbtns">
+    <div class="mbtns" style="margin-top:12px;">
       <button class="btn g" onclick="doPrint()">🖨 ŠTAMPAJ</button>
       <button class="btn gr" onclick="closePrintModal()">Zatvori</button>
     </div>
@@ -4838,6 +4856,7 @@ function escHtml(s) {
 // =====================================================================
 let printScale = 10000;
 let paperFmt = 'A4L';
+let printMode  = 'gj'; // 'gj' | 'view'
 
 // Paper dimensions in mm (printable area, minus ~10mm margins)
 const PAPER = {
@@ -4875,47 +4894,87 @@ function getOdjelBounds(naziv) {
   return null;
 }
 
+// Vraća objekt { folderName → L.LatLngBounds } iz učitanih kmlLs slojeva
+function _getGJGroups() {
+  const groups = {};
+  kmlLs.forEach(k => {
+    if (!k.name.includes('/')) return;
+    const folder = k.name.split('/')[0];
+    try {
+      const b = k.grp.getBounds();
+      if (!b.isValid()) return;
+      groups[folder] = groups[folder] ? groups[folder].extend(b) : b;
+    } catch {}
+  });
+  return groups;
+}
+
+function setPrintMode(mode) {
+  printMode = mode;
+  document.getElementById('pm-gj').classList.toggle('sel', mode === 'gj');
+  document.getElementById('pm-view').classList.toggle('sel', mode === 'view');
+  document.getElementById('print-gj-section').style.display  = mode === 'gj'   ? '' : 'none';
+  document.getElementById('print-view-section').style.display = mode === 'view' ? '' : 'none';
+  updatePrintInfo();
+}
+
 function showPrintModal() {
-  const sel = document.getElementById('print-odjel');
-  sel.innerHTML = '<option value="">— Sve vlake (trenutni prikaz) —</option>';
-
-  // Odjeli iz projekat tabele (shared datalist)
-  const names = Array.from(document.querySelectorAll('#odjeli-list option'))
-    .map(o => o.value).filter(Boolean);
-  // Dodaj trenutni odjel ako već nije u listi
-  const cur = getOdjel().trim();
-  if (cur && !names.includes(cur)) names.unshift(cur);
-
-  names.forEach(naziv => {
+  // Popuni G.J. dropdown iz učitanih slojeva
+  const gjSel = document.getElementById('print-gj');
+  const gjGroups = _getGJGroups();
+  gjSel.innerHTML = '<option value="">— Odaberi G.J. —</option>';
+  Object.keys(gjGroups).sort().forEach(folder => {
     const opt = document.createElement('option');
-    opt.value = naziv;
-    const hasKml = !!findGraniceOdjel(naziv);
-    opt.textContent = naziv + (hasKml ? ' 📍' : '');
-    sel.appendChild(opt);
+    opt.value = folder;
+    opt.textContent = folder;
+    gjSel.appendChild(opt);
   });
 
-  // Auto-odabir trenutnog odjela
-  if (cur) {
-    sel.value = cur;
-    onPrintOdjelChange();
-  }
+  // Resetuj odjel dropdown
+  document.getElementById('print-odjel').innerHTML = '<option value="">— Cijela G.J. —</option>';
+  document.getElementById('print-odjel-info').textContent = '';
 
+  setPrintMode(printMode);
   document.getElementById('print-modal').classList.add('show');
   updatePrintInfo();
 }
 
+function onPrintGJChange() {
+  const folder = document.getElementById('print-gj').value;
+  const odjelSel = document.getElementById('print-odjel');
+  odjelSel.innerHTML = '<option value="">— Cijela G.J. —</option>';
+  document.getElementById('print-odjel-info').textContent = '';
+
+  if (!folder) { updatePrintInfo(); return; }
+
+  // Filtriraj graniceOdjeli koji leže unutar G.J. bounds-a
+  const gjGroups = _getGJGroups();
+  const gjBounds = gjGroups[folder];
+  const odjeli = gjBounds
+    ? graniceOdjeli.filter(o => { try { return gjBounds.contains(o.bounds.getCenter()); } catch { return false; } })
+    : graniceOdjeli;
+
+  odjeli.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.name;
+    opt.textContent = o.name;
+    odjelSel.appendChild(opt);
+  });
+
+  updatePrintInfo();
+}
+
 function onPrintOdjelChange() {
-  const sel = document.getElementById('print-odjel');
-  const info = document.getElementById('print-odjel-info');
-  const naziv = sel.value;
-  if (!naziv) { info.textContent = ''; return; }
+  const naziv = document.getElementById('print-odjel').value;
+  const info  = document.getElementById('print-odjel-info');
+  if (!naziv) { info.textContent = ''; updatePrintInfo(); return; }
   const bounds = getOdjelBounds(naziv);
-  if (!bounds || !bounds.isValid()) { info.textContent = ''; return; }
+  if (!bounds || !bounds.isValid()) { info.textContent = ''; updatePrintInfo(); return; }
   const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
   const wM = Math.abs(ne.lng - sw.lng) * 111320 * Math.cos(((ne.lat+sw.lat)/2) * Math.PI/180);
   const hM = Math.abs(ne.lat - sw.lat) * 111320;
   const ha = Math.round(wM * hM / 10000);
-  info.textContent = `Dimenzije: ≈ ${Math.round(wM)} m × ${Math.round(hM)} m · ${ha} ha`;
+  info.textContent = `≈ ${Math.round(wM)} m × ${Math.round(hM)} m · ${ha} ha`;
   updatePrintInfo();
 }
 function closePrintModal() {
@@ -4939,7 +4998,7 @@ function setScale(s) {
   }
   custRow.style.display = 'none';
   printScale = s;
-  const map2id = {10000:'10k', 5000:'5k', 25000:'25k'};
+  const map2id = {5000:'5k', 10000:'10k', 25000:'25k', 50000:'50k'};
   if (map2id[s]) document.getElementById('pscl-' + map2id[s]).classList.add('sel');
   updatePrintInfo();
 }
@@ -4953,20 +5012,30 @@ function applyCustomScale() {
 
 function updatePrintInfo() {
   const p = PAPER[paperFmt];
-  // Width and height of map in metres (real world) at given scale
-  const realW_m = (p.w / 1000) * printScale;   // mm → m
-  const realH_m = (p.h / 1000) * printScale;
+  const realW_m  = (p.w / 1000) * printScale;
+  const realH_m  = (p.h / 1000) * printScale;
   const realW_km = (realW_m / 1000).toFixed(2);
   const realH_km = (realH_m / 1000).toFixed(2);
-  const areaHa = ((realW_m * realH_m) / 10000).toFixed(0);
+  const areaHa   = Math.round(realW_m * realH_m / 10000);
 
-  const odjelNaziv = document.getElementById('print-odjel')?.value || '';
-  const odjelNm = odjelNaziv ? `<br>Odjel: <b>${odjelNaziv}</b>` : '';
+  // Prikaz info za "trenutni prikaz" mod
+  if (printMode === 'view') {
+    const b = map.getBounds();
+    const sw = b.getSouthWest(), ne = b.getNorthEast();
+    const lat = (sw.lat + ne.lat) / 2;
+    const vW = Math.abs(ne.lng - sw.lng) * 111320 * Math.cos(lat * Math.PI / 180);
+    const vH = Math.abs(ne.lat - sw.lat) * 111320;
+    document.getElementById('print-view-info').textContent =
+      `Vidljivo: ≈ ${Math.round(vW)} m × ${Math.round(vH)} m`;
+  }
+
+  const gjNm    = document.getElementById('print-gj')?.value    || '';
+  const odjelNm = document.getElementById('print-odjel')?.value || '';
+  const lokacija = odjelNm ? `<br>Odjel: <b>${odjelNm}</b>` : gjNm ? `<br>G.J.: <b>${gjNm}</b>` : '';
+
   document.getElementById('print-info').innerHTML =
-    `Razmjera: <b>1 : ${printScale.toLocaleString('bs')}</b><br>` +
-    `Format: <b>${p.label}</b> (${p.w} × ${p.h} mm)<br>` +
-    `Područje na karti: <b>${realW_km} km × ${realH_km} km</b><br>` +
-    `Površina prikaza: <b>≈ ${areaHa} ha</b>${odjelNm}`;
+    `Razmjera: <b>1 : ${printScale.toLocaleString('bs')}</b> · Format: <b>${p.label}</b> (${p.w} × ${p.h} mm)<br>` +
+    `Isječak: <b>${realW_km} km × ${realH_km} km</b> · <b>≈ ${areaHa} ha</b>${lokacija}`;
   document.getElementById('pi-dims').textContent = `${p.w} × ${p.h} mm`;
   document.getElementById('pi-area').textContent = `≈ ${areaHa} ha`;
 }
@@ -4974,24 +5043,30 @@ function updatePrintInfo() {
 function doPrint() {
   const p = PAPER[paperFmt];
 
-  // Odabrani odjel ili fallback na vlake / trenutni prikaz
-  const odjelNaziv = document.getElementById('print-odjel').value;
-  if (odjelNaziv) {
-    const bounds = getOdjelBounds(odjelNaziv);
+  if (printMode === 'gj') {
+    // Mod 1: centriraj na odabrani odjel ili G.J.
+    const odjelNaziv = document.getElementById('print-odjel').value;
+    const gjFolder   = document.getElementById('print-gj').value;
+    let bounds = null;
+    if (odjelNaziv) {
+      bounds = getOdjelBounds(odjelNaziv);
+    } else if (gjFolder) {
+      const gjGroups = _getGJGroups();
+      bounds = gjGroups[gjFolder] || null;
+    }
     if (bounds && bounds.isValid()) {
       map.setView(bounds.getCenter(), map.getZoom(), { animate: false });
     }
-  } else if (document.getElementById('print-fit-bounds').checked && vlake.length > 0) {
-    const allPts = vlake.flatMap(v => v.pts.map(pt => [pt.la, pt.lo]));
-    if (allPts.length > 0) {
-      map.fitBounds(L.latLngBounds(allPts), { padding: [20, 20], animate: false });
-    }
+    // Postavi zoom za odabranu razmjeru
+    const center = map.getCenter();
+    const zoom = calcZoomForScale(printScale, center.lat, p.w, p.h);
+    map.setZoom(zoom, { animate: false });
+  } else {
+    // Mod 2: trenutni prikaz — samo postavi zoom za razmjeru, centar ostaje isti
+    const center = map.getCenter();
+    const zoom = calcZoomForScale(printScale, center.lat, p.w, p.h);
+    map.setZoom(zoom, { animate: false });
   }
-
-  // Calculate the center of current map view
-  const center = map.getCenter();
-  const zoom = calcZoomForScale(printScale, center.lat, p.w, p.h);
-  map.setZoom(zoom, { animate: false });
 
   // Set CSS vars for print size
   const root = document.documentElement;
@@ -4999,7 +5074,9 @@ function doPrint() {
   root.style.setProperty('--print-map-h', p.h + 'mm');
 
   // Populate header/footer
-  const odjel = document.getElementById('p-odjel').value || 'Traktorske vlake';
+  const gjFolder   = document.getElementById('print-gj')?.value    || '';
+  const odjelPrint = document.getElementById('print-odjel')?.value || '';
+  const odjel = odjelPrint || gjFolder || document.getElementById('p-odjel').value || 'Traktorske vlake';
   const sum = document.getElementById('p-sumarija').value || '';
   const ime = document.getElementById('p-ime').value || '';
   const datum = new Date().toLocaleDateString('bs-BA', {day:'numeric',month:'long',year:'numeric'});
