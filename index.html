@@ -759,7 +759,7 @@ select:focus { outline:none; border-color:#3b82f6; }
       <div class="auth-subtitle">Prijava</div>
       <span class="lbl">Ime</span>
       <input class="pinput" id="auth-ime" placeholder="Vaše ime" autocomplete="given-name">
-      <span class="lbl">Prezime</span>
+      <span class="lbl">Prezime <span style="color:#475569;font-weight:normal;">(za org. naloge ostavite prazno)</span></span>
       <input class="pinput" id="auth-prezime" placeholder="Vaše prezime" autocomplete="family-name">
       <span class="lbl">PIN</span>
       <input class="pinput" id="auth-pin" type="password" inputmode="numeric" placeholder="PIN (4–8 cifara)" maxlength="8"
@@ -1241,11 +1241,12 @@ async function sbLoadProfile() {
   const { data } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
   sbProfile = data;
   if (data) {
-    document.getElementById('p-ime').value = data.ime + ' ' + data.prezime;
+    const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
+    document.getElementById('p-ime').value = fullName;
     if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
     // Show user label in dropdown
     const lbl = document.getElementById('menu-user-label');
-    if (lbl) lbl.textContent = '👤 ' + data.ime + ' ' + data.prezime;
+    if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
     if (data.is_admin) {
       document.getElementById('admin-sec').style.display = 'block';
       adminLoadUsers();
@@ -1287,9 +1288,9 @@ async function doLogin() {
   const pin     = document.getElementById('auth-pin').value.trim();
 
   document.getElementById('auth-err').style.display = 'none';
-  if (!ime || !prezime || !pin) { showAuthErr('Popunite sva polja'); return; }
+  if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
 
-  // Look up internal email by name
+  // Look up internal email by name (prezime može biti prazan za org naloge)
   const { data: email, error: lookupErr } = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
   if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen. Provjerite ime i prezime.'); return; }
 
@@ -1436,7 +1437,8 @@ async function sbInitData() {
   sbLoadOdjeli();
   await sbLoadKolegeVlake();
   sbStartRealtime();
-  autoLoadAllKmlBuckets(); // učitaj KML granice iz storage bucketa
+  await loadGlobalKmlStyles(); // učitaj globalne stilove (admin-set) prije slojeva
+  autoLoadAllKmlBuckets();     // učitaj KML granice iz storage bucketa
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -3289,21 +3291,72 @@ const _ODSJEK_STYLE = { color: '#fbbf24', weight: 1.5, opacity: 0.8 };
 
 
 // ── KML/SHP style persistence ─────────────────────────────────────────────────
-const _KML_STYLES_KEY = 'tvlake_kml_styles_v2';
+// Global styles (set by admin, stored in Supabase) — loaded on startup
+let _globalKmlStyles = {};
+// User overrides (personal, stored in localStorage)
+const _KML_USER_STYLES_KEY = 'tvlake_kml_user_styles_v1';
 
+async function loadGlobalKmlStyles() {
+  try {
+    const { data } = await sb.from('kml_styles_global').select('*');
+    _globalKmlStyles = {};
+    (data || []).forEach(r => { _globalKmlStyles[r.key] = r; });
+  } catch(e) { console.warn('loadGlobalKmlStyles:', e); }
+}
+
+// Save admin global styles to Supabase
+async function saveGlobalKmlStyles() {
+  if (!sbProfile?.is_admin) return;
+  const rows = kmlLs.filter(k => k._key).map(k => ({
+    key: k._key, col: k.col, dash: k.dash,
+    weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
+    updated_by: sbUser.id, updated_at: new Date().toISOString()
+  }));
+  if (rows.length === 0) { showToast('Nema slojeva za sačuvati.'); return; }
+  const { error } = await sb.from('kml_styles_global').upsert(rows, { onConflict: 'key' });
+  if (error) { showToast('Greška pri čuvanju: ' + error.message); return; }
+  rows.forEach(r => { _globalKmlStyles[r.key] = r; });
+  // Clear all user local overrides on admin devices too
+  localStorage.removeItem(_KML_USER_STYLES_KEY);
+  showToast('✓ Stilovi sačuvani kao default za sve korisnike.');
+  rndGraniceModal();
+}
+
+// Save user personal overrides to localStorage
 function saveKmlStyles() {
-  const map = {};
+  const userMap = {};
   kmlLs.forEach(k => {
     if (!k._key) return;
-    map[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis };
+    userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis };
   });
-  localStorage.setItem(_KML_STYLES_KEY, JSON.stringify(map));
+  localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
+}
+
+// Reset a single layer back to admin global default
+function resetLayerToGlobal(i) {
+  const k = kmlLs[i];
+  if (!k?._key) return;
+  const g = _globalKmlStyles[k._key];
+  if (!g) return;
+  k.col = g.col; k.dash = g.dash; k.weight = g.weight; k.opacity = g.opacity; k.vis = g.vis !== false;
+  applyKmlStyle(i);
+  if (k.vis) k.grp.addTo(map); else map.removeLayer(k.grp);
+  // Remove user override for this key
+  try {
+    const um = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
+    delete um[k._key];
+    localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(um));
+  } catch {}
+  rndGraniceModal();
 }
 
 function loadKmlStyleFor(key, defaults) {
   try {
-    const saved = JSON.parse(localStorage.getItem(_KML_STYLES_KEY) || '{}');
-    return saved[key] ? { ...defaults, ...saved[key] } : defaults;
+    const global = _globalKmlStyles[key] || {};
+    const userMap = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
+    const user = userMap[key] || {};
+    // Merge: defaults → global (admin) → user override
+    return { ...defaults, ...global, ...user };
   } catch { return defaults; }
 }
 
@@ -3381,10 +3434,19 @@ function togGlGroupVis(indices) {
 function rndGraniceModal() {
   const el = document.getElementById('granice-list');
   if (!el) return;
+  const isAdmin = sbProfile?.is_admin === true;
   if (kmlLs.length === 0) {
     el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Nema učitanih slojeva.<br>Slojevi se učitavaju automatski pri prijavi.</div>';
     return;
   }
+
+  // Admin global-save banner
+  let html = isAdmin
+    ? `<div style="background:rgba(251,191,36,0.1);border:1px solid #92400e;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:11px;color:#fbbf24;flex:1;">★ Admin prikaz — tvoje izmjene su <b>privatne</b> dok ne sačuvaš kao default.</span>
+        <button class="gl-btn" onclick="saveGlobalKmlStyles()" style="border-color:#fbbf24;color:#fbbf24;font-size:12px;padding:4px 12px;white-space:nowrap;">💾 Sačuvaj kao default za sve</button>
+       </div>`
+    : '';
 
   // Grupiraj po bucketu/folderu
   const groups = {};
@@ -3398,7 +3460,6 @@ function rndGraniceModal() {
   });
 
   const WEIGHTS = [1, 1.5, 2, 3, 4, 5];
-  let html = '';
 
   Object.entries(groups).forEach(([groupName, items]) => {
     const collapsed = _glCollapsed.has(groupName);
@@ -3422,9 +3483,19 @@ function rndGraniceModal() {
         const w = k.weight || 2;
         const op = Math.round((k.opacity ?? 0.9) * 100);
         const shortName = k.name.includes('/') ? k.name.split('/').slice(1).join('/') : k.name;
+        const hasGlobal = !!_globalKmlStyles[k._key];
+        // Detect if user has a local override vs global
+        let hasUserOverride = false;
+        try {
+          const um = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
+          hasUserOverride = !!um[k._key];
+        } catch {}
 
         html += `<div class="gl-row${k.vis ? '' : ' hidden-layer'}">
-          <div class="gl-name">${shortName}</div>
+          <div class="gl-name" style="display:flex;align-items:center;gap:6px;">
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
+            ${!isAdmin && hasGlobal && hasUserOverride ? `<button class="gl-btn" onclick="resetLayerToGlobal(${i})" title="Vrati na admin default" style="font-size:10px;padding:1px 6px;flex-shrink:0;color:#fbbf24;border-color:#92400e;">↺ default</button>` : ''}
+          </div>
           <div class="gl-controls">
             <div class="gl-swatch-wrap" title="Odaberi boju">
               <span class="gl-swatch" style="background:${k.col};"></span>
