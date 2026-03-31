@@ -1579,7 +1579,7 @@ async function deleteProjektUI() {
   if (!p || p.korisnik_id !== sbUser.id) return;
   if (!confirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove.`)) return;
 
-  // Odmah ukloni lokalno i prikaži listu — ne čekaj Supabase
+  // Odmah ukloni lokalno i prikaži listu
   _projekti = _projekti.filter(x => x.id !== id);
   _pdProjektId = null;
   if (_aktivniProjektId === id) {
@@ -1588,12 +1588,21 @@ async function deleteProjektUI() {
     document.getElementById('p-odjel').value = '';
   }
   showProjektiList();
-  showToast('Projekat obrisan.');
 
-  // Briši iz Supabase u pozadini
-  await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
-  await sb.from('projekti').delete().eq('id', id);
-  await sbLoadProjekti();
+  // Briši iz Supabase — provjeri greške
+  const { error: errCl } = await sb.from('projekt_clanovi').delete().eq('projekt_id', id);
+  const { error: errPr } = await sb.from('projekti').delete().eq('id', id).eq('korisnik_id', sbUser.id);
+
+  if (errPr) {
+    // Vraćanje nije uspjelo — vrati lokalno stanje i obavijesti
+    showToast('⚠ Brisanje nije uspjelo: ' + errPr.message);
+    await sbLoadProjekti(); // re-sync jer je stanje nepoznato
+    return;
+  }
+
+  showToast('Projekat obrisan.');
+  // Ne pozivaj sbLoadProjekti() — lokalni _projekti je već tačan.
+  // Samo osvježi kolege vlake.
   await sbLoadKolegeVlake();
 }
 
