@@ -3490,6 +3490,18 @@ function rndGraniceModal() {
     return;
   }
 
+  // Ako nijedna grupa još nije ni dodana ni uklonjena iz _glCollapsed,
+  // a ima grupa — defaultno ih sve sruši
+  const groupKeys = Object.keys(
+    kmlLs.reduce((acc, k) => {
+      const bucket = k._bucket || 'Lokalni';
+      const folder = k.name.includes('/') ? k.name.split('/')[0] : '—';
+      acc[`${bucket} / ${folder}`] = true;
+      return acc;
+    }, {})
+  );
+  if (_glCollapsed.size === 0) groupKeys.forEach(gk => _glCollapsed.add(gk));
+
   // Admin global-save banner
   let html = isAdmin
     ? `<div style="background:rgba(251,191,36,0.1);border:1px solid #92400e;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
@@ -5364,7 +5376,7 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
   }
 
   // Ime featurea iz .dbf atributa (pokušaj česta polja)
-  const NAME_FIELDS = ['NAZIV', 'NAME', 'OznakaOdj', 'Oznaka', 'Broj', 'ID', 'OBJECTID'];
+  const NAME_FIELDS = ['ODJEL', 'OznakaOdj', 'Odjel', 'ODSJEK', 'Odsjek', 'NAZIV', 'Naziv', 'NAME', 'Name', 'Oznaka', 'Broj', 'ID', 'OBJECTID'];
 
   const savedShp = loadKmlStyleFor(key, {});
   const finalOptsShp = { ...opts, ...savedShp };
