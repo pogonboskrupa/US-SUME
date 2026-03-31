@@ -776,6 +776,38 @@ select:focus { outline:none; border-color:#3b82f6; }
 #offline-progress-bar {
   height:8px; background:#0f172a; border-radius:4px; overflow:hidden; margin:10px 0;
 }
+/* SQLiteDB offline map modal */
+#sqlmap-modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.82); z-index:9999;
+  align-items:center; justify-content:center;
+}
+#sqlmap-modal.show { display:flex; }
+#sqlmap-box {
+  background:#16213e; border:1px solid #0f3460;
+  border-radius:10px; padding:22px;
+  width:400px; max-width:94vw;
+}
+#sqlmap-box h3 { font-size:16px; color:#38bdf8; margin-bottom:14px; }
+.sqlmap-drop-zone {
+  border:2px dashed #334155; border-radius:8px; padding:28px 16px;
+  text-align:center; cursor:pointer; transition:border-color .2s;
+  color:#64748b; font-size:13px; margin-bottom:14px;
+}
+.sqlmap-drop-zone:hover, .sqlmap-drop-zone.drag-over {
+  border-color:#38bdf8; color:#e2e8f0;
+}
+.sqlmap-layer-row {
+  background:#0f172a; border:1px solid #1e3a5f; border-radius:7px;
+  padding:10px 12px; margin-bottom:10px;
+}
+.sqlmap-layer-name { font-size:13px; color:#e2e8f0; font-weight:600; margin-bottom:6px; word-break:break-all; }
+.sqlmap-layer-meta { font-size:11px; color:#64748b; margin-bottom:8px; }
+.sqlmap-layer-meta span { color:#94a3b8; }
+.sqlmap-layer-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.sqlmap-opacity-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:6px; }
+.sqlmap-opacity-row input { flex:1; accent-color:#38bdf8; }
+#sqlmap-status { font-size:12px; color:#38bdf8; min-height:18px; text-align:center; margin-bottom:8px; }
 #offline-progress-fill {
   height:100%; background:#38bdf8; border-radius:4px;
   transition:width 0.2s; width:0%;
@@ -5376,6 +5408,199 @@ function closeOfflineModal() {
   document.getElementById('offline-modal').classList.remove('show');
 }
 
+// ─── SQLiteDB offline map ─────────────────────────────────────────────────────
+let _sqlLayers = []; // { name, db, format, layer, visible }
+let _sqlJS = null;
+
+function showSqlMapModal() {
+  document.getElementById('sqlmap-modal').classList.add('show');
+  _sqlmapRenderLayers();
+}
+function closeSqlMapModal() {
+  document.getElementById('sqlmap-modal').classList.remove('show');
+}
+
+function sqlmapHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('sqlmap-drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) sqlmapLoadFile(f);
+}
+
+async function _sqlmapEnsureSqlJs() {
+  if (_sqlJS) return _sqlJS;
+  _sqlmapStatus('⏳ Učitavam SQL.js biblioteku...');
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js';
+    s.onload = async () => {
+      try {
+        _sqlJS = await window.initSqlJs({
+          locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`
+        });
+        resolve(_sqlJS);
+      } catch(e) { reject(e); }
+    };
+    s.onerror = () => reject(new Error('Nije moguće učitati SQL.js'));
+    document.head.appendChild(s);
+  });
+}
+
+function _sqlmapStatus(msg) {
+  document.getElementById('sqlmap-status').textContent = msg;
+}
+
+async function sqlmapLoadFile(file) {
+  if (!file) return;
+  _sqlmapStatus('⏳ Čitam fajl...');
+  try {
+    const SQL = await _sqlmapEnsureSqlJs();
+    _sqlmapStatus('⏳ Otvaranje baze podataka...');
+    const buf = await file.arrayBuffer();
+    const db = new SQL.Database(new Uint8Array(buf));
+    const fmt = _sqlmapDetectFormat(db);
+    if (!fmt) {
+      _sqlmapStatus('❌ Nepoznat format — podržani: MBTiles, RMaps/OruxMaps, AlpineQuest');
+      db.close();
+      return;
+    }
+    const meta = _sqlmapReadMeta(db, fmt);
+    const name = file.name.replace(/\.[^.]+$/, '');
+    const layer = _sqlmapCreateLayer(db, fmt);
+    layer.addTo(map);
+    _sqlLayers.push({ name, db, fmt, layer, visible: true, meta });
+    _sqlmapStatus('✅ Karta učitana: ' + name);
+    _sqlmapRenderLayers();
+    // Reset file input so same file can be re-loaded
+    document.getElementById('sqlmap-file-input').value = '';
+  } catch(e) {
+    _sqlmapStatus('❌ Greška: ' + e.message);
+  }
+}
+
+function _sqlmapDetectFormat(db) {
+  // MBTiles: standard OSGeo format
+  try {
+    const r = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tiles'");
+    if (r[0]?.values[0][0] > 0) {
+      const cols = db.exec("PRAGMA table_info(tiles)")[0]?.values.map(r => r[1]) || [];
+      if (cols.includes('zoom_level')) return 'mbtiles';
+      if (cols.includes('z') && cols.includes('image')) return 'rmaps';
+      if (cols.includes('z') && cols.includes('tile')) return 'alpinequest';
+    }
+  } catch(e) {}
+  // AlpineQuest encoded key format
+  try {
+    const r = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tiles'");
+    if (r[0]?.values[0][0] > 0) return 'rmaps'; // fallback, try rmaps
+  } catch(e) {}
+  return null;
+}
+
+function _sqlmapReadMeta(db, fmt) {
+  const meta = {};
+  try {
+    if (fmt === 'mbtiles') {
+      const r = db.exec("SELECT name, value FROM metadata");
+      if (r[0]) r[0].values.forEach(([k,v]) => { meta[k] = v; });
+    } else {
+      // RMaps/OruxMaps may have an info table
+      try {
+        const r = db.exec("SELECT minzoom, maxzoom FROM info LIMIT 1");
+        if (r[0]?.values[0]) { meta.minzoom = r[0].values[0][0]; meta.maxzoom = r[0].values[0][1]; }
+      } catch(e) {}
+    }
+  } catch(e) {}
+  return meta;
+}
+
+function _sqlmapCreateLayer(db, fmt) {
+  const SqlTileLayer = L.GridLayer.extend({
+    createTile(coords, done) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:256px;height:256px;';
+      const { x, y, z } = coords;
+      try {
+        let rows;
+        if (fmt === 'mbtiles') {
+          const ty = (1 << z) - 1 - y;
+          rows = db.exec(`SELECT tile_data FROM tiles WHERE zoom_level=${z} AND tile_column=${x} AND tile_row=${ty}`);
+        } else if (fmt === 'alpinequest') {
+          rows = db.exec(`SELECT tile FROM tiles WHERE x=${x} AND y=${y} AND z=${z}`);
+        } else {
+          rows = db.exec(`SELECT image FROM tiles WHERE x=${x} AND y=${y} AND z=${z}`);
+          if (!rows[0]?.values?.length) {
+            rows = db.exec(`SELECT image FROM tiles WHERE x=${x} AND y=${y} AND z=${17 - z}`);
+          }
+        }
+        const tileData = rows[0]?.values?.[0]?.[0];
+        if (tileData) {
+          const blob = new Blob([tileData]);
+          const url = URL.createObjectURL(blob);
+          img.onload  = () => { URL.revokeObjectURL(url); done(null, img); };
+          img.onerror = () => { URL.revokeObjectURL(url); done(null, img); };
+          img.src = url;
+          return img;
+        }
+      } catch(e) {}
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      done(null, img);
+      return img;
+    }
+  });
+  return new SqlTileLayer({ tileSize: 256, opacity: 1, maxNativeZoom: 18, maxZoom: 22 });
+}
+
+function _sqlmapRenderLayers() {
+  const el = document.getElementById('sqlmap-layers');
+  if (!_sqlLayers.length) { el.innerHTML = ''; return; }
+  el.innerHTML = _sqlLayers.map((sl, i) => {
+    const fmtLabel = sl.fmt === 'mbtiles' ? 'MBTiles' : sl.fmt === 'alpinequest' ? 'AlpineQuest' : 'RMaps/OruxMaps';
+    const metaDesc = sl.meta?.description ? `<br>${sl.meta.description}` : '';
+    const zInfo = sl.meta?.minzoom != null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
+    return `
+    <div class="sqlmap-layer-row">
+      <div class="sqlmap-layer-name">🗺 ${sl.name}</div>
+      <div class="sqlmap-layer-meta"><span>${fmtLabel}${zInfo}</span>${metaDesc}</div>
+      <div class="sqlmap-layer-controls">
+        <button class="btn ${sl.visible?'b':'gr'}" style="font-size:11px;padding:5px 10px;"
+          onclick="sqlmapToggle(${i})">${sl.visible ? '👁 Vidljivo' : '🙈 Skriveno'}</button>
+        <button class="btn gr" style="font-size:11px;padding:5px 10px;"
+          onclick="sqlmapRemove(${i})">✕ Ukloni</button>
+      </div>
+      <div class="sqlmap-opacity-row">
+        <span>Providnost</span>
+        <input type="range" min="0" max="100" value="${Math.round((sl.layer.options.opacity??1)*100)}"
+          oninput="sqlmapSetOpacity(${i}, this.value)">
+        <span id="sqlmap-op-${i}">${Math.round((sl.layer.options.opacity??1)*100)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sqlmapToggle(i) {
+  const sl = _sqlLayers[i];
+  sl.visible = !sl.visible;
+  if (sl.visible) sl.layer.addTo(map); else map.removeLayer(sl.layer);
+  _sqlmapRenderLayers();
+}
+function sqlmapSetOpacity(i, val) {
+  const sl = _sqlLayers[i];
+  const op = val / 100;
+  sl.layer.setOpacity(op);
+  const lbl = document.getElementById('sqlmap-op-' + i);
+  if (lbl) lbl.textContent = val + '%';
+}
+function sqlmapRemove(i) {
+  const sl = _sqlLayers[i];
+  map.removeLayer(sl.layer);
+  sl.db.close();
+  _sqlLayers.splice(i, 1);
+  _sqlmapRenderLayers();
+  if (!_sqlLayers.length) _sqlmapStatus('');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getOfflineBounds() {
   const v = document.getElementById('offline-area').value;
   if (v.startsWith('odjel:')) {
@@ -5774,6 +5999,7 @@ async function autoLoadAllKmlBuckets() {
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🗄 Učitaj SQLiteDB kartu</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
@@ -5852,6 +6078,32 @@ async function autoLoadAllKmlBuckets() {
     </div>
   </div>
 </div>
+<!-- SQLITEDB OFFLINE MAP MODAL -->
+<div id="sqlmap-modal" onclick="if(event.target===this)closeSqlMapModal()">
+  <div id="sqlmap-box">
+    <h3>🗄 Učitaj offline kartu (SQLiteDB)</h3>
+
+    <div id="sqlmap-drop-zone" class="sqlmap-drop-zone"
+      onclick="document.getElementById('sqlmap-file-input').click()"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="sqlmapHandleDrop(event)">
+      <div style="font-size:28px;margin-bottom:6px;">🗺</div>
+      <div>Klikni ili prevuci fajl</div>
+      <div style="font-size:11px;margin-top:4px;">.sqlitedb · .mbtiles · .db</div>
+      <input type="file" id="sqlmap-file-input" accept=".sqlitedb,.mbtiles,.db,.sqlite"
+        style="display:none;" onchange="sqlmapLoadFile(this.files[0])">
+    </div>
+
+    <div id="sqlmap-status"></div>
+    <div id="sqlmap-layers"></div>
+
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn gr" onclick="closeSqlMapModal()">Zatvori</button>
+    </div>
+  </div>
+</div>
+
 <!-- VLAKA INFO POPUP -->
 <div id="vlaka-popup">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
