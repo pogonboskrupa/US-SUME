@@ -1868,6 +1868,17 @@ async function sbLoadVlake() {
   if (allPts.length > 0) {
     try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
   }
+  // Sync ibr to next free number after loading from Supabase
+  _syncIbr();
+}
+
+function _syncIbr() {
+  const usedBr = new Set(vlake.map(v => v.br));
+  let next = 1;
+  while (usedBr.has(next)) next++;
+  document.getElementById('ibr').value = next;
+  document.getElementById('ikr').value = 0;
+  updPrev();
 }
 
 function scheduleVlakaSave(i) {
@@ -2701,37 +2712,50 @@ updPrev();
 
 // === VLAKA ===
 function nacrtajVlaku() {
-  addV(); // kreira vlaku i selektuje je (actI se postavi)
-  // Kratki delay da se rndList() završi, pa aktiviraj crtanje
-  setTimeout(() => { if (actI !== null) mtAddLine(); }, 30);
+  addV().then(() => { setTimeout(() => { if (actI !== null) mtAddLine(); }, 30); });
 }
 
+let _addVBusy = false;
 async function addV() {
-  const {nm,br,kr} = updPrev();
-  if (vlake.find(v=>v.nm===nm)) { alert(`Vlaka "${nm}" već postoji!`); return; }
-  const color = selC;
-  // Glavna vlaka (kr=0) automatski dobiva sljedeći slobodni lager broj; krakovi nemaju
-  let lager = '';
-  if (kr === 0) {
-    const { lbl } = await nextLagerNum();
-    lager = lbl;
+  if (_addVBusy) return;
+  _addVBusy = true;
+  try {
+    let {br, kr} = updPrev();
+    // Auto-advance br until we find a free name
+    const usedNm = new Set(vlake.map(v => v.nm));
+    while (true) {
+      const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
+      if (!usedNm.has(nm)) { break; }
+      br++;
+    }
+    document.getElementById('ibr').value = br;
+    updPrev();
+    const {nm} = updPrev();
+    const color = selC;
+    let lager = '';
+    if (kr === 0) {
+      const { lbl } = await nextLagerNum();
+      lager = lbl;
+    }
+    const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
+    poly.bindTooltip(nm,{sticky:true,opacity:0.9});
+    attachPolyClick(poly);
+    vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
+    sbFlushVlaka(vlake.length-1);
+    cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
+    document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
+    rndList();
+    selI(vlake.length-1);
+    // Set ibr to next free number
+    const usedBr = new Set(vlake.map(v => v.br));
+    let nextBr = br + 1;
+    while (usedBr.has(nextBr)) nextBr++;
+    document.getElementById('ibr').value = nextBr;
+    document.getElementById('ikr').value = 0;
+    updPrev();
+  } finally {
+    _addVBusy = false;
   }
-  const poly  = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
-  poly.bindTooltip(nm,{sticky:true,opacity:0.9});
-  attachPolyClick(poly);
-  vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
-  sbFlushVlaka(vlake.length-1);
-  cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
-  document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
-  rndList();
-  selI(vlake.length-1);
-  // Auto-increment br to next free number
-  const usedBr = new Set(vlake.map(v => v.br));
-  let nextBr = br + 1;
-  while (usedBr.has(nextBr)) nextBr++;
-  document.getElementById('ibr').value = nextBr;
-  document.getElementById('ikr').value = 0;
-  updPrev();
 }
 
 async function nextLagerNum() {
