@@ -1397,8 +1397,9 @@ function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
   setTimeout(() => map.invalidateSize(), 50);
-  loadProj();      // lokalni podaci odmah
-  sbInitData();    // Supabase async override
+  loadProj();           // lokalni podaci odmah
+  sbInitData();         // Supabase async override
+  sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
 }
 
 // --- Auth form helpers ---
@@ -5416,8 +5417,46 @@ function closeOfflineModal() {
 }
 
 // ─── SQLiteDB offline map ─────────────────────────────────────────────────────
-let _sqlLayers = []; // { name, db, format, layer, visible }
+let _sqlLayers = []; // { name, db, fmt, layer, visible, meta, saved }
 let _sqlJS = null;
+
+// ── IndexedDB helpers ──────────────────────────────────────────────────────────
+function _sqlIdbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('tvlake_sqlmaps', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('maps', { keyPath: 'name' });
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function _sqlIdbSave(name, buffer, fmt, meta) {
+  const idb = await _sqlIdbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('maps', 'readwrite');
+    tx.objectStore('maps').put({ name, buffer, fmt, meta, savedAt: Date.now() });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function _sqlIdbGetAll() {
+  const idb = await _sqlIdbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('maps', 'readonly');
+    const req = tx.objectStore('maps').getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function _sqlIdbDelete(name) {
+  const idb = await _sqlIdbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('maps', 'readwrite');
+    tx.objectStore('maps').delete(name);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 function showSqlMapModal() {
   document.getElementById('sqlmap-modal').classList.add('show');
@@ -5454,7 +5493,8 @@ async function _sqlmapEnsureSqlJs() {
 }
 
 function _sqlmapStatus(msg) {
-  document.getElementById('sqlmap-status').textContent = msg;
+  const el = document.getElementById('sqlmap-status');
+  if (el) el.textContent = msg;
 }
 
 async function sqlmapLoadFile(file) {
@@ -5473,16 +5513,41 @@ async function sqlmapLoadFile(file) {
     }
     const meta = _sqlmapReadMeta(db, fmt);
     const name = file.name.replace(/\.[^.]+$/, '');
+    // Remove existing layer with same name if present
+    const ex = _sqlLayers.findIndex(l => l.name === name);
+    if (ex !== -1) { map.removeLayer(_sqlLayers[ex].layer); _sqlLayers[ex].db.close(); _sqlLayers.splice(ex, 1); }
     const layer = _sqlmapCreateLayer(db, fmt);
     layer.addTo(map);
-    _sqlLayers.push({ name, db, fmt, layer, visible: true, meta });
-    _sqlmapStatus('✅ Karta učitana: ' + name);
+    _sqlLayers.push({ name, db, fmt, layer, visible: true, meta, saved: true });
+    // Persist to IndexedDB
+    _sqlmapStatus('⏳ Čuvam u memoriju pretraživača...');
+    await _sqlIdbSave(name, buf, fmt, meta);
+    _sqlmapStatus('✅ Karta sačuvana: ' + name);
     _sqlmapRenderLayers();
-    // Reset file input so same file can be re-loaded
     document.getElementById('sqlmap-file-input').value = '';
   } catch(e) {
     _sqlmapStatus('❌ Greška: ' + e.message);
   }
+}
+
+// Restore all saved maps from IndexedDB (called on login/showApp)
+async function sqlmapRestoreAll() {
+  let saved;
+  try { saved = await _sqlIdbGetAll(); } catch(e) { return; }
+  if (!saved.length) return;
+  try {
+    const SQL = await _sqlmapEnsureSqlJs();
+    for (const entry of saved) {
+      if (_sqlLayers.find(l => l.name === entry.name)) continue;
+      try {
+        const db = new SQL.Database(new Uint8Array(entry.buffer));
+        const layer = _sqlmapCreateLayer(db, entry.fmt);
+        layer.addTo(map);
+        _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: true, meta: entry.meta || {}, saved: true });
+      } catch(e) { console.warn('SQLmap restore error for', entry.name, e); }
+    }
+    if (_sqlLayers.length) _sqlmapRenderLayers();
+  } catch(e) { console.warn('SQLmap restore failed:', e); }
 }
 
 function _sqlmapDetectFormat(db) {
@@ -5560,14 +5625,16 @@ function _sqlmapCreateLayer(db, fmt) {
 
 function _sqlmapRenderLayers() {
   const el = document.getElementById('sqlmap-layers');
+  if (!el) return;
   if (!_sqlLayers.length) { el.innerHTML = ''; return; }
   el.innerHTML = _sqlLayers.map((sl, i) => {
     const fmtLabel = sl.fmt === 'mbtiles' ? 'MBTiles' : sl.fmt === 'alpinequest' ? 'AlpineQuest' : 'RMaps/OruxMaps';
     const metaDesc = sl.meta?.description ? `<br>${sl.meta.description}` : '';
     const zInfo = sl.meta?.minzoom != null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
+    const savedBadge = sl.saved ? '<span style="color:#4ade80;font-size:10px;margin-left:6px;">💾 sačuvano</span>' : '';
     return `
     <div class="sqlmap-layer-row">
-      <div class="sqlmap-layer-name">🗺 ${sl.name}</div>
+      <div class="sqlmap-layer-name">🗺 ${sl.name}${savedBadge}</div>
       <div class="sqlmap-layer-meta"><span>${fmtLabel}${zInfo}</span>${metaDesc}</div>
       <div class="sqlmap-layer-controls">
         <button class="btn ${sl.visible?'b':'gr'}" style="font-size:11px;padding:5px 10px;"
@@ -5593,15 +5660,15 @@ function sqlmapToggle(i) {
 }
 function sqlmapSetOpacity(i, val) {
   const sl = _sqlLayers[i];
-  const op = val / 100;
-  sl.layer.setOpacity(op);
+  sl.layer.setOpacity(val / 100);
   const lbl = document.getElementById('sqlmap-op-' + i);
   if (lbl) lbl.textContent = val + '%';
 }
-function sqlmapRemove(i) {
+async function sqlmapRemove(i) {
   const sl = _sqlLayers[i];
   map.removeLayer(sl.layer);
   sl.db.close();
+  if (sl.saved) await _sqlIdbDelete(sl.name).catch(() => {});
   _sqlLayers.splice(i, 1);
   _sqlmapRenderLayers();
   if (!_sqlLayers.length) _sqlmapStatus('');
