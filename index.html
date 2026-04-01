@@ -88,6 +88,29 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
 }
 
 .sec { padding:12px; border-bottom:1px solid #0f3460; }
+/* Vlaka conflict dialog */
+#vlaka-conflict {
+  display:none; position:fixed; z-index:9600;
+  left:50%; transform:translateX(-50%); top:70px;
+  background:#1e293b; border:1.5px solid #f59e0b; border-radius:12px;
+  padding:16px 18px; min-width:260px; max-width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.7);
+}
+#vlaka-conflict .vc-title { font-size:13px; font-weight:700; color:#fbbf24; margin-bottom:10px; }
+#vlaka-conflict .vc-btns { display:flex; flex-direction:column; gap:6px; }
+#vlaka-conflict .vc-btns button { font-size:12px; padding:8px 12px; border-radius:7px; border:none; cursor:pointer; text-align:left; }
+/* Lager dialog */
+#lager-dlg {
+  display:none; position:fixed; z-index:9600;
+  left:50%; transform:translateX(-50%); top:70px;
+  background:#1e293b; border:1.5px solid #4ade80; border-radius:12px;
+  padding:16px 18px; min-width:260px; max-width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.7);
+}
+#lager-dlg .ld-title { font-size:13px; font-weight:700; color:#4ade80; margin-bottom:8px; }
+#lager-dlg .ld-input { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+#lager-dlg .ld-input input { flex:1; padding:8px 10px; background:#0f172a; border:1px solid #334155; border-radius:7px; color:#e2e8f0; font-size:14px; font-family:monospace; }
+#lager-dlg .ld-btns { display:flex; gap:8px; }
 #vlaka-popup {
   display:none; position:fixed; z-index:9500;
   background:#1e293b; border:1px solid #334155; border-radius:10px;
@@ -2618,6 +2641,7 @@ function _stopAddLine(fromUser) {
     if (bufLayers.length > 0) drawBuffers();
     setActiveTool('select');
     document.getElementById('fab-gps').style.display = '';
+    if (actI !== null && vlake[actI]?.pts?.length > 0 && !vlake[actI]?.lager) _showLagerDlg(actI);
   }
 }
 
@@ -2716,47 +2740,123 @@ function nacrtajVlaku() {
 }
 
 let _addVBusy = false;
+let _addVAfterCreate = null; // callback after vlaka is actually created
+
 async function addV() {
   if (_addVBusy) return;
   _addVBusy = true;
   try {
-    let {br, kr} = updPrev();
-    // Auto-advance br until we find a free name
-    const usedNm = new Set(vlake.map(v => v.nm));
-    while (true) {
-      const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
-      if (!usedNm.has(nm)) { break; }
-      br++;
+    const {br, kr} = updPrev();
+    const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
+    const existing = vlake.findIndex(v => v.nm === nm);
+    if (existing !== -1) {
+      // Show conflict dialog instead of silently skipping
+      _vcIdx = existing;
+      _vcBr = br; _vcKr = kr;
+      document.getElementById('vc-title').textContent = `⚠ Vlaka "${nm}" već postoji`;
+      document.getElementById('vlaka-conflict').style.display = 'block';
+      return; // will be resumed by vcDelete() or vcAddNext()
     }
-    document.getElementById('ibr').value = br;
-    updPrev();
-    const {nm} = updPrev();
-    const color = selC;
-    let lager = '';
-    if (kr === 0) {
-      const { lbl } = await nextLagerNum();
-      lager = lbl;
-    }
-    const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
-    poly.bindTooltip(nm,{sticky:true,opacity:0.9});
-    attachPolyClick(poly);
-    vlake.push({nm,br,kr,color,lager,pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
-    sbFlushVlaka(vlake.length-1);
-    cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
-    document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
-    rndList();
-    selI(vlake.length-1);
-    // Set ibr to next free number
-    const usedBr = new Set(vlake.map(v => v.br));
-    let nextBr = br + 1;
-    while (usedBr.has(nextBr)) nextBr++;
-    document.getElementById('ibr').value = nextBr;
-    document.getElementById('ikr').value = 0;
-    updPrev();
+    await _doCreateVlaka(br, kr);
   } finally {
     _addVBusy = false;
   }
 }
+
+let _vcIdx = -1, _vcBr = 1, _vcKr = 0;
+
+function vcZoom() {
+  if (_vcIdx < 0 || _vcIdx >= vlake.length) return;
+  const v = vlake[_vcIdx];
+  if (v.pts.length > 0) map.fitBounds(L.latLngBounds(v.pts.map(p=>[p.la,p.lo])),{padding:[40,40]});
+  else showToast('Vlaka nema tačaka — nije crtana');
+  selI(_vcIdx);
+}
+function vcDelete() {
+  document.getElementById('vlaka-conflict').style.display = 'none';
+  if (_vcIdx >= 0 && _vcIdx < vlake.length) {
+    const v = vlake[_vcIdx];
+    map.removeLayer(v.poly);
+    v.wpts.forEach(m=>map.removeLayer(m));
+    if (v.labelMk) map.removeLayer(v.labelMk);
+    if (v.lagerMk) map.removeLayer(v.lagerMk);
+    (v.extraLabels||[]).forEach(m=>map.removeLayer(m));
+    sbDeleteVlaka(v.sbId);
+    vlake.splice(_vcIdx, 1);
+    rndList();
+  }
+  _addVBusy = false;
+  addV(); // retry with same br/kr now that the name is free
+}
+function vcAddNext() {
+  document.getElementById('vlaka-conflict').style.display = 'none';
+  // Find next free br
+  const usedNm = new Set(vlake.map(v => v.nm));
+  let br = _vcBr + 1;
+  while (usedNm.has(_vcKr === 0 ? `T${br}` : `T${br}.${_vcKr}`)) br++;
+  document.getElementById('ibr').value = br;
+  document.getElementById('ikr').value = _vcKr;
+  updPrev();
+  _addVBusy = false;
+  addV();
+}
+function vcCancel() {
+  document.getElementById('vlaka-conflict').style.display = 'none';
+  _addVBusy = false;
+}
+
+async function _doCreateVlaka(br, kr) {
+  const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
+  const color = selC;
+  const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
+  poly.bindTooltip(nm,{sticky:true,opacity:0.9});
+  attachPolyClick(poly);
+  vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
+  sbFlushVlaka(vlake.length-1);
+  cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
+  document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
+  rndList();
+  selI(vlake.length-1);
+  // Advance ibr to next free
+  const usedBr = new Set(vlake.map(v => v.br));
+  let nextBr = br + 1;
+  while (usedBr.has(nextBr)) nextBr++;
+  document.getElementById('ibr').value = nextBr;
+  document.getElementById('ikr').value = 0;
+  updPrev();
+}
+
+// ─── Lager dialog ─────────────────────────────────────────────────────────────
+let _lagerTargetIdx = null;
+
+async function _showLagerDlg(vIdx) {
+  if (vIdx === null || vIdx < 0 || vIdx >= vlake.length) return;
+  const v = vlake[vIdx];
+  if (v.kr !== 0 || v.pts.length === 0) return; // samo matična trasa s tačkama
+  _lagerTargetIdx = vIdx;
+  const { lbl } = await nextLagerNum();
+  document.getElementById('ld-title').textContent = `🏷 Broj lagera za ${v.nm}`;
+  document.getElementById('ld-sub').textContent = 'Prijedlog: ' + lbl + '  (možeš promijeniti ili preskočiti)';
+  document.getElementById('lager-input').value = lbl;
+  document.getElementById('lager-dlg').style.display = 'block';
+  setTimeout(() => { document.getElementById('lager-input').select(); }, 80);
+}
+function lagerDlgOk() {
+  const val = document.getElementById('lager-input').value.trim();
+  document.getElementById('lager-dlg').style.display = 'none';
+  if (_lagerTargetIdx === null) return;
+  const v = vlake[_lagerTargetIdx];
+  if (!v) return;
+  v.lager = val;
+  updateVlakaLabel(_lagerTargetIdx);
+  sbFlushVlaka(_lagerTargetIdx);
+  _lagerTargetIdx = null;
+}
+function lagerDlgSkip() {
+  document.getElementById('lager-dlg').style.display = 'none';
+  _lagerTargetIdx = null;
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 async function nextLagerNum() {
   const used = new Set(vlake.map(v => v.lager).filter(Boolean));
@@ -2866,6 +2966,7 @@ function stopRec() {
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
   document.getElementById('fab-gps').style.display = '';
+  _showLagerDlg(actI);
 }
 
 function toggleRecPause() {
@@ -3485,8 +3586,8 @@ function updateVlakaLabel(i) {
   }
 
   if (v.lager) {
-    const pLast = v.pts[v.pts.length - 1];
-    v.lagerMk = L.marker([pLast.la, pLast.lo], {
+    const pFirst = v.pts[0];
+    v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
       icon: L.divIcon({
         className: '', iconSize: [0,0], iconAnchor: [14,14],
         html: `<div style="background:#f59e0b;color:#000;font-size:12px;font-weight:bold;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);pointer-events:none;font-family:Arial,sans-serif;">${v.lager}</div>`
@@ -6203,6 +6304,28 @@ async function autoLoadAllKmlBuckets() {
 </div>
 
 <!-- VLAKA INFO POPUP -->
+<!-- VLAKA CONFLICT DIALOG -->
+<div id="vlaka-conflict">
+  <div class="vc-title" id="vc-title">⚠ Vlaka već postoji</div>
+  <div class="vc-btns">
+    <button style="background:#1d4ed8;color:#fff;" onclick="vcZoom()">🎯 Prikaži na karti</button>
+    <button style="background:#7f1d1d;color:#fff;" onclick="vcDelete()">🗑 Obriši i dodaj novu</button>
+    <button style="background:#166534;color:#fff;" onclick="vcAddNext()">➕ Dodaj novu (sljedeći broj)</button>
+    <button style="background:#374151;color:#94a3b8;" onclick="vcCancel()">✕ Odustani</button>
+  </div>
+</div>
+<!-- LAGER DIALOG -->
+<div id="lager-dlg">
+  <div class="ld-title" id="ld-title">🏷 Broj lagera</div>
+  <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;" id="ld-sub"></div>
+  <div class="ld-input">
+    <input type="text" id="lager-input" placeholder="npr. L1" onkeydown="if(event.key==='Enter')lagerDlgOk()">
+  </div>
+  <div class="ld-btns">
+    <button class="btn g" style="flex:1;font-size:12px;padding:8px;" onclick="lagerDlgOk()">✓ Potvrdi</button>
+    <button class="btn gr" style="flex:0 0 auto;font-size:12px;padding:8px 12px;" onclick="lagerDlgSkip()">Preskoči</button>
+  </div>
+</div>
 <div id="vlaka-popup">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
     <span id="vp-nm" style="font-size:14px;font-weight:bold;color:#60a5fa;"></span>
