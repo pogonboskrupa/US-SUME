@@ -2270,6 +2270,7 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
+let _activeTab = 'karta';  // trenutno aktivan tab
 // Tool states — only one active at a time
 let activeTool = 'select'; // 'select' | 'addline' | 'addpoint' | 'edit' | 'delnode' | 'merge'
 let editOn=false, mergeMode=false, mergeFirst=null;
@@ -2641,7 +2642,7 @@ function _stopAddLine(fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
     setActiveTool('select');
-    document.getElementById('fab-gps').style.display = '';
+    if (_activeTab === 'karta') document.getElementById('fab-gps').style.display = '';
     if (actI !== null && vlake[actI]?.pts?.length > 0 && !vlake[actI]?.lager) _showLagerDlg(actI);
   }
 }
@@ -2966,7 +2967,7 @@ function stopRec() {
   document.getElementById('btn-krak').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
-  document.getElementById('fab-gps').style.display = '';
+  if (_activeTab === 'karta') document.getElementById('fab-gps').style.display = '';
   _showLagerDlg(actI);
 }
 
@@ -4798,6 +4799,7 @@ function _updMcdDist() {
 }
 
 function switchTab(tab) {
+  _activeTab = tab;
   const panel   = document.getElementById('panel');
   const pproj   = document.getElementById('proj-panel');
   const pizmjeri= document.getElementById('izmjeri-panel');
@@ -4807,6 +4809,7 @@ function switchTab(tab) {
   panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
+  document.getElementById('fab-gps').style.display = tab==='karta' ? '' : 'none';
   if (tab==='karta') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
