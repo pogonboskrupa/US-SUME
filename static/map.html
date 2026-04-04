@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geodetic Measurement — Map Preview</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+    #toolbar {
+      background: #16213e; border-bottom: 2px solid #1e3a5f;
+      padding: 8px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    #toolbar h1 { font-size: 14px; font-weight: bold; color: #60a5fa; white-space: nowrap; }
+    .tool-btn {
+      padding: 5px 14px; border: 1px solid #334155; border-radius: 6px;
+      background: #1e293b; color: #94a3b8; cursor: pointer; font-size: 13px; font-weight: bold;
+      transition: all 0.15s;
+    }
+    .tool-btn:hover { border-color: #3b82f6; color: #60a5fa; }
+    .tool-btn.active { background: #1d4ed8; color: #fff; border-color: #3b82f6; }
+    #clear-btn { background: #7f1d1d; color: #fca5a5; border-color: #991b1b; }
+    #clear-btn:hover { background: #991b1b; }
+
+    #map { flex: 1; }
+
+    #results {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+      background: rgba(15, 23, 42, 0.96); border-top: 2px solid #1e3a5f;
+      padding: 10px 16px 14px; display: none;
+      backdrop-filter: blur(6px);
+      max-height: 42vh; overflow-y: auto;
+    }
+    #results.show { display: block; }
+    .res-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px; margin-top: 8px;
+    }
+    .res-card {
+      background: #0f172a; border: 1px solid #1e3a5f; border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .res-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .res-value { font-size: 15px; font-weight: bold; font-family: monospace; margin-top: 2px; }
+    .c-green  { color: #4ade80; }
+    .c-blue   { color: #60a5fa; }
+    .c-yellow { color: #fbbf24; }
+    .c-purple { color: #a78bfa; }
+    .c-red    { color: #f87171; }
+
+    .hint {
+      font-size: 11px; color: #475569; margin-top: 6px;
+    }
+    #mode-label {
+      font-size: 12px; color: #94a3b8; padding: 3px 10px;
+      border: 1px solid #334155; border-radius: 5px; background: #0f172a;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>📐 Geodetic Measurement</h1>
+  <button class="tool-btn active" id="btn-dist"  onclick="setMode('dist')">📏 Distance</button>
+  <button class="tool-btn"        id="btn-az"    onclick="setMode('az')">🧭 Azimuth</button>
+  <button class="tool-btn"        id="btn-slope" onclick="setMode('slope')">📐 Slope</button>
+  <button class="tool-btn"        id="btn-area"  onclick="setMode('area')">◻ Area</button>
+  <span id="mode-label">Click two points on the map</span>
+  <button class="tool-btn" id="clear-btn" onclick="clearAll()">🗑 Clear</button>
+</div>
+
+<div id="map"></div>
+
+<div id="results"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Map init ────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([44.0, 17.5], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+// ── State ───────────────────────────────────────────────────────────────────
+let mode   = 'dist';   // dist | az | slope | area
+let points = [];       // [{lat, lng, elev?}]
+let layers = L.layerGroup().addTo(map);
+let elevCache = {};
+
+const MODES = {
+  dist:  { need: 2, hint: 'Click 2 points for distance & bearing' },
+  az:    { need: 2, hint: 'Click 2 points for azimuth' },
+  slope: { need: 2, hint: 'Click 2 points — elevation fetched automatically' },
+  area:  { need: Infinity, hint: 'Click 3+ points — double-click to finish' },
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const R = 6371000;
+function toR(d) { return d * Math.PI / 180; }
+function haversine(la1,lo1,la2,lo2) {
+  const dphi=toR(la2-la1), dlam=toR(lo2-lo1);
+  const a=Math.sin(dphi/2)**2+Math.cos(toR(la1))*Math.cos(toR(la2))*Math.sin(dlam/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function bearing(la1,lo1,la2,lo2) {
+  const phi1=toR(la1),phi2=toR(la2),dl=toR(lo2-lo1);
+  return ((Math.atan2(Math.sin(dl)*Math.cos(phi2),
+    Math.cos(phi1)*Math.sin(phi2)-Math.sin(phi1)*Math.cos(phi2)*Math.cos(dl))*180/Math.PI)+360)%360;
+}
+const COMPASS=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+function compassLabel(b) { return COMPASS[Math.round(b/22.5)%16]; }
+function fmtDist(m) { return m>=1000?(m/1000).toFixed(2)+' km':Math.round(m)+' m'; }
+function sphericalArea(pts) {
+  let area=0;
+  for(let i=0;i<pts.length;i++){
+    const j=(i+1)%pts.length;
+    const la1=toR(pts[i].lat),lo1=toR(pts[i].lng);
+    const la2=toR(pts[j].lat),lo2=toR(pts[j].lng);
+    area+=(lo2-lo1)*(2+Math.sin(la1)+Math.sin(la2));
+  }
+  return Math.abs(area*R*R/2);
+}
+
+async function fetchElev(lat, lng) {
+  const key=`${lat.toFixed(5)},${lng.toFixed(5)}`;
+  if (elevCache[key]!=null) return elevCache[key];
+  try {
+    const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`);
+    const d=await r.json();
+    const v=d.elevation?.[0];
+    if(v!=null) elevCache[key]=v;
+    return v??null;
+  } catch { return null; }
+}
+
+// ── Mode switch ──────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.tool-btn[id^="btn-"]').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+m).classList.add('active');
+  document.getElementById('mode-label').textContent = MODES[m].hint;
+  clearAll();
+}
+
+// ── Map click ────────────────────────────────────────────────────────────────
+let dblGuard = false;
+map.on('click', async e => {
+  if (dblGuard) return;
+  const need = MODES[mode].need;
+  if (mode !== 'area' && points.length >= need) clearAll();
+
+  const pt = { lat: e.latlng.lat, lng: e.latlng.lng, elev: null };
+  points.push(pt);
+  redraw();
+
+  // Fetch elevation asynchronously
+  const elev = await fetchElev(pt.lat, pt.lng);
+  pt.elev = elev;
+  redraw();
+  showResults();
+});
+
+map.on('dblclick', e => {
+  dblGuard = true;
+  setTimeout(() => { dblGuard = false; }, 300);
+  if (mode === 'area' && points.length >= 3) showResults(true);
+});
+
+// ── Redraw ───────────────────────────────────────────────────────────────────
+function redraw() {
+  layers.clearLayers();
+  const COLORS = ['#4ade80', '#60a5fa', '#fbbf24', '#f87171', '#a78bfa'];
+  points.forEach((p, i) => {
+    const col = i === 0 ? '#4ade80' : (i === points.length-1 && mode !== 'area' ? '#f87171' : '#60a5fa');
+    layers.addLayer(L.circleMarker([p.lat, p.lng], {
+      radius:7, color:'#fff', weight:2, fillColor:col, fillOpacity:1
+    }).bindTooltip(`${i+1}${p.elev!=null?' · '+Math.round(p.elev)+' m':''}`, {direction:'top'}));
+  });
+
+  if (points.length > 1) {
+    const lls = points.map(p=>[p.lat,p.lng]);
+    layers.addLayer(L.polyline(lls, {color:'#fbbf24',weight:2,dashArray:'6 4',opacity:0.9}));
+    if (mode === 'area' && points.length >= 3) {
+      const a = sphericalArea(points);
+      const lbl = a>=10000?(a/10000).toFixed(2)+' ha':Math.round(a)+' m²';
+      layers.addLayer(L.polygon(lls, {color:'#a78bfa',weight:1.5,dashArray:'4 4',fillColor:'#a78bfa',fillOpacity:0.1}));
+      const cLat=points.reduce((s,p)=>s+p.lat,0)/points.length;
+      const cLng=points.reduce((s,p)=>s+p.lng,0)/points.length;
+      layers.addLayer(L.marker([cLat,cLng],{icon:L.divIcon({className:'',
+        html:`<div style="background:rgba(15,23,42,0.9);color:#a78bfa;font:bold 13px monospace;padding:3px 9px;border-radius:5px;border:1px solid #7c3aed;white-space:nowrap;">◻ ${lbl}</div>`,
+        iconAnchor:[0,0]}),interactive:false}));
+    }
+  }
+  showResults();
+}
+
+// ── Results panel ─────────────────────────────────────────────────────────────
+function card(label, value, cls='c-blue') {
+  return `<div class="res-card"><div class="res-label">${label}</div><div class="res-value ${cls}">${value}</div></div>`;
+}
+
+function showResults(finalise=false) {
+  const el = document.getElementById('results');
+  const pts = points;
+  if (pts.length < 2 && mode !== 'area') { el.classList.remove('show'); return; }
+  if (mode === 'area' && pts.length < 3) { el.classList.remove('show'); return; }
+
+  let html = '';
+
+  if (mode === 'dist' || mode === 'az') {
+    const a = pts[0], b = pts[pts.length-1];
+    const d   = haversine(a.lat,a.lng,b.lat,b.lng);
+    const bfwd = bearing(a.lat,a.lng,b.lat,b.lng);
+    const bbck = (bfwd+180)%360;
+    html += '<div class="res-grid">';
+    html += card('Distance', fmtDist(d), 'c-green');
+    html += card('Forward azimuth', `${bfwd.toFixed(1)}°  ${compassLabel(bfwd)}`, 'c-blue');
+    html += card('Back azimuth',    `${bbck.toFixed(1)}°  ${compassLabel(bbck)}`, 'c-yellow');
+    if (a.elev!=null && b.elev!=null) {
+      const dh=b.elev-a.elev;
+      const pct=(dh/d*100).toFixed(1);
+      const sign=dh>=0?'+':'';
+      html += card('Slope', `${sign}${pct}%  (${sign}${Math.round(dh)} m)`, dh>=0?'c-green':'c-red');
+    }
+    html += card('NV start', a.elev!=null?Math.round(a.elev)+' m':'…', 'c-purple');
+    html += card('NV end',   b.elev!=null?Math.round(b.elev)+' m':'…', 'c-purple');
+    html += '</div>';
+  }
+
+  if (mode === 'slope') {
+    const a=pts[0], b=pts[pts.length-1];
+    const d=haversine(a.lat,a.lng,b.lat,b.lng);
+    html += '<div class="res-grid">';
+    html += card('H. distance', fmtDist(d), 'c-blue');
+    if (a.elev!=null && b.elev!=null) {
+      const dh=b.elev-a.elev, pct=dh/d*100;
+      const ang=(Math.atan2(dh,d)*180/Math.PI).toFixed(1);
+      const GRADES=[[2,'flat'],[5,'gentle'],[15,'moderate'],[30,'steep'],[999,'cliff']];
+      const grade=GRADES.find(g=>Math.abs(pct)<=g[0])?.[1]||'cliff';
+      html += card('Slope', `${pct.toFixed(1)} %  /  ${ang}°`, Math.abs(pct)>15?'c-red':'c-yellow');
+      html += card('Elev change', `${dh>=0?'+':''}${Math.round(dh)} m`, dh>=0?'c-green':'c-red');
+      html += card('Grade', grade.toUpperCase(), 'c-purple');
+    } else {
+      html += card('Elevation', 'Loading…', 'c-yellow');
+    }
+    html += '</div>';
+  }
+
+  if (mode === 'area') {
+    const a = sphericalArea(pts);
+    let perim = 0;
+    for(let i=0;i<pts.length;i++) perim+=haversine(pts[i].lat,pts[i].lng,pts[(i+1)%pts.length].lat,pts[(i+1)%pts.length].lng);
+    html += '<div class="res-grid">';
+    html += card('Area (m²)', Math.round(a).toLocaleString()+' m²', 'c-purple');
+    html += card('Area (ha)',  (a/10000).toFixed(4)+' ha', 'c-purple');
+    html += card('Area (km²)', (a/1e6).toFixed(6)+' km²', 'c-purple');
+    html += card('Perimeter', fmtDist(perim), 'c-blue');
+    html += card('Vertices', pts.length, 'c-yellow');
+    html += '</div>';
+    if (!finalise) html += '<p class="hint">Double-click to close polygon</p>';
+  }
+
+  el.innerHTML = html;
+  el.classList.add('show');
+}
+
+function clearAll() {
+  points = [];
+  layers.clearLayers();
+  document.getElementById('results').classList.remove('show');
+}
+
+// Boot
+setMode('dist');
+</script>
+</body>
+</html>
