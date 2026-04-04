@@ -954,18 +954,15 @@ select:focus { outline:none; border-color:#3b82f6; }
     <div style="position:relative;display:inline-block;flex-shrink:0;">
       <button class="tbtn tbtn-gray" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)" id="menu-btn">☰ Meni ▾</button>
     </div>
-    <button id="mbtn" class="tbtn tbtn-gray" style="display:none;" onclick="togglePanel()">🗺 MAP</button>
     <button class="tbtn tbtn-blue" onclick="toggleGPS()">📡 GPS</button>
     <div id="gps-info">GPS: isključen</div>
   </div>
 
   <div id="tab-bar">
+    <button class="tab-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)">☰ Meni</button>
     <button class="tab-btn active" onclick="switchTab('karta')">🗺 Karta</button>
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
-    <button class="tab-btn" onclick="switchTab('izmjeri')">📏 Izmjeri</button>
-    <div style="flex:1;"></div>
-    <button class="tbtn tbtn-gray" style="padding:3px 9px;font-size:12px;margin-bottom:3px;" onclick="centerMap()">🎯 Centar</button>
   </div>
 
   <!-- QGIS-STIL MAP TOOLBAR -->
@@ -2642,7 +2639,6 @@ function _stopAddLine(fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
     setActiveTool('select');
-    if (_activeTab === 'karta') document.getElementById('fab-gps').style.display = '';
     if (actI !== null && vlake[actI]?.pts?.length > 0 && !vlake[actI]?.lager) _showLagerDlg(actI);
   }
 }
@@ -2967,7 +2963,6 @@ function stopRec() {
   document.getElementById('btn-krak').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
-  if (_activeTab === 'karta') document.getElementById('fab-gps').style.display = '';
   _showLagerDlg(actI);
 }
 
@@ -3263,18 +3258,10 @@ let _tragOn   = false;
 let _tragLine = null;
 let _tragPts  = [];
 
-function toggleFabGps() {
-  _fabOpen = !_fabOpen;
-  const fab = document.getElementById('fab-gps');
-  const btn = document.getElementById('fab-main');
-  fab.classList.toggle('open', _fabOpen);
-  btn.classList.toggle('open', _fabOpen);
-}
+function toggleFabGps() {}
 
 function _closeFab() {
   _fabOpen = false;
-  document.getElementById('fab-gps').classList.remove('open');
-  document.getElementById('fab-main').classList.remove('open');
 }
 
 function fabLokacija() {
@@ -3358,7 +3345,6 @@ function fabSnimVlaku() {
     showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
     return;
   }
-  document.getElementById('fab-gps').style.display = 'none';
   switchTab('vlake');
   nacrtajVlaku();
   showToast('🚜 Vlaka kreirana — pritisni GPS snimanje ili crtaj liniju');
@@ -4805,11 +4791,10 @@ function switchTab(tab) {
   const pizmjeri= document.getElementById('izmjeri-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
     b.classList.toggle('active',
-      (i===0&&tab==='karta')||(i===1&&tab==='vlake')||(i===2&&tab==='projekat')||(i===3&&tab==='izmjeri')));
+      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')));
   panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
-  document.getElementById('fab-gps').style.display = tab==='karta' ? '' : 'none';
   document.getElementById('ovl').style.display = tab==='karta' ? '' : 'none';
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -6233,6 +6218,7 @@ async function autoLoadAllKmlBuckets() {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('izmjeri')">📏 Izmjeri</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
@@ -6402,23 +6388,6 @@ async function autoLoadAllKmlBuckets() {
         <div id="msr-segs"></div>
       </div>
     </div><!-- /izmjeri-panel -->
-
-<!-- GPS FAB -->
-<div id="fab-gps">
-  <button id="fab-main" onclick="toggleFabGps()" title="GPS akcije">📍</button>
-  <div class="fab-item" id="fab-item-vlaka">
-    <span class="fab-item-lbl">Snimi vlaku</span>
-    <button class="fab-item-btn" onclick="fabSnimVlaku()" title="Snimi vlaku">🚜</button>
-  </div>
-  <div class="fab-item" id="fab-item-trag">
-    <span class="fab-item-lbl" id="fab-trag-lbl">Snimi trag</span>
-    <button class="fab-item-btn" id="fab-trag-btn" onclick="fabSnimTrag()" title="Snimi trag kretanja">🔴</button>
-  </div>
-  <div class="fab-item" id="fab-item-loc">
-    <span class="fab-item-lbl">Moja lokacija</span>
-    <button class="fab-item-btn" onclick="fabLokacija()" title="Prikaži moju lokaciju">🎯</button>
-  </div>
-</div>
 
 <!-- GRANICE ODJELA MODAL -->
 <div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
