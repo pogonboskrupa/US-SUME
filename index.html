@@ -960,7 +960,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   </div>
 
   <div id="tab-bar">
-    <button class="tab-btn active" onclick="switchTab('vlake')">📐 Vlake</button>
+    <button class="tab-btn active" onclick="switchTab('karta')">🗺 Karta</button>
+    <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <button class="tab-btn" onclick="switchTab('izmjeri')">📏 Izmjeri</button>
     <div style="flex:1;"></div>
@@ -1419,7 +1420,7 @@ async function sbLoadProfile() {
 function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
-  setTimeout(() => map.invalidateSize(), 50);
+  switchTab('karta');   // defaultno pokaži kartu
   loadProj();           // lokalni podaci odmah
   sbInitData();         // Supabase async override
   sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
@@ -4801,11 +4802,17 @@ function switchTab(tab) {
   const pproj   = document.getElementById('proj-panel');
   const pizmjeri= document.getElementById('izmjeri-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
-    b.classList.toggle('active',(i===0&&tab==='vlake')||(i===1&&tab==='projekat')||(i===2&&tab==='izmjeri')));
+    b.classList.toggle('active',
+      (i===0&&tab==='karta')||(i===1&&tab==='vlake')||(i===2&&tab==='projekat')||(i===3&&tab==='izmjeri')));
   panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
-  if (tab==='vlake') {
+  if (tab==='karta') {
+    _mapFullScreen = true;
+    _setMapUIVisible(false, true);
+    setTimeout(()=>map.invalidateSize(), 50);
+    msrStop();
+  } else if (tab==='vlake') {
     _mapFullScreen = false;
     const tbVis = activeTool !== 'select';
     _setMapUIVisible(tbVis, false);
