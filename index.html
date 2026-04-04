@@ -4810,6 +4810,7 @@ function switchTab(tab) {
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
   document.getElementById('fab-gps').style.display = tab==='karta' ? '' : 'none';
+  document.getElementById('ovl').style.display = tab==='karta' ? '' : 'none';
   if (tab==='karta') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
