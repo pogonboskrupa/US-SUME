@@ -2989,7 +2989,8 @@ function toggleRecPause() {
 }
 
 function startKrakOdOvdje() {
-  if (!recOn || actI === null) return;
+  const drawing = activeTool === 'addline';
+  if ((!recOn && !drawing) || actI === null) return;
   const parentV = vlake[actI];
   const postojeci = vlake
     .map((v, i) => ({ v, i }))
@@ -3032,23 +3033,32 @@ function _closeKrakPicker() {
 
 function odaberiKrak(krakIdx) {
   _closeKrakPicker();
-  if (!recOn || actI === null) return;
+  const drawing = activeTool === 'addline';
+  if ((!recOn && !drawing) || actI === null) return;
   _recParentIdx = actI;
   actI = krakIdx;
-  _gpsBuf = [];
-  selI(krakIdx);
-  _updBanner();
-  showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
+  if (recOn) {
+    _gpsBuf = [];
+    selI(krakIdx);
+    _updBanner();
+    showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
+  } else {
+    selI(krakIdx);
+    _stopAddLine(false);
+    mtAddLine();
+    showToast('↪ Nastavljam crtanje kraka ' + vlake[krakIdx].nm);
+  }
 }
 
 function startNoviKrak() {
   _closeKrakPicker();
-  if (!recOn || actI === null) return;
+  const drawing = activeTool === 'addline';
+  if ((!recOn && !drawing) || actI === null) return;
   const parentIdx = actI;
   const parentV = vlake[parentIdx];
 
   const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
-  if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+  if (!junctionPt) { showToast('Nacrtaj bar jednu tačku na vlaci!'); return; }
 
   const br = parseInt(document.getElementById('krak-novi-br').value) || 1;
   const krakNm = parentV.nm + '.' + br;
@@ -3065,11 +3075,21 @@ function startNoviKrak() {
   addPt(krakIdx, junctionPt.la, junctionPt.lo, junctionPt.al || 0);
   updateVlakaLabel(krakIdx);
 
-  _recParentIdx = parentIdx;
-  actI = krakIdx;
-  _gpsBuf = [];
-  selI(krakIdx);
-  _updBanner();
+  if (recOn) {
+    // GPS mode: switch recording to krak
+    _recParentIdx = parentIdx;
+    actI = krakIdx;
+    _gpsBuf = [];
+    selI(krakIdx);
+    _updBanner();
+  } else {
+    // Drawing mode: stop drawing parent, start drawing krak
+    _stopAddLine(false);
+    _recParentIdx = parentIdx;
+    actI = krakIdx;
+    selI(krakIdx);
+    mtAddLine();
+  }
   sbFlushVlaka(krakIdx);
   rndList();
   showToast('⊕ Novi krak ' + krakNm);
