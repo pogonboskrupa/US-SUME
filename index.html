@@ -196,6 +196,31 @@ input:focus { outline:none; border-color:#3b82f6; }
 .mb:hover { border-color:#ef4444; color:#ef4444; }
 .mb.bl:hover { border-color:#3b82f6; color:#3b82f6; }
 
+/* Recording status bar u Vlake panelu */
+#rec-status-bar {
+  background:#0a1120; border:1.5px solid #ef4444;
+  border-radius:8px; padding:10px 12px; margin-bottom:10px;
+}
+#rec-status-bar.paused { border-color:#f59e0b; }
+#rsb-row1 { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.rsb-dot { width:9px; height:9px; border-radius:50%; background:#ef4444; flex-shrink:0; animation:bl 1s infinite; }
+#rec-status-bar.paused .rsb-dot { background:#f59e0b; animation:none; }
+#rsb-nm { font-weight:800; font-size:15px; color:#f1f5f9; flex:1; }
+#rsb-len { font-size:13px; font-weight:700; color:#4ade80; white-space:nowrap; }
+#rsb-parent { font-size:11px; color:#f59e0b; margin-bottom:6px; }
+#rsb-btns { display:flex; gap:6px; }
+.rsb-btn { flex:1; padding:7px 6px; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; }
+.rsb-btn.pause { background:#f59e0b; color:#000; }
+.rsb-btn.stop  { background:#ef4444; color:#fff; }
+/* Badge na karticama */
+.vrec-badge { font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; white-space:nowrap; }
+.vrec-badge.rec    { background:rgba(239,68,68,0.2);  color:#f87171; animation:bl 1.2s infinite; }
+.vrec-badge.paused { background:rgba(245,158,11,0.2); color:#fbbf24; }
+.vrec-badge.parent { background:rgba(245,158,11,0.15);color:#f59e0b; }
+/* Nastavi dugme na karticama */
+.btn-nastavi { margin-top:5px; width:100%; background:#166534; border:1px solid #4ade80;
+  color:#4ade80; border-radius:6px; padding:5px 8px; font-size:11px; font-weight:700; cursor:pointer; }
+
 /* KML */
 #kml-drop {
   border:2px dashed #374151; border-radius:6px;
@@ -1023,6 +1048,19 @@ select:focus { outline:none; border-color:#3b82f6; }
       <!-- MOJE VLAKE -->
       <div class="sec">
         <div class="sec-t">📋 Moje Vlake (<span id="vc">0</span>)</div>
+        <!-- Statusna traka snimanja — vidljiva samo tokom GPS snimanja -->
+        <div id="rec-status-bar" style="display:none;">
+          <div id="rsb-row1">
+            <span class="rsb-dot"></span>
+            <span id="rsb-nm"></span>
+            <span id="rsb-len"></span>
+          </div>
+          <div id="rsb-parent" style="display:none;">⏸ čeka nastavak: <b id="rsb-parent-nm"></b></div>
+          <div id="rsb-btns">
+            <button class="rsb-btn pause" id="rsb-pause" onclick="toggleRecPause()">⏸ Pauza</button>
+            <button class="rsb-btn stop" onclick="stopRec()">⏹ Stop</button>
+          </div>
+        </div>
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
           Još nema vlaka.<br>
@@ -2973,6 +3011,36 @@ function _updBanner() {
     btnNazad.style.display = 'none';
     btnKrak.style.display = '';
   }
+  _updRecStatusBar();
+}
+
+function _updRecStatusBar() {
+  const bar = document.getElementById('rec-status-bar');
+  if (!bar) return;
+  if (!recOn) {
+    bar.style.display = 'none';
+    rndList();
+    return;
+  }
+  bar.style.display = '';
+  bar.classList.toggle('paused', recPaused);
+  const v = actI !== null ? vlake[actI] : null;
+  document.getElementById('rsb-nm').textContent = v ? v.nm : '';
+  document.getElementById('rsb-len').textContent = v ? fmtL(calcL(v.pts)) : '';
+  const pauseBtn = document.getElementById('rsb-pause');
+  if (recPaused) {
+    pauseBtn.textContent = '▶ Nastavi'; pauseBtn.title = 'Nastavi snimanje';
+  } else {
+    pauseBtn.textContent = '⏸ Pauza'; pauseBtn.title = 'Pauza';
+  }
+  const parentDiv = document.getElementById('rsb-parent');
+  if (_recParentIdx !== null && vlake[_recParentIdx]) {
+    document.getElementById('rsb-parent-nm').textContent = vlake[_recParentIdx].nm;
+    parentDiv.style.display = '';
+  } else {
+    parentDiv.style.display = 'none';
+  }
+  rndList();
 }
 
 function togRec() {
@@ -2987,6 +3055,7 @@ function togRec() {
     document.getElementById('btn-pause').textContent = '⏸';
     document.getElementById('bl2').textContent = '0 m · 0 tač.';
     _updBanner();
+    _updRecStatusBar();
     if (!gpsOn) toggleGPS();
   } else {
     stopRec();
@@ -3005,6 +3074,7 @@ function stopRec() {
   document.getElementById('btn-krak').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
+  _updRecStatusBar();
   _showLagerDlg(actI);
 }
 
@@ -3021,10 +3091,10 @@ function toggleRecPause() {
   } else {
     banner.classList.remove('paused');
     btn.textContent = '⏸'; btn.title = 'Pauza';
-    // Obnovi normalni prikaz dužine/tačaka
     _updBl2();
     showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
+  _updRecStatusBar();
 }
 
 function startKrakOdOvdje() {
@@ -3434,10 +3504,12 @@ function addWP() {
 function updBan() {
   if (actI === null) return;
   const v = vlake[actI];
-  // Only update bl2 text during GPS recording — other tools set their own instruction text
   if (recOn) {
     document.getElementById('bn').textContent = '⏺ ' + v.nm;
     document.getElementById('bl2').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
+    // Live update dužine u status baru (bez rebuilda liste)
+    const lenEl = document.getElementById('rsb-len');
+    if (lenEl) lenEl.textContent = fmtL(calcL(v.pts));
   }
 }
 function updOvl() {
@@ -3472,20 +3544,34 @@ function rndList() {
     const d=calcL(v.pts), row=document.createElement('div');
     row.className='vrow'+(i===actI?' act':'');
     const lagerInfo = v.lager ? ' · ✓ lager' : '';
+    const isRecThis   = recOn && i === actI;
+    const isPausedPar = recOn && i === _recParentIdx;
+    let badge = '';
+    if (isRecThis && !recPaused) badge = `<span class="vrec-badge rec">🔴 snima se</span>`;
+    else if (isRecThis && recPaused) badge = `<span class="vrec-badge paused">⏸ pauzirano</span>`;
+    else if (isPausedPar) badge = `<span class="vrec-badge parent">⏸ čeka</span>`;
+    const nasaviBtn = isPausedPar
+      ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()">▶ Nastavi snimanje ${v.nm}</button>`
+      : '';
     row.innerHTML=`
       <div class="vcard-stripe" style="background:${v.color}"></div>
       <div class="vcard-info">
         <div class="vcard-top">
           <span class="vcard-name">${v.nm}</span>
+          ${badge}
           <span class="vcard-km">${fmtL(d)}</span>
         </div>
         <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
+        ${nasaviBtn}
       </div>
       <div class="vcard-btns">
+        <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
         <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
         <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
       </div>`;
-    row.onclick=()=>showVlakaOnMap(i); el.appendChild(row);
+    // Tokom snimanja klik samo selektuje (ne prebacuje na kartu)
+    row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
+    el.appendChild(row);
   });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
