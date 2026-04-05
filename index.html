@@ -172,24 +172,25 @@ input:focus { outline:none; border-color:#3b82f6; }
 .cdot:hover { transform:scale(1.15); }
 .cdot.sel { border-color:#fff; transform:scale(1.2); }
 
-/* Vlaka list */
+/* Vlaka list — PRO kartice */
 .vrow {
-  display:flex; align-items:center; gap:6px;
-  padding:7px 8px; border-radius:5px; margin-bottom:5px;
-  cursor:pointer; background:#0f172a;
-  border:1px solid #1e293b; transition:border-color 0.15s;
+  display:flex; align-items:stretch; border-radius:8px; margin-bottom:6px;
+  cursor:pointer; background:#0f172a; border:1px solid #1e293b;
+  overflow:hidden; transition:border-color 0.15s, background 0.15s;
 }
-.vrow:hover { border-color:#3b82f6; }
-.vrow.act   { border-color:#fbbf24; background:#1c1800; }
-.vdot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
-.vnam { font-weight:bold; font-size:14px; color:#fbbf24; min-width:58px; }
-.vinf { flex:1; font-size:11px; color:#64748b; line-height:1.5; }
-.vlen { color:#4ade80; }
-.vbts { display:flex; gap:4px; }
+.vrow:hover { border-color:#3b82f6; background:#0f1f3a; }
+.vrow.act   { border-color:#fbbf24; background:#151200; }
+.vcard-stripe { width:5px; flex-shrink:0; }
+.vcard-info { flex:1; padding:9px 10px; min-width:0; }
+.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+.vcard-name { font-weight:800; font-size:15px; color:#f1f5f9; white-space:nowrap; }
+.vcard-km { font-size:14px; font-weight:700; color:#4ade80; white-space:nowrap; }
+.vcard-sub { font-size:11px; color:#475569; margin-top:2px; }
+.vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 7px 6px 0; }
 .mb {
-  width:24px; height:24px; border-radius:4px;
+  width:28px; height:28px; border-radius:5px;
   border:1px solid #374151; background:#1e293b;
-  color:#94a3b8; font-size:11px; cursor:pointer;
+  color:#94a3b8; font-size:12px; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
 .mb:hover { border-color:#ef4444; color:#ef4444; }
@@ -1015,6 +1016,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
 
+      <!-- MOJE VLAKE -->
+      <div class="sec">
+        <div class="sec-t">📋 Moje Vlake (<span id="vc">0</span>)</div>
+        <div id="vl"></div>
+        <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
+          Još nema vlaka.<br>
+          Unesite broj vlake i kraka<br>
+          pa kliknite <b style="color:#4ade80;">DODAJ VLAKU</b>.
+        </div>
+      </div>
+
       <!-- SPAJANJE VLAKA -->
       <div class="sec" id="merge-sec" style="display:none;">
         <div class="sec-t">🔗 Spoji Vlake</div>
@@ -1060,17 +1072,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <input type="file" id="kf" accept=".kml" multiple style="display:none" onchange="fileK(event)">
         <div id="kl"></div>
-      </div>
-
-      <!-- LISTA VLAKA -->
-      <div class="sec">
-        <div class="sec-t">📋 Moje Vlake (<span id="vc">0</span>)</div>
-        <div id="vl"></div>
-        <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
-          Još nema vlaka.<br>
-          Unesite broj vlake i kraka<br>
-          pa kliknite <b style="color:#4ade80;">DODAJ VLAKU</b>.
-        </div>
       </div>
 
     </div><!-- /panel -->
@@ -3407,6 +3408,12 @@ function updOvl() {
   }).join('');
 }
 
+function showVlakaOnMap(i) {
+  selI(i);
+  switchTab('karta');
+  zmV(i);
+}
+
 // === LIST ===
 function rndList() {
   const el=document.getElementById('vl'), nv=document.getElementById('nv');
@@ -3415,16 +3422,21 @@ function rndList() {
   vlake.forEach((v,i)=>{
     const d=calcL(v.pts), row=document.createElement('div');
     row.className='vrow'+(i===actI?' act':'');
+    const lagerInfo = v.lager ? ' · ✓ lager' : '';
     row.innerHTML=`
-      <div class="vdot" style="background:${v.color}"></div>
-      <div class="vnam">${v.nm}</div>
-      <div class="vinf">${v.pts.length} tač.<br><span class="vlen">${fmtL(d)}</span></div>
-      <div class="vbts">
-        <button class="mb bl" onclick="event.stopPropagation();zmV(${i})" title="Zoom na vlaku">🎯</button>
+      <div class="vcard-stripe" style="background:${v.color}"></div>
+      <div class="vcard-info">
+        <div class="vcard-top">
+          <span class="vcard-name">${v.nm}</span>
+          <span class="vcard-km">${fmtL(d)}</span>
+        </div>
+        <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
+      </div>
+      <div class="vcard-btns">
         <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
         <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
       </div>`;
-    row.onclick=()=>selI(i); el.appendChild(row);
+    row.onclick=()=>showVlakaOnMap(i); el.appendChild(row);
   });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
