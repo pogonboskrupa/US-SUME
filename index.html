@@ -2748,6 +2748,8 @@ function mtAddLine() {
   const c = map.getCenter();
   drawUndoStack.push([]);
   addPt(actI, c.lat, c.lng, 0);
+  // Vuci modus je default
+  toggleDrawDrag();
 }
 
 function stopAddLine() { _stopAddLine(true); }
