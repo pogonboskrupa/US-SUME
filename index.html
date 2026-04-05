@@ -559,7 +559,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   border:1px solid rgba(255,255,255,0.15);
   border-radius:6px;
   padding:4px 9px;
-  display:flex; align-items:center; gap:5px;
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px;
   font-size:12px; font-family:monospace; white-space:nowrap;
   color:#e2e8f0;
   backdrop-filter:blur(3px);
@@ -567,18 +567,6 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-icon { font-size:13px; line-height:1; }
 #nv-badge #nv-val { color:#22d3ee; font-weight:bold; }
 
-/* === KOORDINATE HUD (gornji lijevi ugao mape) === */
-#coord-hud {
-  position:absolute; top:8px; left:8px;
-  background:rgba(15,23,42,0.88); border:1px solid #1e3a5f;
-  border-radius:7px; padding:6px 10px;
-  font-family:monospace; font-size:12px; z-index:600;
-  pointer-events:none; line-height:1.7;
-  backdrop-filter:blur(4px);
-}
-#coord-hud .ch-val { color:#38bdf8; font-weight:700; font-size:13px; }
-#coord-hud .ch-nv  { color:#22d3ee; font-weight:700; }
-#coord-hud .ch-lbl { color:#475569; font-size:10px; margin-right:4px; }
 
 /* === QGIS-STIL TOOLBAR NA MAPI === */
 #map-toolbar {
@@ -888,7 +876,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
-  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #coord-hud, #banner, #modal, #print-modal,
+  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
@@ -1244,12 +1232,18 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:7px;">⊕ Kreiraj krak</button>
         </div>
       </div>
-      <!-- N.V. + razmjera badge top-left -->
+      <!-- N.V. + razmjera + MGI koordinate badge top-left -->
       <div id="nv-badge">
-        <span class="nv-icon">⛰</span>
-        <span id="nv-val">— m</span>
-        <span style="color:#475569;margin:0 3px;">|</span>
-        <span style="color:#94a3b8;font-size:11px;">1:</span><span id="map-scale-val" style="color:#fbbf24;font-weight:bold;">—</span>
+        <div style="display:flex;align-items:center;gap:3px;">
+          <span class="nv-icon">⛰</span>
+          <span id="nv-val">— m</span>
+          <span style="color:#475569;margin:0 3px;">|</span>
+          <span style="color:#94a3b8;font-size:11px;">1:</span><span id="map-scale-val" style="color:#fbbf24;font-weight:bold;">—</span>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;padding-top:4px;line-height:1.7;">
+          <span style="color:#475569;font-size:10px;">Y (E)</span> <span id="omgi-y" style="color:#38bdf8;font-weight:700;font-size:13px;">—</span><br>
+          <span style="color:#475569;font-size:10px;">X (N)</span> <span id="omgi-x" style="color:#38bdf8;font-weight:700;font-size:13px;">—</span>
+        </div>
       </div>
       <div id="banner">
         <!-- Red 1: info -->
@@ -1274,16 +1268,11 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
 
-      <div id="coord-hud" style="display:none;">
-        <div><span class="ch-lbl">Y (E)</span><span class="ch-val" id="omgi-y">—</span></div>
-        <div><span class="ch-lbl">X (N)</span><span class="ch-val" id="omgi-x">—</span></div>
-        <div style="border-top:1px solid #1e3a5f;margin:4px 0 3px;"></div>
-        <div><span class="ch-lbl">N.V.</span><span class="ch-nv" id="onv">—</span></div>
-        <!-- Sakriveni elementi koje JS još koristi -->
-        <span id="oacc" style="display:none;"></span>
-        <div id="ovl-lines" style="display:none;"></div>
-        <div id="buf-status" style="display:none;"></div>
-      </div>
+      <!-- Sakriveni elementi koje JS još koristi -->
+      <span id="onv" style="display:none;"></span>
+      <span id="oacc" style="display:none;"></span>
+      <div id="ovl-lines" style="display:none;"></div>
+      <div id="buf-status" style="display:none;"></div>
     </div>
 
   </div>
@@ -4954,7 +4943,6 @@ function switchTab(tab) {
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
   document.getElementById('fab-gps').style.display = tab==='karta' ? '' : 'none';
-  document.getElementById('coord-hud').style.display = tab==='karta' ? '' : 'none';
   if (tab==='karta') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
