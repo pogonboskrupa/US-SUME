@@ -2702,9 +2702,14 @@ function mtAddLine() {
   map.doubleClickZoom.disable();
   drawUndoStack = [];
   document.getElementById('banner').classList.add('show');
-  document.getElementById('bn').textContent = vlake[actI].nm + ' ✏';
-  document.getElementById('bl2').textContent = 'Klikaj tačke · Dbl-klik ili ESC = završi · Ctrl+Z = undo';
-  showToast('✏ Crtaj liniju — klikni na kartu za tačke');
+  document.getElementById('banner').classList.remove('paused');
+  document.getElementById('bn').textContent = '✏ Crtanje: ' + vlake[actI].nm;
+  document.getElementById('bl2').textContent = 'Klikaj tačke na karti · Dbl-klik = završi · ESC = odustani';
+  document.getElementById('bn-parent').style.display = 'none';
+  document.getElementById('btn-pause').style.display = 'none';
+  document.getElementById('btn-krak').style.display = 'none';
+  document.getElementById('btn-nazad-roditelj').style.display = 'none';
+  document.getElementById('btn-flip-dir').style.display = 'none';
 }
 
 function stopAddLine() { _stopAddLine(true); }
@@ -2714,6 +2719,10 @@ function _stopAddLine(fromUser) {
   if (drawPreviewLine) { map.removeLayer(drawPreviewLine); drawPreviewLine = null; }
   hideSnapRing(); snapTarget = null;
   document.getElementById('banner').classList.remove('show');
+  // Vrati dugmad bannera za GPS snimanje
+  document.getElementById('btn-pause').style.display = '';
+  document.getElementById('btn-krak').style.display = '';
+  document.getElementById('btn-flip-dir').style.display = '';
   drawUndoStack = [];
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
@@ -2814,7 +2823,14 @@ updPrev();
 
 // === VLAKA ===
 function nacrtajVlaku() {
-  addV().then(() => { setTimeout(() => { if (actI !== null) mtAddLine(); }, 30); });
+  addV().then(() => {
+    setTimeout(() => {
+      if (actI !== null) {
+        switchTab('karta'); // Prebaci na full-screen mapu za crtanje
+        mtAddLine();
+      }
+    }, 30);
+  });
 }
 
 let _addVBusy = false;
@@ -4169,7 +4185,7 @@ function togglePanel(){
     _setMapUIVisible(activeTool !== 'select', false);
   }
 }
-function chkMob(){const m=window.innerWidth<580;document.getElementById('mbtn').style.display=m?'block':'none';}
+function chkMob(){const el=document.getElementById('mbtn');if(el){const m=window.innerWidth<580;el.style.display=m?'block':'none';}}
 chkMob(); window.addEventListener('resize',chkMob);
 
 // === UTILS ===
