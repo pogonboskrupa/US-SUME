@@ -553,7 +553,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* === N.V. BADGE (gornji lijevi ugao) === */
 #nv-badge {
-  position:absolute; top:10px; left:10px;
+  position:absolute; top:3px; left:8px;
   z-index:900; pointer-events:none;
   background:rgba(15,23,42,0.82);
   border:1px solid rgba(255,255,255,0.15);
@@ -2482,17 +2482,20 @@ map.on('dblclick', e => {
 });
 
 map.on('mousemove', e => {
-  updMGI(e.latlng.lat, e.latlng.lng);
   if (!_gpsAlt) debouncedUpdElev(e.latlng.lat, e.latlng.lng, 300);
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte
-map.on('move', () => { _updMcdDist(); });
-map.on('moveend', () => {
-  if (_gpsAlt) return;
+map.on('move', () => {
+  _updMcdDist();
   const c = map.getCenter();
-  debouncedUpdElev(c.lat, c.lng, 450);
+  updMGI(c.lat, c.lng);
+});
+map.on('moveend', () => {
+  const c = map.getCenter();
+  updMGI(c.lat, c.lng);
+  if (!_gpsAlt) debouncedUpdElev(c.lat, c.lng, 450);
 });
 
 // === RAZMJERA KARTE (live) ===
@@ -3302,7 +3305,6 @@ function onP(p) {
   // Update display always
   document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
-  updMGI(la, lo);
   // GPS altitude — tačnije od API-ja kad dostupno
   if (al != null) {
     _gpsAlt = true;
