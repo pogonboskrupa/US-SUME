@@ -507,6 +507,22 @@ select:focus { outline:none; border-color:#3b82f6; }
   background:rgba(255,255,255,0.9);
   border:2px solid rgba(0,0,0,0.4);
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
+  transition:all 0.15s;
+}
+/* Crtanje aktivno — centralna tačka je interaktivna */
+.drawing-active #map-center-dot {
+  pointer-events:auto; cursor:crosshair;
+}
+.drawing-active #mcd-ring {
+  width:20px; height:20px;
+  background:#4ade80; border-color:#166534;
+  box-shadow:0 0 0 3px rgba(74,222,128,0.35), 0 2px 8px rgba(0,0,0,0.6);
+}
+/* Draw-drag modus — tačka pulsira */
+.draw-drag-on #mcd-ring {
+  background:#f97316; border-color:#c2410c;
+  box-shadow:0 0 0 4px rgba(249,115,22,0.4), 0 2px 8px rgba(0,0,0,0.6);
+  animation:bl 0.8s infinite;
 }
 #mcd-dist {
   display:none;
@@ -1269,6 +1285,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹ Stop</button>
           <!-- Crtanje dugmad — vidljiva samo u addline modu -->
           <button class="brec-btn" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku" style="display:none;background:#7c3aed;color:#fff;">↩ Undo</button>
+          <button class="brec-btn" id="btn-draw-drag" onclick="toggleDrawDrag()" title="Vuci modus — tačke se dodaju dok pomijeraš mapu" style="display:none;background:#374151;color:#e2e8f0;">✍ Vuci</button>
           <button class="brec-btn" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje" style="display:none;background:#16a34a;color:#fff;">✓ Završi</button>
         </div>
       </div>
@@ -2713,7 +2730,7 @@ function mtAddLine() {
   document.getElementById('banner').classList.add('show');
   document.getElementById('banner').classList.remove('paused');
   document.getElementById('bn').textContent = '✏ Crtanje: ' + vlake[actI].nm;
-  document.getElementById('bl2').textContent = 'Klikaj tačke · ✓ Završi ili dbl-klik za kraj';
+  document.getElementById('bl2').textContent = 'Tapni zelenu tačku ili kartu · ✓ Završi';
   document.getElementById('bn-parent').style.display = 'none';
   // Sakrij GPS dugmad, prikaži draw dugmad
   document.getElementById('btn-pause').style.display = 'none';
@@ -2721,10 +2738,69 @@ function mtAddLine() {
   document.getElementById('btn-nazad-roditelj').style.display = 'none';
   document.getElementById('btn-flip-dir').style.display = 'none';
   document.getElementById('btn-draw-undo').style.display = '';
+  document.getElementById('btn-draw-drag').style.display = '';
   document.getElementById('btn-draw-done').style.display = '';
+  // Aktiviraj interaktivnu centralnu tačku
+  document.getElementById('main').classList.add('drawing-active');
+  document.getElementById('map-center-dot').onclick = _mcdClick;
+  document.getElementById('map-center-dot').style.display = '';
+  // Prva tačka = centar mape (bijela centralna tačka)
+  const c = map.getCenter();
+  drawUndoStack.push([]);
+  addPt(actI, c.lat, c.lng, 0);
 }
 
 function stopAddLine() { _stopAddLine(true); }
+
+// Klik na centralnu bijelu tačku = dodaj tačku na trenutnom centru mape
+function _mcdClick(e) {
+  if (activeTool !== 'addline' || actI === null) return;
+  e.stopPropagation();
+  const c = map.getCenter();
+  drawUndoStack.push(vlake[actI].pts.map(p => ({...p})));
+  addPt(actI, c.lat, c.lng, 0);
+}
+
+// Draw-drag modus: tačke se dodaju automatski dok se mapa pomjera
+let _drawDragOn = false;
+let _drawDragLastPt = null;
+const DRAW_DRAG_MIN_M = 5; // minimalna udaljenost (m) između tačaka u drag modusu
+
+function toggleDrawDrag() {
+  if (!_drawDragOn) {
+    _drawDragOn = true;
+    _drawDragLastPt = null;
+    document.getElementById('btn-draw-drag').style.background = '#f97316';
+    document.getElementById('btn-draw-drag').textContent = '✍ Stop';
+    document.getElementById('main').classList.add('draw-drag-on');
+    document.getElementById('bl2').textContent = 'Vuci modus — pomjeri mapu za crtanje';
+    map.on('move', _onMapMoveDraw);
+  } else {
+    _stopDrawDrag();
+    document.getElementById('bl2').textContent = 'Tapni zelenu tačku ili kartu · ✓ Završi';
+  }
+}
+
+function _stopDrawDrag() {
+  if (!_drawDragOn) return;
+  _drawDragOn = false;
+  _drawDragLastPt = null;
+  map.off('move', _onMapMoveDraw);
+  const btn = document.getElementById('btn-draw-drag');
+  if (btn) { btn.style.background = '#374151'; btn.textContent = '✍ Vuci'; }
+  document.getElementById('main').classList.remove('draw-drag-on');
+}
+
+function _onMapMoveDraw() {
+  if (!_drawDragOn || activeTool !== 'addline' || actI === null) return;
+  const c = map.getCenter();
+  if (_drawDragLastPt) {
+    const d = dst(_drawDragLastPt.la, _drawDragLastPt.lo, c.lat, c.lng);
+    if (d < DRAW_DRAG_MIN_M) return;
+  }
+  _drawDragLastPt = { la: c.lat, lo: c.lng };
+  addPt(actI, c.lat, c.lng, 0);
+}
 function _stopAddLine(fromUser) {
   if (_prevMoveTimer) { clearTimeout(_prevMoveTimer); _prevMoveTimer = null; }
   map.doubleClickZoom.enable();
@@ -2736,7 +2812,12 @@ function _stopAddLine(fromUser) {
   document.getElementById('btn-krak').style.display = '';
   document.getElementById('btn-flip-dir').style.display = '';
   document.getElementById('btn-draw-undo').style.display = 'none';
+  document.getElementById('btn-draw-drag').style.display = 'none';
   document.getElementById('btn-draw-done').style.display = 'none';
+  // Deaktiviraj draw-drag modus i interaktivnu centralnu tačku
+  _stopDrawDrag();
+  document.getElementById('main').classList.remove('drawing-active');
+  document.getElementById('map-center-dot').onclick = null;
   drawUndoStack = [];
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
