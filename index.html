@@ -1375,17 +1375,18 @@ let sbUser = null;
 let sbProfile = null;
 
 async function initAuth() {
-  try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      sbUser = session.user;
-      await sbLoadProfile();
-      showApp();
+  // onAuthStateChange je pouzdan za restore sesije nakon zatvaranja browsera
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'INITIAL_SESSION' && session && !sbUser) {
+      try {
+        sbUser = session.user;
+        await sbLoadProfile();
+        showApp();
+      } catch(e) {
+        console.error('Auth init error:', e);
+      }
     }
-    // else: auth screen already visible (it's shown by default)
-  } catch(e) {
-    console.error('Auth init error:', e);
-  }
+  });
 }
 
 async function sbLoadProfile() {
