@@ -946,6 +946,7 @@ select:focus { outline:none; border-color:#3b82f6; }
       <span class="lbl">Šumarija / Gazdinstvo *</span>
       <select class="pinput" id="reg-sumarija">
         <option value="">— Odaberi šumariju —</option>
+        <option>ŠPD US ŠUME</option>
         <option>ŠUMARIJA BOS.KRUPA</option>
         <option>ŠUMARIJA BOS.PETROVAC</option>
         <option>ŠUMARIJA SANSKI MOST</option>
@@ -1857,7 +1858,8 @@ function showProjektDetalji(id) {
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
   // All members can add new clan; only vlasnik can delete project
-  document.getElementById('pd-add-clan-sec').style.display = '';
+  // ŠPD US ŠUME members cannot add projektanti
+  document.getElementById('pd-add-clan-sec').style.display = isSpd() ? 'none' : '';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
 }
 
@@ -2096,6 +2098,8 @@ function _placeLabelMarkers(pts, nm, zOff) {
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
 async function sbLoadKolegeVlake() {
   if (!sbProfile?.sumarija || !sbUser) return;
+  // ŠPD US ŠUME nema dijeljenje vlaka
+  if (isSpd()) return;
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = [];
@@ -2317,6 +2321,9 @@ function sbStartRealtime() {
 // === MGI ZONE 6 BOSNIA ===
 // MGI (Militar-Geographisches Institut) / Balkans zone 6 — EPSG:31276
 proj4.defs('MGI-ZONE6', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
+
+// Provjera da li je korisnik iz ŠPD US ŠUME grupe (bez prava dijeljenja)
+function isSpd() { return sbProfile?.sumarija === 'ŠPD US ŠUME'; }
 
 function wgsToMGI(lat, lon) {
   try {
