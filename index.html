@@ -992,8 +992,8 @@ select:focus { outline:none; border-color:#3b82f6; }
       <span class="mt-ico">🖱</span><span>Odabir</span>
     </button>
     <div class="mt-sep"></div>
-    <button class="mt-btn" id="mt-addline" onclick="mtAddLine()" title="Dodaj liniju vlake (klikaj tačke, dbl-klik za kraj)">
-      <span class="mt-ico">✏️</span><span>Dodaj liniju</span>
+    <button class="mt-btn" id="mt-addline" onclick="mtAddLine()" title="Nacrtaj novu vlaku (auto-kreira ako nema odabrane)">
+      <span class="mt-ico">✏️</span><span>Nova vlaka</span>
     </button>
     <button class="mt-btn" id="mt-addpt" onclick="mtAddPoint()" title="Dodaj waypoint (GPS tačka)">
       <span class="mt-ico">📍</span><span>Dodaj tačku</span>
@@ -1267,6 +1267,9 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">↩ Nazad</button>
           <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
           <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹ Stop</button>
+          <!-- Crtanje dugmad — vidljiva samo u addline modu -->
+          <button class="brec-btn" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku" style="display:none;background:#7c3aed;color:#fff;">↩ Undo</button>
+          <button class="brec-btn" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje" style="display:none;background:#16a34a;color:#fff;">✓ Završi</button>
         </div>
       </div>
 
@@ -2487,6 +2490,8 @@ map.on('click', e => {
 map.on('dblclick', e => {
   if (activeTool === 'addline') {
     e.originalEvent.preventDefault();
+    // Zahtijeva min. 2 tačke — sprječava slučajni prekid dvostrukim tapom
+    if (actI !== null && vlake[actI].pts.length < 2) return;
     _dblClickGuard = true;
     setTimeout(() => { _dblClickGuard = false; }, 300);
     stopAddLine();
@@ -2697,19 +2702,26 @@ function mtSelect() {
 }
 
 function mtAddLine() {
-  if (actI === null) { showToast('⚠ Prvo dodaj i odaberi vlaku!'); return; }
+  // Auto-kreiraj vlaku ako nema odabrane — jedan klik za početi crtanje
+  if (actI === null) {
+    addV().then(() => { if (actI !== null) mtAddLine(); });
+    return;
+  }
   setActiveTool('addline');
   map.doubleClickZoom.disable();
   drawUndoStack = [];
   document.getElementById('banner').classList.add('show');
   document.getElementById('banner').classList.remove('paused');
   document.getElementById('bn').textContent = '✏ Crtanje: ' + vlake[actI].nm;
-  document.getElementById('bl2').textContent = 'Klikaj tačke na karti · Dbl-klik = završi · ESC = odustani';
+  document.getElementById('bl2').textContent = 'Klikaj tačke · ✓ Završi ili dbl-klik za kraj';
   document.getElementById('bn-parent').style.display = 'none';
+  // Sakrij GPS dugmad, prikaži draw dugmad
   document.getElementById('btn-pause').style.display = 'none';
   document.getElementById('btn-krak').style.display = 'none';
   document.getElementById('btn-nazad-roditelj').style.display = 'none';
   document.getElementById('btn-flip-dir').style.display = 'none';
+  document.getElementById('btn-draw-undo').style.display = '';
+  document.getElementById('btn-draw-done').style.display = '';
 }
 
 function stopAddLine() { _stopAddLine(true); }
@@ -2719,10 +2731,12 @@ function _stopAddLine(fromUser) {
   if (drawPreviewLine) { map.removeLayer(drawPreviewLine); drawPreviewLine = null; }
   hideSnapRing(); snapTarget = null;
   document.getElementById('banner').classList.remove('show');
-  // Vrati dugmad bannera za GPS snimanje
+  // Vrati GPS dugmad, sakrij draw dugmad
   document.getElementById('btn-pause').style.display = '';
   document.getElementById('btn-krak').style.display = '';
   document.getElementById('btn-flip-dir').style.display = '';
+  document.getElementById('btn-draw-undo').style.display = 'none';
+  document.getElementById('btn-draw-done').style.display = 'none';
   drawUndoStack = [];
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
