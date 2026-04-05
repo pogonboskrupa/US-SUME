@@ -862,7 +862,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
-  #topbar, #tab-bar, #panel, #proj-panel, #izmjeri-panel, #ovl, #banner, #modal, #print-modal,
+  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #ovl, #banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
@@ -948,15 +948,6 @@ select:focus { outline:none; border-color:#3b82f6; }
 </div>
 
 <div id="wrapper" style="display:none;">
-
-  <div id="topbar">
-    <!-- MENI DROPDOWN -->
-    <div style="position:relative;display:inline-block;flex-shrink:0;">
-      <button class="tbtn tbtn-gray" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)" id="menu-btn">☰ Meni ▾</button>
-    </div>
-    <button class="tbtn tbtn-blue" onclick="toggleGPS()">📡 GPS</button>
-    <div id="gps-info">GPS: isključen</div>
-  </div>
 
   <div id="tab-bar">
     <button class="tab-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)">☰ Meni</button>
@@ -3258,10 +3249,20 @@ let _tragOn   = false;
 let _tragLine = null;
 let _tragPts  = [];
 
-function toggleFabGps() {}
+function toggleFabGps() {
+  _fabOpen = !_fabOpen;
+  const fab = document.getElementById('fab-gps');
+  const btn = document.getElementById('fab-main');
+  fab.classList.toggle('open', _fabOpen);
+  btn.classList.toggle('open', _fabOpen);
+}
 
 function _closeFab() {
   _fabOpen = false;
+  const fab = document.getElementById('fab-gps');
+  const btn = document.getElementById('fab-main');
+  if (fab) fab.classList.remove('open');
+  if (btn) btn.classList.remove('open');
 }
 
 function fabLokacija() {
@@ -4795,6 +4796,7 @@ function switchTab(tab) {
   panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
+  document.getElementById('fab-gps').style.display = tab==='karta' ? '' : 'none';
   document.getElementById('ovl').style.display = tab==='karta' ? '' : 'none';
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -6211,6 +6213,8 @@ async function autoLoadAllKmlBuckets() {
   background:#16213e;border:1px solid #0f3460;border-radius:8px;
   min-width:220px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
   touch-action:manipulation;">
+  <div class="mdrop-item" onclick="closeMenuDropdown();toggleGPS()">📡 GPS — <span id="gps-info" style="color:#94a3b8;font-size:11px;">isključen</span></div>
+  <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta</div>
@@ -6388,6 +6392,23 @@ async function autoLoadAllKmlBuckets() {
         <div id="msr-segs"></div>
       </div>
     </div><!-- /izmjeri-panel -->
+
+<!-- GPS FAB -->
+<div id="fab-gps" style="display:none;">
+  <button id="fab-main" onclick="toggleFabGps()" title="GPS akcije">📍</button>
+  <div class="fab-item" id="fab-item-vlaka">
+    <span class="fab-item-lbl">Snimi vlaku</span>
+    <button class="fab-item-btn" onclick="fabSnimVlaku()" title="Snimi vlaku">🚜</button>
+  </div>
+  <div class="fab-item" id="fab-item-trag">
+    <span class="fab-item-lbl" id="fab-trag-lbl">Snimi trag</span>
+    <button class="fab-item-btn" id="fab-trag-btn" onclick="fabSnimTrag()" title="Snimi trag kretanja">🔴</button>
+  </div>
+  <div class="fab-item" id="fab-item-loc">
+    <span class="fab-item-lbl">Moja lokacija</span>
+    <button class="fab-item-btn" onclick="fabLokacija()" title="Prikaži moju lokaciju">🎯</button>
+  </div>
+</div>
 
 <!-- GRANICE ODJELA MODAL -->
 <div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
