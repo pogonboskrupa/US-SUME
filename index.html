@@ -913,7 +913,11 @@ select:focus { outline:none; border-color:#3b82f6; }
       <span class="lbl">PIN</span>
       <input class="pinput" id="auth-pin" type="password" inputmode="numeric" placeholder="PIN (4–8 cifara)" maxlength="8"
              onkeydown="if(event.key==='Enter')doLogin()">
-      <button class="btn g" style="margin-top:14px;" onclick="doLogin()">→ PRIJAVA</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-size:13px;color:#94a3b8;">
+        <input type="checkbox" id="auth-zapamti" style="width:16px;height:16px;accent-color:#4ade80;cursor:pointer;">
+        Zapamti me
+      </label>
+      <button class="btn g" style="margin-top:10px;" onclick="doLogin()">→ PRIJAVA</button>
       <div class="auth-divider">ili</div>
       <button class="btn gr" onclick="authShowReg()">Registracija novog korisnika</button>
       <div class="auth-err" id="auth-err"></div>
@@ -1375,19 +1379,47 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 let sbUser = null;
 let sbProfile = null;
 
+const _SAVED_USER_KEY = 'tvlake_saved_user';
+
 async function initAuth() {
-  // onAuthStateChange je pouzdan za restore sesije nakon zatvaranja browsera
+  // 1. Pokušaj Supabase sesiju
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'INITIAL_SESSION' && session && !sbUser) {
       try {
         sbUser = session.user;
         await sbLoadProfile();
         showApp();
+        return;
       } catch(e) {
         console.error('Auth init error:', e);
       }
     }
   });
+
+  // 2. Fallback: auto-login sa zapamćenim kredencijalima
+  setTimeout(async () => {
+    if (sbUser) return; // već logovan putem sesije
+    const saved = _loadSavedUser();
+    if (!saved) return;
+    try {
+      const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
+      if (!email) { _clearSavedUser(); return; }
+      const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
+      if (error) { _clearSavedUser(); return; }
+      sbUser = (await sb.auth.getUser()).data.user;
+      await sbLoadProfile();
+      showApp();
+    } catch(e) {
+      console.error('Auto-login error:', e);
+    }
+  }, 800); // čekaj da onAuthStateChange stigne prvi
+}
+
+function _loadSavedUser() {
+  try { return JSON.parse(localStorage.getItem(_SAVED_USER_KEY)); } catch { return null; }
+}
+function _clearSavedUser() {
+  localStorage.removeItem(_SAVED_USER_KEY);
 }
 
 async function sbLoadProfile() {
@@ -1421,6 +1453,14 @@ function authShowLogin() {
   document.getElementById('auth-login-form').style.display = 'block';
   document.getElementById('auth-reg-form').style.display = 'none';
   document.getElementById('auth-err').style.display = 'none';
+  // Popuni polja ako su zapamćeni
+  const saved = _loadSavedUser();
+  if (saved) {
+    document.getElementById('auth-ime').value = saved.ime || '';
+    document.getElementById('auth-prezime').value = saved.prezime || '';
+    document.getElementById('auth-pin').value = saved.pin || '';
+    document.getElementById('auth-zapamti').checked = true;
+  }
 }
 
 function authShowReg() {
@@ -1450,6 +1490,13 @@ async function doLogin() {
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
   if (error) { showAuthErr('Pogrešan PIN.'); return; }
+
+  // Zapamti korisnika ako je checkbox čekiran
+  if (document.getElementById('auth-zapamti').checked) {
+    localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+  } else {
+    _clearSavedUser();
+  }
 
   sbUser = (await sb.auth.getUser()).data.user;
   await sbLoadProfile();
@@ -1526,10 +1573,12 @@ async function doLogout() {
   document.getElementById('wrapper').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
   closeAdminModal();
+  _clearSavedUser();
   authShowLogin();
   document.getElementById('auth-ime').value = '';
   document.getElementById('auth-prezime').value = '';
   document.getElementById('auth-pin').value = '';
+  document.getElementById('auth-zapamti').checked = false;
 }
 
 // --- Admin modal ---
