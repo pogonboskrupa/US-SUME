@@ -276,7 +276,14 @@ input:focus { outline:none; border-color:#3b82f6; }
 .brec-btn.flip  { background:#7c3aed; color:#fff; }
 .brec-btn.stop  { background:#ef4444; color:#fff; }
 .brec-btn.krak  { background:#0ea5e9; color:#fff; }
+.brec-btn.krak-d{ background:#f97316; color:#fff; }
 .brec-btn.back  { background:#334155; color:#94a3b8; }
+.brec-btn.krak-picker-btn { background:#1e3a5f; color:#94a3b8; padding:6px 8px; flex:0 0 auto; }
+
+/* Vlake hijerarhija */
+.vrow-krak { margin-left:14px; border-left:2px solid #1e3a5f; }
+.vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
+.vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
 /* Export modal */
 #modal {
@@ -1227,19 +1234,14 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="mcd-dist"></div>
       </div>
 
-      <!-- Krak picker popup -->
-      <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:8px;min-width:180px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
-        <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;padding:0 4px;">Odaberi krak</div>
-        <div id="krak-picker-list"></div>
-        <div style="border-top:1px solid #1e3a5f;margin-top:6px;padding-top:8px;">
-          <div style="font-size:11px;color:#64748b;margin-bottom:5px;">Broj novog kraka:</div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <div id="krak-novi-prefix" style="font-size:13px;font-weight:bold;color:#94a3b8;white-space:nowrap;"></div>
-            <input id="krak-novi-br" type="number" min="1" max="99" style="width:60px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:14px;font-weight:bold;padding:5px 8px;text-align:center;" oninput="updKrakNoviPrev()">
-            <div id="krak-novi-prev" style="font-size:12px;color:#0ea5e9;font-weight:bold;flex:1;"></div>
-          </div>
-          <button onclick="startNoviKrak()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px;font-size:13px;font-weight:bold;cursor:pointer;margin-top:7px;">⊕ Kreiraj krak</button>
+      <!-- Krak picker popup — samo za nastavak postojećeg kraka -->
+      <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:10px;min-width:200px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;">↪ Nastavi krak</div>
+          <button onclick="_closeKrakPicker()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
         </div>
+        <div id="krak-picker-list"></div>
+        <div id="krak-picker-empty" style="display:none;font-size:12px;color:#475569;text-align:center;padding:8px 0;">Nema postojećih krakova</div>
       </div>
       <!-- N.V. + razmjera + MGI koordinate badge top-left -->
       <div id="nv-badge">
@@ -1266,7 +1268,9 @@ select:focus { outline:none; border-color:#3b82f6; }
         <!-- Red 2: dugmad -->
         <div id="banner-row2">
           <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
-          <button class="brec-btn krak" id="btn-krak" onclick="startKrakOdOvdje()" title="Krak">⊕ Krak</button>
+          <button class="brec-btn krak"   id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak">⊕ L</button>
+          <button class="brec-btn krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak">⊕ D</button>
+          <button class="brec-btn krak-picker-btn" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
           <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">↩ Nazad</button>
           <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
           <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹ Stop</button>
@@ -2592,7 +2596,7 @@ document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
   if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) dd.style.display = 'none';
   const kp = document.getElementById('krak-picker');
-  if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak')) kp.style.display = 'none';
+  if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
 });
 
 // Keyboard shortcuts
@@ -2682,7 +2686,9 @@ function mtAddLine() {
   document.getElementById('bn-parent').style.display = 'none';
   // Sakrij GPS dugmad, prikaži draw dugmad
   document.getElementById('btn-pause').style.display = 'none';
-  document.getElementById('btn-krak').style.display = 'none';
+  document.getElementById('btn-krak-l').style.display = 'none';
+  document.getElementById('btn-krak-d').style.display = 'none';
+  document.getElementById('btn-krak-picker').style.display = 'none';
   document.getElementById('btn-nazad-roditelj').style.display = 'none';
   document.getElementById('btn-flip-dir').style.display = 'none';
   document.getElementById('btn-draw-undo').style.display = '';
@@ -2759,7 +2765,9 @@ function _stopAddLine(fromUser) {
   document.getElementById('banner').classList.remove('show');
   // Vrati GPS dugmad, sakrij draw dugmad
   document.getElementById('btn-pause').style.display = '';
-  document.getElementById('btn-krak').style.display = '';
+  document.getElementById('btn-krak-l').style.display = '';
+  document.getElementById('btn-krak-d').style.display = '';
+  document.getElementById('btn-krak-picker').style.display = '';
   document.getElementById('btn-flip-dir').style.display = '';
   document.getElementById('btn-draw-undo').style.display = 'none';
   document.getElementById('btn-draw-drag').style.display = 'none';
@@ -3056,21 +3064,28 @@ function selI(i) {
 function _updBanner() {
   if (!recOn || actI === null) return;
   const v = vlake[actI];
-  const bnEl = document.getElementById('bn');
-  const bnParent = document.getElementById('bn-parent');
-  const btnNazad = document.getElementById('btn-nazad-roditelj');
-  const btnKrak = document.getElementById('btn-krak');
+  const bnEl       = document.getElementById('bn');
+  const bnParent   = document.getElementById('bn-parent');
+  const btnNazad   = document.getElementById('btn-nazad-roditelj');
+  const btnKrakL   = document.getElementById('btn-krak-l');
+  const btnKrakD   = document.getElementById('btn-krak-d');
+  const btnPicker  = document.getElementById('btn-krak-picker');
   bnEl.textContent = v.nm;
-  if (_recParentIdx !== null && vlake[_recParentIdx]) {
+  const onKrak = _recParentIdx !== null && vlake[_recParentIdx];
+  if (onKrak) {
     bnParent.textContent = '← ' + vlake[_recParentIdx].nm;
     bnParent.style.display = '';
     btnNazad.style.display = '';
     btnNazad.title = 'Vrati se na ' + vlake[_recParentIdx].nm;
-    btnKrak.style.display = 'none'; // nema kraka na kraku
+    btnKrakL.style.display = 'none';
+    btnKrakD.style.display = 'none';
+    btnPicker.style.display = 'none';
   } else {
     bnParent.style.display = 'none';
     btnNazad.style.display = 'none';
-    btnKrak.style.display = '';
+    btnKrakL.style.display = '';
+    btnKrakD.style.display = '';
+    btnPicker.style.display = '';
   }
   _updRecStatusBar();
 }
@@ -3132,7 +3147,9 @@ function stopRec() {
   banner.classList.remove('show'); banner.classList.remove('paused');
   document.getElementById('bn-parent').style.display = 'none';
   document.getElementById('btn-nazad-roditelj').style.display = 'none';
-  document.getElementById('btn-krak').style.display = '';
+  document.getElementById('btn-krak-l').style.display = '';
+  document.getElementById('btn-krak-d').style.display = '';
+  document.getElementById('btn-krak-picker').style.display = '';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
@@ -3158,43 +3175,93 @@ function toggleRecPause() {
   _updRecStatusBar();
 }
 
+// Generiši sljedeće ime kraka: T1L1, T1L2... ili T1D1, T1D2...
+// Backward compat: i stari T1.1, T1.2 stil su podržani u pickeru
+function _nextKrakNm(parentNm, strana) {
+  let n = 1;
+  while (vlake.find(v => v.nm === parentNm + strana + n)) n++;
+  return parentNm + strana + n;
+}
+
+// Direktno kreiraj novi krak bez pickera
+function noviKrakStrana(strana) {
+  const drawing = activeTool === 'addline';
+  if ((!recOn && !drawing) || actI === null) return;
+  _closeKrakPicker();
+  const parentIdx = actI;
+  const parentV   = vlake[parentIdx];
+  const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
+  if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+
+  const krakNm = _nextKrakNm(parentV.nm, strana);
+  const color  = parentV.color;
+  const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+  poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
+  attachPolyClick(poly);
+
+  const krak = { nm: krakNm, br: parentV.br, kr: 1, color, lager: '', pts: [], poly,
+                 wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
+                 updatedAt: new Date().toISOString() };
+  vlake.push(krak);
+  const krakIdx = vlake.length - 1;
+
+  addPt(krakIdx, junctionPt.la, junctionPt.lo, junctionPt.al || 0);
+  updateVlakaLabel(krakIdx);
+
+  if (recOn) {
+    _recParentIdx = parentIdx;
+    actI = krakIdx;
+    _gpsBuf = [];
+    selI(krakIdx);
+    _updBanner();
+  } else {
+    _stopAddLine(false);
+    _recParentIdx = parentIdx;
+    actI = krakIdx;
+    selI(krakIdx);
+    mtAddLine();
+  }
+  sbFlushVlaka(krakIdx);
+  rndList();
+  const label = strana === 'L' ? 'lijevi' : 'desni';
+  showToast(`⊕ Novi ${label} krak ${krakNm}`);
+}
+
+// Picker za nastavak postojećeg kraka
 function startKrakOdOvdje() {
   const drawing = activeTool === 'addline';
   if ((!recOn && !drawing) || actI === null) return;
   const parentV = vlake[actI];
+
+  // Pronađi sve krake ove vlake (novi L/D stil i stari . stil)
   const postojeci = vlake
     .map((v, i) => ({ v, i }))
-    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.'));
+    .filter(({ v }) => v.kr > 0 && (
+      v.nm.startsWith(parentV.nm + 'L') ||
+      v.nm.startsWith(parentV.nm + 'D') ||
+      v.nm.startsWith(parentV.nm + '.')
+    ));
 
-  // Popuni listu postojećih
-  const list = document.getElementById('krak-picker-list');
-  list.innerHTML = postojeci.length === 0
-    ? `<div style="font-size:11px;color:#475569;text-align:center;padding:4px 0;">Nema krakova za ${parentV.nm}</div>`
-    : postojeci.map(({ v, i }) => {
-        const m = Math.round(v.pts.length > 1 ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
-        return `<button onclick="odaberiKrak(${i})" style="display:block;width:100%;text-align:left;background:rgba(14,165,233,0.12);border:1px solid #0ea5e9;border-radius:6px;color:#e2e8f0;padding:7px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
-          <span style="color:#0ea5e9;">${v.nm}</span>
-          <span style="font-size:11px;color:#64748b;margin-left:8px;">${v.pts.length} tač. · ${m} m</span>
-        </button>`;
-      }).join('');
-
-  // Postavi prefix i default broj za novi krak
-  let nextNum = 1;
-  while (vlake.find(v => v.nm === parentV.nm + '.' + nextNum)) nextNum++;
-  document.getElementById('krak-novi-prefix').textContent = parentV.nm + '.';
-  document.getElementById('krak-novi-br').value = nextNum;
-  updKrakNoviPrev();
+  const list  = document.getElementById('krak-picker-list');
+  const empty = document.getElementById('krak-picker-empty');
+  if (postojeci.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = '';
+  } else {
+    empty.style.display = 'none';
+    list.innerHTML = postojeci.map(({ v, i }) => {
+      const m = Math.round(v.pts.length > 1
+        ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
+      const isL = v.nm.includes('L');
+      const isD = v.nm.includes('D');
+      const badge = isL ? `<span class="vkrak-badge-l">L</span>` : isD ? `<span class="vkrak-badge-d">D</span>` : '';
+      return `<button onclick="odaberiKrak(${i})" style="display:flex;align-items:center;gap:6px;width:100%;text-align:left;background:rgba(14,165,233,0.10);border:1px solid #1e3a5f;border-radius:6px;color:#e2e8f0;padding:8px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
+        ${badge}<span style="color:#e2e8f0;">${v.nm}</span>
+        <span style="font-size:11px;color:#64748b;margin-left:auto;">${v.pts.length} tač. · ${m} m</span>
+      </button>`;
+    }).join('');
+  }
   document.getElementById('krak-picker').style.display = '';
-}
-
-function updKrakNoviPrev() {
-  const prefix = document.getElementById('krak-novi-prefix').textContent;
-  const br = document.getElementById('krak-novi-br').value;
-  const nm = prefix + br;
-  const prev = document.getElementById('krak-novi-prev');
-  const exists = vlake.find(v => v.nm === nm);
-  prev.textContent = exists ? '⚠ već postoji' : '→ ' + nm;
-  prev.style.color = exists ? '#f87171' : '#0ea5e9';
 }
 
 function _closeKrakPicker() {
@@ -3220,50 +3287,6 @@ function odaberiKrak(krakIdx) {
   }
 }
 
-function startNoviKrak() {
-  _closeKrakPicker();
-  const drawing = activeTool === 'addline';
-  if ((!recOn && !drawing) || actI === null) return;
-  const parentIdx = actI;
-  const parentV = vlake[parentIdx];
-
-  const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
-  if (!junctionPt) { showToast('Nacrtaj bar jednu tačku na vlaci!'); return; }
-
-  const br = parseInt(document.getElementById('krak-novi-br').value) || 1;
-  const krakNm = parentV.nm + '.' + br;
-  if (vlake.find(v => v.nm === krakNm)) { showToast('Krak ' + krakNm + ' već postoji! Odaberi drugi broj.'); startKrakOdOvdje(); return; }
-
-  const color = parentV.color;
-  const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
-  poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
-  attachPolyClick(poly);
-  const krak = { nm: krakNm, br: parentV.br, kr: 1, color, lager: '', pts: [], poly, wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() };
-  vlake.push(krak);
-  const krakIdx = vlake.length - 1;
-
-  addPt(krakIdx, junctionPt.la, junctionPt.lo, junctionPt.al || 0);
-  updateVlakaLabel(krakIdx);
-
-  if (recOn) {
-    // GPS mode: switch recording to krak
-    _recParentIdx = parentIdx;
-    actI = krakIdx;
-    _gpsBuf = [];
-    selI(krakIdx);
-    _updBanner();
-  } else {
-    // Drawing mode: stop drawing parent, start drawing krak
-    _stopAddLine(false);
-    _recParentIdx = parentIdx;
-    actI = krakIdx;
-    selI(krakIdx);
-    mtAddLine();
-  }
-  sbFlushVlaka(krakIdx);
-  rndList();
-  showToast('⊕ Novi krak ' + krakNm);
-}
 
 function _updBl2() {
   if (actI === null) return;
@@ -3595,43 +3618,80 @@ function showVlakaOnMap(i) {
   zmV(i);
 }
 
+function _renderVlakaRow(el, v, i, isKrak) {
+  const d   = calcL(v.pts);
+  const row = document.createElement('div');
+  row.className = 'vrow' + (i === actI ? ' act' : '') + (isKrak ? ' vrow-krak' : '');
+  const lagerInfo    = v.lager ? ' · ✓ lager' : '';
+  const isRecThis    = recOn && i === actI;
+  const isPausedPar  = recOn && i === _recParentIdx;
+  const stranaBadge  = isKrak ? _krakStranaBadge(v.nm) : '';
+  let badge = '';
+  if (isRecThis && !recPaused) badge = `<span class="vrec-badge rec">🔴 snima se</span>`;
+  else if (isRecThis && recPaused) badge = `<span class="vrec-badge paused">⏸ pauzirano</span>`;
+  else if (isPausedPar)            badge = `<span class="vrec-badge parent">⏸ čeka</span>`;
+  const nasaviBtn = isPausedPar
+    ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()">▶ Nastavi ${v.nm}</button>`
+    : '';
+  row.innerHTML = `
+    <div class="vcard-stripe" style="background:${v.color}"></div>
+    <div class="vcard-info">
+      <div class="vcard-top">
+        ${stranaBadge}<span class="vcard-name">${v.nm}</span>
+        ${badge}
+        <span class="vcard-km">${fmtL(d)}</span>
+      </div>
+      <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
+      ${nasaviBtn}
+    </div>
+    <div class="vcard-btns">
+      <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
+      <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
+      <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
+    </div>`;
+  row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
+  el.appendChild(row);
+}
+
+// Vrati badge (L/D) za krak na osnovu imena
+function _krakStranaBadge(nm) {
+  // Pronađi L ili D iza imena roditelja (npr T1L1 → L, T2D3 → D)
+  const m = nm.match(/[A-Z]\d+([LD])\d+$/);
+  if (!m) return '';
+  return m[1] === 'L'
+    ? `<span class="vkrak-badge-l">L</span>`
+    : `<span class="vkrak-badge-d">D</span>`;
+}
+
 // === LIST ===
 function rndList() {
   const el=document.getElementById('vl'), nv=document.getElementById('nv');
   document.getElementById('vc').textContent=vlake.length;
   el.innerHTML=''; nv.style.display=vlake.length===0?'block':'none';
-  vlake.forEach((v,i)=>{
-    const d=calcL(v.pts), row=document.createElement('div');
-    row.className='vrow'+(i===actI?' act':'');
-    const lagerInfo = v.lager ? ' · ✓ lager' : '';
-    const isRecThis   = recOn && i === actI;
-    const isPausedPar = recOn && i === _recParentIdx;
-    let badge = '';
-    if (isRecThis && !recPaused) badge = `<span class="vrec-badge rec">🔴 snima se</span>`;
-    else if (isRecThis && recPaused) badge = `<span class="vrec-badge paused">⏸ pauzirano</span>`;
-    else if (isPausedPar) badge = `<span class="vrec-badge parent">⏸ čeka</span>`;
-    const nasaviBtn = isPausedPar
-      ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()">▶ Nastavi snimanje ${v.nm}</button>`
-      : '';
-    row.innerHTML=`
-      <div class="vcard-stripe" style="background:${v.color}"></div>
-      <div class="vcard-info">
-        <div class="vcard-top">
-          <span class="vcard-name">${v.nm}</span>
-          ${badge}
-          <span class="vcard-km">${fmtL(d)}</span>
-        </div>
-        <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
-        ${nasaviBtn}
-      </div>
-      <div class="vcard-btns">
-        <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
-        <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
-        <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
-      </div>`;
-    // Tokom snimanja klik samo selektuje (ne prebacuje na kartu)
-    row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
-    el.appendChild(row);
+
+  // Grupiraj: glavne vlake (kr===0) i njihovi kraci (kr>0)
+  const rendered = new Set();
+
+  vlake.forEach((v,i) => {
+    if (rendered.has(i)) return;
+    rendered.add(i);
+
+    const isMain = v.kr === 0;
+    _renderVlakaRow(el, v, i, false);
+
+    // Prikaži krake uvučeno ispod glavne vlake
+    if (isMain) {
+      vlake.forEach((k, ki) => {
+        if (k.kr > 0 && (
+          k.nm.startsWith(v.nm + 'L') ||
+          k.nm.startsWith(v.nm + 'D') ||
+          k.nm.startsWith(v.nm + '.')
+        )) {
+          rendered.add(ki);
+          _renderVlakaRow(el, k, ki, true);
+        }
+      });
+    }
   });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
