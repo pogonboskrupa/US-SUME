@@ -3144,7 +3144,7 @@ function togRec() {
   if (!recOn) {
     if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
     recOn = true; recPaused = false; _recParentIdx = null;
-    _gpsBuf = [];
+    _gpsBuf = []; _lastRecTime = 0;
     const b = document.getElementById('brec');
     if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
     const banner = document.getElementById('banner');
@@ -3161,7 +3161,7 @@ function togRec() {
 
 function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
-  _gpsBuf = [];
+  _gpsBuf = []; _lastRecTime = 0;
   const b = document.getElementById('brec');
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
   const banner = document.getElementById('banner');
@@ -3180,7 +3180,7 @@ function stopRec() {
 function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
-  _gpsBuf = [];
+  _gpsBuf = []; _lastRecTime = 0;
   const banner = document.getElementById('banner');
   const btn = document.getElementById('btn-pause');
   if (recPaused) {
@@ -3231,7 +3231,7 @@ function noviKrakStrana(strana) {
   if (recOn) {
     _recParentIdx = parentIdx;
     actI = krakIdx;
-    _gpsBuf = [];
+    _gpsBuf = []; _lastRecTime = 0;
     selI(krakIdx);
     _updBanner();
   } else {
@@ -3289,7 +3289,7 @@ function odaberiKrak(krakIdx) {
   _recParentIdx = actI;
   actI = krakIdx;
   if (recOn) {
-    _gpsBuf = [];
+    _gpsBuf = []; _lastRecTime = 0;
     selI(krakIdx);
     _updBanner();
     showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
@@ -3315,7 +3315,7 @@ function vratiSeNaRoditelja() {
   if (krakIdx !== null) updateVlakaLabel(krakIdx);
   actI = _recParentIdx;
   _recParentIdx = null;
-  _gpsBuf = [];
+  _gpsBuf = []; _lastRecTime = 0;
   selI(actI);
 
   // Auto-pauziraj — povratak se ne snima
@@ -3375,7 +3375,7 @@ function startGPS() {
   gpsOn = true;
   document.getElementById('gps-info').textContent = 'GPS: tražim signal...';
   wid = navigator.geolocation.watchPosition(onP, onPE, {
-    enableHighAccuracy: true, maximumAge: 2000, timeout: 20000
+    enableHighAccuracy: true, maximumAge: 0, timeout: 20000
   });
 }
 function stopGPS() {
@@ -3386,11 +3386,15 @@ function stopGPS() {
   _updMcdDist();
 }
 
-// GPS smoothing — simple running average of last N positions
-const GPS_SMOOTH = 3;   // average over last 3 positions
-const GPS_MIN_DIST = 3; // minimum metres between recorded points
-const GPS_MAX_ACC  = 25; // ignore fixes worse than 25m accuracy
-let _gpsBuf = [];        // circular buffer for smoothing
+// ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
+// Šumski teren: signali često skaču, drveće blokira sателit — agresivniji filter
+const GPS_SMOOTH    = 7;  // prosjek zadnjih N pozicija
+const GPS_MIN_DIST  = 5;  // minimalni razmak između snimljenih tačaka (m)
+const GPS_MAX_ACC   = 15; // ignoriši fikseve lošije od 15m
+const GPS_MAX_JUMP  = 25; // maksimalni skok između dva uzastopna fikseva (m) — outlier
+const GPS_MAX_SPEED = 2.5;// maksimalna realna brzina hoda (m/s ≈ 9 km/h)
+let _gpsBuf       = [];   // kružni buffer za smoothing
+let _lastRecTime  = 0;    // timestamp zadnje snimljene tačke (za speed gate)
 
 function onP(p) {
   const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
@@ -3398,10 +3402,9 @@ function onP(p) {
   _addTragPoint(la, lo, al);
   _updMcdDist();
 
-  // Update display always
+  // Prikaz uvijek
   document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
-  // GPS altitude — tačnije od API-ja kad dostupno
   if (al != null) {
     _gpsAlt = true;
     const nvGpsTxt = Math.round(al) + ' m 📡';
@@ -3413,7 +3416,7 @@ function onP(p) {
     debouncedUpdElev(la, lo, 200);
   }
 
-  // Update position marker always
+  // Marker pozicije
   if (!posMk) {
     const ico = L.divIcon({className:'', iconSize:[18,18], iconAnchor:[9,9],
       html:`<div style="width:18px;height:18px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 10px #3b82f6;"></div>`});
@@ -3425,30 +3428,48 @@ function onP(p) {
     posCr.setLatLng([la, lo]).setRadius(ac);
   }
 
-  // Only record if actively recording and not paused
   if (!recOn || recPaused || actI === null) return;
 
-  // Skip fixes with poor accuracy
+  // 1. FILTER TAČNOSTI — odbaci loše fikseve
   if (ac > GPS_MAX_ACC) return;
 
-  // Add to smoothing buffer
-  _gpsBuf.push({la, lo, al: al||0});
-  if (_gpsBuf.length > GPS_SMOOTH) _gpsBuf.shift();
-
-  // Compute smoothed position (mean of buffer)
-  const sla = _gpsBuf.reduce((s,p) => s + p.la, 0) / _gpsBuf.length;
-  const slo = _gpsBuf.reduce((s,p) => s + p.lo, 0) / _gpsBuf.length;
-  const sal = _gpsBuf.reduce((s,p) => s + p.al, 0) / _gpsBuf.length;
-
-  // Check minimum distance from last recorded point
-  const v = vlake[actI];
-  if (v.pts.length > 0) {
-    const last = v.pts[v.pts.length - 1];
-    // Min distance = max(GPS_MIN_DIST, accuracy/3) to avoid jitter
-    const minDist = Math.max(GPS_MIN_DIST, ac / 3);
-    if (dst(last.la, last.lo, sla, slo) < minDist) return;
+  // 2. FILTER OUTLIERA — odbaci GPS skok (drvo/zid blokiralo satelit)
+  if (_gpsBuf.length > 0) {
+    const prev = _gpsBuf[_gpsBuf.length - 1];
+    if (dst(prev.la, prev.lo, la, lo) > GPS_MAX_JUMP) {
+      // Skok prevelik — očisti buffer i počni iznova
+      _gpsBuf = []; _lastRecTime = 0;
+      return;
+    }
   }
 
+  // 3. BUFFER — dodaj u kružni buffer (čuva accuracy za ponderirani prosjek)
+  _gpsBuf.push({la, lo, al: al||0, ac});
+  if (_gpsBuf.length > GPS_SMOOTH) _gpsBuf.shift();
+
+  // 4. PONDERIRANI PROSJEK — bolji signal (manji ac) dobija veću težinu
+  const totalW = _gpsBuf.reduce((s, pt) => s + 1 / pt.ac, 0);
+  const sla = _gpsBuf.reduce((s, pt) => s + pt.la / pt.ac, 0) / totalW;
+  const slo = _gpsBuf.reduce((s, pt) => s + pt.lo / pt.ac, 0) / totalW;
+  const sal = _gpsBuf.reduce((s, pt) => s + pt.al / pt.ac, 0) / totalW;
+
+  const v = vlake[actI];
+  if (v.pts.length > 0) {
+    const last   = v.pts[v.pts.length - 1];
+    const distM  = dst(last.la, last.lo, sla, slo);
+
+    // 5. MIN RAZMAK — ne snimi ako smo premalo pomjerili
+    const minDist = Math.max(GPS_MIN_DIST, ac * 0.4);
+    if (distM < minDist) return;
+
+    // 6. SPEED GATE — odbaci ako implicira nerealno brzo kretanje
+    const elapsed = (Date.now() - _lastRecTime) / 1000;
+    if (_lastRecTime > 0 && elapsed > 0 && elapsed < 30) {
+      if (distM / elapsed > GPS_MAX_SPEED) return;
+    }
+  }
+
+  _lastRecTime = Date.now();
   addPt(actI, sla, slo, sal);
 }
 function onPE(e) {
