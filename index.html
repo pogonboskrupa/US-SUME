@@ -3228,6 +3228,7 @@ function togRec() {
     if (!gpsOn) toggleGPS();
     _acquireWakeLock();
     _checkBatteryOptHint();
+    document.getElementById('fab-gps').style.display = 'none';
   } else {
     stopRec();
   }
@@ -3250,6 +3251,10 @@ function stopRec() {
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
   _showLagerDlg(actI);
+  // Vrati FAB lokacije ako smo na karti
+  const curTab = document.querySelector('.tab-btn.active');
+  if (!curTab || curTab.textContent.includes('Karta') || curTab.textContent.includes('🗺'))
+    document.getElementById('fab-gps').style.display = '';
 }
 
 function toggleRecPause() {
