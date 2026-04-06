@@ -1276,6 +1276,11 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div class="rdot"></div>
           <div id="bn">T1</div>
           <div id="bl2">0 m</div>
+          <div id="wakelock-icon" title="Ekran ostaje uključen" style="display:none;font-size:13px;margin-left:6px;opacity:0.6;">🔒</div>
+        </div>
+        <!-- Upozorenje kad app ide u pozadinu -->
+        <div id="bg-warning" style="display:none;background:#7c2d12;padding:4px 13px;font-size:11px;color:#fed7aa;text-align:center;">
+          ⚠ App u pozadini — GPS može biti pauziran
         </div>
         <!-- Red 1b: krak info (roditeljska vlaka) — vidljiv samo na kraku -->
         <div id="banner-parent-row">
@@ -3140,6 +3145,73 @@ function _updRecStatusBar() {
   rndList();
 }
 
+// ─── WAKE LOCK — sprečava gašenje ekrana tokom snimanja ──────────────────────
+let _wakeLock = null;
+
+async function _acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    _wakeLock = await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release', () => { _wakeLock = null; _updWakeLockIcon(); });
+    _updWakeLockIcon();
+  } catch(e) { /* odbijen — niska baterija ili nije podržano */ }
+}
+
+async function _releaseWakeLock() {
+  if (_wakeLock) { try { await _wakeLock.release(); } catch(e) {} _wakeLock = null; }
+  _updWakeLockIcon();
+}
+
+// Ponovo uzmi wake lock kad se korisnik vrati na stranicu
+// Jednom pokaži savjet za optimizaciju baterije (samo Android)
+const _BATT_HINT_KEY = 'tvlake_batt_hint_shown';
+function _checkBatteryOptHint() {
+  if (localStorage.getItem(_BATT_HINT_KEY)) return;
+  const isAndroid = /android/i.test(navigator.userAgent);
+  if (!isAndroid) return;
+  localStorage.setItem(_BATT_HINT_KEY, '1');
+  // Prikaži modal sa uputama
+  const m = document.createElement('div');
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = `
+    <div style="background:#0f172a;border:2px solid #22c55e;border-radius:14px;padding:20px;max-width:340px;font-family:sans-serif;color:#e2e8f0;">
+      <div style="font-size:22px;margin-bottom:8px;">🔋 Kontinuirano GPS snimanje</div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:14px;line-height:1.6;">
+        Da bi GPS radio dok šetaš i ekran se isključi, <b style="color:#fbbf24;">isključi optimizaciju baterije</b> za Chrome:
+      </div>
+      <div style="background:#1e293b;border-radius:8px;padding:12px;font-size:12px;line-height:2;margin-bottom:16px;">
+        <b style="color:#22c55e;">Postavke Android</b> →<br>
+        Aplikacije → Chrome →<br>
+        Baterija → <b style="color:#fbbf24;">Neograničeno</b>
+      </div>
+      <div style="font-size:11px;color:#475569;margin-bottom:14px;">
+        Bez toga Android može ugasiti GPS nakon ~1 min u pozadini.
+      </div>
+      <button onclick="this.closest('div[style]').remove()" style="width:100%;background:#22c55e;color:#000;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:bold;cursor:pointer;">✓ Razumijem</button>
+    </div>`;
+  document.body.appendChild(m);
+}
+
+document.addEventListener('visibilitychange', async () => {
+  const bgWarn = document.getElementById('bg-warning');
+  if (document.visibilityState === 'visible') {
+    if (bgWarn) bgWarn.style.display = 'none';
+    // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
+    if (recOn && !_wakeLock) await _acquireWakeLock();
+    _updWakeLockIcon();
+  } else {
+    if (recOn && !recPaused) {
+      if (bgWarn) bgWarn.style.display = '';
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+  }
+});
+
+function _updWakeLockIcon() {
+  const el = document.getElementById('wakelock-icon');
+  if (el) el.style.display = (recOn && _wakeLock) ? '' : 'none';
+}
+
 function togRec() {
   if (!recOn) {
     if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
@@ -3154,6 +3226,8 @@ function togRec() {
     _updBanner();
     _updRecStatusBar();
     if (!gpsOn) toggleGPS();
+    _acquireWakeLock();
+    _checkBatteryOptHint();
   } else {
     stopRec();
   }
@@ -3162,6 +3236,7 @@ function togRec() {
 function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
   _gpsBuf = []; _lastRecTime = 0;
+  _releaseWakeLock();
   const b = document.getElementById('brec');
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
   const banner = document.getElementById('banner');
