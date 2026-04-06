@@ -104,3 +104,6 @@ $$;
 -- Samo prijavljeni korisnici mogu zvati ovu funkciju
 REVOKE ALL ON FUNCTION create_projektant(TEXT, TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION create_projektant(TEXT, TEXT, TEXT) TO authenticated;
+
+-- Dodaj strana kolonu za L/D identifikaciju kraka
+ALTER TABLE vlake ADD COLUMN IF NOT EXISTS strana TEXT DEFAULT NULL;

@@ -2019,7 +2019,7 @@ async function sbLoadVlake() {
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
-    const v = { nm: row.nm, br: row.br, kr: row.kr, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: [], sbId: row.id, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
+    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: [], sbId: row.id, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
@@ -2056,7 +2056,7 @@ async function sbFlushVlaka(i) {
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
     projekt_id:  _aktivniProjektId || null,
-    nm: v.nm, br: v.br, kr: v.kr, boja: v.color,
+    nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
     updated_at: new Date().toISOString()
@@ -3093,8 +3093,7 @@ function _updBanner() {
   const onKrak = _recParentIdx !== null && vlake[_recParentIdx];
   if (onKrak) {
     const par = vlake[_recParentIdx];
-    // Odredi L/D iz imena kraka
-    const strand = v.nm.includes('L') ? 'Lijevi krak' : v.nm.includes('D') ? 'Desni krak' : 'Krak';
+    const strand = v.strana === 'L' ? 'Lijevi krak' : v.strana === 'D' ? 'Desni krak' : 'Krak';
     bnParentLbl.textContent = strand + ' · ' + v.nm;
     bnParent.textContent = par.nm;
     parentRow.style.display = 'flex';
@@ -3197,12 +3196,11 @@ function toggleRecPause() {
   _updRecStatusBar();
 }
 
-// Generiši sljedeće ime kraka: T1L1, T1L2... ili T1D1, T1D2...
-// Backward compat: i stari T1.1, T1.2 stil su podržani u pickeru
-function _nextKrakNm(parentNm, strana) {
+// Generiši sljedeće ime kraka: T1.1, T1.2, T3.5...
+function _nextKrakNm(parentNm) {
   let n = 1;
-  while (vlake.find(v => v.nm === parentNm + strana + n)) n++;
-  return parentNm + strana + n;
+  while (vlake.find(v => v.nm === parentNm + '.' + n)) n++;
+  return parentNm + '.' + n;
 }
 
 // Direktno kreiraj novi krak bez pickera
@@ -3215,13 +3213,13 @@ function noviKrakStrana(strana) {
   const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
   if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
 
-  const krakNm = _nextKrakNm(parentV.nm, strana);
+  const krakNm = _nextKrakNm(parentV.nm);
   const color  = parentV.color;
   const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
-  const krak = { nm: krakNm, br: parentV.br, kr: 1, color, lager: '', pts: [], poly,
+  const krak = { nm: krakNm, br: parentV.br, kr: 1, strana: strana || null, color, lager: '', pts: [], poly,
                  wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
                  updatedAt: new Date().toISOString() };
   vlake.push(krak);
@@ -3258,11 +3256,7 @@ function startKrakOdOvdje() {
   // Pronađi sve krake ove vlake (novi L/D stil i stari . stil)
   const postojeci = vlake
     .map((v, i) => ({ v, i }))
-    .filter(({ v }) => v.kr > 0 && (
-      v.nm.startsWith(parentV.nm + 'L') ||
-      v.nm.startsWith(parentV.nm + 'D') ||
-      v.nm.startsWith(parentV.nm + '.')
-    ));
+    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.'));
 
   const list  = document.getElementById('krak-picker-list');
   const empty = document.getElementById('krak-picker-empty');
@@ -3274,9 +3268,7 @@ function startKrakOdOvdje() {
     list.innerHTML = postojeci.map(({ v, i }) => {
       const m = Math.round(v.pts.length > 1
         ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
-      const isL = v.nm.includes('L');
-      const isD = v.nm.includes('D');
-      const badge = isL ? `<span class="vkrak-badge-l">L</span>` : isD ? `<span class="vkrak-badge-d">D</span>` : '';
+      const badge = _krakStranaBadge(v.strana);
       return `<button onclick="odaberiKrak(${i})" style="display:flex;align-items:center;gap:6px;width:100%;text-align:left;background:rgba(14,165,233,0.10);border:1px solid #1e3a5f;border-radius:6px;color:#e2e8f0;padding:8px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
         ${badge}<span style="color:#e2e8f0;">${v.nm}</span>
         <span style="font-size:11px;color:#64748b;margin-left:auto;">${v.pts.length} tač. · ${m} m</span>
@@ -3646,7 +3638,7 @@ function _renderVlakaRow(el, v, i, isKrak) {
   const lagerInfo    = v.lager ? ' · ✓ lager' : '';
   const isRecThis    = recOn && i === actI;
   const isPausedPar  = recOn && i === _recParentIdx;
-  const stranaBadge  = isKrak ? _krakStranaBadge(v.nm) : '';
+  const stranaBadge  = isKrak ? _krakStranaBadge(v.strana) : '';
   let badge = '';
   if (isRecThis && !recPaused) badge = `<span class="vrec-badge rec">🔴 snima se</span>`;
   else if (isRecThis && recPaused) badge = `<span class="vrec-badge paused">⏸ pauzirano</span>`;
@@ -3674,14 +3666,11 @@ function _renderVlakaRow(el, v, i, isKrak) {
   el.appendChild(row);
 }
 
-// Vrati badge (L/D) za krak na osnovu imena
-function _krakStranaBadge(nm) {
-  // Pronađi L ili D iza imena roditelja (npr T1L1 → L, T2D3 → D)
-  const m = nm.match(/[A-Z]\d+([LD])\d+$/);
-  if (!m) return '';
-  return m[1] === 'L'
-    ? `<span class="vkrak-badge-l">L</span>`
-    : `<span class="vkrak-badge-d">D</span>`;
+// Vrati badge (L/D) za krak na osnovu strana polja
+function _krakStranaBadge(strana) {
+  if (strana === 'L') return `<span class="vkrak-badge-l">L</span>`;
+  if (strana === 'D') return `<span class="vkrak-badge-d">D</span>`;
+  return '';
 }
 
 // === LIST ===
@@ -3703,11 +3692,7 @@ function rndList() {
     // Prikaži krake uvučeno ispod glavne vlake
     if (isMain) {
       vlake.forEach((k, ki) => {
-        if (k.kr > 0 && (
-          k.nm.startsWith(v.nm + 'L') ||
-          k.nm.startsWith(v.nm + 'D') ||
-          k.nm.startsWith(v.nm + '.')
-        )) {
+        if (k.kr > 0 && k.nm.startsWith(v.nm + '.')) {
           rendered.add(ki);
           _renderVlakaRow(el, k, ki, true);
         }
