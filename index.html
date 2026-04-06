@@ -247,34 +247,48 @@ input:focus { outline:none; border-color:#3b82f6; }
 /* Banner */
 #banner {
   position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
-  background:rgba(10,17,35,0.96); border:1.5px solid #fbbf24;
-  border-radius:12px; padding:8px 12px 10px 12px;
-  display:none; flex-direction:column; gap:8px;
+  background:rgba(8,14,28,0.97); border:2px solid #fbbf24;
+  border-radius:14px; padding:0;
+  display:none; flex-direction:column;
   z-index:500; font-family:monospace; white-space:nowrap;
-  box-shadow:0 4px 18px rgba(0,0,0,0.6);
-  max-width:96vw; min-width:260px;
+  box-shadow:0 6px 28px rgba(0,0,0,0.75);
+  max-width:98vw; min-width:280px; overflow:hidden;
 }
 #banner.show { display:flex; }
 #banner.paused { border-color:#f59e0b; }
-#banner-row1 { display:flex; align-items:center; gap:8px; }
-#banner-row2 { display:flex; align-items:center; gap:5px; }
+/* Red 1 — info */
+#banner-row1 {
+  display:flex; align-items:center; gap:0;
+  padding:9px 13px 7px 13px; border-bottom:1px solid rgba(255,255,255,0.07);
+}
+/* Red s imenom roditelja (krak mode) */
+#banner-parent-row {
+  display:none; align-items:center; gap:6px;
+  padding:3px 13px 5px 13px;
+  font-size:11px; color:#64748b;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+/* Red 2 — dugmad */
+#banner-row2 { display:flex; align-items:stretch; gap:0; min-height:44px; }
 .rdot {
   width:9px; height:9px; border-radius:50%; background:#ef4444;
-  animation:bl 1s infinite; flex-shrink:0;
+  animation:bl 1s infinite; flex-shrink:0; margin-right:8px; margin-top:3px;
 }
 #banner.paused .rdot { background:#f59e0b; animation:none; }
-#bn { font-size:15px; font-weight:bold; color:#fbbf24; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
-#bl2 { font-size:12px; color:#94a3b8; flex:1; }
+#bn { font-size:15px; font-weight:bold; color:#fbbf24; max-width:130px; overflow:hidden; text-overflow:ellipsis; }
+#bl2 { font-size:12px; color:#64748b; margin-left:auto; padding-left:10px; }
 .brec-sep { width:1px; background:#1e3a5f; height:22px; margin:0 1px; flex-shrink:0; }
 .brec-btn {
-  border:none; border-radius:7px; cursor:pointer;
-  font-size:13px; font-weight:bold; padding:6px 12px;
-  transition:opacity 0.15s; white-space:nowrap; flex-shrink:0; flex:1;
+  border:none; border-top:none; cursor:pointer;
+  font-size:13px; font-weight:bold; padding:8px 12px;
+  transition:background 0.15s; white-space:nowrap; flex-shrink:0; flex:1;
+  border-right:1px solid rgba(255,255,255,0.07);
 }
-.brec-btn:hover { opacity:0.8; }
-.brec-btn.pause { background:#f59e0b; color:#000; }
-.brec-btn.flip  { background:#7c3aed; color:#fff; }
-.brec-btn.stop  { background:#ef4444; color:#fff; }
+.brec-btn:last-child { border-right:none; }
+.brec-btn:active { filter:brightness(1.3); }
+.brec-btn.pause { background:#1c1400; color:#f59e0b; }
+.brec-btn.flip  { background:#150d2e; color:#a78bfa; }
+.brec-btn.stop  { background:#2d0a0a; color:#f87171; }
 .brec-btn.krak  { background:#0ea5e9; color:#fff; }
 .brec-btn.krak-d{ background:#f97316; color:#fff; }
 .brec-btn.back  { background:#334155; color:#94a3b8; }
@@ -1257,27 +1271,31 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
       <div id="banner">
-        <!-- Red 1: info -->
+        <!-- Red 1: ime vlake + dužina -->
         <div id="banner-row1">
           <div class="rdot"></div>
           <div id="bn">T1</div>
-          <div id="bn-parent" style="display:none;font-size:11px;color:#94a3b8;"></div>
-          <div class="brec-sep"></div>
-          <div id="bl2">0 m · 0 tač.</div>
+          <div id="bl2">0 m</div>
         </div>
-        <!-- Red 2: dugmad -->
+        <!-- Red 1b: krak info (roditeljska vlaka) — vidljiv samo na kraku -->
+        <div id="banner-parent-row">
+          <span style="color:#f97316;">⊕</span>
+          <span id="bn-parent-label">krak</span>
+          <span style="margin-left:auto;">← vrati se na</span>
+          <span id="bn-parent" style="color:#fbbf24;font-weight:bold;margin-left:4px;"></span>
+        </div>
+        <!-- Red 2: dugmad GPS snimanja -->
         <div id="banner-row2">
-          <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
-          <button class="brec-btn krak"   id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak">⊕ L</button>
-          <button class="brec-btn krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak">⊕ D</button>
-          <button class="brec-btn krak-picker-btn" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
-          <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">↩ Nazad</button>
-          <button class="brec-btn flip" id="btn-flip-dir" onclick="flipVlakaDir()" title="Okreni smjer">↔</button>
-          <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje">⏹ Stop</button>
+          <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸ Pauza</button>
+          <button class="brec-btn krak"   id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="background:#0c2233;color:#38bdf8;">⊕ Lijevi</button>
+          <button class="brec-btn krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="background:#231200;color:#fb923c;">⊕ Desni</button>
+          <button class="brec-btn krak-picker-btn" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak" style="background:#0f172a;color:#64748b;flex:0 0 auto;padding:8px 10px;">↪</button>
+          <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;background:#1a0a00;color:#fb923c;flex:2;">↩ Vrati na glavnu</button>
+          <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje" style="flex:0 0 auto;padding:8px 14px;">⏹</button>
           <!-- Crtanje dugmad — vidljiva samo u addline modu -->
-          <button class="brec-btn" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku" style="display:none;background:#7c3aed;color:#fff;">↩ Undo</button>
-          <button class="brec-btn" id="btn-draw-drag" onclick="toggleDrawDrag()" title="Vuci modus — tačke se dodaju dok pomijeraš mapu" style="display:none;background:#374151;color:#e2e8f0;">✍ Vuci</button>
-          <button class="brec-btn" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje" style="display:none;background:#16a34a;color:#fff;">✓ Završi</button>
+          <button class="brec-btn" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku" style="display:none;background:#150d2e;color:#a78bfa;">↩ Undo</button>
+          <button class="brec-btn" id="btn-draw-drag" onclick="toggleDrawDrag()" title="Vuci modus" style="display:none;background:#0f172a;color:#64748b;">✍ Vuci</button>
+          <button class="brec-btn" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje" style="display:none;background:#052e16;color:#4ade80;">✓ Završi</button>
         </div>
       </div>
 
@@ -2683,7 +2701,7 @@ function mtAddLine() {
   document.getElementById('banner').classList.remove('paused');
   document.getElementById('bn').textContent = '✏ Crtanje: ' + vlake[actI].nm;
   document.getElementById('bl2').textContent = 'Tapni zelenu tačku ili kartu · ✓ Završi';
-  document.getElementById('bn-parent').style.display = 'none';
+  document.getElementById('banner-parent-row').style.display = 'none';
   // Sakrij GPS dugmad, prikaži draw dugmad
   document.getElementById('btn-pause').style.display = 'none';
   document.getElementById('btn-krak-l').style.display = 'none';
@@ -2702,8 +2720,7 @@ function mtAddLine() {
   const c = map.getCenter();
   drawUndoStack.push([]);
   addPt(actI, c.lat, c.lng, 0);
-  // Vuci modus je default
-  toggleDrawDrag();
+  // Default: tap-to-add (ne vuci) — korisnik uključi Vuci po potrebi
 }
 
 function stopAddLine() { _stopAddLine(true); }
@@ -3063,9 +3080,11 @@ function selI(i) {
 
 function _updBanner() {
   if (!recOn || actI === null) return;
-  const v = vlake[actI];
+  const v          = vlake[actI];
   const bnEl       = document.getElementById('bn');
+  const parentRow  = document.getElementById('banner-parent-row');
   const bnParent   = document.getElementById('bn-parent');
+  const bnParentLbl= document.getElementById('bn-parent-label');
   const btnNazad   = document.getElementById('btn-nazad-roditelj');
   const btnKrakL   = document.getElementById('btn-krak-l');
   const btnKrakD   = document.getElementById('btn-krak-d');
@@ -3073,15 +3092,18 @@ function _updBanner() {
   bnEl.textContent = v.nm;
   const onKrak = _recParentIdx !== null && vlake[_recParentIdx];
   if (onKrak) {
-    bnParent.textContent = '← ' + vlake[_recParentIdx].nm;
-    bnParent.style.display = '';
+    const par = vlake[_recParentIdx];
+    // Odredi L/D iz imena kraka
+    const strand = v.nm.includes('L') ? 'Lijevi krak' : v.nm.includes('D') ? 'Desni krak' : 'Krak';
+    bnParentLbl.textContent = strand + ' · ' + v.nm;
+    bnParent.textContent = par.nm;
+    parentRow.style.display = 'flex';
     btnNazad.style.display = '';
-    btnNazad.title = 'Vrati se na ' + vlake[_recParentIdx].nm;
     btnKrakL.style.display = 'none';
     btnKrakD.style.display = 'none';
     btnPicker.style.display = 'none';
   } else {
-    bnParent.style.display = 'none';
+    parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
     btnKrakL.style.display = '';
     btnKrakD.style.display = '';
@@ -3145,7 +3167,7 @@ function stopRec() {
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
   const banner = document.getElementById('banner');
   banner.classList.remove('show'); banner.classList.remove('paused');
-  document.getElementById('bn-parent').style.display = 'none';
+  document.getElementById('banner-parent-row').style.display = 'none';
   document.getElementById('btn-nazad-roditelj').style.display = 'none';
   document.getElementById('btn-krak-l').style.display = '';
   document.getElementById('btn-krak-d').style.display = '';
@@ -3164,11 +3186,11 @@ function toggleRecPause() {
   const btn = document.getElementById('btn-pause');
   if (recPaused) {
     banner.classList.add('paused');
-    btn.textContent = '▶'; btn.title = 'Nastavi snimanje';
+    btn.textContent = '▶ Nastavi'; btn.title = 'Nastavi snimanje';
     showToast('⏸ Snimanje pauzirano');
   } else {
     banner.classList.remove('paused');
-    btn.textContent = '⏸'; btn.title = 'Pauza';
+    btn.textContent = '⏸ Pauza'; btn.title = 'Pauza';
     _updBl2();
     showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
@@ -3309,14 +3331,13 @@ function vratiSeNaRoditelja() {
   const banner = document.getElementById('banner');
   const btn = document.getElementById('btn-pause');
   banner.classList.add('paused');
-  btn.textContent = '▶';
+  btn.textContent = '▶ Nastavi';
   btn.title = 'Nastavi snimanje na vlaci';
 
   _updBanner();
 
-  // Prikaži poruku u baner redu
-  const bl2 = document.getElementById('bl2');
-  bl2.innerHTML = '<span style="color:#f59e0b;font-weight:bold;">⏸ Vraćanje — pritisni ▶ kad stigneš</span>';
+  // Prikaži poruku u info redu
+  document.getElementById('bl2').textContent = '⏸ Hodaj nazad, pritisni ▶ Nastavi';
 
   showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
 }
