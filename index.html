@@ -2746,6 +2746,7 @@ function mtAddLine() {
   drawUndoStack.push([]);
   addPt(actI, c.lat, c.lng, 0);
   // Default: tap-to-add (ne vuci) — korisnik uključi Vuci po potrebi
+  _updFabVisibility();
 }
 
 function stopAddLine() { _stopAddLine(true); }
@@ -2819,6 +2820,7 @@ function _stopAddLine(fromUser) {
   document.getElementById('main').classList.remove('drawing-active');
   document.getElementById('map-center-dot').onclick = null;
   drawUndoStack = [];
+  _updFabVisibility();
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
@@ -3225,7 +3227,7 @@ function togRec() {
     if (!gpsOn) toggleGPS();
     _acquireWakeLock();
     _checkBatteryOptHint();
-    document.getElementById('fab-gps').style.display = 'none';
+    _updFabVisibility();
   } else {
     stopRec();
   }
@@ -3248,10 +3250,7 @@ function stopRec() {
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
   _showLagerDlg(actI);
-  // Vrati FAB lokacije ako smo na karti
-  const curTab = document.querySelector('.tab-btn.active');
-  if (!curTab || curTab.textContent.includes('Karta') || curTab.textContent.includes('🗺'))
-    document.getElementById('fab-gps').style.display = '';
+  _updFabVisibility();
 }
 
 function toggleRecPause() {
@@ -5255,6 +5254,13 @@ function _updMcdDist() {
   el.style.display = 'block';
 }
 
+// Centralna logika vidljivosti FAB-a — poziva se iz switchTab, togRec, stopRec, mtAddLine, _stopAddLine
+function _updFabVisibility() {
+  const onKarta = _activeTab === 'karta';
+  const bannerActive = recOn || activeTool === 'addline';
+  document.getElementById('fab-gps').style.display = (onKarta && !bannerActive) ? '' : 'none';
+}
+
 function switchTab(tab) {
   _activeTab = tab;
   const panel   = document.getElementById('panel');
@@ -5266,7 +5272,7 @@ function switchTab(tab) {
   panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
   pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
-  document.getElementById('fab-gps').style.display = (tab==='karta' && !recOn) ? '' : 'none';
+  _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
