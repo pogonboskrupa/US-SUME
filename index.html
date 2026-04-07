@@ -3186,30 +3186,7 @@ async function _releaseWakeLock() {
 // Jednom pokaži savjet za optimizaciju baterije (samo Android)
 const _BATT_HINT_KEY = 'tvlake_batt_hint_shown';
 function _checkBatteryOptHint() {
-  if (localStorage.getItem(_BATT_HINT_KEY)) return;
-  const isAndroid = /android/i.test(navigator.userAgent);
-  if (!isAndroid) return;
-  localStorage.setItem(_BATT_HINT_KEY, '1');
-  // Prikaži modal sa uputama
-  const m = document.createElement('div');
-  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
-  m.innerHTML = `
-    <div style="background:#0f172a;border:2px solid #22c55e;border-radius:14px;padding:20px;max-width:340px;font-family:sans-serif;color:#e2e8f0;">
-      <div style="font-size:22px;margin-bottom:8px;">🔋 Kontinuirano GPS snimanje</div>
-      <div style="font-size:13px;color:#94a3b8;margin-bottom:14px;line-height:1.6;">
-        Da bi GPS radio dok šetaš i ekran se isključi, <b style="color:#fbbf24;">isključi optimizaciju baterije</b> za Chrome:
-      </div>
-      <div style="background:#1e293b;border-radius:8px;padding:12px;font-size:12px;line-height:2;margin-bottom:16px;">
-        <b style="color:#22c55e;">Postavke Android</b> →<br>
-        Aplikacije → Chrome →<br>
-        Baterija → <b style="color:#fbbf24;">Neograničeno</b>
-      </div>
-      <div style="font-size:11px;color:#475569;margin-bottom:14px;">
-        Bez toga Android može ugasiti GPS nakon ~1 min u pozadini.
-      </div>
-      <button onclick="this.closest('div[style]').remove()" style="width:100%;background:#22c55e;color:#000;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:bold;cursor:pointer;">✓ Razumijem</button>
-    </div>`;
-  document.body.appendChild(m);
+  // Privremeno isključeno — planirano rješenje kroz PWA/APK
 }
 
 document.addEventListener('visibilitychange', async () => {
