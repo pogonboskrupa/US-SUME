@@ -3227,6 +3227,9 @@ function togRec() {
     if (!gpsOn) toggleGPS();
     _acquireWakeLock();
     _checkBatteryOptHint();
+    _startGpsWatchdog();
+    _startSWHeartbeat();
+    _startRecNotification();
     _updFabVisibility();
   } else {
     stopRec();
@@ -3237,6 +3240,9 @@ function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
   _gpsBuf = []; _lastRecTime = 0;
   _releaseWakeLock();
+  _stopGpsWatchdog();
+  _stopSWHeartbeat();
+  _stopRecNotification();
   const b = document.getElementById('brec');
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
   const banner = document.getElementById('banner');
@@ -3485,6 +3491,8 @@ function _gpsBearing(la1, lo1, la2, lo2) {
 function onP(p) {
   const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
   lastP = {la, lo, al: al||0, ac};
+  _lastGpsFixTime = Date.now();
+  _gpsRestartCount = 0; // resetuj brojač grešaka nakon uspješnog fixa
   _addTragPoint(la, lo, al);
   _updMcdDist();
 
@@ -3570,8 +3578,107 @@ function onP(p) {
   _lastRecTime = Date.now();
   addPt(actI, sla, slo, sal);
 }
+let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
+let _gpsWatchdogTimer = null;
+let _heartbeatTimer   = null;
+let _gpsRestartCount  = 0;
+
+// ── GPS ERROR — auto-restart ─────────────────────────────────────────────────
 function onPE(e) {
   document.getElementById('gps-info').textContent = 'GPS: greška — ' + e.message;
+  if (recOn && gpsOn && _gpsRestartCount < 5) {
+    _gpsRestartCount++;
+    setTimeout(() => {
+      if (recOn && gpsOn) {
+        if (wid) navigator.geolocation.clearWatch(wid);
+        wid = navigator.geolocation.watchPosition(onP, onPE, {
+          enableHighAccuracy: true, maximumAge: 0, timeout: 20000
+        });
+      }
+    }, 3000);
+  }
+}
+
+// ── GPS WATCHDOG — detektuje zamrznut GPS i restartuje ga ───────────────────
+const GPS_WATCHDOG_TIMEOUT = 45000; // 45s bez fixa = zamrznut GPS
+
+function _startGpsWatchdog() {
+  _stopGpsWatchdog();
+  _lastGpsFixTime = Date.now();
+  _gpsRestartCount = 0;
+  _gpsWatchdogTimer = setInterval(() => {
+    if (!recOn) { _stopGpsWatchdog(); return; }
+    const elapsed = Date.now() - _lastGpsFixTime;
+    if (elapsed > GPS_WATCHDOG_TIMEOUT) {
+      // GPS zamrznut — restart
+      document.getElementById('gps-info').textContent = 'GPS: restart...';
+      if (wid) navigator.geolocation.clearWatch(wid);
+      wid = null;
+      setTimeout(() => {
+        if (recOn) {
+          wid = navigator.geolocation.watchPosition(onP, onPE, {
+            enableHighAccuracy: true, maximumAge: 0, timeout: 20000
+          });
+          _lastGpsFixTime = Date.now();
+        }
+      }, 1000);
+    }
+  }, 15000); // provjeri svakih 15s
+}
+
+function _stopGpsWatchdog() {
+  if (_gpsWatchdogTimer) { clearInterval(_gpsWatchdogTimer); _gpsWatchdogTimer = null; }
+}
+
+// ── SW HEARTBEAT — drži Service Worker budan tokom snimanja ─────────────────
+function _startSWHeartbeat() {
+  _stopSWHeartbeat();
+  _heartbeatTimer = setInterval(() => {
+    if (!recOn) { _stopSWHeartbeat(); return; }
+    const sw = navigator.serviceWorker?.controller;
+    if (sw) sw.postMessage({ type: 'gps-heartbeat' });
+  }, 25000); // svakih 25s
+}
+
+function _stopSWHeartbeat() {
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+}
+
+// ── SW NOTIFIKACIJA — Foreground Service ekvivalent ─────────────────────────
+function _startRecNotification() {
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'denied') return;
+  const _sendNotif = () => {
+    const sw = navigator.serviceWorker.controller;
+    if (!sw) return;
+    const v = actI !== null ? vlake[actI] : null;
+    sw.postMessage({
+      type: 'show-rec-notification',
+      nm:   v ? v.nm : '',
+      dist: v ? fmtL(calcL(v.pts)) : ''
+    });
+  };
+  if (Notification.permission === 'granted') {
+    _sendNotif();
+  } else {
+    Notification.requestPermission().then(perm => { if (perm === 'granted') _sendNotif(); });
+  }
+}
+
+function _stopRecNotification() {
+  const sw = navigator.serviceWorker?.controller;
+  if (sw) sw.postMessage({ type: 'hide-rec-notification' });
+}
+
+// ── PRIJEM AKCIJA IZ NOTIFIKACIJE ────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', evt => {
+    if (evt.data?.type === 'rec-action') {
+      if (evt.data.action === 'stop')  stopRec();
+      if (evt.data.action === 'pause') toggleRecPause();
+    }
+  });
 }
 
 function centerMap() {
@@ -3725,6 +3832,8 @@ function updBan() {
     // Live update dužine u status baru (bez rebuilda liste)
     const lenEl = document.getElementById('rsb-len');
     if (lenEl) lenEl.textContent = fmtL(calcL(v.pts));
+    // Osvježi SW notifikaciju svakih ~10 novih tačaka
+    if (v.pts.length % 10 === 0) _startRecNotification();
   }
 }
 function updOvl() {
