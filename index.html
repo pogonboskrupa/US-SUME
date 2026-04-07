@@ -451,6 +451,18 @@ select:focus { outline:none; border-color:#3b82f6; }
 .stat-val.yellow { color:#fbbf24; }
 .stat-val.blue   { color:#60a5fa; }
 
+/* STD tabela */
+.std-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px; }
+.std-row:last-child { border-bottom:none; }
+.std-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.std-nm   { color:#e2e8f0; font-weight:bold; min-width:52px; font-family:monospace; }
+.std-nm.krak { color:#94a3b8; padding-left:10px; }
+.std-formula { color:#475569; font-size:10px; flex:1; line-height:1.4; }
+.std-val  { color:#4ade80; font-weight:bold; font-family:monospace; white-space:nowrap; }
+.std-avg  { background:rgba(251,191,36,0.08); border-radius:6px; padding:8px 10px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; }
+.std-avg-lbl { font-size:11px; color:#94a3b8; line-height:1.5; }
+.std-avg-val { font-size:18px; font-weight:bold; color:#fbbf24; font-family:monospace; }
+
 /* Odjeli rekap */
 .orek-card {
   background:#0f172a; border:1px solid #1e293b;
@@ -1207,6 +1219,14 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div class="sec-t">📊 Rekap Projekta</div>
         <div class="stat-card" id="rekap-card">
           <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za rekap</div>
+        </div>
+      </div>
+
+      <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
+      <div class="sec">
+        <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
+        <div id="std-card">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za izračun STD</div>
         </div>
       </div>
 
@@ -4402,6 +4422,64 @@ chkMob(); window.addEventListener('resize',chkMob);
 // === UTILS ===
 function dst(la1,lo1,la2,lo2){const R=6371000,a=Math.sin((la2-la1)*Math.PI/360)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin((lo2-lo1)*Math.PI/360)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function calcL(pts){let s=0;for(let i=1;i<pts.length;i++)s+=dst(pts[i-1].la,pts[i-1].lo,pts[i].la,pts[i].lo);return s;}
+
+// Pronađi indeks točke na glavnoj vlaci najbliži raskrsnici (prvoj točki kraka)
+function _findJunctionIdx(mainPts, krakFirstPt) {
+  if (!krakFirstPt || mainPts.length === 0) return 0;
+  let minD = Infinity, idx = 0;
+  mainPts.forEach((p, i) => {
+    const d = dst(p.la, p.lo, krakFirstPt.la, krakFirstPt.lo);
+    if (d < minD) { minD = d; idx = i; }
+  });
+  return idx;
+}
+
+// Dužina od pts[0] (lager/put) do pts[jIdx] (raskrsnica)
+function _distToRoad(mainPts, jIdx) {
+  let d = 0;
+  for (let i = 1; i <= jIdx; i++)
+    d += dst(mainPts[i-1].la, mainPts[i-1].lo, mainPts[i].la, mainPts[i].lo);
+  return d;
+}
+
+// Izračun Srednje Transportne Distance Privlačenja
+function calcSTD(vlakeList) {
+  const mainVlake = vlakeList.filter(v => v.kr === 0 && v.pts.length >= 2);
+  const rows = [];
+  let totalDist = 0, count = 0;
+
+  mainVlake.forEach(main => {
+    const mainLen = calcL(main.pts);
+
+    // Glavna vlaka — STD = cijela dužina
+    rows.push({
+      nm: main.nm, color: main.color, type: 'main',
+      dist: mainLen,
+      formula: fmtL(mainLen)
+    });
+    totalDist += mainLen; count++;
+
+    // Kraci ove vlake
+    const kraci = vlakeList.filter(k =>
+      k.kr > 0 && k.nm.startsWith(main.nm + '.') && k.pts.length >= 2
+    );
+    kraci.forEach(krak => {
+      const krakLen  = calcL(krak.pts);
+      const jIdx     = _findJunctionIdx(main.pts, krak.pts[0]);
+      const toRoad   = _distToRoad(main.pts, jIdx);
+      const total    = krakLen + toRoad;
+      rows.push({
+        nm: krak.nm, color: krak.color, strana: krak.strana, type: 'krak',
+        dist: total, krakLen, toRoad,
+        formula: `${fmtL(krakLen)} + ${fmtL(toRoad)}`
+      });
+      totalDist += total; count++;
+    });
+  });
+
+  const avg = count > 0 ? Math.round(totalDist / count) : 0;
+  return { rows, avg, count, totalDist };
+}
 function fmtL(m){return m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(2)} km`;}
 
 // === KML EXPORT ===
@@ -4913,6 +4991,46 @@ function updProjStats() {
       <span class="stat-name">Gustoća mreže</span>
       <span class="stat-val blue">${gustoca}</span>
     </div>`;
+
+  // === STD PRIVLAČENJA ===
+  const stdEl = document.getElementById('std-card');
+  if (stdEl) {
+    const std = calcSTD(vlake);
+    if (std.count === 0) {
+      stdEl.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema vlaka za izračun STD</div>';
+    } else {
+      const stranaBadge = s => s === 'L'
+        ? `<span class="vkrak-badge-l" style="font-size:9px;padding:1px 3px;">L</span>`
+        : s === 'D'
+        ? `<span class="vkrak-badge-d" style="font-size:9px;padding:1px 3px;">D</span>`
+        : '';
+      const rowsHtml = std.rows.map(r => `
+        <div class="std-row">
+          <div class="std-dot" style="background:${r.color};${r.type==='krak'?'opacity:0.6':''}"></div>
+          <div class="std-nm ${r.type==='krak'?'krak':''}">${stranaBadge(r.strana)}${r.nm}</div>
+          <div class="std-formula">${r.type==='krak'
+            ? `${fmtL(r.krakLen)}&nbsp;<span style="color:#334155">+</span>&nbsp;${fmtL(r.toRoad)}`
+            : `<span style="color:#475569">cijela vlaka</span>`}</div>
+          <div class="std-val">${fmtL(r.dist)}</div>
+        </div>`).join('');
+
+      stdEl.innerHTML = `
+        <div style="font-size:10px;color:#475569;margin-bottom:8px;line-height:1.6;">
+          Krak = dužina kraka + dužina glavne vlake do lager/puta<br>
+          <span style="color:#334155;">Lager/put se računa od početka (🅿 tačke) vlake</span>
+        </div>
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;">
+          ${rowsHtml}
+        </div>
+        <div class="std-avg">
+          <div class="std-avg-lbl">
+            Srednja transportna<br>distanca privlačenja<br>
+            <span style="color:#475569;font-size:10px;">(${std.count} vlaka/krakova)</span>
+          </div>
+          <div class="std-avg-val">${fmtL(std.avg)}</div>
+        </div>`;
+    }
+  }
 
   rndKolege();
 }
