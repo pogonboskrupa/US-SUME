@@ -3463,14 +3463,24 @@ function stopGPS() {
 }
 
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
-// Šumski teren: signali često skaču, drveće blokira sателit — agresivniji filter
-const GPS_SMOOTH    = 7;  // prosjek zadnjih N pozicija
-const GPS_MIN_DIST  = 5;  // minimalni razmak između snimljenih tačaka (m)
-const GPS_MAX_ACC   = 15; // ignoriši fikseve lošije od 15m
-const GPS_MAX_JUMP  = 25; // maksimalni skok između dva uzastopna fikseva (m) — outlier
-const GPS_MAX_SPEED = 2.5;// maksimalna realna brzina hoda (m/s ≈ 9 km/h)
-let _gpsBuf       = [];   // kružni buffer za smoothing
-let _lastRecTime  = 0;    // timestamp zadnje snimljene tačke (za speed gate)
+const GPS_SMOOTH    = 5;   // prosjek zadnjih N pozicija (manji = brži odziv)
+const GPS_MIN_DIST  = 4;   // minimalni razmak između snimljenih tačaka (m)
+const GPS_MAX_ACC   = 12;  // ignoriši fikseve lošije od 12m
+const GPS_MAX_JUMP  = 18;  // maksimalni skok između dva uzastopna fikseva (m)
+const GPS_MAX_SPEED = 2.2; // maksimalna realna brzina hoda (m/s ≈ 8 km/h)
+const GPS_MAX_TURN  = 130; // maksimalni nagli zaokret (°) za mali pomak — bearing check
+let _gpsBuf       = [];    // kružni buffer za smoothing
+let _lastRecTime  = 0;     // timestamp zadnje snimljene tačke (za speed gate)
+
+// Bearing (smjer) između dvije GPS tačke u stepenima (0–360)
+function _gpsBearing(la1, lo1, la2, lo2) {
+  const dLo = (lo2 - lo1) * Math.PI / 180;
+  const lat1 = la1 * Math.PI / 180;
+  const lat2 = la2 * Math.PI / 180;
+  const y = Math.sin(dLo) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLo);
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
 
 function onP(p) {
   const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
@@ -3509,21 +3519,22 @@ function onP(p) {
   // 1. FILTER TAČNOSTI — odbaci loše fikseve
   if (ac > GPS_MAX_ACC) return;
 
-  // 2. FILTER OUTLIERA — odbaci GPS skok (drvo/zid blokiralo satelit)
+  // 2. FILTER OUTLIERA — odbaci GPS skok
   if (_gpsBuf.length > 0) {
     const prev = _gpsBuf[_gpsBuf.length - 1];
     if (dst(prev.la, prev.lo, la, lo) > GPS_MAX_JUMP) {
-      // Skok prevelik — očisti buffer i počni iznova
       _gpsBuf = []; _lastRecTime = 0;
       return;
     }
   }
 
-  // 3. BUFFER — dodaj u kružni buffer (čuva accuracy za ponderirani prosjek)
+  // 3. BUFFER — kružni buffer s accuracy
   _gpsBuf.push({la, lo, al: al||0, ac});
   if (_gpsBuf.length > GPS_SMOOTH) _gpsBuf.shift();
+  // Čekaj dok buffer nije napunjen — izbjegava lažni start
+  if (_gpsBuf.length < Math.min(3, GPS_SMOOTH)) return;
 
-  // 4. PONDERIRANI PROSJEK — bolji signal (manji ac) dobija veću težinu
+  // 4. PONDERIRANI PROSJEK (manji ac = bolji signal = veća težina)
   const totalW = _gpsBuf.reduce((s, pt) => s + 1 / pt.ac, 0);
   const sla = _gpsBuf.reduce((s, pt) => s + pt.la / pt.ac, 0) / totalW;
   const slo = _gpsBuf.reduce((s, pt) => s + pt.lo / pt.ac, 0) / totalW;
@@ -3531,17 +3542,28 @@ function onP(p) {
 
   const v = vlake[actI];
   if (v.pts.length > 0) {
-    const last   = v.pts[v.pts.length - 1];
-    const distM  = dst(last.la, last.lo, sla, slo);
+    const last  = v.pts[v.pts.length - 1];
+    const distM = dst(last.la, last.lo, sla, slo);
 
-    // 5. MIN RAZMAK — ne snimi ako smo premalo pomjerili
-    const minDist = Math.max(GPS_MIN_DIST, ac * 0.4);
+    // 5. MIN RAZMAK
+    const minDist = Math.max(GPS_MIN_DIST, ac * 0.35);
     if (distM < minDist) return;
 
-    // 6. SPEED GATE — odbaci ako implicira nerealno brzo kretanje
+    // 6. SPEED GATE
     const elapsed = (Date.now() - _lastRecTime) / 1000;
     if (_lastRecTime > 0 && elapsed > 0 && elapsed < 30) {
       if (distM / elapsed > GPS_MAX_SPEED) return;
+    }
+
+    // 7. BEARING CHECK — nagla promjena smjera uz mali pomak = GPS šum
+    if (v.pts.length >= 2) {
+      const p2 = v.pts[v.pts.length - 1];
+      const p1 = v.pts[v.pts.length - 2];
+      const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
+      const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
+      const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
+      // Ako zaokret >130° i pomak <15m — vjerovatno GPS šum, ne stvarni U-okret
+      if (turnDeg > GPS_MAX_TURN && distM < 15) return;
     }
   }
 
