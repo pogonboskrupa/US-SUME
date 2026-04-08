@@ -3469,12 +3469,12 @@ function stopGPS() {
 }
 
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
-const GPS_SMOOTH    = 5;   // prosjek zadnjih N pozicija (manji = brži odziv)
-const GPS_MIN_DIST  = 4;   // minimalni razmak između snimljenih tačaka (m)
+const GPS_SMOOTH    = 7;   // buffer za trimovani ponderirani prosjek (šuma: više = glađe)
+const GPS_MIN_DIST  = 3;   // minimalni razmak između snimljenih tačaka (m)
 const GPS_MAX_ACC   = 12;  // ignoriši fikseve lošije od 12m
-const GPS_MAX_JUMP  = 18;  // maksimalni skok između dva uzastopna fikseva (m)
+const GPS_MAX_JUMP  = 15;  // maksimalni skok između dva uzastopna fikseva (m)
 const GPS_MAX_SPEED = 2.2; // maksimalna realna brzina hoda (m/s ≈ 8 km/h)
-const GPS_MAX_TURN  = 130; // maksimalni nagli zaokret (°) za mali pomak — bearing check
+const GPS_MAX_TURN  = 110; // maksimalni nagli zaokret (°) za mali pomak — bearing check
 let _gpsBuf       = [];    // kružni buffer za smoothing
 let _lastRecTime  = 0;     // timestamp zadnje snimljene tačke (za speed gate)
 
@@ -3542,19 +3542,26 @@ function onP(p) {
   // Čekaj dok buffer nije napunjen — izbjegava lažni start
   if (_gpsBuf.length < Math.min(3, GPS_SMOOTH)) return;
 
-  // 4. PONDERIRANI PROSJEK (manji ac = bolji signal = veća težina)
-  const totalW = _gpsBuf.reduce((s, pt) => s + 1 / pt.ac, 0);
-  const sla = _gpsBuf.reduce((s, pt) => s + pt.la / pt.ac, 0) / totalW;
-  const slo = _gpsBuf.reduce((s, pt) => s + pt.lo / pt.ac, 0) / totalW;
-  const sal = _gpsBuf.reduce((s, pt) => s + pt.al / pt.ac, 0) / totalW;
+  // 4. TRIMOVANI PONDERIRANI PROSJEK
+  //    Ukloni najlošiji fiks iz buffera prije prosjeka — ključno za šumu (multipath)
+  let buf = _gpsBuf.slice();
+  if (buf.length >= 4) {
+    // Sortiraj po tačnosti, ukloni najlošiji (najviši ac = najgori signal)
+    buf = buf.slice().sort((a, b) => a.ac - b.ac);
+    buf.pop();
+  }
+  const totalW = buf.reduce((s, pt) => s + 1 / pt.ac, 0);
+  const sla = buf.reduce((s, pt) => s + pt.la / pt.ac, 0) / totalW;
+  const slo = buf.reduce((s, pt) => s + pt.lo / pt.ac, 0) / totalW;
+  const sal = buf.reduce((s, pt) => s + pt.al / pt.ac, 0) / totalW;
 
   const v = vlake[actI];
   if (v.pts.length > 0) {
     const last  = v.pts[v.pts.length - 1];
     const distM = dst(last.la, last.lo, sla, slo);
 
-    // 5. MIN RAZMAK
-    const minDist = Math.max(GPS_MIN_DIST, ac * 0.35);
+    // 5. MIN RAZMAK (adaptivno prema tačnosti)
+    const minDist = Math.max(GPS_MIN_DIST, ac * 0.4);
     if (distM < minDist) return;
 
     // 6. SPEED GATE
@@ -3563,15 +3570,15 @@ function onP(p) {
       if (distM / elapsed > GPS_MAX_SPEED) return;
     }
 
-    // 7. BEARING CHECK — nagla promjena smjera uz mali pomak = GPS šum
+    // 7. BEARING CHECK — nagla promjena smjera uz mali pomak = GPS šum (multipath)
     if (v.pts.length >= 2) {
       const p2 = v.pts[v.pts.length - 1];
       const p1 = v.pts[v.pts.length - 2];
       const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
       const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
       const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
-      // Ako zaokret >130° i pomak <15m — vjerovatno GPS šum, ne stvarni U-okret
-      if (turnDeg > GPS_MAX_TURN && distM < 15) return;
+      // Zaokret >110° uz pomak <12m — GPS odboj od stabla, ne stvarni U-okret
+      if (turnDeg > GPS_MAX_TURN && distM < 12) return;
     }
   }
 
