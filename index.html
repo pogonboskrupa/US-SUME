@@ -3169,6 +3169,36 @@ function _updRecStatusBar() {
 // ─── WAKE LOCK — sprečava gašenje ekrana tokom snimanja ──────────────────────
 let _wakeLock = null;
 
+// ─── SILENT AUDIO — sprečava suspenziju taba kad se izađe iz browsera ────────
+// Android Chrome ne suspenduje tab koji ima aktivan AudioContext s outputom.
+let _bgAudioCtx = null;
+let _bgAudioSrc = null;
+
+function _startBgAudio() {
+  if (_bgAudioCtx) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    _bgAudioCtx = new AC();
+    // 2-sekundni tihi buffer u petlji (0.001 gain = nečujno, ali ne 0 — browser bi ga optimizovao)
+    const buf = _bgAudioCtx.createBuffer(1, _bgAudioCtx.sampleRate * 2, _bgAudioCtx.sampleRate);
+    _bgAudioSrc = _bgAudioCtx.createBufferSource();
+    _bgAudioSrc.buffer = buf;
+    _bgAudioSrc.loop = true;
+    const gain = _bgAudioCtx.createGain();
+    gain.gain.value = 0.001;
+    _bgAudioSrc.connect(gain);
+    gain.connect(_bgAudioCtx.destination);
+    _bgAudioSrc.start();
+  } catch(e) {}
+}
+
+function _stopBgAudio() {
+  try { _bgAudioSrc?.stop(); } catch(e) {}
+  try { _bgAudioCtx?.close(); } catch(e) {}
+  _bgAudioCtx = null; _bgAudioSrc = null;
+}
+
 async function _acquireWakeLock() {
   if (!('wakeLock' in navigator)) return;
   try {
@@ -3225,6 +3255,7 @@ function togRec() {
     _updRecStatusBar();
     if (!gpsOn) toggleGPS();
     _acquireWakeLock();
+    _startBgAudio();
     _checkBatteryOptHint();
     _startGpsWatchdog();
     _startSWHeartbeat();
@@ -3239,6 +3270,7 @@ function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
   _gpsBuf = []; _lastRecTime = 0;
   _releaseWakeLock();
+  _stopBgAudio();
   _stopGpsWatchdog();
   _stopSWHeartbeat();
   _stopRecNotification();
@@ -3696,6 +3728,14 @@ if ('serviceWorker' in navigator) {
     if (evt.data?.type === 'rec-action') {
       if (evt.data.action === 'stop')  stopRec();
       if (evt.data.action === 'pause') toggleRecPause();
+    }
+    // SW šalje ping svakih 20s tokom snimanja — restartuj GPS ako se ugasio
+    if (evt.data?.type === 'sw-ping' && recOn && gpsOn && !wid) {
+      wid = navigator.geolocation.watchPosition(onP, onPE, {
+        enableHighAccuracy: true, maximumAge: 0, timeout: 20000
+      });
+      _lastGpsFixTime = Date.now();
+      document.getElementById('gps-info').textContent = 'GPS: restart od SW...';
     }
   });
 }
