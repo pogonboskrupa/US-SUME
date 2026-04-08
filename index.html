@@ -3278,9 +3278,11 @@ function toggleRecPause() {
 }
 
 // Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
-function _nextKrakNm(parentNm) {
-  let n = 1;
-  while (vlake.find(v => v.nm === parentNm + '.' + n)) n++;
+// Neparne (1,3,5...) = Lijevi ('L'), Parne (2,4,6...) = Desni ('D')
+function _nextKrakNm(parentNm, strana) {
+  let n = strana === 'D' ? 2 : 1; // D kreće od 2, L i bez strane od 1
+  const step = strana ? 2 : 1;    // s stranom preskačemo po 2, bez slobodan redosljed
+  while (vlake.find(v => v.nm === parentNm + '.' + n)) n += step;
   return parentNm + '.' + n;
 }
 
@@ -3302,7 +3304,7 @@ function noviKrakStrana(strana) {
   const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
   if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
 
-  const krakNm = _nextKrakNm(parentV.nm);
+  const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
   const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
