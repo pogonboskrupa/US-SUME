@@ -3117,23 +3117,22 @@ function _updBanner() {
   const btnKrakD   = document.getElementById('btn-krak-d');
   const btnPicker  = document.getElementById('btn-krak-picker');
   bnEl.textContent = v.nm;
-  const onKrak = _recParentIdx !== null && vlake[_recParentIdx];
-  if (onKrak) {
+  // L/D/Picker uvijek vidljivi — krak se može dodati na bilo kojoj vlaki/kraku
+  btnKrakL.style.display = '';
+  btnKrakD.style.display = '';
+  btnPicker.style.display = '';
+  const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
+  if (hasParent) {
     const par = vlake[_recParentIdx];
     const strand = v.strana === 'L' ? 'Lijevi krak' : v.strana === 'D' ? 'Desni krak' : 'Krak';
     bnParentLbl.textContent = strand + ' · ' + v.nm;
     bnParent.textContent = par.nm;
     parentRow.style.display = 'flex';
     btnNazad.style.display = '';
-    btnKrakL.style.display = 'none';
-    btnKrakD.style.display = 'none';
-    btnPicker.style.display = 'none';
+    btnNazad.textContent = '↩ ' + par.nm;
   } else {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
-    btnKrakL.style.display = '';
-    btnKrakD.style.display = '';
-    btnPicker.style.display = '';
   }
   _updRecStatusBar();
 }
@@ -3278,11 +3277,19 @@ function toggleRecPause() {
   _updRecStatusBar();
 }
 
-// Generiši sljedeće ime kraka: T1.1, T1.2, T3.5...
+// Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
 function _nextKrakNm(parentNm) {
   let n = 1;
   while (vlake.find(v => v.nm === parentNm + '.' + n)) n++;
   return parentNm + '.' + n;
+}
+
+// Pronađi indeks roditeljske vlake na osnovu imenskog prefiksa
+function _parentOf(v) {
+  const parts = v.nm.split('.');
+  if (parts.length <= 1) return -1;
+  const parentNm = parts.slice(0, -1).join('.');
+  return vlake.findIndex(x => x.nm === parentNm);
 }
 
 // Direktno kreiraj novi krak bez pickera
@@ -3301,7 +3308,7 @@ function noviKrakStrana(strana) {
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
-  const krak = { nm: krakNm, br: parentV.br, kr: 1, strana: strana || null, color, lager: '', pts: [], poly,
+  const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
                  wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
                  updatedAt: new Date().toISOString() };
   vlake.push(krak);
@@ -3395,8 +3402,11 @@ function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
   const krakIdx = actI;
   if (krakIdx !== null) updateVlakaLabel(krakIdx);
-  actI = _recParentIdx;
-  _recParentIdx = null;
+  const newActiveIdx = _recParentIdx;
+  // Pronađi djeda — roditelja roditelja (za dublje gniježđenje)
+  const grandparentI = _parentOf(vlake[newActiveIdx]);
+  actI = newActiveIdx;
+  _recParentIdx = grandparentI >= 0 ? grandparentI : null;
   _gpsBuf = []; _lastRecTime = 0;
   selI(actI);
 
@@ -3866,10 +3876,12 @@ function showVlakaOnMap(i) {
   zmV(i);
 }
 
-function _renderVlakaRow(el, v, i, isKrak) {
+function _renderVlakaRow(el, v, i, depth) {
   const d   = calcL(v.pts);
   const row = document.createElement('div');
+  const isKrak = depth > 0;
   row.className = 'vrow' + (i === actI ? ' act' : '') + (isKrak ? ' vrow-krak' : '');
+  if (depth > 1) row.style.marginLeft = (depth * 14) + 'px';
   const lagerInfo    = v.lager ? ' · ✓ lager' : '';
   const isRecThis    = recOn && i === actI;
   const isPausedPar  = recOn && i === _recParentIdx;
@@ -3914,26 +3926,18 @@ function rndList() {
   document.getElementById('vc').textContent=vlake.length;
   el.innerHTML=''; nv.style.display=vlake.length===0?'block':'none';
 
-  // Grupiraj: glavne vlake (kr===0) i njihovi kraci (kr>0)
+  // Rekurzivno renderuj: glavna vlaka → direktni kraci → njihovi pod-kraci...
   const rendered = new Set();
-
-  vlake.forEach((v,i) => {
+  function renderWithChildren(v, i, depth) {
     if (rendered.has(i)) return;
     rendered.add(i);
-
-    const isMain = v.kr === 0;
-    _renderVlakaRow(el, v, i, false);
-
-    // Prikaži krake uvučeno ispod glavne vlake
-    if (isMain) {
-      vlake.forEach((k, ki) => {
-        if (k.kr > 0 && k.nm.startsWith(v.nm + '.')) {
-          rendered.add(ki);
-          _renderVlakaRow(el, k, ki, true);
-        }
-      });
-    }
-  });
+    _renderVlakaRow(el, v, i, depth);
+    vlake.forEach((k, ki) => {
+      const kParentNm = k.nm.split('.').slice(0, -1).join('.');
+      if (kParentNm === v.nm) renderWithChildren(k, ki, depth + 1);
+    });
+  }
+  vlake.forEach((v, i) => { if (v.kr === 0) renderWithChildren(v, i, 0); });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
   clearTimeout(rndList._projTimer);
@@ -4556,40 +4560,44 @@ function _distToRoad(mainPts, jIdx) {
   return d;
 }
 
+// Rekurzivno izračunaj ukupnu dužinu od početka kraka do kamionskog puta/lagera
+// Za T1.2.1: dužina T1.2.1 + (dužina T1.2 do spoja s T1.2.1) + (dužina T1 do spoja s T1.2)
+function _distToMainRoad(vlakeList, krak) {
+  const parts = krak.nm.split('.');
+  if (parts.length <= 1) return 0;
+  const parentNm = parts.slice(0, -1).join('.');
+  const parent = vlakeList.find(v => v.nm === parentNm);
+  if (!parent || parent.pts.length < 2) return 0;
+  const jIdx = _findJunctionIdx(parent.pts, krak.pts[0]);
+  return _distToRoad(parent.pts, jIdx) + _distToMainRoad(vlakeList, parent);
+}
+
 // Izračun Srednje Transportne Distance Privlačenja
 function calcSTD(vlakeList) {
-  const mainVlake = vlakeList.filter(v => v.kr === 0 && v.pts.length >= 2);
   const rows = [];
   let totalDist = 0, count = 0;
 
-  mainVlake.forEach(main => {
-    const mainLen = calcL(main.pts);
-
-    // Glavna vlaka — STD = cijela dužina
-    rows.push({
-      nm: main.nm, color: main.color, type: 'main',
-      dist: mainLen,
-      formula: fmtL(mainLen)
+  // Rekurzivno renderuj u hijerarhijskom redoslijedu (kao rndList)
+  function addRows(parentNm, depth) {
+    vlakeList.forEach(v => {
+      const vParentNm = v.nm.split('.').slice(0, -1).join('.');
+      if (vParentNm !== parentNm || v.pts.length < 2) return;
+      const vLen = calcL(v.pts);
+      if (v.kr === 0) {
+        rows.push({ nm: v.nm, color: v.color, type: 'main', dist: vLen, depth: 0, formula: fmtL(vLen) });
+        totalDist += vLen; count++;
+        addRows(v.nm, 1);
+      } else {
+        const toRoad = _distToMainRoad(vlakeList, v);
+        const total  = vLen + toRoad;
+        rows.push({ nm: v.nm, color: v.color, strana: v.strana, type: 'krak', depth,
+                    dist: total, krakLen: vLen, toRoad, formula: `${fmtL(vLen)} + ${fmtL(toRoad)}` });
+        totalDist += total; count++;
+        addRows(v.nm, depth + 1);
+      }
     });
-    totalDist += mainLen; count++;
-
-    // Kraci ove vlake
-    const kraci = vlakeList.filter(k =>
-      k.kr > 0 && k.nm.startsWith(main.nm + '.') && k.pts.length >= 2
-    );
-    kraci.forEach(krak => {
-      const krakLen  = calcL(krak.pts);
-      const jIdx     = _findJunctionIdx(main.pts, krak.pts[0]);
-      const toRoad   = _distToRoad(main.pts, jIdx);
-      const total    = krakLen + toRoad;
-      rows.push({
-        nm: krak.nm, color: krak.color, strana: krak.strana, type: 'krak',
-        dist: total, krakLen, toRoad,
-        formula: `${fmtL(krakLen)} + ${fmtL(toRoad)}`
-      });
-      totalDist += total; count++;
-    });
-  });
+  }
+  addRows('', 0); // počni od korijena (glavne vlake čiji parentNm je '')
 
   const avg = count > 0 ? Math.round(totalDist / count) : 0;
   return { rows, avg, count, totalDist };
@@ -5119,7 +5127,7 @@ function updProjStats() {
         ? `<span class="vkrak-badge-d" style="font-size:9px;padding:1px 3px;">D</span>`
         : '';
       const rowsHtml = std.rows.map(r => `
-        <div class="std-row">
+        <div class="std-row" style="${r.depth>0?`padding-left:${r.depth*10}px`:``}">
           <div class="std-dot" style="background:${r.color};${r.type==='krak'?'opacity:0.6':''}"></div>
           <div class="std-nm ${r.type==='krak'?'krak':''}">${stranaBadge(r.strana)}${r.nm}</div>
           <div class="std-formula">${r.type==='krak'
@@ -5130,8 +5138,8 @@ function updProjStats() {
 
       stdEl.innerHTML = `
         <div style="font-size:10px;color:#475569;margin-bottom:8px;line-height:1.6;">
-          Krak = dužina kraka + dužina glavne vlake do lager/puta<br>
-          <span style="color:#334155;">Lager/put se računa od početka (🅿 tačke) vlake</span>
+          Krak = dužina kraka + dužina nadređenih vlaka/krakova do lager/puta<br>
+          <span style="color:#334155;">Lager/put se računa od početka (🅿 tačke) glavne vlake</span>
         </div>
         <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;">
           ${rowsHtml}
