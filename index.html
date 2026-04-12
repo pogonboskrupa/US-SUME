@@ -244,55 +244,49 @@ input:focus { outline:none; border-color:#3b82f6; }
 /* MAP */
 #map { flex:1; position:relative; }
 
-/* Banner */
-#banner {
+/* ═══ ZAJEDNIČKI BANNER STIL ═══ */
+#rec-banner, #draw-banner {
   position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
-  background:rgba(8,14,28,0.97); border:2px solid #fbbf24;
-  border-radius:14px; padding:0;
   display:none; flex-direction:column;
-  z-index:500; font-family:monospace; white-space:nowrap;
-  box-shadow:0 6px 28px rgba(0,0,0,0.75);
+  z-index:500; font-family:monospace;
   max-width:98vw; min-width:280px; overflow:hidden;
+  border-radius:14px; box-shadow:0 6px 28px rgba(0,0,0,0.75);
 }
-#banner.show { display:flex; }
-#banner.paused { border-color:#f59e0b; }
-/* Red 1 — info */
-#banner-row1 {
-  display:flex; align-items:center; gap:0;
-  padding:9px 13px 7px 13px; border-bottom:1px solid rgba(255,255,255,0.07);
-}
-/* Red s imenom roditelja (krak mode) */
-#banner-parent-row {
-  display:none; align-items:center; gap:6px;
-  padding:3px 13px 5px 13px;
-  font-size:11px; color:#64748b;
-  border-bottom:1px solid rgba(255,255,255,0.05);
-}
-/* Red 2 — dugmad */
-#banner-row2 { display:flex; align-items:stretch; gap:0; min-height:44px; }
-.rdot {
-  width:9px; height:9px; border-radius:50%; background:#ef4444;
-  animation:bl 1s infinite; flex-shrink:0; margin-right:8px; margin-top:3px;
-}
-#banner.paused .rdot { background:#f59e0b; animation:none; }
-#bn { font-size:15px; font-weight:bold; color:#fbbf24; max-width:130px; overflow:hidden; text-overflow:ellipsis; }
-#bl2 { font-size:12px; color:#64748b; margin-left:auto; padding-left:10px; }
-.brec-sep { width:1px; background:#1e3a5f; height:22px; margin:0 1px; flex-shrink:0; }
-.brec-btn {
-  border:none; border-top:none; cursor:pointer;
-  font-size:13px; font-weight:bold; padding:8px 12px;
-  transition:background 0.15s; white-space:nowrap; flex-shrink:0; flex:1;
-  border-right:1px solid rgba(255,255,255,0.07);
-}
-.brec-btn:last-child { border-right:none; }
-.brec-btn:active { filter:brightness(1.3); }
-.brec-btn.pause { background:#1c1400; color:#f59e0b; }
-.brec-btn.flip  { background:#150d2e; color:#a78bfa; }
-.brec-btn.stop  { background:#2d0a0a; color:#f87171; }
-.brec-btn.krak  { background:#0ea5e9; color:#fff; }
-.brec-btn.krak-d{ background:#f97316; color:#fff; }
-.brec-btn.back  { background:#334155; color:#94a3b8; }
-.brec-btn.krak-picker-btn { background:#1e3a5f; color:#94a3b8; padding:6px 8px; flex:0 0 auto; }
+#rec-banner.show, #draw-banner.show { display:flex; }
+
+/* ═══ REC BANNER (crveno/žuta) ═══ */
+#rec-banner { background:rgba(8,14,28,0.97); border:2px solid #fbbf24; }
+#rec-banner.paused { border-color:#f59e0b; }
+#rec-banner.paused .rdot { background:#f59e0b; animation:none; }
+#rec-row1 { display:flex; align-items:center; gap:0; padding:9px 13px 7px; border-bottom:1px solid rgba(255,255,255,0.07); }
+#rec-nm { font-size:15px; font-weight:800; color:#fbbf24; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#rec-stats { font-size:12px; color:#94a3b8; margin-left:auto; padding-left:10px; white-space:nowrap; }
+#rec-parent-row { display:none; align-items:center; gap:6px; padding:3px 13px 5px; font-size:11px; color:#64748b; border-bottom:1px solid rgba(255,255,255,0.05); }
+#rec-row2 { display:flex; align-items:stretch; min-height:48px; }
+.rdot { width:9px; height:9px; border-radius:50%; background:#ef4444; animation:bl 1s infinite; flex-shrink:0; margin-right:8px; margin-top:3px; }
+.rb { border:none; cursor:pointer; font-size:13px; font-weight:bold; padding:10px 12px; flex:1; border-right:1px solid rgba(255,255,255,0.07); white-space:nowrap; transition:background 0.15s; }
+.rb:last-child { border-right:none; }
+.rb:active { filter:brightness(1.3); }
+.rb.pause  { background:#1c1400; color:#f59e0b; }
+.rb.stop   { background:#2d0a0a; color:#f87171; flex:0 0 auto; padding:10px 16px; }
+.rb.krak-l { background:#0c2233; color:#38bdf8; }
+.rb.krak-d { background:#231200; color:#fb923c; }
+.rb.picker { background:#0f172a; color:#64748b; flex:0 0 auto; padding:10px; }
+.rb.back   { background:#1a0a00; color:#fb923c; }
+
+/* ═══ DRAW BANNER (zelena) ═══ */
+#draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
+#draw-row1 { display:flex; align-items:center; gap:8px; padding:9px 13px 7px; border-bottom:1px solid rgba(74,222,128,0.15); }
+#draw-nm { font-size:15px; font-weight:800; color:#4ade80; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#draw-stats { font-size:12px; color:#64748b; margin-left:auto; white-space:nowrap; }
+#draw-row2 { display:flex; align-items:stretch; min-height:48px; }
+.db { border:none; cursor:pointer; font-size:13px; font-weight:bold; padding:10px 14px; flex:1; border-right:1px solid rgba(74,222,128,0.1); white-space:nowrap; transition:background 0.15s; }
+.db:last-child { border-right:none; }
+.db:active { filter:brightness(1.3); }
+.db.undo { background:#150d2e; color:#a78bfa; }
+.db.drag { background:#0f172a; color:#64748b; }
+.db.drag.active { background:#231200; color:#f97316; }
+.db.done { background:#052e16; color:#4ade80; }
 
 /* Vlake hijerarhija */
 .vrow-krak { margin-left:14px; border-left:2px solid #1e3a5f; }
@@ -909,7 +903,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
-  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #banner, #modal, #print-modal,
+  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #rec-banner, #draw-banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
@@ -1290,37 +1284,44 @@ select:focus { outline:none; border-color:#3b82f6; }
           <span style="color:#475569;font-size:10px;">X (N)</span> <span id="omgi-x" style="color:#38bdf8;font-weight:700;font-size:13px;">—</span>
         </div>
       </div>
-      <div id="banner">
-        <!-- Red 1: ime vlake + dužina -->
-        <div id="banner-row1">
+      <!-- ═══ GPS SNIMANJE BANNER ═══ -->
+      <div id="rec-banner">
+        <div id="rec-row1">
           <div class="rdot"></div>
-          <div id="bn">T1</div>
-          <div id="bl2">0 m</div>
+          <div id="rec-nm">T1</div>
+          <div id="rec-stats">0 m · 0 tač.</div>
           <div id="wakelock-icon" title="Ekran ostaje uključen" style="display:none;font-size:13px;margin-left:6px;opacity:0.6;">🔒</div>
         </div>
-        <!-- Upozorenje kad app ide u pozadinu -->
         <div id="bg-warning" style="display:none;background:#7c2d12;padding:4px 13px;font-size:11px;color:#fed7aa;text-align:center;">
           ⚠ App u pozadini — GPS može biti pauziran
         </div>
-        <!-- Red 1b: krak info (roditeljska vlaka) — vidljiv samo na kraku -->
-        <div id="banner-parent-row">
+        <div id="rec-parent-row">
           <span style="color:#f97316;">⊕</span>
-          <span id="bn-parent-label">krak</span>
+          <span id="rec-parent-label">krak</span>
           <span style="margin-left:auto;">← vrati se na</span>
-          <span id="bn-parent" style="color:#fbbf24;font-weight:bold;margin-left:4px;"></span>
+          <span id="rec-parent-nm" style="color:#fbbf24;font-weight:bold;margin-left:4px;"></span>
         </div>
-        <!-- Red 2: dugmad GPS snimanja -->
-        <div id="banner-row2">
-          <button class="brec-btn pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸ Pauza</button>
-          <button class="brec-btn krak"   id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="background:#0c2233;color:#38bdf8;">⊕ Lijevi</button>
-          <button class="brec-btn krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="background:#231200;color:#fb923c;">⊕ Desni</button>
-          <button class="brec-btn krak-picker-btn" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak" style="background:#0f172a;color:#64748b;flex:0 0 auto;padding:8px 10px;">↪</button>
-          <button class="brec-btn back" id="btn-nazad-roditelj" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;background:#1a0a00;color:#fb923c;flex:2;">↩ Vrati na glavnu</button>
-          <button class="brec-btn stop" onclick="stopRec()" title="Zaustavi snimanje" style="flex:0 0 auto;padding:8px 14px;">⏹</button>
-          <!-- Crtanje dugmad — vidljiva samo u addline modu -->
-          <button class="brec-btn" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku" style="display:none;background:#150d2e;color:#a78bfa;">↩ Undo</button>
-          <button class="brec-btn" id="btn-draw-drag" onclick="toggleDrawDrag()" title="Vuci modus" style="display:none;background:#0f172a;color:#64748b;">✍ Vuci</button>
-          <button class="brec-btn" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje" style="display:none;background:#052e16;color:#4ade80;">✓ Završi</button>
+        <div id="rec-row2">
+          <button class="rb pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
+          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak">⊕ L</button>
+          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak">⊕ D</button>
+          <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
+          <button class="rb back"   id="btn-nazad" onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
+          <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
+        </div>
+      </div>
+
+      <!-- ═══ CRTANJE BANNER ═══ -->
+      <div id="draw-banner">
+        <div id="draw-row1">
+          <span style="color:#4ade80;font-size:16px;">✏</span>
+          <div id="draw-nm">T1</div>
+          <div id="draw-stats">0 m · 0 tač.</div>
+        </div>
+        <div id="draw-row2">
+          <button class="db undo" id="btn-draw-undo" onclick="mtUndo()" title="Poništi zadnju tačku">↩ Undo</button>
+          <button class="db drag" id="btn-draw-drag" onclick="toggleDrawDrag()" title="Vuci modus">✍ Vuci</button>
+          <button class="db done" id="btn-draw-done" onclick="stopAddLine()" title="Završi crtanje">✓ Završi</button>
         </div>
       </div>
 
@@ -2516,7 +2517,7 @@ TL['⛰ Topo'].addTo(map);  // Default: TOPO
 L.control.layers(TL,{},{position:'topright'}).addTo(map);
 
 // Prevent overlay and banner from passing events to Leaflet map
-['ovl','banner'].forEach(id => {
+['ovl','rec-banner','draw-banner'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     L.DomEvent.disableClickPropagation(el);
@@ -2710,7 +2711,7 @@ function setActiveTool(tool) {
 
 function mtSelect() {
   setActiveTool('select');
-  document.getElementById('banner').classList.remove('show');
+  document.getElementById('draw-banner').classList.remove('show');
 }
 
 function mtAddLine() {
@@ -2722,21 +2723,9 @@ function mtAddLine() {
   setActiveTool('addline');
   map.doubleClickZoom.disable();
   drawUndoStack = [];
-  document.getElementById('banner').classList.add('show');
-  document.getElementById('banner').classList.remove('paused');
-  document.getElementById('bn').textContent = '✏ Crtanje: ' + vlake[actI].nm;
-  document.getElementById('bl2').textContent = 'Tapni zelenu tačku ili kartu · ✓ Završi';
-  document.getElementById('banner-parent-row').style.display = 'none';
-  // Sakrij GPS dugmad, prikaži draw dugmad
-  document.getElementById('btn-pause').style.display = 'none';
-  document.getElementById('btn-krak-l').style.display = 'none';
-  document.getElementById('btn-krak-d').style.display = 'none';
-  document.getElementById('btn-krak-picker').style.display = 'none';
-  document.getElementById('btn-nazad-roditelj').style.display = 'none';
-  document.getElementById('btn-flip-dir').style.display = 'none';
-  document.getElementById('btn-draw-undo').style.display = '';
-  document.getElementById('btn-draw-drag').style.display = '';
-  document.getElementById('btn-draw-done').style.display = '';
+  document.getElementById('draw-banner').classList.add('show');
+  document.getElementById('draw-nm').textContent = vlake[actI].nm;
+  document.getElementById('draw-stats').textContent = '0 m · 0 tač.';
   // Aktiviraj interaktivnu centralnu tačku
   document.getElementById('main').classList.add('drawing-active');
   document.getElementById('map-center-dot').onclick = _mcdClick;
@@ -2769,14 +2758,13 @@ function toggleDrawDrag() {
   if (!_drawDragOn) {
     _drawDragOn = true;
     _drawDragLastPt = null;
-    document.getElementById('btn-draw-drag').style.background = '#f97316';
-    document.getElementById('btn-draw-drag').textContent = '✍ Stop';
+    const btn = document.getElementById('btn-draw-drag');
+    btn.classList.add('active');
+    btn.textContent = '✍ Stop';
     document.getElementById('main').classList.add('draw-drag-on');
-    document.getElementById('bl2').textContent = 'Vuci modus — pomjeri mapu za crtanje';
     map.on('move', _onMapMoveDraw);
   } else {
     _stopDrawDrag();
-    document.getElementById('bl2').textContent = 'Tapni zelenu tačku ili kartu · ✓ Završi';
   }
 }
 
@@ -2786,7 +2774,7 @@ function _stopDrawDrag() {
   _drawDragLastPt = null;
   map.off('move', _onMapMoveDraw);
   const btn = document.getElementById('btn-draw-drag');
-  if (btn) { btn.style.background = '#374151'; btn.textContent = '✍ Vuci'; }
+  if (btn) { btn.classList.remove('active'); btn.textContent = '✍ Vuci'; }
   document.getElementById('main').classList.remove('draw-drag-on');
 }
 
@@ -2805,16 +2793,7 @@ function _stopAddLine(fromUser) {
   map.doubleClickZoom.enable();
   if (drawPreviewLine) { map.removeLayer(drawPreviewLine); drawPreviewLine = null; }
   hideSnapRing(); snapTarget = null;
-  document.getElementById('banner').classList.remove('show');
-  // Vrati GPS dugmad, sakrij draw dugmad
-  document.getElementById('btn-pause').style.display = '';
-  document.getElementById('btn-krak-l').style.display = '';
-  document.getElementById('btn-krak-d').style.display = '';
-  document.getElementById('btn-krak-picker').style.display = '';
-  document.getElementById('btn-flip-dir').style.display = '';
-  document.getElementById('btn-draw-undo').style.display = 'none';
-  document.getElementById('btn-draw-drag').style.display = 'none';
-  document.getElementById('btn-draw-done').style.display = 'none';
+  document.getElementById('draw-banner').classList.remove('show');
   // Deaktiviraj draw-drag modus i interaktivnu centralnu tačku
   _stopDrawDrag();
   document.getElementById('main').classList.remove('drawing-active');
@@ -2841,9 +2820,10 @@ function mtEditLine() {
   setActiveTool('edit');
   editOn = true;
   map.doubleClickZoom.disable();
-  document.getElementById('banner').classList.add('show');
-  document.getElementById('bn').textContent = vlake[actI].nm + ' 🔧';
-  document.getElementById('bl2').textContent = 'Drag = pomjeri · Klik na segment = nova tačka · Desni klik = briši · ESC = izlaz';
+  document.getElementById('draw-banner').classList.add('show');
+  document.getElementById('draw-nm').textContent = vlake[actI].nm + ' 🔧';
+  document.getElementById('draw-stats').textContent = 'Drag · Klik · ESC';
+  document.getElementById('draw-row2').style.display = 'none';
   buildEditHandles(actI);
   showToast('🔧 Edit — povuci čvor, desni klik = obriši, klik na segment = dodaj');
 }
@@ -2853,7 +2833,8 @@ function _stopEdit(fromUser) {
   mergeMode = false; mergeFirst = null;
   clearEditHandles();
   map.doubleClickZoom.enable();
-  document.getElementById('banner').classList.remove('show');
+  document.getElementById('draw-banner').classList.remove('show');
+  document.getElementById('draw-row2').style.display = '';
   document.getElementById('merge-sec').style.display = 'none';
   if (snapRingMk) { map.removeLayer(snapRingMk); snapRingMk = null; }
   if (fromUser) {
@@ -2870,9 +2851,10 @@ function mtDeleteNode() {
   editOn = true;
   map.doubleClickZoom.disable();
   buildEditHandles(actI);
-  document.getElementById('banner').classList.add('show');
-  document.getElementById('bn').textContent = vlake[actI].nm + ' ✂';
-  document.getElementById('bl2').textContent = 'Klikni na čvor (krug) za brisanje · ESC = izlaz';
+  document.getElementById('draw-banner').classList.add('show');
+  document.getElementById('draw-nm').textContent = vlake[actI].nm + ' ✂';
+  document.getElementById('draw-stats').textContent = 'Klikni čvor · ESC';
+  document.getElementById('draw-row2').style.display = 'none';
   showToast('✂ Klikni na čvor (bijeli krug) da ga obrišeš');
 }
 
@@ -2884,6 +2866,7 @@ function mtUndo() {
   syncPoly(actI);
   updateVlakaLabel(actI);
   updOvl(); rndList();
+  _updDrawStats();
   showToast('↩ Poništena zadnja tačka');
   // reset preview
   if (drawPreviewLine) { map.removeLayer(drawPreviewLine); drawPreviewLine = null; }
@@ -3107,26 +3090,16 @@ function selI(i) {
 
 function _updBanner() {
   if (!recOn || actI === null) return;
-  const v          = vlake[actI];
-  const bnEl       = document.getElementById('bn');
-  const parentRow  = document.getElementById('banner-parent-row');
-  const bnParent   = document.getElementById('bn-parent');
-  const bnParentLbl= document.getElementById('bn-parent-label');
-  const btnNazad   = document.getElementById('btn-nazad-roditelj');
-  const btnKrakL   = document.getElementById('btn-krak-l');
-  const btnKrakD   = document.getElementById('btn-krak-d');
-  const btnPicker  = document.getElementById('btn-krak-picker');
-  bnEl.textContent = v.nm;
-  // L/D/Picker uvijek vidljivi — krak se može dodati na bilo kojoj vlaki/kraku
-  btnKrakL.style.display = '';
-  btnKrakD.style.display = '';
-  btnPicker.style.display = '';
+  const v = vlake[actI];
+  document.getElementById('rec-nm').textContent = v.nm;
+  const parentRow = document.getElementById('rec-parent-row');
+  const btnNazad  = document.getElementById('btn-nazad');
   const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
   if (hasParent) {
     const par = vlake[_recParentIdx];
     const strand = v.strana === 'L' ? 'Lijevi krak' : v.strana === 'D' ? 'Desni krak' : 'Krak';
-    bnParentLbl.textContent = strand + ' · ' + v.nm;
-    bnParent.textContent = par.nm;
+    document.getElementById('rec-parent-label').textContent = strand + ' · ' + v.nm;
+    document.getElementById('rec-parent-nm').textContent = par.nm;
     parentRow.style.display = 'flex';
     btnNazad.style.display = '';
     btnNazad.textContent = '↩ ' + par.nm;
@@ -3247,10 +3220,10 @@ function togRec() {
     _gpsBuf = []; _lastRecTime = 0;
     const b = document.getElementById('brec');
     if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
-    const banner = document.getElementById('banner');
+    const banner = document.getElementById('rec-banner');
     banner.classList.add('show'); banner.classList.remove('paused');
     document.getElementById('btn-pause').textContent = '⏸';
-    document.getElementById('bl2').textContent = '0 m · 0 tač.';
+    document.getElementById('rec-stats').textContent = '0 m · 0 tač.';
     _updBanner();
     _updRecStatusBar();
     if (!gpsOn) toggleGPS();
@@ -3276,13 +3249,10 @@ function stopRec() {
   _stopRecNotification();
   const b = document.getElementById('brec');
   if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
-  const banner = document.getElementById('banner');
+  const banner = document.getElementById('rec-banner');
   banner.classList.remove('show'); banner.classList.remove('paused');
-  document.getElementById('banner-parent-row').style.display = 'none';
-  document.getElementById('btn-nazad-roditelj').style.display = 'none';
-  document.getElementById('btn-krak-l').style.display = '';
-  document.getElementById('btn-krak-d').style.display = '';
-  document.getElementById('btn-krak-picker').style.display = '';
+  document.getElementById('rec-parent-row').style.display = 'none';
+  document.getElementById('btn-nazad').style.display = 'none';
   if (actI !== null) updateVlakaLabel(actI);
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
@@ -3294,15 +3264,15 @@ function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
   _gpsBuf = []; _lastRecTime = 0;
-  const banner = document.getElementById('banner');
+  const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
   if (recPaused) {
     banner.classList.add('paused');
-    btn.textContent = '▶ Nastavi'; btn.title = 'Nastavi snimanje';
+    btn.textContent = '▶'; btn.title = 'Nastavi snimanje';
     showToast('⏸ Snimanje pauzirano');
   } else {
     banner.classList.remove('paused');
-    btn.textContent = '⏸ Pauza'; btn.title = 'Pauza';
+    btn.textContent = '⏸'; btn.title = 'Pauza';
     _updBl2();
     showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
@@ -3429,7 +3399,14 @@ function _updBl2() {
   if (actI === null) return;
   const v = vlake[actI];
   if (!v) return;
-  document.getElementById('bl2').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
+  document.getElementById('rec-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
+}
+
+function _updDrawStats() {
+  if (activeTool !== 'addline' || actI === null) return;
+  const v = vlake[actI];
+  if (!v) return;
+  document.getElementById('draw-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
 }
 
 function vratiSeNaRoditelja() {
@@ -3446,16 +3423,16 @@ function vratiSeNaRoditelja() {
 
   // Auto-pauziraj — povratak se ne snima
   recPaused = true;
-  const banner = document.getElementById('banner');
+  const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
   banner.classList.add('paused');
-  btn.textContent = '▶ Nastavi';
+  btn.textContent = '▶';
   btn.title = 'Nastavi snimanje na vlaci';
 
   _updBanner();
 
   // Prikaži poruku u info redu
-  document.getElementById('bl2').textContent = '⏸ Hodaj nazad, pritisni ▶ Nastavi';
+  document.getElementById('rec-stats').textContent = '⏸ Hodaj nazad, ▶';
 
   showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
 }
@@ -3886,14 +3863,13 @@ function updBan() {
   if (actI === null) return;
   const v = vlake[actI];
   if (recOn) {
-    document.getElementById('bn').textContent = '⏺ ' + v.nm;
-    document.getElementById('bl2').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
-    // Live update dužine u status baru (bez rebuilda liste)
+    document.getElementById('rec-nm').textContent = v.nm;
+    document.getElementById('rec-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
     const lenEl = document.getElementById('rsb-len');
     if (lenEl) lenEl.textContent = fmtL(calcL(v.pts));
-    // Osvježi SW notifikaciju svakih ~10 novih tačaka
     if (v.pts.length % 10 === 0) _startRecNotification();
   }
+  if (activeTool === 'addline') _updDrawStats();
 }
 function updOvl() {
   const el = document.getElementById('ovl-lines');
@@ -4859,9 +4835,10 @@ function startMergeMode(){
   setActiveTool('merge');
   editOn = true;
   map.doubleClickZoom.disable();
-  document.getElementById('banner').classList.add('show');
-  document.getElementById('bn').textContent = '🔗 Spajanje vlaka';
-  document.getElementById('bl2').textContent = 'Klikni krajnju tačku (zelena/crvena) prve vlake...';
+  document.getElementById('draw-banner').classList.add('show');
+  document.getElementById('draw-nm').textContent = '🔗 Spajanje vlaka';
+  document.getElementById('draw-stats').textContent = 'Klikni krajnju tačku...';
+  document.getElementById('draw-row2').style.display = 'none';
   mergeMode = true; mergeFirst = null;
   document.getElementById('merge-sec').style.display = 'block';
   document.getElementById('merge-status').textContent = 'Klikni na krajnju tačku prve vlake...';
@@ -4892,7 +4869,8 @@ function _cancelMergeInternal() {
   mergeMode = false; mergeFirst = null;
   document.getElementById('merge-sec').style.display = 'none';
   clearEditHandles();
-  document.getElementById('banner').classList.remove('show');
+  document.getElementById('draw-banner').classList.remove('show');
+  document.getElementById('draw-row2').style.display = '';
   map.doubleClickZoom.enable();
   editOn = false;
 }
@@ -4954,7 +4932,8 @@ function doMerge(a,b){
   rndList(); updOvl();
   if(bufLayers.length>0) drawBuffers();
   document.getElementById('merge-status').textContent='';
-  document.getElementById('banner').classList.remove('show');
+  document.getElementById('draw-banner').classList.remove('show');
+  document.getElementById('draw-row2').style.display = '';
   map.doubleClickZoom.enable();
   activeTool = 'select'; // set directly to avoid re-triggering cleanup
   document.querySelectorAll('.mt-btn').forEach(b => b.classList.remove('active','active-green','active-orange','active-red'));
