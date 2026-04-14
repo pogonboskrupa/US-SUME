@@ -2,9 +2,10 @@
 // Service Worker — Traktorske Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
+const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -60,12 +61,33 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // API pozivi — nikad ne keširati (zahtijevaju internet)
   if (
     url.includes('supabase.co') ||
-    url.includes('cdnjs.cloudflare') ||
-    url.includes('unpkg.com') ||
     url.includes('api.open-meteo.com')
   ) {
+    return;
+  }
+
+  // CDN biblioteke (Leaflet, proj4, Turf, sql-wasm...) — keš pri prvom učitavanju
+  if (
+    url.includes('cdnjs.cloudflare.com') ||
+    url.includes('cdn.jsdelivr.net') ||
+    url.includes('unpkg.com')
+  ) {
+    event.respondWith(
+      caches.open(LIB_CACHE).then(async cache => {
+        const cached = await cache.match(event.request);
+        if (cached) return cached;
+        try {
+          const resp = await fetch(event.request);
+          if (resp.ok) cache.put(event.request, resp.clone());
+          return resp;
+        } catch {
+          return cached || new Response('', { status: 503 });
+        }
+      })
+    );
     return;
   }
 
