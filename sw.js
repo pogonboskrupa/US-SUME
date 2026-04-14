@@ -2,7 +2,7 @@
 // Service Worker — Traktorske Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.3.0';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 
@@ -16,12 +16,10 @@ const APP_SHELL = [
 ];
 
 // ─── INSTALL ─────────────────────────────────────────────────────────
-// NE pozivamo skipWaiting ovdje — čekamo da korisnik potvrdi update
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(APP_CACHE).then(cache => cache.addAll(APP_SHELL))
   );
-  // Ne preuzimamo kontrolu automatski — toast u aplikaciji nudi izbor
 });
 
 // ─── ACTIVATE ────────────────────────────────────────────────────────
@@ -41,7 +39,6 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = event.request.url;
 
-  // Map tile zahtjevi → cache-first (omogućuje offline kartu)
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
@@ -63,7 +60,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Supabase, CDN i vanjski API → uvijek mreža (nikad cache)
   if (
     url.includes('supabase.co') ||
     url.includes('cdnjs.cloudflare') ||
@@ -73,7 +69,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // App shell (index.html, manifest, ikone) → network-first, fallback na cache
   if (
     url.startsWith(self.location.origin) ||
     event.request.mode === 'navigate'
@@ -91,8 +86,84 @@ self.addEventListener('fetch', event => {
   }
 });
 
+// ─── BACKGROUND RECORDING STATE ──────────────────────────────────────
+// Web Lock drži SW živ dok traje snimanje; SW periodično pinga stranicu
+let _recLockRelease = null;  // otpušta Web Lock kad snimanje stane
+let _swPingTimer    = null;  // interval koji šalje 'sw-ping' stranici
+
+function _startRecLock() {
+  if (_recLockRelease || !('locks' in self.navigator || 'locks' in navigator)) return;
+  const locks = (self.navigator || navigator).locks;
+  if (!locks) return;
+  locks.request('gps-rec-bg', { mode: 'shared' }, () =>
+    new Promise(resolve => { _recLockRelease = resolve; })
+  ).catch(() => {});
+  // Periodično pinkaj stranicu — ona restartuje GPS ako se ugasio
+  _swPingTimer = setInterval(() => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: false })
+      .then(clients => clients.forEach(c => c.postMessage({ type: 'sw-ping' })));
+  }, 20000);
+}
+
+function _stopRecLock() {
+  if (_recLockRelease) { _recLockRelease(); _recLockRelease = null; }
+  if (_swPingTimer)    { clearInterval(_swPingTimer); _swPingTimer = null; }
+}
+
 // ─── MESSAGE ─────────────────────────────────────────────────────────
-// Stranica šalje 'skipWaiting' kada korisnik klikne "Ažuriraj"
 self.addEventListener('message', event => {
-  if (event.data === 'skipWaiting') self.skipWaiting();
+  if (event.data === 'skipWaiting') {
+    self.skipWaiting();
+    return;
+  }
+  // Heartbeat od stranice tokom GPS snimanja — drži SW budan
+  if (event.data?.type === 'gps-heartbeat') {
+    event.source?.postMessage({ type: 'heartbeat-ack' });
+    return;
+  }
+  // Pokaži notifikaciju snimanja + uzmi Web Lock (Foreground Service ekvivalent)
+  if (event.data?.type === 'show-rec-notification') {
+    const { nm, dist } = event.data;
+    self.registration.showNotification('🔴 GPS Snimanje — ' + (nm || 'vlaka'), {
+      body: dist ? `Snimljeno: ${dist}` : 'Traktorske vlake aktivno snima GPS trag...',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      tag: 'gps-recording',
+      requireInteraction: true,
+      silent: true,
+      actions: [
+        { action: 'pause',  title: '⏸ Pauza' },
+        { action: 'stop',   title: '⏹ Stop'  }
+      ]
+    });
+    _startRecLock();
+    return;
+  }
+  // Zatvori notifikaciju i otpusti Web Lock
+  if (event.data?.type === 'hide-rec-notification') {
+    self.registration.getNotifications({ tag: 'gps-recording' })
+      .then(ns => ns.forEach(n => n.close()));
+    _stopRecLock();
+    return;
+  }
+});
+
+// ─── NOTIFICATION CLICK ───────────────────────────────────────────────
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  if (event.action === 'stop' || event.action === 'pause') {
+    // Pošalji akciju u sve otvorene klijente (stranice)
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clients => {
+        clients.forEach(c => c.postMessage({ type: 'rec-action', action: event.action }));
+        // Ako nema otvorenih prozora, otvori app
+        if (clients.length === 0) self.clients.openWindow('./');
+      });
+  } else {
+    // Tapnuli na tijelo notifikacije — fokusiraj ili otvori app
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      if (clients.length > 0) clients[0].focus();
+      else self.clients.openWindow('./');
+    });
+  }
 });
