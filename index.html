@@ -2723,18 +2723,17 @@ function mtAddLine() {
   setActiveTool('addline');
   map.doubleClickZoom.disable();
   drawUndoStack = [];
+  // Spremi trenutno stanje kao inicijalni undo — ne smijemo slučajno obrisati
+  // pre-postojeće tačke (npr. GPS snimanje) kad korisnik udari Undo do kraja
+  drawUndoStack.push(vlake[actI].pts.map(p => ({...p})));
   document.getElementById('draw-banner').classList.add('show');
   document.getElementById('draw-nm').textContent = vlake[actI].nm;
-  document.getElementById('draw-stats').textContent = '0 m · 0 tač.';
+  _updDrawStats();
   // Aktiviraj interaktivnu centralnu tačku
   document.getElementById('main').classList.add('drawing-active');
   document.getElementById('map-center-dot').onclick = _mcdClick;
   document.getElementById('map-center-dot').style.display = '';
-  // Prva tačka = centar mape (bijela centralna tačka)
-  const c = map.getCenter();
-  drawUndoStack.push([]);
-  addPt(actI, c.lat, c.lng, 0);
-  // Default: tap-to-add (ne vuci) — korisnik uključi Vuci po potrebi
+  // NEMA auto-prve-tačke — korisnik pozicionira crosshair pa tapne/klikne
   _updFabVisibility();
 }
 
@@ -2756,6 +2755,8 @@ const DRAW_DRAG_MIN_M = 5; // minimalna udaljenost (m) između tačaka u drag mo
 
 function toggleDrawDrag() {
   if (!_drawDragOn) {
+    // Spremi stanje prije cijele drag sesije — jedno Undo vraća sve drag tačke odjednom
+    if (actI !== null) drawUndoStack.push(vlake[actI].pts.map(p => ({...p})));
     _drawDragOn = true;
     _drawDragLastPt = null;
     const btn = document.getElementById('btn-draw-drag');
