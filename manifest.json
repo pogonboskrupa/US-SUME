@@ -2,8 +2,11 @@
   "name": "Traktorske Vlake",
   "short_name": "Vlake",
   "description": "Projektovanje traktorskih vlaka — offline GIS alat za šumare",
+  "id": "/",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#16213e",
@@ -28,5 +31,6 @@
     }
   ],
   "categories": ["productivity", "utilities"],
-  "lang": "bs"
+  "lang": "bs",
+  "prefer_related_applications": false
 }
