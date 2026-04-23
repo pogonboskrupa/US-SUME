@@ -825,12 +825,27 @@ select:focus { outline:none; border-color:#3b82f6; }
 .print-row > div { flex:1; }
 
 /* Offline modal */
-#offline-modal {
+#offline-modal, #profil-modal {
   display:none; position:fixed; inset:0;
   background:rgba(0,0,0,0.82); z-index:9999;
   align-items:center; justify-content:center;
 }
-#offline-modal.show { display:flex; }
+#offline-modal.show, #profil-modal.show { display:flex; }
+#profil-box {
+  background:#0f172a; border:1.5px solid #334155; border-radius:12px;
+  padding:16px; width:440px; max-width:96vw;
+  box-shadow:0 8px 32px rgba(0,0,0,0.8);
+}
+#profil-box h3 { margin:0 0 10px; font-size:13px; color:#94a3b8; font-weight:600; }
+#profil-box h3 span { color:#fbbf24; }
+#profil-svg { width:100%; height:200px; display:block; border-radius:6px; background:#080e1c; }
+#profil-stats {
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;
+  font-size:12px; font-family:monospace;
+}
+#profil-legend { display:flex; gap:12px; margin-top:8px; font-size:11px; color:#64748b; }
+#profil-legend span { display:flex; align-items:center; gap:4px; }
+#profil-legend i { display:inline-block; width:20px; height:3px; border-radius:2px; }
 .offline-mbox {
   background:#16213e; border:1px solid #0f3460;
   border-radius:10px; padding:22px;
@@ -1290,6 +1305,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div class="rdot"></div>
           <div id="rec-nm">T1</div>
           <div id="rec-stats">0 m · 0 tač.</div>
+          <div id="rec-slope" style="display:none;font-size:11px;font-weight:bold;margin-left:6px;font-family:monospace;"></div>
           <div id="wakelock-icon" title="Ekran ostaje uključen" style="display:none;font-size:13px;margin-left:6px;opacity:0.6;">🔒</div>
         </div>
         <div id="bg-warning" style="display:none;background:#7c2d12;padding:4px 13px;font-size:11px;color:#fed7aa;text-align:center;">
@@ -3401,6 +3417,36 @@ function _updBl2() {
   const v = vlake[actI];
   if (!v) return;
   document.getElementById('rec-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
+  _updSlope();
+}
+
+// ─── NAGIB U REALNOM VREMENU ─────────────────────────────────────────────────
+function _calcRecentSlope(pts) {
+  if (pts.length < 2) return null;
+  const last = pts[pts.length - 1];
+  if (!last.al) return null;
+  // Traži tačku ~30m unazad za stabilniji nagib (GPS alt je bučan)
+  let i = pts.length - 2, cumDist = 0;
+  while (i > 0) {
+    cumDist += dst(pts[i].la, pts[i].lo, pts[i + 1].la, pts[i + 1].lo);
+    if (cumDist >= 30) break;
+    i--;
+  }
+  const horizDist = dst(pts[i].la, pts[i].lo, last.la, last.lo);
+  if (horizDist < 8 || !pts[i].al) return null;
+  return (last.al - pts[i].al) / horizDist * 100;
+}
+
+function _updSlope() {
+  const el = document.getElementById('rec-slope');
+  if (!el || !recOn || actI === null) { if (el) el.style.display = 'none'; return; }
+  const slope = _calcRecentSlope(vlake[actI]?.pts || []);
+  if (slope === null) { el.style.display = 'none'; return; }
+  const abs = Math.abs(slope);
+  const arrow = slope >= 0 ? '↗' : '↘';
+  el.style.color = abs > 18 ? '#f87171' : abs > 12 ? '#fbbf24' : '#4ade80';
+  el.textContent = `${arrow}${abs.toFixed(1)}%`;
+  el.style.display = '';
 }
 
 function _updDrawStats() {
@@ -3971,6 +4017,7 @@ function _renderVlakaRow(el, v, i, depth) {
     </div>
     <div class="vcard-btns">
       <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
+      <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
       <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
       <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
     </div>`;
@@ -6248,6 +6295,91 @@ function closeOfflineModal() {
   document.getElementById('offline-modal').classList.remove('show');
 }
 
+// ─── PROFIL VISINA ────────────────────────────────────────────────────────────
+function showElevProfile(idx) {
+  const v = vlake[idx];
+  if (!v || v.pts.length < 2) { showToast('Nema dovoljno tačaka za profil'); return; }
+
+  const alts = v.pts.map(p => p.al || 0);
+  if (!alts.some(a => a !== 0)) {
+    showToast('Nema podataka o visini — snimaj trag sa GPS-om'); return;
+  }
+
+  // Kumulativne distance duž trase
+  const cumD = [0];
+  for (let i = 1; i < v.pts.length; i++)
+    cumD.push(cumD[i-1] + dst(v.pts[i-1].la, v.pts[i-1].lo, v.pts[i].la, v.pts[i].lo));
+  const totalD = cumD[cumD.length - 1];
+
+  const minAlt = Math.min(...alts), maxAlt = Math.max(...alts);
+  const altRange = maxAlt - minAlt || 1;
+
+  // SVG koordinate (viewBox 420×200)
+  const W=420, H=200, pad={t:18,r:12,b:28,l:46};
+  const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+
+  const sx = i => pad.l + (cumD[i]/totalD)*pw;
+  const sy = i => pad.t + ph - ((alts[i]-minAlt)/altRange)*ph;
+
+  // Segmenti bojani po nagibu
+  let segs = '';
+  for (let i = 1; i < v.pts.length; i++) {
+    const d = dst(v.pts[i-1].la, v.pts[i-1].lo, v.pts[i].la, v.pts[i].lo);
+    const slope = d > 0.5 ? Math.abs((alts[i]-alts[i-1])/d*100) : 0;
+    const col = slope>18?'#f87171':slope>12?'#fbbf24':'#4ade80';
+    segs += `<line x1="${sx(i-1).toFixed(1)}" y1="${sy(i-1).toFixed(1)}" x2="${sx(i).toFixed(1)}" y2="${sy(i).toFixed(1)}" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }
+
+  // Mrežaste linije i oznake Y osi (visina)
+  let grid = '', yLab = '';
+  for (let t=0; t<=4; t++) {
+    const frac = t/4;
+    const yy = (pad.t + ph - frac*ph).toFixed(1);
+    const alt = Math.round(minAlt + frac*altRange);
+    grid += `<line x1="${pad.l}" y1="${yy}" x2="${pad.l+pw}" y2="${yy}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+    yLab += `<text x="${pad.l-4}" y="${(+yy+4).toFixed(1)}" text-anchor="end" fill="#475569" font-size="9">${alt}</text>`;
+  }
+
+  // Oznake X osi (dužina)
+  let xLab = '';
+  for (let t=0; t<=4; t++) {
+    const xx = (pad.l + t/4*pw).toFixed(1);
+    xLab += `<text x="${xx}" y="${H-6}" text-anchor="middle" fill="#475569" font-size="9">${Math.round(t/4*totalD)}m</text>`;
+  }
+
+  // Fill ispod linije
+  const poly = v.pts.map((_,i)=>`${sx(i).toFixed(1)},${sy(i).toFixed(1)}`).join(' ');
+  const fill = `${pad.l},${pad.t+ph} ` + poly + ` ${sx(v.pts.length-1).toFixed(1)},${pad.t+ph}`;
+
+  document.getElementById('profil-svg').innerHTML =
+    `${grid}${yLab}${xLab}
+     <text x="10" y="${(H/2).toFixed(0)}" transform="rotate(-90,10,${(H/2).toFixed(0)})" text-anchor="middle" fill="#334155" font-size="9">m n.v.</text>
+     <polygon points="${fill}" fill="rgba(74,222,128,0.06)"/>
+     ${segs}`;
+
+  document.getElementById('profil-nm').textContent = v.nm;
+
+  // Statistike
+  const slopes = v.pts.slice(1).map((p,i)=>{
+    const d = dst(v.pts[i].la,v.pts[i].lo,p.la,p.lo);
+    return d>0.5 ? Math.abs((alts[i+1]-alts[i])/d*100) : 0;
+  });
+  const maxSlope = Math.max(...slopes);
+  const avgSlope = slopes.reduce((s,x)=>s+x,0)/slopes.length;
+  document.getElementById('profil-stats').innerHTML =
+    `<span style="color:#94a3b8">Min: <b style="color:#e2e8f0">${Math.round(minAlt)} m</b></span>` +
+    `<span style="color:#94a3b8">Max: <b style="color:#e2e8f0">${Math.round(maxAlt)} m</b></span>` +
+    `<span style="color:#94a3b8">Razlika: <b style="color:#e2e8f0">${Math.round(maxAlt-minAlt)} m</b></span>` +
+    `<span style="color:#94a3b8">Max nagib: <b style="color:${maxSlope>18?'#f87171':maxSlope>12?'#fbbf24':'#4ade80'}">${maxSlope.toFixed(1)}%</b></span>` +
+    `<span style="color:#94a3b8">Prosj. nagib: <b style="color:#e2e8f0">${avgSlope.toFixed(1)}%</b></span>`;
+
+  document.getElementById('profil-modal').classList.add('show');
+}
+
+function closeProfilModal() {
+  document.getElementById('profil-modal').classList.remove('show');
+}
+
 // ─── SQLiteDB offline map ─────────────────────────────────────────────────────
 let _sqlLayers = []; // { name, db, fmt, layer, visible, meta, saved }
 let _sqlJS = null;
@@ -7112,6 +7244,23 @@ async function autoLoadAllKmlBuckets() {
     <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 14px;border-radius:0;text-align:center;background:rgba(0,0,0,0.3);"></div>
     <div id="granice-list">
       <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
+    </div>
+  </div>
+</div>
+
+<!-- PROFIL VISINA MODAL -->
+<div id="profil-modal" onclick="if(event.target===this)closeProfilModal()">
+  <div id="profil-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:13px;color:#94a3b8;font-weight:600;">↕ Profil visina — <span id="profil-nm" style="color:#fbbf24;"></span></h3>
+      <button onclick="closeProfilModal()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:0 4px;">✕</button>
+    </div>
+    <svg id="profil-svg" viewBox="0 0 420 200" preserveAspectRatio="none" style="width:100%;height:200px;display:block;border-radius:6px;background:#080e1c;"></svg>
+    <div id="profil-stats" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px;font-family:monospace;"></div>
+    <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:#64748b;">
+      <span><span style="display:inline-block;width:18px;height:3px;background:#4ade80;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>&lt;12%</span>
+      <span><span style="display:inline-block;width:18px;height:3px;background:#fbbf24;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>12–18%</span>
+      <span><span style="display:inline-block;width:18px;height:3px;background:#f87171;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>&gt;18%</span>
     </div>
   </div>
 </div>
