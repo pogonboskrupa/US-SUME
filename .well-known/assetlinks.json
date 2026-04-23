@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ba.pogon.traktorskevlake",
+    "sha256_cert_fingerprints": [
+      "4E:4E:A6:07:D6:B5:1B:FF:5E:CB:DF:EC:44:4B:BE:9B:A6:96:C4:02:12:EA:E2:05:A0:0D:FF:60:BA:14:68:A1"
+    ]
+  }
+}]
