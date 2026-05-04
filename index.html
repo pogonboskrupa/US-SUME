@@ -1018,6 +1018,26 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 #doz-save-box h3 { margin:0 0 14px; font-size:14px; }
 
+/* Boundary options grid */
+.doz-bdry-opts { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:8px; }
+.doz-bdry-opt-btn {
+  border:1px solid #1e3a5f; border-radius:7px; padding:8px 6px;
+  background:#0f172a; color:#94a3b8; cursor:pointer; font-size:11px;
+  font-weight:600; text-align:center; line-height:1.4; white-space:nowrap;
+}
+.doz-bdry-opt-btn:hover { border-color:#3b82f6; color:#60a5fa; }
+.doz-bdry-opt-btn span { display:block; font-size:15px; margin-bottom:2px; }
+
+/* Pick mode banner */
+#doz-pick-banner {
+  position:fixed; top:0; left:0; right:0;
+  background:rgba(8,14,28,0.96); border-bottom:2px solid #3b82f6;
+  z-index:2000; display:none; align-items:center;
+  padding:10px 16px; gap:12px;
+  font-size:13px; font-weight:600; color:#60a5fa;
+}
+#doz-pick-banner .pb-hint { font-size:11px; color:#475569; font-weight:400; flex:1; }
+
 /* Engineer coverage rows */
 .doz-cov-row {
   padding:7px 0; border-bottom:1px solid #1e293b; font-size:12px;
@@ -2733,7 +2753,8 @@ let _dblClickGuard = false;
 map.on('click', e => {
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
-  if (_dozDrawType !== null) { dozAddDrawPoint(e.latlng); return; } // doznaka crtanje
+  if (_dozPickMode)           { _dozHandlePickClick(e.latlng); return; } // pick polygon
+  if (_dozDrawType !== null) { dozAddDrawPoint(e.latlng); return; }  // doznaka crtanje
   if (!_vpJustOpened) closeVlakaPopup();
   if (textToolOn) { openTextDialog(e.latlng.lat, e.latlng.lng, null); return; }
   if (activeTool === 'edit' || activeTool === 'delnode') return;
@@ -7661,6 +7682,169 @@ async function dozAddMember() {
   } catch(e) { showToast('Greška: ' + e.message); }
 }
 
+// ─── Pick Polygon from Map ────────────────────────────────────────
+let _dozPickMode = false;
+
+function dozStartPickMode() {
+  _dozPickMode = true;
+  document.getElementById('doz-create-modal').style.display = 'none';
+  document.getElementById('doz-pick-banner').style.display  = 'flex';
+  document.getElementById('map').style.cursor = 'crosshair';
+}
+
+function dozEndPickMode() {
+  _dozPickMode = false;
+  document.getElementById('doz-pick-banner').style.display = 'none';
+  document.getElementById('map').style.cursor = '';
+  document.getElementById('doz-create-modal').style.display = 'flex';
+}
+
+function _dozHandlePickClick(latlng) {
+  const candidates = [];
+
+  function scanLayer(layer) {
+    // Recurse into groups
+    if (layer.eachLayer) { layer.eachLayer(scanLayer); return; }
+    // Only Polyline/Polygon layers
+    if (!(layer instanceof L.Polyline)) return;
+    let lls = layer.getLatLngs();
+    // Flatten nested arrays (e.g. Leaflet polygon rings)
+    if (Array.isArray(lls[0]) && !lls[0].lat) lls = lls[0];
+    if (!lls.length || !lls[0]?.lat) return;
+    if (lls.length < 3) return;
+    const poly = lls.map(p => ({ lat: p.lat, lng: p.lng }));
+    if (_dozPointInPoly(latlng, poly)) {
+      candidates.push({ poly, area: _dozCalcArea(poly) });
+    }
+  }
+  map.eachLayer(scanLayer);
+
+  if (!candidates.length) {
+    showToast('Nije pronađen poligon na toj lokaciji. Pokušaj kliknuti unutar odjela.');
+    return;
+  }
+  // Pick smallest polygon (most specific match)
+  candidates.sort((a, b) => a.area - b.area);
+  const best = candidates[0];
+  const coords = best.poly.map(p => [p.lng, p.lat]);
+  coords.push(coords[0]);
+  _dozBdryGeoJSON = { type:'Polygon', coordinates:[coords] };
+  _dozBdryAreaHa  = parseFloat((best.area / 10000).toFixed(3));
+  dozEndPickMode();
+  _dozUpdateBdryStatus();
+  showToast(`✅ Poligon prepoznat — ~${_dozBdryAreaHa} ha`);
+}
+
+// Ray-casting point-in-polygon test
+function _dozPointInPoly(latlng, poly) {
+  const x = latlng.lng ?? latlng.lng, y = latlng.lat ?? latlng.lat;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].lng, yi = poly[i].lat;
+    const xj = poly[j].lng, yj = poly[j].lat;
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+// ─── KML / SHP File Import ────────────────────────────────────────
+async function dozHandleBdryFile(event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // reset so same file can be re-picked
+  if (!file) return;
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'kml') {
+    await _dozParseBdryKML(file);
+  } else if (ext === 'shp') {
+    await _dozParseBdrySHP(file);
+  } else if (ext === 'zip') {
+    await _dozParseBdryZipSHP(file);
+  } else {
+    showToast('Podržani formati: .kml, .shp, .zip (SHP bundle)');
+  }
+}
+
+async function _dozParseBdryKML(file) {
+  const text = await file.text();
+  const doc  = new DOMParser().parseFromString(text, 'text/xml');
+  const polys = [];
+  doc.querySelectorAll('Polygon').forEach(pg => {
+    const raw = pg.querySelector('outerBoundaryIs coordinates, coordinates')?.textContent;
+    const cs  = pcs(raw); // existing pcs() parser returns [[lat,lng],...]
+    if (cs.length > 2) {
+      const pts = cs.map(c => ({ lat: c[0], lng: c[1] }));
+      polys.push({ pts, area: _dozCalcArea(pts), name: pg.closest('Placemark')?.querySelector('name')?.textContent || '' });
+    }
+  });
+  if (!polys.length) { showToast('Nije pronađen poligon u KML fajlu'); return; }
+  // If multiple polygons, let user pick the one with the largest area (whole odjel)
+  // or show a list — for now pick largest
+  if (polys.length === 1) {
+    _dozApplyBdryFromPts(polys[0].pts);
+  } else {
+    // Show picker toast — list names, let user pick
+    _dozShowPolyPicker(polys, 'KML');
+  }
+}
+
+async function _dozParseBdrySHP(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const source = await shapefile.open(buf);
+    const polys = [];
+    let result;
+    while (!(result = await source.read()).done) {
+      const geom = result.value?.geometry;
+      if (!geom) continue;
+      const rings = geom.type === 'Polygon'      ? [geom.coordinates[0]]
+                  : geom.type === 'MultiPolygon' ? geom.coordinates.map(r => r[0])
+                  : [];
+      rings.forEach(ring => {
+        const pts = ring.map(c => ({ lat: c[1], lng: c[0] }));
+        if (pts.length > 2) polys.push({ pts, area: _dozCalcArea(pts), name: result.value?.properties?.NAME || result.value?.properties?.name || '' });
+      });
+    }
+    if (!polys.length) { showToast('Nije pronađen poligon u SHP fajlu'); return; }
+    polys.length === 1 ? _dozApplyBdryFromPts(polys[0].pts) : _dozShowPolyPicker(polys, 'SHP');
+  } catch(e) {
+    showToast('Greška čitanja SHP: ' + e.message);
+  }
+}
+
+async function _dozParseBdryZipSHP(file) {
+  // Try to read zip as SHP directly (some SHP tools output raw zip with .shp inside)
+  // Requires the user to upload the .shp file extracted from zip
+  showToast('Uploadujte .shp fajl direktno (ne ZIP). Ekstraktujte ZIP i odaberite .shp fajl.');
+}
+
+// Multiple polygon picker (inline in modal)
+let _dozPolyPickerList = [];
+function _dozShowPolyPicker(polys, src) {
+  _dozPolyPickerList = polys.sort((a, b) => b.area - a.area);
+  const el = document.getElementById('doz-create-error');
+  el.innerHTML = `<div style="color:#fbbf24;margin-bottom:4px;">Pronađeno ${polys.length} poligona iz ${src} — odaberi:</div>` +
+    polys.slice(0, 8).map((p, i) => `<button onclick="_dozPickPolyByIdx(${i})"
+      style="display:block;width:100%;text-align:left;background:#0f172a;border:1px solid #1e3a5f;color:#94a3b8;border-radius:5px;padding:5px 8px;cursor:pointer;font-size:11px;margin-bottom:3px;">
+      ${p.name || 'Poligon ' + (i+1)} — ${(p.area/10000).toFixed(2)} ha
+    </button>`).join('');
+}
+function _dozPickPolyByIdx(i) {
+  _dozApplyBdryFromPts(_dozPolyPickerList[i].pts);
+  document.getElementById('doz-create-error').innerHTML = '';
+}
+
+function _dozApplyBdryFromPts(pts) {
+  const coords = pts.map(p => [p.lng, p.lat]);
+  coords.push(coords[0]);
+  _dozBdryGeoJSON = { type:'Polygon', coordinates:[coords] };
+  _dozBdryAreaHa  = parseFloat((_dozCalcArea(pts) / 10000).toFixed(3));
+  _dozUpdateBdryStatus();
+  showToast(`✅ Granica učitana — ~${_dozBdryAreaHa} ha`);
+}
+
 // ─── Boundary Drawing ─────────────────────────────────────────────
 // State
 let _dozBdryGeoJSON = null;  // stored GeoJSON after draw
@@ -8074,6 +8258,13 @@ function dozBackToList() {
   </div>
 </div>
 
+<!-- ═══ DOZNAKA — PICK MODE BANNER ═══ -->
+<div id="doz-pick-banner">
+  <span>🖱 Klikni na odjel na karti</span>
+  <span class="pb-hint">Najmanji poligon koji sadrži klik bit će odabran kao granica</span>
+  <button onclick="dozEndPickMode()" style="background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;white-space:nowrap;">✕ Odustani</button>
+</div>
+
 <!-- ═══ DOZNAKA — TYPE PICKER SHEET ═══ -->
 <div id="doz-type-picker">
   <h4>Odaberi tip obilježavanja</h4>
@@ -8106,15 +8297,24 @@ function dozBackToList() {
     <span class="lbl">Opis (opcionalno)</span>
     <input class="pinput" id="doz-create-desc" placeholder="npr. Sječa hrasta, ~12 ha">
 
-    <span class="lbl">Granica odjela na karti</span>
+    <span class="lbl">Granica odjela</span>
     <div id="doz-bdry-status" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:9px 12px;font-size:12px;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
       <span id="doz-bdry-icon">○</span>
-      <span id="doz-bdry-text">Granica nije nacrtana</span>
+      <span id="doz-bdry-text">Granica nije odabrana</span>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:8px;">
-      <button class="btn b" style="flex:1;font-size:12px;" onclick="dozStartBoundaryDraw()">📐 Nacrtaj na karti</button>
-      <button class="btn" id="doz-bdry-clear-btn" style="display:none;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;flex:0 0 auto;" onclick="dozClearBoundary()">✕ Poništi</button>
+    <div class="doz-bdry-opts">
+      <button class="doz-bdry-opt-btn" onclick="dozStartPickMode()" title="Klikni na već učitani KML/SHP odjel na karti">
+        <span>🖱</span>Klikni na odjel
+      </button>
+      <button class="doz-bdry-opt-btn" onclick="document.getElementById('doz-bdry-file').click()" title="Uvezi KML ili SHP fajl kao granicu">
+        <span>📂</span>KML / SHP
+      </button>
+      <button class="doz-bdry-opt-btn" onclick="dozStartBoundaryDraw()" title="Ručno tapkaj uglove na mapi">
+        <span>📐</span>Nacrtaj ručno
+      </button>
     </div>
+    <input type="file" id="doz-bdry-file" accept=".kml,.shp,.zip" style="display:none" onchange="dozHandleBdryFile(event)">
+    <button id="doz-bdry-clear-btn" style="display:none;width:100%;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;padding:7px;font-size:12px;cursor:pointer;margin-bottom:6px;" onclick="dozClearBoundary()">✕ Poništi granicu</button>
 
     <div class="doz-create-error" id="doz-create-error"></div>
     <div style="display:flex;gap:8px;margin-top:12px;">
