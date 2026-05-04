@@ -1018,6 +1018,21 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 #doz-save-box h3 { margin:0 0 14px; font-size:14px; }
 
+/* Engineer coverage rows */
+.doz-cov-row {
+  padding:7px 0; border-bottom:1px solid #1e293b; font-size:12px;
+}
+.doz-cov-row:last-child { border-bottom:none; }
+.doz-cov-hdr { display:flex; align-items:center; gap:7px; margin-bottom:4px; }
+.doz-cov-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.doz-cov-name { color:#e2e8f0; font-weight:600; flex:1; }
+.doz-cov-bar-wrap { height:5px; background:#1e293b; border-radius:3px; overflow:hidden; margin:4px 0 3px; }
+.doz-cov-bar { height:100%; border-radius:3px; transition:width 0.4s; }
+.doz-cov-stats { color:#64748b; font-size:11px; display:flex; gap:10px; flex-wrap:wrap; }
+.doz-cov-stats b { color:#94a3b8; }
+/* Odjel total area bar */
+.doz-cov-total { font-size:11px; color:#475569; margin-bottom:8px; padding:5px 8px; background:#0f172a; border-radius:5px; }
+
 /* === PRINT STYLES === */
 @media print {
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1420,6 +1435,11 @@ select:focus { outline:none; border-color:#3b82f6; }
             <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
           </div>
           <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
+        </div>
+
+        <div class="sec" id="doz-coverage-sec">
+          <div class="sec-t">📊 Površina zahvata po projektantu</div>
+          <div id="doz-coverage-list"><div class="doz-empty">Nema GPS tragova za prikaz</div></div>
         </div>
 
         <div class="sec">
@@ -7390,6 +7410,8 @@ function dozRenderDetail() {
     .join('');
   ms.innerHTML = chips || '<span class="doz-empty">Nema označenih zona</span>';
   document.getElementById('doz-markings-count').textContent = _dozMarkings.length;
+  // Engineer coverage zones
+  dozCalcEngineerCoverage();
 }
 
 // ─── GPS Tracking ─────────────────────────────────────────────────
@@ -7488,14 +7510,19 @@ function dozUndoDrawPt() {
 }
 
 function dozCancelDraw() {
+  const wasBoundary = _dozDrawType === '__boundary__';
   _dozDrawType = null; _dozDrawPts = [];
   if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
   document.getElementById('doz-draw-banner').style.display = 'none';
+  document.querySelector('#doz-draw-row2 .ddb.finish').textContent = '✓ Zatvori';
   document.getElementById('map').style.cursor = '';
+  if (wasBoundary) document.getElementById('doz-create-modal').style.display = 'flex';
 }
 
 function dozFinishDraw() {
   if (_dozDrawPts.length < 3) { showToast('Trebaju najmanje 3 tačke'); return; }
+  // Boundary draw — special handling
+  if (_dozDrawType === '__boundary__') { _dozFinalizeBoundary(); return; }
   const coords = _dozDrawPts.map(p => [p.lng, p.lat]);
   coords.push(coords[0]);
   _dozPendingSavePolygon = { type:'Polygon', coordinates:[coords] };
@@ -7580,12 +7607,15 @@ async function dozDeleteOdjel() {
 
 // ─── Create Odjel ─────────────────────────────────────────────────
 function dozShowCreateOdjel() {
+  _dozBdryGeoJSON = null; _dozBdryAreaHa = 0;
   document.getElementById('doz-create-modal').style.display = 'flex';
-  ['doz-create-name','doz-create-desc','doz-create-area','doz-create-geojson'].forEach(id => { document.getElementById(id).value = ''; });
+  ['doz-create-name','doz-create-desc'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('doz-create-error').textContent = '';
+  _dozUpdateBdryStatus();
 }
 function dozCloseCreateOdjel() {
   document.getElementById('doz-create-modal').style.display = 'none';
+  if (_dozDrawType === '__boundary__') dozCancelDraw();
 }
 
 async function dozSaveOdjel() {
@@ -7593,18 +7623,14 @@ async function dozSaveOdjel() {
   const err  = document.getElementById('doz-create-error');
   if (!name) { err.textContent = 'Unesite naziv odjela'; return; }
   const desc  = document.getElementById('doz-create-desc').value.trim() || null;
-  const area  = parseFloat(document.getElementById('doz-create-area').value) || null;
-  const gjStr = document.getElementById('doz-create-geojson').value.trim();
-  let boundary = null;
-  if (gjStr) {
-    try { boundary = JSON.parse(gjStr); }
-    catch(e) { err.textContent = 'Neispravan GeoJSON'; return; }
-  }
+  // Area comes from drawn boundary if available, else null
+  const area  = _dozBdryGeoJSON ? _dozBdryAreaHa : null;
   err.textContent = '';
   try {
     const { error } = await sb.from('doz_projects').insert({
       name, description: desc, created_by: sbUser.id,
-      boundary_geojson: boundary, known_area_ha: area, status: 'active'
+      boundary_geojson: _dozBdryGeoJSON || null,
+      known_area_ha: area, status: 'active'
     });
     if (error) throw error;
     dozCloseCreateOdjel();
@@ -7635,13 +7661,194 @@ async function dozAddMember() {
   } catch(e) { showToast('Greška: ' + e.message); }
 }
 
+// ─── Boundary Drawing ─────────────────────────────────────────────
+// State
+let _dozBdryGeoJSON = null;  // stored GeoJSON after draw
+let _dozBdryAreaHa  = 0;
+let _dozBdryLayer   = null;  // preview layer on map during draw
+let _dozEngineerHullLayers = null;
+
+// Start drawing the odjel boundary on the map
+function dozStartBoundaryDraw() {
+  // Hide modal temporarily
+  document.getElementById('doz-create-modal').style.display = 'none';
+  // Reuse the existing draw mechanism with a special type marker
+  _dozDrawType = '__boundary__';
+  _dozDrawPts  = [];
+  document.getElementById('doz-draw-banner').style.display = 'flex';
+  document.getElementById('doz-draw-type-label').textContent = '📐 Granica odjela';
+  document.getElementById('doz-draw-count').textContent = '0 tač.';
+  // Change "✓ Zatvori" label for clarity
+  document.querySelector('#doz-draw-row2 .ddb.finish').textContent = '✓ Zatvori granicu';
+  document.getElementById('map').style.cursor = 'crosshair';
+  if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+  showToast('📐 Tapkaj uglove odjela na mapi, zatim ✓ Zatvori granicu');
+}
+
+// Called after user finishes boundary polygon
+function _dozFinalizeBoundary() {
+  if (_dozDrawPts.length < 3) { showToast('Trebaju najmanje 3 tačke za granicu'); return; }
+  const coords = _dozDrawPts.map(p => [p.lng, p.lat]);
+  coords.push(coords[0]); // close ring
+  _dozBdryGeoJSON = { type:'Polygon', coordinates:[coords] };
+  _dozBdryAreaHa  = parseFloat((_dozCalcArea(_dozDrawPts) / 10000).toFixed(3));
+  // Clean up draw
+  if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+  _dozDrawType = null; _dozDrawPts = [];
+  document.getElementById('doz-draw-banner').style.display = 'none';
+  document.querySelector('#doz-draw-row2 .ddb.finish').textContent = '✓ Zatvori';
+  document.getElementById('map').style.cursor = '';
+  // Update modal status and re-show it
+  _dozUpdateBdryStatus();
+  document.getElementById('doz-create-modal').style.display = 'flex';
+}
+
+function _dozUpdateBdryStatus() {
+  const icon = document.getElementById('doz-bdry-icon');
+  const text = document.getElementById('doz-bdry-text');
+  const clearBtn = document.getElementById('doz-bdry-clear-btn');
+  if (_dozBdryGeoJSON) {
+    icon.textContent = '✓';
+    icon.style.color = '#4ade80';
+    text.textContent = `Granica nacrtana — ~${_dozBdryAreaHa} ha`;
+    text.style.color = '#4ade80';
+    if (clearBtn) clearBtn.style.display = '';
+  } else {
+    icon.textContent = '○';
+    icon.style.color = '';
+    text.textContent = 'Granica nije nacrtana';
+    text.style.color = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+}
+
+function dozClearBoundary() {
+  _dozBdryGeoJSON = null; _dozBdryAreaHa = 0;
+  _dozUpdateBdryStatus();
+}
+
+// ─── Engineer Coverage (Convex Hull) ──────────────────────────────
+
+// Graham scan convex hull; pts = [{lat, lng}]
+function _dozConvexHull(pts) {
+  if (pts.length < 3) return pts.slice();
+  const pivot = pts.reduce((a, b) => (b.lat < a.lat || (b.lat === a.lat && b.lng < a.lng)) ? b : a);
+  const rest = pts.filter(p => p !== pivot).sort((a, b) => {
+    const aA = Math.atan2(a.lat - pivot.lat, a.lng - pivot.lng);
+    const bA = Math.atan2(b.lat - pivot.lat, b.lng - pivot.lng);
+    return aA !== bA ? aA - bA : _dozDist(pivot, a) - _dozDist(pivot, b);
+  });
+  const hull = [pivot];
+  for (const p of rest) {
+    while (hull.length > 1 && _dozCross(hull[hull.length-2], hull[hull.length-1], p) <= 0) hull.pop();
+    hull.push(p);
+  }
+  return hull;
+}
+function _dozCross(O, A, B) {
+  return (A.lng - O.lng) * (B.lat - O.lat) - (A.lat - O.lat) * (B.lng - O.lng);
+}
+function _dozDist(a, b) {
+  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
+}
+
+// Calculate and render engineer coverage zones
+function dozCalcEngineerCoverage() {
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  const odjelAreaHa = odjel?.known_area_ha ? parseFloat(odjel.known_area_ha) : null;
+
+  // Group track points by user
+  const byUser = {};
+  _dozTracks.forEach(p => {
+    (byUser[p.user_id] = byUser[p.user_id] || []).push({ lat: p.latitude, lng: p.longitude });
+  });
+
+  // For each member, calc convex hull area
+  const memberIdx = {};
+  _dozMembers.forEach((m, i) => { memberIdx[m.user_id] = i; });
+
+  const results = _dozMembers.map((m, i) => {
+    const pts = byUser[m.user_id] || [];
+    if (pts.length < 3) {
+      return { member: m, idx: i, pts, hull: null, areaHa: 0, trackLen: _dozTrackLength(pts) };
+    }
+    const hull = _dozConvexHull(pts);
+    const areaHa = parseFloat((_dozCalcArea(hull) / 10000).toFixed(3));
+    return { member: m, idx: i, pts, hull, areaHa, trackLen: _dozTrackLength(pts) };
+  });
+
+  _dozRenderCoveragePanel(results, odjelAreaHa);
+  _dozRenderHullLayers(results);
+}
+
+function _dozTrackLength(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const R = 6371000, toR = Math.PI/180;
+    const dLat = (pts[i].lat - pts[i-1].lat) * toR;
+    const dLng = (pts[i].lng - pts[i-1].lng) * toR;
+    const a = Math.sin(dLat/2)**2 + Math.cos(pts[i-1].lat*toR)*Math.cos(pts[i].lat*toR)*Math.sin(dLng/2)**2;
+    d += 2 * R * Math.asin(Math.sqrt(a));
+  }
+  return d; // metres
+}
+
+function _dozRenderCoveragePanel(results, odjelAreaHa) {
+  const el = document.getElementById('doz-coverage-list');
+  if (!results.length || results.every(r => r.pts.length === 0)) {
+    el.innerHTML = '<div class="doz-empty">Nema GPS tragova za prikaz</div>'; return;
+  }
+  const maxArea = Math.max(...results.map(r => r.areaHa), odjelAreaHa || 0.01, 0.01);
+  let html = '';
+  if (odjelAreaHa) {
+    html += `<div class="doz-cov-total">🌲 Ukupna površina odjela: <b style="color:#4ade80;">${odjelAreaHa.toFixed(1)} ha</b></div>`;
+  }
+  for (const r of results) {
+    if (r.pts.length === 0) continue;
+    const color = DOZ_ENG_COLORS[r.idx % DOZ_ENG_COLORS.length];
+    const name  = r.member.profiles?.full_name || `Inženjer ${r.idx + 1}`;
+    const pct   = odjelAreaHa ? Math.min(100, (r.areaHa / odjelAreaHa * 100)).toFixed(1) : '—';
+    const barW  = (r.areaHa / maxArea * 100).toFixed(1);
+    const lenKm = (r.trackLen / 1000).toFixed(2);
+    html += `<div class="doz-cov-row">
+      <div class="doz-cov-hdr">
+        <div class="doz-cov-dot" style="background:${color};"></div>
+        <div class="doz-cov-name">${name}</div>
+        <div style="font-size:12px;font-weight:700;color:${color};">${r.areaHa > 0 ? r.areaHa + ' ha' : '—'}</div>
+      </div>
+      ${r.areaHa > 0 ? `<div class="doz-cov-bar-wrap"><div class="doz-cov-bar" style="width:${barW}%;background:${color};"></div></div>` : ''}
+      <div class="doz-cov-stats">
+        ${odjelAreaHa && r.areaHa > 0 ? `<span><b>${pct}%</b> odjela</span>` : ''}
+        <span>📍 ${r.pts.length} tač.</span>
+        <span>📏 ${lenKm} km</span>
+        ${r.hull ? `<span title="Konveksni omotač GPS traga">⬡ konv. omotač</span>` : '<span style="color:#475569;">premalo tačaka za zonu</span>'}
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html || '<div class="doz-empty">Nema GPS tragova za prikaz</div>';
+}
+
+function _dozRenderHullLayers(results) {
+  if (_dozEngineerHullLayers) { map.removeLayer(_dozEngineerHullLayers); _dozEngineerHullLayers = null; }
+  _dozEngineerHullLayers = L.layerGroup().addTo(map);
+  for (const r of results) {
+    if (!r.hull || r.hull.length < 3) continue;
+    const color = DOZ_ENG_COLORS[r.idx % DOZ_ENG_COLORS.length];
+    const name  = r.member.profiles?.full_name || `Inženjer ${r.idx + 1}`;
+    L.polygon(r.hull.map(p => [p.lat, p.lng]), {
+      color, weight:2, fillColor:color, fillOpacity:0.12, dashArray:'4,4'
+    }).bindTooltip(`${name}: ~${r.areaHa} ha`, { direction:'center', permanent:false })
+      .addTo(_dozEngineerHullLayers);
+  }
+}
+
 // ─── Back to List ─────────────────────────────────────────────────
 function dozBackToList() {
   _dozSelId = null;
   dozStopGPS();
   dozCancelDraw();
-  [_dozBoundaryLayer, _dozTracksLayer, _dozMarkingsLayer, _dozGpsTrackLayer].forEach(l => { if (l) map.removeLayer(l); });
-  _dozBoundaryLayer = _dozTracksLayer = _dozMarkingsLayer = _dozGpsTrackLayer = null;
+  [_dozBoundaryLayer, _dozTracksLayer, _dozMarkingsLayer, _dozGpsTrackLayer, _dozEngineerHullLayers].forEach(l => { if (l) map.removeLayer(l); });
+  _dozBoundaryLayer = _dozTracksLayer = _dozMarkingsLayer = _dozGpsTrackLayer = _dozEngineerHullLayers = null;
   document.getElementById('doz-panel-list').style.display   = 'flex';
   document.getElementById('doz-panel-detail').style.display = 'none';
 }
@@ -7898,14 +8105,19 @@ function dozBackToList() {
     <input class="pinput" id="doz-create-name" placeholder="npr. Odjel 25 — Babića Kosa">
     <span class="lbl">Opis (opcionalno)</span>
     <input class="pinput" id="doz-create-desc" placeholder="npr. Sječa hrasta, ~12 ha">
-    <span class="lbl">Poznata površina u ha (opcionalno)</span>
-    <input class="pinput" type="number" step="0.1" id="doz-create-area" placeholder="12.5">
-    <span class="lbl">Granica odjela — GeoJSON Polygon (opcionalno)</span>
-    <textarea class="pinput" id="doz-create-geojson" rows="3"
-      style="resize:vertical;font-size:11px;font-family:monospace;"
-      placeholder='{"type":"Polygon","coordinates":[[[17.5,43.9],[17.51,43.9],[17.51,43.91],[17.5,43.9]]]}'></textarea>
+
+    <span class="lbl">Granica odjela na karti</span>
+    <div id="doz-bdry-status" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:9px 12px;font-size:12px;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+      <span id="doz-bdry-icon">○</span>
+      <span id="doz-bdry-text">Granica nije nacrtana</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <button class="btn b" style="flex:1;font-size:12px;" onclick="dozStartBoundaryDraw()">📐 Nacrtaj na karti</button>
+      <button class="btn" id="doz-bdry-clear-btn" style="display:none;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;flex:0 0 auto;" onclick="dozClearBoundary()">✕ Poništi</button>
+    </div>
+
     <div class="doz-create-error" id="doz-create-error"></div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
+    <div style="display:flex;gap:8px;margin-top:12px;">
       <button class="btn g" style="flex:1;" onclick="dozSaveOdjel()">✓ Kreiraj odjel</button>
       <button class="btn" style="background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;flex:0 0 auto;" onclick="dozCloseCreateOdjel()">✕</button>
     </div>
