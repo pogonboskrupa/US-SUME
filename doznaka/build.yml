@@ -1,0 +1,137 @@
+# .github/workflows/build.yml
+# Automatski build APK-a pri svakom push-u na main granu
+
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ═══════════════════════════════════════════════
+  # TEST
+  # ═══════════════════════════════════════════════
+  test:
+    name: Testovi i analiza koda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Postavi Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Instaliraj zavisnosti
+        run: flutter pub get
+
+      - name: Analiziraj kod
+        run: flutter analyze --no-fatal-infos
+
+      - name: Pokreni testove
+        run: flutter test --coverage
+
+  # ═══════════════════════════════════════════════
+  # BUILD ANDROID (APK)
+  # ═══════════════════════════════════════════════
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Postavi Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Postavi Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Instaliraj zavisnosti
+        run: flutter pub get
+
+      - name: Kreiraj .env fajl sa Supabase config-om
+        run: |
+          cat > lib/core/env.dart << EOF
+          // Auto-generirano od GitHub Actions
+          class Env {
+            static const supabaseUrl = '${{ secrets.SUPABASE_URL }}';
+            static const supabaseAnonKey = '${{ secrets.SUPABASE_ANON_KEY }}';
+          }
+          EOF
+
+      - name: Build release APK
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build App Bundle (za Play Store)
+        run: flutter build appbundle --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forestry-tracker-apk
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          retention-days: 30
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forestry-tracker-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════
+  # GITHUB RELEASE (samo za tagove v*.*.*)
+  # ═══════════════════════════════════════════════
+  release:
+    name: Kreiraj GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-android
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preuzmi APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: forestry-tracker-apk
+          path: artifacts/
+
+      - name: Kreiraj Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Šumarstvo Tracker ${{ github.ref_name }}"
+          body: |
+            ## Šumarstvo Tracker — ${{ github.ref_name }}
+
+            ### Preuzimanje
+            - `app-arm64-v8a-release.apk` — za moderne telefone (preporučeno)
+            - `app-armeabi-v7a-release.apk` — za starije telefone
+
+            ### Instalacija
+            1. Preuzmi APK za tvoj uređaj
+            2. Dopusti instalaciju iz nepoznatih izvora
+            3. Instaliraj APK
+            4. Isključi battery optimizaciju za bolji GPS trag
+
+            ### Changelog
+            ${{ github.event.head_commit.message }}
+          files: artifacts/*.apk
+          draft: false
+          prerelease: false
