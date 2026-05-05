@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tamna šumarska tema — komplementarna indexu.html -->
+    <color name="colorPrimary">#1e3a2f</color>
+    <color name="colorPrimaryDark">#08111f</color>
+    <color name="colorAccent">#4ade80</color>
+    <color name="colorBackground">#08111f</color>
+    <color name="colorSplashBackground">#08111f</color>
+</resources>

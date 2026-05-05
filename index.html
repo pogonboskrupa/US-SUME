@@ -2660,6 +2660,52 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
   });
 })();
 
+// ─── CAPACITOR NATIVE DETECTION ──────────────────────────────────────────────
+// true kad app radi kao nativni Android APK (Capacitor), false u browseru/PWA
+const _CAP = !!(window.Capacitor?.isNativePlatform?.() && window.Capacitor.isNativePlatform());
+
+// ─── GPS ABSTRACTION — radi i u browseru i u nativnom APK-u ──────────────────
+// Vraća watchId (string u native modu, number u browser modu)
+async function _geoWatch(successCb, errorCb, opts) {
+  if (_CAP) {
+    const { Geolocation } = Capacitor.Plugins;
+    try {
+      await Geolocation.requestPermissions({ permissions: ['location'] });
+    } catch(e) { /* permisija već odobrena ili nije podržano */ }
+    return await Geolocation.watchPosition(
+      { enableHighAccuracy: true, timeout: opts?.timeout ?? 20000 },
+      (pos, err) => {
+        if (err || !pos) { errorCb(err || { message: 'Nema pozicije' }); return; }
+        // Mapiramo Capacitor pos na standard GeolocationPosition format
+        successCb({
+          coords: {
+            latitude:         pos.coords.latitude,
+            longitude:        pos.coords.longitude,
+            accuracy:         pos.coords.accuracy,
+            altitude:         pos.coords.altitude ?? null,
+            altitudeAccuracy: pos.coords.altitudeAccuracy ?? null,
+            speed:            pos.coords.speed ?? null,
+            heading:          pos.coords.heading ?? null,
+          },
+          timestamp: pos.timestamp
+        });
+      }
+    );
+  } else {
+    if (!navigator.geolocation) { alert('Uređaj ne podržava GPS!'); return null; }
+    return navigator.geolocation.watchPosition(successCb, errorCb, opts);
+  }
+}
+
+function _geoClear(watchId) {
+  if (watchId == null) return;
+  if (_CAP) {
+    Capacitor.Plugins.Geolocation.clearWatch({ id: watchId });
+  } else {
+    navigator.geolocation.clearWatch(watchId);
+  }
+}
+
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
@@ -3398,16 +3444,27 @@ function _stopBgAudio() {
 }
 
 async function _acquireWakeLock() {
-  if (!('wakeLock' in navigator)) return;
-  try {
-    _wakeLock = await navigator.wakeLock.request('screen');
-    _wakeLock.addEventListener('release', () => { _wakeLock = null; _updWakeLockIcon(); });
-    _updWakeLockIcon();
-  } catch(e) { /* odbijen — niska baterija ili nije podržano */ }
+  if (_CAP) {
+    // Native APK — KeepAwake plugin (ekran ostaje upaljen tokom snimanja)
+    try { await Capacitor.Plugins.KeepAwake.keepAwake(); _wakeLock = { native: true }; } catch(e) {}
+  } else {
+    // Browser — Web WakeLock API
+    if (!('wakeLock' in navigator)) return;
+    try {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; _updWakeLockIcon(); });
+    } catch(e) {}
+  }
+  _updWakeLockIcon();
 }
 
 async function _releaseWakeLock() {
-  if (_wakeLock) { try { await _wakeLock.release(); } catch(e) {} _wakeLock = null; }
+  if (_CAP) {
+    try { await Capacitor.Plugins.KeepAwake.allowSleep(); } catch(e) {}
+    _wakeLock = null;
+  } else {
+    if (_wakeLock) { try { await _wakeLock.release(); } catch(e) {} _wakeLock = null; }
+  }
   _updWakeLockIcon();
 }
 
@@ -3422,16 +3479,29 @@ document.addEventListener('visibilitychange', async () => {
   const bgWarn = document.getElementById('bg-warning');
   if (document.visibilityState === 'visible') {
     if (bgWarn) bgWarn.style.display = 'none';
-    // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
-    if (recOn && !_wakeLock) await _acquireWakeLock();
+    if (!_CAP && recOn && !_wakeLock) await _acquireWakeLock(); // browser: ponovo uzmi wake lock
     _updWakeLockIcon();
   } else {
-    if (recOn && !recPaused) {
+    if (recOn && !recPaused && !_CAP) {
+      // Browser: upozori korisnika (u nativnom APK-u GPS radi i u pozadini)
       if (bgWarn) bgWarn.style.display = '';
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
   }
 });
+
+// Capacitor App lifecycle (native APK): state-change umjesto visibilitychange
+if (_CAP) {
+  Capacitor.Plugins.App.addListener('appStateChange', async ({ isActive }) => {
+    if (isActive) {
+      // App se vratio u foreground
+      document.getElementById('bg-warning')?.style.setProperty('display', 'none');
+      _updWakeLockIcon();
+    }
+    // U pozadini: GPS snimanje se nastavlja kroz native Geolocation plugin
+    // (ne treba ništa raditi — Capacitor drži GPS watch u životu)
+  });
+}
 
 function _updWakeLockIcon() {
   const el = document.getElementById('wakelock-icon');
@@ -3728,16 +3798,14 @@ function drawPreviewUpdate(latlng) {
 function toggleGPS() {
   if (!gpsOn) startGPS(); else stopGPS();
 }
-function startGPS() {
-  if (!navigator.geolocation) { alert('Uređaj ne podržava GPS!'); return; }
+async function startGPS() {
   gpsOn = true;
   document.getElementById('gps-info').textContent = 'GPS: tražim signal...';
-  wid = navigator.geolocation.watchPosition(onP, onPE, {
-    enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-  });
+  wid = await _geoWatch(onP, onPE, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  if (wid == null) { gpsOn = false; } // GPS nije dostupan
 }
 function stopGPS() {
-  if (wid) navigator.geolocation.clearWatch(wid);
+  _geoClear(wid);
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
@@ -3917,12 +3985,10 @@ function onPE(e) {
   document.getElementById('gps-info').textContent = 'GPS: greška — ' + e.message;
   if (recOn && gpsOn && _gpsRestartCount < 5) {
     _gpsRestartCount++;
-    setTimeout(() => {
+    setTimeout(async () => {
       if (recOn && gpsOn) {
-        if (wid) navigator.geolocation.clearWatch(wid);
-        wid = navigator.geolocation.watchPosition(onP, onPE, {
-          enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-        });
+        _geoClear(wid);
+        wid = await _geoWatch(onP, onPE, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
       }
     }, 3000);
   }
@@ -3935,22 +4001,18 @@ function _startGpsWatchdog() {
   _stopGpsWatchdog();
   _lastGpsFixTime = Date.now();
   _gpsRestartCount = 0;
-  _gpsWatchdogTimer = setInterval(() => {
+  _gpsWatchdogTimer = setInterval(async () => {
     if (!recOn) { _stopGpsWatchdog(); return; }
     const elapsed = Date.now() - _lastGpsFixTime;
     if (elapsed > GPS_WATCHDOG_TIMEOUT) {
       // GPS zamrznut — restart
       document.getElementById('gps-info').textContent = 'GPS: restart...';
-      if (wid) navigator.geolocation.clearWatch(wid);
-      wid = null;
-      setTimeout(() => {
-        if (recOn) {
-          wid = navigator.geolocation.watchPosition(onP, onPE, {
-            enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-          });
-          _lastGpsFixTime = Date.now();
-        }
-      }, 1000);
+      _geoClear(wid); wid = null;
+      await new Promise(r => setTimeout(r, 1000));
+      if (recOn) {
+        wid = await _geoWatch(onP, onPE, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+        _lastGpsFixTime = Date.now();
+      }
     }
   }, 15000); // provjeri svakih 15s
 }
@@ -4009,10 +4071,8 @@ if ('serviceWorker' in navigator) {
     }
     // SW šalje ping svakih 20s tokom snimanja — restartuj GPS ako se ugasio
     if (evt.data?.type === 'sw-ping' && recOn && gpsOn && !wid) {
-      wid = navigator.geolocation.watchPosition(onP, onPE, {
-        enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-      });
-      _lastGpsFixTime = Date.now();
+      _geoWatch(onP, onPE, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 })
+        .then(id => { wid = id; _lastGpsFixTime = Date.now(); });
       document.getElementById('gps-info').textContent = 'GPS: restart od SW...';
     }
   });
@@ -7442,7 +7502,6 @@ function dozToggleGPS() {
 
 async function dozStartGPS() {
   if (!_dozSelId || !sbUser) { showToast('Odaberi odjel i prijavi se'); return; }
-  if (!navigator.geolocation) { showToast('GPS nije dostupan'); return; }
   _dozGpsOn = true;
   _dozGpsPts = [];
   if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
@@ -7451,7 +7510,7 @@ async function dozStartGPS() {
   if (btn) { btn.textContent = '⏹ Zaustavi GPS'; btn.style.background='#2d0a0a'; btn.style.color='#f87171'; btn.style.borderColor='#7f1d1d'; }
   document.getElementById('doz-gps-status').style.display = 'block';
 
-  _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
+  const dozCallback = async pos => {
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
     if (acc > 20) return;
     _dozGpsPts.push([lat, lng]);
@@ -7468,12 +7527,13 @@ async function dozStartGPS() {
         recorded_at: new Date().toISOString()
       });
     } catch(e) {}
-  }, err => { console.warn('Doznaka GPS', err); },
-  { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
+  };
+  _dozGpsWatchId = await _geoWatch(dozCallback, err => console.warn('Doznaka GPS', err),
+    { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
 
 function dozStopGPS() {
-  if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
+  _geoClear(_dozGpsWatchId); _dozGpsWatchId = null;
   _dozGpsOn = false;
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '📍 Počni GPS snimanje'; btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; }

@@ -1,0 +1,41 @@
+# Node
+node_modules/
+
+# Build output (generisano, ne commitovati)
+www/
+
+# Android build artifacts
+android/app/build/
+android/.gradle/
+android/build/
+
+# SIGURNOST: Keystore se NE commituje! Koristiti GitHub Secrets
+android/app/keystore.jks
+android/app/*.jks
+android/app/*.p12
+android/app/*.pfx
+
+# Android local config
+android/local.properties
+android/capacitor.settings.gradle
+
+# Capacitor
+.capacitor/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# Editor
+.vscode/
+.idea/
+*.iml

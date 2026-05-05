@@ -1,0 +1,31 @@
+{
+  "appId": "ba.pogonboskrupa.sumarija",
+  "appName": "Šumarija",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Geolocation": {
+      "requestPermissions": true
+    },
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 1500,
+      "backgroundColor": "#08111f",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#08111f",
+      "overlaysWebView": false
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "loggingBehavior": "none"
+  }
+}

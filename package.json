@@ -1,0 +1,35 @@
+{
+  "name": "projektovanje-traktorskih-vlaka",
+  "version": "1.0.0",
+  "description": "Šumarija – GIS alat za projektovanje traktorskih vlaka i doznaku stabala",
+  "main": "sw.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "sync": "npm run build && npx cap sync",
+    "open:android": "npx cap open android",
+    "test": "echo \"No tests\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:39851/git/pogonboskrupa/Projektovanje-traktorskih-vlaka"
+  },
+  "keywords": [],
+  "author": "Pogon Bosna-Krupa",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/geolocation": "^8.2.0",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  }
+}
