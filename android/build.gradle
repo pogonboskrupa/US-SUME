@@ -11,7 +11,8 @@ buildscript {
         classpath 'com.google.gms:google-services:4.4.4'
         // Kotlin mora biti ovdje sa verzijom kako bi subprojekti (Capacitor plugini)
         // mogli primijeniti 'org.jetbrains.kotlin.android' bez konflikta verzija
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'
+        // Kotlin verzija se registruje u settings.gradle pluginManagement bloku,
+        // NE ovdje — dodavanje ovdje pravi "unknown version" konflikt sa novim plugins DSL-om
     }
 }
 

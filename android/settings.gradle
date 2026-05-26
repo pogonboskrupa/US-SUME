@@ -1,3 +1,25 @@
+// pluginManagement MORA biti prvi blok u settings.gradle
+// Registruje verziju Kotlin plugina GLOBALNO, pa subprojekti
+// (Capacitor plugini) ne naletaju na "unknown version" konflikt.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    plugins {
+        id 'org.jetbrains.kotlin.android' version '2.0.21'
+        id 'org.jetbrains.kotlin.jvm'     version '2.0.21'
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id.startsWith('org.jetbrains.kotlin')) {
+                useVersion '2.0.21'
+            }
+        }
+    }
+}
+
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
