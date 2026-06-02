@@ -1175,11 +1175,13 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <span class="lbl">Boja trase</span>
         <div class="colors" id="clrs"></div>
-        <button class="btn g" onclick="addV()">➕ DODAJ VLAKU</button>
-        <button class="btn g" onclick="nacrtajVlaku()" style="background:#0f3460;">✏️ NACRTAJ VLAKU</button>
-        <button class="btn o" id="brec" onclick="togRec()">⏺ POČNI GPS SNIMANJE</button>
+        <button class="btn o" id="brec" onclick="dodiISnimi()">🎙 DODAJ I SNIMI</button>
+        <div style="display:flex;gap:6px;margin-top:5px;">
+          <button class="btn g" style="flex:1;font-size:12px;" onclick="addV()">➕ Samo dodaj</button>
+          <button class="btn" style="flex:1;font-size:12px;background:#0f3460;color:#e2e8f0;" onclick="nacrtajVlaku()">✏️ Nacrtaj</button>
+        </div>
         <div style="font-size:11px;color:#475569;text-align:center;margin-top:4px;line-height:1.5;">
-          Za crtanje i editovanje koristi<br><b style="color:#94a3b8;">toolbar na vrhu karte ↑</b>
+          Za editovanje koristi<br><b style="color:#94a3b8;">toolbar na vrhu karte ↑</b>
         </div>
       </div>
 
@@ -3269,11 +3271,24 @@ function updPrev() {
 updPrev();
 
 // === VLAKA ===
+// Primarna akcija: kreiraj vlaku i odmah pokreni GPS snimanje
+function dodiISnimi() {
+  addV().then(() => {
+    setTimeout(() => {
+      if (actI !== null) {
+        switchTab('karta');
+        togRec();
+      }
+    }, 30);
+  });
+}
+
+// Sekundarna akcija: kreiraj vlaku i aktiviraj ručno crtanje
 function nacrtajVlaku() {
   addV().then(() => {
     setTimeout(() => {
       if (actI !== null) {
-        switchTab('karta'); // Prebaci na full-screen mapu za crtanje
+        switchTab('karta');
         mtAddLine();
       }
     }, 30);
@@ -3586,7 +3601,7 @@ function togRec() {
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0;
     const b = document.getElementById('brec');
-    if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
+    if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); b.setAttribute('onclick', 'togRec()'); }
     const banner = document.getElementById('rec-banner');
     banner.classList.add('show'); banner.classList.remove('paused');
     document.getElementById('btn-pause').textContent = '⏸';
@@ -3615,7 +3630,7 @@ function stopRec() {
   _stopSWHeartbeat();
   _stopRecNotification();
   const b = document.getElementById('brec');
-  if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
+  if (b) { b.textContent = '🎙 DODAJ I SNIMI'; b.classList.remove('rec'); b.setAttribute('onclick', 'dodiISnimi()'); }
   const banner = document.getElementById('rec-banner');
   banner.classList.remove('show'); banner.classList.remove('paused');
   document.getElementById('rec-parent-row').style.display = 'none';
@@ -4269,8 +4284,8 @@ function fabSnimVlaku() {
     return;
   }
   switchTab('vlake');
-  nacrtajVlaku();
-  showToast('🚜 Vlaka kreirana — pritisni GPS snimanje ili crtaj liniju');
+  dodiISnimi();
+  showToast('🚜 Vlaka kreirana — GPS snimanje pokrenuto');
 }
 
 // === POINTS ===
@@ -4366,6 +4381,7 @@ function _renderVlakaRow(el, v, i, depth) {
       ${nasaviBtn}
     </div>
     <div class="vcard-btns">
+      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');togRec()" title="Počni GPS snimanje" style="border-color:#ea580c;color:#ea580c;font-size:11px;width:auto;padding:0 5px;">▶</button>` : ''}
       <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
       <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
       <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
