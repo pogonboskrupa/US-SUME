@@ -1196,6 +1196,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div class="seg-grp">
           <button class="seg-btn" id="brec" onclick="togSnimVlaku()" title="Snimi vlaku">
             <span class="seg-ico">🚜</span><span>Snimi vlaku</span>
+            <span id="brec-nm" style="font-size:9px;color:#fbbf24;line-height:1;">T1</span>
           </button>
           <button class="seg-btn" id="btrag" onclick="togSnimTrag()" title="Snimi trag kretanja">
             <span class="seg-ico">🔴</span><span>Snimi trag</span>
@@ -1509,8 +1510,8 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <div id="rec-row2">
           <button class="rb pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
-          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak">⊕ L</button>
-          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak">⊕ D</button>
+          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
+          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
           <button class="rb back"   id="btn-nazad" onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
           <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
@@ -3287,6 +3288,8 @@ function updPrev() {
   }
   document.getElementById('np').textContent = nm;
   document.getElementById('nd').textContent = ds;
+  const brecNm = document.getElementById('brec-nm');
+  if (brecNm && !recOn) brecNm.textContent = nm; // ne mijenjaj dok snima
   return {nm, br, kr};
 }
 updPrev();
@@ -3505,10 +3508,22 @@ function selI(i) {
   });
 }
 
+function _updKrakBtns() {
+  if (actI === null) return;
+  const nm = vlake[actI].nm;
+  const el = document.getElementById('krak-l-nm');
+  const er = document.getElementById('krak-d-nm');
+  if (el) el.textContent = _nextKrakNm(nm, 'L');
+  if (er) er.textContent = _nextKrakNm(nm, 'D');
+}
+
 function _updBanner() {
   if (!recOn || actI === null) return;
   const v = vlake[actI];
   document.getElementById('rec-nm').textContent = v.nm;
+  // Prikaži naziv aktivne vlake i na brec gumbu
+  const brecNm = document.getElementById('brec-nm');
+  if (brecNm) brecNm.textContent = v.nm;
   const parentRow = document.getElementById('rec-parent-row');
   const btnNazad  = document.getElementById('btn-nazad');
   const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
@@ -3524,6 +3539,7 @@ function _updBanner() {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
   }
+  _updKrakBtns();
   _updRecStatusBar();
 }
 
