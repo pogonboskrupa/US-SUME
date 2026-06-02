@@ -1121,6 +1121,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
+    <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
   <!-- QGIS-STIL MAP TOOLBAR -->
@@ -1644,6 +1645,102 @@ let sbProfile = null;
 
 const _SAVED_USER_KEY = 'tvlake_saved_user';
 
+// ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
+const _OL = {
+  VLAKE:    'tvlake_ol_vlake',
+  PROJEKTI: 'tvlake_ol_projekti',
+  LOG:      'tvlake_ol_log',
+  LABELS:   'tvlake_ol_labels',
+  PROFILE:  'tvlake_ol_profile',
+  KOLEGE:   'tvlake_ol_kolegeMap',
+  QUEUE:    'tvlake_ol_queue',
+
+  save(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+  },
+
+  load(key) {
+    try { const v = JSON.parse(localStorage.getItem(key)); return v?.data ?? null; }
+    catch { return null; }
+  },
+
+  enqueue(op) {
+    try {
+      const q = this.loadQueue();
+      // Deduplicate upsert_vlaka by nm — čuvaj samo zadnju verziju
+      if (op.type === 'upsert_vlaka') {
+        const idx = q.findIndex(o => o.type === 'upsert_vlaka' &&
+          o.payload.nm === op.payload.nm &&
+          o.payload.korisnik_id === op.payload.korisnik_id);
+        if (idx >= 0) q.splice(idx, 1);
+      }
+      // Deduplicate upsert_log by datum
+      if (op.type === 'upsert_log') {
+        const idx = q.findIndex(o => o.type === 'upsert_log' &&
+          o.payload.datum === op.payload.datum &&
+          o.payload.korisnik_id === op.payload.korisnik_id);
+        if (idx >= 0) q.splice(idx, 1);
+      }
+      q.push({ ...op, ts: Date.now() });
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+    } catch(e) {}
+  },
+
+  loadQueue() {
+    try { return JSON.parse(localStorage.getItem(this.QUEUE)) || []; }
+    catch { return []; }
+  },
+
+  removeFromQueue(ts) {
+    try {
+      const q = this.loadQueue().filter(o => o.ts !== ts);
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+    } catch(e) {}
+  }
+};
+
+let _isOfflineMode = false;
+
+function _setOfflineMode(offline) {
+  _isOfflineMode = offline;
+  const el = document.getElementById('offline-badge');
+  if (el) el.style.display = offline ? 'inline-block' : 'none';
+}
+
+window.addEventListener('online', () => {
+  _setOfflineMode(false);
+  showToast('🌐 Veza uspostavljena — sinkroniziram...');
+  _processOfflineQueue();
+});
+window.addEventListener('offline', () => {
+  _setOfflineMode(true);
+  showToast('📴 Offline — podaci se čuvaju lokalno');
+});
+
+async function _processOfflineQueue() {
+  if (!sbUser || !sbProfile) return;
+  const q = _OL.loadQueue();
+  if (!q.length) return;
+  let synced = 0;
+  for (const op of [...q]) {
+    try {
+      let err = null;
+      if (op.type === 'upsert_vlaka') {
+        const { error } = await sb.from('vlake').upsert(op.payload, { onConflict: 'korisnik_id,sumarija,nm' });
+        err = error;
+      } else if (op.type === 'delete_vlaka') {
+        const { error } = await sb.from('vlake').delete().eq('id', op.payload.id);
+        err = error;
+      } else if (op.type === 'upsert_log') {
+        const { error } = await sb.from('dnevni_log').upsert(op.payload, { onConflict: 'korisnik_id,datum' });
+        err = error;
+      }
+      if (!err) { _OL.removeFromQueue(op.ts); synced++; }
+    } catch(e) { break; } // still offline
+  }
+  if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
+}
+
 async function initAuth() {
   // 1. Pokušaj Supabase sesiju
   sb.auth.onAuthStateChange(async (event, session) => {
@@ -1676,6 +1773,20 @@ async function initAuth() {
       console.error('Auto-login error:', e);
     }
   }, 800); // čekaj da onAuthStateChange stigne prvi
+
+  // 3. Offline fallback — ako nema mreže ali postoji keširani profil
+  setTimeout(async () => {
+    if (sbUser) return;
+    const cached = _OL.load(_OL.PROFILE);
+    const saved = _loadSavedUser();
+    if (cached && saved) {
+      sbUser = { id: cached.id, email: cached.email || '' };
+      sbProfile = cached;
+      _setOfflineMode(true);
+      showApp();
+      showToast('📴 Offline pristup — koriste se lokalni podaci');
+    }
+  }, 4500);
 }
 
 function _loadSavedUser() {
@@ -1689,6 +1800,7 @@ async function sbLoadProfile() {
   const { data } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
   sbProfile = data;
   if (data) {
+    _OL.save(_OL.PROFILE, data); // Keširaj za offline
     const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
     document.getElementById('p-ime').value = fullName;
     if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
@@ -1705,10 +1817,13 @@ async function sbLoadProfile() {
 function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
+  _setOfflineMode(!navigator.onLine); // Postavi offline indikator odmah
   switchTab('karta');   // defaultno pokaži kartu
   loadProj();           // lokalni podaci odmah
   sbInitData();         // Supabase async override
   sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
+  // Procesiraj eventualni offline red čim dobijemo mrežu
+  if (navigator.onLine) _processOfflineQueue();
 }
 
 // --- Auth form helpers ---
@@ -1925,28 +2040,39 @@ const _deletedProjektIds = new Set(); // guard: ne dozvoli sbLoadProjekti da ih 
 
 async function sbLoadProjekti() {
   if (!sbUser) return;
-  // Load my projects
-  const { data: moji } = await sb.from('projekti')
-    .select('*').eq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+  try {
+    // Load my projects
+    const { data: moji, error: e1 } = await sb.from('projekti')
+      .select('*').eq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+    if (e1) throw e1;
 
-  // Load projects I'm a member of
-  const { data: clanstva } = await sb.from('projekt_clanovi')
-    .select('projekt_id').eq('korisnik_id', sbUser.id);
-  let dijeljeni = [];
-  if (clanstva && clanstva.length > 0) {
-    const ids = clanstva.map(c => c.projekt_id);
-    const { data } = await sb.from('projekti').select('*').in('id', ids)
-      .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
-    dijeljeni = data || [];
-  }
-  // Nikad ne vraćaj lokalno obrisane projekte (DB propagacija može kasniti)
-  _projekti = [...(moji || []), ...dijeljeni].filter(p => !_deletedProjektIds.has(p.id));
+    // Load projects I'm a member of
+    const { data: clanstva } = await sb.from('projekt_clanovi')
+      .select('projekt_id').eq('korisnik_id', sbUser.id);
+    let dijeljeni = [];
+    if (clanstva && clanstva.length > 0) {
+      const ids = clanstva.map(c => c.projekt_id);
+      const { data } = await sb.from('projekti').select('*').in('id', ids)
+        .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+      dijeljeni = data || [];
+    }
+    // Nikad ne vraćaj lokalno obrisane projekte (DB propagacija može kasniti)
+    _projekti = [...(moji || []), ...dijeljeni].filter(p => !_deletedProjektIds.has(p.id));
 
-  // Load clanovi for each project
-  for (const p of _projekti) {
-    const { data: cl } = await sb.from('projekt_clanovi')
-      .select('korisnik_id, added_by').eq('projekt_id', p.id);
-    p.clanovi = cl || [];
+    // Load clanovi for each project
+    for (const p of _projekti) {
+      const { data: cl } = await sb.from('projekt_clanovi')
+        .select('korisnik_id, added_by').eq('projekt_id', p.id);
+      p.clanovi = cl || [];
+    }
+
+    _OL.save(_OL.PROJEKTI, _projekti); // Keširaj za offline
+  } catch(e) {
+    // Offline fallback — učitaj iz keša
+    const cached = _OL.load(_OL.PROJEKTI);
+    if (cached) {
+      _projekti = cached.filter(p => !_deletedProjektIds.has(p.id));
+    }
   }
 
   // Validate _aktivniProjektId still exists
@@ -2215,14 +2341,8 @@ async function sbLoadProj() { return sbLoadProjekti(); }
 async function sbSaveProj() { /* handled by saveNovProjekt */ }
 
 // ─── VLAKE ───────────────────────────────────────────────────────────────────
-async function sbLoadVlake() {
-  if (!sbUser || !sbProfile) return;
-  const { data } = await sb.from('vlake')
-    .select('*')
-    .eq('korisnik_id', sbUser.id)
-    .eq('sumarija', sbProfile.sumarija || '');
-  if (!data || data.length === 0) return;
-  data.forEach(row => {
+function _applyVlakeRows(rows) {
+  rows.forEach(row => {
     if (vlake.find(v => v.nm === row.nm)) return;
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
@@ -2238,8 +2358,22 @@ async function sbLoadVlake() {
   if (allPts.length > 0) {
     try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
   }
-  // Sync ibr to next free number after loading from Supabase
   _syncIbr();
+}
+
+async function sbLoadVlake() {
+  if (!sbUser || !sbProfile) return;
+  let rows = null;
+  try {
+    const { data, error } = await sb.from('vlake')
+      .select('*')
+      .eq('korisnik_id', sbUser.id)
+      .eq('sumarija', sbProfile.sumarija || '');
+    if (!error && data) { rows = data; _OL.save(_OL.VLAKE, data); }
+  } catch(e) {}
+  if (!rows) rows = _OL.load(_OL.VLAKE);
+  if (!rows || rows.length === 0) return;
+  _applyVlakeRows(rows);
 }
 
 function _syncIbr() {
@@ -2259,7 +2393,7 @@ function scheduleVlakaSave(i) {
 async function sbFlushVlaka(i) {
   const v = vlake[i];
   if (!v || !sbUser || !sbProfile) return;
-  const { data, error } = await sb.from('vlake').upsert({
+  const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
@@ -2268,14 +2402,45 @@ async function sbFlushVlaka(i) {
     lager: v.lager || null,
     pts: v.pts,
     updated_at: new Date().toISOString()
-  }, { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single();
-  if (!error && data) { v.sbId = data.id; v.updatedAt = new Date().toISOString(); }
-  if (error) console.error('Greška vlaka:', error);
+  };
+
+  // Uvijek ažuriraj lokalni keš odmah (preživljava refresh čak i offline)
+  const cached = _OL.load(_OL.VLAKE) || [];
+  const ci = cached.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
+  const cRow = { ...payload, id: v.sbId || null };
+  if (ci >= 0) cached.splice(ci, 1, cRow); else cached.push(cRow);
+  _OL.save(_OL.VLAKE, cached);
+
+  try {
+    const { data, error } = await sb.from('vlake').upsert(payload,
+      { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single();
+    if (!error && data) {
+      v.sbId = data.id;
+      v.updatedAt = new Date().toISOString();
+      // Ažuriraj ID u kešu
+      const c2 = _OL.load(_OL.VLAKE) || [];
+      const i2 = c2.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
+      if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
+    } else if (error) {
+      _OL.enqueue({ type: 'upsert_vlaka', payload });
+    }
+  } catch(e) {
+    _OL.enqueue({ type: 'upsert_vlaka', payload });
+  }
 }
 
 async function sbDeleteVlaka(sbId) {
   if (!sbId || !sbUser) return;
-  await sb.from('vlake').delete().eq('id', sbId);
+  // Ukloni iz lokalnog keša odmah
+  const cached = _OL.load(_OL.VLAKE) || [];
+  _OL.save(_OL.VLAKE, cached.filter(r => r.id !== sbId));
+
+  try {
+    const { error } = await sb.from('vlake').delete().eq('id', sbId);
+    if (error) _OL.enqueue({ type: 'delete_vlaka', payload: { id: sbId } });
+  } catch(e) {
+    _OL.enqueue({ type: 'delete_vlaka', payload: { id: sbId } });
+  }
 }
 
 // ─── LABEL HELPERS (potrebni i za sbLoadKolegeVlake i za updateVlakaLabel) ────
@@ -2384,15 +2549,10 @@ async function sbLoadKolegeVlake() {
 }
 
 // ─── DNEVNI LOG ──────────────────────────────────────────────────────────────
-async function sbLoadLog() {
-  if (!sbProfile?.sumarija) return;
-  const { data } = await sb.from('dnevni_log')
-    .select('*')
-    .eq('sumarija', sbProfile.sumarija)
-    .order('datum', { ascending: false });
-  if (!data || data.length === 0) return;
+function _applyLogRows(rows) {
+  if (!rows || rows.length === 0) return;
   const grouped = {};
-  data.forEach(row => {
+  rows.forEach(row => {
     if (!grouped[row.datum]) grouped[row.datum] = { date: row.datum, entries: [] };
     grouped[row.datum].entries.push({
       projektant: row.projektant,
@@ -2406,9 +2566,23 @@ async function sbLoadLog() {
   rndLog(); updProjStats(); rndOdjeliRekap();
 }
 
+async function sbLoadLog() {
+  if (!sbProfile?.sumarija) return;
+  let rows = null;
+  try {
+    const { data, error } = await sb.from('dnevni_log')
+      .select('*')
+      .eq('sumarija', sbProfile.sumarija)
+      .order('datum', { ascending: false });
+    if (!error && data) { rows = data; _OL.save(_OL.LOG, data); }
+  } catch(e) {}
+  if (!rows) rows = _OL.load(_OL.LOG);
+  _applyLogRows(rows);
+}
+
 async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel) {
   if (!sbUser || !sbProfile) return;
-  const { error } = await sb.from('dnevni_log').upsert({
+  const payload = {
     korisnik_id:    sbUser.id,
     sumarija:       sbProfile.sumarija || '',
     odjel:          odjel || '',
@@ -2416,8 +2590,12 @@ async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel) {
     projektant:     ime,
     meters:         totalM,
     vlake_snapshot: vSnap
-  }, { onConflict: 'korisnik_id,datum' });
-  if (error) console.error('Greška log:', error);
+  };
+  const { error } = await sb.from('dnevni_log').upsert(payload, { onConflict: 'korisnik_id,datum' });
+  if (error) {
+    _OL.enqueue({ type: 'upsert_log', payload });
+    console.error('Greška log (queueing):', error);
+  }
 }
 
 async function sbClearLog() {
@@ -2498,9 +2676,14 @@ async function sbLoadOdjeli() {
 // ─── TEXT LABELS ─────────────────────────────────────────────────────────────
 async function sbLoadTextLabelsDB() {
   if (!sbUser) return;
-  const { data } = await sb.from('text_labels').select('*').eq('korisnik_id', sbUser.id);
-  if (!data) return;
-  data.forEach(row => {
+  let rows = null;
+  try {
+    const { data, error } = await sb.from('text_labels').select('*').eq('korisnik_id', sbUser.id);
+    if (!error && data) { rows = data; _OL.save(_OL.LABELS, data); }
+  } catch(e) {}
+  if (!rows) rows = _OL.load(_OL.LABELS);
+  if (!rows) return;
+  rows.forEach(row => {
     const lbl = { id: row.label_id, lat: row.lat, lng: row.lng, text: row.tekst, size: row.velicina, color: row.boja };
     lbl.marker = createTextMarker(lbl);
     textLabels.push(lbl);
