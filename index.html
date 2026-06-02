@@ -187,6 +187,24 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vcard-km { font-size:14px; font-weight:700; color:#4ade80; white-space:nowrap; }
 .vcard-sub { font-size:11px; color:#475569; margin-top:2px; }
 .vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 7px 6px 0; }
+
+/* AlpineQuest-stil segmented gumbi */
+.seg-grp {
+  display:flex; border-radius:8px; overflow:hidden;
+  border:1px solid #374151; margin-top:8px;
+}
+.seg-btn {
+  flex:1; background:#1e293b; color:#94a3b8;
+  border:none; border-right:1px solid #374151;
+  padding:6px 2px 5px; font-size:10px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  transition:background 0.15s, color 0.15s; line-height:1.2;
+}
+.seg-btn:last-child { border-right:none; }
+.seg-btn:hover { background:#0f172a; color:#e2e8f0; }
+.seg-btn.active { background:rgba(220,38,38,0.18); color:#fca5a5; }
+.seg-ico { font-size:17px; line-height:1; }
+
 .mb {
   width:28px; height:28px; border-radius:5px;
   border:1px solid #374151; background:#1e293b;
@@ -1175,11 +1193,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <span class="lbl">Boja trase</span>
         <div class="colors" id="clrs"></div>
-        <button class="btn g" onclick="addV()">➕ DODAJ VLAKU</button>
-        <button class="btn g" onclick="nacrtajVlaku()" style="background:#0f3460;">✏️ NACRTAJ VLAKU</button>
-        <button class="btn o" id="brec" onclick="togRec()">⏺ POČNI GPS SNIMANJE</button>
-        <div style="font-size:11px;color:#475569;text-align:center;margin-top:4px;line-height:1.5;">
-          Za crtanje i editovanje koristi<br><b style="color:#94a3b8;">toolbar na vrhu karte ↑</b>
+        <div class="seg-grp">
+          <button class="seg-btn" id="brec" onclick="togSnimVlaku()" title="Snimi vlaku">
+            <span class="seg-ico">🚜</span><span>Snimi vlaku</span>
+            <span id="brec-nm" style="font-size:9px;color:#fbbf24;line-height:1;">T1</span>
+          </button>
+          <button class="seg-btn" id="btrag" onclick="togSnimTrag()" title="Snimi trag kretanja">
+            <span class="seg-ico">🔴</span><span>Snimi trag</span>
+          </button>
+          <button class="seg-btn" onclick="mojaLokacija()" title="Moja pozicija">
+            <span class="seg-ico">🎯</span><span>Pozicija</span>
+          </button>
         </div>
       </div>
 
@@ -1203,7 +1227,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
           Još nema vlaka.<br>
           Unesite broj vlake i kraka<br>
-          pa kliknite <b style="color:#4ade80;">DODAJ VLAKU</b>.
+          pa kliknite <b style="color:#ea580c;">Snimi vlaku</b>.
         </div>
       </div>
 
@@ -1486,8 +1510,8 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <div id="rec-row2">
           <button class="rb pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
-          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak">⊕ L</button>
-          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak">⊕ D</button>
+          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
+          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
           <button class="rb back"   id="btn-nazad" onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
           <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
@@ -3264,16 +3288,45 @@ function updPrev() {
   }
   document.getElementById('np').textContent = nm;
   document.getElementById('nd').textContent = ds;
+  const brecNm = document.getElementById('brec-nm');
+  if (brecNm && !recOn) brecNm.textContent = nm; // ne mijenjaj dok snima
   return {nm, br, kr};
 }
 updPrev();
 
 // === VLAKA ===
+// Segmented gumbi — wrapperi koji prebacuju na kartu
+function togSnimVlaku() {
+  if (recOn) { togRec(); return; }
+  dodiISnimi();
+}
+function togSnimTrag() {
+  switchTab('karta');
+  fabSnimTrag();
+}
+function mojaLokacija() {
+  switchTab('karta');
+  fabLokacija();
+}
+
+// Primarna akcija: kreiraj vlaku i odmah pokreni GPS snimanje
+function dodiISnimi() {
+  addV().then(() => {
+    setTimeout(() => {
+      if (actI !== null) {
+        switchTab('karta');
+        togRec();
+      }
+    }, 30);
+  });
+}
+
+// Sekundarna akcija: kreiraj vlaku i aktiviraj ručno crtanje
 function nacrtajVlaku() {
   addV().then(() => {
     setTimeout(() => {
       if (actI !== null) {
-        switchTab('karta'); // Prebaci na full-screen mapu za crtanje
+        switchTab('karta');
         mtAddLine();
       }
     }, 30);
@@ -3455,10 +3508,22 @@ function selI(i) {
   });
 }
 
+function _updKrakBtns() {
+  if (actI === null) return;
+  const nm = vlake[actI].nm;
+  const el = document.getElementById('krak-l-nm');
+  const er = document.getElementById('krak-d-nm');
+  if (el) el.textContent = _nextKrakNm(nm, 'L');
+  if (er) er.textContent = _nextKrakNm(nm, 'D');
+}
+
 function _updBanner() {
   if (!recOn || actI === null) return;
   const v = vlake[actI];
   document.getElementById('rec-nm').textContent = v.nm;
+  // Prikaži naziv aktivne vlake i na brec gumbu
+  const brecNm = document.getElementById('brec-nm');
+  if (brecNm) brecNm.textContent = v.nm;
   const parentRow = document.getElementById('rec-parent-row');
   const btnNazad  = document.getElementById('btn-nazad');
   const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
@@ -3474,6 +3539,7 @@ function _updBanner() {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
   }
+  _updKrakBtns();
   _updRecStatusBar();
 }
 
@@ -3586,7 +3652,7 @@ function togRec() {
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0;
     const b = document.getElementById('brec');
-    if (b) { b.textContent = '⏹ ZAUSTAVI SNIMANJE'; b.classList.add('rec'); }
+    if (b) b.classList.add('active');
     const banner = document.getElementById('rec-banner');
     banner.classList.add('show'); banner.classList.remove('paused');
     document.getElementById('btn-pause').textContent = '⏸';
@@ -3615,7 +3681,7 @@ function stopRec() {
   _stopSWHeartbeat();
   _stopRecNotification();
   const b = document.getElementById('brec');
-  if (b) { b.textContent = '⏺ POČNI GPS SNIMANJE'; b.classList.remove('rec'); }
+  if (b) b.classList.remove('active');
   const banner = document.getElementById('rec-banner');
   banner.classList.remove('show'); banner.classList.remove('paused');
   document.getElementById('rec-parent-row').style.display = 'none';
@@ -4212,6 +4278,8 @@ function fabSnimTrag() {
     const lbl = document.getElementById('fab-trag-lbl');
     if (btn) { btn.classList.remove('active'); btn.textContent = '🔴'; }
     if (lbl) lbl.textContent = 'Snimi trag';
+    const bt = document.getElementById('btrag');
+    if (bt) bt.classList.remove('active');
     document.getElementById('fab-main').classList.remove('gps-active');
     if (_tragPts.length > 1) {
       const dlLink = document.createElement('a');
@@ -4236,6 +4304,8 @@ function fabSnimTrag() {
     if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
     if (lbl) lbl.textContent = 'Zaustavi trag';
     document.getElementById('fab-main').classList.add('gps-active');
+    const bt = document.getElementById('btrag');
+    if (bt) bt.classList.add('active');
     showToast('🔴 Snimanje traga pokrenuto');
   }
 }
@@ -4269,8 +4339,8 @@ function fabSnimVlaku() {
     return;
   }
   switchTab('vlake');
-  nacrtajVlaku();
-  showToast('🚜 Vlaka kreirana — pritisni GPS snimanje ili crtaj liniju');
+  dodiISnimi();
+  showToast('🚜 Vlaka kreirana — GPS snimanje pokrenuto');
 }
 
 // === POINTS ===
@@ -4366,6 +4436,7 @@ function _renderVlakaRow(el, v, i, depth) {
       ${nasaviBtn}
     </div>
     <div class="vcard-btns">
+      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');togRec()" title="Počni GPS snimanje" style="border-color:#ea580c;color:#ea580c;font-size:11px;width:auto;padding:0 5px;">▶</button>` : ''}
       <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
       <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
       <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
