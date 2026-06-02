@@ -1,0 +1,156 @@
+# .github/workflows/build.yml
+# Auto-build Flutter APK iz doznaka/ source fragmenata
+
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout koda
+        uses: actions/checkout@v4
+
+      - name: Postavi Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Postavi Flutter 3.22.x
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      # ── Bootstrap Flutter projekta ───────────────────────────────
+      - name: Kreiraj Flutter projekat
+        run: |
+          flutter create \
+            --org com.forestrytracker \
+            --project-name forestry_tracker \
+            --platforms android \
+            /tmp/app
+
+      # ── Kopiranje source fajlova ─────────────────────────────────
+      - name: Kopiraj pubspec.yaml
+        run: cp doznaka/pubspec.yaml /tmp/app/pubspec.yaml
+
+      - name: Kopiraj Dart source fajlove
+        run: |
+          SRC="doznaka"
+          DEST="/tmp/app"
+
+          # lib/ root
+          cp $SRC/main.dart                     $DEST/lib/main.dart
+
+          # lib/core/
+          mkdir -p $DEST/lib/core
+          cp $SRC/constants.dart                $DEST/lib/core/constants.dart
+          cp $SRC/theme.dart                    $DEST/lib/core/theme.dart
+
+          # lib/models/
+          mkdir -p $DEST/lib/models
+          cp $SRC/models.dart                   $DEST/lib/models/models.dart
+
+          # lib/providers/
+          mkdir -p $DEST/lib/providers
+          cp $SRC/providers.dart                $DEST/lib/providers/providers.dart
+
+          # lib/services/
+          mkdir -p $DEST/lib/services
+          cp $SRC/supabase_service.dart         $DEST/lib/services/supabase_service.dart
+          cp $SRC/gps_service.dart              $DEST/lib/services/gps_service.dart
+          cp $SRC/battery_service.dart          $DEST/lib/services/battery_service.dart
+          cp $SRC/geo_parser.dart               $DEST/lib/services/geo_parser.dart
+          cp $SRC/area_calculator.dart          $DEST/lib/services/area_calculator.dart
+          cp $SRC/marking_service.dart          $DEST/lib/services/marking_service.dart
+
+          # lib/screens/auth/
+          mkdir -p $DEST/lib/screens/auth
+          cp $SRC/login_screen.dart             $DEST/lib/screens/auth/login_screen.dart
+          cp $SRC/register_screen.dart          $DEST/lib/screens/auth/register_screen.dart
+
+          # lib/screens/home/
+          mkdir -p $DEST/lib/screens/home
+          cp $SRC/home_screen.dart              $DEST/lib/screens/home/home_screen.dart
+
+          # lib/screens/map/
+          mkdir -p $DEST/lib/screens/map
+          cp $SRC/map_screen.dart               $DEST/lib/screens/map/map_screen.dart
+
+          # lib/screens/members/
+          mkdir -p $DEST/lib/screens/members
+          cp $SRC/members_screen.dart           $DEST/lib/screens/members/members_screen.dart
+
+          # lib/screens/project/
+          mkdir -p $DEST/lib/screens/project
+          cp $SRC/create_project_screen.dart    $DEST/lib/screens/project/create_project_screen.dart
+
+          # lib/screens/marking/
+          mkdir -p $DEST/lib/screens/marking
+          cp $SRC/drawing_tool.dart             $DEST/lib/screens/marking/drawing_tool.dart
+          cp $SRC/markings_panel.dart           $DEST/lib/screens/marking/markings_panel.dart
+          cp $SRC/save_marking_dialog.dart      $DEST/lib/screens/marking/save_marking_dialog.dart
+
+          # lib/screens/widgets/
+          mkdir -p $DEST/lib/screens/widgets
+          cp $SRC/engineer_card.dart            $DEST/lib/screens/widgets/engineer_card.dart
+          cp $SRC/area_stats_panel.dart         $DEST/lib/screens/widgets/area_stats_panel.dart
+
+          # assets/
+          mkdir -p $DEST/assets/images
+
+      # ── Android konfiguracija ────────────────────────────────────
+      - name: Zamijeni AndroidManifest.xml
+        run: |
+          cp doznaka/AndroidManifest.xml \
+            /tmp/app/android/app/src/main/AndroidManifest.xml
+
+      - name: Kopiraj MainActivity.kt
+        run: |
+          KTDIR="/tmp/app/android/app/src/main/kotlin/com/forestrytracker"
+          mkdir -p "$KTDIR"
+          cp doznaka/MainActivity.kt "$KTDIR/MainActivity.kt"
+
+      # ── Supabase credentials iz GitHub Secrets ───────────────────
+      - name: Ubaci Supabase credentials
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          sed -i \
+            "s|https://TVOJ_PROJECT_ID.supabase.co|${SUPABASE_URL}|g" \
+            /tmp/app/lib/core/constants.dart
+          sed -i \
+            "s|TVOJ_ANON_KEY|${SUPABASE_ANON_KEY}|g" \
+            /tmp/app/lib/core/constants.dart
+
+      # ── Build ────────────────────────────────────────────────────
+      - name: flutter pub get
+        working-directory: /tmp/app
+        run: flutter pub get
+
+      - name: Riverpod codegen (build_runner)
+        working-directory: /tmp/app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build debug APK
+        working-directory: /tmp/app
+        run: flutter build apk --debug --split-per-abi
+
+      # ── Artifact ─────────────────────────────────────────────────
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: forestry-tracker-debug
+          path: /tmp/app/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          retention-days: 30
+          if-no-files-found: error
