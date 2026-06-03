@@ -7612,20 +7612,20 @@ function switchTab(tab) {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
     setTimeout(()=>map.invalidateSize(), 50);
-    msrStop();
+    msrStop(true);
   } else if (tab==='vlake') {
     _mapFullScreen = false;
     const tbVis = activeTool !== 'select';
     _setMapUIVisible(tbVis, false);
-    msrStop();
+    msrStop(true);
   } else if (tab==='projekat') {
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
     _setMapUIVisible(false, false);
-    msrStop();
+    msrStop(true);
   } else if (tab==='doznaka') {
     _mapFullScreen = false;
     _setMapUIVisible(false, false);
-    msrStop();
+    msrStop(true);
     dozInit();
   } else if (tab==='mjtrg') {
     _mapFullScreen = true;
@@ -7867,7 +7867,7 @@ function msrStart() {
   const hint = document.getElementById('msr-hint');
   if (hint) hint.innerHTML = 'Klikaj na karti ili pritisni <b>⊕ Pozicija tačke</b>.<br>Vuci tačku da je pomjeriš · desni klik = briši tačku.';
 }
-function msrStop() {
+function msrStop(skipSave) {
   _msrOn = false;
   map.getContainer().style.cursor = '';
   map.off('click', _msrMapClick);
@@ -7877,12 +7877,12 @@ function msrStop() {
   const xh = document.getElementById('msr-xhair');
   if (xh) xh.style.display = 'none';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.innerHTML = _msrPts.length
-    ? 'Izmjera završena. Vuci tačke za korekciju · desni klik = briši tačku.'
-    : 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
+  if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
+  // Auto-ponudi snimanje ako ima ≥2 tačaka
+  if (!skipSave && _msrPts.length >= 2) _mqmOpen();
 }
 function msrClear() {
-  msrStop();
+  msrStop(true);
   _msrPts = [];
   if (_msrLayer) {
     _msrLayer.clearLayers();
@@ -7896,6 +7896,60 @@ function msrClear() {
 function msrActivateIfNeeded() {
   _msrUpdPanel();
   _msrRegRender();
+}
+
+// ── Quick meta prompt po završetku mjerenja ───────────────────────────
+let _mqmId = null;
+function _mqmOpen() {
+  const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  const now  = new Date();
+  const entry = {
+    id: 'mr_' + Date.now(),
+    name: 'Mjerenje ' + now.toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    date: now.toISOString(),
+    gj: aktP?.gj || '',
+    odjel: aktP?.odjel || '',
+    pts: _msrPts.slice(),
+    color: _msrColor
+  };
+  _msrRegistry.unshift(entry);
+  _msrRegSave();
+  _msrRegRender();
+  _mqmId = entry.id;
+  // Popuni select
+  const sel = document.getElementById('mqm-gj-sel');
+  if (sel && !sel.options.length) {
+    sel.innerHTML = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+      `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
+    ).join('');
+  }
+  if (sel) {
+    const gjV = entry.gj;
+    sel.value = _GJ_OPTIONS.includes(gjV) ? gjV : (gjV ? 'CUSTOM' : '');
+    const cust = document.getElementById('mqm-gj-cust');
+    if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? gjV : ''; }
+  }
+  const nameEl = document.getElementById('mqm-name');
+  if (nameEl) nameEl.value = entry.name;
+  const odj = document.getElementById('mqm-odjel');
+  if (odj) odj.value = entry.odjel;
+  document.getElementById('msr-quick-meta').style.display = '';
+}
+function _mqmSave() {
+  const m = _mqmId && _msrRegistry.find(x => x.id === _mqmId);
+  if (m) {
+    const nameEl = document.getElementById('mqm-name');
+    m.name  = (nameEl?.value || m.name).trim() || m.name;
+    m.gj    = _gjGetValue('mqm');
+    m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
+    _msrRegSave();
+    _msrRegRender();
+  }
+  _mqmClose();
+}
+function _mqmClose() {
+  document.getElementById('msr-quick-meta').style.display = 'none';
+  _mqmId = null;
 }
 
 // =====================================================================
@@ -10287,6 +10341,36 @@ function dozBackToList() {
 
 <!-- Crosshair za mjerenje -->
 <div id="msr-xhair" style="display:none;"></div>
+
+<!-- === Quick meta prompt — po završetku mjerenja === -->
+<div id="msr-quick-meta" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:8500;
+  background:rgba(15,23,42,0.97);border-top:2px solid #38bdf8;border-radius:14px 14px 0 0;
+  padding:12px 14px;padding-bottom:max(env(safe-area-inset-bottom,0px),12px);
+  box-shadow:0 -4px 24px rgba(0,0,0,0.6);">
+  <div style="font-size:13px;font-weight:600;color:#38bdf8;margin-bottom:10px;">📏 Mjerenje završeno — spremi opis (opciono)</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+    <div style="flex:2;min-width:140px;">
+      <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Naziv</div>
+      <input id="mqm-name" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;" placeholder="Naziv mjerenja">
+    </div>
+    <div style="flex:1;min-width:130px;">
+      <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">GJ</div>
+      <select id="mqm-gj-sel" onchange="_gjSelChange('mqm')"
+        style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;"></select>
+      <input id="mqm-gj-cust" style="display:none;width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;" placeholder="Unesi naziv GJ">
+    </div>
+    <div style="flex:1;min-width:90px;">
+      <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Odjel</div>
+      <input id="mqm-odjel" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;" placeholder="npr. 14a">
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="_mqmSave()"
+      style="flex:1;background:#0369a1;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer;">✓ Spremi</button>
+    <button onclick="_mqmClose()"
+      style="flex:0 0 auto;background:#1e293b;color:#64748b;border:1px solid #334155;border-radius:8px;padding:10px 18px;font-size:13px;cursor:pointer;">Preskoči</button>
+  </div>
+</div>
 
 <!-- === Quick meta prompt — po završetku snimanja traga === -->
 <div id="trag-quick-meta" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:8500;
