@@ -687,19 +687,24 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* === N.V. BADGE (gornji lijevi ugao) === */
 #nv-badge {
-  position:absolute; top:3px; left:8px;
+  position:absolute; top:4px; left:8px; right:8px;
   z-index:900; pointer-events:none;
-  background:rgba(15,23,42,0.82);
-  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(15,23,42,0.80);
+  border:1px solid rgba(255,255,255,0.12);
   border-radius:6px;
-  padding:4px 9px;
-  display:flex; flex-direction:column; align-items:flex-start; gap:2px;
-  font-size:12px; font-family:monospace; white-space:nowrap;
-  color:#e2e8f0;
+  padding:3px 8px;
+  display:flex; flex-direction:row; align-items:center; gap:0;
+  font-size:10px; font-family:monospace; white-space:nowrap;
+  color:#94a3b8;
   backdrop-filter:blur(3px);
+  overflow:hidden;
 }
-#nv-badge .nv-icon { font-size:13px; line-height:1; }
-#nv-badge #nv-val { color:#22d3ee; font-weight:bold; }
+#nv-badge .nv-icon { font-size:11px; margin-right:3px; }
+#nv-badge #nv-val { color:#22d3ee; font-weight:bold; font-size:11px; }
+#nv-badge .nv-sep { color:#334155; margin:0 6px; }
+#nv-badge .nv-lbl { color:#475569; font-size:9px; }
+#nv-badge .nv-coord { color:#38bdf8; font-weight:700; font-size:10px; }
+#nv-badge #map-scale-val { color:#fbbf24; font-weight:bold; font-size:10px; }
 
 
 /* === QGIS-STIL TOOLBAR NA MAPI === */
@@ -1612,18 +1617,16 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="krak-picker-list"></div>
         <div id="krak-picker-empty" style="display:none;font-size:12px;color:#475569;text-align:center;padding:8px 0;">Nema postojećih krakova</div>
       </div>
-      <!-- N.V. + razmjera + MGI koordinate badge top-left -->
+      <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
-        <div style="display:flex;align-items:center;gap:3px;">
-          <span class="nv-icon">⛰</span>
-          <span id="nv-val">— m</span>
-          <span style="color:#475569;margin:0 3px;">|</span>
-          <span style="color:#94a3b8;font-size:11px;">1:</span><span id="map-scale-val" style="color:#fbbf24;font-weight:bold;">—</span>
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;padding-top:4px;line-height:1.7;">
-          <span style="color:#475569;font-size:10px;">Y (E)</span> <span id="omgi-y" style="color:#38bdf8;font-weight:700;font-size:13px;">—</span><br>
-          <span style="color:#475569;font-size:10px;">X (N)</span> <span id="omgi-x" style="color:#38bdf8;font-weight:700;font-size:13px;">—</span>
-        </div>
+        <span class="nv-icon">⛰</span>
+        <span id="nv-val">— m</span>
+        <span class="nv-sep">|</span>
+        <span class="nv-lbl">Y</span>&nbsp;<span id="omgi-y" class="nv-coord">—</span>
+        <span class="nv-sep">·</span>
+        <span class="nv-lbl">X</span>&nbsp;<span id="omgi-x" class="nv-coord">—</span>
+        <span class="nv-sep">|</span>
+        <span class="nv-lbl">1:</span><span id="map-scale-val">—</span>
       </div>
       <!-- ═══ GPS SNIMANJE BANNER ═══ -->
       <div id="rec-banner">
