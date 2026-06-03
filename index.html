@@ -552,7 +552,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* === Mjerenja & Tragovi panel === */
 #mjtrg-panel {
   position:fixed; left:0; right:0; bottom:0;
-  max-height:68vh;
+  max-height:20vh;
   background:rgba(15,23,42,0.97);
   border-top:2px solid #1e3a5f;
   border-radius:14px 14px 0 0;
@@ -561,6 +561,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   overscroll-behavior:contain; touch-action:pan-y;
   backdrop-filter:blur(6px);
   padding-bottom:env(safe-area-inset-bottom,0px);
+  transition:max-height 0.2s ease;
 }
 @media (min-width:581px) {
   #mjtrg-panel {
@@ -7624,6 +7625,8 @@ function _mjtrgTab(t) {
   const isMsr = t === 'msr';
   document.getElementById('mjtrg-sec-msr').style.display = isMsr ? '' : 'none';
   document.getElementById('mjtrg-sec-trg').style.display = isMsr ? 'none' : '';
+  const panel = document.getElementById('mjtrg-panel');
+  if (panel) panel.style.maxHeight = isMsr ? '20vh' : '60vh';
   const tMsr = document.getElementById('mjtrg-tab-msr');
   const tTrg = document.getElementById('mjtrg-tab-trg');
   if (tMsr) {
@@ -7761,57 +7764,31 @@ function _msrRedraw() {
 }
 
 function _msrUpdPanel() {
-  const segsEl  = document.getElementById('msr-segs');
   const totalBox = document.getElementById('msr-total-box');
-  if (!segsEl) return;
+  if (!totalBox) return;
   const pts = _msrPts;
-  if (pts.length < 2) { segsEl.innerHTML=''; if(totalBox) totalBox.style.display='none'; return; }
-  let html = '', totalDist = 0, totalUp = 0, totalDn = 0;
+  if (pts.length < 2) { totalBox.style.display='none'; return; }
+  let totalDist = 0, totalUp = 0, totalDn = 0;
   for (let i = 0; i < pts.length-1; i++) {
     const a=pts[i], b=pts[i+1];
-    const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
-    const az   = _msrBearing(a.lat,a.lng,b.lat,b.lng);
-    totalDist += dist;
-    let slopeHtml = '<span style="color:#475569;">—</span>';
+    totalDist += _msrHaversine(a.lat,a.lng,b.lat,b.lng);
     if (a.elev != null && b.elev != null) {
       const dh = b.elev - a.elev;
-      const pct = dist > 0 ? (dh/dist*100).toFixed(1) : '0.0';
-      const col = dh > 0 ? '#34d399' : (dh < 0 ? '#f87171' : '#94a3b8');
-      slopeHtml = `<b style="color:${col};">${pct>0?'+':''}${pct}%</b>`;
       if (dh > 0) totalUp += dh; else totalDn -= dh;
     }
-    const azDir = ['S','SSI','SI','ISI','I','IIJ','IJ','JIJ','J','JJZ','JZ','ZJZ','Z','ZSZ','SZ','SSZ'][Math.round(az/22.5)%16];
-    html += `<div class="msr-seg">
-      <div class="msr-seg-hdr">
-        <span class="msr-seg-num">Tačka ${i+1} → ${i+2}</span>
-        <span class="msr-seg-dist">${_msrFmt(dist)}</span>
-      </div>
-      <div class="msr-seg-row">
-        <div>🧭 Az: <b>${az.toFixed(1)}° ${azDir}</b></div>
-        <div>📐 Nagib: ${slopeHtml}</div>
-      </div>
-      ${(a.elev!=null||b.elev!=null)?`<div class="msr-seg-row" style="margin-top:3px;">
-        <div>⛰ NV₁: <b>${a.elev!=null?Math.round(a.elev)+' m':'—'}</b></div>
-        <div>⛰ NV₂: <b>${b.elev!=null?Math.round(b.elev)+' m':'—'}</b></div>
-      </div>`:''}
-    </div>`;
   }
-  segsEl.innerHTML = html;
-  if (totalBox) {
-    totalBox.style.display = 'block';
-    document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
-    document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
-    document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
-    // Površina — prikazuje se kad ima ≥3 tačaka
-    const areaRow = document.getElementById('msr-area-row');
-    if (pts.length >= 3) {
-      const areaM2 = _msrSphericalArea(pts);
-      areaRow.style.display = 'block';
-      document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
-      document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
-    } else {
-      areaRow.style.display = 'none';
-    }
+  totalBox.style.display = 'block';
+  document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
+  document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
+  document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
+  const areaRow = document.getElementById('msr-area-row');
+  if (pts.length >= 3) {
+    const areaM2 = _msrSphericalArea(pts);
+    areaRow.style.display = 'block';
+    document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
+    document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
+  } else {
+    areaRow.style.display = 'none';
   }
 }
 
@@ -10060,7 +10037,6 @@ function dozBackToList() {
             </div>
           </div>
         </div>
-        <div id="msr-segs"></div>
 
         <!-- Sačuvana mjerenja -->
         <div id="msr-saved-box" style="margin-top:10px;border-top:1px solid #1e293b;padding-top:8px;">
