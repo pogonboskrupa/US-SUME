@@ -136,7 +136,7 @@ class GpsService {
 
   // Inicijalizacija (pokrenuti u main())
   Future<void> initialize() async {
-    const androidConfig = AndroidConfiguration(
+    final androidConfig = AndroidConfiguration(
       onStart: onStart,
       autoStart: false,
       isForegroundMode: true,
@@ -146,7 +146,7 @@ class GpsService {
       foregroundServiceNotificationId: 1001,
     );
 
-    const iosConfig = IOSConfiguration(autoStart: false);
+    final iosConfig = IosConfiguration(autoStart: false);
 
     await _service.configure(
       androidConfiguration: androidConfig,
