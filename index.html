@@ -284,10 +284,10 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* ═══ ZAJEDNIČKI BANNER STIL ═══ */
 #rec-banner, #draw-banner {
-  position:absolute; bottom:56px; left:8px;
+  position:absolute; bottom:8px; left:8px;
   display:none; flex-direction:column;
   z-index:500; font-family:monospace;
-  max-width:calc(100vw - 16px); min-width:260px; overflow:hidden;
+  width:calc(50vw + 60px); max-width:320px; min-width:220px; overflow:hidden;
   border-radius:14px; box-shadow:0 6px 28px rgba(0,0,0,0.75);
 }
 #rec-banner.show, #draw-banner.show { display:flex; }
@@ -1501,7 +1501,10 @@ select:focus { outline:none; border-color:#3b82f6; }
       <div id="rec-banner">
         <div id="rec-row1">
           <div class="rdot"></div>
-          <div id="rec-nm">T1</div>
+          <button id="rec-nm-btn" onclick="stopRec();_openVlakaPicker('rec');" title="Promijeni vlaku" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;">
+            <div id="rec-nm">T1</div>
+            <span style="font-size:9px;color:#64748b;opacity:0.8;">▼</span>
+          </button>
           <div id="rec-stats">0 m · 0 tač.</div>
           <div id="rec-slope" style="display:none;font-size:11px;font-weight:bold;margin-left:6px;font-family:monospace;"></div>
           <div id="wakelock-icon" title="Ekran ostaje uključen" style="display:none;font-size:13px;margin-left:6px;opacity:0.6;">🔒</div>
@@ -4436,9 +4439,7 @@ function fabSnimVlaku() {
     showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
     return;
   }
-  switchTab('vlake');
-  dodiISnimi();
-  showToast('🚜 Vlaka kreirana — GPS snimanje pokrenuto');
+  _openVlakaPicker('rec');
 }
 
 // === POINTS ===
