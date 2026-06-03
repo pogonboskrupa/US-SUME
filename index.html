@@ -1305,6 +1305,10 @@ select:focus { outline:none; border-color:#3b82f6; }
             <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape">📐 Fituj u prikaz</button>
             <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel">📐 Fituj u odjel</button>
           </div>
+          <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
+                  onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
+            🎯 Precizno poravnaj na granicu odjela
+          </button>
           <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
           <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
                  oninput="refKartaSetOpacity(this.value)">
@@ -4986,6 +4990,157 @@ function refKartaClearImported() {
   document.getElementById('refkarta-imp-ctrl').style.display = 'none';
 }
 
+// ─── Precizno poravnanje na granicu odjela ────────────────────────────────────
+//
+// Algoritam:
+//  1. Parsira binarnu sliku (isti prag tame kao za detekciju)
+//  2. Sampuje KML poligon na 100 ravnomjernih tačaka
+//  3. Svaku KML tačku konvertuje u piksel-koordinate (gruba aproksimacija)
+//  4. Za svaku tačku traži najbliži tamni piksel unutar search radiusa
+//  5. Median svih offset-a = translacijska korekcija
+//  6. Least-squares slope u X i Y = korekcija razmjere
+//  7. Ažurira _refBounds → precizno poravnanje
+
+function refKartaAlign() {
+  if (!_refImg) { showToast('⚠ Učitaj sliku karte!'); return; }
+  const odjel = graniceOdjeli.find(o => o.ring && o.ring.length > 3)
+              || graniceOdjeli[0];
+  if (!odjel) { showToast('⚠ Treba učitan KML odjel s poligonom'); return; }
+  if (!_refBounds) { refKartaFitOdjel(); if (!_refBounds) return; }
+
+  const btn = document.getElementById('refkarta-align-btn');
+  btn.textContent = '⏳ Poravnavam...'; btn.disabled = true;
+  setTimeout(() => {
+    try { _doAlign(odjel); }
+    catch(e) { showToast('⚠ Greška: ' + e.message); console.error(e); }
+    finally { btn.textContent = '🎯 Precizno poravnaj na granicu odjela'; btn.disabled = false; }
+  }, 60);
+}
+
+function _doAlign(odjel) {
+  // 1. Downsample + binary image
+  const MAX_W = 1400;
+  const sc = Math.min(1, MAX_W / _refImg.width);
+  const W = Math.round(_refImg.width * sc);
+  const H = Math.round(_refImg.height * sc);
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(_refImg, 0, 0, W, H);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  const thr = parseInt(document.getElementById('refkarta-thr').value);
+  const bin = new Uint8Array(W * H);
+  for (let i=0;i<W*H;i++){
+    bin[i] = (0.299*px[i*4]+0.587*px[i*4+1]+0.114*px[i*4+2]) < thr ? 1 : 0;
+  }
+
+  // 2. Resample KML polygon to N evenly-spaced points
+  const ring = odjel.ring || _boundsToRing(odjel.bounds);
+  const N = 120;
+  const sampled = _resampleRing(ring, N);
+
+  // 3. Current transform: lat/lon → pixel
+  const [[south, west], [north, east]] = _refBounds;
+  const latSpan = north - south, lonSpan = east - west;
+  const latToPy = (lat) => (north - lat) / latSpan * H;
+  const lonToPx = (lon) => (lon - west)  / lonSpan * W;
+
+  // 4. For each sampled KML point, find nearest dark pixel in image
+  const SR = Math.max(20, Math.round(Math.min(W, H) * 0.08)); // search radius 8%
+  const matches = [];
+  for (const [lat, lon] of sampled) {
+    const ex = lonToPx(lon), ey = latToPy(lat);
+    const x0=Math.max(0,Math.round(ex-SR)), x1=Math.min(W-1,Math.round(ex+SR));
+    const y0=Math.max(0,Math.round(ey-SR)), y1=Math.min(H-1,Math.round(ey+SR));
+    let bDist = SR+1, bx=ex, by=ey;
+    for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+      if (!bin[y*W+x]) continue;
+      const d = Math.hypot(x-ex, y-ey);
+      if (d < bDist) { bDist=d; bx=x; by=y; }
+    }
+    if (bDist <= SR) matches.push({ ex, ey, bx, by });
+  }
+
+  if (matches.length < 8) {
+    showToast(`⚠ Premalo podudaranja (${matches.length}/${N}) — smanji prag tame ili fituj ručno`);
+    return;
+  }
+
+  // 5. Median translation
+  const oxArr = matches.map(m => m.bx - m.ex);
+  const oyArr = matches.map(m => m.by - m.ey);
+  const tx = _median(oxArr);
+  const ty = _median(oyArr);
+
+  // 6. Scale correction using linear regression (offset vs position)
+  //    expected_actual = scale * expected_from_bounds
+  //    bx = scale_x * ex + shift_x  → solve by least squares
+  const scale_x = _lsSlope(matches.map(m=>m.ex), matches.map(m=>m.bx));
+  const scale_y = _lsSlope(matches.map(m=>m.ey), matches.map(m=>m.by));
+  // Clamp scale to reasonable range to avoid degenerate fits
+  const sx = Math.max(0.85, Math.min(1.15, scale_x));
+  const sy = Math.max(0.85, Math.min(1.15, scale_y));
+
+  // 7. Compute corrected bounds
+  // New transform: pixel → geo
+  //   lon(px) = west' + px / (W * sx) * lonSpan
+  //   lat(py) = north' - py / (H * sy) * latSpan
+  // With translation correction (tx, ty are in "scaled image" pixels):
+  const new_west  = west  - tx / W * lonSpan;
+  const new_east  = new_west + lonSpan / sx;
+  const new_north = north + ty / H * latSpan;
+  const new_south = new_north - latSpan / sy;
+
+  _refBounds = [[new_south, new_west], [new_north, new_east]];
+  _placeRefOverlay();
+
+  const residuals = matches.map(m =>
+    Math.hypot(m.bx - (m.ex*sx + tx), m.by - (m.ey*sy + ty))
+  );
+  const meanRes = Math.round(_mean(residuals));
+  const mReal = Math.round(meanRes / sc / W * lonSpan * 111320); // approx metres
+  showToast(`✓ Poravnato! ${matches.length}/${N} tač., greška ~${meanRes}px (~${mReal}m)`);
+}
+
+// Helpers
+function _boundsToRing(b) {
+  // Convert L.latLngBounds to [[lat,lon]] ring
+  return [[b.getNorth(),b.getWest()],[b.getNorth(),b.getEast()],
+          [b.getSouth(),b.getEast()],[b.getSouth(),b.getWest()]];
+}
+function _resampleRing(ring, n) {
+  const segs = ring.map((p,i) => {
+    const q = ring[(i+1)%ring.length];
+    return { a:p, b:q, d:Math.hypot(q[0]-p[0], q[1]-p[1]) };
+  });
+  const total = segs.reduce((s,sg)=>s+sg.d, 0);
+  const step = total / n;
+  const result = [];
+  let cumDist = 0, si = 0;
+  for (let i=0;i<n;i++) {
+    const target = i * step;
+    while (si < segs.length-1 && cumDist + segs[si].d < target) { cumDist += segs[si].d; si++; }
+    const t = segs[si].d > 1e-10 ? (target - cumDist) / segs[si].d : 0;
+    const {a,b} = segs[si];
+    result.push([a[0]+t*(b[0]-a[0]), a[1]+t*(b[1]-a[1])]);
+  }
+  return result;
+}
+function _median(arr) {
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+function _mean(arr) { return arr.reduce((s,v)=>s+v,0)/arr.length; }
+function _lsSlope(xs, ys) {
+  // slope = cov(x,y) / var(x)
+  const n = xs.length;
+  const mx = _mean(xs), my = _mean(ys);
+  let cov=0, vx=0;
+  for (let i=0;i<n;i++) { cov+=(xs[i]-mx)*(ys[i]-my); vx+=(xs[i]-mx)**2; }
+  return vx < 1e-10 ? 1 : cov/vx;
+}
+
 // ─── Line Detection Pipeline ───────────────────────────────────────────────
 
 function refKartaRunDetect() {
@@ -7761,8 +7916,23 @@ function _extractGraniceOdjeli(doc) {
     const name = pm.querySelector('name')?.textContent?.trim() || '';
     if (!name || graniceOdjeli.find(o => o.name === name)) return;
     const allPts = [];
-    pm.querySelectorAll('coordinates').forEach(c => pcs(c.textContent).forEach(pt => allPts.push(pt)));
-    if (allPts.length > 0) graniceOdjeli.push({ name, bounds: L.latLngBounds(allPts) });
+    let ring = null; // najveći outer ring (za shape matching)
+    // Pokušaj outerBoundaryIs za Polygon
+    const outerC = pm.querySelector('Polygon outerBoundaryIs coordinates, outerBoundaryIs coordinates');
+    if (outerC) {
+      ring = pcs(outerC.textContent);
+      ring.forEach(pt => allPts.push(pt));
+      // Dodaj i innerBoundaryIs ako postoji
+      pm.querySelectorAll('innerBoundaryIs coordinates').forEach(c => pcs(c.textContent).forEach(pt => allPts.push(pt)));
+    } else {
+      // Fallback: sve coordinates
+      pm.querySelectorAll('coordinates').forEach(c => {
+        const pts = pcs(c.textContent);
+        pts.forEach(pt => allPts.push(pt));
+        if (!ring || pts.length > ring.length) ring = pts;
+      });
+    }
+    if (allPts.length > 0) graniceOdjeli.push({ name, bounds: L.latLngBounds(allPts), ring: ring || null });
   });
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
 }
