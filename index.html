@@ -3317,11 +3317,20 @@ function _nextMainBr() {
   let n = 1; while (used.has(n)) n++; return n;
 }
 
-function _openVlakaPicker() {
+let _vpickerMode = 'rec'; // 'rec' | 'trag'
+
+function _openVlakaPicker(mode) {
+  _vpickerMode = mode || 'rec';
+  const isTrag = _vpickerMode === 'trag';
+
   const nextBr = _nextMainBr();
   document.getElementById('ibr').value = nextBr;
   document.getElementById('ikr').value = 0;
   updPrev();
+
+  // Naslov pickera
+  document.querySelector('#vlaka-picker span').textContent =
+    isTrag ? '🔴 Odaberi vlaku za snimanje traga' : '🚜 Odaberi vlaku za snimanje';
 
   const list = document.getElementById('vpicker-list');
   list.innerHTML = '';
@@ -3330,28 +3339,34 @@ function _openVlakaPicker() {
   const novBtn = document.createElement('button');
   novBtn.className = 'vpick-new';
   novBtn.innerHTML = `➕ Nova vlaka <b>T${nextBr}</b>`;
-  novBtn.onclick = () => { _closeVlakaPicker(); setTimeout(dodiISnimi, 260); };
+  novBtn.onclick = () => {
+    _closeVlakaPicker();
+    if (isTrag) setTimeout(() => addV().then(() => { setTimeout(fabSnimTrag, 30); }), 260);
+    else setTimeout(dodiISnimi, 260);
+  };
   list.appendChild(novBtn);
 
   // Postojeće vlake
   if (vlake.length > 0) {
     const sep = document.createElement('div');
     sep.style.cssText = 'padding:4px 2px;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-top:4px;';
-    sep.textContent = 'Ili nastavi snimanje postojeće';
+    sep.textContent = isTrag ? 'Ili snimi trag na postojećoj' : 'Ili nastavi snimanje postojeće';
     list.appendChild(sep);
 
     vlake.forEach((v, i) => {
       const row = document.createElement('div');
       row.className = 'vpick-row';
       const d = fmtL(calcL(v.pts));
+      const btnLbl = isTrag ? '🔴 Trag' : '▶ Snimi';
+      const pickFn = isTrag ? `_pickVlakaForTrag(${i})` : `_pickVlaka(${i})`;
       row.innerHTML = `
         <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;">
           <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
           <div style="color:#64748b;font-size:11px;">${d} · ${v.pts.length} tač.</div>
         </div>
-        <button class="vpick-rec" onclick="event.stopPropagation();_pickVlaka(${i})">▶ Snimi</button>`;
-      row.onclick = () => _pickVlaka(i);
+        <button class="vpick-rec" onclick="event.stopPropagation();${pickFn}">${btnLbl}</button>`;
+      row.onclick = () => isTrag ? _pickVlakaForTrag(i) : _pickVlaka(i);
       list.appendChild(row);
     });
   }
@@ -3375,8 +3390,17 @@ function _pickVlaka(i) {
   }, 260);
 }
 function togSnimTrag() {
-  switchTab('karta');
-  fabSnimTrag();
+  if (_tragOn) { fabSnimTrag(); return; } // stop
+  _openVlakaPicker('trag');
+}
+
+function _pickVlakaForTrag(i) {
+  _closeVlakaPicker();
+  setTimeout(() => {
+    selI(i);
+    switchTab('karta');
+    fabSnimTrag();
+  }, 260);
 }
 function mojaLokacija() {
   switchTab('karta');
