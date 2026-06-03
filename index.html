@@ -970,6 +970,63 @@ select:focus { outline:none; border-color:#3b82f6; }
   height:8px; background:#0f172a; border-radius:4px; overflow:hidden; margin:10px 0;
 }
 /* SQLiteDB offline map modal */
+/* === Omiljene karte modal === */
+#mapfav-modal {
+  display:none; position:fixed; inset:0; z-index:9700;
+  background:rgba(0,0,0,0.75); align-items:flex-end; justify-content:center;
+}
+#mapfav-modal.open { display:flex; }
+#mapfav-box {
+  background:#0f172a; border:1px solid #1e3a5f; border-radius:16px 16px 0 0;
+  width:100%; max-width:560px; max-height:80vh;
+  display:flex; flex-direction:column;
+  box-shadow:0 -4px 32px rgba(0,0,0,0.7);
+}
+#mapfav-box h3 {
+  margin:0; padding:13px 16px 10px; font-size:15px; color:#e2e8f0;
+  border-bottom:1px solid #1e293b; flex-shrink:0;
+  display:flex; align-items:center; gap:8px;
+}
+#mapfav-grid {
+  flex:1; overflow-y:auto; padding:10px;
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px;
+}
+.mfav-card {
+  background:#1e293b; border:2px solid #334155; border-radius:10px;
+  overflow:hidden; cursor:pointer; transition:border-color .15s;
+  display:flex; flex-direction:column;
+}
+.mfav-card:hover { border-color:#38bdf8; }
+.mfav-card.active { border-color:#4ade80; }
+.mfav-thumb {
+  width:100%; height:72px; object-fit:cover; display:block;
+  background:#0f172a;
+}
+.mfav-thumb-placeholder {
+  width:100%; height:72px; display:flex; align-items:center;
+  justify-content:center; font-size:26px; background:#0f172a;
+}
+.mfav-label {
+  padding:5px 7px 6px; font-size:11px; color:#e2e8f0;
+  font-weight:600; line-height:1.3; word-break:break-word;
+}
+.mfav-btns {
+  display:flex; gap:0; border-top:1px solid #334155;
+}
+.mfav-btns button {
+  flex:1; padding:5px 0; font-size:11px; background:none; border:none;
+  color:#64748b; cursor:pointer;
+}
+.mfav-btns button:hover { color:#e2e8f0; background:#334155; }
+.mfav-btns .del { color:#7f1d1d; }
+.mfav-btns .del:hover { color:#f87171; background:#2d0a0a; }
+.mfav-add-card {
+  background:#0f172a; border:2px dashed #334155; border-radius:10px;
+  height:120px; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; cursor:pointer; gap:4px; color:#475569;
+  font-size:11px; transition:border-color .15s;
+}
+.mfav-add-card:hover { border-color:#38bdf8; color:#94a3b8; }
 #sqlmap-modal {
   display:none; position:fixed; inset:0;
   background:rgba(0,0,0,0.82); z-index:9999;
@@ -3069,6 +3126,151 @@ const TL = {
 };
 TL['⛰ Topo'].addTo(map);  // Default: TOPO
 L.control.layers(TL,{},{position:'topright'}).addTo(map);
+
+// ── Omiljene karte — custom Leaflet control dugme ───────────────────────────
+const _MapFavBtn = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd() {
+    const btn = L.DomUtil.create('button');
+    btn.style.cssText = 'display:block;width:34px;height:34px;background:#16213e;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:16px;color:#fbbf24;margin-top:4px;';
+    btn.title = 'Omiljene karte';
+    btn.textContent = '⭐';
+    L.DomEvent.disableClickPropagation(btn);
+    L.DomEvent.on(btn, 'click', openMapFavs);
+    return btn;
+  }
+});
+new _MapFavBtn().addTo(map);
+
+// ── Omiljene karte — state & funkcije ───────────────────────────────────────
+const _MAPFAV_KEY = 'tvlake_map_favs';
+let _mapFavs = [];
+
+function _mapFavLoad() {
+  try { _mapFavs = JSON.parse(localStorage.getItem(_MAPFAV_KEY) || '[]'); } catch(e) { _mapFavs = []; }
+}
+function _mapFavSave() {
+  try { localStorage.setItem(_MAPFAV_KEY, JSON.stringify(_mapFavs)); } catch(e) {}
+}
+
+function _activeLayerKey() {
+  for (const [key, layer] of Object.entries(TL)) {
+    if (map.hasLayer(layer)) return key;
+  }
+  return null;
+}
+
+// Pretvori tile URL template u konkretan URL za thumbnail tile
+function _tileThumbUrl(tpl, lat, lon, arcgis) {
+  const z = 14;
+  const x = Math.floor((lon + 180) / 360 * (1 << z));
+  const rawY = Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI;
+  const y = Math.floor((1 - rawY) / 2 * (1 << z));
+  if (arcgis) return tpl.replace('{z}',z).replace('{y}',y).replace('{x}',x);
+  return tpl.replace('{s}','a').replace('{z}',z).replace('{x}',x).replace('{y}',y);
+}
+
+function _mapFavThumbHtml(fav) {
+  if (fav.type === 'sqlite') {
+    return `<div class="mfav-thumb-placeholder">🗄</div>`;
+  }
+  const c = map.getCenter();
+  const url = _tileThumbUrl(fav.tileUrl, c.lat, c.lng, fav.arcgis);
+  return `<img class="mfav-thumb" src="${url}" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'" alt="">
+          <div class="mfav-thumb-placeholder" style="display:none;">🗺</div>`;
+}
+
+function _mapFavRender() {
+  const el = document.getElementById('mapfav-grid');
+  if (!el) return;
+  const activeKey = _activeLayerKey();
+  const activeSqlId = _sqlLayers.find(sl => sl.visible)?.name || null;
+
+  const cards = _mapFavs.map((fav, i) => {
+    const isActive = fav.type === 'tl' ? fav.tlKey === activeKey : fav.sqliteId === activeSqlId;
+    return `<div class="mfav-card${isActive?' active':''}" onclick="mapFavSwitch(${i})" title="${fav.name}">
+      ${_mapFavThumbHtml(fav)}
+      <div class="mfav-label">${fav.name}</div>
+      <div class="mfav-btns">
+        <button onclick="event.stopPropagation();mapFavRename(${i})" title="Preimenuj">✏</button>
+        <button class="del" onclick="event.stopPropagation();mapFavDel(${i})" title="Ukloni">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = cards + `<div class="mfav-add-card" onclick="mapFavAddCurrent()">
+    <span style="font-size:24px;">＋</span>
+    <span>Dodaj trenutnu kartu</span>
+  </div>`;
+}
+
+function openMapFavs() {
+  _mapFavRender();
+  document.getElementById('mapfav-modal').classList.add('open');
+}
+function closeMapFavs() {
+  document.getElementById('mapfav-modal').classList.remove('open');
+}
+
+function mapFavAddCurrent() {
+  const tlKey = _activeLayerKey();
+  const sqlActive = _sqlLayers.find(sl => sl.visible);
+  let fav;
+  if (tlKey) {
+    const layer = TL[tlKey];
+    const tileUrl = layer._url || '';
+    const arcgis = tileUrl.includes('arcgisonline') || tileUrl.includes('ArcGIS');
+    const defaultName = tlKey.replace(/^[^\w]+/, '').trim(); // strip emoji
+    const name = prompt('Naziv ove karte:', defaultName);
+    if (!name) return;
+    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey, tileUrl, arcgis };
+  } else if (sqlActive) {
+    const name = prompt('Naziv ove offline karte:', sqlActive.name);
+    if (!name) return;
+    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
+  } else {
+    showToast('Nema aktivne karte za dodavanje'); return;
+  }
+  _mapFavs.push(fav);
+  _mapFavSave();
+  _mapFavRender();
+  showToast('⭐ Karta dodana u omiljene: ' + fav.name);
+}
+
+function mapFavSwitch(i) {
+  const fav = _mapFavs[i];
+  if (!fav) return;
+  if (fav.type === 'tl') {
+    const layer = TL[fav.tlKey];
+    if (!layer) { showToast('Sloj nije dostupan: ' + fav.tlKey); return; }
+    Object.values(TL).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
+    layer.addTo(map);
+    showToast('🗺 ' + fav.name);
+  } else if (fav.type === 'sqlite') {
+    const sl = _sqlLayers.find(s => s.name === fav.sqliteId);
+    if (!sl) { showToast('Offline karta nije učitana: ' + fav.sqliteId); return; }
+    _sqlLayers.forEach(s => { if (s.visible) { map.removeLayer(s.layer); s.visible = false; } });
+    sl.layer.addTo(map); sl.visible = true;
+    _sqlmapRenderLayers();
+    showToast('🗄 ' + fav.name);
+  }
+  closeMapFavs();
+}
+
+function mapFavRename(i) {
+  const fav = _mapFavs[i];
+  if (!fav) return;
+  const name = prompt('Novi naziv:', fav.name);
+  if (name?.trim()) { fav.name = name.trim(); _mapFavSave(); _mapFavRender(); }
+}
+
+function mapFavDel(i) {
+  _mapFavs.splice(i, 1);
+  _mapFavSave();
+  _mapFavRender();
+}
+
+_mapFavLoad();
 
 // Prevent overlay and banner from passing events to Leaflet map
 ['ovl','rec-banner','draw-banner'].forEach(id => {
@@ -9606,6 +9808,20 @@ function dozBackToList() {
     <button onclick="_vpickGo()">→ Idi</button>
   </div>
   <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
+</div>
+
+<!-- === Omiljene karte modal === -->
+<div id="mapfav-modal" onclick="if(event.target===this)closeMapFavs()">
+  <div id="mapfav-box">
+    <h3>
+      ⭐ Omiljene karte
+      <button onclick="closeMapFavs()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0;">✕</button>
+    </h3>
+    <div id="mapfav-grid"></div>
+    <div style="padding:8px;flex-shrink:0;border-top:1px solid #1e293b;">
+      <button onclick="closeMapFavs()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Zatvori</button>
+    </div>
+  </div>
 </div>
 
 <!-- === Registar tragova === -->
