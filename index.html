@@ -230,6 +230,39 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
 .vpick-search-row button:active { background:#0ea5e9;color:#fff; }
 .vcard-elev { font-size:10px;color:#94a3b8;display:flex;gap:6px;flex-wrap:wrap;margin-top:1px; }
+/* === Registar tragova === */
+#trag-reg-modal {
+  display:none; position:fixed; inset:0; z-index:9500;
+  background:rgba(0,0,0,0.72); align-items:flex-end; justify-content:center;
+}
+#trag-reg-modal.open { display:flex; }
+#trag-reg-box {
+  background:#0f172a; border:1px solid #1e3a5f; border-radius:16px 16px 0 0;
+  width:100%; max-width:560px; max-height:82vh;
+  display:flex; flex-direction:column;
+  box-shadow:0 -4px 32px rgba(0,0,0,0.7);
+}
+#trag-reg-box h3 { margin:0; padding:14px 16px 10px; font-size:15px; color:#e2e8f0; border-bottom:1px solid #1e293b; flex-shrink:0; }
+#trag-reg-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:6px; }
+.treg-row {
+  background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 12px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.treg-row:hover { border-color:#475569; }
+.treg-name { font-size:13px; font-weight:600; color:#e2e8f0; cursor:pointer; }
+.treg-meta { font-size:11px; color:#64748b; }
+.treg-btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+.treg-btns button { background:#0f172a; border:1px solid #334155; color:#94a3b8; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; }
+.treg-btns button:hover { background:#1e293b; color:#e2e8f0; }
+.treg-btns .del-btn { border-color:#7f1d1d; color:#f87171; }
+.treg-btns .del-btn:hover { background:#2d0a0a; }
+.treg-empty { color:#475569; font-size:12px; text-align:center; padding:20px; }
+/* Trag popup on map */
+.trag-popup { min-width:180px; }
+.trag-popup b { font-size:13px; }
+.trag-popup-meta { font-size:11px; color:#888; margin:4px 0 8px; }
+.trag-popup-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.trag-popup-btns button { background:#1e293b; border:1px solid #334155; color:#e2e8f0; border-radius:5px; padding:4px 8px; font-size:11px; cursor:pointer; }
 /* === Delete confirmation modal === */
 #del-modal-bg {
   display:none; position:fixed; inset:0; z-index:11000;
@@ -1245,6 +1278,9 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="seg-btn" id="btrag" onclick="togSnimTrag()" title="Snimi trag kretanja">
             <span class="seg-ico">🔴</span><span>Snimi trag</span>
           </button>
+          <button class="seg-btn" onclick="openTragRegistry()" title="Registar snih tragova">
+            <span class="seg-ico">📋</span><span>Tragovi</span>
+          </button>
           <button class="seg-btn" onclick="mojaLokacija()" title="Moja pozicija">
             <span class="seg-ico">🎯</span><span>Pozicija</span>
           </button>
@@ -1949,6 +1985,7 @@ function showApp() {
   sbInitData();         // Supabase async override
   sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
   geojsonOdjeliRestore(); // obnovi GeoJSON odjele
+  _tragRegLoad();         // obnovi registar tragova
   // Procesiraj eventualni offline red čim dobijemo mrežu
   if (navigator.onLine) _processOfflineQueue();
 }
@@ -3160,6 +3197,24 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'z') { e.preventDefault(); mtUndo(); }
   if (e.key === 'Escape') stopActiveTool();
+  // Space = dodaj tačku na centru karte (dok je aktivan alat crtanja ili GPS snimanje)
+  if (e.key === ' ' && !e.ctrlKey && !e.altKey) {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    if (activeTool === 'addline' || activeTool === 'addpoint') {
+      const c = map.getCenter();
+      const al = lastP?.al ?? null;
+      if (actI !== null) addPt(actI, c.lat, c.lng, al);
+      // Brief visual flash at map center
+      const dot = document.getElementById('map-center-dot');
+      if (dot) { dot.style.transform = 'translate(-50%,-50%) scale(2.5)'; dot.style.opacity = '1'; setTimeout(() => { dot.style.transform=''; dot.style.opacity=''; }, 300); }
+      showToast('📍 Tačka dodana na centru karte');
+    } else if (recOn && actI !== null && lastP) {
+      addPt(actI, lastP.la, lastP.lo, lastP.al ?? null);
+      showToast('📍 GPS tačka dodana');
+    }
+  }
 });
 
 // === MENI DROPDOWN ===
@@ -4547,6 +4602,173 @@ let _tragOn   = false;
 let _tragLine = null;
 let _tragPts  = [];
 
+// ── Registar tragova ────────────────────────────────────────────────────────
+const _TRAG_REG_KEY = 'tvlake_tragovi';
+let _tragRegistry   = [];  // [{id, name, date, pts, color, visible}]
+let _tragLayers     = {};  // id → L.polyline
+
+const _TRAG_COLORS = ['#f97316','#38bdf8','#4ade80','#a78bfa','#fb7185','#facc15','#e879f9','#34d399'];
+
+function _tragRegLoad() {
+  try {
+    const raw = localStorage.getItem(_TRAG_REG_KEY);
+    if (raw) _tragRegistry = JSON.parse(raw);
+  } catch(e) { _tragRegistry = []; }
+  // Re-add map layers for all saved tragovi
+  _tragRegistry.forEach(t => _tragRegAddLayer(t));
+}
+
+function _tragRegSave() {
+  try { localStorage.setItem(_TRAG_REG_KEY, JSON.stringify(_tragRegistry)); } catch(e) {}
+}
+
+function _tragRegAddLayer(t) {
+  if (_tragLayers[t.id]) { try { map.removeLayer(_tragLayers[t.id]); } catch(e) {} }
+  const line = L.polyline(t.pts.map(p => [p[0], p[1]]), {
+    color: t.color || '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4'
+  });
+  const lenM = _tragCalcLen(t.pts);
+  line.bindPopup(() => _tragPopupHtml(t, lenM), { maxWidth: 260 });
+  line.on('click', () => line.openPopup());
+  if (t.visible !== false) line.addTo(map);
+  _tragLayers[t.id] = line;
+}
+
+function _tragCalcLen(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i-1], b = pts[i];
+    const dlat = (b[0]-a[0]) * Math.PI/180;
+    const dlon = (b[1]-a[1]) * Math.PI/180;
+    const x = Math.sin(dlat/2)**2 + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dlon/2)**2;
+    d += 6371000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+  }
+  return d;
+}
+
+function _tragFmtLen(m) {
+  return m >= 1000 ? (m/1000).toFixed(2)+' km' : Math.round(m)+' m';
+}
+
+function _tragPopupHtml(t, lenM) {
+  const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  return `<div class="trag-popup">
+    <b>${_escHtml(t.name)}</b>
+    <div class="trag-popup-meta">${dt}<br>${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
+    <div class="trag-popup-btns">
+      <button onclick="_tragRegRename('${t.id}')">✏ Preimenuj</button>
+      <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
+      <button onclick="_tragRegToggle('${t.id}')" id="tvis-${t.id}">${t.visible!==false?'🙈 Sakrij':'👁 Prikaži'}</button>
+      <button onclick="_tragRegDelete('${t.id}')" style="color:#f87171;border-color:#7f1d1d;">✕ Briši</button>
+    </div>
+  </div>`;
+}
+
+function _escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function _tragRegAdd(pts) {
+  const id = 'trag_' + Date.now();
+  const color = _TRAG_COLORS[_tragRegistry.length % _TRAG_COLORS.length];
+  const t = {
+    id, color, pts, visible: true,
+    date: new Date().toISOString(),
+    name: 'Trag ' + new Date().toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'})
+  };
+  _tragRegistry.unshift(t);
+  _tragRegAddLayer(t);
+  _tragRegSave();
+  _tragRegRender();
+}
+
+function openTragRegistry() {
+  _tragRegRender();
+  document.getElementById('trag-reg-modal').classList.add('open');
+}
+function closeTragRegistry() {
+  document.getElementById('trag-reg-modal').classList.remove('open');
+}
+
+function _tragRegRender() {
+  const el = document.getElementById('trag-reg-list');
+  const cnt = document.getElementById('trag-reg-count');
+  if (!el) return;
+  if (cnt) cnt.textContent = _tragRegistry.length ? `(${_tragRegistry.length})` : '';
+  if (!_tragRegistry.length) {
+    el.innerHTML = '<div class="treg-empty">Nema sačuvanih tragova.<br>Klikni <b>Snimi trag</b> u panelu za snimanje.</div>';
+    return;
+  }
+  el.innerHTML = _tragRegistry.map(t => {
+    const lenM = _tragCalcLen(t.pts);
+    const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const vis = t.visible !== false;
+    return `<div class="treg-row">
+      <div class="treg-name" onclick="_tragRegZoom('${t.id}')" style="border-left:3px solid ${t.color};padding-left:8px;">${_escHtml(t.name)}</div>
+      <div class="treg-meta">${dt} · ${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
+      <div class="treg-btns">
+        <button onclick="_tragRegZoom('${t.id}')">🗺 Zoom</button>
+        <button onclick="_tragRegToggle('${t.id}')">${vis?'🙈 Sakrij':'👁 Prikaži'}</button>
+        <button onclick="_tragRegRename('${t.id}')">✏ Preimenuj</button>
+        <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
+        <button class="del-btn" onclick="_tragRegDelete('${t.id}')">✕ Briši</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _tragRegZoom(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t || !t.pts.length) return;
+  const line = _tragLayers[id];
+  if (line) { map.fitBounds(line.getBounds(), {padding:[30,30]}); switchTab('karta'); closeTragRegistry(); }
+}
+
+function _tragRegToggle(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.visible = t.visible === false ? true : false;
+  const line = _tragLayers[id];
+  if (line) {
+    if (t.visible) line.addTo(map); else map.removeLayer(line);
+    // Update popup if open
+    line.setPopupContent(_tragPopupHtml(t, _tragCalcLen(t.pts)));
+  }
+  _tragRegSave();
+  _tragRegRender();
+}
+
+function _tragRegDelete(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const line = _tragLayers[id];
+  if (line) { try { map.removeLayer(line); } catch(e) {} delete _tragLayers[id]; }
+  _tragRegistry = _tragRegistry.filter(x => x.id !== id);
+  _tragRegSave();
+  _tragRegRender();
+}
+
+function _tragRegRename(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const name = prompt('Novo ime traga:', t.name);
+  if (name && name.trim()) {
+    t.name = name.trim();
+    const line = _tragLayers[id];
+    if (line) line.setPopupContent(_tragPopupHtml(t, _tragCalcLen(t.pts)));
+    _tragRegSave();
+    _tragRegRender();
+  }
+}
+
+function _tragRegDlGpx(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const gpx = _tragToGpx(t.pts);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([gpx], {type:'application/gpx+xml'}));
+  a.download = t.name.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.gpx';
+  a.click();
+}
+
 function toggleFabGps() {
   _fabOpen = !_fabOpen;
   const fab = document.getElementById('fab-gps');
@@ -4592,12 +4814,8 @@ function fabSnimTrag() {
     if (bt) bt.classList.remove('active');
     document.getElementById('fab-main').classList.remove('gps-active');
     if (_tragPts.length > 1) {
-      const dlLink = document.createElement('a');
-      const gpx = _tragToGpx(_tragPts);
-      dlLink.href = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
-      dlLink.download = 'trag_' + new Date().toISOString().slice(0,10) + '.gpx';
-      dlLink.click();
-      showToast(`✓ Trag sačuvan — ${_tragPts.length} tačaka`);
+      _tragRegAdd(_tragPts.slice());
+      showToast(`✓ Trag sačuvan — ${_tragPts.length} tačaka · Otvori "Tragovi" za pregled`);
     } else {
       showToast('Trag nije snimljen (premalo tačaka)');
     }
@@ -7103,7 +7321,11 @@ function msrStop() {
 function msrClear() {
   msrStop();
   _msrPts = [];
-  if (_msrLayer) _msrLayer.clearLayers();
+  if (_msrLayer) {
+    _msrLayer.clearLayers();
+    try { map.removeLayer(_msrLayer); } catch(e) {}
+    _msrLayer = null;
+  }
   _msrUpdPanel();
   const hint = document.getElementById('msr-hint');
   if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
@@ -9294,6 +9516,19 @@ function dozBackToList() {
     <button onclick="_vpickGo()">→ Idi</button>
   </div>
   <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
+</div>
+
+<!-- === Registar tragova === -->
+<div id="trag-reg-modal" onclick="if(event.target===this)closeTragRegistry()">
+  <div id="trag-reg-box">
+    <h3>🗺 Registar tragova <span id="trag-reg-count" style="color:#64748b;font-weight:400;font-size:12px;"></span>
+      <button onclick="closeTragRegistry()" style="float:right;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0;margin-top:-2px;">✕</button>
+    </h3>
+    <div id="trag-reg-list"></div>
+    <div style="padding:8px;flex-shrink:0;border-top:1px solid #1e293b;">
+      <button onclick="closeTragRegistry()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Zatvori</button>
+    </div>
+  </div>
 </div>
 
 <!-- === Delete confirmation modal === -->
