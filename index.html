@@ -2820,8 +2820,9 @@ const PAL = ['#60a5fa','#f87171','#fbbf24','#a78bfa','#fb923c','#38bdf8','#f472b
 const KORISNIK_PAL = ['#f97316','#818cf8','#22d3ee','#fb7185','#facc15','#c084fc','#2dd4bf','#f43f5e','#60a5fa','#fbbf24'];
 let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 
-(function buildC() {
+function buildC() {
   const el = document.getElementById('clrs');
+  if (!el) return;
   PAL.forEach((c, i) => {
     const d = document.createElement('div');
     d.className = 'cdot' + (i===0?' sel':'');
@@ -2832,7 +2833,8 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
     };
     el.appendChild(d);
   });
-})();
+}
+document.addEventListener('DOMContentLoaded', buildC);
 
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
