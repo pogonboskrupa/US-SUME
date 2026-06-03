@@ -2,7 +2,7 @@
 // Service Worker — Traktorske Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.5.5';
+const APP_VERSION = '1.5.6';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
@@ -14,7 +14,7 @@ const APP_SHELL = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './forwarder.png'
+  './forwarder.svg'
 ];
 
 // ─── INSTALL ─────────────────────────────────────────────────────────
