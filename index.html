@@ -1948,6 +1948,7 @@ function showApp() {
   loadProj();           // lokalni podaci odmah
   sbInitData();         // Supabase async override
   sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
+  geojsonOdjeliRestore(); // obnovi GeoJSON odjele
   // Procesiraj eventualni offline red čim dobijemo mrežu
   if (navigator.onLine) _processOfflineQueue();
 }
@@ -2424,6 +2425,18 @@ async function aktivirajProjekt() {
   updProjStats(); rndLog();
   await sbLoadKolegeVlake();
   showToast('Projekat aktiviran: ' + p.odjel);
+  // Auto-zoom na odjel poligon ako je poznat
+  if (p.odjel && graniceOdjeli.length) {
+    const match = graniceOdjeli.find(o => o.name === p.odjel)
+                || graniceOdjeli.find(o => o.name.toLowerCase() === p.odjel.toLowerCase())
+                || graniceOdjeli.find(o => p.odjel.toLowerCase().includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(p.odjel.toLowerCase()));
+    if (match?.bounds) {
+      setTimeout(() => {
+        switchTab('karta');
+        map.fitBounds(match.bounds, { padding: [30, 30] });
+      }, 400);
+    }
+  }
 }
 
 async function deleteProjektUI() {
@@ -7833,20 +7846,23 @@ async function sqlmapRestoreAll() {
 }
 
 function _sqlmapDetectFormat(db) {
-  // MBTiles: standard OSGeo format
   try {
-    const r = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tiles'");
+    // Check for tiles as TABLE or VIEW (hybrid MBTiles uses a VIEW)
+    const r = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE (type='table' OR type='view') AND name='tiles'");
     if (r[0]?.values[0][0] > 0) {
       const cols = db.exec("PRAGMA table_info(tiles)")[0]?.values.map(r => r[1]) || [];
       if (cols.includes('zoom_level')) return 'mbtiles';
       if (cols.includes('z') && cols.includes('image')) return 'rmaps';
       if (cols.includes('z') && cols.includes('tile')) return 'alpinequest';
+      // columns detected but unrecognised — still try mbtiles query
+      return 'mbtiles';
     }
-  } catch(e) {}
-  // AlpineQuest encoded key format
-  try {
-    const r = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tiles'");
-    if (r[0]?.values[0][0] > 0) return 'rmaps'; // fallback, try rmaps
+    // Hybrid MBTiles: map + images tables (tiles is a VIEW not yet visible above, or missing)
+    const hasMap    = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='map'")[0]?.values[0][0] > 0;
+    const hasImages = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='images'")[0]?.values[0][0] > 0;
+    const hasMeta   = db.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata'")[0]?.values[0][0] > 0;
+    if (hasMap && hasImages) return 'mbtiles';
+    if (hasMeta) return 'mbtiles'; // metadata table alone is strong MBTiles indicator
   } catch(e) {}
   return null;
 }
@@ -8152,6 +8168,147 @@ function _extractGraniceOdjeli(doc) {
     if (allPts.length > 0) graniceOdjeli.push({ name, bounds: L.latLngBounds(allPts), ring: ring || null });
   });
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+}
+
+// ── GeoJSON odjeli ────────────────────────────────────────────────────────────
+const _GEOJSON_LS_KEY = 'tvlake_geojson_odjeli';
+let _geojsonLayer = null;
+let _geojsonVisible = true;
+
+function _gjPropName(props) {
+  // Auto-detect which property contains the odjel name
+  for (const k of ['naziv','Naziv','NAZIV','name','Name','NAME','odjel','Odjel','ODJEL','id','ID','šifra','SIFRA']) {
+    if (props[k] != null && String(props[k]).trim()) return String(props[k]).trim();
+  }
+  // Fallback: first string property
+  for (const v of Object.values(props || {})) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+function _gjExtractRing(geom) {
+  if (!geom) return null;
+  let coords = null;
+  if (geom.type === 'Polygon') {
+    coords = geom.coordinates[0];
+  } else if (geom.type === 'MultiPolygon') {
+    let maxLen = 0;
+    geom.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; coords = poly[0]; } });
+  }
+  if (!coords) return null;
+  return coords.map(([lon, lat]) => [lat, lon]);
+}
+
+function _applyGeoJSONOdjeli(data) {
+  if (!data?.features?.length) return 0;
+  if (_geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} _geojsonLayer = null; }
+
+  let added = 0;
+  data.features.forEach(f => {
+    if (!f.geometry) return;
+    const name = _gjPropName(f.properties || {});
+    if (!name) return;
+    const ring = _gjExtractRing(f.geometry);
+    if (!ring || ring.length < 3) return;
+    if (!graniceOdjeli.find(o => o.name === name)) {
+      graniceOdjeli.push({ name, bounds: L.latLngBounds(ring), ring, _fromGeojson: true });
+      added++;
+    }
+  });
+  graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+
+  _geojsonLayer = L.geoJSON(data, {
+    style: { color: '#38bdf8', weight: 1.5, fillColor: '#38bdf8', fillOpacity: 0.04, dashArray: '4,4' },
+    onEachFeature(f, layer) {
+      const name = _gjPropName(f.properties || {});
+      if (name) layer.bindTooltip(name, { sticky: true, className: 'leaflet-tooltip' });
+    }
+  });
+  if (_geojsonVisible) _geojsonLayer.addTo(map);
+  return added;
+}
+
+function loadGeoJSONOdjeli(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Remove previously loaded geojson entries from graniceOdjeli
+      graniceOdjeli = graniceOdjeli.filter(o => !o._fromGeojson);
+      const added = _applyGeoJSONOdjeli(data);
+      // Persist (cap at 4 MB to avoid localStorage overflow)
+      try {
+        if (e.target.result.length < 4 * 1024 * 1024) {
+          localStorage.setItem(_GEOJSON_LS_KEY, e.target.result);
+        } else {
+          // Store compact rings only
+          const compact = { _compact: true, odjeli: graniceOdjeli.filter(o => o._fromGeojson).map(o => ({ name: o.name, ring: o.ring })) };
+          localStorage.setItem(_GEOJSON_LS_KEY, JSON.stringify(compact));
+        }
+      } catch(ex) {}
+      _geojsonOdjeliUpdUI(data.features?.length || 0, added);
+      showToast('GeoJSON učitan: ' + added + ' novih odjela');
+    } catch(ex) {
+      showToast('❌ GeoJSON greška: ' + ex.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function _geojsonOdjeliClear() {
+  if (_geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} _geojsonLayer = null; }
+  graniceOdjeli = graniceOdjeli.filter(o => !o._fromGeojson);
+  try { localStorage.removeItem(_GEOJSON_LS_KEY); } catch(e) {}
+  _geojsonOdjeliUpdUI(0, 0);
+  showToast('GeoJSON odjeli uklonjeni');
+}
+
+function _geojsonToggleVis() {
+  _geojsonVisible = !_geojsonVisible;
+  if (!_geojsonLayer) return;
+  if (_geojsonVisible) _geojsonLayer.addTo(map); else map.removeLayer(_geojsonLayer);
+  _geojsonOdjeliUpdUI();
+}
+
+function _geojsonOdjeliUpdUI(total, added) {
+  const el = document.getElementById('geojson-odjeli-info');
+  if (!el) return;
+  const cnt = graniceOdjeli.filter(o => o._fromGeojson).length;
+  if (cnt === 0) {
+    el.innerHTML = '<span style="color:#475569;">Nije učitan GeoJSON fajl.</span>';
+    return;
+  }
+  el.innerHTML = `
+    <span style="color:#4ade80;">${cnt} odjela učitano</span>
+    <button onclick="_geojsonToggleVis()" style="margin-left:8px;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;">
+      ${_geojsonVisible ? '👁 Vidljivo' : '🙈 Skriveno'}
+    </button>
+    <button onclick="_geojsonOdjeliClear()" style="margin-left:4px;background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;">
+      ✕ Ukloni
+    </button>`;
+}
+
+function geojsonOdjeliRestore() {
+  try {
+    const raw = localStorage.getItem(_GEOJSON_LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data._compact) {
+      // Restore from compact rings only (no map layer, just graniceOdjeli entries)
+      data.odjeli.forEach(o => {
+        if (o.name && o.ring?.length >= 3 && !graniceOdjeli.find(g => g.name === o.name)) {
+          graniceOdjeli.push({ name: o.name, bounds: L.latLngBounds(o.ring), ring: o.ring, _fromGeojson: true });
+        }
+      });
+      graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+      _geojsonOdjeliUpdUI();
+    } else {
+      _applyGeoJSONOdjeli(data);
+      _geojsonOdjeliUpdUI();
+    }
+  } catch(e) {}
 }
 
 // ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
@@ -9021,6 +9178,21 @@ function dozBackToList() {
       </div>
     </div>
     <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 14px;border-radius:0;text-align:center;background:rgba(0,0,0,0.3);"></div>
+
+    <!-- GeoJSON odjeli sekcija -->
+    <div style="padding:10px 14px 8px;border-bottom:1px solid #1e293b;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <span style="font-size:13px;font-weight:600;color:#e2e8f0;">📁 GeoJSON odjeli</span>
+        <button onclick="document.getElementById('geojson-odjeli-input').click()"
+                style="margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;">
+          📂 Učitaj .geojson
+        </button>
+        <input type="file" id="geojson-odjeli-input" accept=".geojson,.json"
+               style="display:none" onchange="loadGeoJSONOdjeli(this.files[0]);this.value=''">
+      </div>
+      <div id="geojson-odjeli-info" style="font-size:11px;color:#64748b;">Nije učitan GeoJSON fajl.</div>
+    </div>
+
     <div id="granice-list">
       <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
     </div>
