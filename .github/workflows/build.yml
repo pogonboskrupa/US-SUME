@@ -6,6 +6,8 @@ name: Build Android APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -121,17 +123,23 @@ jobs:
           cp doznaka/MainActivity.kt "$KTDIR/MainActivity.kt"
 
       # ── Supabase credentials iz GitHub Secrets ───────────────────
+      # Ako secrets nisu postavljeni, ostaju placeholder vrijednosti
+      # (build prolazi, app se kompajlira, samo ne može spojiti na Supabase)
       - name: Ubaci Supabase credentials
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          sed -i \
-            "s|https://TVOJ_PROJECT_ID.supabase.co|${SUPABASE_URL}|g" \
-            /tmp/app/lib/core/constants.dart
-          sed -i \
-            "s|TVOJ_ANON_KEY|${SUPABASE_ANON_KEY}|g" \
-            /tmp/app/lib/core/constants.dart
+          if [ -n "$SUPABASE_URL" ]; then
+            sed -i \
+              "s|https://TVOJ_PROJECT_ID.supabase.co|${SUPABASE_URL}|g" \
+              /tmp/app/lib/core/constants.dart
+          fi
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            sed -i \
+              "s|TVOJ_ANON_KEY|${SUPABASE_ANON_KEY}|g" \
+              /tmp/app/lib/core/constants.dart
+          fi
 
       # ── Build ────────────────────────────────────────────────────
       - name: flutter pub get
@@ -146,8 +154,9 @@ jobs:
         working-directory: /tmp/app
         run: flutter build apk --debug --split-per-abi
 
-      # ── Artifact ─────────────────────────────────────────────────
+      # ── Artifact (samo na push/dispatch, ne na PR) ────────────────
       - name: Upload APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: forestry-tracker-debug
