@@ -41,6 +41,11 @@ jobs:
             --platforms android \
             /tmp/app
 
+      - name: Patch Kotlin plugin verzija
+        run: |
+          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "2.0.21"/' \
+            /tmp/app/android/settings.gradle
+
       # ── Kopiranje source fajlova ─────────────────────────────────
       - name: Kopiraj pubspec.yaml
         run: cp doznaka/pubspec.yaml /tmp/app/pubspec.yaml
