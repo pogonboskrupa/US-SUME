@@ -3733,8 +3733,8 @@ function _openVlakaPicker(mode) {
   updPrev();
 
   // Naslov pickera
-  document.querySelector('#vlaka-picker span').textContent =
-    isTrag ? '🔴 Odaberi vlaku za snimanje traga' : '<img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:4px;">Odaberi vlaku za snimanje';
+  document.querySelector('#vlaka-picker span').innerHTML =
+    isTrag ? '🔴 Odaberi vlaku za snimanje traga' : '<img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;">';
 
   const list = document.getElementById('vpicker-list');
   list.innerHTML = '';
@@ -9823,7 +9823,7 @@ function dozBackToList() {
 <div id="vpicker-overlay" onclick="_closeVlakaPicker()"></div>
 <div id="vlaka-picker">
   <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;flex-shrink:0;">
-    <span style="color:#e2e8f0;font-size:13px;font-weight:600;"><img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:4px;">Odaberi vlaku za snimanje</span>
+    <span style="color:#e2e8f0;font-size:13px;font-weight:600;"><img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;"></span>
     <button onclick="_closeVlakaPicker()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
   </div>
   <div style="padding:7px 12px 6px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;align-items:center;gap:8px;">
