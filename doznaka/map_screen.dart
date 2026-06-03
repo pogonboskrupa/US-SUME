@@ -341,13 +341,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 PolygonLayer(
                   polygons: zones.zones
                       .where((z) => z.polygon.length >= 3)
-                      .map((z) => Polygon(
+                      .map<Polygon<Object>>((z) => Polygon(
                             points: z.polygon,
                             color: _hex(z.color).withOpacity(0.14),
                             borderColor:
                                 _hex(z.color).withOpacity(0.45),
                             borderStrokeWidth: 1.5,
-                            isDotted: true,
                           ))
                       .toList(),
                 ),
@@ -418,7 +417,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
               // Crtanje — linija u toku
               if (_isDrawing && _drawingPoints.length >= 2)
-                PolylineLayer(polylines: [
+                PolylineLayer<Object>(polylines: [
                   Polyline(
                     points: [
                       ..._drawingPoints,
@@ -427,7 +426,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     ],
                     strokeWidth: 2.5,
                     color: _drawingType?.color ?? Colors.orange,
-                    isDotted: true,
                   ),
                 ]),
 
