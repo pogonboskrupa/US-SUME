@@ -224,6 +224,13 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vpick-row:hover { background:#263548; }
 .vpick-rec { background:#059669;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap; }
 .vpick-rec:hover { background:#047857; }
+.vpick-search-row { padding:7px 10px 7px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;gap:6px;align-items:center; }
+.vpick-search-row input { flex:1;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:7px;padding:7px 10px;font-size:14px;font-family:monospace;outline:none; }
+.vpick-search-row input:focus { border-color:#38bdf8; }
+.vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
+.vpick-search-row button:active { background:#0ea5e9;color:#fff; }
+.vcard-elev { font-size:10px;color:#94a3b8;display:flex;gap:6px;flex-wrap:wrap;margin-top:1px; }
+.vcard-elev .eu { color:#4ade80; } .vcard-elev .ed { color:#f87171; } .vcard-elev .eroad { color:#fbbf24; }
 
 .mb {
   width:28px; height:28px; border-radius:5px;
@@ -3359,14 +3366,16 @@ function _openVlakaPicker(mode) {
     vlake.forEach((v, i) => {
       const row = document.createElement('div');
       row.className = 'vpick-row';
+      row.dataset.nm = v.nm;
       const d = fmtL(calcL(v.pts));
+      const elv = _elevHtml(v.pts);
       const btnLbl = isTrag ? '🔴 Trag' : '▶ Snimi';
       const pickFn = isTrag ? `_pickVlakaForTrag(${i})` : `_pickVlaka(${i})`;
       row.innerHTML = `
         <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;">
           <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
-          <div style="color:#64748b;font-size:11px;">${d} · ${v.pts.length} tač.</div>
+          <div style="color:#64748b;font-size:11px;">${d}${elv ? ' · '+elv : ''} · ${v.pts.length} tač.</div>
         </div>
         <button class="vpick-rec" onclick="event.stopPropagation();${pickFn}">${btnLbl}</button>`;
       row.onclick = () => isTrag ? _pickVlakaForTrag(i) : _pickVlaka(i);
@@ -3376,6 +3385,9 @@ function _openVlakaPicker(mode) {
 
   document.getElementById('vlaka-picker').classList.add('open');
   document.getElementById('vpicker-overlay').style.display = 'block';
+  // Resetuj i fokusiraj search input
+  const inp = document.getElementById('vpick-input');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 320); }
 }
 
 function _closeVlakaPicker() {
@@ -3405,6 +3417,81 @@ function _pickVlakaForTrag(i) {
     fabSnimTrag();
   }, 260);
 }
+// ─── Picker search/number input ───────────────────────────────────────────────
+
+// Parsiraj unos u picker inputu: "14" → {br:14,kr:0} ; "14.5" → {br:14,kr:5}
+function _parseVNum(s) {
+  s = s.trim().replace(/^[Tt]/, '');
+  if (!s) return null;
+  const parts = s.split('.');
+  const br = parseInt(parts[0]);
+  const kr = parts.length > 1 ? parseInt(parts[1]) : 0;
+  if (isNaN(br)) return null;
+  return { br, kr, nm: kr === 0 ? `T${br}` : `T${br}.${kr}` };
+}
+
+// Filtriraj listu u pickeru prema unosu
+function _vpickFilter() {
+  const raw = (document.getElementById('vpick-input')?.value || '').trim().replace(/^[Tt]/, '');
+  const list = document.getElementById('vpicker-list');
+  if (!list) return;
+  // Ažuriraj dimming na svakom redu
+  list.querySelectorAll('.vpick-row').forEach(row => {
+    const nm = row.dataset.nm || '';
+    const match = !raw || nm.toLowerCase().replace(/^t/,'').startsWith(raw.toLowerCase());
+    row.style.opacity = match ? '1' : '0.28';
+  });
+}
+
+// "Idi" — navigiraj na unesenu vlaku ili kreiraj novu
+async function _vpickGo() {
+  const raw = document.getElementById('vpick-input')?.value || '';
+  const p = _parseVNum(raw);
+  if (!p) { showToast('Unesi broj npr. 14 ili 14.5'); return; }
+  // Pronađi postojeću
+  const existing = vlake.findIndex(v => v.nm === p.nm);
+  if (existing !== -1) {
+    _closeVlakaPicker();
+    setTimeout(() => {
+      if (_vpickerMode === 'trag') { selI(existing); switchTab('karta'); fabSnimTrag(); }
+      else { selI(existing); switchTab('karta'); togRec(); }
+    }, 260);
+    return;
+  }
+  // Kreiraj novu
+  _closeVlakaPicker();
+  if (p.kr === 0) {
+    // Matična vlaka
+    document.getElementById('ibr').value = p.br;
+    document.getElementById('ikr').value = 0;
+    updPrev();
+    setTimeout(async () => {
+      await _doCreateVlaka(p.br, 0);
+      if (_vpickerMode === 'trag') fabSnimTrag(); else togRec();
+    }, 260);
+  } else {
+    // Krak — pronađi ili kreiraj roditelja
+    const parts = p.nm.split('.');
+    const parentNm = parts.slice(0, -1).join('.');
+    let parIdx = vlake.findIndex(v => v.nm === parentNm);
+    if (parIdx < 0) {
+      const parParts = parentNm.replace(/^T/,'').split('.');
+      const parBr = parseInt(parParts[0]);
+      const parKr = parParts.length > 1 ? parseInt(parParts[1]) : 0;
+      await _doCreateVlaka(parBr, parKr);
+      parIdx = vlake.length - 1;
+    }
+    document.getElementById('ibr').value = p.br;
+    document.getElementById('ikr').value = p.kr;
+    updPrev();
+    setTimeout(async () => {
+      selI(parIdx);
+      await _doCreateVlaka(p.br, p.kr);
+      if (_vpickerMode === 'trag') fabSnimTrag(); else togRec();
+    }, 260);
+  }
+}
+
 function mojaLokacija() {
   switchTab('karta');
   fabLokacija();
@@ -4512,7 +4599,7 @@ function _renderVlakaRow(el, v, i, depth) {
   const isKrak = depth > 0;
   row.className = 'vrow' + (i === actI ? ' act' : '') + (isKrak ? ' vrow-krak' : '');
   if (depth > 1) row.style.marginLeft = (depth * 14) + 'px';
-  const lagerInfo    = v.lager ? ' · ✓ lager' : '';
+  const lagerInfo    = v.lager ? ` · 🏷${v.lager}` : '';
   const isRecThis    = recOn && i === actI;
   const isPausedPar  = recOn && i === _recParentIdx;
   const stranaBadge  = isKrak ? _krakStranaBadge(v.strana) : '';
@@ -4523,6 +4610,15 @@ function _renderVlakaRow(el, v, i, depth) {
   const nasaviBtn = isPausedPar
     ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()">▶ Nastavi ${v.nm}</button>`
     : '';
+  // Elev stats + distanca od puta za krakove
+  const elvHtml = _elevHtml(v.pts);
+  let roadDistHtml = '';
+  if (isKrak && v.pts.length > 0) {
+    const rd = _distToMainRoad(vlake, v) + d;
+    roadDistHtml = `<span class="eroad">📍${fmtL(rd)} od puta</span>`;
+  }
+  const elevRow = (elvHtml || roadDistHtml)
+    ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}</div>` : '';
   row.innerHTML = `
     <div class="vcard-stripe" style="background:${v.color}"></div>
     <div class="vcard-info">
@@ -4532,6 +4628,7 @@ function _renderVlakaRow(el, v, i, depth) {
         <span class="vcard-km">${fmtL(d)}</span>
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
+      ${elevRow}
       ${nasaviBtn}
     </div>
     <div class="vcard-btns">
@@ -4740,10 +4837,18 @@ function updateVlakaLabel(i) {
 
   if (v.lager) {
     const pFirst = v.pts[0];
+    const S = 22; // px veličina simbola
+    // Pravougaonik: dijagonala TL→BR, gornji trougao (TL-TR-BR) crn
+    const svgSym = `<svg width="${S}" height="${S}" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">
+      <rect x="0.5" y="0.5" width="${S-1}" height="${S-1}" fill="none" stroke="white" stroke-width="1.5"/>
+      <polygon points="0,0 ${S},0 ${S},${S}" fill="black"/>
+      <line x1="0" y1="0" x2="${S}" y2="${S}" stroke="white" stroke-width="1.5"/>
+    </svg>
+    <div style="color:#fbbf24;font-weight:bold;font-size:10px;text-align:center;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,0.9);margin-top:1px;pointer-events:none;">${v.lager}</div>`;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
       icon: L.divIcon({
-        className: '', iconSize: [0,0], iconAnchor: [14,14],
-        html: `<div style="background:#f59e0b;color:#000;font-size:12px;font-weight:bold;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.6);pointer-events:none;font-family:Arial,sans-serif;">${v.lager}</div>`
+        className: '', iconSize: [S, S+14], iconAnchor: [S/2, S/2],
+        html: svgSym
       }),
       interactive: false, zIndexOffset: 600, pane: 'vlakeLabels'
     }).addTo(map);
@@ -5171,6 +5276,21 @@ chkMob(); window.addEventListener('resize',chkMob);
 // === UTILS ===
 function dst(la1,lo1,la2,lo2){const R=6371000,a=Math.sin((la2-la1)*Math.PI/360)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin((lo2-lo1)*Math.PI/360)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function calcL(pts){let s=0;for(let i=1;i<pts.length;i++)s+=dst(pts[i-1].la,pts[i-1].lo,pts[i].la,pts[i].lo);return s;}
+function calcElev(pts){
+  let up=0,down=0;
+  for(let i=1;i<pts.length;i++){
+    const dh=(pts[i].al||0)-(pts[i-1].al||0);
+    if(dh>0.3)up+=dh; else if(dh<-0.3)down-=dh;
+  }
+  return {up:Math.round(up),down:Math.round(down)};
+}
+function _elevHtml(pts){
+  if(!pts||pts.length<2)return '';
+  const hasAlt=pts.some(p=>p.al&&p.al!==0);
+  if(!hasAlt)return '';
+  const {up,down}=calcElev(pts);
+  return (up?`<span class="eu">↑${up}m</span>`:'')+(down?`<span class="ed"> ↓${down}m</span>`:'');
+}
 
 // Pronađi indeks točke na glavnoj vlaci najbliži raskrsnici (prvoj točki kraka)
 function _findJunctionIdx(mainPts, krakFirstPt) {
@@ -8307,6 +8427,11 @@ function dozBackToList() {
   <div style="padding:7px 12px 6px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;align-items:center;gap:8px;">
     <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja:</span>
     <div class="colors" id="clrs" style="margin:0;flex:1;"></div>
+  </div>
+  <div class="vpick-search-row">
+    <input id="vpick-input" type="text" placeholder="npr. 14  ili  14.5" autocomplete="off" inputmode="decimal"
+           oninput="_vpickFilter()" onkeydown="if(event.key==='Enter')_vpickGo()">
+    <button onclick="_vpickGo()">→ Idi</button>
   </div>
   <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
 </div>
