@@ -1391,7 +1391,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
-    <button class="tab-btn" onclick="switchTab('mjtrg')">📏 M&amp;T</button>
+    <button class="tab-btn" id="mjtrg-tab-btn" ontouchstart="toggleMjtrgDropdown(event)" onclick="toggleMjtrgDropdown(event)">📏 M&amp;T</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -3512,6 +3512,8 @@ map.on('moveend', _updMapScale);
 document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
   if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) dd.style.display = 'none';
+  const mdd = document.getElementById('mjtrg-dropdown');
+  if (mdd && !mdd.contains(e.target) && !e.target.closest('#mjtrg-tab-btn')) mdd.style.display = 'none';
   const kp = document.getElementById('krak-picker');
   if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
 });
@@ -3565,6 +3567,28 @@ function toggleMenuDropdown(e) {
 }
 function closeMenuDropdown() {
   document.getElementById('menu-dropdown').style.display = 'none';
+}
+function toggleMjtrgDropdown(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const dd = document.getElementById('mjtrg-dropdown');
+  if (dd.style.display === 'none') {
+    const btn = document.getElementById('mjtrg-tab-btn');
+    const r = btn.getBoundingClientRect();
+    const ddW = 180;
+    let left = r.left;
+    if (left + ddW > window.innerWidth - 6) left = window.innerWidth - ddW - 6;
+    if (left < 6) left = 6;
+    dd.style.top  = (r.bottom + 4) + 'px';
+    dd.style.left = left + 'px';
+    dd.style.pointerEvents = 'none';
+    dd.style.display = 'block';
+    setTimeout(() => { dd.style.pointerEvents = ''; }, 400);
+  } else {
+    dd.style.display = 'none';
+  }
+}
+function closeMjtrgDropdown() {
+  document.getElementById('mjtrg-dropdown').style.display = 'none';
 }
 
 // Koordinate HUD — no-op (stara funkcija ovl uklonjena)
@@ -7648,6 +7672,10 @@ let _msrMode  = 'dist'; // 'dist' | 'area' | 'nagib'
 
 function _msrSetMode(m) {
   _msrMode = m;
+  const modeLabels = { dist:'📏 Udaljenost', area:'◻ Površina', nagib:'📐 Nagib' };
+  const badge = document.getElementById('msr-mode-badge');
+  if (badge) badge.textContent = modeLabels[m] || m;
+  // legacy inline buttons (ako postoje)
   ['dist','area','nagib'].forEach(k => {
     const b = document.getElementById('msrm-'+k);
     if (b) {
@@ -10007,6 +10035,21 @@ function dozBackToList() {
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
 </div>
+
+<!-- M&T DROPDOWN -->
+<div id="mjtrg-dropdown" style="
+  display:none;position:fixed;top:0;left:0;
+  background:#16213e;border:1px solid #1e3a5f;border-radius:8px;
+  min-width:180px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  touch-action:manipulation;">
+  <div style="font-size:10px;font-weight:700;color:#475569;padding:7px 14px 4px;text-transform:uppercase;letter-spacing:0.5px;">Mjerenje</div>
+  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('dist');switchTab('mjtrg');_mjtrgTab('msr')">📏 Udaljenost</div>
+  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('area');switchTab('mjtrg');_mjtrgTab('msr')">◻ Površina</div>
+  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('nagib');switchTab('mjtrg');_mjtrgTab('msr')">📐 Nagib</div>
+  <div class="mdrop-sep"></div>
+  <div class="mdrop-item" onclick="closeMjtrgDropdown();switchTab('mjtrg');_mjtrgTab('trg')">🗺 Tragovi</div>
+</div>
+
 <!-- ADMIN MODAL -->
 <div id="admin-modal" onclick="if(event.target===this)closeAdminModal()"
   style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:90000;overflow-y:auto;padding:20px;box-sizing:border-box;">
@@ -10147,14 +10190,10 @@ function dozBackToList() {
 
       <!-- IZMJERA -->
       <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;">
-        <!-- Mod mjerenja -->
-        <div style="display:flex;gap:4px;margin-bottom:8px;background:#0f172a;border-radius:8px;padding:3px;">
-          <button id="msrm-dist"  onclick="_msrSetMode('dist')"
-                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#1e3a5f;color:#38bdf8;">📏 Udaljenost</button>
-          <button id="msrm-area"  onclick="_msrSetMode('area')"
-                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#64748b;">◻ Površina</button>
-          <button id="msrm-nagib" onclick="_msrSetMode('nagib')"
-                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#64748b;">📐 Nagib</button>
+        <!-- Aktivni mod (badge) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span id="msr-mode-badge" style="font-size:11px;font-weight:700;color:#38bdf8;background:#1e3a5f;padding:2px 8px;border-radius:10px;">📏 Udaljenost</span>
+          <span style="font-size:11px;color:#475569;">← promijeni klikom na tab</span>
         </div>
         <!-- Kontrole -->
         <div style="display:flex;gap:6px;margin-bottom:8px;">
