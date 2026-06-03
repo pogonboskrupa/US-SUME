@@ -257,6 +257,40 @@ input:focus { outline:none; border-color:#3b82f6; }
 .treg-btns .del-btn { border-color:#7f1d1d; color:#f87171; }
 .treg-btns .del-btn:hover { background:#2d0a0a; }
 .treg-empty { color:#475569; font-size:12px; text-align:center; padding:20px; }
+/* Grupiranje */
+.mjtrg-grp-hdr {
+  font-size:10px; font-weight:700; color:#475569; text-transform:uppercase;
+  letter-spacing:0.6px; padding:8px 2px 3px; margin-bottom:4px;
+  border-bottom:1px solid #1e293b; display:flex; align-items:center; gap:4px;
+  user-select:none;
+}
+.mjtrg-grp-cnt { color:#334155; font-weight:400; margin-left:auto; }
+/* Meta inline editor */
+.treg-meta-edit {
+  display:flex; gap:4px; flex-wrap:wrap; margin-top:5px;
+  padding:6px 8px; background:#0f172a; border-radius:6px; border:1px dashed #334155;
+}
+.treg-meta-edit .mf-col { display:flex; flex-direction:column; flex:1; min-width:70px; }
+.treg-meta-edit label { font-size:10px; color:#64748b; margin-bottom:2px; }
+.treg-meta-edit input {
+  background:#1e293b; border:1px solid #334155; color:#e2e8f0;
+  border-radius:4px; padding:4px 6px; font-size:11px; outline:none;
+}
+.treg-meta-edit input:focus { border-color:#38bdf8; }
+.treg-meta-edit .mf-save {
+  align-self:flex-end; background:#1e3a5f; color:#38bdf8;
+  border:1px solid #1e3a5f; border-radius:5px;
+  padding:4px 10px; font-size:11px; cursor:pointer;
+}
+/* Grupiraj select */
+.mjtrg-grp-row {
+  display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-shrink:0;
+}
+.mjtrg-grp-row label { font-size:11px; color:#64748b; white-space:nowrap; }
+.mjtrg-grp-row select {
+  flex:1; background:#1e293b; border:1px solid #334155; color:#e2e8f0;
+  border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer;
+}
 /* Trag popup on map */
 .trag-popup { min-width:180px; }
 .trag-popup b { font-size:13px; }
@@ -2106,8 +2140,9 @@ function showApp() {
   loadProj();           // lokalni podaci odmah
   sbInitData();         // Supabase async override
   sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
-  geojsonOdjeliRestore(); // obnovi GeoJSON odjele
-  _tragRegLoad();         // obnovi registar tragova
+  geojsonOdjeliRestore();
+  _tragRegLoad();
+  _msrRegLoad();
   // Procesiraj eventualni offline red čim dobijemo mrežu
   if (navigator.onLine) _processOfflineQueue();
 }
@@ -4960,10 +4995,13 @@ function _escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 function _tragRegAdd(pts) {
   const id = 'trag_' + Date.now();
   const color = _TRAG_COLORS[_tragRegistry.length % _TRAG_COLORS.length];
+  const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
   const t = {
     id, color, pts, visible: true,
     date: new Date().toISOString(),
-    name: 'Trag ' + new Date().toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'})
+    name: 'Trag ' + new Date().toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    gj: aktP?.gj || '',
+    odjel: aktP?.odjel || ''
   };
   _tragRegistry.unshift(t);
   _tragRegAddLayer(t);
@@ -4978,6 +5016,59 @@ function closeTragRegistry() {
   switchTab('karta');
 }
 
+let _trgGrpBy = 'date';
+let _msrGrpBy = 'date';
+
+// ── Grouping helpers ──────────────────────────────────────────────────
+function _grpKey(item, by) {
+  if (by === 'date') {
+    const d = new Date(item.date || Date.now());
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+  if (by === 'gj')    return item.gj    && item.gj.trim()    ? item.gj.trim()    : '—';
+  if (by === 'odjel') return item.odjel && item.odjel.trim() ? item.odjel.trim() : '—';
+  return null;
+}
+function _grpDateLabel(key) {
+  const [y, m] = key.split('-');
+  const months = ['Januar','Februar','Mart','April','Maj','Juni','Juli','August','Septembar','Oktobar','Novembar','Decembar'];
+  return `${months[parseInt(m)-1]} ${y}`;
+}
+function _renderGrouped(items, by, rowFn) {
+  if (by === 'none' || !by) return items.map(rowFn).join('');
+  const groups = new Map();
+  for (const item of items) {
+    const key = _grpKey(item, by);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const keys = [...groups.keys()].sort((a, b) =>
+    by === 'date' ? b.localeCompare(a) : a.localeCompare(b)
+  );
+  let html = '';
+  for (const key of keys) {
+    const label = by === 'date' ? _grpDateLabel(key) : key;
+    html += `<div class="mjtrg-grp-hdr">${_escHtml(label)}<span class="mjtrg-grp-cnt">${groups.get(key).length}</span></div>`;
+    html += groups.get(key).map(rowFn).join('');
+  }
+  return html;
+}
+// ── Trag meta inline editor ─────────────────────────────────────────
+function _tragRegEditMeta(id) {
+  const el = document.getElementById('treg-edit-' + id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function _tragRegSetMeta(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.name  = (document.getElementById('treg-ei-name-'+id)?.value  || t.name).trim();
+  t.gj    = (document.getElementById('treg-ei-gj-'+id)?.value    || '').trim();
+  t.odjel = (document.getElementById('treg-ei-odjel-'+id)?.value || '').trim();
+  _tragRegSave();
+  _tragRegRender();
+}
+
 function _tragRegRender() {
   const el = document.getElementById('trag-reg-list');
   const cnt = document.getElementById('trag-reg-count');
@@ -4987,22 +5078,29 @@ function _tragRegRender() {
     el.innerHTML = '<div class="treg-empty">Nema sačuvanih tragova.<br>Klikni <b>Snimi trag</b> u panelu za snimanje.</div>';
     return;
   }
-  el.innerHTML = _tragRegistry.map(t => {
+  el.innerHTML = _renderGrouped(_tragRegistry, _trgGrpBy, t => {
     const lenM = _tragCalcLen(t.pts);
-    const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const dt = new Date(t.date).toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'});
     const vis = t.visible !== false;
+    const meta = [dt, _tragFmtLen(lenM), t.pts.length+' tač.', t.gj?'GJ: <b>'+_escHtml(t.gj)+'</b>':'', t.odjel?'Odj: <b>'+_escHtml(t.odjel)+'</b>':''].filter(Boolean).join(' · ');
     return `<div class="treg-row">
       <div class="treg-name" onclick="_tragRegZoom('${t.id}')" style="border-left:3px solid ${t.color};padding-left:8px;">${_escHtml(t.name)}</div>
-      <div class="treg-meta">${dt} · ${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
+      <div class="treg-meta">${meta}</div>
+      <div id="treg-edit-${t.id}" style="display:none;" class="treg-meta-edit">
+        <div class="mf-col"><label>Naziv</label><input id="treg-ei-name-${t.id}" value="${_escHtml(t.name)}"></div>
+        <div class="mf-col"><label>GJ</label><input id="treg-ei-gj-${t.id}" value="${_escHtml(t.gj||'')}" placeholder="npr. Konjuh"></div>
+        <div class="mf-col"><label>Odjel</label><input id="treg-ei-odjel-${t.id}" value="${_escHtml(t.odjel||'')}" placeholder="npr. 14a"></div>
+        <button class="mf-save" onclick="_tragRegSetMeta('${t.id}')">✓ Spremi</button>
+      </div>
       <div class="treg-btns">
         <button onclick="_tragRegZoom('${t.id}')">🗺 Zoom</button>
         <button onclick="_tragRegToggle('${t.id}')">${vis?'🙈 Sakrij':'👁 Prikaži'}</button>
-        <button onclick="_tragRegRename('${t.id}')">✏ Preimenuj</button>
+        <button onclick="_tragRegEditMeta('${t.id}')">✏ Meta</button>
         <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
         <button class="del-btn" onclick="_tragRegDelete('${t.id}')">✕ Briši</button>
       </div>
     </div>`;
-  }).join('');
+  });
 }
 
 function _tragRegZoom(id) {
@@ -7755,8 +7853,121 @@ function msrClear() {
   if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
 }
 function msrActivateIfNeeded() {
-  // Poziva se kad se otvori tab — ništa ne radi automatski, samo osvježi panel
   _msrUpdPanel();
+  _msrRegRender();
+}
+
+// =====================================================================
+// === MSR REGISTRY (sačuvana mjerenja) ===
+// =====================================================================
+const _MSR_REG_KEY = 'tvlake_mjerenja';
+let _msrRegistry   = [];
+
+function _msrRegLoad() {
+  try {
+    const raw = localStorage.getItem(_MSR_REG_KEY);
+    if (raw) _msrRegistry = JSON.parse(raw);
+  } catch(e) { _msrRegistry = []; }
+  _msrRegRender();
+}
+function _msrRegSave() {
+  try { localStorage.setItem(_MSR_REG_KEY, JSON.stringify(_msrRegistry)); } catch(e) {}
+}
+
+function _msrPts2Len(pts) {
+  let len = 0;
+  for (let i = 0; i < pts.length - 1; i++)
+    len += _msrHaversine(pts[i].lat, pts[i].lng, pts[i+1].lat, pts[i+1].lng);
+  return len;
+}
+
+function _msrRegAdd() {
+  if (_msrPts.length < 2) { showToast('Dodaj najmanje 2 tačke prije snimanja.'); return; }
+  const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  const now = new Date();
+  const entry = {
+    id: 'mr_' + Date.now(),
+    name: 'Mjerenje ' + now.toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    date: now.toISOString(),
+    gj: aktP?.gj || '',
+    odjel: aktP?.odjel || '',
+    pts: _msrPts.slice(),
+    color: _msrColor
+  };
+  _msrRegistry.unshift(entry);
+  _msrRegSave();
+  _msrRegRender();
+  showToast('Mjerenje sačuvano.');
+  // Otvori inline editor za unos GJ/Odjela na novom unosu
+  setTimeout(() => _msrRegEditMeta(entry.id, true), 100);
+}
+
+function _msrRegDelete(id) {
+  _msrRegistry = _msrRegistry.filter(x => x.id !== id);
+  _msrRegSave();
+  _msrRegRender();
+}
+
+function _msrRegZoom(id) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m || !m.pts.length) return;
+  const bounds = L.latLngBounds(m.pts.map(p => [p.lat, p.lng]));
+  map.fitBounds(bounds, {padding:[40,40]});
+  // Prikaži mjerenje na mapi
+  if (!_msrLayer) _msrLayer = L.layerGroup().addTo(map);
+  _msrPts = m.pts.map(p => ({...p}));
+  _msrColor = m.color || '#fbbf24';
+  _msrRedraw();
+  _msrUpdPanel();
+  switchTab('mjtrg');
+}
+
+function _msrRegEditMeta(id, forceOpen) {
+  const el = document.getElementById('mreg-edit-' + id);
+  if (!el) return;
+  el.style.display = (forceOpen || el.style.display === 'none') ? '' : 'none';
+  if (el.style.display !== 'none') el.querySelector('input')?.focus();
+}
+
+function _msrRegSetMeta(id) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m) return;
+  m.name  = (document.getElementById('mreg-ei-name-'+id)?.value  || m.name).trim() || m.name;
+  m.gj    = (document.getElementById('mreg-ei-gj-'+id)?.value    || '').trim();
+  m.odjel = (document.getElementById('mreg-ei-odjel-'+id)?.value || '').trim();
+  _msrRegSave();
+  _msrRegRender();
+}
+
+function _msrRegRender() {
+  const el = document.getElementById('msr-saved-list');
+  if (!el) return;
+  const cnt = document.getElementById('msr-saved-count');
+  if (cnt) cnt.textContent = _msrRegistry.length ? `(${_msrRegistry.length})` : '';
+  if (!_msrRegistry.length) {
+    el.innerHTML = '<div class="treg-empty" style="padding:10px 0;">Nema sačuvanih mjerenja.<br>Klikni 💾 da sačuvaš aktivno mjerenje.</div>';
+    return;
+  }
+  el.innerHTML = _renderGrouped(_msrRegistry, _msrGrpBy, m => {
+    const dt = new Date(m.date).toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const lenM = _msrPts2Len(m.pts);
+    const meta = [dt, _msrFmt(lenM), m.pts.length+' tač.', m.gj?'GJ: <b>'+_escHtml(m.gj)+'</b>':'', m.odjel?'Odj: <b>'+_escHtml(m.odjel)+'</b>':''].filter(Boolean).join(' · ');
+    return `<div class="treg-row" style="border-left:3px solid ${m.color||'#fbbf24'};">
+      <div class="treg-name" onclick="_msrRegZoom('${m.id}')">${_escHtml(m.name)}</div>
+      <div class="treg-meta">${meta}</div>
+      <div id="mreg-edit-${m.id}" style="display:none;" class="treg-meta-edit">
+        <div class="mf-col"><label>Naziv</label><input id="mreg-ei-name-${m.id}" value="${_escHtml(m.name)}"></div>
+        <div class="mf-col"><label>GJ</label><input id="mreg-ei-gj-${m.id}" value="${_escHtml(m.gj||'')}" placeholder="npr. Konjuh"></div>
+        <div class="mf-col"><label>Odjel</label><input id="mreg-ei-odjel-${m.id}" value="${_escHtml(m.odjel||'')}" placeholder="npr. 14a"></div>
+        <button class="mf-save" onclick="_msrRegSetMeta('${m.id}')">✓ Spremi</button>
+      </div>
+      <div class="treg-btns">
+        <button onclick="_msrRegZoom('${m.id}')">🗺 Zoom</button>
+        <button onclick="_msrRegEditMeta('${m.id}')">✏ Meta</button>
+        <button class="del-btn" onclick="_msrRegDelete('${m.id}')">✕ Briši</button>
+      </div>
+    </div>`;
+  });
 }
 
 initAuth();
@@ -9778,8 +9989,10 @@ function dozBackToList() {
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;">▶ Počni</button>
           <button class="btn" onclick="msrAddCenter()" title="Dodaj tačku na poziciji centra karte"
-                  style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 9px;font-size:12px;">⊕ Pozicija tačke</button>
-          <button class="btn" onclick="msrClear()" title="Obriši sve tačke"
+                  style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 8px;font-size:11px;">⊕ Pozicija tačke</button>
+          <button class="btn" onclick="_msrRegAdd()" title="Spremi mjerenje"
+                  style="background:#14532d;color:#4ade80;flex:0 0 auto;padding:0 8px;">💾</button>
+          <button class="btn" onclick="msrClear()" title="Obriši aktivno mjerenje"
                   style="background:#374151;color:#e2e8f0;flex:0 0 auto;">🗑</button>
         </div>
 
@@ -9820,15 +10033,42 @@ function dozBackToList() {
           </div>
         </div>
         <div id="msr-segs"></div>
+
+        <!-- Sačuvana mjerenja -->
+        <div id="msr-saved-box" style="margin-top:10px;border-top:1px solid #1e293b;padding-top:8px;">
+          <div style="display:flex;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:600;color:#94a3b8;">Sačuvana mjerenja</span>
+            <span id="msr-saved-count" style="color:#475569;font-size:11px;margin-left:5px;"></span>
+          </div>
+          <div class="mjtrg-grp-row">
+            <label>Grupiraj:</label>
+            <select onchange="_msrGrpBy=this.value;_msrRegRender()">
+              <option value="date">Datum (mj/god)</option>
+              <option value="gj">GJ</option>
+              <option value="odjel">Odjel</option>
+              <option value="none">Bez grupiranja</option>
+            </select>
+          </div>
+          <div id="msr-saved-list" style="display:flex;flex-direction:column;gap:5px;"></div>
+        </div>
       </div>
 
       <!-- TRAGOVI -->
       <div id="mjtrg-sec-trg" style="display:none;padding:10px 14px 12px;flex:1;">
-        <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
           <div class="sec-t" style="margin:0;">🗺 Registar tragova</div>
           <span id="trag-reg-count" style="color:#64748b;font-weight:400;font-size:12px;margin-left:6px;"></span>
         </div>
-        <div id="trag-reg-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <div class="mjtrg-grp-row">
+          <label>Grupiraj:</label>
+          <select onchange="_trgGrpBy=this.value;_tragRegRender()">
+            <option value="date">Datum (mj/god)</option>
+            <option value="gj">GJ</option>
+            <option value="odjel">Odjel</option>
+            <option value="none">Bez grupiranja</option>
+          </select>
+        </div>
+        <div id="trag-reg-list" style="display:flex;flex-direction:column;gap:5px;"></div>
       </div>
     </div><!-- /mjtrg-panel -->
 
