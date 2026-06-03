@@ -510,6 +510,52 @@ select:focus { outline:none; border-color:#3b82f6; }
     border-right:2px solid #1e3a5f;
   }
 }
+/* === Mjerenja & Tragovi panel === */
+#mjtrg-panel {
+  position:fixed; left:0; right:0; bottom:0;
+  max-height:68vh;
+  background:rgba(15,23,42,0.97);
+  border-top:2px solid #1e3a5f;
+  border-radius:14px 14px 0 0;
+  z-index:800; display:none; flex-direction:column;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain; touch-action:pan-y;
+  backdrop-filter:blur(6px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (min-width:581px) {
+  #mjtrg-panel {
+    left:0; right:auto; top:0; bottom:0;
+    max-height:none; width:300px;
+    border-radius:0; border-top:none;
+    border-right:2px solid #1e3a5f;
+  }
+}
+#mjtrg-panel .sec { padding:10px 14px 12px; border-bottom:1px solid #1e293b; }
+.msr-swatch {
+  width:22px; height:22px; border-radius:50%;
+  border:2px solid transparent; cursor:pointer;
+  transition:transform 0.15s, border-color 0.1s; flex-shrink:0;
+}
+.msr-swatch.on { border-color:#fff; transform:scale(1.25); }
+/* Crosshair overlay na mapi */
+#msr-xhair {
+  display:none; position:fixed;
+  top:50%; left:50%;
+  width:28px; height:28px;
+  transform:translate(-50%,-50%);
+  border:2px solid rgba(255,255,255,0.9);
+  border-radius:50%;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.6);
+  pointer-events:none; z-index:850;
+}
+#msr-xhair::before, #msr-xhair::after {
+  content:''; position:absolute;
+  background:rgba(255,255,255,0.92);
+  box-shadow:0 0 2px rgba(0,0,0,0.9);
+}
+#msr-xhair::before { left:-12px; right:-12px; top:50%; height:2px; transform:translateY(-50%); }
+#msr-xhair::after  { top:-12px; bottom:-12px; left:50%; width:2px; transform:translateX(-50%); }
 .msr-seg {
   background:#0f172a; border:1px solid #1e3a5f;
   border-radius:7px; padding:8px 10px; margin-bottom:6px;
@@ -1207,7 +1253,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
-  #tab-bar, #panel, #proj-panel, #izmjeri-panel, #rec-banner, #draw-banner, #modal, #print-modal,
+  #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
@@ -1305,6 +1351,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
+    <button class="tab-btn" onclick="switchTab('mjtrg')">📏 M&amp;T</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -1355,8 +1402,8 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="seg-btn" id="btrag" onclick="togSnimTrag()" title="Snimi trag kretanja">
             <span class="seg-ico">🔴</span><span>Snimi trag</span>
           </button>
-          <button class="seg-btn" onclick="openTragRegistry()" title="Registar snih tragova">
-            <span class="seg-ico">📋</span><span>Tragovi</span>
+          <button class="seg-btn" onclick="switchTab('mjtrg')" title="Mjerenja i registar tragova">
+            <span class="seg-ico">📏</span><span>M&amp;T</span>
           </button>
           <button class="seg-btn" onclick="mojaLokacija()" title="Moja pozicija">
             <span class="seg-ico">🎯</span><span>Pozicija</span>
@@ -4925,11 +4972,10 @@ function _tragRegAdd(pts) {
 }
 
 function openTragRegistry() {
-  _tragRegRender();
-  document.getElementById('trag-reg-modal').classList.add('open');
+  switchTab('mjtrg');
 }
 function closeTragRegistry() {
-  document.getElementById('trag-reg-modal').classList.remove('open');
+  switchTab('karta');
 }
 
 function _tragRegRender() {
@@ -6293,8 +6339,8 @@ function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').v
 // === PANEL MOBILE ===
 function togglePanel(){
   const pproj=document.getElementById('proj-panel');
-  const pizmjeri=document.getElementById('izmjeri-panel');
-  if (pproj.style.display==='flex' || pizmjeri.style.display==='flex') { switchTab('vlake'); return; }
+  const pmjtrg2=document.getElementById('mjtrg-panel');
+  if (pproj.style.display==='flex' || pmjtrg2.style.display==='flex') { switchTab('vlake'); return; }
   const p=document.getElementById('panel');
   const showing = p.style.display==='flex';
   p.style.display = showing ? 'none' : 'flex';
@@ -7390,14 +7436,14 @@ function switchTab(tab) {
   const panel   = document.getElementById('panel');
   const pproj   = document.getElementById('proj-panel');
   const pdoz    = document.getElementById('doznaka-panel');
-  const pizmjeri= document.getElementById('izmjeri-panel');
+  const pmjtrg  = document.getElementById('mjtrg-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
     b.classList.toggle('active',
-      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')||(i===4&&tab==='doznaka')));
-  panel.style.display    = tab==='vlake'    ? 'flex' : 'none';
-  pproj.style.display    = tab==='projekat' ? 'flex' : 'none';
-  pdoz.style.display     = tab==='doznaka'  ? 'flex' : 'none';
-  pizmjeri.style.display = tab==='izmjeri'  ? 'flex' : 'none';
+      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')||(i===4&&tab==='doznaka')||(i===5&&tab==='mjtrg')));
+  panel.style.display   = tab==='vlake'    ? 'flex' : 'none';
+  pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
+  pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
+  pmjtrg.style.display  = tab==='mjtrg'   ? 'flex' : 'none';
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -7418,21 +7464,35 @@ function switchTab(tab) {
     _setMapUIVisible(false, false);
     msrStop();
     dozInit();
-  } else if (tab==='izmjeri') {
+  } else if (tab==='mjtrg') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
     setTimeout(()=>map.invalidateSize(), 50);
     msrActivateIfNeeded();
+    _tragRegRender();
   }
 }
 
 // =====================================================================
 // === IZMJERA (mjerenje udaljenosti, nagiba, azimuta) ===
 // =====================================================================
-let _msrOn    = false;     // aktivan mod mjerenja
-let _msrPts   = [];        // [{lat,lng,elev}]
-let _msrLayer = null;      // L.layerGroup na mapi
-let _msrElevCache = {};    // "lat,lng" → m
+let _msrOn    = false;
+let _msrPts   = [];
+let _msrLayer = null;
+let _msrElevCache = {};
+let _msrColor = '#fbbf24';
+
+function _msrSetColor(c, el) {
+  _msrColor = c;
+  document.querySelectorAll('.msr-swatch').forEach(s => s.classList.remove('on'));
+  if (el) el.classList.add('on');
+  _msrRedraw();
+}
+
+function msrAddCenter() {
+  if (!_msrOn) return;
+  _msrAddPoint(map.getCenter());
+}
 
 function _msrFmt(m) {
   return m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
@@ -7480,35 +7540,31 @@ function _msrRedraw() {
   _msrLayer.clearLayers();
   const pts = _msrPts;
   if (!pts.length) return;
-  // Markerji za tačke
-  pts.forEach((p, i) => {
-    const color = i === 0 ? '#4ade80' : (i === pts.length-1 ? '#f87171' : '#60a5fa');
-    const mk = L.circleMarker([p.lat, p.lng], {
-      radius:6, color:'#fff', weight:2, fillColor:color, fillOpacity:1, pane:'markerPane'
-    });
-    mk.bindTooltip(`${i+1}${p.elev != null ? ' · '+Math.round(p.elev)+' m' : ''}`, {permanent:false, direction:'top'});
-    _msrLayer.addLayer(mk);
-  });
-  // Linije između tačaka
+
+  // Linije s kontrastnom pozadinom
   if (pts.length > 1) {
     const latlngs = pts.map(p => [p.lat, p.lng]);
-    _msrLayer.addLayer(L.polyline(latlngs, {color:'#fbbf24', weight:2, dashArray:'6 4', opacity:0.9}));
-    // Zatvoreni poligon (ispunjen) kad ≥3 tačaka
+    // Tamna pozadinska linija (kontrast)
+    _msrLayer.addLayer(L.polyline(latlngs, {color:'#000', weight:7, opacity:0.45, lineCap:'round', lineJoin:'round'}));
+    // Obojena linija
+    _msrLayer.addLayer(L.polyline(latlngs, {color:_msrColor, weight:3.5, opacity:1.0, lineCap:'round', lineJoin:'round'}));
+
+    // Poligon (≥3 tačaka)
     if (pts.length >= 3) {
       const areaM2 = _msrSphericalArea(pts);
       const areaLbl = areaM2 >= 10000
         ? (areaM2/10000).toFixed(2)+' ha'
         : Math.round(areaM2).toLocaleString('bs')+' m²';
       _msrLayer.addLayer(L.polygon(latlngs, {color:'#a78bfa', weight:1.5, dashArray:'4 4', fillColor:'#a78bfa', fillOpacity:0.08}));
-      // Label u centroidu
       const cLat = pts.reduce((s,p)=>s+p.lat,0)/pts.length;
       const cLng = pts.reduce((s,p)=>s+p.lng,0)/pts.length;
       _msrLayer.addLayer(L.marker([cLat,cLng],{
-        icon:L.divIcon({className:'',html:`<div style="background:rgba(15,23,42,0.85);color:#a78bfa;font-size:12px;font-family:monospace;padding:3px 8px;border-radius:5px;border:1px solid #7c3aed;white-space:nowrap;pointer-events:none;font-weight:bold;">◻ ${areaLbl}</div>`,iconAnchor:[0,0]}),
+        icon:L.divIcon({className:'',html:`<div style="background:rgba(15,23,42,0.88);color:#a78bfa;font-size:12px;font-family:monospace;padding:3px 8px;border-radius:5px;border:1px solid #7c3aed;white-space:nowrap;pointer-events:none;font-weight:bold;">◻ ${areaLbl}</div>`,iconAnchor:[0,0]}),
         interactive:false
       }));
     }
-    // Label po svakom segmentu
+
+    // Labele po segmentima
     for (let i = 0; i < pts.length-1; i++) {
       const a=pts[i], b=pts[i+1];
       const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
@@ -7519,21 +7575,44 @@ function _msrRedraw() {
         slopeTxt = ` · ${pct>0?'+':''}${pct}%`;
       }
       const midLat = (a.lat+b.lat)/2, midLng = (a.lng+b.lng)/2;
-      const lbl = L.marker([midLat, midLng], {
+      _msrLayer.addLayer(L.marker([midLat, midLng], {
+        interactive:false,
         icon: L.divIcon({
           className:'',
-          html:`<div style="background:rgba(15,23,42,0.85);color:#fbbf24;font-size:11px;font-family:monospace;
-                            padding:2px 6px;border-radius:4px;border:1px solid #f59e0b;white-space:nowrap;
-                            pointer-events:none;">
-                  ${_msrFmt(dist)} · ${az.toFixed(0)}°${slopeTxt}
-                </div>`,
+          html:`<div style="background:rgba(15,23,42,0.88);color:${_msrColor};font-size:11px;font-family:monospace;padding:2px 6px;border-radius:4px;border:1px solid ${_msrColor};white-space:nowrap;pointer-events:none;">${_msrFmt(dist)} · ${az.toFixed(0)}°${slopeTxt}</div>`,
           iconAnchor:[0,0]
-        }),
-        interactive:false
-      });
-      _msrLayer.addLayer(lbl);
+        })
+      }));
     }
   }
+
+  // Draggable markeri za tačke (crtaju se na vrhu)
+  pts.forEach((p, idx) => {
+    const ptColor = idx === 0 ? '#4ade80' : (idx === pts.length-1 ? '#f87171' : _msrColor);
+    const mk = L.marker([p.lat, p.lng], {
+      draggable: true,
+      zIndexOffset: 500,
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:${ptColor};border:3px solid #fff;box-shadow:0 0 5px rgba(0,0,0,0.8),0 0 0 1px rgba(0,0,0,0.4);cursor:grab;"></div>`,
+        iconSize:[14,14], iconAnchor:[7,7]
+      })
+    });
+    mk.bindTooltip(`Tačka ${idx+1}${p.elev != null ? ' · '+Math.round(p.elev)+' m nv' : ''}`, {permanent:false, direction:'top', offset:[0,-4]});
+    mk.on('dragend', async function(e) {
+      const ll = e.target.getLatLng();
+      _msrPts[idx] = { lat: ll.lat, lng: ll.lng, elev: null };
+      _msrRedraw(); _msrUpdPanel();
+      const elev = await _msrFetchElev(ll.lat, ll.lng);
+      if (_msrPts[idx]) { _msrPts[idx].elev = elev; _msrRedraw(); _msrUpdPanel(); }
+    });
+    mk.on('contextmenu', function(e) {
+      L.DomEvent.stopPropagation(e);
+      _msrPts.splice(idx, 1);
+      _msrRedraw(); _msrUpdPanel();
+    });
+    _msrLayer.addLayer(mk);
+  });
 }
 
 function _msrUpdPanel() {
@@ -7624,9 +7703,11 @@ function msrStart() {
   map.on('click', _msrMapClick);
   map.on('dblclick', _msrMapDblClick);
   const btn = document.getElementById('btn-msr-start');
-  if (btn) { btn.textContent='⏹ Završi izmjeru'; btn.style.background='#dc2626'; }
+  if (btn) { btn.textContent='⏹ Završi'; btn.style.background='#dc2626'; }
+  const xh = document.getElementById('msr-xhair');
+  if (xh) xh.style.display = '';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.textContent = 'Klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
+  if (hint) hint.innerHTML = 'Klikaj na karti ili pritisni <b>⊕ Centar</b> da dodaš tačku.<br>Vuci tačku da je pomjeriš · desni klik = briši tačku.';
 }
 function msrStop() {
   _msrOn = false;
@@ -7634,9 +7715,13 @@ function msrStop() {
   map.off('click', _msrMapClick);
   map.off('dblclick', _msrMapDblClick);
   const btn = document.getElementById('btn-msr-start');
-  if (btn) { btn.textContent='▶ Počni izmjeru'; btn.style.background=''; }
+  if (btn) { btn.textContent='▶ Počni'; btn.style.background=''; }
+  const xh = document.getElementById('msr-xhair');
+  if (xh) xh.style.display = 'none';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.textContent = _msrPts.length ? 'Izmjera završena. Pritisni 🗑 za brisanje.' : 'Pritisni dugme pa klikaj tačke na karti.';
+  if (hint) hint.innerHTML = _msrPts.length
+    ? 'Izmjera završena. Vuci tačke za korekciju · desni klik = briši tačku.'
+    : 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Centar.';
 }
 function msrClear() {
   msrStop();
@@ -9521,7 +9606,7 @@ function dozBackToList() {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('izmjeri')">📏 Izmjeri</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('mjtrg')">📏 Mjerenja &amp; Tragovi</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
@@ -9659,14 +9744,37 @@ function dozBackToList() {
   </div>
 </div>
     <!-- IZMJERI PANEL -->
-    <div id="izmjeri-panel">
+    <div id="mjtrg-panel">
+      <!-- IZMJERA -->
       <div class="sec">
-        <div class="sec-t">📏 Izmjera na terenu</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-          <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;min-width:120px;">▶ Počni izmjeru</button>
-          <button class="btn" style="background:#374151;color:#e2e8f0;flex:0 0 auto;" onclick="msrClear()" title="Obriši sve tačke">🗑</button>
+        <div class="sec-t">📏 Mjerenje udaljenosti i površina</div>
+
+        <!-- Kontrole -->
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;">▶ Počni</button>
+          <button class="btn" onclick="msrAddCenter()" title="Dodaj tačku u centru karte"
+                  style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 10px;font-size:13px;">⊕ Centar</button>
+          <button class="btn" onclick="msrClear()" title="Obriši sve tačke"
+                  style="background:#374151;color:#e2e8f0;flex:0 0 auto;">🗑</button>
         </div>
-        <div id="msr-hint" style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.</div>
+
+        <!-- Boja linije -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:11px;color:#64748b;flex-shrink:0;">Boja:</span>
+          <div id="msr-color-row" style="display:flex;gap:7px;flex-wrap:wrap;">
+            <div class="msr-swatch on"  style="background:#fbbf24;" onclick="_msrSetColor('#fbbf24',this)" title="Žuta"></div>
+            <div class="msr-swatch"     style="background:#f87171;" onclick="_msrSetColor('#f87171',this)" title="Crvena"></div>
+            <div class="msr-swatch"     style="background:#4ade80;" onclick="_msrSetColor('#4ade80',this)" title="Zelena"></div>
+            <div class="msr-swatch"     style="background:#38bdf8;" onclick="_msrSetColor('#38bdf8',this)" title="Plava"></div>
+            <div class="msr-swatch"     style="background:#fb923c;" onclick="_msrSetColor('#fb923c',this)" title="Narandžasta"></div>
+            <div class="msr-swatch"     style="background:#e879f9;" onclick="_msrSetColor('#e879f9',this)" title="Ljubičasta"></div>
+            <div class="msr-swatch"     style="background:#ffffff;border-color:#475569;" onclick="_msrSetColor('#ffffff',this)" title="Bijela"></div>
+          </div>
+        </div>
+
+        <div id="msr-hint" style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">
+          Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Centar.
+        </div>
 
         <!-- Ukupno -->
         <div id="msr-total-box" style="display:none;background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
@@ -9679,18 +9787,25 @@ function dozBackToList() {
             <div style="font-size:11px;color:#94a3b8;">⬇ Silaza: <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
           </div>
           <div id="msr-area-row" style="display:none;border-top:1px solid #1e3a5f;padding-top:6px;margin-top:4px;">
-            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Površina (zatvoreni poligon)</div>
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Površina</div>
             <div style="display:flex;gap:14px;flex-wrap:wrap;">
               <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-m2" style="color:#a78bfa;font-family:monospace;">—</b> m²</div>
               <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-ha" style="color:#a78bfa;font-family:monospace;">—</b> ha</div>
             </div>
           </div>
         </div>
-
-        <!-- Segmenti -->
         <div id="msr-segs"></div>
       </div>
-    </div><!-- /izmjeri-panel -->
+
+      <!-- TRAGOVI -->
+      <div class="sec" style="border-bottom:none;flex:1;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <div class="sec-t" style="margin:0;">🗺 Registar tragova</div>
+          <span id="trag-reg-count" style="color:#64748b;font-weight:400;font-size:12px;margin-left:6px;"></span>
+        </div>
+        <div id="trag-reg-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+    </div><!-- /mjtrg-panel -->
 
 <!-- GPS FAB -->
 <div id="fab-gps" style="display:none;">
@@ -9864,6 +9979,9 @@ function dozBackToList() {
     </div>
   </div>
 </div>
+
+<!-- Crosshair za mjerenje -->
+<div id="msr-xhair" style="display:none;"></div>
 
 <!-- === Delete confirmation modal === -->
 <div id="del-modal-bg" onclick="if(event.target===this)_delCancel()">
