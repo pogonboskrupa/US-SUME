@@ -277,6 +277,11 @@ input:focus { outline:none; border-color:#3b82f6; }
   border-radius:4px; padding:4px 6px; font-size:11px; outline:none;
 }
 .treg-meta-edit input:focus { border-color:#38bdf8; }
+.treg-meta-edit select {
+  background:#1e293b; border:1px solid #334155; color:#e2e8f0;
+  border-radius:4px; padding:4px 6px; font-size:11px; width:100%;
+}
+.treg-meta-edit select:focus { border-color:#38bdf8; outline:none; }
 .treg-meta-edit .mf-save {
   align-self:flex-end; background:#1e3a5f; color:#38bdf8;
   border:1px solid #1e3a5f; border-radius:5px;
@@ -5019,6 +5024,29 @@ function closeTragRegistry() {
 let _trgGrpBy = 'date';
 let _msrGrpBy = 'date';
 
+const _GJ_OPTIONS = ['RISOVAC KRUPA','GRMEČ JASENICA','VOJSKOVA','BAŠTRA ĆORKOVAČA','GOMILA'];
+
+function _gjFieldHtml(pfx, val) {
+  const isCustom = !!val && !_GJ_OPTIONS.includes(val);
+  const sel = isCustom ? 'CUSTOM' : (val || '');
+  const opts = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+    `<option value="${_escHtml(v)}"${sel===v?' selected':''}>${v || '— odaberi GJ —'}</option>`
+  ).join('');
+  return `<select id="${pfx}-gj-sel" onchange="_gjSelChange('${pfx}')">${opts}</select>`
+       + `<input id="${pfx}-gj-cust" style="display:${isCustom?'':'none'};margin-top:3px;" value="${isCustom?_escHtml(val):''}" placeholder="Unesi naziv GJ">`;
+}
+function _gjSelChange(pfx) {
+  const cust = document.getElementById(pfx+'-gj-cust');
+  const isC  = document.getElementById(pfx+'-gj-sel')?.value === 'CUSTOM';
+  if (cust) { cust.style.display = isC ? '' : 'none'; if (isC) cust.focus(); }
+}
+function _gjGetValue(pfx) {
+  const sel = document.getElementById(pfx+'-gj-sel');
+  if (!sel) return '';
+  if (sel.value === 'CUSTOM') return (document.getElementById(pfx+'-gj-cust')?.value || '').trim();
+  return sel.value;
+}
+
 // ── Grouping helpers ──────────────────────────────────────────────────
 function _grpKey(item, by) {
   if (by === 'date') {
@@ -5062,8 +5090,8 @@ function _tragRegEditMeta(id) {
 function _tragRegSetMeta(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
-  t.name  = (document.getElementById('treg-ei-name-'+id)?.value  || t.name).trim();
-  t.gj    = (document.getElementById('treg-ei-gj-'+id)?.value    || '').trim();
+  t.name  = (document.getElementById('treg-ei-name-'+id)?.value || t.name).trim();
+  t.gj    = _gjGetValue('treg-'+id);
   t.odjel = (document.getElementById('treg-ei-odjel-'+id)?.value || '').trim();
   _tragRegSave();
   _tragRegRender();
@@ -5088,7 +5116,7 @@ function _tragRegRender() {
       <div class="treg-meta">${meta}</div>
       <div id="treg-edit-${t.id}" style="display:none;" class="treg-meta-edit">
         <div class="mf-col"><label>Naziv</label><input id="treg-ei-name-${t.id}" value="${_escHtml(t.name)}"></div>
-        <div class="mf-col"><label>GJ</label><input id="treg-ei-gj-${t.id}" value="${_escHtml(t.gj||'')}" placeholder="npr. Konjuh"></div>
+        <div class="mf-col"><label>GJ</label>${_gjFieldHtml('treg-'+t.id, t.gj||'')}</div>
         <div class="mf-col"><label>Odjel</label><input id="treg-ei-odjel-${t.id}" value="${_escHtml(t.odjel||'')}" placeholder="npr. 14a"></div>
         <button class="mf-save" onclick="_tragRegSetMeta('${t.id}')">✓ Spremi</button>
       </div>
@@ -7932,8 +7960,8 @@ function _msrRegEditMeta(id, forceOpen) {
 function _msrRegSetMeta(id) {
   const m = _msrRegistry.find(x => x.id === id);
   if (!m) return;
-  m.name  = (document.getElementById('mreg-ei-name-'+id)?.value  || m.name).trim() || m.name;
-  m.gj    = (document.getElementById('mreg-ei-gj-'+id)?.value    || '').trim();
+  m.name  = (document.getElementById('mreg-ei-name-'+id)?.value || m.name).trim() || m.name;
+  m.gj    = _gjGetValue('mreg-'+id);
   m.odjel = (document.getElementById('mreg-ei-odjel-'+id)?.value || '').trim();
   _msrRegSave();
   _msrRegRender();
@@ -7957,7 +7985,7 @@ function _msrRegRender() {
       <div class="treg-meta">${meta}</div>
       <div id="mreg-edit-${m.id}" style="display:none;" class="treg-meta-edit">
         <div class="mf-col"><label>Naziv</label><input id="mreg-ei-name-${m.id}" value="${_escHtml(m.name)}"></div>
-        <div class="mf-col"><label>GJ</label><input id="mreg-ei-gj-${m.id}" value="${_escHtml(m.gj||'')}" placeholder="npr. Konjuh"></div>
+        <div class="mf-col"><label>GJ</label>${_gjFieldHtml('mreg-'+m.id, m.gj||'')}</div>
         <div class="mf-col"><label>Odjel</label><input id="mreg-ei-odjel-${m.id}" value="${_escHtml(m.odjel||'')}" placeholder="npr. 14a"></div>
         <button class="mf-save" onclick="_msrRegSetMeta('${m.id}')">✓ Spremi</button>
       </div>
