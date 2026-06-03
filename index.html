@@ -230,6 +230,35 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
 .vpick-search-row button:active { background:#0ea5e9;color:#fff; }
 .vcard-elev { font-size:10px;color:#94a3b8;display:flex;gap:6px;flex-wrap:wrap;margin-top:1px; }
+/* === Delete confirmation modal === */
+#del-modal-bg {
+  display:none; position:fixed; inset:0; z-index:11000;
+  background:rgba(0,0,0,0.72); align-items:center; justify-content:center;
+}
+#del-modal-bg.open { display:flex; }
+#del-modal {
+  background:#0f172a; border:1px solid #7f1d1d; border-radius:16px;
+  padding:24px 22px 18px; max-width:360px; width:calc(100% - 40px);
+  box-shadow:0 8px 40px rgba(0,0,0,0.8);
+}
+#del-modal h3 { margin:0 0 6px; color:#fca5a5; font-size:16px; }
+#del-modal .del-meta { font-size:12px; color:#94a3b8; margin-bottom:14px; }
+#del-modal .del-warn { font-size:12px; color:#f87171; margin-bottom:10px; }
+#del-modal .del-input-row { margin-bottom:14px; }
+#del-modal .del-input-row label { font-size:11px; color:#94a3b8; display:block; margin-bottom:5px; }
+#del-modal .del-input-row input {
+  width:100%; box-sizing:border-box; background:#1e293b; border:1px solid #475569;
+  color:#e2e8f0; border-radius:8px; padding:9px 11px; font-size:15px;
+  font-family:monospace; outline:none;
+}
+#del-modal .del-input-row input:focus { border-color:#f87171; }
+#del-modal .del-btns { display:flex; gap:8px; }
+#del-modal .del-btns button { flex:1; padding:11px; border:none; border-radius:9px; font-size:14px; font-weight:600; cursor:pointer; }
+#del-modal .del-cancel { background:#1e293b; color:#94a3b8; }
+#del-modal .del-cancel:hover { background:#334155; color:#e2e8f0; }
+#del-modal .del-confirm { background:#7f1d1d; color:#fca5a5; }
+#del-modal .del-confirm:active { background:#991b1b; }
+#del-modal .del-confirm:disabled { opacity:0.35; cursor:not-allowed; }
 .vcard-elev .eu { color:#4ade80; } .vcard-elev .ed { color:#f87171; } .vcard-elev .eroad { color:#fbbf24; }
 
 .mb {
@@ -4755,8 +4784,61 @@ function zmV(i) {
   const v=vlake[i];
   if (v.pts.length>0) map.fitBounds(L.latLngBounds(v.pts.map(p=>[p.la,p.lo])),{padding:[30,30]});
 }
+let _delPendingIdx = null;
+
 function dlV(i) {
-  if (!confirm(`Obrisati vlaku ${vlake[i].nm}?`)) return;
+  const v = vlake[i];
+  _delPendingIdx = i;
+  const pts = v.pts ? v.pts.length : 0;
+  const dist = pts > 1 ? fmtL(Math.round(calcL(v.pts))) : null;
+  const needType = pts >= 5; // vlake s GPS podacima zahtijevaju tipkanje
+
+  document.getElementById('del-modal-title').textContent = `Obriši ${v.nm}?`;
+  document.getElementById('del-modal-meta').innerHTML =
+    `<b style="color:#e2e8f0;">${v.nm}</b>` +
+    (dist ? ` &nbsp;·&nbsp; ${dist}` : '') +
+    ` &nbsp;·&nbsp; ${pts} tačaka`;
+  document.getElementById('del-modal-warn').textContent =
+    needType
+      ? 'Ova vlaka ima snimljene GPS tačke. Brisanje je trajno i ne može se poništiti.'
+      : pts > 0
+        ? 'Vlaka ima tačke. Brisanje je trajno.'
+        : '';
+
+  const inputRow = document.getElementById('del-input-row');
+  const inp = document.getElementById('del-modal-input');
+  if (needType) {
+    document.getElementById('del-input-label').textContent = `Upiši "${v.nm}" za potvrdu:`;
+    inp.value = '';
+    inp.placeholder = v.nm;
+    inputRow.style.display = '';
+    document.getElementById('del-confirm-btn').disabled = true;
+  } else {
+    inputRow.style.display = 'none';
+    document.getElementById('del-confirm-btn').disabled = false;
+  }
+
+  document.getElementById('del-modal-bg').classList.add('open');
+  if (needType) setTimeout(() => inp.focus(), 120);
+}
+
+function _delInputCheck() {
+  const v = _delPendingIdx !== null ? vlake[_delPendingIdx] : null;
+  if (!v) return;
+  const inp = document.getElementById('del-modal-input').value.trim();
+  document.getElementById('del-confirm-btn').disabled = inp !== v.nm;
+}
+
+function _delCancel() {
+  document.getElementById('del-modal-bg').classList.remove('open');
+  _delPendingIdx = null;
+}
+
+function _delConfirm() {
+  const i = _delPendingIdx;
+  if (i === null || !vlake[i]) { _delCancel(); return; }
+  _delCancel();
+
   map.removeLayer(vlake[i].poly);
   vlake[i].wpts.forEach(m=>map.removeLayer(m));
   if (vlake[i].labelMk) map.removeLayer(vlake[i].labelMk);
@@ -9040,6 +9122,24 @@ function dozBackToList() {
     <button onclick="_vpickGo()">→ Idi</button>
   </div>
   <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
+</div>
+
+<!-- === Delete confirmation modal === -->
+<div id="del-modal-bg" onclick="if(event.target===this)_delCancel()">
+  <div id="del-modal">
+    <h3 id="del-modal-title">Obriši vlaku?</h3>
+    <div class="del-meta" id="del-modal-meta"></div>
+    <div class="del-warn" id="del-modal-warn"></div>
+    <div class="del-input-row" id="del-input-row" style="display:none">
+      <label id="del-input-label">Upiši ime vlake za potvrdu:</label>
+      <input id="del-modal-input" type="text" autocomplete="off" autocorrect="off"
+             spellcheck="false" oninput="_delInputCheck()" onkeydown="if(event.key==='Enter')_delConfirm()">
+    </div>
+    <div class="del-btns">
+      <button class="del-cancel" onclick="_delCancel()">Odustani</button>
+      <button class="del-confirm" id="del-confirm-btn" onclick="_delConfirm()">🗑 Obriši</button>
+    </div>
+  </div>
 </div>
 </body>
 </html>
