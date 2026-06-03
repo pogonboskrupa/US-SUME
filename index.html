@@ -1201,8 +1201,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div style="display:none;" id="nd">Vlaka 1 — matična trasa</div>
         <input type="hidden" id="ibr" value="1">
         <input type="hidden" id="ikr" value="0">
-        <span class="lbl">Boja nove vlake</span>
-        <div class="colors" id="clrs"></div>
         <div class="seg-grp">
           <button class="seg-btn" id="brec" onclick="togSnimVlaku()" title="Snimi vlaku">
             <span class="seg-ico">🚜</span><span>Snimi vlaku</span>
@@ -8278,6 +8276,10 @@ function dozBackToList() {
   <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;flex-shrink:0;">
     <span style="color:#e2e8f0;font-size:13px;font-weight:600;">🚜 Odaberi vlaku za snimanje</span>
     <button onclick="_closeVlakaPicker()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
+  </div>
+  <div style="padding:7px 12px 6px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja:</span>
+    <div class="colors" id="clrs" style="margin:0;flex:1;"></div>
   </div>
   <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
 </div>
