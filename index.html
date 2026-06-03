@@ -7644,6 +7644,31 @@ let _msrPts   = [];
 let _msrLayer = null;
 let _msrElevCache = {};
 let _msrColor = '#fbbf24';
+let _msrMode  = 'dist'; // 'dist' | 'area' | 'nagib'
+
+function _msrSetMode(m) {
+  _msrMode = m;
+  ['dist','area','nagib'].forEach(k => {
+    const b = document.getElementById('msrm-'+k);
+    if (b) {
+      b.style.background = k===m ? '#1e3a5f' : 'none';
+      b.style.color      = k===m ? '#38bdf8' : '#64748b';
+    }
+  });
+  // Ako je nagib, ostavi samo 2 tačke
+  if (m === 'nagib' && _msrPts.length > 2) {
+    _msrPts = _msrPts.slice(0, 2);
+    _msrRedraw(); _msrUpdPanel();
+  }
+  _msrUpdPanel();
+  const hints = {
+    dist:  'Klikaj tačke — mjeri ukupnu udaljenost.',
+    area:  'Klikaj ≥3 tačke — poligon se zatvara automatski.',
+    nagib: 'Klikni 2 tačke — nagib se računa automatski.'
+  };
+  const hint = document.getElementById('msr-hint');
+  if (hint && !_msrOn) hint.textContent = hints[m];
+}
 
 function _msrSetColor(c, el) {
   _msrColor = c;
@@ -7675,7 +7700,7 @@ function _mjtrgTab(t) {
     tTrg.style.color = !isMsr ? '#38bdf8' : '#64748b';
     tTrg.style.borderBottomColor = !isMsr ? '#38bdf8' : 'transparent';
   }
-  if (!isMsr) _tragRegRender();
+  if (isMsr) _msrRegRender(); else _tragRegRender();
 }
 
 function _msrFmt(m) {
@@ -7728,10 +7753,12 @@ function _msrRedraw() {
   // Linije s kontrastnom pozadinom
   if (pts.length > 1) {
     const latlngs = pts.map(p => [p.lat, p.lng]);
+    // Zatvorene koordinate ako je površina (≥3 tačaka)
+    const drawLL = (pts.length >= 3 && _msrMode === 'area') ? [...latlngs, latlngs[0]] : latlngs;
     // Bijela pozadinska linija (outline kontrast)
-    _msrLayer.addLayer(L.polyline(latlngs, {color:'#fff', weight:6, opacity:0.85, lineCap:'round', lineJoin:'round'}));
+    _msrLayer.addLayer(L.polyline(drawLL, {color:'#fff', weight:6, opacity:0.85, lineCap:'round', lineJoin:'round'}));
     // Obojena linija
-    _msrLayer.addLayer(L.polyline(latlngs, {color:_msrColor, weight:3, opacity:1.0, lineCap:'round', lineJoin:'round'}));
+    _msrLayer.addLayer(L.polyline(drawLL, {color:_msrColor, weight:3, opacity:1.0, lineCap:'round', lineJoin:'round'}));
 
     // Poligon (≥3 tačaka)
     if (pts.length >= 3) {
@@ -7804,6 +7831,28 @@ function _msrUpdPanel() {
   if (!totalBox) return;
   const pts = _msrPts;
   if (pts.length < 2) { totalBox.style.display='none'; return; }
+  totalBox.style.display = 'block';
+
+  if (_msrMode === 'nagib' && pts.length >= 2) {
+    const a = pts[0], b = pts[pts.length-1];
+    const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
+    const dh   = (b.elev != null && a.elev != null) ? b.elev - a.elev : null;
+    const pct  = (dh != null && dist > 0) ? (dh/dist*100).toFixed(1) : null;
+    const ang  = (dh != null && dist > 0) ? (Math.atan(dh/dist)*180/Math.PI).toFixed(1) : null;
+    document.getElementById('msr-total-dist').textContent = _msrFmt(dist);
+    document.getElementById('msr-total-up').textContent   = pct !== null ? (pct>0?'+':'')+pct+' %' : '—';
+    document.getElementById('msr-total-down').textContent = ang !== null ? (ang>0?'+':'')+ang+'°' : '—';
+    document.getElementById('msr-area-row').style.display = 'none';
+    // Labela - promijeni naslove za nagib
+    const labels = totalBox.querySelectorAll('[data-lbl]');
+    labels.forEach(l => {
+      if (l.dataset.lbl==='up')   l.textContent = '📐 Nagib:';
+      if (l.dataset.lbl==='down') l.textContent = '📏 Kut:';
+    });
+    return;
+  }
+
+  // dist / area mode
   let totalDist = 0, totalUp = 0, totalDn = 0;
   for (let i = 0; i < pts.length-1; i++) {
     const a=pts[i], b=pts[i+1];
@@ -7813,12 +7862,17 @@ function _msrUpdPanel() {
       if (dh > 0) totalUp += dh; else totalDn -= dh;
     }
   }
-  totalBox.style.display = 'block';
   document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
   document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
   document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
+  // Vrati labele ako su promijenjene
+  const upLbl = totalBox.querySelector('[data-lbl="up"]');
+  const dnLbl = totalBox.querySelector('[data-lbl="down"]');
+  if (upLbl) upLbl.textContent = '⬆ Uspona:';
+  if (dnLbl) dnLbl.textContent = '⬇ Silaza:';
+
   const areaRow = document.getElementById('msr-area-row');
-  if (pts.length >= 3) {
+  if (_msrMode === 'area' && pts.length >= 3) {
     const areaM2 = _msrSphericalArea(pts);
     areaRow.style.display = 'block';
     document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
@@ -7833,6 +7887,15 @@ async function _msrAddPoint(latlng) {
   _msrPts.push(pt);
   _msrRedraw();
   _msrUpdPanel();
+  // Nagib mod: automatski završi nakon 2. tačke
+  if (_msrMode === 'nagib' && _msrPts.length === 2) {
+    const elev = await _msrFetchElev(latlng.lat, latlng.lng);
+    pt.elev = elev;
+    _msrRedraw();
+    _msrUpdPanel();
+    msrStop();
+    return;
+  }
   // Fetch visine u pozadini pa ažuriraj
   const elev = await _msrFetchElev(latlng.lat, latlng.lng);
   pt.elev = elev;
@@ -7865,7 +7928,8 @@ function msrStart() {
   const xh = document.getElementById('msr-xhair');
   if (xh) xh.style.display = '';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.innerHTML = 'Klikaj na karti ili pritisni <b>⊕ Pozicija tačke</b>.<br>Vuci tačku da je pomjeriš · desni klik = briši tačku.';
+  const modeHints = { dist: 'Klikaj tačke — mjeri ukupnu udaljenost.', area: 'Klikaj ≥3 tačke — poligon se zatvara automatski.', nagib: 'Klikni 2 tačke — nagib se računa automatski.' };
+  if (hint) hint.innerHTML = (modeHints[_msrMode] || 'Klikaj tačke.') + '<br><small style="color:#475569">⊕ Pozicija tačke · vuci da pomjeriš · desni klik briši</small>';
 }
 function msrStop(skipSave) {
   _msrOn = false;
@@ -7946,6 +8010,9 @@ function _mqmSave() {
     _msrRegRender();
   }
   _mqmClose();
+  // Pokaži registar da korisnik vidi sačuvano
+  switchTab('mjtrg');
+  _mjtrgTab('msr');
 }
 function _mqmClose() {
   document.getElementById('msr-quick-meta').style.display = 'none';
@@ -10080,13 +10147,20 @@ function dozBackToList() {
 
       <!-- IZMJERA -->
       <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;">
+        <!-- Mod mjerenja -->
+        <div style="display:flex;gap:4px;margin-bottom:8px;background:#0f172a;border-radius:8px;padding:3px;">
+          <button id="msrm-dist"  onclick="_msrSetMode('dist')"
+                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#1e3a5f;color:#38bdf8;">📏 Udaljenost</button>
+          <button id="msrm-area"  onclick="_msrSetMode('area')"
+                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#64748b;">◻ Površina</button>
+          <button id="msrm-nagib" onclick="_msrSetMode('nagib')"
+                  style="flex:1;padding:5px 4px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#64748b;">📐 Nagib</button>
+        </div>
         <!-- Kontrole -->
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;">▶ Počni</button>
           <button class="btn" onclick="msrAddCenter()" title="Dodaj tačku na poziciji centra karte"
                   style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 8px;font-size:11px;">⊕ Pozicija tačke</button>
-          <button class="btn" onclick="_msrRegAdd()" title="Spremi mjerenje"
-                  style="background:#14532d;color:#4ade80;flex:0 0 auto;padding:0 8px;">💾</button>
           <button class="btn" onclick="msrClear()" title="Obriši aktivno mjerenje"
                   style="background:#374151;color:#e2e8f0;flex:0 0 auto;">🗑</button>
         </div>
@@ -10116,8 +10190,8 @@ function dozBackToList() {
             <b id="msr-total-dist" style="color:#4ade80;font-size:15px;font-family:monospace;">0 m</b>
           </div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
-            <div style="font-size:11px;color:#94a3b8;">⬆ Uspona: <b id="msr-total-up" style="color:#34d399;">0 m</b></div>
-            <div style="font-size:11px;color:#94a3b8;">⬇ Silaza: <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
+            <div style="font-size:11px;color:#94a3b8;"><span data-lbl="up">⬆ Uspona:</span> <b id="msr-total-up" style="color:#34d399;">0 m</b></div>
+            <div style="font-size:11px;color:#94a3b8;"><span data-lbl="down">⬇ Silaza:</span> <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
           </div>
           <div id="msr-area-row" style="display:none;border-top:1px solid #1e3a5f;padding-top:6px;margin-top:4px;">
             <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;">Površina</div>
