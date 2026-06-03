@@ -2656,7 +2656,10 @@ function _applyLogRows(rows) {
       meters:     row.meters,
       odjel:      row.odjel || '',
       vlake:      row.vlake_snapshot || [],
-      vlakeNm:    (row.vlake_snapshot || []).map(v => v.nm)
+      vlakeNm:    (row.vlake_snapshot || []).map(v => v.nm),
+      workStart:  row.work_start  || '',
+      workEnd:    row.work_end    || '',
+      activeMin:  row.active_min  ?? null
     });
   });
   dnevniLog = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
@@ -2677,7 +2680,7 @@ async function sbLoadLog() {
   _applyLogRows(rows);
 }
 
-async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel) {
+async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel, timing) {
   if (!sbUser || !sbProfile) return;
   const payload = {
     korisnik_id:    sbUser.id,
@@ -2686,7 +2689,10 @@ async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel) {
     datum:          date,
     projektant:     ime,
     meters:         totalM,
-    vlake_snapshot: vSnap
+    vlake_snapshot: vSnap,
+    work_start:     timing?.workStart  || null,
+    work_end:       timing?.workEnd    || null,
+    active_min:     timing?.activeMin  ?? null
   };
   const { error } = await sb.from('dnevni_log').upsert(payload, { onConflict: 'korisnik_id,datum' });
   if (error) {
@@ -3895,6 +3901,11 @@ function togRec() {
     if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0;
+    // Timing: početak segmenta
+    _initDayTiming();
+    _recSegStart = Date.now();
+    if (!_dayWorkStart) { _dayWorkStart = new Date().toISOString(); }
+    _saveDayTiming(todayStr());
     const b = document.getElementById('brec');
     if (b) b.classList.add('active');
     const banner = document.getElementById('rec-banner');
@@ -3917,6 +3928,12 @@ function togRec() {
 }
 
 function stopRec() {
+  if (recOn && !recPaused && _recSegStart > 0) {
+    _dayActiveMs += Date.now() - _recSegStart;
+    _dayWorkEnd = new Date().toISOString();
+    _saveDayTiming(todayStr());
+  }
+  _recSegStart = 0;
   recOn = false; recPaused = false; _recParentIdx = null;
   _kfReset(); _lastRecTime = 0;
   _releaseWakeLock();
@@ -3941,6 +3958,13 @@ function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
   _kfReset(); _lastRecTime = 0;
+  if (recPaused) {
+    if (_recSegStart > 0) { _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
+    _dayWorkEnd = new Date().toISOString();
+    _saveDayTiming(todayStr());
+  } else {
+    _recSegStart = Date.now();
+  }
   const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
   if (recPaused) {
@@ -6232,6 +6256,50 @@ let kolege = [];
 let dnevniLog = [];
 const KPAL = ['#f97316','#a78bfa','#38bdf8','#fb7185','#34d399','#facc15','#e879f9','#64748b'];
 
+// ─── Dnevno praćenje vremena ──────────────────────────────────────────────────
+let _recSegStart  = 0;   // Date.now() na početku aktivnog segmenta snimanja
+let _dayActiveMs  = 0;   // akumulirani ms aktivnog snimanja danas
+let _dayWorkStart = '';  // ISO timestamp prvog starta danas
+let _dayWorkEnd   = '';  // ISO timestamp zadnjeg stopa/pauze danas
+
+function _saveDayTiming(date) {
+  try {
+    localStorage.setItem('tvlake_day_timing', JSON.stringify({
+      date, activeMs: _dayActiveMs,
+      workStart: _dayWorkStart, workEnd: _dayWorkEnd
+    }));
+  } catch(e) {}
+}
+function _loadDayTiming() {
+  try { return JSON.parse(localStorage.getItem('tvlake_day_timing')); } catch { return null; }
+}
+function _initDayTiming() {
+  const today = todayStr();
+  const saved = _loadDayTiming();
+  if (saved?.date === today) {
+    _dayActiveMs  = saved.activeMs  || 0;
+    _dayWorkStart = saved.workStart || '';
+    _dayWorkEnd   = saved.workEnd   || '';
+  } else {
+    // Novi dan — reset
+    _dayActiveMs = 0; _dayWorkStart = ''; _dayWorkEnd = '';
+  }
+}
+function _fmtTime(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleTimeString('bs-BA', { hour:'2-digit', minute:'2-digit' }); } catch { return ''; }
+}
+function _fmtDur(minutes) {
+  if (!minutes || minutes <= 0) return '—';
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  return h > 0 ? `${h}h ${m < 10 ? '0'+m : m}min` : `${m}min`;
+}
+function _parseHHMM(s) {
+  if (!s) return 0;
+  const parts = s.split(':');
+  return parseInt(parts[0] || 0) * 60 + parseInt(parts[1] || 0);
+}
+
 function loadProj() {
   try {
     const p = JSON.parse(localStorage.getItem('tvlake_proj')||'{}');
@@ -6414,13 +6482,21 @@ function logDan() {
   const totalM=Math.round(calcL(vlake.flatMap(v=>v.pts)));
   const vSnap=vlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
   if (vlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
+  // Timing: ako je snimanje trenutno aktivno, dodaj tekući segment
+  let activeMs = _dayActiveMs;
+  if (recOn && !recPaused && _recSegStart > 0) activeMs += Date.now() - _recSegStart;
+  const timing = _loadDayTiming();
+  const workStart = timing?.date === date ? _fmtTime(timing.workStart) : _fmtTime(_dayWorkStart);
+  const workEnd   = timing?.date === date ? _fmtTime(timing.workEnd)   : _fmtTime(_dayWorkEnd);
+  const activeMin = Math.round(activeMs / 60000);
   let day=dnevniLog.find(d=>d.date===date);
   if (!day) { day={date,entries:[]}; dnevniLog.unshift(day); }
   const entry=day.entries.find(e=>e.projektant===ime);
-  if (entry) { entry.meters=totalM; entry.odjel=odjel; entry.vlake=vSnap; entry.vlakeNm=vSnap.map(v=>v.nm); }
-  else        { day.entries.push({projektant:ime,meters:totalM,odjel,vlake:vSnap,vlakeNm:vSnap.map(v=>v.nm)}); }
+  const timingObj = { workStart, workEnd, activeMin };
+  if (entry) { Object.assign(entry, { meters:totalM, odjel, vlake:vSnap, vlakeNm:vSnap.map(v=>v.nm), ...timingObj }); }
+  else        { day.entries.push({ projektant:ime, meters:totalM, odjel, vlake:vSnap, vlakeNm:vSnap.map(v=>v.nm), ...timingObj }); }
   localStorage.setItem('tvlake_log', JSON.stringify(dnevniLog));
-  sbSaveLogEntry(date, ime, totalM, vSnap, odjel);
+  sbSaveLogEntry(date, ime, totalM, vSnap, odjel, timingObj);
   rndLog(); updProjStats(); rndOdjeliRekap();
   const b=document.getElementById('proj-panel').querySelector('[onclick="logDan()"]');
   if(b){const t=b.textContent;b.textContent='✅ Zabilježeno!';setTimeout(()=>b.textContent=t,1800);}
@@ -6450,13 +6526,36 @@ function rndLog() {
   el.innerHTML=dnevniLog.map(day=>{
     const dayTotal=day.entries.reduce((s,e)=>s+e.meters,0);
     const dayName=new Date(day.date+'T12:00:00').toLocaleDateString('bs-BA',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+    // Dan-level timing: ujedini sve entries
+    const allStarts = day.entries.map(e=>e.workStart).filter(Boolean);
+    const allEnds   = day.entries.map(e=>e.workEnd).filter(Boolean);
+    const dayStart  = allStarts.length ? allStarts.sort()[0] : '';
+    const dayEnd    = allEnds.length   ? allEnds.sort().reverse()[0] : '';
+    const totalActiveMin = day.entries.reduce((s,e)=>s+(e.activeMin||0),0);
+    // Ukupno trajanje dana (početak→kraj, uključujući pauze)
+    let dayDurMin = null;
+    if (dayStart && dayEnd) {
+      try {
+        const t1 = _parseHHMM(dayStart), t2 = _parseHHMM(dayEnd);
+        dayDurMin = t2 >= t1 ? t2 - t1 : (t2 + 1440 - t1); // handle midnight cross
+      } catch(e) {}
+    }
+    const timingRow = (dayStart || totalActiveMin > 0) ? `
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;padding:5px 0 3px;border-bottom:1px solid #1e293b;">
+        ${dayStart ? `<span style="color:#64748b;">🕐 ${dayStart}${dayEnd?' – '+dayEnd:''}</span>` : ''}
+        ${dayDurMin!==null ? `<span style="color:#94a3b8;">⏱ ${_fmtDur(dayDurMin)}</span>` : ''}
+        ${totalActiveMin > 0 ? `<span style="color:#f87171;">🔴 snimanje ${_fmtDur(totalActiveMin)}</span>` : ''}
+      </div>` : '';
+
     const entries=day.entries.map(e=>{
       const vRows=(e.vlake||[]).filter(v=>v.m>0).map(v=>
         `<div style="display:flex;justify-content:space-between;padding:1px 0 1px 10px;color:#64748b;font-size:11px;">
           <span>${v.nm}</span><span style="font-family:monospace;">${fmtL(v.m)}</span></div>`).join('');
+      const eTime = (e.workStart||e.activeMin) ? `<span style="font-size:10px;color:#475569;margin-left:6px;">${e.workStart?e.workStart+(e.workEnd?' – '+e.workEnd:''):''}${e.activeMin>0?' · 🔴'+_fmtDur(e.activeMin):''}</span>` : '';
       return `<div style="padding:4px 0;border-bottom:1px solid #1e293b;">
-        <div style="display:flex;justify-content:space-between;">
-          <b style="color:#e2e8f0;font-size:12px;">${e.projektant}</b>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
+          <span><b style="color:#e2e8f0;font-size:12px;">${e.projektant}</b>${eTime}</span>
           <span style="color:#4ade80;font-family:monospace;">${fmtL(e.meters)}</span>
         </div>${vRows}</div>`;
     }).join('');
@@ -6465,6 +6564,7 @@ function rndLog() {
         <span>📅 ${dayName}</span>
         <button onclick="exportDnevniKml('${day.date}')" title="Izvezi ovaj dan kao KML" style="background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">📥 KML</button>
       </div>
+      ${timingRow}
       <div class="day-entries">${entries}</div>
       <div class="day-total"><span style="color:#64748b;">Dan ukupno</span><span style="color:#fbbf24;font-family:monospace;">${fmtL(dayTotal)}</span></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px;">
@@ -6484,13 +6584,19 @@ function rndOdjeliRekap() {
   dnevniLog.forEach(day => {
     day.entries.forEach(e => {
       const od = e.odjel || '—';
-      if (!byOdjel[od]) byOdjel[od] = { vlake: {}, projektanti: new Set(), dates: new Set() };
+      if (!byOdjel[od]) byOdjel[od] = { vlake: {}, byProjektant: {}, dates: new Set() };
       const o = byOdjel[od];
-      o.projektanti.add(e.projektant);
       o.dates.add(day.date);
       (e.vlake || []).forEach(v => {
         if (v.m > 0 && (!o.vlake[v.nm] || v.m > o.vlake[v.nm])) o.vlake[v.nm] = v.m;
       });
+      // Per-projektant stats
+      const pr = e.projektant || '?';
+      if (!o.byProjektant[pr]) o.byProjektant[pr] = { activeMin: 0, starts: [], ends: [] };
+      const p = o.byProjektant[pr];
+      p.activeMin += e.activeMin || 0;
+      if (e.workStart) p.starts.push(e.workStart);
+      if (e.workEnd)   p.ends.push(e.workEnd);
     });
   });
 
@@ -6505,13 +6611,40 @@ function rndOdjeliRekap() {
     const vEntries = Object.entries(o.vlake).sort((a,b) => a[0].localeCompare(b[0], 'bs'));
     const total = vEntries.reduce((s, [,m]) => s + m, 0);
     const dates = [...o.dates].sort();
-    const proj = [...o.projektanti].join(', ');
     const id = 'orek-' + od.replace(/\W/g,'_');
+
+    // Vlaka rows
     const vRows = vEntries.map(([nm, m]) =>
       `<div class="orek-vrow">
         <span style="color:#94a3b8;">${nm}</span>
         <span style="color:#4ade80;font-family:monospace;">${fmtL(m)}</span>
       </div>`).join('');
+
+    // Per-projektant timing rows
+    const projEntries = Object.entries(o.byProjektant).sort((a,b) => a[0].localeCompare(b[0],'bs'));
+    let totalOdjelActiveMin = 0;
+    const projRows = projEntries.map(([pr, p]) => {
+      totalOdjelActiveMin += p.activeMin || 0;
+      const earliest = p.starts.length ? p.starts.sort()[0] : '';
+      const latest   = p.ends.length   ? p.ends.sort().reverse()[0] : '';
+      const durMin = (earliest && latest) ? (() => {
+        const t1 = _parseHHMM(_fmtTime(earliest)), t2 = _parseHHMM(_fmtTime(latest));
+        return t2 >= t1 ? t2 - t1 : t2 + 1440 - t1;
+      })() : null;
+      const timeStr = earliest ? _fmtTime(earliest) + (latest ? ' – ' + _fmtTime(latest) : '') : '';
+      return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 0;border-bottom:1px solid #1e293b;font-size:11px;">
+        <span style="color:#e2e8f0;min-width:80px;">👤 ${pr}</span>
+        ${timeStr ? `<span style="color:#64748b;">🕐 ${timeStr}</span>` : ''}
+        ${durMin !== null ? `<span style="color:#94a3b8;">⏱ ${_fmtDur(durMin)}</span>` : ''}
+        ${p.activeMin > 0 ? `<span style="color:#f87171;">🔴 ${_fmtDur(p.activeMin)}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    const timingSection = projEntries.length ? `
+      <div style="margin:6px 0 4px;font-size:10px;font-weight:bold;color:#475569;text-transform:uppercase;letter-spacing:0.05em;">Statistika projektanata</div>
+      ${projRows}
+      ${totalOdjelActiveMin > 0 ? `<div style="font-size:11px;padding:3px 0;color:#f87171;">🔴 Ukupno aktivno snimanje: <b>${_fmtDur(totalOdjelActiveMin)}</b></div>` : ''}` : '';
+
     return `<div class="orek-card">
       <div class="orek-hdr" onclick="this.nextElementSibling.classList.toggle('open')">
         <span class="orek-nm">${od}</span>
@@ -6519,9 +6652,11 @@ function rndOdjeliRekap() {
       </div>
       <div class="orek-body" id="${id}">
         <div class="orek-meta">
-          👤 ${proj}<br>
+          👤 ${projEntries.map(([pr])=>pr).join(', ')}<br>
           📅 ${dates.length} dana · ${fmtDate(dates[0])}${dates.length>1?' → '+fmtDate(dates[dates.length-1]):''}
         </div>
+        ${timingSection}
+        <div style="margin:6px 0 4px;font-size:10px;font-weight:bold;color:#475569;text-transform:uppercase;letter-spacing:0.05em;">Vlake</div>
         ${vRows}
         <div class="orek-vrow" style="border-top:1px solid #334155;margin-top:4px;padding-top:4px;">
           <span style="font-weight:bold;color:#e2e8f0;">Ukupno vlaka</span>
