@@ -206,6 +206,18 @@ input:focus { outline:none; border-color:#3b82f6; }
 .seg-ico { font-size:17px; line-height:1; }
 
 /* Vlaka picker sheet */
+#vpicker-overlay {
+  display:none; position:fixed; inset:0; z-index:9700;
+  background:rgba(0,0,0,0.55);
+}
+#vlaka-picker {
+  position:fixed; bottom:0; left:0; right:0; z-index:9800;
+  display:flex; flex-direction:column; max-height:75vh;
+  background:#0f172a; border-top:2px solid #374151;
+  border-radius:12px 12px 0 0; box-shadow:0 -4px 24px rgba(0,0,0,0.6);
+  transform:translateY(100%); transition:transform 0.25s cubic-bezier(0.32,0.72,0,1);
+}
+#vlaka-picker.open { transform:translateY(0); }
 .vpick-new { width:100%;background:#ea580c;color:#fff;border:none;border-radius:8px;padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px; }
 .vpick-new:hover { background:#c2410c; }
 .vpick-row { display:flex;align-items:center;gap:8px;background:#1e293b;border-radius:8px;padding:8px 10px;cursor:pointer;border:1px solid #334155; }
@@ -3318,7 +3330,7 @@ function _openVlakaPicker() {
   const novBtn = document.createElement('button');
   novBtn.className = 'vpick-new';
   novBtn.innerHTML = `➕ Nova vlaka <b>T${nextBr}</b>`;
-  novBtn.onclick = () => { _closeVlakaPicker(); dodiISnimi(); };
+  novBtn.onclick = () => { _closeVlakaPicker(); setTimeout(dodiISnimi, 260); };
   list.appendChild(novBtn);
 
   // Postojeće vlake
@@ -3344,20 +3356,23 @@ function _openVlakaPicker() {
     });
   }
 
-  document.getElementById('vlaka-picker').style.display = 'flex';
+  document.getElementById('vlaka-picker').classList.add('open');
   document.getElementById('vpicker-overlay').style.display = 'block';
 }
 
 function _closeVlakaPicker() {
-  document.getElementById('vlaka-picker').style.display = 'none';
+  document.getElementById('vlaka-picker').classList.remove('open');
   document.getElementById('vpicker-overlay').style.display = 'none';
 }
 
 function _pickVlaka(i) {
   _closeVlakaPicker();
-  selI(i);
-  switchTab('karta');
-  togRec();
+  // Čekaj da picker animacija završi prije pokretanja snimanja
+  setTimeout(() => {
+    selI(i);
+    switchTab('karta');
+    togRec();
+  }, 260);
 }
 function togSnimTrag() {
   switchTab('karta');
@@ -8258,9 +8273,9 @@ function dozBackToList() {
 </div>
 
 <!-- VLAKA PICKER SHEET -->
-<div id="vpicker-overlay" style="display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.55);" onclick="_closeVlakaPicker()"></div>
-<div id="vlaka-picker" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9500;flex-direction:column;max-height:75vh;background:#0f172a;border-top:2px solid #374151;border-radius:12px 12px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.6);">
-  <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;">
+<div id="vpicker-overlay" onclick="_closeVlakaPicker()"></div>
+<div id="vlaka-picker">
+  <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;flex-shrink:0;">
     <span style="color:#e2e8f0;font-size:13px;font-weight:600;">🚜 Odaberi vlaku za snimanje</span>
     <button onclick="_closeVlakaPicker()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
   </div>
