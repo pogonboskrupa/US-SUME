@@ -526,7 +526,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 @media (min-width:581px) {
   #mjtrg-panel {
     left:0; right:auto; top:0; bottom:0;
-    max-height:none; width:300px;
+    max-height:none; width:258px;
     border-radius:0; border-top:none;
     border-right:2px solid #1e3a5f;
   }
@@ -7494,6 +7494,25 @@ function msrAddCenter() {
   _msrAddPoint(map.getCenter());
 }
 
+function _mjtrgTab(t) {
+  const isMsr = t === 'msr';
+  document.getElementById('mjtrg-sec-msr').style.display = isMsr ? '' : 'none';
+  document.getElementById('mjtrg-sec-trg').style.display = isMsr ? 'none' : '';
+  const tMsr = document.getElementById('mjtrg-tab-msr');
+  const tTrg = document.getElementById('mjtrg-tab-trg');
+  if (tMsr) {
+    tMsr.style.background = isMsr ? 'rgba(220,38,38,0.12)' : 'none';
+    tMsr.style.color = isMsr ? '#fca5a5' : '#64748b';
+    tMsr.style.borderBottomColor = isMsr ? '#ef4444' : 'transparent';
+  }
+  if (tTrg) {
+    tTrg.style.background = !isMsr ? 'rgba(56,189,248,0.1)' : 'none';
+    tTrg.style.color = !isMsr ? '#38bdf8' : '#64748b';
+    tTrg.style.borderBottomColor = !isMsr ? '#38bdf8' : 'transparent';
+  }
+  if (!isMsr) _tragRegRender();
+}
+
 function _msrFmt(m) {
   return m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
 }
@@ -7707,7 +7726,7 @@ function msrStart() {
   const xh = document.getElementById('msr-xhair');
   if (xh) xh.style.display = '';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.innerHTML = 'Klikaj na karti ili pritisni <b>⊕ Centar</b> da dodaš tačku.<br>Vuci tačku da je pomjeriš · desni klik = briši tačku.';
+  if (hint) hint.innerHTML = 'Klikaj na karti ili pritisni <b>⊕ Pozicija tačke</b>.<br>Vuci tačku da je pomjeriš · desni klik = briši tačku.';
 }
 function msrStop() {
   _msrOn = false;
@@ -7721,7 +7740,7 @@ function msrStop() {
   const hint = document.getElementById('msr-hint');
   if (hint) hint.innerHTML = _msrPts.length
     ? 'Izmjera završena. Vuci tačke za korekciju · desni klik = briši tačku.'
-    : 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Centar.';
+    : 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
 }
 function msrClear() {
   msrStop();
@@ -9745,15 +9764,21 @@ function dozBackToList() {
 </div>
     <!-- IZMJERI PANEL -->
     <div id="mjtrg-panel">
-      <!-- IZMJERA -->
-      <div class="sec">
-        <div class="sec-t">📏 Mjerenje udaljenosti i površina</div>
+      <!-- Sub-tabovi -->
+      <div style="display:flex;border-bottom:1px solid #1e293b;flex-shrink:0;">
+        <button id="mjtrg-tab-msr" onclick="_mjtrgTab('msr')"
+          style="flex:1;padding:9px 4px;background:rgba(220,38,38,0.12);color:#fca5a5;border:none;border-bottom:2px solid #ef4444;font-size:13px;font-weight:600;cursor:pointer;">📏 Mjerenje</button>
+        <button id="mjtrg-tab-trg" onclick="_mjtrgTab('trg')"
+          style="flex:1;padding:9px 4px;background:none;color:#64748b;border:none;border-bottom:2px solid transparent;font-size:13px;font-weight:600;cursor:pointer;">🗺 Tragovi</button>
+      </div>
 
+      <!-- IZMJERA -->
+      <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;">
         <!-- Kontrole -->
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button id="btn-msr-start" class="btn g" onclick="msrToggle()" style="flex:1;">▶ Počni</button>
-          <button class="btn" onclick="msrAddCenter()" title="Dodaj tačku u centru karte"
-                  style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 10px;font-size:13px;">⊕ Centar</button>
+          <button class="btn" onclick="msrAddCenter()" title="Dodaj tačku na poziciji centra karte"
+                  style="background:#1e3a5f;color:#38bdf8;flex:0 0 auto;padding:0 9px;font-size:12px;">⊕ Pozicija tačke</button>
           <button class="btn" onclick="msrClear()" title="Obriši sve tačke"
                   style="background:#374151;color:#e2e8f0;flex:0 0 auto;">🗑</button>
         </div>
@@ -9773,7 +9798,7 @@ function dozBackToList() {
         </div>
 
         <div id="msr-hint" style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">
-          Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Centar.
+          Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.
         </div>
 
         <!-- Ukupno -->
@@ -9798,7 +9823,7 @@ function dozBackToList() {
       </div>
 
       <!-- TRAGOVI -->
-      <div class="sec" style="border-bottom:none;flex:1;">
+      <div id="mjtrg-sec-trg" style="display:none;padding:10px 14px 12px;flex:1;">
         <div style="display:flex;align-items:center;margin-bottom:8px;">
           <div class="sec-t" style="margin:0;">🗺 Registar tragova</div>
           <span id="trag-reg-count" style="color:#64748b;font-weight:400;font-size:12px;margin-left:6px;"></span>
