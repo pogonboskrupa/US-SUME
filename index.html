@@ -4101,8 +4101,16 @@ function noviKrakStrana(strana) {
   _closeKrakPicker();
   const parentIdx = actI;
   const parentV   = vlake[parentIdx];
-  const junctionPt = parentV.pts.length > 0 ? parentV.pts[parentV.pts.length - 1] : null;
-  if (!junctionPt) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+  if (parentV.pts.length === 0) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+  // Snap na najbliže mjesto na matičnoj vlaci (GPS pozicija ili zadnja tačka)
+  let junctionPt;
+  if (lastP && parentV.pts.length >= 2) {
+    junctionPt = _snapToNearestPtOnLine(parentV.pts, lastP.la, lastP.lo);
+  } else {
+    junctionPt = parentV.pts[parentV.pts.length - 1];
+  }
+  if (!junctionPt) { showToast('Greška pri pronalasku spoja!'); return; }
+  const snapDistM = lastP ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
 
   const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
@@ -4135,7 +4143,8 @@ function noviKrakStrana(strana) {
   sbFlushVlaka(krakIdx);
   rndList();
   const label = strana === 'L' ? 'lijevi' : 'desni';
-  showToast(`⊕ Novi ${label} krak ${krakNm}`);
+  const snapInfo = snapDistM != null ? ` · spojen na ${snapDistM}m od GPS` : '';
+  showToast(`⊕ Novi ${label} krak ${krakNm}${snapInfo}`);
 }
 
 // Picker za nastavak postojećeg kraka
@@ -6085,6 +6094,30 @@ function _elevHtml(pts){
   return (up?`<span class="eu">↑${up}m</span>`:'')+(down?`<span class="ed"> ↓${down}m</span>`:'');
 }
 
+// Pronađi tačku na segmentu mainPts (vertex ili projekciju) najbližu referentnoj tački
+// Vraća {la, lo, al} — tačna projekcija na segment ako je bliža od verteksa
+function _snapToNearestPtOnLine(mainPts, refLa, refLo) {
+  if (!mainPts || mainPts.length === 0) return null;
+  if (mainPts.length === 1) return mainPts[0];
+  let bestDist = Infinity, bestPt = mainPts[0];
+  for (let i = 0; i < mainPts.length - 1; i++) {
+    const a = mainPts[i], b = mainPts[i + 1];
+    // Projekcija refPt na segment a→b
+    const dx = b.lo - a.lo, dy = b.la - a.la;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq > 0 ? ((refLo - a.lo) * dx + (refLa - a.la) * dy) / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    const pLa = a.la + t * dy, pLo = a.lo + t * dx;
+    const d = dst(refLa, refLo, pLa, pLo);
+    if (d < bestDist) {
+      bestDist = d;
+      const al = a.al != null && b.al != null ? a.al + t * (b.al - a.al) : (a.al ?? b.al ?? 0);
+      bestPt = { la: pLa, lo: pLo, al };
+    }
+  }
+  return bestPt;
+}
+
 // Pronađi indeks točke na glavnoj vlaci najbliži raskrsnici (prvoj točki kraka)
 function _findJunctionIdx(mainPts, krakFirstPt) {
   if (!krakFirstPt || mainPts.length === 0) return 0;
@@ -6741,11 +6774,63 @@ function updProjStats() {
             <span style="color:#475569;font-size:10px;">(${std.count} vlaka/krakova)</span>
           </div>
           <div class="std-avg-val">${fmtL(std.avg)}</div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn gr" style="flex:1;font-size:11px;padding:6px;" onclick="exportSTDcsv()">📥 Izvezi CSV</button>
+          <button class="btn gr" style="flex:1;font-size:11px;padding:6px;" onclick="exportSTDtxt()">📋 Kopiraj tekst</button>
         </div>`;
     }
   }
 
   rndKolege();
+}
+
+function exportSTDcsv() {
+  const std = calcSTD(vlake);
+  if (!std.count) { showToast('Nema vlaka za eksport'); return; }
+  const odjel = getOdjel() || 'odjel';
+  let csv = 'Vlaka/krak;Tip;Strana;Duzina vlastita (m);Duzina do puta (m);Efektivna distanca (m);Formula\n';
+  std.rows.forEach(r => {
+    csv += `${r.nm};${r.type==='main'?'Vlaka':'Krak'};${r.strana||'—'};`;
+    csv += r.type === 'main'
+      ? `${Math.round(r.dist)};0;${Math.round(r.dist)};Cijela vlaka\n`
+      : `${Math.round(r.krakLen)};${Math.round(r.toRoad)};${Math.round(r.dist)};${fmtL(r.krakLen)} + ${fmtL(r.toRoad)}\n`;
+  });
+  csv += `\nUKUPNO;;;${Math.round(std.totalDist)};;;${fmtL(std.totalDist)}\n`;
+  csv += `STD (/${std.count} vlaka);;;;${Math.round(std.avg)};;${fmtL(std.avg)}\n`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `STD_${odjel}_${todayStr()}.csv`;
+  a.click();
+  showToast('📥 STD lista preuzeta');
+}
+
+function exportSTDtxt() {
+  const std = calcSTD(vlake);
+  if (!std.count) { showToast('Nema vlaka za eksport'); return; }
+  const odjel = getOdjel() || 'Odjel';
+  const pad = (s, n) => String(s).padEnd(n);
+  let txt = `SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA — ${odjel}\n`;
+  txt += '='.repeat(60) + '\n\n';
+  txt += pad('Vlaka/krak', 14) + pad('Tip', 8) + pad('Vlastita', 12) + pad('Do puta', 12) + 'Efektivno\n';
+  txt += '-'.repeat(60) + '\n';
+  std.rows.forEach(r => {
+    const vlastita = r.type === 'main' ? fmtL(r.dist) : fmtL(r.krakLen);
+    const doPuta   = r.type === 'main' ? '—' : fmtL(r.toRoad);
+    const prefix   = '  '.repeat(r.depth);
+    txt += pad(prefix + r.nm, 14) + pad(r.type==='main'?'Vlaka':'Krak', 8) + pad(vlastita, 12) + pad(doPuta, 12) + fmtL(r.dist) + '\n';
+  });
+  txt += '-'.repeat(60) + '\n';
+  txt += pad('UKUPNO', 34) + pad('', 12) + fmtL(std.totalDist) + '\n';
+  txt += pad(`STD (÷${std.count} vlaka/krakova)`, 34) + pad('', 12) + fmtL(std.avg) + '\n';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(() => showToast('📋 STD lista kopirana u clipboard'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('📋 STD lista kopirana');
+  }
 }
 
 // === KOLEGE ===
