@@ -3512,8 +3512,7 @@ map.on('moveend', _updMapScale);
 document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
   if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) dd.style.display = 'none';
-  const mdd = document.getElementById('mjtrg-dropdown');
-  if (mdd && !mdd.contains(e.target) && !e.target.closest('#mjtrg-tab-btn')) mdd.style.display = 'none';
+  // mjtrg bottom sheet se zatvara preko #mjtrg-sheet-bg overlay-a
   const kp = document.getElementById('krak-picker');
   if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
 });
@@ -3571,24 +3570,18 @@ function closeMenuDropdown() {
 function toggleMjtrgDropdown(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
   const dd = document.getElementById('mjtrg-dropdown');
+  const bg = document.getElementById('mjtrg-sheet-bg');
   if (dd.style.display === 'none') {
-    const btn = document.getElementById('mjtrg-tab-btn');
-    const r = btn.getBoundingClientRect();
-    const ddW = 180;
-    let left = r.left;
-    if (left + ddW > window.innerWidth - 6) left = window.innerWidth - ddW - 6;
-    if (left < 6) left = 6;
-    dd.style.top  = (r.bottom + 4) + 'px';
-    dd.style.left = left + 'px';
-    dd.style.pointerEvents = 'none';
+    bg.style.display = 'block';
     dd.style.display = 'block';
-    setTimeout(() => { dd.style.pointerEvents = ''; }, 400);
   } else {
     dd.style.display = 'none';
+    bg.style.display = 'none';
   }
 }
 function closeMjtrgDropdown() {
   document.getElementById('mjtrg-dropdown').style.display = 'none';
+  document.getElementById('mjtrg-sheet-bg').style.display = 'none';
 }
 
 // Koordinate HUD — no-op (stara funkcija ovl uklonjena)
@@ -10036,18 +10029,66 @@ function dozBackToList() {
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
 </div>
 
-<!-- M&T DROPDOWN -->
+<!-- M&T BOTTOM SHEET -->
+<div id="mjtrg-sheet-bg" onclick="closeMjtrgDropdown()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:98000;touch-action:none;"></div>
 <div id="mjtrg-dropdown" style="
-  display:none;position:fixed;top:0;left:0;
-  background:#16213e;border:1px solid #1e3a5f;border-radius:8px;
-  min-width:180px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
-  touch-action:manipulation;">
-  <div style="font-size:10px;font-weight:700;color:#475569;padding:7px 14px 4px;text-transform:uppercase;letter-spacing:0.5px;">Mjerenje</div>
-  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('dist');switchTab('mjtrg');_mjtrgTab('msr')">📏 Udaljenost</div>
-  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('area');switchTab('mjtrg');_mjtrgTab('msr')">◻ Površina</div>
-  <div class="mdrop-item" onclick="closeMjtrgDropdown();_msrSetMode('nagib');switchTab('mjtrg');_mjtrgTab('msr')">📐 Nagib</div>
-  <div class="mdrop-sep"></div>
-  <div class="mdrop-item" onclick="closeMjtrgDropdown();switchTab('mjtrg');_mjtrgTab('trg')">🗺 Tragovi</div>
+  display:none;position:fixed;left:0;right:0;bottom:0;
+  background:#fff;border-radius:18px 18px 0 0;
+  z-index:99000;box-shadow:0 -4px 32px rgba(0,0,0,0.22);
+  touch-action:manipulation;padding-bottom:env(safe-area-inset-bottom,0px);
+  max-height:90vh;overflow-y:auto;">
+  <!-- Handle bar -->
+  <div style="display:flex;justify-content:center;padding:10px 0 0;">
+    <div style="width:36px;height:4px;background:#d1d5db;border-radius:2px;"></div>
+  </div>
+  <!-- Title -->
+  <div style="padding:14px 20px 6px;font-size:18px;font-weight:700;color:#111827;">Mjerenja &amp; Tragovi</div>
+  <!-- Section: Mjerenje -->
+  <div style="padding:4px 20px 2px;font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.8px;text-transform:uppercase;">Mjerenje</div>
+  <!-- Udaljenost -->
+  <div onclick="closeMjtrgDropdown();_msrSetMode('dist');switchTab('mjtrg');_mjtrgTab('msr')"
+    style="display:flex;align-items:center;gap:16px;padding:14px 20px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+    <div style="width:44px;height:44px;border-radius:12px;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📏</div>
+    <div>
+      <div style="font-size:15px;font-weight:600;color:#111827;">Udaljenost</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:1px;">Mjeri duljinu puta po tački na karti.</div>
+    </div>
+  </div>
+  <!-- Površina -->
+  <div onclick="closeMjtrgDropdown();_msrSetMode('area');switchTab('mjtrg');_mjtrgTab('msr')"
+    style="display:flex;align-items:center;gap:16px;padding:14px 20px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+    <div style="width:44px;height:44px;border-radius:12px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">◻</div>
+    <div>
+      <div style="font-size:15px;font-weight:600;color:#111827;">Površina</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:1px;">Iscrtaj poligon i izračunaj površinu (m², ha).</div>
+    </div>
+  </div>
+  <!-- Nagib -->
+  <div onclick="closeMjtrgDropdown();_msrSetMode('nagib');switchTab('mjtrg');_mjtrgTab('msr')"
+    style="display:flex;align-items:center;gap:16px;padding:14px 20px;cursor:pointer;border-bottom:1px solid #f3f4f6;">
+    <div style="width:44px;height:44px;border-radius:12px;background:#fff7ed;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📐</div>
+    <div>
+      <div style="font-size:15px;font-weight:600;color:#111827;">Nagib</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:1px;">Odaberi 2 tačke — nagib u % i kut automatski.</div>
+    </div>
+  </div>
+  <!-- Section: Tragovi -->
+  <div style="padding:14px 20px 2px;font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.8px;text-transform:uppercase;">GPS Tragovi</div>
+  <!-- Tragovi -->
+  <div onclick="closeMjtrgDropdown();switchTab('mjtrg');_mjtrgTab('trg')"
+    style="display:flex;align-items:center;gap:16px;padding:14px 20px;cursor:pointer;">
+    <div style="width:44px;height:44px;border-radius:12px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🗺</div>
+    <div>
+      <div style="font-size:15px;font-weight:600;color:#111827;">Tragovi</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:1px;">Registar snimljenih GPS tragova vlaka.</div>
+    </div>
+  </div>
+  <!-- Cancel -->
+  <div onclick="closeMjtrgDropdown()"
+    style="text-align:center;padding:14px 20px 18px;font-size:14px;font-weight:700;color:#3b82f6;cursor:pointer;border-top:1px solid #f3f4f6;">
+    ODUSTANI
+  </div>
 </div>
 
 <!-- ADMIN MODAL -->
