@@ -291,10 +291,10 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* ═══ ZAJEDNIČKI BANNER STIL ═══ */
 #rec-banner, #draw-banner {
-  position:absolute; bottom:8px; left:8px;
+  position:absolute; bottom:8px; left:8px; right:8px;
   display:none; flex-direction:column;
   z-index:500; font-family:monospace;
-  width:calc(50vw + 60px); max-width:320px; min-width:220px; overflow:hidden;
+  overflow:hidden;
   border-radius:14px; box-shadow:0 6px 28px rgba(0,0,0,0.75);
 }
 #rec-banner.show, #draw-banner.show { display:flex; }
