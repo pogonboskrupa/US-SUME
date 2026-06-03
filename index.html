@@ -205,6 +205,14 @@ input:focus { outline:none; border-color:#3b82f6; }
 .seg-btn.active { background:rgba(220,38,38,0.18); color:#fca5a5; }
 .seg-ico { font-size:17px; line-height:1; }
 
+/* Vlaka picker sheet */
+.vpick-new { width:100%;background:#ea580c;color:#fff;border:none;border-radius:8px;padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px; }
+.vpick-new:hover { background:#c2410c; }
+.vpick-row { display:flex;align-items:center;gap:8px;background:#1e293b;border-radius:8px;padding:8px 10px;cursor:pointer;border:1px solid #334155; }
+.vpick-row:hover { background:#263548; }
+.vpick-rec { background:#059669;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap; }
+.vpick-rec:hover { background:#047857; }
+
 .mb {
   width:28px; height:28px; border-radius:5px;
   border:1px solid #374151; background:#1e293b;
@@ -1174,24 +1182,14 @@ select:focus { outline:none; border-color:#3b82f6; }
 
     <div id="panel">
 
-      <!-- NOVA VLAKA -->
+      <!-- SNIMANJE -->
       <div class="sec">
-        <div class="sec-t">📐 Nova Vlaka</div>
-        <div class="name-box">
-          <div class="name-big" id="np">T1</div>
-          <div class="name-desc" id="nd">Vlaka 1 — matična trasa</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <div style="flex:1;">
-            <span class="lbl">Broj vlake</span>
-            <input type="number" id="ibr" min="1" max="99" value="1" oninput="updPrev()">
-          </div>
-          <div style="flex:1;">
-            <span class="lbl">Krak (0=glavna)</span>
-            <input type="number" id="ikr" min="0" max="99" value="0" oninput="updPrev()">
-          </div>
-        </div>
-        <span class="lbl">Boja trase</span>
+        <!-- Skriveni elementi za JS kompatibilnost (addV čita ibr/ikr) -->
+        <div style="display:none;" id="np">T1</div>
+        <div style="display:none;" id="nd">Vlaka 1 — matična trasa</div>
+        <input type="hidden" id="ibr" value="1">
+        <input type="hidden" id="ikr" value="0">
+        <span class="lbl">Boja nove vlake</span>
         <div class="colors" id="clrs"></div>
         <div class="seg-grp">
           <button class="seg-btn" id="brec" onclick="togSnimVlaku()" title="Snimi vlaku">
@@ -1226,8 +1224,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
           Još nema vlaka.<br>
-          Unesite broj vlake i kraka<br>
-          pa kliknite <b style="color:#ea580c;">Snimi vlaku</b>.
+          Kliknite <b style="color:#ea580c;">🚜 Snimi vlaku</b>.
         </div>
       </div>
 
@@ -3297,8 +3294,70 @@ updPrev();
 // === VLAKA ===
 // Segmented gumbi — wrapperi koji prebacuju na kartu
 function togSnimVlaku() {
-  if (recOn) { togRec(); return; }
-  dodiISnimi();
+  if (recOn) { stopRec(); return; }
+  _openVlakaPicker();
+}
+
+function _nextMainBr() {
+  const used = new Set(
+    vlake.filter(v => !v.nm.includes('.')).map(v => parseInt(v.nm.slice(1)))
+  );
+  let n = 1; while (used.has(n)) n++; return n;
+}
+
+function _openVlakaPicker() {
+  const nextBr = _nextMainBr();
+  document.getElementById('ibr').value = nextBr;
+  document.getElementById('ikr').value = 0;
+  updPrev();
+
+  const list = document.getElementById('vpicker-list');
+  list.innerHTML = '';
+
+  // "Nova vlaka" gumb
+  const novBtn = document.createElement('button');
+  novBtn.className = 'vpick-new';
+  novBtn.innerHTML = `➕ Nova vlaka <b>T${nextBr}</b>`;
+  novBtn.onclick = () => { _closeVlakaPicker(); dodiISnimi(); };
+  list.appendChild(novBtn);
+
+  // Postojeće vlake
+  if (vlake.length > 0) {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'padding:4px 2px;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-top:4px;';
+    sep.textContent = 'Ili nastavi snimanje postojeće';
+    list.appendChild(sep);
+
+    vlake.forEach((v, i) => {
+      const row = document.createElement('div');
+      row.className = 'vpick-row';
+      const d = fmtL(calcL(v.pts));
+      row.innerHTML = `
+        <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
+          <div style="color:#64748b;font-size:11px;">${d} · ${v.pts.length} tač.</div>
+        </div>
+        <button class="vpick-rec" onclick="event.stopPropagation();_pickVlaka(${i})">▶ Snimi</button>`;
+      row.onclick = () => _pickVlaka(i);
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById('vlaka-picker').style.display = 'flex';
+  document.getElementById('vpicker-overlay').style.display = 'block';
+}
+
+function _closeVlakaPicker() {
+  document.getElementById('vlaka-picker').style.display = 'none';
+  document.getElementById('vpicker-overlay').style.display = 'none';
+}
+
+function _pickVlaka(i) {
+  _closeVlakaPicker();
+  selI(i);
+  switchTab('karta');
+  togRec();
 }
 function togSnimTrag() {
   switchTab('karta');
@@ -4436,7 +4495,6 @@ function _renderVlakaRow(el, v, i, depth) {
       ${nasaviBtn}
     </div>
     <div class="vcard-btns">
-      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');togRec()" title="Počni GPS snimanje" style="border-color:#ea580c;color:#ea580c;font-size:11px;width:auto;padding:0 5px;">▶</button>` : ''}
       <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
       <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
       <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
@@ -8199,5 +8257,14 @@ function dozBackToList() {
   </div>
 </div>
 
+<!-- VLAKA PICKER SHEET -->
+<div id="vpicker-overlay" style="display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.55);" onclick="_closeVlakaPicker()"></div>
+<div id="vlaka-picker" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9500;flex-direction:column;max-height:75vh;background:#0f172a;border-top:2px solid #374151;border-radius:12px 12px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.6);">
+  <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;">
+    <span style="color:#e2e8f0;font-size:13px;font-weight:600;">🚜 Odaberi vlaku za snimanje</span>
+    <button onclick="_closeVlakaPicker()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
+  </div>
+  <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
+</div>
 </body>
 </html>
