@@ -25,10 +25,9 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Postavi Flutter 3.22.x
+      - name: Postavi Flutter (latest stable)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.x'
           channel: 'stable'
           cache: true
 
