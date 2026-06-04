@@ -1351,6 +1351,30 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 #zoom-btns button:active { background: #1e40af; }
 
+/* ── Gumb "Moja lokacija" — uvijek vidljiv ──────────────── */
+#loc-fixed-btn {
+  position: fixed;
+  right: 10px;
+  bottom: 172px;   /* iznad zoom gumba */
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #16213e;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 13px 7px 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+#loc-fixed-btn:active { background: #1e3a5f; border-color: #3b82f6; }
+#loc-fixed-btn.gps-on { border-color: #22c55e; }
+
 /* ── Layer switcher dugme (Leaflet control) ─────────────── */
 #layer-switch-btn {
   display: block;
@@ -5470,15 +5494,19 @@ function fabLokacija() {
   _closeFab();
   if (lastP) {
     map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
-    showToast('📍 Centrirana na tvoju lokaciju');
   } else {
     showToast('⏳ Pokretanje GPS-a...');
     startGPS();
-    // čekaj prvu poziciju pa centriranje
     const wait = setInterval(() => {
       if (lastP) { clearInterval(wait); map.setView([lastP.la, lastP.lo], 16); }
     }, 500);
     setTimeout(() => clearInterval(wait), 15000);
+  }
+  // Vizualna potvrda — kratki pulse na gumbu
+  const btn = document.getElementById('loc-fixed-btn');
+  if (btn) {
+    btn.style.borderColor = '#3b82f6';
+    setTimeout(() => { btn.style.borderColor = ''; }, 600);
   }
 }
 
@@ -10933,10 +10961,6 @@ function dozBackToList() {
     <span class="fab-item-lbl" id="fab-trag-lbl">Snimi trag</span>
     <button class="fab-item-btn" id="fab-trag-btn" onclick="fabSnimTrag()" title="Snimi trag kretanja">🔴</button>
   </div>
-  <div class="fab-item" id="fab-item-loc">
-    <span class="fab-item-lbl">Moja lokacija</span>
-    <button class="fab-item-btn" onclick="fabLokacija()" title="Prikaži moju lokaciju">🎯</button>
-  </div>
 </div>
 
 <!-- GRANICE ODJELA MODAL -->
@@ -11171,6 +11195,11 @@ function dozBackToList() {
     </div>
   </div>
 </div>
+
+<!-- Moja lokacija — uvijek vidljiv horizontalni gumb -->
+<button id="loc-fixed-btn" onclick="fabLokacija()" title="Centriranje na moju GPS poziciju">
+  🎯 <span>Moja lokacija</span>
+</button>
 
 <!-- Zoom gumbi -->
 <div id="zoom-btns" style="display:none;">
