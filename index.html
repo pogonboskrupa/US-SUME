@@ -637,6 +637,20 @@ select:focus { outline:none; border-color:#3b82f6; }
 .stat-val  { color:#4ade80; font-weight:bold; font-family:monospace; }
 .stat-val.yellow { color:#fbbf24; }
 .stat-val.blue   { color:#60a5fa; }
+.stat-val.red    { color:#f87171; }
+.stat-val.orange { color:#fb923c; }
+.stat-section { font-size:10px;font-weight:bold;color:#334155;text-transform:uppercase;
+  letter-spacing:0.7px;margin:10px 0 5px;padding-top:8px;border-top:1px solid #1e293b; }
+.stat-section:first-child { margin-top:0; border-top:none; }
+/* projektant grid */
+.proj-stat-grid { display:grid; grid-template-columns:1fr auto auto auto; gap:0; font-size:11px; }
+.proj-stat-hdr  { color:#475569; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;
+  padding:3px 6px 5px; border-bottom:1px solid #1e293b; }
+.proj-stat-cell { padding:5px 6px; border-bottom:1px solid #0f172a; color:#94a3b8; }
+.proj-stat-cell.nm { color:#e2e8f0; font-weight:600; }
+.proj-stat-cell.me { color:#4ade80; font-family:monospace; font-weight:bold; }
+.proj-stat-cell.rt { text-align:right; }
+.proj-stat-row-me .proj-stat-cell { background:rgba(251,191,36,0.06); }
 
 /* STD tabela */
 .std-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px; }
@@ -1756,6 +1770,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div class="sec-t">📊 Rekap Projekta</div>
         <div class="stat-card" id="rekap-card">
           <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za rekap</div>
+        </div>
+      </div>
+
+      <!-- TERENSKE I TEHNIČKE STATISTIKE -->
+      <div class="sec">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="sec-t" style="margin:0;">🏔 Terenske statistike</div>
+          <button class="btn gr" style="margin:0;font-size:11px;padding:5px 10px;" onclick="exportTerenStats()">📥 Izvezi</button>
+        </div>
+        <div id="teren-stats-card">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za statistike</div>
         </div>
       </div>
 
@@ -7878,7 +7903,200 @@ function updProjStats() {
     }
   }
 
+  updTerenStats();
   rndKolege();
+}
+
+// ── Terenske statistike ───────────────────────────────────────────────────────
+
+function _calcTerenStats() {
+  const allPts = vlake.flatMap(v => v.pts);
+  const hasPts = allPts.length >= 2;
+
+  // Broj vlaka i krakova
+  const nVlaka  = vlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
+  const nKrakovi= vlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
+  const totalLen = calcL(allPts);
+
+  // Visine
+  const alts = allPts.map(p => p.al).filter(a => a && a > 0);
+  const maxAlt = alts.length ? Math.round(Math.max(...alts)) : null;
+  const minAlt = alts.length ? Math.round(Math.min(...alts)) : null;
+
+  // Ukupni uspon/pad (po svakoj vlaci zasebno, ne cross-vlaka)
+  let totalUp = 0, totalDown = 0;
+  vlake.forEach(v => {
+    const e = calcElev(v.pts);
+    totalUp   += e.up;
+    totalDown += e.down;
+  });
+
+  // Prosječan nagib — ponderirani prosjek nagiba po dužini segmenta
+  let sumSlopeDist = 0, sumDist = 0;
+  vlake.forEach(v => {
+    for (let i = 1; i < v.pts.length; i++) {
+      const a = v.pts[i-1], b = v.pts[i];
+      if (!a.al || !b.al || a.al <= 0 || b.al <= 0) continue;
+      const d = dst(a.la, a.lo, b.la, b.lo);
+      if (d < 0.5) continue;
+      const slope = Math.abs(b.al - a.al) / d * 100;
+      sumSlopeDist += slope * d;
+      sumDist += d;
+    }
+  });
+  const avgSlope = sumDist > 1 ? (sumSlopeDist / sumDist).toFixed(1) : null;
+
+  // Prosječna dužina vlake (samo glavne)
+  const mainVlake = vlake.filter(v => v.kr === 0 && v.pts.length >= 2);
+  const avgVlakaLen = mainVlake.length
+    ? Math.round(mainVlake.reduce((s, v) => s + calcL(v.pts), 0) / mainVlake.length)
+    : null;
+
+  const pov = parseFloat(document.getElementById('p-povrsina').value) || 0;
+  const gustoca = pov > 0 ? Math.round(totalLen / pov) : null;
+
+  // Stats po projektantu (kombinirano iz dnevnog loga + aktivni projektant)
+  const myIme = getIme();
+  const allP  = {};
+  dnevniLog.forEach(day => {
+    day.entries.forEach(e => {
+      if (!allP[e.projektant]) allP[e.projektant] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
+      if (e.meters > allP[e.projektant].meters) allP[e.projektant].meters = e.meters;
+      allP[e.projektant].days.add(day.date);
+      allP[e.projektant].workDates.push(day.date);
+      if (e.activeMin != null) allP[e.projektant].activeMin += e.activeMin;
+    });
+  });
+  if (!allP[myIme]) allP[myIme] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
+  allP[myIme].meters = Math.round(calcL(vlake.flatMap(v => v.pts)));
+
+  return { nVlaka, nKrakovi, totalLen, maxAlt, minAlt, totalUp, totalDown, avgSlope,
+           avgVlakaLen, pov, gustoca, allP, myIme, hasPts };
+}
+
+function updTerenStats() {
+  const el = document.getElementById('teren-stats-card');
+  if (!el) return;
+  if (!_aktivniProjektId) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za statistike</div>';
+    return;
+  }
+
+  const s = _calcTerenStats();
+
+  const row = (label, val, cls='', title='') =>
+    `<div class="stat-row"${title ? ` title="${title}"` : ''}>
+       <span class="stat-name">${label}</span>
+       <span class="stat-val ${cls}">${val}</span>
+     </div>`;
+
+  const fAlt = a => a != null ? `${a.toLocaleString()} m n.m.` : '<span style="color:#334155;">—</span>';
+  const fSlope = s => s != null ? `${s} %` : '<span style="color:#334155;">—</span>';
+  const fM = m => m != null ? fmtL(m) : '<span style="color:#334155;">—</span>';
+
+  // Projektanti tabela
+  const entries = Object.entries(s.allP).sort((a,b) => b[1].meters - a[1].meters);
+  const totalAllM = entries.reduce((sum, [,d]) => sum + d.meters, 0);
+  const projGrid = entries.map(([ime, d]) => {
+    const isMe = ime === s.myIme;
+    const days = d.days.size;
+    const hrs  = d.activeMin ? (d.activeMin / 60).toFixed(1) + ' h' : '—';
+    const mDay = days ? fmtL(Math.round(d.meters / days)) + '/d' : '—';
+    return `<div class="proj-stat-cell nm${isMe ? ' me' : ''}">${ime}${isMe ? ' <span style="font-size:9px;opacity:0.5;">(ti)</span>' : ''}</div>
+      <div class="proj-stat-cell rt${isMe ? ' me' : ''}">${fmtL(d.meters)}</div>
+      <div class="proj-stat-cell rt" style="color:#60a5fa;">${days}d · ${hrs}</div>
+      <div class="proj-stat-cell rt" style="color:#94a3b8;">${mDay}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-section" style="margin-top:0;border-top:none;">Vlake</div>
+      ${row('Broj vlaka (glavnih)', s.nVlaka || '—', 'yellow')}
+      ${row('Broj krakova', s.nKrakovi || '—')}
+      ${row('Ukupna dužina', fM(s.totalLen), 'yellow')}
+      ${s.avgVlakaLen != null ? row('Prosj. dužina vlake', fM(s.avgVlakaLen)) : ''}
+
+      <div class="stat-section">Reljef</div>
+      ${row('Najveća tačka', fAlt(s.maxAlt), 'orange', 'Maksimalna nadmorska visina na svim vlakama')}
+      ${row('Najniža tačka', fAlt(s.minAlt), 'blue', 'Minimalna nadmorska visina na svim vlakama')}
+      ${s.maxAlt != null && s.minAlt != null ? row('Visinska razlika', `${(s.maxAlt - s.minAlt).toLocaleString()} m`) : ''}
+      ${row('Ukupni uspon', s.totalUp ? `↑ ${s.totalUp.toLocaleString()} m` : '—', 'green')}
+      ${row('Ukupni pad', s.totalDown ? `↓ ${s.totalDown.toLocaleString()} m` : '—', 'red')}
+      ${row('Prosječan nagib', fSlope(s.avgSlope), s.avgSlope > 25 ? 'red' : s.avgSlope > 15 ? 'orange' : '', 'Ponderirani prosj. nagib po dužini segmenta')}
+
+      <div class="stat-section">Mreža</div>
+      ${row('Površina odjela', s.pov > 0 ? s.pov + ' ha' : '—', 'blue')}
+      ${row('Gustoća mreže', s.gustoca != null ? s.gustoca + ' m/ha' : '—', s.gustoca > 300 ? 'orange' : 'blue', 'Ukupna dužina / površina odjela')}
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-section" style="margin-top:0;border-top:none;">Projektanti</div>
+      <div class="proj-stat-grid">
+        <div class="proj-stat-hdr">Ime</div>
+        <div class="proj-stat-hdr rt">Dužina</div>
+        <div class="proj-stat-hdr rt">Dana · Sati</div>
+        <div class="proj-stat-hdr rt">m/dan</div>
+        ${projGrid || '<div class="proj-stat-cell" style="grid-column:1/-1;color:#475569;">Nema podataka</div>'}
+        <div class="proj-stat-cell" style="grid-column:1/3;font-weight:bold;color:#fbbf24;border-top:1px solid #334155;padding-top:7px;">Ukupno</div>
+        <div class="proj-stat-cell rt" style="color:#fbbf24;font-weight:bold;border-top:1px solid #334155;padding-top:7px;font-family:monospace;">${fmtL(totalAllM)}</div>
+        <div class="proj-stat-cell" style="border-top:1px solid #334155;"></div>
+      </div>
+    </div>`;
+}
+
+function exportTerenStats() {
+  const s = _calcTerenStats();
+  const odjel = getOdjel() || 'odjel';
+  const sumarija = document.getElementById('p-sumarija').value.trim() || '';
+  const std = calcSTD(vlake);
+  const date = todayStr();
+
+  let txt = `PROJEKTOVANJE TRAKTORSKIH VLAKA — STATISTIKE\n`;
+  txt += `${'='.repeat(50)}\n`;
+  txt += `Odjel: ${odjel}  |  GJ/Suma: ${sumarija}  |  Datum: ${date}\n\n`;
+
+  txt += `VLAKE\n${'-'.repeat(30)}\n`;
+  txt += `Broj vlaka (glavnih): ${s.nVlaka}\n`;
+  txt += `Broj krakova: ${s.nKrakovi}\n`;
+  txt += `Ukupna dužina: ${fmtL(s.totalLen)}\n`;
+  if (s.avgVlakaLen) txt += `Prosj. dužina vlake: ${fmtL(s.avgVlakaLen)}\n`;
+
+  txt += `\nRELJEF\n${'-'.repeat(30)}\n`;
+  if (s.maxAlt != null) txt += `Najveća tačka: ${s.maxAlt} m n.m.\n`;
+  if (s.minAlt != null) txt += `Najniža tačka: ${s.minAlt} m n.m.\n`;
+  if (s.maxAlt != null && s.minAlt != null) txt += `Visinska razlika: ${s.maxAlt - s.minAlt} m\n`;
+  if (s.totalUp)  txt += `Ukupni uspon: ↑ ${s.totalUp} m\n`;
+  if (s.totalDown) txt += `Ukupni pad: ↓ ${s.totalDown} m\n`;
+  if (s.avgSlope != null) txt += `Prosječan nagib: ${s.avgSlope} %\n`;
+
+  txt += `\nMREŽA\n${'-'.repeat(30)}\n`;
+  if (s.pov > 0) txt += `Površina odjela: ${s.pov} ha\n`;
+  if (s.gustoca != null) txt += `Gustoća mreže: ${s.gustoca} m/ha\n`;
+
+  txt += `\nSREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA (STDP)\n${'-'.repeat(30)}\n`;
+  if (std.count) {
+    std.rows.forEach(r => {
+      const ind = r.depth > 0 ? '  '.repeat(r.depth) + '└ ' : '';
+      txt += `${ind}${r.nm}: ${fmtL(r.dist)}`;
+      if (r.type === 'krak') txt += ` (${fmtL(r.krakLen)} + ${fmtL(r.toRoad)})`;
+      txt += '\n';
+    });
+    txt += `STDP = ${fmtL(std.avg)}  (${std.count} vlaka/krakova)\n`;
+  }
+
+  txt += `\nPROJEKTANTI\n${'-'.repeat(30)}\n`;
+  Object.entries(s.allP).sort((a,b) => b[1].meters - a[1].meters).forEach(([ime, d]) => {
+    const hrs = d.activeMin ? (d.activeMin / 60).toFixed(1) + ' h' : '—';
+    const mDay = d.days.size ? fmtL(Math.round(d.meters / d.days.size)) + '/dan' : '';
+    txt += `${ime}: ${fmtL(d.meters)}  |  ${d.days.size} dana  |  ${hrs} aktivno  |  ${mDay}\n`;
+  });
+
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Statistike_${odjel}_${date}.txt`;
+  a.click();
+  showToast('📥 Statistike preuzete');
 }
 
 function exportSTDcsv() {
