@@ -1298,6 +1298,15 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar button:last-child { border-right: none; }
 #action-bar button:active { background: rgba(255,255,255,0.06); }
 #action-bar .ab-ico { font-size: 19px; line-height: 1; }
+/* U modu snimanja ima 5 gumba — smanji font da stane */
+#action-bar.rec-mode button { font-size: 9px; }
+#action-bar.rec-mode .ab-ico { font-size: 16px; }
+#action-bar.paused-mode button { font-size: 10px; }
+#action-bar #ab-pauza { color: #94a3b8; }
+#action-bar #ab-pauza.resuming { color: #4ade80; }
+#action-bar #ab-pauza:active { background: rgba(255,255,255,0.07); }
+#action-bar #ab-kraj { color: #f87171; }
+#action-bar #ab-kraj:active { background: rgba(248,113,113,0.12); }
 #action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); vertical-align: middle; }
 #action-bar #brec-nm {
@@ -4642,6 +4651,43 @@ function toggleRecPause() {
     showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
   _updRecStatusBar();
+  _updFabVisibility();
+}
+
+function _krajVlake() {
+  if (!recOn) return;
+  stopRec();
+  _stodaljShow();
+}
+
+function _stodaljShow() {
+  const nextNm = 'T' + _nextMainBr();
+  document.getElementById('sdb-nova-nm').textContent = nextNm;
+  const sub = document.getElementById('sto-dalje-sub');
+  if (sub) sub.textContent = actI !== null ? ('Završeno: ' + (vlake[actI]?.nm || '')) : '';
+  document.getElementById('sto-dalje-sheet').style.display = '';
+  document.getElementById('sto-dalje-bg').style.display = '';
+}
+
+function _stodaljOdustani() {
+  document.getElementById('sto-dalje-sheet').style.display = 'none';
+  document.getElementById('sto-dalje-bg').style.display = 'none';
+}
+
+function _stodaljNovaVlaka() {
+  _stodaljOdustani();
+  addV().then(() => {
+    setTimeout(() => {
+      if (actI === null) return;
+      switchTab('karta');
+      togRec();
+    }, 30);
+  });
+}
+
+function _stodaljKrajDana() {
+  _stodaljOdustani();
+  showToast('✓ Dobro urađeno! Ne zaboravi "Zabilježi danas" u Projektu.');
 }
 
 // Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
@@ -8451,19 +8497,59 @@ function _updFabVisibility() {
   if (ab) ab.style.display = onKarta ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
   if (cb) cb.style.display = onKarta ? 'flex' : 'none';
-  // Tokom snimanja vlake: zamijeni brec+btrag s krak gumbima
-  const inRec = recOn;
-  const brecEl  = document.getElementById('brec');
-  const btragEl = document.getElementById('btrag');
-  const bkrakL  = document.getElementById('ab-krak-l');
-  const bkrakD  = document.getElementById('ab-krak-d');
-  if (brecEl)  brecEl.style.display  = inRec ? 'none' : '';
-  if (btragEl) btragEl.style.display = inRec ? 'none' : '';
-  if (bkrakL)  bkrakL.style.display  = inRec ? '' : 'none';
-  if (bkrakD)  bkrakD.style.display  = inRec ? '' : 'none';
-  // ab-nazad: prikaži samo ako recOn i postoji roditelj — _updBanner ga ažurira detaljno
-  const abNazad = document.getElementById('ab-nazad');
-  if (abNazad && !inRec) abNazad.style.display = 'none';
+
+  const inRec    = recOn;
+  const isPaused = recPaused;
+  const hasParent = inRec && _recParentIdx !== null && vlake[_recParentIdx];
+
+  const g = id => document.getElementById(id);
+  const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
+
+  if (!inRec) {
+    // Normalni mod: Snimi vlaku + Snimi trag
+    show('brec',    true);  show('btrag',   true);
+    show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
+    show('ab-pauza',false); show('ab-kraj',  false);
+    if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
+    return;
+  }
+
+  show('brec', false); show('btrag', false);
+
+  if (isPaused) {
+    // Pauzirani mod: samo Nastavi + Završi + Moja lok
+    show('ab-nazad', false); show('ab-krak-l', false); show('ab-krak-d', false);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '▶'; if (txt) txt.textContent = 'Nastavi';
+    const bPauza = g('ab-pauza');
+    if (bPauza) { bPauza.classList.add('resuming'); }
+    show('ab-kraj', true);
+    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
+    if (ab) { ab.classList.remove('rec-mode'); ab.classList.add('paused-mode'); }
+  } else if (hasParent) {
+    // Na kraku: Vrati se + Pauza + ⊕L + ⊕D
+    // (ab-nazad se pokazuje/skriva u _updBanner na osnovu hasParent)
+    show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    const bPauza = g('ab-pauza');
+    if (bPauza) bPauza.classList.remove('resuming');
+    show('ab-kraj', false);
+    if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
+  } else {
+    // Na glavnoj vlaci: Pauza + ⊕L + ⊕D + Kraj
+    show('ab-nazad', false); show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    const bPauza = g('ab-pauza');
+    if (bPauza) bPauza.classList.remove('resuming');
+    show('ab-kraj', true);
+    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Kraj vlake';
+    if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
+  }
 }
 
 function switchTab(tab) {
@@ -11444,6 +11530,16 @@ function dozBackToList() {
     <span class="ab-ico">⊕</span>
     <span>Desni krak</span>
   </button>
+  <!-- Pauza / Nastavi (tokom snimanja) -->
+  <button id="ab-pauza" onclick="toggleRecPause()" title="Pauza / Nastavi" style="display:none;">
+    <span class="ab-ico" id="ab-pauza-ico">⏸</span>
+    <span id="ab-pauza-txt">Pauza</span>
+  </button>
+  <!-- Kraj vlake (otvara što-dalje sheet) -->
+  <button id="ab-kraj" onclick="_krajVlake()" title="Završi snimanje" style="display:none;">
+    <span class="ab-ico">⏹</span>
+    <span id="ab-kraj-txt">Kraj vlake</span>
+  </button>
   <!-- Uvijek vidljivo -->
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
@@ -11451,6 +11547,34 @@ function dozBackToList() {
   </button>
 </div>
 
+<!-- Što dalje? sheet — prikazuje se nakon završetka snimanja vlake -->
+<div id="sto-dalje-bg" onclick="_stodaljOdustani()"
+  style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(0,0,0,0.55);"></div>
+<div id="sto-dalje-sheet" style="display:none;position:fixed;left:0;right:0;bottom:0;
+  z-index:3201;background:#0f1f3d;border-radius:16px 16px 0 0;
+  border-top:2px solid #1e3a5f;padding:18px 16px 40px;
+  box-shadow:0 -6px 28px rgba(0,0,0,0.65);">
+  <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:4px;">Vlaka završena. Što dalje?</div>
+  <div style="font-size:11px;color:#475569;margin-bottom:16px;" id="sto-dalje-sub"></div>
+  <div style="display:flex;flex-direction:column;gap:9px;">
+    <button id="sdb-nova" onclick="_stodaljNovaVlaka()"
+      style="padding:13px 14px;background:#166534;border:1px solid #4ade80;border-radius:9px;
+             color:#4ade80;font-size:14px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">🚜</span>
+      <span>Nova vlaka <span id="sdb-nova-nm" style="color:#fbbf24;"></span> (kreće od puta)</span>
+    </button>
+    <button onclick="_stodaljKrajDana()"
+      style="padding:13px 14px;background:#1e3a5f;border:1px solid #334155;border-radius:9px;
+             color:#94a3b8;font-size:13px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">✅</span>
+      <span>Završi za danas</span>
+    </button>
+    <button onclick="_stodaljOdustani()"
+      style="padding:10px;background:none;border:none;color:#475569;font-size:12px;cursor:pointer;">
+      ↩ Nastavi snimanje (ne završavaj)
+    </button>
+  </div>
+</div>
 
 <!-- Layer switcher bottom sheet -->
 <div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
