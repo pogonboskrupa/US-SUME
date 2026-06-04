@@ -4661,10 +4661,6 @@ function _krajVlake() {
 }
 
 function _stodaljShow() {
-  const nextNm = 'T' + _nextMainBr();
-  document.getElementById('sdb-nova-nm').textContent = nextNm;
-  const sub = document.getElementById('sto-dalje-sub');
-  if (sub) sub.textContent = actI !== null ? ('Završeno: ' + (vlake[actI]?.nm || '')) : '';
   document.getElementById('sto-dalje-sheet').style.display = '';
   document.getElementById('sto-dalje-bg').style.display = '';
 }
@@ -4683,11 +4679,6 @@ function _stodaljNovaVlaka() {
       togRec();
     }, 30);
   });
-}
-
-function _stodaljKrajDana() {
-  _stodaljOdustani();
-  showToast('✓ Dobro urađeno! Ne zaboravi "Zabilježi danas" u Projektu.');
 }
 
 // Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
@@ -11553,24 +11544,17 @@ function dozBackToList() {
   z-index:3201;background:#0f1f3d;border-radius:16px 16px 0 0;
   border-top:2px solid #1e3a5f;padding:18px 16px 40px;
   box-shadow:0 -6px 28px rgba(0,0,0,0.65);">
-  <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:4px;">Vlaka završena. Što dalje?</div>
-  <div style="font-size:11px;color:#475569;margin-bottom:16px;" id="sto-dalje-sub"></div>
+  <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:16px;">Vlaka završena</div>
   <div style="display:flex;flex-direction:column;gap:9px;">
     <button id="sdb-nova" onclick="_stodaljNovaVlaka()"
-      style="padding:13px 14px;background:#166534;border:1px solid #4ade80;border-radius:9px;
-             color:#4ade80;font-size:14px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;">🚜</span>
-      <span>Nova vlaka <span id="sdb-nova-nm" style="color:#fbbf24;"></span> (kreće od puta)</span>
-    </button>
-    <button onclick="_stodaljKrajDana()"
-      style="padding:13px 14px;background:#1e3a5f;border:1px solid #334155;border-radius:9px;
-             color:#94a3b8;font-size:13px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;">✅</span>
-      <span>Završi za danas</span>
+      style="padding:14px 16px;background:#166534;border:1px solid #4ade80;border-radius:9px;
+             color:#4ade80;font-size:15px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:22px;">🚜</span>
+      <span>Započni novu vlaku (kreće od puta)</span>
     </button>
     <button onclick="_stodaljOdustani()"
       style="padding:10px;background:none;border:none;color:#475569;font-size:12px;cursor:pointer;">
-      ↩ Nastavi snimanje (ne završavaj)
+      ✕ Odustani
     </button>
   </div>
 </div>
