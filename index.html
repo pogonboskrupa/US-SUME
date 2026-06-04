@@ -7658,6 +7658,7 @@ function switchTab(tab) {
 let _msrOn    = false;
 let _msrPts   = [];
 let _msrLayer = null;
+let _msrSavedLayer = null;
 let _msrElevCache = {};
 let _msrColor = '#fbbf24';
 let _msrMode  = 'dist'; // 'dist' | 'area' | 'nagib'
@@ -7982,7 +7983,9 @@ function _mqmOpen() {
     gj: aktP?.gj || '',
     odjel: aktP?.odjel || '',
     pts: _msrPts.slice(),
-    color: _msrColor
+    color: _msrColor,
+    mode: _msrMode,
+    fillOpacity: 0.18
   };
   _msrRegistry.unshift(entry);
   _msrRegSave();
@@ -8016,6 +8019,7 @@ function _mqmSave() {
     m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
     _msrRegSave();
     _msrRegRender();
+    _msrDrawAllSaved();
   }
   _mqmClose();
   // Pokaži registar da korisnik vidi sačuvano
@@ -8039,6 +8043,7 @@ function _msrRegLoad() {
     if (raw) _msrRegistry = JSON.parse(raw);
   } catch(e) { _msrRegistry = []; }
   _msrRegRender();
+  _msrDrawAllSaved();
 }
 function _msrRegSave() {
   try { localStorage.setItem(_MSR_REG_KEY, JSON.stringify(_msrRegistry)); } catch(e) {}
@@ -8076,6 +8081,95 @@ function _msrRegDelete(id) {
   _msrRegistry = _msrRegistry.filter(x => x.id !== id);
   _msrRegSave();
   _msrRegRender();
+  _msrDrawAllSaved();
+}
+
+function _msrSetFillOpacity(id, val) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m) return;
+  m.fillOpacity = parseFloat(val);
+  _msrRegSave();
+  _msrDrawAllSaved();
+  // Ažuriraj prikaz vrijednosti u popupu
+  const lbl = document.getElementById('mfop-lbl-' + id);
+  if (lbl) lbl.textContent = Math.round(m.fillOpacity * 100) + '%';
+}
+
+function _msrDrawAllSaved() {
+  if (!window.map) return;
+  if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup().addTo(map); }
+  _msrSavedLayer.clearLayers();
+  _msrRegistry.forEach(m => {
+    if (!m.pts || m.pts.length < 2) return;
+    const color  = m.color || '#fbbf24';
+    const mode   = m.mode  || 'dist';
+    const latlngs = m.pts.map(p => [p.lat, p.lng]);
+
+    const buildPopup = () => {
+      let totalDist = 0, totalUp = 0, totalDn = 0;
+      for (let i = 0; i < m.pts.length - 1; i++) {
+        const a = m.pts[i], b = m.pts[i+1];
+        totalDist += _msrHaversine(a.lat, a.lng, b.lat, b.lng);
+        if (a.elev != null && b.elev != null) {
+          const dh = b.elev - a.elev;
+          if (dh > 0) totalUp += dh; else totalDn -= dh;
+        }
+      }
+      const dateStr = m.date ? new Date(m.date).toLocaleDateString('bs-BA') : '';
+      let html = `<div style="min-width:180px;font-family:sans-serif;">
+        <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px;">${_escHtml(m.name)}</div>`;
+      if (m.gj || m.odjel) html += `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${[m.gj, m.odjel].filter(Boolean).join(' · ')}</div>`;
+      if (dateStr)          html += `<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">${dateStr}</div>`;
+
+      if (mode === 'nagib' && m.pts.length >= 2) {
+        const a = m.pts[0], b = m.pts[m.pts.length-1];
+        const d = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
+        const dh = (a.elev!=null&&b.elev!=null) ? b.elev-a.elev : null;
+        const pct = (dh!=null&&d>0) ? (dh/d*100).toFixed(1) : null;
+        const ang = (dh!=null&&d>0) ? (Math.atan(dh/d)*180/Math.PI).toFixed(1) : null;
+        html += `<div style="font-size:13px;color:#374151;">📏 ${_msrFmt(d)}</div>`;
+        if (pct!=null) html += `<div style="font-size:13px;color:#374151;">📐 Nagib: ${pct>0?'+':''}${pct}%</div>`;
+        if (ang!=null) html += `<div style="font-size:13px;color:#374151;">Kut: ${ang}°</div>`;
+      } else if (mode === 'area' && m.pts.length >= 3) {
+        const aM2 = _msrSphericalArea(m.pts);
+        html += `<div style="font-size:13px;color:#374151;">📏 Obim: ${_msrFmt(totalDist)}</div>`;
+        html += `<div style="font-size:13px;color:#374151;">◻ ${Math.round(aM2).toLocaleString('bs')} m²  (${(aM2/10000).toFixed(4)} ha)</div>`;
+        const fop = Math.round((m.fillOpacity||0.18)*100);
+        html += `<div style="margin-top:8px;font-size:12px;color:#64748b;">Transparentnost ispune:
+          <span id="mfop-lbl-${m.id}" style="font-weight:700;color:#374151;">${fop}%</span><br>
+          <input type="range" min="0" max="100" value="${fop}"
+            style="width:100%;margin-top:4px;"
+            oninput="_msrSetFillOpacity('${m.id}', this.value/100)">
+        </div>`;
+      } else {
+        html += `<div style="font-size:13px;color:#374151;">📏 ${_msrFmt(totalDist)}</div>`;
+        if (totalUp > 0 || totalDn > 0)
+          html += `<div style="font-size:12px;color:#64748b;">⬆ ${Math.round(totalUp)} m &nbsp; ⬇ ${Math.round(totalDn)} m</div>`;
+      }
+      html += `<div style="margin-top:10px;display:flex;gap:6px;">
+        <button onclick="_msrRegZoom('${m.id}')" style="flex:1;padding:5px 8px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">✏️ Edituj</button>
+        <button onclick="if(confirm('Obrisati mjerenje?')){_msrRegDelete('${m.id}');}" style="padding:5px 8px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">🗑</button>
+      </div></div>`;
+      return html;
+    };
+
+    if (mode === 'area' && latlngs.length >= 3) {
+      const poly = L.polygon(latlngs, {
+        color: color, weight: 2.5,
+        fillColor: color, fillOpacity: m.fillOpacity ?? 0.18,
+        opacity: 0.9
+      });
+      poly.bindPopup(buildPopup, {maxWidth: 260});
+      _msrSavedLayer.addLayer(poly);
+    } else {
+      const drawLL = mode === 'area' ? [...latlngs, latlngs[0]] : latlngs;
+      const bg  = L.polyline(drawLL, {color:'#fff', weight:6, opacity:0.7, lineCap:'round', lineJoin:'round', interactive:false});
+      const fg  = L.polyline(drawLL, {color, weight:3, opacity:1.0, lineCap:'round', lineJoin:'round'});
+      fg.bindPopup(buildPopup, {maxWidth: 260});
+      _msrSavedLayer.addLayer(bg);
+      _msrSavedLayer.addLayer(fg);
+    }
+  });
 }
 
 function _msrRegZoom(id) {
@@ -8138,6 +8232,8 @@ function _msrRegRender() {
       </div>
     </div>`;
   });
+  // Svaki put kad se renderuje lista, osiguraj da su svi nacrtani na mapi
+  if (window.map) _msrDrawAllSaved();
 }
 
 initAuth();
