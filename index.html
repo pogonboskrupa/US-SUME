@@ -1326,33 +1326,41 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* ── Zoom gumbi ─────────────────────────────────────────── */
 #zoom-btns {
   position: fixed;
-  left: 6px;
-  top: 44px;
+  left: 8px;
+  top: 34px;
   bottom: auto;
   right: auto;
   z-index: 1500;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
   pointer-events: none;
 }
 #zoom-btns button {
   pointer-events: auto;
-  width: 38px; height: 38px;
-  background: #16213e;
+  width: 38px; height: 34px;
+  background: rgba(15,31,61,0.88);
   border: 1px solid #334155;
-  border-radius: 8px;
+  border-top: none;
+  border-radius: 0;
   color: #e2e8f0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 300;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   line-height: 1;
   padding: 0;
   transition: background 0.15s;
 }
-#zoom-btns button:active { background: #1e40af; }
+#zoom-btns button:first-child {
+  border-top: 1px solid #334155;
+  border-radius: 0 0 0 0;
+}
+#zoom-btns button:last-child {
+  border-radius: 0 0 6px 6px;
+}
+#zoom-btns button:active { background: #1e3a5f; }
 
 /* ── Gumb "Moja lokacija" — uvijek vidljiv ──────────────── */
 #loc-fixed-btn {
