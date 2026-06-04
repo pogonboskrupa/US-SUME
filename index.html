@@ -4681,7 +4681,10 @@ function _stodaljOdustani() {
 
 function _stodaljNovaVlaka() {
   _stodaljOdustani();
-  addV().then(() => {
+  // Direktno kreira s prvim slobodnim brojem — zaobilazi conflict dialog koji bi
+  // ostavio korisnika zaglavlje bez načina povratka ako T[n] već postoji
+  const br = _nextMainBr();
+  _doCreateVlaka(br, 0).then(() => {
     setTimeout(() => {
       if (actI === null) return;
       switchTab('karta');
@@ -4715,15 +4718,16 @@ function noviKrakStrana(strana) {
   const parentIdx = actI;
   const parentV   = vlake[parentIdx];
   if (parentV.pts.length === 0) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
-  // Snap na najbliže mjesto na matičnoj vlaci (GPS pozicija ili zadnja tačka)
+  // Snap na najbliže mjesto na matičnoj vlaci — samo kad GPS snima (recOn + lastP).
+  // U modu crtanja lastP može biti stali GPS fix iz ranije sesije, pa ignorišemo ga.
   let junctionPt;
-  if (lastP && parentV.pts.length >= 2) {
+  if (recOn && lastP && parentV.pts.length >= 2) {
     junctionPt = _snapToNearestPtOnLine(parentV.pts, lastP.la, lastP.lo);
   } else {
     junctionPt = parentV.pts[parentV.pts.length - 1];
   }
   if (!junctionPt) { showToast('Greška pri pronalasku spoja!'); return; }
-  const snapDistM = lastP ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
+  const snapDistM = (recOn && lastP) ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
 
   const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
@@ -4731,9 +4735,10 @@ function noviKrakStrana(strana) {
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
-  // junctionOnParent: indeks točke na roditeljskoj vlaci gdje krak nastaje
-  // Sprema se pri kreiranju kako bi trim bio precizan (ne ovisi o GPS-u pri povratku)
-  const junctionOnParent = lastP
+  // junctionOnParent: indeks točke na roditeljskoj vlaci gdje krak nastaje.
+  // Čuva se kako trim pri povratku koristio precizan indeks, ne GPS u tom trenutku.
+  // U modu crtanja koristimo zadnju točku (nema pouzdanog GPS-a za snap).
+  const junctionOnParent = (recOn && lastP)
     ? _findJunctionIdx(parentV.pts, { la: lastP.la, lo: lastP.lo })
     : parentV.pts.length - 1;
   const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
@@ -4874,11 +4879,19 @@ function vratiSeNaRoditelja() {
   const krakIdx = actI;
   if (krakIdx !== null) {
     updateVlakaLabel(krakIdx);
-    // Force-spremi krak odmah — ne čekaj debounce
+    // Force-spremi krak odmah — ne čekaj debounce; briši key da stopRec ne flushra duplo
     clearTimeout(_vlakaSaveTimers[krakIdx]);
+    delete _vlakaSaveTimers[krakIdx];
     sbFlushVlaka(krakIdx);
-    // Preuzmi tačan indeks grananja koji je sačuvan pri kreiranju kraka
-    _parentReturnTrimToIdx = vlake[krakIdx]?.junctionOnParent ?? -1;
+    // Preuzmi tačan indeks grananja:
+    //  - ako je krak kreiran u ovoj sesiji, junctionOnParent je direktno pohranjen
+    //  - ako je krak učitan iz baze (nema junctionOnParent), rekomputaj iz prve tačke kraka
+    //    (krak.pts[0] je uvijek snap-točka na roditeljskoj vlaci)
+    let jIdx = vlake[krakIdx]?.junctionOnParent ?? -1;
+    if (jIdx < 0 && vlake[krakIdx]?.pts?.length > 0 && vlake[_recParentIdx]?.pts?.length > 0) {
+      jIdx = _findJunctionIdx(vlake[_recParentIdx].pts, vlake[krakIdx].pts[0]);
+    }
+    _parentReturnTrimToIdx = jIdx;
   }
   const newActiveIdx = _recParentIdx;
   const parent = vlake[newActiveIdx];
@@ -4890,10 +4903,13 @@ function vratiSeNaRoditelja() {
   _kfReset(); _lastRecTime = 0;
   selI(actI);
 
-  // Postavi flag: na prvoj GPS tački po nastavku, odreži parent do GPS pozicije
+  // Postavi flag: na prvoj GPS tački po nastavku, odreži parent do tačke grananja
   _parentReturnIdx = newActiveIdx;
 
-  // Auto-pauziraj — povratak se ne snima
+  // Auto-pauziraj — povratak se ne snima; obračunaj aktivno vrijeme (kao toggleRecPause)
+  if (_recSegStart > 0) { _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
+  _dayWorkEnd = new Date().toISOString();
+  _saveDayTiming(todayStr());
   recPaused = true;
   const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
@@ -4902,6 +4918,7 @@ function vratiSeNaRoditelja() {
   btn.title = 'Nastavi snimanje na vlaci';
 
   _updBanner();
+  _updFabVisibility();
 
   document.getElementById('rec-stats').textContent = '⏸ Hodaj nazad, ▶';
 
