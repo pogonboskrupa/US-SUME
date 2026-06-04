@@ -8159,33 +8159,6 @@ function _msrRedraw() {
         ? (areaM2/10000).toFixed(2)+' ha'
         : Math.round(areaM2).toLocaleString('bs')+' m²';
       _msrLayer.addLayer(L.polygon(latlngs, {color:'#a78bfa', weight:1.5, dashArray:'4 4', fillColor:'#a78bfa', fillOpacity:0.08}));
-      const cLat = pts.reduce((s,p)=>s+p.lat,0)/pts.length;
-      const cLng = pts.reduce((s,p)=>s+p.lng,0)/pts.length;
-      _msrLayer.addLayer(L.marker([cLat,cLng],{
-        icon:L.divIcon({className:'',html:`<div style="color:#a78bfa;font-size:12px;font-family:monospace;padding:2px 0;white-space:nowrap;pointer-events:none;font-weight:bold;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 4px #fff;">◻ ${areaLbl}</div>`,iconAnchor:[0,0]}),
-        interactive:false
-      }));
-    }
-
-    // Labele po segmentima
-    for (let i = 0; i < pts.length-1; i++) {
-      const a=pts[i], b=pts[i+1];
-      const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
-      const az   = _msrBearing(a.lat,a.lng,b.lat,b.lng);
-      let slopeTxt = '';
-      if (a.elev != null && b.elev != null && dist > 0) {
-        const pct = ((b.elev - a.elev) / dist * 100).toFixed(1);
-        slopeTxt = ` · ${pct>0?'+':''}${pct}%`;
-      }
-      const midLat = (a.lat+b.lat)/2, midLng = (a.lng+b.lng)/2;
-      _msrLayer.addLayer(L.marker([midLat, midLng], {
-        interactive:false,
-        icon: L.divIcon({
-          className:'',
-          html:`<div style="color:${_msrColor};font-size:11px;font-family:monospace;padding:1px 0;white-space:nowrap;pointer-events:none;font-weight:700;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff;">${_msrFmt(dist)} · ${az.toFixed(0)}°${slopeTxt}</div>`,
-          iconAnchor:[0,0]
-        })
-      }));
     }
   }
 
