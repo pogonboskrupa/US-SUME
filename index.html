@@ -4551,7 +4551,12 @@ function stopRec() {
   banner.classList.remove('show'); banner.classList.remove('paused');
   document.getElementById('rec-parent-row').style.display = 'none';
   document.getElementById('btn-nazad').style.display = 'none';
-  if (actI !== null) updateVlakaLabel(actI);
+  if (actI !== null) {
+    updateVlakaLabel(actI);
+    // Odmah sačuvaj — ne čekaj debounce (zaštita od gubitka ako se app zatvori)
+    clearTimeout(_vlakaSaveTimers[actI]);
+    sbFlushVlaka(actI);
+  }
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
   _showLagerDlg(actI);
@@ -5698,35 +5703,30 @@ function dlV(i) {
   _delPendingIdx = i;
   const pts = v.pts ? v.pts.length : 0;
   const dist = pts > 1 ? fmtL(Math.round(calcL(v.pts))) : null;
-  const needType = pts >= 5; // vlake s GPS podacima zahtijevaju tipkanje
 
   document.getElementById('del-modal-title').textContent = `Obriši ${v.nm}?`;
   document.getElementById('del-modal-meta').innerHTML =
     `<b style="color:#e2e8f0;">${v.nm}</b>` +
     (dist ? ` &nbsp;·&nbsp; ${dist}` : '') +
-    ` &nbsp;·&nbsp; ${pts} tačaka`;
+    (pts > 0 ? ` &nbsp;·&nbsp; ${pts} tačaka` : '');
   document.getElementById('del-modal-warn').textContent =
-    needType
-      ? 'Ova vlaka ima snimljene GPS tačke. Brisanje je trajno i ne može se poništiti.'
-      : pts > 0
-        ? 'Vlaka ima tačke. Brisanje je trajno.'
-        : '';
+    pts > 0
+      ? 'Brisanje je trajno i ne može se poništiti.'
+      : 'Ova vlaka nema snimljenih tačaka.';
 
+  // Uvijek zahtijevaj tipkanje — sprječava slučajno brisanje
   const inputRow = document.getElementById('del-input-row');
   const inp = document.getElementById('del-modal-input');
-  if (needType) {
+  {
     document.getElementById('del-input-label').textContent = `Upiši "${v.nm}" za potvrdu:`;
     inp.value = '';
     inp.placeholder = v.nm;
     inputRow.style.display = '';
     document.getElementById('del-confirm-btn').disabled = true;
-  } else {
-    inputRow.style.display = 'none';
-    document.getElementById('del-confirm-btn').disabled = false;
   }
 
   document.getElementById('del-modal-bg').classList.add('open');
-  if (needType) setTimeout(() => inp.focus(), 120);
+  setTimeout(() => inp.focus(), 120);
 }
 
 function _delInputCheck() {
