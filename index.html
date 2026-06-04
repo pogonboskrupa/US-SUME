@@ -8517,20 +8517,19 @@ function _updFabVisibility() {
   show('brec', false); show('btrag', false);
 
   if (isPaused) {
-    // Pauzirani mod: samo Nastavi + Završi + Moja lok
-    show('ab-nazad', false); show('ab-krak-l', false); show('ab-krak-d', false);
+    // Pauzirani mod: Nastavi + (Vrati se na roditelja ako u kraku) + (Završi ako glavna vlaka)
+    show('ab-nazad', !!hasParent); show('ab-krak-l', false); show('ab-krak-d', false);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
     if (ico) ico.textContent = '▶'; if (txt) txt.textContent = 'Nastavi';
     const bPauza = g('ab-pauza');
     if (bPauza) { bPauza.classList.add('resuming'); }
-    show('ab-kraj', true);
+    show('ab-kraj', !hasParent);
     const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
     if (ab) { ab.classList.remove('rec-mode'); ab.classList.add('paused-mode'); }
   } else if (hasParent) {
-    // Na kraku: Vrati se + Pauza + ⊕L + ⊕D
-    // (ab-nazad se pokazuje/skriva u _updBanner na osnovu hasParent)
-    show('ab-krak-l', true); show('ab-krak-d', true);
+    // Na kraku: Vrati se na roditelja + Pauza + ⊕L + ⊕D
+    show('ab-nazad', true); show('ab-krak-l', true); show('ab-krak-d', true);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
     if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
