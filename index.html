@@ -1537,6 +1537,11 @@ select:focus { outline:none; border-color:#3b82f6; }
                   onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
             🎯 Precizno poravnaj na granicu odjela
           </button>
+          <button class="btn" id="refkarta-calib-btn" style="width:100%;margin-bottom:6px;font-size:12px;background:#1e3a5f;color:#38bdf8;"
+                  onclick="_refCalibToggle()" title="Postavi kontrolne tačke (klik na slici → klik gdje treba)">
+            🎯 Kalibriraj (kontrolne tačke)
+          </button>
+          <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
           <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
           <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
                  oninput="refKartaSetOpacity(this.value)">
@@ -5737,10 +5742,15 @@ function updateVlakaLabel(i) {
 
 let _refImg = null;       // HTMLImageElement
 let _refBounds = null;    // [[south,west],[north,east]]
-let _refOverlay = null;   // L.imageOverlay (aktivna, nesačuvana)
+let _refOverlay = null;   // L.imageOverlay / AffineImageOverlay (aktivna, nesačuvana)
 let _refImpGroup = null;  // L.layerGroup — detektovane vlake
-let _refRepoOverlays = {}; // id → L.imageOverlay za sačuvane slike iz repozitorija
+let _refRepoOverlays = {}; // id → overlay za sačuvane slike iz repozitorija
 let _refRepoData = [];     // lokalna kopija unesenih stavki
+let _refCPs = [];          // kontrolne tačke aktivne slike: [{imgX,imgY,lat,lng}]
+let _refCalibOn = false;   // mod kalibracije
+let _refCalibStage = 'img';// 'img' (klik na slici) | 'map' (klik gdje treba)
+let _refCalibTmp = null;   // privremeni {imgX,imgY} dok se čeka ciljni klik
+let _refCalibLayer = null; // L.layerGroup s markerima kontrolnih tačaka
 
 function refKartaLoad(e) {
   const file = e.target.files[0];
@@ -5749,6 +5759,8 @@ function refKartaLoad(e) {
   const img = new Image();
   img.onload = () => {
     _refImg = img;
+    _refCPs = [];
+    if (_refCalibLayer) _refCalibLayer.clearLayers();
     document.getElementById('refkarta-ctrl').style.display = '';
     showToast('✓ Karta učitana — klikni "Fituj" da postaviš na mapu');
     refKartaFitView();
@@ -5774,14 +5786,100 @@ function refKartaFitOdjel() {
   showToast('📐 Karta postavljena u granice odjela');
 }
 
+// ─── Afina/sličnosna transformacija iz parova (imgPx → ciljni px) ─────────────
+// Riješi z = p*x + q*y + r metodom najmanjih kvadrata (3 nepoznate).
+function _refSolve3(rows, zs) {
+  // Normalne jednačine 3x3
+  let Sxx=0,Sxy=0,Sx=0,Syy=0,Sy=0,n=rows.length,Sxz=0,Syz=0,Sz=0;
+  for (let i=0;i<n;i++){
+    const x=rows[i][0], y=rows[i][1], z=zs[i];
+    Sxx+=x*x; Sxy+=x*y; Sx+=x; Syy+=y*y; Sy+=y;
+    Sxz+=x*z; Syz+=y*z; Sz+=z;
+  }
+  const A=[[Sxx,Sxy,Sx],[Sxy,Syy,Sy],[Sx,Sy,n]], B=[Sxz,Syz,Sz];
+  return _solve3x3(A,B);
+}
+function _solve3x3(A,B){
+  // Gaussova eliminacija s pivotiranjem
+  const M=[[...A[0],B[0]],[...A[1],B[1]],[...A[2],B[2]]];
+  for (let c=0;c<3;c++){
+    let piv=c; for(let r=c+1;r<3;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    [M[c],M[piv]]=[M[piv],M[c]];
+    if (Math.abs(M[c][c])<1e-12) return null;
+    for (let r=0;r<3;r++){ if(r===c) continue; const f=M[r][c]/M[c][c]; for(let k=c;k<4;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return [M[0][3]/M[0][0], M[1][3]/M[1][1], M[2][3]/M[2][2]];
+}
+// Vrati {a,b,c,d,e,f}: X=a*x+c*y+e, Y=b*x+d*y+f   (CSS matrix konvencija)
+function _refAffineFromPairs(pairs) {
+  // pairs: [{x,y,X,Y}]
+  if (pairs.length === 2) {
+    // Sličnosna (translacija+rotacija+skala)
+    const [p,q]=pairs;
+    const dx=q.x-p.x, dy=q.y-p.y, dX=q.X-p.X, dY=q.Y-p.Y;
+    const den=dx*dx+dy*dy || 1e-9;
+    const a=(dx*dX+dy*dY)/den;
+    const b=(dx*dY-dy*dX)/den;
+    return { a, b, c:-b, d:a, e:p.X-a*p.x+b*p.y, f:p.Y-b*p.x-a*p.y };
+  }
+  // ≥3: puna afina (najmanji kvadrati)
+  const rows = pairs.map(p=>[p.x,p.y]);
+  const sx = _refSolve3(rows, pairs.map(p=>p.X)); // [a,c,e]
+  const sy = _refSolve3(rows, pairs.map(p=>p.Y)); // [b,d,f]
+  if (!sx || !sy) return null;
+  return { a:sx[0], c:sx[1], e:sx[2], b:sy[0], d:sy[1], f:sy[2] };
+}
+
+// ─── Custom Leaflet layer: slika transformisana afinom (rotacija+skala+skew) ──
+const AffineImageOverlay = L.Layer.extend({
+  initialize(src, cps, opts) { this._src=src; this._cps=cps; this.options=opts||{}; },
+  setControlPoints(cps){ this._cps=cps; if(this._img) this._reset(); },
+  setOpacity(o){ this.options.opacity=o; if(this._img) this._img.style.opacity=o; },
+  onAdd(map) {
+    this._map = map;
+    const img = this._img = L.DomUtil.create('img');
+    img.src = this._src;
+    img.style.position = 'absolute';
+    img.style.transformOrigin = '0 0';
+    img.style.opacity = this.options.opacity ?? 0.6;
+    img.style.pointerEvents = 'none';
+    img.style.imageRendering = 'auto';
+    img.draggable = false;
+    (map.getPane(this.options.pane) || map.getPanes().overlayPane).appendChild(img);
+    map.on('zoom viewreset', this._reset, this);
+    this._reset();
+    return this;
+  },
+  onRemove(map) {
+    if (this._img) L.DomUtil.remove(this._img);
+    map.off('zoom viewreset', this._reset, this);
+  },
+  _reset() {
+    if (!this._img || !this._cps || this._cps.length < 2) return;
+    const map = this._map;
+    const pairs = this._cps.map(cp => {
+      const lp = map.latLngToLayerPoint([cp.lat, cp.lng]);
+      return { x:cp.imgX, y:cp.imgY, X:lp.x, Y:lp.y };
+    });
+    const M = _refAffineFromPairs(pairs);
+    if (!M) return;
+    this._img.style.transform =
+      `matrix(${M.a},${M.b},${M.c},${M.d},${M.e},${M.f})`;
+  }
+});
+
+// Prikaži aktivnu sliku — afino ako ima ≥2 kontrolne tačke, inače bbox
 function _placeRefOverlay() {
   if (_refOverlay) { map.removeLayer(_refOverlay); _refOverlay = null; }
-  if (!_refImg || !_refBounds) return;
+  if (!_refImg) return;
   const opa = parseInt(document.getElementById('refkarta-opa').value) / 100;
-  _refOverlay = L.imageOverlay(_refImg.src, _refBounds, {
-    opacity: opa, interactive: false, crossOrigin: true, pane: 'refKarte'
-  }).addTo(map);
-  // Pokaži dugme za čuvanje na server
+  if (_refCPs.length >= 2) {
+    _refOverlay = new AffineImageOverlay(_refImg.src, _refCPs, { opacity:opa, pane:'refKarte' }).addTo(map);
+  } else if (_refBounds) {
+    _refOverlay = L.imageOverlay(_refImg.src, _refBounds, {
+      opacity: opa, interactive: false, crossOrigin: true, pane: 'refKarte'
+    }).addTo(map);
+  }
   const saveBtn = document.getElementById('refkarta-save-btn');
   if (saveBtn) saveBtn.style.display = '';
 }
@@ -5796,13 +5894,124 @@ function refKartaSetVisible(v) {
 }
 
 function refKartaRemove() {
+  if (_refCalibOn) _refCalibStop();
   if (_refOverlay) { map.removeLayer(_refOverlay); _refOverlay = null; }
-  _refImg = null; _refBounds = null;
+  _refImg = null; _refBounds = null; _refCPs = [];
   document.getElementById('refkarta-ctrl').style.display = 'none';
   document.getElementById('refkarta-file').value = '';
   const saveBtn = document.getElementById('refkarta-save-btn');
   if (saveBtn) { saveBtn.style.display = 'none'; saveBtn.disabled = false; saveBtn.textContent = '☁ Sačuvaj na server'; }
   refKartaClearImported();
+}
+
+// ─── Kalibracija preko kontrolnih tačaka ──────────────────────────────────────
+// Pretvori klik na karti (latlng) → piksel slike, koristeći trenutni prikaz.
+function _refLatLngToImgPx(latlng) {
+  if (_refCPs.length >= 2) {
+    // Invertuj afinu pixel→layerPoint
+    const pairs = _refCPs.map(cp => {
+      const lp = map.latLngToLayerPoint([cp.lat, cp.lng]);
+      return { x:cp.imgX, y:cp.imgY, X:lp.x, Y:lp.y };
+    });
+    const M = _refAffineFromPairs(pairs);
+    const lp = map.latLngToLayerPoint(latlng);
+    const det = M.a*M.d - M.b*M.c;
+    if (Math.abs(det) < 1e-12) return null;
+    const dx = lp.x - M.e, dy = lp.y - M.f;
+    return { imgX:( M.d*dx - M.c*dy)/det, imgY:(-M.b*dx + M.a*dy)/det };
+  }
+  if (_refBounds && _refImg) {
+    const [[s,w],[n,e]] = _refBounds;
+    return {
+      imgX: (latlng.lng - w)/(e - w) * _refImg.width,
+      imgY: (n - latlng.lat)/(n - s) * _refImg.height
+    };
+  }
+  return null;
+}
+
+function _refCalibToggle() {
+  if (_refCalibOn) _refCalibStop(); else _refCalibStart();
+}
+function _refCalibStart() {
+  if (!_refImg) { showToast('⚠ Prvo učitaj sliku'); return; }
+  if (!_refOverlay) { showToast('⚠ Prvo postavi sliku (Fituj u prikaz)'); return; }
+  _refCalibOn = true;
+  _refCalibStage = 'img';
+  _refCalibTmp = null;
+  if (!_refCalibLayer) _refCalibLayer = L.layerGroup().addTo(map);
+  _refCalibRedrawMarkers();
+  map.on('click', _refCalibClick);
+  _refOverlay.setOpacity(0.55);
+  _refCalibUpdateUI();
+}
+function _refCalibStop() {
+  _refCalibOn = false;
+  _refCalibTmp = null;
+  map.off('click', _refCalibClick);
+  // Vrati providnost na vrijednost slidera
+  const opaEl = document.getElementById('refkarta-opa');
+  if (_refOverlay && opaEl) _refOverlay.setOpacity(parseInt(opaEl.value)/100);
+  _refCalibUpdateUI();
+}
+function _refCalibClick(e) {
+  if (!_refCalibOn) return;
+  if (_refCalibStage === 'img') {
+    const px = _refLatLngToImgPx(e.latlng);
+    if (!px) return;
+    _refCalibTmp = px;
+    // Plavi marker = tačka na slici (kako je sada)
+    L.circleMarker(e.latlng, { radius:7, color:'#fff', weight:2, fillColor:'#38bdf8', fillOpacity:1, pane:'refKarte' })
+      .addTo(_refCalibLayer);
+    _refCalibStage = 'map';
+  } else {
+    // Zeleni marker = gdje stvarno treba
+    _refCPs.push({ imgX:_refCalibTmp.imgX, imgY:_refCalibTmp.imgY, lat:e.latlng.lat, lng:e.latlng.lng });
+    _refCalibTmp = null;
+    _refCalibStage = 'img';
+    _placeRefOverlay();
+    if (_refCalibOn) _refOverlay.setOpacity(0.55);
+    _refCalibRedrawMarkers();
+  }
+  _refCalibUpdateUI();
+}
+function _refCalibRedrawMarkers() {
+  if (!_refCalibLayer) return;
+  _refCalibLayer.clearLayers();
+  _refCPs.forEach((cp, i) => {
+    L.marker([cp.lat, cp.lng], {
+      pane:'refKarte', draggable:true,
+      icon: L.divIcon({ className:'', iconSize:[20,20], iconAnchor:[10,10],
+        html:`<div style="width:18px;height:18px;border-radius:50%;background:#22c55e;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.6);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">${i+1}</div>` })
+    }).on('dragend', ev => {
+      const ll = ev.target.getLatLng();
+      _refCPs[i].lat = ll.lat; _refCPs[i].lng = ll.lng;
+      _placeRefOverlay(); if (_refCalibOn) _refOverlay.setOpacity(0.55);
+    }).on('contextmenu', ev => {
+      L.DomEvent.stop(ev);
+      _refCPs.splice(i,1); _placeRefOverlay();
+      if(_refCalibOn) _refOverlay.setOpacity(0.55);
+      _refCalibRedrawMarkers(); _refCalibUpdateUI();
+    }).addTo(_refCalibLayer);
+  });
+}
+function _refCalibUpdateUI() {
+  const btn = document.getElementById('refkarta-calib-btn');
+  const hint = document.getElementById('refkarta-calib-hint');
+  if (btn) {
+    btn.textContent = _refCalibOn ? '✓ Završi kalibraciju' : '🎯 Kalibriraj (kontrolne tačke)';
+    btn.style.background = _refCalibOn ? '#14532d' : '';
+    btn.style.color = _refCalibOn ? '#4ade80' : '';
+  }
+  if (hint) {
+    if (!_refCalibOn) { hint.style.display = 'none'; return; }
+    hint.style.display = '';
+    const n = _refCPs.length;
+    if (_refCalibStage === 'img')
+      hint.innerHTML = `<b style="color:#38bdf8;">Korak 1:</b> klikni prepoznatljivu tačku <b>na slici</b> (raskrsnica, ugao odjela…). <span style="color:#64748b;">Tačaka: ${n}</span>`;
+    else
+      hint.innerHTML = `<b style="color:#22c55e;">Korak 2:</b> klikni gdje ta tačka <b>stvarno treba biti</b> na karti.`;
+  }
 }
 
 function refKartaImportedVisible(v) {
@@ -5869,17 +6078,27 @@ async function _refRepoToggle(id, on) {
   if (!r) return;
   if (on) {
     if (!_refRepoOverlays[id]) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        _refRepoOverlays[id] = L.imageOverlay(img.src, r.bounds, {
-          opacity: r.opacity || 0.55, interactive: false, pane: 'refKarte'
+      const src = `${SUPA_URL}/storage/v1/object/public/ref-karte/${r.storage_path}`;
+      if (r.control_points && r.control_points.length >= 2) {
+        _refRepoOverlays[id] = new AffineImageOverlay(src, r.control_points, {
+          opacity: r.opacity || 0.55, pane: 'refKarte'
         }).addTo(map);
-        map.fitBounds(r.bounds, {padding:[30,30]});
+        const b = L.latLngBounds(r.control_points.map(cp => [cp.lat, cp.lng])).pad(0.5);
+        map.fitBounds(b, {padding:[30,30]});
         _refRepoRender();
-      };
-      img.onerror = () => showToast('⚠ Greška pri učitavanju slike s servera');
-      img.src = `${SUPA_URL}/storage/v1/object/public/ref-karte/${r.storage_path}`;
+      } else {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          _refRepoOverlays[id] = L.imageOverlay(img.src, r.bounds, {
+            opacity: r.opacity || 0.55, interactive: false, pane: 'refKarte'
+          }).addTo(map);
+          map.fitBounds(r.bounds, {padding:[30,30]});
+          _refRepoRender();
+        };
+        img.onerror = () => showToast('⚠ Greška pri učitavanju slike s servera');
+        img.src = src;
+      }
     }
   } else {
     if (_refRepoOverlays[id]) { map.removeLayer(_refRepoOverlays[id]); delete _refRepoOverlays[id]; }
@@ -5930,7 +6149,8 @@ async function refKartaSaveToServer() {
     const name = prompt('Naziv referentne slike:', 'Karta ' + new Date().toLocaleDateString('bs-BA')) || 'Karta';
     const { error: dbErr } = await sb.from('ref_karte').insert({
       user_id: sbUser.id, name, storage_path: path,
-      bounds: _refBounds, opacity: parseInt(document.getElementById('refkarta-opa').value) / 100
+      bounds: _refBounds, opacity: parseInt(document.getElementById('refkarta-opa').value) / 100,
+      control_points: _refCPs.length >= 2 ? _refCPs : null
     });
     if (dbErr) throw dbErr;
     showToast('✓ Slika sačuvana na server');
