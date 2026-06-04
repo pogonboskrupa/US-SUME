@@ -1864,6 +1864,26 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="krak-picker-list"></div>
         <div id="krak-picker-empty" style="display:none;font-size:12px;color:#475569;text-align:center;padding:8px 0;">Nema postojećih krakova</div>
       </div>
+      <!-- Modal: izbor kraka prije početka snimanja -->
+      <div id="krak-izbor" style="display:none;position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:2500;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:12px;padding:14px 16px;min-width:240px;max-width:90vw;box-shadow:0 8px 28px rgba(0,0,0,0.75);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span id="krak-izbor-title" style="font-size:13px;font-weight:bold;color:#fbbf24;"></span>
+          <button onclick="_krakIzborClose()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;">
+          <button onclick="_krakIzborDirektno()" style="padding:11px 14px;background:#166534;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-size:13px;font-weight:bold;cursor:pointer;text-align:left;">
+            ▶ Snimi direktno
+          </button>
+          <div style="display:flex;gap:7px;">
+            <button onclick="_krakIzborStrana('L')" style="flex:1;padding:11px 8px;background:#1e3a5f;border:1px solid #38bdf8;border-radius:8px;color:#38bdf8;font-size:13px;font-weight:bold;cursor:pointer;">
+              ⊕ Lijevi krak
+            </button>
+            <button onclick="_krakIzborStrana('D')" style="flex:1;padding:11px 8px;background:#1e3a5f;border:1px solid #f97316;border-radius:8px;color:#f97316;font-size:13px;font-weight:bold;cursor:pointer;">
+              ⊕ Desni krak
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
         <span class="nv-icon">⛰</span>
@@ -4026,11 +4046,10 @@ function _closeVlakaPicker() {
 
 function _pickVlaka(i) {
   _closeVlakaPicker();
-  // Čekaj da picker animacija završi prije pokretanja snimanja
   setTimeout(() => {
     selI(i);
     switchTab('karta');
-    togRec();
+    _showKrakIzbor(i);
   }, 260);
 }
 function togSnimTrag() {
@@ -4045,6 +4064,39 @@ function _pickVlakaForTrag(i) {
     fabSnimTrag();
   }, 260);
 }
+// ─── Krak izbor modal (prije početka snimanja) ────────────────────────────────
+let _krakIzborVlakaIdx = null;
+
+function _showKrakIzbor(i) {
+  _krakIzborVlakaIdx = i;
+  const v = vlake[i];
+  document.getElementById('krak-izbor-title').textContent = v ? v.nm : '';
+  document.getElementById('krak-izbor').style.display = '';
+}
+
+function _krakIzborClose() {
+  document.getElementById('krak-izbor').style.display = 'none';
+  _krakIzborVlakaIdx = null;
+}
+
+function _krakIzborDirektno() {
+  const i = _krakIzborVlakaIdx;
+  _krakIzborClose();
+  if (i === null) return;
+  selI(i);
+  togRec();
+}
+
+function _krakIzborStrana(strana) {
+  const i = _krakIzborVlakaIdx;
+  _krakIzborClose();
+  if (i === null) return;
+  selI(i);
+  togRec();
+  // Kreiraj krak čim snimanje krene (roditeljska vlaka mora imati barem jednu tačku)
+  setTimeout(() => noviKrakStrana(strana), 200);
+}
+
 // ─── Picker search/number input ───────────────────────────────────────────────
 
 // Parsiraj unos u picker inputu: "14" → {br:14,kr:0} ; "14.5" → {br:14,kr:5}
