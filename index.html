@@ -791,10 +791,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-lbl { color:#475569; font-size:9px; }
 #nv-badge .nv-coord { color:#ffffff; font-weight:700; font-size:10px; }
 #nv-badge #map-scale-val { color:#fbbf24; font-weight:bold; font-size:10px; }
-/* Pomjeri Leaflet kontrole ispod badge zaglavlja (badge ~36px visine) */
-/* nv-badge visina ~28px + top 4px = 32px; Leaflet dodaje jos 10px interno */
-#map .leaflet-top-left  { margin-top: 38px; margin-left: 4px; }
-#map .leaflet-top-right { margin-top: 38px; margin-right: 4px; }
+/* Sakrij Leaflet default kontrole (koristimo vlastiti panel) */
+#map .leaflet-top-left,
+#map .leaflet-top-right { display: none !important; }
 
 
 /* === QGIS-STIL TOOLBAR NA MAPI === */
@@ -1296,14 +1295,24 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar #ab-loc { color: #60a5fa; }
 #action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
 
-/* ── Zoom gumbi (Leaflet control, topleft) ──────────────── */
-.leaflet-ctrl-zoom-custom {
+/* ── Kontrolni panel ispod nv-badge (zoom + layer) ───────── */
+#map-ctrl-bar {
+  position: absolute;
+  top: 32px; left: 8px; right: 8px;
+  z-index: 900;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+#map-ctrl-bar > * { pointer-events: auto; }
+#map-zoom-btns {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  border-radius: 5px;
 }
-.leaflet-ctrl-zoom-custom button {
+#map-zoom-btns button {
   width: 34px; height: 34px;
   background: #16213e;
   border: 1px solid #334155;
@@ -1318,18 +1327,19 @@ select:focus { outline:none; border-color:#3b82f6; }
   padding: 0;
   transition: background 0.15s;
 }
-.leaflet-ctrl-zoom-custom button:first-child {
+#map-zoom-btns button:first-child {
   border-top: 1px solid #334155;
   border-radius: 5px 5px 0 0;
 }
-.leaflet-ctrl-zoom-custom button:last-child {
-  border-radius: 0 0 5px 5px;
+#map-zoom-btns button:last-child { border-radius: 0 0 5px 5px; }
+#map-zoom-btns button:active { background: #1e3a5f; }
+#map-layer-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.leaflet-ctrl-zoom-custom button:active { background: #1e3a5f; }
-
-/* ── Layer switcher dugme (Leaflet control) ─────────────── */
-#layer-switch-btn {
-  display: block;
+#layer-switch-btn, #map-fav-btn {
+  display: flex; align-items: center; justify-content: center;
   width: 34px; height: 34px;
   background: #16213e;
   border: 1px solid #334155;
@@ -1337,8 +1347,10 @@ select:focus { outline:none; border-color:#3b82f6; }
   cursor: pointer;
   font-size: 18px;
   color: #e2e8f0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  transition: background 0.15s;
 }
-#layer-switch-btn:active { background: #1e3a5f; }
+#layer-switch-btn:active, #map-fav-btn:active { background: #1e3a5f; }
 
 /* ── Layer switcher bottom sheet ────────────────────────── */
 #layer-sheet {
@@ -1862,6 +1874,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         <span class="nv-lbl">X</span>&nbsp;<span id="omgi-x" class="nv-coord">—</span>
         <span class="nv-sep">|</span>
         <span class="nv-lbl">1:</span><span id="map-scale-val">—</span>
+      </div>
+      <!-- Kontrolni panel odmah ispod nv-badge: zoom lijevo, slojevi desno -->
+      <div id="map-ctrl-bar" style="display:none;">
+        <div id="map-zoom-btns">
+          <button onclick="map.zoomIn()" title="Uvećaj">＋</button>
+          <button onclick="map.zoomOut()" title="Umanji">－</button>
+        </div>
+        <div id="map-layer-btns">
+          <button id="layer-switch-btn" onclick="_openLayerSheet()" title="Promijeni sloj karte">⛰</button>
+          <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte">⭐</button>
+        </div>
       </div>
       <!-- ═══ GPS SNIMANJE BANNER ═══ -->
       <div id="rec-banner">
@@ -3324,50 +3347,7 @@ const TL = {
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
 TL['⛰ Topo'].addTo(map);  // Default: TOPO
-// Layer switcher — custom dugme umjesto Leaflet default
-// Zoom control — topleft, ispod nv-badge
-const _ZoomCtrl = L.Control.extend({
-  options: { position: 'topleft' },
-  onAdd() {
-    const c = L.DomUtil.create('div', 'leaflet-ctrl-zoom-custom leaflet-bar');
-    c.innerHTML =
-      `<button onclick="map.zoomIn()" title="Uvećaj">＋</button>` +
-      `<button onclick="map.zoomOut()" title="Umanji">－</button>`;
-    L.DomEvent.disableClickPropagation(c);
-    return c;
-  }
-});
-const _zoomCtrl = new _ZoomCtrl().addTo(map);
-
-// Layer switcher — topright, ispod nv-badge
-const _LayerSwitchCtrl = L.Control.extend({
-  options: { position: 'topright' },
-  onAdd() {
-    const btn = L.DomUtil.create('button','');
-    btn.id = 'layer-switch-btn';
-    btn.title = 'Promijeni sloj karte';
-    btn.textContent = '⛰';
-    L.DomEvent.disableClickPropagation(btn);
-    L.DomEvent.on(btn, 'click', _openLayerSheet);
-    return btn;
-  }
-});
-new _LayerSwitchCtrl().addTo(map);
-
-// ── Omiljene karte — custom Leaflet control dugme ───────────────────────────
-const _MapFavBtn = L.Control.extend({
-  options: { position: 'topright' },
-  onAdd() {
-    const btn = L.DomUtil.create('button');
-    btn.style.cssText = 'display:block;width:34px;height:34px;background:#16213e;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:16px;color:#fbbf24;margin-top:4px;';
-    btn.title = 'Omiljene karte';
-    btn.textContent = '⭐';
-    L.DomEvent.disableClickPropagation(btn);
-    L.DomEvent.on(btn, 'click', openMapFavs);
-    return btn;
-  }
-});
-new _MapFavBtn().addTo(map);
+// Zoom i layer kontrole su sada vlastiti HTML panel (#map-ctrl-bar), ne Leaflet kontrole
 
 // ── Omiljene karte — state & funkcije ───────────────────────────────────────
 const _MAPFAV_KEY = 'tvlake_map_favs';
@@ -8155,10 +8135,8 @@ function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
   const ab = document.getElementById('action-bar');
   if (ab) ab.style.display = onKarta ? 'flex' : 'none';
-  // Zoom Leaflet control — sakri/prikaži container
-  if (_zoomCtrl && _zoomCtrl._container) {
-    _zoomCtrl._container.style.display = onKarta ? '' : 'none';
-  }
+  const cb = document.getElementById('map-ctrl-bar');
+  if (cb) cb.style.display = onKarta ? 'flex' : 'none';
 }
 
 function switchTab(tab) {
