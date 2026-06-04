@@ -938,76 +938,6 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gl-preset:hover { transform:scale(1.25); border-color:#60a5fa; }
 .gl-preset.active { border-color:#fff; transform:scale(1.15); }
 
-/* ── GPS FAB (Floating Action Button) ───────────────────── */
-#fab-gps {
-  position: fixed;
-  bottom: 24px;
-  left: 16px;
-  z-index: 2000;
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: flex-start;
-  gap: 10px;
-  pointer-events: none;
-}
-#fab-gps > * { pointer-events: auto; }
-#fab-main {
-  width: 54px; height: 54px;
-  border-radius: 50%;
-  background: #dc2626;
-  border: 3px solid rgba(255,255,255,0.2);
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.55);
-  font-size: 26px;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform 0.25s, background 0.2s;
-  line-height: 1;
-  padding: 0;
-}
-#fab-main.open { transform: rotate(45deg); background: #7f1d1d; }
-#fab-main.gps-active { background: #16a34a; }
-#fab-main.gps-active.open { background: #14532d; }
-.fab-item {
-  display: flex; align-items: center; gap: 10px;
-  opacity: 0; transform: translateY(12px) scale(0.9);
-  pointer-events: none;
-  transition: opacity 0.18s, transform 0.18s;
-}
-.fab-item:nth-child(2) { transition-delay: 0.00s; }
-.fab-item:nth-child(3) { transition-delay: 0.05s; }
-.fab-item:nth-child(4) { transition-delay: 0.10s; }
-#fab-gps.open .fab-item {
-  opacity: 1; transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-.fab-item-btn {
-  width: 46px; height: 46px;
-  border-radius: 50%;
-  background: #1e3a5f;
-  border: 2px solid #334155;
-  cursor: pointer;
-  font-size: 20px;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.5);
-  transition: background 0.15s, border-color 0.15s;
-  flex-shrink: 0;
-  padding: 0;
-}
-.fab-item-btn:hover { background: #1e40af; border-color: #3b82f6; }
-.fab-item-btn.active { background: #7f1d1d; border-color: #ef4444; }
-.fab-item-lbl {
-  background: rgba(10,17,35,0.92);
-  border: 1px solid #334155;
-  color: #e2e8f0;
-  font-size: 12px;
-  font-weight: bold;
-  padding: 5px 12px;
-  border-radius: 20px;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  order: -1;
-}
-
 /* Print modal */
 #print-modal {
   display:none; position:fixed; inset:0;
@@ -1323,6 +1253,48 @@ select:focus { outline:none; border-color:#3b82f6; }
 #print-header { display:none; }
 #print-footer { display:none; }
 
+/* ── Action bar (Snimi vlaku / Snimi trag / Moja lokacija) ─ */
+#action-bar {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1600;
+  height: 58px;
+  background: #0a111f;
+  border-top: 1px solid #1e3a5f;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.5);
+}
+#action-bar button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-right: 1px solid #1e293b;
+  color: #94a3b8;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.2px;
+  height: 100%;
+}
+#action-bar button:last-child { border-right: none; }
+#action-bar button:active { background: rgba(255,255,255,0.06); }
+#action-bar .ab-ico { font-size: 19px; line-height: 1; }
+#action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); vertical-align: middle; }
+#action-bar #brec-nm {
+  font-size: 9px; color: #fbbf24; line-height: 1;
+  max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#action-bar #brec.active  { color: #4ade80; background: rgba(74,222,128,0.09); }
+#action-bar #btrag.active { color: #f97316; background: rgba(249,115,22,0.09); }
+#action-bar #ab-loc { color: #60a5fa; }
+#action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
+
 /* ── Zoom gumbi ─────────────────────────────────────────── */
 #zoom-btns {
   position: fixed;
@@ -1361,30 +1333,6 @@ select:focus { outline:none; border-color:#3b82f6; }
   border-radius: 0 0 6px 6px;
 }
 #zoom-btns button:active { background: #1e3a5f; }
-
-/* ── Gumb "Moja lokacija" — uvijek vidljiv ──────────────── */
-#loc-fixed-btn {
-  position: fixed;
-  right: 10px;
-  bottom: 80px;
-  z-index: 1500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #16213e;
-  border: 1px solid #334155;
-  border-radius: 20px;
-  color: #e2e8f0;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 7px 13px 7px 10px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-#loc-fixed-btn:active { background: #1e3a5f; border-color: #3b82f6; }
-#loc-fixed-btn.gps-on { border-color: #22c55e; }
 
 /* ── Layer switcher dugme (Leaflet control) ─────────────── */
 #layer-switch-btn {
@@ -1561,13 +1509,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         <input type="hidden" id="ibr" value="1">
         <input type="hidden" id="ikr" value="0">
         <div class="seg-grp">
-          <button class="seg-btn" id="brec" onclick="togSnimVlaku()" title="Snimi vlaku">
-            <span class="seg-ico"><img src="forwarder.svg" alt="" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6));"></span><span>Snimi vlaku</span>
-            <span id="brec-nm" style="font-size:9px;color:#fbbf24;line-height:1;">T1</span>
-          </button>
-          <button class="seg-btn" id="btrag" onclick="togSnimTrag()" title="Snimi trag kretanja">
-            <span class="seg-ico">🔴</span><span>Snimi trag</span>
-          </button>
           <button class="seg-btn" onclick="toggleMjtrgDropdown()" title="Mjerenja i registar tragova">
             <span class="seg-ico">📏</span><span>M&amp;T</span>
           </button>
@@ -5485,24 +5426,7 @@ function _tragRegDlGpx(id) {
   a.click();
 }
 
-function toggleFabGps() {
-  _fabOpen = !_fabOpen;
-  const fab = document.getElementById('fab-gps');
-  const btn = document.getElementById('fab-main');
-  fab.classList.toggle('open', _fabOpen);
-  btn.classList.toggle('open', _fabOpen);
-}
-
-function _closeFab() {
-  _fabOpen = false;
-  const fab = document.getElementById('fab-gps');
-  const btn = document.getElementById('fab-main');
-  if (fab) fab.classList.remove('open');
-  if (btn) btn.classList.remove('open');
-}
-
 function fabLokacija() {
-  _closeFab();
   if (lastP) {
     map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
   } else {
@@ -5522,17 +5446,10 @@ function fabLokacija() {
 }
 
 function fabSnimTrag() {
-  _closeFab();
   if (_tragOn) {
-    // Zaustavi snimanje traga
     _tragOn = false;
-    const btn = document.getElementById('fab-trag-btn');
-    const lbl = document.getElementById('fab-trag-lbl');
-    if (btn) { btn.classList.remove('active'); btn.textContent = '🔴'; }
-    if (lbl) lbl.textContent = 'Snimi trag';
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
-    document.getElementById('fab-main').classList.remove('gps-active');
     if (_tragPts.length > 1) {
       const saved = _tragRegAdd(_tragPts.slice());
       _tqmOpen(saved.id);
@@ -5541,17 +5458,11 @@ function fabSnimTrag() {
     }
     _tragPts = [];
   } else {
-    // Počni snimanje traga
     if (!gpsOn) startGPS();
     _tragOn = true;
     _tragPts = [];
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
-    const btn = document.getElementById('fab-trag-btn');
-    const lbl = document.getElementById('fab-trag-lbl');
-    if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
-    if (lbl) lbl.textContent = 'Zaustavi trag';
-    document.getElementById('fab-main').classList.add('gps-active');
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
     showToast('🔴 Snimanje traga pokrenuto');
@@ -5581,7 +5492,6 @@ function _tragToGpx(pts) {
 }
 
 function fabSnimVlaku() {
-  _closeFab();
   if (!_aktivniProjektId) {
     showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
     return;
@@ -8237,8 +8147,8 @@ function _updMcdDist() {
 // Centralna logika vidljivosti FAB-a — poziva se iz switchTab, togRec, stopRec, mtAddLine, _stopAddLine
 function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
-  const bannerActive = recOn || activeTool === 'addline';
-  document.getElementById('fab-gps').style.display = (onKarta && !bannerActive) ? '' : 'none';
+  const ab = document.getElementById('action-bar');
+  if (ab) ab.style.display = onKarta ? 'flex' : 'none';
   const zb = document.getElementById('zoom-btns');
   if (zb) zb.style.display = onKarta ? '' : 'none';
 }
@@ -10961,18 +10871,6 @@ function dozBackToList() {
       </div>
     </div><!-- /mjtrg-panel -->
 
-<!-- GPS FAB -->
-<div id="fab-gps" style="display:none;">
-  <button id="fab-main" onclick="toggleFabGps()" title="GPS akcije">📍</button>
-  <div class="fab-item" id="fab-item-vlaka">
-    <span class="fab-item-lbl">Snimi vlaku</span>
-    <button class="fab-item-btn" onclick="fabSnimVlaku()" title="Snimi vlaku" style="padding:4px;"><img src="forwarder.svg" alt="🚜" style="width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.7));"></button>
-  </div>
-  <div class="fab-item" id="fab-item-trag">
-    <span class="fab-item-lbl" id="fab-trag-lbl">Snimi trag</span>
-    <button class="fab-item-btn" id="fab-trag-btn" onclick="fabSnimTrag()" title="Snimi trag kretanja">🔴</button>
-  </div>
-</div>
 
 <!-- GRANICE ODJELA MODAL -->
 <div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
@@ -11207,10 +11105,22 @@ function dozBackToList() {
   </div>
 </div>
 
-<!-- Moja lokacija — uvijek vidljiv horizontalni gumb -->
-<button id="loc-fixed-btn" onclick="fabLokacija()" title="Centriranje na moju GPS poziciju">
-  🎯 <span>Moja lokacija</span>
-</button>
+<!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
+<div id="action-bar">
+  <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
+    <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
+    <span>Snimi vlaku</span>
+    <span id="brec-nm">T1</span>
+  </button>
+  <button id="btrag" onclick="togSnimTrag()" title="Snimi GPS trag">
+    <span class="ab-ico">🔴</span>
+    <span>Snimi trag</span>
+  </button>
+  <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
+    <span class="ab-ico">🎯</span>
+    <span>Moja lokacija</span>
+  </button>
+</div>
 
 <!-- Zoom gumbi -->
 <div id="zoom-btns" style="display:none;">
