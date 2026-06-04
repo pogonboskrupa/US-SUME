@@ -7707,20 +7707,8 @@ function _mjtrgTab(t) {
   document.getElementById('mjtrg-sec-msr').style.display = isMsr ? '' : 'none';
   document.getElementById('mjtrg-sec-trg').style.display = isMsr ? 'none' : '';
   const panel = document.getElementById('mjtrg-panel');
-  if (panel) panel.style.maxHeight = isMsr ? '15vh' : '60vh';
-  const tMsr = document.getElementById('mjtrg-tab-msr');
-  const tTrg = document.getElementById('mjtrg-tab-trg');
-  if (tMsr) {
-    tMsr.style.background = isMsr ? 'rgba(220,38,38,0.12)' : 'none';
-    tMsr.style.color = isMsr ? '#fca5a5' : '#64748b';
-    tMsr.style.borderBottomColor = isMsr ? '#ef4444' : 'transparent';
-  }
-  if (tTrg) {
-    tTrg.style.background = !isMsr ? 'rgba(56,189,248,0.1)' : 'none';
-    tTrg.style.color = !isMsr ? '#38bdf8' : '#64748b';
-    tTrg.style.borderBottomColor = !isMsr ? '#38bdf8' : 'transparent';
-  }
-  if (isMsr) { /* mjerenje panel nema listu */ } else { _tragRegRender(); _msrRegRender(); }
+  if (panel) panel.style.maxHeight = isMsr ? '15vh' : '65vh';
+  if (!isMsr) { _tragRegRender(); _msrRegRender(); }
 }
 
 function _msrFmt(m) {
@@ -10192,27 +10180,15 @@ function dozBackToList() {
 </div>
     <!-- IZMJERI PANEL -->
     <div id="mjtrg-panel">
-      <!-- Sub-tabovi -->
-      <div style="display:flex;border-bottom:1px solid #1e293b;flex-shrink:0;">
-        <button id="mjtrg-tab-msr" onclick="_mjtrgTab('msr')"
-          style="flex:1;padding:9px 4px;background:rgba(220,38,38,0.12);color:#fca5a5;border:none;border-bottom:2px solid #ef4444;font-size:13px;font-weight:600;cursor:pointer;">📏 Mjerenje</button>
-        <button id="mjtrg-tab-trg" onclick="_mjtrgTab('trg')"
-          style="flex:1;padding:9px 4px;background:none;color:#64748b;border:none;border-bottom:2px solid transparent;font-size:13px;font-weight:600;cursor:pointer;">🗺 Tragovi</button>
-      </div>
-
       <!-- IZMJERA -->
-      <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;">
-        <!-- Mod badge -->
-        <div style="margin-bottom:12px;">
-          <span id="msr-mode-badge" style="font-size:12px;font-weight:700;color:#38bdf8;background:#1e3a5f;padding:3px 10px;border-radius:10px;">📏 Udaljenost</span>
-        </div>
+      <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;padding:10px 14px 12px;">
         <!-- Gumbi -->
-        <button id="btn-msr-start" class="btn g" onclick="msrToggle()"
-          style="width:100%;padding:11px;font-size:14px;font-weight:700;margin-bottom:8px;border-radius:10px;">▶ Počni mjerenje</button>
         <div style="display:flex;gap:8px;">
+          <button id="btn-msr-start" class="btn g" onclick="msrToggle()"
+            style="flex:1;padding:11px;font-size:14px;font-weight:700;border-radius:10px;">▶ Počni mjerenje</button>
           <button onclick="msrAddCenter()"
             style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
-                   padding:10px 8px;border:2px solid #1e3a5f;border-radius:10px;
+                   padding:11px 8px;border:2px solid #1e3a5f;border-radius:10px;
                    background:#0f172a;color:#38bdf8;font-size:13px;font-weight:600;cursor:pointer;">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;">
               <circle cx="9" cy="9" r="7.5" stroke="#38bdf8" stroke-width="1.5"/>
@@ -10224,9 +10200,6 @@ function dozBackToList() {
             </svg>
             Pozicija tačke
           </button>
-          <button onclick="msrClear()" title="Obriši"
-            style="padding:10px 14px;border:2px solid #374151;border-radius:10px;
-                   background:#0f172a;color:#64748b;font-size:16px;cursor:pointer;">🗑</button>
         </div>
 
         <!-- Rezultati (vidljivi kad je mjerenje aktivno) -->
