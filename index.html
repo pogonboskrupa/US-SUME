@@ -1294,6 +1294,10 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar #btrag.active { color: #f97316; background: rgba(249,115,22,0.09); }
 #action-bar #ab-loc { color: #60a5fa; }
 #action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
+#action-bar #ab-krak-l { color: #38bdf8; }
+#action-bar #ab-krak-d { color: #f97316; }
+#action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
+#action-bar #ab-krak-d:active { background: rgba(249,115,22,0.1); }
 
 /* ── Kontrolni panel ispod nv-badge (zoom + layer) ───────── */
 #map-ctrl-bar {
@@ -8189,6 +8193,16 @@ function _updFabVisibility() {
   if (ab) ab.style.display = onKarta ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
   if (cb) cb.style.display = onKarta ? 'flex' : 'none';
+  // Tokom snimanja vlake: zamijeni brec+btrag s krak gumbima
+  const inRec = recOn;
+  const brecEl  = document.getElementById('brec');
+  const btragEl = document.getElementById('btrag');
+  const bkrakL  = document.getElementById('ab-krak-l');
+  const bkrakD  = document.getElementById('ab-krak-d');
+  if (brecEl)  brecEl.style.display  = inRec ? 'none' : '';
+  if (btragEl) btragEl.style.display = inRec ? 'none' : '';
+  if (bkrakL)  bkrakL.style.display  = inRec ? '' : 'none';
+  if (bkrakD)  bkrakD.style.display  = inRec ? '' : 'none';
 }
 
 function switchTab(tab) {
@@ -11145,6 +11159,7 @@ function dozBackToList() {
 
 <!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
 <div id="action-bar">
+  <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
     <span>Snimi vlaku</span>
@@ -11154,6 +11169,16 @@ function dozBackToList() {
     <span class="ab-ico">🔴</span>
     <span>Snimi trag</span>
   </button>
+  <!-- Mod snimanja vlake (recOn) — krak gumbi -->
+  <button id="ab-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="display:none;">
+    <span class="ab-ico">⊕</span>
+    <span>Lijevi krak</span>
+  </button>
+  <button id="ab-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="display:none;">
+    <span class="ab-ico">⊕</span>
+    <span>Desni krak</span>
+  </button>
+  <!-- Uvijek vidljivo -->
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
     <span>Moja lokacija</span>
