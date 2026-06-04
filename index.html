@@ -3347,7 +3347,8 @@ setTimeout(() => { _appStarted = true; }, 4000);
 // Zasebni pane za vlake — omogućava brzo sakrivanje svih vlaka + labela odjednom
 map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
-map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620; // iznad markera, ispod popupa
+map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
+map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390; // ispod vlaka, iznad tile-ova
 const TL = {
   '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c']}),
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
@@ -3551,6 +3552,7 @@ function mapFavDel(i) {
 }
 
 _mapFavLoad();
+_loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
 ['ovl','rec-banner','draw-banner'].forEach(id => {
@@ -5924,6 +5926,42 @@ function updateVlakaLabel(i) {
 // ═══════════════════════════════════════════════════════════════════════════
 // === REFERENTNA KARTA (Image Overlay + Line Detection) ===
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── Šumski kamionski putevi (statički GeoJSON sloj) ──────────────────────────
+let _puteviLayerBg = null;  // bijela pozadina za kontrast
+let _puteviLayerFg = null;  // narandžasta linija
+let _puteviVisible = true;
+
+function _loadPutevi() {
+  fetch('PUTEVI/putevi.geojson')
+    .then(r => r.json())
+    .then(data => {
+      const baseOpts = { pane: 'putevi', interactive: false };
+      _puteviLayerBg = L.geoJSON(data, { ...baseOpts,
+        style: { color: '#fff', weight: 5, opacity: 0.65, lineCap: 'round', lineJoin: 'round' }
+      }).addTo(map);
+      _puteviLayerFg = L.geoJSON(data, { ...baseOpts,
+        style: { color: '#f97316', weight: 3, opacity: 0.9, lineCap: 'round', lineJoin: 'round' },
+        onEachFeature(feature, layer) {
+          if (feature.properties?.name) {
+            layer.bindTooltip(feature.properties.name, { sticky: true, direction: 'top' });
+          }
+        }
+      }).addTo(map);
+      _puteviLayerFg.options.interactive = true; // foreground sloj je klikabilan
+    })
+    .catch(e => console.warn('Putevi GeoJSON nije učitan:', e));
+}
+
+function togglePutevi(show) {
+  _puteviVisible = show;
+  [_puteviLayerBg, _puteviLayerFg].forEach(l => {
+    if (!l) return;
+    if (show) map.addLayer(l); else map.removeLayer(l);
+  });
+  const cb = document.getElementById('putevi-toggle');
+  if (cb) cb.checked = show;
+}
 
 let _refImg = null;       // HTMLImageElement
 let _refBounds = null;    // [[south,west],[north,east]]
@@ -11151,6 +11189,17 @@ function dozBackToList() {
     <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
       <span class="layer-ico">🗺</span>Karta
     </button>
+  </div>
+  <div style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
+    <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
+    <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
+      <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
+        style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span style="display:inline-block;width:28px;height:4px;background:#f97316;border-radius:2px;"></span>
+        Šumski kamionski putevi
+      </span>
+    </label>
   </div>
 </div>
 
