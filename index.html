@@ -2711,7 +2711,7 @@ function _applyVlakeRows(rows) {
   rndList();
   vlake.forEach((v, i) => updateVlakaLabel(i));
   const allPts = vlake.flatMap(v => v.pts.map(p => [p.la, p.lo]));
-  if (allPts.length > 0) {
+  if (allPts.length > 0 && _appStarted) {
     try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
   }
   _syncIbr();
@@ -3107,6 +3107,20 @@ function wgsToMGI(lat, lon) {
   } catch(e) { return null; }
 }
 
+// Inverzno: MGI (y=easting, x=northing kako se prikazuje u badge-u) → [lat, lon]
+function mgiToWgs(y, x) {
+  const [lon, lat] = proj4('MGI-ZONE6', 'EPSG:4326', [y, x]);
+  return [lat, lon];
+}
+// Leaflet zoom za zadanu razmjeru 1:scale na datoj geo-širini
+function zoomForScale(scale, lat) {
+  return Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) / (scale * 0.0002646));
+}
+// Podrazumijevani prikaz po otvaranju: MGI Y=6354662, X=4972300, razmjera 1:50000
+const DEFAULT_VIEW_MGI = { y: 6354662, x: 4972300, scale: 50000 };
+const _defCenter = mgiToWgs(DEFAULT_VIEW_MGI.y, DEFAULT_VIEW_MGI.x);
+const _defZoom   = Math.round(zoomForScale(DEFAULT_VIEW_MGI.scale, _defCenter[0]));
+
 function updMGI(lat, lon) {
   const c = wgsToMGI(lat, lon);
   if (c) {
@@ -3233,7 +3247,10 @@ const CachedOsm  = makeCachedTileLayer();
 const CachedSat  = makeCachedTileLayer();
 
 // === MAP ===
-const map = L.map('map',{zoomControl:false,attributionControl:false}).setView([44.55,16.85],13);
+const map = L.map('map',{zoomControl:false,attributionControl:false}).setView(_defCenter, _defZoom);
+// Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
+let _appStarted = false;
+setTimeout(() => { _appStarted = true; }, 4000);
 // Zasebni pane za vlake — omogućava brzo sakrivanje svih vlaka + labela odjednom
 map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
@@ -9989,7 +10006,7 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
         grp = await _loadOneShp(bucketName, file, opts, extractOdjeli);
       }
 
-      if (grp && !didFit && extractOdjeli) {
+      if (grp && !didFit && extractOdjeli && _appStarted) {
         try { const b = grp.getBounds(); if (b.isValid()) { map.fitBounds(b, { padding: [30,30] }); didFit = true; } } catch {}
       }
     }
