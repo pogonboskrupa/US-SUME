@@ -1298,6 +1298,12 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar #ab-krak-d { color: #f97316; }
 #action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
 #action-bar #ab-krak-d:active { background: rgba(249,115,22,0.1); }
+#action-bar #ab-nazad { color: #a78bfa; }
+#action-bar #ab-nazad:active { background: rgba(167,139,250,0.1); }
+#action-bar #ab-nazad-nm {
+  font-size: 9px; color: #fbbf24; line-height: 1;
+  max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ── Kontrolni panel ispod nv-badge (zoom + layer) ───────── */
 #map-ctrl-bar {
@@ -4399,6 +4405,8 @@ function _updBanner() {
   const parentRow = document.getElementById('rec-parent-row');
   const btnNazad  = document.getElementById('btn-nazad');
   const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
+  const abNazad   = document.getElementById('ab-nazad');
+  const abNazadNm = document.getElementById('ab-nazad-nm');
   if (hasParent) {
     const par = vlake[_recParentIdx];
     const strand = v.strana === 'L' ? 'Lijevi krak' : v.strana === 'D' ? 'Desni krak' : 'Krak';
@@ -4407,9 +4415,13 @@ function _updBanner() {
     parentRow.style.display = 'flex';
     btnNazad.style.display = '';
     btnNazad.textContent = '↩ ' + par.nm;
+    if (abNazad)   abNazad.style.display = '';
+    if (abNazadNm) abNazadNm.textContent = par.nm;
   } else {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
+    if (abNazad)   abNazad.style.display = 'none';
+    if (abNazadNm) abNazadNm.textContent = '';
   }
   _updKrakBtns();
   _updRecStatusBar();
@@ -8203,6 +8215,9 @@ function _updFabVisibility() {
   if (btragEl) btragEl.style.display = inRec ? 'none' : '';
   if (bkrakL)  bkrakL.style.display  = inRec ? '' : 'none';
   if (bkrakD)  bkrakD.style.display  = inRec ? '' : 'none';
+  // ab-nazad: prikaži samo ako recOn i postoji roditelj — _updBanner ga ažurira detaljno
+  const abNazad = document.getElementById('ab-nazad');
+  if (abNazad && !inRec) abNazad.style.display = 'none';
 }
 
 function switchTab(tab) {
@@ -11169,7 +11184,12 @@ function dozBackToList() {
     <span class="ab-ico">🔴</span>
     <span>Snimi trag</span>
   </button>
-  <!-- Mod snimanja vlake (recOn) — krak gumbi -->
+  <!-- Mod snimanja vlake (recOn) — krak gumbi + povratak -->
+  <button id="ab-nazad" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">
+    <span class="ab-ico">↩</span>
+    <span>Vrati se na</span>
+    <span id="ab-nazad-nm"></span>
+  </button>
   <button id="ab-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="display:none;">
     <span class="ab-ico">⊕</span>
     <span>Lijevi krak</span>
