@@ -1321,6 +1321,98 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 #print-header { display:none; }
 #print-footer { display:none; }
+
+/* ── Zoom gumbi ─────────────────────────────────────────── */
+#zoom-btns {
+  position: fixed;
+  right: 10px;
+  bottom: 80px;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+#zoom-btns button {
+  pointer-events: auto;
+  width: 38px; height: 38px;
+  background: #16213e;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 22px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  line-height: 1;
+  padding: 0;
+  transition: background 0.15s;
+}
+#zoom-btns button:active { background: #1e40af; }
+
+/* ── Layer switcher dugme (Leaflet control) ─────────────── */
+#layer-switch-btn {
+  display: block;
+  width: 34px; height: 34px;
+  background: #16213e;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #e2e8f0;
+  margin-top: 4px;
+}
+#layer-switch-btn:active { background: #1e3a5f; }
+
+/* ── Layer switcher bottom sheet ────────────────────────── */
+#layer-sheet {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #0f1f3d;
+  border-radius: 16px 16px 0 0;
+  z-index: 4500;
+  padding: 16px 16px 36px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.6);
+}
+#layer-sheet-bg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 4499;
+}
+#layer-sheet h3 {
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0 0 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+.layer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.layer-opt {
+  background: #16213e;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  color: #cbd5e1;
+  font-size: 13px;
+  padding: 14px 6px;
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.layer-opt span.layer-ico { font-size: 26px; line-height: 1; }
+.layer-opt:active, .layer-opt.active {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #fff;
+}
 </style>
 </head>
 <body>
@@ -3190,6 +3282,7 @@ let activeTool = 'select'; // 'select' | 'addline' | 'addpoint' | 'edit' | 'deln
 let editOn=false, mergeMode=false, mergeFirst=null;
 let editNodeMks=[], editMidMks=[], snapRingMk=null, snapTarget=null;
 let wid=null, lastP=null, posMk=null, posCr=null;
+let _compassHeading = null; // trenutni azimut telefona (0-360°, 0=sjever)
 let kmlLs=[], kmlCI=0;
 let drawPreviewLine=null;
 let drawUndoStack=[];
@@ -3261,7 +3354,20 @@ const TL = {
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
 TL['⛰ Topo'].addTo(map);  // Default: TOPO
-L.control.layers(TL,{},{position:'topright'}).addTo(map);
+// Layer switcher — custom dugme umjesto Leaflet default
+const _LayerSwitchCtrl = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd() {
+    const btn = L.DomUtil.create('button','');
+    btn.id = 'layer-switch-btn';
+    btn.title = 'Promijeni sloj karte';
+    btn.textContent = '⛰';
+    L.DomEvent.disableClickPropagation(btn);
+    L.DomEvent.on(btn, 'click', _openLayerSheet);
+    return btn;
+  }
+});
+new _LayerSwitchCtrl().addTo(map);
 
 // ── Omiljene karte — custom Leaflet control dugme ───────────────────────────
 const _MapFavBtn = L.Control.extend({
@@ -3294,6 +3400,29 @@ function _activeLayerKey() {
     if (map.hasLayer(layer)) return key;
   }
   return null;
+}
+
+// ── Layer switcher sheet ─────────────────────────────────────────────────────
+function _openLayerSheet() {
+  document.getElementById('layer-sheet-bg').style.display = 'block';
+  document.getElementById('layer-sheet').style.display   = 'block';
+  const active = _activeLayerKey();
+  document.querySelectorAll('.layer-opt').forEach(el => el.classList.remove('active'));
+  const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm'};
+  const el = document.getElementById(map2id[active]);
+  if (el) el.classList.add('active');
+}
+function closeLayerSheet() {
+  document.getElementById('layer-sheet-bg').style.display = 'none';
+  document.getElementById('layer-sheet').style.display   = 'none';
+}
+function setLayer(key) {
+  Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  if (TL[key]) TL[key].addTo(map);
+  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+  const btn = document.getElementById('layer-switch-btn');
+  if (btn) btn.textContent = icons[key] || '🗺';
+  closeLayerSheet();
 }
 
 // Pretvori tile URL template u konkretan URL za dati tile
@@ -4701,6 +4830,39 @@ function stopGPS() {
   _updMcdDist();
 }
 
+// ── KOMPAS / SMJER TELEFONA ──────────────────────────────────────────────────
+function _updCompassOnMarker(heading) {
+  if (!posMk) return;
+  const el = posMk.getElement();
+  if (!el) return;
+  const svg = el.querySelector('#loc-svg');
+  if (svg) {
+    svg.style.transform = `rotate(${heading}deg)`;
+    svg.style.transformOrigin = '16px 16px';
+  }
+  const arrow = el.querySelector('#loc-arrow');
+  if (arrow) arrow.style.opacity = '0.85';
+}
+
+function _onDeviceOrientation(e) {
+  let heading = null;
+  if (typeof e.webkitCompassHeading === 'number') {
+    heading = e.webkitCompassHeading; // iOS
+  } else if (e.alpha !== null && e.alpha !== undefined) {
+    heading = (360 - e.alpha) % 360; // Android
+  }
+  if (heading === null) return;
+  _compassHeading = heading;
+  _updCompassOnMarker(heading);
+}
+
+// iOS: deviceorientation s webkitCompassHeading
+window.addEventListener('deviceorientation', e => {
+  if (typeof e.webkitCompassHeading === 'number') _onDeviceOrientation(e);
+}, true);
+// Android: deviceorientationabsolute
+window.addEventListener('deviceorientationabsolute', _onDeviceOrientation, true);
+
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
 const GPS_MIN_DIST  = 2;    // minimalni razmak između snimljenih tačaka (m)
 const GPS_MAX_ACC   = 12;   // ignoriši fikseve lošije od 12m
@@ -4806,13 +4968,19 @@ function onP(p) {
     debouncedUpdElev(la, lo, 200);
   }
 
-  // Marker pozicije
+  // Marker pozicije (SVG s kompasom)
   if (!posMk) {
-    const ico = L.divIcon({className:'', iconSize:[18,18], iconAnchor:[9,9],
-      html:`<div style="width:18px;height:18px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 10px #3b82f6;"></div>`});
+    const ico = L.divIcon({className:'', iconSize:[32,32], iconAnchor:[16,16],
+      html:`<svg id="loc-svg" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="-16 -16 32 32" style="overflow:visible;transform-origin:16px 16px;">
+        <polygon id="loc-arrow" points="0,-18 -6,-6 6,-6" fill="#3b82f6" opacity="0" style="transition:opacity 0.3s;"/>
+        <circle cx="0" cy="0" r="8" fill="#3b82f6" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 0 5px #3b82f6);"/>
+        <circle cx="0" cy="0" r="3" fill="#fff"/>
+      </svg>`});
     posMk = L.marker([la,lo], {icon:ico, zIndexOffset:999}).addTo(map);
     posCr = L.circle([la,lo], {radius:ac, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:0.12, weight:1}).addTo(map);
     map.setView([la,lo], 17);
+    // Primijeni tekući heading ako je dostupan
+    if (_compassHeading !== null) _updCompassOnMarker(_compassHeading);
   } else {
     posMk.setLatLng([la, lo]);
     posCr.setLatLng([la, lo]).setRadius(ac);
@@ -7991,6 +8159,8 @@ function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
   const bannerActive = recOn || activeTool === 'addline';
   document.getElementById('fab-gps').style.display = (onKarta && !bannerActive) ? '' : 'none';
+  const zb = document.getElementById('zoom-btns');
+  if (zb) zb.style.display = onKarta ? '' : 'none';
 }
 
 function switchTab(tab) {
@@ -10960,5 +11130,29 @@ function dozBackToList() {
     </div>
   </div>
 </div>
+
+<!-- Zoom gumbi -->
+<div id="zoom-btns" style="display:none;">
+  <button onclick="map.zoomIn()" title="Uvećaj">＋</button>
+  <button onclick="map.zoomOut()" title="Umanji">－</button>
+</div>
+
+<!-- Layer switcher bottom sheet -->
+<div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
+<div id="layer-sheet">
+  <h3>Pozadinska karta</h3>
+  <div class="layer-grid">
+    <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
+      <span class="layer-ico">⛰</span>Topo
+    </button>
+    <button class="layer-opt" id="lo-sat" onclick="setLayer('🛰 Satelit')">
+      <span class="layer-ico">🛰</span>Satelit
+    </button>
+    <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
+      <span class="layer-ico">🗺</span>Karta
+    </button>
+  </div>
+</div>
+
 </body>
 </html>
