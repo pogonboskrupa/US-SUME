@@ -4621,6 +4621,15 @@ function stopRec() {
     clearTimeout(_vlakaSaveTimers[actI]);
     sbFlushVlaka(actI);
   }
+  // Spremi i sve ostale vlake s pending timerima (npr. krak koji se još nije snimio)
+  Object.keys(_vlakaSaveTimers).forEach(k => {
+    const ki = parseInt(k);
+    if (!isNaN(ki) && ki !== actI && _vlakaSaveTimers[ki]) {
+      clearTimeout(_vlakaSaveTimers[ki]);
+      delete _vlakaSaveTimers[ki];
+      sbFlushVlaka(ki);
+    }
+  });
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
   _showLagerDlg(actI);
@@ -4722,9 +4731,14 @@ function noviKrakStrana(strana) {
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
+  // junctionOnParent: indeks točke na roditeljskoj vlaci gdje krak nastaje
+  // Sprema se pri kreiranju kako bi trim bio precizan (ne ovisi o GPS-u pri povratku)
+  const junctionOnParent = lastP
+    ? _findJunctionIdx(parentV.pts, { la: lastP.la, lo: lastP.lo })
+    : parentV.pts.length - 1;
   const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
                  wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
-                 updatedAt: new Date().toISOString() };
+                 updatedAt: new Date().toISOString(), junctionOnParent };
   vlake.push(krak);
   const krakIdx = vlake.length - 1;
 
@@ -4852,11 +4866,20 @@ function _updDrawStats() {
 
 // Index vlake na koju smo se vratili — koristi se za trim pri prvoj GPS tački
 let _parentReturnIdx = null;
+// Tačan indeks na roditeljskoj vlaci gdje je krak nastao (čuva se pri kreiranju kraka)
+let _parentReturnTrimToIdx = -1;
 
 function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
   const krakIdx = actI;
-  if (krakIdx !== null) updateVlakaLabel(krakIdx);
+  if (krakIdx !== null) {
+    updateVlakaLabel(krakIdx);
+    // Force-spremi krak odmah — ne čekaj debounce
+    clearTimeout(_vlakaSaveTimers[krakIdx]);
+    sbFlushVlaka(krakIdx);
+    // Preuzmi tačan indeks grananja koji je sačuvan pri kreiranju kraka
+    _parentReturnTrimToIdx = vlake[krakIdx]?.junctionOnParent ?? -1;
+  }
   const newActiveIdx = _recParentIdx;
   const parent = vlake[newActiveIdx];
 
@@ -5142,19 +5165,18 @@ function onP(p) {
   if (_parentReturnIdx !== null && actI === _parentReturnIdx) {
     const _prIdx = _parentReturnIdx;
     _parentReturnIdx = null; // briši odmah — trim se radi samo jednom
+    const trimTo = _parentReturnTrimToIdx;
+    _parentReturnTrimToIdx = -1;
     const _prv = vlake[_prIdx];
-    if (_prv && _prv.pts.length >= 2) {
-      const _ci = _findJunctionIdx(_prv.pts, { la: sla, lo: slo });
-      const _cd = dst(_prv.pts[_ci].la, _prv.pts[_ci].lo, sla, slo);
-      // Trim samo ako smo bliže nekom ranijem dijelu vlake (ne zadnjoj tački)
-      // i GPS je dovoljno blizu (< 40m) da je pouzdano locirano na vlaci
-      if (_ci < _prv.pts.length - 1 && _cd < 40) {
-        _prv.pts = _prv.pts.slice(0, _ci + 1);
-        _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
-        updateVlakaLabel(_prIdx);
-        clearTimeout(_vlakaSaveTimers[_prIdx]);
-        sbFlushVlaka(_prIdx);
-      }
+    // Trim samo ako imamo validan indeks grananja (> 0 = ne na samom početku vlake)
+    // i taj indeks nije zadnji — koristi pohranjen indeks, ne GPS, da izbjegnemo
+    // pogrešan trim kad korisnik stane kod puta (početak T1) umjesto kod grananja
+    if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
+      _prv.pts = _prv.pts.slice(0, trimTo + 1);
+      _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
+      updateVlakaLabel(_prIdx);
+      clearTimeout(_vlakaSaveTimers[_prIdx]);
+      sbFlushVlaka(_prIdx);
     }
   }
 
