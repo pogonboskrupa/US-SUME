@@ -4679,30 +4679,6 @@ function noviKrakStrana(strana) {
   if (!junctionPt) { showToast('Greška pri pronalasku spoja!'); return; }
   const snapDistM = lastP ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
 
-  // Umetni junction u parent.pts na pravo mjesto i zapamti indeks
-  // Ovo osigurava da se pri povratku parent može odrezati do junction-a (bez dupli linija)
-  let _jInsertIdx = parentV.pts.length - 1; // default: junction je zadnja tačka
-  if (lastP && parentV.pts.length >= 2) {
-    let bestDist = Infinity;
-    for (let _si = 0; _si < parentV.pts.length - 1; _si++) {
-      const _a = parentV.pts[_si], _b = parentV.pts[_si + 1];
-      const _dx = _b.lo - _a.lo, _dy = _b.la - _a.la;
-      const _lsq = _dx * _dx + _dy * _dy;
-      let _t = _lsq > 0 ? ((junctionPt.lo - _a.lo) * _dx + (junctionPt.la - _a.la) * _dy) / _lsq : 0;
-      _t = Math.max(0, Math.min(1, _t));
-      const _d = dst(junctionPt.la, junctionPt.lo, _a.la + _t * _dy, _a.lo + _t * _dx);
-      if (_d < bestDist) { bestDist = _d; _jInsertIdx = _si + 1; }
-    }
-    // Umetni junction samo ako nije duplikat susjedne tačke
-    const _existing = parentV.pts[_jInsertIdx];
-    if (!_existing || dst(_existing.la, _existing.lo, junctionPt.la, junctionPt.lo) > 0.5) {
-      parentV.pts.splice(_jInsertIdx, 0, { la: junctionPt.la, lo: junctionPt.lo, al: junctionPt.al || 0 });
-      parentV.poly.setLatLngs(parentV.pts.map(p => [p.la, p.lo]));
-    } else {
-      _jInsertIdx = parentV.pts.indexOf(_existing);
-    }
-  }
-
   const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
   const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
@@ -4711,7 +4687,6 @@ function noviKrakStrana(strana) {
 
   const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
                  wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
-                 _parentJunctionIdx: _jInsertIdx,
                  updatedAt: new Date().toISOString() };
   vlake.push(krak);
   const krakIdx = vlake.length - 1;
@@ -4838,26 +4813,15 @@ function _updDrawStats() {
   document.getElementById('draw-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
 }
 
+// Index vlake na koju smo se vratili — koristi se za trim pri prvoj GPS tački
+let _parentReturnIdx = null;
+
 function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
   const krakIdx = actI;
   if (krakIdx !== null) updateVlakaLabel(krakIdx);
   const newActiveIdx = _recParentIdx;
   const parent = vlake[newActiveIdx];
-  const krak   = vlake[krakIdx];
-
-  // Odreži parent vlaku do junction tačke — ukloni sve tačke snimljene IZA raskrsnice
-  // To sprječava duplu liniju kad se nastavi snimanje od junction-a
-  if (krak && typeof krak._parentJunctionIdx === 'number' && parent) {
-    const jIdx = krak._parentJunctionIdx;
-    if (jIdx >= 0 && jIdx < parent.pts.length - 1) {
-      parent.pts = parent.pts.slice(0, jIdx + 1);
-      parent.poly.setLatLngs(parent.pts.map(p => [p.la, p.lo]));
-      updateVlakaLabel(newActiveIdx);
-      clearTimeout(_vlakaSaveTimers[newActiveIdx]);
-      sbFlushVlaka(newActiveIdx);
-    }
-  }
 
   // Pronađi djeda — roditelja roditelja (za dublje gniježđenje)
   const grandparentI = _parentOf(parent);
@@ -4865,6 +4829,9 @@ function vratiSeNaRoditelja() {
   _recParentIdx = grandparentI >= 0 ? grandparentI : null;
   _kfReset(); _lastRecTime = 0;
   selI(actI);
+
+  // Postavi flag: na prvoj GPS tački po nastavku, odreži parent do GPS pozicije
+  _parentReturnIdx = newActiveIdx;
 
   // Auto-pauziraj — povratak se ne snima
   recPaused = true;
@@ -4876,7 +4843,6 @@ function vratiSeNaRoditelja() {
 
   _updBanner();
 
-  // Prikaži poruku u info redu
   document.getElementById('rec-stats').textContent = '⏸ Hodaj nazad, ▶';
 
   showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
@@ -5134,6 +5100,27 @@ function onP(p) {
   }
 
   _lastRecTime = Date.now();
+
+  // Trim pri povratku na roditeljsku vlaku: odreži tačke snimljene IZA mjesta gdje sad stojimo
+  if (_parentReturnIdx !== null && actI === _parentReturnIdx) {
+    const _prIdx = _parentReturnIdx;
+    _parentReturnIdx = null; // briši odmah — trim se radi samo jednom
+    const _prv = vlake[_prIdx];
+    if (_prv && _prv.pts.length >= 2) {
+      const _ci = _findJunctionIdx(_prv.pts, { la: sla, lo: slo });
+      const _cd = dst(_prv.pts[_ci].la, _prv.pts[_ci].lo, sla, slo);
+      // Trim samo ako smo bliže nekom ranijem dijelu vlake (ne zadnjoj tački)
+      // i GPS je dovoljno blizu (< 40m) da je pouzdano locirano na vlaci
+      if (_ci < _prv.pts.length - 1 && _cd < 40) {
+        _prv.pts = _prv.pts.slice(0, _ci + 1);
+        _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
+        updateVlakaLabel(_prIdx);
+        clearTimeout(_vlakaSaveTimers[_prIdx]);
+        sbFlushVlaka(_prIdx);
+      }
+    }
+  }
+
   addPt(actI, sla, slo, al || 0);
 }
 let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
