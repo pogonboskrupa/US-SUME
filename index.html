@@ -637,6 +637,20 @@ select:focus { outline:none; border-color:#3b82f6; }
 .stat-val  { color:#4ade80; font-weight:bold; font-family:monospace; }
 .stat-val.yellow { color:#fbbf24; }
 .stat-val.blue   { color:#60a5fa; }
+.stat-val.red    { color:#f87171; }
+.stat-val.orange { color:#fb923c; }
+.stat-section { font-size:10px;font-weight:bold;color:#334155;text-transform:uppercase;
+  letter-spacing:0.7px;margin:10px 0 5px;padding-top:8px;border-top:1px solid #1e293b; }
+.stat-section:first-child { margin-top:0; border-top:none; }
+/* projektant grid */
+.proj-stat-grid { display:grid; grid-template-columns:1fr auto auto auto; gap:0; font-size:11px; }
+.proj-stat-hdr  { color:#475569; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;
+  padding:3px 6px 5px; border-bottom:1px solid #1e293b; }
+.proj-stat-cell { padding:5px 6px; border-bottom:1px solid #0f172a; color:#94a3b8; }
+.proj-stat-cell.nm { color:#e2e8f0; font-weight:600; }
+.proj-stat-cell.me { color:#4ade80; font-family:monospace; font-weight:bold; }
+.proj-stat-cell.rt { text-align:right; }
+.proj-stat-row-me .proj-stat-cell { background:rgba(251,191,36,0.06); }
 
 /* STD tabela */
 .std-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px; }
@@ -791,10 +805,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-lbl { color:#475569; font-size:9px; }
 #nv-badge .nv-coord { color:#ffffff; font-weight:700; font-size:10px; }
 #nv-badge #map-scale-val { color:#fbbf24; font-weight:bold; font-size:10px; }
-/* Pomjeri Leaflet kontrole ispod badge zaglavlja (badge ~36px visine) */
-/* nv-badge visina ~28px + top 4px = 32px; Leaflet dodaje jos 10px interno */
-#map .leaflet-top-left  { margin-top: 38px; margin-left: 4px; }
-#map .leaflet-top-right { margin-top: 38px; margin-right: 4px; }
+/* Sakrij Leaflet default kontrole (koristimo vlastiti panel) */
+#map .leaflet-top-left,
+#map .leaflet-top-right { display: none !important; }
 
 
 /* === QGIS-STIL TOOLBAR NA MAPI === */
@@ -1285,6 +1298,15 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar button:last-child { border-right: none; }
 #action-bar button:active { background: rgba(255,255,255,0.06); }
 #action-bar .ab-ico { font-size: 19px; line-height: 1; }
+/* U modu snimanja ima 5 gumba — smanji font da stane */
+#action-bar.rec-mode button { font-size: 9px; }
+#action-bar.rec-mode .ab-ico { font-size: 16px; }
+#action-bar.paused-mode button { font-size: 10px; }
+#action-bar #ab-pauza { color: #94a3b8; }
+#action-bar #ab-pauza.resuming { color: #4ade80; }
+#action-bar #ab-pauza:active { background: rgba(255,255,255,0.07); }
+#action-bar #ab-kraj { color: #f87171; }
+#action-bar #ab-kraj:active { background: rgba(248,113,113,0.12); }
 #action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); vertical-align: middle; }
 #action-bar #brec-nm {
@@ -1295,15 +1317,35 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar #btrag.active { color: #f97316; background: rgba(249,115,22,0.09); }
 #action-bar #ab-loc { color: #60a5fa; }
 #action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
+#action-bar #ab-krak-l { color: #38bdf8; }
+#action-bar #ab-krak-d { color: #f97316; }
+#action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
+#action-bar #ab-krak-d:active { background: rgba(249,115,22,0.1); }
+#action-bar #ab-nazad { color: #a78bfa; }
+#action-bar #ab-nazad:active { background: rgba(167,139,250,0.1); }
+#action-bar #ab-nazad-nm {
+  font-size: 9px; color: #fbbf24; line-height: 1;
+  max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
-/* ── Zoom gumbi (Leaflet control, topleft) ──────────────── */
-.leaflet-ctrl-zoom-custom {
+/* ── Kontrolni panel ispod nv-badge (zoom + layer) ───────── */
+#map-ctrl-bar {
+  position: absolute;
+  top: 32px; left: 8px; right: 8px;
+  z-index: 900;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+#map-ctrl-bar > * { pointer-events: auto; }
+#map-zoom-btns {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  border-radius: 5px;
 }
-.leaflet-ctrl-zoom-custom button {
+#map-zoom-btns button {
   width: 34px; height: 34px;
   background: #16213e;
   border: 1px solid #334155;
@@ -1318,18 +1360,19 @@ select:focus { outline:none; border-color:#3b82f6; }
   padding: 0;
   transition: background 0.15s;
 }
-.leaflet-ctrl-zoom-custom button:first-child {
+#map-zoom-btns button:first-child {
   border-top: 1px solid #334155;
   border-radius: 5px 5px 0 0;
 }
-.leaflet-ctrl-zoom-custom button:last-child {
-  border-radius: 0 0 5px 5px;
+#map-zoom-btns button:last-child { border-radius: 0 0 5px 5px; }
+#map-zoom-btns button:active { background: #1e3a5f; }
+#map-layer-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.leaflet-ctrl-zoom-custom button:active { background: #1e3a5f; }
-
-/* ── Layer switcher dugme (Leaflet control) ─────────────── */
-#layer-switch-btn {
-  display: block;
+#layer-switch-btn, #map-fav-btn {
+  display: flex; align-items: center; justify-content: center;
   width: 34px; height: 34px;
   background: #16213e;
   border: 1px solid #334155;
@@ -1337,8 +1380,10 @@ select:focus { outline:none; border-color:#3b82f6; }
   cursor: pointer;
   font-size: 18px;
   color: #e2e8f0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  transition: background 0.15s;
 }
-#layer-switch-btn:active { background: #1e3a5f; }
+#layer-switch-btn:active, #map-fav-btn:active { background: #1e3a5f; }
 
 /* ── Layer switcher bottom sheet ────────────────────────── */
 #layer-sheet {
@@ -1737,6 +1782,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
 
+      <!-- TERENSKE I TEHNIČKE STATISTIKE -->
+      <div class="sec">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="sec-t" style="margin:0;">🏔 Terenske statistike</div>
+          <button class="btn gr" style="margin:0;font-size:11px;padding:5px 10px;" onclick="exportTerenStats()">📥 Izvezi</button>
+        </div>
+        <div id="teren-stats-card">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za statistike</div>
+        </div>
+      </div>
+
       <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
       <div class="sec">
         <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
@@ -1852,6 +1908,26 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="krak-picker-list"></div>
         <div id="krak-picker-empty" style="display:none;font-size:12px;color:#475569;text-align:center;padding:8px 0;">Nema postojećih krakova</div>
       </div>
+      <!-- Modal: izbor kraka prije početka snimanja -->
+      <div id="krak-izbor" style="display:none;position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:2500;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:12px;padding:14px 16px;min-width:240px;max-width:90vw;box-shadow:0 8px 28px rgba(0,0,0,0.75);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span id="krak-izbor-title" style="font-size:13px;font-weight:bold;color:#fbbf24;"></span>
+          <button onclick="_krakIzborClose()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;">
+          <button onclick="_krakIzborDirektno()" style="padding:11px 14px;background:#166534;border:1px solid #4ade80;border-radius:8px;color:#4ade80;font-size:13px;font-weight:bold;cursor:pointer;text-align:left;">
+            ▶ Snimi direktno
+          </button>
+          <div style="display:flex;gap:7px;">
+            <button onclick="_krakIzborStrana('L')" style="flex:1;padding:11px 8px;background:#1e3a5f;border:1px solid #38bdf8;border-radius:8px;color:#38bdf8;font-size:13px;font-weight:bold;cursor:pointer;">
+              ⊕ Lijevi krak
+            </button>
+            <button onclick="_krakIzborStrana('D')" style="flex:1;padding:11px 8px;background:#1e3a5f;border:1px solid #f97316;border-radius:8px;color:#f97316;font-size:13px;font-weight:bold;cursor:pointer;">
+              ⊕ Desni krak
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
         <span class="nv-icon">⛰</span>
@@ -1862,6 +1938,17 @@ select:focus { outline:none; border-color:#3b82f6; }
         <span class="nv-lbl">X</span>&nbsp;<span id="omgi-x" class="nv-coord">—</span>
         <span class="nv-sep">|</span>
         <span class="nv-lbl">1:</span><span id="map-scale-val">—</span>
+      </div>
+      <!-- Kontrolni panel odmah ispod nv-badge: zoom lijevo, slojevi desno -->
+      <div id="map-ctrl-bar" style="display:none;">
+        <div id="map-zoom-btns">
+          <button onclick="map.zoomIn()" title="Uvećaj">＋</button>
+          <button onclick="map.zoomOut()" title="Umanji">－</button>
+        </div>
+        <div id="map-layer-btns">
+          <button id="layer-switch-btn" onclick="_openLayerSheet()" title="Promijeni sloj karte">⛰</button>
+          <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte">⭐</button>
+        </div>
       </div>
       <!-- ═══ GPS SNIMANJE BANNER ═══ -->
       <div id="rec-banner">
@@ -2611,10 +2698,11 @@ function showProjektDetalji(id) {
   sel.innerHTML = '<option value="">— Odaberi projektanta —</option>' +
     available.map(([kid, info]) => `<option value="${kid}">${info.ime}</option>`).join('');
 
-  // Aktiviraj button
+  // Aktiviraj / Deaktiviraj button
   const btn = document.getElementById('pd-aktiviraj-btn');
-  btn.textContent = isAkt ? '✅ Aktivan projekat' : '⚡ Aktiviraj ovaj projekat';
-  btn.className = isAkt ? 'btn g' : 'btn b';
+  btn.textContent = isAkt ? '⏏ Deaktiviraj projekat' : '⚡ Aktiviraj ovaj projekat';
+  btn.className   = isAkt ? 'btn gr' : 'btn b';
+  btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
   // All members can add new clan; only vlasnik can delete project
@@ -2700,6 +2788,8 @@ async function aktivirajProjekt() {
   showProjektDetalji(id); // refresh button state
   rndProjektiList();
   updProjStats(); rndLog();
+  _updFabVisibility();
+  if (p.odjel) _showProjektOdjelHighlight(p.odjel);
   await sbLoadKolegeVlake();
   showToast('Projekat aktiviran: ' + p.odjel);
   // Auto-zoom na odjel poligon ako je poznat
@@ -2716,6 +2806,16 @@ async function aktivirajProjekt() {
   }
 }
 
+function deaktivirajProjekt() {
+  _aktivniProjektId = null;
+  localStorage.removeItem('tvlake_akt_proj');
+  _hideProjektOdjelHighlight();
+  if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
+  rndProjektiList();
+  _updFabVisibility();
+  showToast('Projekat deaktiviran.');
+}
+
 async function deleteProjektUI() {
   const id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
@@ -2729,6 +2829,8 @@ async function deleteProjektUI() {
     _aktivniProjektId = null;
     localStorage.removeItem('tvlake_akt_proj');
     document.getElementById('p-odjel').value = '';
+    _hideProjektOdjelHighlight();
+    _updFabVisibility();
   }
   showProjektiList();
 
@@ -2775,6 +2877,7 @@ function _applyVlakeRows(rows) {
     try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
   }
   _syncIbr();
+  _updFabVisibility();
 }
 
 async function sbLoadVlake() {
@@ -3323,55 +3426,31 @@ const TL = {
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
-TL['⛰ Topo'].addTo(map);  // Default: TOPO
-// Layer switcher — custom dugme umjesto Leaflet default
-// Zoom control — topleft, ispod nv-badge
-const _ZoomCtrl = L.Control.extend({
-  options: { position: 'topleft' },
-  onAdd() {
-    const c = L.DomUtil.create('div', 'leaflet-ctrl-zoom-custom leaflet-bar');
-    c.innerHTML =
-      `<button onclick="map.zoomIn()" title="Uvećaj">＋</button>` +
-      `<button onclick="map.zoomOut()" title="Umanji">－</button>`;
-    L.DomEvent.disableClickPropagation(c);
-    return c;
-  }
-});
-const _zoomCtrl = new _ZoomCtrl().addTo(map);
-
-// Layer switcher — topright, ispod nv-badge
-const _LayerSwitchCtrl = L.Control.extend({
-  options: { position: 'topright' },
-  onAdd() {
-    const btn = L.DomUtil.create('button','');
-    btn.id = 'layer-switch-btn';
-    btn.title = 'Promijeni sloj karte';
-    btn.textContent = '⛰';
-    L.DomEvent.disableClickPropagation(btn);
-    L.DomEvent.on(btn, 'click', _openLayerSheet);
-    return btn;
-  }
-});
-new _LayerSwitchCtrl().addTo(map);
-
-// ── Omiljene karte — custom Leaflet control dugme ───────────────────────────
-const _MapFavBtn = L.Control.extend({
-  options: { position: 'topright' },
-  onAdd() {
-    const btn = L.DomUtil.create('button');
-    btn.style.cssText = 'display:block;width:34px;height:34px;background:#16213e;border:1px solid #334155;border-radius:5px;cursor:pointer;font-size:16px;color:#fbbf24;margin-top:4px;';
-    btn.title = 'Omiljene karte';
-    btn.textContent = '⭐';
-    L.DomEvent.disableClickPropagation(btn);
-    L.DomEvent.on(btn, 'click', openMapFavs);
-    return btn;
-  }
-});
-new _MapFavBtn().addTo(map);
+// Vrati zadnju kartu ili defaultuj na Topo
+(function _restoreLastMap() {
+  let restoredKey = '⛰ Topo';
+  try {
+    const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
+  } catch(e) {}
+  TL[restoredKey].addTo(map);
+  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+  // btn may not exist yet at this point — setLayer later handles it; update after DOM ready
+  setTimeout(() => {
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = icons[restoredKey] || '🗺';
+  }, 0);
+})();
+// Zoom i layer kontrole su sada vlastiti HTML panel (#map-ctrl-bar), ne Leaflet kontrole
 
 // ── Omiljene karte — state & funkcije ───────────────────────────────────────
-const _MAPFAV_KEY = 'tvlake_map_favs';
+const _MAPFAV_KEY  = 'tvlake_map_favs';
+const _LASTMAP_KEY = 'tvlake_last_map';
 let _mapFavs = [];
+
+function _saveLastMap(type, key, sqlId) {
+  try { localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key: key||null, sqlId: sqlId||null })); } catch(e) {}
+}
 
 function _mapFavLoad() {
   try { _mapFavs = JSON.parse(localStorage.getItem(_MAPFAV_KEY) || '[]'); } catch(e) { _mapFavs = []; }
@@ -3407,6 +3486,7 @@ function setLayer(key) {
   const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
   const btn = document.getElementById('layer-switch-btn');
   if (btn) btn.textContent = icons[key] || '🗺';
+  _saveLastMap('tl', key);
   closeLayerSheet();
 }
 
@@ -3510,6 +3590,10 @@ function mapFavSwitch(i) {
     if (!layer) { showToast('Sloj nije dostupan: ' + fav.tlKey); return; }
     Object.values(TL).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
     layer.addTo(map);
+    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = icons[fav.tlKey] || '🗺';
+    _saveLastMap('tl', fav.tlKey);
     showToast('🗺 ' + fav.name);
   } else if (fav.type === 'sqlite') {
     const sl = _sqlLayers.find(s => s.name === fav.sqliteId);
@@ -3517,6 +3601,7 @@ function mapFavSwitch(i) {
     _sqlLayers.forEach(s => { if (s.visible) { map.removeLayer(s.layer); s.visible = false; } });
     sl.layer.addTo(map); sl.visible = true;
     _sqlmapRenderLayers();
+    _saveLastMap('sqlite', null, fav.sqliteId);
     showToast('🗄 ' + fav.name);
   }
   closeMapFavs();
@@ -4046,16 +4131,14 @@ function _closeVlakaPicker() {
 
 function _pickVlaka(i) {
   _closeVlakaPicker();
-  // Čekaj da picker animacija završi prije pokretanja snimanja
   setTimeout(() => {
     selI(i);
     switchTab('karta');
-    togRec();
+    _showKrakIzbor(i);
   }, 260);
 }
 function togSnimTrag() {
-  if (_tragOn) { fabSnimTrag(); return; } // stop
-  _openVlakaPicker('trag');
+  fabSnimTrag();
 }
 
 function _pickVlakaForTrag(i) {
@@ -4066,6 +4149,39 @@ function _pickVlakaForTrag(i) {
     fabSnimTrag();
   }, 260);
 }
+// ─── Krak izbor modal (prije početka snimanja) ────────────────────────────────
+let _krakIzborVlakaIdx = null;
+
+function _showKrakIzbor(i) {
+  _krakIzborVlakaIdx = i;
+  const v = vlake[i];
+  document.getElementById('krak-izbor-title').textContent = v ? v.nm : '';
+  document.getElementById('krak-izbor').style.display = '';
+}
+
+function _krakIzborClose() {
+  document.getElementById('krak-izbor').style.display = 'none';
+  _krakIzborVlakaIdx = null;
+}
+
+function _krakIzborDirektno() {
+  const i = _krakIzborVlakaIdx;
+  _krakIzborClose();
+  if (i === null) return;
+  selI(i);
+  togRec();
+}
+
+function _krakIzborStrana(strana) {
+  const i = _krakIzborVlakaIdx;
+  _krakIzborClose();
+  if (i === null) return;
+  selI(i);
+  togRec();
+  // Kreiraj krak čim snimanje krene (roditeljska vlaka mora imati barem jednu tačku)
+  setTimeout(() => noviKrakStrana(strana), 200);
+}
+
 // ─── Picker search/number input ───────────────────────────────────────────────
 
 // Parsiraj unos u picker inputu: "14" → {br:14,kr:0} ; "14.5" → {br:14,kr:5}
@@ -4343,6 +4459,7 @@ function selI(i) {
   ['mt-addline','mt-addpt','mt-edit','mt-delnode','mt-merge'].forEach(id => {
     const b = document.getElementById(id); if (b) b.disabled = false;
   });
+  _updFabVisibility();
 }
 
 function _updKrakBtns() {
@@ -4364,6 +4481,8 @@ function _updBanner() {
   const parentRow = document.getElementById('rec-parent-row');
   const btnNazad  = document.getElementById('btn-nazad');
   const hasParent = _recParentIdx !== null && vlake[_recParentIdx];
+  const abNazad   = document.getElementById('ab-nazad');
+  const abNazadNm = document.getElementById('ab-nazad-nm');
   if (hasParent) {
     const par = vlake[_recParentIdx];
     const strand = v.strana === 'L' ? 'Lijevi krak' : v.strana === 'D' ? 'Desni krak' : 'Krak';
@@ -4372,9 +4491,13 @@ function _updBanner() {
     parentRow.style.display = 'flex';
     btnNazad.style.display = '';
     btnNazad.textContent = '↩ ' + par.nm;
+    if (abNazad)   abNazad.style.display = '';
+    if (abNazadNm) abNazadNm.textContent = par.nm;
   } else {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
+    if (abNazad)   abNazad.style.display = 'none';
+    if (abNazadNm) abNazadNm.textContent = '';
   }
   _updKrakBtns();
   _updRecStatusBar();
@@ -4540,6 +4663,15 @@ function stopRec() {
     clearTimeout(_vlakaSaveTimers[actI]);
     sbFlushVlaka(actI);
   }
+  // Spremi i sve ostale vlake s pending timerima (npr. krak koji se još nije snimio)
+  Object.keys(_vlakaSaveTimers).forEach(k => {
+    const ki = parseInt(k);
+    if (!isNaN(ki) && ki !== actI && _vlakaSaveTimers[ki]) {
+      clearTimeout(_vlakaSaveTimers[ki]);
+      delete _vlakaSaveTimers[ki];
+      sbFlushVlaka(ki);
+    }
+  });
   if (bufLayers.length > 0) drawBuffers();
   _updRecStatusBar();
   _showLagerDlg(actI);
@@ -4570,6 +4702,37 @@ function toggleRecPause() {
     showToast('▶ Snimanje nastavljeno — ' + (actI !== null ? vlake[actI].nm : ''));
   }
   _updRecStatusBar();
+  _updFabVisibility();
+}
+
+function _krajVlake() {
+  if (!recOn) return;
+  stopRec();
+  _stodaljShow();
+}
+
+function _stodaljShow() {
+  document.getElementById('sto-dalje-sheet').style.display = '';
+  document.getElementById('sto-dalje-bg').style.display = '';
+}
+
+function _stodaljOdustani() {
+  document.getElementById('sto-dalje-sheet').style.display = 'none';
+  document.getElementById('sto-dalje-bg').style.display = 'none';
+}
+
+function _stodaljNovaVlaka() {
+  _stodaljOdustani();
+  // Direktno kreira s prvim slobodnim brojem — zaobilazi conflict dialog koji bi
+  // ostavio korisnika zaglavlje bez načina povratka ako T[n] već postoji
+  const br = _nextMainBr();
+  _doCreateVlaka(br, 0).then(() => {
+    setTimeout(() => {
+      if (actI === null) return;
+      switchTab('karta');
+      togRec();
+    }, 30);
+  });
 }
 
 // Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
@@ -4597,15 +4760,16 @@ function noviKrakStrana(strana) {
   const parentIdx = actI;
   const parentV   = vlake[parentIdx];
   if (parentV.pts.length === 0) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
-  // Snap na najbliže mjesto na matičnoj vlaci (GPS pozicija ili zadnja tačka)
+  // Snap na najbliže mjesto na matičnoj vlaci — samo kad GPS snima (recOn + lastP).
+  // U modu crtanja lastP može biti stali GPS fix iz ranije sesije, pa ignorišemo ga.
   let junctionPt;
-  if (lastP && parentV.pts.length >= 2) {
+  if (recOn && lastP && parentV.pts.length >= 2) {
     junctionPt = _snapToNearestPtOnLine(parentV.pts, lastP.la, lastP.lo);
   } else {
     junctionPt = parentV.pts[parentV.pts.length - 1];
   }
   if (!junctionPt) { showToast('Greška pri pronalasku spoja!'); return; }
-  const snapDistM = lastP ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
+  const snapDistM = (recOn && lastP) ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
 
   const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
@@ -4613,9 +4777,15 @@ function noviKrakStrana(strana) {
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
+  // junctionOnParent: indeks točke na roditeljskoj vlaci gdje krak nastaje.
+  // Čuva se kako trim pri povratku koristio precizan indeks, ne GPS u tom trenutku.
+  // U modu crtanja koristimo zadnju točku (nema pouzdanog GPS-a za snap).
+  const junctionOnParent = (recOn && lastP)
+    ? _findJunctionIdx(parentV.pts, { la: lastP.la, lo: lastP.lo })
+    : parentV.pts.length - 1;
   const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
                  wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
-                 updatedAt: new Date().toISOString() };
+                 updatedAt: new Date().toISOString(), junctionOnParent };
   vlake.push(krak);
   const krakIdx = vlake.length - 1;
 
@@ -4741,19 +4911,47 @@ function _updDrawStats() {
   document.getElementById('draw-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
 }
 
+// Index vlake na koju smo se vratili — koristi se za trim pri prvoj GPS tački
+let _parentReturnIdx = null;
+// Tačan indeks na roditeljskoj vlaci gdje je krak nastao (čuva se pri kreiranju kraka)
+let _parentReturnTrimToIdx = -1;
+
 function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
   const krakIdx = actI;
-  if (krakIdx !== null) updateVlakaLabel(krakIdx);
+  if (krakIdx !== null) {
+    updateVlakaLabel(krakIdx);
+    // Force-spremi krak odmah — ne čekaj debounce; briši key da stopRec ne flushra duplo
+    clearTimeout(_vlakaSaveTimers[krakIdx]);
+    delete _vlakaSaveTimers[krakIdx];
+    sbFlushVlaka(krakIdx);
+    // Preuzmi tačan indeks grananja:
+    //  - ako je krak kreiran u ovoj sesiji, junctionOnParent je direktno pohranjen
+    //  - ako je krak učitan iz baze (nema junctionOnParent), rekomputaj iz prve tačke kraka
+    //    (krak.pts[0] je uvijek snap-točka na roditeljskoj vlaci)
+    let jIdx = vlake[krakIdx]?.junctionOnParent ?? -1;
+    if (jIdx < 0 && vlake[krakIdx]?.pts?.length > 0 && vlake[_recParentIdx]?.pts?.length > 0) {
+      jIdx = _findJunctionIdx(vlake[_recParentIdx].pts, vlake[krakIdx].pts[0]);
+    }
+    _parentReturnTrimToIdx = jIdx;
+  }
   const newActiveIdx = _recParentIdx;
+  const parent = vlake[newActiveIdx];
+
   // Pronađi djeda — roditelja roditelja (za dublje gniježđenje)
-  const grandparentI = _parentOf(vlake[newActiveIdx]);
+  const grandparentI = _parentOf(parent);
   actI = newActiveIdx;
   _recParentIdx = grandparentI >= 0 ? grandparentI : null;
   _kfReset(); _lastRecTime = 0;
   selI(actI);
 
-  // Auto-pauziraj — povratak se ne snima
+  // Postavi flag: na prvoj GPS tački po nastavku, odreži parent do tačke grananja
+  _parentReturnIdx = newActiveIdx;
+
+  // Auto-pauziraj — povratak se ne snima; obračunaj aktivno vrijeme (kao toggleRecPause)
+  if (_recSegStart > 0) { _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
+  _dayWorkEnd = new Date().toISOString();
+  _saveDayTiming(todayStr());
   recPaused = true;
   const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
@@ -4762,8 +4960,8 @@ function vratiSeNaRoditelja() {
   btn.title = 'Nastavi snimanje na vlaci';
 
   _updBanner();
+  _updFabVisibility();
 
-  // Prikaži poruku u info redu
   document.getElementById('rec-stats').textContent = '⏸ Hodaj nazad, ▶';
 
   showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
@@ -5021,6 +5219,26 @@ function onP(p) {
   }
 
   _lastRecTime = Date.now();
+
+  // Trim pri povratku na roditeljsku vlaku: odreži tačke snimljene IZA mjesta gdje sad stojimo
+  if (_parentReturnIdx !== null && actI === _parentReturnIdx) {
+    const _prIdx = _parentReturnIdx;
+    _parentReturnIdx = null; // briši odmah — trim se radi samo jednom
+    const trimTo = _parentReturnTrimToIdx;
+    _parentReturnTrimToIdx = -1;
+    const _prv = vlake[_prIdx];
+    // Trim samo ako imamo validan indeks grananja (> 0 = ne na samom početku vlake)
+    // i taj indeks nije zadnji — koristi pohranjen indeks, ne GPS, da izbjegnemo
+    // pogrešan trim kad korisnik stane kod puta (početak T1) umjesto kod grananja
+    if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
+      _prv.pts = _prv.pts.slice(0, trimTo + 1);
+      _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
+      updateVlakaLabel(_prIdx);
+      clearTimeout(_vlakaSaveTimers[_prIdx]);
+      sbFlushVlaka(_prIdx);
+    }
+  }
+
   addPt(actI, sla, slo, al || 0);
 }
 let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
@@ -7790,7 +8008,200 @@ function updProjStats() {
     }
   }
 
+  updTerenStats();
   rndKolege();
+}
+
+// ── Terenske statistike ───────────────────────────────────────────────────────
+
+function _calcTerenStats() {
+  const allPts = vlake.flatMap(v => v.pts);
+  const hasPts = allPts.length >= 2;
+
+  // Broj vlaka i krakova
+  const nVlaka  = vlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
+  const nKrakovi= vlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
+  const totalLen = calcL(allPts);
+
+  // Visine
+  const alts = allPts.map(p => p.al).filter(a => a && a > 0);
+  const maxAlt = alts.length ? Math.round(Math.max(...alts)) : null;
+  const minAlt = alts.length ? Math.round(Math.min(...alts)) : null;
+
+  // Ukupni uspon/pad (po svakoj vlaci zasebno, ne cross-vlaka)
+  let totalUp = 0, totalDown = 0;
+  vlake.forEach(v => {
+    const e = calcElev(v.pts);
+    totalUp   += e.up;
+    totalDown += e.down;
+  });
+
+  // Prosječan nagib — ponderirani prosjek nagiba po dužini segmenta
+  let sumSlopeDist = 0, sumDist = 0;
+  vlake.forEach(v => {
+    for (let i = 1; i < v.pts.length; i++) {
+      const a = v.pts[i-1], b = v.pts[i];
+      if (!a.al || !b.al || a.al <= 0 || b.al <= 0) continue;
+      const d = dst(a.la, a.lo, b.la, b.lo);
+      if (d < 0.5) continue;
+      const slope = Math.abs(b.al - a.al) / d * 100;
+      sumSlopeDist += slope * d;
+      sumDist += d;
+    }
+  });
+  const avgSlope = sumDist > 1 ? (sumSlopeDist / sumDist).toFixed(1) : null;
+
+  // Prosječna dužina vlake (samo glavne)
+  const mainVlake = vlake.filter(v => v.kr === 0 && v.pts.length >= 2);
+  const avgVlakaLen = mainVlake.length
+    ? Math.round(mainVlake.reduce((s, v) => s + calcL(v.pts), 0) / mainVlake.length)
+    : null;
+
+  const pov = parseFloat(document.getElementById('p-povrsina').value) || 0;
+  const gustoca = pov > 0 ? Math.round(totalLen / pov) : null;
+
+  // Stats po projektantu (kombinirano iz dnevnog loga + aktivni projektant)
+  const myIme = getIme();
+  const allP  = {};
+  dnevniLog.forEach(day => {
+    day.entries.forEach(e => {
+      if (!allP[e.projektant]) allP[e.projektant] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
+      if (e.meters > allP[e.projektant].meters) allP[e.projektant].meters = e.meters;
+      allP[e.projektant].days.add(day.date);
+      allP[e.projektant].workDates.push(day.date);
+      if (e.activeMin != null) allP[e.projektant].activeMin += e.activeMin;
+    });
+  });
+  if (!allP[myIme]) allP[myIme] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
+  allP[myIme].meters = Math.round(calcL(vlake.flatMap(v => v.pts)));
+
+  return { nVlaka, nKrakovi, totalLen, maxAlt, minAlt, totalUp, totalDown, avgSlope,
+           avgVlakaLen, pov, gustoca, allP, myIme, hasPts };
+}
+
+function updTerenStats() {
+  const el = document.getElementById('teren-stats-card');
+  if (!el) return;
+  if (!_aktivniProjektId) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za statistike</div>';
+    return;
+  }
+
+  const s = _calcTerenStats();
+
+  const row = (label, val, cls='', title='') =>
+    `<div class="stat-row"${title ? ` title="${title}"` : ''}>
+       <span class="stat-name">${label}</span>
+       <span class="stat-val ${cls}">${val}</span>
+     </div>`;
+
+  const fAlt = a => a != null ? `${a.toLocaleString()} m n.m.` : '<span style="color:#334155;">—</span>';
+  const fSlope = s => s != null ? `${s} %` : '<span style="color:#334155;">—</span>';
+  const fM = m => m != null ? fmtL(m) : '<span style="color:#334155;">—</span>';
+
+  // Projektanti tabela
+  const entries = Object.entries(s.allP).sort((a,b) => b[1].meters - a[1].meters);
+  const totalAllM = entries.reduce((sum, [,d]) => sum + d.meters, 0);
+  const projGrid = entries.map(([ime, d]) => {
+    const isMe = ime === s.myIme;
+    const days = d.days.size;
+    const hrs  = d.activeMin ? (d.activeMin / 60).toFixed(1) + ' h' : '—';
+    const mDay = days ? fmtL(Math.round(d.meters / days)) + '/d' : '—';
+    return `<div class="proj-stat-cell nm${isMe ? ' me' : ''}">${ime}${isMe ? ' <span style="font-size:9px;opacity:0.5;">(ti)</span>' : ''}</div>
+      <div class="proj-stat-cell rt${isMe ? ' me' : ''}">${fmtL(d.meters)}</div>
+      <div class="proj-stat-cell rt" style="color:#60a5fa;">${days}d · ${hrs}</div>
+      <div class="proj-stat-cell rt" style="color:#94a3b8;">${mDay}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-section" style="margin-top:0;border-top:none;">Vlake</div>
+      ${row('Broj vlaka (glavnih)', s.nVlaka || '—', 'yellow')}
+      ${row('Broj krakova', s.nKrakovi || '—')}
+      ${row('Ukupna dužina', fM(s.totalLen), 'yellow')}
+      ${s.avgVlakaLen != null ? row('Prosj. dužina vlake', fM(s.avgVlakaLen)) : ''}
+
+      <div class="stat-section">Reljef</div>
+      ${row('Najveća tačka', fAlt(s.maxAlt), 'orange', 'Maksimalna nadmorska visina na svim vlakama')}
+      ${row('Najniža tačka', fAlt(s.minAlt), 'blue', 'Minimalna nadmorska visina na svim vlakama')}
+      ${s.maxAlt != null && s.minAlt != null ? row('Visinska razlika', `${(s.maxAlt - s.minAlt).toLocaleString()} m`) : ''}
+      ${row('Ukupni uspon', s.totalUp ? `↑ ${s.totalUp.toLocaleString()} m` : '—', 'green')}
+      ${row('Ukupni pad', s.totalDown ? `↓ ${s.totalDown.toLocaleString()} m` : '—', 'red')}
+      ${row('Prosječan nagib', fSlope(s.avgSlope), s.avgSlope > 25 ? 'red' : s.avgSlope > 15 ? 'orange' : '', 'Ponderirani prosj. nagib po dužini segmenta')}
+
+      <div class="stat-section">Mreža</div>
+      ${row('Površina odjela', s.pov > 0 ? s.pov + ' ha' : '—', 'blue')}
+      ${row('Gustoća mreže', s.gustoca != null ? s.gustoca + ' m/ha' : '—', s.gustoca > 300 ? 'orange' : 'blue', 'Ukupna dužina / površina odjela')}
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-section" style="margin-top:0;border-top:none;">Projektanti</div>
+      <div class="proj-stat-grid">
+        <div class="proj-stat-hdr">Ime</div>
+        <div class="proj-stat-hdr rt">Dužina</div>
+        <div class="proj-stat-hdr rt">Dana · Sati</div>
+        <div class="proj-stat-hdr rt">m/dan</div>
+        ${projGrid || '<div class="proj-stat-cell" style="grid-column:1/-1;color:#475569;">Nema podataka</div>'}
+        <div class="proj-stat-cell" style="grid-column:1/3;font-weight:bold;color:#fbbf24;border-top:1px solid #334155;padding-top:7px;">Ukupno</div>
+        <div class="proj-stat-cell rt" style="color:#fbbf24;font-weight:bold;border-top:1px solid #334155;padding-top:7px;font-family:monospace;">${fmtL(totalAllM)}</div>
+        <div class="proj-stat-cell" style="border-top:1px solid #334155;"></div>
+      </div>
+    </div>`;
+}
+
+function exportTerenStats() {
+  const s = _calcTerenStats();
+  const odjel = getOdjel() || 'odjel';
+  const sumarija = document.getElementById('p-sumarija').value.trim() || '';
+  const std = calcSTD(vlake);
+  const date = todayStr();
+
+  let txt = `PROJEKTOVANJE TRAKTORSKIH VLAKA — STATISTIKE\n`;
+  txt += `${'='.repeat(50)}\n`;
+  txt += `Odjel: ${odjel}  |  GJ/Suma: ${sumarija}  |  Datum: ${date}\n\n`;
+
+  txt += `VLAKE\n${'-'.repeat(30)}\n`;
+  txt += `Broj vlaka (glavnih): ${s.nVlaka}\n`;
+  txt += `Broj krakova: ${s.nKrakovi}\n`;
+  txt += `Ukupna dužina: ${fmtL(s.totalLen)}\n`;
+  if (s.avgVlakaLen) txt += `Prosj. dužina vlake: ${fmtL(s.avgVlakaLen)}\n`;
+
+  txt += `\nRELJEF\n${'-'.repeat(30)}\n`;
+  if (s.maxAlt != null) txt += `Najveća tačka: ${s.maxAlt} m n.m.\n`;
+  if (s.minAlt != null) txt += `Najniža tačka: ${s.minAlt} m n.m.\n`;
+  if (s.maxAlt != null && s.minAlt != null) txt += `Visinska razlika: ${s.maxAlt - s.minAlt} m\n`;
+  if (s.totalUp)  txt += `Ukupni uspon: ↑ ${s.totalUp} m\n`;
+  if (s.totalDown) txt += `Ukupni pad: ↓ ${s.totalDown} m\n`;
+  if (s.avgSlope != null) txt += `Prosječan nagib: ${s.avgSlope} %\n`;
+
+  txt += `\nMREŽA\n${'-'.repeat(30)}\n`;
+  if (s.pov > 0) txt += `Površina odjela: ${s.pov} ha\n`;
+  if (s.gustoca != null) txt += `Gustoća mreže: ${s.gustoca} m/ha\n`;
+
+  txt += `\nSREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA (STDP)\n${'-'.repeat(30)}\n`;
+  if (std.count) {
+    std.rows.forEach(r => {
+      const ind = r.depth > 0 ? '  '.repeat(r.depth) + '└ ' : '';
+      txt += `${ind}${r.nm}: ${fmtL(r.dist)}`;
+      if (r.type === 'krak') txt += ` (${fmtL(r.krakLen)} + ${fmtL(r.toRoad)})`;
+      txt += '\n';
+    });
+    txt += `STDP = ${fmtL(std.avg)}  (${std.count} vlaka/krakova)\n`;
+  }
+
+  txt += `\nPROJEKTANTI\n${'-'.repeat(30)}\n`;
+  Object.entries(s.allP).sort((a,b) => b[1].meters - a[1].meters).forEach(([ime, d]) => {
+    const hrs = d.activeMin ? (d.activeMin / 60).toFixed(1) + ' h' : '—';
+    const mDay = d.days.size ? fmtL(Math.round(d.meters / d.days.size)) + '/dan' : '';
+    txt += `${ime}: ${fmtL(d.meters)}  |  ${d.days.size} dana  |  ${hrs} aktivno  |  ${mDay}\n`;
+  });
+
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Statistike_${odjel}_${date}.txt`;
+  a.click();
+  showToast('📥 Statistike preuzete');
 }
 
 function exportSTDcsv() {
@@ -8156,9 +8567,59 @@ function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
   const ab = document.getElementById('action-bar');
   if (ab) ab.style.display = onKarta ? 'flex' : 'none';
-  // Zoom Leaflet control — sakri/prikaži container
-  if (_zoomCtrl && _zoomCtrl._container) {
-    _zoomCtrl._container.style.display = onKarta ? '' : 'none';
+  const cb = document.getElementById('map-ctrl-bar');
+  if (cb) cb.style.display = onKarta ? 'flex' : 'none';
+
+  const inRec    = recOn;
+  const isPaused = recPaused;
+  const hasParent = inRec && _recParentIdx !== null && vlake[_recParentIdx];
+
+  const g = id => document.getElementById(id);
+  const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
+
+  if (!inRec) {
+    // "Snimi vlaku" samo kad postoji aktivan projekat
+    show('brec', !!_aktivniProjektId);  show('btrag', true);
+    show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
+    show('ab-pauza',false); show('ab-kraj',  false);
+    if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
+    return;
+  }
+
+  show('brec', false); show('btrag', false);
+
+  if (isPaused) {
+    // Pauzirani mod: Nastavi + (Vrati se na roditelja ako u kraku) + (Završi ako glavna vlaka)
+    show('ab-nazad', !!hasParent); show('ab-krak-l', false); show('ab-krak-d', false);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '▶'; if (txt) txt.textContent = 'Nastavi';
+    const bPauza = g('ab-pauza');
+    if (bPauza) { bPauza.classList.add('resuming'); }
+    show('ab-kraj', !hasParent);
+    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
+    if (ab) { ab.classList.remove('rec-mode'); ab.classList.add('paused-mode'); }
+  } else if (hasParent) {
+    // Na kraku: Vrati se na roditelja + Pauza + ⊕L + ⊕D
+    show('ab-nazad', true); show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    const bPauza = g('ab-pauza');
+    if (bPauza) bPauza.classList.remove('resuming');
+    show('ab-kraj', false);
+    if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
+  } else {
+    // Na glavnoj vlaci: Pauza + ⊕L + ⊕D + Kraj
+    show('ab-nazad', false); show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-pauza', true);
+    const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
+    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    const bPauza = g('ab-pauza');
+    if (bPauza) bPauza.classList.remove('resuming');
+    show('ab-kraj', true);
+    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Kraj vlake';
+    if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
   }
 }
 
@@ -9816,12 +10277,45 @@ function _extractGraniceOdjeli(doc) {
     if (allPts.length > 0) graniceOdjeli.push({ name, bounds: L.latLngBounds(allPts), ring: ring || null });
   });
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+  _refreshProjektOdjelHighlight();
 }
 
 // ── GeoJSON odjeli ────────────────────────────────────────────────────────────
 const _GEOJSON_LS_KEY = 'tvlake_geojson_odjeli';
 let _geojsonLayer = null;
 let _geojsonVisible = true;
+let _projektOdjelLayer = null;  // highlight polygon aktivnog projekta
+
+function _findGraniceMatch(name) {
+  if (!name || !graniceOdjeli.length) return null;
+  const low = name.toLowerCase();
+  return graniceOdjeli.find(o => o.name === name)
+      || graniceOdjeli.find(o => o.name.toLowerCase() === low)
+      || graniceOdjeli.find(o => low.includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(low))
+      || null;
+}
+
+function _hideProjektOdjelHighlight() {
+  if (_projektOdjelLayer) { try { map.removeLayer(_projektOdjelLayer); } catch(e) {} _projektOdjelLayer = null; }
+}
+
+function _showProjektOdjelHighlight(odjelName) {
+  _hideProjektOdjelHighlight();
+  const match = _findGraniceMatch(odjelName);
+  if (!match?.ring) return;
+  _projektOdjelLayer = L.polygon(match.ring, {
+    color: '#f97316', weight: 2.5, opacity: 0.85,
+    fillColor: '#f97316', fillOpacity: 0.07,
+    dashArray: '7,5', pane: 'putevi'
+  }).addTo(map);
+  _projektOdjelLayer.bindTooltip('📂 ' + match.name, { sticky: true, className: 'leaflet-tooltip' });
+}
+
+function _refreshProjektOdjelHighlight() {
+  if (!_aktivniProjektId) return;
+  const p = _projekti.find(x => x.id === _aktivniProjektId);
+  if (p?.odjel) _showProjektOdjelHighlight(p.odjel);
+}
 
 function _gjPropName(props) {
   // Auto-detect which property contains the odjel name
@@ -9874,6 +10368,7 @@ function _applyGeoJSONOdjeli(data) {
     }
   });
   if (_geojsonVisible) _geojsonLayer.addTo(map);
+  _refreshProjektOdjelHighlight();
   return added;
 }
 
@@ -9951,6 +10446,7 @@ function geojsonOdjeliRestore() {
         }
       });
       graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+      _refreshProjektOdjelHighlight();
       _geojsonOdjeliUpdUI();
     } else {
       _applyGeoJSONOdjeli(data);
@@ -11116,6 +11612,7 @@ function dozBackToList() {
 
 <!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
 <div id="action-bar">
+  <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
     <span>Snimi vlaku</span>
@@ -11125,12 +11622,58 @@ function dozBackToList() {
     <span class="ab-ico">🔴</span>
     <span>Snimi trag</span>
   </button>
+  <!-- Mod snimanja vlake (recOn) — krak gumbi + povratak -->
+  <button id="ab-nazad" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">
+    <span class="ab-ico">↩</span>
+    <span>Vrati se na</span>
+    <span id="ab-nazad-nm"></span>
+  </button>
+  <button id="ab-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="display:none;">
+    <span class="ab-ico">⊕</span>
+    <span>Lijevi krak</span>
+  </button>
+  <button id="ab-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="display:none;">
+    <span class="ab-ico">⊕</span>
+    <span>Desni krak</span>
+  </button>
+  <!-- Pauza / Nastavi (tokom snimanja) -->
+  <button id="ab-pauza" onclick="toggleRecPause()" title="Pauza / Nastavi" style="display:none;">
+    <span class="ab-ico" id="ab-pauza-ico">⏸</span>
+    <span id="ab-pauza-txt">Pauza</span>
+  </button>
+  <!-- Kraj vlake (otvara što-dalje sheet) -->
+  <button id="ab-kraj" onclick="_krajVlake()" title="Završi snimanje" style="display:none;">
+    <span class="ab-ico">⏹</span>
+    <span id="ab-kraj-txt">Kraj vlake</span>
+  </button>
+  <!-- Uvijek vidljivo -->
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
     <span>Moja lokacija</span>
   </button>
 </div>
 
+<!-- Što dalje? sheet — prikazuje se nakon završetka snimanja vlake -->
+<div id="sto-dalje-bg" onclick="_stodaljOdustani()"
+  style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(0,0,0,0.55);"></div>
+<div id="sto-dalje-sheet" style="display:none;position:fixed;left:0;right:0;bottom:0;
+  z-index:3201;background:#0f1f3d;border-radius:16px 16px 0 0;
+  border-top:2px solid #1e3a5f;padding:18px 16px 40px;
+  box-shadow:0 -6px 28px rgba(0,0,0,0.65);">
+  <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:16px;">Vlaka završena</div>
+  <div style="display:flex;flex-direction:column;gap:9px;">
+    <button id="sdb-nova" onclick="_stodaljNovaVlaka()"
+      style="padding:14px 16px;background:#166534;border:1px solid #4ade80;border-radius:9px;
+             color:#4ade80;font-size:15px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:22px;">🚜</span>
+      <span>Započni novu vlaku (kreće od puta)</span>
+    </button>
+    <button onclick="_stodaljOdustani()"
+      style="padding:10px;background:none;border:none;color:#475569;font-size:12px;cursor:pointer;">
+      ✕ Odustani
+    </button>
+  </div>
+</div>
 
 <!-- Layer switcher bottom sheet -->
 <div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
