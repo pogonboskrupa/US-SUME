@@ -3410,12 +3410,31 @@ const TL = {
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
-TL['⛰ Topo'].addTo(map);  // Default: TOPO
+// Vrati zadnju kartu ili defaultuj na Topo
+(function _restoreLastMap() {
+  let restoredKey = '⛰ Topo';
+  try {
+    const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
+  } catch(e) {}
+  TL[restoredKey].addTo(map);
+  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+  // btn may not exist yet at this point — setLayer later handles it; update after DOM ready
+  setTimeout(() => {
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = icons[restoredKey] || '🗺';
+  }, 0);
+})();
 // Zoom i layer kontrole su sada vlastiti HTML panel (#map-ctrl-bar), ne Leaflet kontrole
 
 // ── Omiljene karte — state & funkcije ───────────────────────────────────────
-const _MAPFAV_KEY = 'tvlake_map_favs';
+const _MAPFAV_KEY  = 'tvlake_map_favs';
+const _LASTMAP_KEY = 'tvlake_last_map';
 let _mapFavs = [];
+
+function _saveLastMap(type, key, sqlId) {
+  try { localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key: key||null, sqlId: sqlId||null })); } catch(e) {}
+}
 
 function _mapFavLoad() {
   try { _mapFavs = JSON.parse(localStorage.getItem(_MAPFAV_KEY) || '[]'); } catch(e) { _mapFavs = []; }
@@ -3451,6 +3470,7 @@ function setLayer(key) {
   const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
   const btn = document.getElementById('layer-switch-btn');
   if (btn) btn.textContent = icons[key] || '🗺';
+  _saveLastMap('tl', key);
   closeLayerSheet();
 }
 
@@ -3554,6 +3574,10 @@ function mapFavSwitch(i) {
     if (!layer) { showToast('Sloj nije dostupan: ' + fav.tlKey); return; }
     Object.values(TL).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
     layer.addTo(map);
+    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = icons[fav.tlKey] || '🗺';
+    _saveLastMap('tl', fav.tlKey);
     showToast('🗺 ' + fav.name);
   } else if (fav.type === 'sqlite') {
     const sl = _sqlLayers.find(s => s.name === fav.sqliteId);
@@ -3561,6 +3585,7 @@ function mapFavSwitch(i) {
     _sqlLayers.forEach(s => { if (s.visible) { map.removeLayer(s.layer); s.visible = false; } });
     sl.layer.addTo(map); sl.visible = true;
     _sqlmapRenderLayers();
+    _saveLastMap('sqlite', null, fav.sqliteId);
     showToast('🗄 ' + fav.name);
   }
   closeMapFavs();
