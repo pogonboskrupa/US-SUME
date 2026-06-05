@@ -12,6 +12,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- Preconnect: otvori TCP/TLS konekciju za CDN domene unaprijed -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
@@ -2313,17 +2318,19 @@ async function sbLoadProfile() {
 function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
-  _setOfflineMode(!navigator.onLine); // Postavi offline indikator odmah
-  switchTab('karta');   // defaultno pokaži kartu
-  loadProj();           // lokalni podaci odmah
-  sbInitData();         // Supabase async override
-  sqlmapRestoreAll();   // obnovi SQLiteDB karte iz pretraživača
-  geojsonOdjeliRestore();
-  _tragRegLoad();
-  _msrRegLoad();
-  _refRepoLoad();
-  // Procesiraj eventualni offline red čim dobijemo mrežu
+  _setOfflineMode(!navigator.onLine);
+  switchTab('karta');
+  loadProj();      // lokalni podaci odmah (sinhrono, brzo)
+  sbInitData();    // Supabase podaci u pozadini
   if (navigator.onLine) _processOfflineQueue();
+  // Nekritični restores odgoditi iza prvog painta — ne blokiraju prikaz karte
+  setTimeout(() => {
+    sqlmapRestoreAll();
+    geojsonOdjeliRestore();
+    _tragRegLoad();
+    _msrRegLoad();
+    _refRepoLoad();
+  }, 80);
 }
 
 // --- Auth form helpers ---
@@ -2518,18 +2525,19 @@ let kolegeLabels = []; // label markers za kolege vlake
 
 async function sbInitData() {
   if (!sbProfile) return;
+  // Sve nezavisne operacije paralelno — smanjuje waterfall s 3+ sek na ~1 sek
   await Promise.all([
     sbLoadProjekti(),
     sbLoadVlake(),
     sbLoadLog(),
-    sbLoadTextLabelsDB()
+    sbLoadTextLabelsDB(),
+    sbLoadKolege(),       // nema zavisnosti → može paralelno
+    sbLoadOdjeli(),       // nema zavisnosti → može paralelno
+    loadGlobalKmlStyles() // nema zavisnosti → može paralelno
   ]);
-  sbLoadKolege();
-  sbLoadOdjeli();
-  await sbLoadKolegeVlake();
-  sbStartRealtime();
-  await loadGlobalKmlStyles(); // učitaj globalne stilove (admin-set) prije slojeva
-  autoLoadAllKmlBuckets();     // učitaj KML granice iz storage bucketa
+  sbStartRealtime();          // fire-and-forget
+  await sbLoadKolegeVlake();  // treba _aktivniProjektId iz sbLoadProjekti
+  autoLoadAllKmlBuckets();    // fire-and-forget (granice u pozadini)
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -10688,8 +10696,11 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
 // Poziva se iz sbInitData() nakon prijave
 async function autoLoadAllKmlBuckets() {
   const graniceStyle = { color: '#22c55e', weight: 2, dashArray: '6 4', opacity: 0.9 };
-  await autoLoadStorageBucket('Granice odjela', graniceStyle, true);
-  await autoLoadStorageBucket('ODJELI_ODSJECI', _ODJEL_STYLE);
+  // Oba bucketa paralelno — prepolovljava ukupno čekanje
+  await Promise.all([
+    autoLoadStorageBucket('Granice odjela', graniceStyle, true),
+    autoLoadStorageBucket('ODJELI_ODSJECI', _ODJEL_STYLE)
+  ]);
 }
 
 // =====================================================================
