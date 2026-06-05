@@ -2789,6 +2789,7 @@ async function aktivirajProjekt() {
   rndProjektiList();
   updProjStats(); rndLog();
   _updFabVisibility();
+  if (p.odjel) _showProjektOdjelHighlight(p.odjel);
   await sbLoadKolegeVlake();
   showToast('Projekat aktiviran: ' + p.odjel);
   // Auto-zoom na odjel poligon ako je poznat
@@ -2808,6 +2809,7 @@ async function aktivirajProjekt() {
 function deaktivirajProjekt() {
   _aktivniProjektId = null;
   localStorage.removeItem('tvlake_akt_proj');
+  _hideProjektOdjelHighlight();
   if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
   rndProjektiList();
   _updFabVisibility();
@@ -2827,6 +2829,7 @@ async function deleteProjektUI() {
     _aktivniProjektId = null;
     localStorage.removeItem('tvlake_akt_proj');
     document.getElementById('p-odjel').value = '';
+    _hideProjektOdjelHighlight();
     _updFabVisibility();
   }
   showProjektiList();
@@ -10274,12 +10277,45 @@ function _extractGraniceOdjeli(doc) {
     if (allPts.length > 0) graniceOdjeli.push({ name, bounds: L.latLngBounds(allPts), ring: ring || null });
   });
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+  _refreshProjektOdjelHighlight();
 }
 
 // ── GeoJSON odjeli ────────────────────────────────────────────────────────────
 const _GEOJSON_LS_KEY = 'tvlake_geojson_odjeli';
 let _geojsonLayer = null;
 let _geojsonVisible = true;
+let _projektOdjelLayer = null;  // highlight polygon aktivnog projekta
+
+function _findGraniceMatch(name) {
+  if (!name || !graniceOdjeli.length) return null;
+  const low = name.toLowerCase();
+  return graniceOdjeli.find(o => o.name === name)
+      || graniceOdjeli.find(o => o.name.toLowerCase() === low)
+      || graniceOdjeli.find(o => low.includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(low))
+      || null;
+}
+
+function _hideProjektOdjelHighlight() {
+  if (_projektOdjelLayer) { try { map.removeLayer(_projektOdjelLayer); } catch(e) {} _projektOdjelLayer = null; }
+}
+
+function _showProjektOdjelHighlight(odjelName) {
+  _hideProjektOdjelHighlight();
+  const match = _findGraniceMatch(odjelName);
+  if (!match?.ring) return;
+  _projektOdjelLayer = L.polygon(match.ring, {
+    color: '#f97316', weight: 2.5, opacity: 0.85,
+    fillColor: '#f97316', fillOpacity: 0.07,
+    dashArray: '7,5', pane: 'putevi'
+  }).addTo(map);
+  _projektOdjelLayer.bindTooltip('📂 ' + match.name, { sticky: true, className: 'leaflet-tooltip' });
+}
+
+function _refreshProjektOdjelHighlight() {
+  if (!_aktivniProjektId) return;
+  const p = _projekti.find(x => x.id === _aktivniProjektId);
+  if (p?.odjel) _showProjektOdjelHighlight(p.odjel);
+}
 
 function _gjPropName(props) {
   // Auto-detect which property contains the odjel name
@@ -10332,6 +10368,7 @@ function _applyGeoJSONOdjeli(data) {
     }
   });
   if (_geojsonVisible) _geojsonLayer.addTo(map);
+  _refreshProjektOdjelHighlight();
   return added;
 }
 
@@ -10409,6 +10446,7 @@ function geojsonOdjeliRestore() {
         }
       });
       graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
+      _refreshProjektOdjelHighlight();
       _geojsonOdjeliUpdUI();
     } else {
       _applyGeoJSONOdjeli(data);
