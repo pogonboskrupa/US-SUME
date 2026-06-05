@@ -2787,6 +2787,7 @@ async function aktivirajProjekt() {
   showProjektDetalji(id); // refresh button state
   rndProjektiList();
   updProjStats(); rndLog();
+  _updFabVisibility();
   await sbLoadKolegeVlake();
   showToast('Projekat aktiviran: ' + p.odjel);
   // Auto-zoom na odjel poligon ako je poznat
@@ -2816,6 +2817,7 @@ async function deleteProjektUI() {
     _aktivniProjektId = null;
     localStorage.removeItem('tvlake_akt_proj');
     document.getElementById('p-odjel').value = '';
+    _updFabVisibility();
   }
   showProjektiList();
 
@@ -8563,8 +8565,8 @@ function _updFabVisibility() {
   const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
 
   if (!inRec) {
-    // "Snimi vlaku" samo kad postoji odabrana vlaka (aktivan projekat)
-    show('brec',    actI !== null);  show('btrag', true);
+    // "Snimi vlaku" samo kad postoji aktivan projekat
+    show('brec', !!_aktivniProjektId);  show('btrag', true);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
