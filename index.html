@@ -5107,37 +5107,61 @@ window.addEventListener('deviceorientation', e => {
 window.addEventListener('deviceorientationabsolute', _onDeviceOrientation, true);
 
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
-const GPS_MIN_DIST  = 2;    // minimalni razmak između snimljenih tačaka (m)
-const GPS_MAX_ACC   = 12;   // ignoriši fikseve lošije od 12m
-const GPS_MAX_JUMP  = 40;   // katastrofalni skok (GPS izgubio signal) → reset Kalmana (m)
-const GPS_MAX_SPEED = 2.5;  // maksimalna brzina hoda (m/s ≈ 9 km/h)
-const GPS_MAX_TURN  = 110;  // maksimalni nagli zaokret (°) za bearing check
+const GPS_MIN_DIST  = 1;    // minimalni razmak između snimljenih tačaka (m)
+const GPS_MAX_ACC   = 12;   // osnova za tačnost; dinamički se povećava kad traktor brzo ide
+const GPS_MAX_JUMP  = 35;   // katastrofalni skok → reset Kalmana (m)
+const GPS_MAX_SPEED = 8.0;  // maks. brzina traktora praznog povratka (m/s ≈ 29 km/h)
+const GPS_MAX_TURN  = 120;  // maks. nagli zaokret (°) za bearing check
 
 // ─── KALMAN FILTER ───────────────────────────────────────────────────────────
-// Model: hod s konstantnom brzinom + ubrzanje kao procesni šum
-// Stanje: pozicija (lat, lon) + brzina (vla, vlo)
-// Mjerni šum R = acc² — loš GPS signal → manje vjerujemo mjerenju, više predviđanju
-// Procesni šum Q ∝ KF_ACC_NOISE² · dt⁴ — fizika: ubrzanje × kvadrat koraka
-const KF_ACC_NOISE = 1.5;   // m/s² — max ubrzanje pri hodu po šumi
-const KF_MIN_R     = 1.5;   // m — minimalni mjerni šum (floor za odlično acc)
+// Model: konstantna brzina + ubrzanje kao procesni šum
+// Mjerni šum R = max(KF_MIN_R, acc)² — slabiji GPS → manje vjerujemo mjerenju
+// Procesni šum Q ∝ KF_ACC_NOISE² · dt⁴
+const KF_ACC_NOISE = 1.0;   // m/s² — ubrzanje traktora (predvidljivije od hoda)
+const KF_MIN_R     = 0.8;   // m — floor za odličan GPS signal (< 1m acc)
 const MPDEG        = 111320; // ≈ metri po stepenu geografske širine
 
 let _kf          = null;   // Kalman state: {la,lo,vla,vlo,Pla,Plo,t}
 let _lastRecTime = 0;      // timestamp zadnje snimljene tačke
 
-function _kfReset() { _kf = null; }
+// ─── GPS WARM-UP BUFFER ───────────────────────────────────────────────────────
+// Prvih N fikseva sakupljamo u bafer; tek kad se stabilizuju pokrećemo snimanje.
+// Sprječava inicijalni skok od 20–100 m pri hladnom startu GPS-a.
+const GPS_WARMUP_COUNT = 3;   // broj fikseva potrebnih za inicijalizaciju
+let _warmupBuf = [];           // [{la,lo,ac}] — raw fiksevi iz bafere
+
+// Težinski centroid — veća težina = bolji (manji) acc
+function _weightedCentroid(pts) {
+  let wla = 0, wlo = 0, wSum = 0;
+  pts.forEach(p => { const w = 1 / (p.ac * p.ac); wla += p.la * w; wlo += p.lo * w; wSum += w; });
+  return { la: wla / wSum, lo: wlo / wSum };
+}
+
+function _kfReset() { _kf = null; _warmupBuf = []; _altEma = null; }
 
 function _kfStep(la, lo, ac, tMs) {
-  const R    = Math.max(KF_MIN_R, ac);
+  const R     = Math.max(KF_MIN_R, ac);
   const mpdLo = MPDEG * Math.cos(la * Math.PI / 180);
 
-  // ── INICIJALIZACIJA ──────────────────────────────────────────────────────
+  // ── WARM-UP — sakupljaj fikseve dok se GPS ne stabilizuje ────────────────
   if (!_kf) {
-    _kf = { la, lo, vla: 0, vlo: 0,
+    _warmupBuf.push({ la, lo, ac });
+    if (_warmupBuf.length < GPS_WARMUP_COUNT) return null;
+    // Provjeri da li su sve tačke konzistentne (radijus raspršenosti ≤ acc praga)
+    const c = _weightedCentroid(_warmupBuf);
+    const maxSpread = Math.max(..._warmupBuf.map(p => dst(c.la, c.lo, p.la, p.lo)));
+    if (maxSpread > GPS_MAX_ACC) {
+      // Fiksevi su raštrkani — odbaci najstariji i nastavi čekati
+      _warmupBuf.shift();
+      return null;
+    }
+    // GPS se stabilizovao — inicijaliziraj Kalman centroidom
+    _kf = { la: c.la, lo: c.lo, vla: 0, vlo: 0,
             Pla: (R / MPDEG)  ** 2,
             Plo: (R / mpdLo)  ** 2,
             t: tMs };
-    return null;  // 1. fix = inicijalizacija, ne snimaj još
+    _warmupBuf = [];
+    return { la: _kf.la, lo: _kf.lo };  // prva snimljena tačka = centroid
   }
 
   const dt = Math.min(10, Math.max(0.05, (tMs - _kf.t) / 1000));
@@ -5146,26 +5170,34 @@ function _kfStep(la, lo, ac, tMs) {
   // ── PREDICT — konstantna brzina ──────────────────────────────────────────
   const predLa = _kf.la + _kf.vla * dt;
   const predLo = _kf.lo + _kf.vlo * dt;
-  // Procesni šum: varijanca pozicije = (a_noise · dt²/2)²
   const qPos = (KF_ACC_NOISE * dt * dt * 0.5) ** 2;
   const Pla  = _kf.Pla + qPos / (MPDEG  * MPDEG);
   const Plo  = _kf.Plo + qPos / (mpdLo  * mpdLo);
 
+  // ── MULTIPATH DETEKCIJA — odbaci fikseve koji su daleko od predikcije ────
+  // Ako je GPS mjerni šum premali a skok od predikcije velik → vjerovatno spike
+  const predDistM = dst(predLa, predLo, la, lo);
+  if (_kf && predDistM > Math.max(GPS_MAX_JUMP * 0.6, ac * 2.5)) {
+    // Ne resetuj cijeli Kalman — samo ignoriši ovaj fix i ojačaj nesigurnost
+    _kf.Pla = Math.min(_kf.Pla * 2, (20 / MPDEG) ** 2);
+    _kf.Plo = Math.min(_kf.Plo * 2, (20 / mpdLo) ** 2);
+    return null;
+  }
+
   // ── UPDATE — ponderiraj predviđanje i mjerenje ───────────────────────────
   const Rla  = (R / MPDEG)  ** 2;
   const Rlo  = (R / mpdLo)  ** 2;
-  const Kla  = Pla / (Pla + Rla);  // Kalman gain: blizu 1 → vjeruj GPS-u, blizu 0 → vjeruj predviđanju
+  const Kla  = Pla / (Pla + Rla);
   const Klo  = Plo / (Plo + Rlo);
 
   const newLa = predLa + Kla * (la - predLa);
   const newLo = predLo + Klo * (lo - predLo);
 
-  // Ažuriraj brzinu (spori exponential smoothing — otporan na nagle GPS skokove)
-  const alpha = Math.min(1, dt / 4.0);
+  // Ažuriraj brzinu (brži smoothing nego ranije — traktor drži brzinu dulje)
+  const alpha = Math.min(1, dt / 3.0);
   _kf.vla = (1 - alpha) * _kf.vla + alpha * (newLa - _kf.la) / dt;
   _kf.vlo = (1 - alpha) * _kf.vlo + alpha * (newLo - _kf.lo) / dt;
 
-  // Ograniči brzinu — hodač ne može ići brže od GPS_MAX_SPEED
   const vMs = Math.sqrt((_kf.vla * MPDEG) ** 2 + (_kf.vlo * mpdLo) ** 2);
   if (vMs > GPS_MAX_SPEED) {
     const sc = GPS_MAX_SPEED / vMs;
@@ -5179,6 +5211,16 @@ function _kfStep(la, lo, ac, tMs) {
   return { la: _kf.la, lo: _kf.lo };
 }
 
+// ─── EMA FILTAR ZA NADMORSKU VISINU ──────────────────────────────────────────
+let _altEma = null;
+const ALT_EMA_ALPHA = 0.25;  // 0=ignoriši GPS, 1=uzmi direktno; 0.25 = lagano glačanje
+function _filteredAlt(al) {
+  if (al == null) return null;
+  if (_altEma === null) { _altEma = al; return al; }
+  _altEma = ALT_EMA_ALPHA * al + (1 - ALT_EMA_ALPHA) * _altEma;
+  return Math.round(_altEma * 10) / 10;
+}
+
 // Bearing (smjer) između dvije GPS tačke u stepenima (0–360)
 function _gpsBearing(la1, lo1, la2, lo2) {
   const dLo = (lo2 - lo1) * Math.PI / 180;
@@ -5190,19 +5232,24 @@ function _gpsBearing(la1, lo1, la2, lo2) {
 }
 
 function onP(p) {
-  const {latitude:la, longitude:lo, altitude:al, accuracy:ac} = p.coords;
-  lastP = {la, lo, al: al||0, ac};
+  const { latitude: la, longitude: lo, altitude: al, accuracy: ac,
+          speed: gpsSpeed, heading: gpsHeading } = p.coords;
+  const filtAl = _filteredAlt(al);
+  lastP = { la, lo, al: filtAl ?? 0, ac };
   _lastGpsFixTime = Date.now();
-  _gpsRestartCount = 0; // resetuj brojač grešaka nakon uspješnog fixa
+  _gpsRestartCount = 0;
   _addTragPoint(la, lo, al);
   _updMcdDist();
 
-  // Prikaz uvijek
-  document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m`;
+  // Prikaz uvijek — pokaži brzinu ako je dostupna
+  const speedKmh = (gpsSpeed != null && gpsSpeed >= 0) ? ` ${Math.round(gpsSpeed * 3.6)}km/h` : '';
+  const warmTxt  = (recOn && !recPaused && _warmupBuf.length > 0 && _warmupBuf.length < GPS_WARMUP_COUNT)
+    ? ` (GPS stabilizacija ${_warmupBuf.length}/${GPS_WARMUP_COUNT})` : '';
+  document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m${speedKmh}${warmTxt}`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   if (al != null) {
     _gpsAlt = true;
-    const nvGpsTxt = Math.round(al) + ' m 📡';
+    const nvGpsTxt = Math.round(filtAl ?? al) + ' m 📡';
     document.getElementById('onv').textContent = nvGpsTxt;
     const nvVal = document.getElementById('nv-val');
     if (nvVal) nvVal.textContent = nvGpsTxt;
@@ -5222,7 +5269,6 @@ function onP(p) {
     posMk = L.marker([la,lo], {icon:ico, zIndexOffset:999}).addTo(map);
     posCr = L.circle([la,lo], {radius:ac, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:0.12, weight:1}).addTo(map);
     map.setView([la,lo], 17);
-    // Primijeni tekući heading ako je dostupan
     if (_compassHeading !== null) _updCompassOnMarker(_compassHeading);
   } else {
     posMk.setLatLng([la, lo]);
@@ -5231,20 +5277,19 @@ function onP(p) {
 
   if (!recOn || recPaused || actI === null) return;
 
-  // 1. FILTER TAČNOSTI — odbaci fikseve lošije od praga
-  if (ac > GPS_MAX_ACC) return;
+  // 1. FILTER TAČNOSTI — adaptivan prag: pri visokoj GPS brzini prihvatamo malo više šuma
+  //    Kad traktor ide brzo (prazni povratak) GPS accuracy može biti 12–18 m ali je fixno.
+  const dynMaxAcc = (gpsSpeed != null && gpsSpeed > 2.0) ? Math.min(20, GPS_MAX_ACC * 1.6) : GPS_MAX_ACC;
+  if (ac > dynMaxAcc) return;
 
   // 2. FILTER KATASTROFALNOG SKOKA — GPS izgubio signal i teleportovao se
-  //    Mali skokovi (multipath) Kalman sam glača — ovo je samo za lock-loss
   if (_kf && dst(_kf.la, _kf.lo, la, lo) > GPS_MAX_JUMP) {
     _kfReset(); _lastRecTime = 0; return;
   }
 
-  // 3. KALMAN FILTER — fusion predviđanja (fizika hoda) i GPS mjerenja
-  //    Kad acc visok (šuma): K→0, Kalman ignorira GPS skok, zadržava putanju
-  //    Kad acc nizak (dobro nebo): K→1, Kalman prati GPS direktno
+  // 3. KALMAN FILTER (uključuje warm-up i multipath detekciju)
   const kfOut = _kfStep(la, lo, ac, Date.now());
-  if (!kfOut) return;  // prva tačka = inicijalizacija filtera, još ne snimaj
+  if (!kfOut) return;
   const { la: sla, lo: slo } = kfOut;
 
   const v = vlake[actI];
@@ -5252,38 +5297,39 @@ function onP(p) {
     const last  = v.pts[v.pts.length - 1];
     const distM = dst(last.la, last.lo, sla, slo);
 
-    // 4. MIN RAZMAK — ne snimaj dok se ne pomjerimo dovoljno
+    // 4. MIN RAZMAK
     if (distM < GPS_MIN_DIST) return;
 
-    // 5. SPEED GATE — sigurnosni cap (Kalman već ograničava brzinu, ovo je backup)
+    // 5. SPEED GATE — sigurnosni backup; koristi GPS-prijavljenu brzinu ako dostupna
+    const reported = (gpsSpeed != null && gpsSpeed >= 0) ? gpsSpeed : null;
+    if (reported !== null && reported > GPS_MAX_SPEED) return;
     const elapsed = (Date.now() - _lastRecTime) / 1000;
-    if (_lastRecTime > 0 && elapsed > 0 && elapsed < 30) {
+    if (_lastRecTime > 0 && elapsed > 0 && elapsed < 30 && reported === null) {
       if (distM / elapsed > GPS_MAX_SPEED) return;
     }
 
-    // 6. BEARING CHECK — nagla promjena smjera + mali pomak = residualni multipath
+    // 6. BEARING CHECK — adaptivan prag: pri većoj brzini tolerišemo širi zaokret
     if (v.pts.length >= 2) {
       const p2 = v.pts[v.pts.length - 1];
       const p1 = v.pts[v.pts.length - 2];
       const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
       const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
       const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
-      if (turnDeg > GPS_MAX_TURN && distM < 12) return;
+      // Bliski piksel-skokovi koji su multipath su uvijek sporog kretanja → uži prag
+      const bearingDistThresh = (reported != null && reported > 1.5) ? 6 : 10;
+      if (turnDeg > GPS_MAX_TURN && distM < bearingDistThresh) return;
     }
   }
 
   _lastRecTime = Date.now();
 
-  // Trim pri povratku na roditeljsku vlaku: odreži tačke snimljene IZA mjesta gdje sad stojimo
+  // Trim pri povratku na roditeljsku vlaku
   if (_parentReturnIdx !== null && actI === _parentReturnIdx) {
     const _prIdx = _parentReturnIdx;
-    _parentReturnIdx = null; // briši odmah — trim se radi samo jednom
+    _parentReturnIdx = null;
     const trimTo = _parentReturnTrimToIdx;
     _parentReturnTrimToIdx = -1;
     const _prv = vlake[_prIdx];
-    // Trim samo ako imamo validan indeks grananja (> 0 = ne na samom početku vlake)
-    // i taj indeks nije zadnji — koristi pohranjen indeks, ne GPS, da izbjegnemo
-    // pogrešan trim kad korisnik stane kod puta (početak T1) umjesto kod grananja
     if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
       _prv.pts = _prv.pts.slice(0, trimTo + 1);
       _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
@@ -5293,7 +5339,7 @@ function onP(p) {
     }
   }
 
-  addPt(actI, sla, slo, al || 0);
+  addPt(actI, sla, slo, filtAl ?? al ?? 0);
 }
 let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
 let _gpsWatchdogTimer = null;
