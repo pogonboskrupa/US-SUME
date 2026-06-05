@@ -2140,6 +2140,7 @@ const _OL = {
   LABELS:   'tvlake_ol_labels',
   PROFILE:  'tvlake_ol_profile',
   KOLEGE:   'tvlake_ol_kolegeMap',
+  ODJELI:   'tvlake_ol_odjeli',
   QUEUE:    'tvlake_ol_queue',
 
   save(key, data) {
@@ -2221,6 +2222,9 @@ async function _processOfflineQueue() {
       } else if (op.type === 'upsert_log') {
         const { error } = await sb.from('dnevni_log').upsert(op.payload, { onConflict: 'korisnik_id,datum' });
         err = error;
+      } else if (op.type === 'upsert_odjel') {
+        const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
+        err = error;
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
     } catch(e) { break; } // still offline
@@ -2250,14 +2254,17 @@ async function initAuth() {
     if (!saved) return;
     try {
       const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
-      if (!email) { _clearSavedUser(); return; }
+      // Briši kredencijale samo ako smo online i korisnik nije nađen (pogrešno ime)
+      if (!email) { if (navigator.onLine) _clearSavedUser(); return; }
       const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
-      if (error) { _clearSavedUser(); return; }
+      // Briši samo kod auth greške (pogrešan PIN), ne kod mrežne greške
+      if (error) { if (navigator.onLine) _clearSavedUser(); return; }
       sbUser = (await sb.auth.getUser()).data.user;
       await sbLoadProfile();
       showApp();
     } catch(e) {
       console.error('Auto-login error:', e);
+      // Ne brišemo kredencijale — greška može biti mrežna (offline)
     }
   }, 800); // čekaj da onAuthStateChange stigne prvi
 
@@ -2284,20 +2291,22 @@ function _clearSavedUser() {
 }
 
 async function sbLoadProfile() {
-  const { data } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
+  let data = null;
+  try {
+    const { data: d, error } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
+    if (!error && d) { data = d; _OL.save(_OL.PROFILE, d); }
+  } catch(e) {}
+  if (!data) data = _OL.load(_OL.PROFILE); // fallback na keš
   sbProfile = data;
-  if (data) {
-    _OL.save(_OL.PROFILE, data); // Keširaj za offline
-    const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
-    document.getElementById('p-ime').value = fullName;
-    if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
-    // Show user label in dropdown
-    const lbl = document.getElementById('menu-user-label');
-    if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
-    if (data.is_admin) {
-      const adminItem = document.getElementById('menu-admin-item');
-      if (adminItem) adminItem.style.display = 'block';
-    }
+  if (!data) return;
+  const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
+  document.getElementById('p-ime').value = fullName;
+  if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
+  const lbl = document.getElementById('menu-user-label');
+  if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
+  if (data.is_admin) {
+    const adminItem = document.getElementById('menu-admin-item');
+    if (adminItem) adminItem.style.display = 'block';
   }
 }
 
@@ -3027,24 +3036,24 @@ async function sbLoadKolegeVlake() {
   }
 
   let data;
-  if (memberIds.length > 0) {
-    // Filter by explicit project members + odjel projekta
-    let q = sb.from('vlake')
-      .select('nm, korisnik_id, pts, boja')
-      .in('korisnik_id', memberIds)
-      .eq('sumarija', sbProfile.sumarija);
-    if (akt.odjel) q = q.eq('odjel', akt.odjel);
-    ({ data } = await q);
-  } else {
-    // Fallback: filter by same odjel text (backwards compat)
-    const odjel = getOdjel();
-    if (!odjel) return;
-    ({ data } = await sb.from('vlake')
-      .select('nm, korisnik_id, pts, boja')
-      .eq('sumarija', sbProfile.sumarija)
-      .eq('odjel', odjel)
-      .neq('korisnik_id', sbUser.id));
-  }
+  try {
+    if (memberIds.length > 0) {
+      let q = sb.from('vlake')
+        .select('nm, korisnik_id, pts, boja')
+        .in('korisnik_id', memberIds)
+        .eq('sumarija', sbProfile.sumarija);
+      if (akt.odjel) q = q.eq('odjel', akt.odjel);
+      ({ data } = await q);
+    } else {
+      const odjel = getOdjel();
+      if (!odjel) return;
+      ({ data } = await sb.from('vlake')
+        .select('nm, korisnik_id, pts, boja')
+        .eq('sumarija', sbProfile.sumarija)
+        .eq('odjel', odjel)
+        .neq('korisnik_id', sbUser.id));
+    }
+  } catch(e) { return; } // offline — kolege vlake se preskačaju
   if (!data) return;
 
   const seenIds = [];
@@ -3116,10 +3125,11 @@ async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel, timing) {
     work_end:       timing?.workEnd    || null,
     active_min:     timing?.activeMin  ?? null
   };
-  const { error } = await sb.from('dnevni_log').upsert(payload, { onConflict: 'korisnik_id,datum' });
-  if (error) {
+  try {
+    const { error } = await sb.from('dnevni_log').upsert(payload, { onConflict: 'korisnik_id,datum' });
+    if (error) throw error;
+  } catch(e) {
     _OL.enqueue({ type: 'upsert_log', payload });
-    console.error('Greška log (queueing):', error);
   }
 }
 
@@ -3136,10 +3146,15 @@ let kolegeMap = {}; // korisnik_id -> { ime, color }
 
 async function sbLoadKolege() {
   if (!sbProfile?.sumarija || !sbUser) return;
-  const { data } = await sb.from('korisnici')
-    .select('id, ime, prezime, boja')
-    .eq('sumarija', sbProfile.sumarija)
-    .neq('id', sbUser.id);
+  let data = null;
+  try {
+    const { data: d, error } = await sb.from('korisnici')
+      .select('id, ime, prezime, boja')
+      .eq('sumarija', sbProfile.sumarija)
+      .neq('id', sbUser.id);
+    if (!error && d) { data = d; _OL.save(_OL.KOLEGE, d); }
+  } catch(e) {}
+  if (!data) data = _OL.load(_OL.KOLEGE);
   if (!data) return;
 
   kolegeMap = {};
@@ -3153,10 +3168,11 @@ async function sbLoadKolege() {
     kolegeMap[k.id] = { ime: k.ime + ' ' + k.prezime, color };
   });
 
-  // Auto-assign boja u bazi ako nije postavljena
-  toUpdate.forEach(({ id, boja }) => {
-    sb.from('korisnici').update({ boja }).eq('id', id).then(() => {});
-  });
+  if (navigator.onLine) {
+    toUpdate.forEach(({ id, boja }) => {
+      sb.from('korisnici').update({ boja }).eq('id', id).then(() => {});
+    });
+  }
 
   kolege = Object.values(kolegeMap);
   rndKolege();
@@ -3174,19 +3190,26 @@ function debouncedSaveOdjel() {
 
 async function sbSaveOdjel(naziv) {
   if (!sbUser || !sbProfile?.sumarija || !naziv) return;
-  await sb.from('odjeli').upsert({
-    sumarija: sbProfile.sumarija,
-    naziv,
-    korisnik_id: sbUser.id
-  }, { onConflict: 'sumarija,naziv' });
+  const payload = { sumarija: sbProfile.sumarija, naziv, korisnik_id: sbUser.id };
+  try {
+    const { error } = await sb.from('odjeli').upsert(payload, { onConflict: 'sumarija,naziv' });
+    if (error) throw error;
+  } catch(e) {
+    _OL.enqueue({ type: 'upsert_odjel', payload });
+  }
 }
 
 async function sbLoadOdjeli() {
   if (!sbProfile?.sumarija) return;
-  const { data } = await sb.from('odjeli')
-    .select('naziv')
-    .eq('sumarija', sbProfile.sumarija)
-    .order('naziv');
+  let data = null;
+  try {
+    const { data: d, error } = await sb.from('odjeli')
+      .select('naziv')
+      .eq('sumarija', sbProfile.sumarija)
+      .order('naziv');
+    if (!error && d) { data = d; _OL.save(_OL.ODJELI, d); }
+  } catch(e) {}
+  if (!data) data = _OL.load(_OL.ODJELI);
   if (!data) return;
   const dl = document.getElementById('odjeli-list');
   if (!dl) return;
@@ -3217,17 +3240,20 @@ async function sbLoadTextLabelsDB() {
 
 async function sbSaveTextLabels() {
   if (!sbUser || !sbProfile) return;
-  await sb.from('text_labels').delete().eq('korisnik_id', sbUser.id);
-  if (textLabels.length === 0) return;
-  sb.from('text_labels').insert(
-    textLabels.map(l => ({
-      korisnik_id: sbUser.id,
-      sumarija:    sbProfile.sumarija || '',
-      label_id:    l.id,
-      lat: l.lat, lng: l.lng,
-      tekst: l.text, velicina: l.size, boja: l.color
-    }))
-  ).then(({error}) => { if (error) console.error('Greška text labels:', error); });
+  const rows = textLabels.map(l => ({
+    korisnik_id: sbUser.id, sumarija: sbProfile.sumarija || '',
+    label_id: l.id, lat: l.lat, lng: l.lng,
+    tekst: l.text, velicina: l.size, boja: l.color
+  }));
+  // Uvijek keširaj lokalno — db sync je best-effort
+  _OL.save(_OL.LABELS, rows);
+  try {
+    await sb.from('text_labels').delete().eq('korisnik_id', sbUser.id);
+    if (rows.length > 0) {
+      const { error } = await sb.from('text_labels').insert(rows);
+      if (error) console.error('Greška text labels:', error);
+    }
+  } catch(e) {} // offline — lokalni keš je pohranjen gore
 }
 
 // ─── REALTIME ────────────────────────────────────────────────────────────────
