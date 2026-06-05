@@ -3067,6 +3067,7 @@ async function sbLoadKolegeVlake() {
   const seenIds = [];
   data.forEach(row => {
     if (!row.pts || row.pts.length < 2) return;
+    if (row.korisnik_id === sbUser?.id) return; // nikad ne prikazuj vlastite vlake kao kolege
     const kid = row.korisnik_id;
     let info = kolegeMap[kid];
     if (!info) {
