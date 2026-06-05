@@ -4746,6 +4746,32 @@ function _krajVlake() {
 }
 
 function _stodaljShow() {
+  const el = document.getElementById('sdl-vlake-list');
+  if (el) {
+    if (!vlake.length) {
+      el.innerHTML = '<div style="color:#64748b;font-size:13px;padding:12px 0;">Nema vlaka. Dodaj vlaku pa klikni Snimi vlaku.</div>';
+    } else {
+      el.innerHTML = vlake.map((v, i) => {
+        const depth = (v.nm.match(/\./g) || []).length;
+        const pts = v.pts || [];
+        let distM = 0;
+        for (let j = 1; j < pts.length; j++) distM += dst(pts[j-1].la, pts[j-1].lo, pts[j].la, pts[j].lo);
+        distM = Math.round(distM);
+        const ml = depth * 14;
+        const ico = depth === 0 ? '🚜' : '↳';
+        const fw = depth === 0 ? '700' : '400';
+        return `<div onclick="_stodaljVratiSe(${i})"
+          style="display:flex;align-items:center;gap:10px;padding:12px 12px 12px ${12+ml}px;
+                 cursor:pointer;border-radius:9px;background:rgba(255,255,255,0.04);
+                 border:1px solid #1e3a5f;active:background:#1e3a5f;">
+          <span style="font-size:17px;min-width:20px;text-align:center;">${ico}</span>
+          <span style="flex:1;color:#e2e8f0;font-size:14px;font-weight:${fw};">${_escHtml(v.nm)}</span>
+          ${distM > 0 ? `<span style="color:#64748b;font-size:12px;">${distM} m</span>` : ''}
+          <span style="color:#38bdf8;font-size:16px;padding-left:4px;">▶</span>
+        </div>`;
+      }).join('');
+    }
+  }
   document.getElementById('sto-dalje-sheet').style.display = '';
   document.getElementById('sto-dalje-bg').style.display = '';
 }
@@ -4755,18 +4781,11 @@ function _stodaljOdustani() {
   document.getElementById('sto-dalje-bg').style.display = 'none';
 }
 
-function _stodaljNovaVlaka() {
+function _stodaljVratiSe(i) {
   _stodaljOdustani();
-  // Direktno kreira s prvim slobodnim brojem — zaobilazi conflict dialog koji bi
-  // ostavio korisnika zaglavlje bez načina povratka ako T[n] već postoji
-  const br = _nextMainBr();
-  _doCreateVlaka(br, 0).then(() => {
-    setTimeout(() => {
-      if (actI === null) return;
-      switchTab('karta');
-      togRec();
-    }, 30);
-  });
+  selI(i);
+  switchTab('karta');
+  setTimeout(() => togRec(), 30);
 }
 
 // Generiši sljedeće ime kraka: T1.1, T1.2, T3.5, T1.2.1...
@@ -8628,36 +8647,36 @@ function _updFabVisibility() {
   show('brec', false); show('btrag', false);
 
   if (isPaused) {
-    // Pauzirani mod: Nastavi + (Vrati se na roditelja ako u kraku) + (Završi ako glavna vlaka)
+    // Pauzirani mod: [⏹ Završi] [▶ Nastavi] + [↩ Vrati se] ako u kraku
     show('ab-nazad', !!hasParent); show('ab-krak-l', false); show('ab-krak-d', false);
+    // Završi — uvijek vidljiv kad je pauzirano (i na kraku i na glavnoj vlaci)
+    show('ab-kraj', true);
+    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
     if (ico) ico.textContent = '▶'; if (txt) txt.textContent = 'Nastavi';
     const bPauza = g('ab-pauza');
-    if (bPauza) { bPauza.classList.add('resuming'); }
-    show('ab-kraj', !hasParent);
-    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
+    if (bPauza) bPauza.classList.add('resuming');
     if (ab) { ab.classList.remove('rec-mode'); ab.classList.add('paused-mode'); }
   } else if (hasParent) {
-    // Na kraku: Vrati se na roditelja + Pauza + ⊕L + ⊕D
+    // Na kraku (snima): [↩ Vrati se] [⊕L] [⊕D] [⏸ Pauza] — bez Završi
     show('ab-nazad', true); show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-kraj', false);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
     if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
     const bPauza = g('ab-pauza');
     if (bPauza) bPauza.classList.remove('resuming');
-    show('ab-kraj', false);
     if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
   } else {
-    // Na glavnoj vlaci: Pauza + ⊕L + ⊕D + Kraj
+    // Na glavnoj vlaci (snima): [⊕L] [⊕D] [⏸ Pauza] — bez Završi
     show('ab-nazad', false); show('ab-krak-l', true); show('ab-krak-d', true);
+    show('ab-kraj', false);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
     if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
     const bPauza = g('ab-pauza');
     if (bPauza) bPauza.classList.remove('resuming');
-    show('ab-kraj', true);
-    const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Kraj vlake';
     if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
   }
 }
@@ -11679,14 +11698,14 @@ function dozBackToList() {
     <span>Desni krak</span>
   </button>
   <!-- Pauza / Nastavi (tokom snimanja) -->
+  <!-- ab-kraj je ISPRED ab-pauza — kad je pauzirano, Završi se pojavi na istom vizualnom mjestu kao Pauza -->
+  <button id="ab-kraj" onclick="_krajVlake()" title="Završi snimanje" style="display:none;">
+    <span class="ab-ico">⏹</span>
+    <span id="ab-kraj-txt">Završi</span>
+  </button>
   <button id="ab-pauza" onclick="toggleRecPause()" title="Pauza / Nastavi" style="display:none;">
     <span class="ab-ico" id="ab-pauza-ico">⏸</span>
     <span id="ab-pauza-txt">Pauza</span>
-  </button>
-  <!-- Kraj vlake (otvara što-dalje sheet) -->
-  <button id="ab-kraj" onclick="_krajVlake()" title="Završi snimanje" style="display:none;">
-    <span class="ab-ico">⏹</span>
-    <span id="ab-kraj-txt">Kraj vlake</span>
   </button>
   <!-- Uvijek vidljivo -->
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
@@ -11700,20 +11719,15 @@ function dozBackToList() {
   style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(0,0,0,0.55);"></div>
 <div id="sto-dalje-sheet" style="display:none;position:fixed;left:0;right:0;bottom:0;
   z-index:3201;background:#0f1f3d;border-radius:16px 16px 0 0;
-  border-top:2px solid #1e3a5f;padding:18px 16px 40px;
+  border-top:2px solid #1e3a5f;padding:16px 16px 36px;
   box-shadow:0 -6px 28px rgba(0,0,0,0.65);">
-  <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:16px;">Vlaka završena</div>
-  <div style="display:flex;flex-direction:column;gap:9px;">
-    <button id="sdb-nova" onclick="_stodaljNovaVlaka()"
-      style="padding:14px 16px;background:#166534;border:1px solid #4ade80;border-radius:9px;
-             color:#4ade80;font-size:15px;font-weight:bold;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:22px;">🚜</span>
-      <span>Započni novu vlaku (kreće od puta)</span>
-    </button>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="font-size:15px;font-weight:bold;color:#e2e8f0;">Nastavi snimanje na:</div>
     <button onclick="_stodaljOdustani()"
-      style="padding:10px;background:none;border:none;color:#475569;font-size:12px;cursor:pointer;">
-      ✕ Odustani
-    </button>
+      style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;">✕</button>
+  </div>
+  <div id="sdl-vlake-list"
+    style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto;padding-right:2px;">
   </div>
 </div>
 
