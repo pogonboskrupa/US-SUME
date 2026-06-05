@@ -2862,6 +2862,7 @@ function _applyVlakeRows(rows) {
     try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
   }
   _syncIbr();
+  _updFabVisibility();
 }
 
 async function sbLoadVlake() {
@@ -4443,6 +4444,7 @@ function selI(i) {
   ['mt-addline','mt-addpt','mt-edit','mt-delnode','mt-merge'].forEach(id => {
     const b = document.getElementById(id); if (b) b.disabled = false;
   });
+  _updFabVisibility();
 }
 
 function _updKrakBtns() {
@@ -8561,8 +8563,8 @@ function _updFabVisibility() {
   const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
 
   if (!inRec) {
-    // Normalni mod: Snimi vlaku + Snimi trag
-    show('brec',    true);  show('btrag',   true);
+    // "Snimi vlaku" samo kad postoji odabrana vlaka (aktivan projekat)
+    show('brec',    actI !== null);  show('btrag', true);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
