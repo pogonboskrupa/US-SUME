@@ -6131,7 +6131,7 @@ function updateVlakaLabel(i) {
 // ── Šumski kamionski putevi (statički GeoJSON sloj) ──────────────────────────
 let _puteviLayerBg = null;  // bijela pozadina za kontrast
 let _puteviLayerFg = null;  // narandžasta linija
-let _puteviVisible = true;
+let _puteviVisible = localStorage.getItem('tvlake_putevi_visible') !== '0'; // default: vidljivi
 
 function _loadPutevi() {
   fetch('./PUTEVI/putevi.geojson')
@@ -6152,6 +6152,10 @@ function _loadPutevi() {
           }
         }
       }).addTo(map);
+      // Primijeni sačuvano stanje vidljivosti
+      if (!_puteviVisible) togglePutevi(false);
+      const cb = document.getElementById('putevi-toggle');
+      if (cb) cb.checked = _puteviVisible;
     })
     .catch(e => console.error('Putevi GeoJSON greška:', e));
 }
@@ -6164,6 +6168,7 @@ function togglePutevi(show) {
   });
   const cb = document.getElementById('putevi-toggle');
   if (cb) cb.checked = show;
+  try { localStorage.setItem('tvlake_putevi_visible', show ? '1' : '0'); } catch(e) {}
 }
 
 let _refImg = null;       // HTMLImageElement
