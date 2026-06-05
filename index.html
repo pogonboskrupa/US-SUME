@@ -5108,9 +5108,9 @@ window.addEventListener('deviceorientationabsolute', _onDeviceOrientation, true)
 
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────────────
 const GPS_MIN_DIST  = 1;    // minimalni razmak između snimljenih tačaka (m)
-const GPS_MAX_ACC   = 12;   // osnova za tačnost; dinamički se povećava kad traktor brzo ide
-const GPS_MAX_JUMP  = 35;   // katastrofalni skok → reset Kalmana (m)
-const GPS_MAX_SPEED = 8.0;  // maks. brzina traktora praznog povratka (m/s ≈ 29 km/h)
+const GPS_MAX_ACC   = 12;   // maks. prihvatljiva GPS tačnost (m) — pod krošnjom tipično 4–12m
+const GPS_MAX_JUMP  = 35;   // katastrofalni skok (GPS lock-loss) → reset Kalmana (m)
+const GPS_MAX_SPEED = 2.5;  // maks. brzina hodača po šumi (m/s ≈ 9 km/h)
 const GPS_MAX_TURN  = 120;  // maks. nagli zaokret (°) za bearing check
 
 // ─── KALMAN FILTER ───────────────────────────────────────────────────────────
@@ -5277,10 +5277,8 @@ function onP(p) {
 
   if (!recOn || recPaused || actI === null) return;
 
-  // 1. FILTER TAČNOSTI — adaptivan prag: pri visokoj GPS brzini prihvatamo malo više šuma
-  //    Kad traktor ide brzo (prazni povratak) GPS accuracy može biti 12–18 m ali je fixno.
-  const dynMaxAcc = (gpsSpeed != null && gpsSpeed > 2.0) ? Math.min(20, GPS_MAX_ACC * 1.6) : GPS_MAX_ACC;
-  if (ac > dynMaxAcc) return;
+  // 1. FILTER TAČNOSTI — odbaci fikseve lošije od praga
+  if (ac > GPS_MAX_ACC) return;
 
   // 2. FILTER KATASTROFALNOG SKOKA — GPS izgubio signal i teleportovao se
   if (_kf && dst(_kf.la, _kf.lo, la, lo) > GPS_MAX_JUMP) {
