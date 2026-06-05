@@ -2698,10 +2698,11 @@ function showProjektDetalji(id) {
   sel.innerHTML = '<option value="">— Odaberi projektanta —</option>' +
     available.map(([kid, info]) => `<option value="${kid}">${info.ime}</option>`).join('');
 
-  // Aktiviraj button
+  // Aktiviraj / Deaktiviraj button
   const btn = document.getElementById('pd-aktiviraj-btn');
-  btn.textContent = isAkt ? '✅ Aktivan projekat' : '⚡ Aktiviraj ovaj projekat';
-  btn.className = isAkt ? 'btn g' : 'btn b';
+  btn.textContent = isAkt ? '⏏ Deaktiviraj projekat' : '⚡ Aktiviraj ovaj projekat';
+  btn.className   = isAkt ? 'btn gr' : 'btn b';
+  btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
   // All members can add new clan; only vlasnik can delete project
@@ -2802,6 +2803,15 @@ async function aktivirajProjekt() {
       }, 400);
     }
   }
+}
+
+function deaktivirajProjekt() {
+  _aktivniProjektId = null;
+  localStorage.removeItem('tvlake_akt_proj');
+  if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
+  rndProjektiList();
+  _updFabVisibility();
+  showToast('Projekat deaktiviran.');
 }
 
 async function deleteProjektUI() {
