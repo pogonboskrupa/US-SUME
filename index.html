@@ -5273,11 +5273,12 @@ function onP(p) {
   // 1. FILTER TAČNOSTI
   if (ac > GPS_MAX_ACC) return;
 
-  // 2. DOPPLER SPEED VALIDACIJA — coords.speed dolazi od Doppler efekta (tačniji od pozicije).
-  //    Ako pozicija skoči daleko a Doppler kaže "stojim" → to je multipath spike, odbaci.
+  // 2. DOPPLER SPEED VALIDACIJA — odbaci samo ekstremne spike-ove.
+  //    Šumski GPS šum je 5–15m, pa threshold mora biti > GPS_MAX_ACC da ne odbaci normalne fixove.
+  //    Kada GPS kaže speed=0 (mirovanie) ali pozicija skoči > 2× GPS_MAX_ACC → vjerovatno spike.
   if (gpsSpeed != null && gpsSpeed >= 0 && _kf) {
-    const dtS = Math.max(0.1, (Date.now() - _kf.t) / 1000);
-    const maxAllowed = Math.max(6.0, gpsSpeed * dtS * 3.0 + 4.0);
+    const dtS = Math.max(0.5, (Date.now() - _kf.t) / 1000);
+    const maxAllowed = Math.max(GPS_MAX_ACC * 2.5, gpsSpeed * dtS * 4.0 + GPS_MAX_ACC);
     if (dst(_kf.la, _kf.lo, la, lo) > maxAllowed) return;
   }
 
