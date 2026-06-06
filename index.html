@@ -407,6 +407,25 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* ═══ REC BANNER (crveno/žuta) ═══ */
 #rec-banner { background:rgba(8,14,28,0.97); border:2px solid #fbbf24; }
+#kolege-live-bar {
+  display:none; position:absolute; top:54px; left:50%; transform:translateX(-50%);
+  z-index:801; background:rgba(15,23,42,0.93); border:1px solid #1e3a5f;
+  border-radius:20px; padding:5px 14px 5px 10px; color:#e2e8f0; font-size:12px;
+  font-weight:600; align-items:center; gap:7px; pointer-events:none;
+  box-shadow:0 2px 8px rgba(0,0,0,0.4); white-space:nowrap;
+}
+.live-dot {
+  width:8px; height:8px; border-radius:50%; background:#ef4444; flex-shrink:0;
+  animation:livePulse 1.2s infinite;
+}
+@keyframes livePulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:0.35; transform:scale(0.65); }
+}
+.sync-dot { width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.sync-dot--ok  { background:#22c55e; }
+.sync-dot--err { background:#ef4444; animation:livePulse 1s infinite; }
+.sync-dot--off { background:#475569; }
 #rec-banner.paused { border-color:#f59e0b; }
 #rec-banner.paused .rdot { background:#f59e0b; animation:none; }
 #rec-row1 { display:flex; align-items:center; gap:0; padding:9px 13px 7px; border-bottom:1px solid rgba(255,255,255,0.07); }
@@ -1973,8 +1992,11 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="map-layer-btns">
           <button id="layer-switch-btn" onclick="_openLayerSheet()" title="Promijeni sloj karte">⛰</button>
           <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte">⭐</button>
+          <span id="sync-status-dot" class="sync-dot sync-dot--off" title="Realtime sync" style="margin:6px 2px 0 4px;"></span>
         </div>
       </div>
+      <!-- Kolege live indicator -->
+      <div id="kolege-live-bar"></div>
       <!-- ═══ GPS SNIMANJE BANNER ═══ -->
       <div id="rec-banner">
         <div id="rec-row1">
@@ -2492,7 +2514,12 @@ async function doLogout() {
 
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
-  kolegeVlake = []; kolegeLabels = [];
+  kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
+  _kolegeActiveSince = {};
+  _sbRemoveRtChannels();
+  clearInterval(window._liveBarTimer);
+  _updSyncDot('off');
+  _updKoleguLiveBar();
 
   Object.keys(_vlakaSaveTimers).forEach(k => clearTimeout(_vlakaSaveTimers[k]));
   _vlakaSaveTimers = {};
@@ -2605,8 +2632,14 @@ async function adminDeleteUser(userId, name) {
 // =====================================================================
 
 let _vlakaSaveTimers = {};
-let kolegeVlake  = []; // read-only colleague vlake polylines on map
-let kolegeLabels = []; // label markers za kolege vlake
+let kolegeVlake     = []; // read-only colleague vlake polylines on map
+let kolegeLabels    = []; // label markers za kolege vlake
+let kolegeVlakeMap  = {}; // `kid::nm` → { poly } — za brzi patch bez full reload
+let _rtVlakeChannel = null;
+let _rtOdjeliChannel= null;
+let _rtSyncTimer    = null;  // throttle za full reload
+let _kolegeActiveSince = {}; // kid → timestamp zadnjeg realtime updejta
+const _LIVE_BADGE_MS = 90000; // 90s — kolega se smatra aktivnim
 
 async function sbInitData() {
   if (!sbProfile) return;
@@ -2896,6 +2929,7 @@ async function aktivirajProjekt() {
   _updFabVisibility();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel);
   await sbLoadKolegeVlake();
+  sbStartRealtime(); // restart kanala — osvježi pretplatu na novi projekat
   showToast('Projekat aktiviran: ' + p.odjel);
   // Auto-zoom na odjel poligon ako je poznat
   if (p.odjel && graniceOdjeli.length) {
@@ -2915,6 +2949,11 @@ function deaktivirajProjekt() {
   _aktivniProjektId = null;
   localStorage.removeItem('tvlake_akt_proj');
   _hideProjektOdjelHighlight();
+  kolegeVlake.forEach(p => map.removeLayer(p));
+  kolegeLabels.forEach(m => map.removeLayer(m));
+  kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
+  _kolegeActiveSince = {};
+  _updKoleguLiveBar();
   if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
   rndProjektiList();
   _updFabVisibility();
@@ -3127,7 +3166,7 @@ async function sbLoadKolegeVlake() {
   if (isSpd()) return;
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
-  kolegeVlake = []; kolegeLabels = [];
+  kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
 
   let memberIds = [];
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
@@ -3168,6 +3207,7 @@ async function sbLoadKolegeVlake() {
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
     kolegeVlake.push(poly);
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
+    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime };
   });
 }
 
@@ -3353,28 +3393,109 @@ async function sbSaveTextLabels() {
 }
 
 // ─── REALTIME ────────────────────────────────────────────────────────────────
+
+function _sbRemoveRtChannels() {
+  try { if (_rtVlakeChannel)  sb.removeChannel(_rtVlakeChannel);  } catch(e) {}
+  try { if (_rtOdjeliChannel) sb.removeChannel(_rtOdjeliChannel); } catch(e) {}
+  _rtVlakeChannel = null; _rtOdjeliChannel = null;
+}
+
+function _onRtStatus(status) {
+  if (status === 'SUBSCRIBED') {
+    _updSyncDot('ok');
+  } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+    _updSyncDot('err');
+    // Auto-reconnect nakon 8s
+    setTimeout(() => {
+      if (!_rtVlakeChannel || _rtVlakeChannel.state !== 'joined') sbStartRealtime();
+    }, 8000);
+  }
+}
+
+function _onVlakaRtEvent(payload) {
+  const changedBy = payload.new?.korisnik_id || payload.old?.korisnik_id;
+  if (!changedBy || changedBy === sbUser?.id) return;
+
+  // Provjeri je li ovaj korisnik u aktivnom projektu
+  const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  if (akt) {
+    const memberIds = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
+    if (!memberIds.includes(changedBy)) return; // nije u našem projektu
+  }
+
+  // Fast-path: UPDATE/INSERT s pts → ažuriraj samo tu poliliniju bez full reload
+  if ((payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') && payload.new?.pts?.length >= 2) {
+    _patchKolegaVlaka(payload.new);
+    _kolegeActiveSince[changedBy] = Date.now();
+    _updKoleguLiveBar();
+    return;
+  }
+
+  // DELETE ili nema pts → throttled full reload
+  _schedKolegeFullSync();
+}
+
+// Ažurira jednu poliliniju kolege u-place, bez brisanja ostalih
+function _patchKolegaVlaka(row) {
+  if (!row.pts || row.pts.length < 2 || row.korisnik_id === sbUser?.id) return;
+  const key = row.korisnik_id + '::' + row.nm;
+  const latLngs = row.pts.map(p => [p.la, p.lo]);
+
+  if (kolegeVlakeMap[key]) {
+    kolegeVlakeMap[key].poly.setLatLngs(latLngs);
+  } else {
+    // Nova vlaka od kolege koje još nema u mapi → full reload (jedanput)
+    _schedKolegeFullSync(500);
+  }
+}
+
+function _schedKolegeFullSync(delay = 4000) {
+  clearTimeout(_rtSyncTimer);
+  _rtSyncTimer = setTimeout(() => sbLoadKolegeVlake(), delay);
+}
+
+function _updKoleguLiveBar() {
+  const bar = document.getElementById('kolege-live-bar');
+  if (!bar) return;
+  const now = Date.now();
+  const active = Object.entries(_kolegeActiveSince)
+    .filter(([, ts]) => now - ts < _LIVE_BADGE_MS)
+    .map(([kid]) => (kolegeMap[kid]?.ime || 'Kolega').split(' ')[0]);
+  if (active.length === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = `<span class="live-dot"></span>${active.join(', ')} snima${active.length > 1 ? 'ju' : ''}`;
+}
+
+function _updSyncDot(status) {
+  const dot = document.getElementById('sync-status-dot');
+  if (!dot) return;
+  dot.className = 'sync-dot sync-dot--' + status;
+  dot.title = status === 'ok' ? 'Realtime sync aktivan'
+            : status === 'err' ? 'Sync prekinut — reconnect...'
+            : 'Sync neaktivan';
+}
+
 function sbStartRealtime() {
   if (!sbProfile?.sumarija) return;
-  sb.channel('vlake-realtime')
+  _sbRemoveRtChannels();
+
+  _rtVlakeChannel = sb.channel('vlake-rt-' + Date.now())
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'vlake',
       filter: `sumarija=eq.${sbProfile.sumarija}`
-    }, payload => {
-      const changedBy = payload.new?.korisnik_id || payload.old?.korisnik_id;
-      if (changedBy && changedBy !== sbUser?.id) {
-        sbLoadKolegeVlake();
-      }
-    })
-    .subscribe();
+    }, _onVlakaRtEvent)
+    .subscribe(_onRtStatus);
 
-  sb.channel('odjeli-realtime')
+  _rtOdjeliChannel = sb.channel('odjeli-rt-' + Date.now())
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'odjeli',
       filter: `sumarija=eq.${sbProfile.sumarija}`
-    }, () => {
-      sbLoadOdjeli();
-    })
+    }, () => sbLoadOdjeli())
     .subscribe();
+
+  // Periodično čisti stale "aktivni" badge (svakih 30s)
+  clearInterval(window._liveBarTimer);
+  window._liveBarTimer = setInterval(_updKoleguLiveBar, 30000);
 }
 
 // =====================================================================
