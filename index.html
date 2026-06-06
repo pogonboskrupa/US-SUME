@@ -1374,6 +1374,31 @@ select:focus { outline:none; border-color:#3b82f6; }
   display:flex; align-items:center; justify-content:center;
   font-size:7px; color:#fff; font-weight:700; line-height:1;
 }
+/* Share kolege dialog */
+#share-foto-dlg {
+  display:none; position:fixed; inset:0; z-index:9600;
+  background:rgba(0,0,0,0.6); align-items:flex-end; justify-content:center;
+}
+#share-foto-box {
+  background:#0f1f3d; border-radius:16px 16px 0 0; border-top:2px solid #1e3a5f;
+  width:100%; max-width:480px; padding:20px 18px 36px;
+  box-shadow:0 -6px 28px rgba(0,0,0,0.65); max-height:75vh; display:flex; flex-direction:column;
+}
+#share-foto-box h3 { margin:0 0 14px; font-size:15px; color:#e2e8f0; }
+#share-foto-list  { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin-bottom:16px; }
+.share-kolega-row {
+  display:flex; align-items:center; gap:12px; padding:10px 12px;
+  background:#1e3a5f; border-radius:8px; cursor:pointer; user-select:none;
+}
+.share-kolega-row:active { background:#1e4a7a; }
+.share-kolega-row input[type=checkbox] { width:18px; height:18px; accent-color:#3b82f6; cursor:pointer; flex-shrink:0; }
+.share-kolega-row .skr-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.share-kolega-row .skr-ime { color:#e2e8f0; font-size:14px; }
+#share-foto-actions { display:flex; gap:10px; }
+#share-foto-actions button { flex:1; padding:11px; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+#share-foto-ok     { background:#3b82f6; color:#fff; }
+#share-foto-ok:active { background:#2563eb; }
+#share-foto-cancel { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
 #action-bar #ab-krak-l { color: #38bdf8; }
 #action-bar #ab-krak-d { color: #f97316; }
 #action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
@@ -3552,7 +3577,7 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
   if (isOwn) {
     actionBtns = shared
       ? `<button class="foto-popup-btn fpp-shared-ok" disabled>👥 Podijeljeno</button>`
-      : `<button class="foto-popup-btn fpp-share" onclick="shareFoto(${idx})">📤 Podijeli</button>`;
+      : `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${idx})">📤 Podijeli</button>`;
     actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>`;
   }
   m.bindPopup(
@@ -3581,35 +3606,66 @@ function closeFotoFullscreen() {
   document.getElementById('foto-fullscreen-img').src = '';
 }
 
+// ─ Share dialog ─
+let _shareFotoIdx = null;
+
+function openShareFotoDlg(idx) {
+  _shareFotoIdx = idx;
+  const entries = Object.entries(kolegeMap);
+  const list    = document.getElementById('share-foto-list');
+  if (!entries.length) { showToast('Nema kolega u šumariji'); return; }
+  list.innerHTML = entries.map(([kid, info]) => `
+    <label class="share-kolega-row" onclick="event.stopPropagation()">
+      <input type="checkbox" value="${kid}">
+      <span class="skr-dot" style="background:${info.color||'#64748b'};"></span>
+      <span class="skr-ime">${info.ime}</span>
+    </label>`).join('');
+  document.getElementById('share-foto-dlg').style.display = 'flex';
+  map.closePopup();
+}
+
+function closeShareFotoDlg() {
+  document.getElementById('share-foto-dlg').style.display = 'none';
+  _shareFotoIdx = null;
+}
+
+async function confirmShareFoto() {
+  const checks = document.querySelectorAll('#share-foto-list input[type=checkbox]:checked');
+  const ids    = Array.from(checks).map(c => c.value);
+  if (!ids.length) { showToast('Odaberi barem jednog kolegu'); return; }
+  closeShareFotoDlg();
+  await shareFoto(_shareFotoIdx, ids);
+}
+
 // ─ Dijeljenje ─
-async function shareFoto(idx) {
+async function shareFoto(idx, sharedWith) {
   const f = _locFotos[idx];
-  if (!f || f.shared) return;
+  if (!f) return;
   showToast('⏳ Dijeljenje...');
-  const ok = await sbSaveFoto(f, idx);
+  const ok = await sbSaveFoto(f, idx, sharedWith);
   if (!ok) return;
-  f.shared = true;
-  // Ažuriraj ikonu i popup
+  f.shared     = true;
+  f.sharedWith = sharedWith;
   f.marker.setIcon(L.divIcon({
     className:'', iconSize:[46,56], iconAnchor:[23,56], popupAnchor:[0,-58],
     html: _fotoMarkerHtml(f.thumb, true, true)
   }));
   _setupFotoPopup(f.marker, idx, f.la, f.lo, f.ts, f.full, true, true);
   _saveFotos();
-  showToast('👥 Foto podijeljeno s kolegama');
+  showToast('👥 Foto podijeljeno');
 }
 
-async function sbSaveFoto(f, idx) {
+async function sbSaveFoto(f, idx, sharedWith) {
   if (!sbUser || !sbProfile) return false;
   try {
     const {data, error} = await sb.from('loc_fotos').upsert({
       ...(f.sbId ? {id: f.sbId} : {}),
-      korisnik_id: sbUser.id,
-      sumarija:    sbProfile.sumarija,
+      korisnik_id:  sbUser.id,
+      sumarija:     sbProfile.sumarija,
       la: f.la, lo: f.lo, ts: f.ts,
-      thumb:    f.thumb,
-      full_img: f.full,
-      shared:   true,
+      thumb:        f.thumb,
+      full_img:     f.full,
+      shared_with:  sharedWith,
     }, {onConflict: 'id'}).select('id').single();
     if (error) { showToast('Greška: ' + error.message); return false; }
     if (data) { _locFotos[idx].sbId = data.id; }
@@ -3629,10 +3685,10 @@ async function sbLoadSharedFotos() {
   _sharedFotos = [];
   try {
     const {data, error} = await sb.from('loc_fotos')
-      .select('id, korisnik_id, la, lo, ts, thumb, full_img, shared')
+      .select('id, korisnik_id, la, lo, ts, thumb, full_img, shared_with')
       .eq('sumarija', sbProfile.sumarija)
-      .eq('shared', true)
-      .neq('korisnik_id', sbUser.id);
+      .neq('korisnik_id', sbUser.id)
+      .contains('shared_with', [sbUser.id]);
     if (error || !data) return;
     data.forEach((row, i) => {
       if (!row.thumb || !row.la || !row.lo) return;
@@ -3677,7 +3733,7 @@ async function _resizeImg(file, maxPx, q) {
 function _saveFotos() {
   try {
     localStorage.setItem(_FOTO_KEY, JSON.stringify(
-      _locFotos.map(({la,lo,ts,thumb,full,shared,sbId}) => ({la,lo,ts,thumb,full,shared:!!shared,sbId:sbId||null}))
+      _locFotos.map(({la,lo,ts,thumb,full,shared,sharedWith,sbId}) => ({la,lo,ts,thumb,full,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null}))
     ));
   } catch(e) { showToast('⚠ Premalo prostora za čuvanje fotosa'); }
 }
@@ -3685,9 +3741,9 @@ function _saveFotos() {
 function _restoreFotos() {
   try {
     const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
-    d.forEach(({la,lo,ts,thumb,full,shared,sbId}, i) => {
+    d.forEach(({la,lo,ts,thumb,full,shared,sharedWith,sbId}, i) => {
       const m = _buildFotoMarker(la, lo, thumb, full, i, ts, true, !!shared);
-      _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: !!shared, sbId: sbId||null});
+      _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null});
     });
   } catch(e) {}
 }
@@ -12542,6 +12598,18 @@ function dozBackToList() {
 
 <input type="file" id="loc-photo-input" accept="image/*" capture="environment"
   style="display:none" onchange="onLocPhotoSelected(this)">
+
+<!-- Share foto — odabir kolega -->
+<div id="share-foto-dlg" onclick="if(event.target===this)closeShareFotoDlg()">
+  <div id="share-foto-box">
+    <h3>👥 S kim dijeliti foto?</h3>
+    <div id="share-foto-list"></div>
+    <div id="share-foto-actions">
+      <button id="share-foto-cancel" onclick="closeShareFotoDlg()">Odustani</button>
+      <button id="share-foto-ok"     onclick="confirmShareFoto()">✓ Podijeli</button>
+    </div>
+  </div>
+</div>
 
 <!-- Fullscreen foto preglednik -->
 <div id="foto-fullscreen" onclick="if(event.target===this)closeFotoFullscreen()">
