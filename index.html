@@ -3597,14 +3597,28 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
 }
 
 // ─ Fullscreen ─
-function openFotoFullscreen(idx, isShared) {
+async function openFotoFullscreen(idx, isShared) {
   const f = isShared ? _sharedFotos[idx] : _locFotos[idx];
   if (!f) return;
   map.closePopup();
-  document.getElementById('foto-fullscreen-img').src = f.full;
   const dt = new Date(f.ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
   document.getElementById('foto-fullscreen-meta').textContent = `${dt} · ${f.la.toFixed(5)}, ${f.lo.toFixed(5)}`;
   document.getElementById('foto-fullscreen').style.display = 'flex';
+  // Koristi full ako je u memoriji, inače prikaži thumb odmah pa fetchuj iz DB
+  if (f.full) {
+    document.getElementById('foto-fullscreen-img').src = f.full;
+  } else {
+    document.getElementById('foto-fullscreen-img').src = f.thumb; // placeholder
+    if (f.sbId && sbUser) {
+      try {
+        const { data } = await sb.from('loc_fotos').select('full_img').eq('id', f.sbId).single();
+        if (data?.full_img) {
+          f.full = data.full_img; // keširaj u memoriji
+          document.getElementById('foto-fullscreen-img').src = f.full;
+        }
+      } catch(e) {}
+    }
+  }
 }
 function closeFotoFullscreen() {
   document.getElementById('foto-fullscreen').style.display = 'none';
@@ -3614,14 +3628,35 @@ function closeFotoFullscreen() {
 // ─ Share dialog ─
 let _shareFotoIdx = null;
 
-function openShareFotoDlg(idx) {
+async function openShareFotoDlg(idx) {
   _shareFotoIdx = idx;
-  const f           = _locFotos[idx];
-  const alreadyWith = new Set(f?.sharedWith || []);
-  // Filtrirati sebe iz liste (zaštita od pogrešnog kolegeMap cachea)
-  const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== sbUser?.id);
-  const list    = document.getElementById('share-foto-list');
-  if (!entries.length) { showToast('Nema kolega u šumariji'); return; }
+  const f    = _locFotos[idx];
+  const dlg  = document.getElementById('share-foto-dlg');
+  const list = document.getElementById('share-foto-list');
+  list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">⏳ Učitavam...</div>';
+  dlg.style.display = 'flex';
+  map.closePopup();
+
+  if (typeof sbLoadKolege === 'function') await sbLoadKolege().catch(() => {});
+
+  let alreadyWith = new Set(f?.sharedWith || []);
+  if (f?.sbId && sbUser) {
+    try {
+      const { data } = await sb.from('loc_fotos').select('shared_with').eq('id', f.sbId).single();
+      if (data?.shared_with) {
+        alreadyWith = new Set(data.shared_with);
+        f.sharedWith = data.shared_with;
+        _saveFotos();
+      }
+    } catch(e) {}
+  }
+
+  const myId = sbUser?.id || sbProfile?.id;
+  const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
+  if (!entries.length) {
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Nema kolega u šumariji</div>';
+    return;
+  }
   list.innerHTML = entries.map(([kid, info]) => {
     const done = alreadyWith.has(kid);
     return `<label class="share-kolega-row" onclick="event.stopPropagation()" style="${done?'opacity:0.65;':''}">
@@ -3631,8 +3666,6 @@ function openShareFotoDlg(idx) {
       ${done ? '<span style="font-size:10px;color:#4ade80;margin-left:auto;">✓ podijeljeno</span>' : ''}
     </label>`;
   }).join('');
-  document.getElementById('share-foto-dlg').style.display = 'flex';
-  map.closePopup();
 }
 
 function closeShareFotoDlg() {
@@ -3653,8 +3686,9 @@ async function confirmShareFoto() {
     return;
   }
   const allIds = [...alreadyWith, ...newIds];
+  const savedIdx = _shareFotoIdx;
   closeShareFotoDlg();
-  await shareFoto(_shareFotoIdx, allIds);
+  await shareFoto(savedIdx, allIds);
 }
 
 // ─ Dijeljenje ─
@@ -3708,7 +3742,6 @@ async function sbSaveFoto(f, idx, sharedWith) {
   try {
     let error, data;
     if (f.sbId) {
-      // Slika već postoji u DB — samo ažuriraj shared_with
       ({ error } = await sb.from('loc_fotos')
         .update({ shared_with: sharedWith })
         .eq('id', f.sbId)
@@ -3798,9 +3831,12 @@ async function _resizeImg(file, maxPx, q) {
 
 // ─ Persistencija ─
 function _saveFotos() {
+  // Ne spremat full (base64 slika) — preveliko za localStorage, može prekoračiti kvotu
+  // full ostaje samo u memoriji; pri ponovnom otvaranju app-a uzima se iz Supabase
   try {
     localStorage.setItem(_FOTO_KEY, JSON.stringify(
-      _locFotos.map(({la,lo,ts,thumb,full,shared,sharedWith,sbId}) => ({la,lo,ts,thumb,full,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null}))
+      _locFotos.map(({la,lo,ts,thumb,shared,sharedWith,sbId}) =>
+        ({la,lo,ts,thumb,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null}))
     ));
   } catch(e) { showToast('⚠ Premalo prostora za čuvanje fotosa'); }
 }
@@ -3808,9 +3844,10 @@ function _saveFotos() {
 function _restoreFotos() {
   try {
     const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
-    d.forEach(({la,lo,ts,thumb,full,shared,sharedWith,sbId}, i) => {
-      const m = _buildFotoMarker(la, lo, thumb, full, i, ts, true, !!shared);
-      _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null});
+    d.forEach(({la,lo,ts,thumb,shared,sharedWith,sbId}, i) => {
+      // full je null dok se ne učita iz Supabase (openFotoFullscreen ga fetchuje)
+      const m = _buildFotoMarker(la, lo, thumb, thumb, i, ts, true, !!shared);
+      _locFotos.push({la, lo, ts, thumb, full: null, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null});
     });
   } catch(e) {}
 }
