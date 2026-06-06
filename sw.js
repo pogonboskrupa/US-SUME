@@ -1,8 +1,8 @@
 // =====================================================================
-// Service Worker — Traktorske Vlake
+// Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.5.60';
+const APP_VERSION = '1.5.61';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
@@ -15,7 +15,8 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './forwarder.svg',
-  './PUTEVI/putevi.geojson'
+  './PUTEVI/putevi.geojson',
+  './.well-known/assetlinks.json'
 ];
 
 // ─── INSTALL ─────────────────────────────────────────────────────────

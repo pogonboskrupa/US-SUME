@@ -1,12 +1,15 @@
 {
-  "name": "Traktorske Vlake",
-  "short_name": "Vlake",
-  "description": "Projektovanje traktorskih vlaka — offline GIS alat za šumare",
+  "name": "ŠPD Unsko-sanske šume — Vlake",
+  "short_name": "USS Vlake",
+  "description": "Projektovanje traktorskih vlaka — offline GIS alat za šumare ŠPD Unsko-sanske šume",
   "id": "/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#16213e",
@@ -31,7 +34,10 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "lang": "bs",
   "prefer_related_applications": false
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema aplikacije — identično manifest.json theme_color i background_color -->
+    <color name="colorPrimary">#16213e</color>
+    <color name="colorBackground">#0f172a</color>
+</resources>
