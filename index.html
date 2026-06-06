@@ -10535,8 +10535,8 @@ function _extractGraniceOdjeli(doc) {
 // ── GeoJSON odjeli ────────────────────────────────────────────────────────────
 const _GEOJSON_LS_KEY = 'tvlake_geojson_odjeli';
 let _geojsonLayer = null;
-let _geojsonVisible = true;
-let _geojsonOpacity = 1.0;
+let _geojsonVisible = localStorage.getItem('tvlake_granice_visible') !== '0';
+let _geojsonOpacity = parseFloat(localStorage.getItem('tvlake_granice_opacity') || '1');
 let _projektOdjelLayer = null;  // highlight polygon aktivnog projekta
 
 function _findGraniceMatch(name) {
@@ -10614,7 +10614,7 @@ function _applyGeoJSONOdjeli(data) {
   graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
 
   _geojsonLayer = L.geoJSON(data, {
-    style: { color: '#38bdf8', weight: 1.5, fillColor: '#38bdf8', fillOpacity: 0.04, dashArray: '4,4' },
+    style: { color: '#38bdf8', weight: 1.5, opacity: _geojsonOpacity, fillColor: '#38bdf8', fillOpacity: _geojsonOpacity * 0.04, dashArray: '4,4' },
     onEachFeature(f, layer) {
       const name = _gjPropName(f.properties || {});
       if (name) layer.bindTooltip(name, { sticky: true, className: 'leaflet-tooltip' });
@@ -10664,26 +10664,25 @@ function _geojsonOdjeliClear() {
   showToast('GeoJSON odjeli uklonjeni');
 }
 
-function _geojsonToggleVis() {
-  _geojsonVisible = !_geojsonVisible;
-  if (!_geojsonLayer) return;
-  if (_geojsonVisible) _geojsonLayer.addTo(map); else map.removeLayer(_geojsonLayer);
+function _geojsonToggleVis(val) {
+  _geojsonVisible = (val !== undefined) ? !!val : !_geojsonVisible;
+  if (_geojsonLayer) {
+    if (_geojsonVisible) _geojsonLayer.addTo(map); else map.removeLayer(_geojsonLayer);
+  }
+  try { localStorage.setItem('tvlake_granice_visible', _geojsonVisible ? '1' : '0'); } catch(e) {}
   _geojsonOdjeliUpdUI();
   _lsRenderGranice();
 }
 
 function _geojsonSetOpacity(val) {
   _geojsonOpacity = parseFloat(val);
-  if (!_geojsonLayer) return;
-  _geojsonLayer.setStyle({ opacity: _geojsonOpacity, fillOpacity: _geojsonOpacity * 0.04 });
+  if (_geojsonLayer) _geojsonLayer.setStyle({ opacity: _geojsonOpacity, fillOpacity: _geojsonOpacity * 0.04 });
+  try { localStorage.setItem('tvlake_granice_opacity', String(_geojsonOpacity)); } catch(e) {}
 }
 
 function _lsRenderGranice() {
-  const ctrl = document.getElementById('ls-granice-controls');
-  if (!ctrl) return;
-  ctrl.style.display = (_geojsonLayer) ? 'block' : 'none';
-  const btn = document.getElementById('ls-granice-toggle');
-  if (btn) btn.textContent = _geojsonVisible ? '👁 Vidljivo' : '🚫 Skriveno';
+  const cb = document.getElementById('granice-toggle');
+  if (cb) cb.checked = _geojsonVisible;
   const slider = document.getElementById('ls-granice-opacity');
   if (slider) slider.value = _geojsonOpacity;
 }
@@ -11972,6 +11971,7 @@ function dozBackToList() {
 
   <div style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
     <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
+    <!-- Putevi -->
     <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
       <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
         style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
@@ -11980,6 +11980,23 @@ function dozBackToList() {
         Šumski kamionski putevi
       </span>
     </label>
+    <!-- Granice odjela -->
+    <div style="padding:6px 0 2px;">
+      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
+        <input type="checkbox" id="granice-toggle" onchange="_geojsonToggleVis(this.checked)"
+          style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #38bdf8;border-bottom:1px solid rgba(56,189,248,0.3);"></span>
+          Granice odjela
+        </span>
+      </label>
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
+        <span style="color:#64748b;font-size:11px;white-space:nowrap;">Prozirnost</span>
+        <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
+          style="flex:1;accent-color:#38bdf8;cursor:pointer;"
+          oninput="_geojsonSetOpacity(this.value)">
+      </div>
+    </div>
   </div>
   <!-- Offline SQLite karte -->
   <div id="ls-sqlite-section" style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
@@ -11989,20 +12006,6 @@ function dozBackToList() {
       style="width:100%;margin-top:10px;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
       📂 Učitaj novu offline kartu
     </button>
-  </div>
-  <!-- Granice odjela — kontrole (vidljivo samo kad je učitan GeoJSON) -->
-  <div id="ls-granice-controls" style="display:none;margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
-    <h3 style="margin-bottom:10px;">Granice odjela</h3>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <button id="ls-granice-toggle" onclick="_geojsonToggleVis();"
-        style="padding:5px 12px;border-radius:6px;border:1px solid #334155;cursor:pointer;font-size:13px;background:#1e3a5f;color:#cbd5e1;white-space:nowrap;">
-        👁 Vidljivo
-      </button>
-      <span style="color:#94a3b8;font-size:12px;">Prozirnost:</span>
-      <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
-        style="flex:1;accent-color:#38bdf8;cursor:pointer;"
-        oninput="_geojsonSetOpacity(this.value)">
-    </div>
   </div>
 </div>
 
