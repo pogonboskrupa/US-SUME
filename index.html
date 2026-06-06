@@ -3018,6 +3018,8 @@ function deaktivirajProjekt() {
   if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
   rndProjektiList();
   _updFabVisibility();
+  updProjStats();
+  rndOdjeliRekap();
   showToast('Projekat deaktiviran.');
 }
 
@@ -9249,6 +9251,7 @@ function rndLog() {
 function rndOdjeliRekap() {
   const el = document.getElementById('odjeli-rekap');
   if (!el) return;
+  if (!_aktivniProjektId) { el.innerHTML = ''; return; }
 
   // Grupiši sve log unose po odjelu
   const byOdjel = {};
