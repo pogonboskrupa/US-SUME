@@ -1346,9 +1346,34 @@ select:focus { outline:none; border-color:#3b82f6; }
 .leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
 .tacka-popup-btn, .foto-popup-btn {
   background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;
-  padding:3px 12px;cursor:pointer;font-size:11px;margin-top:6px;
+  padding:3px 10px;cursor:pointer;font-size:11px;margin-top:6px;
 }
 .tacka-popup-btn:active,.foto-popup-btn:active { opacity:0.7; }
+.fpp-info { background:#1e3a5f; color:#93c5fd; }
+.fpp-share { background:#1e3a5f; color:#93c5fd; }
+.fpp-shared-ok { background:#14532d; color:#86efac; cursor:default; }
+#foto-fullscreen {
+  display:none; position:fixed; inset:0; z-index:99500;
+  background:rgba(0,0,0,0.93); flex-direction:column;
+  align-items:center; justify-content:center; touch-action:manipulation;
+}
+#foto-fullscreen-img {
+  max-width:96vw; max-height:86vh; border-radius:8px;
+  object-fit:contain; display:block;
+}
+#foto-fullscreen-close {
+  position:absolute; top:14px; right:14px;
+  background:rgba(255,255,255,0.14); border:none; color:#fff;
+  border-radius:50%; width:42px; height:42px; font-size:22px;
+  cursor:pointer; line-height:42px; text-align:center;
+}
+#foto-fullscreen-meta { color:#94a3b8; font-size:11px; margin-top:8px; }
+.foto-shared-dot {
+  position:absolute; top:2px; right:2px; width:13px; height:13px;
+  background:#3b82f6; border-radius:50%; border:1.5px solid #fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:7px; color:#fff; font-weight:700; line-height:1;
+}
 #action-bar #ab-krak-l { color: #38bdf8; }
 #action-bar #ab-krak-d { color: #f97316; }
 #action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
@@ -2663,9 +2688,10 @@ async function sbInitData() {
     sbLoadOdjeli(),       // nema zavisnosti → može paralelno
     loadGlobalKmlStyles() // nema zavisnosti → može paralelno
   ]);
-  sbStartRealtime();          // fire-and-forget
-  await sbLoadKolegeVlake();  // treba _aktivniProjektId iz sbLoadProjekti
-  autoLoadAllKmlBuckets();    // fire-and-forget (granice u pozadini)
+  sbStartRealtime();              // fire-and-forget
+  await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
+  sbLoadSharedFotos();            // fire-and-forget
+  autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -3465,8 +3491,9 @@ function _restoreTacke() {
 }
 
 // ─── FOTO OZNAKE ──────────────────────────────────────────────────────────────
-let _locFotos = [];
-const _FOTO_KEY = 'tvlake_loc_fotos';
+let _locFotos    = [];  // vlastite foto oznake
+let _sharedFotos = [];  // foto oznake od kolega (shared=true)
+const _FOTO_KEY  = 'tvlake_loc_fotos';
 
 function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
@@ -3482,48 +3509,153 @@ async function onLocPhotoSelected(input) {
   showToast('⏳ Obrađujem sliku...');
   try {
     const [thumb, full] = await Promise.all([
-      _resizeImg(file, 60, 0.78),
-      _resizeImg(file, 480, 0.72),
+      _resizeImg(file, 60,  0.78),
+      _resizeImg(file, 900, 0.80),   // veća rezolucija za fullscreen
     ]);
     const idx = _locFotos.length;
-    const m = _buildFotoMarker(la, lo, thumb, full, idx, ts);
-    _locFotos.push({la, lo, ts, thumb, full, marker: m});
+    const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, false);
+    _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sbId: null});
     _saveFotos();
     showToast('📷 Foto dodano na mapu');
   } catch(e) { showToast('Greška pri obradi slike'); }
 }
 
-function _buildFotoMarker(la, lo, thumb, full, idx, ts) {
+// ─ Ikona markera (vlastita: bijeli obrub; dijeljena tuđa: plavi obrub) ─
+function _fotoMarkerHtml(thumb, shared, isOwn) {
+  const border = (!isOwn && shared) ? '#3b82f6' : '#fff';
+  const badge  = (isOwn && shared)
+    ? `<div class="foto-shared-dot">👥</div>` : '';
+  return `<div style="width:44px;height:44px;border-radius:6px;border:2.5px solid ${border};
+    overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.65);background:#0f172a;position:relative;">
+    <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;">${badge}
+  </div>
+  <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;
+    border-top:10px solid ${border};margin:0 auto;"></div>`;
+}
+
+function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
   const ico = L.divIcon({
     className:'', iconSize:[46,56], iconAnchor:[23,56], popupAnchor:[0,-58],
-    html:`<div style="width:44px;height:44px;border-radius:6px;border:2.5px solid #fff;overflow:hidden;
-      box-shadow:0 2px 8px rgba(0,0,0,0.65);background:#0f172a;position:relative;">
-      <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
-    </div>
-    <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:10px solid #fff;margin:0 auto;"></div>`
+    html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
   const m = L.marker([la, lo], {icon: ico}).addTo(map);
-  _setupFotoPopup(m, idx, la, lo, ts, full);
+  _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }
 
-function _setupFotoPopup(m, idx, la, lo, ts, full) {
-  const dt = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  m.bindPopup(`<div style="min-width:200px;max-width:256px;color:#1e293b;">
-    <img src="${full}" style="width:100%;border-radius:6px;margin-bottom:5px;display:block;" loading="lazy">
-    <div style="font-size:10px;color:#64748b;margin-bottom:4px;">${dt} · ${la.toFixed(5)}, ${lo.toFixed(5)}</div>
-    <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>
-  </div>`, {maxWidth:280, className:'tvlake-popup'});
+// ─ Popup ─
+function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
+  const dt   = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const meta = `${la.toFixed(5)}, ${lo.toFixed(5)}`;
+  const expandBtn = `<button class="foto-popup-btn fpp-info" onclick="openFotoFullscreen(${idx},${!isOwn})">🔍 Proširi</button>`;
+  let actionBtns = '';
+  if (isOwn) {
+    actionBtns = shared
+      ? `<button class="foto-popup-btn fpp-shared-ok" disabled>👥 Podijeljeno</button>`
+      : `<button class="foto-popup-btn fpp-share" onclick="shareFoto(${idx})">📤 Podijeli</button>`;
+    actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>`;
+  }
+  m.bindPopup(
+    `<div style="min-width:200px;max-width:256px;color:#1e293b;">
+      <img src="${full}" style="width:100%;border-radius:6px;margin-bottom:5px;display:block;cursor:zoom-in;"
+        onclick="openFotoFullscreen(${idx},${!isOwn})">
+      <div style="font-size:10px;color:#64748b;margin-bottom:5px;">${dt} · ${meta}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">${expandBtn}${actionBtns}</div>
+    </div>`,
+    {maxWidth:280, className:'tvlake-popup'}
+  );
 }
 
+// ─ Fullscreen ─
+function openFotoFullscreen(idx, isShared) {
+  const f = isShared ? _sharedFotos[idx] : _locFotos[idx];
+  if (!f) return;
+  map.closePopup();
+  document.getElementById('foto-fullscreen-img').src = f.full;
+  const dt = new Date(f.ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('foto-fullscreen-meta').textContent = `${dt} · ${f.la.toFixed(5)}, ${f.lo.toFixed(5)}`;
+  document.getElementById('foto-fullscreen').style.display = 'flex';
+}
+function closeFotoFullscreen() {
+  document.getElementById('foto-fullscreen').style.display = 'none';
+  document.getElementById('foto-fullscreen-img').src = '';
+}
+
+// ─ Dijeljenje ─
+async function shareFoto(idx) {
+  const f = _locFotos[idx];
+  if (!f || f.shared) return;
+  showToast('⏳ Dijeljenje...');
+  const ok = await sbSaveFoto(f, idx);
+  if (!ok) return;
+  f.shared = true;
+  // Ažuriraj ikonu i popup
+  f.marker.setIcon(L.divIcon({
+    className:'', iconSize:[46,56], iconAnchor:[23,56], popupAnchor:[0,-58],
+    html: _fotoMarkerHtml(f.thumb, true, true)
+  }));
+  _setupFotoPopup(f.marker, idx, f.la, f.lo, f.ts, f.full, true, true);
+  _saveFotos();
+  showToast('👥 Foto podijeljeno s kolegama');
+}
+
+async function sbSaveFoto(f, idx) {
+  if (!sbUser || !sbProfile) return false;
+  try {
+    const {data, error} = await sb.from('loc_fotos').upsert({
+      ...(f.sbId ? {id: f.sbId} : {}),
+      korisnik_id: sbUser.id,
+      sumarija:    sbProfile.sumarija,
+      la: f.la, lo: f.lo, ts: f.ts,
+      thumb:    f.thumb,
+      full_img: f.full,
+      shared:   true,
+    }, {onConflict: 'id'}).select('id').single();
+    if (error) { showToast('Greška: ' + error.message); return false; }
+    if (data) { _locFotos[idx].sbId = data.id; }
+    return true;
+  } catch(e) { showToast('Nema veze sa serverom'); return false; }
+}
+
+async function sbDeleteFoto(sbId) {
+  if (!sbId || !sbUser) return;
+  try { await sb.from('loc_fotos').delete().eq('id', sbId).eq('korisnik_id', sbUser.id); } catch(e) {}
+}
+
+// ─ Učitaj tuđe dijeljene fotos ─
+async function sbLoadSharedFotos() {
+  if (!sbProfile?.sumarija || !sbUser || isSpd() === false && false) return;
+  _sharedFotos.forEach(f => map.removeLayer(f.marker));
+  _sharedFotos = [];
+  try {
+    const {data, error} = await sb.from('loc_fotos')
+      .select('id, korisnik_id, la, lo, ts, thumb, full_img, shared')
+      .eq('sumarija', sbProfile.sumarija)
+      .eq('shared', true)
+      .neq('korisnik_id', sbUser.id);
+    if (error || !data) return;
+    data.forEach((row, i) => {
+      if (!row.thumb || !row.la || !row.lo) return;
+      const m = _buildFotoMarker(row.la, row.lo, row.thumb, row.full_img || row.thumb, i, row.ts, false, true);
+      _sharedFotos.push({la: row.la, lo: row.lo, ts: row.ts, thumb: row.thumb, full: row.full_img || row.thumb, marker: m, sbId: row.id});
+    });
+  } catch(e) {}
+}
+
+// ─ Brisanje ─
 function deleteFoto(idx) {
   if (idx < 0 || idx >= _locFotos.length) return;
-  map.removeLayer(_locFotos[idx].marker);
+  const f = _locFotos[idx];
+  map.removeLayer(f.marker);
+  if (f.sbId) sbDeleteFoto(f.sbId);
   _locFotos.splice(idx, 1);
+  // Renumber remaining popups
+  _locFotos.forEach((fi, i) => _setupFotoPopup(fi.marker, i, fi.la, fi.lo, fi.ts, fi.full, true, fi.shared));
   _saveFotos();
   map.closePopup();
 }
 
+// ─ Resize helper ─
 async function _resizeImg(file, maxPx, q) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -3541,18 +3673,21 @@ async function _resizeImg(file, maxPx, q) {
   });
 }
 
+// ─ Persistencija ─
 function _saveFotos() {
   try {
-    localStorage.setItem(_FOTO_KEY, JSON.stringify(_locFotos.map(({la,lo,ts,thumb,full})=>({la,lo,ts,thumb,full}))));
+    localStorage.setItem(_FOTO_KEY, JSON.stringify(
+      _locFotos.map(({la,lo,ts,thumb,full,shared,sbId}) => ({la,lo,ts,thumb,full,shared:!!shared,sbId:sbId||null}))
+    ));
   } catch(e) { showToast('⚠ Premalo prostora za čuvanje fotosa'); }
 }
 
 function _restoreFotos() {
   try {
     const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
-    d.forEach(({la,lo,ts,thumb,full}, i) => {
-      const m = _buildFotoMarker(la, lo, thumb, full, i, ts);
-      _locFotos.push({la, lo, ts, thumb, full, marker: m});
+    d.forEach(({la,lo,ts,thumb,full,shared,sbId}, i) => {
+      const m = _buildFotoMarker(la, lo, thumb, full, i, ts, true, !!shared);
+      _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: !!shared, sbId: sbId||null});
     });
   } catch(e) {}
 }
@@ -3656,6 +3791,17 @@ function sbStartRealtime() {
       event: '*', schema: 'public', table: 'odjeli',
       filter: `sumarija=eq.${sbProfile.sumarija}`
     }, () => sbLoadOdjeli())
+    .subscribe();
+
+  // Shared fotos realtime
+  sb.channel('fotos-rt-' + Date.now())
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'loc_fotos',
+      filter: `sumarija=eq.${sbProfile.sumarija}`
+    }, payload => {
+      const by = payload.new?.korisnik_id || payload.old?.korisnik_id;
+      if (by && by !== sbUser?.id) sbLoadSharedFotos();
+    })
     .subscribe();
 
   // Periodično čisti stale "aktivni" badge (svakih 30s)
@@ -12396,6 +12542,13 @@ function dozBackToList() {
 
 <input type="file" id="loc-photo-input" accept="image/*" capture="environment"
   style="display:none" onchange="onLocPhotoSelected(this)">
+
+<!-- Fullscreen foto preglednik -->
+<div id="foto-fullscreen" onclick="if(event.target===this)closeFotoFullscreen()">
+  <button id="foto-fullscreen-close" onclick="closeFotoFullscreen()">✕</button>
+  <img id="foto-fullscreen-img" src="" alt="">
+  <div id="foto-fullscreen-meta"></div>
+</div>
 
 </body>
 </html>
