@@ -3658,17 +3658,28 @@ async function shareFoto(idx, sharedWith) {
 async function sbSaveFoto(f, idx, sharedWith) {
   if (!sbUser || !sbProfile) return false;
   try {
-    const {data, error} = await sb.from('loc_fotos').upsert({
-      ...(f.sbId ? {id: f.sbId} : {}),
-      korisnik_id:  sbUser.id,
-      sumarija:     sbProfile.sumarija,
-      la: f.la, lo: f.lo, ts: f.ts,
-      thumb:        f.thumb,
-      full_img:     f.full,
-      shared_with:  sharedWith,
-    }, {onConflict: 'id'}).select('id').single();
+    let error, data;
+    if (f.sbId) {
+      // Ažuriraj postojeći zapis
+      ({ error } = await sb.from('loc_fotos')
+        .update({ shared_with: sharedWith, full_img: f.full, thumb: f.thumb })
+        .eq('id', f.sbId)
+        .eq('korisnik_id', sbUser.id));
+    } else {
+      // Novi zapis
+      ({ data, error } = await sb.from('loc_fotos')
+        .insert({
+          korisnik_id: sbUser.id,
+          sumarija:    sbProfile.sumarija,
+          la: f.la, lo: f.lo, ts: f.ts,
+          thumb:       f.thumb,
+          full_img:    f.full,
+          shared_with: sharedWith,
+        })
+        .select('id').single());
+      if (data?.id) _locFotos[idx].sbId = data.id;
+    }
     if (error) { showToast('Greška: ' + error.message); return false; }
-    if (data) { _locFotos[idx].sbId = data.id; }
     return true;
   } catch(e) { showToast('Nema veze sa serverom'); return false; }
 }
@@ -3688,8 +3699,9 @@ async function sbLoadSharedFotos() {
       .select('id, korisnik_id, la, lo, ts, thumb, full_img, shared_with')
       .eq('sumarija', sbProfile.sumarija)
       .neq('korisnik_id', sbUser.id)
-      .contains('shared_with', [sbUser.id]);
-    if (error || !data) return;
+      .filter('shared_with', 'cs', `{${sbUser.id}}`);
+    if (error) { console.warn('sbLoadSharedFotos:', error.message); return; }
+    if (!data) return;
     data.forEach((row, i) => {
       if (!row.thumb || !row.la || !row.lo) return;
       const m = _buildFotoMarker(row.la, row.lo, row.thumb, row.full_img || row.thumb, i, row.ts, false, true);
