@@ -1400,7 +1400,20 @@ select:focus { outline:none; border-color:#3b82f6; }
   z-index: 4500;
   padding: 16px 16px 36px;
   box-shadow: 0 -4px 24px rgba(0,0,0,0.6);
+  max-height: 82vh;
+  overflow-y: auto;
 }
+/* ── Offline SQLite karte unutar layer sheeta ── */
+.ls-sql-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; border-bottom: 1px solid #1a2f50;
+  font-size: 13px; color: #cbd5e1;
+}
+.ls-sql-row:last-child { border-bottom: none; }
+.ls-sql-vis { font-size: 20px; cursor: pointer; user-select: none; flex-shrink: 0; }
+.ls-sql-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-sql-opacity { width: 64px; accent-color: #3b82f6; cursor: pointer; }
+.ls-sql-remove { font-size: 14px; cursor: pointer; color: #64748b; padding: 4px; flex-shrink: 0; }
 #layer-sheet-bg {
   display: none;
   position: fixed;
@@ -3541,6 +3554,24 @@ function _activeLayerKey() {
 }
 
 // ── Layer switcher sheet ─────────────────────────────────────────────────────
+function _lsRenderSqlite() {
+  const list = document.getElementById('ls-sqlite-list');
+  if (!list) return;
+  if (!_sqlLayers.length) {
+    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:4px 0 8px;">Nema učitanih offline karata</div>';
+    return;
+  }
+  list.innerHTML = _sqlLayers.map((sl, i) => `
+    <div class="ls-sql-row">
+      <span class="ls-sql-vis" onclick="sqlmapToggle(${i})" title="${sl.visible ? 'Sakrij' : 'Prikaži'}">${sl.visible ? '👁' : '🙈'}</span>
+      <span class="ls-sql-name" title="${sl.name}">${sl.name}</span>
+      <input type="range" class="ls-sql-opacity" min="0" max="100"
+        value="${Math.round((sl.layer.options.opacity ?? 1) * 100)}"
+        oninput="sqlmapSetOpacity(${i}, this.value)">
+      <span class="ls-sql-remove" onclick="sqlmapRemove(${i})" title="Ukloni">✕</span>
+    </div>`).join('');
+}
+
 function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
@@ -3549,6 +3580,7 @@ function _openLayerSheet() {
   const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm'};
   const el = document.getElementById(map2id[active]);
   if (el) el.classList.add('active');
+  _lsRenderSqlite();
 }
 function closeLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'none';
@@ -10085,6 +10117,7 @@ async function sqlmapLoadFile(file) {
     await _sqlIdbSave(name, buf, fmt, meta);
     _sqlmapStatus('✅ Karta sačuvana: ' + name);
     _sqlmapRenderLayers();
+    _lsRenderSqlite();
     document.getElementById('sqlmap-file-input').value = '';
   } catch(e) {
     _sqlmapStatus('❌ Greška: ' + e.message);
@@ -10107,7 +10140,7 @@ async function sqlmapRestoreAll() {
         _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: true, meta: entry.meta || {}, saved: true });
       } catch(e) { console.warn('SQLmap restore error for', entry.name, e); }
     }
-    if (_sqlLayers.length) _sqlmapRenderLayers();
+    if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
   } catch(e) { console.warn('SQLmap restore failed:', e); }
 }
 
@@ -10221,6 +10254,7 @@ function sqlmapToggle(i) {
   sl.visible = !sl.visible;
   if (sl.visible) sl.layer.addTo(map); else map.removeLayer(sl.layer);
   _sqlmapRenderLayers();
+  _lsRenderSqlite();
 }
 function sqlmapSetOpacity(i, val) {
   const sl = _sqlLayers[i];
@@ -10235,6 +10269,7 @@ async function sqlmapRemove(i) {
   if (sl.saved) await _sqlIdbDelete(sl.name).catch(() => {});
   _sqlLayers.splice(i, 1);
   _sqlmapRenderLayers();
+  _lsRenderSqlite();
   if (!_sqlLayers.length) _sqlmapStatus('');
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11855,6 +11890,15 @@ function dozBackToList() {
         Šumski kamionski putevi
       </span>
     </label>
+  </div>
+  <!-- Offline SQLite karte -->
+  <div id="ls-sqlite-section" style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
+    <h3 style="margin-bottom:10px;">Offline karte (SQLite)</h3>
+    <div id="ls-sqlite-list"></div>
+    <button onclick="closeLayerSheet();showSqlMapModal();"
+      style="width:100%;margin-top:10px;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
+      📂 Učitaj novu offline kartu
+    </button>
   </div>
 </div>
 
