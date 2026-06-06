@@ -1518,8 +1518,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   <div id="tab-bar">
     <button class="tab-btn" id="menu-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)">☰ Meni</button>
     <button class="tab-btn active" onclick="switchTab('karta')">🗺 Karta</button>
-    <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
+    <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
@@ -1564,14 +1564,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div style="display:none;" id="nd">Vlaka 1 — matična trasa</div>
         <input type="hidden" id="ibr" value="1">
         <input type="hidden" id="ikr" value="0">
-        <div class="seg-grp">
-          <button class="seg-btn" onclick="toggleMjtrgDropdown()" title="Mjerenja i registar tragova">
-            <span class="seg-ico">📏</span><span>M&amp;T</span>
-          </button>
-          <button class="seg-btn" onclick="mojaLokacija()" title="Moja pozicija">
-            <span class="seg-ico">🎯</span><span>Pozicija</span>
-          </button>
-        </div>
       </div>
 
       <!-- MOJE VLAKE -->
@@ -1627,21 +1619,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <button class="btn b" onclick="drawBuffers()">🔲 PRIKAŽI BUFFERE</button>
         <button class="btn gr" onclick="clearBuffers()">✕ UKLONI BUFFERE</button>
-      </div>
-
-      <!-- KML -->
-      <div class="sec">
-        <div class="sec-t">🗺 KML Granice Odjela</div>
-        <div id="kml-drop"
-             onclick="document.getElementById('kf').click()"
-             ondragover="event.preventDefault();this.classList.add('over')"
-             ondragleave="this.classList.remove('over')"
-             ondrop="dropK(event)">
-          📂 DODAJ KML FAJL<br>
-          <small style="font-size:11px;">Kliknite ovdje ili povucite .kml fajl</small>
-        </div>
-        <input type="file" id="kf" accept=".kml" multiple style="display:none" onchange="fileK(event)">
-        <div id="kl"></div>
       </div>
 
       <!-- REFERENTNA KARTA -->
@@ -3642,6 +3619,7 @@ function _lsRenderSqlite() {
 function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
+  _lsTab('karte');
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
   if (grRow) grRow.style.display = (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) ? 'block' : 'none';
@@ -7434,20 +7412,36 @@ function rndKml() {
   if (!el) return;
   el.innerHTML = kmlLs.length === 0
     ? '<div style="font-size:11px;color:#475569;padding:6px 0;">Nema učitanih slojeva.</div>'
-    : `<div style="font-size:11px;color:#64748b;padding:4px 0;">${kmlLs.length} sloj${kmlLs.length===1?'':'eva'} — <a href="#" onclick="openGraniceModal();return false;" style="color:#60a5fa;">uredi stilove</a></div>`;
+    : `<div style="font-size:11px;color:#64748b;padding:4px 0;">${kmlLs.length} sloj${kmlLs.length===1?'':'eva'} učitan${kmlLs.length===1?'':'o'}.</div>`;
 }
 
-// ── Granice Odjela Modal ───────────────────────────────────────────────────────
+// ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
+function _lsTab(name) {
+  const panes = ['karte','granice'];
+  panes.forEach(p => {
+    const pane = document.getElementById('ls-pane-' + p);
+    const btn  = document.getElementById('ls-tab-' + p);
+    if (!pane || !btn) return;
+    const active = p === name;
+    pane.style.display = active ? '' : 'none';
+    btn.style.background  = active ? '#1e3a5f' : '#0f172a';
+    btn.style.borderColor = active ? '#334155' : '#1e293b';
+    btn.style.color       = active ? '#e2e8f0' : '#64748b';
+  });
+}
+
+// ── Granice Odjela — now lives in layer sheet ──────────────────────────────────
 function openGraniceModal() {
-  document.getElementById('granice-modal').classList.add('show');
+  _openLayerSheet();
+  _lsTab('granice');
   rndGraniceModal();
 }
 function closeGraniceModal() {
-  document.getElementById('granice-modal').classList.remove('show');
+  closeLayerSheet();
 }
 
 async function reloadGraniceSlojevi() {
-  closeGraniceModal();
+  closeLayerSheet();
   await autoLoadAllKmlBuckets();
   openGraniceModal();
 }
@@ -8948,7 +8942,7 @@ function switchTab(tab) {
   const padmin  = document.getElementById('admin-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
     b.classList.toggle('active',
-      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')||(i===4&&tab==='doznaka')||(i===5&&tab==='admin')||(i===5&&tab==='mjtrg')));
+      (i===1&&tab==='karta')||(i===2&&tab==='projekat')||(i===3&&tab==='vlake')||(i===4&&tab==='doznaka')||(i===5&&tab==='admin')||(i===5&&tab==='mjtrg')));
   panel.style.display   = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
   pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
@@ -11719,38 +11713,6 @@ function dozBackToList() {
     </div><!-- /mjtrg-panel -->
 
 
-<!-- GRANICE ODJELA MODAL -->
-<div id="granice-modal" onclick="if(event.target===this)closeGraniceModal()">
-  <div id="granice-mbox">
-    <div class="gmhdr">
-      <h2>🗺 Granice Odjela — Slojevi</h2>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Ponovo učitaj iz bucketa" style="font-size:13px;padding:4px 10px;">↺ Reload</button>
-        <button onclick="closeGraniceModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">✕</button>
-      </div>
-    </div>
-    <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 14px;border-radius:0;text-align:center;background:rgba(0,0,0,0.3);"></div>
-
-    <!-- GeoJSON odjeli sekcija -->
-    <div style="padding:10px 14px 8px;border-bottom:1px solid #1e293b;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-        <span style="font-size:13px;font-weight:600;color:#e2e8f0;">📁 GeoJSON odjeli</span>
-        <button onclick="document.getElementById('geojson-odjeli-input').click()"
-                style="margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;">
-          📂 Učitaj .geojson
-        </button>
-        <input type="file" id="geojson-odjeli-input" accept=".geojson,.json"
-               style="display:none" onchange="loadGeoJSONOdjeli(this.files[0]);this.value=''">
-      </div>
-      <div id="geojson-odjeli-info" style="font-size:11px;color:#64748b;">Nije učitan GeoJSON fajl.</div>
-    </div>
-
-    <div id="granice-list">
-      <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══ DOZNAKA — TYPE PICKER SHEET ═══ -->
 <div id="doz-type-picker">
   <h4>Odaberi tip obilježavanja</h4>
@@ -12015,64 +11977,120 @@ function dozBackToList() {
 <!-- Layer switcher bottom sheet -->
 <div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
 <div id="layer-sheet">
-  <h3>Pozadinska karta</h3>
-  <div class="layer-grid" id="ls-basemap-grid">
-    <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
-      <span class="layer-ico">⛰</span>Topo
+  <!-- Sub-tab bar -->
+  <div id="ls-tabs" style="display:flex;gap:4px;margin-bottom:14px;">
+    <button id="ls-tab-karte" onclick="_lsTab('karte')"
+      style="flex:1;padding:7px 4px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;">
+      🗺 Karte
     </button>
-    <button class="layer-opt" id="lo-sat" onclick="setLayer('🛰 Satelit')">
-      <span class="layer-ico">🛰</span>Satelit
+    <button id="ls-tab-granice" onclick="_lsTab('granice')"
+      style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
+      🗂 Granice
     </button>
-    <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
-      <span class="layer-ico">🗺</span>Karta
-    </button>
-    <!-- SQLite karte se renderuju dinamički, teku u isti grid -->
-    <div id="ls-sqlite-in-grid" style="display:contents;"></div>
   </div>
-  <!-- Granice odjela — sakriven dok nema podataka -->
-  <div id="ls-granice-row" style="display:none;margin-top:10px;">
-    <div class="layer-grid" style="grid-template-columns:1fr;">
-      <button class="layer-opt" id="lo-granice" onclick="setLayer('_granice')">
-        <span class="layer-ico">🗂</span>Topo + Granice odjela
+
+  <!-- Tab: Karte -->
+  <div id="ls-pane-karte">
+    <h3>Pozadinska karta</h3>
+    <div class="layer-grid" id="ls-basemap-grid">
+      <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
+        <span class="layer-ico">⛰</span>Topo
       </button>
+      <button class="layer-opt" id="lo-sat" onclick="setLayer('🛰 Satelit')">
+        <span class="layer-ico">🛰</span>Satelit
+      </button>
+      <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
+        <span class="layer-ico">🗺</span>Karta
+      </button>
+      <!-- SQLite karte se renderuju dinamički, teku u isti grid -->
+      <div id="ls-sqlite-in-grid" style="display:contents;"></div>
+    </div>
+    <!-- Granice odjela — sakriven dok nema podataka -->
+    <div id="ls-granice-row" style="display:none;margin-top:10px;">
+      <div class="layer-grid" style="grid-template-columns:1fr;">
+        <button class="layer-opt" id="lo-granice" onclick="setLayer('_granice')">
+          <span class="layer-ico">🗂</span>Topo + Granice odjela
+        </button>
+      </div>
+    </div>
+
+    <!-- Učitaj offline kartu -->
+    <div style="margin-top:14px;">
+      <button onclick="closeLayerSheet();showSqlMapModal();"
+        style="width:100%;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
+        📂 Dodaj / upravljaj offline kartama
+      </button>
+    </div>
+
+    <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
+      <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
+      <!-- Putevi -->
+      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
+        <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
+          style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-block;width:28px;height:4px;background:#f97316;border-radius:2px;"></span>
+          Šumski kamionski putevi
+        </span>
+      </label>
+      <!-- Granice odjela -->
+      <div style="padding:6px 0 2px;">
+        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
+          <input type="checkbox" id="granice-toggle" onchange="_geojsonToggleVis(this.checked)"
+            style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #38bdf8;border-bottom:1px solid rgba(56,189,248,0.3);"></span>
+            Granice odjela
+          </span>
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
+          <span style="color:#64748b;font-size:11px;white-space:nowrap;">Prozirnost</span>
+          <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
+            style="flex:1;accent-color:#38bdf8;cursor:pointer;"
+            oninput="_geojsonSetOpacity(this.value)">
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Učitaj offline kartu -->
-  <div style="margin-top:14px;">
-    <button onclick="closeLayerSheet();showSqlMapModal();"
-      style="width:100%;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
-      📂 Dodaj / upravljaj offline kartama
-    </button>
-  </div>
+  <!-- Tab: Granice -->
+  <div id="ls-pane-granice" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h3 style="margin:0;">🗂 Granice Odjela</h3>
+      <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Ponovo učitaj iz bucketa" style="font-size:13px;padding:4px 10px;">↺ Reload</button>
+    </div>
+    <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 10px;border-radius:6px;text-align:center;background:rgba(0,0,0,0.3);margin-bottom:8px;"></div>
 
-  <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
-    <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
-    <!-- Putevi -->
-    <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
-      <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
-        style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
-      <span style="display:flex;align-items:center;gap:8px;">
-        <span style="display:inline-block;width:28px;height:4px;background:#f97316;border-radius:2px;"></span>
-        Šumski kamionski putevi
-      </span>
-    </label>
-    <!-- Granice odjela -->
-    <div style="padding:6px 0 2px;">
-      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
-        <input type="checkbox" id="granice-toggle" onchange="_geojsonToggleVis(this.checked)"
-          style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;">
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #38bdf8;border-bottom:1px solid rgba(56,189,248,0.3);"></span>
-          Granice odjela
-        </span>
-      </label>
-      <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
-        <span style="color:#64748b;font-size:11px;white-space:nowrap;">Prozirnost</span>
-        <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
-          style="flex:1;accent-color:#38bdf8;cursor:pointer;"
-          oninput="_geojsonSetOpacity(this.value)">
+    <!-- GeoJSON odjeli -->
+    <div style="padding:10px 0 8px;border-bottom:1px solid #1e293b;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <span style="font-size:13px;font-weight:600;color:#e2e8f0;">📁 GeoJSON odjeli</span>
+        <button onclick="document.getElementById('geojson-odjeli-input').click()"
+                style="margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;">
+          📂 Učitaj .geojson
+        </button>
+        <input type="file" id="geojson-odjeli-input" accept=".geojson,.json"
+               style="display:none" onchange="loadGeoJSONOdjeli(this.files[0]);this.value=''">
       </div>
+      <div id="geojson-odjeli-info" style="font-size:11px;color:#64748b;">Nije učitan GeoJSON fajl.</div>
+    </div>
+
+    <!-- KML upload -->
+    <div style="margin-bottom:10px;">
+      <div id="kml-drop"
+           onclick="document.getElementById('kf').click()"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="dropK(event)">
+        📂 DODAJ KML FAJL<br>
+        <small style="font-size:11px;">Kliknite ovdje ili povucite .kml fajl</small>
+      </div>
+      <input type="file" id="kf" accept=".kml" multiple style="display:none" onchange="fileK(event)">
+      <div id="kl"></div>
+    </div>
+
+    <div id="granice-list">
+      <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
     </div>
   </div>
 </div>
