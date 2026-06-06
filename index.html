@@ -5328,6 +5328,11 @@ function onP(p) {
     posCr.setLatLng([la, lo]).setRadius(ac);
   }
 
+  // Prati lokaciju kad se snima vlaka ili trag
+  if ((recOn && !recPaused) || _tragOn) {
+    map.panTo([la, lo], { animate: true, duration: 0.5 });
+  }
+
   if (!recOn || recPaused || actI === null) return;
 
   // 1. FILTER TAČNOSTI
@@ -6244,19 +6249,19 @@ function updateVlakaLabel(i) {
     if (mks.length > 0) { v.labelMk = mks[0]; v.extraLabels = mks.slice(1); }
   }
 
-  if (v.lager) {
+  if (v.kr === 0 && v.lager) {
     const pFirst = v.pts[0];
-    const S = 22; // px veličina simbola
-    // Pravougaonik: dijagonala TL→BR, gornji trougao (TL-TR-BR) crn
-    const svgSym = `<svg width="${S}" height="${S}" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">
-      <rect x="0.5" y="0.5" width="${S-1}" height="${S-1}" fill="none" stroke="white" stroke-width="1.5"/>
-      <polygon points="0,0 ${S},0 ${S},${S}" fill="black"/>
-      <line x1="0" y1="0" x2="${S}" y2="${S}" stroke="white" stroke-width="1.5"/>
+    const LW = 28, LH = 13; // pravougaon, plosnat
+    const svgSym = `<svg width="${LW}" height="${LH}" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.9))">
+      <rect x="0" y="0" width="${LW}" height="${LH}" fill="white"/>
+      <polygon points="0,0 ${LW},0 ${LW},${LH}" fill="black"/>
+      <line x1="0" y1="0" x2="${LW}" y2="${LH}" stroke="white" stroke-width="1.5"/>
+      <rect x="0.5" y="0.5" width="${LW-1}" height="${LH-1}" fill="none" stroke="#888" stroke-width="0.5"/>
     </svg>
-    <div style="color:#fbbf24;font-weight:bold;font-size:10px;text-align:center;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,0.9);margin-top:1px;pointer-events:none;">${v.lager}</div>`;
+    <div style="color:#fbbf24;font-weight:bold;font-size:9px;text-align:center;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,1);margin-top:1px;pointer-events:none;">${v.lager}</div>`;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
       icon: L.divIcon({
-        className: '', iconSize: [S, S+14], iconAnchor: [S/2, S/2],
+        className: '', iconSize: [LW, LH+11], iconAnchor: [LW/2, LH/2],
         html: svgSym
       }),
       interactive: false, zIndexOffset: 600, pane: 'vlakeLabels'
