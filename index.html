@@ -2138,6 +2138,28 @@ let sbProfile = null;
 const _SAVED_USER_KEY = 'tvlake_saved_user';
 
 // ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
+// Vlake bez projekta se čuvaju isključivo ovdje (localStorage) — nikad na server
+const LOCAL_VLAKE_KEY = 'tvlake_local_vlake';
+
+function _saveLocalVlake() {
+  try {
+    const rows = vlake
+      .filter(v => v.projektId === null)
+      .map(v => ({
+        nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
+        boja: v.color, lager: v.lager || null,
+        pts: v.pts, wpts: v.wpts || [],
+        updated_at: new Date().toISOString(),
+        projekt_id: null, id: null
+      }));
+    localStorage.setItem(LOCAL_VLAKE_KEY, JSON.stringify(rows));
+  } catch(e) {}
+}
+
+function _loadLocalVlake() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY) || '[]'); } catch(e) { return []; }
+}
+
 const _OL = {
   VLAKE:    'tvlake_ol_vlake',
   PROJEKTI: 'tvlake_ol_projekti',
@@ -2882,7 +2904,7 @@ function _applyVlakeRows(rows) {
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
-    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: [], sbId: row.id, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
+    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
@@ -2898,18 +2920,25 @@ function _applyVlakeRows(rows) {
 }
 
 async function sbLoadVlake() {
-  if (!sbUser || !sbProfile) return;
-  let rows = null;
-  try {
-    const { data, error } = await sb.from('vlake')
-      .select('*')
-      .eq('korisnik_id', sbUser.id)
-      .eq('sumarija', sbProfile.sumarija || '');
-    if (!error && data) { rows = data; _OL.save(_OL.VLAKE, data); }
-  } catch(e) {}
-  if (!rows) rows = _OL.load(_OL.VLAKE);
-  if (!rows || rows.length === 0) return;
-  _applyVlakeRows(rows);
+  // 1. Lokalne vlake (bez projekta) — uvijek iz localStorage, bez servera
+  const localRows = _loadLocalVlake();
+
+  // 2. Projektne vlake — iz Supabase (ili offline keša)
+  let serverRows = null;
+  if (sbUser && sbProfile) {
+    try {
+      const { data, error } = await sb.from('vlake')
+        .select('*')
+        .eq('korisnik_id', sbUser.id)
+        .eq('sumarija', sbProfile.sumarija || '');
+      if (!error && data) { serverRows = data; _OL.save(_OL.VLAKE, data); }
+    } catch(e) {}
+    if (!serverRows) serverRows = _OL.load(_OL.VLAKE);
+  }
+
+  const allRows = [...localRows, ...(serverRows || [])];
+  if (allRows.length === 0) return;
+  _applyVlakeRows(allRows);
 }
 
 function _syncIbr() {
@@ -2928,19 +2957,28 @@ function scheduleVlakaSave(i) {
 
 async function sbFlushVlaka(i) {
   const v = vlake[i];
-  if (!v || !sbUser || !sbProfile) return;
+  if (!v) return;
+
+  // Vlake bez projekta se čuvaju SAMO lokalno — nikad na Supabase
+  if (v.projektId === null) {
+    _saveLocalVlake();
+    return;
+  }
+
+  // Projektne vlake — Supabase (saradnici trebaju vidjeti)
+  if (!sbUser || !sbProfile) return;
   const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
-    projekt_id:  _aktivniProjektId || null,
+    projekt_id:  v.projektId,
     nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
     updated_at: new Date().toISOString()
   };
 
-  // Uvijek ažuriraj lokalni keš odmah (preživljava refresh čak i offline)
+  // Ažuriraj lokalni keš projektnih vlaka odmah
   const cached = _OL.load(_OL.VLAKE) || [];
   const ci = cached.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
   const cRow = { ...payload, id: v.sbId || null };
@@ -2953,7 +2991,6 @@ async function sbFlushVlaka(i) {
     if (!error && data) {
       v.sbId = data.id;
       v.updatedAt = new Date().toISOString();
-      // Ažuriraj ID u kešu
       const c2 = _OL.load(_OL.VLAKE) || [];
       const i2 = c2.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
@@ -2965,17 +3002,19 @@ async function sbFlushVlaka(i) {
   }
 }
 
-async function sbDeleteVlaka(sbId) {
-  if (!sbId || !sbUser) return;
-  // Ukloni iz lokalnog keša odmah
+async function sbDeleteVlaka(v) {
+  if (!v) return;
+  // Lokalne vlake — brisanje iz Supabase nije potrebno; pozivalac poziva _saveLocalVlake() nakon splice
+  if (v.projektId === null) return;
+  // Projektne vlake — briši sa Supabase
+  if (!v.sbId || !sbUser) return;
   const cached = _OL.load(_OL.VLAKE) || [];
-  _OL.save(_OL.VLAKE, cached.filter(r => r.id !== sbId));
-
+  _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
   try {
-    const { error } = await sb.from('vlake').delete().eq('id', sbId);
-    if (error) _OL.enqueue({ type: 'delete_vlaka', payload: { id: sbId } });
+    const { error } = await sb.from('vlake').delete().eq('id', v.sbId);
+    if (error) _OL.enqueue({ type: 'delete_vlaka', payload: { id: v.sbId } });
   } catch(e) {
-    _OL.enqueue({ type: 'delete_vlaka', payload: { id: sbId } });
+    _OL.enqueue({ type: 'delete_vlaka', payload: { id: v.sbId } });
   }
 }
 
@@ -4363,8 +4402,9 @@ function vcDelete() {
     if (v.labelMk) map.removeLayer(v.labelMk);
     if (v.lagerMk) map.removeLayer(v.lagerMk);
     (v.extraLabels||[]).forEach(m=>map.removeLayer(m));
-    sbDeleteVlaka(v.sbId);
+    sbDeleteVlaka(v);
     vlake.splice(_vcIdx, 1);
+    _saveLocalVlake();
     rndList();
   }
   _addVBusy = false;
@@ -4393,7 +4433,7 @@ async function _doCreateVlaka(br, kr) {
   const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
   attachPolyClick(poly);
-  vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
+  vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,projektId:_aktivniProjektId||null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
   sbFlushVlaka(vlake.length-1);
   cIdx=(cIdx+1)%PAL.length; selC=PAL[cIdx];
   document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
@@ -6028,9 +6068,11 @@ function _delConfirm() {
   if (vlake[i].labelMk) map.removeLayer(vlake[i].labelMk);
   if (vlake[i].lagerMk) map.removeLayer(vlake[i].lagerMk);
   (vlake[i].extraLabels || []).forEach(m => map.removeLayer(m));
-  sbDeleteVlaka(vlake[i].sbId);
+  const _delV = vlake[i];
+  sbDeleteVlaka(_delV);
   clearTimeout(_vlakaSaveTimers[i]);
   vlake.splice(i,1);
+  _saveLocalVlake();
   // Reindeksiraj tajmere nakon splice
   const nt = {};
   Object.keys(_vlakaSaveTimers).forEach(k => { const n=+k; if(n<i) nt[n]=_vlakaSaveTimers[n]; else if(n>i) nt[n-1]=_vlakaSaveTimers[n]; });
@@ -7811,9 +7853,10 @@ function doMerge(a,b){
   vb.wpts.forEach(m=>map.removeLayer(m));
   if (vb.labelMk) map.removeLayer(vb.labelMk);
   if (vb.lagerMk) map.removeLayer(vb.lagerMk);
-  sbDeleteVlaka(vb.sbId);
+  sbDeleteVlaka(vb);
   clearTimeout(_vlakaSaveTimers[b.vi]);
   vlake.splice(b.vi,1);
+  _saveLocalVlake();
   // Fix actI: after splice, a.vi may have shifted if b.vi < a.vi
   const finalIdx = b.vi < a.vi ? a.vi - 1 : a.vi;
   actI = Math.max(0, Math.min(finalIdx, vlake.length - 1));
