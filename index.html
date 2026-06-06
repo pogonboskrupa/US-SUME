@@ -2137,6 +2137,26 @@ let sbProfile = null;
 
 const _SAVED_USER_KEY = 'tvlake_saved_user';
 
+// ─── LOCAL VLAKE (bez prijave / fallback) ─────────────────────────────────────
+const LOCAL_VLAKE_KEY = 'tvlake_local_vlake';
+
+function _saveLocalVlake() {
+  try {
+    const rows = vlake.map(v => ({
+      nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
+      boja: v.color, lager: v.lager || null,
+      pts: v.pts,
+      updated_at: v.updatedAt || new Date().toISOString(),
+      id: v.sbId || null
+    }));
+    localStorage.setItem(LOCAL_VLAKE_KEY, JSON.stringify(rows));
+  } catch(e) {}
+}
+
+function _loadLocalVlake() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY) || '[]'); } catch(e) { return []; }
+}
+
 // ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
 // Vlake bez projekta se čuvaju isključivo ovdje (localStorage) — nikad na server
 const LOCAL_VLAKE_KEY = 'tvlake_local_vlake';
@@ -6085,6 +6105,7 @@ function _delConfirm() {
     actI--;
   }
   stopRec();
+  _saveLocalVlake();
   rndList(); updOvl();
 }
 
