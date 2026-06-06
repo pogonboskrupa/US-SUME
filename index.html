@@ -3575,9 +3575,8 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
   const expandBtn = `<button class="foto-popup-btn fpp-info" onclick="openFotoFullscreen(${idx},${!isOwn})">🔍 Proširi</button>`;
   let actionBtns = '';
   if (isOwn) {
-    actionBtns = shared
-      ? `<button class="foto-popup-btn fpp-shared-ok" disabled>👥 Podijeljeno</button>`
-      : `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${idx})">📤 Podijeli</button>`;
+    const shareLbl = shared ? '👥 Podijeli' : '📤 Podijeli';
+    actionBtns = `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${idx})">${shareLbl}</button>`;
     actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>`;
   }
   m.bindPopup(
@@ -3611,15 +3610,20 @@ let _shareFotoIdx = null;
 
 function openShareFotoDlg(idx) {
   _shareFotoIdx = idx;
-  const entries = Object.entries(kolegeMap);
-  const list    = document.getElementById('share-foto-list');
+  const f            = _locFotos[idx];
+  const alreadyWith  = new Set(f?.sharedWith || []);
+  const entries      = Object.entries(kolegeMap);
+  const list         = document.getElementById('share-foto-list');
   if (!entries.length) { showToast('Nema kolega u šumariji'); return; }
-  list.innerHTML = entries.map(([kid, info]) => `
-    <label class="share-kolega-row" onclick="event.stopPropagation()">
-      <input type="checkbox" value="${kid}">
+  list.innerHTML = entries.map(([kid, info]) => {
+    const done = alreadyWith.has(kid);
+    return `<label class="share-kolega-row" onclick="event.stopPropagation()" style="${done?'opacity:0.65;':''}">
+      <input type="checkbox" value="${kid}" ${done ? 'checked disabled' : ''}>
       <span class="skr-dot" style="background:${info.color||'#64748b'};"></span>
       <span class="skr-ime">${info.ime}</span>
-    </label>`).join('');
+      ${done ? '<span style="font-size:10px;color:#4ade80;margin-left:auto;">✓ podijeljeno</span>' : ''}
+    </label>`;
+  }).join('');
   document.getElementById('share-foto-dlg').style.display = 'flex';
   map.closePopup();
 }
@@ -3630,11 +3634,20 @@ function closeShareFotoDlg() {
 }
 
 async function confirmShareFoto() {
-  const checks = document.querySelectorAll('#share-foto-list input[type=checkbox]:checked');
-  const ids    = Array.from(checks).map(c => c.value);
-  if (!ids.length) { showToast('Odaberi barem jednog kolegu'); return; }
+  const f           = _locFotos[_shareFotoIdx];
+  const alreadyWith = new Set(f?.sharedWith || []);
+  const newIds      = Array.from(
+    document.querySelectorAll('#share-foto-list input[type=checkbox]:checked:not(:disabled)')
+  ).map(c => c.value).filter(id => !alreadyWith.has(id));
+
+  if (!newIds.length) {
+    showToast('Već podijeljeno sa svim odabranim kolegama');
+    closeShareFotoDlg();
+    return;
+  }
+  const allIds = [...alreadyWith, ...newIds];
   closeShareFotoDlg();
-  await shareFoto(_shareFotoIdx, ids);
+  await shareFoto(_shareFotoIdx, allIds);
 }
 
 // ─ Dijeljenje ─
@@ -6619,6 +6632,7 @@ function _renderVlakaRow(el, v, i, depth) {
       ${nasaviBtn}
     </div>
     <div class="vcard-btns">
+      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje" style="background:#ea580c;color:#fff;border-color:#c2410c;">▶</button>` : ''}
       <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
       <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
       <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
