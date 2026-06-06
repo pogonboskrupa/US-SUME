@@ -2150,29 +2150,29 @@ let sbProfile = null;
 
 const _SAVED_USER_KEY = 'tvlake_saved_user';
 
-// ─── LOCAL VLAKE (bez prijave / fallback) ─────────────────────────────────────
-// Vlake bez projekta se čuvaju isključivo ovdje (localStorage) — nikad na server
+// ─── LOKALNI KEŠ VLAKA (preživljava restart bez logina) ──────────────────────
 const LOCAL_VLAKE_KEY = 'tvlake_local_vlake';
 
 function _saveLocalVlake() {
+  // Serijalizuje SAMO primitive — bez Leaflet objekata (poly, wpts, labelMk...)
   try {
-    const rows = vlake
-      .filter(v => v.projektId === null)
-      .map(v => ({
-        nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
-        boja: v.color, lager: v.lager || null,
-        pts: v.pts,
-        updated_at: new Date().toISOString(),
-        projekt_id: null, id: null
-      }));
+    const rows = vlake.map(v => ({
+      nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
+      boja: v.color, lager: v.lager || null,
+      pts: v.pts,
+      updated_at: v.updatedAt || new Date().toISOString(),
+      id: v.sbId || null
+    }));
     localStorage.setItem(LOCAL_VLAKE_KEY, JSON.stringify(rows));
   } catch(e) {}
 }
 
 function _loadLocalVlake() {
-  try { return JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY) || '[]'); } catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY) || '[]'); }
+  catch(e) { return []; }
 }
 
+// ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
 const _OL = {
   VLAKE:    'tvlake_ol_vlake',
   PROJEKTI: 'tvlake_ol_projekti',
@@ -2933,10 +2933,10 @@ function _applyVlakeRows(rows) {
 }
 
 async function sbLoadVlake() {
-  // 1. Lokalne vlake (bez projekta) — uvijek iz localStorage, bez servera
+  // 1. Lokalne vlake — uvijek učitaj iz localStorage (preživljavaju restart bez logina)
   const localRows = _loadLocalVlake();
 
-  // 2. Projektne vlake — iz Supabase (ili offline keša)
+  // 2. Serverske vlake — samo ako je korisnik prijavljen
   let serverRows = null;
   if (sbUser && sbProfile) {
     try {
@@ -2971,20 +2971,13 @@ function scheduleVlakaSave(i) {
 async function sbFlushVlaka(i) {
   const v = vlake[i];
   if (!v) return;
-
-  // Vlake bez projekta se čuvaju SAMO lokalno — nikad na Supabase
-  if (v.projektId === null) {
-    _saveLocalVlake();
-    return;
-  }
-
-  // Projektne vlake — Supabase (saradnici trebaju vidjeti)
-  if (!sbUser || !sbProfile) return;
+  _saveLocalVlake();                           // uvijek spremi lokalno odmah (sync)
+  if (!sbUser || !sbProfile) return;           // bez prijave — samo lokalni keš
   const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
-    projekt_id:  v.projektId,
+    projekt_id:  _aktivniProjektId || null,
     nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
