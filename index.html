@@ -1849,7 +1849,10 @@ select:focus { outline:none; border-color:#3b82f6; }
 
       <!-- REKAP -->
       <div class="sec">
-        <div class="sec-t">📊 Rekap Projekta</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="sec-t" style="margin:0;">📊 Rekap Projekta</div>
+          <button class="btn g" style="margin:0;font-size:11px;padding:5px 10px;" onclick="exportProjektPDF()">📄 Izvezi PDF</button>
+        </div>
         <div class="stat-card" id="rekap-card">
           <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za rekap</div>
         </div>
@@ -9245,6 +9248,181 @@ function rndLog() {
         <span style="color:#38bdf8;font-family:monospace;">${fmtL(cumMap[day.date])}</span>
       </div></div>`;
   }).join('');
+}
+
+// === PDF IZVOZ PROJEKTA ===
+function exportProjektPDF() {
+  if (!_aktivniProjektId) { showToast('Nema aktivnog projekta'); return; }
+  const proj = _projekti.find(p => p.id === _aktivniProjektId);
+  if (!proj) return;
+
+  // ── helpers (inline, jer idu u novi prozor) ──
+  const fmtM = m => {
+    const v = Math.round(m);
+    return v >= 1000 ? (v / 1000).toFixed(3).replace('.', ',') + ' km' : v + ' m';
+  };
+  const fmtD = s => {
+    if (!s) return '—';
+    try { return new Date(s + 'T12:00:00').toLocaleDateString('hr', {day:'2-digit',month:'2-digit',year:'numeric'}); }
+    catch { return s; }
+  };
+  const calcVLen = pts => {
+    let d = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dx = (pts[i].lo - pts[i-1].lo) * 111320 * Math.cos((pts[i].la + pts[i-1].la) / 2 * Math.PI / 180);
+      const dy = (pts[i].la - pts[i-1].la) * 111320;
+      d += Math.sqrt(dx * dx + dy * dy);
+    }
+    return Math.round(d);
+  };
+
+  // ── projekat info ──
+  const pov       = parseFloat(proj.povrsina) || 0;
+  const myIme     = getIme();
+  const myTotalM  = Math.round(calcL(vlake.flatMap(v => v.pts)));
+
+  // ── rekap po projektantu (iz loga + live) ──
+  const byProj = {};
+  dnevniLog.forEach(day => {
+    day.entries.forEach(e => {
+      if (!byProj[e.projektant]) byProj[e.projektant] = { meters: 0, days: new Set() };
+      if (e.meters > byProj[e.projektant].meters) byProj[e.projektant].meters = e.meters;
+      byProj[e.projektant].days.add(day.date);
+    });
+  });
+  if (!byProj[myIme]) byProj[myIme] = { meters: 0, days: new Set() };
+  byProj[myIme].meters = myTotalM;
+  const totalAllM  = Object.values(byProj).reduce((s, v) => s + v.meters, 0);
+  const gustoca    = pov > 0 ? Math.round(totalAllM / pov) + ' m/ha' : '—';
+
+  // ── vlake hijerarhija ──
+  const sortedMain = vlake.filter(v => v.kr === 0).sort((a, b) => a.br - b.br);
+  let totalGlavnihM = 0, totalKrakovaM = 0, brGlavnih = 0, brKrakova = 0;
+  const vlakeRows = sortedMain.map(v => {
+    const vLen = calcVLen(v.pts);
+    totalGlavnihM += vLen; brGlavnih++;
+    const djeca = vlake.filter(k => {
+      const par = k.nm.split('.').slice(0, -1).join('.');
+      return par === v.nm;
+    }).sort((a, b) => a.br - b.br || a.kr - b.kr);
+    const kRows = djeca.map(k => {
+      const kLen = calcVLen(k.pts);
+      totalKrakovaM += kLen; brKrakova++;
+      return `<tr class="krow">
+        <td style="padding-left:22px;">↳ ${k.nm}</td>
+        <td>Krak</td>
+        <td style="text-align:right;">${k.pts.length}</td>
+        <td style="text-align:right;">${fmtM(kLen)}</td>
+        <td>${k.lager || '—'}</td>
+      </tr>`;
+    }).join('');
+    return `<tr class="mrow">
+      <td><b>${v.nm}</b></td>
+      <td>Matična vlaka</td>
+      <td style="text-align:right;">${v.pts.length}</td>
+      <td style="text-align:right;">${fmtM(vLen)}</td>
+      <td>${v.lager || '—'}</td>
+    </tr>${kRows}`;
+  }).join('');
+
+  // ── dnevni log ──
+  const logRows = [...dnevniLog]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .flatMap(day => day.entries.map(e => `
+      <tr>
+        <td>${fmtD(day.date)}</td>
+        <td>${e.projektant}</td>
+        <td>${e.odjel || proj.odjel || '—'}</td>
+        <td style="text-align:right;">${fmtM(e.meters)}</td>
+        <td style="text-align:center;">${e.workStart || '—'}</td>
+        <td style="text-align:center;">${e.workEnd || '—'}</td>
+        <td style="text-align:center;">${e.activeMin != null ? Math.round(e.activeMin) + ' min' : '—'}</td>
+      </tr>`)).join('');
+
+  const now = new Date().toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const sumarija = proj.sumarija || sbProfile?.sumarija || '—';
+
+  const html = `<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<title>Izvještaj — ${proj.odjel}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#111;background:#fff;padding:14mm 16mm}
+h1{font-size:15pt;margin-bottom:2px}
+.sub{font-size:9.5pt;color:#555;margin-bottom:14px}
+h2{font-size:11.5pt;margin:18px 0 6px;padding-bottom:3px;border-bottom:2px solid #1e3a5f;color:#1e3a5f}
+.info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 24px;margin-bottom:16px;background:#f5f7fa;border-radius:6px;padding:10px 14px}
+.il{font-size:9pt;color:#555}
+.iv{font-weight:bold;font-size:10.5pt}
+table{width:100%;border-collapse:collapse;font-size:9.5pt;margin-bottom:8px}
+thead th{background:#1e3a5f;color:#fff;padding:5px 8px;text-align:left;font-weight:600}
+thead th.r{text-align:right}
+tbody td{padding:4px 8px;border-bottom:1px solid #e5e7eb}
+tbody tr:nth-child(even) td{background:#f9fafb}
+.mrow td{font-weight:600}
+.krow td{color:#374151;font-size:9pt}
+.tot td{font-weight:bold;border-top:2px solid #1e3a5f;background:#eef2ff!important}
+.note{font-size:9pt;color:#374151;margin:4px 0 16px}
+.footer{margin-top:22px;font-size:8.5pt;color:#888;border-top:1px solid #d1d5db;padding-top:7px;display:flex;justify-content:space-between}
+@media print{body{padding:8mm 10mm}@page{margin:8mm}}
+</style>
+</head>
+<body>
+<h1>ŠPD Unsko-sanske šume — Izvještaj projektovanja traktorskih vlaka</h1>
+<div class="sub">Generiran: ${now}</div>
+
+<div class="info">
+  <div><div class="il">Šumarija</div><div class="iv">${sumarija}</div></div>
+  <div><div class="il">Odjel</div><div class="iv">${proj.odjel || '—'}</div></div>
+  <div><div class="il">G.J.</div><div class="iv">${proj.gj || '—'}</div></div>
+  <div><div class="il">Datum početka</div><div class="iv">${fmtD(proj.datum)}</div></div>
+  <div><div class="il">Površina odjela</div><div class="iv">${pov ? pov + ' ha' : '—'}</div></div>
+  <div><div class="il">Gustoća mreže</div><div class="iv">${gustoca}</div></div>
+</div>
+
+<h2>Ukupni rekap po projektantu</h2>
+<table>
+  <thead><tr><th>Projektant</th><th class="r">Dužina vlaka</th><th class="r">Dana rada</th></tr></thead>
+  <tbody>
+    ${Object.entries(byProj).map(([ime, d]) => `
+    <tr><td>${ime}</td><td style="text-align:right">${fmtM(d.meters)}</td><td style="text-align:right">${d.days.size}</td></tr>`).join('')}
+    <tr class="tot"><td>UKUPNO</td><td style="text-align:right">${fmtM(totalAllM)}</td><td style="text-align:right">${dnevniLog.length} dana</td></tr>
+  </tbody>
+</table>
+
+<h2>Dnevni izvještaj radova</h2>
+${logRows ? `<table>
+  <thead><tr>
+    <th>Datum</th><th>Projektant</th><th>Odjel</th>
+    <th class="r">Dužina</th><th style="text-align:center">Početak</th>
+    <th style="text-align:center">Kraj</th><th style="text-align:center">Aktivno</th>
+  </tr></thead>
+  <tbody>${logRows}</tbody>
+</table>` : '<p class="note" style="font-style:italic">Nema upisanih radova.</p>'}
+
+<h2>Spisak vlaka i krakova</h2>
+<p class="note">Matičnih vlaka: <b>${brGlavnih}</b> (ukupno ${fmtM(totalGlavnihM)}) &nbsp;·&nbsp; Krakova: <b>${brKrakova}</b> (ukupno ${fmtM(totalKrakovaM)})</p>
+${vlakeRows ? `<table>
+  <thead><tr><th>Naziv</th><th>Tip</th><th class="r">Tačaka</th><th class="r">Dužina</th><th>Lager</th></tr></thead>
+  <tbody>
+    ${vlakeRows}
+    <tr class="tot"><td colspan="3">UKUPNO</td><td style="text-align:right">${fmtM(totalGlavnihM + totalKrakovaM)}</td><td></td></tr>
+  </tbody>
+</table>` : '<p class="note" style="font-style:italic">Nema unesenih vlaka.</p>'}
+
+<div class="footer">
+  <span>ŠPD Unsko-sanske šume d.o.o. Bihać — Traktorske vlake</span>
+  <span>${sumarija} · ${proj.odjel}</span>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=860,height=960,scrollbars=yes');
+  if (!win) { showToast('⚠ Dozvoli popup prozore pa pokušaj ponovo'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { try { win.focus(); win.print(); } catch(e) {} }, 500);
 }
 
 // === IZVJEŠTAJI PO ODJELIMA ===
