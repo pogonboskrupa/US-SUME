@@ -2924,10 +2924,6 @@ function _applyVlakeRows(rows) {
   });
   rndList();
   vlake.forEach((v, i) => updateVlakaLabel(i));
-  const allPts = vlake.flatMap(v => v.pts.map(p => [p.la, p.lo]));
-  if (allPts.length > 0 && _appStarted) {
-    try { map.fitBounds(L.latLngBounds(allPts), { padding: [30, 30] }); } catch(e) {}
-  }
   _syncIbr();
   _updFabVisibility();
 }
