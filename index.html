@@ -4466,6 +4466,19 @@ function _updMapScale() {
   const pLabels = map.getPane('vlakeLabels');
   if (pLines)  pLines.style.display  = hideVlake ? 'none' : '';
   if (pLabels) pLabels.style.display = hideVlake ? 'none' : '';
+  // Sakrij foto oznake i tragove pri razmjeri > 1:25 000
+  const hideFT = closest > 25000;
+  [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
+    if (!f.marker) return;
+    if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
+    else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
+  });
+  (_tragRegistry||[]).forEach(t => {
+    const layer = (_tragLayers||{})[t.id];
+    if (!layer) return;
+    if (hideFT && map.hasLayer(layer)) map.removeLayer(layer);
+    else if (!hideFT && !map.hasLayer(layer) && t.visible !== false) map.addLayer(layer);
+  });
 }
 map.on('zoomend', _updMapScale);
 map.on('moveend', _updMapScale);
