@@ -1521,6 +1521,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
+    <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -1848,6 +1849,35 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
 
     </div><!-- /proj-panel -->
+
+    <!-- ═══ ADMIN — KORISNICI PANEL ═══ -->
+    <div id="admin-panel" style="display:none;flex-direction:column;height:100%;overflow:hidden;background:#0f172a;">
+      <!-- Header -->
+      <div style="padding:14px 16px 10px;border-bottom:1px solid #1e3a5f;flex-shrink:0;">
+        <div style="font-weight:700;color:#fbbf24;font-size:15px;margin-bottom:10px;">👥 Korisnici</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="admin-filter-sum" onchange="adminLoadUsers()"
+            style="flex:1;padding:7px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;">
+            <option value="">— Sve šumarije —</option>
+            <option>ŠPD US ŠUME</option>
+            <option>ŠUMARIJA BOS.KRUPA</option>
+            <option>ŠUMARIJA BOS.PETROVAC</option>
+            <option>ŠUMARIJA SANSKI MOST</option>
+            <option>ŠUMARIJA BIHAĆ</option>
+            <option>ŠUMARIJA CAZIN</option>
+            <option>ŠUMARIJA KLJUČ</option>
+          </select>
+          <button onclick="adminLoadUsers()"
+            style="padding:7px 12px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#94a3b8;font-size:13px;cursor:pointer;white-space:nowrap;">
+            🔄
+          </button>
+        </div>
+      </div>
+      <!-- Lista korisnika -->
+      <div id="admin-panel-user-list" style="flex:1;overflow-y:auto;padding:12px 16px;">
+        <p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Odaberi tab da učitaš...</p>
+      </div>
+    </div>
 
     <!-- ═══ DOZNAKA STABALA PANEL ═══ -->
     <div id="doznaka-panel">
@@ -2344,6 +2374,8 @@ async function sbLoadProfile() {
   if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
   const lbl = document.getElementById('menu-user-label');
   if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
+  const adminTabBtn = document.getElementById('admin-tab-btn');
+  if (adminTabBtn) adminTabBtn.style.display = data.is_admin ? '' : 'none';
   if (data.is_admin) {
     const adminItem = document.getElementById('menu-admin-item');
     if (adminItem) adminItem.style.display = 'block';
@@ -2501,51 +2533,92 @@ async function doLogout() {
   document.getElementById('auth-zapamti').checked = false;
 }
 
-// --- Admin modal ---
-function showAdminModal() {
-  if (!sbProfile?.is_admin) return;
-  document.getElementById('admin-modal').style.display = 'block';
-  adminLoadUsers();
-}
-function closeAdminModal() {
-  document.getElementById('admin-modal').style.display = 'none';
-}
+// --- Admin (legacy stub — tab se koristi umjesto modala) ---
+function showAdminModal() { switchTab('admin'); }
+function closeAdminModal() {}
 
-// --- Admin: load user list ---
+// --- Admin: učitaj listu korisnika ---
 async function adminLoadUsers() {
-  const { data } = await sb.from('korisnici').select('*').order('created_at', { ascending: false });
-  const el = document.getElementById('admin-user-list');
-  if (!data || data.length === 0) {
-    el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:6px 0;">Nema registrovanih korisnika</p>';
+  if (!sbProfile?.is_admin) return;
+  const el = document.getElementById('admin-panel-user-list');
+  if (!el) return;
+  el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">⏳ Učitavam...</p>';
+
+  const filterSum = document.getElementById('admin-filter-sum')?.value || '';
+  let q = sb.from('korisnici').select('*').order('sumarija').order('ime', { ascending: true });
+  if (filterSum) q = q.eq('sumarija', filterSum);
+  const { data, error } = await q;
+
+  if (error || !data || data.length === 0) {
+    el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Nema korisnika</p>';
     return;
   }
-  el.innerHTML = data.map(u => `
-    <div class="auth-user-row">
-      <div class="auth-user-info">
-        <div class="auth-user-name">
-          ${u.ime} ${u.prezime}
-          ${u.is_admin ? '<span style="color:#fbbf24;font-size:10px;"> ★ ADMIN</span>' : ''}
-        </div>
-        <div class="auth-user-meta">
-          ${u.sumarija || '—'} &nbsp;·&nbsp;
-          ${u.created_at ? new Date(u.created_at).toLocaleDateString('bs-BA') : ''}
-        </div>
+
+  // Grupiši po šumariji
+  const groups = {};
+  data.forEach(u => { const s = u.sumarija || '—'; (groups[s] = groups[s] || []).push(u); });
+
+  el.innerHTML = Object.entries(groups).map(([sum, users]) => `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:0.5px;
+                  padding:4px 0 6px;border-bottom:1px solid #1e3a5f;margin-bottom:8px;">
+        ${_escHtml(sum)} <span style="color:#475569;">(${users.length})</span>
       </div>
-      ${!u.is_admin ? `
-        <button onclick="adminDeleteUser('${u.id}','${u.ime} ${u.prezime}')"
-          style="background:#dc2626;color:#fff;border:none;border-radius:5px;
-                 padding:5px 11px;font-size:12px;cursor:pointer;flex-shrink:0;">
-          Obriši
-        </button>` : ''}
+      ${users.map(u => {
+        const nm = (_escHtml(u.ime||'') + ' ' + _escHtml(u.prezime||'')).trim();
+        const uid = u.id;
+        const sumOpts = _SUMARIJE.map(s =>
+          `<option value="${_escHtml(s)}"${s===u.sumarija?' selected':''}>${_escHtml(s)}</option>`
+        ).join('');
+        return `
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px;">
+            ${nm}${u.is_admin ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>' : ''}
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin?'0':'8px'};">
+            ${u.created_at ? new Date(u.created_at).toLocaleDateString('bs-BA') : '—'}
+            ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
+          </div>
+          ${!u.is_admin ? `
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="admin-sum-sel-${uid}"
+              style="flex:1;min-width:0;padding:6px 8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;">
+              ${sumOpts}
+            </select>
+            <button onclick="adminTransferUser('${uid}','${nm}')"
+              style="padding:6px 11px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;">
+              ↔ Prebaci
+            </button>
+            <button onclick="adminDeleteUser('${uid}','${nm}')"
+              style="padding:6px 10px;background:rgba(220,38,38,0.12);border:1px solid #dc2626;border-radius:6px;color:#f87171;font-size:13px;cursor:pointer;">
+              🗑
+            </button>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
     </div>
   `).join('');
 }
 
-// --- Admin: delete user ---
+// --- Admin: prebaci korisnika u drugu šumariju ---
+async function adminTransferUser(userId, name) {
+  if (!sbProfile?.is_admin) return;
+  const sel = document.getElementById('admin-sum-sel-' + userId);
+  if (!sel) return;
+  const newSum = sel.value;
+  if (!confirm(`Prebaciti "${name}"\nu šumariju:\n"${newSum}"?`)) return;
+  const { error } = await sb.from('korisnici').update({ sumarija: newSum }).eq('id', userId);
+  if (error) { showToast('Greška: ' + error.message); return; }
+  showToast(`✅ ${name} → ${newSum}`);
+  adminLoadUsers();
+}
+
+// --- Admin: obriši korisnika ---
 async function adminDeleteUser(userId, name) {
-  if (!confirm(`Obrisati korisnika "${name}"?\n\nOva radnja je trajna.`)) return;
+  if (!sbProfile?.is_admin) return;
+  if (!confirm(`Trajno obrisati korisnika "${name}"?\n\nOva radnja se ne može poništiti.`)) return;
   const { error } = await sb.rpc('admin_delete_user', { target_id: userId });
-  if (error) { alert('Greška pri brisanju: ' + error.message); return; }
+  if (error) { showToast('Greška pri brisanju: ' + error.message); return; }
   showToast(`Korisnik "${name}" obrisan`);
   adminLoadUsers();
 }
@@ -5723,6 +5796,7 @@ let _trgGrpBy = 'date';
 let _msrGrpBy = 'date';
 
 const _GJ_OPTIONS = ['RISOVAC KRUPA','GRMEČ JASENICA','VOJSKOVA','BAŠTRA ĆORKOVAČA','GOMILA'];
+const _SUMARIJE   = ['ŠPD US ŠUME','ŠUMARIJA BOS.KRUPA','ŠUMARIJA BOS.PETROVAC','ŠUMARIJA SANSKI MOST','ŠUMARIJA BIHAĆ','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'];
 
 function _gjFieldHtml(pfx, val) {
   const isCustom = !!val && !_GJ_OPTIONS.includes(val);
@@ -8870,13 +8944,16 @@ function switchTab(tab) {
   const pproj   = document.getElementById('proj-panel');
   const pdoz    = document.getElementById('doznaka-panel');
   const pmjtrg  = document.getElementById('mjtrg-panel');
+  const padmin  = document.getElementById('admin-panel');
   document.querySelectorAll('.tab-btn').forEach((b,i)=>
     b.classList.toggle('active',
-      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')||(i===4&&tab==='doznaka')||(i===5&&tab==='mjtrg')));
+      (i===1&&tab==='karta')||(i===2&&tab==='vlake')||(i===3&&tab==='projekat')||(i===4&&tab==='doznaka')||(i===5&&tab==='admin')||(i===5&&tab==='mjtrg')));
   panel.style.display   = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
   pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
   pmjtrg.style.display  = tab==='mjtrg'   ? 'flex' : 'none';
+  if (padmin) padmin.style.display = tab==='admin' ? 'flex' : 'none';
+  if (tab === 'admin') adminLoadUsers();
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -8903,6 +8980,10 @@ function switchTab(tab) {
     setTimeout(()=>map.invalidateSize(), 50);
     msrActivateIfNeeded();
     _tragRegRender();
+  } else if (tab==='admin') {
+    _mapFullScreen = false;
+    _setMapUIVisible(false, false);
+    msrStop(true);
   }
 }
 
@@ -11402,7 +11483,7 @@ function dozBackToList() {
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
   <div class="mdrop-sep"></div>
-  <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();showAdminModal()">🔑 Admin — Korisnici</div>
+  <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
 </div>
@@ -11438,20 +11519,6 @@ function dozBackToList() {
   <div onclick="closeMjtrgDropdown()"
     style="padding:16px 20px;text-align:center;font-size:15px;font-weight:700;color:#3b82f6;cursor:pointer;">
     Odustani
-  </div>
-</div>
-
-<!-- ADMIN MODAL -->
-<div id="admin-modal" onclick="if(event.target===this)closeAdminModal()"
-  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:90000;overflow-y:auto;padding:20px;box-sizing:border-box;">
-  <div style="max-width:480px;margin:0 auto;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:18px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <div style="font-weight:700;font-size:15px;color:#fbbf24;">🔑 Admin — Korisnici</div>
-      <button onclick="closeAdminModal()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;line-height:1;">×</button>
-    </div>
-    <div id="admin-user-list" style="font-size:12px;color:#64748b;text-align:center;padding:8px 0;">
-      Učitavam...
-    </div>
   </div>
 </div>
 
