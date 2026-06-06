@@ -11528,7 +11528,8 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
         grp = await _loadOneShp(bucketName, file, opts, extractOdjeli);
       }
 
-      if (grp && !didFit && extractOdjeli && _appStarted) {
+      // fitBounds samo pri prvom otvaranju app (nema sačuvane pozicije) da ne pregazi korisnikov prikaz
+      if (grp && !didFit && extractOdjeli && !localStorage.getItem('tvlake_last_pos')) {
         try { const b = grp.getBounds(); if (b.isValid()) { map.fitBounds(b, { padding: [30,30] }); didFit = true; } } catch {}
       }
     }
