@@ -3536,6 +3536,13 @@ function _mapFavSave() {
 }
 
 function _activeLayerKey() {
+  // SQLite ekskluzivni prikaz
+  const si = (typeof _sqlLayers !== 'undefined') ? _sqlLayers.findIndex(sl => sl.visible && map.hasLayer(sl.layer)) : -1;
+  if (si >= 0) return '_sqlite_' + si;
+  // Topo + Granice
+  const gl = (typeof _geojsonLayer !== 'undefined') ? _geojsonLayer : null;
+  if (map.hasLayer(TL['⛰ Topo']) && gl && map.hasLayer(gl)) return '_granice';
+  // Normalni tile sloj
   for (const [key, layer] of Object.entries(TL)) {
     if (map.hasLayer(layer)) return key;
   }
@@ -3550,24 +3557,37 @@ function _lsRenderSqlite() {
     list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:4px 0 8px;">Nema učitanih offline karata</div>';
     return;
   }
-  list.innerHTML = _sqlLayers.map((sl, i) => `
-    <div class="ls-sql-row">
-      <span class="ls-sql-vis" onclick="sqlmapToggle(${i})" title="${sl.visible ? 'Sakrij' : 'Prikaži'}">${sl.visible ? '👁' : '🙈'}</span>
-      <span class="ls-sql-name" title="${sl.name}">${sl.name}</span>
-      <input type="range" class="ls-sql-opacity" min="0" max="100"
-        value="${Math.round((sl.layer.options.opacity ?? 1) * 100)}"
-        oninput="sqlmapSetOpacity(${i}, this.value)">
-      <span class="ls-sql-remove" onclick="sqlmapRemove(${i})" title="Ukloni">✕</span>
-    </div>`).join('');
+  const active = _activeLayerKey();
+  list.innerHTML = _sqlLayers.map((sl, i) => {
+    const isActive = active === '_sqlite_' + i;
+    const op = Math.round((sl.layer.options.opacity ?? 1) * 100);
+    return `<div style="margin-bottom:8px;">
+      <button class="layer-opt${isActive ? ' active' : ''}" style="width:100%;flex-direction:row;gap:10px;padding:10px 14px;justify-content:flex-start;"
+        onclick="setLayerSqlite(${i})">
+        <span style="font-size:18px;">🗄</span>
+        <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sl.name}</span>
+        <span onclick="event.stopPropagation();sqlmapRemove(${i})" style="color:#64748b;font-size:13px;padding:0 4px;" title="Ukloni">✕</span>
+      </button>
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 0;">
+        <span style="color:#475569;font-size:11px;">Providnost</span>
+        <input type="range" class="ls-sql-opacity" min="0" max="100" value="${op}"
+          oninput="sqlmapSetOpacity(${i}, this.value)" style="flex:1;">
+        <span id="ls-sql-op-${i}" style="color:#94a3b8;font-size:11px;min-width:30px;">${op}%</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
+  // Granice odjela dugme — prikaži samo ako ima učitanih granica
+  const grRow = document.getElementById('ls-granice-row');
+  if (grRow) grRow.style.display = (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) ? 'block' : 'none';
   const active = _activeLayerKey();
   document.querySelectorAll('.layer-opt').forEach(el => el.classList.remove('active'));
-  const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm'};
-  const el = document.getElementById(map2id[active]);
+  const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm','_granice':'lo-granice'};
+  const el = document.getElementById(map2id[active] || '');
   if (el) el.classList.add('active');
   _lsRenderSqlite();
 }
@@ -3575,14 +3595,60 @@ function closeLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'none';
   document.getElementById('layer-sheet').style.display   = 'none';
 }
+
+// Aktivira tile sloj — isključuje SQLite i opciono granice
 function setLayer(key) {
+  // Ukloni sve SQLite slojeve s mape (postaju nevidljivi)
+  if (typeof _sqlLayers !== 'undefined') {
+    _sqlLayers.forEach(sl => { if (map.hasLayer(sl.layer)) { map.removeLayer(sl.layer); sl.visible = false; } });
+  }
+  // Ukloni sve tile slojeve
   Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
-  if (TL[key]) TL[key].addTo(map);
-  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
-  const btn = document.getElementById('layer-switch-btn');
-  if (btn) btn.textContent = icons[key] || '🗺';
-  _saveLastMap('tl', key);
+
+  if (key === '_granice') {
+    // Topo + granice odjela zajedno
+    TL['⛰ Topo'].addTo(map);
+    if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer && !map.hasLayer(_geojsonLayer)) {
+      _geojsonLayer.addTo(map);
+    }
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = '🗂';
+    _saveLastMap('tl', '⛰ Topo');
+  } else {
+    // Sakrij granice ako su bile aktivne
+    if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer && map.hasLayer(_geojsonLayer)) {
+      map.removeLayer(_geojsonLayer);
+    }
+    if (TL[key]) TL[key].addTo(map);
+    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = icons[key] || '🗺';
+    _saveLastMap('tl', key);
+  }
   closeLayerSheet();
+  _lsRenderSqlite();
+}
+
+// Aktivira SQLite kartu kao ekskluzivni prikaz — bez tile pozadine
+function setLayerSqlite(i) {
+  const sl = _sqlLayers[i];
+  if (!sl) return;
+  // Ukloni sve tile slojeve
+  Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  // Sakrij granice
+  if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer && map.hasLayer(_geojsonLayer)) {
+    map.removeLayer(_geojsonLayer);
+  }
+  // Prikaži samo ovu SQLite kartu, sakrij ostale
+  _sqlLayers.forEach((s, j) => {
+    if (j === i) { s.visible = true; if (!map.hasLayer(s.layer)) s.layer.addTo(map); }
+    else         { s.visible = false; if (map.hasLayer(s.layer)) map.removeLayer(s.layer); }
+  });
+  _saveLastMap('sqlite', null, sl.name);
+  const btn = document.getElementById('layer-switch-btn');
+  if (btn) btn.textContent = '🗄';
+  closeLayerSheet();
+  _lsRenderSqlite();
 }
 
 // Pretvori tile URL template u konkretan URL za dati tile
@@ -10250,6 +10316,8 @@ function sqlmapSetOpacity(i, val) {
   sl.layer.setOpacity(val / 100);
   const lbl = document.getElementById('sqlmap-op-' + i);
   if (lbl) lbl.textContent = val + '%';
+  const lbl2 = document.getElementById('ls-sql-op-' + i);
+  if (lbl2) lbl2.textContent = val + '%';
 }
 async function sqlmapRemove(i) {
   const sl = _sqlLayers[i];
@@ -10573,6 +10641,9 @@ function loadGeoJSONOdjeli(file) {
         }
       } catch(ex) {}
       _geojsonOdjeliUpdUI(data.features?.length || 0, added);
+      // Osvježi layer sheet — pojavi se "Topo + Granice" dugme
+      const grRow = document.getElementById('ls-granice-row');
+      if (grRow && _geojsonLayer) grRow.style.display = 'block';
       showToast('GeoJSON učitan: ' + added + ' novih odjela');
     } catch(ex) {
       showToast('❌ GeoJSON greška: ' + ex.message);
@@ -11869,6 +11940,15 @@ function dozBackToList() {
       <span class="layer-ico">🗺</span>Karta
     </button>
   </div>
+  <!-- Granice odjela — kombinovani prikaz (sakriven dok nema podataka) -->
+  <div id="ls-granice-row" style="display:none;margin-top:12px;">
+    <div class="layer-grid" style="grid-template-columns:1fr;">
+      <button class="layer-opt" id="lo-granice" onclick="setLayer('_granice')">
+        <span class="layer-ico">🗂</span>Topo + Granice odjela
+      </button>
+    </div>
+  </div>
+
   <div style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
     <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
     <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
