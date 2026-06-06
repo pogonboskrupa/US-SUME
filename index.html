@@ -3216,11 +3216,12 @@ function _applyLogRows(rows) {
 }
 
 async function sbLoadLog() {
-  if (!sbProfile?.sumarija) return;
+  if (!sbProfile?.sumarija || !sbUser) return;
   let rows = null;
   try {
     const { data, error } = await sb.from('dnevni_log')
       .select('*')
+      .eq('korisnik_id', sbUser.id)
       .eq('sumarija', sbProfile.sumarija)
       .order('datum', { ascending: false });
     if (!error && data) { rows = data; _OL.save(_OL.LOG, data); }
