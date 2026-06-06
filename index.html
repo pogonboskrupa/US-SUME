@@ -3547,6 +3547,7 @@ async function onLocPhotoSelected(input) {
     _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null});
     _saveFotos();
     showToast('📷 Foto dodano na mapu');
+    sbUploadFoto(_locFotos[idx], idx); // async, non-blocking — dobiva sbId rano
   } catch(e) { showToast('Greška pri obradi slike'); }
 }
 
@@ -3615,10 +3616,11 @@ let _shareFotoIdx = null;
 
 function openShareFotoDlg(idx) {
   _shareFotoIdx = idx;
-  const f            = _locFotos[idx];
-  const alreadyWith  = new Set(f?.sharedWith || []);
-  const entries      = Object.entries(kolegeMap);
-  const list         = document.getElementById('share-foto-list');
+  const f           = _locFotos[idx];
+  const alreadyWith = new Set(f?.sharedWith || []);
+  // Filtrirati sebe iz liste (zaštita od pogrešnog kolegeMap cachea)
+  const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== sbUser?.id);
+  const list    = document.getElementById('share-foto-list');
   if (!entries.length) { showToast('Nema kolega u šumariji'); return; }
   list.innerHTML = entries.map(([kid, info]) => {
     const done = alreadyWith.has(kid);
@@ -3660,8 +3662,8 @@ async function shareFoto(idx, sharedWith) {
   const f = _locFotos[idx];
   if (!f) return;
   showToast('⏳ Dijeljenje...');
-  const ok = await sbSaveFoto(f, idx, sharedWith);
-  if (!ok) return;
+
+  // Lokalni state uvijek ažurirati odmah — UI ostaje konzistentan čak i ako DB padne
   f.shared     = true;
   f.sharedWith = sharedWith;
   f.marker.setIcon(L.divIcon({
@@ -3670,7 +3672,35 @@ async function shareFoto(idx, sharedWith) {
   }));
   _setupFotoPopup(f.marker, idx, f.la, f.lo, f.ts, f.full, true, true);
   _saveFotos();
-  showToast('👥 Foto podijeljeno');
+
+  // Pokušaj sačuvati na server
+  const ok = await sbSaveFoto(f, idx, sharedWith);
+  if (ok) {
+    showToast('👥 Foto podijeljeno');
+  } else {
+    showToast('⚠ Podijeljeno lokalno, ali nema veze sa serverom');
+  }
+}
+
+// Jednokratni upload foto u Supabase odmah po slikanju (da se dobije sbId)
+async function sbUploadFoto(f, idx) {
+  if (!sbUser || !sbProfile || f.sbId) return;
+  try {
+    const { data, error } = await sb.from('loc_fotos')
+      .insert({
+        korisnik_id: sbUser.id,
+        sumarija:    sbProfile.sumarija,
+        la: f.la, lo: f.lo, ts: f.ts,
+        thumb:       f.thumb,
+        full_img:    f.full,
+        shared_with: null,
+      })
+      .select('id').single();
+    if (!error && data?.id) {
+      _locFotos[idx].sbId = data.id;
+      _saveFotos();
+    }
+  } catch(e) {} // offline — probat će ponovo pri dijeljenju
 }
 
 async function sbSaveFoto(f, idx, sharedWith) {
@@ -3678,13 +3708,13 @@ async function sbSaveFoto(f, idx, sharedWith) {
   try {
     let error, data;
     if (f.sbId) {
-      // Ažuriraj postojeći zapis
+      // Slika već postoji u DB — samo ažuriraj shared_with
       ({ error } = await sb.from('loc_fotos')
-        .update({ shared_with: sharedWith, full_img: f.full, thumb: f.thumb })
+        .update({ shared_with: sharedWith })
         .eq('id', f.sbId)
         .eq('korisnik_id', sbUser.id));
     } else {
-      // Novi zapis
+      // Slika još nije u DB (offline pri slikanju) — puni INSERT
       ({ data, error } = await sb.from('loc_fotos')
         .insert({
           korisnik_id: sbUser.id,
@@ -3697,9 +3727,16 @@ async function sbSaveFoto(f, idx, sharedWith) {
         .select('id').single());
       if (data?.id) _locFotos[idx].sbId = data.id;
     }
-    if (error) { showToast('Greška: ' + error.message); return false; }
+    if (error) {
+      console.error('sbSaveFoto error:', error);
+      showToast('Greška dijeljenja: ' + error.message);
+      return false;
+    }
     return true;
-  } catch(e) { showToast('Nema veze sa serverom'); return false; }
+  } catch(e) {
+    console.error('sbSaveFoto catch:', e);
+    return false;
+  }
 }
 
 async function sbDeleteFoto(sbId) {
