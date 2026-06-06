@@ -3590,6 +3590,7 @@ function _openLayerSheet() {
   const el = document.getElementById(map2id[active] || '');
   if (el) el.classList.add('active');
   _lsRenderSqlite();
+  _lsRenderGranice();
 }
 function closeLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'none';
@@ -3719,21 +3720,26 @@ function closeMapFavs() {
 }
 
 function mapFavAddCurrent() {
-  const tlKey = _activeLayerKey();
-  const sqlActive = _sqlLayers.find(sl => sl.visible);
+  const activeKey = _activeLayerKey();
   let fav;
-  if (tlKey) {
-    const layer = TL[tlKey];
-    const tileUrl = layer._url || '';
-    const arcgis = tileUrl.includes('arcgisonline') || tileUrl.includes('ArcGIS');
-    const defaultName = tlKey.replace(/^[^\w]+/, '').trim(); // strip emoji
-    const name = prompt('Naziv ove karte:', defaultName);
-    if (!name) return;
-    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey, tileUrl, arcgis };
-  } else if (sqlActive) {
+  if (activeKey && activeKey.startsWith('_sqlite_')) {
+    const sqlActive = _sqlLayers.find(sl => sl.visible);
+    if (!sqlActive) { showToast('Nema aktivne offline karte'); return; }
     const name = prompt('Naziv ove offline karte:', sqlActive.name);
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
+  } else if (activeKey === '_granice') {
+    const name = prompt('Naziv:', 'Topo + Granice odjela');
+    if (!name) return;
+    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: '_granice', tileUrl: '', arcgis: false };
+  } else if (activeKey && TL[activeKey]) {
+    const layer = TL[activeKey];
+    const tileUrl = layer._url || '';
+    const arcgis = tileUrl.includes('arcgisonline') || tileUrl.includes('ArcGIS');
+    const defaultName = activeKey.replace(/^[^\w]+/, '').trim();
+    const name = prompt('Naziv ove karte:', defaultName);
+    if (!name) return;
+    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: activeKey, tileUrl, arcgis };
   } else {
     showToast('Nema aktivne karte za dodavanje'); return;
   }
@@ -3747,14 +3753,11 @@ function mapFavSwitch(i) {
   const fav = _mapFavs[i];
   if (!fav) return;
   if (fav.type === 'tl') {
-    const layer = TL[fav.tlKey];
-    if (!layer) { showToast('Sloj nije dostupan: ' + fav.tlKey); return; }
-    Object.values(TL).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
-    layer.addTo(map);
-    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
-    const btn = document.getElementById('layer-switch-btn');
-    if (btn) btn.textContent = icons[fav.tlKey] || '🗺';
-    _saveLastMap('tl', fav.tlKey);
+    if (fav.tlKey === '_granice' || TL[fav.tlKey]) {
+      setLayer(fav.tlKey);
+    } else {
+      showToast('Sloj nije dostupan: ' + fav.tlKey); return;
+    }
     showToast('🗺 ' + fav.name);
   } else if (fav.type === 'sqlite') {
     const sl = _sqlLayers.find(s => s.name === fav.sqliteId);
@@ -10533,6 +10536,7 @@ function _extractGraniceOdjeli(doc) {
 const _GEOJSON_LS_KEY = 'tvlake_geojson_odjeli';
 let _geojsonLayer = null;
 let _geojsonVisible = true;
+let _geojsonOpacity = 1.0;
 let _projektOdjelLayer = null;  // highlight polygon aktivnog projekta
 
 function _findGraniceMatch(name) {
@@ -10665,6 +10669,23 @@ function _geojsonToggleVis() {
   if (!_geojsonLayer) return;
   if (_geojsonVisible) _geojsonLayer.addTo(map); else map.removeLayer(_geojsonLayer);
   _geojsonOdjeliUpdUI();
+  _lsRenderGranice();
+}
+
+function _geojsonSetOpacity(val) {
+  _geojsonOpacity = parseFloat(val);
+  if (!_geojsonLayer) return;
+  _geojsonLayer.setStyle({ opacity: _geojsonOpacity, fillOpacity: _geojsonOpacity * 0.04 });
+}
+
+function _lsRenderGranice() {
+  const ctrl = document.getElementById('ls-granice-controls');
+  if (!ctrl) return;
+  ctrl.style.display = (_geojsonLayer) ? 'block' : 'none';
+  const btn = document.getElementById('ls-granice-toggle');
+  if (btn) btn.textContent = _geojsonVisible ? '👁 Vidljivo' : '🚫 Skriveno';
+  const slider = document.getElementById('ls-granice-opacity');
+  if (slider) slider.value = _geojsonOpacity;
 }
 
 function _geojsonOdjeliUpdUI(total, added) {
@@ -11968,6 +11989,20 @@ function dozBackToList() {
       style="width:100%;margin-top:10px;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
       📂 Učitaj novu offline kartu
     </button>
+  </div>
+  <!-- Granice odjela — kontrole (vidljivo samo kad je učitan GeoJSON) -->
+  <div id="ls-granice-controls" style="display:none;margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
+    <h3 style="margin-bottom:10px;">Granice odjela</h3>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="ls-granice-toggle" onclick="_geojsonToggleVis();"
+        style="padding:5px 12px;border-radius:6px;border:1px solid #334155;cursor:pointer;font-size:13px;background:#1e3a5f;color:#cbd5e1;white-space:nowrap;">
+        👁 Vidljivo
+      </button>
+      <span style="color:#94a3b8;font-size:12px;">Prozirnost:</span>
+      <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
+        style="flex:1;accent-color:#38bdf8;cursor:pointer;"
+        oninput="_geojsonSetOpacity(this.value)">
+    </div>
   </div>
 </div>
 
