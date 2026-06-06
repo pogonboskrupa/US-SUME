@@ -8761,6 +8761,13 @@ function fmtDate(s) {
 
 // === REKAP CARD ===
 function updProjStats() {
+  if (!_aktivniProjektId) {
+    document.getElementById('rekap-card').innerHTML =
+      '<div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za rekap</div>';
+    const stdEl = document.getElementById('std-card');
+    if (stdEl) stdEl.innerHTML = '';
+    return;
+  }
   const myTotal = calcL(vlake.flatMap(v=>v.pts));
   const pov     = parseFloat(document.getElementById('p-povrsina').value)||0;
   const odjel   = getOdjel();
