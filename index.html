@@ -2757,9 +2757,8 @@ function showProjektDetalji(id) {
   btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
-  // All members can add new clan; only vlasnik can delete project
-  // ŠPD US ŠUME members cannot add projektanti
-  document.getElementById('pd-add-clan-sec').style.display = isSpd() ? 'none' : '';
+  // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat
+  document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !isSpd()) ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
 }
 
@@ -2808,8 +2807,10 @@ async function kreirajProjektanta() {
 
 async function addProjektClanUI() {
   const id = _pdProjektId;
+  const p = _projekti.find(x => x.id === id);
+  if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može dodavati članove'); return; }
   const korisnik_id = document.getElementById('pd-add-select').value;
-  if (!id || !korisnik_id) { showToast('Odaberi projektanta!'); return; }
+  if (!korisnik_id) { showToast('Odaberi projektanta!'); return; }
   const { error } = await sb.from('projekt_clanovi').insert({
     projekt_id: id, korisnik_id, added_by: sbUser.id
   });
@@ -2821,6 +2822,8 @@ async function addProjektClanUI() {
 }
 
 async function removeProjektClan(projekt_id, korisnik_id) {
+  const p = _projekti.find(x => x.id === projekt_id);
+  if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može uklanjati članove'); return; }
   if (!confirm('Ukloniti projektanta iz projekta?')) return;
   await sb.from('projekt_clanovi').delete()
     .eq('projekt_id', projekt_id).eq('korisnik_id', korisnik_id);
@@ -3084,24 +3087,16 @@ async function sbLoadKolegeVlake() {
     memberIds = all.filter(id => id !== sbUser.id);
   }
 
+  if (memberIds.length === 0) return; // nema kolega u aktivnom projektu
+
   let data;
   try {
-    if (memberIds.length > 0) {
-      let q = sb.from('vlake')
-        .select('nm, korisnik_id, pts, boja')
-        .in('korisnik_id', memberIds)
-        .eq('sumarija', sbProfile.sumarija);
-      if (akt.odjel) q = q.eq('odjel', akt.odjel);
-      ({ data } = await q);
-    } else {
-      const odjel = getOdjel();
-      if (!odjel) return;
-      ({ data } = await sb.from('vlake')
-        .select('nm, korisnik_id, pts, boja')
-        .eq('sumarija', sbProfile.sumarija)
-        .eq('odjel', odjel)
-        .neq('korisnik_id', sbUser.id));
-    }
+    let q = sb.from('vlake')
+      .select('nm, korisnik_id, pts, boja')
+      .in('korisnik_id', memberIds)
+      .eq('sumarija', sbProfile.sumarija);
+    if (akt.odjel) q = q.eq('odjel', akt.odjel);
+    ({ data } = await q);
   } catch(e) { return; } // offline — kolege vlake se preskačaju
   if (!data) return;
 
