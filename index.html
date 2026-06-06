@@ -3538,8 +3538,8 @@ async function onLocPhotoSelected(input) {
       _resizeImg(file, 900, 0.80),   // veća rezolucija za fullscreen
     ]);
     const idx = _locFotos.length;
-    const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, false);
-    _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sbId: null});
+    const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, true);
+    _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null});
     _saveFotos();
     showToast('📷 Foto dodano na mapu');
   } catch(e) { showToast('Greška pri obradi slike'); }
