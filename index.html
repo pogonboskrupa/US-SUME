@@ -1341,6 +1341,14 @@ select:focus { outline:none; border-color:#3b82f6; }
 #action-bar #btrag.active { color: #f97316; background: rgba(249,115,22,0.09); }
 #action-bar #ab-loc { color: #60a5fa; }
 #action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
+#action-bar #ab-tacka { color: #fbbf24; }
+#action-bar #ab-tacka:active { background: rgba(251,191,36,0.1); }
+.leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
+.tacka-popup-btn, .foto-popup-btn {
+  background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;
+  padding:3px 12px;cursor:pointer;font-size:11px;margin-top:6px;
+}
+.tacka-popup-btn:active,.foto-popup-btn:active { opacity:0.7; }
 #action-bar #ab-krak-l { color: #38bdf8; }
 #action-bar #ab-krak-d { color: #f97316; }
 #action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
@@ -2396,6 +2404,8 @@ function showApp() {
     _tragRegLoad();
     _msrRegLoad();
     _refRepoLoad();
+    _restoreTacke();
+    _restoreFotos();
   }, 80);
 }
 
@@ -3392,6 +3402,161 @@ async function sbSaveTextLabels() {
   } catch(e) {} // offline — lokalni keš je pohranjen gore
 }
 
+// ─── TAČKE (GPS oznake na mapi) ──────────────────────────────────────────────
+let _tacke = [];
+const _TACKE_KEY = 'tvlake_tacke';
+
+function _tačkaIcon(n) {
+  return L.divIcon({
+    className: '', iconSize:[24,32], iconAnchor:[12,32], popupAnchor:[0,-34],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
+      <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z"
+        fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/>
+      <circle cx="12" cy="12" r="5.5" fill="#fff"/>
+      <text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">${n}</text>
+    </svg>`
+  });
+}
+
+function addTacka() {
+  if (!lastP) { showToast('Nema GPS signala'); return; }
+  const {la, lo} = lastP;
+  const ts = Date.now();
+  const idx = _tacke.length;
+  const m = L.marker([la, lo], {icon: _tačkaIcon(idx+1)}).addTo(map);
+  _setupTackaPopup(m, idx, la, lo, ts);
+  _tacke.push({la, lo, ts, marker: m});
+  _saveTacke();
+  showToast(`📍 Tačka ${idx+1} dodana`);
+}
+
+function _setupTackaPopup(m, idx, la, lo, ts) {
+  const dt = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  m.bindPopup(`<div style="font-size:12px;min-width:150px;color:#1e293b;">
+    <b style="font-size:13px;">📍 Tačka ${idx+1}</b><br>
+    <span style="color:#64748b;font-size:10px;">${dt}</span><br>
+    <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code><br>
+    <button class="tacka-popup-btn" onclick="deleteTacka(${idx})">🗑 Obriši</button>
+  </div>`, {className:'tvlake-popup'});
+}
+
+function deleteTacka(idx) {
+  if (idx < 0 || idx >= _tacke.length) return;
+  map.removeLayer(_tacke[idx].marker);
+  _tacke.splice(idx, 1);
+  _tacke.forEach((t, i) => { t.marker.setIcon(_tačkaIcon(i+1)); _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts); });
+  _saveTacke();
+  map.closePopup();
+}
+
+function _saveTacke() {
+  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts})=>({la,lo,ts}))));
+}
+
+function _restoreTacke() {
+  try {
+    const d = JSON.parse(localStorage.getItem(_TACKE_KEY) || '[]');
+    d.forEach(({la,lo,ts}, i) => {
+      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1)}).addTo(map);
+      _setupTackaPopup(m, i, la, lo, ts);
+      _tacke.push({la, lo, ts, marker: m});
+    });
+  } catch(e) {}
+}
+
+// ─── FOTO OZNAKE ──────────────────────────────────────────────────────────────
+let _locFotos = [];
+const _FOTO_KEY = 'tvlake_loc_fotos';
+
+function startLocPhoto() {
+  if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
+  document.getElementById('loc-photo-input').click();
+}
+
+async function onLocPhotoSelected(input) {
+  const file = input.files[0];
+  if (!file || !lastP) return;
+  input.value = '';
+  const {la, lo} = lastP;
+  const ts = Date.now();
+  showToast('⏳ Obrađujem sliku...');
+  try {
+    const [thumb, full] = await Promise.all([
+      _resizeImg(file, 60, 0.78),
+      _resizeImg(file, 480, 0.72),
+    ]);
+    const idx = _locFotos.length;
+    const m = _buildFotoMarker(la, lo, thumb, full, idx, ts);
+    _locFotos.push({la, lo, ts, thumb, full, marker: m});
+    _saveFotos();
+    showToast('📷 Foto dodano na mapu');
+  } catch(e) { showToast('Greška pri obradi slike'); }
+}
+
+function _buildFotoMarker(la, lo, thumb, full, idx, ts) {
+  const ico = L.divIcon({
+    className:'', iconSize:[46,56], iconAnchor:[23,56], popupAnchor:[0,-58],
+    html:`<div style="width:44px;height:44px;border-radius:6px;border:2.5px solid #fff;overflow:hidden;
+      box-shadow:0 2px 8px rgba(0,0,0,0.65);background:#0f172a;position:relative;">
+      <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+    </div>
+    <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:10px solid #fff;margin:0 auto;"></div>`
+  });
+  const m = L.marker([la, lo], {icon: ico}).addTo(map);
+  _setupFotoPopup(m, idx, la, lo, ts, full);
+  return m;
+}
+
+function _setupFotoPopup(m, idx, la, lo, ts, full) {
+  const dt = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  m.bindPopup(`<div style="min-width:200px;max-width:256px;color:#1e293b;">
+    <img src="${full}" style="width:100%;border-radius:6px;margin-bottom:5px;display:block;" loading="lazy">
+    <div style="font-size:10px;color:#64748b;margin-bottom:4px;">${dt} · ${la.toFixed(5)}, ${lo.toFixed(5)}</div>
+    <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>
+  </div>`, {maxWidth:280, className:'tvlake-popup'});
+}
+
+function deleteFoto(idx) {
+  if (idx < 0 || idx >= _locFotos.length) return;
+  map.removeLayer(_locFotos[idx].marker);
+  _locFotos.splice(idx, 1);
+  _saveFotos();
+  map.closePopup();
+}
+
+async function _resizeImg(file, maxPx, q) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(maxPx / img.width, maxPx / img.height, 1);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load failed')); };
+    img.src = url;
+  });
+}
+
+function _saveFotos() {
+  try {
+    localStorage.setItem(_FOTO_KEY, JSON.stringify(_locFotos.map(({la,lo,ts,thumb,full})=>({la,lo,ts,thumb,full}))));
+  } catch(e) { showToast('⚠ Premalo prostora za čuvanje fotosa'); }
+}
+
+function _restoreFotos() {
+  try {
+    const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
+    d.forEach(({la,lo,ts,thumb,full}, i) => {
+      const m = _buildFotoMarker(la, lo, thumb, full, i, ts);
+      _locFotos.push({la, lo, ts, thumb, full, marker: m});
+    });
+  } catch(e) {}
+}
+
 // ─── REALTIME ────────────────────────────────────────────────────────────────
 
 function _sbRemoveRtChannels() {
@@ -3654,7 +3819,14 @@ const CachedOsm  = makeCachedTileLayer();
 const CachedSat  = makeCachedTileLayer();
 
 // === MAP ===
-const map = L.map('map',{zoomControl:false,attributionControl:false}).setView(_defCenter, _defZoom);
+// Vrati zadnju poziciju ako postoji, inače defaultna lokacija na 1:50000
+let _initMapCenter = _defCenter, _initMapZoom = _defZoom;
+try {
+  const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
+  if (_lp?.la && _lp?.lo && _lp?.z) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
+} catch(e) {}
+const map = L.map('map',{zoomControl:false,attributionControl:false}).setView(_initMapCenter, _initMapZoom);
+map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
 let _appStarted = false;
 setTimeout(() => { _appStarted = true; }, 4000);
@@ -11599,6 +11771,7 @@ function dozBackToList() {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()">📷 Uslikaj lokaciju</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
@@ -12073,6 +12246,10 @@ function dozBackToList() {
     <span id="ab-pauza-txt">Pauza</span>
   </button>
   <!-- Uvijek vidljivo -->
+  <button id="ab-tacka" onclick="addTacka()" title="Dodaj oznaku na trenutnoj GPS poziciji">
+    <span class="ab-ico">📍</span>
+    <span>Tačka</span>
+  </button>
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
     <span>Moja lokacija</span>
@@ -12216,6 +12393,9 @@ function dozBackToList() {
     </div>
   </div>
 </div>
+
+<input type="file" id="loc-photo-input" accept="image/*" capture="environment"
+  style="display:none" onchange="onLocPhotoSelected(this)">
 
 </body>
 </html>
