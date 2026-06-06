@@ -3551,29 +3551,21 @@ function _activeLayerKey() {
 
 // ── Layer switcher sheet ─────────────────────────────────────────────────────
 function _lsRenderSqlite() {
-  const list = document.getElementById('ls-sqlite-list');
-  if (!list) return;
-  if (!_sqlLayers.length) {
-    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:4px 0 8px;">Nema učitanih offline karata</div>';
-    return;
-  }
+  const grid = document.getElementById('ls-sqlite-in-grid');
+  if (!grid) return;
+  if (!_sqlLayers.length) { grid.innerHTML = ''; return; }
   const active = _activeLayerKey();
-  list.innerHTML = _sqlLayers.map((sl, i) => {
-    const isActive = active === '_sqlite_' + i;
-    const op = Math.round((sl.layer.options.opacity ?? 1) * 100);
-    return `<div style="margin-bottom:8px;">
-      <button class="layer-opt${isActive ? ' active' : ''}" style="width:100%;flex-direction:row;gap:10px;padding:10px 14px;justify-content:flex-start;"
+  grid.innerHTML = _sqlLayers.map((sl, i) => {
+    const short = sl.name.length > 13 ? sl.name.slice(0, 12) + '…' : sl.name;
+    return `<div style="position:relative;">
+      <button class="layer-opt" id="ls-sql-btn-${i}" style="width:100%;padding:10px 6px 12px;"
         onclick="setLayerSqlite(${i})">
-        <span style="font-size:18px;">🗄</span>
-        <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sl.name}</span>
-        <span onclick="event.stopPropagation();sqlmapRemove(${i})" style="color:#64748b;font-size:13px;padding:0 4px;" title="Ukloni">✕</span>
+        <span class="layer-ico">🗄</span>
+        <span style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;display:block;">${short}</span>
       </button>
-      <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 0;">
-        <span style="color:#475569;font-size:11px;">Providnost</span>
-        <input type="range" class="ls-sql-opacity" min="0" max="100" value="${op}"
-          oninput="sqlmapSetOpacity(${i}, this.value)" style="flex:1;">
-        <span id="ls-sql-op-${i}" style="color:#94a3b8;font-size:11px;min-width:30px;">${op}%</span>
-      </div>
+      <button onclick="event.stopPropagation();sqlmapConfirmDelete(${i})"
+        style="position:absolute;top:4px;right:4px;background:rgba(15,23,42,0.85);border:1px solid #475569;color:#64748b;border-radius:4px;font-size:10px;line-height:1.5;padding:0 5px;cursor:pointer;"
+        title="Trajno izbriši kartu">✕</button>
     </div>`;
   }).join('');
 }
@@ -3584,12 +3576,19 @@ function _openLayerSheet() {
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
   if (grRow) grRow.style.display = (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) ? 'block' : 'none';
+  // Renderuj SQLite karte u grid, pa postavi active klasu
+  _lsRenderSqlite();
   const active = _activeLayerKey();
   document.querySelectorAll('.layer-opt').forEach(el => el.classList.remove('active'));
-  const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm','_granice':'lo-granice'};
-  const el = document.getElementById(map2id[active] || '');
-  if (el) el.classList.add('active');
-  _lsRenderSqlite();
+  if (active && active.startsWith('_sqlite_')) {
+    const idx = parseInt(active.replace('_sqlite_', ''), 10);
+    const sqlBtn = document.getElementById('ls-sql-btn-' + idx);
+    if (sqlBtn) sqlBtn.classList.add('active');
+  } else {
+    const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm','_granice':'lo-granice'};
+    const el = document.getElementById(map2id[active] || '');
+    if (el) el.classList.add('active');
+  }
   _lsRenderGranice();
 }
 function closeLayerSheet() {
@@ -10319,8 +10318,7 @@ function sqlmapSetOpacity(i, val) {
   sl.layer.setOpacity(val / 100);
   const lbl = document.getElementById('sqlmap-op-' + i);
   if (lbl) lbl.textContent = val + '%';
-  const lbl2 = document.getElementById('ls-sql-op-' + i);
-  if (lbl2) lbl2.textContent = val + '%';
+  // ls-sql-op-* elements no longer exist in layer sheet (maps moved to grid)
 }
 async function sqlmapRemove(i) {
   const sl = _sqlLayers[i];
@@ -10331,6 +10329,12 @@ async function sqlmapRemove(i) {
   _sqlmapRenderLayers();
   _lsRenderSqlite();
   if (!_sqlLayers.length) _sqlmapStatus('');
+}
+async function sqlmapConfirmDelete(i) {
+  const sl = _sqlLayers[i];
+  if (!sl) return;
+  if (!confirm(`Trajno obrisati kartu "${sl.name}"?\n\nKarta će biti uklonjena iz memorije pretraživača i više neće biti dostupna offline.`)) return;
+  await sqlmapRemove(i);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -11949,7 +11953,7 @@ function dozBackToList() {
 <div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
 <div id="layer-sheet">
   <h3>Pozadinska karta</h3>
-  <div class="layer-grid">
+  <div class="layer-grid" id="ls-basemap-grid">
     <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
       <span class="layer-ico">⛰</span>Topo
     </button>
@@ -11959,9 +11963,11 @@ function dozBackToList() {
     <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
       <span class="layer-ico">🗺</span>Karta
     </button>
+    <!-- SQLite karte se renderuju dinamički, teku u isti grid -->
+    <div id="ls-sqlite-in-grid" style="display:contents;"></div>
   </div>
-  <!-- Granice odjela — kombinovani prikaz (sakriven dok nema podataka) -->
-  <div id="ls-granice-row" style="display:none;margin-top:12px;">
+  <!-- Granice odjela — sakriven dok nema podataka -->
+  <div id="ls-granice-row" style="display:none;margin-top:10px;">
     <div class="layer-grid" style="grid-template-columns:1fr;">
       <button class="layer-opt" id="lo-granice" onclick="setLayer('_granice')">
         <span class="layer-ico">🗂</span>Topo + Granice odjela
@@ -11969,7 +11975,15 @@ function dozBackToList() {
     </div>
   </div>
 
-  <div style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
+  <!-- Učitaj offline kartu -->
+  <div style="margin-top:14px;">
+    <button onclick="closeLayerSheet();showSqlMapModal();"
+      style="width:100%;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
+      📂 Dodaj / upravljaj offline kartama
+    </button>
+  </div>
+
+  <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
     <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
     <!-- Putevi -->
     <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
@@ -11997,15 +12011,6 @@ function dozBackToList() {
           oninput="_geojsonSetOpacity(this.value)">
       </div>
     </div>
-  </div>
-  <!-- Offline SQLite karte -->
-  <div id="ls-sqlite-section" style="margin-top:16px;border-top:1px solid #1e3a5f;padding-top:14px;">
-    <h3 style="margin-bottom:10px;">Offline karte (SQLite)</h3>
-    <div id="ls-sqlite-list"></div>
-    <button onclick="closeLayerSheet();showSqlMapModal();"
-      style="width:100%;margin-top:10px;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
-      📂 Učitaj novu offline kartu
-    </button>
   </div>
 </div>
 
