@@ -975,6 +975,81 @@ select:focus { outline:none; border-color:#3b82f6; }
 .mdrop-item:hover { background:#0f3460;color:#fff; }
 .mdrop-sep { height:1px;background:#0f3460;margin:2px 0; }
 
+/* === HELP MODAL === */
+#help-modal {
+  display:none; position:fixed; inset:0; background:#0a0f1e; z-index:99500;
+  flex-direction:column; overflow:hidden;
+}
+#help-modal.open { display:flex; }
+#help-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px 10px; border-bottom:1px solid #1e3a5f; flex-shrink:0;
+  background:#0d1526;
+}
+#help-hdr h2 { margin:0; font-size:15px; color:#e2e8f0; font-weight:700; }
+#help-close {
+  background:none; border:none; color:#64748b; font-size:22px; cursor:pointer; line-height:1; padding:0 4px;
+}
+#help-body {
+  flex:1; overflow-y:auto; padding:0 0 60px;
+  -webkit-overflow-scrolling:touch;
+}
+/* Tab nav inside help */
+#help-tabs { display:flex; border-bottom:1px solid #1e3a5f; background:#0d1526; flex-shrink:0; }
+.help-tab {
+  flex:1; padding:9px 4px; font-size:12px; font-weight:600; color:#64748b;
+  background:none; border:none; border-bottom:2px solid transparent;
+  cursor:pointer; text-align:center; letter-spacing:0.3px;
+}
+.help-tab.active { color:#60a5fa; border-bottom-color:#60a5fa; }
+/* Section headers */
+.help-sec {
+  border-bottom:1px solid #1e293b;
+}
+.help-sec-hdr {
+  display:flex; align-items:center; gap:8px;
+  padding:12px 16px 10px; cursor:pointer; user-select:none;
+  font-size:13px; font-weight:700; color:#cbd5e1;
+}
+.help-sec-hdr:hover { background:rgba(255,255,255,0.03); }
+.help-sec-hdr .h-arrow { font-size:10px; color:#475569; transition:transform .2s; flex-shrink:0; }
+.help-sec-hdr .h-arrow.open { transform:rotate(90deg); }
+.help-sec-body { padding:0 16px 14px; display:none; }
+.help-sec-body.open { display:block; }
+/* Rows */
+.help-row {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:9px 0; border-bottom:1px solid #1e293b;
+}
+.help-row:last-child { border-bottom:none; }
+.help-icon {
+  flex-shrink:0; width:38px; height:38px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:9px; font-size:20px; background:#1e293b;
+}
+.help-icon.col { border-radius:7px; }
+.help-txt { flex:1; }
+.help-txt b { display:block; font-size:13px; color:#e2e8f0; margin-bottom:2px; }
+.help-txt span { font-size:11px; color:#94a3b8; line-height:1.5; }
+/* Color swatch */
+.help-swatch {
+  display:inline-block; width:14px; height:14px; border-radius:3px;
+  vertical-align:middle; margin-right:4px; flex-shrink:0;
+}
+/* Step list */
+.help-steps { margin:6px 0 0; padding:0; list-style:none; }
+.help-steps li {
+  font-size:11px; color:#94a3b8; padding:3px 0 3px 18px; position:relative; line-height:1.5;
+}
+.help-steps li::before {
+  content: attr(data-n); position:absolute; left:0;
+  color:#38bdf8; font-weight:700; font-size:11px;
+}
+/* Mini map diagram */
+.help-diagram {
+  margin:8px 0; border-radius:8px; border:1px solid #1e3a5f;
+  background:#0f1e36; padding:10px 12px; font-size:11px; color:#94a3b8;
+}
 /* === CENTER DOT === */
 #map-center-dot {
   position:absolute; top:50%; left:50%;
@@ -13603,6 +13678,29 @@ function dozBackToList() {
   document.getElementById('doz-panel-list').style.display   = 'flex';
   document.getElementById('doz-panel-detail').style.display = 'none';
 }
+
+// ─── HELP MODAL ───────────────────────────────────────────────────────────────
+function showHelp() {
+  document.getElementById('help-modal').classList.add('open');
+}
+function closeHelp() {
+  document.getElementById('help-modal').classList.remove('open');
+}
+let _helpTab = 'gen';
+function helpTab(id, btn) {
+  _helpTab = id;
+  document.querySelectorAll('.help-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['gen','vlake','doznaka','simboli'].forEach(t => {
+    document.getElementById('help-pane-' + t).style.display = (t === id) ? '' : 'none';
+  });
+}
+function toggleHelpSec(hdr) {
+  const arrow = hdr.querySelector('.h-arrow');
+  const body  = hdr.nextElementSibling;
+  const open  = body.classList.toggle('open');
+  if (open) arrow.classList.add('open'); else arrow.classList.remove('open');
+}
 </script>
 
 <!-- MENI DROPDOWN — direktno u body da izbjegne sve stacking context probleme -->
@@ -13627,10 +13725,496 @@ function dozBackToList() {
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()">📷 Uslikaj lokaciju</div>
   <div class="mdrop-sep"></div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showHelp()">📖 Upute za korištenje</div>
+  <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
 </div>
+
+<!-- ─── HELP MODAL ─────────────────────────────────────────────────────── -->
+<div id="help-modal">
+  <div id="help-hdr">
+    <h2>📖 Upute za korištenje</h2>
+    <button id="help-close" onclick="closeHelp()">✕</button>
+  </div>
+  <div id="help-tabs">
+    <button class="help-tab active" onclick="helpTab('gen',this)">Generalije</button>
+    <button class="help-tab" onclick="helpTab('vlake',this)">Vlake</button>
+    <button class="help-tab" onclick="helpTab('doznaka',this)">Doznaka</button>
+    <button class="help-tab" onclick="helpTab('simboli',this)">Simboli</button>
+  </div>
+  <div id="help-body">
+
+    <!-- ── GENERALIJE ─────────────────────────── -->
+    <div id="help-pane-gen">
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🗺 Šta je ova aplikacija?
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">🌲</div>
+            <div class="help-txt">
+              <b>USS Vlake — Aplikacija za šumariju</b>
+              <span>Alat za projektovanje traktorskih vlaka, GPS snimanje, označavanje zona doznake i upravljanje KML fajlovima. Radi u browseru na telefonu ili računaru, bez instalacije.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🧭 Navigacija — tabovi
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">☰</div>
+            <div class="help-txt"><b>Meni</b><span>Otvara padajući meni sa svim alatima: GPS, Export, Print, Offline karta, Dodavanje KML fajlova i ove upute.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📁</div>
+            <div class="help-txt"><b>Projekat</b><span>Pregled i odabir projekta, dnevni log radova, statistike po projektantu i odjelu, upravljanje projektantima.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📐</div>
+            <div class="help-txt"><b>Vlake</b><span>Crtanje i upravljanje traktorskim vlakama, mjerenja distanci i površina, buffer zone, referentna karta.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🌲</div>
+            <div class="help-txt"><b>Doznaka</b><span>Kreiranje odjela za doznaku, ucrtavanje granica, označavanje zona (zaštitne, prioritetne, sjemenjaci...), GPS praćenje projektanata.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🗂 Oznake — bočni panel
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Oznake panel se otvara automatski i prikazuje sve slojeve vidljive na mapi. Tap na sloj otvara editor boja i stilova.</div>
+          <div class="help-row">
+            <div class="help-icon">📂</div>
+            <div class="help-txt"><b>Učitani fajlovi (lokalni)</b><span>KML fajlovi koje ste ručno učitali sa uređaja. Čuvaju se lokalno u browseru. Možete ih preimenovati, promijeniti boju, providnost i uzorak punjenja, te dodati tag/odjel za pretragu.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🌐</div>
+            <div class="help-txt"><b>Server fajlovi</b><span>KML fajlovi sa Supabase servera, grupisani po GJ (Gospodarskoj jedinici). Svaka GJ je sklopiva grupa — tapnite na naziv GJ da proširite ili skupite listu.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📡</div>
+            <div class="help-txt"><b>GPS tragovi</b><span>Snimljeni GPS putevi. Prikazuju se kao linije na mapi u boji dodijeljenoj korisniku.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📷</div>
+            <div class="help-txt"><b>Foto oznake</b><span>Fotografije snimljene na lokaciji. Prikazuju se kao markeri na mapi. Mogu se dijeliti s kolegama.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🛠 Alati iz menija
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">📡</div>
+            <div class="help-txt"><b>GPS</b><span>Uključi/isključi GPS snimanje lokacije u realnom vremenu. Tačka plave boje prikazuje vašu poziciju na mapi.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">⬆</div>
+            <div class="help-txt"><b>KML Export</b><span>Izvoz svih vlaka i slojeva u KML format za Google Earth ili GIS softver.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📥</div>
+            <div class="help-txt"><b>Offline karta</b><span>Preuzimanje karata za rad bez interneta. Bitno za rad na terenu u planinskom predjelu.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📂</div>
+            <div class="help-txt"><b>Dodaj KML fajl</b><span>Učitaj KML fajl s uređaja i prikaži ga na mapi kao poseban sloj. Pojavljuje se u sekciji "Učitani fajlovi".</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📷</div>
+            <div class="help-txt"><b>Uslikaj lokaciju</b><span>Uslikajte tačku na terenu — foto se veže za GPS koordinate i pojavljuje na mapi kao marker.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🏷</div>
+            <div class="help-txt"><b>Tekst na karti</b><span>Dodajte tekstualnu oznaku direktno na mapu — korisno za napomene i reference tačaka.</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /gen -->
+
+    <!-- ── VLAKE ───────────────────────────────── -->
+    <div id="help-pane-vlake" style="display:none;">
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📋 Pregled vlaka
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">📋</div>
+            <div class="help-txt"><b>Moje Vlake</b><span>Popis svih vlaka u projektu. Svaka vlaka ima naziv, dužinu i boju traga. Tapnite na vlaku da je odaberete i prikažete na mapi.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">👁</div>
+            <div class="help-txt"><b>Vidljivost</b><span>Svaka vlaka ima gumb za uključivanje/isključivanje prikaza na mapi bez brisanja.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>✏ Crtanje vlake
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Tapnite na mapu da dodate tačke vlake jednu po jednu. Linija se crta između tačaka. Kad završite, pritisnite "Završi vlaku".</div>
+          <ul class="help-steps">
+            <li data-n="1.">Odaberite ili kreirajte vlaku u panelu vlaka</li>
+            <li data-n="2.">Tapnite na mapu da dodate prvu tačku</li>
+            <li data-n="3.">Nastavljajte tapkati duž željene trase</li>
+            <li data-n="4.">Pritisnite <b>Poništi zadnju</b> za uklanjanje zadnje tačke</li>
+            <li data-n="5.">Pritisnite <b>Završi vlaku</b> kad ste zadovoljni trasom</li>
+          </ul>
+          <div class="help-row" style="margin-top:8px;">
+            <div class="help-icon">📍</div>
+            <div class="help-txt"><b>Dodaj tačku gumbom</b><span>Gumb 📍 u donjem desnom uglu dodaje tačku na centar mape — korisno za precizno pozicioniranje.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📏 Mjerenja i profil terena
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">📏</div>
+            <div class="help-txt"><b>Mjerenje distance</b><span>Tapkajte tačke na mapi da izmjerite razdaljinu između njih. Prikazuje ukupnu dužinu, uspon i silaz.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:#4ade8022;">⬆</div>
+            <div class="help-txt"><b style="color:#4ade80;">Uspon</b><span>Ukupna visinska razlika uzlaznih dionica (zelena boja).</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:#f8717122;">⬇</div>
+            <div class="help-txt"><b style="color:#f87171;">Silaz</b><span>Ukupna visinska razlika silaznih dionica (crvena boja).</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:#a78bfa22;">◻</div>
+            <div class="help-txt"><b style="color:#a78bfa;">Površina</b><span>Ako su tačke zatvorene u poligon, prikazuje se površina u m² i hektarima (ljubičasta boja).</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🔲 Buffer zone
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Buffer zone su zone oko vlake koje pokazuju pokrivenost. Prikazuju se kao poluprovidni slojevi na mapi.</div>
+          <div class="help-row">
+            <div class="help-icon col" style="background:#60a5fa33;border:2px solid #60a5fa;">
+              &nbsp;&nbsp;&nbsp;
+            </div>
+            <div class="help-txt"><b style="color:#60a5fa;">Buffer zona</b><span>Plava/svijetloplava zona oko vlake — pokazuje pokriveno područje projektovanog zahvata.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon col" style="background:#ef444455;border:2px solid #ef4444;">
+              &nbsp;&nbsp;&nbsp;
+            </div>
+            <div class="help-txt"><b style="color:#ef4444;">Mrtva zona (preklapanje)</b><span>Crvena zona nastaje gdje se buffers dvije ili više vlaka preklapaju — označava redundantno područje.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔗</div>
+            <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu kontinuiranu liniju — korisno za planiranje mreže vlaka.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🗺 Referentna karta i detekcija
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">🗺</div>
+            <div class="help-txt"><b>Referentna karta</b><span>Učitajte sliku papirne karte ili ortofota i preklopite je na digitalnu mapu. Koristite da prenesete vlake s papira u digitalni format.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔍</div>
+            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>Pokušava automatski prepoznati trase vlaka iz učitane referentne slike koristeći analizu kontrasta i putanja.</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /vlake -->
+
+    <!-- ── DOZNAKA ─────────────────────────────── -->
+    <div id="help-pane-doznaka" style="display:none;">
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🌲 Šta je Doznaka tab?
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">🌲</div>
+            <div class="help-txt">
+              <b>Doznaka — označavanje stabala i zona</b>
+              <span>Omogućuje kreiranje projekata doznake po odjelima, ucrtavanje granica odjela, GPS praćenje projektanata na terenu i označavanje posebnih zona (zaštitne, sjemenjaci, prioriteti...).</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>➕ Kreiranje novog odjela
+        </div>
+        <div class="help-sec-body">
+          <ul class="help-steps">
+            <li data-n="1.">U Doznaka panelu tapnite <b>+ Novi</b></li>
+            <li data-n="2.">Upišite ili odaberite <b>GJ</b> (Gospodarska jedinica, npr. RISOVAC KRUPA)</li>
+            <li data-n="3.">Upišite ili odaberite <b>Odjel</b> (npr. 78)</li>
+            <li data-n="4.">Opcija A — Učitajte <b>GeoJSON fajl</b> sa granicama odsjeka — granica se automatski izračuna</li>
+            <li data-n="4.">Opcija B — Tapnite <b>Ucrtaj granicu na mapi</b> i tapkajte uglove granice ručno</li>
+            <li data-n="5.">Tapnite <b>Završi</b> — vraćate se na formu s prikazanom površinom</li>
+            <li data-n="6.">Pritisnite <b>Spremi odjel</b></li>
+          </ul>
+          <div class="help-row" style="margin-top:8px;">
+            <div class="help-icon">📐</div>
+            <div class="help-txt"><b>Površina odjela</b><span>Automatski se izračunava iz ucrtane granice ili GeoJSON poligona i prikazuje u hektarima (ha).</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📐 Ucrtavanje granice odjela
+        </div>
+        <div class="help-sec-body">
+          <ul class="help-steps">
+            <li data-n="1.">Unesite GJ i odjel u formu</li>
+            <li data-n="2.">Tapnite <b>Ucrtaj granicu na mapi</b> (pojavljuje se kad nema GeoJSON-a)</li>
+            <li data-n="3.">App prelazi na prikaz mape — tapkajte uglove granice</li>
+            <li data-n="4.">Koristite <b>Poništi</b> za uklanjanje zadnje tačke</li>
+            <li data-n="5.">Tapnite <b>Završi</b> — automatski se vraćate na formu s ucrtanom granicom i površinom</li>
+            <li data-n="6.">Tapnite <b>Otkaži</b> — vraćate se na formu <em>bez</em> granice</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🛡 Označavanje zona na mapi
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Zona se ucrtava kao poligon na mapi. Svaki tip zone ima svoju boju i emoji oznaku.</div>
+          <ul class="help-steps">
+            <li data-n="1.">Otvorite odjel iz liste tapom na karticu</li>
+            <li data-n="2.">Tapnite <b>Obilježi zonu na mapi</b></li>
+            <li data-n="3.">Odaberite tip zone iz liste</li>
+            <li data-n="4.">Tapkajte uglove zone na mapi</li>
+            <li data-n="5.">Tapnite <b>Završi</b>, unesite naziv/napomenu i potvrdite</li>
+          </ul>
+          <div class="help-row" style="margin-top:6px;">
+            <div class="help-icon" style="font-size:16px;">🚫</div>
+            <div class="help-txt"><b style="color:#E63946;">Nepogodno za sječu</b><span>Kamen, nagib, vlažno tlo — ne može se izvlačiti drvo.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">🌿</div>
+            <div class="help-txt"><b style="color:#52B788;">Čišćenje podmlatka</b><span>Zona gdje treba čišćenje šiblja i podmlatka prije doznake.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">🛡</div>
+            <div class="help-txt"><b style="color:#3B8BD4;">Zaštitna zona</b><span>Vodotok, zaštitno stanište, zabranjena zona.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">🌰</div>
+            <div class="help-txt"><b style="color:#FF9F1C;">Stabla sjemenjaci</b><span>Odabrana matična stabla — NE sjeći! Ova stabla ostaju za obnovu šume.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">⭐</div>
+            <div class="help-txt"><b style="color:#FFBE0B;">Prioritet doznake</b><span>Ova zona se doznauje prva — hitno ili najvažnija.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">✅</div>
+            <div class="help-txt"><b style="color:#8D99AE;">Završeno</b><span>Doznaka u ovoj zoni je završena.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">📍</div>
+            <div class="help-txt"><b style="color:#9B5DE5;">Ostalo</b><span>Korisnička napomena — slobodni opis za bilo koji tip bilješke.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📍 GPS Trag projektanta
+        </div>
+        <div class="help-sec-body">
+          <ul class="help-steps">
+            <li data-n="1.">Otvorite odjel iz liste</li>
+            <li data-n="2.">Tapnite <b>📍 Počni GPS snimanje</b></li>
+            <li data-n="3.">Hodajte terenom — app snima tačke svakih nekoliko sekundi</li>
+            <li data-n="4.">GPS trag se prikazuje kao linija na mapi u boji dodijeljenoj projektantu</li>
+            <li data-n="5.">Tapnite <b>⏹ Zaustavi GPS</b> kad završite</li>
+          </ul>
+          <div class="help-row" style="margin-top:6px;">
+            <div class="help-icon" style="font-size:10px;">●●●</div>
+            <div class="help-txt"><b>Više projektanata</b><span>Svaki projektant ima svoju boju traga. Tragovi svih projektanata vidljivi su istovremeno na mapi.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>👥 Projektanti (tim)
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon">➕</div>
+            <div class="help-txt"><b>Dodaj projektanta</b><span>Tapnite <b>+ Dodaj</b> pored naslova "Projektanti". Prikazuje se lista kolega iz iste šumarije koji još nisu dodani. Tapnite <b>Dodaj</b> pored imena.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔑</div>
+            <div class="help-txt"><b>Ko može dodavati?</b><span>Samo kreator odjela (vlasnik projekta) može dodavati i uklanjati projektante.</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /doznaka -->
+
+    <!-- ── SIMBOLI ─────────────────────────────── -->
+    <div id="help-pane-simboli" style="display:none;">
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow open">▶</span>🗺 Simboli na mapi
+        </div>
+        <div class="help-sec-body open">
+          <div class="help-row">
+            <div class="help-icon" style="background:rgba(96,165,250,0.25);border:2px solid #60a5fa;border-radius:6px;">&nbsp;</div>
+            <div class="help-txt"><b style="color:#60a5fa;">Buffer zona vlake</b><span>Plava poluprovidna površina — projektovano područje zahvata traktorske vlake.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:rgba(239,68,68,0.45);border:2px solid #ef4444;border-radius:6px;">&nbsp;</div>
+            <div class="help-txt"><b style="color:#ef4444;">Mrtva zona</b><span>Crvena zona preklapanja — dio koji pokrivaju dvije ili više vlaka istovremeno.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:rgba(74,222,128,0.12);border:2px dashed #4ade80;border-radius:6px;">&nbsp;</div>
+            <div class="help-txt"><b style="color:#4ade80;">Granica odjela</b><span>Zelena isprekidana linija — ucrtana ili GeoJSON granica odjela u Doznaka panelu.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📍</div>
+            <div class="help-txt"><b>Marker tačke</b><span>Pojedinačna tačka mjerenja ili oznake na mapi.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📷</div>
+            <div class="help-txt"><b>Foto marker</b><span>Fotografija snimljena na toj lokaciji. Tapnite za pregled i dijeljenje.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔵</div>
+            <div class="help-txt"><b>GPS pozicija</b><span>Vaša trenutna lokacija (plavi krug) — prikazuje se kad je GPS uključen iz menija.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🎨 Boje zona doznake
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <span class="help-swatch" style="background:#E63946;"></span>
+            <div class="help-icon" style="font-size:16px;">🚫</div>
+            <div class="help-txt"><b>Nepogodno za sječu</b><span style="color:#E63946;">Crvena</span><span> — kamen, nagib, vlažno tlo</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#52B788;"></span>
+            <div class="help-icon" style="font-size:16px;">🌿</div>
+            <div class="help-txt"><b>Čišćenje podmlatka</b><span style="color:#52B788;">Zelena</span><span> — čišćenje šiblja</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#3B8BD4;"></span>
+            <div class="help-icon" style="font-size:16px;">🛡</div>
+            <div class="help-txt"><b>Zaštitna zona</b><span style="color:#3B8BD4;">Plava</span><span> — vodotok, stanište</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#FF9F1C;"></span>
+            <div class="help-icon" style="font-size:16px;">🌰</div>
+            <div class="help-txt"><b>Stabla sjemenjaci</b><span style="color:#FF9F1C;">Narandžasta</span><span> — ne sjeći!</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#FFBE0B;"></span>
+            <div class="help-icon" style="font-size:16px;">⭐</div>
+            <div class="help-txt"><b>Prioritet doznake</b><span style="color:#FFBE0B;">Žuta</span><span> — doznauje se prvo</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#8D99AE;"></span>
+            <div class="help-icon" style="font-size:16px;">✅</div>
+            <div class="help-txt"><b>Završeno</b><span style="color:#8D99AE;">Siva</span><span> — doznaka završena</span></div>
+          </div>
+          <div class="help-row">
+            <span class="help-swatch" style="background:#9B5DE5;"></span>
+            <div class="help-icon" style="font-size:16px;">📍</div>
+            <div class="help-txt"><b>Ostalo / napomena</b><span style="color:#9B5DE5;">Ljubičasta</span><span> — slobodna bilješka</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🎨 KML stil oznaka
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon" style="border:3px solid #60a5fa;background:transparent;">&nbsp;</div>
+            <div class="help-txt"><b>Boja linije/obruba</b><span>Svaki KML sloj ima boju linije koja se mijenja u editoru oznake (tapnite na sloj u Oznake panelu).</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:#60a5fa55;border:2px solid #60a5fa;">&nbsp;</div>
+            <div class="help-txt"><b>Puno punjenje (solid)</b><span>Poligon sa punom bojom punjenja — providnost se podešava klizačem.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:repeating-linear-gradient(45deg,#60a5fa55 0,#60a5fa55 2px,transparent 2px,transparent 6px);border:2px solid #60a5fa;">&nbsp;</div>
+            <div class="help-txt"><b>Dijagonalni hatch</b><span>Poligon s kosim šrafurama — koristi se za privremene oznake ili planirana područja.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="background:repeating-linear-gradient(0deg,#60a5fa55 0,#60a5fa55 2px,transparent 2px,transparent 6px);border:2px solid #60a5fa;">&nbsp;</div>
+            <div class="help-txt"><b>Vodoravni hatch</b><span>Horizontalne linije unutar poligona.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📊 Oznake mjerenja
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon" style="color:#4ade80;font-size:22px;">⬆</div>
+            <div class="help-txt"><b style="color:#4ade80;">Uspon (visinska razlika gore)</b><span>Zelena brojka — ukupni uspon u metrima duž izmjerene trase.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#f87171;font-size:22px;">⬇</div>
+            <div class="help-txt"><b style="color:#f87171;">Silaz (visinska razlika dolje)</b><span>Crvena brojka — ukupni silaz u metrima.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#a78bfa;font-size:22px;">◻</div>
+            <div class="help-txt"><b style="color:#a78bfa;">Površina poligona</b><span>Ljubičasta — izračunata površina zatvorenog poligona u m² i ha.</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /simboli -->
+
+  </div><!-- /help-body -->
+</div><!-- /help-modal -->
 
 <!-- M&T BOTTOM SHEET -->
 <div id="mjtrg-sheet-bg" onclick="closeMjtrgDropdown()"
