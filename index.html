@@ -2560,6 +2560,7 @@ function showApp() {
     _refRepoLoad();
     _restoreTacke();
     _restoreFotos();
+    _localKmlRestore();
   }, 80);
 }
 
@@ -7903,7 +7904,8 @@ function ldK(file) {
       const col=KCOLS[kmlCI%KCOLS.length]; kmlCI++;
       const doc=new DOMParser().parseFromString(ev.target.result,'text/xml');
       const grp=pkml(doc,col); grp.addTo(map);
-      kmlLs.push({name:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true});
+      kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true});
+      _localKmlSaveContent(file.name, ev.target.result, col);
       _glCollapsed.delete('Lokalni / —');
       rndGraniceModal();
       try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
@@ -8008,6 +8010,7 @@ const _ODSJEK_STYLE = { color: '#fbbf24', weight: 1.5, opacity: 0.8 };
 let _globalKmlStyles = {};
 // User overrides (personal, stored in localStorage)
 const _KML_USER_STYLES_KEY = 'tvlake_kml_user_styles_v1';
+const _LOCAL_KML_KEY = 'tvlake_local_kmls_v1';
 
 async function loadGlobalKmlStyles() {
   try {
@@ -8122,6 +8125,7 @@ function togK(i) {
   k.vis ? map.removeLayer(k.grp) : k.grp.addTo(map);
   k.vis = !k.vis;
   saveKmlStyles();
+  _localKmlSaveAll();
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
@@ -8130,6 +8134,7 @@ function delK(i) {
   kmlLs.splice(i, 1);
   _kmlEditIdx = -1;
   saveKmlStyles();
+  _localKmlSaveAll();
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
@@ -8209,7 +8214,7 @@ function _rndOznakePanel() {
         const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
         const isEdit = _kmlEditIdx === i;
         return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
-          <div class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
+          <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
           <div class="oz-row-info">
             <div class="oz-row-name">${_escHtml(shortName)}</div>
             <div class="oz-row-meta">${meta}</div>
@@ -8282,6 +8287,64 @@ function _ozZoomKml(i) {
   closeOznakePanel();
 }
 
+// ── Lokalni KML persistence ───────────────────────────────────────────────────
+function _localKmlSaveContent(origName, content, col) {
+  try {
+    const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
+    store[origName] = { content, col, dash: '', weight: 2, opacity: 0.9, vis: true, displayName: origName };
+    localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
+  } catch(e) { console.warn('KML nije sačuvan lokalno (prevelik fajl?):', e); }
+}
+
+function _localKmlSaveAll() {
+  try {
+    const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
+    kmlLs.forEach(k => {
+      if (k._key) return;
+      const origName = k._origName || k.name;
+      if (!store[origName]) return;
+      store[origName].displayName = k.name;
+      store[origName].col     = k.col;
+      store[origName].dash    = k.dash;
+      store[origName].weight  = k.weight;
+      store[origName].opacity = k.opacity ?? 0.9;
+      store[origName].vis     = k.vis;
+    });
+    // Ukloni stavke koje više nisu u kmlLs
+    const activeNames = new Set(kmlLs.filter(k => !k._key).map(k => k._origName || k.name));
+    for (const key of Object.keys(store)) {
+      if (!activeNames.has(key)) delete store[key];
+    }
+    localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
+  } catch(e) { console.warn('_localKmlSaveAll error:', e); }
+}
+
+function _localKmlRestore() {
+  try {
+    const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
+    if (!Object.keys(store).length) return;
+    Object.entries(store).forEach(([origName, data]) => {
+      if (kmlLs.find(k => (k._origName || k.name) === origName && !k._key)) return;
+      try {
+        const col = data.col || KCOLS[kmlCI % KCOLS.length]; kmlCI++;
+        const doc = new DOMParser().parseFromString(data.content, 'text/xml');
+        const grp = pkml(doc, col);
+        grp.addTo(map);
+        if (data.vis === false) map.removeLayer(grp);
+        kmlLs.push({
+          name: data.displayName || origName, _origName: origName,
+          grp, col, dash: data.dash || '', weight: data.weight || 2,
+          opacity: data.opacity ?? 0.9, vis: data.vis !== false
+        });
+        applyKmlStyle(kmlLs.length - 1);
+      } catch(e) { console.warn('KML restore greška:', origName, e); }
+    });
+    _glCollapsed.delete('Lokalni / —');
+    rndGraniceModal();
+    if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
+  } catch(e) { console.warn('_localKmlRestore error:', e); }
+}
+
 function _ozKmlToggleEdit(i) {
   _kmlEditIdx = _kmlEditIdx === i ? -1 : i;
   _rndOznakePanel();
@@ -8298,42 +8361,66 @@ function _renderKmlEditor(i) {
     <div class="oz-ed-field">
       <div class="oz-ed-label">Ime</div>
       <input class="oz-ed-input" type="text" value="${_escHtml(k.name)}"
-        onchange="_kmlSetNameR(${i},this.value)" placeholder="Naziv sloja">
+        onchange="event.stopPropagation();_kmlSetNameR(${i},this.value)" placeholder="Naziv sloja">
     </div>
     <div class="oz-ed-field">
       <div class="oz-ed-label">Boja</div>
       <div class="oz-ed-colors">
         ${dots}
         <input type="color" class="oz-ed-color-pick" value="${k.col}"
-          oninput="event.stopPropagation();_kmlSetColR(${i},this.value)">
+          oninput="event.stopPropagation();_kmlColorLive(${i},this.value)"
+          onchange="event.stopPropagation();_kmlSetColR(${i},this.value)">
       </div>
     </div>
     <div class="oz-ed-field">
       <div class="oz-ed-label">Providnost <span id="oz-op-lbl-${i}">${op}%</span></div>
       <input type="range" class="oz-ed-range" min="5" max="100" step="5" value="${op}"
-        oninput="event.stopPropagation();document.getElementById('oz-op-lbl-${i}').textContent=this.value+'%';_kmlSetOpR(${i},this.value/100)">
+        oninput="event.stopPropagation();_kmlOpacityLive(${i},this.value)"
+        onchange="event.stopPropagation();_kmlSetOpR(${i},this.value/100)">
     </div>
     <div class="oz-ed-btns">
       <button class="oz-ed-btn" onclick="event.stopPropagation();_ozZoomKml(${i})">🗺 Zoom</button>
-      <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj \\''+_escHtml(kmlLs[${i}]?.name||'')+'\\' ?'))delK(${i})">✕ Briši</button>
+      <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj?'))delK(${i})">✕ Briši</button>
     </div>
   </div>`;
+}
+
+function _kmlColorLive(i, col) {
+  if (!kmlLs[i]) return;
+  kmlLs[i].col = col;
+  applyKmlStyle(i);
+  const sw = document.getElementById('oz-kml-sw-' + i);
+  if (sw) sw.style.background = col;
+}
+
+function _kmlOpacityLive(i, pct) {
+  if (!kmlLs[i]) return;
+  kmlLs[i].opacity = pct / 100;
+  applyKmlStyle(i);
+  const lbl = document.getElementById('oz-op-lbl-' + i);
+  if (lbl) lbl.textContent = pct + '%';
 }
 
 function _kmlSetNameR(i, val) {
   if (!kmlLs[i]) return;
   kmlLs[i].name = val.trim() || kmlLs[i].name;
   saveKmlStyles();
+  _localKmlSaveAll();
 }
 
 function _kmlSetColR(i, col) {
   setKmlColor(i, col);
+  _localKmlSaveAll();
   _rndOznakePanel();
 }
 
 function _kmlSetOpR(i, val) {
-  setKmlOpacity(i, parseFloat(val));
-  _rndOznakePanel();
+  if (!kmlLs[i]) return;
+  kmlLs[i].opacity = parseFloat(val);
+  applyKmlStyle(i);
+  saveKmlStyles();
+  _localKmlSaveAll();
+  rndGraniceModal();
 }
 
 function _ozTogTrag(id) {
