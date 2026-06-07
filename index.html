@@ -1498,6 +1498,77 @@ select:focus { outline:none; border-color:#3b82f6; }
   background: rgba(0,0,0,0.45);
   z-index: 4499;
 }
+/* ── Oznake panel ──────────────────────────────────────────────────── */
+#oznake-bg {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45); z-index: 4499;
+}
+#oznake-panel {
+  display: none; position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #0f1f3d;
+  border-radius: 16px 16px 0 0;
+  z-index: 4500; padding: 0 0 32px;
+  max-height: 80vh; overflow-y: auto;
+}
+#oznake-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid #1e3a5f;
+  position: sticky; top: 0; background: #0f1f3d; z-index: 1;
+}
+#oznake-header .oz-title {
+  flex: 1; font-size: 14px; font-weight: 600; color: #e2e8f0;
+}
+#oznake-header .oz-total {
+  font-size: 11px; color: #64748b;
+  background: #1e293b; border-radius: 12px; padding: 2px 8px;
+}
+#oznake-header .oz-close {
+  background: none; border: none; color: #64748b;
+  font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px;
+}
+.oz-sec-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px 9px;
+  background: #111f38; cursor: pointer;
+  border-top: 1px solid #1e3a5f;
+  user-select: none;
+}
+.oz-sec-hdr:active { background: #1e3a5f; }
+.oz-sec-arrow { font-size: 10px; color: #475569; transition: transform .15s; }
+.oz-sec-arrow.open { transform: rotate(90deg); }
+.oz-sec-label { flex: 1; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .6px; }
+.oz-sec-cnt { font-size: 11px; color: #475569; }
+.oz-sec-body { padding: 0; }
+.oz-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid #0f172a;
+  cursor: pointer; transition: background .1s;
+}
+.oz-row:active { background: #1e293b; }
+.oz-row.hidden-layer { opacity: 0.45; }
+.oz-row-icon { font-size: 18px; flex-shrink: 0; }
+.oz-row-color { width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0; }
+.oz-row-info { flex: 1; min-width: 0; }
+.oz-row-name { font-size: 13px; color: #e2e8f0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oz-row-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+.oz-vis-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 4px; flex-shrink: 0;
+  color: #64748b;
+}
+.oz-vis-btn.on { color: #e2e8f0; }
+.oz-empty { padding: 14px 16px; font-size: 12px; color: #475569; text-align: center; }
+#oznake-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  background: #16213e;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px; cursor: pointer; color: #cbd5e1;
+  font-size: 15px; transition: background .15s;
+}
+#oznake-btn:active { background: #1e3a5f; }
 #layer-sheet h3 {
   text-align: center;
   font-size: 13px;
@@ -2052,6 +2123,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <div id="map-layer-btns">
           <button id="layer-switch-btn" onclick="_openLayerSheet()" title="Promijeni sloj karte">⛰</button>
+          <button id="oznake-btn" onclick="openOznakePanel()" title="Lista oznaka i KML fajlova">≡</button>
           <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte">⭐</button>
           <span id="sync-status-dot" class="sync-dot sync-dot--off" title="Realtime sync" style="margin:6px 2px 0 4px;"></span>
         </div>
@@ -8022,18 +8094,169 @@ function togK(i) {
   k.vis = !k.vis;
   saveKmlStyles();
   rndGraniceModal();
+  if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
 function delK(i) {
   map.removeLayer(kmlLs[i].grp);
   kmlLs.splice(i, 1);
   saveKmlStyles();
   rndGraniceModal();
+  if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
 
 // ── Old rndKml (still used in panel — keep minimal) ───────────────────────────
 function rndKml() {
   const el = document.getElementById('kl');
   if (el) el.innerHTML = '';
+}
+
+// ── Oznake panel ──────────────────────────────────────────────────────────────
+const _ozCollapsed = new Set();
+
+function _kmlCalcLen(grp) {
+  let d = 0;
+  grp.eachLayer(l => {
+    if (!l.getLatLngs) return;
+    const lls = l.getLatLngs();
+    const flat = Array.isArray(lls[0]) ? lls.flat(Infinity) : lls;
+    for (let i = 1; i < flat.length; i++) d += flat[i-1].distanceTo(flat[i]);
+  });
+  return d;
+}
+
+function _kmlFeatureCount(grp) {
+  let n = 0;
+  grp.eachLayer(l => { if (!(l.getLatLngs && l.getLatLngs().length === 1 && !l.getLatLngs()[0].length)) n++; });
+  return n || grp.getLayers().length;
+}
+
+function openOznakePanel() {
+  document.getElementById('oznake-bg').style.display = 'block';
+  document.getElementById('oznake-panel').style.display = 'block';
+  _rndOznakePanel();
+}
+
+function closeOznakePanel() {
+  document.getElementById('oznake-bg').style.display = 'none';
+  document.getElementById('oznake-panel').style.display = 'none';
+}
+
+function togOzSec(sec) {
+  _ozCollapsed.has(sec) ? _ozCollapsed.delete(sec) : _ozCollapsed.add(sec);
+  _rndOznakePanel();
+}
+
+function _rndOznakePanel() {
+  const kmlEl  = document.getElementById('oz-sec-kml');
+  const tragEl = document.getElementById('oz-sec-trag');
+  const fotoEl = document.getElementById('oz-sec-foto');
+  if (!kmlEl) return;
+
+  const kmlOpen  = !_ozCollapsed.has('kml');
+  const tragOpen = !_ozCollapsed.has('trag');
+  const fotoOpen = !_ozCollapsed.has('foto');
+
+  // Arrows
+  ['kml','trag','foto'].forEach(s => {
+    const arr = document.getElementById('oz-arr-' + s);
+    if (arr) arr.className = 'oz-sec-arrow' + (!_ozCollapsed.has(s) ? ' open' : '');
+  });
+
+  // ── KML fajlovi ──
+  document.getElementById('oz-cnt-kml').textContent = kmlLs.length;
+  if (!kmlOpen) { kmlEl.style.display = 'none'; }
+  else {
+    kmlEl.style.display = '';
+    if (!kmlLs.length) {
+      kmlEl.innerHTML = '<div class="oz-empty">Nema učitanih KML fajlova.</div>';
+    } else {
+      kmlEl.innerHTML = kmlLs.map((k, i) => {
+        const shortName = k.name.replace(/^.*\//, '');
+        const cnt  = _kmlFeatureCount(k.grp);
+        const lenM = _kmlCalcLen(k.grp);
+        const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
+        const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
+        return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozZoomKml(${i})">
+          <div class="oz-row-icon">📄</div>
+          <div class="oz-row-info">
+            <div class="oz-row-name">${shortName}</div>
+            <div class="oz-row-meta">${meta}</div>
+          </div>
+          <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
+            ${k.vis ? '👁' : '🙈'}
+          </button>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── GPS tragovi ──
+  const trags = (typeof _tragRegistry !== 'undefined') ? _tragRegistry : [];
+  document.getElementById('oz-cnt-trag').textContent = trags.length;
+  if (!tragOpen) { tragEl.style.display = 'none'; }
+  else {
+    tragEl.style.display = '';
+    if (!trags.length) {
+      tragEl.innerHTML = '<div class="oz-empty">Nema snimljenih tragova.</div>';
+    } else {
+      tragEl.innerHTML = trags.map(t => {
+        const vis  = t.visible !== false;
+        const lenM = _tragCalcLen(t.pts);
+        const dt   = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+        const meta = [dt, _tragFmtLen(lenM), t.pts.length + ' tač.'].join(' · ');
+        return `<div class="oz-row${vis?'':' hidden-layer'}" onclick="event.stopPropagation();_tragRegZoom('${t.id}')">
+          <div class="oz-row-color" style="background:${t.color};"></div>
+          <div class="oz-row-info">
+            <div class="oz-row-name">${_escHtml(t.name)}</div>
+            <div class="oz-row-meta">${meta}</div>
+          </div>
+          <button class="oz-vis-btn${vis?' on':''}" onclick="event.stopPropagation();_ozTogTrag('${t.id}')" title="${vis?'Sakrij':'Prikaži'}">
+            ${vis ? '👁' : '🙈'}
+          </button>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Foto oznake ──
+  const locN    = (typeof _locFotos    !== 'undefined') ? _locFotos.length    : 0;
+  const shareN  = (typeof _sharedFotos !== 'undefined') ? _sharedFotos.length : 0;
+  const fotoTot = locN + shareN;
+  document.getElementById('oz-cnt-foto').textContent = fotoTot;
+  if (!fotoOpen) { fotoEl.style.display = 'none'; }
+  else {
+    fotoEl.style.display = '';
+    if (!fotoTot) {
+      fotoEl.innerHTML = '<div class="oz-empty">Nema foto oznaka.</div>';
+    } else {
+      let html = '';
+      if (locN) html += `<div class="oz-row"><div class="oz-row-icon">📷</div><div class="oz-row-info"><div class="oz-row-name">Moje fotografije</div><div class="oz-row-meta">${locN} ${locN===1?'fotografija':'fotografija'}</div></div></div>`;
+      if (shareN) html += `<div class="oz-row"><div class="oz-row-icon">👥</div><div class="oz-row-info"><div class="oz-row-name">Podijeljene fotografije</div><div class="oz-row-meta">${shareN} ${shareN===1?'fotografija':'fotografija'}</div></div></div>`;
+      fotoEl.innerHTML = html;
+    }
+  }
+
+  // Total badge
+  const total = kmlLs.length + trags.length + fotoTot;
+  document.getElementById('oz-total-badge').textContent = total + (total===1?' stavka':' stavki');
+}
+
+function _ozZoomKml(i) {
+  const k = kmlLs[i];
+  if (!k) return;
+  try { const b = k.grp.getBounds(); if (b.isValid()) map.fitBounds(b, {padding:[30,30]}); } catch(e) {}
+  closeOznakePanel();
+}
+
+function _ozTogTrag(id) {
+  const t = (typeof _tragRegistry !== 'undefined') ? _tragRegistry.find(x => x.id === id) : null;
+  if (!t) return;
+  const layer = (typeof _tragLayers !== 'undefined') ? _tragLayers[id] : null;
+  const nowVis = t.visible !== false;
+  t.visible = !nowVis;
+  if (layer) { nowVis ? map.removeLayer(layer) : layer.addTo(map); }
+  if (typeof _tragRegSave === 'function') _tragRegSave();
+  _rndOznakePanel();
 }
 
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
@@ -13163,6 +13386,40 @@ function dozBackToList() {
 
 <input type="file" id="loc-photo-input" accept="image/*" capture="environment"
   style="display:none" onchange="onLocPhotoSelected(this)">
+
+<!-- ══ OZNAKE PANEL ══════════════════════════════════════════════════ -->
+<div id="oznake-bg" onclick="closeOznakePanel()"></div>
+<div id="oznake-panel">
+  <div id="oznake-header">
+    <span class="oz-title">🗂 Prikazane oznake</span>
+    <span class="oz-total" id="oz-total-badge">0</span>
+    <button class="oz-close" onclick="closeOznakePanel()">✕</button>
+  </div>
+
+  <!-- KML fajlovi -->
+  <div class="oz-sec-hdr" onclick="togOzSec('kml')">
+    <span class="oz-sec-arrow open" id="oz-arr-kml">▶</span>
+    <span class="oz-sec-label">KML fajlovi</span>
+    <span class="oz-sec-cnt" id="oz-cnt-kml">0</span>
+  </div>
+  <div class="oz-sec-body" id="oz-sec-kml"></div>
+
+  <!-- GPS tragovi -->
+  <div class="oz-sec-hdr" onclick="togOzSec('trag')">
+    <span class="oz-sec-arrow open" id="oz-arr-trag">▶</span>
+    <span class="oz-sec-label">GPS tragovi</span>
+    <span class="oz-sec-cnt" id="oz-cnt-trag">0</span>
+  </div>
+  <div class="oz-sec-body" id="oz-sec-trag"></div>
+
+  <!-- Foto oznake -->
+  <div class="oz-sec-hdr" onclick="togOzSec('foto')">
+    <span class="oz-sec-arrow open" id="oz-arr-foto">▶</span>
+    <span class="oz-sec-label">Foto oznake</span>
+    <span class="oz-sec-cnt" id="oz-cnt-foto">0</span>
+  </div>
+  <div class="oz-sec-body" id="oz-sec-foto"></div>
+</div>
 
 <!-- Share foto — odabir kolega -->
 <div id="share-foto-dlg" onclick="if(event.target===this)closeShareFotoDlg()">
