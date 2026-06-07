@@ -13004,13 +13004,21 @@ async function dozLoadLayers(projectId) {
   if (!projectId) return;
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
-      sb.from('doz_project_members').select('*, korisnici!user_id(ime,prezime,boja)').eq('project_id', projectId).eq('is_active', true),
+      sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
       sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true).order('created_at', { ascending: false }),
       sb.from('doz_track_points').select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId).order('recorded_at', { ascending: true })
     ]);
     _dozMembers  = mRes.data  || [];
     _dozMarkings = mkRes.data || [];
     _dozTracks   = trRes.data || [];
+
+    // Load korisnici names separately — avoids depending on FK join definition
+    if (_dozMembers.length) {
+      const ids = [...new Set(_dozMembers.map(m => m.user_id).filter(Boolean))];
+      const { data: kData } = await sb.from('korisnici').select('id,ime,prezime,boja').in('id', ids);
+      const kMap = Object.fromEntries((kData || []).map(k => [k.id, k]));
+      _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || null }));
+    }
   } catch(e) {
     console.error('dozLoadLayers', e);
     _dozMembers = []; _dozMarkings = []; _dozTracks = [];
@@ -13068,7 +13076,7 @@ function dozRenderDetail() {
   const ml = document.getElementById('doz-members-list');
   ml.innerHTML = _dozMembers.length
     ? _dozMembers.map((m, i) => {
-        const k = m.korisnici;
+        const k = m._korisnik;
         const name = k ? (`${k.ime||''} ${k.prezime||''}`.trim() || `Projektant ${i+1}`) : `Projektant ${i+1}`;
         const color = k?.boja || DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length];
         return `<div class="doz-member-row">
@@ -13189,10 +13197,16 @@ function dozUndoDrawPt() {
 }
 
 function dozCancelDraw() {
+  const wasBoundary = _dozDrawType === '__boundary__';
   _dozDrawType = null; _dozDrawPts = [];
   if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
   document.getElementById('doz-draw-banner').style.display = 'none';
   document.getElementById('map').style.cursor = '';
+  if (wasBoundary) {
+    // Vrati modal za kreiranje — granica nije ucrtana
+    _dozCreateBoundary = null; _dozCreateAreaHa = null;
+    dozShowCreateOdjel(true);
+  }
 }
 
 function dozFinishDraw() {
@@ -13317,10 +13331,15 @@ function dozShowCreateOdjel(restore) {
     if (gjEl)    gjEl.value    = savedGj;
     if (odjelEl) odjelEl.value = savedOdjel;
 
-    document.getElementById('doz-create-no-poly').style.display = 'none';
-    document.getElementById('doz-create-poly-ok').style.display = 'block';
-    document.getElementById('doz-create-poly-area').textContent =
-      `${(savedAreaHa||0).toFixed(1)} ha ucrtano`;
+    if (savedBnd) {
+      document.getElementById('doz-create-no-poly').style.display = 'none';
+      document.getElementById('doz-create-poly-ok').style.display = 'block';
+      document.getElementById('doz-create-poly-area').textContent =
+        `${(savedAreaHa||0).toFixed(1)} ha ucrtano`;
+    } else {
+      document.getElementById('doz-create-poly-ok').style.display = 'none';
+      document.getElementById('doz-create-no-poly').style.display = savedOdjel ? 'block' : 'none';
+    }
     return;
   }
 
