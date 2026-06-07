@@ -12957,18 +12957,29 @@ function dozShowCreateOdjel(restore) {
   document.getElementById('doz-create-error').textContent = '';
 
   if (restore) {
-    // Vraćamo se iz crtanja granice — prikaži rezultat
-    _dozCreateGj    = _dozNewOdjelDrawGj;
-    _dozCreateOdjel = _dozNewOdjelDrawOdjel;
-    _dozCreateRenderGjField();
+    // Spasi sve prije nego render funkcije resetuju state
+    const savedGj    = _dozNewOdjelDrawGj;
+    const savedOdjel = _dozNewOdjelDrawOdjel;
+    const savedAreaHa  = _dozCreateAreaHa;
+    const savedBnd     = _dozCreateBoundary;
+
+    _dozCreateRenderGjField(); // interno resetuje GJ/odjel — namjerno
+
+    // Vrati sačuvane vrijednosti
+    _dozCreateGj       = savedGj;
+    _dozCreateOdjel    = savedOdjel;
+    _dozCreateAreaHa   = savedAreaHa;
+    _dozCreateBoundary = savedBnd;
+
     const gjEl    = document.getElementById('doz-create-gj');
     const odjelEl = document.getElementById('doz-create-odjel');
-    if (gjEl)    gjEl.value    = _dozCreateGj;
-    if (odjelEl) odjelEl.value = _dozCreateOdjel;
-    document.getElementById('doz-create-no-poly').style.display  = 'none';
-    document.getElementById('doz-create-poly-ok').style.display  = 'block';
-    document.getElementById('doz-create-poly-area').textContent  =
-      `${(_dozCreateAreaHa||0).toFixed(1)} ha ucrtano`;
+    if (gjEl)    gjEl.value    = savedGj;
+    if (odjelEl) odjelEl.value = savedOdjel;
+
+    document.getElementById('doz-create-no-poly').style.display = 'none';
+    document.getElementById('doz-create-poly-ok').style.display = 'block';
+    document.getElementById('doz-create-poly-area').textContent =
+      `${(savedAreaHa||0).toFixed(1)} ha ucrtano`;
     return;
   }
 
