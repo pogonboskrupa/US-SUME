@@ -1709,6 +1709,26 @@ select:focus { outline:none; border-color:#3b82f6; }
   padding:3px 10px;cursor:pointer;font-size:11px;margin-top:6px;
 }
 .tacka-popup-btn:active,.foto-popup-btn:active { opacity:0.7; }
+/* ── Tačka nav panel ── */
+#tacka-nav-panel {
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:1700;
+  background:rgba(10,17,31,0.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:2px solid #1e3a5f;padding:10px 14px 12px;
+  flex-direction:row;align-items:center;gap:12px;
+  box-shadow:0 -4px 20px rgba(0,0,0,0.6);
+}
+#tnp-arrow {
+  font-size:26px;line-height:1;flex-shrink:0;
+  transition:transform 0.4s ease;display:inline-block;
+}
+#tnp-info { flex:1;min-width:0; }
+#tnp-name { font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+#tnp-air  { font-size:12px;color:#93c5fd;margin-top:2px; }
+#tnp-road { font-size:12px;color:#86efac;margin-top:1px; }
+#tnp-stop { background:#7f1d1d;border:none;color:#fca5a5;border-radius:8px;
+  padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0; }
+#tnp-stop:active { opacity:0.8; }
+/* bottom offset set dynamically via JS based on action-bar visibility */
 /* ── Tačka modal ── */
 #tacka-modal-bg {
   display:none;position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.6);
@@ -4114,7 +4134,7 @@ let _tacke = [];
 const _TACKE_KEY = 'tvlake_tacke';
 let _tackaPlaceMode = false;  // čekamo klik na karti
 let _tackaPlaceNm   = '';     // naziv koji se koristi pri kliku
-let _tackaNavLine   = null;   // Leaflet polyline navigacijske linije
+// nav lines live in vodiMeDoTacke section below
 
 function _tačkaIcon(n, nm) {
   const labelH = nm ? 14 : 0;
@@ -4212,24 +4232,213 @@ function _setupTackaPopup(m, idx, la, lo, ts, nm) {
   }, {className:'tvlake-popup'});
 }
 
-// ── Navigation ──
+// ── Road routing (Dijkstra on putevi.geojson graph) ──
+let _tackaNavIdx    = null;  // index of tačka we're navigating to
+let _tackaRoadLine  = null;  // green road-route polyline
+let _tackaAirLine   = null;  // blue dashed air-line
+
+function _getPuteviGraph() {
+  if (_puteviGraph) return _puteviGraph;
+  if (!_puteviGeoJSON) return null;
+  const nodeMap = new Map();  // key -> idx
+  const nodes   = [];         // [{la, lo}]
+  const adj     = [];         // adj[i] = [{to, dist}]
+
+  function nodeIdx(la, lo) {
+    const key = la.toFixed(5) + ',' + lo.toFixed(5);
+    if (nodeMap.has(key)) return nodeMap.get(key);
+    const idx = nodes.length;
+    nodeMap.set(key, idx);
+    nodes.push({la, lo});
+    adj.push([]);
+    return idx;
+  }
+
+  for (const f of (_puteviGeoJSON.features || [])) {
+    if (f.geometry?.type !== 'LineString') continue;
+    const coords = f.geometry.coordinates;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [lo1, la1] = coords[i], [lo2, la2] = coords[i + 1];
+      const a = nodeIdx(la1, lo1), b = nodeIdx(la2, lo2);
+      const d = _haversine(la1, lo1, la2, lo2);
+      adj[a].push({to: b, dist: d});
+      adj[b].push({to: a, dist: d});
+    }
+  }
+  _puteviGraph = {nodes, adj};
+  return _puteviGraph;
+}
+
+function _nearestGraphNode(la, lo) {
+  const g = _getPuteviGraph();
+  if (!g || !g.nodes.length) return null;
+  let bestI = 0, bestD = Infinity;
+  for (let i = 0; i < g.nodes.length; i++) {
+    const d = _haversine(la, lo, g.nodes[i].la, g.nodes[i].lo);
+    if (d < bestD) { bestD = d; bestI = i; }
+  }
+  return {idx: bestI, dist: bestD};
+}
+
+function _dijkstra(startIdx, endIdx) {
+  const g = _getPuteviGraph();
+  if (!g) return null;
+  const n    = g.nodes.length;
+  const dist = new Float64Array(n).fill(Infinity);
+  const prev = new Int32Array(n).fill(-1);
+  const done = new Uint8Array(n);
+  dist[startIdx] = 0;
+  const pq = [[0, startIdx]];
+
+  while (pq.length > 0) {
+    let mi = 0;
+    for (let i = 1; i < pq.length; i++) if (pq[i][0] < pq[mi][0]) mi = i;
+    const [d, u] = pq.splice(mi, 1)[0];
+    if (done[u]) continue;
+    done[u] = 1;
+    if (u === endIdx) break;
+    for (const {to: v, dist: w} of g.adj[u]) {
+      if (done[v]) continue;
+      const nd = d + w;
+      if (nd < dist[v]) { dist[v] = nd; prev[v] = u; pq.push([nd, v]); }
+    }
+  }
+
+  if (dist[endIdx] === Infinity) return null;
+  const path = [];
+  for (let cur = endIdx; cur !== -1; cur = prev[cur]) path.unshift([g.nodes[cur].la, g.nodes[cur].lo]);
+  return {path, dist: dist[endIdx]};
+}
+
+function _clearNavLayers() {
+  if (_tackaRoadLine) { map.removeLayer(_tackaRoadLine); _tackaRoadLine = null; }
+  if (_tackaAirLine)  { map.removeLayer(_tackaAirLine);  _tackaAirLine  = null; }
+}
+
+// ── Navigation entry point ──
 function vodiMeDoTacke(idx) {
   if (idx < 0 || idx >= _tacke.length) return;
-  const t = _tacke[idx];
   map.closePopup();
-  // Ukloni staru liniju
-  if (_tackaNavLine) { map.removeLayer(_tackaNavLine); _tackaNavLine = null; }
-  if (lastP) {
-    const dist = _haversine(lastP.la, lastP.lo, t.la, t.lo);
-    _tackaNavLine = L.polyline([[lastP.la, lastP.lo],[t.la, t.lo]], {
-      color:'#3b82f6', weight:2, dashArray:'8 5', opacity:0.9
+  _clearNavLayers();
+  _tackaNavIdx = idx;
+
+  const t = _tacke[idx];
+  const fromLa = lastP?.la, fromLo = lastP?.lo;
+
+  // Air-line (always)
+  if (fromLa != null) {
+    _tackaAirLine = L.polyline([[fromLa, fromLo], [t.la, t.lo]], {
+      color:'#60a5fa', weight:2, dashArray:'8 5', opacity:0.85
     }).addTo(map);
-    map.fitBounds(_tackaNavLine.getBounds(), {padding:[40,40], animate:true});
-    showToast(`✈️ ${_fmtDist(dist)} vazdušnom linijom`);
   }
-  // Otvori Google Maps navigaciju
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${t.la},${t.lo}&travelmode=walking`;
-  window.open(url, '_blank');
+
+  // Road route via Dijkstra
+  let routeBuilt = false;
+  if (fromLa != null && _puteviGeoJSON) {
+    const sn = _nearestGraphNode(fromLa, fromLo);
+    const en = _nearestGraphNode(t.la,   t.lo);
+    if (sn && en && sn.idx !== en.idx) {
+      const result = _dijkstra(sn.idx, en.idx);
+      if (result) {
+        // Prepend user pos + append destination for full visual path
+        const fullPath = [[fromLa, fromLo], ...result.path, [t.la, t.lo]];
+        _tackaRoadLine = L.polyline(fullPath, {
+          color:'#22c55e', weight:4, opacity:0.9, lineCap:'round', lineJoin:'round'
+        }).addTo(map);
+        routeBuilt = true;
+      }
+    }
+  }
+
+  // Show nav panel
+  _showNavPanel(idx);
+
+  // Fit map
+  const bounds = [];
+  if (fromLa != null) bounds.push([fromLa, fromLo]);
+  bounds.push([t.la, t.lo]);
+  if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds), {padding:[50,50], animate:true});
+
+  if (!routeBuilt && !fromLa) showToast('Uključi GPS za navigaciju');
+}
+
+// ── Nav panel ──
+function _showNavPanel(idx) {
+  const panel = document.getElementById('tacka-nav-panel');
+  if (!panel) return;
+  const t = _tacke[idx];
+  document.getElementById('tnp-name').textContent = t.nm || ('Tačka ' + (idx + 1));
+  const ab = document.getElementById('action-bar');
+  panel.style.bottom = (ab && ab.style.display !== 'none') ? (ab.offsetHeight + 'px') : '0';
+  panel.style.display = 'flex';
+  _updateNavPanel(lastP?.la, lastP?.lo);
+}
+
+function _updateNavPanel(la, lo) {
+  if (_tackaNavIdx === null) return;
+  const t = _tacke[_tackaNavIdx];
+  if (!t) return;
+
+  const airEl  = document.getElementById('tnp-air');
+  const roadEl = document.getElementById('tnp-road');
+  const brngEl = document.getElementById('tnp-arrow');
+
+  if (la != null) {
+    const airDist  = _haversine(la, lo, t.la, t.lo);
+    airEl.textContent = '✈️ ' + _fmtDist(airDist);
+
+    // Update air line
+    if (_tackaAirLine) _tackaAirLine.setLatLngs([[la, lo], [t.la, t.lo]]);
+
+    // Bearing arrow rotation
+    const brng = _bearing(la, lo, t.la, t.lo);
+    brngEl.style.transform = `rotate(${brng}deg)`;
+
+    // Check if arrived
+    if (airDist < 15) {
+      airEl.textContent = '✅ Stigao si!';
+      airEl.style.color = '#4ade80';
+    } else {
+      airEl.style.color = '';
+    }
+
+    // Road dist from existing polyline
+    if (_tackaRoadLine) {
+      const lls = _tackaRoadLine.getLatLngs();
+      let rd = 0;
+      // Snap to nearest point on road line, sum remaining
+      let nearI = 0, nearD = Infinity;
+      for (let i = 0; i < lls.length; i++) {
+        const d = _haversine(la, lo, lls[i].lat, lls[i].lng);
+        if (d < nearD) { nearD = d; nearI = i; }
+      }
+      for (let i = nearI; i < lls.length - 1; i++) {
+        rd += _haversine(lls[i].lat, lls[i].lng, lls[i+1].lat, lls[i+1].lng);
+      }
+      roadEl.textContent = '🛤 ' + _fmtDist(rd);
+      roadEl.style.display = '';
+    } else {
+      roadEl.style.display = 'none';
+    }
+  } else {
+    airEl.textContent = '📡 Uključi GPS';
+    roadEl.style.display = 'none';
+  }
+}
+
+function _bearing(la1, lo1, la2, lo2) {
+  const r = Math.PI / 180;
+  const dLo = (lo2 - lo1) * r;
+  const y = Math.sin(dLo) * Math.cos(la2 * r);
+  const x = Math.cos(la1 * r) * Math.sin(la2 * r) - Math.sin(la1 * r) * Math.cos(la2 * r) * Math.cos(dLo);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function stopTackaNav() {
+  _tackaNavIdx = null;
+  _clearNavLayers();
+  const panel = document.getElementById('tacka-nav-panel');
+  if (panel) panel.style.display = 'none';
 }
 
 // ── Helpers ──
@@ -6832,6 +7041,9 @@ function onP(p) {
     map.panTo([la, lo], { animate: true, duration: 0.5 });
   }
 
+  // Navigacija do tačke — ažuriraj panel i liniju
+  if (_tackaNavIdx !== null) _updateNavPanel(la, lo);
+
   if (!recOn || recPaused || actI === null) return;
 
   // 1. FILTER TAČNOSTI
@@ -7828,11 +8040,14 @@ function updateVlakaLabel(i) {
 let _puteviLayerBg = null;  // bijela pozadina za kontrast
 let _puteviLayerFg = null;  // narandžasta linija
 let _puteviVisible = localStorage.getItem('tvlake_putevi_visible') !== '0'; // default: vidljivi
+let _puteviGeoJSON = null;  // raw GeoJSON za routing
+let _puteviGraph   = null;  // {nodes, adj} — grade se lazy
 
 function _loadPutevi() {
   fetch('./PUTEVI/putevi.geojson')
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(data => {
+      _puteviGeoJSON = data;
       const sharedOpts = { renderer: _puteviRenderer, pane: 'putevi' };
       _puteviLayerBg = L.geoJSON(data, {
         ...sharedOpts,
@@ -15051,6 +15266,17 @@ function toggleHelpSec(hdr) {
     <span class="ab-ico">🎯</span>
     <span>Moja lokacija</span>
   </button>
+</div>
+
+<!-- Tačka navigacioni panel -->
+<div id="tacka-nav-panel">
+  <span id="tnp-arrow">🧭</span>
+  <div id="tnp-info">
+    <div id="tnp-name">—</div>
+    <div id="tnp-air">📡 Uključi GPS</div>
+    <div id="tnp-road" style="display:none;"></div>
+  </div>
+  <button id="tnp-stop" onclick="stopTackaNav()">✕ Stop</button>
 </div>
 
 <!-- Tačka modal — unos naziva -->
