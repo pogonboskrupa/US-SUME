@@ -401,19 +401,19 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Vlaka list — PRO kartice */
 .vrow {
-  display:flex; align-items:stretch; border-radius:8px; margin-bottom:6px;
+  display:flex; align-items:stretch; border-radius:6px; margin-bottom:4px;
   cursor:pointer; background:#0f172a; border:1px solid #1e293b;
   overflow:hidden; transition:border-color 0.15s, background 0.15s;
 }
 .vrow:hover { border-color:#3b82f6; background:#0f1f3a; }
 .vrow.act   { border-color:#fbbf24; background:#151200; }
-.vcard-stripe { width:5px; flex-shrink:0; }
-.vcard-info { flex:1; padding:9px 10px; min-width:0; }
-.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
-.vcard-name { font-weight:800; font-size:15px; color:#f1f5f9; white-space:nowrap; }
-.vcard-km { font-size:14px; font-weight:700; color:#4ade80; white-space:nowrap; }
-.vcard-sub { font-size:11px; color:#475569; margin-top:2px; }
-.vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 7px 6px 0; }
+.vcard-stripe { width:4px; flex-shrink:0; }
+.vcard-info { flex:1; padding:5px 8px; min-width:0; }
+.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:5px; }
+.vcard-name { font-weight:700; font-size:13px; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vcard-km { font-size:12px; font-weight:700; color:#4ade80; white-space:nowrap; flex-shrink:0; }
+.vcard-sub { font-size:10px; color:#475569; margin-top:1px; }
+.vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:2px; padding:4px 5px 4px 0; }
 
 /* AlpineQuest-stil segmented gumbi */
 .seg-grp {
@@ -456,7 +456,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vpick-search-row input:focus { border-color:#38bdf8; }
 .vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
 .vpick-search-row button:active { background:#0ea5e9;color:#fff; }
-.vcard-elev { font-size:10px;color:#94a3b8;display:flex;gap:6px;flex-wrap:wrap;margin-top:1px; }
+.vcard-elev { font-size:9px;color:#94a3b8;display:flex;gap:5px;flex-wrap:wrap;margin-top:0; }
 /* === Registar tragova === */
 #trag-reg-modal {
   display:none; position:fixed; inset:0; z-index:9500;
@@ -561,9 +561,9 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vcard-elev .eu { color:#4ade80; } .vcard-elev .ed { color:#f87171; } .vcard-elev .eroad { color:#fbbf24; }
 
 .mb {
-  width:28px; height:28px; border-radius:5px;
+  width:24px; height:24px; border-radius:4px;
   border:1px solid #374151; background:#1e293b;
-  color:#94a3b8; font-size:12px; cursor:pointer;
+  color:#94a3b8; font-size:11px; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
 .mb:hover { border-color:#ef4444; color:#ef4444; }
