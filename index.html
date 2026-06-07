@@ -3147,19 +3147,24 @@ async function adminLoadUsers() {
   if (!el) return;
   el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">⏳ Učitavam...</p>';
 
-  const filterSum = document.getElementById('admin-filter-sum')?.value || '';
-  let q = sb.from('korisnici').select('*').order('sumarija').order('ime', { ascending: true });
-  if (filterSum) q = q.eq('sumarija', filterSum);
-  const { data, error } = await q;
+  const { data, error } = await sb.rpc('admin_get_all_users');
+  if (error) {
+    el.innerHTML = `<p style="color:#f87171;font-size:12px;text-align:center;padding:16px 0;">Greška: ${_escHtml(error.message)}</p>`;
+    return;
+  }
 
-  if (error || !data || data.length === 0) {
+  const filterSum = document.getElementById('admin-filter-sum')?.value || '';
+  let rows = data || [];
+  if (filterSum) rows = rows.filter(u => u.sumarija === filterSum);
+
+  if (!rows.length) {
     el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Nema korisnika</p>';
     return;
   }
 
   // Grupiši po šumariji
   const groups = {};
-  data.forEach(u => { const s = u.sumarija || '—'; (groups[s] = groups[s] || []).push(u); });
+  rows.forEach(u => { const s = u.sumarija || '—'; (groups[s] = groups[s] || []).push(u); });
 
   el.innerHTML = Object.entries(groups).map(([sum, users]) => `
     <div style="margin-bottom:20px;">
