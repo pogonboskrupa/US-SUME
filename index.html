@@ -1709,6 +1709,46 @@ select:focus { outline:none; border-color:#3b82f6; }
   padding:3px 10px;cursor:pointer;font-size:11px;margin-top:6px;
 }
 .tacka-popup-btn:active,.foto-popup-btn:active { opacity:0.7; }
+/* ── Tačka modal ── */
+#tacka-modal-bg {
+  display:none;position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.6);
+}
+#tacka-modal {
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:3401;
+  background:#0f1f3d;border-radius:16px 16px 0 0;border-top:2px solid #1e3a5f;
+  padding:16px 16px 32px;box-shadow:0 -6px 28px rgba(0,0,0,0.7);
+}
+#tacka-modal h3 {
+  margin:0 0 12px;font-size:15px;color:#e2e8f0;font-weight:700;
+}
+#tacka-nm-input {
+  width:100%;box-sizing:border-box;background:#0a1628;border:1px solid #2d4a7a;
+  border-radius:8px;padding:10px 12px;font-size:14px;color:#e2e8f0;
+  outline:none;margin-bottom:12px;
+}
+#tacka-nm-input:focus { border-color:#3b82f6; }
+#tacka-nm-input::placeholder { color:#475569; }
+.tacka-modal-btns {
+  display:flex;gap:8px;
+}
+.tacka-modal-btns button {
+  flex:1;padding:11px 8px;border-radius:10px;border:none;cursor:pointer;
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:opacity 0.15s;
+}
+.tacka-modal-btns button:active { opacity:0.8; }
+#tacka-btn-gps  { background:#16a34a;color:#fff; }
+#tacka-btn-map  { background:#2563eb;color:#fff; }
+#tacka-btn-cancel { background:#1e293b;color:#94a3b8;flex:0 0 auto;padding:11px 14px; }
+/* Place-on-map banner */
+#tacka-place-banner {
+  display:none;position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:3300;
+  background:#1d4ed8;color:#fff;border-radius:20px;padding:8px 18px;
+  font-size:13px;font-weight:700;box-shadow:0 3px 12px rgba(0,0,0,0.5);
+  white-space:nowrap;pointer-events:none;
+}
+/* Nav line on map */
+.tacka-nav-line { stroke:#3b82f6;stroke-width:2;stroke-dasharray:8 5; }
 .fpp-info { background:#1e3a5f; color:#93c5fd; }
 .fpp-share { background:#1e3a5f; color:#93c5fd; }
 .fpp-shared-ok { background:#14532d; color:#86efac; cursor:default; }
@@ -4072,64 +4112,173 @@ async function sbSaveTextLabels() {
 // ─── TAČKE (GPS oznake na mapi) ──────────────────────────────────────────────
 let _tacke = [];
 const _TACKE_KEY = 'tvlake_tacke';
+let _tackaPlaceMode = false;  // čekamo klik na karti
+let _tackaPlaceNm   = '';     // naziv koji se koristi pri kliku
+let _tackaNavLine   = null;   // Leaflet polyline navigacijske linije
 
-function _tačkaIcon(n) {
+function _tačkaIcon(n, nm) {
+  const labelH = nm ? 14 : 0;
+  const totalH = 32 + labelH;
+  const label = nm
+    ? `<text x="12" y="${32 + labelH - 2}" text-anchor="middle" font-size="9" font-weight="700"
+        fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke">${_escSvg(nm)}</text>`
+    : '';
   return L.divIcon({
-    className: '', iconSize:[24,32], iconAnchor:[12,32], popupAnchor:[0,-34],
-    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
+    className: '', iconSize:[24, totalH], iconAnchor:[12, 32], popupAnchor:[0,-34],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="${totalH}" viewBox="0 0 24 ${totalH}">
       <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z"
         fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/>
       <circle cx="12" cy="12" r="5.5" fill="#fff"/>
       <text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">${n}</text>
+      ${label}
     </svg>`
   });
 }
 
-function addTacka() {
+function _escSvg(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Modal ──
+function _tackaOpenModal() {
+  switchTab('karta');
+  document.getElementById('tacka-modal-bg').style.display = 'block';
+  document.getElementById('tacka-modal').style.display    = 'block';
+  setTimeout(() => document.getElementById('tacka-nm-input').focus(), 80);
+}
+
+function _tackaCancelModal() {
+  document.getElementById('tacka-modal-bg').style.display = 'none';
+  document.getElementById('tacka-modal').style.display    = 'none';
+  document.getElementById('tacka-nm-input').value = '';
+}
+
+function _tackaAddAtGPS() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
   if (!lastP) { showToast('Nema GPS signala'); return; }
-  const {la, lo} = lastP;
-  const ts = Date.now();
+  _createTacka(lastP.la, lastP.lo, nm);
+}
+
+function _tackaAddOnMap() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
+  _tackaPlaceNm   = nm;
+  _tackaPlaceMode = true;
+  document.getElementById('tacka-place-banner').style.display = 'block';
+  map.getContainer().style.cursor = 'crosshair';
+}
+
+function _tackaExitPlaceMode() {
+  _tackaPlaceMode = false;
+  _tackaPlaceNm   = '';
+  document.getElementById('tacka-place-banner').style.display = 'none';
+  map.getContainer().style.cursor = '';
+}
+
+// ── Core creation ──
+function _createTacka(la, lo, nm) {
+  const ts  = Date.now();
   const idx = _tacke.length;
-  const m = L.marker([la, lo], {icon: _tačkaIcon(idx+1)}).addTo(map);
-  _setupTackaPopup(m, idx, la, lo, ts);
-  _tacke.push({la, lo, ts, marker: m});
+  const m   = L.marker([la, lo], {icon: _tačkaIcon(idx+1, nm)}).addTo(map);
+  _setupTackaPopup(m, idx, la, lo, ts, nm);
+  _tacke.push({la, lo, ts, nm, marker: m});
   _saveTacke();
-  showToast(`📍 Tačka ${idx+1} dodana`);
+  map.setView([la, lo], Math.max(map.getZoom(), 15), {animate: true});
+  showToast(`📍 ${nm || ('Tačka ' + (idx+1))} dodana`);
 }
 
-function _setupTackaPopup(m, idx, la, lo, ts) {
-  const dt = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  m.bindPopup(`<div style="font-size:12px;min-width:150px;color:#1e293b;">
-    <b style="font-size:13px;">📍 Tačka ${idx+1}</b><br>
-    <span style="color:#64748b;font-size:10px;">${dt}</span><br>
-    <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code><br>
-    <button class="tacka-popup-btn" onclick="deleteTacka(${idx})">🗑 Obriši</button>
-  </div>`, {className:'tvlake-popup'});
+// ── Popup ──
+function _setupTackaPopup(m, idx, la, lo, ts, nm) {
+  const title = nm || ('Tačka ' + (idx+1));
+  const dt    = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  m.bindPopup(() => {
+    const distHtml = lastP
+      ? `<div style="margin:5px 0 2px;font-size:11px;color:#475569;">
+           ✈️ Vazdušna linija: <b style="color:#3b82f6;">${_fmtDist(_haversine(lastP.la,lastP.lo,la,lo))}</b>
+         </div>`
+      : '';
+    return `<div style="font-size:12px;min-width:160px;color:#1e293b;">
+      <b style="font-size:13px;color:#1e293b;">📍 ${_escHtml(title)}</b><br>
+      <span style="color:#64748b;font-size:10px;">${dt}</span><br>
+      <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code>
+      ${distHtml}
+      <div style="display:flex;gap:5px;margin-top:7px;">
+        <button class="tacka-popup-btn" style="background:#1d4ed8;color:#bfdbfe;flex:1;"
+          onclick="vodiMeDoTacke(${idx})">🧭 Vodi me</button>
+        <button class="tacka-popup-btn" onclick="deleteTacka(${idx})" style="flex:0 0 auto;">🗑</button>
+      </div>
+    </div>`;
+  }, {className:'tvlake-popup'});
 }
 
+// ── Navigation ──
+function vodiMeDoTacke(idx) {
+  if (idx < 0 || idx >= _tacke.length) return;
+  const t = _tacke[idx];
+  map.closePopup();
+  // Ukloni staru liniju
+  if (_tackaNavLine) { map.removeLayer(_tackaNavLine); _tackaNavLine = null; }
+  if (lastP) {
+    const dist = _haversine(lastP.la, lastP.lo, t.la, t.lo);
+    _tackaNavLine = L.polyline([[lastP.la, lastP.lo],[t.la, t.lo]], {
+      color:'#3b82f6', weight:2, dashArray:'8 5', opacity:0.9
+    }).addTo(map);
+    map.fitBounds(_tackaNavLine.getBounds(), {padding:[40,40], animate:true});
+    showToast(`✈️ ${_fmtDist(dist)} vazdušnom linijom`);
+  }
+  // Otvori Google Maps navigaciju
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${t.la},${t.lo}&travelmode=walking`;
+  window.open(url, '_blank');
+}
+
+// ── Helpers ──
+function _haversine(la1, lo1, la2, lo2) {
+  const R = 6371000, r = Math.PI/180;
+  const dLa = (la2-la1)*r, dLo = (lo2-lo1)*r;
+  const a = Math.sin(dLa/2)**2 + Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function _fmtDist(m) {
+  return m >= 1000 ? (m/1000).toFixed(2)+' km' : Math.round(m)+' m';
+}
+
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Delete ──
 function deleteTacka(idx) {
   if (idx < 0 || idx >= _tacke.length) return;
   map.removeLayer(_tacke[idx].marker);
   _tacke.splice(idx, 1);
-  _tacke.forEach((t, i) => { t.marker.setIcon(_tačkaIcon(i+1)); _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts); });
+  _tacke.forEach((t, i) => {
+    t.marker.setIcon(_tačkaIcon(i+1, t.nm));
+    _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts, t.nm);
+  });
   _saveTacke();
   map.closePopup();
 }
 
+// ── Persistence ──
 function _saveTacke() {
-  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts})=>({la,lo,ts}))));
+  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts,nm})=>({la,lo,ts,nm}))));
 }
 
 function _restoreTacke() {
   try {
     const d = JSON.parse(localStorage.getItem(_TACKE_KEY) || '[]');
-    d.forEach(({la,lo,ts}, i) => {
-      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1)}).addTo(map);
-      _setupTackaPopup(m, i, la, lo, ts);
-      _tacke.push({la, lo, ts, marker: m});
+    d.forEach(({la,lo,ts,nm}, i) => {
+      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1, nm)}).addTo(map);
+      _setupTackaPopup(m, i, la, lo, ts, nm);
+      _tacke.push({la, lo, ts, nm, marker: m});
     });
   } catch(e) {}
 }
+
+// ── Legacy shim (old calls without modal) ──
+function addTacka() { _tackaOpenModal(); }
 
 // ─── FOTO OZNAKE ──────────────────────────────────────────────────────────────
 let _locFotos    = [];  // vlastite foto oznake
@@ -5060,6 +5209,12 @@ let _dblClickGuard = false;
 map.on('click', e => {
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
+  if (_tackaPlaceMode) {
+    const nm = _tackaPlaceNm;
+    _tackaExitPlaceMode();
+    _createTacka(e.latlng.lat, e.latlng.lng, nm);
+    return;
+  }
   if (_dozDrawType !== null) { dozAddDrawPoint(e.latlng); return; } // doznaka crtanje
   if (!_vpJustOpened) closeVlakaPopup();
   if (textToolOn) { openTextDialog(e.latlng.lat, e.latlng.lng, null); return; }
@@ -14888,7 +15043,7 @@ function toggleHelpSec(hdr) {
     <span id="ab-pauza-txt">Pauza</span>
   </button>
   <!-- Uvijek vidljivo -->
-  <button id="ab-tacka" onclick="addTacka()" title="Dodaj oznaku na trenutnoj GPS poziciji">
+  <button id="ab-tacka" onclick="_tackaOpenModal()" title="Dodaj oznaku">
     <span class="ab-ico">📍</span>
     <span>Tačka</span>
   </button>
@@ -14897,6 +15052,25 @@ function toggleHelpSec(hdr) {
     <span>Moja lokacija</span>
   </button>
 </div>
+
+<!-- Tačka modal — unos naziva -->
+<div id="tacka-modal-bg" onclick="_tackaCancelModal()"></div>
+<div id="tacka-modal">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <h3 style="margin:0;">📍 Nova tačka</h3>
+    <button onclick="_tackaCancelModal()"
+      style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;">✕</button>
+  </div>
+  <input id="tacka-nm-input" type="text" placeholder="Naziv tačke (npr. Sječa, Deponija...)" autocomplete="off" maxlength="40"
+    onkeydown="if(event.key==='Enter'){document.getElementById('tacka-btn-gps').click();}">
+  <div class="tacka-modal-btns">
+    <button id="tacka-btn-gps" onclick="_tackaAddAtGPS()">📡 GPS lokacija</button>
+    <button id="tacka-btn-map" onclick="_tackaAddOnMap()">🗺 Klikni na karti</button>
+    <button id="tacka-btn-cancel" onclick="_tackaCancelModal()">✕</button>
+  </div>
+</div>
+<!-- Tačka place-on-map banner -->
+<div id="tacka-place-banner">📍 Tapni na karti za postavljanje tačke</div>
 
 <!-- Što dalje? sheet — prikazuje se nakon završetka snimanja vlake -->
 <div id="sto-dalje-bg" onclick="_stodaljOdustani()"
