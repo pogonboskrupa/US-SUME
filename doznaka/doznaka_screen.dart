@@ -48,6 +48,10 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
   bool _showZone = true;
   bool _showTrack = true;
 
+  // Ručno crtanje granice odjela
+  bool _isDrawingOdjel = false;
+  final List<LatLng> _drawingPts = [];
+
   // Korisnici na projektu (za panel)
   Map<String, String> _userNames = {};
   Map<String, String> _userColors = {};
@@ -315,6 +319,121 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
     }
   }
 
+  // ── Ručno crtanje granice odjela ─────────────────────────
+
+  void _startDrawingOdjel() {
+    setState(() {
+      _isDrawingOdjel = true;
+      _drawingPts.clear();
+    });
+  }
+
+  void _onMapTap(TapPosition _, LatLng pt) {
+    if (_isDrawingOdjel) {
+      setState(() => _drawingPts.add(pt));
+    }
+  }
+
+  void _undoDrawingPt() {
+    if (_drawingPts.isNotEmpty) setState(() => _drawingPts.removeLast());
+  }
+
+  void _cancelDrawingOdjel() {
+    setState(() {
+      _isDrawingOdjel = false;
+      _drawingPts.clear();
+    });
+  }
+
+  Future<void> _completeDrawingOdjel() async {
+    if (_drawingPts.length < 3) return;
+    final pts = List<LatLng>.from(_drawingPts);
+    setState(() {
+      _isDrawingOdjel = false;
+      _drawingPts.clear();
+    });
+    await _showDrawnOdjelDialog(pts);
+  }
+
+  Future<void> _showDrawnOdjelDialog(List<LatLng> pts) async {
+    final gjCtrl = TextEditingController();
+    final odjelCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Naziv odjela'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Unesi naziv gospodarske jedinice i broj odjela.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: gjCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Gospodarska jedinica (GJ)',
+                hintText: 'npr. RISOVAC KRUPA',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: odjelCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Odjel',
+                hintText: 'npr. 78',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.text,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Odustani'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2D6A4F),
+            ),
+            onPressed: () {
+              if (gjCtrl.text.trim().isEmpty || odjelCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Kreiraj'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final gj = gjCtrl.text.trim().toUpperCase();
+    final odjel = odjelCtrl.text.trim();
+
+    // Napravi Polygon GeoJSON iz ucrtanih tačaka
+    final coords = [...pts, pts.first]
+        .map((p) => [p.longitude, p.latitude])
+        .toList();
+    final boundary = {
+      'type': 'Polygon',
+      'coordinates': [coords],
+    };
+
+    // Izračunaj površinu
+    final areaHa = DoznakaService.calcTotalAreaHa([
+      OdjelFeature(gj: gj, odjel: odjel, geometry: boundary),
+    ]);
+
+    await _createProjekat(gj, odjel, boundary, areaHa);
+  }
+
   // ── GeoJSON učitavanje ────────────────────────────────────
 
   Future<void> _pickGeojsonFile() async {
@@ -438,11 +557,12 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
           // ─── Mapa ──────────────────────────────────────
           FlutterMap(
             mapController: _mapController,
-            options: const MapOptions(
-              initialCenter: LatLng(44.5, 17.0), // BiH centar
+            options: MapOptions(
+              initialCenter: const LatLng(44.5, 17.0),
               initialZoom: 10,
               minZoom: AppConstants.minZoom,
               maxZoom: AppConstants.maxZoom,
+              onTap: _onMapTap,
             ),
             children: [
               TileLayer(
@@ -525,15 +645,67 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
                     ),
                   ],
                 ),
+
+              // ── Drawing preview (crtanje odjela) ─────────
+              if (_isDrawingOdjel && _drawingPts.length >= 3)
+                PolygonLayer(
+                  polygons: [
+                    Polygon(
+                      points: _drawingPts,
+                      color: const Color(0xFF2D6A4F).withOpacity(0.18),
+                      borderColor: const Color(0xFF2D6A4F),
+                      borderStrokeWidth: 2.0,
+                    ),
+                  ],
+                ),
+              if (_isDrawingOdjel && _drawingPts.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: [..._drawingPts, _drawingPts.first],
+                      color: const Color(0xFF2D6A4F),
+                      strokeWidth: 2.0,
+                      isDotted: true,
+                    ),
+                  ],
+                ),
+              if (_isDrawingOdjel && _drawingPts.isNotEmpty)
+                MarkerLayer(
+                  markers: _drawingPts
+                      .map((pt) => Marker(
+                            point: pt,
+                            width: 14,
+                            height: 14,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2D6A4F),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Colors.white, width: 2),
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
             ],
           ),
 
-          // ─── Lista projekata (ako nema aktivnog) ───────
-          if (_aktivan == null)
+          // ─── Lista projekata (ako nema aktivnog i ne crtamo) ──
+          if (_aktivan == null && !_isDrawingOdjel)
             _ProjekatSelector(
               projekti: _projekti,
               onSelect: _aktivirajProjekat,
               onPickGeojson: _pickGeojsonFile,
+              onDrawOdjel: _startDrawingOdjel,
+            ),
+
+          // ─── Drawing toolbar (crtanje granice odjela) ─────
+          if (_isDrawingOdjel)
+            _DrawingOdjelOverlay(
+              numPts: _drawingPts.length,
+              onUndo: _undoDrawingPt,
+              onCancel: _cancelDrawingOdjel,
+              onComplete: _drawingPts.length >= 3 ? _completeDrawingOdjel : null,
             ),
 
           // ─── Doznaka panel (bottom sheet) ──────────────
@@ -652,11 +824,13 @@ class _ProjekatSelector extends StatelessWidget {
   final List<DoznakaProjekat> projekti;
   final Function(DoznakaProjekat) onSelect;
   final VoidCallback onPickGeojson;
+  final VoidCallback onDrawOdjel;
 
   const _ProjekatSelector({
     required this.projekti,
     required this.onSelect,
     required this.onPickGeojson,
+    required this.onDrawOdjel,
   });
 
   @override
@@ -666,43 +840,76 @@ class _ProjekatSelector extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
               children: [
                 const Text(
                   'Doznaka projekti',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
+                // Opcija 2: ručno crtanje
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF2D6A4F),
+                    side: const BorderSide(color: Color(0xFF2D6A4F)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.edit_location_alt, size: 16),
+                  label: const Text('Ucrtaj',
+                      style: TextStyle(fontSize: 13)),
+                  onPressed: onDrawOdjel,
+                ),
+                const SizedBox(width: 8),
+                // Opcija 1: GeoJSON fajl
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF2D6A4F),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    visualDensity: VisualDensity.compact,
                   ),
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Učitaj GeoJSON'),
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: const Text('GeoJSON',
+                      style: TextStyle(fontSize: 13)),
                   onPressed: onPickGeojson,
                 ),
               ],
             ),
           ),
           if (projekti.isEmpty)
-            const Expanded(
+            Expanded(
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.forest_outlined, size: 56, color: Colors.grey),
-                    SizedBox(height: 12),
-                    Text(
+                    const Icon(Icons.forest_outlined,
+                        size: 56, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    const Text(
                       'Nema projekata',
                       style: TextStyle(
                           color: Colors.grey, fontWeight: FontWeight.w500),
                     ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Učitaj GeoJSON fajl sa granicama odjela',
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Učitaj GeoJSON ili ucrtaj granicu odjela',
                       style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    const SizedBox(height: 24),
+                    // Larger draw button in empty state
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF2D6A4F),
+                        side: const BorderSide(color: Color(0xFF2D6A4F)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.edit_location_alt),
+                      label: const Text('Ucrtaj granicu odjela'),
+                      onPressed: onDrawOdjel,
                     ),
                   ],
                 ),
@@ -740,6 +947,121 @@ class _ProjekatSelector extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ── Drawing overlay (crtanje granice odjela) ──────────────
+
+class _DrawingOdjelOverlay extends StatelessWidget {
+  final int numPts;
+  final VoidCallback onUndo;
+  final VoidCallback onCancel;
+  final VoidCallback? onComplete;
+
+  const _DrawingOdjelOverlay({
+    required this.numPts,
+    required this.onUndo,
+    required this.onCancel,
+    required this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // ─── Gornji banner ────────────────────────────────
+        Positioned(
+          top: 12,
+          left: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B4332),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: const [
+                BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 6,
+                    offset: Offset(0, 2))
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.touch_app,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    numPts == 0
+                        ? 'Tapni na mapu da dodaš tačku granice'
+                        : numPts < 3
+                            ? '$numPts tačaka — potrebno još ${3 - numPts}'
+                            : '$numPts tačaka — ucrtano',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // ─── Donji toolbar ────────────────────────────────
+        Positioned(
+          bottom: 24,
+          left: 12,
+          right: 12,
+          child: Row(
+            children: [
+              // Odustani
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.red.shade600,
+                    side: BorderSide(color: Colors.red.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('Odustani'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Poništi zadnju tačku
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 13),
+                ),
+                onPressed: numPts > 0 ? onUndo : null,
+                child: const Icon(Icons.undo, size: 20),
+              ),
+              const SizedBox(width: 8),
+              // Završi poligon
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: onComplete != null
+                        ? const Color(0xFF2D6A4F)
+                        : Colors.grey,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  onPressed: onComplete,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Završi'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
