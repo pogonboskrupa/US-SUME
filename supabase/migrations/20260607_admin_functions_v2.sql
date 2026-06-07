@@ -1,7 +1,7 @@
 -- ============================================================
--- Admin funkcije v2
--- Oba upita idu kroz SECURITY DEFINER da zaobiđu RLS koji
--- ograničava SELECT/UPDATE samo na redove iste šumarije.
+-- Admin funkcije v2 (fixed: column reference ambiguity)
+-- RETURNS TABLE output columns shadow unqualified names inside
+-- the function body — sve WHERE klauzule moraju koristiti alias.
 -- ============================================================
 
 -- ─── 1. Dohvati SVE korisnike (za admin panel) ───────────────
@@ -22,7 +22,7 @@ SET search_path = public, auth
 AS $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM korisnici WHERE id = auth.uid() AND is_admin = TRUE
+    SELECT 1 FROM korisnici AS a WHERE a.id = auth.uid() AND a.is_admin = TRUE
   ) THEN
     RAISE EXCEPTION 'Pristup odbijen — samo admin';
   END IF;
@@ -51,18 +51,18 @@ SET search_path = public, auth
 AS $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM korisnici WHERE id = auth.uid() AND is_admin = TRUE
+    SELECT 1 FROM korisnici AS a WHERE a.id = auth.uid() AND a.is_admin = TRUE
   ) THEN
     RAISE EXCEPTION 'Pristup odbijen — samo admin';
   END IF;
 
   IF EXISTS (
-    SELECT 1 FROM korisnici WHERE id = p_user_id AND is_admin = TRUE
+    SELECT 1 FROM korisnici AS b WHERE b.id = p_user_id AND b.is_admin = TRUE
   ) THEN
     RAISE EXCEPTION 'Admin nalog se ne može premještati';
   END IF;
 
-  UPDATE korisnici SET sumarija = p_sumarija WHERE id = p_user_id;
+  UPDATE korisnici SET sumarija = p_sumarija WHERE korisnici.id = p_user_id;
 END;
 $$;
 
