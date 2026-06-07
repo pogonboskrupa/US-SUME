@@ -8271,50 +8271,66 @@ function togOzSec(sec) {
 }
 
 function _rndOznakePanel() {
-  const kmlEl  = document.getElementById('oz-sec-kml');
-  const tragEl = document.getElementById('oz-sec-trag');
-  const fotoEl = document.getElementById('oz-sec-foto');
-  if (!kmlEl) return;
+  const localEl  = document.getElementById('oz-sec-local');
+  const bucketEl = document.getElementById('oz-sec-bucket');
+  const tragEl   = document.getElementById('oz-sec-trag');
+  const fotoEl   = document.getElementById('oz-sec-foto');
+  if (!localEl) return;
 
-  const kmlOpen  = !_ozCollapsed.has('kml');
-  const tragOpen = !_ozCollapsed.has('trag');
-  const fotoOpen = !_ozCollapsed.has('foto');
+  const localOpen  = !_ozCollapsed.has('local');
+  const bucketOpen = !_ozCollapsed.has('bucket');
+  const tragOpen   = !_ozCollapsed.has('trag');
+  const fotoOpen   = !_ozCollapsed.has('foto');
 
   // Arrows
-  ['kml','trag','foto'].forEach(s => {
+  ['local','bucket','trag','foto'].forEach(s => {
     const arr = document.getElementById('oz-arr-' + s);
     if (arr) arr.className = 'oz-sec-arrow' + (!_ozCollapsed.has(s) ? ' open' : '');
   });
 
-  // ── KML fajlovi ──
-  document.getElementById('oz-cnt-kml').textContent = kmlLs.length;
-  if (!kmlOpen) { kmlEl.style.display = 'none'; }
+  // ── KML — razdvoji lokalne i bucket ──
+  const localKmls  = kmlLs.map((k, i) => ({k, i})).filter(x => !x.k._key);
+  const bucketKmls = kmlLs.map((k, i) => ({k, i})).filter(x =>  x.k._key);
+
+  const _kmlRow = ({k, i}) => {
+    const shortName = k.name.replace(/^.*\//, '');
+    const cnt  = _kmlFeatureCount(k.grp);
+    const lenM = _kmlCalcLen(k.grp);
+    const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
+    const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
+    const isEdit = _kmlEditIdx === i;
+    return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
+      <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
+      <div class="oz-row-info">
+        <div class="oz-row-name">${_escHtml(shortName)}</div>
+        <div class="oz-row-meta">${meta}</div>
+      </div>
+      <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
+        ${k.vis ? '👁' : '🙈'}
+      </button>
+      <span class="oz-expand-arrow${isEdit?' open':''}">›</span>
+    </div>
+    ${isEdit ? _renderKmlEditor(i) : ''}`;
+  };
+
+  // Lokalni
+  document.getElementById('oz-cnt-local').textContent = localKmls.length;
+  if (!localOpen) { localEl.style.display = 'none'; }
   else {
-    kmlEl.style.display = '';
-    if (!kmlLs.length) {
-      kmlEl.innerHTML = '<div class="oz-empty">Nema učitanih KML fajlova.</div>';
-    } else {
-      kmlEl.innerHTML = kmlLs.map((k, i) => {
-        const shortName = k.name.replace(/^.*\//, '');
-        const cnt  = _kmlFeatureCount(k.grp);
-        const lenM = _kmlCalcLen(k.grp);
-        const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
-        const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
-        const isEdit = _kmlEditIdx === i;
-        return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
-          <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
-          <div class="oz-row-info">
-            <div class="oz-row-name">${_escHtml(shortName)}</div>
-            <div class="oz-row-meta">${meta}</div>
-          </div>
-          <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
-            ${k.vis ? '👁' : '🙈'}
-          </button>
-          <span class="oz-expand-arrow${isEdit?' open':''}">›</span>
-        </div>
-        ${isEdit ? _renderKmlEditor(i) : ''}`;
-      }).join('');
-    }
+    localEl.style.display = '';
+    localEl.innerHTML = localKmls.length
+      ? localKmls.map(_kmlRow).join('')
+      : '<div class="oz-empty">Nema učitanih lokalnih fajlova.</div>';
+  }
+
+  // Bucket
+  document.getElementById('oz-cnt-bucket').textContent = bucketKmls.length;
+  if (!bucketOpen) { bucketEl.style.display = 'none'; }
+  else {
+    bucketEl.style.display = '';
+    bucketEl.innerHTML = bucketKmls.length
+      ? bucketKmls.map(_kmlRow).join('')
+      : '<div class="oz-empty">Nema server fajlova.</div>';
   }
 
   // ── GPS tragovi ──
@@ -13761,13 +13777,21 @@ function dozBackToList() {
     <button class="oz-close" onclick="closeOznakePanel()">✕</button>
   </div>
 
-  <!-- KML fajlovi -->
-  <div class="oz-sec-hdr" onclick="togOzSec('kml')">
-    <span class="oz-sec-arrow open" id="oz-arr-kml">▶</span>
-    <span class="oz-sec-label">KML fajlovi</span>
-    <span class="oz-sec-cnt" id="oz-cnt-kml">0</span>
+  <!-- Učitani fajlovi (lokalni) -->
+  <div class="oz-sec-hdr" onclick="togOzSec('local')">
+    <span class="oz-sec-arrow open" id="oz-arr-local">▶</span>
+    <span class="oz-sec-label">📂 Učitani fajlovi</span>
+    <span class="oz-sec-cnt" id="oz-cnt-local">0</span>
   </div>
-  <div class="oz-sec-body" id="oz-sec-kml"></div>
+  <div class="oz-sec-body" id="oz-sec-local"></div>
+
+  <!-- Server / bucket fajlovi -->
+  <div class="oz-sec-hdr" onclick="togOzSec('bucket')">
+    <span class="oz-sec-arrow open" id="oz-arr-bucket">▶</span>
+    <span class="oz-sec-label">🌐 Server fajlovi</span>
+    <span class="oz-sec-cnt" id="oz-cnt-bucket">0</span>
+  </div>
+  <div class="oz-sec-body" id="oz-sec-bucket"></div>
 
   <!-- GPS tragovi -->
   <div class="oz-sec-hdr" onclick="togOzSec('trag')">
