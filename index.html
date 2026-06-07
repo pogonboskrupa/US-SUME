@@ -414,20 +414,50 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vcard-km { font-size:12px; font-weight:700; color:#4ade80; white-space:nowrap; flex-shrink:0; }
 .vcard-sub { font-size:10px; color:#475569; margin-top:1px; }
 .vcard-btns { display:none; }
-/* Horizontalni action row unutar kartice */
-.vcard-actions { display:flex; gap:2px; margin-top:4px; align-items:center; }
-.vab {
-  height:20px; min-width:20px; padding:0 5px; border-radius:3px;
-  border:1px solid #2d3748; background:#141e2e;
-  color:#64748b; font-size:10px; cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-  white-space:nowrap; transition:border-color .12s,color .12s,background .12s;
+/* Vlake card — action buttons (bottom-bar stil) */
+.vcard-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.05);
 }
-.vab:hover { border-color:#3b82f6; color:#93c5fd; background:#0f1f3a; }
-.vab.vab-rec { border-color:#92400e; background:rgba(234,88,12,.15); color:#fb923c; }
-.vab.vab-rec:hover { background:rgba(234,88,12,.3); border-color:#ea580c; color:#fed7aa; }
-.vab.vab-del { margin-left:auto; }
-.vab.vab-del:hover { border-color:#ef4444; color:#fca5a5; background:#1a0a0a; }
+.action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 2px 5px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.action-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); }
+.action-btn:active { transform: scale(0.95); }
+.btn-icon {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.btn-label { font-size: 9px; color: rgba(255,255,255,0.45); line-height: 1; }
+/* Boje po tipu */
+.action-btn.btn-record .btn-icon { background: rgba(232,69,60,0.18); color: #e8453c; }
+.action-btn.btn-map    .btn-icon { background: rgba(74,158,255,0.18); color: #4a9eff; }
+.action-btn.btn-elev   .btn-icon { background: rgba(52,211,153,0.18); color: #34d399; }
+.action-btn.btn-edit   .btn-icon { background: rgba(245,166,35,0.18); color: #f5a623; }
+.action-btn.btn-del    .btn-icon { background: rgba(100,116,139,0.18); color: #64748b; }
+.action-btn.btn-del:hover .btn-icon { background: rgba(239,68,68,0.2); color: #f87171; }
+/* Aktivno snimanje */
+.action-btn.btn-record.recording {
+  border-color: rgba(232,69,60,0.5);
+  background: rgba(232,69,60,0.08);
+}
+.action-btn.btn-record.recording .btn-label { color: #e8453c; }
+.action-btn.btn-record.recording .btn-icon { animation: bl 1s infinite; }
 /* Project header chip */
 #vlake-proj-hdr {
   display:flex; align-items:center; gap:6px;
@@ -7305,11 +7335,26 @@ function _renderVlakaRow(el, v, i, depth) {
       ${elevRow}
       ${nasaviBtn}
       <div class="vcard-actions">
-        ${!recOn ? `<button class="vab vab-rec" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje">▶ Snimi</button>` : ''}
-        <button class="vab" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
-        <button class="vab" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
-        <button class="vab" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">🔧</button>
-        <button class="vab vab-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">✕</button>
+        <button class="action-btn btn-record${isRecThis ? ' recording' : ''}" onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn ? '' : 'setTimeout(togRec,30);'}" title="${recOn && isRecThis ? 'Snimanje aktivno' : 'Počni GPS snimanje'}">
+          <span class="btn-icon">${isRecThis && !recPaused ? '🔴' : isRecThis && recPaused ? '⏸' : '▶'}</span>
+          <span class="btn-label">${isRecThis && !recPaused ? 'Snima' : isRecThis && recPaused ? 'Pauza' : 'Snimi'}</span>
+        </button>
+        <button class="action-btn btn-map" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">
+          <span class="btn-icon">🗺</span>
+          <span class="btn-label">Karta</span>
+        </button>
+        <button class="action-btn btn-elev" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">
+          <span class="btn-icon">↕</span>
+          <span class="btn-label">Profil</span>
+        </button>
+        <button class="action-btn btn-edit" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">
+          <span class="btn-icon">🔧</span>
+          <span class="btn-label">Uredi</span>
+        </button>
+        <button class="action-btn btn-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">
+          <span class="btn-icon">✕</span>
+          <span class="btn-label">Briši</span>
+        </button>
       </div>
     </div>`;
   row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
