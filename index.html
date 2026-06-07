@@ -401,19 +401,44 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Vlaka list — PRO kartice */
 .vrow {
-  display:flex; align-items:stretch; border-radius:8px; margin-bottom:6px;
+  display:flex; align-items:stretch; border-radius:6px; margin-bottom:4px;
   cursor:pointer; background:#0f172a; border:1px solid #1e293b;
   overflow:hidden; transition:border-color 0.15s, background 0.15s;
 }
 .vrow:hover { border-color:#3b82f6; background:#0f1f3a; }
 .vrow.act   { border-color:#fbbf24; background:#151200; }
-.vcard-stripe { width:5px; flex-shrink:0; }
-.vcard-info { flex:1; padding:9px 10px; min-width:0; }
-.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
-.vcard-name { font-weight:800; font-size:15px; color:#f1f5f9; white-space:nowrap; }
-.vcard-km { font-size:14px; font-weight:700; color:#4ade80; white-space:nowrap; }
-.vcard-sub { font-size:11px; color:#475569; margin-top:2px; }
-.vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:3px; padding:6px 7px 6px 0; }
+.vcard-stripe { width:4px; flex-shrink:0; }
+.vcard-info { flex:1; padding:5px 8px; min-width:0; }
+.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:5px; }
+.vcard-name { font-weight:700; font-size:13px; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vcard-km { font-size:12px; font-weight:700; color:#4ade80; white-space:nowrap; flex-shrink:0; }
+.vcard-sub { font-size:10px; color:#475569; margin-top:1px; }
+.vcard-btns { display:none; }
+/* Horizontalni action row unutar kartice */
+.vcard-actions { display:flex; gap:2px; margin-top:4px; align-items:center; }
+.vab {
+  height:20px; min-width:20px; padding:0 5px; border-radius:3px;
+  border:1px solid #2d3748; background:#141e2e;
+  color:#64748b; font-size:10px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  white-space:nowrap; transition:border-color .12s,color .12s,background .12s;
+}
+.vab:hover { border-color:#3b82f6; color:#93c5fd; background:#0f1f3a; }
+.vab.vab-rec { border-color:#92400e; background:rgba(234,88,12,.15); color:#fb923c; }
+.vab.vab-rec:hover { background:rgba(234,88,12,.3); border-color:#ea580c; color:#fed7aa; }
+.vab.vab-del { margin-left:auto; }
+.vab.vab-del:hover { border-color:#ef4444; color:#fca5a5; background:#1a0a0a; }
+/* Project header chip */
+#vlake-proj-hdr {
+  display:flex; align-items:center; gap:6px;
+  background:#0a1628; border:1px solid #1e3a5f;
+  border-radius:6px; padding:5px 8px; margin-bottom:6px; font-size:11px;
+}
+.vph-lbl { flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vph-lbl b { color:#e2e8f0; }
+.vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
+.vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
+.vph-nav:hover { color:#94a3b8; }
 
 /* AlpineQuest-stil segmented gumbi */
 .seg-grp {
@@ -456,7 +481,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vpick-search-row input:focus { border-color:#38bdf8; }
 .vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
 .vpick-search-row button:active { background:#0ea5e9;color:#fff; }
-.vcard-elev { font-size:10px;color:#94a3b8;display:flex;gap:6px;flex-wrap:wrap;margin-top:1px; }
+.vcard-elev { font-size:9px;color:#94a3b8;display:flex;gap:5px;flex-wrap:wrap;margin-top:0; }
 /* === Registar tragova === */
 #trag-reg-modal {
   display:none; position:fixed; inset:0; z-index:9500;
@@ -681,7 +706,9 @@ input:focus { outline:none; border-color:#3b82f6; }
 .db.done { background:#052e16; color:#4ade80; }
 
 /* Vlake hijerarhija */
-.vrow-krak { margin-left:14px; border-left:2px solid #1e3a5f; }
+.vrow-krak { margin-left:12px; border-left:2px solid #1e3a5f; }
+.vrow-kolega { opacity:0.82; cursor:pointer; }
+.vrow-kolega:hover { border-color:#334155; background:#0a1628; }
 .vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 .vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
@@ -2191,11 +2218,17 @@ select:focus { outline:none; border-color:#3b82f6; }
             <button class="rsb-btn stop" onclick="stopRec()">⏹ Stop</button>
           </div>
         </div>
+        <div id="vlake-proj-hdr" style="display:none;"></div>
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
-          Još nema vlaka.<br>
-          Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.
+          Odaberite projekat za prikaz vlaka.
         </div>
+      </div>
+
+      <!-- VLAKE KOLEGA -->
+      <div class="sec" id="kolege-vlake-sec" style="display:none;">
+        <div class="sec-t">👥 Vlake kolega (<span id="kolege-vc">0</span>)</div>
+        <div id="kolege-vl"></div>
       </div>
 
       <!-- SPAJANJE VLAKA -->
@@ -3815,7 +3848,7 @@ async function sbLoadKolegeVlake() {
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
     kolegeVlake.push(poly);
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime };
+    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime, pts: row.pts || [] };
   });
 }
 
@@ -3919,7 +3952,7 @@ async function sbLoadKolege() {
   }
 
   kolege = Object.values(kolegeMap);
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 
 // ─── ODJELI (dijeljeni popis po šumariji) ─────────────────────────────────────
@@ -7258,24 +7291,26 @@ function _renderVlakaRow(el, v, i, depth) {
   }
   const elevRow = (elvHtml || roadDistHtml)
     ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}</div>` : '';
+  const stripeStyle = isKrak ? `background:${v.color};opacity:.6` : `background:${v.color}`;
+  const krakArrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
   row.innerHTML = `
-    <div class="vcard-stripe" style="background:${v.color}"></div>
+    <div class="vcard-stripe" style="${stripeStyle}"></div>
     <div class="vcard-info">
       <div class="vcard-top">
-        ${stranaBadge}<span class="vcard-name">${v.nm}</span>
+        ${krakArrow}${stranaBadge}<span class="vcard-name">${v.nm}</span>
         ${badge}
         <span class="vcard-km">${fmtL(d)}</span>
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
       ${nasaviBtn}
-    </div>
-    <div class="vcard-btns">
-      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje" style="background:#ea580c;color:#fff;border-color:#c2410c;">▶</button>` : ''}
-      <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
-      <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
-      <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
-      <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
+      <div class="vcard-actions">
+        ${!recOn ? `<button class="vab vab-rec" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje">▶ Snimi</button>` : ''}
+        <button class="vab" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
+        <button class="vab" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
+        <button class="vab" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">🔧</button>
+        <button class="vab vab-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">✕</button>
+      </div>
     </div>`;
   row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
   el.appendChild(row);
@@ -7291,8 +7326,41 @@ function _krakStranaBadge(strana) {
 // === LIST ===
 function rndList() {
   const el=document.getElementById('vl'), nv=document.getElementById('nv');
-  document.getElementById('vc').textContent=vlake.length;
-  el.innerHTML=''; nv.style.display=vlake.length===0?'block':'none';
+  el.innerHTML='';
+
+  // Filtriraj po aktivnom projektu
+  const hasProj = !!_aktivniProjektId;
+  const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : [];
+  const rootVlake    = allProjVlake.filter(v => v.kr === 0);
+  const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
+  document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount}k` : '');
+
+  // Project header chip
+  const hdr = document.getElementById('vlake-proj-hdr');
+  if (hdr) {
+    const akt = (_projekti||[]).find(p => p.id === _aktivniProjektId);
+    if (akt) {
+      const totalDist = calcL(allProjVlake.flatMap(v => v.pts));
+      const lbl = [akt.odjel, akt.gj].filter(Boolean).join(' · ') || 'Projekat';
+      hdr.style.display = 'flex';
+      hdr.innerHTML = `
+        <span class="vph-lbl">📁 <b>${lbl}</b></span>
+        <span class="vph-dist">${fmtL(totalDist)}</span>
+        <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">▸</button>`;
+    } else {
+      hdr.style.display = 'none';
+    }
+  }
+
+  if (!hasProj) {
+    nv.style.display = 'block';
+    nv.innerHTML = 'Odaberite projekat za prikaz vlaka.';
+  } else if (rootVlake.length === 0) {
+    nv.style.display = 'block';
+    nv.innerHTML = `Još nema vlaka za ovaj projekat.<br>Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.`;
+  } else {
+    nv.style.display = 'none';
+  }
 
   // Rekurzivno renderuj: glavna vlaka → direktni kraci → njihovi pod-kraci...
   const rendered = new Set();
@@ -7305,7 +7373,7 @@ function rndList() {
       if (kParentNm === v.nm) renderWithChildren(k, ki, depth + 1);
     });
   }
-  vlake.forEach((v, i) => { if (v.kr === 0) renderWithChildren(v, i, 0); });
+  rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
   clearTimeout(rndList._projTimer);
@@ -9963,7 +10031,7 @@ function loadProj() {
     kolege    = JSON.parse(localStorage.getItem('tvlake_kolege')||'[]');
     dnevniLog = JSON.parse(localStorage.getItem('tvlake_log')||'[]');
   } catch(e) {}
-  rndKolege(); rndLog(); updProjStats();
+  rndKolege(); rndKolegeVlakeList(); rndLog(); updProjStats();
 }
 
 function saveProj() {
@@ -10096,7 +10164,7 @@ function updProjStats() {
   }
 
   updTerenStats();
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 
 // ── Terenske statistike ───────────────────────────────────────────────────────
@@ -10348,12 +10416,12 @@ function addKolega() {
   kolege.push({ ime, color: KPAL[kolege.length % KPAL.length] });
   el.value='';
   localStorage.setItem('tvlake_kolege', JSON.stringify(kolege));
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 function delKolega(i) {
   kolege.splice(i,1);
   localStorage.setItem('tvlake_kolege', JSON.stringify(kolege));
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 function rndKolege() {
   const el = document.getElementById('kolege-list');
@@ -10378,6 +10446,42 @@ function rndKolege() {
 
   if (rows.length === 1) rows.push(`<div style="font-size:11px;color:#475569;padding:6px 0;">Nema kolega u ovom odjelu</div>`);
   el.innerHTML = rows.join('');
+}
+
+function rndKolegeVlakeList() {
+  const el  = document.getElementById('kolege-vl');
+  const sec = document.getElementById('kolege-vlake-sec');
+  const cnt = document.getElementById('kolege-vc');
+  if (!el || !sec) return;
+
+  const entries = Object.entries(kolegeVlakeMap);
+  if (!entries.length) { sec.style.display = 'none'; return; }
+
+  sec.style.display = 'block';
+  cnt.textContent   = entries.length;
+
+  let lastIme = null;
+  const html = entries.map(([key, kv]) => {
+    const nm      = key.split('::').slice(1).join('::');
+    const d       = calcL(kv.pts);
+    const isKrak  = nm.includes('.');
+    const arrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
+    const imeSep  = (!isKrak && kv.ime !== lastIme)
+      ? `<div style="font-size:10px;color:#475569;margin:4px 0 2px;padding-left:2px;">${kv.ime}</div>` : '';
+    if (!isKrak) lastIme = kv.ime;
+    const escKey  = key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `${imeSep}<div class="vrow${isKrak?' vrow-krak':''} vrow-kolega"
+        onclick="(function(){const kv=kolegeVlakeMap['${escKey}'];if(kv?.poly&&kv.poly.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30],animate:true});switchTab('karta');})()">
+      <div class="vcard-stripe" style="background:${kv.color}"></div>
+      <div class="vcard-info">
+        <div class="vcard-top">
+          ${arrow}<span class="vcard-name">${nm}</span>
+          <span class="vcard-km">${fmtL(d)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
 }
 
 // === DNEVNIK ===
@@ -10914,7 +11018,7 @@ function switchTab(tab) {
     _setMapUIVisible(tbVis, false);
     msrStop(true);
   } else if (tab==='projekat') {
-    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
+    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList();
     _setMapUIVisible(false, false);
     msrStop(true);
   } else if (tab==='doznaka') {
