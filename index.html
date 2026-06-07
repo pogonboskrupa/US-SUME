@@ -8581,7 +8581,7 @@ function rndKml() {
 }
 
 // ── Oznake panel ──────────────────────────────────────────────────────────────
-const _ozCollapsed = new Set(['local']);
+const _ozCollapsed = new Set(['local','bucket','trag','foto']);
 
 function _kmlCalcLen(grp) {
   let d = 0;
@@ -14279,7 +14279,7 @@ function dozBackToList() {
 
   <!-- GPS tragovi -->
   <div class="oz-sec-hdr" onclick="togOzSec('trag')">
-    <span class="oz-sec-arrow open" id="oz-arr-trag">▶</span>
+    <span class="oz-sec-arrow" id="oz-arr-trag">▶</span>
     <span class="oz-sec-label">GPS tragovi</span>
     <span class="oz-sec-cnt" id="oz-cnt-trag">0</span>
   </div>
@@ -14287,7 +14287,7 @@ function dozBackToList() {
 
   <!-- Foto oznake -->
   <div class="oz-sec-hdr" onclick="togOzSec('foto')">
-    <span class="oz-sec-arrow open" id="oz-arr-foto">▶</span>
+    <span class="oz-sec-arrow" id="oz-arr-foto">▶</span>
     <span class="oz-sec-label">Foto oznake</span>
     <span class="oz-sec-cnt" id="oz-cnt-foto">0</span>
   </div>
@@ -14295,7 +14295,7 @@ function dozBackToList() {
 
   <!-- Server / bucket fajlovi -->
   <div class="oz-sec-hdr" onclick="togOzSec('bucket')">
-    <span class="oz-sec-arrow open" id="oz-arr-bucket">▶</span>
+    <span class="oz-sec-arrow" id="oz-arr-bucket">▶</span>
     <span class="oz-sec-label">🌐 Server fajlovi</span>
     <span class="oz-sec-cnt" id="oz-cnt-bucket">0</span>
   </div>
