@@ -48,6 +48,12 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
   bool _showZone = true;
   bool _showTrack = true;
 
+  // Vlake overlay
+  bool _showVlake = false;
+  Project? _vlakeProjekat;
+  List<TrackPoint> _vlakeTacke = [];
+  Map<String, List<LatLng>> _vlakeTrackByUser = {};  // userId → polyline
+
   // Ručno crtanje granice odjela
   bool _isDrawingOdjel = false;
   final List<LatLng> _drawingPts = [];
@@ -367,6 +373,79 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
     }
   }
 
+  // ── Vlake overlay ────────────────────────────────────────
+
+  Future<void> _showVlakeSheet() async {
+    if (_aktivan == null) return;
+    // Dohvati sve vlake projekte kojima korisnik ima pristup
+    final sviProjekti = await SupabaseService.getMyProjects();
+    final odjelPts = _aktivan!.boundaryPoints;
+
+    // Filtriraj one čija granica se prostorno preklapa s odjelom
+    final preklapajuci = sviProjekti.where((p) {
+      if (!p.hasBoundary) return false;
+      return _bbPreklapanje(odjelPts, p.boundaryPoints);
+    }).toList();
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _VlakeSheet(
+        preklapajuci: preklapajuci,
+        aktivan: _vlakeProjekat,
+        onOdabir: (p) async {
+          Navigator.pop(context);
+          await _ucitajVlake(p);
+        },
+        onUkloni: () {
+          Navigator.pop(context);
+          setState(() {
+            _vlakeProjekat = null;
+            _vlakeTacke = [];
+            _vlakeTrackByUser = {};
+            _showVlake = false;
+          });
+        },
+      ),
+    );
+  }
+
+  Future<void> _ucitajVlake(Project p) async {
+    setState(() => _vlakeProjekat = p);
+    try {
+      final tacke = await SupabaseService.getAllTrackPoints(p.id);
+      final byUser = <String, List<LatLng>>{};
+      for (final t in tacke) {
+        byUser.putIfAbsent(t.userId, () => []).add(t.latLng);
+      }
+      setState(() {
+        _vlakeTacke = tacke;
+        _vlakeTrackByUser = byUser;
+        _showVlake = true;
+      });
+    } catch (e) {
+      _showMsg('Greška pri učitavanju vlaka: $e');
+    }
+  }
+
+  // Bounding box preklop — da li se dvije liste tačaka prostorno sijeku
+  bool _bbPreklapanje(List<LatLng> a, List<LatLng> b) {
+    if (a.isEmpty || b.isEmpty) return false;
+    final minLatA = a.map((p) => p.latitude).reduce(min);
+    final maxLatA = a.map((p) => p.latitude).reduce(max);
+    final minLngA = a.map((p) => p.longitude).reduce(min);
+    final maxLngA = a.map((p) => p.longitude).reduce(max);
+    final minLatB = b.map((p) => p.latitude).reduce(min);
+    final maxLatB = b.map((p) => p.latitude).reduce(max);
+    final minLngB = b.map((p) => p.longitude).reduce(min);
+    final maxLngB = b.map((p) => p.longitude).reduce(max);
+    return maxLatA >= minLatB && minLatA <= maxLatB &&
+           maxLngA >= minLngB && minLngA <= maxLngB;
+  }
+
   // ── Ručno crtanje granice odjela ─────────────────────────
 
   void _startDrawingOdjel() {
@@ -585,6 +664,23 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
         backgroundColor: const Color(0xFF1B4332),
         foregroundColor: Colors.white,
         actions: [
+          // Vlake overlay toggle
+          IconButton(
+            icon: Icon(
+              Icons.route,
+              color: _showVlake ? Colors.amber : Colors.white54,
+            ),
+            tooltip: 'Vlake overlay',
+            onPressed: _aktivan != null
+                ? () {
+                    if (_vlakeProjekat != null) {
+                      setState(() => _showVlake = !_showVlake);
+                    } else {
+                      _showVlakeSheet();
+                    }
+                  }
+                : null,
+          ),
           // Layer toggle
           IconButton(
             icon: Icon(
@@ -621,6 +717,20 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
                 urlTemplate: AppConstants.osmTileUrl,
                 userAgentPackageName: 'com.example.doznaka',
               ),
+
+              // ── Vlake overlay (ispod doznaka zona) ────────
+              if (_showVlake && _vlakeTrackByUser.isNotEmpty)
+                PolylineLayer(
+                  polylines: _vlakeTrackByUser.values
+                      .map((pts) => Polyline(
+                            points: pts,
+                            strokeWidth: 3.5,
+                            color: const Color(0xFF5D3A1A),
+                            borderStrokeWidth: 2.0,
+                            borderColor: Colors.white,
+                          ))
+                      .toList(),
+                ),
 
               // Granica odjela
               if (_aktivan != null)
@@ -1297,6 +1407,176 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
     final boundary = DoznakaService.mergeOdsjeci(odsjeci);
     final areaHa = DoznakaService.calcTotalAreaHa(odsjeci);
     widget.onConfirm(_selGj!, _selOdjel!, boundary, areaHa);
+  }
+}
+
+// ── Sheet za odabir vlake projekta ───────────────────────
+
+class _VlakeSheet extends StatelessWidget {
+  final List<Project> preklapajuci;
+  final Project? aktivan;
+  final Function(Project) onOdabir;
+  final VoidCallback onUkloni;
+
+  const _VlakeSheet({
+    required this.preklapajuci,
+    required this.aktivan,
+    required this.onOdabir,
+    required this.onUkloni,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final myId = SupabaseService.currentUserId;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+
+          const Text('Vlake projekti',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(
+            'Projekti koji se prostorno poklapaju s odabranim odjelom',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+
+          if (aktivan != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F9F6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2D6A4F).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.route, color: Color(0xFF2D6A4F), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Aktivno: ${aktivan!.name}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500, fontSize: 13),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red.shade600,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: onUkloni,
+                    child: const Text('Ukloni'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+          ],
+
+          if (preklapajuci.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.route, size: 40, color: Colors.grey.shade400),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Nema vlake projekata za ovaj odjel',
+                      style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: preklapajuci.length,
+                itemBuilder: (_, i) {
+                  final p = preklapajuci[i];
+                  final isOwner = p.createdBy == myId;
+                  final isAktivan = aktivan?.id == p.id;
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: isAktivan
+                          ? const Color(0xFF2D6A4F)
+                          : Colors.brown.shade100,
+                      child: Icon(
+                        Icons.route,
+                        color: isAktivan
+                            ? Colors.white
+                            : Colors.brown.shade700,
+                        size: 18,
+                      ),
+                    ),
+                    title: Text(
+                      p.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: isAktivan ? const Color(0xFF2D6A4F) : null,
+                      ),
+                    ),
+                    subtitle: isOwner
+                        ? null
+                        : Text(
+                            'Kontaktiraj vlasnika projekta za pristup',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.orange.shade700),
+                          ),
+                    trailing: isOwner
+                        ? (isAktivan
+                            ? const Icon(Icons.check_circle,
+                                color: Color(0xFF2D6A4F))
+                            : FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.brown.shade700,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () => onOdabir(p),
+                                child: const Text('Učitaj'),
+                              ))
+                        : Icon(Icons.lock_outline,
+                            color: Colors.grey.shade400, size: 18),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
