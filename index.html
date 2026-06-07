@@ -1782,6 +1782,18 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .oz-vis-btn.on { color: #e2e8f0; }
 .oz-empty { padding: 14px 16px; font-size: 12px; color: #475569; text-align: center; }
+/* Bucket GJ group headers */
+.oz-gj-hdr {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 16px 7px; background:#070e1a;
+  cursor:pointer; border-top:1px solid #0d1625;
+  user-select:none;
+}
+.oz-gj-hdr:active { background:#0f1f38; }
+.oz-gj-arrow { font-size:13px; color:#334155; transition:transform .15s; flex-shrink:0; }
+.oz-gj-arrow.open { transform:rotate(90deg); color:#3b82f6; }
+.oz-gj-name { flex:1; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oz-gj-cnt { font-size:10px; color:#334155; background:#1e293b; border-radius:8px; padding:1px 7px; flex-shrink:0; }
 /* Search + sort bar */
 .oz-search-wrap { padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 6px; }
 .oz-search-row { position: relative; display: flex; gap: 6px; align-items: center; }
@@ -4527,6 +4539,7 @@ let wid=null, lastP=null, posMk=null, posCr=null;
 let _compassHeading = null; // trenutni azimut telefona (0-360°, 0=sjever)
 let kmlLs=[], kmlCI=0, _kmlEditIdx=-1;
 let _ozLocalSearch='', _ozLocalSort='recent';
+const _ozBucketCollapsed = new Set();
 let drawPreviewLine=null;
 let drawUndoStack=[];
 const KCOLS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899'];
@@ -8700,14 +8713,40 @@ function _rndOznakePanel() {
     }
   }
 
-  // Bucket
+  // Bucket — grupiraj po GJ (prvi segment _folder ili _bucket)
   document.getElementById('oz-cnt-bucket').textContent = bucketKmls.length;
   if (!bucketOpen) { bucketEl.style.display = 'none'; }
   else {
     bucketEl.style.display = '';
-    bucketEl.innerHTML = bucketKmls.length
-      ? bucketKmls.map(x => _kmlRow(x, false)).join('')
-      : '<div class="oz-empty">Nema server fajlova.</div>';
+    if (!bucketKmls.length) {
+      bucketEl.innerHTML = '<div class="oz-empty">Nema server fajlova.</div>';
+    } else {
+      const gjGroups = {};
+      bucketKmls.forEach(({k, i}) => {
+        const gj = k._folder ? k._folder.split('/')[0] : (k._bucket || '—');
+        if (!gjGroups[gj]) gjGroups[gj] = [];
+        gjGroups[gj].push({k, i});
+      });
+      let html = '';
+      Object.entries(gjGroups).sort(([a],[b]) => a.localeCompare(b,'bs')).forEach(([gj, items]) => {
+        const collapsed = _ozBucketCollapsed.has(gj);
+        const allVis = items.every(x => x.k.vis);
+        const anyVis = items.some(x => x.k.vis);
+        const visIcon = allVis ? '👁' : anyVis ? '◑' : '🙈';
+        const gjEsc = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        const idxArr = JSON.stringify(items.map(x => x.i));
+        html += `<div class="oz-gj-hdr" onclick="event.stopPropagation();_ozBucketToggleGroup('${gjEsc}')">
+          <span class="oz-gj-arrow${collapsed?'':' open'}">›</span>
+          <span class="oz-gj-name">${_escHtml(gj)}</span>
+          <span class="oz-gj-cnt">${items.length}</span>
+          <button class="oz-vis-btn${allVis?' on':anyVis?' half':''}"
+            onclick="event.stopPropagation();_ozBucketToggleGroupVis(${idxArr})"
+            title="${allVis?'Sakrij grupu':'Prikaži grupu'}">${visIcon}</button>
+        </div>`;
+        if (!collapsed) html += items.map(x => _kmlRow(x, false)).join('');
+      });
+      bucketEl.innerHTML = html;
+    }
   }
 
   // ── GPS tragovi ──
@@ -8931,6 +8970,22 @@ function _renderKmlEditor(i) {
       <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj?'))delK(${i})">✕ Briši</button>
     </div>
   </div>`;
+}
+
+function _ozBucketToggleGroup(gj) {
+  _ozBucketCollapsed.has(gj) ? _ozBucketCollapsed.delete(gj) : _ozBucketCollapsed.add(gj);
+  _rndOznakePanel();
+}
+
+function _ozBucketToggleGroupVis(indices) {
+  const allVis = indices.every(i => kmlLs[i]?.vis);
+  indices.forEach(i => {
+    if (!kmlLs[i]) return;
+    kmlLs[i].vis = !allVis;
+    allVis ? map.removeLayer(kmlLs[i].grp) : kmlLs[i].grp.addTo(map);
+  });
+  saveKmlStyles(); _localKmlSaveAll(); rndGraniceModal();
+  _rndOznakePanel();
 }
 
 function _ozSetSearch(val) {
@@ -12696,7 +12751,7 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
   grp.addTo(map);
   const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
   const _fc = finalOpts.col || finalOpts.color;
-  kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
+  kmlLs.push({ name: label, _key: key, _bucket: bucketName, _folder: file.folder || '', grp,
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
@@ -12785,7 +12840,7 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
   if (finalOptsShp.vis === false) map.removeLayer(grp);
   else grp.addTo(map);
   const label = file.folder ? `${file.folder.split('/').pop()}/${file.name}` : file.name;
-  kmlLs.push({ name: label, _key: key, _bucket: bucketName, grp,
+  kmlLs.push({ name: label, _key: key, _bucket: bucketName, _folder: file.folder || '', grp,
     col: shpStyle.color, dash: shpStyle.dashArray || '',
     weight: shpStyle.weight, opacity: shpStyle.opacity,
     vis: finalOptsShp.vis !== false });
