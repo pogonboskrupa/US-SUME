@@ -681,8 +681,36 @@ input:focus { outline:none; border-color:#3b82f6; }
 .db.done { background:#052e16; color:#4ade80; }
 
 /* Vlake hijerarhija */
-.vrow-krak { margin-left:14px; border-left:2px solid #1e3a5f; }
-.vrow-kolega { opacity:0.75; pointer-events:none; }
+.vrow-krak { margin-left:12px; border-left:2px solid #1e3a5f; }
+.vrow-kolega { opacity:0.80; cursor:pointer; }
+.vrow-kolega:hover { border-color:#334155; background:#0a1628; }
+
+/* Vlake card — horizontalni action row */
+.vcard-actions { display:flex; gap:2px; margin-top:4px; align-items:center; }
+.vab {
+  height:20px; min-width:20px; padding:0 5px; border-radius:3px;
+  border:1px solid #2d3748; background:#141e2e;
+  color:#64748b; font-size:10px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  white-space:nowrap; transition:border-color .12s,color .12s,background .12s;
+}
+.vab:hover { border-color:#3b82f6; color:#93c5fd; background:#0f1f3a; }
+.vab.vab-rec { border-color:#92400e; background:rgba(234,88,12,.15); color:#fb923c; }
+.vab.vab-rec:hover { background:rgba(234,88,12,.3); border-color:#ea580c; color:#fed7aa; }
+.vab.vab-del { margin-left:auto; }
+.vab.vab-del:hover { border-color:#ef4444; color:#fca5a5; background:#1a0a0a; }
+
+/* Project header chip */
+#vlake-proj-hdr {
+  display:flex; align-items:center; gap:6px;
+  background:#0a1628; border:1px solid #1e3a5f;
+  border-radius:6px; padding:5px 8px; margin-bottom:6px; font-size:11px;
+}
+.vph-lbl { flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vph-lbl b { color:#e2e8f0; }
+.vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
+.vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
+.vph-nav:hover { color:#94a3b8; }
 .vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 .vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
@@ -2192,10 +2220,10 @@ select:focus { outline:none; border-color:#3b82f6; }
             <button class="rsb-btn stop" onclick="stopRec()">⏹ Stop</button>
           </div>
         </div>
+        <div id="vlake-proj-hdr" style="display:none;"></div>
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
-          Još nema vlaka.<br>
-          Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.
+          Odaberite projekat za prikaz vlaka.
         </div>
       </div>
 
@@ -7265,24 +7293,28 @@ function _renderVlakaRow(el, v, i, depth) {
   }
   const elevRow = (elvHtml || roadDistHtml)
     ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}</div>` : '';
+  const stripeStyle = isKrak
+    ? `background:${v.color};opacity:.6`
+    : `background:${v.color}`;
+  const krakArrow = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
   row.innerHTML = `
-    <div class="vcard-stripe" style="background:${v.color}"></div>
+    <div class="vcard-stripe" style="${stripeStyle}"></div>
     <div class="vcard-info">
       <div class="vcard-top">
-        ${stranaBadge}<span class="vcard-name">${v.nm}</span>
+        ${krakArrow}${stranaBadge}<span class="vcard-name">${v.nm}</span>
         ${badge}
         <span class="vcard-km">${fmtL(d)}</span>
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
       ${nasaviBtn}
-    </div>
-    <div class="vcard-btns">
-      ${!recOn ? `<button class="mb" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje" style="background:#ea580c;color:#fff;border-color:#c2410c;">▶</button>` : ''}
-      <button class="mb bl" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
-      <button class="mb bl" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
-      <button class="mb bl" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj">🔧</button>
-      <button class="mb"    onclick="event.stopPropagation();dlV(${i})" title="Briši">✕</button>
+      <div class="vcard-actions">
+        ${!recOn ? `<button class="vab vab-rec" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje">▶ Snimi</button>` : ''}
+        <button class="vab" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
+        <button class="vab" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
+        <button class="vab" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">🔧</button>
+        <button class="vab vab-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">✕</button>
+      </div>
     </div>`;
   row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
   el.appendChild(row);
@@ -7302,15 +7334,35 @@ function rndList() {
 
   // Filtriraj po aktivnom projektu
   const hasProj = !!_aktivniProjektId;
-  const rootVlake = vlake.filter(v => v.kr === 0 && (!hasProj || v.projektId === _aktivniProjektId));
-  document.getElementById('vc').textContent = rootVlake.length;
+  const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : [];
+  const rootVlake    = allProjVlake.filter(v => v.kr === 0);
+  const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
+  document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount}k` : '');
+
+  // Project header chip
+  const hdr = document.getElementById('vlake-proj-hdr');
+  if (hdr) {
+    const akt = (_projekti||[]).find(p => p.id === _aktivniProjektId);
+    if (akt) {
+      const totalDist = calcL(allProjVlake.flatMap(v => v.pts));
+      const lbl = [akt.odjel, akt.gj].filter(Boolean).join(' · ') || 'Projekat';
+      hdr.style.display = 'flex';
+      hdr.innerHTML = `
+        <span class="vph-lbl">📁 <b>${lbl}</b></span>
+        <span class="vph-dist">${fmtL(totalDist)}</span>
+        <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">▸</button>`;
+    } else {
+      hdr.style.display = 'none';
+    }
+  }
 
   if (!hasProj) {
     nv.style.display = 'block';
     nv.innerHTML = 'Odaberite projekat za prikaz vlaka.';
   } else if (rootVlake.length === 0) {
     nv.style.display = 'block';
-    nv.innerHTML = 'Još nema vlaka za ovaj projekat.<br>Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.';
+    nv.innerHTML = `Još nema vlaka za ovaj projekat.<br>
+      Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.`;
   } else {
     nv.style.display = 'none';
   }
@@ -10413,19 +10465,26 @@ function rndKolegeVlakeList() {
   sec.style.display = 'block';
   cnt.textContent   = entries.length;
 
-  // Grupiši po koleginoj imeni za vizualni razmak
+  // Grupiši po kolegi — prikaz s imenom i zumom na karti
+  let lastIme = null;
   const html = entries.map(([key, kv]) => {
     const nm = key.split('::').slice(1).join('::');
     const d  = calcL(kv.pts);
     const isKrak = nm.includes('.');
-    return `<div class="vrow${isKrak ? ' vrow-krak' : ''} vrow-kolega">
+    const krakArrow = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
+    // Separator kad se promijeni kolega
+    const imeSep = (!isKrak && kv.ime !== lastIme)
+      ? `<div style="font-size:10px;color:#475569;margin:4px 0 2px;padding-left:2px;">${kv.ime}</div>` : '';
+    if (!isKrak) lastIme = kv.ime;
+    const escKey = key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `${imeSep}<div class="vrow${isKrak ? ' vrow-krak' : ''} vrow-kolega"
+        onclick="(function(){const kv=kolegeVlakeMap['${escKey}'];if(kv?.poly&&kv.poly.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30],animate:true});switchTab('karta');})()">
       <div class="vcard-stripe" style="background:${kv.color}"></div>
       <div class="vcard-info">
         <div class="vcard-top">
-          <span class="vcard-name">${nm}</span>
+          ${krakArrow}<span class="vcard-name">${nm}</span>
           <span class="vcard-km">${fmtL(d)}</span>
         </div>
-        <div class="vcard-sub">${kv.ime}</div>
       </div>
     </div>`;
   }).join('');
