@@ -3209,8 +3209,9 @@ async function adminTransferUser(userId, name) {
   const sel = document.getElementById('admin-sum-sel-' + userId);
   if (!sel) return;
   const newSum = sel.value;
+  if (!newSum) { showToast('Odaberi šumariju'); return; }
   if (!confirm(`Prebaciti "${name}"\nu šumariju:\n"${newSum}"?`)) return;
-  const { error } = await sb.from('korisnici').update({ sumarija: newSum }).eq('id', userId);
+  const { error } = await sb.rpc('admin_set_sumarija', { p_user_id: userId, p_sumarija: newSum });
   if (error) { showToast('Greška: ' + error.message); return; }
   showToast(`✅ ${name} → ${newSum}`);
   adminLoadUsers();
