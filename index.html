@@ -1816,14 +1816,6 @@ select:focus { outline:none; border-color:#3b82f6; }
   border-radius: 4px; padding: 1px 6px; font-size: 10px;
   font-weight: 600; margin-right: 4px; vertical-align: middle;
 }
-/* Inline rename */
-.oz-row-name-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.oz-rename-btn {
-  flex-shrink: 0; background: none; border: none; padding: 2px 3px;
-  color: #475569; font-size: 12px; cursor: pointer; line-height: 1;
-  opacity: 0; transition: opacity .15s;
-}
-.oz-row:hover .oz-rename-btn, .oz-row:active .oz-rename-btn { opacity: 1; }
 .oz-inline-input {
   flex: 1; min-width: 0; background: #1e293b; border: 1px solid #3b82f6;
   color: #e2e8f0; border-radius: 5px; padding: 2px 6px;
@@ -8639,7 +8631,7 @@ function _rndOznakePanel() {
   const localKmls  = kmlLs.map((k, i) => ({k, i})).filter(x => !x.k._key);
   const bucketKmls = kmlLs.map((k, i) => ({k, i})).filter(x =>  x.k._key);
 
-  const _kmlRow = ({k, i}, showRename) => {
+  const _kmlRow = ({k, i}) => {
     const shortName = k.name.replace(/^.*\//, '');
     const cnt  = _kmlFeatureCount(k.grp);
     const lenM = _kmlCalcLen(k.grp);
@@ -8647,16 +8639,10 @@ function _rndOznakePanel() {
     const tagChip = k.tag ? `<span class="oz-tag-chip">${_escHtml(k.tag)}</span>` : '';
     const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
     const isEdit = _kmlEditIdx === i;
-    const renameBtn = showRename
-      ? `<button class="oz-rename-btn" onclick="event.stopPropagation();_kmlRenameStart(${i},this)" title="Preimenuj">✏</button>`
-      : '';
     return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
       <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
       <div class="oz-row-info">
-        <div class="oz-row-name-wrap">
-          <span class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</span>
-          ${renameBtn}
-        </div>
+        <div class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</div>
         <div class="oz-row-meta">${tagChip}${meta}</div>
       </div>
       <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
@@ -8709,7 +8695,7 @@ function _rndOznakePanel() {
     } else if (!filtered.length) {
       localEl.innerHTML = searchBar + '<div class="oz-empty">Nema rezultata za "' + _escHtml(_ozLocalSearch) + '".</div>';
     } else {
-      localEl.innerHTML = searchBar + filtered.map(x => _kmlRow(x, true)).join('');
+      localEl.innerHTML = searchBar + filtered.map(x => _kmlRow(x)).join('');
     }
   }
 
@@ -8743,7 +8729,7 @@ function _rndOznakePanel() {
             onclick="event.stopPropagation();_ozBucketToggleGroupVis(${idxArr})"
             title="${allVis?'Sakrij grupu':'Prikaži grupu'}">${visIcon}</button>
         </div>`;
-        if (!collapsed) html += items.map(x => _kmlRow(x, false)).join('');
+        if (!collapsed) html += items.map(x => _kmlRow(x)).join('');
       });
       bucketEl.innerHTML = html;
     }
