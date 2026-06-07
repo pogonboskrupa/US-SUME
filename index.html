@@ -7334,26 +7334,22 @@ function _renderVlakaRow(el, v, i, depth) {
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
       ${nasaviBtn}
-      <div class="vcard-actions">
-        <button class="action-btn btn-record${isRecThis ? ' recording' : ''}" onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn ? '' : 'setTimeout(togRec,30);'}" title="${recOn && isRecThis ? 'Snimanje aktivno' : 'Počni GPS snimanje'}">
-          <span class="btn-icon">${isRecThis && !recPaused ? '🔴' : isRecThis && recPaused ? '⏸' : '▶'}</span>
-          <span class="btn-label">${isRecThis && !recPaused ? 'Snima' : isRecThis && recPaused ? 'Pauza' : 'Snimi'}</span>
+      <div class="seg-grp" style="margin-top:5px;">
+        <button class="seg-btn${isRecThis && !recPaused ? ' active' : ''}" onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn ? '' : 'setTimeout(togRec,30);'}" title="${recOn && isRecThis ? 'Snimanje aktivno' : 'Počni GPS snimanje'}" style="${isRecThis && !recPaused ? '' : 'color:#fb923c;'}">
+          <span class="seg-ico">${isRecThis && !recPaused ? '🔴' : isRecThis && recPaused ? '⏸' : '▶'}</span>
+          <span>${isRecThis && !recPaused ? 'Snima' : isRecThis && recPaused ? 'Pauza' : 'Snimi'}</span>
         </button>
-        <button class="action-btn btn-map" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">
-          <span class="btn-icon">🗺</span>
-          <span class="btn-label">Karta</span>
+        <button class="seg-btn" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti" style="color:#4a9eff;">
+          <span class="seg-ico">🗺</span><span>Karta</span>
         </button>
-        <button class="action-btn btn-elev" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">
-          <span class="btn-icon">↕</span>
-          <span class="btn-label">Profil</span>
+        <button class="seg-btn" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina" style="color:#34d399;">
+          <span class="seg-ico">↕</span><span>Profil</span>
         </button>
-        <button class="action-btn btn-edit" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">
-          <span class="btn-icon">🔧</span>
-          <span class="btn-label">Uredi</span>
+        <button class="seg-btn" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju" style="color:#f5a623;">
+          <span class="seg-ico">🔧</span><span>Uredi</span>
         </button>
-        <button class="action-btn btn-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">
-          <span class="btn-icon">✕</span>
-          <span class="btn-label">Briši</span>
+        <button class="seg-btn" onclick="event.stopPropagation();dlV(${i})" title="Obriši" style="color:#64748b;">
+          <span class="seg-ico">✕</span><span>Briši</span>
         </button>
       </div>
     </div>`;
