@@ -143,9 +143,16 @@ class AreaCalculator {
   }
 
   // ============================================================
-  // Sutherland-Hodgman: klipuj poligon jednom linijom
+  // Sutherland-Hodgman: klipuj poligon jednom linijom (javna)
   // keepRight=true → zadržava tačke desno od linije (A→B)
   // ============================================================
+  static List<LatLng> clipPolygonByLine(
+    List<LatLng> polygon,
+    LatLng lineA,
+    LatLng lineB, {
+    required bool keepRight,
+  }) => _clipPolygonByLine(polygon, lineA, lineB, keepRight: keepRight);
+
   static List<LatLng> _clipPolygonByLine(
     List<LatLng> polygon,
     LatLng lineA,

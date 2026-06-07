@@ -34,10 +34,19 @@ class AppConstants {
   static const osmTileUrl =
       'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-  // Supabase tabele
+  // Supabase tabele — vlake
   static const tProfiles = 'profiles';
   static const tProjects = 'projects';
   static const tMembers = 'project_members';
   static const tTrackPoints = 'track_points';
   static const tZones = 'engineer_zones';
+
+  // Supabase tabele — doznaka
+  static const tDoznakaProj   = 'doznaka_projekti';
+  static const tDoznakaTrasa  = 'doznaka_trasa';
+  static const tDoznakaTacke  = 'doznaka_tacke';
+
+  // Doznaka — granica pojasa (koliko metara od traga do gornje granice poligona
+  // aktivira pitanje 'Je li ovo zadnji pojas?')
+  static const doznakaNearBoundaryM = 50.0;
 }
