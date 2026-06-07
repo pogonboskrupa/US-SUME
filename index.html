@@ -3662,6 +3662,7 @@ async function aktivirajProjekt() {
   rndProjektiList();
   updProjStats(); rndLog();
   _updFabVisibility();
+  _updVlakeMapVisibility();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel);
   await sbLoadKolegeVlake();
   sbStartRealtime(); // restart kanala — osvježi pretplatu na novi projekat
@@ -3692,6 +3693,7 @@ function deaktivirajProjekt() {
   if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
   rndProjektiList();
   _updFabVisibility();
+  _updVlakeMapVisibility();
   updProjStats();
   rndOdjeliRekap();
   showToast('Projekat deaktiviran.');
@@ -3755,6 +3757,21 @@ function _applyVlakeRows(rows) {
   vlake.forEach((v, i) => updateVlakaLabel(i));
   _syncIbr();
   _updFabVisibility();
+  _updVlakeMapVisibility();
+}
+
+// Pokaži/sakrij polyline-ove vlaka prema aktivnom projektu
+function _updVlakeMapVisibility() {
+  vlake.forEach(v => {
+    const show = !!_aktivniProjektId && v.projektId === _aktivniProjektId;
+    const layers = [v.poly, ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
+    layers.forEach(l => {
+      try {
+        if (show) { if (!map.hasLayer(l)) map.addLayer(l); }
+        else       { if (map.hasLayer(l))  map.removeLayer(l); }
+      } catch(e) {}
+    });
+  });
 }
 
 async function sbLoadVlake() {
@@ -5465,7 +5482,8 @@ map.on('click', e => {
       }
     });
     if (bestI >= 0 && bestD <= HIT_PX) {
-      _activateVlakaEdit(bestI);
+      selI(bestI);
+      showVlakaPopup(bestI, e.latlng);
       return;
     }
   }
@@ -7905,7 +7923,10 @@ function attachPolyClick(poly) {
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv.poly === poly);
-    if (idx >= 0) _activateVlakaEdit(idx);
+    if (idx >= 0) {
+      selI(idx);
+      showVlakaPopup(idx, e.latlng);
+    }
   });
 }
 
@@ -7967,6 +7988,61 @@ function vpDelete() {
   const i = _vpIdx;
   closeVlakaPopup();
   dlV(i);
+}
+
+function vpIzravnaj() {
+  if (_vpIdx === null) return;
+  izravnajVlaku(_vpIdx);
+}
+
+// Ramer-Douglas-Peucker simplifikacija — uklanja tačke unutar tolM metara od linije
+function _rdpSimplify(pts, tolM) {
+  if (pts.length <= 2) return pts;
+
+  function perpDist(p, a, b) {
+    const cosLat = Math.cos(p.la * Math.PI / 180);
+    const dx = (b.lo - a.lo) * cosLat, dy = b.la - a.la;
+    const len2 = dx*dx + dy*dy;
+    if (len2 < 1e-18) return _haversine(p.la, p.lo, a.la, a.lo);
+    const t = Math.max(0, Math.min(1, ((p.lo - a.lo)*cosLat*dx + (p.la - a.la)*dy) / len2));
+    return _haversine(p.la, p.lo, a.la + t*dy, a.lo + t*(dx/cosLat));
+  }
+
+  function rdp(seg, eps) {
+    if (seg.length <= 2) return seg;
+    let maxD = 0, maxI = 0;
+    for (let i = 1; i < seg.length - 1; i++) {
+      const d = perpDist(seg[i], seg[0], seg[seg.length-1]);
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > eps) {
+      const l = rdp(seg.slice(0, maxI+1), eps);
+      const r = rdp(seg.slice(maxI), eps);
+      return [...l.slice(0,-1), ...r];
+    }
+    return [seg[0], seg[seg.length-1]];
+  }
+
+  return rdp(pts, tolM);
+}
+
+function izravnajVlaku(idx) {
+  const v = vlake[idx];
+  if (!v || v.pts.length < 3) { showToast('Premalo tačaka za izravnavanje'); return; }
+  const TOL = 4; // 4 metra tolerancija
+  const before = v.pts.length;
+  const simplified = _rdpSimplify([...v.pts], TOL);
+  if (simplified.length >= before) { showToast('Vlaka je već optimalna'); return; }
+  drawUndoStack.push(v.pts.map(p => ({...p})));
+  v.pts = simplified;
+  v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  v.wpts.forEach(m => map.removeLayer(m));
+  v.wpts = [];
+  scheduleVlakaSave(idx);
+  _saveLocalVlake();
+  rndList();
+  closeVlakaPopup();
+  showToast(`✅ ${before - simplified.length} tačaka uklonjeno (${before} → ${simplified.length})`);
 }
 
 // === VLAKA LABELE ===
@@ -14917,8 +14993,9 @@ function toggleHelpSec(hdr) {
   <div id="vp-info"></div>
   <div class="vp-btns">
     <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;">🔧 Edituj</button>
-    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.6;">🎯</button>
-    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.6;">✕ Briši</button>
+    <button onclick="vpIzravnaj()" style="background:#0d5426;color:#86efac;" title="Ukloni suvišne GPS tačke (RDP 4m)">〰 Izravnaj</button>
+    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.5;">🎯</button>
+    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.5;">✕</button>
   </div>
 </div>
     <!-- IZMJERI PANEL -->
