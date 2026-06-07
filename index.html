@@ -1560,6 +1560,41 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .oz-vis-btn.on { color: #e2e8f0; }
 .oz-empty { padding: 14px 16px; font-size: 12px; color: #475569; text-align: center; }
+/* Search + sort bar */
+.oz-search-wrap { padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 6px; }
+.oz-search-row { position: relative; display: flex; gap: 6px; align-items: center; }
+.oz-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); font-size: 13px; pointer-events: none; opacity: 0.5; }
+.oz-search-input {
+  flex: 1; background: #1e293b; border: 1px solid #334155;
+  color: #e2e8f0; border-radius: 8px; padding: 6px 8px 6px 28px;
+  font-size: 13px; outline: none;
+}
+.oz-search-input:focus { border-color: #3b82f6; }
+.oz-sort-btn {
+  flex-shrink: 0; background: #1e293b; border: 1px solid #334155;
+  color: #94a3b8; border-radius: 8px; padding: 6px 10px;
+  font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.oz-sort-btn.active { border-color: #3b82f6; color: #60a5fa; background: #172554; }
+/* Tag chip */
+.oz-tag-chip {
+  display: inline-block; background: #1e3a5f; color: #60a5fa;
+  border-radius: 4px; padding: 1px 6px; font-size: 10px;
+  font-weight: 600; margin-right: 4px; vertical-align: middle;
+}
+/* Inline rename */
+.oz-row-name-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.oz-rename-btn {
+  flex-shrink: 0; background: none; border: none; padding: 2px 3px;
+  color: #475569; font-size: 12px; cursor: pointer; line-height: 1;
+  opacity: 0; transition: opacity .15s;
+}
+.oz-row:hover .oz-rename-btn, .oz-row:active .oz-rename-btn { opacity: 1; }
+.oz-inline-input {
+  flex: 1; min-width: 0; background: #1e293b; border: 1px solid #3b82f6;
+  color: #e2e8f0; border-radius: 5px; padding: 2px 6px;
+  font-size: 13px; font-weight: 500; outline: none;
+}
 /* KML inline editor */
 .oz-expand-arrow { font-size: 16px; color: #475569; flex-shrink: 0; transition: transform .15s; padding: 0 2px; }
 .oz-expand-arrow.open { transform: rotate(90deg); color: #60a5fa; }
@@ -4195,6 +4230,7 @@ let editNodeMks=[], editMidMks=[], snapRingMk=null, snapTarget=null;
 let wid=null, lastP=null, posMk=null, posCr=null;
 let _compassHeading = null; // trenutni azimut telefona (0-360°, 0=sjever)
 let kmlLs=[], kmlCI=0, _kmlEditIdx=-1;
+let _ozLocalSearch='', _ozLocalSort='recent';
 let drawPreviewLine=null;
 let drawUndoStack=[];
 const KCOLS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899'];
@@ -7928,7 +7964,8 @@ function ldK(file) {
       const col=KCOLS[kmlCI%KCOLS.length]; kmlCI++;
       const doc=new DOMParser().parseFromString(ev.target.result,'text/xml');
       const grp=pkml(doc,col); grp.addTo(map);
-      kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:0.35});
+      const _autoTag = file.name.match(/^(\d+)/)?.[1] || '';
+      kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:0.35,tag:_autoTag,_loadedAt:Date.now()});
       _localKmlSaveContent(file.name, ev.target.result, col);
       _glCollapsed.delete('Lokalni / —');
       rndGraniceModal();
@@ -8093,7 +8130,8 @@ function saveKmlStyles() {
   kmlLs.forEach(k => {
     if (!k._key) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
-      fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35 };
+      fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
+      tag: k.tag || '' };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
 }
@@ -8292,18 +8330,25 @@ function _rndOznakePanel() {
   const localKmls  = kmlLs.map((k, i) => ({k, i})).filter(x => !x.k._key);
   const bucketKmls = kmlLs.map((k, i) => ({k, i})).filter(x =>  x.k._key);
 
-  const _kmlRow = ({k, i}) => {
+  const _kmlRow = ({k, i}, showRename) => {
     const shortName = k.name.replace(/^.*\//, '');
     const cnt  = _kmlFeatureCount(k.grp);
     const lenM = _kmlCalcLen(k.grp);
     const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
+    const tagChip = k.tag ? `<span class="oz-tag-chip">${_escHtml(k.tag)}</span>` : '';
     const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
     const isEdit = _kmlEditIdx === i;
+    const renameBtn = showRename
+      ? `<button class="oz-rename-btn" onclick="event.stopPropagation();_kmlRenameStart(${i},this)" title="Preimenuj">✏</button>`
+      : '';
     return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
       <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
       <div class="oz-row-info">
-        <div class="oz-row-name">${_escHtml(shortName)}</div>
-        <div class="oz-row-meta">${meta}</div>
+        <div class="oz-row-name-wrap">
+          <span class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</span>
+          ${renameBtn}
+        </div>
+        <div class="oz-row-meta">${tagChip}${meta}</div>
       </div>
       <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
         ${k.vis ? '👁' : '🙈'}
@@ -8313,14 +8358,50 @@ function _rndOznakePanel() {
     ${isEdit ? _renderKmlEditor(i) : ''}`;
   };
 
-  // Lokalni
+  // ── Lokalni — search + sort + filter ──
   document.getElementById('oz-cnt-local').textContent = localKmls.length;
   if (!localOpen) { localEl.style.display = 'none'; }
   else {
     localEl.style.display = '';
-    localEl.innerHTML = localKmls.length
-      ? localKmls.map(_kmlRow).join('')
-      : '<div class="oz-empty">Nema učitanih lokalnih fajlova.</div>';
+    const sortLabels = {recent:'🕐 Nedavno', name:'📝 Naziv', proximity:'📍 Blizina'};
+    const searchBar = `<div class="oz-search-wrap">
+      <div class="oz-search-row">
+        <span class="oz-search-icon">🔍</span>
+        <input class="oz-search-input" type="search" placeholder="Pretraži po imenu ili odjelu…"
+          value="${_escHtml(_ozLocalSearch)}"
+          oninput="event.stopPropagation();_ozSetSearch(this.value)">
+        <button class="oz-sort-btn${_ozLocalSort!=='recent'?' active':''}"
+          onclick="event.stopPropagation();_ozCycleSort()"
+          title="Promijeni redoslijed">${sortLabels[_ozLocalSort]}</button>
+      </div>
+    </div>`;
+
+    let filtered = localKmls.filter(({k}) => {
+      if (!_ozLocalSearch) return true;
+      const q = _ozLocalSearch.toLowerCase();
+      return k.name.toLowerCase().includes(q) || (k.tag||'').toLowerCase().includes(q);
+    });
+
+    if (_ozLocalSort === 'name') {
+      filtered = [...filtered].sort((a,b) => (a.k.tag||a.k.name).localeCompare(b.k.tag||b.k.name));
+    } else if (_ozLocalSort === 'proximity') {
+      const pos = posMk ? posMk.getLatLng() : null;
+      filtered = [...filtered].sort((a,b) => {
+        if (!pos) return 0;
+        const da = _kmlDistFromPos(a.k, pos), db = _kmlDistFromPos(b.k, pos);
+        return da - db;
+      });
+    } else {
+      filtered = [...filtered].sort((a,b) => (b.k._loadedAt||0) - (a.k._loadedAt||0));
+    }
+
+    if (!localKmls.length) {
+      localEl.innerHTML = searchBar + '<div class="oz-empty">Nema učitanih lokalnih fajlova.</div>';
+    } else if (!filtered.length) {
+      localEl.innerHTML = searchBar + '<div class="oz-empty">Nema rezultata za "' + _escHtml(_ozLocalSearch) + '".</div>';
+    } else {
+      localEl.innerHTML = searchBar + filtered.map(x => _kmlRow(x, true)).join('');
+    }
   }
 
   // Bucket
@@ -8329,7 +8410,7 @@ function _rndOznakePanel() {
   else {
     bucketEl.style.display = '';
     bucketEl.innerHTML = bucketKmls.length
-      ? bucketKmls.map(_kmlRow).join('')
+      ? bucketKmls.map(x => _kmlRow(x, false)).join('')
       : '<div class="oz-empty">Nema server fajlova.</div>';
   }
 
@@ -8417,6 +8498,8 @@ function _localKmlSaveAll() {
       store[origName].fillCol      = k.fillCol || k.col;
       store[origName].fillPattern  = k.fillPattern || 'solid';
       store[origName].fillOpacity  = k.fillOpacity ?? 0.35;
+      store[origName].tag          = k.tag || '';
+      store[origName]._loadedAt    = k._loadedAt || Date.now();
     });
     // Ukloni stavke koje više nisu u kmlLs
     const activeNames = new Set(kmlLs.filter(k => !k._key).map(k => k._origName || k.name));
@@ -8444,7 +8527,8 @@ function _localKmlRestore() {
           grp, col, dash: data.dash || '', weight: data.weight || 2,
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
-          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35
+          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
+          tag: data.tag || '', _loadedAt: data._loadedAt || Date.now()
         });
         applyKmlStyle(kmlLs.length - 1);
       } catch(e) { console.warn('KML restore greška:', origName, e); }
@@ -8517,6 +8601,11 @@ function _renderKmlEditor(i) {
         onchange="event.stopPropagation();_kmlSetNameR(${i},this.value)" placeholder="Naziv sloja">
     </div>
     <div class="oz-ed-field">
+      <div class="oz-ed-label">Odjel / Tag</div>
+      <input class="oz-ed-input" type="text" value="${_escHtml(k.tag||'')}"
+        onchange="event.stopPropagation();_kmlSaveTag(${i},this.value)" placeholder="npr. 85 ili Odjel C">
+    </div>
+    <div class="oz-ed-field">
       <div class="oz-ed-label">Boja linije</div>
       <div class="oz-ed-colors">
         ${lineDots}
@@ -8546,6 +8635,46 @@ function _renderKmlEditor(i) {
       <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj?'))delK(${i})">✕ Briši</button>
     </div>
   </div>`;
+}
+
+function _ozSetSearch(val) {
+  _ozLocalSearch = val;
+  _rndOznakePanel();
+}
+
+function _ozCycleSort() {
+  const order = ['recent','name','proximity'];
+  _ozLocalSort = order[(order.indexOf(_ozLocalSort) + 1) % order.length];
+  _rndOznakePanel();
+}
+
+function _kmlDistFromPos(k, pos) {
+  try { const b = k.grp.getBounds(); if (b.isValid()) return map.distance(pos, b.getCenter()); } catch(e) {}
+  return Infinity;
+}
+
+function _kmlRenameStart(i, btn) {
+  const wrap = btn.closest('.oz-row-name-wrap');
+  const k = kmlLs[i];
+  wrap.innerHTML = `<input class="oz-inline-input" value="${_escHtml(k.name)}"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}"
+    onblur="_kmlRenameDone(${i},this)">`;
+  const inp = wrap.querySelector('input');
+  inp.focus(); inp.select();
+}
+
+function _kmlRenameDone(i, input) {
+  if (!input.dataset.cancel) {
+    const val = input.value.trim();
+    if (val && val !== kmlLs[i]?.name) _kmlSetNameR(i, val);
+  }
+  _rndOznakePanel();
+}
+
+function _kmlSaveTag(i, val) {
+  if (!kmlLs[i]) return;
+  kmlLs[i].tag = val.trim();
+  saveKmlStyles(); _localKmlSaveAll();
 }
 
 function _kmlSetFill(i, on) {
@@ -12275,7 +12404,8 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
-    fill: false, fillCol: _fc, fillPattern: 'solid', fillOpacity: 0.35 });
+    fill: false, fillCol: _fc, fillPattern: 'solid', fillOpacity: 0.35,
+    tag: '', _loadedAt: Date.now() });
   // Apply visibility
   if (finalOpts.vis === false) map.removeLayer(grp);
   return grp;
