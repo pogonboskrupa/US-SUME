@@ -539,6 +539,92 @@ class DoznakaTrasa {
 }
 
 // ============================================================
+// KorisnikProfile — red iz korisnici tabele (sa sumarija poljem)
+// ============================================================
+class KorisnikProfile {
+  final String id;
+  final String ime;
+  final String prezime;
+  final String sumarija;
+  final String boja;
+
+  const KorisnikProfile({
+    required this.id,
+    required this.ime,
+    required this.prezime,
+    required this.sumarija,
+    required this.boja,
+  });
+
+  factory KorisnikProfile.fromJson(Map<String, dynamic> j) => KorisnikProfile(
+        id: j['id'],
+        ime: j['ime'] ?? '',
+        prezime: j['prezime'] ?? '',
+        sumarija: j['sumarija'] ?? '',
+        boja: j['boja'] ?? '#3B8BD4',
+      );
+
+  String get punoIme => '$ime $prezime'.trim();
+
+  String get inicijali {
+    final i = ime.isNotEmpty ? ime[0] : '';
+    final p = prezime.isNotEmpty ? prezime[0] : '';
+    return '$i$p'.toUpperCase();
+  }
+
+  Color get color {
+    try {
+      return Color(int.parse('FF${boja.replaceAll('#', '')}', radix: 16));
+    } catch (_) {
+      return Colors.blue;
+    }
+  }
+}
+
+// ============================================================
+// DoznakaClan — projektant dodijeljen na doznaka projekat
+// ============================================================
+class DoznakaClan {
+  final String id;
+  final String projekatId;
+  final String userId;
+  final String boja;
+  final DateTime dodanAt;
+  final KorisnikProfile? profil;
+
+  const DoznakaClan({
+    required this.id,
+    required this.projekatId,
+    required this.userId,
+    required this.boja,
+    required this.dodanAt,
+    this.profil,
+  });
+
+  factory DoznakaClan.fromJson(Map<String, dynamic> j) => DoznakaClan(
+        id: j['id'],
+        projekatId: j['projekat_id'],
+        userId: j['user_id'],
+        boja: j['boja'] ?? '#3B8BD4',
+        dodanAt: DateTime.tryParse(j['dodan_at'] ?? '') ?? DateTime.now(),
+        profil: j['korisnici'] != null
+            ? KorisnikProfile.fromJson(j['korisnici'])
+            : null,
+      );
+
+  String get displayName => profil?.punoIme ?? 'Projektant';
+  String get inicijali => profil?.inicijali ?? '?';
+
+  Color get color {
+    try {
+      return Color(int.parse('FF${boja.replaceAll('#', '')}', radix: 16));
+    } catch (_) {
+      return Colors.teal;
+    }
+  }
+}
+
+// ============================================================
 // GeoJSON parser za odjel granice (za dropdown)
 // ============================================================
 class OdjelFeature {

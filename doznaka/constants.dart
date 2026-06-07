@@ -42,9 +42,10 @@ class AppConstants {
   static const tZones = 'engineer_zones';
 
   // Supabase tabele — doznaka
-  static const tDoznakaProj   = 'doznaka_projekti';
-  static const tDoznakaTrasa  = 'doznaka_trasa';
-  static const tDoznakaTacke  = 'doznaka_tacke';
+  static const tDoznakaProj    = 'doznaka_projekti';
+  static const tDoznakaTrasa   = 'doznaka_trasa';
+  static const tDoznakaTacke   = 'doznaka_tacke';
+  static const tDoznakaClanovi = 'doznaka_clanovi';
 
   // Doznaka — granica pojasa (koliko metara od traga do gornje granice poligona
   // aktivira pitanje 'Je li ovo zadnji pojas?')

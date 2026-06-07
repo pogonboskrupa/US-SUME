@@ -206,4 +206,32 @@ class SupabaseService {
           .from(AppConstants.tZones)
           .stream(primaryKey: ['id'])
           .eq('project_id', projectId);
+
+  // ── KORISNICI (sumarija) ─────────────────────────────────
+
+  /// Vrati profil trenutnog korisnika iz korisnici tabele
+  static Future<Map<String, dynamic>?> getCurrentKorisnik() async {
+    if (currentUserId == null) return null;
+    return await _db
+        .from('korisnici')
+        .select()
+        .eq('id', currentUserId!)
+        .maybeSingle();
+  }
+
+  /// Vrati sve korisnike iz iste šumarije kao trenutni korisnik
+  static Future<List<Map<String, dynamic>>> getKorisniciSumarije() async {
+    if (currentUserId == null) return [];
+    final me = await getCurrentKorisnik();
+    if (me == null) return [];
+    final sumarija = me['sumarija'] as String? ?? '';
+    if (sumarija.isEmpty) return [];
+    final data = await _db
+        .from('korisnici')
+        .select()
+        .eq('sumarija', sumarija)
+        .neq('id', currentUserId!)
+        .order('prezime');
+    return (data as List).cast<Map<String, dynamic>>();
+  }
 }

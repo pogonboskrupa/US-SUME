@@ -234,6 +234,44 @@ class DoznakaService {
     return 0;
   }
 
+  // ── CLANOVI ──────────────────────────────────────────────
+
+  /// Lista projektanata na projektu (sa profilom iz korisnici)
+  static Future<List<DoznakaClan>> getClanove(String projekatId) async {
+    final data = await _db
+        .from(AppConstants.tDoznakaClanovi)
+        .select('*, korisnici(*)')
+        .eq('projekat_id', projekatId)
+        .order('dodan_at');
+    return (data as List).map((j) => DoznakaClan.fromJson(j)).toList();
+  }
+
+  static Stream<List<Map<String, dynamic>>> clanoviStream(String projekatId) =>
+      _db
+          .from(AppConstants.tDoznakaClanovi)
+          .stream(primaryKey: ['id'])
+          .eq('projekat_id', projekatId);
+
+  static Future<void> addClan({
+    required String projekatId,
+    required String userId,
+    required String boja,
+  }) async {
+    await _db.from(AppConstants.tDoznakaClanovi).insert({
+      'projekat_id': projekatId,
+      'user_id': userId,
+      'boja': boja,
+    });
+  }
+
+  static Future<void> removeClan(String projekatId, String userId) async {
+    await _db
+        .from(AppConstants.tDoznakaClanovi)
+        .delete()
+        .eq('projekat_id', projekatId)
+        .eq('user_id', userId);
+  }
+
   static double _ringAreaHa(List<List<dynamic>> ring) {
     const earthRadius = 6371000.0;
     final refLat = (ring.first[1] as num).toDouble() * pi / 180;

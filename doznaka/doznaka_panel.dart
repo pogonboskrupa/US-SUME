@@ -6,23 +6,29 @@ import '../../models/models.dart';
 
 class DoznakaPanel extends StatelessWidget {
   final DoznakaProjekat projekat;
-  final List<DoznakaTrasa> trase;            // Sve završene trase
-  final Map<String, String> userNames;       // userId → ime
-  final Map<String, String> userColors;      // userId → hex boja
+  final List<DoznakaTrasa> trase;
+  final List<DoznakaClan> clanovi;
+  final Map<String, String> userNames;
+  final Map<String, String> userColors;
   final bool isTracking;
+  final bool isCreator;
   final VoidCallback onStartTrasa;
   final VoidCallback onFinishTrasa;
+  final VoidCallback onDodajProjektanta;
   final VoidCallback onClose;
 
   const DoznakaPanel({
     super.key,
     required this.projekat,
     required this.trase,
+    required this.clanovi,
     required this.userNames,
     required this.userColors,
     required this.isTracking,
+    required this.isCreator,
     required this.onStartTrasa,
     required this.onFinishTrasa,
+    required this.onDodajProjektanta,
     required this.onClose,
   });
 
@@ -59,12 +65,17 @@ class DoznakaPanel extends StatelessWidget {
               children: [
                 // Ukupni progresbar
                 if (totalHa > 0) ...[
-                  _ProgressBar(
-                    pokrivenoHa: pokrivenoHa,
-                    totalHa: totalHa,
-                  ),
+                  _ProgressBar(pokrivenoHa: pokrivenoHa, totalHa: totalHa),
                   const SizedBox(height: 12),
                 ],
+
+                // Tim projektanata
+                _TimSection(
+                  clanovi: clanovi,
+                  isCreator: isCreator,
+                  onDodaj: onDodajProjektanta,
+                ),
+                const SizedBox(height: 12),
 
                 // Red po projektantu
                 if (stats.isEmpty)
@@ -94,16 +105,11 @@ class DoznakaPanel extends StatelessWidget {
                 ],
 
                 const SizedBox(height: 8),
-
-                // Ukupna površina odjela
                 if (totalHa > 0)
                   Center(
                     child: Text(
                       'Ukupno odjel: ${totalHa.toStringAsFixed(1)} ha',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                     ),
                   ),
               ],
@@ -180,6 +186,8 @@ class _Header extends StatelessWidget {
     required this.onFinishTrasa,
     required this.onClose,
   });
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -448,6 +456,78 @@ class _EmptyState extends StatelessWidget {
             'Tapni "Snimi trasu" da počneš',
             style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Tim projektanata ──────────────────────────────────────
+
+class _TimSection extends StatelessWidget {
+  final List<DoznakaClan> clanovi;
+  final bool isCreator;
+  final VoidCallback onDodaj;
+
+  const _TimSection({
+    required this.clanovi,
+    required this.isCreator,
+    required this.onDodaj,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F9F6),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          // Avatar row
+          Expanded(
+            child: clanovi.isEmpty
+                ? Text(
+                    'Nema dodanih projektanata',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500),
+                  )
+                : Wrap(
+                    spacing: 6,
+                    children: clanovi.map((c) {
+                      return Tooltip(
+                        message: c.displayName,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: c.color.withOpacity(0.2),
+                          child: Text(
+                            c.inicijali,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: c.color,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+
+          // Dodaj dugme (samo kreator)
+          if (isCreator)
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF2D6A4F),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.person_add_outlined, size: 16),
+              label: const Text('Dodaj', style: TextStyle(fontSize: 12)),
+              onPressed: onDodaj,
+            ),
         ],
       ),
     );

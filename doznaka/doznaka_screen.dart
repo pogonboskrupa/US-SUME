@@ -52,7 +52,8 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
   bool _isDrawingOdjel = false;
   final List<LatLng> _drawingPts = [];
 
-  // Korisnici na projektu (za panel)
+  // Projektanti na projektu
+  List<DoznakaClan> _clanovi = [];
   Map<String, String> _userNames = {};
   Map<String, String> _userColors = {};
 
@@ -106,8 +107,34 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
       _onTraseUpdate(trase);
     });
 
-    // Učitaj korisnike
-    await _loadUsers(p);
+    // Učitaj korisnike + clanove
+    await _loadClanove();
+  }
+
+  Future<void> _loadClanove() async {
+    if (_aktivan == null) return;
+    final clanovi = await DoznakaService.getClanove(_aktivan!.id);
+    if (!mounted) return;
+    final names = <String, String>{};
+    final colors = <String, String>{};
+    for (final c in clanovi) {
+      names[c.userId] = c.displayName;
+      colors[c.userId] = c.boja;
+    }
+    // Dodaj i samog kreatora ako nije u listi
+    final myId = SupabaseService.currentUserId;
+    if (myId != null && !names.containsKey(myId)) {
+      final k = await SupabaseService.getCurrentKorisnik();
+      if (k != null) {
+        names[myId] = '${k['ime']} ${k['prezime']}'.trim();
+        colors[myId] = AppConstants.engineerColors[0];
+      }
+    }
+    setState(() {
+      _clanovi = clanovi;
+      _userNames = names;
+      _userColors = colors;
+    });
   }
 
   Future<void> _loadTrase() async {
@@ -152,21 +179,42 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
     setState(() => _trase = trase);
   }
 
-  Future<void> _loadUsers(DoznakaProjekat p) async {
-    // Dohvati profil trenutnog korisnika i poznate korisnike trasa
-    final myId = SupabaseService.currentUserId;
-    if (myId != null) {
-      final profile = await SupabaseService.getProfile(myId);
-      if (profile != null) {
-        _userNames[myId] = profile.fullName;
-      }
-    }
-    // Boje — dodjeli boje po redoslijedu (isti sistem kao engineerColors)
-    final userIds = _trase.map((t) => t.userId).toSet().toList();
-    for (int i = 0; i < userIds.length; i++) {
-      _userColors[userIds[i]] = AppConstants.engineerColors[i % AppConstants.engineerColors.length];
-    }
-    if (mounted) setState(() {});
+  Future<void> _showDodajProjektantaSheet() async {
+    if (_aktivan == null) return;
+    final sviKorisnici = await SupabaseService.getKorisniciSumarije();
+    final vecClanovi = _clanovi.map((c) => c.userId).toSet();
+    final dostupni = sviKorisnici
+        .map((j) => KorisnikProfile.fromJson(j))
+        .where((k) => !vecClanovi.contains(k.id))
+        .toList();
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _DodajProjektantaSheet(
+        dostupni: dostupni,
+        postojeciBroj: _clanovi.length + 1,
+        onAdd: (korisnik) async {
+          Navigator.pop(context);
+          final boja = AppConstants.engineerColors[
+              (_clanovi.length + 1) % AppConstants.engineerColors.length];
+          try {
+            await DoznakaService.addClan(
+              projekatId: _aktivan!.id,
+              userId: korisnik.id,
+              boja: boja,
+            );
+            await _loadClanove();
+            _showMsg('${korisnik.punoIme} dodan na projekat');
+          } catch (e) {
+            _showMsg('Greška: $e');
+          }
+        },
+      ),
+    );
   }
 
   // ── GPS snimanje ─────────────────────────────────────────
@@ -481,6 +529,10 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
           Navigator.pop(ctx);
           await _createProjekat(gj, odjel, boundary, areaHa);
         },
+        onDrawInstead: () {
+          Navigator.pop(ctx);
+          _startDrawingOdjel();
+        },
       ),
     );
   }
@@ -717,11 +769,14 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
               child: DoznakaPanel(
                 projekat: _aktivan!,
                 trase: _trase,
+                clanovi: _clanovi,
                 userNames: _userNames,
                 userColors: _userColors,
                 isTracking: _isTracking,
+                isCreator: _aktivan!.createdBy == SupabaseService.currentUserId,
                 onStartTrasa: _startTrasa,
                 onFinishTrasa: () => _finishTrasa(),
+                onDodajProjektanta: _showDodajProjektantaSheet,
                 onClose: () => setState(() => _showPanel = false),
               ),
             ),
@@ -1072,11 +1127,13 @@ class _NewProjekatSheet extends StatefulWidget {
   final Map<String, Set<String>> gjOdjelMap;
   final List<OdjelFeature> odjelFeatures;
   final Function(String gj, String odjel, Map<String, dynamic> boundary, double areaHa) onConfirm;
+  final VoidCallback onDrawInstead;
 
   const _NewProjekatSheet({
     required this.gjOdjelMap,
     required this.odjelFeatures,
     required this.onConfirm,
+    required this.onDrawInstead,
   });
 
   @override
@@ -1098,9 +1155,18 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
       });
   }
 
+  bool get _odjelImaPoligon {
+    if (_selGj == null || _selOdjel == null) return false;
+    final odsjeci = widget.odjelFeatures
+        .where((f) => f.gj == _selGj && f.odjel == _selOdjel && !f.isExcluded)
+        .toList();
+    return odsjeci.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canConfirm = _selGj != null && _selOdjel != null;
+    final canConfirm = _selGj != null && _selOdjel != null && _odjelImaPoligon;
+    final needsDraw = _selGj != null && _selOdjel != null && !_odjelImaPoligon;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -1124,7 +1190,7 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
           DropdownButtonFormField<String>(
             value: _selGj,
             decoration: const InputDecoration(
-              labelText: 'Gospodarska jedinica (GJ)',
+              labelText: 'GJ',
               border: OutlineInputBorder(),
             ),
             items: _gjs
@@ -1137,7 +1203,7 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
           ),
           const SizedBox(height: 12),
 
-          // Odjel dropdown
+          // Odjel dropdown — BEZ prefiksa "Odjel"
           DropdownButtonFormField<String>(
             value: _selOdjel,
             decoration: const InputDecoration(
@@ -1145,24 +1211,79 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
               border: OutlineInputBorder(),
             ),
             items: _odjeli
-                .map((o) => DropdownMenuItem(value: o, child: Text('Odjel $o')))
+                .map((o) => DropdownMenuItem(value: o, child: Text(o)))
                 .toList(),
             onChanged: _selGj == null
                 ? null
                 : (v) => setState(() => _selOdjel = v),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF2D6A4F),
+          // Upozorenje ako odjel nema poligon u GeoJSON-u
+          if (needsDraw)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
               ),
-              onPressed: canConfirm ? _confirm : null,
-              child: const Text('Kreiraj projekat'),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: Colors.orange.shade700, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Odabrani odjel nema granicu u GeoJSON fajlu. '
+                      'Ucrtaj granicu ručno na mapi.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+
+          if (needsDraw) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D6A4F),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+                icon: const Icon(Icons.edit_location_alt),
+                label: const Text('Ucrtaj granicu odjela'),
+                onPressed: widget.onDrawInstead,
+              ),
+            ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D6A4F),
+                ),
+                onPressed: canConfirm ? _confirm : null,
+                child: const Text('Kreiraj projekat'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF2D6A4F),
+                  side: const BorderSide(color: Color(0xFF2D6A4F)),
+                ),
+                icon: const Icon(Icons.edit_location_alt, size: 16),
+                label: const Text('Ili ucrtaj granicu ručno'),
+                onPressed: widget.onDrawInstead,
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -1176,5 +1297,126 @@ class _NewProjekatSheetState extends State<_NewProjekatSheet> {
     final boundary = DoznakaService.mergeOdsjeci(odsjeci);
     final areaHa = DoznakaService.calcTotalAreaHa(odsjeci);
     widget.onConfirm(_selGj!, _selOdjel!, boundary, areaHa);
+  }
+}
+
+// ── Sheet za dodavanje projektanta iz šumarije ────────────
+
+class _DodajProjektantaSheet extends StatefulWidget {
+  final List<KorisnikProfile> dostupni;
+  final int postojeciBroj;
+  final Function(KorisnikProfile) onAdd;
+
+  const _DodajProjektantaSheet({
+    required this.dostupni,
+    required this.postojeciBroj,
+    required this.onAdd,
+  });
+
+  @override
+  State<_DodajProjektantaSheet> createState() => _DodajProjektantaSheetState();
+}
+
+class _DodajProjektantaSheetState extends State<_DodajProjektantaSheet> {
+  String _filter = '';
+
+  List<KorisnikProfile> get _filtered {
+    if (_filter.isEmpty) return widget.dostupni;
+    final q = _filter.toLowerCase();
+    return widget.dostupni
+        .where((k) => k.punoIme.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+
+          const Text('Dodaj projektanta',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(
+            'Projektanti registrovani u istoj šumariji',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+
+          if (widget.dostupni.length > 5)
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Pretraži...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _filter = v),
+            ),
+          if (widget.dostupni.length > 5) const SizedBox(height: 10),
+
+          if (widget.dostupni.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'Svi projektanti su već dodani na projekat.',
+                  style: TextStyle(color: Colors.grey.shade500),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _filtered.length,
+                itemBuilder: (_, i) {
+                  final k = _filtered[i];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: k.color.withOpacity(0.2),
+                      child: Text(
+                        k.inicijali,
+                        style: TextStyle(
+                            color: k.color, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Text(k.punoIme,
+                        style: const TextStyle(fontWeight: FontWeight.w500)),
+                    trailing: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D6A4F),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => widget.onAdd(k),
+                      child: const Text('Dodaj'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
