@@ -10566,7 +10566,8 @@ function updProjStats() {
     if (stdEl) stdEl.innerHTML = '';
     return;
   }
-  const myTotal = calcL(vlake.flatMap(v=>v.pts));
+  const projVlake = vlake.filter(v => v.projektId === _aktivniProjektId);
+  const myTotal = calcL(projVlake.flatMap(v=>v.pts));
   const pov     = parseFloat(document.getElementById('p-povrsina').value)||0;
   const odjel   = getOdjel();
   const sumarija= document.getElementById('p-sumarija').value.trim();
@@ -10582,7 +10583,7 @@ function updProjStats() {
       allP[e.projektant].days.add(day.date);
     });
   });
-  // override own meters with live session value
+  // override own meters with live session value (project-filtered)
   const myIme = getIme();
   if (!allP[myIme]) allP[myIme] = {meters:0, days:new Set()};
   allP[myIme].meters = Math.round(myTotal);
@@ -10619,7 +10620,7 @@ function updProjStats() {
   // === STD PRIVLAČENJA ===
   const stdEl = document.getElementById('std-card');
   if (stdEl) {
-    const std = calcSTD(vlake);
+    const std = calcSTD(projVlake);
     if (std.count === 0) {
       stdEl.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema vlaka za izračun STD</div>';
     } else {
@@ -10667,12 +10668,13 @@ function updProjStats() {
 // ── Terenske statistike ───────────────────────────────────────────────────────
 
 function _calcTerenStats() {
-  const allPts = vlake.flatMap(v => v.pts);
+  const pVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const allPts = pVlake.flatMap(v => v.pts);
   const hasPts = allPts.length >= 2;
 
   // Broj vlaka i krakova
-  const nVlaka  = vlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
-  const nKrakovi= vlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
+  const nVlaka  = pVlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
+  const nKrakovi= pVlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
   const totalLen = calcL(allPts);
 
   // Visine
@@ -10682,7 +10684,7 @@ function _calcTerenStats() {
 
   // Ukupni uspon/pad (po svakoj vlaci zasebno, ne cross-vlaka)
   let totalUp = 0, totalDown = 0;
-  vlake.forEach(v => {
+  pVlake.forEach(v => {
     const e = calcElev(v.pts);
     totalUp   += e.up;
     totalDown += e.down;
@@ -10690,7 +10692,7 @@ function _calcTerenStats() {
 
   // Prosječan nagib — ponderirani prosjek nagiba po dužini segmenta
   let sumSlopeDist = 0, sumDist = 0;
-  vlake.forEach(v => {
+  pVlake.forEach(v => {
     for (let i = 1; i < v.pts.length; i++) {
       const a = v.pts[i-1], b = v.pts[i];
       if (!a.al || !b.al || a.al <= 0 || b.al <= 0) continue;
@@ -10704,7 +10706,7 @@ function _calcTerenStats() {
   const avgSlope = sumDist > 1 ? (sumSlopeDist / sumDist).toFixed(1) : null;
 
   // Prosječna dužina vlake (samo glavne)
-  const mainVlake = vlake.filter(v => v.kr === 0 && v.pts.length >= 2);
+  const mainVlake = pVlake.filter(v => v.kr === 0 && v.pts.length >= 2);
   const avgVlakaLen = mainVlake.length
     ? Math.round(mainVlake.reduce((s, v) => s + calcL(v.pts), 0) / mainVlake.length)
     : null;
@@ -10725,7 +10727,7 @@ function _calcTerenStats() {
     });
   });
   if (!allP[myIme]) allP[myIme] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
-  allP[myIme].meters = Math.round(calcL(vlake.flatMap(v => v.pts)));
+  allP[myIme].meters = Math.round(calcL(pVlake.flatMap(v => v.pts)));
 
   return { nVlaka, nKrakovi, totalLen, maxAlt, minAlt, totalUp, totalDown, avgSlope,
            avgVlakaLen, pov, gustoca, allP, myIme, hasPts };
@@ -10805,7 +10807,8 @@ function exportTerenStats() {
   const s = _calcTerenStats();
   const odjel = getOdjel() || 'odjel';
   const sumarija = document.getElementById('p-sumarija').value.trim() || '';
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   const date = todayStr();
 
   let txt = `PROJEKTOVANJE TRAKTORSKIH VLAKA — STATISTIKE\n`;
@@ -10857,7 +10860,8 @@ function exportTerenStats() {
 }
 
 function exportSTDcsv() {
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   if (!std.count) { showToast('Nema vlaka za eksport'); return; }
   const odjel = getOdjel() || 'odjel';
   let csv = 'Vlaka/krak;Tip;Strana;Duzina vlastita (m);Duzina do puta (m);Efektivna distanca (m);Formula\n';
@@ -10877,7 +10881,8 @@ function exportSTDcsv() {
 }
 
 function exportSTDtxt() {
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   if (!std.count) { showToast('Nema vlaka za eksport'); return; }
   const odjel = getOdjel() || 'Odjel';
   const pad = (s, n) => String(s).padEnd(n);
@@ -10984,9 +10989,10 @@ function rndKolegeVlakeList() {
 // === DNEVNIK ===
 function logDan() {
   const date=todayStr(), ime=getIme(), odjel=getOdjel();
-  const totalM=Math.round(calcL(vlake.flatMap(v=>v.pts)));
-  const vSnap=vlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
-  if (vlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
+  const logVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const totalM=Math.round(calcL(logVlake.flatMap(v=>v.pts)));
+  const vSnap=logVlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
+  if (logVlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
   // Timing: ako je snimanje trenutno aktivno, dodaj tekući segment
   let activeMs = _dayActiveMs;
   if (recOn && !recPaused && _recSegStart > 0) activeMs += Date.now() - _recSegStart;
@@ -11108,7 +11114,8 @@ function exportProjektPDF() {
   // ── projekat info ──
   const pov       = parseFloat(proj.povrsina) || 0;
   const myIme     = getIme();
-  const myTotalM  = Math.round(calcL(vlake.flatMap(v => v.pts)));
+  const pdfVlake  = vlake.filter(v => v.projektId === _aktivniProjektId);
+  const myTotalM  = Math.round(calcL(pdfVlake.flatMap(v => v.pts)));
 
   // ── rekap po projektantu (iz loga + live) ──
   const byProj = {};
@@ -11125,12 +11132,12 @@ function exportProjektPDF() {
   const gustoca    = pov > 0 ? Math.round(totalAllM / pov) + ' m/ha' : '—';
 
   // ── vlake hijerarhija ──
-  const sortedMain = vlake.filter(v => v.kr === 0).sort((a, b) => a.br - b.br);
+  const sortedMain = pdfVlake.filter(v => v.kr === 0).sort((a, b) => a.br - b.br);
   let totalGlavnihM = 0, totalKrakovaM = 0, brGlavnih = 0, brKrakova = 0;
   const vlakeRows = sortedMain.map(v => {
     const vLen = calcVLen(v.pts);
     totalGlavnihM += vLen; brGlavnih++;
-    const djeca = vlake.filter(k => {
+    const djeca = pdfVlake.filter(k => {
       const par = k.nm.split('.').slice(0, -1).join('.');
       return par === v.nm;
     }).sort((a, b) => a.br - b.br || a.kr - b.kr);
