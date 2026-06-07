@@ -11836,6 +11836,15 @@ let _dozDrawType = null;
 let _dozDrawPts  = [];
 let _dozDrawLayer= null;
 let _dozBoundaryLayer = null;
+
+// ─── Kreiranje novog odjela — stanje ─────────────
+let _dozCreateFeatures = []; // [{gj, odjel, odsjek, gazKlasa, geometry}]
+let _dozCreateGj       = '';
+let _dozCreateOdjel    = '';
+let _dozCreateBoundary = null; // GeoJSON Polygon/MultiPolygon
+let _dozCreateAreaHa   = null;
+let _dozNewOdjelDrawGj    = '';
+let _dozNewOdjelDrawOdjel = '';
 let _dozTracksLayer   = null;
 let _dozMarkingsLayer = null;
 let _dozGpsOn    = false;
@@ -12078,16 +12087,17 @@ function dozAddDrawPoint(latlng) {
 function _dozRedrawPreview() {
   if (_dozDrawLayer) map.removeLayer(_dozDrawLayer);
   _dozDrawLayer = L.layerGroup().addTo(map);
-  const t = DOZ_TYPES[_dozDrawType] || DOZ_TYPES.custom;
+  const isBoundary = _dozDrawType === '__boundary__';
+  const t = isBoundary ? { color: '#38bdf8' } : (DOZ_TYPES[_dozDrawType] || DOZ_TYPES.custom);
   _dozDrawPts.forEach(pt => {
     L.circleMarker([pt.lat, pt.lng], { radius:5, color:t.color, fillColor:t.color, fillOpacity:0.9, weight:2 }).addTo(_dozDrawLayer);
   });
   if (_dozDrawPts.length >= 2) {
     const ring = _dozDrawPts.map(p => [p.lat, p.lng]).concat([[_dozDrawPts[0].lat, _dozDrawPts[0].lng]]);
-    L.polyline(ring, { color:t.color, weight:2, dashArray:'5,4' }).addTo(_dozDrawLayer);
+    L.polyline(ring, { color:t.color, weight: isBoundary ? 2.5 : 2, dashArray: isBoundary ? '8,5' : '5,4' }).addTo(_dozDrawLayer);
   }
   if (_dozDrawPts.length >= 3) {
-    L.polygon(_dozDrawPts.map(p => [p.lat, p.lng]), { color:t.color, fillColor:t.color, fillOpacity:0.15, weight:1 }).addTo(_dozDrawLayer);
+    L.polygon(_dozDrawPts.map(p => [p.lat, p.lng]), { color:t.color, fillColor:t.color, fillOpacity:0.12, weight:1 }).addTo(_dozDrawLayer);
   }
 }
 
@@ -12109,6 +12119,19 @@ function dozFinishDraw() {
   if (_dozDrawPts.length < 3) { showToast('Trebaju najmanje 3 tačke'); return; }
   const coords = _dozDrawPts.map(p => [p.lng, p.lat]);
   coords.push(coords[0]);
+
+  // Poseban slučaj: crtanje granice novog odjela
+  if (_dozDrawType === '__boundary__') {
+    _dozCreateBoundary = { type:'Polygon', coordinates:[coords] };
+    _dozCreateAreaHa   = _dozCalcArea(_dozDrawPts) / 10000;
+    _dozDrawType = null; _dozDrawPts = [];
+    if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+    document.getElementById('doz-draw-banner').style.display = 'none';
+    document.getElementById('map').style.cursor = '';
+    dozShowCreateOdjel(true); // vrati modal s ucrtanom granicom
+    return;
+  }
+
   _dozPendingSavePolygon = { type:'Polygon', coordinates:[coords] };
   const areaHa = (_dozCalcArea(_dozDrawPts) / 10000).toFixed(4);
   const t = DOZ_TYPES[_dozDrawType];
@@ -12190,57 +12213,272 @@ async function dozDeleteOdjel() {
 }
 
 // ─── Create Odjel ─────────────────────────────────────────────────
-function dozShowCreateOdjel() {
+function dozShowCreateOdjel(restore) {
   document.getElementById('doz-create-modal').style.display = 'flex';
-  ['doz-create-name','doz-create-desc','doz-create-area','doz-create-geojson'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('doz-create-error').textContent = '';
+
+  if (restore) {
+    // Vraćamo se iz crtanja granice — prikaži rezultat
+    _dozCreateGj    = _dozNewOdjelDrawGj;
+    _dozCreateOdjel = _dozNewOdjelDrawOdjel;
+    _dozCreateRenderGjField();
+    const gjEl    = document.getElementById('doz-create-gj');
+    const odjelEl = document.getElementById('doz-create-odjel');
+    if (gjEl)    gjEl.value    = _dozCreateGj;
+    if (odjelEl) odjelEl.value = _dozCreateOdjel;
+    document.getElementById('doz-create-no-poly').style.display  = 'none';
+    document.getElementById('doz-create-poly-ok').style.display  = 'block';
+    document.getElementById('doz-create-poly-area').textContent  =
+      `${(_dozCreateAreaHa||0).toFixed(1)} ha ucrtano`;
+    return;
+  }
+
+  // Svježi start
+  _dozCreateFeatures = [];
+  _dozCreateGj       = '';
+  _dozCreateOdjel    = '';
+  _dozCreateBoundary = null;
+  _dozCreateAreaHa   = null;
+  const st = document.getElementById('doz-gjson-status');
+  st.textContent = 'Nije učitan GeoJSON fajl';
+  st.style.color = '#475569';
+  document.getElementById('doz-create-no-poly').style.display = 'none';
+  document.getElementById('doz-create-poly-ok').style.display = 'none';
+  _dozCreateRenderGjField();
 }
+
 function dozCloseCreateOdjel() {
   document.getElementById('doz-create-modal').style.display = 'none';
 }
 
-async function dozSaveOdjel() {
-  const name = document.getElementById('doz-create-name').value.trim();
-  const err  = document.getElementById('doz-create-error');
-  if (!name) { err.textContent = 'Unesite naziv odjela'; return; }
-  const desc  = document.getElementById('doz-create-desc').value.trim() || null;
-  const area  = parseFloat(document.getElementById('doz-create-area').value) || null;
-  const gjStr = document.getElementById('doz-create-geojson').value.trim();
-  let boundary = null;
-  if (gjStr) {
-    try { boundary = JSON.parse(gjStr); }
-    catch(e) { err.textContent = 'Neispravan GeoJSON'; return; }
+function dozCreateLoadGeojson(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.features?.length) { showToast('Fajl nema features'); return; }
+      _dozCreateFeatures = data.features
+        .filter(f => f.geometry)
+        .map(f => ({
+          gj:       (f.properties?.GJ      || f.properties?.gj      || '').trim(),
+          odjel:    String(f.properties?.ODJEL   || f.properties?.odjel   || '').trim(),
+          odsjek:   String(f.properties?.ODSJEK  || f.properties?.odsjek  || '').trim(),
+          gazKlasa: String(f.properties?.Gaz_Klasa_ || f.properties?.GAZ_KLASA || '').trim(),
+          geometry: f.geometry
+        }))
+        .filter(f => f.gj && f.odjel);
+      const gjCount = new Set(_dozCreateFeatures.map(f => f.gj)).size;
+      const st = document.getElementById('doz-gjson-status');
+      st.textContent = `${_dozCreateFeatures.length} odsjeka · ${gjCount} GJ učitano`;
+      st.style.color = '#4ade80';
+      _dozCreateRenderGjField();
+      showToast(`✅ GeoJSON: ${_dozCreateFeatures.length} odsjeka`);
+    } catch(ex) { showToast('❌ GeoJSON greška: ' + ex.message); }
+  };
+  reader.readAsText(file);
+}
+
+function _dozCreateRenderGjField() {
+  const wrap = document.getElementById('doz-create-gj-wrap');
+  const gjSet = [...new Set(_dozCreateFeatures.map(f => f.gj))].sort();
+  if (gjSet.length > 0) {
+    wrap.innerHTML = `<select class="pinput" id="doz-create-gj" onchange="_dozCreateOnGjChange()">
+      <option value="">— odaberi GJ —</option>
+      ${gjSet.map(g => `<option value="${_escHtml(g)}">${_escHtml(g)}</option>`).join('')}
+    </select>`;
+  } else {
+    wrap.innerHTML = `<input class="pinput" id="doz-create-gj" placeholder="npr. RISOVAC KRUPA" style="text-transform:uppercase" oninput="_dozCreateOnGjChange()">`;
   }
-  err.textContent = '';
-  try {
-    const { error } = await sb.from('doz_projects').insert({
-      name, description: desc, created_by: sbUser.id,
-      boundary_geojson: boundary, known_area_ha: area, status: 'active'
-    });
-    if (error) throw error;
-    dozCloseCreateOdjel();
-    showToast('✅ Odjel kreiran!');
-    await dozLoadOdjeli();
-  } catch(e) {
-    err.textContent = 'Greška: ' + e.message;
+  _dozCreateGj = '';
+  _dozCreateRenderOdjelField();
+}
+
+function _dozCreateOnGjChange() {
+  _dozCreateGj     = (document.getElementById('doz-create-gj')?.value || '').trim();
+  _dozCreateOdjel  = '';
+  _dozCreateBoundary = null;
+  _dozCreateAreaHa   = null;
+  document.getElementById('doz-create-poly-ok').style.display = 'none';
+  _dozCreateRenderOdjelField();
+}
+
+function _dozCreateRenderOdjelField() {
+  const wrap = document.getElementById('doz-create-odjel-wrap');
+  const odjeli = [...new Set(
+    _dozCreateFeatures.filter(f => !_dozCreateGj || f.gj === _dozCreateGj).map(f => f.odjel)
+  )].sort((a, b) => (parseInt(a)||0) - (parseInt(b)||0));
+  if (odjeli.length > 0) {
+    wrap.innerHTML = `<select class="pinput" id="doz-create-odjel" onchange="_dozCreateOnOdjelChange()">
+      <option value="">— odaberi odjel —</option>
+      ${odjeli.map(o => `<option value="${_escHtml(o)}">${_escHtml(o)}</option>`).join('')}
+    </select>`;
+  } else {
+    wrap.innerHTML = `<input class="pinput" id="doz-create-odjel" placeholder="npr. 78" oninput="_dozCreateOnOdjelChange()">`;
+  }
+  _dozCreateOdjel = '';
+  _dozCreateOnOdjelChange();
+}
+
+function _dozCreateOnOdjelChange() {
+  _dozCreateOdjel = (document.getElementById('doz-create-odjel')?.value || '').trim();
+  document.getElementById('doz-create-error').textContent = '';
+  const noPoly = document.getElementById('doz-create-no-poly');
+  const polyOk = document.getElementById('doz-create-poly-ok');
+
+  if (!_dozCreateOdjel) {
+    noPoly.style.display = 'none'; polyOk.style.display = 'none';
+    _dozCreateBoundary = null; _dozCreateAreaHa = null; return;
+  }
+
+  // Pokuša naći poligon iz učitanog GeoJSON-a (isključi Gaz_Klasa_ s '8000')
+  const odsjeci = _dozCreateFeatures.filter(f =>
+    (!_dozCreateGj || f.gj === _dozCreateGj) &&
+    f.odjel === _dozCreateOdjel &&
+    !f.gazKlasa.includes('8000')
+  );
+
+  if (odsjeci.length > 0) {
+    _dozCreateBoundary = _dozMergeOdsjeci(odsjeci);
+    _dozCreateAreaHa   = _dozCalcGeomAreaHa(_dozCreateBoundary);
+    polyOk.style.display = 'block';
+    document.getElementById('doz-create-poly-area').textContent = `${_dozCreateAreaHa.toFixed(1)} ha`;
+    noPoly.style.display = 'none';
+  } else if (_dozCreateBoundary) {
+    // Granica ucrtana ručno
+    polyOk.style.display = 'block'; noPoly.style.display = 'none';
+  } else {
+    noPoly.style.display = 'block'; polyOk.style.display = 'none';
+    _dozCreateBoundary = null; _dozCreateAreaHa = null;
   }
 }
 
-// ─── Add Member ────────────────────────────────────────────────────
-async function dozAddMember() {
-  const email = prompt('Email adresa inženjera (mora biti registrovan):')?.trim().toLowerCase();
-  if (!email) return;
+function _dozMergeOdsjeci(odsjeci) {
+  if (odsjeci.length === 1) return odsjeci[0].geometry;
+  const polys = [];
+  for (const f of odsjeci) {
+    const g = f.geometry;
+    if (g.type === 'Polygon')      polys.push(g.coordinates);
+    else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => polys.push(p));
+  }
+  return polys.length === 1
+    ? { type: 'Polygon', coordinates: polys[0] }
+    : { type: 'MultiPolygon', coordinates: polys };
+}
+
+function _dozCalcGeomAreaHa(geom) {
+  if (!geom) return 0;
+  const ringArea = ring => {
+    const R = 6371000;
+    const cos = Math.cos(ring[0][1] * Math.PI / 180);
+    let a = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const p1 = ring[i], p2 = ring[(i+1) % ring.length];
+      const x1 = p1[0]*Math.PI/180*R*cos, y1 = p1[1]*Math.PI/180*R;
+      const x2 = p2[0]*Math.PI/180*R*cos, y2 = p2[1]*Math.PI/180*R;
+      a += x1*y2 - x2*y1;
+    }
+    return Math.abs(a/2) / 10000;
+  };
+  if (geom.type === 'Polygon')      return ringArea(geom.coordinates[0]);
+  if (geom.type === 'MultiPolygon') return geom.coordinates.reduce((s,p) => s + ringArea(p[0]), 0);
+  return 0;
+}
+
+function dozStartNewBoundaryDraw() {
+  _dozNewOdjelDrawGj    = _dozCreateGj;
+  _dozNewOdjelDrawOdjel = _dozCreateOdjel;
+  if (!_dozNewOdjelDrawOdjel) { document.getElementById('doz-create-error').textContent = 'Unesi odjel prvo'; return; }
+  dozCloseCreateOdjel();
+  _dozDrawType = '__boundary__';
+  _dozDrawPts  = [];
+  document.getElementById('doz-draw-banner').style.display = 'flex';
+  document.getElementById('doz-draw-type-label').textContent = `📐 Granica — odjel ${_dozNewOdjelDrawOdjel}`;
+  document.getElementById('doz-draw-count').textContent = '0 tač.';
+  document.getElementById('map').style.cursor = 'crosshair';
+  if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+  switchTab('karta');
+  showToast('📐 Tapkaj tačke granice odjela · pritisni Završi kad gotovo');
+}
+
+async function dozSaveOdjel() {
+  const gj    = (document.getElementById('doz-create-gj')?.value    || '').trim().toUpperCase();
+  const odjel = (document.getElementById('doz-create-odjel')?.value || '').trim();
+  const err   = document.getElementById('doz-create-error');
+  if (!gj)    { err.textContent = 'Unesite GJ'; return; }
+  if (!odjel) { err.textContent = 'Unesite odjel'; return; }
+  if (!_dozCreateBoundary) { err.textContent = 'Učitajte GeoJSON ili ucrtajte granicu odjela'; return; }
+  err.textContent = '';
   try {
-    const { data: prof, error: pe } = await sb.from('profiles').select('id,full_name,email').eq('email', email).maybeSingle();
-    if (pe) throw pe;
-    if (!prof) { showToast('Korisnik nije pronađen. Mora biti registrovan u aplikaciji.'); return; }
+    const { error } = await sb.from('doz_projects').insert({
+      name: `${gj} · ${odjel}`,
+      description: null,
+      created_by: sbUser.id,
+      boundary_geojson: _dozCreateBoundary,
+      known_area_ha: _dozCreateAreaHa || null,
+      status: 'active'
+    });
+    if (error) throw error;
+    dozCloseCreateOdjel();
+    showToast('✅ Projekat kreiran!');
+    await dozLoadOdjeli();
+  } catch(e) { err.textContent = 'Greška: ' + e.message; }
+}
+
+// ─── Add Member (šumarija lista) ──────────────────────────────────
+async function dozAddMember() {
+  try {
+    const { data: me } = await sb.from('korisnici').select('sumarija').eq('id', sbUser.id).single();
+    if (!me?.sumarija) { showToast('Nisi registrovan u šumariji'); return; }
+    const { data: users } = await sb.from('korisnici')
+      .select('id,ime,prezime,boja').eq('sumarija', me.sumarija).neq('id', sbUser.id).order('prezime');
+    if (!users?.length) { showToast('Nema projektanata u šumariji'); return; }
+    const vecClanovi = new Set(_dozMembers.map(m => m.user_id));
+    const dostupni = users.filter(u => !vecClanovi.has(u.id));
+    if (!dostupni.length) { showToast('Svi projektanti su već dodani'); return; }
+    _dozShowMemberPicker(dostupni);
+  } catch(e) { showToast('Greška: ' + e.message); }
+}
+
+function _dozShowMemberPicker(users) {
+  const existing = document.getElementById('doz-member-picker');
+  if (existing) existing.remove();
+  const rows = users.map(u => {
+    const initials = ((u.ime||'')[0]||(u.prezime||'')[0]||'?').toUpperCase() +
+                     ((u.prezime||'')[1]||'').toUpperCase();
+    const color = u.boja || DOZ_ENG_COLORS[0];
+    return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #1e293b;">
+      <div style="width:30px;height:30px;border-radius:50%;background:${color}22;border:1px solid ${color};
+        display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${color};flex-shrink:0;">${_escHtml(initials)}</div>
+      <div style="flex:1;font-size:13px;color:#e2e8f0;">${_escHtml(u.ime||'')} ${_escHtml(u.prezime||'')}</div>
+      <button onclick="_dozPickMember('${u.id}')" style="background:#166534;border:1px solid #4ade80;color:#4ade80;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer;white-space:nowrap;">Dodaj</button>
+    </div>`;
+  }).join('');
+  const modal = document.createElement('div');
+  modal.id = 'doz-member-picker';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;z-index:2000;padding:0 0 0 0;';
+  modal.innerHTML = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px 14px 0 0;padding:16px;width:100%;max-width:400px;max-height:70vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:700;color:#e2e8f0;">Dodaj projektanta</div>
+      <button onclick="document.getElementById('doz-member-picker').remove()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;">✕</button>
+    </div>
+    <div style="font-size:11px;color:#475569;margin-bottom:10px;">Projektanti iz iste šumarije</div>
+    ${rows}
+  </div>`;
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
+
+async function _dozPickMember(userId) {
+  document.getElementById('doz-member-picker')?.remove();
+  try {
     const { error } = await sb.from('doz_project_members').insert({
-      project_id: _dozSelId, user_id: prof.id, role:'engineer',
+      project_id: _dozSelId, user_id: userId, role:'engineer',
       track_color: DOZ_ENG_COLORS[_dozMembers.length % DOZ_ENG_COLORS.length],
       order_index: _dozMembers.length, is_active: true
     });
-    if (error) { if (error.code === '23505') { showToast('Korisnik je već član'); return; } throw error; }
-    showToast(`✅ ${prof.full_name || email} dodan kao inženjer`);
+    if (error) { if (error.code==='23505') { showToast('Projektant je već član'); return; } throw error; }
+    showToast('✅ Projektant dodan');
     await dozLoadLayers(_dozSelId);
     dozRenderDetail();
   } catch(e) { showToast('Greška: ' + e.message); }
@@ -12541,20 +12779,37 @@ function dozBackToList() {
 <!-- ═══ DOZNAKA — CREATE ODJEL MODAL ═══ -->
 <div id="doz-create-modal" onclick="if(event.target===this)dozCloseCreateOdjel()">
   <div id="doz-create-box">
-    <h3>🌲 Novi Odjel</h3>
-    <span class="lbl">Naziv odjela *</span>
-    <input class="pinput" id="doz-create-name" placeholder="npr. Odjel 25 — Babića Kosa">
-    <span class="lbl">Opis (opcionalno)</span>
-    <input class="pinput" id="doz-create-desc" placeholder="npr. Sječa hrasta, ~12 ha">
-    <span class="lbl">Poznata površina u ha (opcionalno)</span>
-    <input class="pinput" type="number" step="0.1" id="doz-create-area" placeholder="12.5">
-    <span class="lbl">Granica odjela — GeoJSON Polygon (opcionalno)</span>
-    <textarea class="pinput" id="doz-create-geojson" rows="3"
-      style="resize:vertical;font-size:11px;font-family:monospace;"
-      placeholder='{"type":"Polygon","coordinates":[[[17.5,43.9],[17.51,43.9],[17.51,43.91],[17.5,43.9]]]}'></textarea>
+    <h3>🌲 Novi doznaka projekat</h3>
+
+    <!-- Opcioni GeoJSON loader -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;">
+      <button class="btn" style="background:#1e3a5f;border:1px solid #1e3a5f;color:#38bdf8;font-size:11px;padding:5px 10px;margin:0;flex-shrink:0;" onclick="document.getElementById('doz-gjson-file').click()">📂 Učitaj GeoJSON</button>
+      <span id="doz-gjson-status" style="font-size:11px;color:#475569;flex:1;">Nije učitan GeoJSON fajl</span>
+      <input type="file" id="doz-gjson-file" accept=".geojson,.json" style="display:none" onchange="dozCreateLoadGeojson(this.files[0]);this.value=''">
+    </div>
+
+    <!-- GJ -->
+    <span class="lbl">GJ *</span>
+    <div id="doz-create-gj-wrap"><input class="pinput" id="doz-create-gj" placeholder="npr. RISOVAC KRUPA" style="text-transform:uppercase" oninput="_dozCreateOnGjChange()"></div>
+
+    <!-- Odjel -->
+    <span class="lbl" style="margin-top:10px;display:block;">Odjel *</span>
+    <div id="doz-create-odjel-wrap"><input class="pinput" id="doz-create-odjel" placeholder="npr. 78" oninput="_dozCreateOnOdjelChange()"></div>
+
+    <!-- Upozorenje — nema poligona -->
+    <div id="doz-create-no-poly" style="display:none;margin-top:10px;background:#2d1a00;border:1px solid #92400e;border-radius:8px;padding:9px 11px;">
+      <div style="font-size:12px;color:#fbbf24;margin-bottom:7px;">⚠ Odabrani odjel nema granicu u GeoJSON fajlu.<br>Učitaj GeoJSON ili ucrtaj granicu ručno na mapi.</div>
+      <button class="btn" style="background:#1e3a5f;border:1px solid #38bdf8;color:#38bdf8;font-size:12px;padding:7px 12px;margin:0;" onclick="dozStartNewBoundaryDraw()">✏ Ucrtaj granicu na mapi</button>
+    </div>
+
+    <!-- Potvrda — granica OK -->
+    <div id="doz-create-poly-ok" style="display:none;margin-top:10px;background:#052e16;border:1px solid #166534;border-radius:8px;padding:8px 11px;font-size:12px;color:#4ade80;">
+      ✓ Granica ucrtana · <span id="doz-create-poly-area"></span>
+    </div>
+
     <div class="doz-create-error" id="doz-create-error"></div>
     <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="btn g" style="flex:1;" onclick="dozSaveOdjel()">✓ Kreiraj odjel</button>
+      <button class="btn g" id="doz-create-submit" style="flex:1;" onclick="dozSaveOdjel()">✓ Kreiraj projekat</button>
       <button class="btn" style="background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;flex:0 0 auto;" onclick="dozCloseCreateOdjel()">✕</button>
     </div>
   </div>

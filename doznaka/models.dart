@@ -386,3 +386,296 @@ class AreaMarking {
 
   String get displayLabel => label?.isNotEmpty == true ? label! : type.label;
 }
+
+// ============================================================
+// DoznakaProjekat — odabrani GJ+Odjel sa granicom
+// ============================================================
+class DoznakaProjekat {
+  final String id;
+  final String createdBy;
+  final String gj;
+  final String odjel;
+  final Map<String, dynamic> boundaryGeojson;
+  final double? totalAreaHa;
+  final DateTime createdAt;
+
+  const DoznakaProjekat({
+    required this.id,
+    required this.createdBy,
+    required this.gj,
+    required this.odjel,
+    required this.boundaryGeojson,
+    this.totalAreaHa,
+    required this.createdAt,
+  });
+
+  factory DoznakaProjekat.fromJson(Map<String, dynamic> j) => DoznakaProjekat(
+        id: j['id'],
+        createdBy: j['created_by'],
+        gj: j['gj'],
+        odjel: j['odjel'],
+        boundaryGeojson: j['boundary_geojson'] as Map<String, dynamic>,
+        totalAreaHa: (j['total_area_ha'] as num?)?.toDouble(),
+        createdAt: DateTime.parse(j['created_at']),
+      );
+
+  String get displayName => '$gj — Odjel $odjel';
+
+  List<LatLng> get boundaryPoints {
+    try {
+      final type = boundaryGeojson['type'] as String;
+      List<dynamic> rings;
+      if (type == 'Polygon') {
+        rings = [boundaryGeojson['coordinates'][0]];
+      } else if (type == 'MultiPolygon') {
+        // Uzmi sve prstene prvog poligona (aproksimacija za prikaz)
+        rings = [boundaryGeojson['coordinates'][0][0]];
+      } else {
+        return [];
+      }
+      return (rings[0] as List)
+          .cast<List<dynamic>>()
+          .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Svi prstenovi (za MultiPolygon prikaz na mapi)
+  List<List<LatLng>> get allRings {
+    try {
+      final type = boundaryGeojson['type'] as String;
+      if (type == 'Polygon') {
+        final ring = (boundaryGeojson['coordinates'][0] as List)
+            .cast<List<dynamic>>()
+            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .toList();
+        return [ring];
+      } else if (type == 'MultiPolygon') {
+        return (boundaryGeojson['coordinates'] as List).map((poly) {
+          return ((poly[0] as List).cast<List<dynamic>>())
+              .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+              .toList();
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+}
+
+// ============================================================
+// DoznakaTrasa — jedna GPS šetnja (pojas)
+// ============================================================
+class DoznakaTrasa {
+  final String id;
+  final String projekatId;
+  final String userId;
+  final List<LatLng> track;       // GPS trag (polyline)
+  final List<LatLng>? zona;       // Izračunata zona (buffer)
+  final double? areaHa;
+  final double? areaPct;
+  final bool isLastStrip;
+  final String status;            // 'active' | 'finished'
+  final DateTime startedAt;
+  final DateTime? finishedAt;
+  final double? centroidLat;      // Za sortiranje pojaseva
+
+  const DoznakaTrasa({
+    required this.id,
+    required this.projekatId,
+    required this.userId,
+    required this.track,
+    this.zona,
+    this.areaHa,
+    this.areaPct,
+    this.isLastStrip = false,
+    required this.status,
+    required this.startedAt,
+    this.finishedAt,
+    this.centroidLat,
+  });
+
+  factory DoznakaTrasa.fromJson(Map<String, dynamic> j) {
+    List<LatLng> track = [];
+    final tgj = j['track_geojson'] as Map<String, dynamic>?;
+    if (tgj != null) {
+      try {
+        track = (tgj['coordinates'] as List)
+            .cast<List<dynamic>>()
+            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .toList();
+      } catch (_) {}
+    }
+
+    List<LatLng>? zona;
+    final zgj = j['zona_geojson'] as Map<String, dynamic>?;
+    if (zgj != null) {
+      try {
+        zona = (zgj['coordinates'][0] as List)
+            .cast<List<dynamic>>()
+            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .toList();
+      } catch (_) {}
+    }
+
+    return DoznakaTrasa(
+      id: j['id'],
+      projekatId: j['projekat_id'],
+      userId: j['user_id'],
+      track: track,
+      zona: zona,
+      areaHa: (j['area_ha'] as num?)?.toDouble(),
+      areaPct: (j['area_pct'] as num?)?.toDouble(),
+      isLastStrip: j['is_last_strip'] ?? false,
+      status: j['status'] ?? 'active',
+      startedAt: DateTime.parse(j['started_at']),
+      finishedAt: j['finished_at'] != null ? DateTime.parse(j['finished_at']) : null,
+      centroidLat: (j['centroid_lat'] as num?)?.toDouble(),
+    );
+  }
+
+  bool get isFinished => status == 'finished';
+}
+
+// ============================================================
+// KorisnikProfile — red iz korisnici tabele (sa sumarija poljem)
+// ============================================================
+class KorisnikProfile {
+  final String id;
+  final String ime;
+  final String prezime;
+  final String sumarija;
+  final String boja;
+
+  const KorisnikProfile({
+    required this.id,
+    required this.ime,
+    required this.prezime,
+    required this.sumarija,
+    required this.boja,
+  });
+
+  factory KorisnikProfile.fromJson(Map<String, dynamic> j) => KorisnikProfile(
+        id: j['id'],
+        ime: j['ime'] ?? '',
+        prezime: j['prezime'] ?? '',
+        sumarija: j['sumarija'] ?? '',
+        boja: j['boja'] ?? '#3B8BD4',
+      );
+
+  String get punoIme => '$ime $prezime'.trim();
+
+  String get inicijali {
+    final i = ime.isNotEmpty ? ime[0] : '';
+    final p = prezime.isNotEmpty ? prezime[0] : '';
+    return '$i$p'.toUpperCase();
+  }
+
+  Color get color {
+    try {
+      return Color(int.parse('FF${boja.replaceAll('#', '')}', radix: 16));
+    } catch (_) {
+      return Colors.blue;
+    }
+  }
+}
+
+// ============================================================
+// DoznakaClan — projektant dodijeljen na doznaka projekat
+// ============================================================
+class DoznakaClan {
+  final String id;
+  final String projekatId;
+  final String userId;
+  final String boja;
+  final DateTime dodanAt;
+  final KorisnikProfile? profil;
+
+  const DoznakaClan({
+    required this.id,
+    required this.projekatId,
+    required this.userId,
+    required this.boja,
+    required this.dodanAt,
+    this.profil,
+  });
+
+  factory DoznakaClan.fromJson(Map<String, dynamic> j) => DoznakaClan(
+        id: j['id'],
+        projekatId: j['projekat_id'],
+        userId: j['user_id'],
+        boja: j['boja'] ?? '#3B8BD4',
+        dodanAt: DateTime.tryParse(j['dodan_at'] ?? '') ?? DateTime.now(),
+        profil: j['korisnici'] != null
+            ? KorisnikProfile.fromJson(j['korisnici'])
+            : null,
+      );
+
+  String get displayName => profil?.punoIme ?? 'Projektant';
+  String get inicijali => profil?.inicijali ?? '?';
+
+  Color get color {
+    try {
+      return Color(int.parse('FF${boja.replaceAll('#', '')}', radix: 16));
+    } catch (_) {
+      return Colors.teal;
+    }
+  }
+}
+
+// ============================================================
+// GeoJSON parser za odjel granice (za dropdown)
+// ============================================================
+class OdjelFeature {
+  final String gj;
+  final String odjel;
+  final String? odsjek;
+  final String? gazKlasa;
+  final Map<String, dynamic> geometry;
+
+  const OdjelFeature({
+    required this.gj,
+    required this.odjel,
+    this.odsjek,
+    this.gazKlasa,
+    required this.geometry,
+  });
+
+  bool get isExcluded {
+    if (gazKlasa == null) return false;
+    return gazKlasa!.contains('8000') || gazKlasa! == '8000';
+  }
+
+  static List<OdjelFeature> parseGeojson(Map<String, dynamic> geojson) {
+    final features = <OdjelFeature>[];
+    try {
+      final list = geojson['features'] as List;
+      for (final f in list) {
+        final props = f['properties'] as Map<String, dynamic>? ?? {};
+        final gj = (props['GJ'] ?? props['gj'] ?? '').toString();
+        final odjel = (props['ODJEL'] ?? props['odjel'] ?? '').toString();
+        final odsjek = (props['ODSJEK'] ?? props['odsjek'])?.toString();
+        final gazKlasa = (props['Gaz_Klasa_'] ?? props['GAZ_KLASA_'] ?? props['gaz_klasa'])?.toString();
+        if (gj.isEmpty || odjel.isEmpty) continue;
+        features.add(OdjelFeature(
+          gj: gj,
+          odjel: odjel,
+          odsjek: odsjek,
+          gazKlasa: gazKlasa,
+          geometry: f['geometry'] as Map<String, dynamic>,
+        ));
+      }
+    } catch (_) {}
+    return features;
+  }
+
+  // Grupišu se GJ → lista odjela
+  static Map<String, Set<String>> groupByGj(List<OdjelFeature> features) {
+    final map = <String, Set<String>>{};
+    for (final f in features) {
+      map.putIfAbsent(f.gj, () => {}).add(f.odjel);
+    }
+    return map;
+  }
+}
