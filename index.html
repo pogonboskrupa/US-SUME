@@ -7334,22 +7334,26 @@ function _renderVlakaRow(el, v, i, depth) {
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
       ${nasaviBtn}
-      <div class="seg-grp" style="margin-top:5px;">
-        <button class="seg-btn${isRecThis && !recPaused ? ' active' : ''}" onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn ? '' : 'setTimeout(togRec,30);'}" title="${recOn && isRecThis ? 'Snimanje aktivno' : 'Počni GPS snimanje'}" style="${isRecThis && !recPaused ? '' : 'color:#fb923c;'}">
-          <span class="seg-ico">${isRecThis && !recPaused ? '🔴' : isRecThis && recPaused ? '⏸' : '▶'}</span>
-          <span>${isRecThis && !recPaused ? 'Snima' : isRecThis && recPaused ? 'Pauza' : 'Snimi'}</span>
+      <div style="display:flex;gap:4px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
+        <button onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(232,69,60,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#e8453c;">${isRecThis&&!recPaused?'🔴':isRecThis&&recPaused?'⏸':'▶'}</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">${isRecThis&&!recPaused?'Snima':isRecThis&&recPaused?'Pauza':'Snimi'}</span>
         </button>
-        <button class="seg-btn" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti" style="color:#4a9eff;">
-          <span class="seg-ico">🗺</span><span>Karta</span>
+        <button onclick="event.stopPropagation();showVlakaOnMap(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(74,158,255,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#4a9eff;">🗺</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Karta</span>
         </button>
-        <button class="seg-btn" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina" style="color:#34d399;">
-          <span class="seg-ico">↕</span><span>Profil</span>
+        <button onclick="event.stopPropagation();showElevProfile(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;">↕</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
         </button>
-        <button class="seg-btn" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju" style="color:#f5a623;">
-          <span class="seg-ico">🔧</span><span>Uredi</span>
+        <button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;">🔧</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
         </button>
-        <button class="seg-btn" onclick="event.stopPropagation();dlV(${i})" title="Obriši" style="color:#64748b;">
-          <span class="seg-ico">✕</span><span>Briši</span>
+        <button onclick="event.stopPropagation();dlV(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(100,116,139,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#94a3b8;">✕</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Briši</span>
         </button>
       </div>
     </div>`;
