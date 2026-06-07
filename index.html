@@ -7802,34 +7802,42 @@ function ldK(file) {
       const col=KCOLS[kmlCI%KCOLS.length]; kmlCI++;
       const doc=new DOMParser().parseFromString(ev.target.result,'text/xml');
       const grp=pkml(doc,col); grp.addTo(map);
-      kmlLs.push({name:file.name,grp,col,dash:'',weight:2,vis:true}); rndKml();
+      kmlLs.push({name:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true});
+      _glCollapsed.delete('Lokalni / —');
+      rndGraniceModal();
       try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
     } catch(x){alert('Greška KML: '+x.message);}
   };
   r.readAsText(file);
 }
-function pkml(doc,col) {
-  const g=L.featureGroup();
-  doc.querySelectorAll('Placemark').forEach(pm=>{
-    const name=pm.querySelector('name')?.textContent?.trim()||'';
-    // Poligoni → crtamo samo vanjsku granicu kao liniju (bez fill-a, manji fajl)
-    pm.querySelectorAll('Polygon').forEach(pg=>{
-      const cs=pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
-      if(cs.length>2){
-        // Zatvorimo liniju (prva=zadnja tačka)
-        const closed=[...cs, cs[0]];
-        const l=L.polyline(closed,{color:col,weight:2,opacity:0.9});
-        if(name)l.bindTooltip(name,{sticky:true});
+function pkml(doc, col, op) {
+  op = op ?? 0.9;
+  const g = L.featureGroup();
+  doc.querySelectorAll('Placemark').forEach(pm => {
+    const name = pm.querySelector('name')?.textContent?.trim() || '';
+    pm.querySelectorAll('Polygon').forEach(pg => {
+      const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
+      if (cs.length > 2) {
+        const l = L.polyline([...cs, cs[0]], {color:col, weight:2, opacity:op});
+        if (name) l.bindTooltip(name, {sticky:true});
         l.addTo(g);
       }
     });
-    pm.querySelectorAll('LineString').forEach(ls=>{
-      const cs=pcs(ls.querySelector('coordinates')?.textContent);
-      if(cs.length>1){const l=L.polyline(cs,{color:col,weight:2,dashArray:'6,4'});if(name)l.bindTooltip(name,{sticky:true});l.addTo(g);}
+    pm.querySelectorAll('LineString').forEach(ls => {
+      const cs = pcs(ls.querySelector('coordinates')?.textContent);
+      if (cs.length > 1) {
+        const l = L.polyline(cs, {color:col, weight:2, dashArray:'6,4', opacity:op});
+        if (name) l.bindTooltip(name, {sticky:true});
+        l.addTo(g);
+      }
     });
-    pm.querySelectorAll('Point').forEach(pt=>{
-      const cs=pcs(pt.querySelector('coordinates')?.textContent);
-      if(cs.length>0){const m=L.circleMarker(cs[0],{radius:5,color:col,fillColor:col,fillOpacity:0.8});if(name)m.bindTooltip(name);m.addTo(g);}
+    pm.querySelectorAll('Point').forEach(pt => {
+      const cs = pcs(pt.querySelector('coordinates')?.textContent);
+      if (cs.length > 0) {
+        const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
+        if (name) m.bindTooltip(name);
+        m.addTo(g);
+      }
     });
   });
   return g;
@@ -7997,7 +8005,8 @@ function _kmlStyleToLeaflet(s) {
 function applyKmlStyle(i) {
   const k = kmlLs[i];
   if (!k) return;
-  const opts = { color: k.col, weight: k.weight || 2, opacity: k.opacity ?? 0.9 };
+  const op = k.opacity ?? 0.9;
+  const opts = { color: k.col, weight: k.weight || 2, opacity: op, fillColor: k.col, fillOpacity: op };
   if (k.dash) opts.dashArray = k.dash;
   else delete opts.dashArray;
   k.grp.eachLayer(l => { if (l.setStyle) l.setStyle(opts); });
@@ -8023,12 +8032,8 @@ function delK(i) {
 
 // ── Old rndKml (still used in panel — keep minimal) ───────────────────────────
 function rndKml() {
-  // Panel "kl" element still shows layers (compact)
   const el = document.getElementById('kl');
-  if (!el) return;
-  el.innerHTML = kmlLs.length === 0
-    ? '<div style="font-size:11px;color:#475569;padding:6px 0;">Nema učitanih slojeva.</div>'
-    : `<div style="font-size:11px;color:#64748b;padding:4px 0;">${kmlLs.length} sloj${kmlLs.length===1?'':'eva'} učitan${kmlLs.length===1?'':'o'}.</div>`;
+  if (el) el.innerHTML = '';
 }
 
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
