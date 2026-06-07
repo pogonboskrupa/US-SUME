@@ -682,6 +682,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Vlake hijerarhija */
 .vrow-krak { margin-left:14px; border-left:2px solid #1e3a5f; }
+.vrow-kolega { opacity:0.75; pointer-events:none; }
 .vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 .vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
@@ -2196,6 +2197,12 @@ select:focus { outline:none; border-color:#3b82f6; }
           Još nema vlaka.<br>
           Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.
         </div>
+      </div>
+
+      <!-- VLAKE KOLEGA -->
+      <div class="sec" id="kolege-vlake-sec" style="display:none;">
+        <div class="sec-t">👥 Vlake kolega (<span id="kolege-vc">0</span>)</div>
+        <div id="kolege-vl"></div>
       </div>
 
       <!-- SPAJANJE VLAKA -->
@@ -3815,7 +3822,7 @@ async function sbLoadKolegeVlake() {
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
     kolegeVlake.push(poly);
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime };
+    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime, pts: row.pts || [] };
   });
 }
 
@@ -3919,7 +3926,7 @@ async function sbLoadKolege() {
   }
 
   kolege = Object.values(kolegeMap);
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 
 // ─── ODJELI (dijeljeni popis po šumariji) ─────────────────────────────────────
@@ -7291,8 +7298,22 @@ function _krakStranaBadge(strana) {
 // === LIST ===
 function rndList() {
   const el=document.getElementById('vl'), nv=document.getElementById('nv');
-  document.getElementById('vc').textContent=vlake.length;
-  el.innerHTML=''; nv.style.display=vlake.length===0?'block':'none';
+  el.innerHTML='';
+
+  // Filtriraj po aktivnom projektu
+  const hasProj = !!_aktivniProjektId;
+  const rootVlake = vlake.filter(v => v.kr === 0 && (!hasProj || v.projektId === _aktivniProjektId));
+  document.getElementById('vc').textContent = rootVlake.length;
+
+  if (!hasProj) {
+    nv.style.display = 'block';
+    nv.innerHTML = 'Odaberite projekat za prikaz vlaka.';
+  } else if (rootVlake.length === 0) {
+    nv.style.display = 'block';
+    nv.innerHTML = 'Još nema vlaka za ovaj projekat.<br>Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.';
+  } else {
+    nv.style.display = 'none';
+  }
 
   // Rekurzivno renderuj: glavna vlaka → direktni kraci → njihovi pod-kraci...
   const rendered = new Set();
@@ -7305,7 +7326,7 @@ function rndList() {
       if (kParentNm === v.nm) renderWithChildren(k, ki, depth + 1);
     });
   }
-  vlake.forEach((v, i) => { if (v.kr === 0) renderWithChildren(v, i, 0); });
+  rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
   clearTimeout(rndList._projTimer);
@@ -9963,7 +9984,7 @@ function loadProj() {
     kolege    = JSON.parse(localStorage.getItem('tvlake_kolege')||'[]');
     dnevniLog = JSON.parse(localStorage.getItem('tvlake_log')||'[]');
   } catch(e) {}
-  rndKolege(); rndLog(); updProjStats();
+  rndKolege(); rndKolegeVlakeList(); rndLog(); updProjStats();
 }
 
 function saveProj() {
@@ -10096,7 +10117,7 @@ function updProjStats() {
   }
 
   updTerenStats();
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 
 // ── Terenske statistike ───────────────────────────────────────────────────────
@@ -10348,12 +10369,12 @@ function addKolega() {
   kolege.push({ ime, color: KPAL[kolege.length % KPAL.length] });
   el.value='';
   localStorage.setItem('tvlake_kolege', JSON.stringify(kolege));
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 function delKolega(i) {
   kolege.splice(i,1);
   localStorage.setItem('tvlake_kolege', JSON.stringify(kolege));
-  rndKolege();
+  rndKolege(); rndKolegeVlakeList();
 }
 function rndKolege() {
   const el = document.getElementById('kolege-list');
@@ -10378,6 +10399,37 @@ function rndKolege() {
 
   if (rows.length === 1) rows.push(`<div style="font-size:11px;color:#475569;padding:6px 0;">Nema kolega u ovom odjelu</div>`);
   el.innerHTML = rows.join('');
+}
+
+function rndKolegeVlakeList() {
+  const el  = document.getElementById('kolege-vl');
+  const sec = document.getElementById('kolege-vlake-sec');
+  const cnt = document.getElementById('kolege-vc');
+  if (!el || !sec) return;
+
+  const entries = Object.entries(kolegeVlakeMap);
+  if (!entries.length) { sec.style.display = 'none'; return; }
+
+  sec.style.display = 'block';
+  cnt.textContent   = entries.length;
+
+  // Grupiši po koleginoj imeni za vizualni razmak
+  const html = entries.map(([key, kv]) => {
+    const nm = key.split('::').slice(1).join('::');
+    const d  = calcL(kv.pts);
+    const isKrak = nm.includes('.');
+    return `<div class="vrow${isKrak ? ' vrow-krak' : ''} vrow-kolega">
+      <div class="vcard-stripe" style="background:${kv.color}"></div>
+      <div class="vcard-info">
+        <div class="vcard-top">
+          <span class="vcard-name">${nm}</span>
+          <span class="vcard-km">${fmtL(d)}</span>
+        </div>
+        <div class="vcard-sub">${kv.ime}</div>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = html;
 }
 
 // === DNEVNIK ===
@@ -10914,7 +10966,7 @@ function switchTab(tab) {
     _setMapUIVisible(tbVis, false);
     msrStop(true);
   } else if (tab==='projekat') {
-    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege();
+    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList();
     _setMapUIVisible(false, false);
     msrStop(true);
   } else if (tab==='doznaka') {
