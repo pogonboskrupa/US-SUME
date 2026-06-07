@@ -2408,7 +2408,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <div class="sec" style="border-top:1px solid #0f3460;padding-top:10px;">
           <div style="font-size:10px;color:#334155;line-height:1.6;text-align:center;">
-            GPS tragovi inženjera · Obilježavanje zona<br>Saradnja u realnom vremenu · Supabase sync
+            GPS tragovi projektanata · Obilježavanje zona<br>Saradnja u realnom vremenu · Supabase sync
           </div>
         </div>
       </div>
@@ -2422,7 +2422,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
 
         <div class="sec">
-          <div class="sec-t">📍 GPS Trag inženjera</div>
+          <div class="sec-t">📍 GPS Trag projektanta</div>
           <button id="doz-gps-btn" class="btn g" onclick="dozToggleGPS()" style="margin-bottom:0;">📍 Počni GPS snimanje</button>
           <div id="doz-gps-status" style="display:none;font-size:11px;color:#4ade80;margin-top:5px;text-align:center;">● Snimanje aktivno</div>
         </div>
@@ -2434,7 +2434,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
         <div class="sec">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div class="sec-t" style="margin:0;">👥 Inženjeri</div>
+            <div class="sec-t" style="margin:0;">👥 Projektanti</div>
             <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
           </div>
           <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
@@ -13004,7 +13004,7 @@ async function dozLoadLayers(projectId) {
   if (!projectId) return;
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
-      sb.from('doz_project_members').select('*, profiles(full_name,email)').eq('project_id', projectId).eq('is_active', true),
+      sb.from('doz_project_members').select('*, korisnici!user_id(ime,prezime,boja)').eq('project_id', projectId).eq('is_active', true),
       sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true).order('created_at', { ascending: false }),
       sb.from('doz_track_points').select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId).order('recorded_at', { ascending: true })
     ]);
@@ -13067,13 +13067,17 @@ function dozRenderDetail() {
   // Members
   const ml = document.getElementById('doz-members-list');
   ml.innerHTML = _dozMembers.length
-    ? _dozMembers.map((m, i) => `
-        <div class="doz-member-row">
-          <div class="doz-member-dot" style="background:${DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length]};"></div>
-          <div class="doz-member-name">${m.profiles?.full_name || 'Inženjer ' + (i+1)}
+    ? _dozMembers.map((m, i) => {
+        const k = m.korisnici;
+        const name = k ? (`${k.ime||''} ${k.prezime||''}`.trim() || `Projektant ${i+1}`) : `Projektant ${i+1}`;
+        const color = k?.boja || DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length];
+        return `<div class="doz-member-row">
+          <div class="doz-member-dot" style="background:${color};"></div>
+          <div class="doz-member-name">${_escHtml(name)}
             ${m.role === 'manager' ? '<span style="color:#fbbf24;font-size:10px;"> ★</span>' : ''}
           </div>
-        </div>`).join('')
+        </div>`;
+      }).join('')
     : '<div class="doz-empty">Nema članova</div>';
 
   // Markings summary
@@ -13415,7 +13419,7 @@ function _dozCreateOnOdjelChange() {
 
   if (!_dozCreateOdjel) {
     noPoly.style.display = 'none'; polyOk.style.display = 'none';
-    _dozCreateBoundary = null; _dozCreateAreaHa = null; return;
+    return;
   }
 
   // Pokuša naći poligon iz učitanog GeoJSON-a (isključi Gaz_Klasa_ s '8000')
@@ -13436,7 +13440,6 @@ function _dozCreateOnOdjelChange() {
     polyOk.style.display = 'block'; noPoly.style.display = 'none';
   } else {
     noPoly.style.display = 'block'; polyOk.style.display = 'none';
-    _dozCreateBoundary = null; _dozCreateAreaHa = null;
   }
 }
 
