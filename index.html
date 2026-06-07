@@ -13863,6 +13863,10 @@ function toggleHelpSec(hdr) {
             <div class="help-icon">👁</div>
             <div class="help-txt"><b>Vidljivost</b><span>Svaka vlaka ima gumb za uključivanje/isključivanje prikaza na mapi bez brisanja.</span></div>
           </div>
+          <div class="help-row">
+            <div class="help-icon">👥</div>
+            <div class="help-txt"><b>Timski rad — više projektanata</b><span>Više projektanata može raditi na istom projektu istovremeno. Svaki vidi vlake i trase svih ostalih u realnom vremenu — vlaka jednog projektanta odmah postaje vidljiva drugom. Boja traga razlikuje svakog projektanta.</span></div>
+          </div>
         </div>
       </div>
 
@@ -13964,8 +13968,8 @@ function toggleHelpSec(hdr) {
           <div class="help-row">
             <div class="help-icon">🌲</div>
             <div class="help-txt">
-              <b>Doznaka — označavanje stabala i zona</b>
-              <span>Omogućuje kreiranje projekata doznake po odjelima, ucrtavanje granica odjela, GPS praćenje projektanata na terenu i označavanje posebnih zona (zaštitne, sjemenjaci, prioriteti...).</span>
+              <b>Doznaka — timsko označavanje stabala po pojasima</b>
+              <span>Alat za organizaciju doznake (odabira stabala za sječu) po odjelima. Više projektanata može raditi istovremeno — svaki hoda svojim pojasom kroz odjel dok snima GPS trag koji ostaje vidljiv ostalima. Uz to se obilježavaju posebne zone (zaštitne, sjemenjaci, prioriteti...).</span>
             </div>
           </div>
         </div>
@@ -14054,26 +14058,40 @@ function toggleHelpSec(hdr) {
 
       <div class="help-sec">
         <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>📍 GPS Trag projektanta
+          <span class="h-arrow">▶</span>📍 GPS Trag — snimanje pojasa doznake
         </div>
         <div class="help-sec-body">
+          <div class="help-diagram" style="border-color:#38bdf8;">
+            <b style="color:#38bdf8;">Šta je pojas doznake?</b><br>
+            Projektant hoda kroz šumu u ravnim prugama (pojasima), s lijeve i desne strane odabira (doznauje) stabla za sječu. GPS trag bilježi svaki pojas — vidljivo je koji dio odjela je pokriven i koji nije. Kad svi pojasi zajedno pokriju cijeli odjel, doznaka je završena.
+          </div>
           <ul class="help-steps">
             <li data-n="1.">Otvorite odjel iz liste</li>
-            <li data-n="2.">Tapnite <b>📍 Počni GPS snimanje</b></li>
-            <li data-n="3.">Hodajte terenom — app snima tačke svakih nekoliko sekundi</li>
-            <li data-n="4.">GPS trag se prikazuje kao linija na mapi u boji dodijeljenoj projektantu</li>
-            <li data-n="5.">Tapnite <b>⏹ Zaustavi GPS</b> kad završite</li>
+            <li data-n="2.">Tapnite <b>📍 Počni GPS snimanje</b> — uđite u šumu na početak prvog pojasa</li>
+            <li data-n="3.">Hodajte ravno kroz odjel doznaujući stabla — app automatski snima GPS tačke</li>
+            <li data-n="4.">Na kraju pojasa tapnite <b>⏹ Zaustavi GPS</b>, pređite na sljedeći pojas i ponovo pokrenite</li>
+            <li data-n="5.">Svaki pojas se na mapi prikazuje kao obojana linija u vašoj boji</li>
           </ul>
-          <div class="help-row" style="margin-top:6px;">
-            <div class="help-icon" style="font-size:10px;">●●●</div>
-            <div class="help-txt"><b>Više projektanata</b><span>Svaki projektant ima svoju boju traga. Tragovi svih projektanata vidljivi su istovremeno na mapi.</span></div>
+          <div class="help-row" style="margin-top:8px;">
+            <div class="help-icon" style="font-size:16px;">👥</div>
+            <div class="help-txt">
+              <b>Timski rad po pojasima</b>
+              <span>Više projektanata može raditi istovremeno — svaki hoda drugačijim pojasima. Tragovi svih projektanata vidljivi su istovremeno na mapi, u različitim bojama. Na taj način voditelj odmah vidi koji dijelovi odjela su pokriveni a koji nedostaju.</span>
+            </div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">🗺</div>
+            <div class="help-txt">
+              <b>Pregled pokrivenosti</b>
+              <span>Mapa prikazuje sve snimljene pojaseve zajedno. Bijela (nepokrijena) područja između linija ukazuju na dijelove odjela koji još nisu doznačeni.</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="help-sec">
         <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>👥 Projektanti (tim)
+          <span class="h-arrow">▶</span>👥 Projektanti — timski rad
         </div>
         <div class="help-sec-body">
           <div class="help-row">
@@ -14081,8 +14099,12 @@ function toggleHelpSec(hdr) {
             <div class="help-txt"><b>Dodaj projektanta</b><span>Tapnite <b>+ Dodaj</b> pored naslova "Projektanti". Prikazuje se lista kolega iz iste šumarije koji još nisu dodani. Tapnite <b>Dodaj</b> pored imena.</span></div>
           </div>
           <div class="help-row">
+            <div class="help-icon">👁</div>
+            <div class="help-txt"><b>Sve vide sve</b><span>Svaki dodani projektant vidi GPS tragove svih ostalih na mapi. To omogućuje koordinaciju — ko je gdje i koji pojasevi su pokriveni, bez telefonskog dogovaranja.</span></div>
+          </div>
+          <div class="help-row">
             <div class="help-icon">🔑</div>
-            <div class="help-txt"><b>Ko može dodavati?</b><span>Samo kreator odjela (vlasnik projekta) može dodavati i uklanjati projektante.</span></div>
+            <div class="help-txt"><b>Ko može dodavati?</b><span>Samo kreator odjela (vlasnik projekta) može dodavati i uklanjati projektante iz tima.</span></div>
           </div>
         </div>
       </div>
@@ -14120,6 +14142,10 @@ function toggleHelpSec(hdr) {
           <div class="help-row">
             <div class="help-icon">🔵</div>
             <div class="help-txt"><b>GPS pozicija</b><span>Vaša trenutna lokacija (plavi krug) — prikazuje se kad je GPS uključen iz menija.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:13px;color:#fbbf24;">━━━</div>
+            <div class="help-txt"><b>GPS trag pojasa (doznaka)</b><span>Obojana linija na mapi koja prikazuje put projektanta kroz odjel tokom snimanja pojasa doznake. Svaki projektant ima drugu boju, pa se odmah vidi ko je pokrio koji dio odjela.</span></div>
           </div>
         </div>
       </div>
