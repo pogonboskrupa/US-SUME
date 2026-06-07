@@ -25,29 +25,251 @@
 <script src="https://cdn.jsdelivr.net/npm/shapefile@0.6.6/dist/shapefile.min.js"></script>
 <style>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
 /* === AUTH SCREEN === */
 #auth-screen {
   display:flex; position:fixed; inset:0; z-index:99999;
-  background:#0f172a; align-items:center; justify-content:center;
+  background:#080f0a; align-items:center; justify-content:center;
+  overflow:hidden; font-family:'DM Sans',Arial,sans-serif;
 }
-.auth-box {
-  background:#16213e; border:1px solid #0f3460; border-radius:14px;
-  padding:30px 28px; width:340px; max-width:95vw;
+/* Background layers */
+.auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
+.auth-bg-grid {
+  position:absolute; inset:-50%; width:200%; height:200%;
+  background-image:
+    linear-gradient(rgba(58,158,80,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(58,158,80,0.04) 1px,transparent 1px);
+  background-size:40px 40px;
+  animation:authGridDrift 60s linear infinite;
 }
-.auth-logo { text-align:center; margin-bottom:22px; }
-.auth-logo-icon { font-size:36px; }
-.auth-logo-title { font-size:21px; font-weight:bold; color:#4ade80; margin-top:6px; }
-.auth-subtitle { font-size:13px; color:#64748b; text-align:center; margin-bottom:18px; }
+@keyframes authGridDrift { 0%{transform:translate(0,0)} 100%{transform:translate(40px,40px)} }
+.auth-bg-glow {
+  position:absolute; border-radius:50%; filter:blur(80px);
+}
+.auth-bg-glow-1 {
+  width:500px; height:500px;
+  background:radial-gradient(circle,#3a9e50,transparent 70%);
+  top:-150px; left:-100px; opacity:0.10;
+  animation:authGlowPulse 8s ease-in-out infinite alternate;
+}
+.auth-bg-glow-2 {
+  width:400px; height:400px;
+  background:radial-gradient(circle,#1a5c2a,transparent 70%);
+  bottom:-100px; right:-80px; opacity:0.10;
+  animation:authGlowPulse 10s ease-in-out infinite alternate-reverse;
+}
+@keyframes authGlowPulse {
+  from{opacity:0.06;transform:scale(0.95)} to{opacity:0.16;transform:scale(1.05)}
+}
+/* Card wrapper */
+.auth-card-wrap {
+  position:relative; z-index:1;
+  width:100%; max-width:400px; padding:16px;
+  animation:authCardIn 0.8s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes authCardIn {
+  from{opacity:0;transform:translateY(28px) scale(0.97)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+/* Status bar */
+.auth-sbar {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:0 4px 10px;
+  animation:authFadeIn 0.6s 0.4s both;
+}
+@keyframes authFadeIn { from{opacity:0} to{opacity:1} }
+.auth-sbadge {
+  display:flex; align-items:center; gap:6px;
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:rgba(180,205,183,0.45); letter-spacing:0.08em;
+}
+.auth-sdot {
+  width:6px; height:6px; border-radius:50%;
+  background:#3a9e50; box-shadow:0 0 8px #3a9e50;
+  animation:authDotBlink 2s ease-in-out infinite;
+}
+@keyframes authDotBlink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+.auth-ver {
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:rgba(180,205,183,0.35); letter-spacing:0.06em;
+}
+/* Card */
+.auth-card {
+  background:#0d1a0f;
+  border:1px solid rgba(74,163,90,0.18);
+  border-radius:20px; padding:32px 28px 24px;
+  position:relative; overflow:hidden;
+  box-shadow:
+    0 0 0 1px rgba(58,158,80,0.06),
+    0 24px 80px rgba(0,0,0,0.65),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.auth-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:linear-gradient(90deg,transparent 0%,#3a9e50 30%,#4eca65 50%,#3a9e50 70%,transparent 100%);
+  opacity:0.8;
+}
+.auth-card::after {
+  content:''; position:absolute; top:0; right:0;
+  width:120px; height:120px;
+  background:radial-gradient(circle at top right,rgba(58,158,80,0.08),transparent 70%);
+  border-radius:0 20px 0 0;
+}
+/* Header */
+.auth-hdr { text-align:center; margin-bottom:26px; animation:authFadeIn 0.6s 0.2s both; }
+.auth-logo-box {
+  width:68px; height:68px; margin:0 auto 16px;
+  background:linear-gradient(135deg,#1a3d20,#0d2012);
+  border:1.5px solid rgba(74,163,90,0.4);
+  border-radius:16px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px;
+  box-shadow:0 0 24px rgba(58,158,80,0.2),inset 0 1px 0 rgba(255,255,255,0.06);
+  position:relative; overflow:hidden;
+}
+.auth-logo-box::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(135deg,rgba(58,158,80,0.1),transparent);
+}
+.auth-logo-corner {
+  position:absolute; bottom:-1px; right:-1px;
+  width:16px; height:16px; background:#3a9e50;
+  clip-path:polygon(100% 0,100% 100%,0 100%);
+  border-radius:0 0 16px 0;
+}
+.auth-org-name {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px; letter-spacing:0.12em;
+  color:#e8f0e9; line-height:1; margin-bottom:14px;
+}
+.auth-divline {
+  display:flex; align-items:center; gap:10px;
+}
+.auth-divline::before,.auth-divline::after {
+  content:''; flex:1; height:1px; background:rgba(74,163,90,0.18);
+}
+.auth-divlabel {
+  font-family:'JetBrains Mono',monospace; font-size:9px;
+  letter-spacing:0.2em; color:rgba(180,205,183,0.45); text-transform:uppercase;
+}
+/* Form fields */
+.auth-form-body { animation:authFadeIn 0.6s 0.35s both; }
+.auth-field { margin-bottom:12px; }
+.auth-field-lbl {
+  display:flex; align-items:baseline; gap:6px;
+  margin-bottom:5px; font-size:11px; font-weight:600;
+  letter-spacing:0.1em; text-transform:uppercase;
+  color:rgba(180,205,183,0.7);
+}
+.auth-field-hint { font-size:10px; font-weight:400; color:rgba(180,205,183,0.4); text-transform:none; letter-spacing:0; }
+.auth-input-wrap { position:relative; }
+.auth-input-icon {
+  position:absolute; left:13px; top:50%; transform:translateY(-50%);
+  font-size:13px; opacity:0.35; pointer-events:none;
+  transition:opacity 0.2s;
+}
+#auth-screen input:not([type=checkbox]):not([type=radio]) {
+  width:100%; background:#111c13;
+  border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
+  padding:12px 12px 12px 38px;
+  color:#e8f0e9; font-family:'DM Sans',Arial,sans-serif;
+  font-size:14px; outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s,background 0.2s;
+  -webkit-appearance:none;
+}
+#auth-screen input:not([type=checkbox]):not([type=radio])::placeholder {
+  color:rgba(180,205,183,0.22); font-size:13px;
+}
+#auth-screen input:not([type=checkbox]):not([type=radio]):focus {
+  border-color:rgba(74,163,90,0.7); background:#0f1f11;
+  box-shadow:0 0 0 3px rgba(74,163,90,0.12);
+}
+#auth-screen input:focus + .auth-input-icon,
+.auth-input-wrap:focus-within .auth-input-icon { opacity:0.65; }
+.auth-pin-input {
+  font-family:'JetBrains Mono',monospace !important;
+  letter-spacing:0.3em !important; font-size:15px !important;
+}
+#auth-screen select {
+  width:100%; background:#111c13;
+  border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
+  padding:12px 12px; color:#e8f0e9;
+  font-family:'DM Sans',Arial,sans-serif; font-size:14px; outline:none;
+}
+/* Remember me */
+.auth-remember-row {
+  display:flex; align-items:center; gap:10px;
+  margin:14px 0 18px;
+}
+.auth-cbx {
+  width:18px; height:18px; border:1.5px solid rgba(74,163,90,0.3);
+  border-radius:5px; background:#111c13; cursor:pointer; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  transition:border-color 0.2s,background 0.2s;
+  font-size:11px; font-weight:700; color:#fff;
+}
+.auth-cbx.checked { background:#3a9e50; border-color:#3a9e50; }
+.auth-cbx-lbl {
+  font-size:13px; color:rgba(180,205,183,0.7); cursor:pointer; user-select:none;
+}
+/* Primary button */
+.auth-btn-primary {
+  width:100%; padding:14px;
+  background:linear-gradient(135deg,#2e8b42,#3a9e50 50%,#3aad52);
+  border:none; border-radius:12px; color:#fff;
+  font-family:'Bebas Neue',sans-serif; font-size:18px;
+  letter-spacing:0.18em; cursor:pointer;
+  position:relative; overflow:hidden;
+  transition:transform 0.15s,box-shadow 0.15s;
+  box-shadow:0 4px 24px rgba(58,158,80,0.35),inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.auth-btn-primary::before {
+  content:''; position:absolute; top:0; left:-100%;
+  width:100%; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);
+  transition:left 0.5s ease;
+}
+.auth-btn-primary:hover::before { left:100%; }
+.auth-btn-primary:hover { transform:translateY(-1px); box-shadow:0 8px 32px rgba(58,158,80,0.45),inset 0 1px 0 rgba(255,255,255,0.15); }
+.auth-btn-primary:active { transform:translateY(1px); }
+.auth-btn-primary-inner { position:relative; z-index:1; display:flex; align-items:center; justify-content:center; gap:8px; }
+/* Or separator */
+.auth-or-sep {
+  display:flex; align-items:center; gap:12px; margin:14px 0;
+}
+.auth-or-sep::before,.auth-or-sep::after { content:''; flex:1; height:1px; background:rgba(74,163,90,0.18); }
+.auth-or-txt { font-size:10px; color:rgba(180,205,183,0.35); letter-spacing:0.15em; font-family:'JetBrains Mono',monospace; }
+/* Secondary button */
+.auth-btn-secondary {
+  width:100%; padding:12px;
+  background:transparent; border:1.5px solid rgba(74,163,90,0.18);
+  border-radius:12px; color:rgba(180,205,183,0.65);
+  font-family:'DM Sans',Arial,sans-serif; font-size:13px;
+  font-weight:500; cursor:pointer;
+  transition:border-color 0.2s,color 0.2s,background 0.2s;
+}
+.auth-btn-secondary:hover { border-color:rgba(74,163,90,0.5); color:#4eca65; background:rgba(58,158,80,0.05); }
+/* Error */
 .auth-err {
   color:#f87171; font-size:12px; text-align:center;
   margin-top:10px; display:none; background:rgba(220,38,38,0.1);
   border:1px solid rgba(220,38,38,0.3); border-radius:6px; padding:7px 10px;
 }
-.auth-divider { text-align:center; color:#374151; font-size:12px; margin:12px 0; }
-.auth-user-row {
-  display:flex; align-items:center; gap:8px;
-  padding:8px 0; border-bottom:1px solid #1e293b;
+/* Footer */
+.auth-card-foot {
+  margin-top:18px; display:flex; justify-content:center; gap:20px;
+  animation:authFadeIn 0.6s 0.6s both;
 }
+.auth-foot-lnk {
+  font-family:'JetBrains Mono',monospace; font-size:9px;
+  color:rgba(180,205,183,0.25); letter-spacing:0.1em; text-transform:uppercase;
+}
+/* Legacy — keep for JS refs */
+.auth-user-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #1e293b; }
 .auth-user-info { flex:1; }
 .auth-user-name { font-size:13px; font-weight:bold; color:#e2e8f0; }
 .auth-user-meta { font-size:11px; color:#64748b; margin-top:1px; }
@@ -1693,58 +1915,130 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <!-- ===== AUTH SCREEN ===== -->
 <div id="auth-screen">
-  <div class="auth-box">
-    <div class="auth-logo">
-      <img src="forwarder.svg" alt="Forwarder" style="width:110px;height:auto;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.5));">
-      <div class="auth-logo-title">UNSKO SANSKE ŠUME</div>
+  <!-- Background -->
+  <div class="auth-bg">
+    <div class="auth-bg-grid"></div>
+    <div class="auth-bg-glow auth-bg-glow-1"></div>
+    <div class="auth-bg-glow auth-bg-glow-2"></div>
+  </div>
+
+  <div class="auth-card-wrap">
+    <!-- Status bar -->
+    <div class="auth-sbar">
+      <div class="auth-sbadge"><div class="auth-sdot"></div>SISTEM AKTIVAN</div>
+      <div class="auth-ver">v2.4</div>
     </div>
 
-    <!-- LOGIN FORMA -->
-    <div id="auth-login-form">
-      <div class="auth-subtitle">Prijava</div>
-      <span class="lbl">Ime</span>
-      <input class="pinput" id="auth-ime" placeholder="Vaše ime" autocomplete="given-name">
-      <span class="lbl">Prezime <span style="color:#475569;font-weight:normal;">(za org. naloge ostavite prazno)</span></span>
-      <input class="pinput" id="auth-prezime" placeholder="Vaše prezime" autocomplete="family-name">
-      <span class="lbl">PIN</span>
-      <input class="pinput" id="auth-pin" type="password" inputmode="numeric" placeholder="PIN (4–8 cifara)" maxlength="8"
-             onkeydown="if(event.key==='Enter')doLogin()">
-      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-size:13px;color:#94a3b8;">
-        <input type="checkbox" id="auth-zapamti" style="width:16px;height:16px;accent-color:#4ade80;cursor:pointer;">
-        Zapamti me
-      </label>
-      <button class="btn g" style="margin-top:10px;" onclick="doLogin()">→ PRIJAVA</button>
-      <div class="auth-divider">ili</div>
-      <button class="btn gr" onclick="authShowReg()">Registracija novog korisnika</button>
-      <div class="auth-err" id="auth-err"></div>
-    </div>
+    <div class="auth-card">
+      <!-- Header -->
+      <div class="auth-hdr">
+        <div class="auth-logo-box">
+          🌲
+          <div class="auth-logo-corner"></div>
+        </div>
+        <div class="auth-org-name">Unsko-Sanske Šume</div>
+        <div class="auth-divline">
+          <span class="auth-divlabel">Prijava u sistem</span>
+        </div>
+      </div>
 
-    <!-- REGISTRACIJA FORMA -->
-    <div id="auth-reg-form" style="display:none;">
-      <div class="auth-subtitle">Registracija</div>
-      <span class="lbl">Ime *</span>
-      <input class="pinput" id="reg-ime" placeholder="Vaše ime">
-      <span class="lbl">Prezime *</span>
-      <input class="pinput" id="reg-prezime" placeholder="Vaše prezime">
-      <span class="lbl">Šumarija / Gazdinstvo *</span>
-      <select class="pinput" id="reg-sumarija">
-        <option value="">— Odaberi šumariju —</option>
-        <option>ŠPD US ŠUME</option>
-        <option>ŠUMARIJA BOS.KRUPA</option>
-        <option>ŠUMARIJA BOS.PETROVAC</option>
-        <option>ŠUMARIJA SANSKI MOST</option>
-        <option>ŠUMARIJA BIHAĆ</option>
-        <option>ŠUMARIJA CAZIN</option>
-        <option>ŠUMARIJA KLJUČ</option>
-      </select>
-      <span class="lbl">PIN * (4–8 cifara)</span>
-      <input class="pinput" id="reg-pin" type="password" inputmode="numeric" placeholder="Odaberite PIN" maxlength="8">
-      <span class="lbl">Potvrda PIN-a *</span>
-      <input class="pinput" id="reg-pin2" type="password" inputmode="numeric" placeholder="Ponovite PIN" maxlength="8"
-             onkeydown="if(event.key==='Enter')doRegister()">
-      <button class="btn g" style="margin-top:14px;" onclick="doRegister()">✓ REGISTRUJ SE</button>
-      <button class="btn gr" style="margin-top:6px;" onclick="authShowLogin()">← Nazad na prijavu</button>
-      <div class="auth-err" id="reg-err"></div>
+      <!-- LOGIN FORMA -->
+      <div id="auth-login-form" class="auth-form-body">
+        <div class="auth-field">
+          <div class="auth-field-lbl">Ime</div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">👤</span>
+            <input id="auth-ime" placeholder="Vaše ime" autocomplete="given-name">
+          </div>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">Prezime <span class="auth-field-hint">— prazno za org. naloge</span></div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">📋</span>
+            <input id="auth-prezime" placeholder="Vaše prezime" autocomplete="family-name">
+          </div>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">PIN</div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">🔐</span>
+            <input id="auth-pin" type="password" inputmode="numeric"
+              class="auth-pin-input" placeholder="• • • • • •" maxlength="8"
+              autocomplete="current-password"
+              onkeydown="if(event.key==='Enter')doLogin()">
+          </div>
+        </div>
+
+        <div class="auth-remember-row">
+          <div class="auth-cbx" id="auth-cbx-el" onclick="this.classList.toggle('checked');document.getElementById('auth-zapamti').checked=this.classList.contains('checked')"></div>
+          <input type="checkbox" id="auth-zapamti" style="display:none;">
+          <span class="auth-cbx-lbl" onclick="document.getElementById('auth-cbx-el').click()">Zapamti me na ovom uređaju</span>
+        </div>
+
+        <button class="auth-btn-primary" onclick="doLogin()">
+          <div class="auth-btn-primary-inner">Prijava <span>→</span></div>
+        </button>
+        <div class="auth-or-sep"><span class="auth-or-txt">ILI</span></div>
+        <button class="auth-btn-secondary" onclick="authShowReg()">Registracija novog korisnika</button>
+        <div class="auth-err" id="auth-err"></div>
+      </div>
+
+      <!-- REGISTRACIJA FORMA -->
+      <div id="auth-reg-form" class="auth-form-body" style="display:none;">
+        <div class="auth-field">
+          <div class="auth-field-lbl">Ime *</div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">👤</span>
+            <input id="reg-ime" placeholder="Vaše ime">
+          </div>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">Prezime *</div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">📋</span>
+            <input id="reg-prezime" placeholder="Vaše prezime">
+          </div>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">Šumarija / Gazdinstvo *</div>
+          <select id="reg-sumarija">
+            <option value="">— Odaberi šumariju —</option>
+            <option>ŠPD US ŠUME</option>
+            <option>ŠUMARIJA BOS.KRUPA</option>
+            <option>ŠUMARIJA BOS.PETROVAC</option>
+            <option>ŠUMARIJA SANSKI MOST</option>
+            <option>ŠUMARIJA BIHAĆ</option>
+            <option>ŠUMARIJA CAZIN</option>
+            <option>ŠUMARIJA KLJUČ</option>
+          </select>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">PIN * <span class="auth-field-hint">(4–8 cifara)</span></div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">🔐</span>
+            <input id="reg-pin" type="password" inputmode="numeric"
+              class="auth-pin-input" placeholder="Odaberite PIN" maxlength="8">
+          </div>
+        </div>
+        <div class="auth-field">
+          <div class="auth-field-lbl">Potvrda PIN-a *</div>
+          <div class="auth-input-wrap">
+            <span class="auth-input-icon">🔐</span>
+            <input id="reg-pin2" type="password" inputmode="numeric"
+              class="auth-pin-input" placeholder="Ponovite PIN" maxlength="8"
+              onkeydown="if(event.key==='Enter')doRegister()">
+          </div>
+        </div>
+        <button class="auth-btn-primary" style="margin-top:6px;" onclick="doRegister()">
+          <div class="auth-btn-primary-inner">✓ Registruj se</div>
+        </button>
+        <button class="auth-btn-secondary" style="margin-top:8px;" onclick="authShowLogin()">← Nazad na prijavu</button>
+        <div class="auth-err" id="reg-err"></div>
+      </div>
+
+      <div class="auth-card-foot">
+        <span class="auth-foot-lnk">ŠPD © 2026</span>
+      </div>
     </div>
   </div>
 </div>
@@ -2635,6 +2929,8 @@ function authShowLogin() {
     document.getElementById('auth-prezime').value = saved.prezime || '';
     document.getElementById('auth-pin').value = saved.pin || '';
     document.getElementById('auth-zapamti').checked = true;
+    const cbxEl = document.getElementById('auth-cbx-el');
+    if (cbxEl) cbxEl.classList.add('checked');
   }
 }
 
