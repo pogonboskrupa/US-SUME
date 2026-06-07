@@ -1560,6 +1560,35 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .oz-vis-btn.on { color: #e2e8f0; }
 .oz-empty { padding: 14px 16px; font-size: 12px; color: #475569; text-align: center; }
+/* KML inline editor */
+.oz-expand-arrow { font-size: 16px; color: #475569; flex-shrink: 0; transition: transform .15s; padding: 0 2px; }
+.oz-expand-arrow.open { transform: rotate(90deg); color: #60a5fa; }
+.oz-kml-editor {
+  background: #111f38; padding: 12px 16px 14px;
+  border-bottom: 2px solid #1e3a5f;
+}
+.oz-ed-field { margin-bottom: 10px; }
+.oz-ed-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+.oz-ed-input {
+  width: 100%; background: #1e293b; border: 1px solid #334155;
+  color: #e2e8f0; border-radius: 6px; padding: 6px 10px;
+  font-size: 13px; box-sizing: border-box;
+}
+.oz-ed-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.oz-ed-dot {
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
+  border: 2px solid transparent; transition: transform .1s;
+}
+.oz-ed-dot:active { transform: scale(1.2); }
+.oz-ed-dot.act { border-color: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.6); }
+.oz-ed-color-pick { width: 28px; height: 24px; border: 1px solid #334155; border-radius: 5px; cursor: pointer; padding: 0; background: none; }
+.oz-ed-range { width: 100%; accent-color: #3b82f6; cursor: pointer; }
+.oz-ed-btns { display: flex; gap: 8px; margin-top: 6px; }
+.oz-ed-btn {
+  flex: 1; padding: 8px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
+}
+.oz-ed-btn.danger { color: #f87171; border-color: #7f1d1d; background: #1c0f0f; }
 #oznake-btn {
   display: flex; align-items: center; justify-content: center;
   width: 34px; height: 34px;
@@ -4140,7 +4169,7 @@ let editOn=false, mergeMode=false, mergeFirst=null;
 let editNodeMks=[], editMidMks=[], snapRingMk=null, snapTarget=null;
 let wid=null, lastP=null, posMk=null, posCr=null;
 let _compassHeading = null; // trenutni azimut telefona (0-360°, 0=sjever)
-let kmlLs=[], kmlCI=0;
+let kmlLs=[], kmlCI=0, _kmlEditIdx=-1;
 let drawPreviewLine=null;
 let drawUndoStack=[];
 const KCOLS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899'];
@@ -8099,6 +8128,7 @@ function togK(i) {
 function delK(i) {
   map.removeLayer(kmlLs[i].grp);
   kmlLs.splice(i, 1);
+  _kmlEditIdx = -1;
   saveKmlStyles();
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
@@ -8139,6 +8169,7 @@ function openOznakePanel() {
 function closeOznakePanel() {
   document.getElementById('oznake-bg').style.display = 'none';
   document.getElementById('oznake-panel').style.display = 'none';
+  _kmlEditIdx = -1;
 }
 
 function togOzSec(sec) {
@@ -8176,16 +8207,19 @@ function _rndOznakePanel() {
         const lenM = _kmlCalcLen(k.grp);
         const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
         const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
-        return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozZoomKml(${i})">
-          <div class="oz-row-icon">📄</div>
+        const isEdit = _kmlEditIdx === i;
+        return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
+          <div class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
           <div class="oz-row-info">
-            <div class="oz-row-name">${shortName}</div>
+            <div class="oz-row-name">${_escHtml(shortName)}</div>
             <div class="oz-row-meta">${meta}</div>
           </div>
           <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
             ${k.vis ? '👁' : '🙈'}
           </button>
-        </div>`;
+          <span class="oz-expand-arrow${isEdit?' open':''}">›</span>
+        </div>
+        ${isEdit ? _renderKmlEditor(i) : ''}`;
       }).join('');
     }
   }
@@ -8246,6 +8280,60 @@ function _ozZoomKml(i) {
   if (!k) return;
   try { const b = k.grp.getBounds(); if (b.isValid()) map.fitBounds(b, {padding:[30,30]}); } catch(e) {}
   closeOznakePanel();
+}
+
+function _ozKmlToggleEdit(i) {
+  _kmlEditIdx = _kmlEditIdx === i ? -1 : i;
+  _rndOznakePanel();
+}
+
+function _renderKmlEditor(i) {
+  const k = kmlLs[i];
+  const op = Math.round((k.opacity ?? 0.9) * 100);
+  const PRESET = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'];
+  const dots = PRESET.map(c =>
+    `<span class="oz-ed-dot${k.col===c?' act':''}" style="background:${c}" onclick="event.stopPropagation();_kmlSetColR(${i},'${c}')"></span>`
+  ).join('');
+  return `<div class="oz-kml-editor" onclick="event.stopPropagation()">
+    <div class="oz-ed-field">
+      <div class="oz-ed-label">Ime</div>
+      <input class="oz-ed-input" type="text" value="${_escHtml(k.name)}"
+        onchange="_kmlSetNameR(${i},this.value)" placeholder="Naziv sloja">
+    </div>
+    <div class="oz-ed-field">
+      <div class="oz-ed-label">Boja</div>
+      <div class="oz-ed-colors">
+        ${dots}
+        <input type="color" class="oz-ed-color-pick" value="${k.col}"
+          oninput="event.stopPropagation();_kmlSetColR(${i},this.value)">
+      </div>
+    </div>
+    <div class="oz-ed-field">
+      <div class="oz-ed-label">Providnost <span id="oz-op-lbl-${i}">${op}%</span></div>
+      <input type="range" class="oz-ed-range" min="5" max="100" step="5" value="${op}"
+        oninput="event.stopPropagation();document.getElementById('oz-op-lbl-${i}').textContent=this.value+'%';_kmlSetOpR(${i},this.value/100)">
+    </div>
+    <div class="oz-ed-btns">
+      <button class="oz-ed-btn" onclick="event.stopPropagation();_ozZoomKml(${i})">🗺 Zoom</button>
+      <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj \\''+_escHtml(kmlLs[${i}]?.name||'')+'\\' ?'))delK(${i})">✕ Briši</button>
+    </div>
+  </div>`;
+}
+
+function _kmlSetNameR(i, val) {
+  if (!kmlLs[i]) return;
+  kmlLs[i].name = val.trim() || kmlLs[i].name;
+  saveKmlStyles();
+}
+
+function _kmlSetColR(i, col) {
+  setKmlColor(i, col);
+  _rndOznakePanel();
+}
+
+function _kmlSetOpR(i, val) {
+  setKmlOpacity(i, parseFloat(val));
+  _rndOznakePanel();
 }
 
 function _ozTogTrag(id) {
