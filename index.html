@@ -1992,6 +1992,11 @@ select:focus { outline:none; border-color:#3b82f6; }
 .oz-gj-arrow.open { transform:rotate(90deg); color:#3b82f6; }
 .oz-gj-name { flex:1; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .oz-gj-cnt { font-size:10px; color:#334155; background:#1e293b; border-radius:8px; padding:1px 7px; flex-shrink:0; }
+.oz-offline-badge { font-size:9px; font-weight:700; color:#22c55e; background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.3); border-radius:8px; padding:1px 6px; flex-shrink:0; white-space:nowrap; }
+.oz-offline-badge.partial { color:#f59e0b; background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.3); }
+.oz-dl-btn { flex-shrink:0; background:rgba(59,130,246,.13); border:1px solid rgba(59,130,246,.35); color:#60a5fa; border-radius:7px; padding:2px 8px; font-size:11px; cursor:pointer; line-height:1.5; transition:background .15s; }
+.oz-dl-btn:active { background:rgba(59,130,246,.25); }
+.oz-dl-btn.cached { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.3); color:#f87171; }
 /* Search + sort bar */
 .oz-search-wrap { padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 6px; }
 .oz-search-row { position: relative; display: flex; gap: 6px; align-items: center; }
@@ -3122,6 +3127,7 @@ function showApp() {
     _restoreTacke();
     _restoreFotos();
     _localKmlRestore();
+    _kmlcInit(); // load IDB key list for offline badge rendering
   }, 80);
 }
 
@@ -9499,10 +9505,23 @@ function _rndOznakePanel() {
         const visIcon = allVis ? '👁' : anyVis ? '◑' : '🙈';
         const gjEsc = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         const idxArr = JSON.stringify(items.map(x => x.i));
+        const idxArrEsc = idxArr.replace(/'/g,"\\'");
+        const allCached  = items.every(x => _kmlcKeys.has('file:' + x.k._key));
+        const someCached = items.some(x => _kmlcKeys.has('file:' + x.k._key));
+        const offlineBadge = allCached
+          ? `<span class="oz-offline-badge">✓ offline</span>`
+          : someCached
+          ? `<span class="oz-offline-badge partial">↻ djel.</span>`
+          : '';
+        const dlBtn = allCached
+          ? `<button class="oz-dl-btn cached" onclick="event.stopPropagation();_kmlcUiDelete('${idxArrEsc}')" title="Obriši offline kopiju">🗑</button>`
+          : `<button class="oz-dl-btn" onclick="event.stopPropagation();_kmlcUiDownload('${idxArrEsc}')" title="Sačuvaj grupu za offline">⬇</button>`;
         html += `<div class="oz-gj-hdr" onclick="event.stopPropagation();_ozBucketToggleGroup('${gjEsc}')">
           <span class="oz-gj-arrow${collapsed?'':' open'}">›</span>
           <span class="oz-gj-name">${_escHtml(gj)}</span>
           <span class="oz-gj-cnt">${items.length}</span>
+          ${offlineBadge}
+          ${dlBtn}
           <button class="oz-vis-btn${allVis?' on':anyVis?' half':''}"
             onclick="event.stopPropagation();_ozBucketToggleGroupVis(${idxArr})"
             title="${allVis?'Sakrij grupu':'Prikaži grupu'}">${visIcon}</button>
@@ -13537,11 +13556,149 @@ function _bucketFileUrl(bucketName, filePath) {
   return `${SUPA_URL}/storage/v1/object/public/${encodeURIComponent(bucketName)}/${parts}`;
 }
 
+// ── KML/SHP offline cache (IndexedDB) ─────────────────────────────────────────
+const _KMLC_DB    = 'tvlake-kml-cache-v1';
+const _KMLC_STORE = 'files';
+let   _kmlcDB   = null;
+let   _kmlcKeys = new Set(); // all keys currently stored in IDB
+
+async function _kmlcOpen() {
+  if (_kmlcDB) return _kmlcDB;
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(_KMLC_DB, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(_KMLC_STORE);
+    req.onsuccess = e => { _kmlcDB = e.target.result; resolve(_kmlcDB); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function _kmlcSave(key, data) {
+  try {
+    const db = await _kmlcOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readwrite');
+      tx.objectStore(_KMLC_STORE).put(data, key);
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+    _kmlcKeys.add(key);
+  } catch(e) { console.warn('_kmlcSave err', key, e); }
+}
+
+async function _kmlcGet(key) {
+  try {
+    const db = await _kmlcOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readonly');
+      const req = tx.objectStore(_KMLC_STORE).get(key);
+      req.onsuccess = e => resolve(e.target.result ?? null);
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch { return null; }
+}
+
+async function _kmlcDelete(key) {
+  try {
+    const db = await _kmlcOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readwrite');
+      tx.objectStore(_KMLC_STORE).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+    _kmlcKeys.delete(key);
+  } catch(e) { console.warn('_kmlcDelete err', key, e); }
+}
+
+async function _kmlcInit() {
+  try {
+    const db = await _kmlcOpen();
+    const keys = await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readonly');
+      const req = tx.objectStore(_KMLC_STORE).getAllKeys();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+    keys.forEach(k => _kmlcKeys.add(k));
+  } catch(e) { console.warn('_kmlcInit err', e); }
+}
+
+// Download all files in a group to IDB
+async function _kmlcDownloadGroup(items) {
+  let saved = 0;
+  for (const {k} of items) {
+    const slash = k._key.indexOf('/');
+    const bucketName = k._key.slice(0, slash);
+    const filePath   = k._key.slice(slash + 1);
+    const isBin = /\.(shp|dbf)$/i.test(filePath);
+    const type  = isBin ? 'arraybuffer' : 'text';
+    try {
+      const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { apikey: SUPA_KEY } });
+      if (!r.ok) continue;
+      const data = isBin ? await r.arrayBuffer() : await r.text();
+      await _kmlcSave('file:' + k._key, data);
+      saved++;
+      // For SHP also cache companion .dbf and .prj
+      if (/\.shp$/i.test(filePath)) {
+        const base = filePath.replace(/\.shp$/i, '');
+        for (const ext of ['.dbf', '.prj']) {
+          const cKey = 'file:' + bucketName + '/' + base + ext;
+          if (_kmlcKeys.has(cKey)) continue;
+          try {
+            const r2 = await fetch(_bucketFileUrl(bucketName, base + ext), { headers: { apikey: SUPA_KEY } });
+            if (!r2.ok) continue;
+            const d2 = ext === '.prj' ? await r2.text() : await r2.arrayBuffer();
+            await _kmlcSave(cKey, d2);
+          } catch {}
+        }
+      }
+    } catch(e) { console.warn('_kmlcDownloadGroup fetch err', k._key, e); }
+  }
+  return saved;
+}
+
+// Delete cached files for a group from IDB
+async function _kmlcDeleteGroup(items) {
+  for (const {k} of items) {
+    await _kmlcDelete('file:' + k._key);
+    if (/\.shp$/i.test(k._key)) {
+      const base = k._key.replace(/\.shp$/i, '');
+      for (const ext of ['.dbf', '.prj']) await _kmlcDelete('file:' + base + ext);
+    }
+  }
+}
+
+// UI handlers called from _rndOznakePanel
+async function _kmlcUiDownload(idxArrJson) {
+  const idxArr = JSON.parse(idxArrJson);
+  const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
+  showToast('⬇ Preuzimam fajlove za offline...');
+  const saved = await _kmlcDownloadGroup(items);
+  showToast(`✅ ${saved} fajl${saved === 1 ? '' : 'a'} sačuvano offline`);
+  _rndOznakePanel();
+}
+
+async function _kmlcUiDelete(idxArrJson) {
+  const idxArr = JSON.parse(idxArrJson);
+  const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
+  await _kmlcDeleteGroup(items);
+  showToast('🗑 Offline kopija obrisana');
+  _rndOznakePanel();
+}
+
 // ── Fetch helper ──────────────────────────────────────────────────────────────
 async function _fetchBucketFile(bucketName, filePath, type = 'text') {
-  const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { 'apikey': SUPA_KEY } });
-  if (!r.ok) return null;
-  return type === 'arraybuffer' ? r.arrayBuffer() : r.text();
+  const cacheKey = 'file:' + bucketName + '/' + filePath;
+  try {
+    const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { 'apikey': SUPA_KEY } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = type === 'arraybuffer' ? await r.arrayBuffer() : await r.text();
+    _kmlcSave(cacheKey, data); // fire-and-forget
+    return data;
+  } catch {
+    if (_kmlcKeys.has(cacheKey)) return _kmlcGet(cacheKey);
+    return null;
+  }
 }
 
 // ── Učitaj jedan KML fajl ────────────────────────────────────────────────────
@@ -13670,8 +13827,22 @@ function _reprojectGeometry(geom, fromCrs) {
 // ── Glavna funkcija: učitaj cijeli bucket (root + podfolderi, KML + SHP) ─────
 async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
   try {
-    const allFiles = await _listBucketAll(bucketName);
-    if (!allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
+    let allFiles = null;
+    const listKey = 'listing:' + bucketName;
+    try {
+      allFiles = await _listBucketAll(bucketName);
+      if (allFiles.length) _kmlcSave(listKey, JSON.stringify(allFiles)); // cache listing for offline
+    } catch { allFiles = null; }
+
+    // If network fetch failed or returned empty, try cached listing
+    if (!allFiles || !allFiles.length) {
+      if (_kmlcKeys.has(listKey)) {
+        const raw = await _kmlcGet(listKey);
+        if (raw) { try { allFiles = JSON.parse(raw); } catch { allFiles = []; } }
+      }
+    }
+
+    if (!allFiles || !allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
 
     const supported = allFiles.filter(f => /\.(kml|shp)$/i.test(f.name));
     if (!supported.length) { console.warn(`Bucket "${bucketName}": nema KML/SHP fajlova`); return; }
