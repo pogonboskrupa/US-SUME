@@ -4431,21 +4431,23 @@ let _tackaPlaceNm   = '';     // naziv koji se koristi pri kliku
 // nav lines live in vodiMeDoTacke section below
 
 function _tačkaIcon(n, nm) {
-  const labelH = nm ? 14 : 0;
-  const totalH = 32 + labelH;
   const label = nm
-    ? `<text x="12" y="${32 + labelH - 2}" text-anchor="middle" font-size="9" font-weight="700"
-        fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke">${_escSvg(nm)}</text>`
+    ? `<div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);
+        white-space:nowrap;font-size:9px;font-weight:700;line-height:14px;
+        color:#fff;text-shadow:-1.5px -1.5px 0 #000,1.5px -1.5px 0 #000,
+        -1.5px 1.5px 0 #000,1.5px 1.5px 0 #000;">${_escHtml(nm)}</div>`
     : '';
   return L.divIcon({
-    className: '', iconSize:[24, totalH], iconAnchor:[12, 32], popupAnchor:[0,-34],
-    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="${totalH}" viewBox="0 0 24 ${totalH}">
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z"
-        fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/>
-      <circle cx="12" cy="12" r="5.5" fill="#fff"/>
-      <text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">${n}</text>
+    className: '', iconSize:[24, nm ? 46 : 32], iconAnchor:[12, 32], popupAnchor:[0,-34],
+    html:`<div style="position:relative;overflow:visible;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
+        <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z"
+          fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="5.5" fill="#fff"/>
+        <text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">${n}</text>
+      </svg>
       ${label}
-    </svg>`
+    </div>`
   });
 }
 
@@ -4520,6 +4522,7 @@ function _setupTackaPopup(m, idx, la, lo, ts, nm) {
       <div style="display:flex;gap:5px;margin-top:7px;">
         <button class="tacka-popup-btn" style="background:#1d4ed8;color:#bfdbfe;flex:1;"
           onclick="vodiMeDoTacke(${idx})">🧭 Vodi me</button>
+        <button class="tacka-popup-btn" onclick="_renameTacka(${idx})" style="flex:0 0 auto;" title="Preimenuj">✏️</button>
         <button class="tacka-popup-btn" onclick="deleteTacka(${idx})" style="flex:0 0 auto;">🗑</button>
       </div>
     </div>`;
@@ -4780,8 +4783,30 @@ function _restoreTacke() {
   } catch(e) {}
 }
 
-// ── Legacy shim (old calls without modal) ──
-function addTacka() { _tackaOpenModal(); }
+// ── Tačka dugme — direktna akcija bez modala ──
+function addTacka() {
+  switchTab('karta');
+  if (lastP) {
+    _createTacka(lastP.la, lastP.lo, '');
+  } else {
+    _tackaPlaceNm = '';
+    _tackaPlaceMode = true;
+    document.getElementById('tacka-place-banner').style.display = 'block';
+    map.getContainer().style.cursor = 'crosshair';
+  }
+}
+
+function _renameTacka(idx) {
+  const t = _tacke[idx];
+  const cur = t.nm || '';
+  const nw = window.prompt('Naziv tačke:', cur);
+  if (nw === null) return;
+  t.nm = nw.trim();
+  t.marker.setIcon(_tačkaIcon(idx + 1, t.nm));
+  _setupTackaPopup(t.marker, idx, t.la, t.lo, t.ts, t.nm);
+  t.marker.openPopup();
+  _saveTacke();
+}
 
 // ─── FOTO OZNAKE ──────────────────────────────────────────────────────────────
 let _locFotos    = [];  // vlastite foto oznake
@@ -16177,7 +16202,7 @@ function toggleHelpSec(hdr) {
     <span id="ab-pauza-txt">Pauza</span>
   </button>
   <!-- Uvijek vidljivo -->
-  <button id="ab-tacka" onclick="_tackaOpenModal()" title="Dodaj oznaku">
+  <button id="ab-tacka" onclick="addTacka()" title="Dodaj oznaku">
     <span class="ab-ico">📍</span>
     <span>Tačka</span>
   </button>
