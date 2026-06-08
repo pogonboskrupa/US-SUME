@@ -2473,7 +2473,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button onclick="hideNovProjektForm()" style="background:none;border:none;color:#475569;font-size:20px;cursor:pointer;line-height:1;">✕</button>
         </div>
         <span class="lbl">Odjel</span>
-        <input class="pinput" id="np-odjel" inputmode="decimal" autocomplete="off" placeholder="npr. 64/2" oninput="this.value=this.value.replace(/[^0-9\/]/g,'')">
+        <input class="pinput" id="np-odjel" inputmode="text" autocomplete="off" placeholder="npr. 64/2" oninput="this.value=this.value.replace(/[^0-9\/]/g,'')">
         <span class="lbl">G.J. (Gospodarska Jedinica)</span>
         <select class="pinput" id="np-gj" onchange="_npGjChange(this)">
           <option value="">— odaberi —</option>
