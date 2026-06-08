@@ -5440,11 +5440,24 @@ function _nvColor(e) {
 }
 function _aspColor(deg, mag) {
   if (mag < 0.8) return [128, 128, 128, 0];
-  // hue: N→240° (blue), E→120° (green), S→0° (red), W→300° (magenta)
-  const hue = (deg + 240) % 360;
-  const alpha = Math.min(210, 80 + mag * 40);
-  const [r,g,b] = _hsl2rgb(hue, 0.85, 0.45);
-  return [r, g, b, Math.round(alpha)];
+  // 4 anchor colours: N=blue, E=green, S=orange, W=purple — interpolate between them
+  const stops = [
+    [0,   [59,  127, 212]],  // Sjever (N)
+    [90,  [76,  175,  80]],  // Istok  (E)
+    [180, [232, 100,  10]],  // Jug    (S)
+    [270, [156,  77, 204]],  // Zapad  (W)
+    [360, [59,  127, 212]],  // wrap back to N
+  ];
+  let lo = stops[0], hi = stops[1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (deg >= stops[i][0] && deg < stops[i+1][0]) { lo = stops[i]; hi = stops[i+1]; break; }
+  }
+  const t = (deg - lo[0]) / (hi[0] - lo[0]);
+  const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+  const r = lerp(lo[1][0], hi[1][0], t);
+  const g = lerp(lo[1][1], hi[1][1], t);
+  const b = lerp(lo[1][2], hi[1][2], t);
+  return [r, g, b, Math.min(210, Math.round(85 + mag * 30))];
 }
 async function _getTerrariumTile(z, x, y) {
   const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
@@ -5502,7 +5515,10 @@ function _makeDemCanvasLayer(mode) {
               const y0=Math.max(0,py-1), y1=Math.min(255,py+1);
               const dzdx = elev[py*256+x1] - elev[py*256+x0];
               const dzdy = elev[y1*256+px] - elev[y0*256+px];
-              const asp  = (Math.atan2(dzdy, dzdx)*180/Math.PI + 360) % 360;
+              // Aspect = compass direction the slope faces (downhill direction).
+              // Tile y increases southward, so geographic N component = -dzdy.
+              // atan2(-dzdx, dzdy) gives bearing from North, clockwise.
+              const asp  = (Math.atan2(-dzdx, dzdy)*180/Math.PI + 360) % 360;
               rgba = _aspColor(asp, Math.hypot(dzdx, dzdy));
             }
             od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
@@ -10262,12 +10278,12 @@ function _demLegendUpdate() {
   el.style.display = '';
   let html = '';
   if (showEkspo) {
-    html += `<div class="leg-title">🧭 Strane svijeta</div>
-    <div class="leg-compass">
-      <div class="leg-dir"><div class="leg-dot" style="background:#3b7fd4;"></div>S (Sjever)</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#4caf50;"></div>I (Istok)</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#e8640a;"></div>J (Jug)</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#9c4dcc;"></div>Z (Zapad)</div>
+    html += `<div class="leg-title">🧭 Ekspozicija padine</div>
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <div class="leg-dir"><div class="leg-dot" style="background:#3b7fd4;"></div>Sjeverna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#4caf50;"></div>Istočna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#e8640a;"></div>Južna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#9c4dcc;"></div>Zapadna</div>
     </div>`;
   }
   if (showNv) {
