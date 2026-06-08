@@ -2473,9 +2473,18 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button onclick="hideNovProjektForm()" style="background:none;border:none;color:#475569;font-size:20px;cursor:pointer;line-height:1;">✕</button>
         </div>
         <span class="lbl">Odjel</span>
-        <input class="pinput" id="np-odjel" list="odjeli-list" autocomplete="off" placeholder="npr. RISOVAC KRUPA 45">
+        <input class="pinput" id="np-odjel" inputmode="decimal" autocomplete="off" placeholder="npr. 64/2" oninput="this.value=this.value.replace(/[^0-9\/]/g,'')">
         <span class="lbl">G.J. (Gospodarska Jedinica)</span>
-        <input class="pinput" id="np-gj" placeholder="npr. Risovac">
+        <select class="pinput" id="np-gj" onchange="_npGjChange(this)">
+          <option value="">— odaberi —</option>
+          <option value="Risovac Krupa">Risovac Krupa</option>
+          <option value="Grmeč Jasenica">Grmeč Jasenica</option>
+          <option value="Vojskova">Vojskova</option>
+          <option value="Baštra Ćorkovača">Baštra Ćorkovača</option>
+          <option value="Gomila">Gomila</option>
+          <option value="_custom">Druga GJ (upiši)…</option>
+        </select>
+        <input class="pinput" id="np-gj-custom" placeholder="Upiši naziv GJ" style="display:none;margin-top:4px;">
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
             <span class="lbl">Površina (ha)</span>
@@ -3577,12 +3586,26 @@ function rndProjektiList() {
   el.innerHTML = html;
 }
 
+function _npGjChange(sel) {
+  const cust = document.getElementById('np-gj-custom');
+  if (sel.value === '_custom') { cust.style.display = ''; cust.focus(); }
+  else { cust.style.display = 'none'; cust.value = ''; }
+}
+
+function _npGjValue() {
+  const sel = document.getElementById('np-gj');
+  if (sel.value === '_custom') return document.getElementById('np-gj-custom').value.trim();
+  return sel.value;
+}
+
 function showNovProjektForm() {
   document.getElementById('proj-list-sec').style.display = 'none';
   document.getElementById('proj-detalji-sec').style.display = 'none';
   document.getElementById('nov-proj-sec').style.display = '';
   document.getElementById('np-odjel').value = '';
   document.getElementById('np-gj').value = '';
+  document.getElementById('np-gj-custom').style.display = 'none';
+  document.getElementById('np-gj-custom').value = '';
   document.getElementById('np-povrsina').value = '';
   document.getElementById('np-datum').value = todayStr();
 }
@@ -3598,7 +3621,7 @@ async function saveNovProjekt() {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile?.sumarija || '',
     odjel,
-    gj:       document.getElementById('np-gj').value.trim(),
+    gj:       _npGjValue(),
     povrsina: parseFloat(document.getElementById('np-povrsina').value) || null,
     datum:    document.getElementById('np-datum').value || todayStr(),
     updated_at: new Date().toISOString()
