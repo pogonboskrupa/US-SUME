@@ -719,7 +719,8 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.krak-l { background:#0c2233; color:#38bdf8; }
 .rb.krak-d { background:#231200; color:#fb923c; }
 .rb.picker { background:#0f172a; color:#64748b; flex:0 0 auto; padding:10px; }
-.rb.back   { background:#1a0a00; color:#fb923c; }
+.rb.back     { background:#1a0a00; color:#fb923c; }
+.rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
 /* ═══ DRAW BANNER (zelena) ═══ */
 #draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
@@ -2751,7 +2752,8 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
-          <button class="rb back"   id="btn-nazad" onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
+          <button class="rb back"      id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
+          <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju">🔓</button>
           <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
         </div>
       </div>
@@ -5201,6 +5203,7 @@ document.addEventListener('DOMContentLoaded', buildC);
 
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
+let _recFreeView = false;
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
 let _activeTab = 'karta';  // trenutno aktivan tab
 // Tool states — only one active at a time
@@ -5671,7 +5674,7 @@ map.on('move', () => {
 map.on('moveend', () => {
   const c = map.getCenter();
   updMGI(c.lat, c.lng);
-  if (!_gpsAlt) debouncedUpdElev(c.lat, c.lng, 450);
+  if (!_gpsAlt || _recFreeView) debouncedUpdElev(c.lat, c.lng, 450);
 });
 
 // === RAZMJERA KARTE (live) ===
@@ -6622,6 +6625,9 @@ function stopRec() {
   }
   _recSegStart = 0;
   recOn = false; recPaused = false; _recParentIdx = null;
+  _recFreeView = false;
+  const _fvBtn = document.getElementById('btn-freeview');
+  if (_fvBtn) { _fvBtn.textContent = '🔓'; _fvBtn.style.background = ''; }
   _kfReset(); _lastRecTime = 0;
   _releaseWakeLock();
   _stopBgAudio();
@@ -6680,6 +6686,17 @@ function toggleRecPause() {
   }
   _updRecStatusBar();
   _updFabVisibility();
+}
+
+function toggleRecFreeView() {
+  _recFreeView = !_recFreeView;
+  const btn = document.getElementById('btn-freeview');
+  if (_recFreeView) {
+    if (btn) { btn.textContent = '📍'; btn.style.background = '#14330a'; }
+  } else {
+    if (btn) { btn.textContent = '🔓'; btn.style.background = ''; }
+    if (lastP) map.panTo([lastP.la, lastP.lo], { animate: true, duration: 0.5 });
+  }
 }
 
 function _krajVlake() {
@@ -7210,8 +7227,8 @@ function onP(p) {
     posCr.setLatLng([la, lo]).setRadius(ac);
   }
 
-  // Prati lokaciju kad se snima vlaka ili trag
-  if ((recOn && !recPaused) || _tragOn) {
+  // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
+  if (((recOn && !recPaused) || _tragOn) && !_recFreeView) {
     map.panTo([la, lo], { animate: true, duration: 0.5 });
   }
 
