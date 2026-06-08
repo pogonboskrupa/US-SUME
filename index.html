@@ -5387,13 +5387,114 @@ const TL = {
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
+const _TERR_CACHE  = 'tvlake-terr-v1';
 const CachedElev  = makeCachedTileLayer(_ELEV_CACHE);
 const CachedSlope = makeCachedTileLayer(_SLOPE_CACHE);
+
+// ── DEM Canvas helpers ────────────────────────────────────────────────────────
+function _hsl2rgb(h, s, l) {
+  const f = (n, k=(n+h/30)%12) => l - s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,9-k,1));
+  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+}
+function _nvColor(e) {
+  // Hypsometric tinting: elevation in metres
+  if (e < 0)    return [50,  120, 210, 170];
+  if (e < 200)  return [90,  195,  90, 185];
+  if (e < 400)  return [165, 220, 100, 185];
+  if (e < 600)  return [215, 215, 105, 185];
+  if (e < 850)  return [215, 175,  90, 190];
+  if (e < 1100) return [185, 135,  70, 195];
+  if (e < 1400) return [155, 105,  60, 195];
+  if (e < 1700) return [160, 120, 105, 200];
+  return [215, 220, 230, 200];
+}
+function _aspColor(deg, mag) {
+  if (mag < 0.8) return [128, 128, 128, 0];
+  // hue: N→240° (blue), E→120° (green), S→0° (red), W→300° (magenta)
+  const hue = (deg + 240) % 360;
+  const alpha = Math.min(210, 80 + mag * 40);
+  const [r,g,b] = _hsl2rgb(hue, 0.85, 0.45);
+  return [r, g, b, Math.round(alpha)];
+}
+async function _getTerrariumTile(z, x, y) {
+  const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+  let blob = null;
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open(_TERR_CACHE);
+      let resp = await cache.match(url);
+      if (!resp) {
+        resp = await fetch(url, { mode:'cors' });
+        if (resp?.ok) { cache.put(url, resp.clone()); } else return null;
+      }
+      blob = await resp.blob();
+    } catch { return null; }
+  } else {
+    blob = await fetch(url, { mode:'cors' }).then(r=>r.ok?r.blob():null).catch(()=>null);
+  }
+  if (!blob) return null;
+  if (typeof createImageBitmap !== 'undefined') return createImageBitmap(blob);
+  return new Promise(res => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = URL.createObjectURL(blob);
+  });
+}
+function _makeDemCanvasLayer(mode) {
+  return L.GridLayer.extend({
+    createTile(coords, done) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+        if (!src) { done(null, canvas); return; }
+        const tmp = document.createElement('canvas');
+        tmp.width = tmp.height = 256;
+        const tc = tmp.getContext('2d');
+        tc.drawImage(src, 0, 0, 256, 256);
+        const raw = tc.getImageData(0, 0, 256, 256).data;
+        // Decode terrarium: elev = R*256 + G + B/256 - 32768
+        const elev = new Float32Array(256*256);
+        for (let i=0; i<256*256; i++)
+          elev[i] = raw[i*4]*256 + raw[i*4+1] + raw[i*4+2]/256 - 32768;
+        const ctx = canvas.getContext('2d');
+        const out = ctx.createImageData(256, 256);
+        const od  = out.data;
+        for (let py=0; py<256; py++) {
+          for (let px=0; px<256; px++) {
+            const idx = py*256+px;
+            let rgba;
+            if (mode === 'nv') {
+              rgba = _nvColor(elev[idx]);
+            } else {
+              const x0=Math.max(0,px-1), x1=Math.min(255,px+1);
+              const y0=Math.max(0,py-1), y1=Math.min(255,py+1);
+              const dzdx = elev[py*256+x1] - elev[py*256+x0];
+              const dzdy = elev[y1*256+px] - elev[y0*256+px];
+              const asp  = (Math.atan2(dzdy, dzdx)*180/Math.PI + 360) % 360;
+              rgba = _aspColor(asp, Math.hypot(dzdx, dzdy));
+            }
+            od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
+          }
+        }
+        ctx.putImageData(out, 0, 0);
+        done(null, canvas);
+      }).catch(() => done(null, canvas));
+      return canvas;
+    }
+  });
+}
+const DemNV    = _makeDemCanvasLayer('nv');
+const DemEkspo = _makeDemCanvasLayer('ekspo');
+
 const _OVL = {
   elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',  { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
-  slope: new CachedSlope('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' })
+  slope: new CachedSlope('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
+  nv:    new DemNV(   { pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.75, attribution:'' }),
+  ekspo: new DemEkspo({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.80, attribution:'' })
 };
-let _ovlState = { elev: false, slope: false };
+let _ovlState = { elev: false, slope: false, nv: false, ekspo: false };
 try { Object.assign(_ovlState, JSON.parse(localStorage.getItem('tvlake_ovl_state') || '{}')); } catch {}
 // Restore overlay visibility
 Object.entries(_ovlState).forEach(([k,v]) => { if (v && _OVL[k]) _OVL[k].addTo(map); });
@@ -5470,10 +5571,10 @@ function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
   _lsTab('karte');
-  const ecb = document.getElementById('inst-elev-cb');
-  const scb = document.getElementById('inst-slope-cb');
-  if (ecb) ecb.checked  = !!_ovlState.elev;
-  if (scb) scb.checked = !!_ovlState.slope;
+  ['elev','slope','nv','ekspo'].forEach(id => {
+    const cb = document.getElementById('inst-' + id + '-cb');
+    if (cb) cb.checked = !!_ovlState[id];
+  });
   _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
@@ -10121,24 +10222,43 @@ function _instToggle(id, on) {
 }
 
 async function _instClear(id) {
-  const cacheName = id === 'elev' ? _ELEV_CACHE : _SLOPE_CACHE;
   if (!('caches' in window)) return;
-  await caches.delete(cacheName);
-  if (_ovlState[id]) _OVL[id].redraw();
+  // nv + ekspo share the same terrarium cache
+  const cacheMap = { elev: _ELEV_CACHE, slope: _SLOPE_CACHE, nv: _TERR_CACHE, ekspo: _TERR_CACHE };
+  const cn = cacheMap[id];
+  if (!cn) return;
+  await caches.delete(cn);
+  // If terrarium was cleared, redraw both DEM layers
+  if (cn === _TERR_CACHE) {
+    if (_ovlState.nv)    _OVL.nv.redraw();
+    if (_ovlState.ekspo) _OVL.ekspo.redraw();
+  } else if (_ovlState[id]) {
+    _OVL[id].redraw();
+  }
   await _instUpdateStats();
   showToast('Keš obrisan');
 }
 
 async function _instUpdateStats() {
   if (!('caches' in window)) return;
-  for (const [id, cn] of [['elev', _ELEV_CACHE], ['slope', _SLOPE_CACHE]]) {
+  const pairs = [
+    ['elev',  _ELEV_CACHE],
+    ['slope', _SLOPE_CACHE],
+    ['nv',    _TERR_CACHE],
+    ['ekspo', _TERR_CACHE]   // same cache — same number shown on both
+  ];
+  // Cache size per cache name (fetch once, reuse)
+  const counts = {};
+  for (const [, cn] of pairs) {
+    if (cn in counts) continue;
+    try { const c = await caches.open(cn); counts[cn] = (await c.keys()).length; }
+    catch { counts[cn] = -1; }
+  }
+  for (const [id, cn] of pairs) {
     const el = document.getElementById('inst-' + id + '-stat');
     if (!el) continue;
-    try {
-      const cache = await caches.open(cn);
-      const keys  = await cache.keys();
-      el.textContent = keys.length ? keys.length + ' pločica' : 'Prazno';
-    } catch { el.textContent = '—'; }
+    const n = counts[cn];
+    el.textContent = n < 0 ? '—' : n ? n + ' pločica' : 'Prazno';
   }
 }
 
@@ -16082,6 +16202,41 @@ function toggleHelpSec(hdr) {
         style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
         🗑
       </button>
+    </div>
+    <!-- Nadmorska visina (DEM) -->
+    <div class="inst-layer-row" id="inst-nv-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"
+          style="width:18px;height:18px;accent-color:#4ade80;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nadmorska visina</div>
+          <div style="font-size:11px;color:#64748b;">Hipsometrijska obojenost terena</div>
+          <div id="inst-nv-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('nv')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Strane svijeta (Ekspozicija) -->
+    <div class="inst-layer-row" id="inst-ekspo-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"
+          style="width:18px;height:18px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Strane svijeta</div>
+          <div style="font-size:11px;color:#64748b;">Ekspozicija padine — S/J/I/Z</div>
+          <div id="inst-ekspo-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('ekspo')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:#334155;line-height:1.5;">
+      N.V. i Strane dijele isti keš (terrarium DEM tiles, max zoom 14→upscale).
     </div>
   </div>
 

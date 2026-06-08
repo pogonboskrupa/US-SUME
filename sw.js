@@ -2,12 +2,13 @@
 // Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.6.16';
+const APP_VERSION = '1.6.17';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
 const ELEV_CACHE  = 'tvlake-elev-v1';   // ArcGIS World Hillshade
 const SLOPE_CACHE = 'tvlake-slope-v1';  // ArcGIS World Shaded Relief
+const TERR_CACHE  = 'tvlake-terr-v1';   // Terrarium DEM tiles (N.V. + Strane)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -62,6 +63,12 @@ function _tileRespond(event, cacheName) {
 
 self.addEventListener('fetch', event => {
   const url = event.request.url;
+
+  // Terrarium DEM tiles (elevation-tiles-prod S3 bucket)
+  if (url.includes('elevation-tiles-prod')) {
+    _tileRespond(event, TERR_CACHE);
+    return;
+  }
 
   // Specific ArcGIS elevation caches — must come BEFORE the generic arcgisonline.com handler
   if (url.includes('arcgisonline.com') && url.includes('/World_Hillshade/')) {
