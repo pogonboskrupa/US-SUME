@@ -7382,11 +7382,12 @@ window.addEventListener('deviceorientation', e => {
 window.addEventListener('deviceorientationabsolute', _onDeviceOrientation, true);
 
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────
-const GPS_MIN_DIST  = 1;    // minimalni razmak između snimljenih tačaka (m)
+const GPS_MIN_DIST  = 3;    // minimalni razmak između snimljenih tačaka (m) — 3m sprječava drift-kruž
 const GPS_MAX_ACC   = 15;   // maks. prihvatljiva GPS tačnost (m) — pod šumskom krošnjom 5–15m
 const GPS_MAX_JUMP  = 25;   // uzastopni skok (konsekutivni loši fiksevi) → reset Kalmana (m)
 const GPS_MAX_SPEED = 2.5;  // maks. brzina hodača po šumi (m/s ≈ 9 km/h)
-const GPS_MAX_TURN  = 120;  // maks. nagli zaokret (°) za bearing check
+const GPS_MAX_TURN  = 90;   // maks. nagli zaokret (°) za bearing check
+const GPS_STILL_SPD = 0.3;  // m/s — ispod ove Kalman brzine → nuluj inerciju (nema drift-luka)
 
 // ─── KALMAN FILTER ───────────────────────────────────────────────────────────────────
 // Mjerni šum R = max(KF_MIN_R, acc) — pod krošnjom acc≈10–15m → R visok → Kalman
@@ -7470,6 +7471,9 @@ function _kfStep(la, lo, ac, tMs) {
   if (vMs > GPS_MAX_SPEED) {
     const sc = GPS_MAX_SPEED / vMs;
     _kf.vla *= sc;  _kf.vlo *= sc;
+  } else if (vMs < GPS_STILL_SPD) {
+    // Hodač je stao — nuliraj inerciju da ne nastane luk kad krene u drugu stranu
+    _kf.vla = 0;  _kf.vlo = 0;
   }
 
   _kf.la  = newLa;  _kf.lo  = newLo;
@@ -7585,8 +7589,9 @@ function onP(p) {
     const last  = v.pts[v.pts.length - 1];
     const distM = dst(last.la, last.lo, sla, slo);
 
-    // 6. MIN RAZMAK
-    if (distM < GPS_MIN_DIST) return;
+    // 6. MIN RAZMAK — adaptivni: lošija tačnost zahtijeva veći pomak
+    const effectiveDist = Math.max(GPS_MIN_DIST, ac * 0.35);
+    if (distM < effectiveDist) return;
 
     // 7. SPEED GATE — backup za slučaj da Doppler nije dostupan
     const reported = (gpsSpeed != null && gpsSpeed >= 0) ? gpsSpeed : null;
@@ -7603,7 +7608,7 @@ function onP(p) {
       const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
       const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
       const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
-      if (turnDeg > GPS_MAX_TURN && distM < 10) return;
+      if (turnDeg > GPS_MAX_TURN && distM < 15) return;
     }
   }
 
