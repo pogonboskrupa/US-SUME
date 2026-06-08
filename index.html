@@ -12164,15 +12164,18 @@ function _updFabVisibility() {
   const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
 
   if (!inRec) {
-    // "Snimi vlaku" samo kad postoji aktivan projekat
-    show('brec', !!_aktivniProjektId);  show('btrag', true);
+    const hasProj = !!_aktivniProjektId;
+    // Aktivan projekat: Snimi vlaku vidljivo, Tačka i Snimi trag skriveni
+    show('brec',     hasProj);
+    show('btrag',    !hasProj);
+    show('ab-tacka', !hasProj);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
     return;
   }
 
-  show('brec', false); show('btrag', false);
+  show('brec', false); show('btrag', false); show('ab-tacka', false);
 
   if (isPaused) {
     // Pauzirani mod: [⏹ Završi] [▶ Nastavi] + [↩ Vrati se] ako u kraku
