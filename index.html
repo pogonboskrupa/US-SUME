@@ -1191,6 +1191,33 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-icon { font-size:11px; margin-right:3px; }
 #nv-badge #nv-val { color:#22d3ee; font-weight:bold; font-size:11px; }
 #nv-badge .nv-sep { color:#334155; margin:0 6px; }
+/* ── DEM legenda na mapi ─────────────────────────────────── */
+#dem-legend {
+  position:absolute; bottom:70px; left:8px; z-index:850;
+  background:rgba(10,17,35,0.88); border:1px solid rgba(255,255,255,0.12);
+  border-radius:8px; padding:8px 10px; pointer-events:none;
+  backdrop-filter:blur(4px); min-width:110px;
+  font-size:10px; color:#94a3b8;
+}
+#dem-legend .leg-title {
+  font-size:9px; font-weight:700; letter-spacing:0.07em;
+  text-transform:uppercase; color:#64748b; margin-bottom:5px;
+}
+#dem-legend .leg-sep { border-top:1px solid #1e293b; margin:7px 0 5px; }
+.leg-compass {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:3px; width:88px;
+}
+.leg-dir {
+  display:flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:700; color:#e2e8f0;
+}
+.leg-dot { width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+.leg-nv-row {
+  display:flex; align-items:center; gap:5px; padding:1px 0;
+}
+.leg-nv-swatch { width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+.leg-nv-lbl { font-size:10px; color:#cbd5e1; }
 #nv-badge .nv-lbl { color:#475569; font-size:9px; }
 #nv-badge .nv-coord { color:#ffffff; font-weight:700; font-size:10px; }
 #nv-badge #map-scale-val { color:#fbbf24; font-weight:bold; font-size:10px; }
@@ -1628,7 +1655,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
   #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
-  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
+  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -2688,6 +2715,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 
     <!-- MAP -->
     <div id="map">
+      <!-- DEM legenda (N.V. + Strane svijeta) -->
+      <div id="dem-legend" style="display:none;"></div>
+
       <!-- Center crosshair dot (visible only in full-map / MAP mode) -->
       <div id="map-center-dot" style="display:none;">
         <div id="mcd-ring"></div>
@@ -5498,6 +5528,7 @@ let _ovlState = { elev: false, slope: false, nv: false, ekspo: false };
 try { Object.assign(_ovlState, JSON.parse(localStorage.getItem('tvlake_ovl_state') || '{}')); } catch {}
 // Restore overlay visibility
 Object.entries(_ovlState).forEach(([k,v]) => { if (v && _OVL[k]) _OVL[k].addTo(map); });
+setTimeout(_demLegendUpdate, 0); // after DOM ready
 // Vrati zadnju kartu ili defaultuj na Topo
 (function _restoreLastMap() {
   let restoredKey = '⛰ Topo';
@@ -10219,6 +10250,38 @@ function _instToggle(id, on) {
   else map.removeLayer(_OVL[id]);
   _ovlState[id] = on;
   localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState));
+  _demLegendUpdate();
+}
+
+function _demLegendUpdate() {
+  const el = document.getElementById('dem-legend');
+  if (!el) return;
+  const showEkspo = !!_ovlState.ekspo;
+  const showNv    = !!_ovlState.nv;
+  if (!showEkspo && !showNv) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  let html = '';
+  if (showEkspo) {
+    html += `<div class="leg-title">🧭 Strane svijeta</div>
+    <div class="leg-compass">
+      <div class="leg-dir"><div class="leg-dot" style="background:#3b7fd4;"></div>S (Sjever)</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#4caf50;"></div>I (Istok)</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#e8640a;"></div>J (Jug)</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#9c4dcc;"></div>Z (Zapad)</div>
+    </div>`;
+  }
+  if (showNv) {
+    if (showEkspo) html += '<div class="leg-sep"></div>';
+    html += `<div class="leg-title">📏 Nadmorska visina</div>`;
+    const bands = [
+      ['#d7dce6','> 1700 m'],['#a07868','1400 m'],['#9f7846','1100 m'],
+      ['#b98f46','850 m'],  ['#d7c782','600 m'], ['#a5dc64','400 m'],
+      ['#5ac85a','200 m'],  ['#5ac85a','0 m']
+    ];
+    const uniq = bands.filter((b,i) => i===0||b[0]!==bands[i-1][0]);
+    html += uniq.map(([c,l])=>`<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:${c};"></div><span class="leg-nv-lbl">${l}</span></div>`).join('');
+  }
+  el.innerHTML = html;
 }
 
 async function _instClear(id) {
