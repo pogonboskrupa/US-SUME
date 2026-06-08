@@ -1159,6 +1159,12 @@ select:focus { outline:none; border-color:#3b82f6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
 .clan-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1e3a5f; }
 .clan-row:last-child { border-bottom:none; }
+.add-clan-row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; border-radius:4px; }
+.add-clan-row:last-child { border-bottom:none; }
+.add-clan-row:active { background:rgba(96,165,250,0.08); }
+.add-clan-row input[type=checkbox] { width:17px; height:17px; accent-color:#60a5fa; flex-shrink:0; cursor:pointer; }
+.add-clan-row .clan-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.add-clan-row .acr-name { font-size:13px; color:#e2e8f0; }
 .proj-gj-header { font-size:10px; font-weight:700; color:#38bdf8; letter-spacing:0.06em; text-transform:uppercase; padding:8px 4px 3px; margin-top:4px; border-bottom:1px solid #1e3a5f; margin-bottom:5px; }
 .proj-gj-header:first-child { margin-top:0; padding-top:2px; }
 .proj-section-sep { font-size:10px; font-weight:700; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; padding:10px 4px 4px; margin-top:6px; border-top:1px solid #1e293b; margin-bottom:2px; display:flex; align-items:center; gap:6px; }
@@ -2508,10 +2514,13 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">👥 Projektanti</div>
         <div id="pd-clanovi" style="margin-bottom:12px;"></div>
         <div id="pd-add-clan-sec">
-          <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Dodaj postojećeg</div>
-          <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <select id="pd-add-select" class="pinput" style="flex:1;margin:0;"></select>
-            <button class="btn b" style="margin:0;padding:7px 14px;font-size:13px;" onclick="addProjektClanUI()">+</button>
+          <button class="btn b" style="width:100%;margin-bottom:8px;font-size:13px;" onclick="openDodajClanPanel()">👤 Dodaj projektanta</button>
+          <div id="pd-add-panel" style="display:none;background:rgba(15,23,42,0.8);border:1px solid #1e3a5f;border-radius:7px;padding:10px;margin-bottom:8px;">
+            <div id="pd-add-checks" style="max-height:180px;overflow-y:auto;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn g" style="flex:1;font-size:13px;margin:0;" onclick="confirmDodajClanove()">✅ Dodaj odabrane</button>
+              <button class="btn gr" style="font-size:13px;margin:0;padding:7px 12px;" onclick="closeDodajClanPanel()">✕</button>
+            </div>
           </div>
           <!-- Kreiraj novog projektanta -->
           <div id="pd-novi-toggle" style="font-size:12px;color:#60a5fa;cursor:pointer;margin-bottom:6px;user-select:none;" onclick="toggleNoviProj()">▶ Kreiraj novog projektanta</div>
@@ -3689,12 +3698,10 @@ function showProjektDetalji(id) {
     return `<div class="clan-row"><div class="clan-dot" style="background:${color}"></div><div class="clan-name">${name}${tag}</div>${del}</div>`;
   }).join('');
 
-  // Dropdown za dodavanje
-  const sel = document.getElementById('pd-add-select');
+  // Pripremi dostupne projektante (bez onih koji su već članovi)
   const existingIds = new Set(allMembers.map(m => m.korisnik_id));
-  const available = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
-  sel.innerHTML = '<option value="">— Odaberi projektanta —</option>' +
-    available.map(([kid, info]) => `<option value="${kid}">${info.ime}</option>`).join('');
+  window._pdAvailable = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
+  closeDodajClanPanel();
 
   // Aktiviraj / Deaktiviraj button
   const btn = document.getElementById('pd-aktiviraj-btn');
@@ -3768,17 +3775,37 @@ async function kreirajProjektanta() {
   await sbLoadKolegeVlake();
 }
 
-async function addProjektClanUI() {
+function openDodajClanPanel() {
+  const panel = document.getElementById('pd-add-panel');
+  const cont  = document.getElementById('pd-add-checks');
+  const avail = window._pdAvailable || [];
+  if (!avail.length) { showToast('Nema dostupnih projektanata za dodavanje'); return; }
+  cont.innerHTML = avail.map(([kid, info]) =>
+    `<label class="add-clan-row">
+      <input type="checkbox" value="${kid}">
+      <div class="clan-dot" style="background:${info.color || '#94a3b8'}"></div>
+      <span class="acr-name">${info.ime}</span>
+    </label>`
+  ).join('');
+  panel.style.display = '';
+}
+
+function closeDodajClanPanel() {
+  const panel = document.getElementById('pd-add-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+async function confirmDodajClanove() {
   const id = _pdProjektId;
-  const p = _projekti.find(x => x.id === id);
+  const p  = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može dodavati članove'); return; }
-  const korisnik_id = document.getElementById('pd-add-select').value;
-  if (!korisnik_id) { showToast('Odaberi projektanta!'); return; }
-  const { error } = await sb.from('projekt_clanovi').insert({
-    projekt_id: id, korisnik_id, added_by: sbUser.id
-  });
+  const checked = [...document.querySelectorAll('#pd-add-checks input[type=checkbox]:checked')];
+  if (!checked.length) { showToast('Odaberi barem jednog projektanta'); return; }
+  const rows = checked.map(cb => ({ projekt_id: id, korisnik_id: cb.value, added_by: sbUser.id }));
+  const { error } = await sb.from('projekt_clanovi').insert(rows);
   if (error) { showToast('Greška: ' + error.message); return; }
-  showToast('Projektant dodan!');
+  showToast(`✅ Dodano ${rows.length} projektant${rows.length > 1 ? 'a' : ''}`);
+  closeDodajClanPanel();
   await sbLoadProjekti();
   showProjektDetalji(id);
   await sbLoadKolegeVlake();
