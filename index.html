@@ -3022,6 +3022,35 @@ async function _processOfflineQueue() {
       } else if (op.type === 'upsert_odjel') {
         const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
         err = error;
+      } else if (op.type === 'insert_projekt') {
+        const { _tempId, ...insertPayload } = op.payload;
+        const { data: pd, error } = await sb.from('projekti').insert(insertPayload).select('id').single();
+        err = error;
+        if (!err && pd) {
+          const realId = pd.id;
+          // Swap tempId → realId in remaining queue entries (both in-memory copy and localStorage)
+          q.forEach(qOp => {
+            if (qOp.payload?.projekt_id === _tempId) qOp.payload.projekt_id = realId;
+          });
+          const lq = _OL.loadQueue();
+          lq.forEach(qOp => { if (qOp.payload?.projekt_id === _tempId) qOp.payload.projekt_id = realId; });
+          localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+          // Update in-memory vlake
+          vlake.forEach(v => { if (v.projektId === _tempId) v.projektId = realId; });
+          // Update vlake cache
+          const cv = _OL.load(_OL.VLAKE) || [];
+          cv.forEach(r => { if (r.projekt_id === _tempId) r.projekt_id = realId; });
+          _OL.save(_OL.VLAKE, cv);
+          // Update _projekti
+          const pi = _projekti.findIndex(p => p.id === _tempId);
+          if (pi >= 0) _projekti[pi] = { ..._projekti[pi], id: realId, _pendingSync: false };
+          if (_aktivniProjektId === _tempId) {
+            _aktivniProjektId = realId;
+            localStorage.setItem('tvlake_akt_proj', realId);
+          }
+          _OL.save(_OL.PROJEKTI, _projekti);
+          rndProjektiList();
+        }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
     } catch(e) { break; } // still offline
@@ -3484,6 +3513,7 @@ function rndProjektiList() {
       <div class="proj-card-title">
         ${p.odjel || '—'}
         ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
+        ${p._pendingSync ? '<span style="font-size:10px;color:#f59e0b;margin-left:4px;">⏳ čeka sync</span>' : ''}
         ${!isVlasnik ? '<span style="font-size:10px;color:#64748b;margin-left:4px;">(podijeljen)</span>' : ''}
       </div>
       <div class="proj-card-sub">
@@ -3519,6 +3549,21 @@ async function saveNovProjekt() {
     datum:    document.getElementById('np-datum').value || todayStr(),
     updated_at: new Date().toISOString()
   };
+
+  if (!navigator.onLine) {
+    const tempId = crypto.randomUUID();
+    const newProj = { ...payload, id: tempId, clanovi: [], _pendingSync: true };
+    _projekti.unshift(newProj);
+    _OL.save(_OL.PROJEKTI, _projekti);
+    _OL.enqueue({ type: 'insert_projekt', payload: { ...payload, _tempId: tempId } });
+    hideNovProjektForm();
+    _aktivniProjektId = tempId;
+    localStorage.setItem('tvlake_akt_proj', tempId);
+    rndProjektiList(); updProjStats();
+    showToast('📋 Projekat kreiran — sinhronizira se kad budes online');
+    return;
+  }
+
   const { data, error } = await sb.from('projekti').insert(payload).select('id').single();
   if (error) { showToast('Greška: ' + error.message); return; }
   showToast('Projekat sačuvan!');
@@ -3739,6 +3784,15 @@ async function deleteProjektUI() {
     _updFabVisibility();
   }
   showProjektiList();
+
+  // Ako projekat još nije sinhroniziran (kreiran offline), samo ukloni iz reda
+  if (p._pendingSync) {
+    const lq = _OL.loadQueue().filter(o => !(o.type === 'insert_projekt' && o.payload._tempId === id));
+    localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+    _OL.save(_OL.PROJEKTI, _projekti);
+    showToast('Projekat uklonjen.');
+    return;
+  }
 
   // Dodaj u guard set PRIJE poziva — sbLoadProjekti nikad ga neće vratiti
   _deletedProjektIds.add(id);
