@@ -5539,9 +5539,63 @@ function _makeDemCanvasLayer(mode) {
 const DemNV    = _makeDemCanvasLayer('nv');
 const DemEkspo = _makeDemCanvasLayer('ekspo');
 
+// ── Slope canvas layer (terrarium-based, crvene nijanse od 30%) ───────────────
+function _tile2lat(y, z) {
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+function _slopeColor(pct) {
+  if (pct < 30) return [0, 0, 0, 0];
+  const t = Math.min(1, (pct - 30) / 80); // 0 pri 30%, 1 pri 110%+
+  return [
+    Math.round(230 - t * 50),   // R: 230→180
+    Math.round(170 - t * 160),  // G: 170→10
+    Math.round(170 - t * 160),  // B: 170→10
+    Math.round(110 + t * 130)   // A: 110→240
+  ];
+}
+const DemSlopeClass = L.GridLayer.extend({
+  createTile(coords, done) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 256;
+    _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+      if (!src) { done(null, canvas); return; }
+      const tmp = document.createElement('canvas');
+      tmp.width = tmp.height = 256;
+      const tc = tmp.getContext('2d');
+      tc.drawImage(src, 0, 0, 256, 256);
+      const raw = tc.getImageData(0, 0, 256, 256).data;
+      const elev = new Float32Array(256 * 256);
+      for (let i = 0; i < 256 * 256; i++)
+        elev[i] = raw[i*4]*256 + raw[i*4+1] + raw[i*4+2]/256 - 32768;
+      // Geografska veličina piksela u metrima na ovoj geografskoj širini
+      const lat  = _tile2lat(coords.y + 0.5, coords.z);
+      const pixM = Math.cos(lat * Math.PI / 180) * 156543.03392 / Math.pow(2, coords.z);
+      const ctx = canvas.getContext('2d');
+      const out = ctx.createImageData(256, 256);
+      const od  = out.data;
+      for (let py = 0; py < 256; py++) {
+        for (let px = 0; px < 256; px++) {
+          const idx = py * 256 + px;
+          const x0 = Math.max(0, px-1), x1 = Math.min(255, px+1);
+          const y0 = Math.max(0, py-1), y1 = Math.min(255, py+1);
+          const dzdx = (elev[py*256+x1] - elev[py*256+x0]) / ((x1-x0) * pixM);
+          const dzdy = (elev[y1*256+px] - elev[y0*256+px]) / ((y1-y0) * pixM);
+          const pct  = Math.sqrt(dzdx*dzdx + dzdy*dzdy) * 100;
+          const rgba = _slopeColor(pct);
+          od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      done(null, canvas);
+    }).catch(() => done(null, canvas));
+    return canvas;
+  }
+});
+
 const _OVL = {
-  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',  { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
-  slope: new CachedSlope('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
+  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
+  slope: new DemSlopeClass({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:1.0, attribution:'' }),
   nv:    new DemNV(   { pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.75, attribution:'' }),
   ekspo: new DemEkspo({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.80, attribution:'' })
 };
@@ -10313,7 +10367,7 @@ async function _instClear(id) {
   if (!('caches' in window)) return;
   const cacheMap = {
     elev:  _ELEV_CACHE,
-    slope: _SLOPE_CACHE,
+    slope: _TERR_CACHE,
     nv:    _TERR_CACHE,
     ekspo: _TERR_CACHE
   };
@@ -10321,6 +10375,7 @@ async function _instClear(id) {
   if (!cn) return;
   await caches.delete(cn);
   if (cn === _TERR_CACHE) {
+    if (_ovlState.slope) _OVL.slope.redraw();
     if (_ovlState.nv)    _OVL.nv.redraw();
     if (_ovlState.ekspo) _OVL.ekspo.redraw();
   } else if (_OVL[id] && _ovlState[id]) {
@@ -10334,7 +10389,7 @@ async function _instUpdateStats() {
   if (!('caches' in window)) return;
   const pairs = [
     ['elev',  _ELEV_CACHE],
-    ['slope', _SLOPE_CACHE],
+    ['slope', _TERR_CACHE],
     ['nv',    _TERR_CACHE],
     ['ekspo', _TERR_CACHE]
   ];
@@ -16268,7 +16323,7 @@ function toggleHelpSec(hdr) {
           style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;flex-shrink:0;">
         <div>
           <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Hipsometrija</div>
-          <div style="font-size:11px;color:#64748b;">Elevation hillshade overlay</div>
+          <div style="font-size:11px;color:#64748b;">Sjenčanje reljefa — hillshade sloj</div>
           <div id="inst-elev-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
         </div>
       </label>
@@ -16284,7 +16339,7 @@ function toggleHelpSec(hdr) {
           style="width:18px;height:18px;accent-color:#fb923c;cursor:pointer;flex-shrink:0;">
         <div>
           <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nagib terena</div>
-          <div style="font-size:11px;color:#64748b;">DEM Slopes — shaded relief</div>
+          <div style="font-size:11px;color:#64748b;">Nagibi ≥30% — nijanse crvene</div>
           <div id="inst-slope-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
         </div>
       </label>
@@ -16326,7 +16381,7 @@ function toggleHelpSec(hdr) {
       </button>
     </div>
     <div style="margin-top:8px;font-size:10px;color:#334155;line-height:1.5;">
-      N.V. i Strane dijele isti keš (terrarium DEM tiles, max zoom 14→upscale).
+      Nagibi, N.V. i Strane dijele isti keš (terrarium DEM pločice, max zum 14→uvećanje).
     </div>
   </div>
 
