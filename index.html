@@ -7097,7 +7097,7 @@ function onP(p) {
   lastP = { la, lo, al: filtAl ?? 0, ac };
   _lastGpsFixTime = Date.now();
   _gpsRestartCount = 0;
-  _addTragPoint(la, lo, al);
+  _addTragPoint(la, lo, ac, al);
   _updMcdDist();
 
   // Prikaz uvijek — pokaži brzinu ako je dostupna
@@ -7654,16 +7654,22 @@ function fabSnimTrag() {
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     if (_tragPts.length > 1) {
-      const saved = _tragRegAdd(_tragPts.slice());
+      // RDP simplifikacija snimljenog traga (3m tolerancija) — uklanja GPS šum
+      const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
+      const simp  = _rdpSimplify(pts3d, 3);
+      const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
+      const saved = _tragRegAdd(final);
       _tqmOpen(saved.id);
     } else {
       showToast('Trag nije snimljen (premalo tačaka)');
     }
     _tragPts = [];
+    _tragBuf = [];
   } else {
     if (!gpsOn) startGPS();
-    _tragOn = true;
+    _tragOn  = true;
     _tragPts = [];
+    _tragBuf = [];
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
     const bt = document.getElementById('btrag');
@@ -7672,14 +7678,31 @@ function fabSnimTrag() {
   }
 }
 
-function _addTragPoint(la, lo, al) {
+let _tragBuf = [];  // kružni buffer zadnja 3 raw GPS fixa za median filtar
+
+function _addTragPoint(la, lo, ac, al) {
   if (!_tragOn) return;
+
+  // 1. Odbaci slabe GPS fikseve (grad: zgrade blokiraju satelite)
+  if (ac > 25) return;
+
+  // 2. Median filtar od 3 fikseva — jedan spike ne može pokvariti medijanu
+  _tragBuf.push({ la, lo });
+  if (_tragBuf.length > 3) _tragBuf.shift();
+  const n   = _tragBuf.length;
+  const mla = [..._tragBuf].sort((a, b) => a.la - b.la)[Math.floor(n / 2)].la;
+  const mlo = [..._tragBuf].sort((a, b) => a.lo - b.lo)[Math.floor(n / 2)].lo;
+
+  // 3. Minimalna udaljenost od zadnje prihvaćene tačke
   if (_tragPts.length > 0) {
     const last = _tragPts[_tragPts.length - 1];
-    if (dst(last[0], last[1], la, lo) < 2) return; // min 2m između tačaka
+    const d    = dst(last[0], last[1], mla, mlo);
+    if (d < 5) return;   // premalo kretanja
+    if (d > Math.max(40, ac * 3)) return;  // preveliki skok — odbaci spike
   }
-  _tragPts.push([la, lo, al]);
-  if (_tragLine) _tragLine.addLatLng([la, lo]);
+
+  _tragPts.push([mla, mlo, al]);
+  if (_tragLine) _tragLine.addLatLng([mla, mlo]);
 }
 
 function _tragToGpx(pts) {
