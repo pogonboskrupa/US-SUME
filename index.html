@@ -4783,13 +4783,14 @@ function _restoreTacke() {
   } catch(e) {}
 }
 
-// ── Tačka dugme — direktna akcija bez modala ──
+// ── Tačka dugme — unos naziva pa automatski postavi ──
 function addTacka() {
   switchTab('karta');
+  const nm = (window.prompt('Naziv tačke (može ostati prazno):', '') ?? '').trim();
   if (lastP) {
-    _createTacka(lastP.la, lastP.lo, '');
+    _createTacka(lastP.la, lastP.lo, nm);
   } else {
-    _tackaPlaceNm = '';
+    _tackaPlaceNm = nm;
     _tackaPlaceMode = true;
     document.getElementById('tacka-place-banner').style.display = 'block';
     map.getContainer().style.cursor = 'crosshair';
