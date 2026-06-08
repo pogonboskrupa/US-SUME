@@ -4881,6 +4881,8 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
     const shareLbl = shared ? '👥 Podijeli' : '📤 Podijeli';
     actionBtns = `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${idx})">${shareLbl}</button>`;
     actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>`;
+  } else {
+    actionBtns = `<button class="foto-popup-btn" onclick="deleteFotoShared(${idx})">🗑 Ukloni</button>`;
   }
   m.bindPopup(
     `<div style="min-width:200px;max-width:256px;color:#1e293b;">
@@ -5087,8 +5089,10 @@ async function sbLoadSharedFotos() {
       .filter('shared_with', 'cs', `{${sbUser.id}}`);
     if (error) { console.warn('sbLoadSharedFotos:', error.message); return; }
     if (!data) return;
+    const dismissed = _getDismissedFotos();
     data.forEach((row, i) => {
       if (!row.thumb || !row.la || !row.lo) return;
+      if (dismissed.has(row.id)) return;
       const m = _buildFotoMarker(row.la, row.lo, row.thumb, row.full_img || row.thumb, i, row.ts, false, true);
       _sharedFotos.push({la: row.la, lo: row.lo, ts: row.ts, thumb: row.thumb, full: row.full_img || row.thumb, marker: m, sbId: row.id});
     });
@@ -5102,10 +5106,40 @@ function deleteFoto(idx) {
   map.removeLayer(f.marker);
   if (f.sbId) sbDeleteFoto(f.sbId);
   _locFotos.splice(idx, 1);
-  // Renumber remaining popups
   _locFotos.forEach((fi, i) => _setupFotoPopup(fi.marker, i, fi.la, fi.lo, fi.ts, fi.full, true, fi.shared));
   _saveFotos();
   map.closePopup();
+}
+
+// ─ Dismiss dijeljene slike (samo za primatelja) ─
+const _DISMISSED_FOTOS_KEY = 'tvlake_dismissed_fotos';
+function _getDismissedFotos() {
+  try { return new Set(JSON.parse(localStorage.getItem(_DISMISSED_FOTOS_KEY) || '[]')); } catch { return new Set(); }
+}
+function _addDismissedFoto(sbId) {
+  const s = _getDismissedFotos(); s.add(sbId);
+  localStorage.setItem(_DISMISSED_FOTOS_KEY, JSON.stringify([...s]));
+}
+
+async function deleteFotoShared(idx) {
+  const f = _sharedFotos[idx];
+  if (!f) return;
+  map.removeLayer(f.marker);
+  _sharedFotos.splice(idx, 1);
+  _sharedFotos.forEach((fi, i) => _setupFotoPopup(fi.marker, i, fi.la, fi.lo, fi.ts, fi.full, false, true));
+  map.closePopup();
+  // Lokalni dismiss — perzistira i ako DB update ne uspije
+  if (f.sbId) _addDismissedFoto(f.sbId);
+  // Ukloni sebe iz shared_with u bazi
+  if (f.sbId && sbUser) {
+    try {
+      const { data } = await sb.from('loc_fotos').select('shared_with').eq('id', f.sbId).single();
+      if (data?.shared_with) {
+        const newShared = data.shared_with.filter(id => id !== sbUser.id);
+        await sb.from('loc_fotos').update({ shared_with: newShared }).eq('id', f.sbId);
+      }
+    } catch(e) {}
+  }
 }
 
 // ─ Resize helper ─
