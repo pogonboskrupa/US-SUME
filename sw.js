@@ -2,13 +2,14 @@
 // Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.6.19';
+const APP_VERSION = '1.6.20';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
-const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
-const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
-const ELEV_CACHE  = 'tvlake-elev-v1';   // ArcGIS World Hillshade
-const SLOPE_CACHE = 'tvlake-slope-v1';  // ArcGIS World Shaded Relief
-const TERR_CACHE  = 'tvlake-terr-v1';   // Terrarium DEM tiles (N.V. + Strane)
+const TILE_CACHE  = 'tvlake-tiles-v1';
+const LIB_CACHE   = 'tvlake-lib-v1';
+const ELEV_CACHE  = 'tvlake-elev-v1';
+const SLOPE_CACHE = 'tvlake-slope-v1';
+const TERR_CACHE  = 'tvlake-terr-v1';
+const NV_CACHE    = 'tvlake-nv-v1';     // Open-Meteo elevation (statički, može se keširati)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -89,11 +90,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // API pozivi — nikad ne keširati (zahtijevaju internet)
-  if (
-    url.includes('supabase.co') ||
-    url.includes('api.open-meteo.com')
-  ) {
+  // Elevation API — statički podaci terena, keširamo za offline
+  if (url.includes('api.open-meteo.com') && url.includes('/v1/elevation')) {
+    _tileRespond(event, NV_CACHE);
+    return;
+  }
+  // Ostali API pozivi — nikad ne keširati
+  if (url.includes('supabase.co') || url.includes('api.open-meteo.com')) {
     return;
   }
 

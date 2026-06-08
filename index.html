@@ -5280,7 +5280,7 @@ function debouncedUpdElev(lat, lng, ms) {
 
 async function fetchElev() {
   const lat = _elevLat, lng = _elevLng;
-  if (lat == null) return;
+  if (lat == null || !_nvApiEnabled) return;
   try {
     const ctrl = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(4000) : undefined;
     const r = await fetch(
@@ -5418,6 +5418,8 @@ const TL = {
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
 const _TERR_CACHE  = 'tvlake-terr-v1';
+const _NV_API_CACHE = 'tvlake-nv-v1';
+let _nvApiEnabled = JSON.parse(localStorage.getItem('tvlake_nv_api') ?? 'true');
 const CachedElev  = makeCachedTileLayer(_ELEV_CACHE);
 const CachedSlope = makeCachedTileLayer(_SLOPE_CACHE);
 
@@ -5426,17 +5428,22 @@ function _hsl2rgb(h, s, l) {
   const f = (n, k=(n+h/30)%12) => l - s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,9-k,1));
   return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
 }
+// 8 visinskih pojaseva: 0-200 / 200-400 / 400-600 / 600-800 / 800-1000 / 1000-1200 / 1200-1400 / >1400
+const _NV_BANDS = [
+  [   0, [76,  175,  80, 185]],  // 0–200 m    zelena
+  [ 200, [139, 195,  74, 185]],  // 200–400 m  svjetlozelena
+  [ 400, [212, 225,  87, 185]],  // 400–600 m  žutozelena
+  [ 600, [255, 193,   7, 188]],  // 600–800 m  jantarna
+  [ 800, [255, 152,   0, 190]],  // 800–1000 m narančasta
+  [1000, [188,  84,  14, 193]],  // 1000–1200 m tamnonarančasta
+  [1200, [121,  85,  72, 196]],  // 1200–1400 m smeđa
+  [1400, [200, 200, 210, 200]],  // >1400 m    sivobijela
+];
 function _nvColor(e) {
-  // Hypsometric tinting: elevation in metres
-  if (e < 0)    return [50,  120, 210, 170];
-  if (e < 200)  return [90,  195,  90, 185];
-  if (e < 400)  return [165, 220, 100, 185];
-  if (e < 600)  return [215, 215, 105, 185];
-  if (e < 850)  return [215, 175,  90, 190];
-  if (e < 1100) return [185, 135,  70, 195];
-  if (e < 1400) return [155, 105,  60, 195];
-  if (e < 1700) return [160, 120, 105, 200];
-  return [215, 220, 230, 200];
+  if (e < 0) return [50, 100, 200, 160];
+  for (let i = _NV_BANDS.length - 1; i >= 0; i--)
+    if (e >= _NV_BANDS[i][0]) return _NV_BANDS[i][1];
+  return _NV_BANDS[0][1];
 }
 function _aspColor(deg, mag) {
   if (mag < 0.8) return [128, 128, 128, 0];
@@ -5622,6 +5629,8 @@ function _openLayerSheet() {
     const cb = document.getElementById('inst-' + id + '-cb');
     if (cb) cb.checked = !!_ovlState[id];
   });
+  const nvApiCb = document.getElementById('inst-nvapi-cb');
+  if (nvApiCb) nvApiCb.checked = _nvApiEnabled;
   _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
@@ -10269,6 +10278,21 @@ function _instToggle(id, on) {
   _demLegendUpdate();
 }
 
+function _nvApiToggle(on) {
+  _nvApiEnabled = on;
+  localStorage.setItem('tvlake_nv_api', JSON.stringify(on));
+  if (!on) {
+    // Clear the elevation display
+    document.getElementById('onv').textContent = '— m';
+    const nvVal = document.getElementById('nv-val');
+    if (nvVal) nvVal.textContent = '— m';
+  } else {
+    // Trigger a fresh fetch
+    const c = map.getCenter();
+    debouncedUpdElev(c.lat, c.lng, 200);
+  }
+}
+
 function _demLegendUpdate() {
   const el = document.getElementById('dem-legend');
   if (!el) return;
@@ -10290,28 +10314,36 @@ function _demLegendUpdate() {
     if (showEkspo) html += '<div class="leg-sep"></div>';
     html += `<div class="leg-title">📏 Nadmorska visina</div>`;
     const bands = [
-      ['#d7dce6','> 1700 m'],['#a07868','1400 m'],['#9f7846','1100 m'],
-      ['#b98f46','850 m'],  ['#d7c782','600 m'], ['#a5dc64','400 m'],
-      ['#5ac85a','200 m'],  ['#5ac85a','0 m']
+      ['#c8c8d2','> 1400 m'],
+      ['#795548','1200 m'],
+      ['#bc540e','1000 m'],
+      ['#ff9800',' 800 m'],
+      ['#ffc107',' 600 m'],
+      ['#d4e157',' 400 m'],
+      ['#8bc34a',' 200 m'],
+      ['#4caf50','   0 m'],
     ];
-    const uniq = bands.filter((b,i) => i===0||b[0]!==bands[i-1][0]);
-    html += uniq.map(([c,l])=>`<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:${c};"></div><span class="leg-nv-lbl">${l}</span></div>`).join('');
+    html += bands.map(([c,l])=>`<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:${c};"></div><span class="leg-nv-lbl">${l}</span></div>`).join('');
   }
   el.innerHTML = html;
 }
 
 async function _instClear(id) {
   if (!('caches' in window)) return;
-  // nv + ekspo share the same terrarium cache
-  const cacheMap = { elev: _ELEV_CACHE, slope: _SLOPE_CACHE, nv: _TERR_CACHE, ekspo: _TERR_CACHE };
+  const cacheMap = {
+    elev:  _ELEV_CACHE,
+    slope: _SLOPE_CACHE,
+    nv:    _TERR_CACHE,
+    ekspo: _TERR_CACHE,
+    nvapi: _NV_API_CACHE
+  };
   const cn = cacheMap[id];
   if (!cn) return;
   await caches.delete(cn);
-  // If terrarium was cleared, redraw both DEM layers
   if (cn === _TERR_CACHE) {
     if (_ovlState.nv)    _OVL.nv.redraw();
     if (_ovlState.ekspo) _OVL.ekspo.redraw();
-  } else if (_ovlState[id]) {
+  } else if (_OVL[id] && _ovlState[id]) {
     _OVL[id].redraw();
   }
   await _instUpdateStats();
@@ -10324,9 +10356,9 @@ async function _instUpdateStats() {
     ['elev',  _ELEV_CACHE],
     ['slope', _SLOPE_CACHE],
     ['nv',    _TERR_CACHE],
-    ['ekspo', _TERR_CACHE]   // same cache — same number shown on both
+    ['ekspo', _TERR_CACHE],
+    ['nvapi', _NV_API_CACHE]
   ];
-  // Cache size per cache name (fetch once, reuse)
   const counts = {};
   for (const [, cn] of pairs) {
     if (cn in counts) continue;
@@ -16282,18 +16314,34 @@ function toggleHelpSec(hdr) {
         🗑
       </button>
     </div>
-    <!-- Nadmorska visina (DEM) -->
+    <!-- Nadmorska visina — prikaz u bojama (DEM canvas) -->
     <div class="inst-layer-row" id="inst-nv-row">
       <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
         <input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"
           style="width:18px;height:18px;accent-color:#4ade80;cursor:pointer;flex-shrink:0;">
         <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nadmorska visina</div>
-          <div style="font-size:11px;color:#64748b;">Hipsometrijska obojenost terena</div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">N.V. — prikaz u bojama</div>
+          <div style="font-size:11px;color:#64748b;">Hipsometrija na karti (200m pojasevi)</div>
           <div id="inst-nv-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
         </div>
       </label>
       <button onclick="_instClear('nv')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Nadmorska visina — API fetch za koordinatnu traku -->
+    <div class="inst-layer-row" id="inst-nvapi-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-nvapi-cb" checked onchange="_nvApiToggle(this.checked)"
+          style="width:18px;height:18px;accent-color:#22d3ee;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">N.V. — koordinatna traka</div>
+          <div style="font-size:11px;color:#64748b;">Učitaj visinu za prikaz u statusnoj traci</div>
+          <div id="inst-nvapi-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('nvapi')" title="Obriši keš"
         style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
         🗑
       </button>
