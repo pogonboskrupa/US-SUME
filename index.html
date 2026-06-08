@@ -2916,7 +2916,7 @@ function _saveLocalVlake() {
     const rows = vlake.map(v => ({
       nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
       boja: v.color, lager: v.lager || null,
-      pts: v.pts,
+      pts: v.pts, projekt_id: v.projektId || null,
       updated_at: v.updatedAt || new Date().toISOString(),
       id: v.sbId || null
     }));
@@ -2930,6 +2930,7 @@ function _loadLocalVlake() {
 }
 
 // ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
+const _DOZ_TRACK_BUF_KEY = 'tvlake_doz_track_buf';
 const _OL = {
   VLAKE:    'tvlake_ol_vlake',
   PROJEKTI: 'tvlake_ol_projekti',
@@ -3055,6 +3056,17 @@ async function _processOfflineQueue() {
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
     } catch(e) { break; } // still offline
   }
+  // Flush buffered doznaka GPS track points
+  try {
+    const dozBuf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+    if (dozBuf.length > 0) {
+      const { error } = await sb.from('doz_track_points').insert(dozBuf);
+      if (!error) {
+        localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
+        synced += dozBuf.length;
+      }
+    }
+  } catch {}
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
 }
 
@@ -3426,6 +3438,7 @@ async function sbInitData() {
   await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
   sbLoadSharedFotos();            // fire-and-forget
   autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
+  if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -3881,7 +3894,9 @@ async function sbLoadVlake() {
     if (!serverRows) serverRows = _OL.load(_OL.VLAKE);
   }
 
-  const allRows = [...localRows, ...(serverRows || [])];
+  // Server/cache rows first so dedup-by-nm keeps the version with projekt_id, sbId, etc.
+  // Local-only rows (no matching nm in server) are still appended after.
+  const allRows = [...(serverRows || []), ...localRows];
   if (allRows.length === 0) return;
   _applyVlakeRows(allRows);
 }
@@ -14171,14 +14186,22 @@ async function dozStartGPS() {
       _dozGpsTrackLayer = L.layerGroup().addTo(map);
       L.polyline(_dozGpsPts, { color:'#fbbf24', weight:3, opacity:0.9 }).addTo(_dozGpsTrackLayer);
     }
+    const _dozPt = {
+      project_id: _dozSelId, user_id: sbUser.id,
+      latitude: lat, longitude: lng,
+      altitude: alt || null, accuracy: acc, speed: speed || null,
+      recorded_at: new Date().toISOString()
+    };
     try {
-      await sb.from('doz_track_points').insert({
-        project_id: _dozSelId, user_id: sbUser.id,
-        latitude: lat, longitude: lng,
-        altitude: alt || null, accuracy: acc, speed: speed || null,
-        recorded_at: new Date().toISOString()
-      });
-    } catch(e) {}
+      await sb.from('doz_track_points').insert(_dozPt);
+    } catch(e) {
+      // Buffer offline — flush in _processOfflineQueue when back online
+      try {
+        const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+        buf.push(_dozPt);
+        localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(buf));
+      } catch {}
+    }
   }, err => { console.warn('Doznaka GPS', err); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
