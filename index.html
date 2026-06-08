@@ -4786,7 +4786,15 @@ function _restoreTacke() {
 // ── Tačka dugme — unos naziva pa automatski postavi ──
 function addTacka() {
   switchTab('karta');
-  const nm = (window.prompt('Naziv tačke (može ostati prazno):', '') ?? '').trim();
+  document.getElementById('tacka-nm-input').value = '';
+  document.getElementById('tacka-modal-bg').style.display = 'block';
+  document.getElementById('tacka-modal').style.display    = 'block';
+  setTimeout(() => document.getElementById('tacka-nm-input').focus(), 80);
+}
+
+function _tackaConfirm() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
   if (lastP) {
     _createTacka(lastP.la, lastP.lo, nm);
   } else {
@@ -16233,10 +16241,9 @@ function toggleHelpSec(hdr) {
       style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;">✕</button>
   </div>
   <input id="tacka-nm-input" type="text" placeholder="Naziv tačke (npr. Sječa, Deponija...)" autocomplete="off" maxlength="40"
-    onkeydown="if(event.key==='Enter'){document.getElementById('tacka-btn-gps').click();}">
+    onkeydown="if(event.key==='Enter'){_tackaConfirm();}">
   <div class="tacka-modal-btns">
-    <button id="tacka-btn-gps" onclick="_tackaAddAtGPS()">📡 GPS lokacija</button>
-    <button id="tacka-btn-map" onclick="_tackaAddOnMap()">🗺 Klikni na karti</button>
+    <button id="tacka-btn-confirm" onclick="_tackaConfirm()" style="flex:1;">📍 Dodaj</button>
     <button id="tacka-btn-cancel" onclick="_tackaCancelModal()">✕</button>
   </div>
 </div>
