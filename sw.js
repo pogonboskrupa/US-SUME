@@ -2,10 +2,12 @@
 // Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.6.15';
+const APP_VERSION = '1.6.16';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
 const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
+const ELEV_CACHE  = 'tvlake-elev-v1';   // ArcGIS World Hillshade
+const SLOPE_CACHE = 'tvlake-slope-v1';  // ArcGIS World Shaded Relief
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -40,27 +42,43 @@ self.addEventListener('activate', event => {
 });
 
 // ─── FETCH ───────────────────────────────────────────────────────────
+
+// Helper — cache-then-fetch pattern for tile caches
+function _tileRespond(event, cacheName) {
+  event.respondWith(
+    caches.open(cacheName).then(async cache => {
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+      try {
+        const resp = await fetch(event.request);
+        if (resp.ok) cache.put(event.request, resp.clone());
+        return resp;
+      } catch {
+        return cached || new Response('', { status: 503 });
+      }
+    })
+  );
+}
+
 self.addEventListener('fetch', event => {
   const url = event.request.url;
+
+  // Specific ArcGIS elevation caches — must come BEFORE the generic arcgisonline.com handler
+  if (url.includes('arcgisonline.com') && url.includes('/World_Hillshade/')) {
+    _tileRespond(event, ELEV_CACHE);
+    return;
+  }
+  if (url.includes('arcgisonline.com') && url.includes('/World_Shaded_Relief/')) {
+    _tileRespond(event, SLOPE_CACHE);
+    return;
+  }
 
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
     url.includes('arcgisonline.com')
   ) {
-    event.respondWith(
-      caches.open(TILE_CACHE).then(async cache => {
-        const cached = await cache.match(event.request);
-        if (cached) return cached;
-        try {
-          const resp = await fetch(event.request);
-          if (resp.ok) cache.put(event.request, resp.clone());
-          return resp;
-        } catch {
-          return cached || new Response('', { status: 503 });
-        }
-      })
-    );
+    _tileRespond(event, TILE_CACHE);
     return;
   }
 

@@ -2127,6 +2127,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   border-color: #3b82f6;
   color: #fff;
 }
+.inst-layer-row { display:flex; align-items:center; gap:8px; padding:10px 8px; border:1px solid #1e3a5f; border-radius:8px; margin-bottom:8px; background:rgba(15,23,42,0.6); }
 </style>
 </head>
 <body>
@@ -5316,7 +5317,8 @@ let editingLabelId = null;
 const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
-function makeCachedTileLayer(urlTemplate, opts) {
+function makeCachedTileLayer(cacheName) {
+  cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
     createTile(coords, done) {
       const tile = document.createElement('img');
@@ -5327,7 +5329,7 @@ function makeCachedTileLayer(urlTemplate, opts) {
         tile.onerror = e => done(e, tile);
         tile.src = url; return tile;
       }
-      caches.open(TILE_CACHE_NAME).then(async cache => {
+      caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
         if (cached) {
           tile.src = URL.createObjectURL(await cached.blob());
@@ -5376,12 +5378,25 @@ map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
 map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
+map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.svg({ pane: 'putevi' });
 const TL = {
   '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c']}),
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
+const _ELEV_CACHE  = 'tvlake-elev-v1';
+const _SLOPE_CACHE = 'tvlake-slope-v1';
+const CachedElev  = makeCachedTileLayer(_ELEV_CACHE);
+const CachedSlope = makeCachedTileLayer(_SLOPE_CACHE);
+const _OVL = {
+  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',  { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
+  slope: new CachedSlope('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' })
+};
+let _ovlState = { elev: false, slope: false };
+try { Object.assign(_ovlState, JSON.parse(localStorage.getItem('tvlake_ovl_state') || '{}')); } catch {}
+// Restore overlay visibility
+Object.entries(_ovlState).forEach(([k,v]) => { if (v && _OVL[k]) _OVL[k].addTo(map); });
 // Vrati zadnju kartu ili defaultuj na Topo
 (function _restoreLastMap() {
   let restoredKey = '⛰ Topo';
@@ -5455,6 +5470,11 @@ function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
   _lsTab('karte');
+  const ecb = document.getElementById('inst-elev-cb');
+  const scb = document.getElementById('inst-slope-cb');
+  if (ecb) ecb.checked  = !!_ovlState.elev;
+  if (scb) scb.checked = !!_ovlState.slope;
+  _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
   if (grRow) grRow.style.display = (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) ? 'block' : 'none';
@@ -10079,7 +10099,7 @@ function _ozTogTrag(id) {
 
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
 function _lsTab(name) {
-  const panes = ['karte','granice'];
+  const panes = ['karte','inst','granice'];
   panes.forEach(p => {
     const pane = document.getElementById('ls-pane-' + p);
     const btn  = document.getElementById('ls-tab-' + p);
@@ -10090,6 +10110,36 @@ function _lsTab(name) {
     btn.style.borderColor = active ? '#334155' : '#1e293b';
     btn.style.color       = active ? '#e2e8f0' : '#64748b';
   });
+  if (name === 'inst') _instUpdateStats();
+}
+
+function _instToggle(id, on) {
+  if (on) _OVL[id].addTo(map);
+  else map.removeLayer(_OVL[id]);
+  _ovlState[id] = on;
+  localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState));
+}
+
+async function _instClear(id) {
+  const cacheName = id === 'elev' ? _ELEV_CACHE : _SLOPE_CACHE;
+  if (!('caches' in window)) return;
+  await caches.delete(cacheName);
+  if (_ovlState[id]) _OVL[id].redraw();
+  await _instUpdateStats();
+  showToast('Keš obrisan');
+}
+
+async function _instUpdateStats() {
+  if (!('caches' in window)) return;
+  for (const [id, cn] of [['elev', _ELEV_CACHE], ['slope', _SLOPE_CACHE]]) {
+    const el = document.getElementById('inst-' + id + '-stat');
+    if (!el) continue;
+    try {
+      const cache = await caches.open(cn);
+      const keys  = await cache.keys();
+      el.textContent = keys.length ? keys.length + ' pločica' : 'Prazno';
+    } catch { el.textContent = '—'; }
+  }
 }
 
 // ── Granice Odjela — now lives in layer sheet ──────────────────────────────────
@@ -15923,6 +15973,10 @@ function toggleHelpSec(hdr) {
       style="flex:1;padding:7px 4px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;">
       🗺 Karte
     </button>
+    <button id="ls-tab-inst" onclick="_lsTab('inst')"
+      style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
+      🏔 Instalirane
+    </button>
     <button id="ls-tab-granice" onclick="_lsTab('granice')"
       style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
       🗂 Granice
@@ -15990,6 +16044,44 @@ function toggleHelpSec(hdr) {
             oninput="_geojsonSetOpacity(this.value)">
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Tab: Instalirane karte -->
+  <div id="ls-pane-inst" style="display:none;">
+    <h3>🏔 Instalirane karte</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.6;">Slojevi se keširaju automatski dok pregledaš kartu. Brisanjem keša oslobađaš prostor.</p>
+    <!-- Hipsometrija -->
+    <div class="inst-layer-row" id="inst-elev-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"
+          style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Hipsometrija</div>
+          <div style="font-size:11px;color:#64748b;">Elevation hillshade overlay</div>
+          <div id="inst-elev-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('elev')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Nagibi terena -->
+    <div class="inst-layer-row" id="inst-slope-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"
+          style="width:18px;height:18px;accent-color:#fb923c;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nagib terena</div>
+          <div style="font-size:11px;color:#64748b;">DEM Slopes — shaded relief</div>
+          <div id="inst-slope-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('slope')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
     </div>
   </div>
 
