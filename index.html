@@ -4029,14 +4029,19 @@ async function sbLoadKolegeVlake() {
       info = { ime: row.ime || 'Kolega', color: KORISNIK_PAL[seenIds.indexOf(kid) % KORISNIK_PAL.length] };
     }
     const color = row.boja || info.color;
+    const mapKey = kid + '::' + row.nm;
     const poly = L.polyline(
       row.pts.map(p => [p.la, p.lo]),
-      { color, weight: 3, opacity: 0.7, dashArray: '10,6', interactive: false }
+      { color, weight: 3, opacity: 0.7, dashArray: '10,6', interactive: true }
     ).addTo(map);
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
+    poly.on('click', function(e) {
+      L.DomEvent.stopPropagation(e);
+      showKolegeVlakaInfo(mapKey, e.latlng);
+    });
     kolegeVlake.push(poly);
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime, pts: row.pts || [] };
+    kolegeVlakeMap[mapKey] = { poly, color, ime: info.ime, pts: row.pts || [] };
   });
 }
 
@@ -8013,24 +8018,29 @@ function showVlakaPopup(i, latlng) {
   const len = calcL(v.pts);
   const ime = getIme();
   const dat = v.updatedAt ? fmtDate(v.updatedAt.slice(0,10)) : fmtDate(todayStr());
-  document.getElementById('vp-nm').textContent = v.nm + (v.kr > 0 ? ' (krak)' : '');
-  document.getElementById('vp-nm').style.color = v.color;
+  const tipLabel = v.kr > 0 ? ' (krak)' : '';
+  const brLabel  = v.br != null ? `<span style="font-size:11px;color:#64748b;margin-left:5px;">br.${v.br}</span>` : '';
+  document.getElementById('vp-nm').innerHTML =
+    `<span style="color:${v.color};">${v.nm}</span>${brLabel}<span style="color:#64748b;font-size:11px;">${tipLabel}</span>`;
   document.getElementById('vp-info').innerHTML = `
+    <div class="vp-row">🔢 Broj vlake: <b>${v.br ?? '—'}</b>${v.kr > 0 ? `&nbsp;(krak ${v.kr})` : ''}</div>
     <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
-    <div class="vp-row">📍 Tačaka: <b>${v.pts.length}</b></div>
+    <div class="vp-row">📍 Tačaka GPS: <b>${v.pts.length}</b></div>
     <div class="vp-row">👤 Projektant: <b>${ime}</b></div>
     <div class="vp-row">📅 Ažurirano: <b>${dat}</b></div>
     ${v.lager ? `<div class="vp-row">🪵 Lager: <b style="color:#f59e0b;">${v.lager}</b></div>` : ''}
   `;
+  _positionPopup(latlng);
+}
+
+function _positionPopup(latlng) {
   const popup = document.getElementById('vlaka-popup');
   popup.style.display = 'block';
-  // Pozicioniraj uz klik na mapi
-  const cp = map.latLngToContainerPoint(latlng);
-  const mapEl = document.getElementById('map');
-  const mr = mapEl.getBoundingClientRect();
-  let left = mr.left + cp.x + 12;
-  let top  = mr.top  + cp.y - 20;
-  const pw = 270, ph = 200;
+  const cp  = map.latLngToContainerPoint(latlng);
+  const mr  = document.getElementById('map').getBoundingClientRect();
+  const pw  = 270, ph = 220;
+  let left  = mr.left + cp.x + 12;
+  let top   = mr.top  + cp.y - 20;
   if (left + pw > window.innerWidth  - 8) left = mr.left + cp.x - pw - 12;
   if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
   if (top < 60) top = 60;
@@ -8039,8 +8049,32 @@ function showVlakaPopup(i, latlng) {
   popup.style.top  = top  + 'px';
 }
 
+function showKolegeVlakaInfo(key, latlng) {
+  const kv = kolegeVlakeMap[key];
+  if (!kv) return;
+  closeVlakaPopup();
+  _vpIdx = null;
+  _vpJustOpened = true;
+  setTimeout(() => { _vpJustOpened = false; }, 80);
+  const len = calcL(kv.pts);
+  const nm  = key.split('::').slice(1).join('::');
+  document.getElementById('vp-nm').innerHTML =
+    `<span style="color:${kv.color};">${nm}</span>
+     <span style="font-size:10px;color:#475569;margin-left:5px;">👥 ${kv.ime || 'Kolega'}</span>`;
+  document.getElementById('vp-info').innerHTML = `
+    <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
+    <div class="vp-row">📍 Tačaka GPS: <b>${kv.pts.length}</b></div>
+    <div class="vp-row">👤 Projektant: <b>${kv.ime || 'Kolega'}</b></div>
+  `;
+  // Sakrij edit dugmad — kolega vlaka je read-only
+  document.getElementById('vlaka-popup-btns').style.display = 'none';
+  _positionPopup(latlng);
+}
+
 function closeVlakaPopup() {
   document.getElementById('vlaka-popup').style.display = 'none';
+  const btns = document.getElementById('vlaka-popup-btns');
+  if (btns) btns.style.display = '';  // restore for next open
   _vpIdx = null;
 }
 
@@ -15073,7 +15107,7 @@ function toggleHelpSec(hdr) {
     <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;">✕</button>
   </div>
   <div id="vp-info"></div>
-  <div class="vp-btns">
+  <div class="vp-btns" id="vlaka-popup-btns">
     <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;">🔧 Edituj</button>
     <button onclick="vpIzravnaj()" style="background:#0d5426;color:#86efac;" title="Ukloni suvišne GPS tačke (RDP 4m)">〰 Izravnaj</button>
     <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.5;">🎯</button>
