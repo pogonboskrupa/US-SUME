@@ -3924,7 +3924,7 @@ async function sbFlushVlaka(i) {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
-    projekt_id:  _aktivniProjektId || null,
+    projekt_id:  v.projektId || null,
     nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
@@ -5295,6 +5295,7 @@ const TL = {
   let restoredKey = '⛰ Topo';
   try {
     const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (saved?.type === 'sqlite') return; // sqlmapRestoreAll will activate the correct SQLite
     if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
@@ -13018,7 +13019,7 @@ async function sqlmapLoadFile(file) {
     // Remove existing layer with same name if present
     const ex = _sqlLayers.findIndex(l => l.name === name);
     if (ex !== -1) { map.removeLayer(_sqlLayers[ex].layer); _sqlLayers[ex].db.close(); _sqlLayers.splice(ex, 1); }
-    const layer = _sqlmapCreateLayer(db, fmt);
+    const layer = _sqlmapCreateLayer(db, fmt, meta);
     layer.addTo(map);
     _sqlLayers.push({ name, db, fmt, layer, visible: true, meta, saved: true });
     // Persist to IndexedDB
@@ -13038,16 +13039,39 @@ async function sqlmapRestoreAll() {
   let saved;
   try { saved = await _sqlIdbGetAll(); } catch(e) { return; }
   if (!saved.length) return;
+
+  // Which SQLite was last active? Only that one goes on the map.
+  let lastSqlId = null;
+  try {
+    const lm = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (lm?.type === 'sqlite' && lm.sqlId) lastSqlId = lm.sqlId;
+  } catch(e) {}
+
   try {
     const SQL = await _sqlmapEnsureSqlJs();
     for (const entry of saved) {
       if (_sqlLayers.find(l => l.name === entry.name)) continue;
       try {
+        const meta = entry.meta || {};
         const db = new SQL.Database(new Uint8Array(entry.buffer));
-        const layer = _sqlmapCreateLayer(db, entry.fmt);
-        layer.addTo(map);
-        _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: true, meta: entry.meta || {}, saved: true });
+        const layer = _sqlmapCreateLayer(db, entry.fmt, meta);
+        // Show only the last-selected SQLite; others remain hidden until user picks them
+        const shouldShow = lastSqlId ? entry.name === lastSqlId : false;
+        if (shouldShow) {
+          // Remove any base tile layer that _restoreLastMap may have added
+          Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+          layer.addTo(map);
+          const btn = document.getElementById('layer-switch-btn');
+          if (btn) btn.textContent = '🗄';
+        }
+        _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: shouldShow, meta, saved: true });
       } catch(e) { console.warn('SQLmap restore error for', entry.name, e); }
+    }
+    // If nothing was flagged as active (first load, no lastSqlId), show the first saved map
+    if (_sqlLayers.length && !_sqlLayers.some(sl => sl.visible)) {
+      if (!lastSqlId) {
+        // No SQLite was ever selected — don't auto-activate, leave the TL as-is
+      }
     }
     if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
   } catch(e) { console.warn('SQLmap restore failed:', e); }
@@ -13092,7 +13116,12 @@ function _sqlmapReadMeta(db, fmt) {
   return meta;
 }
 
-function _sqlmapCreateLayer(db, fmt) {
+function _sqlmapCreateLayer(db, fmt, meta) {
+  // Use zoom limits from MBTiles metadata so Leaflet upscales correctly instead
+  // of requesting tiles at levels that don't exist in the database.
+  const maxNative = (meta?.maxzoom != null) ? Math.max(1, parseInt(meta.maxzoom, 10)) : 18;
+  const minNative = (meta?.minzoom != null) ? Math.max(0, parseInt(meta.minzoom, 10)) : 0;
+
   const SqlTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const img = document.createElement('img');
@@ -13126,7 +13155,7 @@ function _sqlmapCreateLayer(db, fmt) {
       return img;
     }
   });
-  return new SqlTileLayer({ tileSize: 256, opacity: 1, maxNativeZoom: 18, maxZoom: 22 });
+  return new SqlTileLayer({ tileSize: 256, opacity: 1, minNativeZoom: minNative, maxNativeZoom: maxNative, maxZoom: 22 });
 }
 
 function _sqlmapRenderLayers() {
