@@ -3578,6 +3578,23 @@ function showProjektDetalji(id) {
   // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat
   document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !isSpd()) ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
+
+  // Za ne-vlasnike: dugme za brisanje lokalno cachiranih kolega vlaka
+  let ukBtn = document.getElementById('pd-ukl-kol-btn');
+  if (!isVlasnik) {
+    if (!ukBtn) {
+      ukBtn = document.createElement('button');
+      ukBtn.id = 'pd-ukl-kol-btn';
+      ukBtn.className = 'btn gr';
+      ukBtn.style.cssText = 'width:100%;font-size:12px;padding:7px;margin-top:4px;';
+      document.getElementById('pd-delete-btn').parentNode.appendChild(ukBtn);
+    }
+    ukBtn.textContent = '🗑 Ukloni vlake kolega (lokalno)';
+    ukBtn.onclick = () => ukloniKolVlakeZaProjekat(id);
+    ukBtn.style.display = '';
+  } else if (ukBtn) {
+    ukBtn.style.display = 'none';
+  }
 }
 
 function toggleNoviProj() {
@@ -3733,8 +3750,21 @@ async function deleteProjektUI() {
     return;
   }
 
+  _kvcClear(id);  // Briši cache kolega vlaka za ovaj projekat
   showToast('Projekat obrisan.');
   await sbLoadKolegeVlake();
+}
+
+// Ukloni vlake kolega iz lokalne memorije za projekat (za ne-vlasnike)
+function ukloniKolVlakeZaProjekat(projektId) {
+  if (!projektId) return;
+  const p = _projekti.find(x => x.id === projektId);
+  const lbl = p ? (p.odjel || 'projekat') : 'projekat';
+  if (!confirm(`Ukloniti lokalno sačuvane vlake kolega za "${lbl}"?\nVlake nestaju s vaše karte.`)) return;
+  _kvcClear(projektId);
+  // Ako je ovaj projekat aktivan, osvježi prikaz
+  if (_aktivniProjektId === projektId) sbLoadKolegeVlake();
+  showToast('Vlake kolega uklonjene.');
 }
 
 // Legacy compat
@@ -3913,6 +3943,39 @@ function _placeLabelMarkers(pts, nm, zOff) {
   return marks;
 }
 
+// ─── KOLEGE VLAKE CACHE ───────────────────────────────────────────────────────
+// Čuva vlake kolega po projektu u localStorage, tako da ostaju vidljive
+// čak i ako ih kolega obriše iz baze — sve dok korisnik sam ne ukloni projekat.
+const _KVC_KEY = 'tvlake_kolege_cache_v1';
+
+function _kvcSave(projektId, rows) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    if (!all[projektId]) all[projektId] = {};
+    rows.forEach(r => {
+      if (!r.pts || r.pts.length < 2) return;
+      const key = r.korisnik_id + '::' + r.nm;
+      all[projektId][key] = { nm: r.nm, korisnik_id: r.korisnik_id, pts: r.pts, boja: r.boja, ime: r.ime || null };
+    });
+    localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+  } catch(e) {}
+}
+
+function _kvcLoad(projektId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    return Object.values(all[projektId] || {});
+  } catch(e) { return []; }
+}
+
+function _kvcClear(projektId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    delete all[projektId];
+    localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+  } catch(e) {}
+}
+
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
 async function sbLoadKolegeVlake() {
   if (!sbProfile?.sumarija || !sbUser) return;
@@ -3932,26 +3995,38 @@ async function sbLoadKolegeVlake() {
 
   if (memberIds.length === 0) return; // nema kolega u aktivnom projektu
 
-  let data;
+  let dbData = [];
   try {
     let q = sb.from('vlake')
       .select('nm, korisnik_id, pts, boja')
       .in('korisnik_id', memberIds)
       .eq('sumarija', sbProfile.sumarija);
     if (akt.odjel) q = q.eq('odjel', akt.odjel);
-    ({ data } = await q);
-  } catch(e) { return; } // offline — kolege vlake se preskačaju
-  if (!data) return;
+    const { data } = await q;
+    if (data) dbData = data;
+  } catch(e) {} // offline — koristimo samo cache
+
+  // Sačuvaj svježe podatke u cache (merge — nikad ne brišemo stare)
+  const rowsWithIme = dbData.map(r => ({
+    ...r,
+    ime: (kolegeMap[r.korisnik_id] || {}).ime || null
+  }));
+  _kvcSave(akt.id, rowsWithIme);
+
+  // Spoji DB rezultate + cached vlake koje su nestale iz DB-a
+  const dbKeys  = new Set(dbData.map(r => r.korisnik_id + '::' + r.nm));
+  const cached  = _kvcLoad(akt.id).filter(r => !dbKeys.has(r.korisnik_id + '::' + r.nm));
+  const allRows = [...dbData, ...cached];
 
   const seenIds = [];
-  data.forEach(row => {
+  allRows.forEach(row => {
     if (!row.pts || row.pts.length < 2) return;
     if (row.korisnik_id === sbUser?.id) return; // nikad ne prikazuj vlastite vlake kao kolege
     const kid = row.korisnik_id;
     let info = kolegeMap[kid];
     if (!info) {
       if (!seenIds.includes(kid)) seenIds.push(kid);
-      info = { ime: 'Kolega', color: KORISNIK_PAL[seenIds.indexOf(kid) % KORISNIK_PAL.length] };
+      info = { ime: row.ime || 'Kolega', color: KORISNIK_PAL[seenIds.indexOf(kid) % KORISNIK_PAL.length] };
     }
     const color = row.boja || info.color;
     const poly = L.polyline(
