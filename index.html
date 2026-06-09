@@ -16312,33 +16312,58 @@ function toggleHelpSec(hdr) {
       <span>Izmjeri</span>
     </button>
     <!-- Podmeni — pojavljuje se iznad dugmeta -->
-    <div id="ab-izmjeri-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;
-      transform:translateX(-50%);background:#0f172a;border:1px solid #334155;border-radius:10px;
-      box-shadow:0 -4px 20px rgba(0,0,0,0.7);padding:4px;white-space:nowrap;z-index:9100;
-      min-width:150px;">
-      <button onclick="_izmjeriPick('tacka')"
-        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
-        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+    <div id="ab-izmjeri-menu" style="display:none;position:absolute;bottom:calc(100% + 8px);left:50%;
+      transform:translateX(-50%);background:#0f172a;border:1px solid #1e293b;border-radius:12px;
+      box-shadow:0 -6px 24px rgba(0,0,0,0.75);padding:5px;white-space:nowrap;z-index:9100;min-width:160px;">
+      <!-- Tačka -->
+      <button onclick="_izmjeriPick('tacka')" style="display:flex;align-items:center;gap:11px;width:100%;
+        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
         onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
-        <span style="font-size:18px;">📍</span> Tačka
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 2C7.24 2 5 4.24 5 7c0 3.75 5 10 5 10s5-6.25 5-10c0-2.76-2.24-5-5-5z" fill="#60a5fa"/>
+          <circle cx="10" cy="7" r="2" fill="#fff"/>
+        </svg>
+        Tačka
       </button>
-      <button onclick="_izmjeriPick('dist')"
-        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
-        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+      <!-- Distanca -->
+      <button onclick="_izmjeriPick('dist')" style="display:flex;align-items:center;gap:11px;width:100%;
+        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
         onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
-        <span style="font-size:18px;">📏</span> Distanca
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="3" y1="10" x2="17" y2="10" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+          <line x1="3" y1="7" x2="3" y2="13" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+          <line x1="17" y1="7" x2="17" y2="13" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="3" cy="10" r="1.5" fill="#34d399"/>
+          <circle cx="17" cy="10" r="1.5" fill="#34d399"/>
+        </svg>
+        Distanca
       </button>
-      <button onclick="_izmjeriPick('area')"
-        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
-        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+      <!-- Površina -->
+      <button onclick="_izmjeriPick('area')" style="display:flex;align-items:center;gap:11px;width:100%;
+        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
         onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
-        <span style="font-size:18px;">⬛</span> Površina
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="10,3 17,14 3,14" fill="#a78bfa" fill-opacity="0.35" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>
+          <circle cx="10" cy="3" r="1.8" fill="#a78bfa"/>
+          <circle cx="17" cy="14" r="1.8" fill="#a78bfa"/>
+          <circle cx="3" cy="14" r="1.8" fill="#a78bfa"/>
+        </svg>
+        Površina
       </button>
-      <button onclick="_izmjeriPick('nagib')"
-        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
-        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+      <!-- Nagib -->
+      <button onclick="_izmjeriPick('nagib')" style="display:flex;align-items:center;gap:11px;width:100%;
+        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
         onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
-        <span style="font-size:18px;">📐</span> Nagib
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 15 L15 5" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/>
+          <path d="M15 5 L15 15 L3 15" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+          <path d="M15 11 A4 4 0 0 0 11.8 7.5" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        </svg>
+        Nagib
       </button>
     </div>
   </div>
