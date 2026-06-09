@@ -13666,6 +13666,17 @@ class MiniSqlite {
       const mz={};
       await this._scanLeaves(metaRoot,(rid,r)=>{if(r[0]==='minzoom'||r[0]==='maxzoom')mz[r[0]]=+r[1];});
       if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
+    } else if(this.idxRoot>0){
+      // Use index B-tree: leftmost entry = min zoom, rightmost = max zoom
+      try{
+        const fe=await this._firstIdxEntry();const le=await this._lastIdxEntry();
+        if(fe&&le){
+          // Index is sorted by (zoom, col, row) so fe[0]=minzoom, le[0]=maxzoom
+          const sz=fe[0],lz=le[0];
+          if(this.fmt==='rmaps'&&typeof lz==='number'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+          else{minz=typeof sz==='number'?Math.max(0,sz):0;maxz=typeof lz==='number'?Math.min(22,lz):18;}
+        }
+      }catch(e){}
     } else if(this.tilesRoot>0){
       let sz=99,lz=-1;
       const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
@@ -13673,7 +13684,6 @@ class MiniSqlite {
         else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
       try{await go(this.tilesRoot);}catch(e){}
       if(lz>=0){
-        // OruxMaps/RMaps may store z as (17-actual_z); if sampled max < 10, assume inverted
         if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
         else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
       }
@@ -13688,6 +13698,16 @@ class MiniSqlite {
       const cpo=ho+(t===2?12:8);
       if(t===2){const cp=MiniSqlite._u16(d,cpo);n=MiniSqlite._u32(d,cp);}
       else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
+    }return null;
+  }
+  async _lastIdxEntry() {
+    let n=this.idxRoot;
+    for(let depth=0;depth<32;depth++){
+      const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
+      const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
+      const cpo=ho+(t===2?12:8);
+      if(t===2){n=MiniSqlite._u32(d,ho+8);}  // rightmost child
+      else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
     }return null;
   }
   async _firstLeafSample() {
@@ -13888,18 +13908,24 @@ self.onmessage = async ({data:msg}) => {
           tCoord+=',t2='+t2+',t3='+t3;
         }
       }
-      // Test 4: walk index B-tree to first real tile, test full tile() path
+      // Test 4: walk index B-tree to first real tile, test full read path
       let t4='?';
       try{
         const ie=await mini._firstIdxEntry();
-        if(ie){const iz=ie[0],ix=ie[1],iy=ie[2],ir2=ie[ie.length-1];
-          const iy2=(1<<iz)-1-iy;
-          const ta=await mini.tile(iz,ix,iy2);
+        if(ie){
+          const iz=ie[0],ix=ie[1],iy=ie[2],ilen=ie.length,ir2=ie[ilen-1];
+          // a) direct _tblSearch with rowid from index
           const rec4=await mini._tblSearch(mini.tilesRoot,ir2);
-          t4='z'+iz+',x'+ix+',ty'+iy+'→ok:'+(ta?ta.length:'null')+'/tbl:'+(rec4?rec4[mini.colD]?.length||0:'null');
+          const blen=rec4?(rec4[mini.colD]instanceof Uint8Array?rec4[mini.colD].length:(rec4[mini.colD]?.length||0)):0;
+          // b) tile() with TMS-flipped y (for mbtiles)
+          const iy_xyz=Math.max(0,(1<<iz)-1-iy);
+          const ta=await mini.tile(iz,ix,iy_xyz);
+          // c) tile() with raw y (no flip — in case file stores y as XYZ)
+          const tb=await mini.tile(iz,ix,iy);
+          t4='n'+ilen+' z'+iz+' c'+ix+' r'+iy+' rid'+ir2+' tbl'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0);
         }
       }catch(e4){t4='e:'+e4.message;}
-      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4='+t4;
+      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+']';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
