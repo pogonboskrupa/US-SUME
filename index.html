@@ -13863,8 +13863,17 @@ self.onmessage = async ({data:msg}) => {
         let fr=null;
         try{await mini._scanLeaves(mini.tilesRoot,(rid,r)=>{if(!fr){fr=r;throw new Error('stop');}});}
         catch(e){if(e?.message!=='stop')testR='scanErr:'+e?.message;}
-        if(fr){const sz=fr[mini.colZ],sx=fr[mini.colX],sy=fr[mini.colY];tCoord='z'+sz+',x'+sx+',y'+sy;
-          try{const ta=await mini.tile(sz,sx,sy);testR=ta?'ok:'+ta.length:'null';}catch(te){testR='err:'+te.message;}}
+        if(fr){
+          const c0=fr[0],c1=fr[1],c2=fr[2],c3len=fr[3]instanceof Uint8Array?fr[3].length:(fr[3]?.length||0);
+          tCoord='c0='+c0+',c1='+c1+',c2='+c2+',c3='+c3len;
+          // Test 1: via tile() using detected colZ/colX/colY
+          const sz=fr[mini.colZ],sx=fr[mini.colX],sy=fr[mini.colY];
+          try{const ta=await mini.tile(sz,sx,sy);testR=ta?'ok:'+ta.length:'null';}catch(te){testR='err:'+te.message;}
+          // Test 2: direct _idxSearch with raw values, no TMS flip
+          let t2='?';
+          try{const rid2=await mini._idxSearch(mini.idxRoot,c0,c1,c2);t2=rid2!=null?'rid='+rid2:'null';}catch(te2){t2='e';}
+          tCoord+=',t2='+t2;
+        }
       }
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+')';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
