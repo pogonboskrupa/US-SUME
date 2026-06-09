@@ -13622,15 +13622,15 @@ class MiniSqlite {
     };
     await go(root);
   }
-  async _idxSearch(n,z,x,y) {
+  async _idxSearch(n,v0,v1,v2) {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
     const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
     for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
-      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const[rz,rx,ry]=r;const cmp=rz!==z?(rz<z?-1:1):rx!==x?(rx<x?-1:1):ry!==y?(ry<y?-1:1):0;
-        if(cmp>0) return this._idxSearch(ch,z,x,y);
+      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
+        if(cmp>0) return this._idxSearch(ch,v0,v1,v2);
         if(cmp===0) return r[r.length-1];}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const[rz,rx,ry]=r;if(rz===z&&rx===x&&ry===y)return r[r.length-1];}}
-    if(t===2) return this._idxSearch(MiniSqlite._u32(d,ho+8),z,x,y);
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r[r.length-1];}}
+    if(t===2) return this._idxSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
     return null;
   }
   async _tblSearch(n,rowid) {
@@ -13675,7 +13675,12 @@ class MiniSqlite {
   }
   async tile(z,x,y) {
     const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
-    if(this.idxRoot){const rid=await this._idxSearch(this.idxRoot,z,x,ty);if(rid==null)return null;const rec=await this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
+    if(this.idxRoot){
+      // Build search key in actual index column order (colZ/colX/colY reflect table column positions,
+      // which match the index key order for both MBTiles and RMaps primary key indexes)
+      const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
+      const rid=await this._idxSearch(this.idxRoot,sk[0],sk[1],sk[2]);
+      if(rid==null)return null;const rec=await this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
     let found=null;
     await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
     return found;
@@ -13924,6 +13929,23 @@ function _sqlmapStatus(msg) {
   const el = document.getElementById('sqlmap-status');
   if (el) el.textContent = msg;
 }
+// Zoom map to tile bounds from MBTiles metadata.bounds or estimated from zoom centre
+function _sqlmapMetaAutoZoom(meta) {
+  try {
+    if (meta?.bounds) {
+      const b = String(meta.bounds).split(',').map(Number);
+      if (b.length === 4 && b.every(v => !isNaN(v))) {
+        map.fitBounds([[b[1],b[0]],[b[3],b[2]]]);
+        return;
+      }
+    }
+    // No bounds — zoom to a tile coordinate derived from center+maxzoom
+    if (meta?.center) {
+      const c = String(meta.center).split(',').map(Number);
+      if (c.length >= 2) { map.setView([c[1],c[0]], c[2]||meta.maxzoom||14); return; }
+    }
+  } catch(e) {}
+}
 function showSqlMapModal() {
   document.getElementById('sqlmap-modal').classList.add('show');
   _sqlmapRenderLayers();
@@ -13965,7 +13987,9 @@ async function sqlmapLoadFile(file) {
       const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
       _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:true});
-      _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)');
+      _sqlmapMetaAutoZoom(r.meta);
+      const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
+      _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI);
     } else if (isLarge) {
       throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije dostupan — pokušaj u Chrome/Edge.');
     } else {
@@ -13977,7 +14001,9 @@ async function sqlmapLoadFile(file) {
       const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
       _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:false});
-      _sqlmapStatus('✅ Karta sačuvana: ' + name);
+      _sqlmapMetaAutoZoom(r.meta);
+      const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
+      _sqlmapStatus('✅ Karta sačuvana: ' + name + zI);
     }
     _sqlmapRenderLayers(); _lsRenderSqlite();
     const fi = document.getElementById('sqlmap-file-input');
