@@ -12723,8 +12723,8 @@ function _msrRegDelete(id) {
   _msrRegSave();
   _msrRegRender();
   _msrDrawAllSaved();
-  // Ako je obrisano mjerenje trenutno aktivno na mapi (edit mod), očisti live sloj
   if (_mqmId === id) { _mqmId = null; msrClear(); }
+  map.closePopup();
 }
 
 let _msrDelPending = null;
@@ -13532,6 +13532,7 @@ function closeProfilModal() {
 // ─── SQLiteDB offline map ─────────────────────────────────────────────────────
 let _sqlLayers = []; // { name, db, fmt, layer, visible, meta, saved }
 let _sqlJS = null;
+let _sqlJSPromise = null; // deduplicira paralelne pozive _sqlmapEnsureSqlJs()
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────────
 function _sqlIdbOpen() {
@@ -13588,8 +13589,17 @@ function sqlmapHandleDrop(e) {
 
 async function _sqlmapEnsureSqlJs() {
   if (_sqlJS) return _sqlJS;
+  // Vrati isti promise ako je učitavanje već u toku (sprječava duple script tagove)
+  if (_sqlJSPromise) return _sqlJSPromise;
   _sqlmapStatus('⏳ Učitavam SQL.js biblioteku...');
-  return new Promise((resolve, reject) => {
+  _sqlJSPromise = new Promise((resolve, reject) => {
+    // Provjeri da li je initSqlJs već dostupan (script dodan ranije)
+    if (typeof window.initSqlJs === 'function') {
+      window.initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` })
+        .then(sql => { _sqlJS = sql; resolve(sql); })
+        .catch(e => { _sqlJSPromise = null; reject(e); });
+      return;
+    }
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js';
     s.onload = async () => {
@@ -13598,11 +13608,12 @@ async function _sqlmapEnsureSqlJs() {
           locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`
         });
         resolve(_sqlJS);
-      } catch(e) { reject(e); }
+      } catch(e) { _sqlJSPromise = null; reject(e); }
     };
-    s.onerror = () => reject(new Error('Nije moguće učitati SQL.js'));
+    s.onerror = () => { _sqlJSPromise = null; reject(new Error('Nije moguće učitati SQL.js')); };
     document.head.appendChild(s);
   });
+  return _sqlJSPromise;
 }
 
 function _sqlmapStatus(msg) {
@@ -13838,8 +13849,23 @@ async function sqlmapRemove(i) {
 async function sqlmapConfirmDelete(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
-  if (!confirm(`Trajno obrisati kartu "${sl.name}"?\n\nKarta će biti uklonjena iz memorije pretraživača i više neće biti dostupna offline.`)) return;
-  await sqlmapRemove(i);
+  _sqlDelPending = i;
+  const nm = sl.name;
+  const el = document.getElementById('sql-del-confirm');
+  const lbl = document.getElementById('sql-del-name');
+  if (lbl) lbl.textContent = nm;
+  if (el) el.style.display = 'flex';
+}
+let _sqlDelPending = null;
+async function _sqlConfirmDelete() {
+  const i = _sqlDelPending;
+  _sqlDelPending = null;
+  document.getElementById('sql-del-confirm').style.display = 'none';
+  if (i != null) await sqlmapRemove(i);
+}
+function _sqlCancelDelete() {
+  _sqlDelPending = null;
+  document.getElementById('sql-del-confirm').style.display = 'none';
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -16295,20 +16321,28 @@ function toggleHelpSec(hdr) {
 </div>
 
 <!-- === Confirm delete mjerenja === -->
-<div id="msr-del-confirm" style="display:none;position:fixed;inset:0;z-index:9900;
-  background:rgba(0,0,0,0.6);align-items:center;justify-content:center;"
-  onclick="if(event.target===this)_msrCancelDelete()">
-  <div style="background:#0f172a;border:1px solid #dc2626;border-radius:14px;
-    padding:22px 20px;width:min(300px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.8);">
+<div id="msr-del-confirm" onclick="if(event.target===this)_msrCancelDelete()"
+  style="display:none;position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+  <div style="background:#0f172a;border:1px solid #dc2626;border-radius:14px;padding:22px 20px;width:min(300px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.8);">
     <div style="font-size:15px;font-weight:700;color:#f87171;margin-bottom:6px;">🗑 Obriši mjerenje?</div>
     <div style="font-size:13px;color:#94a3b8;margin-bottom:18px;">Ova akcija se ne može poništiti.</div>
     <div style="display:flex;gap:10px;">
-      <button onclick="_msrConfirmDelete()"
-        style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:8px;
-        padding:11px;font-size:14px;font-weight:700;cursor:pointer;">Obriši</button>
-      <button onclick="_msrCancelDelete()"
-        style="flex:1;background:#1e293b;color:#94a3b8;border:1px solid #334155;
-        border-radius:8px;padding:11px;font-size:13px;cursor:pointer;">Odustani</button>
+      <button onclick="_msrConfirmDelete()" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;">Obriši</button>
+      <button onclick="_msrCancelDelete()" style="flex:1;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:11px;font-size:13px;cursor:pointer;">Odustani</button>
+    </div>
+  </div>
+</div>
+
+<!-- === Confirm delete SQLite karte === -->
+<div id="sql-del-confirm" onclick="if(event.target===this)_sqlCancelDelete()"
+  style="display:none;position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+  <div style="background:#0f172a;border:1px solid #dc2626;border-radius:14px;padding:22px 20px;width:min(300px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.8);">
+    <div style="font-size:15px;font-weight:700;color:#f87171;margin-bottom:6px;">🗑 Obriši kartu?</div>
+    <div style="font-size:13px;color:#94a3b8;margin-bottom:4px;word-break:break-all;" id="sql-del-name"></div>
+    <div style="font-size:12px;color:#475569;margin-bottom:16px;">Karta će biti uklonjena iz memorije pretraživača.</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="_sqlConfirmDelete()" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;">Obriši</button>
+      <button onclick="_sqlCancelDelete()" style="flex:1;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:11px;font-size:13px;cursor:pointer;">Odustani</button>
     </div>
   </div>
 </div>
