@@ -13667,10 +13667,10 @@ class MiniSqlite {
       await this._scanLeaves(metaRoot,(rid,r)=>{if(r[0]==='minzoom'||r[0]==='maxzoom')mz[r[0]]=+r[1];});
       if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
     } else if(this.tilesRoot>0){
-      let sz=99,lz=-1;
+      let sz=99,lz=-1; this._sx=null;
       const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
         if(t===5){await go(MiniSqlite._u32(d,cpo));}
-        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
+        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;if(this._sx===null){this._sx=this._recCol(d,p,pL,this.colX);this._sy=this._recCol(d,p,pL,this.colY);this._sz=z;}}}}};
       try{await go(this.tilesRoot);}catch(e){}
       if(lz>=0){
         // OruxMaps/RMaps may store z as (17-actual_z); if sampled max < 10, assume inverted
@@ -13846,7 +13846,9 @@ self.onmessage = async ({data:msg}) => {
       const mini = new MiniSqlite(file);
       const {fmt, meta} = await mini.init();
       if (!fmt) throw new Error('unknown-format');
-      meta._d = 'tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD;
+      let testR='?';
+      if(mini._sx!=null){try{const ta=await mini.tile(mini._sz,mini._sx,mini._sy);testR=ta?'ok:'+ta.length:'null';}catch(te){testR='err:'+te.message;}}
+      meta._d = 'tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'(z'+mini._sz+',x'+mini._sx+',y'+mini._sy+')';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
