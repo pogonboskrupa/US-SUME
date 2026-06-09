@@ -13554,20 +13554,19 @@ const S3CDN  = '${_S3_CDN}';
 let sqlJs = null, sqlite3 = null;
 const dbs = {};
 
-async function _feval(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + url);
-  (0, eval)(await r.text());
-}
 async function getSqlJs() {
   if (sqlJs) return sqlJs;
-  await _feval(SQLCDN + 'sql-wasm.js');
+  importScripts(SQLCDN + 'sql-wasm.js');
   return sqlJs = await initSqlJs({ locateFile: f => SQLCDN + f });
 }
 async function getSqlite3() {
   if (sqlite3) return sqlite3;
-  await _feval(S3CDN + 'sqlite3.js');
-  // sqlite3InitModule radi fetch('sqlite3.wasm') interno — mora biti apsolutni URL
+  // importScripts je kritičan — sqlite3.js mora biti učitan kao pravi Worker script
+  // da bi detektovao Worker kontekst i registrovao OPFS VFS.
+  // fetch()+eval() ne radi jer eval ne triggeruje Worker-specific detekciju.
+  importScripts(S3CDN + 'sqlite3.js');
+  // sqlite3InitModule interno radi fetch('sqlite3.wasm') kao relativni URL —
+  // pada u blob Workeru (nema base URL). Preuzimamo eksplicitno i šaljemo kao wasmBinary.
   const wasmResp = await fetch(S3CDN + 'sqlite3.wasm');
   if (!wasmResp.ok) throw new Error('HTTP ' + wasmResp.status + ': sqlite3.wasm');
   const wasmBinary = await wasmResp.arrayBuffer();
