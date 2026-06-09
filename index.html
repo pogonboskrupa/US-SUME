@@ -13647,7 +13647,7 @@ class MiniSqlite {
     this.tilesRoot=0; this.idxRoot=0; this.fmt=null; this.colZ=0; this.colX=1; this.colY=2; this.colD=3;
     let metaRoot=0;
     await this._scanLeaves(1,(rid,r)=>{
-      const[type,name,,rootPage,sql]=r;
+      const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
       if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const m=s.match(/\(([^)]+)\)/);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
@@ -13657,7 +13657,7 @@ class MiniSqlite {
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
       }
       if(type==='table'&&name==='metadata') metaRoot=rootPage;
-      if(type==='index'&&name.includes('tiles')) this.idxRoot=rootPage;
+      if(type==='index'&&tbl==='tiles') this.idxRoot=rootPage;
     });
     if(!this.fmt) this.fmt='mbtiles';
     let minz=0, maxz=18;
@@ -13668,7 +13668,7 @@ class MiniSqlite {
     } else if(this.tilesRoot>0){
       const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
         if(t===5){await go(MiniSqlite._u32(d,cpo));}
-        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[,rS]=MiniSqlite._vi(d,p);p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<minz)minz=z;if(z>maxz)maxz=z;}}}};
+        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<minz)minz=z;if(z>maxz)maxz=z;}}}};
       try{await go(this.tilesRoot);}catch(e){}
     }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
