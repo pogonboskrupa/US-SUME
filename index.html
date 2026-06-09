@@ -6085,6 +6085,11 @@ map.on('mousemove', e => {
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
+// Kad korisnik povuče mapu tokom snimanja → automatski oslobodi praćenje
+map.on('dragstart', () => {
+  if ((recOn && !recPaused) || _tragOn) _setFreeView(true);
+});
+
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte
 map.on('move', () => {
   _updMcdDist();
@@ -7045,9 +7050,7 @@ function stopRec() {
   }
   _recSegStart = 0;
   recOn = false; recPaused = false; _recParentIdx = null;
-  _recFreeView = false;
-  const _fvBtn = document.getElementById('btn-freeview');
-  if (_fvBtn) { _fvBtn.textContent = '🔓'; _fvBtn.style.background = ''; }
+  _setFreeView(false);
   _kfReset(); _lastRecTime = 0;
   _releaseWakeLock();
   _stopBgAudio();
@@ -7108,15 +7111,19 @@ function toggleRecPause() {
   _updFabVisibility();
 }
 
-function toggleRecFreeView() {
-  _recFreeView = !_recFreeView;
+function _setFreeView(val) {
+  _recFreeView = val;
   const btn = document.getElementById('btn-freeview');
+  if (!btn) return;
   if (_recFreeView) {
-    if (btn) { btn.textContent = '📍'; btn.style.background = '#14330a'; }
+    btn.textContent = '📍'; btn.style.background = '#14330a';
   } else {
-    if (btn) { btn.textContent = '🔓'; btn.style.background = ''; }
-    if (lastP) map.panTo([lastP.la, lastP.lo], { animate: true, duration: 0.5 });
+    btn.textContent = '🔓'; btn.style.background = '';
   }
+}
+function toggleRecFreeView() {
+  _setFreeView(!_recFreeView);
+  if (!_recFreeView && lastP) map.panTo([lastP.la, lastP.lo], { animate: true, duration: 0.5 });
 }
 
 function _krajVlake() {
@@ -8185,6 +8192,7 @@ function fabSnimTrag() {
     _tragBuf = [];
   } else {
     if (!gpsOn) startGPS();
+    _setFreeView(false);
     _tragOn  = true;
     _tragPts = [];
     _tragBuf = [];
