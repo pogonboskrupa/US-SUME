@@ -13629,13 +13629,27 @@ class MiniSqlite {
     const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
     for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
       if(t===5){const ch=MiniSqlite._u32(d,p);p+=4;const[key]=MiniSqlite._vi(d,p);if(rowid<=key)return this._tblSearch(ch,rowid);}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;if(rid===rowid)return this._rec(d,p,pL-rS);}}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;if(rid===rowid)return this._rec(d,p,pL);}}
     if(t===5)return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
     return null;
+  }
+  // Read only first 'stopAfterCol' columns from a record without following overflow pages.
+  // Used for scanning zoom levels without loading tile image data.
+  _recCol(data,pos,pLen,stopAfterCol) {
+    const safe=Math.min(pLen,data.length-pos); const d=data.slice(pos,pos+safe);
+    let p=0; const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
+    const ts=[]; while(p<hSz&&ts.length<=stopAfterCol){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
+    if(ts.length<=stopAfterCol)return undefined;
+    p=hSz; for(let i=0;i<stopAfterCol;i++)p+=MiniSqlite._sz(ts[i]);
+    const t=ts[stopAfterCol]; const sz=MiniSqlite._sz(t);
+    if(t===0)return null; if(t===8)return 0; if(t===9)return 1;
+    if(t>=13&&t%2===1)return new TextDecoder().decode(d.slice(p,p+sz));
+    return MiniSqlite._ri(d,p,sz);
   }
   init() {
     const h=this._pg(1); this.ps=(h[16]<<8)|h[17]; if(this.ps===1)this.ps=65536; this._c.clear();
     this.tilesRoot=0;this.idxRoot=0;this.fmt=null;this.colZ=0;this.colX=1;this.colY=2;this.colD=3;
+    let metaRoot=0;
     this._scanLeaves(1,(rid,r)=>{
       const[type,name,tbl,rootPage,sql]=r;
       if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
@@ -13646,12 +13660,28 @@ class MiniSqlite {
             else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
       }
+      if(type==='table'&&name==='metadata')metaRoot=rootPage;
       if(type==='index'&&tbl==='tiles')this.idxRoot=rootPage;
     });
     if(!this.fmt)this.fmt='mbtiles';
-    let minz=99,maxz=0;
-    this._scanLeaves(this.tilesRoot,(rid,r)=>{const z=r[this.colZ];if(z<minz)minz=z;if(z>maxz)maxz=z;});
-    if(minz>maxz){minz=0;maxz=18;}
+    // Read minzoom/maxzoom from metadata table (MBTiles) — avoids loading all tile images
+    let minz=0,maxz=18;
+    if(metaRoot>0){
+      const mz={};
+      this._scanLeaves(metaRoot,(rid,r)=>{
+        const k=r[0]; const v=r[1];
+        if(k==='minzoom'||k==='maxzoom')mz[k]=+v;
+      });
+      if(mz.minzoom!=null)minz=mz.minzoom;
+      if(mz.maxzoom!=null)maxz=mz.maxzoom;
+    } else if(this.tilesRoot>0) {
+      // Fallback: sample a few leaf pages for zoom range without loading tile images
+      let done=false;
+      const go=(n)=>{if(done)return;const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
+        if(t===5){go(MiniSqlite._u32(d,cpo));} // only follow first child for sampling
+        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[,rS]=MiniSqlite._vi(d,p);p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<minz)minz=z;if(z>maxz)maxz=z;}}}};
+      try{go(this.tilesRoot);}catch(e){}
+    }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
   }
   tile(z,x,y) {
