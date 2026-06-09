@@ -13859,8 +13859,14 @@ self.onmessage = async ({data:msg}) => {
       const {fmt, meta} = await mini.init();
       if (!fmt) throw new Error('unknown-format');
       let testR='?',tCoord='';
-      try{const sm=await mini._firstLeafSample();if(sm&&sm[0]!=null){tCoord='z'+sm[0]+',x'+sm[1]+',y'+sm[2];const ta=await mini.tile(sm[0],sm[1],sm[2]);testR=ta?'ok:'+ta.length:'null';}}catch(te){testR='err:'+te.message;}
-      meta._d = 'tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+')';
+      if(mini.tilesRoot>0){
+        let fr=null;
+        try{await mini._scanLeaves(mini.tilesRoot,(rid,r)=>{if(!fr){fr=r;throw new Error('stop');}});}
+        catch(e){if(e?.message!=='stop')testR='scanErr:'+e?.message;}
+        if(fr){const sz=fr[mini.colZ],sx=fr[mini.colX],sy=fr[mini.colY];tCoord='z'+sz+',x'+sx+',y'+sy;
+          try{const ta=await mini.tile(sz,sx,sy);testR=ta?'ok:'+ta.length:'null';}catch(te){testR='err:'+te.message;}}
+      }
+      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+')';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
