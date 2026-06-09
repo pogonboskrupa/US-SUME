@@ -13649,7 +13649,7 @@ class MiniSqlite {
     await this._scanLeaves(1,(rid,r)=>{
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
       if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
-        if(sql){const s=sql.toLowerCase();const m=s.match(/\(([^)]+)\)/);
+        if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
             const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
@@ -13818,7 +13818,7 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'load-opfs') {
       const root = await navigator.storage.getDirectory();
-      const fname = msg.path.replace(/^\//, '');
+      const fname = msg.path.startsWith('/') ? msg.path.slice(1) : msg.path;
       const fh = await root.getFileHandle(fname);
       const file = await fh.getFile();
       const mini = new MiniSqlite(file);
