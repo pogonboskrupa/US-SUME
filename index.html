@@ -13666,21 +13666,36 @@ class MiniSqlite {
       await this._scanLeaves(metaRoot,(rid,r)=>{if(r[0]==='minzoom'||r[0]==='maxzoom')mz[r[0]]=+r[1];});
       if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
     } else if(this.tilesRoot>0){
+      let sz=99,lz=-1;
       const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
         if(t===5){await go(MiniSqlite._u32(d,cpo));}
-        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<minz)minz=z;if(z>maxz)maxz=z;}}}};
+        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
       try{await go(this.tilesRoot);}catch(e){}
+      if(lz>=0){
+        // OruxMaps/RMaps may store z as (17-actual_z); if sampled max < 10, assume inverted
+        if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+        else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
+      }
     }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
   }
   async tile(z,x,y) {
     const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
     if(this.idxRoot){
-      // Build search key in actual index column order (colZ/colX/colY reflect table column positions,
-      // which match the index key order for both MBTiles and RMaps primary key indexes)
-      const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
-      const rid=await this._idxSearch(this.idxRoot,sk[0],sk[1],sk[2]);
-      if(rid==null)return null;const rec=await this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
+      const sk=[];sk[this.colX]=x;sk[this.colY]=ty;
+      // Some OruxMaps/RMaps files store z as (17-actual_z). Try both on first request,
+      // cache which convention works (_zm: 1=normal, 2=inverted).
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      for(const zv of zCands){
+        sk[this.colZ]=zv;
+        const rid=await this._idxSearch(this.idxRoot,sk[0],sk[1],sk[2]);
+        if(rid!=null){
+          if(!this._zm)this._zm=(zv===z)?1:2;
+          const rec=await this._tblSearch(this.tilesRoot,rid);
+          return rec?rec[this.colD]:null;
+        }
+      }
+      return null;}
     let found=null;
     await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
     return found;
