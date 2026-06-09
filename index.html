@@ -13643,9 +13643,24 @@ class MiniSqlite {
     if(t===5) return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
     return null;
   }
+  // WITHOUT ROWID search: B-tree sorted by (v0,v1,v2), records contain all columns incl. data
+  async _wRowSearch(n,v0,v1,v2) {
+    const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
+    const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
+    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
+      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;
+        const r=await this._rec(d,p,pL);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
+        if(cmp>0) return this._wRowSearch(ch,v0,v1,v2);
+        if(cmp===0) return r;}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);
+        if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r;}}
+    if(t===2) return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
+    return null;
+  }
   async init() {
     const h=await this._pg(1); this.ps=(h[16]<<8)|h[17]; if(this.ps===1)this.ps=65536; this._c.clear();
     this.tilesRoot=0; this.idxRoot=0; this.fmt=null; this.colZ=0; this.colX=1; this.colY=2; this.colD=3;
+    this.noRowId=false; this._zm=0;
     let metaRoot=0;
     await this._scanLeaves(1,(rid,r)=>{
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
@@ -13661,37 +13676,50 @@ class MiniSqlite {
       if(type==='index'&&tbl?.toLowerCase()==='tiles') this.idxRoot=rootPage;
     });
     if(!this.fmt) this.fmt='mbtiles';
-    let minz=0, maxz=18;
+    // Detect WITHOUT ROWID: tiles B-tree pages are index-type (2/10) not table-type (5/13)
+    if(this.tilesRoot>0){
+      const tp=await this._pg(this.tilesRoot);const tt=tp[this.tilesRoot===1?100:0];
+      this.noRowId=(tt===2||tt===10);
+    }
+    let minz=0, maxz=18; const extraMeta={};
     if(metaRoot>0){
       const mz={};
-      await this._scanLeaves(metaRoot,(rid,r)=>{if(r[0]==='minzoom'||r[0]==='maxzoom')mz[r[0]]=+r[1];});
-      if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
-    } else if(this.idxRoot>0){
-      // Use index B-tree: leftmost entry = min zoom, rightmost = max zoom
-      try{
-        const fe=await this._firstIdxEntry();const le=await this._lastIdxEntry();
-        if(fe&&le){
-          // Index is sorted by (zoom, col, row) so fe[0]=minzoom, le[0]=maxzoom
-          const sz=fe[0],lz=le[0];
-          if(this.fmt==='rmaps'&&typeof lz==='number'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
-          else{minz=typeof sz==='number'?Math.max(0,sz):0;maxz=typeof lz==='number'?Math.min(22,lz):18;}
+      await this._scanLeaves(metaRoot,(rid,r)=>{
+        if(typeof r[0]==='string'&&typeof r[1]==='string'){
+          const k=r[0];
+          if(k==='minzoom'||k==='maxzoom')mz[k]=+r[1];
+          else if(k==='bounds'||k==='center'||k==='description'||k==='name'||k==='attribution')extraMeta[k]=r[1];
         }
-      }catch(e){}
-    } else if(this.tilesRoot>0){
-      let sz=99,lz=-1;
-      const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
-        if(t===5){const cp0=MiniSqlite._u16(d,cpo);await go(MiniSqlite._u32(d,cp0));}
-        else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
-      try{await go(this.tilesRoot);}catch(e){}
-      if(lz>=0){
-        if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
-        else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
+      });
+      if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
+    } else {
+      // Derive zoom range from sorted B-tree (index or noRowId primary)
+      const scanRoot=this.noRowId?this.tilesRoot:this.idxRoot;
+      if(scanRoot>0){
+        try{
+          const fe=await this._firstIdxEntry(scanRoot);const le=await this._lastIdxEntry(scanRoot);
+          if(fe&&le){
+            const sz=fe[0],lz=le[0];
+            if(this.fmt==='rmaps'&&typeof lz==='number'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+            else{minz=typeof sz==='number'?Math.max(0,sz):0;maxz=typeof lz==='number'?Math.min(22,lz):18;}
+          }
+        }catch(e){}
+      } else if(this.tilesRoot>0&&!this.noRowId){
+        let sz=99,lz=-1;
+        const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
+          if(t===5){const cp0=MiniSqlite._u16(d,cpo);await go(MiniSqlite._u32(d,cp0));}
+          else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
+        try{await go(this.tilesRoot);}catch(e){}
+        if(lz>=0){
+          if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+          else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
+        }
       }
     }
-    return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
+    return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz,...extraMeta}};
   }
-  async _firstIdxEntry() {
-    let n=this.idxRoot;
+  async _firstIdxEntry(root) {
+    let n=root!=null?root:this.idxRoot;
     for(let depth=0;depth<32;depth++){
       const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
@@ -13700,13 +13728,13 @@ class MiniSqlite {
       else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
     }return null;
   }
-  async _lastIdxEntry() {
-    let n=this.idxRoot;
+  async _lastIdxEntry(root) {
+    let n=root!=null?root:this.idxRoot;
     for(let depth=0;depth<32;depth++){
       const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);
-      if(t===2){n=MiniSqlite._u32(d,ho+8);}  // rightmost child
+      if(t===2){n=MiniSqlite._u32(d,ho+8);}
       else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
     }return null;
   }
@@ -13724,10 +13752,18 @@ class MiniSqlite {
   }
   async tile(z,x,y) {
     const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
+    if(this.noRowId){
+      const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      for(const zv of zCands){
+        sk[this.colZ]=zv;
+        const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
+        if(rec){if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;return rec[this.colD]||null;}
+      }
+      return null;
+    }
     if(this.idxRoot){
       const sk=[];sk[this.colX]=x;sk[this.colY]=ty;
-      // Some OruxMaps/RMaps files store z as (17-actual_z). Try both on first request,
-      // cache which convention works (_zm: 1=normal, 2=inverted).
       const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
       for(const zv of zCands){
         sk[this.colZ]=zv;
@@ -13908,21 +13944,31 @@ self.onmessage = async ({data:msg}) => {
           tCoord+=',t2='+t2+',t3='+t3;
         }
       }
-      // Test 4: walk index B-tree to first real tile, test full read path
+      // Test 4: walk B-tree to first real entry, test full read path
       let t4='?';
       try{
-        const ie=await mini._firstIdxEntry();
+        const scanR=mini.noRowId?mini.tilesRoot:mini.idxRoot;
+        const ie=scanR?await mini._firstIdxEntry(scanR):null;
         if(ie){
-          const iz=ie[0],ix=ie[1],iy=ie[2],ilen=ie.length,ir2=ie[ilen-1];
-          // a) direct _tblSearch with rowid from index
-          const rec4=await mini._tblSearch(mini.tilesRoot,ir2);
-          const blen=rec4?(rec4[mini.colD]instanceof Uint8Array?rec4[mini.colD].length:(rec4[mini.colD]?.length||0)):0;
-          // b) tile() with TMS-flipped y (for mbtiles)
-          const iy_xyz=Math.max(0,(1<<iz)-1-iy);
+          const iz=ie[0],ix=ie[1],iy=ie[2],ilen=ie.length;
+          let blen=0;
+          if(mini.noRowId){
+            // WITHOUT ROWID: record already has all cols including tile_data
+            const d4=ie[mini.colD];blen=d4 instanceof Uint8Array?d4.length:(d4?.length||0);
+          } else {
+            const ir2=ie[ilen-1];
+            const rec4=await mini._tblSearch(mini.tilesRoot,ir2);
+            blen=rec4?(rec4[mini.colD]instanceof Uint8Array?rec4[mini.colD].length:(rec4[mini.colD]?.length||0)):0;
+          }
+          // tile() with TMS-flipped y
+          const iy_xyz=(1<<iz)-1-iy;
           const ta=await mini.tile(iz,ix,iy_xyz);
-          // c) tile() with raw y (no flip — in case file stores y as XYZ)
+          // tile() with raw y
           const tb=await mini.tile(iz,ix,iy);
-          t4='n'+ilen+' z'+iz+' c'+ix+' r'+iy+' rid'+ir2+' tbl'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0);
+          // direct _wRowSearch test (for noRowId)
+          let tw='n/a';
+          if(mini.noRowId){try{const wr=await mini._wRowSearch(mini.tilesRoot,iz,ix,iy);tw=wr?(wr[mini.colD]instanceof Uint8Array?wr[mini.colD].length:(wr[mini.colD]?.length||0))+'b':'null';}catch(we){tw='e:'+we.message;}}
+          t4='nr'+(mini.noRowId?1:0)+' n'+ilen+' z'+iz+' c'+ix+' r'+iy+' dat'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0)+' wr'+tw;
         }
       }catch(e4){t4='e:'+e4.message;}
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+']';
