@@ -12521,6 +12521,7 @@ async function _msrAddPoint(latlng) {
   _msrPts.push(pt);
   _msrRedraw();
   _msrUpdPanel();
+  _msrSyncRegistry();
   // Nagib mod: automatski završi nakon 2. tačke
   if (_msrMode === 'nagib' && _msrPts.length === 2) {
     const elev = await _msrFetchElev(latlng.lat, latlng.lng);
@@ -12535,6 +12536,7 @@ async function _msrAddPoint(latlng) {
   pt.elev = elev;
   _msrRedraw();
   _msrUpdPanel();
+  _msrSyncRegistry();
 }
 
 function _msrMapClick(e) {
@@ -12586,8 +12588,8 @@ function msrStop(skipSave) {
   } else {
     if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
   }
-  // Auto-ponudi snimanje ako ima ≥2 tačaka
-  if (!skipSave && _msrPts.length >= 2) _mqmOpen();
+  // Auto-ponudi snimanje ako ima ≥2 tačaka; preskoči ako editujemo postojeći zapis
+  if (!skipSave && _msrPts.length >= 2 && !_mqmId) _mqmOpen();
 }
 function msrClear() {
   msrStop(true);
@@ -12643,6 +12645,8 @@ function _mqmOpen() {
   if (nameEl) nameEl.value = entry.name;
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = entry.odjel;
+  const title = document.getElementById('mqm-title');
+  if (title) title.textContent = '📏 Mjerenje završeno — spremi opis (opciono)';
   document.getElementById('msr-quick-meta').style.display = '';
 }
 function _mqmSave() {
@@ -12652,6 +12656,8 @@ function _mqmSave() {
     m.name  = (nameEl?.value || m.name).trim() || m.name;
     m.gj    = _gjGetValue('mqm');
     m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
+    m.pts   = _msrPts.slice();
+    m.color = _msrColor;
     _msrRegSave();
     _msrRegRender();
     _msrDrawAllSaved();
@@ -12812,15 +12818,45 @@ function _msrDrawAllSaved() {
 function _msrRegZoom(id) {
   const m = _msrRegistry.find(x => x.id === id);
   if (!m || !m.pts.length) return;
-  const bounds = L.latLngBounds(m.pts.map(p => [p.lat, p.lng]));
-  map.fitBounds(bounds, {padding:[40,40]});
-  // Prikaži mjerenje na mapi
+  map.closePopup();
+
+  // Učitaj mjerenje u aktivno stanje
   if (!_msrLayer) _msrLayer = L.layerGroup().addTo(map);
-  _msrPts = m.pts.map(p => ({...p}));
+  _msrPts   = m.pts.map(p => ({...p}));
   _msrColor = m.color || '#fbbf24';
+  _msrMode  = m.mode  || 'dist';
+  _msrSetMode(_msrMode);
   _msrRedraw();
   _msrUpdPanel();
+  map.fitBounds(L.latLngBounds(m.pts.map(p => [p.lat, p.lng])), {padding:[40,40]});
+
+  // Postavi edit stanje — veza na postojeći zapis
+  _mqmId = id;
+
+  // Popuni panel s postojećim podacima
+  const sel = document.getElementById('mqm-gj-sel');
+  if (sel && !sel.options.length) {
+    sel.innerHTML = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+      `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
+    ).join('');
+  }
+  if (sel) {
+    sel.value = _GJ_OPTIONS.includes(m.gj) ? m.gj : (m.gj ? 'CUSTOM' : '');
+    const cust = document.getElementById('mqm-gj-cust');
+    if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? m.gj : ''; }
+  }
+  const nameEl = document.getElementById('mqm-name');
+  if (nameEl) nameEl.value = m.name || '';
+  const odj = document.getElementById('mqm-odjel');
+  if (odj) odj.value = m.odjel || '';
+  const title = document.getElementById('mqm-title');
+  if (title) title.textContent = '✏️ Edituj mjerenje — vuci tačke ili dodaj nove';
+  document.getElementById('msr-quick-meta').style.display = '';
+
+  // Uđi u aktivni mod snimanja
+  msrStart();
   switchTab('mjtrg');
+  _mjtrgTab('msr');
 }
 
 function _msrRegEditMeta(id, forceOpen) {
@@ -16211,7 +16247,7 @@ function toggleHelpSec(hdr) {
   background:rgba(15,23,42,0.97);border-top:2px solid #38bdf8;border-radius:14px 14px 0 0;
   padding:12px 14px;padding-bottom:max(env(safe-area-inset-bottom,0px),12px);
   box-shadow:0 -4px 24px rgba(0,0,0,0.6);">
-  <div style="font-size:13px;font-weight:600;color:#38bdf8;margin-bottom:10px;">📏 Mjerenje završeno — spremi opis (opciono)</div>
+  <div style="font-size:13px;font-weight:600;color:#38bdf8;margin-bottom:10px;" id="mqm-title">📏 Mjerenje završeno — spremi opis (opciono)</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
     <div style="flex:2;min-width:140px;">
       <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Naziv</div>
