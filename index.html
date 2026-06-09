@@ -4791,6 +4791,32 @@ function _restoreTacke() {
   } catch(e) {}
 }
 
+// ── Izmjeri dugme — popup meni ──
+function _izmjeriToggle() {
+  const menu = document.getElementById('ab-izmjeri-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+function _izmjeriPick(mode) {
+  const menu = document.getElementById('ab-izmjeri-menu');
+  if (menu) menu.style.display = 'none';
+  if (mode === 'tacka') {
+    addTacka();
+  } else {
+    _msrSetMode(mode);
+    switchTab('mjtrg');
+    _mjtrgTab('msr');
+    if (!_msrOn) msrStart();
+  }
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#ab-izmjeri-wrap')) {
+    const m = document.getElementById('ab-izmjeri-menu');
+    if (m) m.style.display = 'none';
+  }
+});
+
 // ── Tačka dugme — unos naziva pa automatski postavi ──
 function addTacka() {
   switchTab('karta');
@@ -12180,14 +12206,14 @@ function _updFabVisibility() {
     // Aktivan projekat: Snimi vlaku vidljivo, Tačka i Snimi trag skriveni
     show('brec',     hasProj);
     show('btrag',    !hasProj);
-    show('ab-tacka', !hasProj);
+    show('ab-izmjeri-wrap', !hasProj);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
     return;
   }
 
-  show('brec', false); show('btrag', false); show('ab-tacka', false);
+  show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
 
   if (isPaused) {
     // Pauzirani mod: [⏹ Završi] [▶ Nastavi] + [↩ Vrati se] ako u kraku
@@ -16279,11 +16305,43 @@ function toggleHelpSec(hdr) {
     <span class="ab-ico" id="ab-pauza-ico">⏸</span>
     <span id="ab-pauza-txt">Pauza</span>
   </button>
-  <!-- Uvijek vidljivo -->
-  <button id="ab-tacka" onclick="addTacka()" title="Dodaj oznaku">
-    <span class="ab-ico">📍</span>
-    <span>Tačka</span>
-  </button>
+  <!-- Izmjeri / Tačka — uvijek vidljivo kad nema projekta -->
+  <div id="ab-izmjeri-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
+    <button id="ab-izmjeri" onclick="_izmjeriToggle()" title="Mjerenja i tačka">
+      <span class="ab-ico">📐</span>
+      <span>Izmjeri</span>
+    </button>
+    <!-- Podmeni — pojavljuje se iznad dugmeta -->
+    <div id="ab-izmjeri-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;
+      transform:translateX(-50%);background:#0f172a;border:1px solid #334155;border-radius:10px;
+      box-shadow:0 -4px 20px rgba(0,0,0,0.7);padding:4px;white-space:nowrap;z-index:9100;
+      min-width:150px;">
+      <button onclick="_izmjeriPick('tacka')"
+        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
+        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        <span style="font-size:18px;">📍</span> Tačka
+      </button>
+      <button onclick="_izmjeriPick('dist')"
+        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
+        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        <span style="font-size:18px;">📏</span> Distanca
+      </button>
+      <button onclick="_izmjeriPick('area')"
+        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
+        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        <span style="font-size:18px;">⬛</span> Površina
+      </button>
+      <button onclick="_izmjeriPick('nagib')"
+        style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;
+        color:#e2e8f0;padding:10px 14px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;"
+        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        <span style="font-size:18px;">📐</span> Nagib
+      </button>
+    </div>
+  </div>
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
     <span>Moja lokacija</span>
