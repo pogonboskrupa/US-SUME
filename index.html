@@ -13550,8 +13550,7 @@ let _sqlW = null, _sqlWSeq = 0, _sqlWCbs = {};
 // ── Worker source ─────────────────────────────────────────────────────────────
 const _SQL_WORKER_SRC = `
 const SQLCDN = '${_SQLJS_CDN}';
-const S3CDN  = '${_S3_CDN}';
-let sqlJs = null, sqlite3 = null;
+let sqlJs = null;
 const dbs = {};
 
 async function getSqlJs() {
@@ -13559,20 +13558,112 @@ async function getSqlJs() {
   importScripts(SQLCDN + 'sql-wasm.js');
   return sqlJs = await initSqlJs({ locateFile: f => SQLCDN + f });
 }
-async function getSqlite3() {
-  if (sqlite3) return sqlite3;
-  // importScripts je kritičan — sqlite3.js mora biti učitan kao pravi Worker script
-  // da bi detektovao Worker kontekst i registrovao OPFS VFS.
-  // fetch()+eval() ne radi jer eval ne triggeruje Worker-specific detekciju.
-  importScripts(S3CDN + 'sqlite3.js');
-  // sqlite3InitModule interno radi fetch('sqlite3.wasm') kao relativni URL —
-  // pada u blob Workeru (nema base URL). Preuzimamo eksplicitno i šaljemo kao wasmBinary.
-  const wasmResp = await fetch(S3CDN + 'sqlite3.wasm');
-  if (!wasmResp.ok) throw new Error('HTTP ' + wasmResp.status + ': sqlite3.wasm');
-  const wasmBinary = await wasmResp.arrayBuffer();
-  sqlite3 = await globalThis.sqlite3InitModule({ wasmBinary, print:()=>{}, printErr:()=>{} });
-  return sqlite3;
+
+// ── MiniSqlite: custom B-tree čitač za OPFS fajlove ─────────────────────────
+// Koristi FileSystemSyncAccessHandle za page-level pristup bez sqlite-wasm.
+// Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
+class MiniSqlite {
+  constructor(h) {
+    this.h = h; this.ps = 4096; this._c = new Map();
+  }
+  _pg(n) {
+    if (this._c.has(n)) return this._c.get(n);
+    const b = new ArrayBuffer(this.ps);
+    this.h.read(b, {at:(n-1)*this.ps});
+    const d = new Uint8Array(b);
+    if (this._c.size > 64) this._c.delete(this._c.keys().next().value);
+    this._c.set(n,d); return d;
+  }
+  static _u16(d,o){return(d[o]<<8)|d[o+1];}
+  static _u32(d,o){return(((d[o]<<8|d[o+1])<<8|d[o+2])<<8|d[o+3])>>>0;}
+  static _vi(d,p) {
+    let v=0;
+    for(let i=0;i<9;i++){const b=d[p+i];v=i<8?v*128+(b&127):v*256+b;if(!(b&128))return[v,i+1];}
+    return[v,9];
+  }
+  static _sz(t){if(t<=0)return 0;if(t<=4)return t;if(t===5)return 6;if(t<=7)return 8;if(t<=9)return 0;return t%2===0?(t-12)>>1:(t-13)>>1;}
+  static _ri(d,o,n){let v=0;for(let i=0;i<n;i++)v=v*256+d[o+i];if(n&&(d[o]&128))v-=Math.pow(2,n*8);return v;}
+  _pay(d,pos,pLen) {
+    const maxL = this.ps-35;
+    if(pLen<=maxL&&pos+pLen<=d.length) return d.slice(pos,pos+pLen);
+    const minL = Math.floor((this.ps-12)*32/255)-23;
+    let loc = minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
+    const out = new Uint8Array(pLen);
+    out.set(d.slice(pos,pos+loc));
+    let ovf = MiniSqlite._u32(d,pos+loc), w=loc;
+    while(ovf&&w<pLen){const pg=this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
+    return out;
+  }
+  _rec(data,pos,pLen) {
+    const d=this._pay(data,pos,pLen); let p=0;
+    const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL; const hE=hSz;
+    const ts=[]; while(p<hE){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
+    p=hSz; const vs=[];
+    for(const t of ts){const sz=MiniSqlite._sz(t);
+      if(t===0)vs.push(null);
+      else if(t===7){const dv=new DataView(d.buffer,d.byteOffset+p,8);vs.push(dv.getFloat64(0,false));}
+      else if(t===8)vs.push(0); else if(t===9)vs.push(1);
+      else if(t>=12&&t%2===0)vs.push(d.slice(p,p+sz));
+      else if(t>=13&&t%2===1)vs.push(new TextDecoder().decode(d.slice(p,p+sz)));
+      else vs.push(MiniSqlite._ri(d,p,sz));
+      p+=sz;}
+    return vs;
+  }
+  _scanLeaves(root,cb) {
+    const go=(n)=>{const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
+      if(t===5){for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);go(MiniSqlite._u32(d,cp));}go(MiniSqlite._u32(d,ho+8));}
+      else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid]=MiniSqlite._vi(d,p);p+=MiniSqlite._vi(d,cp+pLS)[1];cb(rid,this._rec(d,p,pL));}}};
+    go(root);
+  }
+  _idxSearch(n,z,x,y) {
+    const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===2?12:8);
+    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
+      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=this._rec(d,p,pL);const[rz,rx,ry]=r;const cmp=rz!==z?(rz<z?-1:1):rx!==x?(rx<x?-1:1):ry!==y?(ry<y?-1:1):0;
+        if(cmp>0){const f=this._idxSearch(ch,z,x,y);if(f!==null)return f;}
+        if(cmp===0)return r[r.length-1];}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=this._rec(d,p,pL);const[rz,rx,ry]=r;if(rz===z&&rx===x&&ry===y)return r[r.length-1];}}
+    if(t===2)return this._idxSearch(MiniSqlite._u32(d,ho+8),z,x,y);
+    return null;
+  }
+  _tblSearch(n,rowid) {
+    const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
+    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
+      if(t===5){const ch=MiniSqlite._u32(d,p);p+=4;const[key]=MiniSqlite._vi(d,p);if(rowid<=key)return this._tblSearch(ch,rowid);}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;if(rid===rowid)return this._rec(d,p,pL-rS);}}
+    if(t===5)return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
+    return null;
+  }
+  init() {
+    const h=this._pg(1); this.ps=(h[16]<<8)|h[17]; if(this.ps===1)this.ps=65536; this._c.clear();
+    this.tilesRoot=0;this.idxRoot=0;this.fmt=null;this.colZ=0;this.colX=1;this.colY=2;this.colD=3;
+    this._scanLeaves(1,(rid,r)=>{
+      const[type,name,tbl,rootPage,sql]=r;
+      if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
+        if(sql){const s=sql.toLowerCase();const m=s.match(/\(([^)]+)\)/);
+          if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
+            const ci=n=>cols.indexOf(n);
+            if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
+            else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
+            else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
+      }
+      if(type==='index'&&tbl==='tiles')this.idxRoot=rootPage;
+    });
+    if(!this.fmt)this.fmt='mbtiles';
+    let minz=99,maxz=0;
+    this._scanLeaves(this.tilesRoot,(rid,r)=>{const z=r[this.colZ];if(z<minz)minz=z;if(z>maxz)maxz=z;});
+    if(minz>maxz){minz=0;maxz=18;}
+    return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
+  }
+  tile(z,x,y) {
+    let ty=y;
+    if(this.fmt==='mbtiles')ty=(1<<z)-1-y;
+    if(this.idxRoot){const rid=this._idxSearch(this.idxRoot,z,x,ty);if(rid===null)return null;const rec=this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
+    let found=null;
+    this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
+    return found;
+  }
 }
+// ── Kraj MiniSqlite ──────────────────────────────────────────────────────────
 
 function idbOpen() {
   return new Promise((res,rej) => {
@@ -13633,6 +13724,10 @@ function queryTile(name, z, x, y) {
   const inst = dbs[name]; if (!inst) return null;
   const {engine,db,fmt} = inst;
   try {
+    if (engine==='custom') {
+      const arr = inst.mini.tile(z, x, y);
+      return arr ? (arr instanceof Uint8Array ? arr : new Uint8Array(arr)) : null;
+    }
     let td;
     if (fmt==='mbtiles') {
       const ty=(1<<z)-1-y;
@@ -13704,25 +13799,32 @@ self.onmessage = async ({data:msg}) => {
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
-      const s3 = await getSqlite3();
-      if (!s3.capi.sqlite3_vfs_find('opfs')) throw new Error('OPFS VFS nije dostupan u ovom browseru');
-      const db = new s3.oo1.DB({filename:msg.path, flags:'r', vfs:'opfs'});
-      const exec = makeSqlite3Exec(db);
-      const fmt = msg.fmt || detectFmt(exec);
-      if (!fmt) { db.close(); throw new Error('unknown-format'); }
-      const meta = (msg.meta&&Object.keys(msg.meta).length) ? msg.meta : readMeta(exec,fmt);
-      let maxz=meta.maxzoom, minz=meta.minzoom;
-      if (maxz==null) { try{const col=fmt==='mbtiles'?'zoom_level':'z';const v=exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles',false,null,true);if(v?.[1]!=null){minz=+v[0];maxz=+v[1];}}catch(e){} if(maxz==null)maxz=18; }
-      meta.minzoom=minz; meta.maxzoom=maxz;
-      dbs[msg.name] = {db,fmt,engine:'sqlite3'};
-      self.postMessage({id,ok:true,fmt,meta});
+      const root = await navigator.storage.getDirectory();
+      const fname = msg.path.replace(/^\//, '');
+      const fh = await root.getFileHandle(fname);
+      const h = await fh.createSyncAccessHandle();
+      let mini;
+      try {
+        mini = new MiniSqlite(h);
+        const {fmt, meta} = mini.init();
+        if (!fmt) { h.close(); throw new Error('unknown-format'); }
+        dbs[msg.name] = {mini, h, fmt, engine:'custom'};
+        self.postMessage({id, ok:true, fmt, meta});
+      } catch(e) {
+        try { h.close(); } catch(_) {}
+        throw e;
+      }
     }
     else if (msg.type === 'tile') {
       const arr = queryTile(msg.name,msg.z,msg.x,msg.y);
       self.postMessage({id,data:arr}, arr?[arr.buffer]:[]);
     }
     else if (msg.type === 'close') {
-      if (dbs[msg.name]) { try{dbs[msg.name].db.close();}catch(e){} delete dbs[msg.name]; }
+      if (dbs[msg.name]) {
+        const inst = dbs[msg.name];
+        try { inst.engine==='custom' ? inst.h.close() : inst.db.close(); } catch(e) {}
+        delete dbs[msg.name];
+      }
       self.postMessage({id,ok:true});
     }
     else if (msg.type === 'idb-delete') {
@@ -13844,7 +13946,7 @@ async function sqlmapLoadFile(file) {
       _sqlmapStatus('⏳ Kopiranje na disk (' + (file.size/1024/1024|0) + ' MB)...');
       const opfsName = name + '.sqlmap';
       await _opfsStream(opfsName, file);
-      _sqlmapStatus('⏳ Učitavam sqlite-wasm + OPFS VFS...');
+      _sqlmapStatus('⏳ Otvarai OPFS kartu...');
       const r = await _sqlWCall({type:'load-opfs', name, path:'/'+opfsName, fmt:null, meta:{}});
       if (!r.ok) throw new Error(r.error);
       await _sqlWCall({type:'idb-save-meta', name, fmt:r.fmt, meta:r.meta, opfsName, size:file.size});
