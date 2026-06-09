@@ -13559,45 +13559,37 @@ async function getSqlJs() {
   return sqlJs = await initSqlJs({ locateFile: f => SQLCDN + f });
 }
 
-// ── MiniSqlite: custom B-tree čitač za OPFS fajlove ─────────────────────────
-// Koristi FileSystemSyncAccessHandle za page-level pristup bez sqlite-wasm.
+// ── MiniSqlite: async B-tree čitač za OPFS fajlove ───────────────────────────
+// Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(h) {
-    this.h = h; this.ps = 4096; this._c = new Map();
-  }
-  _pg(n) {
-    if (this._c.has(n)) return this._c.get(n);
-    const b = new ArrayBuffer(this.ps);
-    this.h.read(b, {at:(n-1)*this.ps});
-    const d = new Uint8Array(b);
-    if (this._c.size > 64) this._c.delete(this._c.keys().next().value);
+  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); }
+  async _pg(n) {
+    if(this._c.has(n)) return this._c.get(n);
+    const off=(n-1)*this.ps;
+    const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
+    if(this._c.size>128) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
   static _u16(d,o){return(d[o]<<8)|d[o+1];}
   static _u32(d,o){return(((d[o]<<8|d[o+1])<<8|d[o+2])<<8|d[o+3])>>>0;}
-  static _vi(d,p) {
-    let v=0;
-    for(let i=0;i<9;i++){const b=d[p+i];v=i<8?v*128+(b&127):v*256+b;if(!(b&128))return[v,i+1];}
-    return[v,9];
-  }
+  static _vi(d,p){let v=0;for(let i=0;i<9;i++){const b=d[p+i];v=i<8?v*128+(b&127):v*256+b;if(!(b&128))return[v,i+1];}return[v,9];}
   static _sz(t){if(t<=0)return 0;if(t<=4)return t;if(t===5)return 6;if(t<=7)return 8;if(t<=9)return 0;return t%2===0?(t-12)>>1:(t-13)>>1;}
   static _ri(d,o,n){let v=0;for(let i=0;i<n;i++)v=v*256+d[o+i];if(n&&(d[o]&128))v-=Math.pow(2,n*8);return v;}
-  _pay(d,pos,pLen) {
-    const maxL = this.ps-35;
+  async _pay(d,pos,pLen) {
+    const maxL=this.ps-35;
     if(pLen<=maxL&&pos+pLen<=d.length) return d.slice(pos,pos+pLen);
-    const minL = Math.floor((this.ps-12)*32/255)-23;
-    let loc = minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
-    const out = new Uint8Array(pLen);
-    out.set(d.slice(pos,pos+loc));
-    let ovf = MiniSqlite._u32(d,pos+loc), w=loc;
-    while(ovf&&w<pLen){const pg=this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
+    const minL=Math.floor((this.ps-12)*32/255)-23;
+    let loc=minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
+    const out=new Uint8Array(pLen); out.set(d.slice(pos,pos+loc));
+    let ovf=MiniSqlite._u32(d,pos+loc),w=loc;
+    while(ovf&&w<pLen){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
     return out;
   }
-  _rec(data,pos,pLen) {
-    const d=this._pay(data,pos,pLen); let p=0;
-    const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL; const hE=hSz;
-    const ts=[]; while(p<hE){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
+  async _rec(data,pos,pLen) {
+    const d=await this._pay(data,pos,pLen); let p=0;
+    const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
+    const ts=[]; while(p<hSz){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
     p=hSz; const vs=[];
     for(const t of ts){const sz=MiniSqlite._sz(t);
       if(t===0)vs.push(null);
@@ -13609,49 +13601,53 @@ class MiniSqlite {
       p+=sz;}
     return vs;
   }
-  _scanLeaves(root,cb) {
-    const go=(n)=>{const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
-      if(t===5){for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);go(MiniSqlite._u32(d,cp));}go(MiniSqlite._u32(d,ho+8));}
-      else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid]=MiniSqlite._vi(d,p);p+=MiniSqlite._vi(d,cp+pLS)[1];cb(rid,this._rec(d,p,pL));}}};
-    go(root);
-  }
-  _idxSearch(n,z,x,y) {
-    const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===2?12:8);
-    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
-      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=this._rec(d,p,pL);const[rz,rx,ry]=r;const cmp=rz!==z?(rz<z?-1:1):rx!==x?(rx<x?-1:1):ry!==y?(ry<y?-1:1):0;
-        if(cmp>0){const f=this._idxSearch(ch,z,x,y);if(f!==null)return f;}
-        if(cmp===0)return r[r.length-1];}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=this._rec(d,p,pL);const[rz,rx,ry]=r;if(rz===z&&rx===x&&ry===y)return r[r.length-1];}}
-    if(t===2)return this._idxSearch(MiniSqlite._u32(d,ho+8),z,x,y);
-    return null;
-  }
-  _tblSearch(n,rowid) {
-    const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
-    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
-      if(t===5){const ch=MiniSqlite._u32(d,p);p+=4;const[key]=MiniSqlite._vi(d,p);if(rowid<=key)return this._tblSearch(ch,rowid);}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;if(rid===rowid)return this._rec(d,p,pL);}}
-    if(t===5)return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
-    return null;
-  }
-  // Read only first 'stopAfterCol' columns from a record without following overflow pages.
-  // Used for scanning zoom levels without loading tile image data.
-  _recCol(data,pos,pLen,stopAfterCol) {
+  // Read single column value from in-page payload only (no overflow). Fast for small integers.
+  _recCol(data,pos,pLen,col) {
     const safe=Math.min(pLen,data.length-pos); const d=data.slice(pos,pos+safe);
     let p=0; const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
-    const ts=[]; while(p<hSz&&ts.length<=stopAfterCol){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
-    if(ts.length<=stopAfterCol)return undefined;
-    p=hSz; for(let i=0;i<stopAfterCol;i++)p+=MiniSqlite._sz(ts[i]);
-    const t=ts[stopAfterCol]; const sz=MiniSqlite._sz(t);
+    const ts=[]; while(p<hSz&&ts.length<=col){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
+    if(ts.length<=col)return undefined;
+    p=hSz; for(let i=0;i<col;i++)p+=MiniSqlite._sz(ts[i]);
+    const t=ts[col]; const sz=MiniSqlite._sz(t);
     if(t===0)return null; if(t===8)return 0; if(t===9)return 1;
     if(t>=13&&t%2===1)return new TextDecoder().decode(d.slice(p,p+sz));
     return MiniSqlite._ri(d,p,sz);
   }
-  init() {
-    const h=this._pg(1); this.ps=(h[16]<<8)|h[17]; if(this.ps===1)this.ps=65536; this._c.clear();
-    this.tilesRoot=0;this.idxRoot=0;this.fmt=null;this.colZ=0;this.colX=1;this.colY=2;this.colD=3;
+  async _scanLeaves(root,cb) {
+    const go=async(n)=>{
+      const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
+      const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===5?12:8);
+      if(t===5){for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);await go(MiniSqlite._u32(d,cp));}await go(MiniSqlite._u32(d,ho+8));}
+      else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid]=MiniSqlite._vi(d,p);p+=MiniSqlite._vi(d,cp+pLS)[1];cb(rid,await this._rec(d,p,pL));}}
+    };
+    await go(root);
+  }
+  async _idxSearch(n,z,x,y) {
+    const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
+    const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
+    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
+      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const[rz,rx,ry]=r;const cmp=rz!==z?(rz<z?-1:1):rx!==x?(rx<x?-1:1):ry!==y?(ry<y?-1:1):0;
+        if(cmp>0) return this._idxSearch(ch,z,x,y);
+        if(cmp===0) return r[r.length-1];}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const[rz,rx,ry]=r;if(rz===z&&rx===x&&ry===y)return r[r.length-1];}}
+    if(t===2) return this._idxSearch(MiniSqlite._u32(d,ho+8),z,x,y);
+    return null;
+  }
+  async _tblSearch(n,rowid) {
+    const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
+    const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===5?12:8);
+    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
+      if(t===5){const ch=MiniSqlite._u32(d,p);p+=4;const[key]=MiniSqlite._vi(d,p);if(rowid<=key)return this._tblSearch(ch,rowid);}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;if(rid===rowid)return this._rec(d,p,pL);}}
+    if(t===5) return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
+    return null;
+  }
+  async init() {
+    const h=await this._pg(1); this.ps=(h[16]<<8)|h[17]; if(this.ps===1)this.ps=65536; this._c.clear();
+    this.tilesRoot=0; this.idxRoot=0; this.fmt=null; this.colZ=0; this.colX=1; this.colY=2; this.colD=3;
     let metaRoot=0;
-    this._scanLeaves(1,(rid,r)=>{
-      const[type,name,tbl,rootPage,sql]=r;
+    await this._scanLeaves(1,(rid,r)=>{
+      const[type,name,,rootPage,sql]=r;
       if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const m=s.match(/\(([^)]+)\)/);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
@@ -13660,36 +13656,28 @@ class MiniSqlite {
             else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
       }
-      if(type==='table'&&name==='metadata')metaRoot=rootPage;
-      if(type==='index'&&tbl==='tiles')this.idxRoot=rootPage;
+      if(type==='table'&&name==='metadata') metaRoot=rootPage;
+      if(type==='index'&&name.includes('tiles')) this.idxRoot=rootPage;
     });
-    if(!this.fmt)this.fmt='mbtiles';
-    // Read minzoom/maxzoom from metadata table (MBTiles) — avoids loading all tile images
-    let minz=0,maxz=18;
+    if(!this.fmt) this.fmt='mbtiles';
+    let minz=0, maxz=18;
     if(metaRoot>0){
       const mz={};
-      this._scanLeaves(metaRoot,(rid,r)=>{
-        const k=r[0]; const v=r[1];
-        if(k==='minzoom'||k==='maxzoom')mz[k]=+v;
-      });
-      if(mz.minzoom!=null)minz=mz.minzoom;
-      if(mz.maxzoom!=null)maxz=mz.maxzoom;
-    } else if(this.tilesRoot>0) {
-      // Fallback: sample a few leaf pages for zoom range without loading tile images
-      let done=false;
-      const go=(n)=>{if(done)return;const d=this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
-        if(t===5){go(MiniSqlite._u32(d,cpo));} // only follow first child for sampling
+      await this._scanLeaves(metaRoot,(rid,r)=>{if(r[0]==='minzoom'||r[0]==='maxzoom')mz[r[0]]=+r[1];});
+      if(mz.minzoom!=null)minz=mz.minzoom; if(mz.maxzoom!=null)maxz=mz.maxzoom;
+    } else if(this.tilesRoot>0){
+      const go=async(n)=>{const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];const nc=MiniSqlite._u16(d,ho+3);const cpo=ho+(t===5?12:8);
+        if(t===5){await go(MiniSqlite._u32(d,cpo));}
         else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[,rS]=MiniSqlite._vi(d,p);p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<minz)minz=z;if(z>maxz)maxz=z;}}}};
-      try{go(this.tilesRoot);}catch(e){}
+      try{await go(this.tilesRoot);}catch(e){}
     }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
   }
-  tile(z,x,y) {
-    let ty=y;
-    if(this.fmt==='mbtiles')ty=(1<<z)-1-y;
-    if(this.idxRoot){const rid=this._idxSearch(this.idxRoot,z,x,ty);if(rid===null)return null;const rec=this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
+  async tile(z,x,y) {
+    const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
+    if(this.idxRoot){const rid=await this._idxSearch(this.idxRoot,z,x,ty);if(rid==null)return null;const rec=await this._tblSearch(this.tilesRoot,rid);return rec?rec[this.colD]:null;}
     let found=null;
-    this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
+    await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
     return found;
   }
 }
@@ -13750,12 +13738,12 @@ function makeSqlite3Exec(db) {
   };
 }
 
-function queryTile(name, z, x, y) {
+async function queryTile(name, z, x, y) {
   const inst = dbs[name]; if (!inst) return null;
   const {engine,db,fmt} = inst;
   try {
     if (engine==='custom') {
-      const arr = inst.mini.tile(z, x, y);
+      const arr = await inst.mini.tile(z, x, y);
       return arr ? (arr instanceof Uint8Array ? arr : new Uint8Array(arr)) : null;
     }
     let td;
@@ -13832,27 +13820,21 @@ self.onmessage = async ({data:msg}) => {
       const root = await navigator.storage.getDirectory();
       const fname = msg.path.replace(/^\//, '');
       const fh = await root.getFileHandle(fname);
-      const h = await fh.createSyncAccessHandle();
-      let mini;
-      try {
-        mini = new MiniSqlite(h);
-        const {fmt, meta} = mini.init();
-        if (!fmt) { h.close(); throw new Error('unknown-format'); }
-        dbs[msg.name] = {mini, h, fmt, engine:'custom'};
-        self.postMessage({id, ok:true, fmt, meta});
-      } catch(e) {
-        try { h.close(); } catch(_) {}
-        throw e;
-      }
+      const file = await fh.getFile();
+      const mini = new MiniSqlite(file);
+      const {fmt, meta} = await mini.init();
+      if (!fmt) throw new Error('unknown-format');
+      dbs[msg.name] = {mini, fmt, engine:'custom'};
+      self.postMessage({id, ok:true, fmt, meta});
     }
     else if (msg.type === 'tile') {
-      const arr = queryTile(msg.name,msg.z,msg.x,msg.y);
+      const arr = await queryTile(msg.name,msg.z,msg.x,msg.y);
       self.postMessage({id,data:arr}, arr?[arr.buffer]:[]);
     }
     else if (msg.type === 'close') {
       if (dbs[msg.name]) {
         const inst = dbs[msg.name];
-        try { inst.engine==='custom' ? inst.h.close() : inst.db.close(); } catch(e) {}
+        try { if (inst.engine !== 'custom') inst.db.close(); } catch(e) {}
         delete dbs[msg.name];
       }
       self.postMessage({id,ok:true});
