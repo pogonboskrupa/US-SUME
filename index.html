@@ -3091,8 +3091,10 @@ async function _processOfflineQueue() {
           const lq = _OL.loadQueue();
           lq.forEach(qOp => { if (qOp.payload?.projekt_id === _tempId) qOp.payload.projekt_id = realId; });
           localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
-          // Update in-memory vlake
-          vlake.forEach(v => { if (v.projektId === _tempId) v.projektId = realId; });
+          // Update in-memory vlake + re-flush na server s ispravnim projekt_id
+          const migratedVlakeIdxs = [];
+          vlake.forEach((v, vi) => { if (v.projektId === _tempId) { v.projektId = realId; migratedVlakeIdxs.push(vi); } });
+          migratedVlakeIdxs.forEach(vi => sbFlushVlaka(vi));
           // Update vlake cache
           const cv = _OL.load(_OL.VLAKE) || [];
           cv.forEach(r => { if (r.projekt_id === _tempId) r.projekt_id = realId; });
@@ -3105,6 +3107,7 @@ async function _processOfflineQueue() {
             localStorage.setItem('tvlake_akt_proj', realId);
           }
           _OL.save(_OL.PROJEKTI, _projekti);
+          _updVlakeMapVisibility();
           rndProjektiList();
         }
       }
@@ -3479,15 +3482,17 @@ const _LIVE_BADGE_MS = 90000; // 90s — kolega se smatra aktivnim
 
 async function sbInitData() {
   if (!sbProfile) return;
-  // Sve nezavisne operacije paralelno — smanjuje waterfall s 3+ sek na ~1 sek
+  // Projekti se učitavaju PRVI — _aktivniProjektId mora biti validan
+  // prije nego što vlake izračunaju vidljivost u _updVlakeMapVisibility()
+  await sbLoadProjekti();
+  // Sve ostale operacije paralelno — smanjuje waterfall
   await Promise.all([
-    sbLoadProjekti(),
     sbLoadVlake(),
     sbLoadLog(),
     sbLoadTextLabelsDB(),
-    sbLoadKolege(),       // nema zavisnosti → može paralelno
-    sbLoadOdjeli(),       // nema zavisnosti → može paralelno
-    loadGlobalKmlStyles() // nema zavisnosti → može paralelno
+    sbLoadKolege(),
+    sbLoadOdjeli(),
+    loadGlobalKmlStyles()
   ]);
   sbStartRealtime();              // fire-and-forget
   await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
@@ -3552,6 +3557,8 @@ async function sbLoadProjekti() {
   rndProjektiList();
   rndLog(); updProjStats();
   if (akt && akt.odjel) sbSaveOdjel(akt.odjel);
+  // Osvježi vidljivost vlaka — projekt validacija mogla promijeniti _aktivniProjektId
+  _updVlakeMapVisibility();
 }
 
 function _applyProjektFields(p) {
