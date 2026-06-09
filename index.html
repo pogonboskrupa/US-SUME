@@ -12437,7 +12437,7 @@ function _msrRedraw() {
       icon: L.divIcon({
         className: '',
         html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:grab;">
-          <div style="width:14px;height:14px;border-radius:50%;background:${ptColor};border:3px solid #fff;box-shadow:0 0 5px rgba(0,0,0,0.8),0 0 0 1px rgba(0,0,0,0.4);flex-shrink:0;"></div>
+          <div style="width:9px;height:9px;border-radius:50%;background:${ptColor};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.9);flex-shrink:0;"></div>
         </div>`,
         iconSize:[44,44], iconAnchor:[22,22]
       })
@@ -12447,13 +12447,14 @@ function _msrRedraw() {
       const ll = e.target.getLatLng();
       _msrPts[idx] = { lat: ll.lat, lng: ll.lng, elev: null };
       _msrRedraw(); _msrUpdPanel();
+      _msrSyncRegistry();
       const elev = await _msrFetchElev(ll.lat, ll.lng);
-      if (_msrPts[idx]) { _msrPts[idx].elev = elev; _msrRedraw(); _msrUpdPanel(); }
+      if (_msrPts[idx]) { _msrPts[idx].elev = elev; _msrRedraw(); _msrUpdPanel(); _msrSyncRegistry(); }
     });
     mk.on('contextmenu', function(e) {
       L.DomEvent.stopPropagation(e);
       _msrPts.splice(idx, 1);
-      _msrRedraw(); _msrUpdPanel();
+      _msrRedraw(); _msrUpdPanel(); _msrSyncRegistry();
     });
     _msrLayer.addLayer(mk);
   });
@@ -12564,6 +12565,12 @@ function msrStart() {
   const modeHints = { dist: 'Klikaj tačke — mjeri ukupnu udaljenost.', area: 'Klikaj ≥3 tačke — poligon se zatvara automatski.', nagib: 'Klikni 2 tačke — nagib se računa automatski.' };
   if (hint) hint.innerHTML = (modeHints[_msrMode] || 'Klikaj tačke.') + '<br><small style="color:#475569">⊕ Pozicija tačke · vuci da pomjeriš · desni klik briši</small>';
 }
+function _msrSyncRegistry() {
+  if (!_mqmId) return;
+  const m = _msrRegistry.find(x => x.id === _mqmId);
+  if (m) { m.pts = _msrPts.slice(); _msrRegSave(); }
+}
+
 function msrStop(skipSave) {
   _msrOn = false;
   map.getContainer().style.cursor = '';
@@ -12574,7 +12581,11 @@ function msrStop(skipSave) {
   const xh = document.getElementById('msr-xhair');
   if (xh) xh.style.display = 'none';
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
+  if (_msrPts.length >= 2) {
+    if (hint) hint.innerHTML = 'Vuci tačke za korekciju · <small style="color:#475569">desni klik = obriši tačku</small>';
+  } else {
+    if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
+  }
   // Auto-ponudi snimanje ako ima ≥2 tačaka
   if (!skipSave && _msrPts.length >= 2) _mqmOpen();
 }
