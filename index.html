@@ -13536,49 +13536,49 @@ function closeProfilModal() {
 }
 
 // ─── SQLiteDB offline map ─────────────────────────────────────────────────────
-// Arhitektura: fajlovi >100 MB → OPFS (streaming, bez punog RAM-a);
-//              fajlovi ≤100 MB → IndexedDB (SQL.js u Workeru).
-// Worker drži sve SQL.js / sqlite-wasm instance; main thread samo crta tile-ove.
-// Crash-guard: ako prethodna sesija pukla pri učitavanju, automatski briše IDB.
+// Arhitektura: Web Worker za sve SQL operacije (ne blokira UI).
+// Fajlovi >100MB → OPFS streaming (ne učitava u RAM); manji → SQL.js u Workeru.
+// Crash-guard: ako učitavanje sruši tab, sljedeće otvaranje automatski briše IDB.
 // ─────────────────────────────────────────────────────────────────────────────
-let _sqlLayers = []; // {name, fmt, layer, visible, meta, saved, opfs}
-
-const _SQL_LARGE = 100 * 1024 * 1024; // 100 MB
-const _SQL_CRASH_KEY  = 'tvlake_sqlmap_loading';
-const _SQL_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
-const _S3_CDN  = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.46.1-build1/sqlite-wasm/jswasm/';
-
-// ── Web Worker za sve SQL operacije ──────────────────────────────────────────
+let _sqlLayers = [];
+const _SQL_LARGE     = 100 * 1024 * 1024;
+const _SQL_CRASH_KEY = 'tvlake_sqlmap_loading';
+const _SQLJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
+const _S3_CDN        = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.46.1-build1/sqlite-wasm/jswasm/';
 let _sqlW = null, _sqlWSeq = 0, _sqlWCbs = {};
 
+// ── Worker source ─────────────────────────────────────────────────────────────
 const _SQL_WORKER_SRC = `
-const SQLCDN  = '${_SQL_CDN}';
-const S3CDN   = '${_S3_CDN}';
+const SQLCDN = '${_SQLJS_CDN}';
+const S3CDN  = '${_S3_CDN}';
 let sqlJs = null, sqlite3 = null;
 const dbs = {};
 
-async function _fetchEval(url) {
+async function _feval(url) {
   const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
-  const txt = await r.text();
-  (0, eval)(txt);
+  if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + url);
+  (0, eval)(await r.text());
 }
 async function getSqlJs() {
   if (sqlJs) return sqlJs;
-  await _fetchEval(SQLCDN + 'sql-wasm.js');
+  await _feval(SQLCDN + 'sql-wasm.js');
   return sqlJs = await initSqlJs({ locateFile: f => SQLCDN + f });
 }
 async function getSqlite3() {
   if (sqlite3) return sqlite3;
-  await _fetchEval(S3CDN + 'sqlite3.js');
-  sqlite3 = await globalThis.sqlite3InitModule({ locateFile: f => S3CDN + f, print:()=>{}, printErr:()=>{} });
+  await _feval(S3CDN + 'sqlite3.js');
+  // sqlite3InitModule radi fetch('sqlite3.wasm') interno — mora biti apsolutni URL
+  const wasmResp = await fetch(S3CDN + 'sqlite3.wasm');
+  if (!wasmResp.ok) throw new Error('HTTP ' + wasmResp.status + ': sqlite3.wasm');
+  const wasmBinary = await wasmResp.arrayBuffer();
+  sqlite3 = await globalThis.sqlite3InitModule({ wasmBinary, print:()=>{}, printErr:()=>{} });
   return sqlite3;
 }
 
 function idbOpen() {
   return new Promise((res,rej) => {
-    const r = indexedDB.open('tvlake_sqlmaps',1);
-    r.onupgradeneeded = e => e.target.result.createObjectStore('maps',{keyPath:'name'});
+    const r = indexedDB.open('tvlake_sqlmaps', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('maps', {keyPath:'name'});
     r.onsuccess = e => res(e.target.result);
     r.onerror = () => rej(r.error);
   });
@@ -13586,19 +13586,16 @@ function idbOpen() {
 
 function detectFmt(exec) {
   try {
-    const cnt = exec("SELECT COUNT(*) FROM sqlite_master WHERE (type='table' OR type='view') AND name='tiles'");
-    if (cnt > 0) {
+    if (exec("SELECT COUNT(*) FROM sqlite_master WHERE (type='table' OR type='view') AND name='tiles'") > 0) {
       const cols = exec('PRAGMA table_info(tiles)', true);
       if (cols.includes('zoom_level')) return 'mbtiles';
       if (cols.includes('z') && cols.includes('image')) return 'rmaps';
       if (cols.includes('z') && cols.includes('tile')) return 'alpinequest';
       return 'mbtiles';
     }
-    const hasMap = exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='map'") > 0;
-    const hasImg = exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='images'") > 0;
-    const hasMet = exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata'") > 0;
-    if (hasMap && hasImg) return 'mbtiles';
-    if (hasMet) return 'mbtiles';
+    if (exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='map'") > 0 &&
+        exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='images'") > 0) return 'mbtiles';
+    if (exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata'") > 0) return 'mbtiles';
   } catch(e) {}
   return null;
 }
@@ -13607,52 +13604,46 @@ function readMeta(exec, fmt) {
   const m = {};
   try {
     if (fmt === 'mbtiles') {
-      exec('SELECT name,value FROM metadata', false, (k,v) => m[k] = v);
+      exec('SELECT name,value FROM metadata', false, (k,v) => m[k]=v);
     } else {
-      try { const r = exec('SELECT minzoom,maxzoom FROM info LIMIT 1',false,null,true); if(r) { m.minzoom=r[0]; m.maxzoom=r[1]; } } catch(e) {}
+      try { const r=exec('SELECT minzoom,maxzoom FROM info LIMIT 1',false,null,true); if(r){m.minzoom=r[0];m.maxzoom=r[1];} } catch(e){}
     }
   } catch(e) {}
   return m;
 }
 
 function makeSqlJsExec(db) {
-  return function exec(sql, cols, cb, row) {
+  return function(sql, cols, cb, row) {
     const r = db.exec(sql);
-    if (cols) return (r[0]?.values || []).map(v => v[1]);
-    if (row) return r[0]?.values?.[0] || null;
-    if (cb) (r[0]?.values || []).forEach(v => cb(v[0], v[1]));
-    return r[0]?.values?.[0]?.[0] ?? 0;
+    if (cols) return (r[0]?.values||[]).map(v=>v[1]);
+    if (row)  return r[0]?.values?.[0]||null;
+    if (cb)   (r[0]?.values||[]).forEach(v=>cb(v[0],v[1]));
+    return r[0]?.values?.[0]?.[0]??0;
   };
 }
-
 function makeSqlite3Exec(db) {
-  return function exec(sql, cols, cb, row) {
-    if (cols) { const rows=[]; db.exec(sql,{callback:r=>rows.push(r[1])}); return rows; }
-    if (row) { let v=null; db.exec(sql,{callback:r=>{ v=r; }}); return v; }
-    if (cb) { db.exec(sql,{callback:r=>cb(r[0],r[1])}); return 0; }
-    return db.selectValue(sql) ?? 0;
+  return function(sql, cols, cb, row) {
+    if (cols){const a=[];db.exec(sql,{callback:r=>a.push(r[1])});return a;}
+    if (row){let v=null;db.exec(sql,{callback:r=>{v=r;}});return v;}
+    if (cb){db.exec(sql,{callback:r=>cb(r[0],r[1])});return 0;}
+    return db.selectValue(sql)??0;
   };
 }
 
 function queryTile(name, z, x, y) {
-  const inst = dbs[name];
-  if (!inst) return null;
-  const {engine, db, fmt} = inst;
+  const inst = dbs[name]; if (!inst) return null;
+  const {engine,db,fmt} = inst;
   try {
     let td;
-    if (fmt === 'mbtiles') {
-      const ty = (1<<z)-1-y;
-      if (engine==='sqljs') {
-        td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
-      } else {
-        td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
-      }
-    } else if (fmt === 'alpinequest') {
-      if (engine==='sqljs') {
-        td = db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
-      } else {
-        td = db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
-      }
+    if (fmt==='mbtiles') {
+      const ty=(1<<z)-1-y;
+      td = engine==='sqljs'
+        ? db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0]
+        : db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
+    } else if (fmt==='alpinequest') {
+      td = engine==='sqljs'
+        ? db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0]
+        : db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
     } else {
       if (engine==='sqljs') {
         td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
@@ -13672,15 +13663,12 @@ self.onmessage = async ({data:msg}) => {
     if (msg.type === 'list') {
       const idb = await idbOpen();
       const rows = await new Promise((res,rej) => {
-        const out = [];
-        const req = idb.transaction('maps','readonly').objectStore('maps').openCursor();
+        const out=[];
+        const req=idb.transaction('maps','readonly').objectStore('maps').openCursor();
         req.onsuccess = e => {
-          const c = e.target.result;
-          if (c) {
-            const {name,fmt,meta,savedAt,opfs,opfsName,size} = c.value;
-            out.push({name,fmt,meta:meta||{},savedAt,opfs:!!opfs,opfsName,size:size||c.value.buffer?.byteLength||0});
-            c.continue();
-          } else res(out);
+          const c=e.target.result;
+          if (c) { const {name,fmt,meta,savedAt,opfs,opfsName,size}=c.value; out.push({name,fmt,meta:meta||{},savedAt,opfs:!!opfs,opfsName,size:size||c.value.buffer?.byteLength||0}); c.continue(); }
+          else res(out);
         };
         req.onerror = () => rej(req.error);
       });
@@ -13688,19 +13676,15 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'load-idb') {
       const idb = await idbOpen();
-      const entry = await new Promise((res,rej) => {
-        const req = idb.transaction('maps','readonly').objectStore('maps').get(msg.name);
-        req.onsuccess = () => res(req.result);
-        req.onerror = () => rej(req.error);
-      });
-      if (!entry || entry.opfs) throw new Error(entry?.opfs ? 'opfs' : 'not-found');
+      const entry = await new Promise((res,rej)=>{ const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
+      if (!entry||entry.opfs) throw new Error(entry?.opfs?'opfs':'not-found');
       const SQL = await getSqlJs();
       const db = new SQL.Database(new Uint8Array(entry.buffer));
       const exec = makeSqlJsExec(db);
       const fmt = entry.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
-      const meta = (entry.meta && Object.keys(entry.meta).length) ? entry.meta : readMeta(exec, fmt);
-      dbs[msg.name] = {db, fmt, engine:'sqljs'};
+      const meta = (entry.meta&&Object.keys(entry.meta).length) ? entry.meta : readMeta(exec,fmt);
+      dbs[msg.name] = {db,fmt,engine:'sqljs'};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-buf') {
@@ -13709,43 +13693,33 @@ self.onmessage = async ({data:msg}) => {
       const exec = makeSqlJsExec(db);
       const fmt = detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
-      const meta = readMeta(exec, fmt);
-      let maxz = meta.maxzoom; let minz = meta.minzoom;
-      if (maxz == null) {
-        try { const col=fmt==='mbtiles'?'zoom_level':'z'; const r=db.exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles'); const v=r[0]?.values?.[0]; if(v?.[1]!=null){minz=+v[0];maxz=+v[1];} } catch(e){}
-        if (maxz==null) maxz=18;
-      }
+      const meta = readMeta(exec,fmt);
+      let maxz=meta.maxzoom, minz=meta.minzoom;
+      if (maxz==null) { try{const col=fmt==='mbtiles'?'zoom_level':'z';const r=db.exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles');const v=r[0]?.values?.[0];if(v?.[1]!=null){minz=+v[0];maxz=+v[1];}}catch(e){} if(maxz==null)maxz=18; }
       meta.minzoom=minz; meta.maxzoom=maxz;
       if (msg.save) {
         const idb = await idbOpen();
-        await new Promise((res,rej) => {
-          const tx = idb.transaction('maps','readwrite');
-          tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength});
-          tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
-        });
+        await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       }
-      dbs[msg.name] = {db, fmt, engine:'sqljs'};
+      dbs[msg.name] = {db,fmt,engine:'sqljs'};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
       const s3 = await getSqlite3();
-      if (!s3.capi.sqlite3_vfs_find('opfs')) throw new Error('OPFS VFS nije dostupan');
-      const db = new s3.oo1.DB({filename: msg.path, flags:'r', vfs:'opfs'});
+      if (!s3.capi.sqlite3_vfs_find('opfs')) throw new Error('OPFS VFS nije dostupan u ovom browseru');
+      const db = new s3.oo1.DB({filename:msg.path, flags:'r', vfs:'opfs'});
       const exec = makeSqlite3Exec(db);
       const fmt = msg.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
-      const meta = (msg.meta && Object.keys(msg.meta).length) ? msg.meta : readMeta(exec, fmt);
-      let maxz = meta.maxzoom; let minz = meta.minzoom;
-      if (maxz == null) {
-        try { const col=fmt==='mbtiles'?'zoom_level':'z'; const v=exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles',false,null,true); if(v?.[1]!=null){minz=+v[0];maxz=+v[1];} } catch(e){}
-        if (maxz==null) maxz=18;
-      }
+      const meta = (msg.meta&&Object.keys(msg.meta).length) ? msg.meta : readMeta(exec,fmt);
+      let maxz=meta.maxzoom, minz=meta.minzoom;
+      if (maxz==null) { try{const col=fmt==='mbtiles'?'zoom_level':'z';const v=exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles',false,null,true);if(v?.[1]!=null){minz=+v[0];maxz=+v[1];}}catch(e){} if(maxz==null)maxz=18; }
       meta.minzoom=minz; meta.maxzoom=maxz;
-      dbs[msg.name] = {db, fmt, engine:'sqlite3'};
+      dbs[msg.name] = {db,fmt,engine:'sqlite3'};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'tile') {
-      const arr = queryTile(msg.name, msg.z, msg.x, msg.y);
+      const arr = queryTile(msg.name,msg.z,msg.x,msg.y);
       self.postMessage({id,data:arr}, arr?[arr.buffer]:[]);
     }
     else if (msg.type === 'close') {
@@ -13754,18 +13728,12 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'idb-delete') {
       const idb = await idbOpen();
-      await new Promise((res,rej) => {
-        const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
-      });
+      await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       self.postMessage({id,ok:true});
     }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
-      await new Promise((res,rej) => {
-        const tx=idb.transaction('maps','readwrite');
-        tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size});
-        tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
-      });
+      await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       self.postMessage({id,ok:true});
     }
   } catch(err) {
@@ -13774,25 +13742,20 @@ self.onmessage = async ({data:msg}) => {
 };
 `.trim();
 
+// ── Worker management ─────────────────────────────────────────────────────────
 function _sqlWorkerEnsure() {
   if (_sqlW) return;
-  const blob = new Blob([_SQL_WORKER_SRC], {type:'application/javascript'});
-  const url  = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(new Blob([_SQL_WORKER_SRC], {type:'application/javascript'}));
   _sqlW = new Worker(url);
   URL.revokeObjectURL(url);
-  _sqlW.onmessage = ({data:d}) => {
-    const cb = _sqlWCbs[d.id];
-    if (cb) { delete _sqlWCbs[d.id]; cb(d); }
-  };
+  _sqlW.onmessage = ({data:d}) => { const cb=_sqlWCbs[d.id]; if(cb){delete _sqlWCbs[d.id];cb(d);} };
   _sqlW.onerror = (e) => {
     console.error('SQL Worker error:', e.message);
-    _sqlmapStatus('❌ SQL Worker greška: ' + (e.message||'nepoznato'));
-    Object.values(_sqlWCbs).forEach(cb => cb({ok:false,error:'worker-error'}));
-    _sqlWCbs = {};
-    _sqlW = null; // allow restart
+    _sqlmapStatus('❌ Worker greška: ' + (e.message||'nepoznato'));
+    Object.values(_sqlWCbs).forEach(cb=>cb({ok:false,error:'worker-error'}));
+    _sqlWCbs = {}; _sqlW = null;
   };
 }
-
 function _sqlWCall(msg, transfers) {
   _sqlWorkerEnsure();
   return new Promise(resolve => {
@@ -13801,27 +13764,22 @@ function _sqlWCall(msg, transfers) {
     msg.id = id;
     if (transfers?.length) _sqlW.postMessage(msg, transfers);
     else _sqlW.postMessage(msg);
-    if (msg.type !== 'tile') {
-      setTimeout(() => { if(_sqlWCbs[id]){delete _sqlWCbs[id];resolve({ok:false,error:'timeout'});} }, 180000);
-    }
+    if (msg.type !== 'tile') setTimeout(()=>{ if(_sqlWCbs[id]){delete _sqlWCbs[id];resolve({ok:false,error:'timeout'});} }, 180000);
   });
 }
 
 // ── OPFS helpers (main thread) ────────────────────────────────────────────────
 function _opfsAvail() { return typeof navigator?.storage?.getDirectory === 'function'; }
-
 async function _opfsStream(filename, file) {
   const root = await navigator.storage.getDirectory();
   const fh = await root.getFileHandle(filename, {create:true});
-  const w = await fh.createWritable();
-  await file.stream().pipeTo(w);
+  await file.stream().pipeTo(await fh.createWritable());
 }
-
 async function _opfsDel(filename) {
-  try { const r=await navigator.storage.getDirectory(); await r.removeEntry(filename); } catch(e){}
+  try { await (await navigator.storage.getDirectory()).removeEntry(filename); } catch(e){}
 }
 
-// ── IndexedDB — samo brisanje, ostalo u Workeru ───────────────────────────────
+// ── IDB helpers (main thread) ─────────────────────────────────────────────────
 function _sqlIdbOpen() {
   return new Promise((res,rej) => {
     const r=indexedDB.open('tvlake_sqlmaps',1);
@@ -13830,7 +13788,7 @@ function _sqlIdbOpen() {
   });
 }
 async function _sqlIdbDeleteDirect(name) {
-  const idb = await _sqlIdbOpen();
+  const idb=await _sqlIdbOpen();
   return new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
 }
 async function _sqlIdbClearAll() {
@@ -13841,20 +13799,18 @@ async function _sqlIdbClearAll() {
 async function _sqlCrashCheck() {
   if (!localStorage.getItem(_SQL_CRASH_KEY)) return false;
   localStorage.removeItem(_SQL_CRASH_KEY);
-  try { await _sqlIdbClearAll(); } catch(e){}
-  _sqlmapStatus('⚠️ Prethodna karta je uzrokovala rušenje (prevelik fajl). Obrisana je automatski.');
+  try { await _sqlIdbClearAll(); } catch(e) {}
+  _sqlmapStatus('⚠️ Prethodna karta uzrokovala rušenje. Obrisana je automatski.');
   const el = document.getElementById('sqlmap-crash-banner');
   if (el) el.style.display = '';
   return true;
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+// ── UI helpers ────────────────────────────────────────────────────────────────
 function _sqlmapStatus(msg) {
   const el = document.getElementById('sqlmap-status');
   if (el) el.textContent = msg;
 }
-
-// ── Modali ────────────────────────────────────────────────────────────────────
 function showSqlMapModal() {
   document.getElementById('sqlmap-modal').classList.add('show');
   _sqlmapRenderLayers();
@@ -13875,7 +13831,6 @@ async function sqlmapLoadFile(file) {
   const name = file.name.replace(/\.[^.]+$/, '');
   const isLarge = file.size > _SQL_LARGE;
 
-  // Ukloni postojeći sloj istog naziva
   const ex = _sqlLayers.findIndex(l => l.name === name);
   if (ex !== -1) {
     map.removeLayer(_sqlLayers[ex].layer);
@@ -13887,37 +13842,31 @@ async function sqlmapLoadFile(file) {
 
   try {
     if (isLarge && _opfsAvail()) {
-      // ── Veliki fajl: streaming u OPFS, bez punog RAM učitavanja ──
-      _sqlmapStatus('⏳ Kopiranje na lokalni disk (' + (file.size/1024/1024|0) + ' MB)...');
+      _sqlmapStatus('⏳ Kopiranje na disk (' + (file.size/1024/1024|0) + ' MB)...');
       const opfsName = name + '.sqlmap';
       await _opfsStream(opfsName, file);
-      _sqlmapStatus('⏳ Učitavam sqlite-wasm modul...');
+      _sqlmapStatus('⏳ Učitavam sqlite-wasm + OPFS VFS...');
       const r = await _sqlWCall({type:'load-opfs', name, path:'/'+opfsName, fmt:null, meta:{}});
       if (!r.ok) throw new Error(r.error);
-      const {fmt, meta} = r;
-      // Sačuvaj samo metapodatke u IDB (bez buffera)
-      await _sqlWCall({type:'idb-save-meta', name, fmt, meta, opfsName, size:file.size});
-      const layer = _sqlmapCreateLayerW(name, fmt, meta);
+      await _sqlWCall({type:'idb-save-meta', name, fmt:r.fmt, meta:r.meta, opfsName, size:file.size});
+      const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
-      _sqlLayers.push({name, fmt, layer, visible:true, meta, saved:true, opfs:true});
+      _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:true});
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)');
     } else if (isLarge) {
-      throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije podržan u ovom browseru. Pokušaj u Chrome/Edge.');
+      throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije dostupan — pokušaj u Chrome/Edge.');
     } else {
-      // ── Mali fajl: SQL.js u Workeru ──
       _sqlmapStatus('⏳ Čitam fajl...');
       const buf = await file.arrayBuffer();
       _sqlmapStatus('⏳ Otvaranje baze...');
       const r = await _sqlWCall({type:'load-buf', name, buffer:buf, save:true}, [buf]);
       if (!r.ok) throw new Error(r.error);
-      const {fmt, meta} = r;
-      const layer = _sqlmapCreateLayerW(name, fmt, meta);
+      const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
-      _sqlLayers.push({name, fmt, layer, visible:true, meta, saved:true, opfs:false});
+      _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:false});
       _sqlmapStatus('✅ Karta sačuvana: ' + name);
     }
-    _sqlmapRenderLayers();
-    _lsRenderSqlite();
+    _sqlmapRenderLayers(); _lsRenderSqlite();
     const fi = document.getElementById('sqlmap-file-input');
     if (fi) fi.value = '';
   } catch(e) {
@@ -13928,14 +13877,11 @@ async function sqlmapLoadFile(file) {
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
 async function sqlmapRestoreAll() {
-  if (await _sqlCrashCheck()) return; // prethodna sesija pukla → IDB obrisan
-
+  if (await _sqlCrashCheck()) return;
   let lastSqlId = null;
   try { const lm=JSON.parse(localStorage.getItem('tvlake_last_map')); if(lm?.type==='sqlite'&&lm.sqlId) lastSqlId=lm.sqlId; } catch(e){}
 
-  // Postavi crash-guard PRIJE učitavanja (čistimo ako učitavanje sruši tab)
   localStorage.setItem(_SQL_CRASH_KEY, '1');
-
   try {
     const r = await _sqlWCall({type:'list'});
     if (!r.ok || !r.rows?.length) { localStorage.removeItem(_SQL_CRASH_KEY); return; }
@@ -13951,8 +13897,7 @@ async function sqlmapRestoreAll() {
           lr = await _sqlWCall({type:'load-idb', name:entry.name});
         }
         if (!lr.ok) { console.warn('SQLmap restore skip:', entry.name, lr.error); continue; }
-        const {fmt, meta} = lr;
-        const layer = _sqlmapCreateLayerW(entry.name, fmt, meta);
+        const layer = _sqlmapCreateLayerW(entry.name, lr.fmt, lr.meta);
         const shouldShow = lastSqlId ? entry.name === lastSqlId : false;
         if (shouldShow) {
           Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
@@ -13961,19 +13906,18 @@ async function sqlmapRestoreAll() {
           const btn = document.getElementById('layer-switch-btn');
           if (btn) btn.textContent = '🗄';
         }
-        _sqlLayers.push({name:entry.name, fmt, layer, visible:shouldShow, meta, saved:true, opfs:!!entry.opfs});
+        _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs});
       } catch(e) { console.warn('SQLmap restore error', entry.name, e); }
     }
     if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
   } catch(e) { console.warn('SQLmap restore failed:', e); }
-
-  localStorage.removeItem(_SQL_CRASH_KEY); // uspješno završeno
+  localStorage.removeItem(_SQL_CRASH_KEY);
 }
 
-// ── Worker-based tile layer ───────────────────────────────────────────────────
+// ── Worker tile layer ─────────────────────────────────────────────────────────
 function _sqlmapCreateLayerW(name, fmt, meta) {
-  const maxNative = (meta?.maxzoom != null) ? Math.max(1, parseInt(meta.maxzoom,10)) : 18;
-  const minNative = (meta?.minzoom != null) ? Math.max(0, parseInt(meta.minzoom,10)) : 0;
+  const maxNative = (meta?.maxzoom!=null) ? Math.max(1,parseInt(meta.maxzoom,10)) : 18;
+  const minNative = (meta?.minzoom!=null) ? Math.max(0,parseInt(meta.minzoom,10)) : 0;
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const img = document.createElement('img');
@@ -14001,9 +13945,9 @@ function _sqlmapRenderLayers() {
   if (!el) return;
   if (!_sqlLayers.length) { el.innerHTML = ''; return; }
   el.innerHTML = _sqlLayers.map((sl, i) => {
-    const fmtLabel = sl.fmt === 'mbtiles' ? 'MBTiles' : sl.fmt === 'alpinequest' ? 'AlpineQuest' : 'RMaps/OruxMaps';
+    const fmtLabel = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='alpinequest'?'AlpineQuest':'RMaps/OruxMaps';
     const metaDesc = sl.meta?.description ? `<br>${sl.meta.description}` : '';
-    const zInfo = sl.meta?.minzoom != null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
+    const zInfo = sl.meta?.minzoom!=null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
     const badge = sl.saved ? (sl.opfs ? '<span style="color:#38bdf8;font-size:10px;margin-left:6px;">💾 OPFS</span>' : '<span style="color:#4ade80;font-size:10px;margin-left:6px;">💾 sačuvano</span>') : '';
     return `
     <div class="sqlmap-layer-row">
@@ -14011,14 +13955,14 @@ function _sqlmapRenderLayers() {
       <div class="sqlmap-layer-meta"><span>${fmtLabel}${zInfo}</span>${metaDesc}</div>
       <div class="sqlmap-layer-controls">
         <button class="btn ${sl.visible?'b':'gr'}" style="font-size:11px;padding:5px 10px;"
-          onclick="sqlmapToggle(${i})">${sl.visible ? '👁 Vidljivo' : '🙈 Skriveno'}</button>
+          onclick="sqlmapToggle(${i})">${sl.visible?'👁 Vidljivo':'🙈 Skriveno'}</button>
         <button class="btn gr" style="font-size:11px;padding:5px 10px;"
           onclick="sqlmapRemove(${i})">✕ Ukloni</button>
       </div>
       <div class="sqlmap-opacity-row">
         <span>Providnost</span>
         <input type="range" min="0" max="100" value="${Math.round((sl.layer.options.opacity??1)*100)}"
-          oninput="sqlmapSetOpacity(${i}, this.value)">
+          oninput="sqlmapSetOpacity(${i},this.value)">
         <span id="sqlmap-op-${i}">${Math.round((sl.layer.options.opacity??1)*100)}%</span>
       </div>
     </div>`;
@@ -14033,19 +13977,17 @@ function sqlmapToggle(i) {
 }
 function sqlmapSetOpacity(i, val) {
   const sl = _sqlLayers[i];
-  sl.layer.setOpacity(val / 100);
-  const lbl = document.getElementById('sqlmap-op-' + i);
-  if (lbl) lbl.textContent = val + '%';
+  sl.layer.setOpacity(val/100);
+  const lbl = document.getElementById('sqlmap-op-'+i);
+  if (lbl) lbl.textContent = val+'%';
 }
 async function sqlmapRemove(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
   map.removeLayer(sl.layer);
   await _sqlWCall({type:'close', name:sl.name});
-  if (sl.saved) {
-    await _sqlWCall({type:'idb-delete', name:sl.name});
-    if (sl.opfs) _opfsDel(sl.name + '.sqlmap');
-  }
+  if (sl.opfs) _opfsDel(sl.name+'.sqlmap');
+  if (sl.saved) await _sqlIdbDeleteDirect(sl.name).catch(()=>{});
   _sqlLayers.splice(i, 1);
   _sqlmapRenderLayers(); _lsRenderSqlite();
   if (!_sqlLayers.length) _sqlmapStatus('');
@@ -14053,26 +13995,19 @@ async function sqlmapRemove(i) {
 async function sqlmapConfirmDelete(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
-  _sqlDelPending = i;
-  const lbl = document.getElementById('sql-del-name');
-  if (lbl) lbl.textContent = sl.name;
-  document.getElementById('sql-del-confirm').style.display = 'flex';
-}
-let _sqlDelPending = null;
-async function _sqlConfirmDelete() {
-  const i = _sqlDelPending; _sqlDelPending = null;
-  document.getElementById('sql-del-confirm').style.display = 'none';
-  if (i != null) await sqlmapRemove(i);
-}
-function _sqlCancelDelete() {
-  _sqlDelPending = null;
-  document.getElementById('sql-del-confirm').style.display = 'none';
+  if (!confirm(`Trajno obrisati kartu "${sl.name}"?`)) return;
+  await sqlmapRemove(i);
 }
 async function sqlmapClearAll() {
-  _sqlLayers.forEach(sl => { try { map.removeLayer(sl.layer); } catch(e){} });
-  _sqlLayers = [];
   if (_sqlW) { _sqlW.terminate(); _sqlW = null; _sqlWCbs = {}; }
-  try { await _sqlIdbClearAll(); } catch(e){}
+  for (const sl of _sqlLayers) { try{map.removeLayer(sl.layer);}catch(e){} }
+  _sqlLayers = [];
+  try { await _sqlIdbClearAll(); } catch(e) {}
+  // Obriši sve OPFS fajlove
+  try {
+    const root = await navigator.storage.getDirectory();
+    for await (const [n] of root.entries()) { if(n.endsWith('.sqlmap')) await root.removeEntry(n).catch(()=>{}); }
+  } catch(e) {}
   _sqlmapRenderLayers(); _lsRenderSqlite();
   _sqlmapStatus('Sve offline karte obrisane.');
   const el = document.getElementById('sqlmap-crash-banner');
@@ -16232,7 +16167,7 @@ function toggleHelpSec(hdr) {
 
     <div id="sqlmap-status"></div>
 
-    <div id="sqlmap-crash-banner" style="display:none;background:#7f1d1d;color:#fca5a5;border:1px solid #dc2626;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:12px;">
+    <div id="sqlmap-crash-banner" style="display:none;background:#7f1d1d;color:#fca5a5;border:1px solid #dc2626;border-radius:8px;padding:10px 14px;margin:6px 0;font-size:12px;">
       ⚠️ Prethodna karta je uzrokovala rušenje (prevelik fajl bez OPFS podrške). Obrisana je automatski.
       <br><button onclick="sqlmapClearAll()" style="margin-top:6px;background:#dc2626;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">Obriši sve offline karte</button>
     </div>
