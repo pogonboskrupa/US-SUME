@@ -13577,8 +13577,9 @@ class MiniSqlite {
   static _vi(d,p){let v=0;for(let i=0;i<9;i++){const b=d[p+i];v=i<8?v*128+(b&127):v*256+b;if(!(b&128))return[v,i+1];}return[v,9];}
   static _sz(t){if(t<=0)return 0;if(t<=4)return t;if(t===5)return 6;if(t<=7)return 8;if(t<=9)return 0;return t%2===0?(t-12)>>1:(t-13)>>1;}
   static _ri(d,o,n){let v=0;for(let i=0;i<n;i++)v=v*256+d[o+i];if(n&&(d[o]&128))v-=Math.pow(2,n*8);return v;}
-  async _pay(d,pos,pLen) {
-    const maxL=this.ps-35;
+  async _pay(d,pos,pLen,isIdx=false) {
+    // index cells: maxLocal = floor((ps-12)*64/255)-23; table cells: maxLocal = ps-35
+    const maxL=isIdx?Math.floor((this.ps-12)*64/255)-23:this.ps-35;
     if(pLen<=maxL&&pos+pLen<=d.length) return d.slice(pos,pos+pLen);
     const minL=Math.floor((this.ps-12)*32/255)-23;
     let loc=minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
@@ -13587,8 +13588,8 @@ class MiniSqlite {
     while(ovf&&w<pLen){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
     return out;
   }
-  async _rec(data,pos,pLen) {
-    const d=await this._pay(data,pos,pLen); let p=0;
+  async _rec(data,pos,pLen,isIdx=false) {
+    const d=await this._pay(data,pos,pLen,isIdx); let p=0;
     const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
     const ts=[]; while(p<hSz){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
     p=hSz; const vs=[];
@@ -13627,10 +13628,10 @@ class MiniSqlite {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
     const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
     for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
-      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
+      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
         if(cmp>0) return this._idxSearch(ch,v0,v1,v2);
         if(cmp===0) return r[r.length-1];}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r[r.length-1];}}
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r[r.length-1];}}
     if(t===2) return this._idxSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
     return null;
   }
@@ -13643,16 +13644,16 @@ class MiniSqlite {
     if(t===5) return this._tblSearch(MiniSqlite._u32(d,ho+8),rowid);
     return null;
   }
-  // WITHOUT ROWID search: B-tree sorted by (v0,v1,v2), records contain all columns incl. data
+  // Index B-tree search by (v0,v1,v2) — works for both WITHOUT ROWID and covering indices
   async _wRowSearch(n,v0,v1,v2) {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
     const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
     for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
       if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;
-        const r=await this._rec(d,p,pL);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
+        const r=await this._rec(d,p,pL,true);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
         if(cmp>0) return this._wRowSearch(ch,v0,v1,v2);
         if(cmp===0) return r;}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL);
+      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);
         if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r;}}
     if(t===2) return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
     return null;
@@ -13725,7 +13726,7 @@ class MiniSqlite {
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);
       if(t===2){const cp=MiniSqlite._u16(d,cpo);n=MiniSqlite._u32(d,cp);}
-      else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
+      else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
     }return null;
   }
   async _lastIdxEntry(root) {
@@ -13735,7 +13736,7 @@ class MiniSqlite {
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);
       if(t===2){n=MiniSqlite._u32(d,ho+8);}
-      else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
+      else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
     }return null;
   }
   async _firstLeafSample() {
@@ -13763,15 +13764,15 @@ class MiniSqlite {
       return null;
     }
     if(this.idxRoot){
-      const sk=[];sk[this.colX]=x;sk[this.colY]=ty;
       const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
       for(const zv of zCands){
-        sk[this.colZ]=zv;
-        const rid=await this._idxSearch(this.idxRoot,sk[0],sk[1],sk[2]);
-        if(rid!=null){
-          if(!this._zm)this._zm=(zv===z)?1:2;
-          const rec=await this._tblSearch(this.tilesRoot,rid);
-          return rec?rec[this.colD]:null;
+        const rec=await this._wRowSearch(this.idxRoot,zv,x,ty);
+        if(rec){
+          if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;
+          const blob=rec[this.colD];
+          if(blob instanceof Uint8Array) return blob;
+          const tRec=await this._tblSearch(this.tilesRoot,rec[rec.length-1]);
+          return tRec?tRec[this.colD]||null:null;
         }
       }
       return null;}
@@ -13951,24 +13952,23 @@ self.onmessage = async ({data:msg}) => {
         const ie=scanR?await mini._firstIdxEntry(scanR):null;
         if(ie){
           const iz=ie[0],ix=ie[1],iy=ie[2],ilen=ie.length;
-          let blen=0;
-          if(mini.noRowId){
-            // WITHOUT ROWID: record already has all cols including tile_data
-            const d4=ie[mini.colD];blen=d4 instanceof Uint8Array?d4.length:(d4?.length||0);
-          } else {
-            const ir2=ie[ilen-1];
-            const rec4=await mini._tblSearch(mini.tilesRoot,ir2);
+          const d4=ie[mini.colD];
+          const isCov=d4 instanceof Uint8Array;
+          let blen=isCov?d4.length:0;
+          if(!isCov&&!mini.noRowId){
+            // Standard index: fetch tile_data from table using last element as rowid
+            const rec4=await mini._tblSearch(mini.tilesRoot,ie[ilen-1]);
             blen=rec4?(rec4[mini.colD]instanceof Uint8Array?rec4[mini.colD].length:(rec4[mini.colD]?.length||0)):0;
           }
-          // tile() with TMS-flipped y
           const iy_xyz=(1<<iz)-1-iy;
           const ta=await mini.tile(iz,ix,iy_xyz);
-          // tile() with raw y
           const tb=await mini.tile(iz,ix,iy);
-          // direct _wRowSearch test (for noRowId)
           let tw='n/a';
-          if(mini.noRowId){try{const wr=await mini._wRowSearch(mini.tilesRoot,iz,ix,iy);tw=wr?(wr[mini.colD]instanceof Uint8Array?wr[mini.colD].length:(wr[mini.colD]?.length||0))+'b':'null';}catch(we){tw='e:'+we.message;}}
-          t4='nr'+(mini.noRowId?1:0)+' n'+ilen+' z'+iz+' c'+ix+' r'+iy+' dat'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0)+' wr'+tw;
+          if(mini.noRowId||isCov){
+            const wrRoot=mini.noRowId?mini.tilesRoot:mini.idxRoot;
+            try{const wr=await mini._wRowSearch(wrRoot,iz,ix,iy);tw=wr?(wr[mini.colD]instanceof Uint8Array?wr[mini.colD].length:0)+'b':'null';}catch(we){tw='e:'+we.message;}
+          }
+          t4='nr'+(mini.noRowId?1:0)+' ci'+(isCov?1:0)+' n'+ilen+' z'+iz+' c'+ix+' r'+iy+' dat'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0)+' wr'+tw;
         }
       }catch(e4){t4='e:'+e4.message;}
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+']';
