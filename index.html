@@ -3216,9 +3216,10 @@ function showApp() {
   loadProj();      // lokalni podaci odmah (sinhrono, brzo)
   sbInitData();    // Supabase podaci u pozadini
   if (navigator.onLine) _processOfflineQueue();
-  // Nekritični restores odgoditi iza prvog painta — ne blokiraju prikaz karte
+  // SQLite karta je primarna — restore odmah (async, ne blokira)
+  sqlmapRestoreAll();
+  // Ostali nekritični restores iza prvog painta
   setTimeout(() => {
-    sqlmapRestoreAll();
     geojsonOdjeliRestore();
     _tragRegLoad();
     _msrRegLoad();
@@ -5684,7 +5685,11 @@ setTimeout(_demLegendUpdate, 0); // after DOM ready
   let restoredKey = '⛰ Topo';
   try {
     const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
-    if (saved?.type === 'sqlite') return; // sqlmapRestoreAll will activate the correct SQLite
+    if (saved?.type === 'sqlite') {
+      // Pre-warm SQL.js odmah da sqlmapRestoreAll() ne čeka CDN
+      _sqlmapEnsureSqlJs().catch(() => {});
+      return; // sqlmapRestoreAll will activate the correct SQLite
+    }
     if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
@@ -13565,6 +13570,8 @@ async function sqlmapRestoreAll() {
           // Remove any base tile layer that _restoreLastMap may have added
           Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
           layer.addTo(map);
+          // Forsiraj reload tile-ova za trenutni viewport (bez redraw nema efekta)
+          layer.redraw();
           const btn = document.getElementById('layer-switch-btn');
           if (btn) btn.textContent = '🗄';
         }
@@ -13623,8 +13630,20 @@ function _sqlmapReadMeta(db, fmt) {
 function _sqlmapCreateLayer(db, fmt, meta) {
   // Use zoom limits from MBTiles metadata so Leaflet upscales correctly instead
   // of requesting tiles at levels that don't exist in the database.
-  const maxNative = (meta?.maxzoom != null) ? Math.max(1, parseInt(meta.maxzoom, 10)) : 18;
-  const minNative = (meta?.minzoom != null) ? Math.max(0, parseInt(meta.minzoom, 10)) : 0;
+  let maxNative = (meta?.maxzoom != null) ? Math.max(1, parseInt(meta.maxzoom, 10)) : null;
+  let minNative = (meta?.minzoom != null) ? Math.max(0, parseInt(meta.minzoom, 10)) : 0;
+
+  // Ako metadata nema maxzoom, skeniramo stvarne tile-ove u DB
+  // (sprječava bijele tile-ove kad Leaflet traži zoom koji ne postoji)
+  if (maxNative == null) {
+    try {
+      const col = fmt === 'mbtiles' ? 'zoom_level' : 'z';
+      const r = db.exec(`SELECT MIN(${col}), MAX(${col}) FROM tiles`);
+      const v = r[0]?.values?.[0];
+      if (v?.[1] != null) { minNative = Math.max(0, +v[0]); maxNative = Math.max(1, +v[1]); }
+    } catch(e) {}
+    if (maxNative == null) maxNative = 18;
+  }
 
   const SqlTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
