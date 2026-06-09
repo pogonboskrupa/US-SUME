@@ -13565,6 +13565,7 @@ async function getSqlJs() {
 class MiniSqlite {
   constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); }
   async _pg(n) {
+    if(n<=0) return new Uint8Array(this.ps);
     if(this._c.has(n)) return this._c.get(n);
     const off=(n-1)*this.ps;
     const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
@@ -13648,7 +13649,7 @@ class MiniSqlite {
     let metaRoot=0;
     await this._scanLeaves(1,(rid,r)=>{
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
-      if(type==='table'&&name==='tiles'){this.tilesRoot=rootPage;
+      if(type==='table'&&name?.toLowerCase()==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
             const ci=n=>cols.indexOf(n);
@@ -13656,8 +13657,8 @@ class MiniSqlite {
             else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
       }
-      if(type==='table'&&name==='metadata') metaRoot=rootPage;
-      if(type==='index'&&tbl==='tiles') this.idxRoot=rootPage;
+      if(type==='table'&&name?.toLowerCase()==='metadata') metaRoot=rootPage;
+      if(type==='index'&&tbl?.toLowerCase()==='tiles') this.idxRoot=rootPage;
     });
     if(!this.fmt) this.fmt='mbtiles';
     let minz=0, maxz=18;
@@ -13697,7 +13698,8 @@ class MiniSqlite {
       }
       return null;}
     let found=null;
-    await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colZ]===z&&r[this.colX]===x&&r[this.colY]===ty)found=r[this.colD];});
+    const zv2=this.fmt==='rmaps'?17-z:null;
+    await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colX]===x&&r[this.colY]===ty&&(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2)))found=r[this.colD];});
     return found;
   }
 }
@@ -13844,6 +13846,7 @@ self.onmessage = async ({data:msg}) => {
       const mini = new MiniSqlite(file);
       const {fmt, meta} = await mini.init();
       if (!fmt) throw new Error('unknown-format');
+      meta._d = 'tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD;
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
@@ -14004,7 +14007,8 @@ async function sqlmapLoadFile(file) {
       _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:true});
       _sqlmapMetaAutoZoom(r.meta);
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
-      _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI);
+      const dI=r.meta?._d?' ['+r.meta._d+']':'';
+      _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
     } else if (isLarge) {
       throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije dostupan — pokušaj u Chrome/Edge.');
     } else {
