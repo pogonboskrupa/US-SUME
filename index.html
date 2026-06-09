@@ -13680,6 +13680,16 @@ class MiniSqlite {
     }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz}};
   }
+  async _firstIdxEntry() {
+    let n=this.idxRoot;
+    for(let depth=0;depth<32;depth++){
+      const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
+      const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
+      const cpo=ho+(t===2?12:8);
+      if(t===2){const cp=MiniSqlite._u16(d,cpo);n=MiniSqlite._u32(d,cp);}
+      else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL);}
+    }return null;
+  }
   async _firstLeafSample() {
     let n=this.tilesRoot;
     for(let depth=0;depth<32;depth++){
@@ -13872,10 +13882,24 @@ self.onmessage = async ({data:msg}) => {
           // Test 2: direct _idxSearch with raw values, no TMS flip
           let t2='?';
           try{const rid2=await mini._idxSearch(mini.idxRoot,c0,c1,c2);t2=rid2!=null?'rid='+rid2:'null';}catch(te2){t2='e';}
-          tCoord+=',t2='+t2;
+          // Test 3: _tblSearch for rowid=1 → check BLOB length
+          let t3='?';
+          try{const rec3=await mini._tblSearch(mini.tilesRoot,1);t3=rec3?'c='+(rec3[mini.colD]?.length||0):'null';}catch(te3){t3='e';}
+          tCoord+=',t2='+t2+',t3='+t3;
         }
       }
-      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+')';
+      // Test 4: walk index B-tree to first real tile, test full tile() path
+      let t4='?';
+      try{
+        const ie=await mini._firstIdxEntry();
+        if(ie){const iz=ie[0],ix=ie[1],iy=ie[2],ir2=ie[ie.length-1];
+          const iy2=(1<<iz)-1-iy;
+          const ta=await mini.tile(iz,ix,iy2);
+          const rec4=await mini._tblSearch(mini.tilesRoot,ir2);
+          t4='z'+iz+',x'+ix+',ty'+iy+'→ok:'+(ta?ta.length:'null')+'/tbl:'+(rec4?rec4[mini.colD]?.length||0:'null');
+        }
+      }catch(e4){t4='e:'+e4.message;}
+      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4='+t4;
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
