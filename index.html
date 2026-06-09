@@ -13549,14 +13549,20 @@ const S3CDN   = '${_S3_CDN}';
 let sqlJs = null, sqlite3 = null;
 const dbs = {};
 
+async function _fetchEval(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
+  const txt = await r.text();
+  (0, eval)(txt);
+}
 async function getSqlJs() {
   if (sqlJs) return sqlJs;
-  importScripts(SQLCDN + 'sql-wasm.js');
+  await _fetchEval(SQLCDN + 'sql-wasm.js');
   return sqlJs = await initSqlJs({ locateFile: f => SQLCDN + f });
 }
 async function getSqlite3() {
   if (sqlite3) return sqlite3;
-  importScripts(S3CDN + 'sqlite3.js');
+  await _fetchEval(S3CDN + 'sqlite3.js');
   sqlite3 = await globalThis.sqlite3InitModule({ locateFile: f => S3CDN + f, print:()=>{}, printErr:()=>{} });
   return sqlite3;
 }
@@ -13877,7 +13883,7 @@ async function sqlmapLoadFile(file) {
       _sqlmapStatus('⏳ Kopiranje na lokalni disk (' + (file.size/1024/1024|0) + ' MB)...');
       const opfsName = name + '.sqlmap';
       await _opfsStream(opfsName, file);
-      _sqlmapStatus('⏳ Otvaranje baze...');
+      _sqlmapStatus('⏳ Učitavam sqlite-wasm modul...');
       const r = await _sqlWCall({type:'load-opfs', name, path:'/'+opfsName, fmt:null, meta:{}});
       if (!r.ok) throw new Error(r.error);
       const {fmt, meta} = r;
@@ -13887,6 +13893,8 @@ async function sqlmapLoadFile(file) {
       layer.addTo(map);
       _sqlLayers.push({name, fmt, layer, visible:true, meta, saved:true, opfs:true});
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)');
+    } else if (isLarge) {
+      throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije podržan u ovom browseru. Pokušaj u Chrome/Edge.');
     } else {
       // ── Mali fajl: SQL.js u Workeru ──
       _sqlmapStatus('⏳ Čitam fajl...');

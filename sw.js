@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.6.39';
+const APP_VERSION = '1.6.40';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
