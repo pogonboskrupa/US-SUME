@@ -824,6 +824,61 @@ input:focus { outline:none; border-color:#3b82f6; }
 .mdp-btn.undo  { background:#f1f5f9; color:#7c3aed; }
 .mdp-btn.done  { background:linear-gradient(135deg,#059669,#10b981); color:#fff; }
 
+/* ═══ UVOZ VLAKE IZ FAJLA — svijetli iOS bottom sheet ═══ */
+#imv-overlay {
+  display:none; position:fixed; inset:0; z-index:2400;
+  background:rgba(15,23,42,0.45); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+}
+#imv-modal {
+  display:none; position:fixed; left:50%; bottom:0; transform:translateX(-50%);
+  z-index:2401; width:min(460px, 100vw); max-height:86vh;
+  background:#fff; border-radius:20px 20px 0 0;
+  box-shadow:0 -8px 40px rgba(0,0,0,0.18);
+  flex-direction:column; overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+#imv-overlay.show, #imv-modal.show { display:flex; }
+.imv-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 10px; }
+.imv-title { font-size:17px; font-weight:800; color:#0f172a; }
+.imv-x { background:#f1f5f9; border:none; color:#64748b; width:30px; height:30px; border-radius:50%; font-size:14px; cursor:pointer; }
+.imv-body { padding:0 18px 12px; overflow-y:auto; }
+.imv-file-btn {
+  display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+  padding:13px; border:1.5px dashed #94a3b8; border-radius:14px;
+  background:#f8fafc; color:#334155; font-size:14px; font-weight:700; cursor:pointer;
+}
+.imv-file-btn:active { background:#eef2f7; }
+#imv-fname { font-size:12px; color:#059669; font-weight:600; margin:6px 2px 0; min-height:16px; }
+.imv-lbl { font-size:11px; font-weight:bold; color:#64748b; letter-spacing:0.8px; text-transform:uppercase; margin:12px 2px 5px; }
+.imv-select, .imv-trk-nm, .imv-trk-strana {
+  width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px;
+  background:#f8fafc; color:#0f172a; font-size:14px; outline:none;
+}
+.imv-select:focus, .imv-trk-nm:focus { border-color:#3b82f6; background:#fff; }
+.imv-trk {
+  border:1px solid #e2e8f0; border-radius:14px; padding:10px 12px; margin-top:8px;
+  display:flex; flex-direction:column; gap:7px; background:#fcfdfe;
+}
+.imv-trk-top { display:flex; align-items:center; gap:8px; }
+.imv-trk-top input[type=checkbox] { width:18px; height:18px; accent-color:#2563eb; flex-shrink:0; }
+.imv-trk-meta { font-size:11px; color:#64748b; white-space:nowrap; margin-left:auto; font-variant-numeric:tabular-nums; }
+.imv-trk-orig { font-size:11px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px; }
+.imv-trk-row2 { display:flex; gap:7px; }
+.imv-trk-nm { flex:1; font-weight:700; }
+.imv-trk-strana { width:130px; flex-shrink:0; }
+#imv-hint { font-size:11px; color:#94a3b8; line-height:1.5; margin-top:10px; }
+.imv-foot { display:flex; gap:10px; padding:12px 18px calc(14px + env(safe-area-inset-bottom)); border-top:0.5px solid rgba(0,0,0,0.08); }
+.imv-btn-cancel {
+  flex:1; padding:13px; border:none; border-radius:14px; background:#f1f5f9;
+  color:#334155; font-size:15px; font-weight:700; cursor:pointer;
+}
+.imv-btn-ok {
+  flex:1.4; padding:13px; border:none; border-radius:14px;
+  background:linear-gradient(135deg,#2563eb,#3b82f6); color:#fff;
+  font-size:15px; font-weight:700; cursor:pointer;
+}
+.imv-btn-ok:disabled { opacity:0.45; cursor:default; }
+
 /* Vlake hijerarhija */
 .vrow-krak { margin-left:12px; border-left:2px solid #1e3a5f; }
 .vrow-kolega { opacity:0.82; cursor:pointer; }
@@ -2698,6 +2753,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="projekti-list">
           <div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Učitavam projekte...</div>
         </div>
+        <button class="btn" onclick="impVlakaOpen()" style="width:100%;margin-top:8px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:8px;">📥 Dodaj vlaku iz fajla (KML/GPX)</button>
       </div>
 
       <!-- FORMA ZA NOVI PROJEKAT -->
@@ -4302,6 +4358,200 @@ function mdpFinish() {
     if (vlake[idx].pts.length > 0 && !vlake[idx].lager) _showLagerDlg(idx);
     showToast('✓ Vlaka ' + vlake[idx].nm + ' sačuvana');
   }
+}
+
+// ─── Uvoz vlake iz fajla (KML/GPX — npr. AlpineQuest snimka) ─────────────────
+let _impTracks = []; // [{name, pts:[{la,lo,al}]}]
+
+function impVlakaOpen() {
+  if (!_projekti || _projekti.length === 0) {
+    showToast('⚠ Prvo kreiraj projekat');
+    return;
+  }
+  _impTracks = [];
+  document.getElementById('imv-fname').textContent = '';
+  document.getElementById('imv-tracks').innerHTML = '';
+  document.getElementById('imv-ok').disabled = true;
+  document.getElementById('imv-file').value = '';
+  // Popuni listu projekata — aktivni pre-selektovan
+  const sel = document.getElementById('imv-proj');
+  sel.innerHTML = _projekti.map(p =>
+    `<option value="${p.id}"${p.id === _aktivniProjektId ? ' selected' : ''}>${p.odjel || '—'}${p.gj ? ' · ' + p.gj : ''}</option>`
+  ).join('');
+  document.getElementById('imv-overlay').classList.add('show');
+  document.getElementById('imv-modal').classList.add('show');
+}
+
+function impVlakaClose() {
+  document.getElementById('imv-overlay').classList.remove('show');
+  document.getElementById('imv-modal').classList.remove('show');
+  _impTracks = [];
+}
+
+function impVlakaFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      _impTracks = _impParseTracks(ev.target.result, file.name);
+      if (_impTracks.length === 0) {
+        showToast('⚠ U fajlu nema linija (LineString/track)');
+        document.getElementById('imv-fname').textContent = '';
+        document.getElementById('imv-ok').disabled = true;
+        document.getElementById('imv-tracks').innerHTML = '';
+        return;
+      }
+      document.getElementById('imv-fname').textContent = '✓ ' + file.name + ' — ' + _impTracks.length + ' linija';
+      _impRenderTracks();
+      document.getElementById('imv-ok').disabled = false;
+    } catch (x) {
+      showToast('⚠ Greška pri čitanju fajla: ' + x.message);
+    }
+  };
+  r.readAsText(file);
+}
+
+// Parsira KML (LineString + gx:Track) ili GPX (trk/rte) u listu trakova
+function _impParseTracks(txt, fname) {
+  const tracks = [];
+  const doc = new DOMParser().parseFromString(txt, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Neispravan XML');
+
+  const isGpx = /\.gpx$/i.test(fname) || !!doc.querySelector('gpx');
+  if (isGpx) {
+    // GPX: <trk><trkseg><trkpt lat lon><ele>  i  <rte><rtept lat lon>
+    doc.querySelectorAll('trk, rte').forEach(trk => {
+      const name = trk.querySelector('name')?.textContent?.trim() || '';
+      const pts = [];
+      trk.querySelectorAll('trkpt, rtept').forEach(tp => {
+        const la = parseFloat(tp.getAttribute('lat')), lo = parseFloat(tp.getAttribute('lon'));
+        if (!isFinite(la) || !isFinite(lo)) return;
+        const al = parseFloat(tp.querySelector('ele')?.textContent);
+        pts.push({ la, lo, al: isFinite(al) ? al : 0 });
+      });
+      if (pts.length > 1) tracks.push({ name, pts });
+    });
+    return tracks;
+  }
+
+  // KML: <Placemark><LineString><coordinates>lo,la,al lo,la,al…
+  doc.querySelectorAll('Placemark').forEach(pm => {
+    const name = pm.querySelector('name')?.textContent?.trim() || '';
+    pm.querySelectorAll('LineString').forEach(ls => {
+      const raw = ls.querySelector('coordinates')?.textContent;
+      if (!raw) return;
+      const pts = raw.trim().split(/\s+/).map(c => {
+        const p = c.split(',');
+        if (p.length < 2) return null;
+        const lo = parseFloat(p[0]), la = parseFloat(p[1]), al = parseFloat(p[2]);
+        return (isFinite(la) && isFinite(lo)) ? { la, lo, al: isFinite(al) ? al : 0 } : null;
+      }).filter(Boolean);
+      if (pts.length > 1) tracks.push({ name, pts });
+    });
+    // gx:Track (AlpineQuest/Google Earth GPS snimke): <gx:coord>lo la al</gx:coord>
+    const GX_NS = 'http://www.google.com/kml/ext/2.2';
+    let gtracks = pm.getElementsByTagName('gx:Track');
+    if (!gtracks.length) gtracks = pm.getElementsByTagNameNS(GX_NS, 'Track');
+    [...gtracks].forEach(gt => {
+      let coords = gt.getElementsByTagName('gx:coord');
+      if (!coords.length) coords = gt.getElementsByTagNameNS(GX_NS, 'coord');
+      const pts = [];
+      [...coords].forEach(gc => {
+        const p = gc.textContent.trim().split(/\s+/);
+        const lo = parseFloat(p[0]), la = parseFloat(p[1]), al = parseFloat(p[2]);
+        if (isFinite(la) && isFinite(lo)) pts.push({ la, lo, al: isFinite(al) ? al : 0 });
+      });
+      if (pts.length > 1) tracks.push({ name, pts });
+    });
+  });
+  return tracks;
+}
+
+function _impTrackLen(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo);
+  return d < 1000 ? Math.round(d) + ' m' : (d/1000).toFixed(2) + ' km';
+}
+
+function _impRenderTracks() {
+  // Default nazivi: sljedeći slobodni T<n> u odabranom projektu
+  const projId = document.getElementById('imv-proj').value;
+  const usedNm = new Set(vlake.filter(v => v.projektId === projId).map(v => v.nm));
+  let nextBr = 1;
+  const nextFree = () => {
+    while (usedNm.has('T' + nextBr)) nextBr++;
+    const nm = 'T' + nextBr;
+    usedNm.add(nm);
+    return nm;
+  };
+  document.getElementById('imv-tracks').innerHTML = _impTracks.map((t, i) => {
+    // Ako originalni naziv već liči na T5 / T5.1 — zadrži ga, inače dodijeli sljedeći slobodan
+    const tMatch = t.name.match(/^T?(\d+)(?:\.(\d+))?$/i);
+    const defNm = (tMatch && !usedNm.has('T' + tMatch[1] + (tMatch[2] ? '.' + tMatch[2] : '')))
+      ? 'T' + tMatch[1] + (tMatch[2] ? '.' + tMatch[2] : '')
+      : nextFree();
+    return `<div class="imv-trk">
+      <div class="imv-trk-top">
+        <input type="checkbox" id="imv-chk-${i}" checked>
+        <span class="imv-trk-orig">${t.name || 'Linija ' + (i+1)}</span>
+        <span class="imv-trk-meta">${_impTrackLen(t.pts)} · ${t.pts.length} tač.</span>
+      </div>
+      <div class="imv-trk-row2">
+        <input class="imv-trk-nm" id="imv-nm-${i}" value="${defNm}" placeholder="T5 ili T5.1">
+        <select class="imv-trk-strana" id="imv-str-${i}">
+          <option value="">Strana: —</option>
+          <option value="L">Krak lijevo (L)</option>
+          <option value="D">Krak desno (D)</option>
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function impVlakaConfirm() {
+  const projId = document.getElementById('imv-proj').value;
+  if (!projId) { showToast('⚠ Odaberi projekat'); return; }
+  const toImport = [];
+  for (let i = 0; i < _impTracks.length; i++) {
+    if (!document.getElementById('imv-chk-' + i)?.checked) continue;
+    const nm = document.getElementById('imv-nm-' + i).value.trim();
+    if (!nm) { showToast('⚠ Unesi naziv za sve odabrane linije'); return; }
+    if (vlake.some(v => v.nm === nm && v.projektId === projId) || toImport.some(x => x.nm === nm)) {
+      showToast('⚠ Naziv "' + nm + '" već postoji u projektu');
+      return;
+    }
+    toImport.push({ nm, strana: document.getElementById('imv-str-' + i).value || null, pts: _impTracks[i].pts });
+  }
+  if (toImport.length === 0) { showToast('⚠ Nijedna linija nije odabrana'); return; }
+
+  const created = [];
+  for (const t of toImport) {
+    const m = t.nm.match(/^T?(\d+)(?:\.(\d+))?/i);
+    const br = m ? parseInt(m[1]) : (Math.max(0, ...vlake.map(v => v.br)) + 1);
+    const kr = m && m[2] ? parseInt(m[2]) : 0;
+    const color = PAL[cIdx];
+    cIdx = (cIdx + 1) % PAL.length; selC = PAL[cIdx];
+    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+    poly.bindTooltip(t.nm, { sticky: true, opacity: 0.9 });
+    attachPolyClick(poly);
+    vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+    const idx = vlake.length - 1;
+    updateVlakaLabel(idx);
+    sbFlushVlaka(idx);
+    created.push(idx);
+  }
+  impVlakaClose();
+  _saveLocalVlake();
+  rndList(); updBan(); updOvl();
+  _updVlakeMapVisibility();
+  // Zoom na uvezene vlake
+  const allPts = created.flatMap(i => vlake[i].pts.map(p => [p.la, p.lo]));
+  if (allPts.length) {
+    switchTab('karta');
+    map.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
+  }
+  showToast('✓ Uvezeno: ' + created.map(i => vlake[i].nm).join(', '));
 }
 
 function deaktivirajProjekt() {
@@ -12815,10 +13065,11 @@ function _updMcdDist() {
 // Centralna logika vidljivosti FAB-a — poziva se iz switchTab, togRec, stopRec, mtAddLine, _stopAddLine
 function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
+  const mdpActive = typeof _mdpIdx !== 'undefined' && _mdpIdx !== null; // ručno crtanje u toku
   const ab = document.getElementById('action-bar');
-  if (ab) ab.style.display = onKarta ? 'flex' : 'none';
+  if (ab) ab.style.display = (onKarta && !mdpActive) ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
-  if (cb) cb.style.display = onKarta ? 'flex' : 'none';
+  if (cb) cb.style.display = (onKarta && !mdpActive) ? 'flex' : 'none';
 
   const inRec    = recOn;
   const isPaused = recPaused;
@@ -18131,6 +18382,30 @@ function toggleHelpSec(hdr) {
       <button id="share-foto-cancel" onclick="closeShareFotoDlg()">Odustani</button>
       <button id="share-foto-ok"     onclick="confirmShareFoto()">✓ Podijeli</button>
     </div>
+  </div>
+</div>
+
+<!-- Uvoz vlake iz fajla (KML / GPX — npr. AlpineQuest snimka) -->
+<div id="imv-overlay" onclick="impVlakaClose()"></div>
+<div id="imv-modal" role="dialog" aria-modal="true">
+  <div class="imv-head">
+    <div class="imv-title">📥 Dodaj vlaku iz fajla</div>
+    <button class="imv-x" onclick="impVlakaClose()">✕</button>
+  </div>
+  <div class="imv-body">
+    <button class="imv-file-btn" onclick="document.getElementById('imv-file').click()">
+      <span style="font-size:18px;">📄</span> Odaberi fajl (.kml / .gpx)
+    </button>
+    <input type="file" id="imv-file" accept=".kml,.gpx" style="display:none" onchange="impVlakaFile(event)">
+    <div id="imv-fname"></div>
+    <div class="imv-lbl">Projekat u koji se ubacuje</div>
+    <select id="imv-proj" class="imv-select" onchange="if(_impTracks.length)_impRenderTracks()"></select>
+    <div id="imv-tracks"></div>
+    <div id="imv-hint">Linije iz fajla postaće normalne vlake/kraci — mogu se editovati kao i snimane. Naziv T5 = vlaka, T5.1 = krak.</div>
+  </div>
+  <div class="imv-foot">
+    <button class="imv-btn-cancel" onclick="impVlakaClose()">Odustani</button>
+    <button class="imv-btn-ok" id="imv-ok" onclick="impVlakaConfirm()" disabled>✓ Uvezi</button>
   </div>
 </div>
 
