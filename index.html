@@ -4168,9 +4168,6 @@ async function sbFlushVlaka(i) {
 
 async function sbDeleteVlaka(v) {
   if (!v) return;
-  // Lokalne vlake — brisanje iz Supabase nije potrebno; pozivalac poziva _saveLocalVlake() nakon splice
-  if (v.projektId === null) return;
-  // Projektne vlake — briši sa Supabase
   if (!v.sbId || !sbUser) return;
   const cached = _OL.load(_OL.VLAKE) || [];
   _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
