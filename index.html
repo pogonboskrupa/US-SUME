@@ -413,7 +413,62 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vcard-name { font-weight:700; font-size:13px; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vcard-km { font-size:12px; font-weight:700; color:#4ade80; white-space:nowrap; flex-shrink:0; }
 .vcard-sub { font-size:10px; color:#475569; margin-top:1px; }
-.vcard-btns { display:flex; flex-direction:column; justify-content:center; gap:2px; padding:4px 5px 4px 0; }
+.vcard-btns { display:none; }
+/* Vlake card — action buttons (bottom-bar stil) */
+.vcard-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 2px 5px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.action-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); }
+.action-btn:active { transform: scale(0.95); }
+.btn-icon {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.btn-label { font-size: 9px; color: rgba(255,255,255,0.45); line-height: 1; }
+/* Boje po tipu */
+.action-btn.btn-record .btn-icon { background: rgba(232,69,60,0.18); color: #e8453c; }
+.action-btn.btn-map    .btn-icon { background: rgba(74,158,255,0.18); color: #4a9eff; }
+.action-btn.btn-elev   .btn-icon { background: rgba(52,211,153,0.18); color: #34d399; }
+.action-btn.btn-edit   .btn-icon { background: rgba(245,166,35,0.18); color: #f5a623; }
+.action-btn.btn-del    .btn-icon { background: rgba(100,116,139,0.18); color: #64748b; }
+.action-btn.btn-del:hover .btn-icon { background: rgba(239,68,68,0.2); color: #f87171; }
+/* Aktivno snimanje */
+.action-btn.btn-record.recording {
+  border-color: rgba(232,69,60,0.5);
+  background: rgba(232,69,60,0.08);
+}
+.action-btn.btn-record.recording .btn-label { color: #e8453c; }
+.action-btn.btn-record.recording .btn-icon { animation: bl 1s infinite; }
+/* Project header chip */
+#vlake-proj-hdr {
+  display:flex; align-items:center; gap:6px;
+  background:#0a1628; border:1px solid #1e3a5f;
+  border-radius:6px; padding:5px 8px; margin-bottom:6px; font-size:11px;
+}
+.vph-lbl { flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vph-lbl b { color:#e2e8f0; }
+.vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
+.vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
+.vph-nav:hover { color:#94a3b8; }
 
 /* AlpineQuest-stil segmented gumbi */
 .seg-grp {
@@ -561,9 +616,9 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vcard-elev .eu { color:#4ade80; } .vcard-elev .ed { color:#f87171; } .vcard-elev .eroad { color:#fbbf24; }
 
 .mb {
-  width:24px; height:24px; border-radius:4px;
+  width:28px; height:28px; border-radius:5px;
   border:1px solid #374151; background:#1e293b;
-  color:#94a3b8; font-size:11px; cursor:pointer;
+  color:#94a3b8; font-size:12px; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
 .mb:hover { border-color:#ef4444; color:#ef4444; }
@@ -664,7 +719,8 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.krak-l { background:#0c2233; color:#38bdf8; }
 .rb.krak-d { background:#231200; color:#fb923c; }
 .rb.picker { background:#0f172a; color:#64748b; flex:0 0 auto; padding:10px; }
-.rb.back   { background:#1a0a00; color:#fb923c; }
+.rb.back     { background:#1a0a00; color:#fb923c; }
+.rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
 /* ═══ DRAW BANNER (zelena) ═══ */
 #draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
@@ -682,35 +738,8 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Vlake hijerarhija */
 .vrow-krak { margin-left:12px; border-left:2px solid #1e3a5f; }
-.vrow-kolega { opacity:0.80; cursor:pointer; }
+.vrow-kolega { opacity:0.82; cursor:pointer; }
 .vrow-kolega:hover { border-color:#334155; background:#0a1628; }
-
-/* Vlake card — horizontalni action row */
-.vcard-actions { display:flex; gap:2px; margin-top:4px; align-items:center; }
-.vab {
-  height:20px; min-width:20px; padding:0 5px; border-radius:3px;
-  border:1px solid #2d3748; background:#141e2e;
-  color:#64748b; font-size:10px; cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-  white-space:nowrap; transition:border-color .12s,color .12s,background .12s;
-}
-.vab:hover { border-color:#3b82f6; color:#93c5fd; background:#0f1f3a; }
-.vab.vab-rec { border-color:#92400e; background:rgba(234,88,12,.15); color:#fb923c; }
-.vab.vab-rec:hover { background:rgba(234,88,12,.3); border-color:#ea580c; color:#fed7aa; }
-.vab.vab-del { margin-left:auto; }
-.vab.vab-del:hover { border-color:#ef4444; color:#fca5a5; background:#1a0a0a; }
-
-/* Project header chip */
-#vlake-proj-hdr {
-  display:flex; align-items:center; gap:6px;
-  background:#0a1628; border:1px solid #1e3a5f;
-  border-radius:6px; padding:5px 8px; margin-bottom:6px; font-size:11px;
-}
-.vph-lbl { flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vph-lbl b { color:#e2e8f0; }
-.vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
-.vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
-.vph-nav:hover { color:#94a3b8; }
 .vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 .vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
@@ -1130,6 +1159,16 @@ select:focus { outline:none; border-color:#3b82f6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
 .clan-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1e3a5f; }
 .clan-row:last-child { border-bottom:none; }
+.add-clan-row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; border-radius:4px; }
+.add-clan-row:last-child { border-bottom:none; }
+.add-clan-row:active { background:rgba(96,165,250,0.08); }
+.add-clan-row input[type=checkbox] { width:17px; height:17px; accent-color:#60a5fa; flex-shrink:0; cursor:pointer; }
+.add-clan-row .clan-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.add-clan-row .acr-name { font-size:13px; color:#e2e8f0; }
+.proj-gj-header { font-size:10px; font-weight:700; color:#38bdf8; letter-spacing:0.06em; text-transform:uppercase; padding:8px 4px 3px; margin-top:4px; border-bottom:1px solid #1e3a5f; margin-bottom:5px; }
+.proj-gj-header:first-child { margin-top:0; padding-top:2px; }
+.proj-section-sep { font-size:10px; font-weight:700; color:#64748b; letter-spacing:0.06em; text-transform:uppercase; padding:10px 4px 4px; margin-top:6px; border-top:1px solid #1e293b; margin-bottom:2px; display:flex; align-items:center; gap:6px; }
+.proj-section-sep::before { content:''; flex:1; height:1px; background:#1e293b; }
 .clan-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 .clan-name { font-size:12px; color:#e2e8f0; flex:1; }
 .clan-del { background:none; border:none; color:#475569; cursor:pointer; font-size:14px; padding:0 4px; }
@@ -1152,6 +1191,33 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-icon { font-size:11px; margin-right:3px; }
 #nv-badge #nv-val { color:#22d3ee; font-weight:bold; font-size:11px; }
 #nv-badge .nv-sep { color:#334155; margin:0 6px; }
+/* ── DEM legenda na mapi ─────────────────────────────────── */
+#dem-legend {
+  position:absolute; bottom:70px; left:8px; z-index:850;
+  background:rgba(10,17,35,0.88); border:1px solid rgba(255,255,255,0.12);
+  border-radius:8px; padding:8px 10px; pointer-events:none;
+  backdrop-filter:blur(4px); min-width:110px;
+  font-size:10px; color:#94a3b8;
+}
+#dem-legend .leg-title {
+  font-size:9px; font-weight:700; letter-spacing:0.07em;
+  text-transform:uppercase; color:#64748b; margin-bottom:5px;
+}
+#dem-legend .leg-sep { border-top:1px solid #1e293b; margin:7px 0 5px; }
+.leg-compass {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:3px; width:88px;
+}
+.leg-dir {
+  display:flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:700; color:#e2e8f0;
+}
+.leg-dot { width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+.leg-nv-row {
+  display:flex; align-items:center; gap:5px; padding:1px 0;
+}
+.leg-nv-swatch { width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+.leg-nv-lbl { font-size:10px; color:#cbd5e1; }
 #nv-badge .nv-lbl { color:#475569; font-size:9px; }
 #nv-badge .nv-coord { color:#ffffff; font-weight:700; font-size:10px; }
 #nv-badge #map-scale-val { color:#fbbf24; font-weight:bold; font-size:10px; }
@@ -1589,7 +1655,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
   #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
-  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, .leaflet-control-container { display:none !important; }
+  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -1623,58 +1689,124 @@ select:focus { outline:none; border-color:#3b82f6; }
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  height: 58px;
-  background: #0a111f;
-  border-top: 1px solid #1e3a5f;
-  box-shadow: 0 -2px 12px rgba(0,0,0,0.5);
+  background: rgba(10,17,31,0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.25);
+  padding: 5px 8px 8px;
+  gap: 5px;
 }
 #action-bar button {
   flex: 1;
-  background: transparent;
+  background: none;
   border: none;
-  border-right: 1px solid #1e293b;
-  color: #94a3b8;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 3px;
-  font-size: 10px;
-  font-weight: 500;
   cursor: pointer;
   padding: 0;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s ease;
+  color: rgba(255,255,255,0.72);
+  font-size: 9px;
+  font-weight: 600;
   letter-spacing: 0.2px;
-  height: 100%;
 }
-#action-bar button:last-child { border-right: none; }
-#action-bar button:active { background: rgba(255,255,255,0.06); }
-#action-bar .ab-ico { font-size: 19px; line-height: 1; }
-/* U modu snimanja ima 5 gumba — smanji font da stane */
-#action-bar.rec-mode button { font-size: 9px; }
-#action-bar.rec-mode .ab-ico { font-size: 16px; }
-#action-bar.paused-mode button { font-size: 10px; }
-#action-bar #ab-pauza { color: #94a3b8; }
-#action-bar #ab-pauza.resuming { color: #4ade80; }
-#action-bar #ab-pauza:active { background: rgba(255,255,255,0.07); }
-#action-bar #ab-kraj { color: #f87171; }
-#action-bar #ab-kraj:active { background: rgba(248,113,113,0.12); }
-#action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); vertical-align: middle; }
+#action-bar button:active { transform: scale(0.88); opacity: 0.85; }
+#action-bar .ab-ico {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+#action-bar .ab-ico img { width: 13px; height: 13px; object-fit: contain; filter: brightness(0) invert(1); }
+/* Solid svjetle pozadine */
+#brec     .ab-ico { background: #16a34a; color: #fff; }
+#btrag    .ab-ico { background: #dc2626; color: #fff; }
+#ab-tacka .ab-ico { background: #d97706; color: #fff; }
+#ab-loc   .ab-ico { background: #2563eb; color: #fff; }
+#ab-krak-l .ab-ico { background: #0891b2; color: #fff; }
+#ab-krak-d .ab-ico { background: #ea580c; color: #fff; }
+#ab-nazad  .ab-ico { background: #7c3aed; color: #fff; }
+#ab-kraj   .ab-ico { background: #dc2626; color: #fff; }
+#ab-pauza  .ab-ico { background: #ca8a04; color: #fff; }
+/* Aktivna stanja */
+#btrag.active .ab-ico { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.35); }
+#brec.active  .ab-ico { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.35); }
+#ab-pauza.resuming .ab-ico { background: #16a34a; }
 #action-bar #brec-nm {
-  font-size: 9px; color: #fbbf24; line-height: 1;
-  max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 8px; color: #fbbf24; line-height: 1;
+  max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#action-bar #brec.active  { color: #4ade80; background: rgba(74,222,128,0.09); }
-#action-bar #btrag.active { color: #f97316; background: rgba(249,115,22,0.09); }
-#action-bar #ab-loc { color: #60a5fa; }
-#action-bar #ab-loc:active { background: rgba(96,165,250,0.1); }
-#action-bar #ab-tacka { color: #fbbf24; }
-#action-bar #ab-tacka:active { background: rgba(251,191,36,0.1); }
+#action-bar.rec-mode .ab-ico { width: 24px; height: 24px; font-size: 12px; }
+#action-bar.rec-mode button { font-size: 8px; }
+#action-bar.paused-mode button { font-size: 8px; }
 .leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
 .tacka-popup-btn, .foto-popup-btn {
   background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;
   padding:3px 10px;cursor:pointer;font-size:11px;margin-top:6px;
 }
 .tacka-popup-btn:active,.foto-popup-btn:active { opacity:0.7; }
+/* ── Tačka nav panel ── */
+#tacka-nav-panel {
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:1700;
+  background:rgba(10,17,31,0.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:2px solid #1e3a5f;padding:10px 14px 12px;
+  flex-direction:row;align-items:center;gap:12px;
+  box-shadow:0 -4px 20px rgba(0,0,0,0.6);
+}
+#tnp-arrow {
+  font-size:26px;line-height:1;flex-shrink:0;
+  transition:transform 0.4s ease;display:inline-block;
+}
+#tnp-info { flex:1;min-width:0; }
+#tnp-name { font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+#tnp-air  { font-size:12px;color:#93c5fd;margin-top:2px; }
+#tnp-road { font-size:12px;color:#86efac;margin-top:1px; }
+#tnp-stop { background:#7f1d1d;border:none;color:#fca5a5;border-radius:8px;
+  padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0; }
+#tnp-stop:active { opacity:0.8; }
+/* bottom offset set dynamically via JS based on action-bar visibility */
+/* ── Tačka modal ── */
+#tacka-modal-bg {
+  display:none;position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.6);
+}
+#tacka-modal {
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:3401;
+  background:#0f1f3d;border-radius:16px 16px 0 0;border-top:2px solid #1e3a5f;
+  padding:16px 16px 32px;box-shadow:0 -6px 28px rgba(0,0,0,0.7);
+}
+#tacka-modal h3 {
+  margin:0 0 12px;font-size:15px;color:#e2e8f0;font-weight:700;
+}
+#tacka-nm-input {
+  width:100%;box-sizing:border-box;background:#0a1628;border:1px solid #2d4a7a;
+  border-radius:8px;padding:10px 12px;font-size:14px;color:#e2e8f0;
+  outline:none;margin-bottom:12px;
+}
+#tacka-nm-input:focus { border-color:#3b82f6; }
+#tacka-nm-input::placeholder { color:#475569; }
+.tacka-modal-btns {
+  display:flex;gap:8px;
+}
+.tacka-modal-btns button {
+  flex:1;padding:11px 8px;border-radius:10px;border:none;cursor:pointer;
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:opacity 0.15s;
+}
+.tacka-modal-btns button:active { opacity:0.8; }
+#tacka-btn-gps  { background:#16a34a;color:#fff; }
+#tacka-btn-map  { background:#2563eb;color:#fff; }
+#tacka-btn-cancel { background:#1e293b;color:#94a3b8;flex:0 0 auto;padding:11px 14px; }
+/* Place-on-map banner */
+#tacka-place-banner {
+  display:none;position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:3300;
+  background:#1d4ed8;color:#fff;border-radius:20px;padding:8px 18px;
+  font-size:13px;font-weight:700;box-shadow:0 3px 12px rgba(0,0,0,0.5);
+  white-space:nowrap;pointer-events:none;
+}
+/* Nav line on map */
+.tacka-nav-line { stroke:#3b82f6;stroke-width:2;stroke-dasharray:8 5; }
 .fpp-info { background:#1e3a5f; color:#93c5fd; }
 .fpp-share { background:#1e3a5f; color:#93c5fd; }
 .fpp-shared-ok { background:#14532d; color:#86efac; cursor:default; }
@@ -1898,6 +2030,11 @@ select:focus { outline:none; border-color:#3b82f6; }
 .oz-gj-arrow.open { transform:rotate(90deg); color:#3b82f6; }
 .oz-gj-name { flex:1; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .oz-gj-cnt { font-size:10px; color:#334155; background:#1e293b; border-radius:8px; padding:1px 7px; flex-shrink:0; }
+.oz-offline-badge { font-size:9px; font-weight:700; color:#22c55e; background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.3); border-radius:8px; padding:1px 6px; flex-shrink:0; white-space:nowrap; }
+.oz-offline-badge.partial { color:#f59e0b; background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.3); }
+.oz-dl-btn { flex-shrink:0; background:rgba(59,130,246,.13); border:1px solid rgba(59,130,246,.35); color:#60a5fa; border-radius:7px; padding:2px 8px; font-size:11px; cursor:pointer; line-height:1.5; transition:background .15s; }
+.oz-dl-btn:active { background:rgba(59,130,246,.25); }
+.oz-dl-btn.cached { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.3); color:#f87171; }
 /* Search + sort bar */
 .oz-search-wrap { padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 6px; }
 .oz-search-row { position: relative; display: flex; gap: 6px; align-items: center; }
@@ -2017,6 +2154,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   border-color: #3b82f6;
   color: #fff;
 }
+.inst-layer-row { display:flex; align-items:center; gap:8px; padding:10px 8px; border:1px solid #1e3a5f; border-radius:8px; margin-bottom:8px; background:rgba(15,23,42,0.6); }
 </style>
 </head>
 <body>
@@ -2369,9 +2507,18 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button onclick="hideNovProjektForm()" style="background:none;border:none;color:#475569;font-size:20px;cursor:pointer;line-height:1;">✕</button>
         </div>
         <span class="lbl">Odjel</span>
-        <input class="pinput" id="np-odjel" list="odjeli-list" autocomplete="off" placeholder="npr. RISOVAC KRUPA 45">
+        <input class="pinput" id="np-odjel" inputmode="text" autocomplete="off" placeholder="npr. 64/2" oninput="this.value=this.value.replace(/[^0-9\/]/g,'')">
         <span class="lbl">G.J. (Gospodarska Jedinica)</span>
-        <input class="pinput" id="np-gj" placeholder="npr. Risovac">
+        <select class="pinput" id="np-gj" onchange="_npGjChange(this)">
+          <option value="">— odaberi —</option>
+          <option value="Risovac Krupa">Risovac Krupa</option>
+          <option value="Grmeč Jasenica">Grmeč Jasenica</option>
+          <option value="Vojskova">Vojskova</option>
+          <option value="Baštra Ćorkovača">Baštra Ćorkovača</option>
+          <option value="Gomila">Gomila</option>
+          <option value="_custom">Druga GJ (upiši)…</option>
+        </select>
+        <input class="pinput" id="np-gj-custom" placeholder="Upiši naziv GJ" style="display:none;margin-top:4px;">
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
             <span class="lbl">Površina (ha)</span>
@@ -2395,10 +2542,13 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">👥 Projektanti</div>
         <div id="pd-clanovi" style="margin-bottom:12px;"></div>
         <div id="pd-add-clan-sec">
-          <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Dodaj postojećeg</div>
-          <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <select id="pd-add-select" class="pinput" style="flex:1;margin:0;"></select>
-            <button class="btn b" style="margin:0;padding:7px 14px;font-size:13px;" onclick="addProjektClanUI()">+</button>
+          <button class="btn b" style="width:100%;margin-bottom:8px;font-size:13px;" onclick="openDodajClanPanel()">👤 Dodaj projektanta</button>
+          <div id="pd-add-panel" style="display:none;background:rgba(15,23,42,0.8);border:1px solid #1e3a5f;border-radius:7px;padding:10px;margin-bottom:8px;">
+            <div id="pd-add-checks" style="max-height:180px;overflow-y:auto;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn g" style="flex:1;font-size:13px;margin:0;" onclick="confirmDodajClanove()">✅ Dodaj odabrane</button>
+              <button class="btn gr" style="font-size:13px;margin:0;padding:7px 12px;" onclick="closeDodajClanPanel()">✕</button>
+            </div>
           </div>
           <!-- Kreiraj novog projektanta -->
           <div id="pd-novi-toggle" style="font-size:12px;color:#60a5fa;cursor:pointer;margin-bottom:6px;user-select:none;" onclick="toggleNoviProj()">▶ Kreiraj novog projektanta</div>
@@ -2565,6 +2715,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 
     <!-- MAP -->
     <div id="map">
+      <!-- DEM legenda (N.V. + Strane svijeta) -->
+      <div id="dem-legend" style="display:none;"></div>
+
       <!-- Center crosshair dot (visible only in full-map / MAP mode) -->
       <div id="map-center-dot" style="display:none;">
         <div id="mcd-ring"></div>
@@ -2652,7 +2805,8 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
-          <button class="rb back"   id="btn-nazad" onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
+          <button class="rb back"      id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
+          <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju">🔓</button>
           <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
         </div>
       </div>
@@ -2817,7 +2971,7 @@ function _saveLocalVlake() {
     const rows = vlake.map(v => ({
       nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
       boja: v.color, lager: v.lager || null,
-      pts: v.pts,
+      pts: v.pts, projekt_id: v.projektId || null,
       updated_at: v.updatedAt || new Date().toISOString(),
       id: v.sbId || null
     }));
@@ -2831,6 +2985,7 @@ function _loadLocalVlake() {
 }
 
 // ─── OFFLINE DATA LAYER ───────────────────────────────────────────────────────
+const _DOZ_TRACK_BUF_KEY = 'tvlake_doz_track_buf';
 const _OL = {
   VLAKE:    'tvlake_ol_vlake',
   PROJEKTI: 'tvlake_ol_projekti',
@@ -2923,10 +3078,50 @@ async function _processOfflineQueue() {
       } else if (op.type === 'upsert_odjel') {
         const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
         err = error;
+      } else if (op.type === 'insert_projekt') {
+        const { _tempId, ...insertPayload } = op.payload;
+        const { data: pd, error } = await sb.from('projekti').insert(insertPayload).select('id').single();
+        err = error;
+        if (!err && pd) {
+          const realId = pd.id;
+          // Swap tempId → realId in remaining queue entries (both in-memory copy and localStorage)
+          q.forEach(qOp => {
+            if (qOp.payload?.projekt_id === _tempId) qOp.payload.projekt_id = realId;
+          });
+          const lq = _OL.loadQueue();
+          lq.forEach(qOp => { if (qOp.payload?.projekt_id === _tempId) qOp.payload.projekt_id = realId; });
+          localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+          // Update in-memory vlake
+          vlake.forEach(v => { if (v.projektId === _tempId) v.projektId = realId; });
+          // Update vlake cache
+          const cv = _OL.load(_OL.VLAKE) || [];
+          cv.forEach(r => { if (r.projekt_id === _tempId) r.projekt_id = realId; });
+          _OL.save(_OL.VLAKE, cv);
+          // Update _projekti
+          const pi = _projekti.findIndex(p => p.id === _tempId);
+          if (pi >= 0) _projekti[pi] = { ..._projekti[pi], id: realId, _pendingSync: false };
+          if (_aktivniProjektId === _tempId) {
+            _aktivniProjektId = realId;
+            localStorage.setItem('tvlake_akt_proj', realId);
+          }
+          _OL.save(_OL.PROJEKTI, _projekti);
+          rndProjektiList();
+        }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
     } catch(e) { break; } // still offline
   }
+  // Flush buffered doznaka GPS track points
+  try {
+    const dozBuf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+    if (dozBuf.length > 0) {
+      const { error } = await sb.from('doz_track_points').insert(dozBuf);
+      if (!error) {
+        localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
+        synced += dozBuf.length;
+      }
+    }
+  } catch {}
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
 }
 
@@ -3028,6 +3223,7 @@ function showApp() {
     _restoreTacke();
     _restoreFotos();
     _localKmlRestore();
+    _kmlcInit(); // load IDB key list for offline badge rendering
   }, 80);
 }
 
@@ -3297,6 +3493,7 @@ async function sbInitData() {
   await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
   sbLoadSharedFotos();            // fire-and-forget
   autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
+  if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -3369,6 +3566,47 @@ function _applyProjektFields(p) {
 function saveProj() { /* no-op: project data managed via sbLoadProjekti/saveNovProjekt */ }
 function onOdjelChange() { sbLoadKolegeVlake(); }
 
+function _sortByGjDatum(arr) {
+  return [...arr].sort((a, b) => {
+    const ga = (a.gj || '').toLowerCase();
+    const gb = (b.gj || '').toLowerCase();
+    if (!ga && gb) return 1;
+    if (ga && !gb) return -1;
+    if (ga !== gb) return ga < gb ? -1 : 1;
+    // isti GJ — noviji datum prvi
+    return (b.datum || '').localeCompare(a.datum || '');
+  });
+}
+
+function _renderProjGroup(list) {
+  const byGj = new Map();
+  for (const p of _sortByGjDatum(list)) {
+    const key = p.gj || '';
+    if (!byGj.has(key)) byGj.set(key, []);
+    byGj.get(key).push(p);
+  }
+  let html = '';
+  for (const [gj, projekti] of byGj) {
+    html += `<div class="proj-gj-header">${gj ? 'GJ ' + gj : 'Bez GJ'}</div>`;
+    for (const p of projekti) {
+      const isAkt  = p.id === _aktivniProjektId;
+      const isVlasnik = !sbUser || p.korisnik_id === sbUser.id;
+      const nClan  = (p.clanovi || []).length;
+      html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
+        <div class="proj-card-title">
+          ${p.odjel || '—'}
+          ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
+          ${p._pendingSync ? '<span style="font-size:10px;color:#f59e0b;margin-left:4px;">⏳ čeka sync</span>' : ''}
+        </div>
+        <div class="proj-card-sub">
+          ${p.datum ? fmtDate(p.datum) : '—'}${p.povrsina ? ' &nbsp;|&nbsp; ' + p.povrsina + ' ha' : ''}${nClan ? ' &nbsp;|&nbsp; 👥 ' + nClan : ''}
+        </div>
+      </div>`;
+    }
+  }
+  return html;
+}
+
 function rndProjektiList() {
   const el = document.getElementById('projekti-list');
   if (!el) return;
@@ -3376,21 +3614,28 @@ function rndProjektiList() {
     el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema projekata.<br>Klikni <b style="color:#60a5fa;">+ Novi</b> da kreneš.</div>`;
     return;
   }
-  el.innerHTML = _projekti.map(p => {
-    const isAkt = p.id === _aktivniProjektId;
-    const isVlasnik = p.korisnik_id === sbUser.id;
-    const nClan = (p.clanovi || []).length;
-    return `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
-      <div class="proj-card-title">
-        ${p.odjel || '—'}
-        ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
-        ${!isVlasnik ? '<span style="font-size:10px;color:#64748b;margin-left:4px;">(podijeljen)</span>' : ''}
-      </div>
-      <div class="proj-card-sub">
-        ${p.gj ? 'GJ: ' + p.gj + ' &nbsp;|&nbsp; ' : ''}${p.povrsina ? p.povrsina + ' ha &nbsp;|&nbsp; ' : ''}Počeo: ${p.datum ? fmtDate(p.datum) : '—'}${nClan ? ' &nbsp;|&nbsp; 👥 ' + nClan : ''}
-      </div>
-    </div>`;
-  }).join('');
+  const moji     = _projekti.filter(p => !sbUser || p.korisnik_id === sbUser.id);
+  const dijeljeni = _projekti.filter(p => sbUser && p.korisnik_id !== sbUser.id);
+
+  let html = '';
+  if (moji.length) html += _renderProjGroup(moji);
+  if (dijeljeni.length) {
+    html += `<div class="proj-section-sep">Projekti od kolega</div>`;
+    html += _renderProjGroup(dijeljeni);
+  }
+  el.innerHTML = html;
+}
+
+function _npGjChange(sel) {
+  const cust = document.getElementById('np-gj-custom');
+  if (sel.value === '_custom') { cust.style.display = ''; cust.focus(); }
+  else { cust.style.display = 'none'; cust.value = ''; }
+}
+
+function _npGjValue() {
+  const sel = document.getElementById('np-gj');
+  if (sel.value === '_custom') return document.getElementById('np-gj-custom').value.trim();
+  return sel.value;
 }
 
 function showNovProjektForm() {
@@ -3399,6 +3644,8 @@ function showNovProjektForm() {
   document.getElementById('nov-proj-sec').style.display = '';
   document.getElementById('np-odjel').value = '';
   document.getElementById('np-gj').value = '';
+  document.getElementById('np-gj-custom').style.display = 'none';
+  document.getElementById('np-gj-custom').value = '';
   document.getElementById('np-povrsina').value = '';
   document.getElementById('np-datum').value = todayStr();
 }
@@ -3414,11 +3661,26 @@ async function saveNovProjekt() {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile?.sumarija || '',
     odjel,
-    gj:       document.getElementById('np-gj').value.trim(),
+    gj:       _npGjValue(),
     povrsina: parseFloat(document.getElementById('np-povrsina').value) || null,
     datum:    document.getElementById('np-datum').value || todayStr(),
     updated_at: new Date().toISOString()
   };
+
+  if (!navigator.onLine) {
+    const tempId = crypto.randomUUID();
+    const newProj = { ...payload, id: tempId, clanovi: [], _pendingSync: true };
+    _projekti.unshift(newProj);
+    _OL.save(_OL.PROJEKTI, _projekti);
+    _OL.enqueue({ type: 'insert_projekt', payload: { ...payload, _tempId: tempId } });
+    hideNovProjektForm();
+    _aktivniProjektId = tempId;
+    localStorage.setItem('tvlake_akt_proj', tempId);
+    rndProjektiList(); updProjStats();
+    showToast('📋 Projekat kreiran — sinhronizira se kad budes online');
+    return;
+  }
+
   const { data, error } = await sb.from('projekti').insert(payload).select('id').single();
   if (error) { showToast('Greška: ' + error.message); return; }
   showToast('Projekat sačuvan!');
@@ -3467,12 +3729,10 @@ function showProjektDetalji(id) {
     return `<div class="clan-row"><div class="clan-dot" style="background:${color}"></div><div class="clan-name">${name}${tag}</div>${del}</div>`;
   }).join('');
 
-  // Dropdown za dodavanje
-  const sel = document.getElementById('pd-add-select');
+  // Pripremi dostupne projektante (bez onih koji su već članovi)
   const existingIds = new Set(allMembers.map(m => m.korisnik_id));
-  const available = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
-  sel.innerHTML = '<option value="">— Odaberi projektanta —</option>' +
-    available.map(([kid, info]) => `<option value="${kid}">${info.ime}</option>`).join('');
+  window._pdAvailable = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
+  closeDodajClanPanel();
 
   // Aktiviraj / Deaktiviraj button
   const btn = document.getElementById('pd-aktiviraj-btn');
@@ -3484,6 +3744,23 @@ function showProjektDetalji(id) {
   // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat
   document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !isSpd()) ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
+
+  // Za ne-vlasnike: dugme za brisanje lokalno cachiranih kolega vlaka
+  let ukBtn = document.getElementById('pd-ukl-kol-btn');
+  if (!isVlasnik) {
+    if (!ukBtn) {
+      ukBtn = document.createElement('button');
+      ukBtn.id = 'pd-ukl-kol-btn';
+      ukBtn.className = 'btn gr';
+      ukBtn.style.cssText = 'width:100%;font-size:12px;padding:7px;margin-top:4px;';
+      document.getElementById('pd-delete-btn').parentNode.appendChild(ukBtn);
+    }
+    ukBtn.textContent = '🗑 Ukloni vlake kolega (lokalno)';
+    ukBtn.onclick = () => ukloniKolVlakeZaProjekat(id);
+    ukBtn.style.display = '';
+  } else if (ukBtn) {
+    ukBtn.style.display = 'none';
+  }
 }
 
 function toggleNoviProj() {
@@ -3529,17 +3806,37 @@ async function kreirajProjektanta() {
   await sbLoadKolegeVlake();
 }
 
-async function addProjektClanUI() {
+function openDodajClanPanel() {
+  const panel = document.getElementById('pd-add-panel');
+  const cont  = document.getElementById('pd-add-checks');
+  const avail = window._pdAvailable || [];
+  if (!avail.length) { showToast('Nema dostupnih projektanata za dodavanje'); return; }
+  cont.innerHTML = avail.map(([kid, info]) =>
+    `<label class="add-clan-row">
+      <input type="checkbox" value="${kid}">
+      <div class="clan-dot" style="background:${info.color || '#94a3b8'}"></div>
+      <span class="acr-name">${info.ime}</span>
+    </label>`
+  ).join('');
+  panel.style.display = '';
+}
+
+function closeDodajClanPanel() {
+  const panel = document.getElementById('pd-add-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+async function confirmDodajClanove() {
   const id = _pdProjektId;
-  const p = _projekti.find(x => x.id === id);
+  const p  = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može dodavati članove'); return; }
-  const korisnik_id = document.getElementById('pd-add-select').value;
-  if (!korisnik_id) { showToast('Odaberi projektanta!'); return; }
-  const { error } = await sb.from('projekt_clanovi').insert({
-    projekt_id: id, korisnik_id, added_by: sbUser.id
-  });
+  const checked = [...document.querySelectorAll('#pd-add-checks input[type=checkbox]:checked')];
+  if (!checked.length) { showToast('Odaberi barem jednog projektanta'); return; }
+  const rows = checked.map(cb => ({ projekt_id: id, korisnik_id: cb.value, added_by: sbUser.id }));
+  const { error } = await sb.from('projekt_clanovi').insert(rows);
   if (error) { showToast('Greška: ' + error.message); return; }
-  showToast('Projektant dodan!');
+  showToast(`✅ Dodano ${rows.length} projektant${rows.length > 1 ? 'a' : ''}`);
+  closeDodajClanPanel();
   await sbLoadProjekti();
   showProjektDetalji(id);
   await sbLoadKolegeVlake();
@@ -3568,6 +3865,7 @@ async function aktivirajProjekt() {
   rndProjektiList();
   updProjStats(); rndLog();
   _updFabVisibility();
+  _updVlakeMapVisibility();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel);
   await sbLoadKolegeVlake();
   sbStartRealtime(); // restart kanala — osvježi pretplatu na novi projekat
@@ -3598,6 +3896,7 @@ function deaktivirajProjekt() {
   if (_pdProjektId) showProjektDetalji(_pdProjektId); // refresh btn
   rndProjektiList();
   _updFabVisibility();
+  _updVlakeMapVisibility();
   updProjStats();
   rndOdjeliRekap();
   showToast('Projekat deaktiviran.');
@@ -3621,6 +3920,15 @@ async function deleteProjektUI() {
   }
   showProjektiList();
 
+  // Ako projekat još nije sinhroniziran (kreiran offline), samo ukloni iz reda
+  if (p._pendingSync) {
+    const lq = _OL.loadQueue().filter(o => !(o.type === 'insert_projekt' && o.payload._tempId === id));
+    localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+    _OL.save(_OL.PROJEKTI, _projekti);
+    showToast('Projekat uklonjen.');
+    return;
+  }
+
   // Dodaj u guard set PRIJE poziva — sbLoadProjekti nikad ga neće vratiti
   _deletedProjektIds.add(id);
 
@@ -3637,8 +3945,21 @@ async function deleteProjektUI() {
     return;
   }
 
+  _kvcClear(id);  // Briši cache kolega vlaka za ovaj projekat
   showToast('Projekat obrisan.');
   await sbLoadKolegeVlake();
+}
+
+// Ukloni vlake kolega iz lokalne memorije za projekat (za ne-vlasnike)
+function ukloniKolVlakeZaProjekat(projektId) {
+  if (!projektId) return;
+  const p = _projekti.find(x => x.id === projektId);
+  const lbl = p ? (p.odjel || 'projekat') : 'projekat';
+  if (!confirm(`Ukloniti lokalno sačuvane vlake kolega za "${lbl}"?\nVlake nestaju s vaše karte.`)) return;
+  _kvcClear(projektId);
+  // Ako je ovaj projekat aktivan, osvježi prikaz
+  if (_aktivniProjektId === projektId) sbLoadKolegeVlake();
+  showToast('Vlake kolega uklonjene.');
 }
 
 // Legacy compat
@@ -3661,6 +3982,21 @@ function _applyVlakeRows(rows) {
   vlake.forEach((v, i) => updateVlakaLabel(i));
   _syncIbr();
   _updFabVisibility();
+  _updVlakeMapVisibility();
+}
+
+// Pokaži/sakrij polyline-ove vlaka prema aktivnom projektu
+function _updVlakeMapVisibility() {
+  vlake.forEach(v => {
+    const show = !!_aktivniProjektId && v.projektId === _aktivniProjektId;
+    const layers = [v.poly, ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
+    layers.forEach(l => {
+      try {
+        if (show) { if (!map.hasLayer(l)) map.addLayer(l); }
+        else       { if (map.hasLayer(l))  map.removeLayer(l); }
+      } catch(e) {}
+    });
+  });
 }
 
 async function sbLoadVlake() {
@@ -3680,7 +4016,9 @@ async function sbLoadVlake() {
     if (!serverRows) serverRows = _OL.load(_OL.VLAKE);
   }
 
-  const allRows = [...localRows, ...(serverRows || [])];
+  // Server/cache rows first so dedup-by-nm keeps the version with projekt_id, sbId, etc.
+  // Local-only rows (no matching nm in server) are still appended after.
+  const allRows = [...(serverRows || []), ...localRows];
   if (allRows.length === 0) return;
   _applyVlakeRows(allRows);
 }
@@ -3708,7 +4046,7 @@ async function sbFlushVlaka(i) {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
     odjel:       getOdjel() || '',
-    projekt_id:  _aktivniProjektId || null,
+    projekt_id:  v.projektId || null,
     nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
     pts: v.pts,
@@ -3802,6 +4140,39 @@ function _placeLabelMarkers(pts, nm, zOff) {
   return marks;
 }
 
+// ─── KOLEGE VLAKE CACHE ───────────────────────────────────────────────────────
+// Čuva vlake kolega po projektu u localStorage, tako da ostaju vidljive
+// čak i ako ih kolega obriše iz baze — sve dok korisnik sam ne ukloni projekat.
+const _KVC_KEY = 'tvlake_kolege_cache_v1';
+
+function _kvcSave(projektId, rows) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    if (!all[projektId]) all[projektId] = {};
+    rows.forEach(r => {
+      if (!r.pts || r.pts.length < 2) return;
+      const key = r.korisnik_id + '::' + r.nm;
+      all[projektId][key] = { nm: r.nm, korisnik_id: r.korisnik_id, pts: r.pts, boja: r.boja, ime: r.ime || null };
+    });
+    localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+  } catch(e) {}
+}
+
+function _kvcLoad(projektId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    return Object.values(all[projektId] || {});
+  } catch(e) { return []; }
+}
+
+function _kvcClear(projektId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    delete all[projektId];
+    localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+  } catch(e) {}
+}
+
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
 async function sbLoadKolegeVlake() {
   if (!sbProfile?.sumarija || !sbUser) return;
@@ -3821,36 +4192,53 @@ async function sbLoadKolegeVlake() {
 
   if (memberIds.length === 0) return; // nema kolega u aktivnom projektu
 
-  let data;
+  let dbData = [];
   try {
     let q = sb.from('vlake')
       .select('nm, korisnik_id, pts, boja')
       .in('korisnik_id', memberIds)
       .eq('sumarija', sbProfile.sumarija);
     if (akt.odjel) q = q.eq('odjel', akt.odjel);
-    ({ data } = await q);
-  } catch(e) { return; } // offline — kolege vlake se preskačaju
-  if (!data) return;
+    const { data } = await q;
+    if (data) dbData = data;
+  } catch(e) {} // offline — koristimo samo cache
+
+  // Sačuvaj svježe podatke u cache (merge — nikad ne brišemo stare)
+  const rowsWithIme = dbData.map(r => ({
+    ...r,
+    ime: (kolegeMap[r.korisnik_id] || {}).ime || null
+  }));
+  _kvcSave(akt.id, rowsWithIme);
+
+  // Spoji DB rezultate + cached vlake koje su nestale iz DB-a
+  const dbKeys  = new Set(dbData.map(r => r.korisnik_id + '::' + r.nm));
+  const cached  = _kvcLoad(akt.id).filter(r => !dbKeys.has(r.korisnik_id + '::' + r.nm));
+  const allRows = [...dbData, ...cached];
 
   const seenIds = [];
-  data.forEach(row => {
+  allRows.forEach(row => {
     if (!row.pts || row.pts.length < 2) return;
     if (row.korisnik_id === sbUser?.id) return; // nikad ne prikazuj vlastite vlake kao kolege
     const kid = row.korisnik_id;
     let info = kolegeMap[kid];
     if (!info) {
       if (!seenIds.includes(kid)) seenIds.push(kid);
-      info = { ime: 'Kolega', color: KORISNIK_PAL[seenIds.indexOf(kid) % KORISNIK_PAL.length] };
+      info = { ime: row.ime || 'Kolega', color: KORISNIK_PAL[seenIds.indexOf(kid) % KORISNIK_PAL.length] };
     }
     const color = row.boja || info.color;
+    const mapKey = kid + '::' + row.nm;
     const poly = L.polyline(
       row.pts.map(p => [p.la, p.lo]),
-      { color, weight: 3, opacity: 0.7, dashArray: '10,6', interactive: false }
+      { color, weight: 3, opacity: 0.7, dashArray: '10,6', interactive: true }
     ).addTo(map);
     poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
+    poly.on('click', function(e) {
+      L.DomEvent.stopPropagation(e);
+      showKolegeVlakaInfo(mapKey, e.latlng);
+    });
     kolegeVlake.push(poly);
     _placeLabelMarkers(row.pts, row.nm, 498).forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[kid + '::' + row.nm] = { poly, color, ime: info.ime, pts: row.pts || [] };
+    kolegeVlakeMap[mapKey] = { poly, color, ime: info.ime, pts: row.pts || [] };
   });
 }
 
@@ -4038,64 +4426,362 @@ async function sbSaveTextLabels() {
 // ─── TAČKE (GPS oznake na mapi) ──────────────────────────────────────────────
 let _tacke = [];
 const _TACKE_KEY = 'tvlake_tacke';
+let _tackaPlaceMode = false;  // čekamo klik na karti
+let _tackaPlaceNm   = '';     // naziv koji se koristi pri kliku
+// nav lines live in vodiMeDoTacke section below
 
-function _tačkaIcon(n) {
+function _tačkaIcon(n, nm) {
+  const labelH = nm ? 14 : 0;
+  const totalH = 32 + labelH;
+  const label = nm
+    ? `<text x="12" y="${32 + labelH - 2}" text-anchor="middle" font-size="9" font-weight="700"
+        fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke">${_escSvg(nm)}</text>`
+    : '';
   return L.divIcon({
-    className: '', iconSize:[24,32], iconAnchor:[12,32], popupAnchor:[0,-34],
-    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
+    className: '', iconSize:[24, totalH], iconAnchor:[12, 32], popupAnchor:[0,-34],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="${totalH}" viewBox="0 0 24 ${totalH}">
       <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z"
         fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/>
       <circle cx="12" cy="12" r="5.5" fill="#fff"/>
       <text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">${n}</text>
+      ${label}
     </svg>`
   });
 }
 
-function addTacka() {
+function _escSvg(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Modal ──
+function _tackaOpenModal() {
+  switchTab('karta');
+  document.getElementById('tacka-modal-bg').style.display = 'block';
+  document.getElementById('tacka-modal').style.display    = 'block';
+  setTimeout(() => document.getElementById('tacka-nm-input').focus(), 80);
+}
+
+function _tackaCancelModal() {
+  document.getElementById('tacka-modal-bg').style.display = 'none';
+  document.getElementById('tacka-modal').style.display    = 'none';
+  document.getElementById('tacka-nm-input').value = '';
+}
+
+function _tackaAddAtGPS() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
   if (!lastP) { showToast('Nema GPS signala'); return; }
-  const {la, lo} = lastP;
-  const ts = Date.now();
+  _createTacka(lastP.la, lastP.lo, nm);
+}
+
+function _tackaAddOnMap() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
+  _tackaPlaceNm   = nm;
+  _tackaPlaceMode = true;
+  document.getElementById('tacka-place-banner').style.display = 'block';
+  map.getContainer().style.cursor = 'crosshair';
+}
+
+function _tackaExitPlaceMode() {
+  _tackaPlaceMode = false;
+  _tackaPlaceNm   = '';
+  document.getElementById('tacka-place-banner').style.display = 'none';
+  map.getContainer().style.cursor = '';
+}
+
+// ── Core creation ──
+function _createTacka(la, lo, nm) {
+  const ts  = Date.now();
   const idx = _tacke.length;
-  const m = L.marker([la, lo], {icon: _tačkaIcon(idx+1)}).addTo(map);
-  _setupTackaPopup(m, idx, la, lo, ts);
-  _tacke.push({la, lo, ts, marker: m});
+  const m   = L.marker([la, lo], {icon: _tačkaIcon(idx+1, nm)}).addTo(map);
+  _setupTackaPopup(m, idx, la, lo, ts, nm);
+  _tacke.push({la, lo, ts, nm, marker: m});
   _saveTacke();
-  showToast(`📍 Tačka ${idx+1} dodana`);
+  map.setView([la, lo], Math.max(map.getZoom(), 15), {animate: true});
+  showToast(`📍 ${nm || ('Tačka ' + (idx+1))} dodana`);
 }
 
-function _setupTackaPopup(m, idx, la, lo, ts) {
-  const dt = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  m.bindPopup(`<div style="font-size:12px;min-width:150px;color:#1e293b;">
-    <b style="font-size:13px;">📍 Tačka ${idx+1}</b><br>
-    <span style="color:#64748b;font-size:10px;">${dt}</span><br>
-    <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code><br>
-    <button class="tacka-popup-btn" onclick="deleteTacka(${idx})">🗑 Obriši</button>
-  </div>`, {className:'tvlake-popup'});
+// ── Popup ──
+function _setupTackaPopup(m, idx, la, lo, ts, nm) {
+  const title = nm || ('Tačka ' + (idx+1));
+  const dt    = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  m.bindPopup(() => {
+    const distHtml = lastP
+      ? `<div style="margin:5px 0 2px;font-size:11px;color:#475569;">
+           ✈️ Vazdušna linija: <b style="color:#3b82f6;">${_fmtDist(_haversine(lastP.la,lastP.lo,la,lo))}</b>
+         </div>`
+      : '';
+    return `<div style="font-size:12px;min-width:160px;color:#1e293b;">
+      <b style="font-size:13px;color:#1e293b;">📍 ${_escHtml(title)}</b><br>
+      <span style="color:#64748b;font-size:10px;">${dt}</span><br>
+      <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code>
+      ${distHtml}
+      <div style="display:flex;gap:5px;margin-top:7px;">
+        <button class="tacka-popup-btn" style="background:#1d4ed8;color:#bfdbfe;flex:1;"
+          onclick="vodiMeDoTacke(${idx})">🧭 Vodi me</button>
+        <button class="tacka-popup-btn" onclick="deleteTacka(${idx})" style="flex:0 0 auto;">🗑</button>
+      </div>
+    </div>`;
+  }, {className:'tvlake-popup'});
 }
 
+// ── Road routing (Dijkstra on putevi.geojson graph) ──
+let _tackaNavIdx    = null;  // index of tačka we're navigating to
+let _tackaRoadLine  = null;  // green road-route polyline
+let _tackaAirLine   = null;  // blue dashed air-line
+
+function _getPuteviGraph() {
+  if (_puteviGraph) return _puteviGraph;
+  if (!_puteviGeoJSON) return null;
+  const nodeMap = new Map();  // key -> idx
+  const nodes   = [];         // [{la, lo}]
+  const adj     = [];         // adj[i] = [{to, dist}]
+
+  function nodeIdx(la, lo) {
+    const key = la.toFixed(5) + ',' + lo.toFixed(5);
+    if (nodeMap.has(key)) return nodeMap.get(key);
+    const idx = nodes.length;
+    nodeMap.set(key, idx);
+    nodes.push({la, lo});
+    adj.push([]);
+    return idx;
+  }
+
+  for (const f of (_puteviGeoJSON.features || [])) {
+    if (f.geometry?.type !== 'LineString') continue;
+    const coords = f.geometry.coordinates;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [lo1, la1] = coords[i], [lo2, la2] = coords[i + 1];
+      const a = nodeIdx(la1, lo1), b = nodeIdx(la2, lo2);
+      const d = _haversine(la1, lo1, la2, lo2);
+      adj[a].push({to: b, dist: d});
+      adj[b].push({to: a, dist: d});
+    }
+  }
+  _puteviGraph = {nodes, adj};
+  return _puteviGraph;
+}
+
+function _nearestGraphNode(la, lo) {
+  const g = _getPuteviGraph();
+  if (!g || !g.nodes.length) return null;
+  let bestI = 0, bestD = Infinity;
+  for (let i = 0; i < g.nodes.length; i++) {
+    const d = _haversine(la, lo, g.nodes[i].la, g.nodes[i].lo);
+    if (d < bestD) { bestD = d; bestI = i; }
+  }
+  return {idx: bestI, dist: bestD};
+}
+
+function _dijkstra(startIdx, endIdx) {
+  const g = _getPuteviGraph();
+  if (!g) return null;
+  const n    = g.nodes.length;
+  const dist = new Float64Array(n).fill(Infinity);
+  const prev = new Int32Array(n).fill(-1);
+  const done = new Uint8Array(n);
+  dist[startIdx] = 0;
+  const pq = [[0, startIdx]];
+
+  while (pq.length > 0) {
+    let mi = 0;
+    for (let i = 1; i < pq.length; i++) if (pq[i][0] < pq[mi][0]) mi = i;
+    const [d, u] = pq.splice(mi, 1)[0];
+    if (done[u]) continue;
+    done[u] = 1;
+    if (u === endIdx) break;
+    for (const {to: v, dist: w} of g.adj[u]) {
+      if (done[v]) continue;
+      const nd = d + w;
+      if (nd < dist[v]) { dist[v] = nd; prev[v] = u; pq.push([nd, v]); }
+    }
+  }
+
+  if (dist[endIdx] === Infinity) return null;
+  const path = [];
+  for (let cur = endIdx; cur !== -1; cur = prev[cur]) path.unshift([g.nodes[cur].la, g.nodes[cur].lo]);
+  return {path, dist: dist[endIdx]};
+}
+
+function _clearNavLayers() {
+  if (_tackaRoadLine) { map.removeLayer(_tackaRoadLine); _tackaRoadLine = null; }
+  if (_tackaAirLine)  { map.removeLayer(_tackaAirLine);  _tackaAirLine  = null; }
+}
+
+// ── Navigation entry point ──
+function vodiMeDoTacke(idx) {
+  if (idx < 0 || idx >= _tacke.length) return;
+  map.closePopup();
+  _clearNavLayers();
+  _tackaNavIdx = idx;
+
+  const t = _tacke[idx];
+  const fromLa = lastP?.la, fromLo = lastP?.lo;
+
+  // Air-line (always)
+  if (fromLa != null) {
+    _tackaAirLine = L.polyline([[fromLa, fromLo], [t.la, t.lo]], {
+      color:'#60a5fa', weight:2, dashArray:'8 5', opacity:0.85
+    }).addTo(map);
+  }
+
+  // Road route via Dijkstra
+  let routeBuilt = false;
+  if (fromLa != null && _puteviGeoJSON) {
+    const sn = _nearestGraphNode(fromLa, fromLo);
+    const en = _nearestGraphNode(t.la,   t.lo);
+    if (sn && en && sn.idx !== en.idx) {
+      const result = _dijkstra(sn.idx, en.idx);
+      if (result) {
+        // Prepend user pos + append destination for full visual path
+        const fullPath = [[fromLa, fromLo], ...result.path, [t.la, t.lo]];
+        _tackaRoadLine = L.polyline(fullPath, {
+          color:'#22c55e', weight:4, opacity:0.9, lineCap:'round', lineJoin:'round'
+        }).addTo(map);
+        routeBuilt = true;
+      }
+    }
+  }
+
+  // Show nav panel
+  _showNavPanel(idx);
+
+  // Fit map
+  const bounds = [];
+  if (fromLa != null) bounds.push([fromLa, fromLo]);
+  bounds.push([t.la, t.lo]);
+  if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds), {padding:[50,50], animate:true});
+
+  if (!routeBuilt && !fromLa) showToast('Uključi GPS za navigaciju');
+}
+
+// ── Nav panel ──
+function _showNavPanel(idx) {
+  const panel = document.getElementById('tacka-nav-panel');
+  if (!panel) return;
+  const t = _tacke[idx];
+  document.getElementById('tnp-name').textContent = t.nm || ('Tačka ' + (idx + 1));
+  const ab = document.getElementById('action-bar');
+  panel.style.bottom = (ab && ab.style.display !== 'none') ? (ab.offsetHeight + 'px') : '0';
+  panel.style.display = 'flex';
+  _updateNavPanel(lastP?.la, lastP?.lo);
+}
+
+function _updateNavPanel(la, lo) {
+  if (_tackaNavIdx === null) return;
+  const t = _tacke[_tackaNavIdx];
+  if (!t) return;
+
+  const airEl  = document.getElementById('tnp-air');
+  const roadEl = document.getElementById('tnp-road');
+  const brngEl = document.getElementById('tnp-arrow');
+
+  if (la != null) {
+    const airDist  = _haversine(la, lo, t.la, t.lo);
+    airEl.textContent = '✈️ ' + _fmtDist(airDist);
+
+    // Update air line
+    if (_tackaAirLine) _tackaAirLine.setLatLngs([[la, lo], [t.la, t.lo]]);
+
+    // Bearing arrow rotation
+    const brng = _bearing(la, lo, t.la, t.lo);
+    brngEl.style.transform = `rotate(${brng}deg)`;
+
+    // Check if arrived
+    if (airDist < 15) {
+      airEl.textContent = '✅ Stigao si!';
+      airEl.style.color = '#4ade80';
+    } else {
+      airEl.style.color = '';
+    }
+
+    // Road dist from existing polyline
+    if (_tackaRoadLine) {
+      const lls = _tackaRoadLine.getLatLngs();
+      let rd = 0;
+      // Snap to nearest point on road line, sum remaining
+      let nearI = 0, nearD = Infinity;
+      for (let i = 0; i < lls.length; i++) {
+        const d = _haversine(la, lo, lls[i].lat, lls[i].lng);
+        if (d < nearD) { nearD = d; nearI = i; }
+      }
+      for (let i = nearI; i < lls.length - 1; i++) {
+        rd += _haversine(lls[i].lat, lls[i].lng, lls[i+1].lat, lls[i+1].lng);
+      }
+      roadEl.textContent = '🛤 ' + _fmtDist(rd);
+      roadEl.style.display = '';
+    } else {
+      roadEl.style.display = 'none';
+    }
+  } else {
+    airEl.textContent = '📡 Uključi GPS';
+    roadEl.style.display = 'none';
+  }
+}
+
+function _bearing(la1, lo1, la2, lo2) {
+  const r = Math.PI / 180;
+  const dLo = (lo2 - lo1) * r;
+  const y = Math.sin(dLo) * Math.cos(la2 * r);
+  const x = Math.cos(la1 * r) * Math.sin(la2 * r) - Math.sin(la1 * r) * Math.cos(la2 * r) * Math.cos(dLo);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function stopTackaNav() {
+  _tackaNavIdx = null;
+  _clearNavLayers();
+  const panel = document.getElementById('tacka-nav-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+// ── Helpers ──
+function _haversine(la1, lo1, la2, lo2) {
+  const R = 6371000, r = Math.PI/180;
+  const dLa = (la2-la1)*r, dLo = (lo2-lo1)*r;
+  const a = Math.sin(dLa/2)**2 + Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function _fmtDist(m) {
+  return m >= 1000 ? (m/1000).toFixed(2)+' km' : Math.round(m)+' m';
+}
+
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Delete ──
 function deleteTacka(idx) {
   if (idx < 0 || idx >= _tacke.length) return;
   map.removeLayer(_tacke[idx].marker);
   _tacke.splice(idx, 1);
-  _tacke.forEach((t, i) => { t.marker.setIcon(_tačkaIcon(i+1)); _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts); });
+  _tacke.forEach((t, i) => {
+    t.marker.setIcon(_tačkaIcon(i+1, t.nm));
+    _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts, t.nm);
+  });
   _saveTacke();
   map.closePopup();
 }
 
+// ── Persistence ──
 function _saveTacke() {
-  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts})=>({la,lo,ts}))));
+  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts,nm})=>({la,lo,ts,nm}))));
 }
 
 function _restoreTacke() {
   try {
     const d = JSON.parse(localStorage.getItem(_TACKE_KEY) || '[]');
-    d.forEach(({la,lo,ts}, i) => {
-      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1)}).addTo(map);
-      _setupTackaPopup(m, i, la, lo, ts);
-      _tacke.push({la, lo, ts, marker: m});
+    d.forEach(({la,lo,ts,nm}, i) => {
+      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1, nm)}).addTo(map);
+      _setupTackaPopup(m, i, la, lo, ts, nm);
+      _tacke.push({la, lo, ts, nm, marker: m});
     });
   } catch(e) {}
 }
+
+// ── Legacy shim (old calls without modal) ──
+function addTacka() { _tackaOpenModal(); }
 
 // ─── FOTO OZNAKE ──────────────────────────────────────────────────────────────
 let _locFotos    = [];  // vlastite foto oznake
@@ -4637,6 +5323,7 @@ document.addEventListener('DOMContentLoaded', buildC);
 
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
+let _recFreeView = false;
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
 let _activeTab = 'karta';  // trenutno aktivan tab
 // Tool states — only one active at a time
@@ -4660,7 +5347,8 @@ let editingLabelId = null;
 const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
-function makeCachedTileLayer(urlTemplate, opts) {
+function makeCachedTileLayer(cacheName) {
+  cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
     createTile(coords, done) {
       const tile = document.createElement('img');
@@ -4671,7 +5359,7 @@ function makeCachedTileLayer(urlTemplate, opts) {
         tile.onerror = e => done(e, tile);
         tile.src = url; return tile;
       }
-      caches.open(TILE_CACHE_NAME).then(async cache => {
+      caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
         if (cached) {
           tile.src = URL.createObjectURL(await cached.blob());
@@ -4720,17 +5408,208 @@ map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
 map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
+map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.svg({ pane: 'putevi' });
 const TL = {
   '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c']}),
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
   '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
 };
+const _ELEV_CACHE  = 'tvlake-elev-v1';
+const _SLOPE_CACHE = 'tvlake-slope-v1';
+const _TERR_CACHE  = 'tvlake-terr-v1';
+const CachedElev  = makeCachedTileLayer(_ELEV_CACHE);
+const CachedSlope = makeCachedTileLayer(_SLOPE_CACHE);
+
+// ── DEM Canvas helpers ────────────────────────────────────────────────────────
+function _hsl2rgb(h, s, l) {
+  const f = (n, k=(n+h/30)%12) => l - s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,9-k,1));
+  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+}
+// 8 visinskih pojaseva — kontrastne boje da susjedni pojasevi budu lako razlikovani
+const _NV_BANDS = [
+  [   0, [ 34, 197,  94, 190]],  // 0–200 m    zelena
+  [ 200, [250, 204,  21, 190]],  // 200–400 m  žuta
+  [ 400, [249, 115,  22, 190]],  // 400–600 m  narančasta
+  [ 600, [239,  68,  68, 190]],  // 600–800 m  crvena
+  [ 800, [168,  85, 247, 190]],  // 800–1000 m ljubičasta
+  [1000, [ 59, 130, 246, 192]],  // 1000–1200 m plava
+  [1200, [  6, 182, 212, 192]],  // 1200–1400 m cijan
+  [1400, [226, 232, 240, 200]],  // >1400 m    bijela
+];
+function _nvColor(e) {
+  if (e < 0) return [50, 100, 200, 160];
+  for (let i = _NV_BANDS.length - 1; i >= 0; i--)
+    if (e >= _NV_BANDS[i][0]) return _NV_BANDS[i][1];
+  return _NV_BANDS[0][1];
+}
+function _aspColor(deg, mag) {
+  if (mag < 0.8) return [128, 128, 128, 0];
+  // 4 anchor colours: N=blue, E=green, S=orange, W=purple — interpolate between them
+  const stops = [
+    [0,   [59,  127, 212]],  // Sjever (N)
+    [90,  [76,  175,  80]],  // Istok  (E)
+    [180, [232, 100,  10]],  // Jug    (S)
+    [270, [156,  77, 204]],  // Zapad  (W)
+    [360, [59,  127, 212]],  // wrap back to N
+  ];
+  let lo = stops[0], hi = stops[1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (deg >= stops[i][0] && deg < stops[i+1][0]) { lo = stops[i]; hi = stops[i+1]; break; }
+  }
+  const t = (deg - lo[0]) / (hi[0] - lo[0]);
+  const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+  const r = lerp(lo[1][0], hi[1][0], t);
+  const g = lerp(lo[1][1], hi[1][1], t);
+  const b = lerp(lo[1][2], hi[1][2], t);
+  return [r, g, b, Math.min(210, Math.round(85 + mag * 30))];
+}
+async function _getTerrariumTile(z, x, y) {
+  const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+  let blob = null;
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open(_TERR_CACHE);
+      let resp = await cache.match(url);
+      if (!resp) {
+        resp = await fetch(url, { mode:'cors' });
+        if (resp?.ok) { cache.put(url, resp.clone()); } else return null;
+      }
+      blob = await resp.blob();
+    } catch { return null; }
+  } else {
+    blob = await fetch(url, { mode:'cors' }).then(r=>r.ok?r.blob():null).catch(()=>null);
+  }
+  if (!blob) return null;
+  if (typeof createImageBitmap !== 'undefined') return createImageBitmap(blob);
+  return new Promise(res => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = URL.createObjectURL(blob);
+  });
+}
+function _makeDemCanvasLayer(mode) {
+  return L.GridLayer.extend({
+    createTile(coords, done) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+        if (!src) { done(null, canvas); return; }
+        const tmp = document.createElement('canvas');
+        tmp.width = tmp.height = 256;
+        const tc = tmp.getContext('2d');
+        tc.drawImage(src, 0, 0, 256, 256);
+        const raw = tc.getImageData(0, 0, 256, 256).data;
+        // Decode terrarium: elev = R*256 + G + B/256 - 32768
+        const elev = new Float32Array(256*256);
+        for (let i=0; i<256*256; i++)
+          elev[i] = raw[i*4]*256 + raw[i*4+1] + raw[i*4+2]/256 - 32768;
+        const ctx = canvas.getContext('2d');
+        const out = ctx.createImageData(256, 256);
+        const od  = out.data;
+        for (let py=0; py<256; py++) {
+          for (let px=0; px<256; px++) {
+            const idx = py*256+px;
+            let rgba;
+            if (mode === 'nv') {
+              rgba = _nvColor(elev[idx]);
+            } else {
+              const x0=Math.max(0,px-1), x1=Math.min(255,px+1);
+              const y0=Math.max(0,py-1), y1=Math.min(255,py+1);
+              const dzdx = elev[py*256+x1] - elev[py*256+x0];
+              const dzdy = elev[y1*256+px] - elev[y0*256+px];
+              // Aspect = compass direction the slope faces (downhill direction).
+              // Tile y increases southward, so geographic N component = -dzdy.
+              // atan2(-dzdx, dzdy) gives bearing from North, clockwise.
+              const asp  = (Math.atan2(-dzdx, dzdy)*180/Math.PI + 360) % 360;
+              rgba = _aspColor(asp, Math.hypot(dzdx, dzdy));
+            }
+            od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
+          }
+        }
+        ctx.putImageData(out, 0, 0);
+        done(null, canvas);
+      }).catch(() => done(null, canvas));
+      return canvas;
+    }
+  });
+}
+const DemNV    = _makeDemCanvasLayer('nv');
+const DemEkspo = _makeDemCanvasLayer('ekspo');
+
+// ── Slope canvas layer (terrarium-based, crvene nijanse od 30%) ───────────────
+function _tile2lat(y, z) {
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+function _slopeColor(pct) {
+  if (pct < 30) return [0, 0, 0, 0];
+  const t = Math.min(1, (pct - 30) / 80); // 0 pri 30%, 1 pri 110%+
+  return [
+    Math.round(230 - t * 50),   // R: 230→180
+    Math.round(170 - t * 160),  // G: 170→10
+    Math.round(170 - t * 160),  // B: 170→10
+    Math.round(110 + t * 130)   // A: 110→240
+  ];
+}
+const DemSlopeClass = L.GridLayer.extend({
+  createTile(coords, done) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 256;
+    _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+      if (!src) { done(null, canvas); return; }
+      const tmp = document.createElement('canvas');
+      tmp.width = tmp.height = 256;
+      const tc = tmp.getContext('2d');
+      tc.drawImage(src, 0, 0, 256, 256);
+      const raw = tc.getImageData(0, 0, 256, 256).data;
+      const elev = new Float32Array(256 * 256);
+      for (let i = 0; i < 256 * 256; i++)
+        elev[i] = raw[i*4]*256 + raw[i*4+1] + raw[i*4+2]/256 - 32768;
+      // Geografska veličina piksela u metrima na ovoj geografskoj širini
+      const lat  = _tile2lat(coords.y + 0.5, coords.z);
+      const pixM = Math.cos(lat * Math.PI / 180) * 156543.03392 / Math.pow(2, coords.z);
+      const ctx = canvas.getContext('2d');
+      const out = ctx.createImageData(256, 256);
+      const od  = out.data;
+      for (let py = 0; py < 256; py++) {
+        for (let px = 0; px < 256; px++) {
+          const idx = py * 256 + px;
+          const x0 = Math.max(0, px-1), x1 = Math.min(255, px+1);
+          const y0 = Math.max(0, py-1), y1 = Math.min(255, py+1);
+          const dzdx = (elev[py*256+x1] - elev[py*256+x0]) / ((x1-x0) * pixM);
+          const dzdy = (elev[y1*256+px] - elev[y0*256+px]) / ((y1-y0) * pixM);
+          const pct  = Math.sqrt(dzdx*dzdx + dzdy*dzdy) * 100;
+          const rgba = _slopeColor(pct);
+          od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      done(null, canvas);
+    }).catch(() => done(null, canvas));
+    return canvas;
+  }
+});
+
+const _OVL = {
+  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'' }),
+  slope: new DemSlopeClass({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:1.0, attribution:'' }),
+  nv:    new DemNV(   { pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.75, attribution:'' }),
+  ekspo: new DemEkspo({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.80, attribution:'' })
+};
+let _ovlState = { elev: false, slope: false, nv: false, ekspo: false };
+try { Object.assign(_ovlState, JSON.parse(localStorage.getItem('tvlake_ovl_state') || '{}')); } catch {}
+// Restore overlay visibility
+Object.entries(_ovlState).forEach(([k,v]) => { if (v && _OVL[k]) _OVL[k].addTo(map); });
+setTimeout(_demLegendUpdate, 0); // after DOM ready
 // Vrati zadnju kartu ili defaultuj na Topo
 (function _restoreLastMap() {
   let restoredKey = '⛰ Topo';
   try {
     const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (saved?.type === 'sqlite') return; // sqlmapRestoreAll will activate the correct SQLite
     if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
@@ -4798,6 +5677,11 @@ function _openLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
   _lsTab('karte');
+  ['elev','slope','nv','ekspo'].forEach(id => {
+    const cb = document.getElementById('inst-' + id + '-cb');
+    if (cb) cb.checked = !!_ovlState[id];
+  });
+  _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
   if (grRow) grRow.style.display = (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) ? 'block' : 'none';
@@ -5026,6 +5910,12 @@ let _dblClickGuard = false;
 map.on('click', e => {
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
+  if (_tackaPlaceMode) {
+    const nm = _tackaPlaceNm;
+    _tackaExitPlaceMode();
+    _createTacka(e.latlng.lat, e.latlng.lng, nm);
+    return;
+  }
   if (_dozDrawType !== null) { dozAddDrawPoint(e.latlng); return; } // doznaka crtanje
   if (!_vpJustOpened) closeVlakaPopup();
   if (textToolOn) { openTextDialog(e.latlng.lat, e.latlng.lng, null); return; }
@@ -5067,7 +5957,8 @@ map.on('click', e => {
       }
     });
     if (bestI >= 0 && bestD <= HIT_PX) {
-      _activateVlakaEdit(bestI);
+      selI(bestI);
+      showVlakaPopup(bestI, e.latlng);
       return;
     }
   }
@@ -5099,7 +5990,7 @@ map.on('move', () => {
 map.on('moveend', () => {
   const c = map.getCenter();
   updMGI(c.lat, c.lng);
-  if (!_gpsAlt) debouncedUpdElev(c.lat, c.lng, 450);
+  if (!_gpsAlt || _recFreeView) debouncedUpdElev(c.lat, c.lng, 450);
 });
 
 // === RAZMJERA KARTE (live) ===
@@ -6050,6 +6941,9 @@ function stopRec() {
   }
   _recSegStart = 0;
   recOn = false; recPaused = false; _recParentIdx = null;
+  _recFreeView = false;
+  const _fvBtn = document.getElementById('btn-freeview');
+  if (_fvBtn) { _fvBtn.textContent = '🔓'; _fvBtn.style.background = ''; }
   _kfReset(); _lastRecTime = 0;
   _releaseWakeLock();
   _stopBgAudio();
@@ -6108,6 +7002,17 @@ function toggleRecPause() {
   }
   _updRecStatusBar();
   _updFabVisibility();
+}
+
+function toggleRecFreeView() {
+  _recFreeView = !_recFreeView;
+  const btn = document.getElementById('btn-freeview');
+  if (_recFreeView) {
+    if (btn) { btn.textContent = '📍'; btn.style.background = '#14330a'; }
+  } else {
+    if (btn) { btn.textContent = '🔓'; btn.style.background = ''; }
+    if (lastP) map.panTo([lastP.la, lastP.lo], { animate: true, duration: 0.5 });
+  }
 }
 
 function _krajVlake() {
@@ -6601,7 +7506,7 @@ function onP(p) {
   lastP = { la, lo, al: filtAl ?? 0, ac };
   _lastGpsFixTime = Date.now();
   _gpsRestartCount = 0;
-  _addTragPoint(la, lo, al);
+  _addTragPoint(la, lo, ac, al);
   _updMcdDist();
 
   // Prikaz uvijek — pokaži brzinu ako je dostupna
@@ -6638,10 +7543,13 @@ function onP(p) {
     posCr.setLatLng([la, lo]).setRadius(ac);
   }
 
-  // Prati lokaciju kad se snima vlaka ili trag
-  if ((recOn && !recPaused) || _tragOn) {
+  // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
+  if (((recOn && !recPaused) || _tragOn) && !_recFreeView) {
     map.panTo([la, lo], { animate: true, duration: 0.5 });
   }
+
+  // Navigacija do tačke — ažuriraj panel i liniju
+  if (_tackaNavIdx !== null) _updateNavPanel(la, lo);
 
   if (!recOn || recPaused || actI === null) return;
 
@@ -7155,16 +8063,22 @@ function fabSnimTrag() {
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     if (_tragPts.length > 1) {
-      const saved = _tragRegAdd(_tragPts.slice());
+      // RDP simplifikacija snimljenog traga (3m tolerancija) — uklanja GPS šum
+      const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
+      const simp  = _rdpSimplify(pts3d, 3);
+      const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
+      const saved = _tragRegAdd(final);
       _tqmOpen(saved.id);
     } else {
       showToast('Trag nije snimljen (premalo tačaka)');
     }
     _tragPts = [];
+    _tragBuf = [];
   } else {
     if (!gpsOn) startGPS();
-    _tragOn = true;
+    _tragOn  = true;
     _tragPts = [];
+    _tragBuf = [];
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
     const bt = document.getElementById('btrag');
@@ -7173,14 +8087,31 @@ function fabSnimTrag() {
   }
 }
 
-function _addTragPoint(la, lo, al) {
+let _tragBuf = [];  // kružni buffer zadnja 3 raw GPS fixa za median filtar
+
+function _addTragPoint(la, lo, ac, al) {
   if (!_tragOn) return;
+
+  // 1. Odbaci slabe GPS fikseve (grad: zgrade blokiraju satelite)
+  if (ac > 25) return;
+
+  // 2. Median filtar od 3 fikseva — jedan spike ne može pokvariti medijanu
+  _tragBuf.push({ la, lo });
+  if (_tragBuf.length > 3) _tragBuf.shift();
+  const n   = _tragBuf.length;
+  const mla = [..._tragBuf].sort((a, b) => a.la - b.la)[Math.floor(n / 2)].la;
+  const mlo = [..._tragBuf].sort((a, b) => a.lo - b.lo)[Math.floor(n / 2)].lo;
+
+  // 3. Minimalna udaljenost od zadnje prihvaćene tačke
   if (_tragPts.length > 0) {
     const last = _tragPts[_tragPts.length - 1];
-    if (dst(last[0], last[1], la, lo) < 2) return; // min 2m između tačaka
+    const d    = dst(last[0], last[1], mla, mlo);
+    if (d < 5) return;   // premalo kretanja
+    if (d > Math.max(40, ac * 3)) return;  // preveliki skok — odbaci spike
   }
-  _tragPts.push([la, lo, al]);
-  if (_tragLine) _tragLine.addLatLng([la, lo]);
+
+  _tragPts.push([mla, mlo, al]);
+  if (_tragLine) _tragLine.addLatLng([mla, mlo]);
 }
 
 function _tragToGpx(pts) {
@@ -7293,10 +8224,8 @@ function _renderVlakaRow(el, v, i, depth) {
   }
   const elevRow = (elvHtml || roadDistHtml)
     ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}</div>` : '';
-  const stripeStyle = isKrak
-    ? `background:${v.color};opacity:.6`
-    : `background:${v.color}`;
-  const krakArrow = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
+  const stripeStyle = isKrak ? `background:${v.color};opacity:.6` : `background:${v.color}`;
+  const krakArrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
   row.innerHTML = `
     <div class="vcard-stripe" style="${stripeStyle}"></div>
     <div class="vcard-info">
@@ -7308,12 +8237,27 @@ function _renderVlakaRow(el, v, i, depth) {
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
       ${nasaviBtn}
-      <div class="vcard-actions">
-        ${!recOn ? `<button class="vab vab-rec" onclick="event.stopPropagation();selI(${i});switchTab('karta');setTimeout(togRec,30);" title="Počni GPS snimanje">▶ Snimi</button>` : ''}
-        <button class="vab" onclick="event.stopPropagation();showVlakaOnMap(${i})" title="Prikaži na karti">🗺</button>
-        <button class="vab" onclick="event.stopPropagation();showElevProfile(${i})" title="Profil visina">↕</button>
-        <button class="vab" onclick="event.stopPropagation();selI(${i});togEdit()" title="Edituj geometriju na karti">🔧</button>
-        <button class="vab vab-del" onclick="event.stopPropagation();dlV(${i})" title="Obriši">✕</button>
+      <div style="display:flex;gap:4px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
+        <button onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(232,69,60,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#e8453c;">${isRecThis&&!recPaused?'🔴':isRecThis&&recPaused?'⏸':'▶'}</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">${isRecThis&&!recPaused?'Snima':isRecThis&&recPaused?'Pauza':'Snimi'}</span>
+        </button>
+        <button onclick="event.stopPropagation();showVlakaOnMap(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(74,158,255,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#4a9eff;">🗺</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Karta</span>
+        </button>
+        <button onclick="event.stopPropagation();showElevProfile(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;">↕</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
+        </button>
+        <button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;">🔧</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
+        </button>
+        <button onclick="event.stopPropagation();dlV(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+          <span style="width:38px;height:38px;border-radius:50%;background:rgba(100,116,139,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#94a3b8;">✕</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Briši</span>
+        </button>
       </div>
     </div>`;
   row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
@@ -7361,8 +8305,7 @@ function rndList() {
     nv.innerHTML = 'Odaberite projekat za prikaz vlaka.';
   } else if (rootVlake.length === 0) {
     nv.style.display = 'block';
-    nv.innerHTML = `Još nema vlaka za ovaj projekat.<br>
-      Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.`;
+    nv.innerHTML = `Još nema vlaka za ovaj projekat.<br>Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.`;
   } else {
     nv.style.display = 'none';
   }
@@ -7492,7 +8435,10 @@ function attachPolyClick(poly) {
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv.poly === poly);
-    if (idx >= 0) _activateVlakaEdit(idx);
+    if (idx >= 0) {
+      selI(idx);
+      showVlakaPopup(idx, e.latlng);
+    }
   });
 }
 
@@ -7504,24 +8450,29 @@ function showVlakaPopup(i, latlng) {
   const len = calcL(v.pts);
   const ime = getIme();
   const dat = v.updatedAt ? fmtDate(v.updatedAt.slice(0,10)) : fmtDate(todayStr());
-  document.getElementById('vp-nm').textContent = v.nm + (v.kr > 0 ? ' (krak)' : '');
-  document.getElementById('vp-nm').style.color = v.color;
+  const tipLabel = v.kr > 0 ? ' (krak)' : '';
+  const brLabel  = v.br != null ? `<span style="font-size:11px;color:#64748b;margin-left:5px;">br.${v.br}</span>` : '';
+  document.getElementById('vp-nm').innerHTML =
+    `<span style="color:${v.color};">${v.nm}</span>${brLabel}<span style="color:#64748b;font-size:11px;">${tipLabel}</span>`;
   document.getElementById('vp-info').innerHTML = `
+    <div class="vp-row">🔢 Broj vlake: <b>${v.br ?? '—'}</b>${v.kr > 0 ? `&nbsp;(krak ${v.kr})` : ''}</div>
     <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
-    <div class="vp-row">📍 Tačaka: <b>${v.pts.length}</b></div>
+    <div class="vp-row">📍 Tačaka GPS: <b>${v.pts.length}</b></div>
     <div class="vp-row">👤 Projektant: <b>${ime}</b></div>
     <div class="vp-row">📅 Ažurirano: <b>${dat}</b></div>
     ${v.lager ? `<div class="vp-row">🪵 Lager: <b style="color:#f59e0b;">${v.lager}</b></div>` : ''}
   `;
+  _positionPopup(latlng);
+}
+
+function _positionPopup(latlng) {
   const popup = document.getElementById('vlaka-popup');
   popup.style.display = 'block';
-  // Pozicioniraj uz klik na mapi
-  const cp = map.latLngToContainerPoint(latlng);
-  const mapEl = document.getElementById('map');
-  const mr = mapEl.getBoundingClientRect();
-  let left = mr.left + cp.x + 12;
-  let top  = mr.top  + cp.y - 20;
-  const pw = 270, ph = 200;
+  const cp  = map.latLngToContainerPoint(latlng);
+  const mr  = document.getElementById('map').getBoundingClientRect();
+  const pw  = 270, ph = 220;
+  let left  = mr.left + cp.x + 12;
+  let top   = mr.top  + cp.y - 20;
   if (left + pw > window.innerWidth  - 8) left = mr.left + cp.x - pw - 12;
   if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
   if (top < 60) top = 60;
@@ -7530,8 +8481,32 @@ function showVlakaPopup(i, latlng) {
   popup.style.top  = top  + 'px';
 }
 
+function showKolegeVlakaInfo(key, latlng) {
+  const kv = kolegeVlakeMap[key];
+  if (!kv) return;
+  closeVlakaPopup();
+  _vpIdx = null;
+  _vpJustOpened = true;
+  setTimeout(() => { _vpJustOpened = false; }, 80);
+  const len = calcL(kv.pts);
+  const nm  = key.split('::').slice(1).join('::');
+  document.getElementById('vp-nm').innerHTML =
+    `<span style="color:${kv.color};">${nm}</span>
+     <span style="font-size:10px;color:#475569;margin-left:5px;">👥 ${kv.ime || 'Kolega'}</span>`;
+  document.getElementById('vp-info').innerHTML = `
+    <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
+    <div class="vp-row">📍 Tačaka GPS: <b>${kv.pts.length}</b></div>
+    <div class="vp-row">👤 Projektant: <b>${kv.ime || 'Kolega'}</b></div>
+  `;
+  // Sakrij edit dugmad — kolega vlaka je read-only
+  document.getElementById('vlaka-popup-btns').style.display = 'none';
+  _positionPopup(latlng);
+}
+
 function closeVlakaPopup() {
   document.getElementById('vlaka-popup').style.display = 'none';
+  const btns = document.getElementById('vlaka-popup-btns');
+  if (btns) btns.style.display = '';  // restore for next open
   _vpIdx = null;
 }
 
@@ -7554,6 +8529,61 @@ function vpDelete() {
   const i = _vpIdx;
   closeVlakaPopup();
   dlV(i);
+}
+
+function vpIzravnaj() {
+  if (_vpIdx === null) return;
+  izravnajVlaku(_vpIdx);
+}
+
+// Ramer-Douglas-Peucker simplifikacija — uklanja tačke unutar tolM metara od linije
+function _rdpSimplify(pts, tolM) {
+  if (pts.length <= 2) return pts;
+
+  function perpDist(p, a, b) {
+    const cosLat = Math.cos(p.la * Math.PI / 180);
+    const dx = (b.lo - a.lo) * cosLat, dy = b.la - a.la;
+    const len2 = dx*dx + dy*dy;
+    if (len2 < 1e-18) return _haversine(p.la, p.lo, a.la, a.lo);
+    const t = Math.max(0, Math.min(1, ((p.lo - a.lo)*cosLat*dx + (p.la - a.la)*dy) / len2));
+    return _haversine(p.la, p.lo, a.la + t*dy, a.lo + t*(dx/cosLat));
+  }
+
+  function rdp(seg, eps) {
+    if (seg.length <= 2) return seg;
+    let maxD = 0, maxI = 0;
+    for (let i = 1; i < seg.length - 1; i++) {
+      const d = perpDist(seg[i], seg[0], seg[seg.length-1]);
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > eps) {
+      const l = rdp(seg.slice(0, maxI+1), eps);
+      const r = rdp(seg.slice(maxI), eps);
+      return [...l.slice(0,-1), ...r];
+    }
+    return [seg[0], seg[seg.length-1]];
+  }
+
+  return rdp(pts, tolM);
+}
+
+function izravnajVlaku(idx) {
+  const v = vlake[idx];
+  if (!v || v.pts.length < 3) { showToast('Premalo tačaka za izravnavanje'); return; }
+  const TOL = 4; // 4 metra tolerancija
+  const before = v.pts.length;
+  const simplified = _rdpSimplify([...v.pts], TOL);
+  if (simplified.length >= before) { showToast('Vlaka je već optimalna'); return; }
+  drawUndoStack.push(v.pts.map(p => ({...p})));
+  v.pts = simplified;
+  v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  v.wpts.forEach(m => map.removeLayer(m));
+  v.wpts = [];
+  scheduleVlakaSave(idx);
+  _saveLocalVlake();
+  rndList();
+  closeVlakaPopup();
+  showToast(`✅ ${before - simplified.length} tačaka uklonjeno (${before} → ${simplified.length})`);
 }
 
 // === VLAKA LABELE ===
@@ -7627,11 +8657,14 @@ function updateVlakaLabel(i) {
 let _puteviLayerBg = null;  // bijela pozadina za kontrast
 let _puteviLayerFg = null;  // narandžasta linija
 let _puteviVisible = localStorage.getItem('tvlake_putevi_visible') !== '0'; // default: vidljivi
+let _puteviGeoJSON = null;  // raw GeoJSON za routing
+let _puteviGraph   = null;  // {nodes, adj} — grade se lazy
 
 function _loadPutevi() {
   fetch('./PUTEVI/putevi.geojson')
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(data => {
+      _puteviGeoJSON = data;
       const sharedOpts = { renderer: _puteviRenderer, pane: 'putevi' };
       _puteviLayerBg = L.geoJSON(data, {
         ...sharedOpts,
@@ -8875,10 +9908,23 @@ function _rndOznakePanel() {
         const visIcon = allVis ? '👁' : anyVis ? '◑' : '🙈';
         const gjEsc = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         const idxArr = JSON.stringify(items.map(x => x.i));
+        const idxArrEsc = idxArr.replace(/'/g,"\\'");
+        const allCached  = items.every(x => _kmlcKeys.has('file:' + x.k._key));
+        const someCached = items.some(x => _kmlcKeys.has('file:' + x.k._key));
+        const offlineBadge = allCached
+          ? `<span class="oz-offline-badge">✓ offline</span>`
+          : someCached
+          ? `<span class="oz-offline-badge partial">↻ djel.</span>`
+          : '';
+        const dlBtn = allCached
+          ? `<button class="oz-dl-btn cached" onclick="event.stopPropagation();_kmlcUiDelete('${idxArrEsc}')" title="Obriši offline kopiju">🗑</button>`
+          : `<button class="oz-dl-btn" onclick="event.stopPropagation();_kmlcUiDownload('${idxArrEsc}')" title="Sačuvaj grupu za offline">⬇</button>`;
         html += `<div class="oz-gj-hdr" onclick="event.stopPropagation();_ozBucketToggleGroup('${gjEsc}')">
           <span class="oz-gj-arrow${collapsed?'':' open'}">›</span>
           <span class="oz-gj-name">${_escHtml(gj)}</span>
           <span class="oz-gj-cnt">${items.length}</span>
+          ${offlineBadge}
+          ${dlBtn}
           <button class="oz-vis-btn${allVis?' on':anyVis?' half':''}"
             onclick="event.stopPropagation();_ozBucketToggleGroupVis(${idxArr})"
             title="${allVis?'Sakrij grupu':'Prikaži grupu'}">${visIcon}</button>
@@ -9260,7 +10306,7 @@ function _ozTogTrag(id) {
 
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
 function _lsTab(name) {
-  const panes = ['karte','granice'];
+  const panes = ['karte','inst','granice'];
   panes.forEach(p => {
     const pane = document.getElementById('ls-pane-' + p);
     const btn  = document.getElementById('ls-tab-' + p);
@@ -9271,6 +10317,94 @@ function _lsTab(name) {
     btn.style.borderColor = active ? '#334155' : '#1e293b';
     btn.style.color       = active ? '#e2e8f0' : '#64748b';
   });
+  if (name === 'inst') _instUpdateStats();
+}
+
+function _instToggle(id, on) {
+  if (on) _OVL[id].addTo(map);
+  else map.removeLayer(_OVL[id]);
+  _ovlState[id] = on;
+  localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState));
+  _demLegendUpdate();
+}
+
+function _demLegendUpdate() {
+  const el = document.getElementById('dem-legend');
+  if (!el) return;
+  const showEkspo = !!_ovlState.ekspo;
+  const showNv    = !!_ovlState.nv;
+  if (!showEkspo && !showNv) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  let html = '';
+  if (showEkspo) {
+    html += `<div class="leg-title">🧭 Ekspozicija padine</div>
+    <div style="display:flex;flex-direction:column;gap:3px;">
+      <div class="leg-dir"><div class="leg-dot" style="background:#3b7fd4;"></div>Sjeverna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#4caf50;"></div>Istočna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#e8640a;"></div>Južna</div>
+      <div class="leg-dir"><div class="leg-dot" style="background:#9c4dcc;"></div>Zapadna</div>
+    </div>`;
+  }
+  if (showNv) {
+    if (showEkspo) html += '<div class="leg-sep"></div>';
+    html += `<div class="leg-title">📏 Nadmorska visina</div>`;
+    const bands = [
+      ['#e2e8f0','> 1400 m'],
+      ['#06b6d4',' 1200 m'],
+      ['#3b82f6',' 1000 m'],
+      ['#a855f7','  800 m'],
+      ['#ef4444','  600 m'],
+      ['#f97316','  400 m'],
+      ['#facc15','  200 m'],
+      ['#22c55e','    0 m'],
+    ];
+    html += bands.map(([c,l])=>`<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:${c};"></div><span class="leg-nv-lbl">${l}</span></div>`).join('');
+  }
+  el.innerHTML = html;
+}
+
+async function _instClear(id) {
+  if (!('caches' in window)) return;
+  const cacheMap = {
+    elev:  _ELEV_CACHE,
+    slope: _TERR_CACHE,
+    nv:    _TERR_CACHE,
+    ekspo: _TERR_CACHE
+  };
+  const cn = cacheMap[id];
+  if (!cn) return;
+  await caches.delete(cn);
+  if (cn === _TERR_CACHE) {
+    if (_ovlState.slope) _OVL.slope.redraw();
+    if (_ovlState.nv)    _OVL.nv.redraw();
+    if (_ovlState.ekspo) _OVL.ekspo.redraw();
+  } else if (_OVL[id] && _ovlState[id]) {
+    _OVL[id].redraw();
+  }
+  await _instUpdateStats();
+  showToast('Keš obrisan');
+}
+
+async function _instUpdateStats() {
+  if (!('caches' in window)) return;
+  const pairs = [
+    ['elev',  _ELEV_CACHE],
+    ['slope', _TERR_CACHE],
+    ['nv',    _TERR_CACHE],
+    ['ekspo', _TERR_CACHE]
+  ];
+  const counts = {};
+  for (const [, cn] of pairs) {
+    if (cn in counts) continue;
+    try { const c = await caches.open(cn); counts[cn] = (await c.keys()).length; }
+    catch { counts[cn] = -1; }
+  }
+  for (const [id, cn] of pairs) {
+    const el = document.getElementById('inst-' + id + '-stat');
+    if (!el) continue;
+    const n = counts[cn];
+    el.textContent = n < 0 ? '—' : n ? n + ' pločica' : 'Prazno';
+  }
 }
 
 // ── Granice Odjela — now lives in layer sheet ──────────────────────────────────
@@ -10074,7 +11208,8 @@ function updProjStats() {
     if (stdEl) stdEl.innerHTML = '';
     return;
   }
-  const myTotal = calcL(vlake.flatMap(v=>v.pts));
+  const projVlake = vlake.filter(v => v.projektId === _aktivniProjektId);
+  const myTotal = calcL(projVlake.flatMap(v=>v.pts));
   const pov     = parseFloat(document.getElementById('p-povrsina').value)||0;
   const odjel   = getOdjel();
   const sumarija= document.getElementById('p-sumarija').value.trim();
@@ -10090,7 +11225,7 @@ function updProjStats() {
       allP[e.projektant].days.add(day.date);
     });
   });
-  // override own meters with live session value
+  // override own meters with live session value (project-filtered)
   const myIme = getIme();
   if (!allP[myIme]) allP[myIme] = {meters:0, days:new Set()};
   allP[myIme].meters = Math.round(myTotal);
@@ -10127,7 +11262,7 @@ function updProjStats() {
   // === STD PRIVLAČENJA ===
   const stdEl = document.getElementById('std-card');
   if (stdEl) {
-    const std = calcSTD(vlake);
+    const std = calcSTD(projVlake);
     if (std.count === 0) {
       stdEl.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema vlaka za izračun STD</div>';
     } else {
@@ -10175,12 +11310,13 @@ function updProjStats() {
 // ── Terenske statistike ───────────────────────────────────────────────────────
 
 function _calcTerenStats() {
-  const allPts = vlake.flatMap(v => v.pts);
+  const pVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const allPts = pVlake.flatMap(v => v.pts);
   const hasPts = allPts.length >= 2;
 
   // Broj vlaka i krakova
-  const nVlaka  = vlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
-  const nKrakovi= vlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
+  const nVlaka  = pVlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
+  const nKrakovi= pVlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
   const totalLen = calcL(allPts);
 
   // Visine
@@ -10190,7 +11326,7 @@ function _calcTerenStats() {
 
   // Ukupni uspon/pad (po svakoj vlaci zasebno, ne cross-vlaka)
   let totalUp = 0, totalDown = 0;
-  vlake.forEach(v => {
+  pVlake.forEach(v => {
     const e = calcElev(v.pts);
     totalUp   += e.up;
     totalDown += e.down;
@@ -10198,7 +11334,7 @@ function _calcTerenStats() {
 
   // Prosječan nagib — ponderirani prosjek nagiba po dužini segmenta
   let sumSlopeDist = 0, sumDist = 0;
-  vlake.forEach(v => {
+  pVlake.forEach(v => {
     for (let i = 1; i < v.pts.length; i++) {
       const a = v.pts[i-1], b = v.pts[i];
       if (!a.al || !b.al || a.al <= 0 || b.al <= 0) continue;
@@ -10212,7 +11348,7 @@ function _calcTerenStats() {
   const avgSlope = sumDist > 1 ? (sumSlopeDist / sumDist).toFixed(1) : null;
 
   // Prosječna dužina vlake (samo glavne)
-  const mainVlake = vlake.filter(v => v.kr === 0 && v.pts.length >= 2);
+  const mainVlake = pVlake.filter(v => v.kr === 0 && v.pts.length >= 2);
   const avgVlakaLen = mainVlake.length
     ? Math.round(mainVlake.reduce((s, v) => s + calcL(v.pts), 0) / mainVlake.length)
     : null;
@@ -10233,7 +11369,7 @@ function _calcTerenStats() {
     });
   });
   if (!allP[myIme]) allP[myIme] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
-  allP[myIme].meters = Math.round(calcL(vlake.flatMap(v => v.pts)));
+  allP[myIme].meters = Math.round(calcL(pVlake.flatMap(v => v.pts)));
 
   return { nVlaka, nKrakovi, totalLen, maxAlt, minAlt, totalUp, totalDown, avgSlope,
            avgVlakaLen, pov, gustoca, allP, myIme, hasPts };
@@ -10313,7 +11449,8 @@ function exportTerenStats() {
   const s = _calcTerenStats();
   const odjel = getOdjel() || 'odjel';
   const sumarija = document.getElementById('p-sumarija').value.trim() || '';
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   const date = todayStr();
 
   let txt = `PROJEKTOVANJE TRAKTORSKIH VLAKA — STATISTIKE\n`;
@@ -10365,7 +11502,8 @@ function exportTerenStats() {
 }
 
 function exportSTDcsv() {
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   if (!std.count) { showToast('Nema vlaka za eksport'); return; }
   const odjel = getOdjel() || 'odjel';
   let csv = 'Vlaka/krak;Tip;Strana;Duzina vlastita (m);Duzina do puta (m);Efektivna distanca (m);Formula\n';
@@ -10385,7 +11523,8 @@ function exportSTDcsv() {
 }
 
 function exportSTDtxt() {
-  const std = calcSTD(vlake);
+  const projVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const std = calcSTD(projVlake);
   if (!std.count) { showToast('Nema vlaka za eksport'); return; }
   const odjel = getOdjel() || 'Odjel';
   const pad = (s, n) => String(s).padEnd(n);
@@ -10465,24 +11604,22 @@ function rndKolegeVlakeList() {
   sec.style.display = 'block';
   cnt.textContent   = entries.length;
 
-  // Grupiši po kolegi — prikaz s imenom i zumom na karti
   let lastIme = null;
   const html = entries.map(([key, kv]) => {
-    const nm = key.split('::').slice(1).join('::');
-    const d  = calcL(kv.pts);
-    const isKrak = nm.includes('.');
-    const krakArrow = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
-    // Separator kad se promijeni kolega
-    const imeSep = (!isKrak && kv.ime !== lastIme)
+    const nm      = key.split('::').slice(1).join('::');
+    const d       = calcL(kv.pts);
+    const isKrak  = nm.includes('.');
+    const arrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
+    const imeSep  = (!isKrak && kv.ime !== lastIme)
       ? `<div style="font-size:10px;color:#475569;margin:4px 0 2px;padding-left:2px;">${kv.ime}</div>` : '';
     if (!isKrak) lastIme = kv.ime;
-    const escKey = key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `${imeSep}<div class="vrow${isKrak ? ' vrow-krak' : ''} vrow-kolega"
+    const escKey  = key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `${imeSep}<div class="vrow${isKrak?' vrow-krak':''} vrow-kolega"
         onclick="(function(){const kv=kolegeVlakeMap['${escKey}'];if(kv?.poly&&kv.poly.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30],animate:true});switchTab('karta');})()">
       <div class="vcard-stripe" style="background:${kv.color}"></div>
       <div class="vcard-info">
         <div class="vcard-top">
-          ${krakArrow}<span class="vcard-name">${nm}</span>
+          ${arrow}<span class="vcard-name">${nm}</span>
           <span class="vcard-km">${fmtL(d)}</span>
         </div>
       </div>
@@ -10494,9 +11631,10 @@ function rndKolegeVlakeList() {
 // === DNEVNIK ===
 function logDan() {
   const date=todayStr(), ime=getIme(), odjel=getOdjel();
-  const totalM=Math.round(calcL(vlake.flatMap(v=>v.pts)));
-  const vSnap=vlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
-  if (vlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
+  const logVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
+  const totalM=Math.round(calcL(logVlake.flatMap(v=>v.pts)));
+  const vSnap=logVlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
+  if (logVlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
   // Timing: ako je snimanje trenutno aktivno, dodaj tekući segment
   let activeMs = _dayActiveMs;
   if (recOn && !recPaused && _recSegStart > 0) activeMs += Date.now() - _recSegStart;
@@ -10618,7 +11756,8 @@ function exportProjektPDF() {
   // ── projekat info ──
   const pov       = parseFloat(proj.povrsina) || 0;
   const myIme     = getIme();
-  const myTotalM  = Math.round(calcL(vlake.flatMap(v => v.pts)));
+  const pdfVlake  = vlake.filter(v => v.projektId === _aktivniProjektId);
+  const myTotalM  = Math.round(calcL(pdfVlake.flatMap(v => v.pts)));
 
   // ── rekap po projektantu (iz loga + live) ──
   const byProj = {};
@@ -10635,12 +11774,12 @@ function exportProjektPDF() {
   const gustoca    = pov > 0 ? Math.round(totalAllM / pov) + ' m/ha' : '—';
 
   // ── vlake hijerarhija ──
-  const sortedMain = vlake.filter(v => v.kr === 0).sort((a, b) => a.br - b.br);
+  const sortedMain = pdfVlake.filter(v => v.kr === 0).sort((a, b) => a.br - b.br);
   let totalGlavnihM = 0, totalKrakovaM = 0, brGlavnih = 0, brKrakova = 0;
   const vlakeRows = sortedMain.map(v => {
     const vLen = calcVLen(v.pts);
     totalGlavnihM += vLen; brGlavnih++;
-    const djeca = vlake.filter(k => {
+    const djeca = pdfVlake.filter(k => {
       const par = k.nm.split('.').slice(0, -1).join('.');
       return par === v.nm;
     }).sort((a, b) => a.br - b.br || a.kr - b.kr);
@@ -12301,7 +13440,7 @@ async function sqlmapLoadFile(file) {
     // Remove existing layer with same name if present
     const ex = _sqlLayers.findIndex(l => l.name === name);
     if (ex !== -1) { map.removeLayer(_sqlLayers[ex].layer); _sqlLayers[ex].db.close(); _sqlLayers.splice(ex, 1); }
-    const layer = _sqlmapCreateLayer(db, fmt);
+    const layer = _sqlmapCreateLayer(db, fmt, meta);
     layer.addTo(map);
     _sqlLayers.push({ name, db, fmt, layer, visible: true, meta, saved: true });
     // Persist to IndexedDB
@@ -12321,16 +13460,39 @@ async function sqlmapRestoreAll() {
   let saved;
   try { saved = await _sqlIdbGetAll(); } catch(e) { return; }
   if (!saved.length) return;
+
+  // Which SQLite was last active? Only that one goes on the map.
+  let lastSqlId = null;
+  try {
+    const lm = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (lm?.type === 'sqlite' && lm.sqlId) lastSqlId = lm.sqlId;
+  } catch(e) {}
+
   try {
     const SQL = await _sqlmapEnsureSqlJs();
     for (const entry of saved) {
       if (_sqlLayers.find(l => l.name === entry.name)) continue;
       try {
+        const meta = entry.meta || {};
         const db = new SQL.Database(new Uint8Array(entry.buffer));
-        const layer = _sqlmapCreateLayer(db, entry.fmt);
-        layer.addTo(map);
-        _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: true, meta: entry.meta || {}, saved: true });
+        const layer = _sqlmapCreateLayer(db, entry.fmt, meta);
+        // Show only the last-selected SQLite; others remain hidden until user picks them
+        const shouldShow = lastSqlId ? entry.name === lastSqlId : false;
+        if (shouldShow) {
+          // Remove any base tile layer that _restoreLastMap may have added
+          Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+          layer.addTo(map);
+          const btn = document.getElementById('layer-switch-btn');
+          if (btn) btn.textContent = '🗄';
+        }
+        _sqlLayers.push({ name: entry.name, db, fmt: entry.fmt, layer, visible: shouldShow, meta, saved: true });
       } catch(e) { console.warn('SQLmap restore error for', entry.name, e); }
+    }
+    // If nothing was flagged as active (first load, no lastSqlId), show the first saved map
+    if (_sqlLayers.length && !_sqlLayers.some(sl => sl.visible)) {
+      if (!lastSqlId) {
+        // No SQLite was ever selected — don't auto-activate, leave the TL as-is
+      }
     }
     if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
   } catch(e) { console.warn('SQLmap restore failed:', e); }
@@ -12375,7 +13537,12 @@ function _sqlmapReadMeta(db, fmt) {
   return meta;
 }
 
-function _sqlmapCreateLayer(db, fmt) {
+function _sqlmapCreateLayer(db, fmt, meta) {
+  // Use zoom limits from MBTiles metadata so Leaflet upscales correctly instead
+  // of requesting tiles at levels that don't exist in the database.
+  const maxNative = (meta?.maxzoom != null) ? Math.max(1, parseInt(meta.maxzoom, 10)) : 18;
+  const minNative = (meta?.minzoom != null) ? Math.max(0, parseInt(meta.minzoom, 10)) : 0;
+
   const SqlTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const img = document.createElement('img');
@@ -12409,7 +13576,7 @@ function _sqlmapCreateLayer(db, fmt) {
       return img;
     }
   });
-  return new SqlTileLayer({ tileSize: 256, opacity: 1, maxNativeZoom: 18, maxZoom: 22 });
+  return new SqlTileLayer({ tileSize: 256, opacity: 1, minNativeZoom: minNative, maxNativeZoom: maxNative, maxZoom: 22 });
 }
 
 function _sqlmapRenderLayers() {
@@ -12908,11 +14075,149 @@ function _bucketFileUrl(bucketName, filePath) {
   return `${SUPA_URL}/storage/v1/object/public/${encodeURIComponent(bucketName)}/${parts}`;
 }
 
+// ── KML/SHP offline cache (IndexedDB) ─────────────────────────────────────────
+const _KMLC_DB    = 'tvlake-kml-cache-v1';
+const _KMLC_STORE = 'files';
+let   _kmlcDB   = null;
+let   _kmlcKeys = new Set(); // all keys currently stored in IDB
+
+async function _kmlcOpen() {
+  if (_kmlcDB) return _kmlcDB;
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(_KMLC_DB, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(_KMLC_STORE);
+    req.onsuccess = e => { _kmlcDB = e.target.result; resolve(_kmlcDB); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function _kmlcSave(key, data) {
+  try {
+    const db = await _kmlcOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readwrite');
+      tx.objectStore(_KMLC_STORE).put(data, key);
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+    _kmlcKeys.add(key);
+  } catch(e) { console.warn('_kmlcSave err', key, e); }
+}
+
+async function _kmlcGet(key) {
+  try {
+    const db = await _kmlcOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readonly');
+      const req = tx.objectStore(_KMLC_STORE).get(key);
+      req.onsuccess = e => resolve(e.target.result ?? null);
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch { return null; }
+}
+
+async function _kmlcDelete(key) {
+  try {
+    const db = await _kmlcOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readwrite');
+      tx.objectStore(_KMLC_STORE).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror    = e => reject(e.target.error);
+    });
+    _kmlcKeys.delete(key);
+  } catch(e) { console.warn('_kmlcDelete err', key, e); }
+}
+
+async function _kmlcInit() {
+  try {
+    const db = await _kmlcOpen();
+    const keys = await new Promise((resolve, reject) => {
+      const tx = db.transaction(_KMLC_STORE, 'readonly');
+      const req = tx.objectStore(_KMLC_STORE).getAllKeys();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+    keys.forEach(k => _kmlcKeys.add(k));
+  } catch(e) { console.warn('_kmlcInit err', e); }
+}
+
+// Download all files in a group to IDB
+async function _kmlcDownloadGroup(items) {
+  let saved = 0;
+  for (const {k} of items) {
+    const slash = k._key.indexOf('/');
+    const bucketName = k._key.slice(0, slash);
+    const filePath   = k._key.slice(slash + 1);
+    const isBin = /\.(shp|dbf)$/i.test(filePath);
+    const type  = isBin ? 'arraybuffer' : 'text';
+    try {
+      const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { apikey: SUPA_KEY } });
+      if (!r.ok) continue;
+      const data = isBin ? await r.arrayBuffer() : await r.text();
+      await _kmlcSave('file:' + k._key, data);
+      saved++;
+      // For SHP also cache companion .dbf and .prj
+      if (/\.shp$/i.test(filePath)) {
+        const base = filePath.replace(/\.shp$/i, '');
+        for (const ext of ['.dbf', '.prj']) {
+          const cKey = 'file:' + bucketName + '/' + base + ext;
+          if (_kmlcKeys.has(cKey)) continue;
+          try {
+            const r2 = await fetch(_bucketFileUrl(bucketName, base + ext), { headers: { apikey: SUPA_KEY } });
+            if (!r2.ok) continue;
+            const d2 = ext === '.prj' ? await r2.text() : await r2.arrayBuffer();
+            await _kmlcSave(cKey, d2);
+          } catch {}
+        }
+      }
+    } catch(e) { console.warn('_kmlcDownloadGroup fetch err', k._key, e); }
+  }
+  return saved;
+}
+
+// Delete cached files for a group from IDB
+async function _kmlcDeleteGroup(items) {
+  for (const {k} of items) {
+    await _kmlcDelete('file:' + k._key);
+    if (/\.shp$/i.test(k._key)) {
+      const base = k._key.replace(/\.shp$/i, '');
+      for (const ext of ['.dbf', '.prj']) await _kmlcDelete('file:' + base + ext);
+    }
+  }
+}
+
+// UI handlers called from _rndOznakePanel
+async function _kmlcUiDownload(idxArrJson) {
+  const idxArr = JSON.parse(idxArrJson);
+  const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
+  showToast('⬇ Preuzimam fajlove za offline...');
+  const saved = await _kmlcDownloadGroup(items);
+  showToast(`✅ ${saved} fajl${saved === 1 ? '' : 'a'} sačuvano offline`);
+  _rndOznakePanel();
+}
+
+async function _kmlcUiDelete(idxArrJson) {
+  const idxArr = JSON.parse(idxArrJson);
+  const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
+  await _kmlcDeleteGroup(items);
+  showToast('🗑 Offline kopija obrisana');
+  _rndOznakePanel();
+}
+
 // ── Fetch helper ──────────────────────────────────────────────────────────────
 async function _fetchBucketFile(bucketName, filePath, type = 'text') {
-  const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { 'apikey': SUPA_KEY } });
-  if (!r.ok) return null;
-  return type === 'arraybuffer' ? r.arrayBuffer() : r.text();
+  const cacheKey = 'file:' + bucketName + '/' + filePath;
+  try {
+    const r = await fetch(_bucketFileUrl(bucketName, filePath), { headers: { 'apikey': SUPA_KEY } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = type === 'arraybuffer' ? await r.arrayBuffer() : await r.text();
+    _kmlcSave(cacheKey, data); // fire-and-forget
+    return data;
+  } catch {
+    if (_kmlcKeys.has(cacheKey)) return _kmlcGet(cacheKey);
+    return null;
+  }
 }
 
 // ── Učitaj jedan KML fajl ────────────────────────────────────────────────────
@@ -13041,8 +14346,22 @@ function _reprojectGeometry(geom, fromCrs) {
 // ── Glavna funkcija: učitaj cijeli bucket (root + podfolderi, KML + SHP) ─────
 async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
   try {
-    const allFiles = await _listBucketAll(bucketName);
-    if (!allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
+    let allFiles = null;
+    const listKey = 'listing:' + bucketName;
+    try {
+      allFiles = await _listBucketAll(bucketName);
+      if (allFiles.length) _kmlcSave(listKey, JSON.stringify(allFiles)); // cache listing for offline
+    } catch { allFiles = null; }
+
+    // If network fetch failed or returned empty, try cached listing
+    if (!allFiles || !allFiles.length) {
+      if (_kmlcKeys.has(listKey)) {
+        const raw = await _kmlcGet(listKey);
+        if (raw) { try { allFiles = JSON.parse(raw); } catch { allFiles = []; } }
+      }
+    }
+
+    if (!allFiles || !allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
 
     const supported = allFiles.filter(f => /\.(kml|shp)$/i.test(f.name));
     if (!supported.length) { console.warn(`Bucket "${bucketName}": nema KML/SHP fajlova`); return; }
@@ -13317,14 +14636,22 @@ async function dozStartGPS() {
       _dozGpsTrackLayer = L.layerGroup().addTo(map);
       L.polyline(_dozGpsPts, { color:'#fbbf24', weight:3, opacity:0.9 }).addTo(_dozGpsTrackLayer);
     }
+    const _dozPt = {
+      project_id: _dozSelId, user_id: sbUser.id,
+      latitude: lat, longitude: lng,
+      altitude: alt || null, accuracy: acc, speed: speed || null,
+      recorded_at: new Date().toISOString()
+    };
     try {
-      await sb.from('doz_track_points').insert({
-        project_id: _dozSelId, user_id: sbUser.id,
-        latitude: lat, longitude: lng,
-        altitude: alt || null, accuracy: acc, speed: speed || null,
-        recorded_at: new Date().toISOString()
-      });
-    } catch(e) {}
+      await sb.from('doz_track_points').insert(_dozPt);
+    } catch(e) {
+      // Buffer offline — flush in _processOfflineQueue when back online
+      try {
+        const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+        buf.push(_dozPt);
+        localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(buf));
+      } catch {}
+    }
   }, err => { console.warn('Doznaka GPS', err); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
@@ -14501,10 +15828,11 @@ function toggleHelpSec(hdr) {
     <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;">✕</button>
   </div>
   <div id="vp-info"></div>
-  <div class="vp-btns">
+  <div class="vp-btns" id="vlaka-popup-btns">
     <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;">🔧 Edituj</button>
-    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.6;">🎯</button>
-    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.6;">✕ Briši</button>
+    <button onclick="vpIzravnaj()" style="background:#0d5426;color:#86efac;" title="Ukloni suvišne GPS tačke (RDP 4m)">〰 Izravnaj</button>
+    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.5;">🎯</button>
+    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.5;">✕</button>
   </div>
 </div>
     <!-- IZMJERI PANEL -->
@@ -14844,7 +16172,7 @@ function toggleHelpSec(hdr) {
     <span id="ab-pauza-txt">Pauza</span>
   </button>
   <!-- Uvijek vidljivo -->
-  <button id="ab-tacka" onclick="addTacka()" title="Dodaj oznaku na trenutnoj GPS poziciji">
+  <button id="ab-tacka" onclick="_tackaOpenModal()" title="Dodaj oznaku">
     <span class="ab-ico">📍</span>
     <span>Tačka</span>
   </button>
@@ -14853,6 +16181,36 @@ function toggleHelpSec(hdr) {
     <span>Moja lokacija</span>
   </button>
 </div>
+
+<!-- Tačka navigacioni panel -->
+<div id="tacka-nav-panel">
+  <span id="tnp-arrow">🧭</span>
+  <div id="tnp-info">
+    <div id="tnp-name">—</div>
+    <div id="tnp-air">📡 Uključi GPS</div>
+    <div id="tnp-road" style="display:none;"></div>
+  </div>
+  <button id="tnp-stop" onclick="stopTackaNav()">✕ Stop</button>
+</div>
+
+<!-- Tačka modal — unos naziva -->
+<div id="tacka-modal-bg" onclick="_tackaCancelModal()"></div>
+<div id="tacka-modal">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <h3 style="margin:0;">📍 Nova tačka</h3>
+    <button onclick="_tackaCancelModal()"
+      style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;">✕</button>
+  </div>
+  <input id="tacka-nm-input" type="text" placeholder="Naziv tačke (npr. Sječa, Deponija...)" autocomplete="off" maxlength="40"
+    onkeydown="if(event.key==='Enter'){document.getElementById('tacka-btn-gps').click();}">
+  <div class="tacka-modal-btns">
+    <button id="tacka-btn-gps" onclick="_tackaAddAtGPS()">📡 GPS lokacija</button>
+    <button id="tacka-btn-map" onclick="_tackaAddOnMap()">🗺 Klikni na karti</button>
+    <button id="tacka-btn-cancel" onclick="_tackaCancelModal()">✕</button>
+  </div>
+</div>
+<!-- Tačka place-on-map banner -->
+<div id="tacka-place-banner">📍 Tapni na karti za postavljanje tačke</div>
 
 <!-- Što dalje? sheet — prikazuje se nakon završetka snimanja vlake -->
 <div id="sto-dalje-bg" onclick="_stodaljOdustani()"
@@ -14879,6 +16237,10 @@ function toggleHelpSec(hdr) {
     <button id="ls-tab-karte" onclick="_lsTab('karte')"
       style="flex:1;padding:7px 4px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;">
       🗺 Karte
+    </button>
+    <button id="ls-tab-inst" onclick="_lsTab('inst')"
+      style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
+      🏔 Instalirane
     </button>
     <button id="ls-tab-granice" onclick="_lsTab('granice')"
       style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
@@ -14947,6 +16309,79 @@ function toggleHelpSec(hdr) {
             oninput="_geojsonSetOpacity(this.value)">
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Tab: Instalirane karte -->
+  <div id="ls-pane-inst" style="display:none;">
+    <h3>🏔 Instalirane karte</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.6;">Slojevi se keširaju automatski dok pregledaš kartu. Brisanjem keša oslobađaš prostor.</p>
+    <!-- Hipsometrija -->
+    <div class="inst-layer-row" id="inst-elev-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"
+          style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Hipsometrija</div>
+          <div style="font-size:11px;color:#64748b;">Sjenčanje reljefa — hillshade sloj</div>
+          <div id="inst-elev-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('elev')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Nagibi terena -->
+    <div class="inst-layer-row" id="inst-slope-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"
+          style="width:18px;height:18px;accent-color:#fb923c;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nagib terena</div>
+          <div style="font-size:11px;color:#64748b;">Nagibi ≥30% — nijanse crvene</div>
+          <div id="inst-slope-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('slope')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Nadmorska visina — prikaz u bojama (DEM canvas) -->
+    <div class="inst-layer-row" id="inst-nv-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"
+          style="width:18px;height:18px;accent-color:#4ade80;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">N.V. — prikaz u bojama</div>
+          <div style="font-size:11px;color:#64748b;">Hipsometrija na karti (200m pojasevi)</div>
+          <div id="inst-nv-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('nv')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <!-- Strane svijeta (Ekspozicija) -->
+    <div class="inst-layer-row" id="inst-ekspo-row">
+      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
+        <input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"
+          style="width:18px;height:18px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0;">
+        <div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Strane svijeta</div>
+          <div style="font-size:11px;color:#64748b;">Ekspozicija padine — S/J/I/Z</div>
+          <div id="inst-ekspo-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
+        </div>
+      </label>
+      <button onclick="_instClear('ekspo')" title="Obriši keš"
+        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
+        🗑
+      </button>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:#334155;line-height:1.5;">
+      Nagibi, N.V. i Strane dijele isti keš (terrarium DEM pločice, max zum 14→uvećanje).
     </div>
   </div>
 

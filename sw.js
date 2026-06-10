@@ -2,10 +2,14 @@
 // Service Worker — ŠPD Unsko-sanske šume Vlake
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.5.94';
+const APP_VERSION = '1.6.22';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
-const TILE_CACHE  = 'tvlake-tiles-v1';  // dijeli se između verzija
-const LIB_CACHE   = 'tvlake-lib-v1';    // CDN biblioteke (Leaflet, proj4...)
+const TILE_CACHE  = 'tvlake-tiles-v1';
+const LIB_CACHE   = 'tvlake-lib-v1';
+const ELEV_CACHE  = 'tvlake-elev-v1';
+const SLOPE_CACHE = 'tvlake-slope-v1';
+const TERR_CACHE  = 'tvlake-terr-v1';
+const NV_CACHE    = 'tvlake-nv-v1';     // Open-Meteo elevation (statički, može se keširati)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -40,35 +44,59 @@ self.addEventListener('activate', event => {
 });
 
 // ─── FETCH ───────────────────────────────────────────────────────────
+
+// Helper — cache-then-fetch pattern for tile caches
+function _tileRespond(event, cacheName) {
+  event.respondWith(
+    caches.open(cacheName).then(async cache => {
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+      try {
+        const resp = await fetch(event.request);
+        if (resp.ok) cache.put(event.request, resp.clone());
+        return resp;
+      } catch {
+        return cached || new Response('', { status: 503 });
+      }
+    })
+  );
+}
+
 self.addEventListener('fetch', event => {
   const url = event.request.url;
+
+  // Terrarium DEM tiles (elevation-tiles-prod S3 bucket)
+  if (url.includes('elevation-tiles-prod')) {
+    _tileRespond(event, TERR_CACHE);
+    return;
+  }
+
+  // Specific ArcGIS elevation caches — must come BEFORE the generic arcgisonline.com handler
+  if (url.includes('arcgisonline.com') && url.includes('/World_Hillshade/')) {
+    _tileRespond(event, ELEV_CACHE);
+    return;
+  }
+  if (url.includes('arcgisonline.com') && url.includes('/World_Shaded_Relief/')) {
+    _tileRespond(event, SLOPE_CACHE);
+    return;
+  }
 
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
     url.includes('arcgisonline.com')
   ) {
-    event.respondWith(
-      caches.open(TILE_CACHE).then(async cache => {
-        const cached = await cache.match(event.request);
-        if (cached) return cached;
-        try {
-          const resp = await fetch(event.request);
-          if (resp.ok) cache.put(event.request, resp.clone());
-          return resp;
-        } catch {
-          return cached || new Response('', { status: 503 });
-        }
-      })
-    );
+    _tileRespond(event, TILE_CACHE);
     return;
   }
 
-  // API pozivi — nikad ne keširati (zahtijevaju internet)
-  if (
-    url.includes('supabase.co') ||
-    url.includes('api.open-meteo.com')
-  ) {
+  // Elevation API — statički podaci terena, keširamo za offline
+  if (url.includes('api.open-meteo.com') && url.includes('/v1/elevation')) {
+    _tileRespond(event, NV_CACHE);
+    return;
+  }
+  // Ostali API pozivi — nikad ne keširati
+  if (url.includes('supabase.co') || url.includes('api.open-meteo.com')) {
     return;
   }
 
