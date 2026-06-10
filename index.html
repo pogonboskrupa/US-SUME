@@ -13359,7 +13359,8 @@ function _msrRegRender() {
     </div>`;
   });
   // Svaki put kad se renderuje lista, osiguraj da su svi nacrtani na mapi
-  if (window.map) _msrDrawAllSaved();
+  // ALI ne dok editujemo jedno mjerenje — da ne bude dupla linija
+  if (window.map && !_mqmId) _msrDrawAllSaved();
 }
 
 initAuth();
