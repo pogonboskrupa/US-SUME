@@ -745,6 +745,56 @@ input:focus { outline:none; border-color:#3b82f6; }
 .trb.pause { background:#1c0e00; color:#fb923c; }
 .trb.stop  { background:#2d0a0a; color:#f87171; flex:0 0 auto; padding:10px 18px; }
 
+/* ═══ TRAG QUICK META (post-recording modal) ═══ */
+#trag-quick-meta {
+  display:none; position:absolute; top:54px; left:8px; right:8px; z-index:502;
+  background:rgba(10,18,32,0.97); border:2px solid #f97316; border-radius:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(249,115,22,0.15);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  font-family:'DM Sans',Arial,sans-serif; overflow:hidden;
+  animation:tqmSlideIn 0.25s ease-out;
+}
+@keyframes tqmSlideIn { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+#trag-quick-meta.show { display:block; }
+.tqm-header {
+  display:flex; align-items:center; gap:8px;
+  padding:12px 14px 10px; border-bottom:1px solid rgba(249,115,22,0.15);
+}
+.tqm-header-icon {
+  width:28px; height:28px; border-radius:8px; background:rgba(249,115,22,0.15);
+  display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+}
+.tqm-header-text { font-size:14px; font-weight:700; color:#fb923c; }
+.tqm-header-sub  { font-size:11px; color:#64748b; font-weight:400; }
+.tqm-body { padding:12px 14px; }
+.tqm-field { margin-bottom:10px; }
+.tqm-label {
+  font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.8px;
+  margin-bottom:4px; font-weight:600;
+}
+.tqm-input, .tqm-select {
+  width:100%; background:#0f172a; border:1px solid #1e3a5f; color:#e2e8f0;
+  border-radius:8px; padding:9px 11px; font-size:13px; box-sizing:border-box;
+  transition:border-color 0.15s, box-shadow 0.15s; outline:none;
+}
+.tqm-input:focus, .tqm-select:focus { border-color:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.2); }
+.tqm-input::placeholder { color:#475569; }
+.tqm-actions {
+  display:flex; gap:8px; padding:0 14px 14px;
+}
+.tqm-btn-save {
+  flex:1; background:linear-gradient(135deg,#ea580c,#f97316); color:#fff;
+  border:none; border-radius:10px; padding:11px; font-size:14px; font-weight:700;
+  cursor:pointer; transition:filter 0.15s, transform 0.1s;
+}
+.tqm-btn-save:active { filter:brightness(1.15); transform:scale(0.98); }
+.tqm-btn-skip {
+  flex:0 0 auto; background:transparent; color:#64748b; border:1px solid #334155;
+  border-radius:10px; padding:11px 16px; font-size:13px; cursor:pointer;
+  transition:border-color 0.15s, color 0.15s;
+}
+.tqm-btn-skip:active { border-color:#64748b; color:#94a3b8; }
+
 /* ═══ DRAW BANNER (zelena) ═══ */
 #draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
 #draw-row1 { display:flex; align-items:center; gap:8px; padding:9px 13px 7px; border-bottom:1px solid rgba(74,222,128,0.15); }
@@ -2845,6 +2895,34 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="trag-row2">
           <button class="trb pause" id="trag-btn-pause" onclick="togTragPause()" title="Pauziraj / Nastavi">⏸ Pauziraj</button>
           <button class="trb stop" onclick="fabSnimTrag()" title="Završi snimanje traga">⏹ Završi</button>
+        </div>
+      </div>
+
+      <!-- ═══ TRAG QUICK META (post-recording) ═══ -->
+      <div id="trag-quick-meta">
+        <div class="tqm-header">
+          <div class="tqm-header-icon">&#10003;</div>
+          <div>
+            <div class="tqm-header-text">Trag sačuvan</div>
+            <div class="tqm-header-sub">Dodaj opis (opciono)</div>
+          </div>
+        </div>
+        <div class="tqm-body">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div class="tqm-field" style="flex:1;min-width:130px;">
+              <div class="tqm-label">Gospodarska jedinica</div>
+              <select id="tqm-gj-sel" class="tqm-select" onchange="_gjSelChange('tqm')"></select>
+              <input id="tqm-gj-cust" class="tqm-input" style="display:none;margin-top:5px;" placeholder="Unesi naziv GJ">
+            </div>
+            <div class="tqm-field" style="flex:1;min-width:100px;">
+              <div class="tqm-label">Odjel</div>
+              <input id="tqm-odjel" class="tqm-input" placeholder="npr. 14a">
+            </div>
+          </div>
+        </div>
+        <div class="tqm-actions">
+          <button class="tqm-btn-save" onclick="_tqmSave()">Spremi</button>
+          <button class="tqm-btn-skip" onclick="_tqmClose()">Preskoči</button>
         </div>
       </div>
 
@@ -6078,7 +6156,7 @@ _mapFavLoad();
 _loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
-['ovl','rec-banner','draw-banner','trag-rec-banner'].forEach(id => {
+['ovl','rec-banner','draw-banner','trag-rec-banner','trag-quick-meta'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     L.DomEvent.disableClickPropagation(el);
@@ -7983,7 +8061,7 @@ function _tqmOpen(id) {
   }
   const odj = document.getElementById('tqm-odjel');
   if (odj) odj.value = aktP?.odjel || '';
-  document.getElementById('trag-quick-meta').style.display = '';
+  document.getElementById('trag-quick-meta').classList.add('show');
 }
 function _tqmSave() {
   const t = _tqmId && _tragRegistry.find(x => x.id === _tqmId);
@@ -7995,7 +8073,7 @@ function _tqmSave() {
   _tqmClose();
 }
 function _tqmClose() {
-  document.getElementById('trag-quick-meta').style.display = 'none';
+  document.getElementById('trag-quick-meta').classList.remove('show');
   _tqmId = null;
 }
 
@@ -16981,30 +17059,6 @@ function toggleHelpSec(hdr) {
 </div>
 
 <!-- === Quick meta prompt — po završetku snimanja traga === -->
-<div id="trag-quick-meta" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:8500;
-  background:rgba(15,23,42,0.97);border-top:2px solid #f97316;border-radius:14px 14px 0 0;
-  padding:12px 14px;padding-bottom:max(env(safe-area-inset-bottom,0px),12px);
-  box-shadow:0 -4px 24px rgba(0,0,0,0.6);">
-  <div style="font-size:13px;font-weight:600;color:#fb923c;margin-bottom:10px;">✅ Trag sačuvan — dodaj opis (opciono)</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-    <div style="flex:1;min-width:130px;">
-      <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">GJ</div>
-      <select id="tqm-gj-sel" onchange="_gjSelChange('tqm')"
-        style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;"></select>
-      <input id="tqm-gj-cust" style="display:none;width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;" placeholder="Unesi naziv GJ">
-    </div>
-    <div style="flex:1;min-width:100px;">
-      <div style="font-size:10px;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Odjel</div>
-      <input id="tqm-odjel" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;" placeholder="npr. 14a">
-    </div>
-  </div>
-  <div style="display:flex;gap:8px;">
-    <button onclick="_tqmSave()"
-      style="flex:1;background:#ea580c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer;">✓ Spremi</button>
-    <button onclick="_tqmClose()"
-      style="flex:0 0 auto;background:#1e293b;color:#64748b;border:1px solid #334155;border-radius:8px;padding:10px 18px;font-size:13px;cursor:pointer;">Preskoči</button>
-  </div>
-</div>
 
 <!-- === Delete confirmation modal === -->
 <div id="del-modal-bg" onclick="if(event.target===this)_delCancel()">
