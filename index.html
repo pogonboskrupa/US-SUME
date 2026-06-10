@@ -2729,6 +2729,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
         <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
+        <button class="btn" id="pd-draw-vlaka-btn" onclick="startManualVlakaDraw()" style="width:100%;margin-bottom:6px;background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff;font-size:13px;padding:9px;border-radius:8px;font-weight:600;letter-spacing:0.3px;">✏ Nacrtaj vlaku ručno</button>
         <button class="btn" id="pd-vlake-btn" onclick="toggleProjektVlakeVisible(_pdProjektId)" style="width:100%;margin-bottom:6px;background:#0f1f2e;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;padding:7px;">🙈 Sakrij vlake</button>
         <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;">📥 Izvezi projekat kao KML</button>
         <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;">🗑 Obriši projekat</button>
@@ -3962,6 +3963,10 @@ function showProjektDetalji(id) {
   btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
+  // Nacrtaj vlaku dugme — samo za aktivni projekat
+  const drawBtn = document.getElementById('pd-draw-vlaka-btn');
+  if (drawBtn) drawBtn.style.display = isAkt ? '' : 'none';
+
   // Sakrij/Prikaži vlake dugme
   _updPdVlakeBtn(id);
 
@@ -4106,6 +4111,43 @@ async function aktivirajProjekt() {
       }, 400);
     }
   }
+}
+
+async function startManualVlakaDraw() {
+  if (!_aktivniProjektId) {
+    showToast('Prvo aktiviraj projekat');
+    return;
+  }
+  const usedBr = new Set(vlake.filter(v => v.projektId === _aktivniProjektId).map(v => v.br));
+  let nextBr = 1;
+  while (usedBr.has(nextBr)) nextBr++;
+  const defaultNm = `T${nextBr}`;
+  const nm = await _dlgPrompt('Naziv vlake:', defaultNm, { title: 'Nova ručna vlaka' });
+  if (!nm) return;
+  const exists = vlake.findIndex(v => v.nm === nm && v.projektId === _aktivniProjektId);
+  if (exists !== -1) {
+    showToast('Vlaka "' + nm + '" već postoji u projektu');
+    return;
+  }
+  const brMatch = nm.match(/^T(\d+)(?:\.(\d+))?$/);
+  const br = brMatch ? parseInt(brMatch[1]) : nextBr;
+  const kr = brMatch && brMatch[2] ? parseInt(brMatch[2]) : 0;
+  const color = PAL[cIdx];
+  const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+  poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
+  attachPolyClick(poly);
+  vlake.push({ nm, br, kr, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+  const idx = vlake.length - 1;
+  sbFlushVlaka(idx);
+  cIdx = (cIdx + 1) % PAL.length;
+  selC = PAL[cIdx];
+  rndList();
+  selI(idx);
+  switchTab('karta');
+  setTimeout(() => {
+    actI = idx;
+    mtAddLine();
+  }, 300);
 }
 
 function deaktivirajProjekt() {
