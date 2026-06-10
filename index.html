@@ -13019,12 +13019,14 @@ function msrStop(skipSave) {
 function msrClear() {
   msrStop(true);
   _msrPts = [];
+  _mqmId = null;
   if (_msrLayer) {
     _msrLayer.clearLayers();
     try { map.removeLayer(_msrLayer); } catch(e) {}
     _msrLayer = null;
   }
   _msrUpdPanel();
+  _msrDrawAllSaved();
   const hint = document.getElementById('msr-hint');
   if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
 }
@@ -13095,6 +13097,7 @@ function _mqmSave() {
 function _mqmClose() {
   document.getElementById('msr-quick-meta').style.display = 'none';
   _mqmId = null;
+  _msrDrawAllSaved();
 }
 
 // =====================================================================
@@ -13266,6 +13269,9 @@ function _msrRegZoom(id) {
   const m = _msrRegistry.find(x => x.id === id);
   if (!m || !m.pts.length) return;
   map.closePopup();
+
+  // Ukloni sačuvani sloj dok je u edit modu da ne bude dupla linija
+  if (_msrSavedLayer) _msrSavedLayer.clearLayers();
 
   // Učitaj mjerenje u aktivno stanje
   if (!_msrLayer) _msrLayer = L.layerGroup().addTo(map);
