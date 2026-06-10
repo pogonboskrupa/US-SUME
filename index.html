@@ -1754,6 +1754,67 @@ select:focus { outline:none; border-color:#3b82f6; }
 #print-header { display:none; }
 #print-footer { display:none; }
 
+/* ── Custom dialog sheet ────────────────────────────────── */
+#dlg-overlay {
+  display:none; position:fixed; inset:0; z-index:9800;
+  background:rgba(0,0,0,0.55); backdrop-filter:blur(3px);
+}
+#dlg-overlay.show { display:block; }
+#dlg-sheet {
+  position:fixed; bottom:0; left:0; right:0; z-index:9801;
+  background:rgba(8,15,28,0.98); border-top:2px solid #3b82f6;
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -10px 40px rgba(0,0,0,0.75), 0 0 0 1px rgba(59,130,246,0.12);
+  backdrop-filter:blur(18px);
+  padding:22px 16px calc(env(safe-area-inset-bottom,0px) + 28px);
+  transform:translateY(100%);
+  transition:transform 0.26s cubic-bezier(0.32,0.72,0,1);
+}
+#dlg-sheet.show { transform:translateY(0); }
+#dlg-handle {
+  width:36px; height:4px; background:#334155; border-radius:2px;
+  margin:0 auto 18px; cursor:pointer;
+}
+#dlg-title {
+  font-size:16px; font-weight:800; color:#f1f5f9;
+  margin-bottom:6px; line-height:1.3;
+}
+#dlg-msg {
+  font-size:13px; color:#94a3b8; margin-bottom:16px;
+  white-space:pre-line; line-height:1.5;
+}
+#dlg-input-wrap { display:none; margin-bottom:16px; }
+#dlg-input {
+  width:100%; background:#0f172a; border:1.5px solid #1e3a5f; color:#e2e8f0;
+  border-radius:11px; padding:12px 14px; font-size:15px; box-sizing:border-box;
+  outline:none; transition:border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance:none;
+}
+#dlg-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.18); }
+#dlg-input::placeholder { color:#475569; }
+#dlg-btns { display:flex; gap:10px; }
+.dlg-btn-ok {
+  flex:1; border:none; border-radius:11px; padding:14px; font-size:15px; font-weight:700;
+  cursor:pointer; transition:filter 0.15s, transform 0.1s;
+  background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:#fff;
+}
+.dlg-btn-ok.danger { background:linear-gradient(135deg,#991b1b,#ef4444); }
+.dlg-btn-ok:active { filter:brightness(1.15); transform:scale(0.98); }
+.dlg-btn-cancel {
+  flex:0 0 auto; background:transparent; color:#64748b; border:1.5px solid #2d3f55;
+  border-radius:11px; padding:14px 20px; font-size:14px; cursor:pointer;
+  transition:border-color 0.15s, color 0.15s;
+}
+.dlg-btn-cancel:active { border-color:#64748b; color:#94a3b8; }
+#dlg-actions-list { display:none; flex-direction:column; gap:8px; margin-bottom:0; }
+.dlg-action-btn {
+  width:100%; border:none; border-radius:11px; padding:14px; font-size:14px; font-weight:600;
+  cursor:pointer; text-align:left; transition:filter 0.15s, transform 0.1s;
+  background:#1e293b; color:#e2e8f0; border:1px solid #334155;
+}
+.dlg-action-btn.danger { color:#f87171; border-color:#7f1d1d; background:#1f0e0e; }
+.dlg-action-btn:active { filter:brightness(1.2); transform:scale(0.99); }
+
 /* ── Action bar (Snimi vlaku / Snimi trag / Moja lokacija) ─ */
 #action-bar {
   display: none;
@@ -3543,7 +3604,7 @@ async function adminTransferUser(userId, name) {
   if (!sel) return;
   const newSum = sel.value;
   if (!newSum) { showToast('Odaberi šumariju'); return; }
-  if (!confirm(`Prebaciti "${name}"\nu šumariju:\n"${newSum}"?`)) return;
+  if (!await _dlgConfirm(`Prebaciti "${name}" u šumariju "${newSum}"?`)) return;
   const { error } = await sb.rpc('admin_set_sumarija', { p_user_id: userId, p_sumarija: newSum });
   if (error) { showToast('Greška: ' + error.message); return; }
   showToast(`✅ ${name} → ${newSum}`);
@@ -3553,7 +3614,7 @@ async function adminTransferUser(userId, name) {
 // --- Admin: obriši korisnika ---
 async function adminDeleteUser(userId, name) {
   if (!sbProfile?.is_admin) return;
-  if (!confirm(`Trajno obrisati korisnika "${name}"?\n\nOva radnja se ne može poništiti.`)) return;
+  if (!await _dlgConfirm(`Trajno obrisati korisnika "${name}"?\nOva radnja se ne može poništiti.`, { danger: true })) return;
   const { error } = await sb.rpc('admin_delete_user', { target_id: userId });
   if (error) { showToast('Greška pri brisanju: ' + error.message); return; }
   showToast(`Korisnik "${name}" obrisan`);
@@ -3949,7 +4010,7 @@ async function confirmDodajClanove() {
 async function removeProjektClan(projekt_id, korisnik_id) {
   const p = _projekti.find(x => x.id === projekt_id);
   if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može uklanjati članove'); return; }
-  if (!confirm('Ukloniti projektanta iz projekta?')) return;
+  if (!await _dlgConfirm('Ukloniti projektanta iz projekta?')) return;
   await sb.from('projekt_clanovi').delete()
     .eq('projekt_id', projekt_id).eq('korisnik_id', korisnik_id);
   await sbLoadProjekti();
@@ -4010,7 +4071,11 @@ async function deleteProjektUI() {
   const id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser.id) return;
-  if (!confirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove.`)) return;
+  const ok = await _dlgConfirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove i vlake projekta.`, { danger: true });
+  if (!ok) return;
+
+  // Obriši sve vlake koje pripadaju ovom projektu s karte i servera
+  _deleteVlakeByProjekt(id);
 
   // Odmah ukloni lokalno i prikaži listu
   _projekti = _projekti.filter(x => x.id !== id);
@@ -4056,12 +4121,33 @@ async function deleteProjektUI() {
   await sbLoadKolegeVlake();
 }
 
+function _deleteVlakeByProjekt(projektId) {
+  const toRemove = [];
+  const brSet = new Set();
+  vlake.forEach((v, i) => { if (v.projektId === projektId) { toRemove.push(i); brSet.add(v.br); } });
+  vlake.forEach((v, i) => { if (v.kr > 0 && brSet.has(v.br) && !toRemove.includes(i)) toRemove.push(i); });
+  toRemove.sort((a, b) => b - a);
+  for (const i of toRemove) {
+    const v = vlake[i];
+    if (v.poly) map.removeLayer(v.poly);
+    (v.wpts || []).forEach(m => map.removeLayer(m));
+    if (v.labelMk) map.removeLayer(v.labelMk);
+    if (v.lagerMk) map.removeLayer(v.lagerMk);
+    (v.extraLabels || []).forEach(m => map.removeLayer(m));
+    sbDeleteVlaka(v);
+    clearTimeout(_vlakaSaveTimers[i]);
+    vlake.splice(i, 1);
+  }
+  _saveLocalVlake();
+  rndList();
+}
+
 // Ukloni vlake kolega iz lokalne memorije za projekat (za ne-vlasnike)
-function ukloniKolVlakeZaProjekat(projektId) {
+async function ukloniKolVlakeZaProjekat(projektId) {
   if (!projektId) return;
   const p = _projekti.find(x => x.id === projektId);
   const lbl = p ? (p.odjel || 'projekat') : 'projekat';
-  if (!confirm(`Ukloniti lokalno sačuvane vlake kolega za "${lbl}"?\nVlake nestaju s vaše karte.`)) return;
+  if (!await _dlgConfirm(`Ukloniti lokalno sačuvane vlake kolega za "${lbl}"?\nVlake nestaju s vaše karte.`)) return;
   _kvcClear(projektId);
   // Ako je ovaj projekat aktivan, osvježi prikaz
   if (_aktivniProjektId === projektId) sbLoadKolegeVlake();
@@ -4972,10 +5058,10 @@ function _tackaConfirm() {
   }
 }
 
-function _renameTacka(idx) {
+async function _renameTacka(idx) {
   const t = _tacke[idx];
   const cur = t.nm || '';
-  const nw = window.prompt('Naziv tačke:', cur);
+  const nw = await _dlgPrompt('Naziv tačke:', cur, { title: 'Preimenuj tačku' });
   if (nw === null) return;
   t.nm = nw.trim();
   t.marker.setIcon(_tačkaIcon(idx + 1, t.nm));
@@ -6047,13 +6133,15 @@ function _mapFavRender() {
   </div>`;
 }
 
-function _mapFavMenu(i) {
+async function _mapFavMenu(i) {
   const fav = _mapFavs[i];
   if (!fav) return;
-  const action = prompt(`"${fav.name}"\n\nUpiši:\n  r = preimenuj\n  d = obriši\n`, 'r');
-  if (!action) return;
-  if (action.trim() === 'r') mapFavRename(i);
-  else if (action.trim() === 'd') { _mapFavs.splice(i, 1); _mapFavSave(); _mapFavRender(); }
+  const a = await _dlgActions(fav.name, [
+    { label: '✏ Preimenuj', danger: false },
+    { label: '✕ Obriši', danger: true }
+  ]);
+  if (a === 0) mapFavRename(i);
+  else if (a === 1) { _mapFavs.splice(i, 1); _mapFavSave(); _mapFavRender(); }
 }
 
 function openMapFavs() {
@@ -6064,17 +6152,17 @@ function closeMapFavs() {
   document.getElementById('mapfav-modal').classList.remove('open');
 }
 
-function mapFavAddCurrent() {
+async function mapFavAddCurrent() {
   const activeKey = _activeLayerKey();
   let fav;
   if (activeKey && activeKey.startsWith('_sqlite_')) {
     const sqlActive = _sqlLayers.find(sl => sl.visible);
     if (!sqlActive) { showToast('Nema aktivne offline karte'); return; }
-    const name = prompt('Naziv ove offline karte:', sqlActive.name);
+    const name = await _dlgPrompt('Naziv ove offline karte:', sqlActive.name, { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
   } else if (activeKey === '_granice') {
-    const name = prompt('Naziv:', 'Topo + Granice odjela');
+    const name = await _dlgPrompt('Naziv:', 'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: '_granice', tileUrl: '', arcgis: false };
   } else if (activeKey && TL[activeKey]) {
@@ -6082,7 +6170,7 @@ function mapFavAddCurrent() {
     const tileUrl = layer._url || '';
     const arcgis = tileUrl.includes('arcgisonline') || tileUrl.includes('ArcGIS');
     const defaultName = activeKey.replace(/^[^\w]+/, '').trim();
-    const name = prompt('Naziv ove karte:', defaultName);
+    const name = await _dlgPrompt('Naziv ove karte:', defaultName, { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: activeKey, tileUrl, arcgis };
   } else {
@@ -6116,10 +6204,10 @@ function mapFavSwitch(i) {
   closeMapFavs();
 }
 
-function mapFavRename(i) {
+async function mapFavRename(i) {
   const fav = _mapFavs[i];
   if (!fav) return;
-  const name = prompt('Novi naziv:', fav.name);
+  const name = await _dlgPrompt('Novi naziv:', fav.name, { title: 'Preimenuj kartu' });
   if (name?.trim()) { fav.name = name.trim(); _mapFavSave(); _mapFavRender(); }
 }
 
@@ -6300,10 +6388,10 @@ function setMapScale(scale) {
   showToast('Razmjera 1:' + scale.toLocaleString('bs'));
 }
 
-function setMapScaleCustom() {
+async function setMapScaleCustom() {
   const m = document.getElementById('scale-menu');
   if (m) m.style.display = 'none';
-  const raw = prompt('Unesi razmjeru (npr. 17000 za 1:17 000):');
+  const raw = await _dlgPrompt('Unesi razmjeru (npr. 17000 za 1:17 000):', '', { title: 'Razmjera', inputType: 'number', inputMode: 'numeric' });
   if (raw === null) return;
   const v = parseInt(String(raw).replace(/[^\d]/g, ''), 10);
   if (isNaN(v) || v < 500 || v > 500000) { showToast('⚠ Razmjera mora biti između 500 i 500 000'); return; }
@@ -7181,7 +7269,7 @@ function _updWakeLockIcon() {
 
 function togRec() {
   if (!recOn) {
-    if (actI === null) { alert('Prvo dodaj vlaku!'); return; }
+    if (actI === null) { showToast('⚠ Prvo dodaj vlaku!'); return; }
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0;
     // Timing: početak segmenta
@@ -7612,7 +7700,7 @@ function toggleGPS() {
   if (!gpsOn) startGPS(); else stopGPS();
 }
 function startGPS() {
-  if (!navigator.geolocation) { alert('Uređaj ne podržava GPS!'); return; }
+  if (!navigator.geolocation) { showToast('⚠ Uređaj ne podržava GPS!'); return; }
   gpsOn = true;
   document.getElementById('gps-info').textContent = 'GPS: tražim signal...';
   wid = navigator.geolocation.watchPosition(onP, onPE, {
@@ -8352,10 +8440,10 @@ function _tragRegDelete(id) {
   _tragRegRender();
 }
 
-function _tragRegRename(id) {
+async function _tragRegRename(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
-  const name = prompt('Novo ime traga:', t.name);
+  const name = await _dlgPrompt('Novo ime traga:', t.name, { title: 'Preimenuj trag' });
   if (name && name.trim()) {
     t.name = name.trim();
     const line = _tragLayers[id];
@@ -8524,7 +8612,7 @@ function addPt(i, la, lo, al) {
   }
 }
 function addWP() {
-  if (actI===null||!lastP) { alert('GPS signal + odabrana vlaka!'); return; }
+  if (actI===null||!lastP) { showToast('⚠ GPS signal + odabrana vlaka!'); return; }
   const v=vlake[actI];
   addPt(actI,lastP.la,lastP.lo,lastP.al);
   const ico=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],
@@ -9449,7 +9537,7 @@ function _refRepoOpacity(id, val) {
 }
 
 async function _refRepoDelete(id) {
-  if (!confirm('Obrisati referentnu sliku s servera?')) return;
+  if (!await _dlgConfirm('Obrisati referentnu sliku s servera?', { danger: true })) return;
   const r = _refRepoData.find(x => x.id === id);
   if (!r) return;
   if (_refRepoOverlays[id]) { map.removeLayer(_refRepoOverlays[id]); delete _refRepoOverlays[id]; }
@@ -9474,7 +9562,7 @@ async function refKartaSaveToServer() {
     const path = `${sbUser.id}/${Date.now()}.${ext}`;
     const { error: upErr } = await sb.storage.from('ref-karte').upload(path, blob, { contentType: blob.type, upsert: false });
     if (upErr) throw upErr;
-    const name = prompt('Naziv referentne slike:', 'Karta ' + new Date().toLocaleDateString('bs-BA')) || 'Karta';
+    const name = (await _dlgPrompt('Naziv referentne slike:', 'Karta ' + new Date().toLocaleDateString('bs-BA'), { title: 'Sačuvaj ref. sliku' })) || 'Karta';
     const { error: dbErr } = await sb.from('ref_karte').insert({
       user_id: sbUser.id, name, storage_path: path,
       bounds: _refBounds, opacity: parseInt(document.getElementById('refkarta-opa').value) / 100,
@@ -9827,7 +9915,7 @@ function ldK(file) {
       _glCollapsed.delete('Lokalni / —');
       rndGraniceModal();
       try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
-    } catch(x){alert('Greška KML: '+x.message);}
+    } catch(x){showToast('⚠ Greška KML: '+x.message);}
   };
   r.readAsText(file);
 }
@@ -10522,7 +10610,7 @@ function _renderKmlEditor(i) {
     ${fillExtra}
     <div class="oz-ed-btns">
       <button class="oz-ed-btn" onclick="event.stopPropagation();_ozZoomKml(${i})">🗺 Zoom</button>
-      <button class="oz-ed-btn danger" onclick="event.stopPropagation();if(confirm('Ukloniti sloj?'))delK(${i})">✕ Briši</button>
+      <button class="oz-ed-btn danger" onclick="event.stopPropagation();_dlgConfirm('Ukloniti sloj?',{danger:true}).then(ok=>{if(ok)delK(${i})})">✕ Briši</button>
     </div>
   </div>`;
 }
@@ -10911,7 +10999,7 @@ function rndGraniceModal() {
             </div>
             <div class="gl-sep"></div>
             <button class="gl-btn" onclick="togK(${i})" title="${k.vis?'Sakrij sloj':'Prikaži sloj'}" style="font-size:14px;padding:2px 8px;">${k.vis?'👁':'🚫'}</button>
-            <button class="gl-btn danger" onclick="if(confirm('Ukloniti sloj?'))delK(${i})" title="Ukloni sloj">✕</button>
+            <button class="gl-btn danger" onclick="_dlgConfirm('Ukloniti sloj?',{danger:true}).then(ok=>{if(ok)delK(${i})})" title="Ukloni sloj">✕</button>
           </div>
         </div>`;
       });
@@ -10934,7 +11022,7 @@ function mkKML() {
 function showExport(){document.getElementById('etxt').value=mkKML();document.getElementById('modal').classList.add('show');}
 function closeM(){document.getElementById('modal').classList.remove('show');}
 function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();}
-function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').value);alert('Kopirano!');}
+function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').value);showToast('Kopirano!');}
 
 // === PANEL MOBILE ===
 function togglePanel(){
@@ -11329,7 +11417,7 @@ function handleMergeClick(vi, end){
     // second click
     const a=mergeFirst, b={vi,end};
     if(a.vi===b.vi){
-      alert('Odaberi krajnju tačku DRUGE vlake!'); return;
+      showToast('⚠ Odaberi krajnju tačku DRUGE vlake!'); return;
     }
     doMerge(a,b);
   }
@@ -11925,7 +12013,7 @@ function addKolega() {
   const el = document.getElementById('p-kolega-ime');
   const ime = el.value.trim();
   if (!ime) return;
-  if (kolege.find(k=>k.ime.toLowerCase()===ime.toLowerCase())) { alert('Projektant već postoji!'); return; }
+  if (kolege.find(k=>k.ime.toLowerCase()===ime.toLowerCase())) { showToast('⚠ Projektant već postoji!'); return; }
   kolege.push({ ime, color: KPAL[kolege.length % KPAL.length] });
   el.value='';
   localStorage.setItem('tvlake_kolege', JSON.stringify(kolege));
@@ -12003,7 +12091,7 @@ function logDan() {
   const logVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
   const totalM=Math.round(calcL(logVlake.flatMap(v=>v.pts)));
   const vSnap=logVlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
-  if (logVlake.length===0) { alert('Nema vlaka za evidenciju!'); return; }
+  if (logVlake.length===0) { showToast('⚠ Nema vlaka za evidenciju!'); return; }
   // Timing: ako je snimanje trenutno aktivno, dodaj tekući segment
   let activeMs = _dayActiveMs;
   if (recOn && !recPaused && _recSegStart > 0) activeMs += Date.now() - _recSegStart;
@@ -12023,8 +12111,8 @@ function logDan() {
   const b=document.getElementById('proj-panel').querySelector('[onclick="logDan()"]');
   if(b){const t=b.textContent;b.textContent='✅ Zabilježeno!';setTimeout(()=>b.textContent=t,1800);}
 }
-function clearLog() {
-  if (!confirm('Obrisati cijeli dnevnik radova?')) return;
+async function clearLog() {
+  if (!await _dlgConfirm('Obrisati cijeli dnevnik radova?', { danger: true })) return;
   dnevniLog=[]; localStorage.removeItem('tvlake_log');
   sbClearLog();
   rndLog(); updProjStats(); rndOdjeliRekap();
@@ -12379,14 +12467,14 @@ function mkKMLNaziv() {
   return (getOdjel()||'vlake').replace(/[^a-zA-Z0-9_\-]/g,'_')+'_'+todayStr()+'.kml';
 }
 function kmlPreuzmi() {
-  if (!vlake.length) { alert('Nema vlaka!'); return; }
+  if (!vlake.length) { showToast('⚠ Nema vlaka!'); return; }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));
   a.download=mkKMLNaziv(); a.click();
   showKmlInfo('💾 Fajl sačuvan: <b>'+mkKMLNaziv()+'</b>');
 }
 function kmlNaMail() {
-  if (!vlake.length) { alert('Nema vlaka!'); return; }
+  if (!vlake.length) { showToast('⚠ Nema vlaka!'); return; }
   const odjel=getOdjel()||'Odjel';
   const sum=document.getElementById('p-sumarija').value.trim();
   const subj=encodeURIComponent('Traktorske vlake — '+odjel+(sum?' ('+sum+')':''));
@@ -12401,7 +12489,7 @@ function kmlNaMail() {
   showKmlInfo('✉️ Otvoren mail klijent. Priložite KML fajl koji preuzmete dugmetom iznad.');
 }
 function kmlKopiraj() {
-  if (!vlake.length) { alert('Nema vlaka!'); return; }
+  if (!vlake.length) { showToast('⚠ Nema vlaka!'); return; }
   const kml=mkKML();
   if (navigator.clipboard) {
     navigator.clipboard.writeText(kml).then(()=>showKmlInfo('📋 KML tekst kopiran u clipboard.'));
@@ -13301,7 +13389,7 @@ function closeTextDialog() {
 
 function confirmTextLabel(lat, lng, existingId) {
   const text = document.getElementById('tl-text').value.trim();
-  if (!text) { alert('Unesite tekst oznake!'); return; }
+  if (!text) { showToast('⚠ Unesite tekst oznake!'); return; }
   const size = parseInt(document.getElementById('tl-size').value);
   const color = window._tlSelColor || '#ffffff';
 
@@ -13530,7 +13618,7 @@ function setScale(s) {
 
 function applyCustomScale() {
   const v = parseInt(document.getElementById('custom-scale-val').value);
-  if (isNaN(v) || v < 500 || v > 500000) { alert('Unesite razmjeru između 500 i 500 000'); return; }
+  if (isNaN(v) || v < 500 || v > 500000) { showToast('⚠ Unesite razmjeru između 500 i 500 000'); return; }
   printScale = v;
   updatePrintInfo();
 }
@@ -14628,7 +14716,7 @@ async function sqlmapRemove(i) {
 async function sqlmapConfirmDelete(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
-  if (!confirm(`Trajno obrisati kartu "${sl.name}"?`)) return;
+  if (!await _dlgConfirm(`Trajno obrisati kartu "${sl.name}"?`, { danger: true })) return;
   await sqlmapRemove(i);
 }
 async function sqlmapClearAll() {
@@ -14690,7 +14778,7 @@ async function clearTileCache(e) {
 
 let offlineAbort = false;
 async function startOfflineDownload() {
-  if (!('caches' in window)) { alert('Vaš browser ne podržava Cache API.'); return; }
+  if (!('caches' in window)) { showToast('⚠ Vaš browser ne podržava Cache API.'); return; }
   const bounds = getOfflineBounds();
   const zMin = +document.getElementById('offline-zmin').value;
   const zMax = +document.getElementById('offline-zmax').value;
@@ -14814,6 +14902,102 @@ function showToast(msg) {
   clearTimeout(t._to);
   t._to = setTimeout(() => t.style.opacity = '0', 2500);
 }
+
+// ─── Custom dialog system (replaces all native alert/confirm/prompt) ─────────
+let _dlgResolve = null;
+let _dlgMode = null; // 'alert' | 'confirm' | 'prompt' | 'actions'
+
+function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType = 'text', inputMode = 'text', okLabel = 'OK', cancelLabel = 'Odustani', danger = false, actions = [] } = {}) {
+  return new Promise(resolve => {
+    _dlgResolve = resolve;
+    _dlgMode = mode;
+    const ov  = document.getElementById('dlg-overlay');
+    const sh  = document.getElementById('dlg-sheet');
+    const tl  = document.getElementById('dlg-title');
+    const ms  = document.getElementById('dlg-msg');
+    const iw  = document.getElementById('dlg-input-wrap');
+    const inp = document.getElementById('dlg-input');
+    const ok  = document.getElementById('dlg-ok');
+    const ca  = document.getElementById('dlg-cancel');
+    const al  = document.getElementById('dlg-actions-list');
+    const bt  = document.getElementById('dlg-btns');
+
+    tl.textContent = title;
+    ms.textContent = msg;
+    ms.style.display = msg ? '' : 'none';
+    iw.style.display = mode === 'prompt' ? '' : 'none';
+    bt.style.display = mode === 'actions' ? 'none' : '';
+    al.style.display = mode === 'actions' ? 'flex' : 'none';
+    ca.style.display = (mode === 'alert' || mode === 'actions') ? 'none' : '';
+    ok.textContent   = okLabel;
+    ca.textContent   = cancelLabel;
+    ok.className     = 'dlg-btn-ok' + (danger ? ' danger' : '');
+    sh.style.borderTopColor = danger ? '#ef4444' : '#3b82f6';
+
+    if (mode === 'prompt') {
+      inp.type      = inputType;
+      inp.inputMode = inputMode;
+      inp.value     = inputVal;
+    }
+    if (mode === 'actions') {
+      al.innerHTML = actions.map((a, i) =>
+        `<button class="dlg-action-btn${a.danger ? ' danger' : ''}" onclick="_dlgAction(${i})">${a.label}</button>`
+      ).join('') + `<button class="dlg-btn-cancel" style="width:100%;margin-top:4px;" onclick="_dlgDismiss()">Odustani</button>`;
+    }
+
+    ov.classList.add('show');
+    requestAnimationFrame(() => sh.classList.add('show'));
+    if (mode === 'prompt') setTimeout(() => { inp.focus(); inp.select(); }, 300);
+  });
+}
+
+function _dlgAction(i) {
+  _dlgClose();
+  const r = _dlgResolve;
+  _dlgResolve = null;
+  if (r) r(i);
+}
+
+function _dlgCommit() {
+  const inp = document.getElementById('dlg-input');
+  const val = _dlgMode === 'prompt' ? inp.value : (_dlgMode === 'confirm' ? true : undefined);
+  _dlgClose();
+  const r = _dlgResolve; _dlgResolve = null;
+  if (r) r(val);
+}
+
+function _dlgDismiss() {
+  const val = _dlgMode === 'prompt' ? null : (_dlgMode === 'confirm' ? false : undefined);
+  _dlgClose();
+  const r = _dlgResolve; _dlgResolve = null;
+  if (r) r(val);
+}
+
+function _dlgClose() {
+  const sh = document.getElementById('dlg-sheet');
+  const ov = document.getElementById('dlg-overlay');
+  sh.classList.remove('show');
+  setTimeout(() => ov.classList.remove('show'), 270);
+}
+
+async function _dlgConfirm(msg, { title = 'Potvrdi', danger = false, okLabel } = {}) {
+  return _dlg({ title, msg, mode: 'confirm', danger, okLabel: okLabel || (danger ? 'Obriši' : 'Potvrdi') });
+}
+
+async function _dlgPrompt(msg, defaultVal = '', { title = 'Unos', inputType = 'text', inputMode = 'text', okLabel = 'OK' } = {}) {
+  return _dlg({ title, msg, mode: 'prompt', inputVal: defaultVal, inputType, inputMode, okLabel });
+}
+
+async function _dlgActions(title, actionList) {
+  return _dlg({ title, mode: 'actions', actions: actionList });
+}
+
+// Enter key submits prompt/confirm dialogs
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('dlg-sheet')?.classList.contains('show')) return;
+  if (e.key === 'Enter' && _dlgMode !== 'actions') { e.preventDefault(); _dlgCommit(); }
+  if (e.key === 'Escape') { e.preventDefault(); _dlgDismiss(); }
+});
 
 // === KML IZ SUPABASE STORAGE — automatsko učitavanje ===
 let graniceOdjeli = []; // [{ name, bounds }] — za print/offline dropdown
@@ -15810,7 +15994,7 @@ function _dozCalcArea(pts) {
 
 // ─── Delete Marking ────────────────────────────────────────────────
 async function dozDeleteMarking(id) {
-  if (!confirm('Obriši obilježenu zonu?')) return;
+  if (!await _dlgConfirm('Obriši obilježenu zonu?', { danger: true })) return;
   try {
     const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id);
     if (error) throw error;
@@ -15824,7 +16008,7 @@ async function dozDeleteMarking(id) {
 async function dozDeleteOdjel() {
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   if (!odjel) return;
-  if (!confirm(`Obriši odjel "${odjel.name}"? Ovo briše sve podatke.`)) return;
+  if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo briše sve podatke.`, { danger: true })) return;
   try {
     await sb.from('doz_projects').delete().eq('id', _dozSelId);
     showToast('🗑 Odjel obrisan');
@@ -17595,6 +17779,22 @@ function toggleHelpSec(hdr) {
       <button id="share-foto-cancel" onclick="closeShareFotoDlg()">Odustani</button>
       <button id="share-foto-ok"     onclick="confirmShareFoto()">✓ Podijeli</button>
     </div>
+  </div>
+</div>
+
+<!-- Custom dialog sheet (replaces all native alert/confirm/prompt) -->
+<div id="dlg-overlay" onclick="_dlgDismiss()"></div>
+<div id="dlg-sheet" role="dialog" aria-modal="true">
+  <div id="dlg-handle" onclick="_dlgDismiss()"></div>
+  <div id="dlg-title"></div>
+  <div id="dlg-msg"></div>
+  <div id="dlg-input-wrap">
+    <input id="dlg-input" type="text">
+  </div>
+  <div id="dlg-actions-list"></div>
+  <div id="dlg-btns">
+    <button id="dlg-cancel" class="dlg-btn-cancel" onclick="_dlgDismiss()">Odustani</button>
+    <button id="dlg-ok" class="dlg-btn-ok" onclick="_dlgCommit()">OK</button>
   </div>
 </div>
 
