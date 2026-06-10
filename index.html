@@ -13990,19 +13990,36 @@ self.onmessage = async ({data:msg}) => {
           t4='nr'+(mini.noRowId?1:0)+' ci'+(isCov?1:0)+' n'+ilen+' z'+iz+' c'+ix+' r'+iy+' dat'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0)+' wr'+tw;
         }
       }catch(e4){t4='e:'+e4.message;}
-      // Test 5: walk B-tree to LAST entry — should have real tile_data
+      // Test 5: raw-byte probe of rightmost leaf cell + direct table test
       let t5='?';
       try{
-        const scanR5=mini.noRowId?mini.tilesRoot:mini.idxRoot;
-        const le5=scanR5?await mini._lastIdxEntry(scanR5):null;
-        if(le5){
-          const lz5=le5[0],lx5=le5[1],ly5=le5[2];
-          const d5=le5[mini.colD];
-          const blen5=d5 instanceof Uint8Array?d5.length:0;
-          const iy_xyz5=(1<<lz5)-1-ly5;
-          const ta5=await mini.tile(lz5,lx5,iy_xyz5);
-          t5='z'+lz5+' c'+lx5+' r'+ly5+' dat'+blen5+' tms'+(ta5?ta5.length:0);
-        }else{t5='null';}
+        // Walk rightmost chain of the index (or noRowId primary) B-tree
+        let rn=mini.noRowId?mini.tilesRoot:(mini.idxRoot||0);
+        let chain='',leafPd=null,leafPho=0,leafNc=0;
+        for(let di=0;di<32&&rn>0;di++){
+          const pd5=await mini._pg(rn);const pho5=rn===1?100:0;
+          const pt5=pd5[pho5];const nc5=MiniSqlite._u16(pd5,pho5+3);
+          chain+='['+rn+':'+pt5+'/'+nc5+']';
+          if(pt5===2){rn=MiniSqlite._u32(pd5,pho5+8);}
+          else{leafPd=pd5;leafPho=pho5;leafNc=nc5;rn=0;}
+        }
+        if(leafPd&&leafNc>0){
+          const pcpo=leafPho+8;
+          const lcp=MiniSqlite._u16(leafPd,pcpo+(leafNc-1)*2);
+          let pp=lcp;
+          const[pL5,pLS5]=MiniSqlite._vi(leafPd,pp);pp+=pLS5;
+          // Parse header
+          const[hSz5,hSzL5]=MiniSqlite._vi(leafPd,pp);
+          let tp5=pp+hSzL5; const typs5=[];
+          for(let ci=0;ci<6&&tp5<pp+hSz5;ci++){const[tv,tl]=MiniSqlite._vi(leafPd,tp5);typs5.push(tv);tp5+=tl;}
+          // Raw hex of first 16 bytes of payload
+          const rawH=Array.from(leafPd.slice(pp,pp+16)).map(b=>(b||0).toString(16).padStart(2,'0')).join('');
+          t5='ch='+chain+' lcp='+lcp+' pL='+pL5+' hSz='+hSz5+' ty='+typs5.join(',')+'  raw='+rawH;
+        }else{t5='noLeaf chain='+chain;}
+        // Direct table test — rowid 50
+        let tbl50='?';
+        try{const r50=await mini._tblSearch(mini.tilesRoot,50);tbl50=r50?(r50[mini.colD]instanceof Uint8Array?r50[mini.colD].length+'b':'t:'+(typeof r50[mini.colD])):'null';}catch(e){tbl50='e';}
+        t5+=' tbl50='+tbl50;
       }catch(e5){t5='e:'+e5.message;}
       const mkKeys=Object.keys(meta).filter(k=>k!=='_d'&&k!=='minzoom'&&k!=='maxzoom');
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] mk['+( mkKeys.length?mkKeys.join(','):'none')+']';
