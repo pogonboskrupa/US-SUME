@@ -13563,7 +13563,7 @@ async function getSqlJs() {
 // Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); }
+  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
     if(this._c.has(n)) return this._c.get(n);
@@ -13674,9 +13674,24 @@ class MiniSqlite {
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
       }
       if(type==='table'&&name?.toLowerCase()==='metadata') metaRoot=rootPage;
-      if(type==='index'&&tbl?.toLowerCase()==='tiles') this.idxRoot=rootPage;
+      if(type==='index'&&tbl?.toLowerCase()==='tiles'){this.idxRoot=rootPage;this._idxSql=sql||'';}
     });
     if(!this.fmt) this.fmt='mbtiles';
+    // Detect OruxMaps/Android RMaps: index on (x,y,z[,s]) where z=17-actual_zoom
+    // The tiles table has (x,y,z,s,image) but sqlite_master may show mbtiles column names after rename
+    if(this._idxSql){
+      const idxLow=this._idxSql.toLowerCase();
+      const ixp1=idxLow.indexOf('('),ixp2=idxLow.lastIndexOf(')');
+      if(ixp1>=0&&ixp2>ixp1){
+        const ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
+        if(ic[0]==='x'&&ic[1]==='y'){
+          // OruxMaps: index(x,y,z[,s]); table has (x,y,z,s,image); z=17-zoom; y=XYZ not TMS
+          this.fmt='rmaps'; this._zm=2;
+          this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
+          this._idxColX=0; this._idxColY=1; this._idxColZ=2;  // index key order
+        }
+      }
+    }
     // Detect WITHOUT ROWID: tiles B-tree pages are index-type (2/10) not table-type (5/13)
     if(this.tilesRoot>0){
       const tp=await this._pg(this.tilesRoot);const tt=tp[this.tilesRoot===1?100:0];
@@ -13700,9 +13715,10 @@ class MiniSqlite {
         try{
           const fe=await this._firstIdxEntry(scanRoot);const le=await this._lastIdxEntry(scanRoot);
           if(fe&&le){
-            const sz=fe[0],lz=le[0];
-            if(this.fmt==='rmaps'&&typeof lz==='number'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
-            else{minz=typeof sz==='number'?Math.max(0,sz):0;maxz=typeof lz==='number'?Math.min(22,lz):18;}
+            const sz=fe[this._idxColZ],lz=le[this._idxColZ];
+            const mns=Math.min(sz,lz),mxs=Math.max(sz,lz);
+            if(this.fmt==='rmaps'&&typeof mxs==='number'&&mxs<=17&&17-mns>=0){minz=17-mxs;maxz=17-mns;}
+            else{minz=typeof mns==='number'?Math.max(0,mns):0;maxz=typeof mxs==='number'?Math.min(22,mxs):18;}
           }
         }catch(e){}
       } else if(this.tilesRoot>0&&!this.noRowId){
@@ -13724,11 +13740,14 @@ class MiniSqlite {
         if(sr2>0){
           const le2=await this._lastIdxEntry(sr2);
           if(le2){
-            const lz2=le2[0],lx2=le2[1],ly2=le2[2];
-            if(typeof lz2==='number'&&lz2>=0&&lz2<=22){
-              const yy=(1<<lz2)-1-ly2;
+            const lzRaw=le2[this._idxColZ],lx2=le2[this._idxColX],ly2=le2[this._idxColY];
+            // For RMaps inverted zoom: actual_zoom = 17 - stored_z
+            let lz2=(this.fmt==='rmaps'&&this._zm===2)?17-lzRaw:lzRaw;
+            if(typeof lz2==='number'&&lz2>=0&&lz2<=22&&typeof lx2==='number'&&typeof ly2==='number'){
+              // rmaps uses XYZ y; mbtiles uses TMS y
+              const xyzY=(this.fmt==='rmaps')?ly2:(1<<lz2)-1-ly2;
               const lon2=(lx2+0.5)/(1<<lz2)*360-180;
-              const latR2=Math.PI*(1-2*(yy+0.5)/(1<<lz2));
+              const latR2=Math.PI*(1-2*(xyzY+0.5)/(1<<lz2));
               const lat2=Math.atan(Math.sinh(latR2))*180/Math.PI;
               if(isFinite(lon2)&&isFinite(lat2))extraMeta.center=lon2.toFixed(4)+','+lat2.toFixed(4)+','+lz2;
             }
@@ -13785,7 +13804,10 @@ class MiniSqlite {
     if(this.idxRoot){
       const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
       for(const zv of zCands){
-        const rec=await this._wRowSearch(this.idxRoot,zv,x,ty);
+        // Build 3-key search tuple in the index's actual sort order
+        const key=[null,null,null];
+        key[this._idxColZ]=zv; key[this._idxColX]=x; key[this._idxColY]=ty;
+        const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
         if(rec){
           if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;
           const blob=rec[this.colD];
