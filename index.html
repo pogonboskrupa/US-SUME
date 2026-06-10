@@ -722,6 +722,29 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.back     { background:#1a0a00; color:#fb923c; }
 .rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
+/* ═══ TRAG REC BANNER (narandžasta) ═══ */
+#trag-rec-banner {
+  position:absolute; top:54px; left:8px; right:8px;
+  display:none; flex-direction:column;
+  z-index:501; font-family:monospace;
+  overflow:hidden; border-radius:14px;
+  box-shadow:0 6px 28px rgba(0,0,0,0.75);
+  background:rgba(8,14,28,0.97); border:2px solid #f97316;
+}
+#trag-rec-banner.show { display:flex; }
+#trag-rec-banner.paused { border-color:#fb923c; opacity:0.85; }
+#trag-rec-banner.paused .trdot { background:#fb923c; animation:none; }
+#trag-row1 { display:flex; align-items:center; gap:8px; padding:9px 13px 7px; border-bottom:1px solid rgba(249,115,22,0.15); }
+#trag-lbl  { font-size:15px; font-weight:800; color:#f97316; }
+#trag-stats { font-size:12px; color:#94a3b8; margin-left:auto; white-space:nowrap; }
+.trdot { width:9px; height:9px; border-radius:50%; background:#f97316; animation:bl 1s infinite; flex-shrink:0; }
+#trag-row2 { display:flex; align-items:stretch; min-height:48px; }
+.trb { border:none; cursor:pointer; font-size:13px; font-weight:bold; padding:10px 12px; flex:1; border-right:1px solid rgba(255,255,255,0.07); white-space:nowrap; transition:background 0.15s; }
+.trb:last-child { border-right:none; }
+.trb:active { filter:brightness(1.3); }
+.trb.pause { background:#1c0e00; color:#fb923c; }
+.trb.stop  { background:#2d0a0a; color:#f87171; flex:0 0 auto; padding:10px 18px; }
+
 /* ═══ DRAW BANNER (zelena) ═══ */
 #draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
 #draw-row1 { display:flex; align-items:center; gap:8px; padding:9px 13px 7px; border-bottom:1px solid rgba(74,222,128,0.15); }
@@ -2808,6 +2831,19 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="rb back"      id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
           <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju">🔓</button>
           <button class="rb stop"   onclick="stopRec()" title="Zaustavi snimanje">⏹</button>
+        </div>
+      </div>
+
+      <!-- TRAG RECORDING BANNER -->
+      <div id="trag-rec-banner">
+        <div id="trag-row1">
+          <div class="trdot"></div>
+          <div id="trag-lbl">🔴 Snimanje traga</div>
+          <div id="trag-stats" style="font-size:12px;color:#94a3b8;margin-left:auto;">0 tač. · 0 m</div>
+        </div>
+        <div id="trag-row2">
+          <button class="trb pause" id="trag-btn-pause" onclick="togTragPause()" title="Pauziraj / Nastavi">⏸ Pauziraj</button>
+          <button class="trb stop" onclick="fabSnimTrag()" title="Završi snimanje traga">⏹ Završi</button>
         </div>
       </div>
 
@@ -6009,7 +6045,7 @@ _mapFavLoad();
 _loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
-['ovl','rec-banner','draw-banner'].forEach(id => {
+['ovl','rec-banner','draw-banner','trag-rec-banner'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     L.DomEvent.disableClickPropagation(el);
@@ -7870,9 +7906,10 @@ function centerMap() {
 
 // ── GPS FAB ───────────────────────────────────────────────────────────────────
 let _fabOpen = false;
-let _tragOn   = false;
-let _tragLine = null;
-let _tragPts  = [];
+let _tragOn     = false;
+let _tragPaused = false;
+let _tragLine   = null;
+let _tragPts    = [];
 
 // ── Registar tragova ────────────────────────────────────────────────────────
 const _TRAG_REG_KEY = 'tvlake_tragovi';
@@ -8185,6 +8222,9 @@ function fabLokacija() {
 function fabSnimTrag() {
   if (_tragOn) {
     _tragOn = false;
+    _tragPaused = false;
+    const ban = document.getElementById('trag-rec-banner');
+    if (ban) { ban.classList.remove('show', 'paused'); }
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     if (_tragPts.length > 1) {
@@ -8195,31 +8235,61 @@ function fabSnimTrag() {
       const saved = _tragRegAdd(final);
       _tqmOpen(saved.id);
     } else {
-      showToast('Trag nije snimljen (premalo tačaka)');
+      showToast('⚠ Trag nije snimljen — premalo GPS tačaka (GPS signal slab?)');
     }
     _tragPts = [];
     _tragBuf = [];
   } else {
     if (!gpsOn) startGPS();
     _setFreeView(false);
-    _tragOn  = true;
+    _tragOn     = true;
+    _tragPaused = false;
     _tragPts = [];
     _tragBuf = [];
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
-    showToast('🔴 Snimanje traga pokrenuto');
+    const ban = document.getElementById('trag-rec-banner');
+    if (ban) { ban.classList.add('show'); ban.classList.remove('paused'); }
+    const statsEl = document.getElementById('trag-stats');
+    if (statsEl) statsEl.textContent = '0 tač. · 0 m';
+    const pauseBtn = document.getElementById('trag-btn-pause');
+    if (pauseBtn) pauseBtn.textContent = '⏸ Pauziraj';
   }
+}
+
+function togTragPause() {
+  if (!_tragOn) return;
+  _tragPaused = !_tragPaused;
+  const ban = document.getElementById('trag-rec-banner');
+  const btn = document.getElementById('trag-btn-pause');
+  if (_tragPaused) {
+    if (ban) ban.classList.add('paused');
+    if (btn) btn.textContent = '▶ Nastavi';
+    showToast('⏸ Snimanje traga pauzirano');
+  } else {
+    if (ban) ban.classList.remove('paused');
+    if (btn) btn.textContent = '⏸ Pauziraj';
+    showToast('🔴 Snimanje traga nastavljeno');
+  }
+}
+
+function _updTragBannerStats() {
+  const el = document.getElementById('trag-stats');
+  if (!el) return;
+  const n = _tragPts.length;
+  const d = _tragCalcLen(_tragPts);
+  el.textContent = `${n} tač. · ${_tragFmtLen(d)}`;
 }
 
 let _tragBuf = [];  // kružni buffer zadnja 3 raw GPS fixa za median filtar
 
 function _addTragPoint(la, lo, ac, al) {
-  if (!_tragOn) return;
+  if (!_tragOn || _tragPaused) return;
 
-  // 1. Odbaci slabe GPS fikseve (grad: zgrade blokiraju satelite)
-  if (ac > 25) return;
+  // 1. Odbaci slabe GPS fikseve — šuma > 40m je prevelika za šumski teren
+  if (ac > 40) return;
 
   // 2. Median filtar od 3 fikseva — jedan spike ne može pokvariti medijanu
   _tragBuf.push({ la, lo });
@@ -8238,6 +8308,7 @@ function _addTragPoint(la, lo, ac, al) {
 
   _tragPts.push([mla, mlo, al]);
   if (_tragLine) _tragLine.addLatLng([mla, mlo]);
+  _updTragBannerStats();
 }
 
 function _tragToGpx(pts) {
