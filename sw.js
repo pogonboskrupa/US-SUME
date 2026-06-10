@@ -1,5 +1,5 @@
 // =====================================================================
-// Service Worker — ŠPD Unsko-sanske šume Vlake
+// Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
 const APP_VERSION = '1.6.63';
