@@ -13717,6 +13717,25 @@ class MiniSqlite {
         }
       }
     }
+    // Fallback: derive center from last index entry when metadata has no bounds/center
+    if(!extraMeta.bounds&&!extraMeta.center){
+      try{
+        const sr2=this.noRowId?this.tilesRoot:this.idxRoot;
+        if(sr2>0){
+          const le2=await this._lastIdxEntry(sr2);
+          if(le2){
+            const lz2=le2[0],lx2=le2[1],ly2=le2[2];
+            if(typeof lz2==='number'&&lz2>=0&&lz2<=22){
+              const yy=(1<<lz2)-1-ly2;
+              const lon2=(lx2+0.5)/(1<<lz2)*360-180;
+              const latR2=Math.PI*(1-2*(yy+0.5)/(1<<lz2));
+              const lat2=Math.atan(Math.sinh(latR2))*180/Math.PI;
+              if(isFinite(lon2)&&isFinite(lat2))extraMeta.center=lon2.toFixed(4)+','+lat2.toFixed(4)+','+lz2;
+            }
+          }
+        }
+      }catch(e){}
+    }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz,...extraMeta}};
   }
   async _firstIdxEntry(root) {
@@ -13971,7 +13990,22 @@ self.onmessage = async ({data:msg}) => {
           t4='nr'+(mini.noRowId?1:0)+' ci'+(isCov?1:0)+' n'+ilen+' z'+iz+' c'+ix+' r'+iy+' dat'+blen+' tms'+(ta?ta.length:0)+' raw'+(tb?tb.length:0)+' wr'+tw;
         }
       }catch(e4){t4='e:'+e4.message;}
-      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+']';
+      // Test 5: walk B-tree to LAST entry — should have real tile_data
+      let t5='?';
+      try{
+        const scanR5=mini.noRowId?mini.tilesRoot:mini.idxRoot;
+        const le5=scanR5?await mini._lastIdxEntry(scanR5):null;
+        if(le5){
+          const lz5=le5[0],lx5=le5[1],ly5=le5[2];
+          const d5=le5[mini.colD];
+          const blen5=d5 instanceof Uint8Array?d5.length:0;
+          const iy_xyz5=(1<<lz5)-1-ly5;
+          const ta5=await mini.tile(lz5,lx5,iy_xyz5);
+          t5='z'+lz5+' c'+lx5+' r'+ly5+' dat'+blen5+' tms'+(ta5?ta5.length:0);
+        }else{t5='null';}
+      }catch(e5){t5='e:'+e5.message;}
+      const mkKeys=Object.keys(meta).filter(k=>k!=='_d'&&k!=='minzoom'&&k!=='maxzoom');
+      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] mk['+( mkKeys.length?mkKeys.join(','):'none')+']';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
