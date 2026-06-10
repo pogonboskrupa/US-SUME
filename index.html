@@ -4311,10 +4311,10 @@ async function sbLoadKolegeVlake() {
   let dbData = [];
   try {
     let q = sb.from('vlake')
-      .select('nm, korisnik_id, pts, boja')
+      .select('nm, korisnik_id, pts, boja, kr')
       .in('korisnik_id', memberIds)
-      .eq('sumarija', sbProfile.sumarija);
-    if (akt.odjel) q = q.eq('odjel', akt.odjel);
+      .eq('sumarija', sbProfile.sumarija)
+      .eq('projekt_id', akt.id);  // sve vlake projekta (matične + krakovi), bez filtra po odjelu
     const { data } = await q;
     if (data) dbData = data;
   } catch(e) {} // offline — koristimo samo cache
