@@ -32,7 +32,7 @@
 
 /* === AUTH SCREEN === */
 #auth-screen {
-  display:flex; position:fixed; inset:0; z-index:99999;
+  display:none; position:fixed; inset:0; z-index:99999;
   background:#080f0a; align-items:center; justify-content:center;
   overflow:hidden; font-family:'DM Sans',Arial,sans-serif;
 }
@@ -3128,7 +3128,21 @@ async function _processOfflineQueue() {
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
 }
 
+function _showAuthScreen() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  authShowLogin();
+}
+
 async function initAuth() {
+  const cached = _OL.load(_OL.PROFILE);
+  const saved = _loadSavedUser();
+  const hasLocalData = !!(cached && saved);
+
+  // Ako nema keširanog profila ni kredencijala, odmah prikaži login
+  if (!hasLocalData) {
+    _showAuthScreen();
+  }
+
   // 1. Pokušaj Supabase sesiju
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'INITIAL_SESSION' && session && !sbUser) {
@@ -3145,36 +3159,32 @@ async function initAuth() {
 
   // 2. Fallback: auto-login sa zapamćenim kredencijalima
   setTimeout(async () => {
-    if (sbUser) return; // već logovan putem sesije
-    const saved = _loadSavedUser();
-    if (!saved) return;
+    if (sbUser) return;
+    if (!saved) { _showAuthScreen(); return; }
     try {
       const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
-      // Briši kredencijale samo ako smo online i korisnik nije nađen (pogrešno ime)
-      if (!email) { if (navigator.onLine) _clearSavedUser(); return; }
+      if (!email) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
       const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
-      // Briši samo kod auth greške (pogrešan PIN), ne kod mrežne greške
-      if (error) { if (navigator.onLine) _clearSavedUser(); return; }
+      if (error) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
       sbUser = (await sb.auth.getUser()).data.user;
       await sbLoadProfile();
       showApp();
     } catch(e) {
       console.error('Auto-login error:', e);
-      // Ne brišemo kredencijale — greška može biti mrežna (offline)
     }
-  }, 800); // čekaj da onAuthStateChange stigne prvi
+  }, 800);
 
   // 3. Offline fallback — ako nema mreže ali postoji keširani profil
   setTimeout(async () => {
     if (sbUser) return;
-    const cached = _OL.load(_OL.PROFILE);
-    const saved = _loadSavedUser();
     if (cached && saved) {
       sbUser = { id: cached.id, email: cached.email || '' };
       sbProfile = cached;
       _setOfflineMode(true);
       showApp();
       showToast('📴 Offline pristup — koriste se lokalni podaci');
+    } else {
+      _showAuthScreen();
     }
   }, 4500);
 }
@@ -3361,10 +3371,9 @@ async function doLogout() {
   dnevniLog = []; kolege = [];
 
   document.getElementById('wrapper').style.display = 'none';
-  document.getElementById('auth-screen').style.display = 'flex';
   closeAdminModal();
   _clearSavedUser();
-  authShowLogin();
+  _showAuthScreen();
   document.getElementById('auth-ime').value = '';
   document.getElementById('auth-prezime').value = '';
   document.getElementById('auth-pin').value = '';
