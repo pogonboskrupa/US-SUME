@@ -13070,9 +13070,9 @@ function _mqmOpen() {
     fillOpacity: 0.18
   };
   _msrRegistry.unshift(entry);
+  _mqmId = entry.id;
   _msrRegSave();
   _msrRegRender();
-  _mqmId = entry.id;
   // Popuni select
   const sel = document.getElementById('mqm-gj-sel');
   if (sel && !sel.options.length) {
@@ -13104,17 +13104,18 @@ function _mqmSave() {
     m.pts   = _msrPts.slice();
     m.color = _msrColor;
     _msrRegSave();
-    _msrRegRender();
-    _msrDrawAllSaved();
   }
   _mqmClose();
-  // Pokaži registar da korisnik vidi sačuvano
   switchTab('mjtrg');
   _mjtrgTab('msr');
 }
 function _mqmClose() {
   document.getElementById('msr-quick-meta').style.display = 'none';
   _mqmId = null;
+  // Očisti aktivni edit layer (tačke + linije) da ne ostane dupla linija
+  _msrPts = [];
+  if (_msrLayer) { _msrLayer.clearLayers(); try { map.removeLayer(_msrLayer); } catch(e){} _msrLayer = null; }
+  _msrUpdPanel();
   _msrDrawAllSaved();
 }
 
@@ -13289,6 +13290,9 @@ function _msrRegZoom(id) {
   if (!m || !m.pts.length) return;
   map.closePopup();
 
+  // Postavi edit stanje ODMAH — sprečava _msrDrawAllSaved da crta ovo mjerenje
+  _mqmId = id;
+
   // Ukloni sačuvani sloj dok je u edit modu da ne bude dupla linija
   if (_msrSavedLayer) _msrSavedLayer.clearLayers();
 
@@ -13301,9 +13305,6 @@ function _msrRegZoom(id) {
   _msrRedraw();
   _msrUpdPanel();
   map.fitBounds(L.latLngBounds(m.pts.map(p => [p.lat, p.lng])), {padding:[40,40]});
-
-  // Postavi edit stanje — veza na postojeći zapis
-  _mqmId = id;
 
   // Popuni panel s postojećim podacima
   const sel = document.getElementById('mqm-gj-sel');
