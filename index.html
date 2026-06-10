@@ -793,6 +793,37 @@ input:focus { outline:none; border-color:#3b82f6; }
 .db.drag.active { background:#231200; color:#f97316; }
 .db.done { background:#052e16; color:#4ade80; }
 
+/* ═══ RUČNO CRTANJE VLAKE — svijetli iOS modal ═══ */
+#manual-draw-panel {
+  position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+  z-index:950; width:min(380px, calc(100vw - 24px));
+  background:rgba(255,255,255,0.94);
+  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.18);
+  overflow:hidden;
+}
+.mdp-head { display:flex; align-items:center; gap:8px; padding:11px 15px 8px; }
+.mdp-ico { font-size:15px; color:#059669; }
+#mdp-nm { font-size:15px; font-weight:800; color:#0f172a; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#mdp-stats { font-size:12px; color:#64748b; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.mdp-row { display:flex; align-items:stretch; gap:8px; padding:4px 12px 12px; }
+.mdp-check {
+  display:flex; align-items:center; gap:7px; padding:10px 13px;
+  background:#f1f5f9; border-radius:12px; cursor:pointer; user-select:none;
+  font-size:13px; font-weight:700; color:#334155; transition:all 0.15s;
+}
+.mdp-check:has(input:checked) { background:#fff7ed; color:#ea580c; box-shadow:inset 0 0 0 1.5px #fb923c; }
+.mdp-check input { width:17px; height:17px; accent-color:#ea580c; margin:0; cursor:pointer; }
+.mdp-btn {
+  border:none; cursor:pointer; font-size:13px; font-weight:700;
+  padding:10px 13px; border-radius:12px; white-space:nowrap; transition:all 0.15s;
+}
+.mdp-btn:active { transform:scale(0.96); filter:brightness(0.93); }
+.mdp-btn.point { flex:1; background:linear-gradient(135deg,#2563eb,#3b82f6); color:#fff; }
+.mdp-btn.undo  { background:#f1f5f9; color:#7c3aed; }
+.mdp-btn.done  { background:linear-gradient(135deg,#059669,#10b981); color:#fff; }
+
 /* Vlake hijerarhija */
 .vrow-krak { margin-left:12px; border-left:2px solid #1e3a5f; }
 .vrow-kolega { opacity:0.82; cursor:pointer; }
@@ -3008,6 +3039,24 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
 
+      <!-- ═══ RUČNO CRTANJE VLAKE — modal sa "Crtaj" checkbox + "Tačka" dugme ═══ -->
+      <div id="manual-draw-panel" style="display:none;">
+        <div class="mdp-head">
+          <span class="mdp-ico">✏</span>
+          <span id="mdp-nm">T1</span>
+          <span id="mdp-stats">0 m · 0 tač.</span>
+        </div>
+        <div class="mdp-row">
+          <label class="mdp-check" for="mdp-drag-chk">
+            <input type="checkbox" id="mdp-drag-chk" onchange="mdpToggleDrag(this.checked)">
+            <span>Crtaj</span>
+          </label>
+          <button class="mdp-btn point" onclick="mdpAddPoint()" title="Dodaj tačku na centru">📍 Tačka</button>
+          <button class="mdp-btn undo" onclick="mdpUndo()" title="Poništi">↩</button>
+          <button class="mdp-btn done" onclick="mdpFinish()" title="Završi crtanje">✓ Završi</button>
+        </div>
+      </div>
+
       <!-- Sakriveni elementi koje JS još koristi -->
       <span id="onv" style="display:none;"></span>
       <span id="oacc" style="display:none;"></span>
@@ -4144,10 +4193,115 @@ async function startManualVlakaDraw() {
   rndList();
   selI(idx);
   switchTab('karta');
-  setTimeout(() => {
-    actI = idx;
-    mtAddLine();
-  }, 300);
+  setTimeout(() => { _mdpStart(idx); }, 300);
+}
+
+// ─── Modal za ručno crtanje vlake — checkbox "Crtaj" (vuci) + dugme "Tačka" ───
+let _mdpIdx = null;          // indeks vlake koja se crta
+let _mdpDragOn = false;      // checkbox "Crtaj" aktivan
+let _mdpLastPt = null;       // zadnja tačka u drag modusu
+let _mdpUndoStack = [];      // undo snimci pts[]
+const MDP_DRAG_MIN_M = 5;    // min. razmak (m) između tačaka dok se vuče
+
+function _mdpStart(idx) {
+  if (!vlake[idx]) return;
+  _mdpIdx = idx;
+  actI = idx;
+  _mdpDragOn = false;
+  _mdpLastPt = null;
+  _mdpUndoStack = [vlake[idx].pts.map(p => ({...p}))];
+  map.doubleClickZoom.disable();
+  const panel = document.getElementById('manual-draw-panel');
+  panel.style.display = '';
+  document.getElementById('mdp-nm').textContent = vlake[idx].nm;
+  const chk = document.getElementById('mdp-drag-chk');
+  chk.checked = false;
+  // Crosshair u centru mape — vidljiv tokom cijelog crtanja; tap na tačku = dodaj tačku
+  document.getElementById('main').classList.add('drawing-active');
+  const dot = document.getElementById('map-center-dot');
+  dot.style.display = '';
+  dot.onclick = (e) => { e.stopPropagation(); mdpAddPoint(); };
+  _mdpUpdStats();
+  _updFabVisibility();
+}
+
+function mdpToggleDrag(on) {
+  _mdpDragOn = on;
+  _mdpLastPt = null;
+  const main = document.getElementById('main');
+  if (on) {
+    // Jedan snimak za cijelu drag sesiju — Undo vraća sve drag tačke odjednom
+    if (_mdpIdx !== null && vlake[_mdpIdx]) _mdpUndoStack.push(vlake[_mdpIdx].pts.map(p => ({...p})));
+    main.classList.add('draw-drag-on');
+    map.on('move', _mdpOnMove);
+    // Odmah dodaj tačku na trenutnom centru — linija kreće iz centra
+    const c = map.getCenter();
+    if (_mdpIdx !== null) { addPt(_mdpIdx, c.lat, c.lng, 0); _mdpLastPt = { la: c.lat, lo: c.lng }; }
+    _mdpUpdStats();
+  } else {
+    main.classList.remove('draw-drag-on');
+    map.off('move', _mdpOnMove);
+  }
+}
+
+function _mdpOnMove() {
+  if (!_mdpDragOn || _mdpIdx === null || !vlake[_mdpIdx]) return;
+  const c = map.getCenter();
+  if (_mdpLastPt && dst(_mdpLastPt.la, _mdpLastPt.lo, c.lat, c.lng) < MDP_DRAG_MIN_M) return;
+  _mdpLastPt = { la: c.lat, lo: c.lng };
+  addPt(_mdpIdx, c.lat, c.lng, 0);
+  _mdpUpdStats();
+}
+
+function mdpAddPoint() {
+  if (_mdpIdx === null || !vlake[_mdpIdx]) return;
+  _mdpUndoStack.push(vlake[_mdpIdx].pts.map(p => ({...p})));
+  const c = map.getCenter();
+  addPt(_mdpIdx, c.lat, c.lng, 0);
+  _mdpUpdStats();
+}
+
+function mdpUndo() {
+  if (_mdpIdx === null || !vlake[_mdpIdx] || _mdpUndoStack.length === 0) return;
+  // Zadnji snimak je stanje PRIJE zadnje akcije; prvi snimak čuvamo kao bazu
+  const snap = _mdpUndoStack.length > 1 ? _mdpUndoStack.pop() : _mdpUndoStack[0].map(p => ({...p}));
+  const v = vlake[_mdpIdx];
+  v.pts = snap.map(p => ({...p}));
+  v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  _mdpLastPt = v.pts.length ? { la: v.pts[v.pts.length-1].la, lo: v.pts[v.pts.length-1].lo } : null;
+  scheduleVlakaSave(_mdpIdx);
+  updBan(); updOvl(); rndList();
+  _mdpUpdStats();
+}
+
+function _mdpUpdStats() {
+  const el = document.getElementById('mdp-stats');
+  if (!el || _mdpIdx === null || !vlake[_mdpIdx]) return;
+  const pts = vlake[_mdpIdx].pts;
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo);
+  el.textContent = (d < 1000 ? Math.round(d) + ' m' : (d/1000).toFixed(2) + ' km') + ' · ' + pts.length + ' tač.';
+}
+
+function mdpFinish() {
+  const idx = _mdpIdx;
+  if (_mdpDragOn) mdpToggleDrag(false);
+  document.getElementById('mdp-drag-chk').checked = false;
+  document.getElementById('manual-draw-panel').style.display = 'none';
+  document.getElementById('main').classList.remove('drawing-active');
+  const dot = document.getElementById('map-center-dot');
+  dot.style.display = 'none';
+  dot.onclick = null;
+  map.doubleClickZoom.enable();
+  _mdpIdx = null;
+  _mdpUndoStack = [];
+  _updFabVisibility();
+  if (idx !== null && vlake[idx]) {
+    updateVlakaLabel(idx);
+    sbFlushVlaka(idx);
+    if (vlake[idx].pts.length > 0 && !vlake[idx].lager) _showLagerDlg(idx);
+    showToast('✓ Vlaka ' + vlake[idx].nm + ' sačuvana');
+  }
 }
 
 function deaktivirajProjekt() {
