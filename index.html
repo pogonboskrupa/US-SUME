@@ -1726,7 +1726,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   body { background: #fff !important; overflow: visible !important; }
   #wrapper { display:block !important; height:auto !important; }
   #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
-  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container { display:none !important; }
+  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container,
+  #dlg-overlay, #dlg-sheet, #action-bar, #trag-quick-meta, #map-ctrl-bar, #scale-menu { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -1742,17 +1743,35 @@ select:focus { outline:none; border-color:#3b82f6; }
     margin-bottom:3mm;
   }
   #print-footer {
-    display:block !important;
+    display:flex !important;
     font-family:Arial,sans-serif;
     font-size:8pt;
     padding:3mm 10mm;
     border-top:1px solid #aaa;
     color:#555;
-    display:flex; justify-content:space-between;
+    justify-content:space-between;
   }
+  #print-legend {
+    display:block !important;
+    position:absolute; bottom:8mm; right:8mm;
+    background:rgba(255,255,255,0.92); border:1.5px solid #333;
+    padding:4mm 5mm 3mm;
+    font-family:Arial,sans-serif; font-size:8pt; color:#222;
+    z-index:9000;
+  }
+  #print-legend .pl-title {
+    font-weight:bold; font-size:9pt; margin-bottom:2mm;
+    text-align:center; border-bottom:0.5px solid #999; padding-bottom:1.5mm;
+  }
+  #print-legend .pl-row {
+    display:flex; align-items:center; gap:3mm; margin:1.5mm 0;
+    white-space:nowrap;
+  }
+  #print-legend .pl-sym { width:18mm; height:4mm; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 }
 #print-header { display:none; }
 #print-footer { display:none; }
+#print-legend { display:none; }
 
 /* ── Custom dialog sheet ────────────────────────────────── */
 #dlg-overlay {
@@ -2997,6 +3016,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   <span id="pf-left"></span>
   <span id="pf-right"></span>
 </div>
+<div id="print-legend" style="display:none;"></div>
 
 <!-- PRINT MODAL -->
 <div id="print-modal" onclick="if(event.target===this)closePrintModal()">
@@ -3072,6 +3092,27 @@ select:focus { outline:none; border-color:#3b82f6; }
       <b id="pi-dims">—</b>
       <span style="margin-left:auto;">Površina:</span>
       <b id="pi-area">—</b>
+    </div>
+
+    <!-- Legenda -->
+    <div style="margin:12px 0 0;">
+      <div class="lbl" style="margin-bottom:6px;">Legenda na karti</div>
+      <div id="print-legend-opts" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;">
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="vlaka" checked> Traktorska vlaka</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="krak" checked> Krak</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="lager" checked> Lager</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="kamput"> Kamionski put</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_odjela"> Granica odjela</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_odsjeka"> Granica odsjeka</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="potok"> Potok</label>
+        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_privat"> Granica sa privatnim posjedom</label>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center;">
+        <input type="text" id="print-legend-custom" placeholder="Dodaj stavku…"
+          style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:12px;">
+        <button class="scale-btn" onclick="_plAddCustom()" style="padding:6px 10px;font-size:12px;">＋</button>
+      </div>
+      <div id="print-legend-custom-list" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
     </div>
 
     <div class="mbtns" style="margin-top:12px;">
@@ -13678,6 +13719,61 @@ function updatePrintInfo() {
   document.getElementById('pi-area').textContent = `≈ ${areaHa} ha`;
 }
 
+// ─── PRINT LEGEND ─────────────────────────────────────────────
+let _plCustomItems = [];
+
+const _PL_SYMBOLS = {
+  vlaka:     { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="2.5"/></svg>`, label: 'TRAKTORSKA VLAKA' },
+  krak:      { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1.5"/></svg>`, label: 'KRAK' },
+  lager:     { svg: `<svg width="50" height="10"><rect x="5" y="1" width="40" height="8" fill="none" stroke="#d00" stroke-width="1.5"/><line x1="5" y1="5" x2="45" y2="5" stroke="#d00" stroke-width="1"/><line x1="15" y1="1" x2="15" y2="9" stroke="#d00" stroke-width="0.8"/><line x1="25" y1="1" x2="25" y2="9" stroke="#d00" stroke-width="0.8"/><line x1="35" y1="1" x2="35" y2="9" stroke="#d00" stroke-width="0.8"/></svg>`, label: 'LAGER' },
+  kamput:    { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#555" stroke-width="3"/></svg>`, label: 'KAMIONSKI PUT' },
+  gr_odjela: { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/></svg>`, label: 'GRANICA ODJELA' },
+  gr_odsjeka:{ svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1" stroke-dasharray="2,3"/></svg>`, label: 'GRANICA ODSJEKA' },
+  potok:     { svg: `<svg width="50" height="10"><path d="M0 5 Q8 1 16 5 Q24 9 32 5 Q40 1 50 5" fill="none" stroke="#2563eb" stroke-width="1.5"/></svg>`, label: 'POTOK' },
+  gr_privat: { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#a020a0" stroke-width="1.5" stroke-dasharray="8,2,2,2"/></svg>`, label: 'GRANICA SA PRIVATNIM POSJEDOM' },
+};
+
+function _plAddCustom() {
+  const inp = document.getElementById('print-legend-custom');
+  const txt = inp.value.trim();
+  if (!txt) return;
+  _plCustomItems.push(txt);
+  inp.value = '';
+  _plRenderCustom();
+}
+
+function _plRemoveCustom(i) {
+  _plCustomItems.splice(i, 1);
+  _plRenderCustom();
+}
+
+function _plRenderCustom() {
+  const el = document.getElementById('print-legend-custom-list');
+  el.innerHTML = _plCustomItems.map((t, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:3px 8px;font-size:11px;color:#cbd5e1;">
+      ${t} <span onclick="_plRemoveCustom(${i})" style="cursor:pointer;color:#f87171;font-weight:bold;">✕</span>
+    </span>`
+  ).join('');
+}
+
+function _buildPrintLegend() {
+  const el = document.getElementById('print-legend');
+  const checked = [...document.querySelectorAll('.pl-chk:checked')].map(cb => cb.value);
+  const hasItems = checked.length > 0 || _plCustomItems.length > 0;
+  if (!hasItems) { el.innerHTML = ''; return; }
+
+  let html = '<div class="pl-title">LEGENDA</div>';
+  for (const key of checked) {
+    const s = _PL_SYMBOLS[key];
+    if (!s) continue;
+    html += `<div class="pl-row"><div class="pl-sym">${s.svg}</div><div>${s.label}</div></div>`;
+  }
+  for (const txt of _plCustomItems) {
+    html += `<div class="pl-row"><div class="pl-sym"><svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#666" stroke-width="1.5" stroke-dasharray="4,2"/></svg></div><div>${txt.toUpperCase()}</div></div>`;
+  }
+  el.innerHTML = html;
+}
+
 function doPrint() {
   const p = PAPER[paperFmt];
 
@@ -13727,6 +13823,8 @@ function doPrint() {
   const totalM = Math.round(calcL(vlake.flatMap(v => v.pts)));
   document.getElementById('pf-left').textContent = `${ime ? 'Projektant: ' + ime + ' · ' : ''}Ukupno vlaka: ${fmtL(totalM)}`;
   document.getElementById('pf-right').textContent = `Razmjera 1 : ${printScale.toLocaleString('bs')} · ${p.label}`;
+
+  _buildPrintLegend();
 
   closePrintModal();
 
