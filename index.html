@@ -4142,6 +4142,27 @@ function _deleteVlakeByProjekt(projektId) {
   rndList();
 }
 
+async function _deleteAllOrphanVlake() {
+  if (!vlake.length) return;
+  const ok = await _dlgConfirm(`Obrisati svih ${vlake.length} vlaka?\nOvo je trajno.`, { danger: true });
+  if (!ok) return;
+  for (let i = vlake.length - 1; i >= 0; i--) {
+    const v = vlake[i];
+    if (v.poly) map.removeLayer(v.poly);
+    (v.wpts || []).forEach(m => map.removeLayer(m));
+    if (v.labelMk) map.removeLayer(v.labelMk);
+    if (v.lagerMk) map.removeLayer(v.lagerMk);
+    (v.extraLabels || []).forEach(m => map.removeLayer(m));
+    sbDeleteVlaka(v);
+    clearTimeout(_vlakaSaveTimers[i]);
+  }
+  vlake = [];
+  actI = null;
+  _saveLocalVlake();
+  rndList();
+  showToast('Sve vlake obrisane.');
+}
+
 // Ukloni vlake kolega iz lokalne memorije za projekat (za ne-vlasnike)
 async function ukloniKolVlakeZaProjekat(projektId) {
   if (!projektId) return;
@@ -8735,7 +8756,8 @@ function rndList() {
 
   // Filtriraj po aktivnom projektu
   const hasProj = !!_aktivniProjektId;
-  const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : [];
+  const noProjects = !_projekti || _projekti.length === 0;
+  const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : (noProjects ? vlake : []);
   const rootVlake    = allProjVlake.filter(v => v.kr === 0);
   const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
   document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount}k` : '');
@@ -8757,9 +8779,12 @@ function rndList() {
     }
   }
 
-  if (!hasProj) {
+  if (!hasProj && !noProjects) {
     nv.style.display = 'block';
     nv.innerHTML = 'Odaberite projekat za prikaz vlaka.';
+  } else if (noProjects && vlake.length > 0) {
+    nv.style.display = 'block';
+    nv.innerHTML = `<div style="color:#f87171;margin-bottom:8px;">⚠ ${vlake.length} vlaka bez projekta</div><button onclick="_deleteAllOrphanVlake()" style="background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">✕ Obriši sve</button>`;
   } else if (rootVlake.length === 0) {
     nv.style.display = 'block';
     nv.innerHTML = `Još nema vlaka za ovaj projekat.<br>Kliknite <b style="color:#ea580c;"><img src="forwarder.svg" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</b>.`;
