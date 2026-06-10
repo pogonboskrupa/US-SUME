@@ -4097,9 +4097,17 @@ function _updPdVlakeBtn(id) {
 
 function _updVlakeMapVisibility() {
   const hidden = _getHiddenProjektIds();
+  // Pokupi br-ove vlaka koje pripadaju skrivenim projektima (matične + krakovi)
+  const hiddenBrs = new Set();
+  if (hidden.size > 0) {
+    vlake.forEach(v => {
+      if (v.projektId && hidden.has(v.projektId)) hiddenBrs.add(v.br);
+    });
+  }
   vlake.forEach(v => {
-    // Vlake su uvijek vidljive — skrivaju se samo ako je projekat eksplicitno sakriven
-    const show = !v.projektId || !hidden.has(v.projektId);
+    const projHidden = v.projektId && hidden.has(v.projektId);
+    const brHidden = hiddenBrs.has(v.br);
+    const show = !projHidden && !brHidden;
     const layers = [v.poly, ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
     layers.forEach(l => {
       try {
