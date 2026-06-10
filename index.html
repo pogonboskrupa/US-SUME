@@ -7987,6 +7987,40 @@ function _tragRegSave() {
 }
 
 // ── Quick meta prompt po završetku snimanja traga ──────────────────
+
+function _pointInRing(lat, lng, ring) {
+  if (!ring || ring.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [yi, xi] = Array.isArray(ring[i]) ? ring[i] : [ring[i].lat, ring[i].lng];
+    const [yj, xj] = Array.isArray(ring[j]) ? ring[j] : [ring[j].lat, ring[j].lng];
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function _findOdjelAtPoint(lat, lng) {
+  for (const o of graniceOdjeli) {
+    if (!o.bounds || !o.bounds.contains([lat, lng])) continue;
+    if (o.ring && o.ring.length >= 3) {
+      if (_pointInRing(lat, lng, o.ring)) return o.name;
+    } else {
+      return o.name;
+    }
+  }
+  return null;
+}
+
+function _findGjForOdjel(odjelName) {
+  if (!odjelName) return '';
+  const p = _projekti.find(pr => pr.odjel === odjelName);
+  if (p?.gj) return p.gj;
+  const low = odjelName.toLowerCase();
+  const p2 = _projekti.find(pr => pr.odjel?.toLowerCase() === low);
+  return p2?.gj || '';
+}
+
 let _tqmId = null;
 function _tqmOpen(id) {
   _tqmId = id;
@@ -7996,15 +8030,33 @@ function _tqmOpen(id) {
       `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
     ).join('');
   }
+
+  // Auto-detect odjel i GJ po lokaciji traga
+  const t = _tragRegistry.find(x => x.id === id);
+  let detectedOdjel = '';
+  let detectedGj = '';
+
+  if (t?.pts?.length) {
+    const mid = t.pts[Math.floor(t.pts.length / 2)];
+    const lat = mid[0], lng = mid[1];
+    detectedOdjel = _findOdjelAtPoint(lat, lng) || '';
+    if (detectedOdjel) {
+      detectedGj = _findGjForOdjel(detectedOdjel);
+    }
+  }
+
+  // Fallback na aktivni projekat
   const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  const gjV = detectedGj || aktP?.gj || '';
+  const odjV = detectedOdjel || aktP?.odjel || '';
+
   if (sel) {
-    const gjV = aktP?.gj || '';
     sel.value = (_GJ_OPTIONS.includes(gjV) ? gjV : (gjV ? 'CUSTOM' : ''));
     const cust = document.getElementById('tqm-gj-cust');
     if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? gjV : ''; }
   }
   const odj = document.getElementById('tqm-odjel');
-  if (odj) odj.value = aktP?.odjel || '';
+  if (odj) odj.value = odjV;
   document.getElementById('trag-quick-meta').classList.add('show');
 }
 function _tqmSave() {
