@@ -1246,6 +1246,22 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nv-badge .nv-icon { font-size:11px; margin-right:3px; }
 #nv-badge #nv-val { color:#22d3ee; font-weight:bold; font-size:11px; }
 #nv-badge .nv-sep { color:#334155; margin:0 6px; }
+/* Razmjera — klikabilna, otvara meni za izbor */
+#map-scale-click { pointer-events:auto; cursor:pointer; display:inline-flex; align-items:center; gap:2px; }
+#map-scale-click:active { opacity:0.7; }
+#scale-menu {
+  display:none; position:absolute; top:28px; right:8px; z-index:9100;
+  background:#0f172a; border:1px solid #1e293b; border-radius:10px;
+  box-shadow:0 6px 24px rgba(0,0,0,0.75); padding:5px; min-width:120px;
+}
+#scale-menu button {
+  display:block; width:100%; background:none; border:none; color:#cbd5e1;
+  padding:9px 14px; border-radius:7px; font-size:13px; font-family:monospace;
+  font-weight:600; cursor:pointer; text-align:left; transition:background .12s;
+}
+#scale-menu button:active { background:#1e293b; }
+/* Lager oznaka — vidljiva samo ispod razmjere 1:17000 */
+.lager-hidden .vlaka-lager-mk { display:none !important; }
 /* ── DEM legenda na mapi ─────────────────────────────────── */
 #dem-legend {
   position:absolute; bottom:70px; left:8px; z-index:850;
@@ -2818,7 +2834,16 @@ select:focus { outline:none; border-color:#3b82f6; }
         <span class="nv-sep">·</span>
         <span class="nv-lbl">X</span>&nbsp;<span id="omgi-x" class="nv-coord">—</span>
         <span class="nv-sep">|</span>
-        <span class="nv-lbl">1:</span><span id="map-scale-val">—</span>
+        <span id="map-scale-click" onclick="toggleScaleMenu(event)" title="Odaberi razmjeru">
+          <span class="nv-lbl">1:</span><span id="map-scale-val">—</span><span style="color:#475569;font-size:8px;margin-left:2px;">▾</span>
+        </span>
+      </div>
+      <!-- Meni za izbor razmjere -->
+      <div id="scale-menu">
+        <button onclick="setMapScale(10000)">1:10 000</button>
+        <button onclick="setMapScale(25000)">1:25 000</button>
+        <button onclick="setMapScale(50000)">1:50 000</button>
+        <button onclick="setMapScaleCustom()" style="color:#60a5fa;">Custom…</button>
       </div>
       <!-- Kontrolni panel odmah ispod nv-badge: zoom lijevo, slojevi desno -->
       <div id="map-ctrl-bar" style="display:none;">
@@ -6226,6 +6251,8 @@ function _updMapScale() {
   el.textContent = closest.toLocaleString('bs');
   // Sakrij tekstualne labele (brojevi odjela) pri razmjeri > 1:50 000
   map.getContainer().classList.toggle('labels-hidden', closest > 50000);
+  // Lager oznake vidljive samo ispod razmjere 1:17 000
+  map.getContainer().classList.toggle('lager-hidden', scale > 17000);
   // Sakrij vlake (linije + labele) pri razmjeri > 1:25 000
   const hideVlake = closest > 25000;
   const pLines  = map.getPane('vlakeLines');
@@ -6252,6 +6279,37 @@ function _updMapScale() {
 map.on('zoomend', _updMapScale);
 map.on('moveend', _updMapScale);
 
+// === IZBOR RAZMJERE (klik na badge) ===
+function toggleScaleMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('scale-menu');
+  if (m) m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+
+function setMapScale(scale) {
+  const m = document.getElementById('scale-menu');
+  if (m) m.style.display = 'none';
+  const lat = map.getCenter().lat;
+  const z = zoomForScale(scale, lat);
+  // Privremeno dopusti frakcioni zoom da razmjera bude tačna
+  const prevSnap = map.options.zoomSnap;
+  map.options.zoomSnap = 0;
+  map.setZoom(z, { animate: false });
+  map.options.zoomSnap = prevSnap;
+  _updMapScale();
+  showToast('Razmjera 1:' + scale.toLocaleString('bs'));
+}
+
+function setMapScaleCustom() {
+  const m = document.getElementById('scale-menu');
+  if (m) m.style.display = 'none';
+  const raw = prompt('Unesi razmjeru (npr. 17000 za 1:17 000):');
+  if (raw === null) return;
+  const v = parseInt(String(raw).replace(/[^\d]/g, ''), 10);
+  if (isNaN(v) || v < 500 || v > 500000) { showToast('⚠ Razmjera mora biti između 500 i 500 000'); return; }
+  setMapScale(v);
+}
+
 // Inicijalni fetch N.V. pri učitavanju
 (function() { const c = map.getCenter(); updMGI(c.lat, c.lng); debouncedUpdElev(c.lat, c.lng, 800); _updMapScale(); })();
 
@@ -6262,6 +6320,8 @@ document.addEventListener('click', e => {
   // mjtrg bottom sheet se zatvara preko #mjtrg-sheet-bg overlay-a
   const kp = document.getElementById('krak-picker');
   if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
+  const sm = document.getElementById('scale-menu');
+  if (sm && !sm.contains(e.target) && !e.target.closest('#map-scale-click')) sm.style.display = 'none';
 });
 
 // Keyboard shortcuts
@@ -8950,7 +9010,7 @@ function updateVlakaLabel(i) {
     <div style="color:#fbbf24;font-weight:bold;font-size:9px;text-align:center;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,1);margin-top:1px;pointer-events:none;">${v.lager}</div>`;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
       icon: L.divIcon({
-        className: '', iconSize: [LW, LH+11], iconAnchor: [LW/2, LH/2],
+        className: 'vlaka-lager-mk', iconSize: [LW, LH+11], iconAnchor: [LW/2, LH/2],
         html: svgSym
       }),
       interactive: false, zIndexOffset: 600, pane: 'vlakeLabels'
