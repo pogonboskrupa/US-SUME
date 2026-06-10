@@ -14021,8 +14021,20 @@ self.onmessage = async ({data:msg}) => {
         try{const r50=await mini._tblSearch(mini.tilesRoot,50);tbl50=r50?(r50[mini.colD]instanceof Uint8Array?r50[mini.colD].length+'b':'t:'+(typeof r50[mini.colD])):'null';}catch(e){tbl50='e';}
         t5+=' tbl50='+tbl50;
       }catch(e5){t5='e:'+e5.message;}
+      // Read full sqlite_master schema to find all tables/indices/views + CREATE INDEX SQL
+      let schemaDump='?',idxSqlStr='?';
+      try{
+        const schemas=[];
+        await mini._scanLeaves(1,(rid,r)=>{
+          if(r[0]==='table'||r[0]==='index'||r[0]==='view')
+            schemas.push(r[0].slice(0,3)+':'+r[1]+'@'+r[3]);
+          if(r[0]==='index'&&r[2]?.toLowerCase()==='tiles')
+            idxSqlStr=(r[4]||'nosql').toLowerCase().replace(/\s+/g,' ').slice(0,120);
+        });
+        schemaDump=schemas.join('|');
+      }catch(e){schemaDump='e:'+e.message;}
       const mkKeys=Object.keys(meta).filter(k=>k!=='_d'&&k!=='minzoom'&&k!=='maxzoom');
-      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] mk['+( mkKeys.length?mkKeys.join(','):'none')+']';
+      meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] sch['+schemaDump+'] isql['+idxSqlStr+']';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
     }
