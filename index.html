@@ -723,59 +723,61 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
 /* ═══ TRAG SNIMANJE — action-bar stilovi ═══ */
-#action-bar.trag-mode { border-top-color:rgba(249,115,22,0.4); }
-#ab-trag-pauza.resuming .ab-ico { background:#16a34a !important; }
+#action-bar.trag-mode { border-top-color:#f97316; background:rgba(255,255,255,0.92); }
+#ab-trag-pauza.resuming .ab-ico { background:#dcfce7 !important; color:#16a34a !important; }
 
 /* ═══ TRAG QUICK META (post-recording panel above action-bar) ═══ */
 #trag-quick-meta {
   display:none; position:fixed; bottom:60px; left:0; right:0; z-index:1601;
-  background:rgba(10,18,32,0.97); border-top:2px solid #f97316;
-  border-radius:14px 14px 0 0;
-  box-shadow:0 -8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(249,115,22,0.1);
-  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-  font-family:'DM Sans',Arial,sans-serif; overflow:hidden;
+  background:#fff; border-top:3px solid #f97316;
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -6px 32px rgba(0,0,0,0.10), 0 -1px 0 rgba(0,0,0,0.04);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; overflow:hidden;
   animation:tqmSlideUp 0.25s ease-out;
 }
 @keyframes tqmSlideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
 #trag-quick-meta.show { display:block; }
 .tqm-header {
   display:flex; align-items:center; gap:8px;
-  padding:12px 14px 10px; border-bottom:1px solid rgba(249,115,22,0.15);
+  padding:14px 16px 10px; border-bottom:1px solid #f1f5f9;
 }
 .tqm-header-icon {
-  width:28px; height:28px; border-radius:8px; background:rgba(249,115,22,0.15);
-  display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+  width:30px; height:30px; border-radius:10px; background:#fff7ed;
+  display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;
+  color:#ea580c;
 }
-.tqm-header-text { font-size:14px; font-weight:700; color:#fb923c; }
-.tqm-header-sub  { font-size:11px; color:#64748b; font-weight:400; }
-.tqm-body { padding:12px 14px; }
+.tqm-header-text { font-size:15px; font-weight:700; color:#1e293b; }
+.tqm-header-sub  { font-size:11px; color:#9ca3af; font-weight:400; }
+.tqm-body { padding:14px 16px; }
 .tqm-field { margin-bottom:10px; }
 .tqm-label {
-  font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.8px;
+  font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:0.8px;
   margin-bottom:4px; font-weight:600;
 }
 .tqm-input, .tqm-select {
-  width:100%; background:#0f172a; border:1px solid #1e3a5f; color:#e2e8f0;
-  border-radius:8px; padding:9px 11px; font-size:13px; box-sizing:border-box;
+  width:100%; background:#f8fafc; border:1.5px solid #e2e8f0; color:#1e293b;
+  border-radius:10px; padding:9px 11px; font-size:13px; box-sizing:border-box;
   transition:border-color 0.15s, box-shadow 0.15s; outline:none;
+  -webkit-appearance:none;
 }
-.tqm-input:focus, .tqm-select:focus { border-color:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.2); }
-.tqm-input::placeholder { color:#475569; }
+.tqm-input:focus, .tqm-select:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,0.12); }
+.tqm-input::placeholder { color:#9ca3af; }
 .tqm-actions {
-  display:flex; gap:8px; padding:0 14px 14px;
+  display:flex; gap:10px; padding:0 16px 16px;
 }
 .tqm-btn-save {
   flex:1; background:linear-gradient(135deg,#ea580c,#f97316); color:#fff;
-  border:none; border-radius:10px; padding:11px; font-size:14px; font-weight:700;
+  border:none; border-radius:12px; padding:12px; font-size:15px; font-weight:700;
   cursor:pointer; transition:filter 0.15s, transform 0.1s;
+  box-shadow:0 2px 8px rgba(249,115,22,0.25);
 }
-.tqm-btn-save:active { filter:brightness(1.15); transform:scale(0.98); }
+.tqm-btn-save:active { filter:brightness(1.1); transform:scale(0.98); }
 .tqm-btn-skip {
-  flex:0 0 auto; background:transparent; color:#64748b; border:1px solid #334155;
-  border-radius:10px; padding:11px 16px; font-size:13px; cursor:pointer;
-  transition:border-color 0.15s, color 0.15s;
+  flex:0 0 auto; background:#f1f5f9; color:#64748b; border:1.5px solid #e2e8f0;
+  border-radius:12px; padding:12px 18px; font-size:14px; cursor:pointer;
+  transition:background 0.15s;
 }
-.tqm-btn-skip:active { border-color:#64748b; color:#94a3b8; }
+.tqm-btn-skip:active { background:#e2e8f0; }
 
 /* ═══ DRAW BANNER (zelena) ═══ */
 #draw-banner { background:rgba(5,30,22,0.97); border:2px solid #4ade80; }
@@ -1773,80 +1775,80 @@ select:focus { outline:none; border-color:#3b82f6; }
 #print-footer { display:none; }
 #print-legend { display:none; }
 
-/* ── Custom dialog sheet ────────────────────────────────── */
+/* ── Custom dialog sheet — iOS style ─────────────────────── */
 #dlg-overlay {
   display:none; position:fixed; inset:0; z-index:9800;
-  background:rgba(0,0,0,0.55); backdrop-filter:blur(3px);
+  background:rgba(0,0,0,0.3); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
 }
 #dlg-overlay.show { display:block; }
 #dlg-sheet {
   position:fixed; bottom:0; left:0; right:0; z-index:9801;
-  background:rgba(8,15,28,0.98); border-top:2px solid #3b82f6;
-  border-radius:18px 18px 0 0;
-  box-shadow:0 -10px 40px rgba(0,0,0,0.75), 0 0 0 1px rgba(59,130,246,0.12);
-  backdrop-filter:blur(18px);
-  padding:22px 16px calc(env(safe-area-inset-bottom,0px) + 28px);
+  background:#fff;
+  border-radius:20px 20px 0 0;
+  box-shadow:0 -8px 40px rgba(0,0,0,0.12), 0 -1px 0 rgba(0,0,0,0.04);
+  padding:20px 18px calc(env(safe-area-inset-bottom,0px) + 24px);
   transform:translateY(100%);
-  transition:transform 0.26s cubic-bezier(0.32,0.72,0,1);
+  transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
 }
 #dlg-sheet.show { transform:translateY(0); }
 #dlg-handle {
-  width:36px; height:4px; background:#334155; border-radius:2px;
-  margin:0 auto 18px; cursor:pointer;
+  width:36px; height:4px; background:#d1d5db; border-radius:2px;
+  margin:0 auto 16px; cursor:pointer;
 }
 #dlg-title {
-  font-size:16px; font-weight:800; color:#f1f5f9;
+  font-size:17px; font-weight:800; color:#1e293b;
   margin-bottom:6px; line-height:1.3;
 }
 #dlg-msg {
-  font-size:13px; color:#94a3b8; margin-bottom:16px;
+  font-size:13px; color:#64748b; margin-bottom:16px;
   white-space:pre-line; line-height:1.5;
 }
 #dlg-input-wrap { display:none; margin-bottom:16px; }
 #dlg-input {
-  width:100%; background:#0f172a; border:1.5px solid #1e3a5f; color:#e2e8f0;
-  border-radius:11px; padding:12px 14px; font-size:15px; box-sizing:border-box;
+  width:100%; background:#f8fafc; border:1.5px solid #e2e8f0; color:#1e293b;
+  border-radius:12px; padding:13px 14px; font-size:15px; box-sizing:border-box;
   outline:none; transition:border-color 0.15s, box-shadow 0.15s;
   -webkit-appearance:none;
 }
-#dlg-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.18); }
-#dlg-input::placeholder { color:#475569; }
+#dlg-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.12); }
+#dlg-input::placeholder { color:#9ca3af; }
 #dlg-btns { display:flex; gap:10px; }
 .dlg-btn-ok {
-  flex:1; border:none; border-radius:11px; padding:14px; font-size:15px; font-weight:700;
+  flex:1; border:none; border-radius:12px; padding:14px; font-size:15px; font-weight:700;
   cursor:pointer; transition:filter 0.15s, transform 0.1s;
   background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:#fff;
+  box-shadow:0 2px 8px rgba(59,130,246,0.25);
 }
-.dlg-btn-ok.danger { background:linear-gradient(135deg,#991b1b,#ef4444); }
-.dlg-btn-ok:active { filter:brightness(1.15); transform:scale(0.98); }
+.dlg-btn-ok.danger { background:linear-gradient(135deg,#b91c1c,#ef4444); box-shadow:0 2px 8px rgba(239,68,68,0.25); }
+.dlg-btn-ok:active { filter:brightness(1.1); transform:scale(0.98); }
 .dlg-btn-cancel {
-  flex:0 0 auto; background:transparent; color:#64748b; border:1.5px solid #2d3f55;
-  border-radius:11px; padding:14px 20px; font-size:14px; cursor:pointer;
-  transition:border-color 0.15s, color 0.15s;
+  flex:0 0 auto; background:#f1f5f9; color:#64748b; border:1.5px solid #e2e8f0;
+  border-radius:12px; padding:14px 20px; font-size:14px; cursor:pointer;
+  transition:background 0.15s;
 }
-.dlg-btn-cancel:active { border-color:#64748b; color:#94a3b8; }
+.dlg-btn-cancel:active { background:#e2e8f0; }
 #dlg-actions-list { display:none; flex-direction:column; gap:8px; margin-bottom:0; }
 .dlg-action-btn {
-  width:100%; border:none; border-radius:11px; padding:14px; font-size:14px; font-weight:600;
-  cursor:pointer; text-align:left; transition:filter 0.15s, transform 0.1s;
-  background:#1e293b; color:#e2e8f0; border:1px solid #334155;
+  width:100%; border:none; border-radius:12px; padding:14px; font-size:14px; font-weight:600;
+  cursor:pointer; text-align:left; transition:background 0.15s, transform 0.1s;
+  background:#f8fafc; color:#1e293b; border:1.5px solid #e2e8f0;
 }
-.dlg-action-btn.danger { color:#f87171; border-color:#7f1d1d; background:#1f0e0e; }
-.dlg-action-btn:active { filter:brightness(1.2); transform:scale(0.99); }
+.dlg-action-btn.danger { color:#dc2626; border-color:#fecaca; background:#fef2f2; }
+.dlg-action-btn:active { background:#e2e8f0; transform:scale(0.99); }
 
-/* ── Action bar (Snimi vlaku / Snimi trag / Moja lokacija) ─ */
+/* ── Action bar — iOS style ─ */
 #action-bar {
   display: none;
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  background: rgba(10,17,31,0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.25);
-  padding: 5px 8px 8px;
-  gap: 5px;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-top: 0.5px solid rgba(0,0,0,0.12);
+  box-shadow: 0 -1px 0 rgba(0,0,0,0.04), 0 -4px 16px rgba(0,0,0,0.06);
+  padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  gap: 2px;
 }
 #action-bar button {
   flex: 1;
@@ -1854,44 +1856,60 @@ select:focus { outline:none; border-color:#3b82f6; }
   border: none;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 3px;
+  gap: 2px;
   cursor: pointer;
-  padding: 0;
+  padding: 2px 0;
   transition: all 0.15s ease;
-  color: rgba(255,255,255,0.72);
+  color: #6b7280;
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
 }
-#action-bar button:active { transform: scale(0.88); opacity: 0.85; }
+#action-bar button:active { transform: scale(0.88); opacity: 0.7; }
 #action-bar .ab-ico {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 28px; height: 28px; border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; line-height: 1;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  font-size: 14px; line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: box-shadow 0.15s, transform 0.15s;
 }
-#action-bar .ab-ico img { width: 13px; height: 13px; object-fit: contain; filter: brightness(0) invert(1); }
-/* Solid svjetle pozadine */
-#brec     .ab-ico { background: #16a34a; color: #fff; }
-#btrag    .ab-ico { background: #dc2626; color: #fff; }
-#ab-tacka .ab-ico { background: #d97706; color: #fff; }
-#ab-loc   .ab-ico { background: #2563eb; color: #fff; }
-#ab-krak-l .ab-ico { background: #0891b2; color: #fff; }
-#ab-krak-d .ab-ico { background: #ea580c; color: #fff; }
-#ab-nazad  .ab-ico { background: #7c3aed; color: #fff; }
-#ab-kraj   .ab-ico { background: #dc2626; color: #fff; }
-#ab-pauza  .ab-ico { background: #ca8a04; color: #fff; }
-/* Aktivna stanja */
-#btrag.active .ab-ico { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.35); }
-#brec.active  .ab-ico { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.35); }
-#ab-pauza.resuming .ab-ico { background: #16a34a; }
+#action-bar .ab-ico img { width: 14px; height: 14px; object-fit: contain; filter: none; }
+/* Button icon colors — softer pastels on white */
+#brec     .ab-ico { background: #dcfce7; color: #16a34a; }
+#brec     { color: #16a34a; }
+#btrag    .ab-ico { background: #fee2e2; color: #dc2626; }
+#btrag    { color: #dc2626; }
+#ab-tacka .ab-ico { background: #fef3c7; color: #d97706; }
+#ab-tacka { color: #92400e; }
+#ab-loc   .ab-ico { background: #dbeafe; color: #2563eb; }
+#ab-loc   { color: #1d4ed8; }
+#ab-krak-l .ab-ico { background: #cffafe; color: #0891b2; }
+#ab-krak-l { color: #0e7490; }
+#ab-krak-d .ab-ico { background: #ffedd5; color: #ea580c; }
+#ab-krak-d { color: #c2410c; }
+#ab-nazad  .ab-ico { background: #ede9fe; color: #7c3aed; }
+#ab-nazad  { color: #6d28d9; }
+#ab-kraj   .ab-ico { background: #fee2e2; color: #dc2626; }
+#ab-kraj   { color: #dc2626; }
+#ab-pauza  .ab-ico { background: #fef9c3; color: #a16207; }
+#ab-pauza  { color: #92400e; }
+#ab-izmjeri .ab-ico { background: #f0fdf4; color: #16a34a; }
+#ab-izmjeri { color: #15803d; }
+/* Active states */
+#btrag.active .ab-ico { background: #ef4444; color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
+#btrag.active { color: #ef4444; }
+#brec.active  .ab-ico { background: #22c55e; color: #fff; box-shadow: 0 0 0 3px rgba(34,197,94,0.25); }
+#brec.active  { color: #16a34a; }
+#ab-pauza.resuming .ab-ico { background: #22c55e; color: #fff; }
 #action-bar #brec-nm {
-  font-size: 8px; color: #fbbf24; line-height: 1;
+  font-size: 8px; color: #b45309; line-height: 1;
   max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#action-bar.rec-mode .ab-ico { width: 24px; height: 24px; font-size: 12px; }
+#action-bar.rec-mode .ab-ico { width: 26px; height: 26px; font-size: 12px; }
 #action-bar.rec-mode button { font-size: 8px; }
 #action-bar.paused-mode button { font-size: 8px; }
+/* Active icon img filter for white bg → show original color */
+#brec.active .ab-ico img { filter: brightness(0) invert(1); }
 .leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
 .tacka-popup-btn, .foto-popup-btn {
   background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;
@@ -15023,8 +15041,9 @@ function showToast(msg) {
     t = document.createElement('div');
     t.id = 'toast-msg';
     t.style.cssText = `position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
-      background:rgba(15,23,42,0.95);border:1px solid #4ade80;border-radius:20px;
-      padding:7px 18px;font-size:13px;color:#4ade80;z-index:9000;pointer-events:none;
+      background:#fff;border:none;border-radius:22px;
+      padding:8px 20px;font-size:13px;font-weight:600;color:#1e293b;z-index:9000;pointer-events:none;
+      box-shadow:0 4px 16px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.06);
       transition:opacity 0.4s;`;
     document.body.appendChild(t);
   }
@@ -15063,7 +15082,7 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
     ok.textContent   = okLabel;
     ca.textContent   = cancelLabel;
     ok.className     = 'dlg-btn-ok' + (danger ? ' danger' : '');
-    sh.style.borderTopColor = danger ? '#ef4444' : '#3b82f6';
+    sh.style.borderTop = danger ? '3px solid #ef4444' : 'none';
 
     if (mode === 'prompt') {
       inp.type      = inputType;
@@ -17516,13 +17535,13 @@ function toggleHelpSec(hdr) {
     </button>
     <!-- Podmeni — pojavljuje se iznad dugmeta -->
     <div id="ab-izmjeri-menu" style="display:none;position:absolute;bottom:calc(100% + 8px);left:50%;
-      transform:translateX(-50%);background:#0f172a;border:1px solid #1e293b;border-radius:12px;
-      box-shadow:0 -6px 24px rgba(0,0,0,0.75);padding:5px;white-space:nowrap;z-index:9100;min-width:160px;">
+      transform:translateX(-50%);background:#fff;border:0.5px solid rgba(0,0,0,0.1);border-radius:14px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.04);padding:5px;white-space:nowrap;z-index:9100;min-width:160px;">
       <!-- Tačka -->
       <button onclick="_izmjeriPick('tacka')" style="display:flex;align-items:center;gap:11px;width:100%;
-        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        background:none;border:none;color:#374151;padding:9px 12px;border-radius:10px;font-size:13px;
         font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
-        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M10 2C7.24 2 5 4.24 5 7c0 3.75 5 10 5 10s5-6.25 5-10c0-2.76-2.24-5-5-5z" fill="#60a5fa"/>
           <circle cx="10" cy="7" r="2" fill="#fff"/>
@@ -17531,9 +17550,9 @@ function toggleHelpSec(hdr) {
       </button>
       <!-- Distanca -->
       <button onclick="_izmjeriPick('dist')" style="display:flex;align-items:center;gap:11px;width:100%;
-        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        background:none;border:none;color:#374151;padding:9px 12px;border-radius:10px;font-size:13px;
         font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
-        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <line x1="3" y1="10" x2="17" y2="10" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
           <line x1="3" y1="7" x2="3" y2="13" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
@@ -17545,9 +17564,9 @@ function toggleHelpSec(hdr) {
       </button>
       <!-- Površina -->
       <button onclick="_izmjeriPick('area')" style="display:flex;align-items:center;gap:11px;width:100%;
-        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        background:none;border:none;color:#374151;padding:9px 12px;border-radius:10px;font-size:13px;
         font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
-        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <polygon points="10,3 17,14 3,14" fill="#a78bfa" fill-opacity="0.35" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>
           <circle cx="10" cy="3" r="1.8" fill="#a78bfa"/>
@@ -17558,9 +17577,9 @@ function toggleHelpSec(hdr) {
       </button>
       <!-- Nagib -->
       <button onclick="_izmjeriPick('nagib')" style="display:flex;align-items:center;gap:11px;width:100%;
-        background:none;border:none;color:#cbd5e1;padding:9px 12px;border-radius:8px;font-size:13px;
+        background:none;border:none;color:#374151;padding:9px 12px;border-radius:10px;font-size:13px;
         font-weight:500;cursor:pointer;text-align:left;transition:background .12s;"
-        onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='none'">
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M3 15 L15 5" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/>
           <path d="M15 5 L15 15 L3 15" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
@@ -17583,8 +17602,8 @@ function toggleHelpSec(hdr) {
     <span class="ab-ico" style="background:#dc2626;">⏹</span>
     <span>Završi</span>
   </button>
-  <div id="ab-trag-stats" style="display:none;flex:1;text-align:center;color:#fb923c;font-size:11px;font-weight:700;align-self:center;line-height:1.4;">
-    <div style="font-size:8px;color:#94a3b8;font-weight:600;letter-spacing:0.5px;">SNIMANJE TRAGA</div>
+  <div id="ab-trag-stats" style="display:none;flex:1;text-align:center;color:#c2410c;font-size:11px;font-weight:700;align-self:center;line-height:1.4;">
+    <div style="font-size:8px;color:#9ca3af;font-weight:600;letter-spacing:0.5px;">SNIMANJE TRAGA</div>
     <span id="ab-trag-info">0 tač. · 0 m</span>
   </div>
 </div>
