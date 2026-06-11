@@ -4276,19 +4276,87 @@ async function startManualVlakaDraw() {
   const brMatch = nm.match(/^T(\d+)(?:\.(\d+))?$/);
   const br = brMatch ? parseInt(brMatch[1]) : nextBr;
   const kr = brMatch && brMatch[2] ? parseInt(brMatch[2]) : 0;
+
+  // Ako je krak (ima . u nazivu) — traži spoj na roditelju
+  const parentNm = nm.split('.').slice(0, -1).join('.');
+  let parentIdx = -1;
+  let junctionPt = null;
+  if (parentNm) {
+    parentIdx = vlake.findIndex(v => v.nm === parentNm && v.projektId === _aktivniProjektId);
+    if (parentIdx >= 0 && vlake[parentIdx].pts.length >= 2) {
+      // Zoom na roditelja i traži tap za spoj
+      switchTab('karta');
+      zmV(parentIdx);
+      junctionPt = await _pickJunctionOnVlaka(parentIdx);
+      if (!junctionPt) return; // korisnik otkazao
+    }
+  }
+
   const color = PAL[cIdx];
   const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
   poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
-  vlake.push({ nm, br, kr, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+  const strana = kr > 0 ? (await _dlgActions('Strana kraka', [
+    { label: 'L — lijevo' }, { label: 'D — desno' }, { label: 'Bez strane' }
+  ])) : null;
+  const strVal = strana === 0 ? 'L' : strana === 1 ? 'D' : null;
+  vlake.push({ nm, br, kr, strana: strVal, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
   const idx = vlake.length - 1;
+
+  // Ako imamo junction tačku, dodaj je kao prvu tačku kraka
+  if (junctionPt) {
+    vlake[idx].pts.push({ la: junctionPt.lat, lo: junctionPt.lng, al: 0 });
+    poly.addLatLng([junctionPt.lat, junctionPt.lng]);
+  }
+
   sbFlushVlaka(idx);
   cIdx = (cIdx + 1) % PAL.length;
   selC = PAL[cIdx];
   rndList();
   selI(idx);
-  switchTab('karta');
+  if (_activeTab !== 'karta') switchTab('karta');
   setTimeout(() => { _mdpStart(idx); }, 300);
+}
+
+// Korisnik tapne na roditeljsku vlaku da odabere tačku spoja
+function _pickJunctionOnVlaka(parentIdx) {
+  return new Promise(resolve => {
+    const v = vlake[parentIdx];
+    showToast('📍 Tapni na vlaku ' + v.nm + ' gdje se krak spaja');
+    // Privremeni handleri na polyline i na sve node markere duž linije
+    const markers = [];
+    v.pts.forEach((pt, pi) => {
+      const isFirst = pi === 0, isLast = pi === v.pts.length - 1;
+      const col = isFirst ? '#4ade80' : isLast ? '#f87171' : '#f59e0b';
+      const ico = L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9],
+        html: `<div style="width:18px;height:18px;border-radius:50%;background:${col};border:2.5px solid #fff;box-shadow:0 0 0 3px ${col}44,0 2px 6px rgba(0,0,0,0.4);cursor:crosshair;"></div>` });
+      const mk = L.marker([pt.la, pt.lo], { icon: ico, zIndexOffset: 800, interactive: true }).addTo(map);
+      mk.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        cleanup();
+        resolve(L.latLng(pt.la, pt.lo));
+      });
+      markers.push(mk);
+    });
+    // Tap između tačaka — snap na najbliži segment
+    function onPolyClick(e) {
+      L.DomEvent.stopPropagation(e);
+      cleanup();
+      resolve(e.latlng);
+    }
+    v.poly.on('click', onPolyClick);
+    // Escape / odustani
+    function onKey(e) {
+      if (e.key === 'Escape') { cleanup(); resolve(null); }
+    }
+    document.addEventListener('keydown', onKey);
+
+    function cleanup() {
+      markers.forEach(m => map.removeLayer(m));
+      v.poly.off('click', onPolyClick);
+      document.removeEventListener('keydown', onKey);
+    }
+  });
 }
 
 // ─── Modal za ručno crtanje vlake — checkbox "Crtaj" (vuci) + dugme "Tačka" ───
