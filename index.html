@@ -122,12 +122,12 @@
 /* Header */
 .auth-hdr { text-align:center; margin-bottom:14px; animation:authFadeIn 0.6s 0.2s both; display:flex; flex-direction:column; align-items:center; }
 .auth-logo-box {
-  width:96px; height:96px; margin:0 auto 8px;
+  width:96px; height:115px; margin:0 auto 8px;
   background:transparent; border:none; border-radius:0;
   display:flex; align-items:center; justify-content:center;
-  position:relative; overflow:hidden;
+  position:relative; overflow:visible;
 }
-.auth-logo-box img { width:96px; height:auto; border-radius:12px; }
+.auth-logo-box img { width:auto; height:115px; border-radius:12px; object-fit:contain; }
 .auth-logo-box::before { content:''; }
 .auth-logo-corner { display:none; }
 .auth-org-name {
