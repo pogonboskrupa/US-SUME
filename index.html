@@ -15653,7 +15653,7 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
     tl.textContent = title;
     ms.textContent = msg;
     ms.style.display = msg ? '' : 'none';
-    iw.style.display = mode === 'prompt' ? '' : 'none';
+    iw.style.display = mode === 'prompt' ? 'block' : 'none';
     bt.style.display = mode === 'actions' ? 'none' : '';
     al.style.display = mode === 'actions' ? 'flex' : 'none';
     ca.style.display = (mode === 'alert' || mode === 'actions') ? 'none' : '';
