@@ -2890,6 +2890,27 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
       </div>
 
+      <!-- BOJE VLAKA -->
+      <div class="sec">
+        <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Glavna vlaka</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div id="boja-vl-presets" style="display:flex;gap:4px;"></div>
+              <input type="color" id="boja-vl-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaVlChange(this.value)" onchange="_bojaVlChange(this.value)">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Krak</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div id="boja-kr-presets" style="display:flex;gap:4px;"></div>
+              <input type="color" id="boja-kr-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaKrChange(this.value)" onchange="_bojaKrChange(this.value)">
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
       <div class="sec">
         <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
@@ -4389,7 +4410,7 @@ async function startManualVlakaDraw() {
     }
   }
 
-  const color = PAL[cIdx];
+  const color = kr > 0 ? getBojaKraka() : getBojaVlake();
   const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
   poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
@@ -4732,8 +4753,7 @@ async function impVlakaConfirm() {
     const m = t.nm.match(/^T?(\d+)(?:\.(\d+))?/i);
     const br = m ? parseInt(m[1]) : (Math.max(0, ...vlake.map(v => v.br)) + 1);
     const kr = m && m[2] ? parseInt(m[2]) : 0;
-    const color = PAL[cIdx];
-    cIdx = (cIdx + 1) % PAL.length; selC = PAL[cIdx];
+    const color = kr > 0 ? getBojaKraka() : getBojaVlake();
     const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(t.nm, { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
@@ -6420,6 +6440,40 @@ const PAL = ['#60a5fa','#f87171','#fbbf24','#a78bfa','#fb923c','#38bdf8','#f472b
 const KORISNIK_PAL = ['#f97316','#818cf8','#22d3ee','#fb7185','#facc15','#c084fc','#2dd4bf','#f43f5e','#60a5fa','#fbbf24'];
 let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 
+// ── Default boje vlaka / krakova ─────────────────────────────────────────────
+const _BOJA_KEY = 'tvlake_boje_v1';
+const _BOJA_PRESETS = ['#60a5fa','#4ade80','#fbbf24','#f87171','#a78bfa','#fb923c','#38bdf8','#e2e8f0'];
+function _loadBoje() {
+  try { return JSON.parse(localStorage.getItem(_BOJA_KEY) || '{}'); } catch { return {}; }
+}
+function _saveBoje(b) { localStorage.setItem(_BOJA_KEY, JSON.stringify(b)); }
+function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
+function getBojaKraka()  { return _loadBoje().krak  || '#f87171'; }
+function _bojaVlChange(col) {
+  const b = _loadBoje(); b.vlaka = col; _saveBoje(b);
+  document.getElementById('boja-vl-pick').value = col;
+  _rndBojaPresets();
+}
+function _bojaKrChange(col) {
+  const b = _loadBoje(); b.krak = col; _saveBoje(b);
+  document.getElementById('boja-kr-pick').value = col;
+  _rndBojaPresets();
+}
+function _rndBojaPresets() {
+  const vlCol = getBojaVlake(), krCol = getBojaKraka();
+  const vlEl = document.getElementById('boja-vl-presets');
+  const krEl = document.getElementById('boja-kr-presets');
+  if (!vlEl || !krEl) return;
+  document.getElementById('boja-vl-pick').value = vlCol;
+  document.getElementById('boja-kr-pick').value = krCol;
+  vlEl.innerHTML = _BOJA_PRESETS.map(c =>
+    `<span onclick="_bojaVlChange('${c}')" style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c===vlCol?'#fff':'transparent'};flex-shrink:0;"></span>`
+  ).join('');
+  krEl.innerHTML = _BOJA_PRESETS.map(c =>
+    `<span onclick="_bojaKrChange('${c}')" style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c===krCol?'#fff':'transparent'};flex-shrink:0;"></span>`
+  ).join('');
+}
+
 function buildC() {
   const el = document.getElementById('clrs');
   if (!el) return;
@@ -7876,7 +7930,7 @@ function vcCancel() {
 
 async function _doCreateVlaka(br, kr) {
   const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
-  const color = selC;
+  const color = kr > 0 ? getBojaKraka() : getBojaVlake();
   const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
   attachPolyClick(poly);
@@ -7903,7 +7957,11 @@ async function _showLagerDlg(vIdx) {
   const v = vlake[vIdx];
   if (v.kr !== 0 || v.pts.length === 0) return; // samo matična trasa s tačkama
   _lagerTargetIdx = vIdx;
-  const { lbl } = await nextLagerNum();
+  // Prijedlog: L{br} (npr. T1 → L1, T17 → L17); ako je zauzeto, padamo na sljedeći slobodan
+  const preferred = 'L' + v.br;
+  const { lbl: fallback } = await nextLagerNum();
+  const used = new Set(vlake.map(x => x.lager).filter(Boolean));
+  const lbl = !used.has(preferred) ? preferred : fallback;
   document.getElementById('ld-title').textContent = `🏷 Broj lagera za ${v.nm}`;
   document.getElementById('ld-sub').textContent = 'Prijedlog: ' + lbl + '  (možeš promijeniti ili preskočiti)';
   document.getElementById('lager-input').value = lbl;
@@ -13528,7 +13586,7 @@ function switchTab(tab) {
     _setMapUIVisible(false, false);
     msrStop(true);
   } else if (tab==='projekat') {
-    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList();
+    pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList(); _rndBojaPresets();
     _setMapUIVisible(false, false);
     msrStop(true);
   } else if (tab==='doznaka') {
