@@ -3059,24 +3059,6 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
 
-        <!-- SNIMANJE TRAGA -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">🛤 Snimanje traga</span>
-            <span id="trn-trag-status" style="font-size:11px;color:#64748b;">neaktivno</span>
-          </div>
-          <div id="trn-trag-idle">
-            <button onclick="terenTogTrag()" style="width:100%;padding:13px;background:linear-gradient(135deg,#dc2626,#ef4444);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🔴 Započni snimanje</button>
-          </div>
-          <div id="trn-trag-active" style="display:none;">
-            <div id="trn-trag-stats" style="text-align:center;font-size:14px;color:#34d399;font-family:monospace;font-weight:700;margin-bottom:10px;">0 tač. · 0 m</div>
-            <div style="display:flex;gap:8px;">
-              <button id="trn-trag-pause" onclick="terenPauseTrag()" style="flex:1;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">⏸ Pauza</button>
-              <button onclick="terenStopTrag()" style="flex:1;padding:11px;background:linear-gradient(135deg,#7f1d1d,#991b1b);border:none;border-radius:10px;color:#fca5a5;font-size:13px;font-weight:600;cursor:pointer;">⏹ Završi</button>
-            </div>
-          </div>
-        </div>
-
         <!-- MOJI TRAGOVI -->
         <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -3088,11 +3070,15 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
 
-        <!-- SQLITE ATRIBUTI -->
-        <div id="trn-sql-info" style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;display:none;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🔍 Info o tački na karti</div>
-          <div style="color:#64748b;font-size:12px;margin-bottom:8px;">Tapni na kartu dok je otvoren Teren panel da vidiš informacije o lokaciji.</div>
-          <div id="trn-sql-result" style="display:flex;flex-direction:column;gap:4px;"></div>
+        <!-- MJERENJA -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📏 Mjerenja</span>
+            <span id="trn-msr-cnt" style="font-size:11px;color:#64748b;">0</span>
+          </div>
+          <div id="trn-msr-list" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih mjerenja</div>
+          </div>
         </div>
 
       </div>
@@ -6864,6 +6850,9 @@ function terenRender() {
   terenUpdCompass();
   // Tačke
   terenRenderTacke();
+  // Tragovi + Mjerenja
+  terenRenderTragovi();
+  terenRenderMjerenja();
   // Trag stats
   if (_tragOn) terenUpdTragStats();
 }
@@ -7018,6 +7007,34 @@ function _copyAndToast(txt, nm) {
   } else {
     showToast(txt);
   }
+}
+
+// ── Teren: sačuvana mjerenja ─────────────────────────────────────────────────
+function terenRenderMjerenja() {
+  const list = document.getElementById('trn-msr-list');
+  const cnt = document.getElementById('trn-msr-cnt');
+  if (cnt) cnt.textContent = _msrRegistry.length;
+  if (!list) return;
+  if (!_msrRegistry.length) {
+    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih mjerenja</div>';
+    return;
+  }
+  list.innerHTML = _msrRegistry.slice(0, 20).map(m => {
+    const dt = new Date(m.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const lenM = _msrPts2Len(m.pts);
+    const len = _msrFmt(lenM);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
+      <div style="width:4px;height:28px;border-radius:2px;background:${m.color||'#fbbf24'};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(m.name)}</div>
+        <div style="font-size:11px;color:#64748b;">${dt} · ${len} · ${m.pts.length} tač.</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button onclick="_msrRegZoom('${m.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:11px;cursor:pointer;" title="Prikaži na karti">🗺</button>
+        <button onclick="_msrAskDelete('${m.id}');terenRenderMjerenja()" style="padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f87171;font-size:11px;cursor:pointer;" title="Briši">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Teren: info o tački na karti (KML/odjeli atributi) ───────────────────────
