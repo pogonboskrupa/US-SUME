@@ -3059,6 +3059,42 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
 
+        <!-- SNIMANJE TRAGA -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">🛤 Snimanje traga</span>
+            <span id="trn-trag-status" style="font-size:11px;color:#64748b;">neaktivno</span>
+          </div>
+          <div id="trn-trag-idle">
+            <button onclick="terenTogTrag()" style="width:100%;padding:13px;background:linear-gradient(135deg,#dc2626,#ef4444);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🔴 Započni snimanje</button>
+          </div>
+          <div id="trn-trag-active" style="display:none;">
+            <div id="trn-trag-stats" style="text-align:center;font-size:14px;color:#34d399;font-family:monospace;font-weight:700;margin-bottom:10px;">0 tač. · 0 m</div>
+            <div style="display:flex;gap:8px;">
+              <button id="trn-trag-pause" onclick="terenPauseTrag()" style="flex:1;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">⏸ Pauza</button>
+              <button onclick="terenStopTrag()" style="flex:1;padding:11px;background:linear-gradient(135deg,#7f1d1d,#991b1b);border:none;border-radius:10px;color:#fca5a5;font-size:13px;font-weight:600;cursor:pointer;">⏹ Završi</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MOJI TRAGOVI -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">🗺 Moji tragovi</span>
+            <span id="trn-trag-cnt" style="font-size:11px;color:#64748b;">0</span>
+          </div>
+          <div id="trn-trag-list" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema snimljenih tragova</div>
+          </div>
+        </div>
+
+        <!-- SQLITE ATRIBUTI -->
+        <div id="trn-sql-info" style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;display:none;">
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🔍 Info o tački na karti</div>
+          <div style="color:#64748b;font-size:12px;margin-bottom:8px;">Tapni na kartu dok je otvoren Teren panel da vidiš informacije o lokaciji.</div>
+          <div id="trn-sql-result" style="display:flex;flex-direction:column;gap:4px;"></div>
+        </div>
+
       </div>
     </div>
 
@@ -6823,6 +6859,8 @@ function terenRender() {
   terenUpdCompass();
   // Tačke
   terenRenderTacke();
+  // Trag stats
+  if (_tragOn) terenUpdTragStats();
 }
 
 function terenUpdCompass() {
@@ -6863,6 +6901,7 @@ function terenRenderTacke() {
         <div style="font-size:13px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(nm)}</div>
         ${lastP ? `<div style="font-size:11px;color:#64748b;">📏 ${dist} · 🧭 ${azi}</div>` : '<div style="font-size:11px;color:#475569;">nema GPS-a</div>'}
       </div>
+      <button onclick="terenShareTacka(${i})" style="padding:7px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#34d399;font-size:12px;cursor:pointer;" title="Podijeli koordinate">📤</button>
       <button onclick="vodiMeDoTacke(${i})" style="padding:7px 10px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;">➤ Vodi</button>
     </div>`;
   }).join('');
@@ -6889,6 +6928,201 @@ function terenCopyCoords() {
   } else {
     showToast(txt);
   }
+}
+
+// ── Teren: snimanje traga ────────────────────────────────────────────────────
+function terenTogTrag() {
+  if (!gpsOn) startGPS();
+  if (_tragOn) { terenStopTrag(); return; }
+  _setFreeView(false);
+  _tragOn = true; _tragPaused = false;
+  _tragPts = []; _tragBuf = [];
+  if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
+  _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
+  _terenUpdTragUI();
+  showToast('🔴 Snimanje traga započeto');
+}
+
+function terenPauseTrag() {
+  if (!_tragOn) return;
+  _tragPaused = !_tragPaused;
+  _terenUpdTragUI();
+  showToast(_tragPaused ? '⏸ Snimanje pauzirano' : '🔴 Snimanje nastavljeno');
+}
+
+function terenStopTrag() {
+  _tragOn = false; _tragPaused = false;
+  _terenUpdTragUI();
+  if (_tragPts.length > 1) {
+    const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
+    const simp = _rdpSimplify(pts3d, 3);
+    const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
+    _tragRegAdd(final);
+    terenRenderTragovi();
+    showToast('✅ Trag sačuvan (' + _tragFmtLen(_tragCalcLen(final)) + ')');
+  } else {
+    showToast('⚠ Premalo GPS tačaka — trag nije sačuvan');
+  }
+  _tragPts = []; _tragBuf = [];
+}
+
+function _terenUpdTragUI() {
+  const idle = document.getElementById('trn-trag-idle');
+  const active = document.getElementById('trn-trag-active');
+  const status = document.getElementById('trn-trag-status');
+  const pauseBtn = document.getElementById('trn-trag-pause');
+  if (_tragOn) {
+    if (idle) idle.style.display = 'none';
+    if (active) active.style.display = '';
+    if (status) { status.textContent = _tragPaused ? '⏸ pauzirano' : '🔴 snima'; status.style.color = _tragPaused ? '#fbbf24' : '#ef4444'; }
+    if (pauseBtn) { pauseBtn.textContent = _tragPaused ? '▶ Nastavi' : '⏸ Pauza'; pauseBtn.style.color = _tragPaused ? '#34d399' : '#fbbf24'; }
+  } else {
+    if (idle) idle.style.display = '';
+    if (active) active.style.display = 'none';
+    if (status) { status.textContent = 'neaktivno'; status.style.color = '#64748b'; }
+  }
+  terenUpdTragStats();
+}
+
+function terenUpdTragStats() {
+  const el = document.getElementById('trn-trag-stats');
+  if (!el || !_tragOn) return;
+  const n = _tragPts.length;
+  const d = _tragCalcLen(_tragPts);
+  el.textContent = `${n} tač. · ${_tragFmtLen(d)}`;
+}
+
+function terenRenderTragovi() {
+  const list = document.getElementById('trn-trag-list');
+  const cnt = document.getElementById('trn-trag-cnt');
+  if (cnt) cnt.textContent = _tragRegistry.length;
+  if (!list) return;
+  if (!_tragRegistry.length) {
+    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema snimljenih tragova</div>';
+    return;
+  }
+  list.innerHTML = _tragRegistry.slice(0, 20).map(t => {
+    const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const len = _tragFmtLen(_tragCalcLen(t.pts));
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
+      <div style="width:4px;height:28px;border-radius:2px;background:${t.color||'#f97316'};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(t.name)}</div>
+        <div style="font-size:11px;color:#64748b;">${dt} · ${len} · ${t.pts.length} tač.</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button onclick="_tragRegZoom('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:11px;cursor:pointer;" title="Prikaži na karti">🗺</button>
+        <button onclick="_tragRegDlGpx('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#34d399;font-size:11px;cursor:pointer;" title="Preuzmi GPX">⬇</button>
+        <button onclick="_tragRegDelete('${t.id}');terenRenderTragovi()" style="padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f87171;font-size:11px;cursor:pointer;" title="Briši">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Teren: dijeljenje tačke ──────────────────────────────────────────────────
+function terenShareTacka(i) {
+  const t = _tacke[i];
+  if (!t) return;
+  const nm = t.nm || ('Tačka ' + (i + 1));
+  const c = wgsToMGI(t.la, t.lo);
+  const txt = `📍 ${nm}\nLat: ${t.la.toFixed(6)}, Lon: ${t.lo.toFixed(6)}`
+    + (c ? `\nGK Y: ${c.y}, X: ${c.x}` : '')
+    + `\nhttps://www.google.com/maps?q=${t.la.toFixed(6)},${t.lo.toFixed(6)}`;
+  if (navigator.share) {
+    navigator.share({ title: nm, text: txt }).catch(() => _copyAndToast(txt, nm));
+  } else {
+    _copyAndToast(txt, nm);
+  }
+}
+
+function _copyAndToast(txt, nm) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(
+      () => showToast(`📋 "${nm}" kopirano — pošalji SMS/poruku`),
+      () => showToast(txt)
+    );
+  } else {
+    showToast(txt);
+  }
+}
+
+// ── Teren: info o tački na karti (KML/odjeli atributi) ───────────────────────
+function _terenQueryPoint(lat, lng) {
+  const panel = document.getElementById('trn-sql-info');
+  const result = document.getElementById('trn-sql-result');
+  if (!panel || !result) return;
+  panel.style.display = '';
+
+  const c = wgsToMGI(lat, lng);
+  let html = `<div style="padding:8px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;">
+    <div style="font-size:11px;color:#64748b;margin-bottom:4px;">📍 Odabrana tačka</div>
+    <div style="font-size:12px;color:#e2e8f0;font-family:monospace;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+    ${c ? `<div style="font-size:12px;color:#fbbf24;font-family:monospace;">GK Y: ${c.y} · X: ${c.x}</div>` : ''}
+  </div>`;
+
+  // Provjeri odjele iz KML-a
+  const foundOdjeli = [];
+  for (const o of graniceOdjeli) {
+    if (o.ring && o.ring.length >= 3 && _pointInRing(lat, lng, o.ring)) {
+      foundOdjeli.push(o.name);
+    }
+  }
+  if (foundOdjeli.length) {
+    html += `<div style="padding:8px;background:#0a2f1f;border:1px solid #14532d;border-radius:8px;">
+      <div style="font-size:11px;color:#34d399;margin-bottom:4px;">🌲 Odjel</div>
+      <div style="font-size:14px;color:#e2e8f0;font-weight:700;">${foundOdjeli.map(n => _escHtml(n)).join(', ')}</div>
+    </div>`;
+  }
+
+  // Provjeri KML slojeve za feature blizu klika
+  const hitFeatures = [];
+  const clickPx = map.latLngToContainerPoint(L.latLng(lat, lng));
+  kmlLs.forEach((kl, ki) => {
+    if (!kl.vis || !kl.lg) return;
+    kl.lg.eachLayer(layer => {
+      if (layer._kmlIsPolygon && layer.getBounds && layer.getBounds().contains([lat, lng])) {
+        const nm = layer.getTooltip?.()?.getContent?.() || '';
+        if (nm) hitFeatures.push({ layer: kl.nm || ('Sloj ' + (ki+1)), name: nm, type: 'polygon' });
+      } else if (layer._kmlIsPoint) {
+        const ll = layer.getLatLng();
+        const ptPx = map.latLngToContainerPoint(ll);
+        if (Math.abs(ptPx.x - clickPx.x) < 20 && Math.abs(ptPx.y - clickPx.y) < 20) {
+          const nm = layer.getTooltip?.()?.getContent?.() || '';
+          if (nm) hitFeatures.push({ layer: kl.nm || ('Sloj ' + (ki+1)), name: nm, type: 'point' });
+        }
+      } else if (!layer._kmlIsPolygon && !layer._kmlIsPoint && layer.getLatLngs) {
+        const pts = layer.getLatLngs();
+        if (pts.length >= 2) {
+          let minD = Infinity;
+          for (let j = 0; j < pts.length - 1; j++) {
+            const a = map.latLngToContainerPoint(pts[j]);
+            const b = map.latLngToContainerPoint(pts[j+1]);
+            const d = _distToSegPx(clickPx, a, b);
+            if (d < minD) minD = d;
+          }
+          if (minD < 20) {
+            const nm = layer.getTooltip?.()?.getContent?.() || '';
+            if (nm) hitFeatures.push({ layer: kl.nm || ('Sloj ' + (ki+1)), name: nm, type: 'line' });
+          }
+        }
+      }
+    });
+  });
+  if (hitFeatures.length) {
+    const icons = { polygon: '▣', line: '━', point: '●' };
+    html += `<div style="padding:8px;background:#1a1a3a;border:1px solid #2d2d5e;border-radius:8px;">
+      <div style="font-size:11px;color:#a78bfa;margin-bottom:4px;">🗺 Objekti na lokaciji</div>
+      ${hitFeatures.map(f => `<div style="font-size:12px;color:#e2e8f0;padding:3px 0;">
+        <span style="color:#64748b;">${icons[f.type]||''} ${_escHtml(f.layer)}:</span> <b>${_escHtml(f.name)}</b>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // Kopiranje koordinata kliknute tačke
+  const copyTxt = `${lat.toFixed(6)}, ${lng.toFixed(6)}` + (c ? `\nGK Y: ${c.y}, X: ${c.x}` : '');
+  html += `<button onclick="navigator.clipboard?.writeText(\`${copyTxt.replace(/`/g,"'")}\`).then(()=>showToast('📋 Kopirano'))" style="width:100%;padding:9px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:12px;cursor:pointer;margin-top:2px;">📋 Kopiraj koordinate tačke</button>`;
+
+  result.innerHTML = html;
 }
 
 // === NADMORSKA VISINA ===
@@ -7621,6 +7855,10 @@ map.on('click', e => {
       showVlakaPopup(bestI, e.latlng);
       return;
     }
+  }
+  // Teren: tap na kartu → prikaži info o lokaciji
+  if (_activeTab === 'teren') {
+    _terenQueryPoint(e.latlng.lat, e.latlng.lng);
   }
   // NOTE: GPS recording (recOn) is handled entirely by onP() — never by map clicks
 });
@@ -9977,6 +10215,7 @@ function _addTragPoint(la, lo, ac, al) {
   _tragPts.push([mla, mlo, al]);
   if (_tragLine) _tragLine.addLatLng([mla, mlo]);
   _updTragStats();
+  if (_activeTab === 'teren') terenUpdTragStats();
 }
 
 function _tragToGpx(pts) {
@@ -14096,7 +14335,7 @@ function switchTab(tab) {
   if (padmin) padmin.style.display = tab==='admin' ? 'flex' : 'none';
   if (pteren) pteren.style.display = tab==='teren' ? 'flex' : 'none';
   if (tab === 'admin') adminLoadUsers();
-  if (tab === 'teren') terenRender();
+  if (tab === 'teren') { terenRender(); terenRenderTragovi(); }
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
