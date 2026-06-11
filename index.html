@@ -848,6 +848,19 @@ input:focus { outline:none; border-color:#3b82f6; }
 .mdp-btn.edpmode.active { background:linear-gradient(135deg,#d97706,#f59e0b); color:#fff; box-shadow:0 2px 8px rgba(245,158,11,0.35); }
 .mdp-btn.edpmode.del.active { background:linear-gradient(135deg,#dc2626,#ef4444); box-shadow:0 2px 8px rgba(239,68,68,0.35); }
 #edp-hint { font-size:11px; color:#94a3b8; padding:0 15px 11px; text-align:center; line-height:1.4; }
+#edp-nm {
+  font-size:15px; font-weight:800; color:#0f172a; max-width:140px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  cursor:pointer; text-decoration:underline; text-decoration-color:#cbd5e1;
+  text-underline-offset:3px; text-decoration-style:dashed;
+}
+#edp-nm:active { color:#2563eb; }
+#edp-rename {
+  background:none; border:none; font-size:14px; cursor:pointer; padding:2px 4px;
+  color:#64748b; line-height:1;
+}
+#edp-rename:active { color:#2563eb; }
+#edp-stats { font-size:12px; color:#64748b; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
 
 /* ═══ UVOZ VLAKE IZ FAJLA — svijetli iOS bottom sheet ═══ */
 #imv-overlay {
