@@ -824,6 +824,21 @@ input:focus { outline:none; border-color:#3b82f6; }
 .mdp-btn.undo  { background:#f1f5f9; color:#7c3aed; }
 .mdp-btn.done  { background:linear-gradient(135deg,#059669,#10b981); color:#fff; }
 
+/* ═══ EDIT PANEL — isti svijetli stil kao ručno crtanje ═══ */
+#edit-panel {
+  position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+  z-index:950; width:min(380px, calc(100vw - 24px));
+  background:rgba(255,255,255,0.94);
+  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.18);
+  overflow:hidden;
+}
+.mdp-btn.edpmode { flex:1; background:#f1f5f9; color:#334155; }
+.mdp-btn.edpmode.active { background:linear-gradient(135deg,#d97706,#f59e0b); color:#fff; box-shadow:0 2px 8px rgba(245,158,11,0.35); }
+.mdp-btn.edpmode.del.active { background:linear-gradient(135deg,#dc2626,#ef4444); box-shadow:0 2px 8px rgba(239,68,68,0.35); }
+#edp-hint { font-size:11px; color:#94a3b8; padding:0 15px 11px; text-align:center; line-height:1.4; }
+
 /* ═══ UVOZ VLAKE IZ FAJLA — svijetli iOS bottom sheet ═══ */
 #imv-overlay {
   display:none; position:fixed; inset:0; z-index:2400;
@@ -913,18 +928,24 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* Edit mode node handles */
 .edit-node {
-  width:12px; height:12px; border-radius:50%;
-  background:#fff; border:2px solid #f59e0b;
-  cursor:grab; box-shadow:0 0 0 3px rgba(245,158,11,0.3);
+  width:16px; height:16px; border-radius:50%;
+  background:#fff; border:2.5px solid #f59e0b;
+  cursor:grab; box-shadow:0 0 0 4px rgba(245,158,11,0.3), 0 1px 4px rgba(0,0,0,0.3);
   transition:transform 0.1s;
 }
-.edit-node:hover { transform:scale(1.4); background:#fbbf24; }
-.edit-node.first { border-color:#4ade80; box-shadow:0 0 0 3px rgba(74,222,128,0.4); }
-.edit-node.last  { border-color:#f87171; box-shadow:0 0 0 3px rgba(248,113,113,0.4); }
+.edit-node:hover { transform:scale(1.3); background:#fbbf24; }
+.edit-node.first { border-color:#4ade80; box-shadow:0 0 0 4px rgba(74,222,128,0.4), 0 1px 4px rgba(0,0,0,0.3); }
+.edit-node.last  { border-color:#f87171; box-shadow:0 0 0 4px rgba(248,113,113,0.4), 0 1px 4px rgba(0,0,0,0.3); }
 .edit-node.snap  { background:#a78bfa; border-color:#a78bfa; box-shadow:0 0 0 5px rgba(167,139,250,0.5); transform:scale(1.5); }
+/* Delete mod — tačke postaju crvene mete, midpointi skriveni */
+.edp-del-mode .edit-node {
+  border-color:#ef4444; background:#fee2e2; cursor:pointer;
+  box-shadow:0 0 0 4px rgba(239,68,68,0.35), 0 1px 4px rgba(0,0,0,0.3);
+}
+.edp-del-mode .edit-midnode { display:none; }
 .edit-midnode {
-  width:9px; height:9px; border-radius:50%;
-  background:rgba(255,255,255,0.4); border:1.5px dashed #94a3b8;
+  width:12px; height:12px; border-radius:50%;
+  background:rgba(255,255,255,0.55); border:1.5px dashed #64748b;
   cursor:crosshair;
 }
 .edit-midnode:hover { background:#38bdf8; border-color:#38bdf8; transform:scale(1.3); }
@@ -3111,6 +3132,22 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="mdp-btn undo" onclick="mdpUndo()" title="Poništi">↩</button>
           <button class="mdp-btn done" onclick="mdpFinish()" title="Završi crtanje">✓ Završi</button>
         </div>
+      </div>
+
+      <!-- ═══ EDIT VLAKE — moderni bottom panel ═══ -->
+      <div id="edit-panel" style="display:none;">
+        <div class="mdp-head">
+          <span class="mdp-ico" style="color:#f59e0b;">🔧</span>
+          <span id="edp-nm">T1</span>
+          <span id="edp-stats">0 m · 0 tač.</span>
+        </div>
+        <div class="mdp-row">
+          <button class="mdp-btn edpmode active" id="edp-move" onclick="edpSetMode('move')">✥ Pomjeri</button>
+          <button class="mdp-btn edpmode del" id="edp-del" onclick="edpSetMode('del')">✂ Obriši</button>
+          <button class="mdp-btn undo" onclick="edpUndo()" title="Poništi">↩</button>
+          <button class="mdp-btn done" onclick="stopActiveTool()" title="Završi editovanje">✓</button>
+        </div>
+        <div id="edp-hint">Povuci tačku za pomjeranje · tap između tačaka dodaje novu</div>
       </div>
 
       <!-- Sakriveni elementi koje JS još koristi -->
@@ -7144,29 +7181,75 @@ function mtAddPoint() {
   showToast('📍 Klikni na kartu za tačku/waypoint');
 }
 
+// ─── Edit vlake — moderni bottom panel (Pomjeri / Obriši / Undo / Završi) ────
+let _edDelMode = false;     // ✂ Obriši mod — tap na tačku je briše
+let _edUndoStack = [];      // snapshoti pts[] za Undo
+
+function _edSnapshot() {
+  if (!editOn || activeTool !== 'edit' || actI === null || !vlake[actI]) return;
+  _edUndoStack.push(vlake[actI].pts.map(p => ({...p})));
+  if (_edUndoStack.length > 60) _edUndoStack.shift();
+}
+
+function _edpUpdStats() {
+  const el = document.getElementById('edp-stats');
+  if (!el || actI === null || !vlake[actI]) return;
+  const pts = vlake[actI].pts;
+  el.textContent = fmtL(calcL(pts)) + ' · ' + pts.length + ' tač.';
+}
+
+function edpSetMode(m) {
+  _edDelMode = (m === 'del');
+  document.getElementById('edp-move').classList.toggle('active', !_edDelMode);
+  document.getElementById('edp-del').classList.toggle('active', _edDelMode);
+  document.getElementById('map').classList.toggle('edp-del-mode', _edDelMode);
+  document.getElementById('edp-hint').textContent = _edDelMode
+    ? 'Tapni tačku da je obrišeš'
+    : 'Povuci tačku za pomjeranje · tap između tačaka dodaje novu';
+}
+
+function edpUndo() {
+  if (actI === null || !vlake[actI] || _edUndoStack.length === 0) return;
+  const snap = _edUndoStack.length > 1 ? _edUndoStack.pop() : _edUndoStack[0].map(p => ({...p}));
+  const v = vlake[actI];
+  v.pts = snap.map(p => ({...p}));
+  syncPoly(actI);
+  buildEditHandles(actI);
+  updateVlakaLabel(actI);
+  scheduleVlakaSave(actI);
+  updOvl(); rndList();
+  _edpUpdStats();
+}
+
 function mtEditLine() {
   if (actI === null) { showToast('⚠ Odaberi vlaku za editovanje!'); return; }
   if (vlake[actI].pts.length === 0) { showToast('⚠ Vlaka nema tačaka — najprije nacrtaj liniju!'); return; }
   setActiveTool('edit');
   editOn = true;
+  _edUndoStack = [vlake[actI].pts.map(p => ({...p}))];
   map.doubleClickZoom.disable();
-  document.getElementById('draw-banner').classList.add('show');
-  document.getElementById('draw-nm').textContent = vlake[actI].nm + ' 🔧';
-  document.getElementById('draw-stats').textContent = 'Drag · Klik · ESC';
-  document.getElementById('draw-row2').style.display = 'none';
+  document.getElementById('edit-panel').style.display = '';
+  document.getElementById('edp-nm').textContent = vlake[actI].nm;
+  edpSetMode('move');
+  _edpUpdStats();
   buildEditHandles(actI);
-  showToast('🔧 Edit — povuci čvor, desni klik = obriši, klik na segment = dodaj');
+  _updFabVisibility();
 }
 
 function _stopEdit(fromUser) {
   editOn = false;
   mergeMode = false; mergeFirst = null;
+  _edDelMode = false;
+  _edUndoStack = [];
   clearEditHandles();
   map.doubleClickZoom.enable();
+  document.getElementById('edit-panel').style.display = 'none';
+  document.getElementById('map').classList.remove('edp-del-mode');
   document.getElementById('draw-banner').classList.remove('show');
   document.getElementById('draw-row2').style.display = '';
   document.getElementById('merge-sec').style.display = 'none';
   if (snapRingMk) { map.removeLayer(snapRingMk); snapRingMk = null; }
+  _updFabVisibility();
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
@@ -11766,10 +11849,12 @@ function buildEditHandles(vi) {
   v.pts.forEach((pt, pi) => {
     const isFirst = pi===0, isLast = pi===v.pts.length-1;
     const cls = isFirst?'edit-node first': isLast?'edit-node last':'edit-node';
-    const ico = L.divIcon({className:'', iconSize:[12,12], iconAnchor:[6,6],
+    const ico = L.divIcon({className:'', iconSize:[16,16], iconAnchor:[8,8],
       html:`<div class="${cls}"></div>`});
     const mk = L.marker([pt.la,pt.lo],{icon:ico, draggable:true, zIndexOffset:600}).addTo(map);
 
+    // dragstart: snapshot za Undo
+    mk.on('dragstart', function(){ _edSnapshot(); });
     // drag: update pt and poly live — lightweight, no full DOM rebuild
     mk.on('drag', function(e){
       const ll=e.target.getLatLng();
@@ -11777,6 +11862,7 @@ function buildEditHandles(vi) {
       syncPoly(vi);
       rebuildMidHandles(vi);
       updOvl(); // light update only
+      _edpUpdStats();
     });
     mk.on('dragend', function(){
       scheduleVlakaSave(vi);
@@ -11794,7 +11880,7 @@ function buildEditHandles(vi) {
     // click on node
     mk.on('click', function(e){
       L.DomEvent.stopPropagation(e);
-      if (activeTool === 'delnode') { deleteNode(vi, pi); return; }
+      if (activeTool === 'delnode' || _edDelMode) { deleteNode(vi, pi); return; }
       if (!mergeMode) return;
       const end = pi===0?'first': pi===v.pts.length-1?'last':null;
       if (!end) return;
@@ -11814,19 +11900,21 @@ function rebuildMidHandles(vi) {
   for(let i=0;i<v.pts.length-1;i++){
     const a=v.pts[i], b=v.pts[i+1];
     const mla=(a.la+b.la)/2, mlo=(a.lo+b.lo)/2;
-    const ico=L.divIcon({className:'',iconSize:[9,9],iconAnchor:[4,4],
+    const ico=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],
       html:`<div class="edit-midnode"></div>`});
     const mk=L.marker([mla,mlo],{icon:ico,zIndexOffset:590,interactive:true}).addTo(map);
     const segIdx=i;
     mk.on('click',function(e){
       L.DomEvent.stopPropagation(e);
-      if(mergeMode || activeTool==='delnode') return;
+      if(mergeMode || activeTool==='delnode' || _edDelMode) return;
       // insert new point at midpoint
+      _edSnapshot();
       v.pts.splice(segIdx+1,0,{la:mla,lo:mlo,al:0});
       syncPoly(vi);
       scheduleVlakaSave(vi);
       buildEditHandles(vi);
       updOvl(); rndList();
+      _edpUpdStats();
       showToast('➕ Nova tačka dodana na segment');
     });
     editMidMks.push(mk);
@@ -11836,12 +11924,14 @@ function rebuildMidHandles(vi) {
 function deleteNode(vi, pi) {
   const v = vlake[vi];
   if (v.pts.length <= 2) { showToast('⚠ Vlaka mora imati najmanje 2 tačke!'); return; }
+  _edSnapshot();
   v.pts.splice(pi, 1);
   syncPoly(vi);
   updateVlakaLabel(vi);
   scheduleVlakaSave(vi);
   buildEditHandles(vi);
   updOvl(); rndList();
+  _edpUpdStats();
   if (bufLayers.length > 0) drawBuffers();
   showToast('✂ Tačka obrisana');
 }
@@ -13066,10 +13156,12 @@ function _updMcdDist() {
 function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
   const mdpActive = typeof _mdpIdx !== 'undefined' && _mdpIdx !== null; // ručno crtanje u toku
+  const edActive  = typeof editOn !== 'undefined' && editOn && activeTool === 'edit'; // edit panel otvoren
+  const hideBars  = mdpActive || edActive;
   const ab = document.getElementById('action-bar');
-  if (ab) ab.style.display = (onKarta && !mdpActive) ? 'flex' : 'none';
+  if (ab) ab.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
-  if (cb) cb.style.display = (onKarta && !mdpActive) ? 'flex' : 'none';
+  if (cb) cb.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
 
   const inRec    = recOn;
   const isPaused = recPaused;
