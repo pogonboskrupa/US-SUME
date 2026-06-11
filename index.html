@@ -2874,6 +2874,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <button class="btn" id="pd-draw-vlaka-btn" onclick="startManualVlakaDraw()" style="width:100%;margin-bottom:6px;background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff;font-size:13px;padding:9px;border-radius:8px;font-weight:600;letter-spacing:0.3px;">✏ Nacrtaj vlaku ručno</button>
         <button class="btn" id="pd-vlake-btn" onclick="toggleProjektVlakeVisible(_pdProjektId)" style="width:100%;margin-bottom:6px;background:#0f1f2e;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;padding:7px;">🙈 Sakrij vlake</button>
         <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;">📥 Izvezi projekat kao KML</button>
+        <button class="btn" id="pd-transfer-btn" onclick="transferProjektUI()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;">🔄 Predaj projekat drugom projektantu</button>
         <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;">🗑 Obriši projekat</button>
       </div>
 
@@ -3926,6 +3927,19 @@ const _deletedProjektIds = new Set(); // guard: ne dozvoli sbLoadProjekti da ih 
 async function sbLoadProjekti() {
   if (!sbUser) return;
   try {
+    // ŠPD US ŠUME — pregledni nalog: vidi SVE projekte (read-only)
+    if (isSpd()) {
+      const { data, error } = await sb.from('projekti')
+        .select('*').order('datum', { ascending: false });
+      if (error) throw error;
+      _projekti = (data || []).filter(p => !_deletedProjektIds.has(p.id));
+      for (const p of _projekti) {
+        const { data: cl } = await sb.from('projekt_clanovi')
+          .select('korisnik_id, added_by').eq('projekt_id', p.id);
+        p.clanovi = cl || [];
+      }
+      _OL.save(_OL.PROJEKTI, _projekti);
+    } else {
     // Load my projects
     const { data: moji, error: e1 } = await sb.from('projekti')
       .select('*').eq('korisnik_id', sbUser.id).order('datum', { ascending: false });
@@ -3952,6 +3966,7 @@ async function sbLoadProjekti() {
     }
 
     _OL.save(_OL.PROJEKTI, _projekti); // Keširaj za offline
+    } // close else (non-ŠPD)
   } catch(e) {
     // Offline fallback — učitaj iz keša
     const cached = _OL.load(_OL.PROJEKTI);
@@ -3975,6 +3990,9 @@ async function sbLoadProjekti() {
   if (akt && akt.odjel) sbSaveOdjel(akt.odjel);
   // Osvježi vidljivost vlaka — projekt validacija mogla promijeniti _aktivniProjektId
   _updVlakeMapVisibility();
+
+  // Čisti keš kolega za projekte u kojima više nismo član
+  _kvcPurgeStale();
 }
 
 function _applyProjektFields(p) {
@@ -4037,6 +4055,23 @@ function rndProjektiList() {
     el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema projekata.<br>Klikni <b style="color:#60a5fa;">+ Novi</b> da kreneš.</div>`;
     return;
   }
+  // ŠPD pregledni nalog: grupiši po šumariji
+  if (isSpd()) {
+    const bySum = {};
+    _projekti.forEach(p => {
+      const s = p.sumarija || 'Nepoznato';
+      if (!bySum[s]) bySum[s] = [];
+      bySum[s].push(p);
+    });
+    let html = '';
+    Object.keys(bySum).sort((a,b) => a.localeCompare(b,'bs')).forEach(sum => {
+      html += `<div class="proj-section-sep" style="color:#fbbf24;">${sum}</div>`;
+      html += _renderProjGroup(bySum[sum]);
+    });
+    el.innerHTML = html;
+    return;
+  }
+
   const moji     = _projekti.filter(p => !sbUser || p.korisnik_id === sbUser.id);
   const dijeljeni = _projekti.filter(p => sbUser && p.korisnik_id !== sbUser.id);
 
@@ -4134,7 +4169,7 @@ function showProjektDetalji(id) {
     p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
     p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${p.povrsina} ha` : '',
     p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
-    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : '—'}`
+    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : (kolegeMap[p.korisnik_id]?.ime || p.korisnik_id.slice(0,8))}`
   ].filter(Boolean).join('<br>');
 
   // Clanovi
@@ -4185,6 +4220,8 @@ function showProjektDetalji(id) {
   // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat
   document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !isSpd()) ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
+  const hasClanovi = (p.clanovi || []).length > 0;
+  document.getElementById('pd-transfer-btn').style.display = (isVlasnik && hasClanovi && !isSpd()) ? '' : 'none';
 
   // Za ne-vlasnike: dugme za brisanje lokalno cachiranih kolega vlaka
   let ukBtn = document.getElementById('pd-ukl-kol-btn');
@@ -4870,6 +4907,65 @@ async function deleteProjektUI() {
   await sbLoadKolegeVlake();
 }
 
+async function transferProjektUI() {
+  const id = _pdProjektId;
+  const p = _projekti.find(x => x.id === id);
+  if (!p || p.korisnik_id !== sbUser.id) return;
+  const clanovi = (p.clanovi || []).filter(c => c.korisnik_id !== sbUser.id);
+  if (!clanovi.length) { showToast('Nema članova za prenos'); return; }
+
+  const names = clanovi.map(c => {
+    const info = kolegeMap[c.korisnik_id];
+    return { id: c.korisnik_id, ime: info?.ime || c.korisnik_id.slice(0,8) };
+  });
+
+  const html = names.map(n =>
+    `<button onclick="_doTransferProjekt('${id}','${n.id}')" style="display:block;width:100%;padding:10px;margin-bottom:6px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;text-align:left;">
+      <span style="color:#f59e0b;font-weight:bold;">→</span> ${_escHtml(n.ime)}
+    </button>`
+  ).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'transfer-proj-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:2000;';
+  modal.innerHTML = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:20px;width:90%;max-width:360px;">
+    <div style="font-size:14px;font-weight:700;color:#f59e0b;margin-bottom:4px;">🔄 Predaj projekat</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Novi vlasnik će moći dodavati/uklanjati članove i brisati projekat. Ti ćeš ostati kao član.</div>
+    ${html}
+    <button onclick="document.getElementById('transfer-proj-modal').remove()" style="width:100%;padding:8px;background:none;border:1px solid #334155;border-radius:8px;color:#64748b;font-size:12px;cursor:pointer;margin-top:4px;">Odustani</button>
+  </div>`;
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
+
+async function _doTransferProjekt(projektId, noviVlasnikId) {
+  document.getElementById('transfer-proj-modal')?.remove();
+  const noviIme = kolegeMap[noviVlasnikId]?.ime || 'projektant';
+  if (!await _dlgConfirm(`Predati projekat korisniku "${noviIme}"?\n\nNe možeš poništiti ovu akciju.`)) return;
+
+  try {
+    // 1. Promijeni vlasnika projekta
+    const { error: e1 } = await sb.from('projekti').update({ korisnik_id: noviVlasnikId }).eq('id', projektId).eq('korisnik_id', sbUser.id);
+    if (e1) throw e1;
+
+    // 2. Dodaj starog vlasnika kao člana (ako već nije)
+    await sb.from('projekt_clanovi').upsert(
+      { projekt_id: projektId, korisnik_id: sbUser.id, added_by: noviVlasnikId },
+      { onConflict: 'projekt_id,korisnik_id' }
+    );
+
+    // 3. Ukloni novog vlasnika iz članova (sad je vlasnik)
+    await sb.from('projekt_clanovi').delete()
+      .eq('projekt_id', projektId).eq('korisnik_id', noviVlasnikId);
+
+    showToast(`✅ Projekat predan: ${noviIme}`);
+    await sbLoadProjekti();
+    showProjektDetalji(projektId);
+  } catch(e) {
+    showToast('Greška: ' + e.message);
+  }
+}
+
 function _deleteVlakeByProjekt(projektId) {
   const toRemove = [];
   const brSet = new Set();
@@ -5227,24 +5323,58 @@ function _kvcClear(projektId) {
   } catch(e) {}
 }
 
+function _kvcPurgeStale() {
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    const validIds = new Set(_projekti.map(p => p.id));
+    let changed = false;
+    Object.keys(all).forEach(pid => {
+      if (!validIds.has(pid)) { delete all[pid]; changed = true; }
+    });
+    if (changed) localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+  } catch(e) {}
+}
+
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
 async function sbLoadKolegeVlake() {
   if (!sbProfile?.sumarija || !sbUser) return;
-  // ŠPD US ŠUME nema dijeljenje vlaka
-  if (isSpd()) return;
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
 
-  let memberIds = [];
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+
+  // ŠPD pregledni nalog: prikaži SVE vlake aktivnog projekta (svih korisnika)
+  if (isSpd() && akt) {
+    let dbData = [];
+    try {
+      const { data } = await sb.from('vlake')
+        .select('nm, korisnik_id, pts, boja, kr')
+        .eq('projekt_id', akt.id);
+      if (data) dbData = data;
+    } catch(e) {}
+    dbData.forEach(row => {
+      if (!row.pts || row.pts.length < 2) return;
+      const kid = row.korisnik_id;
+      const info = kolegeMap[kid] || { ime: 'Projektant', color: '#94a3b8' };
+      const color = row.boja || info.color;
+      const mapKey = kid + '::' + row.nm;
+      const poly = L.polyline(row.pts.map(p => [p.la, p.lo]),
+        { color, weight: 3, opacity: 0.7, dashArray: kid === sbUser?.id ? null : '10,6', interactive: true }).addTo(map);
+      poly.bindTooltip(`${info.ime}: ${row.nm}`, { sticky: true, opacity: 0.85 });
+      kolegeVlake.push(poly);
+      kolegeVlakeMap[mapKey] = { poly, pts: row.pts, nm: row.nm, ime: info.ime };
+    });
+    return;
+  }
+
+  let memberIds = [];
   if (akt) {
-    // Collect all member IDs of the active project (vlasnik + clanovi), excluding self
     const all = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
     memberIds = all.filter(id => id !== sbUser.id);
   }
 
-  if (memberIds.length === 0) return; // nema kolega u aktivnom projektu
+  if (memberIds.length === 0) return;
 
   let dbData = [];
   try {
@@ -5252,7 +5382,7 @@ async function sbLoadKolegeVlake() {
       .select('nm, korisnik_id, pts, boja, kr')
       .in('korisnik_id', memberIds)
       .eq('sumarija', sbProfile.sumarija)
-      .eq('projekt_id', akt.id);  // sve vlake projekta (matične + krakovi), bez filtra po odjelu
+      .eq('projekt_id', akt.id);
     const { data } = await q;
     if (data) dbData = data;
   } catch(e) {} // offline — koristimo samo cache
@@ -5369,10 +5499,12 @@ async function sbLoadKolege() {
   if (!sbProfile?.sumarija || !sbUser) return;
   let data = null;
   try {
-    const { data: d, error } = await sb.from('korisnici')
+    let q = sb.from('korisnici')
       .select('id, ime, prezime, boja')
-      .eq('sumarija', sbProfile.sumarija)
       .neq('id', sbUser.id);
+    // ŠPD pregledni nalog vidi SVE korisnike; ostali samo svoju šumariju
+    if (!isSpd()) q = q.eq('sumarija', sbProfile.sumarija);
+    const { data: d, error } = await q;
     if (!error && d) { data = d; _OL.save(_OL.KOLEGE, d); }
   } catch(e) {}
   if (!data) data = _OL.load(_OL.KOLEGE);
@@ -6031,12 +6163,28 @@ async function openShareFotoDlg(idx) {
   }
 
   const myId = sbUser?.id || sbProfile?.id;
+
+  // Opcija: podijeli sa svim članovima aktivnog projekta
+  let projShareHtml = '';
+  const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  if (akt) {
+    const projMembers = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)].filter(id => id !== myId);
+    const allDone = projMembers.length > 0 && projMembers.every(id => alreadyWith.has(id));
+    if (projMembers.length > 0) {
+      projShareHtml = `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #1e3a5f;">
+        <button onclick="_shareFotoWithProject()" style="width:100%;padding:9px;background:${allDone?'#1e293b':'#0f3460'};border:1px solid ${allDone?'#334155':'#3b82f6'};border-radius:8px;color:${allDone?'#64748b':'#60a5fa'};font-size:13px;cursor:pointer;font-weight:600;" ${allDone?'disabled':''}>
+          📁 Podijeli sa cijelim projektom${allDone ? ' ✓' : ` (${projMembers.length})`}
+        </button>
+      </div>`;
+    }
+  }
+
   const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
-  if (!entries.length) {
+  if (!entries.length && !projShareHtml) {
     list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Nema kolega u šumariji</div>';
     return;
   }
-  list.innerHTML = entries.map(([kid, info]) => {
+  list.innerHTML = projShareHtml + entries.map(([kid, info]) => {
     const done = alreadyWith.has(kid);
     return `<label class="share-kolega-row" onclick="event.stopPropagation()" style="${done?'opacity:0.65;':''}">
       <input type="checkbox" value="${kid}" ${done ? 'checked disabled' : ''}>
@@ -6065,6 +6213,20 @@ async function confirmShareFoto() {
     return;
   }
   const allIds = [...alreadyWith, ...newIds];
+  const savedIdx = _shareFotoIdx;
+  closeShareFotoDlg();
+  await shareFoto(savedIdx, allIds);
+}
+
+async function _shareFotoWithProject() {
+  const f = _locFotos[_shareFotoIdx];
+  if (!f) return;
+  const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+  if (!akt) return;
+  const myId = sbUser?.id;
+  const projMembers = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)].filter(id => id !== myId);
+  const alreadyWith = new Set(f.sharedWith || []);
+  const allIds = [...new Set([...alreadyWith, ...projMembers])];
   const savedIdx = _shareFotoIdx;
   closeShareFotoDlg();
   await shareFoto(savedIdx, allIds);
@@ -6464,7 +6626,7 @@ function sbStartRealtime() {
 // MGI (Militar-Geographisches Institut) / Balkans zone 6 — EPSG:31276
 proj4.defs('MGI-ZONE6', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
 
-// Provjera da li je korisnik iz ŠPD US ŠUME grupe (bez prava dijeljenja)
+// ŠPD US ŠUME — pregledni nalog s read-only pristupom svim projektima
 function isSpd() { return sbProfile?.sumarija === 'ŠPD US ŠUME'; }
 
 function wgsToMGI(lat, lon) {
