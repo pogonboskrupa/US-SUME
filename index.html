@@ -4309,10 +4309,7 @@ async function startManualVlakaDraw() {
   const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
   poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
-  const strana = kr > 0 ? (await _dlgActions('Strana kraka', [
-    { label: 'L — lijevo' }, { label: 'D — desno' }, { label: 'Bez strane' }
-  ])) : null;
-  const strVal = strana === 0 ? 'L' : strana === 1 ? 'D' : null;
+  const strVal = kr > 0 ? (kr % 2 !== 0 ? 'L' : 'D') : null;
   vlake.push({ nm, br, kr, strana: strVal, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
   const idx = vlake.length - 1;
 
