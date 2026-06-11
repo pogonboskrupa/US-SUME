@@ -3790,6 +3790,10 @@ async function doLogout() {
   Object.keys(_vlakaSaveTimers).forEach(k => clearTimeout(_vlakaSaveTimers[k]));
   _vlakaSaveTimers = {};
 
+  // Očisti lokalne vlake keš — sprečava prelijevanje vlaka između naloga
+  localStorage.removeItem(LOCAL_VLAKE_KEY);
+  localStorage.removeItem('tvlake_local_vlake_uid');
+
   dnevniLog = []; kolege = [];
 
   document.getElementById('wrapper').style.display = 'none';
@@ -4875,6 +4879,7 @@ function deaktivirajProjekt() {
 }
 
 async function deleteProjektUI() {
+  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   const id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser.id) return;
@@ -5136,6 +5141,20 @@ function _updVlakeMapVisibility() {
 }
 
 async function sbLoadVlake() {
+  // Read-only nalozi (admin, ŠPD) nemaju vlastite vlake — sve vide kroz sbLoadKolegeVlake
+  if (isReadOnly()) return;
+
+  // Provjeri da li lokalne vlake pripadaju trenutnom korisniku
+  // Ako se korisnik promijenio (drugo login), počisti stari keš
+  const _LOCAL_UID_KEY = 'tvlake_local_vlake_uid';
+  if (sbUser) {
+    const prevUid = localStorage.getItem(_LOCAL_UID_KEY);
+    if (prevUid && prevUid !== sbUser.id) {
+      localStorage.removeItem(LOCAL_VLAKE_KEY);
+    }
+    localStorage.setItem(_LOCAL_UID_KEY, sbUser.id);
+  }
+
   // 1. Lokalne vlake — uvijek učitaj iz localStorage (preživljavaju restart bez logina)
   const localRows = _loadLocalVlake();
 
@@ -5174,6 +5193,7 @@ function scheduleVlakaSave(i) {
 }
 
 async function sbFlushVlaka(i) {
+  if (isReadOnly()) return;
   const v = vlake[i];
   if (!v) return;
   _saveLocalVlake();                           // uvijek spremi lokalno odmah (sync)
@@ -9894,10 +9914,10 @@ function _renderVlakaRow(el, v, i, depth) {
       ${elevRow}
       ${nasaviBtn}
       <div style="display:flex;gap:4px;margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
-        <button onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(232,69,60,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#e8453c;">${isRecThis&&!recPaused?'🔴':isRecThis&&recPaused?'⏸':'▶'}</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">${isRecThis&&!recPaused?'Snima':isRecThis&&recPaused?'Pauza':'Snimi'}</span>
-        </button>
+        </button>`}
         <button onclick="event.stopPropagation();showVlakaOnMap(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(74,158,255,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#4a9eff;">🗺</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Karta</span>
@@ -9906,14 +9926,14 @@ function _renderVlakaRow(el, v, i, depth) {
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;">↕</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
         </button>
-        <button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;">🔧</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
-        </button>
-        <button onclick="event.stopPropagation();dlV(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+        </button>`}
+        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();dlV(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(100,116,139,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#94a3b8;">✕</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Briši</span>
-        </button>
+        </button>`}
       </div>
     </div>`;
   row.onclick = () => recOn ? selI(i) : showVlakaOnMap(i);
@@ -9994,6 +10014,7 @@ function zmV(i) {
 let _delPendingIdx = null;
 
 function dlV(i) {
+  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   const v = vlake[i];
   _delPendingIdx = i;
   const pts = v.pts ? v.pts.length : 0;
