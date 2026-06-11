@@ -122,19 +122,13 @@
 /* Header */
 .auth-hdr { text-align:center; margin-bottom:26px; animation:authFadeIn 0.6s 0.2s both; }
 .auth-logo-box {
-  width:68px; height:68px; margin:0 auto 16px;
-  background:linear-gradient(135deg,#1a3d20,#0d2012);
-  border:1.5px solid rgba(74,163,90,0.4);
-  border-radius:16px;
+  width:110px; height:130px; margin:0 auto 16px;
+  background:transparent; border:none; border-radius:0;
   display:flex; align-items:center; justify-content:center;
   font-size:30px;
-  box-shadow:0 0 24px rgba(58,158,80,0.2),inset 0 1px 0 rgba(255,255,255,0.06);
   position:relative; overflow:hidden;
 }
-.auth-logo-box::before {
-  content:''; position:absolute; inset:0;
-  background:linear-gradient(135deg,rgba(58,158,80,0.1),transparent);
-}
+.auth-logo-box::before { content:''; }
 .auth-logo-corner {
   position:absolute; bottom:-1px; right:-1px;
   width:16px; height:16px; background:#3a9e50;
@@ -2514,10 +2508,29 @@ select:focus { outline:none; border-color:#3b82f6; }
       <!-- Header -->
       <div class="auth-hdr">
         <div class="auth-logo-box">
-          🌲
-          <div class="auth-logo-corner"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 235 278" width="110" height="130">
+            <!-- Background -->
+            <rect x="3" y="3" width="229" height="272" rx="38" ry="38" fill="#e8f06a" stroke="#52c4b5" stroke-width="5"/>
+            <!-- Vertical text left side -->
+            <text transform="translate(32,258) rotate(-90)" font-size="13.5" font-family="Arial,sans-serif" font-weight="bold" fill="#2a6644" letter-spacing="1.2">ŠPD UNSKO-SANSKE ŠUME</text>
+            <!-- Pine tree triangle -->
+            <polygon points="127,24 90,108 164,108" fill="#2d7a50"/>
+            <!-- Large light-green oval (top right) -->
+            <ellipse cx="188" cy="62" rx="33" ry="46" fill="#9ecc72"/>
+            <!-- Mauve/brown U-shape -->
+            <path d="M88,112 L88,178 Q88,210 127,210 Q166,210 166,178 L166,112" fill="none" stroke="#8b6070" stroke-width="20" stroke-linecap="round"/>
+            <!-- Light-green C-shape (right) -->
+            <path d="M192,122 Q155,122 155,152 Q155,182 192,182" fill="none" stroke="#9ecc72" stroke-width="18" stroke-linecap="round"/>
+            <!-- Bottom light-green oval -->
+            <ellipse cx="175" cy="234" rx="38" ry="34" fill="#9ecc72"/>
+            <!-- BOSANSKA text -->
+            <text x="138" y="226" font-size="11" font-family="Arial,sans-serif" font-weight="bold" fill="#cc2020" text-anchor="middle">BOSANSKA</text>
+            <!-- KRUPA text -->
+            <text x="138" y="243" font-size="15" font-family="Arial,sans-serif" font-weight="bold" fill="#cc2020" text-anchor="middle">KRUPA</text>
+          </svg>
+          <div class="auth-logo-corner" style="display:none;"></div>
         </div>
-        <div class="auth-org-name">Unsko-Sanske Šume</div>
+        <div class="auth-org-name">ŠPD UNSKO-SANSKE ŠUME D.O.O.</div>
         <div class="auth-divline">
           <span class="auth-divlabel">Prijava u sistem</span>
         </div>
