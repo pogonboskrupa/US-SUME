@@ -3757,6 +3757,11 @@ async function sbLoadProfile() {
       const b = document.querySelector(`button[onclick="switchTab('${t}')"]`);
       if (b) b.style.display = 'none';
     });
+    // Sakrij i iz dropdown menija
+    const mv = document.getElementById('mdrop-vlake');
+    const mp = document.getElementById('mdrop-projekat');
+    if (mv) mv.style.display = 'none';
+    if (mp) mp.style.display = 'none';
     if (terenBtn) terenBtn.style.display = '';
   } else {
     if (terenBtn) terenBtn.style.display = 'none';
@@ -6930,41 +6935,10 @@ function terenCopyCoords() {
   }
 }
 
-// ── Teren: snimanje traga ────────────────────────────────────────────────────
-function terenTogTrag() {
-  if (!gpsOn) startGPS();
-  if (_tragOn) { terenStopTrag(); return; }
-  _setFreeView(false);
-  _tragOn = true; _tragPaused = false;
-  _tragPts = []; _tragBuf = [];
-  if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
-  _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
-  _terenUpdTragUI();
-  showToast('🔴 Snimanje traga započeto');
-}
-
-function terenPauseTrag() {
-  if (!_tragOn) return;
-  _tragPaused = !_tragPaused;
-  _terenUpdTragUI();
-  showToast(_tragPaused ? '⏸ Snimanje pauzirano' : '🔴 Snimanje nastavljeno');
-}
-
-function terenStopTrag() {
-  _tragOn = false; _tragPaused = false;
-  _terenUpdTragUI();
-  if (_tragPts.length > 1) {
-    const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
-    const simp = _rdpSimplify(pts3d, 3);
-    const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
-    _tragRegAdd(final);
-    terenRenderTragovi();
-    showToast('✅ Trag sačuvan (' + _tragFmtLen(_tragCalcLen(final)) + ')');
-  } else {
-    showToast('⚠ Premalo GPS tačaka — trag nije sačuvan');
-  }
-  _tragPts = []; _tragBuf = [];
-}
+// ── Teren: snimanje traga (delegira na fabSnimTrag/togTragPause) ─────────────
+function terenTogTrag() { fabSnimTrag(); }
+function terenPauseTrag() { togTragPause(); _terenUpdTragUI(); }
+function terenStopTrag() { fabSnimTrag(); }
 
 function _terenUpdTragUI() {
   const idle = document.getElementById('trn-trag-idle');
@@ -10135,12 +10109,18 @@ function fabSnimTrag() {
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     _updFabVisibility();
+    if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     if (_tragPts.length > 1) {
       const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
       const simp  = _rdpSimplify(pts3d, 3);
       const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
       const saved = _tragRegAdd(final);
-      _tqmOpen(saved.id);
+      if (_activeTab === 'teren') {
+        terenRenderTragovi();
+        showToast('✅ Trag sačuvan (' + _tragFmtLen(_tragCalcLen(final)) + ')');
+      } else {
+        _tqmOpen(saved.id);
+      }
     } else {
       showToast('⚠ Trag nije snimljen — premalo GPS tačaka (GPS signal slab?)');
     }
@@ -10158,6 +10138,7 @@ function fabSnimTrag() {
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
     _updFabVisibility();
+    if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     _updTragStats();
   }
 }
@@ -10179,6 +10160,7 @@ function togTragPause() {
     if (btn) btn.classList.remove('resuming');
     showToast('🔴 Snimanje traga nastavljeno');
   }
+  if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
 }
 
 function _updTragStats() {
@@ -14238,11 +14220,12 @@ function _updMcdDist() {
 // Centralna logika vidljivosti FAB-a — poziva se iz switchTab, togRec, stopRec, mtAddLine, _stopAddLine
 function _updFabVisibility() {
   const onKarta = _activeTab === 'karta';
+  const onTeren = _activeTab === 'teren';
   const mdpActive = typeof _mdpIdx !== 'undefined' && _mdpIdx !== null; // ručno crtanje u toku
   const edActive  = typeof editOn !== 'undefined' && editOn && activeTool === 'edit'; // edit panel otvoren
   const hideBars  = mdpActive || edActive;
   const ab = document.getElementById('action-bar');
-  if (ab) ab.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
+  if (ab) ab.style.display = ((onKarta || onTeren) && !hideBars) ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
   if (cb) cb.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
 
@@ -14257,6 +14240,23 @@ function _updFabVisibility() {
   const inTrag = _tragOn;
   show('ab-trag-pauza', false); show('ab-trag-kraj', false); show('ab-trag-stats', false);
   if (ab) ab.classList.remove('trag-mode');
+
+  // ── Teren tab: samo Izmjeri + Trag (nema vlaka/projekta) ──────────────────
+  if (onTeren) {
+    show('brec', false);
+    show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
+    show('ab-pauza',false); show('ab-kraj',false);
+    if (inTrag) {
+      show('btrag', false); show('ab-izmjeri-wrap', false);
+      show('ab-trag-pauza', true); show('ab-trag-kraj', true); show('ab-trag-stats', true);
+      if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); ab.classList.add('trag-mode'); }
+    } else {
+      show('btrag', true);
+      show('ab-izmjeri-wrap', true);
+      if (ab) ab.classList.remove('rec-mode', 'paused-mode', 'trag-mode');
+    }
+    return;
+  }
 
   if (!inRec && inTrag) {
     show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
@@ -18157,8 +18157,8 @@ function toggleHelpSec(hdr) {
   <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🗄 Učitaj SQLiteDB kartu</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()">📂 Dodaj KML fajl</div>
   <div class="mdrop-sep"></div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
+  <div class="mdrop-item" id="mdrop-vlake" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
+  <div class="mdrop-item" id="mdrop-projekat" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()">📏 Mjerenja &amp; Tragovi</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
