@@ -2577,33 +2577,8 @@ select:focus { outline:none; border-color:#3b82f6; }
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
-  <!-- QGIS-STIL MAP TOOLBAR -->
-  <div id="map-toolbar" style="display:none;">
-    <button class="mt-btn" id="mt-select" onclick="mtSelect()" title="Odabir / Pan">
-      <span class="mt-ico">🖱</span><span>Odabir</span>
-    </button>
-    <div class="mt-sep"></div>
-    <button class="mt-btn" id="mt-addline" onclick="mtAddLine()" title="Nacrtaj novu vlaku (auto-kreira ako nema odabrane)">
-      <span class="mt-ico">✏️</span><span>Nova vlaka</span>
-    </button>
-    <button class="mt-btn" id="mt-addpt" onclick="mtAddPoint()" title="Dodaj waypoint (GPS tačka)">
-      <span class="mt-ico">📍</span><span>Dodaj tačku</span>
-    </button>
-    <div class="mt-sep"></div>
-    <button class="mt-btn" id="mt-edit" onclick="mtEditLine()" title="Edituj tačke linije — drag, desni klik = briši, klik na segment = ubaci">
-      <span class="mt-ico">🔧</span><span>Edit</span>
-    </button>
-    <button class="mt-btn" id="mt-delnode" onclick="mtDeleteNode()" title="Klikni na tačku linije da je obrišeš">
-      <span class="mt-ico">✂️</span><span>Briši tačku</span>
-    </button>
-    <button class="mt-btn" id="mt-undo" onclick="mtUndo()" title="Poništi zadnju tačku (Ctrl+Z)">
-      <span class="mt-ico">↩️</span><span>Undo</span>
-    </button>
-    <div class="mt-sep"></div>
-    <button class="mt-btn" id="mt-merge" onclick="startMergeMode()" title="Spoji dvije vlake">
-      <span class="mt-ico">🔗</span><span>Spoji</span>
-    </button>
-  </div>
+  <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
+  <div id="map-toolbar" style="display:none;"></div>
 
   <div id="main">
 
@@ -7224,6 +7199,7 @@ function edpUndo() {
 function mtEditLine() {
   if (actI === null) { showToast('⚠ Odaberi vlaku za editovanje!'); return; }
   if (vlake[actI].pts.length === 0) { showToast('⚠ Vlaka nema tačaka — najprije nacrtaj liniju!'); return; }
+  if (_activeTab !== 'karta') { switchTab('karta'); zmV(actI); }
   setActiveTool('edit');
   editOn = true;
   _edUndoStack = [vlake[actI].pts.map(p => ({...p}))];
@@ -9316,7 +9292,7 @@ function _renderVlakaRow(el, v, i, depth) {
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;">↕</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
         </button>
-        <button onclick="event.stopPropagation();selI(${i});switchTab('karta');zmV(${i});setTimeout(togEdit,120)" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+        <button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;">🔧</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
         </button>
@@ -13256,8 +13232,7 @@ function switchTab(tab) {
     msrStop(true);
   } else if (tab==='vlake') {
     _mapFullScreen = false;
-    const tbVis = activeTool !== 'select';
-    _setMapUIVisible(tbVis, false);
+    _setMapUIVisible(false, false);
     msrStop(true);
   } else if (tab==='projekat') {
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList();
