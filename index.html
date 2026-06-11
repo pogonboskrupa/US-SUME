@@ -4900,7 +4900,25 @@ async function sbSaveProj() { /* handled by saveNovProjekt */ }
 // ─── VLAKE ───────────────────────────────────────────────────────────────────
 function _applyVlakeRows(rows) {
   rows.forEach(row => {
-    if (vlake.find(v => v.nm === row.nm)) return;
+    const existIdx = vlake.findIndex(v => v.nm === row.nm && v.projektId === (row.projekt_id || null));
+    if (existIdx >= 0) {
+      // Already loaded — update if server version is newer
+      const ex = vlake[existIdx];
+      if (row.id && (!ex.sbId || (row.updated_at && ex.updatedAt && row.updated_at > ex.updatedAt))) {
+        ex.sbId = row.id;
+        ex.pts = row.pts || ex.pts;
+        ex.br = row.br; ex.kr = row.kr;
+        ex.strana = row.strana || ex.strana;
+        ex.color = row.boja || ex.color;
+        ex.lager = row.lager || ex.lager;
+        ex.updatedAt = row.updated_at || ex.updatedAt;
+        ex.poly.setLatLngs((ex.pts || []).map(p => [p.la, p.lo]));
+        ex.poly.setStyle({ color: ex.color });
+      }
+      return;
+    }
+    // Also skip if same nm exists WITHOUT a projektId (legacy dedup)
+    if (vlake.find(v => v.nm === row.nm && !v.projektId && !row.projekt_id)) return;
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
@@ -5024,19 +5042,27 @@ async function sbFlushVlaka(i) {
 
   // Ažuriraj lokalni keš projektnih vlaka odmah
   const cached = _OL.load(_OL.VLAKE) || [];
-  const ci = cached.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
+  const ci = v.sbId
+    ? cached.findIndex(r => r.id === v.sbId)
+    : cached.findIndex(r => r.nm === v.nm && r.projekt_id === (v.projektId || null) && r.korisnik_id === sbUser.id);
   const cRow = { ...payload, id: v.sbId || null };
   if (ci >= 0) cached.splice(ci, 1, cRow); else cached.push(cRow);
   _OL.save(_OL.VLAKE, cached);
 
   try {
-    const { data, error } = await sb.from('vlake').upsert(payload,
-      { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single();
+    let data, error;
+    if (v.sbId) {
+      // Existing row — update by id to avoid overwriting a different vlaka with same nm
+      ({ data, error } = await sb.from('vlake').update(payload).eq('id', v.sbId).select('id').single());
+    } else {
+      ({ data, error } = await sb.from('vlake').upsert(payload,
+        { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single());
+    }
     if (!error && data) {
       v.sbId = data.id;
       v.updatedAt = new Date().toISOString();
       const c2 = _OL.load(_OL.VLAKE) || [];
-      const i2 = c2.findIndex(r => r.nm === v.nm && r.korisnik_id === sbUser.id);
+      const i2 = c2.findIndex(r => r.id === data.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
     } else if (error) {
       _OL.enqueue({ type: 'upsert_vlaka', payload });
