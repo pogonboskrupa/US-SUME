@@ -15662,7 +15662,14 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
 
     ov.classList.add('show');
     requestAnimationFrame(() => sh.classList.add('show'));
-    if (mode === 'prompt') setTimeout(() => { inp.focus(); inp.select(); }, 300);
+    if (mode === 'prompt') {
+      // Focus synchronously within the user-gesture stack (iOS/Android require this
+      // to show the virtual keyboard — setTimeout breaks the gesture chain)
+      inp.focus();
+      try { inp.select(); } catch(e) {}
+      // Retry after the sheet animation in case focus was lost to the overlay
+      setTimeout(() => { inp.focus(); try { inp.select(); } catch(e) {} }, 280);
+    }
   });
 }
 
