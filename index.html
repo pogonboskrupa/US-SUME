@@ -9233,7 +9233,7 @@ function _renderVlakaRow(el, v, i, depth) {
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;">↕</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
         </button>
-        <button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
+        <button onclick="event.stopPropagation();selI(${i});switchTab('karta');zmV(${i});setTimeout(togEdit,120)" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
           <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;">🔧</span>
           <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
         </button>
