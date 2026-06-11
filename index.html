@@ -3912,6 +3912,7 @@ async function sbInitData() {
   sbStartRealtime();              // fire-and-forget
   await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
   sbLoadSharedFotos();            // fire-and-forget
+  dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
   autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
   if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
 }
@@ -6286,12 +6287,14 @@ function _onVlakaRtEvent(payload) {
   const changedBy = payload.new?.korisnik_id || payload.old?.korisnik_id;
   if (!changedBy || changedBy === sbUser?.id) return;
 
-  // Provjeri je li ovaj korisnik u aktivnom projektu
+  // Tuđi događaji se obrađuju SAMO ako je autor član mog aktivnog projekta
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
-  if (akt) {
-    const memberIds = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
-    if (!memberIds.includes(changedBy)) return; // nije u našem projektu
-  }
+  if (!akt) return; // nema aktivnog projekta — ignoriši tuđe vlake
+  const memberIds = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
+  if (!memberIds.includes(changedBy)) return; // nije u našem projektu
+  // Vlaka mora pripadati aktivnom projektu (ne bilo kojem projektu istog kolege)
+  const evProjekt = payload.new?.projekt_id || payload.old?.projekt_id;
+  if (evProjekt && evProjekt !== akt.id) return;
 
   // Fast-path: UPDATE/INSERT s pts → ažuriraj samo tu poliliniju bez full reload
   if ((payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') && payload.new?.pts?.length >= 2) {
@@ -6432,8 +6435,10 @@ function sbStartRealtime() {
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'doz_area_markings'
     }, payload => {
-      const by = payload.new?.user_id;
-      if (by && by !== sbUser?.id) {
+      const by = payload.new?.user_id || payload.new?.created_by;
+      const pid = payload.new?.project_id;
+      // Obavijest samo ako je oznaka u nekom od MOJIH doznaka odjela
+      if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
         _notifBump('doznaka');
         showToast('🌲 ' + _notifKolegaName(by) + ' je dodao/la oznaku na doznaci');
       }
@@ -6442,7 +6447,8 @@ function sbStartRealtime() {
       event: 'INSERT', schema: 'public', table: 'doz_track_points'
     }, payload => {
       const by = payload.new?.user_id;
-      if (by && by !== sbUser?.id) {
+      const pid = payload.new?.project_id;
+      if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
         _notifBump('doznaka');
       }
     })
@@ -16795,8 +16801,15 @@ async function dozLoadOdjeli() {
   if (!sbUser) { document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Prijavite se za pristup</div>'; return; }
   document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty">Učitavam...</div>';
   try {
-    const { data, error } = await sb.from('doz_projects')
-      .select('*').order('created_at', { ascending: false });
+    // Vidljivi su samo odjeli gdje sam kreator ILI aktivni član
+    const { data: clanstva } = await sb.from('doz_project_members')
+      .select('project_id').eq('user_id', sbUser.id).eq('is_active', true);
+    const memberIds = (clanstva || []).map(c => c.project_id);
+    let q = sb.from('doz_projects').select('*').order('created_at', { ascending: false });
+    q = memberIds.length
+      ? q.or(`created_by.eq.${sbUser.id},id.in.(${memberIds.join(',')})`)
+      : q.eq('created_by', sbUser.id);
+    const { data, error } = await q;
     if (error) throw error;
     _dozOdjeli = data || [];
     dozRenderOdjeli();
@@ -17367,15 +17380,22 @@ async function dozSaveOdjel() {
   if (!_dozCreateBoundary) { err.textContent = 'Učitajte GeoJSON ili ucrtajte granicu odjela'; return; }
   err.textContent = '';
   try {
-    const { error } = await sb.from('doz_projects').insert({
+    const { data: novi, error } = await sb.from('doz_projects').insert({
       name: `${gj} · ${odjel}`,
       description: null,
       created_by: sbUser.id,
       boundary_geojson: _dozCreateBoundary,
       known_area_ha: _dozCreateAreaHa || null,
       status: 'active'
-    });
+    }).select('id').single();
     if (error) throw error;
+    // Kreator je automatski manager-član — RLS i lista članova ga uključuju
+    if (novi?.id) {
+      await sb.from('doz_project_members').insert({
+        project_id: novi.id, user_id: sbUser.id, role: 'manager',
+        track_color: DOZ_ENG_COLORS[0], order_index: 0, is_active: true
+      });
+    }
     dozCloseCreateOdjel();
     showToast('✅ Projekat kreiran!');
     await dozLoadOdjeli();
