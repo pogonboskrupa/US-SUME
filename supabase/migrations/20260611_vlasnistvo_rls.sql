@@ -32,6 +32,15 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
+-- ─── Pomoćna: je li korisnik admin (pregledni nadzor) ──────────────────────────
+create or replace function public.je_admin()
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.korisnici
+    where id = auth.uid() and is_admin = true
+  );
+$$;
+
 -- ─── Ukloni SVE postojeće politike na ciljnim tabelama ──────────────────────
 
 do $$
@@ -73,6 +82,7 @@ create policy "projekti_select" on public.projekti
     korisnik_id = auth.uid()
     or public.je_clan_projekta(id)
     or public.je_spd()
+    or public.je_admin()
   );
 
 create policy "projekti_insert" on public.projekti
@@ -92,6 +102,7 @@ create policy "projekt_clanovi_select" on public.projekt_clanovi
     korisnik_id = auth.uid()
     or public.je_clan_projekta(projekt_id)
     or public.je_spd()
+    or public.je_admin()
   );
 
 create policy "projekt_clanovi_insert" on public.projekt_clanovi
@@ -117,6 +128,7 @@ create policy "vlake_select" on public.vlake
     korisnik_id = auth.uid()
     or (projekt_id is not null and public.je_clan_projekta(projekt_id))
     or (projekt_id is not null and public.je_spd())
+    or public.je_admin()
   );
 
 create policy "vlake_insert" on public.vlake
@@ -229,8 +241,8 @@ do $$
 begin
   if exists (select 1 from information_schema.tables
              where table_schema = 'public' and table_name = 'korisnici') then
-    execute 'create policy "korisnici_spd_select" on public.korisnici
-      for select using (public.je_spd())';
+    execute 'create policy "korisnici_nadzor_select" on public.korisnici
+      for select using (public.je_spd() or public.je_admin())';
   end if;
 exception when duplicate_object then null;
 end $$;
