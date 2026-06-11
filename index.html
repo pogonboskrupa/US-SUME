@@ -996,9 +996,20 @@ select:focus { outline:none; border-color:#3b82f6; }
   background:transparent; color:#64748b;
   border-bottom:2px solid transparent;
   transition:all 0.15s; margin-bottom:-2px;
+  position:relative;
 }
 .tab-btn:hover { color:#94a3b8; }
 .tab-btn.active { color:#4ade80; border-bottom-color:#4ade80; background:rgba(74,222,128,0.07); }
+.tab-notif {
+  display:none; position:absolute; top:4px; right:4px;
+  min-width:16px; height:16px; border-radius:8px;
+  background:#ef4444; color:#fff; font-size:9px; font-weight:bold;
+  line-height:16px; text-align:center; padding:0 4px;
+  box-shadow:0 0 0 2px #0f172a;
+  animation: notif-pop .3s ease;
+}
+.tab-notif.show { display:inline-block; }
+@keyframes notif-pop { 0%{transform:scale(0)} 60%{transform:scale(1.3)} 100%{transform:scale(1)} }
 
 /* PROJEKAT PANEL */
 #proj-panel {
@@ -2619,8 +2630,8 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" id="menu-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)">☰ Meni</button>
     <button class="tab-btn active" onclick="switchTab('karta')">🗺 Karta</button>
     <button class="tab-btn" onclick="switchTab('projekat')">📁 Projekat</button>
-    <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake</button>
-    <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka</button>
+    <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake<span class="tab-notif" id="notif-vlake"></span></button>
+    <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
@@ -6283,9 +6294,14 @@ function _onVlakaRtEvent(payload) {
 
   // Fast-path: UPDATE/INSERT s pts → ažuriraj samo tu poliliniju bez full reload
   if ((payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') && payload.new?.pts?.length >= 2) {
+    const isNew = !kolegeVlakeMap[changedBy + '::' + payload.new.nm];
     _patchKolegaVlaka(payload.new);
     _kolegeActiveSince[changedBy] = Date.now();
     _updKoleguLiveBar();
+    if (isNew) {
+      _notifBump('vlake');
+      showToast('📐 ' + _notifKolegaName(changedBy) + ' dodao/la vlaku ' + (payload.new.nm || ''));
+    }
     return;
   }
 
@@ -6333,6 +6349,33 @@ function _updSyncDot(status) {
             : 'Sync neaktivan';
 }
 
+// ── Obavijesti (tab badges) ───────────────────────────────────────────────────
+const _notifCounts = { vlake: 0, doznaka: 0 };
+
+function _notifBump(tab) {
+  if (_activeTab === tab) return;
+  _notifCounts[tab] = (_notifCounts[tab] || 0) + 1;
+  _notifRender(tab);
+}
+
+function _notifClear(tab) {
+  _notifCounts[tab] = 0;
+  _notifRender(tab);
+}
+
+function _notifRender(tab) {
+  const el = document.getElementById('notif-' + tab);
+  if (!el) return;
+  const n = _notifCounts[tab] || 0;
+  el.textContent = n > 9 ? '9+' : (n || '');
+  el.classList.toggle('show', n > 0);
+}
+
+function _notifKolegaName(korisnikId) {
+  const info = kolegeMap[korisnikId];
+  return info?.ime ? info.ime.split(' ')[0] : 'Kolega';
+}
+
 function sbStartRealtime() {
   if (!sbProfile?.sumarija) return;
   _sbRemoveRtChannels();
@@ -6358,7 +6401,49 @@ function sbStartRealtime() {
       filter: `sumarija=eq.${sbProfile.sumarija}`
     }, payload => {
       const by = payload.new?.korisnik_id || payload.old?.korisnik_id;
-      if (by && by !== sbUser?.id) sbLoadSharedFotos();
+      if (by && by !== sbUser?.id) {
+        sbLoadSharedFotos();
+        if ((payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')
+            && (payload.new?.shared_with || []).includes(sbUser?.id)) {
+          _notifBump('vlake');
+          showToast('📷 ' + _notifKolegaName(by) + ' je podijelio/la fotografiju');
+        }
+      }
+    })
+    .subscribe();
+
+  // Projekt clanovi realtime — obavijest kad te neko doda u projekat
+  sb.channel('clanovi-rt-' + Date.now())
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'projekt_clanovi'
+    }, payload => {
+      if (payload.new?.korisnik_id === sbUser?.id && payload.new?.added_by !== sbUser?.id) {
+        _notifBump('vlake');
+        _notifBump('doznaka');
+        showToast('📁 Dodan/a si u novi projekat');
+        sbLoadProjekti();
+      }
+    })
+    .subscribe();
+
+  // Doznaka realtime — obavijest za nova označavanja
+  sb.channel('doznaka-rt-' + Date.now())
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'doz_area_markings'
+    }, payload => {
+      const by = payload.new?.user_id;
+      if (by && by !== sbUser?.id) {
+        _notifBump('doznaka');
+        showToast('🌲 ' + _notifKolegaName(by) + ' je dodao/la oznaku na doznaci');
+      }
+    })
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'doz_track_points'
+    }, payload => {
+      const by = payload.new?.user_id;
+      if (by && by !== sbUser?.id) {
+        _notifBump('doznaka');
+      }
     })
     .subscribe();
 
@@ -13585,6 +13670,7 @@ function switchTab(tab) {
     _mapFullScreen = false;
     _setMapUIVisible(false, false);
     msrStop(true);
+    _notifClear('vlake');
   } else if (tab==='projekat') {
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList(); _rndBojaPresets();
     _setMapUIVisible(false, false);
@@ -13594,6 +13680,7 @@ function switchTab(tab) {
     _setMapUIVisible(false, false);
     msrStop(true);
     dozInit();
+    _notifClear('doznaka');
   } else if (tab==='mjtrg') {
     _mapFullScreen = true;
     _setMapUIVisible(false, true);
