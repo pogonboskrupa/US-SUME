@@ -2399,6 +2399,16 @@ select:focus { outline:none; border-color:#3b82f6; }
 .oz-ed-dot.act { border-color: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.6); }
 .oz-ed-color-pick { width: 28px; height: 24px; border: 1px solid #334155; border-radius: 5px; cursor: pointer; padding: 0; background: none; }
 .oz-ed-range { width: 100%; accent-color: #3b82f6; cursor: pointer; }
+.oz-ed-weight-row { display:flex; gap:4px; align-items:center; }
+.oz-wt-btn { width:34px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:5px; cursor:pointer; background:#1e293b; border:1.5px solid #334155; padding:0; transition:border-color .1s; }
+.oz-wt-btn.act { border-color:#3b82f6; background:#172554; }
+.oz-wt-btn:hover { border-color:#60a5fa; }
+.oz-wt-line { display:block; width:18px; border-radius:1px; background:#94a3b8; }
+.oz-wt-btn.act .oz-wt-line { background:#60a5fa; }
+.oz-ed-dash-row { display:flex; gap:4px; align-items:center; }
+.oz-dash-btn { padding:4px 10px; border-radius:5px; cursor:pointer; background:#1e293b; border:1.5px solid #334155; color:#94a3b8; font-size:12px; letter-spacing:1px; transition:border-color .1s; }
+.oz-dash-btn.act { border-color:#3b82f6; background:#172554; color:#60a5fa; }
+.oz-dash-btn:hover { border-color:#60a5fa; }
 .oz-ed-btns { display: flex; gap: 8px; margin-top: 6px; }
 .oz-ed-btn {
   flex: 1; padding: 8px; border-radius: 6px; font-size: 12px; cursor: pointer;
@@ -11341,6 +11351,21 @@ function _renderKmlEditor(i) {
         <input type="color" class="oz-ed-color-pick" value="${k.col}"
           oninput="event.stopPropagation();_kmlColorLive(${i},this.value)"
           onchange="event.stopPropagation();_kmlSetColR(${i},this.value)">
+      </div>
+    </div>
+    <div class="oz-ed-field">
+      <div class="oz-ed-label">Debljina linije</div>
+      <div class="oz-ed-weight-row">
+        ${[1,1.5,2,3,4,5].map(ww=>`<button class="oz-wt-btn${(k.weight||2)===ww?' act':''}" onclick="event.stopPropagation();setKmlWeight(${i},${ww});_rndOznakePanel()" title="${ww}px"><span class="oz-wt-line" style="height:${Math.max(1,Math.round(ww))}px"></span></button>`).join('')}
+      </div>
+    </div>
+    <div class="oz-ed-field">
+      <div class="oz-ed-label">Stil linije</div>
+      <div class="oz-ed-dash-row">
+        <button class="oz-dash-btn${(k.dash||'')=== ''    ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'');_rndOznakePanel()" title="Puna linija">━━━</button>
+        <button class="oz-dash-btn${(k.dash||'')==='6 4'  ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'6 4');_rndOznakePanel()" title="Isprekidana">╌ ╌ ╌</button>
+        <button class="oz-dash-btn${(k.dash||'')==='12 6' ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'12 6');_rndOznakePanel()" title="Dugo isprekidana">╍ ╍</button>
+        <button class="oz-dash-btn${(k.dash||'')==='2 4'  ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'2 4');_rndOznakePanel()" title="Tačkasta">· · ·</button>
       </div>
     </div>
     <div class="oz-ed-field">
