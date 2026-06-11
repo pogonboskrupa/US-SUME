@@ -834,6 +834,16 @@ input:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 8px 32px rgba(0,0,0,0.18);
   overflow:hidden;
 }
+#edp-nm {
+  font-size:15px; font-weight:800; color:#0f172a; max-width:130px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  cursor:pointer; border-bottom:1.5px dashed rgba(245,158,11,0.5);
+}
+#edp-stats { font-size:12px; color:#64748b; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
+#edp-rename {
+  background:#fef3c7; border:none; color:#d97706; width:26px; height:26px;
+  border-radius:8px; font-size:13px; cursor:pointer; flex-shrink:0;
+}
 .mdp-btn.edpmode { flex:1; background:#f1f5f9; color:#334155; }
 .mdp-btn.edpmode.active { background:linear-gradient(135deg,#d97706,#f59e0b); color:#fff; box-shadow:0 2px 8px rgba(245,158,11,0.35); }
 .mdp-btn.edpmode.del.active { background:linear-gradient(135deg,#dc2626,#ef4444); box-shadow:0 2px 8px rgba(239,68,68,0.35); }
@@ -3113,7 +3123,8 @@ select:focus { outline:none; border-color:#3b82f6; }
       <div id="edit-panel" style="display:none;">
         <div class="mdp-head">
           <span class="mdp-ico" style="color:#f59e0b;">🔧</span>
-          <span id="edp-nm">T1</span>
+          <span id="edp-nm" onclick="edpRename()" title="Preimenuj vlaku">T1</span>
+          <button id="edp-rename" onclick="edpRename()" title="Preimenuj vlaku">✏</button>
           <span id="edp-stats">0 m · 0 tač.</span>
         </div>
         <div class="mdp-row">
@@ -4843,6 +4854,29 @@ async function sbFlushVlaka(i) {
   } catch(e) {
     _OL.enqueue({ type: 'upsert_vlaka', payload });
   }
+}
+
+// Preimenuje vlaku — ažurira nm/br/kr, tooltip, label, lokalni keš i DB red (po id, bez orphan reda)
+async function renameVlaka(i, newNm) {
+  const v = vlake[i];
+  if (!v) return;
+  const oldNm = v.nm;
+  v.nm = newNm;
+  const m = newNm.match(/^T?(\d+)(?:\.(\d+))?$/i);
+  if (m) { v.br = parseInt(m[1]); v.kr = m[2] ? parseInt(m[2]) : 0; }
+  try { v.poly.setTooltipContent(newNm); } catch(e) {}
+  updateVlakaLabel(i);
+  // Očisti stari red iz offline keša (vodi se po nm)
+  if (sbUser) {
+    const cached = _OL.load(_OL.VLAKE) || [];
+    _OL.save(_OL.VLAKE, cached.filter(r => !(r.nm === oldNm && r.korisnik_id === sbUser.id)));
+  }
+  // DB: prvo preimenuj postojeći red po id — upsert poslije pogađa isti red preko novog nm
+  if (v.sbId && sbUser) {
+    try { await sb.from('vlake').update({ nm: newNm, br: v.br, kr: v.kr, updated_at: new Date().toISOString() }).eq('id', v.sbId); } catch(e) {}
+  }
+  sbFlushVlaka(i);
+  rndList(); updOvl();
 }
 
 async function sbDeleteVlaka(v) {
@@ -7181,6 +7215,22 @@ function edpSetMode(m) {
   document.getElementById('edp-hint').textContent = _edDelMode
     ? 'Tapni tačku da je obrišeš'
     : 'Povuci tačku za pomjeranje · tap između tačaka dodaje novu';
+}
+
+async function edpRename() {
+  if (actI === null || !vlake[actI]) return;
+  const v = vlake[actI];
+  const nw = await _dlgPrompt('Novi naziv vlake (T5 = vlaka, T5.1 = krak):', v.nm, { title: 'Preimenuj vlaku' });
+  if (!nw) return;
+  const nm = nw.trim();
+  if (!nm || nm === v.nm) return;
+  if (vlake.some((x, xi) => xi !== actI && x.nm === nm && x.projektId === v.projektId)) {
+    showToast('⚠ Naziv "' + nm + '" već postoji u projektu');
+    return;
+  }
+  await renameVlaka(actI, nm);
+  document.getElementById('edp-nm').textContent = nm;
+  showToast('✏ Preimenovano u ' + nm);
 }
 
 function edpUndo() {
