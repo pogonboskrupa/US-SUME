@@ -56,12 +56,23 @@ begin
   end loop;
 end $$;
 
+-- ─── Pomoćna: je li korisnik ŠPD US ŠUME (pregledni nalog) ────────────────────
+create or replace function public.je_spd()
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.korisnici
+    where id = auth.uid() and sumarija = 'ŠPD US ŠUME'
+  );
+$$;
+
 -- ─── PROJEKTI ────────────────────────────────────────────────────────────────
--- Vide: vlasnik + članovi. Mijenja/briše: samo vlasnik.
+-- Vide: vlasnik + članovi + ŠPD (read-only). Mijenja/briše: samo vlasnik.
 
 create policy "projekti_select" on public.projekti
   for select using (
-    korisnik_id = auth.uid() or public.je_clan_projekta(id)
+    korisnik_id = auth.uid()
+    or public.je_clan_projekta(id)
+    or public.je_spd()
   );
 
 create policy "projekti_insert" on public.projekti
@@ -78,7 +89,9 @@ create policy "projekti_delete" on public.projekti
 
 create policy "projekt_clanovi_select" on public.projekt_clanovi
   for select using (
-    korisnik_id = auth.uid() or public.je_clan_projekta(projekt_id)
+    korisnik_id = auth.uid()
+    or public.je_clan_projekta(projekt_id)
+    or public.je_spd()
   );
 
 create policy "projekt_clanovi_insert" on public.projekt_clanovi
@@ -103,6 +116,7 @@ create policy "vlake_select" on public.vlake
   for select using (
     korisnik_id = auth.uid()
     or (projekt_id is not null and public.je_clan_projekta(projekt_id))
+    or (projekt_id is not null and public.je_spd())
   );
 
 create policy "vlake_insert" on public.vlake
@@ -206,3 +220,17 @@ where not exists (
   where m.project_id = p.id and m.user_id = p.created_by
 )
 on conflict do nothing;
+
+-- ─── KORISNICI: ŠPD vidi sve korisnike (za pregled projekata) ────────────────
+-- Pretpostavljamo da korisnici tabela već ima RLS — dodaj ŠPD politiku.
+-- (Ako korisnici nema RLS, ova politika nema efekta ali ne šteti.)
+
+do $$
+begin
+  if exists (select 1 from information_schema.tables
+             where table_schema = 'public' and table_name = 'korisnici') then
+    execute 'create policy "korisnici_spd_select" on public.korisnici
+      for select using (public.je_spd())';
+  end if;
+exception when duplicate_object then null;
+end $$;
