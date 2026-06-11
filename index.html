@@ -5011,7 +5011,7 @@ async function sbLoadVlake() {
 }
 
 function _syncIbr() {
-  const usedBr = new Set(vlake.map(v => v.br));
+  const usedBr = new Set(vlake.filter(v => v.projektId === _aktivniProjektId).map(v => v.br));
   let next = 1;
   while (usedBr.has(next)) next++;
   document.getElementById('ibr').value = next;
@@ -5082,10 +5082,14 @@ async function renameVlaka(i, newNm) {
   if (m) { v.br = parseInt(m[1]); v.kr = m[2] ? parseInt(m[2]) : 0; }
   try { v.poly.setTooltipContent(newNm); } catch(e) {}
   updateVlakaLabel(i);
-  // Očisti stari red iz offline keša (vodi se po nm)
+  // Očisti stari red iz offline keša
   if (sbUser) {
     const cached = _OL.load(_OL.VLAKE) || [];
-    _OL.save(_OL.VLAKE, cached.filter(r => !(r.nm === oldNm && r.korisnik_id === sbUser.id)));
+    _OL.save(_OL.VLAKE, cached.filter(r => {
+      if (v.sbId && r.id === v.sbId) return false;
+      if (r.nm === oldNm && r.korisnik_id === sbUser.id && r.projekt_id === (v.projektId || null)) return false;
+      return true;
+    }));
   }
   // DB: prvo preimenuj postojeći red po id — upsert poslije pogađa isti red preko novog nm
   if (v.sbId && sbUser) {
@@ -7731,7 +7735,7 @@ async function _vpickGo() {
   const p = _parseVNum(raw);
   if (!p) { showToast('Unesi broj npr. 14 ili 14.5'); return; }
   // Pronađi postojeću
-  const existing = vlake.findIndex(v => v.nm === p.nm);
+  const existing = vlake.findIndex(v => v.nm === p.nm && v.projektId === _aktivniProjektId);
   if (existing !== -1) {
     _closeVlakaPicker();
     setTimeout(() => {
@@ -7755,7 +7759,7 @@ async function _vpickGo() {
     // Krak — pronađi ili kreiraj roditelja
     const parts = p.nm.split('.');
     const parentNm = parts.slice(0, -1).join('.');
-    let parIdx = vlake.findIndex(v => v.nm === parentNm);
+    let parIdx = vlake.findIndex(v => v.nm === parentNm && v.projektId === _aktivniProjektId);
     if (parIdx < 0) {
       const parParts = parentNm.replace(/^T/,'').split('.');
       const parBr = parseInt(parParts[0]);
@@ -7812,7 +7816,7 @@ async function addV() {
   try {
     const {br, kr} = updPrev();
     const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
-    const existing = vlake.findIndex(v => v.nm === nm);
+    const existing = vlake.findIndex(v => v.nm === nm && v.projektId === _aktivniProjektId);
     if (existing !== -1) {
       // Show conflict dialog instead of silently skipping
       _vcIdx = existing;
@@ -8293,7 +8297,7 @@ function _stodaljVratiSe(i) {
 function _nextKrakNm(parentNm, strana) {
   let n = strana === 'D' ? 2 : 1; // D kreće od 2, L i bez strane od 1
   const step = strana ? 2 : 1;    // s stranom preskačemo po 2, bez slobodan redosljed
-  while (vlake.find(v => v.nm === parentNm + '.' + n)) n += step;
+  while (vlake.find(v => v.nm === parentNm + '.' + n && v.projektId === _aktivniProjektId)) n += step;
   return parentNm + '.' + n;
 }
 
@@ -8302,7 +8306,7 @@ function _parentOf(v) {
   const parts = v.nm.split('.');
   if (parts.length <= 1) return -1;
   const parentNm = parts.slice(0, -1).join('.');
-  return vlake.findIndex(x => x.nm === parentNm);
+  return vlake.findIndex(x => x.nm === parentNm && x.projektId === v.projektId);
 }
 
 // Direktno kreiraj novi krak bez pickera
