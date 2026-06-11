@@ -2622,6 +2622,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('vlake')">📐 Vlake<span class="tab-notif" id="notif-vlake"></span></button>
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
+    <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')">🧭 Teren</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -2985,6 +2986,79 @@ select:focus { outline:none; border-color:#3b82f6; }
       <!-- Lista korisnika -->
       <div id="admin-panel-user-list" style="flex:1;overflow-y:auto;padding:12px 16px;">
         <p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Odaberi tab da učitaš...</p>
+      </div>
+    </div>
+
+    <!-- ═══ TEREN PANEL (ŠPD US ŠUME terenski korisnici) ═══ -->
+    <div id="teren-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;">
+      <!-- Header -->
+      <div style="padding:14px 16px 10px;border-bottom:1px solid #14532d;flex-shrink:0;background:linear-gradient(135deg,#064e3b22,transparent);">
+        <div style="font-weight:700;color:#34d399;font-size:16px;">🧭 Teren — navigacija</div>
+        <div style="color:#64748b;font-size:11px;margin-top:2px;">Orijentacija, geolociranje i karte</div>
+      </div>
+
+      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px;">
+
+        <!-- MOJA POZICIJA -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📍 Moja pozicija</span>
+            <span id="trn-gps-dot" style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>GPS</span>
+          </div>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:13px;">
+            <span style="color:#64748b;">Lat</span><span id="trn-lat" style="color:#e2e8f0;font-family:monospace;">—</span>
+            <span style="color:#64748b;">Lon</span><span id="trn-lon" style="color:#e2e8f0;font-family:monospace;">—</span>
+            <span style="color:#fbbf24;">Y (GK)</span><span id="trn-y" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
+            <span style="color:#fbbf24;">X (GK)</span><span id="trn-x" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
+            <span style="color:#64748b;">Visina</span><span id="trn-alt" style="color:#34d399;font-family:monospace;">— m</span>
+            <span style="color:#64748b;">Tačnost</span><span id="trn-acc" style="color:#94a3b8;font-family:monospace;">— m</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button onclick="fabLokacija()" style="flex:1;padding:11px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">🎯 Centriraj</button>
+            <button onclick="terenCopyCoords()" style="flex:1;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;">📋 Kopiraj</button>
+          </div>
+          <button id="trn-gps-btn" onclick="toggleGPS()" style="width:100%;margin-top:8px;padding:10px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:12px;cursor:pointer;">📡 Uključi/isključi GPS</button>
+        </div>
+
+        <!-- KOMPAS -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;display:flex;align-items:center;gap:16px;">
+          <div style="position:relative;width:84px;height:84px;flex-shrink:0;">
+            <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #334155;"></div>
+            <div style="position:absolute;top:3px;left:50%;transform:translateX(-50%);font-size:9px;color:#f87171;font-weight:700;">S</div>
+            <div style="position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-size:9px;color:#64748b;">J</div>
+            <div style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#64748b;">Z</div>
+            <div style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#64748b;">I</div>
+            <div id="trn-compass-needle" style="position:absolute;top:50%;left:50%;width:3px;height:36px;background:linear-gradient(to top,#64748b 50%,#f87171 50%);transform-origin:bottom center;transform:translate(-50%,-100%) rotate(0deg);border-radius:2px;"></div>
+            <div style="position:absolute;top:50%;left:50%;width:7px;height:7px;background:#e2e8f0;border-radius:50%;transform:translate(-50%,-50%);"></div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Kompas</div>
+            <div id="trn-heading" style="font-size:22px;font-weight:700;color:#34d399;font-family:monospace;">—°</div>
+            <div id="trn-heading-dir" style="font-size:11px;color:#64748b;">azimut uređaja</div>
+          </div>
+        </div>
+
+        <!-- KARTE I SLOJEVI -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🗄 Karte i slojevi</div>
+          <button onclick="showSqlMapModal()" style="width:100%;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">🗄 Učitaj SQLiteDB kartu</button>
+          <button onclick="document.getElementById('kf').click()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">📂 Dodaj KML fajl</button>
+          <button onclick="openOznakePanel()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">≡ Prikazani slojevi i oznake</button>
+          <button onclick="_openLayerSheet()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;">⛰ Promijeni podlogu karte</button>
+        </div>
+
+        <!-- TAČKE / WAYPOINTS -->
+        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📌 Tačke</span>
+            <span id="trn-tacke-cnt" style="font-size:11px;color:#64748b;">0</span>
+          </div>
+          <button onclick="terenMarkHere()" style="width:100%;padding:11px;background:linear-gradient(135deg,#0369a1,#0ea5e9);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:10px;">📍 Označi trenutnu poziciju</button>
+          <div id="trn-tacke-list" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih tačaka</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -3638,6 +3712,19 @@ async function sbLoadProfile() {
     const fotoInput = document.getElementById('loc-photo-input');
     if (fotoInput) fotoInput.disabled = true;
   }
+
+  // ŠPD US ŠUME terenski korisnik (nije admin): samo navigacija/orijentacija.
+  // Sakrij Projekat/Vlake/Doznaka tabove, prikaži Teren tab.
+  const terenBtn = document.getElementById('teren-tab-btn');
+  if (isSpdField()) {
+    ['projekat','vlake','doznaka'].forEach(t => {
+      const b = document.querySelector(`button[onclick="switchTab('${t}')"]`);
+      if (b) b.style.display = 'none';
+    });
+    if (terenBtn) terenBtn.style.display = '';
+  } else {
+    if (terenBtn) terenBtn.style.display = 'none';
+  }
 }
 
 function showApp() {
@@ -3946,9 +4033,11 @@ const _deletedProjektIds = new Set(); // guard: ne dozvoli sbLoadProjekti da ih 
 
 async function sbLoadProjekti() {
   if (!sbUser) return;
+  // ŠPD terenski korisnik nema projekte — preskoči učitavanje
+  if (isSpdField()) { _projekti = []; rndProjektiList(); return; }
   try {
-    // ŠPD US ŠUME — pregledni nalog: vidi SVE projekte (read-only)
-    if (isReadOnly()) {
+    // Admin (SPD USSUME) — nadzorni pregled: vidi SVE projekte (read-only)
+    if (isAdmin()) {
       const { data, error } = await sb.from('projekti')
         .select('*').order('datum', { ascending: false });
       if (error) throw error;
@@ -4075,8 +4164,8 @@ function rndProjektiList() {
     el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema projekata.<br>Klikni <b style="color:#60a5fa;">+ Novi</b> da kreneš.</div>`;
     return;
   }
-  // ŠPD pregledni nalog: grupiši po šumariji
-  if (isReadOnly()) {
+  // Admin nadzorni pregled: grupiši po šumariji
+  if (isAdmin()) {
     const bySum = {};
     _projekti.forEach(p => {
       const s = p.sumarija || 'Nepoznato';
@@ -5385,8 +5474,8 @@ async function sbLoadKolegeVlake() {
 
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
 
-  // ŠPD pregledni nalog: prikaži SVE vlake aktivnog projekta (svih korisnika)
-  if (isReadOnly() && akt) {
+  // Admin nadzorni pregled: prikaži SVE vlake aktivnog projekta (svih korisnika)
+  if (isAdmin() && akt) {
     let dbData = [];
     try {
       const { data } = await sb.from('vlake')
@@ -6667,11 +6756,13 @@ function sbStartRealtime() {
 // MGI (Militar-Geographisches Institut) / Balkans zone 6 — EPSG:31276
 proj4.defs('MGI-ZONE6', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
 
-// ŠPD US ŠUME — pregledni nalog s read-only pristupom svim projektima
+// ŠPD US ŠUME šumarija — terenski/pregledni nalozi
 function isSpd() { return sbProfile?.sumarija === 'ŠPD US ŠUME'; }
-// Admin — nadzorni nalog: pregled svih projekata, bez crtanja vlaka i doznake
+// Admin — nadzorni nalog (SPD USSUME): pregled svih projekata po šumarijama
 function isAdmin() { return !!sbProfile?.is_admin; }
-// Bilo koji read-only pregledni nalog
+// ŠPD US ŠUME terenski korisnik (nije admin): samo navigacija/orijentacija, bez projekata
+function isSpdField() { return isSpd() && !isAdmin(); }
+// Bilo koji nalog koji ne smije uređivati projekte/vlake
 function isReadOnly() { return isSpd() || isAdmin(); }
 
 function wgsToMGI(lat, lon) {
@@ -6700,6 +6791,103 @@ function updMGI(lat, lon) {
   if (c) {
     document.getElementById('omgi-y').textContent = c.y.toLocaleString('bs');
     document.getElementById('omgi-x').textContent = c.x.toLocaleString('bs');
+  }
+}
+
+// ═══ TEREN PANEL (ŠPD US ŠUME terenski korisnici) ═══════════════════════════
+function _azimutSmjer(deg) {
+  const dirs = ['S','SI','I','JI','J','JZ','Z','SZ'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function terenRender() {
+  const g = id => document.getElementById(id);
+  // Pozicija
+  if (lastP) {
+    g('trn-lat').textContent = lastP.la.toFixed(6);
+    g('trn-lon').textContent = lastP.lo.toFixed(6);
+    const c = wgsToMGI(lastP.la, lastP.lo);
+    g('trn-y').textContent = c ? c.y.toLocaleString('bs') : '—';
+    g('trn-x').textContent = c ? c.x.toLocaleString('bs') : '—';
+    g('trn-alt').textContent = (lastP.al != null ? Math.round(lastP.al) : '—') + ' m';
+    g('trn-acc').textContent = (lastP.ac != null ? '±' + Math.round(lastP.ac) : '—') + ' m';
+    const dot = g('trn-gps-dot');
+    if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block;"></span>GPS aktivan';
+  } else {
+    ['trn-lat','trn-lon','trn-y','trn-x'].forEach(id => g(id).textContent = '—');
+    g('trn-alt').textContent = '— m'; g('trn-acc').textContent = '— m';
+    const dot = g('trn-gps-dot');
+    if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>Nema GPS-a';
+  }
+  // Kompas
+  terenUpdCompass();
+  // Tačke
+  terenRenderTacke();
+}
+
+function terenUpdCompass() {
+  const needle = document.getElementById('trn-compass-needle');
+  const hv = document.getElementById('trn-heading');
+  const hd = document.getElementById('trn-heading-dir');
+  if (_compassHeading == null) {
+    if (hv) hv.textContent = '—°';
+    if (hd) hd.textContent = 'azimut nedostupan';
+    return;
+  }
+  const h = Math.round(_compassHeading);
+  // Igla pokazuje sjever relativno na orijentaciju uređaja
+  if (needle) needle.style.transform = `translate(-50%,-100%) rotate(${-h}deg)`;
+  if (hv) hv.textContent = h + '°';
+  if (hd) hd.textContent = _azimutSmjer(h) + ' · azimut uređaja';
+}
+
+function terenRenderTacke() {
+  const list = document.getElementById('trn-tacke-list');
+  const cnt  = document.getElementById('trn-tacke-cnt');
+  if (cnt) cnt.textContent = _tacke.length;
+  if (!list) return;
+  if (!_tacke.length) {
+    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih tačaka</div>';
+    return;
+  }
+  list.innerHTML = _tacke.map((t, i) => {
+    let dist = '', azi = '';
+    if (lastP) {
+      dist = _fmtDist(_haversine(lastP.la, lastP.lo, t.la, t.lo));
+      const b = Math.round(_bearing(lastP.la, lastP.lo, t.la, t.lo));
+      azi = `${b}° ${_azimutSmjer(b)}`;
+    }
+    const nm = t.nm || ('Tačka ' + (i+1));
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(nm)}</div>
+        ${lastP ? `<div style="font-size:11px;color:#64748b;">📏 ${dist} · 🧭 ${azi}</div>` : '<div style="font-size:11px;color:#475569;">nema GPS-a</div>'}
+      </div>
+      <button onclick="vodiMeDoTacke(${i})" style="padding:7px 10px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;">➤ Vodi</button>
+    </div>`;
+  }).join('');
+}
+
+function terenMarkHere() {
+  if (!lastP) { showToast('Nema GPS signala — uključi GPS'); return; }
+  const nm = 'T' + (_tacke.length + 1);
+  _createTacka(lastP.la, lastP.lo, nm);
+  terenRenderTacke();
+}
+
+function terenCopyCoords() {
+  if (!lastP) { showToast('Nema GPS signala'); return; }
+  const c = wgsToMGI(lastP.la, lastP.lo);
+  const txt = `Lat: ${lastP.la.toFixed(6)}, Lon: ${lastP.lo.toFixed(6)}`
+            + (c ? `\nGK Y: ${c.y}, X: ${c.x}` : '')
+            + `\nVisina: ${lastP.al != null ? Math.round(lastP.al) : '—'} m`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(
+      () => showToast('📋 Koordinate kopirane'),
+      () => showToast('Greška pri kopiranju')
+    );
+  } else {
+    showToast(txt);
   }
 }
 
@@ -8935,6 +9123,7 @@ function stopGPS() {
 
 // ── KOMPAS / SMJER TELEFONA ──────────────────────────────────────────────────
 function _updCompassOnMarker(heading) {
+  if (_activeTab === 'teren') terenUpdCompass();
   if (!posMk) return;
   const el = posMk.getElement();
   if (!el) return;
@@ -9097,6 +9286,7 @@ function onP(p) {
   _gpsRestartCount = 0;
   _addTragPoint(la, lo, ac, al);
   _updMcdDist();
+  if (_activeTab === 'teren') terenRender();
 
   // Prikaz uvijek — pokaži brzinu ako je dostupna
   const speedKmh = (gpsSpeed != null && gpsSpeed >= 0) ? ` ${Math.round(gpsSpeed * 3.6)}km/h` : '';
@@ -13894,15 +14084,19 @@ function switchTab(tab) {
   const pdoz    = document.getElementById('doznaka-panel');
   const pmjtrg  = document.getElementById('mjtrg-panel');
   const padmin  = document.getElementById('admin-panel');
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>
-    b.classList.toggle('active',
-      (i===1&&tab==='karta')||(i===2&&tab==='projekat')||(i===3&&tab==='vlake')||(i===4&&tab==='doznaka')||(i===5&&tab==='admin')||(i===5&&tab==='mjtrg')));
+  const pteren  = document.getElementById('teren-panel');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const oc = b.getAttribute('onclick') || '';
+    b.classList.toggle('active', oc.includes(`switchTab('${tab}')`));
+  });
   panel.style.display   = tab==='vlake'    ? 'flex' : 'none';
   pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
   pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
   pmjtrg.style.display  = tab==='mjtrg'   ? 'flex' : 'none';
   if (padmin) padmin.style.display = tab==='admin' ? 'flex' : 'none';
+  if (pteren) pteren.style.display = tab==='teren' ? 'flex' : 'none';
   if (tab === 'admin') adminLoadUsers();
+  if (tab === 'teren') terenRender();
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -13931,6 +14125,10 @@ function switchTab(tab) {
     msrActivateIfNeeded();
     _tragRegRender();
   } else if (tab==='admin') {
+    _mapFullScreen = false;
+    _setMapUIVisible(false, false);
+    msrStop(true);
+  } else if (tab==='teren') {
     _mapFullScreen = false;
     _setMapUIVisible(false, false);
     msrStop(true);
