@@ -2839,6 +2839,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div class="sec-t" style="margin:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pd-title">—</div>
         </div>
         <div id="pd-info" style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.9;background:rgba(15,23,42,0.6);border-radius:6px;padding:9px 11px;border:1px solid #1e3a5f;"></div>
+        <div id="pd-dist-warn" style="display:none;margin-bottom:10px;"></div>
         <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">👥 Projektanti</div>
         <div id="pd-clanovi" style="margin-bottom:12px;"></div>
         <div id="pd-add-clan-sec">
@@ -4131,12 +4132,16 @@ function showProjektDetalji(id) {
   btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
-  // Zoom na odjel — prikaži ako postoji odjel match u granicama
+  // Zoom na odjel — prikaži ako ima vlaka ili KML odjela
   const zoomBtn = document.getElementById('pd-zoom-odjel-btn');
   if (zoomBtn) {
+    const hasVlake = vlake.some(v => v.projektId === id && v.pts.length > 0);
     const hasOdjel = p.odjel && _findOdjelBounds(p.odjel);
-    zoomBtn.style.display = hasOdjel ? '' : 'none';
+    zoomBtn.style.display = (hasVlake || hasOdjel) ? '' : 'none';
   }
+
+  // Upozorenje o razmaku vlaka
+  _checkProjDistWarn(id);
 
   // Nacrtaj vlaku dugme — samo za aktivni projekat
   const drawBtn = document.getElementById('pd-draw-vlaka-btn');
@@ -4175,13 +4180,57 @@ function _findOdjelBounds(odjel) {
   return match?.bounds || null;
 }
 
+function _projVlakePts(projektId) {
+  return vlake.filter(v => v.projektId === projektId && v.pts.length > 0)
+              .flatMap(v => v.pts.map(p => L.latLng(p.la, p.lo)));
+}
+
 function zoomNaOdjel() {
   const p = _projekti.find(x => x.id === _pdProjektId);
-  if (!p?.odjel) { showToast('Projekat nema definisan odjel'); return; }
-  const bounds = _findOdjelBounds(p.odjel);
-  if (!bounds) { showToast('Nije pronađen KML odjela "' + p.odjel + '"'); return; }
-  switchTab('karta');
-  map.fitBounds(bounds, { padding: [30, 30] });
+  if (!p) return;
+  // Prefer zooming to actual vlake in the project
+  const pts = _projVlakePts(p.id);
+  if (pts.length > 0) {
+    const bounds = L.latLngBounds(pts);
+    switchTab('karta');
+    map.fitBounds(bounds, { padding: [40, 40] });
+    return;
+  }
+  // Fallback: KML odjel boundary
+  const bounds = p.odjel ? _findOdjelBounds(p.odjel) : null;
+  if (bounds) {
+    switchTab('karta');
+    map.fitBounds(bounds, { padding: [30, 30] });
+  } else {
+    showToast('Projekat nema vlaka ni KML odjela za zoom');
+  }
+}
+
+function _checkProjDistWarn(projektId) {
+  const el = document.getElementById('pd-dist-warn');
+  if (!el) return;
+  const pts = _projVlakePts(projektId);
+  if (pts.length < 2) { el.style.display = 'none'; return; }
+  // Find bounding box diagonal as a proxy for max spread
+  const bounds = L.latLngBounds(pts);
+  const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+  const diagM = sw.distanceTo(ne);
+  // Also find the single farthest pair from centroid
+  const cx = (sw.lat + ne.lat) / 2, cy = (sw.lng + ne.lng) / 2;
+  const center = L.latLng(cx, cy);
+  let maxDist = 0;
+  pts.forEach(pt => { const d = center.distanceTo(pt); if (d > maxDist) maxDist = d; });
+  const WARN_M = 5000;
+  if (diagM > WARN_M) {
+    const km = (diagM / 1000).toFixed(1);
+    el.style.display = 'block';
+    el.innerHTML = `<div style="background:rgba(120,53,15,0.35);border:1px solid #b45309;border-radius:7px;padding:8px 11px;font-size:12px;color:#fbbf24;display:flex;align-items:flex-start;gap:8px;">
+      <span style="font-size:16px;flex-shrink:0;">⚠</span>
+      <span>Vlake ovog projekta su razmaknute <b>${km} km</b> — prelaze dozvoljenoh 5 km za jedan odjel.</span>
+    </div>`;
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function toggleNoviProj() {
