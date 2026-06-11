@@ -2860,6 +2860,7 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
         <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
+        <button class="btn" id="pd-zoom-odjel-btn" onclick="zoomNaOdjel()" style="width:100%;margin-bottom:6px;background:#0f2940;border:1px solid #1e3a5f;color:#60a5fa;font-size:13px;padding:8px;border-radius:8px;font-weight:600;">🗺 Zoom na odjel</button>
         <button class="btn" id="pd-draw-vlaka-btn" onclick="startManualVlakaDraw()" style="width:100%;margin-bottom:6px;background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff;font-size:13px;padding:9px;border-radius:8px;font-weight:600;letter-spacing:0.3px;">✏ Nacrtaj vlaku ručno</button>
         <button class="btn" id="pd-vlake-btn" onclick="toggleProjektVlakeVisible(_pdProjektId)" style="width:100%;margin-bottom:6px;background:#0f1f2e;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;padding:7px;">🙈 Sakrij vlake</button>
         <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;">📥 Izvezi projekat kao KML</button>
@@ -4130,6 +4131,13 @@ function showProjektDetalji(id) {
   btn.onclick     = isAkt ? deaktivirajProjekt : aktivirajProjekt;
   btn.style.width = '100%'; btn.style.marginBottom = '6px';
 
+  // Zoom na odjel — prikaži ako postoji odjel match u granicama
+  const zoomBtn = document.getElementById('pd-zoom-odjel-btn');
+  if (zoomBtn) {
+    const hasOdjel = p.odjel && _findOdjelBounds(p.odjel);
+    zoomBtn.style.display = hasOdjel ? '' : 'none';
+  }
+
   // Nacrtaj vlaku dugme — samo za aktivni projekat
   const drawBtn = document.getElementById('pd-draw-vlaka-btn');
   if (drawBtn) drawBtn.style.display = isAkt ? '' : 'none';
@@ -4157,6 +4165,23 @@ function showProjektDetalji(id) {
   } else if (ukBtn) {
     ukBtn.style.display = 'none';
   }
+}
+
+function _findOdjelBounds(odjel) {
+  if (!odjel || !graniceOdjeli.length) return null;
+  const match = graniceOdjeli.find(o => o.name === odjel)
+             || graniceOdjeli.find(o => o.name.toLowerCase() === odjel.toLowerCase())
+             || graniceOdjeli.find(o => odjel.toLowerCase().includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(odjel.toLowerCase()));
+  return match?.bounds || null;
+}
+
+function zoomNaOdjel() {
+  const p = _projekti.find(x => x.id === _pdProjektId);
+  if (!p?.odjel) { showToast('Projekat nema definisan odjel'); return; }
+  const bounds = _findOdjelBounds(p.odjel);
+  if (!bounds) { showToast('Nije pronađen KML odjela "' + p.odjel + '"'); return; }
+  switchTab('karta');
+  map.fitBounds(bounds, { padding: [30, 30] });
 }
 
 function toggleNoviProj() {
