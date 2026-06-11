@@ -1561,7 +1561,20 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gl-btn.on { border-color:#60a5fa; color:#60a5fa; background:rgba(59,130,246,0.15); }
 .gl-btn.danger { border-color:#7f1d1d; color:#f87171; }
 .gl-btn.danger:hover { background:#7f1d1d; }
-.gl-weight-row { display:flex; align-items:center; gap:4px; }
+.gl-weight-row { display:flex; align-items:center; gap:3px; }
+.gl-wt-btn {
+  background:none; border:1px solid #334155; border-radius:5px;
+  width:32px; height:26px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all 0.12s; flex-shrink:0;
+}
+.gl-wt-btn:hover { border-color:#3b82f6; }
+.gl-wt-btn.on { border-color:#60a5fa; background:rgba(59,130,246,0.15); }
+.gl-wt-line {
+  display:block; width:18px; border-radius:1px;
+  background:#94a3b8; transition:background 0.12s;
+}
+.gl-wt-btn.on .gl-wt-line { background:#60a5fa; }
+.gl-wt-btn:hover .gl-wt-line { background:#60a5fa; }
 .gl-opacity-row { display:flex; align-items:center; gap:6px; font-size:11px; color:#64748b; flex:1; min-width:120px; }
 .gl-opacity-row input[type=range] { flex:1; accent-color:#60a5fa; }
 .gl-sep { flex:1; }
@@ -11727,9 +11740,11 @@ function rndGraniceModal() {
             <button class="gl-btn ${d===''?'on':''}" onclick="setKmlDash(${i},'')" title="Puna linija">—</button>
             <button class="gl-btn ${d==='6 4'?'on':''}" onclick="setKmlDash(${i},'6 4')" title="Isprekidana">╌</button>
             <button class="gl-btn ${d==='12 6'?'on':''}" onclick="setKmlDash(${i},'12 6')" title="Debela isprekidana">╍</button>
-            <span style="width:1px;height:18px;background:#1e3a5f;flex-shrink:0;"></span>
+          </div>
+          <div class="gl-controls" style="margin-top:5px;">
+            <span style="font-size:10px;color:#475569;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;flex-shrink:0;">Debljina</span>
             <div class="gl-weight-row" title="Debljina linije">
-              ${WEIGHTS.map(ww=>`<button class="gl-btn ${w===ww?'on':''}" onclick="setKmlWeight(${i},${ww})">${ww}</button>`).join('')}
+              ${WEIGHTS.map(ww=>`<button class="gl-wt-btn ${w===ww?'on':''}" onclick="setKmlWeight(${i},${ww})" title="${ww}px"><span class="gl-wt-line" style="height:${Math.max(1,Math.round(ww))}px;"></span></button>`).join('')}
             </div>
           </div>
           <div class="gl-controls" style="margin-top:6px;">
