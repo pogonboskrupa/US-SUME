@@ -3622,6 +3622,22 @@ async function sbLoadProfile() {
     const adminItem = document.getElementById('menu-admin-item');
     if (adminItem) adminItem.style.display = 'block';
   }
+
+  // Admin nadzorni nalog: sakrij elemente za praktičan rad (crtanje, doznaka, snimanje)
+  if (data.is_admin) {
+    // Sakrij doznaka tab
+    const dozTab = document.querySelector('button[onclick="switchTab(\'doznaka\')"]');
+    if (dozTab) dozTab.style.display = 'none';
+    // Sakrij "+ Novi" projekat dugme
+    const noviBtn = document.querySelector('#proj-list-sec .btn.b[onclick="showNovProjektForm()"]');
+    if (noviBtn) noviBtn.style.display = 'none';
+    // Sakrij import vlaka dugme
+    const impBtn = document.querySelector('#proj-list-sec .btn[onclick="impVlakaOpen()"]');
+    if (impBtn) impBtn.style.display = 'none';
+    // Sakrij foto dugme
+    const fotoInput = document.getElementById('loc-photo-input');
+    if (fotoInput) fotoInput.disabled = true;
+  }
 }
 
 function showApp() {
@@ -3928,7 +3944,7 @@ async function sbLoadProjekti() {
   if (!sbUser) return;
   try {
     // ŠPD US ŠUME — pregledni nalog: vidi SVE projekte (read-only)
-    if (isSpd()) {
+    if (isReadOnly()) {
       const { data, error } = await sb.from('projekti')
         .select('*').order('datum', { ascending: false });
       if (error) throw error;
@@ -4056,7 +4072,7 @@ function rndProjektiList() {
     return;
   }
   // ŠPD pregledni nalog: grupiši po šumariji
-  if (isSpd()) {
+  if (isReadOnly()) {
     const bySum = {};
     _projekti.forEach(p => {
       const s = p.sumarija || 'Nepoznato';
@@ -4097,6 +4113,7 @@ function _npGjValue() {
 }
 
 function showNovProjektForm() {
+  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   document.getElementById('proj-list-sec').style.display = 'none';
   document.getElementById('proj-detalji-sec').style.display = 'none';
   document.getElementById('nov-proj-sec').style.display = '';
@@ -4169,7 +4186,8 @@ function showProjektDetalji(id) {
     p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
     p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${p.povrsina} ha` : '',
     p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
-    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : (kolegeMap[p.korisnik_id]?.ime || p.korisnik_id.slice(0,8))}`
+    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : (kolegeMap[p.korisnik_id]?.ime || p.korisnik_id.slice(0,8))}`,
+    isReadOnly() && p.sumarija ? `<b style="color:#fbbf24;">Šumarija:</b> ${p.sumarija}` : ''
   ].filter(Boolean).join('<br>');
 
   // Clanovi
@@ -4210,18 +4228,20 @@ function showProjektDetalji(id) {
   // Upozorenje o razmaku vlaka
   _checkProjDistWarn(id);
 
-  // Nacrtaj vlaku dugme — samo za aktivni projekat
+  // Nacrtaj vlaku dugme — samo za aktivni projekat, ne za read-only naloge
   const drawBtn = document.getElementById('pd-draw-vlaka-btn');
-  if (drawBtn) drawBtn.style.display = isAkt ? '' : 'none';
+  if (drawBtn) drawBtn.style.display = (isAkt && !isReadOnly()) ? '' : 'none';
 
+  // Export KML — uvijek vidljiv (i admin može exportovati)
   // Sakrij/Prikaži vlake dugme
   _updPdVlakeBtn(id);
 
-  // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat
-  document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !isSpd()) ? '' : 'none';
-  document.getElementById('pd-delete-btn').style.display = isVlasnik ? '' : 'none';
+  // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat (ne admin/ŠPD)
+  const ro = isReadOnly();
+  document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !ro) ? '' : 'none';
+  document.getElementById('pd-delete-btn').style.display = (isVlasnik && !ro) ? '' : 'none';
   const hasClanovi = (p.clanovi || []).length > 0;
-  document.getElementById('pd-transfer-btn').style.display = (isVlasnik && hasClanovi && !isSpd()) ? '' : 'none';
+  document.getElementById('pd-transfer-btn').style.display = (isVlasnik && hasClanovi && !ro) ? '' : 'none';
 
   // Za ne-vlasnike: dugme za brisanje lokalno cachiranih kolega vlaka
   let ukBtn = document.getElementById('pd-ukl-kol-btn');
@@ -4424,6 +4444,7 @@ async function aktivirajProjekt() {
 }
 
 async function startManualVlakaDraw() {
+  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   if (!_aktivniProjektId) {
     showToast('Prvo aktiviraj projekat');
     return;
@@ -5345,7 +5366,7 @@ async function sbLoadKolegeVlake() {
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
 
   // ŠPD pregledni nalog: prikaži SVE vlake aktivnog projekta (svih korisnika)
-  if (isSpd() && akt) {
+  if (isReadOnly() && akt) {
     let dbData = [];
     try {
       const { data } = await sb.from('vlake')
@@ -5503,7 +5524,7 @@ async function sbLoadKolege() {
       .select('id, ime, prezime, boja')
       .neq('id', sbUser.id);
     // ŠPD pregledni nalog vidi SVE korisnike; ostali samo svoju šumariju
-    if (!isSpd()) q = q.eq('sumarija', sbProfile.sumarija);
+    if (!isReadOnly()) q = q.eq('sumarija', sbProfile.sumarija);
     const { data: d, error } = await q;
     if (!error && d) { data = d; _OL.save(_OL.KOLEGE, d); }
   } catch(e) {}
@@ -6628,6 +6649,10 @@ proj4.defs('MGI-ZONE6', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +
 
 // ŠPD US ŠUME — pregledni nalog s read-only pristupom svim projektima
 function isSpd() { return sbProfile?.sumarija === 'ŠPD US ŠUME'; }
+// Admin — nadzorni nalog: pregled svih projekata, bez crtanja vlaka i doznake
+function isAdmin() { return !!sbProfile?.is_admin; }
+// Bilo koji read-only pregledni nalog
+function isReadOnly() { return isSpd() || isAdmin(); }
 
 function wgsToMGI(lat, lon) {
   try {
@@ -9757,6 +9782,7 @@ function _tragToGpx(pts) {
 }
 
 function fabSnimVlaku() {
+  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   if (!_aktivniProjektId) {
     showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
     return;
@@ -13793,9 +13819,10 @@ function _updFabVisibility() {
 
   if (!inRec) {
     const hasProj = !!_aktivniProjektId;
-    show('brec',     hasProj);
-    show('btrag',    !hasProj);
-    show('ab-izmjeri-wrap', !hasProj);
+    const ro = typeof isReadOnly === 'function' && isReadOnly();
+    show('brec',     hasProj && !ro);
+    show('btrag',    !hasProj && !ro);
+    show('ab-izmjeri-wrap', !hasProj && !ro);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
