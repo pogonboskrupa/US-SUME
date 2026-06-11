@@ -3623,9 +3623,9 @@ async function sbLoadProfile() {
     if (adminItem) adminItem.style.display = 'block';
   }
 
-  // Admin nadzorni nalog: sakrij elemente za praktičan rad (crtanje, doznaka, snimanje)
+  // Admin nadzorni nalog: sakrij elemente za praktičan rad (crtanje, snimanje)
+  // Doznaka tab OSTAJE vidljiv za šumarijske naloge — samo admin ga nema
   if (data.is_admin) {
-    // Sakrij doznaka tab
     const dozTab = document.querySelector('button[onclick="switchTab(\'doznaka\')"]');
     if (dozTab) dozTab.style.display = 'none';
     // Sakrij "+ Novi" projekat dugme
