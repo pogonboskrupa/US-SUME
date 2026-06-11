@@ -4391,6 +4391,7 @@ function mdpFinish() {
   if (idx !== null && vlake[idx]) {
     updateVlakaLabel(idx);
     sbFlushVlaka(idx);
+    rndList(); updOvl(); updProjStats();
     if (vlake[idx].pts.length > 0 && !vlake[idx].lager) _showLagerDlg(idx);
     showToast('✓ Vlaka ' + vlake[idx].nm + ' sačuvana');
   }
@@ -4578,8 +4579,19 @@ async function impVlakaConfirm() {
     created.push(idx);
   }
   impVlakaClose();
+  // Aktiviraj ciljni projekat ako nije aktivan
+  if (_aktivniProjektId !== projId) {
+    _aktivniProjektId = projId;
+    localStorage.setItem('tvlake_akt_proj', projId);
+    const p = _projekti.find(x => x.id === projId);
+    if (p) _applyProjektFields(p);
+    rndProjektiList();
+    _updFabVisibility();
+    _updVlakeMapVisibility();
+  }
   _saveLocalVlake();
   rndList(); updBan(); updOvl();
+  updProjStats();
   _updVlakeMapVisibility();
   // Zoom na uvezene vlake
   const allPts = created.flatMap(i => vlake[i].pts.map(p => [p.la, p.lo]));
@@ -4889,7 +4901,9 @@ async function renameVlaka(i, newNm) {
     try { await sb.from('vlake').update({ nm: newNm, br: v.br, kr: v.kr, updated_at: new Date().toISOString() }).eq('id', v.sbId); } catch(e) {}
   }
   sbFlushVlaka(i);
+  _saveLocalVlake();
   rndList(); updOvl();
+  updProjStats();
 }
 
 async function sbDeleteVlaka(v) {
@@ -7292,7 +7306,7 @@ function _stopEdit(fromUser) {
   if (fromUser) {
     if (actI !== null) { updateVlakaLabel(actI); sbFlushVlaka(actI); }
     if (bufLayers.length > 0) drawBuffers();
-    rndList(); updOvl();
+    rndList(); updOvl(); updProjStats();
   }
 }
 
