@@ -3376,6 +3376,7 @@ function _saveLocalVlake() {
       nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null,
       boja: v.color, lager: v.lager || null,
       pts: v.pts, projekt_id: v.projektId || null,
+      projektant_ime: v.projektantIme || null,
       updated_at: v.updatedAt || new Date().toISOString(),
       id: v.sbId || null
     }));
@@ -4424,7 +4425,7 @@ async function startManualVlakaDraw() {
   poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
   const strVal = kr > 0 ? (kr % 2 !== 0 ? 'L' : 'D') : null;
-  vlake.push({ nm, br, kr, strana: strVal, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+  vlake.push({ nm, br, kr, strana: strVal, color, lager: '', pts: [], poly, wpts: [], sbId: null, projektId: _aktivniProjektId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
   const idx = vlake.length - 1;
 
   // Ako imamo junction tačku, dodaj je kao prvu tačku kraka
@@ -4766,7 +4767,7 @@ async function impVlakaConfirm() {
     const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(t.nm, { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
-    vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+    vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
     const idx = vlake.length - 1;
     updateVlakaLabel(idx);
     sbFlushVlaka(idx);
@@ -4940,6 +4941,7 @@ function _applyVlakeRows(rows) {
         ex.strana = row.strana || ex.strana;
         ex.color = row.boja || ex.color;
         ex.lager = row.lager || ex.lager;
+        if (row.projektant_ime) ex.projektantIme = row.projektant_ime;
         ex.updatedAt = row.updated_at || ex.updatedAt;
         ex.poly.setLatLngs((ex.pts || []).map(p => [p.la, p.lo]));
         ex.poly.setStyle({ color: ex.color });
@@ -4951,7 +4953,7 @@ function _applyVlakeRows(rows) {
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
-    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
+    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
@@ -5065,6 +5067,7 @@ async function sbFlushVlaka(i) {
     projekt_id:  v.projektId || null,
     nm: v.nm, br: v.br, kr: v.kr, strana: v.strana || null, boja: v.color,
     lager: v.lager || null,
+    projektant_ime: v.projektantIme || null,
     pts: v.pts,
     updated_at: new Date().toISOString()
   };
@@ -9911,7 +9914,7 @@ function showVlakaPopup(i, latlng) {
   _vpJustOpened = true;
   setTimeout(() => { _vpJustOpened = false; }, 80);
   const len = calcL(v.pts);
-  const ime = getIme();
+  const ime = v.projektantIme || getIme();
   const dat = v.updatedAt ? fmtDate(v.updatedAt.slice(0,10)) : fmtDate(todayStr());
   const tipLabel = v.kr > 0 ? ' (krak)' : '';
   const brLabel  = v.br != null ? `<span style="font-size:11px;color:#64748b;margin-left:5px;">br.${v.br}</span>` : '';
