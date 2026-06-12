@@ -9563,11 +9563,11 @@ function onP(p) {
       html:`<svg id="loc-svg" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="-16 -16 32 32" style="overflow:visible;transform-origin:16px 16px;">
         <defs>
           <radialGradient id="loc-cone-grad" cx="50%" cy="100%" r="100%">
-            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.45"/>
-            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.03"/>
+            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.08"/>
           </radialGradient>
         </defs>
-        <path id="loc-cone" d="M0,0 L-18,-52 A55,55 0 0,1 18,-52 Z" fill="url(#loc-cone-grad)" opacity="0" style="transition:opacity 0.3s;"/>
+        <path id="loc-cone" d="M0,0 L-50,-90 A105,105 0 0,1 50,-90 Z" fill="url(#loc-cone-grad)" opacity="0" style="transition:opacity 0.3s;"/>
         <polygon id="loc-arrow" points="0,-18 -6,-6 6,-6" fill="#3b82f6" opacity="0" style="transition:opacity 0.3s;"/>
         <circle cx="0" cy="0" r="8" fill="#3b82f6" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 0 5px #3b82f6);"/>
         <circle cx="0" cy="0" r="3" fill="#fff"/>
@@ -14302,10 +14302,17 @@ function _updFabVisibility() {
   if (!inRec) {
     const hasProj = !!_aktivniProjektId;
     const ro = typeof isReadOnly === 'function' && isReadOnly();
-    show('brec',     hasProj && !ro);
-    show('btrag',    !hasProj && (!ro || spdField));
-    show('ab-izmjeri-wrap', !hasProj && (!ro || spdField));
-    show('ab-kompas', spdField);
+    if (spdField) {
+      show('brec', false);
+      show('btrag', true);
+      show('ab-izmjeri-wrap', true);
+      show('ab-kompas', true);
+    } else {
+      show('brec',     hasProj && !ro);
+      show('btrag',    !hasProj && !ro);
+      show('ab-izmjeri-wrap', !hasProj && !ro);
+      show('ab-kompas', false);
+    }
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
