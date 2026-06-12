@@ -3011,8 +3011,6 @@ select:focus { outline:none; border-color:#3b82f6; }
             <span id="trn-gps-dot" style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>GPS</span>
           </div>
           <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:13px;">
-            <span style="color:#64748b;">Lat</span><span id="trn-lat" style="color:#e2e8f0;font-family:monospace;">—</span>
-            <span style="color:#64748b;">Lon</span><span id="trn-lon" style="color:#e2e8f0;font-family:monospace;">—</span>
             <span style="color:#fbbf24;">Y (GK)</span><span id="trn-y" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
             <span style="color:#fbbf24;">X (GK)</span><span id="trn-x" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
             <span style="color:#64748b;">Visina</span><span id="trn-alt" style="color:#34d399;font-family:monospace;">— m</span>
@@ -5863,10 +5861,12 @@ function _setupTackaPopup(m, idx, la, lo, ts, nm) {
            ✈️ Vazdušna linija: <b style="color:#3b82f6;">${_fmtDist(_haversine(lastP.la,lastP.lo,la,lo))}</b>
          </div>`
       : '';
+    const gk = wgsToMGI(la, lo);
+    const coordStr = gk ? `Y: ${gk.y}  X: ${gk.x}` : `${la.toFixed(6)}, ${lo.toFixed(6)}`;
     return `<div style="font-size:12px;min-width:160px;color:#1e293b;">
       <b style="font-size:13px;color:#1e293b;">📍 ${_escHtml(title)}</b><br>
       <span style="color:#64748b;font-size:10px;">${dt}</span><br>
-      <code style="font-size:9px;color:#475569;">${la.toFixed(6)}, ${lo.toFixed(6)}</code>
+      <code style="font-size:9px;color:#475569;">${coordStr}</code>
       ${distHtml}
       <div style="display:flex;gap:5px;margin-top:7px;">
         <button class="tacka-popup-btn" style="background:#1d4ed8;color:#bfdbfe;flex:1;"
@@ -6871,8 +6871,6 @@ function terenRender() {
   const g = id => document.getElementById(id);
   // Pozicija
   if (lastP) {
-    g('trn-lat').textContent = lastP.la.toFixed(6);
-    g('trn-lon').textContent = lastP.lo.toFixed(6);
     const c = wgsToMGI(lastP.la, lastP.lo);
     g('trn-y').textContent = c ? c.y.toLocaleString('bs') : '—';
     g('trn-x').textContent = c ? c.x.toLocaleString('bs') : '—';
@@ -6881,7 +6879,7 @@ function terenRender() {
     const dot = g('trn-gps-dot');
     if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block;"></span>GPS aktivan';
   } else {
-    ['trn-lat','trn-lon','trn-y','trn-x'].forEach(id => g(id).textContent = '—');
+    ['trn-y','trn-x'].forEach(id => g(id).textContent = '—');
     g('trn-alt').textContent = '— m'; g('trn-acc').textContent = '— m';
     const dot = g('trn-gps-dot');
     if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>Nema GPS-a';
@@ -6951,9 +6949,9 @@ function terenMarkHere() {
 function terenCopyCoords() {
   if (!lastP) { showToast('Nema GPS signala'); return; }
   const c = wgsToMGI(lastP.la, lastP.lo);
-  const txt = `Lat: ${lastP.la.toFixed(6)}, Lon: ${lastP.lo.toFixed(6)}`
-            + (c ? `\nGK Y: ${c.y}, X: ${c.x}` : '')
-            + `\nVisina: ${lastP.al != null ? Math.round(lastP.al) : '—'} m`;
+  const txt = c
+    ? `Y: ${c.y}  X: ${c.x}\nVisina: ${lastP.al != null ? Math.round(lastP.al) : '—'} m`
+    : `Lat: ${lastP.la.toFixed(6)}, Lon: ${lastP.lo.toFixed(6)}`;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(txt).then(
       () => showToast('📋 Koordinate kopirane'),
@@ -7028,9 +7026,8 @@ function terenShareTacka(i) {
   if (!t) return;
   const nm = t.nm || ('Tačka ' + (i + 1));
   const c = wgsToMGI(t.la, t.lo);
-  const txt = `📍 ${nm}\nLat: ${t.la.toFixed(6)}, Lon: ${t.lo.toFixed(6)}`
-    + (c ? `\nGK Y: ${c.y}, X: ${c.x}` : '')
-    + `\nhttps://www.google.com/maps?q=${t.la.toFixed(6)},${t.lo.toFixed(6)}`;
+  const coordLine = c ? `GK Y: ${c.y}  X: ${c.x}` : `${t.la.toFixed(6)}, ${t.lo.toFixed(6)}`;
+  const txt = `📍 ${nm}\n${coordLine}\nhttps://www.google.com/maps?q=${t.la.toFixed(6)},${t.lo.toFixed(6)}`;
   if (navigator.share) {
     navigator.share({ title: nm, text: txt }).catch(() => _copyAndToast(txt, nm));
   } else {
@@ -19375,7 +19372,7 @@ function toggleHelpSec(hdr) {
     <div id="tnp-name">—</div>
     <div id="tnp-air">📡 Uključi GPS</div>
     <div id="tnp-road" style="display:none;"></div>
-    <div id="tnp-elev" style="display:none;font-size:11px;color:#a78bfa;"></div>
+    <div id="tnp-elev" style="display:none;font-size:12px;font-weight:700;"></div>
   </div>
   <button id="tnp-stop" onclick="stopTackaNav()">✕ Stop</button>
 </div>
