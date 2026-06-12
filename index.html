@@ -2028,6 +2028,10 @@ select:focus { outline:none; border-color:#3b82f6; }
 #ab-tacka { color: #92400e; }
 #ab-loc   .ab-ico { background: #dbeafe; color: #2563eb; }
 #ab-loc   { color: #1d4ed8; }
+#ab-kompas .ab-ico { background: #fef3c7; color: #d97706; }
+#ab-kompas { color: #92400e; }
+#ab-kompas.active .ab-ico { background: #f59e0b; color: #fff; box-shadow: 0 0 0 3px rgba(245,158,11,0.25); }
+#ab-kompas.active { color: #f59e0b; }
 #ab-krak-l .ab-ico { background: #cffafe; color: #0891b2; }
 #ab-krak-l { color: #0e7490; }
 #ab-krak-d .ab-ico { background: #ffedd5; color: #ea580c; }
@@ -9363,6 +9367,24 @@ function _updCompassOnMarker(heading) {
   }
   const arrow = el.querySelector('#loc-arrow');
   if (arrow) arrow.style.opacity = '0.85';
+  const cone = el.querySelector('#loc-cone');
+  if (cone) cone.style.opacity = _compassConeOn ? '1' : '0';
+}
+
+let _compassConeOn = false;
+function togCompassCone() {
+  _compassConeOn = !_compassConeOn;
+  const btn = document.getElementById('ab-kompas');
+  if (btn) btn.classList.toggle('active', _compassConeOn);
+  if (posMk) {
+    const el = posMk.getElement();
+    if (el) {
+      const cone = el.querySelector('#loc-cone');
+      if (cone) cone.style.opacity = _compassConeOn ? '1' : '0';
+    }
+  }
+  if (_compassConeOn && !gpsOn) startGPS();
+  showToast(_compassConeOn ? '🧭 Kompas smjer uključen' : '🧭 Kompas smjer isključen');
 }
 
 function _onDeviceOrientation(e) {
@@ -9538,6 +9560,13 @@ function onP(p) {
   if (!posMk) {
     const ico = L.divIcon({className:'', iconSize:[32,32], iconAnchor:[16,16],
       html:`<svg id="loc-svg" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="-16 -16 32 32" style="overflow:visible;transform-origin:16px 16px;">
+        <defs>
+          <radialGradient id="loc-cone-grad" cx="50%" cy="100%" r="100%">
+            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.45"/>
+            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.03"/>
+          </radialGradient>
+        </defs>
+        <path id="loc-cone" d="M0,0 L-18,-52 A55,55 0 0,1 18,-52 Z" fill="url(#loc-cone-grad)" opacity="0" style="transition:opacity 0.3s;"/>
         <polygon id="loc-arrow" points="0,-18 -6,-6 6,-6" fill="#3b82f6" opacity="0" style="transition:opacity 0.3s;"/>
         <circle cx="0" cy="0" r="8" fill="#3b82f6" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 0 5px #3b82f6);"/>
         <circle cx="0" cy="0" r="3" fill="#fff"/>
@@ -14257,8 +14286,11 @@ function _updFabVisibility() {
   show('ab-trag-pauza', false); show('ab-trag-kraj', false); show('ab-trag-stats', false);
   if (ab) ab.classList.remove('trag-mode');
 
+  const spdField = typeof isSpdField === 'function' && isSpdField();
+
   if (!inRec && inTrag) {
     show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+    show('ab-kompas', false);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',false);
     show('ab-trag-pauza', true); show('ab-trag-kraj', true); show('ab-trag-stats', true);
@@ -14269,11 +14301,10 @@ function _updFabVisibility() {
   if (!inRec) {
     const hasProj = !!_aktivniProjektId;
     const ro = typeof isReadOnly === 'function' && isReadOnly();
-    const spdField = typeof isSpdField === 'function' && isSpdField();
-    // ŠPD terenski korisnici: nemaju projekte ali imaju Izmjeri + Trag na karti
     show('brec',     hasProj && !ro);
     show('btrag',    !hasProj && (!ro || spdField));
     show('ab-izmjeri-wrap', !hasProj && (!ro || spdField));
+    show('ab-kompas', spdField);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',  false);
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); }
@@ -14281,6 +14312,7 @@ function _updFabVisibility() {
   }
 
   show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+  show('ab-kompas', false);
 
   if (isPaused) {
     // Pauzirani mod: [⏹ Završi] [▶ Nastavi] + [↩ Vrati se] ako u kraku
@@ -19246,7 +19278,11 @@ function toggleHelpSec(hdr) {
   </div>
   <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
     <span class="ab-ico">🎯</span>
-    <span>Moja lokacija</span>
+    <span>Lokacija</span>
+  </button>
+  <button id="ab-kompas" onclick="togCompassCone()" title="Prikaži smjer na karti" style="display:none;">
+    <span class="ab-ico">🧭</span>
+    <span>Kompas</span>
   </button>
   <!-- Trag snimanje kontrole -->
   <button id="ab-trag-pauza" onclick="togTragPause()" title="Pauziraj / Nastavi trag" style="display:none;">
