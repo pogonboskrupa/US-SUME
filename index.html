@@ -1994,8 +1994,9 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow: 0 -1px 0 rgba(0,0,0,0.04), 0 -4px 16px rgba(0,0,0,0.06);
   padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
   gap: 2px;
+  justify-content: space-around;
 }
-#action-bar button {
+#action-bar button, #ab-izmjeri-wrap {
   flex: 1;
   background: none;
   border: none;
@@ -2043,7 +2044,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #ab-pauza  .ab-ico { background: #fef9c3; color: #a16207; }
 #ab-pauza  { color: #92400e; }
 #ab-izmjeri .ab-ico { background: #f0fdf4; color: #16a34a; }
-#ab-izmjeri { color: #15803d; }
+#ab-izmjeri { color: #15803d; width: 100%; }
 /* Active states */
 #btrag.active .ab-ico { background: #ef4444; color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
 #btrag.active { color: #ef4444; }
