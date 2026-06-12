@@ -3513,6 +3513,11 @@ const _OL = {
   PROFILE:  'tvlake_ol_profile',
   KOLEGE:   'tvlake_ol_kolegeMap',
   ODJELI:   'tvlake_ol_odjeli',
+  DOZ_ODJELI:   'tvlake_ol_doz_odjeli',
+  DOZ_MEMBERS:  'tvlake_ol_doz_members',
+  DOZ_MARKINGS: 'tvlake_ol_doz_markings',
+  DOZ_TRACKS:   'tvlake_ol_doz_tracks',
+  DOZ_SEL_ID:   'tvlake_ol_doz_selid',
   QUEUE:    'tvlake_ol_queue',
 
   save(key, data) {
@@ -3596,7 +3601,16 @@ async function _processOfflineQueue() {
       if (op.type === 'upsert_vlaka') {
         if (op.payload.id) {
           const { id, ...updatePayload } = op.payload;
-          const { error } = await sb.from('vlake').update(updatePayload).eq('id', id);
+          // updated_at guard: ne prepisuj novije podatke na serveru
+          const ua = updatePayload.updated_at;
+          let q = sb.from('vlake').update(updatePayload).eq('id', id);
+          if (ua) q = q.or(`updated_at.is.null,updated_at.lte.${ua}`);
+          const { error, data: updRows } = await q.select('id');
+          if (!error && updRows && updRows.length === 0) {
+            // Server ima noviji red — preuzmi ga
+            const { data: fresh } = await sb.from('vlake').select('*').eq('id', id).single();
+            if (fresh) _applyVlakeRows([fresh]);
+          }
           err = error;
         } else {
           const { error } = await sb.from('vlake').upsert(op.payload, { onConflict: 'korisnik_id,sumarija,nm' });
@@ -6839,42 +6853,22 @@ function sbStartRealtime() {
     })
     .subscribe();
 
-  // Doznaka realtime — obavijest za nova označavanja
-  sb.channel('doznaka-rt-' + Date.now())
+  // Doznaka realtime — per-project pretplata (efikasniji filter na serveru)
+  // Globalni fallback za obavijesti kad nijedan odjel nije otvoren
+  sb.channel('doznaka-rt-global-' + Date.now())
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'doz_area_markings'
     }, payload => {
       const by = payload.new?.user_id || payload.new?.created_by;
       const pid = payload.new?.project_id;
-      // Obavijest samo ako je oznaka u nekom od MOJIH doznaka odjela
       if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
         _notifBump('doznaka');
-        showToast('🌲 ' + _notifKolegaName(by) + ' je dodao/la oznaku na doznaci');
-        if (_dozSelId === pid) { dozLoadLayers(pid).then(() => dozRenderDetail()); }
-      }
-    })
-    .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'doz_area_markings'
-    }, payload => {
-      const ev = payload.eventType;
-      if (ev === 'INSERT') return; // handled above
-      const pid = payload.new?.project_id || payload.old?.project_id;
-      const by = payload.new?.created_by || payload.old?.created_by;
-      if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
-        if (_dozSelId === pid) { dozLoadLayers(pid).then(() => dozRenderDetail()); }
-      }
-    })
-    .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'doz_track_points'
-    }, payload => {
-      const by = payload.new?.user_id;
-      const pid = payload.new?.project_id;
-      if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
-        _notifBump('doznaka');
-        if (_dozSelId === pid) { clearTimeout(_dozTrackRefreshTimer); _dozTrackRefreshTimer = setTimeout(() => dozLoadLayers(pid).then(() => dozRenderDetail()), 5000); }
+        if (pid !== _dozSelId) showToast('🌲 ' + _notifKolegaName(by) + ' je dodao/la oznaku na doznaci');
       }
     })
     .subscribe();
+
+  // Per-project kanal se (re)kreira u _dozSubProject kad korisnik otvori odjel
 
   // Periodično čisti stale "aktivni" badge (svakih 30s)
   clearInterval(window._liveBarTimer);
@@ -18107,6 +18101,7 @@ let _dozNewOdjelDrawGj    = '';
 let _dozNewOdjelDrawOdjel = '';
 let _dozTracksLayer   = null;
 let _dozMarkingsLayer = null;
+let _dozActiveChannel = null;
 let _dozGpsOn    = false;
 let _dozGpsWatchId = null;
 let _dozTrackRefreshTimer = null;
@@ -18121,6 +18116,8 @@ function dozInit() {
     dozInitTypePicker();
     _dozInitDone = true;
   }
+  const savedSel = _OL.load(_OL.DOZ_SEL_ID);
+  if (savedSel) _dozSelId = savedSel;
   dozLoadOdjeli();
 }
 
@@ -18140,7 +18137,6 @@ async function dozLoadOdjeli() {
   if (!sbUser) { document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Prijavite se za pristup</div>'; return; }
   document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty">Učitavam...</div>';
   try {
-    // Vidljivi su samo odjeli gdje sam kreator ILI aktivni član
     const { data: clanstva } = await sb.from('doz_project_members')
       .select('project_id').eq('user_id', sbUser.id).eq('is_active', true);
     const memberIds = (clanstva || []).map(c => c.project_id);
@@ -18151,10 +18147,18 @@ async function dozLoadOdjeli() {
     const { data, error } = await q;
     if (error) throw error;
     _dozOdjeli = data || [];
+    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
     dozRenderOdjeli();
   } catch(e) {
-    document.getElementById('doz-odjeli-list').innerHTML =
-      `<div class="doz-empty" style="color:#f87171;">Greška: ${e.message}<br><small>Provjerite da li su Supabase tabele kreirane.</small></div>`;
+    const cached = _OL.load(_OL.DOZ_ODJELI);
+    if (cached && cached.length) {
+      _dozOdjeli = cached;
+      dozRenderOdjeli();
+      showToast('📴 Doznaka odjeli iz keša (offline)');
+    } else {
+      document.getElementById('doz-odjeli-list').innerHTML =
+        `<div class="doz-empty" style="color:#f87171;">Greška: ${e.message}<br><small>Provjerite da li su Supabase tabele kreirane.</small></div>`;
+    }
   }
 }
 
@@ -18177,10 +18181,48 @@ function dozRenderOdjeli() {
   }).join('');
 }
 
+// ─── Per-project realtime subscription ───────────────────────────
+function _dozSubProject(projectId) {
+  if (_dozActiveChannel) { sb.removeChannel(_dozActiveChannel); _dozActiveChannel = null; }
+  if (!projectId) return;
+  _dozActiveChannel = sb.channel('doz-proj-' + projectId + '-' + Date.now())
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'doz_area_markings',
+      filter: 'project_id=eq.' + projectId
+    }, payload => {
+      const by = payload.new?.user_id || payload.new?.created_by;
+      if (by && by !== sbUser?.id) {
+        showToast('🌲 ' + (_notifKolegaName ? _notifKolegaName(by) : 'Kolega') + ' je dodao/la oznaku');
+        dozLoadLayers(projectId).then(() => dozRenderDetail());
+      }
+    })
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'doz_area_markings',
+      filter: 'project_id=eq.' + projectId
+    }, payload => {
+      if (payload.eventType === 'INSERT') return;
+      const by = payload.new?.created_by || payload.old?.created_by;
+      if (by && by !== sbUser?.id) dozLoadLayers(projectId).then(() => dozRenderDetail());
+    })
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'doz_track_points',
+      filter: 'project_id=eq.' + projectId
+    }, payload => {
+      const by = payload.new?.user_id;
+      if (by && by !== sbUser?.id) {
+        clearTimeout(_dozTrackRefreshTimer);
+        _dozTrackRefreshTimer = setTimeout(() => dozLoadLayers(projectId).then(() => dozRenderDetail()), 5000);
+      }
+    })
+    .subscribe();
+}
+
 // ─── Select Odjel ────────────────────────────────────────────────
 async function dozSelectOdjel(id) {
   _dozSelId = id;
+  _OL.save(_OL.DOZ_SEL_ID, id);
   dozRenderOdjeli();
+  _dozSubProject(id);
   const odjel = _dozOdjeli.find(o => o.id === id);
   if (!odjel) return;
   document.getElementById('doz-panel-list').style.display   = 'none';
@@ -18194,6 +18236,7 @@ async function dozSelectOdjel(id) {
 
 async function dozLoadLayers(projectId) {
   if (!projectId) return;
+  const cacheKey = pid => pid; // per-project cache suffix
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
       sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
@@ -18204,18 +18247,44 @@ async function dozLoadLayers(projectId) {
     _dozMarkings = mkRes.data || [];
     _dozTracks   = trRes.data || [];
 
-    // Load korisnici names separately — avoids depending on FK join definition
     if (_dozMembers.length) {
       const ids = [...new Set(_dozMembers.map(m => m.user_id).filter(Boolean))];
       const { data: kData } = await sb.from('korisnici').select('id,ime,prezime,boja').in('id', ids);
       const kMap = Object.fromEntries((kData || []).map(k => [k.id, k]));
       _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || null }));
     }
+    // Keširaj za offline
+    _dozCacheLayers(projectId);
   } catch(e) {
     console.error('dozLoadLayers', e);
-    _dozMembers = []; _dozMarkings = []; _dozTracks = [];
+    const c = _dozLoadCachedLayers(projectId);
+    if (c) {
+      _dozMembers = c.members; _dozMarkings = c.markings; _dozTracks = c.tracks;
+      showToast('📴 Doznaka slojevi iz keša');
+    } else {
+      _dozMembers = []; _dozMarkings = []; _dozTracks = [];
+    }
   }
   dozRenderMapLayers();
+}
+
+function _dozCacheLayers(projectId) {
+  try {
+    const all = _OL.load(_OL.DOZ_MEMBERS) || {};
+    all[projectId] = { members: _dozMembers, markings: _dozMarkings, tracks: _dozTracks, ts: Date.now() };
+    // Čuvaj max 5 projekata da ne prepunimo localStorage
+    const keys = Object.keys(all);
+    if (keys.length > 5) {
+      keys.sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0));
+      keys.slice(0, keys.length - 5).forEach(k => delete all[k]);
+    }
+    _OL.save(_OL.DOZ_MEMBERS, all);
+  } catch(e) {}
+}
+
+function _dozLoadCachedLayers(projectId) {
+  const all = _OL.load(_OL.DOZ_MEMBERS);
+  return all?.[projectId] || null;
 }
 
 // ─── Render Map Layers ────────────────────────────────────────────
@@ -18490,6 +18559,11 @@ async function dozConfirmSave() {
     dozRenderDetail();
   } catch(e) {
     _OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload });
+    // Dodaj u lokalni keš da se prikaže i offline
+    _dozMarkings.unshift({ ...markingPayload, id: 'local_' + Date.now() });
+    _dozCacheLayers(_dozSelId);
+    dozRenderMapLayers();
+    dozRenderDetail();
     document.getElementById('doz-save-modal').style.display = 'none';
     _dozPendingSavePolygon = null;
     dozCancelDraw();
@@ -18843,6 +18917,7 @@ async function _dozPickMember(userId) {
 // ─── Back to List ─────────────────────────────────────────────────
 function dozBackToList() {
   _dozSelId = null;
+  _dozSubProject(null);
   dozStopGPS();
   dozCancelDraw();
   [_dozBoundaryLayer, _dozTracksLayer, _dozMarkingsLayer, _dozGpsTrackLayer].forEach(l => { if (l) map.removeLayer(l); });
