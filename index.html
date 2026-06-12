@@ -2033,6 +2033,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #ab-kompas { color: #92400e; }
 #ab-kompas.active .ab-ico { background: #f59e0b; color: #fff; box-shadow: 0 0 0 3px rgba(245,158,11,0.25); }
 #ab-kompas.active { color: #f59e0b; }
+#route-suggest-btn.active { background:#4c1d95 !important; border-color:#7c3aed !important; color:#c4b5fd !important; box-shadow:0 0 0 2px rgba(167,139,250,0.3); }
 #ab-krak-l .ab-ico { background: #cffafe; color: #0891b2; }
 #ab-krak-l { color: #0e7490; }
 #ab-krak-d .ab-ico { background: #ffedd5; color: #ea580c; }
@@ -2818,6 +2819,10 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Učitavam projekte...</div>
         </div>
         <button class="btn" onclick="impVlakaOpen()" style="width:100%;margin-top:8px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:8px;">📥 Dodaj vlaku iz fajla (KML/GPX)</button>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="btn" onclick="routeSuggestStart()" id="route-suggest-btn" style="flex:1;background:#1a1040;border:1px solid #3b2d6e;color:#a78bfa;font-size:12px;padding:8px;">🧭 Predloži trasu</button>
+          <button class="btn" onclick="demDownloadUi()" style="flex:1;background:#0a2f1f;border:1px solid #14532d;color:#34d399;font-size:12px;padding:8px;">🏔 DEM offline</button>
+        </div>
       </div>
 
       <!-- FORMA ZA NOVI PROJEKAT -->
@@ -3735,9 +3740,11 @@ async function sbLoadProfile() {
     // Sakrij "+ Novi" projekat dugme
     const noviBtn = document.querySelector('#proj-list-sec .btn.b[onclick="showNovProjektForm()"]');
     if (noviBtn) noviBtn.style.display = 'none';
-    // Sakrij import vlaka dugme
+    // Sakrij import vlaka dugme i alate za projektante
     const impBtn = document.querySelector('#proj-list-sec .btn[onclick="impVlakaOpen()"]');
     if (impBtn) impBtn.style.display = 'none';
+    const routeBtn = document.getElementById('route-suggest-btn');
+    if (routeBtn) routeBtn.parentElement.style.display = 'none';
     // Sakrij foto dugme
     const fotoInput = document.getElementById('loc-photo-input');
     if (fotoInput) fotoInput.disabled = true;
@@ -15975,7 +15982,335 @@ function closeProfilModal() {
   document.getElementById('profil-modal').classList.remove('show');
 }
 
-// ─── SQLiteDB offline map ─────────────────────────────────────────────────────
+// ─── OFFLINE DEM GRID (keširanje visina odjela) ────────────────────────────────
+const _DEM_RES = 30; // grid rezolucija u metrima (~1 arc-second)
+const _DEM_IDB_PREFIX = 'dem:';
+let _demCache = {}; // key → { grid, meta }
+
+async function _demFetchGrid(bounds, res) {
+  const s = bounds.getSouth(), n = bounds.getNorth();
+  const w = bounds.getWest(), e = bounds.getEast();
+  const degPerM = 1 / 111320;
+  const step = res * degPerM;
+  const rows = Math.min(120, Math.ceil((n - s) / step));
+  const cols = Math.min(120, Math.ceil((e - w) / step));
+  const lats = [], lons = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      lats.push((s + r * step).toFixed(5));
+      lons.push((w + c * step).toFixed(5));
+    }
+  }
+  const batchSize = 300;
+  const elevArr = new Float32Array(rows * cols);
+  for (let i = 0; i < lats.length; i += batchSize) {
+    const bLats = lats.slice(i, i + batchSize).join(',');
+    const bLons = lons.slice(i, i + batchSize).join(',');
+    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLons}`);
+    const d = await r.json();
+    if (!Array.isArray(d.elevation)) throw new Error('API greška');
+    for (let j = 0; j < d.elevation.length; j++) elevArr[i + j] = d.elevation[j];
+  }
+  return { grid: elevArr, rows, cols, south: s, west: w, step, north: n, east: e };
+}
+
+function _demGetElev(dem, lat, lon) {
+  const r = (lat - dem.south) / dem.step;
+  const c = (lon - dem.west) / dem.step;
+  const ri = Math.max(0, Math.min(dem.rows - 1, Math.round(r)));
+  const ci = Math.max(0, Math.min(dem.cols - 1, Math.round(c)));
+  return dem.grid[ri * dem.cols + ci];
+}
+
+function _demBilinearElev(dem, lat, lon) {
+  const r = (lat - dem.south) / dem.step;
+  const c = (lon - dem.west) / dem.step;
+  const r0 = Math.max(0, Math.min(dem.rows - 2, Math.floor(r)));
+  const c0 = Math.max(0, Math.min(dem.cols - 2, Math.floor(c)));
+  const fr = r - r0, fc = c - c0;
+  const v00 = dem.grid[r0 * dem.cols + c0];
+  const v10 = dem.grid[(r0 + 1) * dem.cols + c0];
+  const v01 = dem.grid[r0 * dem.cols + c0 + 1];
+  const v11 = dem.grid[(r0 + 1) * dem.cols + c0 + 1];
+  return v00 * (1 - fr) * (1 - fc) + v10 * fr * (1 - fc) + v01 * (1 - fr) * fc + v11 * fr * fc;
+}
+
+async function _demForOdjel(odjelName) {
+  const cacheKey = _DEM_IDB_PREFIX + odjelName;
+  if (_demCache[odjelName]) return _demCache[odjelName];
+  const cached = await _kmlcGet(cacheKey);
+  if (cached) {
+    const d = typeof cached === 'string' ? JSON.parse(cached) : cached;
+    d.grid = new Float32Array(d._gridArr);
+    delete d._gridArr;
+    _demCache[odjelName] = d;
+    return d;
+  }
+  return null;
+}
+
+async function _demDownloadForOdjel(odjelName) {
+  const odjel = findGraniceOdjel(odjelName);
+  if (!odjel?.bounds) throw new Error('Nema granice odjela');
+  const dem = await _demFetchGrid(odjel.bounds.pad(0.1), _DEM_RES);
+  _demCache[odjelName] = dem;
+  const toStore = { ...dem, _gridArr: Array.from(dem.grid) };
+  delete toStore.grid;
+  await _kmlcSave(_DEM_IDB_PREFIX + odjelName, JSON.stringify(toStore));
+  return dem;
+}
+
+async function _demForBounds(bounds) {
+  for (const name of Object.keys(_demCache)) {
+    const d = _demCache[name];
+    if (d.south <= bounds.getSouth() && d.north >= bounds.getNorth() &&
+        d.west <= bounds.getWest() && d.east >= bounds.getEast()) return d;
+  }
+  for (const o of graniceOdjeli) {
+    const d = await _demForOdjel(o.name);
+    if (d && d.south <= bounds.getSouth() && d.north >= bounds.getNorth() &&
+        d.west <= bounds.getWest() && d.east >= bounds.getEast()) return d;
+  }
+  return null;
+}
+
+function _demElevForProfile(dem, pts) {
+  return pts.map(p => _demBilinearElev(dem, p.la, p.lo));
+}
+
+// Proširi _fetchProfileElev da koristi offline DEM kad nema mreže
+const _origFetchProfileElev = _fetchProfileElev;
+_fetchProfileElev = async function(rawPts) {
+  if (navigator.onLine) return _origFetchProfileElev(rawPts);
+  const pts = _resampleLinePts(rawPts, 80);
+  const b = L.latLngBounds(pts.map(p => [p.la, p.lo]));
+  const dem = await _demForBounds(b);
+  if (!dem) return null;
+  const alts = _demElevForProfile(dem, pts);
+  return { pts, alts };
+};
+
+// UI za preuzimanje DEM-a za aktivni odjel
+async function demDownloadUi() {
+  const odjel = typeof getOdjel === 'function' ? getOdjel() : '';
+  if (!odjel) { showToast('Nema aktivnog odjela'); return; }
+  const match = findGraniceOdjel(odjel);
+  if (!match) { showToast('Nema KML granice za odjel ' + odjel); return; }
+  const existing = await _demForOdjel(match.name);
+  if (existing) { showToast('✅ DEM za ' + match.name + ' već postoji offline'); return; }
+  if (!navigator.onLine) { showToast('Potrebna mreža za preuzimanje DEM-a'); return; }
+  showToast('⏳ Preuzimam model terena za ' + match.name + '…');
+  try {
+    const dem = await _demDownloadForOdjel(match.name);
+    showToast(`✅ DEM sačuvan: ${dem.rows}×${dem.cols} tačaka (${match.name})`);
+  } catch(e) { showToast('⚠ Greška: ' + e.message); }
+}
+
+// ─── PRIJEDLOG TRASE (A* po DEM gridu) ───────────────────────────────────────
+let _routeLayer = null;
+let _routeMarkers = [];
+let _routeMode = false;
+let _routeStartLL = null;
+
+function _routeClean() {
+  if (_routeLayer) { map.removeLayer(_routeLayer); _routeLayer = null; }
+  _routeMarkers.forEach(m => map.removeLayer(m));
+  _routeMarkers = [];
+  _routeStartLL = null;
+}
+
+function routeSuggestStart() {
+  if (_routeMode) { routeSuggestCancel(); return; }
+  _routeMode = true;
+  _routeClean();
+  showToast('📍 Klikni na kartu: odaberi POČETAK trase');
+  map.getContainer().style.cursor = 'crosshair';
+  map.once('click', _routeOnStartClick);
+  const btn = document.getElementById('route-suggest-btn');
+  if (btn) btn.classList.add('active');
+}
+
+function routeSuggestCancel() {
+  _routeMode = false;
+  _routeClean();
+  map.getContainer().style.cursor = '';
+  map.off('click', _routeOnStartClick);
+  map.off('click', _routeOnEndClick);
+  const btn = document.getElementById('route-suggest-btn');
+  if (btn) btn.classList.remove('active');
+}
+
+function _routeOnStartClick(e) {
+  _routeStartLL = e.latlng;
+  const m = L.circleMarker(e.latlng, { radius: 7, color: '#4ade80', fillColor: '#4ade80', fillOpacity: 1 }).addTo(map);
+  m.bindTooltip('START', { permanent: true, direction: 'top', className: 'leaflet-tooltip' });
+  _routeMarkers.push(m);
+  showToast('📍 Klikni na kartu: odaberi KRAJ trase');
+  map.once('click', _routeOnEndClick);
+}
+
+async function _routeOnEndClick(e) {
+  const endLL = e.latlng;
+  const m = L.circleMarker(endLL, { radius: 7, color: '#f87171', fillColor: '#f87171', fillOpacity: 1 }).addTo(map);
+  m.bindTooltip('KRAJ', { permanent: true, direction: 'top', className: 'leaflet-tooltip' });
+  _routeMarkers.push(m);
+  map.getContainer().style.cursor = '';
+
+  const bounds = L.latLngBounds([_routeStartLL, endLL]).pad(0.3);
+  showToast('⏳ Tražim optimalnu trasu…');
+
+  let dem = await _demForBounds(bounds);
+  if (!dem) {
+    if (!navigator.onLine) { showToast('⚠ Nema offline DEM-a — potrebna mreža'); routeSuggestCancel(); return; }
+    try {
+      dem = await _demFetchGrid(bounds, _DEM_RES);
+    } catch(e) { showToast('⚠ Greška DEM: ' + e.message); routeSuggestCancel(); return; }
+  }
+
+  const path = _astarRoute(dem, _routeStartLL.lat, _routeStartLL.lng, endLL.lat, endLL.lng);
+  if (!path || path.length < 2) { showToast('⚠ Nije moguće naći trasu'); routeSuggestCancel(); return; }
+
+  const latlngs = path.map(p => [p.lat, p.lng]);
+  _routeLayer = L.polyline(latlngs, { color: '#a78bfa', weight: 4, opacity: 0.9, dashArray: '8,6' }).addTo(map);
+  map.fitBounds(_routeLayer.getBounds(), { padding: [40, 40] });
+
+  const totalDist = path.reduce((s, p, i) => i === 0 ? 0 : s + dst(path[i-1].lat, path[i-1].lng, p.lat, p.lng), 0);
+  const elevStart = _demBilinearElev(dem, _routeStartLL.lat, _routeStartLL.lng);
+  const elevEnd = _demBilinearElev(dem, endLL.lat, endLL.lng);
+  const slopes = [];
+  for (let i = 1; i < path.length; i++) {
+    const d = dst(path[i-1].lat, path[i-1].lng, path[i].lat, path[i].lng);
+    if (d > 0.5) slopes.push(Math.abs((path[i].elev - path[i-1].elev) / d * 100));
+  }
+  const maxSlope = slopes.length ? Math.max(...slopes) : 0;
+  const avgSlope = slopes.length ? slopes.reduce((a, b) => a + b, 0) / slopes.length : 0;
+
+  _routeLayer.bindPopup(`
+    <div style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:8px;min-width:180px;">
+      <div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:6px;">Predložena trasa</div>
+      <div style="font-size:12px;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;">
+        <span style="color:#94a3b8;">Dužina</span><span>${fmtL(totalDist)}</span>
+        <span style="color:#94a3b8;">Početak</span><span>${Math.round(elevStart)} m nv</span>
+        <span style="color:#94a3b8;">Kraj</span><span>${Math.round(elevEnd)} m nv</span>
+        <span style="color:#94a3b8;">Max nagib</span><span style="color:${maxSlope>18?'#f87171':maxSlope>12?'#fbbf24':'#4ade80'}">${maxSlope.toFixed(1)}%</span>
+        <span style="color:#94a3b8;">Prosj. nagib</span><span>${avgSlope.toFixed(1)}%</span>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button onclick="_routeToVlaka()" style="flex:1;padding:6px;background:#059669;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">📐 Kreiraj vlaku</button>
+        <button onclick="routeSuggestCancel()" style="padding:6px 10px;background:#475569;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+  `, { className: 'kml-info-popup', maxWidth: 280 }).openPopup();
+
+  _routeMode = false;
+  const btn = document.getElementById('route-suggest-btn');
+  if (btn) btn.classList.remove('active');
+  showToast(`✓ Trasa: ${fmtL(totalDist)}, max nagib ${maxSlope.toFixed(1)}%`);
+}
+
+// A* po DEM gridu — cijena = udaljenost × (1 + penalty za nagib)
+function _astarRoute(dem, startLat, startLng, endLat, endLng) {
+  const sr = Math.max(0, Math.min(dem.rows - 1, Math.round((startLat - dem.south) / dem.step)));
+  const sc = Math.max(0, Math.min(dem.cols - 1, Math.round((startLng - dem.west) / dem.step)));
+  const er = Math.max(0, Math.min(dem.rows - 1, Math.round((endLat - dem.south) / dem.step)));
+  const ec = Math.max(0, Math.min(dem.cols - 1, Math.round((endLng - dem.west) / dem.step)));
+
+  const key = (r, c) => r * dem.cols + c;
+  const gScore = new Float32Array(dem.rows * dem.cols).fill(Infinity);
+  const fScore = new Float32Array(dem.rows * dem.cols).fill(Infinity);
+  const cameFrom = new Int32Array(dem.rows * dem.cols).fill(-1);
+  const closed = new Uint8Array(dem.rows * dem.cols);
+
+  const heurDist = (r, c) => {
+    const dLat = (r - er) * dem.step * 111320;
+    const dLon = (c - ec) * dem.step * 111320 * Math.cos((dem.south + r * dem.step) * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLon * dLon);
+  };
+
+  const stepM = dem.step * 111320;
+  const diagM = stepM * 1.414;
+  const MAX_SLOPE_PCT = 35;
+
+  gScore[key(sr, sc)] = 0;
+  fScore[key(sr, sc)] = heurDist(sr, sc);
+
+  // Min-heap (simple array-based)
+  const open = [[fScore[key(sr, sc)], sr, sc]];
+  const dirs = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+  let iterations = 0;
+  const maxIter = dem.rows * dem.cols * 2;
+
+  while (open.length > 0 && iterations++ < maxIter) {
+    open.sort((a, b) => a[0] - b[0]);
+    const [, cr, cc] = open.shift();
+    const ck = key(cr, cc);
+    if (closed[ck]) continue;
+    closed[ck] = 1;
+    if (cr === er && cc === ec) break;
+
+    const elev0 = dem.grid[ck];
+    for (const [dr, dc] of dirs) {
+      const nr = cr + dr, nc = cc + dc;
+      if (nr < 0 || nr >= dem.rows || nc < 0 || nc >= dem.cols) continue;
+      const nk = key(nr, nc);
+      if (closed[nk]) continue;
+
+      const elev1 = dem.grid[nk];
+      const isDiag = dr !== 0 && dc !== 0;
+      const segDist = isDiag ? diagM : stepM;
+      const slopePct = Math.abs(elev1 - elev0) / segDist * 100;
+
+      if (slopePct > MAX_SLOPE_PCT) continue;
+
+      let penalty = 1;
+      if (slopePct > 18) penalty = 4;
+      else if (slopePct > 12) penalty = 2;
+      else if (slopePct > 8) penalty = 1.3;
+
+      const tentG = gScore[ck] + segDist * penalty;
+      if (tentG < gScore[nk]) {
+        cameFrom[nk] = ck;
+        gScore[nk] = tentG;
+        fScore[nk] = tentG + heurDist(nr, nc);
+        open.push([fScore[nk], nr, nc]);
+      }
+    }
+  }
+
+  if (cameFrom[key(er, ec)] === -1 && !(sr === er && sc === ec)) return null;
+
+  const path = [];
+  let cur = key(er, ec);
+  while (cur !== -1) {
+    const r = Math.floor(cur / dem.cols), c = cur % dem.cols;
+    path.unshift({
+      lat: dem.south + r * dem.step,
+      lng: dem.west + c * dem.step,
+      elev: dem.grid[cur]
+    });
+    cur = cameFrom[cur];
+  }
+  return path;
+}
+
+// Pretvori predloženu trasu u vlaku u aktivnom projektu
+function _routeToVlaka() {
+  if (!_routeLayer) return;
+  const lls = _routeLayer.getLatLngs();
+  if (lls.length < 2) return;
+  if (!_aktivniProjektId && !confirm('Nema aktivnog projekta. Kreirati vlaku bez projekta?')) return;
+
+  const nm = 'Predložena ' + (vlake.length + 1);
+  const pts = lls.map(ll => ({ la: ll.lat, lo: ll.lng, al: 0 }));
+  const col = PAL[vlake.length % PAL.length];
+  const poly = L.polyline(pts.map(p => [p.la, p.lo]), { color: col, weight: 3 });
+  poly.addTo(map);
+  vlake.push({ nm, br: vlake.length, kr: 0, color: col, lager: '', pts, poly, wpts: [], sbId: null, projektId: _aktivniProjektId || null, projektantIme: typeof getIme === 'function' ? getIme() : '', labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
+  rndList();
+  routeSuggestCancel();
+  showToast('✅ Vlaka kreirana: ' + nm);
+  switchTab('vlake');
+}
 // Arhitektura: Web Worker za sve SQL operacije (ne blokira UI).
 // Fajlovi >100MB → OPFS streaming (ne učitava u RAM); manji → SQL.js u Workeru.
 // Crash-guard: ako učitavanje sruši tab, sljedeće otvaranje automatski briše IDB.
