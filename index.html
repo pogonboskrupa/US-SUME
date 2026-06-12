@@ -3491,7 +3491,11 @@ function _saveLocalVlake() {
       id: v.sbId || null
     }));
     localStorage.setItem(LOCAL_VLAKE_KEY, JSON.stringify(rows));
-  } catch(e) {}
+  } catch(e) {
+    if (e?.name === 'QuotaExceededError' || (e?.message||'').includes('quota')) {
+      showToast('⚠ Lokalna memorija puna — podaci se čuvaju samo na serveru');
+    }
+  }
 }
 
 function _loadLocalVlake() {
@@ -3582,13 +3586,22 @@ async function _processOfflineQueue() {
     try {
       let err = null;
       if (op.type === 'upsert_vlaka') {
-        const { error } = await sb.from('vlake').upsert(op.payload, { onConflict: 'korisnik_id,sumarija,nm' });
-        err = error;
+        if (op.payload.id) {
+          const { id, ...updatePayload } = op.payload;
+          const { error } = await sb.from('vlake').update(updatePayload).eq('id', id);
+          err = error;
+        } else {
+          const { error } = await sb.from('vlake').upsert(op.payload, { onConflict: 'korisnik_id,sumarija,nm' });
+          err = error;
+        }
       } else if (op.type === 'delete_vlaka') {
         const { error } = await sb.from('vlake').delete().eq('id', op.payload.id);
         err = error;
       } else if (op.type === 'upsert_log') {
         const { error } = await sb.from('dnevni_log').upsert(op.payload, { onConflict: 'korisnik_id,datum' });
+        err = error;
+      } else if (op.type === 'insert_doz_marking') {
+        const { error } = await sb.from('doz_area_markings').insert(op.payload);
         err = error;
       } else if (op.type === 'upsert_odjel') {
         const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
@@ -5367,10 +5380,10 @@ async function sbFlushVlaka(i) {
       const i2 = c2.findIndex(r => r.id === data.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
     } else if (error) {
-      _OL.enqueue({ type: 'upsert_vlaka', payload });
+      _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
     }
   } catch(e) {
-    _OL.enqueue({ type: 'upsert_vlaka', payload });
+    _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
   }
 }
 
@@ -6692,8 +6705,11 @@ function _patchKolegaVlaka(row) {
 
   if (kolegeVlakeMap[key]) {
     kolegeVlakeMap[key].poly.setLatLngs(latLngs);
+    kolegeVlakeMap[key].pts = row.pts;
+    if (row.boja && row.boja !== kolegeVlakeMap[key].poly.options.color) {
+      kolegeVlakeMap[key].poly.setStyle({ color: row.boja });
+    }
   } else {
-    // Nova vlaka od kolege koje još nema u mapi → full reload (jedanput)
     _schedKolegeFullSync(500);
   }
 }
@@ -6812,6 +6828,18 @@ function sbStartRealtime() {
       if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
         _notifBump('doznaka');
         showToast('🌲 ' + _notifKolegaName(by) + ' je dodao/la oznaku na doznaci');
+        if (_dozSelId === pid) { dozLoadLayers(pid).then(() => dozRenderDetail()); }
+      }
+    })
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'doz_area_markings'
+    }, payload => {
+      const ev = payload.eventType;
+      if (ev === 'INSERT') return; // handled above
+      const pid = payload.new?.project_id || payload.old?.project_id;
+      const by = payload.new?.created_by || payload.old?.created_by;
+      if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
+        if (_dozSelId === pid) { dozLoadLayers(pid).then(() => dozRenderDetail()); }
       }
     })
     .on('postgres_changes', {
@@ -6821,6 +6849,7 @@ function sbStartRealtime() {
       const pid = payload.new?.project_id;
       if (by && by !== sbUser?.id && pid && _dozOdjeli.some(o => o.id === pid)) {
         _notifBump('doznaka');
+        if (_dozSelId === pid) { clearTimeout(_dozTrackRefreshTimer); _dozTrackRefreshTimer = setTimeout(() => dozLoadLayers(pid).then(() => dozRenderDetail()), 5000); }
       }
     })
     .subscribe();
@@ -18058,6 +18087,7 @@ let _dozTracksLayer   = null;
 let _dozMarkingsLayer = null;
 let _dozGpsOn    = false;
 let _dozGpsWatchId = null;
+let _dozTrackRefreshTimer = null;
 let _dozGpsTrackLayer = null;
 let _dozGpsPts   = [];
 let _dozInitDone = false;
@@ -18184,12 +18214,24 @@ function dozRenderMapLayers() {
   // Tracks grouped by user
   _dozTracksLayer = L.layerGroup().addTo(map);
   const byUser = {};
-  _dozTracks.forEach(p => { (byUser[p.user_id] = byUser[p.user_id] || []).push([p.latitude, p.longitude]); });
+  _dozTracks.forEach(p => { (byUser[p.user_id] = byUser[p.user_id] || []).push(p); });
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
+  const GAP_MS = 5 * 60 * 1000; // 5 min pauza → nova sesija
   Object.entries(byUser).forEach(([uid, pts]) => {
     if (pts.length < 2) return;
-    L.polyline(pts, { color: DOZ_ENG_COLORS[(mIdx[uid] ?? 0) % DOZ_ENG_COLORS.length], weight:3, opacity:0.85 }).addTo(_dozTracksLayer);
+    const col = DOZ_ENG_COLORS[(mIdx[uid] ?? 0) % DOZ_ENG_COLORS.length];
+    const segments = [[]];
+    pts.forEach((p, i) => {
+      if (i > 0) {
+        const dt = new Date(p.recorded_at) - new Date(pts[i-1].recorded_at);
+        if (dt > GAP_MS) segments.push([]);
+      }
+      segments[segments.length - 1].push([p.latitude, p.longitude]);
+    });
+    segments.forEach(seg => {
+      if (seg.length >= 2) L.polyline(seg, { color: col, weight: 3, opacity: 0.85 }).addTo(_dozTracksLayer);
+    });
   });
 
   // Area markings
@@ -18395,13 +18437,14 @@ async function dozConfirmSave() {
   const label  = document.getElementById('doz-save-label').value.trim() || null;
   const note   = document.getElementById('doz-save-note').value.trim()  || null;
   const areaHa = _dozCalcArea(_dozDrawPts) / 10000;
+  const markingPayload = {
+    project_id: _dozSelId, created_by: sbUser.id,
+    marking_type: _dozDrawType, label, note,
+    boundary_geojson: _dozPendingSavePolygon,
+    area_ha: areaHa, is_visible: true
+  };
   try {
-    const { error } = await sb.from('doz_area_markings').insert({
-      project_id: _dozSelId, created_by: sbUser.id,
-      marking_type: _dozDrawType, label, note,
-      boundary_geojson: _dozPendingSavePolygon,
-      area_ha: areaHa, is_visible: true
-    });
+    const { error } = await sb.from('doz_area_markings').insert(markingPayload);
     if (error) throw error;
     document.getElementById('doz-save-modal').style.display = 'none';
     _dozPendingSavePolygon = null;
@@ -18410,7 +18453,11 @@ async function dozConfirmSave() {
     await dozLoadLayers(_dozSelId);
     dozRenderDetail();
   } catch(e) {
-    showToast('Greška: ' + e.message);
+    _OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload });
+    document.getElementById('doz-save-modal').style.display = 'none';
+    _dozPendingSavePolygon = null;
+    dozCancelDraw();
+    showToast('📴 Zona sačuvana lokalno — sinhronizuje se kad bude mreže');
   }
 }
 
