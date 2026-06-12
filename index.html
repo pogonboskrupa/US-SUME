@@ -5971,12 +5971,7 @@ function vodiMeDoTacke(idx) {
   const t = _tacke[idx];
   const fromLa = lastP?.la, fromLo = lastP?.lo;
 
-  // Air-line (always)
-  if (fromLa != null) {
-    _tackaAirLine = L.polyline([[fromLa, fromLo], [t.la, t.lo]], {
-      color:'#60a5fa', weight:2, dashArray:'8 5', opacity:0.85
-    }).addTo(map);
-  }
+  // Nema vazdušne linije
 
   // Road route via Dijkstra
   let routeBuilt = false;
@@ -6042,10 +6037,8 @@ function _updateNavPanel(la, lo) {
 
   if (la != null) {
     const airDist  = _haversine(la, lo, t.la, t.lo);
-    airEl.textContent = '✈️ ' + _fmtDist(airDist);
+    airEl.textContent = _fmtDist(airDist);
 
-    // Update air line
-    if (_tackaAirLine) _tackaAirLine.setLatLngs([[la, lo], [t.la, t.lo]]);
 
     // Bearing arrow rotation
     const brng = _bearing(la, lo, t.la, t.lo);
