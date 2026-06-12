@@ -3577,6 +3577,14 @@ window.addEventListener('offline', () => {
   showToast('📴 Offline — podaci se čuvaju lokalno');
 });
 
+// Razlikuje mrežnu grešku (fetch/timeout) od DB/RLS greške (ima Postgres .code)
+function _isNetworkErr(err) {
+  if (!err) return false;
+  if (err.code && /^\d|^PGRST|^2\d|^4\d/.test(String(err.code))) return false; // Postgres/PostgREST kod → nije mreža
+  const m = (err.message || '').toLowerCase();
+  return m.includes('fetch') || m.includes('network') || m.includes('failed') || m.includes('timeout') || !err.code;
+}
+
 async function _processOfflineQueue() {
   if (!sbUser || !sbProfile) return;
   const q = _OL.loadQueue();
@@ -3650,6 +3658,20 @@ async function _processOfflineQueue() {
       if (!error) {
         localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
         synced += dozBuf.length;
+      } else if (_isNetworkErr(error)) {
+        // Mrežni ispad — zadrži cijeli buffer, ne troši pozive po tački
+      } else {
+        // Bulk pao zbog podataka (npr. tačka ima obrisan project_id) — ubaci po
+        // jednu, zadrži samo one koje i dalje padaju da ne blokiraju ostatak reda
+        const stillFailing = [];
+        for (const pt of dozBuf) {
+          try {
+            const { error: e1 } = await sb.from('doz_track_points').insert(pt);
+            if (e1) stillFailing.push(pt); else synced++;
+          } catch { stillFailing.push(pt); }
+        }
+        if (stillFailing.length) localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(stillFailing));
+        else localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
       }
     }
   } catch {}
@@ -18214,7 +18236,14 @@ function dozRenderMapLayers() {
   // Tracks grouped by user
   _dozTracksLayer = L.layerGroup().addTo(map);
   const byUser = {};
-  _dozTracks.forEach(p => { (byUser[p.user_id] = byUser[p.user_id] || []).push(p); });
+  // Dedup po user_id+recorded_at — štiti od rijetkog double-insert (live + offline buffer)
+  const _seenPt = new Set();
+  _dozTracks.forEach(p => {
+    const sig = p.user_id + '|' + p.recorded_at;
+    if (_seenPt.has(sig)) return;
+    _seenPt.add(sig);
+    (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
+  });
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
   const GAP_MS = 5 * 60 * 1000; // 5 min pauza → nova sesija
@@ -18314,17 +18343,23 @@ async function dozStartGPS() {
       recorded_at: new Date().toISOString()
     };
     try {
-      await sb.from('doz_track_points').insert(_dozPt);
+      // supabase-js NE baca na DB/RLS greške — vraća { error }; provjeri ga eksplicitno
+      const { error } = await sb.from('doz_track_points').insert(_dozPt);
+      if (error) throw error;
     } catch(e) {
-      // Buffer offline — flush in _processOfflineQueue when back online
-      try {
-        const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
-        buf.push(_dozPt);
-        localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(buf));
-      } catch {}
+      _dozBufferTrackPoint(_dozPt);
     }
   }, err => { console.warn('Doznaka GPS', err); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
+}
+
+// Spremi GPS tačku u offline buffer (poziva se i pri mrežnoj i pri DB/RLS grešci)
+function _dozBufferTrackPoint(pt) {
+  try {
+    const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+    buf.push(pt);
+    localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(buf));
+  } catch {}
 }
 
 function dozStopGPS() {
@@ -18436,7 +18471,8 @@ async function dozConfirmSave() {
   if (!_dozPendingSavePolygon) return;
   const label  = document.getElementById('doz-save-label').value.trim() || null;
   const note   = document.getElementById('doz-save-note').value.trim()  || null;
-  const areaHa = _dozCalcArea(_dozDrawPts) / 10000;
+  // Računaj iz spremljene geometrije (_dozPendingSavePolygon), ne iz mutable _dozDrawPts
+  const areaHa = _dozCalcGeomAreaHa(_dozPendingSavePolygon);
   const markingPayload = {
     project_id: _dozSelId, created_by: sbUser.id,
     marking_type: _dozDrawType, label, note,
@@ -18492,9 +18528,18 @@ async function dozDeleteMarking(id) {
 async function dozDeleteOdjel() {
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   if (!odjel) return;
-  if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo briše sve podatke.`, { danger: true })) return;
+  // Samo kreator ili manager smije brisati — briše podatke cijelog tima
+  const myRole = _dozMembers.find(m => m.user_id === sbUser?.id)?.role;
+  const canDelete = odjel.created_by === sbUser?.id || myRole === 'manager';
+  if (!canDelete) { showToast('Samo kreator/manager može obrisati odjel'); return; }
+  if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo nepovratno briše GPS tragove, zone i članstva za CIJELI tim.`, { danger: true })) return;
   try {
-    await sb.from('doz_projects').delete().eq('id', _dozSelId);
+    // Eksplicitno počisti child redove (ne oslanjaj se na DB CASCADE → bez orphana)
+    await sb.from('doz_track_points').delete().eq('project_id', _dozSelId);
+    await sb.from('doz_area_markings').delete().eq('project_id', _dozSelId);
+    await sb.from('doz_project_members').delete().eq('project_id', _dozSelId);
+    const { error } = await sb.from('doz_projects').delete().eq('id', _dozSelId);
+    if (error) throw error;
     showToast('🗑 Odjel obrisan');
     dozBackToList();
     await dozLoadOdjeli();
