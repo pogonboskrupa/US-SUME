@@ -6009,7 +6009,7 @@ function vodiMeDoTacke(idx) {
 }
 
 // ── Nav panel ──
-function _showNavPanel(idx) {
+async function _showNavPanel(idx) {
   const panel = document.getElementById('tacka-nav-panel');
   if (!panel) return;
   const t = _tacke[idx];
@@ -6018,6 +6018,17 @@ function _showNavPanel(idx) {
   panel.style.bottom = (ab && ab.style.display !== 'none') ? (ab.offsetHeight + 'px') : '0';
   panel.style.display = 'flex';
   _updateNavPanel(lastP?.la, lastP?.lo);
+
+  const elevEl = document.getElementById('tnp-elev');
+  if (elevEl) {
+    elevEl.style.display = 'none';
+    const destElev = await _msrFetchElev(t.la, t.lo);
+    if (_tackaNavIdx !== idx) return;
+    if (destElev != null) {
+      t._elev = destElev;
+      _updateNavElev();
+    }
+  }
 }
 
 function _updateNavPanel(la, lo) {
@@ -6070,6 +6081,7 @@ function _updateNavPanel(la, lo) {
     airEl.textContent = '📡 Uključi GPS';
     roadEl.style.display = 'none';
   }
+  _updateNavElev();
 }
 
 function _bearing(la1, lo1, la2, lo2) {
@@ -6078,6 +6090,24 @@ function _bearing(la1, lo1, la2, lo2) {
   const y = Math.sin(dLo) * Math.cos(la2 * r);
   const x = Math.cos(la1 * r) * Math.sin(la2 * r) - Math.sin(la1 * r) * Math.cos(la2 * r) * Math.cos(dLo);
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function _updateNavElev() {
+  const elevEl = document.getElementById('tnp-elev');
+  if (!elevEl || _tackaNavIdx === null) return;
+  const t = _tacke[_tackaNavIdx];
+  if (!t?._elev) { elevEl.style.display = 'none'; return; }
+  const myElev = lastP?.al;
+  if (myElev != null) {
+    const diff = t._elev - myElev;
+    const arrow = diff > 0 ? '⬆' : (diff < 0 ? '⬇' : '➡');
+    const col = diff > 0 ? '#f87171' : (diff < 0 ? '#4ade80' : '#94a3b8');
+    elevEl.innerHTML = `${arrow} <span style="color:${col}">${diff > 0 ? '+' : ''}${Math.round(diff)} m</span> · odredište ${Math.round(t._elev)} m nv`;
+    elevEl.style.display = '';
+  } else {
+    elevEl.textContent = `🏔 ${Math.round(t._elev)} m nv`;
+    elevEl.style.display = '';
+  }
 }
 
 function stopTackaNav() {
@@ -6173,11 +6203,22 @@ function _tackaConfirm() {
   if (lastP) {
     _createTacka(lastP.la, lastP.lo, nm);
   } else {
-    _tackaPlaceNm = nm;
-    _tackaPlaceMode = true;
-    document.getElementById('tacka-place-banner').style.display = 'block';
-    map.getContainer().style.cursor = 'crosshair';
+    _tackaPlaceOnMap(nm);
   }
+}
+
+function _tackaAtCenter() {
+  const nm = document.getElementById('tacka-nm-input').value.trim();
+  _tackaCancelModal();
+  const c = map.getCenter();
+  _createTacka(c.lat, c.lng, nm);
+}
+
+function _tackaPlaceOnMap(nm) {
+  _tackaPlaceNm = nm || '';
+  _tackaPlaceMode = true;
+  document.getElementById('tacka-place-banner').style.display = 'block';
+  map.getContainer().style.cursor = 'crosshair';
 }
 
 async function _renameTacka(idx) {
@@ -19341,6 +19382,7 @@ function toggleHelpSec(hdr) {
     <div id="tnp-name">—</div>
     <div id="tnp-air">📡 Uključi GPS</div>
     <div id="tnp-road" style="display:none;"></div>
+    <div id="tnp-elev" style="display:none;font-size:11px;color:#a78bfa;"></div>
   </div>
   <button id="tnp-stop" onclick="stopTackaNav()">✕ Stop</button>
 </div>
@@ -19356,7 +19398,9 @@ function toggleHelpSec(hdr) {
   <input id="tacka-nm-input" type="text" placeholder="" autocomplete="off" maxlength="40"
     onkeydown="if(event.key==='Enter'){_tackaConfirm();}">
   <div class="tacka-modal-btns">
-    <button id="tacka-btn-confirm" onclick="_tackaConfirm()" style="flex:1;">📍 Dodaj</button>
+    <button id="tacka-btn-confirm" onclick="_tackaConfirm()" style="flex:1;background:#16a34a;color:#fff;">📍 GPS</button>
+    <button onclick="_tackaAtCenter()" style="flex:1;background:#2563eb;color:#fff;">🎯 Centar</button>
+    <button onclick="var nm=document.getElementById('tacka-nm-input').value.trim();_tackaCancelModal();_tackaPlaceOnMap(nm);" style="flex:1;background:#0f3460;color:#60a5fa;">👆 Karta</button>
     <button id="tacka-btn-cancel" onclick="_tackaCancelModal()">✕</button>
   </div>
 </div>
