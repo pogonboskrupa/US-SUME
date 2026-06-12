@@ -9390,6 +9390,24 @@ function stopGPS() {
 // ── KOMPAS / SMJER TELEFONA ──────────────────────────────────────────────────
 function _updCompassOnMarker(heading) {
   if (_activeTab === 'teren') terenUpdCompass();
+
+  // Rotacija karte mod: okreni kartu, marker gleda gore
+  if (_compassMapRotate) {
+    _rotateMap(-heading);
+    if (posMk) {
+      const el = posMk.getElement();
+      if (el) {
+        const svg = el.querySelector('#loc-svg');
+        if (svg) { svg.style.transform = 'rotate(0deg)'; svg.style.transformOrigin = '16px 16px'; }
+        const arrow = el.querySelector('#loc-arrow');
+        if (arrow) arrow.style.opacity = '0.85';
+        const cone = el.querySelector('#loc-cone');
+        if (cone) cone.style.opacity = '0';
+      }
+    }
+    return;
+  }
+
   if (!posMk) return;
   const el = posMk.getElement();
   if (!el) return;
@@ -9405,19 +9423,62 @@ function _updCompassOnMarker(heading) {
 }
 
 let _compassConeOn = false;
+let _compassMapRotate = false;
+
 function togCompassCone() {
-  _compassConeOn = !_compassConeOn;
+  if (!_compassConeOn && !_compassMapRotate) {
+    // OFF → Kona (smjer na markeru)
+    _compassConeOn = true;
+    _compassMapRotate = false;
+    _updCompassVisuals();
+    if (!gpsOn) startGPS();
+    showToast('🧭 Kompas kona — smjer na karti');
+  } else if (_compassConeOn && !_compassMapRotate) {
+    // Kona → Rotacija karte
+    _compassConeOn = false;
+    _compassMapRotate = true;
+    _updCompassVisuals();
+    if (!gpsOn) startGPS();
+    showToast('🧭 Rotacija karte — karta prati orijentaciju');
+  } else {
+    // Rotacija → OFF
+    _compassConeOn = false;
+    _compassMapRotate = false;
+    _rotateMap(0);
+    _updCompassVisuals();
+    showToast('🧭 Kompas isključen');
+  }
   const btn = document.getElementById('ab-kompas');
-  if (btn) btn.classList.toggle('active', _compassConeOn);
+  if (btn) {
+    btn.classList.toggle('active', _compassConeOn || _compassMapRotate);
+    const lbl = btn.querySelector('span:last-child');
+    if (lbl) lbl.textContent = _compassMapRotate ? 'Rotira' : 'Kompas';
+  }
+}
+
+function _updCompassVisuals() {
   if (posMk) {
     const el = posMk.getElement();
     if (el) {
       const cone = el.querySelector('#loc-cone');
       if (cone) cone.style.opacity = _compassConeOn ? '1' : '0';
+      const svg = el.querySelector('#loc-svg');
+      if (svg && !_compassConeOn && !_compassMapRotate) {
+        svg.style.transform = _compassHeading != null ? `rotate(${_compassHeading}deg)` : '';
+      }
     }
   }
-  if (_compassConeOn && !gpsOn) startGPS();
-  showToast(_compassConeOn ? '🧭 Kompas smjer uključen' : '🧭 Kompas smjer isključen');
+}
+
+function _rotateMap(deg) {
+  const mc = document.getElementById('map');
+  if (!mc) return;
+  mc.style.transform = deg === 0 ? '' : `rotate(${deg}deg)`;
+  mc.style.transformOrigin = 'center center';
+  if (deg !== 0) {
+    const s = 1 / Math.cos((Math.abs(deg % 90)) * Math.PI / 180) * 1.05;
+    mc.style.transform = `rotate(${deg}deg) scale(${Math.min(s, 1.45)})`;
+  }
 }
 
 function _onDeviceOrientation(e) {
