@@ -1816,6 +1816,23 @@ select:focus { outline:none; border-color:#3b82f6; }
 #doz-markings-summary { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
 .doz-marking-chip { padding:2px 9px; border-radius:10px; border:1px solid; font-size:11px; font-weight:600; white-space:nowrap; }
 .doz-empty { color:#475569; font-size:12px; text-align:center; padding:16px 0; }
+.doz-zone-row {
+  display:flex; align-items:center; gap:9px; padding:7px 9px; margin-top:5px;
+  background:rgba(15,23,42,0.7); border:1px solid #1e293b; border-radius:7px; cursor:pointer;
+}
+.doz-zone-row:active { border-color:#4ade80; }
+.doz-zone-emoji { font-size:16px; flex-shrink:0; }
+.doz-zone-info { flex:1; min-width:0; }
+.doz-zone-name { font-size:12px; color:#e2e8f0; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doz-zone-meta { font-size:10px; color:#64748b; }
+.doz-zone-del { background:none; border:none; color:#475569; font-size:14px; cursor:pointer; padding:2px 6px; flex-shrink:0; }
+.doz-member-len { font-size:10px; color:#64748b; flex-shrink:0; }
+#doz-gps-stats {
+  display:none; margin-top:7px; background:rgba(15,23,42,0.8); border:1px solid #1e3a5f;
+  border-radius:7px; padding:7px 10px; font-size:11px; color:#94a3b8; line-height:1.8;
+}
+#doz-gps-stats b { color:#4ade80; font-variant-numeric:tabular-nums; }
+#doz-marked-area { font-size:11px; color:#64748b; margin-top:6px; }
 /* Type Picker Sheet */
 #doz-type-picker {
   position:fixed; left:0; right:0; bottom:0;
@@ -3141,11 +3158,13 @@ select:focus { outline:none; border-color:#3b82f6; }
           <h3 id="doz-detail-name">Odjel</h3>
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
+        <div id="doz-status-row" style="display:flex;gap:5px;padding:0 2px 4px;"></div>
 
         <div class="sec">
           <div class="sec-t">📍 GPS Trag projektanta</div>
           <button id="doz-gps-btn" class="btn g" onclick="dozToggleGPS()" style="margin-bottom:0;">📍 Počni GPS snimanje</button>
           <div id="doz-gps-status" style="display:none;font-size:11px;color:#4ade80;margin-top:5px;text-align:center;">● Snimanje aktivno</div>
+          <div id="doz-gps-stats"></div>
         </div>
 
         <div class="sec">
@@ -3164,6 +3183,8 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div class="sec">
           <div class="sec-t">📐 Obilježene zone (<span id="doz-markings-count">0</span>)</div>
           <div id="doz-markings-summary"><span class="doz-empty">Nema označenih zona</span></div>
+          <div id="doz-marked-area"></div>
+          <div id="doz-zones-list"></div>
           <button class="btn" style="background:#0f172a;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;margin-top:8px;" onclick="dozLoadLayers(_dozSelId)">↺ Osvježi slojeve</button>
         </div>
 
@@ -18186,6 +18207,7 @@ let _dozNewOdjelDrawGj    = '';
 let _dozNewOdjelDrawOdjel = '';
 let _dozTracksLayer   = null;
 let _dozMarkingsLayer = null;
+let _dozMarkingLayerById = {};
 let _dozActiveChannel = null;
 let _dozGpsOn    = false;
 let _dozGpsWatchId = null;
@@ -18315,6 +18337,7 @@ async function dozSelectOdjel(id) {
   document.getElementById('doz-detail-name').textContent = odjel.name;
   document.getElementById('doz-detail-area').textContent =
     odjel.known_area_ha ? `${parseFloat(odjel.known_area_ha).toFixed(1)} ha` : '';
+  _dozRenderStatusRow();
   await dozLoadLayers(id);
   dozRenderDetail();
 }
@@ -18419,11 +18442,12 @@ function dozRenderMapLayers() {
 
   // Area markings
   _dozMarkingsLayer = L.layerGroup().addTo(map);
+  _dozMarkingLayerById = {};
   _dozMarkings.forEach(m => {
     try {
       const gj = typeof m.boundary_geojson === 'string' ? JSON.parse(m.boundary_geojson) : m.boundary_geojson;
       const t = DOZ_TYPES[m.marking_type] || DOZ_TYPES.custom;
-      L.geoJSON(gj, { style:{ color:t.color, weight:2, fillColor:t.color, fillOpacity:0.2 } })
+      const lyr = L.geoJSON(gj, { style:{ color:t.color, weight:2, fillColor:t.color, fillOpacity:0.2 } })
         .bindPopup(`<div style="min-width:160px;">
           <b style="font-size:13px;">${t.emoji} ${m.label || t.label}</b>
           ${m.note ? `<br><span style="color:#888;font-size:11px;">${m.note}</span>` : ''}
@@ -18431,29 +18455,109 @@ function dozRenderMapLayers() {
           <br><button onclick="dozDeleteMarking('${m.id}')" style="margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">🗑 Briši</button>
         </div>`)
         .addTo(_dozMarkingsLayer);
+      _dozMarkingLayerById[m.id] = lyr;
     } catch(e) {}
   });
 }
 
+// ─── Status odjela (Aktivno / Pauza / Završeno) ──────────────────
+const _DOZ_STATUSES = [
+  { key: 'active',    label: 'Aktivno',  color: '#4ade80' },
+  { key: 'paused',    label: 'Pauza',    color: '#fbbf24' },
+  { key: 'completed', label: 'Završeno', color: '#60a5fa' }
+];
+
+function _dozRenderStatusRow() {
+  const el = document.getElementById('doz-status-row');
+  if (!el) return;
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  if (!odjel) { el.innerHTML = ''; return; }
+  const cur = odjel.status || 'active';
+  el.innerHTML = _DOZ_STATUSES.map(s => {
+    const on = s.key === cur;
+    return `<button onclick="dozSetStatus('${s.key}')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;
+      background:${on ? s.color + '22' : 'rgba(15,23,42,0.7)'};
+      border:1px solid ${on ? s.color : '#1e293b'};
+      color:${on ? s.color : '#475569'};">${s.label}</button>`;
+  }).join('');
+}
+
+async function dozSetStatus(status) {
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  if (!odjel || odjel.status === status) return;
+  const prev = odjel.status;
+  odjel.status = status;
+  _dozRenderStatusRow();
+  dozRenderOdjeli();
+  try {
+    const { error } = await sb.from('doz_projects').update({ status }).eq('id', _dozSelId);
+    if (error) throw error;
+    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
+  } catch(e) {
+    odjel.status = prev; // vrati pri grešci
+    _dozRenderStatusRow();
+    dozRenderOdjeli();
+    showToast('Greška promjene statusa: ' + (e.message || ''));
+  }
+}
+
+// Zoom na zonu sa liste u panelu
+function dozZoomMarking(id) {
+  const lyr = _dozMarkingLayerById[id];
+  if (!lyr) return;
+  try {
+    const b = lyr.getBounds();
+    if (b.isValid()) { map.fitBounds(b, { padding: [50, 50] }); lyr.openPopup(); }
+  } catch(e) {}
+}
+
 // ─── Render Detail Panel ─────────────────────────────────────────
+
+// Dužina GPS traga po korisniku (sa 5-min gap segmentacijom, kao na mapi)
+function _dozTrackLenByUser() {
+  const GAP_MS = 5 * 60 * 1000;
+  const byUser = {};
+  const seen = new Set();
+  _dozTracks.forEach(p => {
+    const sig = p.user_id + '|' + p.recorded_at;
+    if (seen.has(sig)) return;
+    seen.add(sig);
+    (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
+  });
+  const lens = {};
+  Object.entries(byUser).forEach(([uid, pts]) => {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dt = new Date(pts[i].recorded_at) - new Date(pts[i-1].recorded_at);
+      if (dt > GAP_MS) continue; // pauza — ne spajaj segmente
+      len += dst(pts[i-1].latitude, pts[i-1].longitude, pts[i].latitude, pts[i].longitude);
+    }
+    lens[uid] = len;
+  });
+  return lens;
+}
+
 function dozRenderDetail() {
-  // Members
+  // Members — sa dužinom pređenog GPS traga
+  const trackLens = _dozTrackLenByUser();
   const ml = document.getElementById('doz-members-list');
   ml.innerHTML = _dozMembers.length
     ? _dozMembers.map((m, i) => {
         const k = m._korisnik;
         const name = k ? (`${k.ime||''} ${k.prezime||''}`.trim() || `Projektant ${i+1}`) : `Projektant ${i+1}`;
         const color = k?.boja || DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length];
+        const tl = trackLens[m.user_id];
         return `<div class="doz-member-row">
           <div class="doz-member-dot" style="background:${color};"></div>
           <div class="doz-member-name">${_escHtml(name)}
             ${m.role === 'manager' ? '<span style="color:#fbbf24;font-size:10px;"> ★</span>' : ''}
           </div>
+          ${tl > 0 ? `<span class="doz-member-len">👣 ${fmtL(tl)}</span>` : ''}
         </div>`;
       }).join('')
     : '<div class="doz-empty">Nema članova</div>';
 
-  // Markings summary
+  // Markings summary (chips po tipu)
   const counts = {};
   _dozMarkings.forEach(m => { counts[m.marking_type] = (counts[m.marking_type] || 0) + 1; });
   const ms = document.getElementById('doz-markings-summary');
@@ -18463,6 +18567,40 @@ function dozRenderDetail() {
     .join('');
   ms.innerHTML = chips || '<span class="doz-empty">Nema označenih zona</span>';
   document.getElementById('doz-markings-count').textContent = _dozMarkings.length;
+
+  // Ukupna obilježena površina vs. površina odjela
+  const areaEl = document.getElementById('doz-marked-area');
+  if (areaEl) {
+    const totHa = _dozMarkings.reduce((s, m) => s + (parseFloat(m.area_ha) || 0), 0);
+    if (totHa > 0) {
+      const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+      const knownHa = parseFloat(odjel?.known_area_ha) || 0;
+      const pct = knownHa > 0 ? ` (${Math.min(100, Math.round(totHa / knownHa * 100))}% odjela)` : '';
+      areaEl.innerHTML = `Ukupno obilježeno: <b style="color:#4ade80;">${totHa.toFixed(2)} ha</b>${pct}`;
+    } else areaEl.innerHTML = '';
+  }
+
+  // Lista zona — klik zoomira na zonu na mapi
+  const zl = document.getElementById('doz-zones-list');
+  if (zl) {
+    zl.innerHTML = _dozMarkings.map(m => {
+      const t = DOZ_TYPES[m.marking_type] || DOZ_TYPES.custom;
+      const isLocal = String(m.id).startsWith('local_');
+      const meta = [
+        m.area_ha ? parseFloat(m.area_ha).toFixed(2) + ' ha' : '',
+        m.created_at ? new Date(m.created_at).toLocaleDateString('bs') : '',
+        isLocal ? '⏳ čeka sync' : ''
+      ].filter(Boolean).join(' · ');
+      return `<div class="doz-zone-row" onclick="dozZoomMarking('${m.id}')">
+        <span class="doz-zone-emoji">${t.emoji}</span>
+        <div class="doz-zone-info">
+          <div class="doz-zone-name" style="color:${t.color};">${_escHtml(m.label || t.label)}</div>
+          <div class="doz-zone-meta">${meta}</div>
+        </div>
+        ${!isLocal ? `<button class="doz-zone-del" onclick="event.stopPropagation();dozDeleteMarking('${m.id}')" title="Obriši zonu">🗑</button>` : ''}
+      </div>`;
+    }).join('');
+  }
 }
 
 // ─── GPS Tracking ─────────────────────────────────────────────────
@@ -18470,20 +18608,40 @@ function dozToggleGPS() {
   _dozGpsOn ? dozStopGPS() : dozStartGPS();
 }
 
+let _dozGpsSent = 0, _dozGpsBuffered = 0, _dozGpsLen = 0, _dozGpsStartTs = 0;
+
+function _dozUpdGpsStats(acc) {
+  const el = document.getElementById('doz-gps-stats');
+  if (!el) return;
+  el.style.display = 'block';
+  const mins = Math.floor((Date.now() - _dozGpsStartTs) / 60000);
+  const accStr = acc != null
+    ? (acc > 20 ? `<span style="color:#fbbf24;">±${Math.round(acc)} m — čekam bolji signal</span>` : `±${Math.round(acc)} m`)
+    : '<span style="color:#fbbf24;">čekam signal…</span>';
+  el.innerHTML =
+    `Trag: <b>${fmtL(_dozGpsLen)}</b> · ${_dozGpsPts.length} tač. · ${mins} min<br>` +
+    `Preciznost: ${accStr}` +
+    (_dozGpsBuffered > 0 ? `<br><span style="color:#fbbf24;">📴 ${_dozGpsBuffered} tač. čeka sync</span>` : '');
+}
+
 async function dozStartGPS() {
   if (!_dozSelId || !sbUser) { showToast('Odaberi odjel i prijavi se'); return; }
   if (!navigator.geolocation) { showToast('GPS nije dostupan'); return; }
   _dozGpsOn = true;
   _dozGpsPts = [];
+  _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
   if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
   _dozGpsTrackLayer = L.layerGroup().addTo(map);
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '⏹ Zaustavi GPS'; btn.style.background='#2d0a0a'; btn.style.color='#f87171'; btn.style.borderColor='#7f1d1d'; }
   document.getElementById('doz-gps-status').style.display = 'block';
+  _dozUpdGpsStats(null);
 
   _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
-    if (acc > 20) return;
+    if (acc > 20) { _dozUpdGpsStats(acc); return; } // slab signal — pokaži, ne snimaj
+    const prev = _dozGpsPts[_dozGpsPts.length - 1];
+    if (prev) _dozGpsLen += dst(prev[0], prev[1], lat, lng);
     _dozGpsPts.push([lat, lng]);
     if (_dozGpsPts.length >= 2) {
       if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
@@ -18500,10 +18658,13 @@ async function dozStartGPS() {
       // supabase-js NE baca na DB/RLS greške — vraća { error }; provjeri ga eksplicitno
       const { error } = await sb.from('doz_track_points').insert(_dozPt);
       if (error) throw error;
+      _dozGpsSent++;
     } catch(e) {
       _dozBufferTrackPoint(_dozPt);
+      _dozGpsBuffered++;
     }
-  }, err => { console.warn('Doznaka GPS', err); },
+    _dozUpdGpsStats(acc);
+  }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
 
@@ -18518,10 +18679,18 @@ function _dozBufferTrackPoint(pt) {
 
 function dozStopGPS() {
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
+  const wasOn = _dozGpsOn;
   _dozGpsOn = false;
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '📍 Počni GPS snimanje'; btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; }
   document.getElementById('doz-gps-status').style.display = 'none';
+  const st = document.getElementById('doz-gps-stats');
+  if (st) st.style.display = 'none';
+  if (wasOn && _dozGpsPts.length >= 2) {
+    showToast(`📍 Snimljeno ${fmtL(_dozGpsLen)} (${_dozGpsPts.length} tačaka)`);
+    // Osvježi slojeve da se trag prikaže u boji člana
+    if (_dozSelId) dozLoadLayers(_dozSelId).then(() => dozRenderDetail());
+  }
 }
 
 // ─── Draw Polygon ─────────────────────────────────────────────────
