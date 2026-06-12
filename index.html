@@ -6292,30 +6292,40 @@ let _locFotos    = [];  // vlastite foto oznake
 let _sharedFotos = [];  // foto oznake od kolega (shared=true)
 const _FOTO_KEY  = 'tvlake_loc_fotos';
 
+let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za foto
+
 function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
+  _fotoSnapPos = { la: lastP.la, lo: lastP.lo };
   document.getElementById('loc-photo-input').click();
 }
 
 async function onLocPhotoSelected(input) {
   const file = input.files[0];
-  if (!file || !lastP) return;
+  if (!file) return;
   input.value = '';
-  const {la, lo} = lastP;
+  const pos = _fotoSnapPos || lastP;
+  if (!pos) { showToast('⚠ Nema GPS pozicije — foto nije sačuvan'); return; }
+  const {la, lo} = pos;
+  _fotoSnapPos = null;
   const ts = Date.now();
   showToast('⏳ Obrađujem sliku...');
   try {
     const [thumb, full] = await Promise.all([
       _resizeImg(file, 60,  0.78),
-      _resizeImg(file, 900, 0.80),   // veća rezolucija za fullscreen
+      _resizeImg(file, 900, 0.80),
     ]);
     const idx = _locFotos.length;
     const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, true);
     _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null});
     _saveFotos();
+    map.panTo([la, lo]);
     showToast('📷 Foto dodano na mapu');
-    sbUploadFoto(_locFotos[idx], idx); // async, non-blocking — dobiva sbId rano
-  } catch(e) { showToast('Greška pri obradi slike'); }
+    sbUploadFoto(_locFotos[idx], idx);
+  } catch(e) {
+    console.error('onLocPhotoSelected', e);
+    showToast('⚠ Greška pri obradi slike: ' + (e.message || 'nepoznato'));
+  }
 }
 
 // ─ Ikona markera (vlastita: bijeli obrub; dijeljena tuđa: plavi obrub) ─
@@ -6648,14 +6658,21 @@ async function _resizeImg(file, maxPx, q) {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const s = Math.min(maxPx / img.width, maxPx / img.height, 1);
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', q));
+      try {
+        const s = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * s));
+        c.height = Math.max(1, Math.round(img.height * s));
+        const ctx = c.getContext('2d');
+        if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas context failed')); return; }
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const dataUrl = c.toDataURL('image/jpeg', q);
+        URL.revokeObjectURL(url);
+        if (!dataUrl || dataUrl.length < 50) { reject(new Error('canvas export failed')); return; }
+        resolve(dataUrl);
+      } catch(e) { URL.revokeObjectURL(url); reject(e); }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load failed')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Slika se ne može učitati')); };
     img.src = url;
   });
 }
