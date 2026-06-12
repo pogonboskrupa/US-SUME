@@ -1339,13 +1339,28 @@ select:focus { outline:none; border-color:#3b82f6; }
 .proj-card {
   background:rgba(15,23,42,0.7); border:1px solid #1e3a5f;
   border-radius:7px; padding:9px 11px; margin-bottom:7px; cursor:pointer;
-  transition:border-color 0.15s;
+  transition:border-color 0.15s; position:relative;
 }
 .proj-card:hover { border-color:#3b82f6; }
 .proj-card.aktivan { border-color:#4ade80; background:rgba(74,222,128,0.06); }
-.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; }
+.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:36px; }
 .proj-card-sub { font-size:11px; color:#64748b; line-height:1.6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+.proj-card-vchip { display:inline-block; font-size:10px; color:#4ade80; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.25); border-radius:4px; padding:1px 6px; margin-top:3px; }
+.proj-card-akt {
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; background:#0f2940; border:1px solid #1e3a5f;
+  color:#60a5fa; border-radius:7px; font-size:15px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; line-height:1;
+}
+.proj-card-akt:active { background:#1e3a5f; }
+#proj-search {
+  width:100%; padding:8px 11px; background:rgba(15,23,42,0.8);
+  border:1px solid #1e3a5f; border-radius:7px; color:#e2e8f0; font-size:13px;
+  margin-bottom:8px; outline:none; box-sizing:border-box;
+}
+#proj-search:focus { border-color:#3b82f6; }
+#proj-search::placeholder { color:#475569; }
 .clan-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1e3a5f; }
 .clan-row:last-child { border-bottom:none; }
 .add-clan-row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; border-radius:4px; }
@@ -2815,6 +2830,8 @@ select:focus { outline:none; border-color:#3b82f6; }
           <div class="sec-t" style="margin:0;">📁 Projekti</div>
           <button class="btn b" style="margin:0;padding:5px 12px;font-size:12px;" onclick="showNovProjektForm()">+ Novi</button>
         </div>
+        <input id="proj-search" type="search" placeholder="🔍 Traži odjel, GJ ili šumariju..."
+               autocomplete="off" style="display:none;" oninput="rndProjektiList()">
         <div id="projekti-list">
           <div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Učitavam projekte...</div>
         </div>
@@ -4227,14 +4244,24 @@ function _renderProjGroup(list) {
     if (!byGj.has(key)) byGj.set(key, []);
     byGj.get(key).push(p);
   }
+  const ro = typeof isReadOnly === 'function' && isReadOnly();
   let html = '';
   for (const [gj, projekti] of byGj) {
     html += `<div class="proj-gj-header">${gj ? 'GJ ' + gj : 'Bez GJ'}</div>`;
     for (const p of projekti) {
       const isAkt  = p.id === _aktivniProjektId;
-      const isVlasnik = !sbUser || p.korisnik_id === sbUser.id;
       const nClan  = (p.clanovi || []).length;
+      // Statistike vlaka iz lokalno učitanih podataka (vlastite vlake)
+      const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
+      const totLen = pv.length ? calcL(pv.flatMap(v => v.pts)) : 0;
+      const vChip = pv.length
+        ? `<div><span class="proj-card-vchip">📐 ${pv.length} ${pv.length === 1 ? 'vlaka' : 'vlake'} · ${fmtL(totLen)}</span></div>`
+        : '';
+      const aktBtn = (!isAkt && !ro)
+        ? `<button class="proj-card-akt" onclick="event.stopPropagation();aktivirajProjekt('${p.id}')" title="Aktiviraj projekat">⚡</button>`
+        : '';
       html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
+        ${aktBtn}
         <div class="proj-card-title">
           ${p.odjel || '—'}
           ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
@@ -4243,6 +4270,7 @@ function _renderProjGroup(list) {
         <div class="proj-card-sub">
           ${p.datum ? fmtDate(p.datum) : '—'}${p.povrsina ? ' &nbsp;|&nbsp; ' + p.povrsina + ' ha' : ''}${nClan ? ' &nbsp;|&nbsp; 👥 ' + nClan : ''}
         </div>
+        ${vChip}
       </div>`;
     }
   }
@@ -4252,14 +4280,32 @@ function _renderProjGroup(list) {
 function rndProjektiList() {
   const el = document.getElementById('projekti-list');
   if (!el) return;
+  // Pretraga — vidljiva kad ima više od 5 projekata (ili je već u toku)
+  const sEl = document.getElementById('proj-search');
+  const term = (sEl?.value || '').trim().toLowerCase();
+  if (sEl) sEl.style.display = (_projekti.length > 5 || term) ? '' : 'none';
+
   if (_projekti.length === 0) {
     el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema projekata.<br>Klikni <b style="color:#60a5fa;">+ Novi</b> da kreneš.</div>`;
     return;
   }
+
+  const lista = term
+    ? _projekti.filter(p =>
+        (p.odjel || '').toLowerCase().includes(term) ||
+        (p.gj || '').toLowerCase().includes(term) ||
+        (p.sumarija || '').toLowerCase().includes(term))
+    : _projekti;
+
+  if (!lista.length) {
+    el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema rezultata za „${term}".</div>`;
+    return;
+  }
+
   // Admin nadzorni pregled: grupiši po šumariji
   if (isAdmin()) {
     const bySum = {};
-    _projekti.forEach(p => {
+    lista.forEach(p => {
       const s = p.sumarija || 'Nepoznato';
       if (!bySum[s]) bySum[s] = [];
       bySum[s].push(p);
@@ -4273,11 +4319,20 @@ function rndProjektiList() {
     return;
   }
 
-  const moji     = _projekti.filter(p => !sbUser || p.korisnik_id === sbUser.id);
-  const dijeljeni = _projekti.filter(p => sbUser && p.korisnik_id !== sbUser.id);
+  // Aktivan projekat istaknut na vrhu
+  const akt = lista.find(p => p.id === _aktivniProjektId);
+  const moji      = lista.filter(p => (!sbUser || p.korisnik_id === sbUser.id) && p.id !== _aktivniProjektId);
+  const dijeljeni = lista.filter(p => sbUser && p.korisnik_id !== sbUser.id && p.id !== _aktivniProjektId);
 
   let html = '';
-  if (moji.length) html += _renderProjGroup(moji);
+  if (akt) {
+    html += `<div class="proj-section-sep" style="color:#4ade80;border-top:none;padding-top:2px;">⚡ Aktivan projekat</div>`;
+    html += _renderProjGroup([akt]);
+  }
+  if (moji.length) {
+    if (akt) html += `<div class="proj-section-sep">Ostali projekti</div>`;
+    html += _renderProjGroup(moji);
+  }
   if (dijeljeni.length) {
     html += `<div class="proj-section-sep">Projekti od kolega</div>`;
     html += _renderProjGroup(dijeljeni);
@@ -4317,6 +4372,13 @@ function hideNovProjektForm() {
 async function saveNovProjekt() {
   const odjel = document.getElementById('np-odjel').value.trim();
   if (!odjel) { showToast('Unesite naziv odjela!'); return; }
+  // Upozori na duplikat — isti odjel u istoj GJ već postoji
+  const npGj = _npGjValue();
+  const dup = _projekti.find(p => p.odjel === odjel && (p.gj || '') === (npGj || ''));
+  if (dup) {
+    const ok = await _dlgConfirm(`Projekat za odjel ${odjel}${npGj ? ' (GJ ' + npGj + ')' : ''} već postoji. Kreirati još jedan?`);
+    if (!ok) return;
+  }
   const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile?.sumarija || '',
@@ -4367,11 +4429,16 @@ function showProjektDetalji(id) {
   document.getElementById('nov-proj-sec').style.display = 'none';
   document.getElementById('proj-detalji-sec').style.display = '';
   document.getElementById('pd-title').textContent = p.odjel || '—';
+  // Statistike vlaka za ovaj projekat (lokalno učitane)
+  const pdVlake = vlake.filter(v => v.projektId === id && v.pts.length >= 2);
+  const pdLen   = pdVlake.length ? calcL(pdVlake.flatMap(v => v.pts)) : 0;
+  const pdGust  = (p.povrsina > 0 && pdLen > 0) ? Math.round(pdLen / p.povrsina) + ' m/ha' : null;
   document.getElementById('pd-info').innerHTML = [
     p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
     p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${p.povrsina} ha` : '',
     p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
     `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : (kolegeMap[p.korisnik_id]?.ime || p.korisnik_id.slice(0,8))}`,
+    pdVlake.length ? `<b style="color:#4ade80;">Vlake:</b> ${pdVlake.length} · ${fmtL(pdLen)}${pdGust ? ' · ' + pdGust : ''}` : '',
     isReadOnly() && p.sumarija ? `<b style="color:#fbbf24;">Šumarija:</b> ${p.sumarija}` : ''
   ].filter(Boolean).join('<br>');
 
@@ -4597,15 +4664,16 @@ async function removeProjektClan(projekt_id, korisnik_id) {
   await sbLoadKolegeVlake();
 }
 
-async function aktivirajProjekt() {
-  const id = _pdProjektId;
+async function aktivirajProjekt(id) {
+  // Poziva se i kao onclick handler (prima Event) i direktno s id-om sa kartice
+  if (typeof id !== 'string') id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p) return;
   _aktivniProjektId = id;
   localStorage.setItem('tvlake_akt_proj', id);
   _applyProjektFields(p);
   if (p.odjel) sbSaveOdjel(p.odjel);
-  showProjektDetalji(id); // refresh button state
+  if (_pdProjektId === id) showProjektDetalji(id); // refresh button state ako su detalji otvoreni
   rndProjektiList();
   updProjStats(); rndLog();
   _updFabVisibility();
