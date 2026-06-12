@@ -14553,10 +14553,8 @@ function _msrRedraw() {
       zIndexOffset: 500,
       icon: L.divIcon({
         className: '',
-        html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:grab;">
-          <div style="width:9px;height:9px;border-radius:50%;background:${ptColor};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.9);flex-shrink:0;"></div>
-        </div>`,
-        iconSize:[44,44], iconAnchor:[22,22]
+        html: `<div style="width:13px;height:13px;border-radius:50%;background:${ptColor};border:2.5px solid #fff;box-shadow:0 0 5px rgba(0,0,0,0.85);box-sizing:border-box;cursor:grab;"></div>`,
+        iconSize:[13,13], iconAnchor:[6,6]
       })
     });
     mk.bindTooltip(`Tačka ${idx+1}${p.elev != null ? ' · '+Math.round(p.elev)+' m nv' : ''}`, {permanent:false, direction:'top', offset:[0,-4]});
