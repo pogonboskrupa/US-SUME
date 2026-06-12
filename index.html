@@ -2033,34 +2033,6 @@ select:focus { outline:none; border-color:#3b82f6; }
 #ab-kompas { color: #92400e; }
 #ab-kompas.active .ab-ico { background: #f59e0b; color: #fff; box-shadow: 0 0 0 3px rgba(245,158,11,0.25); }
 #ab-kompas.active { color: #f59e0b; }
-/* Compass settings sheet */
-#compass-sheet-bg { display:none;position:fixed;inset:0;z-index:8900;background:rgba(0,0,0,0.45); }
-#compass-sheet-bg.show { display:block; }
-#compass-sheet {
-  position:fixed;left:0;right:0;bottom:-100%;z-index:8901;
-  background:#fff;border-radius:20px 20px 0 0;
-  padding:0 0 calc(env(safe-area-inset-bottom,0px) + 16px);
-  box-shadow:0 -8px 40px rgba(0,0,0,0.18);
-  transition:bottom 0.3s cubic-bezier(.32,.72,.37,1.12);
-  max-height:70vh;overflow-y:auto;
-}
-#compass-sheet.show { bottom:0; }
-.cs-handle { width:36px;height:4px;border-radius:3px;background:#d1d5db;margin:10px auto 0; }
-.cs-section { padding:6px 20px 10px; }
-.cs-label { font-size:10px;font-weight:700;color:#9ca3af;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px; }
-.cs-row { display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #f1f5f9; }
-.cs-row:last-child { border-bottom:none; }
-.cs-row-left { display:flex;align-items:center;gap:12px; }
-.cs-row-ico { width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px; }
-.cs-row-txt { font-size:15px;font-weight:600;color:#1e293b; }
-.cs-row-sub { font-size:11px;color:#94a3b8;margin-top:1px; }
-.cs-toggle { width:48px;height:28px;border-radius:14px;background:#e2e8f0;position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0; }
-.cs-toggle::after { content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s; }
-.cs-toggle.on { background:#10b981; }
-.cs-toggle.on::after { transform:translateX(20px); }
-.cs-heading-box { background:#f8fafc;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-top:4px; }
-.cs-heading-label { font-size:13px;color:#64748b; }
-.cs-heading-val { font-size:18px;font-weight:700;font-family:monospace; }
 #ab-krak-l .ab-ico { background: #cffafe; color: #0891b2; }
 #ab-krak-l { color: #0e7490; }
 #ab-krak-d .ab-ico { background: #ffedd5; color: #ea580c; }
@@ -9416,26 +9388,10 @@ function stopGPS() {
 }
 
 // ── KOMPAS / SMJER TELEFONA ──────────────────────────────────────────────────
+let _compassConeOn = false;
+
 function _updCompassOnMarker(heading) {
   if (_activeTab === 'teren') terenUpdCompass();
-
-  // Rotacija karte mod: okreni kartu, marker gleda gore
-  if (_compassMapRotate) {
-    _rotateMap(-heading);
-    if (posMk) {
-      const el = posMk.getElement();
-      if (el) {
-        const svg = el.querySelector('#loc-svg');
-        if (svg) { svg.style.transform = 'rotate(0deg)'; svg.style.transformOrigin = '16px 16px'; }
-        const arrow = el.querySelector('#loc-arrow');
-        if (arrow) arrow.style.opacity = '0.85';
-        const cone = el.querySelector('#loc-cone');
-        if (cone) cone.style.opacity = '0';
-      }
-    }
-    return;
-  }
-
   if (!posMk) return;
   const el = posMk.getElement();
   if (!el) return;
@@ -9445,131 +9401,38 @@ function _updCompassOnMarker(heading) {
     svg.style.transformOrigin = '16px 16px';
   }
   const arrow = el.querySelector('#loc-arrow');
-  if (arrow) arrow.style.opacity = '0.85';
+  if (arrow) arrow.style.opacity = _compassConeOn ? '0.85' : '0';
   const cone = el.querySelector('#loc-cone');
   if (cone) cone.style.opacity = _compassConeOn ? '1' : '0';
 }
 
-let _compassConeOn = false;
-let _compassMapRotate = false;
-let _compassHeadingShow = true;
-
 function togCompassCone() {
-  const sheet = document.getElementById('compass-sheet');
-  if (!sheet) return;
-  const isOpen = sheet.classList.contains('show');
-  if (isOpen) { _closeCompassSheet(); return; }
-  _syncCompassSheet();
-  sheet.classList.add('show');
-  document.getElementById('compass-sheet-bg')?.classList.add('show');
-}
-
-function _closeCompassSheet() {
-  document.getElementById('compass-sheet')?.classList.remove('show');
-  document.getElementById('compass-sheet-bg')?.classList.remove('show');
-}
-
-function _togCompassMain(on) {
-  if (on && !gpsOn) startGPS();
-  if (!on) {
-    _compassConeOn = false;
-    _compassMapRotate = false;
-    _rotateMap(0);
-  }
-  _syncCompassSheet();
-  _applyCompassState();
-}
-
-function _togCompassRotate(on) {
-  _compassMapRotate = on;
-  if (on) { _compassConeOn = false; if (!gpsOn) startGPS(); }
-  if (!on) _rotateMap(0);
-  _syncCompassSheet();
-  _applyCompassState();
-}
-
-function _togCompassCone(on) {
-  _compassConeOn = on;
-  if (on) { _compassMapRotate = false; _rotateMap(0); if (!gpsOn) startGPS(); }
-  _syncCompassSheet();
-  _applyCompassState();
-}
-
-function _togCompassHeading(on) {
-  _compassHeadingShow = on;
-  _syncCompassSheet();
-}
-
-function _syncCompassSheet() {
-  const compassOn = _compassConeOn || _compassMapRotate;
-  const t1 = document.getElementById('cs-toggle-main');
-  const t2 = document.getElementById('cs-toggle-rotate');
-  const t3 = document.getElementById('cs-toggle-cone');
-  const t4 = document.getElementById('cs-toggle-heading');
-  const opts = document.getElementById('cs-options');
-  if (t1) t1.classList.toggle('on', compassOn);
-  if (t2) t2.classList.toggle('on', _compassMapRotate);
-  if (t3) t3.classList.toggle('on', _compassConeOn);
-  if (t4) t4.classList.toggle('on', _compassHeadingShow);
-  if (opts) opts.style.display = compassOn ? '' : 'none';
-  // heading display
-  const hd = document.getElementById('cs-heading-val');
-  if (hd) {
-    if (_compassHeading != null) {
-      const h = Math.round(_compassHeading);
-      hd.textContent = `${h}° ${_azimutSmjer(h)}`;
-      hd.style.color = '#34d399';
-    } else {
-      hd.textContent = 'nedostupan';
-      hd.style.color = '#64748b';
-    }
-  }
-  // ab button
+  _compassConeOn = !_compassConeOn;
+  if (_compassConeOn && !gpsOn) startGPS();
   const btn = document.getElementById('ab-kompas');
-  if (btn) btn.classList.toggle('active', compassOn);
-}
-
-function _applyCompassState() {
+  if (btn) btn.classList.toggle('active', _compassConeOn);
   if (posMk) {
     const el = posMk.getElement();
     if (el) {
       const cone = el.querySelector('#loc-cone');
       if (cone) cone.style.opacity = _compassConeOn ? '1' : '0';
+      const arrow = el.querySelector('#loc-arrow');
+      if (arrow) arrow.style.opacity = _compassConeOn ? '0.85' : '0';
     }
   }
-  if (_compassHeading != null) _updCompassOnMarker(_compassHeading);
-}
-
-function _rotateMap(deg) {
-  const mc = document.getElementById('map');
-  if (!mc) return;
-  mc.style.transform = deg === 0 ? '' : `rotate(${deg}deg)`;
-  mc.style.transformOrigin = 'center center';
-  if (deg !== 0) {
-    const s = 1 / Math.cos((Math.abs(deg % 90)) * Math.PI / 180) * 1.05;
-    mc.style.transform = `rotate(${deg}deg) scale(${Math.min(s, 1.45)})`;
-  }
+  if (_compassConeOn && _compassHeading != null) _updCompassOnMarker(_compassHeading);
 }
 
 function _onDeviceOrientation(e) {
   let heading = null;
   if (typeof e.webkitCompassHeading === 'number') {
-    heading = e.webkitCompassHeading; // iOS
+    heading = e.webkitCompassHeading;
   } else if (e.alpha !== null && e.alpha !== undefined) {
-    heading = (360 - e.alpha) % 360; // Android
+    heading = (360 - e.alpha) % 360;
   }
   if (heading === null) return;
   _compassHeading = heading;
   _updCompassOnMarker(heading);
-  const csSheet = document.getElementById('compass-sheet');
-  if (csSheet && csSheet.classList.contains('show')) {
-    const hd = document.getElementById('cs-heading-val');
-    if (hd) {
-      const h = Math.round(heading);
-      hd.textContent = `${h}° ${_azimutSmjer(h)}`;
-      hd.style.color = '#34d399';
-    }
-  }
 }
 
 // iOS: deviceorientation s webkitCompassHeading
@@ -19477,62 +19340,6 @@ function toggleHelpSec(hdr) {
   </div>
 </div>
 
-<!-- Compass settings sheet -->
-<div id="compass-sheet-bg" onclick="_closeCompassSheet()"></div>
-<div id="compass-sheet">
-  <div class="cs-handle"></div>
-
-  <div class="cs-section">
-    <div class="cs-label">Orijentacija</div>
-    <div class="cs-row">
-      <div class="cs-row-left">
-        <div class="cs-row-ico" style="background:#ecfdf5;color:#059669;">🧭</div>
-        <div>
-          <div class="cs-row-txt">Kompas</div>
-          <div class="cs-row-sub">Orijentacija uređaja</div>
-        </div>
-      </div>
-      <div id="cs-toggle-main" class="cs-toggle" onclick="var on=!this.classList.contains('on');_togCompassMain(on);document.getElementById('compass-sheet-bg').classList.toggle('show',on||_compassConeOn||_compassMapRotate)"></div>
-    </div>
-  </div>
-
-  <div id="cs-options" style="display:none;">
-    <div class="cs-section" style="border-top:1px solid #f1f5f9;">
-      <div class="cs-label">Opcije</div>
-      <div class="cs-row">
-        <div class="cs-row-left">
-          <div class="cs-row-ico" style="background:#eff6ff;color:#2563eb;">🔄</div>
-          <div>
-            <div class="cs-row-txt">Rotiraj kartu</div>
-            <div class="cs-row-sub">Karta prati orijentaciju telefona</div>
-          </div>
-        </div>
-        <div id="cs-toggle-rotate" class="cs-toggle" onclick="_togCompassRotate(!this.classList.contains('on'))"></div>
-      </div>
-      <div class="cs-row">
-        <div class="cs-row-left">
-          <div class="cs-row-ico" style="background:#fef3c7;color:#d97706;">📐</div>
-          <div>
-            <div class="cs-row-txt">Prikaži smjer na karti</div>
-            <div class="cs-row-sub">Kona smjera na GPS markeru</div>
-          </div>
-        </div>
-        <div id="cs-toggle-cone" class="cs-toggle" onclick="_togCompassCone(!this.classList.contains('on'))"></div>
-      </div>
-    </div>
-
-    <div class="cs-section" style="border-top:1px solid #f1f5f9;">
-      <div class="cs-label">Informacije</div>
-      <div class="cs-heading-box">
-        <div>
-          <div class="cs-heading-label">Trenutni azimut</div>
-          <div id="cs-heading-val" class="cs-heading-val" style="color:#64748b;">nedostupan</div>
-        </div>
-        <div style="font-size:32px;opacity:0.3;">🧭</div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Trag quick meta panel — iznad action-bar -->
 <div id="trag-quick-meta">
