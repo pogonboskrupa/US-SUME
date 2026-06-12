@@ -10465,10 +10465,13 @@ function rndList() {
     if (akt) {
       const totalDist = calcL(allProjVlake.flatMap(v => v.pts));
       const lbl = [akt.odjel, akt.gj].filter(Boolean).join(' · ') || 'Projekat';
+      const _pv = _projPovrsinaHa();
+      const densHtml = (_pv.ha > 0 && totalDist > 0)
+        ? `<span class="vph-dist" style="color:#60a5fa;" title="Gustoća mreže vlaka (${_pv.ha} ha${_pv.src==='KML'?' iz KML':''})">${Math.round(totalDist/_pv.ha)} m/ha</span>` : '';
       hdr.style.display = 'flex';
       hdr.innerHTML = `
         <span class="vph-lbl">📁 <b>${lbl}</b></span>
-        <span class="vph-dist">${fmtL(totalDist)}</span>
+        <span class="vph-dist">${fmtL(totalDist)}</span>${densHtml}
         <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">▸</button>`;
     } else {
       hdr.style.display = 'none';
@@ -13591,7 +13594,8 @@ function updProjStats() {
   }
   const projVlake = vlake.filter(v => v.projektId === _aktivniProjektId);
   const myTotal = calcL(projVlake.flatMap(v=>v.pts));
-  const pov     = parseFloat(document.getElementById('p-povrsina').value)||0;
+  const _pv     = _projPovrsinaHa();
+  const pov     = _pv.ha;
   const odjel   = getOdjel();
   const sumarija= document.getElementById('p-sumarija').value.trim();
   const datum   = document.getElementById('p-datum').value;
@@ -13628,7 +13632,7 @@ function updProjStats() {
     <div class="stat-row"><span class="stat-name">Početak</span><span class="stat-val blue">${datum?fmtDate(datum):'—'}</span></div>
     <div class="stat-row"><span class="stat-name">Projektanata</span><span class="stat-val">${Object.keys(allP).length}</span></div>
     <div class="stat-row"><span class="stat-name">Dana rada</span><span class="stat-val">${nDana}</span></div>
-    <div class="stat-row"><span class="stat-name">Površina</span><span class="stat-val blue">${pov>0?pov+' ha':'—'}</span></div>
+    <div class="stat-row"><span class="stat-name">Površina</span><span class="stat-val blue">${pov>0?pov+' ha'+(_pv.src==='KML'?' <span style="font-size:9px;color:#64748b;font-weight:normal;">(iz KML)</span>':''):'—'}</span></div>
     <div class="stat-card-title" style="margin-top:10px;">Dužine po projektantu</div>
     ${projRows||'<div style="color:#475569;font-size:12px;">—</div>'}
     <div class="stat-row" style="border-top:1px solid #334155;margin-top:4px;padding-top:6px;">
@@ -15453,6 +15457,32 @@ function findGraniceOdjel(naziv) {
   return bestScore >= 10 ? best : null;
 }
 
+// Geodetska površina prstena [[lat,lng],…] u hektarima (sferna aproksimacija)
+function _ringAreaHa(ring) {
+  if (!ring || ring.length < 3) return 0;
+  const R = 6378137, rad = Math.PI / 180;
+  const P = p => Array.isArray(p) ? p : [p.lat ?? p.la, p.lng ?? p.lo];
+  let s = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [la1, lo1] = P(ring[i]), [la2, lo2] = P(ring[(i + 1) % ring.length]);
+    s += (lo2 - lo1) * rad * (2 + Math.sin(la1 * rad) + Math.sin(la2 * rad));
+  }
+  return Math.abs(s * R * R / 2) / 10000;
+}
+
+// Površina aktivnog projekta (ha): ručno unesena → KML poligon odjela → 0
+function _projPovrsinaHa() {
+  const man = parseFloat(document.getElementById('p-povrsina')?.value) || 0;
+  if (man > 0) return { ha: man, src: 'ručno' };
+  const odjel = typeof getOdjel === 'function' ? getOdjel() : '';
+  const o = findGraniceOdjel(odjel);
+  if (o?.ring?.length >= 3) {
+    const ha = _ringAreaHa(o.ring);
+    if (ha > 0.01) return { ha: Math.round(ha * 10) / 10, src: 'KML' };
+  }
+  return { ha: 0, src: null };
+}
+
 // Bounds za odjel: KML → vlake tog odjela → null
 function getOdjelBounds(naziv) {
   const kml = findGraniceOdjel(naziv);
@@ -15822,14 +15852,58 @@ function showElevProfile(idx) {
   if (!v || v.pts.length < 2) { showToast('Nema dovoljno tačaka za profil'); return; }
 
   const alts = v.pts.map(p => p.al || 0);
-  if (!alts.some(a => a !== 0)) {
-    showToast('Nema podataka o visini — snimaj trag sa GPS-om'); return;
+  if (alts.some(a => a !== 0)) { _renderElevProfile(v.nm, v.pts, alts, 'GPS'); return; }
+
+  // Nacrtana vlaka bez GPS visina — povuci visine iz modela terena (open-meteo)
+  const sig = v.pts.length + ':' + Math.round(calcL(v.pts)); // poništi keš ako su tačke mijenjane
+  if (v._apiProfile?.sig === sig) { _renderElevProfile(v.nm, v._apiProfile.pts, v._apiProfile.alts, 'model terena'); return; }
+  if (!navigator.onLine) { showToast('Nema GPS visina — za profil terena potrebna je mreža'); return; }
+  showToast('⏳ Preuzimam visine terena…');
+  _fetchProfileElev(v.pts).then(res => {
+    if (!res) { showToast('⚠ Visine trenutno nedostupne'); return; }
+    v._apiProfile = { ...res, sig }; // keš za sesiju
+    _renderElevProfile(v.nm, res.pts, res.alts, 'model terena');
+  });
+}
+
+// Batch dohvat visina za liniju (open-meteo podržava listu koordinata)
+async function _fetchProfileElev(rawPts) {
+  const pts = _resampleLinePts(rawPts, 80);
+  const lats = pts.map(p => p.la.toFixed(5)).join(',');
+  const lons = pts.map(p => p.lo.toFixed(5)).join(',');
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`);
+    const d = await r.json();
+    if (!Array.isArray(d.elevation) || d.elevation.length !== pts.length) return null;
+    return { pts, alts: d.elevation };
+  } catch { return null; }
+}
+
+// Resampluje liniju na maxN ravnomjerno raspoređenih tačaka duž trase
+function _resampleLinePts(pts, maxN) {
+  if (pts.length <= maxN) return pts.map(p => ({ la: p.la, lo: p.lo }));
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++)
+    cum.push(cum[i-1] + dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo));
+  const total = cum[cum.length - 1] || 1;
+  const out = []; let j = 0;
+  for (let k = 0; k < maxN; k++) {
+    const target = total * k / (maxN - 1);
+    while (j < pts.length - 2 && cum[j+1] < target) j++;
+    const segLen = cum[j+1] - cum[j] || 1;
+    const f = Math.min(1, Math.max(0, (target - cum[j]) / segLen));
+    out.push({ la: pts[j].la + (pts[j+1].la - pts[j].la) * f, lo: pts[j].lo + (pts[j+1].lo - pts[j].lo) * f });
   }
+  return out;
+}
+
+function _renderElevProfile(name, pts, alts, src) {
+  if (pts.length < 2 || alts.length !== pts.length) return;
 
   // Kumulativne distance duž trase
   const cumD = [0];
-  for (let i = 1; i < v.pts.length; i++)
-    cumD.push(cumD[i-1] + dst(v.pts[i-1].la, v.pts[i-1].lo, v.pts[i].la, v.pts[i].lo));
+  for (let i = 1; i < pts.length; i++)
+    cumD.push(cumD[i-1] + dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo));
   const totalD = cumD[cumD.length - 1];
 
   const minAlt = Math.min(...alts), maxAlt = Math.max(...alts);
@@ -15844,8 +15918,8 @@ function showElevProfile(idx) {
 
   // Segmenti bojani po nagibu
   let segs = '';
-  for (let i = 1; i < v.pts.length; i++) {
-    const d = dst(v.pts[i-1].la, v.pts[i-1].lo, v.pts[i].la, v.pts[i].lo);
+  for (let i = 1; i < pts.length; i++) {
+    const d = dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo);
     const slope = d > 0.5 ? Math.abs((alts[i]-alts[i-1])/d*100) : 0;
     const col = slope>18?'#f87171':slope>12?'#fbbf24':'#4ade80';
     segs += `<line x1="${sx(i-1).toFixed(1)}" y1="${sy(i-1).toFixed(1)}" x2="${sx(i).toFixed(1)}" y2="${sy(i).toFixed(1)}" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
@@ -15869,8 +15943,8 @@ function showElevProfile(idx) {
   }
 
   // Fill ispod linije
-  const poly = v.pts.map((_,i)=>`${sx(i).toFixed(1)},${sy(i).toFixed(1)}`).join(' ');
-  const fill = `${pad.l},${pad.t+ph} ` + poly + ` ${sx(v.pts.length-1).toFixed(1)},${pad.t+ph}`;
+  const poly = pts.map((_,i)=>`${sx(i).toFixed(1)},${sy(i).toFixed(1)}`).join(' ');
+  const fill = `${pad.l},${pad.t+ph} ` + poly + ` ${sx(pts.length-1).toFixed(1)},${pad.t+ph}`;
 
   document.getElementById('profil-svg').innerHTML =
     `${grid}${yLab}${xLab}
@@ -15878,11 +15952,11 @@ function showElevProfile(idx) {
      <polygon points="${fill}" fill="rgba(74,222,128,0.06)"/>
      ${segs}`;
 
-  document.getElementById('profil-nm').textContent = v.nm;
+  document.getElementById('profil-nm').textContent = name + (src && src !== 'GPS' ? ' · ' + src : '');
 
   // Statistike
-  const slopes = v.pts.slice(1).map((p,i)=>{
-    const d = dst(v.pts[i].la,v.pts[i].lo,p.la,p.lo);
+  const slopes = pts.slice(1).map((p,i)=>{
+    const d = dst(pts[i].la,pts[i].lo,p.la,p.lo);
     return d>0.5 ? Math.abs((alts[i+1]-alts[i])/d*100) : 0;
   });
   const maxSlope = Math.max(...slopes);
