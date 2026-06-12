@@ -2061,6 +2061,11 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* Active icon img filter for white bg → show original color */
 #brec.active .ab-ico img { filter: brightness(0) invert(1); }
 .leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
+.kml-info-popup .leaflet-popup-content-wrapper { background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);padding:0; }
+.kml-info-popup .leaflet-popup-content { margin:0;font-size:13px; }
+.kml-info-popup .leaflet-popup-tip { background:#0f172a;border:1px solid #1e3a5f; }
+.kml-info-popup .leaflet-popup-close-button { color:#64748b;font-size:18px;top:6px;right:8px; }
+.kml-info-popup .leaflet-popup-close-button:hover { color:#e2e8f0; }
 .tacka-popup-btn, .foto-popup-btn {
   background:#7f1d1d;border:none;color:#fca5a5;border-radius:4px;
   padding:3px 10px;cursor:pointer;font-size:11px;margin-top:6px;
@@ -11641,12 +11646,16 @@ function pkml(doc, col, op) {
   const g = L.featureGroup();
   doc.querySelectorAll('Placemark').forEach(pm => {
     const name = pm.querySelector('name')?.textContent?.trim() || '';
+    const desc = pm.querySelector('description')?.textContent?.trim() || '';
+    const extData = _parseKmlExtData(pm);
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
         const l = L.polygon(cs, {color:col, weight:2, opacity:op, fillOpacity:0});
         l._kmlIsPolygon = true;
+        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(name, {sticky:true});
+        _bindKmlPopup(l);
         l.addTo(g);
       }
     });
@@ -11654,7 +11663,9 @@ function pkml(doc, col, op) {
       const cs = pcs(ls.querySelector('coordinates')?.textContent);
       if (cs.length > 1) {
         const l = L.polyline(cs, {color:col, weight:2, dashArray:'6,4', opacity:op});
+        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(name, {sticky:true});
+        _bindKmlPopup(l);
         l.addTo(g);
       }
     });
@@ -11663,7 +11674,9 @@ function pkml(doc, col, op) {
       if (cs.length > 0) {
         const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
         m._kmlIsPoint = true;
+        m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
         if (name) m.bindTooltip(name);
+        _bindKmlPopup(m);
         m.addTo(g);
       }
     });
@@ -11673,6 +11686,142 @@ function pkml(doc, col, op) {
 function pcs(s) {
   if(!s) return [];
   return s.trim().split(/\s+/).map(c=>{const p=c.split(',');return p.length>=2?[parseFloat(p[1]),parseFloat(p[0])]:null;}).filter(Boolean);
+}
+
+function _parseKmlExtData(pm) {
+  const ext = {};
+  pm.querySelectorAll('ExtendedData Data, ExtendedData SimpleData').forEach(d => {
+    const key = d.getAttribute('name') || d.getAttribute('key') || '';
+    const val = d.querySelector('value')?.textContent?.trim() || d.textContent?.trim() || '';
+    if (key) ext[key] = val;
+  });
+  pm.querySelectorAll('ExtendedData SchemaData SimpleData').forEach(d => {
+    const key = d.getAttribute('name') || '';
+    if (key) ext[key] = d.textContent?.trim() || '';
+  });
+  return ext;
+}
+
+function _bindKmlPopup(layer) {
+  layer.on('click', function(e) {
+    L.DomEvent.stopPropagation(e);
+    const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
+    layer._kmlPopupId = uid;
+    const popup = L.popup({ maxWidth: 300, minWidth: 200, className: 'kml-info-popup' })
+      .setLatLng(e.latlng)
+      .setContent(_kmlPopupHtml(layer, uid))
+      .openOn(map);
+  });
+}
+
+function _kmlPopupHtml(layer, uid) {
+  const nm = layer._kmlName || '';
+  const desc = layer._kmlDesc || '';
+  const ext = layer._kmlExtData || {};
+  const extKeys = Object.keys(ext);
+  const type = layer._kmlIsPolygon ? 'Poligon' : (layer._kmlIsPoint ? 'Tačka' : 'Linija');
+  const typeIco = layer._kmlIsPolygon ? '▣' : (layer._kmlIsPoint ? '●' : '━');
+
+  let coords = '';
+  if (layer._kmlIsPoint && layer.getLatLng) {
+    const ll = layer.getLatLng();
+    const gk = wgsToMGI(ll.lat, ll.lng);
+    coords = gk ? `<div style="font-size:11px;color:#fbbf24;font-family:monospace;margin-top:4px;">Y: ${gk.y} · X: ${gk.x}</div>` : '';
+  } else if (layer._kmlIsPolygon && layer.getBounds) {
+    const c = layer.getBounds().getCenter();
+    const gk = wgsToMGI(c.lat, c.lng);
+    coords = gk ? `<div style="font-size:11px;color:#fbbf24;font-family:monospace;margin-top:4px;">Centar Y: ${gk.y} · X: ${gk.x}</div>` : '';
+  }
+
+  let extHtml = '';
+  if (extKeys.length) {
+    extHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #334155;">` +
+      extKeys.map(k => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;">
+        <span style="color:#94a3b8;">${_escHtml(k)}</span>
+        <span style="color:#e2e8f0;text-align:right;max-width:60%;word-break:break-all;">${_escHtml(ext[k])}</span>
+      </div>`).join('') + `</div>`;
+  }
+
+  let descHtml = '';
+  if (desc) {
+    const isHtml = /<[a-z][\s\S]*>/i.test(desc);
+    descHtml = `<div style="margin-top:6px;font-size:12px;color:#cbd5e1;line-height:1.4;max-height:120px;overflow-y:auto;">
+      ${isHtml ? desc : _escHtml(desc)}
+    </div>`;
+  }
+
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:180px;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+      <span style="color:#64748b;font-size:13px;">${typeIco}</span>
+      <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">${type}</span>
+    </div>
+    <div id="${uid}-nm" style="font-size:14px;font-weight:700;color:#f1f5f9;cursor:pointer;" onclick="_kmlPopEditName('${uid}',this)" title="Klikni za izmjenu">${nm ? _escHtml(nm) : '<span style=color:#475569>Bez naziva</span>'}</div>
+    ${coords}
+    ${descHtml}
+    ${extHtml}
+    <div style="margin-top:8px;display:flex;gap:6px;">
+      <button onclick="_kmlPopEditStart('${uid}')" style="flex:1;padding:6px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;">✏ Uredi</button>
+      <button onclick="_kmlPopZoom('${uid}')" style="padding:6px 10px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;">🔍</button>
+    </div>
+    <div id="${uid}-edit" style="display:none;margin-top:8px;">
+      <input id="${uid}-name-in" value="${_escAttr(nm)}" placeholder="Naziv" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;margin-bottom:4px;box-sizing:border-box;">
+      <textarea id="${uid}-desc-in" placeholder="Opis / napomena" rows="3" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;resize:vertical;box-sizing:border-box;">${_escHtml(desc)}</textarea>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button onclick="_kmlPopSave('${uid}')" style="flex:1;padding:6px;background:#059669;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">💾 Sačuvaj</button>
+        <button onclick="_kmlPopCancel('${uid}')" style="padding:6px 10px;background:#475569;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _escAttr(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;'); }
+
+function _kmlPopFindLayer(uid) {
+  let found = null;
+  kmlLs.forEach(kl => {
+    kl.grp.eachLayer(l => { if (l._kmlPopupId === uid) found = l; });
+  });
+  return found;
+}
+
+function _kmlPopEditName(uid, el) {
+  _kmlPopEditStart(uid);
+  setTimeout(() => document.getElementById(uid + '-name-in')?.focus(), 50);
+}
+
+function _kmlPopEditStart(uid) {
+  const ed = document.getElementById(uid + '-edit');
+  if (ed) ed.style.display = '';
+}
+
+function _kmlPopCancel(uid) {
+  const ed = document.getElementById(uid + '-edit');
+  if (ed) ed.style.display = 'none';
+}
+
+function _kmlPopSave(uid) {
+  const layer = _kmlPopFindLayer(uid);
+  if (!layer) return;
+  const newName = document.getElementById(uid + '-name-in')?.value?.trim() || '';
+  const newDesc = document.getElementById(uid + '-desc-in')?.value?.trim() || '';
+  layer._kmlName = newName;
+  layer._kmlDesc = newDesc;
+  if (layer.getTooltip?.()) layer.unbindTooltip();
+  if (newName) layer.bindTooltip(newName, { sticky: true });
+  const nmEl = document.getElementById(uid + '-nm');
+  if (nmEl) nmEl.innerHTML = newName ? _escHtml(newName) : '<span style=color:#475569>Bez naziva</span>';
+  _kmlPopCancel(uid);
+  showToast('✓ Sačuvano');
+}
+
+function _kmlPopZoom(uid) {
+  const layer = _kmlPopFindLayer(uid);
+  if (!layer) return;
+  if (layer.getBounds) {
+    try { map.fitBounds(layer.getBounds(), { padding: [40, 40], maxZoom: 17 }); } catch(e) {}
+  } else if (layer.getLatLng) {
+    map.setView(layer.getLatLng(), 17);
+  }
 }
 
 // Centroid niza [lat,lng] koordinata (prosti prosjek — dovoljno za labele)
@@ -11694,24 +11843,30 @@ function pkmlStyled(doc, opts) {
   const g = L.featureGroup();
   doc.querySelectorAll('Placemark').forEach(pm => {
     const name = pm.querySelector('name')?.textContent?.trim() || '';
+    const desc = pm.querySelector('description')?.textContent?.trim() || '';
+    const extData = _parseKmlExtData(pm);
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
         const polyOpts = {...opts, fillOpacity: opts.fillOpacity !== undefined ? opts.fillOpacity : 0};
         const l = L.polygon(cs, polyOpts);
         l._kmlIsPolygon = true;
+        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         l.addTo(g);
         if (name) {
           l.bindTooltip(name, { sticky: true, opacity: 0.85 });
           _kmlLabelMarker(_coordsCentroid(cs), name).addTo(g);
         }
+        _bindKmlPopup(l);
       }
     });
     pm.querySelectorAll('LineString').forEach(ls => {
       const cs = pcs(ls.querySelector('coordinates')?.textContent);
       if (cs.length > 1) {
         const l = L.polyline(cs, opts);
+        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+        _bindKmlPopup(l);
         l.addTo(g);
       }
     });
@@ -11720,7 +11875,9 @@ function pkmlStyled(doc, opts) {
       if (cs.length > 0) {
         const m = L.circleMarker(cs[0], { radius: 4, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
         m._kmlIsPoint = true;
+        m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
         if (name) m.bindTooltip(name, { sticky: true });
+        _bindKmlPopup(m);
         m.addTo(g);
       }
     });
