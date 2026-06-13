@@ -19312,7 +19312,7 @@ function toggleHelpSec(hdr) {
           </div>
           <div class="help-row">
             <div class="help-icon">📁</div>
-            <div class="help-txt"><b>Projekat</b><span>Pregled i odabir projekta, dnevni log radova, statistike po projektantu i odjelu, upravljanje projektantima.</span></div>
+            <div class="help-txt"><b>Projekat</b><span>Pretraga i brza aktivacija projekata, kartice sa statistikama (dužina vlaka, broj krakova, projektanti), rekap, terenske statistike, boje vlaka, STD izračun, dnevnik radova, izvoz PDF/KML.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">📐</div>
@@ -19394,35 +19394,140 @@ function toggleHelpSec(hdr) {
         <div class="help-sec-body">
           <div class="help-row">
             <div class="help-icon">📋</div>
-            <div class="help-txt"><b>Moje Vlake</b><span>Popis svih vlaka u projektu. Svaka vlaka ima naziv, dužinu i boju traga. Tapnite na vlaku da je odaberete i prikažete na mapi.</span></div>
+            <div class="help-txt"><b>Moje Vlake</b><span>Popis svih vlaka u aktivnom projektu. Svaka vlaka prikazuje naziv, ukupnu dužinu (u metrima) i boju traga. Tapnite na vlaku da je odaberete i centrirate na mapi.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">👁</div>
-            <div class="help-txt"><b>Vidljivost</b><span>Svaka vlaka ima gumb za uključivanje/isključivanje prikaza na mapi bez brisanja.</span></div>
+            <div class="help-txt"><b>Vidljivost</b><span>Svaka vlaka ima gumb 👁 za uključivanje/isključivanje prikaza na mapi bez brisanja podataka.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">👥</div>
-            <div class="help-txt"><b>Timski rad — više projektanata</b><span>Više projektanata može raditi na istom projektu istovremeno. Svaki vidi vlake i trase svih ostalih u realnom vremenu — vlaka jednog projektanta odmah postaje vidljiva drugom. Boja traga razlikuje svakog projektanta.</span></div>
+            <div class="help-txt"><b>Vlake kolega</b><span>Ispod vaših vlaka prikazuje se sekcija "Vlake kolega" sa vlakama svih projektanata na istom projektu. Svaki projektant ima svoju boju — odmah se vidi ko je projektovao koju vlaku. Promjene se sinhronizuju u realnom vremenu.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🎨</div>
+            <div class="help-txt"><b>Boje vlaka</b><span>U Projekat tabu postoji sekcija "Boje vlaka" gdje birate boju za glavne vlake i krakove (isti projektant — ista boja).</span></div>
           </div>
         </div>
       </div>
 
       <div class="help-sec">
         <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>✏ Crtanje vlake
+          <span class="h-arrow">▶</span>📡 GPS snimanje vlake
         </div>
         <div class="help-sec-body">
-          <div class="help-diagram">Tapnite na mapu da dodate tačke vlake jednu po jednu. Linija se crta između tačaka. Kad završite, pritisnite "Završi vlaku".</div>
+          <div class="help-diagram" style="border-color:#4ade80;">
+            <b style="color:#4ade80;">Primarni način rada</b><br>
+            GPS snimanje je glavni alat za projektovanje vlake na terenu. Uključite snimanje, hodajte trasom buduće vlake, a app automatski bilježi GPS tačke i crta liniju na mapi. Na vrhu ekrana pojavljuje se crveni baner sa statistikama i kontrolama.
+          </div>
           <ul class="help-steps">
-            <li data-n="1.">Odaberite ili kreirajte vlaku u panelu vlaka</li>
-            <li data-n="2.">Tapnite na mapu da dodate prvu tačku</li>
-            <li data-n="3.">Nastavljajte tapkati duž željene trase</li>
-            <li data-n="4.">Pritisnite <b>Poništi zadnju</b> za uklanjanje zadnje tačke</li>
-            <li data-n="5.">Pritisnite <b>Završi vlaku</b> kad ste zadovoljni trasom</li>
+            <li data-n="1.">Aktivirajte projekat u <b>Projekat</b> tabu</li>
+            <li data-n="2.">Otvorite <b>Vlake</b> tab i odaberite vlaku (ili dodajte novu)</li>
+            <li data-n="3.">Pritisnite <b>▶ Snimi GPS</b> na vlaki — pojavljuje se modal za izbor</li>
+            <li data-n="4.">Odaberite <b>▶ Snimi direktno</b> za nastavak matične trase, ili <b>⊕ Lijevi krak</b> / <b>⊕ Desni krak</b> za odvajanje</li>
+            <li data-n="5.">Hodajte trasom — baner prikazuje dužinu, broj tačaka i nagib terena</li>
+            <li data-n="6.">Pritisnite <b>⏹ Stop</b> za završetak snimanja</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🔀 Krakovi vlake (L / D)
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram" style="border-color:#f97316;">
+            <b style="color:#f97316;">Šta je krak?</b><br>
+            Krak je bočno odvajanje od matične (glavne) trase vlake. Na terenu, vlaka često ima sporedne puteve lijevo ili desno koji vode do stabala za izvlačenje. Svaka vlaka može imati neograničen broj lijevih i desnih krakova.
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#38bdf8;font-size:16px;">⊕ L</div>
+            <div class="help-txt"><b style="color:#38bdf8;">Lijevi krak</b><span>Snima novi lijevi krak. Tokom snimanja, gumb je vidljiv u baneru. Novi krak se crta od trenutne pozicije ulijevo.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#f97316;font-size:16px;">⊕ D</div>
+            <div class="help-txt"><b style="color:#f97316;">Desni krak</b><span>Isto kao lijevi, ali za desnu stranu vlake.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">↪</div>
+            <div class="help-txt"><b>Nastavi postojeći krak</b><span>Ako ste ranije prekinuli snimanje kraka, tapnite ↪ da nastavite od tačke gdje ste stali.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">↩</div>
+            <div class="help-txt"><b>Vrati na roditelja</b><span>Kad završite krak, tapnite ↩ da se vratite na snimanje matične trase (roditelja).</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🎛 Kontrole snimanja (baner)
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Tokom GPS snimanja, na vrhu ekrana pojavljuje se baner sa kontrolama. Evo šta svaki gumb radi:</div>
+          <div class="help-row">
+            <div class="help-icon">⏸</div>
+            <div class="help-txt"><b>Pauza / Nastavi</b><span>Privremeno pauzira GPS snimanje (npr. kad stojite na jednom mjestu). Tapnite ponovo za nastavak. Tokom pauze, tačke se ne bilježe.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#38bdf8;">⊕ L</div>
+            <div class="help-txt"><b>Novi lijevi krak</b><span>Kreće snimanje novog lijevog kraka od trenutne pozicije.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#f97316;">⊕ D</div>
+            <div class="help-txt"><b>Novi desni krak</b><span>Kreće snimanje novog desnog kraka od trenutne pozicije.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">↪</div>
+            <div class="help-txt"><b>Nastavi krak</b><span>Otvara listu postojećih krakova i nastavlja snimanje od kraja odabranog.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">↩</div>
+            <div class="help-txt"><b>Vrati na roditelja</b><span>Završava trenutni krak i nastavlja snimanje matične trase.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔓</div>
+            <div class="help-txt"><b>Slobodan pogled</b><span>Normalno mapa prati vašu GPS poziciju. Tapnite 🔓 da otključate mapu i slobodno je pomičete/zumirate. Tapnite ponovo da se vratite na praćenje pozicije.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#f87171;">⏹</div>
+            <div class="help-txt"><b>Stop</b><span>Završava snimanje. Svi podaci se automatski čuvaju.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔒</div>
+            <div class="help-txt"><b>Wake Lock</b><span>Tokom snimanja, ekran automatski ostaje uključen (ikona 🔒 u baneru). Ovo sprečava gašenje ekrana i gubitak GPS signala.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>✏ Ručno crtanje vlake
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Osim GPS snimanja, vlaku možete nacrtati ručno na mapi — korisno za planiranje u uredu ili doradu trase.</div>
+          <ul class="help-steps">
+            <li data-n="1.">U <b>Projekat</b> tabu tapnite <b>✏ Nacrtaj vlaku ručno</b>, ili odaberite vlaku i tapnite ikonu za crtanje</li>
+            <li data-n="2.">Pojavljuje se baner sa alatima za crtanje</li>
+            <li data-n="3.">Tapkajte na mapu da dodate tačke — linija se crta između tačaka</li>
+            <li data-n="4.">Koristite kontrole u baneru (opisane ispod)</li>
+            <li data-n="5.">Pritisnite <b>✓ Završi</b> kad ste zadovoljni trasom</li>
           </ul>
           <div class="help-row" style="margin-top:8px;">
+            <div class="help-icon">↩</div>
+            <div class="help-txt"><b>Undo</b><span>Uklanja zadnju dodanu tačku.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">✍</div>
+            <div class="help-txt"><b>Vuci modus</b><span>Umjesto tapkanja po tačkama, povucite prst po mapi da kontinuirano crtate liniju — idealno za slobodne oblike.</span></div>
+          </div>
+          <div class="help-row">
             <div class="help-icon">📍</div>
-            <div class="help-txt"><b>Dodaj tačku gumbom</b><span>Gumb 📍 u donjem desnom uglu dodaje tačku na centar mape — korisno za precizno pozicioniranje.</span></div>
+            <div class="help-txt"><b>Tačka (centar)</b><span>Dodaje tačku na centar ekrana (nišan) — precizno pozicioniranje bez tapkanja.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="color:#4ade80;">✓</div>
+            <div class="help-txt"><b>Završi</b><span>Završava crtanje i čuva vlaku. Tačke se odmah sinhronizuju na server.</span></div>
           </div>
         </div>
       </div>
@@ -19434,19 +19539,19 @@ function toggleHelpSec(hdr) {
         <div class="help-sec-body">
           <div class="help-row">
             <div class="help-icon">📏</div>
-            <div class="help-txt"><b>Mjerenje distance</b><span>Tapkajte tačke na mapi da izmjerite razdaljinu između njih. Prikazuje ukupnu dužinu, uspon i silaz.</span></div>
+            <div class="help-txt"><b>Mjerenje distance</b><span>Iz menija otvorite "📏 Mjerenja & Tragovi". Tapkajte tačke na mapi da izmjerite razdaljinu. Prikazuje ukupnu dužinu, uspon, silaz i (ako zatvoreno) površinu.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon" style="background:#4ade8022;">⬆</div>
-            <div class="help-txt"><b style="color:#4ade80;">Uspon</b><span>Ukupna visinska razlika uzlaznih dionica (zelena boja).</span></div>
+            <div class="help-txt"><b style="color:#4ade80;">Uspon</b><span>Ukupna visinska razlika uzlaznih dionica (zelena). Izračunava se iz DEM podataka (digitalni model terena).</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon" style="background:#f8717122;">⬇</div>
-            <div class="help-txt"><b style="color:#f87171;">Silaz</b><span>Ukupna visinska razlika silaznih dionica (crvena boja).</span></div>
+            <div class="help-txt"><b style="color:#f87171;">Silaz</b><span>Ukupna visinska razlika silaznih dionica (crvena).</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon" style="background:#a78bfa22;">◻</div>
-            <div class="help-txt"><b style="color:#a78bfa;">Površina</b><span>Ako su tačke zatvorene u poligon, prikazuje se površina u m² i hektarima (ljubičasta boja).</span></div>
+            <div class="help-txt"><b style="color:#a78bfa;">Površina</b><span>Ako su tačke zatvorene u poligon, prikazuje se površina u m² i hektarima (ljubičasta).</span></div>
           </div>
         </div>
       </div>
@@ -19456,22 +19561,28 @@ function toggleHelpSec(hdr) {
           <span class="h-arrow">▶</span>🔲 Buffer zone
         </div>
         <div class="help-sec-body">
-          <div class="help-diagram">Buffer zone su zone oko vlake koje pokazuju pokrivenost. Prikazuju se kao poluprovidni slojevi na mapi.</div>
-          <div class="help-row">
+          <div class="help-diagram">Buffer zone prikazuju područje zahvata oko svake vlake. Koriste se za provjeru pokrivenosti — da li su sve dijelove odjela moguće doseći s postojećih vlaka.</div>
+          <ul class="help-steps">
+            <li data-n="1.">Odaberite <b>širinu buffera</b> iz padajućeg menija: 60m, 80m (default), 100m ili 120m (računajući po pola na svaku stranu)</li>
+            <li data-n="2.">Opciono: promijenite <b>boju</b> buffera (klik na kvadratić boje) i <b>prozirnost</b> (klizač)</li>
+            <li data-n="3.">Tapnite <b>🔲 PRIKAŽI BUFFERE</b> da prikažete zone na mapi</li>
+            <li data-n="4.">Tapnite <b>✕ UKLONI BUFFERE</b> da ih skinete</li>
+          </ul>
+          <div class="help-row" style="margin-top:6px;">
             <div class="help-icon col" style="background:#60a5fa33;border:2px solid #60a5fa;">
               &nbsp;&nbsp;&nbsp;
             </div>
-            <div class="help-txt"><b style="color:#60a5fa;">Buffer zona</b><span>Plava/svijetloplava zona oko vlake — pokazuje pokriveno područje projektovanog zahvata.</span></div>
+            <div class="help-txt"><b style="color:#60a5fa;">Buffer zona</b><span>Poluprovidna zona oko vlake u odabranoj boji — prikazuje doseg zahvata.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon col" style="background:#ef444455;border:2px solid #ef4444;">
               &nbsp;&nbsp;&nbsp;
             </div>
-            <div class="help-txt"><b style="color:#ef4444;">Mrtva zona (preklapanje)</b><span>Crvena zona nastaje gdje se buffers dvije ili više vlaka preklapaju — označava redundantno područje.</span></div>
+            <div class="help-txt"><b style="color:#ef4444;">Mrtva zona (preklapanje)</b><span>Crvena zona — gdje se bufferi dvije ili više vlaka preklapaju. Uvijek crvena, ne mijenja se.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">🔗</div>
-            <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu kontinuiranu liniju — korisno za planiranje mreže vlaka.</span></div>
+            <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu: kliknite na krajnju tačku (zelenu/crvenu) jedne vlake, pa na krajnju tačku druge.</span></div>
           </div>
         </div>
       </div>
@@ -19481,13 +19592,30 @@ function toggleHelpSec(hdr) {
           <span class="h-arrow">▶</span>🗺 Referentna karta i detekcija
         </div>
         <div class="help-sec-body">
+          <div class="help-diagram">Učitajte sliku papirne karte (1:10000) ili ortofota i preklopite je na digitalnu mapu. Koristite za prijenos vlaka s papira u digitalni format ili kao vizualnu podlogu.</div>
           <div class="help-row">
-            <div class="help-icon">🗺</div>
-            <div class="help-txt"><b>Referentna karta</b><span>Učitajte sliku papirne karte ili ortofota i preklopite je na digitalnu mapu. Koristite da prenesete vlake s papira u digitalni format.</span></div>
+            <div class="help-icon">📷</div>
+            <div class="help-txt"><b>Učitaj sliku karte</b><span>Odaberite sliku (foto ili sken) s uređaja. Pojavljuje se preklopljena na mapi.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📐</div>
+            <div class="help-txt"><b>Fituj u prikaz / Fituj u odjel</b><span>Postavi sliku na trenutni prikaz mape, ili na učitani KML odjel da se poklopi sa granicama.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🎯</div>
+            <div class="help-txt"><b>Precizno poravnaj</b><span>Automatski pronalazi granicu odjela na slici i poravnava je na KML poligon. Radi kada slika jasno prikazuje granicu odjela.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🎯</div>
+            <div class="help-txt"><b>Kalibriraj (kontrolne tačke)</b><span>Ručna kalibracija: kliknite na prepoznatljivu tačku na slici (npr. raskrsnica, kota), pa kliknite istu tačku na mapi. Ponovite za 2–3 tačke za precizno poravnanje.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">🔍</div>
-            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>Pokušava automatski prepoznati trase vlaka iz učitane referentne slike koristeći analizu kontrasta i putanja.</span></div>
+            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>Algoritam pokušava prepoznati trase vlaka iz slike koristeći kontrast. Podesite "Prag tame" i "Min. dužina" klizačima za bolje rezultate. Detektovane vlake se prikazuju kao narandžaste linije.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">☁</div>
+            <div class="help-txt"><b>Sačuvaj na server / Repozitorij</b><span>Učitanu kartu možete sačuvati na server da bude dostupna ostalim projektantima. Repozitorij prikazuje sve ranije sačuvane karte za ovaj projekat.</span></div>
           </div>
         </div>
       </div>
@@ -19508,6 +19636,34 @@ function toggleHelpSec(hdr) {
               <b>Doznaka — timsko označavanje stabala po pojasima</b>
               <span>Alat za organizaciju doznake (odabira stabala za sječu) po odjelima. Više projektanata može raditi istovremeno — svaki hoda svojim pojasom kroz odjel dok snima GPS trag koji ostaje vidljiv ostalima. Uz to se obilježavaju posebne zone (zaštitne, sjemenjaci, prioriteti...).</span>
             </div>
+          </div>
+          <div class="help-diagram" style="border-color:#60a5fa;margin-top:8px;">
+            <b style="color:#60a5fa;">Kako se koristi:</b><br>
+            1. Otvorite <b>Doznaka</b> tab u donjem meniju<br>
+            2. Kreirajte novi odjel (<b>+ Novi</b>) ili otvorite postojeći tapom na karticu<br>
+            3. U detalju odjela: snimajte GPS pojaseve, ucrtavajte zone, dodajte projektante<br>
+            4. Gumb <b>↺ Osvježi</b> osvježava listu odjela sa servera
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📊 Lista odjela i status
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram">Kad otvorite Doznaka tab, vidite listu svih odjela za doznaku (vaših i onih gdje ste dodani kao projektant).</div>
+          <div class="help-row">
+            <div class="help-icon">📋</div>
+            <div class="help-txt"><b>Kartica odjela</b><span>Svaki odjel prikazuje naziv GJ, broj odjela i površinu. Tapnite na karticu da otvorite detaljan prikaz.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📊</div>
+            <div class="help-txt"><b>Status čipovi</b><span>Na vrhu detaljnog prikaza odjela prikazuju se status čipovi: broj obilježenih zona, broj projektanata u timu i ukupna obilježena površina. Služe za brzi pregled napretka doznake.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">‹</div>
+            <div class="help-txt"><b>Nazad na listu</b><span>Gumb ‹ u zaglavlju detalja vraća vas na listu svih odjela.</span></div>
           </div>
         </div>
       </div>
@@ -19554,12 +19710,12 @@ function toggleHelpSec(hdr) {
           <span class="h-arrow">▶</span>🛡 Označavanje zona na mapi
         </div>
         <div class="help-sec-body">
-          <div class="help-diagram">Zona se ucrtava kao poligon na mapi. Svaki tip zone ima svoju boju i emoji oznaku.</div>
+          <div class="help-diagram">Zona se ucrtava kao poligon na mapi. Svaki tip zone ima svoju boju i emoji oznaku. Koristite zone da obilježite posebna područja unutar odjela.</div>
           <ul class="help-steps">
             <li data-n="1.">Otvorite odjel iz liste tapom na karticu</li>
-            <li data-n="2.">Tapnite <b>Obilježi zonu na mapi</b></li>
-            <li data-n="3.">Odaberite tip zone iz liste</li>
-            <li data-n="4.">Tapkajte uglove zone na mapi</li>
+            <li data-n="2.">Tapnite <b>✏ Nacrtaj plohu</b> u sekciji "Obilježi zonu na mapi"</li>
+            <li data-n="3.">Odaberite tip zone iz liste (🚫 Nepogodno, 🌿 Čišćenje, 🛡 Zaštitna, itd.)</li>
+            <li data-n="4.">Tapkajte uglove zone na mapi — linija se automatski zatvara</li>
             <li data-n="5.">Tapnite <b>Završi</b>, unesite naziv/napomenu i potvrdite</li>
           </ul>
           <div class="help-row" style="margin-top:6px;">
@@ -19595,6 +19751,29 @@ function toggleHelpSec(hdr) {
 
       <div class="help-sec">
         <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>📐 Pregled obilježenih zona
+        </div>
+        <div class="help-sec-body">
+          <div class="help-diagram" style="border-color:#a78bfa;">
+            U detaljnom prikazu odjela, sekcija <b>"📐 Obilježene zone"</b> prikazuje sve ucrtane zone sa njihovim tipom, bojom i površinom u hektarima. Na dnu se prikazuje ukupna obilježena površina.
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📋</div>
+            <div class="help-txt"><b>Lista zona</b><span>Svaka zona prikazuje emoji tipa (🚫, 🌿, 🛡...), naziv, napomenu i površinu. Tapnite na zonu da je centrirate na mapi.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">📐</div>
+            <div class="help-txt"><b>Ukupna površina</b><span>Ispod liste zona prikazuje se ukupna obilježena površina svih zona zajedno — korisno za provjeru koliko je odjela pokriveno posebnim oznakama.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">↺</div>
+            <div class="help-txt"><b>Osvježi slojeve</b><span>Gumb "↺ Osvježi slojeve" ponovo učitava zone i GPS tragove sa servera — koristite kad kolega doda novu zonu a vi je ne vidite.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
           <span class="h-arrow">▶</span>📍 GPS Trag — snimanje pojasa doznake
         </div>
         <div class="help-sec-body">
@@ -19610,6 +19789,13 @@ function toggleHelpSec(hdr) {
             <li data-n="5.">Svaki pojas se na mapi prikazuje kao obojana linija u vašoj boji</li>
           </ul>
           <div class="help-row" style="margin-top:8px;">
+            <div class="help-icon" style="font-size:16px;">📊</div>
+            <div class="help-txt">
+              <b>Statistike uživo</b>
+              <span>Tokom GPS snimanja, ispod gumba prikazuju se statistike u realnom vremenu: ukupna dužina pojasa (m), broj snimljenih tačaka i trenutna brzina (km/h). Ovo vam pomaže pratiti napredak bez gledanja u mapu.</span>
+            </div>
+          </div>
+          <div class="help-row">
             <div class="help-icon" style="font-size:16px;">👥</div>
             <div class="help-txt">
               <b>Timski rad po pojasima</b>
@@ -19621,6 +19807,13 @@ function toggleHelpSec(hdr) {
             <div class="help-txt">
               <b>Pregled pokrivenosti</b>
               <span>Mapa prikazuje sve snimljene pojaseve zajedno. Bijela (nepokrijena) područja između linija ukazuju na dijelove odjela koji još nisu doznačeni.</span>
+            </div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon" style="font-size:16px;">📴</div>
+            <div class="help-txt">
+              <b>Offline rad</b>
+              <span>GPS tačke se čuvaju lokalno i šalju na server čim se pojavi internet. Možete snimati pojaseve i bez mrežnog signala — podaci se neće izgubiti.</span>
             </div>
           </div>
         </div>
@@ -19642,6 +19835,22 @@ function toggleHelpSec(hdr) {
           <div class="help-row">
             <div class="help-icon">🔑</div>
             <div class="help-txt"><b>Ko može dodavati?</b><span>Samo kreator odjela (vlasnik projekta) može dodavati i uklanjati projektante iz tima.</span></div>
+          </div>
+          <div class="help-row">
+            <div class="help-icon">🔄</div>
+            <div class="help-txt"><b>Realtime sinhronizacija</b><span>Sve promjene (novi pojasevi, zone, članovi) se sinhronizuju u realnom vremenu preko Supabase servera. Ne trebate ručno osvježavati — podaci stižu automatski.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
+          <span class="h-arrow">▶</span>🗑 Brisanje odjela
+        </div>
+        <div class="help-sec-body">
+          <div class="help-row">
+            <div class="help-icon" style="color:#f87171;">🗑</div>
+            <div class="help-txt"><b style="color:#f87171;">Obriši odjel</b><span>Na dnu detaljnog prikaza odjela nalazi se gumb "🗑 Obriši odjel". Brisanje je trajno — uklanja odjel, sve zone, GPS tragove i članove. Samo vlasnik (kreator) može obrisati odjel. Potvrdite upisom naziva odjela.</span></div>
           </div>
         </div>
       </div>
