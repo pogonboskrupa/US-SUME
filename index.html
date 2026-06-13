@@ -1222,6 +1222,20 @@ select:focus { outline:none; border-color:#3b82f6; }
 .mdrop-item:hover { background:#0f3460;color:#fff; }
 .mdrop-sep { height:1px;background:#0f3460;margin:2px 0; }
 
+/* iOS-style toggle switch (Moja lokacija / GPS) */
+.gps-switch {
+  position:relative; width:42px; height:24px; border-radius:12px;
+  background:#334155; transition:background 0.2s; flex-shrink:0;
+  display:inline-block; cursor:pointer;
+}
+.gps-switch.on { background:#22c55e; }
+.gps-switch-knob {
+  position:absolute; top:2px; left:2px; width:20px; height:20px;
+  border-radius:50%; background:#fff; transition:left 0.2s;
+  box-shadow:0 1px 3px rgba(0,0,0,0.4);
+}
+.gps-switch.on .gps-switch-knob { left:20px; }
+
 /* === HELP MODAL === */
 #help-modal {
   display:none; position:fixed; inset:0; background:#0a0f1e; z-index:99500;
@@ -9554,6 +9568,10 @@ function drawPreviewUpdate(latlng) {
 }
 
 // === GPS ===
+function _updGpsSwitch() {
+  const sw = document.getElementById('gps-switch');
+  if (sw) sw.classList.toggle('on', gpsOn);
+}
 function toggleGPS() {
   if (!gpsOn) startGPS(); else stopGPS();
 }
@@ -9561,6 +9579,7 @@ function startGPS() {
   if (!navigator.geolocation) { showToast('⚠ Uređaj ne podržava GPS!'); return; }
   gpsOn = true;
   document.getElementById('gps-info').textContent = 'GPS: tražim signal...';
+  _updGpsSwitch();
   wid = navigator.geolocation.watchPosition(onP, onPE, {
     enableHighAccuracy: true, maximumAge: 0, timeout: 20000
   });
@@ -9570,6 +9589,7 @@ function stopGPS() {
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
+  _updGpsSwitch();
   _updMcdDist();
 }
 
@@ -19246,7 +19266,13 @@ function toggleHelpSec(hdr) {
   background:#16213e;border:1px solid #0f3460;border-radius:8px;
   min-width:220px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
   touch-action:manipulation;">
-  <div class="mdrop-item" onclick="closeMenuDropdown();toggleGPS()">📡 GPS — <span id="gps-info" style="color:#94a3b8;font-size:11px;">isključen</span></div>
+  <div class="mdrop-item" id="gps-menu-item" onclick="event.stopPropagation();toggleGPS()" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+      <span>📡 Moja lokacija</span>
+      <span id="gps-info" style="color:#94a3b8;font-size:11px;font-weight:normal;">isključen</span>
+    </div>
+    <span class="gps-switch" id="gps-switch"><span class="gps-switch-knob"></span></span>
+  </div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
