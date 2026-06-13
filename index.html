@@ -3559,7 +3559,8 @@ const _OL = {
   QUEUE:    'tvlake_ol_queue',
 
   save(key, data) {
-    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); }
+    catch(e) { if (e?.name === 'QuotaExceededError') showToast('⚠ Lokalna memorija puna — neki podaci se ne mogu sačuvati'); }
   },
 
   load(key) {
@@ -3585,8 +3586,9 @@ const _OL = {
         if (idx >= 0) q.splice(idx, 1);
       }
       q.push({ ...op, ts: Date.now() });
+      if (q.length > 500) { q.splice(0, q.length - 500); showToast('⚠ Offline red prepun — najstarije operacije odbačene'); }
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
-    } catch(e) {}
+    } catch(e) { if (e?.name === 'QuotaExceededError') showToast('⚠ Lokalna memorija puna — offline operacija nije sačuvana'); }
   },
 
   loadQueue() {
@@ -3645,7 +3647,7 @@ async function _processOfflineQueue() {
           if (ua) q = q.or(`updated_at.is.null,updated_at.lte.${ua}`);
           const { error, data: updRows } = await q.select('id');
           if (!error && updRows && updRows.length === 0) {
-            // Server ima noviji red — preuzmi ga
+            showToast('⚠ Izmjena vlake preskočena — kolega je u međuvremenu mijenjao istu vlaku');
             const { data: fresh } = await sb.from('vlake').select('*').eq('id', id).single();
             if (fresh) _applyVlakeRows([fresh]);
           }
@@ -3700,6 +3702,7 @@ async function _processOfflineQueue() {
         }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
+      else if (!_isNetworkErr(err)) { _OL.removeFromQueue(op.ts); console.warn('Offline queue: trajna greška, operacija odbačena', op.type, err); }
     } catch(e) { break; } // still offline
   }
   // Flush buffered doznaka GPS track points
@@ -3714,14 +3717,19 @@ async function _processOfflineQueue() {
         // Mrežni ispad — zadrži cijeli buffer, ne troši pozive po tački
       } else {
         // Bulk pao zbog podataka (npr. tačka ima obrisan project_id) — ubaci po
-        // jednu, zadrži samo one koje i dalje padaju da ne blokiraju ostatak reda
+        // jednu; trajne greške (FK, RLS) odbaci, mrežne zadrži
         const stillFailing = [];
+        let discarded = 0;
         for (const pt of dozBuf) {
           try {
             const { error: e1 } = await sb.from('doz_track_points').insert(pt);
-            if (e1) stillFailing.push(pt); else synced++;
+            if (e1) {
+              if (_isNetworkErr(e1)) stillFailing.push(pt);
+              else discarded++;
+            } else synced++;
           } catch { stillFailing.push(pt); }
         }
+        if (discarded) showToast(`⚠ ${discarded} GPS tačaka odbačeno — projekat/odjel više ne postoji`);
         if (stillFailing.length) localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(stillFailing));
         else localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
       }
@@ -4003,6 +4011,16 @@ async function doLogout() {
   clearInterval(window._liveBarTimer);
   _updSyncDot('off');
   _updKoleguLiveBar();
+
+  // Očisti doznaka resurse
+  _dozSubProject(null);
+  clearTimeout(_dozTrackRefreshTimer); _dozTrackRefreshTimer = null;
+  if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
+  _dozGpsOn = false;
+  _dozOdjeli = []; _dozMembers = []; _dozMarkings = []; _dozTracks = [];
+  _dozSelId = null; _dozInitDone = false;
+  [_OL.DOZ_ODJELI, _OL.DOZ_MEMBERS, _OL.DOZ_MARKINGS, _OL.DOZ_TRACKS, _OL.DOZ_SEL_ID].forEach(k => localStorage.removeItem(k));
+  _demCache = {};
 
   Object.keys(_vlakaSaveTimers).forEach(k => clearTimeout(_vlakaSaveTimers[k]));
   _vlakaSaveTimers = {};
@@ -5245,14 +5263,16 @@ async function _doTransferProjekt(projektId, noviVlasnikId) {
     if (e1) throw e1;
 
     // 2. Dodaj starog vlasnika kao člana (ako već nije)
-    await sb.from('projekt_clanovi').upsert(
+    const { error: e2 } = await sb.from('projekt_clanovi').upsert(
       { projekt_id: projektId, korisnik_id: sbUser.id, added_by: noviVlasnikId },
       { onConflict: 'projekt_id,korisnik_id' }
     );
+    if (e2) throw e2;
 
     // 3. Ukloni novog vlasnika iz članova (sad je vlasnik)
-    await sb.from('projekt_clanovi').delete()
+    const { error: e3 } = await sb.from('projekt_clanovi').delete()
       .eq('projekt_id', projektId).eq('korisnik_id', noviVlasnikId);
+    if (e3) throw e3;
 
     showToast(`✅ Projekat predan: ${noviIme}`);
     await sbLoadProjekti();
@@ -6444,19 +6464,20 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
 function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
   const dt   = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
   const meta = `${la.toFixed(5)}, ${lo.toFixed(5)}`;
-  const expandBtn = `<button class="foto-popup-btn fpp-info" onclick="openFotoFullscreen(${idx},${!isOwn})">🔍 Proširi</button>`;
+  const fkey = ts;
+  const expandBtn = `<button class="foto-popup-btn fpp-info" onclick="openFotoFullscreen(${fkey},${!isOwn})">🔍 Proširi</button>`;
   let actionBtns = '';
   if (isOwn) {
     const shareLbl = shared ? '👥 Podijeli' : '📤 Podijeli';
-    actionBtns = `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${idx})">${shareLbl}</button>`;
-    actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${idx})">🗑 Obriši</button>`;
+    actionBtns = `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${fkey})">${shareLbl}</button>`;
+    actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${fkey})">🗑 Obriši</button>`;
   } else {
-    actionBtns = `<button class="foto-popup-btn" onclick="deleteFotoShared(${idx})">🗑 Ukloni</button>`;
+    actionBtns = `<button class="foto-popup-btn" onclick="deleteFotoShared(${fkey})">🗑 Ukloni</button>`;
   }
   m.bindPopup(
     `<div style="min-width:200px;max-width:256px;color:#1e293b;">
       <img src="${full}" style="width:100%;border-radius:6px;margin-bottom:5px;display:block;cursor:zoom-in;"
-        onclick="openFotoFullscreen(${idx},${!isOwn})">
+        onclick="openFotoFullscreen(${fkey},${!isOwn})">
       <div style="font-size:10px;color:#64748b;margin-bottom:5px;">${dt} · ${meta}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;">${expandBtn}${actionBtns}</div>
     </div>`,
@@ -6465,8 +6486,8 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
 }
 
 // ─ Fullscreen ─
-async function openFotoFullscreen(idx, isShared) {
-  const f = isShared ? _sharedFotos[idx] : _locFotos[idx];
+async function openFotoFullscreen(tsKey, isShared) {
+  const f = isShared ? _sharedFotos.find(x => x.ts === tsKey) : _locFotos.find(x => x.ts === tsKey);
   if (!f) return;
   map.closePopup();
   const dt = new Date(f.ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -6494,11 +6515,11 @@ function closeFotoFullscreen() {
 }
 
 // ─ Share dialog ─
-let _shareFotoIdx = null;
+let _shareFotoKey = null;
 
-async function openShareFotoDlg(idx) {
-  _shareFotoIdx = idx;
-  const f    = _locFotos[idx];
+async function openShareFotoDlg(tsKey) {
+  _shareFotoKey = tsKey;
+  const f    = _locFotos.find(x => x.ts === tsKey);
   const dlg  = document.getElementById('share-foto-dlg');
   const list = document.getElementById('share-foto-list');
   list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">⏳ Učitavam...</div>';
@@ -6554,11 +6575,11 @@ async function openShareFotoDlg(idx) {
 
 function closeShareFotoDlg() {
   document.getElementById('share-foto-dlg').style.display = 'none';
-  _shareFotoIdx = null;
+  _shareFotoKey = null;
 }
 
 async function confirmShareFoto() {
-  const f           = _locFotos[_shareFotoIdx];
+  const f           = _locFotos.find(x => x.ts === _shareFotoKey);
   const alreadyWith = new Set(f?.sharedWith || []);
   const newIds      = Array.from(
     document.querySelectorAll('#share-foto-list input[type=checkbox]:checked:not(:disabled)')
@@ -6570,13 +6591,13 @@ async function confirmShareFoto() {
     return;
   }
   const allIds = [...alreadyWith, ...newIds];
-  const savedIdx = _shareFotoIdx;
+  const savedKey = _shareFotoKey;
   closeShareFotoDlg();
-  await shareFoto(savedIdx, allIds);
+  await shareFoto(savedKey, allIds);
 }
 
 async function _shareFotoWithProject() {
-  const f = _locFotos[_shareFotoIdx];
+  const f = _locFotos.find(x => x.ts === _shareFotoKey);
   if (!f) return;
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
   if (!akt) return;
@@ -6584,18 +6605,18 @@ async function _shareFotoWithProject() {
   const projMembers = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)].filter(id => id !== myId);
   const alreadyWith = new Set(f.sharedWith || []);
   const allIds = [...new Set([...alreadyWith, ...projMembers])];
-  const savedIdx = _shareFotoIdx;
+  const savedKey = _shareFotoKey;
   closeShareFotoDlg();
-  await shareFoto(savedIdx, allIds);
+  await shareFoto(savedKey, allIds);
 }
 
 // ─ Dijeljenje ─
-async function shareFoto(idx, sharedWith) {
-  const f = _locFotos[idx];
+async function shareFoto(tsKey, sharedWith) {
+  const idx = _locFotos.findIndex(x => x.ts === tsKey);
+  const f = idx >= 0 ? _locFotos[idx] : null;
   if (!f) return;
   showToast('⏳ Dijeljenje...');
 
-  // Lokalni state uvijek ažurirati odmah — UI ostaje konzistentan čak i ako DB padne
   f.shared     = true;
   f.sharedWith = sharedWith;
   f.marker.setIcon(L.divIcon({
@@ -6605,7 +6626,6 @@ async function shareFoto(idx, sharedWith) {
   _setupFotoPopup(f.marker, idx, f.la, f.lo, f.ts, f.full, true, true);
   _saveFotos();
 
-  // Pokušaj sačuvati na server
   const ok = await sbSaveFoto(f, idx, sharedWith);
   if (ok) {
     showToast('👥 Foto podijeljeno');
@@ -6699,13 +6719,13 @@ async function sbLoadSharedFotos() {
 }
 
 // ─ Brisanje ─
-function deleteFoto(idx) {
-  if (idx < 0 || idx >= _locFotos.length) return;
+function deleteFoto(tsKey) {
+  const idx = _locFotos.findIndex(x => x.ts === tsKey);
+  if (idx < 0) return;
   const f = _locFotos[idx];
   map.removeLayer(f.marker);
   if (f.sbId) sbDeleteFoto(f.sbId);
   _locFotos.splice(idx, 1);
-  _locFotos.forEach((fi, i) => _setupFotoPopup(fi.marker, i, fi.la, fi.lo, fi.ts, fi.full, true, fi.shared));
   _saveFotos();
   map.closePopup();
 }
@@ -6720,12 +6740,12 @@ function _addDismissedFoto(sbId) {
   localStorage.setItem(_DISMISSED_FOTOS_KEY, JSON.stringify([...s]));
 }
 
-async function deleteFotoShared(idx) {
+async function deleteFotoShared(tsKey) {
+  const idx = _sharedFotos.findIndex(x => x.ts === tsKey);
+  if (idx < 0) return;
   const f = _sharedFotos[idx];
-  if (!f) return;
   map.removeLayer(f.marker);
   _sharedFotos.splice(idx, 1);
-  _sharedFotos.forEach((fi, i) => _setupFotoPopup(fi.marker, i, fi.la, fi.lo, fi.ts, fi.full, false, true));
   map.closePopup();
   // Lokalni dismiss — perzistira i ako DB update ne uspije
   if (f.sbId) _addDismissedFoto(f.sbId);
@@ -6791,10 +6811,13 @@ function _restoreFotos() {
 
 // ─── REALTIME ────────────────────────────────────────────────────────────────
 
+let _rtFotosChannel = null, _rtClanoviChannel = null, _rtDozGlobalChannel = null;
+
 function _sbRemoveRtChannels() {
-  try { if (_rtVlakeChannel)  sb.removeChannel(_rtVlakeChannel);  } catch(e) {}
-  try { if (_rtOdjeliChannel) sb.removeChannel(_rtOdjeliChannel); } catch(e) {}
-  _rtVlakeChannel = null; _rtOdjeliChannel = null;
+  [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel].forEach(ch => {
+    try { if (ch) sb.removeChannel(ch); } catch(e) {}
+  });
+  _rtVlakeChannel = _rtOdjeliChannel = _rtFotosChannel = _rtClanoviChannel = _rtDozGlobalChannel = null;
 }
 
 function _onRtStatus(status) {
@@ -6928,7 +6951,7 @@ function sbStartRealtime() {
     .subscribe();
 
   // Shared fotos realtime
-  sb.channel('fotos-rt-' + Date.now())
+  _rtFotosChannel = sb.channel('fotos-rt-' + Date.now())
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'loc_fotos',
       filter: `sumarija=eq.${sbProfile.sumarija}`
@@ -6946,7 +6969,7 @@ function sbStartRealtime() {
     .subscribe();
 
   // Projekt clanovi realtime — obavijest kad te neko doda u projekat
-  sb.channel('clanovi-rt-' + Date.now())
+  _rtClanoviChannel = sb.channel('clanovi-rt-' + Date.now())
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'projekt_clanovi'
     }, payload => {
@@ -6961,7 +6984,7 @@ function sbStartRealtime() {
 
   // Doznaka realtime — per-project pretplata (efikasniji filter na serveru)
   // Globalni fallback za obavijesti kad nijedan odjel nije otvoren
-  sb.channel('doznaka-rt-global-' + Date.now())
+  _rtDozGlobalChannel = sb.channel('doznaka-rt-global-' + Date.now())
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'doz_area_markings'
     }, payload => {
@@ -14712,7 +14735,12 @@ function _updFabVisibility() {
 }
 
 function switchTab(tab) {
+  const prev = _activeTab;
   _activeTab = tab;
+  if (prev === 'doznaka' && tab !== 'doznaka') {
+    dozCancelDraw();
+    if (_dozGpsOn) showToast('📍 GPS snimanje nastavlja u pozadini');
+  }
   const panel   = document.getElementById('panel');
   const pproj   = document.getElementById('proj-panel');
   const pdoz    = document.getElementById('doznaka-panel');
@@ -18376,11 +18404,15 @@ async function dozLoadLayers(projectId) {
   dozRenderMapLayers();
 }
 
+function _dozCacheKey(projectId) {
+  return (sbUser?.id || '_') + ':' + projectId;
+}
+
 function _dozCacheLayers(projectId) {
   try {
     const all = _OL.load(_OL.DOZ_MEMBERS) || {};
-    all[projectId] = { members: _dozMembers, markings: _dozMarkings, tracks: _dozTracks, ts: Date.now() };
-    // Čuvaj max 5 projekata da ne prepunimo localStorage
+    const ck = _dozCacheKey(projectId);
+    all[ck] = { members: _dozMembers, markings: _dozMarkings, tracks: _dozTracks, ts: Date.now() };
     const keys = Object.keys(all);
     if (keys.length > 5) {
       keys.sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0));
@@ -18392,7 +18424,7 @@ function _dozCacheLayers(projectId) {
 
 function _dozLoadCachedLayers(projectId) {
   const all = _OL.load(_OL.DOZ_MEMBERS);
-  return all?.[projectId] || null;
+  return all?.[_dozCacheKey(projectId)] || null;
 }
 
 // ─── Render Map Layers ────────────────────────────────────────────
@@ -18863,9 +18895,12 @@ async function dozDeleteOdjel() {
   if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo nepovratno briše GPS tragove, zone i članstva za CIJELI tim.`, { danger: true })) return;
   try {
     // Eksplicitno počisti child redove (ne oslanjaj se na DB CASCADE → bez orphana)
-    await sb.from('doz_track_points').delete().eq('project_id', _dozSelId);
-    await sb.from('doz_area_markings').delete().eq('project_id', _dozSelId);
-    await sb.from('doz_project_members').delete().eq('project_id', _dozSelId);
+    const { error: et } = await sb.from('doz_track_points').delete().eq('project_id', _dozSelId);
+    if (et) throw et;
+    const { error: ea } = await sb.from('doz_area_markings').delete().eq('project_id', _dozSelId);
+    if (ea) throw ea;
+    const { error: em } = await sb.from('doz_project_members').delete().eq('project_id', _dozSelId);
+    if (em) throw em;
     const { error } = await sb.from('doz_projects').delete().eq('id', _dozSelId);
     if (error) throw error;
     showToast('🗑 Odjel obrisan');
@@ -19171,6 +19206,7 @@ async function _dozPickMember(userId) {
 // ─── Back to List ─────────────────────────────────────────────────
 function dozBackToList() {
   _dozSelId = null;
+  _OL.save(_OL.DOZ_SEL_ID, null);
   _dozSubProject(null);
   dozStopGPS();
   dozCancelDraw();
