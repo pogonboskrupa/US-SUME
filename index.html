@@ -8747,6 +8747,7 @@ async function _vpickGo() {
   // Pronađi postojeću
   const existing = vlake.findIndex(v => v.nm === p.nm && v.projektId === _aktivniProjektId);
   if (existing !== -1) {
+    if (_vpickerMode === 'nastavi') { _pickNastaviVlaka(existing); return; }
     _closeVlakaPicker();
     setTimeout(() => {
       if (_vpickerMode === 'trag') { selI(existing); switchTab('karta'); fabSnimTrag(); }
@@ -8786,6 +8787,95 @@ async function _vpickGo() {
       if (_vpickerMode === 'trag') fabSnimTrag(); else togRec();
     }, 260);
   }
+}
+
+// ─── Nastavi vlaku — odabir vlake i nastavak od tačke na karti ───────────────
+let _nastaviMarkers = [];
+let _nastaviVlakaIdx = null;
+
+function _openNastaviVlaku() {
+  if (recOn) { showToast('⚠ Prvo zaustavi trenutno snimanje'); return; }
+  if (!vlake.length) { showToast('Nema vlaka u projektu'); return; }
+  _vpickerMode = 'nastavi';
+  const list = document.getElementById('vpicker-list');
+  list.innerHTML = '';
+  document.querySelector('#vlaka-picker span').innerHTML = '↪ Odaberi vlaku za nastavak';
+
+  vlake.forEach((v, i) => {
+    if (v.pts.length === 0) return;
+    const row = document.createElement('div');
+    row.className = 'vpick-row';
+    row.dataset.nm = v.nm;
+    const d = fmtL(calcL(v.pts));
+    const elv = _elevHtml(v.pts);
+    row.innerHTML = `
+      <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
+        <div style="color:#64748b;font-size:11px;">${d}${elv ? ' · '+elv : ''} · ${v.pts.length} tač.</div>
+      </div>
+      <button class="vpick-rec" onclick="event.stopPropagation();_pickNastaviVlaka(${i})" style="background:#92400e;color:#fbbf24;">↪ Nastavi</button>`;
+    row.onclick = () => _pickNastaviVlaka(i);
+    list.appendChild(row);
+  });
+
+  if (!list.children.length) { showToast('Nema vlaka s tačkama'); return; }
+
+  document.getElementById('vlaka-picker').classList.add('open');
+  document.getElementById('vpicker-overlay').style.display = 'block';
+  const inp = document.getElementById('vpick-input');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 320); }
+}
+
+function _pickNastaviVlaka(i) {
+  _closeVlakaPicker();
+  const v = vlake[i];
+  if (!v || v.pts.length === 0) { showToast('Vlaka nema tačaka'); return; }
+  _nastaviVlakaIdx = i;
+  selI(i);
+  switchTab('karta');
+
+  _clearNastaviMarkers();
+  const pts = v.pts;
+  map.fitBounds(v.poly.getBounds().pad(0.15));
+
+  pts.forEach((p, pi) => {
+    const isFirst = pi === 0;
+    const isLast = pi === pts.length - 1;
+    const radius = (isFirst || isLast) ? 8 : 5;
+    const color = isLast ? '#22c55e' : (isFirst ? '#3b82f6' : v.color);
+    const mk = L.circleMarker([p.la, p.lo], {
+      radius, color, fillColor: color, fillOpacity: 0.85, weight: 2, className: 'nastavi-pt'
+    }).addTo(map);
+    mk.bindTooltip(isLast ? `${v.nm} kraj — klikni za nastavak` : (isFirst ? `${v.nm} početak` : `tač. ${pi+1}`),
+      { permanent: isLast, direction: 'top', className: 'nastavi-tooltip' });
+    mk.on('click', () => _nastaviOdTacke(i, pi));
+    _nastaviMarkers.push(mk);
+  });
+
+  showToast('Klikni na tačku vlake odakle želiš nastaviti snimanje');
+}
+
+function _nastaviOdTacke(vIdx, ptIdx) {
+  _clearNastaviMarkers();
+  const v = vlake[vIdx];
+  if (!v) return;
+
+  if (ptIdx < v.pts.length - 1) {
+    v.pts = v.pts.slice(0, ptIdx + 1);
+    v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+    scheduleVlakaSave(vIdx);
+  }
+
+  selI(vIdx);
+  togRec();
+  showToast(`▶ Nastavljam snimanje ${v.nm} od tačke ${ptIdx + 1}`);
+}
+
+function _clearNastaviMarkers() {
+  _nastaviMarkers.forEach(mk => map.removeLayer(mk));
+  _nastaviMarkers = [];
+  _nastaviVlakaIdx = null;
 }
 
 function mojaLokacija() {
@@ -9145,6 +9235,7 @@ function _updWakeLockIcon() {
 function togRec() {
   if (!recOn) {
     if (actI === null) { showToast('⚠ Prvo dodaj vlaku!'); return; }
+    _clearNastaviMarkers();
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0;
     // Timing: početak segmenta
@@ -14702,7 +14793,7 @@ function _updFabVisibility() {
   const spdField = typeof isSpdField === 'function' && isSpdField();
 
   if (!inRec && inTrag) {
-    show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+    show('brec', false); show('btrag', false); show('ab-nastavi', false); show('ab-izmjeri-wrap', false);
     show('ab-kompas', false);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',false);
@@ -14715,12 +14806,13 @@ function _updFabVisibility() {
     const hasProj = !!_aktivniProjektId;
     const ro = typeof isReadOnly === 'function' && isReadOnly();
     if (spdField) {
-      show('brec', false);
+      show('brec', false); show('ab-nastavi', false);
       show('btrag', true);
       show('ab-izmjeri-wrap', true);
       show('ab-kompas', true);
     } else {
       show('brec',     hasProj && !ro);
+      show('ab-nastavi', hasProj && !ro);
       show('btrag',    !hasProj && !ro);
       show('ab-izmjeri-wrap', !hasProj && !ro);
       show('ab-kompas', false);
@@ -14731,7 +14823,7 @@ function _updFabVisibility() {
     return;
   }
 
-  show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+  show('brec', false); show('btrag', false); show('ab-nastavi', false); show('ab-izmjeri-wrap', false);
   show('ab-kompas', false);
 
   if (isPaused) {
@@ -20365,7 +20457,7 @@ function toggleHelpSec(hdr) {
     <div class="colors" id="clrs" style="margin:0;flex:1;"></div>
   </div>
   <div class="vpick-search-row">
-    <input id="vpick-input" type="text" placeholder="npr. 14  ili  14.5" autocomplete="off" inputmode="decimal"
+    <input id="vpick-input" type="text" placeholder="Upiši broj (npr. 14 → T14)" autocomplete="off" inputmode="decimal"
            oninput="_vpickFilter()" onkeydown="if(event.key==='Enter')_vpickGo()">
     <button onclick="_vpickGo()">→ Idi</button>
   </div>
@@ -20491,6 +20583,11 @@ function toggleHelpSec(hdr) {
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
     <span>Snimi vlaku</span>
     <span id="brec-nm">T1</span>
+  </button>
+  <button id="ab-nastavi" onclick="_openNastaviVlaku()" title="Nastavi postojeću vlaku" style="display:none;">
+    <span class="ab-ico" style="background:#fef3c7;color:#d97706;">↪</span>
+    <span>Nastavi</span>
+    <span style="font-size:8px;color:#94a3b8;">vlaku</span>
   </button>
   <button id="btrag" onclick="togSnimTrag()" title="Snimi GPS trag">
     <span class="ab-ico">🔴</span>
