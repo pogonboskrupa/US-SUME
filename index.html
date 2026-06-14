@@ -1270,6 +1270,11 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 1px 3px rgba(0,0,0,0.25);
 }
 .gps-switch.on .gps-switch-knob { left:20px; }
+/* Radius ring labels */
+.radius-label span {
+  font-size:10px; font-weight:700; color:#3b82f6; background:rgba(255,255,255,0.85);
+  padding:1px 4px; border-radius:3px; white-space:nowrap; pointer-events:none;
+}
 
 /* === HELP MODAL === */
 #help-modal {
@@ -9715,11 +9720,70 @@ function drawPreviewUpdate(latlng) {
 }
 
 // === GPS ===
+// ── Radijus krugovi ──────────────────────────────────────────────────────────
+let _radiusOn = false;
+let _radiusCircles = [];
+const _radiusDistances = [50, 100, 200, 500, 1000];
+
+function _togRadiusRings() {
+  _radiusOn = !_radiusOn;
+  if (_radiusOn) {
+    if (!gpsOn) startGPS();
+    _drawRadiusRings();
+  } else {
+    _clearRadiusRings();
+  }
+  _updGpsSwitch();
+}
+
+function _radiusNorthPt(la, lo, meters) {
+  return [la + meters / 111320, lo];
+}
+
+function _drawRadiusRings() {
+  _clearRadiusRings();
+  if (!_radiusOn || !lastP) return;
+  const center = [lastP.la, lastP.lo];
+  _radiusDistances.forEach(r => {
+    const c = L.circle(center, {
+      radius: r, color: '#3b82f6', weight: 1, opacity: 0.45,
+      fillColor: '#3b82f6', fillOpacity: 0.03, dashArray: '6,4', interactive: false
+    }).addTo(map);
+    const lbl = L.marker(_radiusNorthPt(center[0], center[1], r), {
+      icon: L.divIcon({
+        className: 'radius-label',
+        html: `<span>${r >= 1000 ? (r/1000)+'km' : r+'m'}</span>`,
+        iconSize: [0,0], iconAnchor: [-4, 8]
+      }), interactive: false
+    }).addTo(map);
+    _radiusCircles.push(c, lbl);
+  });
+}
+
+function _updateRadiusRings() {
+  if (!_radiusOn || !lastP) return;
+  const center = [lastP.la, lastP.lo];
+  let ci = 0;
+  _radiusDistances.forEach(r => {
+    const circle = _radiusCircles[ci]; ci++;
+    const label = _radiusCircles[ci]; ci++;
+    if (circle) circle.setLatLng(center);
+    if (label) label.setLatLng(_radiusNorthPt(center[0], center[1], r));
+  });
+}
+
+function _clearRadiusRings() {
+  _radiusCircles.forEach(l => map.removeLayer(l));
+  _radiusCircles = [];
+}
+
 function _updGpsSwitch() {
   const sw = document.getElementById('gps-switch');
   if (sw) sw.classList.toggle('on', gpsOn);
   const cs = document.getElementById('compass-switch');
   if (cs) cs.classList.toggle('on', _compassConeOn);
+  const rs = document.getElementById('radius-switch');
+  if (rs) rs.classList.toggle('on', _radiusOn);
   const btn = document.getElementById('ab-loc');
   if (btn) btn.style.color = gpsOn ? '#22c55e' : '';
 }
@@ -9745,6 +9809,7 @@ function stopGPS() {
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
   if (_compassConeOn) togCompassCone();
+  _clearRadiusRings(); _radiusOn = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
   _updGpsSwitch();
   _updMcdDist();
@@ -9974,9 +10039,11 @@ function onP(p) {
     posCr = L.circle([la,lo], {radius:ac, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:0.12, weight:1}).addTo(map);
     map.setView([la,lo], 17);
     if (_compassHeading !== null) _updCompassOnMarker(_compassHeading);
+    _drawRadiusRings();
   } else {
     posMk.setLatLng([la, lo]);
     posCr.setLatLng([la, lo]).setRadius(ac);
+    _updateRadiusRings();
   }
 
   // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
@@ -20757,6 +20824,10 @@ function toggleHelpSec(hdr) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px;">
         <span style="font-size:13px;font-weight:600;color:#1e293b;">🧭 Kompas / pravac</span>
         <span class="gps-switch" id="compass-switch" onclick="_togCompassSwitch()"><span class="gps-switch-knob"></span></span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px;">
+        <span style="font-size:13px;font-weight:600;color:#1e293b;">⊚ Radijus</span>
+        <span class="gps-switch" id="radius-switch" onclick="_togRadiusRings()"><span class="gps-switch-knob"></span></span>
       </div>
       <button onclick="_locPopupCentriraj()" style="width:100%;padding:9px;background:#f0f9ff;border:1px solid #bae6fd;
         border-radius:10px;color:#0284c7;font-size:12px;font-weight:600;cursor:pointer;">🎯 Centriraj na moju poziciju</button>
