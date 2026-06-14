@@ -9737,19 +9737,37 @@ function _togRadiusRings() {
 }
 
 function _radiusNorthPt(la, lo, meters) {
-  return [la + meters / 111320, lo];
+  const R = 6378137;
+  const dLat = meters / R;
+  return [la + dLat * 180 / Math.PI, lo];
+}
+
+function _geodesicCirclePts(la, lo, radiusM, n) {
+  const R = 6378137;
+  const lat1 = la * Math.PI / 180;
+  const lon1 = lo * Math.PI / 180;
+  const d = radiusM / R;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const brng = (2 * Math.PI * i) / n;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+    const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    pts.push([lat2 * 180 / Math.PI, lon2 * 180 / Math.PI]);
+  }
+  return pts;
 }
 
 function _drawRadiusRings() {
   _clearRadiusRings();
   if (!_radiusOn || !lastP) return;
-  const center = [lastP.la, lastP.lo];
+  const la = lastP.la, lo = lastP.lo;
   _radiusDistances.forEach(r => {
-    const c = L.circle(center, {
-      radius: r, color: '#3b82f6', weight: 1, opacity: 0.45,
+    const pts = _geodesicCirclePts(la, lo, r, 72);
+    const c = L.polygon(pts, {
+      color: '#3b82f6', weight: 1, opacity: 0.45,
       fillColor: '#3b82f6', fillOpacity: 0.03, dashArray: '6,4', interactive: false
     }).addTo(map);
-    const lbl = L.marker(_radiusNorthPt(center[0], center[1], r), {
+    const lbl = L.marker(_radiusNorthPt(la, lo, r), {
       icon: L.divIcon({
         className: 'radius-label',
         html: `<span>${r >= 1000 ? (r/1000)+'km' : r+'m'}</span>`,
@@ -9762,13 +9780,13 @@ function _drawRadiusRings() {
 
 function _updateRadiusRings() {
   if (!_radiusOn || !lastP) return;
-  const center = [lastP.la, lastP.lo];
+  const la = lastP.la, lo = lastP.lo;
   let ci = 0;
   _radiusDistances.forEach(r => {
     const circle = _radiusCircles[ci]; ci++;
     const label = _radiusCircles[ci]; ci++;
-    if (circle) circle.setLatLng(center);
-    if (label) label.setLatLng(_radiusNorthPt(center[0], center[1], r));
+    if (circle) circle.setLatLngs(_geodesicCirclePts(la, lo, r, 72));
+    if (label) label.setLatLng(_radiusNorthPt(la, lo, r));
   });
 }
 
