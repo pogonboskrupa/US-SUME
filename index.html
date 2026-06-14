@@ -9737,13 +9737,13 @@ function _togRadiusRings() {
 }
 
 function _radiusNorthPt(la, lo, meters) {
-  const R = 6378137;
+  const R = 6371000;
   const dLat = meters / R;
   return [la + dLat * 180 / Math.PI, lo];
 }
 
 function _geodesicCirclePts(la, lo, radiusM, n) {
-  const R = 6378137;
+  const R = 6371000;
   const lat1 = la * Math.PI / 180;
   const lon1 = lo * Math.PI / 180;
   const d = radiusM / R;
