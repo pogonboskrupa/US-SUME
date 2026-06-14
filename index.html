@@ -479,27 +479,62 @@ input:focus { outline:none; border-color:#3b82f6; }
 /* Vlaka picker sheet */
 #vpicker-overlay {
   display:none; position:fixed; inset:0; z-index:9700;
-  background:rgba(0,0,0,0.55);
+  background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
 }
 #vlaka-picker {
   position:fixed; bottom:0; left:0; right:0; z-index:9800;
-  display:flex; flex-direction:column; max-height:75vh;
-  background:#0f172a; border-top:2px solid #374151;
-  border-radius:12px 12px 0 0; box-shadow:0 -4px 24px rgba(0,0,0,0.6);
-  transform:translateY(100%); transition:transform 0.25s cubic-bezier(0.32,0.72,0,1);
+  display:flex; flex-direction:column; max-height:78vh;
+  background:#0f172a;
+  border-radius:16px 16px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,0.5);
+  transform:translateY(100%); transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
 }
+.vpick-handle { width:36px;height:4px;border-radius:2px;background:#334155;margin:8px auto 0;flex-shrink:0; }
+.vpick-header { display:flex;align-items:center;padding:12px 16px 10px;flex-shrink:0; }
+.vpick-title { color:#f1f5f9;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px; }
+.vpick-close { margin-left:auto;background:rgba(255,255,255,0.06);border:none;color:#94a3b8;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s; }
+.vpick-close:hover { background:rgba(255,255,255,0.12);color:#e2e8f0; }
+.vpick-toolbar { padding:0 16px 8px;flex-shrink:0; }
 #vlaka-picker.open { transform:translateY(0); }
-.vpick-new { width:100%;background:#ea580c;color:#fff;border:none;border-radius:8px;padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px; }
-.vpick-new:hover { background:#c2410c; }
-.vpick-row { display:flex;align-items:center;gap:8px;background:#1e293b;border-radius:8px;padding:8px 10px;cursor:pointer;border:1px solid #334155; }
-.vpick-row:hover { background:#263548; }
-.vpick-rec { background:#059669;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap; }
+/* Action buttons (Nova, Nastavi, Nazad) */
+.vpick-action { width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:12px;padding:12px 14px;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:12px;transition:all 0.12s; }
+.vpick-action:hover { background:#263548; }
+.vpick-action:active { transform:scale(0.98); }
+.vpick-action-ico { width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0; }
+.vpick-action-txt { display:flex;flex-direction:column;gap:1px; }
+.vpick-action-txt b { font-size:13px;font-weight:700; }
+.vpick-action-txt span { font-size:11px;color:#64748b;font-weight:normal; }
+.vpick-action--new { border-color:#ea580c; }
+.vpick-action--new .vpick-action-ico { background:#431407;color:#fb923c; }
+.vpick-action--new:hover { border-color:#f97316;background:#1c1008; }
+.vpick-action--nastavi { border-color:#d97706; }
+.vpick-action--nastavi .vpick-action-ico { background:#451a03;color:#fbbf24; }
+.vpick-action--nastavi:hover { border-color:#fbbf24;background:#1a1303; }
+.vpick-action--back { border-color:#475569;padding:8px 14px; }
+.vpick-action--back .vpick-action-ico { width:28px;height:28px;font-size:20px;font-weight:bold;color:#94a3b8;background:none; }
+/* Section label */
+.vpick-sep-label { padding:6px 4px 2px;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:0.06em;font-weight:600; }
+/* Vlaka row */
+.vpick-row { display:flex;align-items:center;gap:10px;background:#1e293b;border-radius:12px;padding:10px 12px;cursor:pointer;border:1px solid transparent;transition:all 0.12s; }
+.vpick-row:hover { background:#263548;border-color:#334155; }
+.vpick-row:active { transform:scale(0.98); }
+.vpick-color { width:4px;min-height:36px;border-radius:2px;flex-shrink:0; }
+.vpick-info { flex:1;min-width:0; }
+.vpick-nm { color:#f1f5f9;font-size:13px;font-weight:600; }
+.vpick-meta { color:#64748b;font-size:11px;margin-top:1px; }
+.vpick-rec { background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.12s; }
 .vpick-rec:hover { background:#047857; }
-.vpick-search-row { padding:7px 10px 7px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;gap:6px;align-items:center; }
-.vpick-search-row input { flex:1;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:7px;padding:7px 10px;font-size:14px;font-family:monospace;outline:none; }
-.vpick-search-row input:focus { border-color:#38bdf8; }
-.vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap; }
+.vpick-rec:active { transform:scale(0.92); }
+.vpick-rec--nastavi { background:#92400e;color:#fbbf24; }
+.vpick-rec--nastavi:hover { background:#78350f; }
+/* Search row */
+.vpick-search-row { padding:0 16px 8px;flex-shrink:0;display:flex;gap:6px;align-items:center; }
+.vpick-search-row input { flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:10px;padding:9px 12px;font-size:14px;font-family:monospace;outline:none;transition:border-color 0.15s; }
+.vpick-search-row input:focus { border-color:#38bdf8;background:#0f172a; }
+.vpick-search-row button { background:#334155;color:#e2e8f0;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.12s; }
+.vpick-search-row button:hover { background:#475569; }
 .vpick-search-row button:active { background:#0ea5e9;color:#fff; }
+/* List */
+#vpicker-list { overflow-y:auto;flex:1;padding:4px 12px 12px;display:flex;flex-direction:column;gap:6px; }
 .vcard-elev { font-size:9px;color:#94a3b8;display:flex;gap:5px;flex-wrap:wrap;margin-top:0; }
 /* === Registar tragova === */
 #trag-reg-modal {
@@ -8604,16 +8639,18 @@ function _openVlakaPicker(mode) {
   updPrev();
 
   // Naslov pickera
-  document.querySelector('#vlaka-picker span').innerHTML =
-    isTrag ? '🔴 Odaberi vlaku za snimanje traga' : '<img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;">';
+  const titleEl = document.getElementById('vpick-title');
+  if (titleEl) titleEl.innerHTML = isTrag
+    ? '<span style="font-size:15px;">🔴</span> Snimi trag'
+    : '<img src="forwarder.svg" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;"> Snimi vlaku';
 
   const list = document.getElementById('vpicker-list');
   list.innerHTML = '';
 
-  // "Nova vlaka" gumb
+  // ── Sekcija 1: Nova vlaka ──
   const novBtn = document.createElement('button');
-  novBtn.className = 'vpick-new';
-  novBtn.innerHTML = `➕ Nova vlaka <b>T${nextBr}</b>`;
+  novBtn.className = 'vpick-action vpick-action--new';
+  novBtn.innerHTML = `<span class="vpick-action-ico">➕</span><div class="vpick-action-txt"><b>Nova vlaka T${nextBr}</b><span>Kreiraj i odmah pokreni snimanje</span></div>`;
   novBtn.onclick = () => {
     _closeVlakaPicker();
     if (isTrag) setTimeout(() => addV().then(() => { setTimeout(fabSnimTrag, 30); }), 260);
@@ -8621,38 +8658,88 @@ function _openVlakaPicker(mode) {
   };
   list.appendChild(novBtn);
 
-  // Postojeće vlake
+  // ── Sekcija 2: Nastavi vlaku/krak (samo u rec modu, ako postoje vlake s tačkama) ──
+  const nastavive = vlake.filter(v => v.pts.length > 0);
+  if (!isTrag && nastavive.length > 0) {
+    const nastaviBtn = document.createElement('button');
+    nastaviBtn.className = 'vpick-action vpick-action--nastavi';
+    nastaviBtn.innerHTML = `<span class="vpick-action-ico">↪</span><div class="vpick-action-txt"><b>Nastavi vlaku / krak</b><span>Odaberi tačku odakle nastavljaš</span></div>`;
+    nastaviBtn.onclick = () => {
+      // Prebaci listu u nastavi mod
+      _vpickerMode = 'nastavi';
+      const titleEl2 = document.getElementById('vpick-title');
+      if (titleEl2) titleEl2.innerHTML = '↪ Nastavi vlaku';
+      _renderVlakaList();
+    };
+    list.appendChild(nastaviBtn);
+  }
+
+  // ── Sekcija 3: Postojeće vlake ──
   if (vlake.length > 0) {
     const sep = document.createElement('div');
-    sep.style.cssText = 'padding:4px 2px;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-top:4px;';
-    sep.textContent = isTrag ? 'Ili snimi trag na postojećoj' : 'Ili nastavi snimanje postojeće';
+    sep.className = 'vpick-sep-label';
+    sep.textContent = isTrag ? 'Ili snimi trag na postojećoj' : 'Postojeće vlake';
     list.appendChild(sep);
-
-    vlake.forEach((v, i) => {
-      const row = document.createElement('div');
-      row.className = 'vpick-row';
-      row.dataset.nm = v.nm;
-      const d = fmtL(calcL(v.pts));
-      const elv = _elevHtml(v.pts);
-      const btnLbl = isTrag ? '🔴 Trag' : '▶ Snimi';
-      const pickFn = isTrag ? `_pickVlakaForTrag(${i})` : `_pickVlaka(${i})`;
-      row.innerHTML = `
-        <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
-        <div style="flex:1;min-width:0;">
-          <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
-          <div style="color:#64748b;font-size:11px;">${d}${elv ? ' · '+elv : ''} · ${v.pts.length} tač.</div>
-        </div>
-        <button class="vpick-rec" onclick="event.stopPropagation();${pickFn}">${btnLbl}</button>`;
-      row.onclick = () => isTrag ? _pickVlakaForTrag(i) : _pickVlaka(i);
-      list.appendChild(row);
-    });
+    _appendVlakaRows(list, isTrag);
   }
 
   document.getElementById('vlaka-picker').classList.add('open');
   document.getElementById('vpicker-overlay').style.display = 'block';
-  // Resetuj i fokusiraj search input
   const inp = document.getElementById('vpick-input');
-  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 320); }
+  if (inp) { inp.value = ''; _vpickFilter(); setTimeout(() => inp.focus(), 320); }
+}
+
+function _renderVlakaList() {
+  const list = document.getElementById('vpicker-list');
+  list.innerHTML = '';
+  const isNastavi = _vpickerMode === 'nastavi';
+
+  if (isNastavi) {
+    const backBtn = document.createElement('button');
+    backBtn.className = 'vpick-action vpick-action--back';
+    backBtn.innerHTML = `<span class="vpick-action-ico">‹</span><div class="vpick-action-txt"><b>Nazad</b></div>`;
+    backBtn.onclick = () => { _vpickerMode = 'rec'; _openVlakaPicker('rec'); };
+    list.appendChild(backBtn);
+
+    const sep = document.createElement('div');
+    sep.className = 'vpick-sep-label';
+    sep.textContent = 'Odaberi vlaku za nastavak';
+    list.appendChild(sep);
+  }
+
+  _appendVlakaRows(list, false);
+}
+
+function _appendVlakaRows(list, isTrag) {
+  const isNastavi = _vpickerMode === 'nastavi';
+  vlake.forEach((v, i) => {
+    if (isNastavi && v.pts.length === 0) return;
+    const row = document.createElement('div');
+    row.className = 'vpick-row';
+    row.dataset.nm = v.nm;
+    const d = fmtL(calcL(v.pts));
+    const elv = _elevHtml(v.pts);
+    let btnHtml, clickFn;
+    if (isNastavi) {
+      btnHtml = `<button class="vpick-rec vpick-rec--nastavi" onclick="event.stopPropagation();_pickNastaviVlaka(${i})">↪ Nastavi</button>`;
+      clickFn = () => _pickNastaviVlaka(i);
+    } else if (isTrag) {
+      btnHtml = `<button class="vpick-rec" onclick="event.stopPropagation();_pickVlakaForTrag(${i})">🔴 Trag</button>`;
+      clickFn = () => _pickVlakaForTrag(i);
+    } else {
+      btnHtml = `<button class="vpick-rec" onclick="event.stopPropagation();_pickVlaka(${i})">▶ Snimi</button>`;
+      clickFn = () => _pickVlaka(i);
+    }
+    row.innerHTML = `
+      <div class="vpick-color" style="background:${v.color};"></div>
+      <div class="vpick-info">
+        <div class="vpick-nm">${v.nm}</div>
+        <div class="vpick-meta">${d}${elv ? ' · '+elv : ''} · ${v.pts.length} tač.</div>
+      </div>
+      ${btnHtml}`;
+    row.onclick = clickFn;
+    list.appendChild(row);
+  });
 }
 
 function _closeVlakaPicker() {
@@ -8792,40 +8879,6 @@ async function _vpickGo() {
 // ─── Nastavi vlaku — odabir vlake i nastavak od tačke na karti ───────────────
 let _nastaviMarkers = [];
 let _nastaviVlakaIdx = null;
-
-function _openNastaviVlaku() {
-  if (recOn) { showToast('⚠ Prvo zaustavi trenutno snimanje'); return; }
-  if (!vlake.length) { showToast('Nema vlaka u projektu'); return; }
-  _vpickerMode = 'nastavi';
-  const list = document.getElementById('vpicker-list');
-  list.innerHTML = '';
-  document.querySelector('#vlaka-picker span').innerHTML = '↪ Odaberi vlaku za nastavak';
-
-  vlake.forEach((v, i) => {
-    if (v.pts.length === 0) return;
-    const row = document.createElement('div');
-    row.className = 'vpick-row';
-    row.dataset.nm = v.nm;
-    const d = fmtL(calcL(v.pts));
-    const elv = _elevHtml(v.pts);
-    row.innerHTML = `
-      <div style="width:4px;min-height:36px;background:${v.color};border-radius:2px;flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${v.nm}</div>
-        <div style="color:#64748b;font-size:11px;">${d}${elv ? ' · '+elv : ''} · ${v.pts.length} tač.</div>
-      </div>
-      <button class="vpick-rec" onclick="event.stopPropagation();_pickNastaviVlaka(${i})" style="background:#92400e;color:#fbbf24;">↪ Nastavi</button>`;
-    row.onclick = () => _pickNastaviVlaka(i);
-    list.appendChild(row);
-  });
-
-  if (!list.children.length) { showToast('Nema vlaka s tačkama'); return; }
-
-  document.getElementById('vlaka-picker').classList.add('open');
-  document.getElementById('vpicker-overlay').style.display = 'block';
-  const inp = document.getElementById('vpick-input');
-  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 320); }
-}
 
 function _pickNastaviVlaka(i) {
   _closeVlakaPicker();
@@ -14793,7 +14846,7 @@ function _updFabVisibility() {
   const spdField = typeof isSpdField === 'function' && isSpdField();
 
   if (!inRec && inTrag) {
-    show('brec', false); show('btrag', false); show('ab-nastavi', false); show('ab-izmjeri-wrap', false);
+    show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
     show('ab-kompas', false);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',false);
@@ -14806,13 +14859,12 @@ function _updFabVisibility() {
     const hasProj = !!_aktivniProjektId;
     const ro = typeof isReadOnly === 'function' && isReadOnly();
     if (spdField) {
-      show('brec', false); show('ab-nastavi', false);
+      show('brec', false);
       show('btrag', true);
       show('ab-izmjeri-wrap', true);
       show('ab-kompas', true);
     } else {
       show('brec',     hasProj && !ro);
-      show('ab-nastavi', hasProj && !ro);
       show('btrag',    !hasProj && !ro);
       show('ab-izmjeri-wrap', !hasProj && !ro);
       show('ab-kompas', false);
@@ -14823,7 +14875,7 @@ function _updFabVisibility() {
     return;
   }
 
-  show('brec', false); show('btrag', false); show('ab-nastavi', false); show('ab-izmjeri-wrap', false);
+  show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
   show('ab-kompas', false);
 
   if (isPaused) {
@@ -20448,20 +20500,23 @@ function toggleHelpSec(hdr) {
 <!-- VLAKA PICKER SHEET -->
 <div id="vpicker-overlay" onclick="_closeVlakaPicker()"></div>
 <div id="vlaka-picker">
-  <div style="padding:10px 14px 9px;border-bottom:1px solid #1e293b;display:flex;align-items:center;flex-shrink:0;">
-    <span style="color:#e2e8f0;font-size:13px;font-weight:600;"><img src="forwarder.svg" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;"></span>
-    <button onclick="_closeVlakaPicker()" style="margin-left:auto;background:none;border:none;color:#64748b;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
+  <div class="vpick-handle"></div>
+  <div class="vpick-header">
+    <span id="vpick-title" class="vpick-title"><img src="forwarder.svg" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;"> Snimi vlaku</span>
+    <button onclick="_closeVlakaPicker()" class="vpick-close">✕</button>
   </div>
-  <div style="padding:7px 12px 6px;border-bottom:1px solid #1e293b;flex-shrink:0;display:flex;align-items:center;gap:8px;">
-    <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja:</span>
-    <div class="colors" id="clrs" style="margin:0;flex:1;"></div>
+  <div class="vpick-toolbar">
+    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+      <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja:</span>
+      <div class="colors" id="clrs" style="margin:0;flex:1;"></div>
+    </div>
   </div>
   <div class="vpick-search-row">
     <input id="vpick-input" type="text" placeholder="Upiši broj (npr. 14 → T14)" autocomplete="off" inputmode="decimal"
            oninput="_vpickFilter()" onkeydown="if(event.key==='Enter')_vpickGo()">
-    <button onclick="_vpickGo()">→ Idi</button>
+    <button onclick="_vpickGo()">Idi</button>
   </div>
-  <div id="vpicker-list" style="overflow-y:auto;flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;"></div>
+  <div id="vpicker-list"></div>
 </div>
 
 <!-- === Omiljene karte modal === -->
@@ -20583,11 +20638,6 @@ function toggleHelpSec(hdr) {
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
     <span>Snimi vlaku</span>
     <span id="brec-nm">T1</span>
-  </button>
-  <button id="ab-nastavi" onclick="_openNastaviVlaku()" title="Nastavi postojeću vlaku" style="display:none;">
-    <span class="ab-ico" style="background:#fef3c7;color:#d97706;">↪</span>
-    <span>Nastavi</span>
-    <span style="font-size:8px;color:#94a3b8;">vlaku</span>
   </button>
   <button id="btrag" onclick="togSnimTrag()" title="Snimi GPS trag">
     <span class="ab-ico">🔴</span>
