@@ -1225,14 +1225,14 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* iOS-style toggle switch (Moja lokacija / GPS) */
 .gps-switch {
   position:relative; width:42px; height:24px; border-radius:12px;
-  background:#334155; transition:background 0.2s; flex-shrink:0;
+  background:#d1d5db; transition:background 0.2s; flex-shrink:0;
   display:inline-block; cursor:pointer;
 }
 .gps-switch.on { background:#22c55e; }
 .gps-switch-knob {
   position:absolute; top:2px; left:2px; width:20px; height:20px;
   border-radius:50%; background:#fff; transition:left 0.2s;
-  box-shadow:0 1px 3px rgba(0,0,0,0.4);
+  box-shadow:0 1px 3px rgba(0,0,0,0.25);
 }
 .gps-switch.on .gps-switch-knob { left:20px; }
 
@@ -2042,7 +2042,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   gap: 2px;
   justify-content: space-around;
 }
-#action-bar button, #ab-izmjeri-wrap {
+#action-bar button, #ab-izmjeri-wrap, #ab-loc-wrap {
   flex: 1;
   background: none;
   border: none;
@@ -6345,6 +6345,7 @@ function _izmjeriToggle() {
   if (!menu) return;
   const isOpen = menu.style.display !== 'none';
   menu.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) { const lp = document.getElementById('ab-loc-popup'); if (lp) lp.style.display = 'none'; }
 }
 function _izmjeriPick(mode) {
   const menu = document.getElementById('ab-izmjeri-menu');
@@ -8211,6 +8212,8 @@ document.addEventListener('click', e => {
   if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
   const sm = document.getElementById('scale-menu');
   if (sm && !sm.contains(e.target) && !e.target.closest('#map-scale-click')) sm.style.display = 'none';
+  const lp = document.getElementById('ab-loc-popup');
+  if (lp && !lp.contains(e.target) && !e.target.closest('#ab-loc-wrap')) lp.style.display = 'none';
 });
 
 // Keyboard shortcuts
@@ -9571,6 +9574,8 @@ function drawPreviewUpdate(latlng) {
 function _updGpsSwitch() {
   const sw = document.getElementById('gps-switch');
   if (sw) sw.classList.toggle('on', gpsOn);
+  const btn = document.getElementById('ab-loc');
+  if (btn) btn.style.color = gpsOn ? '#22c55e' : '';
 }
 function toggleGPS() {
   if (!gpsOn) startGPS(); else stopGPS();
@@ -10371,6 +10376,16 @@ function _tragRegDlGpx(id) {
   a.click();
 }
 
+function _toggleLocPopup() {
+  const p = document.getElementById('ab-loc-popup');
+  const opening = p.style.display === 'none';
+  p.style.display = opening ? 'block' : 'none';
+  if (opening) { const im = document.getElementById('ab-izmjeri-menu'); if (im) im.style.display = 'none'; }
+}
+function _locPopupCentriraj() {
+  document.getElementById('ab-loc-popup').style.display = 'none';
+  fabLokacija();
+}
 function fabLokacija() {
   if (lastP) {
     map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
@@ -19266,14 +19281,6 @@ function toggleHelpSec(hdr) {
   background:#16213e;border:1px solid #0f3460;border-radius:8px;
   min-width:220px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
   touch-action:manipulation;">
-  <div class="mdrop-item" id="gps-menu-item" onclick="event.stopPropagation();toggleGPS()" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-      <span>📡 Moja lokacija</span>
-      <span id="gps-info" style="color:#94a3b8;font-size:11px;font-weight:normal;">isključen</span>
-    </div>
-    <span class="gps-switch" id="gps-switch"><span class="gps-switch-knob"></span></span>
-  </div>
-  <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta</div>
@@ -20575,10 +20582,23 @@ function toggleHelpSec(hdr) {
       </button>
     </div>
   </div>
-  <button id="ab-loc" onclick="fabLokacija()" title="Centriranje na lokaciju">
-    <span class="ab-ico">🎯</span>
-    <span>Lokacija</span>
-  </button>
+  <div id="ab-loc-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
+    <button id="ab-loc" onclick="_toggleLocPopup()" title="Moja lokacija">
+      <span class="ab-ico">📡</span>
+      <span>Lokacija</span>
+    </button>
+    <div id="ab-loc-popup" style="display:none;position:absolute;bottom:calc(100% + 8px);left:50%;
+      transform:translateX(-50%);background:#fff;border:0.5px solid rgba(0,0,0,0.1);border-radius:14px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.04);padding:12px 16px;white-space:nowrap;z-index:9100;min-width:200px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;">
+        <span style="font-size:14px;font-weight:700;color:#1e293b;">📡 Moja lokacija</span>
+        <span class="gps-switch" id="gps-switch" onclick="toggleGPS()"><span class="gps-switch-knob"></span></span>
+      </div>
+      <div id="gps-info" style="font-size:11px;color:#64748b;margin-bottom:10px;">isključen</div>
+      <button onclick="_locPopupCentriraj()" style="width:100%;padding:9px;background:#f0f9ff;border:1px solid #bae6fd;
+        border-radius:10px;color:#0284c7;font-size:12px;font-weight:600;cursor:pointer;">🎯 Centriraj na moju poziciju</button>
+    </div>
+  </div>
   <button id="ab-kompas" onclick="togCompassCone()" title="Prikaži smjer na karti" style="display:none;">
     <span class="ab-ico">🧭</span>
     <span>Kompas</span>
