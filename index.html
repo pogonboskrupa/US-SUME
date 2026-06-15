@@ -3372,6 +3372,7 @@ select:focus { outline:none; border-color:#3b82f6; }
             <span style="font-size:9px;color:#64748b;opacity:0.8;">▼</span>
           </button>
           <div id="rec-stats">0 m · 0 tač.</div>
+          <span id="rec-signal" style="display:none;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px;white-space:nowrap;font-family:monospace;"></span>
           <div id="rec-slope" style="display:none;font-size:11px;font-weight:bold;margin-left:6px;font-family:monospace;"></div>
           <div id="wakelock-icon" title="Ekran ostaje uključen" style="display:none;font-size:13px;margin-left:6px;opacity:0.6;">🔒</div>
         </div>
@@ -3386,6 +3387,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
         <div id="rec-row2">
           <button class="rb pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
+          <button class="rb" id="btn-preciz" onclick="_precizTacka()" title="Precizna tačka (prosjek 10 fikseva)" style="background:#1e3a5f;color:#38bdf8;font-size:13px;min-width:32px;">📍</button>
           <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
@@ -3446,6 +3448,22 @@ select:focus { outline:none; border-color:#3b82f6; }
           <button class="mdp-btn done" onclick="stopActiveTool()" title="Završi editovanje">✓</button>
         </div>
         <div id="edp-hint">Povuci tačku za pomjeranje · tap između tačaka dodaje novu</div>
+        <div style="display:flex;gap:4px;margin-top:4px;">
+          <button class="mdp-btn" onclick="_smoothVlakaStart()" title="Ugladi GPS trag — uklanja zigzag" style="flex:1;background:#0f172a;color:#a78bfa;border:1px solid #6b21a8;font-size:11px;">🔧 Ugladi trag</button>
+        </div>
+        <div id="edp-smooth" style="display:none;margin-top:4px;background:#0f172a;border:1px solid #6b21a8;border-radius:6px;padding:6px 8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-size:11px;color:#a78bfa;white-space:nowrap;">Jačina:</span>
+            <input type="range" id="edp-smooth-eps" min="1" max="5" value="2" step="0.5" style="flex:1;accent-color:#a78bfa;"
+                   oninput="document.getElementById('edp-smooth-val').textContent=this.value+'m';_smoothVlakaPreview()">
+            <span id="edp-smooth-val" style="font-size:11px;color:#a78bfa;min-width:24px;">2m</span>
+          </div>
+          <div id="edp-smooth-info" style="font-size:10px;color:#94a3b8;margin-bottom:4px;"></div>
+          <div style="display:flex;gap:4px;">
+            <button class="mdp-btn done" onclick="_smoothVlakaApply()" style="flex:1;font-size:11px;">✓ Primijeni</button>
+            <button class="mdp-btn undo" onclick="_smoothVlakaCancel()" style="flex:1;font-size:11px;">✖ Otkaži</button>
+          </div>
+        </div>
       </div>
 
       <!-- Sakriveni elementi koje JS još koristi -->
@@ -8639,6 +8657,108 @@ function stopActiveTool() {
 // backward compat — called from rndList edit button
 function togEdit() { if(actI!==null) mtEditLine(); }
 
+// ─── POST-RECORDING UGLAČAVANJE (Douglas-Peucker za geo koordinate) ────────
+let _smoothPreviewLine = null;
+let _smoothOrigPts = null;
+
+function _dpSimplifyGeo(pts, epsM) {
+  if (pts.length <= 2) return pts;
+  const pld = (p, a, b) => {
+    const segLen = dst(a.la, a.lo, b.la, b.lo);
+    if (segLen < 0.01) return dst(p.la, p.lo, a.la, a.lo);
+    const t = Math.max(0, Math.min(1,
+      ((p.la-a.la)*(b.la-a.la)+(p.lo-a.lo)*(b.lo-a.lo)) /
+      ((b.la-a.la)**2+(b.lo-a.lo)**2)));
+    const projLa = a.la + t*(b.la-a.la);
+    const projLo = a.lo + t*(b.lo-a.lo);
+    return dst(p.la, p.lo, projLa, projLo);
+  };
+  let maxD = 0, maxI = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = pld(pts[i], pts[0], pts[pts.length-1]);
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxD > epsM) {
+    const L = _dpSimplifyGeo(pts.slice(0, maxI+1), epsM);
+    const R = _dpSimplifyGeo(pts.slice(maxI), epsM);
+    return [...L.slice(0,-1), ...R];
+  }
+  return [pts[0], pts[pts.length-1]];
+}
+
+function _removeOutliers(pts) {
+  if (pts.length < 3) return pts;
+  const dists = [];
+  for (let i = 1; i < pts.length - 1; i++) {
+    dists.push(dst(pts[i-1].la, pts[i-1].lo, pts[i+1].la, pts[i+1].lo) -
+               dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo) -
+               dst(pts[i].la, pts[i].lo, pts[i+1].la, pts[i+1].lo));
+  }
+  const median = [...dists].sort((a,b) => a-b)[Math.floor(dists.length/2)];
+  const mad = [...dists].map(d => Math.abs(d-median)).sort((a,b)=>a-b)[Math.floor(dists.length/2)] || 1;
+  const result = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const dev = Math.abs(pld(pts[i], pts[i-1], pts[i+1]));
+    if (dev < 15) result.push(pts[i]);
+  }
+  result.push(pts[pts.length-1]);
+  return result;
+  function pld(p, a, b) {
+    const segLen = dst(a.la, a.lo, b.la, b.lo);
+    if (segLen < 0.01) return dst(p.la, p.lo, a.la, a.lo);
+    const t = Math.max(0, Math.min(1,
+      ((p.la-a.la)*(b.la-a.la)+(p.lo-a.lo)*(b.lo-a.lo)) /
+      ((b.la-a.la)**2+(b.lo-a.lo)**2)));
+    return dst(p.la, p.lo, a.la+t*(b.la-a.la), a.lo+t*(b.lo-a.lo));
+  }
+}
+
+function _smoothVlakaStart() {
+  if (actI === null) return;
+  const v = vlake[actI];
+  if (v.pts.length < 3) { showToast('⚠ Premalo tačaka za uglačavanje'); return; }
+  _smoothOrigPts = v.pts.map(p => ({...p}));
+  document.getElementById('edp-smooth').style.display = '';
+  _smoothVlakaPreview();
+}
+
+function _smoothVlakaPreview() {
+  if (actI === null || !_smoothOrigPts) return;
+  const eps = parseFloat(document.getElementById('edp-smooth-eps').value);
+  let cleaned = _removeOutliers(_smoothOrigPts);
+  const simplified = _dpSimplifyGeo(cleaned, eps);
+  if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
+  _smoothPreviewLine = L.polyline(
+    simplified.map(p => [p.la, p.lo]),
+    { color: '#a78bfa', weight: 3, dashArray: '6 4', opacity: 0.9 }
+  ).addTo(map);
+  const info = document.getElementById('edp-smooth-info');
+  if (info) info.textContent = `${_smoothOrigPts.length} → ${simplified.length} tačaka (−${_smoothOrigPts.length - simplified.length})`;
+}
+
+function _smoothVlakaApply() {
+  if (actI === null || !_smoothOrigPts) return;
+  const eps = parseFloat(document.getElementById('edp-smooth-eps').value);
+  let cleaned = _removeOutliers(_smoothOrigPts);
+  const simplified = _dpSimplifyGeo(cleaned, eps);
+  const v = vlake[actI];
+  const removed = v.pts.length - simplified.length;
+  v.pts = simplified;
+  v.poly.setLatLngs(simplified.map(p => [p.la, p.lo]));
+  updateVlakaLabel(actI);
+  scheduleVlakaSave(actI);
+  _saveLocalVlake();
+  _smoothVlakaCancel();
+  rndList();
+  showToast(`✓ Uglačano: uklonjeno ${removed} tačaka`);
+}
+
+function _smoothVlakaCancel() {
+  if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
+  _smoothOrigPts = null;
+  document.getElementById('edp-smooth').style.display = 'none';
+}
+
 // === PREVIEW ===
 function updPrev() {
   const br = parseInt(document.getElementById('ibr').value)||1;
@@ -9834,6 +9954,12 @@ function _clearRadiusRings() {
   _radiusCircles = [];
 }
 
+function _initForestSwitch() {
+  const fs = document.getElementById('forest-switch');
+  if (fs) fs.classList.toggle('on', _forestMode);
+}
+setTimeout(_initForestSwitch, 100);
+
 function _updGpsSwitch() {
   const sw = document.getElementById('gps-switch');
   if (sw) sw.classList.toggle('on', gpsOn);
@@ -9841,8 +9967,71 @@ function _updGpsSwitch() {
   if (cs) cs.classList.toggle('on', _compassConeOn);
   const rs = document.getElementById('radius-switch');
   if (rs) rs.classList.toggle('on', _radiusOn);
+  const fs = document.getElementById('forest-switch');
+  if (fs) fs.classList.toggle('on', _forestMode);
   const btn = document.getElementById('ab-loc');
   if (btn) btn.style.color = gpsOn ? '#22c55e' : '';
+}
+
+// ─── GPS SIGNAL INDIKATOR u recording banneru ──────────────────────────
+function _updRecSignal(ac) {
+  const el = document.getElementById('rec-signal');
+  if (!el) return;
+  if (!recOn) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  let bg, col, txt;
+  if (ac <= 5) { bg = '#dcfce7'; col = '#16a34a'; txt = `±${Math.round(ac)}m`; }
+  else if (ac <= 10) { bg = '#fef9c3'; col = '#a16207'; txt = `±${Math.round(ac)}m`; }
+  else if (ac <= 15) { bg = '#ffedd5'; col = '#c2410c'; txt = `±${Math.round(ac)}m`; }
+  else { bg = '#fee2e2'; col = '#dc2626'; txt = `±${Math.round(ac)}m ✕`; }
+  el.style.background = bg;
+  el.style.color = col;
+  el.textContent = txt;
+}
+
+// ─── PRECIZNA TAČKA (accuracy-weighted prosjek N fikseva) ──────────────
+let _precizActive = false;
+let _precizBuf = [];  // [{la, lo, ac}]
+const _PRECIZ_N = 10;
+
+function _precizTacka() {
+  if (!recOn || recPaused || actI === null) { showToast('⚠ Snimanje mora biti aktivno'); return; }
+  if (_precizActive) return;
+  _precizActive = true;
+  _precizBuf = [];
+  const btn = document.getElementById('btn-preciz');
+  if (btn) { btn.textContent = '⏳'; btn.style.background = '#14532d'; btn.style.color = '#4ade80'; }
+  showToast(`📍 Stojte mirno — prikupljam ${_PRECIZ_N} fikseva...`);
+}
+
+function _precizCollect(la, lo, ac) {
+  if (!_precizActive) return;
+  _precizBuf.push({ la, lo, ac });
+  const btn = document.getElementById('btn-preciz');
+  if (btn) btn.textContent = `${_precizBuf.length}/${_PRECIZ_N}`;
+  if (_precizBuf.length >= _PRECIZ_N) {
+    _precizFinish();
+  }
+}
+
+function _precizFinish() {
+  _precizActive = false;
+  const btn = document.getElementById('btn-preciz');
+  if (btn) { btn.textContent = '📍'; btn.style.background = '#1e3a5f'; btn.style.color = '#38bdf8'; }
+  if (!_precizBuf.length || actI === null) return;
+  let sumW = 0, wLa = 0, wLo = 0;
+  _precizBuf.forEach(p => {
+    const w = 1 / (p.ac * p.ac);
+    wLa += p.la * w;
+    wLo += p.lo * w;
+    sumW += w;
+  });
+  const avgLa = wLa / sumW;
+  const avgLo = wLo / sumW;
+  const avgAc = Math.sqrt(1 / sumW);
+  addPt(actI, avgLa, avgLo, lastP ? lastP.al : 0);
+  showToast(`📍 Precizna tačka: ±${avgAc.toFixed(1)}m (${_precizBuf.length} fikseva)`);
+  _precizBuf = [];
 }
 function _togCompassSwitch() {
   togCompassCone();
@@ -9927,39 +10116,49 @@ window.addEventListener('deviceorientation', e => {
 // Android: deviceorientationabsolute
 window.addEventListener('deviceorientationabsolute', _onDeviceOrientation, true);
 
+// ─── ŠUMSKI MOD ─────────────────────────────────────────────────────────────
+let _forestMode = localStorage.getItem('tvlake_forest_mode') !== '0';
+
+function _togForestMode() {
+  _forestMode = !_forestMode;
+  localStorage.setItem('tvlake_forest_mode', _forestMode ? '1' : '0');
+  const sw = document.getElementById('forest-switch');
+  if (sw) sw.classList.toggle('on', _forestMode);
+  _kfReset();
+  showToast(_forestMode ? '🌲 Šumski mod uključen — strožije filtriranje' : '☀ Standardni mod — brži odziv');
+}
+
 // ─── GPS FILTER PARAMETRI ────────────────────────────────────────────
-const GPS_MIN_DIST  = 3;    // minimalni razmak između snimljenih tačaka (m) — 3m sprječava drift-kruž
-const GPS_MAX_ACC   = 15;   // maks. prihvatljiva GPS tačnost (m) — pod šumskom krošnjom 5–15m
-const GPS_MAX_JUMP  = 25;   // uzastopni skok (konsekutivni loši fiksevi) → reset Kalmana (m)
-const GPS_MAX_SPEED = 2.5;  // maks. brzina hodača po šumi (m/s ≈ 9 km/h)
-const GPS_MAX_TURN  = 90;   // maks. nagli zaokret (°) za bearing check
-const GPS_STILL_SPD = 0.3;  // m/s — ispod ove Kalman brzine → nuluj inerciju (nema drift-luka)
+const GPS_MIN_DIST  = 3;
+const GPS_MAX_ACC   = 15;
+const GPS_MAX_JUMP  = 25;
+const GPS_MAX_SPEED = 2.5;
+const GPS_STILL_SPD = 0.3;
+
+function _gpsMedN()    { return _forestMode ? 5 : 3; }
+function _gpsDistMul() { return _forestMode ? 0.5 : 0.35; }
+function _gpsMaxTurn() { return _forestMode ? 70 : 90; }
+function _gpsKfNoise() { return _forestMode ? 0.5 : 1.0; }
 
 // ─── KALMAN FILTER ───────────────────────────────────────────────────────────────────
-// Mjerni šum R = max(KF_MIN_R, acc) — pod krošnjom acc≈10–15m → R visok → Kalman
-// više vjeruje svojoj predikciji nego šumovitom GPS-u (sprječava zigzag).
-const KF_ACC_NOISE = 1.0;   // m/s² — procesni šum (ubrzanje hodača)
-const KF_MIN_R     = 2.5;   // m — minimalni mjerni šum; na čistini acc→1m ali ne prihvatamo direktno
+const KF_MIN_R     = 2.5;
 const MPDEG        = 111320; // ≈ metri po stepenu geografske širine
 
 let _kf          = null;   // Kalman state: {la,lo,vla,vlo,Pla,Plo,t}
 let _lastRecTime = 0;
 
 // ─── MEDIAN PRE-FILTER ──────────────────────────────────────────────────────────────────
-// Čuva zadnja GPS_MED_N prihvatljiva mjerenja i vraća MEDIJANU.
-// Medijana je otpornija na outlier spike-ove od prosjeka — jedan loš fix ne
-// može pomjeriti medijanu kad su preostala dva dobra.
-// Primjer: fiksevi na [0m, 0m, +12m spike] → medijana = 0m (spike eliminisan).
-const GPS_MED_N = 3;
+// Čuva zadnja _gpsMedN() prihvatljiva mjerenja i vraća MEDIJANU.
 let _gpsBuf = [];   // [{la, lo, ac}]
 
 function _gpsBufReset() { _gpsBuf = []; }
 
 function _gpsMedianPt(la, lo, ac) {
+  const N = _gpsMedN();
   _gpsBuf.push({ la, lo, ac });
-  if (_gpsBuf.length > GPS_MED_N) _gpsBuf.shift();
-  if (_gpsBuf.length < GPS_MED_N) return null;  // akumuliramo prve N-1 fikseva
-  const m = Math.floor(GPS_MED_N / 2);          // za N=3, m=1 (srednji element)
+  if (_gpsBuf.length > N) _gpsBuf.shift();
+  if (_gpsBuf.length < N) return null;
+  const m = Math.floor(N / 2);
   return {
     la: [..._gpsBuf].sort((a, b) => a.la - b.la)[m].la,
     lo: [..._gpsBuf].sort((a, b) => a.lo - b.lo)[m].lo,
@@ -9988,7 +10187,7 @@ function _kfStep(la, lo, ac, tMs) {
   // Predict
   const predLa = _kf.la + _kf.vla * dt;
   const predLo = _kf.lo + _kf.vlo * dt;
-  const qPos   = (KF_ACC_NOISE * dt * dt * 0.5) ** 2;
+  const qPos   = (_gpsKfNoise() * dt * dt * 0.5) ** 2;
   const Pla    = _kf.Pla + qPos / (MPDEG  * MPDEG);
   const Plo    = _kf.Plo + qPos / (mpdLo  * mpdLo);
 
@@ -10062,10 +10261,12 @@ function onP(p) {
 
   // Prikaz uvijek — pokaži brzinu ako je dostupna
   const speedKmh = (gpsSpeed != null && gpsSpeed >= 0) ? ` ${Math.round(gpsSpeed * 3.6)}km/h` : '';
-  const warmTxt  = (recOn && !recPaused && _gpsBuf.length > 0 && _gpsBuf.length < GPS_MED_N)
-    ? ` (GPS ${_gpsBuf.length}/${GPS_MED_N})` : '';
+  const warmTxt  = (recOn && !recPaused && _gpsBuf.length > 0 && _gpsBuf.length < _gpsMedN())
+    ? ` (GPS ${_gpsBuf.length}/${_gpsMedN()})` : '';
   document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m${speedKmh}${warmTxt}`;
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
+  _updRecSignal(ac);
+  _precizCollect(la, lo, ac);
   if (al != null) {
     _gpsAlt = true;
     const nvGpsTxt = Math.round(filtAl ?? al) + ' m 📡';
@@ -10125,10 +10326,10 @@ function onP(p) {
     if (dst(_kf.la, _kf.lo, la, lo) > maxAllowed) return;
   }
 
-  // 3. MEDIAN PRE-FILTER — uzima medijanu zadnja GPS_MED_N fikseva.
+  // 3. MEDIAN PRE-FILTER — uzima medijanu zadnja _gpsMedN() fikseva.
   //    Jedan loš fix (multipath) ne može pomjeriti medijanu kad su ostala dva dobra.
   const med = _gpsMedianPt(la, lo, ac);
-  if (!med) return;  // prvih GPS_MED_N-1 fikseva: buffer se puni
+  if (!med) return;  // prvih _gpsMedN()-1 fikseva: buffer se puni
 
   // 4. KATASTROFALNI SKOK NA MEDIJANI — ako i medijana skaci > GPS_MAX_JUMP, GPS lock-loss
   if (_kf && dst(_kf.la, _kf.lo, med.la, med.lo) > GPS_MAX_JUMP) {
@@ -10146,7 +10347,7 @@ function onP(p) {
     const distM = dst(last.la, last.lo, sla, slo);
 
     // 6. MIN RAZMAK — adaptivni: lošija tačnost zahtijeva veći pomak
-    const effectiveDist = Math.max(GPS_MIN_DIST, ac * 0.35);
+    const effectiveDist = Math.max(GPS_MIN_DIST, ac * _gpsDistMul());
     if (distM < effectiveDist) return;
 
     // 7. SPEED GATE — backup za slučaj da Doppler nije dostupan
@@ -10164,7 +10365,7 @@ function onP(p) {
       const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
       const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
       const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
-      if (turnDeg > GPS_MAX_TURN && distM < 15) return;
+      if (turnDeg > _gpsMaxTurn() && distM < 15) return;
     }
   }
 
@@ -21239,6 +21440,11 @@ function toggleHelpSec(hdr) {
         <span style="font-size:13px;font-weight:600;color:#1e293b;">⊚ Radijus</span>
         <span class="gps-switch" id="radius-switch" onclick="_togRadiusRings()"><span class="gps-switch-knob"></span></span>
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px;">
+        <span style="font-size:13px;font-weight:600;color:#1e293b;">🌲 Šumski mod</span>
+        <span class="gps-switch" id="forest-switch" onclick="_togForestMode()"><span class="gps-switch-knob"></span></span>
+      </div>
+      <div style="font-size:10px;color:#64748b;margin:-6px 0 10px 0;line-height:1.4;">Strožije filtriranje za bolju preciznost pod krošnjom</div>
       <button onclick="_locPopupCentriraj()" style="width:100%;padding:9px;background:#f0f9ff;border:1px solid #bae6fd;
         border-radius:10px;color:#0284c7;font-size:12px;font-weight:600;cursor:pointer;">🎯 Centriraj na moju poziciju</button>
     </div>
