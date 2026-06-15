@@ -2822,6 +2822,14 @@ select:focus { outline:none; border-color:#3b82f6; }
             <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape">📐 Fituj u prikaz</button>
             <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel">📐 Fituj u odjel</button>
           </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;cursor:pointer;flex:1;">
+              <input type="checkbox" id="refkarta-clip" onchange="_refToggleClip(this.checked)" style="width:14px;height:14px;accent-color:#38bdf8;">
+              ✂ Isijeci po odjelu
+            </label>
+            <button class="btn" id="refkarta-manfit-btn" style="flex:1;font-size:11px;background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+                    onclick="_refToggleManualFit()" title="Ručno razvuci sliku po uglovima i stranama">✋ Ručno fitovanje</button>
+          </div>
           <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
                   onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
             🎯 Precizno poravnaj na granicu odjela
@@ -11406,8 +11414,11 @@ function refKartaFitOdjel() {
   if (!graniceOdjeli.length) { showToast('⚠ Nema učitanog KML odjela'); return; }
   const b = graniceOdjeli[0].bounds;
   _refBounds = [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
+  _refClipToOdjel = true;
+  const cb = document.getElementById('refkarta-clip');
+  if (cb) cb.checked = true;
   _placeRefOverlay();
-  showToast('📐 Karta postavljena u granice odjela');
+  showToast('📐 Karta postavljena i isječena po odjelu');
 }
 
 // ─── Afina/sličnosna transformacija iz parova (imgPx → ciljni px) ─────────────
@@ -11506,6 +11517,117 @@ function _placeRefOverlay() {
   }
   const saveBtn = document.getElementById('refkarta-save-btn');
   if (saveBtn) saveBtn.style.display = '';
+  _refApplyClipPath();
+}
+
+// ─── Clip slike po poligonu odjela ─────────────────────────────────────────
+let _refClipToOdjel = false;
+
+function _refToggleClip(on) {
+  _refClipToOdjel = on;
+  _refApplyClipPath();
+}
+
+function _refApplyClipPath() {
+  if (!_refOverlay) return;
+  const el = _refOverlay.getElement ? _refOverlay.getElement() : _refOverlay._img;
+  if (!el) return;
+
+  if (!_refClipToOdjel || !_refBounds || !graniceOdjeli.length || !graniceOdjeli[0].ring) {
+    el.style.clipPath = '';
+    return;
+  }
+  const [[south, west], [north, east]] = _refBounds;
+  const ring = graniceOdjeli[0].ring;
+  const pts = ring.map(([lat, lon]) => {
+    const xP = ((lon - west) / (east - west) * 100).toFixed(2);
+    const yP = ((north - lat) / (north - south) * 100).toFixed(2);
+    return `${xP}% ${yP}%`;
+  });
+  el.style.clipPath = `polygon(${pts.join(',')})`;
+}
+
+// ─── Ručno fitovanje (drag handles na uglovima i stranama) ─────────────────
+let _refManualFitOn = false;
+let _refFitHandles = [];
+
+function _refToggleManualFit() {
+  _refManualFitOn = !_refManualFitOn;
+  if (_refManualFitOn) _refShowFitHandles();
+  else _refHideFitHandles();
+  const btn = document.getElementById('refkarta-manfit-btn');
+  if (btn) {
+    btn.style.background = _refManualFitOn ? '#14532d' : '#1e293b';
+    btn.style.color = _refManualFitOn ? '#4ade80' : '#94a3b8';
+    btn.style.borderColor = _refManualFitOn ? '#166534' : '#334155';
+  }
+}
+
+function _refShowFitHandles() {
+  _refHideFitHandles();
+  if (!_refBounds) { showToast('⚠ Prvo postavi sliku (Fituj)'); _refManualFitOn = false; return; }
+  const [[s,w],[n,e]] = _refBounds;
+  const defs = [
+    { pos:[n,w], t:'nw' }, { pos:[n,e], t:'ne' },
+    { pos:[s,e], t:'se' }, { pos:[s,w], t:'sw' },
+    { pos:[n,(w+e)/2], t:'n' }, { pos:[s,(w+e)/2], t:'s' },
+    { pos:[(n+s)/2,w], t:'w' }, { pos:[(n+s)/2,e], t:'e' }
+  ];
+  const cur = {nw:'nwse-resize',ne:'nesw-resize',se:'nwse-resize',sw:'nesw-resize',
+               n:'ns-resize',s:'ns-resize',w:'ew-resize',e:'ew-resize'};
+  defs.forEach(({pos, t}) => {
+    const isCorner = t.length === 2;
+    const mk = L.marker(pos, {
+      draggable: true,
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="width:${isCorner?14:10}px;height:${isCorner?14:10}px;background:${isCorner?'#38bdf8':'#a78bfa'};border:2px solid #fff;border-radius:${isCorner?2:5}px;cursor:${cur[t]};box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [isCorner?14:10, isCorner?14:10],
+        iconAnchor: [isCorner?7:5, isCorner?7:5]
+      })
+    }).addTo(map);
+    mk._fitType = t;
+    mk.on('drag', () => _refOnFitDrag(mk));
+    mk.on('dragend', () => _refOnFitDragEnd());
+    _refFitHandles.push(mk);
+  });
+}
+
+function _refOnFitDrag(mk) {
+  const ll = mk.getLatLng();
+  let [[s,w],[n,e]] = _refBounds;
+  switch(mk._fitType) {
+    case 'nw': n=ll.lat; w=ll.lng; break;
+    case 'ne': n=ll.lat; e=ll.lng; break;
+    case 'se': s=ll.lat; e=ll.lng; break;
+    case 'sw': s=ll.lat; w=ll.lng; break;
+    case 'n': n=ll.lat; break;
+    case 's': s=ll.lat; break;
+    case 'w': w=ll.lng; break;
+    case 'e': e=ll.lng; break;
+  }
+  _refBounds = [[s,w],[n,e]];
+  if (_refOverlay && _refOverlay.setBounds) {
+    _refOverlay.setBounds(L.latLngBounds([[s,w],[n,e]]));
+  }
+  _refApplyClipPath();
+  const posMap = {
+    nw:[n,w], ne:[n,e], se:[s,e], sw:[s,w],
+    n:[n,(w+e)/2], s:[s,(w+e)/2], w:[(n+s)/2,w], e:[(n+s)/2,e]
+  };
+  _refFitHandles.forEach(h => {
+    if (h._fitType !== mk._fitType) h.setLatLng(posMap[h._fitType]);
+  });
+}
+
+function _refOnFitDragEnd() {
+  _placeRefOverlay();
+  if (_refManualFitOn) _refShowFitHandles();
+}
+
+function _refHideFitHandles() {
+  _refFitHandles.forEach(mk => map.removeLayer(mk));
+  _refFitHandles = [];
 }
 
 function refKartaSetOpacity(v) {
@@ -11519,8 +11641,12 @@ function refKartaSetVisible(v) {
 
 function refKartaRemove() {
   if (_refCalibOn) _refCalibStop();
+  if (_refManualFitOn) { _refHideFitHandles(); _refManualFitOn = false; }
   if (_refOverlay) { map.removeLayer(_refOverlay); _refOverlay = null; }
   _refImg = null; _refBounds = null; _refCPs = [];
+  _refClipToOdjel = false;
+  const cb = document.getElementById('refkarta-clip');
+  if (cb) cb.checked = false;
   document.getElementById('refkarta-ctrl').style.display = 'none';
   document.getElementById('refkarta-file').value = '';
   const saveBtn = document.getElementById('refkarta-save-btn');
@@ -12059,6 +12185,35 @@ function _refKartaDoDetect(threshold, minLen, mode, targetColor, colorTol) {
     }
   }
 
+  // 2b. Mask outside odjel polygon + erode boundary strip
+  if (_refBounds && graniceOdjeli.length && graniceOdjeli[0].ring) {
+    const [[ms, mw], [mn, me]] = _refBounds;
+    const ring = graniceOdjeli[0].ring;
+    const mc = document.createElement('canvas');
+    mc.width = W; mc.height = H;
+    const mx = mc.getContext('2d');
+    mx.beginPath();
+    ring.forEach(([lat, lon], i) => {
+      const px = (lon - mw) / (me - mw) * W;
+      const py = (mn - lat) / (mn - ms) * H;
+      if (i === 0) mx.moveTo(px, py); else mx.lineTo(px, py);
+    });
+    mx.closePath();
+    mx.fillStyle = '#fff';
+    mx.fill();
+    mx.globalCompositeOperation = 'destination-out';
+    mx.lineWidth = Math.max(6, Math.round(W * 0.012));
+    mx.strokeStyle = '#fff';
+    mx.stroke();
+    const md = mx.getImageData(0, 0, W, H).data;
+    for (let i = 0; i < W * H; i++) {
+      if (md[i * 4 + 3] === 0) bin[i] = 0;
+    }
+  }
+
+  // 2c. Remove small connected components (text, numbers, kote)
+  _refRemoveSmallComponents(bin, W, H, Math.max(20, Math.round(W * 0.025)));
+
   // 3. Zhang-Suen morphological thinning → 1-pixel skeleton
   _zhangSuenThin(bin, W, H);
 
@@ -12092,6 +12247,38 @@ function _refKartaDoDetect(threshold, minLen, mode, targetColor, colorTol) {
   document.getElementById('refkarta-imp-count').textContent = `(${_refDetectedLines.length})`;
   document.getElementById('refkarta-imp-vis').checked = true;
   showToast(`✓ Detektovano ${_refDetectedLines.length} linija`);
+}
+
+// Remove small connected components from binary image (filters text, numbers, kote)
+function _refRemoveSmallComponents(bin, W, H, minArea) {
+  const labels = new Int32Array(W * H);
+  let nextLabel = 1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!bin[y*W+x] || labels[y*W+x]) continue;
+      const queue = [y*W+x];
+      labels[y*W+x] = nextLabel;
+      let head = 0;
+      while (head < queue.length) {
+        const idx = queue[head++];
+        const cx = idx % W, cy = (idx - cx) / W;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const nx = cx+dx, ny = cy+dy;
+            if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+              const ni = ny*W+nx;
+              if (bin[ni] && !labels[ni]) { labels[ni] = nextLabel; queue.push(ni); }
+            }
+          }
+        }
+      }
+      if (queue.length < minArea) {
+        for (let i = 0; i < queue.length; i++) bin[queue[i]] = 0;
+      }
+      nextLabel++;
+    }
+  }
 }
 
 // Zhang-Suen thinning algorithm (modifies bin[] in place)
