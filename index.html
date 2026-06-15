@@ -17053,9 +17053,15 @@ async function _demFetchGrid(bounds, res) {
   for (let i = 0; i < lats.length; i += batchSize) {
     const bLats = lats.slice(i, i + batchSize).join(',');
     const bLons = lons.slice(i, i + batchSize).join(',');
-    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLons}`);
-    const d = await r.json();
-    if (!Array.isArray(d.elevation)) throw new Error('API greška');
+    let r, d;
+    try {
+      const sig = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined;
+      r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLons}`, sig ? {signal:sig} : {});
+    } catch(err) {
+      throw new Error('Mrežna greška — provjerite konekciju');
+    }
+    try { d = await r.json(); } catch { throw new Error('Neispravan odgovor servera'); }
+    if (!Array.isArray(d.elevation)) throw new Error('Server nije vratio podatke o terenu');
     for (let j = 0; j < d.elevation.length; j++) elevArr[i + j] = d.elevation[j];
   }
   return { grid: elevArr, rows, cols, south: s, west: w, step, north: n, east: e };
@@ -17187,6 +17193,31 @@ function routeSuggestCancel() {
   if (btn) btn.classList.remove('active');
 }
 
+function _routeFallbackLine(startLL, endLL) {
+  const latlngs = [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]];
+  _routeLayer = L.polyline(latlngs, { color: '#a78bfa', weight: 4, opacity: 0.9, dashArray: '8,6' }).addTo(map);
+  map.fitBounds(_routeLayer.getBounds(), { padding: [40, 40] });
+  const totalDist = dst(startLL.lat, startLL.lng, endLL.lat, endLL.lng);
+  _routeLayer.bindPopup(`
+    <div style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:8px;min-width:180px;">
+      <div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:6px;">Ravna linija (bez DEM-a)</div>
+      <div style="font-size:12px;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;">
+        <span style="color:#94a3b8;">Dužina</span><span>${fmtL(totalDist)}</span>
+        <span style="color:#94a3b8;">Nagib</span><span style="color:#64748b;">—</span>
+      </div>
+      <div style="font-size:10px;color:#f59e0b;margin-top:6px;">⚠ Bez modela terena — preuzmite DEM za optimalnu trasu</div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button onclick="_routeToVlaka()" style="flex:1;padding:6px;background:#059669;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">📐 Kreiraj vlaku</button>
+        <button onclick="routeSuggestCancel()" style="padding:6px 10px;background:#475569;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+  `, { className: 'kml-info-popup', maxWidth: 280 }).openPopup();
+  _routeMode = false;
+  const btn = document.getElementById('route-suggest-btn');
+  if (btn) btn.classList.remove('active');
+  showToast(`✓ Ravna linija: ${fmtL(totalDist)} (bez DEM-a)`);
+}
+
 function _routeOnStartClick(e) {
   _routeStartLL = e.latlng;
   const m = L.circleMarker(e.latlng, { radius: 7, color: '#4ade80', fillColor: '#4ade80', fillOpacity: 1 }).addTo(map);
@@ -17208,10 +17239,18 @@ async function _routeOnEndClick(e) {
 
   let dem = await _demForBounds(bounds);
   if (!dem) {
-    if (!navigator.onLine) { showToast('⚠ Nema offline DEM-a — potrebna mreža'); routeSuggestCancel(); return; }
+    if (!navigator.onLine) {
+      const ok = await _dlgConfirm('⚠ Offline — DEM nije preuzet.\n\nPreuzmite model terena dok ste na mreži\n(Vlake panel → 🏔 DEM offline).\n\nNacrtati ravnu liniju start→kraj?');
+      if (ok) { _routeFallbackLine(_routeStartLL, endLL); return; }
+      routeSuggestCancel(); return;
+    }
     try {
       dem = await _demFetchGrid(bounds, _DEM_RES);
-    } catch(e) { showToast('⚠ Greška DEM: ' + e.message); routeSuggestCancel(); return; }
+    } catch(err) {
+      const ok = await _dlgConfirm(`⚠ ${err.message}\n\nNacrtati ravnu liniju start→kraj?`);
+      if (ok) { _routeFallbackLine(_routeStartLL, endLL); return; }
+      routeSuggestCancel(); return;
+    }
   }
 
   const path = _astarRoute(dem, _routeStartLL.lat, _routeStartLL.lng, endLL.lat, endLL.lng);
