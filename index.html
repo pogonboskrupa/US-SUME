@@ -2839,6 +2839,10 @@ select:focus { outline:none; border-color:#3b82f6; }
             🎯 Kalibriraj (kontrolne tačke)
           </button>
           <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="refkarta-calib-snap" checked onchange="_refCalibSnapChanged(this.checked)" style="width:14px;height:14px;accent-color:#22c55e;">
+            <span>📍 Veži na <b>broj odjela</b> (snap na centar)</span>
+          </label>
           <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
           <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
                  oninput="refKartaSetOpacity(this.value)">
@@ -11680,6 +11684,14 @@ function _refLatLngToImgPx(latlng) {
   return null;
 }
 
+let _refCalibSnap = true;       // veži ciljni klik na centar najbližeg odjela
+let _refSnapTargetLayer = null; // markeri centara odjela tokom kalibracije
+
+function _refCalibSnapChanged(on) {
+  _refCalibSnap = on;
+  if (_refCalibOn) _refShowSnapTargets();
+}
+
 function _refCalibToggle() {
   if (_refCalibOn) _refCalibStop(); else _refCalibStart();
 }
@@ -11693,12 +11705,14 @@ function _refCalibStart() {
   _refCalibRedrawMarkers();
   map.on('click', _refCalibClick);
   _refOverlay.setOpacity(0.55);
+  _refShowSnapTargets();
   _refCalibUpdateUI();
 }
 function _refCalibStop() {
   _refCalibOn = false;
   _refCalibTmp = null;
   map.off('click', _refCalibClick);
+  _refHideSnapTargets();
   // Vrati providnost na vrijednost slidera
   const opaEl = document.getElementById('refkarta-opa');
   if (_refOverlay && opaEl) _refOverlay.setOpacity(parseInt(opaEl.value)/100);
@@ -11715,8 +11729,18 @@ function _refCalibClick(e) {
       .addTo(_refCalibLayer);
     _refCalibStage = 'map';
   } else {
-    // Zeleni marker = gdje stvarno treba
-    _refCPs.push({ imgX:_refCalibTmp.imgX, imgY:_refCalibTmp.imgY, lat:e.latlng.lat, lng:e.latlng.lng });
+    // Zeleni marker = gdje stvarno treba. Ako je snap uključen, veži na centar odjela.
+    let lat = e.latlng.lat, lng = e.latlng.lng;
+    if (_refCalibSnap) {
+      const od = _refNearestOdjel(e.latlng);
+      if (od) {
+        lat = od.c[0]; lng = od.c[1];
+        showToast(`📍 Vezano na centar odjela: ${od.name}`);
+      } else {
+        showToast('⚠ Nema odjela za snap — uzeta tačka klika');
+      }
+    }
+    _refCPs.push({ imgX:_refCalibTmp.imgX, imgY:_refCalibTmp.imgY, lat, lng });
     _refCalibTmp = null;
     _refCalibStage = 'img';
     _placeRefOverlay();
@@ -11724,6 +11748,68 @@ function _refCalibClick(e) {
     _refCalibRedrawMarkers();
   }
   _refCalibUpdateUI();
+}
+
+// Centroid odjela (poklapa se s pozicijom broja-labela na topo karti)
+function _refOdjelCentroid(od) {
+  if (od.ring && od.ring.length) return _coordsCentroid(od.ring);
+  if (od.bounds) { const c = od.bounds.getCenter(); return [c.lat, c.lng]; }
+  return null;
+}
+
+// Ray-casting: da li je tačka unutar poligona (ring = [[lat,lng],...])
+function _refPointInRing(lat, lng, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const yi = ring[i][0], xi = ring[i][1];
+    const yj = ring[j][0], xj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) &&
+        (lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+// Nađi odjel u kojem je klik (ili najbliži po centru); vrati {name, c:[lat,lng]}
+function _refNearestOdjel(latlng) {
+  if (!graniceOdjeli.length) return null;
+  // 1) Odjel koji sadrži tačku
+  for (const od of graniceOdjeli) {
+    if (od.ring && od.ring.length > 2 && _refPointInRing(latlng.lat, latlng.lng, od.ring)) {
+      const c = _refOdjelCentroid(od);
+      if (c) return { name: od.name || '?', c };
+    }
+  }
+  // 2) Inače najbliži centar
+  let best = null, bestD = Infinity;
+  for (const od of graniceOdjeli) {
+    const c = _refOdjelCentroid(od);
+    if (!c) continue;
+    const d = (c[0]-latlng.lat)**2 + (c[1]-latlng.lng)**2;
+    if (d < bestD) { bestD = d; best = { name: od.name || '?', c }; }
+  }
+  return best;
+}
+
+// Prikaži centre svih odjela kao snap-ciljeve tokom kalibracije
+function _refShowSnapTargets() {
+  _refHideSnapTargets();
+  if (!_refCalibSnap || !graniceOdjeli.length) return;
+  _refSnapTargetLayer = L.layerGroup().addTo(map);
+  graniceOdjeli.forEach(od => {
+    const c = _refOdjelCentroid(od);
+    if (!c) return;
+    L.marker(c, {
+      pane:'refKarte', interactive:false,
+      icon: L.divIcon({ className:'', iconSize:[null,null], iconAnchor:[0,0],
+        html:`<div style="transform:translate(-50%,-50%);display:flex;align-items:center;gap:3px;white-space:nowrap;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;border:1.5px solid #fff;box-shadow:0 0 3px rgba(0,0,0,0.7);"></span>
+                <span style="font-size:10px;font-weight:700;color:#fbbf24;text-shadow:0 0 3px #000,0 0 3px #000;">${od.name||''}</span>
+              </div>` })
+    }).addTo(_refSnapTargetLayer);
+  });
+}
+function _refHideSnapTargets() {
+  if (_refSnapTargetLayer) { map.removeLayer(_refSnapTargetLayer); _refSnapTargetLayer = null; }
 }
 function _refCalibRedrawMarkers() {
   if (!_refCalibLayer) return;
@@ -11758,9 +11844,13 @@ function _refCalibUpdateUI() {
     hint.style.display = '';
     const n = _refCPs.length;
     if (_refCalibStage === 'img')
-      hint.innerHTML = `<b style="color:#38bdf8;">Korak 1:</b> klikni prepoznatljivu tačku <b>na slici</b> (raskrsnica, ugao odjela…). <span style="color:#64748b;">Tačaka: ${n}</span>`;
+      hint.innerHTML = _refCalibSnap
+        ? `<b style="color:#38bdf8;">Korak 1:</b> klikni <b>broj odjela na slici</b> (npr. „14"). <span style="color:#64748b;">Tačaka: ${n}</span>`
+        : `<b style="color:#38bdf8;">Korak 1:</b> klikni prepoznatljivu tačku <b>na slici</b> (raskrsnica, ugao odjela…). <span style="color:#64748b;">Tačaka: ${n}</span>`;
     else
-      hint.innerHTML = `<b style="color:#22c55e;">Korak 2:</b> klikni gdje ta tačka <b>stvarno treba biti</b> na karti.`;
+      hint.innerHTML = _refCalibSnap
+        ? `<b style="color:#22c55e;">Korak 2:</b> klikni na <b>isti odjel na karti</b> — automatski se veže na njegov centar (🟠).`
+        : `<b style="color:#22c55e;">Korak 2:</b> klikni gdje ta tačka <b>stvarno treba biti</b> na karti.`;
   }
 }
 
