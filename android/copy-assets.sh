@@ -1,0 +1,37 @@
+#!/bin/bash
+# Kopira web fajlove u android/app/src/main/assets/
+# Pokrenuti iz korijenskog direktorija projekta: bash android/copy-assets.sh
+
+set -e
+
+ASSETS_DIR="android/app/src/main/assets"
+
+rm -rf "$ASSETS_DIR"
+mkdir -p "$ASSETS_DIR"
+mkdir -p "$ASSETS_DIR/geo"
+mkdir -p "$ASSETS_DIR/doznaka"
+mkdir -p "$ASSETS_DIR/PUTEVI"
+mkdir -p "$ASSETS_DIR/static"
+
+# Glavni fajlovi
+cp index.html "$ASSETS_DIR/"
+cp manifest.json "$ASSETS_DIR/"
+cp sw.js "$ASSETS_DIR/"
+
+# Ikone
+cp icon-192.png "$ASSETS_DIR/"
+cp icon-512.png "$ASSETS_DIR/"
+cp apple-touch-icon.png "$ASSETS_DIR/"
+cp forwarder.png "$ASSETS_DIR/" 2>/dev/null || true
+cp forwarder.svg "$ASSETS_DIR/" 2>/dev/null || true
+cp "FORVARDER IKONA.png" "$ASSETS_DIR/" 2>/dev/null || true
+
+# GeoJSON / KML podaci
+cp GRANICE.kml "$ASSETS_DIR/" 2>/dev/null || true
+cp -r geo/* "$ASSETS_DIR/geo/" 2>/dev/null || true
+cp -r doznaka/* "$ASSETS_DIR/doznaka/" 2>/dev/null || true
+cp -r PUTEVI/* "$ASSETS_DIR/PUTEVI/" 2>/dev/null || true
+cp -r static/* "$ASSETS_DIR/static/" 2>/dev/null || true
+
+echo "Assets kopirani u $ASSETS_DIR/"
+echo "Ukupna velicina: $(du -sh $ASSETS_DIR | cut -f1)"
