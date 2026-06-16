@@ -30,6 +30,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 
+/* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
+.leaflet-tile-container { will-change: transform; }
+.leaflet-tile { will-change: auto; backface-visibility: hidden; }
+.leaflet-zoom-animated { will-change: transform; }
+.leaflet-map-pane { will-change: transform; }
+.leaflet-tile-pane { will-change: transform; }
+
 /* === AUTH SCREEN === */
 #auth-screen {
   display:none; position:fixed; inset:0; z-index:99999;
@@ -7566,6 +7573,11 @@ function makeCachedTileLayer(cacheName) {
       const tile = document.createElement('img');
       tile.setAttribute('role', 'presentation');
       const url = this.getTileUrl(coords);
+      function setBlobSrc(blob) {
+        const u = URL.createObjectURL(blob);
+        tile.onload = tile.onerror = () => { URL.revokeObjectURL(u); done(null, tile); };
+        tile.src = u;
+      }
       if (!('caches' in window)) {
         tile.onload = () => done(null, tile);
         tile.onerror = e => done(e, tile);
@@ -7573,16 +7585,12 @@ function makeCachedTileLayer(cacheName) {
       }
       caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
-        if (cached) {
-          tile.src = URL.createObjectURL(await cached.blob());
-          done(null, tile); return;
-        }
+        if (cached) { setBlobSrc(await cached.blob()); return; }
         try {
           const resp = await fetch(url, { mode: 'cors' });
           if (resp.ok) {
             await cache.put(url, resp.clone());
-            tile.src = URL.createObjectURL(await resp.blob());
-            done(null, tile);
+            setBlobSrc(await resp.blob());
           } else { throw new Error(); }
         } catch {
           tile.onload = () => done(null, tile);
@@ -7610,7 +7618,21 @@ try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
   if (_lp?.la && _lp?.lo && _lp?.z) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
-const map = L.map('map',{zoomControl:false,attributionControl:false}).setView(_initMapCenter, _initMapZoom);
+const map = L.map('map',{
+  zoomControl:false,
+  attributionControl:false,
+  fadeAnimation:false,
+  zoomAnimation:true,
+  zoomAnimationThreshold:4,
+  markerZoomAnimation:false,
+  inertia:true,
+  inertiaDeceleration:3000,
+  inertiaMaxSpeed:3000,
+  wheelDebounceTime:40,
+  wheelPxPerZoomLevel:90,
+  tap:true,
+  tapTolerance:15
+}).setView(_initMapCenter, _initMapZoom);
 map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
 let _appStarted = false;
@@ -7623,9 +7645,9 @@ map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.svg({ pane: 'putevi' });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c']}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';

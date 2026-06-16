@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
         }
 
         webView = new WebView(this);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         setContentView(webView);
 
         hideSystemUI();
