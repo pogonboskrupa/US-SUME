@@ -828,8 +828,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 #manual-draw-panel {
   position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
   z-index:950; width:min(380px, calc(100vw - 24px));
-  background:rgba(255,255,255,0.94);
-  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  background:rgba(255,255,255,0.97);
   border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
   box-shadow:0 8px 32px rgba(0,0,0,0.18);
   overflow:hidden;
@@ -859,8 +858,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 #edit-panel {
   position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
   z-index:950; width:min(380px, calc(100vw - 24px));
-  background:rgba(255,255,255,0.94);
-  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  background:rgba(255,255,255,0.97);
   border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
   box-shadow:0 8px 32px rgba(0,0,0,0.18);
   overflow:hidden;
@@ -2080,9 +2078,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  background: rgba(255,255,255,0.95);
   border-top: 0.5px solid rgba(0,0,0,0.12);
   box-shadow: 0 -1px 0 rgba(0,0,0,0.04), 0 -4px 16px rgba(0,0,0,0.06);
   padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
@@ -2168,7 +2164,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* ── Tačka nav panel ── */
 #tacka-nav-panel {
   display:none;position:fixed;left:0;right:0;bottom:0;z-index:1700;
-  background:rgba(10,17,31,0.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  background:rgba(10,17,31,0.97);
   border-top:2px solid #1e3a5f;padding:10px 14px 12px;
   flex-direction:row;align-items:center;gap:12px;
   box-shadow:0 -4px 20px rgba(0,0,0,0.6);
@@ -8228,11 +8224,17 @@ map.on('dragstart', () => {
   if ((recOn && !recPaused) || _tragOn) _setFreeView(true);
 });
 
-// Ažuriraj N.V. i GPS distancu pri pomicanju karte
+// Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
+let _moveRafPending = false;
 map.on('move', () => {
-  _updMcdDist();
-  const c = map.getCenter();
-  updMGI(c.lat, c.lng);
+  if (_moveRafPending) return;
+  _moveRafPending = true;
+  requestAnimationFrame(() => {
+    _moveRafPending = false;
+    _updMcdDist();
+    const c = map.getCenter();
+    updMGI(c.lat, c.lng);
+  });
 });
 map.on('moveend', () => {
   const c = map.getCenter();
@@ -8268,21 +8270,24 @@ function _updMapScale() {
   // try-catch: _tragRegistry/Layers su let-deklarirani niže u fajlu (TDZ pri init pozivu)
   try {
     const hideFT = closest > 25000;
-    [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
-      if (!f.marker) return;
-      if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
-      else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
-    });
-    (_tragRegistry||[]).forEach(t => {
-      const layer = (_tragLayers||{})[t.id];
-      if (!layer) return;
-      if (hideFT && map.hasLayer(layer)) map.removeLayer(layer);
-      else if (!hideFT && !map.hasLayer(layer) && t.visible !== false) map.addLayer(layer);
-    });
+    if (hideFT !== _prevHideFT) {
+      _prevHideFT = hideFT;
+      [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
+        if (!f.marker) return;
+        if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
+        else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
+      });
+      (_tragRegistry||[]).forEach(t => {
+        const layer = (_tragLayers||{})[t.id];
+        if (!layer) return;
+        if (hideFT && map.hasLayer(layer)) map.removeLayer(layer);
+        else if (!hideFT && !map.hasLayer(layer) && t.visible !== false) map.addLayer(layer);
+      });
+    }
   } catch(e) {}
 }
+let _prevHideFT = false;
 map.on('zoomend', _updMapScale);
-map.on('moveend', _updMapScale);
 
 // === IZBOR RAZMJERE (klik na badge) ===
 function toggleScaleMenu(e) {
