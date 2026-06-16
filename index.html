@@ -20161,6 +20161,28 @@ function toggleHelpSec(hdr) {
   const open  = body.classList.toggle('open');
   if (open) arrow.classList.add('open'); else arrow.classList.remove('open');
 }
+
+// === ANDROID APK DOWNLOAD BRIDGE ===
+// WebView ne podržava <a download>.click() za blob: URL-ove.
+// Interceptujemo klik i šaljemo podatke Android-u preko JavascriptInterface.
+if (typeof AndroidDownload !== 'undefined') {
+  (function() {
+    const origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function() {
+      if (this.download && this.href && this.href.startsWith('blob:')) {
+        const filename = this.download || 'download';
+        fetch(this.href).then(r => r.blob()).then(blob => {
+          const reader = new FileReader();
+          reader.onload = () => AndroidDownload.save(filename, reader.result);
+          reader.readAsDataURL(blob);
+        }).catch(() => origClick.call(this));
+        return;
+      }
+      origClick.call(this);
+    };
+  })();
+}
+
 </script>
 
 <!-- MENI DROPDOWN — direktno u body da izbjegne sve stacking context probleme -->
