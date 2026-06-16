@@ -3,4 +3,6 @@
     <!-- Tema aplikacije — identično manifest.json theme_color i background_color -->
     <color name="colorPrimary">#16213e</color>
     <color name="colorBackground">#0f172a</color>
+    <!-- Splash pozadina = zelena iz logoa -->
+    <color name="colorSplash">#376638</color>
 </resources>

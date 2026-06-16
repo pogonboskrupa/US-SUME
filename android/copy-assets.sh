@@ -12,6 +12,7 @@ mkdir -p "$ASSETS_DIR/geo"
 mkdir -p "$ASSETS_DIR/doznaka"
 mkdir -p "$ASSETS_DIR/PUTEVI"
 mkdir -p "$ASSETS_DIR/static"
+mkdir -p "$ASSETS_DIR/.well-known"
 
 # Glavni fajlovi
 cp index.html "$ASSETS_DIR/"
@@ -32,6 +33,7 @@ cp -r geo/* "$ASSETS_DIR/geo/" 2>/dev/null || true
 cp -r doznaka/* "$ASSETS_DIR/doznaka/" 2>/dev/null || true
 cp -r PUTEVI/* "$ASSETS_DIR/PUTEVI/" 2>/dev/null || true
 cp -r static/* "$ASSETS_DIR/static/" 2>/dev/null || true
+cp -r .well-known/* "$ASSETS_DIR/.well-known/" 2>/dev/null || true
 
 echo "Assets kopirani u $ASSETS_DIR/"
 echo "Ukupna velicina: $(du -sh $ASSETS_DIR | cut -f1)"
