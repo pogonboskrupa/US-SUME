@@ -17398,7 +17398,7 @@ function _routeToVlaka() {
 // Crash-guard: ako učitavanje sruši tab, sljedeće otvaranje automatski briše IDB.
 // ─────────────────────────────────────────────────────────────────────────────
 let _sqlLayers = [];
-const _SQL_LARGE     = 100 * 1024 * 1024;
+const _SQL_LARGE     = 20 * 1024 * 1024;
 const _SQL_CRASH_KEY = 'tvlake_sqlmap_loading';
 const _SQLJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
 const _S3_CDN        = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.46.1-build1/sqlite-wasm/jswasm/';
@@ -17934,6 +17934,13 @@ self.onmessage = async ({data:msg}) => {
       await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       self.postMessage({id,ok:true});
     }
+    else if (msg.type === 'load-file') {
+      const mini = new MiniSqlite(msg.file);
+      const {fmt, meta} = await mini.init();
+      if (!fmt) throw new Error('unknown-format');
+      dbs[msg.name] = {mini, fmt, engine:'custom'};
+      self.postMessage({id, ok:true, fmt, meta});
+    }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
       await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
@@ -18077,7 +18084,8 @@ async function sqlmapLoadFile(file) {
       const dI=r.meta?._d?' ['+r.meta._d+']':'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
     } else if (isLarge) {
-      throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije dostupan — pokušaj u Chrome/Edge.');
+      _sqlmapStatus('⏳ Otvaranje velike karte (' + (file.size/1024/1024|0) + ' MB)...');
+      await _sqlmapLoadDirect(file, name);
     } else {
       _sqlmapStatus('⏳ Čitam fajl...');
       const buf = await file.arrayBuffer();
@@ -18098,6 +18106,18 @@ async function sqlmapLoadFile(file) {
     _sqlmapStatus('❌ Greška: ' + (e.message||e));
     console.error('sqlmapLoadFile', e);
   }
+}
+
+async function _sqlmapLoadDirect(file, name) {
+  const r = await _sqlWCall({type:'load-file', name, file});
+  if (!r.ok) throw new Error(r.error);
+  const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
+  layer.addTo(map);
+  _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
+  _sqlmapMetaAutoZoom(r.meta);
+  const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
+  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, direktno)' + zI);
+  _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
