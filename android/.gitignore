@@ -1,0 +1,16 @@
+# Build outputs
+/build/
+/app/build/
+/.gradle/
+/local.properties
+
+# Assets su kopija web fajlova - generišu se sa copy-assets.sh
+/app/src/main/assets/
+
+# Signing
+*.jks
+*.keystore
+
+# IDE
+/.idea/
+*.iml

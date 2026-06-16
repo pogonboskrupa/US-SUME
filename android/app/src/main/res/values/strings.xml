@@ -1,17 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ŠPD USS Vlake</string>
-
-    <!--
-        OBAVEZNO: Promijenite u stvarni URL gdje je aplikacija hostvovana.
-        Primjer za GitHub Pages: https://pogonboskrupa.github.io/Projektovanje-traktorskih-vlaka/
-        Primjer za vlastiti server: https://vlake.spd-uss.ba/
-    -->
-    <string name="app_url">https://VASA-DOMENA.ba/</string>
-
-    <!--
-        Host (bez https:// i bez trailing slash) — mora odgovarati app_url.
-        Koristi se u AndroidManifest.xml za Digital Asset Links verifikaciju.
-    -->
-    <string name="app_host">VASA-DOMENA.ba</string>
 </resources>
