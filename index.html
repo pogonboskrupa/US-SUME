@@ -32,10 +32,11 @@
 
 /* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
 .leaflet-tile-container { will-change: transform; }
-.leaflet-tile { will-change: auto; backface-visibility: hidden; }
+.leaflet-tile { will-change: auto; backface-visibility: hidden; opacity:0; transition: opacity 0.15s linear; }
+.leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
-.leaflet-tile-pane { will-change: transform; }
+.leaflet-tile-pane { will-change: transform; background: #2d3a2e; }
 
 /* === AUTH SCREEN === */
 #auth-screen {
@@ -1402,7 +1403,8 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .proj-card:hover { border-color:#3b82f6; }
 .proj-card.aktivan { border-color:#4ade80; background:rgba(74,222,128,0.06); }
-.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:36px; }
+.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:40px; }
+.proj-card.aktivan .proj-card-title { padding-right:80px; }
 .proj-card-sub { font-size:11px; color:#64748b; line-height:1.6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
 .proj-card-vchip { display:inline-block; font-size:10px; color:#4ade80; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.25); border-radius:4px; padding:1px 6px; margin-top:3px; }
@@ -1413,6 +1415,13 @@ select:focus { outline:none; border-color:#3b82f6; }
   display:flex; align-items:center; justify-content:center; line-height:1;
 }
 .proj-card-akt:active { background:#1e3a5f; }
+.proj-card-rec {
+  position:absolute; right:44px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4);
+  color:#ef4444; border-radius:7px; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; line-height:1;
+}
+.proj-card-rec:active { background:rgba(239,68,68,0.3); }
 #proj-search {
   width:100%; padding:8px 11px; background:rgba(15,23,42,0.8);
   border:1px solid #1e3a5f; border-radius:7px; color:#e2e8f0; font-size:13px;
@@ -4409,8 +4418,11 @@ function _renderProjGroup(list) {
       const aktBtn = (!isAkt && !ro)
         ? `<button class="proj-card-akt" onclick="event.stopPropagation();aktivirajProjekt('${p.id}')" title="Aktiviraj projekat">⚡</button>`
         : '';
+      const recBtn = (isAkt && !ro)
+        ? `<button class="proj-card-rec" onclick="event.stopPropagation();_projQuickRec()" title="Snimi vlaku">🔴</button>`
+        : '';
       html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
-        ${aktBtn}
+        ${recBtn}${aktBtn}
         <div class="proj-card-title">
           ${p.odjel || '—'}
           ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
@@ -7571,14 +7583,16 @@ function makeCachedTileLayer(cacheName) {
       const url = this.getTileUrl(coords);
       function setBlobSrc(blob) {
         const u = URL.createObjectURL(blob);
-        tile.onload = tile.onerror = () => { URL.revokeObjectURL(u); done(null, tile); };
+        tile.onload = () => { URL.revokeObjectURL(u); tile.classList.add('leaflet-tile-loaded'); done(null, tile); };
+        tile.onerror = () => { URL.revokeObjectURL(u); done(null, tile); };
         tile.src = u;
       }
-      if (!('caches' in window)) {
-        tile.onload = () => done(null, tile);
+      function setDirectSrc() {
+        tile.onload = () => { tile.classList.add('leaflet-tile-loaded'); done(null, tile); };
         tile.onerror = e => done(e, tile);
-        tile.src = url; return tile;
+        tile.src = url;
       }
+      if (!('caches' in window)) { setDirectSrc(); return tile; }
       caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
         if (cached) { setBlobSrc(await cached.blob()); return; }
@@ -7588,16 +7602,8 @@ function makeCachedTileLayer(cacheName) {
             await cache.put(url, resp.clone());
             setBlobSrc(await resp.blob());
           } else { throw new Error(); }
-        } catch {
-          tile.onload = () => done(null, tile);
-          tile.onerror = e => done(e, tile);
-          tile.src = url;
-        }
-      }).catch(() => {
-        tile.onload = () => done(null, tile);
-        tile.onerror = e => done(e, tile);
-        tile.src = url;
-      });
+        } catch { setDirectSrc(); }
+      }).catch(() => { setDirectSrc(); });
       return tile;
     }
   });
@@ -7642,9 +7648,9 @@ map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
@@ -8806,6 +8812,12 @@ updPrev();
 function togSnimVlaku() {
   if (recOn) { stopRec(); return; }
   _openVlakaPicker();
+}
+
+function _projQuickRec() {
+  if (recOn) { switchTab('karta'); return; }
+  switchTab('karta');
+  setTimeout(() => _openVlakaPicker(), 200);
 }
 
 function _nextMainBr() {
