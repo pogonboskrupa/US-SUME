@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "AllowAllHostsInWebView"})
     private void setupWebView() {
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
@@ -64,6 +64,8 @@ public class MainActivity extends Activity {
         ws.setDatabaseEnabled(true);
         ws.setAllowFileAccess(true);
         ws.setAllowContentAccess(true);
+        ws.setAllowFileAccessFromFileURLs(true);
+        ws.setAllowUniversalAccessFromFileURLs(true);
         ws.setGeolocationEnabled(true);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
         ws.setMediaPlaybackRequiresUserGesture(false);
