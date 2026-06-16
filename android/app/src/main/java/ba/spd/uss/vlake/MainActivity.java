@@ -96,6 +96,7 @@ public class MainActivity extends Activity {
                 .build();
 
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
+        webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -224,6 +225,26 @@ public class MainActivity extends Activity {
             if (filename.endsWith(".csv")) return "text/csv";
             if (filename.endsWith(".txt")) return "text/plain";
             return "application/octet-stream";
+        }
+    }
+
+    class GpsBridge {
+        @JavascriptInterface
+        public void startRecording(String title) {
+            Intent intent = new Intent(MainActivity.this, GpsService.class);
+            intent.putExtra("title", title != null ? title : "GPS Snimanje");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+        }
+
+        @JavascriptInterface
+        public void stopRecording() {
+            Intent intent = new Intent(MainActivity.this, GpsService.class);
+            intent.setAction("stop");
+            startService(intent);
         }
     }
 
