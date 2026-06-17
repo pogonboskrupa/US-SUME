@@ -4054,6 +4054,7 @@ function showAuthErr(msg, isReg) {
 
 // --- Login ---
 async function doLogin() {
+  try {
   const ime     = document.getElementById('auth-ime').value.trim();
   const prezime = document.getElementById('auth-prezime').value.trim();
   const pin     = document.getElementById('auth-pin').value.trim();
@@ -4062,16 +4063,18 @@ async function doLogin() {
   if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
   if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
 
+  showAuthErr('Povezivanje sa serverom...');
+
   // Look up internal email by name (prezime može biti prazan za org naloge)
   let email, lookupErr;
   try {
     const r = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
     email = r.data; lookupErr = r.error;
   } catch(e) { showAuthErr('Server nedostupan: ' + e.message); return; }
-  if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen. Provjerite ime i prezime.'); return; }
+  if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen: ' + (lookupErr?.message||'nema emaila')); return; }
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
-  if (error) { showAuthErr('Pogrešan PIN.'); return; }
+  if (error) { showAuthErr('Pogrešan PIN: ' + error.message); return; }
 
   // Zapamti korisnika ako je checkbox čekiran
   if (document.getElementById('auth-zapamti').checked) {
@@ -4083,6 +4086,7 @@ async function doLogin() {
   sbUser = (await sb.auth.getUser()).data.user;
   await sbLoadProfile();
   showApp();
+  } catch(e) { showAuthErr('Greška: ' + e.message); }
 }
 
 // --- Register ---
