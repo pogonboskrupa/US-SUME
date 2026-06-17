@@ -44,6 +44,7 @@
   background:#080f0a; align-items:center; justify-content:center;
   overflow-y:auto; font-family:'DM Sans',Arial,sans-serif;
 }
+#auth-screen:not([style*="flex"]) * { animation-play-state:paused !important; }
 /* Background layers */
 .auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
 .auth-bg-grid {
@@ -10449,6 +10450,8 @@ function onPE(e) {
         });
       }
     }, 3000);
+  } else if (recOn && gpsOn && _gpsRestartCount >= 5) {
+    showToast('⚠ GPS nedostupan — provjerite dozvole i vidljivost neba');
   }
 }
 
@@ -10893,6 +10896,7 @@ function _tragRegDlGpx(id) {
   a.href = URL.createObjectURL(new Blob([gpx], {type:'application/gpx+xml'}));
   a.download = t.name.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.gpx';
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 function _toggleLocPopup() {
@@ -11236,18 +11240,26 @@ function rndList() {
     nv.style.display = 'none';
   }
 
-  // Rekurzivno renderuj: glavna vlaka → direktni kraci → njihovi pod-kraci...
+  // Indeksirana mapa djece: O(n) umjesto O(n²)
+  const childMap = new Map();
+  vlake.forEach((k, ki) => {
+    const pnm = k.nm.split('.').slice(0, -1).join('.');
+    if (pnm) {
+      if (!childMap.has(pnm)) childMap.set(pnm, []);
+      childMap.get(pnm).push({v:k, i:ki});
+    }
+  });
+  const frag = document.createDocumentFragment();
   const rendered = new Set();
   function renderWithChildren(v, i, depth) {
     if (rendered.has(i)) return;
     rendered.add(i);
-    _renderVlakaRow(el, v, i, depth);
-    vlake.forEach((k, ki) => {
-      const kParentNm = k.nm.split('.').slice(0, -1).join('.');
-      if (kParentNm === v.nm) renderWithChildren(k, ki, depth + 1);
-    });
+    _renderVlakaRow(frag, v, i, depth);
+    const ch = childMap.get(v.nm);
+    if (ch) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
   }
   rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+  el.appendChild(frag);
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
   clearTimeout(rndList._projTimer);
@@ -14013,7 +14025,7 @@ function mkKML() {
 }
 function showExport(){document.getElementById('etxt').value=mkKML();document.getElementById('modal').classList.add('show');}
 function closeM(){document.getElementById('modal').classList.remove('show');}
-function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();}
+function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
 function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').value);showToast('Kopirano!');}
 
 // === PANEL MOBILE ===
@@ -14981,6 +14993,7 @@ function exportTerenStats() {
   a.href = URL.createObjectURL(blob);
   a.download = `Statistike_${odjel}_${date}.txt`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   showToast('📥 Statistike preuzete');
 }
 
@@ -15002,6 +15015,7 @@ function exportSTDcsv() {
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `STD_${odjel}_${todayStr()}.csv`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   showToast('📥 STD lista preuzeta');
 }
 
@@ -15497,6 +15511,7 @@ function kmlPreuzmi() {
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));
   a.download=mkKMLNaziv(); a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   showKmlInfo('💾 Fajl sačuvan: <b>'+mkKMLNaziv()+'</b>');
 }
 function kmlNaMail() {
@@ -17869,6 +17884,7 @@ self.onmessage = async ({data:msg}) => {
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
+      try {
       const root = await navigator.storage.getDirectory();
       const fname = msg.path.startsWith('/') ? msg.path.slice(1) : msg.path;
       const fh = await root.getFileHandle(fname);
@@ -17969,6 +17985,7 @@ self.onmessage = async ({data:msg}) => {
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] sch['+schemaDump+'] isql['+idxSqlStr+']';
       dbs[msg.name] = {mini, fmt, engine:'custom'};
       self.postMessage({id, ok:true, fmt, meta});
+      } catch(opfsErr) { self.postMessage({id, ok:false, error:'OPFS: '+opfsErr.message}); }
     }
     else if (msg.type === 'tile') {
       const arr = await queryTile(msg.name,msg.z,msg.x,msg.y);
@@ -18121,7 +18138,9 @@ async function sqlmapLoadFile(file) {
   }
 
   try {
+    let _opfsFailed = false;
     if (isLarge && _opfsAvail()) {
+      try {
       _sqlmapStatus('⏳ Kopiranje na disk (' + (file.size/1024/1024|0) + ' MB)...');
       const opfsName = name + '.sqlmap';
       await _opfsStream(opfsName, file);
@@ -18136,10 +18155,12 @@ async function sqlmapLoadFile(file) {
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
       const dI=r.meta?._d?' ['+r.meta._d+']':'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
-    } else if (isLarge) {
+      } catch(opfsE) { _opfsFailed = true; _opfsDel(name+'.sqlmap'); }
+    }
+    if (isLarge && (!_opfsAvail() || _opfsFailed)) {
       _sqlmapStatus('⏳ Otvaranje velike karte (' + (file.size/1024/1024|0) + ' MB)...');
       await _sqlmapLoadDirect(file, name);
-    } else {
+    } else if (!isLarge) {
       _sqlmapStatus('⏳ Čitam fajl...');
       const buf = await file.arrayBuffer();
       _sqlmapStatus('⏳ Otvaranje baze...');
