@@ -5,4 +5,6 @@
     <color name="colorBackground">#0f172a</color>
     <!-- Splash pozadina = zelena iz logoa -->
     <color name="colorSplash">#376638</color>
+    <!-- Adaptive icon background -->
+    <color name="ic_launcher_background">#376638</color>
 </resources>
