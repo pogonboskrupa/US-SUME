@@ -18050,6 +18050,15 @@ self.onmessage = async ({data:msg}) => {
 };
 `.trim();
 
+// ── MiniSqlite na main threadu (fallback kad Worker ne prima File) ────────────
+const _MiniSqliteMain = (function() {
+  const s = _SQL_WORKER_SRC.indexOf('class MiniSqlite {');
+  const e = _SQL_WORKER_SRC.indexOf('// ── Kraj MiniSqlite');
+  if (s < 0 || e < 0) return null;
+  try { return new Function(_SQL_WORKER_SRC.slice(s, e) + '\nreturn MiniSqlite;')(); }
+  catch(ex) { console.error('MiniSqliteMain init fail', ex); return null; }
+})();
+
 // ── Worker management ─────────────────────────────────────────────────────────
 function _sqlWorkerEnsure() {
   if (_sqlW) return;
@@ -18077,7 +18086,10 @@ function _sqlWCall(msg, transfers) {
 }
 
 // ── OPFS helpers (main thread) ────────────────────────────────────────────────
-function _opfsAvail() { return typeof navigator?.storage?.getDirectory === 'function'; }
+function _opfsAvail() {
+  if (typeof AndroidDownload !== 'undefined') return false; // Android WebView: OPFS nesiguran za velike fajlove
+  return typeof navigator?.storage?.getDirectory === 'function';
+}
 async function _opfsStream(filename, file) {
   const root = await navigator.storage.getDirectory();
   const fh = await root.getFileHandle(filename, {create:true});
@@ -18210,16 +18222,53 @@ async function sqlmapLoadFile(file) {
   }
 }
 
+let _mainMiniDbs = {};
 async function _sqlmapLoadDirect(file, name) {
-  const r = await _sqlWCall({type:'load-file', name, file});
-  if (!r.ok) throw new Error(r.error);
-  const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
+  // Pokušaj Worker path prvo
+  let r = await _sqlWCall({type:'load-file', name, file});
+  if (!r.ok) {
+    // Fallback: MiniSqlite na main threadu (File.slice ne radi u svim WebView workerima)
+    _sqlmapStatus('⏳ Otvaranje karte (fallback)...');
+    const mini = new _MiniSqliteMain(file);
+    const initR = await mini.init();
+    if (!initR.fmt) throw new Error('unknown-format');
+    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
+    r = {ok:true, fmt:initR.fmt, meta:initR.meta};
+  }
+  const useMain = !!_mainMiniDbs[name];
+  const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
   layer.addTo(map);
   _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
-  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, direktno)' + zI);
+  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
   _sqlmapRenderLayers(); _lsRenderSqlite();
+}
+
+function _sqlmapCreateLayerMain(name, fmt, meta) {
+  const maxNative = (meta?.maxzoom!=null) ? Math.max(1,parseInt(meta.maxzoom,10)) : 18;
+  const minNative = (meta?.minzoom!=null) ? Math.max(0,parseInt(meta.minzoom,10)) : 0;
+  const MTileLayer = L.GridLayer.extend({
+    createTile(coords, done) {
+      const img = document.createElement('img');
+      img.style.cssText = 'width:256px;height:256px;';
+      const {x,y,z} = coords;
+      const inst = _mainMiniDbs[name];
+      if (!inst) { done(null,img); return img; }
+      inst.mini.tile(z,x,y).then(data => {
+        if (data) {
+          const url = URL.createObjectURL(new Blob([data]));
+          img.onload = img.onerror = () => { URL.revokeObjectURL(url); done(null,img); };
+          img.src = url;
+        } else {
+          img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+          done(null, img);
+        }
+      }).catch(() => done(null, img));
+      return img;
+    }
+  });
+  return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
