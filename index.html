@@ -18224,10 +18224,26 @@ async function sqlmapLoadFile(file) {
 
 let _mainMiniDbs = {};
 async function _sqlmapLoadDirect(file, name) {
-  // Pokušaj Worker path prvo
+  const isAndroid = typeof AndroidDownload !== 'undefined';
+  // Android WebView: File postMessage može crashovati — čitaj na main threadu
+  if (isAndroid && _MiniSqliteMain) {
+    _sqlmapStatus('⏳ Čitam kartu (' + (file.size/1024/1024|0) + ' MB)...');
+    const mini = new _MiniSqliteMain(file);
+    const initR = await mini.init();
+    if (!initR.fmt) throw new Error('unknown-format');
+    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
+    const layer = _sqlmapCreateLayerMain(name, initR.fmt, initR.meta);
+    layer.addTo(map);
+    _sqlLayers.push({name, fmt:initR.fmt, layer, visible:true, meta:initR.meta, saved:false, opfs:false});
+    _sqlmapMetaAutoZoom(initR.meta);
+    const zI = (initR.meta?.minzoom != null) ? ' · zoom ' + initR.meta.minzoom + '–' + initR.meta.maxzoom : '';
+    _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
+    _sqlmapRenderLayers(); _lsRenderSqlite();
+    return;
+  }
+  // Desktop/PWA: Worker path
   let r = await _sqlWCall({type:'load-file', name, file});
-  if (!r.ok) {
-    // Fallback: MiniSqlite na main threadu (File.slice ne radi u svim WebView workerima)
+  if (!r.ok && _MiniSqliteMain) {
     _sqlmapStatus('⏳ Otvaranje karte (fallback)...');
     const mini = new _MiniSqliteMain(file);
     const initR = await mini.init();
@@ -18235,6 +18251,7 @@ async function _sqlmapLoadDirect(file, name) {
     _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
     r = {ok:true, fmt:initR.fmt, meta:initR.meta};
   }
+  if (!r.ok) throw new Error(r.error);
   const useMain = !!_mainMiniDbs[name];
   const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
   layer.addTo(map);
