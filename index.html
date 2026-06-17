@@ -2,6 +2,8 @@
 <html lang="bs">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -47,7 +49,7 @@
 }
 #auth-screen * { opacity:1; }
 /* Background layers */
-.auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
+.auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
 .auth-bg-grid {
   position:absolute; inset:-50%; width:200%; height:200%;
   background-image:
