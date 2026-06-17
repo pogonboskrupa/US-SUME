@@ -4058,9 +4058,14 @@ async function doLogin() {
 
   document.getElementById('auth-err').style.display = 'none';
   if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
+  if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
 
   // Look up internal email by name (prezime može biti prazan za org naloge)
-  const { data: email, error: lookupErr } = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
+  let email, lookupErr;
+  try {
+    const r = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
+    email = r.data; lookupErr = r.error;
+  } catch(e) { showAuthErr('Server nedostupan: ' + e.message); return; }
   if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen. Provjerite ime i prezime.'); return; }
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
