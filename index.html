@@ -3625,7 +3625,21 @@ select:focus { outline:none; border-color:#3b82f6; }
 // =====================================================================
 const SUPA_URL = 'https://djguplhaayjvwmdlxevx.supabase.co';
 const SUPA_KEY = 'sb_publishable_eccquEW5tzOJUmAu_TK0uw_jKOjTLrs';
-const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+let sb;
+try {
+  sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+} catch(e) {
+  console.error('Supabase init greška:', e);
+  sb = null;
+}
+setTimeout(()=>{
+  const as=document.getElementById('auth-screen');
+  const wr=document.getElementById('wrapper');
+  if(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex'){
+    as.style.display='flex';
+    if(typeof authShowLogin==='function') authShowLogin();
+  }
+},2000);
 
 let sbUser = null;
 let sbProfile = null;
@@ -3872,6 +3886,7 @@ async function initAuth() {
   }
 
   // 1. Pokušaj Supabase sesiju
+  if(!sb){_showAuthScreen();return;}
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'INITIAL_SESSION' && session && !sbUser) {
       try {
