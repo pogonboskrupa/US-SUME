@@ -17598,6 +17598,9 @@ class MiniSqlite {
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
       if(type==='table'&&name?.toLowerCase()==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
+          // PRIMARY KEY (x,y,z,s) → red kolona automatskog indeksa (sqlite_autoindex), čiji je sql NULL
+          const pkm=s.match(/primary\s+key\s*\(([^)]*)\)/);
+          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'`\[\]]/g,'').split(/\s+/)[0]).filter(Boolean);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
             const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
@@ -17610,19 +17613,22 @@ class MiniSqlite {
     if(!this.fmt) this.fmt='mbtiles';
     // Detect OruxMaps/Android RMaps: index on (x,y,z[,s]) where z=17-actual_zoom
     // The tiles table has (x,y,z,s,image) but sqlite_master may show mbtiles column names after rename
+    // Red kolona indeksa: iz CREATE INDEX sql-a, a ako je autoindex (sql NULL) iz PRIMARY KEY-a
+    let ic=null;
     if(this._idxSql){
       const idxLow=this._idxSql.toLowerCase();
       const ixp1=idxLow.indexOf('('),ixp2=idxLow.lastIndexOf(')');
-      if(ixp1>=0&&ixp2>ixp1){
-        const ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
-        if(ic[0]==='x'&&ic[1]==='y'){
-          // OruxMaps/sqlitedb: index(x,y,z[,s]); table has (x,y,z,s,image)
-          this.fmt='rmaps'; this._zm=0;
-          this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
-          this._idxColX=0; this._idxColY=1; this._idxColZ=2;
-          this._nIdxKeys=ic.length; // 3 or 4 (with 's' column)
-        }
-      }
+      if(ixp1>=0&&ixp2>ixp1) ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
+    } else if(this.idxRoot&&this._pkCols&&this._pkCols.length){
+      // sqlite_autoindex_tiles_1 nema sql → red kolona prati PRIMARY KEY (x,y,z,s)
+      ic=this._pkCols.slice();
+    }
+    if(ic&&ic[0]==='x'&&ic[1]==='y'){
+      // OruxMaps/sqlitedb: index(x,y,z[,s]); table has (x,y,z,s,image)
+      this.fmt='rmaps'; this._zm=0;
+      this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
+      this._idxColX=0; this._idxColY=1; this._idxColZ=2;
+      this._nIdxKeys=ic.length; // 3 or 4 (with 's' column)
     }
     // Detect WITHOUT ROWID: tiles B-tree pages are index-type (2/10) not table-type (5/13)
     if(this.tilesRoot>0){
