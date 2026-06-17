@@ -44,7 +44,7 @@
   background:#080f0a; align-items:center; justify-content:center;
   overflow-y:auto; font-family:'DM Sans',Arial,Roboto,sans-serif;
 }
-#auth-screen:not([style*="flex"]) * { animation-play-state:paused !important; opacity:1 !important; }
+#auth-screen * { opacity:1; }
 /* Background layers */
 .auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
 .auth-bg-grid {
@@ -78,7 +78,7 @@
 .auth-card-wrap {
   position:relative; z-index:1;
   width:100%; max-width:380px; padding:12px;
-  animation:authCardIn 0.8s cubic-bezier(0.22,1,0.36,1) both;
+  /* animacija uklonjena — uzrokovala opacity:0 u WebView */
 }
 @keyframes authCardIn {
   from{opacity:0;transform:translateY(28px) scale(0.97)}
@@ -88,7 +88,6 @@
 .auth-sbar {
   display:flex; justify-content:space-between; align-items:center;
   padding:0 4px 6px;
-  animation:authFadeIn 0.6s 0.4s both;
 }
 @keyframes authFadeIn { from{opacity:0} to{opacity:1} }
 .auth-sbadge {
@@ -129,7 +128,7 @@
   border-radius:0 20px 0 0;
 }
 /* Header */
-.auth-hdr { text-align:center; margin-bottom:14px; animation:authFadeIn 0.6s 0.2s both; display:flex; flex-direction:column; align-items:center; }
+.auth-hdr { text-align:center; margin-bottom:14px; display:flex; flex-direction:column; align-items:center; }
 .auth-logo-box {
   width:96px; height:115px; margin:0 auto 28px;
   background:transparent; border:none; border-radius:0;
@@ -155,7 +154,7 @@
   letter-spacing:0.2em; color:rgba(180,205,183,0.45); text-transform:uppercase;
 }
 /* Form fields */
-.auth-form-body { animation:authFadeIn 0.6s 0.35s both; }
+.auth-form-body { }
 .auth-field { margin-bottom:9px; }
 .auth-field-lbl {
   display:flex; align-items:baseline; gap:6px;
@@ -260,7 +259,6 @@
 /* Footer */
 .auth-card-foot {
   margin-top:10px; display:flex; justify-content:center; gap:20px;
-  animation:authFadeIn 0.6s 0.6s both;
 }
 .auth-foot-lnk {
   font-family:'JetBrains Mono',monospace; font-size:9px;
