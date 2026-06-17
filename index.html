@@ -42,9 +42,9 @@
 #auth-screen {
   display:none; position:fixed; inset:0; z-index:99999;
   background:#080f0a; align-items:center; justify-content:center;
-  overflow-y:auto; font-family:'DM Sans',Arial,sans-serif;
+  overflow-y:auto; font-family:'DM Sans',Arial,Roboto,sans-serif;
 }
-#auth-screen:not([style*="flex"]) * { animation-play-state:paused !important; }
+#auth-screen:not([style*="flex"]) * { animation-play-state:paused !important; opacity:1 !important; }
 /* Background layers */
 .auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
 .auth-bg-grid {
@@ -140,7 +140,7 @@
 .auth-logo-box::before { content:''; }
 .auth-logo-corner { display:none; }
 .auth-org-name {
-  font-family:'DM Sans',sans-serif;
+  font-family:'DM Sans',Arial,Roboto,sans-serif;
   font-size:13px; font-weight:600; letter-spacing:0.06em;
   color:rgba(232,240,233,0.7); line-height:1.2; margin-bottom:10px;
 }
@@ -174,7 +174,7 @@
   width:100%; background:#111c13;
   border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
   padding:10px 10px 10px 36px;
-  color:#e8f0e9; font-family:'DM Sans',Arial,sans-serif;
+  color:#e8f0e9; font-family:'DM Sans',Arial,Roboto,sans-serif;
   font-size:13px; outline:none;
   transition:border-color 0.2s,box-shadow 0.2s,background 0.2s;
   -webkit-appearance:none;
@@ -196,7 +196,7 @@
   width:100%; background:#111c13;
   border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
   padding:10px 10px; color:#e8f0e9;
-  font-family:'DM Sans',Arial,sans-serif; font-size:13px; outline:none;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:13px; outline:none;
 }
 /* Remember me */
 .auth-remember-row {
@@ -219,7 +219,7 @@
   width:100%; padding:11px;
   background:linear-gradient(135deg,#2e8b42,#3a9e50 50%,#3aad52);
   border:none; border-radius:10px; color:#fff;
-  font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:14px; font-weight:600;
   letter-spacing:0.08em; cursor:pointer;
   position:relative; overflow:hidden;
   transition:transform 0.15s,box-shadow 0.15s;
@@ -246,7 +246,7 @@
   width:100%; padding:9px;
   background:transparent; border:1.5px solid rgba(74,163,90,0.18);
   border-radius:10px; color:rgba(180,205,183,0.65);
-  font-family:'DM Sans',Arial,sans-serif; font-size:12px;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:12px;
   font-weight:500; cursor:pointer;
   transition:border-color 0.2s,color 0.2s,background 0.2s;
 }
