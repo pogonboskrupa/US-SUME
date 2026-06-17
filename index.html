@@ -17503,22 +17503,27 @@ class MiniSqlite {
   static _sz(t){if(t<=0)return 0;if(t<=4)return t;if(t===5)return 6;if(t<=7)return 8;if(t<=9)return 0;return t%2===0?(t-12)>>1:(t-13)>>1;}
   static _ri(d,o,n){let v=0;for(let i=0;i<n;i++)v=v*256+d[o+i];if(n&&(d[o]&128))v-=Math.pow(2,n*8);return v;}
   async _pay(d,pos,pLen,isIdx=false) {
+    // GUARD: spriječi OOM crash od korumpirane/pogrešno pročitane veličine (tile max ~200KB)
+    if(pLen<0||pLen>16777216) return new Uint8Array(0);
     // index cells: maxLocal = floor((ps-12)*64/255)-23; table cells: maxLocal = ps-35
     const maxL=isIdx?Math.floor((this.ps-12)*64/255)-23:this.ps-35;
     if(pLen<=maxL&&pos+pLen<=d.length) return d.slice(pos,pos+pLen);
     const minL=Math.floor((this.ps-12)*32/255)-23;
     let loc=minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
     const out=new Uint8Array(pLen); out.set(d.slice(pos,pos+loc));
-    let ovf=MiniSqlite._u32(d,pos+loc),w=loc;
-    while(ovf&&w<pLen){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
+    let ovf=MiniSqlite._u32(d,pos+loc),w=loc,guard=0;
+    while(ovf&&w<pLen&&guard++<100000){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
     return out;
   }
   async _rec(data,pos,pLen,isIdx=false) {
     const d=await this._pay(data,pos,pLen,isIdx); let p=0;
+    if(d.length===0) return [];
     const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
+    if(hSz<0||hSz>d.length) return []; // GUARD: korumpiran header
     const ts=[]; while(p<hSz){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
     p=hSz; const vs=[];
     for(const t of ts){const sz=MiniSqlite._sz(t);
+      if(sz>16777216||p+sz>d.length+8){vs.push(null);p+=sz;continue;} // GUARD: nevažeća veličina kolone
       if(t===0)vs.push(null);
       else if(t===7){const dv=new DataView(d.buffer,d.byteOffset+p,8);vs.push(dv.getFloat64(0,false));}
       else if(t===8)vs.push(0); else if(t===9)vs.push(1);
@@ -18262,9 +18267,35 @@ async function _sqlmapLoadDirect(file, name) {
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
+// Ograniči paralelna čitanja tile-ova na main threadu (spriječi memorijski skok)
+let _mainTileActive = 0;
+const _mainTileQueue = [];
+function _mainTileSchedule(fn) {
+  return new Promise(resolve => {
+    const run = () => {
+      _mainTileActive++;
+      fn().then(resolve).finally(() => {
+        _mainTileActive--;
+        const next = _mainTileQueue.shift();
+        if (next) next();
+      });
+    };
+    if (_mainTileActive < 6) run(); else _mainTileQueue.push(run);
+  });
+}
+
+function _zoomBounds(meta) {
+  let a = (meta?.minzoom!=null) ? parseInt(meta.minzoom,10) : 0;
+  let b = (meta?.maxzoom!=null) ? parseInt(meta.maxzoom,10) : 18;
+  if (isNaN(a)) a = 0; if (isNaN(b)) b = 18;
+  // GUARD: neki formati (RMaps info tabela) imaju obrnut min/max
+  const lo = Math.max(0, Math.min(a, b));
+  const hi = Math.max(1, Math.max(a, b));
+  return { minNative: lo, maxNative: hi };
+}
+
 function _sqlmapCreateLayerMain(name, fmt, meta) {
-  const maxNative = (meta?.maxzoom!=null) ? Math.max(1,parseInt(meta.maxzoom,10)) : 18;
-  const minNative = (meta?.minzoom!=null) ? Math.max(0,parseInt(meta.minzoom,10)) : 0;
+  const { minNative, maxNative } = _zoomBounds(meta);
   const MTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const img = document.createElement('img');
@@ -18272,7 +18303,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       const {x,y,z} = coords;
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null,img); return img; }
-      inst.mini.tile(z,x,y).then(data => {
+      _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
         if (data) {
           const url = URL.createObjectURL(new Blob([data]));
           img.onload = img.onerror = () => { URL.revokeObjectURL(url); done(null,img); };
@@ -18329,8 +18360,7 @@ async function sqlmapRestoreAll() {
 
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 function _sqlmapCreateLayerW(name, fmt, meta) {
-  const maxNative = (meta?.maxzoom!=null) ? Math.max(1,parseInt(meta.maxzoom,10)) : 18;
-  const minNative = (meta?.minzoom!=null) ? Math.max(0,parseInt(meta.minzoom,10)) : 0;
+  const { minNative, maxNative } = _zoomBounds(meta);
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const img = document.createElement('img');
