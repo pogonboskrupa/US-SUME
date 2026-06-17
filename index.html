@@ -17488,13 +17488,13 @@ async function getSqlJs() {
 // Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; }
+  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
     if(this._c.has(n)) return this._c.get(n);
     const off=(n-1)*this.ps;
     const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
-    if(this._c.size>128) this._c.delete(this._c.keys().next().value);
+    if(this._c.size>512) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
   static _u16(d,o){return(d[o]<<8)|d[o+1];}
@@ -17570,6 +17570,7 @@ class MiniSqlite {
     return null;
   }
   // Index B-tree search by (v0,v1,v2) — works for both WITHOUT ROWID and covering indices
+  // For 4-key PRIMARY KEY (x,y,z,s): matches first 3 keys, returns first hit regardless of 4th
   async _wRowSearch(n,v0,v1,v2) {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
     const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
@@ -17577,7 +17578,7 @@ class MiniSqlite {
       if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;
         const r=await this._rec(d,p,pL,true);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
         if(cmp>0) return this._wRowSearch(ch,v0,v1,v2);
-        if(cmp===0) return r;}
+        if(cmp>=0) return r;}
       else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);
         if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r;}}
     if(t===2) return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
@@ -17610,10 +17611,11 @@ class MiniSqlite {
       if(ixp1>=0&&ixp2>ixp1){
         const ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
         if(ic[0]==='x'&&ic[1]==='y'){
-          // OruxMaps: index(x,y,z[,s]); table has (x,y,z,s,image); z=17-zoom; y=XYZ not TMS
-          this.fmt='rmaps'; this._zm=2;
+          // OruxMaps/sqlitedb: index(x,y,z[,s]); table has (x,y,z,s,image)
+          this.fmt='rmaps'; this._zm=0;
           this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
-          this._idxColX=0; this._idxColY=1; this._idxColZ=2;  // index key order
+          this._idxColX=0; this._idxColY=1; this._idxColZ=2;
+          this._nIdxKeys=ic.length; // 3 or 4 (with 's' column)
         }
       }
     }
@@ -17642,7 +17644,23 @@ class MiniSqlite {
           if(fe&&le){
             const sz=fe[this._idxColZ],lz=le[this._idxColZ];
             const mns=Math.min(sz,lz),mxs=Math.max(sz,lz);
-            if(this.fmt==='rmaps'&&typeof mxs==='number'&&mxs<=17&&17-mns>=0){minz=17-mxs;maxz=17-mns;}
+            if(this.fmt==='rmaps'&&typeof mxs==='number'){
+              // Auto-detect zoom offset: count tiles at min vs max stored z
+              // If low z has MORE tiles → z is inverted (low z = detail = high web zoom)
+              // Probe tile count at mns vs mxs via B-tree sampling
+              let zOff=17; // default RMaps offset
+              // Heuristic: if stored z range is small (1-10), detect offset from tile grid
+              // For z_stored=N, web_zoom = offset - N. Validate: tile_x < 2^web_zoom
+              const feX=fe[this._idxColX], leX=le[this._idxColX];
+              const maxX=Math.max(typeof feX==='number'?feX:0, typeof leX==='number'?leX:0);
+              if(maxX>0){
+                // Find smallest offset where maxX < 2^(offset-mns)
+                for(let off=mxs;off<=25;off++){if((1<<(off-mns))>maxX){zOff=off;break;}}
+              }
+              this._zOff=zOff; this._zm=2;
+              minz=zOff-mxs; maxz=zOff-mns;
+              if(minz<0)minz=0; if(maxz>22)maxz=22;
+            }
             else{minz=typeof mns==='number'?Math.max(0,mns):0;maxz=typeof mxs==='number'?Math.min(22,mxs):18;}
           }
         }catch(e){}
@@ -17653,7 +17671,11 @@ class MiniSqlite {
           else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
         try{await go(this.tilesRoot);}catch(e){}
         if(lz>=0){
-          if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+          if(this.fmt==='rmaps'){
+            const off=this._zOff||17;
+            minz=off-lz;maxz=off-sz;
+            if(minz<0)minz=0;if(maxz>22)maxz=22;
+          }
           else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
         }
       }
@@ -17666,8 +17688,7 @@ class MiniSqlite {
           const le2=await this._lastIdxEntry(sr2);
           if(le2){
             const lzRaw=le2[this._idxColZ],lx2=le2[this._idxColX],ly2=le2[this._idxColY];
-            // For RMaps inverted zoom: actual_zoom = 17 - stored_z
-            let lz2=(this.fmt==='rmaps'&&this._zm===2)?17-lzRaw:lzRaw;
+            let lz2=(this.fmt==='rmaps'&&this._zm===2)?(this._zOff||17)-lzRaw:lzRaw;
             if(typeof lz2==='number'&&lz2>=0&&lz2<=22&&typeof lx2==='number'&&typeof ly2==='number'){
               // rmaps uses XYZ y; mbtiles uses TMS y
               const xyzY=(this.fmt==='rmaps')?ly2:(1<<lz2)-1-ly2;
@@ -17716,9 +17737,10 @@ class MiniSqlite {
   }
   async tile(z,x,y) {
     const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
+    const off=this._zOff||17;
     if(this.noRowId){
       const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
       for(const zv of zCands){
         sk[this.colZ]=zv;
         const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
@@ -17727,9 +17749,8 @@ class MiniSqlite {
       return null;
     }
     if(this.idxRoot){
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
       for(const zv of zCands){
-        // Build 3-key search tuple in the index's actual sort order
         const key=[null,null,null];
         key[this._idxColZ]=zv; key[this._idxColX]=x; key[this._idxColY]=ty;
         const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
@@ -17743,7 +17764,7 @@ class MiniSqlite {
       }
       return null;}
     let found=null;
-    const zv2=this.fmt==='rmaps'?17-z:null;
+    const zv2=this.fmt==='rmaps'?off-z:null;
     await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colX]===x&&r[this.colY]===ty&&(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2)))found=r[this.colD];});
     return found;
   }
@@ -17824,12 +17845,13 @@ async function queryTile(name, z, x, y) {
         ? db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0]
         : db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
     } else {
+      const off=inst.zOff||17;
       if (engine==='sqljs') {
         td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
-        if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(17-z))[0]?.values?.[0]?.[0];
+        if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(off-z))[0]?.values?.[0]?.[0];
       } else {
         td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
-        if (!td) td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,17-z]);
+        if (!td) td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,off-z]);
       }
     }
     return td ? new Uint8Array(td) : null;
@@ -17863,7 +17885,7 @@ self.onmessage = async ({data:msg}) => {
       const fmt = entry.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = (entry.meta&&Object.keys(entry.meta).length) ? entry.meta : readMeta(exec,fmt);
-      dbs[msg.name] = {db,fmt,engine:'sqljs'};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff:17};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-buf') {
@@ -17873,14 +17895,20 @@ self.onmessage = async ({data:msg}) => {
       const fmt = detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = readMeta(exec,fmt);
-      let maxz=meta.maxzoom, minz=meta.minzoom;
+      let maxz=meta.maxzoom, minz=meta.minzoom, zOff=17;
       if (maxz==null) { try{const col=fmt==='mbtiles'?'zoom_level':'z';const r=db.exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles');const v=r[0]?.values?.[0];if(v?.[1]!=null){minz=+v[0];maxz=+v[1];}}catch(e){} if(maxz==null)maxz=18; }
-      meta.minzoom=minz; meta.maxzoom=maxz;
+      if (fmt==='rmaps'&&typeof minz==='number'&&typeof maxz==='number') {
+        try{const mx=db.exec('SELECT MAX(x) FROM tiles WHERE z='+minz)[0]?.values?.[0]?.[0]||0;
+          for(let off=maxz;off<=25;off++){if((1<<(off-minz))>mx){zOff=off;break;}}
+        }catch(e){}
+        meta.minzoom=zOff-maxz; meta.maxzoom=zOff-minz;
+        if(meta.minzoom<0)meta.minzoom=0;
+      } else { meta.minzoom=minz; meta.maxzoom=maxz; }
       if (msg.save) {
         const idb = await idbOpen();
         await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       }
-      dbs[msg.name] = {db,fmt,engine:'sqljs'};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
@@ -17983,7 +18011,7 @@ self.onmessage = async ({data:msg}) => {
       }catch(e){schemaDump='e:'+e.message;}
       const mkKeys=Object.keys(meta).filter(k=>k!=='_d'&&k!=='minzoom'&&k!=='maxzoom');
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] sch['+schemaDump+'] isql['+idxSqlStr+']';
-      dbs[msg.name] = {mini, fmt, engine:'custom'};
+      dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
       self.postMessage({id, ok:true, fmt, meta});
       } catch(opfsErr) { self.postMessage({id, ok:false, error:'OPFS: '+opfsErr.message}); }
     }
@@ -18008,7 +18036,7 @@ self.onmessage = async ({data:msg}) => {
       const mini = new MiniSqlite(msg.file);
       const {fmt, meta} = await mini.init();
       if (!fmt) throw new Error('unknown-format');
-      dbs[msg.name] = {mini, fmt, engine:'custom'};
+      dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
       self.postMessage({id, ok:true, fmt, meta});
     }
     else if (msg.type === 'idb-save-meta') {
