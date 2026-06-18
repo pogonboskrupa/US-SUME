@@ -5122,27 +5122,63 @@ function impVlakaClose() {
 }
 
 function impVlakaFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    try {
-      _impTracks = _impParseTracks(ev.target.result, file.name);
-      if (_impTracks.length === 0) {
-        showToast('⚠ U fajlu nema linija (LineString/track)');
-        document.getElementById('imv-fname').textContent = '';
-        document.getElementById('imv-ok').disabled = true;
-        document.getElementById('imv-tracks').innerHTML = '';
-        return;
+  const files = [...e.target.files];
+  if (!files.length) return;
+  _impTracks = [];
+  let polyCount = 0;
+  let loaded = 0;
+  files.forEach(file => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const txt = ev.target.result;
+        const tracks = _impParseTracks(txt, file.name);
+        tracks.forEach(t => { t._srcFile = file.name; });
+        _impTracks.push(...tracks);
+        const doc = new DOMParser().parseFromString(txt, 'text/xml');
+        const hasPolygons = doc.querySelectorAll('Polygon').length > 0;
+        if (hasPolygons && /\.kml$/i.test(file.name)) {
+          const col = KCOLS[kmlCI % KCOLS.length]; kmlCI++;
+          const grp = pkml(doc, col); grp.addTo(map);
+          const _autoTag = file.name.match(/^(\d+)/)?.[1] || '';
+          kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:0.35,tag:_autoTag,_loadedAt:Date.now()});
+          _localKmlSaveContent(file.name, txt, col);
+          rndGraniceModal();
+          try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
+          polyCount += doc.querySelectorAll('Polygon').length;
+        }
+      } catch (x) {
+        showToast('⚠ Greška: ' + file.name + ' — ' + x.message);
       }
-      document.getElementById('imv-fname').textContent = '✓ ' + file.name + ' — ' + _impTracks.length + ' linija';
-      _impRenderTracks();
-      document.getElementById('imv-ok').disabled = false;
-    } catch (x) {
-      showToast('⚠ Greška pri čitanju fajla: ' + x.message);
-    }
-  };
-  r.readAsText(file);
+      loaded++;
+      if (loaded === files.length) {
+        const parts = [];
+        if (_impTracks.length > 0) parts.push(_impTracks.length + ' linija');
+        if (polyCount > 0) parts.push(polyCount + ' poligona (dodani kao sloj)');
+        if (parts.length === 0) {
+          showToast('⚠ U fajlovima nema linija ni poligona');
+          document.getElementById('imv-fname').textContent = '';
+          document.getElementById('imv-ok').disabled = true;
+          document.getElementById('imv-tracks').innerHTML = '';
+          return;
+        }
+        const fNames = files.length === 1 ? files[0].name : files.length + ' fajlova';
+        document.getElementById('imv-fname').textContent = '✓ ' + fNames + ' — ' + parts.join(', ');
+        if (_impTracks.length > 0) {
+          _impRenderTracks();
+          document.getElementById('imv-ok').disabled = false;
+        } else {
+          document.getElementById('imv-tracks').innerHTML = '';
+          document.getElementById('imv-ok').disabled = true;
+          if (polyCount > 0) {
+            showToast('✓ ' + polyCount + ' poligona dodano kao KML sloj');
+            impVlakaClose();
+          }
+        }
+      }
+    };
+    r.readAsText(file);
+  });
 }
 
 // Parsira KML (LineString + gx:Track) ili GPX (trk/rte) u listu trakova
@@ -22119,7 +22155,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <button class="imv-file-btn" onclick="document.getElementById('imv-file').click()">
       <span style="font-size:18px;">📄</span> Odaberi fajl (.kml / .gpx)
     </button>
-    <input type="file" id="imv-file" accept=".kml,.gpx" style="display:none" onchange="impVlakaFile(event)">
+    <input type="file" id="imv-file" accept=".kml,.gpx" multiple style="display:none" onchange="impVlakaFile(event)">
     <div id="imv-fname"></div>
     <div class="imv-lbl">Projekat u koji se ubacuje</div>
     <select id="imv-proj" class="imv-select" onchange="if(_impTracks.length)_impRenderTracks()"></select>
