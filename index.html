@@ -7413,7 +7413,9 @@ function _onSharePoint(p) {
   const info = kolegeMap[p.uid];
   if (!info) return;
   _showSharedLocMarker(p.uid, p.la, p.lo, info, false, p.al);
-  showToast('📍 ' + info.ime.split(' ')[0] + ' je podijelio/la lokaciju');
+  const name = info.ime.split(' ')[0];
+  showToast('📍 ' + name + ' je podijelio/la lokaciju');
+  _notifyShareLoc(name, 'je podijelio/la lokaciju 📍', p.la, p.lo);
 }
 
 function _onShareLive(p) {
@@ -7421,7 +7423,22 @@ function _onShareLive(p) {
   if (p.to?.length && !p.to.includes(sbUser?.id)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
+  const isNew = !_sharedLocMarkers[p.uid];
   _showSharedLocMarker(p.uid, p.la, p.lo, info, true, p.al);
+  if (isNew) {
+    const name = info.ime.split(' ')[0];
+    showToast('🔴 ' + name + ' dijeli kretanje');
+    _notifyShareLoc(name, 'dijeli kretanje sa tobom 🔴', p.la, p.lo);
+  }
+}
+
+function _notifyShareLoc(name, body, la, lo) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible') return;
+  const sw = navigator.serviceWorker?.controller;
+  if (sw) {
+    sw.postMessage({ type: 'show-share-notification', name, body, la, lo });
+  }
 }
 
 function _onShareStop(p) {
@@ -11049,6 +11066,11 @@ if ('serviceWorker' in navigator) {
     if (evt.data?.type === 'rec-action') {
       if (evt.data.action === 'stop')  stopRec();
       if (evt.data.action === 'pause') toggleRecPause();
+    }
+    // Klik na share-loc notifikaciju — centriraj mapu na dijeljenu lokaciju
+    if (evt.data?.type === 'pan-to' && evt.data.la && evt.data.lo) {
+      if (_activeTab !== 'karta') switchTab('karta');
+      map.setView([evt.data.la, evt.data.lo], 17);
     }
     // SW šalje ping svakih 20s tokom snimanja — restartuj GPS ako se ugasio
     if (evt.data?.type === 'sw-ping' && recOn && gpsOn && !wid) {
