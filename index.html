@@ -17626,7 +17626,7 @@ class MiniSqlite {
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
           // PRIMARY KEY (x,y,z,s) → red kolona automatskog indeksa (sqlite_autoindex), čiji je sql NULL
           const pkm=s.match(/primary\s+key\s*\(([^)]*)\)/);
-          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'`\[\]]/g,'').split(/\s+/)[0]).filter(Boolean);
+          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'\x60\[\]]/g,'').split(/\s+/)[0]).filter(Boolean);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
             const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
