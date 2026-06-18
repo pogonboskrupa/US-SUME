@@ -3918,6 +3918,17 @@ async function initAuth() {
   const saved = _loadSavedUser();
   const hasLocalData = !!(cached && saved);
 
+  // OFFLINE FAST PATH: keširani profil + zapamćeni kredencijali = odmah u app
+  // Ovo pokriva: povratak iz kamere (Android ubije WebView), avionski mod, teren bez signala
+  if (hasLocalData && (!navigator.onLine || !sb)) {
+    sbUser = { id: cached.id, email: cached.email || '' };
+    sbProfile = cached;
+    _setOfflineMode(true);
+    showApp();
+    showToast('📴 Offline pristup — lokalni podaci');
+    return;
+  }
+
   // Ako nema keširanog profila ni kredencijala, odmah prikaži login
   if (!hasLocalData) {
     _showAuthScreen();
@@ -3952,6 +3963,14 @@ async function initAuth() {
       showApp();
     } catch(e) {
       console.error('Auto-login error:', e);
+      // Mrežna greška pri auto-loginu — koristi offline fallback ako postoji keš
+      if (cached && saved && !sbUser) {
+        sbUser = { id: cached.id, email: cached.email || '' };
+        sbProfile = cached;
+        _setOfflineMode(true);
+        showApp();
+        showToast('📴 Offline pristup — lokalni podaci');
+      }
     }
   }, 800);
 
@@ -4097,7 +4116,22 @@ async function doLogin() {
 
   document.getElementById('auth-err').style.display = 'none';
   if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
-  if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
+
+  // Offline login: keširani profil postoji, nema mreže — pusti u app
+  if (!sb || !navigator.onLine) {
+    const cached = _OL.load(_OL.PROFILE);
+    const saved = _loadSavedUser();
+    if (cached && saved && saved.ime === ime && saved.pin === pin) {
+      sbUser = { id: cached.id, email: cached.email || '' };
+      sbProfile = cached;
+      localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+      _setOfflineMode(true);
+      showApp();
+      showToast('📴 Offline prijava — lokalni podaci');
+      return;
+    }
+    if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
+  }
 
   showAuthErr('Povezivanje sa serverom...');
 
