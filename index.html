@@ -7174,6 +7174,7 @@ let _rtShareChannel = null;
 let _shareLiveOn = false;
 let _shareLiveTimer = null;
 let _sharedLocMarkers = {}; // odKorisnikId → { mk, circle, timer }
+let _shareTargetIds = [];   // kome dijelim (prazno = svima)
 
 function _sbRemoveRtChannels() {
   [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel, _rtShareChannel].forEach(ch => {
@@ -7265,13 +7266,64 @@ function showShareLocMenu() {
   if (!lastP) { showToast('⚠ GPS pozicija nije dostupna'); return; }
   if (!sb || !sbProfile?.sumarija) { showToast('⚠ Potrebna je veza sa serverom'); return; }
 
+  if (_shareLiveOn) {
+    _showShareActionSheet([]);
+    return;
+  }
+
+  const entries = Object.entries(kolegeMap);
+  if (entries.length === 0) { showToast('⚠ Nema kolega u šumariji'); return; }
+
+  const sheet = document.createElement('div');
+  sheet.id = 'share-loc-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:99500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);';
+
+  let listHtml = entries.map(([kid, info]) => {
+    const name = info.ime;
+    const color = info.color || '#3b82f6';
+    return `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #334155;cursor:pointer;">
+      <input type="checkbox" value="${kid}" class="share-kol-cb" style="width:20px;height:20px;accent-color:${color};" checked>
+      <span style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0;">${name.charAt(0)}</span>
+      <span style="color:#e2e8f0;font-size:14px;font-weight:500;">${name}</span>
+    </label>`;
+  }).join('');
+
+  sheet.innerHTML = `<div style="background:#1e293b;border-radius:14px 14px 0 0;width:100%;max-width:400px;padding:18px 16px 24px;box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
+    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:4px;text-align:center;">📍 Podijeli lokaciju</div>
+    <div style="font-size:12px;color:#94a3b8;text-align:center;margin-bottom:12px;">Odaberi sa kim želiš podijeliti</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button onclick="_shareSelAll(true)" style="flex:1;padding:6px;background:#334155;color:#94a3b8;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Označi sve</button>
+      <button onclick="_shareSelAll(false)" style="flex:1;padding:6px;background:#334155;color:#94a3b8;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Odznači sve</button>
+    </div>
+    <div style="max-height:240px;overflow-y:auto;margin-bottom:14px;">${listHtml}</div>
+    <button onclick="_shareLocNext()" style="width:100%;padding:13px;margin-bottom:8px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">Dalje ➜</button>
+    <button onclick="_closeShareSheet()" style="width:100%;padding:13px;background:#334155;color:#94a3b8;border:none;border-radius:10px;font-size:14px;cursor:pointer;">Otkaži</button>
+  </div>`;
+  sheet.addEventListener('click', e => { if (e.target === sheet) _closeShareSheet(); });
+  document.body.appendChild(sheet);
+}
+
+function _shareSelAll(val) {
+  document.querySelectorAll('.share-kol-cb').forEach(cb => cb.checked = val);
+}
+
+function _shareLocNext() {
+  const checked = [...document.querySelectorAll('.share-kol-cb:checked')].map(cb => cb.value);
+  if (checked.length === 0) { showToast('⚠ Odaberi barem jednu osobu'); return; }
+  _closeShareSheet();
+  _showShareActionSheet(checked);
+}
+
+function _showShareActionSheet(selectedIds) {
+  _shareTargetIds = selectedIds;
   const sheet = document.createElement('div');
   sheet.id = 'share-loc-sheet';
   sheet.style.cssText = 'position:fixed;inset:0;z-index:99500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);';
   const liveLabel = _shareLiveOn ? '⏹ Zaustavi dijeljenje kretanja' : '🔴 Podijeli kretanje';
   const liveColor = _shareLiveOn ? '#f87171' : '#22c55e';
+  const countTxt = _shareLiveOn ? '' : ` (${selectedIds.length})`;
   sheet.innerHTML = `<div style="background:#1e293b;border-radius:14px 14px 0 0;width:100%;max-width:400px;padding:18px 16px 24px;box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
-    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:14px;text-align:center;">📍 Podijeli lokaciju</div>
+    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:14px;text-align:center;">📍 Način dijeljenja${countTxt}</div>
     <button onclick="_sharePoint();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">📍 Podijeli tačku</button>
     <button onclick="_toggleShareLive();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:${liveColor};color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">${liveLabel}</button>
     <button onclick="_closeShareSheet()" style="width:100%;padding:13px;background:#334155;color:#94a3b8;border:none;border-radius:10px;font-size:14px;cursor:pointer;">Otkaži</button>
@@ -7289,9 +7341,11 @@ function _sharePoint() {
   if (!lastP || !_rtShareChannel) return;
   _rtShareChannel.send({
     type: 'broadcast', event: 'loc-point',
-    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now() }
+    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now(), to: _shareTargetIds }
   });
-  showToast('📍 Tačka podijeljena sa kolegama');
+  const n = _shareTargetIds.length;
+  const names = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+  showToast('📍 Tačka podijeljena: ' + (names.length <= 3 ? names.join(', ') : names.slice(0,2).join(', ') + ' +' + (names.length-2)));
 }
 
 function _toggleShareLive() {
@@ -7300,7 +7354,8 @@ function _toggleShareLive() {
     showToast('⏹ Dijeljenje kretanja zaustavljeno');
   } else {
     _startShareLive();
-    showToast('🔴 Dijelite kretanje sa kolegama');
+    const sn = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+    showToast('🔴 Dijelite kretanje sa: ' + sn.join(', '));
   }
 }
 
@@ -7328,7 +7383,7 @@ function _sendLivePos() {
   if (!lastP || !_rtShareChannel || !sbUser) return;
   _rtShareChannel.send({
     type: 'broadcast', event: 'loc-live',
-    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now() }
+    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), to: _shareTargetIds }
   });
 }
 
@@ -7339,7 +7394,9 @@ function _updShareLiveIndicator() {
       el = document.createElement('div');
       el.id = 'share-live-ind';
       el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;';
-      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim lokaciju';
+      const tNames = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+      const tLabel = tNames.length <= 2 ? tNames.join(', ') : tNames.slice(0,2).join(', ') + ' +' + (tNames.length-2);
+      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim sa: ' + tLabel;
       el.onclick = () => showShareLocMenu();
       document.body.appendChild(el);
     }
@@ -7352,6 +7409,7 @@ function _updShareLiveIndicator() {
 
 function _onSharePoint(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
+  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
   _showSharedLocMarker(p.uid, p.la, p.lo, info, false, p.al);
@@ -7360,6 +7418,7 @@ function _onSharePoint(p) {
 
 function _onShareLive(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
+  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
   _showSharedLocMarker(p.uid, p.la, p.lo, info, true, p.al);
