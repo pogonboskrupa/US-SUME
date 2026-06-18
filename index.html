@@ -5709,11 +5709,24 @@ async function sbFlushVlaka(i) {
       const c2 = _OL.load(_OL.VLAKE) || [];
       const i2 = c2.findIndex(r => r.id === data.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
+      _updateVlakaSyncIcon(i, 'ok');
     } else if (error) {
       _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+      _updateVlakaSyncIcon(i, 'queue');
     }
   } catch(e) {
     _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+    _updateVlakaSyncIcon(i, 'queue');
+  }
+}
+
+function _updateVlakaSyncIcon(i, status) {
+  const el = document.querySelector(`.vsync-icon[data-vi="${i}"]`);
+  if (!el) return;
+  if (status === 'ok') {
+    el.textContent = '☁'; el.title = 'Sačuvano na server'; el.style.color = '#4ade80';
+  } else if (status === 'queue') {
+    el.textContent = '☁'; el.title = 'U redu čekanja — sačuvaće se kad bude veze'; el.style.color = '#fbbf24';
   }
 }
 
@@ -9611,7 +9624,12 @@ function stopRec() {
     updateVlakaLabel(actI);
     // Odmah sačuvaj — ne čekaj debounce (zaštita od gubitka ako se app zatvori)
     clearTimeout(_vlakaSaveTimers[actI]);
-    sbFlushVlaka(actI);
+    const _recNm = vlake[actI]?.nm || '';
+    const _recPts = vlake[actI]?.pts?.length || 0;
+    sbFlushVlaka(actI).then(() => {
+      if (vlake[actI]?.sbId) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
+      else showToast(`📴 ${_recNm} sačuvana lokalno — sync kad bude veze`);
+    });
   }
   // Spremi i sve ostale vlake s pending timerima (npr. krak koji se još nije snimio)
   Object.keys(_vlakaSaveTimers).forEach(k => {
@@ -11218,6 +11236,7 @@ function _renderVlakaRow(el, v, i, depth) {
         ${krakArrow}${stranaBadge}<span class="vcard-name">${v.nm}</span>
         ${badge}
         <span class="vcard-km">${fmtL(d)}</span>
+        ${sbUser ? `<span class="vsync-icon" data-vi="${i}" title="${v.sbId ? 'Sačuvano na server' : 'Čeka sync...'}" style="font-size:11px;opacity:0.7;margin-left:2px;color:${v.sbId ? '#4ade80' : '#94a3b8'};">☁</span>` : ''}
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
