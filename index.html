@@ -566,7 +566,7 @@ input:focus { outline:none; border-color:#3b82f6; }
   display:flex; flex-direction:column; gap:4px;
 }
 .treg-row:hover { border-color:#475569; }
-.treg-name { font-size:13px; font-weight:600; color:#e2e8f0; cursor:pointer; }
+.treg-name { font-size:14px; font-weight:700; color:#ffffff; cursor:pointer; }
 .treg-meta { font-size:11px; color:#64748b; }
 .treg-btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
 .treg-btns button { background:#0f172a; border:1px solid #334155; color:#94a3b8; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; }
@@ -629,7 +629,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 }
 /* Trag popup on map */
 .trag-popup { min-width:180px; }
-.trag-popup b { font-size:13px; }
+.trag-popup b { font-size:14px; font-weight:700; color:#0f172a; }
 .trag-popup-meta { font-size:11px; color:#888; margin:4px 0 8px; }
 .trag-popup-btns { display:flex; gap:6px; flex-wrap:wrap; }
 .trag-popup-btns button { background:#1e293b; border:1px solid #334155; color:#e2e8f0; border-radius:5px; padding:4px 8px; font-size:11px; cursor:pointer; }
@@ -10968,16 +10968,39 @@ function _tragFmtLen(m) {
 
 function _tragPopupHtml(t, lenM) {
   const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const w = t.weight || 3;
+  const style = t.dashStyle || 'dash';
   return `<div class="trag-popup">
     <b>${_escHtml(t.name)}</b>
     <div class="trag-popup-meta">${dt}<br>${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
     <div class="trag-popup-btns">
       <button onclick="_tragRegRename('${t.id}')">✏ Preimenuj</button>
       <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
-      <button onclick="_tragRegToggle('${t.id}')" id="tvis-${t.id}">${t.visible!==false?'🙈 Sakrij':'👁 Prikaži'}</button>
-      <button onclick="_tragRegDelete('${t.id}')" style="color:#f87171;border-color:#7f1d1d;">✕ Briši</button>
+      <button onclick="_tragRegToggle('${t.id}');_tragPopupRefresh('${t.id}')" id="tvis-${t.id}">${t.visible!==false?'🙈 Sakrij':'👁 Prikaži'}</button>
+      <button onclick="if(confirm('Obrisati trag?'))_tragRegDelete('${t.id}')" style="color:#f87171;border-color:#7f1d1d;">✕ Briši</button>
+    </div>
+    <div style="margin-top:8px;border-top:1px solid #334155;padding-top:8px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <span style="font-size:11px;color:#94a3b8;">Boja</span>
+        <input type="color" value="${t.color}" onchange="_tragoviSetColor('${t.id}',this.value)" style="width:28px;height:22px;border:none;background:none;cursor:pointer;">
+        <span style="font-size:11px;color:#94a3b8;margin-left:8px;">Debljina</span>
+        <input type="range" min="1" max="10" value="${w}" style="width:70px;" oninput="_tragoviSetWeight('${t.id}',+this.value)">
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button onclick="_tragoviSetStyle('${t.id}','solid');_tragPopupRefresh('${t.id}')" style="${style==='solid'?'border-color:#4ade80;color:#4ade80;':''}">━ Puna</button>
+        <button onclick="_tragoviSetStyle('${t.id}','dash');_tragPopupRefresh('${t.id}')" style="${style==='dash'?'border-color:#4ade80;color:#4ade80;':''}">╌ Iscrtkana</button>
+        <button onclick="_tragoviSetStyle('${t.id}','dot');_tragPopupRefresh('${t.id}')" style="${style==='dot'?'border-color:#4ade80;color:#4ade80;':''}">· Točkasta</button>
+      </div>
     </div>
   </div>`;
+}
+
+function _tragPopupRefresh(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  const line = _tragLayers[id];
+  if (!t || !line) return;
+  const lenM = _tragCalcLen(t.pts);
+  line.setPopupContent(_tragPopupHtml(t, lenM));
 }
 
 function _escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
