@@ -11420,6 +11420,8 @@ function fabSnimTrag() {
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4' }).addTo(map);
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
+    // Ako je snimanje pokrenuto iz Tragovi panela, prebaci na kartu da se vidi trag uživo
+    if (_activeTab === 'tragovi') switchTab('karta');
     _updFabVisibility();
     if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     _updTragStats();
@@ -16054,7 +16056,7 @@ function _updFabVisibility() {
   const spdField = typeof isSpdField === 'function' && isSpdField();
 
   if (!inRec && inTrag) {
-    show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+    show('brec', false); show('btrag', false); show('btragovi', false); show('ab-izmjeri-wrap', false);
     show('ab-kompas', false);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',false);
@@ -16068,12 +16070,14 @@ function _updFabVisibility() {
     const ro = typeof isReadOnly === 'function' && isReadOnly();
     if (spdField) {
       show('brec', false);
-      show('btrag', true);
+      show('btrag', false);
+      show('btragovi', true);   // terenski profili: "Tragovi" otvara panel sa snimanjem + bazom
       show('ab-izmjeri-wrap', true);
       show('ab-kompas', true);
     } else {
       show('brec',     hasProj && !ro);
       show('btrag',    !hasProj && !ro);
+      show('btragovi', false);
       show('ab-izmjeri-wrap', !hasProj && !ro);
       show('ab-kompas', false);
     }
@@ -16083,7 +16087,7 @@ function _updFabVisibility() {
     return;
   }
 
-  show('brec', false); show('btrag', false); show('ab-izmjeri-wrap', false);
+  show('brec', false); show('btrag', false); show('btragovi', false); show('ab-izmjeri-wrap', false);
   show('ab-kompas', false);
 
   if (isPaused) {
@@ -22082,6 +22086,10 @@ if (typeof AndroidDownload !== 'undefined') {
   <button id="btrag" onclick="togSnimTrag()" title="Snimi GPS trag">
     <span class="ab-ico">🔴</span>
     <span>Snimi trag</span>
+  </button>
+  <button id="btragovi" onclick="switchTab('tragovi')" title="Tragovi — snimanje i baza tragova" style="display:none;">
+    <span class="ab-ico">👣</span>
+    <span>Tragovi</span>
   </button>
   <!-- Mod snimanja vlake (recOn) — krak gumbi + povratak -->
   <button id="ab-nazad" onclick="vratiSeNaRoditelja()" title="Vrati se na roditeljsku vlaku" style="display:none;">
