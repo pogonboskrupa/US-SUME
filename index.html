@@ -4031,8 +4031,10 @@ async function sbLoadProfile() {
     const routeBtn = document.getElementById('route-suggest-btn');
     if (routeBtn) routeBtn.parentElement.style.display = 'none';
     // Sakrij foto dugme
-    const fotoInput = document.getElementById('loc-photo-input');
-    if (fotoInput) fotoInput.disabled = true;
+    const fotoCam = document.getElementById('loc-photo-cam');
+    const fotoGal = document.getElementById('loc-photo-gal');
+    if (fotoCam) fotoCam.disabled = true;
+    if (fotoGal) fotoGal.disabled = true;
   }
 
   // ŠPD US ŠUME terenski korisnik (nije admin): samo navigacija/orijentacija.
@@ -6673,7 +6675,32 @@ let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za f
 function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
   _fotoSnapPos = { la: lastP.la, lo: lastP.lo };
-  document.getElementById('loc-photo-input').click();
+  // Action sheet: kamera ili galerija
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99998;display:flex;align-items:flex-end;justify-content:center;';
+  const sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#1e293b;border-radius:16px 16px 0 0;width:100%;max-width:400px;padding:12px 16px 20px;';
+  sheet.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-bottom:10px;">Izvor slike</div>'
+    + '<button id="_foto-cam" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">📷 Kamera</button>'
+    + '<button id="_foto-gal" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">🖼 Galerija</button>'
+    + '<button id="_foto-cancel" style="width:100%;padding:14px;background:transparent;border:none;color:#64748b;font-size:14px;cursor:pointer;">Otkaži</button>';
+  bg.appendChild(sheet);
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.addEventListener('click', e => { if (e.target === bg) { _fotoSnapPos = null; close(); } });
+  document.getElementById('_foto-cancel').onclick = () => { _fotoSnapPos = null; close(); };
+  document.getElementById('_foto-cam').onclick = () => {
+    close();
+    const inp = document.getElementById('loc-photo-cam');
+    inp.value = '';
+    inp.click();
+  };
+  document.getElementById('_foto-gal').onclick = () => {
+    close();
+    const inp = document.getElementById('loc-photo-gal');
+    inp.value = '';
+    inp.click();
+  };
 }
 
 async function onLocPhotoSelected(input) {
@@ -22403,7 +22430,9 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 
-<input type="file" id="loc-photo-input" accept="image/*" capture="environment"
+<input type="file" id="loc-photo-cam" accept="image/*" capture="environment"
+  style="display:none" onchange="onLocPhotoSelected(this)">
+<input type="file" id="loc-photo-gal" accept="image/*"
   style="display:none" onchange="onLocPhotoSelected(this)">
 
 <!-- ══ OZNAKE PANEL ══════════════════════════════════════════════════ -->
