@@ -372,6 +372,7 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
 .btn.rec { background:#dc2626; animation:bl 1s infinite; }
 .btn:disabled { background:#1e293b !important; color:#475569 !important; cursor:not-allowed; opacity:1; }
 @keyframes bl { 0%,100%{opacity:1} 50%{opacity:0.55} }
+@keyframes blinker { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
 /* Inputs */
 .lbl { font-size:12px; color:#94a3b8; display:block; margin-bottom:4px; margin-top:6px; }
@@ -4281,6 +4282,7 @@ async function doLogout() {
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
   _kolegeActiveSince = {};
+  _clearAllSharedLocMarkers();
   _sbRemoveRtChannels();
   clearInterval(window._liveBarTimer);
   _updSyncDot('off');
@@ -7168,12 +7170,17 @@ function _restoreFotos() {
 // ─── REALTIME ────────────────────────────────────────────────────────────────
 
 let _rtFotosChannel = null, _rtClanoviChannel = null, _rtDozGlobalChannel = null;
+let _rtShareChannel = null;
+let _shareLiveOn = false;
+let _shareLiveTimer = null;
+let _sharedLocMarkers = {}; // odKorisnikId → { mk, circle, timer }
 
 function _sbRemoveRtChannels() {
-  [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel].forEach(ch => {
+  [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel, _rtShareChannel].forEach(ch => {
     try { if (ch) sb.removeChannel(ch); } catch(e) {}
   });
-  _rtVlakeChannel = _rtOdjeliChannel = _rtFotosChannel = _rtClanoviChannel = _rtDozGlobalChannel = null;
+  _rtVlakeChannel = _rtOdjeliChannel = _rtFotosChannel = _rtClanoviChannel = _rtDozGlobalChannel = _rtShareChannel = null;
+  _stopShareLive();
 }
 
 function _onRtStatus(status) {
@@ -7250,6 +7257,170 @@ function _updKoleguLiveBar() {
   if (active.length === 0) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = `<span class="live-dot"></span>${active.join(', ')} snima${active.length > 1 ? 'ju' : ''}`;
+}
+
+// ─── PODIJELI LOKACIJU ──────────────────────────────────────────────────────
+
+function showShareLocMenu() {
+  if (!lastP) { showToast('⚠ GPS pozicija nije dostupna'); return; }
+  if (!sb || !sbProfile?.sumarija) { showToast('⚠ Potrebna je veza sa serverom'); return; }
+
+  const sheet = document.createElement('div');
+  sheet.id = 'share-loc-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:99500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);';
+  const liveLabel = _shareLiveOn ? '⏹ Zaustavi dijeljenje kretanja' : '🔴 Podijeli kretanje';
+  const liveColor = _shareLiveOn ? '#f87171' : '#22c55e';
+  sheet.innerHTML = `<div style="background:#1e293b;border-radius:14px 14px 0 0;width:100%;max-width:400px;padding:18px 16px 24px;box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
+    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:14px;text-align:center;">📍 Podijeli lokaciju</div>
+    <button onclick="_sharePoint();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">📍 Podijeli tačku</button>
+    <button onclick="_toggleShareLive();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:${liveColor};color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">${liveLabel}</button>
+    <button onclick="_closeShareSheet()" style="width:100%;padding:13px;background:#334155;color:#94a3b8;border:none;border-radius:10px;font-size:14px;cursor:pointer;">Otkaži</button>
+  </div>`;
+  sheet.addEventListener('click', e => { if (e.target === sheet) _closeShareSheet(); });
+  document.body.appendChild(sheet);
+}
+
+function _closeShareSheet() {
+  const s = document.getElementById('share-loc-sheet');
+  if (s) s.remove();
+}
+
+function _sharePoint() {
+  if (!lastP || !_rtShareChannel) return;
+  _rtShareChannel.send({
+    type: 'broadcast', event: 'loc-point',
+    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now() }
+  });
+  showToast('📍 Tačka podijeljena sa kolegama');
+}
+
+function _toggleShareLive() {
+  if (_shareLiveOn) {
+    _stopShareLive();
+    showToast('⏹ Dijeljenje kretanja zaustavljeno');
+  } else {
+    _startShareLive();
+    showToast('🔴 Dijelite kretanje sa kolegama');
+  }
+}
+
+function _startShareLive() {
+  if (_shareLiveOn) return;
+  _shareLiveOn = true;
+  _sendLivePos();
+  _shareLiveTimer = setInterval(_sendLivePos, 5000);
+  _updShareLiveIndicator();
+}
+
+function _stopShareLive() {
+  _shareLiveOn = false;
+  if (_shareLiveTimer) { clearInterval(_shareLiveTimer); _shareLiveTimer = null; }
+  if (_rtShareChannel && sbUser) {
+    _rtShareChannel.send({
+      type: 'broadcast', event: 'loc-stop',
+      payload: { uid: sbUser.id }
+    });
+  }
+  _updShareLiveIndicator();
+}
+
+function _sendLivePos() {
+  if (!lastP || !_rtShareChannel || !sbUser) return;
+  _rtShareChannel.send({
+    type: 'broadcast', event: 'loc-live',
+    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now() }
+  });
+}
+
+function _updShareLiveIndicator() {
+  let el = document.getElementById('share-live-ind');
+  if (_shareLiveOn) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'share-live-ind';
+      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;';
+      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim lokaciju';
+      el.onclick = () => showShareLocMenu();
+      document.body.appendChild(el);
+    }
+  } else {
+    if (el) el.remove();
+  }
+}
+
+// --- Primanje dijeljene lokacije ---
+
+function _onSharePoint(p) {
+  if (!p?.uid || p.uid === sbUser?.id) return;
+  const info = kolegeMap[p.uid];
+  if (!info) return;
+  _showSharedLocMarker(p.uid, p.la, p.lo, info, false, p.al);
+  showToast('📍 ' + info.ime.split(' ')[0] + ' je podijelio/la lokaciju');
+}
+
+function _onShareLive(p) {
+  if (!p?.uid || p.uid === sbUser?.id) return;
+  const info = kolegeMap[p.uid];
+  if (!info) return;
+  _showSharedLocMarker(p.uid, p.la, p.lo, info, true, p.al);
+}
+
+function _onShareStop(p) {
+  if (!p?.uid || p.uid === sbUser?.id) return;
+  _removeSharedLocMarker(p.uid);
+  const info = kolegeMap[p.uid];
+  if (info) showToast(info.ime.split(' ')[0] + ' je zaustavio/la dijeljenje');
+}
+
+function _showSharedLocMarker(uid, la, lo, info, isLive, al) {
+  const existing = _sharedLocMarkers[uid];
+  if (existing) {
+    existing.mk.setLatLng([la, lo]);
+    if (existing.circle) existing.circle.setLatLng([la, lo]);
+    existing.mk.setPopupContent(_sharedLocPopup(info, la, lo, al, isLive));
+    clearTimeout(existing.timer);
+  } else {
+    const color = info.color || '#3b82f6';
+    const name = info.ime.split(' ')[0];
+    const ico = L.divIcon({
+      className: '', iconSize: [36, 36], iconAnchor: [18, 36],
+      html: `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+        <path d="M18 2C11 2 5.5 7.5 5.5 14.5C5.5 24 18 34 18 34S30.5 24 30.5 14.5C30.5 7.5 25 2 18 2Z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+        <circle cx="18" cy="14" r="6" fill="#fff"/>
+        <text x="18" y="17" text-anchor="middle" font-size="9" font-weight="bold" fill="${color}">${name.charAt(0)}</text>
+      </svg>`
+    });
+    const mk = L.marker([la, lo], { icon: ico, zIndexOffset: 900 }).addTo(map);
+    mk.bindPopup(_sharedLocPopup(info, la, lo, al, isLive), { className: 'share-loc-popup' });
+    _sharedLocMarkers[uid] = { mk, circle: null, timer: null };
+  }
+  // Auto-remove after 2 min for point shares, 30s stale for live
+  const timeout = isLive ? 30000 : 120000;
+  _sharedLocMarkers[uid].timer = setTimeout(() => _removeSharedLocMarker(uid), timeout);
+}
+
+function _sharedLocPopup(info, la, lo, al, isLive) {
+  const name = info.ime;
+  const alt = al ? ` · ${Math.round(al)} m n.v.` : '';
+  const mode = isLive ? '🔴 Uživo' : '📍 Tačka';
+  return `<div style="font-size:13px;line-height:1.5;min-width:140px;">
+    <b style="color:#0f172a;font-size:14px;">${name}</b><br>
+    <span style="color:#64748b;">${mode}${alt}</span><br>
+    <span style="color:#94a3b8;font-size:11px;">${la.toFixed(5)}, ${lo.toFixed(5)}</span>
+  </div>`;
+}
+
+function _removeSharedLocMarker(uid) {
+  const entry = _sharedLocMarkers[uid];
+  if (!entry) return;
+  if (entry.mk) map.removeLayer(entry.mk);
+  if (entry.circle) map.removeLayer(entry.circle);
+  clearTimeout(entry.timer);
+  delete _sharedLocMarkers[uid];
+}
+
+function _clearAllSharedLocMarkers() {
+  Object.keys(_sharedLocMarkers).forEach(uid => _removeSharedLocMarker(uid));
 }
 
 function _updSyncDot(status) {
@@ -7354,6 +7525,13 @@ function sbStartRealtime() {
     .subscribe();
 
   // Per-project kanal se (re)kreira u _dozSubProject kad korisnik otvori odjel
+
+  // Broadcast kanal za dijeljenje lokacije (tačka + live kretanje)
+  _rtShareChannel = sb.channel('loc-share-' + sbProfile.sumarija)
+    .on('broadcast', { event: 'loc-point' }, ({ payload }) => _onSharePoint(payload))
+    .on('broadcast', { event: 'loc-live' },  ({ payload }) => _onShareLive(payload))
+    .on('broadcast', { event: 'loc-stop' },  ({ payload }) => _onShareStop(payload))
+    .subscribe();
 
   // Periodično čisti stale "aktivni" badge (svakih 30s)
   clearInterval(window._liveBarTimer);
@@ -20927,6 +21105,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
   <div class="mdrop-item" id="btn-text-tool" onclick="closeMenuDropdown();toggleTextTool()">🏷 Tekst na karti</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()">📷 Uslikaj lokaciju</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showShareLocMenu()">📍 Podijeli lokaciju</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showHelp()">📖 Upute za korištenje</div>
   <div class="mdrop-sep"></div>
