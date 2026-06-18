@@ -7565,7 +7565,9 @@ function sbStartRealtime() {
         if ((payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')
             && (payload.new?.shared_with || []).includes(sbUser?.id)) {
           _notifBump('vlake');
-          showToast('📷 ' + _notifKolegaName(by) + ' je podijelio/la fotografiju');
+          const _fName = _notifKolegaName(by);
+          showToast('📷 ' + _fName + ' je podijelio/la fotografiju');
+          _notifyShareLoc(_fName, 'je podijelio/la fotografiju 📷', payload.new?.lat, payload.new?.lon);
         }
       }
     })
