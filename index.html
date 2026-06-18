@@ -2757,7 +2757,6 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')">🧭 Teren</button>
-    <button class="tab-btn" id="tragovi-tab-btn" onclick="switchTab('tragovi')">👣 Tragovi<span class="tab-notif" id="notif-tragovi"></span></button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -16075,9 +16074,11 @@ function _updFabVisibility() {
       show('ab-izmjeri-wrap', true);
       show('ab-kompas', true);
     } else {
+      // Sa projektom: Snimi vlaku se pojavi, Snimi trag + Izmjeri nestanu.
+      // Bez projekta: Snimi trag + Izmjeri. Tragovi dugme uvijek dostupno.
       show('brec',     hasProj && !ro);
       show('btrag',    !hasProj && !ro);
-      show('btragovi', false);
+      show('btragovi', !ro);
       show('ab-izmjeri-wrap', !hasProj && !ro);
       show('ab-kompas', false);
     }
