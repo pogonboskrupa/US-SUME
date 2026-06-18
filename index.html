@@ -13664,6 +13664,7 @@ function _kmlPopupHtml(layer, uid) {
     ${extHtml}
     <div style="margin-top:8px;display:flex;gap:6px;">
       <button onclick="_kmlPopEditStart('${uid}')" style="flex:1;padding:6px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;">✏ Uredi</button>
+      <button onclick="_kmlPopStyleToggle('${uid}')" style="flex:1;padding:6px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;">🎨 Stil</button>
       <button onclick="_kmlPopZoom('${uid}')" style="padding:6px 10px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;">🔍</button>
     </div>
     <div id="${uid}-edit" style="display:none;margin-top:8px;">
@@ -13674,6 +13675,7 @@ function _kmlPopupHtml(layer, uid) {
         <button onclick="_kmlPopCancel('${uid}')" style="padding:6px 10px;background:#475569;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;">✕</button>
       </div>
     </div>
+    <div id="${uid}-style" style="display:none;margin-top:8px;">${_kmlPopStylePanel(uid, layer)}</div>
   </div>`;
 }
 
@@ -13685,6 +13687,15 @@ function _kmlPopFindLayer(uid) {
     kl.grp.eachLayer(l => { if (l._kmlPopupId === uid) found = l; });
   });
   return found;
+}
+
+function _kmlPopFindIdx(uid) {
+  for (let i = 0; i < kmlLs.length; i++) {
+    let hit = false;
+    kmlLs[i].grp.eachLayer(l => { if (l._kmlPopupId === uid) hit = true; });
+    if (hit) return i;
+  }
+  return -1;
 }
 
 function _kmlPopEditName(uid, el) {
@@ -13725,6 +13736,108 @@ function _kmlPopZoom(uid) {
   } else if (layer.getLatLng) {
     map.setView(layer.getLatLng(), 17);
   }
+}
+
+function _kmlPopStyleToggle(uid) {
+  const el = document.getElementById(uid + '-style');
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    const i = _kmlPopFindIdx(uid);
+    if (i >= 0) el.innerHTML = _kmlPopStylePanel(uid, null, i);
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function _kmlPopStylePanel(uid, layer, idx) {
+  let i = idx !== undefined ? idx : _kmlPopFindIdx(uid);
+  if (i < 0) return '';
+  const k = kmlLs[i];
+  const col = k.col || '#ef4444';
+  const isPoly = !!(layer ? layer._kmlIsPolygon : _kmlGrpHasPolygon(i));
+  const COLS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#ffffff','#000000'];
+  const swatches = COLS.map(c => {
+    const sel = c === col ? 'outline:2px solid #fff;outline-offset:1px;' : '';
+    return `<span onclick="_kpSetCol('${uid}',${i},'${c}')" style="width:22px;height:22px;border-radius:4px;background:${c};cursor:pointer;display:inline-block;${sel}border:1px solid #475569;"></span>`;
+  }).join('');
+
+  const w = k.weight || 2;
+  const dashOpts = [
+    { v: '', l: '━━━' }, { v: '10,6', l: '╌╌╌' }, { v: '4,4', l: '┄┄┄' }, { v: '2,6', l: '· · ·' }
+  ].map(d => {
+    const sel = (k.dash || '') === d.v ? 'background:#334155;color:#fff;' : 'color:#94a3b8;';
+    return `<button onclick="_kpSetDash('${uid}',${i},'${d.v}')" style="padding:3px 6px;border:1px solid #334155;border-radius:4px;font-size:13px;cursor:pointer;background:transparent;${sel}">${d.l}</button>`;
+  }).join('');
+
+  let fillHtml = '';
+  if (isPoly) {
+    const fillOn = k.fill ? 'checked' : '';
+    const fc = k.fillCol || col;
+    const fo = k.fillOpacity ?? 0.35;
+    const fillSwatches = COLS.map(c => {
+      const sel = c === fc ? 'outline:2px solid #fff;outline-offset:1px;' : '';
+      return `<span onclick="_kpSetFillCol('${uid}',${i},'${c}')" style="width:18px;height:18px;border-radius:3px;background:${c};cursor:pointer;display:inline-block;${sel}border:1px solid #475569;"></span>`;
+    }).join('');
+    const patterns = [
+      { v: 'solid', l: '▓' }, { v: 'diagonal', l: '╱' }, { v: 'crosshatch', l: '╳' },
+      { v: 'horizontal', l: '═' }, { v: 'vertical', l: '║' }, { v: 'dots', l: '⠿' }
+    ].map(p => {
+      const sel = (k.fillPattern || 'solid') === p.v ? 'background:#334155;color:#fff;' : 'color:#94a3b8;';
+      return `<button onclick="_kpSetFillPat('${uid}',${i},'${p.v}')" style="padding:2px 5px;border:1px solid #334155;border-radius:4px;font-size:13px;cursor:pointer;background:transparent;${sel}">${p.l}</button>`;
+    }).join('');
+    fillHtml = `
+      <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;">
+        <label style="display:flex;align-items:center;gap:6px;color:#94a3b8;font-size:11px;cursor:pointer;margin-bottom:6px;">
+          <input type="checkbox" ${fillOn} onchange="_kpSetFill('${uid}',${i},this.checked)" style="accent-color:#3b82f6;"> Ispuna
+        </label>
+        <div id="${uid}-fill-opts" style="${k.fill ? '' : 'display:none;'}">
+          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${fillSwatches}</div>
+          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${patterns}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="color:#94a3b8;font-size:10px;">Prozirnost</span>
+            <input type="range" min="0.05" max="1" step="0.05" value="${fo}" oninput="_kpSetFillOp('${uid}',${i},this.value)" style="flex:1;height:4px;">
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Boja linije</div>
+    <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${swatches}
+      <input type="color" value="${col}" onchange="_kpSetCol('${uid}',${i},this.value)" style="width:22px;height:22px;border:none;padding:0;background:none;cursor:pointer;">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      <span style="color:#94a3b8;font-size:10px;">Debljina</span>
+      <input type="range" min="1" max="8" step="0.5" value="${w}" oninput="_kpSetWeight('${uid}',${i},this.value)" style="flex:1;height:4px;">
+      <span style="color:#64748b;font-size:10px;">${w}px</span>
+    </div>
+    <div style="display:flex;gap:3px;margin-bottom:2px;">${dashOpts}</div>
+    ${fillHtml}`;
+}
+
+function _kmlGrpHasPolygon(i) {
+  let has = false;
+  kmlLs[i]?.grp.eachLayer(l => { if (l._kmlIsPolygon) has = true; });
+  return has;
+}
+
+function _kpSetCol(uid, i, c)    { setKmlColor(i, c);   _kpRefreshStyle(uid, i); }
+function _kpSetDash(uid, i, d)   { setKmlDash(i, d);    _kpRefreshStyle(uid, i); }
+function _kpSetWeight(uid, i, w) { setKmlWeight(i, parseFloat(w)); _kpRefreshStyle(uid, i); }
+function _kpSetFill(uid, i, on)  {
+  kmlLs[i].fill = on;
+  const opts = document.getElementById(uid + '-fill-opts');
+  if (opts) opts.style.display = on ? '' : 'none';
+  applyKmlStyle(i); saveKmlStyles();
+}
+function _kpSetFillCol(uid, i, c) { kmlLs[i].fillCol = c; applyKmlStyle(i); saveKmlStyles(); _kpRefreshStyle(uid, i); }
+function _kpSetFillPat(uid, i, p) { kmlLs[i].fillPattern = p; applyKmlStyle(i); saveKmlStyles(); _kpRefreshStyle(uid, i); }
+function _kpSetFillOp(uid, i, v)  { kmlLs[i].fillOpacity = parseFloat(v); applyKmlStyle(i); saveKmlStyles(); }
+
+function _kpRefreshStyle(uid, i) {
+  const el = document.getElementById(uid + '-style');
+  if (el && el.style.display !== 'none') el.innerHTML = _kmlPopStylePanel(uid, null, i);
 }
 
 // Centroid niza [lat,lng] koordinata (prosti prosjek — dovoljno za labele)
