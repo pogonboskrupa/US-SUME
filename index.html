@@ -3282,6 +3282,12 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
       <div id="tragovi-list"></div>
 
+      <!-- Mjerenja -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;padding-top:12px;border-top:1px solid #1e3a5f;">
+        <span style="font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:0.05em;">MJERENJA <span id="tragovi-msr-count" style="color:#fbbf24;"></span></span>
+      </div>
+      <div id="tragovi-msr-list"></div>
+
     </div>
 
     <!-- ═══ DOZNAKA STABALA PANEL ═══ -->
@@ -11239,6 +11245,38 @@ function _tragoviRender() {
     ${g.label ? `<div class="mjtrg-grp-hdr">📅 ${g.label} <span class="mjtrg-grp-cnt">${g.items.length}</span></div>` : ''}
     ${g.items.map(t => _tragoviRowHtml(t)).join('')}
   `).join('');
+
+  // Mjerenja sekcija u istom panelu
+  const msrEl = document.getElementById('tragovi-msr-list');
+  const msrCnt = document.getElementById('tragovi-msr-count');
+  if (msrEl) {
+    const mn = _msrRegistry.length;
+    if (msrCnt) msrCnt.textContent = mn ? `(${mn})` : '';
+    if (!mn) {
+      msrEl.innerHTML = '<div class="treg-empty" style="padding:8px 0;">Nema sačuvanih mjerenja.</div>';
+    } else {
+      msrEl.innerHTML = _msrRegistry.map(m => {
+        const dt = new Date(m.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+        const lenM = _msrPts2Len(m.pts);
+        const mode = m.mode || 'dist';
+        const modeLabel = mode==='area'?'◻ Površina':mode==='nagib'?'📐 Nagib':'📏 Distanca';
+        let detail = _msrFmt(lenM);
+        if (mode === 'area' && m.pts.length >= 3) {
+          const aM2 = _msrSphericalArea(m.pts);
+          detail = (aM2/10000).toFixed(4)+' ha · obim '+_msrFmt(lenM);
+        }
+        const meta = [dt, modeLabel, detail, m.pts.length+' tač.', m.gj?'GJ: '+_escHtml(m.gj):'', m.odjel?'Odj: '+_escHtml(m.odjel):''].filter(Boolean).join(' · ');
+        return `<div class="treg-row" style="margin-bottom:8px;border-left:3px solid ${m.color||'#fbbf24'};">
+          <div class="treg-name" onclick="_msrRegZoom('${m.id}')">${_escHtml(m.name)}</div>
+          <div class="treg-meta">${meta}</div>
+          <div class="treg-btns">
+            <button onclick="_msrRegZoom('${m.id}')">✏ Edituj</button>
+            <button onclick="_msrAskDelete('${m.id}')">✕ Briši</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
 }
 
 function _tragoviRowHtml(t) {
@@ -16863,6 +16901,8 @@ function _msrRegRender() {
   // Svaki put kad se renderuje lista, osiguraj da su svi nacrtani na mapi
   // ALI ne dok editujemo jedno mjerenje — da ne bude dupla linija
   if (window.map && !_mqmId) _msrDrawAllSaved();
+  // Ažuriraj mjerenja u Tragovi panelu
+  if (typeof _tragoviRender === 'function' && document.getElementById('tragovi-msr-list')) _tragoviRender();
 }
 
 initAuth();
