@@ -3771,6 +3771,24 @@ const _OL = {
       const q = this.loadQueue().filter(o => o.ts !== ts);
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
     } catch(e) {}
+  },
+
+  // Povećaj brojač pokušaja za operaciju koja je pala ne-mrežnom greškom.
+  // Vraća true ako je operaciju trebalo odbaciti (prešla limit pokušaja).
+  bumpRetry(ts, maxRetries) {
+    try {
+      const q = this.loadQueue();
+      const op = q.find(o => o.ts === ts);
+      if (!op) return false;
+      op._retries = (op._retries || 0) + 1;
+      if (op._retries >= (maxRetries || 5)) {
+        const nq = q.filter(o => o.ts !== ts);
+        localStorage.setItem(this.QUEUE, JSON.stringify(nq));
+        return true;
+      }
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+      return false;
+    } catch(e) { return false; }
   }
 };
 
@@ -3872,7 +3890,13 @@ async function _processOfflineQueue() {
         }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
-      else if (!_isNetworkErr(err)) { _OL.removeFromQueue(op.ts); console.warn('Offline queue: trajna greška, operacija odbačena', op.type, err); }
+      else if (!_isNetworkErr(err)) {
+        // Ne-mrežna greška (RLS, istekao token, privremeni 4xx/5xx). Ne odbacuj
+        // odmah — daj 5 pokušaja prije nego se operacija proglasi trajno
+        // neispravnom. Sprečava tihi gubitak snimljenih vlaka.
+        const dropped = _OL.bumpRetry(op.ts, 5);
+        if (dropped) console.warn('Offline queue: operacija odbačena nakon 5 pokušaja', op.type, err);
+      }
     } catch(e) { break; } // still offline
   }
   // Flush buffered doznaka GPS track points
@@ -3953,24 +3977,31 @@ async function initAuth() {
   setTimeout(async () => {
     if (sbUser) return;
     if (!saved) { _showAuthScreen(); return; }
-    try {
-      const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
-      if (!email) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
-      const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
-      if (error) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
-      sbUser = (await sb.auth.getUser()).data.user;
-      await sbLoadProfile();
-      showApp();
-    } catch(e) {
-      console.error('Auto-login error:', e);
-      // Mrežna greška pri auto-loginu — koristi offline fallback ako postoji keš
-      if (cached && saved && !sbUser) {
+    // Pomoćnik: bilo kakav neuspjeh online logina kad IMAMO keširani profil
+    // NIKAD ne smije izbaciti korisnika na login ni obrisati kredencijale —
+    // na terenu navigator.onLine zna lažno biti true, a Supabase tiho vrati null.
+    const goOfflineOrLogin = () => {
+      if (cached && saved) {
         sbUser = { id: cached.id, email: cached.email || '' };
         sbProfile = cached;
         _setOfflineMode(true);
         showApp();
         showToast('📴 Offline pristup — lokalni podaci');
+      } else {
+        _showAuthScreen();
       }
+    };
+    try {
+      const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
+      if (!email) { goOfflineOrLogin(); return; }
+      const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
+      if (error) { goOfflineOrLogin(); return; }
+      sbUser = (await sb.auth.getUser()).data.user;
+      await sbLoadProfile();
+      showApp();
+    } catch(e) {
+      console.error('Auto-login error:', e);
+      if (!sbUser) goOfflineOrLogin();
     }
   }, 800);
 
@@ -4203,7 +4234,12 @@ async function doRegister() {
 
 // --- Logout ---
 async function doLogout() {
-  await sb.auth.signOut();
+  // Pokušaj isporučiti zaostale offline operacije prije odjave (da se ne
+  // pomiješaju sa sljedećim nalogom na istom uređaju)
+  if (navigator.onLine && sbUser && sbProfile) {
+    try { await _processOfflineQueue(); } catch(e) {}
+  }
+  try { await sb.auth.signOut(); } catch(e) {}
   sbUser = null; sbProfile = null;
 
   // Očisti mapu i stanje
@@ -4244,6 +4280,9 @@ async function doLogout() {
   // Očisti lokalne vlake keš — sprečava prelijevanje vlaka između naloga
   localStorage.removeItem(LOCAL_VLAKE_KEY);
   localStorage.removeItem('tvlake_local_vlake_uid');
+  // Očisti keširani profil i per-user podatke — sprečava da offline fast-path
+  // pusti pogrešnog korisnika i da se tuđi keš prikaže novom nalogu
+  [_OL.PROFILE, _OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
 
   dnevniLog = []; kolege = [];
 
@@ -9665,13 +9704,31 @@ document.addEventListener('visibilitychange', async () => {
     // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
     if (recOn && !_wakeLock) await _acquireWakeLock();
     _updWakeLockIcon();
+    // Povratak u prvi plan — pokušaj sync (online event zna izostati na Androidu)
+    if (navigator.onLine && sbUser) _processOfflineQueue();
   } else {
+    // App ide u pozadinu (kamera, drugi app, zaključavanje) — Android može
+    // ubiti WebView. Spasi sve lokalno ODMAH, ne čekaj debounce timer.
+    try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
     if (recOn && !recPaused) {
       if (bgWarn) bgWarn.style.display = '';
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
   }
 });
+
+// Posljednja šansa za spas podataka prije nego WebView bude ubijen
+window.addEventListener('pagehide', () => {
+  try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
+});
+
+// Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
+setInterval(() => {
+  if (navigator.onLine && sbUser && sbProfile) {
+    const q = _OL.loadQueue();
+    if (q.length) _processOfflineQueue();
+  }
+}, 60000);
 
 function _updWakeLockIcon() {
   const el = document.getElementById('wakelock-icon');
