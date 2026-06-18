@@ -2,6 +2,8 @@
 <html lang="bs">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,19 +27,30 @@
 <script src="https://cdn.jsdelivr.net/npm/shapefile@0.6.6/dist/shapefile.min.js"></script>
 <style>
 
+</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 
+/* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
+.leaflet-tile-container { will-change: transform; }
+/* Tile-ovi se prikazuju odmah (canvas ima tamnu pozadinu) — nema fade animacije */
+.leaflet-tile { will-change: auto; backface-visibility: hidden; opacity:1; }
+.leaflet-tile-loaded { opacity:1; }
+.leaflet-zoom-animated { will-change: transform; }
+.leaflet-map-pane { will-change: transform; }
+.leaflet-tile-pane { will-change: transform; background: #2d3a2e; }
+
 /* === AUTH SCREEN === */
 #auth-screen {
-  display:none; position:fixed; inset:0; z-index:99999;
+  display:flex; position:fixed; inset:0; z-index:99999;
   background:#080f0a; align-items:center; justify-content:center;
-  overflow-y:auto; font-family:'DM Sans',Arial,sans-serif;
+  overflow-y:auto; font-family:'DM Sans',Arial,Roboto,sans-serif;
 }
+#auth-screen * { opacity:1; }
 /* Background layers */
-.auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; }
+.auth-bg { position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
 .auth-bg-grid {
   position:absolute; inset:-50%; width:200%; height:200%;
   background-image:
@@ -69,7 +82,7 @@
 .auth-card-wrap {
   position:relative; z-index:1;
   width:100%; max-width:380px; padding:12px;
-  animation:authCardIn 0.8s cubic-bezier(0.22,1,0.36,1) both;
+  /* animacija uklonjena — uzrokovala opacity:0 u WebView */
 }
 @keyframes authCardIn {
   from{opacity:0;transform:translateY(28px) scale(0.97)}
@@ -79,7 +92,6 @@
 .auth-sbar {
   display:flex; justify-content:space-between; align-items:center;
   padding:0 4px 6px;
-  animation:authFadeIn 0.6s 0.4s both;
 }
 @keyframes authFadeIn { from{opacity:0} to{opacity:1} }
 .auth-sbadge {
@@ -120,7 +132,7 @@
   border-radius:0 20px 0 0;
 }
 /* Header */
-.auth-hdr { text-align:center; margin-bottom:14px; animation:authFadeIn 0.6s 0.2s both; display:flex; flex-direction:column; align-items:center; }
+.auth-hdr { text-align:center; margin-bottom:14px; display:flex; flex-direction:column; align-items:center; }
 .auth-logo-box {
   width:96px; height:115px; margin:0 auto 28px;
   background:transparent; border:none; border-radius:0;
@@ -131,7 +143,7 @@
 .auth-logo-box::before { content:''; }
 .auth-logo-corner { display:none; }
 .auth-org-name {
-  font-family:'DM Sans',sans-serif;
+  font-family:'DM Sans',Arial,Roboto,sans-serif;
   font-size:13px; font-weight:600; letter-spacing:0.06em;
   color:rgba(232,240,233,0.7); line-height:1.2; margin-bottom:10px;
 }
@@ -146,7 +158,7 @@
   letter-spacing:0.2em; color:rgba(180,205,183,0.45); text-transform:uppercase;
 }
 /* Form fields */
-.auth-form-body { animation:authFadeIn 0.6s 0.35s both; }
+.auth-form-body { }
 .auth-field { margin-bottom:9px; }
 .auth-field-lbl {
   display:flex; align-items:baseline; gap:6px;
@@ -165,7 +177,7 @@
   width:100%; background:#111c13;
   border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
   padding:10px 10px 10px 36px;
-  color:#e8f0e9; font-family:'DM Sans',Arial,sans-serif;
+  color:#e8f0e9; font-family:'DM Sans',Arial,Roboto,sans-serif;
   font-size:13px; outline:none;
   transition:border-color 0.2s,box-shadow 0.2s,background 0.2s;
   -webkit-appearance:none;
@@ -187,7 +199,7 @@
   width:100%; background:#111c13;
   border:1.5px solid rgba(74,163,90,0.18); border-radius:10px;
   padding:10px 10px; color:#e8f0e9;
-  font-family:'DM Sans',Arial,sans-serif; font-size:13px; outline:none;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:13px; outline:none;
 }
 /* Remember me */
 .auth-remember-row {
@@ -210,7 +222,7 @@
   width:100%; padding:11px;
   background:linear-gradient(135deg,#2e8b42,#3a9e50 50%,#3aad52);
   border:none; border-radius:10px; color:#fff;
-  font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:14px; font-weight:600;
   letter-spacing:0.08em; cursor:pointer;
   position:relative; overflow:hidden;
   transition:transform 0.15s,box-shadow 0.15s;
@@ -237,7 +249,7 @@
   width:100%; padding:9px;
   background:transparent; border:1.5px solid rgba(74,163,90,0.18);
   border-radius:10px; color:rgba(180,205,183,0.65);
-  font-family:'DM Sans',Arial,sans-serif; font-size:12px;
+  font-family:'DM Sans',Arial,Roboto,sans-serif; font-size:12px;
   font-weight:500; cursor:pointer;
   transition:border-color 0.2s,color 0.2s,background 0.2s;
 }
@@ -251,7 +263,6 @@
 /* Footer */
 .auth-card-foot {
   margin-top:10px; display:flex; justify-content:center; gap:20px;
-  animation:authFadeIn 0.6s 0.6s both;
 }
 .auth-foot-lnk {
   font-family:'JetBrains Mono',monospace; font-size:9px;
@@ -563,6 +574,20 @@ input:focus { outline:none; border-color:#3b82f6; }
 .treg-btns .del-btn { border-color:#7f1d1d; color:#f87171; }
 .treg-btns .del-btn:hover { background:#2d0a0a; }
 .treg-empty { color:#475569; font-size:12px; text-align:center; padding:20px; }
+/* Trag style editor */
+.tred-row { background:#0f172a; border-radius:8px; padding:8px 10px; margin-top:6px; display:flex; flex-direction:column; gap:8px; border:1px dashed #334155; }
+.tred-row label { font-size:11px; color:#64748b; display:block; margin-bottom:2px; }
+.tred-row input[type=color] { width:38px; height:28px; border:none; padding:1px; border-radius:6px; cursor:pointer; background:transparent; }
+.tred-row input[type=range] { width:100%; accent-color:#4ade80; }
+.tred-style-btns { display:flex; gap:6px; }
+.tred-style-btns button { flex:1; padding:5px 4px; font-size:12px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer; }
+.tred-style-btns button.active { border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.08); }
+/* Tačke lista */
+.tred-pts-list { max-height:180px; overflow-y:auto; border:1px solid #1e293b; border-radius:6px; }
+.tred-pt-row { display:flex; align-items:center; gap:6px; padding:4px 8px; font-size:11px; color:#64748b; border-bottom:1px solid #1e293b; }
+.tred-pt-row:last-child { border-bottom:none; }
+.tred-pt-idx { color:#475569; min-width:28px; font-size:10px; }
+.tred-pt-del { margin-left:auto; background:none; border:none; color:#f87171; cursor:pointer; font-size:13px; padding:0 4px; }
 /* Grupiranje */
 .mjtrg-grp-hdr {
   font-size:10px; font-weight:700; color:#475569; text-transform:uppercase;
@@ -821,8 +846,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 #manual-draw-panel {
   position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
   z-index:950; width:min(380px, calc(100vw - 24px));
-  background:rgba(255,255,255,0.94);
-  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  background:rgba(255,255,255,0.97);
   border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
   box-shadow:0 8px 32px rgba(0,0,0,0.18);
   overflow:hidden;
@@ -852,8 +876,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 #edit-panel {
   position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
   z-index:950; width:min(380px, calc(100vw - 24px));
-  background:rgba(255,255,255,0.94);
-  backdrop-filter:blur(20px) saturate(1.6); -webkit-backdrop-filter:blur(20px) saturate(1.6);
+  background:rgba(255,255,255,0.97);
   border:0.5px solid rgba(0,0,0,0.1); border-radius:18px;
   box-shadow:0 8px 32px rgba(0,0,0,0.18);
   overflow:hidden;
@@ -1397,7 +1420,8 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .proj-card:hover { border-color:#3b82f6; }
 .proj-card.aktivan { border-color:#4ade80; background:rgba(74,222,128,0.06); }
-.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:36px; }
+.proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:40px; }
+.proj-card.aktivan .proj-card-title { padding-right:80px; }
 .proj-card-sub { font-size:11px; color:#64748b; line-height:1.6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
 .proj-card-vchip { display:inline-block; font-size:10px; color:#4ade80; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.25); border-radius:4px; padding:1px 6px; margin-top:3px; }
@@ -1408,6 +1432,13 @@ select:focus { outline:none; border-color:#3b82f6; }
   display:flex; align-items:center; justify-content:center; line-height:1;
 }
 .proj-card-akt:active { background:#1e3a5f; }
+.proj-card-rec {
+  position:absolute; right:44px; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4);
+  color:#ef4444; border-radius:7px; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; line-height:1;
+}
+.proj-card-rec:active { background:rgba(239,68,68,0.3); }
 #proj-search {
   width:100%; padding:8px 11px; background:rgba(15,23,42,0.8);
   border:1px solid #1e3a5f; border-radius:7px; color:#e2e8f0; font-size:13px;
@@ -2073,9 +2104,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  background: rgba(255,255,255,0.95);
   border-top: 0.5px solid rgba(0,0,0,0.12);
   box-shadow: 0 -1px 0 rgba(0,0,0,0.04), 0 -4px 16px rgba(0,0,0,0.06);
   padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
@@ -2161,7 +2190,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* ── Tačka nav panel ── */
 #tacka-nav-panel {
   display:none;position:fixed;left:0;right:0;bottom:0;z-index:1700;
-  background:rgba(10,17,31,0.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  background:rgba(10,17,31,0.97);
   border-top:2px solid #1e3a5f;padding:10px 14px 12px;
   flex-direction:row;align-items:center;gap:12px;
   box-shadow:0 -4px 20px rgba(0,0,0,0.6);
@@ -2720,6 +2749,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')">🧭 Teren</button>
+    <button class="tab-btn" id="tragovi-tab-btn" onclick="switchTab('tragovi')">👣 Tragovi<span class="tab-notif" id="notif-tragovi"></span></button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -3220,6 +3250,24 @@ select:focus { outline:none; border-color:#3b82f6; }
       </div>
     </div>
 
+    <!-- ═══ TRAGOVI PANEL ═══ -->
+    <div id="tragovi-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;padding:12px;">
+
+      <!-- Snimi trag dugme -->
+      <button id="btrag-panel" onclick="fabSnimTrag()" style="width:100%;padding:14px;border-radius:14px;border:none;background:#1e293b;color:#f87171;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;border:1px solid rgba(239,68,68,0.25);">
+        <span id="btrag-panel-ico">🔴</span>
+        <span id="btrag-panel-txt">Snimi trag</span>
+      </button>
+
+      <!-- Lista tragova -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:0.05em;">SNIMLJENI TRAGOVI <span id="tragovi-count" style="color:#4ade80;"></span></span>
+        <button onclick="_tragoviGrpToggle()" style="font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:4px 10px;cursor:pointer;" title="Grupiraj">≡ Grupiraj</button>
+      </div>
+      <div id="tragovi-list"></div>
+
+    </div>
+
     <!-- ═══ DOZNAKA STABALA PANEL ═══ -->
     <div id="doznaka-panel">
 
@@ -3609,12 +3657,27 @@ select:focus { outline:none; border-color:#3b82f6; }
 </div>
 
 <script>
+window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
 const SUPA_URL = 'https://djguplhaayjvwmdlxevx.supabase.co';
 const SUPA_KEY = 'sb_publishable_eccquEW5tzOJUmAu_TK0uw_jKOjTLrs';
-const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+let sb;
+try {
+  sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+} catch(e) {
+  console.error('Supabase init greška:', e);
+  sb = null;
+}
+setTimeout(()=>{
+  const as=document.getElementById('auth-screen');
+  const wr=document.getElementById('wrapper');
+  if(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex'){
+    as.style.display='flex';
+    if(typeof authShowLogin==='function') authShowLogin();
+  }
+},2000);
 
 let sbUser = null;
 let sbProfile = null;
@@ -3708,6 +3771,24 @@ const _OL = {
       const q = this.loadQueue().filter(o => o.ts !== ts);
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
     } catch(e) {}
+  },
+
+  // Povećaj brojač pokušaja za operaciju koja je pala ne-mrežnom greškom.
+  // Vraća true ako je operaciju trebalo odbaciti (prešla limit pokušaja).
+  bumpRetry(ts, maxRetries) {
+    try {
+      const q = this.loadQueue();
+      const op = q.find(o => o.ts === ts);
+      if (!op) return false;
+      op._retries = (op._retries || 0) + 1;
+      if (op._retries >= (maxRetries || 5)) {
+        const nq = q.filter(o => o.ts !== ts);
+        localStorage.setItem(this.QUEUE, JSON.stringify(nq));
+        return true;
+      }
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+      return false;
+    } catch(e) { return false; }
   }
 };
 
@@ -3809,7 +3890,13 @@ async function _processOfflineQueue() {
         }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
-      else if (!_isNetworkErr(err)) { _OL.removeFromQueue(op.ts); console.warn('Offline queue: trajna greška, operacija odbačena', op.type, err); }
+      else if (!_isNetworkErr(err)) {
+        // Ne-mrežna greška (RLS, istekao token, privremeni 4xx/5xx). Ne odbacuj
+        // odmah — daj 5 pokušaja prije nego se operacija proglasi trajno
+        // neispravnom. Sprečava tihi gubitak snimljenih vlaka.
+        const dropped = _OL.bumpRetry(op.ts, 5);
+        if (dropped) console.warn('Offline queue: operacija odbačena nakon 5 pokušaja', op.type, err);
+      }
     } catch(e) { break; } // still offline
   }
   // Flush buffered doznaka GPS track points
@@ -3855,12 +3942,24 @@ async function initAuth() {
   const saved = _loadSavedUser();
   const hasLocalData = !!(cached && saved);
 
+  // OFFLINE FAST PATH: keširani profil + zapamćeni kredencijali = odmah u app
+  // Ovo pokriva: povratak iz kamere (Android ubije WebView), avionski mod, teren bez signala
+  if (hasLocalData && (!navigator.onLine || !sb)) {
+    sbUser = { id: cached.id, email: cached.email || '' };
+    sbProfile = cached;
+    _setOfflineMode(true);
+    showApp();
+    showToast('📴 Offline pristup — lokalni podaci');
+    return;
+  }
+
   // Ako nema keširanog profila ni kredencijala, odmah prikaži login
   if (!hasLocalData) {
     _showAuthScreen();
   }
 
   // 1. Pokušaj Supabase sesiju
+  if(!sb){_showAuthScreen();return;}
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'INITIAL_SESSION' && session && !sbUser) {
       try {
@@ -3878,16 +3977,31 @@ async function initAuth() {
   setTimeout(async () => {
     if (sbUser) return;
     if (!saved) { _showAuthScreen(); return; }
+    // Pomoćnik: bilo kakav neuspjeh online logina kad IMAMO keširani profil
+    // NIKAD ne smije izbaciti korisnika na login ni obrisati kredencijale —
+    // na terenu navigator.onLine zna lažno biti true, a Supabase tiho vrati null.
+    const goOfflineOrLogin = () => {
+      if (cached && saved) {
+        sbUser = { id: cached.id, email: cached.email || '' };
+        sbProfile = cached;
+        _setOfflineMode(true);
+        showApp();
+        showToast('📴 Offline pristup — lokalni podaci');
+      } else {
+        _showAuthScreen();
+      }
+    };
     try {
       const { data: email } = await sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
-      if (!email) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
+      if (!email) { goOfflineOrLogin(); return; }
       const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
-      if (error) { if (navigator.onLine) _clearSavedUser(); _showAuthScreen(); return; }
+      if (error) { goOfflineOrLogin(); return; }
       sbUser = (await sb.auth.getUser()).data.user;
       await sbLoadProfile();
       showApp();
     } catch(e) {
       console.error('Auto-login error:', e);
+      if (!sbUser) goOfflineOrLogin();
     }
   }, 800);
 
@@ -3948,8 +4062,10 @@ async function sbLoadProfile() {
     const routeBtn = document.getElementById('route-suggest-btn');
     if (routeBtn) routeBtn.parentElement.style.display = 'none';
     // Sakrij foto dugme
-    const fotoInput = document.getElementById('loc-photo-input');
-    if (fotoInput) fotoInput.disabled = true;
+    const fotoCam = document.getElementById('loc-photo-cam');
+    const fotoGal = document.getElementById('loc-photo-gal');
+    if (fotoCam) fotoCam.disabled = true;
+    if (fotoGal) fotoGal.disabled = true;
   }
 
   // ŠPD US ŠUME terenski korisnik (nije admin): samo navigacija/orijentacija.
@@ -4026,6 +4142,7 @@ function showAuthErr(msg, isReg) {
 
 // --- Login ---
 async function doLogin() {
+  try {
   const ime     = document.getElementById('auth-ime').value.trim();
   const prezime = document.getElementById('auth-prezime').value.trim();
   const pin     = document.getElementById('auth-pin').value.trim();
@@ -4033,12 +4150,34 @@ async function doLogin() {
   document.getElementById('auth-err').style.display = 'none';
   if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
 
+  // Offline login: keširani profil postoji, nema mreže — pusti u app
+  if (!sb || !navigator.onLine) {
+    const cached = _OL.load(_OL.PROFILE);
+    const saved = _loadSavedUser();
+    if (cached && saved && saved.ime === ime && saved.pin === pin) {
+      sbUser = { id: cached.id, email: cached.email || '' };
+      sbProfile = cached;
+      localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+      _setOfflineMode(true);
+      showApp();
+      showToast('📴 Offline prijava — lokalni podaci');
+      return;
+    }
+    if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
+  }
+
+  showAuthErr('Povezivanje sa serverom...');
+
   // Look up internal email by name (prezime može biti prazan za org naloge)
-  const { data: email, error: lookupErr } = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
-  if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen. Provjerite ime i prezime.'); return; }
+  let email, lookupErr;
+  try {
+    const r = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
+    email = r.data; lookupErr = r.error;
+  } catch(e) { showAuthErr('Server nedostupan: ' + e.message); return; }
+  if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen: ' + (lookupErr?.message||'nema emaila')); return; }
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
-  if (error) { showAuthErr('Pogrešan PIN.'); return; }
+  if (error) { showAuthErr('Pogrešan PIN: ' + error.message); return; }
 
   // Zapamti korisnika ako je checkbox čekiran
   if (document.getElementById('auth-zapamti').checked) {
@@ -4050,6 +4189,7 @@ async function doLogin() {
   sbUser = (await sb.auth.getUser()).data.user;
   await sbLoadProfile();
   showApp();
+  } catch(e) { showAuthErr('Greška: ' + e.message); }
 }
 
 // --- Register ---
@@ -4094,7 +4234,12 @@ async function doRegister() {
 
 // --- Logout ---
 async function doLogout() {
-  await sb.auth.signOut();
+  // Pokušaj isporučiti zaostale offline operacije prije odjave (da se ne
+  // pomiješaju sa sljedećim nalogom na istom uređaju)
+  if (navigator.onLine && sbUser && sbProfile) {
+    try { await _processOfflineQueue(); } catch(e) {}
+  }
+  try { await sb.auth.signOut(); } catch(e) {}
   sbUser = null; sbProfile = null;
 
   // Očisti mapu i stanje
@@ -4135,6 +4280,9 @@ async function doLogout() {
   // Očisti lokalne vlake keš — sprečava prelijevanje vlaka između naloga
   localStorage.removeItem(LOCAL_VLAKE_KEY);
   localStorage.removeItem('tvlake_local_vlake_uid');
+  // Očisti keširani profil i per-user podatke — sprečava da offline fast-path
+  // pusti pogrešnog korisnika i da se tuđi keš prikaže novom nalogu
+  [_OL.PROFILE, _OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
 
   dnevniLog = []; kolege = [];
 
@@ -4406,8 +4554,11 @@ function _renderProjGroup(list) {
       const aktBtn = (!isAkt && !ro)
         ? `<button class="proj-card-akt" onclick="event.stopPropagation();aktivirajProjekt('${p.id}')" title="Aktiviraj projekat">⚡</button>`
         : '';
+      const recBtn = (isAkt && !ro)
+        ? `<button class="proj-card-rec" onclick="event.stopPropagation();_projQuickRec()" title="Snimi vlaku">🔴</button>`
+        : '';
       html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
-        ${aktBtn}
+        ${recBtn}${aktBtn}
         <div class="proj-card-title">
           ${p.odjel || '—'}
           ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
@@ -4879,7 +5030,7 @@ async function startManualVlakaDraw() {
   }
 
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+  const poly = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
   const strVal = kr > 0 ? (kr % 2 !== 0 ? 'L' : 'D') : null;
@@ -5080,27 +5231,63 @@ function impVlakaClose() {
 }
 
 function impVlakaFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    try {
-      _impTracks = _impParseTracks(ev.target.result, file.name);
-      if (_impTracks.length === 0) {
-        showToast('⚠ U fajlu nema linija (LineString/track)');
-        document.getElementById('imv-fname').textContent = '';
-        document.getElementById('imv-ok').disabled = true;
-        document.getElementById('imv-tracks').innerHTML = '';
-        return;
+  const files = [...e.target.files];
+  if (!files.length) return;
+  _impTracks = [];
+  let polyCount = 0;
+  let loaded = 0;
+  files.forEach(file => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const txt = ev.target.result;
+        const tracks = _impParseTracks(txt, file.name);
+        tracks.forEach(t => { t._srcFile = file.name; });
+        _impTracks.push(...tracks);
+        const doc = new DOMParser().parseFromString(txt, 'text/xml');
+        const hasPolygons = doc.querySelectorAll('Polygon').length > 0;
+        if (hasPolygons && /\.kml$/i.test(file.name)) {
+          const col = KCOLS[kmlCI % KCOLS.length]; kmlCI++;
+          const grp = pkml(doc, col); grp.addTo(map);
+          const _autoTag = file.name.match(/^(\d+)/)?.[1] || '';
+          kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:0.35,tag:_autoTag,_loadedAt:Date.now()});
+          _localKmlSaveContent(file.name, txt, col);
+          rndGraniceModal();
+          try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
+          polyCount += doc.querySelectorAll('Polygon').length;
+        }
+      } catch (x) {
+        showToast('⚠ Greška: ' + file.name + ' — ' + x.message);
       }
-      document.getElementById('imv-fname').textContent = '✓ ' + file.name + ' — ' + _impTracks.length + ' linija';
-      _impRenderTracks();
-      document.getElementById('imv-ok').disabled = false;
-    } catch (x) {
-      showToast('⚠ Greška pri čitanju fajla: ' + x.message);
-    }
-  };
-  r.readAsText(file);
+      loaded++;
+      if (loaded === files.length) {
+        const parts = [];
+        if (_impTracks.length > 0) parts.push(_impTracks.length + ' linija');
+        if (polyCount > 0) parts.push(polyCount + ' poligona (dodani kao sloj)');
+        if (parts.length === 0) {
+          showToast('⚠ U fajlovima nema linija ni poligona');
+          document.getElementById('imv-fname').textContent = '';
+          document.getElementById('imv-ok').disabled = true;
+          document.getElementById('imv-tracks').innerHTML = '';
+          return;
+        }
+        const fNames = files.length === 1 ? files[0].name : files.length + ' fajlova';
+        document.getElementById('imv-fname').textContent = '✓ ' + fNames + ' — ' + parts.join(', ');
+        if (_impTracks.length > 0) {
+          _impRenderTracks();
+          document.getElementById('imv-ok').disabled = false;
+        } else {
+          document.getElementById('imv-tracks').innerHTML = '';
+          document.getElementById('imv-ok').disabled = true;
+          if (polyCount > 0) {
+            showToast('✓ ' + polyCount + ' poligona dodano kao KML sloj');
+            impVlakaClose();
+          }
+        }
+      }
+    };
+    r.readAsText(file);
+  });
 }
 
 // Parsira KML (LineString + gx:Track) ili GPX (trk/rte) u listu trakova
@@ -5222,7 +5409,7 @@ async function impVlakaConfirm() {
     const br = m ? parseInt(m[1]) : (Math.max(0, ...vlake.map(v => v.br)) + 1);
     const kr = m && m[2] ? parseInt(m[2]) : 0;
     const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(t.nm, { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
     vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
@@ -5471,7 +5658,7 @@ function _applyVlakeRows(rows) {
     // Also skip if same nm exists WITHOUT a projektId (legacy dedup)
     if (vlake.find(v => v.nm === row.nm && !v.projektId && !row.projekt_id)) return;
     const color = row.boja || '#4ade80';
-    const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+    const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
     const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
@@ -5631,11 +5818,24 @@ async function sbFlushVlaka(i) {
       const c2 = _OL.load(_OL.VLAKE) || [];
       const i2 = c2.findIndex(r => r.id === data.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
+      _updateVlakaSyncIcon(i, 'ok');
     } else if (error) {
       _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+      _updateVlakaSyncIcon(i, 'queue');
     }
   } catch(e) {
     _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+    _updateVlakaSyncIcon(i, 'queue');
+  }
+}
+
+function _updateVlakaSyncIcon(i, status) {
+  const el = document.querySelector(`.vsync-icon[data-vi="${i}"]`);
+  if (!el) return;
+  if (status === 'ok') {
+    el.textContent = '☁'; el.title = 'Sačuvano na server'; el.style.color = '#4ade80';
+  } else if (status === 'queue') {
+    el.textContent = '☁'; el.title = 'U redu čekanja — sačuvaće se kad bude veze'; el.style.color = '#fbbf24';
   }
 }
 
@@ -6514,7 +6714,32 @@ let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za f
 function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
   _fotoSnapPos = { la: lastP.la, lo: lastP.lo };
-  document.getElementById('loc-photo-input').click();
+  // Action sheet: kamera ili galerija
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99998;display:flex;align-items:flex-end;justify-content:center;';
+  const sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#1e293b;border-radius:16px 16px 0 0;width:100%;max-width:400px;padding:12px 16px 20px;';
+  sheet.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-bottom:10px;">Izvor slike</div>'
+    + '<button id="_foto-cam" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">📷 Kamera</button>'
+    + '<button id="_foto-gal" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">🖼 Galerija</button>'
+    + '<button id="_foto-cancel" style="width:100%;padding:14px;background:transparent;border:none;color:#64748b;font-size:14px;cursor:pointer;">Otkaži</button>';
+  bg.appendChild(sheet);
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.addEventListener('click', e => { if (e.target === bg) { _fotoSnapPos = null; close(); } });
+  document.getElementById('_foto-cancel').onclick = () => { _fotoSnapPos = null; close(); };
+  document.getElementById('_foto-cam').onclick = () => {
+    close();
+    const inp = document.getElementById('loc-photo-cam');
+    inp.value = '';
+    inp.click();
+  };
+  document.getElementById('_foto-gal').onclick = () => {
+    close();
+    const inp = document.getElementById('loc-photo-gal');
+    inp.value = '';
+    inp.click();
+  };
 }
 
 async function onLocPhotoSelected(input) {
@@ -7563,38 +7788,54 @@ function makeCachedTileLayer(cacheName) {
   cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
     createTile(coords, done) {
-      const tile = document.createElement('img');
-      tile.setAttribute('role', 'presentation');
+      const sz = this.getTileSize();
+      const canvas = document.createElement('canvas');
+      canvas.width = sz.x; canvas.height = sz.y;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      // Tamna pozadina odmah — nema bijelog bljeska dok tile se učitava
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, sz.x, sz.y);
+
       const url = this.getTileUrl(coords);
-      if (!('caches' in window)) {
-        tile.onload = () => done(null, tile);
-        tile.onerror = e => done(e, tile);
-        tile.src = url; return tile;
-      }
+
+      const drawBlob = (blob) => {
+        if ('createImageBitmap' in window) {
+          // GPU-accelerated dekodiranje, ne blokira main thread
+          createImageBitmap(blob).then(bmp => {
+            ctx.drawImage(bmp, 0, 0, sz.x, sz.y);
+            bmp.close();
+            done(null, canvas);
+          }).catch(() => done(null, canvas));
+        } else {
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img, 0, 0, sz.x, sz.y); URL.revokeObjectURL(u); done(null, canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null, canvas); };
+          img.src = u;
+        }
+      };
+
+      const fallback = () => {
+        const img = new Image();
+        img.crossOrigin = '';
+        img.onload = () => { ctx.drawImage(img, 0, 0, sz.x, sz.y); done(null, canvas); };
+        img.onerror = () => done(null, canvas);
+        img.src = url;
+      };
+
+      if (!('caches' in window)) { fallback(); return canvas; }
+
       caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
-        if (cached) {
-          tile.src = URL.createObjectURL(await cached.blob());
-          done(null, tile); return;
-        }
+        if (cached) { drawBlob(await cached.blob()); return; }
         try {
           const resp = await fetch(url, { mode: 'cors' });
-          if (resp.ok) {
-            await cache.put(url, resp.clone());
-            tile.src = URL.createObjectURL(await resp.blob());
-            done(null, tile);
-          } else { throw new Error(); }
-        } catch {
-          tile.onload = () => done(null, tile);
-          tile.onerror = e => done(e, tile);
-          tile.src = url;
-        }
-      }).catch(() => {
-        tile.onload = () => done(null, tile);
-        tile.onerror = e => done(e, tile);
-        tile.src = url;
-      });
-      return tile;
+          if (resp.ok) { cache.put(url, resp.clone()); drawBlob(await resp.blob()); }
+          else fallback();
+        } catch { fallback(); }
+      }).catch(fallback);
+
+      return canvas;
     }
   });
 }
@@ -7610,7 +7851,22 @@ try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
   if (_lp?.la && _lp?.lo && _lp?.z) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
-const map = L.map('map',{zoomControl:false,attributionControl:false}).setView(_initMapCenter, _initMapZoom);
+const map = L.map('map',{
+  zoomControl:false,
+  attributionControl:false,
+  fadeAnimation:true,
+  zoomAnimation:true,
+  zoomAnimationThreshold:8,
+  markerZoomAnimation:true,
+  inertia:true,
+  inertiaDeceleration:2500,
+  inertiaMaxSpeed:3500,
+  wheelDebounceTime:25,
+  wheelPxPerZoomLevel:80,
+  tap:true,
+  tapTolerance:15,
+  preferCanvas:true
+}).setView(_initMapCenter, _initMapZoom);
 map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
 let _appStarted = false;
@@ -7618,14 +7874,15 @@ setTimeout(() => { _appStarted = true; }, 4000);
 // Zasebni pane za vlake — omogućava brzo sakrivanje svih vlaka + labela odjednom
 map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
+const _vlakeRenderer = L.canvas({ pane: 'vlakeLines', padding: 0.3 });
 map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
-const _puteviRenderer = L.svg({ pane: 'putevi' });
+const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c']}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
@@ -8206,11 +8463,17 @@ map.on('dragstart', () => {
   if ((recOn && !recPaused) || _tragOn) _setFreeView(true);
 });
 
-// Ažuriraj N.V. i GPS distancu pri pomicanju karte
+// Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
+let _moveRafPending = false;
 map.on('move', () => {
-  _updMcdDist();
-  const c = map.getCenter();
-  updMGI(c.lat, c.lng);
+  if (_moveRafPending) return;
+  _moveRafPending = true;
+  requestAnimationFrame(() => {
+    _moveRafPending = false;
+    _updMcdDist();
+    const c = map.getCenter();
+    updMGI(c.lat, c.lng);
+  });
 });
 map.on('moveend', () => {
   const c = map.getCenter();
@@ -8246,21 +8509,24 @@ function _updMapScale() {
   // try-catch: _tragRegistry/Layers su let-deklarirani niže u fajlu (TDZ pri init pozivu)
   try {
     const hideFT = closest > 25000;
-    [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
-      if (!f.marker) return;
-      if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
-      else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
-    });
-    (_tragRegistry||[]).forEach(t => {
-      const layer = (_tragLayers||{})[t.id];
-      if (!layer) return;
-      if (hideFT && map.hasLayer(layer)) map.removeLayer(layer);
-      else if (!hideFT && !map.hasLayer(layer) && t.visible !== false) map.addLayer(layer);
-    });
+    if (hideFT !== _prevHideFT) {
+      _prevHideFT = hideFT;
+      [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
+        if (!f.marker) return;
+        if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
+        else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
+      });
+      (_tragRegistry||[]).forEach(t => {
+        const layer = (_tragLayers||{})[t.id];
+        if (!layer) return;
+        if (hideFT && map.hasLayer(layer)) map.removeLayer(layer);
+        else if (!hideFT && !map.hasLayer(layer) && t.visible !== false) map.addLayer(layer);
+      });
+    }
   } catch(e) {}
 }
+let _prevHideFT = false;
 map.on('zoomend', _updMapScale);
-map.on('moveend', _updMapScale);
 
 // === IZBOR RAZMJERE (klik na badge) ===
 function toggleScaleMenu(e) {
@@ -8780,6 +9046,12 @@ function togSnimVlaku() {
   _openVlakaPicker();
 }
 
+function _projQuickRec() {
+  if (recOn) { switchTab('karta'); return; }
+  switchTab('karta');
+  setTimeout(() => _openVlakaPicker(), 200);
+}
+
 function _nextMainBr() {
   const used = new Set(
     vlake.filter(v => !v.nm.includes('.')).map(v => parseInt(v.nm.slice(1)))
@@ -9190,7 +9462,7 @@ function vcCancel() {
 async function _doCreateVlaka(br, kr) {
   const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines'}).addTo(map);
+  const poly = L.polyline([],{color,weight:4,opacity:0.9,pane:'vlakeLines',renderer:_vlakeRenderer}).addTo(map);
   poly.bindTooltip(nm,{sticky:true,opacity:0.9});
   attachPolyClick(poly);
   vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,projektId:_aktivniProjektId||null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
@@ -9432,13 +9704,31 @@ document.addEventListener('visibilitychange', async () => {
     // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
     if (recOn && !_wakeLock) await _acquireWakeLock();
     _updWakeLockIcon();
+    // Povratak u prvi plan — pokušaj sync (online event zna izostati na Androidu)
+    if (navigator.onLine && sbUser) _processOfflineQueue();
   } else {
+    // App ide u pozadinu (kamera, drugi app, zaključavanje) — Android može
+    // ubiti WebView. Spasi sve lokalno ODMAH, ne čekaj debounce timer.
+    try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
     if (recOn && !recPaused) {
       if (bgWarn) bgWarn.style.display = '';
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
   }
 });
+
+// Posljednja šansa za spas podataka prije nego WebView bude ubijen
+window.addEventListener('pagehide', () => {
+  try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
+});
+
+// Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
+setInterval(() => {
+  if (navigator.onLine && sbUser && sbProfile) {
+    const q = _OL.loadQueue();
+    if (q.length) _processOfflineQueue();
+  }
+}, 60000);
 
 function _updWakeLockIcon() {
   const el = document.getElementById('wakelock-icon');
@@ -9471,6 +9761,9 @@ function togRec() {
     _startGpsWatchdog();
     _startSWHeartbeat();
     _startRecNotification();
+    if (typeof AndroidGps !== 'undefined') {
+      try { AndroidGps.startRecording(vlake[actI]?.name || 'GPS Snimanje'); } catch(e) {}
+    }
     _updFabVisibility();
   } else {
     stopRec();
@@ -9492,6 +9785,9 @@ function stopRec() {
   _stopGpsWatchdog();
   _stopSWHeartbeat();
   _stopRecNotification();
+  if (typeof AndroidGps !== 'undefined') {
+    try { AndroidGps.stopRecording(); } catch(e) {}
+  }
   const b = document.getElementById('brec');
   if (b) b.classList.remove('active');
   const banner = document.getElementById('rec-banner');
@@ -9502,7 +9798,12 @@ function stopRec() {
     updateVlakaLabel(actI);
     // Odmah sačuvaj — ne čekaj debounce (zaštita od gubitka ako se app zatvori)
     clearTimeout(_vlakaSaveTimers[actI]);
-    sbFlushVlaka(actI);
+    const _recNm = vlake[actI]?.nm || '';
+    const _recPts = vlake[actI]?.pts?.length || 0;
+    sbFlushVlaka(actI).then(() => {
+      if (vlake[actI]?.sbId) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
+      else showToast(`📴 ${_recNm} sačuvana lokalno — sync kad bude veze`);
+    });
   }
   // Spremi i sve ostale vlake s pending timerima (npr. krak koji se još nije snimio)
   Object.keys(_vlakaSaveTimers).forEach(k => {
@@ -9648,7 +9949,7 @@ function noviKrakStrana(strana) {
 
   const krakNm = _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
-  const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+  const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
@@ -10403,6 +10704,8 @@ function onPE(e) {
         });
       }
     }, 3000);
+  } else if (recOn && gpsOn && _gpsRestartCount >= 5) {
+    showToast('⚠ GPS nedostupan — provjerite dozvole i vidljivost neba');
   }
 }
 
@@ -10617,8 +10920,9 @@ function _tqmClose() {
 
 function _tragRegAddLayer(t) {
   if (_tragLayers[t.id]) { try { map.removeLayer(_tragLayers[t.id]); } catch(e) {} }
+  const dashArray = t.dashStyle==='solid' ? null : t.dashStyle==='dot' ? '2 6' : '8 4';
   const line = L.polyline(t.pts.map(p => [p[0], p[1]]), {
-    color: t.color || '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4'
+    color: t.color || '#f97316', weight: t.weight || 3, opacity: 0.85, dashArray
   });
   const lenM = _tragCalcLen(t.pts);
   line.bindPopup(() => _tragPopupHtml(t, lenM), { maxWidth: 260 });
@@ -10762,6 +11066,8 @@ function _tragRegSetMeta(id) {
 }
 
 function _tragRegRender() {
+  if (typeof _tragoviRender === 'function') _tragoviRender();
+  if (typeof _tragoviUpdBtn === 'function') _tragoviUpdBtn();
   const el = document.getElementById('trag-reg-list');
   const cnt = document.getElementById('trag-reg-count');
   if (!el) return;
@@ -10824,6 +11130,195 @@ function _tragRegDelete(id) {
   _tragRegistry = _tragRegistry.filter(x => x.id !== id);
   _tragRegSave();
   _tragRegRender();
+  _tragoviRender();
+}
+
+// ── Tragovi panel (bottom tab) ────────────────────────────────────────────────
+let _tragoviGrpBy = 'date'; // 'date' | 'gj' | 'none'
+
+function _tragoviUpdBtn() {
+  const btn = document.getElementById('btrag-panel');
+  const ico = document.getElementById('btrag-panel-ico');
+  const txt = document.getElementById('btrag-panel-txt');
+  if (!btn) return;
+  if (_tragOn) {
+    btn.style.background = 'rgba(239,68,68,0.15)';
+    btn.style.borderColor = 'rgba(239,68,68,0.5)';
+    if (ico) ico.textContent = '⏹';
+    if (txt) txt.textContent = 'Zaustavi snimanje';
+  } else {
+    btn.style.background = '#1e293b';
+    btn.style.borderColor = 'rgba(239,68,68,0.25)';
+    if (ico) ico.textContent = '🔴';
+    if (txt) txt.textContent = 'Snimi trag';
+  }
+}
+
+function _tragoviGrpToggle() {
+  const opts = ['date','gj','none'];
+  _tragoviGrpBy = opts[(opts.indexOf(_tragoviGrpBy)+1) % opts.length];
+  _tragoviRender();
+}
+
+function _tragoviRender() {
+  const el = document.getElementById('tragovi-list');
+  const cnt = document.getElementById('tragovi-count');
+  const notif = document.getElementById('notif-tragovi');
+  if (!el) return;
+  const n = _tragRegistry.length;
+  if (cnt) cnt.textContent = n ? `(${n})` : '';
+  if (notif) notif.textContent = n || '';
+  if (!n) {
+    el.innerHTML = '<div class="treg-empty">Nema sačuvanih tragova.<br>Klikni <b>Snimi trag</b> gore.</div>';
+    return;
+  }
+  // Grupiraj
+  let groups = [];
+  if (_tragoviGrpBy === 'none') {
+    groups = [{ label: null, items: _tragRegistry }];
+  } else if (_tragoviGrpBy === 'gj') {
+    const map2 = new Map();
+    _tragRegistry.forEach(t => {
+      const k = t.gj || '—';
+      if (!map2.has(k)) map2.set(k, []);
+      map2.get(k).push(t);
+    });
+    groups = [...map2.entries()].map(([k,v]) => ({ label:'GJ: '+k, items:v }));
+  } else {
+    const map2 = new Map();
+    _tragRegistry.forEach(t => {
+      const k = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+      if (!map2.has(k)) map2.set(k, []);
+      map2.get(k).push(t);
+    });
+    groups = [...map2.entries()].map(([k,v]) => ({ label:k, items:v }));
+  }
+  el.innerHTML = groups.map(g => `
+    ${g.label ? `<div class="mjtrg-grp-hdr">📅 ${g.label} <span class="mjtrg-grp-cnt">${g.items.length}</span></div>` : ''}
+    ${g.items.map(t => _tragoviRowHtml(t)).join('')}
+  `).join('');
+}
+
+function _tragoviRowHtml(t) {
+  const lenM = _tragCalcLen(t.pts);
+  const dt = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const vis = t.visible !== false;
+  const w = t.weight || 3;
+  const style = t.dashStyle || 'dash';
+  const styles = {solid:'━━━', dash:'╌╌╌', dot:'···'};
+  return `<div class="treg-row" style="margin-bottom:8px;gap:6px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:4px;height:36px;border-radius:2px;background:${t.color};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div class="treg-name" onclick="_tragRegZoom('${t.id}')" title="Zoom na karti">${_escHtml(t.name)}</div>
+        <div class="treg-meta">${dt} · ${_tragFmtLen(lenM)} · ${t.pts.length} tač.${t.odjel?' · '+_escHtml(t.odjel):''}</div>
+      </div>
+      <button onclick="_tragoviToggleEdit('${t.id}')" style="background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:5px 10px;font-size:13px;cursor:pointer;" title="Uredi">✏</button>
+    </div>
+    <div class="treg-btns">
+      <button onclick="_tragRegZoom('${t.id}')">🗺 Zoom</button>
+      <button onclick="_tragRegToggle('${t.id}');_tragoviRender()">${vis?'🙈 Sakrij':'👁 Prikaži'}</button>
+      <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
+      <button class="del-btn" onclick="if(confirm('Obrisati trag?'))_tragRegDelete('${t.id}')">✕ Briši</button>
+    </div>
+    <div id="tred-${t.id}" style="display:none;" class="tred-row">
+      <div>
+        <label>Naziv</label>
+        <input id="tred-nm-${t.id}" value="${_escHtml(t.name)}" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;font-size:13px;" onchange="_tragoviSetName('${t.id}',this.value)">
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div>
+          <label>Boja</label>
+          <input type="color" value="${t.color}" onchange="_tragoviSetColor('${t.id}',this.value)">
+        </div>
+        <div style="flex:1;">
+          <label>Debljina: <span id="tred-w-lbl-${t.id}">${w}px</span></label>
+          <input type="range" min="1" max="10" value="${w}" oninput="_tragoviSetWeight('${t.id}',+this.value)">
+        </div>
+      </div>
+      <div>
+        <label>Stil linije</label>
+        <div class="tred-style-btns">
+          <button class="${style==='solid'?'active':''}" onclick="_tragoviSetStyle('${t.id}','solid')">━ Puna</button>
+          <button class="${style==='dash'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dash')">╌ Iscrtkana</button>
+          <button class="${style==='dot'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dot')">· Točkasta</button>
+        </div>
+      </div>
+      <div>
+        <label style="cursor:pointer;" onclick="_tragoviTogglePts('${t.id}')">📍 Tačke (${t.pts.length}) <span style="color:#475569;">▾</span></label>
+        <div id="tred-pts-${t.id}" style="display:none;" class="tred-pts-list">
+          ${t.pts.map((p,i) => `<div class="tred-pt-row">
+            <span class="tred-pt-idx">#${i+1}</span>
+            <span>${p[0].toFixed(6)}, ${p[1].toFixed(6)}${p[2]?' · '+Math.round(p[2])+'m':''}</span>
+            <button class="tred-pt-del" onclick="_tragoviDelPt('${t.id}',${i})" title="Obriši tačku">✕</button>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _tragoviToggleEdit(id) {
+  const el = document.getElementById('tred-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function _tragoviTogglePts(id) {
+  const el = document.getElementById('tred-pts-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function _tragoviSetName(id, val) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.name = val.trim() || t.name;
+  _tragRegSave();
+}
+function _tragoviSetColor(id, col) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.color = col;
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ color: col });
+  _tragRegSave();
+}
+function _tragoviSetWeight(id, w) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.weight = w;
+  const lbl = document.getElementById('tred-w-lbl-'+id);
+  if (lbl) lbl.textContent = w+'px';
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ weight: w });
+  _tragRegSave();
+}
+function _tragoviSetStyle(id, s) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.dashStyle = s;
+  const dashArray = s==='solid' ? null : s==='dot' ? '2 6' : '8 5';
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ dashArray });
+  _tragRegSave();
+  // Refresh edit panel da ažurira active stanje dugmadi
+  const ed = document.getElementById('tred-'+id);
+  if (ed && ed.style.display !== 'none') {
+    _tragoviRender();
+    const edNew = document.getElementById('tred-'+id);
+    if (edNew) edNew.style.display = '';
+  }
+}
+function _tragoviDelPt(id, idx) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t || t.pts.length <= 2) { showToast('⚠ Trag mora imati min. 2 tačke'); return; }
+  t.pts.splice(idx, 1);
+  const line = _tragLayers[id];
+  if (line) line.setLatLngs(t.pts.map(p => [p[0], p[1]]));
+  _tragRegSave();
+  _tragoviRender();
+  // Ponovo otvori edit panel
+  setTimeout(() => {
+    const ed = document.getElementById('tred-'+id);
+    if (ed) { ed.style.display = ''; _tragoviTogglePts(id); }
+  }, 0);
 }
 
 async function _tragRegRename(id) {
@@ -10847,6 +11342,7 @@ function _tragRegDlGpx(id) {
   a.href = URL.createObjectURL(new Blob([gpx], {type:'application/gpx+xml'}));
   a.download = t.name.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.gpx';
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 function _toggleLocPopup() {
@@ -11001,6 +11497,11 @@ function fabSnimVlaku() {
 }
 
 // === POINTS ===
+let _ovlRndTimer = 0;
+function _scheduleOvlRnd() {
+  if (_ovlRndTimer) return;
+  _ovlRndTimer = setTimeout(() => { _ovlRndTimer = 0; updOvl(); rndList(); }, 2000);
+}
 function addPt(i, la, lo, al) {
   const v = vlake[i];
   if (v.pts.length > 0) {
@@ -11014,7 +11515,9 @@ function addPt(i, la, lo, al) {
   v.poly.addLatLng([la, lo]);
   scheduleVlakaSave(i);
   if (v.pts.length === 2 || (v.kr > 0 && v.pts.length === 1)) updateVlakaLabel(i);
-  updBan(); updOvl(); rndList();
+  updBan();
+  if (!recOn) { updOvl(); rndList(); }
+  else { _scheduleOvlRnd(); }
   // Only redraw buffers when not actively drawing (expensive per-point)
   if (bufLayers.length > 0 && activeTool !== 'addline' && activeTool !== 'addpoint' && !recOn) {
     drawBuffers();
@@ -11099,6 +11602,7 @@ function _renderVlakaRow(el, v, i, depth) {
         ${krakArrow}${stranaBadge}<span class="vcard-name">${v.nm}</span>
         ${badge}
         <span class="vcard-km">${fmtL(d)}</span>
+        ${sbUser ? `<span class="vsync-icon" data-vi="${i}" title="${v.sbId ? 'Sačuvano na server' : 'Čeka sync...'}" style="font-size:11px;opacity:0.7;margin-left:2px;color:${v.sbId ? '#4ade80' : '#94a3b8'};">☁</span>` : ''}
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
@@ -11183,18 +11687,26 @@ function rndList() {
     nv.style.display = 'none';
   }
 
-  // Rekurzivno renderuj: glavna vlaka → direktni kraci → njihovi pod-kraci...
+  // Indeksirana mapa djece: O(n) umjesto O(n²)
+  const childMap = new Map();
+  vlake.forEach((k, ki) => {
+    const pnm = k.nm.split('.').slice(0, -1).join('.');
+    if (pnm) {
+      if (!childMap.has(pnm)) childMap.set(pnm, []);
+      childMap.get(pnm).push({v:k, i:ki});
+    }
+  });
+  const frag = document.createDocumentFragment();
   const rendered = new Set();
   function renderWithChildren(v, i, depth) {
     if (rendered.has(i)) return;
     rendered.add(i);
-    _renderVlakaRow(el, v, i, depth);
-    vlake.forEach((k, ki) => {
-      const kParentNm = k.nm.split('.').slice(0, -1).join('.');
-      if (kParentNm === v.nm) renderWithChildren(k, ki, depth + 1);
-    });
+    _renderVlakaRow(frag, v, i, depth);
+    const ch = childMap.get(v.nm);
+    if (ch) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
   }
   rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+  el.appendChild(frag);
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
   clearTimeout(rndList._projTimer);
@@ -12077,7 +12589,7 @@ async function refKartaImportDetected() {
     const br = _nextMainBr();
     const nm = `T${br}`;
     const pts = latlngs.map(([la, lo]) => ({ la, lo, al: 0 }));
-    const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.9, pane: 'vlakeLines' }).addTo(map);
+    const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(nm, { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
     vlake.push({ nm, br, kr: 0, strana: null, color, lager: '', pts, poly, wpts: [], sbId: null, projektId: _aktivniProjektId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
@@ -13960,7 +14472,7 @@ function mkKML() {
 }
 function showExport(){document.getElementById('etxt').value=mkKML();document.getElementById('modal').classList.add('show');}
 function closeM(){document.getElementById('modal').classList.remove('show');}
-function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();}
+function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
 function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').value);showToast('Kopirano!');}
 
 // === PANEL MOBILE ===
@@ -14928,6 +15440,7 @@ function exportTerenStats() {
   a.href = URL.createObjectURL(blob);
   a.download = `Statistike_${odjel}_${date}.txt`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   showToast('📥 Statistike preuzete');
 }
 
@@ -14949,6 +15462,7 @@ function exportSTDcsv() {
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `STD_${odjel}_${todayStr()}.csv`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   showToast('📥 STD lista preuzeta');
 }
 
@@ -15444,6 +15958,7 @@ function kmlPreuzmi() {
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));
   a.download=mkKMLNaziv(); a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   showKmlInfo('💾 Fajl sačuvan: <b>'+mkKMLNaziv()+'</b>');
 }
 function kmlNaMail() {
@@ -15605,12 +16120,13 @@ function switchTab(tab) {
     dozCancelDraw();
     if (_dozGpsOn) showToast('📍 GPS snimanje nastavlja u pozadini');
   }
-  const panel   = document.getElementById('panel');
-  const pproj   = document.getElementById('proj-panel');
-  const pdoz    = document.getElementById('doznaka-panel');
-  const pmjtrg  = document.getElementById('mjtrg-panel');
-  const padmin  = document.getElementById('admin-panel');
-  const pteren  = document.getElementById('teren-panel');
+  const panel    = document.getElementById('panel');
+  const pproj    = document.getElementById('proj-panel');
+  const pdoz     = document.getElementById('doznaka-panel');
+  const pmjtrg   = document.getElementById('mjtrg-panel');
+  const padmin   = document.getElementById('admin-panel');
+  const pteren   = document.getElementById('teren-panel');
+  const ptragovi = document.getElementById('tragovi-panel');
   document.querySelectorAll('.tab-btn').forEach(b => {
     const oc = b.getAttribute('onclick') || '';
     b.classList.toggle('active', oc.includes(`switchTab('${tab}')`));
@@ -15619,10 +16135,12 @@ function switchTab(tab) {
   pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
   pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
   pmjtrg.style.display  = tab==='mjtrg'   ? 'flex' : 'none';
-  if (padmin) padmin.style.display = tab==='admin' ? 'flex' : 'none';
-  if (pteren) pteren.style.display = tab==='teren' ? 'flex' : 'none';
-  if (tab === 'admin') adminLoadUsers();
-  if (tab === 'teren') { terenRender(); terenRenderTragovi(); }
+  if (padmin)   padmin.style.display   = tab==='admin'   ? 'flex' : 'none';
+  if (pteren)   pteren.style.display   = tab==='teren'   ? 'flex' : 'none';
+  if (ptragovi) ptragovi.style.display = tab==='tragovi' ? 'flex' : 'none';
+  if (tab === 'admin')   adminLoadUsers();
+  if (tab === 'teren')   { terenRender(); terenRenderTragovi(); }
+  if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
@@ -17398,7 +17916,7 @@ function _routeToVlaka() {
 // Crash-guard: ako učitavanje sruši tab, sljedeće otvaranje automatski briše IDB.
 // ─────────────────────────────────────────────────────────────────────────────
 let _sqlLayers = [];
-const _SQL_LARGE     = 100 * 1024 * 1024;
+const _SQL_LARGE     = 20 * 1024 * 1024;
 const _SQL_CRASH_KEY = 'tvlake_sqlmap_loading';
 const _SQLJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
 const _S3_CDN        = 'https://cdn.jsdelivr.net/npm/@sqlite.org/sqlite-wasm@3.46.1-build1/sqlite-wasm/jswasm/';
@@ -17420,13 +17938,13 @@ async function getSqlJs() {
 // Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; }
+  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
     if(this._c.has(n)) return this._c.get(n);
     const off=(n-1)*this.ps;
     const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
-    if(this._c.size>128) this._c.delete(this._c.keys().next().value);
+    if(this._c.size>512) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
   static _u16(d,o){return(d[o]<<8)|d[o+1];}
@@ -17435,22 +17953,27 @@ class MiniSqlite {
   static _sz(t){if(t<=0)return 0;if(t<=4)return t;if(t===5)return 6;if(t<=7)return 8;if(t<=9)return 0;return t%2===0?(t-12)>>1:(t-13)>>1;}
   static _ri(d,o,n){let v=0;for(let i=0;i<n;i++)v=v*256+d[o+i];if(n&&(d[o]&128))v-=Math.pow(2,n*8);return v;}
   async _pay(d,pos,pLen,isIdx=false) {
+    // GUARD: spriječi OOM crash od korumpirane/pogrešno pročitane veličine (tile max ~200KB)
+    if(pLen<0||pLen>16777216) return new Uint8Array(0);
     // index cells: maxLocal = floor((ps-12)*64/255)-23; table cells: maxLocal = ps-35
     const maxL=isIdx?Math.floor((this.ps-12)*64/255)-23:this.ps-35;
     if(pLen<=maxL&&pos+pLen<=d.length) return d.slice(pos,pos+pLen);
     const minL=Math.floor((this.ps-12)*32/255)-23;
     let loc=minL+(pLen-minL)%(this.ps-4); if(loc>maxL)loc=minL; loc=Math.min(loc,pLen);
     const out=new Uint8Array(pLen); out.set(d.slice(pos,pos+loc));
-    let ovf=MiniSqlite._u32(d,pos+loc),w=loc;
-    while(ovf&&w<pLen){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
+    let ovf=MiniSqlite._u32(d,pos+loc),w=loc,guard=0;
+    while(ovf&&w<pLen&&guard++<100000){const pg=await this._pg(ovf);ovf=MiniSqlite._u32(pg,0);const ch=Math.min(pLen-w,this.ps-4);out.set(pg.slice(4,4+ch),w);w+=ch;}
     return out;
   }
   async _rec(data,pos,pLen,isIdx=false) {
     const d=await this._pay(data,pos,pLen,isIdx); let p=0;
+    if(d.length===0) return [];
     const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
+    if(hSz<0||hSz>d.length) return []; // GUARD: korumpiran header
     const ts=[]; while(p<hSz){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
     p=hSz; const vs=[];
     for(const t of ts){const sz=MiniSqlite._sz(t);
+      if(sz>16777216||p+sz>d.length+8){vs.push(null);p+=sz;continue;} // GUARD: nevažeća veličina kolone
       if(t===0)vs.push(null);
       else if(t===7){const dv=new DataView(d.buffer,d.byteOffset+p,8);vs.push(dv.getFloat64(0,false));}
       else if(t===8)vs.push(0); else if(t===9)vs.push(1);
@@ -17502,6 +18025,7 @@ class MiniSqlite {
     return null;
   }
   // Index B-tree search by (v0,v1,v2) — works for both WITHOUT ROWID and covering indices
+  // For 4-key PRIMARY KEY (x,y,z,s): matches first 3 keys, returns first hit regardless of 4th
   async _wRowSearch(n,v0,v1,v2) {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
     const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
@@ -17509,7 +18033,7 @@ class MiniSqlite {
       if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;
         const r=await this._rec(d,p,pL,true);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
         if(cmp>0) return this._wRowSearch(ch,v0,v1,v2);
-        if(cmp===0) return r;}
+        if(cmp>=0) return r;}
       else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);
         if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r;}}
     if(t===2) return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
@@ -17524,6 +18048,9 @@ class MiniSqlite {
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
       if(type==='table'&&name?.toLowerCase()==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
+          // PRIMARY KEY (x,y,z,s) → red kolona automatskog indeksa (sqlite_autoindex), čiji je sql NULL
+          const pkm=s.match(/primary\s+key\s*\(([^)]*)\)/);
+          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'\x60\[\]]/g,'').split(/\s+/)[0]).filter(Boolean);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
             const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
@@ -17536,18 +18063,22 @@ class MiniSqlite {
     if(!this.fmt) this.fmt='mbtiles';
     // Detect OruxMaps/Android RMaps: index on (x,y,z[,s]) where z=17-actual_zoom
     // The tiles table has (x,y,z,s,image) but sqlite_master may show mbtiles column names after rename
+    // Red kolona indeksa: iz CREATE INDEX sql-a, a ako je autoindex (sql NULL) iz PRIMARY KEY-a
+    let ic=null;
     if(this._idxSql){
       const idxLow=this._idxSql.toLowerCase();
       const ixp1=idxLow.indexOf('('),ixp2=idxLow.lastIndexOf(')');
-      if(ixp1>=0&&ixp2>ixp1){
-        const ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
-        if(ic[0]==='x'&&ic[1]==='y'){
-          // OruxMaps: index(x,y,z[,s]); table has (x,y,z,s,image); z=17-zoom; y=XYZ not TMS
-          this.fmt='rmaps'; this._zm=2;
-          this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
-          this._idxColX=0; this._idxColY=1; this._idxColZ=2;  // index key order
-        }
-      }
+      if(ixp1>=0&&ixp2>ixp1) ic=idxLow.slice(ixp1+1,ixp2).split(',').map(c=>c.trim()).filter(Boolean);
+    } else if(this.idxRoot&&this._pkCols&&this._pkCols.length){
+      // sqlite_autoindex_tiles_1 nema sql → red kolona prati PRIMARY KEY (x,y,z,s)
+      ic=this._pkCols.slice();
+    }
+    if(ic&&ic[0]==='x'&&ic[1]==='y'){
+      // OruxMaps/sqlitedb: index(x,y,z[,s]); table has (x,y,z,s,image)
+      this.fmt='rmaps'; this._zm=0;
+      this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
+      this._idxColX=0; this._idxColY=1; this._idxColZ=2;
+      this._nIdxKeys=ic.length; // 3 or 4 (with 's' column)
     }
     // Detect WITHOUT ROWID: tiles B-tree pages are index-type (2/10) not table-type (5/13)
     if(this.tilesRoot>0){
@@ -17574,7 +18105,23 @@ class MiniSqlite {
           if(fe&&le){
             const sz=fe[this._idxColZ],lz=le[this._idxColZ];
             const mns=Math.min(sz,lz),mxs=Math.max(sz,lz);
-            if(this.fmt==='rmaps'&&typeof mxs==='number'&&mxs<=17&&17-mns>=0){minz=17-mxs;maxz=17-mns;}
+            if(this.fmt==='rmaps'&&typeof mxs==='number'){
+              // Auto-detect zoom offset: count tiles at min vs max stored z
+              // If low z has MORE tiles → z is inverted (low z = detail = high web zoom)
+              // Probe tile count at mns vs mxs via B-tree sampling
+              let zOff=17; // default RMaps offset
+              // Heuristic: if stored z range is small (1-10), detect offset from tile grid
+              // For z_stored=N, web_zoom = offset - N. Validate: tile_x < 2^web_zoom
+              const feX=fe[this._idxColX], leX=le[this._idxColX];
+              const maxX=Math.max(typeof feX==='number'?feX:0, typeof leX==='number'?leX:0);
+              if(maxX>0){
+                // Find smallest offset where maxX < 2^(offset-mns)
+                for(let off=mxs;off<=25;off++){if((1<<(off-mns))>maxX){zOff=off;break;}}
+              }
+              this._zOff=zOff; this._zm=2;
+              minz=zOff-mxs; maxz=zOff-mns;
+              if(minz<0)minz=0; if(maxz>22)maxz=22;
+            }
             else{minz=typeof mns==='number'?Math.max(0,mns):0;maxz=typeof mxs==='number'?Math.min(22,mxs):18;}
           }
         }catch(e){}
@@ -17585,7 +18132,11 @@ class MiniSqlite {
           else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const rS=MiniSqlite._vi(d,p)[1];p+=rS;const z=this._recCol(d,p,pL,this.colZ);if(z!=null){if(z<sz)sz=z;if(z>lz)lz=z;}}}};
         try{await go(this.tilesRoot);}catch(e){}
         if(lz>=0){
-          if(this.fmt==='rmaps'&&lz<=10&&17-sz<=22){minz=17-lz;maxz=17-sz;}
+          if(this.fmt==='rmaps'){
+            const off=this._zOff||17;
+            minz=off-lz;maxz=off-sz;
+            if(minz<0)minz=0;if(maxz>22)maxz=22;
+          }
           else{minz=sz===99?0:sz;maxz=lz<0?18:lz;}
         }
       }
@@ -17598,8 +18149,7 @@ class MiniSqlite {
           const le2=await this._lastIdxEntry(sr2);
           if(le2){
             const lzRaw=le2[this._idxColZ],lx2=le2[this._idxColX],ly2=le2[this._idxColY];
-            // For RMaps inverted zoom: actual_zoom = 17 - stored_z
-            let lz2=(this.fmt==='rmaps'&&this._zm===2)?17-lzRaw:lzRaw;
+            let lz2=(this.fmt==='rmaps'&&this._zm===2)?(this._zOff||17)-lzRaw:lzRaw;
             if(typeof lz2==='number'&&lz2>=0&&lz2<=22&&typeof lx2==='number'&&typeof ly2==='number'){
               // rmaps uses XYZ y; mbtiles uses TMS y
               const xyzY=(this.fmt==='rmaps')?ly2:(1<<lz2)-1-ly2;
@@ -17648,9 +18198,10 @@ class MiniSqlite {
   }
   async tile(z,x,y) {
     const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
+    const off=this._zOff||17;
     if(this.noRowId){
       const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
       for(const zv of zCands){
         sk[this.colZ]=zv;
         const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
@@ -17659,9 +18210,8 @@ class MiniSqlite {
       return null;
     }
     if(this.idxRoot){
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[17-z]:this._zm===1?[z]:[z,17-z];
+      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
       for(const zv of zCands){
-        // Build 3-key search tuple in the index's actual sort order
         const key=[null,null,null];
         key[this._idxColZ]=zv; key[this._idxColX]=x; key[this._idxColY]=ty;
         const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
@@ -17675,7 +18225,7 @@ class MiniSqlite {
       }
       return null;}
     let found=null;
-    const zv2=this.fmt==='rmaps'?17-z:null;
+    const zv2=this.fmt==='rmaps'?off-z:null;
     await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colX]===x&&r[this.colY]===ty&&(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2)))found=r[this.colD];});
     return found;
   }
@@ -17756,12 +18306,13 @@ async function queryTile(name, z, x, y) {
         ? db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0]
         : db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
     } else {
+      const off=inst.zOff||17;
       if (engine==='sqljs') {
         td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
-        if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(17-z))[0]?.values?.[0]?.[0];
+        if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(off-z))[0]?.values?.[0]?.[0];
       } else {
         td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
-        if (!td) td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,17-z]);
+        if (!td) td = db.selectValue('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[x,y,off-z]);
       }
     }
     return td ? new Uint8Array(td) : null;
@@ -17795,7 +18346,7 @@ self.onmessage = async ({data:msg}) => {
       const fmt = entry.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = (entry.meta&&Object.keys(entry.meta).length) ? entry.meta : readMeta(exec,fmt);
-      dbs[msg.name] = {db,fmt,engine:'sqljs'};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff:17};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-buf') {
@@ -17805,17 +18356,24 @@ self.onmessage = async ({data:msg}) => {
       const fmt = detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = readMeta(exec,fmt);
-      let maxz=meta.maxzoom, minz=meta.minzoom;
+      let maxz=meta.maxzoom, minz=meta.minzoom, zOff=17;
       if (maxz==null) { try{const col=fmt==='mbtiles'?'zoom_level':'z';const r=db.exec('SELECT MIN('+col+'),MAX('+col+') FROM tiles');const v=r[0]?.values?.[0];if(v?.[1]!=null){minz=+v[0];maxz=+v[1];}}catch(e){} if(maxz==null)maxz=18; }
-      meta.minzoom=minz; meta.maxzoom=maxz;
+      if (fmt==='rmaps'&&typeof minz==='number'&&typeof maxz==='number') {
+        try{const mx=db.exec('SELECT MAX(x) FROM tiles WHERE z='+minz)[0]?.values?.[0]?.[0]||0;
+          for(let off=maxz;off<=25;off++){if((1<<(off-minz))>mx){zOff=off;break;}}
+        }catch(e){}
+        meta.minzoom=zOff-maxz; meta.maxzoom=zOff-minz;
+        if(meta.minzoom<0)meta.minzoom=0;
+      } else { meta.minzoom=minz; meta.maxzoom=maxz; }
       if (msg.save) {
         const idb = await idbOpen();
         await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       }
-      dbs[msg.name] = {db,fmt,engine:'sqljs'};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff};
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
+      try {
       const root = await navigator.storage.getDirectory();
       const fname = msg.path.startsWith('/') ? msg.path.slice(1) : msg.path;
       const fh = await root.getFileHandle(fname);
@@ -17914,8 +18472,9 @@ self.onmessage = async ({data:msg}) => {
       }catch(e){schemaDump='e:'+e.message;}
       const mkKeys=Object.keys(meta).filter(k=>k!=='_d'&&k!=='minzoom'&&k!=='maxzoom');
       meta._d = 'ps='+mini.ps+' tr='+mini.tilesRoot+' ir='+mini.idxRoot+' fmt='+mini.fmt+' z/x/y/d='+mini.colZ+'/'+mini.colX+'/'+mini.colY+'/'+mini.colD+' tst='+testR+'('+tCoord+') t4['+t4+'] t5['+t5+'] sch['+schemaDump+'] isql['+idxSqlStr+']';
-      dbs[msg.name] = {mini, fmt, engine:'custom'};
+      dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
       self.postMessage({id, ok:true, fmt, meta});
+      } catch(opfsErr) { self.postMessage({id, ok:false, error:'OPFS: '+opfsErr.message}); }
     }
     else if (msg.type === 'tile') {
       const arr = await queryTile(msg.name,msg.z,msg.x,msg.y);
@@ -17934,6 +18493,13 @@ self.onmessage = async ({data:msg}) => {
       await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       self.postMessage({id,ok:true});
     }
+    else if (msg.type === 'load-file') {
+      const mini = new MiniSqlite(msg.file);
+      const {fmt, meta} = await mini.init();
+      if (!fmt) throw new Error('unknown-format');
+      dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
+      self.postMessage({id, ok:true, fmt, meta});
+    }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
       await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
@@ -17944,6 +18510,15 @@ self.onmessage = async ({data:msg}) => {
   }
 };
 `.trim();
+
+// ── MiniSqlite na main threadu (fallback kad Worker ne prima File) ────────────
+const _MiniSqliteMain = (function() {
+  const s = _SQL_WORKER_SRC.indexOf('class MiniSqlite {');
+  const e = _SQL_WORKER_SRC.indexOf('// ── Kraj MiniSqlite');
+  if (s < 0 || e < 0) return null;
+  try { return new Function(_SQL_WORKER_SRC.slice(s, e) + '\nreturn MiniSqlite;')(); }
+  catch(ex) { console.error('MiniSqliteMain init fail', ex); return null; }
+})();
 
 // ── Worker management ─────────────────────────────────────────────────────────
 function _sqlWorkerEnsure() {
@@ -17972,7 +18547,10 @@ function _sqlWCall(msg, transfers) {
 }
 
 // ── OPFS helpers (main thread) ────────────────────────────────────────────────
-function _opfsAvail() { return typeof navigator?.storage?.getDirectory === 'function'; }
+function _opfsAvail() {
+  if (typeof AndroidDownload !== 'undefined') return false; // Android WebView: OPFS nesiguran za velike fajlove
+  return typeof navigator?.storage?.getDirectory === 'function';
+}
 async function _opfsStream(filename, file) {
   const root = await navigator.storage.getDirectory();
   const fh = await root.getFileHandle(filename, {create:true});
@@ -18061,7 +18639,9 @@ async function sqlmapLoadFile(file) {
   }
 
   try {
+    let _opfsFailed = false;
     if (isLarge && _opfsAvail()) {
+      try {
       _sqlmapStatus('⏳ Kopiranje na disk (' + (file.size/1024/1024|0) + ' MB)...');
       const opfsName = name + '.sqlmap';
       await _opfsStream(opfsName, file);
@@ -18076,9 +18656,12 @@ async function sqlmapLoadFile(file) {
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
       const dI=r.meta?._d?' ['+r.meta._d+']':'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
-    } else if (isLarge) {
-      throw new Error('Fajl je prevelik (' + (file.size/1024/1024|0) + ' MB). OPFS nije dostupan — pokušaj u Chrome/Edge.');
-    } else {
+      } catch(opfsE) { _opfsFailed = true; _opfsDel(name+'.sqlmap'); }
+    }
+    if (isLarge && (!_opfsAvail() || _opfsFailed)) {
+      _sqlmapStatus('⏳ Otvaranje velike karte (' + (file.size/1024/1024|0) + ' MB)...');
+      await _sqlmapLoadDirect(file, name);
+    } else if (!isLarge) {
       _sqlmapStatus('⏳ Čitam fajl...');
       const buf = await file.arrayBuffer();
       _sqlmapStatus('⏳ Otvaranje baze...');
@@ -18098,6 +18681,104 @@ async function sqlmapLoadFile(file) {
     _sqlmapStatus('❌ Greška: ' + (e.message||e));
     console.error('sqlmapLoadFile', e);
   }
+}
+
+let _mainMiniDbs = {};
+async function _sqlmapLoadDirect(file, name) {
+  const isAndroid = typeof AndroidDownload !== 'undefined';
+  // Android WebView: File postMessage može crashovati — čitaj na main threadu
+  if (isAndroid && _MiniSqliteMain) {
+    _sqlmapStatus('⏳ Čitam kartu (' + (file.size/1024/1024|0) + ' MB)...');
+    const mini = new _MiniSqliteMain(file);
+    const initR = await mini.init();
+    if (!initR.fmt) throw new Error('unknown-format');
+    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
+    const layer = _sqlmapCreateLayerMain(name, initR.fmt, initR.meta);
+    layer.addTo(map);
+    _sqlLayers.push({name, fmt:initR.fmt, layer, visible:true, meta:initR.meta, saved:false, opfs:false});
+    _sqlmapMetaAutoZoom(initR.meta);
+    const zI = (initR.meta?.minzoom != null) ? ' · zoom ' + initR.meta.minzoom + '–' + initR.meta.maxzoom : '';
+    _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
+    _sqlmapRenderLayers(); _lsRenderSqlite();
+    return;
+  }
+  // Desktop/PWA: Worker path
+  let r = await _sqlWCall({type:'load-file', name, file});
+  if (!r.ok && _MiniSqliteMain) {
+    _sqlmapStatus('⏳ Otvaranje karte (fallback)...');
+    const mini = new _MiniSqliteMain(file);
+    const initR = await mini.init();
+    if (!initR.fmt) throw new Error('unknown-format');
+    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
+    r = {ok:true, fmt:initR.fmt, meta:initR.meta};
+  }
+  if (!r.ok) throw new Error(r.error);
+  const useMain = !!_mainMiniDbs[name];
+  const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
+  layer.addTo(map);
+  _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
+  _sqlmapMetaAutoZoom(r.meta);
+  const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
+  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
+  _sqlmapRenderLayers(); _lsRenderSqlite();
+}
+
+// Ograniči paralelna čitanja tile-ova na main threadu (spriječi memorijski skok)
+let _mainTileActive = 0;
+const _mainTileQueue = [];
+function _mainTileSchedule(fn) {
+  return new Promise(resolve => {
+    const run = () => {
+      _mainTileActive++;
+      fn().then(resolve).finally(() => {
+        _mainTileActive--;
+        const next = _mainTileQueue.shift();
+        if (next) next();
+      });
+    };
+    if (_mainTileActive < 6) run(); else _mainTileQueue.push(run);
+  });
+}
+
+function _zoomBounds(meta) {
+  let a = (meta?.minzoom!=null) ? parseInt(meta.minzoom,10) : 0;
+  let b = (meta?.maxzoom!=null) ? parseInt(meta.maxzoom,10) : 18;
+  if (isNaN(a)) a = 0; if (isNaN(b)) b = 18;
+  // GUARD: neki formati (RMaps info tabela) imaju obrnut min/max
+  const lo = Math.max(0, Math.min(a, b));
+  const hi = Math.max(1, Math.max(a, b));
+  return { minNative: lo, maxNative: hi };
+}
+
+function _sqlmapCreateLayerMain(name, fmt, meta) {
+  const { minNative, maxNative } = _zoomBounds(meta);
+  const MTileLayer = L.GridLayer.extend({
+    createTile(coords, done) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
+      const {x,y,z} = coords;
+      const inst = _mainMiniDbs[name];
+      if (!inst) { done(null, canvas); return canvas; }
+      _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
+        if (!data) { done(null, canvas); return; }
+        const blob = new Blob([data]);
+        if ('createImageBitmap' in window) {
+          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
+        } else {
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
+          img.src = u;
+        }
+      }).catch(() => done(null, canvas));
+      return canvas;
+    }
+  });
+  return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
@@ -18141,24 +18822,29 @@ async function sqlmapRestoreAll() {
 
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 function _sqlmapCreateLayerW(name, fmt, meta) {
-  const maxNative = (meta?.maxzoom!=null) ? Math.max(1,parseInt(meta.maxzoom,10)) : 18;
-  const minNative = (meta?.minzoom!=null) ? Math.max(0,parseInt(meta.minzoom,10)) : 0;
+  const { minNative, maxNative } = _zoomBounds(meta);
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
-      const img = document.createElement('img');
-      img.style.cssText = 'width:256px;height:256px;';
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
       const {x,y,z} = coords;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
-        if (data) {
-          const url = URL.createObjectURL(new Blob([data]));
-          img.onload = img.onerror = () => { URL.revokeObjectURL(url); done(null,img); };
-          img.src = url;
+        if (!data) { done(null, canvas); return; }
+        const blob = new Blob([data]);
+        if ('createImageBitmap' in window) {
+          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
         } else {
-          img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-          done(null, img);
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
+          img.src = u;
         }
-      });
-      return img;
+      }).catch(() => done(null, canvas));
+      return canvas;
     }
   });
   return new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
@@ -20141,6 +20827,28 @@ function toggleHelpSec(hdr) {
   const open  = body.classList.toggle('open');
   if (open) arrow.classList.add('open'); else arrow.classList.remove('open');
 }
+
+// === ANDROID APK DOWNLOAD BRIDGE ===
+// WebView ne podržava <a download>.click() za blob: URL-ove.
+// Interceptujemo klik i šaljemo podatke Android-u preko JavascriptInterface.
+if (typeof AndroidDownload !== 'undefined') {
+  (function() {
+    const origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function() {
+      if (this.download && this.href && this.href.startsWith('blob:')) {
+        const filename = this.download || 'download';
+        fetch(this.href).then(r => r.blob()).then(blob => {
+          const reader = new FileReader();
+          reader.onload = () => AndroidDownload.save(filename, reader.result);
+          reader.readAsDataURL(blob);
+        }).catch(() => origClick.call(this));
+        return;
+      }
+      origClick.call(this);
+    };
+  })();
+}
+
 </script>
 
 <!-- MENI DROPDOWN — direktno u body da izbjegne sve stacking context probleme -->
@@ -21779,7 +22487,9 @@ function toggleHelpSec(hdr) {
   </div>
 </div>
 
-<input type="file" id="loc-photo-input" accept="image/*" capture="environment"
+<input type="file" id="loc-photo-cam" accept="image/*" capture="environment"
+  style="display:none" onchange="onLocPhotoSelected(this)">
+<input type="file" id="loc-photo-gal" accept="image/*"
   style="display:none" onchange="onLocPhotoSelected(this)">
 
 <!-- ══ OZNAKE PANEL ══════════════════════════════════════════════════ -->
@@ -21847,7 +22557,7 @@ function toggleHelpSec(hdr) {
     <button class="imv-file-btn" onclick="document.getElementById('imv-file').click()">
       <span style="font-size:18px;">📄</span> Odaberi fajl (.kml / .gpx)
     </button>
-    <input type="file" id="imv-file" accept=".kml,.gpx" style="display:none" onchange="impVlakaFile(event)">
+    <input type="file" id="imv-file" accept=".kml,.gpx" multiple style="display:none" onchange="impVlakaFile(event)">
     <div id="imv-fname"></div>
     <div class="imv-lbl">Projekat u koji se ubacuje</div>
     <select id="imv-proj" class="imv-select" onchange="if(_impTracks.length)_impRenderTracks()"></select>

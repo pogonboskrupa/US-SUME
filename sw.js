@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.6.63';
+const APP_VERSION = '1.7.5';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -26,7 +26,17 @@ const APP_SHELL = [
 // ─── INSTALL ─────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(APP_CACHE).then(cache => cache.addAll(APP_SHELL))
+    caches.open(APP_CACHE).then(cache =>
+      // Otporno precachiranje — jedan nedostajući fajl (npr. u APK assets-u)
+      // ne smije srušiti instalaciju cijelog service workera.
+      Promise.allSettled(
+        APP_SHELL.map(u =>
+          fetch(u, { cache: 'reload' })
+            .then(r => { if (r.ok) return cache.put(u, r); })
+            .catch(() => {})
+        )
+      )
+    )
   );
 });
 
