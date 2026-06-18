@@ -7794,7 +7794,7 @@ let wid=null, lastP=null, posMk=null, posCr=null;
 let _compassHeading = null; // trenutni azimut telefona (0-360°, 0=sjever)
 let kmlLs=[], kmlCI=0, _kmlEditIdx=-1;
 let _ozLocalSearch='', _ozLocalSort='recent';
-const _ozBucketCollapsed = new Set();
+const _ozBucketExpanded = new Set();
 let drawPreviewLine=null;
 let drawUndoStack=[];
 const KCOLS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6','#ec4899'];
@@ -13733,7 +13733,7 @@ function rndKml() {
 }
 
 // ── Oznake panel ──────────────────────────────────────────────────────────────
-const _ozCollapsed = new Set(['local','trag','foto']);
+const _ozCollapsed = new Set(['local','foto']);
 
 function _kmlCalcLen(grp) {
   let d = 0;
@@ -13772,17 +13772,15 @@ function togOzSec(sec) {
 function _rndOznakePanel() {
   const localEl  = document.getElementById('oz-sec-local');
   const bucketEl = document.getElementById('oz-sec-bucket');
-  const tragEl   = document.getElementById('oz-sec-trag');
   const fotoEl   = document.getElementById('oz-sec-foto');
   if (!localEl) return;
 
   const localOpen  = !_ozCollapsed.has('local');
   const bucketOpen = !_ozCollapsed.has('bucket');
-  const tragOpen   = !_ozCollapsed.has('trag');
   const fotoOpen   = !_ozCollapsed.has('foto');
 
   // Arrows
-  ['local','bucket','trag','foto'].forEach(s => {
+  ['local','bucket','foto'].forEach(s => {
     const arr = document.getElementById('oz-arr-' + s);
     if (arr) arr.className = 'oz-sec-arrow' + (!_ozCollapsed.has(s) ? ' open' : '');
   });
@@ -13875,7 +13873,7 @@ function _rndOznakePanel() {
       });
       let html = '';
       Object.entries(gjGroups).sort(([a],[b]) => a.localeCompare(b,'bs')).forEach(([gj, items]) => {
-        const collapsed = _ozBucketCollapsed.has(gj);
+        const collapsed = !_ozBucketExpanded.has(gj);
         const allVis = items.every(x => x.k.vis);
         const anyVis = items.some(x => x.k.vis);
         const visIcon = allVis ? '👁' : anyVis ? '◑' : '🙈';
@@ -13908,34 +13906,6 @@ function _rndOznakePanel() {
     }
   }
 
-  // ── GPS tragovi ──
-  const trags = (typeof _tragRegistry !== 'undefined') ? _tragRegistry : [];
-  document.getElementById('oz-cnt-trag').textContent = trags.length;
-  if (!tragOpen) { tragEl.style.display = 'none'; }
-  else {
-    tragEl.style.display = '';
-    if (!trags.length) {
-      tragEl.innerHTML = '<div class="oz-empty">Nema snimljenih tragova.</div>';
-    } else {
-      tragEl.innerHTML = trags.map(t => {
-        const vis  = t.visible !== false;
-        const lenM = _tragCalcLen(t.pts);
-        const dt   = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
-        const meta = [dt, _tragFmtLen(lenM), t.pts.length + ' tač.'].join(' · ');
-        return `<div class="oz-row${vis?'':' hidden-layer'}" onclick="event.stopPropagation();_tragRegZoom('${t.id}')">
-          <div class="oz-row-color" style="background:${t.color};"></div>
-          <div class="oz-row-info">
-            <div class="oz-row-name">${_escHtml(t.name)}</div>
-            <div class="oz-row-meta">${meta}</div>
-          </div>
-          <button class="oz-vis-btn${vis?' on':''}" onclick="event.stopPropagation();_ozTogTrag('${t.id}')" title="${vis?'Sakrij':'Prikaži'}">
-            ${vis ? '👁' : '🙈'}
-          </button>
-        </div>`;
-      }).join('');
-    }
-  }
-
   // ── Foto oznake ──
   const locN    = (typeof _locFotos    !== 'undefined') ? _locFotos.length    : 0;
   const shareN  = (typeof _sharedFotos !== 'undefined') ? _sharedFotos.length : 0;
@@ -13955,7 +13925,7 @@ function _rndOznakePanel() {
   }
 
   // Total badge
-  const total = kmlLs.length + trags.length + fotoTot;
+  const total = kmlLs.length + fotoTot;
   document.getElementById('oz-total-badge').textContent = total + (total===1?' stavka':' stavki');
 }
 
@@ -14147,7 +14117,7 @@ function _renderKmlEditor(i) {
 }
 
 function _ozBucketToggleGroup(gj) {
-  _ozBucketCollapsed.has(gj) ? _ozBucketCollapsed.delete(gj) : _ozBucketCollapsed.add(gj);
+  _ozBucketExpanded.has(gj) ? _ozBucketExpanded.delete(gj) : _ozBucketExpanded.add(gj);
   _rndOznakePanel();
 }
 
@@ -22595,14 +22565,6 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="oz-sec-cnt" id="oz-cnt-local">0</span>
   </div>
   <div class="oz-sec-body" id="oz-sec-local"></div>
-
-  <!-- GPS tragovi -->
-  <div class="oz-sec-hdr" onclick="togOzSec('trag')">
-    <span class="oz-sec-arrow" id="oz-arr-trag">▶</span>
-    <span class="oz-sec-label">GPS tragovi</span>
-    <span class="oz-sec-cnt" id="oz-cnt-trag">0</span>
-  </div>
-  <div class="oz-sec-body" id="oz-sec-trag"></div>
 
   <!-- Foto oznake -->
   <div class="oz-sec-hdr" onclick="togOzSec('foto')">
