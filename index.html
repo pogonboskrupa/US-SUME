@@ -573,6 +573,20 @@ input:focus { outline:none; border-color:#3b82f6; }
 .treg-btns .del-btn { border-color:#7f1d1d; color:#f87171; }
 .treg-btns .del-btn:hover { background:#2d0a0a; }
 .treg-empty { color:#475569; font-size:12px; text-align:center; padding:20px; }
+/* Trag style editor */
+.tred-row { background:#0f172a; border-radius:8px; padding:8px 10px; margin-top:6px; display:flex; flex-direction:column; gap:8px; border:1px dashed #334155; }
+.tred-row label { font-size:11px; color:#64748b; display:block; margin-bottom:2px; }
+.tred-row input[type=color] { width:38px; height:28px; border:none; padding:1px; border-radius:6px; cursor:pointer; background:transparent; }
+.tred-row input[type=range] { width:100%; accent-color:#4ade80; }
+.tred-style-btns { display:flex; gap:6px; }
+.tred-style-btns button { flex:1; padding:5px 4px; font-size:12px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer; }
+.tred-style-btns button.active { border-color:#4ade80; color:#4ade80; background:rgba(74,222,128,0.08); }
+/* Tačke lista */
+.tred-pts-list { max-height:180px; overflow-y:auto; border:1px solid #1e293b; border-radius:6px; }
+.tred-pt-row { display:flex; align-items:center; gap:6px; padding:4px 8px; font-size:11px; color:#64748b; border-bottom:1px solid #1e293b; }
+.tred-pt-row:last-child { border-bottom:none; }
+.tred-pt-idx { color:#475569; min-width:28px; font-size:10px; }
+.tred-pt-del { margin-left:auto; background:none; border:none; color:#f87171; cursor:pointer; font-size:13px; padding:0 4px; }
 /* Grupiranje */
 .mjtrg-grp-hdr {
   font-size:10px; font-weight:700; color:#475569; text-transform:uppercase;
@@ -2734,6 +2748,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" onclick="switchTab('doznaka')">🌲 Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')">🧭 Teren</button>
+    <button class="tab-btn" id="tragovi-tab-btn" onclick="switchTab('tragovi')">👣 Tragovi<span class="tab-notif" id="notif-tragovi"></span></button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
   </div>
 
@@ -3232,6 +3247,24 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
 
       </div>
+    </div>
+
+    <!-- ═══ TRAGOVI PANEL ═══ -->
+    <div id="tragovi-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;padding:12px;">
+
+      <!-- Snimi trag dugme -->
+      <button id="btrag-panel" onclick="fabSnimTrag()" style="width:100%;padding:14px;border-radius:14px;border:none;background:#1e293b;color:#f87171;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;border:1px solid rgba(239,68,68,0.25);">
+        <span id="btrag-panel-ico">🔴</span>
+        <span id="btrag-panel-txt">Snimi trag</span>
+      </button>
+
+      <!-- Lista tragova -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:0.05em;">SNIMLJENI TRAGOVI <span id="tragovi-count" style="color:#4ade80;"></span></span>
+        <button onclick="_tragoviGrpToggle()" style="font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:4px 10px;cursor:pointer;" title="Grupiraj">≡ Grupiraj</button>
+      </div>
+      <div id="tragovi-list"></div>
+
     </div>
 
     <!-- ═══ DOZNAKA STABALA PANEL ═══ -->
@@ -10746,8 +10779,9 @@ function _tqmClose() {
 
 function _tragRegAddLayer(t) {
   if (_tragLayers[t.id]) { try { map.removeLayer(_tragLayers[t.id]); } catch(e) {} }
+  const dashArray = t.dashStyle==='solid' ? null : t.dashStyle==='dot' ? '2 6' : '8 4';
   const line = L.polyline(t.pts.map(p => [p[0], p[1]]), {
-    color: t.color || '#f97316', weight: 3, opacity: 0.85, dashArray: '8 4'
+    color: t.color || '#f97316', weight: t.weight || 3, opacity: 0.85, dashArray
   });
   const lenM = _tragCalcLen(t.pts);
   line.bindPopup(() => _tragPopupHtml(t, lenM), { maxWidth: 260 });
@@ -10891,6 +10925,8 @@ function _tragRegSetMeta(id) {
 }
 
 function _tragRegRender() {
+  if (typeof _tragoviRender === 'function') _tragoviRender();
+  if (typeof _tragoviUpdBtn === 'function') _tragoviUpdBtn();
   const el = document.getElementById('trag-reg-list');
   const cnt = document.getElementById('trag-reg-count');
   if (!el) return;
@@ -10953,6 +10989,195 @@ function _tragRegDelete(id) {
   _tragRegistry = _tragRegistry.filter(x => x.id !== id);
   _tragRegSave();
   _tragRegRender();
+  _tragoviRender();
+}
+
+// ── Tragovi panel (bottom tab) ────────────────────────────────────────────────
+let _tragoviGrpBy = 'date'; // 'date' | 'gj' | 'none'
+
+function _tragoviUpdBtn() {
+  const btn = document.getElementById('btrag-panel');
+  const ico = document.getElementById('btrag-panel-ico');
+  const txt = document.getElementById('btrag-panel-txt');
+  if (!btn) return;
+  if (_tragOn) {
+    btn.style.background = 'rgba(239,68,68,0.15)';
+    btn.style.borderColor = 'rgba(239,68,68,0.5)';
+    if (ico) ico.textContent = '⏹';
+    if (txt) txt.textContent = 'Zaustavi snimanje';
+  } else {
+    btn.style.background = '#1e293b';
+    btn.style.borderColor = 'rgba(239,68,68,0.25)';
+    if (ico) ico.textContent = '🔴';
+    if (txt) txt.textContent = 'Snimi trag';
+  }
+}
+
+function _tragoviGrpToggle() {
+  const opts = ['date','gj','none'];
+  _tragoviGrpBy = opts[(opts.indexOf(_tragoviGrpBy)+1) % opts.length];
+  _tragoviRender();
+}
+
+function _tragoviRender() {
+  const el = document.getElementById('tragovi-list');
+  const cnt = document.getElementById('tragovi-count');
+  const notif = document.getElementById('notif-tragovi');
+  if (!el) return;
+  const n = _tragRegistry.length;
+  if (cnt) cnt.textContent = n ? `(${n})` : '';
+  if (notif) notif.textContent = n || '';
+  if (!n) {
+    el.innerHTML = '<div class="treg-empty">Nema sačuvanih tragova.<br>Klikni <b>Snimi trag</b> gore.</div>';
+    return;
+  }
+  // Grupiraj
+  let groups = [];
+  if (_tragoviGrpBy === 'none') {
+    groups = [{ label: null, items: _tragRegistry }];
+  } else if (_tragoviGrpBy === 'gj') {
+    const map2 = new Map();
+    _tragRegistry.forEach(t => {
+      const k = t.gj || '—';
+      if (!map2.has(k)) map2.set(k, []);
+      map2.get(k).push(t);
+    });
+    groups = [...map2.entries()].map(([k,v]) => ({ label:'GJ: '+k, items:v }));
+  } else {
+    const map2 = new Map();
+    _tragRegistry.forEach(t => {
+      const k = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+      if (!map2.has(k)) map2.set(k, []);
+      map2.get(k).push(t);
+    });
+    groups = [...map2.entries()].map(([k,v]) => ({ label:k, items:v }));
+  }
+  el.innerHTML = groups.map(g => `
+    ${g.label ? `<div class="mjtrg-grp-hdr">📅 ${g.label} <span class="mjtrg-grp-cnt">${g.items.length}</span></div>` : ''}
+    ${g.items.map(t => _tragoviRowHtml(t)).join('')}
+  `).join('');
+}
+
+function _tragoviRowHtml(t) {
+  const lenM = _tragCalcLen(t.pts);
+  const dt = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const vis = t.visible !== false;
+  const w = t.weight || 3;
+  const style = t.dashStyle || 'dash';
+  const styles = {solid:'━━━', dash:'╌╌╌', dot:'···'};
+  return `<div class="treg-row" style="margin-bottom:8px;gap:6px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:4px;height:36px;border-radius:2px;background:${t.color};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div class="treg-name" onclick="_tragRegZoom('${t.id}')" title="Zoom na karti">${_escHtml(t.name)}</div>
+        <div class="treg-meta">${dt} · ${_tragFmtLen(lenM)} · ${t.pts.length} tač.${t.odjel?' · '+_escHtml(t.odjel):''}</div>
+      </div>
+      <button onclick="_tragoviToggleEdit('${t.id}')" style="background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:5px 10px;font-size:13px;cursor:pointer;" title="Uredi">✏</button>
+    </div>
+    <div class="treg-btns">
+      <button onclick="_tragRegZoom('${t.id}')">🗺 Zoom</button>
+      <button onclick="_tragRegToggle('${t.id}');_tragoviRender()">${vis?'🙈 Sakrij':'👁 Prikaži'}</button>
+      <button onclick="_tragRegDlGpx('${t.id}')">⬇ GPX</button>
+      <button class="del-btn" onclick="if(confirm('Obrisati trag?'))_tragRegDelete('${t.id}')">✕ Briši</button>
+    </div>
+    <div id="tred-${t.id}" style="display:none;" class="tred-row">
+      <div>
+        <label>Naziv</label>
+        <input id="tred-nm-${t.id}" value="${_escHtml(t.name)}" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;font-size:13px;" onchange="_tragoviSetName('${t.id}',this.value)">
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div>
+          <label>Boja</label>
+          <input type="color" value="${t.color}" onchange="_tragoviSetColor('${t.id}',this.value)">
+        </div>
+        <div style="flex:1;">
+          <label>Debljina: <span id="tred-w-lbl-${t.id}">${w}px</span></label>
+          <input type="range" min="1" max="10" value="${w}" oninput="_tragoviSetWeight('${t.id}',+this.value)">
+        </div>
+      </div>
+      <div>
+        <label>Stil linije</label>
+        <div class="tred-style-btns">
+          <button class="${style==='solid'?'active':''}" onclick="_tragoviSetStyle('${t.id}','solid')">━ Puna</button>
+          <button class="${style==='dash'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dash')">╌ Iscrtkana</button>
+          <button class="${style==='dot'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dot')">· Točkasta</button>
+        </div>
+      </div>
+      <div>
+        <label style="cursor:pointer;" onclick="_tragoviTogglePts('${t.id}')">📍 Tačke (${t.pts.length}) <span style="color:#475569;">▾</span></label>
+        <div id="tred-pts-${t.id}" style="display:none;" class="tred-pts-list">
+          ${t.pts.map((p,i) => `<div class="tred-pt-row">
+            <span class="tred-pt-idx">#${i+1}</span>
+            <span>${p[0].toFixed(6)}, ${p[1].toFixed(6)}${p[2]?' · '+Math.round(p[2])+'m':''}</span>
+            <button class="tred-pt-del" onclick="_tragoviDelPt('${t.id}',${i})" title="Obriši tačku">✕</button>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _tragoviToggleEdit(id) {
+  const el = document.getElementById('tred-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function _tragoviTogglePts(id) {
+  const el = document.getElementById('tred-pts-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function _tragoviSetName(id, val) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.name = val.trim() || t.name;
+  _tragRegSave();
+}
+function _tragoviSetColor(id, col) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.color = col;
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ color: col });
+  _tragRegSave();
+}
+function _tragoviSetWeight(id, w) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.weight = w;
+  const lbl = document.getElementById('tred-w-lbl-'+id);
+  if (lbl) lbl.textContent = w+'px';
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ weight: w });
+  _tragRegSave();
+}
+function _tragoviSetStyle(id, s) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  t.dashStyle = s;
+  const dashArray = s==='solid' ? null : s==='dot' ? '2 6' : '8 5';
+  const line = _tragLayers[id];
+  if (line) line.setStyle({ dashArray });
+  _tragRegSave();
+  // Refresh edit panel da ažurira active stanje dugmadi
+  const ed = document.getElementById('tred-'+id);
+  if (ed && ed.style.display !== 'none') {
+    _tragoviRender();
+    const edNew = document.getElementById('tred-'+id);
+    if (edNew) edNew.style.display = '';
+  }
+}
+function _tragoviDelPt(id, idx) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t || t.pts.length <= 2) { showToast('⚠ Trag mora imati min. 2 tačke'); return; }
+  t.pts.splice(idx, 1);
+  const line = _tragLayers[id];
+  if (line) line.setLatLngs(t.pts.map(p => [p[0], p[1]]));
+  _tragRegSave();
+  _tragoviRender();
+  // Ponovo otvori edit panel
+  setTimeout(() => {
+    const ed = document.getElementById('tred-'+id);
+    if (ed) { ed.style.display = ''; _tragoviTogglePts(id); }
+  }, 0);
 }
 
 async function _tragRegRename(id) {
@@ -15754,12 +15979,13 @@ function switchTab(tab) {
     dozCancelDraw();
     if (_dozGpsOn) showToast('📍 GPS snimanje nastavlja u pozadini');
   }
-  const panel   = document.getElementById('panel');
-  const pproj   = document.getElementById('proj-panel');
-  const pdoz    = document.getElementById('doznaka-panel');
-  const pmjtrg  = document.getElementById('mjtrg-panel');
-  const padmin  = document.getElementById('admin-panel');
-  const pteren  = document.getElementById('teren-panel');
+  const panel    = document.getElementById('panel');
+  const pproj    = document.getElementById('proj-panel');
+  const pdoz     = document.getElementById('doznaka-panel');
+  const pmjtrg   = document.getElementById('mjtrg-panel');
+  const padmin   = document.getElementById('admin-panel');
+  const pteren   = document.getElementById('teren-panel');
+  const ptragovi = document.getElementById('tragovi-panel');
   document.querySelectorAll('.tab-btn').forEach(b => {
     const oc = b.getAttribute('onclick') || '';
     b.classList.toggle('active', oc.includes(`switchTab('${tab}')`));
@@ -15768,10 +15994,12 @@ function switchTab(tab) {
   pproj.style.display   = tab==='projekat' ? 'flex' : 'none';
   pdoz.style.display    = tab==='doznaka'  ? 'flex' : 'none';
   pmjtrg.style.display  = tab==='mjtrg'   ? 'flex' : 'none';
-  if (padmin) padmin.style.display = tab==='admin' ? 'flex' : 'none';
-  if (pteren) pteren.style.display = tab==='teren' ? 'flex' : 'none';
-  if (tab === 'admin') adminLoadUsers();
-  if (tab === 'teren') { terenRender(); terenRenderTragovi(); }
+  if (padmin)   padmin.style.display   = tab==='admin'   ? 'flex' : 'none';
+  if (pteren)   pteren.style.display   = tab==='teren'   ? 'flex' : 'none';
+  if (ptragovi) ptragovi.style.display = tab==='tragovi' ? 'flex' : 'none';
+  if (tab === 'admin')   adminLoadUsers();
+  if (tab === 'teren')   { terenRender(); terenRenderTragovi(); }
+  if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;
