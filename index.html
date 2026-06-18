@@ -35,7 +35,8 @@
 
 /* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
 .leaflet-tile-container { will-change: transform; }
-.leaflet-tile { will-change: auto; backface-visibility: hidden; opacity:0; transition: opacity 0.15s linear; }
+/* Tile-ovi se prikazuju odmah (canvas ima tamnu pozadinu) — nema fade animacije */
+.leaflet-tile { will-change: auto; backface-visibility: hidden; opacity:1; }
 .leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
@@ -7687,33 +7688,54 @@ function makeCachedTileLayer(cacheName) {
   cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
     createTile(coords, done) {
-      const tile = document.createElement('img');
-      tile.setAttribute('role', 'presentation');
+      const sz = this.getTileSize();
+      const canvas = document.createElement('canvas');
+      canvas.width = sz.x; canvas.height = sz.y;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      // Tamna pozadina odmah — nema bijelog bljeska dok tile se učitava
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, sz.x, sz.y);
+
       const url = this.getTileUrl(coords);
-      function setBlobSrc(blob) {
-        const u = URL.createObjectURL(blob);
-        tile.onload = () => { URL.revokeObjectURL(u); tile.classList.add('leaflet-tile-loaded'); done(null, tile); };
-        tile.onerror = () => { URL.revokeObjectURL(u); done(null, tile); };
-        tile.src = u;
-      }
-      function setDirectSrc() {
-        tile.onload = () => { tile.classList.add('leaflet-tile-loaded'); done(null, tile); };
-        tile.onerror = e => done(e, tile);
-        tile.src = url;
-      }
-      if (!('caches' in window)) { setDirectSrc(); return tile; }
+
+      const drawBlob = (blob) => {
+        if ('createImageBitmap' in window) {
+          // GPU-accelerated dekodiranje, ne blokira main thread
+          createImageBitmap(blob).then(bmp => {
+            ctx.drawImage(bmp, 0, 0, sz.x, sz.y);
+            bmp.close();
+            done(null, canvas);
+          }).catch(() => done(null, canvas));
+        } else {
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img, 0, 0, sz.x, sz.y); URL.revokeObjectURL(u); done(null, canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null, canvas); };
+          img.src = u;
+        }
+      };
+
+      const fallback = () => {
+        const img = new Image();
+        img.crossOrigin = '';
+        img.onload = () => { ctx.drawImage(img, 0, 0, sz.x, sz.y); done(null, canvas); };
+        img.onerror = () => done(null, canvas);
+        img.src = url;
+      };
+
+      if (!('caches' in window)) { fallback(); return canvas; }
+
       caches.open(cacheName).then(async cache => {
         const cached = await cache.match(url);
-        if (cached) { setBlobSrc(await cached.blob()); return; }
+        if (cached) { drawBlob(await cached.blob()); return; }
         try {
           const resp = await fetch(url, { mode: 'cors' });
-          if (resp.ok) {
-            await cache.put(url, resp.clone());
-            setBlobSrc(await resp.blob());
-          } else { throw new Error(); }
-        } catch { setDirectSrc(); }
-      }).catch(() => { setDirectSrc(); });
-      return tile;
+          if (resp.ok) { cache.put(url, resp.clone()); drawBlob(await resp.blob()); }
+          else fallback();
+        } catch { fallback(); }
+      }).catch(fallback);
+
+      return canvas;
     }
   });
 }
@@ -7732,17 +7754,18 @@ try {
 const map = L.map('map',{
   zoomControl:false,
   attributionControl:false,
-  fadeAnimation:false,
+  fadeAnimation:true,
   zoomAnimation:true,
-  zoomAnimationThreshold:4,
-  markerZoomAnimation:false,
+  zoomAnimationThreshold:8,
+  markerZoomAnimation:true,
   inertia:true,
-  inertiaDeceleration:3000,
-  inertiaMaxSpeed:3000,
-  wheelDebounceTime:40,
-  wheelPxPerZoomLevel:90,
+  inertiaDeceleration:2500,
+  inertiaMaxSpeed:3500,
+  wheelDebounceTime:25,
+  wheelPxPerZoomLevel:80,
   tap:true,
-  tapTolerance:15
+  tapTolerance:15,
+  preferCanvas:true
 }).setView(_initMapCenter, _initMapZoom);
 map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
@@ -7757,9 +7780,9 @@ map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:8,updateWhenZooming:false,updateWhenIdle:true,updateInterval:100})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
@@ -18613,22 +18636,28 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
   const MTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
-      const img = document.createElement('img');
-      img.style.cssText = 'width:256px;height:256px;';
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
       const {x,y,z} = coords;
       const inst = _mainMiniDbs[name];
-      if (!inst) { done(null,img); return img; }
+      if (!inst) { done(null, canvas); return canvas; }
       _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
-        if (data) {
-          const url = URL.createObjectURL(new Blob([data]));
-          img.onload = img.onerror = () => { URL.revokeObjectURL(url); done(null,img); };
-          img.src = url;
+        if (!data) { done(null, canvas); return; }
+        const blob = new Blob([data]);
+        if ('createImageBitmap' in window) {
+          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
         } else {
-          img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-          done(null, img);
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
+          img.src = u;
         }
-      }).catch(() => done(null, img));
-      return img;
+      }).catch(() => done(null, canvas));
+      return canvas;
     }
   });
   return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
@@ -18678,20 +18707,26 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
-      const img = document.createElement('img');
-      img.style.cssText = 'width:256px;height:256px;';
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
       const {x,y,z} = coords;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
-        if (data) {
-          const url = URL.createObjectURL(new Blob([data]));
-          img.onload = img.onerror = () => { URL.revokeObjectURL(url); done(null,img); };
-          img.src = url;
+        if (!data) { done(null, canvas); return; }
+        const blob = new Blob([data]);
+        if ('createImageBitmap' in window) {
+          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
         } else {
-          img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-          done(null, img);
+          const u = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
+          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
+          img.src = u;
         }
-      });
-      return img;
+      }).catch(() => done(null, canvas));
+      return canvas;
     }
   });
   return new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
