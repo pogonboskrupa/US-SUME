@@ -8388,6 +8388,8 @@ _loadPutevi();
 let _dblClickGuard = false;
 
 map.on('click', e => {
+  // Klik na mapu dok je panel otvoren — vrati se na kartu
+  if (_activeTab !== 'karta') { switchTab('karta'); return; }
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   if (_tackaPlaceMode) {
