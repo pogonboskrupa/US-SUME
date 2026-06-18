@@ -3261,10 +3261,19 @@ select:focus { outline:none; border-color:#3b82f6; }
     <div id="tragovi-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;padding:12px;">
 
       <!-- Snimi trag dugme -->
-      <button id="btrag-panel" onclick="fabSnimTrag()" style="width:100%;padding:14px;border-radius:14px;border:none;background:#1e293b;color:#f87171;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;border:1px solid rgba(239,68,68,0.25);">
-        <span id="btrag-panel-ico">🔴</span>
-        <span id="btrag-panel-txt">Snimi trag</span>
-      </button>
+      <!-- Akcijska dugmad -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button id="btrag-panel" onclick="fabSnimTrag()" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(239,68,68,0.25);background:#1e293b;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span id="btrag-panel-ico">🔴</span>
+          <span id="btrag-panel-txt">Snimi trag</span>
+        </button>
+        <button onclick="switchTab('karta');setTimeout(()=>_tackaFromTragovi(),50);" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(96,165,250,0.25);background:#1e293b;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          📍 <span>Snimi tačku</span>
+        </button>
+        <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(251,191,36,0.25);background:#1e293b;color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          📷 <span>Uslikaj</span>
+        </button>
+      </div>
 
       <!-- Lista tragova -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -6667,6 +6676,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Tačka dugme — unos naziva pa automatski postavi ──
+function _tackaFromTragovi() { addTacka(); }
 function addTacka() {
   switchTab('karta');
   document.getElementById('tacka-nm-input').value = '';
@@ -16071,15 +16081,14 @@ function _updFabVisibility() {
     const ro = typeof isReadOnly === 'function' && isReadOnly();
     if (spdField) {
       show('brec', false);
-      show('btrag', false);
-      show('btragovi', true);   // terenski profili: "Tragovi" otvara panel sa snimanjem + bazom
+           show('btragovi', true);   // terenski profili: "Tragovi" otvara panel sa snimanjem + bazom
       show('ab-izmjeri-wrap', true);
       show('ab-kompas', true);
     } else {
       // Sa projektom: Snimi vlaku se pojavi, Snimi trag + Izmjeri nestanu.
       // Bez projekta: Snimi trag + Izmjeri. Tragovi dugme uvijek dostupno.
       show('brec',     hasProj && !ro);
-      show('btrag',    !hasProj && !ro);
+
       show('btragovi', !ro);
       show('ab-izmjeri-wrap', !hasProj && !ro);
       show('ab-kompas', false);
@@ -22085,10 +22094,6 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
     <span>Snimi vlaku</span>
     <span id="brec-nm">T1</span>
-  </button>
-  <button id="btrag" onclick="togSnimTrag()" title="Snimi GPS trag">
-    <span class="ab-ico">🔴</span>
-    <span>Snimi trag</span>
   </button>
   <button id="btragovi" onclick="switchTab('tragovi')" title="Tragovi — snimanje i baza tragova" style="display:none;">
     <span class="ab-ico">👣</span>
