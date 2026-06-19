@@ -19346,6 +19346,8 @@ function _sqlmapRenderLayers() {
         <button class="btn ${sl.visible?'b':'gr'}" style="font-size:11px;padding:5px 10px;"
           onclick="sqlmapToggle(${i})">${sl.visible?'👁 Vidljivo':'🙈 Skriveno'}</button>
         <button class="btn gr" style="font-size:11px;padding:5px 10px;"
+          onclick="_sqlmapTestTile(${i})">🔬 Test</button>
+        <button class="btn gr" style="font-size:11px;padding:5px 10px;"
           onclick="sqlmapRemove(${i})">✕ Ukloni</button>
       </div>
       <div class="sqlmap-opacity-row">
@@ -19363,6 +19365,58 @@ function sqlmapToggle(i) {
   sl.visible = !sl.visible;
   if (sl.visible) sl.layer.addTo(map); else map.removeLayer(sl.layer);
   _sqlmapRenderLayers(); _lsRenderSqlite();
+}
+
+// Dijagnostika: testira čitanje tile-a za trenutni centar karte
+async function _sqlmapTestTile(i) {
+  const sl = _sqlLayers[i];
+  if (!sl) return;
+  // Zoom unutar native opsega karte
+  const minZ = sl.meta?.minzoom != null ? parseInt(sl.meta.minzoom,10) : 0;
+  const maxZ = sl.meta?.maxzoom != null ? parseInt(sl.meta.maxzoom,10) : 18;
+  let z = Math.round(map.getZoom());
+  z = Math.max(minZ, Math.min(maxZ, z));
+  const c = map.getCenter();
+  const n = Math.pow(2, z);
+  const x = Math.floor((c.lng + 180) / 360 * n);
+  const latR = c.lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * n);
+  _sqlmapStatus('🔬 Testiram tile z'+z+' x'+x+' y'+y+'...');
+  let report;
+  try {
+    const useMain = !!_mainMiniDbs[sl.name];
+    let data;
+    if (useMain) {
+      data = await _mainMiniDbs[sl.name].mini.tile(z, x, y);
+    } else {
+      const res = await _sqlWCall({type:'tile', name: sl.name, z, x, y});
+      data = res?.data;
+    }
+    const eng = useMain ? 'main' : 'worker';
+    if (!data || !data.length) {
+      report = `❌ NEMA PODATAKA\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
+    } else {
+      const mime = _tileMime(data);
+      let dec;
+      try {
+        const bmp = await createImageBitmap(new Blob([data], {type:mime}));
+        dec = '✅ OK '+bmp.width+'×'+bmp.height; bmp.close();
+      } catch(e) {
+        // Image() fallback test
+        try {
+          await new Promise((res,rej)=>{ const u=URL.createObjectURL(new Blob([data],{type:mime})); const im=new Image(); im.onload=()=>{URL.revokeObjectURL(u);res();}; im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('img'));}; im.src=u; });
+          dec = '⚠ createImageBitmap FAIL, Image() OK ('+e.message+')';
+        } catch(e2) {
+          dec = '❌ DECODE FAIL: '+e.message;
+        }
+      }
+      report = `✅ TILE PRONAĐEN\nz${z} x${x} y${y} (${eng})\nBajtova: ${data.length}\nMIME: ${mime}\nDekodiranje: ${dec}`;
+    }
+  } catch(e) {
+    report = '❌ GREŠKA: '+(e.message||e);
+  }
+  _sqlmapStatus('');
+  await _dlgConfirm(report, { title:'🔬 Test — '+sl.name, okLabel:'OK' });
 }
 function sqlmapSetOpacity(i, val) {
   const sl = _sqlLayers[i];
