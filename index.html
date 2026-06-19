@@ -34,13 +34,15 @@
 <style>
 
 /* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
-.leaflet-tile-container { will-change: transform; }
-/* Tile-ovi se prikazuju odmah (canvas ima tamnu pozadinu) — nema fade animacije */
-.leaflet-tile { will-change: auto; backface-visibility: hidden; opacity:1; }
+.leaflet-tile-container { will-change: transform; contain: strict; }
+.leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: auto; }
 .leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
-.leaflet-tile-pane { will-change: transform; background: #2d3a2e; }
+.leaflet-tile-pane { will-change: transform; background: #2d3a2e; contain: layout style; }
+.leaflet-proxy { will-change: transform; }
+.leaflet-fade-anim .leaflet-tile,.leaflet-fade-anim .leaflet-popup { transition: none !important; }
+.leaflet-overlay-pane { contain: layout; }
 
 /* === AUTH SCREEN === */
 #auth-screen {
@@ -8074,6 +8076,19 @@ let editingLabelId = null;
 const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
+const _tileBmpCache = new Map();
+const _TILE_BMP_MAX = 300;
+
+function _tileBmpEvict() {
+  if (_tileBmpCache.size <= _TILE_BMP_MAX) return;
+  const it = _tileBmpCache.keys();
+  while (_tileBmpCache.size > _TILE_BMP_MAX * 0.7) {
+    const k = it.next().value;
+    if (k === undefined) break;
+    _tileBmpCache.delete(k);
+  }
+}
+
 function makeCachedTileLayer(cacheName) {
   cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
@@ -8082,18 +8097,24 @@ function makeCachedTileLayer(cacheName) {
       const canvas = document.createElement('canvas');
       canvas.width = sz.x; canvas.height = sz.y;
       const ctx = canvas.getContext('2d', { alpha: false });
-      // Tamna pozadina odmah — nema bijelog bljeska dok tile se učitava
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, sz.x, sz.y);
 
       const url = this.getTileUrl(coords);
 
+      // RAM keš — ImageBitmap se crta gotovo instant, bez dekodiranja
+      const cachedBmp = _tileBmpCache.get(url);
+      if (cachedBmp) {
+        ctx.drawImage(cachedBmp, 0, 0, sz.x, sz.y);
+        done(null, canvas);
+        return canvas;
+      }
+
       const drawBlob = (blob) => {
         if ('createImageBitmap' in window) {
-          // GPU-accelerated dekodiranje, ne blokira main thread
           createImageBitmap(blob).then(bmp => {
             ctx.drawImage(bmp, 0, 0, sz.x, sz.y);
-            bmp.close();
+            _tileBmpCache.set(url, bmp); _tileBmpEvict();
             done(null, canvas);
           }).catch(() => done(null, canvas));
         } else {
@@ -8144,18 +8165,21 @@ try {
 const map = L.map('map',{
   zoomControl:false,
   attributionControl:false,
-  fadeAnimation:true,
+  fadeAnimation:false,
   zoomAnimation:true,
-  zoomAnimationThreshold:8,
-  markerZoomAnimation:true,
+  zoomAnimationThreshold:12,
+  markerZoomAnimation:false,
   inertia:true,
-  inertiaDeceleration:2500,
-  inertiaMaxSpeed:3500,
-  wheelDebounceTime:25,
-  wheelPxPerZoomLevel:80,
+  inertiaDeceleration:3000,
+  inertiaMaxSpeed:4000,
+  easeLinearity:0.15,
+  worldCopyJump:false,
+  wheelDebounceTime:20,
+  wheelPxPerZoomLevel:90,
   tap:true,
   tapTolerance:15,
-  preferCanvas:true
+  preferCanvas:true,
+  renderer: L.canvas({ padding: 0.3 })
 }).setView(_initMapCenter, _initMapZoom);
 map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
@@ -8170,9 +8194,9 @@ map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:14,updateWhenZooming:true,updateWhenIdle:false,updateInterval:50})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
