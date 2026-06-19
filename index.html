@@ -34,15 +34,16 @@
 <style>
 
 /* === GPU COMPOSITING ZA LEAFLET (brže skrolanje i zumiranje) === */
-.leaflet-tile-container { will-change: transform; contain: strict; }
+/* NAPOMENA: ne koristiti `contain:strict/size` na tile-container — kolabira
+   GridLayer (MBTiles) na 0x0 pa tile-ovi nestanu. Samo will-change je siguran. */
+.leaflet-tile-container { will-change: transform; }
 .leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: auto; }
 .leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
-.leaflet-tile-pane { will-change: transform; background: #2d3a2e; contain: layout style; }
+.leaflet-tile-pane { will-change: transform; background: #2d3a2e; }
 .leaflet-proxy { will-change: transform; }
 .leaflet-fade-anim .leaflet-tile,.leaflet-fade-anim .leaflet-popup { transition: none !important; }
-.leaflet-overlay-pane { contain: layout; }
 
 /* === AUTH SCREEN === */
 #auth-screen {
