@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.9.2';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -63,7 +63,7 @@ function _tileRespond(event, cacheName) {
       if (cached) return cached;
       try {
         const resp = await fetch(event.request);
-        if (resp.ok) cache.put(event.request, resp.clone());
+        if (resp.ok) try { cache.put(event.request, resp.clone()); } catch(e) {}
         return resp;
       } catch {
         return cached || new Response('', { status: 503 });
@@ -122,7 +122,7 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
         try {
           const resp = await fetch(event.request);
-          if (resp.ok) cache.put(event.request, resp.clone());
+          if (resp.ok) try { cache.put(event.request, resp.clone()); } catch(e) {}
           return resp;
         } catch {
           return cached || new Response('', { status: 503 });
@@ -140,7 +140,7 @@ self.addEventListener('fetch', event => {
       fetch(event.request)
         .then(resp => {
           if (resp.ok) {
-            caches.open(APP_CACHE).then(c => c.put(event.request, resp.clone()));
+            try { const rc = resp.clone(); caches.open(APP_CACHE).then(c => c.put(event.request, rc)); } catch(e) {}
           }
           return resp;
         })
