@@ -4767,8 +4767,8 @@ async function saveNovProjekt() {
   if (error) { showToast('Greška: ' + error.message); return; }
   showToast('Projekat sačuvan!');
   hideNovProjektForm();
+  if (data?.id) { _aktivniProjektId = data.id; localStorage.setItem('tvlake_akt_proj', data.id); }
   await sbLoadProjekti();
-  if (data?.id) { _aktivniProjektId = data.id; localStorage.setItem('tvlake_akt_proj', data.id); await sbLoadProjekti(); }
 }
 
 function showProjektiList() {
@@ -5643,7 +5643,7 @@ function _deleteVlakeByProjekt(projektId) {
   const toRemove = [];
   const brSet = new Set();
   vlake.forEach((v, i) => { if (v.projektId === projektId) { toRemove.push(i); brSet.add(v.br); } });
-  vlake.forEach((v, i) => { if (v.kr > 0 && brSet.has(v.br) && !toRemove.includes(i)) toRemove.push(i); });
+  vlake.forEach((v, i) => { if (v.projektId === projektId && v.kr > 0 && brSet.has(v.br) && !toRemove.includes(i)) toRemove.push(i); });
   toRemove.sort((a, b) => b - a);
   for (const i of toRemove) {
     const v = vlake[i];
@@ -11212,18 +11212,21 @@ function _stopSWHeartbeat() {
 
 // ── SW NOTIFIKACIJA — Foreground Service ekvivalent ─────────────────────────
 function _startRecNotification() {
+  const v = actI !== null ? vlake[actI] : null;
+  const nm = v ? v.nm : '';
+  const dist = v ? fmtL(calcL(v.pts)) : '';
+  // Native Android Foreground Service notification
+  if (typeof AndroidGps !== 'undefined') {
+    try { AndroidGps.updateNotification('GPS Snimanje — ' + (nm || 'vlaka'), dist ? 'Snimljeno: ' + dist : 'GPS snimanje aktivno'); } catch(e) {}
+  }
+  // SW notification (PWA / browser)
   if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
   if (!('Notification' in window)) return;
   if (Notification.permission === 'denied') return;
   const _sendNotif = () => {
     const sw = navigator.serviceWorker.controller;
     if (!sw) return;
-    const v = actI !== null ? vlake[actI] : null;
-    sw.postMessage({
-      type: 'show-rec-notification',
-      nm:   v ? v.nm : '',
-      dist: v ? fmtL(calcL(v.pts)) : ''
-    });
+    sw.postMessage({ type: 'show-rec-notification', nm, dist });
   };
   if (Notification.permission === 'granted') {
     _sendNotif();
@@ -11259,6 +11262,11 @@ if ('serviceWorker' in navigator) {
       document.getElementById('gps-info').textContent = 'GPS: restart od SW...';
     }
   });
+}
+// Android native notification actions (pause/stop from Foreground Service)
+function _nativeRecAction(action) {
+  if (action === 'stop')  stopRec();
+  if (action === 'pause') toggleRecPause();
 }
 
 function centerMap() {
