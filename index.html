@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.0';
+const APP_VER = 'v2.1.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -3723,6 +3723,7 @@ function _saveLocalVlake() {
       pts: v.pts, projekt_id: v.projektId || null,
       projektant_ime: v.projektantIme || null,
       updated_at: v.updatedAt || new Date().toISOString(),
+      rev: v.rev != null ? v.rev : null,
       id: v.sbId || null
     }));
     localStorage.setItem(LOCAL_VLAKE_KEY, JSON.stringify(rows));
@@ -3860,13 +3861,13 @@ async function _processOfflineQueue() {
       if (op.type === 'upsert_vlaka') {
         if (op.payload.id) {
           const { id, ...updatePayload } = op.payload;
-          // updated_at guard: ne prepisuj novije podatke na serveru
-          const ua = updatePayload.updated_at;
+          // Optimističko zaključavanje po rev (neovisno o satu uređaja):
+          // primijeni samo ako server rev == rev koji smo znali kad smo stavili u red.
           let q = sb.from('vlake').update(updatePayload).eq('id', id);
-          if (ua) q = q.or(`updated_at.is.null,updated_at.lte.${ua}`);
+          if (op.knownRev != null) q = q.eq('rev', op.knownRev);
           const { error, data: updRows } = await q.select('id');
-          if (!error && updRows && updRows.length === 0) {
-            showToast('⚠ Izmjena vlake preskočena — kolega je u međuvremenu mijenjao istu vlaku');
+          if (!error && updRows && updRows.length === 0 && op.knownRev != null) {
+            showToast('⚠ Izmjena vlake preskočena — novija verzija je već na serveru');
             const { data: fresh } = await sb.from('vlake').select('*').eq('id', id).single();
             if (fresh) _applyVlakeRows([fresh]);
           }
@@ -5712,6 +5713,7 @@ function _applyVlakeRows(rows) {
         ex.lager = row.lager || ex.lager;
         if (row.projektant_ime) ex.projektantIme = row.projektant_ime;
         ex.updatedAt = row.updated_at || ex.updatedAt;
+        if (row.rev != null) ex.rev = row.rev;
         ex.poly.setLatLngs((ex.pts || []).map(p => [p.la, p.lo]));
         ex.poly.setStyle({ color: ex.color });
       }
@@ -5722,7 +5724,7 @@ function _applyVlakeRows(rows) {
     const color = row.boja || '#4ade80';
     const poly  = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(row.nm, { sticky: true, opacity: 0.9 });
-    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null };
+    const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null, rev: row.rev != null ? row.rev : null };
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
@@ -5873,11 +5875,22 @@ async function sbFlushVlaka(i) {
   if (ci >= 0) cached.splice(ci, 1, cRow); else cached.push(cRow);
   _OL.save(_OL.VLAKE, cached);
 
+  const _SEL = 'id, rev, updated_at';
   try {
     let data, error;
     if (v.sbId) {
-      // Existing row — update by id to avoid overwriting a different vlaka with same nm
-      ({ data, error } = await sb.from('vlake').update(payload).eq('id', v.sbId).select('id').single());
+      // Postojeći red — optimističko zaključavanje po rev (neovisno o satu uređaja).
+      // Update samo ako server rev == naš poznati rev; inače je neko (drugi uređaj)
+      // u međuvremenu mijenjao → spoji noviju verziju i obavijesti.
+      let upd = sb.from('vlake').update(payload).eq('id', v.sbId);
+      if (v.rev != null) upd = upd.eq('rev', v.rev);
+      const { data: rows, error: e1 } = await upd.select(_SEL);
+      if (!e1 && (!rows || rows.length === 0) && v.rev != null) {
+        const { data: fresh } = await sb.from('vlake').select('*').eq('id', v.sbId).single();
+        if (fresh) { _applyVlakeRows([fresh]); showToast('⚠ Tvoja izmjena preskočena — novija verzija je već na serveru'); }
+        data = fresh ? { id: fresh.id, rev: fresh.rev, updated_at: fresh.updated_at } : null;
+        error = null;
+      } else { data = rows && rows[0]; error = e1; }
     } else {
       // PROJEKTNO-SKOPIRAN upsert: jedinstvenost vlake je PO PROJEKTU, ne po šumariji.
       // Isto ime (T1) smije postojati u više projekata. Tražimo postojeći red baš za
@@ -5888,24 +5901,25 @@ async function sbFlushVlaka(i) {
       look = (v.projektId) ? look.eq('projekt_id', v.projektId) : look.is('projekt_id', null);
       const { data: ex } = await look.maybeSingle();
       if (ex && ex.id) {
-        ({ data, error } = await sb.from('vlake').update(payload).eq('id', ex.id).select('id').single());
+        ({ data, error } = await sb.from('vlake').update(payload).eq('id', ex.id).select(_SEL).single());
       } else {
-        ({ data, error } = await sb.from('vlake').insert(payload).select('id').single());
+        ({ data, error } = await sb.from('vlake').insert(payload).select(_SEL).single());
       }
     }
     if (!error && data) {
       v.sbId = data.id;
-      v.updatedAt = new Date().toISOString();
+      if (data.rev != null) v.rev = data.rev;
+      v.updatedAt = data.updated_at || new Date().toISOString();
       const c2 = _OL.load(_OL.VLAKE) || [];
       const i2 = c2.findIndex(r => r.id === data.id);
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
       _updateVlakaSyncIcon(i, 'ok');
     } else if (error) {
-      _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+      _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload, knownRev: v.rev ?? null });
       _updateVlakaSyncIcon(i, 'queue');
     }
   } catch(e) {
-    _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload });
+    _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload, knownRev: v.rev ?? null });
     _updateVlakaSyncIcon(i, 'queue');
   }
 }
@@ -5939,9 +5953,13 @@ async function renameVlaka(i, newNm) {
       return true;
     }));
   }
-  // DB: prvo preimenuj postojeći red po id — upsert poslije pogađa isti red preko novog nm
+  // DB: prvo preimenuj postojeći red po id — upsert poslije pogađa isti red preko novog nm.
+  // Uhvati novi rev iz odgovora da naredni sbFlushVlaka ne javi lažni konflikt.
   if (v.sbId && sbUser) {
-    try { await sb.from('vlake').update({ nm: newNm, br: v.br, kr: v.kr, updated_at: new Date().toISOString() }).eq('id', v.sbId); } catch(e) {}
+    try {
+      const { data: rn } = await sb.from('vlake').update({ nm: newNm, br: v.br, kr: v.kr }).eq('id', v.sbId).select('rev, updated_at').single();
+      if (rn) { if (rn.rev != null) v.rev = rn.rev; v.updatedAt = rn.updated_at || v.updatedAt; }
+    } catch(e) {}
   }
   sbFlushVlaka(i);
   _saveLocalVlake();
