@@ -20100,26 +20100,46 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
 }
 
 // ── Učitaj jedan SHP fajl (+ .dbf + .prj ako postoje) ───────────────────────
-async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
+async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths) {
   if (typeof shapefile === 'undefined') { console.warn('shapefile.js nije učitan'); return null; }
   const key = bucketName + '/' + file.path;
   if (kmlLs.find(k => k._key === key)) return null; // dedup
 
   const basePath = file.path.replace(/\.shp$/i, '');
+  // Companion .dbf/.prj — traži samo ako postoje u listingu (izbjegni 400 greške).
+  // Provjera neosjetljiva na velika/mala slova jer ekstenzije variraju (.PRJ, .Dbf...)
+  const _companion = (ext) => {
+    if (!existingPaths) return basePath + ext; // bez listinga — pokušaj svejedno
+    const lo = (basePath + ext).toLowerCase();
+    for (const p of existingPaths) { if (p.toLowerCase() === lo) return p; }
+    return null;
+  };
+  const dbfPath = _companion('.dbf');
+  const prjPath = _companion('.prj');
   const [shpBuf, dbfBuf, prjTxt] = await Promise.all([
     _fetchBucketFile(bucketName, file.path, 'arraybuffer'),
-    _fetchBucketFile(bucketName, basePath + '.dbf', 'arraybuffer'),
-    _fetchBucketFile(bucketName, basePath + '.prj', 'text'),
+    dbfPath ? _fetchBucketFile(bucketName, dbfPath, 'arraybuffer') : Promise.resolve(null),
+    prjPath ? _fetchBucketFile(bucketName, prjPath, 'text') : Promise.resolve(null),
   ]);
   if (!shpBuf) { console.warn('SHP fetch fail:', file.path); return null; }
 
   // Odredi projekciju iz .prj
-  const fromCrs = _prjToProj4(prjTxt);
+  let fromCrs = _prjToProj4(prjTxt);
 
   let geojson;
   try {
     geojson = await shapefile.read(shpBuf, dbfBuf || undefined);
   } catch(e) { console.warn('SHP parse error:', file.name, e.message); return null; }
+
+  // Fallback: ako nema .prj a koordinate su očito projecirane (metri, van
+  // lat/lon opsega), pretpostavi MGI Zone 6 (najčešći CRS za BiH katastar).
+  if (!fromCrs && !prjTxt) {
+    const sample = _firstCoord(geojson.features?.[0]?.geometry);
+    if (sample && (Math.abs(sample[0]) > 180 || Math.abs(sample[1]) > 90)) {
+      fromCrs = 'EPSG:31276';
+      console.info('SHP bez .prj —', file.name, '→ pretpostavljen MGI Zone 6 (EPSG:31276)');
+    }
+  }
 
   // Reprojekcija koordinata ako nije WGS84
   if (fromCrs) {
@@ -20185,6 +20205,15 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli) {
 }
 
 // ── Reprojekcija geometrije in-place (GeoJSON coords) ────────────────────────
+// Prva [x,y] koordinata iz geometrije (za detekciju projekcije)
+function _firstCoord(geom) {
+  if (!geom) return null;
+  let c = geom.coordinates;
+  if (!c && geom.geometries) c = geom.geometries[0]?.coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return (Array.isArray(c) && typeof c[0] === 'number') ? c : null;
+}
+
 function _reprojectGeometry(geom, fromCrs) {
   if (!geom) return;
   const conv = c => proj4(fromCrs, 'WGS84', c); // [x,y] → [lon,lat]
@@ -20220,6 +20249,9 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
     const supported = allFiles.filter(f => /\.(kml|shp)$/i.test(f.name));
     if (!supported.length) { console.warn(`Bucket "${bucketName}": nema KML/SHP fajlova`); return; }
 
+    // Set svih postojećih putanja — da SHP ne traži .dbf/.prj koji ne postoje (400 noise)
+    const existingPaths = new Set(allFiles.map(f => f.path));
+
     let didFit = false;
     for (const file of supported) {
       const opts = typeof getOpts === 'function' ? getOpts(file.name) : { ...getOpts };
@@ -20228,7 +20260,7 @@ async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false)
       if (/\.kml$/i.test(file.name)) {
         grp = await _loadOneKml(bucketName, file, opts, extractOdjeli);
       } else if (/\.shp$/i.test(file.name)) {
-        grp = await _loadOneShp(bucketName, file, opts, extractOdjeli);
+        grp = await _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths);
       }
 
       // fitBounds samo pri prvom otvaranju app (nema sačuvane pozicije) da ne pregazi korisnikov prikaz
