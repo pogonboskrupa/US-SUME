@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v1.9.9';
+const APP_VER = 'v2.0.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -19153,27 +19153,16 @@ async function sqlmapLoadFile(file) {
 
 let _mainMiniDbs = {};
 async function _sqlmapLoadDirect(file, name) {
-  const isAndroid = typeof AndroidDownload !== 'undefined';
-  // Android WebView: File postMessage može crashovati — čitaj na main threadu
-  if (isAndroid && _MiniSqliteMain) {
-    _sqlmapStatus('⏳ Čitam kartu (' + (file.size/1024/1024|0) + ' MB)...');
-    const mini = new _MiniSqliteMain(file);
-    const initR = await mini.init();
-    if (!initR.fmt) throw new Error('unknown-format');
-    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
-    const layer = _sqlmapCreateLayerMain(name, initR.fmt, initR.meta);
-    layer.addTo(map);
-    _sqlLayers.push({name, fmt:initR.fmt, layer, visible:true, meta:initR.meta, saved:false, opfs:false});
-    _sqlmapMetaAutoZoom(initR.meta);
-    const zI = (initR.meta?.minzoom != null) ? ' · zoom ' + initR.meta.minzoom + '–' + initR.meta.maxzoom : '';
-    _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
-    _sqlmapRenderLayers(); _lsRenderSqlite();
-    return;
+  // Uvijek pokušaj Worker path — radi i na Android WebView u većini slučajeva.
+  // Samo ako Worker ne uspije, padaj na main-thread (sporije ali radi).
+  let r;
+  try {
+    r = await _sqlWCall({type:'load-file', name, file});
+  } catch(e) {
+    r = {ok:false, error:e.message||'worker-fail'};
   }
-  // Desktop/PWA: Worker path
-  let r = await _sqlWCall({type:'load-file', name, file});
   if (!r.ok && _MiniSqliteMain) {
-    _sqlmapStatus('⏳ Otvaranje karte (fallback)...');
+    _sqlmapStatus('⏳ Otvaranje karte (fallback ' + (file.size/1024/1024|0) + ' MB)...');
     const mini = new _MiniSqliteMain(file);
     const initR = await mini.init();
     if (!initR.fmt) throw new Error('unknown-format');
@@ -19187,7 +19176,8 @@ async function _sqlmapLoadDirect(file, name) {
   _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
-  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI);
+  const eng = useMain ? ' [main]' : ' [worker]';
+  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI + eng);
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
