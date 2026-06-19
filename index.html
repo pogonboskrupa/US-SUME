@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.0.1';
+const APP_VER = 'v2.1.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -3768,11 +3768,15 @@ const _OL = {
   enqueue(op) {
     try {
       const q = this.loadQueue();
-      // Deduplicate upsert_vlaka by nm — čuvaj samo zadnju verziju
+      // Deduplicate upsert_vlaka by nm — čuvaj samo zadnju verziju.
+      // VAŽNO: uključi projekt_id i id — isto ime (T1) može legitimno postojati u
+      // više projekata, pa dedup samo po nm+korisnik briše tuđu pending izmjenu.
       if (op.type === 'upsert_vlaka') {
         const idx = q.findIndex(o => o.type === 'upsert_vlaka' &&
           o.payload.nm === op.payload.nm &&
-          o.payload.korisnik_id === op.payload.korisnik_id);
+          o.payload.korisnik_id === op.payload.korisnik_id &&
+          (o.payload.projekt_id ?? null) === (op.payload.projekt_id ?? null) &&
+          (o.payload.id ?? null) === (op.payload.id ?? null));
         if (idx >= 0) q.splice(idx, 1);
       }
       // Deduplicate upsert_log by datum
@@ -3868,8 +3872,18 @@ async function _processOfflineQueue() {
           }
           err = error;
         } else {
-          const { error } = await sb.from('vlake').upsert(op.payload, { onConflict: 'korisnik_id,sumarija,nm' });
-          err = error;
+          // Projektno-skopiran upsert (vidi sbFlushVlaka): nađi red po (korisnik,projekt,nm) → update, inače insert
+          let look = sb.from('vlake').select('id')
+            .eq('korisnik_id', op.payload.korisnik_id).eq('nm', op.payload.nm);
+          look = op.payload.projekt_id ? look.eq('projekt_id', op.payload.projekt_id) : look.is('projekt_id', null);
+          const { data: ex } = await look.maybeSingle();
+          if (ex && ex.id) {
+            const { error } = await sb.from('vlake').update(op.payload).eq('id', ex.id);
+            err = error;
+          } else {
+            const { error } = await sb.from('vlake').insert(op.payload);
+            err = error;
+          }
         }
       } else if (op.type === 'delete_vlaka') {
         const { error } = await sb.from('vlake').delete().eq('id', op.payload.id);
@@ -3926,14 +3940,27 @@ async function _processOfflineQueue() {
       }
     } catch(e) { break; } // still offline
   }
-  // Flush buffered doznaka GPS track points
+  // Flush buffered doznaka GPS track points.
+  // VAŽNO: tokom await-a ispod GPS callback može dodati nove tačke u buffer.
+  // Zato uklanjamo SAMO prefiks koji smo poslali (prvih N), ne cijeli ključ —
+  // inače novododane tačke nestanu (race → gubitak GPS tačke na terenu).
   try {
     const dozBuf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
-    if (dozBuf.length > 0) {
+    const N = dozBuf.length;
+    if (N > 0) {
+      // Ukloni prvih `removed` tačaka iz aktuelnog (možda izmijenjenog) buffera
+      const _dropPrefix = (removed) => {
+        if (removed <= 0) return;
+        let cur = [];
+        try { cur = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]'); } catch { cur = []; }
+        const rest = cur.slice(removed);
+        if (rest.length) localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(rest));
+        else localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
+      };
       const { error } = await sb.from('doz_track_points').insert(dozBuf);
       if (!error) {
-        localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
-        synced += dozBuf.length;
+        _dropPrefix(N);
+        synced += N;
       } else if (_isNetworkErr(error)) {
         // Mrežni ispad — zadrži cijeli buffer, ne troši pozive po tački
       } else {
@@ -3951,8 +3978,13 @@ async function _processOfflineQueue() {
           } catch { stillFailing.push(pt); }
         }
         if (discarded) showToast(`⚠ ${discarded} GPS tačaka odbačeno — projekat/odjel više ne postoji`);
-        if (stillFailing.length) localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(stillFailing));
-        else localStorage.removeItem(_DOZ_TRACK_BUF_KEY);
+        // Skini prvih N (poslano/odbačeno), pa vrati one koji još failuju na početak
+        _dropPrefix(N);
+        if (stillFailing.length) {
+          let cur = [];
+          try { cur = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]'); } catch { cur = []; }
+          localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(stillFailing.concat(cur)));
+        }
       }
     }
   } catch {}
@@ -5810,8 +5842,16 @@ async function sbFlushVlaka(i) {
   if (isReadOnly()) return;
   const v = vlake[i];
   if (!v) return;
+  // Validacija: ukloni tačke sa nevažećim koordinatama (NaN/null/∞)
+  if (Array.isArray(v.pts)) {
+    const _clean = v.pts.filter(p => p && Number.isFinite(p.la) && Number.isFinite(p.lo));
+    if (_clean.length !== v.pts.length) v.pts = _clean;
+  }
   _saveLocalVlake();                           // uvijek spremi lokalno odmah (sync)
   if (!sbUser || !sbProfile) return;           // bez prijave — samo lokalni keš
+  // Ne guraj prazne vlake (0 tačaka) na server koje nikad nisu ni snimljene —
+  // sprječava gomilanje praznih redova. Ako već ima sbId, dozvoli (može biti brisanje tačaka).
+  if ((!v.pts || v.pts.length < 1) && !v.sbId) return;
   const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile.sumarija || '',
@@ -5839,8 +5879,19 @@ async function sbFlushVlaka(i) {
       // Existing row — update by id to avoid overwriting a different vlaka with same nm
       ({ data, error } = await sb.from('vlake').update(payload).eq('id', v.sbId).select('id').single());
     } else {
-      ({ data, error } = await sb.from('vlake').upsert(payload,
-        { onConflict: 'korisnik_id,sumarija,nm' }).select('id').single());
+      // PROJEKTNO-SKOPIRAN upsert: jedinstvenost vlake je PO PROJEKTU, ne po šumariji.
+      // Isto ime (T1) smije postojati u više projekata. Tražimo postojeći red baš za
+      // (korisnik_id, projekt_id, nm) pa UPDATE; inače INSERT. Ne oslanjamo se na DB
+      // onConflict ključ (koji bi prepisao T1 iz drugog projekta).
+      let look = sb.from('vlake').select('id')
+        .eq('korisnik_id', sbUser.id).eq('nm', v.nm);
+      look = (v.projektId) ? look.eq('projekt_id', v.projektId) : look.is('projekt_id', null);
+      const { data: ex } = await look.maybeSingle();
+      if (ex && ex.id) {
+        ({ data, error } = await sb.from('vlake').update(payload).eq('id', ex.id).select('id').single());
+      } else {
+        ({ data, error } = await sb.from('vlake').insert(payload).select('id').single());
+      }
     }
     if (!error && data) {
       v.sbId = data.id;
@@ -8089,6 +8140,8 @@ function _tileBmpEvict() {
   while (_tileBmpCache.size > _TILE_BMP_MAX * 0.7) {
     const k = it.next().value;
     if (k === undefined) break;
+    const bmp = _tileBmpCache.get(k);
+    if (bmp && bmp.close) { try { bmp.close(); } catch(e) {} } // oslobodi GPU memoriju
     _tileBmpCache.delete(k);
   }
 }
@@ -8171,7 +8224,7 @@ const map = L.map('map',{
   attributionControl:false,
   fadeAnimation:true,
   zoomAnimation:true,
-  zoomAnimationThreshold:12,
+  zoomAnimationThreshold:4,
   markerZoomAnimation:false,
   inertia:true,
   inertiaDeceleration:3000,
@@ -8190,15 +8243,24 @@ setTimeout(() => { _appStarted = true; }, 4000);
 // Zasebni pane za vlake — omogućava brzo sakrivanje svih vlaka + labela odjednom
 map.createPane('vlakeLines');  map.getPane('vlakeLines').style.zIndex  = 400;
 map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
+// Labele su DOM markeri — sakrij ih tokom pana/zooma radi glatkijeg skrolanja (kao AlpineQuest).
+// Statične su tokom pokreta pa korisnik ne primijeti, a kompozitor ne mora repozicionirati svaki čvor.
+(function(){
+  let _lblHidT = null;
+  const _hideLbl = () => { const p = map.getPane('vlakeLabels'); if (p) p.style.visibility = 'hidden'; };
+  const _showLbl = () => { const p = map.getPane('vlakeLabels'); if (p) p.style.visibility = ''; };
+  map.on('movestart zoomstart', () => { if (_lblHidT) { clearTimeout(_lblHidT); _lblHidT = null; } _hideLbl(); });
+  map.on('moveend zoomend', () => { if (_lblHidT) clearTimeout(_lblHidT); _lblHidT = setTimeout(_showLbl, 80); });
+})();
 const _vlakeRenderer = L.canvas({ pane: 'vlakeLines', padding: 0.3 });
 map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:18,updateWhenZooming:true,updateWhenIdle:false,updateInterval:30})
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
@@ -8284,7 +8346,7 @@ function _makeDemCanvasLayer(mode) {
         if (!src) { done(null, canvas); return; }
         const tmp = document.createElement('canvas');
         tmp.width = tmp.height = 256;
-        const tc = tmp.getContext('2d');
+        const tc = tmp.getContext('2d', { willReadFrequently: true });
         tc.drawImage(src, 0, 0, 256, 256);
         const raw = tc.getImageData(0, 0, 256, 256).data;
         // Decode terrarium: elev = R*256 + G + B/256 - 32768
@@ -8347,7 +8409,7 @@ const DemSlopeClass = L.GridLayer.extend({
       if (!src) { done(null, canvas); return; }
       const tmp = document.createElement('canvas');
       tmp.width = tmp.height = 256;
-      const tc = tmp.getContext('2d');
+      const tc = tmp.getContext('2d', { willReadFrequently: true });
       tc.drawImage(src, 0, 0, 256, 256);
       const raw = tc.getImageData(0, 0, 256, 256).data;
       const elev = new Float32Array(256 * 256);
@@ -9713,6 +9775,20 @@ function nacrtajVlaku() {
 let _addVBusy = false;
 let _addVAfterCreate = null; // callback after vlaka is actually created
 
+// Vrati ime kolege koji već ima vlaku istog imena u aktivnom projektu, ili null.
+// kolegeVlakeMap je ključan po `korisnikId::nm` i učitan baš za aktivni projekat.
+function _kolegaVlakaDup(nm) {
+  try {
+    for (const key in kolegeVlakeMap) {
+      const i = key.indexOf('::');
+      if (i >= 0 && key.slice(i + 2) === nm) {
+        return kolegeVlakeMap[key]?.ime || 'drugi projektant';
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+
 async function addV() {
   if (_addVBusy) return;
   _addVBusy = true;
@@ -9727,6 +9803,18 @@ async function addV() {
       document.getElementById('vc-title').textContent = `⚠ Vlaka "${nm}" već postoji`;
       document.getElementById('vlaka-conflict').style.display = 'block';
       return; // will be resumed by vcDelete() or vcAddNext()
+    }
+    // OBAVIJEST: drugi projektant na ovom projektu već ima vlaku istog imena.
+    // Jedinstvenost je po projektu — rijetko jer se dogovaraju, ali upozori.
+    const kolegaDup = _kolegaVlakaDup(nm);
+    if (kolegaDup) {
+      _addVBusy = false;  // pusti dijalog; nastavak ovisi o odgovoru
+      const ok = await _dlgConfirm(
+        `Vlaka "${nm}" već postoji u projektu — snimio/la ju je ${kolegaDup}.\n\nU istom projektu ne bi smjele postojati dvije iste vlake. Želiš li svejedno kreirati?`,
+        { title: '⚠ Ista vlaka već u projektu', okLabel: 'Svejedno kreiraj', cancelLabel: 'Odustani', danger: true }
+      );
+      if (!ok) return;
+      _addVBusy = true;
     }
     await _doCreateVlaka(br, kr);
   } finally {
@@ -10028,7 +10116,8 @@ document.addEventListener('visibilitychange', async () => {
     // App ide u pozadinu (kamera, drugi app, zaključavanje) — Android može
     // ubiti WebView. Spasi sve lokalno ODMAH, ne čekaj debounce timer.
     try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
-    if (recOn && !recPaused) {
+    try { if (typeof _dozSaveLivePts === 'function') _dozSaveLivePts(); } catch(e) {}
+    if ((recOn && !recPaused) || _dozGpsOn) {
       if (bgWarn) bgWarn.style.display = '';
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
@@ -10038,6 +10127,7 @@ document.addEventListener('visibilitychange', async () => {
 // Posljednja šansa za spas podataka prije nego WebView bude ubijen
 window.addEventListener('pagehide', () => {
   try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
+  try { if (typeof _dozSaveLivePts === 'function') _dozSaveLivePts(); } catch(e) {}
 });
 
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
@@ -10116,10 +10206,13 @@ function stopRec() {
     updateVlakaLabel(actI);
     // Odmah sačuvaj — ne čekaj debounce (zaštita od gubitka ako se app zatvori)
     clearTimeout(_vlakaSaveTimers[actI]);
-    const _recNm = vlake[actI]?.nm || '';
-    const _recPts = vlake[actI]?.pts?.length || 0;
+    // Uhvati referencu na vlaku PRIJE async flush-a — actI/vlake se mogu promijeniti
+    // tokom await-a (npr. korisnik obriše vlaku) → inače pogrešan toast.
+    const _recV = vlake[actI];
+    const _recNm = _recV?.nm || '';
+    const _recPts = _recV?.pts?.length || 0;
     sbFlushVlaka(actI).then(() => {
-      if (vlake[actI]?.sbId) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
+      if (_recV?.sbId) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
       else showToast(`📴 ${_recNm} sačuvana lokalno — sync kad bude veze`);
     });
   }
@@ -10607,7 +10700,16 @@ function _updRecSignal(ac) {
 // ─── PRECIZNA TAČKA (accuracy-weighted prosjek N fikseva) ──────────────
 let _precizActive = false;
 let _precizBuf = [];  // [{la, lo, ac}]
+let _precizTimer = null;
 const _PRECIZ_N = 10;
+
+function _precizReset() {
+  _precizActive = false;
+  _precizBuf = [];
+  if (_precizTimer) { clearTimeout(_precizTimer); _precizTimer = null; }
+  const btn = document.getElementById('btn-preciz');
+  if (btn) { btn.textContent = '📍'; btn.style.background = '#1e3a5f'; btn.style.color = '#38bdf8'; }
+}
 
 function _precizTacka() {
   if (!recOn || recPaused || actI === null) { showToast('⚠ Snimanje mora biti aktivno'); return; }
@@ -10617,10 +10719,20 @@ function _precizTacka() {
   const btn = document.getElementById('btn-preciz');
   if (btn) { btn.textContent = '⏳'; btn.style.background = '#14532d'; btn.style.color = '#4ade80'; }
   showToast(`📍 Stojte mirno — prikupljam ${_PRECIZ_N} fikseva...`);
+  // Timeout: ako GPS ne isporuči dovoljno fikseva za 30s, oslobodi dugme (spriječi trajno zaglavljenje)
+  if (_precizTimer) clearTimeout(_precizTimer);
+  _precizTimer = setTimeout(() => {
+    if (_precizActive) {
+      if (_precizBuf.length >= 3) { _precizFinish(); }
+      else { _precizReset(); showToast('⚠ Precizna tačka prekinuta — slab GPS signal'); }
+    }
+  }, 30000);
 }
 
 function _precizCollect(la, lo, ac) {
   if (!_precizActive) return;
+  // Pauza/stop tokom prikupljanja → odustani, ne ubacuj tačku u neaktivnu vlaku
+  if (!recOn || recPaused || actI === null) { _precizReset(); return; }
   _precizBuf.push({ la, lo, ac });
   const btn = document.getElementById('btn-preciz');
   if (btn) btn.textContent = `${_precizBuf.length}/${_PRECIZ_N}`;
@@ -10631,9 +10743,10 @@ function _precizCollect(la, lo, ac) {
 
 function _precizFinish() {
   _precizActive = false;
+  if (_precizTimer) { clearTimeout(_precizTimer); _precizTimer = null; }
   const btn = document.getElementById('btn-preciz');
   if (btn) { btn.textContent = '📍'; btn.style.background = '#1e3a5f'; btn.style.color = '#38bdf8'; }
-  if (!_precizBuf.length || actI === null) return;
+  if (!_precizBuf.length || actI === null || !recOn || recPaused) { _precizBuf = []; return; }
   let sumW = 0, wLa = 0, wLo = 0;
   _precizBuf.forEach(p => {
     const w = 1 / (p.ac * p.ac);
@@ -11017,6 +11130,7 @@ function onPE(e) {
     setTimeout(() => {
       if (recOn && gpsOn) {
         if (wid) navigator.geolocation.clearWatch(wid);
+        _kfReset(); _lastRecTime = 0;  // čist start nakon gapa — bez artefakt-luka
         wid = navigator.geolocation.watchPosition(onP, onPE, {
           enableHighAccuracy: true, maximumAge: 0, timeout: 20000
         });
@@ -11044,6 +11158,7 @@ function _startGpsWatchdog() {
       wid = null;
       setTimeout(() => {
         if (recOn) {
+          _kfReset(); _lastRecTime = 0;  // zamrznut GPS 45s+ → čist start
           wid = navigator.geolocation.watchPosition(onP, onPE, {
             enableHighAccuracy: true, maximumAge: 0, timeout: 20000
           });
@@ -11113,6 +11228,7 @@ if ('serviceWorker' in navigator) {
     }
     // SW šalje ping svakih 20s tokom snimanja — restartuj GPS ako se ugasio
     if (evt.data?.type === 'sw-ping' && recOn && gpsOn && !wid) {
+      _kfReset(); _lastRecTime = 0;  // restart nakon backgrounda → čist start
       wid = navigator.geolocation.watchPosition(onP, onPE, {
         enableHighAccuracy: true, maximumAge: 0, timeout: 20000
       });
@@ -11905,6 +12021,7 @@ function addPt(i, la, lo, al) {
 }
 function addWP() {
   if (actI===null||!lastP) { showToast('⚠ GPS signal + odabrana vlaka!'); return; }
+  if (recOn && recPaused) { showToast('⏸ Snimanje je pauzirano'); return; }
   const v=vlake[actI];
   addPt(actI,lastP.la,lastP.lo,lastP.al);
   const ico=L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],
@@ -20813,32 +20930,45 @@ function _dozUpdGpsStats(acc) {
     (_dozGpsBuffered > 0 ? `<br><span style="color:#fbbf24;">📴 ${_dozGpsBuffered} tač. čeka sync</span>` : '');
 }
 
+let _dozGpsPoly = null;        // perzistentna polilinija (inkrementalno crtanje)
+let _dozGpsProjId = null;      // uhvaćen na startu — ne mijenja se tokom snimanja
+let _dozGpsUserId = null;
+const _DOZ_GPS_MIN_DIST = 3;   // metara — minimalni razmak između tačaka (filtrira GPS šum)
+
 async function dozStartGPS() {
+  if (_dozGpsOn) return;        // već snima — spriječi dupli watch (memory leak)
   if (!_dozSelId || !sbUser) { showToast('Odaberi odjel i prijavi se'); return; }
   if (!navigator.geolocation) { showToast('GPS nije dostupan'); return; }
+  if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   _dozGpsOn = true;
   _dozGpsPts = [];
   _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
+  _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;  // zamrzni ID-jeve za cijelu sesiju
   if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
   _dozGpsTrackLayer = L.layerGroup().addTo(map);
+  _dozGpsPoly = L.polyline([], { color:'#fbbf24', weight:3, opacity:0.9 }).addTo(_dozGpsTrackLayer);
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '⏹ Zaustavi GPS'; btn.style.background='#2d0a0a'; btn.style.color='#f87171'; btn.style.borderColor='#7f1d1d'; }
   document.getElementById('doz-gps-status').style.display = 'block';
   _dozUpdGpsStats(null);
+  _acquireWakeLock();           // drži ekran/CPU budan — kao kod snimanja vlaka
 
   _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
+    // Sesija završena ili kontekst nestao tokom await-a → ignoriši fix
+    if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
     if (acc > 20) { _dozUpdGpsStats(acc); return; } // slab signal — pokaži, ne snimaj
     const prev = _dozGpsPts[_dozGpsPts.length - 1];
-    if (prev) _dozGpsLen += dst(prev[0], prev[1], lat, lng);
-    _dozGpsPts.push([lat, lng]);
-    if (_dozGpsPts.length >= 2) {
-      if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
-      _dozGpsTrackLayer = L.layerGroup().addTo(map);
-      L.polyline(_dozGpsPts, { color:'#fbbf24', weight:3, opacity:0.9 }).addTo(_dozGpsTrackLayer);
+    if (prev) {
+      const d = dst(prev[0], prev[1], lat, lng);
+      if (d < _DOZ_GPS_MIN_DIST) { _dozUpdGpsStats(acc); return; } // šum dok stojiš mirno — preskoči
+      _dozGpsLen += d;
     }
+    _dozGpsPts.push([lat, lng]);
+    if (_dozGpsPoly) _dozGpsPoly.addLatLng([lat, lng]);  // inkrementalno — O(1), ne O(n)
+    _dozSaveLivePts();          // spasi live trag (background-kill zaštita)
     const _dozPt = {
-      project_id: _dozSelId, user_id: sbUser.id,
+      project_id: _dozGpsProjId, user_id: _dozGpsUserId,
       latitude: lat, longitude: lng,
       altitude: alt || null, accuracy: acc, speed: speed || null,
       recorded_at: new Date().toISOString()
@@ -20857,7 +20987,8 @@ async function dozStartGPS() {
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
 
-// Spremi GPS tačku u offline buffer (poziva se i pri mrežnoj i pri DB/RLS grešci)
+// Spremi GPS tačku u offline buffer (poziva se i pri mrežnoj i pri DB/RLS grešci).
+// Sinhrono (bez await) → atomarno u single-thread JS, ne može se ispreplitati.
 function _dozBufferTrackPoint(pt) {
   try {
     const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
@@ -20866,10 +20997,22 @@ function _dozBufferTrackPoint(pt) {
   } catch {}
 }
 
+// Spasi live trag lokalno — ako Android ubije WebView u backgroundu, ne gubimo liniju
+const _DOZ_LIVE_KEY = 'tvlake_doz_live';
+function _dozSaveLivePts() {
+  try {
+    if (_dozGpsOn && _dozGpsPts.length)
+      localStorage.setItem(_DOZ_LIVE_KEY, JSON.stringify({ projId:_dozGpsProjId, pts:_dozGpsPts, len:_dozGpsLen, ts:Date.now() }));
+  } catch {}
+}
+
 function dozStopGPS() {
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   const wasOn = _dozGpsOn;
   _dozGpsOn = false;
+  _dozGpsProjId = null; _dozGpsUserId = null;
+  if (!recOn) _releaseWakeLock();   // oslobodi wake-lock (osim ako vlaka još snima)
+  try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {}  // live trag više nije potreban
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '📍 Počni GPS snimanje'; btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; }
   document.getElementById('doz-gps-status').style.display = 'none';
