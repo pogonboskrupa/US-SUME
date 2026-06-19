@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.0.0';
+const APP_VER = 'v2.0.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -19153,31 +19153,34 @@ async function sqlmapLoadFile(file) {
 
 let _mainMiniDbs = {};
 async function _sqlmapLoadDirect(file, name) {
-  // Uvijek pokušaj Worker path — radi i na Android WebView u većini slučajeva.
-  // Samo ako Worker ne uspije, padaj na main-thread (sporije ali radi).
-  let r;
+  _sqlmapStatus('⏳ Otvaranje karte (' + (file.size/1024/1024|0) + ' MB)...');
+  let r, eng = 'worker';
   try {
     r = await _sqlWCall({type:'load-file', name, file});
   } catch(e) {
     r = {ok:false, error:e.message||'worker-fail'};
   }
-  if (!r.ok && _MiniSqliteMain) {
-    _sqlmapStatus('⏳ Otvaranje karte (fallback ' + (file.size/1024/1024|0) + ' MB)...');
-    const mini = new _MiniSqliteMain(file);
-    const initR = await mini.init();
-    if (!initR.fmt) throw new Error('unknown-format');
-    _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
-    r = {ok:true, fmt:initR.fmt, meta:initR.meta};
+  if (!r.ok) {
+    eng = 'main';
+    if (_MiniSqliteMain) {
+      _sqlmapStatus('⏳ Fallback na main-thread (' + (file.size/1024/1024|0) + ' MB)...');
+      const mini = new _MiniSqliteMain(file);
+      const initR = await mini.init();
+      if (!initR.fmt) throw new Error('unknown-format (main)');
+      _mainMiniDbs[name] = {mini, fmt:initR.fmt, meta:initR.meta, zOff:mini._zOff||17};
+      r = {ok:true, fmt:initR.fmt, meta:initR.meta};
+    } else {
+      throw new Error(r.error || 'worker-fail + no main fallback');
+    }
   }
-  if (!r.ok) throw new Error(r.error);
   const useMain = !!_mainMiniDbs[name];
   const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
   layer.addTo(map);
   _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
-  const eng = useMain ? ' [main]' : ' [worker]';
-  _sqlmapStatus('✅ Karta učitana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB)' + zI + eng);
+  const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
+  _sqlmapStatus('✅ ' + name + ' (' + (file.size/1024/1024|0) + ' MB, ' + fmtLabel + ')' + zI + ' [' + eng + ']');
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
@@ -19394,8 +19397,9 @@ async function _sqlmapTestTile(i) {
       data = res?.data;
     }
     const eng = useMain ? 'main' : 'worker';
+    const fmtL = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='rmaps'?'SQLiteDB':sl.fmt||'?';
     if (!data || !data.length) {
-      report = `❌ NEMA PODATAKA\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
+      report = `❌ NEMA PODATAKA\nFormat: ${fmtL}\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nMeta: zoom ${sl.meta?.minzoom||'?'}–${sl.meta?.maxzoom||'?'}\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
     } else {
       const mime = _tileMime(data);
       let dec;
@@ -19403,7 +19407,6 @@ async function _sqlmapTestTile(i) {
         const bmp = await createImageBitmap(new Blob([data], {type:mime}));
         dec = '✅ OK '+bmp.width+'×'+bmp.height; bmp.close();
       } catch(e) {
-        // Image() fallback test
         try {
           await new Promise((res,rej)=>{ const u=URL.createObjectURL(new Blob([data],{type:mime})); const im=new Image(); im.onload=()=>{URL.revokeObjectURL(u);res();}; im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('img'));}; im.src=u; });
           dec = '⚠ createImageBitmap FAIL, Image() OK ('+e.message+')';
@@ -19411,7 +19414,7 @@ async function _sqlmapTestTile(i) {
           dec = '❌ DECODE FAIL: '+e.message;
         }
       }
-      report = `✅ TILE PRONAĐEN\nz${z} x${x} y${y} (${eng})\nBajtova: ${data.length}\nMIME: ${mime}\nDekodiranje: ${dec}`;
+      report = `✅ TILE PRONAĐEN\nFormat: ${fmtL}\nz${z} x${x} y${y} (${eng})\nBajtova: ${data.length}\nMIME: ${mime}\nDekodiranje: ${dec}`;
     }
   } catch(e) {
     report = '❌ GREŠKA: '+(e.message||e);
