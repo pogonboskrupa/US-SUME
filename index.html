@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.1';
+const APP_VER = 'v2.1.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -9451,8 +9451,11 @@ function _projQuickRec() {
 }
 
 function _nextMainBr() {
+  // Numeracija je PO AKTIVNOM PROJEKTU — isto kao _nextKrakNm. Inače bi u novom
+  // projektu prvi predloženi broj bio npr. T7 ako drugi projekti imaju T1–T6.
   const used = new Set(
-    vlake.filter(v => !v.nm.includes('.')).map(v => parseInt(v.nm.slice(1)))
+    vlake.filter(v => !v.nm.includes('.') && v.projektId === _aktivniProjektId)
+         .map(v => parseInt(v.nm.slice(1)))
   );
   let n = 1; while (used.has(n)) n++; return n;
 }
@@ -9869,7 +9872,8 @@ function vcDelete() {
 function vcAddNext() {
   document.getElementById('vlaka-conflict').style.display = 'none';
   // Find next free br
-  const usedNm = new Set(vlake.map(v => v.nm));
+  const pid = _aktivniProjektId || null;
+  const usedNm = new Set(vlake.filter(v => (v.projektId||null) === pid).map(v => v.nm));
   let br = _vcBr + 1;
   while (usedNm.has(_vcKr === 0 ? `T${br}` : `T${br}.${_vcKr}`)) br++;
   document.getElementById('ibr').value = br;
@@ -9895,8 +9899,9 @@ async function _doCreateVlaka(br, kr) {
   document.querySelectorAll('.cdot').forEach((d,j)=>d.classList.toggle('sel',j===cIdx));
   rndList();
   selI(vlake.length-1);
-  // Advance ibr to next free
-  const usedBr = new Set(vlake.map(v => v.br));
+  // Advance ibr to next free (within active project)
+  const _pid = _aktivniProjektId || null;
+  const usedBr = new Set(vlake.filter(v => (v.projektId||null) === _pid).map(v => v.br));
   let nextBr = br + 1;
   while (usedBr.has(nextBr)) nextBr++;
   document.getElementById('ibr').value = nextBr;
@@ -19103,6 +19108,23 @@ self.onmessage = async ({data:msg}) => {
       dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
       self.postMessage({id, ok:true, fmt, meta});
     }
+    else if (msg.type === 'opfs-copy') {
+      const root = await navigator.storage.getDirectory();
+      const fh = await root.getFileHandle(msg.opfsName, {create:true});
+      const ah = await fh.createSyncAccessHandle();
+      try {
+        const CHUNK = 4 * 1024 * 1024;
+        let off = 0;
+        while (off < msg.file.size) {
+          const slice = msg.file.slice(off, Math.min(off + CHUNK, msg.file.size));
+          const buf = await slice.arrayBuffer();
+          ah.write(new Uint8Array(buf), {at: off});
+          off += buf.byteLength;
+        }
+        ah.flush();
+      } finally { ah.close(); }
+      self.postMessage({id, ok:true});
+    }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
       await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
@@ -19137,7 +19159,7 @@ function _sqlWorkerEnsure() {
     _sqlWCbs = {}; _sqlW = null;
   };
 }
-function _sqlWCall(msg, transfers) {
+function _sqlWCall(msg, transfers, timeoutMs) {
   _sqlWorkerEnsure();
   return new Promise(resolve => {
     const id = ++_sqlWSeq;
@@ -19145,19 +19167,24 @@ function _sqlWCall(msg, transfers) {
     msg.id = id;
     if (transfers?.length) _sqlW.postMessage(msg, transfers);
     else _sqlW.postMessage(msg);
-    if (msg.type !== 'tile') setTimeout(()=>{ if(_sqlWCbs[id]){delete _sqlWCbs[id];resolve({ok:false,error:'timeout'});} }, 180000);
+    const tmo = timeoutMs || 180000;
+    if (msg.type !== 'tile') setTimeout(()=>{ if(_sqlWCbs[id]){delete _sqlWCbs[id];resolve({ok:false,error:'timeout'});} }, tmo);
   });
 }
 
 // ── OPFS helpers (main thread) ────────────────────────────────────────────────
 function _opfsAvail() {
-  if (typeof AndroidDownload !== 'undefined') return false; // Android WebView: OPFS nesiguran za velike fajlove
   return typeof navigator?.storage?.getDirectory === 'function';
 }
 async function _opfsStream(filename, file) {
   const root = await navigator.storage.getDirectory();
   const fh = await root.getFileHandle(filename, {create:true});
-  await file.stream().pipeTo(await fh.createWritable());
+  try {
+    await file.stream().pipeTo(await fh.createWritable());
+  } catch(e) {
+    // Android WebView: createWritable() not supported on main thread — use Worker fallback
+    await _sqlWCall({type:'opfs-copy', opfsName:filename, file:file}, [], 600000);
+  }
 }
 async function _opfsDel(filename) {
   try { await (await navigator.storage.getDirectory()).removeEntry(filename); } catch(e){}
