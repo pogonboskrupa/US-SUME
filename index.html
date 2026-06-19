@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v1.9.8';
+const APP_VER = 'v1.9.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -19243,7 +19243,9 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return canvas;
     }
   });
-  return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, updateWhenZooming:false, keepBuffer:4});
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8});
+  layer.on('loading', _mainTileFlush);
+  return layer;
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
