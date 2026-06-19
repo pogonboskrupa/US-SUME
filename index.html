@@ -18409,7 +18409,7 @@ class MiniSqlite {
     if(this._c.has(n)) return this._c.get(n);
     const off=(n-1)*this.ps;
     const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
-    if(this._c.size>512) this._c.delete(this._c.keys().next().value);
+    if(this._c.size>2048) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
   static _u16(d,o){return(d[o]<<8)|d[o+1];}
@@ -19191,18 +19191,25 @@ async function _sqlmapLoadDirect(file, name) {
 // Ograniči paralelna čitanja tile-ova na main threadu (spriječi memorijski skok)
 let _mainTileActive = 0;
 const _mainTileQueue = [];
+let _mainTileGen = 0;
 function _mainTileSchedule(fn) {
-  return new Promise(resolve => {
+  const gen = _mainTileGen;
+  return new Promise((resolve, reject) => {
     const run = () => {
+      if (gen !== _mainTileGen) { resolve(null); return; }
       _mainTileActive++;
-      fn().then(resolve).finally(() => {
+      Promise.resolve().then(fn).then(resolve, reject).finally(() => {
         _mainTileActive--;
         const next = _mainTileQueue.shift();
         if (next) next();
       });
     };
-    if (_mainTileActive < 6) run(); else _mainTileQueue.push(run);
+    if (_mainTileActive < 4) run(); else _mainTileQueue.push(run);
   });
+}
+function _mainTileFlush() {
+  _mainTileGen++;
+  _mainTileQueue.length = 0;
 }
 
 function _zoomBounds(meta) {
@@ -19221,20 +19228,27 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
-      const ctx = canvas.getContext('2d', { alpha: false });
+      const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       const {x,y,z} = coords;
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; done(null, canvas); } };
+      const tmr = setTimeout(finish, 15000);
       _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
-        if (!data) { done(null, canvas); return; }
-        _drawTileBytes(ctx, data, canvas, done);
-      }).catch(() => done(null, canvas));
+        clearTimeout(tmr);
+        if (settled) return;
+        if (!data) { finish(); return; }
+        _drawTileBytes(ctx, data, canvas, (e,c) => { settled = true; done(e, c); });
+      }).catch(() => { clearTimeout(tmr); finish(); });
       return canvas;
     }
   });
-  return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, updateWhenZooming:false});
+  layer.on('loading', _mainTileFlush);
+  return layer;
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
@@ -19314,7 +19328,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
-      const ctx = canvas.getContext('2d', { alpha: false });
+      const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       const {x,y,z} = coords;
