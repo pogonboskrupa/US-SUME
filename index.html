@@ -3684,6 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
+const APP_VER = 'v1.9.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4067,6 +4068,8 @@ async function sbLoadProfile() {
   if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
   const lbl = document.getElementById('menu-user-label');
   if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
+  const verEl = document.getElementById('menu-app-ver');
+  if (verEl) verEl.textContent = APP_VER;
   const adminTabBtn = document.getElementById('admin-tab-btn');
   if (adminTabBtn) adminTabBtn.style.display = data.is_admin ? '' : 'none';
   if (data.is_admin) {
@@ -19192,19 +19195,17 @@ async function _sqlmapLoadDirect(file, name) {
 let _mainTileActive = 0;
 const _mainTileQueue = [];
 let _mainTileGen = 0;
-function _mainTileSchedule(fn) {
-  const gen = _mainTileGen;
+function _mainTileSchedule(fn, gen) {
   return new Promise((resolve, reject) => {
     const run = () => {
       if (gen !== _mainTileGen) { resolve(null); return; }
       _mainTileActive++;
       Promise.resolve().then(fn).then(resolve, reject).finally(() => {
         _mainTileActive--;
-        const next = _mainTileQueue.shift();
-        if (next) next();
+        if (_mainTileQueue.length) _mainTileQueue.shift()();
       });
     };
-    if (_mainTileActive < 4) run(); else _mainTileQueue.push(run);
+    if (_mainTileActive < 6) run(); else _mainTileQueue.push(run);
   });
 }
 function _mainTileFlush() {
@@ -19234,21 +19235,15 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       const {x,y,z} = coords;
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
-      let settled = false;
-      const finish = () => { if (!settled) { settled = true; done(null, canvas); } };
-      const tmr = setTimeout(finish, 15000);
-      _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
-        clearTimeout(tmr);
-        if (settled) return;
-        if (!data) { finish(); return; }
-        _drawTileBytes(ctx, data, canvas, (e,c) => { settled = true; done(e, c); });
-      }).catch(() => { clearTimeout(tmr); finish(); });
+      const gen = _mainTileGen;
+      _mainTileSchedule(() => inst.mini.tile(z,x,y), gen).then(data => {
+        if (!data) { done(null, canvas); return; }
+        _drawTileBytes(ctx, data, canvas, done);
+      }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, updateWhenZooming:false});
-  layer.on('loading', _mainTileFlush);
-  return layer;
+  return new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, updateWhenZooming:false, keepBuffer:4});
 }
 
 // ── Obnavljanje sačuvanih karata ──────────────────────────────────────────────
@@ -21455,6 +21450,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
+  <div style="color:#475569;font-size:9px;text-align:center;padding:6px 0 2px;letter-spacing:0.05em;" id="menu-app-ver"></div>
 </div>
 
 <!-- ─── HELP MODAL ─────────────────────────────────────────────────────── -->
