@@ -19229,16 +19229,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       if (!inst) { done(null, canvas); return canvas; }
       _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
         if (!data) { done(null, canvas); return; }
-        const blob = new Blob([data]);
-        if ('createImageBitmap' in window) {
-          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
-        } else {
-          const u = URL.createObjectURL(blob);
-          const img = new Image();
-          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
-          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
-          img.src = u;
-        }
+        _drawTileBytes(ctx, data, canvas, done);
       }).catch(() => done(null, canvas));
       return canvas;
     }
@@ -19286,6 +19277,37 @@ async function sqlmapRestoreAll() {
 }
 
 // ── Worker tile layer ─────────────────────────────────────────────────────────
+// Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
+function _tileMime(data) {
+  const b = data instanceof Uint8Array ? data : new Uint8Array(data);
+  if (b[0] === 0x89 && b[1] === 0x50) return 'image/png';
+  if (b[0] === 0xFF && b[1] === 0xD8) return 'image/jpeg';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return 'image/webp';
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
+  return 'image/png';
+}
+
+// Nacrtaj raw byte tile na canvas — robusno za WebView:
+// blob DOBIJA MIME tip, a ako createImageBitmap pukne padamo na Image().
+function _drawTileBytes(ctx, data, canvas, done, sz) {
+  sz = sz || 256;
+  const blob = new Blob([data], { type: _tileMime(data) });
+  const useImg = () => {
+    const u = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); done(null, canvas); };
+    img.onerror = () => { URL.revokeObjectURL(u); done(null, canvas); };
+    img.src = u;
+  };
+  if ('createImageBitmap' in window) {
+    createImageBitmap(blob)
+      .then(bmp => { ctx.drawImage(bmp, 0, 0, sz, sz); bmp.close(); done(null, canvas); })
+      .catch(useImg); // WebView često ima createImageBitmap ali pukne → Image fallback
+  } else {
+    useImg();
+  }
+}
+
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
   const WTileLayer = L.GridLayer.extend({
@@ -19298,16 +19320,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       const {x,y,z} = coords;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
         if (!data) { done(null, canvas); return; }
-        const blob = new Blob([data]);
-        if ('createImageBitmap' in window) {
-          createImageBitmap(blob).then(bmp => { ctx.drawImage(bmp,0,0,256,256); bmp.close(); done(null,canvas); }).catch(() => done(null,canvas));
-        } else {
-          const u = URL.createObjectURL(blob);
-          const img = new Image();
-          img.onload = () => { ctx.drawImage(img,0,0,256,256); URL.revokeObjectURL(u); done(null,canvas); };
-          img.onerror = () => { URL.revokeObjectURL(u); done(null,canvas); };
-          img.src = u;
-        }
+        _drawTileBytes(ctx, data, canvas, done);
       }).catch(() => done(null, canvas));
       return canvas;
     }
