@@ -7340,9 +7340,13 @@ function _updKoleguLiveBar() {
 // ─── PODIJELI LOKACIJU ──────────────────────────────────────────────────────
 
 function showShareLocMenu() {
-  if (!lastP) { showToast('⚠ GPS pozicija nije dostupna'); return; }
-  if (!sb || !sbProfile?.sumarija) { showToast('⚠ Potrebna je veza sa serverom'); return; }
-  if (!_shareChannelReady) { showToast('⚠ Kanal za dijeljenje se povezuje...'); return; }
+  if (!lastP) { showToast('⚠ Uključi GPS pa pokušaj ponovo'); return; }
+  if (!sb || !sbProfile?.sumarija) { showToast('⚠ Potrebna je prijava i veza sa serverom'); return; }
+  if (!_shareChannelReady) {
+    showToast('⚠ Kanal za dijeljenje se povezuje...');
+    if (sbProfile?.sumarija) sbStartRealtime();
+    return;
+  }
 
   if (_shareLiveOn) {
     _showShareActionSheet([]);
@@ -7416,17 +7420,23 @@ function _closeShareSheet() {
 }
 
 async function _sharePoint() {
-  if (!lastP || !_rtShareChannel) return;
-  if (!_shareChannelReady) { showToast('⚠ Kanal nije spreman — pokušaj ponovo'); return; }
-  const res = await _rtShareChannel.send({
-    type: 'broadcast', event: 'loc-point',
-    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now(), to: _shareTargetIds }
-  });
-  if (res === 'ok') {
-    const names = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
-    showToast('📍 Tačka podijeljena: ' + (names.length <= 3 ? names.join(', ') : names.slice(0,2).join(', ') + ' +' + (names.length-2)));
-  } else {
-    showToast('⚠ Greška pri slanju — pokušaj ponovo');
+  if (!lastP) { showToast('⚠ GPS pozicija nije dostupna'); return; }
+  if (!_rtShareChannel || !_shareChannelReady) { showToast('⚠ Kanal nije spreman — pokušaj ponovo'); return; }
+  try {
+    const res = await _rtShareChannel.send({
+      type: 'broadcast', event: 'loc-point',
+      payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now(), to: _shareTargetIds }
+    });
+    if (res === 'ok' || res === 'CHANNEL_OK' || res === 'SUBSCRIBED') {
+      const names = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+      showToast('📍 Tačka podijeljena: ' + (names.length <= 3 ? names.join(', ') : names.slice(0,2).join(', ') + ' +' + (names.length-2)));
+    } else {
+      console.warn('share-loc send result:', res);
+      showToast('⚠ Greška pri slanju: ' + (res || 'unknown'));
+    }
+  } catch(e) {
+    console.error('share-loc send error:', e);
+    showToast('⚠ Greška: ' + (e.message || e));
   }
 }
 
@@ -7462,11 +7472,16 @@ function _stopShareLive() {
 }
 
 function _sendLivePos() {
-  if (!lastP || !_rtShareChannel || !sbUser || !_shareChannelReady) return;
+  if (!lastP || !sbUser) return;
+  if (!_rtShareChannel || !_shareChannelReady) {
+    console.warn('share-loc: kanal nije spreman, pokušavam reconnect...');
+    if (sbProfile?.sumarija) sbStartRealtime();
+    return;
+  }
   _rtShareChannel.send({
     type: 'broadcast', event: 'loc-live',
     payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), to: _shareTargetIds }
-  });
+  }).catch(e => console.warn('share-loc live send error:', e));
 }
 
 function _updShareLiveIndicator() {
@@ -7687,14 +7702,17 @@ function sbStartRealtime() {
   // Per-project kanal se (re)kreira u _dozSubProject kad korisnik otvori odjel
 
   // Broadcast kanal za dijeljenje lokacije (tačka + live kretanje)
-  _rtShareChannel = sb.channel('loc-share-' + sbProfile.sumarija, {
+  const shareChanName = 'loc-share-' + (sbProfile.sumarija || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  _shareChannelReady = false;
+  _rtShareChannel = sb.channel(shareChanName, {
     config: { broadcast: { self: false, ack: true } }
   })
     .on('broadcast', { event: 'loc-point' }, ({ payload }) => _onSharePoint(payload))
     .on('broadcast', { event: 'loc-live' },  ({ payload }) => _onShareLive(payload))
     .on('broadcast', { event: 'loc-stop' },  ({ payload }) => _onShareStop(payload))
     .subscribe(status => {
-      if (status === 'SUBSCRIBED') _shareChannelReady = true;
+      if (status === 'SUBSCRIBED') { _shareChannelReady = true; console.log('share-loc channel ready:', shareChanName); }
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { _shareChannelReady = false; console.warn('share-loc channel error:', status); }
     });
 
   // Periodično čisti stale "aktivni" badge (svakih 30s)
