@@ -1829,6 +1829,50 @@ select:focus { outline:none; border-color:#3b82f6; }
 .pm-empty { color:#475569; font-size:12px; text-align:center; padding:18px; }
 
 /* Offline modal */
+/* Nagib analiza panel */
+#nagib-panel {
+  display:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+  z-index:9000; background:#0f172aee; border:1.5px solid #334155; border-radius:12px;
+  padding:14px 16px; width:460px; max-width:96vw; max-height:70vh; overflow-y:auto;
+  box-shadow:0 8px 32px rgba(0,0,0,0.8); color:#e2e8f0; font-size:12px;
+}
+#nagib-panel.show { display:block; }
+#nagib-panel .np-hdr {
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
+}
+#nagib-panel .np-hdr h3 { font-size:13px; color:#a78bfa; font-weight:700; margin:0; }
+#nagib-panel .np-close {
+  background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer; padding:0 4px;
+}
+#nagib-panel .np-close:hover { color:#fff; }
+#nagib-panel .np-legend {
+  display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;
+}
+#nagib-panel .np-leg-item {
+  display:flex; align-items:center; gap:4px; font-size:11px; color:#94a3b8;
+}
+#nagib-panel .np-leg-swatch {
+  width:24px; height:4px; border-radius:2px;
+}
+#nagib-panel table { width:100%; border-collapse:collapse; font-size:11px; }
+#nagib-panel thead th {
+  text-align:left; padding:4px 6px; color:#94a3b8; font-weight:600;
+  border-bottom:1px solid #334155; font-size:10px; text-transform:uppercase;
+}
+#nagib-panel thead th.r { text-align:right; }
+#nagib-panel tbody td { padding:4px 6px; border-bottom:1px solid #1e293b; }
+#nagib-panel tbody td.r { text-align:right; }
+#nagib-panel tbody td.w { color:#fbbf24; font-weight:700; }
+#nagib-panel tbody td.d { color:#f87171; font-weight:700; }
+#nagib-panel tbody tr.tot td { border-top:1.5px solid #334155; font-weight:700; }
+#nagib-panel .np-summary {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:12px;
+}
+#nagib-panel .np-sbox {
+  background:#1e293b; border-radius:6px; padding:8px; text-align:center;
+}
+#nagib-panel .np-sv { font-size:16px; font-weight:800; color:#a78bfa; line-height:1.1; }
+#nagib-panel .np-sl { font-size:9px; color:#64748b; margin-top:2px; text-transform:uppercase; }
 #offline-modal, #profil-modal {
   display:none; position:fixed; inset:0;
   background:rgba(0,0,0,0.82); z-index:9999;
@@ -3790,7 +3834,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.3';
+const APP_VER = 'v2.3.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -5347,7 +5391,6 @@ function mdpUndo() {
   const v = vlake[_mdpIdx];
   v.pts = snap.map(p => ({...p}));
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
-  _updateSteepOverlay(v);
   _mdpLastPt = v.pts.length ? { la: v.pts[v.pts.length-1].la, lo: v.pts[v.pts.length-1].lo } : null;
   scheduleVlakaSave(_mdpIdx);
   updBan(); updOvl(); rndList();
@@ -5597,7 +5640,6 @@ async function impVlakaConfirm() {
     attachPolyClick(poly);
     vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
     const idx = vlake.length - 1;
-    _updateSteepOverlay(vlake[idx]);
     updateVlakaLabel(idx);
     sbFlushVlaka(idx);
     created.push(idx);
@@ -5839,7 +5881,6 @@ function _applyVlakeRows(rows) {
         if (row.rev != null) ex.rev = row.rev;
         ex.poly.setLatLngs((ex.pts || []).map(p => [p.la, p.lo]));
         ex.poly.setStyle({ color: ex.color });
-        _updateSteepOverlay(ex);
       }
       return;
     }
@@ -5852,7 +5893,6 @@ function _applyVlakeRows(rows) {
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
-    _updateSteepOverlay(v);
   });
   rndList();
   vlake.forEach((v, i) => updateVlakaLabel(i));
@@ -5903,7 +5943,7 @@ function _updVlakeMapVisibility() {
     const projHidden = v.projektId && hidden.has(v.projektId);
     const brHidden = hiddenBrs.has(v.br);
     const show = !projHidden && !brHidden;
-    const layers = [v.poly, ...(v._steepPolys || []), ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
+    const layers = [v.poly, ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
     layers.forEach(l => {
       try {
         if (show) { if (!map.hasLayer(l)) map.addLayer(l); }
@@ -9615,7 +9655,6 @@ function _smoothVlakaApply() {
   const removed = v.pts.length - simplified.length;
   v.pts = simplified;
   v.poly.setLatLngs(simplified.map(p => [p.la, p.lo]));
-  _updateSteepOverlay(v);
   updateVlakaLabel(actI);
   scheduleVlakaSave(actI);
   _saveLocalVlake();
@@ -9961,7 +10000,6 @@ function _nastaviOdTacke(vIdx, ptIdx) {
   if (ptIdx < v.pts.length - 1) {
     v.pts = v.pts.slice(0, ptIdx + 1);
     v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
-    _updateSteepOverlay(v);
     scheduleVlakaSave(vIdx);
   }
 
@@ -10185,7 +10223,6 @@ function flipVlakaDir() {
   if (!v || v.pts.length < 2) { showToast('Nema dovoljno tačaka za okret'); return; }
   v.pts.reverse();
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
-  _updateSteepOverlay(v);
   updateVlakaLabel(actI);
   scheduleVlakaSave(actI);
   showToast('↔ Smjer promijenjen — pts[0] sad je drugi kraj');
@@ -10440,7 +10477,6 @@ function stopRec() {
   document.getElementById('rec-parent-row').style.display = 'none';
   document.getElementById('btn-nazad').style.display = 'none';
   if (actI !== null) {
-    _updateSteepOverlay(vlake[actI]);
     updateVlakaLabel(actI);
     clearTimeout(_vlakaSaveTimers[actI]);
     // Uhvati referencu na vlaku PRIJE async flush-a — actI/vlake se mogu promijeniti
@@ -11346,7 +11382,6 @@ function onP(p) {
     if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
       _prv.pts = _prv.pts.slice(0, trimTo + 1);
       _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
-      _updateSteepOverlay(_prv);
       updateVlakaLabel(_prIdx);
       clearTimeout(_vlakaSaveTimers[_prIdx]);
       sbFlushVlaka(_prIdx);
@@ -12257,7 +12292,6 @@ function addPt(i, la, lo, al) {
   v.poly.addLatLng([la, lo]);
   scheduleVlakaSave(i);
   if (v.pts.length === 2 || (v.kr > 0 && v.pts.length === 1)) updateVlakaLabel(i);
-  if (v.pts.length >= 2 && v.pts.length % 5 === 0) _updateSteepOverlay(v);
   updBan();
   if (!recOn) { updOvl(); rndList(); }
   else { _scheduleOvlRnd(); }
@@ -12707,7 +12741,6 @@ function izravnajVlaku(idx) {
   drawUndoStack.push(v.pts.map(p => ({...p})));
   v.pts = simplified;
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
-  _updateSteepOverlay(v);
   v.wpts.forEach(m => map.removeLayer(m));
   v.wpts = [];
   scheduleVlakaSave(idx);
@@ -15504,7 +15537,6 @@ function clearEditHandles() {
 function syncPoly(vi) {
   const v=vlake[vi];
   v.poly.setLatLngs(v.pts.map(p=>[p.la,p.lo]));
-  _updateSteepOverlay(v);
 }
 
 function buildEditHandles(vi) {
@@ -16144,6 +16176,127 @@ async function _pmAktiviraj() {
   await aktivirajProjekt(id);
 }
 
+// ── Analiza nagiba ────────────────────────────────────────────────────
+let _nagibActive = false;
+let _nagibSteepPolys = [];
+
+function _pmNagibAnaliza() {
+  if (!_pmLastData) { showToast('Nema podataka'); return; }
+  const { p, vlakeRows } = _pmLastData;
+  const valid = vlakeRows.filter(r => (r.pts || []).length >= 2);
+  if (!valid.length) { showToast('Nema vlaka sa tačkama'); return; }
+
+  const hasElev = valid.some(r => r.pts.some(pt => (pt.al || 0) !== 0));
+  if (!hasElev) { showToast('Vlake nemaju podatke o nadmorskoj visini (al)'); return; }
+
+  closeProjectManagement();
+  _nagibActive = true;
+
+  const allPts = valid.flatMap(r => r.pts.map(pt => [pt.la, pt.lo]));
+  if (allPts.length) map.fitBounds(L.latLngBounds(allPts).pad(0.1));
+
+  const projVlake = vlake.filter(v => v.projektId === p.id);
+
+  _nagibSteepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
+  _nagibSteepPolys = [];
+  projVlake.forEach(v => {
+    _updateSteepOverlay(v);
+    if (v._steepPolys) _nagibSteepPolys.push(...v._steepPolys);
+  });
+
+  const stats = [];
+  valid.forEach(r => {
+    const pts = r.pts;
+    const totalLen = calcL(pts);
+    let steepLen = 0, maxGrade = 0, steepSegs = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i-1], p1 = pts[i];
+      const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
+      if (hd < 1) continue;
+      const dh = Math.abs((p1.al||0) - (p0.al||0));
+      const grade = (dh / hd) * 100;
+      if (grade >= 20) {
+        steepLen += hd;
+        steepSegs++;
+        if (grade > maxGrade) maxGrade = grade;
+      }
+    }
+    const pct = totalLen > 0 ? (steepLen / totalLen * 100) : 0;
+    stats.push({ nm: r.nm || '?', kr: r.kr || 0, totalLen, steepLen, maxGrade: Math.round(maxGrade), pct, steepSegs });
+  });
+
+  const totLen = stats.reduce((s, r) => s + r.totalLen, 0);
+  const totSteep = stats.reduce((s, r) => s + r.steepLen, 0);
+  const totPct = totLen > 0 ? (totSteep / totLen * 100) : 0;
+  const maxG = Math.max(...stats.map(r => r.maxGrade), 0);
+  const nSteep = stats.filter(r => r.steepLen > 0).length;
+
+  const sbox = (v, l) => `<div class="np-sbox"><div class="np-sv">${v}</div><div class="np-sl">${l}</div></div>`;
+
+  let html = `<div class="np-summary">
+    ${sbox(fmtL(totSteep), 'Strme dionice')}
+    ${sbox(totPct.toFixed(1) + '%', 'Udio strmih')}
+    ${sbox(maxG + '%', 'Max nagib')}
+  </div>`;
+
+  html += `<div class="np-legend">
+    <div class="np-leg-item"><div class="np-leg-swatch" style="background:#60a5fa;"></div> Normalno (&lt;20%)</div>
+    <div class="np-leg-item"><div class="np-leg-swatch" style="background:${_steepColor('#60a5fa', 25)};"></div> 20-30%</div>
+    <div class="np-leg-item"><div class="np-leg-swatch" style="background:${_steepColor('#60a5fa', 35)};"></div> 30-40%</div>
+    <div class="np-leg-item"><div class="np-leg-swatch" style="background:${_steepColor('#60a5fa', 40)};"></div> &gt;40%</div>
+  </div>`;
+
+  html += `<table><thead><tr>
+    <th>Vlaka</th><th class="r">Dužina</th><th class="r">&gt;20%</th><th class="r">Udio</th><th class="r">Max</th>
+  </tr></thead><tbody>`;
+
+  const mains = stats.filter(r => r.kr === 0).sort((a, b) => a.nm.localeCompare(b.nm, 'hr'));
+  const kraks = stats.filter(r => r.kr > 0);
+  const emit = r => {
+    const cls = r.maxGrade >= 30 ? ' class="d"' : (r.maxGrade >= 20 ? ' class="w"' : '');
+    const indent = r.kr > 0 ? ' style="padding-left:14px;color:#94a3b8;"' : '';
+    const pre = r.kr > 0 ? '<span style="color:#475569;">└</span> ' : '';
+    html += `<tr>
+      <td${indent}>${pre}${_esc(r.nm)}</td>
+      <td class="r">${fmtL(r.totalLen)}</td>
+      <td class="r">${r.steepLen > 0 ? fmtL(r.steepLen) : '—'}</td>
+      <td class="r"${cls}>${r.pct > 0 ? r.pct.toFixed(1) + '%' : '—'}</td>
+      <td class="r"${cls}>${r.maxGrade > 0 ? r.maxGrade + '%' : '—'}</td>
+    </tr>`;
+  };
+  mains.forEach(r => {
+    emit(r);
+    kraks.filter(k => {
+      const base = k.nm.replace(/\s*-\s*krak.*$/i, '').replace(/\.\d+$/, '').trim();
+      return base === r.nm.trim() || k.nm.startsWith(r.nm);
+    }).sort((a, b) => a.kr - b.kr).forEach(k => emit(k));
+  });
+
+  html += `<tr class="tot">
+    <td>Ukupno (${nSteep}/${stats.length} vlaka)</td>
+    <td class="r">${fmtL(totLen)}</td>
+    <td class="r">${fmtL(totSteep)}</td>
+    <td class="r">${totPct.toFixed(1)}%</td>
+    <td class="r">${maxG}%</td>
+  </tr></tbody></table>`;
+
+  document.getElementById('nagib-panel-body').innerHTML = html;
+  document.getElementById('nagib-panel').classList.add('show');
+}
+
+function _nagibAnalysisStop() {
+  _nagibActive = false;
+  document.getElementById('nagib-panel').classList.remove('show');
+  _nagibSteepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
+  _nagibSteepPolys = [];
+  vlake.forEach(v => {
+    if (v._steepPolys) {
+      v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
+      v._steepPolys = [];
+    }
+  });
+}
+
 function _pmExportReport() {
   if (!_pmLastData) { showToast('Nema podataka za izvještaj'); return; }
   const { p, vlakeRows, logRows } = _pmLastData;
@@ -16289,6 +16442,7 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
     <button class="pm-act-btn" onclick="_pmShowOnMap()">🗺 Prikaži na karti</button>
     <button class="pm-act-btn ${isAkt ? 'dis' : 'g'}" ${isAkt ? 'disabled' : 'onclick="_pmAktiviraj()"'}>${isAkt ? '✓ Aktivan' : '⚡ Aktiviraj'}</button>
     <button class="pm-act-btn" onclick="_pmExportReport()">🖨 Izvještaj</button>
+    <button class="pm-act-btn" onclick="_pmNagibAnaliza()" style="background:#7c3aed;">📐 Analiza nagiba</button>
   </div>`;
 
   // Osnovno
@@ -22382,6 +22536,14 @@ if (typeof AndroidDownload !== 'undefined') {
       <div id="pm-detail" style="display:none;"><div id="pm-detail-body"></div></div>
     </div>
   </div>
+</div>
+
+<div id="nagib-panel">
+  <div class="np-hdr">
+    <h3>📐 Analiza nagiba vlaka</h3>
+    <button class="np-close" onclick="_nagibAnalysisStop()">✕</button>
+  </div>
+  <div id="nagib-panel-body"></div>
 </div>
 
 <!-- ─── HELP MODAL ─────────────────────────────────────────────────────── -->
