@@ -3862,7 +3862,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.6';
+const APP_VER = 'v2.3.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8511,24 +8511,44 @@ function _gradeColor(grade) {
   return _GRADE_STOPS[0][1];
 }
 
+function _segGrade(pts, i) {
+  const p0 = pts[i-1], p1 = pts[i];
+  const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
+  if (hd < 1) return -1;
+  const dh = Math.abs((p1.al||0) - (p0.al||0));
+  return Math.min(60, (dh / hd) * 100);
+}
+
+function _smoothedGrades(pts) {
+  const raw = [];
+  for (let i = 1; i < pts.length; i++) raw.push(_segGrade(pts, i));
+  if (raw.length < 3) return raw;
+  const out = [raw[0]];
+  for (let i = 1; i < raw.length - 1; i++) {
+    if (raw[i] < 0) { out.push(raw[i]); continue; }
+    out.push((raw[i-1] >= 0 && raw[i+1] >= 0) ? (raw[i-1] + raw[i] * 2 + raw[i+1]) / 4 : raw[i]);
+  }
+  out.push(raw[raw.length - 1]);
+  return out;
+}
+
 function _updateSteepOverlay(v) {
   if (v._steepPolys) { v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} }); v._steepPolys = []; }
   if (!v.pts || v.pts.length < 2) return;
   v._steepPolys = [];
+  const grades = _smoothedGrades(v.pts);
   let cur = null;
-  for (let i = 1; i < v.pts.length; i++) {
-    const p0 = v.pts[i-1], p1 = v.pts[i];
-    const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
-    if (hd < 1) continue;
-    const dh = Math.abs((p1.al||0) - (p0.al||0));
-    const grade = (dh / hd) * 100;
+  for (let i = 0; i < grades.length; i++) {
+    const grade = grades[i];
+    if (grade < 0) { if (cur) { _addGradePoly(v, cur); cur = null; } continue; }
     const band = Math.min(40, Math.floor(grade / 5) * 5);
-    if (cur && i === cur.end + 1 && cur.band === band) {
-      cur.end = i;
+    const si = i + 1;
+    if (cur && si === cur.end + 1 && cur.band === band) {
+      cur.end = si;
       if (grade > cur.maxGrade) cur.maxGrade = grade;
     } else {
       if (cur) _addGradePoly(v, cur);
-      cur = { start: i - 1, end: i, band, maxGrade: grade };
+      cur = { start: si - 1, end: si, band, maxGrade: grade };
     }
   }
   if (cur) _addGradePoly(v, cur);
@@ -16318,7 +16338,12 @@ async function _pmNagibAnaliza() {
 
   _nagibSteepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
   _nagibSteepPolys = [];
+  _nagibHiddenPolys = [];
   projVlake.forEach(v => {
+    if (v.poly && map.hasLayer(v.poly)) {
+      v.poly.setStyle({ opacity: 0 });
+      _nagibHiddenPolys.push(v.poly);
+    }
     _updateSteepOverlay(v);
     if (v._steepPolys) _nagibSteepPolys.push(...v._steepPolys);
   });
@@ -16329,12 +16354,12 @@ async function _pmNagibAnaliza() {
     const totalLen = calcL(pts);
     let steepLen = 0, maxGrade = 0, steepSegs = 0;
     let avgGradeSum = 0, avgGradeN = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const p0 = pts[i-1], p1 = pts[i];
+    const grades = _smoothedGrades(pts);
+    for (let i = 0; i < grades.length; i++) {
+      const grade = grades[i];
+      if (grade < 0) continue;
+      const p0 = pts[i], p1 = pts[i+1];
       const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
-      if (hd < 1) continue;
-      const dh = Math.abs((p1.al||0) - (p0.al||0));
-      const grade = (dh / hd) * 100;
       avgGradeSum += grade * hd; avgGradeN += hd;
       if (grade >= 20) {
         steepLen += hd;
@@ -16429,6 +16454,7 @@ async function _pmNagibAnaliza() {
 }
 
 let _nagibPrevLayer = null;
+let _nagibHiddenPolys = [];
 
 function _getCurrentLayerKey() {
   for (const [key, layer] of Object.entries(TL)) {
@@ -16463,6 +16489,8 @@ function _nagibAnalysisStop() {
       v._steepPolys = [];
     }
   });
+  _nagibHiddenPolys.forEach(p => { try { p.setStyle({ opacity: 0.9 }); } catch(e){} });
+  _nagibHiddenPolys = [];
   if (_nagibPrevLayer) { setLayer(_nagibPrevLayer); _nagibPrevLayer = null; }
 }
 
