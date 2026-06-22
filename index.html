@@ -1826,7 +1826,8 @@ select:focus { outline:none; border-color:#3b82f6; }
 #sqlmap-box {
   background:#16213e; border:1px solid #0f3460;
   border-radius:10px; padding:22px;
-  width:400px; max-width:94vw;
+  width:400px; max-width:94vw; max-height:88vh;
+  overflow-y:auto;
 }
 #sqlmap-box h3 { font-size:16px; color:#38bdf8; margin-bottom:14px; }
 .sqlmap-drop-zone {
@@ -3684,7 +3685,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.8';
+const APP_VER = 'v2.1.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
