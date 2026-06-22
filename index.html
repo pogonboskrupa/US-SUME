@@ -3834,7 +3834,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.4';
+const APP_VER = 'v2.3.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -16102,6 +16102,64 @@ function _pmRenderList() {
   el.innerHTML = html;
 }
 
+function _isManualVlaka(r) {
+  if (!r.pts || r.pts.length < 2) return false;
+  return r.pts.every(p => !p.al || p.al === 0);
+}
+
+async function _enrichVlakeElevation(vlakeRows) {
+  const need = vlakeRows.filter(r => (r.pts || []).length >= 2 && _isManualVlaka(r));
+  if (!need.length) return;
+
+  const allPts = [];
+  const mapping = [];
+  need.forEach(r => {
+    const start = allPts.length;
+    r.pts.forEach(p => allPts.push(p));
+    mapping.push({ r, start, count: r.pts.length });
+  });
+
+  const BATCH = 100;
+  const elevs = new Array(allPts.length).fill(null);
+
+  for (let i = 0; i < allPts.length; i += BATCH) {
+    const chunk = allPts.slice(i, i + BATCH);
+    const lats = chunk.map(p => p.la.toFixed(5)).join(',');
+    const lons = chunk.map(p => p.lo.toFixed(5)).join(',');
+    try {
+      const resp = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`);
+      const d = await resp.json();
+      if (Array.isArray(d.elevation)) {
+        d.elevation.forEach((e, j) => { elevs[i + j] = e; });
+      }
+    } catch(e) {}
+  }
+
+  // Offline fallback: DEM grid
+  const missing = elevs.some(e => e === null);
+  if (missing && typeof _demForBounds === 'function') {
+    const lats = allPts.map(p => p.la), lons = allPts.map(p => p.lo);
+    const bounds = L.latLngBounds(
+      [Math.min(...lats), Math.min(...lons)],
+      [Math.max(...lats), Math.max(...lons)]
+    );
+    const dem = await _demForBounds(bounds);
+    if (dem) {
+      elevs.forEach((e, i) => {
+        if (e === null) elevs[i] = _demBilinearElev(dem, allPts[i].la, allPts[i].lo);
+      });
+    }
+  }
+
+  mapping.forEach(m => {
+    for (let j = 0; j < m.count; j++) {
+      const e = elevs[m.start + j];
+      if (e !== null && e !== undefined) m.r.pts[j].al = Math.round(e * 10) / 10;
+    }
+    m.r._enriched = true;
+  });
+}
+
 async function _pmOpenDetail(id) {
   const p = _projekti.find(x => x.id === id);
   if (!p) return;
@@ -16147,7 +16205,11 @@ async function _pmOpenDetail(id) {
     }));
   }
 
-  if (_pmDetailId !== id) return; // korisnik je u međuvremenu otišao
+  if (_pmDetailId !== id) return;
+
+  await _enrichVlakeElevation(vlakeRows);
+  if (_pmDetailId !== id) return;
+
   _pmLastData = { p, vlakeRows, logRows };
   d.innerHTML = _pmBuildDetail(p, vlakeRows, logRows);
 }
@@ -16180,14 +16242,20 @@ async function _pmAktiviraj() {
 let _nagibActive = false;
 let _nagibSteepPolys = [];
 
-function _pmNagibAnaliza() {
+async function _pmNagibAnaliza() {
   if (!_pmLastData) { showToast('Nema podataka'); return; }
   const { p, vlakeRows } = _pmLastData;
   const valid = vlakeRows.filter(r => (r.pts || []).length >= 2);
   if (!valid.length) { showToast('Nema vlaka sa tačkama'); return; }
 
+  const needEnrich = valid.filter(r => _isManualVlaka(r) && !r._enriched);
+  if (needEnrich.length) {
+    showToast('⏳ Dohvatam nadmorske visine za ručno nacrtane vlake...');
+    await _enrichVlakeElevation(vlakeRows);
+  }
+
   const hasElev = valid.some(r => r.pts.some(pt => (pt.al || 0) !== 0));
-  if (!hasElev) { showToast('Vlake nemaju podatke o nadmorskoj visini (al)'); return; }
+  if (!hasElev) { showToast('Nije moguće dohvatiti podatke o nadmorskoj visini'); return; }
 
   closeProjectManagement();
   _nagibActive = true;
@@ -16196,6 +16264,15 @@ function _pmNagibAnaliza() {
   if (allPts.length) map.fitBounds(L.latLngBounds(allPts).pad(0.1));
 
   const projVlake = vlake.filter(v => v.projektId === p.id);
+
+  // Sync enriched elevation data to local vlake objects
+  valid.forEach(r => {
+    if (!r._enriched) return;
+    const lv = projVlake.find(v => v.nm === r.nm && v.kr === (r.kr || 0));
+    if (lv && lv.pts.length === r.pts.length) {
+      r.pts.forEach((pt, i) => { if (pt.al) lv.pts[i].al = pt.al; });
+    }
+  });
 
   _nagibSteepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
   _nagibSteepPolys = [];
@@ -16222,7 +16299,7 @@ function _pmNagibAnaliza() {
       }
     }
     const pct = totalLen > 0 ? (steepLen / totalLen * 100) : 0;
-    stats.push({ nm: r.nm || '?', kr: r.kr || 0, totalLen, steepLen, maxGrade: Math.round(maxGrade), pct, steepSegs });
+    stats.push({ nm: r.nm || '?', kr: r.kr || 0, totalLen, steepLen, maxGrade: Math.round(maxGrade), pct, steepSegs, manual: !!r._enriched });
   });
 
   const totLen = stats.reduce((s, r) => s + r.totalLen, 0);
@@ -16256,8 +16333,9 @@ function _pmNagibAnaliza() {
     const cls = r.maxGrade >= 30 ? ' class="d"' : (r.maxGrade >= 20 ? ' class="w"' : '');
     const indent = r.kr > 0 ? ' style="padding-left:14px;color:#94a3b8;"' : '';
     const pre = r.kr > 0 ? '<span style="color:#475569;">└</span> ' : '';
+    const badge = r.manual ? ' <span style="font-size:9px;color:#a78bfa;">✏</span>' : '';
     html += `<tr>
-      <td${indent}>${pre}${_esc(r.nm)}</td>
+      <td${indent}>${pre}${_esc(r.nm)}${badge}</td>
       <td class="r">${fmtL(r.totalLen)}</td>
       <td class="r">${r.steepLen > 0 ? fmtL(r.steepLen) : '—'}</td>
       <td class="r"${cls}>${r.pct > 0 ? r.pct.toFixed(1) + '%' : '—'}</td>
@@ -16375,7 +16453,7 @@ ${(() => {
     const krByNm = {};
     krakR.forEach(r => { const base = (r.nm || '').replace(/\\s*-\\s*krak.*$/i, '').trim(); (krByNm[base] = krByNm[base] || []).push(r); });
     const mSet = new Set(mainR.map(r => (r.nm || '').trim()));
-    const vRow = (r, indent) => { const len = calcL(r.pts); const el = calcElev(r.pts); const proj = r.projektant_ime || _pmUserName(r.korisnik_id); return '<tr><td' + (indent ? ' style="padding-left:18px;color:#555"' : '') + '>' + (indent ? '└ ' : '') + _esc(r.nm || '?') + '</td><td class="r">' + fmtM(len) + '</td><td class="r">↑ ' + el.up + ' m</td><td class="r">↓ ' + el.down + ' m</td><td>' + _esc(proj) + '</td></tr>'; };
+    const vRow = (r, indent) => { const len = calcL(r.pts); const el = calcElev(r.pts); const proj = r.projektant_ime || _pmUserName(r.korisnik_id); const tag = r._enriched ? ' <span style="font-size:7.5pt;color:#7c3aed;">(ručno)</span>' : ''; return '<tr><td' + (indent ? ' style="padding-left:18px;color:#555"' : '') + '>' + (indent ? '└ ' : '') + _esc(r.nm || '?') + tag + '</td><td class="r">' + fmtM(len) + '</td><td class="r">↑ ' + el.up + ' m</td><td class="r">↓ ' + el.down + ' m</td><td>' + _esc(proj) + '</td></tr>'; };
     let rows = '';
     mainR.forEach(r => { rows += vRow(r, false); (krByNm[(r.nm || '').trim()] || []).sort((a, b) => (a.kr || 0) - (b.kr || 0)).forEach(k => { rows += vRow(k, true); }); });
     krakR.filter(r => !mSet.has((r.nm || '').replace(/\\s*-\\s*krak.*$/i, '').trim())).forEach(r => { rows += vRow(r, false); });
@@ -16492,8 +16570,9 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
       const nm = _esc(r.nm || '?');
       const pre = indent ? '<span style="color:#475569;margin-right:2px;">└</span>' : '';
       const style = indent ? ' style="padding-left:16px;color:#94a3b8;"' : '';
+      const badge = r._enriched ? ' <span style="font-size:9px;color:#a78bfa;font-weight:normal;">✏ ručno</span>' : '';
       return `<tr>
-        <td${style}>${pre}${nm}</td>
+        <td${style}>${pre}${nm}${badge}</td>
         <td class="r">${fmtL(len)}</td>
         <td class="r">${el.up} m</td>
         <td class="r">${el.down} m</td>
