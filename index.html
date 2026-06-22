@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.4';
+const APP_VER = 'v2.1.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4833,7 +4833,7 @@ function showProjektDetalji(id) {
   const zoomBtn = document.getElementById('pd-zoom-odjel-btn');
   if (zoomBtn) {
     const hasVlake = vlake.some(v => v.projektId === id && v.pts.length > 0);
-    const hasOdjel = p.odjel && _findOdjelBounds(p.odjel);
+    const hasOdjel = p.odjel && _findOdjelBounds(p.odjel, p.gj);
     zoomBtn.style.display = (hasVlake || hasOdjel) ? '' : 'none';
   }
 
@@ -4873,11 +4873,25 @@ function showProjektDetalji(id) {
   }
 }
 
-function _findOdjelBounds(odjel) {
-  if (!odjel || !graniceOdjeli.length) return null;
-  const match = graniceOdjeli.find(o => o.name === odjel)
-             || graniceOdjeli.find(o => o.name.toLowerCase() === odjel.toLowerCase())
-             || graniceOdjeli.find(o => odjel.toLowerCase().includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(odjel.toLowerCase()));
+function _odjeliForGj(gj) {
+  if (!gj || !graniceOdjeli.length) return graniceOdjeli;
+  const gjGroups = _getGJGroups();
+  const gjBounds = gjGroups[gj];
+  if (!gjBounds) return graniceOdjeli;
+  return graniceOdjeli.filter(o => { try { return gjBounds.contains(o.bounds.getCenter()); } catch { return false; } });
+}
+
+function _findOdjelInList(list, odjel) {
+  if (!odjel || !list.length) return null;
+  return list.find(o => o.name === odjel)
+      || list.find(o => o.name.toLowerCase() === odjel.toLowerCase())
+      || list.find(o => odjel.toLowerCase().includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(odjel.toLowerCase()))
+      || null;
+}
+
+function _findOdjelBounds(odjel, gj) {
+  const list = _odjeliForGj(gj);
+  const match = _findOdjelInList(list, odjel);
   return match?.bounds || null;
 }
 
@@ -4897,8 +4911,8 @@ function zoomNaOdjel() {
     map.fitBounds(bounds, { padding: [40, 40] });
     return;
   }
-  // Fallback: KML odjel boundary
-  const bounds = p.odjel ? _findOdjelBounds(p.odjel) : null;
+  // Fallback: KML odjel boundary (filtered by GJ)
+  const bounds = p.odjel ? _findOdjelBounds(p.odjel, p.gj) : null;
   if (bounds) {
     switchTab('karta');
     map.fitBounds(bounds, { padding: [30, 30] });
@@ -5038,15 +5052,13 @@ async function aktivirajProjekt(id) {
   updProjStats(); rndLog();
   _updFabVisibility();
   _updVlakeMapVisibility();
-  if (p.odjel) _showProjektOdjelHighlight(p.odjel);
+  if (p.odjel) _showProjektOdjelHighlight(p.odjel, p.gj);
   await sbLoadKolegeVlake();
-  sbStartRealtime(); // restart kanala — osvježi pretplatu na novi projekat
+  sbStartRealtime();
   showToast('Projekat aktiviran: ' + p.odjel);
-  // Auto-zoom na odjel poligon ako je poznat
   if (p.odjel && graniceOdjeli.length) {
-    const match = graniceOdjeli.find(o => o.name === p.odjel)
-                || graniceOdjeli.find(o => o.name.toLowerCase() === p.odjel.toLowerCase())
-                || graniceOdjeli.find(o => p.odjel.toLowerCase().includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(p.odjel.toLowerCase()));
+    const list = _odjeliForGj(p.gj);
+    const match = _findOdjelInList(list, p.odjel);
     if (match?.bounds) {
       setTimeout(() => {
         switchTab('karta');
@@ -20000,22 +20012,18 @@ let _geojsonVisible = localStorage.getItem('tvlake_granice_visible') !== '0';
 let _geojsonOpacity = parseFloat(localStorage.getItem('tvlake_granice_opacity') || '1');
 let _projektOdjelLayer = null;  // highlight polygon aktivnog projekta
 
-function _findGraniceMatch(name) {
-  if (!name || !graniceOdjeli.length) return null;
-  const low = name.toLowerCase();
-  return graniceOdjeli.find(o => o.name === name)
-      || graniceOdjeli.find(o => o.name.toLowerCase() === low)
-      || graniceOdjeli.find(o => low.includes(o.name.toLowerCase()) || o.name.toLowerCase().includes(low))
-      || null;
+function _findGraniceMatch(name, gj) {
+  const list = _odjeliForGj(gj);
+  return _findOdjelInList(list, name);
 }
 
 function _hideProjektOdjelHighlight() {
   if (_projektOdjelLayer) { try { map.removeLayer(_projektOdjelLayer); } catch(e) {} _projektOdjelLayer = null; }
 }
 
-function _showProjektOdjelHighlight(odjelName) {
+function _showProjektOdjelHighlight(odjelName, gj) {
   _hideProjektOdjelHighlight();
-  const match = _findGraniceMatch(odjelName);
+  const match = _findGraniceMatch(odjelName, gj);
   if (!match?.ring) return;
   _projektOdjelLayer = L.polygon(match.ring, {
     color: '#f97316', weight: 2.5, opacity: 0.85,
@@ -20028,7 +20036,7 @@ function _showProjektOdjelHighlight(odjelName) {
 function _refreshProjektOdjelHighlight() {
   if (!_aktivniProjektId) return;
   const p = _projekti.find(x => x.id === _aktivniProjektId);
-  if (p?.odjel) _showProjektOdjelHighlight(p.odjel);
+  if (p?.odjel) _showProjektOdjelHighlight(p.odjel, p.gj);
 }
 
 function _gjPropName(props) {
