@@ -3790,7 +3790,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.1';
+const APP_VER = 'v2.3.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -16026,7 +16026,7 @@ async function _pmOpenDetail(id) {
   if (navigator.onLine && typeof sb !== 'undefined') {
     try {
       const { data } = await sb.from('vlake')
-        .select('nm,kr,pts,korisnik_id,projektant_ime,updated_at')
+        .select('nm,br,kr,pts,korisnik_id,projektant_ime,updated_at')
         .eq('projekt_id', id);
       if (data) vlakeRows = data;
     } catch(e) {}
@@ -16041,7 +16041,7 @@ async function _pmOpenDetail(id) {
   // Fallback na lokalne podatke ako server ne vrati ništa (offline)
   if (!vlakeRows.length) {
     vlakeRows = vlake.filter(v => v.projektId === id).map(v => ({
-      nm: v.nm, kr: v.kr, pts: v.pts, korisnik_id: sbUser?.id,
+      nm: v.nm, br: v.br, kr: v.kr, pts: v.pts, korisnik_id: sbUser?.id,
       projektant_ime: v.projektantIme, updated_at: v.updatedAt
     }));
   }
@@ -16154,6 +16154,20 @@ tbody tr:nth-child(even) td{background:#f9fafb}
 </div>
 <h2>Vlake — sažetak</h2>
 <p style="font-size:9pt;color:#374151;margin:4px 0 10px">Glavnih vlaka: <b>${nV}</b> &nbsp;·&nbsp; Krakova: <b>${nK}</b> &nbsp;·&nbsp; Ukupna dužina: <b>${fmtM(totalLen)}</b> &nbsp;·&nbsp; Uspon: <b>↑ ${up} m</b> &nbsp;·&nbsp; Pad: <b>↓ ${down} m</b></p>
+${(() => {
+    if (!valid.length) return '';
+    const mainR = valid.filter(r => (r.kr || 0) === 0).sort((a, b) => (a.br || 0) - (b.br || 0));
+    const krakR = valid.filter(r => (r.kr || 0) > 0);
+    const krByNm = {};
+    krakR.forEach(r => { const base = (r.nm || '').replace(/\\s*-\\s*krak.*$/i, '').trim(); (krByNm[base] = krByNm[base] || []).push(r); });
+    const mSet = new Set(mainR.map(r => (r.nm || '').trim()));
+    const vRow = (r, indent) => { const len = calcL(r.pts); const el = calcElev(r.pts); const proj = r.projektant_ime || _pmUserName(r.korisnik_id); return '<tr><td' + (indent ? ' style="padding-left:18px;color:#555"' : '') + '>' + (indent ? '└ ' : '') + _esc(r.nm || '?') + '</td><td class="r">' + fmtM(len) + '</td><td class="r">↑ ' + el.up + ' m</td><td class="r">↓ ' + el.down + ' m</td><td>' + _esc(proj) + '</td></tr>'; };
+    let rows = '';
+    mainR.forEach(r => { rows += vRow(r, false); (krByNm[(r.nm || '').trim()] || []).sort((a, b) => (a.kr || 0) - (b.kr || 0)).forEach(k => { rows += vRow(k, true); }); });
+    krakR.filter(r => !mSet.has((r.nm || '').replace(/\\s*-\\s*krak.*$/i, '').trim())).forEach(r => { rows += vRow(r, false); });
+    rows += '<tr class="tot"><td>Ukupno</td><td class="r">' + fmtM(totalLen) + '</td><td class="r">↑ ' + up + ' m</td><td class="r">↓ ' + down + ' m</td><td></td></tr>';
+    return '<h2>Statistike vlaka</h2><table><thead><tr><th>Vlaka</th><th class="r">Dužina</th><th class="r">Uspon</th><th class="r">Pad</th><th>Projektant</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  })()}
 <h2>Rekap po projektantu</h2>
 <table><thead><tr><th>Projektant</th><th class="r">Dužina vlaka</th><th class="r">Dana rada</th><th class="r">Aktivno</th></tr></thead>
 <tbody>${projRows || '<tr><td colspan="4" style="font-style:italic;color:#777">Nema podataka.</td></tr>'}</tbody></table>
@@ -16238,6 +16252,63 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
       ${kpi('↓ ' + down + ' m', 'Pad')}
     </div>
   </div>`;
+
+  // Per-vlaka statistika
+  if (valid.length) {
+    const mainV = valid.filter(r => (r.kr || 0) === 0).sort((a, b) => (a.br || 0) - (b.br || 0));
+    const krakovi = valid.filter(r => (r.kr || 0) > 0);
+    const krakoviByNm = {};
+    krakovi.forEach(r => {
+      const base = (r.nm || '').replace(/\s*-\s*krak.*$/i, '').trim();
+      if (!krakoviByNm[base]) krakoviByNm[base] = [];
+      krakoviByNm[base].push(r);
+    });
+
+    html += `<div class="pm-sec">
+      <div class="pm-sec-t">📊 Statistike vlaka</div>
+      <table class="pm-tbl"><thead><tr>
+        <th>Vlaka</th><th class="r">Dužina</th><th class="r">↑ Uspon</th><th class="r">↓ Pad</th><th class="r">Proj.</th>
+      </tr></thead><tbody>`;
+
+    const vlRow = (r, indent) => {
+      const len = calcL(r.pts);
+      const el = calcElev(r.pts);
+      const proj = r.projektant_ime || _pmUserName(r.korisnik_id);
+      const nm = _esc(r.nm || '?');
+      const pre = indent ? '<span style="color:#475569;margin-right:2px;">└</span>' : '';
+      const style = indent ? ' style="padding-left:16px;color:#94a3b8;"' : '';
+      return `<tr>
+        <td${style}>${pre}${nm}</td>
+        <td class="r">${fmtL(len)}</td>
+        <td class="r">${el.up} m</td>
+        <td class="r">${el.down} m</td>
+        <td class="r" style="font-size:11px;">${_esc(proj)}</td>
+      </tr>`;
+    };
+
+    mainV.forEach(r => {
+      html += vlRow(r, false);
+      const base = (r.nm || '').trim();
+      (krakoviByNm[base] || []).sort((a, b) => (a.kr || 0) - (b.kr || 0)).forEach(k => {
+        html += vlRow(k, true);
+      });
+    });
+    // Krakovi koji nemaju odgovarajuću glavnu vlaku
+    const matched = new Set(mainV.map(r => (r.nm || '').trim()));
+    krakovi.filter(r => {
+      const base = (r.nm || '').replace(/\s*-\s*krak.*$/i, '').trim();
+      return !matched.has(base);
+    }).forEach(r => html += vlRow(r, false));
+
+    html += `<tr style="border-top:1px solid #334155;font-weight:bold;">
+      <td>Ukupno</td>
+      <td class="r">${fmtL(totalLen)}</td>
+      <td class="r">${up} m</td>
+      <td class="r">${down} m</td>
+      <td></td>
+    </tr>`;
+    html += `</tbody></table></div>`;
+  }
 
   // Vremenski tok
   html += `<div class="pm-sec">
