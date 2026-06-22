@@ -3790,7 +3790,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.2';
+const APP_VER = 'v2.3.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4413,6 +4413,7 @@ async function doLogout() {
   // Očisti mapu i stanje
   vlake.forEach(v => {
     map.removeLayer(v.poly);
+    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
     v.wpts.forEach(m => map.removeLayer(m));
     if (v.labelMk) map.removeLayer(v.labelMk);
     if (v.lagerMk) map.removeLayer(v.lagerMk);
@@ -5346,6 +5347,7 @@ function mdpUndo() {
   const v = vlake[_mdpIdx];
   v.pts = snap.map(p => ({...p}));
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  _updateSteepOverlay(v);
   _mdpLastPt = v.pts.length ? { la: v.pts[v.pts.length-1].la, lo: v.pts[v.pts.length-1].lo } : null;
   scheduleVlakaSave(_mdpIdx);
   updBan(); updOvl(); rndList();
@@ -5595,6 +5597,7 @@ async function impVlakaConfirm() {
     attachPolyClick(poly);
     vlake.push({ nm: t.nm, br, kr, strana: kr > 0 ? t.strana : null, color, lager: '', pts: t.pts.map(p => ({...p})), poly, wpts: [], sbId: null, projektId: projId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
     const idx = vlake.length - 1;
+    _updateSteepOverlay(vlake[idx]);
     updateVlakaLabel(idx);
     sbFlushVlaka(idx);
     created.push(idx);
@@ -5766,6 +5769,7 @@ function _deleteVlakeByProjekt(projektId) {
   for (const i of toRemove) {
     const v = vlake[i];
     if (v.poly) map.removeLayer(v.poly);
+    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
     (v.wpts || []).forEach(m => map.removeLayer(m));
     if (v.labelMk) map.removeLayer(v.labelMk);
     if (v.lagerMk) map.removeLayer(v.lagerMk);
@@ -5785,6 +5789,7 @@ async function _deleteAllOrphanVlake() {
   for (let i = vlake.length - 1; i >= 0; i--) {
     const v = vlake[i];
     if (v.poly) map.removeLayer(v.poly);
+    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
     (v.wpts || []).forEach(m => map.removeLayer(m));
     if (v.labelMk) map.removeLayer(v.labelMk);
     if (v.lagerMk) map.removeLayer(v.lagerMk);
@@ -5834,6 +5839,7 @@ function _applyVlakeRows(rows) {
         if (row.rev != null) ex.rev = row.rev;
         ex.poly.setLatLngs((ex.pts || []).map(p => [p.la, p.lo]));
         ex.poly.setStyle({ color: ex.color });
+        _updateSteepOverlay(ex);
       }
       return;
     }
@@ -5846,6 +5852,7 @@ function _applyVlakeRows(rows) {
     v.pts.forEach(p => poly.addLatLng([p.la, p.lo]));
     vlake.push(v);
     attachPolyClick(poly);
+    _updateSteepOverlay(v);
   });
   rndList();
   vlake.forEach((v, i) => updateVlakaLabel(i));
@@ -5896,7 +5903,7 @@ function _updVlakeMapVisibility() {
     const projHidden = v.projektId && hidden.has(v.projektId);
     const brHidden = hiddenBrs.has(v.br);
     const show = !projHidden && !brHidden;
-    const layers = [v.poly, ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
+    const layers = [v.poly, ...(v._steepPolys || []), ...(v.wpts || []), v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean);
     layers.forEach(l => {
       try {
         if (show) { if (!map.hasLayer(l)) map.addLayer(l); }
@@ -8407,6 +8414,52 @@ map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
   map.on('moveend zoomend', () => { if (_lblHidT) clearTimeout(_lblHidT); _lblHidT = setTimeout(_showLbl, 80); });
 })();
 const _vlakeRenderer = L.canvas({ pane: 'vlakeLines', padding: 0.3 });
+
+function _hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function _rgbToHex(r,g,b){return '#'+[r,g,b].map(c=>Math.max(0,Math.min(255,Math.round(c))).toString(16).padStart(2,'0')).join('');}
+function _steepColor(base, grade) {
+  const t = Math.min(1, Math.max(0, (grade - 20) / 20));
+  const [r,g,b] = _hexToRgb(base);
+  const tr = 255, tg = 60, tb = 40;
+  return _rgbToHex(r+(tr-r)*t, g+(tg-g)*t, b+(tb-b)*t);
+}
+
+function _updateSteepOverlay(v) {
+  if (v._steepPolys) { v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} }); v._steepPolys = []; }
+  if (!v.pts || v.pts.length < 2) return;
+  const segs = [];
+  for (let i = 1; i < v.pts.length; i++) {
+    const p0 = v.pts[i-1], p1 = v.pts[i];
+    const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
+    if (hd < 1) continue;
+    const dh = Math.abs((p1.al||0) - (p0.al||0));
+    const grade = (dh / hd) * 100;
+    if (grade >= 20) segs.push({ i, grade });
+  }
+  if (!segs.length) return;
+  v._steepPolys = [];
+  let cur = null;
+  for (const s of segs) {
+    if (cur && s.i === cur.end + 1 && Math.abs(s.grade - cur.maxGrade) < 10) {
+      cur.end = s.i;
+      if (s.grade > cur.maxGrade) cur.maxGrade = s.grade;
+    } else {
+      if (cur) _addSteepPoly(v, cur);
+      cur = { start: s.i - 1, end: s.i, maxGrade: s.grade };
+    }
+  }
+  if (cur) _addSteepPoly(v, cur);
+}
+
+function _addSteepPoly(v, seg) {
+  const pts = v.pts.slice(seg.start, seg.end + 1).map(p => [p.la, p.lo]);
+  if (pts.length < 2) return;
+  const col = _steepColor(v.color || '#60a5fa', seg.maxGrade);
+  const w = 6;
+  const poly = L.polyline(pts, { color: col, weight: w, opacity: 1, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+  v._steepPolys.push(poly);
+}
+
 map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
@@ -9562,6 +9615,7 @@ function _smoothVlakaApply() {
   const removed = v.pts.length - simplified.length;
   v.pts = simplified;
   v.poly.setLatLngs(simplified.map(p => [p.la, p.lo]));
+  _updateSteepOverlay(v);
   updateVlakaLabel(actI);
   scheduleVlakaSave(actI);
   _saveLocalVlake();
@@ -9907,6 +9961,7 @@ function _nastaviOdTacke(vIdx, ptIdx) {
   if (ptIdx < v.pts.length - 1) {
     v.pts = v.pts.slice(0, ptIdx + 1);
     v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+    _updateSteepOverlay(v);
     scheduleVlakaSave(vIdx);
   }
 
@@ -10014,6 +10069,7 @@ function vcDelete() {
   if (_vcIdx >= 0 && _vcIdx < vlake.length) {
     const v = vlake[_vcIdx];
     map.removeLayer(v.poly);
+    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
     v.wpts.forEach(m=>map.removeLayer(m));
     if (v.labelMk) map.removeLayer(v.labelMk);
     if (v.lagerMk) map.removeLayer(v.lagerMk);
@@ -10129,6 +10185,7 @@ function flipVlakaDir() {
   if (!v || v.pts.length < 2) { showToast('Nema dovoljno tačaka za okret'); return; }
   v.pts.reverse();
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  _updateSteepOverlay(v);
   updateVlakaLabel(actI);
   scheduleVlakaSave(actI);
   showToast('↔ Smjer promijenjen — pts[0] sad je drugi kraj');
@@ -10383,8 +10440,8 @@ function stopRec() {
   document.getElementById('rec-parent-row').style.display = 'none';
   document.getElementById('btn-nazad').style.display = 'none';
   if (actI !== null) {
+    _updateSteepOverlay(vlake[actI]);
     updateVlakaLabel(actI);
-    // Odmah sačuvaj — ne čekaj debounce (zaštita od gubitka ako se app zatvori)
     clearTimeout(_vlakaSaveTimers[actI]);
     // Uhvati referencu na vlaku PRIJE async flush-a — actI/vlake se mogu promijeniti
     // tokom await-a (npr. korisnik obriše vlaku) → inače pogrešan toast.
@@ -11289,6 +11346,7 @@ function onP(p) {
     if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
       _prv.pts = _prv.pts.slice(0, trimTo + 1);
       _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
+      _updateSteepOverlay(_prv);
       updateVlakaLabel(_prIdx);
       clearTimeout(_vlakaSaveTimers[_prIdx]);
       sbFlushVlaka(_prIdx);
@@ -12199,6 +12257,7 @@ function addPt(i, la, lo, al) {
   v.poly.addLatLng([la, lo]);
   scheduleVlakaSave(i);
   if (v.pts.length === 2 || (v.kr > 0 && v.pts.length === 1)) updateVlakaLabel(i);
+  if (v.pts.length >= 2 && v.pts.length % 5 === 0) _updateSteepOverlay(v);
   updBan();
   if (!recOn) { updOvl(); rndList(); }
   else { _scheduleOvlRnd(); }
@@ -12648,6 +12707,7 @@ function izravnajVlaku(idx) {
   drawUndoStack.push(v.pts.map(p => ({...p})));
   v.pts = simplified;
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
+  _updateSteepOverlay(v);
   v.wpts.forEach(m => map.removeLayer(m));
   v.wpts = [];
   scheduleVlakaSave(idx);
@@ -15444,6 +15504,7 @@ function clearEditHandles() {
 function syncPoly(vi) {
   const v=vlake[vi];
   v.poly.setLatLngs(v.pts.map(p=>[p.la,p.lo]));
+  _updateSteepOverlay(v);
 }
 
 function buildEditHandles(vi) {
