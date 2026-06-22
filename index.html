@@ -1765,6 +1765,29 @@ select:focus { outline:none; border-color:#3b82f6; }
   letter-spacing:0.06em; margin:14px 0 7px; padding-left:2px;
 }
 .pm-gj-hdr:first-child { margin-top:0; }
+/* Zbirni pregled */
+.pm-summary {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+  margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid #1e293b;
+}
+.pm-skpi {
+  background:linear-gradient(145deg,#16213e,#13294a); border:1px solid #1e3a5f;
+  border-radius:9px; padding:11px 8px; text-align:center;
+}
+.pm-skpi-v { font-size:17px; font-weight:800; color:#60a5fa; line-height:1.1; }
+.pm-skpi-l { font-size:9px; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; }
+/* Akcije u detalju */
+.pm-actions { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.pm-act-btn {
+  flex:1; min-width:120px; padding:10px 8px; border-radius:8px; cursor:pointer;
+  font-size:12.5px; font-weight:600; background:#16213e; border:1px solid #334155;
+  color:#cbd5e1; transition:border-color 0.15s, background 0.15s;
+}
+.pm-act-btn:hover { border-color:#3b82f6; background:#1a2747; color:#fff; }
+.pm-act-btn.g { border-color:#166534; color:#4ade80; }
+.pm-act-btn.g:hover { background:#14532d; color:#bbf7d0; }
+.pm-act-btn.dis { opacity:0.5; cursor:default; color:#64748b; }
+.pm-act-btn.dis:hover { border-color:#334155; background:#16213e; color:#64748b; }
 /* Detail */
 .pm-sec { margin-top:16px; }
 .pm-sec:first-child { margin-top:0; }
@@ -3767,7 +3790,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.3.0';
+const APP_VER = 'v2.3.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -15894,6 +15917,7 @@ function fmtDateShort(s) {
 // UPRAVLJANJE PROJEKTIMA — pregled svih projekata + detaljna statistika
 // ══════════════════════════════════════════════════════════════════════════
 let _pmDetailId = null;
+let _pmLastData = null;
 
 function _pmUserName(id) {
   if (id && sbUser && id === sbUser.id) return sbProfile ? (sbProfile.ime + ' ' + sbProfile.prezime) : 'Ja';
@@ -15919,11 +15943,37 @@ function _pmShowList() {
 }
 
 function _pmRenderList() {
-  const el = document.getElementById('pm-list');
+  let el = document.getElementById('pm-list');
   if (!_projekti.length) {
     el.innerHTML = '<div class="pm-empty">Nema projekata.</div>';
     return;
   }
+
+  // ── Zbirni pregled (dashboard) ──
+  let sumLen = 0, sumPov = 0, sumVlaka = 0;
+  const allDesigners = new Set();
+  _projekti.forEach(p => {
+    const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
+    sumVlaka += pv.length;
+    sumLen += pv.reduce((s, v) => s + calcL(v.pts), 0);
+    sumPov += parseFloat(p.povrsina) || 0;
+    if (p.korisnik_id) allDesigners.add(p.korisnik_id);
+    (p.clanovi || []).forEach(c => c.korisnik_id && allDesigners.add(c.korisnik_id));
+  });
+  const allDays = new Set();
+  if (typeof dnevniLog !== 'undefined') dnevniLog.forEach(d => allDays.add(d.date));
+
+  const skpi = (v, l) => `<div class="pm-skpi"><div class="pm-skpi-v">${v}</div><div class="pm-skpi-l">${l}</div></div>`;
+  el.innerHTML = `<div class="pm-summary">
+    ${skpi(_projekti.length, 'Projekata')}
+    ${skpi(sumVlaka, 'Vlaka')}
+    ${skpi((sumLen / 1000).toFixed(1) + ' km', 'Ukupno vlaka')}
+    ${skpi(sumPov > 0 ? Math.round(sumPov) + ' ha' : '—', 'Površina')}
+    ${skpi(allDesigners.size, 'Projektanata')}
+    ${skpi(allDays.size || '—', 'Radnih dana')}
+  </div><div id="pm-list-inner"></div>`;
+  el = document.getElementById('pm-list-inner');
+
   const sorted = (typeof _sortByGjDatum === 'function') ? _sortByGjDatum(_projekti) : _projekti.slice();
   const byGj = new Map();
   for (const p of sorted) {
@@ -16005,7 +16055,118 @@ async function _pmOpenDetail(id) {
   }
 
   if (_pmDetailId !== id) return; // korisnik je u međuvremenu otišao
+  _pmLastData = { p, vlakeRows, logRows };
   d.innerHTML = _pmBuildDetail(p, vlakeRows, logRows);
+}
+
+function _pmShowOnMap() {
+  const p = _projekti.find(x => x.id === _pmDetailId);
+  if (!p) return;
+  closeProjectManagement();
+  switchTab('karta');
+  // Prvo probaj fit na stvarne vlake projekta
+  let pts = [];
+  if (_pmLastData && _pmLastData.vlakeRows) {
+    _pmLastData.vlakeRows.forEach(r => (r.pts || []).forEach(pt => pts.push(L.latLng(pt.la, pt.lo))));
+  }
+  if (pts.length) { map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] }); return; }
+  // Fallback: granica odjela (poštujući GJ)
+  const bounds = p.odjel ? _findOdjelBounds(p.odjel, p.gj) : null;
+  if (bounds) map.fitBounds(bounds, { padding: [30, 30] });
+  else showToast('Projekat nema vlaka ni KML odjela za prikaz');
+}
+
+async function _pmAktiviraj() {
+  const id = _pmDetailId;
+  if (!id) return;
+  closeProjectManagement();
+  await aktivirajProjekt(id);
+}
+
+function _pmExportReport() {
+  if (!_pmLastData) { showToast('Nema podataka za izvještaj'); return; }
+  const { p, vlakeRows, logRows } = _pmLastData;
+  const fmtM = m => { const v = Math.round(m); return v >= 1000 ? (v / 1000).toFixed(3).replace('.', ',') + ' km' : v + ' m'; };
+  const fmtD = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('hr', {day:'2-digit',month:'2-digit',year:'numeric'}); } catch { return s; } };
+
+  const valid = vlakeRows.filter(r => (r.pts || []).length >= 2);
+  const nV = valid.filter(r => (r.kr || 0) === 0).length;
+  const nK = valid.filter(r => (r.kr || 0) > 0).length;
+  let totalLen = 0, up = 0, down = 0;
+  valid.forEach(r => { totalLen += calcL(r.pts); const e = calcElev(r.pts); up += e.up; down += e.down; });
+  const pov = parseFloat(p.povrsina) || 0;
+  const gustoca = pov > 0 ? Math.round(totalLen / pov) + ' m/ha' : '—';
+
+  // Projektanti
+  const byP = {};
+  const ens = nm => { if (!byP[nm]) byP[nm] = { len: 0, days: new Set(), activeMin: 0 }; return byP[nm]; };
+  valid.forEach(r => { const nm = r.projektant_ime || _pmUserName(r.korisnik_id); ens(nm).len += calcL(r.pts); });
+  logRows.forEach(r => { const e = ens(r.projektant || 'Nepoznat'); if (r.datum) e.days.add(r.datum); if (r.active_min) e.activeMin += r.active_min; });
+  const projRows = Object.entries(byP).sort((a, b) => b[1].len - a[1].len).map(([nm, d]) =>
+    `<tr><td>${_esc(nm)}</td><td class="r">${fmtM(d.len)}</td><td class="r">${d.days.size || '—'}</td><td class="r">${d.activeMin ? (d.activeMin/60).toFixed(1) + ' h' : '—'}</td></tr>`).join('');
+
+  // Dani rada
+  const byDay = {};
+  logRows.forEach(r => { if (!r.datum) return; (byDay[r.datum] = byDay[r.datum] || []).push(r); });
+  const dayKeys = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
+  const dayRows = dayKeys.map(dt => byDay[dt].map((e, i) =>
+    `<tr>${i === 0 ? `<td rowspan="${byDay[dt].length}">${fmtD(dt)}</td>` : ''}<td>${_esc(e.projektant || '?')}</td><td class="r">${fmtM(e.meters || 0)}</td><td class="c">${_pmTime(e.work_start) || '—'}</td><td class="c">${_pmTime(e.work_end) || '—'}</td><td class="c">${e.active_min ? Math.round(e.active_min) + ' min' : '—'}</td></tr>`
+  ).join('')).join('');
+
+  const logDates = [...new Set(logRows.map(r => r.datum).filter(Boolean))].sort();
+  const nDays = logDates.length;
+  const totalMin = logRows.reduce((s, r) => s + (r.active_min || 0), 0);
+  const now = new Date().toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const sumarija = p.sumarija || sbProfile?.sumarija || '—';
+
+  const html = `<!DOCTYPE html><html lang="bs"><head><meta charset="UTF-8">
+<title>Izvještaj — ${_esc(p.odjel || '')}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#111;background:#fff;padding:14mm 16mm}
+h1{font-size:15pt;margin-bottom:2px}
+.sub{font-size:9.5pt;color:#555;margin-bottom:14px}
+h2{font-size:11.5pt;margin:18px 0 6px;padding-bottom:3px;border-bottom:2px solid #1e3a5f;color:#1e3a5f}
+.info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 24px;margin-bottom:16px;background:#f5f7fa;border-radius:6px;padding:10px 14px}
+.il{font-size:9pt;color:#555}.iv{font-weight:bold;font-size:10.5pt}
+table{width:100%;border-collapse:collapse;font-size:9.5pt;margin-bottom:8px}
+thead th{background:#1e3a5f;color:#fff;padding:5px 8px;text-align:left;font-weight:600}
+thead th.r{text-align:right}thead th.c{text-align:center}
+tbody td{padding:4px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}
+tbody td.r{text-align:right}tbody td.c{text-align:center}
+tbody tr:nth-child(even) td{background:#f9fafb}
+.tot td{font-weight:bold;border-top:2px solid #1e3a5f;background:#eef2ff!important}
+.footer{margin-top:22px;font-size:8.5pt;color:#888;border-top:1px solid #d1d5db;padding-top:7px;display:flex;justify-content:space-between}
+@media print{body{padding:8mm 10mm}@page{margin:8mm}}
+</style></head><body>
+<h1>ŠPD Unsko-sanske šume — Izvještaj projekta</h1>
+<div class="sub">Generiran: ${now}</div>
+<div class="info">
+  <div><div class="il">Šumarija</div><div class="iv">${_esc(sumarija)}</div></div>
+  <div><div class="il">Odjel</div><div class="iv">${_esc(p.odjel || '—')}</div></div>
+  <div><div class="il">G.J.</div><div class="iv">${_esc(p.gj || '—')}</div></div>
+  <div><div class="il">Datum kreiranja</div><div class="iv">${fmtD(p.datum)}</div></div>
+  <div><div class="il">Površina</div><div class="iv">${pov ? pov + ' ha' : '—'}</div></div>
+  <div><div class="il">Gustoća mreže</div><div class="iv">${gustoca}</div></div>
+  <div><div class="il">Vlasnik</div><div class="iv">${_esc(_pmUserName(p.korisnik_id))}</div></div>
+  <div><div class="il">Radnih dana</div><div class="iv">${nDays || '—'}</div></div>
+  <div><div class="il">Aktivno vrijeme</div><div class="iv">${totalMin ? (totalMin/60).toFixed(1) + ' h' : '—'}</div></div>
+</div>
+<h2>Vlake — sažetak</h2>
+<p style="font-size:9pt;color:#374151;margin:4px 0 10px">Glavnih vlaka: <b>${nV}</b> &nbsp;·&nbsp; Krakova: <b>${nK}</b> &nbsp;·&nbsp; Ukupna dužina: <b>${fmtM(totalLen)}</b> &nbsp;·&nbsp; Uspon: <b>↑ ${up} m</b> &nbsp;·&nbsp; Pad: <b>↓ ${down} m</b></p>
+<h2>Rekap po projektantu</h2>
+<table><thead><tr><th>Projektant</th><th class="r">Dužina vlaka</th><th class="r">Dana rada</th><th class="r">Aktivno</th></tr></thead>
+<tbody>${projRows || '<tr><td colspan="4" style="font-style:italic;color:#777">Nema podataka.</td></tr>'}</tbody></table>
+<h2>Dnevni izvještaj radova</h2>
+${dayRows ? `<table><thead><tr><th>Datum</th><th>Projektant</th><th class="r">Dužina</th><th class="c">Početak</th><th class="c">Kraj</th><th class="c">Aktivno</th></tr></thead><tbody>${dayRows}</tbody></table>` : '<p style="font-size:9pt;font-style:italic;color:#777">Nema upisanih radova za ovaj odjel.</p>'}
+<div class="footer"><span>ŠPD Unsko-sanske šume d.o.o. Bihać — Traktorske vlake</span><span>${_esc(sumarija)} · ${_esc(p.odjel || '')}</span></div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=860,height=960,scrollbars=yes');
+  if (!win) { showToast('⚠ Dozvoli popup prozore pa pokušaj ponovo'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { try { win.focus(); win.print(); } catch(e) {} }, 500);
 }
 
 function _pmBuildDetail(p, vlakeRows, logRows) {
@@ -16045,7 +16206,15 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
   const kpi = (val, lbl) => `<div class="pm-kpi"><div class="pm-kpi-val">${val}</div><div class="pm-kpi-lbl">${lbl}</div></div>`;
   const row = (l, v) => `<div class="pm-row"><span class="pm-row-l">${l}</span><span class="pm-row-v">${v}</span></div>`;
 
+  const isAkt = p.id === _aktivniProjektId;
   let html = '';
+
+  // Akcije
+  html += `<div class="pm-actions">
+    <button class="pm-act-btn" onclick="_pmShowOnMap()">🗺 Prikaži na karti</button>
+    <button class="pm-act-btn ${isAkt ? 'dis' : 'g'}" ${isAkt ? 'disabled' : 'onclick="_pmAktiviraj()"'}>${isAkt ? '✓ Aktivan' : '⚡ Aktiviraj'}</button>
+    <button class="pm-act-btn" onclick="_pmExportReport()">🖨 Izvještaj</button>
+  </div>`;
 
   // Osnovno
   html += `<div class="pm-sec">
