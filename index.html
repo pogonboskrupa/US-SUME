@@ -1715,6 +1715,96 @@ select:focus { outline:none; border-color:#3b82f6; }
 .print-row { display:flex; gap:10px; margin-bottom:10px; align-items:flex-end; }
 .print-row > div { flex:1; }
 
+/* === UPRAVLJANJE PROJEKTIMA === */
+#pm-modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.85); z-index:9999;
+  align-items:center; justify-content:center;
+}
+#pm-modal.show { display:flex; }
+#pm-box {
+  background:#0f172a; border:1px solid #1e3a5f;
+  border-radius:12px; padding:0;
+  width:680px; max-width:96vw; max-height:92vh;
+  display:flex; flex-direction:column;
+  box-shadow:0 12px 40px rgba(0,0,0,0.8);
+}
+#pm-hdr {
+  display:flex; align-items:center; gap:10px;
+  padding:14px 18px; border-bottom:1px solid #1e293b; flex-shrink:0;
+}
+#pm-hdr h3 { font-size:15px; color:#60a5fa; margin:0; flex:1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#pm-back-btn {
+  background:#1e293b; border:1px solid #334155; color:#94a3b8;
+  border-radius:7px; padding:5px 11px; font-size:13px; cursor:pointer; display:none;
+}
+#pm-back-btn:hover { color:#fff; border-color:#475569; }
+#pm-close-btn {
+  background:transparent; border:none; color:#64748b;
+  font-size:22px; cursor:pointer; line-height:1; padding:0 4px;
+}
+#pm-close-btn:hover { color:#f87171; }
+#pm-body { padding:14px 18px 20px; overflow-y:auto; flex:1; }
+.pm-card {
+  background:#16213e; border:1px solid #1e3a5f; border-radius:10px;
+  padding:12px 14px; margin-bottom:9px; cursor:pointer;
+  transition:border-color 0.15s, background 0.15s;
+}
+.pm-card:hover { border-color:#3b82f6; background:#1a2747; }
+.pm-card-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.pm-card-odjel { font-size:15px; font-weight:700; color:#e2e8f0; }
+.pm-card-akt {
+  font-size:9px; font-weight:700; background:#166534; color:#bbf7d0;
+  padding:2px 7px; border-radius:10px; letter-spacing:0.04em;
+}
+.pm-card-meta { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; color:#94a3b8; }
+.pm-card-meta b { color:#cbd5e1; font-weight:600; }
+.pm-gj-hdr {
+  font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;
+  letter-spacing:0.06em; margin:14px 0 7px; padding-left:2px;
+}
+.pm-gj-hdr:first-child { margin-top:0; }
+/* Detail */
+.pm-sec { margin-top:16px; }
+.pm-sec:first-child { margin-top:0; }
+.pm-sec-t {
+  font-size:11px; font-weight:700; color:#60a5fa; text-transform:uppercase;
+  letter-spacing:0.07em; margin-bottom:8px; padding-bottom:5px;
+  border-bottom:1px solid #1e293b;
+}
+.pm-kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.pm-kpi {
+  background:#16213e; border:1px solid #1e3a5f; border-radius:9px;
+  padding:10px; text-align:center;
+}
+.pm-kpi-val { font-size:18px; font-weight:800; color:#e2e8f0; line-height:1.1; }
+.pm-kpi-lbl { font-size:9.5px; color:#64748b; margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; }
+.pm-row { display:flex; justify-content:space-between; align-items:center;
+  padding:7px 0; border-bottom:1px solid #16213e; font-size:13px; }
+.pm-row:last-child { border-bottom:none; }
+.pm-row-l { color:#94a3b8; }
+.pm-row-v { color:#e2e8f0; font-weight:600; }
+.pm-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+.pm-tbl th {
+  text-align:left; color:#64748b; font-weight:600; font-size:10px;
+  text-transform:uppercase; letter-spacing:0.04em; padding:5px 6px;
+  border-bottom:1px solid #1e293b;
+}
+.pm-tbl td { padding:7px 6px; border-bottom:1px solid #16213e; color:#cbd5e1; }
+.pm-tbl td.r, .pm-tbl th.r { text-align:right; }
+.pm-tbl tr:last-child td { border-bottom:none; }
+.pm-day {
+  background:#16213e; border:1px solid #1e3a5f; border-radius:8px;
+  padding:9px 12px; margin-bottom:7px;
+}
+.pm-day-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.pm-day-date { font-size:12px; font-weight:700; color:#e2e8f0; }
+.pm-day-tot { font-size:11px; color:#4ade80; font-weight:600; }
+.pm-day-line { font-size:11px; color:#94a3b8; padding:2px 0; }
+.pm-day-line b { color:#cbd5e1; }
+.pm-empty { color:#475569; font-size:12px; text-align:center; padding:18px; }
+
 /* Offline modal */
 #offline-modal, #profil-modal {
   display:none; position:fixed; inset:0;
@@ -3677,7 +3767,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.2.0';
+const APP_VER = 'v2.3.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -15794,6 +15884,259 @@ function fmtDate(s) {
   const d = new Date(s+'T12:00:00');
   return d.toLocaleDateString('bs-BA',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
 }
+function fmtDateShort(s) {
+  if (!s) return '—';
+  const d = new Date(s+'T12:00:00');
+  return d.toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// UPRAVLJANJE PROJEKTIMA — pregled svih projekata + detaljna statistika
+// ══════════════════════════════════════════════════════════════════════════
+let _pmDetailId = null;
+
+function _pmUserName(id) {
+  if (id && sbUser && id === sbUser.id) return sbProfile ? (sbProfile.ime + ' ' + sbProfile.prezime) : 'Ja';
+  return (kolegeMap[id] && kolegeMap[id].ime) || 'Nepoznat';
+}
+
+function showProjectManagement() {
+  document.getElementById('pm-modal').classList.add('show');
+  _pmShowList();
+}
+function closeProjectManagement() {
+  document.getElementById('pm-modal').classList.remove('show');
+  _pmDetailId = null;
+}
+function _pmShowList() {
+  _pmDetailId = null;
+  document.getElementById('pm-back-btn').style.display = 'none';
+  document.getElementById('pm-detail').style.display = 'none';
+  document.getElementById('pm-list-wrap').style.display = '';
+  document.getElementById('pm-title').textContent = '📊 Upravljanje projektima';
+  document.getElementById('pm-body').scrollTop = 0;
+  _pmRenderList();
+}
+
+function _pmRenderList() {
+  const el = document.getElementById('pm-list');
+  if (!_projekti.length) {
+    el.innerHTML = '<div class="pm-empty">Nema projekata.</div>';
+    return;
+  }
+  const sorted = (typeof _sortByGjDatum === 'function') ? _sortByGjDatum(_projekti) : _projekti.slice();
+  const byGj = new Map();
+  for (const p of sorted) {
+    const key = p.gj || '';
+    if (!byGj.has(key)) byGj.set(key, []);
+    byGj.get(key).push(p);
+  }
+  let html = '';
+  for (const [gj, projekti] of byGj) {
+    html += `<div class="pm-gj-hdr">${gj ? '🗂 GJ ' + _esc(gj) : 'Bez GJ'}</div>`;
+    for (const p of projekti) {
+      const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
+      const nV = pv.filter(v => v.kr === 0).length;
+      const nK = pv.filter(v => v.kr > 0).length;
+      const len = pv.reduce((s, v) => s + calcL(v.pts), 0);
+      const nClan = 1 + (p.clanovi ? p.clanovi.length : 0);
+      const isAkt = p.id === _aktivniProjektId;
+      html += `
+        <div class="pm-card" onclick="_pmOpenDetail('${p.id}')">
+          <div class="pm-card-top">
+            <span class="pm-card-odjel">${_esc(p.odjel || '—')}</span>
+            ${isAkt ? '<span class="pm-card-akt">AKTIVAN</span>' : ''}
+          </div>
+          <div class="pm-card-meta">
+            <span>📐 <b>${nV}</b> vlaka${nK ? ' · <b>' + nK + '</b> krak.' : ''}</span>
+            <span>📏 <b>${fmtL(len)}</b></span>
+            <span>👥 <b>${nClan}</b></span>
+            <span>📅 ${fmtDateShort(p.datum)}</span>
+          </div>
+        </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+async function _pmOpenDetail(id) {
+  const p = _projekti.find(x => x.id === id);
+  if (!p) return;
+  _pmDetailId = id;
+  document.getElementById('pm-list-wrap').style.display = 'none';
+  document.getElementById('pm-detail').style.display = '';
+  document.getElementById('pm-back-btn').style.display = '';
+  document.getElementById('pm-title').textContent = '📂 ' + (p.odjel || '—') + (p.gj ? ' · GJ ' + p.gj : '');
+  document.getElementById('pm-body').scrollTop = 0;
+  const d = document.getElementById('pm-detail-body');
+  d.innerHTML = '<div class="pm-empty">⏳ Učitavanje statistike...</div>';
+
+  // Dohvati podatke: vlake po projektu (svi projektanti) + dnevni log po odjelu
+  let vlakeRows = [], logRows = [];
+  if (navigator.onLine && typeof sb !== 'undefined') {
+    try {
+      const { data } = await sb.from('vlake')
+        .select('nm,kr,pts,korisnik_id,projektant_ime,updated_at')
+        .eq('projekt_id', id);
+      if (data) vlakeRows = data;
+    } catch(e) {}
+    try {
+      const { data } = await sb.from('dnevni_log')
+        .select('datum,projektant,meters,active_min,work_start,work_end,odjel')
+        .eq('sumarija', p.sumarija || sbProfile?.sumarija || '')
+        .eq('odjel', p.odjel || '');
+      if (data) logRows = data;
+    } catch(e) {}
+  }
+  // Fallback na lokalne podatke ako server ne vrati ništa (offline)
+  if (!vlakeRows.length) {
+    vlakeRows = vlake.filter(v => v.projektId === id).map(v => ({
+      nm: v.nm, kr: v.kr, pts: v.pts, korisnik_id: sbUser?.id,
+      projektant_ime: v.projektantIme, updated_at: v.updatedAt
+    }));
+  }
+  if (!logRows.length && typeof dnevniLog !== 'undefined') {
+    dnevniLog.forEach(day => (day.entries || []).forEach(e => {
+      if ((e.odjel || '') === (p.odjel || '')) logRows.push({
+        datum: day.date, projektant: e.projektant, meters: e.meters,
+        active_min: e.activeMin, work_start: e.workStart, work_end: e.workEnd
+      });
+    }));
+  }
+
+  if (_pmDetailId !== id) return; // korisnik je u međuvremenu otišao
+  d.innerHTML = _pmBuildDetail(p, vlakeRows, logRows);
+}
+
+function _pmBuildDetail(p, vlakeRows, logRows) {
+  // ── Vlake agregacija ──
+  const valid = vlakeRows.filter(r => (r.pts || []).length >= 2);
+  const nV = valid.filter(r => (r.kr || 0) === 0).length;
+  const nK = valid.filter(r => (r.kr || 0) > 0).length;
+  let totalLen = 0, up = 0, down = 0;
+  valid.forEach(r => { totalLen += calcL(r.pts); const e = calcElev(r.pts); up += e.up; down += e.down; });
+  const pov = parseFloat(p.povrsina) || 0;
+  const gustoca = pov > 0 ? (totalLen / pov) : null; // m/ha
+
+  // ── Projektanti agregacija (dužina iz vlaka, dani/vrijeme iz loga) ──
+  const byP = {};
+  const ens = nm => { if (!byP[nm]) byP[nm] = { name: nm, len: 0, days: new Set(), activeMin: 0 }; return byP[nm]; };
+  valid.forEach(r => { const nm = r.projektant_ime || _pmUserName(r.korisnik_id); ens(nm).len += calcL(r.pts); });
+  logRows.forEach(r => { const nm = r.projektant || 'Nepoznat'; const e = ens(nm); if (r.datum) e.days.add(r.datum); if (r.active_min) e.activeMin += r.active_min; });
+  const projList = Object.values(byP).sort((a, b) => b.len - a.len);
+
+  // ── Vremenski tok ──
+  const logDates = [...new Set(logRows.map(r => r.datum).filter(Boolean))].sort();
+  const firstAct = logDates[0] || null;
+  const lastAct = logDates.length ? logDates[logDates.length - 1] : null;
+  const nDays = logDates.length;
+  const totalMin = logRows.reduce((s, r) => s + (r.active_min || 0), 0);
+  const totalHrs = totalMin ? (totalMin / 60).toFixed(1) + ' h' : '—';
+
+  // ── Dani rada (grupisano po datumu, najnoviji prvo) ──
+  const byDay = {};
+  logRows.forEach(r => {
+    if (!r.datum) return;
+    if (!byDay[r.datum]) byDay[r.datum] = [];
+    byDay[r.datum].push(r);
+  });
+  const dayKeys = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
+
+  const kpi = (val, lbl) => `<div class="pm-kpi"><div class="pm-kpi-val">${val}</div><div class="pm-kpi-lbl">${lbl}</div></div>`;
+  const row = (l, v) => `<div class="pm-row"><span class="pm-row-l">${l}</span><span class="pm-row-v">${v}</span></div>`;
+
+  let html = '';
+
+  // Osnovno
+  html += `<div class="pm-sec">
+    <div class="pm-sec-t">📋 Osnovni podaci</div>
+    ${row('Gospodarska jedinica', p.gj ? _esc(p.gj) : '—')}
+    ${row('Odjel', _esc(p.odjel || '—'))}
+    ${row('Površina', pov > 0 ? pov.toLocaleString('bs-BA') + ' ha' : '—')}
+    ${row('Vlasnik projekta', _esc(_pmUserName(p.korisnik_id)))}
+    ${row('Datum kreiranja', fmtDate(p.datum))}
+  </div>`;
+
+  // Vlake KPI
+  html += `<div class="pm-sec">
+    <div class="pm-sec-t">📐 Vlake</div>
+    <div class="pm-kpi-grid">
+      ${kpi(nV || '0', 'Glavnih vlaka')}
+      ${kpi(nK || '0', 'Krakova')}
+      ${kpi(fmtL(totalLen), 'Ukupna dužina')}
+      ${kpi(gustoca != null ? Math.round(gustoca) + ' m/ha' : '—', 'Gustoća mreže')}
+      ${kpi('↑ ' + up + ' m', 'Uspon')}
+      ${kpi('↓ ' + down + ' m', 'Pad')}
+    </div>
+  </div>`;
+
+  // Vremenski tok
+  html += `<div class="pm-sec">
+    <div class="pm-sec-t">⏱ Vremenski tok</div>
+    ${row('Započeto (prva aktivnost)', firstAct ? fmtDate(firstAct) : '—')}
+    ${row('Zadnja aktivnost', lastAct ? fmtDate(lastAct) : '—')}
+    ${row('Broj radnih dana', nDays || '—')}
+    ${row('Ukupno aktivno vrijeme', totalHrs)}
+  </div>`;
+
+  // Projektanti
+  html += `<div class="pm-sec"><div class="pm-sec-t">👥 Projektanti (${projList.length})</div>`;
+  if (projList.length) {
+    html += `<table class="pm-tbl"><thead><tr>
+      <th>Projektant</th><th class="r">Dužina</th><th class="r">Dana</th><th class="r">Vrijeme</th>
+    </tr></thead><tbody>`;
+    projList.forEach(d => {
+      const hrs = d.activeMin ? (d.activeMin / 60).toFixed(1) + ' h' : '—';
+      html += `<tr>
+        <td>${_esc(d.name)}</td>
+        <td class="r">${d.len ? fmtL(d.len) : '—'}</td>
+        <td class="r">${d.days.size || '—'}</td>
+        <td class="r">${hrs}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<div class="pm-empty">Nema podataka o projektantima.</div>`;
+  }
+  html += `</div>`;
+
+  // Dani rada
+  html += `<div class="pm-sec"><div class="pm-sec-t">📅 Dani rada (${dayKeys.length})</div>`;
+  if (dayKeys.length) {
+    dayKeys.forEach(dt => {
+      const entries = byDay[dt];
+      const dayTot = entries.reduce((s, e) => s + (e.meters || 0), 0);
+      let lines = entries.map(e => {
+        const hrs = e.active_min ? ' · ' + (e.active_min / 60).toFixed(1) + ' h' : '';
+        const tm = (e.work_start && e.work_end) ? ' · ' + _pmTime(e.work_start) + '–' + _pmTime(e.work_end) : '';
+        return `<div class="pm-day-line"><b>${_esc(e.projektant || '?')}</b>: ${fmtL(e.meters || 0)}${hrs}${tm}</div>`;
+      }).join('');
+      html += `<div class="pm-day">
+        <div class="pm-day-hdr">
+          <span class="pm-day-date">${fmtDateShort(dt)}</span>
+          <span class="pm-day-tot">${fmtL(dayTot)}</span>
+        </div>${lines}
+      </div>`;
+    });
+  } else {
+    html += `<div class="pm-empty">Nema zabilježenih radnih dana za ovaj odjel.</div>`;
+  }
+  html += `</div>`;
+
+  return html;
+}
+
+function _pmTime(s) {
+  if (!s) return '';
+  // Podržava "HH:MM" ili ISO timestamp
+  if (/^\d{1,2}:\d{2}/.test(s)) return s.slice(0, 5);
+  try { return new Date(s).toLocaleTimeString('bs-BA', { hour: '2-digit', minute: '2-digit' }); }
+  catch(e) { return ''; }
+}
+
+function _esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // === REKAP CARD ===
 function updProjStats() {
@@ -21709,6 +22052,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="mdrop-vlake" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
   <div class="mdrop-item" id="mdrop-projekat" onclick="closeMenuDropdown();switchTab('projekat')">📁 Projekat</div>
+  <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()">📊 Upravljanje projektima</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()">📏 Mjerenja &amp; Tragovi</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
@@ -21722,6 +22066,21 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
   <div style="color:#475569;font-size:9px;text-align:center;padding:6px 0 2px;letter-spacing:0.05em;" id="menu-app-ver"></div>
+</div>
+
+<!-- ─── UPRAVLJANJE PROJEKTIMA MODAL ──────────────────────────────────── -->
+<div id="pm-modal" onclick="if(event.target===this)closeProjectManagement()">
+  <div id="pm-box">
+    <div id="pm-hdr">
+      <button id="pm-back-btn" onclick="_pmShowList()">← Nazad</button>
+      <h3 id="pm-title">📊 Upravljanje projektima</h3>
+      <button id="pm-close-btn" onclick="closeProjectManagement()">✕</button>
+    </div>
+    <div id="pm-body">
+      <div id="pm-list-wrap"><div id="pm-list"></div></div>
+      <div id="pm-detail" style="display:none;"><div id="pm-detail-body"></div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ─── HELP MODAL ─────────────────────────────────────────────────────── -->
