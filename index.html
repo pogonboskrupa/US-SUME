@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.5';
+const APP_VER = 'v2.1.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8308,7 +8308,9 @@ const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
   '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
   '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '📡 Google':  new CachedSat('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:21,subdomains:['0','1','2','3'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🌿 Sentinel': new CachedSat('https://s2maps-tiles.eu/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg',{maxZoom:14,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
@@ -8507,10 +8509,13 @@ setTimeout(_demLegendUpdate, 0); // after DOM ready
     if (saved?.type === 'sqlite') {
       return; // sqlmapRestoreAll will activate the correct SQLite
     }
-    if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
+    if (saved?.type === 'tl' && saved.key === '_nagib') {
+      restoredKey = '⛰ Topo';
+      setTimeout(() => { if (_OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map); }, 0);
+    } else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
-  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+  const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺','📡 Google':'📡','🌿 Sentinel':'🌿','📐 Nagib':'📐'};
   // btn may not exist yet at this point — setLayer later handles it; update after DOM ready
   setTimeout(() => {
     const btn = document.getElementById('layer-switch-btn');
@@ -8539,6 +8544,8 @@ function _activeLayerKey() {
   // SQLite ekskluzivni prikaz
   const si = (typeof _sqlLayers !== 'undefined') ? _sqlLayers.findIndex(sl => sl.visible && map.hasLayer(sl.layer)) : -1;
   if (si >= 0) return '_sqlite_' + si;
+  // Topo + Nagib
+  if (map.hasLayer(TL['⛰ Topo']) && _OVL.slope && map.hasLayer(_OVL.slope)) return '_nagib';
   // Topo + Granice
   const gl = (typeof _geojsonLayer !== 'undefined') ? _geojsonLayer : null;
   if (map.hasLayer(TL['⛰ Topo']) && gl && map.hasLayer(gl)) return '_granice';
@@ -8591,7 +8598,7 @@ function _openLayerSheet() {
     const sqlBtn = document.getElementById('ls-sql-btn-' + idx);
     if (sqlBtn) sqlBtn.classList.add('active');
   } else {
-    const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm','_granice':'lo-granice'};
+    const map2id = {'⛰ Topo':'lo-topo','🛰 Satelit':'lo-sat','🗺 Karta':'lo-osm','📡 Google':'lo-google','🌿 Sentinel':'lo-ndvi','_nagib':'lo-nagib','_granice':'lo-granice'};
     const el = document.getElementById(map2id[active] || '');
     if (el) el.classList.add('active');
   }
@@ -8611,6 +8618,19 @@ function setLayer(key) {
   // Ukloni sve tile slojeve
   Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
+  if (key === '_nagib') {
+    TL['⛰ Topo'].addTo(map);
+    if (!map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.textContent = '📐';
+    _saveLastMap('tl', '_nagib');
+    closeLayerSheet();
+    _lsRenderSqlite();
+    return;
+  }
+  // Remove slope overlay if switching away from _nagib
+  if (_OVL.slope && map.hasLayer(_OVL.slope) && !_ovlState.slope) map.removeLayer(_OVL.slope);
+
   if (key === '_granice') {
     // Topo + granice odjela zajedno
     TL['⛰ Topo'].addTo(map);
@@ -8626,7 +8646,7 @@ function setLayer(key) {
       map.removeLayer(_geojsonLayer);
     }
     if (TL[key]) TL[key].addTo(map);
-    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺'};
+    const icons = {'⛰ Topo':'⛰','🛰 Satelit':'🛰','🗺 Karta':'🗺','📡 Google':'📡','🌿 Sentinel':'🌿','📐 Nagib':'📐'};
     const btn = document.getElementById('layer-switch-btn');
     if (btn) btn.textContent = icons[key] || '🗺';
     _saveLastMap('tl', key);
@@ -23153,6 +23173,15 @@ if (typeof AndroidDownload !== 'undefined') {
       </button>
       <button class="layer-opt" id="lo-osm" onclick="setLayer('🗺 Karta')">
         <span class="layer-ico">🗺</span>Karta
+      </button>
+      <button class="layer-opt" id="lo-google" onclick="setLayer('📡 Google')">
+        <span class="layer-ico">📡</span>Google
+      </button>
+      <button class="layer-opt" id="lo-ndvi" onclick="setLayer('🌿 Sentinel')">
+        <span class="layer-ico">🌿</span>Sentinel
+      </button>
+      <button class="layer-opt" id="lo-nagib" onclick="setLayer('_nagib')">
+        <span class="layer-ico">📐</span>Nagib
       </button>
       <!-- SQLite karte se renderuju dinamički, teku u isti grid -->
       <div id="ls-sqlite-in-grid" style="display:contents;"></div>
