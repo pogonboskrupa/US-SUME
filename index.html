@@ -3684,7 +3684,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.1.7';
+const APP_VER = 'v2.1.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8512,7 +8512,6 @@ setTimeout(_demLegendUpdate, 0); // after DOM ready
       restoredKey = '⛰ Topo';
       setTimeout(() => {
         if (_OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
-        showToast('🗺 Sačuvana karta obnovljena: Nagib');
       }, 500);
     } else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
@@ -8522,7 +8521,6 @@ setTimeout(_demLegendUpdate, 0); // after DOM ready
   setTimeout(() => {
     const btn = document.getElementById('layer-switch-btn');
     if (btn) btn.textContent = icons[restoredKey] || '🗺';
-    if (restoredKey !== '⛰ Topo') showToast('🗺 Sačuvana karta obnovljena: ' + restoredKey.replace(/^\S+\s/, ''));
   }, 500);
 })();
 // Zoom i layer kontrole su sada vlastiti HTML panel (#map-ctrl-bar), ne Leaflet kontrole
@@ -19538,7 +19536,6 @@ async function sqlmapRestoreAll() {
       } catch(e) { console.warn('SQLmap restore error', entry.name, e); }
     }
     if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
-    if (shownAny) showToast('🗺 Sačuvana karta obnovljena');
     else if (_sqlLayers.length) showToast('🗺 Karte učitane — odaberi kartu iz sloja 🗄');
   } catch(e) { console.warn('SQLmap restore failed:', e); }
   localStorage.removeItem(_SQL_CRASH_KEY);
