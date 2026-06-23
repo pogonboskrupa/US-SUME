@@ -22403,18 +22403,21 @@ function dozStartDraw(type) {
   _dozDrawEnabled = false;
   _dozDragLastPt = null;
   const t = DOZ_TYPES[type];
-  document.getElementById('doz-draw-banner').style.display = 'flex';
-  document.getElementById('doz-draw-type-label').textContent = `${t.emoji} ${t.label}`;
-  document.getElementById('doz-draw-count').textContent = '0 tačaka';
-  document.getElementById('map').style.cursor = '';
-  const dtb = document.getElementById('doz-draw-toggle');
-  if (dtb) { dtb.classList.remove('on'); }
-  if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
-  document.getElementById('action-bar').style.display = 'none';
-  document.getElementById('tab-bar').style.display = 'none';
-  document.getElementById('map-center-dot').style.display = '';
   switchTab('karta');
-  showToast(`${t.emoji} Čekiraj "Crtaj" pa pomjeraj mapu — ili dodaj tačke ručno`);
+  setTimeout(() => {
+    document.getElementById('doz-draw-banner').style.display = 'flex';
+    document.getElementById('doz-draw-type-label').textContent = `${t.emoji} ${t.label}`;
+    document.getElementById('doz-draw-count').textContent = '0 tačaka';
+    document.getElementById('map').style.cursor = '';
+    const dtb = document.getElementById('doz-draw-toggle');
+    if (dtb) { dtb.classList.remove('on'); }
+    if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+    document.getElementById('action-bar').style.display = 'none';
+    document.getElementById('tab-bar').style.display = 'none';
+    document.getElementById('map-center-dot').style.display = '';
+    map.invalidateSize();
+    showToast(`${t.emoji} Čekiraj "Crtaj" pa pomjeraj mapu — ili dodaj tačke ručno`);
+  }, 50);
 }
 
 function dozAddDrawPoint(latlng) {
@@ -22790,18 +22793,21 @@ function dozStartNewBoundaryDraw() {
   _dozDrawPts  = [];
   _dozDrawEnabled = false;
   _dozDragLastPt = null;
-  document.getElementById('doz-draw-banner').style.display = 'flex';
-  document.getElementById('doz-draw-type-label').textContent = `📐 Granica — odjel ${_dozNewOdjelDrawOdjel}`;
-  document.getElementById('doz-draw-count').textContent = '0 tačaka';
-  const dtb = document.getElementById('doz-draw-toggle');
-  if (dtb) { dtb.classList.remove('on'); }
-  document.getElementById('map').style.cursor = '';
-  if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
-  document.getElementById('action-bar').style.display = 'none';
-  document.getElementById('tab-bar').style.display = 'none';
-  document.getElementById('map-center-dot').style.display = '';
   switchTab('karta');
-  showToast('📐 Čekiraj "Crtaj" pa pomjeraj mapu — ili dodaj tačke ručno');
+  setTimeout(() => {
+    document.getElementById('doz-draw-banner').style.display = 'flex';
+    document.getElementById('doz-draw-type-label').textContent = `📐 Granica — odjel ${_dozNewOdjelDrawOdjel}`;
+    document.getElementById('doz-draw-count').textContent = '0 tačaka';
+    const dtb = document.getElementById('doz-draw-toggle');
+    if (dtb) { dtb.classList.remove('on'); }
+    document.getElementById('map').style.cursor = '';
+    if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
+    document.getElementById('action-bar').style.display = 'none';
+    document.getElementById('tab-bar').style.display = 'none';
+    document.getElementById('map-center-dot').style.display = '';
+    map.invalidateSize();
+    showToast('📐 Čekiraj "Crtaj" pa pomjeraj mapu — ili dodaj tačke ručno');
+  }, 50);
 }
 
 function dozToggleDrawMode() {
