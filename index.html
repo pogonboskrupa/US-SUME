@@ -3962,7 +3962,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.5.1';
+const APP_VER = 'v2.5.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -12319,13 +12319,14 @@ function fabSnimTrag() {
   if (_tragOn) {
     _tragOn = false;
     _tragPaused = false;
+    if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     _updFabVisibility();
     if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     if (_tragPts.length > 1) {
       const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
-      const simp  = _rdpSimplify(pts3d, 3);
+      const simp  = _rdpSimplify(pts3d, 1.5);
       const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
       const saved = _tragRegAdd(final);
       if (_activeTab === 'teren') {
@@ -25050,9 +25051,9 @@ if (typeof AndroidDownload !== 'undefined') {
       <span class="ab-ico">📡</span>
       <span>Lokacija</span>
     </button>
-    <div id="ab-loc-popup" style="display:none;position:absolute;bottom:calc(100% + 8px);right:0;
+    <div id="ab-loc-popup" style="display:none;position:fixed;bottom:68px;right:8px;
       background:#fff;border:0.5px solid rgba(0,0,0,0.1);border-radius:14px;
-      box-shadow:0 4px 24px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.04);padding:12px 16px;white-space:nowrap;z-index:9100;min-width:210px;">
+      box-shadow:0 4px 24px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.04);padding:12px 16px;white-space:nowrap;z-index:9100;min-width:210px;max-width:calc(100vw - 16px);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;">
         <span style="font-size:14px;font-weight:700;color:#1e293b;">📡 Moja lokacija</span>
         <span class="gps-switch" id="gps-switch" onclick="toggleGPS()"><span class="gps-switch-knob"></span></span>
