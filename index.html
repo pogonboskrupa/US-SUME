@@ -3962,7 +3962,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.9';
+const APP_VER = 'v2.5.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -19768,7 +19768,7 @@ class MiniSqlite {
   constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
-    if(this._c.has(n)) return this._c.get(n);
+    const cached=this._c.get(n); if(cached!==undefined){this._c.delete(n);this._c.set(n,cached);return cached;}
     const off=(n-1)*this.ps;
     const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
     if(this._c.size>2048) this._c.delete(this._c.keys().next().value);
@@ -20114,6 +20114,19 @@ function makeSqlite3Exec(db) {
   };
 }
 
+function _prepStmt(inst) {
+  if (inst.engine !== 'sqljs' || inst.stmt) return;
+  try {
+    const sql = inst.fmt==='mbtiles' ? 'SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?'
+      : inst.fmt==='alpinequest' ? 'SELECT tile FROM tiles WHERE x=? AND y=? AND z=?'
+      : 'SELECT image FROM tiles WHERE x=? AND y=? AND z=?';
+    inst.stmt = inst.db.prepare(sql);
+  } catch(e) {}
+}
+function _stmtQuery(stmt, a, b, c) {
+  try { stmt.bind([a,b,c]); if(stmt.step()){const r=stmt.get(); stmt.reset(); return r?.[0]??null;} stmt.reset(); } catch(e){}
+  return null;
+}
 async function queryTile(name, z, x, y) {
   const inst = dbs[name]; if (!inst) return null;
   const {engine,db,fmt} = inst;
@@ -20125,16 +20138,17 @@ async function queryTile(name, z, x, y) {
     let td;
     if (fmt==='mbtiles') {
       const ty=(1<<z)-1-y;
-      td = engine==='sqljs'
-        ? db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0]
-        : db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
+      if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
+      else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
+      else td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
     } else if (fmt==='alpinequest') {
-      td = engine==='sqljs'
-        ? db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0]
-        : db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
+      if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); }
+      else if (engine==='sqljs') td = db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
+      else td = db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
     } else {
       const off=inst.zOff||17;
-      if (engine==='sqljs') {
+      if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); if(!td) td = _stmtQuery(inst.stmt, x, y, off-z); }
+      else if (engine==='sqljs') {
         td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
         if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(off-z))[0]?.values?.[0]?.[0];
       } else {
@@ -20174,6 +20188,7 @@ self.onmessage = async ({data:msg}) => {
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = (entry.meta&&Object.keys(entry.meta).length) ? entry.meta : readMeta(exec,fmt);
       dbs[msg.name] = {db,fmt,engine:'sqljs',zOff:17};
+      _prepStmt(dbs[msg.name]);
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-buf') {
@@ -20197,6 +20212,7 @@ self.onmessage = async ({data:msg}) => {
         await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       }
       dbs[msg.name] = {db,fmt,engine:'sqljs',zOff};
+      _prepStmt(dbs[msg.name]);
       self.postMessage({id,ok:true,fmt,meta});
     }
     else if (msg.type === 'load-opfs') {
@@ -20633,20 +20649,28 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
       const ctx = canvas.getContext('2d');
+      const {x,y,z} = coords;
+      const cacheKey = name + '/' + z + '/' + x + '/' + y;
+      const cached = _sqlTileBmpCache.get(cacheKey);
+      if (cached) {
+        ctx.drawImage(cached, 0, 0, 256, 256);
+        _sqlTileBmpCache.delete(cacheKey); _sqlTileBmpCache.set(cacheKey, cached);
+        done(null, canvas);
+        return canvas;
+      }
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
-      const {x,y,z} = coords;
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
       const gen = _mainTileGen;
       _mainTileSchedule(() => inst.mini.tile(z,x,y), gen).then(data => {
         if (!data) { done(null, canvas); return; }
-        _drawTileBytes(ctx, data, canvas, done);
+        _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8});
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   layer.on('loading', _mainTileFlush);
   return layer;
 }
@@ -20703,6 +20727,20 @@ async function sqlmapRestoreAll() {
 
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
+const _sqlTileBmpCache = new Map();
+const _SQL_TILE_BMP_MAX = 200;
+function _sqlTileBmpEvict() {
+  if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
+  const it = _sqlTileBmpCache.keys();
+  while (_sqlTileBmpCache.size > _SQL_TILE_BMP_MAX * 0.7) {
+    const k = it.next().value;
+    if (k === undefined) break;
+    const bmp = _sqlTileBmpCache.get(k);
+    if (bmp && bmp.close) try { bmp.close(); } catch(e) {}
+    _sqlTileBmpCache.delete(k);
+  }
+}
+
 function _tileMime(data) {
   const b = data instanceof Uint8Array ? data : new Uint8Array(data);
   if (b[0] === 0x89 && b[1] === 0x50) return 'image/png';
@@ -20732,25 +20770,61 @@ function _drawTileBytes(ctx, data, canvas, done, sz) {
     useImg();
   }
 }
+function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
+  sz = sz || 256;
+  const blob = new Blob([data], { type: _tileMime(data) });
+  const useImg = () => {
+    const u = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); done(null, canvas); };
+    img.onerror = () => { URL.revokeObjectURL(u); done(null, canvas); };
+    img.src = u;
+  };
+  if ('createImageBitmap' in window) {
+    createImageBitmap(blob)
+      .then(bmp => {
+        ctx.drawImage(bmp, 0, 0, sz, sz);
+        if (cacheKey) { _sqlTileBmpCache.set(cacheKey, bmp); _sqlTileBmpEvict(); }
+        else bmp.close();
+        done(null, canvas);
+      })
+      .catch(useImg);
+  } else {
+    useImg();
+  }
+}
 
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
+  let _wTileGen = 0;
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
       const ctx = canvas.getContext('2d');
+      const {x,y,z} = coords;
+      const cacheKey = name + '/' + z + '/' + x + '/' + y;
+      const cached = _sqlTileBmpCache.get(cacheKey);
+      if (cached) {
+        ctx.drawImage(cached, 0, 0, 256, 256);
+        _sqlTileBmpCache.delete(cacheKey); _sqlTileBmpCache.set(cacheKey, cached);
+        done(null, canvas);
+        return canvas;
+      }
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
-      const {x,y,z} = coords;
+      const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
+        if (gen !== _wTileGen) return;
         if (!data) { done(null, canvas); return; }
-        _drawTileBytes(ctx, data, canvas, done);
+        _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  return new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22});
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:4, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  layer.on('loading', () => { _wTileGen++; });
+  return layer;
 }
 
 // ── Prikaz slojeva ────────────────────────────────────────────────────────────
@@ -20856,6 +20930,7 @@ async function sqlmapRemove(i) {
   await _sqlWCall({type:'close', name:sl.name});
   if (sl.opfs) _opfsDel(sl.name+'.sqlmap');
   if (sl.saved) await _sqlIdbDeleteDirect(sl.name).catch(()=>{});
+  for (const [k, bmp] of _sqlTileBmpCache) { if (k.startsWith(sl.name+'/')) { if (bmp.close) try{bmp.close();}catch(e){} _sqlTileBmpCache.delete(k); } }
   _sqlLayers.splice(i, 1);
   _sqlmapRenderLayers(); _lsRenderSqlite();
   if (!_sqlLayers.length) _sqlmapStatus('');
