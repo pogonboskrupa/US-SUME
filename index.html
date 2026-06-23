@@ -3589,6 +3589,12 @@ select:focus { outline:none; border-color:#3b82f6; }
             <div class="sec-t" style="margin:0;">🛤 Vlake</div>
             <button class="btn b" id="doz-vlake-toggle" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozToggleVlake()">👁 Prikaži</button>
           </div>
+          <div style="margin-bottom:6px;">
+            <select id="doz-link-projekt" onchange="dozLinkProjektChange()" style="width:100%;padding:5px 8px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
+              <option value="">— Poveži s vlake projektom —</option>
+            </select>
+            <div id="doz-link-status" style="font-size:10px;color:#52B788;margin-top:3px;"></div>
+          </div>
           <div id="doz-vlake-list"><div class="doz-empty">Klikni "Prikaži" za vlake u odjelu</div></div>
           <div id="doz-buf-section" style="display:none;margin-top:8px;border-top:1px solid #1e293b;padding-top:8px;">
             <div style="font-size:11px;color:#94a3b8;margin-bottom:5px;font-weight:600;">📏 Buffer zona vlaka</div>
@@ -3947,7 +3953,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.6';
+const APP_VER = 'v2.4.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21927,7 +21933,47 @@ async function dozSelectOdjel(id) {
     odjel.known_area_ha ? `${parseFloat(odjel.known_area_ha).toFixed(1)} ha` : '';
   _dozRenderStatusRow();
   await dozLoadLayers(id);
+  _dozAutoLinkVlake(odjel);
   dozRenderDetail();
+}
+
+function _dozAutoLinkVlake(odjel) {
+  _dozLinkedProjektId = null;
+  if (!odjel?.name || !_projekti?.length) return;
+  const dn = odjel.name.toLowerCase().trim();
+  let best = null;
+  _projekti.forEach(p => {
+    if (!p.odjel) return;
+    const po = p.odjel.toLowerCase().trim();
+    const pg = (p.gj || '').toLowerCase().trim();
+    const combo = `${pg} · ${po}`;
+    if (dn === combo || dn === po || dn.includes(po) || po.includes(dn)) {
+      if (!best || po.length > (best._matchLen || 0)) { best = p; best._matchLen = po.length; }
+    }
+  });
+  if (best) {
+    _dozLinkedProjektId = best.id;
+    _dozShowLinkedVlake();
+  }
+}
+
+function _dozShowLinkedVlake() {
+  if (!_dozLinkedProjektId) return;
+  _dozVlakeIdxs = [];
+  vlake.forEach((v, i) => {
+    if (v.projektId === _dozLinkedProjektId && v.pts.length >= 2) {
+      _dozVlakeIdxs.push(i);
+      [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean).forEach(l => {
+        try { if (!map.hasLayer(l)) map.addLayer(l); } catch(e) {}
+      });
+    }
+  });
+  if (_dozVlakeIdxs.length) {
+    _dozVlakeVisible = true;
+    const btn = document.getElementById('doz-vlake-toggle');
+    if (btn) btn.textContent = '👁‍🗨 Sakrij';
+    document.getElementById('doz-buf-section').style.display = 'block';
+  }
 }
 
 async function dozLoadLayers(projectId) {
@@ -22283,6 +22329,7 @@ let _dozVlakeIdxs = [];
 let _dozBufLayers = [];
 let _dozBufDeadLayers = [];
 let _dozBufRadius = 40;
+let _dozLinkedProjektId = null;
 
 function _dozFindVlakeInBoundary(odjel) {
   const bndFeat = _dozGetBoundaryGeoJSON(odjel);
@@ -22301,12 +22348,10 @@ function _dozFindVlakeInBoundary(odjel) {
 function dozToggleVlake() {
   _dozVlakeVisible = !_dozVlakeVisible;
   const btn = document.getElementById('doz-vlake-toggle');
-  const list = document.getElementById('doz-vlake-list');
   const bufSec = document.getElementById('doz-buf-section');
 
   if (!_dozVlakeVisible) {
     btn.textContent = '👁 Prikaži';
-    list.innerHTML = '<div class="doz-empty">Klikni "Prikaži" za vlake u odjelu</div>';
     bufSec.style.display = 'none';
     _dozVlakeIdxs.forEach(i => {
       const v = vlake[i]; if (!v) return;
@@ -22316,38 +22361,102 @@ function dozToggleVlake() {
     });
     _dozVlakeIdxs = [];
     dozClearBuf();
+    _dozRenderVlakeList();
     return;
   }
 
-  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
-  if (!odjel) { list.innerHTML = '<div class="doz-empty">Nema odjela</div>'; return; }
-
-  _dozVlakeIdxs = _dozFindVlakeInBoundary(odjel);
-  if (!_dozVlakeIdxs.length) {
-    list.innerHTML = '<div class="doz-empty">Nema vlaka u ovom odjelu</div>';
-    btn.textContent = '👁‍🗨 Sakrij';
-    return;
+  if (_dozLinkedProjektId) {
+    _dozShowLinkedVlake();
+  } else {
+    const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+    if (odjel) _dozVlakeIdxs = _dozFindVlakeInBoundary(odjel);
+    _dozVlakeIdxs.forEach(i => {
+      const v = vlake[i];
+      [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels||[])].filter(Boolean).forEach(l => {
+        try { if (!map.hasLayer(l)) map.addLayer(l); } catch(e) {}
+      });
+    });
   }
 
   btn.textContent = '👁‍🗨 Sakrij';
-  bufSec.style.display = 'block';
+  if (_dozVlakeIdxs.length) bufSec.style.display = 'block';
+  _dozRenderVlakeList();
+}
 
+function _dozRenderLinkDropdown() {
+  const sel = document.getElementById('doz-link-projekt');
+  const status = document.getElementById('doz-link-status');
+  if (!sel) return;
+  let opts = '<option value="">— Poveži s vlake projektom —</option>';
+  (_projekti || []).forEach(p => {
+    const label = `${p.gj || ''} · ${p.odjel || ''}`.trim() || p.id.slice(0, 8);
+    const nVlake = vlake.filter(v => v.projektId === p.id).length;
+    opts += `<option value="${p.id}" ${p.id === _dozLinkedProjektId ? 'selected' : ''}>${label} (${nVlake} vlaka)</option>`;
+  });
+  sel.innerHTML = opts;
+  if (status) {
+    if (_dozLinkedProjektId) {
+      const p = _projekti.find(x => x.id === _dozLinkedProjektId);
+      const nv = vlake.filter(v => v.projektId === _dozLinkedProjektId).length;
+      status.innerHTML = `✔ Povezano: <b>${p?.odjel || '?'}</b> — ${nv} vlaka na mapi`;
+    } else {
+      status.textContent = '';
+    }
+  }
+  _dozRenderVlakeList();
+}
+
+function _dozRenderVlakeList() {
+  const list = document.getElementById('doz-vlake-list');
+  if (!list) return;
+  if (!_dozVlakeIdxs.length) {
+    list.innerHTML = '<div class="doz-empty">Nema vlaka</div>';
+    return;
+  }
   let html = '<div style="max-height:140px;overflow-y:auto;">';
   _dozVlakeIdxs.forEach(i => {
     const v = vlake[i];
     const len = calcL(v.pts);
-    const lenStr = len >= 1000 ? (len/1000).toFixed(2) + ' km' : Math.round(len) + ' m';
+    const lenStr = len >= 1000 ? (len / 1000).toFixed(2) + ' km' : Math.round(len) + ' m';
     html += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid #1e293b;">
       <span style="width:8px;height:8px;border-radius:50%;background:${v.color};flex-shrink:0;"></span>
       <span style="color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.nm}</span>
       <span style="color:#64748b;font-family:monospace;flex-shrink:0;">${lenStr}</span>
     </div>`;
-    [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels||[])].filter(Boolean).forEach(l => {
-      try { if (!map.hasLayer(l)) map.addLayer(l); } catch(e) {}
-    });
   });
   html += '</div>';
   list.innerHTML = html;
+}
+
+function dozLinkProjektChange() {
+  const sel = document.getElementById('doz-link-projekt');
+  const newId = sel?.value || null;
+  if (_dozVlakeVisible && _dozLinkedProjektId !== newId) {
+    _dozVlakeIdxs.forEach(i => {
+      const v = vlake[i]; if (!v) return;
+      [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels || [])].filter(Boolean).forEach(l => {
+        try { if (map.hasLayer(l)) map.removeLayer(l); } catch(e) {}
+      });
+    });
+    _dozVlakeIdxs = [];
+    dozClearBuf();
+  }
+  _dozLinkedProjektId = newId;
+  if (newId) {
+    _dozShowLinkedVlake();
+    _dozRenderVlakeList();
+    const status = document.getElementById('doz-link-status');
+    const p = _projekti.find(x => x.id === newId);
+    const nv = vlake.filter(v => v.projektId === newId).length;
+    if (status) status.innerHTML = `✔ Povezano: <b>${p?.odjel || '?'}</b> — ${nv} vlaka na mapi`;
+  } else {
+    _dozVlakeVisible = false;
+    const btn = document.getElementById('doz-vlake-toggle');
+    if (btn) btn.textContent = '👁 Prikaži';
+    document.getElementById('doz-buf-section').style.display = 'none';
+    document.getElementById('doz-link-status').textContent = '';
+    document.getElementById('doz-vlake-list').innerHTML = '<div class="doz-empty">Nema vlaka</div>';
+  }
 }
 
 function dozBufChange() {
@@ -22539,6 +22648,9 @@ function dozRenderDetail() {
         </div>`;
       }).join('')
     : '<div class="doz-empty">Nema članova</div>';
+
+  // Vlake link dropdown
+  _dozRenderLinkDropdown();
 
   // Markings summary (chips po tipu)
   const counts = {};
