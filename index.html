@@ -3520,9 +3520,18 @@ select:focus { outline:none; border-color:#3b82f6; }
 
         <div class="sec">
           <div class="sec-t">📍 GPS Trag projektanta</div>
-          <button id="doz-gps-btn" class="btn g" onclick="dozToggleGPS()" style="margin-bottom:0;">📍 Počni GPS snimanje</button>
+          <div style="display:flex;gap:6px;margin-bottom:4px;">
+            <button id="doz-gps-btn" class="btn g" onclick="dozToggleGPS()" style="flex:1;margin:0;">📍 Počni GPS</button>
+            <button id="doz-gps-pause" class="btn" onclick="dozPauseGPS()" style="display:none;margin:0;padding:6px 12px;background:#422006;border:1px solid #92400e;color:#fbbf24;">⏸</button>
+          </div>
           <div id="doz-gps-status" style="display:none;font-size:11px;color:#4ade80;margin-top:5px;text-align:center;">● Snimanje aktivno</div>
           <div id="doz-gps-stats"></div>
+          <div id="doz-gps-elev" style="display:none;margin-top:6px;">
+            <canvas id="doz-elev-canvas" width="360" height="80" style="width:100%;height:80px;border-radius:6px;background:#0f172a;border:1px solid #1e293b;"></canvas>
+          </div>
+          <div id="doz-gps-export" style="display:none;margin-top:6px;">
+            <button class="btn b" onclick="dozExportGPX()" style="font-size:11px;padding:5px 10px;margin:0;">📥 Export GPX</button>
+          </div>
         </div>
 
         <div class="sec">
@@ -3953,7 +3962,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.8';
+const APP_VER = 'v2.4.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22704,19 +22713,125 @@ function dozToggleGPS() {
 }
 
 let _dozGpsSent = 0, _dozGpsBuffered = 0, _dozGpsLen = 0, _dozGpsStartTs = 0;
+let _dozGpsPaused = false, _dozGpsPausedTime = 0, _dozGpsPauseStart = 0;
+let _dozGpsMaxSpd = 0, _dozGpsSpdSum = 0, _dozGpsSpdCnt = 0;
+let _dozGpsElevData = [];
+let _dozGpsFullPts = [];
+
+function dozPauseGPS() {
+  if (!_dozGpsOn) return;
+  _dozGpsPaused = !_dozGpsPaused;
+  const btn = document.getElementById('doz-gps-pause');
+  const st = document.getElementById('doz-gps-status');
+  if (_dozGpsPaused) {
+    _dozGpsPauseStart = Date.now();
+    if (btn) { btn.textContent = '▶'; btn.style.background = '#052e16'; btn.style.borderColor = '#166534'; btn.style.color = '#4ade80'; }
+    if (st) { st.textContent = '⏸ Pauza'; st.style.color = '#fbbf24'; }
+  } else {
+    _dozGpsPausedTime += Date.now() - _dozGpsPauseStart;
+    _dozGpsPauseStart = 0;
+    if (btn) { btn.textContent = '⏸'; btn.style.background = '#422006'; btn.style.borderColor = '#92400e'; btn.style.color = '#fbbf24'; }
+    if (st) { st.textContent = '● Snimanje aktivno'; st.style.color = '#4ade80'; }
+  }
+}
 
 function _dozUpdGpsStats(acc) {
   const el = document.getElementById('doz-gps-stats');
   if (!el) return;
   el.style.display = 'block';
-  const mins = Math.floor((Date.now() - _dozGpsStartTs) / 60000);
+  const totalMs = Date.now() - _dozGpsStartTs;
+  const pauseMs = _dozGpsPausedTime + (_dozGpsPaused && _dozGpsPauseStart ? Date.now() - _dozGpsPauseStart : 0);
+  const moveMs = Math.max(totalMs - pauseMs, 1);
+  const totalMins = Math.floor(totalMs / 60000);
+  const moveMins = Math.floor(moveMs / 60000);
+  const avgSpd = moveMs > 0 ? (_dozGpsLen / (moveMs / 1000)) : 0;
+  const avgKmh = (avgSpd * 3.6).toFixed(1);
+  const maxKmh = (_dozGpsMaxSpd * 3.6).toFixed(1);
   const accStr = acc != null
-    ? (acc > 20 ? `<span style="color:#fbbf24;">±${Math.round(acc)} m — čekam bolji signal</span>` : `±${Math.round(acc)} m`)
+    ? (acc > 20 ? `<span style="color:#fbbf24;">±${Math.round(acc)}m čekam signal</span>` : `±${Math.round(acc)}m`)
     : '<span style="color:#fbbf24;">čekam signal…</span>';
+  const elevGain = _dozCalcElevGain();
   el.innerHTML =
-    `Trag: <b>${fmtL(_dozGpsLen)}</b> · ${_dozGpsPts.length} tač. · ${mins} min<br>` +
-    `Preciznost: ${accStr}` +
-    (_dozGpsBuffered > 0 ? `<br><span style="color:#fbbf24;">📴 ${_dozGpsBuffered} tač. čeka sync</span>` : '');
+    `Trag: <b>${fmtL(_dozGpsLen)}</b> · ${_dozGpsPts.length} tač. · ${accStr}<br>` +
+    `⏱ ${moveMins} min pokret / ${totalMins} min ukupno` +
+    (_dozGpsPaused ? ' · <b style="color:#fbbf24;">PAUZA</b>' : '') + `<br>` +
+    `🏃 Prosj: <b>${avgKmh}</b> · Max: <b>${maxKmh}</b> km/h` +
+    (elevGain.gain > 0 ? `<br>⛰ +${Math.round(elevGain.gain)}m / -${Math.round(elevGain.loss)}m` : '') +
+    (_dozGpsBuffered > 0 ? `<br><span style="color:#fbbf24;">📴 ${_dozGpsBuffered} čeka sync</span>` : '');
+  _dozDrawElevProfile();
+}
+
+function _dozCalcElevGain() {
+  let gain = 0, loss = 0;
+  for (let i = 1; i < _dozGpsElevData.length; i++) {
+    const diff = _dozGpsElevData[i] - _dozGpsElevData[i - 1];
+    if (diff > 1) gain += diff;
+    else if (diff < -1) loss -= diff;
+  }
+  return { gain, loss };
+}
+
+function _dozDrawElevProfile() {
+  const canvas = document.getElementById('doz-elev-canvas');
+  if (!canvas || _dozGpsElevData.length < 2) return;
+  document.getElementById('doz-gps-elev').style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const data = _dozGpsElevData;
+  let mn = Infinity, mx = -Infinity;
+  data.forEach(v => { if (v < mn) mn = v; if (v > mx) mx = v; });
+  const range = Math.max(mx - mn, 10);
+  const step = w / (data.length - 1);
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = h - ((v - mn) / range) * (h - 10) - 5;
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(74,222,128,0.4)');
+  grad.addColorStop(1, 'rgba(74,222,128,0.05)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = h - ((v - mn) / range) * (h - 10) - 5;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#4ade80';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '9px sans-serif';
+  ctx.fillText(`${Math.round(mx)}m`, 3, 12);
+  ctx.fillText(`${Math.round(mn)}m`, 3, h - 3);
+}
+
+function dozExportGPX() {
+  if (!_dozGpsFullPts.length && !_dozTracks.length) { showToast('Nema tačaka za export'); return; }
+  const pts = _dozGpsFullPts.length ? _dozGpsFullPts : _dozTracks.filter(p => p.user_id === (sbUser?.id || '')).map(p => ({
+    lat: p.latitude, lon: p.longitude, ele: p.altitude || 0, time: p.recorded_at, spd: p.speed || 0
+  }));
+  if (!pts.length) { showToast('Nema tačaka za export'); return; }
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  const name = odjel?.name || 'Doznaka';
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="US SUME">\n<trk><name>${name}</name><trkseg>\n`;
+  pts.forEach(p => {
+    gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele || 0}</ele><time>${p.time || ''}</time></trkpt>\n`;
+  });
+  gpx += `</trkseg></trk>\n</gpx>`;
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.gpx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('📥 GPX exportovan');
 }
 
 let _dozGpsPoly = null;        // perzistentna polilinija (inkrementalno crtanje)
@@ -22732,30 +22847,46 @@ async function dozStartGPS() {
   _dozGpsOn = true;
   _dozGpsPts = [];
   _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
-  _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;  // zamrzni ID-jeve za cijelu sesiju
+  _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;
+  _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+  _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
+  _dozGpsElevData = []; _dozGpsFullPts = [];
   if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
   _dozGpsTrackLayer = L.layerGroup().addTo(map);
-  _dozGpsPoly = L.polyline([], { color:'#fbbf24', weight:3, opacity:0.9 }).addTo(_dozGpsTrackLayer);
+  _dozGpsPoly = null;
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '⏹ Zaustavi GPS'; btn.style.background='#2d0a0a'; btn.style.color='#f87171'; btn.style.borderColor='#7f1d1d'; }
+  const pauseBtn = document.getElementById('doz-gps-pause');
+  if (pauseBtn) { pauseBtn.style.display = ''; pauseBtn.textContent = '⏸'; pauseBtn.style.background='#422006'; pauseBtn.style.borderColor='#92400e'; pauseBtn.style.color='#fbbf24'; }
   document.getElementById('doz-gps-status').style.display = 'block';
+  document.getElementById('doz-gps-export').style.display = 'none';
+  document.getElementById('doz-gps-elev').style.display = 'none';
   _dozUpdGpsStats(null);
-  _acquireWakeLock();           // drži ekran/CPU budan — kao kod snimanja vlaka
+  _acquireWakeLock();
 
   _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
-    // Sesija završena ili kontekst nestao tokom await-a → ignoriši fix
     if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
-    if (acc > 20) { _dozUpdGpsStats(acc); return; } // slab signal — pokaži, ne snimaj
+    if (acc > 20) { _dozUpdGpsStats(acc); return; }
+    if (_dozGpsPaused) { _dozUpdGpsStats(acc); return; }
     const prev = _dozGpsPts[_dozGpsPts.length - 1];
     if (prev) {
       const d = dst(prev[0], prev[1], lat, lng);
-      if (d < _DOZ_GPS_MIN_DIST) { _dozUpdGpsStats(acc); return; } // šum dok stojiš mirno — preskoči
+      if (d < _DOZ_GPS_MIN_DIST) { _dozUpdGpsStats(acc); return; }
       _dozGpsLen += d;
     }
+    const spdMs = (speed != null && speed >= 0) ? speed : 0;
+    if (spdMs > _dozGpsMaxSpd) _dozGpsMaxSpd = spdMs;
+    _dozGpsSpdSum += spdMs; _dozGpsSpdCnt++;
+    if (alt != null) _dozGpsElevData.push(alt);
+    _dozGpsFullPts.push({ lat, lon: lng, ele: alt || 0, time: new Date().toISOString(), spd: spdMs });
+    if (prev) {
+      const kmh = spdMs * 3.6;
+      const col = kmh < 1 ? '#60a5fa' : kmh < 3 ? '#4ade80' : kmh < 6 ? '#fbbf24' : '#ef4444';
+      L.polyline([[prev[0], prev[1]], [lat, lng]], { color: col, weight: 3, opacity: 0.9 }).addTo(_dozGpsTrackLayer);
+    }
     _dozGpsPts.push([lat, lng]);
-    if (_dozGpsPoly) _dozGpsPoly.addLatLng([lat, lng]);  // inkrementalno — O(1), ne O(n)
-    _dozSaveLivePts();          // spasi live trag (background-kill zaštita)
+    _dozSaveLivePts();
     const _dozPt = {
       project_id: _dozGpsProjId, user_id: _dozGpsUserId,
       latitude: lat, longitude: lng,
@@ -22763,7 +22894,6 @@ async function dozStartGPS() {
       recorded_at: new Date().toISOString()
     };
     try {
-      // supabase-js NE baca na DB/RLS greške — vraća { error }; provjeri ga eksplicitno
       const { error } = await sb.from('doz_track_points').insert(_dozPt);
       if (error) throw error;
       _dozGpsSent++;
@@ -22857,16 +22987,19 @@ function dozStopGPS() {
   const wasOn = _dozGpsOn;
   _dozGpsOn = false;
   _dozGpsProjId = null; _dozGpsUserId = null;
-  if (!recOn) _releaseWakeLock();   // oslobodi wake-lock (osim ako vlaka još snima)
-  try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {}  // live trag više nije potreban
+  _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+  if (!recOn) _releaseWakeLock();
+  try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {}
   const btn = document.getElementById('doz-gps-btn');
   if (btn) { btn.textContent = '📍 Počni GPS snimanje'; btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; }
+  const pauseBtn = document.getElementById('doz-gps-pause');
+  if (pauseBtn) pauseBtn.style.display = 'none';
   document.getElementById('doz-gps-status').style.display = 'none';
-  const st = document.getElementById('doz-gps-stats');
-  if (st) st.style.display = 'none';
+  if (wasOn && _dozGpsFullPts.length >= 2) {
+    document.getElementById('doz-gps-export').style.display = 'block';
+  }
   if (wasOn && _dozGpsPts.length >= 2) {
     showToast(`📍 Snimljeno ${fmtL(_dozGpsLen)} (${_dozGpsPts.length} tačaka)`);
-    // Osvježi slojeve da se trag prikaže u boji člana
     if (_dozSelId) dozLoadLayers(_dozSelId).then(() => dozRenderDetail());
   }
 }
