@@ -22293,6 +22293,13 @@ function dozUndoDrawPt() {
   _dozDrawPts.pop();
   _dozRedrawPreview();
   document.getElementById('doz-draw-count').textContent = `${_dozDrawPts.length} tačaka`;
+  if (_dozDrawPts.length > 0) {
+    const last = _dozDrawPts[_dozDrawPts.length - 1];
+    map.panTo([last.lat, last.lng], { animate: true, duration: 0.3 });
+    _dozDragLastPt = { lat: last.lat, lng: last.lng };
+  } else {
+    _dozDragLastPt = null;
+  }
 }
 
 function dozCancelDraw() {
