@@ -3534,6 +3534,28 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
 
         <div class="sec">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div class="sec-t" style="margin:0;">🛤 Vlake</div>
+            <button class="btn b" id="doz-vlake-toggle" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozToggleVlake()">👁 Prikaži</button>
+          </div>
+          <div id="doz-vlake-list"><div class="doz-empty">Klikni "Prikaži" za vlake u odjelu</div></div>
+          <div id="doz-buf-section" style="display:none;margin-top:8px;border-top:1px solid #1e293b;padding-top:8px;">
+            <div style="font-size:11px;color:#94a3b8;margin-bottom:5px;font-weight:600;">📏 Buffer zona vlaka</div>
+            <select id="doz-buf-sel" onchange="dozBufChange()" style="width:100%;padding:6px 8px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:12px;margin-bottom:6px;">
+              <option value="60">60 m (30L + 30D)</option>
+              <option value="80" selected>80 m (40L + 40D)</option>
+              <option value="100">100 m (50L + 50D)</option>
+              <option value="120">120 m (60L + 60D)</option>
+            </select>
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+              <button class="btn b" style="flex:1;font-size:11px;padding:6px;" onclick="dozDrawBuf()">🔲 Bufferi</button>
+              <button class="btn gr" style="flex:1;font-size:11px;padding:6px;" onclick="dozClearBuf()">✕ Ukloni</button>
+            </div>
+            <div id="doz-buf-status" style="display:none;font-size:10px;color:#94a3b8;text-align:center;margin-top:4px;"></div>
+          </div>
+        </div>
+
+        <div class="sec">
           <div class="sec-t">📐 Obilježene zone (<span id="doz-markings-count">0</span>)</div>
           <div id="doz-markings-summary"><span class="doz-empty">Nema označenih zona</span></div>
           <div id="doz-marked-area"></div>
@@ -3874,7 +3896,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.1';
+const APP_VER = 'v2.4.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22129,6 +22151,134 @@ function _dozShowBoundaryPopup(odjel) {
   }
 }
 
+// ─── Doznaka — Vlake prikaz i buffer ────────────────────────────
+let _dozVlakeVisible = false;
+let _dozVlakeIdxs = [];
+let _dozBufLayers = [];
+let _dozBufDeadLayers = [];
+let _dozBufRadius = 40;
+
+function _dozFindVlakeInBoundary(odjel) {
+  const bndFeat = _dozGetBoundaryGeoJSON(odjel);
+  if (!bndFeat) return [];
+  const idxs = [];
+  vlake.forEach((v, i) => {
+    if (v.pts.length < 2) return;
+    for (let k = 0; k < v.pts.length; k++) {
+      const pt = turf.point([v.pts[k].lo, v.pts[k].la]);
+      if (turf.booleanPointInPolygon(pt, bndFeat)) { idxs.push(i); return; }
+    }
+  });
+  return idxs;
+}
+
+function dozToggleVlake() {
+  _dozVlakeVisible = !_dozVlakeVisible;
+  const btn = document.getElementById('doz-vlake-toggle');
+  const list = document.getElementById('doz-vlake-list');
+  const bufSec = document.getElementById('doz-buf-section');
+
+  if (!_dozVlakeVisible) {
+    btn.textContent = '👁 Prikaži';
+    list.innerHTML = '<div class="doz-empty">Klikni "Prikaži" za vlake u odjelu</div>';
+    bufSec.style.display = 'none';
+    _dozVlakeIdxs.forEach(i => {
+      const v = vlake[i]; if (!v) return;
+      [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels||[])].filter(Boolean).forEach(l => {
+        try { if (map.hasLayer(l)) map.removeLayer(l); } catch(e) {}
+      });
+    });
+    _dozVlakeIdxs = [];
+    dozClearBuf();
+    return;
+  }
+
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  if (!odjel) { list.innerHTML = '<div class="doz-empty">Nema odjela</div>'; return; }
+
+  _dozVlakeIdxs = _dozFindVlakeInBoundary(odjel);
+  if (!_dozVlakeIdxs.length) {
+    list.innerHTML = '<div class="doz-empty">Nema vlaka u ovom odjelu</div>';
+    btn.textContent = '👁‍🗨 Sakrij';
+    return;
+  }
+
+  btn.textContent = '👁‍🗨 Sakrij';
+  bufSec.style.display = 'block';
+
+  let html = '<div style="max-height:140px;overflow-y:auto;">';
+  _dozVlakeIdxs.forEach(i => {
+    const v = vlake[i];
+    const len = calcL(v.pts);
+    const lenStr = len >= 1000 ? (len/1000).toFixed(2) + ' km' : Math.round(len) + ' m';
+    html += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid #1e293b;">
+      <span style="width:8px;height:8px;border-radius:50%;background:${v.color};flex-shrink:0;"></span>
+      <span style="color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.nm}</span>
+      <span style="color:#64748b;font-family:monospace;flex-shrink:0;">${lenStr}</span>
+    </div>`;
+    [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels||[])].filter(Boolean).forEach(l => {
+      try { if (!map.hasLayer(l)) map.addLayer(l); } catch(e) {}
+    });
+  });
+  html += '</div>';
+  list.innerHTML = html;
+}
+
+function dozBufChange() {
+  _dozBufRadius = parseInt(document.getElementById('doz-buf-sel').value) / 2;
+}
+
+function dozDrawBuf() {
+  dozClearBuf();
+  if (!_dozVlakeIdxs.length) return;
+  const polys = [];
+  _dozVlakeIdxs.forEach(i => {
+    const v = vlake[i];
+    if (v.pts.length < 2) return;
+    try {
+      const coords = v.pts.map(p => [p.lo, p.la]);
+      const line = turf.lineString(coords);
+      const buf = turf.buffer(line, _dozBufRadius, { units: 'meters', steps: 8 });
+      if (!buf) return;
+      polys.push({ gj: buf, v });
+      const lyr = L.geoJSON(buf, {
+        style: { color: v.color, weight: 1.5, opacity: 0.8, fillColor: v.color, fillOpacity: 0.18 },
+        interactive: false
+      }).addTo(map);
+      lyr.bindTooltip(`Buffer ${v.nm} ±${_dozBufRadius}m`, { sticky: true, opacity: 0.85 });
+      _dozBufLayers.push(lyr);
+    } catch(e) {}
+  });
+  for (let i = 0; i < polys.length; i++) {
+    for (let j = i + 1; j < polys.length; j++) {
+      try {
+        const inter = turf.intersect(polys[i].gj, polys[j].gj);
+        if (!inter) continue;
+        const lyr = L.geoJSON(inter, {
+          style: { color: '#ef4444', weight: 2, opacity: 1, fillColor: '#ef4444', fillOpacity: 0.55, dashArray: '4,3' },
+          interactive: false
+        }).addTo(map);
+        lyr.bindTooltip(`⚠ Mrtva zona: ${polys[i].v.nm} ∩ ${polys[j].v.nm}`, { sticky: true, opacity: 0.95 });
+        _dozBufDeadLayers.push(lyr);
+      } catch(e) {}
+    }
+  }
+  const el = document.getElementById('doz-buf-status');
+  const dead = _dozBufDeadLayers.length;
+  el.textContent = dead > 0
+    ? `${_dozBufLayers.length} buffer(a). ⚠ ${dead} mrtva zona!`
+    : `${_dozBufLayers.length} buffer(a). Nema preklapanja.`;
+  el.style.display = 'block';
+}
+
+function dozClearBuf() {
+  _dozBufLayers.forEach(l => map.removeLayer(l));
+  _dozBufDeadLayers.forEach(l => map.removeLayer(l));
+  _dozBufLayers = []; _dozBufDeadLayers = [];
+  const el = document.getElementById('doz-buf-status');
+  if (el) el.style.display = 'none';
+}
+
 // ─── Status odjela (Aktivno / Pauza / Završeno) ──────────────────
 const _DOZ_STATUSES = [
   { key: 'active',    label: 'Aktivno',  color: '#4ade80' },
@@ -22949,8 +23099,10 @@ function dozBackToList() {
   _dozSubProject(null);
   dozStopGPS();
   dozCancelDraw();
-  [_dozBoundaryLayer, _dozTracksLayer, _dozMarkingsLayer, _dozGpsTrackLayer].forEach(l => { if (l) map.removeLayer(l); });
-  _dozBoundaryLayer = _dozTracksLayer = _dozMarkingsLayer = _dozGpsTrackLayer = null;
+  if (_dozVlakeVisible) { _dozVlakeVisible = true; dozToggleVlake(); }
+  dozClearBuf();
+  [_dozBoundaryLayer, _dozTracksLayer, _dozMarkingsLayer, _dozBandsLayer, _dozGpsTrackLayer].forEach(l => { if (l) map.removeLayer(l); });
+  _dozBoundaryLayer = _dozTracksLayer = _dozMarkingsLayer = _dozBandsLayer = _dozGpsTrackLayer = null;
   document.getElementById('doz-panel-list').style.display   = 'flex';
   document.getElementById('doz-panel-detail').style.display = 'none';
 }
