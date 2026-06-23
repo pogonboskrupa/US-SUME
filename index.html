@@ -3521,6 +3521,25 @@ select:focus { outline:none; border-color:#3b82f6; }
         </div>
 
         <div class="sec">
+          <div class="sec-t">📐 Pojasevi</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:11px;color:#94a3b8;">Vanjski rub:</span>
+            <select id="doz-band-outer" onchange="dozBandOuterChange()" style="flex:1;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
+              <option value="15">15 m</option>
+              <option value="20" selected>20 m (default)</option>
+              <option value="30">30 m</option>
+              <option value="40">40 m</option>
+            </select>
+            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozRefreshBands()">↺</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="checkbox" id="doz-cross-warn" checked onchange="dozCrossWarnToggle()" style="accent-color:#fbbf24;"> Upozorenje na prelaz pojasa
+            </label>
+          </div>
+        </div>
+
+        <div class="sec">
           <div class="sec-t">🗺 Obilježi zonu na mapi</div>
           <button class="btn b" onclick="dozShowTypePicker()" style="margin-bottom:0;">✏ Nacrtaj plohu</button>
         </div>
@@ -3896,7 +3915,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.3';
+const APP_VER = 'v2.4.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22010,7 +22029,7 @@ function dozRenderMapLayers() {
 }
 
 // ─── Pojasevi (Bands) — GPS track–based area assignment ─────────
-const _DOZ_BAND_OUTER_M = 20;
+let _DOZ_BAND_OUTER_M = 20;
 
 function _dozGetBoundaryGeoJSON(odjel) {
   if (!odjel?.boundary_geojson) return null;
@@ -22034,7 +22053,8 @@ function _dozBuildUserTracks() {
     seen.add(sig);
     (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
   });
-  const result = [];
+
+  const allLines = [];
   Object.entries(byUser).forEach(([uid, pts]) => {
     if (pts.length < 2) return;
     const segments = [[]];
@@ -22046,10 +22066,42 @@ function _dozBuildUserTracks() {
       segments[segments.length - 1].push([p.longitude, p.latitude]);
     });
     segments.forEach(seg => {
-      if (seg.length >= 2) result.push({ uid, line: turf.lineString(seg) });
+      if (seg.length >= 2) allLines.push({ uid, line: turf.lineString(seg) });
     });
   });
-  return result;
+
+  if (allLines.length <= 1) return allLines;
+
+  return allLines.map(track => {
+    const others = allLines.filter(t => t.uid !== track.uid);
+    if (!others.length) return track;
+    const coords = turf.getCoords(track.line);
+    const filtered = [coords[0]];
+    let skipRun = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const pt = turf.point(coords[i]);
+      let myDist = Infinity;
+      const myOthers = allLines.filter(t => t !== track && t.uid === track.uid);
+      myOthers.forEach(ml => {
+        const n = turf.nearestPointOnLine(ml.line, pt);
+        if (n.properties.dist < myDist) myDist = n.properties.dist;
+      });
+      let otherDist = Infinity;
+      others.forEach(ot => {
+        const n = turf.nearestPointOnLine(ot.line, pt);
+        if (n.properties.dist < otherDist) otherDist = n.properties.dist;
+      });
+      if (otherDist < myDist * 0.4 && otherDist < 0.015) {
+        skipRun++;
+        if (skipRun > 5) continue;
+      } else {
+        skipRun = 0;
+      }
+      filtered.push(coords[i]);
+    }
+    if (filtered.length < 2) return track;
+    return { uid: track.uid, line: turf.lineString(filtered) };
+  });
 }
 
 function _dozComputeBands(odjel) {
@@ -22150,6 +22202,24 @@ function _dozShowBoundaryPopup(odjel) {
   if (bounds) {
     L.popup({ maxWidth: 300 }).setLatLng(bounds.getCenter()).setContent(html).openOn(map);
   }
+}
+
+function dozBandOuterChange() {
+  _DOZ_BAND_OUTER_M = parseInt(document.getElementById('doz-band-outer')?.value || 20);
+  dozRefreshBands();
+}
+
+function dozRefreshBands() {
+  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  if (!odjel) return;
+  if (_dozBandsLayer) { map.removeLayer(_dozBandsLayer); }
+  _dozBandsLayer = L.layerGroup().addTo(map);
+  _dozRenderBands(odjel);
+}
+
+let _dozCrossWarnEnabled = true;
+function dozCrossWarnToggle() {
+  _dozCrossWarnEnabled = document.getElementById('doz-cross-warn')?.checked ?? true;
 }
 
 // ─── Doznaka — Vlake prikaz i buffer ────────────────────────────
@@ -22497,8 +22567,65 @@ async function dozStartGPS() {
       _dozGpsBuffered++;
     }
     _dozUpdGpsStats(acc);
+    _dozCheckBandCross(lat, lng);
   }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
+}
+
+// ─── Upozorenje kad projektant uđe u tuđi pojas ─────────────────
+let _dozCrossWarnTs = 0;
+let _dozCrossMarker = null;
+let _dozCrossCount = 0;
+
+function _dozCheckBandCross(lat, lng) {
+  if (!_dozGpsOn || !_dozGpsUserId || !_dozCrossWarnEnabled) return;
+  const now = Date.now();
+  if (now - _dozCrossWarnTs < 15000) return;
+
+  const userTracks = _dozBuildUserTracks();
+  const otherTracks = userTracks.filter(t => t.uid !== _dozGpsUserId);
+  if (!otherTracks.length) return;
+
+  const myTracks = userTracks.filter(t => t.uid === _dozGpsUserId);
+  const pt = turf.point([lng, lat]);
+
+  let myDist = Infinity;
+  myTracks.forEach(t => {
+    const n = turf.nearestPointOnLine(t.line, pt);
+    if (n.properties.dist < myDist) myDist = n.properties.dist;
+  });
+
+  let closestOther = null;
+  let otherDist = Infinity;
+  otherTracks.forEach(t => {
+    const n = turf.nearestPointOnLine(t.line, pt);
+    if (n.properties.dist < otherDist) {
+      otherDist = n.properties.dist;
+      closestOther = t;
+    }
+  });
+
+  if (otherDist < myDist && otherDist < 0.025) {
+    _dozCrossCount++;
+    if (_dozCrossCount >= 3) {
+      _dozCrossWarnTs = now;
+      const mIdx = {};
+      _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
+      const member = _dozMembers.find(m => m.user_id === closestOther.uid);
+      const name = member?._korisnik ? (`${member._korisnik.ime || ''} ${member._korisnik.prezime || ''}`.trim()) : 'Projektant';
+      const col = DOZ_ENG_COLORS[(mIdx[closestOther.uid] ?? 0) % DOZ_ENG_COLORS.length];
+      showToast(`⚠ Prelazite u pojas: ${name}`);
+      if (_dozCrossMarker) map.removeLayer(_dozCrossMarker);
+      _dozCrossMarker = L.circleMarker([lat, lng], {
+        radius: 10, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.4, weight: 2
+      }).addTo(_dozGpsTrackLayer || map);
+      _dozCrossMarker.bindTooltip(`⚠ Prelaz u pojas: ${name}`, { permanent: false, opacity: 0.9 });
+      setTimeout(() => { if (_dozCrossMarker) { try { map.removeLayer(_dozCrossMarker); } catch(e) {} _dozCrossMarker = null; } }, 30000);
+      _dozCrossCount = 0;
+    }
+  } else {
+    _dozCrossCount = 0;
+  }
 }
 
 // Spremi GPS tačku u offline buffer (poziva se i pri mrežnoj i pri DB/RLS grešci).
