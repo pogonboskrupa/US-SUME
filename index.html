@@ -3896,7 +3896,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.4.2';
+const APP_VER = 'v2.4.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8483,6 +8483,7 @@ try {
   if (_lp?.la && _lp?.lo && _lp?.z) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
 const map = L.map('map',{
+  maxZoom:22,
   zoomControl:false,
   attributionControl:false,
   fadeAnimation:true,
@@ -8602,9 +8603,9 @@ map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
 const TL = {
   '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:['a','b','c'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '📡 Google':  new CachedSat('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:21,subdomains:['0','1','2','3'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:19,maxZoom:22,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxNativeZoom:19,maxZoom:22,keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '📡 Google':  new CachedSat('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxNativeZoom:21,maxZoom:22,subdomains:['0','1','2','3'],keepBuffer:4,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150})
 };
 const _ELEV_CACHE  = 'tvlake-elev-v1';
 const _SLOPE_CACHE = 'tvlake-slope-v1';
