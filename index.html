@@ -21547,10 +21547,13 @@ async function _loadOdsjeciSQLite() {
     // Parsiraj redosljed kolona iz CREATE TABLE
     const colNames = (colSql.match(/\(([^)]+)\)/)?.[1] || '')
       .split(',').map(c => c.trim().split(/\s+/)[0].toLowerCase().replace(/["'`]/g,''));
-    const ci = n => { const i = colNames.indexOf(n); return i >= 0 ? i : -1; };
-    const iGj=ci('gj')>=0?ci('gj'):1, iOdj=ci('odjel')>=0?ci('odjel'):2,
-          iOdsk=ci('odsjek')>=0?ci('odsjek'):3, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):4,
-          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):5, iGeom=ci('geom')>=0?ci('geom'):6;
+    // INTEGER PRIMARY KEY je rowid alias — NE čuva se u record payload-u, preskočiti u indeksima
+    const isRowidAlias = /INTEGER\s+PRIMARY\s+KEY/i.test(colSql.split(',')[0] || '');
+    const colOffset = isRowidAlias ? 1 : 0;
+    const ci = n => { const i = colNames.indexOf(n); return i >= 0 ? i - colOffset : -1; };
+    const iGj=ci('gj')>=0?ci('gj'):0, iOdj=ci('odjel')>=0?ci('odjel'):1,
+          iOdsk=ci('odsjek')>=0?ci('odsjek'):2, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):3,
+          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):4, iGeom=ci('geom')>=0?ci('geom'):5;
 
     // 3. Skeniraj sve redove, kreiraj Leaflet poligone
     if (_odsjeciLayerGrp) { try { map.removeLayer(_odsjeciLayerGrp); } catch {} }
@@ -21593,10 +21596,12 @@ async function _loadOdsjeciSQLite() {
       }
     });
 
-    if (!cnt) return;
+    if (!cnt) { showToast('⚠ Odsjeci: nisu nađeni poligoni u bazi'); return; }
     graniceOdjeli.sort((a,b) => a.name.localeCompare(b.name, 'bs'));
 
     // Dodaj u kmlLs da se pojavi u layer panelu
+    const existingIdx = kmlLs.findIndex(k => k._isSqliteVector);
+    if (existingIdx >= 0) kmlLs.splice(existingIdx, 1);
     kmlLs.push({
       name: '🗂 Odsjeci (SQLite)',
       grp: _odsjeciLayerGrp,
@@ -21605,10 +21610,21 @@ async function _loadOdsjeciSQLite() {
       _isSqliteVector: true
     });
     _odsjeciLayerGrp.addTo(map);
+
+    // Zumiraj na granice sloja
+    try {
+      const bounds = _odsjeciLayerGrp.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+    } catch {}
+
     if (typeof rndKml === 'function') rndKml();
     if (typeof _geojsonOdjeliUpdUI === 'function') _geojsonOdjeliUpdUI();
-    console.log(`✅ Odsjeci SQLite: ${cnt} poligona učitano`);
-  } catch(e) { console.error('_loadOdsjeciSQLite:', e); }
+    showToast(`✅ Odsjeci: ${cnt} poligona učitano`);
+    console.log(`✅ Odsjeci SQLite: ${cnt} poligona učitano, colOffset=${colOffset}`);
+  } catch(e) {
+    console.error('_loadOdsjeciSQLite:', e);
+    showToast('❌ Greška pri učitavanju odsjeci: ' + e.message);
+  }
 }
 
 // ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
