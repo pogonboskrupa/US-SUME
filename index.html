@@ -21463,6 +21463,154 @@ function geojsonOdjeliRestore() {
   } catch(e) {}
 }
 
+// ── UNSKO_odsjeci.sqlite — vektorski sloj odsjeka ────────────────────────────
+const _ODSJECI_SQLITE_URL = SUPA_URL + '/storage/v1/object/public/SQLITE%20VECTOR/UNSKO_odsjeci.sqlite';
+const _ODSJECI_IDB_KEY    = 'tvlake_odsjeci_sqlite_v1';
+let   _odsjeciLayerGrp    = null;
+
+// Boje po GJ
+const _GJ_COLORS = {
+  'RISOVAC KRUPA':  '#4ade80',
+  'VOJSKOVA':       '#60a5fa',
+  'GRMEČ JASENICA': '#fb923c',
+  'GOMILA':         '#c084fc',
+};
+function _gjColor(gj) { return _GJ_COLORS[(gj||'').toUpperCase()] || '#94a3b8'; }
+
+// ── SpatiaLite WKB parser ──────────────────────────────────────────────────────
+// Format: [0x00][endian][srid:4][mbr:32][0x7C][wkb...]
+function _parseSpatialiteWkb(bytes) {
+  if (!bytes || bytes.length < 44) return null;
+  if (bytes[0] !== 0x00 || bytes[38] !== 0x7C) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  let pos = 39;
+  const le = bytes[pos++] === 0x01;
+  const geomType = view.getUint32(pos, le) & 0xFFFF; pos += 4;
+
+  function rU32() { const v = view.getUint32(pos, le); pos += 4; return v; }
+  function rF64() { const v = view.getFloat64(pos, le); pos += 8; return v; }
+
+  function parseRing() {
+    const n = rU32(); const pts = [];
+    for (let i = 0; i < n; i++) {
+      const x = rF64(), y = rF64();
+      try { const [lng, lat] = proj4('EPSG:3908', 'WGS84', [x, y]); pts.push([lat, lng]); }
+      catch { pts.push([y, x]); }
+    }
+    return pts;
+  }
+  function parsePoly() { const nr = rU32(); const rings = []; for (let i=0;i<nr;i++) rings.push(parseRing()); return rings; }
+
+  const polys = [];
+  if (geomType === 3) {
+    polys.push(parsePoly());
+  } else if (geomType === 6) {
+    const n = rU32();
+    for (let i = 0; i < n; i++) {
+      pos++; // sub byte order
+      const st = view.getUint32(pos, le) & 0xFFFF; pos += 4;
+      if (st === 3) polys.push(parsePoly());
+    }
+  }
+  return polys;
+}
+
+// ── Loader ────────────────────────────────────────────────────────────────────
+async function _loadOdsjeciSQLite() {
+  if (!_MiniSqliteMain) return;
+
+  // 1. Fetch (online) ili IDB cache (offline)
+  let buf = null;
+  if (navigator.onLine) {
+    try {
+      const r = await fetch(_ODSJECI_SQLITE_URL, { cache: 'no-store' });
+      if (r.ok) { buf = await r.arrayBuffer(); _kmlcSave(_ODSJECI_IDB_KEY, buf); }
+    } catch(e) { console.warn('odsjeci fetch:', e.message); }
+  }
+  if (!buf && _kmlcKeys.has(_ODSJECI_IDB_KEY)) {
+    try { const c = await _kmlcGet(_ODSJECI_IDB_KEY); if (c) buf = c instanceof ArrayBuffer ? c : c.buffer; }
+    catch {}
+  }
+  if (!buf || !buf.byteLength) return;
+
+  try {
+    // 2. Otvori SQLite, pronađi tabelu odsjeci
+    const mini = new _MiniSqliteMain(new File([buf], 'odsjeci.sqlite'));
+    await mini.init();
+
+    let odsjeciRoot = 0, colSql = '';
+    await mini._scanLeaves(1, (rid, r) => {
+      if (r[0] === 'table' && r[1]?.toLowerCase() === 'odsjeci') { odsjeciRoot = r[3]; colSql = r[4] || ''; }
+    });
+    if (!odsjeciRoot) { console.warn('Tabela odsjeci nije nađena'); return; }
+
+    // Parsiraj redosljed kolona iz CREATE TABLE
+    const colNames = (colSql.match(/\(([^)]+)\)/)?.[1] || '')
+      .split(',').map(c => c.trim().split(/\s+/)[0].toLowerCase().replace(/["'`]/g,''));
+    const ci = n => { const i = colNames.indexOf(n); return i >= 0 ? i : -1; };
+    const iGj=ci('gj')>=0?ci('gj'):1, iOdj=ci('odjel')>=0?ci('odjel'):2,
+          iOdsk=ci('odsjek')>=0?ci('odsjek'):3, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):4,
+          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):5, iGeom=ci('geom')>=0?ci('geom'):6;
+
+    // 3. Skeniraj sve redove, kreiraj Leaflet poligone
+    if (_odsjeciLayerGrp) { try { map.removeLayer(_odsjeciLayerGrp); } catch {} }
+    _odsjeciLayerGrp = L.layerGroup();
+    let cnt = 0;
+
+    await mini._scanLeaves(odsjeciRoot, (rid, row) => {
+      const gj=row[iGj]||'', odjel=row[iOdj]||'', odsjek=row[iOdsk]||'',
+            gaz=row[iGaz]||'', povrHa=row[iPov]?(row[iPov]/10000).toFixed(2):'?';
+      const blob = row[iGeom];
+      if (!blob) return;
+      const polys = _parseSpatialiteWkb(blob);
+      if (!polys?.length) return;
+
+      const col = _gjColor(gj);
+      const popupHtml = `<div style="font-size:13px;line-height:1.8">
+        <b style="font-size:15px;color:#e2e8f0">${odjel}/${odsjek}</b><br>
+        <span style="color:#64748b;font-size:11px">${gj}</span><br>
+        Gaz. klasa: <b>${gaz||'—'}</b><br>
+        Površina: <b>${povrHa} ha</b>
+      </div>`;
+
+      for (const rings of polys) {
+        if (!rings[0]?.length) continue;
+        const poly = L.polygon(rings, {
+          color: col, weight: 1.5, opacity: 0.9,
+          fillColor: col, fillOpacity: 0.07,
+          interactive: true
+        });
+        poly.bindPopup(popupHtml, { maxWidth: 220 });
+        _odsjeciLayerGrp.addLayer(poly);
+
+        // Integriraj u graniceOdjeli (za zoom/search)
+        const nm = odjel + (odsjek ? '/' + odsjek : '');
+        if (!graniceOdjeli.find(o => o.name === nm && o._gjSql === gj)) {
+          try { const b = poly.getBounds(); if (b.isValid()) graniceOdjeli.push({ name: nm, _gjSql: gj, bounds: b }); }
+          catch {}
+        }
+        cnt++;
+      }
+    });
+
+    if (!cnt) return;
+    graniceOdjeli.sort((a,b) => a.name.localeCompare(b.name, 'bs'));
+
+    // Dodaj u kmlLs da se pojavi u layer panelu
+    kmlLs.push({
+      name: '🗂 Odsjeci (SQLite)',
+      grp: _odsjeciLayerGrp,
+      col: '#4ade80', dash: '', weight: 1.5, opacity: 0.9,
+      vis: true, fill: true, fillCol: '#4ade80', fillPattern: 'solid', fillOpacity: 0.07,
+      _isSqliteVector: true
+    });
+    _odsjeciLayerGrp.addTo(map);
+    if (typeof rndKml === 'function') rndKml();
+    if (typeof _geojsonOdjeliUpdUI === 'function') _geojsonOdjeliUpdUI();
+    console.log(`✅ Odsjeci SQLite: ${cnt} poligona učitano`);
+  } catch(e) { console.error('_loadOdsjeciSQLite:', e); }
+}
+
 // ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
 proj4.defs('EPSG:31276', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
 proj4.defs('EPSG:31275', '+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9999 +x_0=5500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
@@ -21856,7 +22004,8 @@ async function autoLoadAllKmlBuckets() {
   // Oba bucketa paralelno — prepolovljava ukupno čekanje
   await Promise.all([
     autoLoadStorageBucket('Granice odjela', graniceStyle, true),
-    autoLoadStorageBucket('ODJELI_ODSJECI', _ODJEL_STYLE)
+    autoLoadStorageBucket('ODJELI_ODSJECI', _ODJEL_STYLE),
+    _loadOdsjeciSQLite()
   ]);
 }
 
