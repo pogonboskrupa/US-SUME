@@ -14756,13 +14756,24 @@ function togK(i) {
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
 function delK(i) {
-  map.removeLayer(kmlLs[i].grp);
+  const k = kmlLs[i];
+  if (k.grp) map.removeLayer(k.grp);
+  // Bucket fajl: sačuvaj vis:false da se ne auto-učita idući put (ostaje u panelu kao 🙈)
+  if (k._key) _kmlPersistHidden(k._key);
   kmlLs.splice(i, 1);
   _kmlEditIdx = -1;
   saveKmlStyles();
   _localKmlSaveAll();
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
+}
+
+function _kmlPersistHidden(key) {
+  try {
+    const um = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
+    um[key] = { ...(um[key] || {}), vis: false };
+    localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(um));
+  } catch {}
 }
 
 // ── Old rndKml (still used in panel — keep minimal) ───────────────────────────
@@ -21787,6 +21798,17 @@ async function _kmlcUiDownload(idxArrJson) {
   const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
   showToast('⬇ Preuzimam fajlove za offline...');
   const saved = await _kmlcDownloadGroup(items);
+  // Ukloni vis:false override — fajlovi ponovo vidljivi pri idućem ulasku
+  items.forEach(({k}) => {
+    if (!k._key) return;
+    try {
+      const um = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
+      if (um[k._key]) { um[k._key].vis = true; localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(um)); }
+    } catch {}
+    // Prikaži i u trenutnoj sesiji
+    k.vis = true;
+    if (k.grp) k.grp.addTo(map);
+  });
   showToast(`✅ ${saved} fajl${saved === 1 ? '' : 'a'} sačuvano offline`);
   _rndOznakePanel();
 }
@@ -21795,7 +21817,9 @@ async function _kmlcUiDelete(idxArrJson) {
   const idxArr = JSON.parse(idxArrJson);
   const items  = idxArr.map(i => ({ k: kmlLs[i], i }));
   await _kmlcDeleteGroup(items);
-  showToast('🗑 Offline kopija obrisana');
+  // Sačuvaj vis:false za sve obrisane fajlove — ne auto-učitavaj idući put
+  items.forEach(({k}) => { if (k._key) _kmlPersistHidden(k._key); });
+  showToast('🗑 Offline kopija obrisana — fajl neće biti prikazan pri idućem ulasku');
   _rndOznakePanel();
 }
 
