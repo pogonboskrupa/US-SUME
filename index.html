@@ -2,8 +2,7 @@
 <html lang="bs">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Cache-Control" content="max-age=86400">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,11 +19,27 @@
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/shapefile@0.6.6/dist/shapefile.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" onerror="_libErr('Leaflet')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js" onerror="_libErr('proj4')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js" onerror="_libErr('Turf')"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="_libErr('Supabase')"></script>
+<script src="https://cdn.jsdelivr.net/npm/shapefile@0.6.6/dist/shapefile.min.js" onerror="_libErr('Shapefile')"></script>
+<script>
+var _libErrNames=[];
+function _libErr(n){_libErrNames.push(n);}
+window.addEventListener('DOMContentLoaded',function(){
+  if(!_libErrNames.length)return;
+  var critical=_libErrNames.filter(function(n){return n==='Leaflet'||n==='Supabase';});
+  if(!critical.length)return;
+  document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1B4332;color:#fff;font-family:sans-serif;padding:32px;text-align:center;">'
+    +'<div style="font-size:48px;margin-bottom:16px;">📡</div>'
+    +'<div style="font-size:20px;font-weight:700;margin-bottom:8px;">Nema internet konekcije</div>'
+    +'<div style="font-size:15px;color:rgba(255,255,255,0.7);margin-bottom:32px;max-width:320px;">Aplikacija se mora pokrenuti <b>jednom sa internetom</b> da bi radila offline. Biblioteke se čuvaju u cache-u i sljedeći put neće trebati internet.</div>'
+    +'<div style="background:rgba(255,255,255,0.08);border-radius:12px;padding:12px 20px;font-size:13px;color:rgba(255,255,255,0.5);">Nedostaje: '+_libErrNames.join(', ')+'</div>'
+    +'<button onclick="location.reload()" style="margin-top:28px;background:#2D6A4F;border:none;border-radius:12px;color:#fff;font-size:15px;padding:14px 32px;cursor:pointer;">↻ Pokušaj ponovo</button>'
+    +'</div>';
+});
+</script>
 <style>
 
 </style>

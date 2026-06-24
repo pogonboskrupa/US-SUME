@@ -90,7 +90,8 @@ public class MainActivity extends Activity {
         ws.setAllowFileAccessFromFileURLs(true);
         ws.setAllowUniversalAccessFromFileURLs(true);
         ws.setGeolocationEnabled(true);
-        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // LOAD_CACHE_ELSE_NETWORK: koristi cache kad nema interneta (CDN biblioteke dostupne offline)
+        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setTextZoom(100);
 
