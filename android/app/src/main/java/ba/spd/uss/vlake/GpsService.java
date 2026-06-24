@@ -25,20 +25,63 @@ public class GpsService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && "stop".equals(intent.getAction())) {
+        if (intent == null) return START_NOT_STICKY;
+
+        String action = intent.getAction();
+        if ("stop".equals(action)) {
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
         }
 
-        String title = "GPS Snimanje";
-        if (intent != null && intent.getStringExtra("title") != null) {
-            title = intent.getStringExtra("title");
+        if ("pause".equals(action)) {
+            sendBroadcastToWeb("pause");
+            return START_STICKY;
         }
 
+        if ("update".equals(action)) {
+            String title = intent.getStringExtra("title");
+            String body = intent.getStringExtra("body");
+            updateNotification(
+                title != null ? title : "GPS Snimanje",
+                body != null ? body : "Traktorske vlake — GPS snimanje aktivno"
+            );
+            return START_STICKY;
+        }
+
+        String title = intent.getStringExtra("title");
+        if (title == null) title = "GPS Snimanje";
+
+        showForegroundNotification(title, "Traktorske vlake — GPS snimanje aktivno");
+        return START_STICKY;
+    }
+
+    private void showForegroundNotification(String title, String body) {
+        Notification notification = buildNotification(title, body);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIF_ID, notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+        } else {
+            startForeground(NOTIF_ID, notification);
+        }
+    }
+
+    private void updateNotification(String title, String body) {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) {
+            nm.notify(NOTIF_ID, buildNotification(title, body));
+        }
+    }
+
+    private Notification buildNotification(String title, String body) {
         Intent openApp = new Intent(this, MainActivity.class);
         openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingOpen = PendingIntent.getActivity(this, 0, openApp,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Intent pauseIntent = new Intent(this, GpsService.class);
+        pauseIntent.setAction("pause");
+        PendingIntent pendingPause = PendingIntent.getService(this, 2, pauseIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Intent stopIntent = new Intent(this, GpsService.class);
@@ -46,23 +89,22 @@ public class GpsService extends Service {
         PendingIntent pendingStop = PendingIntent.getService(this, 1, stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(title)
-                .setContentText("Traktorske vlake — GPS snimanje aktivno")
+                .setContentText(body)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
                 .setContentIntent(pendingOpen)
-                .addAction(android.R.drawable.ic_media_pause, "Stop", pendingStop)
+                .addAction(android.R.drawable.ic_media_pause, "Pauza", pendingPause)
+                .addAction(android.R.drawable.ic_delete, "Stop", pendingStop)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
-        } else {
-            startForeground(NOTIF_ID, notification);
-        }
-
-        return START_STICKY;
+    private void sendBroadcastToWeb(String action) {
+        Intent i = new Intent("ba.spd.uss.vlake.REC_ACTION");
+        i.putExtra("action", action);
+        sendBroadcast(i);
     }
 
     private void createChannel() {
