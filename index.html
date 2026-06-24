@@ -20659,8 +20659,6 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
-      ctx.fillStyle = '#2d3a2e';
-      ctx.fillRect(0, 0, 256, 256);
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
       const gen = _mainTileGen;
@@ -20812,18 +20810,16 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
-      ctx.fillStyle = '#2d3a2e';
-      ctx.fillRect(0, 0, 256, 256);
       const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
-        if (gen !== _wTileGen) return;
+        if (gen !== _wTileGen) { done(null, canvas); return; }
         if (!data) { done(null, canvas); return; }
         _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:4, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   layer.on('loading', () => { _wTileGen++; });
   return layer;
 }
