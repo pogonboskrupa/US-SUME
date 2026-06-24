@@ -12335,6 +12335,7 @@ function fabSnimTrag() {
     _tragOn = false;
     _tragPaused = false;
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
+    _tragLiveClear();
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.remove('active');
     _updFabVisibility();
@@ -12355,6 +12356,7 @@ function fabSnimTrag() {
     }
     _tragPts = [];
     _tragBuf = [];
+    _tragLastT = 0;
   } else {
     if (!gpsOn) startGPS();
     _setFreeView(false);
@@ -12362,7 +12364,9 @@ function fabSnimTrag() {
     _tragPaused = false;
     _tragPts = [];
     _tragBuf = [];
+    _tragLastT = 0;
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
+    _tragLiveClear();
     _tragLine = L.polyline([], { color: '#f97316', weight: 3, opacity: 0.85 }).addTo(map);
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
@@ -12381,6 +12385,10 @@ function togTragPause() {
   const txt = document.getElementById('ab-trag-pauza-txt');
   const btn = document.getElementById('ab-trag-pauza');
   if (_tragPaused) {
+    // Očisti živi vrh i resetuj filtere — bez artefakt-linije preko pauze
+    _tragLiveClear();
+    _tragBuf = [];
+    _tragLastT = 0;
     if (ico) ico.textContent = '▶';
     if (txt) txt.textContent = 'Nastavi';
     if (btn) btn.classList.add('resuming');
@@ -12402,33 +12410,72 @@ function _updTragStats() {
   el.textContent = `${n} tač. · ${_tragFmtLen(d)}`;
 }
 
-let _tragBuf = [];  // kružni buffer zadnja 3 raw GPS fixa za median filtar
+let _tragBuf = [];      // kružni buffer zadnja 3 raw GPS fixa za median filtar
+let _tragLastT = 0;     // timestamp zadnje commit tačke (za speed-gate)
+let _tragLiveSeg = null;// živi "rubber-band" segment do trenutne pozicije
 
 function _addTragPoint(la, lo, ac, al) {
   if (!_tragOn || _tragPaused) return;
 
-  // 1. Odbaci slabe GPS fikseve — šuma > 40m je prevelika za šumski teren
-  if (ac > 40) return;
+  // 1. Odbaci samo katastrofalno loše fikseve
+  if (ac > 50) return;
 
-  // 2. Median filtar od 3 fikseva — jedan spike ne može pokvariti medijanu
+  const now = Date.now();
+
+  // 2. Median filtar od 3 fiksa — biramo STVARNI fix najbliži centroidu
+  //    (median po odvojenim osama bi mogao stvoriti tačku koja ne postoji → artefakt)
   _tragBuf.push({ la, lo });
   if (_tragBuf.length > 3) _tragBuf.shift();
-  const n   = _tragBuf.length;
-  const mla = [..._tragBuf].sort((a, b) => a.la - b.la)[Math.floor(n / 2)].la;
-  const mlo = [..._tragBuf].sort((a, b) => a.lo - b.lo)[Math.floor(n / 2)].lo;
+  let mla = la, mlo = lo;
+  if (_tragBuf.length === 3) {
+    const cla = (_tragBuf[0].la + _tragBuf[1].la + _tragBuf[2].la) / 3;
+    const clo = (_tragBuf[0].lo + _tragBuf[1].lo + _tragBuf[2].lo) / 3;
+    let best = _tragBuf[0], bd = Infinity;
+    for (const p of _tragBuf) {
+      const dd = (p.la - cla) ** 2 + (p.lo - clo) ** 2;
+      if (dd < bd) { bd = dd; best = p; }
+    }
+    mla = best.la; mlo = best.lo;
+  }
 
-  // 3. Minimalna udaljenost od zadnje prihvaćene tačke
+  // 3. Odluka o commit-u tačke u trajni trag
+  let commit = true;
   if (_tragPts.length > 0) {
     const last = _tragPts[_tragPts.length - 1];
     const d    = dst(last[0], last[1], mla, mlo);
-    if (d < 5) return;   // premalo kretanja
-    if (d > Math.max(40, ac * 3)) return;  // preveliki skok — odbaci spike
+    if (d < 4) {
+      commit = false;                       // premalo kretanja — ne dodaji novu tačku
+    } else {
+      // SPEED-GATE umjesto fiksne udaljenosti: dozvoli brzo kretanje vozila,
+      // odbaci samo nemoguće skokove (GPS spike). 35 m/s ≈ 126 km/h.
+      const dtS = _tragLastT ? Math.max(0.5, (now - _tragLastT) / 1000) : 1;
+      if (d / dtS > 35) commit = false;
+    }
   }
 
-  _tragPts.push([mla, mlo, al]);
-  if (_tragLine) _tragLine.addLatLng([mla, mlo]);
-  _updTragStats();
-  if (_activeTab === 'teren') terenUpdTragStats();
+  if (commit) {
+    _tragPts.push([mla, mlo, al]);
+    _tragLastT = now;
+    if (_tragLine) _tragLine.addLatLng([mla, mlo]);  // inkrementalno (brzo i za duge tragove)
+    _updTragStats();
+    if (_activeTab === 'teren') terenUpdTragStats();
+  }
+
+  // 4. ŽIVI VRH — linija UVIJEK ide do trenutne pozicije (marker), bez zaostajanja
+  if (_tragPts.length > 0) {
+    const last = _tragPts[_tragPts.length - 1];
+    const segLatLngs = [[last[0], last[1]], [la, lo]];
+    if (!_tragLiveSeg) {
+      _tragLiveSeg = L.polyline(segLatLngs,
+        { color: '#f97316', weight: 3, opacity: 0.85, interactive: false }).addTo(map);
+    } else {
+      _tragLiveSeg.setLatLngs(segLatLngs);
+    }
+  }
+}
+
+function _tragLiveClear() {
+  if (_tragLiveSeg) { map.removeLayer(_tragLiveSeg); _tragLiveSeg = null; }
 }
 
 function _tragToGpx(pts) {
