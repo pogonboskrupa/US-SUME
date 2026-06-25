@@ -4054,7 +4054,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.9.0';
+const APP_VER = 'v2.9.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21253,7 +21253,9 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
-      // Nacrtaj parent tile kao placeholder dok pravi tile ne stigne
+      // Pozadina + placeholder (parent za zoom-in, djeca za zoom-out)
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
@@ -21366,22 +21368,39 @@ function _drawTileBytes(ctx, data, canvas, done, sz) {
   }
 }
 function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
-  // Pokušaj pronaći parent tile (z-1, z-2) u BMP kešu i nacrtaj odgovarajući kvadrant
+  ctx.imageSmoothingEnabled = false;
+
+  // 1. Zoom-in smjer: traži parent tile na z-1 ili z-2 (upscale)
   for (let dz = 1; dz <= 2; dz++) {
     const pz = z - dz;
     if (pz < 0) break;
-    const scale = 1 << dz;          // 2 ili 4
+    const scale = 1 << dz;
     const px = x >> dz;
     const py = y >> dz;
     const bmp = cache.get(name + '/' + pz + '/' + px + '/' + py);
     if (!bmp) continue;
-    const tileSize = 256 / scale;    // 128 ili 64
+    const tileSize = 256 / scale;
     const sx = (x % scale) * tileSize;
     const sy = (y % scale) * tileSize;
-    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(bmp, sx, sy, tileSize, tileSize, 0, 0, 256, 256);
-    return;
+    return true;
   }
+
+  // 2. Zoom-out smjer: složi tile iz 4 djece na z+1 (downscale)
+  const cz = z + 1;
+  const cx = x * 2, cy = y * 2;
+  const quads = [[0,0,cx,cy],[1,0,cx+1,cy],[0,1,cx,cy+1],[1,1,cx+1,cy+1]];
+  let found = 0;
+  for (const [qx, qy, tx, ty] of quads) {
+    const bmp = cache.get(name + '/' + cz + '/' + tx + '/' + ty);
+    if (bmp) {
+      ctx.drawImage(bmp, 0, 0, 256, 256, qx * 128, qy * 128, 128, 128);
+      found++;
+    }
+  }
+  if (found > 0) return true;
+
+  return false;
 }
 
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
@@ -21426,7 +21445,9 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
-      // Nacrtaj parent tile kao placeholder dok pravi tile ne stigne
+      // Pozadina + placeholder (parent za zoom-in, djeca za zoom-out)
+      ctx.fillStyle = '#2d3a2e';
+      ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
