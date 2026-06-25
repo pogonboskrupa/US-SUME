@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.9.7';
+const APP_VER = 'v2.9.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21208,9 +21208,11 @@ async function _sqlmapLoadDirect(file, name) {
 // Ograniči paralelna čitanja tile-ova na main threadu (spriječi memorijski skok)
 let _mainTileActive = 0;
 const _mainTileQueue = [];
-function _mainTileSchedule(fn) {
+let _mainTileGen = 0;
+function _mainTileSchedule(fn, gen) {
   return new Promise((resolve, reject) => {
     const run = () => {
+      if (gen !== _mainTileGen) { resolve(null); return; }
       _mainTileActive++;
       Promise.resolve().then(fn).then(resolve, reject).finally(() => {
         _mainTileActive--;
@@ -21221,7 +21223,7 @@ function _mainTileSchedule(fn) {
   });
 }
 function _mainTileFlush() {
-  // Samo čisti queue — in-progress tile-ovi završe i popune BMP keš
+  _mainTileGen++;
   _mainTileQueue.length = 0;
 }
 
@@ -21258,32 +21260,16 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
-      _mainTileSchedule(() => inst.mini.tile(z,x,y)).then(data => {
+      const gen = _mainTileGen;
+      _mainTileSchedule(() => inst.mini.tile(z,x,y), gen).then(data => {
         if (!data) { done(null, canvas); return; }
         _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:false, updateInterval:200});
-  // Flush queue na zoomstart (ne na panu)
-  const _onZoomStart = () => _mainTileFlush();
-  layer.on('add',    () => map.on('zoomstart', _onZoomStart));
-  layer.on('remove', () => map.off('zoomstart', _onZoomStart));
-  // Debounce tile učitavanja na zoom promjenu — čekaj 200ms da korisnik prestane zoomirati
-  const _mOrig = layer._update.bind(layer);
-  let _mLastZ = -1, _mTimer = null;
-  layer._update = function() {
-    const z = map.getZoom ? map.getZoom() : -1;
-    if (z !== _mLastZ) {
-      _mLastZ = z;
-      clearTimeout(_mTimer);
-      _mTimer = setTimeout(_mOrig, 200);
-    } else {
-      clearTimeout(_mTimer);
-      _mOrig();
-    }
-  };
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  layer.on('loading', _mainTileFlush);
   return layer;
 }
 
@@ -21468,28 +21454,17 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
+      const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
+        if (gen !== _wTileGen) { done(null, canvas); return; }
         if (!data) { done(null, canvas); return; }
         _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:false, updateInterval:200});
-  // Debounce tile učitavanja na zoom promjenu
-  const _wOrig = layer._update.bind(layer);
-  let _wLastZ = -1, _wTimer = null;
-  layer._update = function() {
-    const z = map.getZoom ? map.getZoom() : -1;
-    if (z !== _wLastZ) {
-      _wLastZ = z;
-      clearTimeout(_wTimer);
-      _wTimer = setTimeout(_wOrig, 200);
-    } else {
-      clearTimeout(_wTimer);
-      _wOrig();
-    }
-  };
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  layer.on('loading', () => { _wTileGen++; });
   return layer;
 }
 
