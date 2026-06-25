@@ -2231,6 +2231,35 @@ select:focus { outline:none; border-color:#3b82f6; }
 .ddb.undo    { background:#150d2e; color:#a78bfa; }
 .ddb.finish  { background:#052e16; color:#4ade80; }
 .ddb.cancel  { background:#2d0a0a; color:#f87171; flex:0 0 auto; }
+/* KML Sel Banner */
+#doz-kmlsel-banner {
+  position:fixed; bottom:0; left:0; right:0;
+  display:none; flex-direction:column;
+  background:rgba(5,20,40,0.98);
+  border-top:2px solid #f59e0b;
+  z-index:1700; font-family:inherit;
+  box-shadow:0 -4px 24px rgba(0,0,0,0.6);
+}
+#doz-kmlsel-row1 {
+  display:flex; align-items:center; gap:8px; padding:7px 14px 5px;
+  border-bottom:1px solid rgba(245,158,11,0.15);
+}
+#doz-kmlsel-label { font-size:13px; font-weight:700; color:#f59e0b; }
+#doz-kmlsel-info  { font-size:11px; color:#94a3b8; margin-left:auto; }
+#doz-kmlsel-row2 {
+  display:flex; align-items:stretch; min-height:52px;
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+}
+.dks { border:none; cursor:pointer; font-size:12px; font-weight:700;
+  padding:10px 6px; flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:3px;
+  border-right:1px solid rgba(245,158,11,0.08); white-space:nowrap; }
+.dks:last-child { border-right:none; }
+.dks:active { filter:brightness(1.3); transform:scale(0.95); }
+.dks .dks-ico { font-size:18px; line-height:1; }
+.dks .dks-lbl { font-size:10px; letter-spacing:0.2px; }
+.dks.confirm { background:#052e16; color:#4ade80; }
+.dks.cancel  { background:#2d0a0a; color:#f87171; flex:0 0 auto; }
 /* Create Odjel Modal */
 #doz-create-modal {
   position:fixed; inset:0; background:rgba(0,0,0,0.75);
@@ -14727,6 +14756,10 @@ function _parseKmlExtData(pm) {
 function _bindKmlPopup(layer) {
   layer.on('click', function(e) {
     L.DomEvent.stopPropagation(e);
+    if (_dozKmlSelMode && layer._kmlIsPolygon) {
+      _dozKmlSelToggle(layer);
+      return;
+    }
     const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
     layer._kmlPopupId = uid;
     const popup = L.popup({ maxWidth: 300, minWidth: 200, className: 'kml-info-popup' })
@@ -22971,6 +23004,10 @@ let _dozCreateBoundary = null; // GeoJSON Polygon/MultiPolygon
 let _dozCreateAreaHa   = null;
 let _dozNewOdjelDrawGj    = '';
 let _dozNewOdjelDrawOdjel = '';
+let _dozKmlSelMode     = false;
+let _dozKmlSelLayers   = [];
+let _dozKmlSelSavedGj    = '';
+let _dozKmlSelSavedOdjel = '';
 let _dozTracksLayer   = null;
 let _dozMarkingsLayer = null;
 let _dozMarkingLayerById = {};
@@ -24595,6 +24632,126 @@ function dozStartNewBoundaryDraw() {
   }, 50);
 }
 
+function dozStartKmlSel() {
+  if (!_dozCreateOdjel) { document.getElementById('doz-create-error').textContent = 'Unesi odjel prvo'; return; }
+  if (!kmlLs || !kmlLs.length) { showToast('⚠ Nema učitanih KML slojeva'); return; }
+  const hasPolygons = kmlLs.some(k => {
+    let found = false;
+    k.grp.eachLayer(l => { if (l._kmlIsPolygon) found = true; });
+    return found;
+  });
+  if (!hasPolygons) { showToast('⚠ Nema KML poligona na mapi'); return; }
+  _dozKmlSelSavedGj    = _dozCreateGj;
+  _dozKmlSelSavedOdjel = _dozCreateOdjel;
+  _dozKmlSelMode       = true;
+  _dozKmlSelLayers     = [];
+  dozCloseCreateOdjel();
+  switchTab('karta');
+  setTimeout(() => {
+    document.getElementById('doz-kmlsel-banner').style.display = 'flex';
+    document.getElementById('doz-kmlsel-label').textContent = `📌 Odjel ${_dozKmlSelSavedOdjel} — izaberi poligone`;
+    _dozKmlSelUpdateInfo();
+    document.getElementById('action-bar').style.display = 'none';
+    document.getElementById('tab-bar').style.display = 'none';
+    map.invalidateSize();
+    showToast('Klikni na KML poligone za odabir površine');
+  }, 50);
+}
+
+function dozCancelKmlSel() {
+  _dozKmlSelMode = false;
+  _dozKmlSelLayers.forEach(l => { try { l.setStyle(l._kmlOrigStyle || {}); } catch(e){} });
+  _dozKmlSelLayers = [];
+  document.getElementById('doz-kmlsel-banner').style.display = 'none';
+  document.getElementById('action-bar').style.display = '';
+  document.getElementById('tab-bar').style.display = '';
+  map.invalidateSize();
+  _dozNewOdjelDrawGj    = _dozKmlSelSavedGj;
+  _dozNewOdjelDrawOdjel = _dozKmlSelSavedOdjel;
+  dozShowCreateOdjel(true);
+}
+
+function _dozKmlSelToggle(layer) {
+  const idx = _dozKmlSelLayers.indexOf(layer);
+  if (idx >= 0) {
+    _dozKmlSelLayers.splice(idx, 1);
+    try { layer.setStyle(layer._kmlOrigStyle || { fillOpacity: 0.2, weight: 1 }); } catch(e) {}
+  } else {
+    if (!layer._kmlOrigStyle) {
+      layer._kmlOrigStyle = {
+        color:       layer.options.color       || '#3388ff',
+        fillColor:   layer.options.fillColor   || '#3388ff',
+        fillOpacity: layer.options.fillOpacity ?? 0.2,
+        weight:      layer.options.weight      || 1,
+        opacity:     layer.options.opacity     ?? 1
+      };
+    }
+    layer.setStyle({ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.4, weight: 3 });
+    _dozKmlSelLayers.push(layer);
+  }
+  _dozKmlSelUpdateInfo();
+}
+
+function _dozKmlSelUpdateInfo() {
+  const n = _dozKmlSelLayers.length;
+  let ha = 0;
+  if (n > 0 && typeof turf !== 'undefined') {
+    _dozKmlSelLayers.forEach(l => {
+      try {
+        const gj = _dozKmlLayerToGeoJSON(l);
+        if (gj) ha += turf.area(gj) / 10000;
+      } catch(e) {}
+    });
+  }
+  document.getElementById('doz-kmlsel-info').textContent = `${n} poligon${n===1?'':'a'} · ${ha.toFixed(1)} ha`;
+}
+
+function _dozKmlLayerToGeoJSON(layer) {
+  if (typeof layer.toGeoJSON === 'function') return layer.toGeoJSON();
+  if (layer.getLatLngs) {
+    const rings = layer.getLatLngs();
+    const toCoords = ring => (Array.isArray(ring[0]) ? ring : [ring]).map(r =>
+      (Array.isArray(r) ? r : [r]).map(p => [p.lng ?? p[1], p.lat ?? p[0]])
+    );
+    const coords = toCoords(rings);
+    return { type: 'Feature', geometry: { type: 'Polygon', coordinates: coords } };
+  }
+  return null;
+}
+
+function dozConfirmKmlSel() {
+  if (!_dozKmlSelLayers.length) { showToast('⚠ Nijedan poligon nije izabran'); return; }
+  let merged = null;
+  let totalHa = 0;
+  if (typeof turf !== 'undefined') {
+    try {
+      const features = _dozKmlSelLayers.map(l => {
+        const gj = _dozKmlLayerToGeoJSON(l);
+        return gj && gj.type === 'Feature' ? gj : turf.feature(gj);
+      }).filter(Boolean);
+      merged = features.length === 1 ? features[0] : features.reduce((acc, f) => turf.union(acc, f));
+      totalHa = turf.area(merged) / 10000;
+    } catch(e) {
+      showToast('Greška pri spajanju poligona: ' + e.message); return;
+    }
+  } else {
+    const gj = _dozKmlLayerToGeoJSON(_dozKmlSelLayers[0]);
+    merged = gj; totalHa = 0;
+  }
+  _dozCreateBoundary = merged && merged.geometry ? merged.geometry : merged;
+  _dozCreateAreaHa   = totalHa;
+  _dozKmlSelMode = false;
+  _dozKmlSelLayers.forEach(l => { try { l.setStyle(l._kmlOrigStyle || {}); } catch(e){} });
+  _dozKmlSelLayers = [];
+  document.getElementById('doz-kmlsel-banner').style.display = 'none';
+  document.getElementById('action-bar').style.display = '';
+  document.getElementById('tab-bar').style.display = '';
+  map.invalidateSize();
+  _dozNewOdjelDrawGj    = _dozKmlSelSavedGj;
+  _dozNewOdjelDrawOdjel = _dozKmlSelSavedOdjel;
+  dozShowCreateOdjel(true);
+}
+
 function dozToggleDrawMode() {
   _dozDrawEnabled = !_dozDrawEnabled;
   const btn = document.getElementById('doz-draw-toggle');
@@ -25862,6 +26019,22 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 
+<!-- ═══ DOZNAKA — KML SEL BANNER (bottom bar) ═══ -->
+<div id="doz-kmlsel-banner">
+  <div id="doz-kmlsel-row1">
+    <span id="doz-kmlsel-label">📌 Izaberi KML poligone</span>
+    <span id="doz-kmlsel-info">0 poligona · 0.0 ha</span>
+  </div>
+  <div id="doz-kmlsel-row2">
+    <button class="dks confirm" onclick="dozConfirmKmlSel()">
+      <span class="dks-ico">✓</span><span class="dks-lbl">Potvrdi</span>
+    </button>
+    <button class="dks cancel" onclick="dozCancelKmlSel()">
+      <span class="dks-ico">✕</span><span class="dks-lbl">Odustani</span>
+    </button>
+  </div>
+</div>
+
 <!-- ═══ DOZNAKA — CREATE ODJEL MODAL ═══ -->
 <div id="doz-create-modal" onclick="if(event.target===this)dozCloseCreateOdjel()">
   <div id="doz-create-box">
@@ -25886,6 +26059,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <div id="doz-create-no-poly" style="display:none;margin-top:10px;background:#2d1a00;border:1px solid #92400e;border-radius:8px;padding:9px 11px;">
       <div style="font-size:12px;color:#fbbf24;margin-bottom:7px;">⚠ Odabrani odjel nema granicu u GeoJSON fajlu.<br>Učitaj GeoJSON ili ucrtaj granicu ručno na mapi.</div>
       <button class="btn" style="background:#1e3a5f;border:1px solid #38bdf8;color:#38bdf8;font-size:12px;padding:7px 12px;margin:0;" onclick="dozStartNewBoundaryDraw()">✏ Ucrtaj granicu na mapi</button>
+      <button class="btn" style="background:#3b2500;border:1px solid #f59e0b;color:#f59e0b;font-size:12px;padding:7px 12px;margin:4px 0 0 0;" onclick="dozStartKmlSel()">📌 Izaberi KML poligon(e)</button>
     </div>
 
     <!-- Potvrda — granica OK -->
