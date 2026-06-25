@@ -4002,7 +4002,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.6.0';
+const APP_VER = 'v2.6.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21858,13 +21858,33 @@ async function _loadOdsjeciSQLite() {
     // Parsiraj redosljed kolona iz CREATE TABLE
     const colNames = (colSql.match(/\(([^)]+)\)/)?.[1] || '')
       .split(',').map(c => c.trim().split(/\s+/)[0].toLowerCase().replace(/["'`]/g,''));
-    // INTEGER PRIMARY KEY je rowid alias — NE čuva se u record payload-u, preskočiti u indeksima
-    const isRowidAlias = /INTEGER\s+PRIMARY\s+KEY/i.test(colSql.split(',')[0] || '');
-    const colOffset = isRowidAlias ? 1 : 0;
+
+    // ROBUSTNA detekcija offseta: pročitaj PRVI red i nađi geom kolonu po
+    // SpatiaLite potpisu (byte[0]=0x00, byte[38]=0x7C). Iz nje izvedi offset
+    // između deklarisanih kolona (CREATE TABLE) i stvarnih u payload-u.
+    // Tako radi bez obzira da li je rowid-alias (id) kolona prisutna kao null
+    // ili izostavljena — što je ranije uzrokovalo "0 poligona".
+    const _isWkbBlob = v => v && (v instanceof Uint8Array || v.buffer) &&
+      v.length >= 44 && v[0] === 0x00 && v[38] === 0x7C;
+    // Skeniraj prvih nekoliko redova dok ne nađemo onaj s validnim geom blob-om
+    // (prvi red može imati null geometriju → tad detekcija mora ići dalje).
+    let geomActualIdx = -1, _probed = 0;
+    try {
+      await mini._scanLeaves(odsjeciRoot, (rid, r) => {
+        for (let j = 0; j < r.length; j++) { if (_isWkbBlob(r[j])) { geomActualIdx = j; throw new Error('stop'); } }
+        if (++_probed >= 50) throw new Error('stop');
+      });
+    } catch(e) { if (e?.message !== 'stop') throw e; }
+    if (geomActualIdx < 0) { showToast('⚠ Odsjeci: nije nađena geometrijska kolona u bazi'); return; }
+
+    const declaredGeom = colNames.indexOf('geom');
+    const colOffset = (geomActualIdx >= 0 && declaredGeom >= 0) ? (declaredGeom - geomActualIdx) : 0;
     const ci = n => { const i = colNames.indexOf(n); return i >= 0 ? i - colOffset : -1; };
+    const iGeom = geomActualIdx >= 0 ? geomActualIdx : (ci('geom') >= 0 ? ci('geom') : 5);
     const iGj=ci('gj')>=0?ci('gj'):0, iOdj=ci('odjel')>=0?ci('odjel'):1,
           iOdsk=ci('odsjek')>=0?ci('odsjek'):2, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):3,
-          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):4, iGeom=ci('geom')>=0?ci('geom'):5;
+          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):4;
+    console.log('Odsjeci kolone:', { colNames, geomActualIdx, declaredGeom, colOffset, iGj, iOdj, iOdsk, iGaz, iPov, iGeom });
 
     // 3. Skeniraj sve redove, kreiraj Leaflet poligone (grupirano po GJ)
     if (_odsjeciLayerGrp) { try { map.removeLayer(_odsjeciLayerGrp); } catch {} }
