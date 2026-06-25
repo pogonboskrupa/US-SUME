@@ -16666,7 +16666,7 @@ function fmtDate(s) {
     const d = new Date(String(s).length <= 10 ? s + 'T12:00:00' : s);
     const dd = String(d.getDate()).padStart(2,'0');
     const mm = String(d.getMonth()+1).padStart(2,'0');
-    const dan = d.toLocaleDateString('bs-BA', {weekday:'short'});
+    const dan = ['ned','pon','uto','sri','čet','pet','sub'][d.getDay()];
     return `${dd}.${mm}.${d.getFullYear()} - ${dan}`;
   } catch { return String(s); }
 }
