@@ -4026,7 +4026,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.7.0';
+const APP_VER = 'v2.8.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4129,6 +4129,20 @@ const _OL = {
           o.payload.korisnik_id === op.payload.korisnik_id);
         if (idx >= 0) q.splice(idx, 1);
       }
+      // Deduplicate upsert_trag — čuvaj samo zadnju verziju po (nm, korisnik, id)
+      if (op.type === 'upsert_trag') {
+        const idx = q.findIndex(o => o.type === 'upsert_trag' &&
+          o.payload.nm === op.payload.nm &&
+          o.payload.korisnik_id === op.payload.korisnik_id &&
+          (o.payload.id ?? null) === (op.payload.id ?? null));
+        if (idx >= 0) q.splice(idx, 1);
+      }
+      // Deduplicate upsert_labels — uvijek samo zadnji set oznaka za korisnika
+      if (op.type === 'upsert_labels') {
+        const idx = q.findIndex(o => o.type === 'upsert_labels' &&
+          o.payload?.[0]?.korisnik_id === op.payload?.[0]?.korisnik_id);
+        if (idx >= 0) q.splice(idx, 1);
+      }
       q.push({ ...op, ts: Date.now() });
       if (q.length > 500) { q.splice(0, q.length - 500); showToast('⚠ Offline red prepun — najstarije operacije odbačene'); }
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
@@ -4190,12 +4204,16 @@ function _updSyncBadge() {
 }
 
 const _OP_LABELS = {
-  upsert_vlaka:    '↑ Snimaj vlaku',
-  delete_vlaka:    '✕ Briši vlaku',
-  upsert_log:      '↑ Dnevni log',
-  insert_projekt:  '+ Novi projekat',
-  upsert_odjel:    '↑ Odjel',
+  upsert_vlaka:       '↑ Snimaj vlaku',
+  delete_vlaka:       '✕ Briši vlaku',
+  upsert_log:         '↑ Dnevni log',
+  insert_projekt:     '+ Novi projekat',
+  upsert_odjel:       '↑ Odjel',
   insert_doz_marking: '+ Doznaka oznaka',
+  delete_doz_marking: '✕ Briši doznaka oznaku',
+  upsert_trag:        '↑ Snimaj trag',
+  delete_trag:        '✕ Briši trag',
+  upsert_labels:      '↑ Tekstualne oznake',
 };
 
 function openSyncQueuePanel() {
@@ -4271,7 +4289,7 @@ function _fmtAgo(ts) {
 window.addEventListener('online', () => {
   _setOfflineMode(false);
   showToast('🌐 Veza uspostavljena — sinkroniziram...');
-  _processOfflineQueue();
+  setTimeout(() => _processOfflineQueue(), 1000);
 });
 window.addEventListener('offline', () => {
   _setOfflineMode(true);
@@ -4365,6 +4383,38 @@ async function _processOfflineQueue() {
           _OL.save(_OL.PROJEKTI, _projekti);
           _updVlakeMapVisibility();
           rndProjektiList();
+        }
+      } else if (op.type === 'upsert_trag') {
+        if (op.payload.id) {
+          const { id, ...upd } = op.payload;
+          const { error } = await sb.from('tragovi').update(upd).eq('id', id);
+          err = error;
+        } else {
+          const { data, error } = await sb.from('tragovi').insert(op.payload).select('id').single();
+          err = error;
+          if (!err && data) {
+            const tr = _tragRegistry.find(t => t.nm === op.payload.nm && !t.sbId);
+            if (tr) { tr.sbId = data.id; _tragRegSave(); }
+          }
+        }
+      } else if (op.type === 'delete_trag') {
+        const { error } = await sb.from('tragovi').delete().eq('id', op.payload.id);
+        err = error;
+      } else if (op.type === 'delete_doz_marking') {
+        const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', op.payload.id);
+        err = error;
+      } else if (op.type === 'upsert_labels') {
+        if (Array.isArray(op.payload) && op.payload.length > 0) {
+          const uid = op.payload[0].korisnik_id;
+          await sb.from('text_labels').delete().eq('korisnik_id', uid);
+          const { error } = await sb.from('text_labels').insert(op.payload);
+          err = error;
+        } else {
+          // Empty labels — just delete all for this user
+          if (op.payload?.[0]?.korisnik_id) {
+            const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.payload[0].korisnik_id);
+            err = error;
+          }
         }
       }
       if (!err) { _OL.removeFromQueue(op.ts); synced++; }
@@ -4601,6 +4651,10 @@ function showApp() {
   setTimeout(() => {
     geojsonOdjeliRestore();
     _tragRegLoad();
+    // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
+    if (navigator.onLine && sbUser && sbProfile) {
+      (_tragRegistry || []).filter(t => !t.sbId && t.pts?.length).forEach(t => sbFlushTrag(t));
+    }
     _msrRegLoad();
     _refRepoLoad();
     _restoreTacke();
@@ -6434,6 +6488,48 @@ async function sbDeleteVlaka(v) {
   }
 }
 
+// ─── TRAGOVI SERVER SYNC ───────────────────────────────────────────────────────
+
+async function sbFlushTrag(t) {
+  if (!sbUser || !sbProfile || !t?.pts?.length) return;
+  _tragRegSave();
+  const kmVal = (t.pts.length > 1)
+    ? Math.round(_tragCalcLen(t.pts)) / 1000
+    : 0;
+  const payload = {
+    korisnik_id: sbUser.id,
+    sumarija: sbProfile.sumarija || '',
+    nm: t.name,
+    pts: t.pts,
+    datum: (t.date || new Date().toISOString()).slice(0, 10),
+    km: kmVal,
+    boja: t.color || '#f97316',
+    updated_at: new Date().toISOString()
+  };
+  try {
+    if (t.sbId) {
+      const { error } = await sb.from('tragovi').update(payload).eq('id', t.sbId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await sb.from('tragovi').insert(payload).select('id').single();
+      if (error) throw error;
+      if (data) { t.sbId = data.id; _tragRegSave(); }
+    }
+  } catch(e) {
+    _OL.enqueue({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload });
+  }
+}
+
+async function sbDeleteTrag(t) {
+  if (!t?.sbId || !sbUser) return;
+  try {
+    const { error } = await sb.from('tragovi').delete().eq('id', t.sbId);
+    if (error) throw error;
+  } catch(e) {
+    _OL.enqueue({ type: 'delete_trag', payload: { id: t.sbId } });
+  }
+}
+
 // ─── LABEL HELPERS (potrebni i za sbLoadKolegeVlake i za updateVlakaLabel) ────
 function ptDist(a, b) {
   const dx = (b.lo - a.lo) * 111320 * Math.cos((a.la + b.la) / 2 * Math.PI / 180);
@@ -6795,9 +6891,12 @@ async function sbSaveTextLabels() {
     await sb.from('text_labels').delete().eq('korisnik_id', sbUser.id);
     if (rows.length > 0) {
       const { error } = await sb.from('text_labels').insert(rows);
-      if (error) console.error('Greška text labels:', error);
+      if (error) throw error;
     }
-  } catch(e) {} // offline — lokalni keš je pohranjen gore
+  } catch(e) {
+    // offline ili greška — stavi u red za sync pri ponovnom signalu
+    _OL.enqueue({ type: 'upsert_labels', payload: rows });
+  }
 }
 
 // ─── TAČKE (GPS oznake na mapi) ──────────────────────────────────────────────
@@ -10824,11 +10923,14 @@ window.addEventListener('pagehide', () => {
 });
 
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
-setInterval(() => {
-  if (navigator.onLine && sbUser && sbProfile) {
-    const q = _OL.loadQueue();
-    if (q.length) _processOfflineQueue();
-  }
+setInterval(async () => {
+  if (!navigator.onLine || !sbUser || !sbProfile) return;
+  // Osvježi Supabase token da ne istekne nakon dugog offlinea
+  try { await sb.auth.getSession(); } catch(e) {}
+  const q = _OL.loadQueue();
+  if (q.length) _processOfflineQueue();
+  // Flush tragova bez sbId koji su dodani dok smo bili offline
+  (_tragRegistry || []).filter(t => !t.sbId && t.pts?.length).forEach(t => sbFlushTrag(t));
 }, 60000);
 
 function _updWakeLockIcon() {
@@ -12137,12 +12239,14 @@ function _tragRegAdd(pts) {
     date: new Date().toISOString(),
     name: 'Trag ' + new Date().toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
     gj: aktP?.gj || '',
-    odjel: aktP?.odjel || ''
+    odjel: aktP?.odjel || '',
+    sbId: null
   };
   _tragRegistry.unshift(t);
   _tragRegAddLayer(t);
   _tragRegSave();
   _tragRegRender();
+  sbFlushTrag(t);
   return t;
 }
 
@@ -12290,6 +12394,7 @@ function _tragRegToggle(id) {
 function _tragRegDelete(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
+  sbDeleteTrag(t);
   const line = _tragLayers[id];
   if (line) { try { map.removeLayer(line); } catch(e) {} delete _tragLayers[id]; }
   _tragRegistry = _tragRegistry.filter(x => x.id !== id);
@@ -24204,7 +24309,10 @@ async function dozDeleteMarking(id) {
     showToast('🗑 Zona obrisana');
     await dozLoadLayers(_dozSelId);
     dozRenderDetail();
-  } catch(e) { showToast('Greška: ' + e.message); }
+  } catch(e) {
+    _OL.enqueue({ type: 'delete_doz_marking', payload: { id } });
+    showToast('📴 Offline — brisanje čeka sinkronizaciju');
+  }
 }
 
 // ─── Delete Odjel ──────────────────────────────────────────────────
