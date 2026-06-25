@@ -2975,6 +2975,7 @@ select:focus { outline:none; border-color:#3b82f6; }
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')">👥 Korisnici</button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')">🧭 Teren</button>
     <span id="offline-badge" style="display:none;background:#dc2626;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;">📴 OFFLINE</span>
+    <span id="sync-badge" onclick="openSyncQueuePanel()" style="display:none;background:#f59e0b;color:#000;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:4px;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;" title="Pending operacije čekaju sync">⟳ <span id="sync-badge-cnt">0</span></span>
   </div>
 
   <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
@@ -4083,6 +4084,7 @@ const _OL = {
       q.push({ ...op, ts: Date.now() });
       if (q.length > 500) { q.splice(0, q.length - 500); showToast('⚠ Offline red prepun — najstarije operacije odbačene'); }
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
+      if (typeof _updSyncBadge === 'function') _updSyncBadge();
     } catch(e) { if (e?.name === 'QuotaExceededError') showToast('⚠ Lokalna memorija puna — offline operacija nije sačuvana'); }
   },
 
@@ -4123,6 +4125,99 @@ function _setOfflineMode(offline) {
   _isOfflineMode = offline;
   const el = document.getElementById('offline-badge');
   if (el) el.style.display = offline ? 'inline-block' : 'none';
+}
+
+function _updSyncBadge() {
+  const q   = _OL.loadQueue();
+  const cnt = q.length;
+  const badge = document.getElementById('sync-badge');
+  const cntEl = document.getElementById('sync-badge-cnt');
+  if (!badge) return;
+  if (cnt > 0) {
+    badge.style.display = 'inline-block';
+    if (cntEl) cntEl.textContent = cnt;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+const _OP_LABELS = {
+  upsert_vlaka:    '↑ Snimaj vlaku',
+  delete_vlaka:    '✕ Briši vlaku',
+  upsert_log:      '↑ Dnevni log',
+  insert_projekt:  '+ Novi projekat',
+  upsert_odjel:    '↑ Odjel',
+  insert_doz_marking: '+ Doznaka oznaka',
+};
+
+function openSyncQueuePanel() {
+  const q    = _OL.loadQueue();
+  const list = document.getElementById('syncq-list');
+  const bg   = document.getElementById('syncq-bg');
+  const pan  = document.getElementById('syncq-panel');
+  if (!list || !pan) return;
+
+  if (!q.length) {
+    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:#475569;font-size:13px;">Nema pending operacija — sve je sinkronizirano ✓</div>';
+  } else {
+    list.innerHTML = q.map((op, i) => {
+      const lbl   = _OP_LABELS[op.type] || op.type;
+      const nm    = op.payload?.nm || op.payload?.datum || op.payload?.naziv || '';
+      const ret   = op._retries ? `<span style="color:#f87171;font-size:10px"> (${op._retries} pokušaja)</span>` : '';
+      const age   = op.ts ? _fmtAgo(op.ts) : '';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1e293b;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">${lbl}${ret}</div>
+          ${nm ? `<div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(String(nm))}</div>` : ''}
+          ${age ? `<div style="font-size:10px;color:#475569">${age}</div>` : ''}
+        </div>
+        <button onclick="_syncQueueDiscard(${op.ts})"
+          style="border:none;background:none;color:#64748b;font-size:16px;cursor:pointer;flex-shrink:0;padding:4px 6px;"
+          title="Odbaci operaciju">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  if (bg)  bg.style.display  = 'block';
+  pan.style.display = 'flex';
+}
+
+function closeSyncQueuePanel() {
+  const bg  = document.getElementById('syncq-bg');
+  const pan = document.getElementById('syncq-panel');
+  if (bg)  bg.style.display  = 'none';
+  if (pan) pan.style.display = 'none';
+}
+
+function _syncQueueDiscard(ts) {
+  _OL.removeFromQueue(ts);
+  _updSyncBadge();
+  openSyncQueuePanel(); // re-render
+}
+
+function _syncQueueClearAll() {
+  if (!confirm('Obrisati sve pending operacije? Ovo trajno briše nesinkronizirane izmjene.')) return;
+  try { localStorage.setItem(_OL.QUEUE, JSON.stringify([])); } catch {}
+  _updSyncBadge();
+  openSyncQueuePanel();
+}
+
+function _syncQueueFlushNow() {
+  closeSyncQueuePanel();
+  if (navigator.onLine) {
+    showToast('↑ Pokušavam sync...');
+    _processOfflineQueue().then(_updSyncBadge).catch(() => showToast('❌ Sync nije uspio — provjeri vezu'));
+  } else {
+    showToast('📴 Offline — sync nije moguć');
+  }
+}
+
+function _fmtAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'Maloprijed';
+  if (s < 3600) return `Prije ${Math.floor(s/60)} min`;
+  if (s < 86400) return `Prije ${Math.floor(s/3600)} h`;
+  return `Prije ${Math.floor(s/86400)} d`;
 }
 
 window.addEventListener('online', () => {
@@ -4283,6 +4378,7 @@ async function _processOfflineQueue() {
     }
   } catch {}
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
+  if (typeof _updSyncBadge === 'function') _updSyncBadge();
 }
 
 function _showAuthScreen() {
@@ -4783,6 +4879,7 @@ async function sbInitData() {
   dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
   autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
   if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
+  _updSyncBadge();               // prikaži badge ako ima pending ops iz prošle sesije
   setTimeout(_crashCheck, 1500); // provjeri nedovršena snimanja (odgodi da se mapa inicijalizira)
 }
 
@@ -25902,6 +25999,21 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="oz-sec-cnt" id="oz-cnt-bucket">0</span>
   </div>
   <div class="oz-sec-body" id="oz-sec-bucket"></div>
+</div>
+
+<!-- Sync queue viewer panel -->
+<div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
+<div id="syncq-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:70vh;background:#0f172a;border-top:1px solid #334155;border-radius:16px 16px 0 0;z-index:4000;flex-direction:column;overflow:hidden;">
+  <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #1e293b;flex-shrink:0;">
+    <span style="font-size:15px;font-weight:700;color:#e2e8f0;flex:1">⟳ Pending sync operacije</span>
+    <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0">✕</button>
+  </div>
+  <div id="syncq-list" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
+  <div style="padding:12px 16px;border-top:1px solid #1e293b;display:flex;gap:8px;flex-shrink:0;">
+    <button onclick="openSyncQueuePanel()" style="flex:1;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;cursor:pointer;">↺ Osvježi</button>
+    <button onclick="_syncQueueFlushNow()" style="flex:1;padding:9px;border-radius:8px;border:1px solid rgba(59,130,246,.4);background:rgba(59,130,246,.12);color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;">▶ Sync sada</button>
+    <button onclick="_syncQueueClearAll()" style="padding:9px 14px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:13px;cursor:pointer;">🗑 Obriši sve</button>
+  </div>
 </div>
 
 <!-- Share foto — odabir kolega -->
