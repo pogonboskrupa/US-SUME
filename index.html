@@ -15283,6 +15283,7 @@ function _renderKmlEditor(i) {
     </div>` : '';
 
   return `<div class="oz-kml-editor" onclick="event.stopPropagation()">
+    ${k._isSqliteVector ? _odsjeciPanelHtml() : ''}
     <div class="oz-ed-field">
       <div class="oz-ed-label">Ime</div>
       <input class="oz-ed-input" type="text" value="${_escHtml(k.name)}"
@@ -21652,6 +21653,10 @@ function geojsonOdjeliRestore() {
 const _ODSJECI_SQLITE_URL = SUPA_URL + '/storage/v1/object/public/SQLITE%20VECTOR/UNSKO_odsjeci.sqlite';
 const _ODSJECI_IDB_KEY    = 'tvlake_odsjeci_sqlite_v1';
 let   _odsjeciLayerGrp    = null;
+let   _odsjeciFeatures    = [];   // [{gj,odjel,odsjek,gaz,povrHa,bounds}] — jedna stavka po SQLite redu
+let   _odsjeciByGj        = {};   // gj string → L.layerGroup (za toggle po GJ)
+let   _odsjeciGjVisible   = {};   // gj string → boolean
+let   _odsjeciSearchQ     = '';   // aktivni query u filter panelu
 
 // Boje po GJ
 const _GJ_COLORS = {
@@ -21740,9 +21745,12 @@ async function _loadOdsjeciSQLite() {
           iOdsk=ci('odsjek')>=0?ci('odsjek'):2, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):3,
           iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):4, iGeom=ci('geom')>=0?ci('geom'):5;
 
-    // 3. Skeniraj sve redove, kreiraj Leaflet poligone
+    // 3. Skeniraj sve redove, kreiraj Leaflet poligone (grupirano po GJ)
     if (_odsjeciLayerGrp) { try { map.removeLayer(_odsjeciLayerGrp); } catch {} }
     _odsjeciLayerGrp = L.layerGroup();
+    _odsjeciFeatures  = [];
+    _odsjeciByGj      = {};
+    _odsjeciGjVisible = {};
     let cnt = 0;
 
     await mini._scanLeaves(odsjeciRoot, (rid, row) => {
@@ -21753,6 +21761,13 @@ async function _loadOdsjeciSQLite() {
       const polys = _parseSpatialiteWkb(blob);
       if (!polys?.length) return;
 
+      // Osiguraj GJ sub-grupu
+      if (!_odsjeciByGj[gj]) {
+        _odsjeciByGj[gj] = L.layerGroup();
+        _odsjeciGjVisible[gj] = true;
+        _odsjeciLayerGrp.addLayer(_odsjeciByGj[gj]);
+      }
+
       const col = _gjColor(gj);
       const popupHtml = `<div style="font-size:13px;line-height:1.8">
         <b style="font-size:15px;color:#e2e8f0">${odjel}/${odsjek}</b><br>
@@ -21761,6 +21776,7 @@ async function _loadOdsjeciSQLite() {
         Površina: <b>${povrHa} ha</b>
       </div>`;
 
+      let featureBounds = null;
       for (const rings of polys) {
         if (!rings[0]?.length) continue;
         const poly = L.polygon(rings, {
@@ -21769,15 +21785,21 @@ async function _loadOdsjeciSQLite() {
           interactive: true
         });
         poly.bindPopup(popupHtml, { maxWidth: 220 });
-        _odsjeciLayerGrp.addLayer(poly);
+        _odsjeciByGj[gj].addLayer(poly);
+        try {
+          const b = poly.getBounds();
+          if (b.isValid()) featureBounds = featureBounds ? featureBounds.extend(b) : L.latLngBounds(b.getSouthWest(), b.getNorthEast());
+        } catch {}
+        cnt++;
+      }
 
-        // Integriraj u graniceOdjeli (za zoom/search)
+      if (featureBounds) {
+        _odsjeciFeatures.push({ gj, odjel: String(odjel), odsjek: String(odsjek), gaz, povrHa, bounds: featureBounds });
+        // Integriraj u graniceOdjeli (za globalni zoom/search)
         const nm = odjel + (odsjek ? '/' + odsjek : '');
         if (!graniceOdjeli.find(o => o.name === nm && o._gjSql === gj)) {
-          try { const b = poly.getBounds(); if (b.isValid()) graniceOdjeli.push({ name: nm, _gjSql: gj, bounds: b }); }
-          catch {}
+          graniceOdjeli.push({ name: nm, _gjSql: gj, bounds: featureBounds });
         }
-        cnt++;
       }
     });
 
@@ -21810,6 +21832,97 @@ async function _loadOdsjeciSQLite() {
     console.error('_loadOdsjeciSQLite:', e);
     showToast('❌ Greška pri učitavanju odsjeci: ' + e.message);
   }
+}
+
+// ── Odsjeci filter / search helpers ──────────────────────────────────────────
+
+function _odsjeciTogGj(gj) {
+  _odsjeciGjVisible[gj] = !_odsjeciGjVisible[gj];
+  const grp = _odsjeciByGj[gj];
+  if (grp) {
+    if (_odsjeciGjVisible[gj]) _odsjeciLayerGrp.addLayer(grp);
+    else _odsjeciLayerGrp.removeLayer(grp);
+  }
+  _rndOznakePanel();
+}
+
+function _odsjeciZoom(idx) {
+  const f = _odsjeciFeatures[idx];
+  if (!f?.bounds) return;
+  // Osiguraj vidljivost GJ podgrupe
+  if (_odsjeciByGj[f.gj] && !_odsjeciGjVisible[f.gj]) {
+    _odsjeciGjVisible[f.gj] = true;
+    _odsjeciLayerGrp.addLayer(_odsjeciByGj[f.gj]);
+  }
+  // Osiguraj da je cijeli sloj vidljiv na mapi
+  const kIdx = kmlLs.findIndex(k => k._isSqliteVector);
+  if (kIdx >= 0 && !kmlLs[kIdx].vis) { kmlLs[kIdx].vis = true; _odsjeciLayerGrp.addTo(map); }
+  map.fitBounds(f.bounds, { padding: [30, 30] });
+  _rndOznakePanel();
+}
+
+function _odsjeciDoSearch(q) {
+  _odsjeciSearchQ = q;
+  _rndOznakePanel();
+}
+
+function _odsjeciPanelHtml() {
+  if (!_odsjeciFeatures.length) return '';
+  const gjs = Object.keys(_odsjeciByGj).sort((a, b) => a.localeCompare(b, 'bs'));
+
+  const gjHtml = gjs.map(gj => {
+    const col  = _gjColor(gj);
+    const cnt  = _odsjeciFeatures.filter(f => f.gj === gj).length;
+    const chk  = _odsjeciGjVisible[gj] ? 'checked' : '';
+    const gjE  = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer;border-radius:6px;">
+      <input type="checkbox" ${chk} onchange="event.stopPropagation();_odsjeciTogGj('${gjE}')" style="accent-color:${col}">
+      <span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span>
+      <span style="flex:1;font-size:12px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(gj)}</span>
+      <span style="font-size:11px;color:#475569;flex-shrink:0">${cnt}</span>
+    </label>`;
+  }).join('');
+
+  const q = _odsjeciSearchQ.trim().toLowerCase();
+  let resultsHtml = '';
+  if (q.length >= 1) {
+    const matches = _odsjeciFeatures
+      .map((f, idx) => ({ f, idx }))
+      .filter(({ f }) =>
+        f.odjel.toLowerCase().includes(q) ||
+        f.odsjek.toLowerCase().includes(q) ||
+        f.gj.toLowerCase().includes(q)
+      ).slice(0, 25);
+
+    if (!matches.length) {
+      resultsHtml = `<div style="font-size:12px;color:#475569;padding:6px 2px">Nema rezultata za "${_escHtml(q)}"</div>`;
+    } else {
+      resultsHtml = matches.map(({ f, idx }) => {
+        const col = _gjColor(f.gj);
+        return `<div onclick="event.stopPropagation();_odsjeciZoom(${idx})"
+          style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px;margin-bottom:1px;"
+          onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
+          <span style="width:8px;height:8px;border-radius:1px;background:${col};flex-shrink:0"></span>
+          <span style="flex:1;font-size:12px;color:#e2e8f0"><b>${_escHtml(f.odjel)}/${_escHtml(f.odsjek)}</b></span>
+          <span style="font-size:10px;color:#64748b;flex-shrink:0">${_escHtml(f.povrHa)} ha</span>
+          <span style="font-size:12px;color:#3b82f6;flex-shrink:0">⊕</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  return `<div onclick="event.stopPropagation()" style="padding:2px 0 10px;border-bottom:1px solid #334155;margin-bottom:10px;">
+    <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Gospodarske jedinice</div>
+    ${gjHtml}
+    <div style="margin-top:10px">
+      <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px">Pretraga odjela / odsjeka</div>
+      <input class="oz-ed-input" type="search" placeholder="Npr. 23 ili 23/a ili naziv GJ…"
+        value="${_escHtml(_odsjeciSearchQ)}"
+        oninput="event.stopPropagation();_odsjeciDoSearch(this.value)"
+        style="margin-bottom:4px;">
+      <div style="max-height:160px;overflow-y:auto;">${resultsHtml}</div>
+    </div>
+  </div>`;
 }
 
 // ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
