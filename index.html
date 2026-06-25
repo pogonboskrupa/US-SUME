@@ -12057,7 +12057,8 @@ let _tragPts    = [];
 // ── Registar tragova ────────────────────────────────────────────────────────
 const _TRAG_REG_KEY = 'tvlake_tragovi';
 let _tragRegistry   = [];  // [{id, name, date, pts, color, visible}]
-let _tragLayers     = {};  // id → L.polyline
+let _tragLayers     = {};  // id → L.polyline (vizualni)
+let _tragHitLayers  = {};  // id → L.polyline (nevidljivi, širi, za klik)
 
 const _TRAG_COLORS = ['#f97316','#38bdf8','#4ade80','#a78bfa','#fb7185','#facc15','#e879f9','#34d399'];
 
@@ -12163,15 +12164,19 @@ function _tqmClose() {
 
 function _tragRegAddLayer(t) {
   if (_tragLayers[t.id]) { try { map.removeLayer(_tragLayers[t.id]); } catch(e) {} }
+  if (_tragHitLayers[t.id]) { try { map.removeLayer(_tragHitLayers[t.id]); } catch(e) {} }
   const dashArray = t.dashStyle==='dot' ? '2 6' : (t.dashStyle==='dash' ? '8 4' : null);
-  const line = L.polyline(t.pts.map(p => [p[0], p[1]]), {
-    color: t.color || '#f97316', weight: t.weight || 3, opacity: 0.85, dashArray
+  const lls = t.pts.map(p => [p[0], p[1]]);
+  const line = L.polyline(lls, {
+    color: t.color || '#f97316', weight: t.weight || 3, opacity: 0.85, dashArray, interactive: false
   });
+  const hit = L.polyline(lls, { weight: 24, opacity: 0.001, color: '#000', interactive: true });
   const lenM = _tragCalcLen(t.pts);
   line.bindPopup(() => _tragPopupHtml(t, lenM), { maxWidth: 260 });
-  line.on('click', () => line.openPopup());
-  if (t.visible !== false) line.addTo(map);
+  hit.on('click', e => { L.DomEvent.stopPropagation(e); line.openPopup(e.latlng); });
+  if (t.visible !== false) { line.addTo(map); hit.addTo(map); }
   _tragLayers[t.id] = line;
+  _tragHitLayers[t.id] = hit;
 }
 
 function _tragCalcLen(pts) {
@@ -12381,9 +12386,15 @@ function _tragRegToggle(id) {
   if (!t) return;
   t.visible = t.visible === false ? true : false;
   const line = _tragLayers[id];
+  const hit  = _tragHitLayers[id];
   if (line) {
-    if (t.visible) line.addTo(map); else map.removeLayer(line);
-    // Update popup if open
+    if (t.visible) {
+      line.addTo(map);
+      if (hit) hit.addTo(map);
+    } else {
+      map.removeLayer(line);
+      if (hit) { try { map.removeLayer(hit); } catch(e) {} }
+    }
     line.setPopupContent(_tragPopupHtml(t, _tragCalcLen(t.pts)));
   }
   _tragRegSave();
@@ -12396,6 +12407,8 @@ function _tragRegDelete(id) {
   sbDeleteTrag(t);
   const line = _tragLayers[id];
   if (line) { try { map.removeLayer(line); } catch(e) {} delete _tragLayers[id]; }
+  const hit = _tragHitLayers[id];
+  if (hit) { try { map.removeLayer(hit); } catch(e) {} delete _tragHitLayers[id]; }
   _tragRegistry = _tragRegistry.filter(x => x.id !== id);
   _tragRegSave();
   _tragRegRender();
@@ -13194,18 +13207,36 @@ function _activateVlakaEdit(idx) {
   // Samo selektuj i prikaži u listi — toolbar se otvara samo kroz Nacrtaj vlaku
 }
 
+let _lastVlakaClickTs = 0;
 function attachPolyClick(poly) {
-  poly.on('click', function(e) {
+  // Nevidljivi široki sloj (24px) za lakši klik/tap po cijeloj dužini vlake
+  const hit = L.polyline(poly.getLatLngs(), {
+    weight: 24, opacity: 0.001, color: '#000',
+    pane: poly.options.pane, renderer: poly.options.renderer, interactive: true
+  });
+  // Sinkroniziraj hit s vizualnim polyom kad se latlngs mijenjaju
+  const _syncHit = () => { try { hit.setLatLngs(poly.getLatLngs()); } catch(e) {} };
+  const _origSet = poly.setLatLngs.bind(poly);
+  poly.setLatLngs = function(ll) { const r = _origSet(ll); _syncHit(); return r; };
+  const _origAdd = poly.addLatLng.bind(poly);
+  poly.addLatLng = function(ll) { const r = _origAdd(ll); _syncHit(); return r; };
+  poly.on('add',    () => { try { hit.addTo(map); } catch(e) {} });
+  poly.on('remove', () => { try { map.removeLayer(hit); } catch(e) {} });
+  if (poly._map) { try { hit.addTo(poly._map); } catch(e) {} }
+
+  function _onClick(e) {
+    const now = Date.now();
+    if (now - _lastVlakaClickTs < 150) return;  // spriječi dvostruki okidač
+    _lastVlakaClickTs = now;
     if (recOn) return;
     if (activeTool === 'edit' || activeTool === 'delnode' || activeTool === 'merge') return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv.poly === poly);
-    if (idx >= 0) {
-      selI(idx);
-      showVlakaPopup(idx, e.latlng);
-    }
-  });
+    if (idx >= 0) { selI(idx); showVlakaPopup(idx, e.latlng); }
+  }
+  poly.on('click', _onClick);
+  hit.on('click',  _onClick);
 }
 
 function showVlakaPopup(i, latlng) {
