@@ -76,7 +76,7 @@ window.addEventListener('DOMContentLoaded',function(){
 /* NAPOMENA: ne koristiti `contain:strict/size` na tile-container — kolabira
    GridLayer (MBTiles) na 0x0 pa tile-ovi nestanu. Samo will-change je siguran. */
 .leaflet-tile-container { will-change: transform; }
-.leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: auto; }
+.leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: pixelated; image-rendering: -webkit-optimize-contrast; }
 .leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
@@ -8844,7 +8844,7 @@ const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
 const _tileBmpCache = new Map();
-const _TILE_BMP_MAX = 300;
+const _TILE_BMP_MAX = 500;
 
 function _tileBmpEvict() {
   if (_tileBmpCache.size <= _TILE_BMP_MAX) return;
@@ -8866,6 +8866,7 @@ function makeCachedTileLayer(cacheName) {
       const canvas = document.createElement('canvas');
       canvas.width = sz.x; canvas.height = sz.y;
       const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, sz.x, sz.y);
 
@@ -21242,6 +21243,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
       const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
@@ -21319,7 +21321,7 @@ async function sqlmapRestoreAll() {
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
-const _SQL_TILE_BMP_MAX = 200;
+const _SQL_TILE_BMP_MAX = 400;
 function _sqlTileBmpEvict() {
   if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
   const it = _sqlTileBmpCache.keys();
@@ -21393,6 +21395,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
       const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
