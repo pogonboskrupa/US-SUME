@@ -3471,7 +3471,6 @@ select:focus { outline:none; border-color:#3b82f6; }
         <!-- KARTE I SLOJEVI -->
         <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
           <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🗄 Karte i slojevi</div>
-          <button onclick="showSqlMapModal()" style="width:100%;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">🗄 Učitaj SQLiteDB kartu</button>
           <button onclick="openMapManager()" style="width:100%;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">🗂 Upravljanje offline kartama</button>
           <button onclick="document.getElementById('kf').click()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">📂 Dodaj KML fajl</button>
           <button onclick="openOznakePanel()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">≡ Prikazani slojevi i oznake</button>
@@ -4899,7 +4898,7 @@ async function adminLoadUsers() {
             ${nm}${u.is_admin ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>' : ''}
           </div>
           <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin?'0':'8px'};">
-            ${u.created_at ? new Date(u.created_at).toLocaleDateString('bs-BA') : '—'}
+            ${u.created_at ? fmtDateShort(u.created_at) : '—'}
             ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
           </div>
           ${!u.is_admin ? `
@@ -12237,7 +12236,7 @@ function _tragRegAdd(pts) {
   const t = {
     id, color, pts, visible: true,
     date: new Date().toISOString(),
-    name: 'Trag ' + new Date().toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    name: 'Trag ' + fmtDateShort(new Date().toISOString()),
     gj: aktP?.gj || '',
     odjel: aktP?.odjel || '',
     sbId: null
@@ -12347,7 +12346,7 @@ function _tragRegRender() {
   }
   el.innerHTML = _renderGrouped(_tragRegistry, _trgGrpBy, t => {
     const lenM = _tragCalcLen(t.pts);
-    const dt = new Date(t.date).toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const dt = fmtDateShort(t.date);
     const vis = t.visible !== false;
     const meta = [dt, _tragFmtLen(lenM), t.pts.length+' tač.', t.gj?'GJ: <b>'+_escHtml(t.gj)+'</b>':'', t.odjel?'Odj: <b>'+_escHtml(t.odjel)+'</b>':''].filter(Boolean).join(' · ');
     return `<div class="treg-row">
@@ -12457,7 +12456,7 @@ function _tragoviRender() {
   } else {
     const map2 = new Map();
     _tragRegistry.forEach(t => {
-      const k = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const k = fmtDateShort(t.date);
       if (!map2.has(k)) map2.set(k, []);
       map2.get(k).push(t);
     });
@@ -12478,7 +12477,7 @@ function _tragoviRender() {
       msrEl.innerHTML = '<div class="treg-empty" style="padding:8px 0;">Nema sačuvanih mjerenja.</div>';
     } else {
       msrEl.innerHTML = _msrRegistry.map(m => {
-        const dt = new Date(m.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+        const dt = fmtDateShort(m.date);
         const lenM = _msrPts2Len(m.pts);
         const mode = m.mode || 'dist';
         const modeLabel = mode==='area'?'◻ Površina':mode==='nagib'?'📐 Nagib':'📏 Distanca';
@@ -12503,7 +12502,7 @@ function _tragoviRender() {
 
 function _tragoviRowHtml(t) {
   const lenM = _tragCalcLen(t.pts);
-  const dt = new Date(t.date).toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const dt = fmtDateShort(t.date);
   const vis = t.visible !== false;
   const w = t.weight || 3;
   const style = t.dashStyle || 'solid';
@@ -16663,13 +16662,20 @@ function getOdjel() { return document.getElementById('p-odjel').value.trim() || 
 function todayStr() { return new Date().toISOString().slice(0,10); }
 function fmtDate(s) {
   if (!s) return '—';
-  const d = new Date(s+'T12:00:00');
-  return d.toLocaleDateString('bs-BA',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+  try {
+    const d = new Date(String(s).length <= 10 ? s + 'T12:00:00' : s);
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dan = d.toLocaleDateString('bs-BA', {weekday:'short'});
+    return `${dd}.${mm}.${d.getFullYear()} - ${dan}`;
+  } catch { return String(s); }
 }
 function fmtDateShort(s) {
   if (!s) return '—';
-  const d = new Date(s+'T12:00:00');
-  return d.toLocaleDateString('bs-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
+  try {
+    const d = new Date(String(s).length <= 10 ? s + 'T12:00:00' : s);
+    return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + d.getFullYear();
+  } catch { return String(s); }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -17102,7 +17108,7 @@ function _pmExportReport() {
   if (!_pmLastData) { showToast('Nema podataka za izvještaj'); return; }
   const { p, vlakeRows, logRows } = _pmLastData;
   const fmtM = m => { const v = Math.round(m); return v >= 1000 ? (v / 1000).toFixed(3).replace('.', ',') + ' km' : v + ' m'; };
-  const fmtD = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('hr', {day:'2-digit',month:'2-digit',year:'numeric'}); } catch { return s; } };
+  const fmtD = s => fmtDateShort(s);
 
   const valid = vlakeRows.filter(r => (r.pts || []).length >= 2);
   const nV = valid.filter(r => (r.kr || 0) === 0).length;
@@ -17896,7 +17902,7 @@ function rndLog() {
 
   el.innerHTML=dnevniLog.map(day=>{
     const dayTotal=day.entries.reduce((s,e)=>s+e.meters,0);
-    const dayName=new Date(day.date+'T12:00:00').toLocaleDateString('bs-BA',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const dayName=fmtDate(day.date);
 
     // Dan-level timing: ujedini sve entries
     const allStarts = day.entries.map(e=>e.workStart).filter(Boolean);
@@ -17958,7 +17964,7 @@ function exportProjektPDF() {
   };
   const fmtD = s => {
     if (!s) return '—';
-    try { return new Date(s + 'T12:00:00').toLocaleDateString('hr', {day:'2-digit',month:'2-digit',year:'numeric'}); }
+    try { return fmtDateShort(s); }
     catch { return s; }
   };
   const calcVLen = pts => {
@@ -18772,7 +18778,7 @@ function _mqmOpen() {
   const now  = new Date();
   const entry = {
     id: 'mr_' + Date.now(),
-    name: 'Mjerenje ' + now.toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    name: 'Mjerenje ' + fmtDateShort(now.toISOString()),
     date: now.toISOString(),
     gj: aktP?.gj || '',
     odjel: aktP?.odjel || '',
@@ -18862,7 +18868,7 @@ function _msrRegAdd() {
   const now = new Date();
   const entry = {
     id: 'mr_' + Date.now(),
-    name: 'Mjerenje ' + now.toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'}),
+    name: 'Mjerenje ' + fmtDateShort(now.toISOString()),
     date: now.toISOString(),
     gj: aktP?.gj || '',
     odjel: aktP?.odjel || '',
@@ -18938,7 +18944,7 @@ function _msrDrawAllSaved() {
           if (dh > 0) totalUp += dh; else totalDn -= dh;
         }
       }
-      const dateStr = m.date ? new Date(m.date).toLocaleDateString('bs-BA') : '';
+      const dateStr = m.date ? fmtDateShort(m.date) : '';
       let html = `<div style="min-width:180px;font-family:sans-serif;">
         <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px;">${_escHtml(m.name)}</div>`;
       if (m.gj || m.odjel) html += `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${[m.gj, m.odjel].filter(Boolean).join(' · ')}</div>`;
@@ -19071,7 +19077,7 @@ function _msrRegRender() {
     return;
   }
   el.innerHTML = _renderGrouped(_msrRegistry, _msrGrpBy, m => {
-    const dt = new Date(m.date).toLocaleDateString('bs-BA', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const dt = fmtDateShort(m.date);
     const lenM = _msrPts2Len(m.pts);
     const meta = [dt, _msrFmt(lenM), m.pts.length+' tač.', m.gj?'GJ: <b>'+_escHtml(m.gj)+'</b>':'', m.odjel?'Odj: <b>'+_escHtml(m.odjel)+'</b>':''].filter(Boolean).join(' · ');
     return `<div class="treg-row" style="border-left:3px solid ${m.color||'#fbbf24'};">
@@ -19580,7 +19586,7 @@ function doPrint() {
   const odjel = odjelPrint || gjFolder || document.getElementById('p-odjel').value || 'Traktorske vlake';
   const sum = document.getElementById('p-sumarija').value || '';
   const ime = document.getElementById('p-ime').value || '';
-  const datum = new Date().toLocaleDateString('bs-BA', {day:'numeric',month:'long',year:'numeric'});
+  const datum = fmtDate(new Date().toISOString());
 
   document.getElementById('ph-odjel').textContent = odjel;
   document.getElementById('ph-sumarija').textContent = sum;
@@ -21497,7 +21503,7 @@ function _mapMgrFmtSize(b) {
 }
 function _mapMgrFmtDate(ts) {
   if (!ts) return '';
-  try { const d = new Date(ts); return d.toLocaleDateString('bs-BA') + ' ' + d.toTimeString().slice(0,5); }
+  try { const d = new Date(ts); return fmtDateShort(ts) + ' ' + d.toTimeString().slice(0,5); }
   catch(e) { return ''; }
 }
 function _mapMgrIsFav(name) {
@@ -23012,7 +23018,7 @@ function dozRenderOdjeli() {
       <div class="doz-odjel-meta">
         ${o.known_area_ha ? `<span>📐 ${parseFloat(o.known_area_ha).toFixed(1)} ha</span>` : ''}
         <span class="doz-status-chip ${status}">${label}</span>
-        <span>${new Date(o.created_at).toLocaleDateString('bs')}</span>
+        <span>${fmtDateShort(o.created_at)}</span>
       </div>
     </div>`;
   }).join('');
@@ -23363,7 +23369,7 @@ function _dozRenderBands(odjel) {
   if (!bands.length) return;
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
-  const created = odjel?.created_at ? new Date(odjel.created_at).toLocaleDateString('bs') : '—';
+  const created = odjel?.created_at ? fmtDateShort(odjel.created_at) : '—';
 
   bands.forEach(b => {
     const col = DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length];
@@ -23754,7 +23760,7 @@ function dozRenderDetail() {
     const bandPct = bndHa > 0 ? Math.round(bandHa / bndHa * 100) : 0;
     const totalTrackLen = Object.values(_dozTrackLenByUser()).reduce((s, v) => s + v, 0);
     const nPts = _dozTracks.length;
-    const created = odjel.created_at ? new Date(odjel.created_at).toLocaleDateString('bs') : '—';
+    const created = odjel.created_at ? fmtDateShort(odjel.created_at) : '—';
     statsEl.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;">
         <span>📐 Površina odjela:</span><b style="color:#e2e8f0;">${(totalHa || bndHa).toFixed(2)} ha</b>
@@ -23819,7 +23825,7 @@ function dozRenderDetail() {
       const isLocal = String(m.id).startsWith('local_');
       const meta = [
         m.area_ha ? parseFloat(m.area_ha).toFixed(2) + ' ha' : '',
-        m.created_at ? new Date(m.created_at).toLocaleDateString('bs') : '',
+        m.created_at ? fmtDateShort(m.created_at) : '',
         isLocal ? '⏳ čeka sync' : ''
       ].filter(Boolean).join(' · ');
       return `<div class="doz-zone-row" onclick="dozZoomMarking('${m.id}')">
