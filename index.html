@@ -76,7 +76,7 @@ window.addEventListener('DOMContentLoaded',function(){
 /* NAPOMENA: ne koristiti `contain:strict/size` na tile-container — kolabira
    GridLayer (MBTiles) na 0x0 pa tile-ovi nestanu. Samo will-change je siguran. */
 .leaflet-tile-container { will-change: transform; }
-.leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: pixelated; image-rendering: -webkit-optimize-contrast; }
+.leaflet-tile { backface-visibility: hidden; opacity:1; image-rendering: pixelated; }
 .leaflet-tile-loaded { opacity:1; }
 .leaflet-zoom-animated { will-change: transform; }
 .leaflet-map-pane { will-change: transform; }
@@ -21218,7 +21218,7 @@ function _mainTileSchedule(fn, gen) {
         if (_mainTileQueue.length) _mainTileQueue.shift()();
       });
     };
-    if (_mainTileActive < 6) run(); else _mainTileQueue.push(run);
+    if (_mainTileActive < 12) run(); else _mainTileQueue.push(run);
   });
 }
 function _mainTileFlush() {
@@ -21253,6 +21253,8 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
+      // Nacrtaj parent tile kao placeholder dok pravi tile ne stigne
+      _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       const inst = _mainMiniDbs[name];
       if (!inst) { done(null, canvas); return canvas; }
       const gen = _mainTileGen;
@@ -21363,6 +21365,25 @@ function _drawTileBytes(ctx, data, canvas, done, sz) {
     useImg();
   }
 }
+function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
+  // Pokušaj pronaći parent tile (z-1, z-2) u BMP kešu i nacrtaj odgovarajući kvadrant
+  for (let dz = 1; dz <= 2; dz++) {
+    const pz = z - dz;
+    if (pz < 0) break;
+    const scale = 1 << dz;          // 2 ili 4
+    const px = x >> dz;
+    const py = y >> dz;
+    const bmp = cache.get(name + '/' + pz + '/' + px + '/' + py);
+    if (!bmp) continue;
+    const tileSize = 256 / scale;    // 128 ili 64
+    const sx = (x % scale) * tileSize;
+    const sy = (y % scale) * tileSize;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(bmp, sx, sy, tileSize, tileSize, 0, 0, 256, 256);
+    return;
+  }
+}
+
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;
   const blob = new Blob([data], { type: _tileMime(data) });
@@ -21405,6 +21426,8 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
         done(null, canvas);
         return canvas;
       }
+      // Nacrtaj parent tile kao placeholder dok pravi tile ne stigne
+      _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
         if (gen !== _wTileGen) { done(null, canvas); return; }
