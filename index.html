@@ -4002,7 +4002,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.6.1';
+const APP_VER = 'v2.6.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21790,38 +21790,64 @@ function _gjColor(gj) { return _GJ_COLORS[(gj||'').toUpperCase()] || '#94a3b8'; 
 
 // ── SpatiaLite WKB parser ──────────────────────────────────────────────────────
 // Format: [0x00][endian][srid:4][mbr:32][0x7C][wkb...]
+// ROBUSTNO: eksplicitna dužina DataView-a + bounds-guard na svako čitanje
+// (sprječava "Offset is outside of bounds" RangeError) + podrška za Z/M
+// koordinate (3D/4D geometrija ima 3-4 doubla po tački, ne 2).
 function _parseSpatialiteWkb(bytes) {
   if (!bytes || bytes.length < 44) return null;
   if (bytes[0] !== 0x00 || bytes[38] !== 0x7C) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  const blen = bytes.byteLength;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, blen);
   let pos = 39;
   const le = bytes[pos++] === 0x01;
-  const geomType = view.getUint32(pos, le) & 0xFFFF; pos += 4;
 
-  function rU32() { const v = view.getUint32(pos, le); pos += 4; return v; }
-  function rF64() { const v = view.getFloat64(pos, le); pos += 8; return v; }
+  const _OOB = { oob: true };
+  function rU32() { if (pos + 4 > blen) throw _OOB; const v = view.getUint32(pos, le); pos += 4; return v; }
+  function rF64() { if (pos + 8 > blen) throw _OOB; const v = view.getFloat64(pos, le); pos += 8; return v; }
+  function rByte() { if (pos + 1 > blen) throw _OOB; return bytes[pos++]; }
 
-  function parseRing() {
-    const n = rU32(); const pts = [];
+  // Broj koordinata po tački iz ISO WKB tipa:
+  //   3=Polygon(2D), 1003=PolygonZ, 2003=PolygonM, 3003=PolygonZM
+  function dimsOf(t) { const z = (t >= 1000 && t < 2000) || t >= 3000; const m = (t >= 2000); return 2 + (z ? 1 : 0) + (m ? 1 : 0); }
+
+  function parseRing(nd) {
+    const n = rU32();
+    if (n < 0 || n > 5e6) throw _OOB;          // sanity protiv smeća
+    const pts = [];
     for (let i = 0; i < n; i++) {
       const x = rF64(), y = rF64();
+      for (let k = 2; k < nd; k++) rF64();     // preskoči Z / M
       try { const [lng, lat] = proj4('EPSG:3908', 'WGS84', [x, y]); pts.push([lat, lng]); }
       catch { pts.push([y, x]); }
     }
     return pts;
   }
-  function parsePoly() { const nr = rU32(); const rings = []; for (let i=0;i<nr;i++) rings.push(parseRing()); return rings; }
+  function parsePoly(nd) {
+    const nr = rU32();
+    if (nr < 0 || nr > 1e6) throw _OOB;
+    const rings = [];
+    for (let i = 0; i < nr; i++) rings.push(parseRing(nd));
+    return rings;
+  }
 
   const polys = [];
-  if (geomType === 3) {
-    polys.push(parsePoly());
-  } else if (geomType === 6) {
-    const n = rU32();
-    for (let i = 0; i < n; i++) {
-      pos++; // sub byte order
-      const st = view.getUint32(pos, le) & 0xFFFF; pos += 4;
-      if (st === 3) polys.push(parsePoly());
+  try {
+    const gt = rU32();
+    const base = gt % 1000;                     // 3=polygon, 6=multipolygon (bez Z/M)
+    if (base === 3) {
+      polys.push(parsePoly(dimsOf(gt)));
+    } else if (base === 6) {
+      const n = rU32();
+      if (n < 0 || n > 1e6) return polys;
+      for (let i = 0; i < n; i++) {
+        rByte();                                // sub byte order (isti endian u praksi)
+        const st = rU32();
+        if (st % 1000 === 3) polys.push(parsePoly(dimsOf(st)));
+        else break;                             // nepoznata sub-geometrija
+      }
     }
+  } catch(e) {
+    if (e !== _OOB) throw e;                     // pravu grešku propagiraj, OOB progutaj
   }
   return polys;
 }
