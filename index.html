@@ -2073,6 +2073,29 @@ select:focus { outline:none; border-color:#3b82f6; }
 .sqlmap-opacity-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:6px; }
 .sqlmap-opacity-row input { flex:1; accent-color:#38bdf8; }
 #sqlmap-status { font-size:12px; color:#38bdf8; min-height:18px; text-align:center; margin-bottom:8px; }
+/* ── Offline Map Manager ─────────────────────────────────────────── */
+#mapmgr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:9999; align-items:center; justify-content:center; }
+#mapmgr-modal.show { display:flex; }
+#mapmgr-box { background:#16213e; border:1px solid #0f3460; border-radius:10px; padding:20px; width:440px; max-width:96vw; max-height:90vh; overflow-y:auto; }
+#mapmgr-box h3 { font-size:16px; color:#38bdf8; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+.mapmgr-storage { background:#0f172a; border:1px solid #1e3a5f; border-radius:8px; padding:10px 12px; margin-bottom:12px; }
+.mapmgr-storage-txt { font-size:11px; color:#94a3b8; margin-bottom:6px; display:flex; justify-content:space-between; }
+.mapmgr-storage-txt b { color:#e2e8f0; }
+.mapmgr-bar { height:7px; background:#1e293b; border-radius:4px; overflow:hidden; }
+.mapmgr-bar-fill { height:100%; background:linear-gradient(90deg,#38bdf8,#22d3ee); border-radius:4px; transition:width .3s; }
+.mapmgr-search { width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#e2e8f0; font-size:13px; padding:9px 12px; margin-bottom:12px; }
+.mapmgr-search:focus { outline:none; border-color:#38bdf8; }
+.mapmgr-card { background:#0f172a; border:1px solid #1e3a5f; border-radius:8px; padding:10px 12px; margin-bottom:9px; }
+.mapmgr-card.active { border-color:#22c55e; box-shadow:0 0 0 1px #22c55e44; }
+.mapmgr-card-top { display:flex; align-items:flex-start; gap:8px; }
+.mapmgr-card-nm { flex:1; font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-word; }
+.mapmgr-card-meta { font-size:11px; color:#64748b; margin-top:3px; line-height:1.5; }
+.mapmgr-card-meta .mm-on { color:#22c55e; font-weight:600; }
+.mapmgr-fav { background:none; border:none; font-size:18px; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; opacity:.45; }
+.mapmgr-fav.on { opacity:1; }
+.mapmgr-card-btns { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
+.mapmgr-card-btns .btn { font-size:11px; padding:5px 10px; }
+.mapmgr-empty { text-align:center; color:#64748b; font-size:12px; padding:24px 8px; }
 #offline-progress-fill {
   height:100%; background:#38bdf8; border-radius:4px;
   transition:width 0.2s; width:0%;
@@ -3449,6 +3472,7 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
           <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🗄 Karte i slojevi</div>
           <button onclick="showSqlMapModal()" style="width:100%;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">🗄 Učitaj SQLiteDB kartu</button>
+          <button onclick="openMapManager()" style="width:100%;padding:11px;background:#0f3460;border:1px solid #1e3a5f;border-radius:10px;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">🗂 Upravljanje offline kartama</button>
           <button onclick="document.getElementById('kf').click()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">📂 Dodaj KML fajl</button>
           <button onclick="openOznakePanel()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;margin-bottom:8px;">≡ Prikazani slojevi i oznake</button>
           <button onclick="_openLayerSheet()" style="width:100%;padding:11px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#94a3b8;font-size:13px;cursor:pointer;">⛰ Promijeni podlogu karte</button>
@@ -4002,7 +4026,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.6.2';
+const APP_VER = 'v2.7.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20194,8 +20218,12 @@ class MiniSqlite {
     this.tilesRoot=0; this.idxRoot=0; this.fmt=null; this.colZ=0; this.colX=1; this.colY=2; this.colD=3;
     this.noRowId=false; this._zm=0;
     let metaRoot=0;
+    // GeoPackage: katalog svih tabela/indeksa za rezoluciju dinamičke tile-tabele
+    let _gpkgRoot=0; const _allTbls={}, _idxByTbl={};
     await this._scanLeaves(1,(rid,r)=>{
       const type=r[0],name=r[1],tbl=r[2],rootPage=r[3],sql=r[4];
+      if(type==='table'&&name){ _allTbls[name.toLowerCase()]={root:rootPage,sql:sql||''}; if(name.toLowerCase()==='gpkg_contents')_gpkgRoot=rootPage; }
+      if(type==='index'&&tbl){ (_idxByTbl[tbl.toLowerCase()]=_idxByTbl[tbl.toLowerCase()]||[]).push({root:rootPage,sql:sql||''}); }
       if(type==='table'&&name?.toLowerCase()==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
           // PRIMARY KEY (x,y,z,s) → red kolona automatskog indeksa (sqlite_autoindex), čiji je sql NULL
@@ -20210,6 +20238,28 @@ class MiniSqlite {
       if(type==='table'&&name?.toLowerCase()==='metadata') metaRoot=rootPage;
       if(type==='index'&&tbl?.toLowerCase()==='tiles'){this.idxRoot=rootPage;this._idxSql=sql||'';}
     });
+    // GeoPackage (.gpkg): tile podaci su u korisničkoj tabeli (ime iz gpkg_contents)
+    if(!this.fmt && _gpkgRoot>0){
+      let tileTbl=null;
+      try{ await this._scanLeaves(_gpkgRoot,(rid,r)=>{ if(!tileTbl && r[1]==='tiles' && typeof r[0]==='string') tileTbl=r[0]; }); }catch(e){}
+      const tinfo=tileTbl?_allTbls[tileTbl.toLowerCase()]:null;
+      if(tinfo){
+        this.fmt='gpkg'; this.tilesRoot=tinfo.root;
+        // Kolone iz CREATE TABLE (default po GeoPackage specifikaciji: id,zoom_level,tile_column,tile_row,tile_data)
+        let cols=[]; const s=(tinfo.sql||'').toLowerCase();
+        const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');
+        if(_p1>=0&&_p2>_p1) cols=s.slice(_p1+1,_p2).split(',').map(c=>c.trim().split(/\s+/)[0].replace(/["'\x60\[\]]/g,''));
+        const gci=n=>cols.indexOf(n);
+        this.colZ=gci('zoom_level')>=0?gci('zoom_level'):1;
+        this.colX=gci('tile_column')>=0?gci('tile_column'):2;
+        this.colY=gci('tile_row')>=0?gci('tile_row'):3;
+        this.colD=gci('tile_data')>=0?gci('tile_data'):4;
+        // Autoindeks na UNIQUE(zoom_level,tile_column,tile_row) → ubrzava dohvat (inače leaf-scan)
+        const idxs=_idxByTbl[tileTbl.toLowerCase()]||[];
+        const aix=idxs.find(x=>!x.sql)||idxs[0]; // autoindeks (sql NULL) prati UNIQUE redoslijed
+        if(aix){ this.idxRoot=aix.root; this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=aix.sql; }
+      }
+    }
     if(!this.fmt) this.fmt='mbtiles';
     // Detect OruxMaps/Android RMaps: index on (x,y,z[,s]) where z=17-actual_zoom
     // The tiles table has (x,y,z,s,image) but sqlite_master may show mbtiles column names after rename
@@ -20301,8 +20351,8 @@ class MiniSqlite {
             const lzRaw=le2[this._idxColZ],lx2=le2[this._idxColX],ly2=le2[this._idxColY];
             let lz2=(this.fmt==='rmaps'&&this._zm===2)?(this._zOff||17)-lzRaw:lzRaw;
             if(typeof lz2==='number'&&lz2>=0&&lz2<=22&&typeof lx2==='number'&&typeof ly2==='number'){
-              // rmaps uses XYZ y; mbtiles uses TMS y
-              const xyzY=(this.fmt==='rmaps')?ly2:(1<<lz2)-1-ly2;
+              // rmaps/gpkg koriste XYZ y; mbtiles koristi TMS y
+              const xyzY=(this.fmt==='rmaps'||this.fmt==='gpkg')?ly2:(1<<lz2)-1-ly2;
               const lon2=(lx2+0.5)/(1<<lz2)*360-180;
               const latR2=Math.PI*(1-2*(xyzY+0.5)/(1<<lz2));
               const lat2=Math.atan(Math.sinh(latR2))*180/Math.PI;
@@ -20391,8 +20441,19 @@ function idbOpen() {
   });
 }
 
+// GeoPackage: ime tile-tabele iz gpkg_contents (data_type='tiles')
+function gpkgTileTable(exec) {
+  try {
+    const t = exec("SELECT table_name FROM gpkg_contents WHERE data_type='tiles' ORDER BY table_name LIMIT 1");
+    return (typeof t === 'string' && t) ? t : null;
+  } catch(e) { return null; }
+}
+
 function detectFmt(exec) {
   try {
+    // GeoPackage (.gpkg) — SQLite s gpkg_contents katalogom; tile podaci u korisničkoj tabeli
+    if (exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='gpkg_contents'") > 0
+        && gpkgTileTable(exec)) return 'gpkg';
     if (exec("SELECT COUNT(*) FROM sqlite_master WHERE (type='table' OR type='view') AND name='tiles'") > 0) {
       const cols = exec('PRAGMA table_info(tiles)', true);
       if (cols.includes('zoom_level')) return 'mbtiles';
@@ -20412,6 +20473,9 @@ function readMeta(exec, fmt) {
   try {
     if (fmt === 'mbtiles') {
       exec('SELECT name,value FROM metadata', false, (k,v) => m[k]=v);
+    } else if (fmt === 'gpkg') {
+      try { const r=exec('SELECT MIN(zoom_level),MAX(zoom_level) FROM gpkg_tile_matrix',false,null,true); if(r&&r[1]!=null){m.minzoom=+r[0];m.maxzoom=+r[1];} } catch(e){}
+      try { const id=exec("SELECT identifier FROM gpkg_contents WHERE data_type='tiles' LIMIT 1"); if(typeof id==='string'&&id)m.description=id; } catch(e){}
     } else {
       try { const r=exec('SELECT minzoom,maxzoom FROM info LIMIT 1',false,null,true); if(r){m.minzoom=r[0];m.maxzoom=r[1];} } catch(e){}
     }
@@ -20440,6 +20504,11 @@ function makeSqlite3Exec(db) {
 function _prepStmt(inst) {
   if (inst.engine !== 'sqljs' || inst.stmt) return;
   try {
+    if (inst.fmt === 'gpkg') {
+      if (!inst.gpkgT) return;
+      inst.stmt = inst.db.prepare('SELECT tile_data FROM "'+inst.gpkgT+'" WHERE zoom_level=? AND tile_column=? AND tile_row=?');
+      return;
+    }
     const sql = inst.fmt==='mbtiles' ? 'SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?'
       : inst.fmt==='alpinequest' ? 'SELECT tile FROM tiles WHERE x=? AND y=? AND z=?'
       : 'SELECT image FROM tiles WHERE x=? AND y=? AND z=?';
@@ -20459,7 +20528,13 @@ async function queryTile(name, z, x, y) {
       return arr ? (arr instanceof Uint8Array ? arr : new Uint8Array(arr)) : null;
     }
     let td;
-    if (fmt==='mbtiles') {
+    if (fmt==='gpkg') {
+      const t = inst.gpkgT; if (!t) return null;
+      const ty=y; // GeoPackage tile_row je XYZ (gornji-lijevi ishodišni), bez TMS flipa
+      if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
+      else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM "'+t+'" WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
+      else td = db.selectValue('SELECT tile_data FROM "'+t+'" WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
+    } else if (fmt==='mbtiles') {
       const ty=(1<<z)-1-y;
       if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
       else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
@@ -20500,6 +20575,25 @@ self.onmessage = async ({data:msg}) => {
       });
       self.postMessage({id,ok:true,rows});
     }
+    else if (msg.type === 'idb-rename') {
+      const idb = await idbOpen();
+      await new Promise((res,rej) => {
+        const tx = idb.transaction('maps','readwrite');
+        const st = tx.objectStore('maps');
+        const gr = st.get(msg.old);
+        gr.onsuccess = () => {
+          const v = gr.result;
+          if (!v) { rej(new Error('not-found')); return; }
+          v.name = msg.neu;            // novi ključ (keyPath)
+          // opfsName ostaje isti → fizički OPFS fajl se ne mijenja
+          const pr = st.put(v);
+          pr.onsuccess = () => { const dr = st.delete(msg.old); dr.onsuccess = () => res(); dr.onerror = () => rej(dr.error); };
+          pr.onerror = () => rej(pr.error);
+        };
+        gr.onerror = () => rej(gr.error);
+      });
+      self.postMessage({id,ok:true});
+    }
     else if (msg.type === 'load-idb') {
       const idb = await idbOpen();
       const entry = await new Promise((res,rej)=>{ const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
@@ -20510,7 +20604,7 @@ self.onmessage = async ({data:msg}) => {
       const fmt = entry.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
       const meta = (entry.meta&&Object.keys(entry.meta).length) ? entry.meta : readMeta(exec,fmt);
-      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff:17};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff:17,gpkgT:fmt==='gpkg'?gpkgTileTable(exec):null};
       _prepStmt(dbs[msg.name]);
       self.postMessage({id,ok:true,fmt,meta});
     }
@@ -20534,7 +20628,7 @@ self.onmessage = async ({data:msg}) => {
         const idb = await idbOpen();
         await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       }
-      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff};
+      dbs[msg.name] = {db,fmt,engine:'sqljs',zOff,gpkgT:fmt==='gpkg'?gpkgTileTable(exec):null};
       _prepStmt(dbs[msg.name]);
       self.postMessage({id,ok:true,fmt,meta});
     }
@@ -20892,6 +20986,7 @@ async function sqlmapLoadFile(file) {
     // pri sljedećem otvaranju aplikacije.
     if (_sqlLayers.find(l => l.name === name)) _saveLastMap('sqlite', null, name);
     _sqlmapRenderLayers(); _lsRenderSqlite();
+    if (document.getElementById('mapmgr-modal')?.classList.contains('show')) _mapMgrRender();
     const fi = document.getElementById('sqlmap-file-input');
     if (fi) fi.value = '';
   } catch(e) {
@@ -20928,7 +21023,7 @@ async function _sqlmapLoadDirect(file, name) {
   _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
-  const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
+  const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='gpkg'?'GeoPackage':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
   _sqlmapStatus('✅ ' + name + ' (' + (file.size/1024/1024|0) + ' MB, ' + fmtLabel + ')' + zI + ' [' + eng + ']');
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
@@ -21152,7 +21247,7 @@ function _sqlmapRenderLayers() {
   if (!el) return;
   if (!_sqlLayers.length) { el.innerHTML = ''; return; }
   el.innerHTML = _sqlLayers.map((sl, i) => {
-    const fmtLabel = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='alpinequest'?'AlpineQuest':'RMaps/OruxMaps';
+    const fmtLabel = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='gpkg'?'GeoPackage':sl.fmt==='alpinequest'?'AlpineQuest':'RMaps/OruxMaps';
     const metaDesc = sl.meta?.description ? `<br>${sl.meta.description}` : '';
     const zInfo = sl.meta?.minzoom!=null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
     const badge = sl.saved ? (sl.opfs ? '<span style="color:#38bdf8;font-size:10px;margin-left:6px;">💾 OPFS</span>' : '<span style="color:#4ade80;font-size:10px;margin-left:6px;">💾 sačuvano</span>') : '';
@@ -21211,7 +21306,7 @@ async function _sqlmapTestTile(i) {
       data = res?.data;
     }
     const eng = useMain ? 'main' : 'worker';
-    const fmtL = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='rmaps'?'SQLiteDB':sl.fmt||'?';
+    const fmtL = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='gpkg'?'GeoPackage':sl.fmt==='rmaps'?'SQLiteDB':sl.fmt||'?';
     if (!data || !data.length) {
       report = `❌ NEMA PODATAKA\nFormat: ${fmtL}\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nMeta: zoom ${sl.meta?.minzoom||'?'}–${sl.meta?.maxzoom||'?'}\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
     } else {
@@ -21274,6 +21369,203 @@ async function sqlmapClearAll() {
   _sqlmapStatus('Sve offline karte obrisane.');
   const el = document.getElementById('sqlmap-crash-banner');
   if (el) el.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  UPRAVLJANJE OFFLINE KARTAMA (Offline Map Manager)
+// ═══════════════════════════════════════════════════════════════════════════════
+let _mapMgrQ = '';
+let _mapMgrShown = [];   // trenutno prikazane (filtrirane) karte — dugmad rade po indeksu (sigurno za navodnike u nazivu)
+
+function _mapMgrFmtLabel(fmt) {
+  return fmt==='mbtiles' ? 'MBTiles'
+    : fmt==='gpkg' ? 'GeoPackage'
+    : fmt==='alpinequest' ? 'AlpineQuest'
+    : fmt==='rmaps' ? 'SQLiteDB' : (fmt || 'SQLiteDB');
+}
+function _mapMgrFmtSize(b) {
+  if (b == null || isNaN(b)) return '?';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(0) + ' KB';
+  if (b < 1073741824) return (b/1048576).toFixed(1) + ' MB';
+  return (b/1073741824).toFixed(2) + ' GB';
+}
+function _mapMgrFmtDate(ts) {
+  if (!ts) return '';
+  try { const d = new Date(ts); return d.toLocaleDateString('bs-BA') + ' ' + d.toTimeString().slice(0,5); }
+  catch(e) { return ''; }
+}
+function _mapMgrIsFav(name) {
+  return _mapFavs.some(f => f.type === 'sqlite' && f.sqliteId === name);
+}
+
+// Spoji trajno sačuvane karte (iz IDB preko worker 'list') sa in-memory stanjem (_sqlLayers)
+async function _mapMgrCollect() {
+  let rows = [];
+  try {
+    const r = await _sqlWCall({ type: 'list' });
+    if (r?.ok && Array.isArray(r.rows)) rows = r.rows;
+  } catch(e) { console.warn('mapmgr list', e); }
+  const byName = {};
+  rows.forEach(e => {
+    const sl = _sqlLayers.find(l => l.name === e.name);
+    byName[e.name] = {
+      name: e.name, fmt: e.fmt || sl?.fmt, meta: e.meta || sl?.meta || {},
+      size: e.size || 0, savedAt: e.savedAt || 0, opfs: !!e.opfs,
+      saved: true, loaded: !!sl, visible: !!(sl && sl.visible)
+    };
+  });
+  // Karte koje su u memoriji ali nisu (još) u IDB listi — npr. sesijske / direct-load
+  _sqlLayers.forEach(sl => {
+    if (!byName[sl.name]) byName[sl.name] = {
+      name: sl.name, fmt: sl.fmt, meta: sl.meta || {}, size: 0, savedAt: 0,
+      opfs: !!sl.opfs, saved: !!sl.saved, loaded: true, visible: !!sl.visible
+    };
+  });
+  return Object.values(byName).sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
+}
+
+async function _mapMgrRender() {
+  const list = document.getElementById('mapmgr-list');
+  if (!list) return;
+  const maps = await _mapMgrCollect();
+
+  // Traka memorije
+  const mapsBytes = maps.reduce((s,m) => s + (m.size||0), 0);
+  document.getElementById('mapmgr-maps-size').textContent =
+    _mapMgrFmtSize(mapsBytes) + ' · ' + maps.length + ' ' + (maps.length===1?'karta':'karata');
+  try {
+    if (navigator.storage?.estimate) {
+      const est = await navigator.storage.estimate();
+      const used = est.usage || 0, quota = est.quota || 0;
+      const pct = quota ? Math.min(100, used/quota*100) : 0;
+      document.getElementById('mapmgr-bar-fill').style.width = pct.toFixed(1) + '%';
+      document.getElementById('mapmgr-quota-txt').textContent =
+        quota ? (_mapMgrFmtSize(used) + ' / ' + _mapMgrFmtSize(quota)) : _mapMgrFmtSize(used);
+    } else {
+      document.getElementById('mapmgr-quota-txt').textContent = '';
+    }
+  } catch(e) { document.getElementById('mapmgr-quota-txt').textContent = ''; }
+
+  const q = _mapMgrQ.trim().toLowerCase();
+  _mapMgrShown = q ? maps.filter(m => m.name.toLowerCase().includes(q)) : maps;
+
+  if (!_mapMgrShown.length) {
+    list.innerHTML = `<div class="mapmgr-empty">${maps.length ? 'Nema karte za "' + _escHtml(_mapMgrQ) + '"' : 'Nema učitanih offline karata.<br>Klikni „Učitaj novu kartu" iznad.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = _mapMgrShown.map((m, i) => {
+    const nameEsc = _escHtml(m.name);
+    const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
+    const dInfo = m.savedAt ? ' · ' + _mapMgrFmtDate(m.savedAt) : '';
+    const store = m.saved ? (m.opfs ? '💾 OPFS' : '💾 baza') : '⏳ sesija';
+    const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
+    const activeMark = m.visible ? '<span class="mm-on">● aktivna</span> · ' : (m.loaded ? '' : '⚠ nije učitana · ');
+    const favOn = _mapMgrIsFav(m.name);
+    return `<div class="mapmgr-card${m.visible?' active':''}">
+      <div class="mapmgr-card-top">
+        <div>
+          <div class="mapmgr-card-nm">🗺 ${nameEsc}</div>
+          <div class="mapmgr-card-meta">${activeMark}${_mapMgrFmtLabel(m.fmt)}${zInfo}${sizeInfo}</div>
+          <div class="mapmgr-card-meta">${store}${dInfo}</div>
+        </div>
+        <button class="mapmgr-fav${favOn?' on':''}" title="Omiljena karta" onclick="_mapMgrToggleFav(${i})">${favOn?'⭐':'☆'}</button>
+      </div>
+      <div class="mapmgr-card-btns">
+        <button class="btn ${m.visible?'b':'gr'}" onclick="_mapMgrActivate(${i})">${m.visible?'👁 Prikazana':'👁 Prikaži'}</button>
+        <button class="btn gr" onclick="_mapMgrRename(${i})">✏ Preimenuj</button>
+        <button class="btn gr" style="color:#f87171;" onclick="_mapMgrDelete(${i})">🗑 Obriši</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMapManager() {
+  _mapMgrQ = '';
+  const s = document.getElementById('mapmgr-search'); if (s) s.value = '';
+  document.getElementById('mapmgr-modal').classList.add('show');
+  _mapMgrRender();
+}
+function closeMapManager() {
+  document.getElementById('mapmgr-modal').classList.remove('show');
+}
+function _mapMgrSearch(q) { _mapMgrQ = q || ''; _mapMgrRender(); }
+
+function _mapMgrToggleFav(i) {
+  const m = _mapMgrShown[i]; if (!m) return;
+  const name = m.name;
+  const idx = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === name);
+  if (idx >= 0) { _mapFavs.splice(idx, 1); showToast('Uklonjeno iz omiljenih'); }
+  else { _mapFavs.push({ id: 'fav_' + Date.now(), name, type: 'sqlite', sqliteId: name }); showToast('⭐ Dodano u omiljene'); }
+  _mapFavSave();
+  if (document.getElementById('mapfav-modal')?.classList.contains('open')) _mapFavRender();
+  _mapMgrRender();
+}
+
+function _mapMgrActivate(i) {
+  const m = _mapMgrShown[i]; if (!m) return;
+  const idx = _sqlLayers.findIndex(l => l.name === m.name);
+  if (idx < 0) { showToast('Karta nije učitana — zatvori i ponovo otvori aplikaciju'); return; }
+  setLayerSqlite(idx);
+  showToast('🗄 ' + m.name);
+  _mapMgrRender();
+}
+
+async function _mapMgrDelete(i) {
+  const m = _mapMgrShown[i]; if (!m) return;
+  const name = m.name;
+  if (!await _dlgConfirm(`Trajno obrisati kartu "${name}"?`, { danger: true })) return;
+  const idx = _sqlLayers.findIndex(l => l.name === name);
+  if (idx >= 0) {
+    await sqlmapRemove(idx);
+  } else {
+    try { await _sqlIdbDeleteDirect(name); } catch(e) {}
+    _opfsDel(name + '.sqlmap');
+  }
+  // Ukloni eventualnu referencu iz omiljenih
+  const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === name);
+  if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
+  showToast('🗑 Karta obrisana: ' + name);
+  _mapMgrRender();
+}
+
+async function _mapMgrRename(i) {
+  const m = _mapMgrShown[i]; if (!m) return;
+  const name = m.name;
+  const neu = await _dlgPrompt('Novi naziv karte:', name, { title: '✏ Preimenuj kartu' });
+  const nn = neu?.trim();
+  if (!nn || nn === name) return;
+  if (_sqlLayers.some(l => l.name === nn)) { showToast('⚠ Karta s tim nazivom već postoji'); return; }
+  try {
+    const r = await _sqlWCall({ type: 'idb-rename', old: name, neu: nn });
+    if (!r?.ok) throw new Error(r?.error || 'rename-fail');
+  } catch(e) { showToast('❌ Preimenovanje nije uspjelo: ' + (e.message || e)); return; }
+  // Ažuriraj in-memory reference
+  const sl = _sqlLayers.find(l => l.name === name);
+  if (sl) sl.name = nn;
+  if (_mainMiniDbs[name]) { _mainMiniDbs[nn] = _mainMiniDbs[name]; delete _mainMiniDbs[name]; }
+  for (const [k, bmp] of _sqlTileBmpCache) {
+    if (k.startsWith(name + '/')) { if (bmp.close) try{bmp.close();}catch(e){} _sqlTileBmpCache.delete(k); }
+  }
+  _mapFavs.forEach(f => { if (f.type === 'sqlite' && f.sqliteId === name) f.sqliteId = nn; });
+  _mapFavSave();
+  try { const lm = JSON.parse(localStorage.getItem('tvlake_last_map')); if (lm?.type === 'sqlite' && lm.sqlId === name) _saveLastMap('sqlite', null, nn); } catch(e) {}
+  if (sl?.layer) sl.layer.redraw();
+  _sqlmapRenderLayers(); _lsRenderSqlite();
+  showToast('✏ Preimenovano u: ' + nn);
+  _mapMgrRender();
+}
+
+async function _mapMgrClearAll() {
+  if (!await _dlgConfirm('Trajno obrisati SVE offline karte?', { danger: true })) return;
+  await sqlmapClearAll();
+  // Ukloni dangling sqlite favorite
+  const before = _mapFavs.length;
+  _mapFavs = _mapFavs.filter(f => f.type !== 'sqlite');
+  if (_mapFavs.length !== before) _mapFavSave();
+  showToast('🗑 Sve offline karte obrisane');
+  _mapMgrRender();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -24363,6 +24655,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🗄 Učitaj SQLiteDB kartu</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();openMapManager()">🗂 Upravljanje offline kartama</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()">📂 Dodaj KML fajl</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="mdrop-vlake" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
@@ -25224,8 +25517,8 @@ if (typeof AndroidDownload !== 'undefined') {
       ondrop="sqlmapHandleDrop(event)">
       <div style="font-size:28px;margin-bottom:6px;">🗺</div>
       <div>Klikni ili prevuci fajl</div>
-      <div style="font-size:11px;margin-top:4px;">.sqlitedb · .mbtiles · .db</div>
-      <input type="file" id="sqlmap-file-input" accept=".sqlitedb,.mbtiles,.db,.sqlite"
+      <div style="font-size:11px;margin-top:4px;">.sqlitedb · .mbtiles · .gpkg · .db</div>
+      <input type="file" id="sqlmap-file-input" accept=".sqlitedb,.mbtiles,.gpkg,.db,.sqlite"
         style="display:none;" onchange="sqlmapLoadFile(this.files[0])">
     </div>
 
@@ -25240,6 +25533,34 @@ if (typeof AndroidDownload !== 'undefined') {
 
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn gr" onclick="closeSqlMapModal()">Zatvori</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPRAVLJANJE OFFLINE KARTAMA -->
+<div id="mapmgr-modal" onclick="if(event.target===this)closeMapManager()">
+  <div id="mapmgr-box">
+    <h3>🗂 Upravljanje offline kartama</h3>
+
+    <button class="btn b" style="width:100%;padding:10px;font-size:13px;font-weight:600;margin-bottom:12px;"
+      onclick="document.getElementById('sqlmap-file-input').click()">📥 Učitaj novu kartu (.sqlitedb · .mbtiles · .gpkg)</button>
+
+    <div class="mapmgr-storage">
+      <div class="mapmgr-storage-txt">
+        <span>Offline karte: <b id="mapmgr-maps-size">–</b></span>
+        <span id="mapmgr-quota-txt">–</span>
+      </div>
+      <div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="mapmgr-bar-fill" style="width:0%;"></div></div>
+    </div>
+
+    <input type="text" id="mapmgr-search" class="mapmgr-search" placeholder="🔍 Pretraži karte po nazivu…"
+      oninput="_mapMgrSearch(this.value)">
+
+    <div id="mapmgr-list"></div>
+
+    <div class="mbtns" style="margin-top:10px;">
+      <button class="btn gr" style="color:#f87171;border-color:#7f1d1d;" onclick="_mapMgrClearAll()">🗑 Obriši sve</button>
+      <button class="btn gr" onclick="closeMapManager()">Zatvori</button>
     </div>
   </div>
 </div>
