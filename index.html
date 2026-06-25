@@ -4783,6 +4783,7 @@ async function sbInitData() {
   dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
   autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
   if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
+  setTimeout(_crashCheck, 1500); // provjeri nedovršena snimanja (odgodi da se mapa inicijalizira)
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -8452,6 +8453,101 @@ document.addEventListener('DOMContentLoaded', buildC);
 // === STATE ===
 let vlake=[], actI=null, recOn=false, recPaused=false, gpsOn=false, _recParentIdx=null;
 let _recFreeView = false;
+
+// ── CRASH RECOVERY — auto-save in-progress recordings ────────────────────────
+const _CRASH_VLAKA_KEY = 'tvlake_crash_vlaka_v2';
+const _CRASH_TRAG_KEY  = 'tvlake_crash_trag_v2';
+let _crashSaveTimer = null;
+
+function _crashSaveVlaka() {
+  if (!recOn || recPaused || actI === null) return;
+  const v = vlake[actI];
+  if (!v || v.pts.length < 2) return;
+  try {
+    const snap = {
+      pts: v.pts.map(p => [p.la, p.lo, p.elev ?? null]),
+      nm: v.nm, br: v.br, color: v.color,
+      projektId: v.projektId || _aktivniProjektId,
+      ts: Date.now()
+    };
+    localStorage.setItem(_CRASH_VLAKA_KEY, JSON.stringify(snap));
+  } catch(e) { console.warn('crash-save vlaka:', e); }
+}
+
+function _crashSaveTrag() {
+  if (!_tragOn || _tragPaused || _tragPts.length < 2) return;
+  try {
+    localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts: _tragPts, ts: Date.now() }));
+  } catch(e) { console.warn('crash-save trag:', e); }
+}
+
+function _crashStartTimer() {
+  _crashStopTimer();
+  _crashSaveTimer = setInterval(() => { _crashSaveVlaka(); _crashSaveTrag(); }, 30000);
+}
+function _crashStopTimer() {
+  if (_crashSaveTimer) { clearInterval(_crashSaveTimer); _crashSaveTimer = null; }
+}
+function _crashClearVlaka() { try { localStorage.removeItem(_CRASH_VLAKA_KEY); } catch {} }
+function _crashClearTrag()  { try { localStorage.removeItem(_CRASH_TRAG_KEY);  } catch {} }
+
+async function _crashCheck() {
+  const snapV = (() => { try { const r = localStorage.getItem(_CRASH_VLAKA_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
+  const snapT = (() => { try { const r = localStorage.getItem(_CRASH_TRAG_KEY);  return r ? JSON.parse(r) : null; } catch { return null; } })();
+  if (!snapV && !snapT) return;
+
+  // Prikaži dijalog oporavka
+  const age = (snap) => {
+    const m = Math.round((Date.now() - snap.ts) / 60000);
+    return m < 60 ? `${m} min` : `${Math.round(m/60)} h`;
+  };
+  let msg = '⚠ Nađeno nedovršeno snimanje:\n\n';
+  if (snapV) msg += `• Vlaka "${snapV.nm || '?'}" — ${snapV.pts.length} tač. (${age(snapV)} ago)\n`;
+  if (snapT) msg += `• Trag — ${snapT.pts.length} tač. (${age(snapT)} ago)\n`;
+  msg += '\nŽeliš li oporaviti?';
+
+  const ok = await _dlgConfirm(msg, { okLabel: 'Oporavi', cancelLabel: 'Odbaci' });
+  if (!ok) { _crashClearVlaka(); _crashClearTrag(); return; }
+
+  if (snapV) {
+    try {
+      const { addV, selI } = window;
+      // Dodaj novu vlaku i popuni tačkama
+      const newI = vlake.length;
+      addV(snapV.color || '#f97316');
+      vlake[newI].nm = (snapV.nm || 'Oporavljena vlaka') + ' ↩';
+      vlake[newI].br = snapV.br || '';
+      for (const [la, lo, el] of snapV.pts) {
+        const pt = { la, lo, elev: el ?? 0 };
+        vlake[newI].pts.push(pt);
+        vlake[newI].poly.addLatLng([la, lo]);
+      }
+      selI(newI);
+      await saveV(newI);
+      showToast(`✅ Oporavljena vlaka: ${snapV.pts.length} tačaka`);
+    } catch(e) { showToast('⚠ Greška pri oporavku vlake: ' + e.message); }
+    _crashClearVlaka();
+  }
+
+  if (snapT) {
+    try {
+      _tragPts = snapT.pts;
+      if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
+      _tragLiveClear();
+      _tragLine = L.polyline(_tragPts.map(p => [p[0], p[1]]),
+        { color: '#f97316', weight: 3, opacity: 0.85 }).addTo(map);
+      _tragOn = true; _tragPaused = false;
+      const b = document.getElementById('btrag');
+      if (b) b.classList.add('active');
+      _updFabVisibility();
+      _updTragStats();
+      if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
+      showToast(`✅ Oporavljen trag: ${snapT.pts.length} tačaka — snimanje nastavljeno`);
+      _crashStartTimer();
+    } catch(e) { showToast('⚠ Greška pri oporavku traga: ' + e.message); }
+    _crashClearTrag();
+  }
+}
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
 let _activeTab = 'karta';  // trenutno aktivan tab
 // Tool states — only one active at a time
@@ -10625,12 +10721,15 @@ function togRec() {
       try { AndroidGps.startRecording(vlake[actI]?.name || 'GPS Snimanje'); } catch(e) {}
     }
     _updFabVisibility();
+    _crashStartTimer();   // auto-save svakih 30s
   } else {
     stopRec();
   }
 }
 
 function stopRec() {
+  _crashStopTimer();
+  _crashClearVlaka();  // normalno zaustavljanje — nema potrebe za oporavkom
   if (recOn && !recPaused && _recSegStart > 0) {
     _dayActiveMs += Date.now() - _recSegStart;
     _dayWorkEnd = new Date().toISOString();
@@ -12357,6 +12456,8 @@ function fabSnimTrag() {
     _tragPts = [];
     _tragBuf = [];
     _tragLastT = 0;
+    _crashStopTimer();
+    _crashClearTrag();  // normalno sačuvan
   } else {
     if (!gpsOn) startGPS();
     _setFreeView(false);
@@ -12375,6 +12476,7 @@ function fabSnimTrag() {
     _updFabVisibility();
     if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     _updTragStats();
+    _crashStartTimer();   // auto-save svakih 30s
   }
 }
 
@@ -12413,6 +12515,8 @@ function _updTragStats() {
 let _tragBuf = [];      // kružni buffer zadnja 3 raw GPS fixa za median filtar
 let _tragLastT = 0;     // timestamp zadnje commit tačke (za speed-gate)
 let _tragLiveSeg = null;// živi "rubber-band" segment do trenutne pozicije
+let _tragLastMoveT = 0; // timestamp zadnjeg stvarnog pomaka (za auto-pauzu)
+const _TRAG_AUTOPAUSE_MS = 120000; // 2 min mirovanja → auto-pauza
 
 function _addTragPoint(la, lo, ac, al) {
   if (!_tragOn || _tragPaused) return;
@@ -12454,14 +12558,32 @@ function _addTragPoint(la, lo, ac, al) {
   }
 
   if (commit) {
-    _tragPts.push([mla, mlo, al]);
+    _tragPts.push([mla, mlo, al, now, Math.round(ac)]);  // [la, lo, alt, timestamp, accuracy_m]
     _tragLastT = now;
+    _tragLastMoveT = now;
     if (_tragLine) _tragLine.addLatLng([mla, mlo]);  // inkrementalno (brzo i za duge tragove)
     _updTragStats();
     if (_activeTab === 'teren') terenUpdTragStats();
   }
 
-  // 4. ŽIVI VRH — linija UVIJEK ide do trenutne pozicije (marker), bez zaostajanja
+  // 4a. AUTO-PAUZA: ako nema stvarnog pomaka >2 min, pauziraj automatski
+  if (_tragLastMoveT > 0 && (now - _tragLastMoveT) > _TRAG_AUTOPAUSE_MS) {
+    _tragLastMoveT = 0; // reset da ne prikazujemo toast svaki fix
+    _tragPaused = true;
+    _tragLiveClear();
+    _tragBuf = [];
+    _tragLastT = 0;
+    const ico = document.getElementById('ab-trag-pauza-ico');
+    const txt = document.getElementById('ab-trag-pauza-txt');
+    const btn = document.getElementById('ab-trag-pauza');
+    if (ico) ico.textContent = '▶';
+    if (txt) txt.textContent = 'Nastavi';
+    if (btn) btn.classList.add('resuming');
+    showToast('⏸ Trag pauziran — dugo mirovanje (2 min)');
+    if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
+  }
+
+  // 4b. ŽIVI VRH — linija UVIJEK ide do trenutne pozicije (marker), bez zaostajanja
   if (_tragPts.length > 0) {
     const last = _tragPts[_tragPts.length - 1];
     const segLatLngs = [[last[0], last[1]], [la, lo]];
@@ -12479,9 +12601,14 @@ function _tragLiveClear() {
 }
 
 function _tragToGpx(pts) {
-  const trkpts = pts.map(p =>
-    `    <trkpt lat="${p[0].toFixed(7)}" lon="${p[1].toFixed(7)}">${p[2] != null ? `<ele>${p[2].toFixed(1)}</ele>` : ''}</trkpt>`
-  ).join('\n');
+  const trkpts = pts.map(p => {
+    const [la, lo, al, ts, ac] = p;
+    let inner = '';
+    if (al != null) inner += `<ele>${Number(al).toFixed(1)}</ele>`;
+    if (ts)        inner += `<time>${new Date(ts).toISOString()}</time>`;
+    if (ac != null) inner += `<hdop>${(ac / 5).toFixed(1)}</hdop>`; // hdop ≈ accuracy/5
+    return `    <trkpt lat="${la.toFixed(7)}" lon="${lo.toFixed(7)}">${inner}</trkpt>`;
+  }).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="TVlake App">
   <trk><name>Trag ${new Date().toLocaleString('bs-BA')}</name>
