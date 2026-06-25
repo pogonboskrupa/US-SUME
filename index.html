@@ -4054,7 +4054,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.9.4';
+const APP_VER = 'v2.9.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21267,8 +21267,11 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
-  layer.on('loading', _mainTileFlush);
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:false, updateInterval:200});
+  // Flush queue samo pri promjeni zoom-a (ne i pri panu) da ostari tile-ovi ne blokiraju queue
+  const _onZoomStart = () => _mainTileFlush();
+  layer.on('add',    () => map.on('zoomstart',  _onZoomStart));
+  layer.on('remove', () => map.off('zoomstart', _onZoomStart));
   return layer;
 }
 
@@ -21386,19 +21389,23 @@ function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
     return true;
   }
 
-  // 2. Zoom-out smjer: složi tile iz 4 djece na z+1 (downscale)
-  const cz = z + 1;
-  const cx = x * 2, cy = y * 2;
-  const quads = [[0,0,cx,cy],[1,0,cx+1,cy],[0,1,cx,cy+1],[1,1,cx+1,cy+1]];
-  let found = 0;
-  for (const [qx, qy, tx, ty] of quads) {
-    const bmp = cache.get(name + '/' + cz + '/' + tx + '/' + ty);
-    if (bmp) {
-      ctx.drawImage(bmp, 0, 0, 256, 256, qx * 128, qy * 128, 128, 128);
-      found++;
+  // 2. Zoom-out smjer: složi tile iz djece na z+1 ili z+2
+  for (let dz = 1; dz <= 2; dz++) {
+    const cz = z + dz;
+    const scale = 1 << dz;   // 2 ili 4
+    const tSize = 256 / scale; // 128 ili 64
+    let found = 0;
+    for (let qy = 0; qy < scale; qy++) {
+      for (let qx = 0; qx < scale; qx++) {
+        const bmp = cache.get(name + '/' + cz + '/' + (x * scale + qx) + '/' + (y * scale + qy));
+        if (bmp) {
+          ctx.drawImage(bmp, 0, 0, 256, 256, qx * tSize, qy * tSize, tSize, tSize);
+          found++;
+        }
+      }
     }
+    if (found > 0) return true;
   }
-  if (found > 0) return true;
 
   return false;
 }
@@ -21449,17 +21456,14 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
-      const gen = _wTileGen;
       _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
-        if (gen !== _wTileGen) { done(null, canvas); return; }
         if (!data) { done(null, canvas); return; }
         _drawTileBytesC(ctx, data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
   });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
-  layer.on('loading', () => { _wTileGen++; });
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:false, updateInterval:200});
   return layer;
 }
 
