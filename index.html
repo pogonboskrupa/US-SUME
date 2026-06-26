@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.9.9';
+const APP_VER = 'v3.0.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21209,6 +21209,7 @@ async function _sqlmapLoadDirect(file, name) {
 let _mainTileActive = 0;
 const _mainTileQueue = [];
 let _mainTileGen = 0;
+let _mainTileLastZ = -1;
 function _mainTileSchedule(fn, gen) {
   return new Promise((resolve, reject) => {
     const run = () => {
@@ -21246,6 +21247,8 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
+      // Flush samo pri promjeni zoom nivoa — ne pri skrolovanju
+      if (z !== _mainTileLastZ) { _mainTileLastZ = z; _mainTileFlush(); }
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
@@ -21269,7 +21272,6 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
     }
   });
   const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:16, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
-  layer.on('loading', _mainTileFlush);
   return layer;
 }
 
@@ -21435,6 +21437,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
   let _wTileGen = 0;
+  let _wTileLastZ = -1;
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
@@ -21442,6 +21445,8 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
+      // Flush samo pri promjeni zoom nivoa — ne pri skrolovanju
+      if (z !== _wTileLastZ) { _wTileLastZ = z; _wTileGen++; }
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
@@ -21464,7 +21469,6 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
     }
   });
   const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:16, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
-  layer.on('loading', () => { _wTileGen++; });
   return layer;
 }
 
