@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.0.2';
+const APP_VER = 'v3.0.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21171,6 +21171,7 @@ async function sqlmapLoadFile(file) {
       const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
       _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:true});
+      _sqlPrewarm(name);
       _sqlmapMetaAutoZoom(r.meta);
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
       const dI=r.meta?._d?' ['+r.meta._d+']':'';
@@ -21192,6 +21193,7 @@ async function sqlmapLoadFile(file) {
       const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
       layer.addTo(map);
       _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:false});
+      _sqlPrewarm(name);
       _sqlmapMetaAutoZoom(r.meta);
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + zI);
@@ -21235,6 +21237,7 @@ async function _sqlmapLoadDirect(file, name) {
   const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
   layer.addTo(map);
   _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
+  _sqlPrewarm(name);
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
   const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='gpkg'?'GeoPackage':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
@@ -21354,6 +21357,7 @@ async function sqlmapRestoreAll() {
           shownAny = true;
         }
         _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs});
+        if (shouldShow) _sqlPrewarm(entry.name);
       } catch(e) { console.warn('SQLmap restore error', entry.name, e); }
     }
     if (_sqlLayers.length) { _sqlmapRenderLayers(); _lsRenderSqlite(); }
@@ -21435,6 +21439,43 @@ function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
     }
   }
   return found > 0;
+}
+
+// Pre-učitaj sve tile-ove na manjim zoom razinama u BMP cache
+// da se odmah vidi cijelo područje karte bez skrolanja.
+async function _sqlPrewarm(name) {
+  const sl = _sqlLayers.find(l => l.name === name);
+  if (!sl || !sl.meta?.bounds) return;
+  const [west, south, east, north] = sl.meta.bounds.split(',').map(Number);
+  const minZ = Math.max(parseInt(sl.meta.minzoom || 0), 0);
+  const maxZ = Math.min(parseInt(sl.meta.maxzoom || 18), 14); // do zoom 14 max
+  // Konverzija geo koordinata u tile koordinate
+  const lng2t = (lng, z) => Math.floor((lng + 180) / 360 * (1 << z));
+  const lat2t = (lat, z) => {
+    const r = lat * Math.PI / 180;
+    return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z));
+  };
+  await new Promise(r => setTimeout(r, 500)); // pričekaj da se viewport tile-ovi učitaju
+  for (let z = minZ; z <= maxZ; z++) {
+    const x0 = lng2t(west, z),  x1 = lng2t(east, z);
+    const y0 = lat2t(north, z), y1 = lat2t(south, z);
+    const total = (x1 - x0 + 1) * (y1 - y0 + 1);
+    if (total > 600) continue; // preskoči prevelike zoom razine
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const key = name + '/' + z + '/' + x + '/' + y;
+        if (_sqlTileBmpCache.has(key)) continue;
+        try {
+          const {data} = await _sqlWCall({type:'tile', name, z, x, y});
+          if (!data) continue;
+          const bmp = await createImageBitmap(new Blob([data], {type: _tileMime(data)}));
+          _sqlTileBmpCache.set(key, bmp);
+          _sqlTileBmpEvict();
+        } catch(e) {}
+        await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
+      }
+    }
+  }
 }
 
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
