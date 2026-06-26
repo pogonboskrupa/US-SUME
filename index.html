@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v2.9.8';
+const APP_VER = 'v2.9.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8845,7 +8845,7 @@ const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
 const _tileBmpCache = new Map();
-const _TILE_BMP_MAX = 500;
+const _TILE_BMP_MAX = 800;
 
 function _tileBmpEvict() {
   if (_tileBmpCache.size <= _TILE_BMP_MAX) return;
@@ -21268,7 +21268,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:16, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   layer.on('loading', _mainTileFlush);
   return layer;
 }
@@ -21326,7 +21326,7 @@ async function sqlmapRestoreAll() {
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
-const _SQL_TILE_BMP_MAX = 400;
+const _SQL_TILE_BMP_MAX = 800;
 function _sqlTileBmpEvict() {
   if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
   const it = _sqlTileBmpCache.keys();
@@ -21463,7 +21463,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       return canvas;
     }
   });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:8, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:16, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   layer.on('loading', () => { _wTileGen++; });
   return layer;
 }
