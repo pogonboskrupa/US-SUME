@@ -50,7 +50,7 @@ public class MainActivity extends Activity {
     private static final int REQ_PERMS = 2;
     private static final int REQ_BG_LOC = 3;
     private static final String APP_URL =
-            "https://appassets.androidplatform.net/assets/index.html";
+            "https://pogonboskrupa.github.io/US-SUME/";
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -116,7 +116,8 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if (url.startsWith("https://appassets.androidplatform.net/")) {
+                if (url.startsWith("https://appassets.androidplatform.net/") ||
+                    url.startsWith("https://pogonboskrupa.github.io/US-SUME")) {
                     return false;
                 }
                 try {
