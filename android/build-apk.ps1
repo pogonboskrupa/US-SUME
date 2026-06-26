@@ -3,7 +3,7 @@
 # Ili iz android/ foldera:         powershell -ExecutionPolicy Bypass -File build-apk.ps1
 
 param(
-    [string]$Branch  = "claude/priprema_produkcija",
+    [string]$Branch  = "claude/pensive-clarke-jjtf2a",
     [string]$BuildType = "debug"   # "debug" ili "release"
 )
 
