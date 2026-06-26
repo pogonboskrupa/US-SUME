@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.0.0';
+const APP_VER = 'v3.0.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21098,6 +21098,43 @@ function showSqlMapModal() {
 function closeSqlMapModal() {
   document.getElementById('sqlmap-modal').classList.remove('show');
 }
+function sqlmapShowDebug() {
+  const zoom = map.getZoom();
+  const c = map.getCenter();
+  const bounds = map.getBounds();
+  let t = `=== KARTA DEBUG INFO ===\n`;
+  t += `Zoom: ${zoom} | Lat: ${c.lat.toFixed(5)} Lng: ${c.lng.toFixed(5)}\n`;
+  t += `Viewport: N${bounds.getNorth().toFixed(4)} S${bounds.getSouth().toFixed(4)} E${bounds.getEast().toFixed(4)} W${bounds.getWest().toFixed(4)}\n`;
+  t += `BMP cache: ${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX}\n`;
+  t += `SQLite reads: aktivno=${_mainTileActive} queue=${_mainTileQueue.length} gen=${_mainTileGen}\n\n`;
+  if (!_sqlLayers.length) {
+    t += '⚠️ Nema učitanih SQLite karata!\n';
+  } else {
+    _sqlLayers.forEach(sl => {
+      const m = sl.meta || {};
+      const minZ = m.minzoom != null ? parseInt(m.minzoom) : '?';
+      const maxZ = m.maxzoom != null ? parseInt(m.maxzoom) : '?';
+      const inRange = (minZ === '?' || zoom >= minZ) && (maxZ === '?' || zoom <= maxZ);
+      t += `📦 ${sl.name}\n`;
+      t += `  Format: ${sl.fmt} | OPFS: ${sl.opfs ? 'da' : 'ne'}\n`;
+      t += `  Zoom: ${minZ}–${maxZ} | Trenutni: ${zoom} ${inRange ? '✅' : '⚠️ VAN OPSEGA'}\n`;
+      if (m.bounds) {
+        const b = String(m.bounds).split(',').map(Number);
+        t += `  Bounds: W${b[0]?.toFixed(3)} S${b[1]?.toFixed(3)} E${b[2]?.toFixed(3)} N${b[3]?.toFixed(3)}\n`;
+        if (b.length === 4) {
+          const inBounds = c.lat >= b[1] && c.lat <= b[3] && c.lng >= b[0] && c.lng <= b[2];
+          t += `  Centar mape: ${inBounds ? '✅ unutar granica' : '⚠️ VAN GRANICA karte'}\n`;
+        }
+      }
+      if (m.center) t += `  Center meta: ${m.center}\n`;
+      if (m.description) t += `  Opis: ${m.description}\n`;
+      t += '\n';
+    });
+  }
+  const el = document.getElementById('sqlmap-debug-out');
+  el.textContent = t;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
 function sqlmapHandleDrop(e) {
   e.preventDefault();
   document.getElementById('sqlmap-drop-zone').classList.remove('drag-over');
@@ -21373,41 +21410,31 @@ function _drawTileBytes(ctx, data, canvas, done, sz) {
 function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
   ctx.imageSmoothingEnabled = false;
 
-  // 1. Zoom-in smjer: traži parent tile na z-1 ili z-2 (upscale)
-  for (let dz = 1; dz <= 2; dz++) {
-    const pz = z - dz;
-    if (pz < 0) break;
-    const scale = 1 << dz;
-    const px = x >> dz;
-    const py = y >> dz;
+  // Zoom-in smjer: samo z-1 (2× upscale) — z-2 (4×) izgleda previše grubo
+  const pz = z - 1;
+  if (pz >= 0) {
+    const px = x >> 1; const py = y >> 1;
     const bmp = cache.get(name + '/' + pz + '/' + px + '/' + py);
-    if (!bmp) continue;
-    const tileSize = 256 / scale;
-    const sx = (x % scale) * tileSize;
-    const sy = (y % scale) * tileSize;
-    ctx.drawImage(bmp, sx, sy, tileSize, tileSize, 0, 0, 256, 256);
-    return true;
+    if (bmp) {
+      const sx = (x & 1) * 128; const sy = (y & 1) * 128;
+      ctx.drawImage(bmp, sx, sy, 128, 128, 0, 0, 256, 256);
+      return true;
+    }
   }
 
-  // 2. Zoom-out smjer: složi tile iz djece na z+1 ili z+2
-  for (let dz = 1; dz <= 2; dz++) {
-    const cz = z + dz;
-    const scale = 1 << dz;   // 2 ili 4
-    const tSize = 256 / scale; // 128 ili 64
-    let found = 0;
-    for (let qy = 0; qy < scale; qy++) {
-      for (let qx = 0; qx < scale; qx++) {
-        const bmp = cache.get(name + '/' + cz + '/' + (x * scale + qx) + '/' + (y * scale + qy));
-        if (bmp) {
-          ctx.drawImage(bmp, 0, 0, 256, 256, qx * tSize, qy * tSize, tSize, tSize);
-          found++;
-        }
+  // Zoom-out smjer: složi tile iz 4 djece na z+1
+  const cz = z + 1;
+  let found = 0;
+  for (let qy = 0; qy < 2; qy++) {
+    for (let qx = 0; qx < 2; qx++) {
+      const bmp = cache.get(name + '/' + cz + '/' + (x * 2 + qx) + '/' + (y * 2 + qy));
+      if (bmp) {
+        ctx.drawImage(bmp, 0, 0, 256, 256, qx * 128, qy * 128, 128, 128);
+        found++;
       }
     }
-    if (found > 0) return true;
   }
-
-  return false;
+  return found > 0;
 }
 
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
@@ -25891,7 +25918,9 @@ if (typeof AndroidDownload !== 'undefined') {
 
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn gr" onclick="closeSqlMapModal()">Zatvori</button>
+      <button class="btn" style="background:#1e3a5f;color:#93c5fd;" onclick="sqlmapShowDebug()">🔍 Debug info</button>
     </div>
+    <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>
 </div>
 
