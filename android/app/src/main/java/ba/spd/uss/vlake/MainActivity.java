@@ -31,6 +31,10 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.webkit.WebViewAssetLoader;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -40,9 +44,11 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assetLoader;
+    private BroadcastReceiver recActionReceiver;
 
     private static final int REQ_FILE = 1;
     private static final int REQ_PERMS = 2;
+    private static final int REQ_BG_LOC = 3;
     private static final String APP_URL =
             "https://appassets.androidplatform.net/assets/index.html";
 
@@ -64,6 +70,7 @@ public class MainActivity extends Activity {
         hideSystemUI();
         requestPermissions();
         setupWebView();
+        registerRecActionReceiver();
 
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
@@ -83,7 +90,8 @@ public class MainActivity extends Activity {
         ws.setAllowFileAccessFromFileURLs(true);
         ws.setAllowUniversalAccessFromFileURLs(true);
         ws.setGeolocationEnabled(true);
-        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // LOAD_CACHE_ELSE_NETWORK: koristi cache kad nema interneta (CDN biblioteke dostupne offline)
+        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setTextZoom(100);
 
@@ -231,6 +239,7 @@ public class MainActivity extends Activity {
     class GpsBridge {
         @JavascriptInterface
         public void startRecording(String title) {
+            requestBackgroundLocationIfNeeded();
             Intent intent = new Intent(MainActivity.this, GpsService.class);
             intent.putExtra("title", title != null ? title : "GPS Snimanje");
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -246,6 +255,57 @@ public class MainActivity extends Activity {
             intent.setAction("stop");
             startService(intent);
         }
+
+        @JavascriptInterface
+        public void updateNotification(String title, String body) {
+            Intent intent = new Intent(MainActivity.this, GpsService.class);
+            intent.setAction("update");
+            intent.putExtra("title", title);
+            intent.putExtra("body", body);
+            startService(intent);
+        }
+
+        @JavascriptInterface
+        public boolean hasBackgroundLocation() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true;
+            return ContextCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private void registerRecActionReceiver() {
+        recActionReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getStringExtra("action");
+                if (action != null && webView != null) {
+                    runOnUiThread(() -> webView.evaluateJavascript(
+                        "if(typeof _nativeRecAction==='function')_nativeRecAction('" + action + "')",
+                        null));
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter("ba.spd.uss.vlake.REC_ACTION");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(recActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(recActionReceiver, filter);
+        }
+    }
+
+    private void requestBackgroundLocationIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) return;
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) return;
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
+                REQ_BG_LOC);
     }
 
     private void requestPermissions() {
@@ -357,6 +417,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (recActionReceiver != null) {
+            try { unregisterReceiver(recActionReceiver); } catch (Exception ignored) {}
+        }
         if (webView != null) {
             webView.destroy();
         }

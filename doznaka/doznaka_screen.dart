@@ -52,7 +52,7 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
   bool _showVlake = false;
   Project? _vlakeProjekat;
   List<TrackPoint> _vlakeTacke = [];
-  Map<String, List<LatLng>> _vlakeTrackByUser = {};  // userId → polyline
+  Map<String, List<List<LatLng>>> _vlakeTrackByUser = {};  // userId → segmenti
 
   // Ručno crtanje granice odjela
   bool _isDrawingOdjel = false;
@@ -417,18 +417,39 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
     setState(() => _vlakeProjekat = p);
     try {
       final tacke = await SupabaseService.getAllTrackPoints(p.id);
-      final byUser = <String, List<LatLng>>{};
+      final byUser = <String, List<TrackPoint>>{};
       for (final t in tacke) {
-        byUser.putIfAbsent(t.userId, () => []).add(t.latLng);
+        byUser.putIfAbsent(t.userId, () => []).add(t);
       }
+      final segByUser = byUser.map(
+        (uid, pts) => MapEntry(uid, _splitVlakeSegments(pts)),
+      );
       setState(() {
         _vlakeTacke = tacke;
-        _vlakeTrackByUser = byUser;
+        _vlakeTrackByUser = segByUser;
         _showVlake = true;
       });
     } catch (e) {
       _showMsg('Greška pri učitavanju vlaka: $e');
     }
+  }
+
+  List<List<LatLng>> _splitVlakeSegments(List<TrackPoint> points,
+      {Duration maxGap = const Duration(minutes: 2)}) {
+    if (points.isEmpty) return [];
+    final segments = <List<LatLng>>[];
+    var current = <LatLng>[points.first.latLng];
+    for (int i = 1; i < points.length; i++) {
+      final gap =
+          points[i].recordedAt.difference(points[i - 1].recordedAt).abs();
+      if (gap > maxGap) {
+        if (current.length >= 2) segments.add(current);
+        current = [];
+      }
+      current.add(points[i].latLng);
+    }
+    if (current.length >= 2) segments.add(current);
+    return segments;
   }
 
   // Bounding box preklop — da li se dvije liste tačaka prostorno sijeku
@@ -722,13 +743,13 @@ class _DoznakaScreenState extends State<DoznakaScreen> {
               if (_showVlake && _vlakeTrackByUser.isNotEmpty)
                 PolylineLayer(
                   polylines: _vlakeTrackByUser.values
-                      .map((pts) => Polyline(
+                      .expand((segs) => segs.map((pts) => Polyline(
                             points: pts,
                             strokeWidth: 3.5,
                             color: const Color(0xFF5D3A1A),
                             borderStrokeWidth: 2.0,
                             borderColor: Colors.white,
-                          ))
+                          )))
                       .toList(),
                 ),
 

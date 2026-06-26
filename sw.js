@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.7.6';
+const APP_VERSION = '3.1.3';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -63,7 +63,7 @@ function _tileRespond(event, cacheName) {
       if (cached) return cached;
       try {
         const resp = await fetch(event.request);
-        if (resp.ok) cache.put(event.request, resp.clone());
+        if (resp.ok) try { cache.put(event.request, resp.clone()); } catch(e) {}
         return resp;
       } catch {
         return cached || new Response('', { status: 503 });
@@ -94,7 +94,8 @@ self.addEventListener('fetch', event => {
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
-    url.includes('arcgisonline.com')
+    url.includes('arcgisonline.com') ||
+    url.includes('.google.com/vt/')
   ) {
     _tileRespond(event, TILE_CACHE);
     return;
@@ -122,7 +123,7 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
         try {
           const resp = await fetch(event.request);
-          if (resp.ok) cache.put(event.request, resp.clone());
+          if (resp.ok) try { cache.put(event.request, resp.clone()); } catch(e) {}
           return resp;
         } catch {
           return cached || new Response('', { status: 503 });
@@ -140,7 +141,7 @@ self.addEventListener('fetch', event => {
       fetch(event.request)
         .then(resp => {
           if (resp.ok) {
-            caches.open(APP_CACHE).then(c => c.put(event.request, resp.clone()));
+            try { const rc = resp.clone(); caches.open(APP_CACHE).then(c => c.put(event.request, rc)); } catch(e) {}
           }
           return resp;
         })
@@ -209,21 +210,43 @@ self.addEventListener('message', event => {
     _stopRecLock();
     return;
   }
+  // Notifikacija dijeljene lokacije
+  if (event.data?.type === 'show-share-notification') {
+    const { name, body, la, lo } = event.data;
+    self.registration.showNotification('📍 ' + name, {
+      body: body,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      tag: 'share-loc-' + name,
+      data: { la, lo },
+      silent: false,
+      vibrate: [200, 100, 200]
+    });
+    return;
+  }
 });
 
 // ─── NOTIFICATION CLICK ───────────────────────────────────────────────
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  const data = event.notification.data;
   if (event.action === 'stop' || event.action === 'pause') {
-    // Pošalji akciju u sve otvorene klijente (stranice)
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then(clients => {
         clients.forEach(c => c.postMessage({ type: 'rec-action', action: event.action }));
-        // Ako nema otvorenih prozora, otvori app
         if (clients.length === 0) self.clients.openWindow('./');
       });
+  } else if (data?.la && data?.lo) {
+    // Klik na share-loc notifikaciju — fokusiraj app i centriraj na lokaciju
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      if (clients.length > 0) {
+        clients[0].focus();
+        clients[0].postMessage({ type: 'pan-to', la: data.la, lo: data.lo });
+      } else {
+        self.clients.openWindow('./');
+      }
+    });
   } else {
-    // Tapnuli na tijelo notifikacije — fokusiraj ili otvori app
     self.clients.matchAll({ type: 'window' }).then(clients => {
       if (clients.length > 0) clients[0].focus();
       else self.clients.openWindow('./');
