@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.1';
+const APP_VER = 'v3.1.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21442,28 +21442,36 @@ function _drawTileBytes(ctx, data, canvas, done, sz) {
 function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
   ctx.imageSmoothingEnabled = false;
 
-  // Zoom-in smjer: samo z-1 (2× upscale) — z-2 (4×) izgleda previše grubo
-  const pz = z - 1;
-  if (pz >= 0) {
-    const px = x >> 1; const py = y >> 1;
-    const bmp = cache.get(name + '/' + pz + '/' + px + '/' + py);
+  // 1) Roditeljski smjer (z-1, z-2, z-3) — JEDAN tile, upscale, uvijek puno pokriće.
+  //    Ključno za zoom-out: prewarm puni niže zoomove (z<=12) pa su roditelji u
+  //    cache-u i pri udaljavanju, što daje potpunu sliku umjesto krpanja iz djece.
+  for (let dz = 1; dz <= 3; dz++) {
+    const pz = z - dz; if (pz < 0) break;
+    const scale = 1 << dz;                 // 2, 4, 8
+    const bmp = cache.get(name + '/' + pz + '/' + (x >> dz) + '/' + (y >> dz));
     if (bmp) {
-      const sx = (x & 1) * 128; const sy = (y & 1) * 128;
-      ctx.drawImage(bmp, sx, sy, 128, 128, 0, 0, 256, 256);
+      const tile = 256 / scale;            // dio roditelja koji pokriva ovu pločicu
+      const sx = (x % scale) * tile, sy = (y % scale) * tile;
+      ctx.drawImage(bmp, sx, sy, tile, tile, 0, 0, 256, 256);
       return true;
     }
   }
 
-  // Zoom-out smjer: složi tile iz 4 djece na z+1
-  const cz = z + 1;
+  // 2) Djeca (z+1) — kad niži zoomovi nisu u cache-u (npr. prije prewarma)
   let found = 0;
   for (let qy = 0; qy < 2; qy++) {
     for (let qx = 0; qx < 2; qx++) {
-      const bmp = cache.get(name + '/' + cz + '/' + (x * 2 + qx) + '/' + (y * 2 + qy));
-      if (bmp) {
-        ctx.drawImage(bmp, 0, 0, 256, 256, qx * 128, qy * 128, 128, 128);
-        found++;
-      }
+      const bmp = cache.get(name + '/' + (z + 1) + '/' + (x * 2 + qx) + '/' + (y * 2 + qy));
+      if (bmp) { ctx.drawImage(bmp, 0, 0, 256, 256, qx * 128, qy * 128, 128, 128); found++; }
+    }
+  }
+  if (found > 0) return true;
+
+  // 3) Unuci (z+2) — grublje, ali bolje nego prazno
+  for (let qy = 0; qy < 4; qy++) {
+    for (let qx = 0; qx < 4; qx++) {
+      const bmp = cache.get(name + '/' + (z + 2) + '/' + (x * 4 + qx) + '/' + (y * 4 + qy));
+      if (bmp) { ctx.drawImage(bmp, 0, 0, 256, 256, qx * 64, qy * 64, 64, 64); found++; }
     }
   }
   return found > 0;
