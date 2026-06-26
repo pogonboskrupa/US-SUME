@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.0';
+const APP_VER = 'v3.1.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8845,7 +8845,7 @@ const TILE_CACHE_NAME = 'tvlake-tiles-v1';
 
 // Cache-backed tile layer — tiles se automatski čuvaju za offline
 const _tileBmpCache = new Map();
-const _TILE_BMP_MAX = 800;
+const _TILE_BMP_MAX = 350;
 
 function _tileBmpEvict() {
   if (_tileBmpCache.size <= _TILE_BMP_MAX) return;
@@ -8966,6 +8966,10 @@ map.createPane('vlakeLabels'); map.getPane('vlakeLabels').style.zIndex = 401;
   const _showLbl = () => { const p = map.getPane('vlakeLabels'); if (p) p.style.visibility = ''; };
   map.on('movestart zoomstart', () => { if (_lblHidT) { clearTimeout(_lblHidT); _lblHidT = null; } _hideLbl(); });
   map.on('moveend zoomend', () => { if (_lblHidT) clearTimeout(_lblHidT); _lblHidT = setTimeout(_showLbl, 80); });
+  // Zastavica interakcije — pauzira pozadinsko pre-učitavanje tile-ova (_sqlPrewarm)
+  let _interEndT = null;
+  map.on('movestart zoomstart', () => { if (_interEndT) { clearTimeout(_interEndT); _interEndT = null; } _mapInteracting = true; });
+  map.on('moveend zoomend', () => { if (_interEndT) clearTimeout(_interEndT); _interEndT = setTimeout(() => { _mapInteracting = false; }, 250); });
 })();
 const _vlakeRenderer = L.canvas({ pane: 'vlakeLines', padding: 0.3 });
 
@@ -21245,11 +21249,13 @@ async function _sqlmapLoadDirect(file, name) {
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
+// Zastavica aktivne interakcije s mapom — pauzira pozadinsko pre-učitavanje
+let _mapInteracting = false;
+
 // Ograniči paralelna čitanja tile-ova na main threadu (spriječi memorijski skok)
 let _mainTileActive = 0;
 const _mainTileQueue = [];
 let _mainTileGen = 0;
-let _mainTileLastZ = -1;
 function _mainTileSchedule(fn, gen) {
   return new Promise((resolve, reject) => {
     const run = () => {
@@ -21269,31 +21275,27 @@ function _mainTileFlush() {
 }
 
 // ── Globalni throttle za worker tile čitanja ──────────────────────────────────
-// Jedan worker obrađuje zahtjeve serijski. Bez ograničenja, pri skrolu/zoomu se
-// stotine zahtjeva nagomilaju u worker queue-u i svježe vidljive pločice čekaju
-// iza zastarjelih. Zato: max 8 zahtjeva u letu; ostali čekaju u main-thread redu
-// koji se MOMENTALNO prazni pri promjeni zoom nivoa (zastarjeli ne stignu do workera).
+// Jedan worker obrađuje zahtjeve serijski. Ograničavamo broj zahtjeva u letu, ali
+// VAŽNO: nijedan zahtjev se NE napušta — svaki se na kraju razriješi (i pozove done()),
+// inače Leaflet pločicu drži zauvijek "loading" sa zelenom pozadinom i nikad je ne
+// pokušava ponovo. Red je LIFO: pri skrolu/zoomu zadnje zatraženi (trenutno vidljivi)
+// tile-ovi se obrađuju PRVI; zastarjeli iz prethodnog pogleda obrade se zadnji (popune
+// cache, korisno za placeholder). Konkurentnost sprječava zagušenje workera.
 let _wTileActive = 0;
-const _wTileQueue = [];
-let _wTileSchedGen = 0;
-let _wTileGlobalLastZ = -1;
-const _W_TILE_MAX_INFLIGHT = 8;
-function _wTileScheduleCall(msg, gen) {
+const _wTileStack = [];                 // LIFO — najnoviji zahtjev prvi
+const _W_TILE_MAX_INFLIGHT = 6;
+function _wTileScheduleCall(msg) {
   return new Promise(resolve => {
     const run = () => {
-      if (gen !== _wTileSchedGen) { resolve(null); return; }   // zastario → preskoči
       _wTileActive++;
       _sqlWCall(msg).then(resolve, () => resolve(null)).finally(() => {
         _wTileActive--;
-        if (_wTileQueue.length) _wTileQueue.shift()();
+        const next = _wTileStack.pop();  // najnoviji (trenutni viewport) prvi
+        if (next) next();
       });
     };
-    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileQueue.push(run);
+    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileStack.push(run);
   });
-}
-function _wTileFlushAll() {
-  _wTileSchedGen++;
-  _wTileQueue.length = 0;
 }
 
 function _zoomBounds(meta) {
@@ -21312,11 +21314,9 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false });
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
-      // Flush samo pri promjeni zoom nivoa — ne pri skrolovanju
-      if (z !== _mainTileLastZ) { _mainTileLastZ = z; _mainTileFlush(); }
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
@@ -21397,7 +21397,7 @@ async function sqlmapRestoreAll() {
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
-const _SQL_TILE_BMP_MAX = 800;
+const _SQL_TILE_BMP_MAX = 400;
 function _sqlTileBmpEvict() {
   if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
   const it = _sqlTileBmpCache.keys();
@@ -21476,7 +21476,7 @@ async function _sqlPrewarm(name) {
   if (!sl || !sl.meta?.bounds) return;
   const [west, south, east, north] = sl.meta.bounds.split(',').map(Number);
   const minZ = Math.max(parseInt(sl.meta.minzoom || 0), 0);
-  const maxZ = Math.min(parseInt(sl.meta.maxzoom || 18), 14); // do zoom 14 max
+  const maxZ = Math.min(parseInt(sl.meta.maxzoom || 18), 12); // do zoom 12 (pregled, manje memorije)
   // Konverzija geo koordinata u tile koordinate
   const lng2t = (lng, z) => Math.floor((lng + 180) / 360 * (1 << z));
   const lat2t = (lat, z) => {
@@ -21488,15 +21488,17 @@ async function _sqlPrewarm(name) {
     const x0 = lng2t(west, z),  x1 = lng2t(east, z);
     const y0 = lat2t(north, z), y1 = lat2t(south, z);
     const total = (x1 - x0 + 1) * (y1 - y0 + 1);
-    if (total > 600) continue; // preskoči prevelike zoom razine
+    if (total > 300) continue; // preskoči prevelike zoom razine
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
         const key = name + '/' + z + '/' + x + '/' + y;
         if (_sqlTileBmpCache.has(key)) continue;
+        // Pauziraj pozadinsko pre-učitavanje dok korisnik aktivno skrola/zumira
+        while (_mapInteracting) await new Promise(r => setTimeout(r, 200));
         try {
-          // Kroz throttle (gen=trenutni) — pri zoom/skrolu ovi pozadinski
-          // zahtjevi se odbace i prepuste prvenstvo interaktivnim pločicama.
-          const res = await _wTileScheduleCall({type:'tile', name, z, x, y}, _wTileSchedGen);
+          // Kroz isti throttle (LIFO) — interaktivne pločice imaju prvenstvo jer
+          // se njihovi zahtjevi stavljaju na vrh stoga nakon ovih pozadinskih.
+          const res = await _wTileScheduleCall({type:'tile', name, z, x, y});
           const data = res && res.data;
           if (!data) continue;
           const bmp = await createImageBitmap(new Blob([data], {type: _tileMime(data)}));
@@ -21539,11 +21541,9 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false });
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
-      // Pri promjeni zoom nivoa odbaci sve zastarjele zahtjeve iz reda (globalno)
-      if (z !== _wTileGlobalLastZ) { _wTileGlobalLastZ = z; _wTileFlushAll(); }
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
@@ -21556,7 +21556,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
-      _wTileScheduleCall({type:'tile', name, z, x, y}, _wTileSchedGen).then(res => {
+      _wTileScheduleCall({type:'tile', name, z, x, y}).then(res => {
         if (!res || !res.data) { done(null, canvas); return; }
         _drawTileBytesC(ctx, res.data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
