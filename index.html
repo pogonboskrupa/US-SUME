@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.0.3';
+const APP_VER = 'v3.1.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21268,6 +21268,34 @@ function _mainTileFlush() {
   _mainTileQueue.length = 0;
 }
 
+// ── Globalni throttle za worker tile čitanja ──────────────────────────────────
+// Jedan worker obrađuje zahtjeve serijski. Bez ograničenja, pri skrolu/zoomu se
+// stotine zahtjeva nagomilaju u worker queue-u i svježe vidljive pločice čekaju
+// iza zastarjelih. Zato: max 8 zahtjeva u letu; ostali čekaju u main-thread redu
+// koji se MOMENTALNO prazni pri promjeni zoom nivoa (zastarjeli ne stignu do workera).
+let _wTileActive = 0;
+const _wTileQueue = [];
+let _wTileSchedGen = 0;
+let _wTileGlobalLastZ = -1;
+const _W_TILE_MAX_INFLIGHT = 8;
+function _wTileScheduleCall(msg, gen) {
+  return new Promise(resolve => {
+    const run = () => {
+      if (gen !== _wTileSchedGen) { resolve(null); return; }   // zastario → preskoči
+      _wTileActive++;
+      _sqlWCall(msg).then(resolve, () => resolve(null)).finally(() => {
+        _wTileActive--;
+        if (_wTileQueue.length) _wTileQueue.shift()();
+      });
+    };
+    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileQueue.push(run);
+  });
+}
+function _wTileFlushAll() {
+  _wTileSchedGen++;
+  _wTileQueue.length = 0;
+}
+
 function _zoomBounds(meta) {
   let a = (meta?.minzoom!=null) ? parseInt(meta.minzoom,10) : 0;
   let b = (meta?.maxzoom!=null) ? parseInt(meta.maxzoom,10) : 18;
@@ -21466,7 +21494,10 @@ async function _sqlPrewarm(name) {
         const key = name + '/' + z + '/' + x + '/' + y;
         if (_sqlTileBmpCache.has(key)) continue;
         try {
-          const {data} = await _sqlWCall({type:'tile', name, z, x, y});
+          // Kroz throttle (gen=trenutni) — pri zoom/skrolu ovi pozadinski
+          // zahtjevi se odbace i prepuste prvenstvo interaktivnim pločicama.
+          const res = await _wTileScheduleCall({type:'tile', name, z, x, y}, _wTileSchedGen);
+          const data = res && res.data;
           if (!data) continue;
           const bmp = await createImageBitmap(new Blob([data], {type: _tileMime(data)}));
           _sqlTileBmpCache.set(key, bmp);
@@ -21504,8 +21535,6 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
 
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
-  let _wTileGen = 0;
-  let _wTileLastZ = -1;
   const WTileLayer = L.GridLayer.extend({
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
@@ -21513,8 +21542,8 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
-      // Flush samo pri promjeni zoom nivoa — ne pri skrolovanju
-      if (z !== _wTileLastZ) { _wTileLastZ = z; _wTileGen++; }
+      // Pri promjeni zoom nivoa odbaci sve zastarjele zahtjeve iz reda (globalno)
+      if (z !== _wTileGlobalLastZ) { _wTileGlobalLastZ = z; _wTileFlushAll(); }
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
@@ -21527,11 +21556,9 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       ctx.fillStyle = '#2d3a2e';
       ctx.fillRect(0, 0, 256, 256);
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
-      const gen = _wTileGen;
-      _sqlWCall({type:'tile', name, z, x, y}).then(({data}) => {
-        if (gen !== _wTileGen) { done(null, canvas); return; }
-        if (!data) { done(null, canvas); return; }
-        _drawTileBytesC(ctx, data, canvas, done, cacheKey);
+      _wTileScheduleCall({type:'tile', name, z, x, y}, _wTileSchedGen).then(res => {
+        if (!res || !res.data) { done(null, canvas); return; }
+        _drawTileBytesC(ctx, res.data, canvas, done, cacheKey);
       }).catch(() => done(null, canvas));
       return canvas;
     }
