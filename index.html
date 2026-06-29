@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.7';
+const APP_VER = 'v3.3.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21267,19 +21267,31 @@ async function sqlmapDebugPro() {
     t += `\n✅ Nema praznih pločica u ovom trenutku.\n`;
   }
 
-  // Provjera ispravnosti keširanih bitmapa (use-after-close?)
+  // SKEN SVIH keširanih bitmapa — koliko ih je prazno (use-after-close / loš decode)?
   try {
-    const firstKey = _sqlTileBmpCache.keys().next().value;
-    if (firstKey) {
-      const bmp = _sqlTileBmpCache.get(firstKey);
-      const tc = document.createElement('canvas'); tc.width = tc.height = 8;
-      tc.getContext('2d').drawImage(bmp, 0, 0, 8, 8);
-      const px = tc.getContext('2d').getImageData(0,0,8,8).data;
-      let any = false; for (let i=3;i<px.length;i+=4) if (px[i] !== 0) { any = true; break; }
-      t += `\nCache bitmap test (${firstKey.split('/').slice(-3).join('/')}): ${bmp.width}x${bmp.height} crta=${any?'OK':'PRAZNO(zatvorena?)'}\n`;
+    const tc = document.createElement('canvas'); tc.width = tc.height = 6;
+    const tcx = tc.getContext('2d');
+    let total = 0, bad = 0, err = 0, isBmp = 0, isCanvas = 0;
+    const badKeys = [];
+    for (const [k, v] of _sqlTileBmpCache) {
+      total++;
+      if (v && v.tagName === 'CANVAS') isCanvas++; else isBmp++;
+      try {
+        tcx.clearRect(0, 0, 6, 6);
+        tcx.drawImage(v, 0, 0, 6, 6);
+        const px = tcx.getImageData(0, 0, 6, 6).data;
+        let any = false; for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) { any = true; break; }
+        if (!any) { bad++; if (badKeys.length < 5) badKeys.push(k.split('/').slice(-3).join('/')); }
+      } catch(e) { err++; }
     }
-  } catch(e) { t += `\nCache bitmap test: GREŠKA (${e.message}) — bitmapa vjerovatno zatvorena!\n`; }
+    t += `\n--- SKEN CACHE-a (${total} bitmapa) ---\n`;
+    t += `  tip: canvas=${isCanvas} bitmap=${isBmp}\n`;
+    t += `  PRAZNIH: ${bad}  greška(zatvorenih): ${err}\n`;
+    if (badKeys.length) t += `  primjeri praznih: ${badKeys.join(', ')}\n`;
+    if (bad === 0 && err === 0) t += `  ✅ sve keširane bitmape su važeće\n`;
+  } catch(e) { t += `\nSKEN CACHE-a: GREŠKA ${e.message}\n`; }
 
+  t += `\n${APP_VER}`;
   el.textContent = t;
 }
 
@@ -21742,8 +21754,8 @@ async function _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, cap
           if (useMain) data = await _mainMiniDbs[name].mini.tile(z, x, y);
           else { const res = await _wTileScheduleCall({type:'tile', name, z, x, y}); data = res && res.data; }
           if (!data) continue;
-          const bmp = await _decodeBlobBmp(new Blob([data], {type: _tileMime(data)}), 256); // D1-17
-          _bmpCacheSet(_sqlTileBmpCache, key, bmp); _sqlTileBmpEvict();
+          const c = await _decodeToCanvas(new Blob([data], {type: _tileMime(data)}), 256); // D1-23
+          _bmpCacheSet(_sqlTileBmpCache, key, c); _sqlTileBmpEvict();
         } catch(e) {}
         await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
       }
@@ -21825,13 +21837,27 @@ map.on('moveend zoomend', _schedPrewarmView);
   [150, 500, 1200, 2500].forEach(d => setTimeout(heal, d));  // rane provjere nakon učitavanja
 })();
 
-// D1-17: Dekodiraj ISKLJUČIVO iz blob-a. Debug PRO je pokazao da createImageBitmap(canvas)
-// u ovom WebView-u vraća PRAZNU bitmapu → keširane prazne bitmape → prazne pločice pri
-// cache-hit. createImageBitmap(blob) radi savršeno (🔬 Test). Resize opcija smanjuje na
-// sz radi memorije; ako WebView ignoriše opciju, vrati punu (512) ali VAŽEĆU bitmapu.
-function _decodeBlobBmp(blob, sz) {
-  return createImageBitmap(blob, { resizeWidth: sz, resizeHeight: sz, resizeQuality: 'high' })
-    .catch(() => createImageBitmap(blob));
+// D1-23: Keširaj 256px offscreen CANVAS (NE ImageBitmap). Tvoj WebView vraća PRAZNU bitmapu
+// i iz createImageBitmap(canvas) (D1-13/17) I iz resize-opcije createImageBitmap(blob,{resize})
+// (Debug PRO v3.3.7: crta=PRAZNO). Jedino POUZDANO: čisti createImageBitmap(blob) + drawImage.
+// Canvas se crta istim drawImage-om kojim se pločice i prikazuju (RADI), pa je keširani
+// canvas UVIJEK važeći. drawImage prihvata canvas svuda (cache-hit, placeholder, debug test).
+function _srcToCanvas(src, sz) {
+  const oc = document.createElement('canvas'); oc.width = oc.height = sz;
+  oc.getContext('2d').drawImage(src, 0, 0, sz, sz);
+  return oc;
+}
+function _decodeToCanvas(blob, sz) {
+  const viaImg = () => new Promise((res, rej) => {
+    const u = URL.createObjectURL(blob); const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(u); res(_srcToCanvas(img, sz)); };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(); };
+    img.src = u;
+  });
+  if ('createImageBitmap' in window) {
+    return createImageBitmap(blob).then(bmp => { const c = _srcToCanvas(bmp, sz); if (bmp.close) bmp.close(); return c; }).catch(viaImg);
+  }
+  return viaImg();
 }
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;
@@ -21839,24 +21865,21 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   let _fin = false;
   const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); };
   const _safety = setTimeout(finish, 8000);  // sigurnosni okidač
+  const onSrc = (src) => {
+    ctx.drawImage(src, 0, 0, sz, sz);                       // na vidljivu tile canvas
+    if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, _srcToCanvas(src, sz)); _sqlTileBmpEvict(); }
+    finish();
+  };
   if ('createImageBitmap' in window) {
-    _decodeBlobBmp(blob, sz).then(bmp => {
-      ctx.drawImage(bmp, 0, 0, sz, sz);
-      // Keširaj VAŽEĆU dekodiranu bitmapu (NE snapshot canvasa). Ne zatvaramo (D1-16).
-      if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, bmp); _sqlTileBmpEvict(); }
-      else bmp.close();
-      finish();
-    }).catch(() => {
-      const u = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); finish(); };
+    createImageBitmap(blob).then(bmp => { onSrc(bmp); if (bmp.close) bmp.close(); }).catch(() => {
+      const u = URL.createObjectURL(blob); const img = new Image();
+      img.onload = () => { onSrc(img); URL.revokeObjectURL(u); };
       img.onerror = () => { URL.revokeObjectURL(u); finish(); };
       img.src = u;
     });
   } else {
-    const u = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); finish(); };
+    const u = URL.createObjectURL(blob); const img = new Image();
+    img.onload = () => { onSrc(img); URL.revokeObjectURL(u); };
     img.onerror = () => { URL.revokeObjectURL(u); finish(); };
     img.src = u;
   }

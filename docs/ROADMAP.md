@@ -218,7 +218,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 - **D1-22 — Pri intenzivnom skrolu+zoom pločice nakratko nestaju (blago, transient).**
   Sporo offline čitanje + Leaflet izbaci pločice izvan keepBuffer-a prije nego nove
   stignu. **Fix (v3.3.7):** keepBuffer 4→6 (zadrži više pločica oko ekrana tokom
-  interakcije).  Status: 🔄 (v3.3.7, test)
+  interakcije).  Status: ✅ djelimično (v3.3.7 — op=1, karta većinom puna).
+- **D1-23 — Keširaj 256px CANVAS umjesto ImageBitmap (resize-opcija takođe daje prazne
+  bitmape).** Debug PRO v3.3.7: `crta=PRAZNO` opet — `createImageBitmap(blob,{resizeWidth})`
+  u ovom WebView-u takođe tiho vraća praznu bitmapu (kao createImageBitmap(canvas) ranije).
+  Jedino pouzdano: čisti `createImageBitmap(blob)` + `drawImage`. **Fix (v3.3.8):** keširamo
+  256px offscreen CANVAS (crtan drawImage-om koji RADI) — uvijek važeći; drawImage prihvata
+  canvas svuda. Debug PRO: sken SVIH keširanih (broj praznih/zatvorenih).  Status: 🔄 (v3.3.8)
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
