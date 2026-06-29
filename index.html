@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.6';
+const APP_VER = 'v3.4.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22808,7 +22808,10 @@ async function startOfflineDownload() {
 // === PWA SERVICE WORKER ===
 (function registerSW() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('./sw.js').then(reg => {
+  // updateViaCache:'none' → preglednik UVIJEK dohvati svjež sw.js (zaobiđe HTTP keš s
+  // max-age=600 koji je inače kasnio detekciju nove verzije do 10 min). Ovo je ključ
+  // pouzdanog auto-update-a — bez njega refresh često servira STARU verziju.
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
     // Ako je SW već čekao pri učitavanju stranice → auto-primijeni (app tek učitan,
     // ništa se ne snima) da korisnik pouzdano dobije najnoviju verziju.
     if (reg.waiting) {
