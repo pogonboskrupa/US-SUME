@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.8';
+const APP_VER = 'v3.1.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21630,10 +21630,18 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       // Placeholder iz cache-a (parent za zoom-in, djeca za zoom-out); BEZ neprozirne
       // ispune — gdje nema placeholdera, zadržane pločice/pozadina prosijavaju.
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
-      _wTileScheduleCall({type:'tile', name, z, x, y}).then(res => {
-        if (!res || !res.data) { done(null, canvas); return; }
-        _drawTileBytesC(ctx, res.data, canvas, done, cacheKey);
-      }).catch(() => done(null, canvas));
+      // Retry na timeout: ako worker ne odgovori na vrijeme (zauzet/spor), Leaflet bi
+      // pločicu inače trajno označio gotovom (prazna) i nikad je ne bi tražio ponovo.
+      // Ponovni zahtjev ide na vrh LIFO stoga pa se brzo obradi. Genuine null (nema
+      // pločice u bazi) → odmah done, bez uzaludnih pokušaja.
+      const _tryRead = (tries) => {
+        _wTileScheduleCall({type:'tile', name, z, x, y}).then(res => {
+          if (res && res.data) { _drawTileBytesC(ctx, res.data, canvas, done, cacheKey); return; }
+          if (res && res.error === 'timeout' && tries < 3) { _tryRead(tries + 1); return; }
+          done(null, canvas);
+        }).catch(() => { if (tries < 3) _tryRead(tries + 1); else done(null, canvas); });
+      };
+      _tryRead(0);
       return canvas;
     }
   });

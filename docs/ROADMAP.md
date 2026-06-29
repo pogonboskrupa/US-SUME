@@ -123,3 +123,10 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   Update je tražio ručni klik na "Ažuriraj" toast; korisnik je mogao testirati staru
   keširanu verziju. **Fix (v3.1.8):** auto-`skipWaiting` kad nema aktivnog snimanja
   (recOn/_tragOn/_dozGpsOn) → automatski reload na najnoviju verziju.  Status: ✅ (v3.1.8)
+- **D1-11 — Pojedinačne pločice ostaju trajno prazne nakon timeout-a.** Ako čitanje
+  pločice istekne (D1-1 timeout), `done(null,canvas)` označi je gotovom i Leaflet je
+  nikad ne traži ponovo → trajno prazna. **Fix (v3.1.9):** retry na `error:'timeout'`
+  do 3x (ponovni zahtjev na vrh LIFO stoga); genuine null (nema u bazi) → odmah done
+  bez retry-a.  Status: ✅ (v3.1.9). NAPOMENA: ako pločice ostaju prazne i nakon ovoga,
+  uzrok je genuine null (lookup vraća null / gap u bazi) — provjeriti 🔬 Test na praznoj
+  pločici.
