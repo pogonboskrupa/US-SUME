@@ -130,3 +130,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   bez retry-a.  Status: ✅ (v3.1.9). NAPOMENA: ako pločice ostaju prazne i nakon ovoga,
   uzrok je genuine null (lookup vraća null / gap u bazi) — provjeriti 🔬 Test na praznoj
   pločici.
+- **D1-12 — 512×512 pločice iscrpe GPU memoriju → prazne pločice (PRAVI KORIJEN).**
+  🔬 Test je otkrio da UNSKO SQLiteDB ima 512×512 pločice. Keširane kao 512 bitmape =
+  1MB svaka (4× više); cache 500 → ~500MB GPU → telefon iscrpi GPU backing → pločice
+  ostanu prazne ("kad zumiram dođe pa nestane"). Test je svejedno nalazio podatke (read
+  radi) — problem čisto memorijski. **Fix (v3.2.0):** `createImageBitmap` s
+  `resizeWidth/Height:256` u `_drawTileBytesC` i prewarmu — dekodira odmah na 256
+  (prikazujemo na 256 ionako) → 4× manje GPU memorije, bez gubitka kvalitete. Fallback
+  na puni decode ako resize opcije nisu podržane.  Status: ✅ (v3.2.0)

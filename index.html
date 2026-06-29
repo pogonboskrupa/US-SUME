@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.9';
+const APP_VER = 'v3.2.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21532,7 +21532,9 @@ async function _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, cap
           if (useMain) data = await _mainMiniDbs[name].mini.tile(z, x, y);
           else { const res = await _wTileScheduleCall({type:'tile', name, z, x, y}); data = res && res.data; }
           if (!data) continue;
-          const bmp = await createImageBitmap(new Blob([data], {type: _tileMime(data)}));
+          const _blob = new Blob([data], {type: _tileMime(data)});
+          const bmp = await createImageBitmap(_blob, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'high' })
+            .catch(() => createImageBitmap(_blob));  // D1-12: 256px da 512 karte ne iscrpe GPU
           _bmpCacheSet(_sqlTileBmpCache, key, bmp); _sqlTileBmpEvict();
         } catch(e) {}
         await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
@@ -21594,7 +21596,12 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
     img.src = u;
   };
   if ('createImageBitmap' in window) {
-    createImageBitmap(blob)
+    // D1-12: dekodiraj na ciljnu veličinu (sz=256). Neke SQLiteDB/rmaps karte imaju
+    // 512×512 pločice → bez resize-a bi keširana bitmapa bila 1MB (4× memorije) i
+    // iscrpila GPU → prazne pločice. Resize na 256 = 256KB, bez gubitka prikaza.
+    const _decode = () => createImageBitmap(blob, { resizeWidth: sz, resizeHeight: sz, resizeQuality: 'high' })
+      .catch(() => createImageBitmap(blob));  // ako resize opcije nisu podržane
+    _decode()
       .then(bmp => {
         ctx.drawImage(bmp, 0, 0, sz, sz);
         if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, bmp); _sqlTileBmpEvict(); }  // D1-7
