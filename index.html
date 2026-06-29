@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.0';
+const APP_VER = 'v3.2.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21532,9 +21532,7 @@ async function _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, cap
           if (useMain) data = await _mainMiniDbs[name].mini.tile(z, x, y);
           else { const res = await _wTileScheduleCall({type:'tile', name, z, x, y}); data = res && res.data; }
           if (!data) continue;
-          const _blob = new Blob([data], {type: _tileMime(data)});
-          const bmp = await createImageBitmap(_blob, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'high' })
-            .catch(() => createImageBitmap(_blob));  // D1-12: 256px da 512 karte ne iscrpe GPU
+          const bmp = await _decodeTileBmp(new Blob([data], {type: _tileMime(data)}), 256); // D1-12
           _bmpCacheSet(_sqlTileBmpCache, key, bmp); _sqlTileBmpEvict();
         } catch(e) {}
         await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
@@ -21585,6 +21583,18 @@ async function _prewarmView() {
 }
 map.on('moveend zoomend', _schedPrewarmView);
 
+// D1-12: GARANTOVANO dekodiraj na ≤sz (256). Neke SQLiteDB/rmaps karte imaju 512×512
+// pločice → keširane kao 512 = 1MB svaka → cache iscrpi GPU → prazne pločice. Resize
+// opcije createImageBitmap-a neki WebView-i tiho ignorišu, pa ovdje garantujemo manju
+// bitmapu preko offscreen canvasa (512→256). Prikazujemo na 256 ionako — bez gubitka.
+async function _decodeTileBmp(blob, sz) {
+  const big = await createImageBitmap(blob);
+  if (big.width <= sz && big.height <= sz) return big;
+  const c = document.createElement('canvas'); c.width = c.height = sz;
+  const cx = c.getContext('2d'); cx.imageSmoothingEnabled = true;
+  cx.drawImage(big, 0, 0, sz, sz); big.close();
+  return await createImageBitmap(c);
+}
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;
   const blob = new Blob([data], { type: _tileMime(data) });
@@ -21596,12 +21606,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
     img.src = u;
   };
   if ('createImageBitmap' in window) {
-    // D1-12: dekodiraj na ciljnu veličinu (sz=256). Neke SQLiteDB/rmaps karte imaju
-    // 512×512 pločice → bez resize-a bi keširana bitmapa bila 1MB (4× memorije) i
-    // iscrpila GPU → prazne pločice. Resize na 256 = 256KB, bez gubitka prikaza.
-    const _decode = () => createImageBitmap(blob, { resizeWidth: sz, resizeHeight: sz, resizeQuality: 'high' })
-      .catch(() => createImageBitmap(blob));  // ako resize opcije nisu podržane
-    _decode()
+    _decodeTileBmp(blob, sz)
       .then(bmp => {
         ctx.drawImage(bmp, 0, 0, sz, sz);
         if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, bmp); _sqlTileBmpEvict(); }  // D1-7
@@ -21755,6 +21760,7 @@ async function _sqlmapTestTile(i) {
     report = '❌ GREŠKA: '+(e.message||e);
   }
   _sqlmapStatus('');
+  report += '\n\n— ' + APP_VER + ' —';
   await _dlgConfirm(report, { title:'🔬 Test — '+sl.name, okLabel:'OK' });
 }
 function sqlmapSetOpacity(i, val) {

@@ -138,3 +138,7 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   `resizeWidth/Height:256` u `_drawTileBytesC` i prewarmu — dekodira odmah na 256
   (prikazujemo na 256 ionako) → 4× manje GPU memorije, bez gubitka kvalitete. Fallback
   na puni decode ako resize opcije nisu podržane.  Status: ✅ (v3.2.0)
+  - **v3.2.1 dopuna:** `createImageBitmap` resize opcije neki WebView-i TIHO ignorišu
+    (vrate 512 bez greške) → fix nullified. Sada GARANTOVANO smanjenje preko offscreen
+    canvasa (`_decodeTileBmp`: ako bitmapa > 256, nacrtaj na 256 canvas pa re-encode).
+    Verzija dodana u 🔬 Test izvještaj radi potvrde koju verziju korisnik gleda.
