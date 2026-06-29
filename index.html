@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.1';
+const APP_VER = 'v3.4.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20307,12 +20307,14 @@ async function getSqlJs() {
 // Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(file) { this.file=file; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
+  constructor(file, sync) { this.file=file; this.sync=sync||null; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
     const cached=this._c.get(n); if(cached!==undefined){this._c.delete(n);this._c.set(n,cached);return cached;}
     const off=(n-1)*this.ps;
-    const d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
+    let d;
+    if(this.sync){ d=new Uint8Array(this.ps); try{ this.sync.read(d,{at:off}); }catch(e){ if(this.file) d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); } }
+    else { d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); }
     if(this._c.size>2048) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
@@ -20832,8 +20834,12 @@ self.onmessage = async ({data:msg}) => {
       const root = await navigator.storage.getDirectory();
       const fname = msg.path.startsWith('/') ? msg.path.slice(1) : msg.path;
       const fh = await root.getFileHandle(fname);
-      const file = await fh.getFile();
-      const mini = new MiniSqlite(file);
+      // SyncAccessHandle = SINHRONO čitanje stranica (mikrosekunde umjesto ~25ms po
+      // stranici preko file.slice().arrayBuffer()). Glavna optimizacija brzine — profil
+      // pokazao avg čitanje 100ms/pločica. Fallback na File ako sync nije podržan.
+      let sync = null, file = null;
+      try { sync = await fh.createSyncAccessHandle(); } catch(e) { file = await fh.getFile(); }
+      const mini = new MiniSqlite(file, sync);
       const {fmt, meta} = await mini.init();
       if (!fmt) throw new Error('unknown-format');
       // Teška dijagnostika (skeniranje B-stabla, schema dump) SAMO na izričit zahtjev
@@ -20944,6 +20950,7 @@ self.onmessage = async ({data:msg}) => {
       if (dbs[msg.name]) {
         const inst = dbs[msg.name];
         try { if (inst.engine !== 'custom') inst.db.close(); } catch(e) {}
+        try { if (inst.mini && inst.mini.sync) inst.mini.sync.close(); } catch(e) {}  // otpusti SyncAccessHandle
         delete dbs[msg.name];
       }
       self.postMessage({id,ok:true});
@@ -21303,7 +21310,7 @@ async function sqlmapDebugPro() {
   t += `Pločice: kreirano=${p.created} gotovo=${p.done} timeout=${p.timeout} null=${p.nullData} err=${p.err}\n`;
   t += `Red čekanja: avg=${avg(p.qWaitSum, p.qWaitN)}ms max=${p.qWaitMax | 0}ms\n`;
   t += `Čitanje (worker SQLite/OPFS): n=${p.reads} avg=${avg(p.readSum, p.reads)}ms max=${p.readMax | 0}ms\n`;
-  t += `Dekodiranje (PNG→canvas): n=${p.decodes} avg=${avg(p.decSum, p.decodes)}ms max=${p.decMax | 0}ms\n`;
+  t += `Dekodiranje (PNG→canvas): n=${p.decodes} avg=${avg(p.decSum, p.decodes)}ms max=${p.decMax | 0}ms praznih→Image=${p.decBlank}\n`;
   t += `UKUPNO po pločici (createTile→done): avg=${avg(p.totalSum, p.totalN)}ms max=${p.totalMax | 0}ms\n`;
   t += `Najsporija: ${p.slowest || '-'}\n`;
   t += `(za svjež profil: ♻ Reset profila, pa skrolaj/zumiraj 10s, pa Debug PRO)\n`;
@@ -21567,10 +21574,10 @@ const _tileProf = {
   created:0, done:0, timeout:0, nullData:0, err:0,
   reads:0, readSum:0, readMax:0,
   qWaitN:0, qWaitSum:0, qWaitMax:0,
-  decodes:0, decSum:0, decMax:0,
+  decodes:0, decSum:0, decMax:0, decBlank:0,
   totalN:0, totalSum:0, totalMax:0, slowest:'',
   t0: (typeof performance!=='undefined'?performance.now():Date.now()),
-  reset(){ ['created','done','timeout','nullData','err','reads','readSum','readMax','qWaitN','qWaitSum','qWaitMax','decodes','decSum','decMax','totalN','totalSum','totalMax'].forEach(k=>this[k]=0); this.slowest=''; this.t0=performance.now(); }
+  reset(){ ['created','done','timeout','nullData','err','reads','readSum','readMax','qWaitN','qWaitSum','qWaitMax','decodes','decSum','decMax','decBlank','totalN','totalSum','totalMax'].forEach(k=>this[k]=0); this.slowest=''; this.t0=performance.now(); }
 };
 const _now = () => (typeof performance!=='undefined'?performance.now():Date.now());
 
@@ -21900,6 +21907,16 @@ function _srcToCanvas(src, sz) {
   oc.getContext('2d').drawImage(src, 0, 0, sz, sz);
   return oc;
 }
+// Je li canvas neproziran (uspješno dekodirano) — par tačaka; sve providno = neuspjeh
+function _canvasOpaque(cv) {
+  try {
+    const cx = cv.getContext('2d'); const w = cv.width, h = cv.height;
+    for (const [px, py] of [[w/2,h/2],[w/4,h/4],[3*w/4,3*h/4],[3*w/4,h/4],[w/4,3*h/4]]) {
+      if (cx.getImageData(px|0, py|0, 1, 1).data[3] !== 0) return true;
+    }
+    return false;
+  } catch(e) { return true; }
+}
 function _decodeToCanvas(blob, sz) {
   const viaImg = () => new Promise((res, rej) => {
     const u = URL.createObjectURL(blob); const img = new Image();
@@ -21908,7 +21925,7 @@ function _decodeToCanvas(blob, sz) {
     img.src = u;
   });
   if ('createImageBitmap' in window) {
-    return createImageBitmap(blob).then(bmp => { const c = _srcToCanvas(bmp, sz); if (bmp.close) bmp.close(); return c; }).catch(viaImg);
+    return createImageBitmap(blob).then(bmp => { const c = _srcToCanvas(bmp, sz); if (bmp.close) bmp.close(); return _canvasOpaque(c) ? c : viaImg(); }).catch(viaImg);
   }
   return viaImg();
 }
@@ -21918,24 +21935,26 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   let _fin = false;
   const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); };
   const _safety = setTimeout(finish, 8000);  // sigurnosni okidač
+  const drawViaImg = () => {
+    const u = URL.createObjectURL(blob); const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, _srcToCanvas(img, sz)); _sqlTileBmpEvict(); } URL.revokeObjectURL(u); finish(); };
+    img.onerror = () => { URL.revokeObjectURL(u); finish(); };
+    img.src = u;
+  };
   const onSrc = (src) => {
-    ctx.drawImage(src, 0, 0, sz, sz);                       // na vidljivu tile canvas
-    if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, _srcToCanvas(src, sz)); _sqlTileBmpEvict(); }
+    const oc = _srcToCanvas(src, sz);
+    // D1-24: createImageBitmap u ovom WebView-u zna dati PRAZNU sliku → ako je dekodirano
+    // sve providno, ponovi preko Image() (pouzdanije). Inače crtaj iz već-dekodiranog canvasa.
+    if (!_canvasOpaque(oc)) { _tileProf.decBlank++; drawViaImg(); return; }
+    ctx.drawImage(oc, 0, 0, sz, sz);                   // na vidljivu tile canvas
+    if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, oc); _sqlTileBmpEvict(); }
     finish();
   };
   if ('createImageBitmap' in window) {
     const _d0 = _now();
-    createImageBitmap(blob).then(bmp => { const dt=_now()-_d0; _tileProf.decodes++; _tileProf.decSum+=dt; if(dt>_tileProf.decMax)_tileProf.decMax=dt; onSrc(bmp); if (bmp.close) bmp.close(); }).catch(() => {
-      const u = URL.createObjectURL(blob); const img = new Image();
-      img.onload = () => { onSrc(img); URL.revokeObjectURL(u); };
-      img.onerror = () => { URL.revokeObjectURL(u); finish(); };
-      img.src = u;
-    });
+    createImageBitmap(blob).then(bmp => { const dt=_now()-_d0; _tileProf.decodes++; _tileProf.decSum+=dt; if(dt>_tileProf.decMax)_tileProf.decMax=dt; onSrc(bmp); if (bmp.close) bmp.close(); }).catch(drawViaImg);
   } else {
-    const u = URL.createObjectURL(blob); const img = new Image();
-    img.onload = () => { onSrc(img); URL.revokeObjectURL(u); };
-    img.onerror = () => { URL.revokeObjectURL(u); finish(); };
-    img.src = u;
+    drawViaImg();
   }
 }
 

@@ -229,6 +229,18 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   gdje je karta sitna tačka = uglavnom providni = normalno/bezopasno). Keš na radnim
   zoomovima (12-15) potpuno važeći.
 - **Debug alati:** 📋 Kopiraj Debug PRO dugme (v3.3.9) — kopira ispis u clipboard.
+  Profilacija tile pipeline-a (v3.4.1): mjeri red čekanja / čitanje / dekodiranje / ukupno.
+- **D1-25 — SPOROST: OPFS čitanje 100ms/pločica (profilacija dokazala).** Profil v3.4.1:
+  Čitanje (worker SQLite/OPFS) avg=100ms max=294ms = USKO GRLO (dekodiranje samo 27ms,
+  red 27ms). Uzrok: MiniSqlite čita 4KB stranice preko `file.slice().arrayBuffer()` —
+  asinhrono, ~25ms po stranici. **Fix (v3.4.2):** OPFS **SyncAccessHandle** — sinhrono
+  `read()` (mikrosekunde/stranica) u workeru; fallback na File ako nije podržano. Glavna
+  razlika u brzini naspram native (AlpineQuest). Sync handle se zatvara na `close`.
+  Status: 🔄 (v3.4.2, mjeriti profil ponovo).
+- **D1-24 — createImageBitmap(blob) ponekad prazna slika (11 praznih z14/z15 u SKEN-u).**
+  Profil/SKEN: i čisti createImageBitmap(blob) zna dati providnu sliku → fale pločice.
+  **Fix (v3.4.2):** `_canvasOpaque` provjeri dekodirano; ako prazno → Image() fallback
+  (pouzdaniji). Profil broji `praznih→Image`.  Status: 🔄 (v3.4.2)
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
