@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.2';
+const APP_VER = 'v3.3.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21220,6 +21220,22 @@ async function sqlmapDebugPro() {
   t += `  ✅ s sadržajem: ${content}\n`;
   t += `  ⬛ PRAZNE: ${blank}  (od toga: Leaflet-loaded=${blankLoaded}, u cache=${blankCached})\n`;
   if (unreadable) t += `  ❓ nečitljive (tainted): ${unreadable}\n`;
+
+  // Pozicije i veličine pločica na ekranu — otkriva skaliranje (retained tiles s drugog
+  // zooma se prikazuju sitno) ili klasteriranje (pogrešan pixel origin/transform).
+  const _mEl = document.getElementById('map');
+  const _mr = _mEl ? _mEl.getBoundingClientRect() : { left: 0, top: 0 };
+  t += `\n--- Pozicije pločica (rel. #map, prvih 10) ---\n`;
+  let _shown = 0;
+  for (const key of tiles) {
+    if (_shown >= 10) break;
+    const tile = layer._tiles[key];
+    const cv = tile && tile.el; if (!cv || cv.tagName !== 'CANVAS') continue;
+    const r = cv.getBoundingClientRect(); const c = tile.coords || {};
+    t += `  z${c.z}/${c.x}/${c.y} @(${(r.left - _mr.left) | 0},${(r.top - _mr.top) | 0}) ${r.width | 0}x${r.height | 0}\n`;
+    _shown++;
+  }
+  t += `(očekivano: ${_shown ? '256x256' : '?'} po pločici; sitnije = skalirane retained pločice)\n`;
 
   // Live read za nekoliko praznih — ima li podataka u bazi?
   if (blankList.length) {
