@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.5';
+const APP_VER = 'v3.2.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21159,6 +21159,102 @@ function sqlmapShowDebug() {
   el.textContent = t;
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
+
+// 🐞 DEBUG PRO — ispituje SVAKU pločicu vidljivog SQLite sloja: prazna li je (uzorkovanjem
+// piksela), je li u BMP cache-u, smatra li je Leaflet učitanom, i (za prazne) ima li
+// podataka u bazi (live read). Daje tačan presjek gdje render puca.
+function _cvBlank(cv) {
+  try {
+    const cx = cv.getContext('2d');
+    const w = cv.width || 256, h = cv.height || 256;
+    const pts = [[w/2,h/2],[w/4,h/4],[3*w/4,h/4],[w/4,3*h/4],[3*w/4,3*h/4],[w/2,h/4],[w/2,3*h/4]];
+    let nonBlank = 0;
+    for (const [px,py] of pts) {
+      const d = cx.getImageData(px|0, py|0, 1, 1).data;
+      const transparent = d[3] === 0;
+      const bgGreen = Math.abs(d[0]-45)<10 && Math.abs(d[1]-58)<10 && Math.abs(d[2]-46)<10;
+      if (!transparent && !bgGreen) nonBlank++;
+    }
+    return nonBlank === 0;   // sve tačke prozirne ili pozadinska zelena → prazna
+  } catch(e) { return null; } // npr. tainted canvas — ne može se očitati
+}
+async function sqlmapDebugPro() {
+  const el = document.getElementById('sqlmap-debug-out');
+  el.style.display = 'block';
+  el.textContent = '🐞 Debug PRO — analiziram pločice...';
+  const sl = _sqlLayers.find(l => l.visible) || _sqlLayers[0];
+  if (!sl) { el.textContent = '⚠️ Nema vidljivog SQLite sloja.'; return; }
+  const layer = sl.layer;
+  const name = sl.name;
+  const useMain = !!_mainMiniDbs[name];
+  const z = Math.round(map.getZoom());
+  let t = `=== DEBUG PRO ${APP_VER} ===\n`;
+  t += `Karta: ${name} (${sl.fmt}, OPFS:${sl.opfs?'da':'ne'}, eng:${useMain?'main':'worker'})\n`;
+  t += `Zoom: ${z} | meta zoom: ${sl.meta?.minzoom}-${sl.meta?.maxzoom}\n`;
+  t += `Cache: sql=${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX} online=${_tileBmpCache.size}\n`;
+  t += `Throttle: wActive=${_wTileActive} wStack=${_wTileStack.length} | mainActive=${_mainTileActive} mainQueue=${_mainTileQueue.length}\n`;
+
+  const tiles = layer && layer._tiles ? Object.keys(layer._tiles) : [];
+  t += `Leaflet pločica u sloju: ${tiles.length}\n`;
+  if (!tiles.length) { el.textContent = t + '\n⚠️ Sloj nema pločica (_tiles prazan).'; return; }
+
+  let blank = 0, content = 0, unreadable = 0, blankLoaded = 0, blankCached = 0;
+  const blankList = [];
+  for (const key of tiles) {
+    const tile = layer._tiles[key];
+    const cv = tile && tile.el;
+    if (!cv || cv.tagName !== 'CANVAS') continue;
+    const coords = tile.coords || {};
+    const isBlank = _cvBlank(cv);
+    if (isBlank === null) { unreadable++; continue; }
+    if (isBlank) {
+      blank++;
+      if (tile.loaded) blankLoaded++;
+      const ck = name + '/' + coords.z + '/' + coords.x + '/' + coords.y;
+      const inCache = _sqlTileBmpCache.has(ck);
+      if (inCache) blankCached++;
+      if (blankList.length < 6) blankList.push({x:coords.x, y:coords.y, z:coords.z, loaded:!!tile.loaded, cache:inCache});
+    } else content++;
+  }
+  t += `\nStanje pločica:\n`;
+  t += `  ✅ s sadržajem: ${content}\n`;
+  t += `  ⬛ PRAZNE: ${blank}  (od toga: Leaflet-loaded=${blankLoaded}, u cache=${blankCached})\n`;
+  if (unreadable) t += `  ❓ nečitljive (tainted): ${unreadable}\n`;
+
+  // Live read za nekoliko praznih — ima li podataka u bazi?
+  if (blankList.length) {
+    t += `\n--- Live read praznih pločica ---\n`;
+    for (const bt of blankList) {
+      let info;
+      try {
+        let data;
+        if (useMain) data = await _mainMiniDbs[name].mini.tile(bt.z, bt.x, bt.y);
+        else { const r = await _sqlWCall({type:'tile', name, z:bt.z, x:bt.x, y:bt.y}); data = r?.data; }
+        info = (data && data.length) ? `read=OK(${(data.length/1024|0)}KB)` : `read=PRAZNO`;
+      } catch(e) { info = 'read=GREŠKA'; }
+      t += `  z${bt.z}/${bt.x}/${bt.y}: loaded=${bt.loaded?'DA':'ne'} cache=${bt.cache?'DA':'ne'} ${info}\n`;
+    }
+    t += `\nZAKLJUČAK: ako prazne pločice imaju read=OK i loaded=DA → render bug\n`;
+    t += `(podaci postoje, Leaflet misli da je gotova, a canvas prazan).\n`;
+  } else if (blank === 0) {
+    t += `\n✅ Nema praznih pločica u ovom trenutku.\n`;
+  }
+
+  // Provjera ispravnosti keširanih bitmapa (use-after-close?)
+  try {
+    const firstKey = _sqlTileBmpCache.keys().next().value;
+    if (firstKey) {
+      const bmp = _sqlTileBmpCache.get(firstKey);
+      const tc = document.createElement('canvas'); tc.width = tc.height = 8;
+      tc.getContext('2d').drawImage(bmp, 0, 0, 8, 8);
+      const px = tc.getContext('2d').getImageData(0,0,8,8).data;
+      let any = false; for (let i=3;i<px.length;i+=4) if (px[i] !== 0) { any = true; break; }
+      t += `\nCache bitmap test (${firstKey.split('/').slice(-3).join('/')}): ${bmp.width}x${bmp.height} crta=${any?'OK':'PRAZNO(zatvorena?)'}\n`;
+    }
+  } catch(e) { t += `\nCache bitmap test: GREŠKA (${e.message}) — bitmapa vjerovatno zatvorena!\n`; }
+
+  el.textContent = t;
+}
 function sqlmapHandleDrop(e) {
   e.preventDefault();
   document.getElementById('sqlmap-drop-zone').classList.remove('drag-over');
@@ -26123,6 +26219,9 @@ if (typeof AndroidDownload !== 'undefined') {
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn gr" onclick="closeSqlMapModal()">Zatvori</button>
       <button class="btn" style="background:#1e3a5f;color:#93c5fd;" onclick="sqlmapShowDebug()">🔍 Debug info</button>
+    </div>
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn" style="background:#3b1e5f;color:#d8b4fe;width:100%;" onclick="sqlmapDebugPro()">🐞 Debug PRO (analiza pločica)</button>
     </div>
     <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>
