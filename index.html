@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.1';
+const APP_VER = 'v3.3.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21293,17 +21293,29 @@ function _dbgHudUpdate() {
     } else content++;
   }
   const zStr = Object.keys(zCount).map(k => `z${k}:${zCount[k]}`).join(' ');
-  // Koliko pločica Leaflet TREBA za viewport (256px grid + buffer) vs koliko ima
   const size = map.getSize();
   const expected = (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
   const tooFew = tiles.length < expected - 2;
+  // Stvarna veličina #map elementa iz DOM-a (vs Leaflet getSize) + koliko je pločica
+  // STVARNO vidljivo na ekranu (presjek s viewport-om). Otkriva: (a) stale veličinu
+  // (DOM≠getSize), (b) pločice pozicionirane van ekrana (ima:N ali vidljivih:0).
+  const mEl = document.getElementById('map');
+  const mr = mEl ? mEl.getBoundingClientRect() : { left:0, top:0, right:0, bottom:0, width:0, height:0 };
+  let visible = 0;
+  for (const tile of tiles) {
+    const cv = tile && tile.el; if (!cv) continue;
+    const r = cv.getBoundingClientRect();
+    if (r.right > mr.left && r.left < mr.right && r.bottom > mr.top && r.top < mr.bottom && r.width > 1) visible++;
+  }
+  const sizeStale = Math.abs((mr.height|0) - size.y) > 4 || Math.abs((mr.width|0) - size.x) > 4;
   _dbgHudEl.textContent =
     `${APP_VER}  zoom ${z}  (native≤${sl.meta?.maxzoom})\n` +
-    `ekran ${size.x}x${size.y} treba~${expected} ima:${tiles.length}${tooFew ? ' ⚠️PREMALO' : ''}\n` +
+    `DOM #map ${mr.width|0}x${mr.height|0}  Leaflet ${size.x}x${size.y}${sizeStale ? ' ⚠️STALE' : ''}\n` +
+    `treba~${expected} ima:${tiles.length} vidljivih:${visible}${tooFew ? ' ⚠️PREMALO' : ''}\n` +
     `s sadržajem ✅${content}  prazne ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
-    (blank ? `PRAZNE: ${zStr}  loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : '') +
+    (blank ? `PRAZNE: ${zStr} loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : '') +
     `cache ${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX}  wAct=${_wTileActive} wStk=${_wTileStack.length}`;
-  _dbgHudEl.style.borderColor = (blank || tooFew) ? '#ef4444' : '#22c55e';
+  _dbgHudEl.style.borderColor = (blank || tooFew || sizeStale || visible < tiles.length) ? '#ef4444' : '#22c55e';
 }
 function sqlmapForceResize() {
   try { map.invalidateSize({ pan: false }); } catch(e) {}
