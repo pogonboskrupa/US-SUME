@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.5';
+const APP_VER = 'v3.1.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8859,6 +8859,14 @@ function _tileBmpEvict() {
   }
 }
 
+// D1-7: upiši bitmapu u cache zatvarajući prethodnu za isti ključ — bez ovoga dva
+// paralelna createTile za isti coord ostave prvu bitmapu nezatvorenu (GPU leak).
+function _bmpCacheSet(cache, key, bmp) {
+  const old = cache.get(key);
+  if (old && old !== bmp && old.close) { try { old.close(); } catch(e) {} }
+  cache.set(key, bmp);
+}
+
 function makeCachedTileLayer(cacheName) {
   cacheName = cacheName || TILE_CACHE_NAME;
   return L.TileLayer.extend({
@@ -8887,7 +8895,7 @@ function makeCachedTileLayer(cacheName) {
         if ('createImageBitmap' in window) {
           createImageBitmap(blob).then(bmp => {
             ctx.drawImage(bmp, 0, 0, sz.x, sz.y);
-            _tileBmpCache.set(url, bmp); _tileBmpEvict();
+            _bmpCacheSet(_tileBmpCache, url, bmp); _tileBmpEvict();  // D1-7
             done(null, canvas);
           }).catch(() => done(null, canvas));
         } else {
@@ -21550,7 +21558,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
     createImageBitmap(blob)
       .then(bmp => {
         ctx.drawImage(bmp, 0, 0, sz, sz);
-        if (cacheKey) { _sqlTileBmpCache.set(cacheKey, bmp); _sqlTileBmpEvict(); }
+        if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, bmp); _sqlTileBmpEvict(); }  // D1-7
         else bmp.close();
         done(null, canvas);
       })
@@ -21628,8 +21636,19 @@ function _sqlmapRenderLayers() {
 
 function sqlmapToggle(i) {
   const sl = _sqlLayers[i];
+  if (!sl) return;
   sl.visible = !sl.visible;
-  if (sl.visible) sl.layer.addTo(map); else map.removeLayer(sl.layer);
+  if (sl.visible) {
+    // D1-3: samo jedna offline karta aktivna istovremeno — sakrij ostale.
+    // Manje paralelnih SQLite čitanja i GPU memorije → manja šansa za sive/crne pločice.
+    _sqlLayers.forEach((o, j) => {
+      if (j !== i && o.visible) { o.visible = false; if (map.hasLayer(o.layer)) map.removeLayer(o.layer); }
+    });
+    if (!map.hasLayer(sl.layer)) sl.layer.addTo(map);
+    _saveLastMap('sqlite', null, sl.name);
+  } else {
+    if (map.hasLayer(sl.layer)) map.removeLayer(sl.layer);
+  }
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 

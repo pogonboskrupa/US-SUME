@@ -11,7 +11,7 @@ Status legenda: ⬜ nije početo · 🔄 u toku · ✅ završeno
 
 ---
 
-## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  🔄
+## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  ✅
 
 Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
@@ -88,7 +88,7 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   slot leak. **Fix:** očistiti cache + resetovati throttle.  Status: ✅ (v3.1.4)
 - **D1-3 — `sqlmapToggle` dozvoljava 2+ vidljive offline karte** (~L21617) →
   udvostručuje čitanja/memoriju (uzrok ranijeg UNSKO+UNSKO_2GB). `setLayerSqlite` je
-  ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ⬜
+  ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ✅ (v3.1.6, Opcija 1: samo jedna aktivna)
 - **D1-4 — Online createTile prekriva zadržane pločice pri zoom-out** (~L8869) — isti
   bug popravljen za SQLite (neproziran canvas + zelena ispuna), ali za online slojeve.
   **Fix:** providan canvas, bez ispune.  Status: ✅ (v3.1.5)
@@ -100,4 +100,6 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 - **D1-6 — Online BMP cache je FIFO, ne LRU.** Cache-hit (~L8878) ne osvježava poziciju
   (nema delete+set kao SQLite). **Fix:** delete+set na hit.  Status: ✅ (v3.1.5)
 - **D1-7 — Race: dupli createTile za isti coord** može procuriti prvu bitmapu (druga
-  prepiše u cache bez close). Rijetko.  Status: ⬜
+  prepiše u cache bez close). Rijetko.  Status: ✅ (v3.1.6, `_bmpCacheSet` helper)
+
+**DIO 1 ZAVRŠEN** ✅ — svih 7 nalaza riješeno (v3.1.4–v3.1.6).
