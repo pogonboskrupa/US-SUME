@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.5';
+const APP_VER = 'v3.3.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8946,7 +8946,12 @@ const map = L.map('map',{
   maxZoom:22,
   zoomControl:false,
   attributionControl:false,
-  fadeAnimation:true,
+  // D1-21: fadeAnimation ISKLJUČEN. S njim Leaflet postavlja INLINE opacity na pločice
+  // tokom fade-a; naš `transition:none` ih ostavi zaglavljene na opacity 0 (inline
+  // nadjačava CSS .leaflet-tile{opacity:1}) → "pločice sa sadržajem ali ekran prazan"
+  // (potvrđeno Debug PRO-om: 12 ispravno poredanih content-pločica nevidljivih). Bez
+  // fade-a pločice se prikažu odmah na punoj vidljivosti.
+  fadeAnimation:false,
   zoomAnimation:true,
   zoomAnimationThreshold:4,
   markerZoomAnimation:false,

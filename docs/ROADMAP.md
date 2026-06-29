@@ -207,6 +207,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   prazna); redraw u krivom trenutku ostavi pločice nevidljivima. Debug PRO dopunjen
   DOM-dijagnostikom (opacity/isConnected/tile-pane transform) da otkrije zašto su
   content-pločice nevidljive.  Status: 🔄 dijagnostika (v3.3.5)
+- **D1-21 — Pločice sa sadržajem NEVIDLJIVE: fadeAnimation ostavlja inline opacity=0
+  (PRAVI KORIJEN).** Debug PRO v3.3.4: 12 pločica, 256x256, ISPRAVNO poredane preko
+  viewporta, sve s sadržajem, cache OK — a ekran prazan. Jedino objašnjenje: opacity.
+  Karta je imala `fadeAnimation:true` → Leaflet postavlja INLINE `style.opacity` na
+  pločice tokom fade-a; naš `transition:none !important` ih ostavi zaglavljene na
+  opacity 0 (inline nadjačava CSS `.leaflet-tile{opacity:1}`). **Fix (v3.3.6):**
+  `fadeAnimation:false` — Leaflet ne dira opacity, pločice odmah pune.  Status: 🔄 (v3.3.6)
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
