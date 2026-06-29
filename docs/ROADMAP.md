@@ -193,4 +193,17 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   pločice samo za taj dio, ostatak prazan. ResizeObserver nije pomogao (init-stale, bez
   promjene). **Fix (v3.3.1):** SAMOIZLJEČENJE — `setInterval(1500)` + rane provjere
   upoređuju `map.getSize()` sa stvarnim `clientWidth/Height`; na neslaganje →
-  `invalidateSize()`. Garantovan oporavak ≤1.5s bez obzira na uzrok.  Status: 🔄 (v3.3.1)
+  `invalidateSize()`. Garantovan oporavak ≤1.5s bez obzira na uzrok.  Status: ❌ pogrešan
+  trag — Debug PRO v3.3.2/3.3.3 pokazao DOM=Leaflet=641 (veličina TAČNA), nije stale.
+- **D1-20 — Leaflet nakon zoom-a napravi NEPOTPUN grid (9 umjesto 22 pločice) → veliki
+  prazan dio (PRAVI KORIJEN, potvrđeno Debug PRO-om).** Debug PRO v3.3.3: 22 pločice sve
+  256x256, sve s sadržajem, ispravno poredane, z12 TILE PRONAĐEN, cache OK — sve zdravo
+  KAD se popuni. Ali odmah nakon zoom-out Leaflet napravi premalo pločica (HUD pokazao
+  ima:9 treba:12) jer `_update` odradi dok je zoom transform još u prelazu; ostane prazno
+  dok navigacija/🔄 ne dopuni. **Fix (v3.3.4):** na `zoomend` (debounce 350ms) ako grid
+  ima manje pločica nego što viewport traži → `layer.redraw()` (dopuni). Sada SIGURNO jer
+  su D1-16/17 uklonili prazne keš bitmape i use-after-close.  Status: 🔄 (v3.3.4, test)
+
+> NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
+> D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
+> finalni preostali simptom bio nepotpun Leaflet grid nakon zoom-a (ne veličina).

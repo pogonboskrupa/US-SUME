@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.3';
+const APP_VER = 'v3.3.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21331,7 +21331,7 @@ function _dbgHudUpdate() {
     `s sadržajem ✅${content}  prazne ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
     (blank ? `PRAZNE: ${zStr} loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : '') +
     `cache ${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX}  wAct=${_wTileActive} wStk=${_wTileStack.length}`;
-  _dbgHudEl.style.borderColor = (blank || tooFew || sizeStale || visible < tiles.length) ? '#ef4444' : '#22c55e';
+  _dbgHudEl.style.borderColor = (blank || tooFew || sizeStale) ? '#ef4444' : '#22c55e';
 }
 function sqlmapForceResize() {
   try { map.invalidateSize({ pan: false }); } catch(e) {}
@@ -21785,6 +21785,23 @@ async function _prewarmView() {
   } finally { _prewarmViewBusy = false; }
 }
 map.on('moveend zoomend', _schedPrewarmView);
+
+// D1-20: Nakon zoom-a Leaflet zna napraviti NEPOTPUN grid (npr. 9 umjesto 22 pločice)
+// jer _update odradi dok je zoom transform/veličina još u prelazu → veliki dio ekrana
+// prazan dok ga navigacija/🔄 ne dopuni. Čim se zoom smiri, ako grid ima manje pločica
+// nego što viewport traži → redraw (dopuni). Sada SIGURNO: D1-16/17 su uklonili prazne
+// keš bitmape i use-after-close, pa redraw više ne pravi prazne pločice.
+let _zoomFillT = null;
+map.on('zoomend', () => {
+  if (_zoomFillT) clearTimeout(_zoomFillT);
+  _zoomFillT = setTimeout(() => {
+    const sl = _sqlLayers.find(l => l.visible);
+    if (!sl || !sl.layer || !sl.layer._tiles) return;
+    const size = map.getSize();
+    const need = (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
+    if (Object.keys(sl.layer._tiles).length < need) sl.layer.redraw();
+  }, 350);
+});
 
 // D1-18/D1-19: Leaflet zna zadržati POGREŠNU (manju) veličinu ako je inicijaliziran
 // prije nego se layout smirio, ili kad se kontejner promijeni bez window-resize eventa
