@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.8';
+const APP_VER = 'v3.2.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21293,12 +21293,24 @@ function _dbgHudUpdate() {
     } else content++;
   }
   const zStr = Object.keys(zCount).map(k => `z${k}:${zCount[k]}`).join(' ');
+  // Koliko pločica Leaflet TREBA za viewport (256px grid + buffer) vs koliko ima
+  const size = map.getSize();
+  const expected = (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
+  const tooFew = tiles.length < expected - 2;
   _dbgHudEl.textContent =
     `${APP_VER}  zoom ${z}  (native≤${sl.meta?.maxzoom})\n` +
-    `pločice ${tiles.length}: ✅${content} ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
-    (blank ? `PRAZNE po zoomu: ${zStr}\n  loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : `nema praznih ✅\n`) +
+    `ekran ${size.x}x${size.y} treba~${expected} ima:${tiles.length}${tooFew ? ' ⚠️PREMALO' : ''}\n` +
+    `s sadržajem ✅${content}  prazne ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
+    (blank ? `PRAZNE: ${zStr}  loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : '') +
     `cache ${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX}  wAct=${_wTileActive} wStk=${_wTileStack.length}`;
-  _dbgHudEl.style.borderColor = blank ? '#ef4444' : '#22c55e';
+  _dbgHudEl.style.borderColor = (blank || tooFew) ? '#ef4444' : '#22c55e';
+}
+function sqlmapForceResize() {
+  try { map.invalidateSize({ pan: false }); } catch(e) {}
+  const sl = _sqlLayers.find(l => l.visible);
+  if (sl && sl.layer && sl.layer.redraw) sl.layer.redraw();
+  closeSqlMapModal();
+  showToast('🔄 Karta osvježena (invalidateSize). Provjeri jesu li praznine nestale.');
 }
 function sqlmapToggleLiveHud() {
   if (_dbgHudEl) {
@@ -21745,6 +21757,24 @@ async function _prewarmView() {
   } finally { _prewarmViewBusy = false; }
 }
 map.on('moveend zoomend', _schedPrewarmView);
+
+// D1-18: Auto-osvježi Leaflet veličinu kad se kontejner karte promijeni. Na mobilnom
+// (collapse address-bara, UI paneli) kontejner zna promijeniti visinu BEZ window-resize
+// eventa → Leaflet zadrži staru (manju) veličinu i NE napravi pločice za dio ekrana
+// (HUD pokaže "treba~30 ima:12", desni/donji dio prazan). ResizeObserver to hvata.
+(function _autoInvalidateMapSize() {
+  if (typeof ResizeObserver === 'undefined') return;
+  const el = document.getElementById('map');
+  if (!el) return;
+  let t = null, lastH = 0, lastW = 0;
+  new ResizeObserver(entries => {
+    const r = entries[0]?.contentRect; if (!r) return;
+    if (Math.abs(r.height - lastH) < 2 && Math.abs(r.width - lastW) < 2) return;
+    lastH = r.height; lastW = r.width;
+    if (t) clearTimeout(t);
+    t = setTimeout(() => { try { map.invalidateSize({ pan: false }); } catch(e) {} }, 120);
+  }).observe(el);
+})();
 
 // D1-17: Dekodiraj ISKLJUČIVO iz blob-a. Debug PRO je pokazao da createImageBitmap(canvas)
 // u ovom WebView-u vraća PRAZNU bitmapu → keširane prazne bitmape → prazne pločice pri
@@ -26276,6 +26306,9 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn" style="background:#1e3a5f;color:#7dd3fc;width:100%;" onclick="sqlmapToggleLiveHud()">📊 Live HUD (uživo na ekranu)</button>
+    </div>
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn" style="background:#14532d;color:#86efac;width:100%;" onclick="sqlmapForceResize()">🔄 Osvježi veličinu karte (test popravke)</button>
     </div>
     <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>

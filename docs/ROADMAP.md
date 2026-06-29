@@ -178,4 +178,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   keširane prazne bitmape → cache-hit crta ništa → prazna pločica. `createImageBitmap(blob)`
   radi savršeno (🔬 Test). **Fix (v3.2.7):** keširaj ISKLJUČIVO `_decodeBlobBmp` (iz blob-a,
   s resize opcijom za memoriju, fallback na punu); uklonjen svaki `createImageBitmap(canvas)`.
-  Cache cap 500→300.  Status: 🔄 (v3.2.7, test)
+  Cache cap 500→300.  Status: ✅ (v3.2.7 — Debug PRO: crta=OK, cache bitmape sad važeće)
+- **D1-18 — Leaflet ne pravi pločice za dio ekrana (stale veličina) → velike praznine
+  (PRAVI KORIJEN, potvrđeno Live HUD-om).** Live HUD: `pločice 12: ✅12 ⬛0` a ekran pun
+  praznina → praznine NISU prazne pločice nego pločice koje Leaflet NIKAD ne napravi.
+  Leaflet zadrži staru (manju) veličinu kontejnera (mobilni address-bar/UI paneli mijenjaju
+  visinu bez window-resize eventa) pa učita pločice samo za gornji/lijevi dio. **Fix
+  (v3.2.9):** ResizeObserver na #map → `map.invalidateSize()` na promjenu veličine; HUD
+  pokazuje "treba~N ima:M ⚠️PREMALO"; ručno dugme "🔄 Osvježi veličinu karte".
+  Status: 🔄 (v3.2.9, test)
