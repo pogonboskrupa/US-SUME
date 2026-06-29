@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.9';
+const APP_VER = 'v3.4.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21271,7 +21271,7 @@ async function sqlmapDebugPro() {
   try {
     const tc = document.createElement('canvas'); tc.width = tc.height = 6;
     const tcx = tc.getContext('2d');
-    let total = 0, bad = 0, err = 0, isBmp = 0, isCanvas = 0;
+    let total = 0, badLow = 0, badHigh = 0, err = 0, isBmp = 0, isCanvas = 0;
     const badKeys = [];
     for (const [k, v] of _sqlTileBmpCache) {
       total++;
@@ -21281,14 +21281,18 @@ async function sqlmapDebugPro() {
         tcx.drawImage(v, 0, 0, 6, 6);
         const px = tcx.getImageData(0, 0, 6, 6).data;
         let any = false; for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) { any = true; break; }
-        if (!any) { bad++; if (badKeys.length < 5) badKeys.push(k.split('/').slice(-3).join('/')); }
+        if (!any) {
+          const parts = k.split('/'); const zz = +parts[parts.length - 3];
+          if (zz < 10) badLow++; else { badHigh++; if (badKeys.length < 5) badKeys.push(parts.slice(-3).join('/')); }
+        }
       } catch(e) { err++; }
     }
     t += `\n--- SKEN CACHE-a (${total} bitmapa) ---\n`;
     t += `  tip: canvas=${isCanvas} bitmap=${isBmp}\n`;
-    t += `  PRAZNIH: ${bad}  greška(zatvorenih): ${err}\n`;
-    if (badKeys.length) t += `  primjeri praznih: ${badKeys.join(', ')}\n`;
-    if (bad === 0 && err === 0) t += `  ✅ sve keširane bitmape su važeće\n`;
+    t += `  prazni (niski zoom z<10, NORMALNO): ${badLow}\n`;
+    t += `  PRAZNI na radnom zoomu (≥10, PROBLEM): ${badHigh}  greška(zatvorenih): ${err}\n`;
+    if (badKeys.length) t += `  primjeri problematičnih: ${badKeys.join(', ')}\n`;
+    if (badHigh === 0 && err === 0) t += `  ✅ keš zdrav na radnim zoomovima\n`;
   } catch(e) { t += `\nSKEN CACHE-a: GREŠKA ${e.message}\n`; }
 
   t += `\n${APP_VER}`;
