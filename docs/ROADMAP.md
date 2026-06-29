@@ -254,3 +254,20 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   vizuelno prazno. **Fix (v3.4.4):** fiksiraj `#wrapper` na stvarnu `window.innerHeight`
   (na load/resize/orientation/visibilitychange + 1.5s heal), pa invalidateSize. HUD
   pokazuje innerH vs #map. Status: 🔄 (v3.4.4, test)
+
+---
+
+## DIO 2 — UČITAVANJE KARATA (UX)
+
+- **D2-1 — Konsolidirani ekran "UČITAJ KARTU" (v3.4.5).** Ranije razbacano kroz 3 stavke
+  menija (Učitaj SQLiteDB, Upravljanje kartama, Offline karta). Novi tab u Meniju
+  objedinjuje: izbor izvora (Interna/SD/Nedavno) + multi-file picker + drag&drop (batch),
+  nedavne karte (top 10, tap=aktiviraj, long-press=obriši, minijatura), bottom-sheet s
+  pregledom (format po SQLite headeru, veličina, CRS, validacija), upravljanje svim
+  kartama (aktiviraj/deaktiviraj/info/obriši + prozirnost + z-index), traka memorije +
+  pretraga, lokalizirane greške. Koristi POSTOJEĆI engine (sqlmapLoadFile, _mapMgrCollect,
+  setLayerSqlite) — formati .mbtiles/.sqlitedb/.gpkg/.db. NAPOMENA: app je Leaflet WebView,
+  ne native — formati koji traže native libove (.map Mapsforge, .ozf2 OziExplorer, .vrt/.tif
+  GDAL) nisu izvedivi bez prelaska na native. Stare stavke menija: "Učitaj SQLiteDB" →
+  preimenovan u "Dijagnostika karata (Debug)" (zadržan Debug PRO/HUD); "Upravljanje
+  kartama" uklonjen (sad u novom ekranu). Status: 🔄 (v3.4.5, test)

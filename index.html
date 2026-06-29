@@ -2097,6 +2097,49 @@ select:focus { outline:none; border-color:#3b82f6; }
 .mapmgr-card-btns { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
 .mapmgr-card-btns .btn { font-size:11px; padding:5px 10px; }
 .mapmgr-empty { text-align:center; color:#64748b; font-size:12px; padding:24px 8px; }
+/* ── UČITAJ KARTU — konsolidirani ekran ──────────────────────────── */
+#loadmap-modal { display:none; position:fixed; inset:0; background:#0b1220; z-index:10000; flex-direction:column; }
+#loadmap-modal.show { display:flex; }
+#loadmap-hdr { display:flex; align-items:center; gap:10px; padding:14px 16px; background:#16213e; border-bottom:1px solid #0f3460; flex-shrink:0; }
+#loadmap-hdr h3 { margin:0; font-size:17px; color:#38bdf8; flex:1; display:flex; align-items:center; gap:8px; }
+#loadmap-close { background:none; border:none; color:#94a3b8; font-size:24px; cursor:pointer; line-height:1; padding:0 4px; }
+#loadmap-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 16px 40px; }
+.lm-section { margin-bottom:22px; }
+.lm-section-title { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#64748b; font-weight:700; margin-bottom:10px; }
+.lm-src-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.lm-src-btn { flex:1 1 30%; min-width:96px; background:#16213e; border:1px solid #1e3a5f; border-radius:10px; padding:14px 8px; color:#e2e8f0; font-size:12px; cursor:pointer; text-align:center; transition:border-color .15s; }
+.lm-src-btn:hover, .lm-src-btn:active { border-color:#38bdf8; }
+.lm-src-btn .ico { font-size:22px; display:block; margin-bottom:6px; }
+.lm-drop { border:2px dashed #334155; border-radius:10px; padding:26px 16px; text-align:center; color:#64748b; font-size:13px; cursor:pointer; transition:border-color .2s,color .2s; }
+.lm-drop.drag-over, .lm-drop:hover { border-color:#38bdf8; color:#e2e8f0; }
+.lm-hint { font-size:11px; color:#475569; margin-top:8px; line-height:1.5; }
+.lm-card { background:#0f172a; border:1px solid #1e3a5f; border-radius:9px; padding:11px 12px; margin-bottom:9px; }
+.lm-card.active { border-color:#22c55e; box-shadow:0 0 0 1px #22c55e44; }
+.lm-card-top { display:flex; gap:10px; align-items:center; }
+.lm-thumb { width:46px; height:46px; border-radius:7px; background:#1e293b; flex-shrink:0; object-fit:cover; border:1px solid #334155; display:flex; align-items:center; justify-content:center; font-size:20px; color:#475569; }
+.lm-card-info { flex:1; min-width:0; }
+.lm-card-nm { font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-word; }
+.lm-card-nm .on { color:#22c55e; }
+.lm-card-meta { font-size:11px; color:#64748b; margin-top:3px; line-height:1.5; }
+.lm-card-btns { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
+.lm-card-btns .btn { font-size:11px; padding:5px 10px; }
+.lm-op-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:8px; flex-wrap:wrap; }
+.lm-op-row input[type=range] { flex:1; min-width:90px; accent-color:#38bdf8; }
+.lm-z-btns { display:inline-flex; gap:4px; align-items:center; }
+.lm-z-btns button { background:#1e293b; border:1px solid #334155; color:#94a3b8; border-radius:5px; width:26px; height:24px; cursor:pointer; font-size:12px; }
+.lm-empty { text-align:center; color:#475569; font-size:12px; padding:18px 8px; }
+#loadmap-status { font-size:12px; color:#38bdf8; min-height:16px; text-align:center; margin:6px 0; }
+#loadmap-sheet { display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,.6); align-items:flex-end; }
+#loadmap-sheet.show { display:flex; }
+#loadmap-sheet-box { background:#16213e; border-top:1px solid #0f3460; border-radius:16px 16px 0 0; width:100%; max-height:80vh; overflow-y:auto; padding:18px 18px 24px; box-shadow:0 -8px 30px rgba(0,0,0,.5); }
+#loadmap-sheet-box h4 { margin:0 0 12px; font-size:15px; color:#38bdf8; }
+.lm-sheet-file { background:#0f172a; border:1px solid #1e3a5f; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+.lm-sheet-file .nm { font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-all; }
+.lm-sheet-file .det { font-size:11px; color:#94a3b8; margin-top:4px; line-height:1.6; }
+.lm-sheet-file .bad { color:#f87171; }
+.lm-sheet-file .ok { color:#4ade80; }
+.lm-sheet-btns { display:flex; gap:10px; margin-top:12px; }
+.lm-sheet-btns .btn { flex:1; padding:11px; font-size:14px; font-weight:600; }
 #offline-progress-fill {
   height:100%; background:#38bdf8; border-radius:4px;
   transition:width 0.2s; width:0%;
@@ -4055,7 +4098,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.4';
+const APP_VER = 'v3.4.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22360,6 +22403,324 @@ async function _mapMgrClearAll() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  UČITAJ KARTU — konsolidirani ekran (izbor izvora + nedavne + upravljanje)
+//  Objedinjuje raniju funkcionalnost iz sqlmap-modal i mapmgr-modal u jedan tab.
+//  Koristi POSTOJEĆI engine (sqlmapLoadFile, _mapMgrCollect, setLayerSqlite…) —
+//  podržani formati: .mbtiles, .sqlitedb, .gpkg, .db (svi SQLite-bazirani).
+// ═══════════════════════════════════════════════════════════════════════════════
+let _loadmapPending = [];          // odabrane datoteke koje čekaju potvrdu (bottom sheet)
+let _loadmapRecentShown = [];      // top 10 nedavnih (index-bazirani handleri)
+let _loadmapManageShown = [];      // filtrirane karte u upravljanju
+let _loadmapManageQ = '';
+
+function openLoadMapScreen() {
+  document.getElementById('loadmap-modal').classList.add('show');
+  _loadmapStatus('');
+  const s = document.getElementById('loadmap-search'); if (s) s.value = '';
+  _loadmapManageQ = '';
+  _loadmapRenderRecent();
+  _loadmapRenderManage();
+}
+function closeLoadMapScreen() {
+  document.getElementById('loadmap-modal').classList.remove('show');
+  loadmapCancelSheet();
+}
+function _loadmapStatus(t) { const e = document.getElementById('loadmap-status'); if (e) e.textContent = t || ''; }
+function loadmapPickFiles() { document.getElementById('loadmap-file-input').click(); }
+
+// Lokalizirane poruke grešaka (prema specifikaciji)
+function _loadmapErr(code, extra) {
+  const M = {
+    corrupt: 'Datoteka je oštećena ili nije valjana baza karata.',
+    notiles: 'Karta ne sadrži tileove za trenutni zoom level.',
+    crs:     'Koordinatni sustav nije podržan. Očekivano: EPSG:3857.',
+    space:   'Nedovoljno prostora na uređaju. Oslobodite ' + (extra || '') + '.',
+    perm:    'Dozvolite pristup svim datotekama u postavkama.'
+  };
+  return M[code] || code;
+}
+
+// Detekcija formata: ekstenzija + SQLite magic header (prvih 16 bajtova)
+async function _loadmapDetect(file) {
+  const ext = (file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+  const fmt = ext === '.mbtiles' ? 'MBTiles'
+    : ext === '.gpkg' ? 'GeoPackage'
+    : (ext === '.sqlitedb' || ext === '.db' || ext === '.sqlite') ? 'SQLiteDB'
+    : 'Nepoznat';
+  let headerOk = false;
+  try {
+    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const magic = 'SQLite format 3\0';
+    headerOk = magic.split('').every((c, k) => head[k] === c.charCodeAt(0));
+  } catch (e) {}
+  return { ext, fmt, headerOk, valid: headerOk, size: file.size };
+}
+
+// Odabir/drop datoteka → otvori bottom sheet s pregledom (metapodaci + validacija)
+async function loadmapHandleFiles(fileList) {
+  const files = Array.from(fileList || []);
+  const fi = document.getElementById('loadmap-file-input'); if (fi) fi.value = '';
+  if (!files.length) return;
+  _loadmapPending = files;
+  const listEl = document.getElementById('loadmap-sheet-list');
+  document.getElementById('loadmap-sheet-title').textContent =
+    files.length > 1 ? ('Pregled — ' + files.length + ' datoteka') : 'Pregled datoteke';
+  listEl.innerHTML = '<div class="lm-empty">⏳ Analiza…</div>';
+  document.getElementById('loadmap-sheet').classList.add('show');
+  const rows = [];
+  for (const f of files) {
+    const d = await _loadmapDetect(f);
+    const big = f.size > 100 * 1024 * 1024;
+    rows.push(
+      '<div class="lm-sheet-file">' +
+        '<div class="nm">📄 ' + _escHtml(f.name) + '</div>' +
+        '<div class="det">' +
+          'Format: <b>' + d.fmt + '</b> · Veličina: ' + _mapMgrFmtSize(f.size) + '<br>' +
+          'CRS: EPSG:3857 (pretpostavljeno) · ' +
+          'SQLite zaglavlje: ' + (d.headerOk
+            ? '<span class="ok">✓ valjano</span>'
+            : '<span class="bad">✗ nije SQLite baza</span>') +
+          (big ? '<br>⚠ Velika datoteka — učitavanje može potrajati' : '') +
+          (!d.valid ? ('<br><span class="bad">' + _loadmapErr('corrupt') + '</span>') : '') +
+        '</div>' +
+      '</div>'
+    );
+  }
+  listEl.innerHTML = rows.join('');
+}
+
+function loadmapCancelSheet() {
+  const sh = document.getElementById('loadmap-sheet');
+  if (sh) sh.classList.remove('show');
+  _loadmapPending = [];
+}
+
+// Potvrda → sekvencijalno (batch) učitavanje preko postojećeg loadera
+async function loadmapConfirmLoad() {
+  const files = _loadmapPending.slice();
+  loadmapCancelSheet();
+  if (!files.length) return;
+  // Gruba provjera prostora prije kopiranja velikih datoteka
+  try {
+    const total = files.reduce((s, f) => s + f.size, 0);
+    if (navigator.storage?.estimate) {
+      const est = await navigator.storage.estimate();
+      const free = (est.quota || 0) - (est.usage || 0);
+      if (free && total > free) {
+        _loadmapStatus('❌ ' + _loadmapErr('space', _mapMgrFmtSize(total - free)));
+        return;
+      }
+    }
+  } catch (e) {}
+  let ok = 0, fail = 0;
+  for (let i = 0; i < files.length; i++) {
+    _loadmapStatus('⏳ Učitavam ' + (i + 1) + '/' + files.length + ': ' + files[i].name + '…');
+    try {
+      await sqlmapLoadFile(files[i]);
+      ok++;
+      await _loadmapThumb(files[i].name.replace(/\.[^.]+$/, ''));
+    } catch (e) { fail++; console.error('loadmap load', e); }
+  }
+  _loadmapStatus('✅ Učitano ' + ok + (fail ? (' · ❌ ' + fail + ' neuspjelo') : ''));
+  _loadmapRenderRecent();
+  _loadmapRenderManage();
+}
+
+function loadmapHandleDrop(e) {
+  e.preventDefault();
+  const dz = document.getElementById('loadmap-drop'); if (dz) dz.classList.remove('drag-over');
+  if (e.dataTransfer?.files?.length) loadmapHandleFiles(e.dataTransfer.files);
+}
+
+// Minijatura iz centra karte (best-effort), cache u localStorage
+async function _loadmapThumb(name) {
+  try {
+    const sl = _sqlLayers.find(l => l.name === name);
+    if (!sl) return;
+    const m = sl.meta || {};
+    const z = m.minzoom != null ? parseInt(m.minzoom, 10) : 12;
+    let lat, lng;
+    if (m.bounds) { const b = String(m.bounds).split(',').map(Number); lng = (b[0] + b[2]) / 2; lat = (b[1] + b[3]) / 2; }
+    else if (m.center) { const c = String(m.center).split(',').map(Number); lng = c[0]; lat = c[1]; }
+    else return;
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    const n = Math.pow(2, z);
+    const x = Math.floor((lng + 180) / 360 * n);
+    const latR = lat * Math.PI / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n);
+    let data;
+    if (_mainMiniDbs[name]) data = await _mainMiniDbs[name].mini.tile(z, x, y);
+    else { const res = await _sqlWCall({ type: 'tile', name, z, x, y }); data = res?.data; }
+    if (!data || !data.length) return;
+    const bmp = await createImageBitmap(new Blob([data], { type: _tileMime(data) }));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 46;
+    cv.getContext('2d').drawImage(bmp, 0, 0, 46, 46); bmp.close();
+    localStorage.setItem('lm_thumb_' + name, cv.toDataURL('image/jpeg', 0.6));
+  } catch (e) {}
+}
+function _loadmapThumbHtml(name) {
+  let d = null; try { d = localStorage.getItem('lm_thumb_' + name); } catch (e) {}
+  return d ? '<img class="lm-thumb" src="' + d + '">' : '<div class="lm-thumb">🗺</div>';
+}
+
+// ── NEDAVNE KARTE (top 10, tap = aktiviraj, long-press = obriši) ────────────────
+async function _loadmapRenderRecent() {
+  const el = document.getElementById('loadmap-recent'); if (!el) return;
+  const maps = (await _mapMgrCollect()).slice(0, 10);
+  _loadmapRecentShown = maps;
+  if (!maps.length) { el.innerHTML = '<div class="lm-empty">Još nema učitanih karata.</div>'; return; }
+  el.innerHTML = maps.map((m, i) => {
+    const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
+    const dInfo = m.savedAt ? ' · ' + _mapMgrFmtDate(m.savedAt) : '';
+    const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
+    return '<div class="lm-card' + (m.visible ? ' active' : '') + '"' +
+      ' onclick="_loadmapRecentTap(' + i + ')"' +
+      ' oncontextmenu="event.preventDefault();_loadmapRecentDel(' + i + ')"' +
+      ' ontouchstart="_loadmapLpStart(' + i + ')" ontouchend="_loadmapLpEnd()" ontouchmove="_loadmapLpEnd()">' +
+      '<div class="lm-card-top">' +
+        _loadmapThumbHtml(m.name) +
+        '<div class="lm-card-info">' +
+          '<div class="lm-card-nm">' + (m.visible ? '<span class="on">● </span>' : '') + _escHtml(m.name) + '</div>' +
+          '<div class="lm-card-meta">' + _mapMgrFmtLabel(m.fmt) + zInfo + sizeInfo + dInfo + '</div>' +
+        '</div>' +
+      '</div></div>';
+  }).join('');
+}
+let _loadmapLpTimer = null, _loadmapLpFired = false;
+function _loadmapLpStart(i) { _loadmapLpFired = false; clearTimeout(_loadmapLpTimer); _loadmapLpTimer = setTimeout(() => { _loadmapLpFired = true; _loadmapRecentDel(i); }, 600); }
+function _loadmapLpEnd() { clearTimeout(_loadmapLpTimer); }
+function _loadmapRecentTap(i) {
+  if (_loadmapLpFired) { _loadmapLpFired = false; return; }
+  const m = _loadmapRecentShown[i]; if (!m) return;
+  const idx = _sqlLayers.findIndex(l => l.name === m.name);
+  if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
+  setLayerSqlite(idx);
+  showToast('🗄 ' + m.name);
+  closeLoadMapScreen();
+}
+async function _loadmapRecentDel(i) {
+  const m = _loadmapRecentShown[i]; if (!m) return;
+  if (!await _dlgConfirm('Obrisati kartu iz povijesti "' + m.name + '"?', { danger: true })) return;
+  const idx = _sqlLayers.findIndex(l => l.name === m.name);
+  if (idx >= 0) await sqlmapRemove(idx);
+  else { try { await _sqlIdbDeleteDirect(m.name); } catch (e) {} _opfsDel(m.name + '.sqlmap'); }
+  try { localStorage.removeItem('lm_thumb_' + m.name); } catch (e) {}
+  showToast('🗑 Obrisano: ' + m.name);
+  _loadmapRenderRecent(); _loadmapRenderManage();
+}
+
+// ── UPRAVLJANJE (sve karte: aktiviraj/deaktiviraj/info/obriši + prozirnost + z-index) ──
+function _loadmapManageSearch(q) { _loadmapManageQ = q || ''; _loadmapRenderManage(); }
+async function _loadmapRenderManage() {
+  const list = document.getElementById('loadmap-manage'); if (!list) return;
+  const maps = await _mapMgrCollect();
+  const mapsBytes = maps.reduce((s, m) => s + (m.size || 0), 0);
+  const szEl = document.getElementById('loadmap-size');
+  if (szEl) szEl.textContent = _mapMgrFmtSize(mapsBytes) + ' · ' + maps.length + ' ' + (maps.length === 1 ? 'karta' : 'karata');
+  try {
+    if (navigator.storage?.estimate) {
+      const est = await navigator.storage.estimate();
+      const used = est.usage || 0, quota = est.quota || 0;
+      const pct = quota ? Math.min(100, used / quota * 100) : 0;
+      const bar = document.getElementById('loadmap-bar'); if (bar) bar.style.width = pct.toFixed(1) + '%';
+      const qt = document.getElementById('loadmap-quota');
+      if (qt) qt.textContent = quota ? (_mapMgrFmtSize(used) + ' / ' + _mapMgrFmtSize(quota)) : _mapMgrFmtSize(used);
+    }
+  } catch (e) {}
+  const q = _loadmapManageQ.trim().toLowerCase();
+  _loadmapManageShown = q ? maps.filter(m => m.name.toLowerCase().includes(q)) : maps;
+  if (!_loadmapManageShown.length) {
+    list.innerHTML = '<div class="lm-empty">' + (maps.length ? 'Nema rezultata za pretragu.' : 'Nema učitanih offline karata.') + '</div>';
+    return;
+  }
+  list.innerHTML = _loadmapManageShown.map((m, i) => {
+    const sl = _sqlLayers.find(l => l.name === m.name);
+    const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
+    const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
+    const store = m.saved ? (m.opfs ? '💾 OPFS' : '💾 baza') : '⏳ sesija';
+    const crs = (m.meta && (m.meta.crs || m.meta.srs)) ? (m.meta.crs || m.meta.srs) : 'EPSG:3857';
+    const op = sl ? Math.round((sl.layer.options.opacity ?? 1) * 100) : 100;
+    const opRow = sl
+      ? '<div class="lm-op-row"><span>Providnost</span>' +
+        '<input type="range" min="0" max="100" value="' + op + '" oninput="_loadmapSetOpacity(' + i + ',this.value)">' +
+        '<span id="lm-op-' + i + '">' + op + '%</span>' +
+        '<span style="margin-left:8px;">Sloj:</span><span class="lm-z-btns">' +
+        '<button onclick="_loadmapZ(' + i + ',-1)" title="Ispod">▼</button>' +
+        '<button onclick="_loadmapZ(' + i + ',1)" title="Iznad">▲</button></span></div>'
+      : '';
+    return '<div class="lm-card' + (m.visible ? ' active' : '') + '">' +
+      '<div class="lm-card-top">' +
+        _loadmapThumbHtml(m.name) +
+        '<div class="lm-card-info">' +
+          '<div class="lm-card-nm">' + (m.visible ? '<span class="on">● </span>' : '') + _escHtml(m.name) + '</div>' +
+          '<div class="lm-card-meta">' + _mapMgrFmtLabel(m.fmt) + zInfo + sizeInfo + '</div>' +
+          '<div class="lm-card-meta">' + store + ' · ' + crs + (m.loaded ? '' : ' · ⚠ nije učitana') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="lm-card-btns">' +
+        '<button class="btn ' + (m.visible ? 'b' : 'gr') + '" onclick="_loadmapActivate(' + i + ')">' + (m.visible ? '👁 Aktivna' : '👁 Aktiviraj') + '</button>' +
+        (m.visible ? '<button class="btn gr" onclick="_loadmapDeactivate(' + i + ')">🙈 Deaktiviraj</button>' : '') +
+        '<button class="btn gr" onclick="_loadmapInfo(' + i + ')">ℹ Info</button>' +
+        '<button class="btn gr" style="color:#f87171;" onclick="_loadmapDelete(' + i + ')">🗑 Obriši</button>' +
+      '</div>' + opRow +
+    '</div>';
+  }).join('');
+}
+function _loadmapActivate(i) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  const idx = _sqlLayers.findIndex(l => l.name === m.name);
+  if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
+  setLayerSqlite(idx);
+  showToast('🗄 ' + m.name);
+  _loadmapRenderManage(); _loadmapRenderRecent();
+}
+function _loadmapDeactivate(i) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  const sl = _sqlLayers.find(l => l.name === m.name);
+  if (sl) { sl.visible = false; if (map.hasLayer(sl.layer)) map.removeLayer(sl.layer); _sqlmapRenderLayers(); _lsRenderSqlite(); }
+  _loadmapRenderManage(); _loadmapRenderRecent();
+}
+function _loadmapSetOpacity(i, val) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  const sl = _sqlLayers.find(l => l.name === m.name);
+  if (sl) { sl.layer.setOpacity(val / 100); const lbl = document.getElementById('lm-op-' + i); if (lbl) lbl.textContent = val + '%'; }
+}
+function _loadmapZ(i, dir) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  const sl = _sqlLayers.find(l => l.name === m.name);
+  if (sl && sl.layer.setZIndex) { const cur = sl.layer.options.zIndex || 0; sl.layer.setZIndex(cur + dir); showToast('Z-index sloja: ' + (cur + dir)); }
+}
+async function _loadmapDelete(i) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  if (!await _dlgConfirm('Trajno obrisati kartu "' + m.name + '"?', { danger: true })) return;
+  const idx = _sqlLayers.findIndex(l => l.name === m.name);
+  if (idx >= 0) await sqlmapRemove(idx);
+  else { try { await _sqlIdbDeleteDirect(m.name); } catch (e) {} _opfsDel(m.name + '.sqlmap'); }
+  try { localStorage.removeItem('lm_thumb_' + m.name); } catch (e) {}
+  const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === m.name);
+  if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
+  showToast('🗑 Obrisano: ' + m.name);
+  _loadmapRenderManage(); _loadmapRenderRecent();
+}
+async function _loadmapInfo(i) {
+  const m = _loadmapManageShown[i]; if (!m) return;
+  const meta = m.meta || {};
+  let t = '📦 ' + m.name + '\n\n';
+  t += 'Format: ' + _mapMgrFmtLabel(m.fmt) + '\n';
+  t += 'Veličina: ' + _mapMgrFmtSize(m.size) + '\n';
+  t += 'Pohrana: ' + (m.saved ? (m.opfs ? 'OPFS (trajno)' : 'baza (trajno)') : 'sesija (privremeno)') + '\n';
+  if (meta.minzoom != null) t += 'Zoom: ' + meta.minzoom + '–' + meta.maxzoom + '\n';
+  t += 'CRS: ' + (meta.crs || meta.srs || 'EPSG:3857 (pretpostavljeno)') + '\n';
+  if (meta.bounds) {
+    const b = String(meta.bounds).split(',').map(Number);
+    if (b.length === 4) t += 'Granice: W' + b[0].toFixed(3) + ' S' + b[1].toFixed(3) + ' E' + b[2].toFixed(3) + ' N' + b[3].toFixed(3) + '\n';
+  }
+  if (meta.description) t += 'Opis: ' + meta.description + '\n';
+  if (m.savedAt) t += 'Učitano: ' + _mapMgrFmtDate(m.savedAt) + '\n';
+  await _dlgConfirm(t, { title: 'ℹ Info — ' + m.name, okLabel: 'OK' });
+}
+
 function getOfflineBounds() {
   const v = document.getElementById('offline-area').value;
   if (v.startsWith('odjel:')) {
@@ -25578,9 +25939,9 @@ if (typeof AndroidDownload !== 'undefined') {
   touch-action:manipulation;">
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🗄 Učitaj SQLiteDB kartu</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();openMapManager()">🗂 Upravljanje offline kartama</div>
+  <div class="mdrop-item" style="color:#38bdf8;font-weight:700;" onclick="closeMenuDropdown();openLoadMapScreen()">🗺 UČITAJ KARTU</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta (preuzmi)</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🔧 Dijagnostika karata (Debug)</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()">📂 Dodaj KML fajl</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="mdrop-vlake" onclick="closeMenuDropdown();switchTab('vlake')">📐 Panel vlaka</div>
@@ -26503,6 +26864,69 @@ if (typeof AndroidDownload !== 'undefined') {
     <div class="mbtns" style="margin-top:10px;">
       <button class="btn gr" style="color:#f87171;border-color:#7f1d1d;" onclick="_mapMgrClearAll()">🗑 Obriši sve</button>
       <button class="btn gr" onclick="closeMapManager()">Zatvori</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ UČITAJ KARTU — konsolidirani ekran ═══ -->
+<div id="loadmap-modal">
+  <div id="loadmap-hdr">
+    <h3>🗺 Učitaj kartu</h3>
+    <button id="loadmap-close" onclick="closeLoadMapScreen()">✕</button>
+  </div>
+  <div id="loadmap-body">
+
+    <!-- IZBOR IZVORA -->
+    <div class="lm-section">
+      <div class="lm-section-title">📂 Izbor izvora</div>
+      <div class="lm-src-row">
+        <button class="lm-src-btn" onclick="loadmapPickFiles()"><span class="ico">📱</span>Interna pohrana</button>
+        <button class="lm-src-btn" onclick="loadmapPickFiles()"><span class="ico">💾</span>SD kartica</button>
+        <button class="lm-src-btn" onclick="document.getElementById('loadmap-recent-sec').scrollIntoView({behavior:'smooth'})"><span class="ico">🕒</span>Nedavno</button>
+      </div>
+      <div class="lm-drop" id="loadmap-drop"
+        onclick="loadmapPickFiles()"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="loadmapHandleDrop(event)">
+        <div style="font-size:30px;margin-bottom:6px;">🗺</div>
+        <div>Klikni ili prevuci kartu ovdje</div>
+        <div style="font-size:11px;margin-top:5px;color:#475569;">.mbtiles · .sqlitedb · .gpkg · .db — može i više odjednom</div>
+      </div>
+      <input type="file" id="loadmap-file-input" multiple accept=".mbtiles,.sqlitedb,.gpkg,.db,.sqlite"
+        style="display:none;" onchange="loadmapHandleFiles(this.files)">
+      <div class="lm-hint">ℹ Sustav otvara izbornik datoteka uređaja — odatle biraš internu memoriju, SD karticu ili oblak (Drive/Dropbox).</div>
+      <div id="loadmap-status"></div>
+    </div>
+
+    <!-- NEDAVNE KARTE -->
+    <div class="lm-section" id="loadmap-recent-sec">
+      <div class="lm-section-title">🕒 Nedavne karte <span style="font-weight:400;text-transform:none;color:#475569;">(tap = aktiviraj · drži = obriši)</span></div>
+      <div id="loadmap-recent"></div>
+    </div>
+
+    <!-- UPRAVLJANJE SVIM KARTAMA -->
+    <div class="lm-section">
+      <div class="lm-section-title">🗂 Sve karte — upravljanje</div>
+      <div class="mapmgr-storage">
+        <div class="mapmgr-storage-txt"><span>Offline karte: <b id="loadmap-size">–</b></span><span id="loadmap-quota">–</span></div>
+        <div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="loadmap-bar" style="width:0%;"></div></div>
+      </div>
+      <input type="text" id="loadmap-search" class="mapmgr-search" placeholder="🔍 Pretraži karte po nazivu…" oninput="_loadmapManageSearch(this.value)">
+      <div id="loadmap-manage"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- bottom sheet nakon odabira datoteke -->
+<div id="loadmap-sheet" onclick="if(event.target===this)loadmapCancelSheet()">
+  <div id="loadmap-sheet-box">
+    <h4 id="loadmap-sheet-title">Pregled datoteke</h4>
+    <div id="loadmap-sheet-list"></div>
+    <div class="lm-sheet-btns">
+      <button class="btn gr" onclick="loadmapCancelSheet()">✕ Otkaži</button>
+      <button class="btn b" onclick="loadmapConfirmLoad()">📥 Učitaj</button>
     </div>
   </div>
 </div>
