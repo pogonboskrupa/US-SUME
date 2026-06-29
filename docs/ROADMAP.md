@@ -271,3 +271,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   GDAL) nisu izvedivi bez prelaska na native. Stare stavke menija: "Učitaj SQLiteDB" →
   preimenovan u "Dijagnostika karata (Debug)" (zadržan Debug PRO/HUD); "Upravljanje
   kartama" uklonjen (sad u novom ekranu). Status: 🔄 (v3.4.5, test)
+
+- **D1-27 — REGRESIJA: meni/tabovi se ne mogu kliknuti (v3.4.6, hitni fix).** Uzrok:
+  D1-26 JS height-hack `wrap.style.height = window.innerHeight + 'px'` + `setInterval 1.5s`.
+  Na nekim WebView-ima `innerHeight` privremeno krivo izračuna → wrapper VEĆI od ekrana →
+  prekrije/odgura tab-bar pa klikovi ne rade. **Fix:** ukloniti JS height-forsiranje;
+  visinu rješava ČISTI CSS — `#wrapper { position:fixed; inset:0 }` pouzdano ispuni stvarni
+  vidljivi viewport (bez 100vh/100dvh i bez innerHeight), pa #map dobije punu visinu a
+  wrapper nikad ne prelazi ekran. Ostaje samo blagi invalidateSize na resize/orientation.
+  Status: 🔄 (v3.4.6, test) — zamjenjuje D1-26 pristup.
