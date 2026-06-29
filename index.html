@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.6';
+const APP_VER = 'v3.1.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21502,26 +21502,19 @@ function _sqlDrawParentPlaceholder(ctx, cache, name, x, y, z) {
   return found > 0;
 }
 
-// Pre-učitaj sve tile-ove na manjim zoom razinama u BMP cache
-// da se odmah vidi cijelo područje karte bez skrolanja.
-async function _sqlPrewarm(name) {
-  const sl = _sqlLayers.find(l => l.name === name);
-  if (!sl || !sl.meta?.bounds) return;
-  const [west, south, east, north] = sl.meta.bounds.split(',').map(Number);
-  const minZ = Math.max(parseInt(sl.meta.minzoom || 0), 0);
-  const maxZ = Math.min(parseInt(sl.meta.maxzoom || 18), 12); // do zoom 12 (pregled, manje memorije)
-  // Konverzija geo koordinata u tile koordinate
-  const lng2t = (lng, z) => Math.floor((lng + 180) / 360 * (1 << z));
-  const lat2t = (lat, z) => {
-    const r = lat * Math.PI / 180;
-    return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z));
-  };
-  await new Promise(r => setTimeout(r, 500)); // pričekaj da se viewport tile-ovi učitaju
-  for (let z = minZ; z <= maxZ; z++) {
-    const x0 = lng2t(west, z),  x1 = lng2t(east, z);
-    const y0 = lat2t(north, z), y1 = lat2t(south, z);
-    const total = (x1 - x0 + 1) * (y1 - y0 + 1);
-    if (total > 300) continue; // preskoči prevelike zoom razine
+// Pre-učitaj tile-ove zadanog područja na nižim zoom razinama u BMP cache —
+// daje placeholder piramidu za gladak zoom-out. Engine-agnostičan (worker ili main).
+const _PREWARM_LL2T = {
+  x: (lng, z) => Math.floor((lng + 180) / 360 * (1 << z)),
+  y: (lat, z) => { const r = lat * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z)); }
+};
+async function _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, cap) {
+  cap = cap || 300;
+  const useMain = !!_mainMiniDbs[name];
+  for (let z = Math.max(minZ, 0); z <= maxZ; z++) {
+    const x0 = _PREWARM_LL2T.x(west, z),  x1 = _PREWARM_LL2T.x(east, z);
+    const y0 = _PREWARM_LL2T.y(north, z), y1 = _PREWARM_LL2T.y(south, z);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > cap) continue; // preskoči prevelike razine
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
         const key = name + '/' + z + '/' + x + '/' + y;
@@ -21529,20 +21522,60 @@ async function _sqlPrewarm(name) {
         // Pauziraj pozadinsko pre-učitavanje dok korisnik aktivno skrola/zumira
         while (_mapInteracting) await new Promise(r => setTimeout(r, 200));
         try {
-          // Kroz isti throttle (LIFO) — interaktivne pločice imaju prvenstvo jer
-          // se njihovi zahtjevi stavljaju na vrh stoga nakon ovih pozadinskih.
-          const res = await _wTileScheduleCall({type:'tile', name, z, x, y});
-          const data = res && res.data;
+          let data;
+          if (useMain) data = await _mainMiniDbs[name].mini.tile(z, x, y);
+          else { const res = await _wTileScheduleCall({type:'tile', name, z, x, y}); data = res && res.data; }
           if (!data) continue;
           const bmp = await createImageBitmap(new Blob([data], {type: _tileMime(data)}));
-          _sqlTileBmpCache.set(key, bmp);
-          _sqlTileBmpEvict();
+          _bmpCacheSet(_sqlTileBmpCache, key, bmp); _sqlTileBmpEvict();
         } catch(e) {}
         await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
       }
     }
   }
 }
+
+// Inicijalni prewarm — pregledni zoomovi (z<=12) cijele karte. RMaps/SQLiteDB nema
+// `bounds` u meta, pa fallback na trenutni pogled karte (auto-zoom je već na području).
+async function _sqlPrewarm(name) {
+  const sl = _sqlLayers.find(l => l.name === name);
+  if (!sl) return;
+  let west, south, east, north;
+  if (sl.meta?.bounds) {
+    [west, south, east, north] = sl.meta.bounds.split(',').map(Number);
+  } else {
+    const b = map.getBounds().pad(0.5);
+    west = b.getWest(); south = b.getSouth(); east = b.getEast(); north = b.getNorth();
+  }
+  const minZ = Math.max(parseInt(sl.meta?.minzoom || 0, 10) || 0, 0);
+  const maxZ = Math.min(parseInt(sl.meta?.maxzoom || 18, 10), 12);
+  await new Promise(r => setTimeout(r, 500)); // pričekaj da se viewport tile-ovi učitaju
+  await _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, 300);
+}
+
+// Prewarm nižih zoom nivoa za TRENUTNI pogled — okida se kad se karta smiri, da
+// zoom-out uvijek ima placeholder piramidu gdje god korisnik bio (svi formati).
+let _prewarmViewT = null, _prewarmViewBusy = false;
+function _schedPrewarmView() {
+  if (_prewarmViewT) clearTimeout(_prewarmViewT);
+  _prewarmViewT = setTimeout(_prewarmView, 500);
+}
+async function _prewarmView() {
+  if (_prewarmViewBusy) return;
+  const sl = _sqlLayers.find(l => l.visible);
+  if (!sl) return;
+  const curZ = Math.round(map.getZoom());
+  const minN = Math.max(parseInt(sl.meta?.minzoom || 0, 10) || 0, 0);
+  const maxN = parseInt(sl.meta?.maxzoom || 18, 10);
+  const zHi = Math.min(curZ - 1, maxN);          // niži nivoi za placeholder pri zoom-out
+  const zLo = Math.max(minN, curZ - 3);
+  if (zHi < zLo) return;
+  const b = map.getBounds();
+  _prewarmViewBusy = true;
+  try { await _sqlPrewarmRegion(sl.name, b.getWest(), b.getSouth(), b.getEast(), b.getNorth(), zLo, zHi, 200); }
+  finally { _prewarmViewBusy = false; }
+}
+map.on('moveend zoomend', _schedPrewarmView);
 
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;

@@ -103,3 +103,15 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   prepiše u cache bez close). Rijetko.  Status: ✅ (v3.1.6, `_bmpCacheSet` helper)
 
 **DIO 1 ZAVRŠEN** ✅ — svih 7 nalaza riješeno (v3.1.4–v3.1.6).
+
+#### Naknadni nalaz (teren, v3.1.7)
+- **D1-8 — RMaps/SQLiteDB karte nisu dobivale prewarm → prazne pločice pri
+  zoom-out.** `_sqlPrewarm` je izlazio ako `meta.bounds` ne postoji, a rmaps format
+  čita samo minzoom/maxzoom iz `info` tabele (nema bounds). Zato je multi-level
+  placeholder pri zoom-out nalazio prazan cache → prazne pločice (specifično za
+  SQLiteDB, ne mbtiles). **Fix (v3.1.7):**
+  - `_sqlPrewarm` fallback na trenutni pogled karte kad nema `meta.bounds`.
+  - Novi `_sqlPrewarmRegion` (engine-agnostičan: worker ili main-thread).
+  - Novi `_prewarmView` na `moveend/zoomend` — puni 3 niža zoom nivoa za trenutni
+    pogled, pa zoom-out svuda ima placeholder piramidu (svi formati).
+  Status: ✅ (v3.1.7)
