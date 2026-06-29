@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.3';
+const APP_VER = 'v3.4.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21389,7 +21389,7 @@ function _dbgHudUpdate() {
   const sizeStale = Math.abs((mr.height|0) - size.y) > 4 || Math.abs((mr.width|0) - size.x) > 4;
   _dbgHudEl.textContent =
     `${APP_VER}  zoom ${z}  (native≤${sl.meta?.maxzoom})\n` +
-    `DOM #map ${mr.width|0}x${mr.height|0}  Leaflet ${size.x}x${size.y}${sizeStale ? ' ⚠️STALE' : ''}\n` +
+    `ekran(innerH)=${window.innerHeight} #map=${mr.width|0}x${mr.height|0} Leaflet=${size.x}x${size.y}${sizeStale ? ' ⚠️STALE' : ''}\n` +
     `treba~${expected} ima:${tiles.length} vidljivih:${visible}${tooFew ? ' ⚠️PREMALO' : ''}\n` +
     `s sadržajem ✅${content}  prazne ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
     (blank ? `PRAZNE: ${zStr} loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : '') +
@@ -21871,17 +21871,21 @@ map.on('moveend zoomend', _schedPrewarmView);
 // D1-20 POVUČEN (v3.3.5): zoomFill redraw je napravio "12 pločica sa sadržajem ali
 // ekran prazan" — redraw u krivom trenutku ostavi pločice nevidljivima. Vraćeno.
 
-// D1-18/D1-19: Leaflet zna zadržati POGREŠNU (manju) veličinu ako je inicijaliziran
-// prije nego se layout smirio, ili kad se kontejner promijeni bez window-resize eventa
-// (mobilni address-bar, UI paneli, flex:1 #map). Tada učita pločice samo za dio ekrana,
-// a ostatak je prazan (HUD pokazao getSize=369x641 a stvarni kontejner ~1900px).
-// Rješenje: SAMOIZLJEČENJE — periodično (i na promjene) provjeri da Leaflet veličina
-// odgovara stvarnom kontejneru (clientWidth/Height); ako ne → invalidateSize.
-(function _autoInvalidateMapSize() {
+// D1-26: PRAVI uzrok "karta puni samo gornji dio ekrana": #wrapper koristi 100vh/100dvh,
+// što na ovom WebView-u pogrešno izračuna visinu → #map (flex:1) je kraći od stvarnog
+// ekrana, donji dio prazan (van karte). Self-heal je prije samo poravnao Leaflet s tom
+// POGREŠNOM visinom. Sada FIKSIRAMO #wrapper na stvarnu window.innerHeight (pouzdano),
+// pa #map ispuni cijeli ekran, pa invalidateSize da Leaflet napravi sve pločice.
+(function _fixViewportAndMapSize() {
   const el = document.getElementById('map');
+  const wrap = document.getElementById('wrapper');
   if (!el) return;
   const heal = () => {
     try {
+      const vh = window.innerHeight;
+      if (wrap && vh && Math.abs(wrap.clientHeight - vh) > 4) {
+        wrap.style.height = vh + 'px';   // stvarna visina ekrana umjesto (pogrešnog) dvh
+      }
       const s = map.getSize();
       if (Math.abs(s.y - el.clientHeight) > 4 || Math.abs(s.x - el.clientWidth) > 4) {
         map.invalidateSize({ pan: false });
@@ -21892,8 +21896,11 @@ map.on('moveend zoomend', _schedPrewarmView);
     let t = null;
     new ResizeObserver(() => { if (t) clearTimeout(t); t = setTimeout(heal, 100); }).observe(el);
   }
+  window.addEventListener('resize', heal);
+  window.addEventListener('orientationchange', () => setTimeout(heal, 150));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(heal, 150); });
   setInterval(heal, 1500);                          // stalna jeftina provjera (self-heal)
-  [150, 500, 1200, 2500].forEach(d => setTimeout(heal, d));  // rane provjere nakon učitavanja
+  [0, 150, 500, 1200, 2500].forEach(d => setTimeout(heal, d));  // rane provjere nakon učitavanja
 })();
 
 // D1-23: Keširaj 256px offscreen CANVAS (NE ImageBitmap). Tvoj WebView vraća PRAZNU bitmapu

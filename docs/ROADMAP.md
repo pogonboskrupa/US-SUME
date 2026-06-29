@@ -246,3 +246,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
 > finalni preostali simptom bio nepotpun Leaflet grid nakon zoom-a (ne veličina).
+
+- **D1-26 — PRAVI uzrok "karta puni samo gornji dio ekrana" (mnogi raniji 'prazni'
+  screenshoti).** `#wrapper { height:100vh; height:100dvh }` na ovom WebView-u pogrešno
+  računa visinu → `#map` (flex:1) kraći od ekrana → donja polovina prazna (van karte).
+  Self-heal (D1-19) je samo poravnao Leaflet s tom pogrešnom visinom — zato "debug ok" a
+  vizuelno prazno. **Fix (v3.4.4):** fiksiraj `#wrapper` na stvarnu `window.innerHeight`
+  (na load/resize/orientation/visibilitychange + 1.5s heal), pa invalidateSize. HUD
+  pokazuje innerH vs #map. Status: 🔄 (v3.4.4, test)
