@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.2';
+const APP_VER = 'v3.4.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21284,11 +21284,10 @@ async function sqlmapDebugPro() {
       total++;
       if (v && v.tagName === 'CANVAS') isCanvas++; else isBmp++;
       try {
-        tcx.clearRect(0, 0, 6, 6);
-        tcx.drawImage(v, 0, 0, 6, 6);
-        const px = tcx.getImageData(0, 0, 6, 6).data;
-        let any = false; for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) { any = true; break; }
-        if (!any) {
+        // Ista provjera kao kod keširanja (_canvasOpaque): 5 tačaka preko PUNE rezolucije.
+        // Grubi 6x6 downscale je lažno označavao rijetke/rubne (uglavnom providne) pločice.
+        const blank = (v && v.tagName === 'CANVAS') ? !_canvasOpaque(v) : false;
+        if (blank) {
           const parts = k.split('/'); const zz = +parts[parts.length - 3];
           if (zz < 10) badLow++; else { badHigh++; if (badKeys.length < 5) badKeys.push(parts.slice(-3).join('/')); }
         }

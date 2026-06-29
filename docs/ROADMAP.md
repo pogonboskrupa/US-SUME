@@ -236,7 +236,8 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   asinhrono, ~25ms po stranici. **Fix (v3.4.2):** OPFS **SyncAccessHandle** — sinhrono
   `read()` (mikrosekunde/stranica) u workeru; fallback na File ako nije podržano. Glavna
   razlika u brzini naspram native (AlpineQuest). Sync handle se zatvara na `close`.
-  Status: 🔄 (v3.4.2, mjeriti profil ponovo).
+  Status: ✅ (v3.4.2 — profil potvrdio: Čitanje 70-100ms → 8ms, ~10× brže; UKUPNO/pločica
+  117ms → 26ms). GLAVNI proboj brzine.
 - **D1-24 — createImageBitmap(blob) ponekad prazna slika (11 praznih z14/z15 u SKEN-u).**
   Profil/SKEN: i čisti createImageBitmap(blob) zna dati providnu sliku → fale pločice.
   **Fix (v3.4.2):** `_canvasOpaque` provjeri dekodirano; ako prazno → Image() fallback
