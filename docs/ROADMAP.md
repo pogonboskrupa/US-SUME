@@ -224,7 +224,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   u ovom WebView-u takođe tiho vraća praznu bitmapu (kao createImageBitmap(canvas) ranije).
   Jedino pouzdano: čisti `createImageBitmap(blob)` + `drawImage`. **Fix (v3.3.8):** keširamo
   256px offscreen CANVAS (crtan drawImage-om koji RADI) — uvijek važeći; drawImage prihvata
-  canvas svuda. Debug PRO: sken SVIH keširanih (broj praznih/zatvorenih).  Status: 🔄 (v3.3.8)
+  canvas svuda. Debug PRO: sken SVIH keširanih (broj praznih/zatvorenih).  Status: ✅ (v3.3.8 —
+  SKEN: canvas=89 bitmap=0, 0 grešaka; 8 "praznih" su NISKI zoom z2-z9 overview tile-ovi
+  gdje je karta sitna tačka = uglavnom providni = normalno/bezopasno). Keš na radnim
+  zoomovima (12-15) potpuno važeći.
+- **Debug alati:** 📋 Kopiraj Debug PRO dugme (v3.3.9) — kopira ispis u clipboard.
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je

@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.8';
+const APP_VER = 'v3.3.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21295,6 +21295,23 @@ async function sqlmapDebugPro() {
   el.textContent = t;
 }
 
+// 📋 Kopiraj sadržaj Debug PRO / Debug info u clipboard (lakše slanje umjesto screenshot-a)
+async function sqlmapCopyDebug() {
+  const el = document.getElementById('sqlmap-debug-out');
+  const txt = (el && el.textContent || '').trim();
+  if (!txt) { showToast('⚠ Prvo pokreni Debug PRO ili Debug info'); return; }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(txt);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px;';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    showToast('📋 Debug kopiran — zalijepi gdje treba');
+  } catch(e) { showToast('⚠ Kopiranje nije uspjelo: ' + (e.message || e)); }
+}
+
 // 📊 LIVE HUD — stalni prikaz na ekranu koji se uživo ažurira (na svaki zoom/pomak +
 // svakih 1.5s). Pokazuje koliko je pločica prazno BAŠ U TRENUTKU dok se pojave, da
 // korisnik može slikati prazne pločice + brojač zajedno. Crveni okvir = ima praznih.
@@ -26381,6 +26398,9 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn" style="background:#14532d;color:#86efac;width:100%;" onclick="sqlmapForceResize()">🔄 Osvježi veličinu karte (test popravke)</button>
+    </div>
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn" style="background:#3f2d1e;color:#fcd34d;width:100%;" onclick="sqlmapCopyDebug()">📋 Kopiraj Debug PRO</button>
     </div>
     <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>
