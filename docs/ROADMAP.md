@@ -171,4 +171,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   redraw POGORŠAO (više churn-a → više zatvaranja usred crtanja) potvrđuje uzrok; test
   nalazi podatke jer čitanje je OK — problem je čisto zatvaranje bitmape. **Fix (v3.2.5):**
   uklonjen `.close()` iz `_bmpCacheSet`, `_sqlTileBmpEvict`, `_tileBmpEvict` — GC oslobađa
-  bitmape (male su, 256px, cache ograničen). D1-15 redraw povučen.  Status: 🔄 (v3.2.5, test)
+  bitmape (male su, 256px, cache ograničen). D1-15 redraw povučen.  Status: ⚠️ djelimično.
+- **D1-17 — Keširane PRAZNE bitmape → prazne pločice (POTVRĐENO Debug PRO-om).** Debug PRO
+  ispis: `Cache bitmap test: 256x256 crta=PRAZNO(zatvorena?)`. Uzrok: `createImageBitmap(canvas)`
+  (u `cacheFromCanvas` i `_decodeTileBmp`) u ovom WebView-u vraća PRAZNU bitmapu →
+  keširane prazne bitmape → cache-hit crta ništa → prazna pločica. `createImageBitmap(blob)`
+  radi savršeno (🔬 Test). **Fix (v3.2.7):** keširaj ISKLJUČIVO `_decodeBlobBmp` (iz blob-a,
+  s resize opcijom za memoriju, fallback na punu); uklonjen svaki `createImageBitmap(canvas)`.
+  Cache cap 500→300.  Status: 🔄 (v3.2.7, test)
