@@ -156,4 +156,10 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   `_prewarmView` (placeholder za niži nivo) kasni (500ms debounce, uski raspon).
   **Fix (v3.2.3):** debounce 500→200ms, raspon curZ-1..curZ-4 (dvostruki zoom-out),
   bounds prošireni (pad 0.3), nivoi se pune od najbližeg (curZ-1) nadolje. Eviction
-  zaštita z≤12→z≤13.  Status: 🔄 (v3.2.3, čeka test)
+  zaštita z≤12→z≤13.  Status: ⚠️ djelimično (v3.2.3) — zoom-out i dalje ostavlja prazne.
+- **D1-15 — Zoom-out ostavlja pločice TRAJNO prazne iako podaci postoje (RENDER bug).**
+  🔬 Test na praznoj pločici nakon zoom-out: "TILE PRONAĐEN" (z14, podaci OK), worker
+  idle → čitanje radi deterministički, ali Leaflet pri zoom-out ne iscrta te pločice.
+  **Fix (v3.2.4):** nakon smiraja zoom-out, `layer.redraw()` forsira ponovni zahtjev
+  svih pločica — keširane se iscrtaju odmah (sinhron cache-hit, bez treperenja), prazne
+  se ponovo učitaju.  Status: 🔄 (v3.2.4, čeka test)
