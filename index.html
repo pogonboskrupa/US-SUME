@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.7';
+const APP_VER = 'v3.2.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21255,6 +21255,70 @@ async function sqlmapDebugPro() {
 
   el.textContent = t;
 }
+
+// 📊 LIVE HUD — stalni prikaz na ekranu koji se uživo ažurira (na svaki zoom/pomak +
+// svakih 1.5s). Pokazuje koliko je pločica prazno BAŠ U TRENUTKU dok se pojave, da
+// korisnik može slikati prazne pločice + brojač zajedno. Crveni okvir = ima praznih.
+let _dbgHudEl = null, _dbgHudTimer = null;
+function _bmpBlank(bmp) {
+  try {
+    const tc = document.createElement('canvas'); tc.width = tc.height = 8;
+    const cx = tc.getContext('2d'); cx.drawImage(bmp, 0, 0, 8, 8);
+    const px = cx.getImageData(0, 0, 8, 8).data;
+    for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) return false;
+    return true;
+  } catch(e) { return true; }
+}
+function _dbgHudUpdate() {
+  if (!_dbgHudEl) return;
+  const sl = _sqlLayers.find(l => l.visible);
+  if (!sl) { _dbgHudEl.textContent = 'Live HUD: nema vidljivog SQLite sloja'; return; }
+  const layer = sl.layer;
+  const z = Math.round(map.getZoom());
+  const tiles = (layer && layer._tiles) ? Object.values(layer._tiles) : [];
+  let blank = 0, content = 0, unread = 0, blankCache = 0, blankCacheBad = 0, blankLoaded = 0;
+  const zCount = {};
+  for (const tile of tiles) {
+    const cv = tile && tile.el;
+    if (!cv || cv.tagName !== 'CANVAS') continue;
+    const b = _cvBlank(cv);
+    if (b === null) { unread++; continue; }
+    if (b) {
+      blank++;
+      const c = tile.coords || {};
+      zCount[c.z] = (zCount[c.z] || 0) + 1;
+      if (tile.loaded) blankLoaded++;
+      const cb = _sqlTileBmpCache.get(sl.name + '/' + c.z + '/' + c.x + '/' + c.y);
+      if (cb) { blankCache++; if (_bmpBlank(cb)) blankCacheBad++; }
+    } else content++;
+  }
+  const zStr = Object.keys(zCount).map(k => `z${k}:${zCount[k]}`).join(' ');
+  _dbgHudEl.textContent =
+    `${APP_VER}  zoom ${z}  (native≤${sl.meta?.maxzoom})\n` +
+    `pločice ${tiles.length}: ✅${content} ⬛${blank}${unread ? ` ❓${unread}` : ''}\n` +
+    (blank ? `PRAZNE po zoomu: ${zStr}\n  loaded=${blankLoaded} uCache=${blankCache} lošaBmp=${blankCacheBad}\n` : `nema praznih ✅\n`) +
+    `cache ${_sqlTileBmpCache.size}/${_SQL_TILE_BMP_MAX}  wAct=${_wTileActive} wStk=${_wTileStack.length}`;
+  _dbgHudEl.style.borderColor = blank ? '#ef4444' : '#22c55e';
+}
+function sqlmapToggleLiveHud() {
+  if (_dbgHudEl) {
+    _dbgHudEl.remove(); _dbgHudEl = null;
+    if (_dbgHudTimer) { clearInterval(_dbgHudTimer); _dbgHudTimer = null; }
+    map.off('moveend zoomend', _dbgHudUpdate);
+    showToast('📊 Live HUD isključen');
+    return;
+  }
+  _dbgHudEl = document.createElement('div');
+  _dbgHudEl.style.cssText = 'position:fixed;top:96px;left:6px;z-index:99998;background:rgba(15,23,42,0.92);' +
+    'color:#a5f3fc;font:11px/1.45 monospace;padding:6px 9px;border:2px solid #22c55e;border-radius:8px;' +
+    'white-space:pre;pointer-events:none;max-width:70vw;box-shadow:0 2px 10px rgba(0,0,0,0.5);';
+  document.body.appendChild(_dbgHudEl);
+  map.on('moveend zoomend', _dbgHudUpdate);
+  _dbgHudTimer = setInterval(_dbgHudUpdate, 1500);
+  _dbgHudUpdate();
+  closeSqlMapModal();
+  showToast('📊 Live HUD UKLJUČEN — odzumiraj i gledaj brojač ⬛ PRAZNE');
+}
 function sqlmapHandleDrop(e) {
   e.preventDefault();
   document.getElementById('sqlmap-drop-zone').classList.remove('drag-over');
@@ -26209,6 +26273,9 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn" style="background:#3b1e5f;color:#d8b4fe;width:100%;" onclick="sqlmapDebugPro()">🐞 Debug PRO (analiza pločica)</button>
+    </div>
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn" style="background:#1e3a5f;color:#7dd3fc;width:100%;" onclick="sqlmapToggleLiveHud()">📊 Live HUD (uživo na ekranu)</button>
     </div>
     <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>
