@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.0';
+const APP_VER = 'v3.4.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21295,6 +21295,19 @@ async function sqlmapDebugPro() {
     if (badHigh === 0 && err === 0) t += `  ✅ keš zdrav na radnim zoomovima\n`;
   } catch(e) { t += `\nSKEN CACHE-a: GREŠKA ${e.message}\n`; }
 
+  // PROFILACIJA — gdje ide vrijeme (čitanje vs dekodiranje vs red čekanja)
+  const p = _tileProf;
+  const avg = (s, n) => n ? (s / n).toFixed(0) : '0';
+  const dur = ((_now() - p.t0) / 1000).toFixed(0);
+  t += `\n--- PROFILACIJA (zadnjih ${dur}s) ---\n`;
+  t += `Pločice: kreirano=${p.created} gotovo=${p.done} timeout=${p.timeout} null=${p.nullData} err=${p.err}\n`;
+  t += `Red čekanja: avg=${avg(p.qWaitSum, p.qWaitN)}ms max=${p.qWaitMax | 0}ms\n`;
+  t += `Čitanje (worker SQLite/OPFS): n=${p.reads} avg=${avg(p.readSum, p.reads)}ms max=${p.readMax | 0}ms\n`;
+  t += `Dekodiranje (PNG→canvas): n=${p.decodes} avg=${avg(p.decSum, p.decodes)}ms max=${p.decMax | 0}ms\n`;
+  t += `UKUPNO po pločici (createTile→done): avg=${avg(p.totalSum, p.totalN)}ms max=${p.totalMax | 0}ms\n`;
+  t += `Najsporija: ${p.slowest || '-'}\n`;
+  t += `(za svjež profil: ♻ Reset profila, pa skrolaj/zumiraj 10s, pa Debug PRO)\n`;
+
   t += `\n${APP_VER}`;
   el.textContent = t;
 }
@@ -21548,11 +21561,30 @@ function _mainTileFlush() {
 let _wTileActive = 0;
 const _wTileStack = [];                 // LIFO — najnoviji zahtjev prvi
 const _W_TILE_MAX_INFLIGHT = 6;
+
+// ── PROFILACIJA tile pipeline-a (mjeri gdje ide vrijeme) ───────────────────────
+const _tileProf = {
+  created:0, done:0, timeout:0, nullData:0, err:0,
+  reads:0, readSum:0, readMax:0,
+  qWaitN:0, qWaitSum:0, qWaitMax:0,
+  decodes:0, decSum:0, decMax:0,
+  totalN:0, totalSum:0, totalMax:0, slowest:'',
+  t0: (typeof performance!=='undefined'?performance.now():Date.now()),
+  reset(){ ['created','done','timeout','nullData','err','reads','readSum','readMax','qWaitN','qWaitSum','qWaitMax','decodes','decSum','decMax','totalN','totalSum','totalMax'].forEach(k=>this[k]=0); this.slowest=''; this.t0=performance.now(); }
+};
+const _now = () => (typeof performance!=='undefined'?performance.now():Date.now());
+
 function _wTileScheduleCall(msg) {
+  const enq = _now();
   return new Promise(resolve => {
     const run = () => {
+      if (msg.type === 'tile') { const qw = _now()-enq; _tileProf.qWaitN++; _tileProf.qWaitSum += qw; if (qw>_tileProf.qWaitMax) _tileProf.qWaitMax = qw; }
       _wTileActive++;
-      _sqlWCall(msg).then(resolve, () => resolve(null)).finally(() => {
+      const rt0 = _now();
+      _sqlWCall(msg).then(r => {
+        if (msg.type === 'tile') { const dt = _now()-rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt>_tileProf.readMax) _tileProf.readMax = dt; }
+        resolve(r);
+      }, () => resolve(null)).finally(() => {
         _wTileActive--;
         const next = _wTileStack.pop();  // najnoviji (trenutni viewport) prvi
         if (next) next();
@@ -21892,7 +21924,8 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
     finish();
   };
   if ('createImageBitmap' in window) {
-    createImageBitmap(blob).then(bmp => { onSrc(bmp); if (bmp.close) bmp.close(); }).catch(() => {
+    const _d0 = _now();
+    createImageBitmap(blob).then(bmp => { const dt=_now()-_d0; _tileProf.decodes++; _tileProf.decSum+=dt; if(dt>_tileProf.decMax)_tileProf.decMax=dt; onSrc(bmp); if (bmp.close) bmp.close(); }).catch(() => {
       const u = URL.createObjectURL(blob); const img = new Image();
       img.onload = () => { onSrc(img); URL.revokeObjectURL(u); };
       img.onerror = () => { URL.revokeObjectURL(u); finish(); };
@@ -21918,12 +21951,19 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const {x,y,z} = coords;
+      const _ct0 = _now(); _tileProf.created++;
+      const _doneP = (err, cv) => {
+        const dt = _now() - _ct0;
+        _tileProf.done++; _tileProf.totalN++; _tileProf.totalSum += dt;
+        if (dt > _tileProf.totalMax) { _tileProf.totalMax = dt; _tileProf.slowest = z+'/'+x+'/'+y+' '+(dt|0)+'ms'; }
+        done(err, cv);
+      };
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
       if (cached) {
         ctx.drawImage(cached, 0, 0, 256, 256);
         _sqlTileBmpCache.delete(cacheKey); _sqlTileBmpCache.set(cacheKey, cached);
-        done(null, canvas);
+        _doneP(null, canvas);
         return canvas;
       }
       // Placeholder iz cache-a (parent za zoom-in, djeca za zoom-out); BEZ neprozirne
@@ -21931,14 +21971,15 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
       // Retry na timeout: ako worker ne odgovori na vrijeme (zauzet/spor), Leaflet bi
       // pločicu inače trajno označio gotovom (prazna) i nikad je ne bi tražio ponovo.
-      // Ponovni zahtjev ide na vrh LIFO stoga pa se brzo obradi. Genuine null (nema
-      // pločice u bazi) → odmah done, bez uzaludnih pokušaja.
       const _tryRead = (tries) => {
         _wTileScheduleCall({type:'tile', name, z, x, y}).then(res => {
-          if (res && res.data) { _drawTileBytesC(ctx, res.data, canvas, done, cacheKey); return; }
-          if (res && res.error === 'timeout' && tries < 3) { _tryRead(tries + 1); return; }
-          done(null, canvas);
-        }).catch(() => { if (tries < 3) _tryRead(tries + 1); else done(null, canvas); });
+          if (res && res.data) { _drawTileBytesC(ctx, res.data, canvas, _doneP, cacheKey); return; }
+          if (res && res.error === 'timeout') {
+            if (tries < 3) { _tryRead(tries + 1); return; }
+            _tileProf.timeout++;
+          } else { _tileProf.nullData++; }
+          _doneP(null, canvas);
+        }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(null, canvas); } });
       };
       _tryRead(0);
       return canvas;
@@ -26405,6 +26446,9 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
     <div class="mbtns" style="margin-top:6px;">
       <button class="btn" style="background:#3f2d1e;color:#fcd34d;width:100%;" onclick="sqlmapCopyDebug()">📋 Kopiraj Debug PRO</button>
+    </div>
+    <div class="mbtns" style="margin-top:6px;">
+      <button class="btn" style="background:#3a1e3f;color:#e9d5ff;width:100%;" onclick="_tileProf.reset();showToast('♻ Profil resetovan — skrolaj/zumiraj pa Debug PRO');closeSqlMapModal();">♻ Reset profila (mjerenje brzine)</button>
     </div>
     <div id="sqlmap-debug-out" style="display:none;margin-top:8px;background:#0f172a;color:#94a3b8;font-size:11px;font-family:monospace;padding:10px;border-radius:8px;white-space:pre-wrap;max-height:260px;overflow-y:auto;user-select:text;"></div>
   </div>
