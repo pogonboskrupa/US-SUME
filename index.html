@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.0';
+const APP_VER = 'v3.3.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21758,22 +21758,29 @@ async function _prewarmView() {
 }
 map.on('moveend zoomend', _schedPrewarmView);
 
-// D1-18: Auto-osvježi Leaflet veličinu kad se kontejner karte promijeni. Na mobilnom
-// (collapse address-bara, UI paneli) kontejner zna promijeniti visinu BEZ window-resize
-// eventa → Leaflet zadrži staru (manju) veličinu i NE napravi pločice za dio ekrana
-// (HUD pokaže "treba~30 ima:12", desni/donji dio prazan). ResizeObserver to hvata.
+// D1-18/D1-19: Leaflet zna zadržati POGREŠNU (manju) veličinu ako je inicijaliziran
+// prije nego se layout smirio, ili kad se kontejner promijeni bez window-resize eventa
+// (mobilni address-bar, UI paneli, flex:1 #map). Tada učita pločice samo za dio ekrana,
+// a ostatak je prazan (HUD pokazao getSize=369x641 a stvarni kontejner ~1900px).
+// Rješenje: SAMOIZLJEČENJE — periodično (i na promjene) provjeri da Leaflet veličina
+// odgovara stvarnom kontejneru (clientWidth/Height); ako ne → invalidateSize.
 (function _autoInvalidateMapSize() {
-  if (typeof ResizeObserver === 'undefined') return;
   const el = document.getElementById('map');
   if (!el) return;
-  let t = null, lastH = 0, lastW = 0;
-  new ResizeObserver(entries => {
-    const r = entries[0]?.contentRect; if (!r) return;
-    if (Math.abs(r.height - lastH) < 2 && Math.abs(r.width - lastW) < 2) return;
-    lastH = r.height; lastW = r.width;
-    if (t) clearTimeout(t);
-    t = setTimeout(() => { try { map.invalidateSize({ pan: false }); } catch(e) {} }, 120);
-  }).observe(el);
+  const heal = () => {
+    try {
+      const s = map.getSize();
+      if (Math.abs(s.y - el.clientHeight) > 4 || Math.abs(s.x - el.clientWidth) > 4) {
+        map.invalidateSize({ pan: false });
+      }
+    } catch(e) {}
+  };
+  if (typeof ResizeObserver !== 'undefined') {
+    let t = null;
+    new ResizeObserver(() => { if (t) clearTimeout(t); t = setTimeout(heal, 100); }).observe(el);
+  }
+  setInterval(heal, 1500);                          // stalna jeftina provjera (self-heal)
+  [150, 500, 1200, 2500].forEach(d => setTimeout(heal, d));  // rane provjere nakon učitavanja
 })();
 
 // D1-17: Dekodiraj ISKLJUČIVO iz blob-a. Debug PRO je pokazao da createImageBitmap(canvas)

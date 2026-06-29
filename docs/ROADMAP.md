@@ -186,4 +186,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   visinu bez window-resize eventa) pa učita pločice samo za gornji/lijevi dio. **Fix
   (v3.2.9):** ResizeObserver na #map → `map.invalidateSize()` na promjenu veličine; HUD
   pokazuje "treba~N ima:M ⚠️PREMALO"; ručno dugme "🔄 Osvježi veličinu karte".
-  Status: 🔄 (v3.2.9, test)
+  Status: ⚠️ djelimično (v3.2.9) — ResizeObserver nije uhvatio init-stale veličinu.
+- **D1-19 — Leaflet zaglavljen na pogrešnoj (manjoj) veličini → velike praznine
+  (KONAČNO POTVRĐENO Live HUD-om: `ekran 369x641` a stvarni ~1900px).** Leaflet
+  inicijaliziran prije nego se layout (#map flex:1) smirio → `getSize()=641`, učita
+  pločice samo za taj dio, ostatak prazan. ResizeObserver nije pomogao (init-stale, bez
+  promjene). **Fix (v3.3.1):** SAMOIZLJEČENJE — `setInterval(1500)` + rane provjere
+  upoređuju `map.getSize()` sa stvarnim `clientWidth/Height`; na neslaganje →
+  `invalidateSize()`. Garantovan oporavak ≤1.5s bez obzira na uzrok.  Status: 🔄 (v3.3.1)
