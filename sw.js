@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '3.2.9';
+const APP_VERSION = '3.3.0';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -137,8 +137,12 @@ self.addEventListener('fetch', event => {
     url.startsWith(self.location.origin) ||
     event.request.mode === 'navigate'
   ) {
+    // Navigacije (index.html) dohvati BEZ HTTP keša — inače browser/CDN servira staru
+    // verziju do isteka max-age (~10 min) pa update kasni. Ostalo: normalan network-first.
+    const isNav = event.request.mode === 'navigate';
+    const req = isNav ? new Request(event.request, { cache: 'no-store' }) : event.request;
     event.respondWith(
-      fetch(event.request)
+      fetch(req)
         .then(resp => {
           if (resp.ok) {
             try { const rc = resp.clone(); caches.open(APP_CACHE).then(c => c.put(event.request, rc)); } catch(e) {}
