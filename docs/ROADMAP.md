@@ -79,13 +79,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   na čitanju jednog tile-a (OPFS stall), callback nikad ne stigne → `_wTileScheduleCall`
   `finally` se ne izvrši → `_wTileActive` se ne smanji. Nakon 6 takvih cijeli red je
   zamrznut i karta prestaje učitavati. **Fix:** timeout za tile (~20s) koji resolve-a
-  null i oslobađa slot.  Status: ⬜
+  null i oslobađa slot.  Status: ✅ (v3.1.4)
 
 🟠 **Srednji**
 - **D1-2 — `sqlmapClearAll` ne čisti BMP cache ni throttle stanje.** Terminira worker
   (~L21697) ali ne zatvara `_sqlTileBmpCache` bitmape (GPU leak do eviction) niti
   resetuje `_wTileActive`/`_wTileStack` → in-flight promise-i nikad ne resolve-aju →
-  slot leak. **Fix:** očistiti cache + resetovati throttle.  Status: ⬜
+  slot leak. **Fix:** očistiti cache + resetovati throttle.  Status: ✅ (v3.1.4)
 - **D1-3 — `sqlmapToggle` dozvoljava 2+ vidljive offline karte** (~L21617) →
   udvostručuje čitanja/memoriju (uzrok ranijeg UNSKO+UNSKO_2GB). `setLayerSqlite` je
   ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ⬜
@@ -94,7 +94,7 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   **Fix:** providan canvas, bez ispune.  Status: ⬜
 - **D1-5 — Globalni crash-brojač briše SVE karte.** `_sqlCrashCheck` nakon 3 pada zove
   `_sqlIdbClearAll()` (sve karte) iako je samo jedna problematična. **Fix:** brojač po
-  karti.  Status: ⬜
+  karti.  Status: ✅ (v3.1.4)
 
 🟡 **Nizak**
 - **D1-6 — Online BMP cache je FIFO, ne LRU.** Cache-hit (~L8878) ne osvježava poziciju
