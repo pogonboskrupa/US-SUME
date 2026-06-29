@@ -91,13 +91,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ⬜
 - **D1-4 — Online createTile prekriva zadržane pločice pri zoom-out** (~L8869) — isti
   bug popravljen za SQLite (neproziran canvas + zelena ispuna), ali za online slojeve.
-  **Fix:** providan canvas, bez ispune.  Status: ⬜
+  **Fix:** providan canvas, bez ispune.  Status: ✅ (v3.1.5)
 - **D1-5 — Globalni crash-brojač briše SVE karte.** `_sqlCrashCheck` nakon 3 pada zove
   `_sqlIdbClearAll()` (sve karte) iako je samo jedna problematična. **Fix:** brojač po
   karti.  Status: ✅ (v3.1.4)
 
 🟡 **Nizak**
 - **D1-6 — Online BMP cache je FIFO, ne LRU.** Cache-hit (~L8878) ne osvježava poziciju
-  (nema delete+set kao SQLite). **Fix:** delete+set na hit.  Status: ⬜
+  (nema delete+set kao SQLite). **Fix:** delete+set na hit.  Status: ✅ (v3.1.5)
 - **D1-7 — Race: dupli createTile za isti coord** može procuriti prvu bitmapu (druga
   prepiše u cache bez close). Rijetko.  Status: ⬜

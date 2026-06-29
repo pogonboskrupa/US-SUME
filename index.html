@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.4';
+const APP_VER = 'v3.1.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8866,10 +8866,11 @@ function makeCachedTileLayer(cacheName) {
       const sz = this.getTileSize();
       const canvas = document.createElement('canvas');
       canvas.width = sz.x; canvas.height = sz.y;
-      const ctx = canvas.getContext('2d', { alpha: false });
+      // D1-4: providan canvas, bez neprozirne ispune — providni dijelovi propuštaju
+      // Leaflet-ove zadržane pločice susjednog zoom nivoa (gladak zoom-out) i pozadinu
+      // pane-a (#2d3a2e); pri gubitku GPU backing-a pokaže zelenu pozadinu, ne crno.
+      const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#2d3a2e';
-      ctx.fillRect(0, 0, sz.x, sz.y);
 
       const url = this.getTileUrl(coords);
 
@@ -8877,6 +8878,7 @@ function makeCachedTileLayer(cacheName) {
       const cachedBmp = _tileBmpCache.get(url);
       if (cachedBmp) {
         ctx.drawImage(cachedBmp, 0, 0, sz.x, sz.y);
+        _tileBmpCache.delete(url); _tileBmpCache.set(url, cachedBmp);  // D1-6: osvježi LRU poziciju
         done(null, canvas);
         return canvas;
       }
