@@ -71,5 +71,33 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 > Ovdje upisujemo bugove i optimizacije dok ih nalazimo, po dijelovima.
 
-### DIO 1 — nalazi
-- _(u toku)_
+### DIO 1 — nalazi (analiza 2026-06-29)
+
+🔴 **Visok**
+- **D1-1 — Worker tile hang → trajni gubitak slota (zamrzavanje karte).**
+  `_sqlWCall` namjerno NEMA timeout za `type:'tile'` (~L21005). Ako worker zaglavi
+  na čitanju jednog tile-a (OPFS stall), callback nikad ne stigne → `_wTileScheduleCall`
+  `finally` se ne izvrši → `_wTileActive` se ne smanji. Nakon 6 takvih cijeli red je
+  zamrznut i karta prestaje učitavati. **Fix:** timeout za tile (~20s) koji resolve-a
+  null i oslobađa slot.  Status: ⬜
+
+🟠 **Srednji**
+- **D1-2 — `sqlmapClearAll` ne čisti BMP cache ni throttle stanje.** Terminira worker
+  (~L21697) ali ne zatvara `_sqlTileBmpCache` bitmape (GPU leak do eviction) niti
+  resetuje `_wTileActive`/`_wTileStack` → in-flight promise-i nikad ne resolve-aju →
+  slot leak. **Fix:** očistiti cache + resetovati throttle.  Status: ⬜
+- **D1-3 — `sqlmapToggle` dozvoljava 2+ vidljive offline karte** (~L21617) →
+  udvostručuje čitanja/memoriju (uzrok ranijeg UNSKO+UNSKO_2GB). `setLayerSqlite` je
+  ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ⬜
+- **D1-4 — Online createTile prekriva zadržane pločice pri zoom-out** (~L8869) — isti
+  bug popravljen za SQLite (neproziran canvas + zelena ispuna), ali za online slojeve.
+  **Fix:** providan canvas, bez ispune.  Status: ⬜
+- **D1-5 — Globalni crash-brojač briše SVE karte.** `_sqlCrashCheck` nakon 3 pada zove
+  `_sqlIdbClearAll()` (sve karte) iako je samo jedna problematična. **Fix:** brojač po
+  karti.  Status: ⬜
+
+🟡 **Nizak**
+- **D1-6 — Online BMP cache je FIFO, ne LRU.** Cache-hit (~L8878) ne osvježava poziciju
+  (nema delete+set kao SQLite). **Fix:** delete+set na hit.  Status: ⬜
+- **D1-7 — Race: dupli createTile za isti coord** može procuriti prvu bitmapu (druga
+  prepiše u cache bez close). Rijetko.  Status: ⬜
