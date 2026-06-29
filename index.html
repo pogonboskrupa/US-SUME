@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.2';
+const APP_VER = 'v3.2.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21423,7 +21423,7 @@ async function sqlmapRestoreAll() {
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
 const _SQL_TILE_BMP_MAX = 500;
-const _SQL_OVERVIEW_Z = 12;   // tile-ovi z<=12 su placeholder piramida za zoom-out
+const _SQL_OVERVIEW_Z = 13;   // tile-ovi z<=13 su placeholder piramida za zoom-out
 function _sqlTileBmpEvict() {
   if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
   const it = _sqlTileBmpCache.keys();
@@ -21564,7 +21564,7 @@ async function _sqlPrewarm(name) {
 let _prewarmViewT = null, _prewarmViewBusy = false;
 function _schedPrewarmView() {
   if (_prewarmViewT) clearTimeout(_prewarmViewT);
-  _prewarmViewT = setTimeout(_prewarmView, 500);
+  _prewarmViewT = setTimeout(_prewarmView, 200);   // brzo nakon smiraja → niži nivoi spremni za zoom-out
 }
 async function _prewarmView() {
   if (_prewarmViewBusy) return;
@@ -21574,12 +21574,16 @@ async function _prewarmView() {
   const minN = Math.max(parseInt(sl.meta?.minzoom || 0, 10) || 0, 0);
   const maxN = parseInt(sl.meta?.maxzoom || 18, 10);
   const zHi = Math.min(curZ - 1, maxN);          // niži nivoi za placeholder pri zoom-out
-  const zLo = Math.max(minN, curZ - 3);
+  const zLo = Math.max(minN, curZ - 4);          // 4 nivoa ispod — pokriva i dvostruki zoom-out
   if (zHi < zLo) return;
-  const b = map.getBounds();
+  const b = map.getBounds().pad(0.3);            // prošireno radi okoline pri panu
   _prewarmViewBusy = true;
-  try { await _sqlPrewarmRegion(sl.name, b.getWest(), b.getSouth(), b.getEast(), b.getNorth(), zLo, zHi, 200); }
-  finally { _prewarmViewBusy = false; }
+  // Od najbližeg nižeg nivoa prema dnu — curZ-1 (najvjerovatniji zoom-out cilj) prvi
+  try {
+    for (let z = zHi; z >= zLo; z--) {
+      await _sqlPrewarmRegion(sl.name, b.getWest(), b.getSouth(), b.getEast(), b.getNorth(), z, z, 260);
+    }
+  } finally { _prewarmViewBusy = false; }
 }
 map.on('moveend zoomend', _schedPrewarmView);
 

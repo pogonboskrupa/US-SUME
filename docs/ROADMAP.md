@@ -151,3 +151,9 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   nacrtaj plain `createImageBitmap(blob)` na 256 i pozovi `done()` ODMAH; keširanje
   (256 snapshot canvasa) zasebno best-effort. Sigurnosni timeout (8s) garantuje done().
   Status: ✅ (v3.2.2)
+- **D1-14 — Zoom-out: pločice "nestanu" jer niži nivo nije prewarmovan na vrijeme.**
+  Nakon v3.2.2 (skrol radi), zoom-in pa zoom-out još pokazuje praznine jer
+  `_prewarmView` (placeholder za niži nivo) kasni (500ms debounce, uski raspon).
+  **Fix (v3.2.3):** debounce 500→200ms, raspon curZ-1..curZ-4 (dvostruki zoom-out),
+  bounds prošireni (pad 0.3), nivoi se pune od najbližeg (curZ-1) nadolje. Eviction
+  zaštita z≤12→z≤13.  Status: 🔄 (v3.2.3, čeka test)
