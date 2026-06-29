@@ -115,3 +115,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   - Novi `_prewarmView` na `moveend/zoomend` — puni 3 niža zoom nivoa za trenutni
     pogled, pa zoom-out svuda ima placeholder piramidu (svi formati).
   Status: ✅ (v3.1.7)
+- **D1-9 — Overview tile-ovi se evictovali → placeholder piramida nestaje.** LRU je
+  izbacivao i pregledne (z≤12) tile-ove kad se napuni cache pri visokim zoomovima,
+  pa je zoom-out opet ostajao bez placeholdera. **Fix (v3.1.8):** `_sqlTileBmpEvict`
+  čuva z≤12 tile-ove od evictiona; cache 400→500.  Status: ✅ (v3.1.8)
+- **D1-10 — SW update se nije primjenjivao automatski → testiranje stare verzije.**
+  Update je tražio ručni klik na "Ažuriraj" toast; korisnik je mogao testirati staru
+  keširanu verziju. **Fix (v3.1.8):** auto-`skipWaiting` kad nema aktivnog snimanja
+  (recOn/_tragOn/_dozGpsOn) → automatski reload na najnoviju verziju.  Status: ✅ (v3.1.8)

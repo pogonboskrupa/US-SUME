@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.1.7';
+const APP_VER = 'v3.1.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21422,13 +21422,19 @@ async function sqlmapRestoreAll() {
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
-const _SQL_TILE_BMP_MAX = 400;
+const _SQL_TILE_BMP_MAX = 500;
+const _SQL_OVERVIEW_Z = 12;   // tile-ovi z<=12 su placeholder piramida za zoom-out
 function _sqlTileBmpEvict() {
   if (_sqlTileBmpCache.size <= _SQL_TILE_BMP_MAX) return;
   const it = _sqlTileBmpCache.keys();
-  while (_sqlTileBmpCache.size > _SQL_TILE_BMP_MAX * 0.7) {
+  const target = _SQL_TILE_BMP_MAX * 0.7;
+  while (_sqlTileBmpCache.size > target) {
     const k = it.next().value;
-    if (k === undefined) break;
+    if (k === undefined) break;   // iscrpljen iterator (ostali samo zaštićeni) → stani
+    // Čuvaj pregledne (niske zoom) tile-ove od evictiona — to je piramida koja
+    // pri zoom-out uvijek daje placeholder umjesto praznih pločica.
+    const parts = k.split('/');
+    if (+parts[parts.length - 3] <= _SQL_OVERVIEW_Z) continue;
     const bmp = _sqlTileBmpCache.get(k);
     if (bmp && bmp.close) try { bmp.close(); } catch(e) {}
     _sqlTileBmpCache.delete(k);
@@ -22075,8 +22081,12 @@ async function startOfflineDownload() {
 (function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('./sw.js').then(reg => {
-    // Ako je SW već čekao pri učitavanju stranice → odmah pokaži toast
-    if (reg.waiting) { showUpdateToast(); }
+    // Ako je SW već čekao pri učitavanju stranice → auto-primijeni (app tek učitan,
+    // ništa se ne snima) da korisnik pouzdano dobije najnoviju verziju.
+    if (reg.waiting) {
+      if (!recOn && !_tragOn && !_dozGpsOn) reg.waiting.postMessage('skipWaiting');
+      else showUpdateToast();
+    }
 
     // Provjeri update odmah i svakih 30 min
     reg.update();
@@ -22087,7 +22097,10 @@ async function startOfflineDownload() {
       const newSW = reg.installing;
       newSW.addEventListener('statechange', () => {
         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateToast();
+          // Auto-primijeni update kad app miruje (nema aktivnog snimanja) — pouzdano
+          // dobijanje najnovije verzije bez ručnog klika. Tokom snimanja → toast.
+          if (!recOn && !_tragOn && !_dozGpsOn) newSW.postMessage('skipWaiting');
+          else showUpdateToast();
         }
       });
     });
