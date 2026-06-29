@@ -142,3 +142,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
     (vrate 512 bez greške) → fix nullified. Sada GARANTOVANO smanjenje preko offscreen
     canvasa (`_decodeTileBmp`: ako bitmapa > 256, nacrtaj na 256 canvas pa re-encode).
     Verzija dodana u 🔬 Test izvještaj radi potvrde koju verziju korisnik gleda.
+- **D1-13 — done() se ne pozove ako keš-dekod zaglavi → trajno prazne pločice (PRAVI
+  KORIJEN, potvrđeno debug-om).** Debug na v3.2.1: BMP cache 69/500, SQLite reads
+  aktivno=0 queue=0 (worker IDLE), a 🔬 Test nalazi podatke → dakle NIJE memorija ni
+  čitanje. `_decodeTileBmp` je radio canvas round-trip (`createImageBitmap(canvas)`)
+  PRIJE `done()`; ako taj korak zaglavi/padne u WebView-u, `done()` se nikad ne pozove
+  → pločica trajno "loading" (prazna), worker idle, podaci postoje. **Fix (v3.2.2):**
+  nacrtaj plain `createImageBitmap(blob)` na 256 i pozovi `done()` ODMAH; keširanje
+  (256 snapshot canvasa) zasebno best-effort. Sigurnosni timeout (8s) garantuje done().
+  Status: ✅ (v3.2.2)

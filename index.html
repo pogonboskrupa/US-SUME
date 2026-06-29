@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.1';
+const APP_VER = 'v3.2.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21585,8 +21585,8 @@ map.on('moveend zoomend', _schedPrewarmView);
 
 // D1-12: GARANTOVANO dekodiraj na ≤sz (256). Neke SQLiteDB/rmaps karte imaju 512×512
 // pločice → keširane kao 512 = 1MB svaka → cache iscrpi GPU → prazne pločice. Resize
-// opcije createImageBitmap-a neki WebView-i tiho ignorišu, pa ovdje garantujemo manju
-// bitmapu preko offscreen canvasa (512→256). Prikazujemo na 256 ionako — bez gubitka.
+// opcije createImageBitmap-a neki WebView-i tiho ignorišu, pa za PREWARM garantujemo
+// manju bitmapu preko offscreen canvasa (512→256). Prikazujemo na 256 ionako.
 async function _decodeTileBmp(blob, sz) {
   const big = await createImageBitmap(blob);
   if (big.width <= sz && big.height <= sz) return big;
@@ -21595,27 +21595,41 @@ async function _decodeTileBmp(blob, sz) {
   cx.drawImage(big, 0, 0, sz, sz); big.close();
   return await createImageBitmap(c);
 }
+// D1-13: KLJUČNO — nacrtaj pločicu i pozovi done() ODMAH (plain decode, dokazano radi
+// per 🔬 Test), pa keširaj ZASEBNO kao best-effort. Ako keš-dekod (createImageBitmap
+// iz canvasa) zaglavi/padne u WebView-u, pločica je VEĆ prikazana i gotova — nema više
+// trajno praznih pločica zbog problema s keširanjem.
 function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;
   const blob = new Blob([data], { type: _tileMime(data) });
-  const useImg = () => {
-    const u = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); done(null, canvas); };
-    img.onerror = () => { URL.revokeObjectURL(u); done(null, canvas); };
-    img.src = u;
+  let _fin = false;
+  const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); };
+  // Sigurnosni okidač: ako dekodiranje iz bilo kog razloga ne završi, ipak završi.
+  const _safety = setTimeout(finish, 8000);
+  const cacheFromCanvas = () => {
+    if (!cacheKey || !('createImageBitmap' in window)) return;
+    // 256 snapshot vidljivog canvasa (već nacrtan na 256) — manja memorija od 512 izvora
+    createImageBitmap(canvas).then(small => { _bmpCacheSet(_sqlTileBmpCache, cacheKey, small); _sqlTileBmpEvict(); }).catch(() => {});
   };
   if ('createImageBitmap' in window) {
-    _decodeTileBmp(blob, sz)
-      .then(bmp => {
-        ctx.drawImage(bmp, 0, 0, sz, sz);
-        if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, bmp); _sqlTileBmpEvict(); }  // D1-7
-        else bmp.close();
-        done(null, canvas);
-      })
-      .catch(useImg);
+    createImageBitmap(blob).then(bmp => {
+      ctx.drawImage(bmp, 0, 0, sz, sz);   // 512→256 na vidljivom canvasu
+      bmp.close();
+      finish();                            // done() ODMAH — ne čekaj keširanje
+      cacheFromCanvas();                   // keš je best-effort, ne blokira prikaz
+    }).catch(() => {
+      const u = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); finish(); cacheFromCanvas(); };
+      img.onerror = () => { URL.revokeObjectURL(u); finish(); };
+      img.src = u;
+    });
   } else {
-    useImg();
+    const u = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); URL.revokeObjectURL(u); finish(); };
+    img.onerror = () => { URL.revokeObjectURL(u); finish(); };
+    img.src = u;
   }
 }
 
