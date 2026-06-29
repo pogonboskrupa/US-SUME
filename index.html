@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.6';
+const APP_VER = 'v3.3.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21572,7 +21572,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return canvas;
     }
   });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:4, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:6, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   return layer;
 }
 
@@ -21900,7 +21900,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       return canvas;
     }
   });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:4, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:6, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
   return layer;
 }
 

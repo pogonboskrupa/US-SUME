@@ -213,7 +213,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   Karta je imala `fadeAnimation:true` → Leaflet postavlja INLINE `style.opacity` na
   pločice tokom fade-a; naš `transition:none !important` ih ostavi zaglavljene na
   opacity 0 (inline nadjačava CSS `.leaflet-tile{opacity:1}`). **Fix (v3.3.6):**
-  `fadeAnimation:false` — Leaflet ne dira opacity, pločice odmah pune.  Status: 🔄 (v3.3.6)
+  `fadeAnimation:false` — Leaflet ne dira opacity, pločice odmah pune.  Status: ✅ (v3.3.6 —
+  Debug PRO potvrdio op=1, pločice vidljive). GLAVNI bug nevidljivih pločica RIJEŠEN.
+- **D1-22 — Pri intenzivnom skrolu+zoom pločice nakratko nestaju (blago, transient).**
+  Sporo offline čitanje + Leaflet izbaci pločice izvan keepBuffer-a prije nego nove
+  stignu. **Fix (v3.3.7):** keepBuffer 4→6 (zadrži više pločica oko ekrana tokom
+  interakcije).  Status: 🔄 (v3.3.7, test)
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
