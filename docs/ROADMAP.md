@@ -162,4 +162,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   idle → čitanje radi deterministički, ali Leaflet pri zoom-out ne iscrta te pločice.
   **Fix (v3.2.4):** nakon smiraja zoom-out, `layer.redraw()` forsira ponovni zahtjev
   svih pločica — keširane se iscrtaju odmah (sinhron cache-hit, bez treperenja), prazne
-  se ponovo učitaju.  Status: 🔄 (v3.2.4, čeka test)
+  se ponovo učitaju.  Status: ❌ POVUČENO (v3.2.5) — pogoršalo (još manje pločica);
+  redraw pravi više churn-a → više use-after-close (vidi D1-16).
+- **D1-16 — Use-after-close race na ImageBitmap → prazne pločice pri zoom-out (PRAVI
+  KORIJEN).** `.close()` (dodan za GPU memoriju u D1-2/D1-7/D1-9) zatvarao je bitmapu
+  dok je DRUGI createTile poziv upravo crta iz cache-a (pri zoom in/out ima puno
+  createTile churn-a). Zatvaranje usred `drawImage` → prazna pločica. To što je D1-15
+  redraw POGORŠAO (više churn-a → više zatvaranja usred crtanja) potvrđuje uzrok; test
+  nalazi podatke jer čitanje je OK — problem je čisto zatvaranje bitmape. **Fix (v3.2.5):**
+  uklonjen `.close()` iz `_bmpCacheSet`, `_sqlTileBmpEvict`, `_tileBmpEvict` — GC oslobađa
+  bitmape (male su, 256px, cache ograničen). D1-15 redraw povučen.  Status: 🔄 (v3.2.5, test)

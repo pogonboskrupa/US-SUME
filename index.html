@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.2.4';
+const APP_VER = 'v3.2.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -8853,17 +8853,16 @@ function _tileBmpEvict() {
   while (_tileBmpCache.size > _TILE_BMP_MAX * 0.7) {
     const k = it.next().value;
     if (k === undefined) break;
-    const bmp = _tileBmpCache.get(k);
-    if (bmp && bmp.close) { try { bmp.close(); } catch(e) {} } // oslobodi GPU memoriju
+    // D1-16: ne zatvaramo (može se crtati u drugom createTile pozivu) — GC oslobađa.
     _tileBmpCache.delete(k);
   }
 }
 
-// D1-7: upiši bitmapu u cache zatvarajući prethodnu za isti ključ — bez ovoga dva
-// paralelna createTile za isti coord ostave prvu bitmapu nezatvorenu (GPU leak).
+// D1-16: upiši bitmapu u cache. NE zatvaramo prethodnu eksplicitno — pri zoom in/out
+// ima puno createTile churn-a pa drugi poziv može upravo CRTATI staru bitmapu iz cache-a;
+// zatvaranje usred crtanja daje praznu pločicu (use-after-close). GC oslobađa staru
+// bitmapu kad nema referenci. Bitmape su male (256px) pa je memorija ograničena.
 function _bmpCacheSet(cache, key, bmp) {
-  const old = cache.get(key);
-  if (old && old !== bmp && old.close) { try { old.close(); } catch(e) {} }
   cache.set(key, bmp);
 }
 
@@ -21435,8 +21434,8 @@ function _sqlTileBmpEvict() {
     // pri zoom-out uvijek daje placeholder umjesto praznih pločica.
     const parts = k.split('/');
     if (+parts[parts.length - 3] <= _SQL_OVERVIEW_Z) continue;
-    const bmp = _sqlTileBmpCache.get(k);
-    if (bmp && bmp.close) try { bmp.close(); } catch(e) {}
+    // D1-16: NE zatvaramo bitmapu (može se upravo crtati iz cache-a u drugom
+    // createTile pozivu → prazna pločica). Samo izbaci iz mape; GC oslobađa.
     _sqlTileBmpCache.delete(k);
   }
 }
@@ -21586,24 +21585,6 @@ async function _prewarmView() {
   } finally { _prewarmViewBusy = false; }
 }
 map.on('moveend zoomend', _schedPrewarmView);
-
-// D1-15: Pri ZOOM-OUT Leaflet zna ostaviti pojedine pločice trajno prazne iako podaci
-// postoje (potvrđeno 🔬 Test: TILE PRONAĐEN, a pločica prazna). Forsiraj ponovni zahtjev
-// svih pločica vidljivog SQLite sloja nakon što se zoom-out smiri: keširane pločice se
-// iscrtaju ODMAH (cache-hit je sinhron → bez treperenja), prazne se ponovo učitaju.
-let _zoomRedrawPrev = null;
-map.on('zoomstart', () => { _zoomRedrawPrev = Math.round(map.getZoom()); });
-map.on('zoomend', () => {
-  const nz = Math.round(map.getZoom());
-  const out = _zoomRedrawPrev != null && nz < _zoomRedrawPrev;
-  _zoomRedrawPrev = nz;
-  if (!out) return;
-  setTimeout(() => {
-    if (Math.round(map.getZoom()) !== nz) return;   // korisnik opet zumira → preskoči
-    const sl = _sqlLayers.find(l => l.visible);
-    if (sl && sl.layer && sl.layer.redraw) sl.layer.redraw();
-  }, 320);
-});
 
 // D1-12: GARANTOVANO dekodiraj na ≤sz (256). Neke SQLiteDB/rmaps karte imaju 512×512
 // pločice → keširane kao 512 = 1MB svaka → cache iscrpi GPU → prazne pločice. Resize
