@@ -4055,7 +4055,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.3.4';
+const APP_VER = 'v3.3.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21225,17 +21225,23 @@ async function sqlmapDebugPro() {
   // zooma se prikazuju sitno) ili klasteriranje (pogrešan pixel origin/transform).
   const _mEl = document.getElementById('map');
   const _mr = _mEl ? _mEl.getBoundingClientRect() : { left: 0, top: 0 };
-  t += `\n--- Pozicije pločica (rel. #map, prvih 10) ---\n`;
+  // Stanje tile-pane-a (možda nevidljiv: opacity/visibility/transform)
+  const pane = map.getPane && map.getPane('tilePane');
+  if (pane) {
+    const ps = getComputedStyle(pane);
+    t += `\nTile-pane: opacity=${ps.opacity} vis=${ps.visibility} display=${ps.display}\n  transform=${(pane.style.transform||ps.transform||'').slice(0,40)}\n`;
+  }
+  t += `--- Pločice (prvih 8): poz | veličina | opacity | uDOM ---\n`;
   let _shown = 0;
   for (const key of tiles) {
-    if (_shown >= 10) break;
+    if (_shown >= 8) break;
     const tile = layer._tiles[key];
     const cv = tile && tile.el; if (!cv || cv.tagName !== 'CANVAS') continue;
     const r = cv.getBoundingClientRect(); const c = tile.coords || {};
-    t += `  z${c.z}/${c.x}/${c.y} @(${(r.left - _mr.left) | 0},${(r.top - _mr.top) | 0}) ${r.width | 0}x${r.height | 0}\n`;
+    const op = cv.style.opacity || getComputedStyle(cv).opacity;
+    t += `  z${c.z}/${c.x}/${c.y} @(${(r.left - _mr.left) | 0},${(r.top - _mr.top) | 0}) ${r.width | 0}x${r.height | 0} op=${op} dom=${cv.isConnected ? 'da' : 'NE'}\n`;
     _shown++;
   }
-  t += `(očekivano: ${_shown ? '256x256' : '?'} po pločici; sitnije = skalirane retained pločice)\n`;
 
   // Live read za nekoliko praznih — ima li podataka u bazi?
   if (blankList.length) {
@@ -21786,22 +21792,8 @@ async function _prewarmView() {
 }
 map.on('moveend zoomend', _schedPrewarmView);
 
-// D1-20: Nakon zoom-a Leaflet zna napraviti NEPOTPUN grid (npr. 9 umjesto 22 pločice)
-// jer _update odradi dok je zoom transform/veličina još u prelazu → veliki dio ekrana
-// prazan dok ga navigacija/🔄 ne dopuni. Čim se zoom smiri, ako grid ima manje pločica
-// nego što viewport traži → redraw (dopuni). Sada SIGURNO: D1-16/17 su uklonili prazne
-// keš bitmape i use-after-close, pa redraw više ne pravi prazne pločice.
-let _zoomFillT = null;
-map.on('zoomend', () => {
-  if (_zoomFillT) clearTimeout(_zoomFillT);
-  _zoomFillT = setTimeout(() => {
-    const sl = _sqlLayers.find(l => l.visible);
-    if (!sl || !sl.layer || !sl.layer._tiles) return;
-    const size = map.getSize();
-    const need = (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
-    if (Object.keys(sl.layer._tiles).length < need) sl.layer.redraw();
-  }, 350);
-});
+// D1-20 POVUČEN (v3.3.5): zoomFill redraw je napravio "12 pločica sa sadržajem ali
+// ekran prazan" — redraw u krivom trenutku ostavi pločice nevidljivima. Vraćeno.
 
 // D1-18/D1-19: Leaflet zna zadržati POGREŠNU (manju) veličinu ako je inicijaliziran
 // prije nego se layout smirio, ili kad se kontejner promijeni bez window-resize eventa

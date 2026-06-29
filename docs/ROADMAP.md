@@ -202,7 +202,11 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   ima:9 treba:12) jer `_update` odradi dok je zoom transform još u prelazu; ostane prazno
   dok navigacija/🔄 ne dopuni. **Fix (v3.3.4):** na `zoomend` (debounce 350ms) ako grid
   ima manje pločica nego što viewport traži → `layer.redraw()` (dopuni). Sada SIGURNO jer
-  su D1-16/17 uklonili prazne keš bitmape i use-after-close.  Status: 🔄 (v3.3.4, test)
+  su D1-16/17 uklonili prazne keš bitmape i use-after-close.  Status: ❌ POVUČEN (v3.3.5)
+  — zoomFill redraw je dao "12 pločica sa sadržajem ali ekran prazan" (HUD zelen, karta
+  prazna); redraw u krivom trenutku ostavi pločice nevidljivima. Debug PRO dopunjen
+  DOM-dijagnostikom (opacity/isConnected/tile-pane transform) da otkrije zašto su
+  content-pločice nevidljive.  Status: 🔄 dijagnostika (v3.3.5)
 
 > NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
 > D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
