@@ -307,3 +307,17 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   Leaflet ih smatra učitanima pa ih nikad više ne crta → trajno prazne. **Fix (v3.5.4):**
   nakon zoomend/moveend sweep koji pre-nudge-a SVE pločice vidljivog sloja (0/150/400/800ms)
   → zaglavljene se prikažu. Status: 🔄 (v3.5.4, test zoom-out).
+
+## DIO 2 (nastavak) — MBTiles (primarni format)
+
+- **D2-2 — MBTiles robusnost (v3.5.5).** Istraga (2 Explore agenta): Y-flip(TMS)/zoom za
+  mbtiles su ISPRAVNI; mbtiles dijeli render pipeline s rmaps pa važe sve render popravke
+  (v3.5.2–v3.5.4 composite nudge). Preostali uzroci "ne radi":
+  (1) **XYZ-pohranjene MBTiles** (bez TMS flipa) → flip pogriješi svaku pločicu. FIX:
+  `queryTile()` i `MiniSqlite.tile()` sad probaju TMS flip pa XYZ (ne-flip) fallback i
+  zapamte orijentaciju (`inst.mbY`/`this._mbY`). (2) **Vektorske MBTiles (PBF/MVT)** →
+  raster pipeline ih ne dekodira. FIX: `_sqlmapVectorFmt`/`_sqlmapWarnIfVector` daju jasnu
+  poruku umjesto tihih praznih pločica (prepoznaje po `metadata.format`). (3) Dijagnostika:
+  🔬 Test sad prikazuje `meta.format` + ⚠ vektor upozorenje. **Preostaje D2-3:** 512px
+  tile-size podrška (tek ako Test pokaže 512×512 — riskantnije, thread-a tsz kroz layer/
+  createTile/_drawTileBytesC/placeholder/prewarm). Status: 🔄 (v3.5.5, test + 🔬 Test).

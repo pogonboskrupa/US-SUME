@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.4';
+const APP_VER = 'v3.5.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20640,36 +20640,49 @@ class MiniSqlite {
     }return null;
   }
   async tile(z,x,y) {
-    const ty=this.fmt==='mbtiles'?(1<<z)-1-y:y;
     const off=this._zOff||17;
+    // MBTiles: TMS (flip) prvo, pa XYZ (ne-flip) kao fallback (neke MBTiles su XYZ).
+    // Zapamti orijentaciju koja uspije (this._mbY) da se ne pogađa svaki put.
+    const tyTms=(1<<z)-1-y;
+    const tyCands=this.fmt!=='mbtiles'?[y]:(this._mbY==='xyz'?[y]:this._mbY==='tms'?[tyTms]:[tyTms,y]);
+    const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
+    const _mbHit=(ty)=>{ if(this.fmt==='mbtiles'&&!this._mbY) this._mbY=(ty===tyTms)?'tms':'xyz'; };
     if(this.noRowId){
-      const sk=[];sk[this.colZ]=z;sk[this.colX]=x;sk[this.colY]=ty;
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
-      for(const zv of zCands){
-        sk[this.colZ]=zv;
-        const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
-        if(rec){if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;return rec[this.colD]||null;}
+      for(const ty of tyCands){
+        const sk=[];sk[this.colX]=x;sk[this.colY]=ty;
+        for(const zv of zCands){
+          sk[this.colZ]=zv;
+          const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
+          if(rec){if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;_mbHit(ty);return rec[this.colD]||null;}
+        }
       }
       return null;
     }
     if(this.idxRoot){
-      const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
-      for(const zv of zCands){
-        const key=[null,null,null];
-        key[this._idxColZ]=zv; key[this._idxColX]=x; key[this._idxColY]=ty;
-        const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
-        if(rec){
-          if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;
-          const blob=rec[this.colD];
-          if(blob instanceof Uint8Array) return blob;
-          const tRec=await this._tblSearch(this.tilesRoot,rec[rec.length-1]);
-          return tRec?tRec[this.colD]||null:null;
+      for(const ty of tyCands){
+        for(const zv of zCands){
+          const key=[null,null,null];
+          key[this._idxColZ]=zv; key[this._idxColX]=x; key[this._idxColY]=ty;
+          const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
+          if(rec){
+            if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;
+            _mbHit(ty);
+            const blob=rec[this.colD];
+            if(blob instanceof Uint8Array) return blob;
+            const tRec=await this._tblSearch(this.tilesRoot,rec[rec.length-1]);
+            return tRec?tRec[this.colD]||null:null;
+          }
         }
       }
       return null;}
     let found=null;
     const zv2=this.fmt==='rmaps'?off-z:null;
-    await this._scanLeaves(this.tilesRoot,(rid,r)=>{if(!found&&r[this.colX]===x&&r[this.colY]===ty&&(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2)))found=r[this.colD];});
+    await this._scanLeaves(this.tilesRoot,(rid,r)=>{
+      if(found)return;
+      const okX=r[this.colX]===x, okZ=(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2));
+      const okY=tyCands.includes(r[this.colY]);
+      if(okX&&okZ&&okY)found=r[this.colD];
+    });
     return found;
   }
 }
@@ -20778,10 +20791,16 @@ async function queryTile(name, z, x, y) {
       else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM "'+t+'" WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
       else td = db.selectValue('SELECT tile_data FROM "'+t+'" WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
     } else if (fmt==='mbtiles') {
-      const ty=(1<<z)-1-y;
-      if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
-      else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
-      else td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
+      // MBTiles spec = TMS (tile_row obrnut). Ali neke MBTiles su XYZ → ako flipovani
+      // upit ne nađe pločicu, probaj ne-flipovani y. Zapamti šta radi (inst.mbY).
+      const tyTms=(1<<z)-1-y;
+      const tyCands = inst.mbY==='xyz' ? [y] : inst.mbY==='tms' ? [tyTms] : [tyTms, y];
+      for (const ty of tyCands) {
+        if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
+        else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
+        else td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
+        if (td) { if(!inst.mbY) inst.mbY = (ty===tyTms) ? 'tms' : 'xyz'; break; }
+      }
     } else if (fmt==='alpinequest') {
       if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); }
       else if (engine==='sqljs') td = db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
@@ -21500,6 +21519,25 @@ function sqlmapHandleDrop(e) {
 }
 
 // ── Učitavanje fajla ──────────────────────────────────────────────────────────
+// Vektorska MBTiles (PBF/MVT) — raster pipeline je ne može dekodirati. Prepoznaj po
+// metadata.format pa daj JASNU poruku umjesto tihih praznih pločica.
+function _sqlmapVectorFmt(meta) {
+  const f = String(meta?.format || '').toLowerCase().trim();
+  return f === 'pbf' || f === 'mvt' || f === 'vector' || f.indexOf('pbf') >= 0;
+}
+async function _sqlmapWarnIfVector(name) {
+  const sl = _sqlLayers.find(l => l.name === name);
+  if (!sl || !_sqlmapVectorFmt(sl.meta)) return;
+  showToast('⚠ MBTiles je VEKTORSKA (PBF) — prikaz podržava samo RASTER');
+  await _dlgConfirm(
+    'Ova MBTiles karta je VEKTORSKA (format: ' + (sl.meta.format || 'pbf') + ').\n\n' +
+    'Aplikacija prikazuje samo RASTER pločice (PNG/JPG). Vektorske (PBF/MVT) karte ne mogu ' +
+    'se prikazati u ovom Leaflet prikazu — za njih treba MapLibre GL render.\n\n' +
+    'Koristi RASTER MBTiles (npr. izvoz iz MOBAC, SAS.Planet ili QGIS kao slike).',
+    { title: '⚠ Vektorska MBTiles', okLabel: 'Razumijem' }
+  );
+}
+
 async function sqlmapLoadFile(file) {
   if (!file) return;
   const name = file.name.replace(/\.[^.]+$/, '');
@@ -21562,6 +21600,7 @@ async function sqlmapLoadFile(file) {
     if (document.getElementById('mapmgr-modal')?.classList.contains('show')) _mapMgrRender();
     const fi = document.getElementById('sqlmap-file-input');
     if (fi) fi.value = '';
+    _sqlmapWarnIfVector(name);   // Step 3: jasna poruka ako je MBTiles vektorska (PBF)
   } catch(e) {
     _sqlmapStatus('❌ Greška: ' + (e.message||e));
     console.error('sqlmapLoadFile', e);
@@ -22198,8 +22237,10 @@ async function _sqlmapTestTile(i) {
     }
     const eng = useMain ? 'main' : 'worker';
     const fmtL = sl.fmt==='mbtiles'?'MBTiles':sl.fmt==='gpkg'?'GeoPackage':sl.fmt==='rmaps'?'SQLiteDB':sl.fmt||'?';
+    const mFmt = sl.meta?.format ? String(sl.meta.format) : '?';
+    const vecHint = _sqlmapVectorFmt(sl.meta) ? '  ⚠ VEKTORSKA (PBF) — nije podržano!' : '';
     if (!data || !data.length) {
-      report = `❌ NEMA PODATAKA\nFormat: ${fmtL}\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nMeta: zoom ${sl.meta?.minzoom||'?'}–${sl.meta?.maxzoom||'?'}\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
+      report = `❌ NEMA PODATAKA\nFormat: ${fmtL} (meta.format: ${mFmt})${vecHint}\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nMeta: zoom ${sl.meta?.minzoom||'?'}–${sl.meta?.maxzoom||'?'}\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
     } else {
       const mime = _tileMime(data);
       let dec;
@@ -22214,7 +22255,7 @@ async function _sqlmapTestTile(i) {
           dec = '❌ DECODE FAIL: '+e.message;
         }
       }
-      report = `✅ TILE PRONAĐEN\nFormat: ${fmtL}\nz${z} x${x} y${y} (${eng})\nBajtova: ${data.length}\nMIME: ${mime}\nDekodiranje: ${dec}`;
+      report = `✅ TILE PRONAĐEN\nFormat: ${fmtL} (meta.format: ${mFmt})${vecHint}\nz${z} x${x} y${y} (${eng})\nBajtova: ${data.length}\nMIME: ${mime}\nDekodiranje: ${dec}`;
     }
   } catch(e) {
     report = '❌ GREŠKA: '+(e.message||e);
