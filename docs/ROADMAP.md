@@ -291,3 +291,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   `_canvasOpaque` sada gusto skenira cijeli canvas (svaki 8. piksel). Rezultat: rijetke
   pločice se prikažu, prave prazne zadrže upscale roditelja (kao AlpineQuest), cache se ne
   truje. Status: 🔄 (v3.4.9, test na z15)
+
+- **D1-29 — KORIJEN "pune pločice, prazan ekran" (vidljivih 6/11, karta gurnuta dolje).**
+  Debug v3.5.1 + screenshot dokazali: pločice su 100% pune i ispravno pozicionirane
+  (getImageData ih vidi), ali se NE prikazuju — a invalidateSize ih potpuno izbriše.
+  Uzrok: tile <canvas> Leaflet doda u DOM PRAZAN, pa mi crtamo ASINKRONO (nakon read/decode);
+  ovaj WebView ne re-kompozitira kasnije nacrtan canvas → GPU sloj ostane prazan iako su
+  pikseli u memoriji. **Fix:** _compositeNudge — kratki opacity flicker kroz rAF nakon
+  async crtanja forsira recomposite. Poziciju/transform ne diramo (drži Leaflet).
+  Status: 🔄 (v3.5.2, test). NB: isključuje KIMI hipoteze (CRS/format/CORS) — pločice su
+  dokazano pune i čitljive.

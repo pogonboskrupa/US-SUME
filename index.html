@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.1';
+const APP_VER = 'v3.5.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21974,6 +21974,16 @@ function _srcToCanvas(src, sz) {
   oc.getContext('2d').drawImage(src, 0, 0, sz, sz);
   return oc;
 }
+// D1-29: Neki WebView-i NE osvježe na ekranu canvas pločicu nacrtanu ASINKRONO (Leaflet ju
+// je već dodao u DOM i kompozitirao PRAZNU; kasniji drawImage promijeni piksele u memoriji
+// ali GPU sloj ostane prazan → "pune pločice, prazan ekran"). Kratki opacity nudge kroz rAF
+// forsira recomposite. Poziciju/transform NE diramo (to drži Leaflet).
+function _compositeNudge(cv) {
+  try {
+    cv.style.opacity = '0.999';
+    requestAnimationFrame(() => { try { cv.style.opacity = ''; } catch(e) {} });
+  } catch(e) {}
+}
 // Je li canvas neproziran (uspješno dekodirano)? Gust uzorak cijelog canvasa (svaki 8.
 // piksel) — raniji uzorak od 5 tačaka je znao PROMAŠITI rijetke pločice (npr. tanka cesta
 // na providnoj podlozi) pa ih lažno proglasiti praznima i odbaciti. Jedan getImageData je
@@ -22002,7 +22012,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   sz = sz || 256;
   const blob = new Blob([data], { type: _tileMime(data) });
   let _fin = false;
-  const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); };
+  const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); _compositeNudge(canvas); };
   const _safety = setTimeout(finish, 8000);  // sigurnosni okidač
   // Image() fallback (pouzdaniji u ovom WebView-u). KLJUČNO: ako je i preko Image() rezultat
   // PRAZAN, NE crtamo ga (zadržavamo upscale-an roditeljski placeholder umjesto da ga
