@@ -368,3 +368,19 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   za rmaps. Status: ✅ POTVRĐENO (v3.6.2 — korisnik: "Napokon riješen problem"). ZATVARA
   cijelu offline-render sagu (D1-13…D1-30, D2-2…D2-7): čitanje (OPFS sync, mbY), koordinate
   (TMS/Y-flip), centriranje (medijan), i PRIKAZ (img native composite).
+
+---
+
+## DIO 2 — nalazi (analiza 2026-06-30)
+
+- **D2-A — nema zaštite od PARALELNOG sync-a (v3.6.3).** `_processOfflineQueue` se zove iz
+  4+ mjesta (online event, restore, "Sync sad", sbInitData); bez guard-a dva prolaza
+  obrade isti red → dupli inserti (npr. duplirani projekt). **Fix:** `_syncInProgress`
+  zastavica (+ `_syncRerun` da preskočeni poziv re-okine na kraju), try/finally. ✅ (v3.6.3)
+- **D2-B — `ts` kao ključ reda nije jedinstven (v3.6.3).** Dvije op. u istoj ms → isti `ts`
+  → `removeFromQueue(ts)` obriše OBJE → tihi gubitak operacije. **Fix:** jedinstveni `_qid`
+  (Date.now()+seq) u `enqueue`; remove/bumpRetry/discard po `_qid` (fallback na `ts` za
+  stari red). ✅ (v3.6.3)
+- **D2-C — upsert_labels delete-pa-insert neatomski** (rizik gubitka oznaka ako insert
+  padne). Status: ⬜ (preostaje).
+- **D2-D — istek tokena → bumpRetry → odbacivanje** umjesto refresh sesije. Status: ⬜.
