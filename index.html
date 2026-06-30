@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.8';
+const APP_VER = 'v3.4.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21949,13 +21949,15 @@ function _srcToCanvas(src, sz) {
   oc.getContext('2d').drawImage(src, 0, 0, sz, sz);
   return oc;
 }
-// Je li canvas neproziran (uspješno dekodirano) — par tačaka; sve providno = neuspjeh
+// Je li canvas neproziran (uspješno dekodirano)? Gust uzorak cijelog canvasa (svaki 8.
+// piksel) — raniji uzorak od 5 tačaka je znao PROMAŠITI rijetke pločice (npr. tanka cesta
+// na providnoj podlozi) pa ih lažno proglasiti praznima i odbaciti. Jedan getImageData je
+// jeftin i pouzdano nađe BILO koji neproziran piksel.
 function _canvasOpaque(cv) {
   try {
     const cx = cv.getContext('2d'); const w = cv.width, h = cv.height;
-    for (const [px, py] of [[w/2,h/2],[w/4,h/4],[3*w/4,3*h/4],[3*w/4,h/4],[w/4,3*h/4]]) {
-      if (cx.getImageData(px|0, py|0, 1, 1).data[3] !== 0) return true;
-    }
+    const d = cx.getImageData(0, 0, w, h).data;
+    for (let i = 3; i < d.length; i += 32) { if (d[i] !== 0) return true; }  // alpha svakog 8. piksela
     return false;
   } catch(e) { return true; }
 }
@@ -21977,9 +21979,23 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
   let _fin = false;
   const finish = () => { if (_fin) return; _fin = true; clearTimeout(_safety); done(null, canvas); };
   const _safety = setTimeout(finish, 8000);  // sigurnosni okidač
+  // Image() fallback (pouzdaniji u ovom WebView-u). KLJUČNO: ako je i preko Image() rezultat
+  // PRAZAN, NE crtamo ga (zadržavamo upscale-an roditeljski placeholder umjesto da ga
+  // prebrišemo praznim) i NE keširamo ga — inače bi prazna pločica ostala zaglavljena u
+  // cache-u i vraćala se prazna na svaki cache-hit (uzrok "praznih pločica" na z15/z13).
   const drawViaImg = () => {
     const u = URL.createObjectURL(blob); const img = new Image();
-    img.onload = () => { ctx.drawImage(img, 0, 0, sz, sz); if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, _srcToCanvas(img, sz)); _sqlTileBmpEvict(); } URL.revokeObjectURL(u); finish(); };
+    img.onload = () => {
+      URL.revokeObjectURL(u);
+      const oc = _srcToCanvas(img, sz);
+      if (_canvasOpaque(oc)) {
+        ctx.drawImage(oc, 0, 0, sz, sz);
+        if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, oc); _sqlTileBmpEvict(); }
+      } else {
+        _tileProf.decBlank++;   // ostalo prazno i preko Image() → zadrži placeholder, ne keširaj
+      }
+      finish();
+    };
     img.onerror = () => { URL.revokeObjectURL(u); finish(); };
     img.src = u;
   };
@@ -21987,7 +22003,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
     const oc = _srcToCanvas(src, sz);
     // D1-24: createImageBitmap u ovom WebView-u zna dati PRAZNU sliku → ako je dekodirano
     // sve providno, ponovi preko Image() (pouzdanije). Inače crtaj iz već-dekodiranog canvasa.
-    if (!_canvasOpaque(oc)) { _tileProf.decBlank++; drawViaImg(); return; }
+    if (!_canvasOpaque(oc)) { drawViaImg(); return; }
     ctx.drawImage(oc, 0, 0, sz, sz);                   // na vidljivu tile canvas
     if (cacheKey) { _bmpCacheSet(_sqlTileBmpCache, cacheKey, oc); _sqlTileBmpEvict(); }
     finish();

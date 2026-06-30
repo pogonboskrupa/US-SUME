@@ -280,3 +280,14 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   vidljivi viewport (bez 100vh/100dvh i bez innerHeight), pa #map dobije punu visinu a
   wrapper nikad ne prelazi ekran. Ostaje samo blagi invalidateSize na resize/orientation.
   Status: 🔄 (v3.4.6, test) — zamjenjuje D1-26 pristup.
+
+- **D1-28 — Prazne pločice na z15/z13 (cache poisoning + lažni "blank").** Debug PRO SKEN
+  (v3.4.8) našao 14 praznih CANVAS-a u cache-u na radnom zoomu. Dva uzroka: (1) `drawViaImg`
+  (Image fallback) je crtao i KEŠIRAO rezultat bez provjere praznoće → ako je dekodiranje
+  prazno, prebrisao bi upscale-an roditeljski placeholder praznim I zaglavio prazno u cache
+  (svaki cache-hit potom prazan). (2) `_canvasOpaque` je uzorkovao samo 5 tačaka → znao
+  promašiti rijetke pločice (tanka linija na providnom) i lažno ih odbaciti. **Fix (v3.4.9):**
+  drawViaImg crta/kešira SAMO ako je neprozirno; inače zadrži placeholder, ne keširaj.
+  `_canvasOpaque` sada gusto skenira cijeli canvas (svaki 8. piksel). Rezultat: rijetke
+  pločice se prikažu, prave prazne zadrže upscale roditelja (kao AlpineQuest), cache se ne
+  truje. Status: 🔄 (v3.4.9, test na z15)
