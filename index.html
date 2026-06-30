@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.0';
+const APP_VER = 'v3.5.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21236,6 +21236,17 @@ function _cvBlank(cv) {
     return true;                       // sve prozirno ili pozadinska zelena → prazna
   } catch(e) { return null; } // npr. tainted canvas — ne može se očitati
 }
+// Udio neprozirnih (ne-pozadinskih) piksela [0..1] — "koliko je pločica STVARNO puna".
+// Pločica može imati par piksela sadržaja (prolazi _cvBlank) ali izgledati prazno.
+function _cvCoverage(cv) {
+  try {
+    const cx = cv.getContext('2d'); const w = cv.width||256, h = cv.height||256;
+    const d = cx.getImageData(0,0,w,h).data; let op=0, tot=0;
+    for (let i=0;i<d.length;i+=32){ tot++; if(d[i+3]===0)continue;
+      const g=Math.abs(d[i]-45)<10&&Math.abs(d[i+1]-58)<10&&Math.abs(d[i+2]-46)<10; if(!g)op++; }
+    return tot ? op/tot : 0;
+  } catch(e){ return -1; }
+}
 async function sqlmapDebugPro() {
   const el = document.getElementById('sqlmap-debug-out');
   el.style.display = 'block';
@@ -21257,12 +21268,18 @@ async function sqlmapDebugPro() {
   if (!tiles.length) { el.textContent = t + '\n⚠️ Sloj nema pločica (_tiles prazan).'; return; }
 
   let blank = 0, content = 0, unreadable = 0, blankLoaded = 0, blankCached = 0;
+  let covSum = 0, covN = 0, lowCov = 0, visible = 0;
+  const _mElV = document.getElementById('map');
+  const _mrV = _mElV ? _mElV.getBoundingClientRect() : { left:0, top:0, right:0, bottom:0 };
   const blankList = [];
   for (const key of tiles) {
     const tile = layer._tiles[key];
     const cv = tile && tile.el;
     if (!cv || cv.tagName !== 'CANVAS') continue;
     const coords = tile.coords || {};
+    // Je li pločica STVARNO vidljiva na ekranu (presjek s #map)?
+    const rr = cv.getBoundingClientRect();
+    if (rr.right > _mrV.left && rr.left < _mrV.right && rr.bottom > _mrV.top && rr.top < _mrV.bottom && rr.width > 1) visible++;
     const isBlank = _cvBlank(cv);
     if (isBlank === null) { unreadable++; continue; }
     if (isBlank) {
@@ -21272,11 +21289,18 @@ async function sqlmapDebugPro() {
       const inCache = _sqlTileBmpCache.has(ck);
       if (inCache) blankCached++;
       if (blankList.length < 6) blankList.push({x:coords.x, y:coords.y, z:coords.z, loaded:!!tile.loaded, cache:inCache});
-    } else content++;
+    } else {
+      content++;
+      const cov = _cvCoverage(cv);
+      if (cov >= 0) { covSum += cov; covN++; if (cov < 0.05) lowCov++; }
+    }
   }
+  const _vSize = map.getSize();
+  const _vExpected = (Math.ceil(_vSize.x/256)+1) * (Math.ceil(_vSize.y/256)+1);
   t += `\nStanje pločica:\n`;
-  t += `  ✅ s sadržajem: ${content}\n`;
+  t += `  ✅ s sadržajem: ${content}  (prosj. popunjenost ${covN ? (covSum/covN*100).toFixed(0) : '-'}%, slabe<5%: ${lowCov})\n`;
   t += `  ⬛ PRAZNE: ${blank}  (od toga: Leaflet-loaded=${blankLoaded}, u cache=${blankCached})\n`;
+  t += `  👁 vidljivih na ekranu: ${visible}/${tiles.length}  (treba~${_vExpected})${visible < _vExpected - 2 ? ' ⚠️ PREMALO VIDLJIVIH' : ''}\n`;
   if (unreadable) t += `  ❓ nečitljive (tainted): ${unreadable}\n`;
 
   // Pozicije i veličine pločica na ekranu — otkriva skaliranje (retained tiles s drugog
