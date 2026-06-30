@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.6';
+const APP_VER = 'v3.5.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22257,6 +22257,25 @@ async function _sqlmapTestTile(i) {
     const vecHint = _sqlmapVectorFmt(sl.meta) ? '  ⚠ VEKTORSKA (PBF) — nije podržano!' : '';
     if (!data || !data.length) {
       report = `❌ NEMA PODATAKA\nFormat: ${fmtL} (meta.format: ${mFmt})${vecHint}\nTile z${z} x${x} y${y} (${eng})\nqueryTile vratio prazno.\n\nMeta: zoom ${sl.meta?.minzoom||'?'}–${sl.meta?.maxzoom||'?'}\nDijagnostika:\n${sl.meta?._d || 'n/a'}`;
+      // DUBINSKA PROVJERA: koji zoom ima podatke na ovom centru + ima li susjeda (otkriva
+      // sparse zoomove / rupe u pokrivenosti vs stvarni bug koordinata).
+      const _rd = async (pz, px, py) => {
+        try { return useMain ? await _mainMiniDbs[sl.name].mini.tile(pz, px, py)
+                             : (await _sqlWCall({type:'tile', name: sl.name, z:pz, x:px, y:py}))?.data; }
+        catch(e) { return null; }
+      };
+      const _xy = (lng, lat, pz) => { const nn=Math.pow(2,pz); const r=lat*Math.PI/180;
+        return [Math.floor((lng+180)/360*nn), Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*nn)]; };
+      const zHits = [];
+      for (let pz = minZ; pz <= maxZ; pz++) { const [px,py]=_xy(c.lng,c.lat,pz); const d2=await _rd(pz,px,py); if (d2&&d2.length) zHits.push(pz); }
+      let nb = 0, firstHit = '';
+      for (let dy=-3; dy<=3; dy++) for (let dx=-3; dx<=3; dx++) { const d3=await _rd(z, x+dx, y+dy); if (d3&&d3.length) { nb++; if(!firstHit) firstHit=`dx=${dx} dy=${dy}`; } }
+      report += `\n\n--- DUBINSKA PROVJERA (centar ${c.lat.toFixed(4)},${c.lng.toFixed(4)}) ---\n`;
+      report += `Zoomovi s podatkom NA CENTRU: ${zHits.length?zHits.join(','):'NIJEDAN'}\n`;
+      report += `Susjedi (±3) na z${z}: ${nb}/49 s podatkom${firstHit?(' (najbliži '+firstHit+')'):''}\n`;
+      report += nb===0 && zHits.length===0
+        ? 'ZAKLJUČAK: centar je IZVAN stvarne pokrivenosti (bounds širi od podataka).\n'
+        : (zHits.length && zHits.indexOf(z)<0 ? 'ZAKLJUČAK: ovaj zoom NEMA pločice (rijetki zoomovi); postoje na: '+zHits.join(',')+'.\n' : 'ZAKLJUČAK: ima podataka u blizini — provjeri rupe/poravnanje.\n');
     } else {
       const mime = _tileMime(data);
       let dec;
