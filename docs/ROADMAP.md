@@ -301,3 +301,9 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   async crtanja forsira recomposite. Poziciju/transform ne diramo (drži Leaflet).
   Status: 🔄 (v3.5.2, test). NB: isključuje KIMI hipoteze (CRS/format/CORS) — pločice su
   dokazano pune i čitljive.
+
+- **D1-30 — Zoom-OUT gubi pločice trajno ("koliko god čekao").** Pri smanjenju zooma neke
+  novoučitane pločice se ne re-kompozitiraju (nudge iz _doneP padne usred zoom-tranzicije);
+  Leaflet ih smatra učitanima pa ih nikad više ne crta → trajno prazne. **Fix (v3.5.4):**
+  nakon zoomend/moveend sweep koji pre-nudge-a SVE pločice vidljivog sloja (0/150/400/800ms)
+  → zaglavljene se prikažu. Status: 🔄 (v3.5.4, test zoom-out).

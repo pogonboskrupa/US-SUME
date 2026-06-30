@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.3';
+const APP_VER = 'v3.5.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21984,6 +21984,25 @@ function _compositeNudge(cv) {
     requestAnimationFrame(() => { try { cv.style.opacity = ''; } catch(e) {} });
   } catch(e) {}
 }
+// D1-30: Pri ZOOM-OUT (smanjenju zooma) neke novoučitane pločice se ne re-kompozitiraju —
+// nudge iz _doneP padne u sred zoom-tranzicije pa ne "uhvati". Leaflet ih smatra učitanima
+// pa ih nikad više ne crta → trajno prazne "koliko god čekao". Rješenje: nakon što se zoom
+// SMIRI, pre-nudge-aj SVE pločice vidljivog sloja (imaju sadržaj, samo ih treba prikazati).
+function _sqlNudgeVisibleTiles() {
+  for (const sl of _sqlLayers) {
+    if (!sl.visible || !sl.layer || !sl.layer._tiles) continue;
+    for (const k in sl.layer._tiles) {
+      const el = sl.layer._tiles[k] && sl.layer._tiles[k].el;
+      if (el && el.tagName === 'CANVAS') _compositeNudge(el);
+    }
+  }
+}
+(function _registerZoomNudge() {
+  if (typeof map === 'undefined' || !map.on) return;
+  const sweep = () => { [0, 150, 400, 800].forEach(d => setTimeout(_sqlNudgeVisibleTiles, d)); };
+  map.on('zoomend', sweep);
+  map.on('moveend', () => setTimeout(_sqlNudgeVisibleTiles, 120));
+})();
 // Je li canvas neproziran (uspješno dekodirano)? Gust uzorak cijelog canvasa (svaki 8.
 // piksel) — raniji uzorak od 5 tačaka je znao PROMAŠITI rijetke pločice (npr. tanka cesta
 // na providnoj podlozi) pa ih lažno proglasiti praznima i odbaciti. Jedan getImageData je
