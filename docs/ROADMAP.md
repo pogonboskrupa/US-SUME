@@ -321,3 +321,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   🔬 Test sad prikazuje `meta.format` + ⚠ vektor upozorenje. **Preostaje D2-3:** 512px
   tile-size podrška (tek ako Test pokaže 512×512 — riskantnije, thread-a tsz kroz layer/
   createTile/_drawTileBytesC/placeholder/prewarm). Status: 🔄 (v3.5.5, test + 🔬 Test).
+
+- **D2-3 — MBTiles "prazno posvuda" = centriranje na UGAO pokrivenosti (v3.5.6).** 🔬 Test
+  dokazao: podaci OK (raster, 88KB pločica čita se), ali karta nema `bounds` u metadata pa
+  je auto-zoom koristio `_lastIdxEntry` (MAX ključ indeksa = JI ugao na maxzoom z17) → karta
+  skoči na ugao, odzumiranjem prazno. **Fix:** worker `MiniSqlite.init()` sad izvodi prave
+  BOUNDS iz PRVOG + ZADNJEG ulaza indeksa (dva dijagonalna ugla → lat/lng neovisan o zoomu),
+  pa `_sqlmapMetaAutoZoom` radi `fitBounds` (maxZoom 16, padding) na CIJELU pokrivenost.
+  Center fallback umjeren (cap z14). 🔬 Test prikazuje bounds/center. Vrijedi i za rmaps
+  (bolje centriranje). Status: 🔄 (v3.5.6, test).

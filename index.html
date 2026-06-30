@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.5';
+const APP_VER = 'v3.5.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20584,24 +20584,35 @@ class MiniSqlite {
         }
       }
     }
-    // Fallback: derive center from last index entry when metadata has no bounds/center
+    // Fallback: izvedi BOUNDS iz PRVOG i ZADNJEG ulaza indeksa (dva dijagonalna ugla
+    // pokrivenosti) kad metadata nema bounds/center. lat/lng je neovisan o zoomu, pa dva
+    // ugla (i na različitim zoomovima) daju ispravan okvir → karta se centrira na SREDINU
+    // pokrivenosti umjesto na UGAO (raniji bug: samo _lastIdxEntry = JI ugao na maxzoom →
+    // prazno posvuda pri odzumiranju).
     if(!extraMeta.bounds&&!extraMeta.center){
       try{
         const sr2=this.noRowId?this.tilesRoot:this.idxRoot;
         if(sr2>0){
-          const le2=await this._lastIdxEntry(sr2);
-          if(le2){
-            const lzRaw=le2[this._idxColZ],lx2=le2[this._idxColX],ly2=le2[this._idxColY];
-            let lz2=(this.fmt==='rmaps'&&this._zm===2)?(this._zOff||17)-lzRaw:lzRaw;
-            if(typeof lz2==='number'&&lz2>=0&&lz2<=22&&typeof lx2==='number'&&typeof ly2==='number'){
-              // rmaps/gpkg koriste XYZ y; mbtiles koristi TMS y
-              const xyzY=(this.fmt==='rmaps'||this.fmt==='gpkg')?ly2:(1<<lz2)-1-ly2;
-              const lon2=(lx2+0.5)/(1<<lz2)*360-180;
-              const latR2=Math.PI*(1-2*(xyzY+0.5)/(1<<lz2));
-              const lat2=Math.atan(Math.sinh(latR2))*180/Math.PI;
-              if(isFinite(lon2)&&isFinite(lat2))extraMeta.center=lon2.toFixed(4)+','+lat2.toFixed(4)+','+lz2;
-            }
+          const toLL=(e)=>{
+            if(!e)return null;
+            const zRaw=e[this._idxColZ],ex=e[this._idxColX],ey=e[this._idxColY];
+            const zz=(this.fmt==='rmaps'&&this._zm===2)?(this._zOff||17)-zRaw:zRaw;
+            if(typeof zz!=='number'||zz<0||zz>22||typeof ex!=='number'||typeof ey!=='number')return null;
+            const xyzY=(this.fmt==='rmaps'||this.fmt==='gpkg')?ey:(1<<zz)-1-ey;  // mbtiles=TMS flip
+            const lon=(ex+0.5)/(1<<zz)*360-180;
+            const latR=Math.PI*(1-2*(xyzY+0.5)/(1<<zz));
+            const lat=Math.atan(Math.sinh(latR))*180/Math.PI;
+            return (isFinite(lon)&&isFinite(lat))?{lon,lat,z:zz}:null;
+          };
+          const a=toLL(await this._firstIdxEntry(sr2));
+          const b=toLL(await this._lastIdxEntry(sr2));
+          if(a&&b&&(a.lon!==b.lon||a.lat!==b.lat)){
+            const w=Math.min(a.lon,b.lon),ee=Math.max(a.lon,b.lon);
+            const s=Math.min(a.lat,b.lat),n=Math.max(a.lat,b.lat);
+            extraMeta.bounds=w.toFixed(5)+','+s.toFixed(5)+','+ee.toFixed(5)+','+n.toFixed(5);
           }
+          const c=b||a;  // sekundarni fallback ako su uglovi isti / samo jedan
+          if(c)extraMeta.center=c.lon.toFixed(4)+','+c.lat.toFixed(4)+','+Math.min(c.z,13);
         }
       }catch(e){}
     }
@@ -21180,15 +21191,20 @@ function _sqlmapMetaAutoZoom(meta) {
   try {
     if (meta?.bounds) {
       const b = String(meta.bounds).split(',').map(Number);
-      if (b.length === 4 && b.every(v => !isNaN(v))) {
-        map.fitBounds([[b[1],b[0]],[b[3],b[2]]]);
+      // Validne, ne-degenerirane granice → fitBounds na CIJELU pokrivenost (sredina ekrana).
+      if (b.length === 4 && b.every(v => !isNaN(v)) && (b[0]!==b[2] || b[1]!==b[3])) {
+        const mz = Math.min(parseInt(meta.maxzoom,10) || 16, 16);  // ne pre-zumiraj
+        map.fitBounds([[b[1],b[0]],[b[3],b[2]]], { maxZoom: mz, padding: [20,20] });
         return;
       }
     }
-    // No bounds — zoom to a tile coordinate derived from center+maxzoom
+    // Nema bounds — centriraj na izvedeni center, ali UMJERENIM zoomom (ne z17 na ugao).
     if (meta?.center) {
       const c = String(meta.center).split(',').map(Number);
-      if (c.length >= 2) { map.setView([c[1],c[0]], c[2]||meta.maxzoom||14); return; }
+      if (c.length >= 2) {
+        const z = Math.min(c[2] || parseInt(meta.maxzoom,10) || 13, 14);
+        map.setView([c[1],c[0]], z); return;
+      }
     }
   } catch(e) {}
 }
@@ -22261,6 +22277,7 @@ async function _sqlmapTestTile(i) {
     report = '❌ GREŠKA: '+(e.message||e);
   }
   _sqlmapStatus('');
+  report += `\nBounds: ${sl.meta?.bounds || '—'}\nCenter: ${sl.meta?.center || '—'}`;
   report += '\n\n— ' + APP_VER + ' —';
   await _dlgConfirm(report, { title:'🔬 Test — '+sl.name, okLabel:'OK' });
 }
