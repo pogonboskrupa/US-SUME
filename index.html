@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.4';
+const APP_VER = 'v3.6.5';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -6463,7 +6463,30 @@ function scheduleVlakaSave(i) {
 async function sbFlushVlaka(i) {
   if (isReadOnly()) return;
   const v = vlake[i];
-  if (!v) return;
+  if (!v || v._deleted) return;
+  // Serijalizuj flush-eve PO VLACI — paralelni pozivi (debounce + direktan poziv) za istu vlaku
+  // ne smiju oba ući u INSERT granu prije nego prvi dobije sbId (duplicate-save race).
+  if (v._flushing) {
+    v._flushPending = true;
+    await v._flushing.catch(() => {});
+    return;
+  }
+  v._flushing = _sbFlushVlakaImpl(v, i);
+  try {
+    await v._flushing;
+  } finally {
+    v._flushing = null;
+    if (v._flushPending) {
+      v._flushPending = false;
+      if (!v._deleted) {
+        const ni = vlake.indexOf(v);
+        if (ni >= 0) sbFlushVlaka(ni);
+      }
+    }
+  }
+}
+
+async function _sbFlushVlakaImpl(v, i) {
   // Validacija: ukloni tačke sa nevažećim koordinatama (NaN/null/∞)
   if (Array.isArray(v.pts)) {
     const _clean = v.pts.filter(p => p && Number.isFinite(p.la) && Number.isFinite(p.lo));
@@ -6589,6 +6612,8 @@ async function renameVlaka(i, newNm) {
 
 async function sbDeleteVlaka(v) {
   if (!v) return;
+  v._deleted = true;  // spriječi budući sbFlushVlaka da ovu vlaku ipak insert-uje
+  if (v._flushing) { try { await v._flushing; } catch(e) {} }  // sačekaj in-flight insert da dobijemo sbId
   if (!v.sbId || !sbUser) return;
   const cached = _OL.load(_OL.VLAKE) || [];
   _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
@@ -11126,6 +11151,7 @@ function togRec() {
 }
 
 function stopRec() {
+  if (!recOn) return;  // idempotentno — sprječava petlju ako native "Stop" odjekne nazad u JS
   _crashStopTimer();
   _crashClearVlaka();  // normalno zaustavljanje — nema potrebe za oporavkom
   if (recOn && !recPaused && _recSegStart > 0) {

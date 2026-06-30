@@ -41,15 +41,15 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 ---
 
-## 🛻 DIO 3 — Vlake + GPS snimanje (jezgro terenskog rada)  ⬜
+## 🛻 DIO 3 — Vlake + GPS snimanje (jezgro terenskog rada)  🔄
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | ⬜ |
-| GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | ⬜ |
+| Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | 🔄 (D3-D/E ✅ v3.6.5) |
+| GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | 🔄 (D3-A ✅ v3.6.5; D3-B/C ⬜) |
 | UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ⬜ |
 | Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ⬜ |
-| Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | ⬜ |
+| Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | 🔄 (D3-A ✅ v3.6.5) |
 | Nagib u stvarnom vremenu | `_calcRecentSlope` | ⬜ |
 
 ---
@@ -387,3 +387,22 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 - **D2-D — istek tokena → bumpRetry → odbacivanje.** **Fix (v3.6.4):** `_isAuthErr` (401/JWT-expired,
   ne RLS) → `sb.auth.refreshSession()` jednom po prolazu + rerun s novim tokenom; op ostaje u
   redu. ✅ (v3.6.4)
+
+## DIO 3 — nalazi (analiza 2026-06-30)
+
+- **D3-A — native "Stop" u notifikaciji ne zaustavlja snimanje.** `GpsService.java` za akciju
+  "stop" nije slao broadcast nazad u JS (za razliku od "pause") → `recOn` ostane `true`, GPS watch
+  i foreground-zaštita nestanu bez sinhronizacije stanja. **Fix (v3.6.5):** `sendBroadcastToWeb("stop")`
+  dodan u "stop" granu; `stopRec()` dobio idempotency guard (`if (!recOn) return;`) da spriječi
+  beskonačnu broadcast-petlju kad JS-inicirani stop odjekne nazad kroz servis. ✅ (v3.6.5)
+- **D3-D — `sbFlushVlaka` nema zaštitu od paralelnih poziva.** Debounce tajmer + direktni pozivi
+  za istu vlaku mogu oba ući u INSERT granu prije nego prvi dobije `sbId` → duplikat reda na
+  serveru. **Fix (v3.6.5):** per-vlaka `_flushing`/`_flushPending` guard (analogno D2-A pattern-u,
+  ali po objektu umjesto globalno) — `sbFlushVlaka` sad tanki wrapper oko `_sbFlushVlakaImpl`.
+  ✅ (v3.6.5)
+- **D3-E — brisanje vlake prije prvog sync-a ne sprječava in-flight insert.** `sbDeleteVlaka`
+  je bio no-op kad `v.sbId` još ne postoji, pa bi tek-obrisana vlaka ipak bila insert-ovana na
+  server kad njen prvi flush završi. **Fix (v3.6.5):** `v._deleted=true` postavljeno sinhrono na
+  ulazu u `sbDeleteVlaka`, koja zatim čeka eventualni in-flight flush prije provjere `sbId` —
+  ako je insert uspio, odmah briše upravo kreirani red. ✅ (v3.6.5)
+- **D3-B, D3-C (GPS watchdog races, tihi gap nakon skoka signala) — ostaju za sljedeću rundu.**

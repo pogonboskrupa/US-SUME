@@ -29,6 +29,7 @@ public class GpsService extends Service {
 
         String action = intent.getAction();
         if ("stop".equals(action)) {
+            sendBroadcastToWeb("stop");
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
