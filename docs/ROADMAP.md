@@ -350,3 +350,10 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   deep-probe 0/49 iako (557,654) postoji. **Fix:** ukloniti lock; UVIJEK probaj [tyTms, y]
   (TMS karte pogode prvi, bez troška; XYZ na drugi). Objašnjava zašto je tst=ok stalno
   zbunjivao (artefakt dijagnostike, ne dokaz da pravi zahtjevi rade). Status: 🔄 (v3.6.0).
+
+- **D2-6 — MBTiles zoom-OUT pločice nestaju trajno (v3.6.1).** Nakon v3.6.0 (čitanje radi),
+  pri zoom-out velike 2GB pločice se učitaju POSLIJE fiksnog sweep prozora (0-800ms) pa ih
+  nudge promaši → trajno prazne. **Fix:** (1) `layer.on('load')` → nudge u trenutku kad su
+  SVE pločice gotove (timing-robusno, primarno); (2) pane-level recomposite (toggle
+  tilePane opacity) uz per-tile — jači okidač kad ih je mnogo; (3) sweep rep produžen na
+  1500ms. Status: 🔄 (v3.6.1). Fallback ako ne uspije: <img> pločice umjesto canvas.
