@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.7';
+const APP_VER = 'v3.5.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20606,13 +20606,16 @@ class MiniSqlite {
           };
           const a=toLL(await this._firstIdxEntry(sr2));
           const b=toLL(await this._lastIdxEntry(sr2));
+          const mid=toLL(await this._middleIdxEntry(sr2));
           if(a&&b&&(a.lon!==b.lon||a.lat!==b.lat)){
             const w=Math.min(a.lon,b.lon),ee=Math.max(a.lon,b.lon);
             const s=Math.min(a.lat,b.lat),n=Math.max(a.lat,b.lat);
             extraMeta.bounds=w.toFixed(5)+','+s.toFixed(5)+','+ee.toFixed(5)+','+n.toFixed(5);
           }
-          const c=b||a;  // sekundarni fallback ako su uglovi isti / samo jedan
-          if(c)extraMeta.center=c.lon.toFixed(4)+','+c.lat.toFixed(4)+','+Math.min(c.z,13);
+          // Center = MEDIJANSKA pločica (≈ centar pokrivenosti) → karta slijeće NA podatke,
+          // ne na skewed bbox ugao. Fallback na zadnji/prvi ako medijan fali.
+          const c=mid||b||a;
+          if(c)extraMeta.center=c.lon.toFixed(4)+','+c.lat.toFixed(4)+','+Math.min(c.z,14);
         }
       }catch(e){}
     }
@@ -20636,6 +20639,19 @@ class MiniSqlite {
       const cpo=ho+(t===2?12:8);
       if(t===2){n=MiniSqlite._u32(d,ho+8);}
       else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
+    }return null;
+  }
+  // MEDIJANSKI ulaz indeksa: silazi u SREDNJE dijete/ćeliju na svakom nivou. Indeks je
+  // sortiran (zoom,col,row) pa je medijan ≈ PROSTORNI CENTAR pokrivenosti (pouzdana tačka
+  // za centriranje, za razliku od prvog/zadnjeg = skewed uglovi).
+  async _middleIdxEntry(root) {
+    let n=root!=null?root:this.idxRoot;
+    for(let depth=0;depth<32;depth++){
+      const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
+      const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
+      const cpo=ho+(t===2?12:8);const mid=nc>>1;
+      if(t===2){const cp=MiniSqlite._u16(d,cpo+mid*2);n=MiniSqlite._u32(d,cp);}
+      else{const cp=MiniSqlite._u16(d,cpo+mid*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
     }return null;
   }
   async _firstLeafSample() {
@@ -21189,21 +21205,22 @@ function _sqlmapStatus(msg) {
 // Zoom map to tile bounds from MBTiles metadata.bounds or estimated from zoom centre
 function _sqlmapMetaAutoZoom(meta) {
   try {
-    if (meta?.bounds) {
-      const b = String(meta.bounds).split(',').map(Number);
-      // Validne, ne-degenerirane granice → fitBounds na CIJELU pokrivenost (sredina ekrana).
-      if (b.length === 4 && b.every(v => !isNaN(v)) && (b[0]!==b[2] || b[1]!==b[3])) {
-        const mz = Math.min(parseInt(meta.maxzoom,10) || 16, 16);  // ne pre-zumiraj
-        map.fitBounds([[b[1],b[0]],[b[3],b[2]]], { maxZoom: mz, padding: [20,20] });
-        return;
-      }
-    }
-    // Nema bounds — centriraj na izvedeni center, ali UMJERENIM zoomom (ne z17 na ugao).
+    // PRIORITET: centriraj na POUZDANU pločicu (medijanska iz baze) → uvijek slijeće NA
+    // podatke. fitBounds(bbox) tek ako center fali (bbox iz uglova zna biti skewed pa
+    // promaši gusto područje — uzrok "prazno posvuda" kod MBTiles bez metadata.bounds).
     if (meta?.center) {
       const c = String(meta.center).split(',').map(Number);
-      if (c.length >= 2) {
-        const z = Math.min(c[2] || parseInt(meta.maxzoom,10) || 13, 14);
+      if (c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1])) {
+        const z = Math.min(c[2] || parseInt(meta.maxzoom,10) || 14, 14);
         map.setView([c[1],c[0]], z); return;
+      }
+    }
+    if (meta?.bounds) {
+      const b = String(meta.bounds).split(',').map(Number);
+      if (b.length === 4 && b.every(v => !isNaN(v)) && (b[0]!==b[2] || b[1]!==b[3])) {
+        const mz = Math.min(parseInt(meta.maxzoom,10) || 16, 16);
+        map.fitBounds([[b[1],b[0]],[b[3],b[2]]], { maxZoom: mz, padding: [20,20] });
+        return;
       }
     }
   } catch(e) {}
@@ -22156,6 +22173,26 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       // Placeholder iz cache-a (parent za zoom-in, djeca za zoom-out); BEZ neprozirne
       // ispune — gdje nema placeholdera, zadržane pločice/pozadina prosijavaju.
       _sqlDrawParentPlaceholder(ctx, _sqlTileBmpCache, name, x, y, z);
+      // D2-4: rijedak/šupljikav zoom — kad pločice NEMA u bazi, nacrtaj NAJBLIŽEG pretka
+      // (z-1, z-2…) upscale-ano IZ BAZE (keš zna biti prazan) umjesto praznog (AlpineQuest).
+      const _drawAncestorOrBlank = (dz) => {
+        const pz = z - dz;
+        if (pz < minNative) { _tileProf.nullData++; _doneP(null, canvas); return; }
+        const px = x >> dz, py = y >> dz;
+        _wTileScheduleCall({type:'tile', name, z:pz, x:px, y:py}).then(r2 => {
+          if (!(r2 && r2.data)) { _drawAncestorOrBlank(dz + 1); return; }
+          _decodeToCanvas(new Blob([r2.data], {type:_tileMime(r2.data)}), 256).then(pc => {
+            if (pc && _canvasOpaque(pc)) {
+              const scale = 1 << dz, part = 256 / scale;
+              const sx = (x % scale) * part, sy = (y % scale) * part;
+              ctx.imageSmoothingEnabled = false;
+              ctx.drawImage(pc, sx, sy, part, part, 0, 0, 256, 256);
+              _bmpCacheSet(_sqlTileBmpCache, name + '/' + pz + '/' + px + '/' + py, pc); _sqlTileBmpEvict();
+              _doneP(null, canvas);
+            } else _drawAncestorOrBlank(dz + 1);
+          }).catch(() => _drawAncestorOrBlank(dz + 1));
+        }).catch(() => _drawAncestorOrBlank(dz + 1));
+      };
       // Retry na timeout: ako worker ne odgovori na vrijeme (zauzet/spor), Leaflet bi
       // pločicu inače trajno označio gotovom (prazna) i nikad je ne bi tražio ponovo.
       const _tryRead = (tries) => {
@@ -22163,9 +22200,9 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
           if (res && res.data) { _drawTileBytesC(ctx, res.data, canvas, _doneP, cacheKey); return; }
           if (res && res.error === 'timeout') {
             if (tries < 3) { _tryRead(tries + 1); return; }
-            _tileProf.timeout++;
-          } else { _tileProf.nullData++; }
-          _doneP(null, canvas);
+            _tileProf.timeout++; _doneP(null, canvas); return;
+          }
+          _drawAncestorOrBlank(1);   // null podaci → pokušaj upscale pretka
         }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(null, canvas); } });
       };
       _tryRead(0);

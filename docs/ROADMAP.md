@@ -330,3 +330,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   pa `_sqlmapMetaAutoZoom` radi `fitBounds` (maxZoom 16, padding) na CIJELU pokrivenost.
   Center fallback umjeren (cap z14). 🔬 Test prikazuje bounds/center. Vrijedi i za rmaps
   (bolje centriranje). Status: 🔄 (v3.5.6, test).
+
+- **D2-4 — MBTiles "prazno" = auto-center na rub/pored gustih podataka (v3.5.8).** Debug+Test
+  dokazali: podaci OK i čitaju se (135KB PNG na z11), ali karta slijeće 1 pločicu PORED
+  gustog područja jer bounds (iz prvog z10 / zadnjeg z17 ugla) su skewed → centar bbox-a
+  pada izvan gustih podataka. **Fix:** (1) worker `_middleIdxEntry` = MEDIJANSKI ulaz indeksa
+  ≈ prostorni centar pokrivenosti; init postavlja `meta.center` na tu pločicu. (2)
+  `_sqlmapMetaAutoZoom` prioritet center→setView (pouzdano slijeće NA podatke), fitBounds tek
+  ako center fali. (3) Graceful degradation: na praznu pločicu čita NAJBLIŽEG pretka iz baze
+  i crta upscale-an kvadrant (AlpineQuest), keš se puni za placeholder piramidu. Status:
+  🔄 (v3.5.8, test). Vrijedi i za rmaps (bolji center).
