@@ -340,3 +340,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   ako center fali. (3) Graceful degradation: na praznu pločicu čita NAJBLIŽEG pretka iz baze
   i crta upscale-an kvadrant (AlpineQuest), keš se puni za placeholder piramidu. Status:
   🔄 (v3.5.8, test). Vrijedi i za rmaps (bolji center).
+
+- **D2-5 — PRAVI korijen MBTiles "prazno": mbY Y-orijentacija lock zatrovan init
+  dijagnostikom (v3.6.0).** v3.5.5 je dodao pamćenje Y-orijentacije (this._mbY/inst.mbY):
+  prvi pogodak zaključa TMS ili XYZ. ALI init dijagnostika (load-opfs) zove
+  mini.tile(storedZ, storedCol, storedRow) — proslijedi STORED (TMS) row kao y; tile() ga
+  flipuje (promaši) pa padne na ne-flip = storedRow (pogodi) → zaključa _mbY='xyz'. Od tada
+  SVI pravi zahtjevi (ispravan XYZ y) koriste ne-flip → promaše sve → "prazno posvuda",
+  deep-probe 0/49 iako (557,654) postoji. **Fix:** ukloniti lock; UVIJEK probaj [tyTms, y]
+  (TMS karte pogode prvi, bez troška; XYZ na drugi). Objašnjava zašto je tst=ok stalno
+  zbunjivao (artefakt dijagnostike, ne dokaz da pravi zahtjevi rade). Status: 🔄 (v3.6.0).

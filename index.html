@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.9';
+const APP_VER = 'v3.6.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -20668,19 +20668,20 @@ class MiniSqlite {
   }
   async tile(z,x,y) {
     const off=this._zOff||17;
-    // MBTiles: TMS (flip) prvo, pa XYZ (ne-flip) kao fallback (neke MBTiles su XYZ).
-    // Zapamti orijentaciju koja uspije (this._mbY) da se ne pogađa svaki put.
+    // MBTiles: UVIJEK probaj TMS (flip) prvo, pa XYZ (ne-flip) kao fallback. NE pamtimo
+    // orijentaciju — init dijagnostika zove tile() sa STORED (TMS) koordinatama pa bi lock
+    // zaključao pogrešan smjer i sve prave zahtjeve bi promašili (bug v3.5.5). TMS karte
+    // pogode na prvom (bez troška); XYZ karte na drugom.
     const tyTms=(1<<z)-1-y;
-    const tyCands=this.fmt!=='mbtiles'?[y]:(this._mbY==='xyz'?[y]:this._mbY==='tms'?[tyTms]:[tyTms,y]);
+    const tyCands=this.fmt!=='mbtiles'?[y]:[tyTms,y];
     const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
-    const _mbHit=(ty)=>{ if(this.fmt==='mbtiles'&&!this._mbY) this._mbY=(ty===tyTms)?'tms':'xyz'; };
     if(this.noRowId){
       for(const ty of tyCands){
         const sk=[];sk[this.colX]=x;sk[this.colY]=ty;
         for(const zv of zCands){
           sk[this.colZ]=zv;
           const rec=await this._wRowSearch(this.tilesRoot,sk[0],sk[1],sk[2]);
-          if(rec){if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;_mbHit(ty);return rec[this.colD]||null;}
+          if(rec){if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;return rec[this.colD]||null;}
         }
       }
       return null;
@@ -20693,7 +20694,6 @@ class MiniSqlite {
           const rec=await this._wRowSearch(this.idxRoot,key[0],key[1],key[2]);
           if(rec){
             if(!this._zm&&this.fmt==='rmaps')this._zm=(zv===z)?1:2;
-            _mbHit(ty);
             const blob=rec[this.colD];
             if(blob instanceof Uint8Array) return blob;
             const tRec=await this._tblSearch(this.tilesRoot,rec[rec.length-1]);
@@ -20818,15 +20818,14 @@ async function queryTile(name, z, x, y) {
       else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM "'+t+'" WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
       else td = db.selectValue('SELECT tile_data FROM "'+t+'" WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
     } else if (fmt==='mbtiles') {
-      // MBTiles spec = TMS (tile_row obrnut). Ali neke MBTiles su XYZ → ako flipovani
-      // upit ne nađe pločicu, probaj ne-flipovani y. Zapamti šta radi (inst.mbY).
+      // MBTiles spec = TMS (tile_row obrnut). Neke su XYZ → UVIJEK probaj TMS flip pa XYZ.
+      // Bez pamćenja orijentacije (lock bi se zatrovao init dijagnostikom — bug v3.5.5).
       const tyTms=(1<<z)-1-y;
-      const tyCands = inst.mbY==='xyz' ? [y] : inst.mbY==='tms' ? [tyTms] : [tyTms, y];
-      for (const ty of tyCands) {
+      for (const ty of [tyTms, y]) {
         if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
         else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
         else td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
-        if (td) { if(!inst.mbY) inst.mbY = (ty===tyTms) ? 'tms' : 'xyz'; break; }
+        if (td) break;
       }
     } else if (fmt==='alpinequest') {
       if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); }
