@@ -365,4 +365,6 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   kompozitira NATIVNO (kao Leaflet default/online). Uklonjeno: composite nudge, placeholder
   piramida, ancestor-upscale, canvas cache iz tile-puta; prewarm no-op. Placeholder daje
   Leaflet keepBuffer:6. Debug PRO prilagođen img-u (complete && naturalWidth>0). Vrijedi i
-  za rmaps. Status: 🔄 (v3.6.2, test zoom-out).
+  za rmaps. Status: ✅ POTVRĐENO (v3.6.2 — korisnik: "Napokon riješen problem"). ZATVARA
+  cijelu offline-render sagu (D1-13…D1-30, D2-2…D2-7): čitanje (OPFS sync, mbY), koordinate
+  (TMS/Y-flip), centriranje (medijan), i PRIKAZ (img native composite).
