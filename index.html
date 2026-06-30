@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.5';
+const APP_VER = 'v3.6.6';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -11119,7 +11119,7 @@ function togRec() {
     if (actI === null) { showToast('⚠ Prvo dodaj vlaku!'); return; }
     _clearNastaviMarkers();
     recOn = true; recPaused = false; _recParentIdx = null;
-    _kfReset(); _lastRecTime = 0;
+    _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
     // Timing: početak segmenta
     _initDayTiming();
     _recSegStart = Date.now();
@@ -11208,7 +11208,7 @@ function stopRec() {
 function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
-  _kfReset(); _lastRecTime = 0;
+  _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
   if (recPaused) {
     if (_recSegStart > 0) { _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
     _dayWorkEnd = new Date().toISOString();
@@ -11837,6 +11837,20 @@ const GPS_MAX_JUMP  = 25;
 const GPS_MAX_SPEED = 2.5;
 const GPS_STILL_SPD = 0.3;
 
+// ─── GPS RESTART KOORDINACIJA (D3-B) ─────────────────────────────────
+// Tri nezavisna trigera (onPE greška, watchdog, sw-ping) dijele jednu stvarnu
+// izvedbu restarta — sprječava da blizak dvostruki/trostruki restart iznova
+// briše medijan-buffer prije nego se uopće napuni (duplo duži oporavak).
+let _lastGpsRestartAt     = 0;
+const GPS_RESTART_COOLDOWN = 5000;
+
+// ─── GPS GAP DETEKCIJA (D3-C) ─────────────────────────────────────────
+// Pravo zidno-vrijeme zadnje DODANE tačke — namjerno odvojeno od _lastRecTime
+// (kojeg restart-funkcije nule radi gašenja speed-gate-a) da preživi restart i
+// tačno mjeri prekid, umjesto da se prekid tiho utopi u geometriju traga.
+let _lastPtAcceptedAt   = 0;
+const GPS_GAP_WARN_MS   = 60000;
+
 function _gpsMedN()    { return _forestMode ? 5 : 3; }
 function _gpsDistMul() { return _forestMode ? 0.5 : 0.35; }
 function _gpsMaxTurn() { return _forestMode ? 70 : 90; }
@@ -12089,26 +12103,42 @@ function onP(p) {
     }
   }
 
-  addPt(actI, sla, slo, filtAl ?? al ?? 0);
+  // GAP DETEKCIJA (D3-C) — dugi prekid bez tačaka ne smije se tiho utopiti u geometriju
+  const gapMs = _lastPtAcceptedAt > 0 ? Date.now() - _lastPtAcceptedAt : 0;
+  const isGap = gapMs > GPS_GAP_WARN_MS;
+  if (isGap) showToast('⚠ GPS prekid ' + Math.round(gapMs / 1000) + 's — provjeri ovaj dio traga');
+  addPt(actI, sla, slo, filtAl ?? al ?? 0, isGap);
+  _lastPtAcceptedAt = Date.now();
 }
 let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
 let _gpsWatchdogTimer = null;
 let _heartbeatTimer   = null;
 let _gpsRestartCount  = 0;
 
+// ── GPS RESTART — jedinstvena izvedba, dijele je onPE/watchdog/sw-ping (D3-B) ──
+// Cooldown sprječava da dva trigera blizu jedan drugom iznova obore tek
+// uspostavljen watch i izbrišu medijan-buffer prije nego se napuni.
+function _restartGpsWatch(reason) {
+  if (!recOn || !gpsOn) return false;
+  const now = Date.now();
+  if (now - _lastGpsRestartAt < GPS_RESTART_COOLDOWN) return false;
+  _lastGpsRestartAt = now;
+  if (wid) { navigator.geolocation.clearWatch(wid); wid = null; }
+  _kfReset(); _lastRecTime = 0;
+  wid = navigator.geolocation.watchPosition(onP, onPE, {
+    enableHighAccuracy: true, maximumAge: 0, timeout: 20000
+  });
+  _lastGpsFixTime = now;
+  document.getElementById('gps-info').textContent = 'GPS: restart (' + reason + ')...';
+  return true;
+}
+
 // ── GPS ERROR — auto-restart ─────────────────────────────────────────────────
 function onPE(e) {
   document.getElementById('gps-info').textContent = 'GPS: greška — ' + e.message;
   if (recOn && gpsOn && _gpsRestartCount < 5) {
-    _gpsRestartCount++;
     setTimeout(() => {
-      if (recOn && gpsOn) {
-        if (wid) navigator.geolocation.clearWatch(wid);
-        _kfReset(); _lastRecTime = 0;  // čist start nakon gapa — bez artefakt-luka
-        wid = navigator.geolocation.watchPosition(onP, onPE, {
-          enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-        });
-      }
+      if (_restartGpsWatch('error')) _gpsRestartCount++;
     }, 3000);
   } else if (recOn && gpsOn && _gpsRestartCount >= 5) {
     showToast('⚠ GPS nedostupan — provjerite dozvole i vidljivost neba');
@@ -12126,19 +12156,7 @@ function _startGpsWatchdog() {
     if (!recOn) { _stopGpsWatchdog(); return; }
     const elapsed = Date.now() - _lastGpsFixTime;
     if (elapsed > GPS_WATCHDOG_TIMEOUT) {
-      // GPS zamrznut — restart
-      document.getElementById('gps-info').textContent = 'GPS: restart...';
-      if (wid) navigator.geolocation.clearWatch(wid);
-      wid = null;
-      setTimeout(() => {
-        if (recOn) {
-          _kfReset(); _lastRecTime = 0;  // zamrznut GPS 45s+ → čist start
-          wid = navigator.geolocation.watchPosition(onP, onPE, {
-            enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-          });
-          _lastGpsFixTime = Date.now();
-        }
-      }, 1000);
+      setTimeout(() => { _restartGpsWatch('watchdog'); }, 1000);
     }
   }, 15000); // provjeri svakih 15s
 }
@@ -12205,12 +12223,7 @@ if ('serviceWorker' in navigator) {
     }
     // SW šalje ping svakih 20s tokom snimanja — restartuj GPS ako se ugasio
     if (evt.data?.type === 'sw-ping' && recOn && gpsOn && !wid) {
-      _kfReset(); _lastRecTime = 0;  // restart nakon backgrounda → čist start
-      wid = navigator.geolocation.watchPosition(onP, onPE, {
-        enableHighAccuracy: true, maximumAge: 0, timeout: 20000
-      });
-      _lastGpsFixTime = Date.now();
-      document.getElementById('gps-info').textContent = 'GPS: restart od SW...';
+      _restartGpsWatch('sw-ping');
     }
   });
 }
@@ -13072,7 +13085,7 @@ function _scheduleOvlRnd() {
   if (_ovlRndTimer) return;
   _ovlRndTimer = setTimeout(() => { _ovlRndTimer = 0; updOvl(); rndList(); }, 2000);
 }
-function addPt(i, la, lo, al) {
+function addPt(i, la, lo, al, gap) {
   const v = vlake[i];
   if (v.pts.length > 0) {
     const last = v.pts[v.pts.length - 1];
@@ -13081,7 +13094,7 @@ function addPt(i, la, lo, al) {
     const minDist = recOn ? 0.1 : 0.5;
     if (dst(last.la, last.lo, la, lo) < minDist) return;
   }
-  v.pts.push({la, lo, al});
+  v.pts.push({la, lo, al, ...(gap ? { gap: true } : {})});
   v.poly.addLatLng([la, lo]);
   scheduleVlakaSave(i);
   if (v.pts.length === 2 || (v.kr > 0 && v.pts.length === 1)) updateVlakaLabel(i);

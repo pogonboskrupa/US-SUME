@@ -46,7 +46,7 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
 | Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | 🔄 (D3-D/E ✅ v3.6.5) |
-| GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | 🔄 (D3-A ✅ v3.6.5; D3-B/C ⬜) |
+| GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | ✅ (D3-A v3.6.5; D3-B/C v3.6.6) |
 | UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ⬜ |
 | Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ⬜ |
 | Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | 🔄 (D3-A ✅ v3.6.5) |
@@ -405,4 +405,13 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   server kad njen prvi flush završi. **Fix (v3.6.5):** `v._deleted=true` postavljeno sinhrono na
   ulazu u `sbDeleteVlaka`, koja zatim čeka eventualni in-flight flush prije provjere `sbId` —
   ako je insert uspio, odmah briše upravo kreirani red. ✅ (v3.6.5)
-- **D3-B, D3-C (GPS watchdog races, tihi gap nakon skoka signala) — ostaju za sljedeću rundu.**
+- **D3-B — tri nezavisna mehanizma (onPE, watchdog, sw-ping) restartuju GPS watch bez
+  koordinacije.** Blizak dvostruki/trostruki restart kod produženog gubitka signala briše
+  medijan-buffer iznova prije nego se napuni → duplo/trostruko duži oporavak. **Fix (v3.6.6):**
+  jedinstvena `_restartGpsWatch(reason)` s 5s cooldown-om — sva tri trigera dijele istu izvedbu,
+  blizak duplikat se tiho preskoči. ✅ (v3.6.6)
+- **D3-C — dugi prekid signala daje tihi "teleport" u zapisanom tragu.** Nakon restarta `_kf`
+  je `null` pa katastrofalni-skok provjera ne hvata prvi fix nakon oporavka — tačka se tiho doda
+  bez upozorenja, ravna linija kroz neopisani teren. **Fix (v3.6.6):** `_lastPtAcceptedAt`
+  (preživljava restart, za razliku od `_lastRecTime`) mjeri pravi prekid; >60s → toast upozorenje
+  + `gap:true` oznaka na tački (aditivno, ne mijenja GPX export/`calcL`/server payload). ✅ (v3.6.6)
