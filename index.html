@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.4.9';
+const APP_VER = 'v3.5.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -21225,15 +21225,15 @@ function _cvBlank(cv) {
   try {
     const cx = cv.getContext('2d');
     const w = cv.width || 256, h = cv.height || 256;
-    const pts = [[w/2,h/2],[w/4,h/4],[3*w/4,h/4],[w/4,3*h/4],[3*w/4,3*h/4],[w/2,h/4],[w/2,3*h/4]];
-    let nonBlank = 0;
-    for (const [px,py] of pts) {
-      const d = cx.getImageData(px|0, py|0, 1, 1).data;
-      const transparent = d[3] === 0;
-      const bgGreen = Math.abs(d[0]-45)<10 && Math.abs(d[1]-58)<10 && Math.abs(d[2]-46)<10;
-      if (!transparent && !bgGreen) nonBlank++;
+    // Gust sken cijelog canvasa (svaki 8. piksel) — usklađen s _canvasOpaque. Raniji uzorak
+    // od 7 tačaka je lažno prijavljivao rijetke pločice (tanka linija) kao prazne.
+    const data = cx.getImageData(0, 0, w, h).data;
+    for (let i = 0; i < data.length; i += 32) {
+      if (data[i+3] === 0) continue;   // proziran piksel
+      const bgGreen = Math.abs(data[i]-45)<10 && Math.abs(data[i+1]-58)<10 && Math.abs(data[i+2]-46)<10;
+      if (!bgGreen) return false;      // našao pravi sadržaj → NIJE prazna
     }
-    return nonBlank === 0;   // sve tačke prozirne ili pozadinska zelena → prazna
+    return true;                       // sve prozirno ili pozadinska zelena → prazna
   } catch(e) { return null; } // npr. tainted canvas — ne može se očitati
 }
 async function sqlmapDebugPro() {
@@ -21860,7 +21860,8 @@ async function _sqlPrewarmRegion(name, west, south, east, north, minZ, maxZ, cap
           else { const res = await _wTileScheduleCall({type:'tile', name, z, x, y}); data = res && res.data; }
           if (!data) continue;
           const c = await _decodeToCanvas(new Blob([data], {type: _tileMime(data)}), 256); // D1-23
-          _bmpCacheSet(_sqlTileBmpCache, key, c); _sqlTileBmpEvict();
+          // Ne keširaj prazno (D1-28): inače bi prewarm zatrovao cache praznim placeholderom.
+          if (c && _canvasOpaque(c)) { _bmpCacheSet(_sqlTileBmpCache, key, c); _sqlTileBmpEvict(); }
         } catch(e) {}
         await new Promise(r => setTimeout(r, 0)); // oslobodi event loop
       }
