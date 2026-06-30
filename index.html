@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.8';
+const APP_VER = 'v3.5.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22774,6 +22774,7 @@ function _loadmapRecentTap(i) {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
   setLayerSqlite(idx);
+  _sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);   // skoči NA podatke (medijanski centar)
   showToast('🗄 ' + m.name);
   closeLoadMapScreen();
 }
@@ -22850,6 +22851,7 @@ function _loadmapActivate(i) {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
   setLayerSqlite(idx);
+  _sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);   // skoči NA podatke (medijanski centar)
   showToast('🗄 ' + m.name);
   _loadmapRenderManage(); _loadmapRenderRecent();
 }
