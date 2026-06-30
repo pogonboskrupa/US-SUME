@@ -357,3 +357,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   SVE pločice gotove (timing-robusno, primarno); (2) pane-level recomposite (toggle
   tilePane opacity) uz per-tile — jači okidač kad ih je mnogo; (3) sweep rep produžen na
   1500ms. Status: 🔄 (v3.6.1). Fallback ako ne uspije: <img> pločice umjesto canvas.
+
+- **D2-7 — Offline pločice <canvas> → <img> (v3.6.2, GASI compositing klasu).** Nakon 3
+  varijante nudge-a (per-tile/pane/load-event) pločice su se i dalje gubile na zoom-out
+  (WebView ne re-kompozitira async-crtan canvas s dugim worker round-tripom). Rješenje:
+  createTile sada vraća <img> (img.src = blob iz worker-a) umjesto canvas → browser
+  kompozitira NATIVNO (kao Leaflet default/online). Uklonjeno: composite nudge, placeholder
+  piramida, ancestor-upscale, canvas cache iz tile-puta; prewarm no-op. Placeholder daje
+  Leaflet keepBuffer:6. Debug PRO prilagođen img-u (complete && naturalWidth>0). Vrijedi i
+  za rmaps. Status: 🔄 (v3.6.2, test zoom-out).
