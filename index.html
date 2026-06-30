@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.5.2';
+const APP_VER = 'v3.5.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -22069,6 +22069,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
         _tileProf.done++; _tileProf.totalN++; _tileProf.totalSum += dt;
         if (dt > _tileProf.totalMax) { _tileProf.totalMax = dt; _tileProf.slowest = z+'/'+x+'/'+y+' '+(dt|0)+'ms'; }
         done(err, cv);
+        _compositeNudge(cv);   // D1-29: pokrij SVE puteve (cache-hit, null/placeholder, async)
       };
       const cacheKey = name + '/' + z + '/' + x + '/' + y;
       const cached = _sqlTileBmpCache.get(cacheKey);
