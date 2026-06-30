@@ -381,6 +381,9 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   → `removeFromQueue(ts)` obriše OBJE → tihi gubitak operacije. **Fix:** jedinstveni `_qid`
   (Date.now()+seq) u `enqueue`; remove/bumpRetry/discard po `_qid` (fallback na `ts` za
   stari red). ✅ (v3.6.3)
-- **D2-C — upsert_labels delete-pa-insert neatomski** (rizik gubitka oznaka ako insert
-  padne). Status: ⬜ (preostaje).
-- **D2-D — istek tokena → bumpRetry → odbacivanje** umjesto refresh sesije. Status: ⬜.
+- **D2-C — upsert_labels delete-pa-insert neatomski.** Rizik gubitka oznaka ako insert padne.
+  **Fix (v3.6.4):** UNIQUE(korisnik_id,label_id) migracija + `_syncTextLabelsServer` (upsert
+  update-in-place + brisanje samo obsoletnih; fallback na staro ako constraint nema). ✅ (v3.6.4)
+- **D2-D — istek tokena → bumpRetry → odbacivanje.** **Fix (v3.6.4):** `_isAuthErr` (401/JWT-expired,
+  ne RLS) → `sb.auth.refreshSession()` jednom po prolazu + rerun s novim tokenom; op ostaje u
+  redu. ✅ (v3.6.4)

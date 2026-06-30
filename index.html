@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.3';
+const APP_VER = 'v3.6.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4385,6 +4385,17 @@ function _isNetworkErr(err) {
   return m.includes('fetch') || m.includes('network') || m.includes('failed') || m.includes('timeout') || !err.code;
 }
 
+// D2-D: istek tokena (NE RLS/403). Na ovu grešku osvježimo sesiju i pokušamo ponovo,
+// umjesto da se operacija odbaci nakon 5 pokušaja (gubitak snimljene vlake/loga).
+function _isAuthErr(err) {
+  if (!err) return false;
+  const st = err.status || err.statusCode;
+  const code = String(err.code || '');
+  const m = (err.message || '').toLowerCase();
+  if (st === 403 || code === '42501') return false;   // RLS zabrana — legitimno, ne refresh
+  return st === 401 || code === 'PGRST301' || /jwt.*expir|token.*expir|unauthor/.test(m);
+}
+
 let _syncInProgress = false, _syncRerun = false;
 async function _processOfflineQueue() {
   if (!sbUser || !sbProfile) return;
@@ -4396,6 +4407,7 @@ async function _processOfflineQueue() {
   const q = _OL.loadQueue();
   if (!q.length) return;
   let synced = 0;
+  let _authRefreshed = false;   // D2-D: osvježi sesiju najviše jednom po prolazu
   for (const op of [...q]) {
     try {
       let err = null;
@@ -4491,20 +4503,29 @@ async function _processOfflineQueue() {
         const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', op.payload.id);
         err = error;
       } else if (op.type === 'upsert_labels') {
+        // D2-C: siguran upsert (bez prazan-server prozora) preko zajedničkog helpera.
         if (Array.isArray(op.payload) && op.payload.length > 0) {
-          const uid = op.payload[0].korisnik_id;
-          await sb.from('text_labels').delete().eq('korisnik_id', uid);
-          const { error } = await sb.from('text_labels').insert(op.payload);
+          const r = await _syncTextLabelsServer(op.payload[0].korisnik_id, op.payload);
+          err = r.error;
+        } else if (op.payload?.[0]?.korisnik_id) {
+          // Prazan set — obriši sve oznake korisnika
+          const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.payload[0].korisnik_id);
           err = error;
-        } else {
-          // Empty labels — just delete all for this user
-          if (op.payload?.[0]?.korisnik_id) {
-            const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.payload[0].korisnik_id);
-            err = error;
-          }
         }
       }
       if (!err) { _OL.removeFromQueue(op._qid ?? op.ts); synced++; }
+      else if (_isAuthErr(err)) {
+        // D2-D: istekao token → osvježi sesiju (jednom) i re-okini prolaz s NOVIM tokenom.
+        // Op ostaje u redu (ne bumpRetry/odbacivanje). Re-okini SAMO ako je refresh dao
+        // važeću sesiju — inače (stvarno odjavljen) prekini bez rerun-a da nema petlje.
+        if (!_authRefreshed) {
+          _authRefreshed = true;
+          let ok = false;
+          try { const { data } = await sb.auth.refreshSession(); ok = !!data?.session; } catch(e) {}
+          if (ok) _syncRerun = true;
+        }
+        break;   // prekini prolaz; ostatak reda ide u rerun (ako je refresh uspio) ili kasnije
+      }
       else if (!_isNetworkErr(err)) {
         // Ne-mrežna greška (RLS, istekao token, privremeni 4xx/5xx). Ne odbacuj
         // odmah — daj 5 pokušaja prije nego se operacija proglasi trajno
@@ -6969,6 +6990,29 @@ async function sbLoadTextLabelsDB() {
   });
 }
 
+// D2-C: sigurna sinkronizacija seta tekst-oznaka — upsert (update-in-place, BEZ brisanja
+// prije pisanja) + brisanje SAMO obsoletnih. Spriječava prazan-server prozor ako insert
+// padne. Fallback na staro (delete-pa-insert) ako unique constraint još nije primijenjen
+// (42P10). Vraća { error } (ili baca na mrežnu grešku da pozivatelj stavi u offline red).
+async function _syncTextLabelsServer(uid, rows) {
+  const ids = rows.map(r => r.label_id);
+  const { error: upErr } = await sb.from('text_labels').upsert(rows, { onConflict: 'korisnik_id,label_id' });
+  if (upErr) {
+    if (String(upErr.code) === '42P10') {
+      // Migracija (unique constraint) još nije primijenjena → staro ponašanje, bez regresije.
+      await sb.from('text_labels').delete().eq('korisnik_id', uid);
+      if (rows.length) { const { error } = await sb.from('text_labels').insert(rows); return { error }; }
+      return { error: null };
+    }
+    return { error: upErr };
+  }
+  // Ukloni serverske oznake koje više ne postoje lokalno (ako rows prazan → obriši sve).
+  const { data: ex } = await sb.from('text_labels').select('label_id').eq('korisnik_id', uid);
+  const stale = (ex || []).map(r => r.label_id).filter(id => !ids.includes(id));
+  if (stale.length) await sb.from('text_labels').delete().eq('korisnik_id', uid).in('label_id', stale);
+  return { error: null };
+}
+
 async function sbSaveTextLabels() {
   if (!sbUser || !sbProfile) return;
   const rows = textLabels.map(l => ({
@@ -6979,11 +7023,8 @@ async function sbSaveTextLabels() {
   // Uvijek keširaj lokalno — db sync je best-effort
   _OL.save(_OL.LABELS, rows);
   try {
-    await sb.from('text_labels').delete().eq('korisnik_id', sbUser.id);
-    if (rows.length > 0) {
-      const { error } = await sb.from('text_labels').insert(rows);
-      if (error) throw error;
-    }
+    const { error } = await _syncTextLabelsServer(sbUser.id, rows);
+    if (error) throw error;
   } catch(e) {
     // offline ili greška — stavi u red za sync pri ponovnom signalu
     _OL.enqueue({ type: 'upsert_labels', payload: rows });
