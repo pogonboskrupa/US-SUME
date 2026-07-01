@@ -4105,7 +4105,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.7.2';
+const APP_VER = 'v3.7.3';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -9157,7 +9157,46 @@ function makeCachedTileLayer(cacheName) {
         }
       };
 
-      const fallback = () => {
+      // D1-online: umjesto PRAZNE pločice (offline miss / nedostupan server), nacrtaj
+      // najbližu RODITELJSKU pločicu iz keša (niži zoom, rastegnuta) → zamućeno umjesto
+      // prazno. Roditelj je (z-dz, x>>dz, y>>dz); dijete je jedan pod-kvadrat roditelja.
+      const drawParentFallback = async () => {
+        for (let dz = 1; dz <= 6; dz++) {
+          const pz = coords.z - dz;
+          if (pz < 0) break;
+          const scale = 1 << dz;
+          const px = Math.floor(coords.x / scale);
+          const py = Math.floor(coords.y / scale);
+          let purl;
+          try { purl = this.getTileUrl({ x: px, y: py, z: pz }); } catch(e) { continue; }
+          const sub = sz.x / scale;                       // veličina pod-kvadrata na roditelju
+          const sx  = (coords.x - px * scale) * sub;
+          const sy  = (coords.y - py * scale) * sub;
+          const rbmp = _tileBmpCache.get(purl);
+          if (rbmp) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(rbmp, sx, sy, sub, sub, 0, 0, sz.x, sz.y);
+            done(null, canvas); return true;
+          }
+          if (!('caches' in window)) continue;
+          try {
+            const c = await caches.open(cacheName);
+            const m = await c.match(purl);
+            if (m) {
+              const bmp = await createImageBitmap(await m.blob());
+              _bmpCacheSet(_tileBmpCache, purl, bmp); _tileBmpEvict();
+              ctx.imageSmoothingEnabled = true;
+              ctx.drawImage(bmp, sx, sy, sub, sub, 0, 0, sz.x, sz.y);
+              done(null, canvas); return true;
+            }
+          } catch(e) {}
+        }
+        return false;
+      };
+
+      const fallback = async () => {
+        if (await drawParentFallback()) return;   // roditelj iz keša → nema prazno
+        // zadnji pokušaj: <img> s crossOrigin (može proći kad fetch padne zbog CORS-a, online)
         const img = new Image();
         img.crossOrigin = '';
         img.onload = () => { ctx.drawImage(img, 0, 0, sz.x, sz.y); done(null, canvas); };
@@ -23176,9 +23215,16 @@ async function showCacheInfo() {
   if (!('caches' in window)) return;
   const cache = await caches.open(TILE_CACHE_NAME);
   const keys = await cache.keys();
+  // Ukupna zauzetost memorije aplikacije (pločice + karte + offline baze)
+  let mbTxt = '';
+  if (navigator.storage && navigator.storage.estimate) {
+    try { const est = await navigator.storage.estimate(); mbTxt = ` · ≈ ${Math.round((est.usage || 0) / 1048576)} MB ukupno`; } catch(e) {}
+  }
   let html = keys.length > 0
-    ? `💾 U cache-u: <b style="color:#4ade80">${keys.length.toLocaleString()}</b> tile-ova · <a href="#" onclick="clearTileCache(event)" style="color:#f87171;">Obriši cache</a>`
-    : `💾 Cache je prazan`;
+    ? `💾 Keširano (online prikazi): <b style="color:#4ade80">${keys.length.toLocaleString()}</b> pločica${mbTxt}<br>`
+      + `<span style="font-size:11px;color:#94a3b8;">Sve što pogledaš online (satelit/topo/google) čuva se za offline.</span> `
+      + `<a href="#" onclick="clearTileCache(event)" style="color:#f87171;">Obriši memoriju karata</a>`
+    : `💾 Nema keširanih pločica — pregledaj karte online da se snime za offline.`;
   // D1-A: prijavi ako je prethodno preuzimanje prekinuto (aplikacija ubijena/zatvorena
   // usred download-a) — korisnik inače nema indikaciju da region nije potpun.
   if (localStorage.getItem(_OFFLINE_DL_INCOMPLETE_KEY)) {
@@ -23188,9 +23234,15 @@ async function showCacheInfo() {
 }
 
 async function clearTileCache(e) {
-  e.preventDefault();
-  await caches.delete(TILE_CACHE_NAME);
-  showToast('Cache obrisan');
+  if (e) e.preventDefault();
+  if (!await _dlgConfirm('Obrisati sve keširane karte (satelit, topo, teren)? Offline prikaz tih područja više neće raditi dok ih ponovo ne pogledaš online.', { title: 'Obriši memoriju karata', okLabel: 'Obriši' })) return;
+  // Obriši SVE mapne kešove (pločice + teren overlay), ali NE app shell / biblioteke
+  const keys = await caches.keys();
+  const mapCaches = keys.filter(k => /^tvlake-(tiles|elev|slope|terr|nv)/.test(k));
+  await Promise.all(mapCaches.map(k => caches.delete(k)));
+  _tileBmpCache.clear();  // i RAM keš
+  localStorage.removeItem(_OFFLINE_DL_INCOMPLETE_KEY);
+  showToast('🗑 Memorija karata obrisana');
   showCacheInfo();
 }
 
