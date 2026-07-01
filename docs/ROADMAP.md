@@ -54,16 +54,16 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 ---
 
-## 🌲 DIO 4 — Tragovi, Doznaka, Mjerenja, KML/Export (terenski alati + I/O)  ⬜
+## 🌲 DIO 4 — Tragovi, Doznaka, Mjerenja, KML/Export (terenski alati + I/O)  ✅
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Tragovi (GPS putanje) | `_tragReg*`, `_tragovi*` (~L12100–12900), `togSnimTrag`, `sbFlushTrag`, GPX export | ⬜ |
-| Doznaka — odjeli i slojevi | `dozInit`, `dozLoadOdjeli`, `dozSelectOdjel`, `dozLoadLayers`, `dozRenderMapLayers` | ⬜ |
-| Doznaka — crtanje i markings | `dozStartDraw`, `dozAddDrawPoint`, `dozFinishDraw`, `dozConfirmSave`, `dozDeleteMarking` | ⬜ |
-| Doznaka — GPS, KML izbor, članovi, status | `dozStartGPS`, `dozStartKmlSel`, `dozAddMember`, `dozSetStatus`, `dozExportGPX` | ⬜ |
-| Mjerenja | `addTacka`, `msr*`, Izmjeri popup (~L7316), `showElevProfile` | ⬜ |
-| KML/GeoJSON import/export | `pkml`, `pkmlStyled`, `loadKmlStyleFor`, `kmlPreuzmi/NaMail/Kopiraj` | ⬜ |
+| Tragovi (GPS putanje) | `_tragReg*`, `_tragovi*` (~L12100–12900), `togSnimTrag`, `sbFlushTrag`, GPX export | ✅ (D4-C v3.6.7) |
+| Doznaka — odjeli i slojevi | `dozInit`, `dozLoadOdjeli`, `dozSelectOdjel`, `dozLoadLayers`, `dozRenderMapLayers` | ✅ (D4-D v3.6.8) |
+| Doznaka — crtanje i markings | `dozStartDraw`, `dozAddDrawPoint`, `dozFinishDraw`, `dozConfirmSave`, `dozDeleteMarking` | ✅ (D4-B/F v3.6.8) |
+| Doznaka — GPS, KML izbor, članovi, status | `dozStartGPS`, `dozStartKmlSel`, `dozAddMember`, `dozSetStatus`, `dozExportGPX` | ✅ (D4-E/I v3.6.8) |
+| Mjerenja | `addTacka`, `msr*`, Izmjeri popup (~L7316), `showElevProfile` | ✅ (D4-G/H v3.6.8) |
+| KML/GeoJSON import/export | `pkml`, `pkmlStyled`, `loadKmlStyleFor`, `kmlPreuzmi/NaMail/Kopiraj` | ✅ (D4-A v3.6.7) |
 
 ---
 
@@ -434,10 +434,30 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   in-flight insert da ga ipak kreira na serveru). **Fix (v3.6.7):** identičan `_flushing`/
   `_flushPending`/`_deleted` pattern prenesen iz `sbFlushVlaka`/`sbDeleteVlaka` na
   `sbFlushTrag`/`_sbFlushTragImpl`/`sbDeleteTrag`. ✅ (v3.6.7)
-- **D4-B (Doznaka markice — ghost/resurrection, gore nego kod vlake jer `insert_doz_marking`
-  uopće ne hvata server ID), D4-D (stale-odjel render race), D4-E (wake-lock dijeljen između
-  glavnog snimanja i Doznaka GPS-a), D4-F (nema in-flight guard na `dozConfirmSave`),
-  D4-G (tačke mjerenja cure između tab/mode prebacivanja), D4-H (`gap:true` oznaka iz v3.6.6 se
-  nigdje ne čita — profil visine/nagib tiho prikazuje teleportovani skok kao glatku promjenu),
-  D4-I (`dozSetStatus` nema offline queue — status promjena offline se tiho gubi) — ostaju za
-  sljedeću rundu.**
+- **D4-B — Doznaka markice: ghost/resurrection na delete-prije-sync, gore nego kod vlake jer
+  `insert_doz_marking` uopće nije hvatao server ID.** **Fix (v3.6.8):** `dozConfirmSave` taguje
+  offline-kreiranu markicu privremenim `_localId` u redu čekanja; queue grana sad hvata
+  `data.id` (`.select('id')`) i po uspjehu zamijeni lokalni ID stvarnim; `dozDeleteMarking` za
+  `'local_'` ID otkazuje odgovarajući red čekanja umjesto da gađa nepostojeći server red. ✅
+  (v3.6.8)
+- **D4-D — stale-odjel render race.** Brzo prebacivanje odjel A→B prije nego se A-ov fetch
+  završi moglo je prikazati pogrešne markice/tragove. **Fix (v3.6.8):** generation token
+  `_dozLoadGen` u `dozLoadLayers` — stariji odgovor se tiho odbaci. ✅ (v3.6.8)
+- **D4-E — wake-lock nije bio svjestan Doznaka GPS-a.** `stopRec()` je bezuslovno gasio wake
+  lock (mogao ugasiti ekran usred aktivnog Doznaka GPS snimanja); `visibilitychange` handler je
+  reacquire-ovao wake lock samo za glavno snimanje. **Fix (v3.6.8):** oba mjesta sad provjeravaju
+  i `_dozGpsOn`. ✅ (v3.6.8)
+- **D4-F — nema in-flight guard na `dozConfirmSave`.** Dupli tap na "Sačuvaj" prije nego prvi
+  insert završi pravio je duplikat markice. **Fix (v3.6.8):** `_dozSaveInFlight` zastavica. ✅
+  (v3.6.8)
+- **D4-G — tačke mjerenja cure između FAB-selektovanih mjerenja.** `_izmjeriPick` je pokretao
+  novo mjerenje bez čišćenja tačaka ostavljenih od prethodne (već završene/napuštene) sesije.
+  **Fix (v3.6.8):** `msrClear()` prije `msrStart()` kad se bira novi tip iz FAB menija (tab-switch
+  "nastavi" ponašanje ostaje netaknuto). ✅ (v3.6.8)
+- **D4-H — profil visine/nagib je ignorisao `gap:true` oznaku (v3.6.6).** Teleportovani GPS-prekid
+  segment se prikazivao kao glatka promjena, kvareći "Max nagib" statistiku. **Fix (v3.6.8):**
+  gap segmenti se crtaju sivo/isprekidano i isključuju iz nagib-statistike (uz brojač isključenih
+  segmenata u prikazu). ✅ (v3.6.8)
+- **D4-I — `dozSetStatus` nema offline queue.** Mrežna greška je tiho vraćala status na staro
+  umjesto da zakaže sync. **Fix (v3.6.8):** `_isNetworkErr` grananje → `upsert_doz_status` u
+  offline red čekanja umjesto revert-a. ✅ (v3.6.8)

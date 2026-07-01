@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.7';
+const APP_VER = 'v3.6.8';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4292,6 +4292,7 @@ const _OP_LABELS = {
   upsert_odjel:       '↑ Odjel',
   insert_doz_marking: '+ Doznaka oznaka',
   delete_doz_marking: '✕ Briši doznaka oznaku',
+  upsert_doz_status:  '↑ Status odjela',
   upsert_trag:        '↑ Snimaj trag',
   delete_trag:        '✕ Briši trag',
   upsert_labels:      '↑ Tekstualne oznake',
@@ -4446,8 +4447,14 @@ async function _processOfflineQueue() {
         const { error } = await sb.from('dnevni_log').upsert(op.payload, { onConflict: 'korisnik_id,datum' });
         err = error;
       } else if (op.type === 'insert_doz_marking') {
-        const { error } = await sb.from('doz_area_markings').insert(op.payload);
+        const { data, error } = await sb.from('doz_area_markings').insert(op.payload).select('id').single();
         err = error;
+        if (!err && data && op._localId) {
+          // D4-B: zamijeni privremeni 'local_' ID stvarnim server ID-jem da kasnije
+          // brisanje ove markice može pogoditi pravi red (inače ghost-resurrection).
+          const dm = _dozMarkings.find(m => m.id === op._localId);
+          if (dm) { dm.id = data.id; _dozCacheLayers(dm.project_id); }
+        }
       } else if (op.type === 'upsert_odjel') {
         const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
         err = error;
@@ -4501,6 +4508,9 @@ async function _processOfflineQueue() {
         err = error;
       } else if (op.type === 'delete_doz_marking') {
         const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', op.payload.id);
+        err = error;
+      } else if (op.type === 'upsert_doz_status') {
+        const { error } = await sb.from('doz_projects').update({ status: op.payload.status }).eq('id', op.payload.id);
         err = error;
       } else if (op.type === 'upsert_labels') {
         // D2-C: siguran upsert (bez prazan-server prozora) preko zajedničkog helpera.
@@ -7482,7 +7492,12 @@ function _izmjeriPick(mode) {
     _msrSetMode(mode);
     switchTab('mjtrg');
     _mjtrgTab('msr');
-    if (!_msrOn) msrStart();
+    if (!_msrOn) {
+      // D4-G: novo mjerenje iz FAB menija ne smije naslijediti tačke ostavljene
+      // od prethodne (već završene/napuštene) sesije.
+      msrClear();
+      msrStart();
+    }
   }
 }
 document.addEventListener('click', function(e) {
@@ -11100,7 +11115,8 @@ document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible') {
     if (bgWarn) bgWarn.style.display = 'none';
     // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
-    if (recOn && !_wakeLock) await _acquireWakeLock();
+    // D4-E: i Doznaka GPS treba wake lock, ne samo glavno snimanje vlake
+    if ((recOn || _dozGpsOn) && !_wakeLock) await _acquireWakeLock();
     _updWakeLockIcon();
     // Povratak u prvi plan — pokušaj sync (online event zna izostati na Androidu)
     if (navigator.onLine && sbUser) _processOfflineQueue();
@@ -11187,7 +11203,7 @@ function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
   _setFreeView(false);
   _kfReset(); _lastRecTime = 0;
-  _releaseWakeLock();
+  if (!_dozGpsOn) _releaseWakeLock();  // D4-E: ne gasi ekran ako Doznaka GPS i dalje radi
   _stopBgAudio();
   _stopGpsWatchdog();
   _stopSWHeartbeat();
@@ -20022,13 +20038,17 @@ function _renderElevProfile(name, pts, alts, src) {
   const sx = i => pad.l + (cumD[i]/totalD)*pw;
   const sy = i => pad.t + ph - ((alts[i]-minAlt)/altRange)*ph;
 
-  // Segmenti bojani po nagibu
+  // Segmenti bojani po nagibu — GPS-prekid segment (D4-H) je isprekidan/siv, ne pravi nagib
   let segs = '';
+  let gapCount = 0;
   for (let i = 1; i < pts.length; i++) {
+    const isGapSeg = !!pts[i].gap;
+    if (isGapSeg) gapCount++;
     const d = dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo);
     const slope = d > 0.5 ? Math.abs((alts[i]-alts[i-1])/d*100) : 0;
-    const col = slope>18?'#f87171':slope>12?'#fbbf24':'#4ade80';
-    segs += `<line x1="${sx(i-1).toFixed(1)}" y1="${sy(i-1).toFixed(1)}" x2="${sx(i).toFixed(1)}" y2="${sy(i).toFixed(1)}" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+    const col = isGapSeg ? '#64748b' : (slope>18?'#f87171':slope>12?'#fbbf24':'#4ade80');
+    const dash = isGapSeg ? ' stroke-dasharray="4,3"' : '';
+    segs += `<line x1="${sx(i-1).toFixed(1)}" y1="${sy(i-1).toFixed(1)}" x2="${sx(i).toFixed(1)}" y2="${sy(i).toFixed(1)}" stroke="${col}" stroke-width="2.5" stroke-linecap="round"${dash}/>`;
   }
 
   // Mrežaste linije i oznake Y osi (visina)
@@ -20060,19 +20080,21 @@ function _renderElevProfile(name, pts, alts, src) {
 
   document.getElementById('profil-nm').textContent = name + (src && src !== 'GPS' ? ' · ' + src : '');
 
-  // Statistike
+  // Statistike — isključi GPS-prekid segmente (teleport, ne stvarni nagib terena)
   const slopes = pts.slice(1).map((p,i)=>{
+    if (p.gap) return null;
     const d = dst(pts[i].la,pts[i].lo,p.la,p.lo);
     return d>0.5 ? Math.abs((alts[i+1]-alts[i])/d*100) : 0;
-  });
-  const maxSlope = Math.max(...slopes);
-  const avgSlope = slopes.reduce((s,x)=>s+x,0)/slopes.length;
+  }).filter(s => s !== null);
+  const maxSlope = slopes.length ? Math.max(...slopes) : 0;
+  const avgSlope = slopes.length ? slopes.reduce((s,x)=>s+x,0)/slopes.length : 0;
+  const gapNote = gapCount ? ` <span style="color:#64748b" title="Segmenti preko GPS-prekida isključeni iz statistike">(⚠ ${gapCount} GPS-prekid${gapCount>1?'a':''} isključen${gapCount>1?'o':''})</span>` : '';
   document.getElementById('profil-stats').innerHTML =
     `<span style="color:#94a3b8">Min: <b style="color:#e2e8f0">${Math.round(minAlt)} m</b></span>` +
     `<span style="color:#94a3b8">Max: <b style="color:#e2e8f0">${Math.round(maxAlt)} m</b></span>` +
     `<span style="color:#94a3b8">Razlika: <b style="color:#e2e8f0">${Math.round(maxAlt-minAlt)} m</b></span>` +
     `<span style="color:#94a3b8">Max nagib: <b style="color:${maxSlope>18?'#f87171':maxSlope>12?'#fbbf24':'#4ade80'}">${maxSlope.toFixed(1)}%</b></span>` +
-    `<span style="color:#94a3b8">Prosj. nagib: <b style="color:#e2e8f0">${avgSlope.toFixed(1)}%</b></span>`;
+    `<span style="color:#94a3b8">Prosj. nagib: <b style="color:#e2e8f0">${avgSlope.toFixed(1)}%</b></span>${gapNote}`;
 
   document.getElementById('profil-modal').classList.add('show');
 }
@@ -24256,6 +24278,7 @@ const DOZ_ENG_COLORS = ['#E63946','#3B8BD4','#52B788','#FF9F1C','#9B5DE5','#00B4
 
 let _dozOdjeli   = [];
 let _dozSelId    = null;
+let _dozLoadGen  = 0;  // D4-D: generation token — spriječi stariji odgovor da prepiše novije odabrani odjel
 let _dozMembers  = [];
 let _dozMarkings = [];
 let _dozTracks   = [];
@@ -24457,12 +24480,14 @@ function _dozShowLinkedVlake() {
 async function dozLoadLayers(projectId) {
   if (!projectId) return;
   const cacheKey = pid => pid; // per-project cache suffix
+  const myGen = ++_dozLoadGen;  // D4-D: spriječi da stariji (spori) odgovor prepiše novije odabrani odjel
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
       sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
       sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true).order('created_at', { ascending: false }),
       sb.from('doz_track_points').select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId).order('recorded_at', { ascending: true })
     ]);
+    if (myGen !== _dozLoadGen) return;  // novije selektovan drugi odjel u međuvremenu — odbaci
     _dozMembers  = mRes.data  || [];
     _dozMarkings = mkRes.data || [];
     _dozTracks   = trRes.data || [];
@@ -24470,12 +24495,14 @@ async function dozLoadLayers(projectId) {
     if (_dozMembers.length) {
       const ids = [...new Set(_dozMembers.map(m => m.user_id).filter(Boolean))];
       const { data: kData } = await sb.from('korisnici').select('id,ime,prezime,boja').in('id', ids);
+      if (myGen !== _dozLoadGen) return;
       const kMap = Object.fromEntries((kData || []).map(k => [k.id, k]));
       _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || null }));
     }
     // Keširaj za offline
     _dozCacheLayers(projectId);
   } catch(e) {
+    if (myGen !== _dozLoadGen) return;
     console.error('dozLoadLayers', e);
     const c = _dozLoadCachedLayers(projectId);
     if (c) {
@@ -24485,6 +24512,7 @@ async function dozLoadLayers(projectId) {
       _dozMembers = []; _dozMarkings = []; _dozTracks = [];
     }
   }
+  if (myGen !== _dozLoadGen) return;
   dozRenderMapLayers();
 }
 
@@ -25039,10 +25067,18 @@ async function dozSetStatus(status) {
     if (error) throw error;
     _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
   } catch(e) {
-    odjel.status = prev;
-    _dozRenderStatusRow();
-    dozRenderOdjeli();
-    showToast('Greška promjene statusa: ' + (e.message || ''));
+    // D4-I: mrežna greška ne smije tiho odbaciti promjenu statusa — zakaži sync
+    // za kasnije umjesto da se lokalna promjena vraća na staro.
+    if (_isNetworkErr(e)) {
+      _OL.enqueue({ type: 'upsert_doz_status', payload: { id: _dozSelId, status } });
+      _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
+      showToast('📴 Status promijenjen lokalno — sinhronizuje se kad bude mreže');
+    } else {
+      odjel.status = prev;
+      _dozRenderStatusRow();
+      dozRenderOdjeli();
+      showToast('Greška promjene statusa: ' + (e.message || ''));
+    }
   }
 }
 
@@ -25592,8 +25628,11 @@ function dozCancelSave() {
   dozCancelDraw();
 }
 
+let _dozSaveInFlight = false;
 async function dozConfirmSave() {
-  if (!_dozPendingSavePolygon) return;
+  if (!_dozPendingSavePolygon || _dozSaveInFlight) return;  // D4-F: spriječi dupli tap = dupla markica
+  _dozSaveInFlight = true;
+  try {
   const label  = document.getElementById('doz-save-label').value.trim() || null;
   const note   = document.getElementById('doz-save-note').value.trim()  || null;
   // Računaj iz spremljene geometrije (_dozPendingSavePolygon), ne iz mutable _dozDrawPts
@@ -25614,9 +25653,12 @@ async function dozConfirmSave() {
     await dozLoadLayers(_dozSelId);
     dozRenderDetail();
   } catch(e) {
-    _OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload });
+    // D4-B: pamti privremeni ID i uz payload u redu čekanja da kasnije brisanje
+    // (prije nego se ovaj insert sinhronizuje) može ispravno pronaći/otkazati red.
+    const localId = 'local_' + Date.now();
+    _OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload, _localId: localId });
     // Dodaj u lokalni keš da se prikaže i offline
-    _dozMarkings.unshift({ ...markingPayload, id: 'local_' + Date.now() });
+    _dozMarkings.unshift({ ...markingPayload, id: localId });
     _dozCacheLayers(_dozSelId);
     dozRenderMapLayers();
     dozRenderDetail();
@@ -25624,6 +25666,9 @@ async function dozConfirmSave() {
     _dozPendingSavePolygon = null;
     dozCancelDraw();
     showToast('📴 Zona sačuvana lokalno — sinhronizuje se kad bude mreže');
+  }
+  } finally {
+    _dozSaveInFlight = false;
   }
 }
 
@@ -25645,6 +25690,20 @@ function _dozCalcArea(pts) {
 // ─── Delete Marking ────────────────────────────────────────────────
 async function dozDeleteMarking(id) {
   if (!await _dlgConfirm('Obriši obilježenu zonu?', { danger: true })) return;
+  // D4-B: markica kreirana offline (još nema pravi server ID) — insert nikad nije stigao
+  // na server, pa "brisanje" mora otkazati red čekanja umjesto da gađa nepostojeći ID.
+  if (String(id).startsWith('local_')) {
+    const q = _OL.loadQueue();
+    const hasQueued = q.some(o => o.type === 'insert_doz_marking' && o._localId === id);
+    if (hasQueued) {
+      localStorage.setItem(_OL.QUEUE, JSON.stringify(q.filter(o => !(o.type === 'insert_doz_marking' && o._localId === id))));
+    }
+    _dozMarkings = _dozMarkings.filter(m => m.id !== id);
+    dozRenderMapLayers();
+    dozRenderDetail();
+    showToast(hasQueued ? '🗑 Zona uklonjena (nikad nije stigla na server)' : '🗑 Zona uklonjena lokalno');
+    return;
+  }
   try {
     const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id);
     if (error) throw error;
