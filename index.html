@@ -4132,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.2';
+const APP_VER = 'v3.8.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -4807,7 +4807,7 @@ async function sbLoadProfile() {
   _updFabVisibility();
 }
 
-function showApp() {
+async function showApp() {
   // Gate odobrenja: neodobren korisnik NE ulazi u app. FAIL-SAFE — blokira samo kad je
   // odobren EKSPLICITNO false (prije primjene migracije kolona je undefined → ne blokira,
   // niko se ne zaključa). Admin uvijek prolazi.
@@ -4816,6 +4816,10 @@ function showApp() {
     authShowPending();
     return;
   }
+  // Ako se na ovom uređaju prijavio DRUGI korisnik od posljednjeg puta — obriši prethodni
+  // lokalni sadržaj (offline karte, KML, granice, tačke...) PRIJE restore poziva ispod,
+  // da ne dođe do curenja podataka između korisnika na dijeljenom uređaju.
+  if (sbUser) await _checkDeviceUserSwitch(sbUser.id);
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
   _setOfflineMode(!navigator.onLine);
@@ -5088,51 +5092,37 @@ async function doLogout() {
   _dozGpsOn = false;
   _dozOdjeli = []; _dozMembers = []; _dozMarkings = []; _dozTracks = [];
   _dozSelId = null; _dozInitDone = false;
-  [_OL.DOZ_ODJELI, _OL.DOZ_MEMBERS, _OL.DOZ_MARKINGS, _OL.DOZ_TRACKS, _OL.DOZ_SEL_ID].forEach(k => localStorage.removeItem(k));
   _demCache = {};
 
   Object.keys(_vlakaSaveTimers).forEach(k => clearTimeout(_vlakaSaveTimers[k]));
   _vlakaSaveTimers = {};
 
-  // Očisti lokalne vlake keš — sprečava prelijevanje vlaka između naloga
-  localStorage.removeItem(LOCAL_VLAKE_KEY);
-  localStorage.removeItem('tvlake_local_vlake_uid');
-  // Očisti keširani profil i per-user podatke — sprečava da offline fast-path
-  // pusti pogrešnog korisnika i da se tuđi keš prikaže novom nalogu
-  [_OL.PROFILE, _OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
-
-  // D2-E: tragovi/mjerenja/foto oznake su ranije preživljavale odjavu — na dijeljenom
-  // tabletu sljedeći korisnik bi vidio tragove/mjerenja/fotke prethodnog naloga na karti.
+  // NAPOMENA: trajno localStorage/OPFS brisanje (offline karte, KML, granice, tačke,
+  // tragovi/mjerenja/fotke, kolege keš...) se NE radi ovdje više — premješteno je u
+  // _wipeAllLocalUserData(), koja se poziva SAMO kad showApp() otkrije da se na ovom
+  // uređaju prijavio DRUGI korisnik (vidi _checkDeviceUserSwitch). In-memory nizovi se
+  // I DALJE resetuju ovdje (bezopasno — restore funkcije ih ponovo pune iz localStorage
+  // na sljedećoj prijavi, bilo istog bilo drugog korisnika; neke restore funkcije imaju
+  // "već učitano" dedup provjeru BAŠ na ove nizove, pa bi bez reseta sloj ostao skinut s
+  // mape a niz i dalje mislio da je "učitan" — vidi _localKmlRestore).
   Object.values(_tragLayers).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
   Object.values(_tragHitLayers).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
   _tragLayers = {}; _tragHitLayers = {}; _tragRegistry = [];
-  localStorage.removeItem(_TRAG_REG_KEY);
 
   _msrRegistry = [];
-  localStorage.removeItem(_MSR_REG_KEY);
 
   _locFotos.forEach(f => { if (f.marker) { try { map.removeLayer(f.marker); } catch(e) {} } });
   _locFotos = [];
-  localStorage.removeItem(_FOTO_KEY);
 
-  // Isti razlog kao gore — lokalno uvezeni KML/granice/tačke su propušteni u D2-E rundi,
-  // pa su i dalje curili između naloga na dijeljenom uređaju.
   kmlLs.forEach(k => { if (k.grp) try { map.removeLayer(k.grp); } catch(e) {} });
   kmlLs = [];
-  localStorage.removeItem(_LOCAL_KML_KEY);
 
   if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} }
   _geojsonLayer = null;
-  // Zadrži unose iz KML-bucket-a (dijeljeno, server) — obriši samo lokalno uvezene (_fromGeojson)
   graniceOdjeli = graniceOdjeli.filter(o => !o._fromGeojson);
-  localStorage.removeItem(_GEOJSON_LS_KEY);
 
   _tacke.forEach(t => { if (t.marker) try { map.removeLayer(t.marker); } catch(e) {} });
   _tacke = [];
-  localStorage.removeItem(_TACKE_KEY);
-
-  localStorage.removeItem(_KVC_KEY);
-  localStorage.removeItem('tvlake_kolege');
 
   dnevniLog = []; kolege = [];
 
@@ -5147,6 +5137,42 @@ async function doLogout() {
     document.getElementById('auth-pin').value = '';
     document.getElementById('auth-zapamti').checked = false;
   }
+}
+
+// Trajno briše SVE lokalno pohranjene per-korisnik podatke (offline karte, KML, granice,
+// tačke, tragovi/mjerenja/fotke, kolege keš...). Poziva se SAMO iz _checkDeviceUserSwitch
+// kad se otkrije da se na uređaju prijavio DRUGI korisnik — NIKAD na običnu odjavu (vidi
+// napomenu u doLogout).
+async function _wipeAllLocalUserData() {
+  await sqlmapClearAll();  // offline karte — OPFS/IndexedDB, mogu biti više GB
+  localStorage.removeItem(LOCAL_VLAKE_KEY);
+  localStorage.removeItem('tvlake_local_vlake_uid');
+  // _OL.PROFILE se NAMJERNO ne briše — showApp() ovo zove NAKON sbLoadProfile(), koji je već
+  // upisao svjež profil TRENUTNOG (novog) korisnika; brisanje bi obrisalo baš taj zapis.
+  [_OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
+  [_OL.DOZ_ODJELI, _OL.DOZ_MEMBERS, _OL.DOZ_MARKINGS, _OL.DOZ_TRACKS, _OL.DOZ_SEL_ID].forEach(k => localStorage.removeItem(k));
+  localStorage.removeItem(_TRAG_REG_KEY);
+  localStorage.removeItem(_MSR_REG_KEY);
+  localStorage.removeItem(_FOTO_KEY);
+  localStorage.removeItem(_LOCAL_KML_KEY);
+  localStorage.removeItem(_GEOJSON_LS_KEY);
+  localStorage.removeItem(_TACKE_KEY);
+  localStorage.removeItem(_KVC_KEY);
+  localStorage.removeItem('tvlake_kolege');
+}
+
+const _DEVICE_LAST_USER_KEY = 'tvlake_device_last_user';
+// Detektuje promjenu korisnika NA OVOM UREĐAJU. Prvi login ikad (ili isti korisnik kao
+// prošli put) → ne dira ništa. Drugačiji korisnik → puno brisanje PRIJE nego showApp()
+// pokrene restore pozive (sprječava trku brisanje-vs-čitanje istih podataka).
+async function _checkDeviceUserSwitch(uid) {
+  if (!uid) return;
+  const last = localStorage.getItem(_DEVICE_LAST_USER_KEY);
+  if (last && last !== uid) {
+    await _wipeAllLocalUserData();
+    showToast('🔄 Drugi korisnik na ovom uređaju — lokalni podaci prethodnog naloga obrisani');
+  }
+  localStorage.setItem(_DEVICE_LAST_USER_KEY, uid);
 }
 
 // --- Admin (legacy stub — tab se koristi umjesto modala) ---
