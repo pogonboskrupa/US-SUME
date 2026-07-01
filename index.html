@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.7.0';
+const APP_VER = 'v3.7.1';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -11980,7 +11980,10 @@ const GPS_GAP_WARN_MS   = 60000;
 
 function _gpsMedN()    { return _forestMode ? 5 : 3; }
 function _gpsDistMul() { return _forestMode ? 0.5 : 0.35; }
-function _gpsMaxTurn() { return _forestMode ? 70 : 90; }
+// D3-S: krakovi vlaka skreću i pod 90°+ — prag mora biti IZNAD pravog ugla (uz GPS
+// šum ~90° čita se do ~105°) da se legitiman oštar okret ne odbaci kao multipath.
+// Odbacuju se samo near-reversali (>prag, tj. skoro-U-okret = multipath potpis).
+function _gpsMaxTurn() { return _forestMode ? 105 : 115; }
 function _gpsKfNoise() { return _forestMode ? 0.5 : 1.0; }
 
 // ─── KALMAN FILTER ───────────────────────────────────────────────────────────────────
@@ -12202,13 +12205,17 @@ function onP(p) {
     }
 
     // 8. BEARING CHECK — nagla promjena smjera + mali pomak = residualni multipath
+    // D3-S: distanca-gate snižena 15→8m — stvaran oštar okret (krak) pri kojem operater
+    // pređe >8m u novom smjeru se UVIJEK zadrži; odbacuje se samo jitter-blizu (<8m)
+    // near-reversal (multipath potpis). Median pre-filter + Kalman i dalje čuvaju od
+    // izolovanih spikeova, pa je ovaj gate tek tercijarna odbrana.
     if (v.pts.length >= 2) {
       const p2 = v.pts[v.pts.length - 1];
       const p1 = v.pts[v.pts.length - 2];
       const prevBearing = _gpsBearing(p1.la, p1.lo, p2.la, p2.lo);
       const newBearing  = _gpsBearing(p2.la, p2.lo, sla, slo);
       const turnDeg = Math.abs(((newBearing - prevBearing + 540) % 360) - 180);
-      if (turnDeg > _gpsMaxTurn() && distM < 15) return;
+      if (turnDeg > _gpsMaxTurn() && distM < 8) return;
     }
   }
 
