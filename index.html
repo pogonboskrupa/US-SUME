@@ -3027,6 +3027,9 @@ select:focus { outline:none; border-color:#3b82f6; }
         </button>
         <div class="auth-or-sep"><span class="auth-or-txt">ILI</span></div>
         <button class="auth-btn-secondary" onclick="authShowReg()">Registracija novog korisnika</button>
+        <div style="text-align:center;margin-top:10px;">
+          <a href="#" onclick="_zaboravljenPin(event)" style="color:#64748b;font-size:12px;text-decoration:none;">Zaboravljen PIN?</a>
+        </div>
         <div class="auth-err" id="auth-err"></div>
       </div>
 
@@ -3081,6 +3084,20 @@ select:focus { outline:none; border-color:#3b82f6; }
         </button>
         <button class="auth-btn-secondary" style="margin-top:8px;" onclick="authShowLogin()">← Nazad na prijavu</button>
         <div class="auth-err" id="reg-err"></div>
+      </div>
+
+      <!-- ČEKANJE ODOBRENJA (admin gate) -->
+      <div id="auth-pending-form" class="auth-form-body" style="display:none;text-align:center;">
+        <div style="font-size:44px;margin:6px 0 10px;">⏳</div>
+        <div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Čeka se odobrenje</div>
+        <div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:16px;">
+          Registracija je zaprimljena. Administrator treba odobriti Vaš pristup prije nego
+          možete koristiti aplikaciju. Pokušajte ponovo kada Vas admin odobri.
+        </div>
+        <button class="auth-btn-primary" onclick="_authRecheck()">
+          <div class="auth-btn-primary-inner">🔄 Provjeri ponovo</div>
+        </button>
+        <button class="auth-btn-secondary" style="margin-top:8px;" onclick="doLogout()">Odjava</button>
       </div>
 
       <div class="auth-card-foot" style="flex-direction:column;align-items:center;gap:4px;">
@@ -4106,7 +4123,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.7.5';
+const APP_VER = 'v3.8.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -4782,6 +4799,14 @@ async function sbLoadProfile() {
 }
 
 function showApp() {
+  // Gate odobrenja: neodobren korisnik NE ulazi u app. FAIL-SAFE — blokira samo kad je
+  // odobren EKSPLICITNO false (prije primjene migracije kolona je undefined → ne blokira,
+  // niko se ne zaključa). Admin uvijek prolazi.
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin) {
+    _showAuthScreen();
+    authShowPending();
+    return;
+  }
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('wrapper').style.display = 'flex';
   _setOfflineMode(!navigator.onLine);
@@ -4809,10 +4834,39 @@ function showApp() {
 }
 
 // --- Auth form helpers ---
+function _authHidePending() {
+  const p = document.getElementById('auth-pending-form');
+  if (p) p.style.display = 'none';
+}
+function authShowPending() {
+  document.getElementById('auth-login-form').style.display = 'none';
+  document.getElementById('auth-reg-form').style.display = 'none';
+  const err = document.getElementById('auth-err'); if (err) err.style.display = 'none';
+  const p = document.getElementById('auth-pending-form');
+  if (p) p.style.display = 'block';
+}
+// Nakon što admin odobri — korisnik klikne "Provjeri ponovo" i uđe bez ponovne prijave.
+async function _authRecheck() {
+  if (sbUser && navigator.onLine) {
+    try { await sbLoadProfile(); } catch(e) {}
+    showApp();  // gate ponovo provjerava sbProfile.odobren
+  } else if (sbUser) {
+    showApp();
+  } else {
+    authShowLogin();
+  }
+}
+// Zaboravljen PIN — neautentifikovan korisnik se ne može dokazati, pa upućujemo na admina.
+function _zaboravljenPin(e) {
+  if (e) e.preventDefault();
+  _dlgConfirm('Za reset PIN-a obratite se administratoru — recite mu svoje ime i prezime, pa će Vam postaviti novi PIN.',
+    { title: '🔑 Zaboravljen PIN', okLabel: 'U redu' });
+}
 function authShowLogin() {
   document.getElementById('auth-login-form').style.display = 'block';
   document.getElementById('auth-reg-form').style.display = 'none';
   document.getElementById('auth-err').style.display = 'none';
+  _authHidePending();
   // Popuni polja ako su zapamćeni
   const saved = _loadSavedUser();
   if (saved) {
@@ -4829,6 +4883,7 @@ function authShowReg() {
   document.getElementById('auth-login-form').style.display = 'none';
   document.getElementById('auth-reg-form').style.display = 'block';
   document.getElementById('reg-err').style.display = 'none';
+  _authHidePending();
 }
 
 function showAuthErr(msg, isReg) {
@@ -4946,13 +5001,37 @@ async function doRegister() {
 
   sbUser = data.user;
   await sbLoadProfile();
-  showApp();
+  // Novi korisnik NE ulazi odmah — čeka admin odobrenje (odobren=FALSE po defaultu).
+  // showApp() bi ionako gate-ovao, ali eksplicitno pokazujemo pending s porukom.
+  // (Ako migracija nije primijenjena, odobren je undefined → showApp gate propušta → app.)
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin) authShowPending();
+  else showApp();
   } finally {
     _authInFlight = false;
   }
 }
 
 // --- Logout ---
+// --- Self-service: promijeni vlastiti PIN (ulogovan korisnik) ---
+// Ne treba RPC — sesija autorizuje sb.auth.updateUser; radi i bez migracije.
+async function promijeniPin() {
+  if (!sbUser) { showToast('Prvo se prijavite'); return; }
+  if (!navigator.onLine) { showToast('⚠ Promjena PIN-a traži internet'); return; }
+  const p1 = await _dlgPrompt('Novi PIN (4–6 cifara)', '', { title: '🔑 Promijeni PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Dalje' });
+  if (p1 === null) return;
+  const pin = String(p1).trim();
+  if (!/^\d{4,6}$/.test(pin)) { showToast('PIN mora biti 4–6 cifara'); return; }
+  const p2 = await _dlgPrompt('Ponovite novi PIN', '', { title: '🔑 Potvrdi PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Sačuvaj' });
+  if (p2 === null) return;
+  if (String(p2).trim() !== pin) { showToast('PIN-ovi se ne poklapaju'); return; }
+  const { error } = await sb.auth.updateUser({ password: pin.padEnd(6, '0') });
+  if (error) { showToast('Greška: ' + error.message); return; }
+  // Ako je "zapamti me" bio uključen, ažuriraj sačuvani PIN da auto-login radi
+  const saved = _loadSavedUser();
+  if (saved) { saved.pin = pin; localStorage.setItem(_SAVED_USER_KEY, JSON.stringify(saved)); }
+  showToast('✅ PIN promijenjen');
+}
+
 async function doLogout() {
   // Pokušaj isporučiti zaostale offline operacije prije odjave (da se ne
   // pomiješaju sa sljedećim nalogom na istom uređaju)
@@ -5074,16 +5153,35 @@ async function adminLoadUsers() {
         const sumOpts = _SUMARIJE.map(s =>
           `<option value="${_escHtml(s)}"${s===u.sumarija?' selected':''}>${_escHtml(s)}</option>`
         ).join('');
+        // odobren: true/false/undefined (undefined = migracija još nije primijenjena)
+        const isPending  = u.odobren === false;
+        const isApproved = u.odobren === true;
+        const cardBorder = isPending ? '#d97706' : '#334155';
+        const statusChip = isPending
+          ? ' <span style="color:#fbbf24;font-size:10px;background:rgba(217,119,6,0.18);padding:1px 6px;border-radius:4px;">⏳ ČEKA ODOBRENJE</span>'
+          : isApproved ? ' <span style="color:#4ade80;font-size:10px;">✓ odobren</span>' : '';
+        const approveBtn = isPending
+          ? `<button onclick="adminSetApproved('${uid}',true,'${nm}')"
+               style="flex:1;padding:7px;background:#14532d;border:1px solid #16a34a;border-radius:6px;color:#4ade80;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">✓ Odobri</button>`
+          : isApproved
+          ? `<button onclick="adminSetApproved('${uid}',false,'${nm}')"
+               style="flex:1;padding:7px;background:#3a1e1e;border:1px solid #7f5539;border-radius:6px;color:#fbbf24;font-size:12px;cursor:pointer;white-space:nowrap;">⊘ Opozovi</button>`
+          : '';
         return `
-        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="background:#1e293b;border:1px solid ${cardBorder};border-radius:8px;padding:10px 12px;margin-bottom:8px;">
           <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px;">
-            ${nm}${u.is_admin ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>' : ''}
+            ${nm}${u.is_admin ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>' : statusChip}
           </div>
           <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin?'0':'8px'};">
             ${u.created_at ? fmtDateShort(u.created_at) : '—'}
             ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
           </div>
           ${!u.is_admin ? `
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            ${approveBtn}
+            <button onclick="adminResetPin('${uid}','${nm}')"
+              style="${approveBtn?'':'flex:1;'}padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;">🔑 Reset PIN</button>
+          </div>
           <div style="display:flex;gap:6px;align-items:center;">
             <select id="admin-sum-sel-${uid}"
               style="flex:1;min-width:0;padding:6px 8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;">
@@ -5126,6 +5224,36 @@ async function adminDeleteUser(userId, name) {
   if (error) { showToast('Greška pri brisanju: ' + error.message); return; }
   showToast(`Korisnik "${name}" obrisan`);
   adminLoadUsers();
+}
+
+// --- Admin: odobri / opozovi pristup ---
+async function adminSetApproved(userId, approved, name) {
+  if (!sbProfile?.is_admin) return;
+  if (!approved && !await _dlgConfirm(`Opozvati pristup korisniku "${name}"? Neće moći koristiti aplikaciju dok ga ponovo ne odobriš.`, { danger: true })) return;
+  const { error } = await sb.rpc('admin_set_approved', { p_user_id: userId, p_odobren: approved });
+  if (error) {
+    const missing = /function .*does not exist|schema cache|PGRST202/i.test(error.message || '') || error.code === 'PGRST202';
+    showToast(missing ? '⚠ Primijeni migraciju 20260701 na Supabase (funkcija ne postoji)' : 'Greška: ' + error.message);
+    return;
+  }
+  showToast(approved ? `✅ "${name}" odobren` : `⊘ Pristup opozvan: "${name}"`);
+  adminLoadUsers();
+}
+
+// --- Admin: reset PIN-a (zaboravljen PIN) ---
+async function adminResetPin(userId, name) {
+  if (!sbProfile?.is_admin) return;
+  const pin = await _dlgPrompt(`Novi PIN za "${name}" (4–6 cifara). Saopšti ga korisniku.`, '', { title: '🔑 Reset PIN', inputType: 'text', inputMode: 'numeric', okLabel: 'Postavi' });
+  if (pin === null) return;
+  const p = String(pin).trim();
+  if (!/^\d{4,6}$/.test(p)) { showToast('PIN mora biti 4–6 cifara'); return; }
+  const { error } = await sb.rpc('admin_reset_pin', { p_user_id: userId, p_pin: p });
+  if (error) {
+    const missing = /function .*does not exist|schema cache|PGRST202/i.test(error.message || '') || error.code === 'PGRST202';
+    showToast(missing ? '⚠ Primijeni migraciju 20260701 na Supabase (funkcija ne postoji)' : 'Greška: ' + error.message);
+    return;
+  }
+  await _dlgConfirm(`Novi PIN za "${name}" je: ${p}\n\nSaopšti ga korisniku — prijaviće se ovim PIN-om.`, { title: '✅ PIN resetovan', okLabel: 'U redu' });
 }
 
 // =====================================================================
@@ -26552,6 +26680,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()">🔑 Promijeni PIN</div>
   <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
   <div style="color:#475569;font-size:9px;text-align:center;padding:6px 0 2px;letter-spacing:0.05em;" id="menu-app-ver"></div>
 </div>
