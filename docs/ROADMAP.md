@@ -11,19 +11,21 @@ Status legenda: ⬜ nije početo · 🔄 u toku · ✅ završeno
 
 ---
 
-## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  ✅
+## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  🔄
 
-Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
+Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika. Napomena: header je
+ranije preuranjeno označen ✅ — u stvarnosti je detaljno bug-hunting prošao samo offline
+SQLite/MBTiles render pipeline (3 od 7 sekvenci); ostale 4 nikad nisu dobile posvećenu rundu.
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Online tile slojevi (Topo/Satelit/Karta/Google) | `makeCachedTileLayer` (~L8862), `TL` (~L9055), `_tileBmpCache` | ⬜ |
-| Offline SQLite/OPFS čitač | `MiniSqlite` (~L20291), worker `_sqlWCall`, `queryTile`, `detectFmt`, `readMeta` | ⬜ |
-| Renderiranje pločica | `_sqlmapCreateLayerW/Main`, `_wTileScheduleCall`, `_sqlDrawParentPlaceholder`, `_sqlPrewarm`, `_drawTileBytesC` | ⬜ |
-| Upravljanje offline kartama | `sqlmapLoadFile`, `sqlmapRestoreAll`, `sqlmapToggle`, `sqlmapSetOpacity`, `sqlmapRemove`, `sqlmapShowDebug` | ⬜ |
-| Download online karte za offline | `showOfflineModal` (~L19736) | ⬜ |
-| Teren overlay (visina/nagib/hillshade) | `_elevHtml`, elevation/slope tile čitanje (~L9145–9217) | ⬜ |
-| GeoJSON granice + skala + prebacivanje sloja | `_geojson*` (~L22332), `setLayerSqlite`, `_updMapScale` | ⬜ |
+| Online tile slojevi (Topo/Satelit/Karta/Google) | `makeCachedTileLayer` (~L8862), `TL` (~L9055), `_tileBmpCache` | ⬜ nikad analizirano (odvojen engine od offline SQLite bugova) |
+| Offline SQLite/OPFS čitač | `MiniSqlite` (~L20291), worker `_sqlWCall`, `queryTile`, `detectFmt`, `readMeta` | ✅ (D1-13…D1-30, D2-2…D2-7, v3.4.4–v3.6.2) |
+| Renderiranje pločica | `_sqlmapCreateLayerW/Main`, `_wTileScheduleCall`, `_sqlDrawParentPlaceholder`, `_sqlPrewarm`, `_drawTileBytesC` | ✅ (canvas→img fix, v3.6.2) |
+| Upravljanje offline kartama | `sqlmapLoadFile`, `sqlmapRestoreAll`, `sqlmapToggle`, `sqlmapSetOpacity`, `sqlmapRemove`, `sqlmapShowDebug` | ✅ (UČITAJ KARTU tab, v3.4.5) |
+| Download online karte za offline | `showOfflineModal` (~L19736) | ⬜ nikad analizirano |
+| Teren overlay (visina/nagib/hillshade) | `_elevHtml`, elevation/slope tile čitanje (~L9145–9217) | ⬜ nikad analizirano |
+| GeoJSON granice + skala + prebacivanje sloja | `_geojson*` (~L22332), `setLayerSqlite`, `_updMapScale` | ⬜ nikad analizirano |
 
 ---
 
@@ -45,12 +47,12 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | 🔄 (D3-D/E ✅ v3.6.5) |
+| Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | ✅ (D3-D/E v3.6.5) |
 | GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | ✅ (D3-A v3.6.5; D3-B/C v3.6.6) |
-| UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ⬜ |
-| Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ⬜ |
-| Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | 🔄 (D3-A ✅ v3.6.5) |
-| Nagib u stvarnom vremenu | `_calcRecentSlope` | ⬜ |
+| UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ⬜ nikad analizirano |
+| Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ⬜ nikad analizirano (samo uzgredna napomena u D3 istrazi) |
+| Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | ✅ (D3-A/B v3.6.5-6) |
+| Nagib u stvarnom vremenu | `_calcRecentSlope` | ⬜ nikad analizirano (samo uzgredna napomena, nije bug) |
 
 ---
 
