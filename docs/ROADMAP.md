@@ -415,3 +415,29 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
   bez upozorenja, ravna linija kroz neopisani teren. **Fix (v3.6.6):** `_lastPtAcceptedAt`
   (preživljava restart, za razliku od `_lastRecTime`) mjeri pravi prekid; >60s → toast upozorenje
   + `gap:true` oznaka na tački (aditivno, ne mijenja GPX export/`calcL`/server payload). ✅ (v3.6.6)
+
+## DIO 4 — nalazi (analiza 2026-07-01)
+
+- **D4-A — XSS preko uvezenog KML/GeoJSON/.dbf sadržaja (SIGURNOSNI, HIGH).**
+  `_kmlPopupHtml` je umetao sirov `<description>` u popup kad "izgleda kao HTML" (regex heuristika,
+  aktivno permisivna); `pkml`/`pkmlStyled` (KML uvoz) i shapefile/GeoJSON odjel-uvoz su vezivali
+  sirov `<name>`/atribut direktno na `bindTooltip`/`divIcon html` bez escape-a — Leaflet oboje
+  ubacuje preko `innerHTML`. Dijeljena/preuzeta `.kml`/`.shp` datoteka s npr.
+  `<img src=x onerror=...>` u opisu ili nazivu izvršava proizvoljni JS u originu aplikacije
+  (krađa Supabase auth tokena/sesije). **Fix (v3.6.7):** `_kmlPopupHtml` uvijek `_escHtml(desc)`
+  (uklonjena "isHtml" grana, novi red → `<br>` za čitljivost); svi `bindTooltip(name,...)` pozivi
+  u `pkml`/`pkmlStyled`/shapefile-uvozu sad `_escHtml(name)`; `_kmlLabelMarker` escape-uje `text`
+  interno (štiti oba pozivaoca). ✅ (v3.6.7)
+- **D4-C — `sbFlushTrag`/`sbDeleteTrag` imaju isti duplicate-save i resurrection bug kao vlake
+  prije D3-D/D3-E fix-a.** Nema in-flight guard-a (paralelni pozivi oba INSERT-uju prije nego
+  prvi dobije `sbId`) niti `_deleted` zastavice (brisanje traga prije prvog sync-a ne sprječava
+  in-flight insert da ga ipak kreira na serveru). **Fix (v3.6.7):** identičan `_flushing`/
+  `_flushPending`/`_deleted` pattern prenesen iz `sbFlushVlaka`/`sbDeleteVlaka` na
+  `sbFlushTrag`/`_sbFlushTragImpl`/`sbDeleteTrag`. ✅ (v3.6.7)
+- **D4-B (Doznaka markice — ghost/resurrection, gore nego kod vlake jer `insert_doz_marking`
+  uopće ne hvata server ID), D4-D (stale-odjel render race), D4-E (wake-lock dijeljen između
+  glavnog snimanja i Doznaka GPS-a), D4-F (nema in-flight guard na `dozConfirmSave`),
+  D4-G (tačke mjerenja cure između tab/mode prebacivanja), D4-H (`gap:true` oznaka iz v3.6.6 se
+  nigdje ne čita — profil visine/nagib tiho prikazuje teleportovani skok kao glatku promjenu),
+  D4-I (`dozSetStatus` nema offline queue — status promjena offline se tiho gubi) — ostaju za
+  sljedeću rundu.**

@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.6';
+const APP_VER = 'v3.6.7';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -6628,6 +6628,27 @@ async function sbDeleteVlaka(v) {
 // ─── TRAGOVI SERVER SYNC ───────────────────────────────────────────────────────
 
 async function sbFlushTrag(t) {
+  if (!t || t._deleted) return;
+  // Isti guard kao sbFlushVlaka (D3-D pattern) — spriječi da dva paralelna poziva
+  // za isti trag oba uđu u INSERT granu prije nego prvi dobije sbId (duplicate row).
+  if (t._flushing) {
+    t._flushPending = true;
+    await t._flushing.catch(() => {});
+    return;
+  }
+  t._flushing = _sbFlushTragImpl(t);
+  try {
+    await t._flushing;
+  } finally {
+    t._flushing = null;
+    if (t._flushPending) {
+      t._flushPending = false;
+      if (!t._deleted) sbFlushTrag(t);
+    }
+  }
+}
+
+async function _sbFlushTragImpl(t) {
   if (!sbUser || !sbProfile || !t?.pts?.length) return;
   _tragRegSave();
   const kmVal = (t.pts.length > 1)
@@ -6658,6 +6679,9 @@ async function sbFlushTrag(t) {
 }
 
 async function sbDeleteTrag(t) {
+  if (!t) return;
+  t._deleted = true;  // spriječi budući sbFlushTrag da ovaj trag ipak insert-uje (D3-E pattern)
+  if (t._flushing) { try { await t._flushing; } catch(e) {} }
   if (!t?.sbId || !sbUser) return;
   try {
     const { error } = await sb.from('tragovi').delete().eq('id', t.sbId);
@@ -14867,7 +14891,7 @@ function pkml(doc, col, op) {
         const l = L.polygon(cs, {color:col, weight:2, opacity:op, fillOpacity:0});
         l._kmlIsPolygon = true;
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
-        if (name) l.bindTooltip(name, {sticky:true});
+        if (name) l.bindTooltip(_escHtml(name), {sticky:true});
         _bindKmlPopup(l);
         l.addTo(g);
       }
@@ -14877,7 +14901,7 @@ function pkml(doc, col, op) {
       if (cs.length > 1) {
         const l = L.polyline(cs, {color:col, weight:2, dashArray:'6,4', opacity:op});
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
-        if (name) l.bindTooltip(name, {sticky:true});
+        if (name) l.bindTooltip(_escHtml(name), {sticky:true});
         _bindKmlPopup(l);
         l.addTo(g);
       }
@@ -14888,7 +14912,7 @@ function pkml(doc, col, op) {
         const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
         m._kmlIsPoint = true;
         m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
-        if (name) m.bindTooltip(name);
+        if (name) m.bindTooltip(_escHtml(name));
         _bindKmlPopup(m);
         m.addTo(g);
       }
@@ -14961,9 +14985,10 @@ function _kmlPopupHtml(layer, uid) {
 
   let descHtml = '';
   if (desc) {
-    const isHtml = /<[a-z][\s\S]*>/i.test(desc);
+    // Uvijek escape-uj — opis dolazi iz KML fajla korisnika/kolege (uvoz/dijeljenje),
+    // nikad ne umeći sirov HTML (XSS preko <description>). Novi red → <br> radi čitljivosti.
     descHtml = `<div style="margin-top:6px;font-size:12px;color:#cbd5e1;line-height:1.4;max-height:120px;overflow-y:auto;">
-      ${isHtml ? desc : _escHtml(desc)}
+      ${_escHtml(desc).replace(/\n/g, '<br>')}
     </div>`;
   }
 
@@ -15163,7 +15188,9 @@ function _coordsCentroid(cs) {
 // Kreira L.marker sa permanentnom labelom na datoj poziciji
 function _kmlLabelMarker(pos, text) {
   return L.marker(pos, {
-    icon: L.divIcon({ className: 'kml-label', html: `<div>${text}</div>`, iconSize: null, iconAnchor: [0, 0] }),
+    // _escHtml ovdje (ne na mjestu poziva) — text dolazi iz uvezenog KML/GeoJSON/.dbf
+    // fajla, štiti oba pozivaoca odjednom (XSS preko <name>/atributa).
+    icon: L.divIcon({ className: 'kml-label', html: `<div>${_escHtml(text)}</div>`, iconSize: null, iconAnchor: [0, 0] }),
     interactive: false, zIndexOffset: 100
   });
 }
@@ -15184,7 +15211,7 @@ function pkmlStyled(doc, opts) {
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         l.addTo(g);
         if (name) {
-          l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+          l.bindTooltip(_escHtml(name), { sticky: true, opacity: 0.85 });
           _kmlLabelMarker(_coordsCentroid(cs), name).addTo(g);
         }
         _bindKmlPopup(l);
@@ -15195,7 +15222,7 @@ function pkmlStyled(doc, opts) {
       if (cs.length > 1) {
         const l = L.polyline(cs, opts);
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
-        if (name) l.bindTooltip(name, { sticky: true, opacity: 0.85 });
+        if (name) l.bindTooltip(_escHtml(name), { sticky: true, opacity: 0.85 });
         _bindKmlPopup(l);
         l.addTo(g);
       }
@@ -15206,7 +15233,7 @@ function pkmlStyled(doc, opts) {
         const m = L.circleMarker(cs[0], { radius: 4, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
         m._kmlIsPoint = true;
         m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
-        if (name) m.bindTooltip(name, { sticky: true });
+        if (name) m.bindTooltip(_escHtml(name), { sticky: true });
         _bindKmlPopup(m);
         m.addTo(g);
       }
@@ -24096,7 +24123,7 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths)
         style: () => styleOpts,
         pointToLayer: (_, ll) => L.circleMarker(ll, { radius: 4, ...styleOpts }),
       });
-      if (nm) layer.bindTooltip(String(nm), { sticky: true, opacity: 0.9 });
+      if (nm) layer.bindTooltip(_escHtml(String(nm)), { sticky: true, opacity: 0.9 });
       layer.addTo(grp);
       // Permanentna labela na centru poligona
       if (nm && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
