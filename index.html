@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="max-age=86400">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1080,7 +1080,11 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 /* TABS */
 #tab-bar {
-  display:flex; gap:2px; padding:0 8px;
+  display:flex; gap:2px;
+  /* iOS: env(safe-area-inset-top) gura traku ispod notch-a/Dynamic Island-a
+     (status bar je black-translucent → sadržaj bi inače išao pod vrh). Na
+     Androidu/desktopu je inset 0 → nema promjene. */
+  padding:env(safe-area-inset-top, 0px) 8px 0;
   background:#16213e; border-bottom:2px solid #0f3460;
   flex-shrink:0; align-items:center;
   overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
@@ -4101,7 +4105,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.7.1';
+const APP_VER = 'v3.7.2';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -11234,9 +11238,26 @@ function _updWakeLockIcon() {
   if (el) el.style.display = (recOn && _wakeLock) ? '' : 'none';
 }
 
+// iOS (Safari/PWA) ne snima GPS u pozadini — upozori korisnika JEDNOM pri prvom snimanju.
+function _iosBgRecWarn() {
+  if (typeof AndroidGps !== 'undefined') return;  // Android native wrapper — pozadina radi
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!isIOS) return;
+  if (localStorage.getItem('tvlake_ios_bg_warned')) return;
+  localStorage.setItem('tvlake_ios_bg_warned', '1');
+  _dlgConfirm(
+    'Na iPhone-u iOS zaustavlja snimanje kad aplikacija ode u pozadinu. Dok snimaš vlaku, '
+    + 'DRŽI aplikaciju otvorenu i ekran upaljen — ne prebacuj na druge aplikacije i ne gasi '
+    + 'ekran, inače se GPS trag prekida.',
+    { title: '⚠ iPhone — snimanje', okLabel: 'Razumijem' }
+  );
+}
+
 function togRec() {
   if (!recOn) {
     if (actI === null) { showToast('⚠ Prvo dodaj vlaku!'); return; }
+    _iosBgRecWarn();
     _clearNastaviMarkers();
     recOn = true; recPaused = false; _recParentIdx = null;
     _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
