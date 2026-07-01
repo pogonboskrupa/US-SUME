@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.9';
+const APP_VER = 'v3.7.0';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -11283,6 +11283,7 @@ function stopRec() {
   recOn = false; recPaused = false; _recParentIdx = null;
   _setFreeView(false);
   _kfReset(); _lastRecTime = 0;
+  if (_precizActive) _precizReset();  // D3-Q: ne ostavljaj dugme zaglavljeno na "n/10"
   if (!_dozGpsOn) _releaseWakeLock();  // D4-E: ne gasi ekran ako Doznaka GPS i dalje radi
   _stopBgAudio();
   _stopGpsWatchdog();
@@ -11329,6 +11330,7 @@ function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
   _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
+  if (recPaused && _precizActive) _precizReset();  // D3-Q: ne ostavljaj dugme zaglavljeno na "n/10"
   if (recPaused) {
     if (_recSegStart > 0) { _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
     _dayWorkEnd = new Date().toISOString();
@@ -11560,10 +11562,15 @@ function _updBl2() {
 function _calcRecentSlope(pts) {
   if (pts.length < 2) return null;
   const last = pts[pts.length - 1];
+  // D3-P: zadnja tačka nakon GPS-prekida je teleport, ne stvarni teren — sačekaj
+  // par novih tačaka prije nego ponovo prikažemo nagib.
+  if (last.gap) return null;
   if (!last.al) return null;
-  // Traži tačku ~30m unazad za stabilniji nagib (GPS alt je bučan)
+  // Traži tačku ~30m unazad za stabilniji nagib (GPS alt je bučan). Zaustavi se
+  // (bez rezultata) ako put nazad prelazi preko GPS-prekid segmenta.
   let i = pts.length - 2, cumDist = 0;
   while (i > 0) {
+    if (pts[i + 1].gap) return null;
     cumDist += dst(pts[i].la, pts[i].lo, pts[i + 1].la, pts[i + 1].lo);
     if (cumDist >= 30) break;
     i--;
@@ -12245,6 +12252,12 @@ function _restartGpsWatch(reason) {
   _lastGpsRestartAt = now;
   if (wid) { navigator.geolocation.clearWatch(wid); wid = null; }
   _kfReset(); _lastRecTime = 0;
+  // D3-O: GPS restart usred prikupljanja precizne tačke bi tiho miješao fikseve
+  // prije/poslije restarta u prosjek bez upozorenja — otkaži umjesto toga.
+  if (_precizActive) {
+    _precizReset();
+    showToast('⚠ GPS prekid usred precizne tačke — pokušaj ponovo');
+  }
   wid = navigator.geolocation.watchPosition(onP, onPE, {
     enableHighAccuracy: true, maximumAge: 0, timeout: 20000
   });
@@ -12300,6 +12313,7 @@ function _stopSWHeartbeat() {
 }
 
 // ── SW NOTIFIKACIJA — Foreground Service ekvivalent ─────────────────────────
+let _lastRecNotifAt = 0;  // D3-R: vremenski prag da notifikacija ne kasni u rijetkom terenu
 function _startRecNotification() {
   const v = actI !== null ? vlake[actI] : null;
   const nm = v ? v.nm : '';
@@ -13244,7 +13258,14 @@ function updBan() {
     document.getElementById('rec-stats').textContent = `${fmtL(calcL(v.pts))} · ${v.pts.length} tač.`;
     const lenEl = document.getElementById('rsb-len');
     if (lenEl) lenEl.textContent = fmtL(calcL(v.pts));
-    if (v.pts.length % 10 === 0) _startRecNotification();
+    _updSlope();  // D3-N: "nagib u realnom vremenu" se ranije osvježavao samo na pauzi/nastavku
+    // D3-R: notifikacija se ranije osvježavala samo svakih 10 PRIHVAĆENIH tačaka —
+    // u rijetkom terenu (filteri odbace većinu fikseva) tekst je znao kasniti minutama.
+    // Dodatni vremenski prag garantuje osvježenje bar svakih ~20s.
+    if (v.pts.length % 10 === 0 || Date.now() - _lastRecNotifAt > 20000) {
+      _startRecNotification();
+      _lastRecNotifAt = Date.now();
+    }
   }
   if (activeTool === 'addline') _updDrawStats();
 }
@@ -23122,14 +23143,20 @@ function updateOfflineEstimate() {
   if (n > 50000) document.getElementById('offline-estimate').innerHTML += `<br><span style="color:#f87171;">Previše tile-ova — smanjite zoom ili područje</span>`;
 }
 
+const _OFFLINE_DL_INCOMPLETE_KEY = 'tvlake_offline_dl_incomplete';
 async function showCacheInfo() {
   if (!('caches' in window)) return;
   const cache = await caches.open(TILE_CACHE_NAME);
   const keys = await cache.keys();
-  document.getElementById('offline-cache-info').innerHTML =
-    keys.length > 0
-      ? `💾 U cache-u: <b style="color:#4ade80">${keys.length.toLocaleString()}</b> tile-ova · <a href="#" onclick="clearTileCache(event)" style="color:#f87171;">Obriši cache</a>`
-      : `💾 Cache je prazan`;
+  let html = keys.length > 0
+    ? `💾 U cache-u: <b style="color:#4ade80">${keys.length.toLocaleString()}</b> tile-ova · <a href="#" onclick="clearTileCache(event)" style="color:#f87171;">Obriši cache</a>`
+    : `💾 Cache je prazan`;
+  // D1-A: prijavi ako je prethodno preuzimanje prekinuto (aplikacija ubijena/zatvorena
+  // usred download-a) — korisnik inače nema indikaciju da region nije potpun.
+  if (localStorage.getItem(_OFFLINE_DL_INCOMPLETE_KEY)) {
+    html += `<br><span style="color:#fbbf24;">⚠ Prethodno preuzimanje nije završeno — pokreni ponovo da dopuniš.</span>`;
+  }
+  document.getElementById('offline-cache-info').innerHTML = html;
 }
 
 async function clearTileCache(e) {
@@ -23140,13 +23167,18 @@ async function clearTileCache(e) {
 }
 
 let offlineAbort = false;
+let _offlineDlInFlight = false;
 async function startOfflineDownload() {
+  // D1-A: spriječi konkurentno preuzimanje (dupli tap / ponovno otvoren modal) —
+  // dva paralelna prolaza bi trošila mrežu/bateriju i mutirala isti progress bar.
+  if (_offlineDlInFlight) { showToast('⏳ Preuzimanje je već u toku'); return; }
   if (!('caches' in window)) { showToast('⚠ Vaš browser ne podržava Cache API.'); return; }
   const bounds = getOfflineBounds();
   const zMin = +document.getElementById('offline-zmin').value;
   const zMax = +document.getElementById('offline-zmax').value;
   const urls = buildTileUrls(bounds, zMin, zMax);
   if (urls.length === 0) return;
+  _offlineDlInFlight = true;
 
   const btn = document.getElementById('offline-dl-btn');
   btn.textContent = '⏹ Zaustavi';
@@ -23157,37 +23189,49 @@ async function startOfflineDownload() {
   const fill = document.getElementById('offline-progress-fill');
   const status = document.getElementById('offline-status');
   bar.style.display = 'block';
+  localStorage.setItem(_OFFLINE_DL_INCOMPLETE_KEY, '1');
 
-  const cache = await caches.open(TILE_CACHE_NAME);
-  let done = 0, skipped = 0, failed = 0;
+  try {
+    const cache = await caches.open(TILE_CACHE_NAME);
+    let done = 0, skipped = 0, failed = 0, quotaHit = false;
 
-  for (const url of urls) {
-    if (offlineAbort) break;
-    // Provjeri da li je već u cache-u
-    const existing = await cache.match(url);
-    if (existing) { skipped++; done++; }
-    else {
-      try {
-        const resp = await fetch(url, { mode: 'cors' });
-        if (resp.ok) { await cache.put(url, resp); done++; }
-        else failed++;
-      } catch { failed++; done++; }
+    for (const url of urls) {
+      if (offlineAbort || quotaHit) break;
+      // Provjeri da li je već u cache-u
+      const existing = await cache.match(url);
+      if (existing) { skipped++; done++; }
+      else {
+        try {
+          const resp = await fetch(url, { mode: 'cors' });
+          if (resp.ok) {
+            try { await cache.put(url, resp); done++; }
+            catch(qe) { if (qe && qe.name === 'QuotaExceededError') quotaHit = true; failed++; done++; }
+          }
+          else failed++;
+        } catch { failed++; done++; }
+      }
+      const pct = Math.round(done / urls.length * 100);
+      fill.style.width = pct + '%';
+      if (done % 20 === 0 || done === urls.length) {
+        status.textContent = `${done} / ${urls.length} · preskočeno: ${skipped} · greška: ${failed}`;
+      }
+      // Mali delay da ne opteretimo server
+      if (done % 10 === 0) await new Promise(r => setTimeout(r, 50));
     }
-    const pct = Math.round(done / urls.length * 100);
-    fill.style.width = pct + '%';
-    if (done % 20 === 0 || done === urls.length) {
-      status.textContent = `${done} / ${urls.length} · preskočeno: ${skipped} · greška: ${failed}`;
-    }
-    // Mali delay da ne opteretimo server
-    if (done % 10 === 0) await new Promise(r => setTimeout(r, 50));
+
+    btn.textContent = '📥 Preuzmi';
+    btn.onclick = startOfflineDownload;
+    const fullyDone = !offlineAbort && !quotaHit;
+    status.textContent = quotaHit
+      ? `⚠ Nema više prostora za pohranu — preuzeto ${done} tile-ova prije popune memorije.`
+      : offlineAbort
+      ? `Prekinuto. Preuzeto ${done} tile-ova.`
+      : `✅ Gotovo! ${done - failed} tile-ova u cache-u.`;
+    if (fullyDone) localStorage.removeItem(_OFFLINE_DL_INCOMPLETE_KEY);
+    showCacheInfo();
+  } finally {
+    _offlineDlInFlight = false;
   }
-
-  btn.textContent = '📥 Preuzmi';
-  btn.onclick = startOfflineDownload;
-  status.textContent = offlineAbort
-    ? `Prekinuto. Preuzeto ${done} tile-ova.`
-    : `✅ Gotovo! ${done - failed} tile-ova u cache-u.`;
-  showCacheInfo();
 }
 
 // === PWA SERVICE WORKER ===
@@ -23480,14 +23524,18 @@ function _applyGeoJSONOdjeli(data) {
   if (_geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} _geojsonLayer = null; }
 
   let added = 0;
+  // D1-F: O(1) dedup preko Set-a umjesto O(n) .find() po feature-u (kvadratno za
+  // fajlove s hiljadama odjela — mogao je vidljivo zaglaviti glavnu nit pri učitavanju).
+  const existingNames = new Set(graniceOdjeli.map(o => o.name));
   data.features.forEach(f => {
     if (!f.geometry) return;
     const name = _gjPropName(f.properties || {});
     if (!name) return;
     const ring = _gjExtractRing(f.geometry);
     if (!ring || ring.length < 3) return;
-    if (!graniceOdjeli.find(o => o.name === name)) {
+    if (!existingNames.has(name)) {
       graniceOdjeli.push({ name, bounds: L.latLngBounds(ring), ring, _fromGeojson: true });
+      existingNames.add(name);
       added++;
     }
   });
@@ -23497,7 +23545,9 @@ function _applyGeoJSONOdjeli(data) {
     style: { color: '#38bdf8', weight: 1.5, opacity: _geojsonOpacity, fillColor: '#38bdf8', fillOpacity: _geojsonOpacity * 0.04, dashArray: '4,4' },
     onEachFeature(f, layer) {
       const name = _gjPropName(f.properties || {});
-      if (name) layer.bindTooltip(name, { sticky: true, className: 'leaflet-tooltip' });
+      // D1-F (sigurnosni): escape — GeoJSON dolazi iz uvezenog fajla, isti XSS
+      // sink kao KML <name> koji smo ranije popravili (bindTooltip = innerHTML).
+      if (name) layer.bindTooltip(_escHtml(name), { sticky: true, className: 'leaflet-tooltip' });
     }
   });
   if (_geojsonVisible) _geojsonLayer.addTo(map);
@@ -23591,15 +23641,34 @@ function geojsonOdjeliRestore() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (data._compact) {
-      // Restore from compact rings only (no map layer, just graniceOdjeli entries)
+      // Restore from compact rings (fajlovi ≥4MB) — ring podaci su dovoljni da se
+      // rekonstruiše i VIZUELNI sloj, ne samo graniceOdjeli pretraga/highlight
+      // (D1-D: prije ovog fix-a je plavi overlay/„Topo + Granice" dugme nestajao
+      // nakon reload-a baš za najveće/najčešće kadastarske fajlove).
+      const existingNames = new Set(graniceOdjeli.map(g => g.name));  // D1-F: O(1) dedup
       data.odjeli.forEach(o => {
-        if (o.name && o.ring?.length >= 3 && !graniceOdjeli.find(g => g.name === o.name)) {
+        if (o.name && o.ring?.length >= 3 && !existingNames.has(o.name)) {
           graniceOdjeli.push({ name: o.name, bounds: L.latLngBounds(o.ring), ring: o.ring, _fromGeojson: true });
+          existingNames.add(o.name);
         }
       });
       graniceOdjeli.sort((a, b) => a.name.localeCompare(b.name, 'bs'));
       _refreshProjektOdjelHighlight();
       _geojsonOdjeliUpdUI();
+
+      if (_geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} _geojsonLayer = null; }
+      const polys = data.odjeli
+        .filter(o => o.ring?.length >= 3)
+        .map(o => L.polygon(o.ring, {
+          color: '#38bdf8', weight: 1.5, opacity: _geojsonOpacity,
+          fillColor: '#38bdf8', fillOpacity: _geojsonOpacity * 0.04, dashArray: '4,4'
+        }).bindTooltip(_escHtml(o.name), { sticky: true, className: 'leaflet-tooltip' }));
+      if (polys.length) {
+        _geojsonLayer = L.featureGroup(polys);
+        if (_geojsonVisible) _geojsonLayer.addTo(map);
+      }
+      const grRow = document.getElementById('ls-granice-row');
+      if (grRow && _geojsonLayer) grRow.style.display = 'block';
     } else {
       _applyGeoJSONOdjeli(data);
       _geojsonOdjeliUpdUI();

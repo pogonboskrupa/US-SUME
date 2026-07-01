@@ -11,21 +11,19 @@ Status legenda: ⬜ nije početo · 🔄 u toku · ✅ završeno
 
 ---
 
-## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  🔄
+## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  ✅
 
-Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika. Napomena: header je
-ranije preuranjeno označen ✅ — u stvarnosti je detaljno bug-hunting prošao samo offline
-SQLite/MBTiles render pipeline (3 od 7 sekvenci); ostale 4 nikad nisu dobile posvećenu rundu.
+Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Online tile slojevi (Topo/Satelit/Karta/Google) | `makeCachedTileLayer` (~L8862), `TL` (~L9055), `_tileBmpCache` | ⬜ nikad analizirano (odvojen engine od offline SQLite bugova) |
+| Online tile slojevi (Topo/Satelit/Karta/Google) | `makeCachedTileLayer` (~L8862), `TL` (~L9055), `_tileBmpCache` | ✅ pregledano — čisto (bounded LRU keš, ispravan layer switch) |
 | Offline SQLite/OPFS čitač | `MiniSqlite` (~L20291), worker `_sqlWCall`, `queryTile`, `detectFmt`, `readMeta` | ✅ (D1-13…D1-30, D2-2…D2-7, v3.4.4–v3.6.2) |
 | Renderiranje pločica | `_sqlmapCreateLayerW/Main`, `_wTileScheduleCall`, `_sqlDrawParentPlaceholder`, `_sqlPrewarm`, `_drawTileBytesC` | ✅ (canvas→img fix, v3.6.2) |
 | Upravljanje offline kartama | `sqlmapLoadFile`, `sqlmapRestoreAll`, `sqlmapToggle`, `sqlmapSetOpacity`, `sqlmapRemove`, `sqlmapShowDebug` | ✅ (UČITAJ KARTU tab, v3.4.5) |
-| Download online karte za offline | `showOfflineModal` (~L19736) | ⬜ nikad analizirano |
-| Teren overlay (visina/nagib/hillshade) | `_elevHtml`, elevation/slope tile čitanje (~L9145–9217) | ⬜ nikad analizirano |
-| GeoJSON granice + skala + prebacivanje sloja | `_geojson*` (~L22332), `setLayerSqlite`, `_updMapScale` | ⬜ nikad analizirano |
+| Download online karte za offline | `showOfflineModal` (~L19736), `startOfflineDownload` | ✅ (D1-A v3.7.0) |
+| Teren overlay (visina/nagib/hillshade) | `_elevHtml`, elevation/slope tile čitanje (~L9145–9217) | ✅ pregledano — čisto (singleton slojevi, simetrično toggle) |
+| GeoJSON granice + skala + prebacivanje sloja | `_geojson*` (~L22332), `setLayerSqlite`, `_updMapScale` | ✅ (D1-D/F v3.7.0; D1-E provjeren — nije bug) |
 
 ---
 
@@ -43,16 +41,16 @@ SQLite/MBTiles render pipeline (3 od 7 sekvenci); ostale 4 nikad nisu dobile pos
 
 ---
 
-## 🛻 DIO 3 — Vlake + GPS snimanje (jezgro terenskog rada)  🔄
+## 🛻 DIO 3 — Vlake + GPS snimanje (jezgro terenskog rada)  ✅
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
 | Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | ✅ (D3-D/E v3.6.5) |
 | GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | ✅ (D3-A v3.6.5; D3-B/C v3.6.6) |
-| UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ⬜ nikad analizirano |
-| Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ⬜ nikad analizirano (samo uzgredna napomena u D3 istrazi) |
+| UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ✅ (D3-R v3.7.0; ostalo pregledano — čisto) |
+| Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ✅ (D3-O/Q v3.7.0) |
 | Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | ✅ (D3-A/B v3.6.5-6) |
-| Nagib u stvarnom vremenu | `_calcRecentSlope` | ⬜ nikad analizirano (samo uzgredna napomena, nije bug) |
+| Nagib u stvarnom vremenu | `_calcRecentSlope` | ✅ (D3-N/P v3.7.0) |
 
 ---
 
@@ -517,3 +515,54 @@ SQLite/MBTiles render pipeline (3 od 7 sekvenci); ostale 4 nikad nisu dobile pos
 - **D4-I — `dozSetStatus` nema offline queue.** Mrežna greška je tiho vraćala status na staro
   umjesto da zakaže sync. **Fix (v3.6.8):** `_isNetworkErr` grananje → `upsert_doz_status` u
   offline red čekanja umjesto revert-a. ✅ (v3.6.8)
+
+## DIO 1 (preostalo) + DIO 3 (preostalo) — nalazi (analiza 2026-07-01)
+
+Zatvara preostale sekvence iz oba dijela — DIO 1 i DIO 3 su sad u potpunosti pregledani.
+
+- **D1-A — offline download regije nema in-flight guard.** `startOfflineDownload` je mogao
+  pokrenuti DVA paralelna download-a (dupli tap/ponovo otvoren modal) — interleaved progress bar,
+  trošenje mreže/baterije na duple fetch-eve; nema indikacije da je prethodni download prekinut
+  (app ubijen usred preuzimanja). **Fix (v3.7.0):** `_offlineDlInFlight` guard; hvatanje
+  `QuotaExceededError` na `cache.put` s jasnom porukom umjesto tihog "failed" brojača; persistovan
+  `tvlake_offline_dl_incomplete` flag prikazan u `showCacheInfo()` dok se download ne završi u
+  potpunosti. ✅ (v3.7.0)
+- **D1-D — GeoJSON kompaktno-skladištenje (fajlovi ≥4MB) nikad nije rekonstruisalo vizuelni
+  sloj nakon reload-a.** `geojsonOdjeliRestore`-ova `_compact` grana je punila samo
+  `graniceOdjeli` (pretraga/highlight), ali NIKAD `_geojsonLayer` — plavi granice-overlay i
+  "Topo + Granice" dugme su tiho nestajali baš za najveće/najčešće kadastarske export-e.
+  **Fix (v3.7.0):** kompaktna grana sad rekonstruiše `_geojsonLayer` kao `L.featureGroup` od
+  `L.polygon` po sačuvanom ring-u, istim stilom kao normalna (non-compact) putanja. ✅ (v3.7.0)
+- **D1-E — provjera: da li `_updMapScale` pogrešno računa razmjeru za SQLite offline karte
+  necrash-standardne rezolucije?** Provjereno i ISKLJUČENO kao bug: `L.map()` (`index.html:9192`)
+  koristi default `L.CRS.EPSG3857`, pa je zoom↔razmjera odnos svojstvo CRS-a/mape, ne
+  tile-source-a — SQLite `_zm`/`zOff` offset je samo interni detalj dohvata tačne pločice za dati
+  standardni zoom, ne mijenja značenje tog zoom nivoa. Nije potreban fix. ✅ (v3.7.0, verifikovano)
+- **D1-F — dvije stvari nađene usput u istoj funkciji:** (1) O(n²) `graniceOdjeli.find()` dedup
+  po feature-u pri GeoJSON uvozu — kvadratno za fajlove s hiljadama odjela, moglo zamjetno
+  zaglaviti glavnu nit. (2) **Sigurnosni:** `_applyGeoJSONOdjeli`'s `onEachFeature` je vezivao
+  sirov `<name>` na `bindTooltip` bez escape-a — ista XSS klasa kao KML fix (D4-A), samo
+  propuštena tačka jer je ovo odvojena GeoJSON-granice putanja. **Fix (v3.7.0):** `Set`-bazirani
+  O(1) dedup (i u `_applyGeoJSONOdjeli` i u kompaktnom restore-u); `_escHtml(name)` prije
+  `bindTooltip`. ✅ (v3.7.0)
+- **D3-N — "nagib u realnom vremenu" nije bio real-time.** `_updSlope()` se pozivao SAMO iz
+  `toggleRecPause()` (jednom po pauzi/nastavku) — `updBan()` (poziva se na svaku prihvaćenu GPS
+  tačku) ga nikad nije zvao, pa je prikaz bio zamrznut između pauza. **Fix (v3.7.0):** `_updSlope()`
+  dodan u `updBan()`, osvježava se na svaku tačku kao i ostale statistike. ✅ (v3.7.0)
+- **D3-O — precizna tačka je tiho miješala fikseve preko GPS restarta.** `_precizCollect`/
+  `_precizFinish` nisu imali nikakvu svijest o `_restartGpsWatch()` dešavanju usred prikupljanja
+  — prosjek je mogao spojiti fikseve prije/poslije prekida signala bez upozorenja. **Fix
+  (v3.7.0):** `_restartGpsWatch` sad zove `_precizReset()` + toast upozorenje ako je prikupljanje
+  aktivno kad se restart stvarno desi. ✅ (v3.7.0)
+- **D3-P — `_calcRecentSlope` nije provjeravao `gap:true` (v3.6.6 oznaka).** Nagib preko
+  teleportovanog GPS-prekid segmenta bi se prikazao kao stvaran (pogotovo nakon D3-N fix-a, koji
+  ga je učinio stvarno real-time). **Fix (v3.7.0):** funkcija sad vraća `null` (bez prikaza) ako
+  zadnja tačka ili bilo koji segment na putu unazad ima `gap:true`. ✅ (v3.7.0)
+- **D3-Q — dugme precizne tačke moglo ostati zaglavljeno na "n/10" do 30s** nakon stop/pauze
+  usred prikupljanja (čišćenje se ranije oslanjalo na SLJEDEĆI GPS fix ili 30s timeout). **Fix
+  (v3.7.0):** `stopRec()`/`toggleRecPause()` sad odmah zovu `_precizReset()` ako je prikupljanje
+  aktivno. ✅ (v3.7.0)
+- **D3-R — notifikacija udaljenosti je kasnila u rijetkom terenu.** Osvježavala se samo svakih
+  10 PRIHVAĆENIH tačaka — u gustoj šumi (agresivni GPS filteri odbace većinu fikseva) tekst je
+  znao kasniti minutama. **Fix (v3.7.0):** dodatni vremenski prag (~20s) garantuje osvježenje
+  bez obzira na rijetkost prihvaćenih tačaka. ✅ (v3.7.0)
