@@ -3050,17 +3050,26 @@ select:focus { outline:none; border-color:#3b82f6; }
           </div>
         </div>
         <div class="auth-field">
-          <div class="auth-field-lbl">Šumarija / Gazdinstvo *</div>
+          <div class="auth-field-lbl">Profil / Šumarija *</div>
           <select id="reg-sumarija">
-            <option value="">— Odaberi šumariju —</option>
-            <option>ŠPD US ŠUME</option>
-            <option>ŠUMARIJA BOS.KRUPA</option>
-            <option>ŠUMARIJA BOS.PETROVAC</option>
-            <option>ŠUMARIJA SANSKI MOST</option>
-            <option>ŠUMARIJA BIHAĆ</option>
-            <option>ŠUMARIJA CAZIN</option>
-            <option>ŠUMARIJA KLJUČ</option>
+            <option value="">— Odaberi profil —</option>
+            <optgroup label="Terenski radnici">
+              <!-- value ostaje 'ŠPD US ŠUME' — isSpd() ga poredi tačno; mijenja se samo prikaz -->
+              <option value="ŠPD US ŠUME">ŠPD USŠ (TERENSKI PROFIL)</option>
+            </optgroup>
+            <optgroup label="Samo projektanti">
+              <option>ŠUMARIJA BOS.KRUPA</option>
+              <option>ŠUMARIJA BOS.PETROVAC</option>
+              <option>ŠUMARIJA SANSKI MOST</option>
+              <option>ŠUMARIJA BIHAĆ</option>
+              <option>ŠUMARIJA CAZIN</option>
+              <option>ŠUMARIJA KLJUČ</option>
+            </optgroup>
           </select>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.5;margin-top:6px;padding:7px 9px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.18);border-radius:6px;">
+            ℹ️ Imenovanim šumarijama (Bos. Krupa, Bihać, Cazin…) pristupaju <b>samo projektanti</b>.
+            Ostali radnici biraju <b>ŠPD USŠ (TERENSKI PROFIL)</b>.
+          </div>
         </div>
         <div class="auth-field">
           <div class="auth-field-lbl">PIN * <span class="auth-field-hint">(4–8 cifara)</span></div>
@@ -4123,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.0';
+const APP_VER = 'v3.8.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
