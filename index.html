@@ -4132,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.1';
+const APP_VER = 'v3.8.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -5050,6 +5050,13 @@ async function doLogout() {
   try { await sb.auth.signOut(); } catch(e) {}
   sbUser = null; sbProfile = null;
 
+  // Sve čišćenje ide u try/finally — GARANTOVANO se vraćamo na login ekran čak i ako
+  // neki korak čišćenja (mapni sloj, realtime kanal, Doznaka state...) baci grešku.
+  // Bez ovoga bi neuhvaćena greška tiho prekinula funkciju usred čišćenja (nema
+  // window.addEventListener('unhandledrejection', ...) hendlera) i korisnik bi
+  // ostao "zaglavljen" bez ikakve vidljive poruke — "odjava ne vraća login screen".
+  try {
+
   // Očisti mapu i stanje
   vlake.forEach(v => {
     map.removeLayer(v.poly);
@@ -5108,16 +5115,38 @@ async function doLogout() {
   _locFotos = [];
   localStorage.removeItem(_FOTO_KEY);
 
+  // Isti razlog kao gore — lokalno uvezeni KML/granice/tačke su propušteni u D2-E rundi,
+  // pa su i dalje curili između naloga na dijeljenom uređaju.
+  kmlLs.forEach(k => { if (k.grp) try { map.removeLayer(k.grp); } catch(e) {} });
+  kmlLs = [];
+  localStorage.removeItem(_LOCAL_KML_KEY);
+
+  if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} }
+  _geojsonLayer = null;
+  // Zadrži unose iz KML-bucket-a (dijeljeno, server) — obriši samo lokalno uvezene (_fromGeojson)
+  graniceOdjeli = graniceOdjeli.filter(o => !o._fromGeojson);
+  localStorage.removeItem(_GEOJSON_LS_KEY);
+
+  _tacke.forEach(t => { if (t.marker) try { map.removeLayer(t.marker); } catch(e) {} });
+  _tacke = [];
+  localStorage.removeItem(_TACKE_KEY);
+
+  localStorage.removeItem(_KVC_KEY);
+  localStorage.removeItem('tvlake_kolege');
+
   dnevniLog = []; kolege = [];
 
-  document.getElementById('wrapper').style.display = 'none';
-  closeAdminModal();
-  _clearSavedUser();
-  _showAuthScreen();
-  document.getElementById('auth-ime').value = '';
-  document.getElementById('auth-prezime').value = '';
-  document.getElementById('auth-pin').value = '';
-  document.getElementById('auth-zapamti').checked = false;
+  } catch(e) { console.error('doLogout cleanup greška:', e); }
+  finally {
+    document.getElementById('wrapper').style.display = 'none';
+    closeAdminModal();
+    _clearSavedUser();
+    _showAuthScreen();
+    document.getElementById('auth-ime').value = '';
+    document.getElementById('auth-prezime').value = '';
+    document.getElementById('auth-pin').value = '';
+    document.getElementById('auth-zapamti').checked = false;
+  }
 }
 
 // --- Admin (legacy stub — tab se koristi umjesto modala) ---
