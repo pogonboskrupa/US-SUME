@@ -382,15 +382,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               // Tragovi
               if (_showTracks)
                 PolylineLayer(
-                  polylines: _members.map((mem) {
-                    final pts = tracking.tracksByUser[mem.userId]
-                            ?.map((p) => p.latLng)
-                            .toList() ??
-                        [];
-                    return Polyline(
-                        points: pts,
+                  polylines: _members.expand((mem) {
+                    final pts = tracking.tracksByUser[mem.userId] ?? [];
+                    return _splitTrackSegments(pts).map((seg) => Polyline(
+                        points: seg,
                         strokeWidth: 3.5,
-                        color: mem.color);
+                        color: mem.color));
                   }).toList(),
                 ),
 
@@ -911,6 +908,23 @@ class _EngineerMarker extends StatelessWidget {
       ),
     );
   }
+}
+
+List<List<LatLng>> _splitTrackSegments(List<TrackPoint> points,
+    {Duration maxGap = const Duration(minutes: 2)}) {
+  if (points.isEmpty) return [];
+  final segments = <List<LatLng>>[];
+  var current = <LatLng>[points.first.latLng];
+  for (int i = 1; i < points.length; i++) {
+    final gap = points[i].recordedAt.difference(points[i - 1].recordedAt).abs();
+    if (gap > maxGap) {
+      if (current.length >= 2) segments.add(current);
+      current = [];
+    }
+    current.add(points[i].latLng);
+  }
+  if (current.length >= 2) segments.add(current);
+  return segments;
 }
 
 class _PulsingDot extends StatefulWidget {

@@ -1,0 +1,568 @@
+# US-SUME — Roadmap analize bugova i optimizacije
+
+> Sistematičan pregled svih sekvenci aplikacije, raspoređen u 4 dijela.
+> Analiza i popravke idu korak po korak, dio po dio.
+>
+> Glavni fajl: `index.html` (~26.000 linija, SPA) · `sw.js` (service worker) ·
+> `android/` (WebView wrapper). Backend: Supabase. Karte: Leaflet + custom
+> SQLite/OPFS čitač.
+
+Status legenda: ⬜ nije početo · 🔄 u toku · ✅ završeno
+
+---
+
+## 🗺️ DIO 1 — Karta i offline karte (temelj prikaza)  ✅
+
+Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
+
+| Sekvenca | Ključne funkcije | Status |
+|---|---|---|
+| Online tile slojevi (Topo/Satelit/Karta/Google) | `makeCachedTileLayer` (~L8862), `TL` (~L9055), `_tileBmpCache` | ✅ pregledano — čisto (bounded LRU keš, ispravan layer switch) |
+| Offline SQLite/OPFS čitač | `MiniSqlite` (~L20291), worker `_sqlWCall`, `queryTile`, `detectFmt`, `readMeta` | ✅ (D1-13…D1-30, D2-2…D2-7, v3.4.4–v3.6.2) |
+| Renderiranje pločica | `_sqlmapCreateLayerW/Main`, `_wTileScheduleCall`, `_sqlDrawParentPlaceholder`, `_sqlPrewarm`, `_drawTileBytesC` | ✅ (canvas→img fix, v3.6.2) |
+| Upravljanje offline kartama | `sqlmapLoadFile`, `sqlmapRestoreAll`, `sqlmapToggle`, `sqlmapSetOpacity`, `sqlmapRemove`, `sqlmapShowDebug` | ✅ (UČITAJ KARTU tab, v3.4.5) |
+| Download online karte za offline | `showOfflineModal` (~L19736), `startOfflineDownload` | ✅ (D1-A v3.7.0) |
+| Teren overlay (visina/nagib/hillshade) | `_elevHtml`, elevation/slope tile čitanje (~L9145–9217) | ✅ pregledano — čisto (singleton slojevi, simetrično toggle) |
+| GeoJSON granice + skala + prebacivanje sloja | `_geojson*` (~L22332), `setLayerSqlite`, `_updMapScale` | ✅ (D1-D/F v3.7.0; D1-E provjeren — nije bug) |
+
+---
+
+## 🔐 DIO 2 — Auth, projekti, sinkronizacija (okosnica podataka)  ✅
+
+| Sekvenca | Ključne funkcije | Status |
+|---|---|---|
+| Prijava/registracija | `sbLoadProfile` (~L4606), `showApp` (~L4669), `authShowLogin/Reg` | ✅ (D2-K v3.6.9) |
+| Supabase init + realtime | `sbInitData` (~L4993), `sbStartRealtime` (~L8217) | ✅ (D2-J v3.6.9) |
+| Projekti | `sbLoadProjekti` (~L5023), kreiranje/spremanje projekta | ✅ (D2-F/H/L v3.6.9) |
+| Offline red & auto-sync | `_OL` queue, `_processOfflineQueue` (~L4336), online/offline tranzicije | ✅ (D2-A/B/C/D v3.6.3-4, D2-I v3.6.9) |
+| Kolege / odjeli / log | `sbLoadKolege`, `sbSaveOdjel`, `sbLoadOdjeli`, `sbLoadLog`, `sbSaveLogEntry` | ✅ (D2-G v3.6.9) |
+| Tekst-oznake i fotografije | `sbSaveTextLabels`, `sbUploadFoto`, `sbSaveFoto`, `sbLoadSharedFotos` | ✅ (D2-C v3.6.4, D2-E v3.6.9) |
+| Admin panel | `adminLoadUsers` | ✅ (pregledano — vidi napomenu D2-M) |
+
+---
+
+## 🛻 DIO 3 — Vlake + GPS snimanje (jezgro terenskog rada)  ✅
+
+| Sekvenca | Ključne funkcije | Status |
+|---|---|---|
+| Vlake CRUD | `sbLoadVlake` (~L6328), `sbFlushVlaka`, `sbDeleteVlaka`, `sbLoadKolegeVlake` | ✅ (D3-D/E v3.6.5) |
+| GPS engine snimanja | `togRec` (~L10975), `stopRec`, `toggleRecPause`, `watchPosition`/`onP`/`onPE` | ✅ (D3-A v3.6.5; D3-B/C v3.6.6) |
+| UI snimanja + signal + notifikacije | `_updRecStatusBar`, `_updRecSignal`, `_startRecNotification`, `_nativeRecAction` | ✅ (D3-R v3.7.0; ostalo pregledano — čisto) |
+| Precizna tačka | `_precizTacka`, `_precizCollect`, `_precizFinish` | ✅ (D3-O/Q v3.7.0) |
+| Pozadinsko snimanje | Web Lock (`sw.js`), `GpsService.java`, SW ping | ✅ (D3-A/B v3.6.5-6) |
+| Nagib u stvarnom vremenu | `_calcRecentSlope` | ✅ (D3-N/P v3.7.0) |
+
+---
+
+## 🌲 DIO 4 — Tragovi, Doznaka, Mjerenja, KML/Export (terenski alati + I/O)  ✅
+
+| Sekvenca | Ključne funkcije | Status |
+|---|---|---|
+| Tragovi (GPS putanje) | `_tragReg*`, `_tragovi*` (~L12100–12900), `togSnimTrag`, `sbFlushTrag`, GPX export | ✅ (D4-C v3.6.7) |
+| Doznaka — odjeli i slojevi | `dozInit`, `dozLoadOdjeli`, `dozSelectOdjel`, `dozLoadLayers`, `dozRenderMapLayers` | ✅ (D4-D v3.6.8) |
+| Doznaka — crtanje i markings | `dozStartDraw`, `dozAddDrawPoint`, `dozFinishDraw`, `dozConfirmSave`, `dozDeleteMarking` | ✅ (D4-B/F v3.6.8) |
+| Doznaka — GPS, KML izbor, članovi, status | `dozStartGPS`, `dozStartKmlSel`, `dozAddMember`, `dozSetStatus`, `dozExportGPX` | ✅ (D4-E/I v3.6.8) |
+| Mjerenja | `addTacka`, `msr*`, Izmjeri popup (~L7316), `showElevProfile` | ✅ (D4-G/H v3.6.8) |
+| KML/GeoJSON import/export | `pkml`, `pkmlStyled`, `loadKmlStyleFor`, `kmlPreuzmi/NaMail/Kopiraj` | ✅ (D4-A v3.6.7) |
+
+---
+
+## Dnevnik nalaza i popravki
+
+> Ovdje upisujemo bugove i optimizacije dok ih nalazimo, po dijelovima.
+
+### DIO 1 — nalazi (analiza 2026-06-29)
+
+🔴 **Visok**
+- **D1-1 — Worker tile hang → trajni gubitak slota (zamrzavanje karte).**
+  `_sqlWCall` namjerno NEMA timeout za `type:'tile'` (~L21005). Ako worker zaglavi
+  na čitanju jednog tile-a (OPFS stall), callback nikad ne stigne → `_wTileScheduleCall`
+  `finally` se ne izvrši → `_wTileActive` se ne smanji. Nakon 6 takvih cijeli red je
+  zamrznut i karta prestaje učitavati. **Fix:** timeout za tile (~20s) koji resolve-a
+  null i oslobađa slot.  Status: ✅ (v3.1.4)
+
+🟠 **Srednji**
+- **D1-2 — `sqlmapClearAll` ne čisti BMP cache ni throttle stanje.** Terminira worker
+  (~L21697) ali ne zatvara `_sqlTileBmpCache` bitmape (GPU leak do eviction) niti
+  resetuje `_wTileActive`/`_wTileStack` → in-flight promise-i nikad ne resolve-aju →
+  slot leak. **Fix:** očistiti cache + resetovati throttle.  Status: ✅ (v3.1.4)
+- **D1-3 — `sqlmapToggle` dozvoljava 2+ vidljive offline karte** (~L21617) →
+  udvostručuje čitanja/memoriju (uzrok ranijeg UNSKO+UNSKO_2GB). `setLayerSqlite` je
+  ekskluzivan, toggle nije. **Fix:** toggle sakrije druge baze (UX odluka).  Status: ✅ (v3.1.6, Opcija 1: samo jedna aktivna)
+- **D1-4 — Online createTile prekriva zadržane pločice pri zoom-out** (~L8869) — isti
+  bug popravljen za SQLite (neproziran canvas + zelena ispuna), ali za online slojeve.
+  **Fix:** providan canvas, bez ispune.  Status: ✅ (v3.1.5)
+- **D1-5 — Globalni crash-brojač briše SVE karte.** `_sqlCrashCheck` nakon 3 pada zove
+  `_sqlIdbClearAll()` (sve karte) iako je samo jedna problematična. **Fix:** brojač po
+  karti.  Status: ✅ (v3.1.4)
+
+🟡 **Nizak**
+- **D1-6 — Online BMP cache je FIFO, ne LRU.** Cache-hit (~L8878) ne osvježava poziciju
+  (nema delete+set kao SQLite). **Fix:** delete+set na hit.  Status: ✅ (v3.1.5)
+- **D1-7 — Race: dupli createTile za isti coord** može procuriti prvu bitmapu (druga
+  prepiše u cache bez close). Rijetko.  Status: ✅ (v3.1.6, `_bmpCacheSet` helper)
+
+**DIO 1 ZAVRŠEN** ✅ — svih 7 nalaza riješeno (v3.1.4–v3.1.6).
+
+#### Naknadni nalaz (teren, v3.1.7)
+- **D1-8 — RMaps/SQLiteDB karte nisu dobivale prewarm → prazne pločice pri
+  zoom-out.** `_sqlPrewarm` je izlazio ako `meta.bounds` ne postoji, a rmaps format
+  čita samo minzoom/maxzoom iz `info` tabele (nema bounds). Zato je multi-level
+  placeholder pri zoom-out nalazio prazan cache → prazne pločice (specifično za
+  SQLiteDB, ne mbtiles). **Fix (v3.1.7):**
+  - `_sqlPrewarm` fallback na trenutni pogled karte kad nema `meta.bounds`.
+  - Novi `_sqlPrewarmRegion` (engine-agnostičan: worker ili main-thread).
+  - Novi `_prewarmView` na `moveend/zoomend` — puni 3 niža zoom nivoa za trenutni
+    pogled, pa zoom-out svuda ima placeholder piramidu (svi formati).
+  Status: ✅ (v3.1.7)
+- **D1-9 — Overview tile-ovi se evictovali → placeholder piramida nestaje.** LRU je
+  izbacivao i pregledne (z≤12) tile-ove kad se napuni cache pri visokim zoomovima,
+  pa je zoom-out opet ostajao bez placeholdera. **Fix (v3.1.8):** `_sqlTileBmpEvict`
+  čuva z≤12 tile-ove od evictiona; cache 400→500.  Status: ✅ (v3.1.8)
+- **D1-10 — SW update se nije primjenjivao automatski → testiranje stare verzije.**
+  Update je tražio ručni klik na "Ažuriraj" toast; korisnik je mogao testirati staru
+  keširanu verziju. **Fix (v3.1.8):** auto-`skipWaiting` kad nema aktivnog snimanja
+  (recOn/_tragOn/_dozGpsOn) → automatski reload na najnoviju verziju.  Status: ✅ (v3.1.8)
+- **D1-11 — Pojedinačne pločice ostaju trajno prazne nakon timeout-a.** Ako čitanje
+  pločice istekne (D1-1 timeout), `done(null,canvas)` označi je gotovom i Leaflet je
+  nikad ne traži ponovo → trajno prazna. **Fix (v3.1.9):** retry na `error:'timeout'`
+  do 3x (ponovni zahtjev na vrh LIFO stoga); genuine null (nema u bazi) → odmah done
+  bez retry-a.  Status: ✅ (v3.1.9). NAPOMENA: ako pločice ostaju prazne i nakon ovoga,
+  uzrok je genuine null (lookup vraća null / gap u bazi) — provjeriti 🔬 Test na praznoj
+  pločici.
+- **D1-12 — 512×512 pločice iscrpe GPU memoriju → prazne pločice (PRAVI KORIJEN).**
+  🔬 Test je otkrio da UNSKO SQLiteDB ima 512×512 pločice. Keširane kao 512 bitmape =
+  1MB svaka (4× više); cache 500 → ~500MB GPU → telefon iscrpi GPU backing → pločice
+  ostanu prazne ("kad zumiram dođe pa nestane"). Test je svejedno nalazio podatke (read
+  radi) — problem čisto memorijski. **Fix (v3.2.0):** `createImageBitmap` s
+  `resizeWidth/Height:256` u `_drawTileBytesC` i prewarmu — dekodira odmah na 256
+  (prikazujemo na 256 ionako) → 4× manje GPU memorije, bez gubitka kvalitete. Fallback
+  na puni decode ako resize opcije nisu podržane.  Status: ✅ (v3.2.0)
+  - **v3.2.1 dopuna:** `createImageBitmap` resize opcije neki WebView-i TIHO ignorišu
+    (vrate 512 bez greške) → fix nullified. Sada GARANTOVANO smanjenje preko offscreen
+    canvasa (`_decodeTileBmp`: ako bitmapa > 256, nacrtaj na 256 canvas pa re-encode).
+    Verzija dodana u 🔬 Test izvještaj radi potvrde koju verziju korisnik gleda.
+- **D1-13 — done() se ne pozove ako keš-dekod zaglavi → trajno prazne pločice (PRAVI
+  KORIJEN, potvrđeno debug-om).** Debug na v3.2.1: BMP cache 69/500, SQLite reads
+  aktivno=0 queue=0 (worker IDLE), a 🔬 Test nalazi podatke → dakle NIJE memorija ni
+  čitanje. `_decodeTileBmp` je radio canvas round-trip (`createImageBitmap(canvas)`)
+  PRIJE `done()`; ako taj korak zaglavi/padne u WebView-u, `done()` se nikad ne pozove
+  → pločica trajno "loading" (prazna), worker idle, podaci postoje. **Fix (v3.2.2):**
+  nacrtaj plain `createImageBitmap(blob)` na 256 i pozovi `done()` ODMAH; keširanje
+  (256 snapshot canvasa) zasebno best-effort. Sigurnosni timeout (8s) garantuje done().
+  Status: ✅ (v3.2.2)
+- **D1-14 — Zoom-out: pločice "nestanu" jer niži nivo nije prewarmovan na vrijeme.**
+  Nakon v3.2.2 (skrol radi), zoom-in pa zoom-out još pokazuje praznine jer
+  `_prewarmView` (placeholder za niži nivo) kasni (500ms debounce, uski raspon).
+  **Fix (v3.2.3):** debounce 500→200ms, raspon curZ-1..curZ-4 (dvostruki zoom-out),
+  bounds prošireni (pad 0.3), nivoi se pune od najbližeg (curZ-1) nadolje. Eviction
+  zaštita z≤12→z≤13.  Status: ⚠️ djelimično (v3.2.3) — zoom-out i dalje ostavlja prazne.
+- **D1-15 — Zoom-out ostavlja pločice TRAJNO prazne iako podaci postoje (RENDER bug).**
+  🔬 Test na praznoj pločici nakon zoom-out: "TILE PRONAĐEN" (z14, podaci OK), worker
+  idle → čitanje radi deterministički, ali Leaflet pri zoom-out ne iscrta te pločice.
+  **Fix (v3.2.4):** nakon smiraja zoom-out, `layer.redraw()` forsira ponovni zahtjev
+  svih pločica — keširane se iscrtaju odmah (sinhron cache-hit, bez treperenja), prazne
+  se ponovo učitaju.  Status: ❌ POVUČENO (v3.2.5) — pogoršalo (još manje pločica);
+  redraw pravi više churn-a → više use-after-close (vidi D1-16).
+- **D1-16 — Use-after-close race na ImageBitmap → prazne pločice pri zoom-out (PRAVI
+  KORIJEN).** `.close()` (dodan za GPU memoriju u D1-2/D1-7/D1-9) zatvarao je bitmapu
+  dok je DRUGI createTile poziv upravo crta iz cache-a (pri zoom in/out ima puno
+  createTile churn-a). Zatvaranje usred `drawImage` → prazna pločica. To što je D1-15
+  redraw POGORŠAO (više churn-a → više zatvaranja usred crtanja) potvrđuje uzrok; test
+  nalazi podatke jer čitanje je OK — problem je čisto zatvaranje bitmape. **Fix (v3.2.5):**
+  uklonjen `.close()` iz `_bmpCacheSet`, `_sqlTileBmpEvict`, `_tileBmpEvict` — GC oslobađa
+  bitmape (male su, 256px, cache ograničen). D1-15 redraw povučen.  Status: ⚠️ djelimično.
+- **D1-17 — Keširane PRAZNE bitmape → prazne pločice (POTVRĐENO Debug PRO-om).** Debug PRO
+  ispis: `Cache bitmap test: 256x256 crta=PRAZNO(zatvorena?)`. Uzrok: `createImageBitmap(canvas)`
+  (u `cacheFromCanvas` i `_decodeTileBmp`) u ovom WebView-u vraća PRAZNU bitmapu →
+  keširane prazne bitmape → cache-hit crta ništa → prazna pločica. `createImageBitmap(blob)`
+  radi savršeno (🔬 Test). **Fix (v3.2.7):** keširaj ISKLJUČIVO `_decodeBlobBmp` (iz blob-a,
+  s resize opcijom za memoriju, fallback na punu); uklonjen svaki `createImageBitmap(canvas)`.
+  Cache cap 500→300.  Status: ✅ (v3.2.7 — Debug PRO: crta=OK, cache bitmape sad važeće)
+- **D1-18 — Leaflet ne pravi pločice za dio ekrana (stale veličina) → velike praznine
+  (PRAVI KORIJEN, potvrđeno Live HUD-om).** Live HUD: `pločice 12: ✅12 ⬛0` a ekran pun
+  praznina → praznine NISU prazne pločice nego pločice koje Leaflet NIKAD ne napravi.
+  Leaflet zadrži staru (manju) veličinu kontejnera (mobilni address-bar/UI paneli mijenjaju
+  visinu bez window-resize eventa) pa učita pločice samo za gornji/lijevi dio. **Fix
+  (v3.2.9):** ResizeObserver na #map → `map.invalidateSize()` na promjenu veličine; HUD
+  pokazuje "treba~N ima:M ⚠️PREMALO"; ručno dugme "🔄 Osvježi veličinu karte".
+  Status: ⚠️ djelimično (v3.2.9) — ResizeObserver nije uhvatio init-stale veličinu.
+- **D1-19 — Leaflet zaglavljen na pogrešnoj (manjoj) veličini → velike praznine
+  (KONAČNO POTVRĐENO Live HUD-om: `ekran 369x641` a stvarni ~1900px).** Leaflet
+  inicijaliziran prije nego se layout (#map flex:1) smirio → `getSize()=641`, učita
+  pločice samo za taj dio, ostatak prazan. ResizeObserver nije pomogao (init-stale, bez
+  promjene). **Fix (v3.3.1):** SAMOIZLJEČENJE — `setInterval(1500)` + rane provjere
+  upoređuju `map.getSize()` sa stvarnim `clientWidth/Height`; na neslaganje →
+  `invalidateSize()`. Garantovan oporavak ≤1.5s bez obzira na uzrok.  Status: ❌ pogrešan
+  trag — Debug PRO v3.3.2/3.3.3 pokazao DOM=Leaflet=641 (veličina TAČNA), nije stale.
+- **D1-20 — Leaflet nakon zoom-a napravi NEPOTPUN grid (9 umjesto 22 pločice) → veliki
+  prazan dio (PRAVI KORIJEN, potvrđeno Debug PRO-om).** Debug PRO v3.3.3: 22 pločice sve
+  256x256, sve s sadržajem, ispravno poredane, z12 TILE PRONAĐEN, cache OK — sve zdravo
+  KAD se popuni. Ali odmah nakon zoom-out Leaflet napravi premalo pločica (HUD pokazao
+  ima:9 treba:12) jer `_update` odradi dok je zoom transform još u prelazu; ostane prazno
+  dok navigacija/🔄 ne dopuni. **Fix (v3.3.4):** na `zoomend` (debounce 350ms) ako grid
+  ima manje pločica nego što viewport traži → `layer.redraw()` (dopuni). Sada SIGURNO jer
+  su D1-16/17 uklonili prazne keš bitmape i use-after-close.  Status: ❌ POVUČEN (v3.3.5)
+  — zoomFill redraw je dao "12 pločica sa sadržajem ali ekran prazan" (HUD zelen, karta
+  prazna); redraw u krivom trenutku ostavi pločice nevidljivima. Debug PRO dopunjen
+  DOM-dijagnostikom (opacity/isConnected/tile-pane transform) da otkrije zašto su
+  content-pločice nevidljive.  Status: 🔄 dijagnostika (v3.3.5)
+- **D1-21 — Pločice sa sadržajem NEVIDLJIVE: fadeAnimation ostavlja inline opacity=0
+  (PRAVI KORIJEN).** Debug PRO v3.3.4: 12 pločica, 256x256, ISPRAVNO poredane preko
+  viewporta, sve s sadržajem, cache OK — a ekran prazan. Jedino objašnjenje: opacity.
+  Karta je imala `fadeAnimation:true` → Leaflet postavlja INLINE `style.opacity` na
+  pločice tokom fade-a; naš `transition:none !important` ih ostavi zaglavljene na
+  opacity 0 (inline nadjačava CSS `.leaflet-tile{opacity:1}`). **Fix (v3.3.6):**
+  `fadeAnimation:false` — Leaflet ne dira opacity, pločice odmah pune.  Status: ✅ (v3.3.6 —
+  Debug PRO potvrdio op=1, pločice vidljive). GLAVNI bug nevidljivih pločica RIJEŠEN.
+- **D1-22 — Pri intenzivnom skrolu+zoom pločice nakratko nestaju (blago, transient).**
+  Sporo offline čitanje + Leaflet izbaci pločice izvan keepBuffer-a prije nego nove
+  stignu. **Fix (v3.3.7):** keepBuffer 4→6 (zadrži više pločica oko ekrana tokom
+  interakcije).  Status: ✅ djelimično (v3.3.7 — op=1, karta većinom puna).
+- **D1-23 — Keširaj 256px CANVAS umjesto ImageBitmap (resize-opcija takođe daje prazne
+  bitmape).** Debug PRO v3.3.7: `crta=PRAZNO` opet — `createImageBitmap(blob,{resizeWidth})`
+  u ovom WebView-u takođe tiho vraća praznu bitmapu (kao createImageBitmap(canvas) ranije).
+  Jedino pouzdano: čisti `createImageBitmap(blob)` + `drawImage`. **Fix (v3.3.8):** keširamo
+  256px offscreen CANVAS (crtan drawImage-om koji RADI) — uvijek važeći; drawImage prihvata
+  canvas svuda. Debug PRO: sken SVIH keširanih (broj praznih/zatvorenih).  Status: ✅ (v3.3.8 —
+  SKEN: canvas=89 bitmap=0, 0 grešaka; 8 "praznih" su NISKI zoom z2-z9 overview tile-ovi
+  gdje je karta sitna tačka = uglavnom providni = normalno/bezopasno). Keš na radnim
+  zoomovima (12-15) potpuno važeći.
+- **Debug alati:** 📋 Kopiraj Debug PRO dugme (v3.3.9) — kopira ispis u clipboard.
+  Profilacija tile pipeline-a (v3.4.1): mjeri red čekanja / čitanje / dekodiranje / ukupno.
+- **D1-25 — SPOROST: OPFS čitanje 100ms/pločica (profilacija dokazala).** Profil v3.4.1:
+  Čitanje (worker SQLite/OPFS) avg=100ms max=294ms = USKO GRLO (dekodiranje samo 27ms,
+  red 27ms). Uzrok: MiniSqlite čita 4KB stranice preko `file.slice().arrayBuffer()` —
+  asinhrono, ~25ms po stranici. **Fix (v3.4.2):** OPFS **SyncAccessHandle** — sinhrono
+  `read()` (mikrosekunde/stranica) u workeru; fallback na File ako nije podržano. Glavna
+  razlika u brzini naspram native (AlpineQuest). Sync handle se zatvara na `close`.
+  Status: ✅ (v3.4.2 — profil potvrdio: Čitanje 70-100ms → 8ms, ~10× brže; UKUPNO/pločica
+  117ms → 26ms). GLAVNI proboj brzine.
+- **D1-24 — createImageBitmap(blob) ponekad prazna slika (11 praznih z14/z15 u SKEN-u).**
+  Profil/SKEN: i čisti createImageBitmap(blob) zna dati providnu sliku → fale pločice.
+  **Fix (v3.4.2):** `_canvasOpaque` provjeri dekodirano; ako prazno → Image() fallback
+  (pouzdaniji). Profil broji `praznih→Image`.  Status: 🔄 (v3.4.2)
+
+> NAPOMENA: Dubinski bugovi (D1-13 done(), D1-16 use-after-close, D1-17 prazne keš bitmape,
+> D1-1 timeout) bili su STVARNI i riješeni. Live HUD/Debug PRO presudno otkrili da je
+> finalni preostali simptom bio nepotpun Leaflet grid nakon zoom-a (ne veličina).
+
+- **D1-26 — PRAVI uzrok "karta puni samo gornji dio ekrana" (mnogi raniji 'prazni'
+  screenshoti).** `#wrapper { height:100vh; height:100dvh }` na ovom WebView-u pogrešno
+  računa visinu → `#map` (flex:1) kraći od ekrana → donja polovina prazna (van karte).
+  Self-heal (D1-19) je samo poravnao Leaflet s tom pogrešnom visinom — zato "debug ok" a
+  vizuelno prazno. **Fix (v3.4.4):** fiksiraj `#wrapper` na stvarnu `window.innerHeight`
+  (na load/resize/orientation/visibilitychange + 1.5s heal), pa invalidateSize. HUD
+  pokazuje innerH vs #map. Status: 🔄 (v3.4.4, test)
+
+---
+
+## DIO 2 — UČITAVANJE KARATA (UX)
+
+- **D2-1 — Konsolidirani ekran "UČITAJ KARTU" (v3.4.5).** Ranije razbacano kroz 3 stavke
+  menija (Učitaj SQLiteDB, Upravljanje kartama, Offline karta). Novi tab u Meniju
+  objedinjuje: izbor izvora (Interna/SD/Nedavno) + multi-file picker + drag&drop (batch),
+  nedavne karte (top 10, tap=aktiviraj, long-press=obriši, minijatura), bottom-sheet s
+  pregledom (format po SQLite headeru, veličina, CRS, validacija), upravljanje svim
+  kartama (aktiviraj/deaktiviraj/info/obriši + prozirnost + z-index), traka memorije +
+  pretraga, lokalizirane greške. Koristi POSTOJEĆI engine (sqlmapLoadFile, _mapMgrCollect,
+  setLayerSqlite) — formati .mbtiles/.sqlitedb/.gpkg/.db. NAPOMENA: app je Leaflet WebView,
+  ne native — formati koji traže native libove (.map Mapsforge, .ozf2 OziExplorer, .vrt/.tif
+  GDAL) nisu izvedivi bez prelaska na native. Stare stavke menija: "Učitaj SQLiteDB" →
+  preimenovan u "Dijagnostika karata (Debug)" (zadržan Debug PRO/HUD); "Upravljanje
+  kartama" uklonjen (sad u novom ekranu). Status: 🔄 (v3.4.5, test)
+
+- **D1-27 — REGRESIJA: meni/tabovi se ne mogu kliknuti (v3.4.6, hitni fix).** Uzrok:
+  D1-26 JS height-hack `wrap.style.height = window.innerHeight + 'px'` + `setInterval 1.5s`.
+  Na nekim WebView-ima `innerHeight` privremeno krivo izračuna → wrapper VEĆI od ekrana →
+  prekrije/odgura tab-bar pa klikovi ne rade. **Fix:** ukloniti JS height-forsiranje;
+  visinu rješava ČISTI CSS — `#wrapper { position:fixed; inset:0 }` pouzdano ispuni stvarni
+  vidljivi viewport (bez 100vh/100dvh i bez innerHeight), pa #map dobije punu visinu a
+  wrapper nikad ne prelazi ekran. Ostaje samo blagi invalidateSize na resize/orientation.
+  Status: 🔄 (v3.4.6, test) — zamjenjuje D1-26 pristup.
+
+- **D1-28 — Prazne pločice na z15/z13 (cache poisoning + lažni "blank").** Debug PRO SKEN
+  (v3.4.8) našao 14 praznih CANVAS-a u cache-u na radnom zoomu. Dva uzroka: (1) `drawViaImg`
+  (Image fallback) je crtao i KEŠIRAO rezultat bez provjere praznoće → ako je dekodiranje
+  prazno, prebrisao bi upscale-an roditeljski placeholder praznim I zaglavio prazno u cache
+  (svaki cache-hit potom prazan). (2) `_canvasOpaque` je uzorkovao samo 5 tačaka → znao
+  promašiti rijetke pločice (tanka linija na providnom) i lažno ih odbaciti. **Fix (v3.4.9):**
+  drawViaImg crta/kešira SAMO ako je neprozirno; inače zadrži placeholder, ne keširaj.
+  `_canvasOpaque` sada gusto skenira cijeli canvas (svaki 8. piksel). Rezultat: rijetke
+  pločice se prikažu, prave prazne zadrže upscale roditelja (kao AlpineQuest), cache se ne
+  truje. Status: 🔄 (v3.4.9, test na z15)
+
+- **D1-29 — KORIJEN "pune pločice, prazan ekran" (vidljivih 6/11, karta gurnuta dolje).**
+  Debug v3.5.1 + screenshot dokazali: pločice su 100% pune i ispravno pozicionirane
+  (getImageData ih vidi), ali se NE prikazuju — a invalidateSize ih potpuno izbriše.
+  Uzrok: tile <canvas> Leaflet doda u DOM PRAZAN, pa mi crtamo ASINKRONO (nakon read/decode);
+  ovaj WebView ne re-kompozitira kasnije nacrtan canvas → GPU sloj ostane prazan iako su
+  pikseli u memoriji. **Fix:** _compositeNudge — kratki opacity flicker kroz rAF nakon
+  async crtanja forsira recomposite. Poziciju/transform ne diramo (drži Leaflet).
+  Status: 🔄 (v3.5.2, test). NB: isključuje KIMI hipoteze (CRS/format/CORS) — pločice su
+  dokazano pune i čitljive.
+
+- **D1-30 — Zoom-OUT gubi pločice trajno ("koliko god čekao").** Pri smanjenju zooma neke
+  novoučitane pločice se ne re-kompozitiraju (nudge iz _doneP padne usred zoom-tranzicije);
+  Leaflet ih smatra učitanima pa ih nikad više ne crta → trajno prazne. **Fix (v3.5.4):**
+  nakon zoomend/moveend sweep koji pre-nudge-a SVE pločice vidljivog sloja (0/150/400/800ms)
+  → zaglavljene se prikažu. Status: 🔄 (v3.5.4, test zoom-out).
+
+## DIO 2 (nastavak) — MBTiles (primarni format)
+
+- **D2-2 — MBTiles robusnost (v3.5.5).** Istraga (2 Explore agenta): Y-flip(TMS)/zoom za
+  mbtiles su ISPRAVNI; mbtiles dijeli render pipeline s rmaps pa važe sve render popravke
+  (v3.5.2–v3.5.4 composite nudge). Preostali uzroci "ne radi":
+  (1) **XYZ-pohranjene MBTiles** (bez TMS flipa) → flip pogriješi svaku pločicu. FIX:
+  `queryTile()` i `MiniSqlite.tile()` sad probaju TMS flip pa XYZ (ne-flip) fallback i
+  zapamte orijentaciju (`inst.mbY`/`this._mbY`). (2) **Vektorske MBTiles (PBF/MVT)** →
+  raster pipeline ih ne dekodira. FIX: `_sqlmapVectorFmt`/`_sqlmapWarnIfVector` daju jasnu
+  poruku umjesto tihih praznih pločica (prepoznaje po `metadata.format`). (3) Dijagnostika:
+  🔬 Test sad prikazuje `meta.format` + ⚠ vektor upozorenje. **Preostaje D2-3:** 512px
+  tile-size podrška (tek ako Test pokaže 512×512 — riskantnije, thread-a tsz kroz layer/
+  createTile/_drawTileBytesC/placeholder/prewarm). Status: 🔄 (v3.5.5, test + 🔬 Test).
+
+- **D2-3 — MBTiles "prazno posvuda" = centriranje na UGAO pokrivenosti (v3.5.6).** 🔬 Test
+  dokazao: podaci OK (raster, 88KB pločica čita se), ali karta nema `bounds` u metadata pa
+  je auto-zoom koristio `_lastIdxEntry` (MAX ključ indeksa = JI ugao na maxzoom z17) → karta
+  skoči na ugao, odzumiranjem prazno. **Fix:** worker `MiniSqlite.init()` sad izvodi prave
+  BOUNDS iz PRVOG + ZADNJEG ulaza indeksa (dva dijagonalna ugla → lat/lng neovisan o zoomu),
+  pa `_sqlmapMetaAutoZoom` radi `fitBounds` (maxZoom 16, padding) na CIJELU pokrivenost.
+  Center fallback umjeren (cap z14). 🔬 Test prikazuje bounds/center. Vrijedi i za rmaps
+  (bolje centriranje). Status: 🔄 (v3.5.6, test).
+
+- **D2-4 — MBTiles "prazno" = auto-center na rub/pored gustih podataka (v3.5.8).** Debug+Test
+  dokazali: podaci OK i čitaju se (135KB PNG na z11), ali karta slijeće 1 pločicu PORED
+  gustog područja jer bounds (iz prvog z10 / zadnjeg z17 ugla) su skewed → centar bbox-a
+  pada izvan gustih podataka. **Fix:** (1) worker `_middleIdxEntry` = MEDIJANSKI ulaz indeksa
+  ≈ prostorni centar pokrivenosti; init postavlja `meta.center` na tu pločicu. (2)
+  `_sqlmapMetaAutoZoom` prioritet center→setView (pouzdano slijeće NA podatke), fitBounds tek
+  ako center fali. (3) Graceful degradation: na praznu pločicu čita NAJBLIŽEG pretka iz baze
+  i crta upscale-an kvadrant (AlpineQuest), keš se puni za placeholder piramidu. Status:
+  🔄 (v3.5.8, test). Vrijedi i za rmaps (bolji center).
+
+- **D2-5 — PRAVI korijen MBTiles "prazno": mbY Y-orijentacija lock zatrovan init
+  dijagnostikom (v3.6.0).** v3.5.5 je dodao pamćenje Y-orijentacije (this._mbY/inst.mbY):
+  prvi pogodak zaključa TMS ili XYZ. ALI init dijagnostika (load-opfs) zove
+  mini.tile(storedZ, storedCol, storedRow) — proslijedi STORED (TMS) row kao y; tile() ga
+  flipuje (promaši) pa padne na ne-flip = storedRow (pogodi) → zaključa _mbY='xyz'. Od tada
+  SVI pravi zahtjevi (ispravan XYZ y) koriste ne-flip → promaše sve → "prazno posvuda",
+  deep-probe 0/49 iako (557,654) postoji. **Fix:** ukloniti lock; UVIJEK probaj [tyTms, y]
+  (TMS karte pogode prvi, bez troška; XYZ na drugi). Objašnjava zašto je tst=ok stalno
+  zbunjivao (artefakt dijagnostike, ne dokaz da pravi zahtjevi rade). Status: 🔄 (v3.6.0).
+
+- **D2-6 — MBTiles zoom-OUT pločice nestaju trajno (v3.6.1).** Nakon v3.6.0 (čitanje radi),
+  pri zoom-out velike 2GB pločice se učitaju POSLIJE fiksnog sweep prozora (0-800ms) pa ih
+  nudge promaši → trajno prazne. **Fix:** (1) `layer.on('load')` → nudge u trenutku kad su
+  SVE pločice gotove (timing-robusno, primarno); (2) pane-level recomposite (toggle
+  tilePane opacity) uz per-tile — jači okidač kad ih je mnogo; (3) sweep rep produžen na
+  1500ms. Status: 🔄 (v3.6.1). Fallback ako ne uspije: <img> pločice umjesto canvas.
+
+- **D2-7 — Offline pločice <canvas> → <img> (v3.6.2, GASI compositing klasu).** Nakon 3
+  varijante nudge-a (per-tile/pane/load-event) pločice su se i dalje gubile na zoom-out
+  (WebView ne re-kompozitira async-crtan canvas s dugim worker round-tripom). Rješenje:
+  createTile sada vraća <img> (img.src = blob iz worker-a) umjesto canvas → browser
+  kompozitira NATIVNO (kao Leaflet default/online). Uklonjeno: composite nudge, placeholder
+  piramida, ancestor-upscale, canvas cache iz tile-puta; prewarm no-op. Placeholder daje
+  Leaflet keepBuffer:6. Debug PRO prilagođen img-u (complete && naturalWidth>0). Vrijedi i
+  za rmaps. Status: ✅ POTVRĐENO (v3.6.2 — korisnik: "Napokon riješen problem"). ZATVARA
+  cijelu offline-render sagu (D1-13…D1-30, D2-2…D2-7): čitanje (OPFS sync, mbY), koordinate
+  (TMS/Y-flip), centriranje (medijan), i PRIKAZ (img native composite).
+
+---
+
+## DIO 2 — nalazi (analiza 2026-06-30)
+
+- **D2-A — nema zaštite od PARALELNOG sync-a (v3.6.3).** `_processOfflineQueue` se zove iz
+  4+ mjesta (online event, restore, "Sync sad", sbInitData); bez guard-a dva prolaza
+  obrade isti red → dupli inserti (npr. duplirani projekt). **Fix:** `_syncInProgress`
+  zastavica (+ `_syncRerun` da preskočeni poziv re-okine na kraju), try/finally. ✅ (v3.6.3)
+- **D2-B — `ts` kao ključ reda nije jedinstven (v3.6.3).** Dvije op. u istoj ms → isti `ts`
+  → `removeFromQueue(ts)` obriše OBJE → tihi gubitak operacije. **Fix:** jedinstveni `_qid`
+  (Date.now()+seq) u `enqueue`; remove/bumpRetry/discard po `_qid` (fallback na `ts` za
+  stari red). ✅ (v3.6.3)
+- **D2-C — upsert_labels delete-pa-insert neatomski.** Rizik gubitka oznaka ako insert padne.
+  **Fix (v3.6.4):** UNIQUE(korisnik_id,label_id) migracija + `_syncTextLabelsServer` (upsert
+  update-in-place + brisanje samo obsoletnih; fallback na staro ako constraint nema). ✅ (v3.6.4)
+- **D2-D — istek tokena → bumpRetry → odbacivanje.** **Fix (v3.6.4):** `_isAuthErr` (401/JWT-expired,
+  ne RLS) → `sb.auth.refreshSession()` jednom po prolazu + rerun s novim tokenom; op ostaje u
+  redu. ✅ (v3.6.4)
+
+## DIO 2 — nalazi runda 2: auth/realtime/projekti/kolege/admin (analiza 2026-07-01)
+
+- **D2-E — cross-user data leak na dijeljenom uređaju (HIGH).** `doLogout()` nikad nije čistio
+  `_tragRegistry`/`tvlake_tragovi`, `_msrRegistry`/`tvlake_mjerenja`, `_locFotos`/
+  `tvlake_loc_fotos` (ni in-memory ni localStorage) — `showApp()` ih odmah učitava na SVAKOJ
+  prijavi, pa bi drugi korisnik na istom terenskom tabletu vidio tragove/mjerenja/fotke
+  prethodnog naloga na karti. **Fix (v3.6.9):** `doLogout` sad uklanja mapne slojeve (tragovi/
+  foto markeri), prazni sva tri registra i briše sve tri localStorage ključeve. ✅ (v3.6.9)
+- **D2-F — `saveNovProjekt` nema in-flight guard (HIGH).** Dupli tap na "Sačuvaj" prije nego
+  prvi insert završi pravio je duplikat projekta (isti bug klasa kao `sbFlushVlaka`/
+  `dozConfirmSave` prije njihovih fix-eva). **Fix (v3.6.9):** `_npSaveInFlight` zastavica. ✅
+  (v3.6.9)
+- **D2-G — `sbSaveOdjel` upsert tiho prepisuje vlasništvo (`korisnik_id`).** Dijeljena lista
+  odjela po šumariji ima onConflict `sumarija,naziv` (bez `korisnik_id`) — drugi korisnik koji
+  spremi ISTI naziv odjela tiho prepiše `korisnik_id` reda bez greške/upozorenja. **Fix
+  (v3.6.9):** `ignoreDuplicates: true` na oba mjesta (live + queue) — prvi kreator ostaje
+  vlasnik, upsert postaje no-op ako red već postoji. ✅ (v3.6.9)
+- **D2-H — `sbLoadProjekti` nema reentrancy/generation guard.** Konkurentni pozivi (realtime
+  listener + korisničke akcije) mogu pustiti da stariji (spori) odgovor prepiše `_projekti`
+  nakon novijeg. **Fix (v3.6.9):** `_projLoadGen` generation token (isti pattern kao
+  `_dozLoadGen` za Doznaku) — stariji odgovor se tiho odbaci na svakoj provjernoj tački nakon
+  await-a. ✅ (v3.6.9)
+- **D2-I — auth-refresh nedostajao na LIVE (ne-queued) putevima.** `_sbFlushVlakaImpl`/
+  `_sbFlushTragImpl` nisu provjeravali `_isAuthErr` — istek tokena na live putu je samo tiho
+  padao u offline red i čekao SLJEDEĆI prolaz `_processOfflineQueue`-a da osvježi sesiju,
+  odgađajući sync bez potrebe. **Fix (v3.6.9):** zajednički `_tryRefreshSession()` helper; oba
+  puta sad na auth grešku osvježe sesiju i pokušaju JEDNOM ponovo prije nego padnu na queue. ✅
+  (v3.6.9)
+- **D2-J — nema eksplicitnog re-subscribe-a realtime kanala nakon token refresh-a.**
+  `onAuthStateChange` je hvatao samo `INITIAL_SESSION`; postojeći reaktivni `_onRtStatus`
+  fallback (restart 8s nakon `CHANNEL_ERROR`/`TIMED_OUT`) je vjerovatno dovoljan (Supabase
+  realtime klijent inače re-autentifikuje svoj socket interno), ali dodano je i eksplicitno
+  proaktivno rješenje. **Fix (v3.6.9):** `TOKEN_REFRESHED` grana poziva `sbStartRealtime()`
+  (već sigurno za ponovni poziv — čisti stare kanale prije novih). ✅ (v3.6.9)
+- **D2-K — login/registracija: nema double-submit guard, pogrešan-PIN poruka miješa mrežnu
+  grešku sa stvarno pogrešnim kredencijalima, registracija ima check-pa-insert race na
+  ime+prezime (bez DB unique constraint-a — nije dodana migracija jer bi zahtijevala ručni
+  pregled eventualnih postojećih duplikata korisničkih naloga, rizičnije od text_labels
+  dedup-a).** **Fix (v3.6.9):** `_authInFlight` zastavica na `doLogin`/`doRegister`; `doLogin`
+  razlikuje `status===400`/invalid-credential poruke od ostalih grešaka; `doRegister` prepoznaje
+  Postgres `23505` (unique violation) i prikazuje jasnu poruku umjesto sirove greške (spremno
+  ako se constraint doda kasnije). ✅ (v3.6.9)
+- **D2-L — `deleteProjektUI` brisao vlake PRIJE potvrđenog brisanja projekta.** Ako brisanje
+  projekta padne (RLS/mreža), vlake su već bile trajno obrisane → osiromašeni "duh" projekat
+  bez ijedne vlake ostaje na serveru. **Fix (v3.6.9):** `_deleteVlakeByProjekt(id)` premješteno
+  da se poziva TEK nakon potvrđenog uspješnog brisanja projekta (ili odmah za pending-sync
+  projekat koji nikad nije ni postojao na serveru). ✅ (v3.6.9)
+- **D2-M — admin panel akcije idu preko Postgres RPC-ova (`admin_set_sumarija`,
+  `admin_delete_user`, `admin_get_all_users`), što je ispravan obrazac AKO te RPC funkcije
+  same provjeravaju admin ulogu server-side — to se ne može potvrditi iz klijentskog koda
+  (RPC tijela žive u Supabase-u, ne u ovom fajlu). Klijent gejtuje samo UI
+  (`sbProfile?.is_admin`). Nije popravljano u ovoj rundi — preporuka: ručno provjeriti da
+  svaka od te tri RPC funkcije eksplicitno provjerava `is_admin`/ulogu pozivaoca prije izvršenja.**
+
+## DIO 3 — nalazi (analiza 2026-06-30)
+
+- **D3-A — native "Stop" u notifikaciji ne zaustavlja snimanje.** `GpsService.java` za akciju
+  "stop" nije slao broadcast nazad u JS (za razliku od "pause") → `recOn` ostane `true`, GPS watch
+  i foreground-zaštita nestanu bez sinhronizacije stanja. **Fix (v3.6.5):** `sendBroadcastToWeb("stop")`
+  dodan u "stop" granu; `stopRec()` dobio idempotency guard (`if (!recOn) return;`) da spriječi
+  beskonačnu broadcast-petlju kad JS-inicirani stop odjekne nazad kroz servis. ✅ (v3.6.5)
+- **D3-D — `sbFlushVlaka` nema zaštitu od paralelnih poziva.** Debounce tajmer + direktni pozivi
+  za istu vlaku mogu oba ući u INSERT granu prije nego prvi dobije `sbId` → duplikat reda na
+  serveru. **Fix (v3.6.5):** per-vlaka `_flushing`/`_flushPending` guard (analogno D2-A pattern-u,
+  ali po objektu umjesto globalno) — `sbFlushVlaka` sad tanki wrapper oko `_sbFlushVlakaImpl`.
+  ✅ (v3.6.5)
+- **D3-E — brisanje vlake prije prvog sync-a ne sprječava in-flight insert.** `sbDeleteVlaka`
+  je bio no-op kad `v.sbId` još ne postoji, pa bi tek-obrisana vlaka ipak bila insert-ovana na
+  server kad njen prvi flush završi. **Fix (v3.6.5):** `v._deleted=true` postavljeno sinhrono na
+  ulazu u `sbDeleteVlaka`, koja zatim čeka eventualni in-flight flush prije provjere `sbId` —
+  ako je insert uspio, odmah briše upravo kreirani red. ✅ (v3.6.5)
+- **D3-B — tri nezavisna mehanizma (onPE, watchdog, sw-ping) restartuju GPS watch bez
+  koordinacije.** Blizak dvostruki/trostruki restart kod produženog gubitka signala briše
+  medijan-buffer iznova prije nego se napuni → duplo/trostruko duži oporavak. **Fix (v3.6.6):**
+  jedinstvena `_restartGpsWatch(reason)` s 5s cooldown-om — sva tri trigera dijele istu izvedbu,
+  blizak duplikat se tiho preskoči. ✅ (v3.6.6)
+- **D3-C — dugi prekid signala daje tihi "teleport" u zapisanom tragu.** Nakon restarta `_kf`
+  je `null` pa katastrofalni-skok provjera ne hvata prvi fix nakon oporavka — tačka se tiho doda
+  bez upozorenja, ravna linija kroz neopisani teren. **Fix (v3.6.6):** `_lastPtAcceptedAt`
+  (preživljava restart, za razliku od `_lastRecTime`) mjeri pravi prekid; >60s → toast upozorenje
+  + `gap:true` oznaka na tački (aditivno, ne mijenja GPX export/`calcL`/server payload). ✅ (v3.6.6)
+
+## DIO 4 — nalazi (analiza 2026-07-01)
+
+- **D4-A — XSS preko uvezenog KML/GeoJSON/.dbf sadržaja (SIGURNOSNI, HIGH).**
+  `_kmlPopupHtml` je umetao sirov `<description>` u popup kad "izgleda kao HTML" (regex heuristika,
+  aktivno permisivna); `pkml`/`pkmlStyled` (KML uvoz) i shapefile/GeoJSON odjel-uvoz su vezivali
+  sirov `<name>`/atribut direktno na `bindTooltip`/`divIcon html` bez escape-a — Leaflet oboje
+  ubacuje preko `innerHTML`. Dijeljena/preuzeta `.kml`/`.shp` datoteka s npr.
+  `<img src=x onerror=...>` u opisu ili nazivu izvršava proizvoljni JS u originu aplikacije
+  (krađa Supabase auth tokena/sesije). **Fix (v3.6.7):** `_kmlPopupHtml` uvijek `_escHtml(desc)`
+  (uklonjena "isHtml" grana, novi red → `<br>` za čitljivost); svi `bindTooltip(name,...)` pozivi
+  u `pkml`/`pkmlStyled`/shapefile-uvozu sad `_escHtml(name)`; `_kmlLabelMarker` escape-uje `text`
+  interno (štiti oba pozivaoca). ✅ (v3.6.7)
+- **D4-C — `sbFlushTrag`/`sbDeleteTrag` imaju isti duplicate-save i resurrection bug kao vlake
+  prije D3-D/D3-E fix-a.** Nema in-flight guard-a (paralelni pozivi oba INSERT-uju prije nego
+  prvi dobije `sbId`) niti `_deleted` zastavice (brisanje traga prije prvog sync-a ne sprječava
+  in-flight insert da ga ipak kreira na serveru). **Fix (v3.6.7):** identičan `_flushing`/
+  `_flushPending`/`_deleted` pattern prenesen iz `sbFlushVlaka`/`sbDeleteVlaka` na
+  `sbFlushTrag`/`_sbFlushTragImpl`/`sbDeleteTrag`. ✅ (v3.6.7)
+- **D4-B — Doznaka markice: ghost/resurrection na delete-prije-sync, gore nego kod vlake jer
+  `insert_doz_marking` uopće nije hvatao server ID.** **Fix (v3.6.8):** `dozConfirmSave` taguje
+  offline-kreiranu markicu privremenim `_localId` u redu čekanja; queue grana sad hvata
+  `data.id` (`.select('id')`) i po uspjehu zamijeni lokalni ID stvarnim; `dozDeleteMarking` za
+  `'local_'` ID otkazuje odgovarajući red čekanja umjesto da gađa nepostojeći server red. ✅
+  (v3.6.8)
+- **D4-D — stale-odjel render race.** Brzo prebacivanje odjel A→B prije nego se A-ov fetch
+  završi moglo je prikazati pogrešne markice/tragove. **Fix (v3.6.8):** generation token
+  `_dozLoadGen` u `dozLoadLayers` — stariji odgovor se tiho odbaci. ✅ (v3.6.8)
+- **D4-E — wake-lock nije bio svjestan Doznaka GPS-a.** `stopRec()` je bezuslovno gasio wake
+  lock (mogao ugasiti ekran usred aktivnog Doznaka GPS snimanja); `visibilitychange` handler je
+  reacquire-ovao wake lock samo za glavno snimanje. **Fix (v3.6.8):** oba mjesta sad provjeravaju
+  i `_dozGpsOn`. ✅ (v3.6.8)
+- **D4-F — nema in-flight guard na `dozConfirmSave`.** Dupli tap na "Sačuvaj" prije nego prvi
+  insert završi pravio je duplikat markice. **Fix (v3.6.8):** `_dozSaveInFlight` zastavica. ✅
+  (v3.6.8)
+- **D4-G — tačke mjerenja cure između FAB-selektovanih mjerenja.** `_izmjeriPick` je pokretao
+  novo mjerenje bez čišćenja tačaka ostavljenih od prethodne (već završene/napuštene) sesije.
+  **Fix (v3.6.8):** `msrClear()` prije `msrStart()` kad se bira novi tip iz FAB menija (tab-switch
+  "nastavi" ponašanje ostaje netaknuto). ✅ (v3.6.8)
+- **D4-H — profil visine/nagib je ignorisao `gap:true` oznaku (v3.6.6).** Teleportovani GPS-prekid
+  segment se prikazivao kao glatka promjena, kvareći "Max nagib" statistiku. **Fix (v3.6.8):**
+  gap segmenti se crtaju sivo/isprekidano i isključuju iz nagib-statistike (uz brojač isključenih
+  segmenata u prikazu). ✅ (v3.6.8)
+- **D4-I — `dozSetStatus` nema offline queue.** Mrežna greška je tiho vraćala status na staro
+  umjesto da zakaže sync. **Fix (v3.6.8):** `_isNetworkErr` grananje → `upsert_doz_status` u
+  offline red čekanja umjesto revert-a. ✅ (v3.6.8)
+
+## DIO 1 (preostalo) + DIO 3 (preostalo) — nalazi (analiza 2026-07-01)
+
+Zatvara preostale sekvence iz oba dijela — DIO 1 i DIO 3 su sad u potpunosti pregledani.
+
+- **D1-A — offline download regije nema in-flight guard.** `startOfflineDownload` je mogao
+  pokrenuti DVA paralelna download-a (dupli tap/ponovo otvoren modal) — interleaved progress bar,
+  trošenje mreže/baterije na duple fetch-eve; nema indikacije da je prethodni download prekinut
+  (app ubijen usred preuzimanja). **Fix (v3.7.0):** `_offlineDlInFlight` guard; hvatanje
+  `QuotaExceededError` na `cache.put` s jasnom porukom umjesto tihog "failed" brojača; persistovan
+  `tvlake_offline_dl_incomplete` flag prikazan u `showCacheInfo()` dok se download ne završi u
+  potpunosti. ✅ (v3.7.0)
+- **D1-D — GeoJSON kompaktno-skladištenje (fajlovi ≥4MB) nikad nije rekonstruisalo vizuelni
+  sloj nakon reload-a.** `geojsonOdjeliRestore`-ova `_compact` grana je punila samo
+  `graniceOdjeli` (pretraga/highlight), ali NIKAD `_geojsonLayer` — plavi granice-overlay i
+  "Topo + Granice" dugme su tiho nestajali baš za najveće/najčešće kadastarske export-e.
+  **Fix (v3.7.0):** kompaktna grana sad rekonstruiše `_geojsonLayer` kao `L.featureGroup` od
+  `L.polygon` po sačuvanom ring-u, istim stilom kao normalna (non-compact) putanja. ✅ (v3.7.0)
+- **D1-E — provjera: da li `_updMapScale` pogrešno računa razmjeru za SQLite offline karte
+  necrash-standardne rezolucije?** Provjereno i ISKLJUČENO kao bug: `L.map()` (`index.html:9192`)
+  koristi default `L.CRS.EPSG3857`, pa je zoom↔razmjera odnos svojstvo CRS-a/mape, ne
+  tile-source-a — SQLite `_zm`/`zOff` offset je samo interni detalj dohvata tačne pločice za dati
+  standardni zoom, ne mijenja značenje tog zoom nivoa. Nije potreban fix. ✅ (v3.7.0, verifikovano)
+- **D1-F — dvije stvari nađene usput u istoj funkciji:** (1) O(n²) `graniceOdjeli.find()` dedup
+  po feature-u pri GeoJSON uvozu — kvadratno za fajlove s hiljadama odjela, moglo zamjetno
+  zaglaviti glavnu nit. (2) **Sigurnosni:** `_applyGeoJSONOdjeli`'s `onEachFeature` je vezivao
+  sirov `<name>` na `bindTooltip` bez escape-a — ista XSS klasa kao KML fix (D4-A), samo
+  propuštena tačka jer je ovo odvojena GeoJSON-granice putanja. **Fix (v3.7.0):** `Set`-bazirani
+  O(1) dedup (i u `_applyGeoJSONOdjeli` i u kompaktnom restore-u); `_escHtml(name)` prije
+  `bindTooltip`. ✅ (v3.7.0)
+- **D3-N — "nagib u realnom vremenu" nije bio real-time.** `_updSlope()` se pozivao SAMO iz
+  `toggleRecPause()` (jednom po pauzi/nastavku) — `updBan()` (poziva se na svaku prihvaćenu GPS
+  tačku) ga nikad nije zvao, pa je prikaz bio zamrznut između pauza. **Fix (v3.7.0):** `_updSlope()`
+  dodan u `updBan()`, osvježava se na svaku tačku kao i ostale statistike. ✅ (v3.7.0)
+- **D3-O — precizna tačka je tiho miješala fikseve preko GPS restarta.** `_precizCollect`/
+  `_precizFinish` nisu imali nikakvu svijest o `_restartGpsWatch()` dešavanju usred prikupljanja
+  — prosjek je mogao spojiti fikseve prije/poslije prekida signala bez upozorenja. **Fix
+  (v3.7.0):** `_restartGpsWatch` sad zove `_precizReset()` + toast upozorenje ako je prikupljanje
+  aktivno kad se restart stvarno desi. ✅ (v3.7.0)
+- **D3-P — `_calcRecentSlope` nije provjeravao `gap:true` (v3.6.6 oznaka).** Nagib preko
+  teleportovanog GPS-prekid segmenta bi se prikazao kao stvaran (pogotovo nakon D3-N fix-a, koji
+  ga je učinio stvarno real-time). **Fix (v3.7.0):** funkcija sad vraća `null` (bez prikaza) ako
+  zadnja tačka ili bilo koji segment na putu unazad ima `gap:true`. ✅ (v3.7.0)
+- **D3-Q — dugme precizne tačke moglo ostati zaglavljeno na "n/10" do 30s** nakon stop/pauze
+  usred prikupljanja (čišćenje se ranije oslanjalo na SLJEDEĆI GPS fix ili 30s timeout). **Fix
+  (v3.7.0):** `stopRec()`/`toggleRecPause()` sad odmah zovu `_precizReset()` ako je prikupljanje
+  aktivno. ✅ (v3.7.0)
+- **D3-R — notifikacija udaljenosti je kasnila u rijetkom terenu.** Osvježavala se samo svakih
+  10 PRIHVAĆENIH tačaka — u gustoj šumi (agresivni GPS filteri odbace većinu fikseva) tekst je
+  znao kasniti minutama. **Fix (v3.7.0):** dodatni vremenski prag (~20s) garantuje osvježenje
+  bez obzira na rijetkost prihvaćenih tačaka. ✅ (v3.7.0)
