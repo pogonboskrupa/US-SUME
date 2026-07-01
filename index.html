@@ -4101,7 +4101,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.6.8';
+const APP_VER = 'v3.6.9';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -4397,6 +4397,16 @@ function _isAuthErr(err) {
   return st === 401 || code === 'PGRST301' || /jwt.*expir|token.*expir|unauthor/.test(m);
 }
 
+// D2-I: isti refresh-i-pokušaj-ponovo tretman za LIVE (ne-queued) upise — bez ovoga
+// istekao token na live putu (npr. sbFlushVlaka/sbFlushTrag) samo tiho pada u offline
+// red i čeka SLJEDEĆI prolaz _processOfflineQueue-a da osvježi sesiju.
+async function _tryRefreshSession() {
+  try {
+    const { data } = await sb.auth.refreshSession();
+    return !!data?.session;
+  } catch(e) { return false; }
+}
+
 let _syncInProgress = false, _syncRerun = false;
 async function _processOfflineQueue() {
   if (!sbUser || !sbProfile) return;
@@ -4456,7 +4466,7 @@ async function _processOfflineQueue() {
           if (dm) { dm.id = data.id; _dozCacheLayers(dm.project_id); }
         }
       } else if (op.type === 'upsert_odjel') {
-        const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv' });
+        const { error } = await sb.from('odjeli').upsert(op.payload, { onConflict: 'sumarija,naziv', ignoreDuplicates: true });
         err = error;
       } else if (op.type === 'insert_projekt') {
         const { _tempId, ...insertPayload } = op.payload;
@@ -4640,6 +4650,11 @@ async function initAuth() {
         console.error('Auth init error:', e);
       }
     }
+    // D2-J: proaktivno re-subscribe realtime kanala nakon token refresh-a, umjesto da se
+    // oslanjamo samo na reaktivni _onRtStatus fallback (koji čeka da kanal prvo pukne).
+    if (event === 'TOKEN_REFRESHED' && sbUser) {
+      try { sbStartRealtime(); } catch(e) {}
+    }
   });
 
   // 2. Fallback: auto-login sa zapamćenim kredencijalima
@@ -4816,7 +4831,10 @@ function showAuthErr(msg, isReg) {
 }
 
 // --- Login ---
+let _authInFlight = false;
 async function doLogin() {
+  if (_authInFlight) return;  // D2-K: spriječi dupli tap na "Prijavi se"
+  _authInFlight = true;
   try {
   const ime     = document.getElementById('auth-ime').value.trim();
   const prezime = document.getElementById('auth-prezime').value.trim();
@@ -4852,7 +4870,13 @@ async function doLogin() {
   if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen: ' + (lookupErr?.message||'nema emaila')); return; }
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
-  if (error) { showAuthErr('Pogrešan PIN: ' + error.message); return; }
+  if (error) {
+    // D2-K: ne prikazuj "Pogrešan PIN" za mrežnu/server grešku — samo za stvarno
+    // pogrešne kredencijale (Supabase invalid_grant, status 400).
+    const wrongPin = error.status === 400 || /invalid.*(login|credential|grant)/i.test(error.message || '');
+    showAuthErr((wrongPin ? 'Pogrešan PIN' : 'Greška prijave') + ': ' + error.message);
+    return;
+  }
 
   // Zapamti korisnika ako je checkbox čekiran
   if (document.getElementById('auth-zapamti').checked) {
@@ -4865,10 +4889,14 @@ async function doLogin() {
   await sbLoadProfile();
   showApp();
   } catch(e) { showAuthErr('Greška: ' + e.message); }
+  finally { _authInFlight = false; }
 }
 
 // --- Register ---
 async function doRegister() {
+  if (_authInFlight) return;  // D2-K: spriječi dupli tap na "Registruj se"
+  _authInFlight = true;
+  try {
   const ime      = document.getElementById('reg-ime').value.trim();
   const prezime  = document.getElementById('reg-prezime').value.trim();
   const sumarija = document.getElementById('reg-sumarija').value.trim();
@@ -4900,11 +4928,21 @@ async function doRegister() {
   const { error: insertErr } = await sb.from('korisnici').insert({
     id: data.user.id, ime, prezime, sumarija, login_email: loginEmail, boja: korisnikBoja
   });
-  if (insertErr) { showAuthErr('Greška pri kreiranju profila: ' + insertErr.message, true); return; }
+  if (insertErr) {
+    // D2-K: check-pa-insert gore (4910) je racy — dva uređaja mogu proći provjeru
+    // istovremeno. Ako DB ima unique constraint, prepoznaj je i prikaži jasnu poruku
+    // umjesto sirove Postgres greške.
+    const dupNazivErr = insertErr.code === '23505';
+    showAuthErr(dupNazivErr ? `Korisnik "${ime} ${prezime}" već postoji` : 'Greška pri kreiranju profila: ' + insertErr.message, true);
+    return;
+  }
 
   sbUser = data.user;
   await sbLoadProfile();
   showApp();
+  } finally {
+    _authInFlight = false;
+  }
 }
 
 // --- Logout ---
@@ -4960,6 +4998,20 @@ async function doLogout() {
   // Očisti keširani profil i per-user podatke — sprečava da offline fast-path
   // pusti pogrešnog korisnika i da se tuđi keš prikaže novom nalogu
   [_OL.PROFILE, _OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
+
+  // D2-E: tragovi/mjerenja/foto oznake su ranije preživljavale odjavu — na dijeljenom
+  // tabletu sljedeći korisnik bi vidio tragove/mjerenja/fotke prethodnog naloga na karti.
+  Object.values(_tragLayers).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
+  Object.values(_tragHitLayers).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
+  _tragLayers = {}; _tragHitLayers = {}; _tragRegistry = [];
+  localStorage.removeItem(_TRAG_REG_KEY);
+
+  _msrRegistry = [];
+  localStorage.removeItem(_MSR_REG_KEY);
+
+  _locFotos.forEach(f => { if (f.marker) { try { map.removeLayer(f.marker); } catch(e) {} } });
+  _locFotos = [];
+  localStorage.removeItem(_FOTO_KEY);
 
   dnevniLog = []; kolege = [];
 
@@ -5112,21 +5164,25 @@ let _projekti = [];
 let _aktivniProjektId = localStorage.getItem('tvlake_akt_proj') || null;
 let _pdProjektId = null;
 const _deletedProjektIds = new Set(); // guard: ne dozvoli sbLoadProjekti da ih vrati
+let _projLoadGen = 0;  // D2-H: generation token — spriječi stariji (spori) odgovor da prepiše noviji
 
 async function sbLoadProjekti() {
   if (!sbUser) return;
   // ŠPD terenski korisnik nema projekte — preskoči učitavanje
   if (isSpdField()) { _projekti = []; rndProjektiList(); return; }
+  const myGen = ++_projLoadGen;
   try {
     // Admin (SPD USSUME) — nadzorni pregled: vidi SVE projekte (read-only)
     if (isAdmin()) {
       const { data, error } = await sb.from('projekti')
         .select('*').order('datum', { ascending: false });
       if (error) throw error;
+      if (myGen !== _projLoadGen) return;
       _projekti = (data || []).filter(p => !_deletedProjektIds.has(p.id));
       for (const p of _projekti) {
         const { data: cl } = await sb.from('projekt_clanovi')
           .select('korisnik_id, added_by').eq('projekt_id', p.id);
+        if (myGen !== _projLoadGen) return;
         p.clanovi = cl || [];
       }
       _OL.save(_OL.PROJEKTI, _projekti);
@@ -5135,15 +5191,18 @@ async function sbLoadProjekti() {
     const { data: moji, error: e1 } = await sb.from('projekti')
       .select('*').eq('korisnik_id', sbUser.id).order('datum', { ascending: false });
     if (e1) throw e1;
+    if (myGen !== _projLoadGen) return;
 
     // Load projects I'm a member of
     const { data: clanstva } = await sb.from('projekt_clanovi')
       .select('projekt_id').eq('korisnik_id', sbUser.id);
+    if (myGen !== _projLoadGen) return;
     let dijeljeni = [];
     if (clanstva && clanstva.length > 0) {
       const ids = clanstva.map(c => c.projekt_id);
       const { data } = await sb.from('projekti').select('*').in('id', ids)
         .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+      if (myGen !== _projLoadGen) return;
       dijeljeni = data || [];
     }
     // Nikad ne vraćaj lokalno obrisane projekte (DB propagacija može kasniti)
@@ -5153,18 +5212,21 @@ async function sbLoadProjekti() {
     for (const p of _projekti) {
       const { data: cl } = await sb.from('projekt_clanovi')
         .select('korisnik_id, added_by').eq('projekt_id', p.id);
+      if (myGen !== _projLoadGen) return;
       p.clanovi = cl || [];
     }
 
     _OL.save(_OL.PROJEKTI, _projekti); // Keširaj za offline
     } // close else (non-ŠPD)
   } catch(e) {
+    if (myGen !== _projLoadGen) return;
     // Offline fallback — učitaj iz keša
     const cached = _OL.load(_OL.PROJEKTI);
     if (cached) {
       _projekti = cached.filter(p => !_deletedProjektIds.has(p.id));
     }
   }
+  if (myGen !== _projLoadGen) return;
 
   // Validate _aktivniProjektId still exists
   if (_aktivniProjektId && !_projekti.find(p => p.id === _aktivniProjektId)) {
@@ -5345,7 +5407,9 @@ function hideNovProjektForm() {
   document.getElementById('proj-list-sec').style.display = '';
 }
 
+let _npSaveInFlight = false;
 async function saveNovProjekt() {
+  if (_npSaveInFlight) return;  // D2-F: spriječi duplikat projekta od duplog tapa
   const odjel = document.getElementById('np-odjel').value.trim();
   if (!odjel) { showToast('Unesite naziv odjela!'); return; }
   // Upozori na duplikat — isti odjel u istoj GJ već postoji
@@ -5355,6 +5419,8 @@ async function saveNovProjekt() {
     const ok = await _dlgConfirm(`Projekat za odjel ${odjel}${npGj ? ' (GJ ' + npGj + ')' : ''} već postoji. Kreirati još jedan?`);
     if (!ok) return;
   }
+  _npSaveInFlight = true;
+  try {
   const payload = {
     korisnik_id: sbUser.id,
     sumarija:    sbProfile?.sumarija || '',
@@ -5385,6 +5451,9 @@ async function saveNovProjekt() {
   hideNovProjektForm();
   if (data?.id) { _aktivniProjektId = data.id; localStorage.setItem('tvlake_akt_proj', data.id); }
   await sbLoadProjekti();
+  } finally {
+    _npSaveInFlight = false;
+  }
 }
 
 function showProjektiList() {
@@ -6159,8 +6228,10 @@ async function deleteProjektUI() {
   const ok = await _dlgConfirm(`Obrisati projekat "${p.odjel}"?\nOvo briše i sve članove i vlake projekta.`, { danger: true });
   if (!ok) return;
 
-  // Obriši sve vlake koje pripadaju ovom projektu s karte i servera
-  _deleteVlakeByProjekt(id);
+  // D2-L: NE briši vlake prije nego je projekat stvarno obrisan na serveru — ako
+  // brisanje projekta padne (RLS/mreža), ostaje "duh" projekat bez svojih vlaka.
+  // Vlake se sad brišu tek nakon potvrđenog uspjeha (ili odmah za pending-sync
+  // projekat koji nikad nije ni postojao na serveru).
 
   // Odmah ukloni lokalno i prikaži listu
   _projekti = _projekti.filter(x => x.id !== id);
@@ -6180,6 +6251,7 @@ async function deleteProjektUI() {
     localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
     _OL.save(_OL.PROJEKTI, _projekti);
     _setProjektVlakeHidden(id, false);
+    _deleteVlakeByProjekt(id);
     showToast('Projekat uklonjen.');
     return;
   }
@@ -6199,6 +6271,9 @@ async function deleteProjektUI() {
     await sbLoadProjekti();
     return;
   }
+
+  // Projekat potvrđeno obrisan na serveru — tek sad briši njegove vlake s karte i servera
+  _deleteVlakeByProjekt(id);
 
   _setProjektVlakeHidden(id, false); // počisti iz hidden seta
   _kvcClear(id);  // Briši cache kolega vlaka za ovaj projekat
@@ -6496,7 +6571,7 @@ async function sbFlushVlaka(i) {
   }
 }
 
-async function _sbFlushVlakaImpl(v, i) {
+async function _sbFlushVlakaImpl(v, i, _retried) {
   // Validacija: ukloni tačke sa nevažećim koordinatama (NaN/null/∞)
   if (Array.isArray(v.pts)) {
     const _clean = v.pts.filter(p => p && Number.isFinite(p.la) && Number.isFinite(p.lo));
@@ -6568,10 +6643,12 @@ async function _sbFlushVlakaImpl(v, i) {
       if (i2 >= 0) { c2[i2].id = data.id; _OL.save(_OL.VLAKE, c2); }
       _updateVlakaSyncIcon(i, 'ok');
     } else if (error) {
+      if (!_retried && _isAuthErr(error) && await _tryRefreshSession()) return _sbFlushVlakaImpl(v, i, true);
       _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload, knownRev: v.rev ?? null });
       _updateVlakaSyncIcon(i, 'queue');
     }
   } catch(e) {
+    if (!_retried && _isAuthErr(e) && await _tryRefreshSession()) return _sbFlushVlakaImpl(v, i, true);
     _OL.enqueue({ type: 'upsert_vlaka', payload: v.sbId ? { ...payload, id: v.sbId } : payload, knownRev: v.rev ?? null });
     _updateVlakaSyncIcon(i, 'queue');
   }
@@ -6658,7 +6735,7 @@ async function sbFlushTrag(t) {
   }
 }
 
-async function _sbFlushTragImpl(t) {
+async function _sbFlushTragImpl(t, _retried) {
   if (!sbUser || !sbProfile || !t?.pts?.length) return;
   _tragRegSave();
   const kmVal = (t.pts.length > 1)
@@ -6684,6 +6761,7 @@ async function _sbFlushTragImpl(t) {
       if (data) { t.sbId = data.id; _tragRegSave(); }
     }
   } catch(e) {
+    if (!_retried && _isAuthErr(e) && await _tryRefreshSession()) return _sbFlushTragImpl(t, true);
     _OL.enqueue({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload });
   }
 }
@@ -7003,7 +7081,9 @@ async function sbSaveOdjel(naziv) {
   if (!sbUser || !sbProfile?.sumarija || !naziv) return;
   const payload = { sumarija: sbProfile.sumarija, naziv, korisnik_id: sbUser.id };
   try {
-    const { error } = await sb.from('odjeli').upsert(payload, { onConflict: 'sumarija,naziv' });
+    // D2-G: dijeljena lista odjela po šumariji — ignoreDuplicates sprječava da drugi
+    // korisnik koji spremi ISTI naziv tiho prepiše korisnik_id (vlasništvo) prvog kreatora.
+    const { error } = await sb.from('odjeli').upsert(payload, { onConflict: 'sumarija,naziv', ignoreDuplicates: true });
     if (error) throw error;
   } catch(e) {
     _OL.enqueue({ type: 'upsert_odjel', payload });

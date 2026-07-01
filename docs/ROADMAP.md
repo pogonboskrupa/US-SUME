@@ -27,17 +27,17 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 
 ---
 
-## 🔐 DIO 2 — Auth, projekti, sinkronizacija (okosnica podataka)  ⬜
+## 🔐 DIO 2 — Auth, projekti, sinkronizacija (okosnica podataka)  ✅
 
 | Sekvenca | Ključne funkcije | Status |
 |---|---|---|
-| Prijava/registracija | `sbLoadProfile` (~L4606), `showApp` (~L4669), `authShowLogin/Reg` | ⬜ |
-| Supabase init + realtime | `sbInitData` (~L4993), `sbStartRealtime` (~L8217) | ⬜ |
-| Projekti | `sbLoadProjekti` (~L5023), kreiranje/spremanje projekta | ⬜ |
-| Offline red & auto-sync | `_OL` queue, `_processOfflineQueue` (~L4336), online/offline tranzicije | ⬜ |
-| Kolege / odjeli / log | `sbLoadKolege`, `sbSaveOdjel`, `sbLoadOdjeli`, `sbLoadLog`, `sbSaveLogEntry` | ⬜ |
-| Tekst-oznake i fotografije | `sbSaveTextLabels`, `sbUploadFoto`, `sbSaveFoto`, `sbLoadSharedFotos` | ⬜ |
-| Admin panel | `adminLoadUsers` | ⬜ |
+| Prijava/registracija | `sbLoadProfile` (~L4606), `showApp` (~L4669), `authShowLogin/Reg` | ✅ (D2-K v3.6.9) |
+| Supabase init + realtime | `sbInitData` (~L4993), `sbStartRealtime` (~L8217) | ✅ (D2-J v3.6.9) |
+| Projekti | `sbLoadProjekti` (~L5023), kreiranje/spremanje projekta | ✅ (D2-F/H/L v3.6.9) |
+| Offline red & auto-sync | `_OL` queue, `_processOfflineQueue` (~L4336), online/offline tranzicije | ✅ (D2-A/B/C/D v3.6.3-4, D2-I v3.6.9) |
+| Kolege / odjeli / log | `sbLoadKolege`, `sbSaveOdjel`, `sbLoadOdjeli`, `sbLoadLog`, `sbSaveLogEntry` | ✅ (D2-G v3.6.9) |
+| Tekst-oznake i fotografije | `sbSaveTextLabels`, `sbUploadFoto`, `sbSaveFoto`, `sbLoadSharedFotos` | ✅ (D2-C v3.6.4, D2-E v3.6.9) |
+| Admin panel | `adminLoadUsers` | ✅ (pregledano — vidi napomenu D2-M) |
 
 ---
 
@@ -387,6 +387,60 @@ Sloj na kojem se sve ostalo crta. Najviše performansnih/memorijskih rizika.
 - **D2-D — istek tokena → bumpRetry → odbacivanje.** **Fix (v3.6.4):** `_isAuthErr` (401/JWT-expired,
   ne RLS) → `sb.auth.refreshSession()` jednom po prolazu + rerun s novim tokenom; op ostaje u
   redu. ✅ (v3.6.4)
+
+## DIO 2 — nalazi runda 2: auth/realtime/projekti/kolege/admin (analiza 2026-07-01)
+
+- **D2-E — cross-user data leak na dijeljenom uređaju (HIGH).** `doLogout()` nikad nije čistio
+  `_tragRegistry`/`tvlake_tragovi`, `_msrRegistry`/`tvlake_mjerenja`, `_locFotos`/
+  `tvlake_loc_fotos` (ni in-memory ni localStorage) — `showApp()` ih odmah učitava na SVAKOJ
+  prijavi, pa bi drugi korisnik na istom terenskom tabletu vidio tragove/mjerenja/fotke
+  prethodnog naloga na karti. **Fix (v3.6.9):** `doLogout` sad uklanja mapne slojeve (tragovi/
+  foto markeri), prazni sva tri registra i briše sve tri localStorage ključeve. ✅ (v3.6.9)
+- **D2-F — `saveNovProjekt` nema in-flight guard (HIGH).** Dupli tap na "Sačuvaj" prije nego
+  prvi insert završi pravio je duplikat projekta (isti bug klasa kao `sbFlushVlaka`/
+  `dozConfirmSave` prije njihovih fix-eva). **Fix (v3.6.9):** `_npSaveInFlight` zastavica. ✅
+  (v3.6.9)
+- **D2-G — `sbSaveOdjel` upsert tiho prepisuje vlasništvo (`korisnik_id`).** Dijeljena lista
+  odjela po šumariji ima onConflict `sumarija,naziv` (bez `korisnik_id`) — drugi korisnik koji
+  spremi ISTI naziv odjela tiho prepiše `korisnik_id` reda bez greške/upozorenja. **Fix
+  (v3.6.9):** `ignoreDuplicates: true` na oba mjesta (live + queue) — prvi kreator ostaje
+  vlasnik, upsert postaje no-op ako red već postoji. ✅ (v3.6.9)
+- **D2-H — `sbLoadProjekti` nema reentrancy/generation guard.** Konkurentni pozivi (realtime
+  listener + korisničke akcije) mogu pustiti da stariji (spori) odgovor prepiše `_projekti`
+  nakon novijeg. **Fix (v3.6.9):** `_projLoadGen` generation token (isti pattern kao
+  `_dozLoadGen` za Doznaku) — stariji odgovor se tiho odbaci na svakoj provjernoj tački nakon
+  await-a. ✅ (v3.6.9)
+- **D2-I — auth-refresh nedostajao na LIVE (ne-queued) putevima.** `_sbFlushVlakaImpl`/
+  `_sbFlushTragImpl` nisu provjeravali `_isAuthErr` — istek tokena na live putu je samo tiho
+  padao u offline red i čekao SLJEDEĆI prolaz `_processOfflineQueue`-a da osvježi sesiju,
+  odgađajući sync bez potrebe. **Fix (v3.6.9):** zajednički `_tryRefreshSession()` helper; oba
+  puta sad na auth grešku osvježe sesiju i pokušaju JEDNOM ponovo prije nego padnu na queue. ✅
+  (v3.6.9)
+- **D2-J — nema eksplicitnog re-subscribe-a realtime kanala nakon token refresh-a.**
+  `onAuthStateChange` je hvatao samo `INITIAL_SESSION`; postojeći reaktivni `_onRtStatus`
+  fallback (restart 8s nakon `CHANNEL_ERROR`/`TIMED_OUT`) je vjerovatno dovoljan (Supabase
+  realtime klijent inače re-autentifikuje svoj socket interno), ali dodano je i eksplicitno
+  proaktivno rješenje. **Fix (v3.6.9):** `TOKEN_REFRESHED` grana poziva `sbStartRealtime()`
+  (već sigurno za ponovni poziv — čisti stare kanale prije novih). ✅ (v3.6.9)
+- **D2-K — login/registracija: nema double-submit guard, pogrešan-PIN poruka miješa mrežnu
+  grešku sa stvarno pogrešnim kredencijalima, registracija ima check-pa-insert race na
+  ime+prezime (bez DB unique constraint-a — nije dodana migracija jer bi zahtijevala ručni
+  pregled eventualnih postojećih duplikata korisničkih naloga, rizičnije od text_labels
+  dedup-a).** **Fix (v3.6.9):** `_authInFlight` zastavica na `doLogin`/`doRegister`; `doLogin`
+  razlikuje `status===400`/invalid-credential poruke od ostalih grešaka; `doRegister` prepoznaje
+  Postgres `23505` (unique violation) i prikazuje jasnu poruku umjesto sirove greške (spremno
+  ako se constraint doda kasnije). ✅ (v3.6.9)
+- **D2-L — `deleteProjektUI` brisao vlake PRIJE potvrđenog brisanja projekta.** Ako brisanje
+  projekta padne (RLS/mreža), vlake su već bile trajno obrisane → osiromašeni "duh" projekat
+  bez ijedne vlake ostaje na serveru. **Fix (v3.6.9):** `_deleteVlakeByProjekt(id)` premješteno
+  da se poziva TEK nakon potvrđenog uspješnog brisanja projekta (ili odmah za pending-sync
+  projekat koji nikad nije ni postojao na serveru). ✅ (v3.6.9)
+- **D2-M — admin panel akcije idu preko Postgres RPC-ova (`admin_set_sumarija`,
+  `admin_delete_user`, `admin_get_all_users`), što je ispravan obrazac AKO te RPC funkcije
+  same provjeravaju admin ulogu server-side — to se ne može potvrditi iz klijentskog koda
+  (RPC tijela žive u Supabase-u, ne u ovom fajlu). Klijent gejtuje samo UI
+  (`sbProfile?.is_admin`). Nije popravljano u ovoj rundi — preporuka: ručno provjeriti da
+  svaka od te tri RPC funkcije eksplicitno provjerava `is_admin`/ulogu pozivaoca prije izvršenja.**
 
 ## DIO 3 — nalazi (analiza 2026-06-30)
 
