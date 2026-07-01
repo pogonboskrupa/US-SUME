@@ -4105,7 +4105,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.7.3';
+const APP_VER = 'v3.7.4';
 // =====================================================================
 // === SUPABASE AUTH ===
 // =====================================================================
@@ -9659,7 +9659,26 @@ function _openLayerSheet() {
     if (el) el.classList.add('active');
   }
   _lsRenderGranice();
+  _lsRenderCache();
 }
+
+// Prikaz zauzeća memorije online karata (keširane pločice) + brisanje — u modalu karte
+async function _lsRenderCache() {
+  const el = document.getElementById('ls-cache-info');
+  if (!el || !('caches' in window)) return;
+  let count = 0;
+  try { const c = await caches.open(TILE_CACHE_NAME); count = (await c.keys()).length; } catch(e) {}
+  let mbTxt = '';
+  if (navigator.storage && navigator.storage.estimate) {
+    try { const est = await navigator.storage.estimate(); mbTxt = ` · ≈ ${Math.round((est.usage || 0) / 1048576)} MB ukupno`; } catch(e) {}
+  }
+  el.innerHTML = count > 0
+    ? `💾 Online karte u memoriji: <b style="color:#4ade80">${count.toLocaleString()}</b> pločica${mbTxt}`
+      + `<br><span style="font-size:11px;color:#64748b;">Sve što pogledaš online (satelit/topo/google) automatski se čuva za offline.</span>`
+      + `<br><button onclick="clearTileCache(event)" style="margin-top:7px;background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;">🗑 Obriši memoriju karata</button>`
+    : `💾 Nema keširanih online pločica.<br><span style="font-size:11px;color:#64748b;">Pregledaj kartu online — pločice se snime za offline.</span>`;
+}
+
 function closeLayerSheet() {
   document.getElementById('layer-sheet-bg').style.display = 'none';
   document.getElementById('layer-sheet').style.display   = 'none';
@@ -23243,7 +23262,8 @@ async function clearTileCache(e) {
   _tileBmpCache.clear();  // i RAM keš
   localStorage.removeItem(_OFFLINE_DL_INCOMPLETE_KEY);
   showToast('🗑 Memorija karata obrisana');
-  showCacheInfo();
+  if (typeof _lsRenderCache === 'function') _lsRenderCache();
+  if (document.getElementById('offline-cache-info')) showCacheInfo();
 }
 
 let offlineAbort = false;
@@ -26512,7 +26532,6 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
   <div class="mdrop-item" style="color:#38bdf8;font-weight:700;" onclick="closeMenuDropdown();openLoadMapScreen()">🗺 UČITAJ KARTU</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showOfflineModal()">📥 Offline karta (preuzmi)</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showSqlMapModal()">🔧 Dijagnostika karata (Debug)</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()">📂 Dodaj KML fajl</div>
   <div class="mdrop-sep"></div>
@@ -28126,6 +28145,10 @@ if (typeof AndroidDownload !== 'undefined') {
   <!-- Tab: Karte -->
   <div id="ls-pane-karte">
     <h3>Pozadinska karta</h3>
+    <!-- Zauzeće memorije online karata (satelit/topo/google) + brisanje -->
+    <div id="ls-cache-box" style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
+      <div id="ls-cache-info" style="font-size:12px;color:#94a3b8;line-height:1.5;">💾 …</div>
+    </div>
     <div class="layer-grid" id="ls-basemap-grid">
       <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
         <span class="layer-ico">⛰</span>Topo
