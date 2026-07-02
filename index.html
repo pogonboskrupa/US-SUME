@@ -3906,8 +3906,8 @@ select:focus { outline:none; border-color:#3b82f6; }
         <div id="rec-row2">
           <button class="rb pause" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi">⏸</button>
           <button class="rb" id="btn-preciz" onclick="_precizTacka()" title="Precizna tačka (prosjek 10 fikseva)" style="background:#1e3a5f;color:#38bdf8;font-size:13px;min-width:32px;">📍</button>
-          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
-          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
+          <button class="rb krak-l" id="btn-krak-l" onclick="noviKrakStrana('L')" oncontextmenu="event.preventDefault();noviKrakStranaPick('L')" title="Novi lijevi krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
+          <button class="rb krak-d" id="btn-krak-d" onclick="noviKrakStrana('D')" oncontextmenu="event.preventDefault();noviKrakStranaPick('D')" title="Novi desni krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak">↪</button>
           <button class="rb back"      id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;">↩</button>
           <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju">🔓</button>
@@ -4132,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.5';
+const APP_VER = 'v3.9.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -11120,6 +11120,11 @@ function dodiISnimi() {
       if (actI !== null) {
         switchTab('karta');
         togRec();
+        // Lager se na terenu imenuje ODMAH na kamionskom putu (početak snimanja),
+        // ne tek na kraju vlake duboko u šumi. Dijalog ne blokira snimanje;
+        // ako se preskoči, stopRec ga ponovo nudi (guard: v.lager).
+        const _lagIdx = actI;
+        setTimeout(() => { if (recOn) _showLagerDlg(_lagIdx, true); }, 600);
       }
     }, 30);
   });
@@ -11257,10 +11262,13 @@ async function _doCreateVlaka(br, kr) {
 // ─── Lager dialog ─────────────────────────────────────────────────────────────
 let _lagerTargetIdx = null;
 
-async function _showLagerDlg(vIdx) {
+async function _showLagerDlg(vIdx, atStart) {
   if (vIdx === null || vIdx < 0 || vIdx >= vlake.length) return;
   const v = vlake[vIdx];
-  if (v.kr !== 0 || v.pts.length === 0) return; // samo matična trasa s tačkama
+  if (v.kr !== 0 || v.lager) return; // samo matična trasa, bez već dodijeljenog lagera
+  // atStart: poziv na POČETKU snimanja (na kamionskom putu, prije prve tačke) —
+  // tad se lager na terenu i imenuje; bez flaga tražimo bar jednu tačku (kraj crtanja/snimanja)
+  if (!atStart && v.pts.length === 0) return;
   _lagerTargetIdx = vIdx;
   // Prijedlog: L{br} (npr. T1 → L1, T17 → L17); ako je zauzeto, padamo na sljedeći slobodan
   const preferred = 'L' + v.br;
@@ -11270,6 +11278,29 @@ async function _showLagerDlg(vIdx) {
   document.getElementById('ld-title').textContent = `🏷 Broj lagera za ${v.nm}`;
   document.getElementById('ld-sub').textContent = 'Prijedlog: ' + lbl + '  (možeš promijeniti ili preskočiti)';
   document.getElementById('lager-input').value = lbl;
+  // Lageri u blizini — jedan lager često služi za više vlaka (blizu / preko puta).
+  // Referenca: početak ove vlake, ili trenutna GPS pozicija kad tačaka još nema.
+  const nearEl = document.getElementById('ld-nearby');
+  if (nearEl) {
+    const ref = v.pts[0] || (lastP ? { la: lastP.la, lo: lastP.lo } : null);
+    let html = '';
+    if (ref) {
+      const seen = new Set();
+      vlake.forEach(x => {
+        if (x === v || !x.lager || x.kr !== 0 || seen.has(x.lager)) return;
+        if ((x.projektId || null) !== (v.projektId || null)) return;
+        const sp = x.lagerPt || x.pts[0];
+        if (!sp || dst(ref.la, ref.lo, sp.la, sp.lo) > 250) return;
+        seen.add(x.lager);
+        const safe = String(x.lager).replace(/[^\w\s.-]/g, '');
+        html += `<button onclick="document.getElementById('lager-input').value='${safe}'" style="background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#93c5fd;font-size:12px;font-weight:600;padding:5px 10px;margin:0 5px 5px 0;cursor:pointer;">${safe} · kao ${x.nm}</button>`;
+      });
+    }
+    nearEl.innerHTML = html
+      ? `<div style="font-size:10px;color:#64748b;margin-bottom:4px;">U blizini (zajednički lager za više vlaka):</div>${html}`
+      : '';
+    nearEl.style.display = html ? '' : 'none';
+  }
   document.getElementById('lager-dlg').style.display = 'block';
   setTimeout(() => { document.getElementById('lager-input').select(); }, 80);
 }
@@ -11733,8 +11764,34 @@ function _parentOf(v) {
   return vlake.findIndex(x => x.nm === parentNm && x.projektId === v.projektId);
 }
 
+// Krak sa ručnim izborom broja (dugi pritisak na ⊕L/⊕D) — krakovi se ne rade
+// strogo redom, pa projektant mora moći odmah dodijeliti npr. 5.6 i kad 5.4 ne postoji.
+async function noviKrakStranaPick(strana) {
+  const drawing = activeTool === 'addline';
+  if ((!recOn && !drawing) || actI === null) return;
+  const parentV = vlake[actI];
+  if (!parentV || parentV.pts.length === 0) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
+  const predlog = _nextKrakNm(parentV.nm, strana);
+  const val = await _dlgPrompt(
+    'Broj kraka (redoslijed ne mora biti strog — npr. ' + parentV.nm + '.6 i prije .4):',
+    predlog, { title: '⊕ Krak — izbor broja' });
+  if (val == null) return;
+  const pref = parentV.nm + '.';
+  let s = val.trim();
+  if (s.startsWith(pref)) s = s.slice(pref.length);   // dozvoli i puno ime i sam broj
+  if (!/^\d+$/.test(s)) { showToast('⚠ Unesi broj kraka (npr. 6 → ' + pref + '6)'); return; }
+  const n = parseInt(s, 10);
+  if (n < 1) { showToast('⚠ Broj kraka mora biti ≥ 1'); return; }
+  const fullNm = pref + n;
+  if (vlake.find(v => v.nm === fullNm && v.projektId === _aktivniProjektId)) {
+    showToast('⚠ Krak ' + fullNm + ' već postoji'); return;
+  }
+  // Strana iz parnosti (desno parni, lijevo neparni) — mjerodavnija od pritisnutog dugmeta
+  noviKrakStrana(n % 2 === 0 ? 'D' : 'L', fullNm);
+}
+
 // Direktno kreiraj novi krak bez pickera
-function noviKrakStrana(strana) {
+function noviKrakStrana(strana, overrideNm) {
   const drawing = activeTool === 'addline';
   if ((!recOn && !drawing) || actI === null) return;
   _closeKrakPicker();
@@ -11752,7 +11809,7 @@ function noviKrakStrana(strana) {
   if (!junctionPt) { showToast('Greška pri pronalasku spoja!'); return; }
   const snapDistM = (recOn && lastP) ? Math.round(dst(lastP.la, lastP.lo, junctionPt.la, junctionPt.lo)) : null;
 
-  const krakNm = _nextKrakNm(parentV.nm, strana);
+  const krakNm = overrideNm || _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
   const poly   = L.polyline([], { color, weight: 4, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(krakNm, { sticky: true, opacity: 0.9 });
@@ -11764,8 +11821,12 @@ function noviKrakStrana(strana) {
   const junctionOnParent = (recOn && lastP)
     ? _findJunctionIdx(parentV.pts, { la: lastP.la, lo: lastP.lo })
     : parentV.pts.length - 1;
+  // projektId MORA biti naslijeđen od roditelja — bez njega se krak snima na server bez
+  // projekta (projekt_id null), _nextKrakNm/_parentOf dedup po projektu ga ne vide, a
+  // sakrivanje vlaka po projektu ga preskače.
   const krak = { nm: krakNm, br: parentV.br, kr: parentV.kr + 1, strana: strana || null, color, lager: '', pts: [], poly,
-                 wpts: [], sbId: null, labelMk: null, lagerMk: null, extraLabels: [],
+                 wpts: [], sbId: null, projektId: parentV.projektId ?? (_aktivniProjektId || null),
+                 projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [],
                  updatedAt: new Date().toISOString(), junctionOnParent };
   vlake.push(krak);
   const krakIdx = vlake.length - 1;
@@ -11776,7 +11837,12 @@ function noviKrakStrana(strana) {
   if (recOn) {
     _recParentIdx = parentIdx;
     actI = krakIdx;
-    _kfReset(); _lastRecTime = 0;
+    // Kalman/medijana ostaju TOPLI dok se aktivno snima — fizička pozicija je ista
+    // (stojiš na spoju), a hladni restart bi progutao prvih ~5 fixeva pa bi početak
+    // kraka iza spojne tačke bio prava linija od više metara. Reset samo iz pauze
+    // (stanje je staro — hodalo se bez ažuriranja filtera).
+    if (recPaused) _kfReset();
+    _lastRecTime = 0;
     selI(krakIdx);
     _updBanner();
   } else {
@@ -11835,7 +11901,9 @@ function odaberiKrak(krakIdx) {
   _recParentIdx = actI;
   actI = krakIdx;
   if (recOn) {
-    _kfReset(); _lastRecTime = 0;
+    // Isti princip kao noviKrakStrana: topli filter dok se aktivno snima
+    if (recPaused) _kfReset();
+    _lastRecTime = 0;
     selI(krakIdx);
     _updBanner();
     showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
@@ -12527,11 +12595,23 @@ function onP(p) {
     _parentReturnTrimToIdx = -1;
     const _prv = vlake[_prIdx];
     if (_prv && _prv.pts.length >= 2 && trimTo > 0 && trimTo < _prv.pts.length - 1) {
-      _prv.pts = _prv.pts.slice(0, trimTo + 1);
-      _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
-      updateVlakaLabel(_prIdx);
-      clearTimeout(_vlakaSaveTimers[_prIdx]);
-      sbFlushVlaka(_prIdx);
+      // Odsijeci SAMO kratak drift-višak (overshoot pri skretanju u krak, do 30m).
+      // Dug rep iza spoja znači NAKNADNI krak na sredini već snimljene vlake
+      // (krakovi se ne rade strogo redom) — odsijecanje bi trajno obrisalo
+      // stvarno snimljene metre matice.
+      let _tailM = 0;
+      for (let _ti = trimTo; _ti < _prv.pts.length - 1; _ti++) {
+        _tailM += dst(_prv.pts[_ti].la, _prv.pts[_ti].lo, _prv.pts[_ti + 1].la, _prv.pts[_ti + 1].lo);
+      }
+      if (_tailM <= 30) {
+        _prv.pts = _prv.pts.slice(0, trimTo + 1);
+        _prv.poly.setLatLngs(_prv.pts.map(p => [p.la, p.lo]));
+        updateVlakaLabel(_prIdx);
+        clearTimeout(_vlakaSaveTimers[_prIdx]);
+        sbFlushVlaka(_prIdx);
+      } else {
+        showToast('↩ Zadržan snimljeni dio ' + _prv.nm + ' iza spoja (' + Math.round(_tailM) + 'm)');
+      }
     }
   }
 
@@ -27761,6 +27841,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="lager-dlg">
   <div class="ld-title" id="ld-title">🏷 Broj lagera</div>
   <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;" id="ld-sub"></div>
+  <div id="ld-nearby" style="display:none;margin-bottom:8px;"></div>
   <div class="ld-input">
     <input type="text" id="lager-input" placeholder="npr. L1" onkeydown="if(event.key==='Enter')lagerDlgOk()">
   </div>
