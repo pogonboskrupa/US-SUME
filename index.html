@@ -4132,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.4';
+const APP_VER = 'v3.8.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -4404,7 +4404,9 @@ function _fmtAgo(ts) {
 window.addEventListener('online', () => {
   _setOfflineMode(false);
   showToast('🌐 Veza uspostavljena — sinkroniziram...');
-  setTimeout(() => _processOfflineQueue(), 1000);
+  // Write strana (red čekanja) + read strana (projekti/vlake/dnevnik — oporavak
+  // ako je initial fetch pri prijavi pao dok nije bilo veze)
+  setTimeout(() => { _processOfflineQueue(); _reloadCoreData(); }, 1000);
 });
 window.addEventListener('offline', () => {
   _setOfflineMode(true);
@@ -5363,6 +5365,21 @@ async function sbInitData() {
   if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
   _updSyncBadge();               // prikaži badge ako ima pending ops iz prošle sesije
   setTimeout(_crashCheck, 1500); // provjeri nedovršena snimanja (odgodi da se mapa inicijalizira)
+}
+
+// Ponovno učitavanje srž podataka (projekti→vlake→dnevnik) kad initial fetch iz
+// sbInitData() nije uspio (slaba veza pri prijavi) ili se veza vratila poslije offline
+// perioda. Loaderi su idempotentni (generation token, merge+dedup) i sami renderuju
+// svoje liste, pa je bezbjedno zvati ovo više puta.
+let _coreReloadBusy = false;
+async function _reloadCoreData() {
+  if (!sbUser || !sbProfile || !navigator.onLine || _coreReloadBusy) return;
+  _coreReloadBusy = true;
+  try {
+    await sbLoadProjekti();   // prvo — _aktivniProjektId mora biti validan prije vlaka
+    await sbLoadVlake();
+    await sbLoadLog();
+  } catch(e) {} finally { _coreReloadBusy = false; }
 }
 
 // ─── PROJEKTI ────────────────────────────────────────────────────────────────
@@ -19093,10 +19110,14 @@ function switchTab(tab) {
     _setMapUIVisible(false, false);
     msrStop(true);
     _notifClear('vlake');
+    // Samoizlječenje (kao doznaka tab): prazan niz znači da initial fetch vjerovatno
+    // nije uspio — pokušaj ponovo pri otvaranju taba
+    if (!vlake.length) _reloadCoreData();
   } else if (tab==='projekat') {
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList(); _rndBojaPresets();
     _setMapUIVisible(false, false);
     msrStop(true);
+    if (!_projekti.length) _reloadCoreData();
   } else if (tab==='doznaka') {
     _mapFullScreen = false;
     _setMapUIVisible(false, false);
