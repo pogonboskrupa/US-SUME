@@ -4132,7 +4132,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.8.3';
+const APP_VER = 'v3.8.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -5125,6 +5125,9 @@ async function doLogout() {
   _tacke = [];
 
   dnevniLog = []; kolege = [];
+  // SPA nema reload-a pri promjeni korisnika — bez ovoga _projekti ostaje u memoriji
+  // popunjen projektima prethodnog korisnika do prve sbLoadProjekti() osvježenja za sljedećeg.
+  _projekti = [];
 
   } catch(e) { console.error('doLogout cleanup greška:', e); }
   finally {
@@ -5149,8 +5152,12 @@ async function _wipeAllLocalUserData() {
   localStorage.removeItem('tvlake_local_vlake_uid');
   // _OL.PROFILE se NAMJERNO ne briše — showApp() ovo zove NAKON sbLoadProfile(), koji je već
   // upisao svjež profil TRENUTNOG (novog) korisnika; brisanje bi obrisalo baš taj zapis.
-  [_OL.VLAKE, _OL.PROJEKTI, _OL.LOG, _OL.LABELS, _OL.KOLEGE, _OL.ODJELI].forEach(k => localStorage.removeItem(k));
-  [_OL.DOZ_ODJELI, _OL.DOZ_MEMBERS, _OL.DOZ_MARKINGS, _OL.DOZ_TRACKS, _OL.DOZ_SEL_ID].forEach(k => localStorage.removeItem(k));
+  // _OL.VLAKE/PROJEKTI/LOG/LABELS/KOLEGE/ODJELI i _OL.DOZ_* se NAMJERNO ne brišu — to su
+  // write-through offline-keš zrcala servera (fetch → _OL.save na uspjeh, _OL.load SAMO u
+  // catch-u kad je offline/greška), filtrirana po sbUser.id na svakom mjestu učitavanja.
+  // Brisanje ne sprječava ništa (sljedeći online fetch ionako prepisuje keš prije prikaza),
+  // ali kad je vraćajući korisnik OFFLINE, gasi mu vlastiti Projekat/Vlake/Doznaka prikaz dok
+  // se veza ne vrati — upravo prijavljena regresija.
   localStorage.removeItem(_TRAG_REG_KEY);
   localStorage.removeItem(_MSR_REG_KEY);
   localStorage.removeItem(_FOTO_KEY);
