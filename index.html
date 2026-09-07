@@ -4858,7 +4858,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.112.4';
+const APP_VER = 'v3.113.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13235,6 +13235,124 @@ async function _poziSmjerAzuriraj() {
   }
 }
 
+// ── Projekcija opožarene površine (v3.113.0) ──────────────────────────────
+// Detekcija NIJE tačka nego "vreo piksel" — kvadrat od 375 m (VIIRS) ili 1 km
+// (MODIS) koji je satelit izmjerio kao vruć. Kad požar gori duže, uhvati ga
+// više preleta, pa niz STARIJIH detekcija ocrtava trag kuda je vatra već
+// prošla, a najnovije pokazuju gdje je front sada. Odatle se izvodi procjena
+// opožarene površine.
+//
+// OBLIK SE NE NAGAĐA IZVAN ONOGA ŠTO JE VIĐENO. Prva pomisao je convex hull
+// (omotač oko svih detekcija), ali on POPUNI sve udubine: izmjereno na
+// simuliranom požaru u obliku luka (front koji obilazi vrh brda) convex daje
+// 989 ha, concave 109 ha — 9× više "izgorjelog" nego što je iko vidio. Zato:
+//   1. concave hull (maxEdge = prag grupisanja) — realan izduženi/lučni oblik;
+//   2. ako concave padne (detekcije previše razbacane da bi se povezale),
+//      NE pada se na convex nego na UNIJU baferovanih piksela — tj. tvrdi se
+//      samo ono što je stvarno izmjereno. Na 24 razbacane detekcije to je
+//      259 ha, dok bi convex tvrdio 3559 ha (14× izmišljeno).
+// Ovo je PROCJENA iz današnjih detekcija, ne mjerena granica požara — za to
+// postoji EFFIS "Opožarene površine" (kartica ispod), zaseban i precizniji
+// proizvod koji dolazi sa danima zakašnjenja. Ova projekcija popunjava baš
+// tu rupu: dok EFFIS još nema ništa, forester ipak vidi okvirni zahvat.
+const _POZ_OPOZ_KEY  = 'tvlake_pozari_opoz_proj';
+const _POZ_FRONT_MS  = 6 * 3600 * 1000;  // zadnjih 6 h = aktivan front, starije = već izgorjelo
+const _POZ_OPOZ_MAX_UNIJA = 60;          // iznad ovoga unija po pikselu postaje spora — ostaje concave
+let _poziOpozLayer = null;
+
+// Geometrija iz skupa detekcija. DVA sloja, tim redom — i oba su potrebna:
+//   1. otisak SVAKOG piksela (bafer pola senzorske rezolucije, pa unija) —
+//      ovo garantuje da nijedna izmjerena detekcija ne ostane VAN poligona;
+//   2. concave hull odozgo, koji popuni stvarno zatvorenu unutrašnjost kod
+//      gustog požara.
+// Korak 1 nije "rezerva" nego osnova: prva verzija je koristila SAMO concave
+// i na požaru u obliku luka je (vidljivo na screenshotu prije objave) ispala
+// uska krpa oko dva zbijena kraja, dok je desetak detekcija po sredini luka
+// ostalo izvan poligona — poligon koji ne pokriva ono što je satelit izmjerio
+// je gori od nikakvog. Convex hull se i dalje NE koristi nigdje (popunio bi
+// udubinu luka: 1145 ha umjesto ~104 ha na istom skupu tačaka).
+function _poziOpozGeom(pts) {
+  if (typeof turf === 'undefined' || !pts || !pts.length) return null;
+  // bafer = POLA piksela senzora: detekcija je centar kvadrata te veličine
+  const rezM = pts.reduce((m, p) => Math.max(m, isFinite(p.rez) ? p.rez : 375), 0);
+  const bufKm = (rezM / 2) / 1000;
+  const fc = turf.featureCollection(pts.map(p => turf.point([p.lo, p.la])));
+  let geom = null;
+  if (pts.length <= _POZ_OPOZ_MAX_UNIJA) {
+    try {
+      const buf = turf.buffer(fc, bufKm, { units: 'kilometers' });
+      const lista = buf.features || [buf];
+      geom = lista.reduce((a, f) => { try { return a ? (turf.union(a, f) || a) : f; } catch(e) { return a || f; } }, null);
+    } catch(e) {}
+  }
+  if (pts.length >= 3) {
+    try {
+      const cc = turf.concave(fc, { maxEdge: _POZ_GRUPA_M / 1000, units: 'kilometers' });
+      if (cc) {
+        const ccb = turf.buffer(cc, bufKm, { units: 'kilometers' });
+        geom = geom ? (turf.union(geom, ccb) || geom) : ccb;
+      }
+    } catch(e) {}
+  }
+  return geom;
+}
+
+// Projekcija za JEDAN požar: ukupno zahvaćeno + dio koji je vjerovatno već
+// izgorio (detekcije starije od _POZ_FRONT_MS u odnosu na zadnju).
+function _poziOpozProjekcija(g) {
+  if (typeof turf === 'undefined' || !g) return null;
+  const pts = (g.pts || []).filter(p => isFinite(p.la) && isFinite(p.lo));
+  if (!pts.length) return null;
+  const ukupno = _poziOpozGeom(pts);
+  if (!ukupno) return null;
+  const zadnji = isFinite(g.zadnji) ? g.zadnji
+    : Math.max(...pts.map(p => Date.parse(p.dt) || 0));
+  const stari = pts.filter(p => {
+    const t = Date.parse(p.dt);
+    return isFinite(t) && (zadnji - t) >= _POZ_FRONT_MS;
+  });
+  const staro = stari.length >= 3 ? _poziOpozGeom(stari) : null;
+  const ha = f => { try { return turf.area(f) / 10000; } catch(e) { return NaN; } };
+  return {
+    ukupno, staro,
+    haUkupno: ha(ukupno),
+    haStaro: staro ? ha(staro) : 0,
+    sati: (isFinite(g.prvi) && isFinite(g.zadnji)) ? (g.zadnji - g.prvi) / 3600000 : 0,
+    brojStarih: stari.length
+  };
+}
+
+function _poziOpozOn() { return localStorage.getItem(_POZ_OPOZ_KEY) === '1'; }
+function _poziOpozToggle(on) {
+  try { localStorage.setItem(_POZ_OPOZ_KEY, on ? '1' : '0'); } catch(e) {}
+  _poziOpozAzuriraj();
+  _poziRenderPanel();
+}
+
+function _poziOpozAzuriraj() {
+  if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
+  (_poziEvts || []).forEach(g => { g._proj = null; });
+  if (!_poziOpozOn() || !_poziOn || !(_poziEvts || []).length || typeof turf === 'undefined') return;
+  const grp = L.layerGroup([], { pane: 'demOverlay' });
+  let nacrtano = 0;
+  (_poziEvts || []).forEach(g => {
+    const pr = _poziOpozProjekcija(g);
+    if (!pr) return;
+    g._proj = pr;   // kartica u panelu i popup grupe čitaju isti rezultat
+    // interactive:false je OBAVEZNO — novi canvas pane iznad drugog pojede sve
+    // klikove ispod sebe (vidi CLAUDE.md, bug uvezenog KML-a). Brojke idu u
+    // popup markera grupe (pozariPane, iznad) i u karticu, ne u klik po poligonu.
+    L.geoJSON(pr.ukupno, { pane:'demOverlay', interactive:false,
+      style:{ color:'#f97316', weight:2, dashArray:'6,4', fillColor:'#9a3412', fillOpacity:0.28 } }).addTo(grp);
+    if (pr.staro) {
+      L.geoJSON(pr.staro, { pane:'demOverlay', interactive:false,
+        style:{ color:'#57534e', weight:1, fillColor:'#1c1917', fillOpacity:0.45 } }).addTo(grp);
+    }
+    nacrtano++;
+  });
+  if (nacrtano) _poziOpozLayer = grp.addTo(map);
+}
+
 function _poziRender() {
   if (_poziLayer) { try { map.removeLayer(_poziLayer); } catch(e) {} }
   _poziLayer = L.layerGroup([], { pane:'pozariPane' });
@@ -13276,6 +13394,7 @@ function _poziRender() {
     _poziHeatLayer.addTo(map);
   }
 
+  _poziOpozAzuriraj();
   _poziSmjerAzuriraj();
 }
 
@@ -13297,6 +13416,11 @@ function _poziGrupaPopupHtml(g, ref) {
     ${red('Pouzdanost', `<span style="color:${pz.boja};">${pz.txt}</span>`)}
     ${g.frpMax ? red('Najjača detekcija', g.frpMax.toFixed(1) + ' MW') : ''}
     ${g.spanM > 0 ? red('Raspon detekcija', fmtL(g.spanM)) : ''}
+    ${g._proj && isFinite(g._proj.haUkupno) ? red('Projekcija površine',
+      `≈ ${g._proj.haUkupno >= 100 ? Math.round(g._proj.haUkupno) : g._proj.haUkupno.toFixed(1)} ha`
+      + (g._proj.staro && isFinite(g._proj.haStaro)
+          ? ` <span style="color:#a8a29e;">(≈ ${g._proj.haStaro >= 100 ? Math.round(g._proj.haStaro) : g._proj.haStaro.toFixed(1)} ha starije)</span>`
+          : '')) : ''}
     ${gk ? `<div style="font-size:11px;color:#fbbf24;font-family:monospace;margin-top:6px;">Y: ${gk.y} · X: ${gk.x}</div>` : ''}
     <div style="font-size:10px;color:#475569;margin-top:8px;line-height:1.4;">
       Sitne tačke oko markera su pojedinačni satelitski pikseli — pokazuju doseg, nisu zasebni požari.
@@ -13424,6 +13548,7 @@ function _poziToggle(on) {
     if (_poziLayer) { try { map.removeLayer(_poziLayer); } catch(e) {} }
     if (_poziHeatLayer) { try { map.removeLayer(_poziHeatLayer); } catch(e) {} }
     if (_poziSmjerLayer) { try { map.removeLayer(_poziSmjerLayer); } catch(e) {} _poziSmjerLayer = null; }
+    if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
     _poziStatusSet('—');
     return;
   }
@@ -14103,6 +14228,37 @@ function _poziSadrzajHtml() {
       </div>
     </div>`;
 
+  // Sažetak projekcije opožarene površine (v3.113.0). Brojke postoje TEK kad je
+  // sloj uključen (_poziOpozAzuriraj puni g._proj) — bez toga se ništa ne
+  // izmišlja, kartica samo objasni šta prekidač radi.
+  let projSazetak = '';
+  if (_poziOpozOn() && _poziOn) {
+    const sProj = (_poziEvts || []).filter(g => g._proj);
+    if (!sProj.length) {
+      projSazetak = `<div style="font-size:11px;color:#94a3b8;margin-top:8px;">${
+        (_poziEvts || []).length ? 'Nema dovoljno detekcija za procjenu površine.' : 'Trenutno nema detekcija u krugu ' + _POZ_RADIUS_KM + ' km.'
+      }</div>`;
+    } else {
+      const naj = sProj[0];
+      const pr = naj._proj;
+      const uk = sProj.reduce((s, g) => s + (isFinite(g._proj.haUkupno) ? g._proj.haUkupno : 0), 0);
+      const br = v => isFinite(v) ? (v >= 100 ? Math.round(v) : v.toFixed(1)) : '—';
+      const sati = pr.sati;
+      projSazetak =
+        `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;">
+           <div><div style="font-size:20px;font-weight:800;color:#fb923c;">${br(pr.haUkupno)} <span style="font-size:12px;font-weight:600;">ha</span></div>
+                <div style="font-size:10px;color:#64748b;">najbliži požar — ukupno zahvaćeno</div></div>
+           ${pr.staro ? `<div><div style="font-size:20px;font-weight:800;color:#a8a29e;">${br(pr.haStaro)} <span style="font-size:12px;font-weight:600;">ha</span></div>
+                <div style="font-size:10px;color:#64748b;">vjerovatno već izgorjelo</div></div>` : ''}
+         </div>
+         <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
+           ${sati >= 1 ? `Gori (viđen) ${sati < 24 ? Math.round(sati) + ' h' : (sati / 24).toFixed(1) + ' dana'}` : 'Viđen samo u jednom preletu'}
+           ${pr.staro ? '' : ' — nema starijih detekcija, pa se ne može izdvojiti dio koji je već izgorio.'}
+           ${sProj.length > 1 ? ` · svi požari zajedno ≈ ${br(uk)} ha` : ''}
+         </div>`;
+    }
+  }
+
   // Meteo kartica kod najbližeg požara — samo kad ima šta pokazati (tih fail ako mreža ne da)
   let meteoKart = '';
   if (_poziOn && _poziMet && _poziMet.kodPozara && _poziEvts.length && _poziMet.naj === _poziEvts[0]) {
@@ -14161,6 +14317,17 @@ function _poziSadrzajHtml() {
       `<button onclick="_poziPrijavi()" style="width:100%;padding:12px;background:linear-gradient(135deg,#b91c1c,#ef4444);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
          <svg class="ic"><use href="#ic-pozicija"/></svg> Zabilježi požar na mojoj poziciji
        </button>`)
+
+    + kart('🟧 Projekcija opožarene površine',
+      'Procjena iz satelitskih detekcija · nije mjerena granica požara',
+      prekidac('_poziOpozToggle(this.checked)', _poziOpozOn(), 'Prikaži projekciju na karti')
+      + projSazetak
+      + `<div style="font-size:10px;color:#64748b;line-height:1.45;margin-top:8px;">
+           Računa se iz vrelih piksela koje je satelit stvarno izmjerio: narandžasto = ukupno zahvaćeno,
+           tamno unutar njega = dio gdje je vatra prošla prije više od 6 h (front je otišao dalje).
+           Tvrdi se SAMO ono što je viđeno — udubine se ne popunjavaju.
+           Za mjerene granice koristi karticu ispod (EFFIS), koja stiže sa danima zakašnjenja.
+         </div>`)
 
     + kart('🗺 Opožarene površine',
       'Copernicus EFFIS · granice stvarno izgorjelih područja',

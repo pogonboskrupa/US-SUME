@@ -1097,6 +1097,159 @@ t('prosjek dva ista pravca vraća taj isti pravac', () => {
   assert.ok(Math.abs(_poziSmjerBlend(123, 123) - 123) < 0.01);
 });
 
+
+// ── v3.113.0: Projekcija opožarene površine ────────────────────────────────
+// Ovi testovi čuvaju JEDNU ključnu odluku: oblik se NE nagađa izvan onoga što
+// je satelit stvarno izmjerio. Convex hull (omotač) je prva pomisao, ali on
+// popuni sve udubine — na požaru u obliku LUKA daje višestruko veću "izgorjelu"
+// površinu nego što je iko vidio. Zato concave hull, a kad ni on ne uspije
+// (detekcije previše razbacane) — unija baferovanih piksela, NIKAD convex.
+console.log('Projekcija opožarene površine (v3.113.0):');
+
+const _turfMod = { exports: {} };
+new Function('module', 'exports', 'window', 'self',
+  fs.readFileSync(path.join(__dirname, '../../static/libs/turf.min.js'), 'utf8')
+)(_turfMod, _turfMod.exports, {}, {});
+const _turf = _turfMod.exports;
+
+const SRC_OPOZ = [extractFn('_poziOpozGeom'), extractFn('_poziOpozProjekcija')].join('\n');
+function makeOpoz() {
+  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60, _POZ_FRONT_MS: 6 * 3600 * 1000 };
+  const keys = Object.keys(sandbox);
+  return new Function(...keys, SRC_OPOZ + '\nreturn { _poziOpozGeom, _poziOpozProjekcija };')(...keys.map(k => sandbox[k]));
+}
+const OPOZ = makeOpoz();
+const haOf = f => _turf.area(f) / 10000;
+// Površina koju bi VRATIO convex hull — referentna vrijednost za poređenje
+function convexHa(pts) {
+  const fc = _turf.featureCollection(pts.map(p => _turf.point([p.lo, p.la])));
+  return haOf(_turf.buffer(_turf.convex(fc), 0.1875, { units: 'kilometers' }));
+}
+// Požar u obliku LUKA — front koji obilazi vrh brda; unutrašnjost luka NIJE gorjela
+function lukPts(dtIso) {
+  const out = [];
+  for (let i = 0; i < 14; i++) {
+    const a = Math.PI * (i / 13);
+    out.push({ la: 44.90 + 0.02 * Math.sin(a), lo: 16.20 + 0.028 * Math.cos(a), rez: 375, dt: dtIso || '2026-09-05T00:00:00Z' });
+  }
+  return out;
+}
+
+t('lučni požar: NE popunjava udubinu (concave, ne convex)', () => {
+  const pts = lukPts();
+  const g = OPOZ._poziOpozGeom(pts);
+  assert.ok(g, 'mora vratiti geometriju');
+  const ha = haOf(g), cvx = convexHa(pts);
+  assert.ok(ha < cvx * 0.5,
+    'concave (' + ha.toFixed(0) + ' ha) mora biti znatno manji od convex (' + cvx.toFixed(0) + ' ha)');
+});
+
+t('SVAKA detekcija mora biti UNUTAR poligona (lučni požar)', () => {
+  // Prva verzija je koristila samo concave hull i na luku je ostavila desetak
+  // detekcija VAN poligona — uhvaćeno tek na screenshotu, ne ovim brojkama.
+  // Poligon koji ne pokriva izmjereni piksel je gori od nikakvog.
+  const pts = lukPts();
+  const g = OPOZ._poziOpozGeom(pts);
+  const vani = pts.filter(p => !_turf.booleanPointInPolygon(_turf.point([p.lo, p.la]), g));
+  assert.strictEqual(vani.length, 0, vani.length + ' detekcija je ostalo van poligona');
+});
+
+t('SVAKA detekcija unutar poligona i kad su razbacane (concave padne)', () => {
+  const pts = [
+    { la: 44.90, lo: 16.20, rez: 375, dt: '2026-09-05T00:00:00Z' },
+    { la: 44.93, lo: 16.26, rez: 375, dt: '2026-09-05T00:00:00Z' },
+    { la: 44.88, lo: 16.29, rez: 375, dt: '2026-09-05T00:00:00Z' }
+  ];
+  const g = OPOZ._poziOpozGeom(pts);
+  const vani = pts.filter(p => !_turf.booleanPointInPolygon(_turf.point([p.lo, p.la]), g));
+  assert.strictEqual(vani.length, 0, vani.length + ' detekcija je ostalo van poligona');
+});
+
+t('razbacane detekcije (concave padne): unija piksela, NE convex hull', () => {
+  const pts = [
+    { la: 44.90, lo: 16.20, rez: 375, dt: '2026-09-05T00:00:00Z' },
+    { la: 44.93, lo: 16.26, rez: 375, dt: '2026-09-05T00:00:00Z' },
+    { la: 44.88, lo: 16.29, rez: 375, dt: '2026-09-05T00:00:00Z' }
+  ];
+  const g = OPOZ._poziOpozGeom(pts);
+  assert.ok(g, 'mora vratiti geometriju i kad concave padne');
+  const ha = haOf(g), cvx = convexHa(pts);
+  assert.ok(ha < cvx * 0.1,
+    'unija piksela (' + ha.toFixed(0) + ' ha) ne smije biti blizu convex-a (' + cvx.toFixed(0) + ' ha)');
+});
+
+t('jedna detekcija: površina je ~jedan senzorski piksel, ne nula i ne izmišljena', () => {
+  const g = OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]);
+  assert.ok(g, 'jedna detekcija i dalje pokriva površinu');
+  const ha = haOf(g);
+  assert.ok(ha > 5 && ha < 20, 'očekivano ~11 ha (krug r=187 m), dobijeno ' + ha.toFixed(1));
+});
+
+t('MODIS piksel (1 km) daje veću površinu od VIIRS piksela (375 m)', () => {
+  const v = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]));
+  const m = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 1000, dt: '2026-09-05T00:00:00Z' }]));
+  assert.ok(m > v * 3, 'MODIS ' + m.toFixed(0) + ' ha vs VIIRS ' + v.toFixed(0) + ' ha');
+});
+
+t('požar koji gori duže: izdvaja se dio koji je VEĆ izgorio (starije od 6 h)', () => {
+  const t0 = Date.parse('2026-09-05T00:00:00Z');
+  const pts = [];
+  // trag koji se pomjera: 8 starih (0–14 h) + 6 svježih (zadnji sat)
+  for (let i = 0; i < 8; i++) pts.push({ la: 44.90 - i * 0.004, lo: 16.20 + i * 0.004, rez: 375, dt: new Date(t0 + i * 2 * 3600000).toISOString() });
+  for (let i = 0; i < 6; i++) pts.push({ la: 44.87 - i * 0.002, lo: 16.23 + i * 0.002, rez: 375, dt: new Date(t0 + 20 * 3600000).toISOString() });
+  const g = { pts, prvi: t0, zadnji: t0 + 20 * 3600000 };
+  const pr = OPOZ._poziOpozProjekcija(g);
+  assert.ok(pr && pr.ukupno, 'mora dati projekciju');
+  assert.ok(pr.staro, 'mora izdvojiti stariji (već izgorjeli) dio');
+  assert.ok(pr.haStaro > 0 && pr.haStaro < pr.haUkupno,
+    'stariji dio (' + pr.haStaro.toFixed(1) + ') mora biti manji od ukupnog (' + pr.haUkupno.toFixed(1) + ')');
+  assert.ok(Math.abs(pr.sati - 20) < 0.01, 'sati gorenja: ' + pr.sati);
+});
+
+t('požar viđen u JEDNOM preletu: ne izmišlja "već izgorjeli" dio', () => {
+  const t0 = Date.parse('2026-09-05T00:00:00Z');
+  const pts = lukPts(new Date(t0).toISOString());
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: t0, zadnji: t0 });
+  assert.ok(pr && pr.ukupno, 'ukupna površina se i dalje računa');
+  assert.strictEqual(pr.staro, null, 'nema vremenskog raspona → nema "već izgorjelo"');
+  assert.strictEqual(pr.haStaro, 0);
+});
+
+t('bez detekcija → null (ne prazna geometrija, ne greška)', () => {
+  assert.strictEqual(OPOZ._poziOpozProjekcija({ pts: [] }), null);
+  assert.strictEqual(OPOZ._poziOpozGeom([]), null);
+});
+
+console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');
+{
+  const store = {};
+  const sandbox = {
+    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
+    _POZ_OPOZ_KEY: 'tvlake_pozari_opoz_proj',
+    _poziOpozAzuriraj: () => { sandbox._crtano = true; },
+    _poziRenderPanel: () => { sandbox._panel = true; }
+  };
+  const keys = Object.keys(sandbox).filter(k => !k.startsWith('_c') && !k.startsWith('_p') || k.startsWith('_POZ') || k === '_poziOpozAzuriraj' || k === '_poziRenderPanel');
+  const fns = new Function('localStorage', '_POZ_OPOZ_KEY', '_poziOpozAzuriraj', '_poziRenderPanel',
+    extractFn('_poziOpozOn') + '\n' + extractFn('_poziOpozToggle') + '\nreturn { _poziOpozOn, _poziOpozToggle };'
+  )(sandbox.localStorage, sandbox._POZ_OPOZ_KEY, sandbox._poziOpozAzuriraj, sandbox._poziRenderPanel);
+
+  t('podrazumijevano isključeno (nije nametnut sloj koji korisnik nije tražio)', () => {
+    assert.strictEqual(fns._poziOpozOn(), false);
+  });
+  t('uključivanje pamti izbor i odmah precrtava kartu + panel', () => {
+    fns._poziOpozToggle(true);
+    assert.strictEqual(store['tvlake_pozari_opoz_proj'], '1');
+    assert.ok(sandbox._crtano && sandbox._panel);
+    assert.strictEqual(fns._poziOpozOn(), true);
+  });
+  t('isključivanje pamti "0", ne briše ključ', () => {
+    fns._poziOpozToggle(false);
+    assert.strictEqual(store['tvlake_pozari_opoz_proj'], '0');
+    assert.strictEqual(fns._poziOpozOn(), false);
+  });
+}
+
 (async () => {
   for (const a of _async) {
     try { await a.p; pass++; console.log('  ✔ ' + a.name); }

@@ -521,6 +521,47 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   test iz v3.112.2 je koristio drugu paletu, pa test "prošao" ne znači da
   je nova kombinacija boja/alfa provjerena).
 
+- **Projekcija opožarene površine (v3.113.0)**: na zahtjev "pretpostavi koji
+  dio je izgorio na osnovu starijih požara, npr. ako požar gori duži vremenski
+  period". Ovo je NAMJERNO odstupanje od odluke iz v3.104.0 (koja je odbila
+  procjenu hektara iz BROJA detekcija) — i razlika je suštinska: ne množi se
+  broj piksela nekim faktorom, nego se koristi GEOMETRIJA i VRIJEME stvarno
+  izmjerenih vrelih piksela. `_poziOpozGeom`/`_poziOpozProjekcija`/
+  `_poziOpozAzuriraj`, prekidač `_poziOpozToggle` (`localStorage
+  tvlake_pozari_opoz_proj`), vlastita kartica iznad EFFIS kartice.
+  - **Dva sloja geometrije, oba obavezna**: (1) unija baferovanih piksela
+    (bafer = POLA senzorske rezolucije, `p.rez` 375 m VIIRS / 1000 m MODIS) —
+    garantuje da nijedna detekcija ne ostane van poligona; (2) concave hull
+    odozgo, koji popuni stvarno zatvorenu unutrašnjost gustog požara.
+  - **Convex hull se NE koristi nigdje** — popuni sve udubine. Izmjereno na
+    požaru u obliku luka (front koji obilazi vrh brda): convex 1145 ha,
+    stvarna projekcija 214 ha. Na 24 razbacane detekcije convex tvrdi 3559 ha
+    naspram 259 ha stvarno viđenog. To je tačno onaj izmišljeni broj zbog
+    kojeg je v3.104.0 odbila procjenu površine.
+  - **Bug uhvaćen SCREENSHOT-om, ne brojkama**: prva verzija je koristila SAMO
+    concave hull. Unit test "concave < 0.5 × convex" je PROŠAO — ali iz
+    pogrešnog razloga: na luku concave daje uzanu krpu oko dva zbijena kraja i
+    ostavi desetak detekcija po sredini luka POTPUNO VAN poligona. Poligon koji
+    ne pokriva ono što je satelit izmjerio je gori od nikakvog. Vidjelo se tek
+    na slici. Popravka je korak (1) gore, a test koji bi to uhvatio je dodat
+    (`turf.booleanPointInPolygon` za SVAKU detekciju — dva testa, za lučni i
+    za razbacani slučaj). Pouka: asercija o VELIČINI ne zamjenjuje aserciju o
+    POKRIVENOSTI.
+  - **Vremenska podjela**: detekcije starije od `_POZ_FRONT_MS` (6 h) u odnosu
+    na najnoviju u toj grupi = "vjerovatno već izgorjelo" (tamni poligon
+    unutar narandžastog). Kad požar nema vremenskog raspona (viđen u jednom
+    preletu), `staro` je `null` i UI to KAŽE umjesto da nacrta lažni sloj.
+  - **`interactive:false` je obavezan** na oba poligona — inače bi novi canvas
+    pane pojeo klikove svemu ispod (dokumentovana zamka iz v3.101.0). Brojke
+    zato idu u popup markera grupe (`pozariPane`, iznad) i u karticu panela,
+    ne u klik po poligonu. Provjereno Playwright-om: klik na marker i dalje
+    prolazi (1 od 1).
+  - **Ovo NIJE zamjena za EFFIS "Opožarene površine"** — to je mjerena granica
+    i ostaje ispod u panelu; ova projekcija popunjava rupu dok EFFIS (koji
+    kasni danima) još nema ništa. Kartica to izričito piše.
+  - Testovi: 12 novih u `tests/js/pozari.test.js` (100 ukupno), nad STVARNIM
+    turf-om iz `static/libs/turf.min.js`.
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni
