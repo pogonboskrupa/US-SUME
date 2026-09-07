@@ -2638,7 +2638,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   #wrapper { display:block !important; height:auto !important; }
   #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
   #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container,
-  #dlg-overlay, #dlg-sheet, #action-bar, #trag-quick-meta, #map-ctrl-bar, #scale-menu { display:none !important; }
+  #dlg-overlay, #dlg-sheet, #action-bar, #rec-bar, #trag-quick-meta, #map-ctrl-bar, #scale-menu { display:none !important; }
   #main { display:block !important; overflow:visible !important; }
   #map {
     width: var(--print-map-w, 297mm) !important;
@@ -2775,6 +2775,56 @@ select:focus { outline:none; border-color:#3b82f6; }
 .dlg-action-btn:active { background:#e2e8f0; transform:scale(0.99); }
 
 /* ── Action bar — iOS style ─ */
+/* ── Traka snimanja — prati korisnika kroz SVE panele (v3.116.0) ───────────
+   Do sada je donja traka (#action-bar) postojala SAMO na Karti, pa je čim bi
+   korisnik otišao na Vlake/Projekat/Doznaku snimanje nestajalo iz vidokruga:
+   nema ni indikacije da nešto snima, ni načina da se pauzira ili završi bez
+   vraćanja na Kartu. Ova traka to popunjava — tanka je, pojavi se samo dok
+   nešto stvarno snima, i nosi tri stvari koje su tada jedine bitne: ŠTA se
+   snima, koliko je snimljeno, i Pauza/Završi.
+   #main dobija padding-bottom dok je traka vidljiva (body.recbar-on) — traka
+   je position:fixed, pa bi inače prekrila zadnji red sadržaja u panelu koji
+   se skroluje. Jedno pravilo na #main umjesto nabrajanja svakog panela: djeca
+   su height:100%, pa se skupe zajedno sa content boxom roditelja. */
+#rec-bar {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1600;
+  align-items: stretch;
+  gap: 6px;
+  background: #0b1220;
+  border-top: 1px solid #1e293b;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.45);
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
+}
+body.recbar-on #main { padding-bottom: 54px; }
+#rec-bar button {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; border-radius: 10px; cursor: pointer;
+  font-size: 12px; font-weight: 700;
+  padding: 8px 10px;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+#rec-bar button:active { transform: scale(0.95); opacity: 0.85; }
+#rb-go {
+  flex: 1; min-width: 0;
+  background: #14233c; color: #e2e8f0;
+  justify-content: flex-start !important; text-align: left;
+}
+#rb-go > span { min-width: 0; }
+#rb-tip  { display: block; font-size: 12px; font-weight: 800; line-height: 1.2; }
+#rb-info { display: block; font-size: 10px; font-weight: 600; color: #94a3b8;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rb-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  background: #ef4444; animation: rbPuls 1.4s ease-in-out infinite;
+}
+#rec-bar.pauzirano #rb-dot { background: #fbbf24; animation: none; }
+@keyframes rbPuls { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+#rb-pauza { background: #422006; color: #fbbf24; flex-shrink: 0; }
+#rb-kraj  { background: #7f1d1d; color: #fecaca; flex-shrink: 0; }
+
 #action-bar {
   display: none;
   position: fixed;
@@ -4861,7 +4911,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.115.0';
+const APP_VER = 'v3.116.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -18439,6 +18489,94 @@ function _bgRecStart(label) {
   _checkBatteryOptHint();  // sva tri tipa snimanja pate od istog OEM battery-killer problema
 }
 
+// ── Traka snimanja na svim panelima (v3.116.0) ────────────────────────────
+// Koje snimanje traka pokazuje: prioritet vlaka → trag → doznaka pojas. Ako ih
+// ima više istovremeno, ostali se BROJE u natpisu — ne smiju tiho nestati, jer
+// bi korisnik mislio da je završio sve kad završi ono što traka pokazuje.
+function _recBarStanje() {
+  const aktivni = [];
+  if (typeof recOn     !== 'undefined' && recOn)     aktivni.push('vlaka');
+  if (typeof _tragOn   !== 'undefined' && _tragOn)   aktivni.push('trag');
+  if (typeof _dozGpsOn !== 'undefined' && _dozGpsOn) aktivni.push('doznaka');
+  if (!aktivni.length) return null;
+  const ostalih = aktivni.length - 1;
+  const tip = aktivni[0];
+  if (tip === 'vlaka') {
+    const v = (typeof actI !== 'undefined' && actI !== null) ? vlake[actI] : null;
+    return { tip, ostalih, tab: 'karta', naziv: (v && v.nm) || 'Vlaka',
+             info: v ? fmtL(calcL(v.pts)) : '', pauziran: !!recPaused };
+  }
+  if (tip === 'trag') {
+    return { tip, ostalih, tab: 'karta', naziv: 'Trag',
+             info: _tragPts.length + ' tač. · ' + _tragFmtLen(_tragCalcLen(_tragPts)),
+             pauziran: !!_tragPaused };
+  }
+  return { tip, ostalih, tab: 'doznaka', naziv: 'Pojas doznake',
+           info: _dozGpsLen ? _tragFmtLen(_dozGpsLen) : '',
+           pauziran: !!_dozGpsPaused };
+}
+
+function _recBarUpdate() {
+  const s = _recBarStanje();
+  if (!s) return;
+  const g = id => document.getElementById(id);
+  const bar = g('rec-bar');
+  const tip = g('rb-tip'), info = g('rb-info'), ptxt = g('rb-pauza-txt'), pico = g('rb-pauza-ico');
+  if (tip)  tip.textContent  = s.naziv + (s.ostalih ? ' (+' + s.ostalih + ')' : '');
+  if (info) info.textContent = (s.pauziran ? '⏸ pauzirano · ' : '') + (s.info || '');
+  if (ptxt) ptxt.textContent = s.pauziran ? 'Nastavi' : 'Pauza';
+  // "Nastavi" je znak ▶, ne sprite ikonica — u sprite-u nema #ic-play, a
+  // #action-bar (ab-pauza-ico) već koristi baš taj znak za isti smisao.
+  if (pico) pico.innerHTML = s.pauziran ? '▶' : '<svg class="ic"><use href="#ic-pauza"/></svg>';
+  if (bar) bar.classList.toggle('pauzirano', s.pauziran);
+}
+
+let _recBarTimer = null;
+function _recBarSync() {
+  const bar = document.getElementById('rec-bar');
+  if (!bar) return;
+  const s = _recBarStanje();
+  // Na Karti donja traka (#action-bar) već nosi kontrole za vlaku i trag, pa bi
+  // druga traka bila duplikat. Doznaka pojas je IZUZETAK: nju #action-bar ne
+  // pokriva ni na Karti, pa tamo traka ostaje jedini način da se vidi i zaustavi.
+  const dupliraSe = _activeTab === 'karta' && s && s.tip !== 'doznaka';
+  const vidljiv = !!s && !dupliraSe;
+  bar.style.display = vidljiv ? 'flex' : 'none';
+  document.body.classList.toggle('recbar-on', vidljiv);
+  if (vidljiv) {
+    _recBarUpdate();
+    if (!_recBarTimer) _recBarTimer = setInterval(_recBarUpdate, 1000);
+  } else if (_recBarTimer) {
+    clearInterval(_recBarTimer); _recBarTimer = null;
+  }
+}
+
+function _recBarGo() {
+  const s = _recBarStanje();
+  if (s) switchTab(s.tab);
+}
+function _recBarPauza() {
+  const s = _recBarStanje();
+  if (!s) return;
+  if (s.tip === 'vlaka')      toggleRecPause();
+  else if (s.tip === 'trag')  togTragPause();
+  else                        dozPauseGPS();
+  _recBarUpdate();
+}
+function _recBarKraj() {
+  const s = _recBarStanje();
+  if (!s) return;
+  // Završetak se NE izvršava na tuđem panelu — svaki tip ima svoje potvrde i
+  // dijaloge (ime vlake, spašavanje traga, sync pojasa) koji pripadaju svom
+  // ekranu. Zato prvo prebaci tamo, pa onda pozovi.
+  switchTab(s.tab);
+  setTimeout(() => {
+    if (s.tip === 'vlaka')      _krajVlake();
+    else if (s.tip === 'trag')  fabSnimTrag();
+    else                        dozToggleGPS();
+  }, 80);
+}
+
 function _bgRecStopIfIdle() {
   if (_anyRecOn()) return;   // još nešto snima — drži servis/lock živim
   _releaseWakeLock();
@@ -25894,6 +26032,9 @@ function _updFabVisibility() {
   if (ab) ab.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
   const cb = document.getElementById('map-ctrl-bar');
   if (cb) cb.style.display = (onKarta && !hideBars) ? 'flex' : 'none';
+  // Traka snimanja (v3.116.0) — MORA prije ranih return-a ispod, inače se ne bi
+  // osvježila baš u modovima snimanja zbog kojih i postoji.
+  try { _recBarSync(); } catch(e) {}
 
   const inRec    = recOn;
   const isPaused = recPaused;
@@ -38619,6 +38760,25 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
+<!-- Traka snimanja — vidljiva na svim panelima dok nešto snima (v3.116.0).
+     Sadržaj puni _recBarUpdate(), vidljivost _recBarSync() iz _updFabVisibility. -->
+<div id="rec-bar">
+  <button id="rb-go" onclick="_recBarGo()" title="Idi na ekran gdje se snima">
+    <span id="rb-dot"></span>
+    <span>
+      <span id="rb-tip">Snimanje</span>
+      <span id="rb-info"></span>
+    </span>
+  </button>
+  <button id="rb-pauza" onclick="_recBarPauza()" title="Pauza / Nastavi">
+    <span id="rb-pauza-ico"><svg class="ic"><use href="#ic-pauza"/></svg></span>
+    <span id="rb-pauza-txt">Pauza</span>
+  </button>
+  <button id="rb-kraj" onclick="_recBarKraj()" title="Završi snimanje">
+    <svg class="ic"><use href="#ic-stop"/></svg> Završi
+  </button>
+</div>
+
 <div id="action-bar">
   <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">

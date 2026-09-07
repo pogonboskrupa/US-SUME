@@ -784,6 +784,44 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
   `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
 
+## Donja traka — #action-bar (Karta) i #rec-bar (svi paneli)
+
+- **`#action-bar` postoji SAMO na Karti** (`_updFabVisibility`:
+  `ab.style.display = (onKarta && !hideBars) ? 'flex' : 'none'`). To je namjerno
+  — sadrži alate nad kartom (Snimi vlaku, Tragovi, Izmjeri, Lokacija) i mijenja
+  se u modove snimanja (krak L/D, Pauza, Završi, Vrati se; `trag-mode`).
+- **`#rec-bar` — traka snimanja na SVIM panelima (v3.116.0)**: prije nje je čim
+  bi korisnik otišao sa Karte na Vlake/Projekat/Doznaku snimanje NESTAJALO iz
+  vidokruga — ni indikacije da nešto snima, ni načina da se pauzira/završi bez
+  vraćanja na Kartu. Traka nosi tri stvari koje su tada jedine bitne: šta se
+  snima, koliko je snimljeno, i Pauza/Završi.
+  - **Pravilo vidljivosti** (`_recBarSync`): prikaži kad išta snima, OSIM kad
+    smo na Karti i `#action-bar` već pokriva taj tip. **Pojas doznake je
+    izuzetak** — `#action-bar` ga ne pokriva ni na Karti (u `!inRec` grani nema
+    doznaka kontrola), pa je traka tamo jedini način da se vidi i zaustavi.
+  - **Prioritet vlaka → trag → doznaka, a ostali se BROJE** u natpisu
+    (`(+2)`). Bez toga bi korisnik završio ono što traka pokazuje i mislio da
+    je gotov, dok drugo snimanje i dalje troši bateriju.
+  - **Završi PRVO prebaci na svoj ekran pa tek onda završi** (`switchTab` +
+    `setTimeout`) — dijalozi završetka (ime vlake, spašavanje traga, sync
+    pojasa) pripadaju svom ekranu i ne smiju iskočiti na tuđem panelu.
+  - **`_recBarSync()` se zove PRIJE ranih `return`-a u `_updFabVisibility`** —
+    ta funkcija izlazi ranije baš u modovima snimanja, pa bi traka inače
+    ostala neosvježena tačno kad je najpotrebnija.
+  - **Preklapanje sadržaja**: traka je `position:fixed` (isti obrazac kao
+    `#action-bar`), pa bi prekrila zadnji red panela koji se skroluje. Rješeno
+    JEDNIM pravilom `body.recbar-on #main { padding-bottom: 54px; }` umjesto
+    nabrajanja svakog panela — djeca `#main`-a su `height:100%` pa se skupe
+    zajedno sa content boxom roditelja. Klasa se stavlja SAMO kad je traka
+    stvarno vidljiva, pa se na Karti `#main` ne mijenja i Leaflet ne treba
+    dodatni `invalidateSize()` (tab switch ga ionako već zove).
+  - **Novi element u donjem dijelu ekrana mora ući i u `@media print`**
+    pravilo koje skriva `#action-bar` — inače iskoči na štampi.
+  - U sprite-u **nema `#ic-play`**; za "Nastavi" se koristi znak `▶`, isto kao
+    `ab-pauza-ico` u `#action-bar`.
+  - Testovi: `tests/js/rec-bar.test.js` (15) — težište na tome da se ostala
+    snimanja broje i da se Pauza/Završi rutiraju na ISPRAVAN tip.
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni
