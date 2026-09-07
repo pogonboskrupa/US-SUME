@@ -561,6 +561,52 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     kasni danima) još nema ništa. Kartica to izričito piše.
   - Testovi: 12 novih u `tests/js/pozari.test.js` (100 ukupno), nad STVARNIM
     turf-om iz `static/libs/turf.min.js`.
+- **Projekcija — trake starosti i prikaz površine (v3.113.1)**: na zahtjev
+  "unaprijedi trenutnu sekciju, posebno površina koja je opožarena i njen
+  prikaz". Binarna podjela iz v3.113.0 ("front ≤ 6 h" / "sve ostalo") je na
+  požaru koji gori danima gurala SVE osim zadnjih 6 h u jednu tamnu mrlju — a
+  baš je tu informacija koju forester traži (gdje je vatra bila juče, a gdje
+  prekjuče). Sada `_POZ_STAROST` definiše četiri trake (≤6 h / 6–24 h / 1–3
+  dana / starije), svaka sa svojom geometrijom i bojom.
+  - **Starost je RELATIVNA na najnoviju detekciju U TOJ GRUPI**, ne na
+    trenutno vrijeme — "1–3 dana" znači isto bez obzira kad korisnik otvori
+    kartu, i ne mijenja se dok app stoji otvorena.
+  - **Crta se od najstarije ka najnovijoj** (starije dolje): mjesto koje je
+    gorjelo i prekjuče i jutros čita se kao aktivno, što je i tačno.
+  - **Detekcija bez upotrebljivog `dt` ide u NAJSTARIJU traku**, ne ispada —
+    izmjerena je, pa mora biti u projekciji (pokriveno testom).
+  - **`ukupno` NIJE zbir traka** nego njihova spojena geometrija: kad isto
+    mjesto gori više puta, zbir bi istu površinu brojao dvaput. Test to čuva.
+  - **`_poziProj` memoizuje po grupi** (`g._proj`, `undefined` = nije računato,
+    `null` = nema projekcije i ne pokušavaj ponovo). `_poziRender` se zove na
+    svaki meteo/GPS/toast događaj, a geometrija je najskuplji dio; grupe se pri
+    svakom učitavanju grade nanovo (`_poziOznaciNove` pravi nove objekte) pa
+    keš prestaje važiti sam od sebe. **Popupi se grade u `_poziRender` PRIJE
+    nego `_poziOpozAzuriraj` izračuna projekcije** — zato popup zove
+    `_poziProj(g)`, a ne sirovo polje `g._proj` (bilo bi prazno na prvom
+    crtanju).
+  - **Legenda ide na KARTU, ne samo u panel** — panel prekriva cijelu kartu,
+    pa kad korisnik gleda poligone ne vidi nikakvo objašnjenje nijansi.
+    Ubačena je u postojeći `#dem-legend` (`_demLegendUpdate`), čime automatski
+    nasljeđuje sakrivanje van Karte u `switchTab` i izuzeće iz `@media print`.
+    **Rani izlaz `if (!showEkspo && !showNv) return;` je morao biti uklonjen** —
+    inače se legenda požara ne bi pojavila kad su DEM slojevi isključeni;
+    vidljivost se sad odlučuje na kraju, po tome je li išta sastavljeno.
+    `_poziLegendaTrake` vraća samo trake koje su STVARNO nacrtane, uvijek u
+    istom redoslijedu (najnovija → najstarija).
+  - **Kvadratić u legendi ide PUNOM bojom i sa svijetlim okvirom**: prvi
+    pokušaj je preslikavao providnost sa karte (`opacity: t.op + 0.25`) i
+    najtamnija traka (`#292524`) je NESTALA na tamnoj podlozi legende — red je
+    izgledao kao tekst bez oznake. Uhvaćeno na screenshotu, ne u testu.
+    Providnost je stvar karte (da se vidi teren ispod); u legendi je bitan samo
+    identitet boje.
+  - **`_poziPovrsTxt`** — < 10 ha jedna decimala, 10–1000 ha cijeli broj, preko
+    toga km² (100 ha = 1 km²). `213.80266 ha` lažira preciznost koju procjena
+    iz satelitskih piksela nema.
+  - Površina se sad vidi i **u listi požara** (`_poziRedHtml`) — ranije je za
+    poređenje "koji je od ovih velik" trebalo otvarati marker po marker.
+  - Testovi liste su morali dobiti `_poziOpozOn: () => false` u sandboxu —
+    tiču se traka/indeksa, ne geometrije. 10 novih testova (110 ukupno).
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

@@ -844,6 +844,10 @@ function makeLista({ evts, on = true, meta = {}, sort = null }) {
     _poziRefTacka: () => ({ la:44.88, lo:16.15, gps:true }),
     _poziOkvirNaziv: () => '24 sata', _POZ_RADIUS_KM: 150,
     _escHtml: (s) => s,
+    // v3.113.1: _poziRedHtml prikazuje i procijenjenu površinu. Testovi liste
+    // se tiču SAMO traka/indeksa, pa je projekcija ovdje isključena — da red
+    // ostane isti bez obzira na geometriju.
+    _poziOpozOn: () => false, _poziProj: () => null, _poziPovrsTxt: () => '',
     localStorage: { getItem: () => sort, setItem(){}, removeItem(){} },
   };
   const keys = Object.keys(sandbox);
@@ -1114,7 +1118,8 @@ const _turf = _turfMod.exports;
 
 const SRC_OPOZ = [extractFn('_poziOpozGeom'), extractFn('_poziOpozProjekcija')].join('\n');
 function makeOpoz() {
-  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60, _POZ_FRONT_MS: 6 * 3600 * 1000 };
+  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60, _POZ_FRONT_MS: 6 * 3600 * 1000,
+    _POZ_STAROST: eval('(' + extractConst('_POZ_STAROST').replace(/^const _POZ_STAROST = /, '').replace(/;\s*$/, '') + ')') };
   const keys = Object.keys(sandbox);
   return new Function(...keys, SRC_OPOZ + '\nreturn { _poziOpozGeom, _poziOpozProjekcija };')(...keys.map(k => sandbox[k]));
 }
@@ -1249,6 +1254,126 @@ console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');
     assert.strictEqual(fns._poziOpozOn(), false);
   });
 }
+
+
+// ── v3.113.1: trake starosti, formatiranje površine, memoizacija ───────────
+console.log('Trake starosti i prikaz površine (v3.113.1):');
+
+const { _poziPovrsTxt } = new Function(extractFn('_poziPovrsTxt') + '\nreturn { _poziPovrsTxt };')();
+
+t('površina se ne prikazuje lažno preciznim brojem', () => {
+  assert.strictEqual(_poziPovrsTxt(3.44), '3.4 ha');      // sitno → jedna decimala
+  assert.strictEqual(_poziPovrsTxt(213.8027), '214 ha');  // srednje → cijeli broj
+  assert.strictEqual(_poziPovrsTxt(2450), '24.5 km²');    // veliko → km² (100 ha = 1 km²)
+  assert.strictEqual(_poziPovrsTxt(0), '—');
+  assert.strictEqual(_poziPovrsTxt(NaN), '—');
+});
+
+// Požar koji gori 4 dana — detekcije razvučene kroz sve četiri trake starosti
+function pozarKrozTrake() {
+  const zadnji = Date.parse('2026-09-07T12:00:00Z');
+  const satiPrije = [96, 90, 48, 40, 20, 14, 3, 1];   // 2× po traci
+  const pts = satiPrije.map((h, i) => ({
+    la: 44.90 - i * 0.003, lo: 16.20 + i * 0.003, rez: 375,
+    dt: new Date(zadnji - h * 3600000).toISOString()
+  }));
+  return { pts, prvi: zadnji - 96 * 3600000, zadnji };
+}
+
+t('požar koji gori danima se razlaže na VIŠE traka, ne u jednu tamnu mrlju', () => {
+  const pr = OPOZ._poziOpozProjekcija(pozarKrozTrake());
+  assert.ok(pr, 'mora dati projekciju');
+  assert.strictEqual(pr.trake.length, 4, 'očekivane 4 trake, dobijeno ' + pr.trake.length);
+  const ids = pr.trake.map(t => t.id);
+  assert.deepStrictEqual(ids, ['front', 'd1', 'd3', 'star'], 'redoslijed: najnovija → najstarija');
+  pr.trake.forEach(t => assert.ok(t.ha > 0, 'traka ' + t.id + ' mora imati površinu'));
+});
+
+t('haFront je površina zahvaćena u zadnjih 6 h, manja od ukupne', () => {
+  const pr = OPOZ._poziOpozProjekcija(pozarKrozTrake());
+  assert.ok(pr.haFront > 0, 'aktivan front mora imati površinu');
+  assert.ok(pr.haFront < pr.haUkupno, 'front (' + pr.haFront.toFixed(1) + ') < ukupno (' + pr.haUkupno.toFixed(1) + ')');
+  const front = pr.trake.find(t => t.id === 'front');
+  assert.strictEqual(pr.haFront, front.ha, 'haFront mora doći baš iz front trake');
+});
+
+t('ukupno NIJE prost zbir traka (trake se preklapaju kad isto mjesto gori više puta)', () => {
+  // Dvije detekcije na ISTOM mjestu, jedna stara jedna svježa — zbir traka bi
+  // istu površinu izbrojao dvaput; spojena geometrija je broji jednom.
+  const zadnji = Date.parse('2026-09-07T12:00:00Z');
+  const pts = [
+    { la: 44.90, lo: 16.20, rez: 375, dt: new Date(zadnji - 40 * 3600000).toISOString() },
+    { la: 44.90, lo: 16.20, rez: 375, dt: new Date(zadnji).toISOString() }
+  ];
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji - 40 * 3600000, zadnji });
+  const zbir = pr.trake.reduce((s, t) => s + t.ha, 0);
+  assert.ok(pr.haUkupno < zbir * 0.75,
+    'ukupno (' + pr.haUkupno.toFixed(1) + ') mora biti bitno manje od zbira traka (' + zbir.toFixed(1) + ')');
+});
+
+t('detekcija bez upotrebljivog vremena ne ispada iz projekcije', () => {
+  const zadnji = Date.parse('2026-09-07T12:00:00Z');
+  const pts = [
+    { la: 44.900, lo: 16.200, rez: 375, dt: new Date(zadnji).toISOString() },
+    { la: 44.902, lo: 16.202, rez: 375, dt: 'neispravno' },
+    { la: 44.904, lo: 16.204, rez: 375, dt: null }
+  ];
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji, zadnji });
+  const pokriveno = pts.every(p => _turf.booleanPointInPolygon(_turf.point([p.lo, p.la]), pr.ukupno));
+  assert.ok(pokriveno, 'i detekcija bez vremena je izmjerena — mora biti u poligonu');
+});
+
+console.log('Memoizacija projekcije (_poziProj):');
+{
+  let racunato = 0;
+  const fns = new Function('_poziOpozProjekcija',
+    extractFn('_poziProj') + '\nreturn { _poziProj };'
+  )((g) => { racunato++; return { haUkupno: 1 }; });
+
+  t('računa se jednom po grupi, drugi poziv čita keš', () => {
+    const g = { pts: [] };
+    fns._poziProj(g); fns._poziProj(g); fns._poziProj(g);
+    assert.strictEqual(racunato, 1, 'pozvano ' + racunato + ' puta umjesto 1');
+  });
+  t('null rezultat se takođe pamti — ne pokušava se ponovo svaki render', () => {
+    racunato = 0;
+    const fns2 = new Function('_poziOpozProjekcija',
+      extractFn('_poziProj') + '\nreturn { _poziProj };'
+    )(() => { racunato++; return null; });
+    const g = { pts: [] };
+    assert.strictEqual(fns2._poziProj(g), null);
+    assert.strictEqual(fns2._poziProj(g), null);
+    assert.strictEqual(racunato, 1, 'null se mora keširati, pozvano ' + racunato + 'x');
+  });
+}
+
+console.log('Legenda na karti (_poziLegendaTrake):');
+{
+  const STAROST = eval('(' + extractConst('_POZ_STAROST').replace(/^const _POZ_STAROST = /, '').replace(/;\s*$/, '') + ')');
+  function legenda({ on, poziOn, evts }) {
+    return new Function('_poziOpozOn', '_poziOn', '_poziEvts', '_POZ_STAROST',
+      extractFn('_poziLegendaTrake') + '\nreturn _poziLegendaTrake();'
+    )(() => on, poziOn, evts, STAROST);
+  }
+  t('sloj isključen → prazna legenda (ne nudi boje kojih na karti nema)', () => {
+    assert.deepStrictEqual(legenda({ on: false, poziOn: true, evts: [{ _proj: { trake: [{ id: 'front' }] } }] }), []);
+  });
+  t('prikazuje SAMO trake koje stvarno postoje na karti', () => {
+    const r = legenda({ on: true, poziOn: true, evts: [
+      { _proj: { trake: [{ id: 'front' }] } },
+      { _proj: { trake: [{ id: 'star' }] } }
+    ]});
+    assert.deepStrictEqual(r.map(t => t.id), ['front', 'star'], 'bez d1/d3 kojih nema');
+  });
+  t('trake su uvijek u istom redoslijedu (najnovija → najstarija), bez obzira na redoslijed požara', () => {
+    const r = legenda({ on: true, poziOn: true, evts: [
+      { _proj: { trake: [{ id: 'star' }, { id: 'd3' }] } },
+      { _proj: { trake: [{ id: 'front' }] } }
+    ]});
+    assert.deepStrictEqual(r.map(t => t.id), ['front', 'd3', 'star']);
+  });
+}
+
 
 (async () => {
   for (const a of _async) {
