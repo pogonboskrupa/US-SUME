@@ -714,6 +714,33 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     `let _poziNotifTimer` je samostalna deklaracija (ne `const`), pa je
     `extractConst` ne hvata — bez ručnog dodavanja u sandbox
     `_poziNotifTimerStop` puca na `ReferenceError` pri prvom čitanju.
+- **Osvježavanje samo dok je sekcija otvorena + vidljiva svježina (v3.114.1)**:
+  korisnik je na v3.114.0 tražio "neka se ovako ponaša samo po uključenju
+  požari sekcije".
+  - `_poziAutoTreba()` sada gleda `_activeTab === 'pozari'` umjesto `_poziOn`.
+    Razlog je dobar: **sloj ostaje uključen danima**, pa je timer u v3.114.0
+    kucao i dok je korisnik odavno na Vlakama ili Doznaci — trošio podatke i
+    bateriju, a rezultat niko ne gleda. Kad se sekcija otvori, svježe stanje
+    ionako stiže odmah preko `_poziOsvjeziAkoJeStaro()`.
+  - **Obavještenja su jedini izuzetak** i moraju ostati u uslovu — njihova
+    cijela svrha je da jave DOK ne gledaš; bez toga bi ih ova izmjena tiho
+    pokvarila.
+  - `_poziAutoSync()` se zato zove na SVAKU promjenu taba u `switchTab`, ne
+    samo pri ulasku u sekciju — inače timer nikad ne bi stao pri izlasku.
+  - **Vidljiva svježina** (`_poziSvjezinaHtml`, prag `_POZ_STARO_MS` = 30 min):
+    cijeli bug zbog kojeg je v3.114.0 nastala bio je NEVIDLJIV — podaci stari
+    satima, a to je pisalo sitnim sivim slovima usred rečenice sa još pet
+    podataka. Sada svježina ima svoj red, a preko praga postaje žuto
+    upozorenje sa pozivom na "Osvježi". Bolje jedan suvišan pritisak nego
+    gledanje jučerašnjeg stanja u uvjerenju da je današnje.
+  - **"N novih od zadnje provjere"** (`_poziNoviHtml`): poslije TIHOG
+    automatskog osvježavanja se inače ne vidi da se išta promijenilo — nov
+    požar se samo pojavi negdje u listi. Koristi postojeći `g.nov` iz
+    `_poziOznaciNove` (koji upisuje skup viđenih pri svakom učitavanju, pa se
+    brojka prirodno resetuje na sljedećem osvježavanju) i postojeću sklonidbu
+    `_poziBrojRijecNovih` (1 novi / 2 nova / 5 novih).
+  - 9 novih testova (150 u `pozari.test.js`); postojeći testovi automatskog
+    osvježavanja su prepisani sa `_poziOn` na `_activeTab` semantiku.
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

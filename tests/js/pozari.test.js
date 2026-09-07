@@ -1582,13 +1582,15 @@ t('svjež požar i dalje piše "aktivan front"', () => {
 
 
 
-// ── v3.114.0: automatsko osvježavanje detekcija ────────────────────────────
+// ── v3.114.0/v3.114.1: automatsko osvježavanje detekcija ──────────────────
 // Sa terena: požar se vidio na firemap.live, a u app-u ga nije bilo. Dohvat je
 // radio (drugi požari su se prikazivali), ali se osvježavanje NIJE dešavalo —
 // timer je startovao samo ako su uključena obavještenja, a ona su
-// podrazumijevano isključena. Ovi testovi čuvaju da sloj požara sam po sebi
-// bude dovoljan uslov za osvježavanje.
-console.log('Automatsko osvježavanje (v3.114.0):');
+// podrazumijevano isključena.
+// v3.114.1 (na zahtjev): timer radi SAMO dok je sekcija Požari otvorena, ne i
+// kad je samo sloj uključen — sloj ostaje uključen danima, pa bi inače kucao i
+// dok je korisnik na Vlakama. Obavještenja su izuzetak (javljaju dok NE gledaš).
+console.log('Automatsko osvježavanje (v3.114.0 / v3.114.1):');
 
 const SRC_AUTO = [
   // `let _poziNotifTimer` je samostalna deklaracija (ne const) — bez nje bi
@@ -1603,11 +1605,11 @@ const SRC_AUTO = [
   extractFn('_poziOsvjeziAkoJeStaro'),
 ].join('\n');
 
-function makeAuto({ poziOn = false, notifOn = false, online = true, busy = false,
+function makeAuto({ tab = 'karta', notifOn = false, online = true, busy = false,
                     hidden = false, dohvacenoMs = null } = {}) {
-  const stanje = { load: 0, tikova: 0, timerId: null };
+  const stanje = { load: 0, timerId: null, tik: null };
   const sandbox = {
-    _poziOn: poziOn,
+    _activeTab: tab,
     _poziNotifOn: () => notifOn,
     _poziBusy: busy,
     _poziMeta: dohvacenoMs === null ? {} : { dohvacenoMs },
@@ -1620,53 +1622,64 @@ function makeAuto({ poziOn = false, notifOn = false, online = true, busy = false
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys,
-    SRC_AUTO + '\nreturn { _poziAutoTreba, _poziAutoSync, _poziNotifTimerStop, _poziOsvjeziAkoJeStaro, _POZ_AUTO_MS, _POZ_STALE_MS, get timer(){ return _poziNotifTimer; } };'
+    SRC_AUTO + '\nreturn { _poziAutoTreba, _poziAutoSync, _poziNotifTimerStop, _poziOsvjeziAkoJeStaro, _POZ_AUTO_MS, _POZ_STALE_MS };'
   )(...keys.map(k => sandbox[k]));
   return { api, stanje };
 }
 
-t('sloj požara UKLJUČEN, obavještenja isključena → timer ipak radi (uzrok bug-a)', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, notifOn: false });
-  assert.strictEqual(api._poziAutoTreba(), true, 'sloj sam po sebi mora tražiti osvježavanje');
+t('sekcija Požari OTVORENA, obavještenja isključena → timer radi (uzrok bug-a)', () => {
+  const { api, stanje } = makeAuto({ tab: 'pozari', notifOn: false });
+  assert.strictEqual(api._poziAutoTreba(), true, 'otvorena sekcija mora tražiti osvježavanje');
   api._poziAutoSync();
   assert.strictEqual(stanje.timerId, 1, 'timer mora biti pokrenut');
   stanje.tik();
   assert.strictEqual(stanje.load, 1, 'otkucaj mora dohvatiti podatke');
 });
 
-t('samo obavještenja uključena (sloj isključen) → timer i dalje radi', () => {
-  const { api, stanje } = makeAuto({ poziOn: false, notifOn: true });
+t('korisnik OTIŠAO sa sekcije → timer staje (v3.114.1, ne troši dok niko ne gleda)', () => {
+  const { api, stanje } = makeAuto({ tab: 'pozari' });
   api._poziAutoSync();
   assert.strictEqual(stanje.timerId, 1);
+  // isti obrazac kao switchTab: promijeni tab pa ponovo uskladi
+  const drugi = makeAuto({ tab: 'vlake' });
+  drugi.api._poziAutoSync();
+  assert.strictEqual(drugi.stanje.timerId, null, 'van sekcije timer ne smije kucati');
+  assert.strictEqual(drugi.api._poziAutoTreba(), false);
+});
+
+t('samo obavještenja uključena (van sekcije) → timer i dalje radi', () => {
+  const { api, stanje } = makeAuto({ tab: 'karta', notifOn: true });
+  api._poziAutoSync();
+  assert.strictEqual(stanje.timerId, 1, 'obavještenja javljaju dok NE gledaš — moraju kucati');
   stanje.tik();
   assert.strictEqual(stanje.load, 1);
 });
 
-t('ni sloj ni obavještenja → timer se ne pokreće (ne troši bateriju bez potrebe)', () => {
-  const { api, stanje } = makeAuto({ poziOn: false, notifOn: false });
+t('ni sekcija ni obavještenja → timer se ne pokreće (ne troši bateriju bez potrebe)', () => {
+  const { api, stanje } = makeAuto({ tab: 'doznaka', notifOn: false });
   assert.strictEqual(api._poziAutoTreba(), false);
   api._poziAutoSync();
   assert.strictEqual(stanje.timerId, null, 'timer ne smije postojati');
 });
 
 t('otkucaj u POZADINI ne dohvaća (nadoknađuje se pri povratku)', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, hidden: true });
+  const { api, stanje } = makeAuto({ tab: 'pozari', hidden: true });
   api._poziAutoSync();
   stanje.tik();
   assert.strictEqual(stanje.load, 0, 'dok je app u pozadini ne trošimo podatke');
 });
 
 t('otkucaj bez mreže ili dok traje dohvat ne radi ništa', () => {
-  const a = makeAuto({ poziOn: true, online: false });
+  const a = makeAuto({ tab: 'pozari', online: false });
   a.api._poziAutoSync(); a.stanje.tik();
   assert.strictEqual(a.stanje.load, 0, 'offline');
-  const b = makeAuto({ poziOn: true, busy: true });
+  const b = makeAuto({ tab: 'pozari', busy: true });
   b.api._poziAutoSync(); b.stanje.tik();
   assert.strictEqual(b.stanje.load, 0, 'dohvat već u toku');
 });
 
 t('interval je 10 min, prag ustajalosti 5 min', () => {
-  const { api } = makeAuto({ poziOn: true });
+  const { api } = makeAuto({ tab: 'pozari' });
   assert.strictEqual(api._POZ_AUTO_MS, 10 * 60 * 1000);
   assert.strictEqual(api._POZ_STALE_MS, 5 * 60 * 1000);
 });
@@ -1674,33 +1687,97 @@ t('interval je 10 min, prag ustajalosti 5 min', () => {
 console.log('Osvježavanje pri povratku u app / otvaranju panela:');
 
 t('podaci stariji od 5 min → dohvaća odmah', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: Date.now() - 6 * 60 * 1000 });
+  const { api, stanje } = makeAuto({ tab: 'pozari', dohvacenoMs: Date.now() - 6 * 60 * 1000 });
   api._poziOsvjeziAkoJeStaro();
   assert.strictEqual(stanje.load, 1);
 });
 
 t('svježi podaci (prije 1 min) → NE dohvaća ponovo (bez suvišnog prometa)', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: Date.now() - 60 * 1000 });
+  const { api, stanje } = makeAuto({ tab: 'pozari', dohvacenoMs: Date.now() - 60 * 1000 });
   api._poziOsvjeziAkoJeStaro();
   assert.strictEqual(stanje.load, 0);
 });
 
 t('nikad učitano (nema dohvacenoMs) → dohvaća', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: null });
+  const { api, stanje } = makeAuto({ tab: 'pozari', dohvacenoMs: null });
   api._poziOsvjeziAkoJeStaro();
   assert.strictEqual(stanje.load, 1, 'prazan _poziMeta znači da podataka nema uopšte');
 });
 
-t('sloj i obavještenja isključeni → povratak u app ne dohvaća ništa', () => {
-  const { api, stanje } = makeAuto({ poziOn: false, notifOn: false, dohvacenoMs: 0 });
+t('povratak u app dok korisnik NIJE u sekciji → ne dohvaća (v3.114.1)', () => {
+  const { api, stanje } = makeAuto({ tab: 'karta', notifOn: false, dohvacenoMs: 0 });
   api._poziOsvjeziAkoJeStaro();
   assert.strictEqual(stanje.load, 0);
 });
 
 t('offline povratak u app ne baca i ne dohvaća', () => {
-  const { api, stanje } = makeAuto({ poziOn: true, online: false, dohvacenoMs: 0 });
+  const { api, stanje } = makeAuto({ tab: 'pozari', online: false, dohvacenoMs: 0 });
   api._poziOsvjeziAkoJeStaro();
   assert.strictEqual(stanje.load, 0);
+});
+
+
+// ── v3.114.1: vidljiva svježina + "novi od zadnje provjere" ────────────────
+// Bug zbog kojeg je v3.114.0 nastala bio je NEVIDLJIV: podaci stari satima, a
+// to piše sitnim sivim slovima usred rečenice sa još pet podataka.
+console.log('Svježina podataka i oznaka novih (v3.114.1):');
+
+const SRC_SVJ = [
+  extractConst('_POZ_STARO_MS'),
+  extractFn('_poziStarost'),
+  extractFn('_poziSvjezinaHtml'),
+  extractFn('_poziBrojRijecNovih'),
+  extractFn('_poziNoviHtml'),
+].join('\n');
+
+function makeSvj({ poziOn = true, meta = {}, evts = [] } = {}) {
+  const sandbox = { _poziOn: poziOn, _poziMeta: meta, _poziEvts: evts, _escHtml: (x) => String(x), Date };
+  const keys = Object.keys(sandbox);
+  return new Function(...keys, SRC_SVJ + '\nreturn { _poziSvjezinaHtml, _poziNoviHtml };')(...keys.map(k => sandbox[k]));
+}
+
+t('svježi podaci → tiha siva linija, BEZ upozorenja', () => {
+  const html = makeSvj({ meta: { dohvacenoMs: Date.now() - 3 * 60 * 1000 } })._poziSvjezinaHtml();
+  assert.match(html, /Osvježeno/);
+  assert.ok(!/Osvježi<\/b>/.test(html), 'ne smije zvati na akciju dok su podaci svježi');
+});
+
+t('podaci stariji od 30 min → NAPADNO upozorenje sa pozivom na Osvježi', () => {
+  const html = makeSvj({ meta: { dohvacenoMs: Date.now() - 90 * 60 * 1000 } })._poziSvjezinaHtml();
+  assert.match(html, /Podaci su od/);
+  assert.match(html, /Osvježi/);
+  assert.match(html, /#b45309/, 'mora imati vidljiv (žuti) okvir, ne sivi tekst');
+});
+
+t('podaci iz keša se OZNAČE kao takvi', () => {
+  const html = makeSvj({ meta: { dohvacenoMs: Date.now() - 60 * 1000, kes: true } })._poziSvjezinaHtml();
+  assert.match(html, /iz keša/);
+});
+
+t('greška u dohvatu → svježina se ne prikazuje (poruka o grešci već stoji)', () => {
+  assert.strictEqual(makeSvj({ meta: { greska: 'nema mreže', dohvacenoMs: Date.now() } })._poziSvjezinaHtml(), '');
+});
+
+t('sloj isključen ili nikad učitano → nema linije o svježini', () => {
+  assert.strictEqual(makeSvj({ poziOn: false, meta: { dohvacenoMs: Date.now() } })._poziSvjezinaHtml(), '');
+  assert.strictEqual(makeSvj({ meta: {} })._poziSvjezinaHtml(), '');
+});
+
+t('"novi od zadnje provjere" broji SAMO grupe sa nov=true', () => {
+  const api = makeSvj({ evts: [{ nov: true }, { nov: false }, { nov: true }] });
+  const html = api._poziNoviHtml();
+  assert.match(html, /2 nova/, 'dobijeno: ' + html);
+  assert.match(html, /od zadnje provjere/);
+});
+
+t('jedan nov požar — ispravna sklonidba (1 novi, ne "1 novih")', () => {
+  const html = makeSvj({ evts: [{ nov: true }] })._poziNoviHtml();
+  assert.match(html, /1 novi/);
+});
+
+t('nijedan nov → nema trake (ne prikazuje se "0 novih")', () => {
+  assert.strictEqual(makeSvj({ evts: [{ nov: false }, { nov: false }] })._poziNoviHtml(), '');
+  assert.strictEqual(makeSvj({ evts: [] })._poziNoviHtml(), '');
 });
 
 

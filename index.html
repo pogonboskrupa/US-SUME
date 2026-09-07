@@ -4861,7 +4861,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.114.0';
+const APP_VER = 'v3.114.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13963,8 +13963,15 @@ const _POZ_AUTO_MS  = 10 * 60 * 1000;  // periodično, dok je app u prvom planu
 const _POZ_STALE_MS =  5 * 60 * 1000;  // starije od ovoga = osvježi pri povratku/otvaranju
 let _poziNotifTimer = null;
 
+// Periodično osvježavanje radi SAMO dok je sekcija Požari otvorena (v3.114.1,
+// na zahtjev). U v3.114.0 je bilo dovoljno da je sloj uključen — ali sloj ostaje
+// uključen danima, pa je timer kucao i kad je korisnik odavno na Vlakama ili
+// Doznaci: podaci i baterija se troše, a rezultat niko ne gleda. Kad se sekcija
+// otvori, svježe stanje ionako stiže odmah (_poziOsvjeziAkoJeStaro).
+// Obavještenja su JEDINI izuzetak — njihova cijela svrha je da jave dok NE
+// gledaš, pa ona i dalje drže timer živim.
 function _poziAutoTreba() {
-  return (typeof _poziOn !== 'undefined' && _poziOn) || _poziNotifOn();
+  return (typeof _activeTab !== 'undefined' && _activeTab === 'pozari') || _poziNotifOn();
 }
 
 // Jedan timer za oba slučaja — dva odvojena bi na istom uređaju dohvaćala
@@ -13985,6 +13992,42 @@ function _poziNotifTimerStop() {
 function _poziAutoSync() {
   if (_poziAutoTreba()) _poziNotifTimerStart();
   else _poziNotifTimerStop();
+}
+
+// ── Vidljiva svježina podataka (v3.114.1) ─────────────────────────────────
+// Cijeli bug zbog kojeg je v3.114.0 nastala bio je NEVIDLJIV: podaci su bili
+// stari satima, a to je pisalo sitnim sivim slovima usred rečenice sa još pet
+// podataka. Zato svježina sada ima svoj red, a kad pređe prag postaje žuto
+// upozorenje koje se ne može previdjeti — bolje je da korisnik jednom previše
+// pritisne Osvježi nego da gleda jučerašnje stanje misleći da je današnje.
+const _POZ_STARO_MS = 30 * 60 * 1000;
+function _poziSvjezinaHtml() {
+  const m = _poziMeta || {};
+  if (!_poziOn || m.greska) return '';
+  const ts = m.dohvacenoMs || 0;
+  if (!ts) return '';
+  const txt = _poziStarost(ts) + (m.kes ? ' · iz keša' : '');
+  if (Date.now() - ts < _POZ_STARO_MS) {
+    return `<div style="font-size:10px;color:#64748b;margin:0 0 8px;">🕐 Osvježeno ${_escHtml(txt)}</div>`;
+  }
+  return `<div style="margin:0 0 8px;padding:7px 9px;background:#78350f44;border:1px solid #b45309;
+       border-radius:8px;font-size:11px;color:#fcd34d;line-height:1.4;">
+       ⏳ Podaci su od <b>${_escHtml(txt)}</b> — dodirni <b>Osvježi</b> za najnovije stanje.
+     </div>`;
+}
+
+// "N novih od zadnje provjere" — bez ovoga se poslije tihog automatskog
+// osvježavanja ne vidi da se išta promijenilo: novi požar se samo tiho pojavi
+// negdje u listi. Broji grupe koje `_poziOznaciNove` nije našao u prošlom
+// skupu viđenih, pa se prirodno resetuje na sljedećem osvježavanju.
+function _poziNoviHtml() {
+  if (!_poziOn || (_poziMeta || {}).greska) return '';
+  const n = (_poziEvts || []).filter(g => g.nov).length;
+  if (!n) return '';
+  return `<div style="margin:0 0 8px;padding:7px 9px;background:#7c2d1233;border:1px solid #b45309;
+       border-radius:8px;font-size:11.5px;color:#fdba74;font-weight:600;">
+       🆕 ${_escHtml(_poziBrojRijecNovih(n))} od zadnje provjere
+     </div>`;
 }
 
 // Osvježi ODMAH ako su podaci stariji od praga. Ovdje se dobija najviše na
@@ -14554,7 +14597,9 @@ function _poziSadrzajHtml() {
       prekidac('_poziToggle(this.checked)', _poziOn, 'Prikaži detekcije na karti')
       + (_poziOn ? prekidac("_poziHeatSet(this.checked)", _poziHeatOn(), '🔥 Prikaži i kao heatmap (gustina, kao na firemap.live)') : '')
       + okvirChips
-      + `<div id="poz-status" style="font-size:11px;color:#94a3b8;margin:6px 0 8px;">${_escHtml(_poziOn ? _poziSazetak().kratko : '—')}</div>`
+      + `<div id="poz-status" style="font-size:11px;color:#94a3b8;margin:6px 0 6px;">${_escHtml(_poziOn ? _poziSazetak().kratko : '—')}</div>`
+      + _poziSvjezinaHtml()
+      + _poziNoviHtml()
       + sortChips
       + detekcije
       + `<div style="display:flex;gap:7px;margin-top:10px;">
@@ -25934,7 +25979,9 @@ function switchTab(tab) {
   if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
   // Otvaranje panela je najjači signal da korisnika BAŠ SAD zanima stanje —
   // ako su podaci ustajali, dohvati ih odmah (tiho, u pozadini; panel se
-  // ponovo iscrta kad stignu).
+  // ponovo iscrta kad stignu). _poziAutoSync se zove na SVAKU promjenu taba,
+  // ne samo pri ulasku: kad se ode sa sekcije, timer treba i stati.
+  try { _poziAutoSync(); } catch(e) {}
   if (tab === 'pozari')  { _poziRenderPanel(); try { _poziOsvjeziAkoJeStaro(); } catch(e) {} }
   _updFabVisibility();
   if (tab==='karta') {
