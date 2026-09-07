@@ -4861,7 +4861,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.114.1';
+const APP_VER = 'v3.115.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -11285,6 +11285,19 @@ async function _crashCheck() {
   msg += '\nŽeliš li oporaviti?';
 
   const ok = await _dlgConfirm(msg, { okLabel: 'Oporavi', cancelLabel: 'Odbaci' });
+
+  // Native GPS bafer se OVDJE mora povući, a ne samo na visibilitychange
+  // (v3.115.0). Kad OEM battery manager ubije cijeli proces usred snimanja,
+  // GpsService nastavi pisati fiksove u fajl (START_STICKY, foreground servis) —
+  // ali ponovno otvaranje app-a je HLADAN START: stranica se učita već vidljiva,
+  // pa `visibilitychange` NIKAD ne opali i jedini pozivalac drain-a se ne izvrši.
+  // Sve što je servis prikupio dok je app bio mrtav ostajalo je u fajlu i bilo
+  // TRAJNO obrisano pri sljedećem startRecording() (clearBuffer u GpsService).
+  // Drain je destruktivan pa se uzima JEDNOM i usmjerava u obje grane oporavka;
+  // ako korisnik odbaci oporavak, bafer se odbacuje s njim (pripada baš toj
+  // prekinutoj sesiji i ne smije iscuriti u sljedeće snimanje).
+  const bufPts = _nativeBufUzmi();
+
   if (!ok) { _crashClearVlaka(); _crashClearTrag(); return; }
 
   if (snapV) {
@@ -11300,9 +11313,25 @@ async function _crashCheck() {
         vlake[newI].pts.push(pt);
         vlake[newI].poly.addLatLng([la, lo]);
       }
+      // Dopuni onim što je native servis snimio POSLIJE zadnjeg snimka stanja.
+      // Snimak se piše na 30 s, a bafer ima svaki fiks — bez ovoga se gubi sve
+      // od zadnjeg auto-save-a do trenutka kad je proces ubijen, plus cijeli
+      // period dok je app bio zatvoren. Prag je snapV.ts (vrijeme snimka), jer
+      // tačke u snimku nemaju vlastiti timestamp.
+      let dodato = 0;
+      for (const p of bufPts) {
+        if (p.t <= (snapV.ts || 0)) continue;
+        if (p.ac > 50) continue;                     // isti prag kao živi put
+        const zadnja = vlake[newI].pts[vlake[newI].pts.length - 1];
+        if (zadnja && dst(zadnja.la, zadnja.lo, p.la, p.lo) < 0.5) continue;
+        vlake[newI].pts.push({ la: p.la, lo: p.lo, elev: p.al ?? 0 });
+        vlake[newI].poly.addLatLng([p.la, p.lo]);
+        dodato++;
+      }
       selI(newI);
       await saveV(newI);
-      showToast(`✅ Oporavljena vlaka: ${snapV.pts.length} tačaka`);
+      showToast(`✅ Oporavljena vlaka: ${vlake[newI].pts.length} tačaka`
+        + (dodato ? ` (${dodato} iz pozadinskog snimanja)` : ''));
     } catch(e) { showToast('⚠ Greška pri oporavku vlake: ' + e.message); }
     _crashClearVlaka();
   }
@@ -11331,7 +11360,20 @@ async function _crashCheck() {
       _updFabVisibility();
       _updTragStats();
       if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
-      showToast(`✅ Oporavljen trag: ${snapT.pts.length} tačaka — snimanje nastavljeno`);
+      // Isto kao kod vlake: dopuni fiksovima koje je native servis prikupio dok
+      // je proces bio mrtav. Ide kroz _addTragPoint da vrijede isti filteri
+      // (tačnost, speed-gate, auto-pauza) kao za žive tačke, uz STVARNI
+      // historijski timestamp — inače bi speed-gate cijeli period vidio kao
+      // jedan ogroman skok i odbio sve.
+      const prijeDopune = _tragPts.length;
+      for (const p of bufPts) {
+        if (p.t > _tragLastT) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t);
+      }
+      const dodatoT = _tragPts.length - prijeDopune;
+      _updTragStats();
+      showToast(`✅ Oporavljen trag: ${_tragPts.length} tačaka`
+        + (dodatoT ? ` (${dodatoT} iz pozadinskog snimanja)` : '')
+        + ' — snimanje nastavljeno');
       _crashStartTimer();
     } catch(e) { showToast('⚠ Greška pri oporavku traga: ' + e.message); }
     _crashClearTrag();
@@ -19423,16 +19465,27 @@ function _tragLiveClear() {
 // trag (oba primaju fikseve kroz glavni onP watch), _dozLastLiveFixTs za
 // doznaku (vlastiti watch). Bez toga bi replay duplicirao već obrađene tačke
 // (za doznaku i stvarno duplirao redove u doz_track_points na serveru).
+// Pročitaj native bafer JEDNOM i vrati sortirane tačke. Drain je DESTRUKTIVAN
+// (Java strana obriše fajl pri čitanju), pa svaki pozivalac mora znati da je
+// drugi neće više dobiti — zato je izdvojeno u helper: i _drainNativeGpsBuffer
+// (povratak u app) i _crashCheck (hladan start poslije ubijenog procesa) idu
+// kroz njega, a _crashCheck rezultat usmjerava u obje grane oporavka.
+function _nativeBufUzmi() {
+  if (typeof AndroidGps === 'undefined' || typeof AndroidGps.drainNativeBuffer !== 'function') return [];
+  let raw;
+  try { raw = AndroidGps.drainNativeBuffer(); } catch(e) { return []; }
+  if (!raw) return [];
+  let pts;
+  try { pts = JSON.parse(raw); } catch(e) { return []; }
+  if (!Array.isArray(pts) || !pts.length) return [];
+  return pts.filter(p => p && typeof p.t === 'number').sort((a, b) => a.t - b.t);
+}
+
 async function _drainNativeGpsBuffer() {
   if (typeof AndroidGps === 'undefined' || typeof AndroidGps.drainNativeBuffer !== 'function') return;
   if (!_tragOn && !_dozGpsOn && !recOn) return;
-  let raw;
-  try { raw = AndroidGps.drainNativeBuffer(); } catch(e) { return; }
-  if (!raw) return;
-  let pts;
-  try { pts = JSON.parse(raw); } catch(e) { return; }
-  if (!Array.isArray(pts) || !pts.length) return;
-  pts.sort((a, b) => a.t - b.t);
+  const pts = _nativeBufUzmi();
+  if (!pts.length) return;
   for (const p of pts) {
     if (!p || typeof p.t !== 'number') continue;
     if (_tragOn && p.t > Math.max(_tragLastT, _onPLastFixTs))

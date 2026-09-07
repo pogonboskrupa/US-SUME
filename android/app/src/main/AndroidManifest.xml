@@ -38,9 +38,15 @@
             </intent-filter>
         </activity>
 
+        <!-- stopWithTask="false" je EKSPLICITAN, ne oslanja se na platformski
+             podrazumijevani: kad korisnik izbaci app iz "recent apps" usred
+             snimanja, servis mora nastaviti prikupljati GPS. Dio OEM ROM-ova
+             (Xiaomi/Huawei i sl.) agresivno gasi servise uz task, pa je bolje
+             da namjera bude zapisana nego pretpostavljena. -->
         <service
             android:name=".GpsService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="location" />
 
         <provider

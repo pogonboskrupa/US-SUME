@@ -742,6 +742,48 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - 9 novih testova (150 u `pozari.test.js`); postojeći testovi automatskog
     osvježavanja su prepisani sa `_poziOn` na `_activeTab` semantiku.
 
+## Pozadinsko snimanje (trag/vlaka) kad se izađe iz aplikacije
+
+- **Native bafer se NIJE praznio pri hladnom startu (v3.115.0)** — najskuplja
+  posljedica cijelog pozadinskog snimanja. `GpsService` uredno nastavi pisati
+  fiksove u `gps_native_buffer.jsonl` i kad OEM battery manager ubije CIJELI
+  proces usred snimanja (foreground servis + `START_STICKY` + wake lock — sve
+  je to radilo). Ali JEDINI pozivalac `_drainNativeGpsBuffer()` bio je
+  `visibilitychange`, a **ponovno otvaranje app-a poslije ubijenog procesa je
+  HLADAN START: stranica se učita već vidljiva, pa taj event nikad ne opali.**
+  Sve prikupljeno dok je app bio mrtav ostajalo je u fajlu i bilo TRAJNO
+  obrisano pri sljedećem `startRecording()` (`clearBuffer` u `GpsService`) —
+  dakle tačno onaj period zbog kojeg native bafer uopšte postoji.
+  - Popravka: `_nativeBufUzmi()` (jedno destruktivno čitanje, sortirano) +
+    poziv iz `_crashCheck()`. Bafer se uzima **JEDNOM** i usmjerava u obje
+    grane oporavka (trag i vlaka mogu snimati istovremeno).
+  - **Trag** ide kroz `_addTragPoint(..., p.t)` da vrijede isti filteri
+    (tačnost, speed-gate, auto-pauza) i da tačke nose STVARNI historijski
+    timestamp — bez toga speed-gate cijeli period vidi kao jedan skok i odbije
+    sve (ista zamka koju već opisuje komentar uz `_tragLastT` u `_crashCheck`).
+  - **Vlaka** se dopunjava tačkama novijim od `snapV.ts` (vrijeme snimka), jer
+    tačke u crash-snapshotu NEMAJU vlastiti timestamp. Snimak se piše na 30 s,
+    pa se time hvata i onih do 30 s prije nego je proces ubijen.
+  - Ako korisnik ODBIJE oporavak, bafer se svejedno pročita (dakle obriše) —
+    pripada baš toj prekinutoj sesiji i ne smije iscuriti u sljedeće snimanje.
+  - Toast kaže koliko je tačaka došlo iz pozadine ("… (12 iz pozadinskog
+    snimanja)") — bez toga korisnik ne zna je li rupa popunjena ili ne.
+  - Test: `tests/js/gps-bg-buffer.test.js` (13 testova). **Provjereno da pada
+    na starom kodu** prije nego je proglašen dobrim.
+  - **Zamka pri pisanju tog testa**: `_crashCheck` REBIND-uje `_tragPts`/
+    `_tragOn` (to su parametri sandbox funkcije), pa se unutrašnje stanje ne
+    može posmatrati izvana — mock `_addTragPoint` zato bilježi u DIJELJENI niz,
+    a `_tragOn` se čita kroz getter koji vraća sama sandbox funkcija.
+- **`onTaskRemoved` + `android:stopWithTask="false"` (v3.115.0)**: kad korisnik
+  izbaci app iz "recent apps" usred snimanja, servis mora nastaviti. Oba sloja
+  su namjerno tu, ne jedan: dio OEM ROM-ova ignoriše manifest atribut, a
+  `onTaskRemoved` NAMJERNO ne zove `super` (podrazumijevana implementacija zna
+  zaustaviti servis zajedno sa taskom) i preventivno obnavlja foreground
+  notifikaciju + wake lock — bez vidljive notifikacije Android smije ugasiti
+  servis kao "obični" pozadinski.
+- **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
+  `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni

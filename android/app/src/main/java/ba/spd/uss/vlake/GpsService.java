@@ -253,6 +253,23 @@ public class GpsService extends Service {
         }
     }
 
+    // Korisnik je izbacio app iz "recent apps" (swipe) usred snimanja. Activity
+    // se uništava, ali snimanje MORA teći dalje — zato se ovdje NE zove
+    // stopSelf(). Uz android:stopWithTask="false" u manifestu ovo je drugi,
+    // nezavisan sloj iste namjere: dio OEM ROM-ova ignoriše manifest atribut,
+    // a neki sistemi ovdje očekuju izričito ponašanje. Foreground notifikacija i
+    // wake lock se preventivno obnavljaju jer je poslije uklanjanja taska
+    // zabilježeno da servis ostane bez vidljive notifikacije (a bez nje ga
+    // Android smije ugasiti kao "obični" pozadinski servis).
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        acquireWakeLock();
+        showForegroundNotification("GPS Snimanje", "Snimanje se nastavlja — app je zatvorena");
+        startNativeLocationUpdates();
+        // super se NAMJERNO ne zove: podrazumijevana implementacija u nekim
+        // slučajevima zaustavi servis zajedno sa taskom.
+    }
+
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
