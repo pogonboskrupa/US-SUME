@@ -4861,7 +4861,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.113.3';
+const APP_VER = 'v3.114.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5775,7 +5775,7 @@ function _startupRestore() {
       // duplog if-a jer je logika identična.
       if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
       if (navigator.onLine) _poziLoad(true);
-      if (_poziNotifOn()) _poziNotifTimerStart();
+      _poziAutoSync();   // v3.114.0: timer radi i bez obavještenja, dok je sloj uključen
     });
     korak('sjeca', () => {
       if (localStorage.getItem(_SJE_ON_KEY) !== '1') return;
@@ -13762,9 +13762,11 @@ function _poziToggle(on) {
     if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
     // Bez ovoga legenda markera ostane na karti i kad požara više nema.
     if (typeof _demLegendUpdate === 'function') _demLegendUpdate();
+    _poziAutoSync();   // sloj ugašen — timer staje, osim ako ga obavještenja i dalje traže
     _poziStatusSet('—');
     return;
   }
+  _poziAutoSync();     // sloj upaljen — od sada se osvježava i bez obavještenja
   if (_poziLayer) _poziLayer.addTo(map);
   // Udaljenost do požara MORA biti od STVARNE pozicije, ne od centra karte —
   // korisnik je mogao ranije pomjeriti/zumirati kartu bilo gdje, pa bi tihi pad
@@ -13900,13 +13902,13 @@ function _poziNotifNativnoDostupan() {
 function _poziNotifToggle(on) {
   if (!on) {
     try { localStorage.setItem(_POZ_NOTIF_KEY, '0'); } catch(e) {}
-    _poziNotifTimerStop();
+    _poziAutoSync();   // sloj požara može i dalje tražiti osvježavanje
     _poziRenderPanel();
     return;
   }
   if (_poziNotifNativnoDostupan()) {
     try { localStorage.setItem(_POZ_NOTIF_KEY, '1'); } catch(e) {}
-    _poziNotifTimerStart();
+    _poziAutoSync();
     showToast('🔔 Javiću ti kad se pojavi nov požar bliže od ' + _poziNotifKm() + ' km');
     _poziRenderPanel();
     return;
@@ -13918,7 +13920,7 @@ function _poziNotifToggle(on) {
   }
   const upali = () => {
     try { localStorage.setItem(_POZ_NOTIF_KEY, '1'); } catch(e) {}
-    _poziNotifTimerStart();
+    _poziAutoSync();
     showToast('🔔 Javiću ti kad se pojavi nov požar bliže od ' + _poziNotifKm() + ' km');
     _poziRenderPanel();
   };
@@ -13941,19 +13943,59 @@ function _poziNotifPostaviKm(km) {
   _poziRenderPanel();
 }
 
-// Periodična provjera dok je app živa. 15 min: detekcije stižu preletom
-// satelita (par puta dnevno), pa češće nema šta novo donijeti — samo bi trošilo
-// bateriju i podatke.
+// ── Automatsko osvježavanje detekcija (v3.114.0) ──────────────────────────
+// Sa terena je stigla prijava: požar se već vidio na firemap.live, a u app-u ga
+// nema. Uzrok NIJE bio dohvat (drugi požari su se uredno prikazivali, izvori
+// javljali uspjeh) nego to što se osvježavanje uopšte nije DEŠAVALO: timer je
+// do sada startovao SAMO ako su uključena obavještenja, a ona su podrazumijevano
+// isključena. Ko ih nema uključena, dobio bi podatke jednom — pri pokretanju
+// app-a — i nikad više dok ručno ne pritisne "Osvježi". Šumar koji drži app
+// otvorenu cijeli dan tako nikad ne bi vidio požar koji je NASA objavila sat
+// vremena nakon što je on otvorio aplikaciju.
+//
+// Zato timer sada radi kad god je sloj požara uključen ILI su uključena
+// obavještenja, a ne samo u ovom drugom slučaju. Interval je 10 min: detekcije
+// stižu preletom satelita (par puta dnevno), ali NASA ih OBJAVLJUJE sa
+// zakašnjenjem do par sati i u nepredvidivom trenutku — pa je bitno koliko brzo
+// primijetimo objavu, ne koliko brzo satelit prođe. Češće od ovoga bi trošilo
+// bateriju i podatke bez stvarne koristi.
+const _POZ_AUTO_MS  = 10 * 60 * 1000;  // periodično, dok je app u prvom planu
+const _POZ_STALE_MS =  5 * 60 * 1000;  // starije od ovoga = osvježi pri povratku/otvaranju
 let _poziNotifTimer = null;
+
+function _poziAutoTreba() {
+  return (typeof _poziOn !== 'undefined' && _poziOn) || _poziNotifOn();
+}
+
+// Jedan timer za oba slučaja — dva odvojena bi na istom uređaju dohvaćala
+// dvaput zaredom (isti podaci, duplo podataka i baterije).
 function _poziNotifTimerStart() {
   _poziNotifTimerStop();
   _poziNotifTimer = setInterval(() => {
-    if (!_poziNotifOn() || !navigator.onLine || _poziBusy) return;
-    _poziLoad(true);            // tiho: bez toasta, samo osvježi i provjeri
-  }, 15 * 60 * 1000);
+    if (!_poziAutoTreba() || !navigator.onLine || _poziBusy) return;
+    if (document.hidden) return;   // u pozadini ne trošimo podatke; nadoknadi se pri povratku
+    _poziLoad(true);               // tiho: bez toasta, samo osvježi i provjeri
+  }, _POZ_AUTO_MS);
 }
 function _poziNotifTimerStop() {
   if (_poziNotifTimer) { clearInterval(_poziNotifTimer); _poziNotifTimer = null; }
+}
+// Uskladi timer sa trenutnim stanjem — zove se kad se promijeni bilo koji od
+// dva prekidača (sloj požara, obavještenja).
+function _poziAutoSync() {
+  if (_poziAutoTreba()) _poziNotifTimerStart();
+  else _poziNotifTimerStop();
+}
+
+// Osvježi ODMAH ako su podaci stariji od praga. Ovdje se dobija najviše na
+// brzini: šumar izvadi telefon iz džepa ili otvori panel — i vidi svježe stanje,
+// umjesto da čeka do sljedećeg otkucaja timera (do 10 min) ili da se sjeti
+// pritisnuti "Osvježi". Tiho: bez toasta, da povratak u app ne bljesne porukom.
+function _poziOsvjeziAkoJeStaro() {
+  if (!_poziAutoTreba() || !navigator.onLine || _poziBusy) return;
+  const ts = (_poziMeta && _poziMeta.dohvacenoMs) || 0;
+  if (Date.now() - ts < _POZ_STALE_MS) return;
+  _poziLoad(true);
 }
 
 // Pozива se poslije svakog uspješnog učitavanja. Javlja SAMO za požare koji su
@@ -16754,6 +16796,10 @@ document.addEventListener('visibilitychange', async () => {
     _provjeriOpozivOdobrenja();
     // Ako sam ja admin — ima li novih registracija koje čekaju odobrenje?
     _adminSchedPendingCheck();
+    // Detekcije požara (v3.114.0): dok je app bila u pozadini timer namjerno
+    // miruje, pa se ovdje nadoknađuje — šumar izvadi telefon i odmah vidi
+    // svježe stanje, umjesto da čeka sljedeći otkucaj (do 10 min).
+    try { _poziOsvjeziAkoJeStaro(); } catch(e) {}
     // Povratak u prvi plan — pokušaj sync (online event zna izostati na Androidu)
     if (navigator.onLine && sbUser) {
       _processOfflineQueue();
@@ -25886,7 +25932,10 @@ function switchTab(tab) {
   if (tab === 'postavke') postavkeLoadEmails();
   if (tab === 'teren')   { terenRender(); terenRenderTragovi(); }
   if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
-  if (tab === 'pozari')  _poziRenderPanel();
+  // Otvaranje panela je najjači signal da korisnika BAŠ SAD zanima stanje —
+  // ako su podaci ustajali, dohvati ih odmah (tiho, u pozadini; panel se
+  // ponovo iscrta kad stignu).
+  if (tab === 'pozari')  { _poziRenderPanel(); try { _poziOsvjeziAkoJeStaro(); } catch(e) {} }
   _updFabVisibility();
   if (tab==='karta') {
     _mapFullScreen = true;

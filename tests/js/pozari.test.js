@@ -1581,6 +1581,129 @@ t('svjež požar i dalje piše "aktivan front"', () => {
 });
 
 
+
+// ── v3.114.0: automatsko osvježavanje detekcija ────────────────────────────
+// Sa terena: požar se vidio na firemap.live, a u app-u ga nije bilo. Dohvat je
+// radio (drugi požari su se prikazivali), ali se osvježavanje NIJE dešavalo —
+// timer je startovao samo ako su uključena obavještenja, a ona su
+// podrazumijevano isključena. Ovi testovi čuvaju da sloj požara sam po sebi
+// bude dovoljan uslov za osvježavanje.
+console.log('Automatsko osvježavanje (v3.114.0):');
+
+const SRC_AUTO = [
+  // `let _poziNotifTimer` je samostalna deklaracija (ne const) — bez nje bi
+  // _poziNotifTimerStop pukao na ReferenceError pri prvom čitanju.
+  'let _poziNotifTimer = null;',
+  extractConst('_POZ_AUTO_MS'),
+  extractConst('_POZ_STALE_MS'),
+  extractFn('_poziAutoTreba'),
+  extractFn('_poziNotifTimerStart'),
+  extractFn('_poziNotifTimerStop'),
+  extractFn('_poziAutoSync'),
+  extractFn('_poziOsvjeziAkoJeStaro'),
+].join('\n');
+
+function makeAuto({ poziOn = false, notifOn = false, online = true, busy = false,
+                    hidden = false, dohvacenoMs = null } = {}) {
+  const stanje = { load: 0, tikova: 0, timerId: null };
+  const sandbox = {
+    _poziOn: poziOn,
+    _poziNotifOn: () => notifOn,
+    _poziBusy: busy,
+    _poziMeta: dohvacenoMs === null ? {} : { dohvacenoMs },
+    _poziLoad: () => { stanje.load++; },
+    navigator: { onLine: online },
+    document: { get hidden() { return hidden; } },
+    setInterval: (fn) => { stanje.tik = fn; stanje.timerId = 1; return 1; },
+    clearInterval: () => { stanje.timerId = null; },
+    Date,
+  };
+  const keys = Object.keys(sandbox);
+  const api = new Function(...keys,
+    SRC_AUTO + '\nreturn { _poziAutoTreba, _poziAutoSync, _poziNotifTimerStop, _poziOsvjeziAkoJeStaro, _POZ_AUTO_MS, _POZ_STALE_MS, get timer(){ return _poziNotifTimer; } };'
+  )(...keys.map(k => sandbox[k]));
+  return { api, stanje };
+}
+
+t('sloj požara UKLJUČEN, obavještenja isključena → timer ipak radi (uzrok bug-a)', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, notifOn: false });
+  assert.strictEqual(api._poziAutoTreba(), true, 'sloj sam po sebi mora tražiti osvježavanje');
+  api._poziAutoSync();
+  assert.strictEqual(stanje.timerId, 1, 'timer mora biti pokrenut');
+  stanje.tik();
+  assert.strictEqual(stanje.load, 1, 'otkucaj mora dohvatiti podatke');
+});
+
+t('samo obavještenja uključena (sloj isključen) → timer i dalje radi', () => {
+  const { api, stanje } = makeAuto({ poziOn: false, notifOn: true });
+  api._poziAutoSync();
+  assert.strictEqual(stanje.timerId, 1);
+  stanje.tik();
+  assert.strictEqual(stanje.load, 1);
+});
+
+t('ni sloj ni obavještenja → timer se ne pokreće (ne troši bateriju bez potrebe)', () => {
+  const { api, stanje } = makeAuto({ poziOn: false, notifOn: false });
+  assert.strictEqual(api._poziAutoTreba(), false);
+  api._poziAutoSync();
+  assert.strictEqual(stanje.timerId, null, 'timer ne smije postojati');
+});
+
+t('otkucaj u POZADINI ne dohvaća (nadoknađuje se pri povratku)', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, hidden: true });
+  api._poziAutoSync();
+  stanje.tik();
+  assert.strictEqual(stanje.load, 0, 'dok je app u pozadini ne trošimo podatke');
+});
+
+t('otkucaj bez mreže ili dok traje dohvat ne radi ništa', () => {
+  const a = makeAuto({ poziOn: true, online: false });
+  a.api._poziAutoSync(); a.stanje.tik();
+  assert.strictEqual(a.stanje.load, 0, 'offline');
+  const b = makeAuto({ poziOn: true, busy: true });
+  b.api._poziAutoSync(); b.stanje.tik();
+  assert.strictEqual(b.stanje.load, 0, 'dohvat već u toku');
+});
+
+t('interval je 10 min, prag ustajalosti 5 min', () => {
+  const { api } = makeAuto({ poziOn: true });
+  assert.strictEqual(api._POZ_AUTO_MS, 10 * 60 * 1000);
+  assert.strictEqual(api._POZ_STALE_MS, 5 * 60 * 1000);
+});
+
+console.log('Osvježavanje pri povratku u app / otvaranju panela:');
+
+t('podaci stariji od 5 min → dohvaća odmah', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: Date.now() - 6 * 60 * 1000 });
+  api._poziOsvjeziAkoJeStaro();
+  assert.strictEqual(stanje.load, 1);
+});
+
+t('svježi podaci (prije 1 min) → NE dohvaća ponovo (bez suvišnog prometa)', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: Date.now() - 60 * 1000 });
+  api._poziOsvjeziAkoJeStaro();
+  assert.strictEqual(stanje.load, 0);
+});
+
+t('nikad učitano (nema dohvacenoMs) → dohvaća', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, dohvacenoMs: null });
+  api._poziOsvjeziAkoJeStaro();
+  assert.strictEqual(stanje.load, 1, 'prazan _poziMeta znači da podataka nema uopšte');
+});
+
+t('sloj i obavještenja isključeni → povratak u app ne dohvaća ništa', () => {
+  const { api, stanje } = makeAuto({ poziOn: false, notifOn: false, dohvacenoMs: 0 });
+  api._poziOsvjeziAkoJeStaro();
+  assert.strictEqual(stanje.load, 0);
+});
+
+t('offline povratak u app ne baca i ne dohvaća', () => {
+  const { api, stanje } = makeAuto({ poziOn: true, online: false, dohvacenoMs: 0 });
+  api._poziOsvjeziAkoJeStaro();
+  assert.strictEqual(stanje.load, 0);
+});
+
+
 (async () => {
   for (const a of _async) {
     try { await a.p; pass++; console.log('  ✔ ' + a.name); }

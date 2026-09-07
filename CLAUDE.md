@@ -676,6 +676,44 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - Prsten `pozPuls` animacije prebačen sa crvene na narandžastu — crveni
     prsten oko narandžastog markera je izgledao kao druga kategorija, a nije.
   - 11 novih testova (130 u `pozari.test.js`).
+- **Detekcije se nisu osvježavale bez obavještenja (v3.114.0)**: sa terena je
+  stigla prijava "požar se već prikazao na firemap.live a na našoj app ga
+  nema". Dijagnostika kroz pitanja (ne nagađanje) je isključila sve očito:
+  APK (dakle native most, nema CORS-a), MAP_KEY unesen (dakle brzi bbox Area
+  API, ne spore arhive), "Provjeri izvore" javlja uspjeh, požar bliži od 50 km
+  (unutar 100 km) i svjež, a **drugi požari su se uredno prikazivali** — dakle
+  dohvat, parsiranje, filter i crtanje rade.
+  - Pravi uzrok: **osvježavanje se uopšte nije dešavalo**. `_poziNotifTimerStart`
+    je startovao SAMO iz grane `if (_poziNotifOn())` (pri pokretanju i u
+    `_poziNotifToggle`), a obavještenja su podrazumijevano ISKLJUČENA. Ko ih
+    nema uključena dobio bi podatke **jednom, pri pokretanju app-a**, i nikad
+    više dok ručno ne pritisne "Osvježi". Šumar koji drži app otvorenu cijeli
+    dan tako nikad ne vidi požar koji je NASA objavila sat vremena kasnije.
+  - **Pouka**: "Provjeri izvore" (`_poziProvjeriIzvore`) radi SVOJ, potpuno
+    odvojen dohvat i NE upisuje rezultat u `_poziPts`/`_poziEvts`. Zato
+    "sve piše OK" dokazuje samo da mreža radi — ne i da je ono na ekranu
+    svježe. Kod sljedeće slične prijave to razlikovati odmah.
+  - Popravka: `_poziAutoTreba()` (sloj požara UKLJUČEN **ILI** obavještenja
+    uključena) + `_poziAutoSync()` koji usklađuje JEDAN timer sa tim stanjem.
+    Jedan timer namjerno, ne dva — dva bi na istom uređaju dohvaćala dvaput
+    zaredom iste podatke.
+  - **Interval 10 min** (`_POZ_AUTO_MS`, bio 15): bitno je koliko brzo
+    primijetimo NASA-inu OBJAVU, a ne koliko brzo satelit prođe — objava kasni
+    do par sati i dolazi u nepredvidivom trenutku.
+  - **Otkucaj u pozadini se preskače** (`document.hidden`) — ne troši podatke
+    dok app nije na ekranu; nadoknađuje se pri povratku.
+  - **Najveći stvarni dobitak je `_poziOsvjeziAkoJeStaro()`** (prag
+    `_POZ_STALE_MS` = 5 min), zakačen na `visibilitychange` (povratak u prvi
+    plan) i na otvaranje panela u `switchTab('pozari')`. Šumar izvadi telefon
+    ili otvori panel → odmah svježe stanje, umjesto čekanja do sljedećeg
+    otkucaja. Tiho (`_poziLoad(true)`), bez toasta, da povratak u app ne
+    bljesne porukom.
+  - `_poziStatusSet` već zove `_poziRenderPanel()`, pa se lista sama iscrta kad
+    tihi dohvat stigne — nije trebalo dodatno ožičenje.
+  - 11 novih testova (141 u `pozari.test.js`). **Zamka pri pisanju testa**:
+    `let _poziNotifTimer` je samostalna deklaracija (ne `const`), pa je
+    `extractConst` ne hvata — bez ručnog dodavanja u sandbox
+    `_poziNotifTimerStop` puca na `ReferenceError` pri prvom čitanju.
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
