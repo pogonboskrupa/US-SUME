@@ -607,6 +607,34 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     poređenje "koji je od ovih velik" trebalo otvarati marker po marker.
   - Testovi liste su morali dobiti `_poziOpozOn: () => false` u sandboxu —
     tiču se traka/indeksa, ne geometrije. 10 novih testova (110 ukupno).
+- **Tempo napredovanja i produženje na 1–7 dana (v3.113.2)**: na zahtjev
+  "prikaži... s obzirom na prosjek napredovanja koliko će površine izgorjeti
+  za 1,2,3 do 7 dana". `_poziTempo`/`_poziPrognoza`/`_poziPrognozaHtml`.
+  - **Tempo je NAGIB LINEARNE REGRESIJE kroz (vrijeme, kumulativna površina),
+    NE `ukupno / trajanje`.** Ovo je suština: već PRVA detekcija nosi cijeli
+    senzorski piksel (~11 ha kod VIIRS-a) koji se pojavio odjednom i nije
+    "narastao". Naivno dijeljenje taj početni skok pripisuje rastu i naduvava
+    tempo — kod kratko posmatranog požara i višestruko (test: požar koji je
+    skočio na 100 ha pa rastao 2 ha/h daje naivno 12 ha/h, regresija tačno 2).
+  - **Kumulativna kriva dolazi BESPLATNO iz traka starosti** — `ukupno` se
+    ionako gradi unijama, samo se sada akumulira od NAJSTARIJE ka najnovijoj
+    (stvarni redoslijed rasta) i bilježi `{h, ha}` na svakoj traci. Jedini
+    dodatni trošak je `turf.area` po traci. Vrijeme tačke je `tMax` trake
+    (najnovija detekcija u njoj) — trenutak kad je požar dosegao tu površinu.
+  - **Odbija se kad nema osnove**, i to se KAŽE umjesto praznog prostora:
+    < 2 tačke u vremenu (sve detekcije iz istog perioda), raspon < 6 h
+    (`_POZ_TEMPO_MIN_H` — prekratak uzorak), ili nagib ≤ 0 (ne raste, nema šta
+    produžavati). Svaki slučaj ima svoju poruku sa razlogom.
+  - **Upozorenje stoji IZNAD brojeva, ne kao fusnota ispod** — brojka "za 7
+    dana ≈ 424 ha" se pamti i prepričava, pa uslov pod kojim vrijedi mora
+    stići do čitaoca prije nje. Tekst izričito kaže da nije model ponašanja
+    požara i da ne zna za vjetar, gašenje, prepreke ni za to je li požar već
+    ugašen.
+  - **NAMJERNO se ne crta na karti** — produžena površina je čista
+    ekstrapolacija; poligon na karti bi se čitao kao izmjeren podatak, pored
+    trake starosti koje to stvarno jesu. Ostaje kao brojevi u kartici.
+  - 9 novih testova (119 u `pozari.test.js`), uključujući onaj koji čuva baš
+    regresiju naspram naivnog `ukupno/trajanje`.
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

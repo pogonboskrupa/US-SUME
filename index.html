@@ -4858,7 +4858,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.113.1';
+const APP_VER = 'v3.113.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13343,27 +13343,121 @@ function _poziOpozProjekcija(g) {
   });
 
   const trake = [];
-  let ukupno = null, staro = null;
   _POZ_STAROST.forEach((b, i) => {
     if (!kante[i].length) return;
     const geom = _poziOpozGeom(kante[i]);
     if (!geom) return;
+    // Vrijeme NAJNOVIJE detekcije u traci = trenutak kad je požar dosegao tu
+    // kumulativnu površinu (koristi se za tempo napredovanja niže).
+    const tMax = kante[i].reduce((m, p) => { const t = Date.parse(p.dt); return isFinite(t) && t > m ? t : m; }, -Infinity);
     trake.push({ id:b.id, naziv:b.naziv, fill:b.fill, linija:b.linija, op:b.op,
-                 geom, ha: ha(geom), broj: kante[i].length });
-    ukupno = spoji(ukupno, geom);
-    if (b.id !== 'front') staro = spoji(staro, geom);
+                 geom, ha: ha(geom), broj: kante[i].length, tMax });
   });
+  if (!trake.length) return null;
+
+  // Kumulativ se gradi od NAJSTARIJE trake ka najnovijoj — to je stvarni
+  // redoslijed kojim je požar rastao, pa je nagib te krive prosječan tempo
+  // napredovanja (v3.113.2). Unije su iste one koje ionako trebaju za `ukupno`,
+  // pa ovo ne košta nijedan dodatan geometrijski račun — samo turf.area po traci.
+  const prvi = isFinite(g.prvi) ? g.prvi
+    : Math.min(...pts.map(p => Date.parse(p.dt) || zadnji));
+  let kum = null, staro = null;
+  const kumulativ = [];
+  trake.slice().reverse().forEach(t => {
+    kum = spoji(kum, t.geom);          // spoji vraća NOV objekat, ne mutira
+    if (t.id !== 'front') staro = kum; // prefiks bez aktivnog fronta
+    if (isFinite(t.tMax)) kumulativ.push({ h: (t.tMax - prvi) / 3600000, ha: ha(kum) });
+  });
+  const ukupno = kum;
   if (!ukupno) return null;
 
   const front = trake.find(t => t.id === 'front');
   return {
-    ukupno, staro, trake,
+    ukupno, staro, trake, kumulativ,
     haUkupno: ha(ukupno),
     haStaro: staro ? ha(staro) : 0,
     haFront: front ? front.ha : 0,
     sati: (isFinite(g.prvi) && isFinite(g.zadnji)) ? (g.zadnji - g.prvi) / 3600000 : 0,
     brojStarih: pts.length - (front ? front.broj : 0)
   };
+}
+
+// ── Tempo napredovanja i produženje na 1–7 dana (v3.113.2) ────────────────
+// Nagib prave kroz tačke (vrijeme, kumulativna površina) = prosječan prirast
+// u ha/h. Regresija, a ne prosto `ukupno / trajanje`: već PRVA detekcija nosi
+// cijeli piksel (~11 ha kod VIIRS-a) koji se pojavio odjednom, nije "narastao",
+// pa bi dijeljenje ukupnog sa trajanjem taj početni skok pripisalo rastu i
+// naduvalo tempo — kod kratko posmatranog požara i višestruko.
+const _POZ_TEMPO_MIN_H   = 6;   // kraći uzorak od ovoga ne daje upotrebljiv nagib
+const _POZ_PROGNOZA_DANA = 7;
+
+function _poziTempo(pr) {
+  const k = (pr && pr.kumulativ) || [];
+  if (k.length < 2) return null;         // jedna tačka nema nagib
+  const raspon = Math.max(...k.map(x => x.h)) - Math.min(...k.map(x => x.h));
+  if (!(raspon >= _POZ_TEMPO_MIN_H)) return null;
+  const n = k.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  k.forEach(x => { sx += x.h; sy += x.ha; sxx += x.h * x.h; sxy += x.h * x.ha; });
+  const naz = n * sxx - sx * sx;
+  if (!naz) return null;
+  const nagib = (n * sxy - sx * sy) / naz;      // ha po satu
+  if (!isFinite(nagib) || nagib <= 0) return null;  // ne raste — nema šta produžavati
+  return { haNaSat: nagib, haNaDan: nagib * 24, raspon, tacaka: n };
+}
+
+// Pravolinijsko produženje izmjerenog prosjeka. NIJE model ponašanja požara —
+// vidi upozorenje u kartici; zato i stoji uz brojku, ne ispod nje.
+function _poziPrognoza(pr) {
+  const tempo = _poziTempo(pr);
+  if (!tempo || !isFinite(pr.haUkupno)) return null;
+  const dani = [];
+  for (let d = 1; d <= _POZ_PROGNOZA_DANA; d++) {
+    dani.push({ dan: d, ha: pr.haUkupno + tempo.haNaDan * d });
+  }
+  return { tempo, dani };
+}
+
+// Tabela produženja u kartici. Upozorenje stoji IZNAD brojeva, ne kao sitna
+// fusnota ispod: brojka "za 7 dana ≈ 500 ha" se pamti i prepričava, pa uslov
+// pod kojim vrijedi mora stići do čitaoca prije nje.
+function _poziPrognozaHtml(pr) {
+  const pg = _poziPrognoza(pr);
+  if (!pg) {
+    // Bez tempa nema produženja — i to se KAŽE, jer prazan prostor izgleda
+    // kao da je nešto puklo. Razlog je uvijek jedan od dva.
+    const k = (pr && pr.kumulativ) || [];
+    const razlog = k.length < 2
+      ? 'Sve detekcije su iz istog perioda — nema dvije tačke u vremenu iz kojih bi se izveo tempo.'
+      : 'Površina ne pokazuje rast kroz posmatrani period, pa nema tempa za produžiti.';
+    return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;
+      font-size:10px;color:#64748b;line-height:1.45;">📈 Produženje na 1–7 dana nije moguće. ${razlog}</div>`;
+  }
+  const maxHa = pg.dani[pg.dani.length - 1].ha;
+  const redovi = pg.dani.map(d => {
+    const pct = maxHa > 0 ? Math.max(4, Math.round(100 * d.ha / maxHa)) : 4;
+    return `<div style="display:flex;align-items:center;gap:7px;padding:2px 0;">
+      <span style="width:46px;flex-shrink:0;font-size:10px;color:#64748b;">${d.dan} ${d.dan === 1 ? 'dan' : 'dana'}</span>
+      <span style="flex:1;height:9px;background:#1e293b;border-radius:3px;overflow:hidden;">
+        <span style="display:block;height:100%;width:${pct}%;background:linear-gradient(90deg,#9a3412,#f97316);"></span>
+      </span>
+      <span style="width:62px;flex-shrink:0;text-align:right;font-size:11px;color:#e2e8f0;font-weight:600;">${_poziPovrsTxt(d.ha)}</span>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
+      <div style="font-size:11px;font-weight:700;color:#fdba74;">📈 Ako nastavi ovim tempom</div>
+      <div style="font-size:10px;color:#64748b;margin:2px 0 7px;">
+        Prosjek napredovanja ≈ <b style="color:#94a3b8;">${_poziPovrsTxt(pg.tempo.haNaDan)}/dan</b>
+        · izmjereno kroz ${pg.tempo.raspon < 24 ? Math.round(pg.tempo.raspon) + ' h' : (pg.tempo.raspon / 24).toFixed(1) + ' dana'}
+      </div>
+      <div style="padding:7px 9px;background:#7f1d1d33;border:1px solid #b91c1c;border-radius:8px;
+           font-size:10px;color:#fca5a5;line-height:1.45;margin-bottom:8px;">
+        ⚠ Ovo NIJE prognoza ponašanja požara — to je izmjereni prosjek produžen pravolinijski.
+        Ne zna za vjetar, gašenje, puteve i prosjeke kao prepreke, ni za to da li je požar
+        u međuvremenu ugašen. Uzmi kao red veličine, ne kao broj.
+      </div>
+      ${redovi}
+    </div>`;
 }
 
 // Memoizovan pristup — _poziRender se zove na svaki toast/meteo/GPS događaj, a
@@ -14336,6 +14430,7 @@ function _poziSadrzajHtml() {
            <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
              ${sati >= 1 ? `Gori (viđen) ${sati < 24 ? Math.round(sati) + ' h' : (sati / 24).toFixed(1) + ' dana'}` : 'Viđen samo u jednom preletu'}${pr.trake.length < 2 ? ' — sve detekcije su iz istog perioda, pa se ne može razdvojiti šta je izgorjelo ranije.' : '.'}
            </div>
+           ${_poziPrognozaHtml(pr)}
          </div>`;
     }
   }

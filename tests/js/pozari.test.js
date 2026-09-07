@@ -1375,6 +1375,105 @@ console.log('Legenda na karti (_poziLegendaTrake):');
 }
 
 
+
+// ── v3.113.2: tempo napredovanja i produženje na 1–7 dana ─────────────────
+// Ključna odluka koju ovi testovi čuvaju: tempo je NAGIB REGRESIJE kroz
+// (vrijeme, kumulativna površina), a NE `ukupno / trajanje`. Već prva
+// detekcija nosi cijeli senzorski piksel (~11 ha) koji se pojavio odjednom i
+// nije "narastao" — dijeljenje ukupnog sa trajanjem taj početni skok pripisuje
+// rastu i naduvava tempo, kod kratko posmatranog požara i višestruko.
+console.log('Tempo napredovanja i prognoza (v3.113.2):');
+
+const TEMPO = new Function('_POZ_TEMPO_MIN_H', '_POZ_PROGNOZA_DANA',
+  extractFn('_poziTempo') + '\n' + extractFn('_poziPrognoza') + '\nreturn { _poziTempo, _poziPrognoza };'
+)(6, 7);
+
+t('tempo je nagib regresije: 10 ha/h kroz 4 tačke', () => {
+  const pr = { kumulativ: [{h:0,ha:20},{h:10,ha:120},{h:20,ha:220},{h:30,ha:320}], haUkupno:320 };
+  const r = TEMPO._poziTempo(pr);
+  assert.ok(r, 'mora dati tempo');
+  assert.ok(Math.abs(r.haNaSat - 10) < 1e-9, 'ha/h = ' + r.haNaSat);
+  assert.ok(Math.abs(r.haNaDan - 240) < 1e-6, 'ha/dan = ' + r.haNaDan);
+});
+
+t('početni piksel se NE broji kao rast (regresija, ne ukupno/trajanje)', () => {
+  // Požar koji je odmah "skočio" na 100 ha (prvi piksel/prelet), pa 10 h rastao
+  // po 2 ha/h. Naivno ukupno/trajanje = 120/10 = 12 ha/h — 6× previše.
+  const pr = { kumulativ: [{h:0,ha:100},{h:5,ha:110},{h:10,ha:120}], haUkupno:120 };
+  const r = TEMPO._poziTempo(pr);
+  assert.ok(Math.abs(r.haNaSat - 2) < 1e-9, 'očekivano 2 ha/h, dobijeno ' + r.haNaSat);
+  const naivno = pr.haUkupno / 10;
+  assert.ok(r.haNaSat < naivno / 3, 'regresija (' + r.haNaSat + ') mora biti daleko ispod naivnog (' + naivno + ')');
+});
+
+t('jedna tačka u vremenu → nema tempa (ne izmišlja se nagib)', () => {
+  assert.strictEqual(TEMPO._poziTempo({ kumulativ: [{h:0,ha:50}], haUkupno:50 }), null);
+  assert.strictEqual(TEMPO._poziTempo({ kumulativ: [], haUkupno:50 }), null);
+  assert.strictEqual(TEMPO._poziTempo(null), null);
+});
+
+t('prekratak uzorak (< 6 h) → nema tempa', () => {
+  const pr = { kumulativ: [{h:0,ha:20},{h:3,ha:80}], haUkupno:80 };
+  assert.strictEqual(TEMPO._poziTempo(pr), null, '3 h je premalo za pouzdan nagib');
+});
+
+t('površina koja ne raste (ili se smanjuje) → nema produženja', () => {
+  assert.strictEqual(TEMPO._poziTempo({ kumulativ:[{h:0,ha:100},{h:20,ha:100}], haUkupno:100 }), null);
+  assert.strictEqual(TEMPO._poziTempo({ kumulativ:[{h:0,ha:100},{h:20,ha:60}],  haUkupno:60  }), null);
+});
+
+t('prognoza daje tačno 7 dana, rastuće, od TRENUTNE površine', () => {
+  const pr = { kumulativ: [{h:0,ha:100},{h:10,ha:120},{h:20,ha:140}], haUkupno:140 };
+  const pg = TEMPO._poziPrognoza(pr);
+  assert.ok(pg, 'mora dati prognozu');
+  assert.strictEqual(pg.dani.length, 7);
+  assert.deepStrictEqual(pg.dani.map(d => d.dan), [1,2,3,4,5,6,7]);
+  // 2 ha/h = 48 ha/dan, polazi se od 140 ha
+  assert.ok(Math.abs(pg.dani[0].ha - 188) < 1e-6, 'dan 1 = ' + pg.dani[0].ha);
+  assert.ok(Math.abs(pg.dani[6].ha - (140 + 48 * 7)) < 1e-6, 'dan 7 = ' + pg.dani[6].ha);
+  for (let i = 1; i < pg.dani.length; i++) {
+    assert.ok(pg.dani[i].ha > pg.dani[i-1].ha, 'mora rasti iz dana u dan');
+  }
+});
+
+t('bez tempa nema ni prognoze (ne vraća se lista nula)', () => {
+  assert.strictEqual(TEMPO._poziPrognoza({ kumulativ:[{h:0,ha:50}], haUkupno:50 }), null);
+});
+
+console.log('Kumulativna kriva iz stvarne geometrije:');
+
+t('kumulativ raste kroz vrijeme i završava na ukupnoj površini', () => {
+  const zadnji = Date.parse('2026-09-07T12:00:00Z');
+  const satiPrije = [96, 90, 48, 40, 20, 14, 3, 1];
+  const pts = satiPrije.map((h, i) => ({
+    la: 44.90 - i * 0.003, lo: 16.20 + i * 0.003, rez: 375,
+    dt: new Date(zadnji - h * 3600000).toISOString()
+  }));
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji - 96 * 3600000, zadnji });
+  assert.ok(pr.kumulativ.length >= 2, 'treba više tačaka za krivu');
+  for (let i = 1; i < pr.kumulativ.length; i++) {
+    assert.ok(pr.kumulativ[i].h > pr.kumulativ[i-1].h, 'vrijeme mora rasti (najstarija → najnovija)');
+    assert.ok(pr.kumulativ[i].ha >= pr.kumulativ[i-1].ha - 1e-6, 'kumulativna površina ne smije padati');
+  }
+  const zadnjaKum = pr.kumulativ[pr.kumulativ.length - 1].ha;
+  assert.ok(Math.abs(zadnjaKum - pr.haUkupno) < 1e-6, 'zadnja tačka krive = ukupna površina');
+});
+
+t('stvaran požar koji gori 4 dana daje upotrebljiv tempo i 7-dnevno produženje', () => {
+  const zadnji = Date.parse('2026-09-07T12:00:00Z');
+  const satiPrije = [96, 90, 48, 40, 20, 14, 3, 1];
+  const pts = satiPrije.map((h, i) => ({
+    la: 44.90 - i * 0.003, lo: 16.20 + i * 0.003, rez: 375,
+    dt: new Date(zadnji - h * 3600000).toISOString()
+  }));
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji - 96 * 3600000, zadnji });
+  const pg = TEMPO._poziPrognoza(pr);
+  assert.ok(pg, 'požar koji raste 4 dana mora dati prognozu');
+  assert.ok(pg.tempo.haNaDan > 0);
+  assert.ok(pg.dani[6].ha > pr.haUkupno, '7. dan mora biti veći od trenutne površine');
+});
+
+
 (async () => {
   for (const a of _async) {
     try { await a.p; pass++; console.log('  ✔ ' + a.name); }
