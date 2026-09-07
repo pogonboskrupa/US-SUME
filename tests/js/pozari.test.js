@@ -832,6 +832,8 @@ const SRC9 = [
   extractFn('fmtL'),
   extractFn('_poziPouzdanost'),
   extractFn('_poziStarost'),
+  extractConst('_POZ_MK_STAROST'),
+  extractFn('_poziMkStarost'),
   extractFn('_poziRedHtml'),
   extractConst('_POZ_PO_TRACI'),
   extractConst('_POZ_LISTA_MAX'),
@@ -1471,6 +1473,111 @@ t('stvaran požar koji gori 4 dana daje upotrebljiv tempo i 7-dnevno produženje
   assert.ok(pg, 'požar koji raste 4 dana mora dati prognozu');
   assert.ok(pg.tempo.haNaDan > 0);
   assert.ok(pg.dani[6].ha > pr.haUkupno, '7. dan mora biti veći od trenutne površine');
+});
+
+
+
+// ── v3.113.3: boja markera nosi STAROST, ne pouzdanost ─────────────────────
+// Do v3.113.2 je boja značila pouzdanost senzora (crveno = visoka), pa je
+// požar od prije četiri dana bio jarko crven, a onaj koji gori SADA sa
+// slabijim signalom žut — obrnuto od hitnosti. Ovi testovi čuvaju novu
+// semantiku i, najvažnije, da nepoznato vrijeme ne ispadne "najsvježije".
+console.log('Starost markera (v3.113.3):');
+
+const MK = new Function(
+  extractConst('_POZ_MK_STAROST') + '\n' + extractFn('_poziMkStarost') +
+  '\nreturn { _poziMkStarost, _POZ_MK_STAROST };'
+)();
+const H = 3600 * 1000;
+
+t('detekcija stara 1 h → traka "zadnjih 6 h"', () => {
+  assert.strictEqual(MK._poziMkStarost(Date.now() - 1 * H).id, 'h6');
+});
+t('detekcija stara 10 h → traka "6–24 h"', () => {
+  assert.strictEqual(MK._poziMkStarost(Date.now() - 10 * H).id, 'h24');
+});
+t('detekcija stara 2 dana → traka "1–3 dana"', () => {
+  assert.strictEqual(MK._poziMkStarost(Date.now() - 48 * H).id, 'd3');
+});
+t('detekcija stara 10 dana → traka "starije"', () => {
+  assert.strictEqual(MK._poziMkStarost(Date.now() - 240 * H).id, 'st');
+});
+
+t('NEPOZNATO vrijeme ide u NAJSTARIJU traku, ne u najsvježiju', () => {
+  // Zamka: (Date.now() - NaN)/3600000 je NaN, a `NaN <= 6` je false — bez
+  // eksplicitne provjere bi .find vratio prvu traku i detekcija bez vremena
+  // bi na karti izgledala kao da gori upravo sada.
+  assert.strictEqual(MK._poziMkStarost(NaN).id, 'st');
+  assert.strictEqual(MK._poziMkStarost(Date.parse('bezveze')).id, 'st');
+  assert.strictEqual(MK._poziMkStarost(undefined).id, 'st');
+});
+
+t('svjetlije = svježije (boje idu od najsvjetlije ka najtamnijoj)', () => {
+  const svj = (hex) => parseInt(hex.slice(1,3),16) + parseInt(hex.slice(3,5),16) + parseInt(hex.slice(5,7),16);
+  const boje = MK._POZ_MK_STAROST.map(b => svj(b.fill));
+  for (let i = 1; i < boje.length; i++) {
+    assert.ok(boje[i] < boje[i-1],
+      'traka ' + MK._POZ_MK_STAROST[i].id + ' mora biti tamnija od prethodne');
+  }
+});
+
+console.log('Legenda markera (_poziLegendaMarkeri):');
+{
+  function legMk({ poziOn, evts }) {
+    return new Function('_poziOn', '_poziEvts', '_POZ_MK_STAROST', '_poziMkStarost',
+      extractFn('_poziLegendaMarkeri') + '\nreturn _poziLegendaMarkeri();'
+    )(poziOn, evts, MK._POZ_MK_STAROST, MK._poziMkStarost);
+  }
+  t('požari isključeni → prazna legenda', () => {
+    assert.deepStrictEqual(legMk({ poziOn: false, evts: [{ dt: new Date().toISOString() }] }), []);
+  });
+  t('prikazuje SAMO starosti koje na karti stvarno postoje', () => {
+    const r = legMk({ poziOn: true, evts: [
+      { dt: new Date(Date.now() - 1 * H).toISOString() },    // h6
+      { dt: new Date(Date.now() - 200 * H).toISOString() }   // st
+    ]});
+    assert.deepStrictEqual(r.map(b => b.id), ['h6', 'st'], 'bez h24/d3 kojih nema');
+  });
+  t('redoslijed je uvijek najsvježije → najstarije, bez obzira na redoslijed požara', () => {
+    const r = legMk({ poziOn: true, evts: [
+      { dt: new Date(Date.now() - 200 * H).toISOString() },
+      { dt: new Date(Date.now() - 10 * H).toISOString() },
+      { dt: new Date(Date.now() - 1 * H).toISOString() }
+    ]});
+    assert.deepStrictEqual(r.map(b => b.id), ['h6', 'h24', 'st']);
+  });
+}
+
+t('"aktivan front" se NE tvrdi za požar koji odavno nije viđen', () => {
+  const zadnji = Date.now() - 4 * 24 * H;   // zadnja detekcija prije 4 dana
+  const pts = [
+    { la:44.900, lo:16.200, rez:375, dt:new Date(zadnji - 30 * H).toISOString() },
+    { la:44.903, lo:16.203, rez:375, dt:new Date(zadnji - 28 * H).toISOString() },
+    { la:44.906, lo:16.206, rez:375, dt:new Date(zadnji - 26 * H).toISOString() },
+    { la:44.910, lo:16.210, rez:375, dt:new Date(zadnji).toISOString() },
+    { la:44.912, lo:16.212, rez:375, dt:new Date(zadnji - 1 * H).toISOString() },
+    { la:44.914, lo:16.214, rez:375, dt:new Date(zadnji - 2 * H).toISOString() }
+  ];
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji - 30 * H, zadnji });
+  const front = pr.trake.find(x => x.id === 'front');
+  assert.ok(front, 'najnovija traka mora postojati');
+  assert.ok(!/aktivan front/.test(front.naziv),
+    'požar viđen zadnji put prije 4 dana ne smije pisati "aktivan front": ' + front.naziv);
+  assert.match(front.naziv, /najnovije viđeno/);
+});
+
+t('svjež požar i dalje piše "aktivan front"', () => {
+  const zadnji = Date.now() - 1 * H;
+  const pts = [
+    { la:44.900, lo:16.200, rez:375, dt:new Date(zadnji - 30 * H).toISOString() },
+    { la:44.903, lo:16.203, rez:375, dt:new Date(zadnji - 28 * H).toISOString() },
+    { la:44.910, lo:16.210, rez:375, dt:new Date(zadnji).toISOString() },
+    { la:44.912, lo:16.212, rez:375, dt:new Date(zadnji - 1 * H).toISOString() },
+    { la:44.914, lo:16.214, rez:375, dt:new Date(zadnji - 2 * H).toISOString() }
+  ];
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi: zadnji - 30 * H, zadnji });
+  const front = pr.trake.find(x => x.id === 'front');
+  assert.match(front.naziv, /aktivan front/);
 });
 
 

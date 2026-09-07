@@ -635,6 +635,47 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     trake starosti koje to stvarno jesu. Ostaje kao brojevi u kartici.
   - 9 novih testova (119 u `pozari.test.js`), uključujući onaj koji čuva baš
     regresiju naspram naivnog `ukupno/trajanje`.
+- **Boja markera nosi STAROST, ne pouzdanost (v3.113.3)**: na zahtjev
+  "unaprijedi prikaz požara". Do tada je boja markera bila `_poziPouzdanost`
+  (crveno = visoka pouzdanost senzora), pa je požar od prije četiri dana bio
+  jarko crven, a onaj koji gori SADA sa slabijim signalom žut — **tačno
+  obrnuto od hitnosti**. Pouzdanost gotovo nikad ne mijenja odluku na terenu,
+  starost je mijenja uvijek. `_POZ_MK_STAROST`/`_poziMkStarost`.
+  - Pouzdanost NIJE izgubljena — ostaje kao TEKST u listi (desna kolona) i u
+    popup-u. Samo više ne troši najjači vizuelni kanal (boju).
+  - **Ista paleta u listi i na karti**: tačka lijevo u redu liste je ranije
+    bila boja pouzdanosti — sad je boja starosti, ista kao marker. Inače bi
+    ista paleta na dva mjesta značila dvije različite stvari.
+  - **Referenca je SADA** (koliko je detekcija stara), dok trake projekcije
+    mjere u odnosu na najnoviju detekciju TOG požara. Različite reference, ali
+    obje daju isti mentalni model "svjetlije = skorije", što je jedino što
+    korisnik stvarno gradi.
+  - **Zamka koju test čuva**: `(Date.now() - NaN)/3600000` je `NaN`, a
+    `NaN <= 6` je `false`, pa bi `.find` vratio PRVU traku i detekcija bez
+    upotrebljivog vremena bi na karti izgledala kao da gori upravo sada.
+    `_poziMkStarost` zato eksplicitno šalje nepoznato vrijeme u NAJSTARIJU
+    traku.
+  - **Test "svjetlije = svježije" je uhvatio stvarnu grešku u paleti**: prvi
+    izbor za "starije" (`#44403c`, zbir RGB 192) bio je SVJETLIJI od "1–3
+    dana" (`#7c2d12`, 187) — skala nije bila monotona pa bi "tamnije = starije"
+    imalo izuzetak. Zamijenjeno sa `#292524` (114), što je usput ista boja kao
+    najstarija traka projekcije. Asercija o monotonosti svjetline je jeftin
+    način da se ovakav promašaj ne provuče.
+  - **Marker grupe raste sa brojem detekcija** (24→36 px, kapa da ne prekrije
+    susjedne požare) — "koliko je ovo veliko" se vidi prije nego se pročita broj.
+  - **Nova legenda "🔥 Detekcije (starost)"** u istom `#dem-legend` elementu —
+    boja bez ključa je gora od nikakve boje, korisnik bi i dalje pretpostavljao
+    pouzdanost. `_poziLegendaMarkeri` vraća samo starosti koje na karti stvarno
+    postoje. `_poziToggle(false)` mora zvati `_demLegendUpdate()`, inače
+    legenda ostane kad se požari isključe.
+  - **"aktivan front" se više ne tvrdi za požar koji odavno nije viđen**:
+    trake projekcije su relativne na njegovu najnoviju detekciju, pa je kod
+    požara zadnji put viđenog prije 4 dana najnovija traka i dalje pisala
+    "≤ 6 h (aktivan front)" — što jednostavno nije tačno. Sad u tom slučaju
+    piše "najnovije viđeno".
+  - Prsten `pozPuls` animacije prebačen sa crvene na narandžastu — crveni
+    prsten oko narandžastog markera je izgledao kao druga kategorija, a nije.
+  - 11 novih testova (130 u `pozari.test.js`).
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

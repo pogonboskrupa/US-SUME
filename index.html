@@ -1855,9 +1855,12 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 6px rgba(0,0,0,0.6);
 }
 .sje-mk-mala { width:6px; height:6px; margin:2px; border-radius:2px; border:1px solid rgba(255,255,255,0.85); opacity:0.75; }
+/* Prsten pulsa je narandžast (#f97316) — ista boja kao najsvježija traka
+   markera od v3.113.3; crveni prsten oko narandžastog markera je izgledao
+   kao druga kategorija, a nije. */
 @keyframes pozPuls {
-  0%,100% { transform:scale(1);    box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 0 rgba(239,68,68,0.55); }
-  50%     { transform:scale(1.12); box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 9px rgba(239,68,68,0); }
+  0%,100% { transform:scale(1);    box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 0 rgba(249,115,22,0.6); }
+  50%     { transform:scale(1.12); box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 9px rgba(249,115,22,0); }
 }
 
 /* ── KML/SHP permanentne oznake odjela ──────────────────── */
@@ -4858,7 +4861,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.113.2';
+const APP_VER = 'v3.113.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13009,12 +13012,39 @@ function _poziStatusSet(txt) {
 
 // Marker: DIV ikonica (ne canvas!) — canvas sloj preko cijele karte bi krao
 // klikove svemu ispod (vidi zamku "Canvas pane iznad drugog" u CLAUDE.md).
+// Boja markera = STAROST detekcije (v3.113.3), ne pouzdanost senzora.
+// Ranije je boja značila pouzdanost (crveno = visoka), pa je požar od prije
+// četiri dana bio jarko crven, a onaj koji gori SADA sa slabijim signalom
+// žut — tačno obrnuto od hitnosti. Pouzdanost gotovo nikad ne mijenja odluku
+// na terenu, starost je mijenja uvijek; zato boja sada nosi starost, a
+// pouzdanost ostaje kao TEKST u listi i popup-u gdje se može pročitati.
+// Skala je ista logika kao trake projekcije (svjetlije = svježije), pa cijeli
+// panel Požari govori jednim vizuelnim jezikom. Referenca je SADA (koliko je
+// detekcija stara), dok trake projekcije mjere u odnosu na najnoviju detekciju
+// tog požara — obje ipak znače "svjetlije = skorije", što je jedini mentalni
+// model koji korisnik stvarno gradi.
+const _POZ_MK_STAROST = [
+  { id:'h6',  maxH:6,        naziv:'zadnjih 6 h', fill:'#f97316' },
+  { id:'h24', maxH:24,       naziv:'6–24 h',      fill:'#c2410c' },
+  { id:'d3',  maxH:72,       naziv:'1–3 dana',    fill:'#7c2d12' },
+  // #292524 (ne svjetlije sivo): skala mora biti STROGO opadajuća po svjetlini
+  // da "tamnije = starije" vrijedi bez izuzetka — ista boja kao najstarija
+  // traka projekcije, pa se dvije legende poklapaju.
+  { id:'st',  maxH:Infinity, naziv:'starije',     fill:'#292524' }
+];
+function _poziMkStarost(ms) {
+  const h = (Date.now() - ms) / 3600000;
+  // Nepoznato vrijeme NE smije ispasti "najsvježije" — ide u najstariju traku.
+  if (!isFinite(h)) return _POZ_MK_STAROST[_POZ_MK_STAROST.length - 1];
+  return _POZ_MK_STAROST.find(b => h <= b.maxH) || _POZ_MK_STAROST[_POZ_MK_STAROST.length - 1];
+}
+
 function _poziIcon(p) {
-  const pz = _poziPouzdanost(p.conf);
-  const svjez = (Date.now() - Date.parse(p.dt || 0)) < 6 * 3600 * 1000;
+  const st = _poziMkStarost(Date.parse(p.dt));
+  const svjez = st.id === 'h6';
   return L.divIcon({
     className: '', iconSize: [22, 22], iconAnchor: [11, 11],
-    html: `<div class="poz-mk${svjez ? ' svjez' : ''}" style="background:${pz.boja};"></div>`
+    html: `<div class="poz-mk${svjez ? ' svjez' : ''}" style="background:${st.fill};"></div>`
   });
 }
 
@@ -13025,21 +13055,26 @@ function _poziIcon(p) {
 // tačke ispod njega: broj kaže KOLIKO puta je viđen, tačke pokazuju STVARNI
 // prostorni doseg (satelitski piksel je podatak, ne smije se sakriti).
 function _poziIconGrupa(g) {
-  const pz = _poziPouzdanost(g.conf);
-  const svjez = (Date.now() - Date.parse(g.dt || 0)) < 6 * 3600 * 1000;
+  const st = _poziMkStarost(Date.parse(g.dt));   // g.dt = NAJNOVIJA detekcija požara
+  const svjez = st.id === 'h6';
+  // Marker raste sa brojem detekcija (v3.113.3): požar viđen 12 puta je i na
+  // karti krupniji od onog viđenog dvaput, pa se "koliko je ovo veliko" vidi
+  // prije nego se pročita broj. Kapa na 36 px — iznad toga marker počinje
+  // prekrivati susjedne požare umjesto da ih razlikuje.
+  const w = Math.round(Math.min(36, 24 + Math.max(0, g.broj - 1) * 1.4));
   return L.divIcon({
-    className: '', iconSize: [30, 30], iconAnchor: [15, 15],
-    html: `<div class="poz-mk poz-mk-grupa${svjez ? ' svjez' : ''}" style="background:${pz.boja};">${g.broj}</div>`
+    className: '', iconSize: [w + 6, w + 6], iconAnchor: [(w + 6) / 2, (w + 6) / 2],
+    html: `<div class="poz-mk poz-mk-grupa${svjez ? ' svjez' : ''}" style="background:${st.fill};width:${w}px;height:${w}px;">${g.broj}</div>`
   });
 }
 
 // Sitna tačka za pojedinačnu detekciju unutar grupe — vidi se doseg, ali ne
 // otima pažnju ni klik od glavnog markera grupe.
 function _poziIconTacka(p) {
-  const pz = _poziPouzdanost(p.conf);
+  const st = _poziMkStarost(Date.parse(p.dt));
   return L.divIcon({
     className: '', iconSize: [10, 10], iconAnchor: [5, 5],
-    html: `<div class="poz-mk poz-mk-mala" style="background:${pz.boja};"></div>`
+    html: `<div class="poz-mk poz-mk-mala" style="background:${st.fill};"></div>`
   });
 }
 
@@ -13350,7 +13385,13 @@ function _poziOpozProjekcija(g) {
     // Vrijeme NAJNOVIJE detekcije u traci = trenutak kad je požar dosegao tu
     // kumulativnu površinu (koristi se za tempo napredovanja niže).
     const tMax = kante[i].reduce((m, p) => { const t = Date.parse(p.dt); return isFinite(t) && t > m ? t : m; }, -Infinity);
-    trake.push({ id:b.id, naziv:b.naziv, fill:b.fill, linija:b.linija, op:b.op,
+    // "aktivan front" se ne smije tvrditi za požar koji sam po sebi nije viđen
+    // odavno — trake su relativne na NJEGOVU najnoviju detekciju, pa bi kod
+    // požara zadnji put viđenog prije 4 dana najnovija traka i dalje pisala
+    // "aktivan front", što jednostavno nije tačno.
+    const naziv = (b.id === 'front' && (Date.now() - zadnji) > 12 * 3600 * 1000)
+      ? '≤ 6 h (najnovije viđeno)' : b.naziv;
+    trake.push({ id:b.id, naziv, fill:b.fill, linija:b.linija, op:b.op,
                  geom, ha: ha(geom), broj: kante[i].length, tMax });
   });
   if (!trake.length) return null;
@@ -13627,8 +13668,12 @@ function _poziRedHtml(g, i, ref) {
   // za poređenje "koji je od ovih požara veliki" trebalo otvarati jedan po jedan.
   const pr = _poziOpozOn() ? _poziProj(g) : null;
   const povrs = pr && isFinite(pr.haUkupno) ? _poziPovrsTxt(pr.haUkupno) : '';
+  // Tačka lijevo nosi STAROST (ista boja kao marker na karti), ne pouzdanost —
+  // inače bi ista paleta u listi i na karti značila dvije različite stvari.
+  // Pouzdanost ostaje kao tekst desno.
+  const stMk = _poziMkStarost(Date.parse(g.dt));
   return `<div onclick="_poziZoom(${i})" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1e293b;cursor:pointer;">
-    <span style="width:9px;height:9px;border-radius:50%;background:${pz.boja};flex-shrink:0;"></span>
+    <span style="width:9px;height:9px;border-radius:50%;background:${stMk.fill};border:1px solid rgba(255,255,255,0.45);flex-shrink:0;"></span>
     <span style="flex:1;min-width:0;">
       <span style="font-size:12px;color:#e2e8f0;">${fmtL(g.d)} <span style="color:#64748b;">${smjer}</span></span>
       ${g.nov ? ' <span style="color:#fbbf24;font-size:10px;font-weight:700;">🆕 NOVO</span>' : ''}
@@ -13715,6 +13760,8 @@ function _poziToggle(on) {
     if (_poziHeatLayer) { try { map.removeLayer(_poziHeatLayer); } catch(e) {} }
     if (_poziSmjerLayer) { try { map.removeLayer(_poziSmjerLayer); } catch(e) {} _poziSmjerLayer = null; }
     if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
+    // Bez ovoga legenda markera ostane na karti i kad požara više nema.
+    if (typeof _demLegendUpdate === 'function') _demLegendUpdate();
     _poziStatusSet('—');
     return;
   }
@@ -22627,6 +22674,17 @@ function _demLegendUpdate() {
   // samo u panelu: panel prekriva cijelu kartu, pa kad korisnik gleda poligone
   // ne vidi nikakvo objašnjenje šta koja nijansa znači. Ide u isti #dem-legend
   // element (već ga switchTab sakriva van Karte i @media print izuzima).
+  // Legenda markera požara (v3.113.3) — boja markera od sada nosi STAROST, a
+  // boja bez ključa je gora od nikakve boje: korisnik bi vidio četiri nijanse
+  // i pretpostavio pouzdanost (što je i značila do v3.113.2).
+  const mkTrake = _poziLegendaMarkeri();
+  if (mkTrake.length) {
+    if (html) html += '<div class="leg-sep"></div>';
+    html += `<div class="leg-title">🔥 Detekcije (starost)</div>`
+      + mkTrake.map(b => `<div class="leg-nv-row">
+           <div class="leg-nv-swatch" style="background:${b.fill};border-radius:50%;border:1px solid rgba(255,255,255,0.55);"></div>
+           <span class="leg-nv-lbl">${_escHtml(b.naziv)}</span></div>`).join('');
+  }
   const projTrake = _poziLegendaTrake();
   if (projTrake.length) {
     if (html) html += '<div class="leg-sep"></div>';
@@ -22641,6 +22699,15 @@ function _demLegendUpdate() {
   }
   el.style.display = html ? '' : 'none';
   el.innerHTML = html;
+}
+
+// Starosne kategorije markera koji su STVARNO na karti — legenda ne smije
+// nuditi nijansu koje na ekranu nema (npr. "starije" kad su svi požari svježi).
+function _poziLegendaMarkeri() {
+  if (typeof _poziOn === 'undefined' || !_poziOn) return [];
+  const ima = new Set();
+  (_poziEvts || []).forEach(g => { ima.add(_poziMkStarost(Date.parse(g.dt)).id); });
+  return _POZ_MK_STAROST.filter(b => ima.has(b.id));
 }
 
 // Trake koje su STVARNO nacrtane na karti (spojene preko svih vidljivih požara),
