@@ -481,6 +481,45 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
       raste južno→uzbrdo≈180°) + 3 za `_poziSmjerBlend` (prost prosjek,
       0°/360° wraparound, identični pravci) u `tests/js/pozari.test.js`
       (88 testova ukupno u tom fajlu).
+- **Heatmap narandžasta paleta bila je NEVIDLJIVA na stvarnom terenu
+  (v3.112.4)**: korisnik je odmah poslije v3.112.3 prijavio "nema oznake
+  površine u narandžastoj boji" — ekran je pokazivao samo marker grupe i
+  strelicu pravca širenja, bez ikakve heatmap mrlje, iako je (potvrđeno
+  preko AskUserQuestion) prekidač "Prikaži i kao heatmap" bio uključen. Prije
+  nagađanja napravljena Playwright reprodukcija (izvučen `_PoziHeat` iz
+  index.html, simulirana topo podloga — zeleno/braon konturne linije,
+  identičan princip kao ranije za grid-lines/tile-bloburl bugove): canvas se
+  UREDNO nalazi u `demOverlay` pane-u i piksele ispravno računa — kod NIJE
+  bio slomljen. Problem je bio ČISTO VIZUELNI kontrast: `_redraw()` crta
+  svaku tačku sa `globalAlpha` podrazumijevano 0.15 (namjerno nisko od
+  v3.112.2 — usamljena detekcija treba biti blijeda, "usijanost" dolazi tek
+  preklapanjem). Dok je paleta bila rainbow (v3.112.2), najniža gustoća je
+  bila PLAVA — hladan ton na toploj zeleno/braon topo podlozi ima prirodan
+  kontrast čak i na 15% providnosti. Kad je paleta promijenjena na svijetlo
+  narandžastu (v3.112.3, na eksplicitan zahtjev), isti 15% providnosti daje
+  blijedu narandžastu na već zeleno/braon/bež pozadini — boje se stapaju,
+  praktično nevidljivo, i to gore što su stvarne detekcije na terenu
+  RIJETKO piksel-na-piksel preklopljene (grupišu se u isti "požar" unutar
+  1500m praga, ali na tipičnom zumu to je razmak od desetina do stotina
+  piksela, pa se alfa ne penje visoko preklapanjem).
+  Popravka: podrazumijevani alfa podignut sa 0.15 na 0.4 (I DALJE ispod pune
+  neprozirnosti — gušći klaster i dalje izgleda "vruće" jače od usamljene
+  tačke, samo je usamljena tačka sada stvarno vidljiva). Paleta boja NIJE
+  mijenjana (korisnik je eksplicitno tražio svijetlo narandžastu) — problem
+  nije bila boja sama po sebi nego kombinacija te boje sa niskim alfa na
+  toploj podlozi. Verifikovano sa tri varijante uporedo na istoj simuliranoj
+  topo podlozi (trenutno stanje/alfa 0.15 vs alfa 0.4 vs alfa 0.45+zasićenija
+  paleta) — alfa 0.15 je bio jedva vidljiva mrlja, alfa 0.4 jasno vidljiva
+  narandžasta mrlja iste (svijetle) palete.
+  **Pouka**: promjena BOJE vizuelnog sloja se ne može ocijeniti izolovano od
+  PROVIDNOSTI i pozadine na kojoj se prikazuje — ista providnost koja je
+  dobro funkcionisala sa jednom paletom (kontrastna boja) može biti potpuno
+  neupotrebljiva sa drugom (boja bliska pozadini), čak i kad je kod
+  identičan. Kad korisnik traži promjenu SAMO boje, provjeriti da li nova
+  boja i dalje ima dovoljan kontrast na stvarnoj pozadini prije nego se
+  proglasi gotovim — ovdje to nije urađeno prije v3.112.3 push-a (Playwright
+  test iz v3.112.2 je koristio drugu paletu, pa test "prošao" ne znači da
+  je nova kombinacija boja/alfa provjerena).
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

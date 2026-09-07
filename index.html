@@ -4858,7 +4858,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.112.3';
+const APP_VER = 'v3.112.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13111,12 +13111,21 @@ const _PoziHeat = L.Layer.extend({
       const ll = L.latLng(p[0], p[1]);
       if (!bounds.contains(ll)) return;
       const pt = this._map.latLngToContainerPoint(ll);
-      // NAMJERNO nizak zadani alfa (0.15, ne 1) — svaki blob je SAM PO SEBI
-      // providan, pa se "usijanost" gradi TEK preklapanjem više tačaka na
-      // istom mjestu (učestale detekcije istog požara). Kod punog alfa=1 bi
-      // i jedna usamljena tačka odmah izgledala isto "vruće" kao gusto
-      // preklopljen klaster — poništava svrhu heatmap-e.
-      ctx.globalAlpha = Math.max(Math.min(p[2] ?? 0.15, 1), 0.05);
+      // Zadani alfa 0.4 (v3.112.3, bio 0.15 u v3.112.2) — nizak alfa je
+      // namjerno biran da se "usijanost" gradi TEK preklapanjem više tačaka
+      // (učestale detekcije istog požara), ali sa narandžastom paletom
+      // (v3.112.3, prije rainbow) je 0.15 na terenu ispalo NEVIDLJIVO: pravi
+      // topo/satelit/karta pozadine su već zeleno/braon/bež, i blijeda
+      // narandžasta na 15% providnosti se stopi u pozadinu — potvrđeno
+      // Playwright screenshot testom (izolovana tačka na simuliranoj topo
+      // podlozi vidljiva samo kao jedva primjetna mrlja). Rainbow paleta je
+      // imala PLAVU boju za nisku gustoću — hladan ton na toploj zeleno/
+      // braon podlozi ima prirodan kontrast čak i na 15%; topla narandžasta
+      // na toploj podlozi taj kontrast nema, pa treba viši alfa da nadoknadi.
+      // 0.4 je i dalje ispod potpune neprozirnosti (gušći klaster i dalje
+      // izgleda "vruće" jače od usamljene tačke), ali usamljena detekcija
+      // više nije praktično nevidljiva.
+      ctx.globalAlpha = Math.max(Math.min(p[2] ?? 0.4, 1), 0.05);
       ctx.drawImage(this._tpl, pt.x - r, pt.y - r);
     });
     const img = ctx.getImageData(0, 0, size.x, size.y);
