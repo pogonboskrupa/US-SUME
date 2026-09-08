@@ -1109,6 +1109,56 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **Osirotjeli `#dlg-overlay` — dugme "ne reaguje NIGDJE", bez ijedne JS
+  greške (v3.119.1)**: terenska prijava "Nacrtaj vlaku ručno ne radi, ne
+  može se kliknuti" — potvrđeno kroz `AskUserQuestion` da je problem baš
+  DUGME, na APK-u, i da se pri tapu ne mijenja NI BOJA dugmeta (CSS `:active`
+  ne opali) — što znači da dodir NE STIŽE do dugmeta, nije JS logika unutar
+  `startManualVlakaDraw` (ta bi i dalje dala `:active` feedback prije bilo
+  kakvog ranog `return`-a).
+  - Uzrok pronađen statičkom analizom (nema pristupa uređaju za live repro):
+    `#dlg-overlay` je providan sloj PREKO CIJELOG EKRANA (`z-index:999900`,
+    veći od svih ostalih modala — namjerno, vidi komentar uz sam element) koji
+    NAMJERNO hvata svaki dodir dok je bilo koji dijalog (`_dlgPrompt`/
+    `_dlgConfirm`/...) otvoren — ovo je ISPRAVNO ponašanje, sprječava da klik
+    "procuri" na ono ispod dijaloga. Problem je bio KAKO se sklanja:
+    `_dlgClose()` je sklanjao overlay golim `setTimeout(...,270)` DOK sheet
+    (donji list) klizi dole svojom CSS tranzicijom — a `display:none/block`
+    NIJE animatable pa je overlay morao čekati baš taj nagađani tajmer.
+  - **Ako WebView bude PAUZIRAN baš u tom prozoru** (dolazni poziv, prelazak
+    na drugu app, gašenje ekrana — sve uobičajeno na terenu) — taj tajmer zna
+    kasniti ili se izgubiti, a overlay ostaje TRAJNO `'show'`: hvata svaki
+    dodir na CIJELOJ aplikaciji (ne samo jedno dugme), dok ispod izgleda
+    naizgled normalno — `rgba(0,0,0,0.3)` zatamnjenje + blur se lako ne
+    primijeti na jakom terenskom suncu. Rezultat izgleda TAČNO kao "ništa ne
+    reaguje, nigdje, bez greške u konzoli", jer JS strana savršeno radi —
+    klik prosto nikad ne stigne do bilo kojeg dugmeta ispod overlay-a.
+  - **Dva sloja odbrane, ne jedan**:
+    1. `_dlgClose()` sad sklanja overlay na STVARAN kraj tranzicije
+       (`transitionend`), sa 400ms rezervnim `setTimeout`-om ako
+       `transitionend` nikad ne opali (npr. `prefers-reduced-motion`
+       isključuje CSS tranzicije pa event ne postoji). `done` brana štiti od
+       dvostrukog poziva ako oba puta okinu.
+    2. `_dlgHealOrphanedOverlay()`, pozvano iz `visibilitychange('visible')`
+       (isto mjesto gdje se već nadoknađuje GPS bafer/sync poslije povratka
+       iz pozadine) — SAMOISSCJELJENJE za slučaj da OBA mehanizma iz (1)
+       ipak izgube poziv. Provjerava `_dlgResolve` (globalna promjenljiva,
+       postavljena SAMO dok se stvarno čeka odgovor na otvoren dijalog): ako
+       je `null` (dijalog je već "logički" zatvoren) a overlay je i dalje
+       `'show'`, to je siguran znak osirotjelog stanja — prisilno se sklanja.
+       NE dira overlay kad je `_dlgResolve` postavljen (korisnik ima
+       LEGITIMNO otvoren dijalog na koji treba odgovoriti, npr. otvorio
+       dijalog pa prebacio app, vraća se da odgovori) — inače bi ovo
+       samoisscjeljenje zatvorilo tuđi, još aktivan dijalog ispod korisnika.
+  - **Praktičan trenutan lijek dok fix ne stigne na uređaj**: potpuno
+    zatvoriti app (izvući iz recent apps, ne samo minimizovati) i ponovo
+    otvoriti — svježi JS kontekst nema osirotjelo stanje. Ako se problem
+    PONOVI i poslije potpunog restarta, uzrok je NEGDJE DRUGDJE (ovo nije
+    jedini mogući uzrok "dugme ne reaguje") i treba dalja dijagnoza.
+  - 9 novih testova u `tests/js/dlg-overlay.test.js` — pokrivaju sva četiri
+    ishoda `_dlgClose` (transitionend prije/umjesto rezerve, listener se ne
+    curi) i `_dlgHealOrphanedOverlay` (osirotjeli slučaj se ispravlja,
+    LEGITIMNO otvoren dijalog se NE dira, nedostajući element ne baca).
 - **Tanka siva linija na granici pločica — WMS TILING SEAM na EFFIS sloju,
   ne baza karte** (v3.111.8): poslije v3.111.7 (koje je uklonilo DEBELE
   slomljene-slike linije) korisnik je i dalje prijavio TANJU sivu liniju.

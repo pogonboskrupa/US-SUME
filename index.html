@@ -4968,7 +4968,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.119.0';
+const APP_VER = 'v3.119.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -17537,6 +17537,7 @@ document.addEventListener('visibilitychange', async () => {
   const bgWarn = document.getElementById('bg-warning');
   if (document.visibilityState === 'visible') {
     if (bgWarn) bgWarn.style.display = 'none';
+    try { _dlgHealOrphanedOverlay(); } catch(e) {}
     // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
     // Sva tri tipa snimanja (vlaka / trag / doznaka pojas) trebaju wake lock.
     if (_anyRecOn() && !_wakeLock) await _acquireWakeLock();
@@ -33001,11 +33002,55 @@ function _dlgDismiss() {
   if (r) r(val);
 }
 
+// v3.119.1: #dlg-overlay je preko CIJELOG ekrana (z-index 999900) i hvata SVAKI
+// dodir dok ima klasu 'show' — namjerno, da klik ne "procuri" na ono ispod
+// dijaloga. Overlay display:none/block NIJE animatable, pa se sklanjao golim
+// setTimeout(...,270) DOK sheet (dlg-sheet) klizi dole svojom CSS tranzicijom.
+// Problem: ako WebView baš u tom prozoru bude pauziran (dolazni poziv, prelazak
+// na drugu app, gašenje ekrana), taj tajmer zna kasniti ili se (rijetko, na
+// starijim WebView verzijama) izgubiti — a overlay ostane TRAJNO 'show', hvata
+// svaki dodir na cijeloj aplikaciji, dok ispod izgleda naizgled normalno
+// (rgba(0,0,0,0.3) zatamnjenje se lako ne primijeti na jakom terenskom suncu).
+// Rezultat izgleda TAČNO kao "nijedno dugme ne reaguje, ni :active boja" —
+// bez ijedne JS greške u konzoli, jer JS strana i dalje savršeno radi, samo
+// klik nikad ne stigne do dugmeta.
+//
+// Popravka: sklanjanje se sad veže na STVARAN kraj tranzicije (transitionend),
+// ne na nagađanu vrijednost od 270ms — sa timeout-om od 400ms kao REZERVOM za
+// slučaj da transitionend nikad ne opali (npr. reducirano kretanje u
+// pristupačnosti postavkama isključuje CSS tranzicije pa event ne postoji).
+// `done` brani od dvostrukog poziva ako oba puta okinu.
 function _dlgClose() {
   const sh = document.getElementById('dlg-sheet');
   const ov = document.getElementById('dlg-overlay');
   sh.classList.remove('show');
-  setTimeout(() => ov.classList.remove('show'), 270);
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    ov.classList.remove('show');
+    sh.removeEventListener('transitionend', finish);
+  };
+  sh.addEventListener('transitionend', finish);
+  setTimeout(finish, 400);
+}
+
+// Samoisscjeljenje za OSIROTJELI #dlg-overlay (v3.119.1), pozvano iz
+// visibilitychange('visible') — vidi opširnu napomenu uz _dlgClose. Ako je
+// dijalog VEĆ zatvoren (_dlgResolve je null, niko ne čeka odgovor) a overlay
+// je i dalje 'show', to je siguran znak da su transitionend I 400ms rezerva
+// OBOJE izgubljeni dok je app bio u pozadini — overlay je preko cijelog
+// ekrana i hvata SVAKI dodir, pa se sklanja odmah čim se app vrati u prvi
+// plan, ne čekajući da korisnik shvati da mora restartovati aplikaciju.
+// NE dira overlay ako je _dlgResolve i dalje postavljen — to znači da
+// korisnik ima OTVOREN dijalog na koji legitimno treba odgovoriti (npr.
+// otvorio dijalog pa prebacio app, vraća se da odgovori).
+function _dlgHealOrphanedOverlay() {
+  if (_dlgResolve) return false;
+  const ov = document.getElementById('dlg-overlay');
+  if (!ov || !ov.classList.contains('show')) return false;
+  ov.classList.remove('show');
+  return true;
 }
 
 async function _dlgConfirm(msg, { title = 'Potvrdi', danger = false, okLabel } = {}) {
