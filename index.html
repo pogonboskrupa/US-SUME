@@ -4968,7 +4968,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.119.1';
+const APP_VER = 'v3.119.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -23658,14 +23658,16 @@ function _demLegendUpdate() {
   // Legenda markera požara (v3.113.3) — boja markera od sada nosi STAROST, a
   // boja bez ključa je gora od nikakve boje: korisnik bi vidio četiri nijanse
   // i pretpostavio pouzdanost (što je i značila do v3.113.2).
-  const mkTrake = _poziLegendaMarkeri();
-  if (mkTrake.length) {
-    if (html) html += '<div class="leg-sep"></div>';
-    html += `<div class="leg-title">🔥 Detekcije (starost)</div>`
-      + mkTrake.map(b => `<div class="leg-nv-row">
-           <div class="leg-nv-swatch" style="background:${b.fill};border-radius:50%;border:1px solid rgba(255,255,255,0.55);"></div>
-           <span class="leg-nv-lbl">${_escHtml(b.naziv)}</span></div>`).join('');
-  }
+  //
+  // v3.119.2: kad su OBA sloja uključena (tačke I poligoni), ove dvije legende
+  // su čist šum — _POZ_MK_STAROST i _POZ_STAROST dijele ISTE 4 vremenske trake
+  // (≤6h/6-24h/1-3 dana/starije) i 3 od 4 boje su DOSLOVNO identične (razlikuje
+  // se samo "front", namjerno, radi čitljivosti bijelog broja preko markera —
+  // vidi CLAUDE.md v3.117.2). Terenska prijava: "i tačke i prostor označavaš
+  // istom bojom a prikazuješ legendu za oboje... prikaži samo jedno". Poligon
+  // legenda je bogatija (objašnjava stvaran NACRTAN oblik na karti, ne samo
+  // sitnu tačku) pa ima prednost kad je vidljiva; legenda tačaka se prikazuje
+  // SAMO kad poligoni nisu (ili nemaju šta prikazati).
   const projTrake = _poziLegendaTrake();
   if (projTrake.length) {
     if (html) html += '<div class="leg-sep"></div>';
@@ -23677,6 +23679,15 @@ function _demLegendUpdate() {
       + projTrake.map(t => `<div class="leg-nv-row">
            <div class="leg-nv-swatch" style="background:${t.fill};border:1px solid rgba(255,255,255,0.35);"></div>
            <span class="leg-nv-lbl">${_escHtml(t.naziv)}</span></div>`).join('');
+  } else {
+    const mkTrake = _poziLegendaMarkeri();
+    if (mkTrake.length) {
+      if (html) html += '<div class="leg-sep"></div>';
+      html += `<div class="leg-title">🔥 Detekcije (starost)</div>`
+        + mkTrake.map(b => `<div class="leg-nv-row">
+             <div class="leg-nv-swatch" style="background:${b.fill};border-radius:50%;border:1px solid rgba(255,255,255,0.55);"></div>
+             <span class="leg-nv-lbl">${_escHtml(b.naziv)}</span></div>`).join('');
+    }
   }
   el.style.display = html ? '' : 'none';
   el.innerHTML = html;

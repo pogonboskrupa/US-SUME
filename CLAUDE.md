@@ -963,6 +963,32 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     `zadnji: 1000` (epoch+1s = 1970. godina) kao "test timestamp" — 5-godišnje
     obrezivanje ga je ISPRAVNO odbacilo kao prestarog, pa je test "prošao" iz
     pogrešnog razloga dok nije zamijenjen sa `Date.now()`-baziranim vrijednostima.
+- **Dvije legende za skoro isti skup boja — prikaži samo jednu (v3.119.2)**:
+  terenska prijava "i tačke i prostor označavaš istom bojom a prikazuješ
+  legendu za oboje... nema potrebe, prikaži samo jedno". Tačno: `_POZ_MK_STAROST`
+  (boja markera/tačaka) i `_POZ_STAROST` (boja poligona projekcije) dijele
+  ISTE 4 vremenske trake (≤6h/6-24h/1-3 dana/starije, isti `maxH` prag), a 3
+  od 4 boje su DOSLOVNO identične hex vrijednosti — razlikuje se samo "front"
+  (namjerno, v3.117.2: marker treba tamniju nijansu za čitljivost bijelog
+  broja preko sebe, poligon bez teksta može biti svjetliji). Kad su OBA sloja
+  uključena (tačke i projekcija), `_demLegendUpdate` je crtao DVIJE odvojene
+  legende ("🔥 Detekcije (starost)" i "🟧 Opožareno (procjena)") za suštinski
+  istu informaciju — čist šum na malom ekranu.
+  - Poligon legenda ("🟧 Opožareno") sad ima PREDNOST kad je vidljiva —
+    bogatija je (objašnjava stvaran NACRTAN oblik na karti, ne samo sitnu
+    tačku). Legenda tačaka ("🔥 Detekcije") se prikazuje SAMO kad poligoni
+    NEMAJU šta pokazati (projekcija isključena, ili nema podataka) —
+    `if (projTrake.length) { ...poligon... } else { ...tačke... }`, umjesto
+    ranijeg `if/if` koji je crtao oba nezavisno.
+  - **Namjerno NIJE spajanje u JEDNU generičku legendu preko union-a id-jeva**
+    — dva niza koriste RAZLIČITE id stringove za iste pragove (`front`/`h6`,
+    `d1`/`h24`, `star`/`st`, samo `d3` se poklapa) jer su nastali nezavisno
+    (Sječa/Požari v3.107.0 pa Projekcija v3.113.0) — spajanje po id-ju bi
+    tiho promašilo tri od četiri trake. Prikazivanje JEDNE od dvije POSTOJEĆE,
+    već tačne legende je jednostavnije i pouzdanije od pravljenja treće.
+  - 5 novih testova u `tests/js/pozari.test.js` (177 ukupno): oba sloja →
+    samo poligon legenda; samo tačke → legenda tačaka; samo poligoni → poligon
+    legenda; nijedan → prazno; separator prema Ekspoziciji/N.V. i dalje radi.
 
 ## Sekcija Vlake
 

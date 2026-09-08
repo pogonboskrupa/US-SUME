@@ -1517,6 +1517,71 @@ console.log('Legenda na karti (_poziLegendaTrake):');
   });
 }
 
+// ── v3.119.2: _demLegendUpdate NE smije prikazati DVIJE legende za skoro
+// isti skup boja (_POZ_MK_STAROST za tačke i _POZ_STAROST za poligone dijele
+// iste 4 vremenske trake, 3 od 4 boje su doslovno identične — vidi CLAUDE.md).
+// Terenska prijava: "tačke i prostor označavaš istom bojom a prikazuješ
+// legendu za oboje... prikaži samo jedno". Poligon legenda ima prednost kad
+// je vidljiva (bogatija — objašnjava stvaran oblik na karti), legenda tačaka
+// se prikazuje SAMO kad poligoni nemaju šta pokazati.
+console.log('_demLegendUpdate — samo JEDNA legenda starosti kad su oba sloja uključena (v3.119.2):');
+{
+  function renderLegend({ mkTrake, projTrake, ekspo = false, nv = false }) {
+    const el = { html: '', display: '' };
+    const sandbox = {
+      _ovlState: { ekspo, nv },
+      _escHtml: s => s,
+      _poziLegendaMarkeri: () => mkTrake,
+      _poziLegendaTrake: () => projTrake,
+      document: { getElementById: id => (id === 'dem-legend' ? {
+        set style(v) {}, get style() { return { set display(d) { el.display = d; }, get display() { return el.display; } }; },
+        set innerHTML(v) { el.html = v; }, get innerHTML() { return el.html; }
+      } : null) }
+    };
+    const keys = Object.keys(sandbox);
+    new Function(...keys, extractFn('_demLegendUpdate') + '\n_demLegendUpdate();')(...keys.map(k => sandbox[k]));
+    return el.html;
+  }
+
+  t('oba sloja imaju šta pokazati → prikazuje SAMO poligon legendu ("🟧 Opožareno")', () => {
+    const html = renderLegend({
+      mkTrake: [{ id: 'h6', naziv: 'zadnjih 6 h', fill: '#fdba74' }],
+      projTrake: [{ id: 'front', naziv: '≤ 6 h (aktivan front)', fill: '#fed7aa' }]
+    });
+    assert.match(html, /Opožareno/, 'poligon legenda mora biti tu');
+    assert.ok(!/Detekcije \(starost\)/.test(html), 'legenda tačaka NE SMIJE se dupliraju uz poligon legendu: ' + html);
+  });
+
+  t('samo tačke (bez projekcije) → prikazuje legendu tačaka', () => {
+    const html = renderLegend({
+      mkTrake: [{ id: 'h6', naziv: 'zadnjih 6 h', fill: '#fdba74' }],
+      projTrake: []
+    });
+    assert.match(html, /Detekcije \(starost\)/);
+    assert.ok(!/Opožareno/.test(html));
+  });
+
+  t('samo poligoni (npr. tačke isključene ali keš projekcije još vidljiv) → prikazuje poligon legendu', () => {
+    const html = renderLegend({ mkTrake: [], projTrake: [{ id: 'front', naziv: '≤ 6 h', fill: '#fed7aa' }] });
+    assert.match(html, /Opožareno/);
+  });
+
+  t('nijedan sloj → nema legende starosti (prazan string ostaje prazan)', () => {
+    const html = renderLegend({ mkTrake: [], projTrake: [] });
+    assert.strictEqual(html, '');
+  });
+
+  t('legenda starosti se i dalje ispravno nadovezuje na ekspoziciju/nadmorsku (separator, ne zamjena)', () => {
+    const html = renderLegend({
+      mkTrake: [], projTrake: [{ id: 'front', naziv: '≤ 6 h', fill: '#fed7aa' }],
+      ekspo: true
+    });
+    assert.match(html, /Ekspozicija padine/);
+    assert.match(html, /Opožareno/);
+    assert.match(html, /leg-sep/);
+  });
+}
+
 
 
 // ── v3.113.2: tempo napredovanja i produženje na 1–7 dana ─────────────────
