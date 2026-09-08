@@ -1257,6 +1257,46 @@ console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');
   });
 }
 
+// v3.117.1: prognoza je NAMJERNO poseban prekidač od projekcije — na terenu je
+// bilo nejasno kad je jedan checkbox uključivao i trake starosti NA KARTI i
+// tabelu "za 1-7 dana" u kartici odjednom. Ovi testovi čuvaju da je prognoza
+// NEZAVISNA (vlastiti localStorage ključ, ne zove _poziOpozAzuriraj — nikad se
+// ne crta na karti, samo mijenja sadržaj kartice).
+console.log('Prekidač prognoze (_poziPrognOn/_poziPrognToggle) — NEZAVISAN od projekcije:');
+{
+  const store = {};
+  const sandbox = {
+    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
+    _POZ_PROGN_KEY: 'tvlake_pozari_prognoza_prikaz',
+    _poziRenderPanel: () => { sandbox._panel = true; }
+  };
+  const fns = new Function('localStorage', '_POZ_PROGN_KEY', '_poziRenderPanel',
+    extractFn('_poziPrognOn') + '\n' + extractFn('_poziPrognToggle') + '\nreturn { _poziPrognOn, _poziPrognToggle };'
+  )(sandbox.localStorage, sandbox._POZ_PROGN_KEY, sandbox._poziRenderPanel);
+
+  t('podrazumijevano isključeno', () => {
+    assert.strictEqual(fns._poziPrognOn(), false);
+  });
+  t('koristi SVOJ localStorage ključ, različit od projekcije', () => {
+    fns._poziPrognToggle(true);
+    assert.strictEqual(store['tvlake_pozari_prognoza_prikaz'], '1');
+    assert.strictEqual(store['tvlake_pozari_opoz_proj'], undefined,
+      'uključivanje prognoze ne smije dirati ključ projekcije');
+    assert.ok(sandbox._panel, 'kartica se mora ponovo iscrtati');
+  });
+  t('isključivanje pamti "0"', () => {
+    fns._poziPrognToggle(false);
+    assert.strictEqual(store['tvlake_pozari_prognoza_prikaz'], '0');
+    assert.strictEqual(fns._poziPrognOn(), false);
+  });
+  t('_poziPrognToggle NE zove _poziOpozAzuriraj — prognoza se nikad ne crta na karti', () => {
+    // Namjerno bez _poziOpozAzuriraj u sandboxu: ako bi ga _poziPrognToggle
+    // ikad pozvao, ovo baci ReferenceError i test padne.
+    fns._poziPrognToggle(true);
+    fns._poziPrognToggle(false);
+  });
+}
+
 
 // ── v3.113.1: trake starosti, formatiranje površine, memoizacija ───────────
 console.log('Trake starosti i prikaz površine (v3.113.1):');

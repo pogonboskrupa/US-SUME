@@ -4911,7 +4911,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.117.0';
+const APP_VER = 'v3.117.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13639,6 +13639,19 @@ function _poziOpozToggle(on) {
   _poziRenderPanel();
 }
 
+// Prognoza tempa (v3.117.1) je NAMJERNO poseban prekidač od projekcije na karti
+// — na terenu je bilo nejasno kad su oba spojena pod jedan checkbox: korisnik
+// je uključio "Prikaži projekciju" i dobio i trake starosti NA KARTI i tabelu
+// "za 1-7 dana" u kartici odjednom, bez načina da zadrži jedno bez drugog.
+// Prognoza se NIKAD ne crta na karti (ostaje tako, vidi _poziPrognozaHtml) —
+// ovaj prekidač utiče SAMO na sadržaj kartice, pa ne zove _poziOpozAzuriraj.
+const _POZ_PROGN_KEY = 'tvlake_pozari_prognoza_prikaz';
+function _poziPrognOn() { return localStorage.getItem(_POZ_PROGN_KEY) === '1'; }
+function _poziPrognToggle(on) {
+  try { localStorage.setItem(_POZ_PROGN_KEY, on ? '1' : '0'); } catch(e) {}
+  _poziRenderPanel();
+}
+
 function _poziOpozAzuriraj() {
   if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
   if (!_poziOpozOn() || !_poziOn || !(_poziEvts || []).length || typeof turf === 'undefined') {
@@ -14645,44 +14658,52 @@ function _poziSadrzajHtml() {
       </div>
     </div>`;
 
-  // Sažetak projekcije opožarene površine (v3.113.0). Brojke postoje TEK kad je
-  // sloj uključen (_poziProj računa i kešira po grupi) — bez toga se ništa ne
-  // izmišlja, kartica samo objasni šta prekidač radi.
-  let projSazetak = '';
-  if (_poziOpozOn() && _poziOn) {
+  // Sažetak projekcije opožarene površine (v3.113.0) i prognoza tempa (v3.117.1)
+  // — DVA odvojena prekidača (`_poziOpozOn`/`_poziPrognOn`), pa se i sadržaj
+  // gradi u dvije nezavisne promjenljive. Podaci (_poziProj) se računaju čim je
+  // BAR JEDAN od njih uključen — geometrija i tempo dijele istu memoizovanu
+  // projekciju, samo je pitanje šta se od toga PRIKAZUJE. Kartica samo objasni
+  // šta prekidač radi kad nema dovoljno detekcija.
+  let opozSazetak = '';
+  let prognSazetak = '';
+  if ((_poziOpozOn() || _poziPrognOn()) && _poziOn) {
     const sProj = (_poziEvts || []).map(g => _poziProj(g) ? g : null).filter(Boolean);
     if (!sProj.length) {
-      projSazetak = `<div style="font-size:11px;color:#94a3b8;margin-top:8px;">${
+      const prazno = `<div style="font-size:11px;color:#94a3b8;margin-top:8px;">${
         (_poziEvts || []).length ? 'Nema dovoljno detekcija za procjenu površine.' : 'Trenutno nema detekcija u krugu ' + _POZ_RADIUS_KM + ' km.'
       }</div>`;
+      if (_poziOpozOn()) opozSazetak = prazno;
+      if (_poziPrognOn()) prognSazetak = prazno;
     } else {
       const pr = sProj[0]._proj;
       const uk = sProj.reduce((s, g) => s + (isFinite(g._proj.haUkupno) ? g._proj.haUkupno : 0), 0);
       const sati = pr.sati;
-      // Razrada po trakama starosti — ista boja kao na karti, pa se legenda i
-      // kartica čitaju kao jedna cjelina. Zbir traka je VEĆI od ukupnog kad se
-      // trake preklapaju (isto mjesto gorjelo više puta), zato se "Ukupno"
-      // uzima iz spojene geometrije, a ne kao zbir redova.
-      const redovi = pr.trake.map(t => `
-        <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-          <div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;
-               background:${t.fill};border:1px solid ${t.linija};"></div>
-          <span style="flex:1;font-size:11px;color:#94a3b8;">${_escHtml(t.naziv)}</span>
-          <span style="font-size:11px;color:#e2e8f0;font-weight:600;">${_poziPovrsTxt(t.ha)}</span>
-        </div>`).join('');
-      projSazetak =
-        `<div style="margin-top:10px;">
-           <div style="font-size:24px;font-weight:800;color:#fb923c;line-height:1.1;">${_poziPovrsTxt(pr.haUkupno)}</div>
-           <div style="font-size:10px;color:#64748b;margin-bottom:8px;">najbliži požar — ukupno zahvaćeno${sProj.length > 1 ? ` · svi zajedno ${_poziPovrsTxt(uk)}` : ''}</div>
-           ${redovi}
-           ${pr.haFront > 0 ? `<div style="margin-top:8px;padding:7px 9px;background:#7c2d1233;border:1px solid #9a3412;border-radius:8px;font-size:11px;color:#fdba74;">
-             U zadnjih 6 h zahvaćeno ≈ <b>${_poziPovrsTxt(pr.haFront)}</b> — tu je vatra još aktivna.
-           </div>` : ''}
-           <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
-             ${sati >= 1 ? `Gori (viđen) ${sati < 24 ? Math.round(sati) + ' h' : (sati / 24).toFixed(1) + ' dana'}` : 'Viđen samo u jednom preletu'}${pr.trake.length < 2 ? ' — sve detekcije su iz istog perioda, pa se ne može razdvojiti šta je izgorjelo ranije.' : '.'}
-           </div>
-           ${_poziPrognozaHtml(pr)}
-         </div>`;
+      if (_poziOpozOn()) {
+        // Razrada po trakama starosti — ista boja kao na karti, pa se legenda i
+        // kartica čitaju kao jedna cjelina. Zbir traka je VEĆI od ukupnog kad se
+        // trake preklapaju (isto mjesto gorjelo više puta), zato se "Ukupno"
+        // uzima iz spojene geometrije, a ne kao zbir redova.
+        const redovi = pr.trake.map(t => `
+          <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
+            <div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;
+                 background:${t.fill};border:1px solid ${t.linija};"></div>
+            <span style="flex:1;font-size:11px;color:#94a3b8;">${_escHtml(t.naziv)}</span>
+            <span style="font-size:11px;color:#e2e8f0;font-weight:600;">${_poziPovrsTxt(t.ha)}</span>
+          </div>`).join('');
+        opozSazetak =
+          `<div style="margin-top:10px;">
+             <div style="font-size:24px;font-weight:800;color:#fb923c;line-height:1.1;">${_poziPovrsTxt(pr.haUkupno)}</div>
+             <div style="font-size:10px;color:#64748b;margin-bottom:8px;">najbliži požar — ukupno zahvaćeno${sProj.length > 1 ? ` · svi zajedno ${_poziPovrsTxt(uk)}` : ''}</div>
+             ${redovi}
+             ${pr.haFront > 0 ? `<div style="margin-top:8px;padding:7px 9px;background:#7c2d1233;border:1px solid #9a3412;border-radius:8px;font-size:11px;color:#fdba74;">
+               U zadnjih 6 h zahvaćeno ≈ <b>${_poziPovrsTxt(pr.haFront)}</b> — tu je vatra još aktivna.
+             </div>` : ''}
+             <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
+               ${sati >= 1 ? `Gori (viđen) ${sati < 24 ? Math.round(sati) + ' h' : (sati / 24).toFixed(1) + ' dana'}` : 'Viđen samo u jednom preletu'}${pr.trake.length < 2 ? ' — sve detekcije su iz istog perioda, pa se ne može razdvojiti šta je izgorjelo ranije.' : '.'}
+             </div>
+           </div>`;
+      }
+      if (_poziPrognOn()) prognSazetak = _poziPrognozaHtml(pr);
     }
   }
 
@@ -14750,14 +14771,22 @@ function _poziSadrzajHtml() {
     + kart('🟧 Projekcija opožarene površine',
       'Procjena iz satelitskih detekcija · nije mjerena granica požara',
       prekidac('_poziOpozToggle(this.checked)', _poziOpozOn(), 'Prikaži projekciju na karti')
-      + projSazetak
+      + opozSazetak
       + `<div style="font-size:10px;color:#64748b;line-height:1.45;margin-top:8px;">
            Računa se iz vrelih piksela koje je satelit stvarno izmjerio — svaki je 375 m (VIIRS)
            ili 1 km (MODIS). Svjetlije narandžasto je svježije, tamnije je starije:
            tako se vidi kuda je vatra išla, ne samo koliko je ukupno zahvatila.
            Tvrdi se SAMO ono što je viđeno — udubine se ne popunjavaju.
            Za mjerene granice koristi karticu ispod (EFFIS), koja stiže sa danima zakašnjenja.
-         </div>`)
+         </div>`
+      + `<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1e293b;">`
+      + prekidac('_poziPrognToggle(this.checked)', _poziPrognOn(), '📈 Prikaži prognozu napredovanja (unaprijed po danima)')
+      + `<div style="font-size:10px;color:#64748b;line-height:1.45;margin:4px 0 0;">
+           Poseban prikaz od projekcije iznad — NIJE trenutno stanje nego izmjereni prosjek
+           produžen na 1-7 dana unaprijed. Nikad se ne crta na karti, samo kao brojevi ovdje.
+         </div>`
+      + prognSazetak
+      + `</div>`)
 
     + kart('🗺 Opožarene površine',
       'Copernicus EFFIS · granice stvarno izgorjelih područja',

@@ -635,6 +635,34 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     trake starosti koje to stvarno jesu. Ostaje kao brojevi u kartici.
   - 9 novih testova (119 u `pozari.test.js`), uključujući onaj koji čuva baš
     regresiju naspram naivnog `ukupno/trajanje`.
+- **Projekcija i prognoza — DVA nezavisna prekidača (v3.117.1)**: na terenu je
+  screenshot pokazao zbunjujuće preklapanje krugova/poligona uz komentar "nejasno
+  ovo duplo prikazivanje" — jedan checkbox ("Prikaži projekciju na karti") je
+  uključivao ODJEDNOM i trake starosti NA KARTI i tabelu "za 1–7 dana" u
+  kartici, bez načina da se zadrži jedno bez drugog.
+  - Razdvojeno na `_poziOpozOn`/`_poziOpozToggle` (isto kao prije — trake
+    starosti na karti + razrada po trakama u kartici) i NOV
+    `_poziPrognOn`/`_poziPrognToggle` (`localStorage
+    tvlake_pozari_prognoza_prikaz`) — kontroliše SAMO tabelu "Ako nastavi ovim
+    tempom" u kartici. Prognoza se i dalje NIKAD ne crta na karti (v3.113.2
+    odluka ostaje), pa `_poziPrognToggle` namjerno NE zove `_poziOpozAzuriraj`
+    — samo `_poziRenderPanel()`.
+  - Podaci (`_poziProj`, memoizovano po grupi) se računaju čim je BAR JEDAN od
+    dva prekidača uključen (`(_poziOpozOn() || _poziPrognOn()) && _poziOn`) —
+    geometrija i tempo dijele istu projekciju, razlika je samo šta se od toga
+    PRIKAZUJE. Sadržaj kartice je zato razdvojen u `opozSazetak`/`prognSazetak`,
+    svaki punjen samo kad njegov prekidač zove.
+  - **Provjereno Playwright-om nad STVARNIM markupom** (izvučen tačan blok
+    generisanja sadržaja + `kart`/`prekidac` iz index.html, sve 4 kombinacije
+    uklj/isklj): DOM stanje oba checkbox-a (`.checked`) potvrđeno tačno u sve
+    4 kombinacije. Napomena iz te provjere: 📈 emoji u headless Chromium-u bez
+    color-emoji fonta zna izgledati kao mala zelena kvačica pored teksta —
+    lako se pobrka sa DRUGIM checkbox-om na screenshotu; provjera DOM stanja
+    (`.checked`), ne izgleda piksela, je razriješila da je to samo font
+    fallback, ne bug.
+  - 4 nova testa u `tests/js/pozari.test.js` (154 ukupno) — nezavisnost
+    localStorage ključeva i da `_poziPrognToggle` ne baca kad
+    `_poziOpozAzuriraj` uopšte nije u sandboxu (dokaz da ga ne zove).
 - **Boja markera nosi STAROST, ne pouzdanost (v3.113.3)**: na zahtjev
   "unaprijedi prikaz požara". Do tada je boja markera bila `_poziPouzdanost`
   (crveno = visoka pouzdanost senzora), pa je požar od prije četiri dana bio
