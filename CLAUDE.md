@@ -1125,6 +1125,35 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - Testovi: `tests/js/auth-offline-first.test.js` izvlači STVARNI `initAuth`
     iz `index.html` i pušta ga nad mockovima (mreža koja visi, opoziv pristupa,
     nema keša...). Pokrenuti ga pri svakoj izmjeni auth/startup toka.
+- **Sigurnosna mreža više NE vodi na login (v3.117.0)** — zadnji preostali put
+  kojim se login ekran mogao pojaviti bez signala. Tajmer na 6 s postoji da
+  korisnik ne ostane na praznom ekranu ako `initAuth()` nikad ništa ne odluči,
+  ali je bezuslovno dizao login. Podizanje praga (2000→6000 ms u v3.99.3) je
+  smanjilo vjerovatnoću, **ali nije uklonilo uzrok**: dovoljno je da initAuth
+  zbog sporog uređaja, hladnog starta WebView-a ili greške ne stigne do svoje
+  grane u roku, i korisnik sa savršeno ispravnim keširanim profilom dobije
+  login preko sebe. **Nijedan rok nije dovoljno velik da to garantovano ne
+  dođe** — zato se rok više i ne pokušava "dobro podesiti".
+  - Novi red prioriteta u tajmeru: već u app-u (`_appEntered`) → ne diraj
+    ekran; postoji keširani profil → pusti ga UNUTRA offline; login **samo**
+    ako se nemamo na šta osloniti.
+  - `_ulazNaKesu()` je JEDNO mjesto za ulazak na kešu — koriste ga i sigurnosna
+    mreža i `goOfflineOrLogin` u `initAuth`. Ranije je svaka putanja ponavljala
+    isti niz koraka (stub korisnik, profil, `_setOfflineMode`, `showApp`) pa su
+    se lako razilazile: jedna bi zaboravila `_cachedStub`, druga offline oznaku.
+  - Keš se čita SVAKI put iznova, ne prima kao zapamćena vrijednost — pozivaoci
+    su razmaknuti sekundama, a profil je u međuvremenu mogao biti osvježen.
+  - Profil bez `id` se NE prihvata (korumpiran keš ne smije "otključati" app).
+  - Tajmer je u `<script>` bloku 4, a `_appEntered`/`_ulazNaKesu` u bloku 5 —
+    radi jer klasične skripte dijele isti globalni leksički opseg, ali su
+    pozivi svejedno pod `typeof` provjerom i `try/catch` (blok 5 teoretski može
+    ne izvršiti se).
+  - `_provjeriOpozivOdobrenja` je usput dobio `_withTimeout(..., 8000)` —
+    Supabase poziv bez roka na mrtvoj vezi VISI zauvijek, a kako se
+    `_lastOdobrenCheck` postavlja PRIJE poziva, provjera bi prestala raditi do
+    sljedećeg pokretanja.
+  - Testovi: 7 novih u `tests/js/auth-offline-first.test.js` (15 ukupno),
+    **provjereno da padaju na starom kodu**.
 - **Autofill na dijeljenim uređajima**: login polja imaju `autocomplete="off"`
   i PIN se NE pre-popunjava — sprječava prijavu pod tuđim nalogom.
 - **Sintaks-checker** (regex nad `<script>` blokovima) se zbuni ako komentar

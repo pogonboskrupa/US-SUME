@@ -4911,7 +4911,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.116.0';
+const APP_VER = 'v3.117.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -4961,13 +4961,22 @@ try {
 // ponovo pokrene CIJELU stranicu — uklj. ovaj tajmer — a spor/trom mrežni poziv
 // baš tad nije stigao ni uspjeti ni pasti prije 2s). 6000ms je sigurno iznad
 // initAuth()-ovog najsporijeg legitimnog puta (4500ms + obrada).
+// v3.117.0 — ovaj tajmer VIŠE NIJE put do login ekrana kad postoji keširani
+// profil. Podizanje praga (2000→6000 ms) je smanjilo vjerovatnoću, ali nije
+// uklonilo uzrok: dovoljno je da initAuth zbog SPOROG uređaja, hladnog starta
+// WebView-a ili greške ne stigne do svoje grane u zadanom roku, i korisnik sa
+// savršeno ispravnim keširanim profilom dobije login preko sebe. Nijedan rok
+// nije "dovoljno velik" da to garantovano ne dođe. Zato sada red prioriteta
+// glasi: već u app-u → ne diraj; ima keširan profil → pusti ga UNUTRA offline;
+// login samo ako se nemamo NA ŠTA osloniti.
 setTimeout(()=>{
+  try { if (typeof _appEntered !== 'undefined' && _appEntered) return; } catch(e) {}
   const as=document.getElementById('auth-screen');
   const wr=document.getElementById('wrapper');
-  if(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex'){
-    as.style.display='flex';
-    if(typeof authShowLogin==='function') authShowLogin();
-  }
+  if(!(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex')) return;
+  try { if (typeof _ulazNaKesu === 'function' && _ulazNaKesu()) return; } catch(e) {}
+  as.style.display='flex';
+  if(typeof authShowLogin==='function') authShowLogin();
 },6000);
 
 let sbUser = null;
@@ -5470,6 +5479,30 @@ function _showAuthScreen() {
   authShowLogin();
 }
 
+// Ulazak u aplikaciju na KEŠIRANOM profilu (v3.117.0). Jedno mjesto za sve
+// putanje koje moraju pustiti korisnika unutra bez mreže — ranije je svaka
+// ponavljala isti niz koraka (stub korisnik, profil, offline oznaka, showApp) i
+// lako su se razilazile: jedna bi zaboravila _cachedStub, druga _setOfflineMode.
+// Vraća true ako je korisnik ušao (ili je već bio unutra), false ako se nemamo
+// na šta osloniti — TEK tada je login ekran ispravan ishod.
+// Namjerno čita keš SVAKI put umjesto da prima zapamćenu vrijednost: pozivaoci
+// su razmaknuti sekundama (sigurnosna mreža na 6 s), a profil je u međuvremenu
+// mogao biti osvježen.
+function _ulazNaKesu() {
+  if (_appEntered) return true;              // već unutra — ne diraj ekran
+  let cached = null;
+  try { cached = (typeof _OL !== 'undefined' && _OL && _OL.load) ? _OL.load(_OL.PROFILE) : null; } catch(e) {}
+  if (!cached || !cached.id) return false;
+  // _cachedStub: ovo NIJE prava Supabase sesija. Svaka provjera "imamo li
+  // sesiju" mora glasiti `sbUser && !sbUser._cachedStub` (vidi CLAUDE.md).
+  sbUser = { id: cached.id, email: cached.email || '', _cachedStub: true };
+  sbProfile = cached;
+  try { _setOfflineMode(true); } catch(e) {}
+  showApp();
+  showToast('📴 Offline pristup — lokalni podaci');
+  return true;
+}
+
 // Je li showApp() već pozvan u ovoj sesiji stranice. Sprječava DRUGI poziv
 // showApp()-a (koji bi ponovo pokrenuo sve restore-e: slojeve karte, tačke,
 // fotose, SQLite karte — dupli slojevi) kad kasnija online nadogradnja stigne
@@ -5598,15 +5631,9 @@ async function initAuth() {
       }
       return;
     }
-    if (cached) {
-      sbUser = { id: cached.id, email: cached.email || '', _cachedStub: true };
-      sbProfile = cached;
-      _setOfflineMode(true);
-      showApp();
-      showToast('📴 Offline pristup — lokalni podaci');
-    } else {
-      _showAuthScreen();
-    }
+    // Isti helper koji koristi i sigurnosna mreža — jedan put unutra, jedno
+    // ponašanje. Login TEK ako nema keširanog profila.
+    if (!_ulazNaKesu()) _showAuthScreen();
   };
 
   // 2. Fallback: auto-login sa zapamćenim kredencijalima (ako PIN nije
@@ -16906,7 +16933,13 @@ async function _provjeriOpozivOdobrenja() {
   if (now - _lastOdobrenCheck < 60000) return;
   _lastOdobrenCheck = now;
   try {
-    const { data, error } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
+    // ROK je obavezan: navigator.onLine na terenu laže 'true' na mrtvoj vezi, a
+    // Supabase poziv nije fetch() pa nema signal — bez _withTimeout ovaj upit
+    // VISI zauvijek (vidi pravilo u CLAUDE.md). Zaglavljen upit ovdje znači i da
+    // se _lastOdobrenCheck nikad ne "otključa" korisno, pa provjera prestaje
+    // raditi do sljedećeg pokretanja.
+    const { data, error } = await _withTimeout(
+      sb.from('korisnici').select('*').eq('id', sbUser.id).single(), 8000);
     if (error || !data) return;                 // mreža laže da radi — pusti na kešu
     sbProfile = data;
     _OL.save(_OL.PROFILE, data);

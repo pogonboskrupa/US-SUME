@@ -316,6 +316,105 @@ await test('doLogin: logo se sakriva čim prijava krene, ne tek kad se app otvor
     'logo mora biti sakriven PRIJE prvog mrežnog poziva, ne poslije prijave');
 });
 
+
+// ── SIGURNOSNA MREŽA (v3.117.0) ───────────────────────────────────────
+// Najuporniji oblik ovog buga: initAuth je ISPRAVAN, ali ne stigne odlučiti
+// prije nego istekne "sigurnosni" tajmer — pa tajmer prisili login ekran
+// preko korisnika koji ima savršeno ispravan keširani profil. Podizanje roka
+// (2000→6000 ms) je samo smanjilo vjerovatnoću; nijedan rok nije dovoljno
+// velik da to garantovano ne dođe na sporom uređaju ili hladnom startu.
+// Pravilo koje ovi testovi čuvaju: MREŽA (ni tajmer) NE ODLUČUJE ko smije u
+// app — keš odlučuje. Login je zadnja opcija, samo bez keširanog profila.
+const SRC_ULAZ = extractPlainFn('_ulazNaKesu');
+
+function makeMreza({ cached = null, appEntered = false, authDisp = 'none', wrapDisp = 'none' }) {
+  const log = [];
+  const el = {
+    'auth-screen': { style: { display: authDisp } },
+    'wrapper':     { style: { display: wrapDisp } },
+  };
+  const env = {
+    _OL: { PROFILE: 'p', load: () => cached },
+    _setOfflineMode: () => { log.push('offline-mode'); },
+    showApp: () => { log.push('showApp'); el['wrapper'].style.display = 'flex'; },
+    showToast: (m) => { log.push('toast:' + m); },
+    authShowLogin: () => { log.push('LOGIN'); },
+    document: { getElementById: (id) => el[id] || null },
+  };
+  const params = Object.keys(env);
+  const api = new Function(params.join(','),
+    `let _appEntered = ${appEntered ? 'true' : 'false'};
+     let sbUser = null, sbProfile = null;
+     ${SRC_ULAZ}
+     // Tijelo sigurnosne mreže — isto kao u index.html (setTimeout callback).
+     function mreza() {
+       try { if (typeof _appEntered !== 'undefined' && _appEntered) return; } catch(e) {}
+       const as=document.getElementById('auth-screen');
+       const wr=document.getElementById('wrapper');
+       if(!(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex')) return;
+       try { if (typeof _ulazNaKesu === 'function' && _ulazNaKesu()) return; } catch(e) {}
+       as.style.display='flex';
+       if(typeof authShowLogin==='function') authShowLogin();
+     }
+     return { mreza, _ulazNaKesu, stanje: () => ({ sbUser, sbProfile }) };`
+  )(...params.map(k => env[k]));
+  return { api, log, el };
+}
+
+await test('Sigurnosna mreža + keširan profil → ULAZ U APP, NIKAD login', async () => {
+  const { api, log, el } = makeMreza({ cached: CACHED });
+  api.mreza();
+  assert.ok(!log.includes('LOGIN'), 'login se NE smije pojaviti kad postoji keširani profil');
+  assert.ok(log.includes('showApp'), 'korisnik mora ući u app');
+  assert.ok(log.includes('offline-mode'), 'mora biti označen offline režim');
+  assert.notEqual(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža BEZ keširanog profila → login (jedini ispravan ishod)', async () => {
+  const { api, log, el } = makeMreza({ cached: null });
+  api.mreza();
+  assert.ok(log.includes('LOGIN'), 'bez keša se nemamo na šta osloniti');
+  assert.equal(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža kad je korisnik VEĆ u app-u → ne dira ekran', async () => {
+  const { api, log, el } = makeMreza({ cached: CACHED, appEntered: true });
+  api.mreza();
+  assert.deepEqual(log, [], 'ništa se ne smije desiti korisniku koji već radi');
+  assert.notEqual(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža kad je login VEĆ prikazan → ne pokreće ulazak', async () => {
+  const { api, log } = makeMreza({ cached: CACHED, authDisp: 'flex' });
+  api.mreza();
+  assert.deepEqual(log, [], 'odluka je već donesena, ne preglasavaj je');
+});
+
+await test('_ulazNaKesu: korumpiran/nepotpun keš NE pušta u app (nema id)', async () => {
+  const { api, log } = makeMreza({ cached: { email: 'x@y.z' } });   // bez id
+  assert.equal(api._ulazNaKesu(), false, 'profil bez id nije upotrebljiv');
+  assert.ok(!log.includes('showApp'));
+});
+
+await test('_ulazNaKesu: sbUser se označava kao _cachedStub (nije prava sesija)', async () => {
+  const { api } = makeMreza({ cached: CACHED });
+  assert.equal(api._ulazNaKesu(), true);
+  const st = api.stanje();
+  assert.equal(st.sbUser._cachedStub, true,
+    'bez _cachedStub bi kasnije provjere mislile da imamo pravu Supabase sesiju');
+  assert.equal(st.sbUser.id, CACHED.id);
+  assert.equal(st.sbProfile, CACHED);
+});
+
+await test('_ulazNaKesu: _OL nedostupan (skripta se nije učitala) → false, ne baca', async () => {
+  const api = new Function('document,showApp,showToast,_setOfflineMode',
+    `let _appEntered = false; let sbUser = null, sbProfile = null;
+     ${SRC_ULAZ}
+     return { _ulazNaKesu };`
+  )({ getElementById: () => null }, () => {}, () => {}, () => {});
+  assert.equal(api._ulazNaKesu(), false);
+});
+
 console.log(`\n${_pass} prošlo, ${_fail} palo`);
 process.exit(_fail > 0 ? 1 : 0);
 })();
