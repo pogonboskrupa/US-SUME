@@ -663,6 +663,53 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - 4 nova testa u `tests/js/pozari.test.js` (154 ukupno) — nezavisnost
     localStorage ključeva i da `_poziPrognToggle` ne baca kad
     `_poziOpozAzuriraj` uopšte nije u sandboxu (dokaz da ga ne zove).
+- **Trake starosti — šira paleta, ne samo tamnija (v3.117.2)**: na terenu
+  prijavljeno "ovako slične boje... bitno da bude svjetla boja" uz screenshot
+  gdje se krugovi/poligoni traka jedva razlikuju. Python HSL analiza stare
+  skale (`_POZ_STAROST`: `#fb923c→#c2410c→#7c2d12→#292524`) je pokazala PRAVI
+  uzrok: nijansa (hue) se kretala u rasponu od svega 15° (27°→12°), a
+  zasićenost je prema kraju kolabirala ka sivom (96%→6.5%) — razlika između
+  traka se svodila GOTOVO ISKLJUČIVO na zatamnjenje, najteži kanal za oko da
+  razdvoji, pogotovo kroz providnost/preklapanje na karti. Skala JESTE bila
+  strogo monotona po svjetlini (postojeći test to čuva), ali monotona
+  svjetlina ≠ međusobno razlučive boje.
+  - Nova paleta širi raspon nijanse (32°→12°) i drži zasićenost visoko do
+    kraja umjesto da se gasi u sivo, uz eksplicitan zahtjev da najsvježija
+    traka bude vidljivo SVIJETLA:
+    `_POZ_STAROST` (poligoni projekcije na karti): front `#fed7aa` (bilo
+    `#fb923c`), 6–24h `#fb923c` (bilo `#c2410c`), 1–3 dana `#c2410c` (bilo
+    `#7c2d12`), starije `#292524` (nepromijenjeno — već dovoljno različito).
+    `_POZ_MK_STAROST` (markeri/lista/legenda): front `#fdba74`, 6–24h
+    `#fb923c`, 1–3 dana `#c2410c`, starije `#292524` (nepromijenjeno).
+  - **Front NIJE ista nijansa u ova dva niza, namjerno**: tri Playwright
+    provjere PRIJE finalnog izbora (izolovana repro, izvučen stvaran CSS/
+    marker markup, ne nagađanje):
+    1. **Čitljivost teksta na markeru** — grupa markera nosi BIJELI podebljani
+       broj preko boje. Najsvjetliji kandidat (`#fed7aa`, ista nijansa kao
+       poligonski front) je na screenshotu ispao PREBLIJED — broj postaje
+       teško čitljiv. `#fdba74` (jednu nijansu tamnije) je ostao jasno svijetao
+       ALI sa dovoljno kontrasta za bijeli tekst — zato marker koristi
+       `#fdba74`, a poligon (bez teksta preko sebe) zadržava svjetliji `#fed7aa`.
+    2. **Vidljivost poligona na topo podlozi** — direktna primjena pouke iz
+       v3.112.4 (promjena boje se ne smije ocijeniti izolovano od providnosti/
+       pozadine): renderovan `#fed7aa` na opacity 0.55/0.65/0.75 preko
+       simulirane zeleno-braon topo teksture. Postojeći opacity 0.55 (bez
+       izmjene) je već jasno vidljiv i na najsvjetlijoj boji — bez potrebe za
+       podizanjem providnosti.
+    3. **Kombinacija ispune + linije** — Leaflet crta `fillOpacity` i
+       stroke/`color` kao DVA odvojena sloja (linija na punoj neprozirnosti);
+       repro je to vjerno simulirao (odvojeni `.fill`/`.stroke` div) i
+       potvrdio da rub ostaje jasno definisan sa oba kandidata za liniju.
+  - **Prsten pulsa (`pozPuls` CSS keyframes) usklađen sa novim markerom** —
+    `rgba(249,115,22,...)` (`#f97316`, stara boja) → `rgba(253,186,116,...)`
+    (`#fdba74`, nova) — crveni/tamniji prsten oko svjetlijeg markera bi
+    izgledao kao druga kategorija svježine, a nije.
+  - **Postojeći test "svjetlije = svježije" (v3.113.3) je prošao BEZ izmjene
+    testa** — asercija provjerava STROGO OPADAJUĆI zbir RGB komponenti, ne
+    hardkodovane hex vrijednosti, pa je automatski potvrdila da nova paleta
+    ostaje monotona po svjetlini. Ovo je primjer zašto je vrijedno pisati
+    invarijantu umjesto konkretne vrijednosti — test je odmah bio koristan za
+    SASVIM drugu paletu bez ijedne izmjene.
 - **Boja markera nosi STAROST, ne pouzdanost (v3.113.3)**: na zahtjev
   "unaprijedi prikaz požara". Do tada je boja markera bila `_poziPouzdanost`
   (crveno = visoka pouzdanost senzora), pa je požar od prije četiri dana bio

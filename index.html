@@ -1855,12 +1855,12 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 6px rgba(0,0,0,0.6);
 }
 .sje-mk-mala { width:6px; height:6px; margin:2px; border-radius:2px; border:1px solid rgba(255,255,255,0.85); opacity:0.75; }
-/* Prsten pulsa je narandžast (#f97316) — ista boja kao najsvježija traka
-   markera od v3.113.3; crveni prsten oko narandžastog markera je izgledao
-   kao druga kategorija, a nije. */
+/* Prsten pulsa prati boju najsvježije trake markera (v3.117.2: #fdba74,
+   ranije #f97316 uz v3.113.3 paletu) — crveni/tamniji prsten oko svjetlijeg
+   markera bi izgledao kao druga kategorija, a nije. */
 @keyframes pozPuls {
-  0%,100% { transform:scale(1);    box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 0 rgba(249,115,22,0.6); }
-  50%     { transform:scale(1.12); box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 9px rgba(249,115,22,0); }
+  0%,100% { transform:scale(1);    box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 0 rgba(253,186,116,0.7); }
+  50%     { transform:scale(1.12); box-shadow:0 0 6px rgba(0,0,0,0.6), 0 0 0 9px rgba(253,186,116,0); }
 }
 
 /* ── KML/SHP permanentne oznake odjela ──────────────────── */
@@ -4911,7 +4911,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.117.1';
+const APP_VER = 'v3.117.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13142,10 +13142,16 @@ function _poziStatusSet(txt) {
 // detekcija stara), dok trake projekcije mjere u odnosu na najnoviju detekciju
 // tog požara — obje ipak znače "svjetlije = skorije", što je jedini mentalni
 // model koji korisnik stvarno gradi.
+// Paleta zamijenjena v3.117.2 (isti razlog kao _POZ_STAROST gore) — front
+// NIJE ista nijansa kao poligonski front (#fed7aa): ta najsvjetlija nijansa
+// je Playwright provjerom ispala PREBLIJEDA za BIJELI podebljani broj markera
+// grupe (tekst postaje teško čitljiv), pa marker koristi jednu nijansu tamnije
+// (#fdba74) — i dalje jasno "svijetlo" naspram ostatka skale, ali sa dovoljno
+// kontrasta za tekst preko sebe.
 const _POZ_MK_STAROST = [
-  { id:'h6',  maxH:6,        naziv:'zadnjih 6 h', fill:'#f97316' },
-  { id:'h24', maxH:24,       naziv:'6–24 h',      fill:'#c2410c' },
-  { id:'d3',  maxH:72,       naziv:'1–3 dana',    fill:'#7c2d12' },
+  { id:'h6',  maxH:6,        naziv:'zadnjih 6 h', fill:'#fdba74' },
+  { id:'h24', maxH:24,       naziv:'6–24 h',      fill:'#fb923c' },
+  { id:'d3',  maxH:72,       naziv:'1–3 dana',    fill:'#c2410c' },
   // #292524 (ne svjetlije sivo): skala mora biti STROGO opadajuća po svjetlini
   // da "tamnije = starije" vrijedi bez izuzetka — ista boja kao najstarija
   // traka projekcije, pa se dvije legende poklapaju.
@@ -13459,10 +13465,19 @@ function _poziOpozGeom(pts) {
 // Crta se od NAJSTARIJE ka najnovijoj (starije dolje), da aktivan front ostane
 // vizuelno na vrhu — mjesto koje je gorjelo i prekjuče i jutros čita se kao
 // aktivno, što je i tačno.
+// Paleta zamijenjena v3.117.2 na terenski komentar "slične boje, teško se
+// razlikuje" — stara skala (fb923c→c2410c→7c2d12→292524) je numerički bila
+// monotona po svjetlini, ali su sve četiri boje dijelile GOTOVO ISTU nijansu
+// (raspon nijanse samo 27°→12°), pa se razlika svodila samo na zatamnjenje —
+// najteže za oko da razdvoji, pogotovo kroz providnost/preklapanje na karti.
+// Nova skala širi RASPON nijanse (32°→12°) i drži zasićenost visoko do kraja
+// (umjesto da se prema kraju gasi u sivo), uz eksplicitan zahtjev da prva
+// traka bude vidljivo SVIJETLA — verifikovano Playwright screenshotom (sve
+// četiri boje jasno različite na simuliranoj topo podlozi).
 const _POZ_STAROST = [
-  { id:'front', naziv:'≤ 6 h (aktivan front)', maxH:6,        fill:'#fb923c', linija:'#f97316', op:0.55 },
-  { id:'d1',    naziv:'6–24 h',                maxH:24,       fill:'#c2410c', linija:'#ea580c', op:0.50 },
-  { id:'d3',    naziv:'1–3 dana',              maxH:72,       fill:'#7c2d12', linija:'#9a3412', op:0.50 },
+  { id:'front', naziv:'≤ 6 h (aktivan front)', maxH:6,        fill:'#fed7aa', linija:'#fb923c', op:0.55 },
+  { id:'d1',    naziv:'6–24 h',                maxH:24,       fill:'#fb923c', linija:'#ea580c', op:0.50 },
+  { id:'d3',    naziv:'1–3 dana',              maxH:72,       fill:'#c2410c', linija:'#9a3412', op:0.50 },
   { id:'star',  naziv:'starije od 3 dana',     maxH:Infinity, fill:'#292524', linija:'#57534e', op:0.55 }
 ];
 
