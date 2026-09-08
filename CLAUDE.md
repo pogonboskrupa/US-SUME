@@ -859,6 +859,86 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
   `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
 
+## Sekcija Vlake
+
+- **Dužina MREŽE vlaka je bila UDVOSTRUČENA (v3.118.0)** — najskuplja greška u
+  ovoj sekciji, tiha godinama. Na 9 mjesta (zaglavlje liste, kartica projekta,
+  detalji projekta, SRD, Terenske statistike, lista kolega, Dnevnik radova, PDF
+  izvještaj, email sažetak) računalo se `calcL(vlake.flatMap(v => v.pts))` —
+  sve tačke SVIH vlaka spojene u JEDAN niz pa mjerene kao jedna neprekidna
+  linija. `calcL` sabira rastojanje između svaka dva susjedna elementa niza, pa
+  je između zadnje tačke jedne vlake i prve tačke sljedeće ulazio LAŽAN
+  segment — skok preko pola odjela, (n−1) puta.
+  - Izmjereno na realnom rasporedu (24 vlake po ~443 m raspoređene po odjelu od
+    40 ha): tačno **10623 m**, prikazivalo se **21279 m**; gustoća mreže
+    **532 m/ha** umjesto **266 m/ha**. Gustoća je stvarni šumarski pokazatelj
+    po kojem se ocjenjuje da li je mreža vlaka dovoljna — greška te veličine
+    mijenja ZAKLJUČAK, ne samo prikaz.
+  - Zamjenjeno sa `_ukupnoVlakeM(arr)` (zbir `calcL` po vlaci). **Svaki novi
+    zbir dužina vlaka mora ići kroz njega** — `flatMap` nad tačkama je za
+    dužinu uvijek pogrešan (za bounds/brojanje tačaka je u redu, vidi `allPts`
+    u `_calcTerenStats`).
+  - Bug je bio vidljiv da se gledalo: `_calcTerenStats` u ISTOJ funkciji
+    uspon/pad računa "po svakoj vlaci zasebno, ne cross-vlaka" (postojeći
+    komentar!) i prosječnu dužinu preko `reduce`+`calcL` po vlaci — samo je
+    `totalLen` ostao na flatMap-u. Email sažetak je ispisivao TAČNU dužinu
+    svake vlake pa ispod njih "Ukupno" koje se sa tim spiskom nije slagalo.
+  - Test (`tests/js/vlake-nagib.test.js`) namjerno RASPOREDI vlake razmaknuto i
+    poredi sa starom formulom — da su nacrtane jedna do druge, bug se ne bi
+    vidio.
+- **Nagib kao BROJ u listi (v3.118.0)**: nagib se do tada mogao vidjeti samo
+  kao BOJA na karti (preklopnik "Nagib vlaka" / admin "Analiza nagiba") ili
+  otvaranjem profila JEDNE PO JEDNE vlake. Za odluku koju forester stvarno
+  donosi — "je li ova vlaka prohodna za traktor/forvarder" — lista je nudila
+  samo ↑uspon/↓pad, a to NE razlikuje blagu trasu od one sa 40% zidom u
+  sredini (vlaka sa ↑120 m može biti ravnomjernih 8% kroz 1,5 km ili imati
+  60 m preko 30% — isti brojevi).
+  - `_vlNagibStat(pts, limit)` je ČISTA funkcija (bez DOM-a/karte, testabilna),
+    računa nad ISTIM `_smoothedGrades` koje koristi bojenje na karti — broj u
+    listi i boja na karti se ne mogu razići. Vraća `null` kad nema visina
+    (nacrtana vlaka bez GPS-a), **ne nulu** — "nije mjereno" ≠ "ravno", ista
+    logika kao `_elevHtml`.
+  - **Uz max se ispisuje i KOLIKO METARA je preko limita** — max sam po sebi ne
+    razlikuje jednu kratku strminu (rješiva na licu mjesta) od 200 m
+    neprohodne dionice (traži drugu trasu). Metri su otporniji i na GPS šum:
+    jedan loš fiks daje par metara, ne dionicu.
+  - **Limit je izbor korisnika** (`_VL_NAGIB_LIMITI`, `localStorage
+    tvlake_vl_nagib_limit`) jer ZAVISI OD MEHANIZACIJE — traktor uzbrdo
+    podnosi znatno više od forvardera. Podrazumijevanih 20% je isti prag koji
+    admin "Analiza nagiba" već koristi ("20–25% Jako strmo" u njenoj legendi),
+    pa se dva ekrana slažu dok korisnik sam ne odluči drugačije.
+  - **Memoizacija je OBAVEZNA, ne optimizacija**: `rndList()` se tokom snimanja
+    zove svake 2 s (`_scheduleOvlRnd`), a `_smoothedGrades` nad svim vlakama
+    projekta je izmjereno 5.9 ms u sandboxu (50 vlaka / 42k tačaka) — na
+    telefonu višestruko više, baš dok GPS snimanje ima prioritet. `_vlNagib(v, d)`
+    keširа po potpisu `pts.length:round(d):limit`.
+    - **Potpis NAMJERNO prima već izračunatu dužinu `d`** umjesto da zove
+      `calcL` sam — `calcL` je O(n) kao i sam račun nagiba, pa bi potpis koštao
+      koliko i posao koji izbjegava. Izmjereno: topao prolaz 2.91 ms
+      (= samo `calcL`, isto kao PRIJE izmjene), tokom snimanja 3.00 ms — dakle
+      **+0.09 ms** jer se mijenja potpis samo vlake koja raste.
+    - Zato `rndList` računa dužinu u JEDNOM prolazu (`dMap`) i prosljeđuje je i
+      zaglavlju i redovima; ranije je svaki red računao svoju dužinu sam.
+  - **Nacrtana vlaka bez GPS visina koristi već preuzet profil**
+    (`v._apiProfile`, keš iz `showElevProfile`) — bedž se pojavi kad korisnik
+    jednom otvori "Profil", bez novog mrežnog poziva iz liste. Bez toga bedža
+    nema (ne izmišlja se).
+  - **Filter "samo te" crta RAVNU listu** (bez hijerarhije) i dubinu izvodi iz
+    `v.kr`, ne iz mjesta u stablu — krak koji prelazi limit mora biti vidljiv i
+    kad njegova matična vlaka ne prelazi, i mora zadržati svoju oznaku (L/D,
+    "završava na putu"). Indeks koji red nosi ostaje STVARNI indeks u `vlake[]`
+    (`vlake.indexOf(v)`) — ista klasa greške kao `selI` po poziciji u DOM-u i
+    trake udaljenosti u Požarima, ovdje pokrivena testom koji pušta STVARNI
+    `rndList` nad lažnim DOM-om.
+  - Kad ništa ne prelazi limit, traka to KAŽE ("✓ sve u granici") — prazan
+    prostor bi se čitao kao "nije provjereno", što nije isto.
+- **Admin "Analiza nagiba" je prijavljivala "Max nagib 0%" (v3.118.0)**:
+  `maxGrade` se ažurirao SAMO unutar `if (grade >= 20)`, pa je vlaka čija je
+  najstrmija dionica npr. 19% prijavljivala max 0% — isto kao savršeno ravna.
+  Isto je vrijedilo za projektni sažetak (`maxG` je maksimum tih vrijednosti),
+  pa je cijela analiza na blagom terenu tvrdila da nagiba nema. `maxGrade` je
+  izmješten izvan praga; `steepLen`/`steepSegs` ostaju vezani za 20%.
+
 ## Donja traka — #action-bar (Karta) i #rec-bar (svi paneli)
 
 - **`#action-bar` postoji SAMO na Karti** (`_updFabVisibility`:

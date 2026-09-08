@@ -649,6 +649,21 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
 .vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
 .vph-nav:hover { color:#94a3b8; }
+/* Traka nagiba iznad liste vlaka (v3.118.0) */
+#vl-nagib-traka {
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  background:#0a1628; border:1px solid #1e3a5f;
+  border-radius:6px; padding:4px 8px; margin-bottom:6px; font-size:11px;
+}
+.vnt-lbl { color:#94a3b8; white-space:nowrap; }
+.vnt-sel {
+  background:#0f172a; border:1px solid #374151; color:#e2e8f0;
+  border-radius:5px; padding:2px 4px; font-size:11px;
+}
+.vnt-bad { color:#fbbf24; font-weight:600; white-space:nowrap; }
+.vnt-ok  { color:#4ade80; white-space:nowrap; }
+.vnt-f { display:flex; align-items:center; gap:4px; color:#7dd3fc; cursor:pointer; margin-left:auto; white-space:nowrap; }
+.vnt-f input { width:13px; height:13px; flex-shrink:0; }
 
 /* AlpineQuest-stil segmented gumbi */
 .seg-grp {
@@ -843,6 +858,10 @@ input:focus { outline:none; border-color:#3b82f6; }
 #del-modal .del-confirm:active { background:#991b1b; }
 #del-modal .del-confirm:disabled { opacity:0.35; cursor:not-allowed; }
 .vcard-elev .eu { color:#4ade80; } .vcard-elev .ed { color:#f87171; } .vcard-elev .eroad { color:#fbbf24; }
+/* Nagib: boja dolazi iz _gradeColor (inline), pa se ovdje NE postavlja — samo
+   oblik. Dionica preko limita ide u zasebnu, uvijek crvenu oznaku. */
+.vcard-elev .vnag { font-weight:700; }
+.vcard-elev .vnag-bad { color:#fca5a5; }
 
 .mb {
   width:28px; height:28px; border-radius:5px;
@@ -3747,6 +3766,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           </div>
         </div>
         <div id="vlake-proj-hdr" style="display:none;"></div>
+        <div id="vl-nagib-traka" style="display:none;"></div>
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
           Odaberite projekat za prikaz vlaka.
@@ -4911,7 +4931,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.117.2';
+const APP_VER = 'v3.118.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -6967,7 +6987,7 @@ function _renderProjGroup(list) {
       const nClan  = (p.clanovi || []).length;
       // Statistike vlaka iz lokalno učitanih podataka (vlastite vlake)
       const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
-      const totLen = pv.length ? calcL(pv.flatMap(v => v.pts)) : 0;
+      const totLen = _ukupnoVlakeM(pv);
       const vChip = pv.length
         ? `<div><span class="proj-card-vchip">📐 ${pv.length} ${pv.length === 1 ? 'vlaka' : 'vlake'} · ${fmtL(totLen)}</span></div>`
         : '';
@@ -7203,7 +7223,7 @@ function showProjektDetalji(id) {
   document.getElementById('pd-title').textContent = p.odjel || '—';
   // Statistike vlaka za ovaj projekat (lokalno učitane)
   const pdVlake = vlake.filter(v => v.projektId === id && v.pts.length >= 2);
-  const pdLen   = pdVlake.length ? calcL(pdVlake.flatMap(v => v.pts)) : 0;
+  const pdLen   = _ukupnoVlakeM(pdVlake);
   const pdGust  = (p.povrsina > 0 && pdLen > 0) ? Math.round(pdLen / p.povrsina) + ' m/ha' : null;
   document.getElementById('pd-info').innerHTML = [
     p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
@@ -11812,6 +11832,93 @@ function _smoothedGrades(pts) {
   }
   out.push(raw[raw.length - 1]);
   return out;
+}
+
+// ── Nagib vlake kao BROJ u listi (v3.118.0) ─────────────────────────────────
+// Nagib se do sada mogao vidjeti samo kao BOJA na karti (preklopnik "Nagib
+// vlaka" / admin "Analiza nagiba") ili otvaranjem profila JEDNE PO JEDNE
+// vlake. Za odluku koju forester stvarno donosi — "je li ova vlaka uopšte
+// prohodna za traktor/forvarder" — to je bilo prekasno: lista je pokazivala
+// samo ↑uspon/↓pad, a to NE razlikuje blagu trasu od one sa 40% zidom u
+// sredini. Vlaka sa ↑120 m može biti ravnomjernih 8% kroz 1,5 km (u redu) ili
+// imati 60 m preko 30% (neprohodno) — isti brojevi u listi.
+//
+// _vlNagibStat je ČISTA funkcija (bez DOM-a i karte) da se može testirati, i
+// računa nad ISTIM izglađenim nagibima (_smoothedGrades) koje koristi bojenje
+// na karti — broj u listi i boja na karti se zato ne mogu razići.
+//
+// Vraća null kad nema upotrebljivih visina (nacrtana vlaka bez GPS-a) umjesto
+// nule — "nije mjereno" nije isto što i "ravno"; ista logika kao _elevHtml.
+function _vlNagibStat(pts, limitPct) {
+  if (!pts || pts.length < 2) return null;
+  if (!pts.some(p => (p.al || 0) !== 0)) return null;
+  const lim = limitPct > 0 ? limitPct : 20;
+  const grades = _smoothedGrades(pts);
+  let max = 0, prekoM = 0, sumGD = 0, mjerenoM = 0, ukupnoM = 0;
+  for (let i = 0; i < grades.length; i++) {
+    const hd = dst(pts[i].la, pts[i].lo, pts[i + 1].la, pts[i + 1].lo);
+    ukupnoM += hd;
+    const g = grades[i];
+    if (g < 0) continue;   // segment kraći od 1 m — _segGrade ga označava kao nepouzdan
+    if (g > max) max = g;
+    sumGD += g * hd; mjerenoM += hd;
+    if (g >= lim) prekoM += hd;
+  }
+  if (mjerenoM <= 0) return null;
+  return {
+    max: Math.round(max),
+    avg: Math.round((sumGD / mjerenoM) * 10) / 10,
+    prekoM: Math.round(prekoM),
+    ukupnoM: Math.round(ukupnoM),
+    pct: ukupnoM > 0 ? (prekoM / ukupnoM) * 100 : 0,
+    limit: lim
+  };
+}
+
+// Limit je izbor korisnika jer ZAVISI OD MEHANIZACIJE (traktor uzbrdo podnosi
+// znatno više od forvardera) — jedan zakucan broj bi za pola korisnika bio
+// pogrešan, a predstavljen kao mjerodavan. Podrazumijevanih 20% je isti prag
+// koji admin "Analiza nagiba" već koristi ("20-25% Jako strmo" u njenoj
+// legendi), pa se dva ekrana slažu dok korisnik sam ne odluči drugačije.
+const _VL_NAGIB_LIMITI = [12, 15, 18, 20, 25, 30];
+function _vlNagibLimit() {
+  const n = parseInt(localStorage.getItem('tvlake_vl_nagib_limit'), 10);
+  return _VL_NAGIB_LIMITI.indexOf(n) >= 0 ? n : 20;
+}
+function _vlNagibSetLimit(v) {
+  try { localStorage.setItem('tvlake_vl_nagib_limit', String(parseInt(v, 10))); } catch(e) {}
+  rndList();
+}
+
+// Memoizacija je OBAVEZNA, ne optimizacija: rndList() se tokom snimanja poziva
+// svake 2 s (_scheduleOvlRnd), a _smoothedGrades nad svim vlakama projekta je
+// izmjereno 5.9 ms u sandboxu za 50 vlaka / 42k tačaka — na telefonu višestruko
+// više, i to baš dok GPS snimanje ima prioritet (vidi CLAUDE.md upozorenje da
+// se analiza nagiba ne kači na rndList/GPS hot-path).
+//
+// Potpis NAMJERNO prima već izračunatu dužinu `d` umjesto da zove calcL sam —
+// calcL je O(n) kao i sam račun nagiba, pa bi potpis koštao koliko i posao koji
+// izbjegava. _renderVlakaRow tu dužinu ionako računa za prikaz. Tokom snimanja
+// se time mijenja potpis SAMO vlake koja raste (0.05 ms), ostale su pogodak u
+// kešu.
+function _vlNagib(v, d) {
+  if (!v || !v.pts || v.pts.length < 2) return null;
+  const lim = _vlNagibLimit();
+  const sig = v.pts.length + ':' + Math.round(d || 0) + ':' + lim;
+  if (v._ngC && v._ngC.sig === sig) return v._ngC.st;
+  let pts = v.pts;
+  if (!pts.some(p => (p.al || 0) !== 0)) {
+    // Nacrtana vlaka nema GPS visine. Ako je korisnik već otvarao "Profil",
+    // visine terena su preuzete i keširane (v._apiProfile) — iskoristi ih
+    // umjesto da bedž ostane prazan. Bez novog mrežnog poziva iz liste.
+    const ap = v._apiProfile;
+    pts = (ap && ap.pts && ap.alts && ap.pts.length === ap.alts.length)
+      ? ap.pts.map((p, i) => ({ la: p.la, lo: p.lo, al: ap.alts[i] }))
+      : null;
+  }
+  const st = pts ? _vlNagibStat(pts, lim) : null;
+  v._ngC = { sig, st };
+  return st;
 }
 
 function _updateSteepOverlay(v) {
@@ -19800,8 +19907,8 @@ function showVlakaOnMap(i) {
   zmV(i);
 }
 
-function _renderVlakaRow(el, v, i, depth) {
-  const d   = calcL(v.pts);
+function _renderVlakaRow(el, v, i, depth, dPre) {
+  const d   = (dPre != null) ? dPre : calcL(v.pts);
   const row = document.createElement('div');
   const isKrak = depth > 0;
   row.className = 'vrow' + (i === actI ? ' act' : '') + (isKrak ? ' vrow-krak' : '');
@@ -19831,8 +19938,9 @@ function _renderVlakaRow(el, v, i, depth) {
       roadDistHtml = `<span class="eroad">📍${fmtL(rd)} od puta</span>`;
     }
   }
-  const elevRow = (elvHtml || roadDistHtml)
-    ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}</div>` : '';
+  const nagHtml = _vlNagibHtml(v, d);
+  const elevRow = (elvHtml || roadDistHtml || nagHtml)
+    ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}${nagHtml}</div>` : '';
   const stripeStyle = isKrak ? `background:${v.color};opacity:.6` : `background:${v.color}`;
   const krakArrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
   row.innerHTML = `
@@ -19882,11 +19990,62 @@ function _renderVlakaRow(el, v, i, depth) {
   el.appendChild(row);
 }
 
+// Bedž nagiba u redu liste. Boja je iz ISTE skale (_gradeColor) kojom se vlaka
+// boji na karti, pa se "žuto u listi" i "žuto na karti" poklapaju bez učenja
+// druge legende.
+//
+// Kad vlaka prelazi limit, uz max se ispisuje i KOLIKO METARA je preko — max
+// sam po sebi ne razlikuje jednu kratku strminu (koja se rješava na licu
+// mjesta) od 200 m neprohodne dionice (koja traži drugu trasu). Metri su
+// otporniji i na GPS šum: jedan loš fiks daje par metara, ne dionicu.
+function _vlNagibHtml(v, d) {
+  const st = _vlNagib(v, d);
+  if (!st) return '';
+  const preko = st.prekoM > 0;
+  return `<span class="vnag" style="color:${_gradeColor(st.max)}" title="Najveći nagib ${st.max}%, prosjek ${st.avg}%">⛰${st.max}%</span>` +
+    (preko ? `<span class="vnag-bad">${fmtL(st.prekoM)} preko ${st.limit}%</span>` : '');
+}
+
 // Vrati badge (L/D) za krak na osnovu strana polja
 function _krakStranaBadge(strana) {
   if (strana === 'L') return `<span class="vkrak-badge-l">L</span>`;
   if (strana === 'D') return `<span class="vkrak-badge-d">D</span>`;
   return '';
+}
+
+// Traka iznad liste: izbor limita nagiba + filter "samo preko limita".
+// Namjerno se NE prikazuje kad nijedna vlaka nema visine (nacrtane bez GPS-a)
+// — prazna kontrola koja ništa ne mijenja je samo šum na malom ekranu.
+let _vlSamoStrme = false;
+function _vlNagibFilterToggle(on) { _vlSamoStrme = !!on; rndList(); }
+function _vlNagibTrakaRender(nVlaka, nPreko, prekoMUk, limit) {
+  const el = document.getElementById('vl-nagib-traka');
+  if (!el) return;
+  if (!nVlaka) { el.style.display = 'none'; _vlSamoStrme = false; return; }
+  const opts = _VL_NAGIB_LIMITI
+    .map(n => `<option value="${n}"${n === limit ? ' selected' : ''}>preko ${n}%</option>`).join('');
+  // Kad ništa ne prelazi limit, to je NAJVAŽNIJA informacija na ekranu i piše
+  // se otvoreno ("sve u granici") — prazan prostor bi se čitao kao "nije
+  // provjereno", što nije isto.
+  const sazetak = nPreko > 0
+    ? `<span class="vnt-bad">⚠ ${nPreko} ${_vlBrojVlaka(nPreko)} · ${fmtL(prekoMUk)}</span>`
+    : `<span class="vnt-ok">✓ sve u granici</span>`;
+  const filter = nPreko > 0
+    ? `<label class="vnt-f"><input type="checkbox" onchange="_vlNagibFilterToggle(this.checked)"${_vlSamoStrme ? ' checked' : ''}> samo te</label>`
+    : '';
+  el.style.display = 'flex';
+  el.innerHTML = `<span class="vnt-lbl">⛰ Nagib</span>
+    <select class="vnt-sel" onchange="_vlNagibSetLimit(this.value)" title="Limit zavisi od mehanizacije">${opts}</select>
+    ${sazetak}${filter}`;
+  if (nPreko === 0) _vlSamoStrme = false;
+}
+// 1 vlaka / 2-4 vlake / 5+ vlaka — bosanska sklonidba, isti obrazac kao
+// _poziBrojRijec u sekciji Požari.
+function _vlBrojVlaka(n) {
+  const d = n % 10, s = n % 100;
+  if (d === 1 && s !== 11) return 'vlaka';
+  if (d >= 2 && d <= 4 && (s < 12 || s > 14)) return 'vlake';
+  return 'vlaka';
 }
 
 // === LIST ===
@@ -19907,12 +20066,26 @@ function rndList() {
   const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
   document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount}k` : '');
 
+  // Dužina i nagib se računaju u JEDNOM prolazu i prosljeđuju redovima — calcL
+  // je O(n) po vlaci, a treba i zaglavlju (ukupno/gustoća) i svakom redu.
+  // Ranije je red računao svoju dužinu sam, pa bi sažetak nagiba u zaglavlju
+  // značio DRUGI prolaz kroz sve tačke pri svakom crtanju liste.
+  const dMap = new Map();
+  let totalDist = 0, nPreko = 0, prekoMUk = 0;
+  allProjVlake.forEach(v => {
+    const d = calcL(v.pts);
+    dMap.set(v, d);
+    totalDist += d;
+    const st = _vlNagib(v, d);
+    if (st && st.prekoM > 0) { nPreko++; prekoMUk += st.prekoM; }
+  });
+  const nagLimit = _vlNagibLimit();
+
   // Project header chip
   const hdr = document.getElementById('vlake-proj-hdr');
   if (hdr) {
     const akt = (_projekti||[]).find(p => p.id === _aktivniProjektId);
     if (akt) {
-      const totalDist = calcL(allProjVlake.flatMap(v => v.pts));
       const lbl = [akt.odjel, akt.gj].filter(Boolean).join(' · ') || 'Projekat';
       const _pv = _projPovrsinaHa();
       const densHtml = (_pv.ha > 0 && totalDist > 0)
@@ -19926,6 +20099,8 @@ function rndList() {
       hdr.style.display = 'none';
     }
   }
+
+  _vlNagibTrakaRender(allProjVlake.length, nPreko, prekoMUk, nagLimit);
 
   if (!hasProj && !noProjects) {
     nv.style.display = 'block';
@@ -19954,11 +20129,25 @@ function rndList() {
   function renderWithChildren(v, i, depth) {
     if (rendered.has(i)) return;
     rendered.add(i);
-    _renderVlakaRow(frag, v, i, depth);
+    _renderVlakaRow(frag, v, i, depth, dMap.get(v));
     const ch = childMap.get(v.nm);
     if (ch) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
   }
-  rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+  if (_vlSamoStrme && nPreko > 0) {
+    // Filtrirani prikaz je RAVAN (bez hijerarhije) — krak koji prelazi limit
+    // mora biti vidljiv i kad njegova matična vlaka ne prelazi. Dubina se zato
+    // izvodi iz v.kr, ne iz mjesta u stablu, da krak zadrži svoju oznaku
+    // (L/D, "završava na putu") i kad mu roditelj nije nacrtan.
+    //
+    // `i` je i ovdje STVARNI indeks u vlake[] — filtriranje ne smije pomjeriti
+    // vezu red ↔ podatak (vidi selI i tests/js/vlake-list.test.js).
+    allProjVlake
+      .filter(v => { const st = _vlNagib(v, dMap.get(v)); return st && st.prekoM > 0; })
+      .sort((a, b) => (_vlNagib(b, dMap.get(b)).max - _vlNagib(a, dMap.get(a)).max))
+      .forEach(v => _renderVlakaRow(frag, v, vlake.indexOf(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
+  } else {
+    rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+  }
   el.appendChild(frag);
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
@@ -23311,6 +23500,31 @@ chkMob(); window.addEventListener('resize',chkMob);
 // === UTILS ===
 function dst(la1,lo1,la2,lo2){const R=6371000,a=Math.sin((la2-la1)*Math.PI/360)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin((lo2-lo1)*Math.PI/360)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function calcL(pts){let s=0;for(let i=1;i<pts.length;i++)s+=dst(pts[i-1].la,pts[i-1].lo,pts[i].la,pts[i].lo);return s;}
+// Ukupna dužina MREŽE vlaka — zbir dužina POJEDINAČNIH vlaka (v3.118.0).
+//
+// Do sada se na 9 mjesta (zaglavlje liste, kartica projekta, detalji projekta,
+// SRD, Terenske statistike, lista kolega, Dnevnik radova, PDF izvještaj, email
+// sažetak) računalo `calcL(vlake.flatMap(v => v.pts))` — sve tačke svih vlaka
+// spojene u JEDAN niz, pa mjerene kao jedna neprekidna linija. calcL sabira
+// rastojanje između SVAKA DVA susjedna elementa niza, pa je između zadnje
+// tačke jedne vlake i prve tačke sljedeće ulazio LAŽAN segment — skok preko
+// pola odjela, onoliko puta koliko ima vlaka minus jedan.
+//
+// Izmjereno na realnom rasporedu (24 vlake po ~443 m raspoređene po odjelu od
+// 40 ha): tačno 10623 m, a prikazivalo se 21279 m — dakle DUPLO, i gustoća
+// mreže 532 m/ha umjesto 266 m/ha. Gustoća je stvarni šumarski pokazatelj po
+// kojem se ocjenjuje da li je mreža vlaka dovoljna, pa je greška te veličine
+// mijenjala zaključak, ne samo prikaz.
+//
+// Da je bug bio vidljiv: `_calcTerenStats` u istoj funkciji uspon/pad računa
+// "po svakoj vlaci zasebno, ne cross-vlaka" (postojeći komentar!) i prosječnu
+// dužinu preko reduce+calcL po vlaci — samo je totalLen ostao na flatMap-u.
+// Email sažetak je čak ispisivao TAČNU dužinu svake vlake pa ispod njih
+// "Ukupno" koje se sa tim spiskom nije slagalo.
+function _ukupnoVlakeM(arr) {
+  if (!arr || !arr.length) return 0;
+  return arr.reduce((s, v) => s + calcL((v && v.pts) || []), 0);
+}
 function calcElev(pts){
   let up=0,down=0;
   for(let i=1;i<pts.length;i++){
@@ -24487,10 +24701,15 @@ async function _pmNagibAnaliza() {
       const p0 = pts[i], p1 = pts[i+1];
       const hd = dst(p0.la, p0.lo, p1.la, p1.lo);
       avgGradeSum += grade * hd; avgGradeN += hd;
+      // maxGrade se ažurira IZVAN praga od 20% (v3.118.0). Ranije je bio unutar
+      // if-a, pa je vlaka čija je najstrmija dionica npr. 19% prijavljivala
+      // "Max nagib 0%" — a 0% znači ravno. Isto je vrijedilo i za projektni
+      // sažetak (maxG je maksimum tih vrijednosti), pa je cijela analiza na
+      // blagom terenu tvrdila da nagiba nema.
+      if (grade > maxGrade) maxGrade = grade;
       if (grade >= 20) {
         steepLen += hd;
         steepSegs++;
-        if (grade > maxGrade) maxGrade = grade;
       }
     }
     const pct = totalLen > 0 ? (steepLen / totalLen * 100) : 0;
@@ -25209,7 +25428,7 @@ function updProjStats() {
     return;
   }
   const projVlake = vlake.filter(v => v.projektId === _aktivniProjektId);
-  const myTotal = calcL(projVlake.flatMap(v=>v.pts));
+  const myTotal = _ukupnoVlakeM(projVlake);
   const _pv     = _projPovrsinaHa();
   const pov     = _pv.ha;
   const odjel   = getOdjel();
@@ -25311,7 +25530,7 @@ function _calcTerenStats() {
   // Broj vlaka i krakova
   const nVlaka  = pVlake.filter(v => v.kr === 0 && v.pts.length >= 2).length;
   const nKrakovi= pVlake.filter(v => v.kr >  0 && v.pts.length >= 2).length;
-  const totalLen = calcL(allPts);
+  const totalLen = _ukupnoVlakeM(pVlake);
 
   // Visine
   const alts = allPts.map(p => p.al).filter(a => a && a > 0);
@@ -25365,7 +25584,7 @@ function _calcTerenStats() {
     });
   });
   if (!allP[myIme]) allP[myIme] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
-  allP[myIme].meters = Math.round(calcL(pVlake.flatMap(v => v.pts)));
+  allP[myIme].meters = Math.round(_ukupnoVlakeM(pVlake));
 
   return { nVlaka, nKrakovi, totalLen, maxAlt, minAlt, totalUp, totalDown, avgSlope,
            avgVlakaLen, pov, gustoca, allP, myIme, hasPts };
@@ -25567,7 +25786,7 @@ function rndKolege() {
   const myIme = sbProfile ? (sbProfile.ime + ' ' + sbProfile.prezime) : getIme();
   // Moja boja identiteta — dohvati iz sbProfile.boja ili fallback
   const myColor = sbProfile?.boja || '#4ade80';
-  const myM = Math.round(calcL(vlake.flatMap(v => v.pts)));
+  const myM = Math.round(_ukupnoVlakeM(vlake));
 
   const rows = [`<div class="col-vrow">
     <div class="col-vdot" style="background:${myColor}"></div>
@@ -25627,7 +25846,7 @@ function rndKolegeVlakeList() {
 function logDan() {
   const date=todayStr(), ime=getIme(), odjel=getOdjel();
   const logVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
-  const totalM=Math.round(calcL(logVlake.flatMap(v=>v.pts)));
+  const totalM=Math.round(_ukupnoVlakeM(logVlake));
   const vSnap=logVlake.map(v=>({nm:v.nm, m:Math.round(calcL(v.pts))}));
   if (logVlake.length===0) { showToast('⚠ Nema vlaka za evidenciju!'); return; }
   // Timing: ako je snimanje trenutno aktivno, dodaj tekući segment
@@ -25752,7 +25971,7 @@ function exportProjektPDF() {
   const pov       = parseFloat(proj.povrsina) || 0;
   const myIme     = getIme();
   const pdfVlake  = vlake.filter(v => v.projektId === _aktivniProjektId);
-  const myTotalM  = Math.round(calcL(pdfVlake.flatMap(v => v.pts)));
+  const myTotalM  = Math.round(_ukupnoVlakeM(pdfVlake));
 
   // ── rekap po projektantu (iz loga + live) ──
   const byProj = {};
@@ -26048,7 +26267,7 @@ function kmlNaMail() {
   const body=encodeURIComponent(
     'Projektant: '+getIme()+'\nOdjel: '+odjel+(sum?'\nŠumarija: '+sum:'')+
     '\nDatum: '+(document.getElementById('p-datum').value||todayStr())+
-    '\n\nVlake:\n'+popis+'\n\nUkupno: '+fmtL(Math.round(calcL(vlake.flatMap(v=>v.pts))))+
+    '\n\nVlake:\n'+popis+'\n\nUkupno: '+fmtL(Math.round(_ukupnoVlakeM(vlake)))+
     '\n\n--- KML fajl priložite ručno (preuzmite dugmetom ispod). ---'
   );
   window.location.href='mailto:?subject='+subj+'&body='+body;
