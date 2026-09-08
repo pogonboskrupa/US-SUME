@@ -1127,10 +1127,13 @@ function makeOpoz() {
 }
 const OPOZ = makeOpoz();
 const haOf = f => _turf.area(f) / 10000;
-// Površina koju bi VRATIO convex hull — referentna vrijednost za poređenje
+// Površina koju bi VRATIO convex hull — referentna vrijednost za poređenje.
+// Bafer 0.1375 km (137.5 m) je ISTI kao stvarni _poziOpozGeom (v3.119.3:
+// pola VIIRS piksela 187.5m umanjeno za 50m terenske korekcije) — mora
+// pratiti tu vrijednost da poređenje concave-vs-convex ostane fer.
 function convexHa(pts) {
   const fc = _turf.featureCollection(pts.map(p => _turf.point([p.lo, p.la])));
-  return haOf(_turf.buffer(_turf.convex(fc), 0.1875, { units: 'kilometers' }));
+  return haOf(_turf.buffer(_turf.convex(fc), 0.1375, { units: 'kilometers' }));
 }
 // Požar u obliku LUKA — front koji obilazi vrh brda; unutrašnjost luka NIJE gorjela
 function lukPts(dtIso) {
@@ -1189,13 +1192,48 @@ t('jedna detekcija: površina je ~jedan senzorski piksel, ne nula i ne izmišlje
   const g = OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]);
   assert.ok(g, 'jedna detekcija i dalje pokriva površinu');
   const ha = haOf(g);
-  assert.ok(ha > 5 && ha < 20, 'očekivano ~11 ha (krug r=187 m), dobijeno ' + ha.toFixed(1));
+  // v3.119.3: bafer 137.5m (bilo 187.5m) → ~5.9 ha (bilo ~11).
+  assert.ok(ha > 4 && ha < 10, 'očekivano ~5.9 ha (krug r=137.5 m), dobijeno ' + ha.toFixed(1));
 });
 
 t('MODIS piksel (1 km) daje veću površinu od VIIRS piksela (375 m)', () => {
   const v = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]));
   const m = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 1000, dt: '2026-09-05T00:00:00Z' }]));
   assert.ok(m > v * 3, 'MODIS ' + m.toFixed(0) + ' ha vs VIIRS ' + v.toFixed(0) + ' ha');
+});
+
+// v3.119.3: terenska korekcija bafera — "malo si previše uzeo, možda 50m
+// više nego što je na terenu" (VIIRS). Nominalnih pola-piksela (187.5m) je
+// NASA-in objavljeni nominalni pixel size, ali stvarno geolociranje
+// pojedinačnog piksela ima svoju grešku — terensko mjerenje dobija prednost.
+// Umanjenje je UNIFORMNO (ne samo VIIRS), jer formula ne pravi razliku po
+// senzoru — test to eksplicitno provjerava za oba, da buduća izmjena ne
+// vrati stari MODIS bafer "iz navike" dok mijenja samo VIIRS granu.
+console.log('Terenska korekcija bafera — pola piksela UMANJENO za 50m (v3.119.3):');
+
+t('VIIRS: poluprečnik je TAČNO 137.5m (187.5 − 50), ne nominalnih 187.5m', () => {
+  const g = OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]);
+  const ha = haOf(g);
+  const ocekivano = Math.PI * 137.5 * 137.5 / 10000;  // krug r=137.5m u ha
+  assert.ok(Math.abs(ha - ocekivano) / ocekivano < 0.02,
+    'očekivano ' + ocekivano.toFixed(2) + ' ha (r=137.5m), dobijeno ' + ha.toFixed(2));
+});
+
+t('MODIS: ISTA korekcija od 50m primijenjena uniformno (500 − 50 = 450m), ne samo na VIIRS', () => {
+  const g = OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 1000, dt: '2026-09-05T00:00:00Z' }]);
+  const ha = haOf(g);
+  const ocekivano = Math.PI * 450 * 450 / 10000;  // krug r=450m u ha
+  assert.ok(Math.abs(ha - ocekivano) / ocekivano < 0.02,
+    'očekivano ' + ocekivano.toFixed(2) + ' ha (r=450m), dobijeno ' + ha.toFixed(2));
+});
+
+t('korekcija ne smije dati negativan poluprečnik za hipotetički sitan piksel (< 100m) — ne baca', () => {
+  // rez=60 → rezM/2-50 = -20, Math.max(0,...) ga vrati na 0. Bafer 0 znači
+  // stvarno nulta površina (turf.buffer vraća praznu FeatureCollection za
+  // radius 0), pa _poziOpozGeom ISPRAVNO vrati null umjesto da izmisli
+  // geometriju — bitno je da NE BACA (negativan radius bi turf.buffer bacio).
+  // Nedostižno u stvarnoj upotrebi (jedini rez u pipeline-u su 375/1000).
+  assert.doesNotThrow(() => OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 60, dt: '2026-09-05T00:00:00Z' }]));
 });
 
 t('požar koji gori duže: izdvaja se dio koji je VEĆ izgorio (starije od 6 h)', () => {

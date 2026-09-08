@@ -989,6 +989,38 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - 5 novih testova u `tests/js/pozari.test.js` (177 ukupno): oba sloja →
     samo poligon legenda; samo tačke → legenda tačaka; samo poligoni → poligon
     legenda; nijedan → prazno; separator prema Ekspoziciji/N.V. i dalje radi.
+- **Bafer opožarene projekcije umanjen za terensku korekciju od 50m
+  (v3.119.3)**: terenska prijava "malo si previše uzeo, možda 50m više nego
+  što je na terenu" (VIIRS, potvrđeno preko `AskUserQuestion`). Bafer u
+  `_poziOpozGeom` je od v3.113.0 bio TAČNO pola nominalne senzorske rezolucije
+  (187.5m za VIIRS 375m piksel, 500m za MODIS 1km piksel) — NASA-in objavljeni
+  nominalni pixel size, teorijski opravdan, ali stvarno geolociranje
+  pojedinačnog piksela ima svoju grešku. Korisnik je terensko mjerenje
+  stavio iznad nominalne specifikacije, pa je poluprečnik smanjen za 50m:
+  `bufM = Math.max(0, rezM/2 - 50)` — VIIRS 187.5m→137.5m (11.0 ha→5.9 ha za
+  N=1), MODIS 500m→450m (78.2 ha→63.4 ha).
+  - **Korekcija je UNIFORMNA, ne samo za VIIRS** — korisnik je potvrdio da je
+    POREĐENJE bilo za VIIRS, ali pitanje "za koliko smanjiti" je odgovoreno
+    generički ("smanji poluprečnik za ~50m"), a formula ne pravi razliku po
+    senzoru. Namjerna odluka, ne previd — test eksplicitno provjerava OBA
+    senzora da buduća izmjena ne vrati stari MODIS bafer "iz navike" dok
+    dira samo VIIRS granu.
+  - **`Math.max(0, ...)` je odbrana od NEGATIVNOG poluprečnika**, ne garancija
+    da će geometrija uvijek postojati — hipotetički senzor sa rezolucijom
+    ispod 100m bi dao bafer 0, a `turf.buffer` sa radius 0 vraća PRAZNU
+    FeatureCollection (ne baca grešku, ne pravi degenerisanu tačku-geometriju),
+    pa `_poziOpozGeom` u tom slučaju ISPRAVNO vrati `null` (nulta površina se
+    ne izmišlja). Nedostižno u stvarnoj upotrebi — jedini `rez` u pipeline-u
+    su 375 (VIIRS) i 1000 (MODIS), oba daju pozitivan bafer i poslije umanjenja.
+  - Ilustrativne brojke u komentaru iznad `_poziOpozGeom` (poređenje concave
+    vs. convex hull na lučnom požaru, originalno iz v3.113.0: "1145 ha
+    umjesto ~104 ha") ažurirane na nove vrijednosti sa umanjenim baferom
+    (~927 ha vs ~125 ha) — i test `convexHa` pomoćna funkcija (koristila je
+    NEZAVISAN hardkodovan bafer 0.1875 km za poređenje) prebačena na isti
+    0.1375 km kao stvarni kod, da poređenje concave-vs-convex ostane fer.
+  - 3 nova testa u `tests/js/pozari.test.js` (180 ukupno): tačan poluprečnik
+    137.5m za VIIRS i 450m za MODIS (ne stari 187.5/500), i da hipotetički
+    bafer 0 ne baca grešku (vraća `null`, ne izmišljenu geometriju).
 
 ## Sekcija Vlake
 
