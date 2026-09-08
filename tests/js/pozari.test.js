@@ -1921,6 +1921,143 @@ t('nijedan nov → nema trake (ne prikazuje se "0 novih")', () => {
   assert.strictEqual(makeSvj({ evts: [] })._poziNoviHtml(), '');
 });
 
+// ── v3.119.0: "Ova godina" (uživo, GFW) i "Zadnjih 5 godina" (lokalna
+// istorija) ──────────────────────────────────────────────────────────────
+// Zahtjev: "prati požare za duži period, tj. u tekućoj godini... i dodatno da
+// se pamti za zadnjih 5 godina". Dva potpuno različita mehanizma:
+//   - _povGodUrl gradi JEDAN GFW SQL upit sa širokim datumom (od 1. januara)
+//     umjesto lančanja desetina FIRMS zahtjeva (koji imaju tvrd max od par
+//     dana po zahtjevu — vidi CLAUDE.md "Paralelno NIJE uvijek brže").
+//   - _povIstZabiljezi PASIVNO snima svaku grupu koju _poziLoad označi kao
+//     'nov' u lokalnu istoriju, obrezanu na 5 godina — NIJE retroaktivni
+//     dohvat, "pamti" znači doslovno to.
+console.log('"Ova godina" i "Zadnjih 5 godina" (v3.119.0):');
+
+const SRC_POV_GOD = extractFn('_povGodUrl');
+const povGodApi = new Function('_POZ_RADIUS_KM', '_POV_GOD_LIMIT', SRC_POV_GOD + '\nreturn { _povGodUrl };')(100, 10000);
+
+t('_povGodUrl: SQL sadrži 1. januar TEKUĆE godine, ne fiksan broj dana unazad', () => {
+  const url = povGodApi._povGodUrl({ la: 44.9, lo: 16.1 });
+  const godina = new Date().getUTCFullYear();
+  const dekodirano = decodeURIComponent(url);
+  assert.ok(dekodirano.includes("alert__date >= '" + godina + "-01-01'"),
+    'URL mora tražiti od 1.1.' + godina + ': ' + dekodirano);
+  assert.ok(url.startsWith('https://data-api.globalforestwatch.org/dataset/nasa_viirs_fire_alerts/'),
+    'mora ići na ISTI GFW dataset kao požari (nasa_viirs_fire_alerts)');
+});
+
+t('_povGodUrl: bbox prati _POZ_RADIUS_KM, ne fiksnu vrijednost', () => {
+  const uzak = new Function('_POZ_RADIUS_KM', '_POV_GOD_LIMIT', SRC_POV_GOD + '\nreturn { _povGodUrl };')(10, 10000)._povGodUrl({ la:0, lo:0 });
+  const sirok = new Function('_POZ_RADIUS_KM', '_POV_GOD_LIMIT', SRC_POV_GOD + '\nreturn { _povGodUrl };')(100, 10000)._povGodUrl({ la:0, lo:0 });
+  const raspon = u => { const m = decodeURIComponent(u).match(/latitude <= ([\d.]+)/); return parseFloat(m[1]); };
+  assert.ok(raspon(sirok) > raspon(uzak) * 5, 'širi radijus mora dati širi bbox');
+});
+
+t('_povBrojRijecPozar: 1 požar, 2-4 požara, 5+ požara — BEZ "aktivan" (nije uživo)', () => {
+  const F = new Function(extractFn('_povBrojRijecPozar') + '\nreturn { _povBrojRijecPozar };')();
+  assert.strictEqual(F._povBrojRijecPozar(1), '1 požar');
+  assert.strictEqual(F._povBrojRijecPozar(3), '3 požara');
+  assert.strictEqual(F._povBrojRijecPozar(11), '11 požara');
+  assert.ok(!/aktivan/.test(F._povBrojRijecPozar(1)), 'istorijski pregled ne smije tvrditi da požar još gori');
+});
+
+// ── _povIstZabiljezi / _povIstUcitaj / _povIstSacuvaj — lokalna istorija ────
+const SRC_IST = [
+  extractFn('_povIstUcitaj'),
+  extractFn('_povIstSacuvaj'),
+  extractFn('_povIstZabiljezi'),
+  extractFn('_povIstGodine'),
+].join('\n');
+function makeIst(initial) {
+  const store = { tvlake_pozari_istorija: initial !== undefined ? JSON.stringify(initial) : undefined };
+  const localStorage = {
+    getItem: k => (k in store && store[k] !== undefined ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); }
+  };
+  const keys = ['localStorage', '_POV_IST_KEY', '_POV_IST_GODINA_MS'];
+  const fn = new Function(...keys, SRC_IST + '\nreturn { _povIstUcitaj, _povIstSacuvaj, _povIstZabiljezi, _povIstGodine };');
+  return { api: fn(localStorage, 'tvlake_pozari_istorija', 5 * 365.25 * 86400000), store };
+}
+
+t('_povIstZabiljezi: bilježi SAMO grupe označene kao nov (ne sve viđeno)', () => {
+  const { api, store } = makeIst([]);
+  api._povIstZabiljezi([
+    { la:44.9, lo:16.1, zadnji:Date.now(), nov:true },
+    { la:45.0, lo:16.2, zadnji:Date.now(), nov:false },
+  ]);
+  const arr = JSON.parse(store.tvlake_pozari_istorija);
+  assert.strictEqual(arr.length, 1, 'stara (nov:false) grupa se ne smije upisati');
+  assert.strictEqual(arr[0].la, 44.9);
+});
+
+t('_povIstZabiljezi: bez novih grupa ne dira postojeću istoriju', () => {
+  const { api, store } = makeIst([{ la:1, lo:1, dt:new Date().toISOString() }]);
+  api._povIstZabiljezi([{ la:2, lo:2, zadnji:Date.now(), nov:false }]);
+  assert.strictEqual(JSON.parse(store.tvlake_pozari_istorija).length, 1, 'nepotreban upis bez novih');
+});
+
+t('_povIstZabiljezi: prazan/nedostajući poziv ne baca (bez evts, bez liste)', () => {
+  const { api } = makeIst([]);
+  assert.doesNotThrow(() => api._povIstZabiljezi(null));
+  assert.doesNotThrow(() => api._povIstZabiljezi([]));
+});
+
+t('_povIstSacuvaj: briše zapise STARIJE od 5 godina, čuva novije', () => {
+  const staro = new Date(Date.now() - 6 * 365.25 * 86400000).toISOString();  // 6 god — mora nestati
+  const skoro = new Date(Date.now() - 4 * 365.25 * 86400000).toISOString();  // 4 god — mora ostati
+  const { api, store } = makeIst([]);
+  api._povIstSacuvaj([{ la:1, lo:1, dt:staro }, { la:2, lo:2, dt:skoro }]);
+  const arr = JSON.parse(store.tvlake_pozari_istorija);
+  assert.strictEqual(arr.length, 1, 'samo zapis mlađi od 5 godina smije preživjeti');
+  assert.strictEqual(arr[0].la, 2);
+});
+
+t('_povIstSacuvaj: zapis bez upotrebljivog datuma se odbacuje, ne ruši ostatak', () => {
+  const { api, store } = makeIst([]);
+  api._povIstSacuvaj([{ la:1, lo:1, dt:'nije-datum' }, { la:2, lo:2, dt:new Date().toISOString() }]);
+  const arr = JSON.parse(store.tvlake_pozari_istorija);
+  assert.strictEqual(arr.length, 1);
+  assert.strictEqual(arr[0].la, 2);
+});
+
+t('_povIstUcitaj: korumpiran JSON ili nešto što nije niz vraća prazno, ne baca', () => {
+  const { api: a1 } = makeIst(undefined);
+  assert.deepStrictEqual(a1._povIstUcitaj(), []);
+  const store2 = { tvlake_pozari_istorija: '{"nije":"niz"}' };
+  const ls2 = { getItem:k=>store2[k]??null, setItem(){} };
+  const fn2 = new Function('localStorage','_POV_IST_KEY','_POV_IST_GODINA_MS', SRC_IST + '\nreturn {_povIstUcitaj};');
+  assert.deepStrictEqual(fn2(ls2,'tvlake_pozari_istorija',1)._povIstUcitaj(), []);
+  const store3 = { tvlake_pozari_istorija: 'ovo nije json {{{' };
+  const ls3 = { getItem:k=>store3[k]??null, setItem(){} };
+  assert.deepStrictEqual(fn2(ls3,'tvlake_pozari_istorija',1)._povIstUcitaj(), []);
+});
+
+t('_povIstGodine: izvlači SVE godine iz tačaka grupe, sortirano, bez duplikata', () => {
+  const { api } = makeIst([]);
+  const g = { pts: [
+    { dt:'2022-05-01T00:00:00Z' }, { dt:'2024-06-01T00:00:00Z' },
+    { dt:'2022-08-01T00:00:00Z' }, { dt:'neispravno' }
+  ] };
+  assert.deepStrictEqual(api._povIstGodine(g), [2022, 2024]);
+});
+
+t('_povIstGodine: prazna/nedostajuća lista tačaka → prazan niz, ne baca', () => {
+  const { api } = makeIst([]);
+  assert.deepStrictEqual(api._povIstGodine({}), []);
+  assert.deepStrictEqual(api._povIstGodine({ pts: [] }), []);
+});
+
+t('istorija kroz VIŠE ciklusa zabilježi po jednom zapisu za svaku novu grupu', () => {
+  // Simulira _poziLoad koji se zove periodično: prvi ciklus grupa G1 je nov,
+  // drugi ciklus JOŠ UVIJEK aktivna G1 nije nov (već viđena), treći ciklus
+  // stiže nova G2. Istorija mora imati TAČNO 2 zapisa (G1 jednom, G2 jednom).
+  const { api, store } = makeIst([]);
+  const t0 = Date.now();
+  api._povIstZabiljezi([{ la:44.9, lo:16.1, zadnji:t0, nov:true }]);
+  api._povIstZabiljezi([{ la:44.9, lo:16.1, zadnji:t0 + 1000, nov:false }]);  // isti požar, više NIJE nov
+  api._povIstZabiljezi([{ la:45.5, lo:17.0, zadnji:t0 + 2000, nov:true }]);
+  assert.strictEqual(JSON.parse(store.tvlake_pozari_istorija).length, 2);
+});
 
 (async () => {
   for (const a of _async) {

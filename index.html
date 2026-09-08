@@ -1874,6 +1874,43 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 6px rgba(0,0,0,0.6);
 }
 .sje-mk-mala { width:6px; height:6px; margin:2px; border-radius:2px; border:1px solid rgba(255,255,255,0.85); opacity:0.75; }
+/* "Ova godina" (v3.119.0) — krug kao požar (ista vrsta podatka, samo širi
+   period), ali PLAVO da se na prvi pogled ne pobrka sa "gori sada" crveno/
+   narandžastom paletom aktivnih detekcija. */
+.pov-mk {
+  width:12px; height:12px; margin:4px; border-radius:50%;
+  background:#3b82f6; border:1.5px solid rgba(255,255,255,0.85);
+  box-shadow:0 0 4px rgba(0,0,0,0.5);
+}
+.pov-mk-grupa {
+  width:22px; height:22px; margin:4px; border-radius:50%;
+  background:#3b82f6; border:2px solid rgba(255,255,255,0.85);
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:800; color:#fff;
+  text-shadow:0 1px 2px rgba(0,0,0,0.8);
+  box-shadow:0 0 4px rgba(0,0,0,0.5);
+}
+/* "Zadnjih 5 godina" (v3.119.0) — romb (rotiran kvadrat), TREĆI oblik pored
+   kruga (požar/ova godina) i kvadrata (sječa) — kad su sve tri uključene
+   istovremeno mora se na prvi pogled znati koja je koja. Ljubičasta boja,
+   namjerno DALEKO od crveno/narandžaste "aktivno gori" palete. */
+.pov-ist-mk {
+  width:10px; height:10px; margin:5px; transform:rotate(45deg);
+  background:#a78bfa; border:1.5px solid rgba(255,255,255,0.85);
+  box-shadow:0 0 4px rgba(0,0,0,0.5);
+}
+.pov-ist-mk-grupa {
+  width:22px; height:22px; margin:4px; transform:rotate(45deg);
+  background:#a78bfa; border:2px solid rgba(255,255,255,0.85);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 4px rgba(0,0,0,0.5);
+}
+/* Broj unutar romba mora ostati USPRAVAN — kontra-rotacija poništava rotaciju
+   roditelja koja daje sam oblik romba. */
+.pov-ist-mk-grupa span {
+  display:block; transform:rotate(-45deg);
+  font-size:10px; font-weight:800; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.8);
+}
 /* Prsten pulsa prati boju najsvježije trake markera (v3.117.2: #fdba74,
    ranije #f97316 uz v3.113.3 paletu) — crveni/tamniji prsten oko svjetlijeg
    markera bi izgledao kao druga kategorija, a nije. */
@@ -4931,7 +4968,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.118.1';
+const APP_VER = 'v3.119.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5878,6 +5915,18 @@ function _startupRestore() {
       if (localStorage.getItem(_SJE_ON_KEY) !== '1') return;
       _sjeOn = true;
       if (navigator.onLine) _sjeLoad(true);
+    });
+    // "Ova godina" (uživo, treba mrežu) i "Zadnjih 5 godina" (čisto lokalno,
+    // radi i offline — _povIstPrikazi samo čita localStorage) (v3.119.0).
+    korak('povGod', () => {
+      if (localStorage.getItem(_POV_GOD_ON_KEY) !== '1') return;
+      _povGodOn = true;
+      if (navigator.onLine) _povGodLoad(true);
+    });
+    korak('povIst', () => {
+      if (localStorage.getItem(_POV_IST_ON_KEY) !== '1') return;
+      _povIstOn = true;
+      _povIstPrikazi();
     });
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
     // CIJELI Cache Storage/IDB (sve offline pločice i karte odjednom). Uz persist()
@@ -13141,6 +13190,11 @@ async function _poziLoad(tiho) {
     }
     _poziEvts = _poziOznaciNove(_poziGrupeBlizu(_poziGrupisi(_poziPts), ref));
     _poziRender();
+    // "Zadnjih 5 godina" (v3.119.0) — pasivno bilježenje, RADI BEZ OBZIRA na to
+    // da li je taj prekidač uključen. Snima SAMO grupe koje su baš OVDJE prvi
+    // put označene kao 'nov' (jedini pouzdan trenutak "sad sam je prvi put
+    // vidio" — vidi napomenu u _povIstZabiljezi).
+    try { _povIstZabiljezi(_poziEvts); } catch(e) {}
     const s = _poziSazetak();
     _poziStatusSet(s.kratko);
     if (!tiho) showToast(s.toast);
@@ -14628,6 +14682,339 @@ function _poziPrijavi() {
   switchTab('karta');
 }
 
+// ── Bosanska množina: N požar/požara, bez pridjeva "aktivan" (v3.119.0) ────
+// _poziBrojRijecPozar postoji već (v3.104.0), ali uvijek kaže "AKTIVAN požar"
+// — tačno za trenutne detekcije, POGREŠNO za istorijski pregled (požar iz
+// januara odavno nije "aktivan"). Zaseban helper dijele "Ova godina" i
+// "Zadnjih 5 godina" ispod.
+function _povBrojRijecPozar(n) {
+  const d1 = n % 10, d2 = n % 100;
+  if (d1 === 1 && d2 !== 11) return n + ' požar';
+  return n + ' požara';
+}
+
+// ── "Ova godina" — cijela tekuća godina, uživo (v3.119.0) ──────────────────
+// Zahtjev: "prati požare za duži period, tj. u tekućoj godini". FIRMS arhivski
+// CSV-ovi i Area API imaju TVRDU granicu (fiksni 24h/48h/7d fajlovi za arhivu,
+// day_range za Area API) — nijedan ne može vratiti "od 1. januara" u jednom
+// upitu, a lančanje desetina zahtjeva bi na terenskoj vezi vjerovatno propalo
+// (vidi CLAUDE.md "Paralelno NIJE uvijek brže"). GFW-ov Data API NEMA taj
+// limit: isti SQL upit koji već koristi Sječa (v3.107.0) prima proizvoljan
+// datum u WHERE klauzuli, pa "cijela godina" znači SAMO širi datum u ISTOM
+// upitu, bez ijednog dodatnog zahtjeva. Zato ovaj prikaz radi ISKLJUČIVO
+// preko GFW-a (isti ključ kao Sječa) — FIRMS arhiva/Area API fizički ne mogu
+// odgovoriti na ovaj upit, pa nema smisla probati ih kao rezervu.
+const _POV_GOD_ON_KEY    = 'tvlake_pozari_god_on';
+const _POV_GOD_CACHE_KEY = 'tvlake_pozari_god_cache';
+const _POV_GOD_LIMIT     = 10000;   // vidi napomenu u _povGodSazetak o "trunciran"
+
+let _povGodPts  = [];
+let _povGodEvts = [];
+let _povGodLayer = null;
+let _povGodMeta  = null;
+let _povGodOn    = false;
+let _povGodBusy  = false;
+
+function _povGodUrl(ref) {
+  const pocetakGodine = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+  const dLat = _POZ_RADIUS_KM / 111;
+  const dLon = _POZ_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
+  const sql = 'SELECT longitude, latitude, alert__date, alert__time_utc, confidence__cat FROM results'
+    + " WHERE alert__date >= '" + pocetakGodine + "'"
+    + ' AND latitude >= '  + (ref.la - dLat).toFixed(3) + ' AND latitude <= '  + (ref.la + dLat).toFixed(3)
+    + ' AND longitude >= ' + (ref.lo - dLon).toFixed(3) + ' AND longitude <= ' + (ref.lo + dLon).toFixed(3)
+    + ' LIMIT ' + _POV_GOD_LIMIT;
+  return 'https://data-api.globalforestwatch.org/dataset/nasa_viirs_fire_alerts/latest/query/json?sql='
+    + encodeURIComponent(sql);
+}
+
+function _povGodOnStanje() { return localStorage.getItem(_POV_GOD_ON_KEY) === '1'; }
+function _povGodToggle(on) {
+  _povGodOn = on;
+  try { localStorage.setItem(_POV_GOD_ON_KEY, on ? '1' : '0'); } catch(e) {}
+  if (!on) {
+    if (_povGodLayer) { try { map.removeLayer(_povGodLayer); } catch(e) {} }
+    _poziRenderPanel();
+    return;
+  }
+  if (_povGodLayer) _povGodLayer.addTo(map);
+  if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
+  _povGodLoad(false);
+}
+
+async function _povGodLoad(tiho) {
+  if (_povGodBusy) return;
+  const kljuc = _poziGfwKljuc();
+  if (!kljuc) {
+    _povGodMeta = { greska: 'nema-kljuca' };
+    _poziRenderPanel();
+    return;
+  }
+  _povGodBusy = true;
+  _poziRenderPanel();
+  try {
+    const ref = _poziRefTacka();
+    // Timeout duži nego Sječin (25s) — puna godina je znatno veći odgovor od
+    // 30-90-dnevnog prozora, na sporoj vezi treba više vremena da stigne.
+    const r = await _poziDohvatiJedan('GFW cijela godina', _povGodUrl(ref), 35000,
+      { headers:{ 'x-api-key': kljuc }, parser:_poziParseGfwJson, provjera:/"data"\s*:/ });
+    if (r.ok) {
+      _povGodPts = _poziFilterBlizu(r.pts, ref);
+      _povGodMeta = { dohvacenoMs:Date.now(), ukupno:r.pts.length, refGps:ref.gps,
+                      trunciran: r.pts.length >= _POV_GOD_LIMIT };
+      try {
+        localStorage.setItem(_POV_GOD_CACHE_KEY, JSON.stringify({ ts:Date.now(),
+          pts: _povGodPts.slice(0, 3000).map(p => ({ la:p.la, lo:p.lo, dt:p.dt, sat:p.sat, conf:p.conf, rez:p.rez })) }));
+      } catch(e) {}
+    } else {
+      let c = null;
+      try { c = JSON.parse(localStorage.getItem(_POV_GOD_CACHE_KEY)); } catch(e) {}
+      if (!c) {
+        _povGodMeta = { greska: r.greska };
+        _povGodPts = []; _povGodEvts = [];
+        _povGodRender();
+        if (!tiho) _dlgConfirm('Detekcije za tekuću godinu nisu dostupne.\n\n' + r.greska + '\n\n' + _poziSavjet(r.greska),
+          { title:'📅 Ova godina', okLabel:'U redu' });
+        return;
+      }
+      _povGodPts = _poziFilterBlizu(c.pts || [], ref);
+      _povGodMeta = { dohvacenoMs:c.ts, ukupno:(c.pts||[]).length, kes:true, refGps:ref.gps };
+    }
+    _povGodEvts = _poziGrupeBlizu(_poziGrupisi(_povGodPts), ref);
+    _povGodRender();
+    _poziRenderPanel();
+  } finally {
+    _povGodBusy = false;
+  }
+}
+
+function _povGodRender() {
+  if (_povGodLayer) { try { map.removeLayer(_povGodLayer); } catch(e) {} }
+  _povGodLayer = L.layerGroup([], { pane:'pozariPane' });
+  (_povGodEvts || []).forEach(g => {
+    const mk = L.marker([g.la, g.lo], { pane:'pozariPane', zIndexOffset:400, icon: L.divIcon({
+      className:'', iconSize: g.broj > 1 ? [22,22] : [12,12], iconAnchor: g.broj > 1 ? [11,11] : [6,6],
+      html: g.broj > 1 ? `<div class="pov-mk-grupa">${g.broj}</div>` : `<div class="pov-mk"></div>` }) });
+    mk.bindPopup(_povGodPopupHtml(g), { maxWidth:280, className:'kml-info-popup' });
+    mk.addTo(_povGodLayer);
+    g._mk = mk;
+  });
+  if (_povGodOn) _povGodLayer.addTo(map);
+}
+
+function _povGodPopupHtml(g) {
+  const ref = _poziRefTacka();
+  const d = dst(ref.la, ref.lo, g.la, g.lo);
+  const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
+  const dat = t => isFinite(t) ? new Date(t).toLocaleDateString('bs-BA', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—';
+  const red = (l, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:11px;">
+    <span style="color:#94a3b8;">${l}</span><span style="color:#e2e8f0;text-align:right;">${v}</span></div>`;
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:210px;">
+    <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:6px;">📅 Požar u ${new Date().getFullYear()}.</div>
+    ${red('Udaljenost', `<b style="color:#93c5fd;">${fmtL(d)}</b> ${smjer}`)}
+    ${red('Prvi put viđen', dat(g.prvi))}
+    ${red('Zadnji put viđen', dat(g.zadnji))}
+    ${red('Detekcija', String(g.broj))}
+    <div style="font-size:10px;color:#475569;margin-top:8px;line-height:1.4;">
+      Pregled cijele godine — ne prati razvoj uživo (bez trake starosti, vjetra ni prognoze).
+    </div>
+  </div>`;
+}
+
+function _povGodZoom(i) {
+  const g = _povGodEvts[i];
+  if (!g) return;
+  switchTab('karta');
+  setTimeout(() => {
+    map.setView([g.la, g.lo], Math.max(map.getZoom(), g.spanM > 1000 ? 12 : 14));
+    if (g._mk) setTimeout(() => g._mk.openPopup(), 250);
+  }, 80);
+}
+
+// Sažetak za red iznad checkbox-a — vidljiv i kad korisnik NIJE otvorio listu.
+function _povGodSazetak() {
+  const m = _povGodMeta || {};
+  if (m.greska === 'nema-kljuca') return '— treba GFW ključ (kartica 🛰 Detekcija sa satelita)';
+  if (m.greska) return '❌ ' + m.greska;
+  const kes = m.kes ? ' · iz keša' : '';
+  // trunciran = LIMIT je dostignut, dakle STVARNO ima ih još — reci to umjesto
+  // da tiho pokažeš samo prvih 10000 kao da je to sve.
+  const trunc = m.trunciran ? ' · ⚠ ima ih još, prikazano prvih ' + _POV_GOD_LIMIT + ' detekcija' : '';
+  if (!_povGodEvts.length) return '✓ nema evidentiranih ove godine' + kes;
+  return '📅 ' + _povBrojRijecPozar(_povGodEvts.length) + ' ove godine' + kes + trunc;
+}
+
+function _povGodListaHtml() {
+  const m = _povGodMeta || {};
+  if (m.greska === 'nema-kljuca') {
+    return `<div style="font-size:12px;color:#94a3b8;line-height:1.6;padding:4px 0;">
+      ⚠ Treba <b style="color:#e2e8f0;">besplatan Global Forest Watch ključ</b> — isti kao za Sječu.
+      Unesi ga u kartici <b style="color:#e2e8f0;">🛰 Detekcija sa satelita</b> (polje "GFW API ključ")
+      pa uključi prekidač ponovo.</div>`;
+  }
+  if (m.greska) return `<div style="font-size:12px;color:#f87171;line-height:1.5;padding:4px 0;">❌ ${_escHtml(m.greska)}</div>`;
+  if (!_povGodEvts.length) return `<div style="font-size:12px;color:#4ade80;padding:4px 0;">✓ Nema evidentiranih požara ove godine u krugu ${_POZ_RADIUS_KM} km.</div>`;
+  const ref = _poziRefTacka();
+  const redovi = _povGodEvts.slice(0, 12).map((g, i) => {
+    const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
+    const dat = isFinite(g.zadnji) ? new Date(g.zadnji).toLocaleDateString('bs-BA', { day:'2-digit', month:'2-digit' }) : '—';
+    return `<div onclick="_povGodZoom(${i})" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1e293b;cursor:pointer;">
+      <span style="width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0;"></span>
+      <span style="flex:1;min-width:0;">
+        <span style="font-size:12px;color:#e2e8f0;">${fmtL(g.d)} <span style="color:#64748b;">${smjer}</span></span>
+        <div style="font-size:10px;color:#64748b;">${g.broj} det. · zadnji put ${dat}</div>
+      </span>
+    </div>`;
+  }).join('');
+  const ostatak = _povGodEvts.length > 12
+    ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${_povGodEvts.length - 12}</div>` : '';
+  return redovi + ostatak;
+}
+
+// ── "Zadnjih 5 godina" — lokalna istorija na telefonu (v3.119.0) ───────────
+// Uživo dohvat 5 godina unazad NIJE realan istim putem kao "Ova godina" —
+// upit na tako širok period i radijus vraća ogromnu količinu redova
+// (nepouzdano na terenskoj vezi). Umjesto "dohvati unazad", app TIHO PAMTI
+// svaki NOV požar koji sam vidi kroz redovno osvježavanje (_poziLoad, isti
+// mehanizam koji već postoji za 24h/48h/7d, vidi _povIstZabiljezi ispod) —
+// lokalna baza raste organski dok app radi, obrezana na 5 godina. NIJE
+// retroaktivno: uključen danas, prazan je za period prije danas i puni se OD
+// SADA nadalje. "Pamti" znači baš to, ne "izmišlja prošlost".
+const _POV_IST_ON_KEY    = 'tvlake_pozari_ist_on';
+const _POV_IST_KEY       = 'tvlake_pozari_istorija';
+const _POV_IST_GODINA_MS = 5 * 365.25 * 86400000;
+
+let _povIstEvts  = [];
+let _povIstLayer = null;
+let _povIstOn    = false;
+
+function _povIstUcitaj() {
+  let arr;
+  try { arr = JSON.parse(localStorage.getItem(_POV_IST_KEY)); } catch(e) { arr = null; }
+  return Array.isArray(arr) ? arr : [];
+}
+function _povIstSacuvaj(arr) {
+  const granica = Date.now() - _POV_IST_GODINA_MS;
+  const ocisceno = (arr || []).filter(p => { const t = Date.parse(p && p.dt); return isFinite(t) && t >= granica; });
+  try { localStorage.setItem(_POV_IST_KEY, JSON.stringify(ocisceno)); }
+  catch(e) {
+    // Malo vjerovatno (par hiljada malih zapisa preko 5 godina), ali ako
+    // localStorage ipak zafali, skrati na zadnjih 3000 umjesto da tiho
+    // prestane pamtiti bilo šta novo.
+    try { localStorage.setItem(_POV_IST_KEY, JSON.stringify(ocisceno.slice(-3000))); } catch(e2) {}
+  }
+}
+// Poziva se iz _poziLoad poslije SVAKOG osvježavanja — bilježi SAMO grupe
+// označene kao 'nov' (prvi put viđene u OVOM osvježavanju), inače bi isti
+// požar ulazio u istoriju pri svakom od desetina osvježavanja dok gori.
+function _povIstZabiljezi(evts) {
+  if (!evts || !evts.length) return;
+  const novi = evts.filter(g => g.nov).map(g => ({ la:g.la, lo:g.lo, dt:new Date(g.zadnji || Date.now()).toISOString() }));
+  if (!novi.length) return;
+  _povIstSacuvaj(_povIstUcitaj().concat(novi));
+}
+
+function _povIstOnStanje() { return localStorage.getItem(_POV_IST_ON_KEY) === '1'; }
+function _povIstToggle(on) {
+  _povIstOn = on;
+  try { localStorage.setItem(_POV_IST_ON_KEY, on ? '1' : '0'); } catch(e) {}
+  if (!on) {
+    if (_povIstLayer) { try { map.removeLayer(_povIstLayer); } catch(e) {} }
+    _poziRenderPanel();
+    return;
+  }
+  if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
+  _povIstPrikazi();
+}
+// Grupiše ISTIM pragom kao požari (1500 m) — ovdje je to čak i POŽELJNO: više
+// detekcija na približno istom mjestu kroz GODINE se svede u JEDNU tačku
+// "ovdje je gorjelo N puta", umjesto da svaka godina bude zaseban marker.
+function _povIstPrikazi() {
+  const ref = _poziRefTacka();
+  const blizu = _poziFilterBlizu(_povIstUcitaj(), ref);
+  _povIstEvts = _poziGrupeBlizu(_poziGrupisi(blizu), ref);
+  _povIstRender();
+  _poziRenderPanel();
+}
+
+function _povIstRender() {
+  if (_povIstLayer) { try { map.removeLayer(_povIstLayer); } catch(e) {} }
+  _povIstLayer = L.layerGroup([], { pane:'pozariPane' });
+  (_povIstEvts || []).forEach(g => {
+    const mk = L.marker([g.la, g.lo], { pane:'pozariPane', zIndexOffset:300, icon: L.divIcon({
+      className:'', iconSize: g.broj > 1 ? [22,22] : [10,10], iconAnchor: g.broj > 1 ? [11,11] : [5,5],
+      html: g.broj > 1 ? `<div class="pov-ist-mk-grupa"><span>${g.broj}</span></div>` : `<div class="pov-ist-mk"></div>` }) });
+    mk.bindPopup(_povIstPopupHtml(g), { maxWidth:280, className:'kml-info-popup' });
+    mk.addTo(_povIstLayer);
+    g._mk = mk;
+  });
+  if (_povIstOn) _povIstLayer.addTo(map);
+}
+
+function _povIstGodine(g) {
+  const set = new Set();
+  (g.pts || []).forEach(p => { const t = Date.parse(p.dt); if (isFinite(t)) set.add(new Date(t).getFullYear()); });
+  return [...set].sort();
+}
+
+function _povIstPopupHtml(g) {
+  const ref = _poziRefTacka();
+  const d = dst(ref.la, ref.lo, g.la, g.lo);
+  const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
+  const dat = t => isFinite(t) ? new Date(t).toLocaleDateString('bs-BA', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—';
+  const red = (l, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:11px;">
+    <span style="color:#94a3b8;">${l}</span><span style="color:#e2e8f0;text-align:right;">${v}</span></div>`;
+  const godine = _povIstGodine(g);
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:210px;">
+    <div style="font-size:14px;font-weight:700;color:#a78bfa;margin-bottom:6px;">📊 Istorija požara</div>
+    ${red('Udaljenost', `<b style="color:#c4b5fd;">${fmtL(d)}</b> ${smjer}`)}
+    ${red('Zabilježeno', g.broj + '× (' + godine.join(', ') + ')')}
+    ${red('Prvi put', dat(g.prvi))}
+    ${red('Zadnji put', dat(g.zadnji))}
+    <div style="font-size:10px;color:#475569;margin-top:8px;line-height:1.4;">
+      App ovo pamti od kad je "Zadnjih 5 godina" prvi put uključeno na ovom telefonu — nije retroaktivno.
+    </div>
+  </div>`;
+}
+
+function _povIstZoom(i) {
+  const g = _povIstEvts[i];
+  if (!g) return;
+  switchTab('karta');
+  setTimeout(() => {
+    map.setView([g.la, g.lo], Math.max(map.getZoom(), g.spanM > 1000 ? 12 : 14));
+    if (g._mk) setTimeout(() => g._mk.openPopup(), 250);
+  }, 80);
+}
+
+function _povIstSazetak() {
+  if (!_povIstEvts.length) return '— još ništa zabilježeno';
+  return '📊 ' + _povBrojRijecPozar(_povIstEvts.length) + ' zabilježeno';
+}
+
+function _povIstListaHtml() {
+  if (!_povIstEvts.length) {
+    return `<div style="font-size:12px;color:#94a3b8;line-height:1.6;padding:4px 0;">
+      Još nema zabilježenih požara — app počinje pamtiti OD SADA, ne retroaktivno.
+      Vraćaj se povremeno da vidiš šta se nakupilo.</div>`;
+  }
+  const ref = _poziRefTacka();
+  const redovi = _povIstEvts.slice(0, 12).map((g, i) => {
+    const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
+    const godine = _povIstGodine(g);
+    return `<div onclick="_povIstZoom(${i})" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1e293b;cursor:pointer;">
+      <span style="width:9px;height:9px;transform:rotate(45deg);background:#a78bfa;flex-shrink:0;"></span>
+      <span style="flex:1;min-width:0;">
+        <span style="font-size:12px;color:#e2e8f0;">${fmtL(g.d)} <span style="color:#64748b;">${smjer}</span></span>
+        <div style="font-size:10px;color:#64748b;">${g.broj}× · ${godine.join(', ')}</div>
+      </span>
+    </div>`;
+  }).join('');
+  const ostatak = _povIstEvts.length > 12
+    ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${_povIstEvts.length - 12}</div>` : '';
+  return redovi + ostatak;
+}
+
 // ── Panel taba Požari ──────────────────────────────────────────────────────
 // ── Podtabovi panela (v3.107.0) ────────────────────────────────────────────
 // Sječa/vjetroizvale su ZASEBAN satelitski proizvod (smetnja vegetacije), ne
@@ -14940,6 +15327,20 @@ function _poziSadrzajHtml() {
          </div>`
       + prognSazetak
       + `</div>`)
+
+    + kart('📅 Duži period — ova godina / istorija',
+      'Šta se dešavalo ranije, ne samo šta gori sada · dva NEZAVISNA prekidača',
+      prekidac('_povGodToggle(this.checked)', _povGodOnStanje(), '📅 Ova godina (od 1. januara, uživo preko GFW)')
+      + `<div style="font-size:10px;color:#64748b;margin:2px 0 8px;">${_escHtml(_povGodSazetak())}</div>`
+      + (_povGodOnStanje() ? `<div style="margin-bottom:10px;">${_povGodListaHtml()}</div>` : '')
+      + `<div style="border-top:1px solid #1e293b;margin:2px 0 10px;"></div>`
+      + prekidac('_povIstToggle(this.checked)', _povIstOnStanje(), '📊 Zadnjih 5 godina (lokalna istorija na ovom telefonu)')
+      + `<div style="font-size:10px;color:#64748b;margin:2px 0 8px;">${_escHtml(_povIstSazetak())}</div>`
+      + (_povIstOnStanje() ? `<div>${_povIstListaHtml()}</div>` : '')
+      + `<div style="font-size:10px;color:#475569;line-height:1.45;margin-top:8px;">
+           "Ova godina" je pregled uživo, treba GFW ključ. "Zadnjih 5 godina" NIJE retroaktivno —
+           app pamti samo ono što sam vidi od trenutka kad ovo prvi put uključiš, i radi bez ključa.
+         </div>`)
 
     + kart('🗺 Opožarene površine',
       'Copernicus EFFIS · granice stvarno izgorjelih područja',

@@ -898,6 +898,72 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
   `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
 
+- **"Ova godina" (uživo) i "Zadnjih 5 godina" (lokalna istorija) — v3.119.0**:
+  na zahtjev "prati požare za duži period, tj. u tekućoj godini... i dodatno
+  da se pamti za zadnjih 5 godina", u novoj kartici "📅 Duži period" sa DVA
+  nezavisna checkboxa.
+  - **"Ova godina" MORA ići preko GFW-a, ne FIRMS-a** — FIRMS arhivski CSV-ovi
+    imaju fiksne fajlove (24h/48h/7d) i Area API ima tvrd max od par dana po
+    zahtjevu; nijedan ne može vratiti "od 1. januara" u jednom pozivu, a
+    lančanje desetina zahtjeva bi na terenskoj vezi vjerovatno propalo (vidi
+    "Paralelno NIJE uvijek brže" niže). GFW-ov Data API nema taj limit — ISTI
+    SQL upit koji već koristi Sječa (v3.107.0) prima proizvoljan datum u WHERE
+    klauzuli, pa "cijela godina" znači samo širi datum u ISTOM upitu, bez
+    ijednog dodatnog zahtjeva. `_povGodUrl`/`_povGodLoad` — traži isti GFW
+    ključ kao Sječa, LIMIT podignut na 10000 (godina detekcija je mnogo više
+    od 7-dnevnog prozora), a kad je limit dostignut UI to izričito kaže
+    ("ima ih još") umjesto da tiho prikaže samo prvih 10000 kao da je to sve.
+  - **"Zadnjih 5 godina" NIJE dohvat unazad, nego PASIVNO PAMĆENJE unaprijed**
+    — uživo dohvat 5 godina unazad ima isti problem kao "cijela godina" samo
+    gore (veći period, više redova, nepouzdano na terenskoj vezi). Umjesto
+    toga, `_povIstZabiljezi(_poziEvts)` se zove iz `_poziLoad` POSLIJE svakog
+    redovnog osvježavanja (24h/48h/7d — mehanizam koji već postoji) i tiho
+    upisuje SAMO grupe označene kao `nov` (prvi put viđene BAŠ SAD) u
+    `localStorage` (`tvlake_pozari_istorija`), obrezano na 5 godina pri
+    svakom upisu. Radi BEZ GFW ključa i BEZ mreže (čisto lokalno), ali je
+    NAMJERNO neretroaktivno — uključen danas, prazan je za period prije danas.
+    UI to kaže otvoreno umjesto da ostavi utisak da će se pojaviti stara
+    istorija koje zapravo nema.
+  - **Zapisuje se SAMO na `nov: true`** — da isti požar koji gori danima ne
+    uđe u istoriju pri SVAKOM od desetina osvježavanja dok je aktivan
+    (pokriveno testom koji simulira tri uzastopna ciklusa: ista grupa se
+    upiše TAČNO jednom).
+  - **Grupisanje kroz godine namjerno koristi ISTI prag kao požari** (1500 m,
+    ne finiji) — ovdje je to čak POŽELJNO: više detekcija na približno istom
+    mjestu kroz RAZLIČITE godine se svede u JEDNU tačku "ovdje je gorjelo N
+    puta", umjesto da svaka godina bude zaseban marker. Popup i lista
+    ispisuju KOJE godine (`_povIstGodine`, izvučeno iz `pts[].dt`), ne samo
+    zadnji datum.
+  - **Nema wind/tempo/opožarena-projekcija mašinerije** — ta infrastruktura
+    (trake starosti, "aktivan front", pravac širenja) pretpostavlja požar
+    koji SADA gori; primijenjena na detekciju od prije 8 mjeseci bi bila
+    besmislena ili aktivno zavodljiva (npr. strelica pravca širenja za vatru
+    koja je odavno ugašena). Zato oba nova prikaza imaju SVOJ, jednostavniji
+    popup/listu (samo udaljenost, broj detekcija, datumi/godine) — ne
+    dijele `_poziOpozProjekcija`/`_poziSmjerAzuriraj`.
+  - **Nova, TREĆA oznaka na karti** (`_povBrojRijecPozar` bez "aktivan" —
+    "3 požara", ne "3 aktivna požara", jer istorijski pregled ne smije
+    tvrditi da nešto još gori): krug plave boje za "Ova godina" (`.pov-mk`,
+    `.pov-mk-grupa`) i romb ljubičaste boje za "Zadnjih 5 godina"
+    (`.pov-ist-mk`, `.pov-ist-mk-grupa`) — TREĆI oblik pored kruga (požar) i
+    kvadrata (sječa), namjerno DALEKO od crveno/narandžaste "aktivno gori"
+    palete, da se sve tri vrste markera na karti razlikuju na prvi pogled
+    kad su istovremeno uključene. Broj unutar romba mora biti KONTRA-rotiran
+    (`.pov-ist-mk-grupa span { transform:rotate(-45deg) }`) da ostane
+    uspravan i čitljiv — provjereno Playwright screenshotom.
+  - 15 novih testova u `tests/js/pozari.test.js` (172 ukupno): `_povGodUrl`
+    sadrži tačan datum 1.1. tekuće godine i prati `_POZ_RADIUS_KM`;
+    `_povIstZabiljezi` bilježi samo `nov:true`, ne dira postojeću istoriju
+    bez novih, ne baca na praznom/nedostajućem ulazu; `_povIstSacuvaj` briše
+    zapise starije od 5 godina a čuva novije, odbacuje zapis bez upotrebljivog
+    datuma; `_povIstUcitaj` vraća prazno na korumpiran JSON; `_povIstGodine`
+    izvlači sve godine bez duplikata; scenario "tri uzastopna ciklusa"
+    provjerava tačno 2 zapisa (ne 3) za dvije grupe od kojih je jedna viđena
+    dva puta. **Zamka pri pisanju testa**: prvi pokušaj je koristio
+    `zadnji: 1000` (epoch+1s = 1970. godina) kao "test timestamp" — 5-godišnje
+    obrezivanje ga je ISPRAVNO odbacilo kao prestarog, pa je test "prošao" iz
+    pogrešnog razloga dok nije zamijenjen sa `Date.now()`-baziranim vrijednostima.
+
 ## Sekcija Vlake
 
 - **Dužina MREŽE vlaka je bila UDVOSTRUČENA (v3.118.0)** — najskuplja greška u
