@@ -1227,6 +1227,107 @@ t('bez detekcija → null (ne prazna geometrija, ne greška)', () => {
   assert.strictEqual(OPOZ._poziOpozGeom([]), null);
 });
 
+// v3.118.1: terenska prijava "opožarena površina se prikazuje pogrešno" —
+// screenshot je pokazao da RAZLIČITI, nepovezani požari sa samo JEDNOM
+// detekcijom svi pokazuju identičnih 11 ha. To nije procjena nego fiksna
+// veličina jednog senzorskog piksela — nula informacije, ista greška koju je
+// v3.104.0 već odbila za "hektara iz broja detekcija", samo dobijena preko
+// geometrijskog motora umjesto formule.
+console.log('Jedna detekcija NE dobija broj hektara (v3.118.1):');
+
+t('N=1: haUkupno je NaN (ne fiksnih ~11 ha), samoJedanPiksel je true', () => {
+  const t0 = Date.parse('2026-09-05T00:00:00Z');
+  const pr = OPOZ._poziOpozProjekcija({ pts: [{ la: 44.9, lo: 16.2, rez: 375, dt: new Date(t0).toISOString() }], prvi: t0, zadnji: t0 });
+  assert.ok(pr, 'projekcija se i dalje vraća (geometrija treba za kartu)');
+  assert.strictEqual(pr.samoJedanPiksel, true);
+  assert.ok(!isFinite(pr.haUkupno), 'haUkupno mora biti NaN, dobijeno ' + pr.haUkupno);
+  assert.ok(!isFinite(pr.haFront), 'haFront mora biti NaN, dobijeno ' + pr.haFront);
+  assert.ok(pr.ukupno, 'geometrija (za crtanje) mora ostati — samo je broj sakriven');
+});
+
+t('N=2: haUkupno OSTAJE broj (već od dvije detekcije ima stvarne informacije)', () => {
+  const t0 = Date.parse('2026-09-05T00:00:00Z');
+  const dtIso = new Date(t0).toISOString();
+  const pr = OPOZ._poziOpozProjekcija({
+    pts: [{ la: 44.9, lo: 16.2, rez: 375, dt: dtIso }, { la: 44.904, lo: 16.2, rez: 375, dt: dtIso }],
+    prvi: t0, zadnji: t0
+  });
+  assert.strictEqual(pr.samoJedanPiksel, false);
+  assert.ok(isFinite(pr.haUkupno) && pr.haUkupno > 0, 'N=2 mora i dalje davati broj: ' + pr.haUkupno);
+});
+
+t('N=1 uvijek isti broj bez obzira na lokaciju (dokaz da je broj bio nula informacije)', () => {
+  const t0 = Date.parse('2026-09-05T00:00:00Z');
+  const dtIso = new Date(t0).toISOString();
+  const jedan = (la, lo) => OPOZ._poziOpozGeom([{ la, lo, rez: 375, dt: dtIso }]);
+  const haA = haOf(jedan(44.9, 16.2)), haB = haOf(jedan(30.1, -70.4));
+  assert.ok(Math.abs(haA - haB) < 0.01,
+    'dvije NEPOVEZANE lokacije daju identičnu površinu (' + haA.toFixed(2) + ' vs ' + haB.toFixed(2) + ') — zato se ne smije prikazati kao "izmjereno"');
+});
+
+t('_poziRedHtml: N=1 (haUkupno=NaN) ne ispisuje "ha" u redu liste', () => {
+  const sandbox = {
+    _poziPouzdanost: () => ({ txt: 'srednja' }),
+    _bearing: () => 0, _azimutSmjer: () => 'S',
+    fmtL: m => Math.round(m) + ' m',
+    _poziStarost: () => 'prije 7 dana',
+    _poziMkStarost: () => ({ fill: '#292524' }),
+    _poziOpozOn: () => true,
+    _poziProj: () => ({ haUkupno: NaN, samoJedanPiksel: true }),
+  };
+  const keys = Object.keys(sandbox);
+  const html = new Function(...keys, extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:22740,la:44.9,lo:16.2,conf:"m",broj:1,sateliti:["N20"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
+  )(...keys.map(k => sandbox[k]));
+  assert.ok(!/\bha\b/.test(html), 'red ne smije ispisati broj hektara za usamljenu detekciju: ' + html);
+});
+
+t('_poziRedHtml: N=2 i dalje ispisuje "ha" (informativan broj)', () => {
+  const sandbox = {
+    _poziPouzdanost: () => ({ txt: 'srednja' }),
+    _bearing: () => 0, _azimutSmjer: () => 'S',
+    fmtL: m => Math.round(m) + ' m',
+    _poziStarost: () => 'prije 2 dana',
+    _poziMkStarost: () => ({ fill: '#292524' }),
+    _poziOpozOn: () => true,
+    _poziProj: () => ({ haUkupno: 22, samoJedanPiksel: false }),
+    _poziPovrsTxt: ha => Math.round(ha) + ' ha',
+  };
+  const keys = Object.keys(sandbox);
+  const html = new Function(...keys, extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:25630,la:44.9,lo:16.2,conf:"m",broj:3,sateliti:["A","B"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
+  )(...keys.map(k => sandbox[k]));
+  assert.match(html, /22 ha/);
+});
+
+t('_poziOpozAzuriraj: N=1 se NE crta na karti (fiksan krug bi tvrdio lažan zahvat)', () => {
+  const drawn = [];
+  const sandbox = {
+    map: { removeLayer(){}, hasLayer:()=>false },
+    L: {
+      layerGroup: () => ({ addTo: () => ({}) }),
+      geoJSON: (geom, opts) => { drawn.push(opts); return { addTo: () => ({}) }; }
+    },
+    turf: {},
+    _poziOpozOn: () => true, _poziOn: true,
+    _poziEvts: [
+      { la:44.9, lo:16.2 },  // g1: samoJedanPiksel
+      { la:44.95, lo:16.25 } // g2: normalan
+    ],
+    _poziProj: g => g.la === 44.9
+      ? { samoJedanPiksel: true, trake: [{ geom:{}, fill:'#fed7aa', linija:'#fb923c', op:0.55 }], ukupno: {} }
+      : { samoJedanPiksel: false, trake: [{ geom:{}, fill:'#fed7aa', linija:'#fb923c', op:0.55 }], ukupno: {} },
+    _demLegendUpdate: () => {},
+  };
+  const keys = Object.keys(sandbox);
+  // _poziOpozLayer je 'let' na modul-nivou — extractFn ga ne hvata (ista zamka
+  // kao _poziNotifTimer, vidi CLAUDE.md); sandbox ga mora sam deklarisati.
+  // Početna vrijednost nije bitna — funkcija je odmah resetuje na null.
+  new Function(...keys, 'let _poziOpozLayer = null;\n' +
+    extractFn('_poziOpozAzuriraj') + '\n_poziOpozAzuriraj();')(...keys.map(k => sandbox[k]));
+  // Po 2 poziva L.geoJSON po nacrtanom požaru (traka + isprekidana kontura) —
+  // samo JEDAN požar (g2) smije proći, dakle tačno 2 poziva, ne 4.
+  assert.strictEqual(drawn.length, 2, 'očekivano 2 L.geoJSON poziva (samo za N≥2 požar), dobijeno ' + drawn.length);
+});
+
 console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');
 {
   const store = {};

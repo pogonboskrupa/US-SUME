@@ -4931,7 +4931,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.118.0';
+const APP_VER = 'v3.118.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13598,13 +13598,28 @@ function _poziPovrsTxt(ha) {
 }
 
 // Projekcija za JEDAN požar: trake po starosti + ukupan zahvat.
+//
+// v3.118.1: JEDNA detekcija (jedan satelitski piksel) NE dobija broj hektara.
+// Bafer oko jedne tačke je uvijek TAČNO isti krug (polovina rezolucije
+// senzora) bez obzira GDJE je i KOLIKI je požar stvarno — izmjereno: VIIRS
+// N=1 uvijek daje 11.00 ha, MODIS N=1 uvijek 78.21 ha, doslovno identično za
+// bilo koje dvije nepovezane detekcije. To je nula informacije obučene u
+// broj, tačno ono što je v3.104.0 već odbila ("piksel je vreo piksel, ne
+// stvarna granica požara") — samo što je ovdje geometrijski motor (umjesto
+// formule) tiho proizvodio isti izmišljen broj. Već od N=2 broj ZAVISI od
+// stvarnog razmaka detekcija (14.7–22 ha zavisno od udaljenosti u istom
+// testu) — pa se prag postavlja tačno na N=1, ne niže ni više.
 function _poziOpozProjekcija(g) {
   if (typeof turf === 'undefined' || !g) return null;
   const pts = (g.pts || []).filter(p => isFinite(p.la) && isFinite(p.lo));
   if (!pts.length) return null;
+  const samoJedanPiksel = pts.length === 1;
   const zadnji = isFinite(g.zadnji) ? g.zadnji
     : Math.max(...pts.map(p => Date.parse(p.dt) || 0));
-  const ha = f => { try { return turf.area(f) / 10000; } catch(e) { return NaN; } };
+  // Kad je samo jedan piksel, geometrija (ha=NaN) i dalje postoji za crtanje
+  // na karti — vidi napomenu u _poziOpozAzuriraj zašto se baš ONA namjerno NE
+  // crta, samo brojevi ostaju sakriveni.
+  const ha = f => { if (samoJedanPiksel) return NaN; try { return turf.area(f) / 10000; } catch(e) { return NaN; } };
   const spoji = (a, b) => { if (!a) return b; if (!b) return a; try { return turf.union(a, b) || a; } catch(e) { return a; } };
 
   // Razvrstaj detekcije po starosti. Detekcija bez upotrebljivog vremena ide u
@@ -13655,7 +13670,7 @@ function _poziOpozProjekcija(g) {
 
   const front = trake.find(t => t.id === 'front');
   return {
-    ukupno, staro, trake, kumulativ,
+    ukupno, staro, trake, kumulativ, samoJedanPiksel,
     haUkupno: ha(ukupno),
     haStaro: staro ? ha(staro) : 0,
     haFront: front ? front.ha : 0,
@@ -13785,6 +13800,12 @@ function _poziOpozAzuriraj() {
   (_poziEvts || []).forEach(g => {
     const pr = _poziProj(g);
     if (!pr) return;
+    // Jedan piksel = jedan FIKSAN krug (uvijek isti, vidi napomenu uz
+    // _poziOpozProjekcija) — crtanje takvog poligona na karti bi TIHO tvrdilo
+    // "ovoliko je izgorjelo" iako iza toga ne stoji nikakva mjera. Ta detekcija
+    // se i dalje vidi na karti kao SITNA TAČKA (osnovni marker grupe/pojedinačne
+    // detekcije, v3.107.0) — samo bez lažnog "zahvata".
+    if (pr.samoJedanPiksel) return;
     // interactive:false je OBAVEZNO — novi canvas pane iznad drugog pojede sve
     // klikove ispod sebe (vidi CLAUDE.md, bug uvezenog KML-a). Brojke idu u
     // popup markera grupe (pozariPane, iznad) i u karticu, ne u klik po poligonu.
@@ -14800,7 +14821,17 @@ function _poziSadrzajHtml() {
       const pr = sProj[0]._proj;
       const uk = sProj.reduce((s, g) => s + (isFinite(g._proj.haUkupno) ? g._proj.haUkupno : 0), 0);
       const sati = pr.sati;
-      if (_poziOpozOn()) {
+      if (_poziOpozOn() && pr.samoJedanPiksel) {
+        // Najbliži požar ima SAMO jednu detekciju — vidi napomenu uz
+        // _poziOpozProjekcija zašto se tu namjerno NE ispisuje broj hektara
+        // (bio bi uvijek isti, bez obzira na stvarnu veličinu požara).
+        opozSazetak = `<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5;">
+          Najbliži požar ima samo JEDNU detekciju — nedovoljno da se procijeni površina.
+          Krug oko jednog satelitskog piksela je uvijek iste veličine bez obzira koliko je
+          požar stvarno velik, pa bi ispisan broj bio izmišljen. Sačekaj sljedeći prelet
+          satelita (nova detekcija istog požara) ili probaj GFW izvor.
+        </div>`;
+      } else if (_poziOpozOn()) {
         // Razrada po trakama starosti — ista boja kao na karti, pa se legenda i
         // kartica čitaju kao jedna cjelina. Zbir traka je VEĆI od ukupnog kad se
         // trake preklapaju (isto mjesto gorjelo više puta), zato se "Ukupno"

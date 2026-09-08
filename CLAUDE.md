@@ -710,6 +710,45 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     ostaje monotona po svjetlini. Ovo je primjer zašto je vrijedno pisati
     invarijantu umjesto konkretne vrijednosti — test je odmah bio koristan za
     SASVIM drugu paletu bez ijedne izmjene.
+- **Jedna detekcija NE dobija broj hektara (v3.118.1)**: terenska prijava
+  "opožarena površina se prikazuje pogrešno", potvrđena screenshot-om liste —
+  RAZLIČITI, nepovezani požari sa samo JEDNOM detekcijom svi su pokazivali
+  identičnih **11 ha**. Provjereno direktno preko `turf`: krug oko jednog
+  VIIRS piksela (bafer = pola rezolucije, 375 m) je UVIJEK tačno 11.00 ha,
+  MODIS piksel uvijek 78.21 ha — bez obzira GDJE je detekcija i koliki je
+  požar stvarno. To je nula informacije obučena u broj, tačno ono što je
+  v3.104.0 već odbila ("piksel je vreo piksel, ne stvarna granica požara") —
+  samo što je ovdje geometrijski motor iz v3.113.0 (umjesto stare formule)
+  tiho proizvodio isti izmišljen broj za N=1. Već od N=2 broj STVARNO zavisi
+  od razmaka detekcija (izmjereno: 14.7 ha na 100 m razmaka, 22 ha na 400 m,
+  identičnim testom) — prag je zato tačno N=1, ne niže ni više.
+  - `_poziOpozProjekcija` sad prepoznaje `samoJedanPiksel` (`pts.length===1`)
+    i vraća `haUkupno`/`haStaro`/`haFront` kao `NaN` u tom slučaju — GEOMETRIJA
+    (`ukupno`, `trake[].geom`) ostaje netaknuta, jer i dalje treba za crtanje;
+    sakriva se SAMO broj. Postojeći `isFinite(pr.haUkupno)` provjere u listi
+    (`_poziRedHtml`) i kartici automatski sakriju prazno polje bez dodatnog
+    ožičenja — `_poziPovrsTxt` je već vraćao "—" za `NaN`.
+  - **Karta također NE crta poligon za N=1** (`_poziOpozAzuriraj` sad rano
+    izlazi na `pr.samoJedanPiksel`) — inače bi se i dalje vidio fiksan
+    narandžasti krug ISTE veličine svuda, samo bez broja pored njega, što je
+    i dalje vizuelno tvrdilo "ovoliko je izgorjelo". Detekcija ostaje vidljiva
+    kao SITNA TAČKA (osnovni marker, v3.107.0) — ta sitna tačka već postoji
+    nezavisno od ovog sloja i ne sakriva se ničim ovdje.
+  - **Kartica objašnjava RAZLOG, ne samo prazno polje** — kad je najbliži
+    požar baš takav, `opozSazetak` ispisuje zašto broj nije prikazan ("krug
+    oko jednog piksela je uvijek iste veličine... broj bi bio izmišljen")
+    umjesto da headline broj tiho postane "—" bez objašnjenja.
+  - Dijagnoza je urađena kroz dva kruga `AskUserQuestion` — prva (višestruki
+    izbor: koji sloj/kakva greška) korisnik je preskočio i umjesto toga
+    poslao screenshot; iz screenshot-a je uzorak (identičnih "11 ha" na više
+    NEPOVEZANIH redova) bio dovoljan da se formuliše TAČNA, jednim tapom
+    potvrdiva hipoteza umjesto nagađanja koda unaprijed.
+  - 6 novih testova u `tests/js/pozari.test.js` (160 ukupno): `N=1` daje
+    `NaN`/`samoJedanPiksel:true` a geometrija ostaje; `N=2` i dalje daje broj;
+    dvije NEPOVEZANE lokacije sa N=1 daju IDENTIČNU površinu (dokaz da je broj
+    bio nula informacije); `_poziRedHtml` sakriva/pokazuje "ha" u skladu s tim;
+    `_poziOpozAzuriraj` crta tačno 2 `L.geoJSON` poziva (traka + kontura) za
+    JEDAN kvalifikovan požar od dva ulazna, ne 4.
 - **Boja markera nosi STAROST, ne pouzdanost (v3.113.3)**: na zahtjev
   "unaprijedi prikaz požara". Do tada je boja markera bila `_poziPouzdanost`
   (crveno = visoka pouzdanost senzora), pa je požar od prije četiri dana bio
