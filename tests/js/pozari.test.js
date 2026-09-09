@@ -837,10 +837,17 @@ const SRC9 = [
   extractFn('_poziRedHtml'),
   extractConst('_POZ_PO_TRACI'),
   extractConst('_POZ_LISTA_MAX'),
+  extractConst('_poziListaProsireno'),
+  extractFn('_poziListaProsiri'),
+  extractFn('_poziProsiriDugme'),
   extractFn('_poziListaHtml'),
 ].join('\n');
 
-function makeLista({ evts, on = true, meta = {}, sort = null }) {
+// prosiri: lista ključeva ('flat' / 'traka:blizu' / ...) koje treba PRETHODNO
+// označiti proširenim — simulira klik na "Prikaži još" prije čitanja HTML-a,
+// bez pozivanja _poziListaProsiri (koji zove _poziRenderPanel, nepostojeći
+// u ovom sandboxu).
+function makeLista({ evts, on = true, meta = {}, sort = null, prosiri = [] }) {
   const sandbox = {
     _poziOn: on, _poziMeta: meta, _poziEvts: evts,
     _poziRefTacka: () => ({ la:44.88, lo:16.15, gps:true }),
@@ -851,9 +858,11 @@ function makeLista({ evts, on = true, meta = {}, sort = null }) {
     // ostane isti bez obzira na geometriju.
     _poziOpozOn: () => false, _poziProj: () => null, _poziPovrsTxt: () => '',
     localStorage: { getItem: () => sort, setItem(){}, removeItem(){} },
+    _poziRenderPanel: () => {},
   };
   const keys = Object.keys(sandbox);
-  return new Function(...keys, SRC9 + '\nreturn _poziListaHtml();')(...keys.map(k => sandbox[k]));
+  const pripremi = prosiri.map(k => `_poziListaProsireno.add(${JSON.stringify(k)});`).join('\n');
+  return new Function(...keys, SRC9 + '\n' + pripremi + '\nreturn _poziListaHtml();')(...keys.map(k => sandbox[k]));
 }
 
 t('zaglavlja traka se pojavljuju SAMO za trake koje stvarno imaju požar', () => {
@@ -881,13 +890,22 @@ t('onclick indeksi ostaju ORIGINALNI iz _poziEvts, ne pozicija unutar trake', ()
   assert.match(html, /_poziZoom\(2\)/, 'požar iz "sred" trake mora nositi indeks 2 (ne 1)');
 });
 
-t('traka sa više od _POZ_PO_TRACI požara ispiše "i još N", ostale i dalje broji u zaglavlju', () => {
+t('traka sa više od _POZ_PO_TRACI požara ispiše dugme "Prikaži još", ostale i dalje broji u zaglavlju', () => {
   const evts = Array.from({ length: 9 }, (_, k) => ({
     d: 1000 + k * 100, la:44.9, lo:16.2, conf:'h', broj:1, sateliti:['A'], zadnji:Date.now(), nov:false
   }));
   const html = makeLista({ evts });
   assert.match(html, /Do 20 km.*\(9\)/s, 'zaglavlje mora brojati SVIH 9, ne samo prikazanih');
-  assert.match(html, /i još 3 u ovoj traci/);
+  assert.match(html, /Prikaži još u ovoj traci \(3\)/);
+});
+
+t('klik na "Prikaži još" traku (_poziListaProsireno) prikazuje SVE požare te trake, bez dugmeta', () => {
+  const evts = Array.from({ length: 9 }, (_, k) => ({
+    d: 1000 + k * 100, la:44.9, lo:16.2, conf:'h', broj:1, sateliti:['A'], zadnji:Date.now(), nov:false
+  }));
+  const html = makeLista({ evts, prosiri: ['traka:blizu'] });
+  assert.ok(!/Prikaži još/.test(html), 'kad je traka proširena dugme mora nestati');
+  for (let i = 0; i < 9; i++) assert.match(html, new RegExp('_poziZoom\\(' + i + '\\)'), 'svih 9 mora biti prikazano, i=' + i);
 });
 
 console.log('Sort/filter liste požara (v3.110.0) — bliže/dalje/novije prvo:');
@@ -929,13 +947,27 @@ t('"novije prvo" (t_desc): ravna lista, sortirana OPADAJUĆE po vremenu zadnje d
   assert.ok(iNoviji >= 0 && iSred > iNoviji && iStar > iSred, 'poredak mora biti novije→starije: ' + [iNoviji, iSred, iStar]);
 });
 
-t('"dalje prvo"/"novije prvo": kapa na _POZ_LISTA_MAX sa "i još N", ORIGINALNI indeksi ostaju netaknuti', () => {
+t('"dalje prvo"/"novije prvo": kapa na _POZ_LISTA_MAX sa dugmetom "Prikaži još", ORIGINALNI indeksi ostaju netaknuti', () => {
   const evts = Array.from({ length: 20 }, (_, k) => ({
     d: 1000 * (k + 1), la:44.9, lo:16.2, conf:'h', broj:1, sateliti:['A'], zadnji:1000 + k, nov:false
   }));
   const html = makeLista({ evts, sort: 'd_desc' });
-  assert.match(html, /i još 2/);
+  assert.match(html, /Prikaži još \(12\)/, 'kapa je 8 od 20 → dugme mora javiti tačno 12 preostalih');
   assert.match(html, /_poziZoom\(19\)/, 'najdalji (i=19) mora biti prikazan prvi u d_desc');
+  assert.ok(!html.includes('_poziZoom(0)'), 'najbliži (i=0, van kape od 8) ne smije biti prikazan prije proširenja');
+});
+
+t('v3.123.0: kapa ravne liste je smanjena sa 18 na 8 — terenska prijava "puno prikaza"', () => {
+  assert.strictEqual(SRC9.match(/const _POZ_LISTA_MAX\s*=\s*(\d+)/)[1], '8');
+});
+
+t('klik na "Prikaži još" (_poziListaProsireno "flat") prikazuje SVE požare ravne liste, bez dugmeta', () => {
+  const evts = Array.from({ length: 20 }, (_, k) => ({
+    d: 1000 * (k + 1), la:44.9, lo:16.2, conf:'h', broj:1, sateliti:['A'], zadnji:1000 + k, nov:false
+  }));
+  const html = makeLista({ evts, sort: 'd_desc', prosiri: ['flat'] });
+  assert.ok(!/Prikaži još/.test(html), 'kad je lista proširena dugme mora nestati');
+  assert.match(html, /_poziZoom\(0\)/, 'najbliži (i=0) sada MORA biti prikazan — cijela lista');
 });
 
 console.log('_poziSazetak — upozorenje kad udaljenost NIJE od stvarne GPS pozicije:');

@@ -1141,6 +1141,39 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     testu) — inače cijela provjera padne na nečemu što nema veze sa kodom.
   - Testovi: `tests/js/pozari-arhiva.test.js` (24), nad STVARNIM kodom i
     STVARNIM turf-om iz `static/libs/turf.min.js`.
+- **Lista detekcija — kapa smanjena + "Prikaži još" umjesto mrtvog teksta
+  (v3.123.0)**: terenska prijava "prikazuje se puno prikaza, prikaži manje ili
+  bolje da grupišeš tačke istog požara" uz screenshot liste u sortu "Novije
+  prvo". `AskUserQuestion` je poslan da razriješi da li korisnik traži ŠIRE
+  spajanje (topi RAZLIČITE požare u komplekse) ili samo manje redova na
+  ekranu — odgovor nije jednoznačno biran, pa je odabrana NIŽE-RIZIČNA
+  opcija koju sam preporučio: **`_poziGrupisi`/`_POZ_GRUPA_M` (1500 m) se NE
+  dira** — to je dijeljena infrastruktura (markeri, heatmap, opožarena
+  projekcija, arhiva po godinama iz v3.122.0) i već ispravno spaja detekcije
+  koje SU isti požar (vidi v3.104.0); topiti GENUINE različite požare u jedan
+  bi sakrilo stvarnu informaciju da ih ima više. Rješenje ide isključivo kroz
+  PRIKAZ liste:
+  - `_POZ_LISTA_MAX` (kapa ravne liste za sortove "Dalje prvo"/"Novije prvo")
+    smanjen sa 18 na **8** — bio je više nego DUPLO veći od kape trake
+    "Bliže prvo" (`_POZ_PO_TRACI`=6), pa su baš ta dva sorta ispadala znatno
+    gušća bez razloga da budu.
+  - **Mrtav tekst "…i još N" zamijenjen KLIKABILNIM dugmetom** "Prikaži još
+    (N)" (`_poziListaProsiri`/`_poziProsiriDugme`) — i za ravnu listu i za
+    svaku traku posebno. Ranije je "puno prikaza" bio jedini izbor (sve ili
+    ništa preko kape); sad korisnik SAM bira da li mu treba ostatak, bez
+    dodatnog tapa na "Osvježi".
+  - **`_poziListaProsireno` je in-memory `Set`, NAMJERNO se ne pamti u
+    localStorage** — riječ je o gustoći TRENUTNOG prikaza, ne trajnoj
+    postavci (isti princip razdvajanja kao `_poziOpozOn`/`_poziPrognOn` iz
+    v3.117.1, samo ovdje je razlika "traje jednu sesiju" naspram "traje
+    trajno"). Čisti se pri promjeni sorta (`_poziPostaviSort`) — sortovi
+    imaju RAZLIČITO grupisanje (trake vs. ravna lista), pa "prošireno"
+    proizvoljno prenešeno iz jednog u drugi ne bi imalo smisla. NE čisti se
+    pri automatskom osvježavanju (10 min) — korisnik koji je namjerno
+    proširio listu ne smije je vidjeti da se sama tiho skupi ispod njega.
+  - Testovi: prošireni `tests/js/pozari.test.js` (dugme umjesto teksta, tačan
+    broj preostalih, `_poziListaProsireno` stvarno otkriva sve retke kad je
+    postavljen, kapa=8 zaključana testom).
 
 ## Sekcija Vlake
 

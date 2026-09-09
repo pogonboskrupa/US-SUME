@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.122.0';
+const APP_VER = 'v3.123.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -12891,6 +12891,7 @@ function _poziSort() {
 function _poziPostaviSort(id) {
   if (!_POZ_SORTOVI.some(s => s.id === id)) return;
   localStorage.setItem(_POZ_SORT_KEY, id);
+  _poziListaProsireno.clear(); // promjena sorta mijenja šta "prošireno" uopšte znači
   _poziRenderPanel();
 }
 
@@ -14341,7 +14342,29 @@ function _poziRedHtml(g, i, ref) {
 // `i` ostaje ORIGINALNI indeks u _poziEvts (ne pozicija u prikazu), jer
 // _poziZoom(i) čita baš iz njega.
 const _POZ_PO_TRACI = 6;
-const _POZ_LISTA_MAX = 18; // kapa za ravnu listu (dalje prvo / novije prvo)
+const _POZ_LISTA_MAX = 8; // kapa za ravnu listu (dalje prvo / novije prvo) — bila 18,
+                          // terenska prijava "prikazuje se puno prikaza" (v3.123.0):
+                          // 18 je bilo više nego duplo od kape trake "Bliže prvo" (6),
+                          // pa je zadani prikaz baš u ta dva sorta ispadao znatno gušći
+                          // bez ikakvog razloga da bude. Broj požara se OVIM ne mijenja
+                          // (_poziGrupisi/_POZ_GRUPA_M ostaje netaknut — grupisanje
+                          // "je li ovo isti požar" je već ranije tačno riješeno, vidi
+                          // v3.104.0), samo koliko REDOVA stoji na ekranu odjednom.
+// Kapa se više ne završava mrtvim "…i još N" tekstom nego DUGMETOM koje
+// proširi baš TU listu/traku (_poziListaProsireno, in-memory po sesiji panela —
+// namjerno se NE pamti u localStorage, isto kao i drugi UI expand-i, jer je
+// riječ o gustoći prikaza trenutnog učitavanja, ne trajnoj postavci).
+const _poziListaProsireno = new Set();
+function _poziListaProsiri(kljuc) {
+  _poziListaProsireno.add(kljuc);
+  _poziRenderPanel();
+}
+function _poziProsiriDugme(kljuc, ostatak, tekst) {
+  if (ostatak <= 0) return '';
+  return `<div onclick="_poziListaProsiri('${kljuc}')" style="font-size:11px;color:#94a3b8;padding:7px 4px;
+    text-align:center;cursor:pointer;border-radius:8px;background:#14233c;border:1px solid #1e3a5f;margin:2px 0;">
+    ${tekst} (${ostatak}) ▾</div>`;
+}
 function _poziListaHtml() {
   if (!_poziOn) return '';
   const m = _poziMeta || {};
@@ -14361,10 +14384,11 @@ function _poziListaHtml() {
     const poredjeno = [...sIndeksom].sort((a, b) => _poziSort() === 'd_desc'
       ? b.g.d - a.g.d
       : (b.g.zadnji || 0) - (a.g.zadnji || 0));
-    const redovi = poredjeno.slice(0, _POZ_LISTA_MAX).map(({ g, i }) => _poziRedHtml(g, i, ref)).join('');
-    const ostatak = poredjeno.length > _POZ_LISTA_MAX
-      ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${poredjeno.length - _POZ_LISTA_MAX}</div>` : '';
-    return redovi + ostatak;
+    const prosireno = _poziListaProsireno.has('flat');
+    const kapa = prosireno ? poredjeno.length : _POZ_LISTA_MAX;
+    const redovi = poredjeno.slice(0, kapa).map(({ g, i }) => _poziRedHtml(g, i, ref)).join('');
+    const dugme = prosireno ? '' : _poziProsiriDugme('flat', poredjeno.length - kapa, 'Prikaži još');
+    return redovi + dugme;
   }
 
   return _POZ_TRAKE.map(traka => {
@@ -14372,10 +14396,11 @@ function _poziListaHtml() {
     if (!uTraci.length) return '';
     const zaglavlje = `<div style="font-size:10.5px;font-weight:700;color:#94a3b8;padding:8px 4px 3px;">
       ${traka.ikona} ${traka.naziv} <span style="color:#64748b;font-weight:400;">(${uTraci.length})</span></div>`;
-    const redovi = uTraci.slice(0, _POZ_PO_TRACI).map(({ g, i }) => _poziRedHtml(g, i, ref)).join('');
-    const ostatak = uTraci.length > _POZ_PO_TRACI
-      ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${uTraci.length - _POZ_PO_TRACI} u ovoj traci</div>` : '';
-    return zaglavlje + redovi + ostatak;
+    const prosireno = _poziListaProsireno.has('traka:' + traka.id);
+    const kapa = prosireno ? uTraci.length : _POZ_PO_TRACI;
+    const redovi = uTraci.slice(0, kapa).map(({ g, i }) => _poziRedHtml(g, i, ref)).join('');
+    const dugme = prosireno ? '' : _poziProsiriDugme('traka:' + traka.id, uTraci.length - kapa, 'Prikaži još u ovoj traci');
+    return zaglavlje + redovi + dugme;
   }).join('');
 }
 
