@@ -4184,16 +4184,11 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       <div style="padding:14px 16px 10px;border-bottom:1px solid #1e3a5f;flex-shrink:0;">
         <div style="font-weight:700;color:#fbbf24;font-size:15px;margin-bottom:10px;">👥 Korisnici</div>
         <div style="display:flex;gap:8px;align-items:center;">
+          <!-- Opcije se pune iz _SUMARIJE u adminLoadUsers() — ranije su bile
+               prepisane ovdje ručno, pa bi nova šumarija morala na DVA mjesta -->
           <select id="admin-filter-sum" onchange="_adminRenderUsers()"
             style="flex:1;padding:7px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;">
             <option value="">— Sve šumarije —</option>
-            <option>ŠPD US ŠUME</option>
-            <option>ŠUMARIJA BOS.KRUPA</option>
-            <option>ŠUMARIJA BOS.PETROVAC</option>
-            <option>ŠUMARIJA SANSKI MOST</option>
-            <option>ŠUMARIJA BIHAĆ</option>
-            <option>ŠUMARIJA CAZIN</option>
-            <option>ŠUMARIJA KLJUČ</option>
           </select>
           <button onclick="adminLoadUsers()"
             style="padding:7px 12px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#94a3b8;font-size:13px;cursor:pointer;white-space:nowrap;">
@@ -4209,7 +4204,13 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           style="display:block;width:calc(100% - 32px);margin:12px 16px 0;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;cursor:pointer;">
           <svg class="ic"><use href="#ic-statistika"/></svg> Pregled svih projekata (sve šumarije)
         </button>
-        <div id="admin-stats-box" style="display:none;margin:12px 16px 0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 12px;"></div>
+        <!-- Statistika je stajala uvijek otvorena (7 redova) i gurala listu
+             korisnika ispod pregiba — sad je iza prekidača, izbor se pamti. -->
+        <button id="admin-stats-toggle" onclick="_admStatsToggle()"
+          style="display:none;width:calc(100% - 32px);margin:8px 16px 0;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
+          📊 Statistika po šumariji
+        </button>
+        <div id="admin-stats-box" style="display:none;margin:8px 16px 0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 12px;"></div>
         <div id="admin-panel-user-list" style="padding:12px 16px;">
           <p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Odaberi tab da učitaš...</p>
         </div>
@@ -4977,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.120.0';
+const APP_VER = 'v3.121.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -6486,6 +6487,14 @@ async function adminLoadUsers() {
   if (!el) return;
   el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">⏳ Učitavam...</p>';
 
+  // Lista šumarija se puni iz JEDNOG izvora (_SUMARIJE) — ranije je bila i u
+  // markupu prepisana ručno, pa bi nova šumarija radila samo na pola mjesta.
+  const selSum = document.getElementById('admin-filter-sum');
+  if (selSum && selSum.options.length <= 1) {
+    selSum.insertAdjacentHTML('beforeend',
+      _SUMARIJE.map(s => `<option value="${_escHtml(s)}">${_escHtml(s)}</option>`).join(''));
+  }
+
   _adminLoadStats(); // paralelno, ne blokira listu
 
   const { data, error } = await sb.rpc('admin_get_all_users');
@@ -6500,104 +6509,344 @@ async function adminLoadUsers() {
   _adminRenderUsers();
 }
 
+// ═══ KORISNICI (admin) — status, filter, sort, sažetak ═══════════════════
+//
+// Sve ispod su ČISTE funkcije (bez DOM-a i bez mreže) da se mogu testirati —
+// prikaz statusa i redoslijed su ono što je na terenu prijavljeno kao
+// nepregledno, pa moraju biti provjerljivi, ne "izgleda dobro na mom ekranu".
+
+// ČEKA ODOBRENJE i OPOZVAN su se do sada prikazivali IDENTIČNO ("⏳ ČEKA
+// ODOBRENJE") jer oba imaju `odobren === false`. To su suprotne stvari:
+// prvi je nov zahtjev koji admin treba da riješi (i koji se SAM BRIŠE za 7
+// dana), drugi je nalog kojem je admin SVJESNO oduzeo pristup i ne traži
+// nikakvu akciju. Razlikuju se po `istice_at` — popunjen je SAMO za naloge
+// koji čekaju PRVO odobrenje (vidi 20260730_isticanje_registracije.sql).
+// Kad migracija još nije primijenjena, `istice_at` je undefined za SVE, pa se
+// tada ponaša kao ranije (sve neodobreno = čeka) umjesto da tvrdi "opozvan"
+// za nekog ko to nije.
+function _admStatus(u) {
+  if (!u) return 'nepoznat';
+  if (u.is_admin) return 'admin';
+  if (u.odobren === false) {
+    if (u.istice_at) return 'ceka';
+    return (u.istice_at === undefined) ? 'ceka' : 'opozvan';
+  }
+  if (u.odobren === true) return 'odobren';
+  return 'odobren';   // migracija sa `odobren` još nije primijenjena
+}
+
+// Dana od zadnje prijave; null = nikad se nije prijavio, undefined = podatak
+// ne postoji (starija migracija) — to dvoje se NE smije spojiti, jer "nikad"
+// je stvarna informacija a "ne znam" nije.
+function _admDanaNeaktivan(u, sada) {
+  if (!u || u.last_sign_in_at === undefined) return undefined;
+  if (!u.last_sign_in_at) return null;
+  const t = Date.parse(u.last_sign_in_at);
+  if (!isFinite(t)) return undefined;
+  return Math.floor(((sada || Date.now()) - t) / 86400000);
+}
+const _ADM_NEAKTIVAN_DANA = 90;
+
+// "Neaktivan" ima smisla SAMO za nekoga ko se uopšte MOŽE prijaviti. Prvi
+// pokušaj je brojao i naloge koji čekaju odobrenje — a oni se po definiciji
+// nisu prijavili jer im pristup još nije ni odobren; ispadalo je "2 čekaju
+// odobrenje · 4 neaktivnih" gdje su ta ista dva bila brojana dvaput, i na
+// kartici je uz "⏳ ČEKA ODOBRENJE" stajalo još i "nije se prijavio".
+// Uhvaćeno na slici, ne u brojkama — svi testovi su prije toga prolazili.
+// Opozvani se isto izuzimaju: njima je pristup svjesno oduzet, pa "neaktivan"
+// ne govori ništa o njima.
+function _admMozeSePrijaviti(u) {
+  const st = _admStatus(u);
+  return st === 'odobren' || st === 'admin';
+}
+function _admJeNeaktivan(u, sada) {
+  if (!_admMozeSePrijaviti(u)) return false;
+  const d = _admDanaNeaktivan(u, sada);
+  return d === null || (typeof d === 'number' && d >= _ADM_NEAKTIVAN_DANA);
+}
+
+function _admFiltriraj(users, f) {
+  const sum = (f && f.sum) || '';
+  const ime = ((f && f.ime) || '').trim().toLowerCase();
+  const st  = (f && f.status) || 'sve';
+  const sada = (f && f.sada) || Date.now();
+  return (users || []).filter(u => {
+    if (sum && u.sumarija !== sum) return false;
+    if (ime && !((u.ime || '') + ' ' + (u.prezime || '')).toLowerCase().includes(ime)) return false;
+    if (st === 'sve') return true;
+    if (st === 'neaktivni') return _admJeNeaktivan(u, sada);
+    return _admStatus(u) === st;
+  });
+}
+
+// "Čeka odobrenje" ide PRVO uvijek, bez obzira na izabrani sort — ima rok
+// (briše se sam) i jedini je red u ovoj listi na koji admin mora reagovati.
+// Unutar čekanja: najkraći rok prvi.
+function _admSortiraj(users, sort, sada) {
+  const arr = (users || []).slice();
+  const ime = u => ((u.ime || '') + ' ' + (u.prezime || '')).trim().toLowerCase();
+  const ceka = u => _admStatus(u) === 'ceka';
+  arr.sort((a, b) => {
+    if (ceka(a) !== ceka(b)) return ceka(a) ? -1 : 1;
+    if (ceka(a) && ceka(b)) {
+      const ta = Date.parse(a.istice_at || '') || Infinity;
+      const tb = Date.parse(b.istice_at || '') || Infinity;
+      if (ta !== tb) return ta - tb;
+    }
+    if (sort === 'aktivnost') {
+      // Nikad prijavljen ide na DNO ovog sorta, ne na vrh kao "0" —
+      // Date.parse(null) je NaN i bez ovoga bi poredak bio nasumičan.
+      const ta = Date.parse(a.last_sign_in_at || '') || 0;
+      const tb = Date.parse(b.last_sign_in_at || '') || 0;
+      if (ta !== tb) return tb - ta;
+    } else if (sort === 'noviji') {
+      const ta = Date.parse(a.created_at || '') || 0;
+      const tb = Date.parse(b.created_at || '') || 0;
+      if (ta !== tb) return tb - ta;
+    }
+    return ime(a).localeCompare(ime(b), 'bs');
+  });
+  return arr;
+}
+
+function _admSazetak(users, sada) {
+  const s = { ukupno: 0, ceka: 0, odobren: 0, opozvan: 0, admin: 0, neaktivni: 0 };
+  (users || []).forEach(u => {
+    s.ukupno++;
+    const st = _admStatus(u);
+    if (s[st] !== undefined) s[st]++;
+    if (_admJeNeaktivan(u, sada)) s.neaktivni++;
+  });
+  return s;
+}
+
+// Ime korisnika ide u onclick="...('IME')" — `_escHtml` NE escape-uje
+// apostrof, pa bi ime tipa O'Brien prekinulo JS string i dugme bi tiho
+// prestalo raditi (bez greške u konzoli, kao i sve u atributima). Prvo
+// JS-escape (\ i '), pa tek onda HTML-escape.
+function _jsAttr(s) {
+  return _escHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
+// localStorage u try/catch — čitanje na nivou bloka, a u privatnom prozoru /
+// sa blokiranim kolačićima sam pristup BACA i oborio bi cijeli JS blok ispod.
+function _admLS(k, zadano) { try { return localStorage.getItem(k) || zadano; } catch(e) { return zadano; } }
+let _admStatusFilter = _admLS('tvlake_adm_status', 'sve');
+let _admSort         = _admLS('tvlake_adm_sort',   'ime');
+const _admOtvorene   = new Set();   // kartice kojima su otvorene dodatne kontrole
+
+function _admPostaviStatus(v) {
+  _admStatusFilter = v;
+  try { localStorage.setItem('tvlake_adm_status', v); } catch(e) {}
+  _adminRenderUsers();
+}
+function _admPostaviSort(v) {
+  _admSort = v;
+  try { localStorage.setItem('tvlake_adm_sort', v); } catch(e) {}
+  _adminRenderUsers();
+}
+// Toggle bez ponovnog crtanja cijele liste — inače bi se skrol vratio na vrh
+// baš kad admin otvori karticu na dnu.
+function _admToggleKartica(uid) {
+  const box = document.getElementById('adm-ctl-' + uid);
+  const car = document.getElementById('adm-car-' + uid);
+  if (!box) return;
+  const otvoren = box.style.display !== 'none';
+  box.style.display = otvoren ? 'none' : '';
+  if (car) car.textContent = otvoren ? '▾' : '▴';
+  if (otvoren) _admOtvorene.delete(uid); else _admOtvorene.add(uid);
+}
+function _admStatsToggle() {
+  const b = document.getElementById('admin-stats-box');
+  if (!b) return;
+  const skriven = b.dataset.skriven === '1';
+  b.dataset.skriven = skriven ? '0' : '1';
+  b.style.display = skriven ? '' : 'none';
+  try { localStorage.setItem('tvlake_adm_stats', skriven ? '1' : '0'); } catch(e) {}
+  const t = document.getElementById('admin-stats-toggle');
+  if (t) t.textContent = skriven ? '📊 Sakrij statistiku' : '📊 Statistika po šumariji';
+}
+
+function _admBrojRijec(n, jed, mn) { return n + ' ' + (n === 1 ? jed : mn); }
+
 function _adminRenderUsers() {
   if (!sbProfile?.is_admin || _adminUsers === null) return;
   const el = document.getElementById('admin-panel-user-list');
   if (!el) return;
 
   const filterSum  = document.getElementById('admin-filter-sum')?.value || '';
-  const filterName = (document.getElementById('admin-filter-name')?.value || '').trim().toLowerCase();
-  let rows = _adminUsers;
-  if (filterSum)  rows = rows.filter(u => u.sumarija === filterSum);
-  if (filterName) rows = rows.filter(u =>
-    ((u.ime || '') + ' ' + (u.prezime || '')).toLowerCase().includes(filterName));
+  const filterName = document.getElementById('admin-filter-name')?.value || '';
+  const sve = _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName });
+  const rows = _admSortiraj(
+    _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName, status: _admStatusFilter }),
+    _admSort);
+
+  // Sažetak se računa nad OPSEGOM (šumarija + ime), ne nad statusnim filterom —
+  // inače bi brojka "3 čekaju" nestala čim korisnik izabere traku "Odobreni",
+  // a to je baš podatak zbog kojeg bi se vratio nazad.
+  const s = _admSazetak(sve);
+  const chip = (id, txt, boja) =>
+    `<button onclick="_admPostaviStatus('${id}')" style="padding:4px 9px;border-radius:999px;font-size:11px;cursor:pointer;white-space:nowrap;
+      background:${_admStatusFilter===id?boja+'22':'#0f172a'};border:1px solid ${_admStatusFilter===id?boja:'#334155'};
+      color:${_admStatusFilter===id?boja:'#94a3b8'};font-weight:${_admStatusFilter===id?'700':'400'};">${txt}</button>`;
+
+  const traka = `
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">
+      <b style="color:#e2e8f0;">${_admBrojRijec(s.ukupno,'korisnik','korisnika')}</b>${filterSum||filterName?' <span style="color:#64748b;">(od '+_adminUsers.length+')</span>':''}
+      ${s.ceka ? ` · <span style="color:#fbbf24;font-weight:700;">${s.ceka} ${s.ceka===1?'čeka':'čekaju'} odobrenje</span>` : ''}
+      ${s.opozvan ? ` · <span style="color:#f87171;">${s.opozvan} opozvano</span>` : ''}
+      ${s.neaktivni ? ` · <span style="color:#7f8ea3;">${s.neaktivni} neaktivnih</span>` : ''}
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+      ${chip('sve','Svi ('+s.ukupno+')','#93c5fd')}
+      ${s.ceka ? chip('ceka','⏳ Čeka ('+s.ceka+')','#fbbf24') : ''}
+      ${chip('odobren','✓ Odobreni ('+s.odobren+')','#4ade80')}
+      ${s.opozvan ? chip('opozvan','Opozvani ('+s.opozvan+')','#f87171') : ''}
+      ${s.neaktivni ? chip('neaktivni','Neaktivni ('+s.neaktivni+')','#94a3b8') : ''}
+      ${s.admin ? chip('admin','★ Admini ('+s.admin+')','#fbbf24') : ''}
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;">
+      <span style="font-size:11px;color:#64748b;white-space:nowrap;">Poredaj:</span>
+      <select onchange="_admPostaviSort(this.value)" style="flex:1;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#cbd5e1;font-size:12px;">
+        <option value="ime"${_admSort==='ime'?' selected':''}>Po imenu</option>
+        <option value="aktivnost"${_admSort==='aktivnost'?' selected':''}>Zadnja prijava</option>
+        <option value="noviji"${_admSort==='noviji'?' selected':''}>Najnovija registracija</option>
+      </select>
+    </div>`;
 
   if (!rows.length) {
-    el.innerHTML = '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Nema korisnika</p>';
+    el.innerHTML = traka + '<p style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Nema korisnika u ovom izboru</p>';
     return;
   }
 
-  // Grupiši po šumariji
-  const groups = {};
-  rows.forEach(u => { const s = u.sumarija || '—'; (groups[s] = groups[s] || []).push(u); });
+  // Čekanja se izdvajaju IZ grupisanja po šumariji: imaju rok (brišu se sami)
+  // i jedini su red na koji admin mora reagovati, a ranije su bila razbacana
+  // po grupama pa ih je trebalo tražiti.
+  const ceka   = rows.filter(u => _admStatus(u) === 'ceka');
+  const ostali = rows.filter(u => _admStatus(u) !== 'ceka');
 
-  el.innerHTML = Object.entries(groups).map(([sum, users]) => `
+  const groups = {};
+  ostali.forEach(u => { const s2 = u.sumarija || '—'; (groups[s2] = groups[s2] || []).push(u); });
+
+  const blokCeka = ceka.length ? `
+    <div style="margin-bottom:20px;border:1px solid #d97706;border-radius:10px;padding:10px;background:rgba(217,119,6,0.07);">
+      <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:8px;">
+        ⏳ Čeka odobrenje (${ceka.length}) <span style="color:#a16207;font-weight:400;">· neodobreni se brišu sami</span>
+      </div>
+      ${ceka.map(u => _admKarticaHtml(u)).join('')}
+    </div>` : '';
+
+  el.innerHTML = traka + blokCeka + Object.entries(groups).map(([sum, users]) => `
     <div style="margin-bottom:20px;">
       <div style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:0.5px;
                   padding:4px 0 6px;border-bottom:1px solid #1e3a5f;margin-bottom:8px;">
         ${_escHtml(sum)} <span style="color:#475569;">(${users.length})</span>
       </div>
-      ${users.map(u => {
-        const nm = (_escHtml(u.ime||'') + ' ' + _escHtml(u.prezime||'')).trim();
-        const uid = u.id;
-        const sumOpts = _SUMARIJE.map(s =>
-          `<option value="${_escHtml(s)}"${s===u.sumarija?' selected':''}>${_escHtml(s)}</option>`
-        ).join('');
-        // odobren: true/false/undefined (undefined = migracija još nije primijenjena)
-        const isPending  = u.odobren === false;
-        const isApproved = u.odobren === true;
-        const cardBorder = isPending ? '#d97706' : '#334155';
-        // istice_at je popunjen SAMO za naloge koji čekaju PRVO odobrenje (vidi
-        // 20260730_isticanje_registracije.sql) — opozvan nalog (ranije odobren,
-        // pa mu je pristup povučen) ga nema, jer se njemu ništa ne briše.
-        const dana = u.istice_at ? Math.ceil((new Date(u.istice_at) - Date.now()) / 86400000) : null;
-        const expiryChip = (isPending && dana !== null)
-          ? ` <span style="color:#f87171;font-size:10px;">· briše se za ${dana <= 0 ? '<1 dan' : dana + ' dan' + (dana === 1 ? '' : 'a')}</span>`
-          : '';
-        const statusChip = isPending
-          ? ' <span style="color:#fbbf24;font-size:10px;background:rgba(217,119,6,0.18);padding:1px 6px;border-radius:4px;">⏳ ČEKA ODOBRENJE</span>' + expiryChip
-          : isApproved ? ' <span style="color:#4ade80;font-size:10px;">✓ odobren</span>' : '';
-        const approveBtn = isPending
-          ? `<button onclick="adminSetApproved('${uid}',true,'${nm}')"
-               style="flex:1;padding:7px;background:#14532d;border:1px solid #16a34a;border-radius:6px;color:#4ade80;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-potvrdi"/></svg> Odobri</button>`
-          : isApproved
-          ? `<button onclick="adminSetApproved('${uid}',false,'${nm}')"
-               style="flex:1;padding:7px;background:#3a1e1e;border:1px solid #7f5539;border-radius:6px;color:#fbbf24;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-opozovi"/></svg> Opozovi</button>`
-          : '';
-        return `
-        <div style="background:#1e293b;border:1px solid ${cardBorder};border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px;">
-            ${nm}${u.is_admin ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>' : statusChip}
-          </div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin?'0':'8px'};">
-            ${u.created_at ? fmtDateShort(u.created_at) : '—'}
-            ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
-            ${u.last_sign_in_at !== undefined
-              ? '<br>' + (u.last_sign_in_at
-                  ? '🕐 Aktivan: ' + _fmtDateTime(u.last_sign_in_at)
-                  : '<span style="color:#7f8ea3;">nije se još prijavio</span>')
-              : ''}
-          </div>
-          ${!u.is_admin ? `
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            ${approveBtn}
-            <button onclick="adminResetPin('${uid}','${nm}')"
-              style="${approveBtn?'':'flex:1;'}padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-kljuc"/></svg> Reset PIN</button>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            <select id="admin-sum-sel-${uid}"
-              style="flex:1;min-width:0;padding:6px 8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;">
-              ${sumOpts}
-            </select>
-            <button onclick="adminTransferUser('${uid}','${nm}')"
-              style="padding:6px 11px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;">
-              <svg class="ic"><use href="#ic-prebaci"/></svg> Prebaci
-            </button>
-            <button onclick="adminDeleteUser('${uid}','${nm}')"
-              style="padding:6px 10px;background:rgba(220,38,38,0.12);border:1px solid #dc2626;border-radius:6px;color:#f87171;font-size:13px;cursor:pointer;">
-              <svg class="ic"><use href="#ic-obrisi"/></svg>
-            </button>
-          </div>
-          <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8;cursor:pointer;">
-            <input type="checkbox" ${u.je_vodeci ? 'checked' : ''}
-              onchange="adminSetVodeci('${uid}',this.checked,'${nm}')"
-              style="width:15px;height:15px;accent-color:#a78bfa;cursor:pointer;">
-            👁 Vodeći projektant — nadzorni pregled cijele šumarije
-          </label>` : ''}
-        </div>`;
-      }).join('')}
+      ${users.map(u => _admKarticaHtml(u)).join('')}
     </div>
   `).join('');
+}
+
+// Kartica jednog korisnika. Do v3.121.0 su SVE kontrole (Odobri/Opozovi,
+// Reset PIN, šumarija+Prebaci, Briši, Vodeći projektant) stajale otvorene na
+// svakoj kartici — šest kontrola × broj korisnika je zid dugmadi kroz koji se
+// ime jedva nazire, a sve osim odobravanja se koristi jednom u par mjeseci.
+// Sad je vidljivo ono zbog čega admin otvara listu (ko je, u kakvom je
+// stanju, kad je zadnji put bio), a ostalo je iza prekidača po kartici.
+function _admKarticaHtml(u) {
+  const nm     = (_escHtml(u.ime || '') + ' ' + _escHtml(u.prezime || '')).trim();
+  const nmJs   = _jsAttr(((u.ime || '') + ' ' + (u.prezime || '')).trim());
+  const uid    = u.id;
+  const st     = _admStatus(u);
+  const dana   = _admDanaNeaktivan(u);
+  const otvoren = _admOtvorene.has(uid);
+  const okvir  = st === 'ceka' ? '#d97706' : st === 'opozvan' ? '#7f1d1d' : '#334155';
+
+  const rok = u.istice_at ? Math.ceil((new Date(u.istice_at) - Date.now()) / 86400000) : null;
+  const rokChip = (st === 'ceka' && rok !== null)
+    ? ` <span style="color:#f87171;font-size:10px;">· briše se za ${rok <= 0 ? '<1 dan' : rok + ' dan' + (rok === 1 ? '' : 'a')}</span>`
+    : '';
+  const statusChip =
+      st === 'admin'   ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>'
+    : st === 'ceka'    ? ' <span style="color:#fbbf24;font-size:10px;background:rgba(217,119,6,0.18);padding:1px 6px;border-radius:4px;">⏳ ČEKA ODOBRENJE</span>' + rokChip
+    // Opozvan se do sada prikazivao ISTO kao "čeka odobrenje" iako je
+    // suprotno — admin mu je svjesno oduzeo pristup i ne treba ništa raditi.
+    : st === 'opozvan' ? ' <span style="color:#f87171;font-size:10px;background:rgba(220,38,38,0.15);padding:1px 6px;border-radius:4px;">⛔ PRISTUP OPOZVAN</span>'
+    : ' <span style="color:#4ade80;font-size:10px;">✓ odobren</span>';
+
+  // Neaktivnost je do sada bila samo datum u nizu teksta — na 40 korisnika se
+  // iz toga ne vidi ko godinu dana nije otvorio app.
+  const neakt = !_admMozeSePrijaviti(u) ? ''
+    : (dana === null)
+    ? ' <span style="color:#7f8ea3;font-size:10px;background:rgba(100,116,139,0.18);padding:1px 6px;border-radius:4px;">nije se prijavio</span>'
+    : (typeof dana === 'number' && dana >= _ADM_NEAKTIVAN_DANA)
+    ? ` <span style="color:#94a3b8;font-size:10px;background:rgba(100,116,139,0.18);padding:1px 6px;border-radius:4px;">${dana} dana neaktivan</span>`
+    : '';
+
+  const approveBtn =
+      st === 'ceka'
+    ? `<button onclick="adminSetApproved('${uid}',true,'${nmJs}')"
+         style="flex:1;padding:8px;background:#14532d;border:1px solid #16a34a;border-radius:6px;color:#4ade80;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-potvrdi"/></svg> Odobri</button>`
+    : st === 'opozvan'
+    ? `<button onclick="adminSetApproved('${uid}',true,'${nmJs}')"
+         style="flex:1;padding:8px;background:#14532d;border:1px solid #16a34a;border-radius:6px;color:#4ade80;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-potvrdi"/></svg> Vrati pristup</button>`
+    : st === 'odobren'
+    ? `<button onclick="adminSetApproved('${uid}',false,'${nmJs}')"
+         style="flex:1;padding:8px;background:#3a1e1e;border:1px solid #7f5539;border-radius:6px;color:#fbbf24;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-opozovi"/></svg> Opozovi</button>`
+    : '';
+
+  const sumOpts = _SUMARIJE.map(s =>
+    `<option value="${_escHtml(s)}"${s === u.sumarija ? ' selected' : ''}>${_escHtml(s)}</option>`).join('');
+
+  return `
+    <div style="background:#1e293b;border:1px solid ${okvir};border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px;">
+        ${nm || '<span style="color:#64748b;">(bez imena)</span>'}${statusChip}${neakt}
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin ? '0' : '8px'};">
+        ${u.created_at ? fmtDateShort(u.created_at) : '—'}
+        ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
+        ${u.last_sign_in_at !== undefined
+          ? '<br>' + (u.last_sign_in_at
+              ? '🕐 Zadnja prijava: ' + _fmtDateTime(u.last_sign_in_at)
+              : '<span style="color:#7f8ea3;">nije se još prijavio</span>')
+          : ''}
+      </div>
+      ${!u.is_admin ? `
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${approveBtn}
+        <button onclick="_admToggleKartica('${uid}')" title="Reset PIN, prebacivanje, brisanje, vodeći projektant"
+          style="${approveBtn ? '' : 'flex:1;'}padding:8px 11px;background:#0f172a;border:1px solid #475569;border-radius:6px;color:#94a3b8;font-size:12px;cursor:pointer;white-space:nowrap;">
+          <svg class="ic"><use href="#ic-alat"/></svg> Upravljaj <span id="adm-car-${uid}">${otvoren ? '▴' : '▾'}</span>
+        </button>
+      </div>
+      <div id="adm-ctl-${uid}" style="display:${otvoren ? '' : 'none'};margin-top:8px;padding-top:8px;border-top:1px solid #334155;">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+          <select id="admin-sum-sel-${uid}"
+            style="flex:1;min-width:0;padding:6px 8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;">
+            ${sumOpts}
+          </select>
+          <button onclick="adminTransferUser('${uid}','${nmJs}')"
+            style="padding:6px 11px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;">
+            <svg class="ic"><use href="#ic-prebaci"/></svg> Prebaci
+          </button>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" ${u.je_vodeci ? 'checked' : ''}
+            onchange="adminSetVodeci('${uid}',this.checked,'${nmJs}')"
+            style="width:15px;height:15px;accent-color:#a78bfa;cursor:pointer;">
+          👁 Vodeći projektant — nadzorni pregled cijele šumarije
+        </label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="adminResetPin('${uid}','${nmJs}')"
+            style="flex:1;padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-kljuc"/></svg> Reset PIN</button>
+          <button onclick="adminDeleteUser('${uid}','${nmJs}')"
+            style="padding:7px 11px;background:rgba(220,38,38,0.12);border:1px solid #dc2626;border-radius:6px;color:#f87171;font-size:12px;cursor:pointer;white-space:nowrap;">
+            <svg class="ic"><use href="#ic-obrisi"/></svg> Obriši
+          </button>
+        </div>
+      </div>` : ''}
+    </div>`;
 }
 
 // --- Admin: prebaci korisnika u drugu šumariju ---
@@ -6745,6 +6994,21 @@ async function postavkeTestNotif() {
 }
 
 // --- Admin: statistika po šumariji (korisnici · vlake · km) ---
+// Statistika je zbirni pregled, ne svakodnevni alat — podrazumijevano je
+// sklopljena da ne gura listu korisnika ispod pregiba; izbor se pamti.
+function _admStatsPrimijeniStanje() {
+  const box = document.getElementById('admin-stats-box');
+  const btn = document.getElementById('admin-stats-toggle');
+  if (!box) return;
+  const otvorena = _admLS('tvlake_adm_stats', '0') === '1';
+  box.dataset.skriven = otvorena ? '0' : '1';
+  box.style.display = otvorena ? '' : 'none';
+  if (btn) {
+    btn.style.display = '';
+    btn.textContent = otvorena ? '📊 Sakrij statistiku' : '📊 Statistika po šumariji';
+  }
+}
+
 async function _adminLoadStats() {
   if (!sbProfile?.is_admin) return;
   const box = document.getElementById('admin-stats-box');
@@ -6760,7 +7024,7 @@ async function _adminLoadStats() {
   }
   const rows = (data || []).filter(r => r.sumarija);
   if (!rows.length) { box.style.display = 'none'; return; }
-  box.style.display = '';
+  _admStatsPrimijeniStanje();
   const v2 = rows[0].maticnih !== undefined; // detaljna migracija 20260703 primijenjena
   const km = m => (Number(m || 0) / 1000).toFixed(1) + ' km';
   if (!v2) {

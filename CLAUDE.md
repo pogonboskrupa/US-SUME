@@ -1234,6 +1234,72 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   da ljubičasta linija (postojeći Ugladi) zadržava oštar šiljak, a zelena (novo)
   ga nema i prati trasu.
 
+## Admin — sekcija Korisnici
+
+- **Preuređeno zbog preglednosti (v3.121.0)**, na zahtjev. Lista je dotad
+  crtala SVE za svakog korisnika odjednom i grupisala isključivo po šumariji.
+  Izmjereno na 35 korisnika: lista je poslije **28% kraća** uz nepromijenjen
+  skup mogućnosti (ništa nije uklonjeno, samo presloženo).
+- **Registracije na čekanju IDU NA VRH, izdvojene iz grupisanja po šumariji.**
+  One imaju ROK — brišu se same za 7 dana (`20260730_isticanje_registracije`)
+  — a bile su razbacane među odobrenima pa ih je trebalo tražiti. `_admSortiraj`
+  ih gura naprijed **bez obzira na izabrani sort**, a unutar njih prvi je onaj
+  kojem rok ističe najprije. Test to čuva za sva tri sorta.
+- **"ČEKA ODOBRENJE" i "OPOZVAN" su se prikazivali IDENTIČNO** — oba imaju
+  `odobren === false`, pa je nalog kojem je admin SVJESNO oduzeo pristup pisao
+  "⏳ ČEKA ODOBRENJE" kao da traži akciju. Razlikuju se po `istice_at`
+  (popunjen SAMO za naloge koji čekaju PRVO odobrenje). `_admStatus` sad vraća
+  `ceka`/`opozvan`/`odobren`/`admin`, opozvan ima svoju crvenu oznaku i dugme
+  **"Vrati pristup"** umjesto "Odobri". **Kad migracija nije primijenjena**
+  (`istice_at === undefined` za sve) namjerno se vraća staro ponašanje
+  (sve neodobreno = čeka) — bolje poznato staro nego tvrditi "opozvan" za
+  nekoga ko to nije.
+- **"Neaktivan" se broji SAMO za onoga ko se MOŽE prijaviti**
+  (`_admMozeSePrijaviti`: odobren ili admin). Prva verzija je brojala i naloge
+  na čekanju — a oni se po definiciji nisu prijavili jer im pristup još nije
+  odobren; sažetak je pisao "2 čekaju odobrenje · 4 neaktivnih" gdje su ta ista
+  dva bila brojana dvaput, a na kartici je uz "⏳ ČEKA ODOBRENJE" stajalo još i
+  "nije se prijavio". **Uhvaćeno na screenshot-u, ne u brojkama — svi testovi
+  su prije toga prolazili.** Ista pouka kao kod heatmap palete (v3.112.4):
+  jedinični test potvrđuje da se broji ono što je traženo, ne i da je traženo
+  imalo smisla.
+- **`_admDanaNeaktivan` razlikuje `null` (nikad se nije prijavio) od
+  `undefined` (podatak ne postoji, starija migracija)** — spojiti ih u jedno
+  bi značilo tvrditi "nikad" tamo gdje se samo ne zna.
+- **Rijetko korištene kontrole su iza prekidača "Upravljaj" po kartici**
+  (Reset PIN, šumarija+Prebaci, Obriši, Vodeći projektant). Odobri/Opozovi
+  ostaje vidljivo jer je to jedina svakodnevna radnja. Šest kontrola × broj
+  korisnika je bio zid dugmadi kroz koji se ime jedva nazire.
+  `_admToggleKartica` mijenja `display` DIREKTNO, bez ponovnog crtanja liste —
+  inače bi se skrol vratio na vrh baš kad admin otvori karticu na dnu.
+  Otvorene kartice se pamte u `_admOtvorene` (Set) da prežive ponovno crtanje
+  pri promjeni filtera.
+- **Sažetak i chip-filteri po statusu** (Svi / Čeka / Odobreni / Opozvani /
+  Neaktivni / Admini) + sort (ime / zadnja prijava / najnovija registracija),
+  izbor se pamti (`tvlake_adm_status`, `tvlake_adm_sort`). **Sažetak se računa
+  nad OPSEGOM (šumarija + ime), ne nad statusnim filterom** — inače bi brojka
+  "3 čekaju" nestala čim admin izabere traku "Odobreni", a to je baš podatak
+  zbog kojeg bi se vratio nazad.
+- **Statistika po šumariji je sad sklopljena** (`tvlake_adm_stats`) — 7 redova
+  je stajalo uvijek otvoreno i guralo listu korisnika ispod pregiba.
+- **`_escHtml` NE escape-uje apostrof**, a ime korisnika ide u
+  `onclick="fn('IME')"` — ime tipa O'Brien bi prekinulo JS string i dugme bi
+  tiho prestalo raditi, bez greške u konzoli (kao i sve u atributima). Dodan
+  `_jsAttr` (prvo JS-escape `\` i `'`, pa tek onda HTML-escape). **Svako novo
+  dugme koje nosi korisnički tekst u `onclick` mora kroz njega.**
+- **Lista šumarija se puni iz `_SUMARIJE`** u `adminLoadUsers()` — bila je i u
+  markupu prepisana ručno, pa bi nova šumarija radila samo na pola mjesta.
+- **`_admLS` (localStorage u try/catch)**: čitanje je na nivou bloka, a u
+  privatnom prozoru / sa blokiranim kolačićima sam pristup BACA i oborio bi
+  cijeli JS blok ispod.
+- Testovi: `tests/js/admin-korisnici.test.js` (30), nad STVARNIM kodom iz
+  `index.html`. Vizuelno provjereno Playwright reprodukcijom sa rekonstrukcijom
+  starog prikaza uporedo. **Zamka pri pisanju te reprodukcije**: rekonstrukcija
+  je prvo pisana ugniježđenim template literalima unutar template literala —
+  troduplo escape-ovanje je razbilo stranicu uz `Failed to execute 'write' on
+  'Document'`, a mjerenja su tiho ispala 0 px i "false" za sve provjere (dakle
+  test bi "prošao" kao da ništa ne valja). Prepisano običnom konkatenacijom.
+
 ## Donja traka — #action-bar (Karta) i #rec-bar (svi paneli)
 
 - **`#action-bar` postoji SAMO na Karti** (`_updFabVisibility`:
