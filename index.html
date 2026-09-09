@@ -4804,16 +4804,25 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
         </div>
         <div id="edp-smooth" style="display:none;margin-top:4px;background:#0f172a;border:1px solid #6b21a8;border-radius:6px;padding:6px 8px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-            <span style="font-size:11px;color:#a78bfa;white-space:nowrap;">Jačina:</span>
-            <input type="range" id="edp-smooth-eps" min="1" max="5" value="2" step="0.5" style="flex:1;accent-color:#a78bfa;"
-                   oninput="document.getElementById('edp-smooth-val').textContent=this.value+'m';_smoothVlakaPreview()">
-            <span id="edp-smooth-val" style="font-size:11px;color:#a78bfa;min-width:24px;">2m</span>
+            <span style="font-size:11px;color:#a78bfa;white-space:nowrap;" title="Vraćanje istim putem i mirovanje u krugu do ovoliko metara se poravna u jednu tačku. 0 = isključeno.">Vraćanje/stajanje do:</span>
+            <input type="range" id="edp-ugl-krug" min="0" max="15" value="5" step="1" style="flex:1;accent-color:#a78bfa;"
+                   oninput="document.getElementById('edp-ugl-krug-val').textContent=(this.value==='0'?'isklj.':this.value+'m');_smoothVlakaPreview()">
+            <span id="edp-ugl-krug-val" style="font-size:11px;color:#a78bfa;min-width:34px;">5m</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-size:11px;color:#a78bfa;white-space:nowrap;" title="Uklanjanje sitnog bočnog šuma (Douglas-Peucker).">Sitan šum:</span>
+            <input type="range" id="edp-smooth-eps" min="0" max="5" value="1" step="0.5" style="flex:1;accent-color:#a78bfa;"
+                   oninput="document.getElementById('edp-smooth-val').textContent=(this.value==='0'?'isklj.':this.value+'m');_smoothVlakaPreview()">
+            <span id="edp-smooth-val" style="font-size:11px;color:#a78bfa;min-width:34px;">1m</span>
           </div>
           <div id="edp-smooth-info" style="font-size:10px;color:#94a3b8;margin-bottom:4px;"></div>
           <div style="display:flex;gap:4px;">
             <button class="mdp-btn done" onclick="_smoothVlakaApply()" style="flex:1;font-size:11px;"><svg class="ic"><use href="#ic-potvrdi"/></svg> Primijeni</button>
             <button class="mdp-btn undo" onclick="_smoothVlakaCancel()" style="flex:1;font-size:11px;"><svg class="ic"><use href="#ic-zatvori"/></svg> Otkaži</button>
           </div>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px;">
+          <button id="edp-ugl-vrati" class="mdp-btn undo" onclick="_uglVrati();this.style.display='none';" style="display:none;flex:1;font-size:11px;"><svg class="ic"><use href="#ic-nazad"/></svg> Vrati uglačavanje</button>
         </div>
       </div>
 
@@ -4968,7 +4977,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.119.4';
+const APP_VER = 'v3.120.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16646,16 +16655,11 @@ function _dpSimplifyGeo(pts, epsM) {
   return [pts[0], pts[pts.length-1]];
 }
 
+// Uklanja tačke koje OKOMITO odskaču više od 15 m od linije između susjeda
+// (klasičan multipath odskok u stranu). NE vidi povratak istim putem — to je
+// uzdužno odstupanje, za njega postoji _zbijPetlje ispod.
 function _removeOutliers(pts) {
   if (pts.length < 3) return pts;
-  const dists = [];
-  for (let i = 1; i < pts.length - 1; i++) {
-    dists.push(dst(pts[i-1].la, pts[i-1].lo, pts[i+1].la, pts[i+1].lo) -
-               dst(pts[i-1].la, pts[i-1].lo, pts[i].la, pts[i].lo) -
-               dst(pts[i].la, pts[i].lo, pts[i+1].la, pts[i+1].lo));
-  }
-  const median = [...dists].sort((a,b) => a-b)[Math.floor(dists.length/2)];
-  const mad = [...dists].map(d => Math.abs(d-median)).sort((a,b)=>a-b)[Math.floor(dists.length/2)] || 1;
   const result = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
     const dev = Math.abs(pld(pts[i], pts[i-1], pts[i+1]));
@@ -16673,6 +16677,160 @@ function _removeOutliers(pts) {
   }
 }
 
+// ─── SAŽIMANJE PETLJI I MIROVANJA — ono što Douglas-Peucker NE MOŽE ─────────
+//
+// Terenska prijava (v3.120.0), uz screenshot: "vratio sam se istim putem oko
+// 5 metara a uvijek pokaže ovako cik-cak". Do sada je "Ugladi trag" bio SAMO
+// Douglas-Peucker (_dpSimplifyGeo) + _removeOutliers, a oba mjere OKOMITO
+// odstupanje tačke od linije kroz susjede. Povratak istim putem leži UZDUŽ te
+// linije, ne okomito na nju — dakle nevidljiv je za oba, ma koliko se
+// regulator "Jačina" pomjerao. To nije bio propust u podešavanju nego
+// pogrešan alat za taj oblik greške.
+//
+// Izmjereno (izolovan repro nad STVARNIM _dpSimplifyGeo iz ovog fajla;
+// krivudava vlaka od 60 m, povratak 5 m u sredini, bočni GPS šum ±1 m):
+//     snimljeno              35 tač.   82.0 m   3.8 m unazad
+//     DP eps=1               18 tač.   80.8 m   3.8 m unazad  ← cik-cak PREŽIVI
+//     DP eps=2                6 tač.   66.2 m   0.0 m unazad  ← ubije cik-cak,
+//                                                  ali desetkuje i pravu krivinu
+//     zbijPetlje(5) + DP=1   14 tač.   69.4 m   0.0 m unazad  ← i jedno i drugo
+// DP je imao JEDAN regulator za DVA posla koja se međusobno tuku; ovim su
+// razdvojena — krug petlji čisti vraćanje/mirovanje, eps čisti sitan šum.
+//
+// Niz tačaka i..j se sažima u JEDNU tačku ako je istovremeno:
+//   (a) ZATVOREN — svaka tačka niza je unutar `krugM` od početka niza, i
+//   (b) NEPRODUKTIVAN — pređeni put je bar dvostruko veći od neto pomaka
+//       (hodao puno, a pomjerio se malo).
+// Uslov (b) je ono što razdvaja "vrtio se u mjestu" od "prošao kroz" —
+// bez njega bi se i obično pravolinijsko hodanje prorijedilo na svakih
+// `krugM` metara. Provjereno: hodanje pravo 100 m (tačka svakih 2 m) prolazi
+// kroz ovo NETAKNUTO — 51 tačka prije, 51 poslije, dužina identična.
+//
+// GRANICA KOJU TREBA ZNATI: stvarna serpentina (špic-okret) UŽA od ~6 m se na
+// krugu od 5 m poravna kao da je greška — izmjereno, okret širine 4 m gubi
+// 20.5 m, dok 6 m i širi ostaju netaknuti do zadnjeg metra. Vlaka sa okretom
+// užim od 6 m nije prohodna za traktor/forvarder, pa je granica u praksi van
+// domašaja; ako ipak zasmeta, klizač se spusti niže ili na 0 (isključeno).
+function _zbijPetljeProlaz(pts, krugM) {
+  const n = pts.length, out = [];
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && dst(pts[i].la, pts[i].lo, pts[j+1].la, pts[j+1].lo) <= krugM) j++;
+    if (j > i) {
+      let put = 0;
+      for (let k = i; k < j; k++) put += dst(pts[k].la, pts[k].lo, pts[k+1].la, pts[k+1].lo);
+      const neto = dst(pts[i].la, pts[i].lo, pts[j].la, pts[j].lo);
+      if (put >= Math.max(2 * neto, krugM)) {
+        // Oznaka GPS prekida (gap) se PRENOSI na sažetu tačku — inače bi
+        // sažimanje tiho progutalo upozorenje "provjeri ovaj dio traga".
+        // Mora se primijeniti na SVE tri grane ispod, i na sidrene: prvi
+        // pokušaj je gap nosio samo u centroid-grani, pa je mirovanje na
+        // samom POČETKU traga tiho gubilo upozorenje (uhvaćeno testom).
+        let rep;
+        if (i === 0)          rep = { ...pts[0] };          // sidro: početak
+        else if (j === n - 1) rep = { ...pts[n - 1] };      // sidro: kraj
+        else {
+          // Krajevi vlake/traga su SIDRA — početak se veže na put ili matičnu
+          // vlaku, kraj na sljedeći krak. Pomjeranje na centroid bi tiho
+          // raskinulo taj spoj, pa se tu zadržava originalna tačka; unutar
+          // trase centroid je bolji jer usrednji GPS šum cijelog niza.
+          let sla = 0, slo = 0;
+          for (let k = i; k <= j; k++) { sla += pts[k].la; slo += pts[k].lo; }
+          rep = { ...pts[i], la: sla / (j - i + 1), lo: slo / (j - i + 1) };
+        }
+        for (let k = i; k <= j; k++) if (pts[k].gap) { rep.gap = true; break; }
+        out.push(rep);
+        i = j + 1;
+        continue;
+      }
+    }
+    out.push(pts[i]);
+    i++;
+  }
+  return out;
+}
+
+// Više prolaza je NUŽNO, ne optimizacija: kad GPS u mjestu drifta više nego
+// što je krug širok, prvi prolaz sažme tek podgrupe, pa tek drugi spoji ono
+// što je time postalo dovoljno blizu. Izmjereno na "zaboravio pauzu" (40
+// fiksova u mjestu, drift ±3 m, krug 5 m): 1 prolaz → 93.7 m, 2 prolaza →
+// 68.9 m, dalje nepromijenjeno (stvarna trasa 60 m). Petlja staje sama čim
+// prolaz ništa ne promijeni.
+function _zbijPetlje(pts, krugM, maxProlaza) {
+  if (!pts || pts.length < 3 || !(krugM > 0)) return pts;
+  let cur = pts;
+  const lim = maxProlaza || 4;
+  for (let p = 0; p < lim; p++) {
+    const next = _zbijPetljeProlaz(cur, krugM);
+    if (next.length === cur.length) return next;
+    cur = next;
+  }
+  return cur;
+}
+
+// Jedinstven redoslijed obrade za vlaku i za trag — prvo petlje (uzdužno),
+// pa okomiti odskoci, pa sitan šum. Obrnut redoslijed ne bi radio: DP prvo
+// izbaci tačke koje petlji trebaju da bi se uopšte prepoznala kao petlja.
+function _uglObradi(pts, krugM, epsM) {
+  let out = _zbijPetlje(pts, krugM);
+  out = _removeOutliers(out);
+  if (epsM > 0) out = _dpSimplifyGeo(out, epsM);
+  return out;
+}
+
+// Tačke traga su nizovi [la, lo, alt, timestamp, tačnost], vlake su objekti
+// {la, lo, ...} — algoritam radi nad objektima, pa trag ide kroz adapter.
+// Sažeta tačka nosi vrijeme PRVE tačke niza (trenutak dolaska na to mjesto),
+// ne zadnje — inače bi mirovanje od 4 minute izgledalo kao da je počelo tek
+// na svom kraju.
+function _tragPtsUObj(pts) {
+  return pts.map(p => ({ la: p[0], lo: p[1], _al: p[2], _t: p[3], _ac: p[4] }));
+}
+function _tragPtsIzObj(objs) {
+  return objs.map(o => [o.la, o.lo, o._al, o._t, o._ac]);
+}
+
+// ─── POVRATAK (jedan nivo) ─────────────────────────────────────────────────
+// Uglačavanje TRAJNO briše izmjerene GPS tačke. Bez povratka bi jedan pogrešno
+// postavljen klizač nepovratno pojeo snimak sa terena koji se ne može ponoviti.
+let _uglUndo = null;   // { vrsta:'vlaka'|'trag', ref, pts, opis }
+
+function _uglMoguciPovratak(vrsta, ref) {
+  // try/catch zbog TDZ-a: _uglUndo je `let` (nije hoistovan), a listu tragova
+  // zna iscrtati kod koji se pokrene prije nego izvršavanje bloka dođe dovde
+  // (offline-first pokretanje zove showApp() dok se dokument još parsira —
+  // vidi zamku "Pokretanje dira DOM koji JOŠ NE POSTOJI" u CLAUDE.md).
+  try { return !!(_uglUndo && _uglUndo.vrsta === vrsta && _uglUndo.ref === ref); }
+  catch (e) { return false; }
+}
+
+function _uglVrati() {
+  if (!_uglUndo) return;
+  const u = _uglUndo;
+  _uglUndo = null;
+  if (u.vrsta === 'vlaka') {
+    const v = u.ref;
+    if (!vlake.includes(v)) { showToast('⚠ Vlaka više ne postoji'); return; }
+    v.pts = u.pts;
+    v.poly.setLatLngs(u.pts.map(p => [p.la, p.lo]));
+    const i = vlake.indexOf(v);
+    updateVlakaLabel(i);
+    scheduleVlakaSave(i);
+    _saveLocalVlake();
+    rndList();
+  } else {
+    const t = u.ref;
+    if (!_tragRegistry.includes(t)) { showToast('⚠ Trag više ne postoji'); return; }
+    t.pts = u.pts;
+    _tragRegAddLayer(t);
+    _tragRegSave();
+    if (typeof sbFlushTrag === 'function') sbFlushTrag(t);
+    _tragRegRender();
+  }
+  showToast('↩ Uglačavanje poništeno — vraćene originalne tačke');
+}
+
 function _smoothVlakaStart() {
   if (actI === null) return;
   const v = vlake[actI];
@@ -16682,27 +16840,47 @@ function _smoothVlakaStart() {
   _smoothVlakaPreview();
 }
 
+// Sažetak izmjene MORA nositi i dužinu, ne samo broj tačaka: cik-cak i
+// mirovanje NADUVAVAJU izmjerenu dužinu (u reprou 82 m umjesto stvarnih 60 m),
+// a dužina vlake ulazi u gustoću mreže (m/ha) po kojoj se ocjenjuje da li je
+// mreža dovoljna. Broj tačaka sam po sebi ne kaže je li išta ispravljeno.
+function _uglInfoTxt(prije, poslije) {
+  const dPrije = calcL(prije), dPoslije = calcL(poslije);
+  const raz = dPoslije - dPrije;
+  return `${prije.length} → ${poslije.length} tačaka · dužina ${dPrije.toFixed(1)} → ` +
+         `${dPoslije.toFixed(1)} m (${raz >= 0 ? '+' : '−'}${Math.abs(raz).toFixed(1)} m)`;
+}
+
+function _uglVlakaParams() {
+  const krugEl = document.getElementById('edp-ugl-krug');
+  const epsEl  = document.getElementById('edp-smooth-eps');
+  return {
+    krug: krugEl ? parseFloat(krugEl.value) : 5,
+    eps:  epsEl  ? parseFloat(epsEl.value)  : 2
+  };
+}
+
 function _smoothVlakaPreview() {
   if (actI === null || !_smoothOrigPts) return;
-  const eps = parseFloat(document.getElementById('edp-smooth-eps').value);
-  let cleaned = _removeOutliers(_smoothOrigPts);
-  const simplified = _dpSimplifyGeo(cleaned, eps);
+  const { krug, eps } = _uglVlakaParams();
+  const simplified = _uglObradi(_smoothOrigPts, krug, eps);
   if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
   _smoothPreviewLine = L.polyline(
     simplified.map(p => [p.la, p.lo]),
     { color: '#a78bfa', weight: 3, dashArray: '6 4', opacity: 0.9 }
   ).addTo(map);
   const info = document.getElementById('edp-smooth-info');
-  if (info) info.textContent = `${_smoothOrigPts.length} → ${simplified.length} tačaka (−${_smoothOrigPts.length - simplified.length})`;
+  if (info) info.textContent = _uglInfoTxt(_smoothOrigPts, simplified);
 }
 
 function _smoothVlakaApply() {
   if (actI === null || !_smoothOrigPts) return;
-  const eps = parseFloat(document.getElementById('edp-smooth-eps').value);
-  let cleaned = _removeOutliers(_smoothOrigPts);
-  const simplified = _dpSimplifyGeo(cleaned, eps);
+  const { krug, eps } = _uglVlakaParams();
+  const simplified = _uglObradi(_smoothOrigPts, krug, eps);
+  if (simplified.length < 2) { showToast('⚠ Ostalo bi manje od 2 tačke — smanji jačinu'); return; }
   const v = vlake[actI];
   const removed = v.pts.length - simplified.length;
+  _uglUndo = { vrsta: 'vlaka', ref: v, pts: _smoothOrigPts.map(p => ({...p})) };
   v.pts = simplified;
   v.poly.setLatLngs(simplified.map(p => [p.la, p.lo]));
   updateVlakaLabel(actI);
@@ -16710,13 +16888,76 @@ function _smoothVlakaApply() {
   _saveLocalVlake();
   _smoothVlakaCancel();
   rndList();
-  showToast(`✓ Uglačano: uklonjeno ${removed} tačaka`);
+  const btn = document.getElementById('edp-ugl-vrati');
+  if (btn) btn.style.display = '';
+  showToast(`✓ Uglačano: uklonjeno ${removed} tačaka — "Vrati" ako nije dobro`);
 }
 
 function _smoothVlakaCancel() {
   if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
   _smoothOrigPts = null;
   document.getElementById('edp-smooth').style.display = 'none';
+}
+
+// ─── UGLAČAVANJE TRAGA ─────────────────────────────────────────────────────
+// Tragovi do sada NISU imali nikakvo uglačavanje (postojalo je samo za vlake),
+// a korisnik na terenu snima i jedno i drugo istim hodom i istim GPS-om — pa
+// je isti cik-cak jednako pogađao oba. Isti algoritam, isti klizači, samo nad
+// nizovima umjesto objekata (vidi _tragPtsUObj).
+let _uglTragId = null;
+
+function _uglTragParams(id) {
+  const k = document.getElementById('treg-ugl-krug-' + id);
+  const e = document.getElementById('treg-ugl-eps-' + id);
+  return { krug: k ? parseFloat(k.value) : 5, eps: e ? parseFloat(e.value) : 1 };
+}
+
+function _uglTragOtvori(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  if (!t.pts || t.pts.length < 3) { showToast('⚠ Premalo tačaka za uglačavanje'); return; }
+  if (_uglTragId && _uglTragId !== id) _uglTragOtkazi(_uglTragId);
+  _uglTragId = id;
+  const p = document.getElementById('treg-ugl-' + id);
+  if (p) p.style.display = '';
+  _uglTragPreview(id);
+}
+
+function _uglTragPreview(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const { krug, eps } = _uglTragParams(id);
+  const prije = _tragPtsUObj(t.pts);
+  const poslije = _uglObradi(prije, krug, eps);
+  if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
+  _smoothPreviewLine = L.polyline(poslije.map(p => [p.la, p.lo]),
+    { color: '#a78bfa', weight: 3, dashArray: '6 4', opacity: 0.9, pane: 'tragMsrLines' }).addTo(map);
+  const info = document.getElementById('treg-ugl-info-' + id);
+  if (info) info.textContent = _uglInfoTxt(prije, poslije);
+}
+
+function _uglTragPrimijeni(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const { krug, eps } = _uglTragParams(id);
+  const poslije = _uglObradi(_tragPtsUObj(t.pts), krug, eps);
+  if (poslije.length < 2) { showToast('⚠ Ostalo bi manje od 2 tačke — smanji jačinu'); return; }
+  const uklonjeno = t.pts.length - poslije.length;
+  _uglUndo = { vrsta: 'trag', ref: t, pts: t.pts.map(p => p.slice()) };
+  t.pts = _tragPtsIzObj(poslije);
+  _uglTragOtkazi(id);
+  _tragRegAddLayer(t);          // linija, hit-sloj i oznaka dužine se grade iz t.pts
+  _tragRegSave();
+  if (typeof sbFlushTrag === 'function') sbFlushTrag(t);
+  _tragRegRender();
+  showToast(`✓ Uglačano: uklonjeno ${uklonjeno} tačaka — "Vrati" ako nije dobro`);
+}
+
+function _uglTragOtkazi(id) {
+  if (_smoothPreviewLine) { map.removeLayer(_smoothPreviewLine); _smoothPreviewLine = null; }
+  const p = document.getElementById('treg-ugl-' + (id || _uglTragId));
+  if (p) p.style.display = 'none';
+  _uglTragId = null;
 }
 
 // === PREVIEW ===
@@ -19671,9 +19912,30 @@ function _tragRegRender() {
         <div class="mf-col"><label>Odjel</label><input id="treg-ei-odjel-${t.id}" value="${_escHtml(t.odjel||'')}" placeholder="npr. 14a"></div>
         <button class="mf-save" onclick="_tragRegSetMeta('${t.id}')"><svg class="ic"><use href="#ic-potvrdi"/></svg> Spremi</button>
       </div>
+      <div id="treg-ugl-${t.id}" style="display:none;" class="treg-meta-edit">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:11px;white-space:nowrap;">Vraćanje/stajanje do:</span>
+          <input type="range" id="treg-ugl-krug-${t.id}" min="0" max="15" value="5" step="1" style="flex:1;"
+                 oninput="document.getElementById('treg-ugl-krug-v-${t.id}').textContent=(this.value==='0'?'isklj.':this.value+'m');_uglTragPreview('${t.id}')">
+          <span id="treg-ugl-krug-v-${t.id}" style="font-size:11px;min-width:34px;">5m</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:11px;white-space:nowrap;">Sitan šum:</span>
+          <input type="range" id="treg-ugl-eps-${t.id}" min="0" max="5" value="1" step="0.5" style="flex:1;"
+                 oninput="document.getElementById('treg-ugl-eps-v-${t.id}').textContent=(this.value==='0'?'isklj.':this.value+'m');_uglTragPreview('${t.id}')">
+          <span id="treg-ugl-eps-v-${t.id}" style="font-size:11px;min-width:34px;">1m</span>
+        </div>
+        <div id="treg-ugl-info-${t.id}" style="font-size:10px;color:#94a3b8;margin-bottom:4px;"></div>
+        <div style="display:flex;gap:4px;">
+          <button class="mf-save" onclick="_uglTragPrimijeni('${t.id}')"><svg class="ic"><use href="#ic-potvrdi"/></svg> Primijeni</button>
+          <button class="mf-save" onclick="_uglTragOtkazi('${t.id}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Otkaži</button>
+        </div>
+      </div>
       <div class="treg-btns">
         <button onclick="_tragRegZoom('${t.id}')"><svg class="ic"><use href="#ic-karta"/></svg> Zoom</button>
         <button onclick="_tragRegToggle('${t.id}')">${vis?'<svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij':'<svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži'}</button>
+        <button onclick="_uglTragOtvori('${t.id}')" title="Poravna vraćanje istim putem i mirovanje u mjestu"><svg class="ic"><use href="#ic-alat"/></svg> Ugladi</button>
+        ${_uglMoguciPovratak('trag', t) ? `<button onclick="_uglVrati();_tragRegRender();"><svg class="ic"><use href="#ic-nazad"/></svg> Vrati</button>` : ''}
         <button onclick="_tragRegEditMeta('${t.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Meta</button>
         <button onclick="_tragRegShare('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
         <button class="del-btn" onclick="_tragRegDelete('${t.id}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>

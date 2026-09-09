@@ -1148,6 +1148,92 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   pa je cijela analiza na blagom terenu tvrdila da nagiba nema. `maxGrade` je
   izmješten izvan praga; `steepLen`/`steepSegs` ostaju vezani za 20%.
 
+## Uglačavanje snimljenog traga/vlake ("Ugladi")
+
+- **Douglas-Peucker NE MOŽE ukloniti vraćanje istim putem (v3.120.0)** — ovo je
+  suština, i razlog zašto je terenska prijava godinama izgledala kao loše
+  podešen regulator. Korisnik je poslao screenshot vlake sa oštrim cik-cakom uz
+  opis "vratio sam se istim putem oko 5 metara a uvijek pokaže ovako cik-cak".
+  Postojeći "Ugladi trag" je bio SAMO `_dpSimplifyGeo` + `_removeOutliers`, a
+  **oba mjere OKOMITO odstupanje tačke od linije kroz susjede**. Povratak istim
+  putem leži UZDUŽ te linije — okomito odstupanje mu je ~0, pa je za oba
+  algoritma nevidljiv bez obzira koliko se "Jačina" pomjerila. Nije bio propust
+  u podešavanju nego **pogrešan alat za taj oblik greške**.
+  - Izmjereno (izolovan repro nad STVARNIM `_dpSimplifyGeo` iz `index.html`;
+    krivudava vlaka 60 m, povratak 5 m u sredini, bočni šum ±1 m):
+    snimljeno 35 tač./82.0 m/3.8 m unazad → DP eps=1 daje 18 tač./80.8 m i
+    **3.8 m unazad (cik-cak preživi)** → DP eps=2 ubije cik-cak ali sruši na
+    6 tačaka (desetkuje i pravu krivinu) → `_zbijPetlje(5)+DP=1` daje 14 tač./
+    69.4 m/0 m unazad. DP je imao JEDAN regulator za DVA posla koja se tuku.
+  - **Zamka pri pisanju repro-a**: prvi pokušaj je koristio savršeno PRAVU
+    liniju kao "stvarnu" trasu — na njoj DP sve sruši na 2 tačke i cik-cak
+    nestane usput, pa bi test "dokazao" da postojeći kod radi. Realna vlaka je
+    krivudava; tek sa S-krivinom se vidi da eps koji čuva krivinu ne dira
+    cik-cak, a eps koji ubije cik-cak pojede i krivinu.
+- **`_zbijPetlje(pts, krugM, maxProlaza)`** — niz uzastopnih tačaka se sažima u
+  JEDNU ako je istovremeno (a) ZATVOREN (sve unutar `krugM` od početka niza) i
+  (b) NEPRODUKTIVAN (pređeni put ≥ 2× neto pomak). Uslov (b) je ono što
+  razdvaja "vrtio se u mjestu" od "prošao kroz" — **bez njega bi se i obično
+  pravolinijsko hodanje prorijedilo na svakih `krugM` metara**. Provjereno
+  testom: hodanje pravo 100 m (tačka svakih 2 m) prolazi NETAKNUTO, 51 → 51
+  tačaka, dužina identična do milimetra.
+- **Više prolaza je NUŽNO, ne optimizacija**: kad GPS u mjestu drifta više nego
+  što je krug širok, prvi prolaz sažme tek podgrupe pa tek drugi spoji ono što
+  je time postalo dovoljno blizu. Izmjereno ("zaboravio pauzu", 40 fiksova u
+  mjestu, drift ±3 m, krug 5 m): 1 prolaz → 93.7 m, 2 prolaza → 68.9 m, dalje
+  nepromijenjeno (stvarno 60 m). Petlja staje sama čim prolaz ništa ne promijeni.
+- **Krug MORA biti veći od amplitude drifta, inače algoritam ne uhvati ništa** —
+  na driftu ±5 m sa krugom 5 m nijedan niz nije "zatvoren" (susjedni fiksovi su
+  već razmaknuti više od kruga) pa ostane 242 m umjesto 60. To se ne može
+  riješiti unaprijed jer se 5 m jittera ne razlikuje od 5 m stvarnog hoda bez
+  dodatne informacije — zato je klizač korisnikov, a ne konstanta, i zato info
+  linija pokazuje DUŽINU uživo da se može dotjerati na terenu.
+- **Poznata granica, mjerena a ne pretpostavljena**: stvarna serpentina
+  (špic-okret) UŽA od ~6 m se na krugu 5 m poravna kao da je greška — okret od
+  4 m gubi 20.5 m, dok 6 m i širi ostaju netaknuti do zadnjeg metra. Vlaka sa
+  okretom užim od 6 m nije prohodna za traktor/forvarder pa je granica u praksi
+  van domašaja; klizač se svejedno može spustiti ili staviti na 0 (isključeno).
+  Test čuva OBA kraja te granice.
+- **Krajevi su SIDRA** — početak vlake se veže na put ili matičnu vlaku, kraj na
+  sljedeći krak; pomjeranje na centroid bi tiho raskinulo taj spoj. Unutar trase
+  se koristi centroid (usrednji šum cijelog niza), na krajevima originalna tačka.
+- **Oznaka GPS prekida (`gap`) se PRENOSI na sažetu tačku.** Prva verzija ju je
+  nosila samo u centroid-grani, pa je mirovanje na samom POČETKU traga tiho
+  gubilo upozorenje "provjeri ovaj dio traga" — **uhvaćeno testom, ne na terenu**.
+- **Sažetak izmjene mora nositi DUŽINU, ne samo broj tačaka** (`_uglInfoTxt`):
+  cik-cak i mirovanje NADUVAVAJU izmjerenu dužinu (82 m umjesto 60 m u reprou;
+  198 m umjesto 60 m kod zaboravljene pauze), a dužina vlake ulazi u gustoću
+  mreže (m/ha) po kojoj se ocjenjuje da li je mreža dovoljna — ista klasa
+  posljedice kao udvostručena dužina iz v3.118.0. Broj tačaka sam po sebi ne
+  kaže je li išta ispravljeno.
+- **Tragovi su do tada imali NULA uglačavanja** — postojalo je samo za vlake,
+  iako korisnik snima i jedno i drugo istim hodom i istim GPS-om. Sad oba dijele
+  `_uglObradi(pts, krugM, epsM)`; trag ide kroz adapter (`_tragPtsUObj` /
+  `_tragPtsIzObj`) jer su mu tačke nizovi `[la, lo, alt, ts, acc]`, a vlake
+  objekti. Sažeta tačka nosi vrijeme PRVE tačke niza (trenutak dolaska) — ne
+  zadnje, inače bi mirovanje od 4 minute izgledalo kao da je počelo na kraju.
+- **Redoslijed obrade je bitan**: prvo petlje (uzdužno), pa okomiti odskoci, pa
+  sitan šum. Obrnuto ne radi — DP prvo izbaci tačke koje petlji trebaju da bi se
+  uopšte prepoznala kao petlja.
+- **Uglačavanje TRAJNO briše izmjerene GPS tačke**, pa postoji jedan nivo
+  povratka (`_uglUndo`/`_uglVrati`, dugme "Vrati" uz vlaku i uz trag). Snimak sa
+  terena se ne može ponoviti; bez povratka bi jedan pogrešno postavljen klizač
+  bio nepovratan. `_uglMoguciPovratak` je u `try/catch` zbog TDZ-a — `_uglUndo`
+  je `let`, a listu tragova zna iscrtati kod pokrenut prije nego izvršavanje
+  bloka dođe dovde (vidi zamku "Pokretanje dira DOM koji JOŠ NE POSTOJI").
+- **Snimanje se NAMJERNO ne mijenja** — filtriranje po uglu zaokreta u realnom
+  vremenu je već ranije odbijeno (komentari u `_vlakaProcessGpsPoint` i
+  `_addTragPoint`) jer neizbježno pogađa i STVARNU vratnju, ne samo GPS odskok.
+  Snima se vjerodostojno, čisti se poslije, ručno i uz pregled — ne tiho.
+- `_removeOutliers` je usput očišćen od mrtvog koda: računao je `dists`/`median`/
+  `mad` (upravo "detour" signal koji bi vraćanje i vidio) i **nijedno nikad nije
+  koristio** — filtrirao je samo po okomitom odstupanju ≥ 15 m.
+- Testovi: `tests/js/ugladi.test.js` (18), nad STVARNIM kodom izvučenim iz
+  `index.html`. Vizuelno provjereno Playwright reprodukcijom (snimljeno vs.
+  postojeće vs. novo, preko stvarne trase kao pozadine) — na slici se jasno vidi
+  da ljubičasta linija (postojeći Ugladi) zadržava oštar šiljak, a zelena (novo)
+  ga nema i prati trasu.
+
 ## Donja traka — #action-bar (Karta) i #rec-bar (svi paneli)
 
 - **`#action-bar` postoji SAMO na Karti** (`_updFabVisibility`:
