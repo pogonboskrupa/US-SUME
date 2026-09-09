@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.125.0';
+const APP_VER = 'v3.126.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -19171,6 +19171,17 @@ function _updGpsSwitch() {
   if (fs) fs.classList.toggle('on', _forestMode);
   const btn = document.getElementById('ab-loc');
   if (btn) btn.style.color = gpsOn ? '#22c55e' : '';
+  // Dugme "Snimi trag" mora pokazati STVARNO stanje kad se popup otvori —
+  // trag je mogao biti započet negdje drugo (Tragovi tab), pa bi "Snimi
+  // trag" ovdje TIHO drugi put pokrenulo/prekinulo snimanje da tekst laže.
+  const tt = document.getElementById('ab-loc-trag-txt');
+  if (tt) tt.textContent = _tragOn ? 'Završi trag' : 'Snimi trag';
+  const tbtn = document.getElementById('ab-loc-trag');
+  if (tbtn) {
+    tbtn.style.background   = _tragOn ? '#fee2e2' : '#fff7ed';
+    tbtn.style.borderColor  = _tragOn ? '#fca5a5' : '#fdba74';
+    tbtn.style.color        = _tragOn ? '#dc2626' : '#c2410c';
+  }
 }
 
 // ─── GPS SIGNAL INDIKATOR u recording banneru ──────────────────────────
@@ -20928,6 +20939,15 @@ function _toggleLocPopup() {
 function _locPopupCentriraj() {
   document.getElementById('ab-loc-popup').style.display = 'none';
   fabLokacija();
+}
+// Prečica za snimanje traga direktno iz "Moja lokacija" popupa (v3.126.0) —
+// bez ovoga korisnik koji je već otvorio ovaj popup radi GPS/kompasa mora
+// zatvoriti ga i tražiti Tragovi tab da bi počeo snimati. fabSnimTrag() je
+// već TOGGLE (start kad ne snima, spremi/završi kad snima), pa se poziva
+// direktno — nema duple logike ovdje.
+function _locPopupSnimiTrag() {
+  document.getElementById('ab-loc-popup').style.display = 'none';
+  fabSnimTrag();
 }
 function fabLokacija() {
   if (lastP) {
@@ -40632,6 +40652,10 @@ if (typeof AndroidDownload !== 'undefined') {
         <span style="font-size:13px;font-weight:600;color:#1e293b;">🧭 Kompas / pravac</span>
         <span class="gps-switch" id="compass-switch" onclick="_togCompassSwitch()"><span class="gps-switch-knob"></span></span>
       </div>
+      <button id="ab-loc-trag" onclick="_locPopupSnimiTrag()" style="width:100%;display:flex;align-items:center;
+        justify-content:center;gap:8px;padding:9px;background:#fff7ed;border:1px solid #fdba74;border-radius:10px;
+        color:#c2410c;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px;">
+        <svg class="ic"><use href="#ic-trag"/></svg> <span id="ab-loc-trag-txt">Snimi trag</span></button>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px;">
         <span style="font-size:13px;font-weight:600;color:#1e293b;">⊚ Radijus</span>
         <span class="gps-switch" id="radius-switch" onclick="_togRadiusRings()"><span class="gps-switch-knob"></span></span>

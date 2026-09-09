@@ -1539,6 +1539,25 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     `ab-pauza-ico` u `#action-bar`.
   - Testovi: `tests/js/rec-bar.test.js` (15) — težište na tome da se ostala
     snimanja broje i da se Pauza/Završi rutiraju na ISPRAVAN tip.
+- **"Snimi trag" prečica u popupu "Moja lokacija" (v3.126.0)**: na zahtjev
+  — dugme dodano u `#ab-loc-popup` (otvara se preko `#ab-loc`/📡 dugmeta u
+  `#action-bar`), odmah ispod 🧭 Kompas/pravac reda. Korisnik koji je već
+  otvorio taj popup (radi GPS-a/kompasa/radijusa) je ranije morao zatvoriti
+  ga i tražiti Tragovi tab da počne snimati trag.
+  - **`_locPopupSnimiTrag()` NE duplira logiku snimanja** — zatvori popup pa
+    pozove POSTOJEĆI `fabSnimTrag()` (već TOGGLE: start kad ne snima, spremi/
+    završi kad snima, isti obrazac kao `_locPopupCentriraj()`/`fabLokacija()`
+    par iznad). Nula novog koda za sam GPS/trag put.
+  - **Tekst i boja dugmeta prate STVARNO stanje** (`_updGpsSwitch()`, zove se
+    svaki put kad se popup otvori) — trag je mogao biti započet NEGDJE DRUGO
+    (npr. Tragovi tab), pa bi statičko "Snimi trag" ovdje bilo laž koja vodi
+    na tiho gašenje tuđeg snimanja umjesto pokretanja novog. "Snimi trag"
+    (narandžasto) / "Završi trag" (crveno) — ista dva stanja kao `ab-trag-
+    kraj` dugme u `#action-bar` tokom aktivnog snimanja.
+  - Testovi: `tests/js/loc-popup-trag.test.js` (5), nad STVARNIM kodom —
+    `_locPopupSnimiTrag` zatvara popup i zove `fabSnimTrag()` TAČNO jednom;
+    `_updGpsSwitch` postavlja tekst/boju prema `_tragOn` u oba smjera; poziv
+    bez elemenata u DOM-u (popup nikad otvoren) ne baca.
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
