@@ -898,7 +898,7 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
   `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
 
-- **"Ova godina" (uživo) i "Zadnjih 5 godina" (lokalna istorija) — v3.119.0**:
+- **"Ova godina" (uživo) i "Zadnjih 5 godina" (lokalna historija) — v3.119.0**:
   na zahtjev "prati požare za duži period, tj. u tekućoj godini... i dodatno
   da se pamti za zadnjih 5 godina", u novoj kartici "📅 Duži period" sa DVA
   nezavisna checkboxa.
@@ -916,23 +916,23 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - **"Zadnjih 5 godina" NIJE dohvat unazad, nego PASIVNO PAMĆENJE unaprijed**
     — uživo dohvat 5 godina unazad ima isti problem kao "cijela godina" samo
     gore (veći period, više redova, nepouzdano na terenskoj vezi). Umjesto
-    toga, `_povIstZabiljezi(_poziEvts)` se zove iz `_poziLoad` POSLIJE svakog
+    toga, `_povHistZabiljezi(_poziEvts)` se zove iz `_poziLoad` POSLIJE svakog
     redovnog osvježavanja (24h/48h/7d — mehanizam koji već postoji) i tiho
     upisuje SAMO grupe označene kao `nov` (prvi put viđene BAŠ SAD) u
-    `localStorage` (`tvlake_pozari_istorija`), obrezano na 5 godina pri
+    `localStorage` (`tvlake_pozari_historija`), obrezano na 5 godina pri
     svakom upisu. Radi BEZ GFW ključa i BEZ mreže (čisto lokalno), ali je
     NAMJERNO neretroaktivno — uključen danas, prazan je za period prije danas.
     UI to kaže otvoreno umjesto da ostavi utisak da će se pojaviti stara
-    istorija koje zapravo nema.
+    historija koje zapravo nema.
   - **Zapisuje se SAMO na `nov: true`** — da isti požar koji gori danima ne
-    uđe u istoriju pri SVAKOM od desetina osvježavanja dok je aktivan
+    uđe u historiju pri SVAKOM od desetina osvježavanja dok je aktivan
     (pokriveno testom koji simulira tri uzastopna ciklusa: ista grupa se
     upiše TAČNO jednom).
   - **Grupisanje kroz godine namjerno koristi ISTI prag kao požari** (1500 m,
     ne finiji) — ovdje je to čak POŽELJNO: više detekcija na približno istom
     mjestu kroz RAZLIČITE godine se svede u JEDNU tačku "ovdje je gorjelo N
     puta", umjesto da svaka godina bude zaseban marker. Popup i lista
-    ispisuju KOJE godine (`_povIstGodine`, izvučeno iz `pts[].dt`), ne samo
+    ispisuju KOJE godine (`_povHistGodine`, izvučeno iz `pts[].dt`), ne samo
     zadnji datum.
   - **Nema wind/tempo/opožarena-projekcija mašinerije** — ta infrastruktura
     (trake starosti, "aktivan front", pravac širenja) pretpostavlja požar
@@ -942,21 +942,21 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     popup/listu (samo udaljenost, broj detekcija, datumi/godine) — ne
     dijele `_poziOpozProjekcija`/`_poziSmjerAzuriraj`.
   - **Nova, TREĆA oznaka na karti** (`_povBrojRijecPozar` bez "aktivan" —
-    "3 požara", ne "3 aktivna požara", jer istorijski pregled ne smije
+    "3 požara", ne "3 aktivna požara", jer historijski pregled ne smije
     tvrditi da nešto još gori): krug plave boje za "Ova godina" (`.pov-mk`,
     `.pov-mk-grupa`) i romb ljubičaste boje za "Zadnjih 5 godina"
-    (`.pov-ist-mk`, `.pov-ist-mk-grupa`) — TREĆI oblik pored kruga (požar) i
+    (`.pov-hist-mk`, `.pov-hist-mk-grupa`) — TREĆI oblik pored kruga (požar) i
     kvadrata (sječa), namjerno DALEKO od crveno/narandžaste "aktivno gori"
     palete, da se sve tri vrste markera na karti razlikuju na prvi pogled
     kad su istovremeno uključene. Broj unutar romba mora biti KONTRA-rotiran
-    (`.pov-ist-mk-grupa span { transform:rotate(-45deg) }`) da ostane
+    (`.pov-hist-mk-grupa span { transform:rotate(-45deg) }`) da ostane
     uspravan i čitljiv — provjereno Playwright screenshotom.
   - 15 novih testova u `tests/js/pozari.test.js` (172 ukupno): `_povGodUrl`
     sadrži tačan datum 1.1. tekuće godine i prati `_POZ_RADIUS_KM`;
-    `_povIstZabiljezi` bilježi samo `nov:true`, ne dira postojeću istoriju
-    bez novih, ne baca na praznom/nedostajućem ulazu; `_povIstSacuvaj` briše
+    `_povHistZabiljezi` bilježi samo `nov:true`, ne dira postojeću historiju
+    bez novih, ne baca na praznom/nedostajućem ulazu; `_povHistSacuvaj` briše
     zapise starije od 5 godina a čuva novije, odbacuje zapis bez upotrebljivog
-    datuma; `_povIstUcitaj` vraća prazno na korumpiran JSON; `_povIstGodine`
+    datuma; `_povHistUcitaj` vraća prazno na korumpiran JSON; `_povHistGodine`
     izvlači sve godine bez duplikata; scenario "tri uzastopna ciklusa"
     provjerava tačno 2 zapisa (ne 3) za dvije grupe od kojih je jedna viđena
     dva puta. **Zamka pri pisanju testa**: prvi pokušaj je koristio
@@ -1131,8 +1131,8 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     period dok je app korištena").
   - **Vizuelna provjera je uhvatila stvarnu grešku**: kartica je pisala
     "2 **aktivna** požara" jer je korišten `_poziBrojRijecPozar`, a za
-    istorijski pregled postoji zaseban `_povBrojRijecPozar` bez "aktivan"
-    (uvedeno baš zbog toga u v3.119.0 — "istorijski pregled ne smije tvrditi
+    historijski pregled postoji zaseban `_povBrojRijecPozar` bez "aktivan"
+    (uvedeno baš zbog toga u v3.119.0 — "historijski pregled ne smije tvrditi
     da nešto još gori"). Nijedan test to nije hvatao; vidjelo se na slici.
   - **Zamka pri pisanju te Playwright provjere**: `page.setContent()` daje
     `about:blank` origin gdje pristup `localStorage` BACA ("Access is denied
@@ -1223,6 +1223,52 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     `_poziKljucUcitaj`/`_poziAdminSacuvajKljuceve` tiho ne rade ništa (oba su
     u `try/catch`), a stari (sad prazan) ključ ostaje ono što `_poziMapKey`/
     `_poziGfwKljuc` vraćaju dok se migracija ne pokrene.
+- **Bosanska terminologija — "istorija" → "historija" (v3.125.0)**: na
+  eksplicitan zahtjev ("historija umjesto istorija"). Dotad je cijeli
+  "Zadnjih 5 godina" podsistem koristio srbijanski oblik — funkcije/varijable
+  (`_povIstZabiljezi`/`_povIstUcitaj`/`_povIstSacuvaj`/`_povIstGodine`/
+  `_povIstPrikazi`/`_povIstRender`/`_povIstPopupHtml`/`_povIstZoom`/
+  `_povIstSazetak`/`_povIstListaHtml`/`_povIstToggle`/`_povIstOnStanje`/
+  `_povIstOn`/`_povIstEvts`/`_povIstLayer`), konstante (`_POV_IST_KEY`/
+  `_POV_IST_ON_KEY`/`_POV_IST_GODINA_MS`), CSS klase (`.pov-ist-mk`/
+  `.pov-ist-mk-grupa`) i UI tekst ("📊 Istorija požara", "lokalna istorija").
+  Sve preimenovano u `_povHist*`/`_POV_HIST_*`/`.pov-hist-mk*`/"Historija".
+  **Namjerno OGRANIČENO na sekciju Požari** (uklj. Sječu, "Ova godina",
+  arhivu po godinama — sve pod istim panelom) — korisnik je eksplicitno
+  tražio "sad samo u požari sekciju"; ostatak koda (npr. "istorijski
+  timestamp" kod GPS/trag koda, koji je već ispravno "historijski") nije
+  dirán, terminologija se ubuduće ispravlja postepeno kako se kod dotiče iz
+  drugih razloga, ne u jednom prolazu kroz cijeli fajl.
+  - **`localStorage` KLJUČEVI su se stvarno zvali `tvlake_pozari_ist_on`/
+    `tvlake_pozari_istorija`** — obično preimenovanje bi TIHO OBRISALO već
+    sačuvanu historiju požara na telefonu korisnika (novi ključ ne postoji →
+    čita se kao prazno, isti obrazac greške kao svaki drugi "preimenovan
+    ključ bez migracije" bug u ovom projektu). Dodana `_povHistKljucMigracija()`
+    — pri učitavanju skripte (isti obrazac kao `_poziKljucKesUcitaj()`, poziva
+    se ODMAH ispod svoje definicije, prije nego `_startupRestore`-ov
+    `korak('povHist', ...)` stigne pročitati `_POV_HIST_ON_KEY`) — prekopira
+    STARI ključ u NOVI samo ako novi još ne postoji (ne gazi već migrirano
+    stanje na sljedećem pokretanju).
+  - **Zamka na koju je nagaziо prvi pokušaj preimenovanja**: blind
+    `sed 's/istorija/historija/g'` NIJE idempotentan, jer "historija" SADRŽI
+    "istorija" kao podstring (h+**istorija**) — kad je jedno pravilo prvo
+    zamijenilo `tvlake_pozari_istorija` u `tvlake_pozari_historija`, sljedeće
+    (opštije) pravilo u ISTOM sed prolazu je to ponovo pogodilo i proizvelo
+    `tvlake_pozari_hhistorija`. Uhvaćeno grep-om PRIJE commit-a
+    (`grep -n hhistorija`), ne testom — test bi i dalje "prošao" jer se ključ
+    koristi konzistentno kroz kod, samo bi bio ružno pogrešnog imena.
+  - Testovi: `tests/js/pozari.test.js` — sva tri testa `_povHistKljucMigracija`
+    (prekopira kad novi ključ ne postoji, ne gazi postojeći novi ključ, prazan
+    stari ključ ne baca), plus svi postojeći `_povHist*` testovi preimenovani
+    zajedno sa kodom (195 ukupno).
+- **Ubuduće: bosanska terminologija kroz CIJELI projekat** (v3.125.0+) —
+  korisnikov trajni zahtjev, ne jednokratna izmjena: "historija" umjesto
+  "istorija", "sistem" umjesto "sustav", i slično za svaku riječ koja je
+  srbijanski/hrvatski oblik umjesto bosanskog. Važi za NOVI kod, komentare,
+  UI tekst i commit poruke od sada nadalje — postojeći kod van sekcije Požari
+  se ne prepravlja u masovnom prolazu, nego postepeno kad se ta linija koda
+  ionako dotiče iz drugog razloga (isti princip kao "Kandidati za čišćenje"
+  ispod).
 
 ## Sekcija Vlake
 
@@ -2133,3 +2179,11 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
    README) ne traže bump verzije.
 4. Commit poruka na bosanskom, objašnjava UZROK ne samo šta je promijenjeno.
 5. Push na `claude/branch-072026-sa9wz0` (PR #30 se sam ažurira).
+6. **Terminologija je bosanska, ne srbijanska/hrvatska** ("historija" ne
+   "istorija", "sistem" ne "sustav", i slično) — u NOVOM tekstu koji se piše
+   (komentari, UI, commit poruke, CLAUDE.md). Ne prepravljati postojeći kod
+   izvan onoga što se već mijenja iz drugog razloga — masovni prolaz kroz
+   cijeli fajl je posebna, eksplicitno tražena izmjena (vidi v3.125.0 u
+   Panelu Požari za obrazac: preimenovanje identifikatora + localStorage
+   ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
+   već sačuvane podatke).
