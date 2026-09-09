@@ -1174,6 +1174,55 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - Testovi: prošireni `tests/js/pozari.test.js` (dugme umjesto teksta, tačan
     broj preostalih, `_poziListaProsireno` stvarno otkriva sve retke kad je
     postavljen, kapa=8 zaključana testom).
+- **FIRMS MAP_KEY / GFW ključ — sad ih postavlja SAMO ADMIN, za CIJELU firmu
+  (v3.124.0)**: na eksplicitan zahtjev — do tada je svaki korisnik unosio
+  SVOJ ključ, po uređaju (`localStorage`), pa je svaki šumar morao sam
+  napraviti FIRMS/GFW nalog da bi dobio precizniju rutu do detekcija.
+  - **Novi izazov**: FIRMS/GFW se zovu DIREKTNO SA UREĐAJA korisnika (native
+    most ili `fetch()`, ne preko Supabase servera — vidi `_poziApiUrl`/
+    `_poziGfwUrl`), pa ključ mora biti čitljiv SVAKOM odobrenom uređaju, ne
+    samo adminovom. Ovo NIJE tajna kao `app_secrets` (20260729) — to je
+    vrijednost koju browser ionako šalje NASA/GFW serverima u URL-u/headeru,
+    samo se sad čita sa JEDNOG mjesta umjesto da je svako unosi sam.
+  - **Nova tabela `pozari_kljucevi`** (singleton red,
+    `20260909_pozari_kljucevi_admin.sql`): SELECT dozvoljen svakom odobrenom
+    korisniku (`public.je_odobren()`, isti uslov kao svuda), ali NEMA
+    insert/update/delete RLS politiku — upis ide ISKLJUČIVO kroz
+    `admin_set_pozari_kljucevi(firms, gfw)` (SECURITY DEFINER, sama provjerava
+    `je_admin()`). Razlika naspram šablona `app_secrets`: tamo tabela nema
+    NIJEDNU politiku (čita je samo SECURITY DEFINER funkcija), ovdje MORA
+    imati SELECT za sve, jer čita direktno klijent preko PostgREST-a.
+  - **Klijent, offline-first**: `_poziKljucevi` (`{firms, gfw}`) se čita
+    SINHRONO iz `localStorage` keša (`tvlake_pozari_kljucevi_kes`) odmah pri
+    parsiranju skripte (`_poziKljucKesUcitaj()`, pozvana odmah ispod svoje
+    definicije) — stari ključ radi i offline. `_poziKljucUcitaj()` (async)
+    tiho osvježava iz Supabase kad ima mreže, pozvano iz `_startupRestore`
+    (nezavisno od toga je li panel Požari bio uključen — koristi ga i Sječa i
+    "Ova godina"). `_poziMapKey()`/`_poziGfwKljuc()` i dalje imaju ISTI
+    potpis (bez argumenata, vraćaju string) — svi dosadašnji pozivaoci
+    (`_poziDohvati`, `_sjeLoad`, `_povGodLoad`, `_poziProvjeriIzvore`...)
+    ostaju netaknuti.
+  - **UI polje se NE SAKRIVA CSS-om nego se NE GENERIŠE za ne-admina**
+    (`mapKeyPolje = !sbProfile?.is_admin ? '' : ...` u `_poziSadrzajHtml`) —
+    isti princip kao Menu stavke gejtovane na `isAdm` (v3.83.0 i dalje).
+    Admin vidi upozorenje da ključ koji upiše vrijedi za SVE korisnike firme.
+    Oba polja (FIRMS + GFW) se sad čuvaju JEDNIM dugmetom/RPC pozivom
+    (`_poziAdminSacuvajKljuceve`) umjesto dva odvojena "Sačuvaj" — nekad je
+    svaki klik bio čist `localStorage.setItem` (besplatno), sad je mrežni RPC
+    poziv, pa je spajanje u jedan poziv smisleno.
+  - **Tekstovi koji su ranije govorili korisniku "unesi MAP_KEY niže"**
+    (`_poziSavjet`, greška-bez-ključa u Sječi i "Ova godina") su prepravljeni
+    — običan korisnik više nema to polje pred sobom, pa mu imperativ "unesi"
+    ne znači ništa. Sad kažu "provjeri kod admina"/"postavlja ga admin".
+  - Testovi: `tests/js/pozari.test.js` — `_poziKljucKesUcitaj`/`_poziMapKey`/
+    `_poziGfwKljuc` nad STVARNIM kodom (korumpiran keš ne baca, validan keš
+    puni oba polja), plus statička provjera da je `mapKeyPolje` gejtovan na
+    `sbProfile?.is_admin` i da postoji `_poziAdminSacuvajKljuceve`.
+  - **Migraciju treba ručno pokrenuti u Supabase SQL Editoru** (vidi odjeljak
+    "Migracije" ispod) — bez nje `pozari_kljucevi` ne postoji i
+    `_poziKljucUcitaj`/`_poziAdminSacuvajKljuceve` tiho ne rade ništa (oba su
+    u `try/catch`), a stari (sad prazan) ključ ostaje ono što `_poziMapKey`/
+    `_poziGfwKljuc` vraćaju dok se migracija ne pokrene.
 
 ## Sekcija Vlake
 

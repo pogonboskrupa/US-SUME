@@ -2297,6 +2297,54 @@ t('istorija kroz VIŠE ciklusa zabilježi po jednom zapisu za svaku novu grupu',
   assert.strictEqual(JSON.parse(store.tvlake_pozari_istorija).length, 2);
 });
 
+console.log('Dijeljeni FIRMS/GFW ključ (v3.124.0) — admin ga postavlja jednom za sve, čita se iz keša:');
+
+// _poziKljucKesUcitaj NAMJERNO nije auto-pozvana ovdje (za razliku od stvarnog
+// koda, gdje se zove odmah pri parsiranju skripte) — test sam bira kad da
+// učita keš, da provjeri i stanje PRIJE i POSLIJE učitavanja.
+const SRC11 = [
+  HTML.match(/let _poziKljucevi\s*=\s*[^;]+;/)[0],
+  extractConst('_POZ_KLJUCEVI_KES'),
+  extractFn('_poziKljucKesUcitaj'),
+  extractFn('_poziMapKey'),
+  extractFn('_poziGfwKljuc'),
+].join('\n');
+
+function makeKljucApi(store) {
+  const sandbox = { localStorage: store };
+  const keys = Object.keys(sandbox);
+  return new Function(...keys, SRC11 + '\nreturn { _poziKljucKesUcitaj, _poziMapKey, _poziGfwKljuc };')(...keys.map(k => sandbox[k]));
+}
+
+t('bez keša: _poziMapKey/_poziGfwKljuc vraćaju prazan string, ne bacaju', () => {
+  const api = makeKljucApi(makeStore());
+  assert.strictEqual(api._poziMapKey(), '');
+  assert.strictEqual(api._poziGfwKljuc(), '');
+});
+
+t('korumpiran keš u localStorage ne baca — _poziKljucKesUcitaj tiho zadrži prazno', () => {
+  const store = makeStore();
+  store.setItem('tvlake_pozari_kljucevi_kes', '{ nije validan json');
+  const api = makeKljucApi(store);
+  assert.doesNotThrow(() => api._poziKljucKesUcitaj());
+  assert.strictEqual(api._poziMapKey(), '');
+});
+
+t('validan keš popunjava oba ključa — isti dijeljeni objekat za oba poziva', () => {
+  const store = makeStore();
+  store.setItem('tvlake_pozari_kljucevi_kes', JSON.stringify({ firms:'ABC123', gfw:'XYZ789' }));
+  const api = makeKljucApi(store);
+  api._poziKljucKesUcitaj();
+  assert.strictEqual(api._poziMapKey(), 'ABC123');
+  assert.strictEqual(api._poziGfwKljuc(), 'XYZ789');
+});
+
+t('index.html: FIRMS/GFW polja za unos su gejtovana na sbProfile?.is_admin (admin-only UI)', () => {
+  assert.match(HTML, /const mapKeyPolje = !sbProfile\?\.is_admin \? '' : /,
+    'mapKeyPolje mora biti PRAZAN string za ne-admina — vidljivo isključivo adminu');
+  assert.match(HTML, /_poziAdminSacuvajKljuceve/, 'admin čuva OBA ključa jednim RPC pozivom (admin_set_pozari_kljucevi)');
+});
+
 (async () => {
   for (const a of _async) {
     try { await a.p; pass++; console.log('  ✔ ' + a.name); }

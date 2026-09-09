@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.123.0';
+const APP_VER = 'v3.124.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5901,6 +5901,11 @@ function _startupRestore() {
     korak('localKml',  () => _localKmlRestore());
     korak('kmlcInit',  () => _kmlcInit());   // lista IDB ključeva za offline bedž
     korak('temRestore',() => _temRestore()); // tematska .gpkg karta iz IDB (async)
+    // Dijeljeni FIRMS/GFW ključ (v3.124.0) — nezavisno od toga da li je
+    // panel Požari bio uključen, jer se koristi i za Sječu i za "Ova godina".
+    // Keš je već učitan sinhrono pri parsiranju skripte (_poziKljucKesUcitaj);
+    // ovdje samo tiho osvježava ako ima mreže, ne blokira ništa.
+    korak('poziKljucevi', () => { if (navigator.onLine) _poziKljucUcitaj(); });
     // Požari: ako je prikaz bio uključen, vrati ga — prvo iz keša (odmah,
     // radi i offline), pa tihi osvježavajući dohvat ako ima mreže.
     korak('pozari', () => {
@@ -12847,8 +12852,15 @@ const _POZ_CACHE_KEY = 'tvlake_pozari_cache';
 const _POZ_ON_KEY    = 'tvlake_pozari_on';
 const _POZ_OKVIR_KEY = 'tvlake_pozari_okvir';   // '24h' | '48h' | '7d'
 const _POZ_SEEN_KEY  = 'tvlake_pozari_vidjeno'; // ključevi detekcija sa zadnjeg pregleda
-const _POZ_MAPKEY_KEY= 'tvlake_pozari_mapkey';  // opcioni FIRMS MAP_KEY (korisnik unosi sam)
-const _POZ_GFW_KEY   = 'tvlake_pozari_gfwkey';  // opcioni Global Forest Watch API ključ
+// FIRMS MAP_KEY i GFW API ključ (v3.124.0): postavlja ih ISKLJUČIVO admin,
+// JEDNOM, za CIJELU firmu — ranije ih je svaki korisnik unosio sam po
+// uređaju, što je značilo da svaki šumar mora sam napraviti FIRMS/GFW nalog.
+// Ključevi se koriste DIREKTNO SA UREĐAJA korisnika (FIRMS/GFW se zovu iz
+// browsera/APK-a, ne preko Supabase servera), pa svaki uređaj mora imati
+// vrijednost — čita se iz `pozari_kljucevi` (jedan red, RLS dozvoljava SELECT
+// svakom odobrenom korisniku, UPDATE ide isključivo kroz admin_set_pozari_
+// kljuceve RPC) i kešira lokalno za offline (isti obrazac kao _wbUcitajReleases).
+const _POZ_KLJUCEVI_KES = 'tvlake_pozari_kljucevi_kes';
 const _POZ_NOTIF_KEY = 'tvlake_pozari_notif';   // upozorenje kad se pojavi nov požar blizu
 const _POZ_NOTIF_KM  = 'tvlake_pozari_notif_km';// prag udaljenosti za upozorenje
 const _POZ_NOTIF_SEEN= 'tvlake_pozari_notif_seen'; // za koje požare je već javljeno
@@ -13083,14 +13095,13 @@ function _poziOznaciNove(grupe, kljucStorage, preciznost) {
   return rez;
 }
 
-// Opcioni FIRMS MAP_KEY (besplatna, trenutna registracija preko
-// firms.modaps.eosdis.nasa.gov/api/map_key/, samo email — korisnik se sam
-// registruje, aplikacija ničiji email nigdje ne šalje). Kad postoji, Area API
-// se pita PARALELNO uz stare arhivske CSV-ove — bbox oko korisnika je manji i
+// Dijeljeni FIRMS MAP_KEY (v3.124.0: postavlja SAMO admin, za cijelu firmu —
+// vidi _poziKljucevi/_poziKljucUcitaj ispod). Kad postoji, Area API se pita
+// PARALELNO uz stare arhivske CSV-ove — bbox oko korisnika je manji i
 // precizniji zahtjev na DRUGAČIJOJ ruti servera (/api/ vs /data/), pa ima
 // šanse da prođe i kad arhivski fajlovi ne prolaze (ili obrnuto).
 function _poziMapKey() {
-  return (localStorage.getItem(_POZ_MAPKEY_KEY) || '').trim();
+  return (_poziKljucevi.firms || '').trim();
 }
 function _poziApiUrl(kljuc, okvir, ref) {
   const dani = { '24h':1, '48h':2, '7d':7 }[okvir] || 1;
@@ -13119,7 +13130,30 @@ function _poziApiUrl(kljuc, okvir, ref) {
 // Dodati ih značilo bi trajno prazan sloj iz kojeg se ne vidi je li mirno ili
 // je pao izvor: tačno ona greška zbog koje je v3.103.0 rasterski sloj bačen.
 function _poziGfwKljuc() {
-  return (localStorage.getItem(_POZ_GFW_KEY) || '').trim();
+  return (_poziKljucevi.gfw || '').trim();
+}
+
+// ── Dijeljeni ključevi (v3.124.0) ───────────────────────────────────────────
+// Kešira se u localStorage (offline-first: stari ključ radi i bez mreže), a
+// osvježava tiho iz Supabase kad ima interneta. `_poziKljucevi` se čita
+// SINHRONO iz keša odmah pri učitavanju skripte — _poziMapKey/_poziGfwKljuc
+// se mogu pozvati prije nego _poziKljucUcitaj stigne odgovoriti.
+let _poziKljucevi = { firms: '', gfw: '' };
+function _poziKljucKesUcitaj() {
+  try {
+    const j = JSON.parse(localStorage.getItem(_POZ_KLJUCEVI_KES) || 'null');
+    if (j && typeof j === 'object') _poziKljucevi = { firms: j.firms || '', gfw: j.gfw || '' };
+  } catch(e) {}
+}
+_poziKljucKesUcitaj();
+async function _poziKljucUcitaj() {
+  try {
+    const { data, error } = await _withTimeout(
+      sb.from('pozari_kljucevi').select('firms_map_key,gfw_api_key').eq('id', true).maybeSingle(), 8000);
+    if (error || !data) return;
+    _poziKljucevi = { firms: data.firms_map_key || '', gfw: data.gfw_api_key || '' };
+    try { localStorage.setItem(_POZ_KLJUCEVI_KES, JSON.stringify(_poziKljucevi)); } catch(e) {}
+  } catch(e) {}
 }
 function _poziGfwUrl(okvir, ref) {
   const dani = { '24h':1, '48h':2, '7d':7 }[okvir] || 1;
@@ -13197,16 +13231,18 @@ function _poziSavjet(greska) {
       + 'ili zagušena veza. Šta pomaže, redom:\n'
       + '• prebaci okvir na "24 sata" (7-dnevni izvoz za cijelu Evropu je višestruko veći fajl)\n'
       + '• ako je VPN uključen, isključi ga i probaj ponovo — često baš on guši ovakve zahtjeve\n'
-      + '• unesi besplatni MAP_KEY niže: tada se povlači samo krug oko tebe umjesto cijele Evrope';
+      + '• provjeri kod admina je li unesen besplatni MAP_KEY (kartica ispod, vidljiva samo adminu): '
+      + 'tada se povlači samo krug oko tebe umjesto cijele Evrope';
   }
   if (odbijeno && !visi) {
     return 'Zahtjevi su odbijeni ODMAH. To znači ili da uređaj nema mreže (onda je ovo očekivano), '
       + 'ili da server ne dozvoljava pristup iz browsera (CORS). fetch() te dvije stvari namjerno ne '
-      + 'razlikuje, pa se iz aplikacije ne može reći koje je. Ako internet inače radi, unesi besplatni '
-      + 'MAP_KEY niže — on ide drugom rutom servera koja ponekad prolazi tamo gdje arhiva ne.';
+      + 'razlikuje, pa se iz aplikacije ne može reći koje je. Ako internet inače radi, provjeri kod admina '
+      + 'je li unesen besplatni MAP_KEY — on ide drugom rutom servera koja ponekad prolazi tamo gdje arhiva ne.';
   }
   return 'Dio izvora je odbijen odmah, dio je istekao bez odgovora. Ako internet inače radi, probaj '
-    + 'okvir "24 sata", isključi VPN ako ga koristiš, i unesi besplatni MAP_KEY niže (povlači samo tvoju okolinu).';
+    + 'okvir "24 sata", isključi VPN ako ga koristiš, i provjeri kod admina je li unesen besplatni MAP_KEY '
+    + '(povlači samo tvoju okolinu).';
 }
 
 // ── Native HTTP most (APK) — jedini način da se zaobiđe CORS ───────────────
@@ -14474,29 +14510,28 @@ function _poziPostaviOkvir(id) {
   if (_poziOn) _poziLoad(false); else _poziRenderPanel();
 }
 
-// Korisnik unosi SVOJ besplatni FIRMS MAP_KEY (samostalna registracija na
-// firms.modaps.eosdis.nasa.gov/api/map_key/, samo email — aplikacija taj email
-// nikad ne vidi ni ne šalje, samo ključ koji korisnik zalijepi ovdje).
-function _poziPostaviGfwKljuc() {
-  const el = document.getElementById('poz-gfwkey-in');
-  if (!el) return;
-  const v = el.value.trim();
+// Admin unosi FIRMS MAP_KEY i GFW ključ JEDNOM za CIJELU firmu (v3.124.0) —
+// RPC sam provjerava je_admin() na serveru, ovdje je provjera samo za UX
+// (dugme uopšte ne postoji u markupu za ne-admina, vidi mapKeyPolje).
+async function _poziAdminSacuvajKljuceve() {
+  if (!sbProfile?.is_admin) return;
+  const fEl = document.getElementById('poz-mapkey-in');
+  const gEl = document.getElementById('poz-gfwkey-in');
+  const firms = (fEl?.value || '').trim();
+  const gfw = (gEl?.value || '').trim();
+  showToast('⏳ Čuvam…');
   try {
-    if (v) localStorage.setItem(_POZ_GFW_KEY, v); else localStorage.removeItem(_POZ_GFW_KEY);
-  } catch(e) {}
-  showToast(v ? '✅ GFW ključ sačuvan — koristi se od sljedećeg osvježavanja' : 'GFW ključ uklonjen');
-  if (_poziOn) _poziLoad(false); else _poziRenderPanel();
-}
-
-function _poziPostaviMapKey() {
-  const el = document.getElementById('poz-mapkey-in');
-  if (!el) return;
-  const v = el.value.trim();
-  try {
-    if (v) localStorage.setItem(_POZ_MAPKEY_KEY, v); else localStorage.removeItem(_POZ_MAPKEY_KEY);
-  } catch(e) {}
-  showToast(v ? '✅ MAP_KEY sačuvan — koristi se od sljedećeg osvježavanja' : 'MAP_KEY uklonjen');
-  if (_poziOn) _poziLoad(false); else _poziRenderPanel();
+    const { error } = await _withTimeout(sb.rpc('admin_set_pozari_kljucevi', {
+      p_firms_map_key: firms || null, p_gfw_api_key: gfw || null
+    }), 10000);
+    if (error) throw error;
+    _poziKljucevi = { firms, gfw };
+    try { localStorage.setItem(_POZ_KLJUCEVI_KES, JSON.stringify(_poziKljucevi)); } catch(e) {}
+    showToast('✅ Sačuvano — svi korisnici od sada koriste ovaj ključ');
+    if (_poziOn) _poziLoad(false); else _poziRenderPanel();
+  } catch(e) {
+    showToast('❌ Greška pri čuvanju: ' + (e?.message || e));
+  }
 }
 
 // Dijagnostika: proba SVAKI izvor i kaže tačno šta vraća. Ovo je alat kojim se
@@ -15198,8 +15233,8 @@ function _povGodListaHtml() {
   if (m.greska === 'nema-kljuca') {
     return `<div style="font-size:12px;color:#94a3b8;line-height:1.6;padding:4px 0;">
       ⚠ Treba <b style="color:#e2e8f0;">besplatan Global Forest Watch ključ</b> — isti kao za Sječu.
-      Unesi ga u kartici <b style="color:#e2e8f0;">🛰 Detekcija sa satelita</b> (polje "GFW API ključ")
-      pa uključi prekidač ponovo.</div>`;
+      Postavlja ga admin u kartici <b style="color:#e2e8f0;">🛰 Detekcija sa satelita</b>
+      (polje je vidljivo samo adminu, koristi se za sve korisnike).</div>`;
   }
   if (m.greska) return `<div style="font-size:12px;color:#f87171;line-height:1.5;padding:4px 0;">❌ ${_escHtml(m.greska)}</div>`;
   if (!_povGodEvts.length) return `<div style="font-size:12px;color:#4ade80;padding:4px 0;">✓ Nema evidentiranih požara ove godine u krugu ${_POZ_RADIUS_KM} km.</div>`;
@@ -15718,7 +15753,8 @@ function _sjeSadrzajHtml() {
   } else if (m.greska === 'nema-kljuca') {
     lista = `<div style="font-size:12px;color:#94a3b8;line-height:1.6;padding:4px 0;">
       ⚠ Treba <b style="color:#e2e8f0;">besplatan Global Forest Watch ključ</b> — isti onaj iz podtaba
-      Požari. Unesi ga tamo (polje "GFW API ključ") pa se vrati ovdje i uključi prekidač ponovo.</div>`;
+      Požari. Postavlja ga admin (polje je vidljivo samo njemu), pa se prekidač ovdje uključi sam
+      čim ključ stigne na uređaj.</div>`;
   } else if (m.greska) {
     lista = `<div style="font-size:12px;color:#f87171;line-height:1.5;padding:4px 0;">❌ ${_escHtml(m.greska)}</div>`;
   } else if (!_sjeEvts.length) {
@@ -15802,27 +15838,30 @@ function _poziSadrzajHtml() {
         border:1px solid ${on ? '#38bdf8' : '#1e3a5f'};background:${on ? '#38bdf833' : '#14233c'};color:${on ? '#7dd3fc' : '#94a3b8'};">${s.naziv}</button>`;
     }).join('') + `</div>` : '';
 
-  const mapKeyPolje = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
+  // Admin-only od v3.124.0 — vidljivo isključivo adminu (sbProfile?.is_admin),
+  // jer se ključ postavlja JEDNOM za CIJELU firmu i koristi ga svako. Za sve
+  // ostale korisnike ovaj blok se uopšte ne renderuje (ne "sakriva se CSS-om",
+  // stvarno se ne generiše — vidi _poziAdminSacuvajKljuceve/_poziKljucevi).
+  const mapKeyPolje = !sbProfile?.is_admin ? '' : `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
+      <div style="font-size:10.5px;color:#fbbf24;line-height:1.5;margin-bottom:6px;">
+        👁 Ovo polje vidiš SAMO ti (admin) — ključ koji ovdje upišeš koristi se za SVE korisnike firme,
+        oni ga ne vide ni ne podešavaju.
+      </div>
       <div style="font-size:10.5px;color:#64748b;line-height:1.5;margin-bottom:6px;">
         Opciono: besplatni FIRMS MAP_KEY (registracija na
         <span style="color:#7dd3fc;">firms.modaps.eosdis.nasa.gov/api/map_key</span>, samo email, traje minut) —
-        dodaje drugu rutu do istih podataka, tačniju za tvoju okolinu.
+        dodaje drugu rutu do istih podataka, tačniju za okolinu korisnika.
       </div>
-      <div style="display:flex;gap:6px;">
-        <input id="poz-mapkey-in" type="text" placeholder="MAP_KEY (opciono)" value="${_escHtml(_poziMapKey())}"
-          style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
-        <button onclick="_poziPostaviMapKey()" style="padding:8px 12px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;">Sačuvaj</button>
-      </div>
+      <input id="poz-mapkey-in" type="text" placeholder="MAP_KEY (opciono)" value="${_escHtml(_poziMapKey())}"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
       <div style="font-size:10.5px;color:#64748b;line-height:1.5;margin:10px 0 6px;">
         Opciono: Global Forest Watch ključ (<span style="color:#7dd3fc;">globalforestwatch.org</span> nalog →
         API ključ) — ISTE NASA detekcije, ali sa TUĐEG servera. Vrijedi probati jer GFW ima svoju
         CORS politiku, pa zna proći tamo gdje NASA-in server ne prolazi.
       </div>
-      <div style="display:flex;gap:6px;">
-        <input id="poz-gfwkey-in" type="text" placeholder="GFW API ključ (opciono)" value="${_escHtml(_poziGfwKljuc())}"
-          style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
-        <button onclick="_poziPostaviGfwKljuc()" style="padding:8px 12px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;">Sačuvaj</button>
-      </div>
+      <input id="poz-gfwkey-in" type="text" placeholder="GFW API ključ (opciono)" value="${_escHtml(_poziGfwKljuc())}"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
+      <button onclick="_poziAdminSacuvajKljuceve()" style="width:100%;margin-top:8px;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;">Sačuvaj (za sve korisnike)</button>
     </div>`;
 
   // Sažetak projekcije opožarene površine (v3.113.0) i prognoza tempa (v3.117.1)
