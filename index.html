@@ -4968,7 +4968,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.119.3';
+const APP_VER = 'v3.119.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13567,7 +13567,8 @@ async function _poziSmjerAzuriraj() {
 // (omotač oko svih detekcija), ali on POPUNI sve udubine: izmjereno na
 // simuliranom požaru u obliku luka (front koji obilazi vrh brda) convex daje
 // 989 ha, concave 109 ha — 9× više "izgorjelog" nego što je iko vidio. Zato:
-//   1. concave hull (maxEdge = prag grupisanja) — realan izduženi/lučni oblik;
+//   1. concave hull (maxEdge = _POZ_OPOZ_MAXEDGE_M, vidi ispod) — realan
+//      izduženi/lučni oblik;
 //   2. ako concave padne (detekcije previše razbacane da bi se povezale),
 //      NE pada se na convex nego na UNIJU baferovanih piksela — tj. tvrdi se
 //      samo ono što je stvarno izmjereno. Na 24 razbacane detekcije to je
@@ -13579,6 +13580,29 @@ async function _poziSmjerAzuriraj() {
 const _POZ_OPOZ_KEY  = 'tvlake_pozari_opoz_proj';
 const _POZ_FRONT_MS  = 6 * 3600 * 1000;  // zadnjih 6 h = aktivan front, starije = već izgorjelo
 const _POZ_OPOZ_MAX_UNIJA = 60;          // iznad ovoga unija po pikselu postaje spora — ostaje concave
+// Terenska prijava (v3.119.4, sa screenshot-om): "nema tački a vučeš prave
+// linije na duže staze... vuci više obzirom na tačke" — poligon je premošćavao
+// PRAZAN prostor (bez ijedne detekcije unutra) pravim ivicama dužine do 1.5km.
+// Uzrok: concave hull je do sada koristio ISTI prag kao _poziGrupisi
+// (_POZ_GRUPA_M=1500m) za maxEdge — a to su DVA RAZLIČITA pitanja koja slučajno
+// dijele broj. _POZ_GRUPA_M odgovara na "da li su ove dvije detekcije ISTI
+// POŽAR" (grupisanje/dedup, treba širok prag jer isti front zna preskočiti
+// satelitski piksel između dva preleta). maxEdge odgovara na "da li treba
+// CRTATI PUNU LINIJU između ove dvije tačke" (oblik poligona) — tu širok prag
+// znači da se DVIJE udaljene detekcije unutar iste (široko grupisane) vatre
+// spoje pravom linijom preko kilometra prazne šume koja NIJE gorjela.
+// Izmjereno (izolovan repro sa turf-om, gust klaster + 2 izolovane tačke na
+// ~1.4km): na 1.5km hull premošćava do izolovanih tačaka i daje 38 ha umjesto
+// stvarnih 4 ha gustog klastera (izolovane tačke ostaju pokrivene ZASEBNO,
+// sitnim kružićima iz unije piksela — sloj 1 gore, ne nestaju). Na REALNOM
+// kontinuiranom frontu (2km linija, ~100m razmak uz 60m geolokacijski jitter)
+// 500m maxEdge i dalje pokriva SVIH 20 tačaka (0 van hull-a) i daje manji,
+// tačniji obuhvat (4.0 ha nasuprot naduvanih 7.8 ha na starom pragu od 1.5km)
+// — dakle 500m nije samo popravka za razbacan slučaj, i legitiman gust front
+// je bio blago naduvan starim pragom. Ispod 300m concave počinje ispuštati
+// tačke iz realnog fronta (svejedno ostaju pokrivene slojem 1) — 500m je
+// izabran sa margином iznad te granice.
+const _POZ_OPOZ_MAXEDGE_M = 500;
 let _poziOpozLayer = null;
 
 // Geometrija iz skupa detekcija. DVA sloja, tim redom — i oba su potrebna:
@@ -13620,7 +13644,7 @@ function _poziOpozGeom(pts) {
   }
   if (pts.length >= 3) {
     try {
-      const cc = turf.concave(fc, { maxEdge: _POZ_GRUPA_M / 1000, units: 'kilometers' });
+      const cc = turf.concave(fc, { maxEdge: _POZ_OPOZ_MAXEDGE_M / 1000, units: 'kilometers' });
       if (cc) {
         const ccb = turf.buffer(cc, bufKm, { units: 'kilometers' });
         geom = geom ? (turf.union(geom, ccb) || geom) : ccb;

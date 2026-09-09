@@ -1119,8 +1119,13 @@ new Function('module', 'exports', 'window', 'self',
 const _turf = _turfMod.exports;
 
 const SRC_OPOZ = [extractFn('_poziOpozGeom'), extractFn('_poziOpozProjekcija')].join('\n');
-function makeOpoz() {
-  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60, _POZ_FRONT_MS: 6 * 3600 * 1000,
+// maxEdgeM parametrizovano (v3.119.4) — default 500 je stvarna produkciona
+// vrijednost (_POZ_OPOZ_MAXEDGE_M); test niže poredi sa starom vrijednošću
+// 1500 (_POZ_GRUPA_M, prag GRUPISANJA požara, slučajno recikliran kao maxEdge
+// prije ove izmjene) da dokaže da je tightening stvaran, ne kozmetički.
+function makeOpoz(maxEdgeM) {
+  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60,
+    _POZ_OPOZ_MAXEDGE_M: maxEdgeM || 500, _POZ_FRONT_MS: 6 * 3600 * 1000,
     _POZ_STAROST: eval('(' + extractConst('_POZ_STAROST').replace(/^const _POZ_STAROST = /, '').replace(/;\s*$/, '') + ')') };
   const keys = Object.keys(sandbox);
   return new Function(...keys, SRC_OPOZ + '\nreturn { _poziOpozGeom, _poziOpozProjekcija };')(...keys.map(k => sandbox[k]));
@@ -1234,6 +1239,104 @@ t('korekcija ne smije dati negativan poluprečnik za hipotetički sitan piksel (
   // geometriju — bitno je da NE BACA (negativan radius bi turf.buffer bacio).
   // Nedostižno u stvarnoj upotrebi (jedini rez u pipeline-u su 375/1000).
   assert.doesNotThrow(() => OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 60, dt: '2026-09-05T00:00:00Z' }]));
+});
+
+// v3.119.4: terenska prijava sa screenshot-om — "nema tački a vučeš prave
+// linije na duže staze... vuci više obzirom na tačke". Concave hull je do
+// sada koristio _POZ_GRUPA_M (1500m, prag GRUPISANJA požara — namjerno širok,
+// tolerantan na razmak između preleta) i kao svoj maxEdge (dužina ivice
+// poligona) — a to je DRUGO pitanje: širok maxEdge znači da se dvije udaljene
+// detekcije unutar iste grupe spoje PRAVOM LINIJOM preko prostora koji nikad
+// nije gorio. _POZ_OPOZ_MAXEDGE_M (500m) je nova, odvojena, tijesnija
+// vrijednost SAMO za oblik poligona — grupisanje zadržava svoj širi prag.
+console.log('Concave hull maxEdge ODVOJEN od praga grupisanja (v3.119.4):');
+
+// Gust klaster (5 tačaka, ~50-100m razmak) + JEDNA izolovana tačka ~1.33 km
+// sjevernije — ista grupa (unutar _POZ_GRUPA_M=1500m), ali NE treba da budu
+// spojene pravom linijom u isti poligon.
+function klasterPlusIzolovana(dtIso) {
+  const dt = dtIso || '2026-09-05T00:00:00Z';
+  return [
+    { la: 44.9000, lo: 16.2000, rez: 375, dt },
+    { la: 44.9005, lo: 16.2003, rez: 375, dt },
+    { la: 44.8996, lo: 16.2006, rez: 375, dt },
+    { la: 44.9003, lo: 16.1997, rez: 375, dt },
+    { la: 44.8998, lo: 16.2002, rez: 375, dt },
+    { la: 44.9120, lo: 16.2000, rez: 375, dt }  // izolovana, ~1.33 km sjevernije
+  ];
+}
+
+t('novi maxEdge (500m) NE premošćava do izolovane tačke — poligon ostaje tijesan oko klastera', () => {
+  const pts = klasterPlusIzolovana();
+  const gNovi = OPOZ._poziOpozGeom(pts);
+  const gStari = makeOpoz(1500)._poziOpozGeom(pts);
+  const haNovi = haOf(gNovi), haStari = haOf(gStari);
+  assert.ok(haNovi < haStari * 0.5,
+    'novi prag (' + haNovi.toFixed(1) + ' ha) mora biti znatno manji od starog (' + haStari.toFixed(1) + ' ha) — dokaz da stari premošćava prazan prostor');
+});
+
+t('izolovana tačka OSTAJE pokrivena i sa tijesnim maxEdge-om (sloj 1 — pojedinačni bafer, ne bridging)', () => {
+  const pts = klasterPlusIzolovana();
+  const g = OPOZ._poziOpozGeom(pts);
+  const izolovana = pts[pts.length - 1];
+  assert.ok(_turf.booleanPointInPolygon(_turf.point([izolovana.lo, izolovana.la]), g),
+    'izolovana detekcija mora ostati pokrivena kao sitan zaseban krug (unija piksela), ne izostavljena');
+});
+
+// Realan kontinuiran front (20 tačaka, ~100m razmak, ±60m jitter) — dokaz da
+// tightening NE gubi tačke sa STVARNOG požara, samo skida naduvavanje.
+function frontPts(n, stepM) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const r = Math.sin(i * 12.9898) * 43758.5453;
+    const jFrac = r - Math.floor(r);
+    const jM = (jFrac - 0.5) * 2 * 60;
+    const distM = i * stepM + jM;
+    out.push({ la: 44.90 + distM / 111320, lo: 16.20, rez: 375, dt: '2026-09-05T00:00:00Z' });
+  }
+  return out;
+}
+
+t('realan kontinuiran front (100m razmak): NIJEDNA tačka ne ispadne van poligona na 500m maxEdge', () => {
+  const pts = frontPts(20, 100);
+  const g = OPOZ._poziOpozGeom(pts);
+  const vani = pts.filter(p => !_turf.booleanPointInPolygon(_turf.point([p.lo, p.la]), g));
+  assert.strictEqual(vani.length, 0, vani.length + ' tačaka je ostalo van poligona na kontinuiranom frontu');
+});
+
+// Detekcije razmaknute 700m (između novog 500m i starog 1500m praga), u
+// cik-cak (±150m bočno) da concave hull ima STVARNU 2D unutrašnjost — na
+// TAČNO kolinearnim tačkama turf.concave vraća degenerisan (nulti) hull za
+// OBA praga podjednako (provjereno: concave tad ništa ne doda, geom ostaje
+// samo bafer-unija, ista za 500 i 1500 — to NE bi bio test maxEdge-a nego
+// slučajni degenerat). Ovo je namjerno DRUGI test od gornjeg gustog fronta
+// (100m razmak) — tamo bafer-unija sama pokriva/dominira površinu pa maxEdge
+// nema vidljiv efekat na broj; ovdje je razmak dovoljno širok (> prečnik
+// bafer kruga 275m) da SAMO maxEdge odlučuje da li se pravi "premošćena"
+// traka (upravo ono što je korisnik prijavio na screenshotu).
+function cikCakTacke(n, stepM, sirinaM) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const la = 44.90 + (i * stepM) / 111320;
+    const bocno = (i % 2 === 0 ? sirinaM : -sirinaM) / (111320 * Math.cos(44.9 * Math.PI / 180));
+    out.push({ la, lo: 16.20 + bocno, rez: 375, dt: '2026-09-05T00:00:00Z' });
+  }
+  return out;
+}
+
+t('detekcije na 700m razmaku (između 500 i 1500): stari prag premošćava u veliku traku, novi ostaje tijesan', () => {
+  const pts = cikCakTacke(6, 700, 150);
+  const haNovi = haOf(OPOZ._poziOpozGeom(pts));
+  const haStari = haOf(makeOpoz(1500)._poziOpozGeom(pts));
+  assert.ok(haNovi < haStari * 0.4,
+    'novi (' + haNovi.toFixed(1) + ' ha) mora biti znatno manji od starog (' + haStari.toFixed(1) + ' ha) — stari premošćava 700m prazan prostor pravim ivicama');
+});
+
+t('detekcije na 700m razmaku: SVAKA i dalje pokrivena i sa novim (tijesnim) pragom', () => {
+  const pts = cikCakTacke(6, 700, 150);
+  const g = OPOZ._poziOpozGeom(pts);
+  const vani = pts.filter(p => !_turf.booleanPointInPolygon(_turf.point([p.lo, p.la]), g));
+  assert.strictEqual(vani.length, 0, vani.length + ' tačaka je ostalo van poligona — bafer sloj mora pokriti svaku i kad se hull ne premošćava');
 });
 
 t('požar koji gori duže: izdvaja se dio koji je VEĆ izgorio (starije od 6 h)', () => {

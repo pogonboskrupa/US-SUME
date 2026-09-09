@@ -1021,6 +1021,52 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - 3 nova testa u `tests/js/pozari.test.js` (180 ukupno): tačan poluprečnik
     137.5m za VIIRS i 450m za MODIS (ne stari 187.5/500), i da hipotetički
     bafer 0 ne baca grešku (vraća `null`, ne izmišljenu geometriju).
+- **Concave hull maxEdge ODVOJEN od praga grupisanja (v3.119.4)**: terenska
+  prijava sa screenshot-om — velik taman poligon je premošćavao PRAZAN
+  prostor (bez ijedne detekcije unutra) pravim ivicama dužine i do 1.5 km,
+  odmah pored tijesnog narandžastog klastera koji je ispravno pratio stvarne
+  tačke. "nema tački a vučeš prave linije na duže staze... vuci više obzirom
+  na tačke".
+  - **Uzrok**: `turf.concave(fc, { maxEdge: ... })` je koristio ISTI broj kao
+    `_poziGrupisi` — `_POZ_GRUPA_M` (1500m) — za DVA RAZLIČITA pitanja koja su
+    se slučajno poklopila u jednoj konstanti. `_POZ_GRUPA_M` odgovara na "da
+    li su ove dvije detekcije ISTI POŽAR" (grupisanje/dedup — namjerno širok
+    prag, jer isti front zna preskočiti satelitski piksel između dva
+    preleta). `maxEdge` odgovara na sasvim drugo pitanje: "da li treba
+    NACRTATI PUNU LINIJU između ove dvije tačke" (oblik poligona) — tu širok
+    prag znači da se dvije detekcije unutar iste (široko grupisane) vatre
+    spoje pravom ivicom preko kilometra šume koja NIJE gorjela. Dodana je
+    zasebna `_POZ_OPOZ_MAXEDGE_M = 500` (samo za oblik poligona; grupisanje
+    zadržava svoj širi prag nepromijenjen).
+  - **500m izabrano empirijski**, ne nagađano — izolovan Node repro sa
+    STVARNIM `static/libs/turf.min.js` (isti fajl kao produkcija), dva
+    scenarija:
+    1. Gust klaster + izolovana tačka ~1.3 km dalje: na starih 1500m hull se
+       premošćava do izolovane tačke; na 500m ostaje tijesan oko klastera, a
+       izolovana tačka ostaje pokrivena ZASEBNO (sloj 1 — unija baferovanih
+       piksela, nezavisna od maxEdge-a) — dokazano testom preko
+       `turf.booleanPointInPolygon`.
+    2. Realan kontinuiran front (cik-cak raspored, korak 700m, bočni pomak
+       150m — razmak namjerno IZMEĐU 500 i 1500 da SAMO maxEdge odlučuje):
+       stari prag daje 187.9 ha (premošćena traka), novi 35.5 ha (tijesan uz
+       tačke), obje varijante i dalje pokrivaju SVIH 6 tačaka (0 van
+       poligona).
+  - **Zamka pri pisanju testa**: prvi pokušaj testa je koristio TAČNO
+    kolinearne tačke (ista dužina, samo pomjerane duž jedne linije). Na takvom
+    ulazu `turf.concave` vraća degenerisan (nulti) hull za OBA praga
+    PODJEDNAKO (interna Delaunay triangulacija ne uspijeva na potpuno ravnoj
+    liniji) — geometrija tad ostaje SAMO bafer-unija, ista bez obzira na
+    maxEdge, pa je test "prošao" iz pogrešnog razloga (u stvari nije testirao
+    ništa). Isto se desilo i sa gustim frontom (100m razmak) korištenim za
+    invarijantu pokrivenosti — na tom razmaku bafer krugovi (275m prečnik)
+    već sami preklapaju i DOMINIRAJU površinom, pa maxEdge opet nema vidljiv
+    efekat na broj (to je i dalje koristan test — pokazuje da tightening ne
+    izbacuje tačke iz pokrivenosti — ali ne test razlike u površini). Tek
+    cik-cak raspored sa razmakom PREKO prečnika bafer kruga je dao stvaran,
+    mjerljiv dokaz.
+  - `makeOpoz(maxEdgeM)` u testu sad prima parametar da se produkciona i
+    "stara" (1500m) varijanta mogu direktno porediti nad istim ulazom. 4 nova
+    testa u `tests/js/pozari.test.js` (185 ukupno).
 
 ## Sekcija Vlake
 
