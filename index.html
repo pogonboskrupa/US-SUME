@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.121.0';
+const APP_VER = 'v3.122.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5938,6 +5938,9 @@ function _startupRestore() {
       _povIstOn = true;
       _povIstPrikazi();
     });
+    // Opožareno po godinama (v3.122.0) — čisto lokalno, radi offline; crta se
+    // samo ako je korisnik neku godinu ostavio uključenu.
+    korak('povArh', () => { if (_povArhUkljucene().length) _povArhRender(); });
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
     // CIJELI Cache Storage/IDB (sve offline pločice i karte odjednom). Uz persist()
     // pregledano/preuzeto ostaje dok korisnik sam ne obriše.
@@ -13468,6 +13471,14 @@ async function _poziLoad(tiho) {
     // put označene kao 'nov' (jedini pouzdan trenutak "sad sam je prvi put
     // vidio" — vidi napomenu u _povIstZabiljezi).
     try { _povIstZabiljezi(_poziEvts); } catch(e) {}
+    // Arhiva po godinama (v3.122.0) — za razliku od gornjeg reda upisuje
+    // POJEDINAČNE detekcije i to iz SVAKOG osvježavanja, ne samo prvo viđenje.
+    // Baš zato površina požara koji gori danima može da naraste: svaki dan
+    // donese nove vrele piksele, a dedup po (piksel, dan) sprječava da isti
+    // piksel viđen desetak puta dnevno uđe desetak puta. Radi i kad su svi
+    // prikazi "Duži period" isključeni — inače bi arhiva bila prazna baš kod
+    // onoga ko je nikad nije ni uključio.
+    try { if (_povArhDodaj(_poziPts)) _povArhKesOcisti(new Date().getUTCFullYear()); } catch(e) {}
     const s = _poziSazetak();
     _poziStatusSet(s.kratko);
     if (!tiho) showToast(s.toast);
@@ -15090,6 +15101,10 @@ async function _povGodLoad(tiho) {
       _povGodMeta = { dohvacenoMs:c.ts, ukupno:(c.pts||[]).length, kes:true, refGps:ref.gps };
     }
     _povGodEvts = _poziGrupeBlizu(_poziGrupisi(_povGodPts), ref);
+    // GFW upit pokriva CIJELU godinu unazad, pa njime arhiva dobija i period
+    // PRIJE nego je app instalirana — jedini način da se prošlost popuni
+    // retroaktivno. Ko nema ključ, arhiva se puni samo unaprijed (_poziLoad).
+    try { if (_povArhDodaj(_povGodPts)) _povArhKesOcisti(new Date().getUTCFullYear()); } catch(e) {}
     _povGodRender();
     _poziRenderPanel();
   } finally {
@@ -15189,6 +15204,46 @@ function _povGodListaHtml() {
 // lokalna baza raste organski dok app radi, obrezana na 5 godina. NIJE
 // retroaktivno: uključen danas, prazan je za period prije danas i puni se OD
 // SADA nadalje. "Pamti" znači baš to, ne "izmišlja prošlost".
+// ═══ ARHIVA OPOŽARENIH POVRŠINA PO GODINAMA (v3.122.0) ════════════════════
+//
+// Terenski zahtjev: "gori požar više od mjesec dana a ja imam kraći prikaz;
+// hoću ukupno što je gorilo, i da mi se iduće godine prikaže kao opožarena
+// površina iz te i te godine."
+//
+// Zašto POSTOJEĆI prikazi na to ne mogu odgovoriti:
+//   • Redovni panel Požari radi nad 24h/48h/7d prozorom — požar koji gori 40
+//     dana u njemu ima najviše zadnjih 7 dana, pa je i `_poziOpozProjekcija`
+//     računala površinu samo tog isječka.
+//   • "Ova godina" (v3.119.0) JESTE cijela godina, ali ISKLJUČIVO preko GFW-a
+//     i traži besplatan ključ. Korisnik ga (potvrđeno pitanjem) NEMA, pa taj
+//     put kod njega ne radi uopšte.
+//   • "Zadnjih 5 godina" pamti SAMO CENTROID grupe i SAMO pri prvom viđenju
+//     (`nov`). Za mjesec dana gorenja to je jedna tačka od prvog dana — nosi
+//     "ovdje je gorjelo", ali NE i koliko je izgorjelo.
+//
+// Zato ova arhiva pamti POJEDINAČNE detekcije iz SVAKOG osvježavanja. Time
+// se površina požara koji gori danima gradi dan po dan iz onoga što je app
+// ionako već dohvatila — bez ključa, bez novog mrežnog poziva i offline.
+//
+// **NIJE RETROAKTIVNA** — počinje od verzije u kojoj je uvedena; prošle
+// godine se mogu popuniti samo GFW upitom (ako korisnik jednom unese ključ,
+// `_povGodLoad` puni istu arhivu). UI to mora reći otvoreno, ne ostaviti
+// utisak da će se stara istorija pojaviti sama.
+//
+// Zapis je KOMPAKTAN NIZ `[la, lo, dan, rez]`, ne objekat:
+//   • koordinate na 4 decimale (~11 m — daleko ispod VIIRS piksela od 375 m,
+//     pa se ništa mjerljivo ne gubi, a zapis je višestruko manji),
+//   • `dan` = redni dan u godini (0-365), ne pun timestamp — za GODIŠNJU
+//     površinu sat i minuta ne znače ništa,
+//   • `rez` = senzorska rezolucija, OBAVEZNA jer o njoj zavisi bafer u
+//     `_poziOpozGeom` (375 VIIRS / 1000 MODIS).
+// Dedup ide po (piksel, dan): isti vreli piksel viđen četiri puta u istom
+// danu JESTE jedno izgorjelo mjesto, ne četiri — bez toga bi arhiva rasla
+// pri svakom od desetina osvježavanja dnevno i localStorage bi pukao.
+const _POV_ARH_KEY     = 'tvlake_pozari_arhiva';
+const _POV_ARH_GODINA  = 5;      // koliko godina unazad se čuva
+const _POV_ARH_MAX_GOD = 20000;  // gornja granica zapisa po godini (zaštita kvote)
+
 const _POV_IST_ON_KEY    = 'tvlake_pozari_ist_on';
 const _POV_IST_KEY       = 'tvlake_pozari_istorija';
 const _POV_IST_GODINA_MS = 5 * 365.25 * 86400000;
@@ -15196,6 +15251,96 @@ const _POV_IST_GODINA_MS = 5 * 365.25 * 86400000;
 let _povIstEvts  = [];
 let _povIstLayer = null;
 let _povIstOn    = false;
+
+// ── Arhiva: čitanje/pisanje ──────────────────────────────────────────────
+function _povArhUcitaj() {
+  let o;
+  try { o = JSON.parse(localStorage.getItem(_POV_ARH_KEY)); } catch(e) { o = null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+  // Korumpiran/stran zapis se tiho odbacuje po godini, ne obara cijelu arhivu.
+  const out = {};
+  Object.keys(o).forEach(g => { if (/^\d{4}$/.test(g) && Array.isArray(o[g])) out[g] = o[g]; });
+  return out;
+}
+
+function _povArhSacuvaj(obj) {
+  const sada = new Date().getUTCFullYear();
+  const out = {};
+  Object.keys(obj || {}).forEach(g => {
+    const god = parseInt(g, 10);
+    // Obrezivanje na N godina + na buduće godine (pokvaren sat na uređaju bi
+    // inače trajno zauzeo "2074" i to se nikad ne bi samo očistilo).
+    if (!isFinite(god) || god > sada || god <= sada - _POV_ARH_GODINA) return;
+    out[g] = obj[g].slice(-_POV_ARH_MAX_GOD);
+  });
+  try { localStorage.setItem(_POV_ARH_KEY, JSON.stringify(out)); return true; }
+  catch(e) {
+    // Kvota: žrtvuj NAJSTARIJU godinu, ne tekuću — tekuća je ona koju
+    // korisnik trenutno gleda i koja se još puni.
+    const god = Object.keys(out).sort();
+    while (god.length > 1) {
+      delete out[god.shift()];
+      try { localStorage.setItem(_POV_ARH_KEY, JSON.stringify(out)); return true; } catch(e2) {}
+    }
+    return false;
+  }
+}
+
+// Redni dan u godini (0-365) iz ISO datuma — UTC da se zapis ne pomjeri
+// zavisno od vremenske zone uređaja.
+function _povArhDan(ms) {
+  const d = new Date(ms);
+  return Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+                     - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000);
+}
+function _povArhKljuc(la, lo, dan) {
+  return la.toFixed(4) + '|' + lo.toFixed(4) + '|' + dan;
+}
+
+// Ubacuje detekcije u arhivu. Zove se poslije SVAKOG osvježavanja (za razliku
+// od `_povIstZabiljezi` koji hvata samo prvo viđenje) — baš to i jeste ono
+// što omogućava da se površina požara koji gori danima gradi postepeno.
+// Vraća broj STVARNO novih zapisa (0 = sve već viđeno, ništa se ne upisuje).
+function _povArhDodaj(pts) {
+  if (!pts || !pts.length) return 0;
+  const arh = _povArhUcitaj();
+  const vidjeno = {};
+  Object.keys(arh).forEach(g => {
+    vidjeno[g] = new Set(arh[g].map(r => _povArhKljuc(r[0], r[1], r[2])));
+  });
+  let dodato = 0;
+  pts.forEach(p => {
+    const t = Date.parse(p && p.dt);
+    if (!isFinite(t) || !isFinite(p.la) || !isFinite(p.lo)) return;
+    const g = String(new Date(t).getUTCFullYear());
+    const dan = _povArhDan(t);
+    const k = _povArhKljuc(p.la, p.lo, dan);
+    if (!arh[g]) { arh[g] = []; vidjeno[g] = new Set(); }
+    if (vidjeno[g].has(k)) return;
+    vidjeno[g].add(k);
+    arh[g].push([+p.la.toFixed(4), +p.lo.toFixed(4), dan, isFinite(p.rez) ? p.rez : 375]);
+    dodato++;
+  });
+  if (dodato) _povArhSacuvaj(arh);
+  return dodato;
+}
+
+// Godine koje arhiva stvarno sadrži, najnovija prva.
+function _povArhGodine() {
+  const arh = _povArhUcitaj();
+  return Object.keys(arh).filter(g => arh[g].length).sort().reverse();
+}
+
+// Zapisi jedne godine natrag u oblik koji razumije ostatak Požara
+// (`{la, lo, dt, rez}`) — `_poziGrupisi`/`_poziOpozGeom` očekuju baš to.
+function _povArhTacke(godina) {
+  const arh = _povArhUcitaj();
+  const red = arh[String(godina)] || [];
+  return red.map(r => ({
+    la: r[0], lo: r[1], rez: r[3],
+    dt: new Date(Date.UTC(+godina, 0, 1) + r[2] * 86400000).toISOString()
+  }));
+}
 
 function _povIstUcitaj() {
   let arr;
@@ -15221,6 +15366,164 @@ function _povIstZabiljezi(evts) {
   const novi = evts.filter(g => g.nov).map(g => ({ la:g.la, lo:g.lo, dt:new Date(g.zadnji || Date.now()).toISOString() }));
   if (!novi.length) return;
   _povIstSacuvaj(_povIstUcitaj().concat(novi));
+}
+
+// ── Ukupna opožarena površina jedne godine ───────────────────────────────
+//
+// UKUPNO JE SPOJENA GEOMETRIJA, NE ZBIR PO POŽARU. Isto pravilo kao kod traka
+// starosti (v3.113.1): kad isto mjesto gori više puta kroz sezonu — a to je
+// kod požara koji tinja mjesec dana pravilo, ne izuzetak — zbir bi tu istu
+// površinu brojao dvaput i godišnja brojka bi bila naduvana. Test to čuva.
+//
+// Računa se LIJENO (tek kad korisnik uključi godinu) i memoizuje, jer je
+// geometrija najskuplji dio, a `_poziRenderPanel` se zove na svaki meteo/GPS
+// događaj.
+const _povArhKes = {};   // godina -> { ha, geom, brojPozara, brojDetekcija }
+
+function _povArhRacunaj(godina) {
+  const k = String(godina);
+  if (_povArhKes[k] !== undefined) return _povArhKes[k];
+  const pts = _povArhTacke(godina);
+  if (!pts.length || typeof turf === 'undefined') { _povArhKes[k] = null; return null; }
+  let geom = null, brojPozara = 0;
+  try {
+    const grupe = _poziGrupisi(pts);
+    brojPozara = grupe.length;
+    grupe.forEach(g => {
+      const gg = _poziOpozGeom(g.pts);
+      if (!gg) return;
+      geom = geom ? (turf.union(geom, gg) || geom) : gg;
+    });
+  } catch(e) { geom = null; }
+  const rez = geom
+    ? { ha: turf.area(geom) / 10000, geom, brojPozara, brojDetekcija: pts.length }
+    : null;
+  _povArhKes[k] = rez;
+  return rez;
+}
+// Da li je godina VEĆ izračunata — jeftina provjera, bez pokretanja geometrije.
+// Kartica je koristi da odluči šta smije prikazati odmah: bez ovoga bi se pri
+// SVAKOM crtanju panela računalo svih 5 godina, a `_poziRenderPanel` se zove na
+// svaki meteo/GPS/toast događaj. Izmjereno: 284 ms po punoj sezoni (12 dugih
+// požara, 2595 zapisa) u sandboxu — na telefonu višestruko više, pa bi pet
+// godina zaledilo panel na nekoliko sekundi pri svakom otvaranju.
+function _povArhIzracunata(godina) { return _povArhKes[String(godina)] !== undefined; }
+
+// Briše keš SAMO za pogođenu godinu. Redovna osvježavanja mogu dodati jedino u
+// TEKUĆU godinu, pa prošle ostaju izračunate do kraja sesije — bez ovoga bi
+// svako osvježavanje na 10 min poništilo sav posao za sve godine.
+function _povArhKesOcisti(godina) {
+  if (godina === undefined) Object.keys(_povArhKes).forEach(k => delete _povArhKes[k]);
+  else delete _povArhKes[String(godina)];
+  if (_povArhUkljucene().length) _povArhRender();   // ako je neka godina na karti, prekrij novom geometrijom
+}
+
+// ── Prikaz po godinama na karti ──────────────────────────────────────────
+// Boja se izvodi iz SAME godine (a ne iz redoslijeda u listi) da ista godina
+// uvijek bude iste boje — inače bi 2025 mijenjala boju čim se pojavi 2026.
+// Namjerno HLADNA paleta (plavo/ljubičasto/tirkiz), daleko od crveno-
+// narandžaste "gori SADA": ovo je zatvoreno poglavlje, ne aktivan požar.
+const _POV_ARH_BOJE = ['#38bdf8', '#a78bfa', '#2dd4bf', '#f472b6', '#94a3b8'];
+function _povArhBoja(godina) {
+  return _POV_ARH_BOJE[((+godina % _POV_ARH_BOJE.length) + _POV_ARH_BOJE.length) % _POV_ARH_BOJE.length];
+}
+
+const _POV_ARH_ON_KEY = 'tvlake_pozari_arh_on';
+let _povArhLayer = null;
+
+function _povArhUkljucene() {
+  let a;
+  try { a = JSON.parse(localStorage.getItem(_POV_ARH_ON_KEY)); } catch(e) { a = null; }
+  return Array.isArray(a) ? a.map(String) : [];
+}
+function _povArhToggleGod(godina, on) {
+  const g = String(godina);
+  const set = new Set(_povArhUkljucene());
+  if (on) set.add(g); else set.delete(g);
+  try { localStorage.setItem(_POV_ARH_ON_KEY, JSON.stringify([...set])); } catch(e) {}
+  _povArhRender();
+  _poziRenderPanel();
+}
+
+function _povArhRender() {
+  if (_povArhLayer) { try { map.removeLayer(_povArhLayer); } catch(e) {} _povArhLayer = null; }
+  const god = _povArhUkljucene();
+  if (!god.length || typeof L === 'undefined') return;
+  _povArhLayer = L.layerGroup([], { pane:'demOverlay' });
+  // Starije godine se crtaju PRVE pa novije preko njih — inače bi stara,
+  // veća sezona prekrila ono što je gorjelo ove godine.
+  god.slice().sort().forEach(g => {
+    const r = _povArhRacunaj(g);
+    if (!r || !r.geom) return;
+    L.geoJSON(r.geom, {
+      pane: 'demOverlay',
+      // interactive:false je OBAVEZAN — canvas pane iznad drugog inače pojede
+      // sve klikove ispod sebe (dokumentovana zamka iz v3.101.0).
+      style: { color:_povArhBoja(g), weight:2, opacity:0.95, fillColor:_povArhBoja(g), fillOpacity:0.28, interactive:false }
+    }).addTo(_povArhLayer);
+    L.marker([r.geom.geometry ? _povArhCentar(r.geom)[1] : 0, r.geom.geometry ? _povArhCentar(r.geom)[0] : 0], {
+      pane: 'pozariPane', interactive: false,
+      icon: L.divIcon({ className:'', iconSize:[54,18], iconAnchor:[27,9],
+        html: `<div style="background:${_povArhBoja(g)};color:#0f172a;font-size:11px;font-weight:800;
+               text-align:center;border-radius:9px;padding:1px 0;box-shadow:0 1px 3px rgba(0,0,0,.5);">${g}</div>` })
+    }).addTo(_povArhLayer);
+  });
+  _povArhLayer.addTo(map);
+}
+function _povArhCentar(geom) {
+  try { return turf.centroid(geom).geometry.coordinates; } catch(e) { return [0, 0]; }
+}
+
+// Broj zapisa u godini — jeftino (samo dužina niza), za prikaz prije nego se
+// geometrija uopšte izračuna.
+function _povArhBrojZapisa(godina) {
+  const arh = _povArhUcitaj();
+  return (arh[String(godina)] || []).length;
+}
+
+function _povArhKarticaHtml() {
+  const godine = _povArhGodine();
+  const ukljucene = new Set(_povArhUkljucene());
+  const uvod = `<div style="font-size:10px;color:#64748b;line-height:1.45;margin-bottom:8px;">
+      Skuplja se iz detekcija koje app ionako dohvaća — svaki dan donese nove vrele piksele,
+      pa požar koji gori sedmicama ovdje raste do svoje PUNE površine, dok panel iznad
+      pokazuje samo zadnjih ${_escHtml(_poziOkvirNaziv())}.
+      Ukupno je SPOJENA površina, ne zbir po požaru — isto mjesto koje gori više puta
+      se ne broji dvaput.
+    </div>`;
+  if (!godine.length) {
+    return uvod + `<div style="padding:10px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;
+        font-size:11px;color:#94a3b8;line-height:1.5;">
+        Arhiva je još prazna. Puni se sama dok koristiš sekciju Požari — nema šta da se uključi.
+        <div style="color:#64748b;margin-top:4px;">Prošle godine se mogu popuniti unazad samo
+        preko GFW ključa ("Ova godina" iznad); bez ključa pamti se od danas nadalje.</div>
+      </div>`;
+  }
+  const redovi = godine.map(g => {
+    const on = ukljucene.has(String(g));
+    // Geometrija se računa SAMO za godine koje su uključene ili su već
+    // izračunate ranije u ovoj sesiji — vidi napomenu uz _povArhIzracunata.
+    const r = (on || _povArhIzracunata(g)) ? _povArhRacunaj(g) : undefined;
+    const boja = _povArhBoja(g);
+    const desno = r === undefined
+      ? `<span style="color:#64748b;">${_povArhBrojZapisa(g)} detekcija · uključi da izračunaš</span>`
+      : r
+      ? `<b style="color:#e2e8f0;">${_escHtml(_poziPovrsTxt(r.ha))}</b>
+         <span style="color:#64748b;"> · ${_povBrojRijecPozar(r.brojPozara)}</span>`
+      : `<span style="color:#64748b;">nema upotrebljive geometrije</span>`;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #1e293b;cursor:pointer;">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="_povArhToggleGod('${g}',this.checked)"
+          style="width:16px;height:16px;accent-color:${boja};cursor:pointer;flex-shrink:0;">
+        <span style="width:11px;height:11px;border-radius:3px;background:${boja};flex-shrink:0;"></span>
+        <span style="font-size:13px;font-weight:700;color:#e2e8f0;min-width:38px;">${g}</span>
+        <span style="flex:1;text-align:right;font-size:12px;">${desno}</span>
+      </label>`;
+  }).join('');
+  return uvod + redovi
+    + `<div style="font-size:10px;color:#475569;line-height:1.45;margin-top:8px;">
+         Nije retroaktivno — pamti se od verzije u kojoj je ovo uvedeno, i samo za period
+         dok je app korištena. Ako te nema sedmicu dana usred požara, taj dio nedostaje.
+       </div>`;
 }
 
 function _povIstOnStanje() { return localStorage.getItem(_POV_IST_ON_KEY) === '1'; }
@@ -15650,6 +15953,10 @@ function _poziSadrzajHtml() {
            "Ova godina" je pregled uživo, treba GFW ključ. "Zadnjih 5 godina" NIJE retroaktivno —
            app pamti samo ono što sam vidi od trenutka kad ovo prvi put uključiš, i radi bez ključa.
          </div>`)
+
+    + kart('🗓 Opožareno po godinama (ukupno)',
+      'Cijela sezona, ne samo zadnjih 7 dana · radi bez ključa i bez mreže',
+      _povArhKarticaHtml())
 
     + kart('🗺 Opožarene površine',
       'Copernicus EFFIS · granice stvarno izgorjelih područja',

@@ -1068,6 +1068,80 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     "stara" (1500m) varijanta mogu direktno porediti nad istim ulazom. 4 nova
     testa u `tests/js/pozari.test.js` (185 ukupno).
 
+- **Opožareno po godinama — ukupno kroz cijeli život požara (v3.122.0)**:
+  terenski zahtjev "gori požar više od mjesec dana a ja imam kraći prikaz;
+  hoću ukupno što je gorilo i da mi se iduće godine prikaže kao opožarena
+  površina iz te i te godine". **Nijedan postojeći prikaz na to nije mogao
+  odgovoriti**, i to iz tri različita razloga:
+  - redovni panel radi nad prozorom 24h/48h/7d, pa je `_poziOpozProjekcija`
+    računala površinu samo tog isječka — kod požara od 40 dana to je ~1/6 onoga
+    što je stvarno izgorjelo;
+  - "Ova godina" (v3.119.0) JESTE cijela godina, ali ISKLJUČIVO preko GFW-a i
+    traži besplatan ključ — **korisnik ga nema** (provjereno `AskUserQuestion`
+    prije pisanja koda, što je i odlučilo cijeli dizajn: da sam pretpostavio da
+    ključ postoji, isporučio bih nešto što kod njega uopšte ne radi);
+  - "Zadnjih 5 godina" pamti SAMO CENTROID grupe i SAMO pri prvom viđenju
+    (`nov`) — za mjesec dana gorenja to je jedna tačka od prvog dana: nosi
+    "ovdje je gorjelo", ali ne i koliko.
+  - **Rješenje: arhiva pojedinačnih detekcija iz SVAKOG osvježavanja**
+    (`_povArhDodaj`, zakačeno u `_poziLoad`) — radi bez ključa, bez novog
+    mrežnog poziva i offline, jer koristi ono što app ionako već dohvaća.
+    Površina požara koji gori danima se time gradi dan po dan.
+    **Izmjereno na simulaciji požara od 40 dana** (app se otvara svaki dan,
+    prozor 7 dana): stari prikaz 70 ha, arhiva **354 ha — 5.1× više**, i to je
+    stvarna površina, ne procjena drugog reda.
+  - **Dedup po (piksel, dan) je nužan, ne optimizacija**: `_poziLoad` se okida
+    na 10 min, pa bi isti vreli piksel ulazio desetak puta dnevno i
+    localStorage bi pukao. Isti piksel viđen četiri puta u istom danu JESTE
+    jedno izgorjelo mjesto. Isti piksel SLJEDEĆI dan jeste nov zapis — baš
+    zato površina i može rasti. Oboje pokriveno testom.
+  - **Zapis je kompaktan niz `[la, lo, dan, rez]`**, ne objekat: koordinate na
+    4 decimale (~11 m, daleko ispod VIIRS piksela od 375 m), `dan` je redni dan
+    u godini (za GODIŠNJU površinu sat ne znači ništa), a `rez` je OBAVEZAN jer
+    o njemu zavisi bafer u `_poziOpozGeom`. Izmjereno: 40-dnevni požar = 5.3 KB,
+    cijela sezona sa 12 dugotrajnih požara = 65 KB. Udobno za localStorage.
+  - **Ukupno je SPOJENA geometrija, NE zbir po požaru** — isto pravilo kao kod
+    traka starosti (v3.113.1). Kod požara koji tinja mjesec dana isto mjesto
+    gori više puta, pa bi zbir tu površinu brojao dvaput. Test čuva oba smjera:
+    isto mjesto kroz 5 dana ostaje ~jedan piksel (5.9 ha), a dva ODVOJENA
+    požara se saberu.
+  - **Keš se čisti SAMO za pogođenu godinu** (`_povArhKesOcisti(godina)`).
+    Redovna osvježavanja mogu dodati jedino u TEKUĆU godinu; bez ovoga bi svako
+    osvježavanje na 10 min poništilo izračun za svih 5 godina.
+  - **Kartica NE računa godine koje nisu uključene** (`_povArhIzracunata` je
+    jeftina provjera bez pokretanja geometrije). Izmjereno: 284 ms po punoj
+    sezoni u sandboxu — na telefonu višestruko više, a `_poziRenderPanel` se
+    zove na svaki meteo/GPS/toast događaj, pa bi pet godina zaledilo panel na
+    nekoliko sekundi pri svakom otvaranju. Neizračunata godina pokazuje broj
+    detekcija (`_povArhBrojZapisa`, samo dužina niza) i "uključi da izračunaš".
+  - **Boja se izvodi iz SAME godine**, ne iz mjesta u listi — inače bi 2025
+    promijenila boju čim se pojavi 2026. Paleta je namjerno HLADNA (plavo/
+    ljubičasto/tirkiz), daleko od crveno-narandžaste "gori SADA": ovo je
+    zatvoreno poglavlje, ne aktivan požar. Starije godine se crtaju prve pa
+    novije preko njih.
+  - **`interactive:false` na poligonima** — dokumentovana zamka iz v3.101.0
+    (canvas pane iznad drugog pojede sve klikove ispod).
+  - **Buduća godina se odbacuje pri upisu** — pokvaren sat na uređaju bi inače
+    trajno zauzeo npr. "2074" i to se nikad ne bi samo očistilo (obrezivanje
+    gleda samo unazad). Pri punoj kvoti žrtvuje se NAJSTARIJA godina, ne
+    tekuća — tekuću korisnik gleda i ona se još puni.
+  - **GFW put i dalje puni ISTU arhivu** (`_povGodLoad`) — ako korisnik ikad
+    unese besplatan ključ, dobija prošlost retroaktivno. Bez ključa arhiva se
+    puni samo unaprijed, i UI to kaže otvoreno ("nije retroaktivno... samo za
+    period dok je app korištena").
+  - **Vizuelna provjera je uhvatila stvarnu grešku**: kartica je pisala
+    "2 **aktivna** požara" jer je korišten `_poziBrojRijecPozar`, a za
+    istorijski pregled postoji zaseban `_povBrojRijecPozar` bez "aktivan"
+    (uvedeno baš zbog toga u v3.119.0 — "istorijski pregled ne smije tvrditi
+    da nešto još gori"). Nijedan test to nije hvatao; vidjelo se na slici.
+  - **Zamka pri pisanju te Playwright provjere**: `page.setContent()` daje
+    `about:blank` origin gdje pristup `localStorage` BACA ("Access is denied
+    for this document"). Arhiva JE localStorage, pa se stranica mora poslužiti
+    preko pravog `http://127.0.0.1` origina (mali `http.createServer` u
+    testu) — inače cijela provjera padne na nečemu što nema veze sa kodom.
+  - Testovi: `tests/js/pozari-arhiva.test.js` (24), nad STVARNIM kodom i
+    STVARNIM turf-om iz `static/libs/turf.min.js`.
+
 ## Sekcija Vlake
 
 - **Dužina MREŽE vlaka je bila UDVOSTRUČENA (v3.118.0)** — najskuplja greška u
