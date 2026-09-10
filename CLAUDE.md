@@ -2266,6 +2266,53 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   sloj kad je zadnja aktivna bila SQLite (da nema bljeska Topo-a) i računa na
   `sqlmapRestoreAll`. Ako taj restore ne uspije, bez `_sqlEnsureBaseLayer()`
   ostaje siva praznina i prazna lista karata — nema se šta ni aktivirati.
+- **Praznina dok se offline SQLite karta učitava IZGLEDA kao zamrznuta app
+  (v1.1.3)**: terenska prijava "kao da u pozadini provjerava vezu desetak
+  sekundi... i onda nakon desetak sekundi radi bez usporavanja". Dvije runde
+  `AskUserQuestion` su isključile očigledno pogrešne tragove PRIJE nego se
+  ušlo u kod: nije mrežni tile-cache miss (podloga je "Preuzeta offline karta
+  (SQLite/MBTiles)", ne Topo/Satelit), nije opšte zamrzavanje glavne niti
+  (korisnik vidi "sve ostalo" — dugmad i paneli rade, SAMO se karta ne
+  učita), i nije novo/neviđeno područje (dešava se na "istoj karti/području
+  kao uvijek"). To je direktno uputilo na `_restoreLastMap` gore: kad je
+  zadnja aktivna karta bila SQLite, taj IIFE NAMJERNO ostavlja kartu bez
+  IJEDNOG sloja (ni tile ni SQLite) dok `sqlmapRestoreAll()` ne pročita
+  lokalni fajl od stotine MB iz IndexedDB/OPFS — na terenskom uređaju to
+  zna trajati oko deset sekundi. Ta praznina je do sada bila POTPUNO NIJEMA:
+  ništa na ekranu nije govorilo da app RADI nešto, pa je izgledala identično
+  kao pad aplikacije.
+  - **Popravka NE ubrzava učitavanje** (to je inherentno veličini fajla,
+    IndexedDB/OPFS čitanje ne može se preskočiti) — dodaje SAMO vidljiv
+    indikator "⏳ Učitavam kartu…" (`#map-restore-indicator`, centriran preko
+    karte, `pointer-events:none` da ne smeta dodiru) tačno u prozoru u kojem
+    je ekran ranije bio nijemo prazan.
+  - `_mapRestoreIndicatorShow()` se zove SINHRONO u `_restoreLastMap`-ovom
+    `sqlite` ogranku (isti trenutak kad se tile sloj SVJESNO preskače) —
+    indikator se pojavljuje TAČNO kad praznina počinje, ne sa zakašnjenjem.
+  - `_mapRestoreIndicatorHide()` MORA opaliti na SVAKOM izlazu iz
+    `sqlmapRestoreAll()` (uspjeh, "nema karata", pad u internom catch-u,
+    rani `return` iz `_sqlCrashCheck`-a) — funkcija ima više `return`
+    tačaka, pa je CIJELO njeno tijelo omotano u `try { ... } finally {
+    _mapRestoreIndicatorHide(); }` umjesto da se poziv nabraja na svakom
+    mjestu posebno (jedno mjesto koje se ne može zaboraviti dodati na
+    SLJEDEĆEM novom izlazu koji se doda u budućnosti).
+  - **Zamka pri pisanju testa**: `extractFn` koji izvlači tekst funkcije iz
+    `index.html` (kopiran iz ranijih test fajlova) je za `sqlmapRestoreAll`
+    (koja je `async function`, koristi `await`) TRAŽIO SAMO `'function ' +
+    naziv + '('`, pa je izvučeni tekst POČINJAO tačno na "function", bez
+    "async" ispred — izvučena kopija je time prestala biti async funkcija, a
+    `await _sqlCrashCheck()` unutra je pucao kao `SyntaxError: Unexpected
+    identifier '_sqlCrashCheck'` (parser ne prepoznaje `await` kao operator
+    izvan async konteksta, pa ga čita kao obično ime promjenljive iza kojeg
+    ne očekuje još jedno ime). Popravljeno traženjem `'async function ' +
+    naziv + '('` PRVO, sa padom na `'function ' + naziv + '('` za sinhrone
+    funkcije — isti obrazac kao već ispravan `extractFn` u
+    `auth-offline-first.test.js`.
+  - Testovi: `tests/js/map-restore-indicator.test.js` (7) — show/hide na
+    stvarnom (i nedostajućem) DOM elementu, i da `sqlmapRestoreAll` STVARNO
+    zove `_mapRestoreIndicatorHide()` na sva četiri različita izlazna puta
+    (ne samo da funkcija postoji). **Provjereno da test PADA na kodu prije
+    ove izmjene** (nedostaje `_mapRestoreIndicatorShow` u index.html).
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
   ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija
