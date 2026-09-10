@@ -2029,6 +2029,61 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     sljedećeg pokretanja.
   - Testovi: 7 novih u `tests/js/auth-offline-first.test.js` (15 ukupno),
     **provjereno da padaju na starom kodu**.
+- **Sigurnosna mreža je imala JEDNU tačku otkaza — proširena na window.onerror/
+  unhandledrejection (v3.128.1)**: terenska prijava "ako otvorim app na terenu,
+  a nisam prije toga pristupio [bez signala], bude samo crn ekran" — kroz
+  `AskUserQuestion` razjašnjeno: APK, uređaj je RANIJE bio prijavljen SA
+  signalom (dakle IMA keširan profil), ovo je prvi put da se otvara BEZ
+  signala, ekran je POTPUNO prazan/crn (ni logo, ni tekst, ni dugme) i ostaje
+  tako TRAJNO (korisnik mora prisilno zatvoriti app).
+  - **Analiza koda (bez pristupa uređaju za live repro)**: `#auth-screen` ima
+    tamnu pozadinu (`#080f0a`) i JEST vidljiv po CSS-u odmah pri parsiranju —
+    ali pre-check skript (~3743. linija) ga SKRIVA čim postoji keširan profil
+    (`localStorage.getItem('tvlake_ol_profile')`), da ne trepne login preko
+    redovnog korisnika. `#wrapper` ostaje skriven dok ga `showApp()`/
+    `_revealApp()` ne otkriju — a to se dešava ISKLJUČIVO unutar `initAuth()`,
+    `async` funkcije pozvane BEZ `.catch()` na kraju glavnog JS bloka
+    (~29000. linija, blok od preko 34000 linija). Ako NEGDJE unutar tog bloka
+    (sinhrono, prije nego `initAuth()` stigne do svoje grane) neuhvaćena
+    greška ili odbijeno obećanje prekine izvršavanje, korisnik ostaje u
+    procjepu: auth-screen sakriven, wrapper neotkriven — baš taj "crn ekran".
+    Postojeća "sigurnosna mreža" (`_sigurnosnaMrezaPokusaj`, v3.117.0) je JEDINA
+    odbrana od ovoga, a bila je JEDNA `setTimeout` linija na 6000ms — jedina
+    tačka otkaza, i to je tačno oblik greške koji je već dokumentovan kao rizik
+    ("blok 5 teoretski može ne izvršiti se") ali dotad nikad adresiran drugim
+    slojem odbrane.
+  - **Uzrok ostaje NEPOTVRĐEN** (nije bilo moguće reprodukovati u sandboxu bez
+    Android uređaja) — moguće je i da korisnik nije sačekao punih 6 sekundi.
+    Popravka NIJE "targeted fix" na lociran red koda, nego DEFANZIVNO
+    ojačanje — isti princip kao dvoslojna odbrana za osirotjeli `#dlg-overlay`
+    (v3.119.1): `window.onerror` (već postojao, samo logovao u konzolu) i NOV
+    `window.addEventListener('unhandledrejection', ...)` (nije postojao uopšte
+    — `doLogout()` komentar na ~6320. liniji je to već primijetio kao rizik za
+    DRUGI bug) sad OBA pozivaju `_sigurnosnaMrezaPokusaj()` ODMAH čim se
+    desi BILO KOJA neuhvaćena greška/odbijeno obećanje, ne tek poslije 6s.
+  - **Zašto je bezopasno pozvati rano/više puta**: `_ulazNaKesu()` i `showApp()`
+    su već idempotentni (`_appEntered` brana, `_startupRestore._done` brana), a
+    sama `_sigurnosnaMrezaPokusaj()` prvo provjerava da auth-screen/wrapper
+    NISU već u ispravnom stanju — ako `initAuth()` legitimno još radi (samo
+    sporo), poziv se tiho no-opuje i ne prekida ga. Isti razlog zašto NIJE
+    dodat kraći periodični tajmer umjesto event-driven okidanja: prava korist
+    dolazi od REAGOVANJA na grešku, ne od nagađanja kraćeg roka (CLAUDE.md već
+    dokumentuje da "nijedan rok nije dovoljno velik" — v3.117.0).
+  - **`_sigurnosnaMrezaPokusaj`** je postojeći kod 6s tajmera samo izdvojen u
+    imenovanu `function` deklaraciju (hoistovana, dostupna od početka izvršavanja
+    tog `<script>` bloka) — logika NIJE mijenjana, samo sad ima TRI okidača
+    (6s tajmer, `window.onerror`, `unhandledrejection`) umjesto jednog.
+  - **Ako se problem ponovi i poslije ove izmjene**: pravi uzrok je NEGDJE
+    DRUGDJE (npr. stvaran beskonačan sinhroni petlja/hang — JS je jednonitan,
+    ništa, uklj. ovu odbranu, ne može reagovati dok se glavna nit ne oslobodi;
+    jedini trag bi tad bio Android ANR dijalog, ne JS-level fix) — sljedeći
+    korak bi bio USB debug (`chrome://inspect`) na terenu da se vidi TAČNO gdje
+    se izvršavanje zaustavlja, ne dalje nagađanje iz sandboxa.
+  - Testovi: `tests/js/auth-offline-first.test.js` (17 ukupno) — postojeća
+    4 "Sigurnosna mreža" testa sad izvlače STVARNI `_sigurnosnaMrezaPokusaj`
+    (ranije je test držao ručno prepisano "isto kao u index.html" tijelo), plus
+    2 nova koja izvlače stvaran tekst `window.onerror`/`unhandledrejection`
+    registracije i provjeravaju da oba stvarno zovu funkciju spašavanja.
 - **Autofill na dijeljenim uređajima**: login polja imaju `autocomplete="off"`
   i PIN se NE pre-popunjava — sprječava prijavu pod tuđim nalogom.
 - **Sintaks-checker** (regex nad `<script>` blokovima) se zbuni ako komentar

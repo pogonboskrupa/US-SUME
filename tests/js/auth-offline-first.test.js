@@ -325,7 +325,11 @@ await test('doLogin: logo se sakriva čim prijava krene, ne tek kad se app otvor
 // velik da to garantovano ne dođe na sporom uređaju ili hladnom startu.
 // Pravilo koje ovi testovi čuvaju: MREŽA (ni tajmer) NE ODLUČUJE ko smije u
 // app — keš odlučuje. Login je zadnja opcija, samo bez keširanog profila.
-const SRC_ULAZ = extractPlainFn('_ulazNaKesu');
+const SRC_ULAZ  = extractPlainFn('_ulazNaKesu');
+// STVARNA funkcija iz index.html (v3.128.1) — ranije je ovaj test držao ručno
+// prepisano "isto kao u index.html" tijelo; sad se izvlači pravi kod, isti
+// koji zovu i window.onerror/unhandledrejection hendleri (vidi testove ispod).
+const SRC_MREZA = extractPlainFn('_sigurnosnaMrezaPokusaj');
 
 function makeMreza({ cached = null, appEntered = false, authDisp = 'none', wrapDisp = 'none' }) {
   const log = [];
@@ -346,17 +350,8 @@ function makeMreza({ cached = null, appEntered = false, authDisp = 'none', wrapD
     `let _appEntered = ${appEntered ? 'true' : 'false'};
      let sbUser = null, sbProfile = null;
      ${SRC_ULAZ}
-     // Tijelo sigurnosne mreže — isto kao u index.html (setTimeout callback).
-     function mreza() {
-       try { if (typeof _appEntered !== 'undefined' && _appEntered) return; } catch(e) {}
-       const as=document.getElementById('auth-screen');
-       const wr=document.getElementById('wrapper');
-       if(!(as&&wr&&as.style.display!=='flex'&&wr.style.display!=='flex')) return;
-       try { if (typeof _ulazNaKesu === 'function' && _ulazNaKesu()) return; } catch(e) {}
-       as.style.display='flex';
-       if(typeof authShowLogin==='function') authShowLogin();
-     }
-     return { mreza, _ulazNaKesu, stanje: () => ({ sbUser, sbProfile }) };`
+     ${SRC_MREZA}
+     return { mreza: _sigurnosnaMrezaPokusaj, _ulazNaKesu, stanje: () => ({ sbUser, sbProfile }) };`
   )(...params.map(k => env[k]));
   return { api, log, el };
 }
@@ -413,6 +408,62 @@ await test('_ulazNaKesu: _OL nedostupan (skripta se nije učitala) → false, ne
      return { _ulazNaKesu };`
   )({ getElementById: () => null }, () => {}, () => {}, () => {});
   assert.equal(api._ulazNaKesu(), false);
+});
+
+// ── window.onerror / unhandledrejection okidaju sigurnosnu mrežu (v3.128.1) ──
+// Terenska prijava: trajno crn ekran pri PRVOM offline otvaranju na uređaju
+// koji je ranije bio prijavljen SA signalom (dakle ima keširan profil).
+// initAuth() je async funkcija pozvana bez .catch() na kraju glavnog JS bloka
+// — neuhvaćeno odbijeno obećanje ili sinhrona greška NEGDJE unutra (prije nego
+// stigne do showApp()) prekine taj lanac potpuno tiho. Ovi testovi provjeravaju
+// da OBA hendlera stvarno pozivaju _sigurnosnaMrezaPokusaj(), izvlačeći STVARAN
+// tekst iz index.html (brace-matching od poznatog markera), ne pretpostavku.
+function extractStatement(marker) {
+  const start = HTML.indexOf(marker);
+  assert.ok(start >= 0, 'nije nađen marker: ' + marker);
+  let i = HTML.indexOf('{', start), depth = 0;
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        // Ako je izjava zapravo poziv funkcije (npr. addEventListener(...)),
+        // pokupi i zatvarajuću ")" i ";" odmah iza posljednje "}" — bez toga
+        // bi izvučen tekst bio sintaksno nepotpun (fali kraj poziva).
+        let j = i + 1;
+        while (j < HTML.length && /[)\s;]/.test(HTML[j])) j++;
+        return HTML.slice(start, j);
+      }
+    }
+  }
+  throw new Error('nezatvorena izjava za marker: ' + marker);
+}
+
+await test('window.onerror poziva _sigurnosnaMrezaPokusaj()', async () => {
+  const src = extractStatement('window.onerror=function(m,s,l){');
+  let called = false;
+  const sandbox = { window: {}, console: { error: () => {} }, _sigurnosnaMrezaPokusaj: () => { called = true; } };
+  const params = Object.keys(sandbox);
+  new Function(params.join(','), src + '\nwindow.onerror("neka greška", "x.js", 12);')(
+    ...params.map(k => sandbox[k])
+  );
+  assert.ok(called, 'window.onerror mora pokušati spasiti ekran, ne samo logovati');
+});
+
+await test('unhandledrejection listener poziva _sigurnosnaMrezaPokusaj()', async () => {
+  const src = extractStatement("window.addEventListener('unhandledrejection', function(ev) {");
+  let called = false;
+  const handlers = {};
+  const sandbox = {
+    window: { addEventListener: (evt, fn) => { handlers[evt] = fn; } },
+    console: { error: () => {} },
+    _sigurnosnaMrezaPokusaj: () => { called = true; },
+  };
+  const params = Object.keys(sandbox);
+  new Function(params.join(','), src)(...params.map(k => sandbox[k]));
+  assert.ok(typeof handlers.unhandledrejection === 'function', 'listener mora biti registrovan');
+  handlers.unhandledrejection({ reason: new Error('test odbijeno obećanje') });
+  assert.ok(called, 'unhandledrejection mora pokušati spasiti ekran, ne samo logovati');
 });
 
 console.log(`\n${_pass} prošlo, ${_fail} palo`);

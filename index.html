@@ -4977,8 +4977,24 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 </div>
 
 <script>
-window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.128.0';
+window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);_sigurnosnaMrezaPokusaj();};
+// Terenska prijava (v3.128.1): TRAJNO crn ekran pri PRVOM offline otvaranju na
+// uređaju koji je RANIJE bio prijavljen SA signalom (dakle IMA keširan profil).
+// initAuth() je async funkcija pozvana BEZ .catch() na kraju glavnog JS bloka
+// (~29000. linija) — neuhvaćeno odbijeno obećanje NEGDJE unutra (prije nego
+// stigne do showApp()) prekine taj lanac potpuno tiho, bez ijedne greške u
+// konzoli, bez da ijedna grana ispod uopšte pokuša. window.onerror OVO NE HVATA
+// (drugačiji event — 'unhandledrejection'), pa dosadašnji handler gore nikad ne
+// bi ni saznao da se nešto desilo. #auth-screen je u tom prozoru SAKRIVEN
+// (pre-check skript niže gasi ga čim postoji keširan profil, da spriječi
+// "trepta login" za redovne korisnike), a #wrapper JOŠ NIJE otkriven (samo
+// showApp()/_revealApp() to rade) — korisnik gleda praznu, skoro crnu #main
+// pozadinu i ništa se ne dešava, dok ne prođe puna sigurnosna mreža ispod.
+window.addEventListener('unhandledrejection', function(ev) {
+  console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
+  _sigurnosnaMrezaPokusaj();
+});
+const APP_VER = 'v3.128.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5036,7 +5052,13 @@ try {
 // nije "dovoljno velik" da to garantovano ne dođe. Zato sada red prioriteta
 // glasi: već u app-u → ne diraj; ima keširan profil → pusti ga UNUTRA offline;
 // login samo ako se nemamo NA ŠTA osloniti.
-setTimeout(()=>{
+// Izdvojeno u imenovanu funkciju (v3.128.1) da je mogu okinuti i window.onerror/
+// unhandledrejection hendleri gore — ODMAH čim se PRVA greška desi, ne tek
+// poslije 6s. Bezopasno pozvati više puta/rano: _ulazNaKesu() i showApp() su
+// idempotentni, a provjera "auth-screen/wrapper već u ispravnom stanju" ispod
+// sprječava da ovo ikad prekine initAuth() koji legitimno još radi (ista
+// provjera kao prije, samo sad dijeljena).
+function _sigurnosnaMrezaPokusaj() {
   try { if (typeof _appEntered !== 'undefined' && _appEntered) return; } catch(e) {}
   const as=document.getElementById('auth-screen');
   const wr=document.getElementById('wrapper');
@@ -5044,7 +5066,8 @@ setTimeout(()=>{
   try { if (typeof _ulazNaKesu === 'function' && _ulazNaKesu()) return; } catch(e) {}
   as.style.display='flex';
   if(typeof authShowLogin==='function') authShowLogin();
-},6000);
+}
+setTimeout(_sigurnosnaMrezaPokusaj, 6000);
 
 let sbUser = null;
 let sbProfile = null;
