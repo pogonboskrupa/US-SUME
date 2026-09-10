@@ -1295,6 +1295,63 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     računicu, ne duplira već poznate, čisti keš SAMO za pogođene godine, ne
     baca na praznom/nevaljanom ulazu, i NE enqueue-uje nazad ono što je samo
     spojilo (bez ovoga posljednjeg bi push+pull ušli u beskonačnu petlju).
+- **Dijeljena arhiva bez filtera udaljenosti je pokazivala TUĐE požare kao
+  svoje (v1.1.2)**: terenska prijava, ODMAH poslije v1.1.1 — "kod korisnika
+  koji prvi put koristi požari sekciju, prikazuju se požari iz 2026 ali nema
+  požara iz zadnjih 7 dana. kaže i obavijest kod osvježi kako nema požara
+  zadnjih 7 dana a bilo je". Ovo je DIREKTNA posljedica dijeljenja arhive:
+  dok je bila isključivo lokalna (v3.122.0), `_povArhTacke` nikad nije trebala
+  filter udaljenosti — telefon je fizički mogao upisati SAMO ono što je bio
+  dovoljno blizu da vidi, pa je "moja arhiva" automatski značilo "blizu mene".
+  Otkad je arhiva DIJELJENA za cijelu firmu (v1.1.1), ta pretpostavka više ne
+  važi: prvi korisnik u novom kraju odmah vidi "2026" požare koje je KOLEGA
+  zabilježio stotinama km dalje, dok mu ISTOVREMENO redovni panel (koji svoj
+  filter od v3.110.0 već ima, `_poziFilterBlizu`/`_POZ_RADIUS_KM`) ispravno
+  javlja da u NJEGOVOJ blizini zadnjih 7 dana nema ničeg — dvije tačne poruke
+  koje zajedno izgledaju kao kontradikcija/bug. Potvrđeno pregledom koda, ne
+  nagađanjem: `_povHistPrikazi` ("Zadnjih 5 godina", v3.119.0) i `_povGodLoad`
+  ("Ova godina", v3.119.0) OBJE već zovu `_poziFilterBlizu` — jedina karika u
+  cijelom panelu Požari koja tog filtera nije imala bila je baš
+  `_povArhTacke`, i to otkad je (v1.1.1) prvi put mogla dobiti podatke SA
+  SERVERA umjesto isključivo od samog uređaja.
+  - **`_povArhTacke(godina)` sad filtrira kroz `_poziFilterBlizu(pts,
+    _poziRefTacka())`** — ISTI krug (`_POZ_RADIUS_KM`, trenutno 100 km) kao
+    svaki drugi prikaz u panelu. Lokalna arhiva (`localStorage`) i dalje pamti
+    SVE što stigne sa servera, neisfiltrirano — filter je isključivo na
+    ČITANJU/PRIKAZU, ne na upisu, jer uređaj koji putuje između šumarija
+    treba da ima podatke već pri ruci bez ponovnog sinka.
+  - **`_povArhBrojZapisa`/`_povArhGodine` prate isti filter** — inače bi
+    kartica i dalje pisala "300 detekcija" ili nudila godinu za koju je SVE
+    daleko, samo bez geometrije na karti. `_povArhBrojZapisa` i dalje NE
+    pokreće geometriju (`_povArhTacke` samo mapira+filtrira, ne zove turf) —
+    razlika prema staroj verziji je samo TA da broji filtrirano, ne sirovo.
+  - **Ključ keša (`_povArhKes`) sad nosi grubo zaokruženu ref. tačku**
+    (`_povArhKesKljuc`, `"godina@la,lo"` na ~11 km) — bez toga bi PRVI izračun
+    (dok GPS još nema fix pa `_poziRefTacka` pada na centar karte) ostao
+    trajno keširan i POSLIJE što stigne stvarna GPS pozicija, ista zamka koju
+    je `_poziCekajGps` već riješio za redovni panel (v3.106.1), ovdje riješena
+    samim OBLIKOM ključa umjesto posebnim event-om — `_povArhKarticaHtml()`
+    već zove `_povArhRender()` pri svakom crtanju panela (i panel se crta
+    ponovo poslije GPS fixa preko `_poziStatusSet` → `_poziRenderPanel()`,
+    v3.114.0), pa čim ref. tačka istekne, sljedeće crtanje samo od sebe
+    pogodi NOVI ključ i preračuna. **Zamka uhvaćena testom**:
+    `_povArhSpojiServerske` je (prije ovog popravka) čistila keš po SIROVOJ
+    godini (`delete _povArhKes[g]`), a stvarni ključ je već bio u novom
+    `"godina@la,lo"` obliku — brisanje bi promašilo, i stara (npr. "prazno")
+    vrijednost bi ostala keširana i poslije uspješnog spajanja servera. Test
+    "server zapisi se dodaju u lokalnu arhivu i postaju dio računice" je pao
+    prije popravka iz TOG razloga, ne iz razloga filtera udaljenosti.
+  - **Kartica sad OTVORENO kaže obim** ("Dijeli se sa cijelom firmom — vidiš
+    i ono što su kolege već zabilježili, ali SAMO u krugu 100 km od tebe") —
+    isti princip kao svuda drugo u ovom panelu (nikad tiho suziti/proširiti
+    obim bez da se to kaže).
+  - Testovi: `tests/js/pozari-arhiva.test.js` prošireno na 40 (7 novih) —
+    `_povArhTacke`/`_povArhBrojZapisa`/`_povArhGodine`/`_povArhRacunaj` sve
+    ispravno izbacuju daleki zapis a zadržavaju blizak; godina bez ijednog
+    bliskog zapisa se ne nudi; GPS fix koji stigne NAKON prvog izračuna daje
+    svjež (ne stari keširan) rezultat. Sandbox testa je dobio mutabilnu ref.
+    tačku (`mod._refBox.current`) da simulira "GPS je upravo uhvatio fix"
+    unutar iste sesije, umjesto dva odvojena modula.
 - **Lista detekcija — kapa smanjena + "Prikaži još" umjesto mrtvog teksta
   (v3.123.0)**: terenska prijava "prikazuje se puno prikaza, prikaži manje ili
   bolje da grupišeš tačke istog požara" uz screenshot liste u sortu "Novije

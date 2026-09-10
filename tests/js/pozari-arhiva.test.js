@@ -62,9 +62,18 @@ function mkLS() {
   };
 }
 
+// Referentna tačka (v1.1.2): _povArhTacke sad filtrira "blizu mene", isto
+// kao ostatak Požara. Podrazumijevano u testu je _POZ_RADIUS_KM ogroman
+// (efektivno "bez filtriranja") — testovi dedupa/geometrije/keša gore NISU O
+// UDALJENOSTI, pa im se namjerno ne mijenja ponašanje; zaseban blok testova
+// ispod eksplicitno postavlja realan krug (100 km) i tačke unutar/izvan njega
+// da provjeri SAM filter.
 function makeArh(opts) {
   const o = opts || {};
   const olEnqueued = [];
+  // Mutabilna kutija — testovi mogu promijeniti ref TOKOM izvršavanja
+  // (npr. "GPS je upravo stigao") pozivom mod._refBox.current = {...}.
+  const refBox = { current: o.ref || { la: 44.90, lo: 16.20, gps: true } };
   const sandbox = {
     localStorage: o.ls || mkLS(),
     turf,
@@ -74,6 +83,8 @@ function makeArh(opts) {
     _POZ_GRUPA_M: 1500,
     _POZ_OPOZ_MAX_UNIJA: 60,
     _POZ_OPOZ_MAXEDGE_M: 500,
+    _POZ_RADIUS_KM: o.radius !== undefined ? o.radius : 1e6,
+    _poziRefTacka: () => refBox.current,
     _POV_ARH_BOJE: ['#38bdf8', '#a78bfa', '#2dd4bf', '#f472b6', '#94a3b8'],
     // _povArhKesOcisti zove _povArhRender kad je neka godina uključena —
     // u testu nema karte, pa se oba javljaju kao no-op.
@@ -84,11 +95,12 @@ function makeArh(opts) {
     _OL: o.noOL ? undefined : { enqueue: (op) => olEnqueued.push(op) }
   };
   const src = [extractFn('dst'), extractFn('_poziPouzdanost'), extractFn('_poziSatelit'),
-               extractFn('_poziGrupisi'), extractFn('_poziOpozGeom'),
+               extractFn('_poziFilterBlizu'), extractFn('_poziGrupisi'), extractFn('_poziOpozGeom'),
                extractFn('_povArhUcitaj'), extractFn('_povArhSacuvaj'), extractFn('_povArhDan'),
                extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
                extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povArhBoja'),
-               extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhIzracunata'),
+               extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhKesKljuc'),
+               extractFn('_povArhIzracunata'),
                extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti'),
                extractFn('_povArhSpojiServerske')].join('\n');
   const keys = Object.keys(sandbox);
@@ -99,6 +111,7 @@ function makeArh(opts) {
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
   mod._olEnqueued = olEnqueued;
+  mod._refBox = refBox;
   return mod;
 }
 
@@ -428,6 +441,93 @@ t('spojeni server zapisi se NE enqueue-uju nazad (nema beskonačne petlje sync-a
   const A = makeArh();
   A._povArhSpojiServerske([{ godina: GOD, dan: 100, la: 44.5, lo: 16.5, rez: 375 }]);
   assert.strictEqual(A._olEnqueued.length, 0, '_povArhSpojiServerske ne smije zvati _OL.enqueue');
+});
+
+// =====================================================================
+console.log('\nFilter po blizini (v1.1.2):');
+// Zašto: arhiva je od v1.1.1 DIJELJENA za cijelu firmu — bez ovog filtera bi
+// prvi korisnik u novom kraju vidio "2026" požare koje je kolega zabilježio
+// STOTINAMA km dalje, dok mu istovremeno redovni panel (koji filter već ima)
+// ispravno kaže da u njegovoj blizini zadnjih 7 dana nema ničeg — tačno ona
+// zbunjujuća razlika koju je teren prijavio ("prikazuju se požari iz 2026 ali
+// nema požara iz zadnjih 7 dana... a bilo je").
+const REF = { la: 44.90, lo: 16.20, gps: true };
+const BLIZU = { la: 44.90, lo: 16.30 };   // ~8 km od REF
+const DALEKO = { la: 46.50, lo: 16.20 };  // ~178 km od REF, van kruga 100 km
+
+t('_povArhTacke izbacuje zapis DALEKO od korisnika, zadržava BLIZU', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([
+    det(BLIZU.la, BLIZU.lo, iso(GOD, 7, 5)),
+    det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 5)),
+  ]);
+  const t2 = A._povArhTacke(GOD);
+  assert.strictEqual(t2.length, 1, 'samo blizak zapis prolazi filter');
+  assert.strictEqual(t2[0].la, BLIZU.la);
+});
+
+t('_povArhBrojZapisa broji SAMO blizu, ne sirov broj u arhivi', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([
+    det(BLIZU.la, BLIZU.lo, iso(GOD, 7, 5)),
+    det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 6)),
+  ]);
+  assert.strictEqual(A._povArhBrojZapisa(GOD), 1, 'daleki zapis se ne smije brojati');
+});
+
+t('_povArhGodine ne prikazuje godinu čiji su SVI zapisi daleko', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 5))]);
+  assert.deepStrictEqual(A._povArhGodine(), [], 'godina bez ijednog bliskog zapisa se ne nudi');
+});
+
+t('_povArhGodine i dalje prikazuje godinu s BAR JEDNIM bliskim zapisom', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([
+    det(BLIZU.la, BLIZU.lo, iso(GOD, 7, 5)),
+    det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 6)),
+  ]);
+  assert.deepStrictEqual(A._povArhGodine(), [String(GOD)]);
+});
+
+t('_povArhRacunaj ignoriše daleki zapis u geometriji/broju detekcija', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([
+    det(BLIZU.la, BLIZU.lo, iso(GOD, 7, 5)),
+    det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 6)),
+  ]);
+  const r = A._povArhRacunaj(GOD);
+  assert.ok(r, 'blizak zapis i dalje daje geometriju');
+  assert.strictEqual(r.brojDetekcija, 1, 'daleki zapis ne smije ući u računicu');
+});
+
+t('bez ijednog bliskog zapisa _povArhRacunaj vraća null (ne pola-daleke geometrije)', () => {
+  const A = makeArh({ radius: 100, ref: REF });
+  A._povArhDodaj([det(DALEKO.la, DALEKO.lo, iso(GOD, 7, 5))]);
+  assert.strictEqual(A._povArhRacunaj(GOD), null);
+});
+
+console.log('\nKeš prati referentnu tačku, ne ostaje zaglavljen na staroj (v1.1.2):');
+// Dok GPS nema fix, _poziRefTacka pada na centar karte; kad GPS stigne,
+// referentna tačka se pomjeri — geometrija izračunata PRIJE toga ne smije
+// ostati trajno prikazana kao da je ispravna (ista zamka koju je _poziCekajGps
+// već riješio za redovni panel).
+
+t('GPS fix koji stigne NAKON prvog izračuna daje SVJEŽ rezultat, ne stari keširan', () => {
+  const refCentarKarte = { la: 44.90, lo: 16.20, gps: false };   // prije GPS fixa
+  const refGps         = { la: 46.50, lo: 16.20, gps: true };    // stvarna pozicija, ~178 km dalje
+
+  const A = makeArh({ radius: 100, ref: refCentarKarte });
+  A._povArhDodaj([det(refCentarKarte.la, refCentarKarte.lo, iso(GOD, 7, 5))]);  // blizu centra karte
+  A._povArhDodaj([det(refGps.la, refGps.lo, iso(GOD, 7, 6))]);                  // blizu STVARNE pozicije
+
+  const prijeGps = A._povArhRacunaj(GOD);
+  assert.strictEqual(prijeGps.brojDetekcija, 1, 'prije GPS fixa vidi se samo zapis blizu centra karte');
+
+  A._refBox.current = refGps;   // "GPS je upravo uhvatio fix" (isti trenutak kao _poziCekajGps)
+  const posljeGps = A._povArhRacunaj(GOD);
+  assert.strictEqual(posljeGps.brojDetekcija, 1, 'poslije fixa vidi se zapis blizu STVARNE pozicije');
+  assert.notDeepStrictEqual(prijeGps.geom, posljeGps.geom, 'ne smije ostati zaglavljen na geometriji od pogrešne ref. tačke');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

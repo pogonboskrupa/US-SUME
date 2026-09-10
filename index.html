@@ -4994,7 +4994,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.1.1';
+const APP_VER = 'v1.1.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -15777,20 +15777,36 @@ function _povArhDodaj(pts) {
 }
 
 // Godine koje arhiva stvarno sadrži, najnovija prva.
+// SAMO godine koje imaju bar JEDAN zapis U KRUGU od korisnika (v1.1.2, vidi
+// napomenu uz _povArhTacke ispod) — inače bi se u listi pojavila godina čiji
+// su SVI zapisi stigli sa servera od kolege stotinama km dalje, bez ijednog
+// koji stvarno pripada ovom kraju.
 function _povArhGodine() {
   const arh = _povArhUcitaj();
-  return Object.keys(arh).filter(g => arh[g].length).sort().reverse();
+  return Object.keys(arh).filter(g => arh[g].length && _povArhTacke(g).length).sort().reverse();
 }
 
 // Zapisi jedne godine natrag u oblik koji razumije ostatak Požara
 // (`{la, lo, dt, rez}`) — `_poziGrupisi`/`_poziOpozGeom` očekuju baš to.
+//
+// FILTRIRANO na _POZ_RADIUS_KM od korisnika (v1.1.2) — ISTI "blizu mene" krug
+// koji koristi SVAKI drugi prikaz u ovom panelu (živi 24h/48h/7d, "Ova
+// godina", "Zadnjih 5 godina"). Dok je arhiva bila isključivo lokalna
+// (v3.122.0), ovaj filter nije bio potreban: telefon je sam sa sobom mogao
+// upisati samo ono što je FIZIČKI bio blizu da vidi. Otkad je arhiva
+// DIJELJENA za cijelu firmu (v1.1.1), taj oslonac više ne važi — bez filtera
+// bi prvi korisnik u novom kraju vidio "2026" požare koje je NEGDJE DRUGDJE
+// zabilježio kolega, dok mu istovremeno redovni panel (koji filter već ima)
+// ispravno kaže da u zadnjih 7 dana nema ničeg u NJEGOVOJ blizini — tačno
+// zbunjujuća razlika koju je prijavio teren.
 function _povArhTacke(godina) {
   const arh = _povArhUcitaj();
   const red = arh[String(godina)] || [];
-  return red.map(r => ({
+  const pts = red.map(r => ({
     la: r[0], lo: r[1], rez: r[3],
     dt: new Date(Date.UTC(+godina, 0, 1) + r[2] * 86400000).toISOString()
   }));
+  return _poziFilterBlizu(pts, _poziRefTacka());
 }
 
 function _povHistUcitaj() {
@@ -15829,10 +15845,22 @@ function _povHistZabiljezi(evts) {
 // Računa se LIJENO (tek kad korisnik uključi godinu) i memoizuje, jer je
 // geometrija najskuplji dio, a `_poziRenderPanel` se zove na svaki meteo/GPS
 // događaj.
-const _povArhKes = {};   // godina -> { ha, geom, brojPozara, brojDetekcija }
+//
+// Ključ keša NOSI GRUBO ZAOKRUŽENU referentnu tačku (~11 km, v1.1.2) — otkad
+// _povArhTacke filtrira "blizu mene", geometrija zavisi i od TOGA odakle se
+// računa, ne samo od godine. Bez ovoga bi prvi izračun (dok GPS još nema fix
+// pa se koristi centar karte, vidi _poziRefTacka) ostao trajno zaglavljen u
+// kešu i poslije što stigne stvarna GPS pozicija — ista zamka koju je
+// _poziCekajGps već riješila za redovni panel, ovdje riješena samim oblikom
+// ključa umjesto posebnim event-om.
+const _povArhKes = {};   // "godina@la,lo" -> { ha, geom, brojPozara, brojDetekcija }
+function _povArhKesKljuc(godina) {
+  const ref = _poziRefTacka();
+  return godina + '@' + ref.la.toFixed(1) + ',' + ref.lo.toFixed(1);
+}
 
 function _povArhRacunaj(godina) {
-  const k = String(godina);
+  const k = _povArhKesKljuc(godina);
   if (_povArhKes[k] !== undefined) return _povArhKes[k];
   const pts = _povArhTacke(godina);
   if (!pts.length || typeof turf === 'undefined') { _povArhKes[k] = null; return null; }
@@ -15858,14 +15886,15 @@ function _povArhRacunaj(godina) {
 // svaki meteo/GPS/toast događaj. Izmjereno: 284 ms po punoj sezoni (12 dugih
 // požara, 2595 zapisa) u sandboxu — na telefonu višestruko više, pa bi pet
 // godina zaledilo panel na nekoliko sekundi pri svakom otvaranju.
-function _povArhIzracunata(godina) { return _povArhKes[String(godina)] !== undefined; }
+function _povArhIzracunata(godina) { return _povArhKes[_povArhKesKljuc(godina)] !== undefined; }
 
-// Briše keš SAMO za pogođenu godinu. Redovna osvježavanja mogu dodati jedino u
-// TEKUĆU godinu, pa prošle ostaju izračunate do kraja sesije — bez ovoga bi
-// svako osvježavanje na 10 min poništilo sav posao za sve godine.
+// Briše keš SAMO za pogođenu godinu (pod TRENUTNOM referentnom tačkom — vidi
+// _povArhKesKljuc). Redovna osvježavanja mogu dodati jedino u TEKUĆU godinu,
+// pa prošle ostaju izračunate do kraja sesije — bez ovoga bi svako
+// osvježavanje na 10 min poništilo sav posao za sve godine.
 function _povArhKesOcisti(godina) {
   if (godina === undefined) Object.keys(_povArhKes).forEach(k => delete _povArhKes[k]);
-  else delete _povArhKes[String(godina)];
+  else delete _povArhKes[_povArhKesKljuc(godina)];
   if (_povArhUkljucene().length) _povArhRender();   // ako je neka godina na karti, prekrij novom geometrijom
 }
 
@@ -15903,7 +15932,10 @@ function _povArhSpojiServerske(redovi) {
     _povArhSacuvaj(arh);
     // Direktno brisanje keša (ne _povArhKesOcisti) — izbjegava N ponovnih
     // _povArhRender() poziva u petlji, render se radi JEDNOM ispod, na kraju.
-    godineIzmijenjene.forEach(g => delete _povArhKes[g]);
+    // Ključ MORA proći kroz _povArhKesKljuc (v1.1.2, "godina@la,lo") — brisanje
+    // po sirovoj godini bi promašilo stvarni ključ i ostavilo stari (moguće
+    // "prazno") rezultat trajno keširan.
+    godineIzmijenjene.forEach(g => delete _povArhKes[_povArhKesKljuc(g)]);
   }
   return dodato;
 }
@@ -15990,11 +16022,13 @@ function _povArhCentar(geom) {
   try { return turf.centroid(geom).geometry.coordinates; } catch(e) { return [0, 0]; }
 }
 
-// Broj zapisa u godini — jeftino (samo dužina niza), za prikaz prije nego se
-// geometrija uopšte izračuna.
+// Broj zapisa u godini, VEĆ FILTRIRAN na blizinu (v1.1.2) — i dalje jeftino
+// (_povArhTacke samo mapira i filtrira, ne pokreće geometriju/turf), za
+// prikaz prije nego se geometrija uopšte izračuna. Mora čitati filtrirano,
+// inače bi kartica pisala npr. "300 detekcija" za godinu čije su SVE
+// detekcije zapravo negdje daleko, drugdje u firmi.
 function _povArhBrojZapisa(godina) {
-  const arh = _povArhUcitaj();
-  return (arh[String(godina)] || []).length;
+  return _povArhTacke(godina).length;
 }
 
 function _povArhKarticaHtml() {
@@ -16003,6 +16037,12 @@ function _povArhKarticaHtml() {
   // ne samo pri pokretanju app-a (korisnik je mogao uključiti panel Požari
   // kasnije u sesiji).
   if (navigator.onLine) _povArhServerSinkOpp();
+  // Karta se ponovo crta svaki put kad se kartica crta (v1.1.2) — jeftin
+  // no-op ako nijedna godina nije uključena, ali kad JESTE, ovo je jedini
+  // način da poligon prati GPS fix koji stigne POSLIJE prvog crtanja (vidi
+  // _povArhKesKljuc — dok GPS nema fix koristi se centar karte, pa prvi
+  // izračun zna biti pogrešno centriran dok se ne osvježi).
+  if (_povArhUkljucene().length) _povArhRender();
   const godine = _povArhGodine();
   const ukljucene = new Set(_povArhUkljucene());
   const uvod = `<div style="font-size:10px;color:#64748b;line-height:1.45;margin-bottom:8px;">
@@ -16010,14 +16050,17 @@ function _povArhKarticaHtml() {
       pa požar koji gori sedmicama ovdje raste do svoje PUNE površine, dok panel iznad
       pokazuje samo zadnjih ${_escHtml(_poziOkvirNaziv())}.
       Ukupno je SPOJENA površina, ne zbir po požaru — isto mjesto koje gori više puta
-      se ne broji dvaput. Dijeli se sa cijelom firmom — vidiš i ono što su kolege
-      sa svojih telefona već zabilježili, ne samo svoje.
+      se ne broji dvaput. Dijeli se sa cijelom firmom — vidiš i ono što su kolege sa
+      svojih telefona već zabilježili, ali SAMO u krugu ${_POZ_RADIUS_KM} km od tebe
+      (isti krug kao panel iznad) — požar koji je kolega zabilježio negdje drugdje u
+      firmi se ovdje ne prikazuje.
     </div>`;
   if (!godine.length) {
     return uvod + `<div style="padding:10px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;
         font-size:11px;color:#94a3b8;line-height:1.5;">
-        Arhiva je još prazna na ovom uređaju. Puni se sama dok koristiš sekciju Požari, a
-        čim bude interneta, ovdje će se pojaviti i ono što su VEĆ zabilježili drugi korisnici.
+        Arhiva je još prazna u tvom krugu od ${_POZ_RADIUS_KM} km. Puni se sama dok koristiš
+        sekciju Požari, a čim bude interneta, ovdje će se pojaviti i ono što su VEĆ
+        zabilježili drugi korisnici u tvojoj blizini.
         <div style="color:#64748b;margin-top:4px;">Prošle godine se mogu popuniti unazad samo
         preko GFW ključa ("Ova godina" iznad); bez ključa pamti se od danas nadalje.</div>
       </div>`;
