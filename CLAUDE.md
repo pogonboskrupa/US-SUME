@@ -1269,6 +1269,14 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   se ne prepravlja u masovnom prolazu, nego postepeno kad se ta linija koda
   ionako dotiče iz drugog razloga (isti princip kao "Kandidati za čišćenje"
   ispod).
+- **Uklonjena fusnota "nije retroaktivno" iz popupa markera (v3.127.0)**: na
+  eksplicitan zahtjev, obrisan red `App ovo pamti od kad je "Zadnjih 5
+  godina" prvi put uključeno na ovom telefonu — nije retroaktivno.` iz
+  `_povHistPopupHtml` (popup pojedinačnog markera na karti). **Istovjetna
+  napomena ostaje u samoj kartici panela** (`_povHistListaHtml`, red
+  `"Ova godina" je pregled uživo... "Zadnjih 5 godina" NIJE retroaktivno —`)
+  — nije dirana jer korisnik nije tražio uklanjanje odatle, samo iz popupa
+  koji se otvara klikom na marker.
 
 ## Sekcija Vlake
 

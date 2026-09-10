@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.126.0';
+const APP_VER = 'v3.127.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -15664,9 +15664,6 @@ function _povHistPopupHtml(g) {
     ${red('Zabilježeno', g.broj + '× (' + godine.join(', ') + ')')}
     ${red('Prvi put', dat(g.prvi))}
     ${red('Zadnji put', dat(g.zadnji))}
-    <div style="font-size:10px;color:#475569;margin-top:8px;line-height:1.4;">
-      App ovo pamti od kad je "Zadnjih 5 godina" prvi put uključeno na ovom telefonu — nije retroaktivno.
-    </div>
   </div>`;
 }
 
