@@ -53,7 +53,10 @@ function t(name, fn) { _tests.push({ name, fn }); }
 // bez stvarnog Leaflet-a (nedostupan u čistom Node okruženju).
 function makeFakeL() {
   class FakeLayer {
-    constructor(opts) { Object.assign(this, opts || {}); this._handlers = {}; }
+    // Pravi Leaflet uvijek postavlja this.options (merge sa zadanim) — otud
+    // referenca this.options.authHeadersFn (v3.128.0, Sentinel-2) u fetchTile
+    // ne puca u produkciji. Mock je ranije to izostavljao jer mu tad nije trebalo.
+    constructor(opts) { Object.assign(this, opts || {}); this.options = opts || {}; this._handlers = {}; }
     on(evt, fn) { (this._handlers[evt] = this._handlers[evt] || []).push(fn); }
     fire(evt, data) { (this._handlers[evt] || []).forEach(fn => fn(data)); }
   }

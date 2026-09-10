@@ -392,6 +392,86 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     svaki dosadašnji tile host. Config JSON se NE kešira u Cache Storage —
     ima svoj `localStorage` keš (`_wbUcitajReleases`, offline-first isti
     obrazac kao FIRMS detekcije) jer je to lista release-a, ne pločica.
+- **Sentinel-2 (Copernicus Data Space Ecosystem) — svjež snimak za praćenje
+  opožarenosti (v3.128.0)**: na zahtjev "ubaci Copernicus Sentinel-2 da pratim
+  stanje opožarenosti". `AskUserQuestion` je razriješio dvije razgranate
+  odluke PRIJE pisanja koda: (1) svjež pravi Sentinel-2 snimak (istinite
+  boje), ne postojeći EFFIS mjereni poligon niti stari cloudless mozaik — ovo
+  je DOPUNA postojećoj EFFIS "Opožarene površine" kartici u Požarima, ne
+  zamjena; (2) korisnik nema CDSE nalog ali je spreman napraviti ga.
+  - **Isti "privremeno zamijeni baznu podlogu" obrazac kao Vremenska traka**
+    (`_s2On`/`_s2PrevKey`, NAMJERNO ne u localStorage — isti razlog kao
+    Wayback, da app ne otvori stari/nerelevantan snimak tiho pri sljedećem
+    pokretanju). `_s2HideBase`/`_s2RestoreBase` MEĐUSOBNO ISKLJUČUJU Wayback
+    (dva "zamijeni bazu" alata istovremeno bi se samo preklapala) — provjera
+    ide U OBA SMJERA: `_s2HideBase` gasi Wayback ako je uključen, a
+    `_wbHideBase` (dopunjen ovom izmjenom) gasi Sentinel-2 ako je uključen.
+  - **OAuth2 (client credentials), ne prosta MAP_KEY/x-api-key vrijednost** —
+    CDSE zahtijeva token exchange (`_S2_TOKEN_URL`, POST client_id+secret →
+    kratkotrajan Bearer token, keširan u memoriji do isteka −30s marže,
+    `_s2TokenUzmi`) i taj token ide kao `Authorization` header na WMS GetMap
+    poziv — NE može u `<img src>` URL kao FIRMS MAP_KEY. Zato je
+    `makeCachedTileLayer` (dijeljena tile-keš/retry/fallback logika za SVE
+    slojeve karte) dobio nov, OPCIONI `options.authHeadersFn` (async, vraća
+    zaglavlje ili null) čitan u `fetchTile` TAČNO PRIJE svakog zahtjeva —
+    SVI dosadašnji slojevi ga nemaju (`undefined`) pa im se ponašanje NE
+    mijenja (`headers: undefined` je identično kao prije), a neuspjeh
+    (baci/reject) se guta i tretira kao "bez zaglavlja" (server odbije sa
+    401, ide kroz ISTI retry/fallback/prazna-pločica put kao svaki drugi
+    neuspjeh) — ne kao pad cijelog dohvata.
+  - **Dijeljeni pristup za CIJELU firmu, admin ga unosi jednom** — isti
+    obrazac kao FIRMS MAP_KEY/GFW ključ (v3.124.0): nova tabela
+    `sentinel2_kljucevi` (singleton red, RLS SELECT za `je_odobren()`, upis
+    isključivo kroz `admin_set_sentinel2_kljucevi` SECURITY DEFINER gejtovan
+    na `je_admin()`). Četiri polja umjesto jednog (`client_id`/`client_secret`/
+    `instance_id`/`layer`) jer CDSE traži OAuth klijent + Sentinel Hub
+    "Configuration Utility" instancu (koji sloj se traži) + naziv sloja
+    unutar nje (admin ga sam imenuje pri kloniranju konfiguracije, zato je
+    polje a ne fiksna vrijednost). `client_secret` NIJE tretiran kao
+    `app_secrets` tajna (SECURITY DEFINER-only, klijent ga nikad ne vidi) —
+    ISTA odluka i isti razlog kao za FIRMS/GFW: token exchange se radi
+    KLIJENTSKI sa svakog uređaja, pa ključ mora biti čitljiv svakom odobrenom
+    korisniku; server-side (pg_net) exchange bi bio "sigurniji" na papiru, ali
+    pg_net je asinhron (fire-and-forget, odgovor u `net._http_response`) bez
+    provjerenog sinhronog "zovi pa čekaj" puta — rizik neprovjerenog
+    mehanizma je veći od dobiti. UI polje se **NE SAKRIVA CSS-om nego se NE
+    GENERIŠE** za ne-admina (`_s2RenderSekcija`), isti princip kao Požari.
+  - **CORS na `sh.dataspace.copernicus.eu`/`identity.dataspace.copernicus.eu`
+    NIJE bilo moguće potvrditi iz sandboxa** (isti limit kao svaki nov mrežni
+    sloj — `WebFetch` na CDSE dokumentaciju je vratio `EGRESS_BLOCKED`, pa je
+    WMS URL/OAuth format sastavljen iz `WebSearch` rezultata, ne uživo
+    provjerene dokumentacije). "Provjeri pristup" (`_s2ProvjeriPristup`) je
+    alat za teren — token pa jedan probni GetMap poziv, čitljiva poruka o
+    TIPU kvara (`_poziGreskaTxt`, PONOVO iskorišten, ne dupliran). Ako CORS
+    ipak blokira u browseru, isti put kao FIRMS (v3.104.0→v3.105.0): PRVO
+    dokazati na terenu da `fetch()` pada, TEK ONDA dodavati native `AndroidNet`
+    most (preuranjen native kod bez dokaza da treba je nepotreban rizik/posao)
+    — za sada NAMJERNO nema nikakvih `.java`/`AndroidManifest.xml` izmjena.
+  - **Vremenski raspon + MAXCC bira korisnik** (`_S2_RASPONI`: 7/14/30/90
+    dana, `localStorage`) — Sentinel-2 ne prolazi svaki dan (~5 dana), pa WMS
+    `TIME=START/END` raspon (ne fiksan datum) vraća najbolji dostupan snimak
+    u tom prozoru; `MAXCC` (10/20/30/50/100%) ograničava oblačnost. Status
+    tekst eksplicitno kaže "nije garantovano baš danas" — isti princip kao
+    Waybackova napomena o release datumu.
+  - Novi keš bucket `tvlake-sentinel2-v1` — `_CMGR_ROWS`, `sw.js` routing
+    (`sh.dataspace.copernicus.eu` se kešira; `identity.dataspace.copernicus.eu`,
+    OAuth token endpoint, je NAMJERNO ISKLJUČEN iz keša, isti princip kao
+    supabase.co/open-meteo). Tile URL nosi Authorization header koji NIJE dio
+    cache ključa — sadržaj pločice je isti bez obzira na token, keš i dalje
+    radi ispravno.
+  - **Migraciju `20260910_sentinel2_kljucevi.sql` treba ručno pokrenuti u
+    Supabase SQL Editoru** — bez nje tabela ne postoji i `_s2KljucUcitaj`/
+    `_s2AdminSacuvajKljuceve` tiho ne rade ništa (oba su u `try/catch`).
+  - Testovi: `tests/js/sentinel2.test.js` (20) — čista logika (vremenski
+    raspon, raspon/MAXCC pad na zadano, keš ključeva otporan na korupciju,
+    OAuth token keš/istek/greška) + `makeCachedTileLayer`-ov `authHeadersFn`
+    (zaglavlje se šalje, greška se guta bez pada dohvata, postojeći slojevi
+    bez te opcije rade nepromijenjeno) nad STVARNIM kodom. **Zamka**:
+    `tile-bloburl.test.js`-ov mock Leaflet sloja (`makeFakeL`) nije imao
+    `this.options` (pravi Leaflet ga uvijek postavlja) — `this.options.
+    authHeadersFn` je pucao SAMO u tom testnom mocku, ne u produkciji;
+    popravljeno dodavanjem `this.options = opts` u mock, ne u produkcijskom
+    kodu.
 - **Heatmap gustine detekcija u Požarima (v3.112.2)**: na zahtjev "kao na
   firemap.live" — dodatak ispod postojećih markera/grupa, NE zamjena (zamjena
   bi pokvarila `_poziZoom`-ov klik-iz-liste-otvara-popup mehanizam, `g._mk`,

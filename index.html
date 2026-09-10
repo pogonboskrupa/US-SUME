@@ -4978,7 +4978,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);};
-const APP_VER = 'v3.127.0';
+const APP_VER = 'v3.128.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5906,6 +5906,9 @@ function _startupRestore() {
     // Keš je već učitan sinhrono pri parsiranju skripte (_poziKljucKesUcitaj);
     // ovdje samo tiho osvježava ako ima mreže, ne blokira ništa.
     korak('poziKljucevi', () => { if (navigator.onLine) _poziKljucUcitaj(); });
+    // Dijeljeni Sentinel-2 (CDSE) pristup (v3.128.0) — isti obrazac, keš je već
+    // učitan sinhrono (_s2KljucKesUcitaj), ovdje samo tihi osvježavajući dohvat.
+    korak('s2Kljucevi', () => { if (navigator.onLine) _s2KljucUcitaj(); });
     // Požari: ako je prikaz bio uključen, vrati ga — prvo iz keša (odmah,
     // radi i offline), pa tihi osvježavajući dohvat ako ima mreže.
     korak('pozari', () => {
@@ -11916,13 +11919,23 @@ function makeCachedTileLayer(cacheName, baseClass) {
 
       // Dohvat s TIMEOUTOM — na terenskoj mreži zahtjev zna visiti beskonačno
       // (mrtva konekcija uz onLine=true); abort → resolve(null) → retry/fallback.
+      // `options.authHeadersFn` (v3.128.0, Sentinel-2/CDSE) — opciona async funkcija
+      // koja vrati SVJEŽE zaglavlje (npr. Bearer token, obnavlja se sam kad istekne)
+      // TAČNO PRIJE svakog zahtjeva; SVI dosadašnji slojevi je nemaju (undefined)
+      // pa im se ponašanje NE mijenja — `headers: undefined` je identično kao prije.
+      // Neuspjeh (throw/reject) se guta i tretira kao "bez zaglavlja", ne kao pad
+      // cijelog dohvata — server će odbiti sa 401 i to ide kroz isti fallback put
+      // kao svaki drugi neuspjeh (retry/parent-fallback/prazna pločica).
       const fetchTile = (u, ms) => new Promise(resolve => {
         const ctl = new AbortController();
         img._ctls.add(ctl);
         const t = setTimeout(() => ctl.abort(), ms);
-        fetch(u, { mode: 'cors', signal: ctl.signal })
-          .then(r => { clearTimeout(t); img._ctls.delete(ctl); resolve(r); })
-          .catch(() => { clearTimeout(t); img._ctls.delete(ctl); resolve(null); });
+        const finish = (r) => { clearTimeout(t); img._ctls.delete(ctl); resolve(r); };
+        Promise.resolve(this.options.authHeadersFn ? this.options.authHeadersFn() : null)
+          .catch(() => null)
+          .then(hdrs => fetch(u, { mode: 'cors', signal: ctl.signal, headers: hdrs || undefined }))
+          .then(finish)
+          .catch(() => finish(null));
       });
 
       // Zamućeni RODITELJ iz keša (offline promašaj / 404 na visokom zoomu gdje snimka
@@ -12763,8 +12776,19 @@ function _wbNajblizaZima() {
 // postane trajno zapamćena "zadnja karta" (korisnik bi se vratio u app i
 // slučajno gledao snimak iz 2019. umjesto trenutnog stanja).
 function _wbHideBase() {
-  _wbPrevKey = (typeof _activeLayerKey === 'function') ? _activeLayerKey() : null;
-  Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  // Sentinel-2 i Wayback su OBA "privremeno zamijeni baznu podlogu" alati —
+  // simetrična provjera naspram _s2HideBase (koji gasi Wayback ako je uključen).
+  if (typeof _s2On !== 'undefined' && _s2On) {
+    _s2On = false;
+    if (map.hasLayer(_s2TileLayer)) map.removeLayer(_s2TileLayer);
+    const s2Cb = document.getElementById('s2-toggle');
+    if (s2Cb) s2Cb.checked = false;
+    const s2Picker = document.getElementById('s2-picker');
+    if (s2Picker) s2Picker.style.display = 'none';
+  } else {
+    _wbPrevKey = (typeof _activeLayerKey === 'function') ? _activeLayerKey() : null;
+    Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  }
 }
 function _wbRestoreBase() {
   const key = (_wbPrevKey && TL[_wbPrevKey]) ? _wbPrevKey : '⛰ Topo';
@@ -12823,6 +12847,298 @@ function _wbTrazZimu() {
   const sel = document.getElementById('wb-datum');
   if (sel) sel.value = zima.url;
   _wbPostaviDatum(zima.url);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SENTINEL-2 (Copernicus Data Space Ecosystem) — svjež snimak (v3.128.0)
+// ---------------------------------------------------------------------------
+// Na zahtjev "da pratim stanje opožarenosti". Razlikuje se od Vremenske trake
+// (Wayback, iznad): Wayback je Esri-jeva ARHIVA (unazad do 2014, novi release
+// mjesečno), a ovo je pravi Sentinel-2 satelit (10 m rezolucija, novi prolaz
+// svakih ~5 dana) — bliže "šta se dešava SADA" nego Wayback.
+//
+// Copernicus EFFIS "Opožarene površine" (kartica niže u panelu Požari) VEĆ
+// postoji i daje MJERENU granicu — ovo NIJE zamjena za to, nego dopuna: EFFIS
+// je binarna granica (unutra/van), a stvaran snimak pokazuje NIJANSE (koliko
+// je gusto izgorjelo, gdje se vegetacija već oporavlja) koje poligon ne nosi.
+//
+// NEMA besplatnog anonimnog pristupa (za razliku od Wayback-a/WorldCover-a) —
+// CDSE traži OAuth2 (client_id+secret → kratkotrajan Bearer token) I posebnu
+// "konfiguraciju" (instance_id) koja definiše koji je sloj tačno tražen.
+// Admin ih unosi JEDNOM (isti obrazac kao pozari_kljucevi, v3.124.0), klijent
+// čita dijeljeno — vidi migraciju 20260910_sentinel2_kljucevi.sql za punu
+// napomenu zašto client_secret NIJE tretiran kao app_secrets tajna.
+//
+// CORS na sh.dataspace.copernicus.eu/identity.dataspace.copernicus.eu NIJE
+// bilo moguće potvrditi iz sandboxa (isti limit kao za svaki nov mrežni sloj,
+// vidi CLAUDE.md) — "Provjeri pristup" (_s2ProvjeriPristup) je alat za teren,
+// isti princip kao _poziProvjeriIzvore. Ako CORS ipak blokira u browseru, isti
+// put kao FIRMS (v3.104.0→v3.105.0): prvo dokazati na terenu da fetch() pada,
+// TEK ONDA dodavati native AndroidNet most (preuranjen native kod bez dokaza
+// da treba je nepotreban rizik/posao).
+// ═══════════════════════════════════════════════════════════════════════════
+const _S2_KLJUCEVI_KES = 'tvlake_sentinel2_kljucevi_kes';
+let _s2Kljucevi = { clientId: '', clientSecret: '', instanceId: '', layer: 'TRUE-COLOR' };
+function _s2KljucKesUcitaj() {
+  try {
+    const j = JSON.parse(localStorage.getItem(_S2_KLJUCEVI_KES) || 'null');
+    if (j && typeof j === 'object') _s2Kljucevi = {
+      clientId: j.clientId || '', clientSecret: j.clientSecret || '',
+      instanceId: j.instanceId || '', layer: j.layer || 'TRUE-COLOR'
+    };
+  } catch(e) {}
+}
+_s2KljucKesUcitaj();
+async function _s2KljucUcitaj() {
+  try {
+    const { data, error } = await _withTimeout(
+      sb.from('sentinel2_kljucevi').select('client_id,client_secret,instance_id,layer').eq('id', true).maybeSingle(), 8000);
+    if (error || !data) return;
+    _s2Kljucevi = {
+      clientId: data.client_id || '', clientSecret: data.client_secret || '',
+      instanceId: data.instance_id || '', layer: data.layer || 'TRUE-COLOR'
+    };
+    try { localStorage.setItem(_S2_KLJUCEVI_KES, JSON.stringify(_s2Kljucevi)); } catch(e) {}
+  } catch(e) {}
+}
+function _s2Podeseno() {
+  return !!(_s2Kljucevi.clientId && _s2Kljucevi.clientSecret && _s2Kljucevi.instanceId);
+}
+async function _s2AdminSacuvajKljuceve() {
+  if (!sbProfile?.is_admin) return;
+  const cid = (document.getElementById('s2-clientid-in')?.value || '').trim();
+  const cs  = (document.getElementById('s2-clientsecret-in')?.value || '').trim();
+  const iid = (document.getElementById('s2-instanceid-in')?.value || '').trim();
+  const lyr = (document.getElementById('s2-layer-in')?.value || '').trim() || 'TRUE-COLOR';
+  showToast('⏳ Čuvam…');
+  try {
+    const { error } = await _withTimeout(sb.rpc('admin_set_sentinel2_kljucevi', {
+      p_client_id: cid || null, p_client_secret: cs || null, p_instance_id: iid || null, p_layer: lyr
+    }), 10000);
+    if (error) throw error;
+    _s2Kljucevi = { clientId: cid, clientSecret: cs, instanceId: iid, layer: lyr };
+    _s2Token = null; // stari token (ako postoji) je vezan za STARI client_id/secret
+    try { localStorage.setItem(_S2_KLJUCEVI_KES, JSON.stringify(_s2Kljucevi)); } catch(e) {}
+    showToast('✅ Sačuvano — svi korisnici od sada koriste ovaj pristup');
+    _s2RenderSekcija();
+  } catch(e) {
+    showToast('❌ Greška pri čuvanju: ' + (e?.message || e));
+  }
+}
+
+// ── OAuth2 token (client credentials) — kratkotrajan, NIKAD se ne pamti u
+// localStorage (za razliku od kljuceva samih) — nema razloga da preživi
+// zatvaranje app-a, i obnavlja se sam kad istekne. ─────────────────────────
+const _S2_TOKEN_URL = 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token';
+let _s2Token = null; // { access_token, exp } — exp je Date.now() ms kad ističe
+async function _s2TokenUzmi() {
+  if (_s2Token && _s2Token.exp > Date.now() + 30000) return _s2Token.access_token; // 30s marža
+  if (!_s2Podeseno()) return null;
+  const body = 'grant_type=client_credentials'
+    + '&client_id=' + encodeURIComponent(_s2Kljucevi.clientId)
+    + '&client_secret=' + encodeURIComponent(_s2Kljucevi.clientSecret);
+  try {
+    const r = await _fetchT(_S2_TOKEN_URL, 15000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+    if (!r || !r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.access_token) return null;
+    _s2Token = { access_token: j.access_token, exp: Date.now() + (Number(j.expires_in) || 300) * 1000 };
+    return _s2Token.access_token;
+  } catch(e) { return null; }
+}
+
+// ── Vremenski raspon i oblačnost — korisnik bira, WMS TIME prihvata RANGE
+// (START/END) i vraća najbolji (obično najnoviji, najmanje oblačan unutar
+// MAXCC) snimak u tom prozoru — Sentinel-2 ne prolazi svaki dan, pa fiksan
+// datum često ne bi vratio ništa. ───────────────────────────────────────────
+const _S2_RASPONI = [
+  { id: '7',  dani: 7,  naziv: '7 dana' },
+  { id: '14', dani: 14, naziv: '14 dana' },
+  { id: '30', dani: 30, naziv: '30 dana' },
+  { id: '90', dani: 90, naziv: '90 dana' }
+];
+const _S2_RASPON_KEY = 'tvlake_sentinel2_raspon';
+const _S2_MAXCC_KEY  = 'tvlake_sentinel2_maxcc';
+function _s2Raspon() {
+  const v = localStorage.getItem(_S2_RASPON_KEY);
+  return _S2_RASPONI.some(r => r.id === v) ? v : '14';
+}
+function _s2Maxcc() {
+  const v = parseInt(localStorage.getItem(_S2_MAXCC_KEY), 10);
+  return [10, 20, 30, 50, 100].includes(v) ? v : 30;
+}
+function _s2VremenskiOpseg(rasponId) {
+  const dani = (_S2_RASPONI.find(r => r.id === rasponId) || _S2_RASPONI[1]).dani;
+  const kraj = new Date();
+  const pocetak = new Date(kraj.getTime() - dani * 86400000);
+  const iso = d => d.toISOString().slice(0, 10);
+  return iso(pocetak) + '/' + iso(kraj);
+}
+
+const _S2_TILE_CACHE = 'tvlake-sentinel2-v1';
+const CachedSentinel2 = makeCachedTileLayer(_S2_TILE_CACHE, L.TileLayer.WMS);
+const _s2TileLayer = new CachedSentinel2('', {
+  format: 'image/png', transparent: false, version: '1.3.0',
+  maxNativeZoom: 14, maxZoom: 20, keepBuffer: 4,
+  updateWhenZooming: false, updateWhenIdle: true, updateInterval: 150,
+  authHeadersFn: async () => {
+    const tok = await _s2TokenUzmi();
+    return tok ? { Authorization: 'Bearer ' + tok } : null;
+  }
+});
+let _s2On = false;
+let _s2PrevKey = null;
+
+function _s2HideBase() {
+  // Wayback i Sentinel-2 su OBA "privremeno zamijeni baznu podlogu" alati —
+  // dva istovremeno aktivna bi se samo preklapala (zadnji dodan pobjeđuje),
+  // zbunjujuće bez ijedne koristi. Isključivi su, kao radio dugmad.
+  if (_wbOn) {
+    _wbOn = false;
+    if (map.hasLayer(_wbTileLayer)) map.removeLayer(_wbTileLayer);
+    const wbCb = document.getElementById('wb-toggle');
+    if (wbCb) wbCb.checked = false;
+    const wbPicker = document.getElementById('wb-picker');
+    if (wbPicker) wbPicker.style.display = 'none';
+  } else {
+    _s2PrevKey = (typeof _activeLayerKey === 'function') ? _activeLayerKey() : null;
+    Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+  }
+}
+function _s2RestoreBase() {
+  const key = (_s2PrevKey && TL[_s2PrevKey]) ? _s2PrevKey : '⛰ Topo';
+  TL[key].addTo(map);
+  _s2PrevKey = null;
+}
+
+function _s2PostaviParametre() {
+  const raspon = document.getElementById('s2-raspon')?.value || _s2Raspon();
+  const maxcc  = document.getElementById('s2-maxcc')?.value || String(_s2Maxcc());
+  try { localStorage.setItem(_S2_RASPON_KEY, raspon); } catch(e) {}
+  try { localStorage.setItem(_S2_MAXCC_KEY, maxcc); } catch(e) {}
+  _s2TileLayer.setParams({ layers: _s2Kljucevi.layer || 'TRUE-COLOR', maxcc, time: _s2VremenskiOpseg(raspon) });
+  const st = document.getElementById('s2-status');
+  if (st) st.textContent = 'Prikazan najbolji snimak u prozoru od ' + raspon + ' dana (do ' + maxcc + '% oblačnosti) — nije garantovano baš danas.';
+}
+
+async function _s2Toggle(on) {
+  const cb = document.getElementById('s2-toggle');
+  const picker = document.getElementById('s2-picker');
+  if (!on) {
+    _s2On = false;
+    if (map.hasLayer(_s2TileLayer)) map.removeLayer(_s2TileLayer);
+    _s2RestoreBase();
+    if (picker) picker.style.display = 'none';
+    return;
+  }
+  if (!_s2Podeseno()) {
+    if (cb) cb.checked = false;
+    showToast('⚠ Sentinel-2 pristup nije podešen — zatraži od admina');
+    return;
+  }
+  _s2On = true;
+  _s2HideBase();
+  if (picker) picker.style.display = '';
+  _s2TileLayer.setUrl('https://sh.dataspace.copernicus.eu/ogc/wms/' + encodeURIComponent(_s2Kljucevi.instanceId));
+  _s2PostaviParametre();
+  if (!map.hasLayer(_s2TileLayer)) _s2TileLayer.addTo(map);
+}
+
+// Alat za teren — token pa jedan probni GetMap poziv, sa čitljivom porukom o
+// TIPU kvara (isto obrazac kao _poziGreskaTxt/_poziProvjeriIzvore u Požarima).
+async function _s2ProvjeriPristup() {
+  const el = document.getElementById('s2-provjera');
+  if (!el) return;
+  if (!_s2Podeseno()) { el.textContent = '⚠ Nedostaje Client ID / Secret / Instance ID.'; return; }
+  el.textContent = '⏳ Provjeravam…';
+  const t0 = Date.now();
+  let tok;
+  try { tok = await _s2TokenUzmi(); }
+  catch(e) { el.textContent = '❌ Token: ' + _poziGreskaTxt(e) + ' · ' + (Date.now() - t0) + ' ms'; return; }
+  if (!tok) { el.textContent = '❌ Token nije dobijen — provjeri Client ID/Secret · ' + (Date.now() - t0) + ' ms'; return; }
+  const testUrl = 'https://sh.dataspace.copernicus.eu/ogc/wms/' + encodeURIComponent(_s2Kljucevi.instanceId)
+    + '?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=' + encodeURIComponent(_s2Kljucevi.layer || 'TRUE-COLOR')
+    + '&FORMAT=image/png&TRANSPARENT=false&MAXCC=' + _s2Maxcc()
+    + '&TIME=' + encodeURIComponent(_s2VremenskiOpseg(_s2Raspon()))
+    + '&CRS=EPSG:3857&WIDTH=64&HEIGHT=64&BBOX=1780000,5450000,1790000,5460000';
+  try {
+    const r = await _fetchT(testUrl, 15000, { headers: { Authorization: 'Bearer ' + tok } });
+    if (r && r.ok) { el.textContent = '✅ Token i WMS sloj rade · ' + (Date.now() - t0) + ' ms'; return; }
+    el.textContent = '❌ WMS ' + (r ? r.status : '—') + ' — provjeri Instance ID / naziv sloja · ' + (Date.now() - t0) + ' ms';
+  } catch(e) {
+    el.textContent = '❌ WMS: ' + _poziGreskaTxt(e) + ' · ' + (Date.now() - t0) + ' ms';
+  }
+}
+
+// Sadržaj sekcije se gradi u JS (ne statičan HTML) da bi admin polja MOGLA
+// da se ne generišu za ne-admina — isti princip kao mapKeyPolje u Požarima
+// (v3.124.0): "NE SAKRIVA CSS-om nego se NE GENERIŠE".
+function _s2RenderSekcija() {
+  const el = document.getElementById('s2-section');
+  if (!el) return;
+  const adminHtml = !sbProfile?.is_admin ? '' : `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
+      <div style="font-size:10.5px;color:#fbbf24;line-height:1.5;margin-bottom:6px;">
+        👁 Ovo polje vidiš SAMO ti (admin) — pristup koji ovdje upišeš koristi se za SVE korisnike firme.
+      </div>
+      <div style="font-size:10.5px;color:#64748b;line-height:1.5;margin-bottom:6px;">
+        Besplatan nalog na <span style="color:#7dd3fc;">dataspace.copernicus.eu</span> →
+        Settings → OAuth clients (Client ID/Secret) i Sentinel Hub Configuration Utility →
+        kloniraj Sentinel-2 L2A konfiguraciju (Instance ID + naziv sloja unutar nje, npr. "TRUE-COLOR").
+      </div>
+      <input id="s2-clientid-in" type="text" placeholder="Client ID" value="${_escHtml(_s2Kljucevi.clientId)}"
+        style="width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
+      <input id="s2-clientsecret-in" type="text" placeholder="Client Secret" value="${_escHtml(_s2Kljucevi.clientSecret)}"
+        style="width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
+      <input id="s2-instanceid-in" type="text" placeholder="Instance ID" value="${_escHtml(_s2Kljucevi.instanceId)}"
+        style="width:100%;box-sizing:border-box;margin-bottom:6px;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
+      <input id="s2-layer-in" type="text" placeholder="Naziv sloja (npr. TRUE-COLOR)" value="${_escHtml(_s2Kljucevi.layer)}"
+        style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:12px;">
+      <button onclick="_s2AdminSacuvajKljuceve()" style="width:100%;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;">Sačuvaj (za sve korisnike)</button>
+    </div>`;
+
+  if (!_s2Podeseno()) {
+    el.innerHTML = `
+      <h3 style="margin-bottom:6px;">🛰📆 Sentinel-2 (svjež snimak)</h3>
+      <div style="font-size:11px;color:#64748b;line-height:1.5;margin-bottom:8px;">
+        Pravi satelitski snimak (10 m, novi prolaz ~5 dana) za vizuelnu procjenu opožarenosti —
+        dopuna, ne zamjena za mjerenu granicu (EFFIS, u panelu Požari).
+      </div>
+      <div style="font-size:12px;color:#94a3b8;padding:4px 0;">
+        ${sbProfile?.is_admin ? 'Podesi pristup ispod da se sloj uključi.' : 'Nije još podešeno — zatraži od admina da unese Copernicus pristup.'}
+      </div>` + adminHtml;
+    return;
+  }
+  el.innerHTML = `
+    <h3 style="margin-bottom:6px;">🛰📆 Sentinel-2 (svjež snimak)</h3>
+    <div style="font-size:11px;color:#64748b;line-height:1.5;margin-bottom:8px;">
+      Pravi satelitski snimak (10 m, novi prolaz ~5 dana) za vizuelnu procjenu opožarenosti —
+      dopuna, ne zamjena za mjerenu granicu (EFFIS, u panelu Požari).
+    </div>
+    <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
+      <input type="checkbox" id="s2-toggle" ${_s2On ? 'checked' : ''} onchange="_s2Toggle(this.checked)"
+        style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;flex-shrink:0;">
+      <span>Prikaži Sentinel-2 snimak</span>
+    </label>
+    <div id="s2-picker" style="display:${_s2On ? '' : 'none'};margin-top:8px;">
+      <div style="display:flex;gap:6px;">
+        <select id="s2-raspon" onchange="_s2PostaviParametre()"
+          style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:13px;">
+          ${_S2_RASPONI.map(r => `<option value="${r.id}" ${r.id === _s2Raspon() ? 'selected' : ''}>${r.naziv}</option>`).join('')}
+        </select>
+        <select id="s2-maxcc" onchange="_s2PostaviParametre()"
+          style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:13px;">
+          ${[10, 20, 30, 50, 100].map(c => `<option value="${c}" ${c === _s2Maxcc() ? 'selected' : ''}>do ${c}% oblaka</option>`).join('')}
+        </select>
+      </div>
+      <div id="s2-status" style="font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.4;">—</div>
+      <button onclick="_s2ProvjeriPristup()" style="width:100%;margin-top:8px;padding:8px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#94a3b8;font-size:11.5px;cursor:pointer;">Provjeri pristup (za teren)</button>
+      <div id="s2-provjera" style="font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.4;"></div>
+    </div>` + adminHtml;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -16183,6 +16499,9 @@ function _openLayerSheet() {
       sel.value = _wbCurUrl || _wbReleases[0].url;
     }
   }
+  // Sentinel-2 — isti princip, ali cijela sekcija (uklj. admin polja) se
+  // gradi iznova iz _s2RenderSekcija() jer HTML zavisi i od sbProfile.
+  if (typeof _s2RenderSekcija === 'function') _s2RenderSekcija();
   _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
@@ -16266,7 +16585,8 @@ const _CMGR_ROWS = [
   { id: 'terr',  ico: '🗻',  name: 'Teren (DEM)',     sub: 'Visinski podaci',  cache: 'tvlake-terr-v1' },
   { id: 'nv',    ico: '🏷',  name: 'Nadmorske visine', sub: 'Open-Meteo keš',  cache: 'tvlake-nv-v1' },
   { id: 'effis', ico: '🔥',  name: 'Požari (EFFIS)',  sub: 'Opasnost + opožareno', cache: _EFFIS_CACHE },
-  { id: 'wayback', ico: '📅', name: 'Vremenska traka', sub: 'Esri Wayback',    cache: _WB_TILE_CACHE }
+  { id: 'wayback', ico: '📅', name: 'Vremenska traka', sub: 'Esri Wayback',    cache: _WB_TILE_CACHE },
+  { id: 'sentinel2', ico: '🛰', name: 'Sentinel-2 (svjež snimak)', sub: 'Copernicus CDSE', cache: _S2_TILE_CACHE }
 ];
 let _cmgrData = null;   // zadnji scan: {id: {count, bytes}}
 
@@ -40844,6 +41164,10 @@ if (typeof AndroidDownload !== 'undefined') {
         <div id="wb-status" style="font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.4;">—</div>
       </div>
     </div>
+
+    <!-- Sentinel-2 (Copernicus Data Space Ecosystem) — svjež snimak za praćenje
+         opožarenosti, v3.128.0. Cijeli sadržaj gradi _s2RenderSekcija(). -->
+    <div id="s2-section" style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;"></div>
 
     <!-- Učitaj offline kartu -->
     <div style="margin-top:14px;">
