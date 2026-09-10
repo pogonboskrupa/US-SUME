@@ -23,6 +23,15 @@ uređaju:
 - `sw.js` → `const APP_VERSION = 'X.Y.Z';` (bez `v` prefiksa)
 - `android/app/build.gradle` → `versionCode` (+1 svaki put, cijeli broj) i `versionName "X.Y.Z"`
 
+**Šema brojeva (od v1.1.0, na eksplicitan zahtjev — resetovano sa v3.128.1)**:
+`Z` (patch) raste 0→9 unutar istog `Y` (minor); kad bi `Z` prešao 9, umjesto
+toga `Y` se poveća za 1 i `Z` se vrati na 0 (npr. `v1.1.9` → sljedeća izmjena
+je `v1.2.0`, NE `v1.1.10`). Isto pravilo se ponavlja i za `Y` (kad `Y` pređe 9,
+`X` raste za 1 i `Y` se vrati na 0). `versionCode` u `build.gradle` OVO NE
+PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
+zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni
+nezavisno od toga kako se `X.Y.Z` mijenja.
+
 ## APK build — assets se NE povlače sami
 
 `android/app/src/main/assets/` **nije git-tracked** i mora se ručno
