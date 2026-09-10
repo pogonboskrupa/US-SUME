@@ -1721,6 +1721,33 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   'Document'`, a mjerenja su tiho ispala 0 px i "false" za sve provjere (dakle
   test bi "prošao" kao da ništa ne valja). Prepisano običnom konkatenacijom.
 
+## Gornja traka — #tab-bar
+
+- **`#offline-badge` — tekstualna pilula → sitna crvena tačkica (v1.1.4)**: na
+  eksplicitan zahtjev ("ukloni oznaku offline... neka bude samo crvena tačkica
+  u gornjem desnom uglu"). Ranije je `_setOfflineMode` prikazivala/skrivala
+  crvenu pilulu sa tekstom "📴 OFFLINE" (`#offline-badge`, desni kraj `#tab-bar`-a,
+  `margin-left:auto` je gura na sam kraj trake — vizuelno gornji desni ugao
+  app-a). **Element, ID i `_setOfflineMode`/`_isOfflineMode` logika koja
+  odlučuje KAD se prikazuje su NETAKNUTI** — mijenjan je isključivo IZGLED:
+  tekstualni sadržaj uklonjen, `background`/`padding`/`border-radius` sveden na
+  sitan krug (9×9px) sa blagim `box-shadow` prstenom radi vidljivosti na
+  svjetlim/tamnim podlogama, uz `title="Nema signala — radi lokalno"` (hover/
+  long-press objašnjenje bez teksta na samoj traci koja je već puna — vidi
+  komentar iz v3.83.0 "traka je već puna sa 7 tabova").
+  - **Nijedan drugi kod ne zavisi od teksta bedža** — provjereno grep-om, nema
+    testova ni druge logike koja čita `textContent`/`innerHTML` tog elementa
+    (za razliku od NEPOVEZANOG `.oz-offline-badge` — "✓ offline"/"↻ djel."
+    bedž u drugom panelu, drugo ime klase, nije dirán).
+  - Mobilni media-query red `#offline-badge { margin-left:4px !important; }`
+    (bio tu da tekstualna pilula ne razvuče usku traku preko `margin-left:auto`)
+    je ostavljen nepromijenjen — bezopasan i za sitnu tačku, i dalje daje
+    razmak od susjednog bedža.
+  - Izmjena samo dokumentacije/CSS-a — nema sintaksne/logičke promjene u JS-u,
+    pa nije trebalo dodatnih testova (postojeći `auth-offline-first.test.js`
+    testira KADA se offline stanje postavlja, ne kako izgleda; taj dio je
+    netaknut i i dalje prolazi).
+
 ## Donja traka — #action-bar (Karta) i #rec-bar (svi paneli)
 
 - **`#action-bar` postoji SAMO na Karti** (`_updFabVisibility`:
