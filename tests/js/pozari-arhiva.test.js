@@ -64,6 +64,7 @@ function mkLS() {
 
 function makeArh(opts) {
   const o = opts || {};
+  const olEnqueued = [];
   const sandbox = {
     localStorage: o.ls || mkLS(),
     turf,
@@ -77,22 +78,27 @@ function makeArh(opts) {
     // _povArhKesOcisti zove _povArhRender kad je neka godina uključena —
     // u testu nema karte, pa se oba javljaju kao no-op.
     _povArhUkljucene: () => [],
-    _povArhRender: () => {}
+    _povArhRender: () => {},
+    // _OL stub — bilježi enqueue pozive umjesto stvarnog localStorage reda
+    // (taj je testiran zasebno u offline-layer.test.js).
+    _OL: o.noOL ? undefined : { enqueue: (op) => olEnqueued.push(op) }
   };
   const src = [extractFn('dst'), extractFn('_poziPouzdanost'), extractFn('_poziSatelit'),
                extractFn('_poziGrupisi'), extractFn('_poziOpozGeom'),
                extractFn('_povArhUcitaj'), extractFn('_povArhSacuvaj'), extractFn('_povArhDan'),
-               extractFn('_povArhKljuc'), extractFn('_povArhDodaj'), extractFn('_povArhGodine'),
-               extractFn('_povArhTacke'), extractFn('_povArhBoja'), extractFn('_povArhBrojZapisa'),
-               extractConst('_povArhKes'), extractFn('_povArhIzracunata'),
-               extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti')].join('\n');
+               extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
+               extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povArhBoja'),
+               extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhIzracunata'),
+               extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti'),
+               extractFn('_povArhSpojiServerske')].join('\n');
   const keys = Object.keys(sandbox);
   const mod = new Function(...keys, src +
     '\nreturn { _povArhUcitaj,_povArhSacuvaj,_povArhDan,_povArhKljuc,_povArhDodaj,' +
     '_povArhGodine,_povArhTacke,_povArhRacunaj,_povArhBoja,_povArhBrojZapisa,' +
-    '_povArhIzracunata,_povArhKesOcisti,_poziGrupisi,_poziOpozGeom };'
+    '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom };'
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
+  mod._olEnqueued = olEnqueued;
   return mod;
 }
 
@@ -326,6 +332,102 @@ t('susjedne godine se razlikuju po boji', () => {
   const A = makeArh();
   assert.notStrictEqual(A._povArhBoja(2026), A._povArhBoja(2025));
   assert.notStrictEqual(A._povArhBoja(2025), A._povArhBoja(2024));
+});
+
+// =====================================================================
+console.log('\nDijeljena arhiva — enqueue novih zapisa za sync (v1.1.1):');
+// Zašto: terenska primjedba "admin vidi opožarenu površinu za stare požare,
+// drugi korisnici samo mjesto i broj detekcija" — arhiva je bila ISKLJUČIVO
+// lokalna (localStorage), pa je noviji korisnik imao prazniju arhivu za ISTE
+// požare. _povArhDodaj sad, uz lokalni upis, i ENQUEUE-uje nove zapise u _OL
+// red (isti offline-first obrazac kao sve ostalo) da ih _processOfflineQueue
+// pošalje na dijeljenu server tabelu.
+
+t('nov zapis se enqueue-uje sa ISPRAVNIM oblikom (godina/dan/la/lo/rez)', () => {
+  const A = makeArh();
+  const pts = [det(44.9012, 16.2034, iso(GOD, 7, 5))];
+  A._povArhDodaj(pts);
+  assert.strictEqual(A._olEnqueued.length, 1);
+  const op = A._olEnqueued[0];
+  assert.strictEqual(op.type, 'insert_pozari_arhiva');
+  assert.strictEqual(op.payload.length, 1);
+  const r = op.payload[0];
+  assert.strictEqual(r.godina, GOD);
+  assert.strictEqual(r.la, 44.9012);
+  assert.strictEqual(r.lo, 16.2034);
+  assert.strictEqual(r.rez, 375);
+  assert.strictEqual(typeof r.dan, 'number');
+});
+
+t('ponovljeno osvježavanje (sve već viđeno) NE enqueue-uje ništa novo', () => {
+  const A = makeArh();
+  const pts = [det(44.90, 16.20, iso(GOD, 7, 5))];
+  A._povArhDodaj(pts);
+  A._povArhDodaj(pts);   // isto opet
+  assert.strictEqual(A._olEnqueued.length, 1, 'samo PRVI poziv je stvarno dodao nešto');
+});
+
+t('veliki upis (>500 zapisa) se dijeli na komade od najviše 500', () => {
+  const A = makeArh();
+  const pts = [];
+  for (let i = 0; i < 1200; i++) pts.push(det(44 + i * 0.0005, 16, iso(GOD, 7, 5)));
+  A._povArhDodaj(pts);
+  assert.strictEqual(A._olEnqueued.length, 3, '1200 zapisa → 500+500+200');
+  assert.strictEqual(A._olEnqueued[0].payload.length, 500);
+  assert.strictEqual(A._olEnqueued[1].payload.length, 500);
+  assert.strictEqual(A._olEnqueued[2].payload.length, 200);
+});
+
+t('nedostajući _OL (skripta se nije učitala) ne baca', () => {
+  const A = makeArh({ noOL: true });
+  assert.doesNotThrow(() => A._povArhDodaj([det(44.90, 16.20, iso(GOD, 7, 5))]));
+});
+
+// =====================================================================
+console.log('\nDijeljena arhiva — spajanje server zapisa u lokalnu (v1.1.1):');
+
+t('server zapisi se dodaju u lokalnu arhivu i postaju dio računice', () => {
+  const A = makeArh();
+  assert.strictEqual(A._povArhRacunaj(GOD), null, 'prazno prije spajanja');
+  const dodato = A._povArhSpojiServerske([
+    { godina: GOD, dan: 186, la: 44.90, lo: 16.20, rez: 375 },
+    { godina: GOD, dan: 186, la: 44.905, lo: 16.205, rez: 375 },
+  ]);
+  assert.strictEqual(dodato, 2);
+  const r = A._povArhRacunaj(GOD);
+  assert.ok(r && r.ha > 0, 'poslije spajanja mora postojati računica, kao da su lokalno viđeni');
+});
+
+t('server zapis koji je VEĆ lokalno poznat se ne duplira', () => {
+  const A = makeArh();
+  A._povArhDodaj([det(44.90, 16.20, iso(GOD, 7, 5))]);
+  const dan = A._povArhDan(Date.parse(iso(GOD, 7, 5)));
+  const dodato = A._povArhSpojiServerske([{ godina: GOD, dan, la: 44.9, lo: 16.2, rez: 375 }]);
+  assert.strictEqual(dodato, 0, 'isti (godina,dan,la,lo) je već lokalno prisutan');
+  assert.strictEqual((A._povArhUcitaj()[String(GOD)] || []).length, 1, 'ne smije se udvostručiti');
+});
+
+t('spajanje ČISTI keš SAMO za godine koje su stvarno dobile nove zapise', () => {
+  const A = makeArh();
+  A._povArhDodaj([det(44.0, 16.0, iso(GOD - 1, 3, 1))]);
+  A._povArhRacunaj(GOD - 1);   // izračunaj i memoizuj prošlu godinu
+  assert.strictEqual(A._povArhIzracunata(GOD - 1), true);
+  A._povArhSpojiServerske([{ godina: GOD, dan: 10, la: 45.0, lo: 17.0, rez: 375 }]);
+  assert.strictEqual(A._povArhIzracunata(GOD - 1), true, 'nedirnuta godina ostaje izračunata');
+  assert.strictEqual(A._povArhIzracunata(GOD), false, 'godina koja je dobila novi zapis se mora preračunati');
+});
+
+t('prazan/nevaljan red se tiho preskače, ne baca', () => {
+  const A = makeArh();
+  assert.strictEqual(A._povArhSpojiServerske([]), 0);
+  assert.strictEqual(A._povArhSpojiServerske(null), 0);
+  assert.doesNotThrow(() => A._povArhSpojiServerske([{ godina: 'x', dan: null, la: 44, lo: 16 }]));
+});
+
+t('spojeni server zapisi se NE enqueue-uju nazad (nema beskonačne petlje sync-a)', () => {
+  const A = makeArh();
+  A._povArhSpojiServerske([{ godina: GOD, dan: 100, la: 44.5, lo: 16.5, rez: 375 }]);
+  assert.strictEqual(A._olEnqueued.length, 0, '_povArhSpojiServerske ne smije zvati _OL.enqueue');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

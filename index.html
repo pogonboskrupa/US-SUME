@@ -4994,7 +4994,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.1.0';
+const APP_VER = 'v1.1.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5477,6 +5477,13 @@ async function _processOfflineQueue() {
           const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.payload[0].korisnik_id);
           err = error;
         }
+      } else if (op.type === 'insert_pozari_arhiva') {
+        // Dijeljena arhiva požara (v1.1.1) — ignoreDuplicates jer isti
+        // (godina,dan,la,lo) zapis sasvim OČEKIVANO stiže sa VIŠE uređaja
+        // (svako viđenje istog vrelog piksela istog dana) — ON CONFLICT DO
+        // NOTHING, ne update (append-only istorijski zapis, vidi migraciju).
+        const { error } = await sb.from('pozari_arhiva').upsert(op.payload, { onConflict: 'godina,dan,la,lo', ignoreDuplicates: true });
+        err = error;
       }
       if (!err) { _OL.removeFromQueue(op._qid ?? op.ts); synced++; }
       else if (_isAuthErr(err)) {
@@ -5971,7 +5978,12 @@ function _startupRestore() {
     });
     // Opožareno po godinama (v3.122.0) — čisto lokalno, radi offline; crta se
     // samo ako je korisnik neku godinu ostavio uključenu.
-    korak('povArh', () => { if (_povArhUkljucene().length) _povArhRender(); });
+    korak('povArh', () => {
+      if (_povArhUkljucene().length) _povArhRender();
+      // Dijeljena arhiva (v1.1.1) — tiho povuci šta su drugi korisnici već
+      // sakupili, nezavisno od toga je li neka godina trenutno uključena.
+      if (navigator.onLine) _povArhServerSinkOpp();
+    });
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
     // CIJELI Cache Storage/IDB (sve offline pločice i karte odjednom). Uz persist()
     // pregledano/preuzeto ostaje dok korisnik sam ne obriše.
@@ -15717,6 +15729,22 @@ function _povArhKljuc(la, lo, dan) {
   return la.toFixed(4) + '|' + lo.toFixed(4) + '|' + dan;
 }
 
+// Šalje NOVE lokalne zapise u dijeljenu server arhivu (v1.1.1) — isti
+// offline-first obrazac kao sve ostalo u app-u: enqueue ovdje je SINHRONO i
+// BESPLATNO (samo upis u localStorage red), stvaran mrežni upis radi
+// _processOfflineQueue sa svojim retry/backoff. Server ON CONFLICT DO NOTHING
+// (vidi migraciju) znači da je bezopasno poslati isti (godina,dan,la,lo) zapis
+// sa VIŠE uređaja — to je i OČEKIVANO (svako viđenje istog vrelog piksela
+// istog dana sa drugog telefona), ne greška koju treba spriječiti unaprijed.
+// Dijeljeno na komade od 500 da jedan veliki dohvat (npr. "Ova godina" GFW
+// upit, stotine zapisa odjednom) ne ode na server kao JEDAN ogroman zahtjev.
+function _povArhEnqueue(novi) {
+  if (!novi || !novi.length || typeof _OL === 'undefined' || !_OL.enqueue) return;
+  for (let i = 0; i < novi.length; i += 500) {
+    _OL.enqueue({ type: 'insert_pozari_arhiva', payload: novi.slice(i, i + 500) });
+  }
+}
+
 // Ubacuje detekcije u arhivu. Zove se poslije SVAKOG osvježavanja (za razliku
 // od `_povHistZabiljezi` koji hvata samo prvo viđenje) — baš to i jeste ono
 // što omogućava da se površina požara koji gori danima gradi postepeno.
@@ -15729,6 +15757,7 @@ function _povArhDodaj(pts) {
     vidjeno[g] = new Set(arh[g].map(r => _povArhKljuc(r[0], r[1], r[2])));
   });
   let dodato = 0;
+  const novi = [];
   pts.forEach(p => {
     const t = Date.parse(p && p.dt);
     if (!isFinite(t) || !isFinite(p.la) || !isFinite(p.lo)) return;
@@ -15738,10 +15767,12 @@ function _povArhDodaj(pts) {
     if (!arh[g]) { arh[g] = []; vidjeno[g] = new Set(); }
     if (vidjeno[g].has(k)) return;
     vidjeno[g].add(k);
-    arh[g].push([+p.la.toFixed(4), +p.lo.toFixed(4), dan, isFinite(p.rez) ? p.rez : 375]);
+    const la = +p.la.toFixed(4), lo = +p.lo.toFixed(4), rez = isFinite(p.rez) ? p.rez : 375;
+    arh[g].push([la, lo, dan, rez]);
+    novi.push({ godina: +g, dan, la, lo, rez });
     dodato++;
   });
-  if (dodato) _povArhSacuvaj(arh);
+  if (dodato) { _povArhSacuvaj(arh); _povArhEnqueue(novi); }
   return dodato;
 }
 
@@ -15838,6 +15869,71 @@ function _povArhKesOcisti(godina) {
   if (_povArhUkljucene().length) _povArhRender();   // ako je neka godina na karti, prekrij novom geometrijom
 }
 
+// ── Dijeljena arhiva — povuci zapise SA SERVERA i spoji u lokalnu (v1.1.1) ──
+// Lokalna arhiva (gore) OSTAJE izvor istine za crtanje/računicu na klijentu
+// (radi offline, bez izmjene) — ovo je samo dopuna, ISTIM putem kojim
+// _povArhDodaj dopunjuje iz svježih detekcija, pa sva logika dedup/keš/prikaz
+// iznad ostaje netaknuta. Bez ovoga bi nov korisnik (prazna lokalna arhiva)
+// vidio SAMO ono što je NJEGOV telefon sam primijetio od trenutka kad je
+// počeo koristiti Požare — a upravo je to bio razlog terenske primjedbe
+// ("admin vidi opožarenu površinu za stare požare, drugi korisnici samo
+// mjesto i broj detekcija").
+function _povArhSpojiServerske(redovi) {
+  if (!redovi || !redovi.length) return 0;
+  const arh = _povArhUcitaj();
+  const vidjeno = {};
+  Object.keys(arh).forEach(g => {
+    vidjeno[g] = new Set(arh[g].map(r => _povArhKljuc(r[0], r[1], r[2])));
+  });
+  let dodato = 0;
+  const godineIzmijenjene = new Set();
+  redovi.forEach(row => {
+    const la = +Number(row?.la).toFixed(4), lo = +Number(row?.lo).toFixed(4);
+    const dan = parseInt(row?.dan, 10), godina = parseInt(row?.godina, 10);
+    if (!isFinite(la) || !isFinite(lo) || !isFinite(dan) || !isFinite(godina)) return;
+    const g = String(godina);
+    const k = _povArhKljuc(la, lo, dan);
+    if (!arh[g]) { arh[g] = []; vidjeno[g] = new Set(); }
+    if (vidjeno[g].has(k)) return;
+    vidjeno[g].add(k);
+    arh[g].push([la, lo, dan, isFinite(row.rez) ? row.rez : 375]);
+    dodato++; godineIzmijenjene.add(g);
+  });
+  if (dodato) {
+    _povArhSacuvaj(arh);
+    // Direktno brisanje keša (ne _povArhKesOcisti) — izbjegava N ponovnih
+    // _povArhRender() poziva u petlji, render se radi JEDNOM ispod, na kraju.
+    godineIzmijenjene.forEach(g => delete _povArhKes[g]);
+  }
+  return dodato;
+}
+
+// Pokušava JEDNOM po sesiji stranice (in-memory zastavica) — panel se crta na
+// svaki meteo/GPS/toast događaj, a mrežni poziv treba samo prvi put. Sljedeće
+// otvaranje app-a (nova sesija) pokuša ponovo, pa trajno offline uređaj nikad
+// ne "zaglavi" u pokušanom stanju preko restarta.
+let _povArhSyncPokusano = false;
+async function _povArhServerSinkOpp() {
+  if (_povArhSyncPokusano) return;
+  _povArhSyncPokusano = true;
+  if (!navigator.onLine || typeof sb === 'undefined' || !sb || typeof sbUser === 'undefined' || !sbUser) return;
+  try {
+    const sada = new Date().getUTCFullYear();
+    const odGodine = sada - _POV_ARH_GODINA + 1;
+    const { data, error } = await _withTimeout(
+      sb.from('pozari_arhiva').select('godina,dan,la,lo,rez').gte('godina', odGodine).limit(50000),
+      15000
+    );
+    if (error || !data || !data.length) return;
+    const dodato = _povArhSpojiServerske(data);
+    if (!dodato) return;
+    if (_povArhUkljucene().length) _povArhRender();
+    // Ako je panel Požari trenutno otvoren, osvježi karticu odmah — inače
+    // korisnik vidi novopristigle godine/brojke tek pri sljedećem otvaranju.
+    if (typeof _poziRenderPanel === 'function' && typeof _activeTab !== 'undefined' && _activeTab === 'pozari') _poziRenderPanel();
+  } catch(e) {}
+}
+
 // ── Prikaz po godinama na karti ──────────────────────────────────────────
 // Boja se izvodi iz SAME godine (a ne iz redoslijeda u listi) da ista godina
 // uvijek bude iste boje — inače bi 2025 mijenjala boju čim se pojavi 2026.
@@ -15902,6 +15998,11 @@ function _povArhBrojZapisa(godina) {
 }
 
 function _povArhKarticaHtml() {
+  // Dijeljena arhiva (v1.1.1) — tih pokušaj povlačenja sa servera (jednom po
+  // sesiji, vidi _povArhServerSinkOpp) svaki put kad se kartica stvarno crta,
+  // ne samo pri pokretanju app-a (korisnik je mogao uključiti panel Požari
+  // kasnije u sesiji).
+  if (navigator.onLine) _povArhServerSinkOpp();
   const godine = _povArhGodine();
   const ukljucene = new Set(_povArhUkljucene());
   const uvod = `<div style="font-size:10px;color:#64748b;line-height:1.45;margin-bottom:8px;">
@@ -15909,12 +16010,14 @@ function _povArhKarticaHtml() {
       pa požar koji gori sedmicama ovdje raste do svoje PUNE površine, dok panel iznad
       pokazuje samo zadnjih ${_escHtml(_poziOkvirNaziv())}.
       Ukupno je SPOJENA površina, ne zbir po požaru — isto mjesto koje gori više puta
-      se ne broji dvaput.
+      se ne broji dvaput. Dijeli se sa cijelom firmom — vidiš i ono što su kolege
+      sa svojih telefona već zabilježili, ne samo svoje.
     </div>`;
   if (!godine.length) {
     return uvod + `<div style="padding:10px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;
         font-size:11px;color:#94a3b8;line-height:1.5;">
-        Arhiva je još prazna. Puni se sama dok koristiš sekciju Požari — nema šta da se uključi.
+        Arhiva je još prazna na ovom uređaju. Puni se sama dok koristiš sekciju Požari, a
+        čim bude interneta, ovdje će se pojaviti i ono što su VEĆ zabilježili drugi korisnici.
         <div style="color:#64748b;margin-top:4px;">Prošle godine se mogu popuniti unazad samo
         preko GFW ključa ("Ova godina" iznad); bez ključa pamti se od danas nadalje.</div>
       </div>`;

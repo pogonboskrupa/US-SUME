@@ -1230,6 +1230,71 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     testu) — inače cijela provjera padne na nečemu što nema veze sa kodom.
   - Testovi: `tests/js/pozari-arhiva.test.js` (24), nad STVARNIM kodom i
     STVARNIM turf-om iz `static/libs/turf.min.js`.
+- **Arhiva po godinama — sad DIJELJENA za cijelu firmu, ne samo lokalna
+  (v1.1.1)**: terenska primjedba "hoću da prikaz požara imaju svi korisnici
+  kao što ima admin... stare požare prikaže opožarenu površinu a kod drugih
+  samo mjesto i broj detekcija". Uzrok NIJE bio dozvola/pristup — arhiva iz
+  v3.122.0 je od početka bila ISKLJUČIVO `localStorage`, po uređaju: svaki
+  telefon je gradio SVOJU arhivu tek od trenutka kad je PRVI PUT otvorio
+  sekciju Požari. Admin (koristi app najduže, najviše osvježavanja) je prirodno
+  sakupio dovoljno zapisa da za stare požare izračuna površinu; noviji
+  korisnik za ISTI požar ima prazniju/mlađu arhivu pa vidi samo mjesto i broj
+  detekcija — ne bug, nego neizbježna posljedica "svaki uređaj pamti samo ono
+  što je SAM vidio".
+  - **Rješenje: nova tabela `pozari_arhiva`** (`20260911_pozari_arhiva_
+    dijeljena.sql`) — isti (godina,dan,la,lo) oblik zapisa/dedup ključa koji
+    `_povArhKljuc()` već koristi lokalno je i PRIMARNI KLJUČ na serveru, pa
+    dva uređaja koja vide isti vreo piksel istog dana upisuju IDENTIČAN red;
+    klijentski `upsert(..., {ignoreDuplicates:true})` (`ON CONFLICT DO
+    NOTHING`) prirodno svede to na "prvi upiše, ostali tiho preskoče", bez
+    ijedne posebne provjere. **Upis smije SVAKI odobreni korisnik, ne samo
+    admin** (za razliku od `pozari_kljucevi`/`sentinel2_kljucevi`) — telefon
+    samo dijeli ono što je ionako već vidio preko FIRMS/GFW-a, ništa tajno.
+    Nema UPDATE/DELETE politike — append-only istorijski zapis.
+  - **Lokalna arhiva OSTAJE izvor istine za crtanje/računicu** (radi offline,
+    bez izmjene postojeće logike) — server je samo dijeljeno skladište koje se
+    U NJU stapa. Dva nova komada, oba ISTIM putem kao postojeći kod:
+    - **Push**: `_povArhDodaj` (mjesto gdje se NOVI lokalni zapisi već
+      otkrivaju) sad, uz lokalni upis, i `_OL.enqueue({type:'insert_pozari_
+      arhiva', payload})` — isti offline-first obrazac kao sve ostalo u app-u
+      (enqueue je sinhrono/besplatno, stvaran mrežni upis radi
+      `_processOfflineQueue` sa svojim retry/backoff). Veliki upis (npr.
+      "Ova godina" GFW dohvat, stotine zapisa odjednom) se dijeli na komade
+      od 500 (`_povArhEnqueue`) da ne ode kao jedan ogroman zahtjev.
+    - **Pull**: `_povArhSpojiServerske(redovi)` spaja server zapise u lokalnu
+      arhivu KROZ ISTI dedup/spremanje kod (`_povArhUcitaj`/`_povArhSacuvaj`/
+      `_povArhKljuc`) koji `_povArhDodaj` koristi za svježe detekcije — sva
+      logika crtanja/računice iznad ostaje netaknuta, ne zna niti treba znati
+      odakle je zapis stigao. `_povArhServerSinkOpp()` (async) povlači zadnjih
+      `_POV_ARH_GODINA` godina, **pokuša SAMO JEDNOM po sesiji stranice**
+      (in-memory zastavica) — panel se crta na svaki meteo/GPS/toast događaj,
+      mrežni poziv ide samo prvi put; sljedeće otvaranje app-a (nova sesija)
+      pokuša ponovo, pa trajno offline uređaj ne ostaje zaglavljen u
+      "pokušanom" stanju preko restarta.
+  - **Okidači povlačenja**: `_startupRestore`-ov `korak('povArh', ...)`
+    (nezavisno od toga je li neka godina trenutno uključena na karti) I
+    `_povArhKarticaHtml()` (kad korisnik prvi put otvori/stigne do kartice u
+    ovoj sesiji) — pokriva i "app se pokrenula sa uključenom godinom" i
+    "korisnik je uključio panel Požari kasnije u sesiji".
+  - **Zašto NE zaseban RPC (SECURITY DEFINER) kao za ključeve**: ovi podaci
+    nisu tajna niti trebaju posebnu logiku — obična permissive RLS politika
+    (`je_odobren()` za SELECT i INSERT) je dovoljna i jednostavnija, isti
+    princip kao `pozari_kljucevi`/`sentinel2_kljucevi` migracije samo bez
+    admin-only ograničenja na upis.
+  - **Namjerno NIJE dodano**: automatsko brisanje starih redova na serveru
+    (za razliku od lokalne `_povArhSacuvaj`, koja agresivno reže zbog
+    `localStorage` kvote) — Postgres lako nosi desetine/stotine hiljada
+    redova, taj pritisak ne postoji na serveru. `.limit(50000)` na SELECT-u je
+    jedina gornja granica, kao dokumentovana, svjesno privremena mjera (isti
+    princip kao GFW "Ova godina" LIMIT 10000, v3.119.0) — ako firma preko
+    više sezona premaši to, treba paginacija, ne prije.
+  - Testovi: `tests/js/pozari-arhiva.test.js` prošireno na 33 (9 novih) —
+    `_povArhDodaj` enqueue-uje tačan oblik zapisa, ponovljeno osvježavanje ne
+    enqueue-uje ništa, veliki upis se dijeli na komade od 500, nedostajući
+    `_OL` ne baca; `_povArhSpojiServerske` spaja nove server zapise u
+    računicu, ne duplira već poznate, čisti keš SAMO za pogođene godine, ne
+    baca na praznom/nevaljanom ulazu, i NE enqueue-uje nazad ono što je samo
+    spojilo (bez ovoga posljednjeg bi push+pull ušli u beskonačnu petlju).
 - **Lista detekcija — kapa smanjena + "Prikaži još" umjesto mrtvog teksta
   (v3.123.0)**: terenska prijava "prikazuje se puno prikaza, prikaži manje ili
   bolje da grupišeš tačke istog požara" uz screenshot liste u sortu "Novije
