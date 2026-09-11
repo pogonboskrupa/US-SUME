@@ -106,11 +106,14 @@ function makeRestoreEnv(opts) {
   const o = opts || {};
   const el = makeFakeIndicatorEl();
   el.classList.add('show');   // simulira stanje koje je _restoreLastMap ostavio
-  const calls = { ensureBase: [], warn: [] };
+  const calls = { ensureBase: [], warn: [], status: [] };
+  // Podrazumijevano performance.now() koje raste dovoljno malo da sve ostane ISPOD
+  // 1.5s praga (brz slučaj) — testovi za spori slučaj eksplicitno daju svoj `perf`.
   const sandbox = {
     document: { getElementById: id => (id === 'map-restore-indicator' ? el : null) },
     console: { warn: (...a) => calls.warn.push(a) },
     localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    performance: o.perf || { now: () => 0 },
     _SQL_CRASH_KEY: 'tvlake_sql_crash',
     _sqlCrashCheck: o.crashCheck || (async () => false),
     _sqlRestoreFailed: [],
@@ -126,6 +129,7 @@ function makeRestoreEnv(opts) {
     _sqlPrewarm: () => {},
     _sqlFailKey: name => 'fail_' + name,
     _sqlEnsureBaseLayer: n => calls.ensureBase.push(n),
+    _sqlmapStatus: msg => calls.status.push(msg),
     // _mapRestoreIndicatorHide se izvlači STVARAN (ne stub) — test provjerava
     // da ga sqlmapRestoreAll STVARNO pozove, ne samo da postoji.
   };
@@ -133,6 +137,13 @@ function makeRestoreEnv(opts) {
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, src + '\nreturn { sqlmapRestoreAll };')(...keys.map(k => sandbox[k]));
   return { run: api.sqlmapRestoreAll, el, calls };
+}
+
+// performance.now() koje raste za `stepMs` pri SVAKOM pozivu — simulira sporo
+// učitavanje bez STVARNOG čekanja u testu (nijedan pravi setTimeout/sleep).
+function makeSlowPerf(stepMs) {
+  let n = 0;
+  return { now: () => (n += stepMs) };
 }
 
 await t('rani izlaz preko _sqlCrashCheck (crash detektovan) → indikator se skloni', async () => {
@@ -171,6 +182,52 @@ await t('uspješno učitavanje jedne karte → indikator se skloni na kraju', as
   });
   await env.run();
   assert.strictEqual(env.el.classList.contains('show'), false);
+});
+
+// ── v1.1.6: raščlana dijagnostika trajanja ─────────────────────────────────
+console.log('\nsqlmapRestoreAll — dijagnostika trajanja (v1.1.6):');
+
+await t('sporo učitavanje (>1.5s ukupno) upisuje raščlanu po koracima u _sqlmapStatus', async () => {
+  const env = makeRestoreEnv({
+    perf: makeSlowPerf(1000),   // svaki performance.now() poziv +1000ms → lako pređe 1.5s prag
+    wCall: async (msg) => {
+      if (msg.type === 'list') return { ok: true, rows: [{ name: 'karta1', savedAt: 1, opfs: true, opfsName: 'karta1.sqlmap' }] };
+      if (msg.type === 'load-opfs') return { ok: true, fmt: 'mbtiles', meta: {} };
+      return { ok: false };
+    }
+  });
+  await env.run();
+  assert.strictEqual(env.calls.status.length, 1, 'mora upisati TAČNO jedan status red kad je sporo');
+  const msg = env.calls.status[0];
+  assert.ok(/^⏱/.test(msg), 'poruka mora biti prepoznatljiva (⏱ prefiks)');
+  assert.ok(msg.includes('list'), 'raščlana mora imenovati "list" korak');
+  assert.ok(msg.includes('load-opfs'), 'raščlana mora imenovati "load-opfs" korak (ne load-idb za OPFS kartu)');
+  assert.ok(msg.includes('karta1'), 'raščlana mora imenovati KOJA karta je spora, ne samo tip koraka');
+});
+
+await t('brzo učitavanje (<1.5s) NE piše ništa u _sqlmapStatus — bez šuma na normalan restart', async () => {
+  const env = makeRestoreEnv({
+    perf: { now: () => 0 },   // svaki poziv vraća 0 → ukupno trajanje uvijek 0ms
+    wCall: async (msg) => {
+      if (msg.type === 'list') return { ok: true, rows: [{ name: 'karta1', savedAt: 1, opfs: false }] };
+      if (msg.type === 'load-idb') return { ok: true, fmt: 'mbtiles', meta: {} };
+      return { ok: false };
+    }
+  });
+  await env.run();
+  assert.strictEqual(env.calls.status.length, 0, 'normalan (brz) restart ne smije ništa upisati u status liniju');
+});
+
+await t('rani izlaz (nema sačuvanih karata) uz vještački spor performance.now() i dalje javlja bez pucanja', async () => {
+  const env = makeRestoreEnv({
+    perf: makeSlowPerf(1000),
+    wCall: async () => ({ ok: true, rows: [] })
+  });
+  await assert.doesNotReject(() => env.run());
+  assert.strictEqual(env.calls.status.length, 1);
+  // 'list' korak se izvrši i kod ranog izlaza (samo je rows[] prazan) — poruka
+  // mora bar imenovati taj korak, ne prazninu.
+  assert.ok(env.calls.status[0].includes('list'), 'i rani izlaz mora prikazati bar list() korak');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.1.5';
+const APP_VER = 'v1.1.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -33034,6 +33034,18 @@ async function sqlmapRestoreAll() {
   // mora opaliti na SVAKOM izlazu (uspjeh, "nema karata", pad u catch-u niže,
   // rani return iz _sqlCrashCheck-a), inače indikator "Učitavam kartu…" ostane
   // trajno prikazan preko karte kad restore padne na neočekivan način.
+  //
+  // v1.1.6: v1.1.5 je uklonila jedan STVARAN, izmjeren trošak (list() je čitao
+  // cijele bafere iz IndexedDB da bi pročitala par malih polja) — ali korisnik je
+  // poslije te izmjene PONOVO prijavio istih "desetak sekundi", pa taj trošak
+  // OČIGLEDNO nije bio (jedini) uzrok za NJEGOVU kartu. Umjesto da se nagađa
+  // četvrti uzrok bez mogućnosti provjere na uređaju (sandbox ne može dozvati
+  // OPFS/IndexedDB pravog telefona), ovdje se mjeri STVARNO vrijeme svakog koraka
+  // (`performance.now()`) i ispisuje u status liniju 🗄 Offline karte (`_sqlmapStatus`)
+  // kad ukupno traje preko 1.5s — isti princip kao `_poziProvjeriIzvore` (alat za
+  // teren koji SAM kaže gdje vrijeme ide, umjesto da programer nagađa na daljinu).
+  const _tR0 = performance.now();
+  const _tBrk = [];
   try {
   if (await _sqlCrashCheck()) return;
   _sqlRestoreFailed = [];
@@ -33041,7 +33053,9 @@ async function sqlmapRestoreAll() {
   try { const lm=JSON.parse(localStorage.getItem('tvlake_last_map')); if(lm?.type==='sqlite'&&lm.sqlId) lastSqlId=lm.sqlId; } catch(e){}
 
   try {
+    const _tListT0 = performance.now();
     const r = await _sqlWCall({type:'list'}, [], 30000);
+    _tBrk.push('list ' + Math.round(performance.now() - _tListT0) + 'ms');
     if (!r.ok || !r.rows?.length) {
       localStorage.removeItem(_SQL_CRASH_KEY);
       // Popis karata nije uspio (worker pao/istekao) ILI ih stvarno nema —
@@ -33072,12 +33086,14 @@ async function sqlmapRestoreAll() {
         // D1-5: marker = karta koja se trenutno učitava (ostane ako app crashne)
         localStorage.setItem(_SQL_CRASH_KEY, entry.name);
         let lr;
+        const _tLoadT0 = performance.now();
         if (entry.opfs) {
           const opfsName = entry.opfsName || (entry.name + '.sqlmap');
           lr = await _sqlWCall({type:'load-opfs', name:entry.name, path:'/'+opfsName, fmt:entry.fmt, meta:entry.meta});
         } else {
           lr = await _sqlWCall({type:'load-idb', name:entry.name});
         }
+        _tBrk.push((entry.opfs?'load-opfs':'load-idb') + '(' + entry.name + ') ' + Math.round(performance.now() - _tLoadT0) + 'ms');
         // Učitavanje ove karte prošlo bez rušenja → ukloni marker i reset fail brojač
         localStorage.removeItem(_SQL_CRASH_KEY);
         localStorage.removeItem(_sqlFailKey(entry.name));
@@ -33088,6 +33104,7 @@ async function sqlmapRestoreAll() {
           _sqlRestoreFailed.push({ name: entry.name, error: lr.error || 'nepoznato' });
           continue;
         }
+        const _tLayerT0 = performance.now();
         const layer = _sqlmapCreateLayerW(entry.name, lr.fmt, lr.meta);
         const shouldShow = entry.name === showName;
         if (shouldShow) {
@@ -33099,6 +33116,7 @@ async function sqlmapRestoreAll() {
           _saveLastMap('sqlite', null, entry.name);
           shownAny = true;
         }
+        _tBrk.push('sloj(' + entry.name + ') ' + Math.round(performance.now() - _tLayerT0) + 'ms');
         _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs});
         if (shouldShow) _sqlPrewarm(entry.name);
       } catch(e) {
@@ -33118,6 +33136,16 @@ async function sqlmapRestoreAll() {
   }
   localStorage.removeItem(_SQL_CRASH_KEY);
   } finally {
+    // Dijagnostika samo kad je STVARNO sporo (>1.5s) — na svaki normalan (brz)
+    // restart bi ovo bio čist šum u statusnoj liniji. Ostaje vidljivo u
+    // #sqlmap-status čim korisnik otvori 🗄 Offline karte, bez potrebe za USB
+    // debug pristupom — vidi napomenu na vrhu funkcije (v1.1.6).
+    const _tTot = performance.now() - _tR0;
+    if (_tTot > 1500) {
+      const _detalj = _tBrk.join(', ') || 'nema koraka (rani izlaz)';
+      console.warn('SQLmap restore sporo: ' + Math.round(_tTot) + 'ms [' + _detalj + ']');
+      _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + (_tTot/1000).toFixed(1) + 's — ' + _detalj);
+    }
     _mapRestoreIndicatorHide();
   }
 }

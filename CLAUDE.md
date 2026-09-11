@@ -2424,6 +2424,54 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     obaveznom sintaks-provjerom (korak 1 konvencije ispod) — ne na terenu.
     Pravilo: **nijedan komentar UNUTAR `_SQL_WORKER_SRC` ne smije sadržavati
     backtick** (koristiti obične navodnike `'...'` za isticanje imena polja).
+- **v1.1.5 NIJE riješila problem za korisnikovu kartu — izmjerena dijagnostika
+  umjesto četvrtog nagađanja (v1.1.6)**: odmah poslije v1.1.5 push-a, korisnik
+  je JOŠ JEDNOM prijavio istih "desetak sekundi" za "Učitavam kartu…", uz
+  poređenje sa AlpineQuest-om ("odmah se prikaže"). Kroz `AskUserQuestion`
+  potvrđeno: pun APK build (`build-apk.ps1`, dakle NAJNOVIJI kod stvarno na
+  uređaju, ne stara verzija zbog nerađenog `copy-assets`), i SAMO JEDNA
+  sačuvana offline karta (dakle nije "više karata se redom učitava" — petlja u
+  `sqlmapRestoreAll` obrađuje SVE `rows`, ne samo prikazanu, ali ovdje je
+  `rows.length === 1`).
+  - **Zašto v1.1.5 nije bila (jedini) uzrok**: taj fix je riješio STVARAN,
+    izmjeren trošak `list()` poruke (deserijalizacija cijelog bafera iz
+    `maps` IndexedDB store-a) — ali TAJ trošak postoji SAMO za karte
+    spašene starim, ne-OPFS putem (`load-buf`/`load-idb`, samo za fajlove
+    **< 20MB**, `_SQL_LARGE`). Karta od "stotine MB" (uobičajena veličina za
+    ovaj alat) je pri uvozu skoro sigurno išla OPFS putem
+    (`isLarge && _opfsAvail()` u `sqlmapLoadFile`) — a OPFS zapisi u `maps`
+    store-u NIKAD nisu nosili `buffer` polje (drže ga kao pravi fajl na
+    disku), pa je za NJIH `list()` bio jeftin i PRIJE v1.1.5. Analizom koda
+    (bez pristupa uređaju) `load-opfs` put (`createSyncAccessHandle` +
+    `MiniSqlite.init()`, samo skenira `sqlite_master` B-stablo — malo, ne
+    cijelu `tiles` tabelu) i sam `sqlmapRestoreAll` (nema sekvencijalnog
+    čekanja na MREŽNE `korak()` pozive iz `_startupRestore` — oni se pozivaju
+    SINHRONO bez `await`, pa rade UPOREDO, ne jedan za drugim) djeluju
+    lagano — nijedan OČIGLEDAN kandidat za "još jedan" 10-sekundni trošak
+    nije pronađen statičkom analizom.
+  - **Odluka: NE nagađati četvrti uzrok naslijepo.** Umjesto toga,
+    `sqlmapRestoreAll` sad MJERI STVARNO vrijeme (`performance.now()`) oko
+    svakog koraka — `list()`, `load-opfs`/`load-idb` PO KARTI (imenovano
+    imenom karte, ne samo tip poziva), i vrijeme kreiranja/dodavanja Leaflet
+    sloja na kartu — i kad UKUPNO pređe 1.5s, ispisuje raščlanu u
+    `#sqlmap-status` (status linija u 🗄 Offline karte, ista koju `_sqlmapStatus`
+    već koristi za poruke pri UVOZU karte, ovdje prvi put i za RESTORE).
+    Ispod 1.5s ništa se ne piše — normalan (brz) restart ne smije ostaviti
+    šum u statusnoj liniji. Isti princip kao `_poziProvjeriIzvore` (terenski
+    dijagnostički alat koji SAM kaže gdje je problem, umjesto da se čeka na
+    sljedeći krug nagađanja na daljinu iz sandboxa koji ne može dozvati
+    ni OPFS ni IndexedDB pravog uređaja).
+  - **Idući put kad se ovo javi**: korisnik treba otvoriti 🗄 Offline karte i
+    pročitati/proslijediti red "⏱ Zadnje učitavanje trajalo Xs — [raščlana]"
+    — tek TA brojka (npr. "load-opfs(ime_karte) 9400ms" naspram "list 50ms")
+    kaže TAČNO koji korak troši vrijeme, umjesto da se peti put nagađa iz
+    sandboxa koji fizički ne može dozvati OPFS/IndexedDB stvarnog telefona.
+  - Testovi: `tests/js/map-restore-indicator.test.js` prošireno na 10 (3
+    nova) — spor slučaj (vještački `performance.now()` koji raste +1000ms po
+    pozivu, BEZ stvarnog čekanja u testu) upisuje TAČNO jedan status red sa
+    imenom koraka i imenom karte; brz slučaj (uvijek `now()=>0`) ne piše
+    ništa; rani izlaz (nema sačuvanih karata) uz vještački spor `perf` i dalje
+    ispravno prijavi bar `list` korak, bez pucanja.
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
   ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija
