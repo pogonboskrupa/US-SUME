@@ -130,6 +130,12 @@ function makeRestoreEnv(opts) {
     _sqlFailKey: name => 'fail_' + name,
     _sqlEnsureBaseLayer: n => calls.ensureBase.push(n),
     _sqlmapStatus: msg => calls.status.push(msg),
+    // v1.1.7: eksplicitno postavljeno (default null = "indikator nikad prikazan
+    // u ovom testu"), NE oslanjati se na implicitni global koji bi sloppy-mode
+    // dodjela u _mapRestoreIndicatorShow ostavila iza sebe — to bi zavisilo od
+    // REDOSLIJEDA testova u ovom fajlu, što je tiho i lažno "prošlo" u prvoj
+    // verziji ovog testa prije nego je ovo eksplicitno ožičeno.
+    _mapRestoreIndicatorShownAt: o.shownAt !== undefined ? o.shownAt : null,
     // _mapRestoreIndicatorHide se izvlači STVARAN (ne stub) — test provjerava
     // da ga sqlmapRestoreAll STVARNO pozove, ne samo da postoji.
   };
@@ -228,6 +234,48 @@ await t('rani izlaz (nema sačuvanih karata) uz vještački spor performance.now
   // 'list' korak se izvrši i kod ranog izlaza (samo je rows[] prazan) — poruka
   // mora bar imenovati taj korak, ne prazninu.
   assert.ok(env.calls.status[0].includes('list'), 'i rani izlaz mora prikazati bar list() korak');
+});
+
+// ── v1.1.7: razmak PRIJE poziva (auth/startup gate), ne samo unutar funkcije ──
+console.log('\nsqlmapRestoreAll — razmak PRIJE poziva se mjeri odvojeno (v1.1.7):');
+
+await t('funkcija SAMA je brza, ali indikator je bio prikazan davno prije → ipak javlja (korisnik TO vidi)', async () => {
+  // _mapRestoreIndicatorShownAt = 0 (indikator prikazan "na početku vremena").
+  // Kad sqlmapRestoreAll konačno POČNE, performance.now() je već na 9000 —
+  // dakle 9s je prošlo PRIJE nego je ova funkcija uopšte pozvana (npr. auth
+  // gate). Unutar funkcije svaki poziv raste za samo +10ms → _tTot ostaje mali.
+  let n = 9000;
+  const env = makeRestoreEnv({
+    shownAt: 0,
+    perf: { now: () => (n += 10) },
+    wCall: async (msg) => {
+      if (msg.type === 'list') return { ok: true, rows: [{ name: 'karta1', savedAt: 1, opfs: true, opfsName: 'karta1.sqlmap' }] };
+      if (msg.type === 'load-opfs') return { ok: true, fmt: 'mbtiles', meta: {} };
+      return { ok: false };
+    }
+  });
+  await env.run();
+  assert.strictEqual(env.calls.status.length, 1, 'razmak PRIJE poziva sam po sebi mora okinuti dijagnostiku');
+  const msg = env.calls.status[0];
+  assert.ok(msg.includes('PRIJE poziva'), 'poruka mora eksplicitno reći da je kašnjenje PRIJE ulaska u funkciju, ne unutar SQLite čitanja');
+  assert.ok(/9\.\ds/.test(msg) || msg.includes('9.0s') || /9\.\d/.test(msg), 'ukupno vrijeme koje korisnik vidi (od prikaza indikatora) mora biti ~9s, ne par stotina ms');
+});
+
+await t('gap i interno vrijeme približno isti (nema auth kašnjenja) → BEZ "PRIJE poziva" napomene', async () => {
+  // shownAt postavljen TAČNO na _tR0 (indikator prikazan odmah prije poziva) —
+  // razlika između _tOdPrikaza i _tTot je ~0, ispod 200ms praga za napomenu.
+  const env = makeRestoreEnv({
+    shownAt: null,   // isti slučaj kao postojeći "sporo učitavanje" test — nema auth gap podatka
+    perf: makeSlowPerf(1000),
+    wCall: async (msg) => {
+      if (msg.type === 'list') return { ok: true, rows: [{ name: 'karta1', savedAt: 1, opfs: true, opfsName: 'karta1.sqlmap' }] };
+      if (msg.type === 'load-opfs') return { ok: true, fmt: 'mbtiles', meta: {} };
+      return { ok: false };
+    }
+  });
+  await env.run();
+  assert.strictEqual(env.calls.status.length, 1);
+  assert.ok(!env.calls.status[0].includes('PRIJE poziva'), 'bez podatka o prikazu indikatora ne smije se izmišljati "kašnjenje prije poziva"');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

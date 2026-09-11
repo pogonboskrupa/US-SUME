@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.1.6';
+const APP_VER = 'v1.1.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16575,7 +16575,14 @@ function _poziSadrzajHtml() {
 // lokalni fajl i doda pravi sloj. `hide()` se zove iz OBA moguća ishoda tog
 // čitanja (uspjeh i pad) preko try/finally u sqlmapRestoreAll — nikad ne
 // smije ostati trajno prikazan.
+// v1.1.7: pamti KAD je indikator prikazan — sqlmapRestoreAll (v1.1.6) mjeri
+// SAMO svoje vlastito trajanje, a taj poziv može stići tek POSLIJE nepoznatog
+// razmaka (initAuth/showApp gate prije _startupRestore) koji je NEVIDLJIV
+// za tu dijagnostiku. Ako korisnik vidi "Učitavam kartu" 10s a sqlmapRestoreAll
+// samo javlja par stotina ms, razlika je baš u ovom razmaku.
+let _mapRestoreIndicatorShownAt = null;
 function _mapRestoreIndicatorShow() {
+  _mapRestoreIndicatorShownAt = performance.now();
   const el = document.getElementById('map-restore-indicator');
   if (el) el.classList.add('show');
 }
@@ -33136,15 +33143,32 @@ async function sqlmapRestoreAll() {
   }
   localStorage.removeItem(_SQL_CRASH_KEY);
   } finally {
-    // Dijagnostika samo kad je STVARNO sporo (>1.5s) — na svaki normalan (brz)
-    // restart bi ovo bio čist šum u statusnoj liniji. Ostaje vidljivo u
-    // #sqlmap-status čim korisnik otvori 🗄 Offline karte, bez potrebe za USB
-    // debug pristupom — vidi napomenu na vrhu funkcije (v1.1.6).
+    // Dijagnostika samo kad je STVARNO sporo — na svaki normalan (brz) restart
+    // bi ovo bio čist šum u statusnoj liniji. Ostaje vidljivo u #sqlmap-status
+    // čim korisnik otvori 🗄 Offline karte, bez potrebe za USB debug pristup
+    // (vidi napomenu na vrhu funkcije, v1.1.6).
+    //
+    // v1.1.7: v1.1.6 je mjerila SAMO vrijeme UNUTAR ove funkcije — ali korisnik
+    // je prijavio da opet vidi "Učitavam kartu" ~10s a status liniju u
+    // 🗄 Offline karte NIJE vidio, što znači da _tTot (dolje) NIJE prelazio
+    // 1.5s prag. To je moglo značiti samo jedno: razmak koji korisnik STVARNO
+    // gleda (indikator prikazan → indikator skriven) je VEĆI od onoga što ova
+    // funkcija sama izmjeri — dakle kašnjenje je NEGDJE PRIJE nego što je
+    // sqlmapRestoreAll uopšte pozvana (auth/gate prije _startupRestore, vidi
+    // `_mapRestoreIndicatorShownAt`), ne unutar nje. Zato se sad računa i
+    // razmak od trenutka kad je indikator prikazan (može biti ZNATNO veći od
+    // _tTot), i TAJ (veći) broj odlučuje da li se piše dijagnostika.
     const _tTot = performance.now() - _tR0;
-    if (_tTot > 1500) {
+    const _tOdPrikaza = (_mapRestoreIndicatorShownAt != null) ? (performance.now() - _mapRestoreIndicatorShownAt) : null;
+    const _tOdluka = Math.max(_tTot, _tOdPrikaza || 0);
+    if (_tOdluka > 1500) {
       const _detalj = _tBrk.join(', ') || 'nema koraka (rani izlaz)';
-      console.warn('SQLmap restore sporo: ' + Math.round(_tTot) + 'ms [' + _detalj + ']');
-      _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + (_tTot/1000).toFixed(1) + 's — ' + _detalj);
+      const _prijeStarta = _tOdPrikaza != null ? Math.round(_tOdPrikaza - _tTot) : null;
+      const _prijeTxt = (_prijeStarta != null && _prijeStarta > 200)
+        ? (' · PRIJE poziva ' + _prijeStarta + 'ms (auth/startup gate, ne sam SQLite)')
+        : '';
+      console.warn('SQLmap restore sporo: unutra ' + Math.round(_tTot) + 'ms, od prikaza indikatora ' + Math.round(_tOdPrikaza||_tTot) + 'ms [' + _detalj + ']' + _prijeTxt);
+      _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt);
     }
     _mapRestoreIndicatorHide();
   }

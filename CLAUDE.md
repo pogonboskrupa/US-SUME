@@ -2472,6 +2472,68 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     imenom koraka i imenom karte; brz slučaj (uvijek `now()=>0`) ne piše
     ništa; rani izlaz (nema sačuvanih karata) uz vještački spor `perf` i dalje
     ispravno prijavi bar `list` korak, bez pucanja.
+- **v1.1.6 dijagnostika NIJE progovorila — mjerila je pogrešan interval
+  (v1.1.7)**: korisnik je potvrdio (AskUserQuestion): pun rebuild na v1.1.6
+  URAĐEN je PRIJE testiranja, "Učitavam kartu" JE trajalo desetak sekundi opet
+  — ali `#sqlmap-status` u 🗄 Offline karte NIJE pokazivao "⏱" red uopšte.
+  Dodatno, korisnik je javio (bez pitanja): "ovo je do prije dva dana radilo
+  kako treba, učitavalo odmah" — dakle ovo NIJE inherentna cijena OPFS
+  čitanja nego REGRESIJA u nekom nedavnom periodu (mnogo commit-a u tom
+  prozoru, nijedan direktno označen kao "sqlmap"/"offline karta").
+  - **Zašto v1.1.6 nije vidjela ništa**: mjerila je vrijeme SAMO OD TRENUTKA
+    kad je `sqlmapRestoreAll()` POZVANA do njenog završetka (`_tR0 =
+    performance.now()` na PRVOJ liniji funkcije). Ali indikator "Učitavam
+    kartu…" se pali MNOGO RANIJE — u `_restoreLastMap()` IIFE-u (~linija
+    16587), koji se izvršava dok se skripta TEK PARSIRA, prije `initAuth()`/
+    `showApp()`/`_startupRestore()`. `sqlmapRestoreAll()` se poziva TEK iz
+    `_startupRestore()`, koja se pokreće TEK unutar `showApp()`, koja se
+    poziva TEK POSLIJE auth/gate logike. **Ako to auth/gate kašnjenje
+    potraje (spor uređaj, spora mreža za `_provjeriOpozivOdobrenja`/session
+    provjeru, bilo šta između prikaza indikatora i stvarnog poziva
+    `sqlmapRestoreAll()`), korisnik gleda "Učitavam kartu" cijelo to vrijeme
+    — a v1.1.6-ina dijagnostika je za taj period POTPUNO SLIJEPA**, jer njen
+    štopericu uopšte nije ni upalila dok se to dešavalo. Ako je
+    `sqlmapRestoreAll()` sama brza (par stotina ms, npr. mali OPFS `init()`),
+    njen `_tTot` nikad ne pređe 1.5s prag pa se ništa ne ispiše — TAČNO ono
+    što je korisnik prijavio.
+  - **Popravka: mjeri se i razmak PRIJE poziva.** `_mapRestoreIndicatorShow()`
+    sad bilježi `_mapRestoreIndicatorShownAt = performance.now()` u trenutku
+    kad se indikator upali. `sqlmapRestoreAll()` u `finally` bloku računa
+    `_tOdPrikaza = performance.now() - _mapRestoreIndicatorShownAt` (ukupno
+    vrijeme koje je indikator STVARNO bio vidljiv — ono što korisnik gleda)
+    pored postojećeg `_tTot` (vrijeme SAMO unutar funkcije), i odluku "da li
+    je sporo" sad pravi `Math.max(_tTot, _tOdPrikaza)`, ne samo `_tTot`. Kad
+    je razlika između njih veća od 200ms, poruka to EKSPLICITNO kaže:
+    `"... · PRIJE poziva Xms (auth/startup gate, ne sam SQLite)"` — razlikuje
+    dva potpuno različita problema (spor SQLite čitanje vs. nešto sporo PRIJE
+    nego se SQLite uopšte dotakne) umjesto da oba izgledaju identično kao
+    "sporo učitavanje karte".
+  - **I dalje se ne nagađa GDJE tačno u auth/startup lancu kašnjenje nastaje**
+    — to bi bio peti krug nagađanja o `initAuth()` (34000+ linija JS bloka,
+    dokumentovano u CLAUDE.md kao "Pokretanje je OFFLINE-FIRST" sekcija) bez
+    ikakvog dokaza da je baš TU kašnjenje. Sad kad postoji broj koji
+    razlikuje "unutra" od "prije poziva", sljedeći izvještaj iz `#sqlmap-status`
+    će sam reći da li je problem uopšte u SQLite učitavanju ili NEGDJE PRIJE
+    njega (u kom slučaju treba ista dijagnostička tehnika primijenjena na
+    auth/startup lanac, ne dalje diranje `sqlmapRestoreAll`-a).
+  - **Zamka pri pisanju testa**: prvi prolaz testa je (slučajno) PROŠAO bez
+    ijednog eksplicitnog ožičenja `_mapRestoreIndicatorShownAt` u sandbox-u —
+    `new Function(...)` sandbox dijeli JEDAN globalni objekat unutar istog
+    Node procesa (nije prava izolacija), pa je RANIJI test u istom fajlu
+    ("show() dodaje 'show' klasu...") pozivom `_mapRestoreIndicatorShow()`
+    ostavio SLOPPY-MODE IMPLICITNI GLOBAL (`_mapRestoreIndicatorShownAt = ...`
+    bez `let`/`const` u izvučenom tekstu funkcije, jer je deklaracija na
+    posebnom redu ISPRED funkcije i extractFn je ne uključuje) koji je
+    kasniji test tiho pokupio kroz scope chain. Test bi "prošao" i da je
+    ostatak koda pogrešan, samo zbog REDOSLIJEDA testova u fajlu. Popravljeno
+    eksplicitnim `_mapRestoreIndicatorShownAt` ključem u `makeRestoreEnv`
+    sandbox-u (podrazumijevano `null`, postavljivo preko `opts.shownAt`).
+  - 2 nova testa u `tests/js/map-restore-indicator.test.js` (12 ukupno): brza
+    funkcija + davno prikazan indikator (`shownAt` daleko u prošlosti uz
+    performance.now() koji raste sporo unutar funkcije) SVEJEDNO javlja, sa
+    "PRIJE poziva" napomenom; kad razmaka nema (`shownAt: null`, isti slučaj
+    kao postojeći "sporo učitavanje" test), poruka NE izmišlja "PRIJE poziva"
+    napomenu bez osnove.
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
   ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija
