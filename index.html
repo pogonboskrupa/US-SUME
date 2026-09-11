@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.1.4';
+const APP_VER = 'v1.1.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -31864,10 +31864,40 @@ class MiniSqlite {
 }
 // ── Kraj MiniSqlite ──────────────────────────────────────────────────────────
 
+// v2 (v1.1.5): buffer starih (ne-OPFS) karata je preseljen iz 'maps' u zaseban
+// 'mapBufs' store. Razlog: list() čita SAMO metapodatke (ime/format/zoom) da
+// popuni listu sačuvanih karata pri SVAKOM pokretanju app-a — ali dok je buffer
+// (stotine MB) bio UNUTAR istog zapisa, IndexedDB kursor MORA deserijalizovati
+// CIJELI zapis (uklj. buffer) da bi uopšte stigao do tih par malih polja, jer
+// browser ne zna unaprijed da će JS kod buffer odbaciti. To je desetak sekundi
+// čistog gubitka na SVAKOM startu, i to čak i kad se prikazuje SASVIM DRUGA
+// (npr. OPFS) karta — list() prolazi kroz SVE zapise prije nego uopšte odluči
+// koju kartu prikazati. Migracija ide u onupgradeneeded (ista versionchange
+// transakcija vidi i staru i novu strukturu) — svaki zapis sa 'buffer' poljem
+// se prepiše u 'mapBufs', a iz 'maps' zapisa se ukloni SAMO to polje.
 function idbOpen() {
   return new Promise((res,rej) => {
-    const r = indexedDB.open('tvlake_sqlmaps', 1);
-    r.onupgradeneeded = e => e.target.result.createObjectStore('maps', {keyPath:'name'});
+    const r = indexedDB.open('tvlake_sqlmaps', 2);
+    r.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('maps')) db.createObjectStore('maps', {keyPath:'name'});
+      if (!db.objectStoreNames.contains('mapBufs')) db.createObjectStore('mapBufs', {keyPath:'name'});
+      if (e.oldVersion < 2) {
+        const tx = e.target.transaction;
+        const st = tx.objectStore('maps'), bufSt = tx.objectStore('mapBufs');
+        st.openCursor().onsuccess = ev => {
+          const c = ev.target.result;
+          if (!c) return;
+          const v = c.value;
+          if (v && v.buffer) {
+            bufSt.put({ name:v.name, buffer:v.buffer });
+            const meta = Object.assign({}, v); delete meta.buffer;
+            c.update(meta);
+          }
+          c.continue();
+        };
+      }
+    };
     r.onsuccess = e => res(e.target.result);
     r.onerror = () => rej(r.error);
   });
@@ -32014,20 +32044,28 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'idb-rename') {
       const idb = await idbOpen();
+      // Preimenovanje mora obuhvatiti i 'mapBufs' zapis (ako postoji) — karta
+      // koja NIJE OPFS ima svoj buffer tamo pod STARIM imenom (vidi idbOpen).
       await new Promise((res,rej) => {
-        const tx = idb.transaction('maps','readwrite');
-        const st = tx.objectStore('maps');
+        const tx = idb.transaction(['maps','mapBufs'],'readwrite');
+        const st = tx.objectStore('maps'), bufSt = tx.objectStore('mapBufs');
         const gr = st.get(msg.old);
         gr.onsuccess = () => {
           const v = gr.result;
           if (!v) { rej(new Error('not-found')); return; }
           v.name = msg.neu;            // novi ključ (keyPath)
           // opfsName ostaje isti → fizički OPFS fajl se ne mijenja
-          const pr = st.put(v);
-          pr.onsuccess = () => { const dr = st.delete(msg.old); dr.onsuccess = () => res(); dr.onerror = () => rej(dr.error); };
-          pr.onerror = () => rej(pr.error);
+          st.put(v);
+          st.delete(msg.old);
+          const bgr = bufSt.get(msg.old);
+          bgr.onsuccess = () => {
+            const bv = bgr.result;
+            if (bv) { bufSt.put({ name: msg.neu, buffer: bv.buffer }); bufSt.delete(msg.old); }
+          };
         };
         gr.onerror = () => rej(gr.error);
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
       });
       self.postMessage({id,ok:true});
     }
@@ -32035,8 +32073,13 @@ self.onmessage = async ({data:msg}) => {
       const idb = await idbOpen();
       const entry = await new Promise((res,rej)=>{ const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
       if (!entry||entry.opfs) throw new Error(entry?.opfs?'opfs':'not-found');
+      // Buffer je u ZASEBNOM 'mapBufs' store-u (vidi napomena kod idbOpen) — ova
+      // grana se poziva SAMO kad se korisnik stvarno otvori/prikaže baš OVU
+      // kartu, pa je ovdje (i samo ovdje) opravdano platiti cijenu čitanja.
+      const bufEntry = await new Promise((res,rej)=>{ const req=idb.transaction('mapBufs','readonly').objectStore('mapBufs').get(msg.name); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
+      if (!bufEntry || !bufEntry.buffer) throw new Error('buffer-not-found');
       const SQL = await getSqlJs();
-      const db = new SQL.Database(new Uint8Array(entry.buffer));
+      const db = new SQL.Database(new Uint8Array(bufEntry.buffer));
       const exec = makeSqlJsExec(db);
       const fmt = entry.fmt || detectFmt(exec);
       if (!fmt) { db.close(); throw new Error('unknown-format'); }
@@ -32063,7 +32106,15 @@ self.onmessage = async ({data:msg}) => {
       } else { meta.minzoom=minz; meta.maxzoom=maxz; }
       if (msg.save) {
         const idb = await idbOpen();
-        await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,buffer:msg.buffer,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+        // Buffer ide u ZASEBAN 'mapBufs' store, 'maps' nosi SAMO metapodatke —
+        // inače 'list' (poziva se pri SVAKOM pokretanju app-a) mora deserijalizovati
+        // ovaj cijeli buffer da bi pročitao par malih polja (vidi napomena kod idbOpen).
+        await new Promise((res,rej)=>{
+          const tx=idb.transaction(['maps','mapBufs'],'readwrite');
+          tx.objectStore('maps').put({name:msg.name,fmt,meta,savedAt:Date.now(),size:msg.buffer.byteLength});
+          tx.objectStore('mapBufs').put({name:msg.name,buffer:msg.buffer});
+          tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+        });
       }
       dbs[msg.name] = {db,fmt,engine:'sqljs',zOff,gpkgT:fmt==='gpkg'?gpkgTileTable(exec):null};
       _prepStmt(dbs[msg.name]);
@@ -32197,7 +32248,8 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'idb-delete') {
       const idb = await idbOpen();
-      await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+      // Briše i 'mapBufs' zapis (bezopasno ako ga nema — OPFS karte ga nikad nisu ni imale).
+      await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').delete(msg.name); tx.objectStore('mapBufs').delete(msg.name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
       self.postMessage({id,ok:true});
     }
     else if (msg.type === 'load-file') {
@@ -32306,15 +32358,38 @@ async function _opfsDel(filename) {
 
 // ── IDB helpers (main thread) ─────────────────────────────────────────────────
 function _sqlIdbOpen() {
+  // Ista šema/migracija kao worker-ov idbOpen() (v1.1.5) — 'maps' nosi SAMO
+  // metapodatke, buffer je u zasebnom 'mapBufs' store-u. Ovo mjesto se koristi
+  // isključivo za brisanje (_sqlIdbDeleteDirect), pa i ono mora znati za
+  // 'mapBufs' inače ostave osirotjele bufere pri brisanju karte.
   return new Promise((res,rej) => {
-    const r=indexedDB.open('tvlake_sqlmaps',1);
-    r.onupgradeneeded=e=>e.target.result.createObjectStore('maps',{keyPath:'name'});
+    const r=indexedDB.open('tvlake_sqlmaps',2);
+    r.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if (!db.objectStoreNames.contains('maps')) db.createObjectStore('maps',{keyPath:'name'});
+      if (!db.objectStoreNames.contains('mapBufs')) db.createObjectStore('mapBufs',{keyPath:'name'});
+      if (e.oldVersion < 2) {
+        const tx=e.target.transaction;
+        const st=tx.objectStore('maps'), bufSt=tx.objectStore('mapBufs');
+        st.openCursor().onsuccess=ev=>{
+          const c=ev.target.result;
+          if(!c) return;
+          const v=c.value;
+          if (v && v.buffer) {
+            bufSt.put({name:v.name, buffer:v.buffer});
+            const meta = Object.assign({}, v); delete meta.buffer;
+            c.update(meta);
+          }
+          c.continue();
+        };
+      }
+    };
     r.onsuccess=e=>res(e.target.result); r.onerror=()=>rej(r.error);
   });
 }
 async function _sqlIdbDeleteDirect(name) {
   const idb=await _sqlIdbOpen();
-  return new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+  return new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').delete(name); tx.objectStore('mapBufs').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
 }
 async function _sqlIdbClearAll() {
   return new Promise((res,rej)=>{ const r=indexedDB.deleteDatabase('tvlake_sqlmaps'); r.onsuccess=res; r.onerror=()=>rej(r.error); });

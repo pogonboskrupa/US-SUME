@@ -2340,6 +2340,90 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     zove `_mapRestoreIndicatorHide()` na sva četiri različita izlazna puta
     (ne samo da funkcija postoji). **Provjereno da test PADA na kodu prije
     ove izmjene** (nedostaje `_mapRestoreIndicatorShow` u index.html).
+- **Offline SQLite karta — deset sekundi je bilo STVARNO trošenje, ne samo
+  osjećaj (v1.1.5)**: korisnik je poslije v1.1.3 (koje je samo dodalo vidljiv
+  "Učitavam kartu…" indikator) prijavio da isto traje "opet desetak sekundi" —
+  na pitanje da li je pauza očekivana ili treba stvarno skratiti vrijeme,
+  eksplicitno je izabrao "Probaj skratiti stvarno vrijeme učitavanja". Uzrok
+  NIJE bio veličina fajla koji se stvarno prikazuje, nego `list` poruka koju
+  worker izvršava na SVAKOM pokretanju app-a, PRIJE nego se uopšte zna koja
+  će se karta prikazati — samo da bi popunila listu sačuvanih karata (ime/
+  format/veličina) za UI. `list` je iterirala IndexedDB `maps` store preko
+  `openCursor()`, a IndexedDB API PRISILJAVA deserijalizaciju CIJELOG zapisa
+  po kursoru da bi kod uopšte mogao pročitati ta par malih polja — a
+  ne-OPFS (starije/manje) karte su svoj buffer od stotine MB do sada držale
+  UNUTAR ISTOG zapisa kao ti metapodaci. Rezultat: `list` je na svakom startu
+  strukturno klonirala stotine MB, bez obzira koja se karta na kraju stvarno
+  prikaže — to je bio izvor desetosekundne pauze, ne samo veličina fajla koji
+  se učitava.
+  - **Rješenje: buffer ide u ZASEBAN IndexedDB object store** (`mapBufs`,
+    `keyPath:'name'`) — `maps` od sada nosi ISKLJUČIVO metapodatke
+    (`name/fmt/meta/savedAt/size/opfs/opfsName`), nikad buffer. `list` tako
+    čita samo ono što joj treba i prestaje platiti cijenu bafera koje ni ne
+    koristi. Baza `tvlake_sqlmaps` ide sa verzije 1 na 2 (i u worker-ovom
+    `idbOpen()` i u main-thread `_sqlIdbOpen()` — postoje ODVOJENO, oba su
+    morala dobiti ISTU migraciju).
+  - **`onupgradeneeded` migracija je transakciono sigurna i ne briše ništa** —
+    ista versionchange transakcija ima pristup i staroj i novoj strukturi;
+    kod (`e.oldVersion < 2`) prođe kroz postojeće `maps` zapise kursorom, za
+    svaki koji nosi `buffer` polje upiše `{name, buffer}` u novi `mapBufs`
+    store i iz `maps` zapisa ukloni SAMO to polje (`cursor.update(meta)` bez
+    `buffer`-a). OPFS karte (koje nikad nisu imale buffer u IDB-u, već ga
+    drže kao pravi fajl) prolaze migraciju netaknute. Idempotentno — drugo
+    otvaranje je već na verziji 2, migracija se ne ponavlja.
+  - **Svako mjesto koje je ranije čitalo/pisalo/brisalo/preimenovalo `buffer`
+    unutar `maps` zapisa moralo je dobiti companion operaciju nad `mapBufs`**
+    (7 mjesta ukupno, sva u `_SQL_WORKER_SRC` osim main-thread para): `load-buf`
+    (upis pri prvom uvozu — sad piše metapodatke u `maps` i `{name,buffer}` u
+    `mapBufs` u JEDNOJ transakciji preko dva store-a), `load-idb` (učitavanje
+    pri PRIKAZU karte — sad čita buffer iz `mapBufs`, ne iz `maps`; **ovo je
+    JEDINO mjesto gdje je i dalje opravdano platiti cijenu čitanja stotina MB**,
+    jer se poziva samo za kartu koju korisnik stvarno otvara, ne za sve),
+    `idb-delete` (briše i `mapBufs` companion — inače bi ostao osirotjeli
+    buffer bez ikad dostupnog metazapisa koji na njega pokazuje), `idb-rename`
+    (preimenuje companion pod NOVIM imenom — bez ovoga bi preimenovana karta
+    izgubila svoj buffer, jer bi `load-idb` tražio `mapBufs` zapis pod novim
+    imenom koji ne postoji), i main-thread `_sqlIdbDeleteDirect` (isti razlog
+    kao worker-ov `idb-delete`, koristi se pri overwrite-u postojećeg imena
+    tokom uvoza). `idb-save-meta` (OPFS-only put) NIJE dirana — nikad nije
+    imala buffer.
+  - **Efekat je vidljiv TEK od SLJEDEĆEG pokretanja poslije update-a** — prvo
+    pokretanje na novoj verziji i dalje mora jednom proći kroz migraciju
+    (brza, samo premješta reference, ne kopira/ponovo piše same bajtove) i tek
+    tada `list` prestaje nositi stari teret; sama karta koja se PRIKAZUJE
+    (`load-idb`/`load-opfs`) i dalje traje onoliko koliko traje čitanje njenog
+    stvarnog fajla — ovo skraćuje trošak koji se plaćao NEOVISNO o tome koja
+    se karta gleda, ne fizičko čitanje same prikazane karte.
+  - **Testovi**: `tests/js/sqlmap-idb-split.test.js` (16), nad RUČNO
+    NAPRAVLJENOM ali API-kompatibilnom fake IndexedDB implementacijom (Node
+    nema pravi IndexedDB) — namjerno asinhronom (mikrozadaci + `setTimeout(0)`
+    za `tx.oncomplete`) da testira STVARAN redoslijed poziva (npr. da li se
+    `onsuccess` kači PRIJE nego zahtjev stigne do rezultata), ne sinhronu
+    prečicu koja bi sakrila greške redoslijeda. Pokriva: migraciju (svježa
+    baza, inline-buffer zapis, OPFS zapis bez buffera, mješavinu oboje,
+    idempotentnost), `_sqlIdbDeleteDirect` (briše iz oba store-a, ne baca na
+    nepostojećem imenu), i sve četiri worker poruke (`idb-rename`/`idb-delete`/
+    `load-buf`/`load-idb`) izvučene kao stvaran tekst iz `_SQL_WORKER_SRC` i
+    izvršene u sandboxu sa stubovanim sql.js/`detectFmt`/`readMeta` (te grane
+    su NEDIRANE, stub ih zaobilazi bez gubljenja pokrivenosti dijela koji
+    JESTE mijenjan — IDB čitanje/pisanje).
+  - **Zamka pri pisanju testa**: `extractFn` (kopiran iz ranijih test fajlova)
+    je za `_sqlIdbDeleteDirect` (`async function`) tražio poziciju riječi
+    "function" UNUTAR match-a regexa koji dozvoljava opcioni "async " prefiks
+    — `m[0].indexOf('function')` je pronašao "function" i time ODREZAO "async "
+    ispred, ISTA zamka koja je već dokumentovana gore za `sqlmapRestoreAll`
+    (v1.1.3) i još jednom potvrđuje pravilo: prvo tražiti `'async function ' +
+    naziv + '('` doslovno, tek onda padati na `'function ' + naziv + '('`.
+  - **Stražnja provjera stražnje greške**: prvobitni pokušaj ove izmjene je u
+    komentaru iznad `idbOpen()` slučajno upotrijebio markdown-stil doslovni
+    navodnik `` `buffer` `` UNUTAR `_SQL_WORKER_SRC` template literala (koji
+    je sam backtick-string) — taj drugi backtick je PREURANJENO zatvorio
+    cijeli worker izvor usred komentara, pa je ostatak (`function idbOpen`
+    naovamo) postao obična JS naredba van stringa i pukao sa `Unexpected
+    identifier 'buffer'` pri sintaks-provjeri. Uhvaćeno PRIJE commit-a
+    obaveznom sintaks-provjerom (korak 1 konvencije ispod) — ne na terenu.
+    Pravilo: **nijedan komentar UNUTAR `_SQL_WORKER_SRC` ne smije sadržavati
+    backtick** (koristiti obične navodnike `'...'` za isticanje imena polja).
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
   ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija
