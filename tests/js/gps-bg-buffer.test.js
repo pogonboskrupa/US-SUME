@@ -47,11 +47,25 @@ function t(name, fn) {
 }
 
 // ── _nativeBufUzmi: čita i (na Java strani) briše bafer ────────────────────
-console.log('_nativeBufUzmi — jedno destruktivno čitanje:');
+console.log('_nativeBufUzmi — jedno trajno čitanje:');
 
 const SRC_UZMI = extractFn('_nativeBufUzmi');
-function makeUzmi(bridge) {
-  return new Function('AndroidGps', SRC_UZMI + '\nreturn _nativeBufUzmi;')(bridge);
+function makeUzmi(bridge, failStorage = false) {
+  const store = new Map();
+  const localStorage = {
+    getItem: k => store.get(k) || null,
+    setItem: (k,v) => { if (failStorage) throw new Error('quota'); store.set(k,v); },
+    removeItem: k => store.delete(k)
+  };
+  const adapted = !bridge?.readNativeBuffer ? bridge : {
+    readNativeBuffer: () => {
+      let raw = bridge.readNativeBuffer();
+      try { raw = JSON.parse(raw).map(p => JSON.stringify(p)).join('\n'); } catch(e) {}
+      return JSON.stringify({token:'batch',raw:raw || ''});
+    },
+    ackNativeBuffer: () => { if (bridge.ackNativeBuffer) bridge.ackNativeBuffer(); }
+  };
+  return new Function('AndroidGps','localStorage', SRC_UZMI + '\nreturn _nativeBufUzmi;')(adapted,localStorage);
 }
 
 t('bez native mosta (webapp) vraća prazno, ne baca', () => {
@@ -65,7 +79,7 @@ t('tačke se vraćaju SORTIRANE po vremenu (fajl se piše redom pisanja, ne vrem
     { la: 44.9, lo: 16.2, ac: 5, al: 300, sp: 1, t: 100 },
     { la: 44.9, lo: 16.2, ac: 5, al: 300, sp: 1, t: 200 },
   ]);
-  const pts = makeUzmi({ drainNativeBuffer: () => raw })();
+  const pts = makeUzmi({ readNativeBuffer: () => raw })();
   assert.deepStrictEqual(pts.map(p => p.t), [100, 200, 300]);
 });
 
@@ -76,19 +90,19 @@ t('zapisi bez upotrebljivog vremena se odbacuju (pola reda pri ubijanju procesa)
     null,
     { la: 44.9, lo: 16.2, t: 'x' },  // t nije broj
   ]);
-  assert.strictEqual(makeUzmi({ drainNativeBuffer: () => raw })().length, 1);
+  assert.strictEqual(makeUzmi({ readNativeBuffer: () => raw })().length, 1);
 });
 
 t('korumpiran/prazan sadržaj ne ruši oporavak', () => {
-  assert.deepStrictEqual(makeUzmi({ drainNativeBuffer: () => '{nije json' })(), []);
-  assert.deepStrictEqual(makeUzmi({ drainNativeBuffer: () => '' })(), []);
-  assert.deepStrictEqual(makeUzmi({ drainNativeBuffer: () => '[]' })(), []);
-  assert.deepStrictEqual(makeUzmi({ drainNativeBuffer: () => { throw new Error('most pao'); } })(), []);
+  assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '{nije json' })(), []);
+  assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '' })(), []);
+  assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '[]' })(), []);
+  assert.throws(makeUzmi({ readNativeBuffer: () => { throw new Error('most pao'); } }), /most pao/);
 });
 
-t('most se pita SAMO JEDNOM po pozivu (čitanje briše fajl na Java strani)', () => {
+t('most se pita SAMO JEDNOM po pozivu (paket ostaje pending do ack-a)', () => {
   let n = 0;
-  const fn = makeUzmi({ drainNativeBuffer: () => { n++; return '[]'; } });
+  const fn = makeUzmi({ readNativeBuffer: () => { n++; return '[]'; } });
   fn();
   assert.strictEqual(n, 1);
 });
@@ -101,6 +115,9 @@ const SRC_CRASH = [
   extractFn('_crashClearVlaka'),
   extractFn('_crashClearTrag'),
   extractFn('_crashCheck'),
+  extractFn('_recoverVlakaSnapshot'),
+  extractFn('_saveLocalVlake'),
+  extractFn('_nativeBufPotvrdi'),
 ].join('\n');
 
 function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
@@ -118,7 +135,7 @@ function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
       removeItem: k => { store[k] = null; },
       setItem: (k, v) => { store[k] = v; },
     },
-    AndroidGps: { drainNativeBuffer: () => { stanje.drainPozvan++; return JSON.stringify(buf); } },
+    AndroidGps: { readNativeBuffer: () => { stanje.drainPozvan++; return JSON.stringify({token:'test-batch',raw:buf.map(p=>JSON.stringify(p)).join('\n')}); }, ackNativeBuffer:()=>true },
     _dlgConfirm: async () => potvrdi,
     showToast: (m) => stanje.toasts.push(m),
     // vlaka grana
@@ -127,11 +144,14 @@ function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
       addV: (color) => { stanje.vlake.push({ color, nm: '', br: '', pts: [], poly: { addLatLng(){} } }); },
       selI: () => {},
     },
-    saveV: async () => {},
+    LOCAL_VLAKE_KEY: 'tvlake_local_vlake',
+    sbFlushVlaka: async () => {},
+    getVlakaWeight: () => 3, getVlakaDashArray: () => null, _vlakeRenderer: {},
+    _escHtml: s => s, attachPolyClick: () => {},
     dst: (la1, lo1, la2, lo2) => Math.hypot((la1 - la2) * 111000, (lo1 - lo2) * 78000),
     // trag grana
     map: { removeLayer(){} },
-    L: { polyline: () => ({ addTo: () => ({}) }) },
+    L: { polyline: () => ({ addTo(){return this;}, bindTooltip(){return this;}, addLatLng(){}, setLatLngs(){} }) },
     _tragLiveClear: () => {},
     _lineStyle: { tragW: 3 },
     _updFabVisibility: () => {},
@@ -258,6 +278,29 @@ t('nema nedovršenog snimanja → bafer se NE dira (nema šta da mu se doda)', a
   const { fn, stanje } = makeCrash({ buf: [{ la: 44.9, lo: 16.2, ac: 5, al: 300, sp: 1, t: 1 }] });
   await fn();
   assert.strictEqual(stanje.drainPozvan, 0);
+});
+
+t('native ack se NE šalje ako lokalni journal nije upisan', () => {
+  let ack = 0;
+  const fn = makeUzmi({readNativeBuffer:()=>JSON.stringify([{la:44,lo:16,t:1}]),ackNativeBuffer:()=>ack++}, true);
+  assert.throws(fn,/quota/); assert.equal(ack,0);
+});
+t('oporavak čuva al i projekt i stvarno piše lokalni keš', async () => {
+  const {fn,stanje,sandbox} = makeCrash({snapV:{nm:'T1',ts:1,projektId:'p1',pts:[[44,16,600],[44.01,16.01,610]]}});
+  await fn();
+  assert.equal(stanje.vlake[0].pts[0].al,600);
+  assert.equal(stanje.vlake[0].projektId,'p1');
+  const saved = JSON.parse(sandbox.localStorage.getItem('tvlake_local_vlake'));
+  assert.equal(saved[0].pts[1].al,610);
+  assert.equal(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'),null);
+});
+t('neuspješan trajni upis zadržava crash snapshot', async () => {
+  const {fn,sandbox,stanje} = makeCrash({snapV:{nm:'T1',ts:1,pts:[[44,16,600]]}});
+  const original = sandbox.localStorage.setItem;
+  sandbox.localStorage.setItem = (k,v) => { if(k==='tvlake_local_vlake') throw new Error('quota'); original(k,v); };
+  await fn(); await fn();
+  assert.ok(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'));
+  assert.equal(stanje.vlake.length,1,'ponovni pokušaj ne pravi novu vlaku');
 });
 
 (async () => {

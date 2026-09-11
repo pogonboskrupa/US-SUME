@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.1.7';
+const APP_VERSION = '1.1.8';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -13,13 +13,19 @@ const NV_CACHE    = 'tvlake-nv-v1';     // Open-Meteo elevation (statički, mož
 const EFFIS_CACHE = 'tvlake-effis-v1';  // Copernicus EFFIS požari — opasnost + opožareno (v3.103.1)
 const WC_CACHE    = 'tvlake-wcover-v1'; // ESA WorldCover pokrivenost zemljišta (v3.103.0)
 const WB_CACHE    = 'tvlake-wayback-v1';// Esri World Imagery Wayback — vremenska traka (v3.111.0)
-const S2_CACHE    = 'tvlake-sentinel2-v1'; // Copernicus CDSE Sentinel-2 — svjež snimak (v3.128.0)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
   './',
   './index.html',
   './static/js/offline-layer.js',
+  './static/js/reliable-fetch.js',
+  './static/libs/leaflet.min.js',
+  './static/libs/leaflet.min.css',
+  './static/libs/proj4.js',
+  './static/libs/turf.min.js',
+  './static/libs/supabase.min.js',
+  './static/libs/shapefile.min.js',
   './static/js/road-design.js',
   './static/libs/qrcode-gen.js',
   './static/libs/jsQR.js',
@@ -128,16 +134,6 @@ self.addEventListener('fetch', event => {
     _tileRespond(event, WB_CACHE);
     return;
   }
-  // Copernicus Data Space Ecosystem (Sentinel-2 svjež snimak, v3.128.0) — WMS
-  // GetMap pločice (Authorization header nije dio cache ključa, sadržaj je isti
-  // bez obzira na token pa keš i dalje radi). Token endpoint (identity.*) je
-  // NAMJERNO ISKLJUČEN OVDJE (nikad se ne kešira) — pada u "Ostali API pozivi"
-  // granu ispod, isti princip kao supabase.co/open-meteo.
-  if (url.includes('sh.dataspace.copernicus.eu')) {
-    _tileRespond(event, S2_CACHE);
-    return;
-  }
-
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||

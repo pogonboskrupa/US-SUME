@@ -84,7 +84,7 @@ function makeEnv({ readyState = 'complete', pucaju = [] } = {}) {
            docReady: () => { sandbox.document.readyState = 'interactive'; } };
 }
 
-const SVI = ['switchTab','loadProj','sbInitData','queue','sqlmapRestore','geojsonOdjeli',
+const SVI = ['switchTab','sqlmapRestore','loadProj','sbInitData','queue','geojsonOdjeli',
              'tragReg','msrReg','refRepo','tacke','fotos','localKml','kmlcInit','temRestore'];
 
 console.log('_startupRestore — svi koraci obnove se izvrše:');

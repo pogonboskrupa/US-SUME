@@ -3,7 +3,9 @@
 # Ili iz android/ foldera:         powershell -ExecutionPolicy Bypass -File build-apk.ps1
 
 param(
-    [string]$Branch  = "claude/branch-072026-sa9wz0",
+    [ValidateSet("CODEX-US-SUME")]
+    [string]$Branch  = "CODEX-US-SUME",
+    [ValidateSet("debug", "release")]
     [string]$BuildType = "debug"   # "debug" ili "release"
 )
 
@@ -30,22 +32,22 @@ Write-Host "Tip:     $BuildType`n"
 Write-Host "[1/3] Git pull..." -ForegroundColor Yellow
 Set-Location $ProjectDir
 
-$LocalChanges = git status --porcelain -- index.html sw.js android/app/build.gradle
+$LocalChanges = git status --porcelain
 if ($LocalChanges) {
     Write-Host "`n[GRESKA] Lokalne izmjene u index.html/sw.js/build.gradle blokiraju pull:" -ForegroundColor Red
     Write-Host $LocalChanges -ForegroundColor Red
-    Write-Host "Sačuvaj ih (git stash) ili odbaci (git checkout -- <fajl>) pa pokreni skriptu ponovo." -ForegroundColor Red
+    Write-Host "Prvo sačuvaj i pregledaj lokalne izmjene." -ForegroundColor Red
     exit 1
 }
 
-git fetch origin
-if ($LASTEXITCODE -ne 0) { Write-Host "`n[GRESKA] git fetch nije uspio (provjeri internet konekciju)." -ForegroundColor Red; exit 1 }
-
-git checkout $Branch
-if ($LASTEXITCODE -ne 0) { Write-Host "`n[GRESKA] git checkout $Branch nije uspio." -ForegroundColor Red; exit 1 }
-
-git pull origin $Branch
-if ($LASTEXITCODE -ne 0) { Write-Host "`n[GRESKA] git pull nije uspio - vidi poruku iznad." -ForegroundColor Red; exit 1 }
+$CurrentBranch = git branch --show-current
+if ($LASTEXITCODE -ne 0 -or $CurrentBranch -ne $Branch) {
+    throw "Build se pokreće samo sa CODEX-US-SUME. Skripta ne mijenja grane."
+}
+git fetch origin $Branch
+if ($LASTEXITCODE -ne 0) { throw "git fetch nije uspio" }
+git merge --ff-only "origin/$Branch"
+if ($LASTEXITCODE -ne 0) { throw "Grana se ne može fast-forward osvježiti" }
 
 $LocalHead  = git rev-parse HEAD
 $RemoteHead = git rev-parse "origin/$Branch"
@@ -54,6 +56,10 @@ if ($LocalHead -ne $RemoteHead) {
     exit 1
 }
 Write-Host "      OK - zadnji commit: $(git log -1 --oneline)" -ForegroundColor Green
+
+if (-not (Test-Path "$AndroidDir\gradle\wrapper\gradle-wrapper.jar")) {
+    & "$AndroidDir\bootstrap-wrapper.ps1"
+}
 
 # ── 2. Kopiraj assets ────────────────────────────────────────────────────────
 Write-Host "`n[2/3] Kopiranje assets u android/app/src/main/assets/..." -ForegroundColor Yellow

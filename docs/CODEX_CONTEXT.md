@@ -302,3 +302,73 @@ Naredni zadaci, tek poslije korisnikovog izbora:
 Prvo R1: dodatna provjera je već pokazala konkretan kvar na najskupljem
 scenariju — spašavanju snimka s terena. Modularizacija dolazi postepeno,
 tek kad stabilizujemo te tokove; 41k redova samo po sebi nije razlog za rewrite.
+
+## 6. Promjene nakon početnog pregleda — v1.1.8
+
+Ovaj odjel opisuje kod pripremljen na `CODEX-US-SUME` nakon početnog audita.
+Raniji nalazi R1–R5 ostaju historijski dokaz početnog stanja.
+
+### Brži prvi prikaz karte
+
+- `index.html` sada učitava ključne biblioteke iz lokalnog `static/libs`, a
+  Google font je neblokirajući dodatak. Početak više ne čeka CDN timeout.
+- `_startupRestore` pokreće `sqlmapRestoreAll` odmah nakon prikaza početnog
+  taba; SQL worker koristi lokalni sql.js bez CDN pokušaja.
+- Pri pokretanju se obnavlja samo aktivna offline karta. Ostale sačuvane karte
+  su odgođene dok ih korisnik ne izabere, umjesto serijskog učitavanja svih
+  velikih MBTiles/SQLite fajlova prije prvog korisnog prikaza.
+- `tests/browser/codex-startup.cjs` pokriva sintetički IndexedDB/MBTiles
+  scenario, ali nije izvršen jer ovom okruženju nedostaje Playwright Chromium.
+  Poboljšanje treba potvrditi cold-start mjerenjem stvarnog APK-a.
+
+### Očuvanje podataka i sync
+
+- `static/js/offline-layer.js` više ne reže red na 500 operacija i ne briše
+  operaciju poslije pet neuspjeha. Ostaje blokirana za ručni retry/izvoz.
+- Vlake i doznaka projekti prvo dobijaju lokalni zapis/UUID pa tek onda
+  pokušavaju server. `static/js/reliable-fetch.js` ograničava čekanje odgovora
+  i njegovog tijela, bez automatskog ponavljanja upisa.
+- Sync vlake veže server ID/reviziju na novije lokalne operacije, prepoznaje
+  konflikt i utrku duplog inserta. Server red više ne prepisuje izmjenu koja
+  još čeka sync.
+- Doznaka GPS ide prvo u lokalni bafer. Migracija
+  `supabase/migrations/20260911_codex_gps_idempotent.sql` je pripremljena, ali
+  **nije izvršena**; dodaje RLS-respecting idempotentni RPC uz klijentski
+  fallback dok RPC ne postoji.
+- Promjena korisnika arhivira lokalne terenske zapise po vlasniku prije
+  čišćenja prikaza, a queue se ne briše. Offline karte se ne arhiviraju zbog
+  veličine i izolacije korisnika; po potrebi se ponovo uvoze.
+
+### GPS oporavak i Android
+
+- Crash snapshot vlake čuva `al`, projekt i krak, te se briše tek nakon
+  potvrđenog lokalnog upisa.
+- `NativeGpsBuffer.java`, `GpsService.java` i `MainActivity.java` uvode
+  read/ack: native fajl se ne briše dok JavaScript prvo ne upiše sirovi
+  journal. Oštećen red ne odbacuje zdrave redove.
+- WebView zabranjuje file/universal-file pristup, mixed content i cleartext
+  HTTP; FileProvider koristi `applicationId`, a GPS broadcast je paketni.
+- Android kod nije kompajliran ni testiran na uređaju u ovom okruženju.
+  Promjene traže puni APK build i lifecycle test na telefonu.
+
+### Sentinel i build
+
+- Uklonjeni su CDSE OAuth/WMS kod, UI, SW ruta i cache manager za svježi
+  Sentinel-2 snimak. Pri pokretanju se brišu stari klijentski secret i cache.
+  Preostali sloj `🌍 Sentinel` je javni ESA WorldCover, bez ključa.
+- Historijska migracija `20260910_sentinel2_kljucevi.sql` ostaje radi historije.
+  Nije pokrenuta destruktivna migracija za server tabelu/funkciju.
+- Verzija je usklađena: web/SW `1.1.8`, Android `versionCode 344` i
+  `versionName 1.1.8`.
+- `android/build-apk.ps1` prihvata samo `CODEX-US-SUME`; bootstrap provjerava
+  službeni Gradle 8.4 wrapper checksum. Manualni workflow
+  `.github/workflows/codex-webview.yml` gradi Java WebView APK, ali nije
+  pokrenut niti je APK objavljen.
+
+### Provjere v1.1.8
+
+Svih 24 `tests/js/*.test.js` fajlova prolazi (**516 provjera, 0 padova**),
+Python **45/45**, pet inline i četiri izdvojena JS fajla prolaze sintaksnu
+provjeru, a manifest XML parser. Nisu provjereni produkcijski Supabase, nova
+migracija, Android kompilacija/instalacija, background lifecycle ni stvarna
+brzina cold starta.

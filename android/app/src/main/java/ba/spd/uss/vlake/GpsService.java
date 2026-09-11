@@ -46,7 +46,7 @@ public class GpsService extends Service {
     // (WebView dobije prozor), JS strana (_drainNativeGpsBuffer, na
     // visibilitychange) povuče sve što je native sloj prikupio u međuvremenu i
     // popuni prazninu u tragu/vlaci — umjesto prave linije preko cijelog perioda.
-    public static final Object BUFFER_LOCK = new Object();
+    public static final Object BUFFER_LOCK = NativeGpsBuffer.LOCK;
     private static final String BUFFER_FILENAME = "gps_native_buffer.jsonl";
     private LocationManager locationManager;
     private LocationListener locationListener;
@@ -105,7 +105,7 @@ public class GpsService extends Service {
         // u novi trag. Za razliku od intent==null grane iznad (restart servisa
         // nakon što je sistem ubio proces USRED snimanja) — tu se ništa ne briše,
         // jer bi to obrisalo baš one fiksove koje native bafer treba da sačuva.
-        clearBuffer();
+        // Retain unacknowledged fixes across start/restart. JS filters session time.
         startNativeLocationUpdates();
         return START_STICKY;
     }
@@ -155,26 +155,15 @@ public class GpsService extends Service {
         locationListener = null;
     }
 
-    private void clearBuffer() {
-        synchronized (BUFFER_LOCK) {
-            File f = new File(getFilesDir(), BUFFER_FILENAME);
-            if (f.exists()) f.delete();
-        }
-    }
-
     private void appendToBuffer(Location location) {
-        synchronized (BUFFER_LOCK) {
-            try (FileWriter fw = new FileWriter(new File(getFilesDir(), BUFFER_FILENAME), true)) {
-                String line = String.format(Locale.US,
-                        "{\"la\":%.7f,\"lo\":%.7f,\"ac\":%.2f,\"al\":%.2f,\"sp\":%.2f,\"t\":%d}\n",
-                        location.getLatitude(), location.getLongitude(),
-                        location.hasAccuracy() ? location.getAccuracy() : 999.0,
-                        location.hasAltitude() ? location.getAltitude() : 0.0,
-                        location.hasSpeed() ? location.getSpeed() : 0.0,
-                        location.getTime());
-                fw.write(line);
-            } catch (IOException ignored) {}
-        }
+        String line = String.format(Locale.US,
+            "{\"la\":%.7f,\"lo\":%.7f,\"ac\":%.2f,\"al\":%.2f,\"sp\":%.2f,\"t\":%d}",
+            location.getLatitude(), location.getLongitude(),
+            location.hasAccuracy() ? location.getAccuracy() : 999.0,
+            location.hasAltitude() ? location.getAltitude() : 0.0,
+            location.hasSpeed() ? location.getSpeed() : 0.0, location.getTime());
+        try { new NativeGpsBuffer(getFilesDir()).append(line); }
+        catch (IOException e) { android.util.Log.e("US-SUME", "GPS storage write failed"); }
     }
 
     private void acquireWakeLock() {
@@ -239,6 +228,7 @@ public class GpsService extends Service {
     private void sendBroadcastToWeb(String action) {
         Intent i = new Intent("ba.spd.uss.vlake.REC_ACTION");
         i.putExtra("action", action);
+        i.setPackage(getPackageName());
         sendBroadcast(i);
     }
 

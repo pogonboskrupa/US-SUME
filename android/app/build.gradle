@@ -10,24 +10,27 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 343
-        versionName "1.1.7"
+        versionCode 344
+        versionName "1.1.8"
     }
 
+    // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
+    def releaseStore = System.getenv('US_SUME_KEYSTORE')
     signingConfigs {
         release {
-            // Popunite prije generisanja release APK-a:
-            // storeFile     file('keystore.jks')
-            // storePassword 'STORE_PASSWORD'
-            // keyAlias      'KEY_ALIAS'
-            // keyPassword   'KEY_PASSWORD'
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('US_SUME_STORE_PASSWORD')
+                keyAlias System.getenv('US_SUME_KEY_ALIAS')
+                keyPassword System.getenv('US_SUME_KEY_PASSWORD')
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            // signingConfig signingConfigs.release
+            if (releaseStore) signingConfig signingConfigs.release
         }
         debug {
             applicationIdSuffix ".debug"
@@ -65,5 +68,14 @@ dependencies {
     implementation('androidx.webkit:webkit:1.10.0') {
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
+}
+
+// Nikad ne prijavi nepotpisan release kao spreman APK za korisnika.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name == 'assembleRelease' || it.name == 'bundleRelease' }) {
+        ['US_SUME_KEYSTORE', 'US_SUME_STORE_PASSWORD', 'US_SUME_KEY_ALIAS', 'US_SUME_KEY_PASSWORD'].each {
+            if (!System.getenv(it)) throw new GradleException("Nedostaje release konfiguracija: " + it)
+        }
     }
 }

@@ -150,10 +150,10 @@ public class MainActivity extends Activity {
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
-        ws.setAllowFileAccess(true);
+        ws.setAllowFileAccess(false);
         ws.setAllowContentAccess(true);
-        ws.setAllowFileAccessFromFileURLs(true);
-        ws.setAllowUniversalAccessFromFileURLs(true);
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
         ws.setGeolocationEnabled(true);
         // LOAD_DEFAULT (ne LOAD_CACHE_ELSE_NETWORK!): LOAD_CACHE_ELSE_NETWORK koristi
         // keširan odgovor BEZ OBZIRA na starost — ignoriše Cache-Control/no-cache
@@ -170,7 +170,7 @@ public class MainActivity extends Activity {
         ws.setTextZoom(100);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
 
         assetLoader = new WebViewAssetLoader.Builder()
@@ -574,7 +574,7 @@ public class MainActivity extends Activity {
                 fos.close();
 
                 Uri uri = FileProvider.getUriForFile(MainActivity.this,
-                        "ba.spd.uss.vlake.fileprovider", file);
+                        getPackageName() + ".fileprovider", file);
                 String mime = guessMime(filename);
 
                 Intent sendIntent = new Intent(Intent.ACTION_SEND);
@@ -691,32 +691,23 @@ public class MainActivity extends Activity {
         // Poziva se sinhrono iz JS-a (visibilitychange, app opet vidljiv) — vraća
         // sve tačke koje je GpsService prikupio preko native LocationManager-a dok
         // je WebView bio "osiroćen"/bez prozora (vidi napomenu kod sWebView i kod
-        // GpsService.BUFFER_LOCK), pa fajl briše. Metoda ima povratnu vrijednost
-        // pa je WebView poziva sinhrono (za razliku od void mostova koje treba
-        // zvati pa čekati callback) — JS odmah dobija JSON niz.
+        // GpsService.BUFFER_LOCK). Čitanje rotira fajl u pending; briše ga tek
+        // zaseban ack nakon trajnog JS journala. Metoda ima povratnu vrijednost
+        // pa je WebView poziva sinhrono i odmah dobija JSON paket.
         @JavascriptInterface
-        public String drainNativeBuffer() {
-            File f = new File(getFilesDir(), "gps_native_buffer.jsonl");
-            StringBuilder sb = new StringBuilder("[");
-            synchronized (GpsService.BUFFER_LOCK) {
-                if (f.exists()) {
-                    boolean first = true;
-                    try (BufferedReader br = new BufferedReader(new FileReader(f))) {
-                        String line;
-                        while ((line = br.readLine()) != null) {
-                            line = line.trim();
-                            if (line.isEmpty()) continue;
-                            if (!first) sb.append(',');
-                            sb.append(line);
-                            first = false;
-                        }
-                    } catch (IOException ignored) {}
-                    f.delete();
-                }
-            }
-            sb.append(']');
-            return sb.toString();
+        public String readNativeBuffer() {
+            try {
+                String[] batch = new NativeGpsBuffer(getFilesDir()).read();
+                return new org.json.JSONObject().put("token", batch[0]).put("raw", batch[1]).toString();
+            } catch (Exception e) { return ""; } // no ack, file remains intact
         }
+
+        @JavascriptInterface
+        public boolean ackNativeBuffer(String token) {
+            try { return new NativeGpsBuffer(getFilesDir()).ack(token); }
+            catch (IOException e) { return false; }
+        }
+
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")

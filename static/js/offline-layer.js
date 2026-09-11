@@ -42,8 +42,8 @@ const _OL = {
   _seq: 0,   // D2-B: brojač za jedinstveni ključ reda (sprječava ts-koliziju u istoj ms)
 
   save(key, data) {
-    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); }
-    catch(e) { if (e?.name === 'QuotaExceededError') showToast('⚠ Lokalna memorija puna — neki podaci se ne mogu sačuvati'); }
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); return true; }
+    catch(e) { showToast('⚠ Lokalni upis nije uspio — sačuvaj izvoz prije zatvaranja'); return false; }
   },
 
   load(key) {
@@ -53,7 +53,7 @@ const _OL = {
 
   enqueue(op) {
     try {
-      const q = this.loadQueue();
+      const q = this.loadQueue(true);
       // Deduplicate upsert_vlaka by nm — čuvaj samo zadnju verziju.
       // VAŽNO: uključi projekt_id i id — isto ime (T1) može legitimno postojati u
       // više projekata, pa dedup samo po nm+korisnik briše tuđu pending izmjenu.
@@ -96,45 +96,53 @@ const _OL = {
       // izgubljenog odgovora postaje idempotentan (23505 = već upisano). NE za
       // upsert_trag: procesor po payload.id bira update-vs-insert granu (trag
       // idempotentnost se rješava pre-lookupom po korisnik+nm u procesoru).
-      if (['insert_doz_marking', 'insert_projekt'].includes(op.type) && op.payload && !op.payload.id) {
+      if (['insert_doz_marking', 'insert_projekt', 'insert_doz_project'].includes(op.type) && op.payload && !op.payload.id) {
         op.payload.id = _genUUID();
       }
       q.push({ ...op, ts: Date.now(), _qid: qid, _uid: uid });
-      if (q.length > 500) { q.splice(0, q.length - 500); showToast('⚠ Offline red prepun — najstarije operacije odbačene'); }
+      if (q.length === 501) showToast('⚠ Više od 500 izmjena čeka slanje — sve su zadržane');
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
       if (typeof _updSyncBadge === 'function') _updSyncBadge();
-    } catch(e) { if (e?.name === 'QuotaExceededError') showToast('⚠ Lokalna memorija puna — offline operacija nije sačuvana'); }
+      return qid;
+    } catch(e) { showToast('⚠ Offline operacija nije sačuvana — provjeri memoriju i izvezi podatke'); return false; }
   },
 
-  loadQueue() {
-    try { return JSON.parse(localStorage.getItem(this.QUEUE)) || []; }
-    catch { return []; }
+  loadQueue(strict = false) {
+    try {
+      const q = JSON.parse(localStorage.getItem(this.QUEUE) || '[]');
+      if (!Array.isArray(q)) throw new Error('Oštećen offline red');
+      return q;
+    } catch(e) {
+      // Nikad ne prepisuj oštećen original praznim redom.
+      if (strict) throw e;
+      return [];
+    }
   },
 
   removeFromQueue(key) {
     try {
       const k = String(key);
-      const q = this.loadQueue().filter(o => String(o._qid ?? o.ts) !== k);  // D2-B: po _qid
+      const q = this.loadQueue(true).filter(o => String(o._qid ?? o.ts) !== k);
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
     } catch(e) {}
   },
 
   // Povećaj brojač pokušaja za operaciju koja je pala ne-mrežnom greškom.
-  // Vraća true ako je operaciju trebalo odbaciti (prešla limit pokušaja).
+  // Vraća true kad operacija traži ručni retry. Podaci se NIKAD ne odbacuju.
   // errInfo (opciono) { code, message } se pamti na op._lastErr — bez ovoga
-  // korisnik na terenu nema način da vidi ZAŠTO nešto ne sinkronizira sve dok
-  // se ne odbaci nakon 5 pokušaja (vidi "Pending sync operacije" panel).
+  // korisnik na terenu mora moći vidjeti ZAŠTO nešto ne sinkronizira u
+  // "Pending sync operacije" panelu, bez gubitka same operacije.
   bumpRetry(key, maxRetries, errInfo) {
     try {
       const k = String(key);
-      const q = this.loadQueue();
+      const q = this.loadQueue(true);
       const op = q.find(o => String(o._qid ?? o.ts) === k);   // D2-B: po _qid
       if (!op) return false;
       op._retries = (op._retries || 0) + 1;
       if (errInfo) op._lastErr = errInfo;
       if (op._retries >= (maxRetries || 5)) {
-        const nq = q.filter(o => String(o._qid ?? o.ts) !== k);
-        localStorage.setItem(this.QUEUE, JSON.stringify(nq));
+        op._blocked = true;
+        localStorage.setItem(this.QUEUE, JSON.stringify(q));
         return true;
       }
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
