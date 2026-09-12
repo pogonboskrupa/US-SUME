@@ -5,7 +5,7 @@ on:
     branches:
       - CODEX-US-SUME
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     if: github.ref == 'refs/heads/CODEX-US-SUME'
@@ -36,3 +36,75 @@ jobs:
           name: US-SUME-CODEX-debug-${{ github.sha }}
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Privremeno sačuvaj CODEX popravku ažuriranja
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("index.html")
+          s = p.read_text()
+          old = """const _APK_BUILD_URL = 'https://github.com/pogonboskrupa/US-SUME/actions/workflows/codex-webview.yml?query=branch%3ACODEX-US-SUME';
+async function azurirajAplikaciju() {"""
+          new = """const _APK_BUILD_URL = 'https://github.com/pogonboskrupa/US-SUME/actions/workflows/codex-webview.yml?query=branch%3ACODEX-US-SUME';
+
+// GitHub Pages povremeno odgovori sporije, naročito preko mobilne mreže. Bez roka zahtjev može ostati otvoren.
+async function _dohvatiObjavljenuVerziju() {
+  let timer = null;
+  let controller = null;
+  try {
+    if (typeof AbortController !== 'undefined') {
+      controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), 12000);
+    }
+    const r = await fetch(_LIVE_BASE + 'sw.js?_v=' + Date.now(), {
+      cache: 'no-store',
+      signal: controller ? controller.signal : undefined
+    });
+    const m = r.ok ? (await r.text()).match(/APP_VERSION\\s*=\\s*['"]([\\d.]+)['"]/) : null;
+    return m ? m[1] : null;
+  } catch(e) {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function azurirajAplikaciju() {"""
+          assert old in s
+          s = s.replace(old, new, 1)
+          old = """  let latest = null;
+  try {
+    const r = await fetch(_LIVE_BASE + 'sw.js?_v=' + Date.now(), { cache:'no-store' });
+    const m = r.ok ? (await r.text()).match(/APP_VERSION\\s*=\\s*['"]([\\d.]+)['"]/) : null;
+    latest = m ? m[1] : null;
+  } catch(e) {}"""
+          assert old in s
+          s = s.replace(old, "  const latest = await _dohvatiObjavljenuVerziju();", 1)
+          old = """    // Na webu se čita relativno (isti origin); u APK-u sa žive Pages objave.
+    const base = isAPK ? _LIVE_BASE : './';
+    const r = await fetch(base + 'sw.js?_v=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const txt = await r.text();
+    const m = txt.match(/APP_VERSION\\s*=\\s*['"]([\\d.]+)['"]/);
+    if (!m) return;
+    const latest = m[1];"""
+          new = """    // Na webu se čita relativno (isti origin); u APK-u sa žive Pages objave.
+    const latest = isAPK ? await _dohvatiObjavljenuVerziju() : await (async () => {
+      const r = await fetch('./sw.js?_v=' + Date.now(), { cache: 'no-store' });
+      const m = r.ok ? (await r.text()).match(/APP_VERSION\\s*=\\s*['"]([\\d.]+)['"]/) : null;
+      return m ? m[1] : null;
+    })();
+    if (!latest) return;"""
+          assert old in s
+          s = s.replace(old, new, 1).replace("const APP_VER = 'v1.2.3';", "const APP_VER = 'v1.2.4';", 1)
+          p.write_text(s)
+          p = Path("sw.js"); s = p.read_text(); assert "const APP_VERSION = '1.2.3';" in s; p.write_text(s.replace("const APP_VERSION = '1.2.3';", "const APP_VERSION = '1.2.4';", 1))
+          p = Path("android/app/build.gradle"); s = p.read_text(); assert 'versionCode 349' in s and 'versionName "1.2.3"' in s; p.write_text(s.replace('versionCode 349', 'versionCode 350', 1).replace('versionName "1.2.3"', 'versionName "1.2.4"', 1))
+          PY
+          rm -f .github/workflows/codex-self-update.yml
+          git checkout HEAD^ -- .github/workflows/codex-webview.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html sw.js android/app/build.gradle .github/workflows
+          git commit -m "fix: pouzdana provjera ažuriranja aplikacije"
+          git push origin HEAD:CODEX-US-SUME
