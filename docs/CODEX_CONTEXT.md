@@ -372,3 +372,18 @@ Python **45/45**, pet inline i četiri izdvojena JS fajla prolaze sintaksnu
 provjeru, a manifest XML parser. Nisu provjereni produkcijski Supabase, nova
 migracija, Android kompilacija/instalacija, background lifecycle ni stvarna
 brzina cold starta.
+
+## 7. Terenska provjera i startup podloga — v1.1.9
+
+Na debug APK-u v1.1.8 potvrđeno je oko **15 s** do prikaza ranije učitane
+SQLiteDB karte od približno **950 MB**, jednako online i u avionskom režimu.
+Za vrijeme čekanja bila je vidljiva samo siva podloga i indikator. To potvrđuje
+da preostalo vrijeme pripada otvaranju velike lokalne baze, a ne mrežnom CDN-u.
+
+U v1.1.9 `_restoreLastMap` odmah dodaje laganu Topo podlogu, zatim otvara
+SQLite u workeru i zamjenjuje podlogu tek kada je baza spremna. Indikator je
+pomjeren na vrh da ne blokira korištenje karte. Online će Topo biti vidljiv
+odmah; u avionskom režimu zavisi od toga postoje li odgovarajuće Topo pločice
+u service-worker cache-u. Sama SQLite karta od 950 MB i dalje može trebati oko
+15 s za otvaranje — ova izmjena uklanja sivu/neupotrebljivu početnu fazu, ali
+ne tvrdi da je 950 MB baza otvorena trenutno.
