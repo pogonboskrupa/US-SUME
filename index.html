@@ -4990,7 +4990,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.2';
+const APP_VER = 'v1.2.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13486,6 +13486,23 @@ function _poziLoadCache() {
   try { return JSON.parse(localStorage.getItem(_POZ_CACHE_KEY)); } catch(e) { return null; }
 }
 
+// Posljednji uspješan dohvat je terenski podatak: kad se aplikacija ponovo
+// otvori, prikaži ga ODMAH i jasno ga označi kao keš. Ne čeka se mreža, jer bi
+// korisnik bez signala inače vidio praznu kartu iako je podatke već imao.
+function _poziObnoviIzKesa() {
+  const c = _poziLoadCache();
+  if (!c || !Array.isArray(c.pts)) return false;
+  const ref = _poziRefTacka();
+  _poziPts = _poziFilterBlizu(c.pts, ref);
+  _poziMeta = { izvori:c.izvori || (c.izvor ? [c.naziv] : []), dohvacenoMs:c.ts || 0,
+                ukupno:c.pts.length, kes:true, okvir:c.okvir || _poziOkvir(), refGps:ref.gps };
+  // Ovo je isti već viđeni skup, zato ga ne označavaj kao novi niti mijenjaj
+  // ključ "viđeno" samo zato što je aplikacija pokrenuta.
+  _poziEvts = _poziGrupeBlizu(_poziGrupisi(_poziPts), ref).map(g => ({ ...g, nov:false }));
+  _poziRender();
+  return true;
+}
+
 // Bosanska množina: 1 detekcija, 2-4 detekcije, 5+ detekcija (i 11-14 → detekcija)
 function _poziBrojRijec(n) {
   const d1 = n % 10, d2 = n % 100;
@@ -14545,6 +14562,7 @@ function _poziToggle(on) {
     return;
   }
   _poziAutoSync();     // sloj upaljen — od sada se osvježava i bez obavještenja
+  if (!_poziEvts.length) _poziObnoviIzKesa();
   if (_poziLayer) _poziLayer.addTo(map);
   // Udaljenost do požara MORA biti od STVARNE pozicije, ne od centra karte —
   // korisnik je mogao ranije pomjeriti/zumirati kartu bilo gdje, pa bi tihi pad
@@ -15163,6 +15181,36 @@ let _povGodMeta  = null;
 let _povGodOn    = false;
 let _povGodBusy  = false;
 
+// Sezona požara: zimski mjeseci se ne prikazuju u godišnjem pregledu ni u
+// godišnjim opožarenim površinama. Podaci se ipak ne brišu iz lokalne arhive
+// (mogu biti korisni za provjeru izvora), samo se ne crtaju korisniku.
+const _POV_MJESECI_POZARA = [2,3,4,5,6,7,8,9,10]; // mart–novembar, UTC 0–11
+
+function _povGodGrupisiPoMjesecu(pts, ref) {
+  return _POV_MJESECI_POZARA.flatMap(mjesec => {
+    const samoMjesec = (pts || []).filter(p => {
+      const d = new Date(p.dt);
+      return isFinite(d.getTime()) && d.getUTCMonth() === mjesec;
+    });
+    return _poziGrupeBlizu(_poziGrupisi(samoMjesec), ref);
+  }).sort((a,b) => (b.zadnji || 0) - (a.zadnji || 0));
+}
+
+// Godišnji prikaz mora otvoriti posljednje uspješno učitane podatke odmah,
+// uključujući offline. Mrežno osvježavanje ostaje zasebno i nikad ne smije
+// zamijeniti vidljive podatke praznim ekranom dok čeka odgovor.
+function _povGodObnoviIzKesa() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(_POV_GOD_CACHE_KEY) || 'null'); } catch(e) {}
+  if (!c || !Array.isArray(c.pts)) return false;
+  const ref = _poziRefTacka();
+  _povGodPts = _poziFilterBlizu(c.pts, ref);
+  _povGodMeta = { dohvacenoMs:c.ts || 0, ukupno:c.pts.length, kes:true, refGps:ref.gps };
+  _povGodEvts = _povGodGrupisiPoMjesecu(_povGodPts, ref);
+  _povGodRender();
+  return true;
+}
+
 function _povGodUrl(ref) {
   const pocetakGodine = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
   const dLat = _POZ_RADIUS_KM / 111;
@@ -15231,12 +15279,7 @@ async function _povGodLoad(tiho) {
     // Ne spajaj istu lokaciju kroz različite mjesece: boja nosi mjesec, pa
     // svaki mjesečni skup mora ostati zaseban čak i kada se požar ponovio na
     // istom mjestu kasnije u sezoni.
-    _povGodEvts = Array.from({length:12}, (_, mjesec) => {
-      const pts = _povGodPts.filter(p => {
-        const d = new Date(p.dt); return isFinite(d.getTime()) && d.getUTCMonth() === mjesec;
-      });
-      return _poziGrupeBlizu(_poziGrupisi(pts), ref);
-    }).flat().sort((a,b) => (b.zadnji || 0) - (a.zadnji || 0));
+    _povGodEvts = _povGodGrupisiPoMjesecu(_povGodPts, ref);
     // GFW upit pokriva CIJELU godinu unazad, pa njime arhiva dobija i period
     // PRIJE nego je app instalirana — jedini način da se prošlost popuni
     // retroaktivno. Ko nema ključ, arhiva se puni samo unaprijed (_poziLoad).
@@ -15751,7 +15794,7 @@ function _povArhRender() {
   god.slice().sort().forEach(g => {
     const tekuca = +g === new Date().getUTCFullYear();
     if (tekuca) {
-      Array.from({length:12}, (_, mjesec) => {
+      _POV_MJESECI_POZARA.map(mjesec => {
         return { geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] };
       }).forEach(dio => {
         if (!dio.geom) return;
@@ -15957,21 +16000,33 @@ function _povHistListaHtml() {
 const _POZ_PODTAB_KEY = 'tvlake_pozari_podtab';
 let _poziPrikazPotvrdjen = false;
 
+// Vrati izbor korisnika i posljednje podatke pri povratku u Požari. Ranije je
+// ovaj korak gasio sve checkbox-e i uklanjao slojeve pri SVAKOM ulasku, zbog
+// čega su već učitani požari nestajali i u istoj sesiji i poslije restarta.
+function _poziObnoviPrikaz() {
+  _poziOn = localStorage.getItem(_POZ_ON_KEY) === '1';
+  _povGodOn = _povGodOnStanje();
+  _povHistOn = _povHistOnStanje();
+  _poziPrikazPotvrdjen = _poziOn || _poziHeatOn() || _poziSmjerOn() || _poziOpozOn()
+    || _poziPrognOn() || _povGodOn || _povHistOn || _povArhUkljucene().length > 0;
+
+  if (_poziOn) {
+    if (!_poziEvts.length) _poziObnoviIzKesa();
+    else _poziRender();
+  }
+  if (_povGodOn) {
+    if (!_povGodEvts.length) _povGodObnoviIzKesa();
+    else _povGodRender();
+  }
+  if (_povHistOn) _povHistPrikazi();
+  if (_povArhUkljucene().length) _povArhRender();
+  _poziAutoSync();
+}
+
+// Zadržano kao kompatibilno ime za eventualne stare pozive: više NE resetuje
+// teren niti korisničke izbore, nego ih vraća iz lokalne pohrane.
 function _poziResetPrikaza() {
-  _poziPrikazPotvrdjen = false;
-  _poziOn = false; _povGodOn = false; _povHistOn = false;
-  [_POZ_ON_KEY,_POZ_HEAT_KEY,_POZ_SMJER_KEY,_POZ_OPOZ_KEY,_POZ_PROGN_KEY,
-   _POV_GOD_ON_KEY,_POV_HIST_ON_KEY].forEach(k => { try { localStorage.setItem(k, '0'); } catch(e) {} });
-  try { localStorage.setItem(_POV_ARH_ON_KEY, '[]'); } catch(e) {}
-  [_poziLayer,_poziHeatLayer,_poziSmjerLayer,_poziOpozLayer,_povGodLayer,_povHistLayer,_povArhLayer]
-    .forEach(l => { if (l) try { map.removeLayer(l); } catch(e) {} });
-  ['opozareno','fwi'].forEach(id => {
-    if (typeof _OVL !== 'undefined' && _OVL[id]) try { map.removeLayer(_OVL[id]); } catch(e) {}
-    if (typeof _ovlState !== 'undefined') _ovlState[id] = false;
-  });
-  try { localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState)); } catch(e) {}
-  try { _poziAutoSync(); } catch(e) {}
-  try { _demLegendUpdate(); } catch(e) {}
+  _poziObnoviPrikaz();
 }
 
 function _poziPrikaziSve() {
@@ -16238,14 +16293,15 @@ function _poziSadrzajHtml() {
   }
 
   const mjeseci = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
+  const mjeseciSezone = _POV_MJESECI_POZARA.map(i => ({ naziv:mjeseci[i], boja:_POV_MJESEC_BOJE[i] }));
   const glavniPrikaz = `<div style="background:linear-gradient(135deg,#7c2d12,#c2410c);border:1px solid #f97316;border-radius:14px;padding:14px;margin-bottom:12px;">
       <button onclick="_poziPrikaziSve()" style="width:100%;padding:13px;border:0;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:15px;font-weight:800;cursor:pointer;">🔥 Prikaži sve</button>
-      <div style="font-size:10.5px;color:#fed7aa;line-height:1.45;margin-top:8px;text-align:center;">Uključuje sve požarne slojeve odjednom. Prikaz se mora potvrditi pri svakom ulasku u sekciju. Obavještenja se ne uključuju automatski.</div>
-      ${_poziPrikazPotvrdjen ? '<div style="font-size:11px;color:#bbf7d0;text-align:center;margin-top:6px;font-weight:700;">✓ Svi slojevi su zatraženi</div>' : ''}
+      <div style="font-size:10.5px;color:#fed7aa;line-height:1.45;margin-top:8px;text-align:center;">Uključuje sve požarne prikaze odjednom i pamti izbor za sljedeći ulazak. Obavještenja se ne uključuju automatski.</div>
+      ${_poziPrikazPotvrdjen ? '<div style="font-size:11px;color:#bbf7d0;text-align:center;margin-top:6px;font-weight:700;">✓ Prikazi su uključeni i ostaju zapamćeni</div>' : ''}
     </div>`;
   const legendaGodine = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:12px;margin-bottom:12px;">
       <div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Boje opožarenih površina</div>
-      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:5px;">${mjeseci.map((m,i) => `<div style="text-align:center;font-size:9px;color:#94a3b8;"><div style="height:7px;border-radius:3px;background:${_POV_MJESEC_BOJE[i]};margin-bottom:2px;"></div>${m}</div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;">${mjeseciSezone.map(m => `<div style="text-align:center;font-size:9px;color:#94a3b8;"><div style="height:7px;border-radius:3px;background:${m.boja};margin-bottom:2px;"></div>${m.naziv}</div>`).join('')}</div>
       <div style="display:flex;align-items:center;gap:7px;margin-top:9px;font-size:10.5px;color:#94a3b8;"><span style="width:22px;height:8px;border-radius:3px;background:${_POV_STARE_BOJA};"></span>Sve prethodne godine</div>
     </div>`;
 
