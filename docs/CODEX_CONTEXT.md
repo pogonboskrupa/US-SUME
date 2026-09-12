@@ -401,3 +401,11 @@ ne tvrdi da je 950 MB baza otvorena trenutno.
   Detekcije i arhivske površine tekuće godine koriste 12 boja po mjesecima;
   sve ranije godine koriste istu prigušenu boju.
 - Verzije: web/SW `1.2.0`, Android `versionCode 346`, `versionName 1.2.0`.
+
+## 9. Ručno ažuriranje — v1.2.1
+
+- U glavnom meniju, neposredno iznad odjave, nalazi se `🔄 Ažuriraj aplikaciju`.
+  Web verzija pokreće provjeru Service Workera i osvježava aplikaciju.
+- APK može provjeriti je li novija verzija objavljena i otvoriti CODEX GitHub
+  build, ali Android ne dopušta tihu samostalnu instalaciju novog APK-a.
+  Korisnik i dalje ručno potvrđuje preuzimanje i instalaciju.
