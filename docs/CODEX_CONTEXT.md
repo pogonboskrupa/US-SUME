@@ -409,3 +409,10 @@ ne tvrdi da je 950 MB baza otvorena trenutno.
 - APK može provjeriti je li novija verzija objavljena i otvoriti CODEX GitHub
   build, ali Android ne dopušta tihu samostalnu instalaciju novog APK-a.
   Korisnik i dalje ručno potvrđuje preuzimanje i instalaciju.
+
+## 10. GitHub Pages prijava — v1.2.2
+
+- GitHub Pages URL mora biti `https://pogonboskrupa.github.io/US-SUME/`;
+  mala slova u putanji vraćaju 404.
+- `doLogin()` sada hvata i startup grešku prije normalne obrade prijave, pa
+  korisnik dobija poruku umjesto neaktivnog dugmeta.

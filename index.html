@@ -3622,7 +3622,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           <span class="auth-cbx-lbl" onclick="document.getElementById('auth-cbx-el').click()">Ostani prijavljen na ovom ureÄ‘aju</span>
         </div>
 
-        <button class="auth-btn-primary" onclick="doLogin()">
+        <button type="button" class="auth-btn-primary" onclick="doLogin()">
           <div class="auth-btn-primary-inner">Prijava <span><svg class="ic"><use href="#ic-naprijed"/></svg></span></div>
         </button>
         <div class="auth-or-sep"><span class="auth-or-txt">ILI</span></div>
@@ -4990,7 +4990,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('NeuhvaÄ‡eno odbijeno obeÄ‡anje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.1';
+const APP_VER = 'v1.2.2';
 // PrikaÅ¾i verziju na login ekranu (footer je veÄ‡ parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5699,12 +5699,7 @@ async function initAuth() {
       const _tmo = cached
         ? new Promise((_, rej) => setTimeout(() => rej(new Error('_autologin_timeout')), 1500))
         : null;
-      const emailPromise = sb.rpc('get_login_email', ×Í9÷¾›Ê×¬¢h­µçOHZ[[U\›Ê›İ[™Ë“Z[‹“X^
-K›[™İÂˆÛÛœİXˆH
-ˆ
-ˆHÈL
-KÑš^Y
-JNÈËÈŒRĞˆÈ[Bˆ\İ[š[›™\’SBˆ›ØÚ™[˜Nˆˆİ[OH˜ÛÛÜˆÌÎ™‰Û‹ÓØØ[Tİš[™Ê
+      const emailPromise = sb.rpc('get_×Í:ç]›Ê×¬¢h­µç[ÜˆÌÎ™‰Û‹ÓØØ[Tİš[™Ê
 _OØˆ[K[İ˜H0­È8¢bˆİ[OH˜ÛÛÜˆÙ˜˜™Œ‰ÛXŸHPØœ˜
 ÂˆÜ[ˆİ[OH™›Û\Ú^™NŒL\ØÛÛÜˆÍÍMMNÈ–›ÛÛH	Ş“Z[Ÿx $ÉŞ“X^H0­ÈÛÚˆˆİ[OH˜ÛÛÜˆÎMLØ‰Ú[™›Ë›˜[Y_OØÜÜ[˜ÂˆYˆ
 ŠH‹™\ØX›YHˆˆLˆOOHÂˆYˆ
@@ -5909,7 +5904,7 @@ HÂˆ]ØZ]ÙÊÈ]N‰Ğqo\š\˜[š™H\ZØXÚZ™IË[ÙN‰Ø[\	ËÚÓX™[‰ÕH™Y
 HÚ[™İË›ØØ][Û‹š™YˆHĞT×Ğ•RSÕT“ÂˆBŸB‚‹ËÈ8¥ 8¥ 8¥ “Õ’‘THR““Õ’R‘H‘T–’R‘H
 ÜÙX››Èš]›È˜HTÊH8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ‹ËÈTÈÙ\š\˜HST–“•UH\ÜÙ]È^ˆ\\ÜÙ]Ë˜[™›ÚY]›Ü›K›™]8 %Ù\šXÙHÛÜšÙ\‚‹ËÈ]]Ë]\]HH™HÛXqo™H
 ™[XHİš™qo™YÈ[™^š[
-KHÛÜš\ÛšZÈ[ño™HZ™\ÙXÚ[XB‹ËÈ˜Y]H˜Hİ\›Úˆ™\šZšH™^ˆZØZİ›ÙÈ›˜ZØKˆİ™™HÙHÚ˜]H™\šZ˜HØH1oš]™B‹ËÈÚ]XˆYÙ\ÈØš˜]™HKZÛÈ™H›İšZ˜KšZØqo™HÙH™[˜[Y]š]ˆ˜[™\‹ˆÚ]X‚‹ËÈYÙ\È1hX[™HXØÙ\ÜËPÛÛ›ÛP[İËSÜšYÚ[ŠˆHÜ›ÜÜË[ÜšYÚ[ˆ™]Ú^ˆTÈ˜YK‚˜ÛÛœİÓU‘WĞTÑHH	ÚÎ‹ËÜÙÛÛ˜›ÜÚÜ\K™Ú]X‹š[Ëİ\Ë\İ[YKÉÎÂ‚™[˜İ[Ûˆİ™\Û\
+KHÛÜš\ÛšZÈ[ño™HZ™\ÙXÚ[XB‹ËÈ˜Y]H˜Hİ\›Úˆ™\šZšH™^ˆZØZİ›ÙÈ›˜ZØKˆİ™™HÙHÚ˜]H™\šZ˜HØH1oš]™B‹ËÈÚ]XˆYÙ\ÈØš˜]™HKZÛÈ™H›İšZ˜KšZØqo™HÙH™[˜[Y]š]ˆ˜[™\‹ˆÚ]X‚‹ËÈYÙ\È1hX[™HXØÙ\ÜËPÛÛ›ÛP[İËSÜšYÚ[ŠˆHÜ›ÜÜË[ÜšYÚ[ˆ™]Ú^ˆTÈ˜YK‚‹ËÈÚ]XˆYÙ\È1#]]˜H˜^š]ˆ›Ú™ZİHHT“]HØH™[ZÚ[HÛİš[XKˆX[HÛİ˜B‹ËÈœ˜q!ØZHHTËİÙXˆš\İH[ÙÛHİ^™[›È›İš™\š]H›İH™\šZK‚˜ÛÛœİÓU‘WĞTÑHH	ÚÎ‹ËÜÙÛÛ˜›ÜÚÜ\K™Ú]X‹š[ËÕTËTÕSQKÉÎÂ‚™[˜İ[Ûˆİ™\Û\
 KŠHÂˆÛÛœİHHİš[™ÊJKœÜ]
 	Ë‰ÊK›X\
 ˆOˆ\œÙR[
