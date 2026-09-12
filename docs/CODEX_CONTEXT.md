@@ -416,3 +416,11 @@ ne tvrdi da je 950 MB baza otvorena trenutno.
   mala slova u putanji vraćaju 404.
 - `doLogin()` sada hvata i startup grešku prije normalne obrade prijave, pa
   korisnik dobija poruku umjesto neaktivnog dugmeta.
+
+## 11. Požari — zapamćen prikaz (v1.2.3)
+
+- Ulazak u sekciju Požari više ne gasi checkbox-e niti uklanja slojeve.
+  Posljednje uspješno učitane detekcije vraćaju se iz lokalnog keša odmah,
+  uključujući offline, pa se tek zatim mogu osvježiti mrežom.
+- Godišnji prikaz i opožarene površine prikazuju sezonu mart–novembar;
+  januar, februar i decembar se ne crtaju niti se nude u legendi.

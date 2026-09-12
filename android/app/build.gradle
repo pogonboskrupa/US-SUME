@@ -10,8 +10,8 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 348
-        versionName "1.2.2"
+        versionCode 349
+        versionName "1.2.3"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
