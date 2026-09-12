@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   recover:
-    if: ${{ hashFiles('.codex-recovery/index.html.b64.*') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
