@@ -2,7 +2,6 @@ name: Privremena CODEX izmjena ažuriranja
 on:
   push:
     branches: [CODEX-US-SUME]
-    paths: [.github/workflows/codex-self-update.yml]
 permissions:
   contents: write
 jobs:
