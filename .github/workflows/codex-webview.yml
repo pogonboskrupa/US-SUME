@@ -1,6 +1,9 @@
 name: CODEX WebView provjera i APK
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - CODEX-US-SUME
 permissions:
   contents: read
 jobs:
