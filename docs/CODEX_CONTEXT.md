@@ -387,3 +387,17 @@ odmah; u avionskom režimu zavisi od toga postoje li odgovarajuće Topo pločice
 u service-worker cache-u. Sama SQLite karta od 950 MB i dalje može trebati oko
 15 s za otvaranje — ova izmjena uklanja sivu/neupotrebljivu početnu fazu, ali
 ne tvrdi da je 950 MB baza otvorena trenutno.
+
+## 8. Požarni prikaz — v1.2.0
+
+- Svaki novi ulazak u sekciju `Požari` resetuje samo vidljive požarne slojeve;
+  podaci, keševi i postavka obavještenja se ne brišu. Nema automatskog dohvata
+  dok korisnik ne izabere prikaz.
+- Dugme `Prikaži sve` na vrhu uključuje aktivne FIRMS detekcije, heatmap,
+  okvirni smjer, projekciju/prognozu, tekuću godinu, lokalnu historiju,
+  dostupne arhivske godine te EFFIS opožarene površine i FWI. Obavještenja se
+  ne uključuju automatski jer zahtijevaju svjestan izbor i sistemsku dozvolu.
+- Aktivni požari zadržavaju postojeću narandžasto-crvenu paletu po starosti.
+  Detekcije i arhivske površine tekuće godine koriste 12 boja po mjesecima;
+  sve ranije godine koriste istu prigušenu boju.
+- Verzije: web/SW `1.2.0`, Android `versionCode 346`, `versionName 1.2.0`.

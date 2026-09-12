@@ -90,6 +90,8 @@ function makeArh(opts) {
     // u testu nema karte, pa se oba javljaju kao no-op.
     _povArhUkljucene: () => [],
     _povArhRender: () => {},
+    _POV_MJESEC_BOJE: ['#2563eb','#0891b2','#0d9488','#16a34a','#65a30d','#ca8a04','#ea580c','#dc2626','#db2777','#9333ea','#7c3aed','#4f46e5'],
+    _POV_STARE_BOJA: '#64748b',
     // _OL stub — bilježi enqueue pozive umjesto stvarnog localStorage reda
     // (taj je testiran zasebno u offline-layer.test.js).
     _OL: o.noOL ? undefined : { enqueue: (op) => olEnqueued.push(op) }
@@ -98,15 +100,15 @@ function makeArh(opts) {
                extractFn('_poziFilterBlizu'), extractFn('_poziGrupisi'), extractFn('_poziOpozGeom'),
                extractFn('_povArhUcitaj'), extractFn('_povArhSacuvaj'), extractFn('_povArhDan'),
                extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
-               extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povArhBoja'),
+               extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povMjesecBoja'), extractFn('_povArhBoja'),
                extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhKesKljuc'),
                extractFn('_povArhIzracunata'),
-               extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti'),
+               extractFn('_povArhRacunajTacke'), extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti'),
                extractFn('_povArhSpojiServerske')].join('\n');
   const keys = Object.keys(sandbox);
   const mod = new Function(...keys, src +
     '\nreturn { _povArhUcitaj,_povArhSacuvaj,_povArhDan,_povArhKljuc,_povArhDodaj,' +
-    '_povArhGodine,_povArhTacke,_povArhRacunaj,_povArhBoja,_povArhBrojZapisa,' +
+    '_povArhGodine,_povArhTacke,_povArhRacunaj,_povMjesecBoja,_povArhBoja,_povArhBrojZapisa,' +
     '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom };'
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
@@ -341,10 +343,17 @@ t('ista godina uvijek daje istu boju (ne zavisi od redoslijeda u listi)', () => 
   assert.strictEqual(A._povArhBoja(2026), A._povArhBoja(2026));
 });
 
-t('susjedne godine se razlikuju po boji', () => {
+t('tekuća godina se razlikuje, a sve ranije godine imaju istu boju', () => {
   const A = makeArh();
-  assert.notStrictEqual(A._povArhBoja(2026), A._povArhBoja(2025));
-  assert.notStrictEqual(A._povArhBoja(2025), A._povArhBoja(2024));
+  const tekuca = new Date().getUTCFullYear();
+  assert.notStrictEqual(A._povArhBoja(tekuca), A._povArhBoja(tekuca - 1));
+  assert.strictEqual(A._povArhBoja(tekuca - 1), A._povArhBoja(tekuca - 2));
+});
+
+t('svih 12 mjeseci tekuće godine ima različitu boju', () => {
+  const A = makeArh();
+  const boje = Array.from({ length:12 }, (_, m) => A._povMjesecBoja(Date.UTC(2026, m, 15)));
+  assert.strictEqual(new Set(boje).size, 12);
 });
 
 // =====================================================================
