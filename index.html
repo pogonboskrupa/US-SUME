@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.8';
+const APP_VER = 'v1.2.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -14250,7 +14250,10 @@ const _POZ_OPOZ_MAX_UNIJA = 60;          // iznad ovoga unija po pikselu postaje
 // je bio blago naduvan starim pragom. Ispod 300m concave počinje ispuštati
 // tačke iz realnog fronta (svejedno ostaju pokrivene slojem 1) — 500m je
 // izabran sa margином iznad te granice.
-const _POZ_OPOZ_MAXEDGE_M = 500;
+// v1.2.9: terenska validacija na požaru većem od 50 ha u odjelima 26/27
+// pokazala je da 500 m odsijeca veći dio stvarnog požarišta. VIIRS tačke iz
+// različitih preleta imaju veće razmake, zato se vraća operativnih 1500 m.
+const _POZ_OPOZ_MAXEDGE_M = 1500;
 let _poziOpozLayer = null;
 
 // Geometrija iz skupa detekcija. DVA sloja, tim redom — i oba su potrebna:
