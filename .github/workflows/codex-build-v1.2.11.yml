@@ -1,0 +1,57 @@
+name: Build APK v1.2.11
+on:
+  push:
+    branches: [fix/codex-us-sume-workflow-169a5b7]
+    paths: [.github/workflows/codex-build-v1.2.11.yml]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/codex-us-sume-workflow-169a5b7
+      - name: Apply v1.2.11 changes
+        shell: bash
+        run: |
+          echo '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' | base64 -d | gzip -d > /tmp/v1211.patch
+          git apply --index /tmp/v1211.patch
+      - name: Run JavaScript tests
+        run: for f in tests/js/*.test.js; do node "$f"; done
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: razdvoji požare i podesi godišnji pregled"
+          git push origin HEAD:fix/codex-us-sume-workflow-169a5b7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+      - name: Prepare web assets
+        shell: bash
+        run: |
+          rm -rf android/app/src/main/assets
+          mkdir -p android/app/src/main/assets
+          cp index.html manifest.json sw.js icon-192.png icon-512.png apple-touch-icon.png android/app/src/main/assets/
+          cp -r geo doznaka PUTEVI static .well-known android/app/src/main/assets/
+          cp forwarder.svg GRANICE.kml android/app/src/main/assets/
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: US-SUME-v1.2.11-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+      - name: Remove one-time workflow
+        if: always()
+        shell: bash
+        run: |
+          git pull --rebase origin fix/codex-us-sume-workflow-169a5b7
+          git rm .github/workflows/codex-build-v1.2.11.yml
+          git commit -m "ci: ukloni jednokratni APK build v1.2.11"
+          git push origin HEAD:fix/codex-us-sume-workflow-169a5b7
