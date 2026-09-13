@@ -1212,8 +1212,8 @@ const SRC_OPOZ = [extractFn('_poziOpozGeom'), extractFn('_poziOpozProjekcija')].
 // 1500 (_POZ_GRUPA_M, prag GRUPISANJA požara, slučajno recikliran kao maxEdge
 // prije ove izmjene) da dokaže da je tightening stvaran, ne kozmetički.
 function makeOpoz(maxEdgeM) {
-  const sandbox = { turf: _turf, _POZ_GRUPA_M: 1500, _POZ_OPOZ_MAX_UNIJA: 60,
-    _POZ_OPOZ_MAXEDGE_M: maxEdgeM || 1500, _POZ_FRONT_MS: 6 * 3600 * 1000,
+  const sandbox = { turf: _turf, _POZ_GRUPA_M: 750, _POZ_OPOZ_MAX_UNIJA: 60,
+    _POZ_OPOZ_MAXEDGE_M: maxEdgeM || 750, _POZ_FRONT_MS: 6 * 3600 * 1000,
     _POZ_STAROST: eval('(' + extractConst('_POZ_STAROST').replace(/^const _POZ_STAROST = /, '').replace(/;\s*$/, '') + ')') };
   const keys = Object.keys(sandbox);
   return new Function(...keys, SRC_OPOZ + '\nreturn { _poziOpozGeom, _poziOpozProjekcija };')(...keys.map(k => sandbox[k]));
@@ -1354,12 +1354,12 @@ function klasterPlusIzolovana(dtIso) {
   ];
 }
 
-t('operativni maxEdge 1500m čuva koridor između tačaka istog požara', () => {
+t('operativni maxEdge 750m ne pravi dugi koridor između odvojenih požara', () => {
   const pts = klasterPlusIzolovana();
   const haOperativni = haOf(OPOZ._poziOpozGeom(pts));
-  const haUski = haOf(makeOpoz(500)._poziOpozGeom(pts));
-  assert.ok(haOperativni > haUski * 2,
-    'operativni prag (' + haOperativni.toFixed(1) + ' ha) mora sačuvati znatno veći požarni koridor od uskog (' + haUski.toFixed(1) + ' ha)');
+  const haSiroki = haOf(makeOpoz(1500)._poziOpozGeom(pts));
+  assert.ok(haOperativni < haSiroki * 0.7,
+    'uži prag (' + haOperativni.toFixed(1) + ' ha) mora ukloniti koridor koji pravi 1500m (' + haSiroki.toFixed(1) + ' ha)');
 });
 
 t('izolovana tačka OSTAJE pokrivena i sa tijesnim maxEdge-om (sloj 1 — pojedinačni bafer, ne bridging)', () => {
@@ -1411,12 +1411,12 @@ function cikCakTacke(n, stepM, sirinaM) {
   return out;
 }
 
-t('detekcije istog požara na 700m razmaku ostaju povezane u operativni obuhvat', () => {
+t('detekcije na 700m uz bočni razmak ne dobijaju premošteni koridor', () => {
   const pts = cikCakTacke(6, 700, 150);
   const haOperativni = haOf(OPOZ._poziOpozGeom(pts));
-  const haUski = haOf(makeOpoz(500)._poziOpozGeom(pts));
-  assert.ok(haOperativni > haUski * 2,
-    'operativni obuhvat (' + haOperativni.toFixed(1) + ' ha) mora uključiti koridor koji prag 500m odsijeca (' + haUski.toFixed(1) + ' ha)');
+  const haSiroki = haOf(makeOpoz(1500)._poziOpozGeom(pts));
+  assert.ok(haOperativni < haSiroki * 0.7,
+    'operativni obuhvat (' + haOperativni.toFixed(1) + ' ha) mora biti bez koridora širokog praga (' + haSiroki.toFixed(1) + ' ha)');
 });
 
 t('detekcije na 700m razmaku: SVAKA i dalje pokrivena i sa novim (tijesnim) pragom', () => {

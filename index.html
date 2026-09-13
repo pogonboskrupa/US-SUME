@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.10';
+const APP_VER = 'v1.2.11';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13026,7 +13026,7 @@ const _POZ_NOTIF_SEEN= 'tvlake_pozari_notif_seen'; // za koje požare je već ja
 const _POZ_RADIUS_KM = 100;    // v3.110.0: suženo sa 150 na 100 km na eksplicitan zahtjev —
                                 // šire od bilo koje šumarije i dalje, ali bez detekcija toliko
                                 // daleko da su za korisnika samo šum
-const _POZ_GRUPA_M   = 1500;   // detekcije bliže od ovoga su ISTI požar (v. _poziGrupisi)
+const _POZ_GRUPA_M   = 750;    // uži prag: ne spajaj odvojene požare preko doline/rijeke
 
 // Trake udaljenosti (v3.108.0) — lista se RAŠČLANJUJE na "koliko je hitno",
 // ne filtrira: požar na 45 km i dalje treba biti vidljiv (u krugu 100 km je),
@@ -14274,10 +14274,10 @@ const _POZ_OPOZ_MAX_UNIJA = 60;          // iznad ovoga unija po pikselu postaje
 // je bio blago naduvan starim pragom. Ispod 300m concave počinje ispuštati
 // tačke iz realnog fronta (svejedno ostaju pokrivene slojem 1) — 500m je
 // izabran sa margином iznad te granice.
-// v1.2.9: terenska validacija na požaru većem od 50 ha u odjelima 26/27
-// pokazala je da 500 m odsijeca veći dio stvarnog požarišta. VIIRS tačke iz
-// različitih preleta imaju veće razmake, zato se vraća operativnih 1500 m.
-const _POZ_OPOZ_MAXEDGE_M = 1500;
+// v1.2.11: kompromis nakon dvije terenske provjere — 500 m je odsijecalo dio
+// stvarnog požarišta, dok je 1500 m spajalo odvojene požare i premošćavalo
+// Unu. Prag 750 m čuva gušći front, ali ne pravi kilometarske koridore.
+const _POZ_OPOZ_MAXEDGE_M = 750;
 let _poziOpozLayer = null;
 
 // Geometrija iz skupa detekcija. DVA sloja, tim redom — i oba su potrebna:
@@ -15496,7 +15496,10 @@ function _povGodUrl(ref) {
     + encodeURIComponent(sql);
 }
 
-function _povGodOnStanje() { return localStorage.getItem(_POV_GOD_ON_KEY) === '1'; }
+function _povGodOnStanje() {
+  const v = localStorage.getItem(_POV_GOD_ON_KEY);
+  return v === null ? true : v === '1';
+}
 function _povGodToggle(on) {
   _povGodOn = on;
   try { localStorage.setItem(_POV_GOD_ON_KEY, on ? '1' : '0'); } catch(e) {}
@@ -16177,12 +16180,21 @@ function _povHistToggle(on) {
   if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
   _povHistPrikazi();
 }
-// Grupiše ISTIM pragom kao požari (1500 m) — ovdje je to čak i POŽELJNO: više
+// Grupiše ISTIM, užim pragom kao požari (750 m): više
 // detekcija na približno istom mjestu kroz GODINE se svede u JEDNU tačku
 // "ovdje je gorjelo N puta", umjesto da svaka godina bude zaseban marker.
 function _povHistPrikazi() {
   const ref = _poziRefTacka();
-  const blizu = _poziFilterBlizu(_povHistUcitaj(), ref);
+  const tekuca = new Date().getUTCFullYear();
+  const dozvoljene = new Set([tekuca - 1, tekuca - 2]);
+  // Lokalno zabilježene tačke dopuni dijeljenom arhivom, ali prikaži ISKLJUČIVO
+  // prethodne dvije kalendarske godine. Tekuća godina ima zaseban prekidač.
+  let izvor = _povHistUcitaj().filter(p => {
+    const t = Date.parse(p && p.dt);
+    return isFinite(t) && dozvoljene.has(new Date(t).getUTCFullYear());
+  });
+  [tekuca - 1, tekuca - 2].forEach(g => { izvor = izvor.concat(_povArhTacke(g)); });
+  const blizu = _poziFilterBlizu(izvor, ref);
   _povHistEvts = _poziGrupeBlizu(_poziGrupisi(blizu), ref);
   _povHistRender();
   _poziRenderPanel();
@@ -16287,7 +16299,10 @@ function _poziObnoviPrikaz() {
     else _poziRender();
   }
   if (_povGodOn) {
-    if (!_povGodEvts.length) _povGodObnoviIzKesa();
+    if (!_povGodEvts.length) {
+      const izKesa = _povGodObnoviIzKesa();
+      if (!izKesa && typeof navigator !== 'undefined' && navigator.onLine) _povGodLoad(true);
+    }
     else _povGodRender();
   }
   if (_povHistOn) _povHistPrikazi();
@@ -16640,12 +16655,12 @@ function _poziSadrzajHtml() {
       + `<div style="font-size:10px;color:#64748b;margin:2px 0 8px;">${_escHtml(_povGodSazetak())}</div>`
       + (_povGodOnStanje() ? `<div style="margin-bottom:10px;">${_povGodListaHtml()}</div>` : '')
       + `<div style="border-top:1px solid #1e293b;margin:2px 0 10px;"></div>`
-      + prekidac('_povHistToggle(this.checked)', _povHistOnStanje(), '📊 Zadnjih 5 godina (lokalna historija na ovom telefonu)')
+      + prekidac('_povHistToggle(this.checked)', _povHistOnStanje(), '📊 Prethodne 2 godine')
       + `<div style="font-size:10px;color:#64748b;margin:2px 0 8px;">${_escHtml(_povHistSazetak())}</div>`
       + (_povHistOnStanje() ? `<div>${_povHistListaHtml()}</div>` : '')
       + `<div style="font-size:10px;color:#475569;line-height:1.45;margin-top:8px;">
-           "Ova godina" je pregled uživo, treba GFW ključ. "Zadnjih 5 godina" NIJE retroaktivno —
-           app pamti samo ono što sam vidi od trenutka kad ovo prvi put uključiš, i radi bez ključa.
+           "Ova godina" je zadano uključena i osvježava se preko GFW-a. "Prethodne 2 godine"
+           su zaseban izbor i koriste sačuvanu/dijeljenu arhivu, pa rade i bez mreže.
          </div>`)
 
     + kart('🗓 Opožareno po godinama (ukupno)',
