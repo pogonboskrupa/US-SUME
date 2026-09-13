@@ -890,6 +890,8 @@ const SRC9 = [
   extractFn('_poziStatusPozara'),
   extractConst('_POZ_MK_STAROST'),
   extractFn('_poziMkStarost'),
+  extractFn('_poziDatumPojasa'),
+  extractFn('_poziPeriodPojasa'),
   extractFn('_poziRedHtml'),
   extractConst('_POZ_PO_TRACI'),
   extractConst('_POZ_LISTA_MAX'),
@@ -1454,6 +1456,26 @@ t('požar koji gori duže: izdvaja se dio koji je VEĆ izgorio (starije od 6 h)'
   assert.ok(Math.abs(pr.sati - 20) < 0.01, 'sati gorenja: ' + pr.sati);
 });
 
+t('svaki vremenski pojas nosi vlastiti period Od–Do', () => {
+  const t0 = Date.parse('2026-08-11T00:00:00Z');
+  const pts = [0, 2, 26, 28].map((h, i) => ({
+    la:44.9 + i * 0.001, lo:16.2, rez:375,
+    dt:new Date(t0 + h * 3600000).toISOString()
+  }));
+  const pr = OPOZ._poziOpozProjekcija({ pts, prvi:t0, zadnji:t0 + 28 * 3600000 });
+  assert.ok(pr && pr.trake.length >= 2, 'mora imati najmanje dva vremenska pojasa');
+  pr.trake.forEach(tr => {
+    assert.ok(isFinite(tr.od) && isFinite(tr.do), 'pojas mora imati oba datuma');
+    assert.ok(tr.od <= tr.do, 'Od ne smije biti poslije Do');
+  });
+});
+
+t('format perioda pojasa prikazuje puni datum Od i Do', () => {
+  const api = new Function(extractFn('_poziDatumPojasa') + '\n' + extractFn('_poziPeriodPojasa') + '\nreturn {_poziPeriodPojasa};')();
+  const s = api._poziPeriodPojasa(new Date(2026, 7, 11).getTime(), new Date(2026, 7, 14).getTime());
+  assert.strictEqual(s, 'Od: 11.08.2026. · Do: 14.08.2026.');
+});
+
 t('požar viđen u JEDNOM preletu: ne izmišlja "već izgorjeli" dio', () => {
   const t0 = Date.parse('2026-09-05T00:00:00Z');
   const pts = lukPts(new Date(t0).toISOString());
@@ -1518,7 +1540,7 @@ t('_poziRedHtml: N=1 (haUkupno=NaN) ne ispisuje "ha" u redu liste', () => {
     _poziProj: () => ({ haUkupno: NaN, samoJedanPiksel: true }),
   };
   const keys = Object.keys(sandbox);
-  const html = new Function(...keys, extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:22740,la:44.9,lo:16.2,conf:"m",broj:1,sateliti:["N20"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
+  const html = new Function(...keys, extractFn('_poziDatumPojasa') + '\n' + extractFn('_poziPeriodPojasa') + '\n' + extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:22740,la:44.9,lo:16.2,conf:"m",broj:1,sateliti:["N20"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
   )(...keys.map(k => sandbox[k]));
   assert.ok(!/\bha\b/.test(html), 'red ne smije ispisati broj hektara za usamljenu detekciju: ' + html);
 });
@@ -1536,7 +1558,7 @@ t('_poziRedHtml: N=2 i dalje ispisuje "ha" (informativan broj)', () => {
     _poziPovrsTxt: ha => Math.round(ha) + ' ha',
   };
   const keys = Object.keys(sandbox);
-  const html = new Function(...keys, extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:25630,la:44.9,lo:16.2,conf:"m",broj:3,sateliti:["A","B"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
+  const html = new Function(...keys, extractFn('_poziDatumPojasa') + '\n' + extractFn('_poziPeriodPojasa') + '\n' + extractFn('_poziRedHtml') + '\nreturn _poziRedHtml({d:25630,la:44.9,lo:16.2,conf:"m",broj:3,sateliti:["A","B"],zadnji:Date.now(),dt:new Date().toISOString(),nov:false}, 0, {la:44.88,lo:16.15});'
   )(...keys.map(k => sandbox[k]));
   assert.match(html, /22 ha/);
 });

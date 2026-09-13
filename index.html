@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.12';
+const APP_VER = 'v1.2.13';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -14366,6 +14366,17 @@ function _poziPovrsTxt(ha) {
   return (ha / 100).toFixed(1) + ' km²';   // 100 ha = 1 km²
 }
 
+// Jedinstven terenski format perioda za svaki povezani požarni pojas.
+function _poziDatumPojasa(t) {
+  if (!isFinite(t)) return '—';
+  const d = new Date(t);
+  const z = n => String(n).padStart(2, '0');
+  return z(d.getDate()) + '.' + z(d.getMonth() + 1) + '.' + d.getFullYear() + '.';
+}
+function _poziPeriodPojasa(od, doT) {
+  return 'Od: ' + _poziDatumPojasa(od) + ' · Do: ' + _poziDatumPojasa(doT);
+}
+
 // Projekcija za JEDAN požar: trake po starosti + ukupan zahvat.
 //
 // v3.118.1: JEDNA detekcija (jedan satelitski piksel) NE dobija broj hektara.
@@ -14409,7 +14420,9 @@ function _poziOpozProjekcija(g) {
     if (!geom) return;
     // Vrijeme NAJNOVIJE detekcije u traci = trenutak kad je požar dosegao tu
     // kumulativnu površinu (koristi se za tempo napredovanja niže).
-    const tMax = kante[i].reduce((m, p) => { const t = Date.parse(p.dt); return isFinite(t) && t > m ? t : m; }, -Infinity);
+    const vremena = kante[i].map(p => Date.parse(p.dt)).filter(isFinite);
+    const tMin = vremena.length ? Math.min(...vremena) : NaN;
+    const tMax = vremena.length ? Math.max(...vremena) : NaN;
     // "aktivan front" se ne smije tvrditi za požar koji sam po sebi nije viđen
     // odavno — trake su relativne na NJEGOVU najnoviju detekciju, pa bi kod
     // požara zadnji put viđenog prije 4 dana najnovija traka i dalje pisala
@@ -14417,7 +14430,7 @@ function _poziOpozProjekcija(g) {
     const naziv = (b.id === 'front' && (Date.now() - zadnji) > 12 * 3600 * 1000)
       ? '≤ 6 h (najnovije viđeno)' : b.naziv;
     trake.push({ id:b.id, naziv, fill:b.fill, linija:b.linija, op:b.op,
-                 geom, ha: ha(geom), broj: kante[i].length, tMax });
+                 geom, ha: ha(geom), broj: kante[i].length, od:tMin, do:tMax, tMax });
   });
   if (!trake.length) return null;
 
@@ -14653,6 +14666,7 @@ function _poziGrupaPopupHtml(g, ref) {
     ${red('Udaljenost', `<b style="color:#fbbf24;">${fmtL(d)}</b> ${smjer}${ref.gps ? '' : ' <span style="color:#64748b;">(od centra karte)</span>'}`)}
     ${red('Prvi put viđen', vr(g.prvi))}
     ${red('Zadnji put', vr(g.zadnji) + ' · ' + _poziStarost(g.zadnji))}
+    ${red('Period pojasa', _poziPeriodPojasa(g.prvi, g.zadnji))}
     ${g.sateliti.length ? red('Sateliti', g.sateliti.join(', ')) : ''}
     ${red('Pouzdanost', `<span style="color:${pz.boja};">${pz.txt}</span>`)}
     ${g.frpMax ? red('Najjača detekcija', g.frpMax.toFixed(1) + ' MW') : ''}
@@ -14713,6 +14727,7 @@ function _poziRedHtml(g, i, ref) {
   // za poređenje "koji je od ovih požara veliki" trebalo otvarati jedan po jedan.
   const pr = _poziOpozOn() ? _poziProj(g) : null;
   const povrs = pr && isFinite(pr.haUkupno) ? _poziPovrsTxt(pr.haUkupno) : '';
+  const period = _poziPeriodPojasa(g.prvi, g.zadnji);
   // Tačka lijevo nosi STAROST (ista boja kao marker na karti), ne pouzdanost —
   // inače bi ista paleta u listi i na karti značila dvije različite stvari.
   // Pouzdanost ostaje kao tekst desno.
@@ -14723,6 +14738,7 @@ function _poziRedHtml(g, i, ref) {
       <span style="font-size:12px;color:#e2e8f0;">${fmtL(g.d)} <span style="color:#64748b;">${smjer}</span></span>
       ${g.nov ? ' <span style="color:#fbbf24;font-size:10px;font-weight:700;">🆕 NOVO</span>' : ''}
       <div style="font-size:10px;color:#64748b;">${detalji} · ${_poziStarost(g.zadnji)} · ${_poziStatusPozara(g)}</div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${period}</div>
     </span>
     <span style="font-size:10px;color:#64748b;text-align:right;">
       ${povrs ? `<span style="display:block;color:#fb923c;font-weight:700;font-size:11px;">${povrs}</span>` : ''}${pz.txt}
@@ -16539,7 +16555,9 @@ function _poziSadrzajHtml() {
           <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
             <div style="width:13px;height:13px;border-radius:3px;flex-shrink:0;
                  background:${t.fill};border:1px solid ${t.linija};"></div>
-            <span style="flex:1;font-size:11px;color:#94a3b8;">${_escHtml(t.naziv)}</span>
+            <span style="flex:1;font-size:11px;color:#94a3b8;">${_escHtml(t.naziv)}
+              <span style="display:block;font-size:9px;color:#64748b;margin-top:1px;">${_escHtml(_poziPeriodPojasa(t.od, t.do))}</span>
+            </span>
             <span style="font-size:11px;color:#e2e8f0;font-weight:600;">${_poziPovrsTxt(t.ha)}</span>
           </div>`).join('');
         opozSazetak =
