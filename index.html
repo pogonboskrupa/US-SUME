@@ -4990,7 +4990,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.3';
+const APP_VER = 'v1.2.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -12998,7 +12998,10 @@ const _POZ_IZVORI = [
 const _POZ_OKVIRI = [
   { id:'24h', naziv:'24 sata', sufiks:'24h.csv' },
   { id:'48h', naziv:'48 sati', sufiks:'48h.csv' },
-  { id:'7d',  naziv:'7 dana',  sufiks:'7d.csv'  }
+  { id:'7d',  naziv:'7 dana',  sufiks:'7d.csv'  },
+  // FIRMS javni arhivski CSV završava na 7 dana. Duži operativni pregled ide
+  // bbox upitom preko GFW-a, pa može vratiti i požar koji je ugašen prije 8–30 dana.
+  { id:'30d', naziv:'30 dana',  sufiks:null }
 ];
 function _poziOkvir() {
   const v = localStorage.getItem(_POZ_OKVIR_KEY);
@@ -13010,7 +13013,7 @@ function _poziOkvirNaziv(id) {
 }
 function _poziUrl(izv, okvir) {
   const o = _POZ_OKVIRI.find(x => x.id === okvir) || _POZ_OKVIRI[0];
-  return _POZ_BAZA + izv.pref + o.sufiks;
+  return o.sufiks ? (_POZ_BAZA + izv.pref + o.sufiks) : null;
 }
 
 let _poziPts = [];          // pojedinačne detekcije [{la,lo,dt,sat,conf,frp,inst,rez,d}]
@@ -13172,7 +13175,9 @@ function _poziMapKey() {
   return (_poziKljucevi.firms || '').trim();
 }
 function _poziApiUrl(kljuc, okvir, ref) {
-  const dani = { '24h':1, '48h':2, '7d':7 }[okvir] || 1;
+  // NASA Area API prima najviše 5 dana po pozivu. Za 7d se ovaj izvor koristi
+  // samo kao dopuna GFW-u; 30d se u _poziDohvati obrađuje isključivo preko GFW-a.
+  const dani = Math.min(5, { '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1);
   const dLat = _POZ_RADIUS_KM / 111;
   const dLon = _POZ_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
   const bbox = [ref.lo - dLon, ref.la - dLat, ref.lo + dLon, ref.la + dLat].map(x => x.toFixed(3)).join(',');
@@ -13224,7 +13229,8 @@ async function _poziKljucUcitaj() {
   } catch(e) {}
 }
 function _poziGfwUrl(okvir, ref) {
-  const dani = { '24h':1, '48h':2, '7d':7 }[okvir] || 1;
+  const dani = { '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1;
+  const limit = okvir === '30d' ? 5000 : 1000;
   const od = new Date(Date.now() - dani * 86400000).toISOString().slice(0, 10);
   const dLat = _POZ_RADIUS_KM / 111;
   const dLon = _POZ_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
@@ -13232,7 +13238,7 @@ function _poziGfwUrl(okvir, ref) {
     + " WHERE alert__date >= '" + od + "'"
     + ' AND latitude >= '  + (ref.la - dLat).toFixed(3) + ' AND latitude <= '  + (ref.la + dLat).toFixed(3)
     + ' AND longitude >= ' + (ref.lo - dLon).toFixed(3) + ' AND longitude <= ' + (ref.lo + dLon).toFixed(3)
-    + ' LIMIT 1000';
+    + ' ORDER BY alert__date DESC, alert__time_utc DESC LIMIT ' + limit;
   return 'https://data-api.globalforestwatch.org/dataset/nasa_viirs_fire_alerts/latest/query/json?sql='
     + encodeURIComponent(sql);
 }
@@ -13425,6 +13431,17 @@ async function _poziDohvati(okvir) {
         { headers:{ 'x-api-key': _poziGfwKljuc() }, parser:_poziParseGfwJson, provjera:/"data"\s*:/ })
     : null;
 
+  // NASA-ini gotovi evropski CSV-ovi završavaju na 7 dana, a Area API ne
+  // podržava 30 dana. Ne šalji lažni 24h/5d rezervni zahtjev pod oznakom 30d:
+  // za ovaj prozor GFW je jedini izvor koji zaista pokriva cijeli period.
+  if (okvir === '30d') {
+    if (!gfw) return { ok:false, greska:'Pregled 30 dana zahtijeva GFW API ključ koji postavlja admin.' };
+    const r = await gfw;
+    return r.ok
+      ? { ok:true, pts:r.pts || [], izvori:[r.naziv], djelomicno:false, greske:[] }
+      : { ok:false, greska:r.naziv + ': ' + r.greska };
+  }
+
   const spoji = (a, b) => {
     const ok = [a, b].filter(x => x && x.ok);
     const pali = [a, b].filter(x => x && !x.ok);
@@ -13463,7 +13480,8 @@ async function _poziDohvati(okvir) {
 // za API (30s) — ovo su veliki fajlovi i na mobilnoj vezi im 15s zna biti
 // premalo, a prerano odustajanje izgleda isto kao da izvor ne radi.
 async function _poziDohvatiArhive(okvir) {
-  const zahtjevi = _POZ_IZVORI.map(izv => ({ naziv:izv.naziv, url:_poziUrl(izv, okvir) }));
+  const zahtjevi = _POZ_IZVORI.map(izv => ({ naziv:izv.naziv, url:_poziUrl(izv, okvir) })).filter(z => z.url);
+  if (!zahtjevi.length) return { ok:false, greska:'Arhivski FIRMS izvor ne podržava period ' + _poziOkvirNaziv(okvir) };
   const rez = await Promise.all(zahtjevi.map(z => _poziDohvatiJedan(z.naziv, z.url, 30000)));
   const uspjeh = rez.filter(r => r.ok);
   const greske = rez.filter(r => !r.ok).map(r => r.naziv + ': ' + r.greska);
@@ -13473,10 +13491,10 @@ async function _poziDohvatiArhive(okvir) {
   return { ok:true, pts, izvori: uspjeh.map(u => u.naziv), djelomicno: greske.length > 0, greske };
 }
 
-function _poziSaveCache(pts, izvori) {
+function _poziSaveCache(pts, izvori, okvir) {
   try {
     localStorage.setItem(_POZ_CACHE_KEY, JSON.stringify({
-      ts: Date.now(), izvori,
+      ts: Date.now(), izvori, okvir,
       // Keširaj samo okolinu — cijela Evropa zna biti par hiljada tačaka.
       pts: _poziFilterBlizu(pts, _poziRefTacka()).slice(0, 500).map(p => ({ la:p.la, lo:p.lo, dt:p.dt, sat:p.sat, conf:p.conf, frp:p.frp, noc:p.noc, rez:p.rez }))
     }));
@@ -13567,13 +13585,16 @@ async function _poziLoad(tiho) {
     const r = await _poziDohvati(okvir);
     const ref = _poziRefTacka();
     if (r.ok) {
-      _poziSaveCache(r.pts, r.izvori);
+      _poziSaveCache(r.pts, r.izvori, okvir);
       _poziPts = _poziFilterBlizu(r.pts, ref);
       _poziMeta = { izvori:r.izvori, dohvacenoMs:Date.now(), ukupno:r.pts.length, kes:false, okvir,
                     djelomicno:r.djelomicno, greske:r.greske, refGps:ref.gps };
     } else {
       const c = _poziLoadCache();
-      if (!c) {
+      // Ne predstavljaj kraći keš kao da pokriva izabrani period. Stari keševi
+      // bez polja `okvir` tretiraju se kao raniji zadani prozor od 24 sata.
+      const cacheOdgovara = c && (c.okvir === okvir || (!c.okvir && okvir === '24h'));
+      if (!cacheOdgovara) {
         _poziMeta = { greska: r.greska };
         _poziPts = []; _poziEvts = [];
         _poziRender();
@@ -32945,6 +32966,40 @@ async function sqlmapRestoreAll() {
   let lastSqlId = null;
   try { const lm=JSON.parse(localStorage.getItem('tvlake_last_map')); if(lm?.type==='sqlite'&&lm.sqlId) lastSqlId=lm.sqlId; } catch(e){}
 
+  let shownAny = false;
+  // Brzi OPFS put: naziv fizičkog fajla je pri uvozu uvijek "<ime>.sqlmap".
+  // Ne čekaj IndexedDB `list` prije otvaranja zadnje karte — na stvarnom
+  // telefonu je list izmjeren na 12.846 s, dok je load-opfs trajao samo 18 ms.
+  // Ako je karta ranije preimenovana, fizičko ime više ne prati ovaj obrazac;
+  // tada ovaj jeftini pokušaj padne i postojeći IDB put ispod uredno preuzme.
+  if (lastSqlId && !_sqlSkipList().includes(lastSqlId)) {
+    const _tFast0 = performance.now();
+    try {
+      localStorage.setItem(_SQL_CRASH_KEY, lastSqlId);
+      const fast = await _sqlWCall({ type:'load-opfs', name:lastSqlId,
+        path:'/' + lastSqlId + '.sqlmap', fmt:null, meta:{} });
+      localStorage.removeItem(_SQL_CRASH_KEY);
+      if (fast?.ok) {
+        const layer = _sqlmapCreateLayerW(lastSqlId, fast.fmt, fast.meta);
+        Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+        layer.addTo(map);
+        layer.redraw();
+        _sqlLayers.push({ name:lastSqlId, fmt:fast.fmt, layer, visible:true,
+          meta:fast.meta, saved:true, opfs:true });
+        _sqlPrewarm(lastSqlId);
+        const btn = document.getElementById('layer-switch-btn');
+        if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
+        shownAny = true;
+        _tBrk.push('brzi-load-opfs(' + lastSqlId + ') ' + Math.round(performance.now() - _tFast0) + 'ms');
+        // Karta je već vidljiva; sporiji popis ostalih karata više nije dio
+        // korisničkog vremena čekanja i nastavlja se ispod u pozadini funkcije.
+        _mapRestoreIndicatorHide();
+      }
+    } catch(e) {
+      localStorage.removeItem(_SQL_CRASH_KEY);
+    }
+  }
+
   try {
     const _tListT0 = performance.now();
     const r = await _sqlWCall({type:'list'}, [], 30000);
@@ -32965,8 +33020,6 @@ async function sqlmapRestoreAll() {
     const showName = (lastSqlId && _kandidati.some(e => e.name === lastSqlId))
       ? lastSqlId : (_kandidati[0]?.name || null);
     rows.sort((a,b) => Number(b.name === showName) - Number(a.name === showName));
-    let shownAny = false;
-
     const preskoci = _sqlSkipList();
     for (const entry of rows) {
       if (_sqlLayers.find(l => l.name === entry.name)) continue;

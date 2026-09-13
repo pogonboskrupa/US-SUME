@@ -112,7 +112,7 @@ function makeRestoreEnv(opts) {
   const sandbox = {
     document: { getElementById: id => (id === 'map-restore-indicator' ? el : null) },
     console: { warn: (...a) => calls.warn.push(a) },
-    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    localStorage: o.localStorage || { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     performance: o.perf || { now: () => 0 },
     _SQL_CRASH_KEY: 'tvlake_sql_crash',
     _sqlCrashCheck: o.crashCheck || (async () => false),
@@ -120,7 +120,7 @@ function makeRestoreEnv(opts) {
     _sqlWCall: o.wCall || (async () => ({ ok: true, rows: [] })),
     _sqlSkipList: () => [],
     _sqlLayers: [],
-    _sqlmapCreateLayerW: () => ({}),
+    _sqlmapCreateLayerW: o.layerFactory || (() => ({ addTo: () => {}, redraw: () => {} })),
     map: { hasLayer: () => false, removeLayer: () => {} },
     TL: {},
     _saveLastMap: () => {},
@@ -188,6 +188,31 @@ await t('uspješno učitavanje jedne karte → indikator se skloni na kraju', as
   });
   await env.run();
   assert.strictEqual(env.el.classList.contains('show'), false);
+});
+
+await t('zadnja OPFS karta postaje vidljiva PRIJE sporog IndexedDB list poziva', async () => {
+  let pustiListu;
+  const lista = new Promise(resolve => { pustiListu = resolve; });
+  const sloj = { addToCalled:false, redrawCalled:false,
+    addTo(){ this.addToCalled = true; }, redraw(){ this.redrawCalled = true; } };
+  const env = makeRestoreEnv({
+    localStorage: {
+      getItem: k => k === 'tvlake_last_map' ? JSON.stringify({ type:'sqlite', sqlId:'UNSKO' }) : null,
+      setItem: () => {}, removeItem: () => {}
+    },
+    layerFactory: () => sloj,
+    wCall: async msg => {
+      if (msg.type === 'load-opfs') return { ok:true, fmt:'rmaps', meta:{} };
+      if (msg.type === 'list') return lista;
+      return { ok:false };
+    }
+  });
+  const zavrsetak = env.run();
+  await Promise.resolve(); await Promise.resolve();
+  assert.strictEqual(sloj.addToCalled, true, 'OPFS sloj mora biti dodat bez čekanja liste');
+  assert.strictEqual(env.el.classList.contains('show'), false, 'indikator se mora skloniti čim je aktivna karta vidljiva');
+  pustiListu({ ok:true, rows:[{ name:'UNSKO', savedAt:1, opfs:true, opfsName:'UNSKO.sqlmap' }] });
+  await zavrsetak;
 });
 
 // ── v1.1.6: raščlana dijagnostika trajanja ─────────────────────────────────

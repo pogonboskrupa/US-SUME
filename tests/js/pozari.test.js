@@ -216,6 +216,8 @@ t('_poziOkvirNaziv daje čitljivo bosansko ime', () => {
   const api2 = makeApi2(makeStore());
   assert.strictEqual(api2._poziOkvirNaziv('48h'), '48 sati');
   assert.strictEqual(api2._poziOkvirNaziv('7d'), '7 dana');
+  assert.strictEqual(api2._poziOkvirNaziv('30d'), '30 dana');
+  assert.strictEqual(api2._poziUrl({ pref:'x_' }, '30d'), null, '30d nema lažni FIRMS CSV URL');
 });
 
 console.log('_poziApiUrl — bbox oko referentne tačke, MAP_KEY u putanji:');
@@ -233,10 +235,10 @@ t('bbox okružuje referentnu tačku (zapad<istok, jug<sjever)', () => {
   assert.strictEqual(dani, '1', '24h okvir → 1 dan');
 });
 
-t('7d okvir traži 7 dana', () => {
+t('NASA Area API poštuje maksimum od 5 dana', () => {
   const api2 = makeApi2(makeStore());
   const u = api2._poziApiUrl('K', '7d', { la:44.88, lo:16.15 });
-  assert.ok(u.endsWith('/7'));
+  assert.ok(u.endsWith('/5'));
 });
 
 console.log('Bosanska množina za GRUPISANE požare (muški rod, drugačija sklonidba od detekcija):');
@@ -288,6 +290,17 @@ t('_poziGfwUrl: 7d traži stariji datum nego 24h', () => {
   const a = d(api2._poziGfwUrl('24h', { la:44.88, lo:16.15 }));
   const b = d(api2._poziGfwUrl('7d',  { la:44.88, lo:16.15 }));
   assert.ok(b < a, '7d mora ići dalje u prošlost: ' + b + ' vs ' + a);
+});
+
+t('_poziGfwUrl: 30d stvarno traži stariji datum nego 7d', () => {
+  const api2 = makeApi2(makeStore());
+  const d = u => decodeURIComponent(u.split('sql=')[1]).match(/alert__date >= '([\d-]+)'/)[1];
+  const sedam = d(api2._poziGfwUrl('7d',  { la:44.88, lo:16.15 }));
+  const trideset = d(api2._poziGfwUrl('30d', { la:44.88, lo:16.15 }));
+  assert.ok(trideset < sedam, '30d mora obuhvatiti požar star 15 dana: ' + trideset + ' vs ' + sedam);
+  const sql = decodeURIComponent(api2._poziGfwUrl('30d', { la:44.88, lo:16.15 }).split('sql=')[1]);
+  assert.match(sql, /ORDER BY alert__date DESC/);
+  assert.match(sql, /LIMIT 5000$/);
 });
 
 t('_poziParseGfwJson: GFW JSON se svede na ISTI oblik tačke kao FIRMS CSV', () => {
