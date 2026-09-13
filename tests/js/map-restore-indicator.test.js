@@ -79,7 +79,11 @@ console.log('_mapRestoreIndicatorShow/Hide — osnovno ponašanje:');
 
 await t('show() dodaje "show" klasu, hide() je uklanja', () => {
   const el = makeFakeIndicatorEl();
-  const sandbox = { document: { getElementById: id => (id === 'map-restore-indicator' ? el : null) } };
+  const sandbox = {
+    document: { getElementById: id => (id === 'map-restore-indicator' ? el : null) },
+    performance: { now: () => 0 },
+    _mapLoadDiagStart: () => {}
+  };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_SHOW + '\n' + SRC_HIDE +
     '\nreturn { _mapRestoreIndicatorShow, _mapRestoreIndicatorHide };')(...keys.map(k => sandbox[k]));
@@ -91,7 +95,11 @@ await t('show() dodaje "show" klasu, hide() je uklanja', () => {
 });
 
 await t('nedostajući element (DOM još nije isparsiran) ne baca', () => {
-  const sandbox = { document: { getElementById: () => null } };
+  const sandbox = {
+    document: { getElementById: () => null },
+    performance: { now: () => 0 },
+    _mapLoadDiagStart: () => {}
+  };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_SHOW + '\n' + SRC_HIDE +
     '\nreturn { _mapRestoreIndicatorShow, _mapRestoreIndicatorHide };')(...keys.map(k => sandbox[k]));
@@ -106,7 +114,7 @@ function makeRestoreEnv(opts) {
   const o = opts || {};
   const el = makeFakeIndicatorEl();
   el.classList.add('show');   // simulira stanje koje je _restoreLastMap ostavio
-  const calls = { ensureBase: [], warn: [], status: [] };
+  const calls = { ensureBase: [], warn: [], status: [], diag: [] };
   // Podrazumijevano performance.now() koje raste dovoljno malo da sve ostane ISPOD
   // 1.5s praga (brz slučaj) — testovi za spori slučaj eksplicitno daju svoj `perf`.
   const sandbox = {
@@ -130,6 +138,9 @@ function makeRestoreEnv(opts) {
     _sqlFailKey: name => 'fail_' + name,
     _sqlEnsureBaseLayer: n => calls.ensureBase.push(n),
     _sqlmapStatus: msg => calls.status.push(msg),
+    _mapLoadDiagStep: (label, detail) => calls.diag.push({ label, detail }),
+    _mapLoadDiagName: () => {},
+    _mapLoadDiagFinish: state => { calls.diagState = state; },
     // v1.1.7: eksplicitno postavljeno (default null = "indikator nikad prikazan
     // u ovom testu"), NE oslanjati se na implicitni global koji bi sloppy-mode
     // dodjela u _mapRestoreIndicatorShow ostavila iza sebe — to bi zavisilo od
@@ -213,6 +224,26 @@ await t('zadnja OPFS karta postaje vidljiva PRIJE sporog IndexedDB list poziva',
   assert.strictEqual(env.el.classList.contains('show'), false, 'indikator se mora skloniti čim je aktivna karta vidljiva');
   pustiListu({ ok:true, rows:[{ name:'UNSKO', savedAt:1, opfs:true, opfsName:'UNSKO.sqlmap' }] });
   await zavrsetak;
+});
+
+await t('neuspjeli brzi OPFS put ostavlja jasan debug i zatim bilježi fallback', async () => {
+  const env = makeRestoreEnv({
+    localStorage: {
+      getItem: k => k === 'tvlake_last_map' ? JSON.stringify({ type:'sqlite', sqlId:'UNSKO' }) : null,
+      setItem: () => {}, removeItem: () => {}
+    },
+    wCall: async msg => {
+      if (msg.type === 'load-opfs' && msg.path === '/UNSKO.sqlmap') return { ok:false, error:'not-found' };
+      if (msg.type === 'list') return { ok:true, rows:[{ name:'UNSKO', savedAt:1, opfs:false }] };
+      if (msg.type === 'load-idb') return { ok:true, fmt:'mbtiles', meta:{} };
+      return { ok:false };
+    }
+  });
+  await env.run();
+  const labels = env.calls.diag.map(d => d.label);
+  assert.ok(labels.includes('brzi OPFS nije uspio'), 'debug mora objasniti zašto brzi put nije sakrio indikator');
+  assert.ok(labels.includes('IndexedDB popis'), 'debug mora izmjeriti spori popis');
+  assert.ok(labels.includes('karta otvorena'), 'debug mora potvrditi fallback otvaranje');
 });
 
 // ── v1.1.6: raščlana dijagnostika trajanja ─────────────────────────────────

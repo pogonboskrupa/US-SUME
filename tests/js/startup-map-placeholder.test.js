@@ -12,7 +12,11 @@ assert.ok(sqlite[1].includes('TL[restoredKey].addTo(map)'),
   'osnovna karta mora biti dodana prije čekanja velike SQLite baze');
 assert.ok(sqlite[1].indexOf('TL[restoredKey].addTo(map)') < sqlite[1].indexOf('return'),
   'osnovna karta mora biti vidljiva prije izlaza iz startup grane');
-assert.ok(restore.includes('_mapRestoreIndicatorShow()'),
-  'učitavanje i dalje mora biti jasno označeno');
+assert.ok(restore.includes('_mapRestoreIndicatorShow(saved.sqlId)'),
+  'učitavanje mora biti označeno i debug mora dobiti naziv aktivne karte');
+const recentPos = html.indexOf('id="loadmap-recent"');
+const debugPos = html.indexOf('id="loadmap-startup-debug"');
+assert.ok(recentPos >= 0 && debugPos > recentPos,
+  'startup debug mora biti unutar Učitaj kartu, ispod Nedavne karte');
 
-console.log('4 prošlo, 0 palo — karta je vidljiva dok se SQLite učitava');
+console.log('5 prošlo, 0 palo — karta je vidljiva, debug je ispod Nedavne karte');

@@ -2440,6 +2440,10 @@ select:focus { outline:none; border-color:#3b82f6; }
 .lm-card-nm { font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-word; }
 .lm-card-nm .on { color:#22c55e; }
 .lm-card-meta { font-size:11px; color:#64748b; margin-top:3px; line-height:1.5; }
+.lm-startup-diag { display:none; margin-top:10px; padding:10px 11px; border:1px solid #334155; border-radius:9px; background:#080f1e; color:#94a3b8; font:10.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+.lm-startup-diag.show { display:block; }
+.lm-startup-diag-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; color:#38bdf8; font-family:system-ui,sans-serif; font-size:11px; font-weight:700; }
+.lm-startup-diag-head button { margin-left:auto; border:1px solid #334155; border-radius:6px; background:#16213e; color:#cbd5e1; padding:4px 7px; font-size:10px; cursor:pointer; }
 .lm-card-btns { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
 .lm-card-btns .btn { font-size:11px; padding:5px 10px; }
 .lm-op-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:8px; flex-wrap:wrap; }
@@ -4990,7 +4994,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.4';
+const APP_VER = 'v1.2.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16430,8 +16434,53 @@ function _poziSadrzajHtml() {
 // za tu dijagnostiku. Ako korisnik vidi "Učitavam kartu" 10s a sqlmapRestoreAll
 // samo javlja par stotina ms, razlika je baš u ovom razmaku.
 let _mapRestoreIndicatorShownAt = null;
-function _mapRestoreIndicatorShow() {
+const _MAP_LOAD_DIAG_KEY = 'tvlake_map_startup_diag_v1';
+let _mapLoadDiag = null;
+try { _mapLoadDiag = JSON.parse(localStorage.getItem(_MAP_LOAD_DIAG_KEY) || 'null'); } catch(e) {}
+function _mapLoadDiagSave() {
+  try { localStorage.setItem(_MAP_LOAD_DIAG_KEY, JSON.stringify(_mapLoadDiag)); } catch(e) {}
+  try { if (typeof _loadmapRenderStartupDiag === 'function') _loadmapRenderStartupDiag(); } catch(e) {}
+}
+function _mapLoadDiagStart(name) {
+  _mapLoadDiag = { name:name || 'nepoznata karta', startedAt:Date.now(), perf0:performance.now(), state:'u toku', steps:[] };
+  _mapLoadDiagStep('indikator prikazan', 'startup čeka offline kartu');
+}
+function _mapLoadDiagName(name) {
+  if (_mapLoadDiag && name) { _mapLoadDiag.name = name; _mapLoadDiagSave(); }
+}
+function _mapLoadDiagStep(label, detail) {
+  if (!_mapLoadDiag) return;
+  const elapsed = Math.max(0, Math.round(performance.now() - (_mapLoadDiag.perf0 || 0)));
+  _mapLoadDiag.steps.push({ ms:elapsed, label:String(label || ''), detail:String(detail || '') });
+  if (_mapLoadDiag.steps.length > 14) _mapLoadDiag.steps.shift();
+  _mapLoadDiagSave();
+}
+function _mapLoadDiagFinish(state) {
+  if (!_mapLoadDiag) return;
+  _mapLoadDiag.state = state || 'završeno';
+  _mapLoadDiag.finishedAt = Date.now();
+  _mapLoadDiagSave();
+}
+function _mapLoadDiagText() {
+  if (!_mapLoadDiag) return '';
+  const when = _mapLoadDiag.startedAt ? new Date(_mapLoadDiag.startedAt).toLocaleString() : '—';
+  const rows = ['Karta: ' + _mapLoadDiag.name, 'Početak: ' + when + ' · stanje: ' + (_mapLoadDiag.state || 'u toku')];
+  (_mapLoadDiag.steps || []).forEach(s => rows.push('+' + s.ms + ' ms  ' + s.label + (s.detail ? ' — ' + s.detail : '')));
+  return rows.join('\n');
+}
+async function _mapLoadDiagCopy(event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  const txt = _mapLoadDiagText();
+  if (!txt) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(txt);
+    else { const ta=document.createElement('textarea'); ta.value=txt; ta.style.cssText='position:fixed;left:-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    showToast('📋 Debug učitavanja kopiran');
+  } catch(e) { showToast('⚠ Kopiranje nije uspjelo'); }
+}
+function _mapRestoreIndicatorShow(name) {
   _mapRestoreIndicatorShownAt = performance.now();
+  _mapLoadDiagStart(name);
   const el = document.getElementById('map-restore-indicator');
   if (el) el.classList.add('show');
 }
@@ -16445,7 +16494,7 @@ function _mapRestoreIndicatorHide() {
   try {
     const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
     if (saved?.type === 'sqlite') {
-      _mapRestoreIndicatorShow();
+      _mapRestoreIndicatorShow(saved.sqlId);
       // Ne ostavljaj sivu kartu 10–20 s dok se veliki OPFS/SQLite fajl otvara.
       // Topo radi online ili iz SW cache-a; worker je automatski zamijeni
       // SQLite slojem tek kada je baza spremna.
@@ -32960,13 +33009,14 @@ async function sqlmapRestoreAll() {
   // teren koji SAM kaže gdje vrijeme ide, umjesto da programer nagađa na daljinu).
   const _tR0 = performance.now();
   const _tBrk = [];
+  let shownAny = false;
+  _mapLoadDiagStep('sqlmapRestoreAll pokrenut', 'startup je ušao u restore funkciju');
   try {
-  if (await _sqlCrashCheck()) return;
+  if (await _sqlCrashCheck()) { _mapLoadDiagStep('crash zaštita', 'automatsko učitavanje je preskočeno'); return; }
   _sqlRestoreFailed = [];
   let lastSqlId = null;
   try { const lm=JSON.parse(localStorage.getItem('tvlake_last_map')); if(lm?.type==='sqlite'&&lm.sqlId) lastSqlId=lm.sqlId; } catch(e){}
 
-  let shownAny = false;
   // Brzi OPFS put: naziv fizičkog fajla je pri uvozu uvijek "<ime>.sqlmap".
   // Ne čekaj IndexedDB `list` prije otvaranja zadnje karte — na stvarnom
   // telefonu je list izmjeren na 12.846 s, dok je load-opfs trajao samo 18 ms.
@@ -32974,6 +33024,8 @@ async function sqlmapRestoreAll() {
   // tada ovaj jeftini pokušaj padne i postojeći IDB put ispod uredno preuzme.
   if (lastSqlId && !_sqlSkipList().includes(lastSqlId)) {
     const _tFast0 = performance.now();
+    _mapLoadDiagName(lastSqlId);
+    _mapLoadDiagStep('brzi OPFS pokušaj', '/' + lastSqlId + '.sqlmap');
     try {
       localStorage.setItem(_SQL_CRASH_KEY, lastSqlId);
       const fast = await _sqlWCall({ type:'load-opfs', name:lastSqlId,
@@ -32990,20 +33042,27 @@ async function sqlmapRestoreAll() {
         const btn = document.getElementById('layer-switch-btn');
         if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
         shownAny = true;
-        _tBrk.push('brzi-load-opfs(' + lastSqlId + ') ' + Math.round(performance.now() - _tFast0) + 'ms');
+        const _tFastMs = Math.round(performance.now() - _tFast0);
+        _tBrk.push('brzi-load-opfs(' + lastSqlId + ') ' + _tFastMs + 'ms');
+        _mapLoadDiagStep('brzi OPFS uspješan', _tFastMs + 'ms · sloj prikazan, indikator skriven');
         // Karta je već vidljiva; sporiji popis ostalih karata više nije dio
         // korisničkog vremena čekanja i nastavlja se ispod u pozadini funkcije.
         _mapRestoreIndicatorHide();
+      } else {
+        _mapLoadDiagStep('brzi OPFS nije uspio', Math.round(performance.now() - _tFast0) + 'ms · ' + (fast?.error || 'fajl nije otvoren'));
       }
     } catch(e) {
       localStorage.removeItem(_SQL_CRASH_KEY);
+      _mapLoadDiagStep('brzi OPFS greška', Math.round(performance.now() - _tFast0) + 'ms · ' + (e?.message || e));
     }
   }
 
   try {
     const _tListT0 = performance.now();
     const r = await _sqlWCall({type:'list'}, [], 30000);
-    _tBrk.push('list ' + Math.round(performance.now() - _tListT0) + 'ms');
+    const _tListMs = Math.round(performance.now() - _tListT0);
+    _tBrk.push('list ' + _tListMs + 'ms');
+    _mapLoadDiagStep('IndexedDB popis', _tListMs + 'ms · ' + (r.ok ? ((r.rows?.length || 0) + ' karata') : ('NEUSPJEH: ' + (r.error || 'worker'))));
     if (!r.ok || !r.rows?.length) {
       localStorage.removeItem(_SQL_CRASH_KEY);
       // Popis karata nije uspio (worker pao/istekao) ILI ih stvarno nema —
@@ -33019,6 +33078,7 @@ async function sqlmapRestoreAll() {
     const _kandidati = rows.filter(e => !_skipNow.includes(e.name));
     const showName = (lastSqlId && _kandidati.some(e => e.name === lastSqlId))
       ? lastSqlId : (_kandidati[0]?.name || null);
+    _mapLoadDiagName(showName);
     rows.sort((a,b) => Number(b.name === showName) - Number(a.name === showName));
     const preskoci = _sqlSkipList();
     for (const entry of rows) {
@@ -33038,13 +33098,17 @@ async function sqlmapRestoreAll() {
         localStorage.setItem(_SQL_CRASH_KEY, entry.name);
         let lr;
         const _tLoadT0 = performance.now();
+        const _loadKind = entry.opfs ? 'OPFS' : 'IndexedDB';
+        _mapLoadDiagStep('otvaram kartu', _loadKind + ' · ' + (entry.opfs ? (entry.opfsName || entry.name + '.sqlmap') : entry.name));
         if (entry.opfs) {
           const opfsName = entry.opfsName || (entry.name + '.sqlmap');
           lr = await _sqlWCall({type:'load-opfs', name:entry.name, path:'/'+opfsName, fmt:entry.fmt, meta:entry.meta});
         } else {
           lr = await _sqlWCall({type:'load-idb', name:entry.name});
         }
-        _tBrk.push((entry.opfs?'load-opfs':'load-idb') + '(' + entry.name + ') ' + Math.round(performance.now() - _tLoadT0) + 'ms');
+        const _tLoadMs = Math.round(performance.now() - _tLoadT0);
+        _tBrk.push((entry.opfs?'load-opfs':'load-idb') + '(' + entry.name + ') ' + _tLoadMs + 'ms');
+        _mapLoadDiagStep('karta otvorena', _tLoadMs + 'ms · ' + (lr.ok ? 'OK' : ('NEUSPJEH: ' + (lr.error || 'nepoznato'))));
         // Učitavanje ove karte prošlo bez rušenja → ukloni marker i reset fail brojač
         localStorage.removeItem(_SQL_CRASH_KEY);
         localStorage.removeItem(_sqlFailKey(entry.name));
@@ -33068,6 +33132,7 @@ async function sqlmapRestoreAll() {
           shownAny = true;
         }
         _tBrk.push('sloj(' + entry.name + ') ' + Math.round(performance.now() - _tLayerT0) + 'ms');
+        _mapLoadDiagStep('Leaflet sloj kreiran', Math.round(performance.now() - _tLayerT0) + 'ms' + (shouldShow ? ' · karta prikazana' : ''));
         _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs});
         if (shouldShow) _sqlPrewarm(entry.name);
       } catch(e) {
@@ -33083,6 +33148,7 @@ async function sqlmapRestoreAll() {
     if (!shownAny) _sqlEnsureBaseLayer(rows.length);
   } catch(e) {
     console.warn('SQLmap restore failed:', e);
+    _mapLoadDiagStep('restore greška', e?.message || e);
     _sqlEnsureBaseLayer(0);
   }
   localStorage.removeItem(_SQL_CRASH_KEY);
@@ -33114,6 +33180,8 @@ async function sqlmapRestoreAll() {
       console.warn('SQLmap restore sporo: unutra ' + Math.round(_tTot) + 'ms, od prikaza indikatora ' + Math.round(_tOdPrikaza||_tTot) + 'ms [' + _detalj + ']' + _prijeTxt);
       _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt);
     }
+    _mapLoadDiagStep('restore završen', Math.round(_tTot) + 'ms unutar funkcije · indikator skriven');
+    _mapLoadDiagFinish(shownAny ? 'karta prikazana' : 'završeno bez offline karte');
     _mapRestoreIndicatorHide();
   }
 }
@@ -33913,6 +33981,7 @@ let _loadmapManageQ = '';
 function openLoadMapScreen() {
   document.getElementById('loadmap-modal').classList.add('show');
   _loadmapStatus('');
+  _loadmapRenderStartupDiag();
   const s = document.getElementById('loadmap-search'); if (s) s.value = '';
   _loadmapManageQ = '';
   _loadmapRenderRecent();
@@ -33923,6 +33992,15 @@ function closeLoadMapScreen() {
   loadmapCancelSheet();
 }
 function _loadmapStatus(t) { const e = document.getElementById('loadmap-status'); if (e) e.textContent = t || ''; }
+function _loadmapRenderStartupDiag() {
+  const el = document.getElementById('loadmap-startup-debug');
+  if (!el) return;
+  const txt = _mapLoadDiagText();
+  el.classList.toggle('show', !!txt);
+  el.innerHTML = txt
+    ? '<div class="lm-startup-diag-head"><span>🔬 Debug učitavanja pri ulazu</span><button type="button" onclick="_mapLoadDiagCopy(event)">Kopiraj</button></div>' + _escHtml(txt)
+    : '';
+}
 function loadmapPickFiles() { document.getElementById('loadmap-file-input').click(); }
 
 // Lokalizirane poruke grešaka (prema specifikaciji)
@@ -40528,6 +40606,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <div class="lm-section" id="loadmap-recent-sec">
       <div class="lm-section-title">🕒 Nedavne karte <span style="font-weight:400;text-transform:none;color:#475569;">(tap = aktiviraj · drži = obriši)</span></div>
       <div id="loadmap-recent"></div>
+      <div id="loadmap-startup-debug" class="lm-startup-diag"></div>
     </div>
 
     <!-- UPRAVLJANJE SVIM KARTAMA -->
