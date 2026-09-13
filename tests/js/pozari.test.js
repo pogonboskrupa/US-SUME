@@ -688,12 +688,12 @@ t('_sjeFilterBlizu koristi UŽI radijus od požara (50 km, ne 150)', () => {
   assert.strictEqual(api5._sjeFilterBlizu([{ la:45.10, lo:16.15 }], { la:44.88, lo:16.15 }).length, 1);
 });
 
-t('_poziGrupisi sa UŽIM pragom razdvaja ono što bi na 1500 m bilo spojeno', () => {
+t('_poziGrupisi sa novim pragom 450 m razdvaja obližnje zasebne požare', () => {
   const pts = [
     { la:44.9100, lo:16.2000, dt:'2026-08-20T00:00:00Z', conf:'highest', sat:'x', frp:NaN },
     { la:44.9150, lo:16.2000, dt:'2026-08-20T00:00:00Z', conf:'highest', sat:'x', frp:NaN }   // ~555 m
   ];
-  assert.strictEqual(api5._poziGrupisi(pts).length, 1, 'na 1500 m (požari) je to jedan');
+  assert.strictEqual(api5._poziGrupisi(pts).length, 2, 'na 450 m (požari) su to dva odvojena incidenta');
   assert.strictEqual(api5._poziGrupisi(pts, 300).length, 2, 'na 300 m (sječa) su dvije zasebne');
 });
 
