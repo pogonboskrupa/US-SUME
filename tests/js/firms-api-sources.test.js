@@ -30,8 +30,8 @@ async function main() {
     return { ok:true, naziv, pts:[{ sat:naziv }] };
   };
   const fakeUrl = (key, period, ref, source) => 'https://firms.test/' + source;
-  const src = extractArray('_POZ_API_IZVORI') + '\n' + extractFn('_poziDohvatiApi') + '\nreturn _poziDohvatiApi;';
-  const run = new Function('_poziDohvatiJedan', '_poziApiUrl', src)(fakeCall, fakeUrl);
+  const src = extractArray('_POZ_API_IZVORI') + '\n' + extractFn('_poziApiBlokovi') + '\n' + extractFn('_poziDohvatiApi') + '\nreturn _poziDohvatiApi;';
+  const run = new Function('_poziDohvatiJedan', '_poziApiUrl', 'Date', src)(fakeCall, fakeUrl, Date);
   const r = await run('K', '24h', { la:44.88, lo:16.15 });
 
   assert.strictEqual(calls.length, 4, 'mora poslati četiri odvojena FIRMS zahtjeva');

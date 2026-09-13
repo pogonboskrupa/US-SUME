@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.9';
+const APP_VER = 'v1.2.10';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13348,10 +13348,10 @@ function _poziOznaciNove(grupe, kljucStorage, preciznost) {
 function _poziMapKey() {
   return (_poziKljucevi.firms || '').trim();
 }
-function _poziApiUrl(kljuc, okvir, ref, izvor) {
+function _poziApiUrl(kljuc, okvir, ref, izvor, daniOverride, datum) {
   // NASA Area API prima najviše 5 dana po pozivu. Za 7d se ovaj izvor koristi
   // samo kao dopuna GFW-u; 30d se u _poziDohvati obrađuje isključivo preko GFW-a.
-  const dani = Math.min(5, { '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1);
+  const dani = Math.min(5, daniOverride || ({ '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1));
   const dLat = _POZ_RADIUS_KM / 111;
   const dLon = _POZ_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
   const bbox = [ref.lo - dLon, ref.la - dLat, ref.lo + dLon, ref.la + dLat].map(x => x.toFixed(3)).join(',');
@@ -13359,7 +13359,8 @@ function _poziApiUrl(kljuc, okvir, ref, izvor) {
   // zarezima vraća HTTP 400 (potvrđeno debugom sa stvarnog Android uređaja).
   const source = String(izvor || 'VIIRS_SNPP_NRT');
   return 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + encodeURIComponent(kljuc)
-    + '/' + encodeURIComponent(source) + '/' + bbox + '/' + dani;
+    + '/' + encodeURIComponent(source) + '/' + bbox + '/' + dani
+    + (datum ? '/' + encodeURIComponent(datum) : '');
 }
 
 const _POZ_API_IZVORI = [
@@ -13369,10 +13370,34 @@ const _POZ_API_IZVORI = [
   { id:'MODIS_NRT',        naziv:'FIRMS MODIS' }
 ];
 
+// FIRMS Area API dozvoljava samo 1–5 dana po zahtjevu, ali opcioni završni
+// segment DATE vraća historijske podatke od tog datuma. Bez DATE aplikacija
+// je za 7d stvarno dobivala samo 5 dana, a za 30d se potpuno oslanjala na GFW
+// koji na terenskom uređaju vraća prazan skup. Razbijanjem na uzastopne blokove
+// nema rupe između tekućih požara i višegodišnje lokalne arhive.
+function _poziApiBlokovi(okvir, sadMs) {
+  const ukupno = { '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1;
+  if (ukupno <= 5) return [{ dani:ukupno, datum:null }];
+  const danas = new Date(isFinite(sadMs) ? sadMs : Date.now());
+  danas.setUTCHours(0, 0, 0, 0);
+  const pocetak = new Date(danas.getTime() - (ukupno - 1) * 86400000);
+  const blokovi = [];
+  for (let od = 0; od < ukupno; od += 5) {
+    const dani = Math.min(5, ukupno - od);
+    const datum = new Date(pocetak.getTime() + od * 86400000).toISOString().slice(0, 10);
+    blokovi.push({ dani, datum });
+  }
+  return blokovi;
+}
+
 async function _poziDohvatiApi(kljuc, okvir, ref) {
-  const rez = await Promise.all(_POZ_API_IZVORI.map(izv =>
-    _poziDohvatiJedan(izv.naziv, _poziApiUrl(kljuc, okvir, ref, izv.id), 20000)
-  ));
+  const zahtjevi = [];
+  _POZ_API_IZVORI.forEach(izv => _poziApiBlokovi(okvir).forEach(blok => {
+    const dodatak = blok.datum ? (' · ' + blok.datum + ' +' + (blok.dani - 1) + 'd') : '';
+    zahtjevi.push({ naziv:izv.naziv + dodatak,
+      url:_poziApiUrl(kljuc, okvir, ref, izv.id, blok.dani, blok.datum) });
+  }));
+  const rez = await Promise.all(zahtjevi.map(z => _poziDohvatiJedan(z.naziv, z.url, 20000)));
   const uspjesni = rez.filter(r => r.ok);
   const greske = rez.filter(r => !r.ok).map(r => r.naziv + ': ' + r.greska);
   if (!uspjesni.length) return { ok:false, naziv:'FIRMS API', greska:greske.join(' · '), greske };
@@ -13629,10 +13654,9 @@ async function _poziDohvati(okvir) {
         { headers:{ 'x-api-key': _poziGfwKljuc() }, parser:_poziParseGfwJson, provjera:/"data"\s*:/ })
     : null;
 
-  // NASA-ini gotovi evropski CSV-ovi završavaju na 7 dana, a Area API ne
-  // podržava 30 dana. Ne šalji lažni 24h/5d rezervni zahtjev pod oznakom 30d:
-  // za ovaj prozor GFW je jedini izvor koji zaista pokriva cijeli period.
-  if (okvir === '30d') {
+  // Bez FIRMS ključa 30d se i dalje može dobiti samo preko GFW-a. Sa ključem
+  // se niže koristi pouzdaniji FIRMS niz od šest datiranih petodnevnih blokova.
+  if (okvir === '30d' && !kljuc) {
     if (!gfw) return { ok:false, greska:'Pregled 30 dana zahtijeva GFW API ključ koji postavlja admin.' };
     const r = await gfw;
     return r.ok

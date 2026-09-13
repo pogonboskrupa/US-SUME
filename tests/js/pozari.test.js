@@ -95,6 +95,7 @@ const SRC2 = [
   extractFn('_poziEvtKljuc'),
   extractFn('_poziOznaciNove'),
   extractFn('_poziApiUrl'),
+  extractFn('_poziApiBlokovi'),
   extractFn('_poziGfwUrl'),
   extractFn('_poziParseGfwJson'),
   extractFn('_poziBrojRijecPozar'),
@@ -115,7 +116,7 @@ function makeApi2(store) {
   const vals = [store, 'seen', 'tvlake_pozari_okvir', 150];
   return new Function(...keys,
     SRC2 + '\nreturn { _poziOkvir, _poziOkvirNaziv, _poziUrl, _poziGrupisi, _poziGrupeBlizu, ' +
-    '_poziEvtKljuc, _poziOznaciNove, _poziApiUrl, _poziGfwUrl, _poziParseGfwJson, _poziBrojRijecPozar, _poziBrojRijecNovih, _poziBrojRijecIzvora, ' +
+    '_poziEvtKljuc, _poziOznaciNove, _poziApiUrl, _poziApiBlokovi, _poziGfwUrl, _poziParseGfwJson, _poziBrojRijecPozar, _poziBrojRijecNovih, _poziBrojRijecIzvora, ' +
     '_poziVjetarPrijeti, _poziGreskaTxt, _poziSavjet };'
   )(...vals);
 }
@@ -249,6 +250,29 @@ t('NASA Area API poštuje maksimum od 5 dana', () => {
   const api2 = makeApi2(makeStore());
   const u = api2._poziApiUrl('K', '7d', { la:44.88, lo:16.15 });
   assert.ok(u.endsWith('/5'));
+});
+
+t('7 dana se pokriva bez rupe kroz blokove 5+2 dana', () => {
+  const api2 = makeApi2(makeStore());
+  const b = api2._poziApiBlokovi('7d', Date.UTC(2026, 8, 13));
+  assert.deepStrictEqual(b, [
+    { dani:5, datum:'2026-09-07' },
+    { dani:2, datum:'2026-09-12' }
+  ]);
+});
+
+t('30 dana se pokriva kroz šest uzastopnih petodnevnih blokova', () => {
+  const api2 = makeApi2(makeStore());
+  const b = api2._poziApiBlokovi('30d', Date.UTC(2026, 8, 13));
+  assert.strictEqual(b.length, 6);
+  assert.deepStrictEqual(b[0], { dani:5, datum:'2026-08-15' });
+  assert.deepStrictEqual(b[5], { dani:5, datum:'2026-09-09' });
+});
+
+t('historijski Area API URL sadrži početni datum bloka', () => {
+  const api2 = makeApi2(makeStore());
+  const u = api2._poziApiUrl('K', '30d', { la:44.88, lo:16.15 }, 'VIIRS_NOAA20_NRT', 5, '2026-08-15');
+  assert.ok(u.endsWith('/5/2026-08-15'));
 });
 
 t('NASA Area API URL sadrži tačno JEDAN izvor — bez zarezom spojenih source oznaka', () => {
