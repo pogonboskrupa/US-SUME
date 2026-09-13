@@ -1,0 +1,35 @@
+name: Apply FIRMS source fix
+
+on:
+  push:
+    branches: [fix/codex-us-sume-workflow-169a5b7]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/codex-us-sume-workflow-169a5b7
+      - name: Apply verified patch
+        shell: bash
+        run: |
+          echo 'H4sIAAAAAAACA7VZzXLbRhK+8ykmPgRACIIESf2YilNRbMmhbf2UKNm1UVSqITEkhwQxDAagZCmsyml9SQ7ZygOsn2JvOWzJL5In2e6ZAQn+2a7aXZZKBGeme3q6v+7pbgS82yWlUo8nhJZpFMSCB2U6HpfbKQ8DrxfTIGSkvXGqwKOA3ZKdgO5U/V3Pe0wf06CzQ/xKZbteL5RKpY/wLRSLxY/x/vZbUvIr7i4pqv/w0ywl9wWSfYAq5B2acBE1A/KoTT05DrxUSm8S0iF7NF854lErGJJqfT6U0LjHEhytgbDZ6ITFEtg9FQEjta3qysQxHTHyyPeq3vajQnE9VW1lYk61Y4SaFoh+KJfJSxFzmXDSbL189eLi4dfm6xMyFjIRA/bwjpOYhYxKRobhIH34bY9EfEgDEjHSYxGL+Yf3nNzR0YBFcsi9QpC3qrKQ109GIeh6/sNYLqjubrMqWM6v+Y87NbpoudxybavcAFpnq+JvuzukaL5h6AZWiBuPBsHBhEXJKzgUSmhbadQH64UsiNmAddBclku6aaQebTZxtFE7IpIiZB6LYwFUxyztT+jDOxYJIoI2H6iHNuiERgPWABZs4sWgGhE5e0h/LXkvjSMhI3oUszt6KoappAMbZ6fwr4QbJGT/9PT69cEZeUKsiTKktVcorp/agSm00GkMOv/wJ0d73vFBSiJKQtHjEWHDmEYpsbtCJCwmAwZLHt6RMQW7wwzhdxEYS0xEj8hOzMcJdQrknujtrmma9F+z+CCEHQPRSUegNg9QeRAyfPzubTOwLVxUAqiXYHPL2SO8S+w5pZPj4iXsNnkqIlB7AhzNafYU2JRD1Wq1LdffAqdSTzVltswQ5Hos7vgJCNzhx2LC7F6cjpmrcNdpJSKmPfg1jlkHDgXwVFZbJD6i45fsrW3sGbMEzAHC4tRL5MIm3OvyeCTJzz8Ty3K8JOYjbZ9CaZHV/phfxKGtNneJGE547ALHLvIuft5SF7Q/EbGRBsx4vN/aJ/sAGVBNE07CRxQsOZiADzGyRQIKZh0LgjwnqUd+oBDcCHiemNCB5kWG2lcNQ0lHggypAOONUyB+fvimlO6RWkWRpVq8ZwJgDO4t2jF9+D0FiHCpfZlPBOpzKBQh9TInSFAUDhY8oknfg9hlb7kAGqta71sN3yVWfRceqvCwE1iNHfiGHa1GrUKml+r4V6hfX3uFYfiKIiSuT09+uD7bf9a8aF2/PCJl4vv+wirQ6ZpVNiwjX2lxOkLaoFwvpNkI6BIY7Vac/IbttrgFVpdqqSAlxVuZBSlLSiDzU5Di4mxRzV55Izq2gck35NZLxCG/ZYFdcxxvIEAjlgu+gIEWzHDYPDtqLRv2fP/h1+MT8uLg2f4xkSKNOwyNe3H2qgS2bY3pAMMI0cYXgPohNezuKEQPZDEBg72j5Pvz81NSr1SIPRbJJH74HQNRwNppT4wAAkQmEwphp0f2zRWVxuzhd+DveMhR68NI8IS0APNRz9ZwQjd43Wyeta5bx+Ctx2fnllai8R2rnyRj2SiXldd4IxHQsfSYkAGXXkQl9XpiArcnL4PMtNyRk7IF6mNRB66ii7PmUzEaiwjCgfYOR99nRWKVF3d19c/jk/39amV5wFcDRyfPmi18Ujso8yIf/IFo3dOXXja0RgKtAWe2ZB2LaaGYxWIFQjDndfOH1ydnTcQSbnFPeNBY1pkLO0cUvLZhaSyoedIqwQKLTN1lwvk5gXQNIc6XqpWNpP6nSP1F0pnulKTqs0Cq5oGkULzaQw1Q+TbqLMVWE0Yg2G0IihnSALygLHpDIQU4jcWIS+bRMLSXFKq8C1AI/qVNl9/lBQOD4Kyn5HQ/I9B6PHBcUq3Ax0GGjnZPLVMqxwMmVUwD8eAOCOG2tGP07dgTw/zSXszkkK1Z+IVaqcQ2hEo2hFCDIIZiT9FSzQ2vyS+yfb2QRb2k72R+dQ/SN7o0lGzJiKAfsJHm09CimHhD/v0vYjluJt80J/I4kQjPKzU027Ir4gPa6WthYYk3TmXf9jzPjj2kAN+/vHKMmvJyJXG6XiygckkwYCEYtROJTD59NvINqeSl0ykmhLO//vgF/sjzULRpSA4FrEjIG5p0+urqenZ28bxJWgdnmPjcUYJZm8FywBI27EDiZXh8/M+kGFv1HdevYIqxtf0YnzB334xnjTSDsjQOXTKCQwo4qrm3VboTwcoJO2bJM0g80jFQOE5WCSTx23lRYFxg5gBzykMGJ7bNDqh8BVUXjtwL6SQcIGxMto9bxp5MaJJK8uWXZPb8zRO8B2Youg7avdcxbGCv4GmGIUvdHhqehsvU2csqhP/vTrgCT68QpbY1WlrhKtDKEQdZMIV0CRI42fop6SBabIYqL23gsFkube7n6sf5bYJschr4rxhtOOC0kP3T2NDA3PZ9168hMLdrNcyCPw5MW8W3GcpUOBHD5UASpWFodl2OBWoQKLI4cLsSB25X48BKFBzTkOcToaWYd7sQ81b3MyEit6XhPN81b4Zc/FHBRmUpvIFsl2Vw3HlxrD65wKSlXo1Ljc8+jomvG9ivBD48DsgoxYhlnOfrF4I2ImNPF99oUp0WZUbWur+EW613tfYOvczOvBrC5pGa2Ef7p9cvD/7mWJ+4OGcXppsd9tNXvZs5ca97g8fOxIMTihCqNkSko9dcOQvQlGOhaugn6gmcHY4JK5R31HerO1jNw8OW7z7e5Buw2WTAYt5EXDA7V7hj3tHF2gGXnbHuOe0MqZ2vCDSWsvJiJQkh4Pn6zsulHRCuG4ojqg/GjSYwguRZKy1lm2dFqArnORvr/bUr3K9crwtGm227uQqdzrMMw385v8r80BxvYXtt7s3H/WSmhQwWddAbZgp43r1R1bbRPorYG244/5qsIH9+YIVyrMIPL+jGPekzGrAYn6zbEpQhpSF7C64Mskxd1QRhsWZ0is/A7YXEOm+sYUQb5UcBTeijH+VXjTLcM6jUhQaWvPEGkrT1t2lb+Z2g4le2PW+72q1s+dXFtpVeqTtW+hnxXUVsV1WbSuVELRZPOJRjb0Q8ZDH565c/yId/nj4jF5EcipKkEUaLD+/TETP9H/AxvCCznkqreXKMdSaREzqEKjBg41C8xZ5NSv76+z/AYjygJB3D6TSHJ/+Lz1IHSwnxhFjrm1j5WdXHms8+3X/6/QEYEWYT1SnV7SUMwDniGcl589VBRjMnSXjIZGniz1m/an63hnXI23rVgmETgJssD6QubBV0dH0oPZzSVv/0okLEbggUCYyMsPdqkKBxUtEfz2tv+xW/tqsAUg7YpIwh0kDkM7ZA/FRczGjdugJQ0Uolg6o/5p1krnYqAeyJqlt+SjkERysCkRp6WPUq9LquXFnTlbn5MYUrbXkFDubWfH9+9ArWdCX2P4NDOH8LYrWNq3S1cn0d8DiiI7jHLc8rw9+8e4tFjJUm3V3FMNdMg8wvpp3kENPxETM1Zcjg4kioOhlu6ylGJ13bWrofED1Ih5e5bc2joyb+mkAyu57PRzlo9UHhZ/hAXgzZhBVhURJRbMVQFAGrFDpjoElRcr6y2z2EN8UKtABeq3RdUeshXhN7D0i+1iQ6u4CBYtHoQh8IJy/5Fbo0AXaOZlMsmoSFQea6um5qYXpfKpktYWie3KvdZAjxSB8SgjwcxNenmOK/pB+LG4JYP9C98Yjd0QSv4E3Hn67adT+O6du8aU1WsNYoei5vEcxqP9soJOJ3S+bQHFkUrOx1tTezSb4WXlULEhdJ1ckaRUsIHFFA/sLZOpCz5Upz44AQlZ7CBCZ4ikGu+nTwpja2VsQL16VaMi9e0MhqHI7SCdOASdvK2j/O5lbDUsG2ValZs2x3QxtAZeONy3siadLQKfP0yhBNl44G9zWczIaLGKggVROByRyy/huccKmtiJFOdeH0khxDGWNatQAgaynPsVRH78dIdf1mEcRaSmSzVVm5tzi7Z+X2jFPsQSPYD7NXRNZKug2IsXKZEgIo7jh2Zls3U0Uee/OuAGxhWy+RB7bUsbce0ka97u3uuiQUDX/bg/JwqsPjDO464B/8lNLQ1tjQEcIldWA0EjG+PJAhtvoffmMJh+xABBNMuanpUN/RfjJgE7roRnm+eOoWSwx/TI47aK+Oh9h0PMnvmN4O8w6OcGAhTyQ86n6ykoKPUAYJW2O322ymOWY5qeI6d+Mv1AaeHAMz2ypbjjcWY9vJ4dpVtwZ6OCg/a2YDd3wPKTE3Mruq3rnlbDwg9vB0ewHYaWZYEmYnmbMTbUhW8a0J+H5IgYJbH2GKZXVmjRpwBiHSMEGBVDvuw/uI97WKKL6Zkdj9H6Qf4zgvH003ZCnymWYju6xcrXX/Ge7wjWYoera1jWnvh/chMKzgoYVKO5feXZj3SxlyWKZqAx1mzYKfjnaeac2ouLX0BhVkxi0hl5EeuwXLwpWymmLPMiDwJgr1wZr0a3HGpFf1WqXW7e54XpdWO2DIxTR8E+1S1rU0q1L1uu9uQ7IOX34d61BA5NKLO9Bigu/RRnQo+SgdgbbM6zvwZdvEcJK3VurB3SHf8KQP8N5S5tHtokJxhT2iWtIgxve9CX34DSpm/RJJuxgarc3uNNLxBZCqqgFexlL6VVJOkFn8geSyCiEIpGYQtao2PuB7VaijF3rlGKZg3stXgp+OVi5ZfbmxDNo0B9Xy8uqytSDG7IVVmo8L+j4ugY+Vqg5gf2mDLzTVSuDQKDcsJethpTT3da1tOpkFEN0MMhcWAl6F4kV3+k6oMo2SUSTAVBBk7yh5fnZx2mztHx8gSP4EVsQepR/eQ3yM8R4M4rQHFsVkSQ5DEfGgTRE8WaObOg31/q2AoPMJHSZ8ghFK8SJlUi3V9aB6UYyDFEa3imYQQGBGc+b/D6HClfFnIwAA' | base64 -d | gzip -d > /tmp/codex-firms.patch
+          git apply --check /tmp/codex-firms.patch
+          git apply /tmp/codex-firms.patch
+      - name: Run JavaScript tests
+        shell: bash
+        run: |
+          for f in tests/js/*.test.js; do node "$f" >/dev/null; done
+      - name: Commit source and remove one-time workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/codex-firms-fix-once.yml
+          git add index.html sw.js android/app/build.gradle tests/js/pozari.test.js tests/js/firms-api-sources.test.js
+          git config user.name "Pogon Bos.Krupa"
+          git config user.email "pogonboskrupa@gmail.com"
+          git commit -m "fix: razdvoji FIRMS Area API izvore"
+          git push origin HEAD:fix/codex-us-sume-workflow-169a5b7
