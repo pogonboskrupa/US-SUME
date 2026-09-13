@@ -2534,6 +2534,38 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     "PRIJE poziva" napomenom; kad razmaka nema (`shownAt: null`, isti slučaj
     kao postojeći "sporo učitavanje" test), poruka NE izmišlja "PRIJE poziva"
     napomenu bez osnove.
+- **Dijagnostika sporog učitavanja premještena ISPOD konkretne karte, ne u
+  generičku status liniju (v1.2.4)**: na zahtjev ("debug za učitavanje karte
+  stavi ispod učitane karte kod nedavne karte"). Poruka `⏱ Zadnje učitavanje
+  trajalo...` (v1.1.6/v1.1.7 iznad) se do sada pisala isključivo u
+  `#sqlmap-status` — jedna linija na VRHU ekrana "🗄 Offline karte", iznad
+  drop-zone-a, odvojena od bilo koje konkretne karte na koju se odnosi. Kad
+  korisnik ima više sačuvanih karata, ništa u toj liniji nije govorilo NA
+  KOJU se karta odnosi, a druga (novija) UI putanja — 🗺 Učitaj kartu → 🕒
+  Nedavne karte (`_loadmapRenderRecent`, konsolidirani ekran koji je odavno
+  zamijenio `sqlmap-modal` kao stvarnu ulaznu tačku iz Menija) tu poruku
+  uopšte nije ni prikazivala.
+  - Novi globalni `_sqlLastLoadDiag` (`{name, msg} | null`) pamti dijagnostiku
+    PO IMENU karte umjesto da je odmah ispisuje u fiksni DOM element —
+    `sqlmapRestoreAll`-ov `finally` blok je već računao `showName` (koja se
+    karta učitava), samo ga nije čuvao van tog bloka; dodan `_tDiagShowName`
+    da preživi do `finally`.
+  - **Prikazuje se na OBA mjesta koja tu kartu ionako renderuju** — nije
+    izabrano jedno mjesto umjesto drugog, jer oba ekrana (🗄 Offline karte
+    preko `_sqlmapRenderLayers`, 🗺 Učitaj kartu preko `_loadmapRenderRecent`)
+    su i dalje dostupna iz UI-ja (prvi iz `layer-switch-btn` sheeta drugom
+    preko Menija) i mogu se otvoriti nezavisno — poruka bi u samo jednom bila
+    nevidljiva korisniku koji koristi drugi. Oba čitaju ISTI `_sqlLastLoadDiag`
+    i porede `.name` sa svojim redom/karticom; ne pojavljuje se nigdje dok
+    ništa nije bilo sporo (`null`).
+  - `_sqlmapStatus(...)` poziv za OVU poruku je uklonjen (funkcija sama
+    ostaje, koriste je i dalje `_sqlCrashCheck`/`_sqlmapTestTile` za svoje,
+    nepovezane poruke) — dupliranje iste poruke na dva mjesta (vrh ekrana i
+    ispod karte) bi bilo suvišno, isto mjesto/isti podatak.
+  - Testovi: `tests/js/map-restore-indicator.test.js` (i dalje 12, prepravljeni
+    da čitaju `_sqlLastLoadDiag` preko `getDiag()` umjesto `_sqlmapStatus`
+    poziva) — dodatno provjeravaju da diag nosi TAČNO ime karte i da
+    `_sqlmapStatus` NIJE pozvan za ovu poruku.
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
   ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija

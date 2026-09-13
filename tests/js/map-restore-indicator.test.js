@@ -139,10 +139,16 @@ function makeRestoreEnv(opts) {
     // _mapRestoreIndicatorHide se izvlači STVARAN (ne stub) — test provjerava
     // da ga sqlmapRestoreAll STVARNO pozove, ne samo da postoji.
   };
-  const src = SRC_HIDE + '\n' + SRC_RESTORE_ALL;
+  // _sqlLastLoadDiag je u index.html deklarisan kao `let` VAN funkcije
+  // (globalni modul-scope) — ovdje se ista deklaracija dodaje ISPRED izvučenog
+  // tijela, a `getDiag` je jedini način da test poslije poziva pročita šta je
+  // sqlmapRestoreAll u nju upisala (dodjela primitivnog parametra iz sandbox-a
+  // se ne bi vidjela izvana, closure nad `let` unutar iste generisane funkcije
+  // hoće).
+  const src = 'let _sqlLastLoadDiag = null;\n' + SRC_HIDE + '\n' + SRC_RESTORE_ALL;
   const keys = Object.keys(sandbox);
-  const api = new Function(...keys, src + '\nreturn { sqlmapRestoreAll };')(...keys.map(k => sandbox[k]));
-  return { run: api.sqlmapRestoreAll, el, calls };
+  const api = new Function(...keys, src + '\nreturn { sqlmapRestoreAll, getDiag: () => _sqlLastLoadDiag };')(...keys.map(k => sandbox[k]));
+  return { run: api.sqlmapRestoreAll, el, calls, getDiag: api.getDiag };
 }
 
 // performance.now() koje raste za `stepMs` pri SVAKOM pozivu — simulira sporo
@@ -193,7 +199,7 @@ await t('uspješno učitavanje jedne karte → indikator se skloni na kraju', as
 // ── v1.1.6: raščlana dijagnostika trajanja ─────────────────────────────────
 console.log('\nsqlmapRestoreAll — dijagnostika trajanja (v1.1.6):');
 
-await t('sporo učitavanje (>1.5s ukupno) upisuje raščlanu po koracima u _sqlmapStatus', async () => {
+await t('sporo učitavanje (>1.5s ukupno) upisuje raščlanu po koracima u _sqlLastLoadDiag', async () => {
   const env = makeRestoreEnv({
     perf: makeSlowPerf(1000),   // svaki performance.now() poziv +1000ms → lako pređe 1.5s prag
     wCall: async (msg) => {
@@ -203,15 +209,19 @@ await t('sporo učitavanje (>1.5s ukupno) upisuje raščlanu po koracima u _sqlm
     }
   });
   await env.run();
-  assert.strictEqual(env.calls.status.length, 1, 'mora upisati TAČNO jedan status red kad je sporo');
-  const msg = env.calls.status[0];
-  assert.ok(/^⏱/.test(msg), 'poruka mora biti prepoznatljiva (⏱ prefiks)');
-  assert.ok(msg.includes('list'), 'raščlana mora imenovati "list" korak');
-  assert.ok(msg.includes('load-opfs'), 'raščlana mora imenovati "load-opfs" korak (ne load-idb za OPFS kartu)');
-  assert.ok(msg.includes('karta1'), 'raščlana mora imenovati KOJA karta je spora, ne samo tip koraka');
+  const diag = env.getDiag();
+  assert.ok(diag, 'mora upisati _sqlLastLoadDiag kad je sporo');
+  assert.strictEqual(diag.name, 'karta1', 'diag mora biti vezan za IME karte, ne generička poruka bez adresata');
+  assert.ok(/^⏱/.test(diag.msg), 'poruka mora biti prepoznatljiva (⏱ prefiks)');
+  assert.ok(diag.msg.includes('list'), 'raščlana mora imenovati "list" korak');
+  assert.ok(diag.msg.includes('load-opfs'), 'raščlana mora imenovati "load-opfs" korak (ne load-idb za OPFS kartu)');
+  assert.ok(diag.msg.includes('karta1'), 'raščlana mora imenovati KOJA karta je spora, ne samo tip koraka');
+  // v1.2.x: dijagnostika se više NE piše u generičku #sqlmap-status liniju —
+  // ispisuje se ISPOD konkretne karte (_sqlmapRenderLayers/_loadmapRenderRecent).
+  assert.strictEqual(env.calls.status.length, 0, '_sqlmapStatus se ne smije koristiti za ovu poruku');
 });
 
-await t('brzo učitavanje (<1.5s) NE piše ništa u _sqlmapStatus — bez šuma na normalan restart', async () => {
+await t('brzo učitavanje (<1.5s) NE upisuje _sqlLastLoadDiag — bez šuma na normalan restart', async () => {
   const env = makeRestoreEnv({
     perf: { now: () => 0 },   // svaki poziv vraća 0 → ukupno trajanje uvijek 0ms
     wCall: async (msg) => {
@@ -221,7 +231,7 @@ await t('brzo učitavanje (<1.5s) NE piše ništa u _sqlmapStatus — bez šuma 
     }
   });
   await env.run();
-  assert.strictEqual(env.calls.status.length, 0, 'normalan (brz) restart ne smije ništa upisati u status liniju');
+  assert.strictEqual(env.getDiag(), null, 'normalan (brz) restart ne smije ništa upisati u dijagnostiku');
 });
 
 await t('rani izlaz (nema sačuvanih karata) uz vještački spor performance.now() i dalje javlja bez pucanja', async () => {
@@ -230,10 +240,11 @@ await t('rani izlaz (nema sačuvanih karata) uz vještački spor performance.now
     wCall: async () => ({ ok: true, rows: [] })
   });
   await assert.doesNotReject(() => env.run());
-  assert.strictEqual(env.calls.status.length, 1);
+  const diag = env.getDiag();
+  assert.ok(diag);
   // 'list' korak se izvrši i kod ranog izlaza (samo je rows[] prazan) — poruka
   // mora bar imenovati taj korak, ne prazninu.
-  assert.ok(env.calls.status[0].includes('list'), 'i rani izlaz mora prikazati bar list() korak');
+  assert.ok(diag.msg.includes('list'), 'i rani izlaz mora prikazati bar list() korak');
 });
 
 // ── v1.1.7: razmak PRIJE poziva (auth/startup gate), ne samo unutar funkcije ──
@@ -255,8 +266,9 @@ await t('funkcija SAMA je brza, ali indikator je bio prikazan davno prije → ip
     }
   });
   await env.run();
-  assert.strictEqual(env.calls.status.length, 1, 'razmak PRIJE poziva sam po sebi mora okinuti dijagnostiku');
-  const msg = env.calls.status[0];
+  const diag = env.getDiag();
+  assert.ok(diag, 'razmak PRIJE poziva sam po sebi mora okinuti dijagnostiku');
+  const msg = diag.msg;
   assert.ok(msg.includes('PRIJE poziva'), 'poruka mora eksplicitno reći da je kašnjenje PRIJE ulaska u funkciju, ne unutar SQLite čitanja');
   assert.ok(/9\.\ds/.test(msg) || msg.includes('9.0s') || /9\.\d/.test(msg), 'ukupno vrijeme koje korisnik vidi (od prikaza indikatora) mora biti ~9s, ne par stotina ms');
 });
@@ -274,8 +286,9 @@ await t('gap i interno vrijeme približno isti (nema auth kašnjenja) → BEZ "P
     }
   });
   await env.run();
-  assert.strictEqual(env.calls.status.length, 1);
-  assert.ok(!env.calls.status[0].includes('PRIJE poziva'), 'bez podatka o prikazu indikatora ne smije se izmišljati "kašnjenje prije poziva"');
+  const diag = env.getDiag();
+  assert.ok(diag);
+  assert.ok(!diag.msg.includes('PRIJE poziva'), 'bez podatka o prikazu indikatora ne smije se izmišljati "kašnjenje prije poziva"');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

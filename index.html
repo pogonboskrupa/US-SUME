@@ -2390,6 +2390,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 .sqlmap-layer-meta { font-size:11px; color:#64748b; margin-bottom:8px; }
 .sqlmap-layer-meta span { color:#94a3b8; }
 .sqlmap-layer-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.sqlmap-layer-diag { font-size:11px; color:#38bdf8; margin-bottom:8px; line-height:1.4; }
 .sqlmap-opacity-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:6px; }
 .sqlmap-opacity-row input { flex:1; accent-color:#38bdf8; }
 #sqlmap-status { font-size:12px; color:#38bdf8; min-height:18px; text-align:center; margin-bottom:8px; }
@@ -2440,6 +2441,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 .lm-card-nm { font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-word; }
 .lm-card-nm .on { color:#22c55e; }
 .lm-card-meta { font-size:11px; color:#64748b; margin-top:3px; line-height:1.5; }
+.lm-card-diag { font-size:11px; color:#38bdf8; margin-top:6px; line-height:1.4; }
 .lm-card-btns { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
 .lm-card-btns .btn { font-size:11px; padding:5px 10px; }
 .lm-op-row { display:flex; align-items:center; gap:8px; font-size:11px; color:#64748b; margin-top:8px; flex-wrap:wrap; }
@@ -4990,7 +4992,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.3';
+const APP_VER = 'v1.2.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -32922,6 +32924,12 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
 // ranije su padale tiho (samo console.warn) pa je lista bila prazna i
 // korisnik nije imao ŠTA da aktivira ni ikakav trag da karta postoji.
 let _sqlRestoreFailed = [];
+// Dijagnostika sporog učitavanja (v1.1.6/v1.1.7) — RANIJE se pisala u generičku
+// #sqlmap-status liniju na vrhu ekrana "Offline karte", odvojeno od bilo koje
+// konkretne karte. Sada se pamti PO IMENU karte i ispisuje ISPOD nje, na oba
+// mjesta koja tu kartu prikazuju: 🗄 Offline karte (_sqlmapRenderLayers) i
+// 🗺 Učitaj kartu → Nedavne (_loadmapRenderRecent).
+let _sqlLastLoadDiag = null;   // {name, msg} | null
 async function sqlmapRestoreAll() {
   // Sav sadržaj funkcije ide kroz try/finally (v1.1.3) — _mapRestoreIndicatorHide()
   // mora opaliti na SVAKOM izlazu (uspjeh, "nema karata", pad u catch-u niže,
@@ -32939,6 +32947,7 @@ async function sqlmapRestoreAll() {
   // teren koji SAM kaže gdje vrijeme ide, umjesto da programer nagađa na daljinu).
   const _tR0 = performance.now();
   const _tBrk = [];
+  let _tDiagShowName = null;   // ime karte koja se učitava — za _sqlLastLoadDiag u finally
   try {
   if (await _sqlCrashCheck()) return;
   _sqlRestoreFailed = [];
@@ -32964,6 +32973,7 @@ async function sqlmapRestoreAll() {
     const _kandidati = rows.filter(e => !_skipNow.includes(e.name));
     const showName = (lastSqlId && _kandidati.some(e => e.name === lastSqlId))
       ? lastSqlId : (_kandidati[0]?.name || null);
+    _tDiagShowName = showName;
     rows.sort((a,b) => Number(b.name === showName) - Number(a.name === showName));
     let shownAny = false;
 
@@ -33059,7 +33069,13 @@ async function sqlmapRestoreAll() {
         ? (' · PRIJE poziva ' + _prijeStarta + 'ms (auth/startup gate, ne sam SQLite)')
         : '';
       console.warn('SQLmap restore sporo: unutra ' + Math.round(_tTot) + 'ms, od prikaza indikatora ' + Math.round(_tOdPrikaza||_tTot) + 'ms [' + _detalj + ']' + _prijeTxt);
-      _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt);
+      // v1.2.x: umjesto generičke #sqlmap-status linije na vrhu ekrana (odvojeno
+      // od bilo koje konkretne karte), pamti se PO IMENU karte — _sqlmapRenderLayers
+      // i _loadmapRenderRecent ovo čitaju i ispisuju ISPOD baš te karte.
+      _sqlLastLoadDiag = {
+        name: _tDiagShowName,
+        msg: '⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt
+      };
     }
     _mapRestoreIndicatorHide();
   }
@@ -33490,10 +33506,13 @@ function _sqlmapRenderLayers() {
     const metaDesc = sl.meta?.description ? `<br>${sl.meta.description}` : '';
     const zInfo = sl.meta?.minzoom!=null ? ` · zoom ${sl.meta.minzoom}–${sl.meta.maxzoom}` : '';
     const badge = sl.saved ? (sl.opfs ? '<span style="color:#38bdf8;font-size:10px;margin-left:6px;">💾 OPFS</span>' : '<span style="color:#4ade80;font-size:10px;margin-left:6px;">💾 sačuvano</span>') : '';
+    const diagHtml = (_sqlLastLoadDiag && _sqlLastLoadDiag.name === sl.name)
+      ? `<div class="sqlmap-layer-diag">${_escHtml(_sqlLastLoadDiag.msg)}</div>` : '';
     return `
     <div class="sqlmap-layer-row">
       <div class="sqlmap-layer-name">🗺 ${sl.name}${badge}</div>
       <div class="sqlmap-layer-meta"><span>${fmtLabel}${zInfo}</span>${metaDesc}</div>
+      ${diagHtml}
       <div class="sqlmap-layer-controls">
         <button class="btn ${sl.visible?'b':'gr'}" style="font-size:11px;padding:5px 10px;"
           onclick="sqlmapToggle(${i})">${sl.visible?'<svg class="ic"><use href="#ic-prikazi"/></svg> Vidljivo':'<svg class="ic"><use href="#ic-sakrij"/></svg> Skriveno'}</button>
@@ -34017,6 +34036,8 @@ async function _loadmapRenderRecent() {
     const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
     const dInfo = m.savedAt ? ' · ' + _mapMgrFmtDate(m.savedAt) : '';
     const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
+    const diagHtml = (_sqlLastLoadDiag && _sqlLastLoadDiag.name === m.name)
+      ? '<div class="lm-card-diag">' + _escHtml(_sqlLastLoadDiag.msg) + '</div>' : '';
     return '<div class="lm-card' + (m.visible ? ' active' : '') + '"' +
       ' onclick="_loadmapRecentTap(' + i + ')"' +
       ' oncontextmenu="event.preventDefault();_loadmapRecentDel(' + i + ')"' +
@@ -34027,7 +34048,7 @@ async function _loadmapRenderRecent() {
           '<div class="lm-card-nm">' + (m.visible ? '<span class="on">● </span>' : '') + _escHtml(m.name) + '</div>' +
           '<div class="lm-card-meta">' + _mapMgrFmtLabel(m.fmt) + zInfo + sizeInfo + dInfo + '</div>' +
         '</div>' +
-      '</div></div>';
+      '</div>' + diagHtml + '</div>';
   }).join('');
 }
 let _loadmapLpTimer = null, _loadmapLpFired = false;
