@@ -15,4 +15,7 @@ t('trajanje daje dane, sate i minute',()=>assert.equal(api._poziTrajanje(0,(2*14
 t('površina sa više senzora i preleta ima visoku pouzdanost',()=>{const pts=Array.from({length:8},(_,i)=>({dt:'2026-09-'+String(10+(i%3)).padStart(2,'0')+'T'+String(i).padStart(2,'0')+':00:00Z'}));assert.equal(api._poziPovrsPouzdanost({broj:8,sateliti:['A','B'],pts},{haUkupno:40}).id,'visoka');});
 t('UI razdvaja satelit, EFFIS i teren',()=>['Satelitska procjena','EFFIS (zaseban sloj)','Terenska granica'].forEach(x=>assert.ok(html.includes(x))));
 t('UI ima animaciju, odjele, operativne tačke i PDF',()=>['Razvoj požara kroz vrijeme','Operativne tačke','Zahvaćeni odjeli','PDF izvještaj / štampa'].forEach(x=>assert.ok(html.includes(x))));
+t('tekuća godina se zakazuje u pozadini',()=>assert.ok(html.includes('function _povGodLoadPozadina(')));
+t('pojas projekcije je klikabilan i popup prikazuje hektare',()=>{assert.ok(html.includes('function _poziPojasPopupHtml('));assert.ok(/interactive:true/.test(html));});
+t('pojedinačni požar koristi manji marker',()=>assert.ok(html.includes('poz-mk-pojedinac')));
 console.log('\n'+ok+' prošlo, '+(process.exitCode?1:0)+' palo');

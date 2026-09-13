@@ -954,7 +954,7 @@ t('traka sa više od _POZ_PO_TRACI požara ispiše dugme "Prikaži još", ostale
   }));
   const html = makeLista({ evts });
   assert.match(html, /Do 20 km.*\(9\)/s, 'zaglavlje mora brojati SVIH 9, ne samo prikazanih');
-  assert.match(html, /Prikaži još u ovoj traci \(3\)/);
+  assert.match(html, /Prikaži još u ovoj traci \(4\)/);
 });
 
 t('klik na "Prikaži još" traku (_poziListaProsireno) prikazuje SVE požare te trake, bez dugmeta', () => {
@@ -1010,13 +1010,14 @@ t('"dalje prvo"/"novije prvo": kapa na _POZ_LISTA_MAX sa dugmetom "Prikaži još
     d: 1000 * (k + 1), la:44.9, lo:16.2, conf:'h', broj:1, sateliti:['A'], zadnji:1000 + k, nov:false
   }));
   const html = makeLista({ evts, sort: 'd_desc' });
-  assert.match(html, /Prikaži još \(12\)/, 'kapa je 8 od 20 → dugme mora javiti tačno 12 preostalih');
+  assert.match(html, /Prikaži još \(15\)/, 'kapa je 5 od 20 → dugme mora javiti tačno 15 preostalih');
   assert.match(html, /_poziZoom\(19\)/, 'najdalji (i=19) mora biti prikazan prvi u d_desc');
-  assert.ok(!html.includes('_poziZoom(0)'), 'najbliži (i=0, van kape od 8) ne smije biti prikazan prije proširenja');
+  assert.ok(!html.includes('_poziZoom(0)'), 'najbliži (i=0, van kape od 5) ne smije biti prikazan prije proširenja');
 });
 
-t('v3.123.0: kapa ravne liste je smanjena sa 18 na 8 — terenska prijava "puno prikaza"', () => {
-  assert.strictEqual(SRC9.match(/const _POZ_LISTA_MAX\s*=\s*(\d+)/)[1], '8');
+t('v1.3.1: sve liste prvo prikazuju najviše 5 požara', () => {
+  assert.strictEqual(SRC9.match(/const _POZ_LISTA_MAX\s*=\s*(\d+)/)[1], '5');
+  assert.strictEqual(SRC9.match(/const _POZ_PO_TRACI\s*=\s*(\d+)/)[1], '5');
 });
 
 t('klik na "Prikaži još" (_poziListaProsireno "flat") prikazuje SVE požare ravne liste, bez dugmeta', () => {
@@ -1591,6 +1592,8 @@ t('_poziOpozAzuriraj: N=1 se NE crta na karti (fiksan krug bi tvrdio lažan zahv
   // Po 2 poziva L.geoJSON po nacrtanom požaru (traka + isprekidana kontura) —
   // samo JEDAN požar (g2) smije proći, dakle tačno 2 poziva, ne 4.
   assert.strictEqual(drawn.length, 2, 'očekivano 2 L.geoJSON poziva (samo za N≥2 požar), dobijeno ' + drawn.length);
+  assert.strictEqual(drawn[0].interactive, true, 'obojeni vremenski pojas mora primati klik');
+  assert.strictEqual(typeof drawn[0].onEachFeature, 'function', 'klik mora imati popup sa hektarima');
 });
 
 console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');

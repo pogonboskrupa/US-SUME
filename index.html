@@ -1840,6 +1840,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 /* Svježa detekcija (< 6h) pulsira — na karti punoj slojeva se inače izgubi */
 .poz-mk.svjez { animation:pozPuls 1.6s ease-in-out infinite; }
+.poz-mk-pojedinac { width:8px; height:8px; margin:2px; border-width:1.5px; box-shadow:0 0 4px rgba(0,0,0,.55); }
 /* Marker GRUPE (v3.107.0): jedan požar viđen više puta = jedan marker sa
    brojem detekcija, umjesto hrpe istovjetnih pinova jedan preko drugog. */
 .poz-mk-grupa {
@@ -5016,7 +5017,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.0';
+const APP_VER = 'v1.3.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -14054,8 +14055,8 @@ function _poziIcon(p) {
   const st = _poziMkStarost(Date.parse(p.dt));
   const svjez = st.id === 'h6';
   return L.divIcon({
-    className: '', iconSize: [22, 22], iconAnchor: [11, 11],
-    html: `<div class="poz-mk${svjez ? ' svjez' : ''}" style="background:${st.fill};"></div>`
+    className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+    html: `<div class="poz-mk poz-mk-pojedinac${svjez ? ' svjez' : ''}" style="background:${st.fill};"></div>`
   });
 }
 
@@ -14072,7 +14073,7 @@ function _poziIconGrupa(g) {
   // karti krupniji od onog viđenog dvaput, pa se "koliko je ovo veliko" vidi
   // prije nego se pročita broj. Kapa na 36 px — iznad toga marker počinje
   // prekrivati susjedne požare umjesto da ih razlikuje.
-  const w = Math.round(Math.min(36, 24 + Math.max(0, g.broj - 1) * 1.4));
+  const w = Math.round(Math.min(34, 16 + Math.max(0, g.broj - 1) * 1.5));
   return L.divIcon({
     className: '', iconSize: [w + 6, w + 6], iconAnchor: [(w + 6) / 2, (w + 6) / 2],
     html: `<div class="poz-mk poz-mk-grupa${svjez ? ' svjez' : ''}" style="background:${st.fill};width:${w}px;height:${w}px;">${g.broj}</div>`
@@ -14761,6 +14762,18 @@ function _poziOpozToggle(on) {
   _poziRenderPanel();
 }
 
+function _poziPojasPopupHtml(g, tr, pr) {
+  const red=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:11px"><span style="color:#94a3b8">${l}</span><b style="color:#e2e8f0;text-align:right">${v}</b></div>`;
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:220px">
+    <div style="font-size:14px;font-weight:800;color:#fb923c;margin-bottom:5px">🟧 Opožareni dio — procjena</div>
+    ${red('Ovaj vremenski pojas','≈ '+_poziPovrsTxt(tr.ha))}
+    ${red('Period',_escHtml(_poziPeriodPojasa(tr.od,tr.do)))}
+    ${red('Detekcije u pojasu',String(tr.broj))}
+    ${red('Cijeli požar','≈ '+_poziPovrsTxt(pr.haUkupno))}
+    <div style="font-size:9.5px;color:#64748b;line-height:1.4;margin-top:7px">Kliknuti dio je procjena iz satelitskih piksela, ne terenski izmjerena granica.</div>
+  </div>`;
+}
+
 // Prognoza tempa (v3.117.1) je NAMJERNO poseban prekidač od projekcije na karti
 // — na terenu je bilo nejasno kad su oba spojena pod jedan checkbox: korisnik
 // je uključio "Prikaži projekciju" i dobio i trake starosti NA KARTI i tabelu
@@ -14791,13 +14804,14 @@ function _poziOpozAzuriraj() {
     // se i dalje vidi na karti kao SITNA TAČKA (osnovni marker grupe/pojedinačne
     // detekcije, v3.107.0) — samo bez lažnog "zahvata".
     if (pr.samoJedanPiksel) return;
-    // interactive:false je OBAVEZNO — novi canvas pane iznad drugog pojede sve
-    // klikove ispod sebe (vidi CLAUDE.md, bug uvezenog KML-a). Brojke idu u
-    // popup markera grupe (pozariPane, iznad) i u karticu, ne u klik po poligonu.
+    // Ovdje je interakcija namjerna: korisnik traži dodir po konkretnom pojasu
+    // da vidi njegovu površinu. Samo obojeni požarni pojas hvata klik; van njega
+    // mapa i učitani KML/SHP slojevi nastavljaju raditi kao ranije.
     // Obrnut redoslijed: najstarija traka prva (dolje), aktivan front zadnji (gore).
     pr.trake.slice().reverse().forEach(tr => {
-      L.geoJSON(tr.geom, { pane:'demOverlay', interactive:false,
-        style:{ color:tr.linija, weight:1, fillColor:tr.fill, fillOpacity:tr.op } }).addTo(grp);
+      L.geoJSON(tr.geom, { pane:'demOverlay', interactive:true,
+        style:{ color:tr.linija, weight:1, fillColor:tr.fill, fillOpacity:tr.op },
+        onEachFeature:(f,l)=>l.bindPopup(_poziPojasPopupHtml(g,tr,pr),{maxWidth:290,className:'kml-info-popup'}) }).addTo(grp);
     });
     // Vanjska isprekidana kontura ukupnog zahvata — bez nje se, kad su trake
     // slične boje, ne vidi dokle požar UKUPNO seže.
@@ -14956,8 +14970,8 @@ function _poziRedHtml(g, i, ref) {
 // onome na 5 km. U svakom slučaju (trake ili ravna lista, v3.110.0 sort) indeks
 // `i` ostaje ORIGINALNI indeks u _poziEvts (ne pozicija u prikazu), jer
 // _poziZoom(i) čita baš iz njega.
-const _POZ_PO_TRACI = 6;
-const _POZ_LISTA_MAX = 8; // kapa za ravnu listu (dalje prvo / novije prvo) — bila 18,
+const _POZ_PO_TRACI = 5;
+const _POZ_LISTA_MAX = 5; // svaka lista prvo prikazuje najviše pet požara
                           // terenska prijava "prikazuje se puno prikaza" (v3.123.0):
                           // 18 je bilo više nego duplo od kape trake "Bliže prvo" (6),
                           // pa je zadani prikaz baš u ta dva sorta ispadao znatno gušći
@@ -15676,6 +15690,19 @@ let _povGodLayer = null;
 let _povGodMeta  = null;
 let _povGodOn    = false;
 let _povGodBusy  = false;
+let _povGodZakazano = false;
+let _povGodOsvjezenoSesija = false;
+let _povGodListaProsirena = false;
+function _povGodListaProsiri(){_povGodListaProsirena=true;_poziRenderPanel();}
+
+// Puna godina može imati hiljade redova. Prvo se iscrta panel/keš, a mrežni
+// dohvat kreće tek poslije paint-a; korisnik odmah može nastaviti koristiti app.
+function _povGodLoadPozadina(tiho) {
+  if (_povGodBusy || _povGodZakazano || _povGodOsvjezenoSesija || !_povGodOn || !navigator.onLine) return;
+  _povGodZakazano = true;
+  const pokreni=()=>setTimeout(()=>{_povGodZakazano=false;_povGodLoad(tiho);},80);
+  if (typeof requestAnimationFrame==='function') requestAnimationFrame(pokreni); else pokreni();
+}
 
 // Sezona požara: zimski mjeseci se ne prikazuju u godišnjem pregledu ni u
 // godišnjim opožarenim površinama. Podaci se ipak ne brišu iz lokalne arhive
@@ -15734,7 +15761,9 @@ function _povGodToggle(on) {
   }
   if (_povGodLayer) _povGodLayer.addTo(map);
   if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
-  _povGodLoad(false);
+  if (!_povGodEvts.length) _povGodObnoviIzKesa();
+  _poziRenderPanel();
+  _povGodLoadPozadina(false);
 }
 
 async function _povGodLoad(tiho) {
@@ -15745,6 +15774,7 @@ async function _povGodLoad(tiho) {
     _poziRenderPanel();
     return;
   }
+  if (_povGodMeta?.greska) _povGodMeta = null;
   _povGodBusy = true;
   _poziRenderPanel();
   try {
@@ -15754,6 +15784,7 @@ async function _povGodLoad(tiho) {
     const r = await _poziDohvatiJedan('GFW cijela godina', _povGodUrl(ref), 35000,
       { headers:{ 'x-api-key': kljuc }, parser:_poziParseGfwJson, provjera:/"data"\s*:/ });
     if (r.ok) {
+      _povGodOsvjezenoSesija = true;
       _povGodPts = _poziFilterBlizu(r.pts, ref);
       _povGodMeta = { dohvacenoMs:Date.now(), ukupno:r.pts.length, refGps:ref.gps,
                       trunciran: r.pts.length >= _POV_GOD_LIMIT };
@@ -15784,9 +15815,9 @@ async function _povGodLoad(tiho) {
     // retroaktivno. Ko nema ključ, arhiva se puni samo unaprijed (_poziLoad).
     try { if (_povArhDodaj(_povGodPts)) _povArhKesOcisti(new Date().getUTCFullYear()); } catch(e) {}
     _povGodRender();
-    _poziRenderPanel();
   } finally {
     _povGodBusy = false;
+    _poziRenderPanel();
   }
 }
 
@@ -15837,6 +15868,9 @@ function _povGodZoom(i) {
 // Sažetak za red iznad checkbox-a — vidljiv i kad korisnik NIJE otvorio listu.
 function _povGodSazetak() {
   const m = _povGodMeta || {};
+  if (_povGodBusy || _povGodZakazano) return _povGodEvts.length
+    ? '⏳ osvježava se u pozadini · prikazan prethodni rezultat'
+    : '⏳ učitava se u pozadini — aplikacija je dostupna';
   if (m.greska === 'nema-kljuca') return '— treba GFW ključ (kartica 🛰 Detekcija sa satelita)';
   if (m.greska) return '❌ ' + m.greska;
   const kes = m.kes ? ' · iz keša' : '';
@@ -15849,6 +15883,8 @@ function _povGodSazetak() {
 
 function _povGodListaHtml() {
   const m = _povGodMeta || {};
+  const pozadina = (_povGodBusy || _povGodZakazano)
+    ? `<div style="font-size:10.5px;color:#7dd3fc;padding:7px 8px;margin-bottom:5px;background:#0c4a6e44;border:1px solid #075985;border-radius:8px">⏳ Tekuća godina se osvježava u pozadini. Ostale funkcije su dostupne.</div>` : '';
   if (m.greska === 'nema-kljuca') {
     return `<div style="font-size:12px;color:#94a3b8;line-height:1.6;padding:4px 0;">
       ⚠ Treba <b style="color:#e2e8f0;">besplatan Global Forest Watch ključ</b> — isti kao za Sječu.
@@ -15856,9 +15892,10 @@ function _povGodListaHtml() {
       (polje je vidljivo samo adminu, koristi se za sve korisnike).</div>`;
   }
   if (m.greska) return `<div style="font-size:12px;color:#f87171;line-height:1.5;padding:4px 0;">❌ ${_escHtml(m.greska)}</div>`;
-  if (!_povGodEvts.length) return `<div style="font-size:12px;color:#4ade80;padding:4px 0;">✓ Nema evidentiranih požara ove godine u krugu ${_POZ_RADIUS_KM} km.</div>`;
+  if (!_povGodEvts.length) return pozadina || `<div style="font-size:12px;color:#4ade80;padding:4px 0;">✓ Nema evidentiranih požara ove godine u krugu ${_POZ_RADIUS_KM} km.</div>`;
   const ref = _poziRefTacka();
-  const redovi = _povGodEvts.slice(0, 12).map((g, i) => {
+  const kapa = _povGodListaProsirena ? _povGodEvts.length : 5;
+  const redovi = _povGodEvts.slice(0, kapa).map((g, i) => {
     const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
     const dat = isFinite(g.zadnji) ? new Date(g.zadnji).toLocaleDateString('bs-BA', { day:'2-digit', month:'2-digit' }) : '—';
     return `<div onclick="_povGodZoom(${i})" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1e293b;cursor:pointer;">
@@ -15869,9 +15906,9 @@ function _povGodListaHtml() {
       </span>
     </div>`;
   }).join('');
-  const ostatak = _povGodEvts.length > 12
-    ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${_povGodEvts.length - 12}</div>` : '';
-  return redovi + ostatak;
+  const ostatak = !_povGodListaProsirena && _povGodEvts.length > kapa
+    ? `<div onclick="_povGodListaProsiri()" style="font-size:11px;color:#94a3b8;padding:7px 4px;text-align:center;cursor:pointer;border-radius:8px;background:#14233c;border:1px solid #1e3a5f;margin-top:2px">Prikaži još (${_povGodEvts.length-kapa}) ▾</div>` : '';
+  return pozadina + redovi + ostatak;
 }
 
 // ── "Zadnjih 5 godina" — lokalna historija na telefonu (v3.119.0) ──────────
@@ -15951,6 +15988,8 @@ _povHistKljucMigracija();
 let _povHistEvts  = [];
 let _povHistLayer = null;
 let _povHistOn    = false;
+let _povHistListaProsirena = false;
+function _povHistListaProsiri(){_povHistListaProsirena=true;_poziRenderPanel();}
 
 // ── Arhiva: čitanje/pisanje ──────────────────────────────────────────────
 function _povArhUcitaj() {
@@ -16483,7 +16522,8 @@ function _povHistListaHtml() {
       Vraćaj se povremeno da vidiš šta se nakupilo.</div>`;
   }
   const ref = _poziRefTacka();
-  const redovi = _povHistEvts.slice(0, 12).map((g, i) => {
+  const kapa = _povHistListaProsirena ? _povHistEvts.length : 5;
+  const redovi = _povHistEvts.slice(0, kapa).map((g, i) => {
     const smjer = _azimutSmjer(_bearing(ref.la, ref.lo, g.la, g.lo));
     const godine = _povHistGodine(g);
     return `<div onclick="_povHistZoom(${i})" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1e293b;cursor:pointer;">
@@ -16494,8 +16534,8 @@ function _povHistListaHtml() {
       </span>
     </div>`;
   }).join('');
-  const ostatak = _povHistEvts.length > 12
-    ? `<div style="font-size:10px;color:#475569;padding:4px;">…i još ${_povHistEvts.length - 12}</div>` : '';
+  const ostatak = !_povHistListaProsirena && _povHistEvts.length > kapa
+    ? `<div onclick="_povHistListaProsiri()" style="font-size:11px;color:#94a3b8;padding:7px 4px;text-align:center;cursor:pointer;border-radius:8px;background:#14233c;border:1px solid #1e3a5f;margin-top:2px">Prikaži još (${_povHistEvts.length-kapa}) ▾</div>` : '';
   return redovi + ostatak;
 }
 
@@ -16524,10 +16564,10 @@ function _poziObnoviPrikaz() {
   }
   if (_povGodOn) {
     if (!_povGodEvts.length) {
-      const izKesa = _povGodObnoviIzKesa();
-      if (!izKesa && typeof navigator !== 'undefined' && navigator.onLine) _povGodLoad(true);
+      _povGodObnoviIzKesa();
     }
     else _povGodRender();
+    if (typeof navigator !== 'undefined' && navigator.onLine) _povGodLoadPozadina(true);
   }
   if (_povHistOn) _povHistPrikazi();
   if (_povArhUkljucene().length) _povArhRender();
