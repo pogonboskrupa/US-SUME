@@ -366,7 +366,7 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
    postavke (Teren/Postavke/Tragovi) — bez -webkit-overflow-scrolling touch skrol
    u WebView-u zna biti trom/isprekidan. overscroll-behavior:contain sprječava da
    skrol panela "procuri" u pozadinsku kartu. */
-#teren-panel, #postavke-panel, #tragovi-panel, #pozari-panel {
+#teren-panel, #postavke-panel, #tragovi-panel, #pozari-panel, #debug-panel {
   -webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;
   touch-action:pan-y;
@@ -378,7 +378,7 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
    komad karte. Isto pravilo kao Vlake/Projekat/Doznaka: na ≤580px panel uzima
    cijeli ekran. Desktop (sidebar pored karte) ostaje nepromijenjen. */
 @media (max-width:580px) {
-  #teren-panel, #postavke-panel, #tragovi-panel, #admin-panel, #pozari-panel {
+  #teren-panel, #postavke-panel, #tragovi-panel, #admin-panel, #pozari-panel, #debug-panel {
     flex:1 1 100%; width:100%; min-width:0;
   }
 }
@@ -4251,6 +4251,28 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       </div>
     </div>
 
+    <!-- ═══ CENTRALNI DEBUG PANEL (samo admin) ═══ -->
+    <div id="debug-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;">
+      <div style="padding:14px 16px 10px;border-bottom:1px solid #1e3a5f;flex-shrink:0;display:flex;align-items:center;gap:12px;">
+        <button onclick="switchTab('karta')" title="Nazad na kartu"
+          style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#93c5fd;padding:7px 10px;font-size:13px;cursor:pointer;">
+          <svg class="ic"><use href="#ic-nazad"/></svg>
+        </button>
+        <div>
+          <div style="font-weight:700;color:#f87171;font-size:15px;">🛠 DEBUG</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">Aktivni tehnički problemi — samo administrator</div>
+        </div>
+      </div>
+      <div style="padding:14px 16px;">
+        <button onclick="_adminDebugRunFire()"
+          style="width:100%;padding:10px;background:#7c2d12;border:1px solid #f97316;border-radius:9px;color:#fed7aa;font-size:12px;font-weight:700;cursor:pointer;">
+          🔥 Pokreni novi debug požara
+        </button>
+        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Dohvata trenutni period i zapisuje rezultat svakog izvora. API ključevi su automatski skriveni.</div>
+        <div id="admin-debug-list"></div>
+      </div>
+    </div>
+
     <!-- ═══ POŽARI PANEL (otvara se iz Menija, nema svoj tab u traci) ═══ -->
     <div id="pozari-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;">
       <!-- Panel se otvara iz Menija (nema svoj tab u traci), pa nijedan tab nije
@@ -4994,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.5';
+const APP_VER = 'v1.2.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5779,6 +5801,8 @@ async function sbLoadProfile() {
   if (adminItem) adminItem.style.display = isAdm ? 'block' : 'none';
   const postavkeItem = document.getElementById('menu-postavke-item');
   if (postavkeItem) postavkeItem.style.display = isAdm ? 'block' : 'none';
+  const debugItem = document.getElementById('menu-debug-item');
+  if (debugItem) debugItem.style.display = isAdm ? 'block' : 'none';
   // Izvještaji (sedmični/mjesečni po projektantu): nadzorni prikaz — admin + vodeći
   const izvItem = document.getElementById('mdrop-izvjestaji');
   if (izvItem) izvItem.style.display = (isAdm || isVod) ? 'block' : 'none';
@@ -6511,6 +6535,65 @@ function _exportFieldRecovery() {
 // --- Admin (legacy stub — tab se koristi umjesto modala) ---
 function showAdminModal() { switchTab('admin'); }
 function closeAdminModal() {}
+
+// ── Centralni DEBUG (samo admin) ────────────────────────────────────────────
+// Jedan ID predstavlja jedan aktivni problem. Novi pokušaj osvježi istu
+// karticu, a admin je briše tek kada je problem stvarno riješen.
+function _adminDebugRender() {
+  const el = document.getElementById('admin-debug-list');
+  if (!el) return;
+  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  const all = Object.values(_debugRead()).sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!all.length) {
+    el.innerHTML = '<div style="text-align:center;color:#64748b;font-size:12px;padding:24px 8px;">✅ Nema aktivnih debug zapisa.</div>';
+    return;
+  }
+  el.innerHTML = all.map(d => {
+    const id = _escHtml(String(d.id || ''));
+    const dobro = d.state === 'karta prikazana' || d.state === 'uspjeh';
+    const stanje = (dobro ? '✅ ' : '⚠ ') + (d.state || 'aktivno');
+    return '<div style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:11px;margin-bottom:10px;">' +
+      '<div style="margin-bottom:7px;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;">' + _escHtml(d.title || d.id) + '</div>' +
+      '<div style="font-size:10px;color:#64748b;margin-top:2px;">' + stanje + ' · ' + new Date(d.updatedAt || 0).toLocaleString() + '</div></div>' +
+      '<pre style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#94a3b8;font:10.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;max-height:360px;overflow-y:auto;">' + _escHtml(d.text || '') + '</pre>' +
+      '<div style="display:flex;gap:7px;margin-top:9px;">' +
+      '<button onclick="_adminDebugCopy(\'' + id + '\')" style="flex:1;padding:7px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:7px;color:#93c5fd;font-size:11px;cursor:pointer;">📋 Kopiraj</button>' +
+      '<button onclick="_adminDebugResolve(\'' + id + '\')" style="flex:1;padding:7px;background:#14532d;border:1px solid #22c55e;border-radius:7px;color:#bbf7d0;font-size:11px;cursor:pointer;">✓ Obriši kao riješeno</button>' +
+      '</div></div>';
+  }).join('');
+}
+async function _adminDebugCopy(id) {
+  if (!sbProfile?.is_admin) return;
+  const d = _debugRead()[id];
+  if (!d) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(d.text || '');
+    else { const ta=document.createElement('textarea'); ta.value=d.text || ''; ta.style.cssText='position:fixed;left:-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    showToast('📋 Debug kopiran');
+  } catch(e) { showToast('⚠ Kopiranje nije uspjelo'); }
+}
+async function _adminDebugResolve(id) {
+  if (!sbProfile?.is_admin) return;
+  const all = _debugRead();
+  const d = all[id];
+  if (!d) return;
+  if (!await _dlgConfirm('Obrisati debug "' + d.title + '" kao riješen?', { title:'DEBUG riješen', danger:true })) return;
+  _debugRemove(id);
+  if (id === 'map-startup') {
+    _mapLoadDiag = null;
+    try { localStorage.removeItem(_MAP_LOAD_DIAG_KEY); } catch(e) {}
+  }
+  showToast('✅ Debug uklonjen');
+  _adminDebugRender();
+}
+async function _adminDebugRunFire() {
+  if (!sbProfile?.is_admin) return;
+  if (_poziBusy) { showToast('⏳ Dohvat požara već traje'); return; }
+  showToast('🔥 Pokrećem debug požara…');
+  try { await _poziLoad(true); }
+  catch(e) { showToast('❌ Debug požara: ' + (e?.message || e)); }
+  _adminDebugRender();
+}
 
 // --- Admin: učitaj listu korisnika ---
 let _adminUsers = null; // zadnji fetch — render/filter bez ponovnog RPC poziva
@@ -13027,6 +13110,80 @@ let _poziMeta = null;       // {izvori, dohvacenoMs, ukupno, okvir, novih}
 let _poziMet = null;        // meteo kod najbližeg požara + kod mene (Open-Meteo)
 let _poziOn = false;
 let _poziBusy = false;
+let _poziDebugRun = null;
+
+function _poziDebugSafeUrl(url) {
+  return String(url || '—')
+    .replace(/(api\/area\/csv\/)[^/]+/i, '$1***')
+    .replace(/([?&](?:key|api_key|token)=)[^&]+/gi, '$1***')
+    .slice(0, 700);
+}
+function _poziDebugStart(okvir, ref) {
+  _poziDebugRun = {
+    startedAt:Date.now(), state:'u toku', okvir,
+    ref:{ la:Number(ref?.la), lo:Number(ref?.lo), gps:!!ref?.gps },
+    online:navigator.onLine, native:_nativeNetDostupan(),
+    firmsKey:!!_poziMapKey(), gfwKey:!!_poziGfwKljuc(), sources:[]
+  };
+  _poziDebugPublish();
+}
+function _poziDebugSource(naziv, url, startedAt, result) {
+  if (!_poziDebugRun || _poziDebugRun.state !== 'u toku') return;
+  _poziDebugRun.sources.push({
+    naziv, url:_poziDebugSafeUrl(url), ms:Date.now() - startedAt,
+    ok:!!result?.ok, broj:result?.pts?.length || 0,
+    put:result?.native ? 'native APK' : 'browser/fetch', greska:result?.greska || ''
+  });
+  _poziDebugPublish();
+}
+function _poziDebugRange(pts) {
+  const times = (pts || []).map(p => Date.parse(p.dt)).filter(Number.isFinite).sort((a,b) => a-b);
+  return times.length ? new Date(times[0]).toISOString() + ' → ' + new Date(times[times.length-1]).toISOString() : 'nema datuma';
+}
+function _poziDebugFinish(state, data) {
+  if (!_poziDebugRun) return;
+  Object.assign(_poziDebugRun, data || {});
+  _poziDebugRun.state = state || 'završeno';
+  _poziDebugRun.finishedAt = Date.now();
+  _poziDebugPublish();
+}
+function _poziDebugText() {
+  const d = _poziDebugRun;
+  if (!d) return '';
+  const refOk = Number.isFinite(d.ref?.la) && Number.isFinite(d.ref?.lo);
+  const out = [
+    '=== DEBUG POŽARI ' + APP_VER + ' ===',
+    'Početak: ' + new Date(d.startedAt).toLocaleString() + ' · stanje: ' + d.state,
+    'Period: ' + _poziOkvirNaziv(d.okvir) + ' (' + d.okvir + ')',
+    'Referenca: ' + (refOk ? (d.ref.la.toFixed(5) + ', ' + d.ref.lo.toFixed(5)) : 'nepoznata') + ' · ' + (d.ref?.gps ? 'GPS' : 'centar karte'),
+    'Veza: navigator.onLine=' + d.online + ' · put=' + (d.native ? 'native APK' : 'browser/fetch'),
+    'Ključevi: FIRMS=' + (d.firmsKey ? 'DA' : 'NE') + ' · GFW=' + (d.gfwKey ? 'DA' : 'NE'),
+    '', 'IZVORI:'
+  ];
+  if (!d.sources?.length) out.push('⏳ nijedan izvor još nije završio');
+  (d.sources || []).forEach(s => {
+    out.push((s.ok ? '✅ ' : '❌ ') + s.naziv + ' · ' + s.ms + 'ms · ' + s.put + (s.ok ? (' · ' + s.broj + ' detekcija') : (' · ' + s.greska)));
+    out.push('   ' + s.url);
+  });
+  if (d.result) {
+    out.push('', 'REZULTAT: ' + d.result);
+    if (d.ukupno != null) out.push('Primljeno ukupno: ' + d.ukupno);
+    if (d.uKrugu != null) out.push('U krugu ' + _POZ_RADIUS_KM + ' km: ' + d.uKrugu);
+    if (d.grupa != null) out.push('Grupisanih požara: ' + d.grupa);
+    if (d.raspon) out.push('Raspon datuma svih detekcija: ' + d.raspon);
+    if (d.rasponKrug) out.push('Raspon datuma u krugu: ' + d.rasponKrug);
+    if (d.izvori?.length) out.push('Korišteni izvori: ' + d.izvori.join(', '));
+    if (d.greske?.length) out.push('Djelimične greške: ' + d.greske.join(' · '));
+    if (d.greska) out.push('Greška: ' + d.greska);
+    if (d.kes) out.push('Prikazan je lokalni keš: DA');
+  }
+  out.push('', 'Ukupno trajanje: ' + (Date.now() - d.startedAt) + 'ms');
+  return out.join('\n');
+}
+function _poziDebugPublish() {
+  if (!_poziDebugRun) return;
+  _debugUpsert('pozari', 'Požari — dohvat i filtriranje', _poziDebugText(), _poziDebugRun.state);
+}
 
 // FIRMS CSV: header pa redovi. Kolone se traže PO IMENU (ne po poziciji) jer
 // VIIRS i MODIS nemaju isti raspored (bright_ti4 vs brightness itd.), a
@@ -13375,6 +13532,8 @@ function _nativeNetFetch(url, ms, zaglavlja) {
 // FIRMS vraća CSV, a GFW JSON — ali sve ostalo (native/fetch put, mjerenje,
 // prevod greške) je isto pa se ne duplira.
 async function _poziDohvatiJedan(naziv, url, ms, opts) {
+  const _dbgT0 = Date.now();
+  const _dbgVrati = r => { _poziDebugSource(naziv, url, _dbgT0, r); return r; };
   opts = opts || {};
   const parser = opts.parser || _poziParseCsv;
   const provjera = opts.provjera || /latitude/i;
@@ -13388,10 +13547,10 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
   if (_nativeNetDostupan()) {
     try {
       const r = await _nativeNetFetch(url, ms || 20000, zaglavlja);
-      if (r.status && r.status >= 400) return { ok:false, naziv, greska:'HTTP ' + r.status };
-      return ocijeni(r.text, true);
+      if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status });
+      return _dbgVrati(ocijeni(r.text, true));
     } catch(e) {
-      return { ok:false, naziv, greska: _poziGreskaTxt(e) };
+      return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e) });
     }
   }
   try {
@@ -13401,10 +13560,10 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
     const o = { mode:'cors' };
     if (zaglavlja) o.headers = zaglavlja;
     const r = await _fetchT(url, ms || 15000, o);
-    if (!r.ok) return { ok:false, naziv, greska:'HTTP ' + r.status };
-    return ocijeni(await r.text(), false);
+    if (!r.ok) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status });
+    return _dbgVrati(ocijeni(await r.text(), false));
   } catch(e) {
-    return { ok:false, naziv, greska: _poziGreskaTxt(e) };
+    return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e) });
   }
 }
 
@@ -13584,8 +13743,10 @@ async function _poziLoad(tiho) {
   if (_poziBusy) return;
   _poziBusy = true;
   _poziStatusSet('⏳ Dohvatam detekcije…');
+  const _dbgOkvir = _poziOkvir();
+  _poziDebugStart(_dbgOkvir, _poziRefTacka());
   try {
-    const okvir = _poziOkvir();
+    const okvir = _dbgOkvir;
     const r = await _poziDohvati(okvir);
     const ref = _poziRefTacka();
     if (r.ok) {
@@ -13601,6 +13762,7 @@ async function _poziLoad(tiho) {
       if (!cacheOdgovara) {
         _poziMeta = { greska: r.greska };
         _poziPts = []; _poziEvts = [];
+        _poziDebugFinish('greška', { result:'nijedan izvor nije dostupan i nema odgovarajućeg keša', greska:r.greska, ukupno:0, uKrugu:0, grupa:0 });
         _poziRender();
         _poziStatusSet('❌ Nijedan izvor nije dostupan');
         if (!tiho) _dlgConfirm(
@@ -13631,6 +13793,16 @@ async function _poziLoad(tiho) {
     if (!tiho) showToast(s.toast);
     _poziNotifProvjeri();                      // javi ako je nov požar ušao u prag udaljenosti
     if (_poziEvts.length) _poziOsvjeziMeteo(); // ne blokira prikaz, dopunjuje panel kad stigne
+    const _dbgSve = r.ok ? (r.pts || []) : (_poziPts || []);
+    _poziDebugFinish(r.ok ? 'uspjeh' : 'keš', {
+      result:r.ok ? 'mrežni dohvat završen' : 'mreža nije uspjela — prikazan odgovarajući keš',
+      ukupno:_poziMeta?.ukupno ?? _dbgSve.length, uKrugu:_poziPts.length, grupa:_poziEvts.length,
+      raspon:_poziDebugRange(_dbgSve), rasponKrug:_poziDebugRange(_poziPts),
+      izvori:_poziMeta?.izvori || [], greske:r.greske || [], greska:r.ok ? '' : r.greska, kes:!r.ok
+    });
+  } catch(e) {
+    _poziDebugFinish('greška', { result:'neočekivan prekid', greska:e?.message || String(e) });
+    throw e;
   } finally {
     _poziBusy = false;
   }
@@ -16434,11 +16606,35 @@ function _poziSadrzajHtml() {
 // za tu dijagnostiku. Ako korisnik vidi "Učitavam kartu" 10s a sqlmapRestoreAll
 // samo javlja par stotina ms, razlika je baš u ovom razmaku.
 let _mapRestoreIndicatorShownAt = null;
+const _ADMIN_DEBUG_KEY = 'tvlake_admin_debug_v1';
+function _debugRead() {
+  try {
+    const v = JSON.parse(localStorage.getItem(_ADMIN_DEBUG_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch(e) { return {}; }
+}
+function _debugUpsert(id, title, text, state) {
+  if (!id || !text) return;
+  const all = _debugRead();
+  all[id] = { id, title:title || id, text:String(text), state:state || 'aktivno', updatedAt:Date.now() };
+  const ids = Object.keys(all).sort((a,b) => (all[b].updatedAt || 0) - (all[a].updatedAt || 0));
+  ids.slice(12).forEach(k => delete all[k]);
+  try { localStorage.setItem(_ADMIN_DEBUG_KEY, JSON.stringify(all)); } catch(e) {}
+  try { if (typeof _adminDebugRender === 'function') _adminDebugRender(); } catch(e) {}
+}
+function _debugRemove(id) {
+  const all = _debugRead();
+  if (!Object.prototype.hasOwnProperty.call(all, id)) return;
+  delete all[id];
+  try { localStorage.setItem(_ADMIN_DEBUG_KEY, JSON.stringify(all)); } catch(e) {}
+  try { if (typeof _adminDebugRender === 'function') _adminDebugRender(); } catch(e) {}
+}
 const _MAP_LOAD_DIAG_KEY = 'tvlake_map_startup_diag_v1';
 let _mapLoadDiag = null;
 try { _mapLoadDiag = JSON.parse(localStorage.getItem(_MAP_LOAD_DIAG_KEY) || 'null'); } catch(e) {}
 function _mapLoadDiagSave() {
   try { localStorage.setItem(_MAP_LOAD_DIAG_KEY, JSON.stringify(_mapLoadDiag)); } catch(e) {}
+  try { _debugUpsert('map-startup', 'Učitavanje offline karte', _mapLoadDiagText(), _mapLoadDiag?.state); } catch(e) {}
   try { if (typeof _loadmapRenderStartupDiag === 'function') _loadmapRenderStartupDiag(); } catch(e) {}
 }
 function _mapLoadDiagStart(name) {
@@ -16460,6 +16656,12 @@ function _mapLoadDiagFinish(state) {
   _mapLoadDiag.state = state || 'završeno';
   _mapLoadDiag.finishedAt = Date.now();
   _mapLoadDiagSave();
+  // Brz i potpuno uspješan startup više nije aktivan problem. Ne vraćaj ga u
+  // centralni DEBUG pri svakom urednom ulasku; ponovo se deponuje samo ako
+  // traje >1.5 s ili neki korak prijavi grešku/neuspjeh.
+  const sporo = performance.now() - (_mapLoadDiag.perf0 || 0) > 1500;
+  const imaProblem = (_mapLoadDiag.steps || []).some(s => /greška|nije uspio|neuspjeh/i.test((s.label || '') + ' ' + (s.detail || '')));
+  if (_mapLoadDiag.state === 'karta prikazana' && !sporo && !imaProblem) _debugRemove('map-startup');
 }
 function _mapLoadDiagText() {
   if (!_mapLoadDiag) return '';
@@ -28326,6 +28528,7 @@ function _updFabVisibility() {
 }
 
 function switchTab(tab) {
+  if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
   _activeTab = tab;
   if (prev === 'doznaka' && tab !== 'doznaka') {
@@ -28346,6 +28549,7 @@ function switchTab(tab) {
   const pmjtrg   = document.getElementById('mjtrg-panel');
   const padmin   = document.getElementById('admin-panel');
   const ppostavke= document.getElementById('postavke-panel');
+  const pdebug   = document.getElementById('debug-panel');
   const pteren   = document.getElementById('teren-panel');
   const ptragovi = document.getElementById('tragovi-panel');
   const ppozari  = document.getElementById('pozari-panel');
@@ -28353,7 +28557,7 @@ function switchTab(tab) {
     const oc = b.getAttribute('onclick') || '';
     b.classList.toggle('active', oc.includes(`switchTab('${tab}')`));
   });
-  // SVIH osam panela sa provjerom postojanja. Prva četiri su je ranije nemala i
+  // SVI paneli sa provjerom postojanja. Prva četiri su je ranije nemala i
   // to je rušilo cijelo pokretanje: #mjtrg-panel je u markupu tek na ~35138, a
   // skripta se izvršava do ~33857 — kad initAuth uđe u app ODMAH iz keširanog
   // profila (offline-first, v3.100.0), switchTab('karta') se pozove PRIJE nego
@@ -28368,11 +28572,13 @@ function switchTab(tab) {
   _show(pmjtrg, tab==='mjtrg');
   if (padmin)   padmin.style.display   = tab==='admin'   ? 'flex' : 'none';
   if (ppostavke)ppostavke.style.display= tab==='postavke'? 'flex' : 'none';
+  if (pdebug)   pdebug.style.display    = tab==='debug'    ? 'flex' : 'none';
   if (pteren)   pteren.style.display   = tab==='teren'   ? 'flex' : 'none';
   if (ptragovi) ptragovi.style.display = tab==='tragovi' ? 'flex' : 'none';
   _show(ppozari, tab==='pozari');
   if (tab === 'admin')    adminLoadUsers();
   if (tab === 'postavke') postavkeLoadEmails();
+  if (tab === 'debug')    _adminDebugRender();
   if (tab === 'teren')   { terenRender(); terenRenderTragovi(); }
   if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
   // Otvaranje panela je najjači signal da korisnika BAŠ SAD zanima stanje —
@@ -39565,6 +39771,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-sep"></div>
   <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
   <div class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')">🔔 Obavještenja</div>
+  <div class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;font-weight:700;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')">🛠 DEBUG</div>
   <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()">🔑 Promijeni PIN</div>
   <div class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()">🔄 Ažuriraj aplikaciju</div>
