@@ -1,0 +1,24 @@
+name: Apply full burned-area fix
+on:
+  push:
+    branches: [fix/codex-us-sume-workflow-169a5b7]
+    paths: [.github/workflows/codex-apply-fire-area-v129.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: fix/codex-us-sume-workflow-169a5b7 }
+      - run: |
+          echo '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' | base64 -d | gzip -d > /tmp/v129.patch
+          git apply --check /tmp/v129.patch
+          git apply /tmp/v129.patch
+          for f in tests/js/*.test.js; do node "$f" >/dev/null; done
+          git rm .github/workflows/codex-apply-fire-area-v129.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html sw.js android/app/build.gradle tests/js/pozari.test.js
+          git commit -m "fix: vrati puni obuhvat opozarene povrsine"
+          git push origin HEAD:fix/codex-us-sume-workflow-169a5b7
