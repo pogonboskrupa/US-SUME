@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.6';
+const APP_VER = 'v1.2.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13335,15 +13335,37 @@ function _poziOznaciNove(grupe, kljucStorage, preciznost) {
 function _poziMapKey() {
   return (_poziKljucevi.firms || '').trim();
 }
-function _poziApiUrl(kljuc, okvir, ref) {
+function _poziApiUrl(kljuc, okvir, ref, izvor) {
   // NASA Area API prima najviše 5 dana po pozivu. Za 7d se ovaj izvor koristi
   // samo kao dopuna GFW-u; 30d se u _poziDohvati obrađuje isključivo preko GFW-a.
   const dani = Math.min(5, { '24h':1, '48h':2, '7d':7, '30d':30 }[okvir] || 1);
   const dLat = _POZ_RADIUS_KM / 111;
   const dLon = _POZ_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
   const bbox = [ref.lo - dLon, ref.la - dLat, ref.lo + dLon, ref.la + dLat].map(x => x.toFixed(3)).join(',');
+  // FIRMS Area API prima TAČNO JEDAN source po URL-u. Spajanje više oznaka
+  // zarezima vraća HTTP 400 (potvrđeno debugom sa stvarnog Android uređaja).
+  const source = String(izvor || 'VIIRS_SNPP_NRT');
   return 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + encodeURIComponent(kljuc)
-    + '/VIIRS_SNPP_NRT,VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT,MODIS_NRT/' + bbox + '/' + dani;
+    + '/' + encodeURIComponent(source) + '/' + bbox + '/' + dani;
+}
+
+const _POZ_API_IZVORI = [
+  { id:'VIIRS_SNPP_NRT',   naziv:'FIRMS VIIRS S-NPP' },
+  { id:'VIIRS_NOAA20_NRT', naziv:'FIRMS VIIRS NOAA-20' },
+  { id:'VIIRS_NOAA21_NRT', naziv:'FIRMS VIIRS NOAA-21' },
+  { id:'MODIS_NRT',        naziv:'FIRMS MODIS' }
+];
+
+async function _poziDohvatiApi(kljuc, okvir, ref) {
+  const rez = await Promise.all(_POZ_API_IZVORI.map(izv =>
+    _poziDohvatiJedan(izv.naziv, _poziApiUrl(kljuc, okvir, ref, izv.id), 20000)
+  ));
+  const uspjesni = rez.filter(r => r.ok);
+  const greske = rez.filter(r => !r.ok).map(r => r.naziv + ': ' + r.greska);
+  if (!uspjesni.length) return { ok:false, naziv:'FIRMS API', greska:greske.join(' · '), greske };
+  const pts = [];
+  uspjesni.forEach(r => pts.push(...(r.pts || [])));
+  return { ok:true, naziv:'FIRMS API', pts, djelomicno:greske.length > 0, greske };
 }
 
 // ── Global Forest Watch kao DRUGI SERVER za iste VIIRS detekcije ────────────
@@ -13547,10 +13569,10 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
   if (_nativeNetDostupan()) {
     try {
       const r = await _nativeNetFetch(url, ms || 20000, zaglavlja);
-      if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status });
+      if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, native:true });
       return _dbgVrati(ocijeni(r.text, true));
     } catch(e) {
-      return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e) });
+      return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e), native:true });
     }
   }
   try {
@@ -13611,13 +13633,15 @@ async function _poziDohvati(okvir) {
     if (!ok.length) return null;
     const pts = [];
     ok.forEach(x => pts.push(...(x.pts || [])));
+    const greske = pali.map(x => x.naziv + ': ' + x.greska);
+    ok.forEach(x => greske.push(...(x.greske || [])));
     return { ok:true, pts, izvori: ok.map(x => x.naziv),
-             djelomicno: pali.length > 0, greske: pali.map(x => x.naziv + ': ' + x.greska) };
+             djelomicno: greske.length > 0 || ok.some(x => x.djelomicno), greske };
   };
 
   if (kljuc) {
     const [r, g] = await Promise.all([
-      _poziDohvatiJedan('FIRMS API (MAP_KEY)', _poziApiUrl(kljuc, okvir, ref), 20000),
+      _poziDohvatiApi(kljuc, okvir, ref),
       gfw || Promise.resolve(null)
     ]);
     const spojeno = spoji(r, g);
@@ -14827,7 +14851,9 @@ async function _poziProvjeriIzvore() {
   const ref = _poziRefTacka();
   const izvori = _POZ_IZVORI.map(izv => ({ naziv:izv.naziv, url:_poziUrl(izv, okvir) }));
   const kljuc = _poziMapKey();
-  if (kljuc) izvori.push({ naziv:'FIRMS API (MAP_KEY)', url:_poziApiUrl(kljuc, okvir, ref) });
+  if (kljuc) _POZ_API_IZVORI.forEach(izv => izvori.push({
+    naziv:izv.naziv, url:_poziApiUrl(kljuc, okvir, ref, izv.id)
+  }));
   const gk = _poziGfwKljuc();
   if (gk) izvori.push({ naziv:'Global Forest Watch', url:_poziGfwUrl(okvir, ref),
     opts:{ headers:{ 'x-api-key': gk }, parser:_poziParseGfwJson, provjera:/"data"\s*:/ } });

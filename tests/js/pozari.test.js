@@ -241,6 +241,14 @@ t('NASA Area API poštuje maksimum od 5 dana', () => {
   assert.ok(u.endsWith('/5'));
 });
 
+t('NASA Area API URL sadrži tačno JEDAN izvor — bez zarezom spojenih source oznaka', () => {
+  const api2 = makeApi2(makeStore());
+  const u = api2._poziApiUrl('K', '24h', { la:44.88, lo:16.15 }, 'VIIRS_NOAA20_NRT');
+  assert.ok(u.includes('/VIIRS_NOAA20_NRT/'));
+  const source = u.split('/').slice(-3, -2)[0];
+  assert.ok(!source.includes(','), 'FIRMS source segment ne smije sadržavati zarez: ' + source);
+});
+
 console.log('Bosanska množina za GRUPISANE požare (muški rod, drugačija sklonidba od detekcija):');
 
 t('1 aktivan požar / 2-4 aktivna požara / 5+ aktivnih požara', () => {
