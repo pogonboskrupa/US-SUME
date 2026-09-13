@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.7';
+const APP_VER = 'v1.2.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13005,7 +13005,7 @@ if (typeof caches !== 'undefined') caches.delete('tvlake-sentinel2-v1').catch(()
 // ═══════════════════════════════════════════════════════════════════════════
 const _POZ_CACHE_KEY = 'tvlake_pozari_cache';
 const _POZ_ON_KEY    = 'tvlake_pozari_on';
-const _POZ_OKVIR_KEY = 'tvlake_pozari_okvir';   // '24h' | '48h' | '7d'
+const _POZ_OKVIR_KEY = 'tvlake_pozari_okvir';   // '24h' | '48h' | '7d' | '30d'
 const _POZ_SEEN_KEY  = 'tvlake_pozari_vidjeno'; // ključevi detekcija sa zadnjeg pregleda
 // FIRMS MAP_KEY i GFW API ključ (v3.124.0): postavlja ih ISKLJUČIVO admin,
 // JEDNOM, za CIJELU firmu — ranije ih je svaki korisnik unosio sam po
@@ -13092,7 +13092,20 @@ const _POZ_OKVIRI = [
 ];
 function _poziOkvir() {
   const v = localStorage.getItem(_POZ_OKVIR_KEY);
-  return _POZ_OKVIRI.some(o => o.id === v) ? v : '24h';
+  // v1.2.8: 24 h je prekratko za operativni pregled poslije gašenja požara.
+  // Primjer sa terena: požar aktivan do kiše u četvrtak potpuno nestane iz
+  // nedjeljnog pregleda, iako je njegova opožarena površina i dalje važna.
+  // Postojeće instalacije jednom prebaci sa starog zadanog 24h na 7d; nakon
+  // toga korisnik i dalje može ručno izabrati 24h i izbor se više ne dira.
+  const MIG = 'tvlake_pozari_okvir_v128';
+  if (!localStorage.getItem(MIG)) {
+    try {
+      if (!v || v === '24h') localStorage.setItem(_POZ_OKVIR_KEY, '7d');
+      localStorage.setItem(MIG, '1');
+    } catch(e) {}
+    return (!v || v === '24h') ? '7d' : (_POZ_OKVIRI.some(o => o.id === v) ? v : '7d');
+  }
+  return _POZ_OKVIRI.some(o => o.id === v) ? v : '7d';
 }
 function _poziOkvirNaziv(id) {
   const o = _POZ_OKVIRI.find(x => x.id === (id || _poziOkvir()));
@@ -13759,6 +13772,14 @@ function _poziStarost(ms) {
   const h = Math.round(min / 60);
   if (h < 48) return 'prije ' + h + ' h';
   return 'prije ' + Math.round(h / 24) + ' dana';
+}
+
+// Satelitska tačka starija od 24 h nije dokaz da požar još gori. U dužem
+// prozoru je zadržavamo zbog opožarene površine, ali je jasno označavamo kao
+// nedavni požar umjesto da korisniku lažno piše "aktivan".
+function _poziStatusPozara(g) {
+  const h = (Date.now() - Number(g?.zadnji)) / 3600000;
+  return isFinite(h) && h <= 24 ? 'aktivan' : 'nedavni / vjerovatno ugašen';
 }
 
 // Glavni ulaz: dohvati (ili uzmi keš) pa nacrtaj. Grupiše u požare, obilježi
@@ -14597,6 +14618,7 @@ function _poziGrupaPopupHtml(g, ref) {
   const gk = wgsToMGI(g.la, g.lo);
   return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:215px;">
     <div style="font-size:14px;font-weight:700;color:#f87171;margin-bottom:6px;">🔥 Požar — ${g.broj} detekcija${g.nov ? ' <span style="color:#fbbf24;font-size:10px;">🆕 NOVO</span>' : ''}</div>
+    ${red('Stanje', _poziStatusPozara(g))}
     ${red('Udaljenost', `<b style="color:#fbbf24;">${fmtL(d)}</b> ${smjer}${ref.gps ? '' : ' <span style="color:#64748b;">(od centra karte)</span>'}`)}
     ${red('Prvi put viđen', vr(g.prvi))}
     ${red('Zadnji put', vr(g.zadnji) + ' · ' + _poziStarost(g.zadnji))}
@@ -14669,7 +14691,7 @@ function _poziRedHtml(g, i, ref) {
     <span style="flex:1;min-width:0;">
       <span style="font-size:12px;color:#e2e8f0;">${fmtL(g.d)} <span style="color:#64748b;">${smjer}</span></span>
       ${g.nov ? ' <span style="color:#fbbf24;font-size:10px;font-weight:700;">🆕 NOVO</span>' : ''}
-      <div style="font-size:10px;color:#64748b;">${detalji} · ${_poziStarost(g.zadnji)}</div>
+      <div style="font-size:10px;color:#64748b;">${detalji} · ${_poziStarost(g.zadnji)} · ${_poziStatusPozara(g)}</div>
     </span>
     <span style="font-size:10px;color:#64748b;text-align:right;">
       ${povrs ? `<span style="display:block;color:#fb923c;font-weight:700;font-size:11px;">${povrs}</span>` : ''}${pz.txt}
@@ -16386,7 +16408,7 @@ function _poziSadrzajHtml() {
   } else if (m.greska) {
     detekcije = `<div style="font-size:12px;color:#f87171;line-height:1.5;padding:4px 0;">❌ ${_escHtml(m.greska)}</div>`;
   } else if (!_poziEvts.length) {
-    detekcije = `<div style="font-size:13px;color:#4ade80;padding:6px 0;">✓ Nema aktivnih požara u krugu ${_POZ_RADIUS_KM} km, zadnjih ${_poziOkvirNaziv(m.okvir)}.</div>`;
+    detekcije = `<div style="font-size:13px;color:#4ade80;padding:6px 0;">✓ Nema satelitski zabilježenih požara u krugu ${_POZ_RADIUS_KM} km, zadnjih ${_poziOkvirNaziv(m.okvir)}.</div>`;
   } else {
     detekcije = _poziListaHtml();
   }

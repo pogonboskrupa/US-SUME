@@ -195,14 +195,24 @@ t('sasvim nov požar (druga lokacija) OSTAJE nov i kad stari nestane', () => {
   assert.strictEqual(drugi[0].nov, true);
 });
 
-console.log('Vremenski okvir (24h/48h/7d):');
+console.log('Vremenski okvir (24h/48h/7d/30d):');
 
-t('_poziOkvir vraća 24h kad ništa nije sačuvano ili je sačuvana vrijednost neispravna', () => {
+t('_poziOkvir prvi put migrira stari zadani 24h na operativnih 7 dana', () => {
   const store = makeStore();
+  const api2 = makeApi2(store);
+  assert.strictEqual(api2._poziOkvir(), '7d');
+  assert.strictEqual(store.getItem('tvlake_pozari_okvir'), '7d');
+  assert.strictEqual(store.getItem('tvlake_pozari_okvir_v128'), '1');
+});
+
+t('_poziOkvir poslije migracije poštuje ručni izbor 24h', () => {
+  const store = makeStore();
+  store.setItem('tvlake_pozari_okvir_v128', '1');
+  store.setItem('tvlake_pozari_okvir', '24h');
   const api2 = makeApi2(store);
   assert.strictEqual(api2._poziOkvir(), '24h');
   store.setItem('tvlake_pozari_okvir', 'nepostojeci');
-  assert.strictEqual(api2._poziOkvir(), '24h');
+  assert.strictEqual(api2._poziOkvir(), '7d');
 });
 
 t('_poziUrl mijenja SAMO sufiks vremenskog okvira, ne i izvor', () => {
@@ -853,6 +863,7 @@ const SRC9 = [
   extractFn('fmtL'),
   extractFn('_poziPouzdanost'),
   extractFn('_poziStarost'),
+  extractFn('_poziStatusPozara'),
   extractConst('_POZ_MK_STAROST'),
   extractFn('_poziMkStarost'),
   extractFn('_poziRedHtml'),
@@ -1465,6 +1476,7 @@ t('_poziRedHtml: N=1 (haUkupno=NaN) ne ispisuje "ha" u redu liste', () => {
     _bearing: () => 0, _azimutSmjer: () => 'S',
     fmtL: m => Math.round(m) + ' m',
     _poziStarost: () => 'prije 7 dana',
+    _poziStatusPozara: () => 'nedavni / vjerovatno ugašen',
     _poziMkStarost: () => ({ fill: '#292524' }),
     _poziOpozOn: () => true,
     _poziProj: () => ({ haUkupno: NaN, samoJedanPiksel: true }),
@@ -1481,6 +1493,7 @@ t('_poziRedHtml: N=2 i dalje ispisuje "ha" (informativan broj)', () => {
     _bearing: () => 0, _azimutSmjer: () => 'S',
     fmtL: m => Math.round(m) + ' m',
     _poziStarost: () => 'prije 2 dana',
+    _poziStatusPozara: () => 'nedavni / vjerovatno ugašen',
     _poziMkStarost: () => ({ fill: '#292524' }),
     _poziOpozOn: () => true,
     _poziProj: () => ({ haUkupno: 22, samoJedanPiksel: false }),
