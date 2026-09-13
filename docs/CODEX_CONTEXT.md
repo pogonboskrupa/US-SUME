@@ -71,6 +71,10 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
 - `_poziLoad` razlikuje mrežni neuspjeh, keš i svjež odgovor, filtrira blizinu,
   grupiše detekcije i dopunjava arhivu. Projekcije površine i budućeg rasta
   nisu terenski izmjerena granica niti validiran model ponašanja požara.
+- Od v1.3.2 projekcija požara koristi zaseban `pozariPovrsPane` između
+  referentne karte i markera požara. Klik na pojas otvara detalje incidenta
+  direktno na karti, a dnevni replay kumulativno prikazuje samo tačke i
+  procijenjenu geometriju odabranog požara; ostali požari se ne filtriraju.
 
 ## 2. Pet prioritetnih nalaza
 
