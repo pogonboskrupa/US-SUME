@@ -1212,8 +1212,8 @@ const SRC_OPOZ = [extractFn('_poziOpozGeom'), extractFn('_poziOpozProjekcija')].
 // 1500 (_POZ_GRUPA_M, prag GRUPISANJA požara, slučajno recikliran kao maxEdge
 // prije ove izmjene) da dokaže da je tightening stvaran, ne kozmetički.
 function makeOpoz(maxEdgeM) {
-  const sandbox = { turf: _turf, _POZ_GRUPA_M: 750, _POZ_OPOZ_MAX_UNIJA: 60,
-    _POZ_OPOZ_MAXEDGE_M: maxEdgeM || 750, _POZ_FRONT_MS: 6 * 3600 * 1000,
+  const sandbox = { turf: _turf, _POZ_GRUPA_M: 600, _POZ_OPOZ_MAX_UNIJA: 60,
+    _POZ_OPOZ_MAXEDGE_M: maxEdgeM || 600, _POZ_FRONT_MS: 6 * 3600 * 1000,
     _POZ_STAROST: eval('(' + extractConst('_POZ_STAROST').replace(/^const _POZ_STAROST = /, '').replace(/;\s*$/, '') + ')') };
   const keys = Object.keys(sandbox);
   return new Function(...keys, SRC_OPOZ + '\nreturn { _poziOpozGeom, _poziOpozProjekcija };')(...keys.map(k => sandbox[k]));
@@ -1293,6 +1293,19 @@ t('MODIS piksel (1 km) daje veću površinu od VIIRS piksela (375 m)', () => {
   const v = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 375, dt: '2026-09-05T00:00:00Z' }]));
   const m = haOf(OPOZ._poziOpozGeom([{ la: 44.9, lo: 16.2, rez: 1000, dt: '2026-09-05T00:00:00Z' }]));
   assert.ok(m > v * 3, 'MODIS ' + m.toFixed(0) + ' ha vs VIIRS ' + v.toFixed(0) + ' ha');
+});
+
+t('miješana grupa: MODIS ne širi susjedni VIIRS piksel na 1 km', () => {
+  const mjesano = OPOZ._poziOpozGeom([
+    { la:44.9000, lo:16.2000, rez:1000, dt:'2026-09-05T00:00:00Z' },
+    { la:44.9060, lo:16.2000, rez:375, dt:'2026-09-05T00:00:00Z' }
+  ]);
+  const dvaModis = OPOZ._poziOpozGeom([
+    { la:44.9000, lo:16.2000, rez:1000, dt:'2026-09-05T00:00:00Z' },
+    { la:44.9060, lo:16.2000, rez:1000, dt:'2026-09-05T00:00:00Z' }
+  ]);
+  assert.ok(haOf(mjesano) < haOf(dvaModis) * 0.7,
+    'VIIRS tačka mora zadržati svoj manji otisak, ne naslijediti MODIS bafer');
 });
 
 // v3.119.3: terenska korekcija bafera — "malo si previše uzeo, možda 50m

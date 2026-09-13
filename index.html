@@ -5016,7 +5016,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.2.11';
+const APP_VER = 'v1.2.12';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13026,7 +13026,7 @@ const _POZ_NOTIF_SEEN= 'tvlake_pozari_notif_seen'; // za koje požare je već ja
 const _POZ_RADIUS_KM = 100;    // v3.110.0: suženo sa 150 na 100 km na eksplicitan zahtjev —
                                 // šire od bilo koje šumarije i dalje, ali bez detekcija toliko
                                 // daleko da su za korisnika samo šum
-const _POZ_GRUPA_M   = 750;    // uži prag: ne spajaj odvojene požare preko doline/rijeke
+const _POZ_GRUPA_M   = 600;    // uži prag: ne spajaj odvojene požare preko doline/rijeke
 
 // Trake udaljenosti (v3.108.0) — lista se RAŠČLANJUJE na "koliko je hitno",
 // ne filtrira: požar na 45 km i dalje treba biti vidljiv (u krugu 100 km je),
@@ -14274,10 +14274,9 @@ const _POZ_OPOZ_MAX_UNIJA = 60;          // iznad ovoga unija po pikselu postaje
 // je bio blago naduvan starim pragom. Ispod 300m concave počinje ispuštati
 // tačke iz realnog fronta (svejedno ostaju pokrivene slojem 1) — 500m je
 // izabran sa margином iznad te granice.
-// v1.2.11: kompromis nakon dvije terenske provjere — 500 m je odsijecalo dio
-// stvarnog požarišta, dok je 1500 m spajalo odvojene požare i premošćavalo
-// Unu. Prag 750 m čuva gušći front, ali ne pravi kilometarske koridore.
-const _POZ_OPOZ_MAXEDGE_M = 750;
+// v1.2.12: 750 m je na terenu još pravilo preširoke pojaseve. Prag 600 m,
+// zajedno sa pojedinačnim baferom po senzoru ispod, dodatno sužava procjenu.
+const _POZ_OPOZ_MAXEDGE_M = 600;
 let _poziOpozLayer = null;
 
 // Geometrija iz skupa detekcija. DVA sloja, tim redom — i oba su potrebna:
@@ -14305,15 +14304,18 @@ function _poziOpozGeom(pts) {
   // pada sa 500 m na 450 m istom logikom, nema poseban razlog da MODIS ostane
   // pri staroj vrijednosti. `Math.max(0, ...)` brani od negativnog
   // poluprečnika ako bi budući izvor imao rezoluciju ispod 100 m.
-  const rezM = pts.reduce((m, p) => Math.max(m, isFinite(p.rez) ? p.rez : 375), 0);
-  const bufM = Math.max(0, rezM / 2 - 50);
-  const bufKm = bufM / 1000;
   const fc = turf.featureCollection(pts.map(p => turf.point([p.lo, p.la])));
   let geom = null;
   if (pts.length <= _POZ_OPOZ_MAX_UNIJA) {
     try {
-      const buf = turf.buffer(fc, bufKm, { units: 'kilometers' });
-      const lista = buf.features || [buf];
+      // Svaka tačka mora koristiti SVOJU rezoluciju. Ranije je jedna MODIS
+      // detekcija (1 km) širila i sve VIIRS tačke (375 m) na MODIS bafer,
+      // što je stvaralo ogroman pojas i kod grupe od samo dvije detekcije.
+      const lista = pts.map(p => {
+        const rezM = isFinite(p.rez) ? p.rez : 375;
+        return turf.buffer(turf.point([p.lo, p.la]), Math.max(0, rezM / 2 - 50) / 1000,
+          { units: 'kilometers' });
+      }).filter(Boolean);
       geom = lista.reduce((a, f) => { try { return a ? (turf.union(a, f) || a) : f; } catch(e) { return a || f; } }, null);
     } catch(e) {}
   }
@@ -14321,7 +14323,9 @@ function _poziOpozGeom(pts) {
     try {
       const cc = turf.concave(fc, { maxEdge: _POZ_OPOZ_MAXEDGE_M / 1000, units: 'kilometers' });
       if (cc) {
-        const ccb = turf.buffer(cc, bufKm, { units: 'kilometers' });
+        // Hull dobija konzervativni VIIRS rub; veliki MODIS otisak je već
+        // tačno pokriven svojim pojedinačnim baferom iz prvog sloja.
+        const ccb = turf.buffer(cc, 0.1375, { units: 'kilometers' });
         geom = geom ? (turf.union(geom, ccb) || geom) : ccb;
       }
     } catch(e) {}
