@@ -468,11 +468,13 @@ public class MainActivity extends Activity {
                 || h.equals("data-api.globalforestwatch.org");
         }
 
-        // zaglavljaJson: {"x-api-key":"..."} ili null. GFW traži vlastito
-        // zaglavlje, sto u browseru okida CORS preflight — ovdje ne, jer native
-        // poziv nema CORS uopste.
+        // zaglavljaJson: {"x-api-key":"..."} ili null. tijeloJson je null za
+        // GET, a za GFW raster upit sadrži SQL i obaveznu GeoJSON geometriju.
+        // GFW zaglavlja i POST u browseru okidaju CORS preflight — ovdje ne,
+        // jer native poziv nema CORS uopste.
         @JavascriptInterface
-        public void fetchText(final String id, final String url, final int timeoutMs, final String zaglavljaJson) {
+        public void fetchText(final String id, final String url, final int timeoutMs,
+                              final String zaglavljaJson, final String tijeloJson) {
             new Thread(() -> {
                 int status = 0;
                 String b64 = "";
@@ -496,6 +498,17 @@ public class MainActivity extends Activity {
                             while (it.hasNext()) {
                                 String k = it.next();
                                 c.setRequestProperty(k, zg.optString(k, ""));
+                            }
+                        }
+                        if (tijeloJson != null && !tijeloJson.isEmpty()) {
+                            byte[] body = tijeloJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            c.setRequestMethod("POST");
+                            c.setDoOutput(true);
+                            c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                            // Bez fixed-length streaming moda: `/latest` može vratiti 307 na
+                            // dnevnu verziju, a HttpURLConnection tada mora moći ponoviti POST.
+                            try (OutputStream os = c.getOutputStream()) {
+                                os.write(body);
                             }
                         }
                         status = c.getResponseCode();

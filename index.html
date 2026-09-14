@@ -5021,7 +5021,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.3';
+const APP_VER = 'v1.3.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -13644,7 +13644,7 @@ function _nativeNetOdgovor(id, status, b64, greska) {
   p.resolve({ status, text: txt });
 }
 
-function _nativeNetFetch(url, ms, zaglavlja) {
+function _nativeNetFetch(url, ms, zaglavlja, tijelo) {
   return new Promise((resolve, reject) => {
     const id = 'n' + (++_netSeq);
     // Sigurnosna mreža: ako native strana iz bilo kojeg razloga nikad ne
@@ -13654,12 +13654,13 @@ function _nativeNetFetch(url, ms, zaglavlja) {
       const e = new Error('native timeout'); e.name = 'TimeoutError'; reject(e);
     }, (ms || 20000) + 5000);
     _NET_ceka[id] = { resolve, reject, t };
-    try { AndroidNet.fetchText(id, url, ms || 20000, zaglavlja ? JSON.stringify(zaglavlja) : null); }
+    try { AndroidNet.fetchText(id, url, ms || 20000, zaglavlja ? JSON.stringify(zaglavlja) : null,
+      tijelo ? JSON.stringify(tijelo) : null); }
     catch(e) { clearTimeout(t); delete _NET_ceka[id]; reject(e); }
   });
 }
 
-// opts: { headers:{...}, parser:fn, provjera:regex }. Parser je pluggable jer
+// opts: { headers:{...}, body:{...}, parser:fn, provjera:regex }. Parser je pluggable jer
 // FIRMS vraća CSV, a GFW JSON — ali sve ostalo (native/fetch put, mjerenje,
 // prevod greške) je isto pa se ne duplira.
 async function _poziDohvatiJedan(naziv, url, ms, opts) {
@@ -13668,7 +13669,10 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
   opts = opts || {};
   const parser = opts.parser || _poziParseCsv;
   const provjera = opts.provjera || /latitude/i;
-  const zaglavlja = opts.headers || null;
+  const tijelo = opts.body || null;
+  const zaglavlja = { ...(opts.headers || {}) };
+  if (tijelo && !Object.keys(zaglavlja).some(k => k.toLowerCase() === 'content-type'))
+    zaglavlja['Content-Type'] = 'application/json';
   const pregled = txt => String(txt || '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').slice(0, 500);
   const ocijeni = (txt, native, status) => {
     const pts = parser(txt);
@@ -13678,7 +13682,7 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
   // U APK-u prvo native put (nema CORS); u browseru ga nema pa ide fetch().
   if (_nativeNetDostupan()) {
     try {
-      const r = await _nativeNetFetch(url, ms || 20000, zaglavlja);
+      const r = await _nativeNetFetch(url, ms || 20000, Object.keys(zaglavlja).length ? zaglavlja : null, tijelo);
       if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, native:true, status:r.status, bytes:String(r.text || '').length, preview:pregled(r.text) });
       return _dbgVrati(ocijeni(r.text, true, r.status));
     } catch(e) {
@@ -13689,8 +13693,9 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
     // Vlastito zaglavlje (npr. GFW x-api-key) okida CORS preflight — ako ga
     // server ne odobri, pada i prije samog zahtjeva. U APK-u to nije problem
     // jer native put uopšte ne ide kroz CORS.
-    const o = { mode:'cors' };
-    if (zaglavlja) o.headers = zaglavlja;
+    const o = { mode:'cors', method:tijelo ? 'POST' : 'GET' };
+    if (Object.keys(zaglavlja).length) o.headers = zaglavlja;
+    if (tijelo) o.body = JSON.stringify(tijelo);
     const r = await _fetchT(url, ms || 15000, o);
     if (!r.ok) { const txt=await r.text(); return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, status:r.status, bytes:String(txt || '').length, preview:pregled(txt) }); }
     return _dbgVrati(ocijeni(await r.text(), false, r.status));
@@ -15518,10 +15523,12 @@ function _sjeDebugOcisti(v) {
   let s=String(v||'');const k=String(_poziGfwKljuc()||'');if(k)s=s.split(k).join('***');
   return s.replace(/([?&](?:key|api_key|token)=)[^&\s]+/gi,'$1***').slice(0,700);
 }
-function _sjeDebugStart(okvir, ref, url, kljuc) {
+function _sjeDebugStart(okvir, ref, url, kljuc, zahtjev) {
   let kes=null;try{kes=JSON.parse(localStorage.getItem(_SJE_CACHE_KEY)||'null')}catch(e){}
   _sjeDebugRun={startedAt:Date.now(),state:'u toku',okvir,
     ref:{la:Number(ref?.la),lo:Number(ref?.lo),gps:!!ref?.gps},url:_poziDebugSafeUrl(url),
+    method:zahtjev?.body?'POST':'GET',geometryType:zahtjev?.body?.geometry?.type||'nema',
+    geometryPoints:zahtjev?.body?.geometry?.coordinates?.[0]?.length||0,
     online:navigator.onLine,native:_nativeNetDostupan(),keyMemory:!!kljuc,keyCache:_sjeDebugKljucUKesu(),
     cacheExists:!!kes,cacheAgeMs:kes?.ts?Date.now()-kes.ts:null};
   _sjeDebugPublish();
@@ -15544,7 +15551,9 @@ function _sjeDebugText() {
     'GFW ključ: memorija='+(d.keyMemory?'DA':'NE')+' · lokalni keš='+(d.keyCache?'DA':'NE'),
     'Dataset: gfw_integrated_alerts/latest',
     'Očekivana polja: longitude, latitude, gfw_integrated_alerts__date, gfw_integrated_alerts__confidence',
-    'URL: '+d.url,'', 'ZAHTJEV:'];
+    'URL: '+d.url,
+    'Metoda: '+(d.method||'GET')+' · geometrija: '+(d.geometryType||'nema')+' · tačaka obruba: '+(d.geometryPoints||0),
+    '', 'ZAHTJEV:'];
   if(d.requestOk==null)out.push('⏳ zahtjev još traje');
   else {
     out.push((d.requestOk?'✅ uspjeh':'❌ neuspjeh')+' · '+(d.requestMs??'—')+'ms · '+(d.requestNative?'native APK':'browser/fetch'));
@@ -15568,18 +15577,31 @@ function _sjeDebugPublish() {
   if(!_sjeDebugRun)return;_debugUpsert('sjeca-vjetroizvale','Sječa / vjetroizvale — GFW dohvat',_sjeDebugText(),_sjeDebugRun.state);
 }
 
-function _sjeUrl(okvir, ref) {
+function _sjeZahtjev(okvir, ref) {
   const o = _SJE_OKVIRI.find(x => x.id === okvir) || _SJE_OKVIRI[1];
   const od = new Date(Date.now() - o.dana * 86400000).toISOString().slice(0, 10);
   const dLat = _SJE_RADIUS_KM / 111;
   const dLon = _SJE_RADIUS_KM / (111 * Math.cos(ref.la * Math.PI / 180));
   const sql = 'SELECT longitude, latitude, gfw_integrated_alerts__date, gfw_integrated_alerts__confidence FROM results'
     + " WHERE gfw_integrated_alerts__date >= '" + od + "'"
-    + ' AND latitude >= '  + (ref.la - dLat).toFixed(3) + ' AND latitude <= '  + (ref.la + dLat).toFixed(3)
-    + ' AND longitude >= ' + (ref.lo - dLon).toFixed(3) + ' AND longitude <= ' + (ref.lo + dLon).toFixed(3)
-    + ' LIMIT 1000';
-  return 'https://data-api.globalforestwatch.org/dataset/gfw_integrated_alerts/latest/query/json?sql='
-    + encodeURIComponent(sql);
+    + ' ORDER BY gfw_integrated_alerts__date DESC LIMIT 5000';
+  const ring = [];
+  // GFW raster query obavezno traži Polygon/MultiPolygon. Krug od 32 segmenta
+  // je dovoljno precizan za radijus 50 km, a znatno je manji od složenog KML-a.
+  for (let i = 0; i <= 32; i++) {
+    const a = 2 * Math.PI * i / 32;
+    ring.push([
+      Number((ref.lo + dLon * Math.cos(a)).toFixed(6)),
+      Number((ref.la + dLat * Math.sin(a)).toFixed(6))
+    ]);
+  }
+  return {
+    url:'https://data-api.globalforestwatch.org/dataset/gfw_integrated_alerts/latest/query/json',
+    body:{ sql, geometry:{ type:'Polygon', coordinates:[ring] } }
+  };
+}
+function _sjeUrl(okvir, ref) {
+  return _sjeZahtjev(okvir, ref).url;
 }
 
 // Isti oblik tačke kao požari (la/lo/dt/conf) da se grupisanje i prikaz dijele.
@@ -15631,8 +15653,9 @@ async function _sjeLoad(tiho, dijagnostika) {
   const kljuc = _poziGfwKljuc();
   const okvir = _sjeOkvir();
   const ref = _poziRefTacka();
-  const url = _sjeUrl(okvir, ref);
-  if (dijagnostika) _sjeDebugStart(okvir, ref, url, kljuc);
+  const zahtjev = _sjeZahtjev(okvir, ref);
+  const url = zahtjev.url;
+  if (dijagnostika) _sjeDebugStart(okvir, ref, url, kljuc, zahtjev);
   if (!kljuc) {
     _sjeMeta = { greska:'nema-kljuca' };
     if (dijagnostika) _sjeDebugFinish('greška',{requestOk:false,requestMs:0,requestError:'GFW ključ nije učitan u memoriju aplikacije',usedCache:false});
@@ -15644,7 +15667,7 @@ async function _sjeLoad(tiho, dijagnostika) {
   try {
     const t0=Date.now();
     const r = await _poziDohvatiJedan('GFW integrisani alarmi', url, 25000,
-      { headers:{ 'x-api-key': kljuc }, parser:_sjeParse, provjera:/"data"\s*:/ });
+      { headers:{ 'x-api-key': kljuc }, body:zahtjev.body, parser:_sjeParse, provjera:/"data"\s*:/ });
     if (dijagnostika) Object.assign(_sjeDebugRun,{requestOk:!!r.ok,requestMs:Date.now()-t0,
       requestNative:!!r.native,httpStatus:r.status||0,bytes:r.bytes,requestError:r.greska||'',preview:_sjeDebugOcisti(r.preview)});
     if (r.ok) {

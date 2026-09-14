@@ -20,6 +20,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const MAIN_JAVA = fs.readFileSync(path.join(__dirname,
+  '../../android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java'), 'utf8');
 
 function extractFn(name) {
   const re = new RegExp('function ' + name + '\\(');
@@ -414,6 +416,25 @@ t('Base64 tijelo se dekodira u ISPRAVAN UTF-8 (dijakritika u CSV-u)', async () =
   assert.strictEqual(r.text, csv, 'dijakritika mora preživjeti prenos');
 });
 
+t('native most prosljeđuje GFW POST tijelo kao JSON bez izmjene', async () => {
+  let poziv = null;
+  const api3 = makeNet({ fetchText(...args) { poziv = args; } });
+  const body = { sql:'SELECT latitude FROM results', geometry:{ type:'Polygon', coordinates:[] } };
+  const p = api3._nativeNetFetch('https://data-api.globalforestwatch.org/x', 1000,
+    { 'x-api-key':'skriven' }, body);
+  assert.strictEqual(poziv.length, 5);
+  assert.deepStrictEqual(JSON.parse(poziv[4]), body);
+  api3._nativeNetOdgovor(poziv[0], 200, Buffer.from('{"data":[]}', 'utf8').toString('base64'), null);
+  await p;
+});
+
+t('Android native most stvarno šalje POST body i application/json', () => {
+  assert.match(MAIN_JAVA, /final String zaglavljaJson, final String tijeloJson/);
+  assert.match(MAIN_JAVA, /setRequestMethod\("POST"\)/);
+  assert.match(MAIN_JAVA, /setRequestProperty\("Content-Type", "application\/json; charset=utf-8"\)/);
+  assert.match(MAIN_JAVA, /os\.write\(body\)/);
+});
+
 t('greška sa native strane odbija obećanje, ne visi', async () => {
   let zadnji = null;
   const api3 = makeNet({ fetchText(id) { zadnji = id; } });
@@ -635,6 +656,7 @@ const SRC5 = [
   extractFn('_poziSatelit'),
   extractFn('_poziGrupisi'),
   extractFn('_poziEvtKljuc'),
+  extractFn('_sjeZahtjev'),
   extractFn('_sjeUrl'),
   extractFn('_sjeParse'),
   extractFn('_sjePouzdanost'),
@@ -642,21 +664,24 @@ const SRC5 = [
   extractFn('_sjeBrojRijec'),
 ].join('\n');
 const api5 = new Function('localStorage', '_SJE_OKVIR_KEY',
-  SRC5 + '\nreturn { _sjeUrl, _sjeParse, _sjePouzdanost, _sjeFilterBlizu, _sjeBrojRijec, _poziGrupisi, _poziEvtKljuc };'
+  SRC5 + '\nreturn { _sjeZahtjev, _sjeUrl, _sjeParse, _sjePouzdanost, _sjeFilterBlizu, _sjeBrojRijec, _poziGrupisi, _poziEvtKljuc };'
 )(makeStore(), 'tvlake_sjeca_okvir');
 
-t('_sjeUrl gađa gfw_integrated_alerts (ne GLAD/RADD — oni ne pokrivaju BiH)', () => {
-  const u = api5._sjeUrl('30d', { la:44.88, lo:16.15 });
-  assert.match(u, /dataset\/gfw_integrated_alerts\/latest\/query\/json/);
-  const sql = decodeURIComponent(u.split('sql=')[1]);
+t('_sjeZahtjev gađa integrisani raster kroz POST sa obaveznom geometrijom', () => {
+  const z = api5._sjeZahtjev('30d', { la:44.88, lo:16.15 });
+  assert.match(z.url, /dataset\/gfw_integrated_alerts\/latest\/query\/json$/);
+  const sql = z.body.sql;
   assert.match(sql, /gfw_integrated_alerts__date >= '\d{4}-\d{2}-\d{2}'/);
-  assert.match(sql, /latitude >= 44\./);
-  assert.match(sql, /LIMIT/);
+  assert.match(sql, /LIMIT 5000$/);
+  assert.strictEqual(z.body.geometry.type, 'Polygon');
+  assert.strictEqual(z.body.geometry.coordinates[0].length, 33);
+  assert.deepStrictEqual(z.body.geometry.coordinates[0][0], z.body.geometry.coordinates[0][32], 'GeoJSON obrub mora biti zatvoren');
+  assert.ok(!/latitude\s*[<>]=/.test(sql), 'prostorni filter daje geometry, ne SQL bbox');
 });
 
-t('_sjeUrl: 90d ide dalje u prošlost nego 7d', () => {
-  const d = u => decodeURIComponent(u.split('sql=')[1]).match(/date >= '([\d-]+)'/)[1];
-  assert.ok(d(api5._sjeUrl('90d', { la:44.88, lo:16.15 })) < d(api5._sjeUrl('7d', { la:44.88, lo:16.15 })));
+t('_sjeZahtjev: 90d ide dalje u prošlost nego 7d', () => {
+  const d = z => z.body.sql.match(/date >= '([\d-]+)'/)[1];
+  assert.ok(d(api5._sjeZahtjev('90d', { la:44.88, lo:16.15 })) < d(api5._sjeZahtjev('7d', { la:44.88, lo:16.15 })));
 });
 
 t('_sjeParse: GFW JSON → ista struktura tačke kao požari, rezolucija 30 m', () => {

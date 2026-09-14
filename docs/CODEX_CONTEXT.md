@@ -79,6 +79,10 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
   period, referencu, prisutnost ključa, native/browser put, HTTP status,
   veličinu i očišćeni isječak greške, broj primljenih/filtriranih/grupisanih
   alarma i korištenje lokalnog keša. Vrijednost API ključa se ne zapisuje.
+- v1.3.4 popravlja GFW `HTTP 422`: `gfw_integrated_alerts` je raster-only
+  dataset i ne prihvata raniji GET SQL bbox bez geometrije. Aplikacija sada
+  šalje POST JSON (`sql` + zatvoren GeoJSON Polygon od 32 segmenta za 50 km),
+  kroz browser ili prošireni Android native most.
 
 ## 2. Pet prioritetnih nalaza
 

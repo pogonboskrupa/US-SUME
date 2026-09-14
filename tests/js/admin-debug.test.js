@@ -76,7 +76,7 @@ t('GFW ključ se uklanja iz odgovora prije spremanja debug zapisa', () => {
 
 t('debug sječe bilježi mrežni put, HTTP, parsiranje, filtriranje i keš', () => {
   const src = extractFn('_sjeDebugText');
-  ['Dataset: gfw_integrated_alerts/latest','HTTP:','Primljeno iz GFW:','Grupisanih alarma:','Korišten keš nakon greške:'].forEach(x => assert.ok(src.includes(x), x));
+  ['Dataset: gfw_integrated_alerts/latest','Metoda:','geometrija:','HTTP:','Primljeno iz GFW:','Grupisanih alarma:','Korišten keš nakon greške:'].forEach(x => assert.ok(src.includes(x), x));
   const dohvat = extractFn('_poziDohvatiJedan');
   assert.ok(dohvat.includes('preview:pregled'));
   assert.ok(dohvat.includes('bytes:String'));
