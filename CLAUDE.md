@@ -1721,6 +1721,68 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   'Document'`, a mjerenja su tiho ispala 0 px i "false" za sve provjere (dakle
   test bi "prošao" kao da ništa ne valja). Prepisano običnom konkatenacijom.
 
+## Terenski rad — mjerenje kvaliteta veze
+
+- **"Slab signal" je bio POTPUNO nevidljiv stanje (v1.4.6)**: na zahtjev
+  "provjeri terenski rad... kako app radi bez neta ali kako radi i sa slabim
+  signalom". Audit je pokazao da je offline put zdrav, ali da app **nije imala
+  nikakav pojam o kvalitetu veze** — postojala su samo dva stanja, i to izvedena
+  iz `navigator.onLine`, koji je već dokumentovano **LAŽE `true` na mrtvoj vezi**
+  (OS-S4). Posljedica na terenu: crvena tačkica se palila SAMO kad OS sam
+  prizna offline; na slaboj/mrtvoj-ali-`true` vezi korisnik je vidio "online"
+  dok je svaki poziv tiho čekao 15 s do isteka i ništa se nije sinkronizovalo.
+  - **Ono što JESTE bilo ispravno i nije dirano**: transport je već bio ograničen.
+    `reliableFetch` (`static/js/reliable-fetch.js`) je Supabase klijentu predan
+    kao `global:{fetch:...}`, pa SVAKI od ~121 `await sb.*` poziva ima rok od
+    15 s — **uključujući čitanje tijela odgovora** (bez toga bi spor curak bajtova
+    visio i nakon što zaglavlja stignu). Prva sumnja je bila da 121 poziv visi
+    nezaštićeno; provjera je tu sumnju oborila i nijedan gate nije preprav­ljan.
+  - **Mjeri se PASIVNO, bez ijednog dodatnog zahtjeva** — `reliableFetch` je
+    jedina tačka kroz koju prolazi sav Supabase saobraćaj, pa se ishod (`ok`,
+    trajanje, vrsta kvara) bilježi TU, iz poziva koje app ionako pravi.
+    NAMJERNO nema periodičnog "ping"-a: na vezi od ~1.4 KB/s svaki sintetički
+    zahtjev otima propusnost onome što korisnik stvarno čeka (ista pouka kao
+    paralelni FIRMS dohvat, v3.104.1). `setNetObserver` je opcion i greška
+    posmatrača se guta — mjerenje ne smije oboriti prenos koji mjeri.
+  - **HTTP 500 se broji kao ISPRAVNA veza** (`ok:true`) — bajtovi su protekli,
+    link radi, buni se server. Miješanje ta dva bi "server ima bug" prikazalo
+    kao "nemaš signal".
+  - **Prekid koji je tražio POZIVALAC se NE broji kao loša veza** — korisnik koji
+    napusti ekran bi inače svojim `AbortController`-om obojio link kao mrtav.
+  - **Tri stanja umjesto dva** (`_netKvalitet`): `nema` (ništa ne prolazi),
+    `slaba` (prolazi, ali sporo/sa ispadima), `dobra`, plus `nepoznato` dok nema
+    uzoraka. Tačkica `#offline-badge` je sad crvena/**žuta**/skrivena — element,
+    ID i `_setOfflineMode` ostaju (v1.1.4 pravilo), mijenja se samo boja/title,
+    a `_netBadgeSync` je JEDINO mjesto koje o izgledu odlučuje (inače bi
+    `_setOfflineMode` i mjerenje gazili isti element).
+  - **`_isOfflineMode` ima zadnju riječ** — kad je auth/startup sloj odlučio da
+    se radi offline, par brzih uzoraka to ne smije poništiti.
+  - **Stari uzorci se ne broje** (`_NET_SVJEZE_MS` = 10 min) — neuspjeh od prije
+    pola sata ne opisuje teren na kojem korisnik stoji sada.
+  - **Gate-ovi (`navigator.onLine`, ~30 mjesta) NISU mijenjani** — prioritet je
+    "kad ima neta, koristi online značajke", a sužavanje gate-ova na izmjereno
+    stanje bi online funkcije GASILO na slaboj vezi na kojoj one još rade (samo
+    sporije). Mjerenje je za sada ISKLJUČIVO vidljivost, ne odlučivanje.
+  - **Debug sekcija "Terenski rad"** (`_netDebugRender`, kartica u `#debug-panel`):
+    izmjereno stanje, medijan odziva, broj neuspjelih, dubina reda za sync, broj
+    otvorenih offline karata — i `navigator.onLine` ISPISAN pored toga, crvenom
+    kad se razilazi sa mjerenjem, baš da se laž VIDI. Uz to spisak "radi i bez
+    veze" / "traži vezu", da se sa terena ne nagađa šta je pokvareno a šta po
+    prirodi stvari traži mrežu.
+  - **"Testiraj vezu sada"** je JEDINI zahtjev koji ta sekcija sama napravi, i to
+    tek na izričit klik — ide kroz STVARAN Supabase put (isti kojim ide sync),
+    ne "ping" na tuđi server koji o sync-u ne dokazuje ništa. Razlikuje istek
+    ("veza visi") od odbijanja, isti princip kao `_poziGreskaTxt`.
+  - Testovi: `tests/js/net-kvalitet.test.js` (19) nad STVARNIM kodom iz
+    index.html i STVARNIM `reliable-fetch.js`. Vizuelno provjereno Playwright
+    reprodukcijom sva tri stanja uporedo. **Zamka pri pisanju testa**: prvi
+    prolaz je async testove registrovao kroz sinhroni `t()` koji ne čeka
+    Promise — pala asercija bi prošla kao "uspjeh" uz neuhvaćeno odbijanje sa
+    strane; zato postoji zaseban `ta()` runner. Druga zamka (Playwright repro):
+    generisana funkcija je prepisala `document.getElementById` GLOBALNO, pa je
+    druga iteracija dobila `null` — original se mora vratiti poslije svakog
+    scenarija.
+
 ## Gornja traka — #tab-bar
 
 - **`#offline-badge` — tekstualna pilula → sitna crvena tačkica (v1.1.4)**: na

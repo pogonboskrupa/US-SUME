@@ -4257,6 +4257,17 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           🪵 Pokreni debug sječe / vjetroizvala
         </button>
         <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Dohvata trenutni period i zapisuje mrežni put, HTTP odgovor, parsiranje, filtriranje i keš. API ključevi su automatski skriveni.</div>
+
+        <!-- Terenski rad: izmjereno stanje veze + šta radi bez neta.
+             Mjerenje je PASIVNO (iz saobraćaja koji app ionako pravi) — vidi
+             komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
+             sekcija sama napravi, i to tek na izričit klik. -->
+        <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <button onclick="_netTestSada()" id="btn-net-test"
+          style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
+          📶 Testiraj vezu sada
+        </button>
+
         <div id="admin-debug-list"></div>
       </div>
     </div>
@@ -5004,7 +5015,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.5';
+const APP_VER = 'v1.4.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5148,10 +5159,76 @@ function _loadLocalVlake() {
 
 let _isOfflineMode = false;
 
+// ─── MJERENJE KVALITETA VEZE (pasivno, bez ijednog dodatnog zahtjeva) ────────
+// navigator.onLine na terenu LAŽE 'true' na mrtvoj vezi (OS-S4, dokumentovano
+// kroz više terenskih prijava) — zato se stanje linka ne POGAĐA iz njega nego
+// MJERI iz saobraćaja koji app ionako pravi. reliableFetch je jedini transport
+// kroz koji prolazi SVAKI Supabase poziv, pa je mjerenje besplatno i opisuje
+// baš ono što korisnik stvarno čeka.
+// Tri stanja se razlikuju NAMJERNO, jer traže različitu reakciju korisnika:
+//   nema  — ništa ne prolazi (radi se lokalno, sync čeka)
+//   slaba — prolazi, ali sporo/sa ispadima (upisi stižu, ali sa zadrškom)
+//   dobra — online značajke rade normalno
+const _NET_UZORAKA = 12;
+const _NET_SVJEZE_MS = 10 * 60 * 1000;  // stariji uzorci ne opisuju trenutni teren
+const _NET_SPORO_MS = 2500;             // iznad ovoga je "slaba" i kad uspije
+let _netUzorci = [];
+
+function _netZabiljezi(ishod) {
+  if (!ishod) return;
+  _netUzorci.push({ ok:!!ishod.ok, ms:Number(ishod.ms) || 0, vrsta:ishod.vrsta || 'ok', t:Date.now() });
+  if (_netUzorci.length > _NET_UZORAKA) _netUzorci.shift();
+  try { _netBadgeSync(); } catch(e) {}
+}
+function _netSvjezi() {
+  const sad = Date.now();
+  return _netUzorci.filter(u => sad - u.t <= _NET_SVJEZE_MS);
+}
+function _netMedijanMs() {
+  const uspjeli = _netSvjezi().filter(u => u.ok).map(u => u.ms).sort((a, b) => a - b);
+  return uspjeli.length ? uspjeli[Math.floor(uspjeli.length / 2)] : null;
+}
+function _netKvalitet() {
+  // Kad OS KAŽE da nema veze, to je pouzdano (laže samo u drugom smjeru).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'nema';
+  const u = _netSvjezi();
+  if (!u.length) return 'nepoznato';
+  const palo = u.filter(x => !x.ok).length;
+  // Sve palo, a OS tvrdi da veze ima — to je upravo OS-S4 laž.
+  if (palo === u.length) return 'nema';
+  const med = _netMedijanMs();
+  if (palo > 0 || (med != null && med > _NET_SPORO_MS)) return 'slaba';
+  return 'dobra';
+}
+
+// Jedno mjesto koje odlučuje izgled tačkice — inače bi _setOfflineMode i
+// mjerenje pisali po istom elementu i gazili se.
+function _netBadgeSync() {
+  const el = document.getElementById('offline-badge');
+  if (!el) return;
+  const k = _netKvalitet();
+  if (_isOfflineMode || k === 'nema') {
+    el.style.display = 'inline-block';
+    el.style.background = '#dc2626';
+    el.style.boxShadow = '0 0 0 2px rgba(220,38,38,0.3)';
+    el.title = 'Nema signala — radi lokalno, sinkronizacija čeka';
+  } else if (k === 'slaba') {
+    el.style.display = 'inline-block';
+    el.style.background = '#f59e0b';
+    el.style.boxShadow = '0 0 0 2px rgba(245,158,11,0.3)';
+    el.title = 'Slab signal — online značajke rade, ali sporo';
+  } else {
+    el.style.display = 'none';
+  }
+}
+try { if (typeof setNetObserver === 'function') setNetObserver(_netZabiljezi); } catch(e) {}
+
 function _setOfflineMode(offline) {
   _isOfflineMode = offline;
-  const el = document.getElementById('offline-badge');
-  if (el) el.style.display = offline ? 'inline-block' : 'none';
+  try { _netBadgeSync(); } catch(e) {
+    const el = document.getElementById('offline-badge');
+    if (el) el.style.display = offline ? 'inline-block' : 'none';
+  }
 }
 
 function _updSyncBadge() {
@@ -6578,6 +6655,9 @@ function closeAdminModal() {}
 // Jedan ID predstavlja jedan aktivni problem. Novi pokušaj osvježi istu
 // karticu, a admin je briše tek kada je problem stvarno riješen.
 function _adminDebugRender() {
+  // Kartica stanja veze se osvježava zajedno sa listom — inače bi pokazivala
+  // stanje od prošlog otvaranja panela, što je na terenu gore od ničega.
+  try { _netDebugRender(); } catch(e) {}
   const el = document.getElementById('admin-debug-list');
   if (!el) return;
   if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
@@ -6600,6 +6680,108 @@ function _adminDebugRender() {
       '</div></div>';
   }).join('');
 }
+// ─── DEBUG: terenski rad (bez neta / slab signal) ───────────────────────────
+// Odgovara na pitanje koje se sa terena ne može drugačije postaviti: "da li app
+// uopšte ima vezu, ili samo izgleda kao da ima". navigator.onLine se ISPISUJE
+// uz izmjereno stanje baš da se ta razlika VIDI kad laže.
+const _NET_STANJA = {
+  dobra:     { boja:'#22c55e', znak:'✅', txt:'Dobra veza' },
+  slaba:     { boja:'#f59e0b', znak:'⚠',  txt:'Slab signal' },
+  nema:      { boja:'#ef4444', znak:'⛔', txt:'Nema veze' },
+  nepoznato: { boja:'#64748b', znak:'…',  txt:'Još nije mjereno' },
+};
+
+function _netRedHtml(oznaka, vrijednost, boja) {
+  return '<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;">' +
+    '<span style="color:#64748b;">' + _escHtml(oznaka) + '</span>' +
+    '<span style="color:' + (boja || '#cbd5e1') + ';font-weight:600;text-align:right;">' + _escHtml(vrijednost) + '</span></div>';
+}
+
+function _netQueueDubina() {
+  try { return _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id).length; }
+  catch(e) { return null; }
+}
+
+function _netDebugRender() {
+  const el = document.getElementById('net-debug-card');
+  if (!el) return;
+  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  const k = _netKvalitet();
+  const s = _NET_STANJA[k] || _NET_STANJA.nepoznato;
+  const uzorci = _netSvjezi();
+  const palo = uzorci.filter(u => !u.ok).length;
+  const med = _netMedijanMs();
+  const osKaze = (typeof navigator !== 'undefined' && navigator.onLine !== false);
+  const red = _netQueueDubina();
+
+  // Ovo je poenta cijele kartice: OS tvrdi da ima veze, a ništa ne prolazi.
+  const lazOs = osKaze && k === 'nema' && uzorci.length > 0;
+
+  let h = '<div style="font-size:13px;font-weight:700;color:' + s.boja + ';margin-bottom:8px;">' +
+    s.znak + ' ' + _escHtml(s.txt) + '</div>' +
+    '<div style="font:11.5px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;">';
+  h += _netRedHtml('Izmjereno iz', uzorci.length ? uzorci.length + ' zadnjih poziva' : 'nema svježih poziva');
+  if (uzorci.length) {
+    h += _netRedHtml('Neuspjelih', palo + ' / ' + uzorci.length, palo ? '#f59e0b' : '#22c55e');
+    h += _netRedHtml('Medijan odziva', med != null ? med + ' ms' : '—',
+      med != null && med > _NET_SPORO_MS ? '#f59e0b' : '#cbd5e1');
+  }
+  h += _netRedHtml('navigator.onLine', String(osKaze), lazOs ? '#ef4444' : '#cbd5e1');
+  h += _netRedHtml('Čeka u redu za sync', red == null ? '—' : String(red), red ? '#f59e0b' : '#22c55e');
+  h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
+  h += '</div>';
+
+  if (lazOs) {
+    h += '<div style="margin-top:9px;padding:8px;background:#450a0a;border:1px solid #ef4444;border-radius:7px;font-size:10.5px;line-height:1.5;color:#fecaca;">' +
+      'Sistem tvrdi da veza POSTOJI, a nijedan zadnji poziv nije prošao. To je poznata laž ' +
+      'Androida na mrtvoj vezi — app zato radi lokalno i sve upise drži u redu.</div>';
+  }
+
+  // Šta radi bez neta — da se sa terena ne nagađa šta je pokvareno, a šta
+  // jednostavno TRAŽI vezu po prirodi stvari.
+  h += '<div style="margin-top:10px;font-size:10.5px;line-height:1.7;color:#94a3b8;">' +
+    '<div style="color:#22c55e;font-weight:700;margin-bottom:2px;">Radi i bez veze</div>' +
+    'GPS snimanje (vlaka, trag, doznaka) · preuzete offline karte · keširane pločice · ' +
+    'prijava sa keširanim profilom · mjerenja · sve izmjene idu u red i čekaju' +
+    '<div style="color:#f59e0b;font-weight:700;margin:7px 0 2px;">Traži vezu (do tada keš ili prazno)</div>' +
+    'sinkronizacija sa serverom · požari i sječa (FIRMS/GFW) · Sentinel-2 i Vremenska traka · ' +
+    'vjetar · dijeljena arhiva požara' +
+    '</div>';
+  el.innerHTML = h;
+}
+
+// Jedini zahtjev koji ova sekcija sama napravi — i to tek na izričit klik.
+// Mjeri STVARAN put kojim ide sinkronizacija (Supabase kroz reliableFetch), ne
+// zaseban "ping" na tuđi server koji ne dokazuje ništa o sync-u.
+async function _netTestSada() {
+  if (!sbProfile?.is_admin) return;
+  const btn = document.getElementById('btn-net-test');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Testiram…'; }
+  const t0 = Date.now();
+  let ishod;
+  try {
+    if (!sb) throw new Error('Supabase klijent nije napravljen');
+    const { error } = await sb.from('korisnici').select('id').limit(1);
+    const ms = Date.now() - t0;
+    ishod = error
+      ? '❌ Server je odgovorio greškom nakon ' + ms + ' ms: ' + (error.message || error)
+      : '✅ Prošlo za ' + ms + ' ms' + (ms > _NET_SPORO_MS ? ' (sporo — slab signal)' : '');
+  } catch (e) {
+    const ms = Date.now() - t0;
+    // reliableFetch presijeca na 15 s; istek i odbijanje su različiti problemi.
+    ishod = (e && e.name === 'TimeoutError')
+      ? '⛔ Nema odgovora ni nakon ' + ms + ' ms — veza visi (slab ili mrtav signal)'
+      : '⛔ Odbijeno nakon ' + ms + ' ms: ' + (e?.message || e);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '📶 Testiraj vezu sada'; }
+  _debugUpsert('net-test', 'Test veze (ručni)',
+    ishod + '\nIzmjereno stanje: ' + _netKvalitet() + '\nnavigator.onLine: ' + navigator.onLine +
+    '\nU redu za sync: ' + _netQueueDubina(),
+    ishod.startsWith('✅') ? 'uspjeh' : 'aktivno');
+  _netDebugRender();
+  showToast(ishod);
+}
+
 async function _adminDebugCopy(id) {
   if (!sbProfile?.is_admin) return;
   const d = _debugRead()[id];
