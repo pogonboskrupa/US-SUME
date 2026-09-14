@@ -5,7 +5,7 @@ function fn(n){const s=html.indexOf('function '+n+'(');assert.ok(s>=0,'nedostaje
 const src=['_poziOrijent','_poziSegmentiSijeku','_poziVrstaPrepreke','_poziPragIzmedju','_poziTrajanje','_poziPovrsPouzdanost','_poziAnimKoraci'].map(fn).join('\n');
 const api=new Function(src+';return {_poziSegmentiSijeku,_poziVrstaPrepreke,_poziPragIzmedju,_poziTrajanje,_poziPovrsPouzdanost,_poziAnimKoraci}')();
 let ok=0;function t(n,f){try{f();console.log('  ✔ '+n);ok++;}catch(e){console.error('  ✘ '+n+'\n    '+e.message);process.exitCode=1;}}
-console.log('Požari v1.3.6 — prepreke, markeri i replay:');
+console.log('Požari v1.3.8 — prepreke, markeri i replay:');
 t('rijeka je tvrda prepreka',()=>assert.equal(api._poziVrstaPrepreke('Rijeka Una'),'voda'));
 t('put, potok i greben usporavaju spajanje',()=>['Šumski put','potok','glavni greben'].forEach(x=>assert.equal(api._poziVrstaPrepreke(x),'usporava')));
 t('segment preko rijeke se prepoznaje',()=>assert.ok(api._poziSegmentiSijeku({la:0,lo:0},{la:1,lo:1},{la:0,lo:1},{la:1,lo:0})));

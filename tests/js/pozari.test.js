@@ -433,6 +433,12 @@ t('Android native most stvarno šalje POST body i application/json', () => {
   assert.match(MAIN_JAVA, /setRequestMethod\("POST"\)/);
   assert.match(MAIN_JAVA, /setRequestProperty\("Content-Type", "application\/json; charset=utf-8"\)/);
   assert.match(MAIN_JAVA, /os\.write\(body\)/);
+  assert.match(MAIN_JAVA, /status != 307 && status != 308/,
+    'GFW /latest redirect mora se pratiti ručno');
+  assert.match(MAIN_JAVA, /setInstanceFollowRedirects\(false\)/);
+  assert.match(MAIN_JAVA, /URL next = new URL\(u, location\)/);
+  assert.match(MAIN_JAVA, /dozvoljenHost\(next\.getHost\(\)\)/,
+    'redirect ne smije zaobići native host allowlistu');
 });
 
 t('greška sa native strane odbija obećanje, ne visi', async () => {

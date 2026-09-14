@@ -486,33 +486,45 @@ public class MainActivity extends Activity {
                         greska = "nedozvoljena adresa";
                     } else {
                         int t = timeoutMs > 0 ? timeoutMs : 20000;
-                        c = (HttpURLConnection) u.openConnection();
-                        c.setConnectTimeout(t);
-                        c.setReadTimeout(t);
-                        c.setInstanceFollowRedirects(true);
-                        c.setRequestProperty("User-Agent", "DendroMap-Android");
-                        c.setRequestProperty("Accept", "text/csv,application/json,text/plain,*/*");
-                        if (zaglavljaJson != null && zaglavljaJson.length() > 2) {
-                            org.json.JSONObject zg = new org.json.JSONObject(zaglavljaJson);
-                            java.util.Iterator<String> it = zg.keys();
-                            while (it.hasNext()) {
-                                String k = it.next();
-                                c.setRequestProperty(k, zg.optString(k, ""));
+                        byte[] body = (tijeloJson != null && !tijeloJson.isEmpty())
+                                ? tijeloJson.getBytes(java.nio.charset.StandardCharsets.UTF_8) : null;
+                        org.json.JSONObject zg = (zaglavljaJson != null && zaglavljaJson.length() > 2)
+                                ? new org.json.JSONObject(zaglavljaJson) : null;
+                        // HttpURLConnection na Androidu ne prati pouzdano 307/308 za POST.
+                        // GFW `/latest` upravo tako preusmjerava na dnevnu verziju dataseta,
+                        // zato redirect pratimo ručno i ponavljamo ISTU metodu i tijelo.
+                        for (int redirect = 0; redirect <= 5; redirect++) {
+                            c = (HttpURLConnection) u.openConnection();
+                            c.setConnectTimeout(t);
+                            c.setReadTimeout(t);
+                            c.setInstanceFollowRedirects(false);
+                            c.setRequestProperty("User-Agent", "DendroMap-Android");
+                            c.setRequestProperty("Accept", "text/csv,application/json,text/plain,*/*");
+                            if (zg != null) {
+                                java.util.Iterator<String> it = zg.keys();
+                                while (it.hasNext()) {
+                                    String k = it.next();
+                                    c.setRequestProperty(k, zg.optString(k, ""));
+                                }
                             }
-                        }
-                        if (tijeloJson != null && !tijeloJson.isEmpty()) {
-                            byte[] body = tijeloJson.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                            c.setRequestMethod("POST");
-                            c.setDoOutput(true);
-                            c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                            // Bez fixed-length streaming moda: `/latest` može vratiti 307 na
-                            // dnevnu verziju, a HttpURLConnection tada mora moći ponoviti POST.
-                            try (OutputStream os = c.getOutputStream()) {
-                                os.write(body);
+                            if (body != null) {
+                                c.setRequestMethod("POST");
+                                c.setDoOutput(true);
+                                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                                try (OutputStream os = c.getOutputStream()) { os.write(body); }
                             }
+                            status = c.getResponseCode();
+                            if (status != 307 && status != 308 && status != 301 && status != 302) break;
+                            String location = c.getHeaderField("Location");
+                            if (location == null || redirect == 5) { greska = "neispravno preusmjerenje"; break; }
+                            URL next = new URL(u, location);
+                            if (!"https".equalsIgnoreCase(next.getProtocol()) || !dozvoljenHost(next.getHost())) {
+                                greska = "nedozvoljeno preusmjerenje"; break;
+                            }
+                            c.disconnect(); c = null; u = next;
                         }
-                        status = c.getResponseCode();
-                        InputStream is = (status >= 400) ? c.getErrorStream() : c.getInputStream();
+                        InputStream is = (greska != null || c == null) ? null
+                                : ((status >= 400) ? c.getErrorStream() : c.getInputStream());
                         if (is != null) {
                             ByteArrayOutputStream bos = new ByteArrayOutputStream();
                             byte[] buf = new byte[16384];

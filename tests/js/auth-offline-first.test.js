@@ -64,6 +64,7 @@ function makeEnv({ cached = null, saved = null, online = true, sb = null } = {})
 
   const env = {
     _OL: { PROFILE: 'p', load: () => cached },
+    _profileLoad: () => cached,
     _loadSavedUser: () => saved,
     navigator: { onLine: online },
     console: { error: () => {}, warn: () => {}, log: () => {} },
@@ -130,6 +131,23 @@ async function test(name, fn) {
 
 (async () => {
 console.log('auth-offline-first.test.js\n');
+
+await test('profil keš drugog korisnika se odbija kad sesija ima poznat uid', async () => {
+  const src = extractPlainFn('_profileLoad');
+  const field = { id:'field-1', ime:'Terenski' };
+  const admin = { id:'admin-1', ime:'Admin', is_admin:true };
+  const store = new Map([
+    ['tvlake_ol_profile', field],
+    ['tvlake_ol_profile_user_admin-1', admin]
+  ]);
+  const fn = new Function('_OL,_PROFILE_BY_USER_PREFIX', src + '\nreturn _profileLoad;')(
+    { PROFILE:'tvlake_ol_profile', load:k => store.get(k) || null },
+    'tvlake_ol_profile_user_'
+  );
+  assert.equal(fn('admin-1'), admin, 'admin dobija svoj profil, ne zadnji terenski');
+  store.delete('tvlake_ol_profile_user_admin-1');
+  assert.equal(fn('admin-1'), null, 'legacy profil pogrešnog id-a mora biti odbijen');
+});
 
 // ── 1. Keširan profil + STVARNO offline ────────────────────────────────
 await test('Keširan profil + offline → app ODMAH, bez login ekrana', async () => {
@@ -339,6 +357,7 @@ function makeMreza({ cached = null, appEntered = false, authDisp = 'none', wrapD
   };
   const env = {
     _OL: { PROFILE: 'p', load: () => cached },
+    _profileLoad: () => cached,
     _setOfflineMode: () => { log.push('offline-mode'); },
     showApp: () => { log.push('showApp'); el['wrapper'].style.display = 'flex'; },
     showToast: (m) => { log.push('toast:' + m); },

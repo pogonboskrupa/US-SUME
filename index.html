@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.6';
+const APP_VER = 'v1.3.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5105,6 +5105,24 @@ let sbUser = null;
 let sbProfile = null;
 
 const _SAVED_USER_KEY = 'tvlake_saved_user';
+const _PROFILE_BY_USER_PREFIX = 'tvlake_ol_profile_user_';
+
+// Profil nikad nije zajednički između naloga. Legacy ključ ostaje samo kao
+// migracijski "zadnji profil", ali se uz poznat uid prihvata isključivo ako id
+// odgovara aktivnoj Supabase sesiji.
+function _profileSave(data) {
+  if (!data || !data.id) return false;
+  _OL.save(_OL.PROFILE, data);
+  return _OL.save(_PROFILE_BY_USER_PREFIX + data.id, data);
+}
+function _profileLoad(uid) {
+  if (uid) {
+    const own = _OL.load(_PROFILE_BY_USER_PREFIX + uid);
+    if (own && own.id === uid) return own;
+  }
+  const legacy = _OL.load(_OL.PROFILE);
+  return legacy && (!uid || legacy.id === uid) ? legacy : null;
+}
 
 // ─── LOKALNI KEŠ VLAKA (preživljava restart bez logina) ──────────────────────
 const LOCAL_VLAKE_KEY = 'tvlake_local_vlake';
@@ -5577,7 +5595,7 @@ function _showAuthScreen() {
 function _ulazNaKesu() {
   if (_appEntered) return true;              // već unutra — ne diraj ekran
   let cached = null;
-  try { cached = (typeof _OL !== 'undefined' && _OL && _OL.load) ? _OL.load(_OL.PROFILE) : null; } catch(e) {}
+  try { cached = (typeof _OL !== 'undefined' && _OL && _OL.load) ? _profileLoad(sbUser && !sbUser._cachedStub ? sbUser.id : null) : null; } catch(e) {}
   if (!cached || !cached.id) return false;
   // _cachedStub: ovo NIJE prava Supabase sesija. Svaka provjera "imamo li
   // sesiju" mora glasiti `sbUser && !sbUser._cachedStub` (vidi CLAUDE.md).
@@ -5631,7 +5649,18 @@ async function _upgradeToOnlineSession() {
 }
 
 async function initAuth() {
-  const cached = _OL.load(_OL.PROFILE);
+  // getSession čita lokalno sačuvanu Supabase sesiju i radi i bez interneta.
+  // Njegov uid je autoritativan: stari profil drugog naloga se ne smije otvoriti.
+  let startupSessionUser = null;
+  try {
+    if (sb?.auth?.getSession) {
+      const s = await Promise.race([
+        sb.auth.getSession(), new Promise(resolve => setTimeout(() => resolve(null), 350))
+      ]);
+      startupSessionUser = s?.data?.session?.user || null;
+    }
+  } catch(e) {}
+  const cached = _profileLoad(startupSessionUser?.id || null);
   const saved = _loadSavedUser();
 
   // BUG (prijavljeno s terena, popravljeno u v3.92.1): offline ulazak je ranije
@@ -5664,7 +5693,7 @@ async function initAuth() {
   if (cached) {
     // _cachedStub: označava da je ovo profil iz keša, a NE stvarna Supabase
     // sesija — po tome niže znamo da online nadogradnju treba još pokušati.
-    sbUser = { id: cached.id, email: cached.email || '', _cachedStub: true };
+    sbUser = startupSessionUser || { id: cached.id, email: cached.email || '', _cachedStub: true };
     sbProfile = cached;
     _setOfflineMode(!navigator.onLine);
     showApp();
@@ -5701,6 +5730,15 @@ async function initAuth() {
       try { sbStartRealtime(); } catch(e) {}
     }
   });
+
+  // Sesija je pronađena lokalno prije auth callbacka. Ne čekaj mrežu niti
+  // INITIAL_SESSION događaj da potvrdi identitet profila.
+  if (startupSessionUser) {
+    sbUser = startupSessionUser;
+    if (_appEntered) await _upgradeToOnlineSession();
+    else { await sbLoadProfile(); if (sbProfile) await showApp(); }
+    return;
+  }
 
   // Pomoćnik: bilo kakav neuspjeh online logina kad IMAMO keširani profil
   // NIKAD ne smije izbaciti korisnika na login ni obrisati kredencijale —
@@ -5767,9 +5805,9 @@ async function sbLoadProfile() {
   let data = null;
   try {
     const { data: d, error } = await sb.from('korisnici').select('*').eq('id', sbUser.id).single();
-    if (!error && d) { data = d; _OL.save(_OL.PROFILE, d); }
+    if (!error && d && d.id === sbUser.id) { data = d; _profileSave(d); }
   } catch(e) {}
-  if (!data) data = _OL.load(_OL.PROFILE); // fallback na keš
+  if (!data) data = _profileLoad(sbUser?.id); // samo keš OVOG korisnika
   sbProfile = data;
   if (!data) return;
   const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
@@ -5857,7 +5895,7 @@ async function showApp() {
       const { data, error } = await Promise.race([
         sb.from('korisnici').select('*').eq('id', sbUser.id).single(), _tmo
       ]);
-      if (!error && data) { sbProfile = data; _OL.save(_OL.PROFILE, data); }
+      if (!error && data && data.id === sbUser.id) { sbProfile = data; _profileSave(data); }
     } catch(e) {}
   }
   // Gate odobrenja: neodobren korisnik NE ulazi u app. FAIL-SAFE — blokira samo kad je
@@ -5928,9 +5966,17 @@ function _startupRestore() {
     // Keš je već učitan sinhrono pri parsiranju skripte (_poziKljucKesUcitaj);
     // ovdje samo tiho osvježava ako ima mreže, ne blokira ništa.
     korak('poziKljucevi', () => { if (navigator.onLine) _poziKljucUcitaj(); });
-    // Požarni slojevi se namjerno NE vraćaju automatski. Svaki novi ulazak u
-    // sekciju počinje bez prikaza; keševi i obavještenja ostaju sačuvani.
+    // Požarni sloj se vraća automatski iz zadnjeg keša. Nakon što se karta i ostali
+    // startup poslovi smire, zastarjeli požari se tiho dopunjavaju u pozadini.
     korak('pozari', () => _poziResetPrikaza());
+    setTimeout(() => {
+      const ts = (typeof _poziMeta !== 'undefined' && _poziMeta && _poziMeta.dohvacenoMs) || 0;
+      if (typeof _poziOn !== 'undefined' && _poziOn && navigator.onLine
+          && (typeof _poziBusy === 'undefined' || !_poziBusy)
+          && typeof _POZ_STALE_MS !== 'undefined' && Date.now() - ts >= _POZ_STALE_MS) {
+        korak('pozariPozadina', () => _poziLoad(true));
+      }
+    }, 10000);
     korak('sjeca', () => {
       if (localStorage.getItem(_SJE_ON_KEY) !== '1') return;
       _sjeOn = true;
@@ -6003,7 +6049,7 @@ async function _authRecheck() {
         sb.from('korisnici').select('*').eq('id', sbUser.id).single(), _tmo
       ]);
       if (error) throw error;
-      if (data) { sbProfile = data; _OL.save(_OL.PROFILE, data); }
+      if (data && data.id === sbUser.id) { sbProfile = data; _profileSave(data); }
     } catch(e) {
       showToast('⚠ Provjera nije uspjela: ' + (e.message || e.code || 'nepoznata greška'));
     }
@@ -6095,7 +6141,7 @@ async function doLogin() {
 
   // Offline login: keširani profil postoji, nema mreže — pusti u app
   if (!sb || !navigator.onLine) {
-    const cached = _OL.load(_OL.PROFILE);
+    const cached = _profileLoad();
     const saved = _loadSavedUser();
     if (cached && saved && saved.ime === ime && saved.pin === pin) {
       sbUser = { id: cached.id, email: cached.email || '' };
@@ -13501,14 +13547,31 @@ function _poziApiBlokovi(okvir, sadMs) {
   return blokovi;
 }
 
-async function _poziDohvatiApi(kljuc, okvir, ref) {
+async function _poziDohvatiApi(kljuc, okvir, ref, onPrviRezultat) {
   const zahtjevi = [];
-  _POZ_API_IZVORI.forEach(izv => _poziApiBlokovi(okvir).forEach(blok => {
+  // Najnoviji blok S-NPP ide prvi: korisnik dobije aktuelne tačke za ~1 s.
+  // Ostali sateliti/blokovi se dopunjavaju jedan po jedan, bez udara od 8–24
+  // paralelna native threada na CPU, memoriju i mobilnu vezu.
+  const blokovi = _poziApiBlokovi(okvir).slice().reverse();
+  _POZ_API_IZVORI.forEach(izv => blokovi.forEach(blok => {
     const dodatak = blok.datum ? (' · ' + blok.datum + ' +' + (blok.dani - 1) + 'd') : '';
     zahtjevi.push({ naziv:izv.naziv + dodatak,
       url:_poziApiUrl(kljuc, okvir, ref, izv.id, blok.dani, blok.datum) });
   }));
-  const rez = await Promise.all(zahtjevi.map(z => _poziDohvatiJedan(z.naziv, z.url, 20000)));
+  const rez = [];
+  let prviObjavljen = false;
+  for (let i = 0; i < zahtjevi.length; i++) {
+    const z = zahtjevi[i];
+    const r = await _poziDohvatiJedan(z.naziv, z.url, 20000);
+    rez.push(r);
+    if (r.ok && !prviObjavljen && typeof onPrviRezultat === 'function') {
+      prviObjavljen = true;
+      try { onPrviRezultat({ ok:true, pts:r.pts || [], izvori:[r.naziv], djelomicno:true, greske:[] }); } catch(e) {}
+    }
+    // Rasporedi rad kroz vrijeme. Prvi rezultat je već nacrtan i keširan;
+    // telefon između izvora dobija prostor za mapu, GPS i korisničke dodire.
+    if (i < zahtjevi.length - 1) await new Promise(resolve => setTimeout(resolve, 5000));
+  }
   const uspjesni = rez.filter(r => r.ok);
   const greske = rez.filter(r => !r.ok).map(r => r.naziv + ': ' + r.greska);
   if (!uspjesni.length) return { ok:false, naziv:'FIRMS API', greska:greske.join(' · '), greske };
@@ -13752,7 +13815,7 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
 // vezi trajao i do 60s (4 × 15s timeout) prije nego javi grešku — paralelno
 // javlja za ~15s. Ako je postavljen MAP_KEY, Area API se pita kao dodatni,
 // peti izvor, bbox-scoped oko korisnika.
-async function _poziDohvati(okvir) {
+async function _poziDohvati(okvir, onPrviRezultat) {
   const ref = _poziRefTacka();
   const kljuc = _poziMapKey();
 
@@ -13795,7 +13858,7 @@ async function _poziDohvati(okvir) {
 
   if (kljuc) {
     const [r, g] = await Promise.all([
-      _poziDohvatiApi(kljuc, okvir, ref),
+      _poziDohvatiApi(kljuc, okvir, ref, onPrviRezultat),
       gfw || Promise.resolve(null)
     ]);
     const spojeno = spoji(r, g);
@@ -13935,7 +13998,23 @@ async function _poziLoad(tiho) {
   let _perfDohvat = _perf0, _perfFilter = _perf0, _perfGrupe = _perf0, _perfCrtanje = _perf0;
   try {
     const okvir = _dbgOkvir;
-    const r = await _poziDohvati(okvir);
+    let _prviPrikazan = false;
+    const r = await _poziDohvati(okvir, djelimicni => {
+      if (_prviPrikazan || !djelimicni?.ok || !(djelimicni.pts || []).length) return;
+      _prviPrikazan = true;
+      const ref0 = _poziRefTacka();
+      // Ne prepisuj puni stari keš prvim (malim) paketom. Spoji ga s onim što
+      // je već nacrtano; trajni keš se atomarno zamjenjuje tek konačnim skupom.
+      const spoj = new Map();
+      [...(_poziPts || []), ...(djelimicni.pts || [])].forEach(p =>
+        spoj.set([p.la, p.lo, p.dt, p.sat].join('|'), p));
+      _poziPts = _poziFilterBlizu([...spoj.values()], ref0);
+      _poziMeta = { izvori:djelimicni.izvori, dohvacenoMs:Date.now(),
+        ukupno:_poziPts.length, kes:false, okvir, djelomicno:true, refGps:ref0.gps };
+      _poziEvts = _poziOznaciNove(_poziGrupeBlizu(_poziGrupisi(_poziPts), ref0));
+      _poziRender();
+      _poziStatusSet('Dopunjavam u pozadini · ' + _poziBrojRijecPozar(_poziEvts.length));
+    });
     _perfDohvat = performance.now();
     const ref = _poziRefTacka();
     if (r.ok) {
@@ -15003,7 +15082,13 @@ function _poziRender() {
       g._mk = mk;   // _poziZoom otvara BAŠ ovaj marker — bez oslanjanja na redoslijed u nizu
     } else {
       const p = g.pts[0];
-      const mk = L.marker([p.la, p.lo], { icon:_poziIcon(p), pane:'pozariPane', zIndexOffset:900 });
+      if (!_poziCanvasRenderer && L.canvas) _poziCanvasRenderer = L.canvas({ pane:'pozariPane', padding:0.35 });
+      const st = _poziMkStarost(Date.parse(p.dt));
+      // I pojedinačne detekcije su vektorske tačke. Ranije su bile zasebni DOM
+      // markeri pa je svaki požar povećavao broj elemenata i cijenu pan/zoom-a.
+      const mk = L.circleMarker([p.la, p.lo], { renderer:_poziCanvasRenderer || undefined,
+        pane:'pozariPane', radius:6, color:'#fff', weight:2,
+        fillColor:st.fill, fillOpacity:1, opacity:1 });
       mk.bindPopup(_poziPopupHtml(p, ref), { maxWidth:280, className:'kml-info-popup' });
       mk.addTo(_poziLayer);
       g._mk = mk;
@@ -15239,7 +15324,11 @@ function _poziToggle(on) {
   // manje precizan. Ako GPS watch (isti onaj koji koristi 📍 dugme na karti,
   // vidi fabLokacija) još nije pokrenut, pokreni ga sad.
   if (!(typeof lastP !== 'undefined' && lastP && isFinite(lastP.la))) _poziCekajGps();
-  _poziLoad(false);
+  // Ponovno otvaranje sloja ne pokreće isti skupi mrežni dohvat. Svježi rezultat
+  // se samo vrati na kartu; automatski timer ga i dalje osvježava po rasporedu.
+  const svjeze = _poziMeta?.dohvacenoMs && Date.now() - _poziMeta.dohvacenoMs < 5 * 60 * 1000;
+  if (!svjeze || !_poziEvts.length) _poziLoad(false);
+  else _poziStatusSet(_poziBrojRijecPozar(_poziEvts.length));
 }
 
 // Isti obrazac kao fabLokacija (poll na 500ms, odustani nakon 15s) — kad
@@ -17221,6 +17310,7 @@ function _poziSadrzajHtml() {
 // za tu dijagnostiku. Ako korisnik vidi "Učitavam kartu" 10s a sqlmapRestoreAll
 // samo javlja par stotina ms, razlika je baš u ovom razmaku.
 let _mapRestoreIndicatorShownAt = null;
+let _mapRestoreIndicatorTimer = null;
 const _ADMIN_DEBUG_KEY = 'tvlake_admin_debug_v1';
 function _debugRead() {
   try {
@@ -17300,8 +17390,21 @@ function _mapRestoreIndicatorShow(name) {
   _mapLoadDiagStart(name);
   const el = document.getElementById('map-restore-indicator');
   if (el) el.classList.add('show');
+  // Restore velikog SQLite/OPFS fajla smije nastaviti u pozadini, ali overlay
+  // ne smije izgledati kao da je cijela aplikacija zaglavljena. Osnovna Topo
+  // karta je već dodana u _restoreLastMap i ostaje potpuno upotrebljiva.
+  clearTimeout(_mapRestoreIndicatorTimer);
+  _mapRestoreIndicatorTimer = setTimeout(() => {
+    const cur = document.getElementById('map-restore-indicator');
+    if (cur?.classList.contains('show')) {
+      cur.classList.remove('show');
+      _mapLoadDiagStep('indikator sklonjen', 'restore se nastavlja u pozadini');
+    }
+  }, 1500);
 }
 function _mapRestoreIndicatorHide() {
+  clearTimeout(_mapRestoreIndicatorTimer);
+  _mapRestoreIndicatorTimer = null;
   const el = document.getElementById('map-restore-indicator');
   if (el) el.classList.remove('show');
 }
@@ -19730,7 +19833,7 @@ async function _provjeriOpozivOdobrenja() {
       sb.from('korisnici').select('*').eq('id', sbUser.id).single(), 8000);
     if (error || !data) return;                 // mreža laže da radi — pusti na kešu
     sbProfile = data;
-    _OL.save(_OL.PROFILE, data);
+    _profileSave(data);
     if (data.odobren === false && !data.is_admin) {
       _showAuthScreen();
       authShowPending();

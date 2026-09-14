@@ -82,10 +82,11 @@ await t('show() dodaje "show" klasu, hide() je uklanja', () => {
   const sandbox = {
     document: { getElementById: id => (id === 'map-restore-indicator' ? el : null) },
     performance: { now: () => 0 },
-    _mapLoadDiagStart: () => {}
+    _mapLoadDiagStart: () => {}, _mapLoadDiagStep: () => {},
+    setTimeout: () => 1, clearTimeout: () => {}
   };
   const keys = Object.keys(sandbox);
-  const api = new Function(...keys, SRC_SHOW + '\n' + SRC_HIDE +
+  const api = new Function(...keys, 'let _mapRestoreIndicatorTimer=null;\n' + SRC_SHOW + '\n' + SRC_HIDE +
     '\nreturn { _mapRestoreIndicatorShow, _mapRestoreIndicatorHide };')(...keys.map(k => sandbox[k]));
   assert.strictEqual(el.classList.contains('show'), false);
   api._mapRestoreIndicatorShow();
@@ -98,10 +99,11 @@ await t('nedostajući element (DOM još nije isparsiran) ne baca', () => {
   const sandbox = {
     document: { getElementById: () => null },
     performance: { now: () => 0 },
-    _mapLoadDiagStart: () => {}
+    _mapLoadDiagStart: () => {}, _mapLoadDiagStep: () => {},
+    setTimeout: () => 1, clearTimeout: () => {}
   };
   const keys = Object.keys(sandbox);
-  const api = new Function(...keys, SRC_SHOW + '\n' + SRC_HIDE +
+  const api = new Function(...keys, 'let _mapRestoreIndicatorTimer=null;\n' + SRC_SHOW + '\n' + SRC_HIDE +
     '\nreturn { _mapRestoreIndicatorShow, _mapRestoreIndicatorHide };')(...keys.map(k => sandbox[k]));
   assert.doesNotThrow(() => api._mapRestoreIndicatorShow());
   assert.doesNotThrow(() => api._mapRestoreIndicatorHide());
@@ -150,7 +152,7 @@ function makeRestoreEnv(opts) {
     // _mapRestoreIndicatorHide se izvlači STVARAN (ne stub) — test provjerava
     // da ga sqlmapRestoreAll STVARNO pozove, ne samo da postoji.
   };
-  const src = SRC_HIDE + '\n' + SRC_RESTORE_ALL;
+  const src = 'let _mapRestoreIndicatorTimer=null;\n' + SRC_HIDE + '\n' + SRC_RESTORE_ALL;
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, src + '\nreturn { sqlmapRestoreAll };')(...keys.map(k => sandbox[k]));
   return { run: api.sqlmapRestoreAll, el, calls };
