@@ -1,0 +1,47 @@
+name: Apply and build v1.3.8
+on:
+  push:
+    branches: [CODEX-US-SUME]
+    paths:
+      - '.github/workflows/codex-apply-v138.yml'
+permissions:
+  contents: write
+jobs:
+  apply-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: CODEX-US-SUME
+          fetch-depth: 0
+      - name: Apply verified patch
+        run: |
+          base64 -d .github/codex-v138.patch.gz.b64 | gzip -d > /tmp/codex-v138.patch
+          git apply --check /tmp/codex-v138.patch
+          git apply /tmp/codex-v138.patch
+      - name: Run JavaScript tests
+        run: |
+          for f in tests/js/*.test.js; do node "$f"; done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleDebug
+      - name: Commit v1.3.8 and remove bootstrap
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/codex-v138.patch.gz.b64 .github/workflows/codex-apply-v138.yml
+          git add android/app/build.gradle android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java index.html sw.js tests/js/auth-offline-first.test.js tests/js/map-restore-indicator.test.js tests/js/pozari-incident.test.js tests/js/pozari.test.js
+          git commit -m "Release v1.3.8: stagger fires and stabilize map restore"
+          git push origin HEAD:CODEX-US-SUME
+      - uses: actions/upload-artifact@v4
+        with:
+          name: US-SUME-v1.3.8-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
