@@ -1,0 +1,87 @@
+name: Apply v1.3.9 large-OPFS startup fix
+on:
+  push:
+    branches: [CODEX-US-SUME]
+    paths:
+      - '.github/workflows/codex-apply-v139.yml'
+permissions:
+  contents: write
+jobs:
+  apply-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: CODEX-US-SUME
+      - name: Apply targeted v1.3.9 fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("index.html"); s=p.read_text()
+          assert "const APP_VER = 'v1.3.8';" in s
+          assert "let sync = null, file = null;" in s
+          s=s.replace("const APP_VER = 'v1.3.8';","const APP_VER = 'v1.3.9';",1)
+          a=s.index("function _mapRestoreIndicatorShow(name) {")
+          b=s.index("\nfunction _mapRestoreIndicatorHide()",a)
+          show='''function _mapRestoreIndicatorShow(name) {
+            _mapRestoreIndicatorShownAt = performance.now();
+            _mapLoadDiagStart(name);
+            const el = document.getElementById('map-restore-indicator');
+            if (el) el.classList.remove('show');
+            clearTimeout(_mapRestoreIndicatorTimer);
+            _mapRestoreIndicatorTimer = null;
+          }'''
+          s=s[:a]+show+s[b:]
+          old='''let sync = null, file = null;
+                try { sync = await fh.createSyncAccessHandle(); } catch(e) { file = await fh.getFile(); }
+                const mini = new MiniSqlite(file, sync);
+                const {fmt, meta} = await mini.init();'''
+          new='''let sync = null;
+                const file = await fh.getFile();
+                // Velike OPFS karte otvaraj bez sporog ekskluzivnog sync handle-a.
+                const _syncMax = 512 * 1024 * 1024;
+                if (file.size <= _syncMax) {
+                  try { sync = await fh.createSyncAccessHandle(); } catch(e) {}
+                }
+                const mini = new MiniSqlite(file, sync);
+                const {fmt, meta} = await mini.init();
+                meta._opfsRead = sync ? 'sync' : 'async-large';
+                meta._opfsSize = file.size;'''
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+          for fn,oldv,newv in [
+            ("sw.js","APP_VERSION = '1.3.8'","APP_VERSION = '1.3.9'"),
+            ("android/app/build.gradle",'versionCode 408\n        versionName "1.3.8"','versionCode 409\n        versionName "1.3.9"'),
+            ("tests/js/pozari-incident.test.js","Požari v1.3.8","Požari v1.3.9")]:
+            q=Path(fn); t=q.read_text(); assert oldv in t; q.write_text(t.replace(oldv,newv,1))
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run tests
+        run: for f in tests/js/*.test.js; do node "$f"; done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+      - name: Build complete APK
+        run: |
+          bash android/copy-assets.sh
+          gradle -p android --no-daemon assembleDebug
+      - name: Commit and clean bootstrap
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/codex-apply-v139.yml
+          git add index.html sw.js android/app/build.gradle tests/js/pozari-incident.test.js
+          git commit -m "Release v1.3.9: speed up 2 GB offline map startup"
+          git push origin HEAD:CODEX-US-SUME
+      - uses: actions/upload-artifact@v4
+        with:
+          name: US-SUME-v1.3.9-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
