@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.8';
+const APP_VER = 'v1.3.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -17389,18 +17389,9 @@ function _mapRestoreIndicatorShow(name) {
   _mapRestoreIndicatorShownAt = performance.now();
   _mapLoadDiagStart(name);
   const el = document.getElementById('map-restore-indicator');
-  if (el) el.classList.add('show');
-  // Restore velikog SQLite/OPFS fajla smije nastaviti u pozadini, ali overlay
-  // ne smije izgledati kao da je cijela aplikacija zaglavljena. Osnovna Topo
-  // karta je već dodana u _restoreLastMap i ostaje potpuno upotrebljiva.
+  if (el) el.classList.remove('show');
   clearTimeout(_mapRestoreIndicatorTimer);
-  _mapRestoreIndicatorTimer = setTimeout(() => {
-    const cur = document.getElementById('map-restore-indicator');
-    if (cur?.classList.contains('show')) {
-      cur.classList.remove('show');
-      _mapLoadDiagStep('indikator sklonjen', 'restore se nastavlja u pozadini');
-    }
-  }, 1500);
+  _mapRestoreIndicatorTimer = null;
 }
 function _mapRestoreIndicatorHide() {
   clearTimeout(_mapRestoreIndicatorTimer);
@@ -33038,10 +33029,17 @@ self.onmessage = async ({data:msg}) => {
       // SyncAccessHandle = SINHRONO čitanje stranica (mikrosekunde umjesto ~25ms po
       // stranici preko file.slice().arrayBuffer()). Glavna optimizacija brzine — profil
       // pokazao avg čitanje 100ms/pločica. Fallback na File ako sync nije podržan.
-      let sync = null, file = null;
-      try { sync = await fh.createSyncAccessHandle(); } catch(e) { file = await fh.getFile(); }
+      let sync = null;
+      const file = await fh.getFile();
+      // Velike OPFS karte otvaraj bez sporog ekskluzivnog sync handle-a.
+      const _syncMax = 512 * 1024 * 1024;
+      if (file.size <= _syncMax) {
+        try { sync = await fh.createSyncAccessHandle(); } catch(e) {}
+      }
       const mini = new MiniSqlite(file, sync);
       const {fmt, meta} = await mini.init();
+      meta._opfsRead = sync ? 'sync' : 'async-large';
+      meta._opfsSize = file.size;
       if (!fmt) throw new Error('unknown-format');
       // Teška dijagnostika (skeniranje B-stabla, schema dump) SAMO na izričit zahtjev
       // (prvo učitavanje novog fajla). Pri restartu/restore preskačemo — inače je

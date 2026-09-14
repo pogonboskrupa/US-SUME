@@ -90,7 +90,7 @@ await t('show() dodaje "show" klasu, hide() je uklanja', () => {
     '\nreturn { _mapRestoreIndicatorShow, _mapRestoreIndicatorHide };')(...keys.map(k => sandbox[k]));
   assert.strictEqual(el.classList.contains('show'), false);
   api._mapRestoreIndicatorShow();
-  assert.strictEqual(el.classList.contains('show'), true);
+  assert.strictEqual(el.classList.contains('show'), false);
   api._mapRestoreIndicatorHide();
   assert.strictEqual(el.classList.contains('show'), false);
 });
