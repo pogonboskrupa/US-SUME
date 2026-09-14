@@ -5015,7 +5015,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.6';
+const APP_VER = 'v1.4.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -5228,6 +5228,48 @@ function _setOfflineMode(offline) {
   try { _netBadgeSync(); } catch(e) {
     const el = document.getElementById('offline-badge');
     if (el) el.style.display = offline ? 'inline-block' : 'none';
+  }
+}
+
+// ─── LOKALNI UPIS NEPOVRATNIH TERENSKIH PODATAKA ────────────────────────────
+// Snimak sa terena se NE MOŽE ponoviti — trag se ne može ponovo prehodati.
+// Zato upis koji ne uspije (najčešće popunjena localStorage kvota) NE SMIJE
+// proći tiho: `_tragRegSave` i `_msrRegSave` su imali goli `catch(e) {}`, pa
+// bi cijeli terenski dan ostao nesačuvan BEZ IJEDNOG ZNAKA — a proces koji OEM
+// battery manager ubije (dokumentovano, često) odnio bi ga sa sobom.
+function _lsZauzetoKB() {
+  // localStorage ima SVOJU kvotu (~5 MB), potpuno odvojenu od one koju
+  // prijavljuje navigator.storage.estimate() (origin kvota, red veličine GB —
+  // to je ono što mjeri pregled offline karata). Zato se mjeri direktno; inače
+  // bi pregled tvrdio "2 GB slobodno" dok je localStorage do vrha pun.
+  try {
+    let n = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      n += k.length + (localStorage.getItem(k) || '').length;
+    }
+    return Math.round(n * 2 / 1024);   // UTF-16: 2 bajta po znaku
+  } catch(e) { return null; }
+}
+
+function _localSetKriticno(key, vrijednost, opis) {
+  try { localStorage.setItem(key, vrijednost); return true; }
+  catch(e) {
+    const puna = !!(e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      || /quota|exceeded/i.test(e.message || '')));
+    try {
+      showToast(puna
+        ? '⚠ NEMA MJESTA — ' + opis + ' NIJE sačuvano! Sinkronizuj pa obriši stare snimke.'
+        : '⚠ ' + opis + ' nije sačuvano lokalno.');
+    } catch(e2) {}
+    // Zapis ostaje u DEBUG-u i poslije nestanka toasta — na jakom terenskom
+    // suncu se poruka lako previdi, a ovo je gubitak podataka.
+    try {
+      _debugUpsert('local-quota', 'Lokalni upis nije uspio',
+        opis + ' NIJE sačuvano.\nRazlog: ' + (puna ? 'popunjena localStorage kvota (~5 MB)' : (e?.message || e)) +
+        '\nZauzeto sada: ' + _lsZauzetoKB() + ' KB', 'aktivno');
+    } catch(e2) {}
+    return false;
   }
 }
 
@@ -6684,6 +6726,10 @@ function _adminDebugRender() {
 // Odgovara na pitanje koje se sa terena ne može drugačije postaviti: "da li app
 // uopšte ima vezu, ili samo izgleda kao da ima". navigator.onLine se ISPISUJE
 // uz izmjereno stanje baš da se ta razlika VIDI kad laže.
+// Konzervativno: većina Android WebView-a daje ~5 MB po originu. Prag je samo
+// za UPOZORENJE (stvarna granica se ne može pročitati iz JS-a), pa je bolje
+// upozoriti malo ranije nego propustiti.
+const _LS_LIMIT_KB = 5120;
 const _NET_STANJA = {
   dobra:     { boja:'#22c55e', znak:'✅', txt:'Dobra veza' },
   slaba:     { boja:'#f59e0b', znak:'⚠',  txt:'Slab signal' },
@@ -6729,7 +6775,19 @@ function _netDebugRender() {
   h += _netRedHtml('navigator.onLine', String(osKaze), lazOs ? '#ef4444' : '#cbd5e1');
   h += _netRedHtml('Čeka u redu za sync', red == null ? '—' : String(red), red ? '#f59e0b' : '#22c55e');
   h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
+  // Ovo je jedina brojka koja pokazuje koliko još terenskog rada STANE. Pregled
+  // offline karata mjeri origin kvotu (GB) i o localStorage-u ne govori ništa.
+  const zauzeto = _lsZauzetoKB();
+  const popunjenost = zauzeto == null ? 0 : zauzeto / _LS_LIMIT_KB;
+  h += _netRedHtml('Lokalno zauzeto', zauzeto == null ? '—' : zauzeto + ' KB (~' + Math.round(popunjenost * 100) + '%)',
+    popunjenost > 0.8 ? '#ef4444' : popunjenost > 0.6 ? '#f59e0b' : '#22c55e');
   h += '</div>';
+
+  if (popunjenost > 0.8) {
+    h += '<div style="margin-top:9px;padding:8px;background:#450a0a;border:1px solid #ef4444;border-radius:7px;font-size:10.5px;line-height:1.5;color:#fecaca;">' +
+      'Lokalna memorija je skoro puna. Kad se napuni, NOVI snimci se ne mogu sačuvati. ' +
+      'Sinkronizuj (ili izvezi) pa obriši stare tragove i mjerenja.</div>';
+  }
 
   if (lazOs) {
     h += '<div style="margin-top:9px;padding:8px;background:#450a0a;border:1px solid #ef4444;border-radius:7px;font-size:10.5px;line-height:1.5;color:#fecaca;">' +
@@ -22195,7 +22253,9 @@ function _tragRegLoad() {
 }
 
 function _tragRegSave() {
-  try { localStorage.setItem(_TRAG_REG_KEY, JSON.stringify(_tragRegistry)); } catch(e) {}
+  // Snimljen trag je nepovratan — tiho progutan neuspjeh znači izgubljen
+  // terenski dan bez ijednog znaka korisniku (vidi _localSetKriticno).
+  return _localSetKriticno(_TRAG_REG_KEY, JSON.stringify(_tragRegistry), 'Snimljeni tragovi');
 }
 
 // ── Quick meta prompt po završetku snimanja traga ──────────────────
@@ -30560,7 +30620,7 @@ function _msrRegLoad() {
   _msrDrawAllSaved();
 }
 function _msrRegSave() {
-  try { localStorage.setItem(_MSR_REG_KEY, JSON.stringify(_msrRegistry)); } catch(e) {}
+  return _localSetKriticno(_MSR_REG_KEY, JSON.stringify(_msrRegistry), 'Sačuvana mjerenja');
 }
 
 function _msrPts2Len(pts) {

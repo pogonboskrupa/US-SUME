@@ -1783,6 +1783,40 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     druga iteracija dobila `null` — original se mora vratiti poslije svakog
     scenarija.
 
+- **Nepovratan terenski snimak je mogao TIHO propasti (v1.4.7)**: nastavak
+  audita ("najbitnije je da radi offline"). `_tragRegSave` i `_msrRegSave` su
+  imali goli `catch(e) {}` — kad localStorage kvota pukne, snimljeni tragovi i
+  mjerenja se NISU sačuvali, bez ijednog znaka korisniku, bez povratne
+  vrijednosti koju bi pozivalac mogao provjeriti. Trag se ne može ponovo
+  prehodati, a proces koji OEM battery manager ubije (dokumentovano, često)
+  odnio bi nesačuvano sa sobom. To je bio jedini put u app-u kojim se terenski
+  dan mogao izgubiti bez poruke.
+  - **Rizik je IZMJEREN, ne pretpostavljen**: tačka traga (`[la,lo,alt,ts,acc]`)
+    je ~51 B, sat snimanja ~72 KB, terenski dan od 6 h ~433 KB. Uz to queue
+    čuva ISTE tačke još jednom (`upsert_trag` payload nosi `pts`), pa je
+    efektivni budžet upola manji — ~6 terenskih dana do ~5 MB kvote, prije
+    vlaka i arhive požara. Dedup u `_OL.enqueue` sprječava da se isti trag
+    gomila VIŠE puta (to radi ispravno), ali dvostruko čuvanje ostaje.
+  - `_localSetKriticno(key, vrijednost, opis)` — zajednički siguran upis:
+    razlikuje punu kvotu od druge greške (različit problem, različito
+    rješenje), GLASNO javlja da snimak NIJE sačuvan i imenuje ŠTA je izgubljeno,
+    i vraća `false` da pozivalac MOŽE reagovati. Neuspjeh se uz toast upisuje i
+    u DEBUG (`local-quota`) — na jakom terenskom suncu se toast lako previdi, a
+    ovo je gubitak podataka, ne kozmetika.
+  - **`navigator.storage.estimate()` NE mjeri localStorage kvotu** — prijavljuje
+    origin kvotu (red veličine GB, to je ono što pokazuje pregled offline
+    karata), dok localStorage nezavisno staje na ~5 MB. Pregled bi tvrdio "2 GB
+    slobodno" dok je localStorage do vrha pun. Zato `_lsZauzetoKB()` mjeri
+    direktno (zbir ključ+vrijednost × 2 za UTF-16) i kartica "Terenski rad"
+    prikazuje zauzeće sa upozorenjem preko 80 %.
+  - Testovi: `tests/js/offline-kriticni-upis.test.js` (12) nad STVARNIM kodom.
+    Uz asercije ponašanja, jedan test grepa CIJELI `index.html` da nijedan upis
+    `_TRAG_REG_KEY`/`_MSR_REG_KEY` više ne guta grešku — invarijanta, ne
+    konkretna vrijednost (isti princip kao test "svjetlije = svježije" iz
+    v3.113.3, koji je poslije bez izmjene potvrdio SASVIM drugu paletu).
+  - **Provjereno da padaju na starom kodu** — i to ciljano: goli `catch` je
+    potvrđen u obje funkcije prije izmjene, pa asercije nisu prošle slučajno.
+
 ## Gornja traka — #tab-bar
 
 - **`#offline-badge` — tekstualna pilula → sitna crvena tačkica (v1.1.4)**: na
