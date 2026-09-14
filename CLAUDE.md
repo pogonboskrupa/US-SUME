@@ -1817,6 +1817,50 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   - **Provjereno da padaju na starom kodu** — i to ciljano: goli `catch` je
     potvrđen u obje funkcije prije izmjene, pa asercije nisu prošle slučajno.
 
+- **Zaostao canvas u `pozariPane` je gutao SVE klikove na karti (v1.4.8)**:
+  terenska prijava "prikazane oznake nisu klikabilne... izmjere površine i
+  ostalo nije klikabilno". Ovo je dokumentovana zamka v3.101.0 u NAJGOREM
+  obliku — blokada traje i danima nakon što su požari zadnji put prikazani.
+  - **Uzrok DOKAZAN Playwright reprodukcijom nad STVARNIM Leafletom iz
+    `static/libs`, ne nagađan** (ista metoda kao v3.101.0/v3.111.3):
+    1. samo izmjerena površina → klik radi
+    2. + jedna tačka u `pozariPane` → klik MRTAV
+    3. tačka uklonjena sa karte → **I DALJE MRTAV**, 1 canvas zaostao
+    4. renderer uklonjen sa mape → klik ponovo radi, 0 canvasa
+  - **Leaflet NIKAD sam ne ukloni canvas renderer** kad nestane zadnji sloj
+    koji ga koristi: `map.getRenderer()` ga DODA u mapu (`if (!this.hasLayer
+    (renderer)) this.addLayer(renderer)`), ali ga ništa ne vraća nazad. Taj
+    canvas je JEDAN element preko CIJELE karte na z-index **645** — iznad
+    mjerenja (`tragMsrLines` 410), vlaka (`vlakeLines` 400) i oznaka
+    (`vlakeLabels` 401) — pa i potpuno PRAZAN canvas hvata svaki dodir.
+  - **`_povArhSimRender` je pravio NOV `L.canvas` pri SVAKOM crtanju** — a
+    Leaflet stari nikad ne ukloni, pa se u panelu gomilao sloj po sloj i svaki
+    od njih je gutao klikove. Sad koristi dijeljeni `_povArhSimRenderer`
+    (isti obrazac kao `_poziCanvasRenderer`/`_povArhTackeRenderer`).
+  - **`_poziCanvasOslobodi()` oslobađa SAMO kad je `_poziPaneZauzet()` false** —
+    tj. kad nijedan sloj koji crta u taj pane (`_poziLayer`, `_povArhLayer`,
+    `_povArhSimLayer`, `_sjeLayer`, `_povGodLayer`, `_poziIncLayer`) više nije
+    na karti. Bezuslovno uklanjanje bi obrisalo tačke sloja koji se JOŠ
+    prikazuje — zato je taj uslov test, ne detalj. Ukopčano u `_poziToggle
+    (false)`, `_povArhSimZatvori()` i rani izlaz `_povArhRender`-a kad nijedna
+    godina nije uključena.
+  - **Debug kartica "Klikovi na karti"** (`_klikDebugRender`): broj canvasa u
+    panelu + je li sloj požara stvarno prikazan. Kad canvas postoji a sloj NIJE
+    prikazan, to je blokada — kartica to kaže crvenim i nudi dugme "Oslobodi
+    klikove" (`_klikOslobodiSada`) da se stanje popravi odmah na terenu, bez
+    restarta app-a. Kad je sloj prikazan, canvas je legitiman i nema lažne
+    uzbune.
+  - **Preostalo ograničenje, svjesno**: dok su tačke požara STVARNO prikazane,
+    njihov canvas je i dalje iznad i klik na mjerenje ispod njega ne prolazi.
+    To je cijena interaktivnih tačaka iz v1.4.3; rješenje bi bio proximity
+    fallback u `map.on('click')` (obrazac koji vlake i KML već imaju,
+    v3.101.0) — nije rađeno sad jer je dominantan, stalno prisutan slučaj bio
+    zaostao PRAZAN canvas, a fallback nosi rizik za popupe pokrivene testovima.
+  - Testovi: `tests/js/pozari-canvas-klik.test.js` (18) nad STVARNIM kodom —
+    uklj. da se canvas NE dira dok je sloj prikazan, da `_povArhSimRender`
+    više ne pravi nov canvas po crtanju, i da debug kartica razlikuje blokadu
+    od legitimnog canvasa. Provjereno da padaju na starom kodu.
+
 ## Gornja traka — #tab-bar
 
 - **`#offline-badge` — tekstualna pilula → sitna crvena tačkica (v1.1.4)**: na

@@ -4263,6 +4263,10 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
              komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
              sekcija sama napravi, i to tek na izričit klik. -->
         <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <!-- Klikovi na karti: zaostao canvas u pozariPane guta svaki klik na
+             slojeve ispod (mjerenja, vlake, oznake). Vidi _poziCanvasOslobodi. -->
+        <div id="klik-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+
         <button onclick="_netTestSada()" id="btn-net-test"
           style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
           📶 Testiraj vezu sada
@@ -5015,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.7';
+const APP_VER = 'v1.4.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -6700,6 +6704,7 @@ function _adminDebugRender() {
   // Kartica stanja veze se osvježava zajedno sa listom — inače bi pokazivala
   // stanje od prošlog otvaranja panela, što je na terenu gore od ničega.
   try { _netDebugRender(); } catch(e) {}
+  try { _klikDebugRender(); } catch(e) {}
   const el = document.getElementById('admin-debug-list');
   if (!el) return;
   if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
@@ -6806,6 +6811,45 @@ function _netDebugRender() {
     'vjetar · dijeljena arhiva požara' +
     '</div>';
   el.innerHTML = h;
+}
+
+// Klikovi na karti — zaostao canvas u pozariPane (z-index 645) hvata svaki
+// dodir i sve ispod njega (mjerenja 410, vlake 400, oznake 401) izgleda
+// "mrtvo". Ovo je JEDINA brojka koja to objašnjava sa terena.
+function _klikDebugRender() {
+  const el = document.getElementById('klik-debug-card');
+  if (!el) return;
+  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  let canvasa = null, zauzet = null;
+  try { canvasa = _poziPaneCanvasa(); } catch(e) {}
+  try { zauzet = _poziPaneZauzet(); } catch(e) {}
+  // Blokada = canvas postoji, a nijedan sloj požara nije prikazan: taj canvas
+  // ne crta ništa, samo guta klikove.
+  const blokada = !!canvasa && zauzet === false;
+
+  let h = '<div style="font-size:13px;font-weight:700;color:' + (blokada ? '#ef4444' : '#22c55e') +
+    ';margin-bottom:8px;">' + (blokada ? '⛔ Klikovi blokirani' : '✅ Klikovi na karti') + '</div>' +
+    '<div style="font:11.5px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;">';
+  h += _netRedHtml('Canvasa u sloju požara', canvasa == null ? '—' : String(canvasa),
+    blokada ? '#ef4444' : '#cbd5e1');
+  h += _netRedHtml('Sloj požara prikazan', zauzet == null ? '—' : (zauzet ? 'da' : 'ne'));
+  h += '</div>';
+
+  if (blokada) {
+    h += '<div style="margin-top:9px;padding:8px;background:#450a0a;border:1px solid #ef4444;border-radius:7px;font-size:10.5px;line-height:1.5;color:#fecaca;">' +
+      'Prazan canvas je ostao preko cijele karte i hvata svaki dodir — zato izmjerene ' +
+      'površine, vlake i oznake ne reaguju na klik. Dugme ispod ga uklanja odmah.</div>' +
+      '<button onclick="_klikOslobodiSada()" style="width:100%;margin-top:8px;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;cursor:pointer;">Oslobodi klikove</button>';
+  }
+  el.innerHTML = h;
+}
+
+function _klikOslobodiSada() {
+  if (!sbProfile?.is_admin) return;
+  let uspjelo = false;
+  try { uspjelo = _poziCanvasOslobodi(); } catch(e) {}
+  _klikDebugRender();
+  showToast(uspjelo ? '✅ Klikovi oslobođeni' : 'ℹ Nema šta osloboditi (sloj požara je prikazan)');
 }
 
 // Jedini zahtjev koji ova sekcija sama napravi — i to tek na izričit klik.
@@ -15591,6 +15635,9 @@ function _poziToggle(on) {
     if (_poziHeatLayer) { try { map.removeLayer(_poziHeatLayer); } catch(e) {} }
     if (_poziSmjerLayer) { try { map.removeLayer(_poziSmjerLayer); } catch(e) {} _poziSmjerLayer = null; }
     if (_poziOpozLayer) { try { map.removeLayer(_poziOpozLayer); } catch(e) {} _poziOpozLayer = null; }
+    // Bez ovoga zaostao (prazan) canvas u pozariPane i dalje guta svaki klik
+    // na mjerenja/vlake/oznake ispod — vidi _poziCanvasOslobodi.
+    try { _poziCanvasOslobodi(); } catch(e) {}
     // Bez ovoga legenda markera ostane na karti i kad požara više nema.
     if (typeof _demLegendUpdate === 'function') _demLegendUpdate();
     _poziAutoSync();   // sloj ugašen — timer staje, osim ako ga obavještenja i dalje traže
@@ -17014,7 +17061,7 @@ function _povArhRender(force) {
       && typeof map !== 'undefined' && map.hasLayer(_povArhLayer)) return;
   _povArhRenderPotpis = potpis;
   if (_povArhLayer) { try { map.removeLayer(_povArhLayer); } catch(e) {} _povArhLayer = null; }
-  if (!god.length || typeof L === 'undefined') return;
+  if (!god.length || typeof L === 'undefined') { try { _poziCanvasOslobodi(); } catch(e) {} return; }
   _povArhLayer = L.layerGroup([], { pane:'demOverlay' });
   const samoSkore = _povArhSamoSkore();
   const skoreGodine = samoSkore ? _povGodineSkore() : null;
@@ -17114,6 +17161,54 @@ function _povArhCentar(geom) {
 // Live sloj (_poziRender) rješava isto ovako: tačke u pozariPane, poligoni
 // u demOverlay — odvojeni pane-ovi umjesto nadmetanja unutar istog.
 let _povArhTackeRenderer = null;
+
+// ─── OSLOBAĐANJE CANVAS RENDERERA U pozariPane ──────────────────────────────
+// Leaflet NIKAD sam ne ukloni canvas renderer kad nestane zadnji sloj koji ga
+// koristi: map.getRenderer() ga DODA u mapu, ali ga ništa ne vraća nazad. Taj
+// canvas je JEDAN element preko CIJELE karte u pozariPane (z-index 645), pa
+// zaostao — i potpuno PRAZAN — canvas i dalje hvata svaki klik, a sve ispod
+// njega (mjerenja 410, vlake 400, oznake 401) postaje mrtvo. To je
+// dokumentovana zamka v3.101.0 u najgorem obliku, jer traje i danima nakon
+// što su požari zadnji put prikazani.
+//
+// Izmjereno Playwright reprodukcijom nad STVARNIM Leafletom iz static/libs:
+// klik na izmjerenu površinu radi; prestane raditi čim se doda jedna tačka u
+// pozariPane; i NE vrati se ni kad se ta tačka ukloni sa karte (canvas ostaje).
+//
+// Oslobađa se SAMO kad nijedan sloj koji crta u taj pane više nije na karti —
+// inače bi uklanjanje canvasa obrisalo tačke sloja koji je još prikazan.
+function _poziPaneZauzet() {
+  const slojevi = [
+    typeof _poziLayer !== 'undefined' ? _poziLayer : null,
+    typeof _povArhLayer !== 'undefined' ? _povArhLayer : null,
+    typeof _povArhSimLayer !== 'undefined' ? _povArhSimLayer : null,
+    typeof _sjeLayer !== 'undefined' ? _sjeLayer : null,
+    typeof _povGodLayer !== 'undefined' ? _povGodLayer : null,
+    typeof _poziIncLayer !== 'undefined' ? _poziIncLayer : null,
+  ];
+  return slojevi.some(l => { try { return !!(l && map.hasLayer(l)); } catch(e) { return false; } });
+}
+
+function _poziCanvasOslobodi() {
+  if (typeof map === 'undefined' || !map) return false;
+  if (_poziPaneZauzet()) return false;
+  let oslobodjeno = 0;
+  [_poziCanvasRenderer, _povArhTackeRenderer, _povArhSimRenderer].forEach(r => {
+    if (!r) return;
+    try { if (map.hasLayer(r)) { map.removeLayer(r); oslobodjeno++; } } catch(e) {}
+  });
+  _poziCanvasRenderer = null;
+  _povArhTackeRenderer = null;
+  _povArhSimRenderer = null;
+  return oslobodjeno > 0;
+}
+
+// Koliko je canvas elemenata stvarno ostalo u panelu — jedina brojka koja
+// direktno objašnjava "ništa na karti nije klikabilno".
+function _poziPaneCanvasa() {
+  try { return map.getPane('pozariPane').querySelectorAll('canvas').length; }
+  catch(e) { return null; }
+}
 function _povArhCrtajTacke(pts, boja, grupaPoTacki) {
   if (!pts || !pts.length || typeof L === 'undefined') return;
   if (!_povArhTackeRenderer && L.canvas) _povArhTackeRenderer = L.canvas({ pane:'pozariPane', padding:0.35 });
@@ -17186,6 +17281,7 @@ function _povArhVelikiPopupHtml(vg, godina, ha) {
 // _povArhTacke) i svoj sloj, pa dijeljenje state-a sa live simulacijom bi
 // značilo da uključivanje jedne tiho pokvari/prepiše drugu.
 let _povArhSimLayer = null;
+let _povArhSimRenderer = null;
 let _povArhSimGodina = null, _povArhSimSel = '';
 let _povArhSimCut = null, _povArhSimTimer = null;
 
@@ -17231,6 +17327,7 @@ function _povArhSimZatvori() {
   _povArhSimStop();
   _povArhSimGodina = null; _povArhSimSel = ''; _povArhSimCut = null;
   if (_povArhSimLayer) { try { map.removeLayer(_povArhSimLayer); } catch(e) {} _povArhSimLayer = null; }
+  try { _poziCanvasOslobodi(); } catch(e) {}
   document.getElementById('pov-arh-sim-hud')?.remove();
 }
 function _povArhSimRender() {
@@ -17239,7 +17336,12 @@ function _povArhSimRender() {
   if (!g || typeof L === 'undefined') return;
   const pts = isFinite(_povArhSimCut) ? g.pts.filter(p => (Date.parse(p.dt) || 0) <= _povArhSimCut) : g.pts;
   _povArhSimLayer = L.layerGroup([], { pane:'pozariPane' });
-  const renderer = L.canvas ? L.canvas({ pane:'pozariPane', padding:0.35 }) : undefined;
+  // Renderer se PONOVO KORISTI — ranije se pravio nov canvas pri svakom
+  // crtanju simulacije, a Leaflet stari nikad ne ukloni (vidi
+  // _poziCanvasOslobodi), pa se u pozariPane gomilao sloj po sloj i svaki
+  // od njih je gutao klikove svemu ispod.
+  if (!_povArhSimRenderer && L.canvas) _povArhSimRenderer = L.canvas({ pane:'pozariPane', padding:0.35 });
+  const renderer = _povArhSimRenderer || undefined;
   pts.forEach(p => {
     L.circleMarker([p.la, p.lo], { renderer, pane:'pozariPane', radius:5, color:'#fff', weight:2,
       fillColor:'#a78bfa', fillOpacity:1, opacity:1 }).addTo(_povArhSimLayer);
