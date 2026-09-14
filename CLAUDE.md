@@ -1861,6 +1861,56 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     više ne pravi nov canvas po crtanju, i da debug kartica razlikuje blokadu
     od legitimnog canvasa. Provjereno da padaju na starom kodu.
 
+- **Ista blokada klikova postojala je i na DRUGOM panelu — v1.4.8 ju je
+  promašila (v1.4.9)**: nastavak istrage ("istraži dalje eventualne bugove").
+  `pozariPovrsPane` (z-index **640**) nosi INTERAKTIVNE poligone projekcije
+  (`_poziOpozLayer`, trake starosti), ali oni nemaju `renderer:` opciju — pa im
+  Leaflet SAM napravi renderer po pane-u (`map._paneRenderers`), kešira ga
+  zauvijek i nikad ne pusti. `_poziCanvasOslobodi` je oslobađala samo TRI
+  renderera koje app pravi eksplicitno, pa ovaj nije ni bio dotaknut.
+  - **Dokazano istom Playwright reprodukcijom**: poligon dodan u
+    `pozariPovrsPane` → klik na mjerenje mrtav; poligon UKLONJEN → i dalje
+    mrtav, canvas ostao, `map._paneRenderers['pozariPovrsPane']` i dalje
+    postoji. Poslije oslobađanja: klik radi, 0 canvasa.
+  - Praktično: korisnik koji je ijednom uključio "Prikaži projekciju na karti"
+    bi i poslije v1.4.8 imao mrtve klikove — ista prijava, drugi izvor.
+  - **`delete map._paneRenderers[ime]` je OBAVEZAN**, ne kozmetika — bez njega
+    `_getPaneRenderer` vrati već uklonjen renderer i sljedeći poligon crta u
+    odvojen, otkačen canvas.
+  - **v1.4.8 je usput imala i defekt u vlastitoj zaštiti**: `_poziPaneZauzet()`
+    nije nabrajao `_poziOpozLayer` ni `_povHistLayer`. `_poziOpozLayer` je
+    JEDINI sloj koji stvarno zavisi od pane-level renderera — bez njega u toj
+    listi bi ga oslobađanje obrisalo ispod nogu dok je prikazan. Pokriveno
+    testom.
+  - Testovi: `tests/js/pozari-canvas-klik.test.js` (24, +6). Sandbox oponaša
+    `map._paneRenderers` vjerno, da se testira stvarna grana.
+
+- **Crash-zaštita snimanja doznake je mogla TIHO nestati (v1.4.9)**: nastavak
+  audita tihih upisa iz v1.4.7. `_dozSaveLivePts` ima komentar iznad ključa —
+  *"Spasi live trag lokalno — ako Android ubije WebView u backgroundu, ne
+  gubimo liniju"* — a neuspjeh je gutala golim `catch {}`. Kad kvota pukne
+  (izmjereno: realno za ~6 terenskih dana, v1.4.7), zaštita tiho prestane
+  postojati, i pri sljedećem ubistvu WebView-a (OEM battery manager, redovno)
+  nestane cijeli snimljeni pojas — a korisnik nikad nije saznao da zaštite
+  nema. To je gore od v1.4.7 slučaja: tu je tiho padao SAM SNIMAK, ovdje pada
+  MREŽA KOJA SNIMAK ČUVA.
+  - **Javlja se JEDNOM po snimanju, ne po GPS tački** (`_dozLiveUpisPao`) —
+    funkcija se zove na svaki fiks, pa bi toast po tački bio neupotrebljiv
+    usred rada. Zastavica se resetuje na prvi uspješan upis, da se sljedeći
+    kvar opet smije javiti. Pokriveno testom sa 20 uzastopnih tačaka.
+  - Testovi: `tests/js/offline-kriticni-upis.test.js` (17, +5).
+
+- **Provjereno a NIJE bug** (da se ne troši vrijeme na ponovnu istragu):
+  1805 `function` deklaracija — **nijedno duplo ime** (zamka v3.102.1 čista).
+  Nema localStorage ključa koji se čita a nigdje ne piše osim četiri
+  namjerna (pišu se preko konstanti, a dva su samo-za-migraciju iz v3.125.0).
+  `_loadOdsjeciSQLite` IMA `fetch` bez roka iznad offline IDB fallbacka
+  (klasičan OS-S4 obrazac), ali je **dead code** — komentar uz
+  `autoLoadAllKmlBuckets` kaže da su ti bucketi obrisani sa Storage-a i da se
+  funkcija namjerno više ne poziva. Kandidat za brisanje, ne za popravku.
+  Preostalih ~60 tihih `localStorage.setItem` nose UI postavke (sort, filter,
+  providnost) gdje je gubitak bezopasan i tišina ispravna.
+
 ## Gornja traka — #tab-bar
 
 - **`#offline-badge` — tekstualna pilula → sitna crvena tačkica (v1.1.4)**: na

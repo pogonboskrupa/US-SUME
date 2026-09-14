@@ -160,5 +160,55 @@ t('nijedan preostali upis tvlake_tragovi/mjerenja ne guta grešku tiho', () => {
   assert.deepStrictEqual(lose, [], 'tihi upisi nepovratnih snimaka na linijama: ' + lose);
 });
 
+console.log('\nCrash-zaštita snimanja doznake (v1.4.9):');
+
+// Zove se na SVAKU GPS tačku — kad kvota pukne, mora javiti JEDNOM, ne po tački.
+function runDoz(greskaUvijek) {
+  const toasts = [], debug = [];
+  let brojUpisa = 0;
+  const sandbox = {
+    _dozGpsOn: true, _dozGpsPts: [[1, 2]], _dozGpsLen: 5, _dozGpsProjId: 'p1',
+    _DOZ_LIVE_KEY: 'tvlake_doz_live',
+    localStorage: { setItem: () => { brojUpisa++; if (greskaUvijek) { const e = new Error('q'); e.name = 'QuotaExceededError'; throw e; } },
+      getItem: () => null, key: () => null, length: 0 },
+    showToast: (m) => toasts.push(m),
+    _debugUpsert: (id, t, x, st) => debug.push(id),
+    _localSetKriticno: null,
+  };
+  const k = Object.keys(sandbox);
+  const src = extractFn('_localSetKriticno') + '\nlet _dozLiveUpisPao = false;\n' + extractFn('_dozSaveLivePts');
+  const api = new Function(...k, src + '\nreturn { _dozSaveLivePts };')(...k.map(x => sandbox[x]));
+  return { api, toasts, debug };
+}
+
+t('uspješan upis ne uznemirava (zove se na svaku GPS tačku)', () => {
+  const e = runDoz(false);
+  for (let i = 0; i < 5; i++) assert.strictEqual(e.api._dozSaveLivePts(), true);
+  assert.strictEqual(e.toasts.length, 0);
+});
+
+t('KLJUČNO: puna kvota vraća false (dosad se gutalo — crash-zaštita bi tiho nestala)', () => {
+  assert.strictEqual(runDoz(true).api._dozSaveLivePts(), false);
+});
+
+t('kvar se javi JEDNOM, ne na svakoj od 20 GPS tačaka', () => {
+  const e = runDoz(true);
+  for (let i = 0; i < 20; i++) e.api._dozSaveLivePts();
+  assert.strictEqual(e.toasts.length, 1, 'toast po tački bi bio neupotrebljiv usred snimanja');
+  assert.ok(/doznake/i.test(e.toasts[0]), 'mora imenovati šta je bez zaštite: ' + e.toasts[0]);
+});
+
+t('bez aktivnog snimanja ne pokušava upis uopšte', () => {
+  const src = extractFn('_localSetKriticno') + '\nlet _dozLiveUpisPao=false;\n' + extractFn('_dozSaveLivePts');
+  const api = new Function('_dozGpsOn', '_dozGpsPts', '_DOZ_LIVE_KEY', 'localStorage', 'showToast', '_debugUpsert',
+    src + '\nreturn { _dozSaveLivePts };')(false, [], 'k',
+    { setItem: () => { throw new Error('ne smije se ni pozvati'); } }, () => {}, () => {});
+  assert.strictEqual(api._dozSaveLivePts(), true);
+});
+
+t('_dozSaveLivePts više nema goli catch', () => {
+  assert.ok(!/catch\s*\{\s*\}/.test(extractFn('_dozSaveLivePts')));
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);

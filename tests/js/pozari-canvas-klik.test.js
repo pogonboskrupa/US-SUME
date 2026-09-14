@@ -38,13 +38,24 @@ function t(name, fn) {
   catch (e) { fail++; console.log('  ✘ ' + name + '\n      ' + e.message); }
 }
 
-const SRC = [extractFn('_poziPaneZauzet'), extractFn('_poziCanvasOslobodi'), extractFn('_poziPaneCanvasa')].join('\n');
+function extractConst(name) {
+  const m = HTML.match(new RegExp('const ' + name + ' = [^;]+;'));
+  if (!m) throw new Error('nije nađena konstanta ' + name);
+  return m[0];
+}
+const SRC = [extractConst('_POZI_PANEOVI'), extractFn('_poziPaneZauzet'),
+  extractFn('_poziCanvasOslobodi'), extractFn('_poziPaneCanvasa')].join('\n');
 
 // _poziCanvasOslobodi REASSIGN-uje renderere (parametri sandbox funkcije), pa
 // se finalno stanje mora vratiti IZ ISTOG scope-a, ne čitati izvana.
-function run({ naKarti = [], rendereri = ['a', 'b', 'c'], canvasa = 0 } = {}) {
+function run({ naKarti = [], rendereri = ['a', 'b', 'c'], canvasa = 0, paneRend = null } = {}) {
   const uklonjeni = [];
+  // Leaflet kešira renderer PO PANE-u i nikad ga ne pusti — sandbox to vjerno
+  // oponaša da se testira stvarna grana, ne pojednostavljenje.
+  const _paneRenderers = paneRend ? { ...paneRend } : {};
+  Object.values(_paneRenderers).forEach(r => { if (!naKarti.includes(r)) naKarti.push(r); });
   const map = {
+    _paneRenderers,
     hasLayer: (l) => naKarti.includes(l),
     removeLayer: (l) => { uklonjeni.push(l); const i = naKarti.indexOf(l); if (i >= 0) naKarti.splice(i, 1); },
     getPane: () => ({ querySelectorAll: () => ({ length: canvasa }) }),
@@ -53,6 +64,7 @@ function run({ naKarti = [], rendereri = ['a', 'b', 'c'], canvasa = 0 } = {}) {
     map,
     _poziLayer: null, _povArhLayer: null, _povArhSimLayer: null,
     _sjeLayer: null, _povGodLayer: null, _poziIncLayer: null,
+    _poziOpozLayer: null, _povHistLayer: null,
     _poziCanvasRenderer: rendereri[0] || null,
     _povArhTackeRenderer: rendereri[1] || null,
     _povArhSimRenderer: rendereri[2] || null,
@@ -64,6 +76,7 @@ function run({ naKarti = [], rendereri = ['a', 'b', 'c'], canvasa = 0 } = {}) {
     '\nconst zauzet = _poziPaneZauzet();' +
     '\nconst vratio = _poziCanvasOslobodi();' +
     '\nreturn { zauzet, vratio, canvasa:_poziPaneCanvasa(),' +
+    '  paneKes:Object.keys(map._paneRenderers),' +
     '  preostali:[_poziCanvasRenderer,_povArhTackeRenderer,_povArhSimRenderer] };'
   )(...kljucevi.map(k => sandbox[k]));
   return { ...rez, uklonjeni };
@@ -111,8 +124,9 @@ t('renderer postoji ali nije na karti → ništa se ne uklanja', () => {
 
 console.log('\n_poziPaneCanvasa — brojka koja objašnjava "ništa nije klikabilno":');
 
-t('broji canvas elemente u pozariPane', () => {
-  assert.strictEqual(run({ canvasa: 2 }).canvasa, 2);
+t('broji canvas elemente u panelima požara', () => {
+  // po 1 canvas u svakom od dva panela
+  assert.strictEqual(run({ canvasa: 1 }).canvasa, 2);
 });
 
 t('nedostupan pane vraća null, ne baca', () => {
@@ -142,6 +156,40 @@ t('_povArhSimRender PONOVO KORISTI renderer (ne pravi nov canvas po crtanju)', (
   assert.ok(src.includes('_povArhSimRenderer'), 'mora koristiti dijeljeni renderer');
   assert.ok(!/const renderer = L\.canvas \?/.test(src),
     'nov canvas po svakom crtanju se gomilao u pane-u i svaki je gutao klikove');
+});
+
+console.log('\nPane-level renderer (Leaflet ga pravi sam) — v1.4.9:');
+
+t('KLJUČNO: poligon projekcije drži pane ZAUZETIM (v1.4.8 ga je previdjela)', () => {
+  assert.strictEqual(run({ naKarti: ['_poziOpozLayer'] }).zauzet, true,
+    '_poziOpozLayer crta u pozariPovrsPane i JEDINI zavisi od pane-level renderera');
+});
+
+t('"Zadnjih 5 godina" također drži pane zauzetim', () => {
+  assert.strictEqual(run({ naKarti: ['_povHistLayer'] }).zauzet, true);
+});
+
+t('KLJUČNO: pane-level renderer se uklanja sa karte (dosad je ostajao zauvijek)', () => {
+  const r = run({ paneRend: { pozariPovrsPane: 'pl-640' } });
+  assert.ok(r.uklonjeni.includes('pl-640'),
+    'canvas koji je Leaflet sam napravio mora otići, inače i dalje guta klikove');
+});
+
+t('keš map._paneRenderers se BRIŠE (inače bi Leaflet vratio uklonjen renderer)', () => {
+  const r = run({ paneRend: { pozariPovrsPane: 'pl-640', pozariPane: 'pl-645' } });
+  assert.deepStrictEqual(r.paneKes, [],
+    'bez delete-a bi sljedeći poligon crtao u odvojen, otkačen canvas');
+});
+
+t('pane-level renderer se NE dira dok je sloj prikazan', () => {
+  const r = run({ naKarti: ['_poziOpozLayer'], paneRend: { pozariPovrsPane: 'pl-640' } });
+  assert.strictEqual(r.vratio, false);
+  assert.deepStrictEqual(r.uklonjeni, []);
+  assert.deepStrictEqual(r.paneKes, ['pozariPovrsPane'], 'keš mora ostati netaknut');
+});
+
+t('_poziPaneCanvasa broji OBA panela, ne samo jedan', () => {
+  assert.strictEqual(run({ canvasa: 2 }).canvasa, 4, '2 panela × 2 canvasa');
 });
 
 console.log('\n_klikDebugRender — blokada se VIDI u debug panelu:');

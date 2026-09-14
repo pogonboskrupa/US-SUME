@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.8';
+const APP_VER = 'v1.4.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -17162,6 +17162,10 @@ function _povArhCentar(geom) {
 // u demOverlay — odvojeni pane-ovi umjesto nadmetanja unutar istog.
 let _povArhTackeRenderer = null;
 
+// Oba panela požara stoje IZNAD mjerenja (410), vlaka (400) i oznaka (401),
+// pa zaostao canvas u bilo kojem od njih guta klikove svemu ispod.
+const _POZI_PANEOVI = ['pozariPane', 'pozariPovrsPane'];
+
 // ─── OSLOBAĐANJE CANVAS RENDERERA U pozariPane ──────────────────────────────
 // Leaflet NIKAD sam ne ukloni canvas renderer kad nestane zadnji sloj koji ga
 // koristi: map.getRenderer() ga DODA u mapu, ali ga ništa ne vraća nazad. Taj
@@ -17185,6 +17189,10 @@ function _poziPaneZauzet() {
     typeof _sjeLayer !== 'undefined' ? _sjeLayer : null,
     typeof _povGodLayer !== 'undefined' ? _povGodLayer : null,
     typeof _poziIncLayer !== 'undefined' ? _poziIncLayer : null,
+    // Crta u pozariPovrsPane i JEDINI stvarno zavisi od pane-level renderera —
+    // bez njega u ovoj listi bi mu oslobađanje obrisalo poligone ispod nogu.
+    typeof _poziOpozLayer !== 'undefined' ? _poziOpozLayer : null,
+    typeof _povHistLayer !== 'undefined' ? _povHistLayer : null,
   ];
   return slojevi.some(l => { try { return !!(l && map.hasLayer(l)); } catch(e) { return false; } });
 }
@@ -17200,14 +17208,32 @@ function _poziCanvasOslobodi() {
   _poziCanvasRenderer = null;
   _povArhTackeRenderer = null;
   _povArhSimRenderer = null;
+
+  // Sloj koji ima `pane:` ali NE i `renderer:` (npr. poligoni projekcije u
+  // pozariPovrsPane) ne koristi nijedan od renderera gore — Leaflet mu SAM
+  // napravi renderer po pane-u, kešira ga u `map._paneRenderers` i NIKAD ga ne
+  // pusti, isto kao i one eksplicitne. Dokazano istom reprodukcijom: poligon
+  // dodan pa uklonjen ostavlja canvas u pane-u 640 i klik na mjerenje ispod
+  // ostaje mrtav. `delete` je OBAVEZAN — bez njega bi `_getPaneRenderer`
+  // vratio već uklonjen renderer i sljedeći poligon bi crtao u odvojen canvas.
+  _POZI_PANEOVI.forEach(ime => {
+    try {
+      const r = map._paneRenderers && map._paneRenderers[ime];
+      if (!r) return;
+      if (map.hasLayer(r)) { map.removeLayer(r); oslobodjeno++; }
+      delete map._paneRenderers[ime];
+    } catch(e) {}
+  });
   return oslobodjeno > 0;
 }
 
 // Koliko je canvas elemenata stvarno ostalo u panelu — jedina brojka koja
 // direktno objašnjava "ništa na karti nije klikabilno".
 function _poziPaneCanvasa() {
-  try { return map.getPane('pozariPane').querySelectorAll('canvas').length; }
-  catch(e) { return null; }
+  try {
+    return _POZI_PANEOVI.reduce((n, ime) =>
+      n + map.getPane(ime).querySelectorAll('canvas').length, 0);
+  } catch(e) { return null; }
 }
 function _povArhCrtajTacke(pts, boja, grupaPoTacki) {
   if (!pts || !pts.length || typeof L === 'undefined') return;
@@ -40569,11 +40595,26 @@ function _dozBufferTrackPoint(pt) {
 
 // Spasi live trag lokalno — ako Android ubije WebView u backgroundu, ne gubimo liniju
 const _DOZ_LIVE_KEY = 'tvlake_doz_live';
+// Javi se JEDNOM po snimanju, ne na svaku GPS tačku — ova funkcija se zove na
+// svaki fiks, pa bi toast po tački bio neupotrebljiv usred rada.
+let _dozLiveUpisPao = false;
 function _dozSaveLivePts() {
+  if (!(_dozGpsOn && _dozGpsPts.length)) return true;
+  const tekst = JSON.stringify({ projId:_dozGpsProjId, pts:_dozGpsPts, len:_dozGpsLen, ts:Date.now() });
   try {
-    if (_dozGpsOn && _dozGpsPts.length)
-      localStorage.setItem(_DOZ_LIVE_KEY, JSON.stringify({ projId:_dozGpsProjId, pts:_dozGpsPts, len:_dozGpsLen, ts:Date.now() }));
-  } catch {}
+    localStorage.setItem(_DOZ_LIVE_KEY, tekst);
+    _dozLiveUpisPao = false;   // oporavilo se — sljedeći kvar se smije opet javiti
+    return true;
+  } catch(e) {
+    // Ovo je CRASH-ZAŠTITA snimanja doznake (vidi komentar iznad ključa). Tiho
+    // progutan neuspjeh znači da pri sljedećem ubistvu WebView-a — koje OEM
+    // battery manager radi redovno — nestane cijeli snimljeni pojas, a da
+    // korisnik nikad nije saznao da zaštite nema.
+    if (_dozLiveUpisPao) return false;
+    _dozLiveUpisPao = true;
+    _localSetKriticno(_DOZ_LIVE_KEY, tekst, 'Zaštita snimanja doznake');
+    return false;
+  }
 }
 
 function dozStopGPS() {
