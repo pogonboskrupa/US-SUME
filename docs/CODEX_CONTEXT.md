@@ -72,7 +72,7 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
   grupiše detekcije i dopunjava arhivu. Projekcije površine i budućeg rasta
   nisu terenski izmjerena granica niti validiran model ponašanja požara.
 - Od v1.3.2 projekcija požara koristi zaseban `pozariPovrsPane` između
-  referentne karte i markera požara. Klik na pojas otvara detalje incidenta
+  referentne karte i markera požara. Klik na pojas otvara detalje požara
   direktno na karti, a dnevni replay kumulativno prikazuje samo tačke i
   procijenjenu geometriju odabranog požara; ostali požari se ne filtriraju.
 - Od v1.3.3 admin DEBUG ima zaseban zapis za GFW smetnje vegetacije. Bilježi
@@ -83,6 +83,18 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
   dataset i ne prihvata raniji GET SQL bbox bez geometrije. Aplikacija sada
   šalje POST JSON (`sql` + zatvoren GeoJSON Polygon od 32 segmenta za 50 km),
   kroz browser ili prošireni Android native most.
+- v1.3.5 uključuje satelitske tačke požara po zadanom (ručno isključivanje se
+  i dalje poštuje), zadržava svaku tačku vidljivom i grupu s više detekcija
+  označava jednim glavnim trokutom. Popup trokuta prikazuje period požara i
+  pokreće dnevni replay direktno na karti. Kartica „Operativni incident“ i
+  njeni lokalni zapisi su uklonjeni. Admin DEBUG sada bilježi broj tačaka,
+  trokuta, grupa s periodom od–do te stanje i broj koraka simulacije.
+- v1.3.6 dodaje lifecycle debug koji razlikuje novi WebView dokument od običnog
+  povratka iz pozadine i blokira paralelno otvaranje iste SQLite karte. Požarne
+  tačke se crtaju jednim Canvas rendererom umjesto stotinama DOM elemenata,
+  postojeći sloj se pri povratku u tab ponovo koristi, a Turf projekcije imaju
+  ograničen cache koji preživljava mrežno osvježavanje. DEBUG Požari mjeri
+  dohvat, filtriranje/keš, grupisanje, crtanje i naknadnu obradu zasebno.
 
 ## 2. Pet prioritetnih nalaza
 

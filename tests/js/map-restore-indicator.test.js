@@ -201,6 +201,27 @@ await t('uspješno učitavanje jedne karte → indikator se skloni na kraju', as
   assert.strictEqual(env.el.classList.contains('show'), false);
 });
 
+await t('drugi restore u istoj JS sesiji ne otvara ponovo istu kartu', async () => {
+  let poziva = 0;
+  const env = makeRestoreEnv({
+    wCall: async msg => {
+      poziva++;
+      if (msg.type === 'list') return { ok:true, rows:[{ name:'UNSKO', savedAt:1, opfs:false }] };
+      if (msg.type === 'load-idb') return { ok:true, fmt:'mbtiles', meta:{} };
+      return { ok:false };
+    }
+  });
+  await env.run();
+  const prvi = poziva;
+  await env.run();
+  assert.strictEqual(poziva, prvi, 'dupli poziv ne smije ponovo čitati IDB/OPFS');
+});
+
+await t('lifecycle debug razlikuje reload od povratka iz pozadine', () => {
+  ['Zašto se karta ponovo učitava','Navigation tip:','Page persisted/BFCache:','tvlake_page_load_count']
+    .forEach(x => assert.ok(HTML.includes(x), 'nedostaje lifecycle trag: ' + x));
+});
+
 await t('zadnja OPFS karta postaje vidljiva PRIJE sporog IndexedDB list poziva', async () => {
   let pustiListu;
   const lista = new Promise(resolve => { pustiListu = resolve; });
