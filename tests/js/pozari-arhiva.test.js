@@ -100,6 +100,7 @@ function makeArh(opts) {
   };
   const src = [extractFn('dst'), extractFn('_poziPouzdanost'), extractFn('_poziSatelit'),
                extractFn('_poziFilterBlizu'), extractFn('_poziGrupisi'), extractFn('_poziOpozGeom'),
+               extractFn('_poziEvtKljuc'),
                extractFn('_povArhUcitaj'), extractFn('_povArhSacuvaj'), extractFn('_povArhDan'),
                extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
                extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povMjesecBoja'), extractFn('_povArhBoja'),
@@ -110,14 +111,16 @@ function makeArh(opts) {
                extractFn('_povArhRacunajTacke'), extractFn('_povArhRacunaj'),
                extractFn('_povArhRacunajMjesec'), extractFn('_povArhRacunajSkore'),
                extractFn('_povArhKesOcisti'),
-               extractFn('_povArhSpojiServerske')].join('\n');
+               extractFn('_povArhSpojiServerske'), extractConst('_POV_SIM_MIN_H'),
+               extractFn('_povArhVelikiPozari'), extractFn('_povArhSimKljuc'),
+               extractFn('_povArhSimKoraci')].join('\n');
   const keys = Object.keys(sandbox);
   const mod = new Function(...keys, src +
     '\nreturn { _povArhUcitaj,_povArhSacuvaj,_povArhDan,_povArhKljuc,_povArhDodaj,' +
     '_povArhGodine,_povArhTacke,_povArhRacunaj,_povMjesecBoja,_povArhBoja,_povArhBrojZapisa,' +
     '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom,' +
     '_povArhSamoSkore,_povArhPostaviSamoSkore,_povMjesecSkori,_povGodineSkore,' +
-    '_povArhRacunajMjesec,_povArhRacunajSkore };'
+    '_povArhRacunajMjesec,_povArhRacunajSkore,_povArhVelikiPozari,_povArhSimKljuc,_povArhSimKoraci };'
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
   mod._olEnqueued = olEnqueued;
@@ -616,6 +619,75 @@ t('_povArhIzracunata razlikuje keš pune godine od keša prozora od 2 mjeseca', 
     'puna godina ne smije prolaziti kao da je prozor već izračunat');
   A._povArhRacunajSkore(god);
   assert.strictEqual(A._povArhIzracunata(god), true);
+});
+
+console.log('\nVeći (višednevni) požari u arhivi — info i simulacija po danima (v1.4.1):');
+// "Vrati tačke" + simulacija razvoja po danima za historijske požare koji su
+// trajali više dana — dosad je to postojalo SAMO za live prozor (24h-30d),
+// arhiva (mjeseci/godine) je imala samo spojene poligone bez pojedinačnih
+// tačaka i bez ikakve simulacije.
+
+t('_povArhVelikiPozari izdvaja SAMO požare koji su trajali ≥24h, ne kratke prelete', () => {
+  const A = makeArh({});
+  const god = new Date().getUTCFullYear();
+  // Kratak požar: dvije detekcije istog dana, par sati razmaka.
+  A._povArhDodaj([det(44.90, 16.20, iso(god, 3, 10, 10)), det(44.901, 16.201, iso(god, 3, 10, 13))]);
+  // Veći požar: detekcije razvučene kroz 3 dana, dovoljno daleko od prvog
+  // (>1500 m) da _poziGrupisi ne spoji sve u jednu grupu sa kratkim požarom.
+  A._povArhDodaj([
+    det(45.50, 16.90, iso(god, 3, 1, 8)),
+    det(45.502, 16.902, iso(god, 3, 2, 9)),
+    det(45.504, 16.904, iso(god, 3, 3, 10)),
+  ]);
+  const veliki = A._povArhVelikiPozari(god);
+  assert.strictEqual(veliki.length, 1, 'samo jedan požar prelazi prag od 24h');
+  assert.strictEqual(veliki[0].broj, 3);
+});
+
+t('_povArhVelikiPozari vraća prazno kad nema požara preko praga', () => {
+  const A = makeArh({});
+  const god = new Date().getUTCFullYear();
+  A._povArhDodaj([det(44.90, 16.20, iso(god, 3, 10, 10)), det(44.901, 16.201, iso(god, 3, 10, 13))]);
+  assert.deepStrictEqual(A._povArhVelikiPozari(god), []);
+});
+
+t('_povArhSimKljuc je stabilan preko dva zasebna poziva _poziGrupisi', () => {
+  const A = makeArh({});
+  const god = new Date().getUTCFullYear();
+  A._povArhDodaj([
+    det(45.50, 16.90, iso(god, 3, 1, 8)),
+    det(45.502, 16.902, iso(god, 3, 3, 10)),
+  ]);
+  const g1 = A._povArhVelikiPozari(god)[0];
+  const g2 = A._povArhVelikiPozari(god)[0];   // ponovo grupisano iz istih sirovih tačaka
+  assert.strictEqual(A._povArhSimKljuc(g1), A._povArhSimKljuc(g2),
+    'ključ mora biti isti da dugme u popupu (godina+ključ) pouzdano nađe grupu poslije re-grupisanja');
+});
+
+t('_povArhSimKljuc prazan/nedostajući ulaz ne baca', () => {
+  const A = makeArh({});
+  assert.strictEqual(A._povArhSimKljuc(null), '');
+  assert.strictEqual(A._povArhSimKljuc(undefined), '');
+});
+
+t('_povArhSimKoraci: jedan korak po kalendarskom danu, sortirano hronološki', () => {
+  const A = makeArh({});
+  const g = { pts: [
+    det(45.50, 16.90, iso(2026, 3, 3, 9)),
+    det(45.50, 16.90, iso(2026, 3, 1, 8)),
+    det(45.50, 16.90, iso(2026, 3, 1, 14)),   // isti dan kao prethodna — ne novi korak
+    det(45.50, 16.90, iso(2026, 3, 2, 10)),
+  ] };
+  const k = A._povArhSimKoraci(g);
+  assert.strictEqual(k.length, 3, '3 različita kalendarska dana, ne 4 detekcije');
+  assert.ok(k[0].cut < k[1].cut && k[1].cut < k[2].cut, 'koraci moraju biti hronološki sortirani');
+  assert.strictEqual(k[0].broj, 2, 'prvi dan ima DVIJE detekcije (08h i 14h)');
+});
+
+t('_povArhSimKoraci na praznoj/nedostajućoj grupi vraća prazan niz, ne baca', () => {
+  const A = makeArh({});
+  assert.deepStrictEqual(A._povArhSimKoraci(null), []);
+  assert.deepStrictEqual(A._povArhSimKoraci({ pts: [] }), []);
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

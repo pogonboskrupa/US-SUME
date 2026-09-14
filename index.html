@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.0';
+const APP_VER = 'v1.4.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16709,6 +16709,10 @@ function _povArhToggleGod(godina, on) {
   if (on) set.add(g); else set.delete(g);
   try { localStorage.setItem(_POV_ARH_ON_KEY, JSON.stringify([...set])); } catch(e) {}
   _povArhPostaviSamoSkore(false);   // ručni izbor godine ukida filter od 2 mjeseca
+  // Otvorena simulacija za godinu koju korisnik upravo isključuje bi ostala
+  // "viseća" — sopstveni sloj/HUD nezavisan od _povArhLayer, pa se sam ne bi
+  // sklonio kad godina nestane sa karte.
+  if (!on && typeof _povArhSimGodina !== 'undefined' && String(_povArhSimGodina) === g) _povArhSimZatvori();
   _povArhRender(true);
   _poziRenderPanel();
 }
@@ -16747,38 +16751,237 @@ function _povArhRender(force) {
       ? [0,1,2,3,4,5,6,7,8,9,10,11].filter(m => _povMjesecSkori(g, m))
       : (tekuca ? _POV_MJESECI_POZARA : []);
     let sidro = null;   // geometrija na koju se kači oznaka godine
-    mjeseci.map(mjesec => ({ geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
+    // Tačke godine se čitaju JEDNOM (jeftino — samo mapiranje/filter, bez
+    // turf-a) i dijele između crtanja tačaka po mjesecu i pune-godine grane
+    // niže, umjesto da svaka grana čita localStorage/mapira zasebno.
+    const tackeGodine = _povArhTacke(g);
+    mjeseci.map(mjesec => ({ mjesec, geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
       .forEach(dio => {
         if (!dio.geom) return;
         if (!sidro) sidro = dio.geom;
         L.geoJSON(dio.geom, { pane:'demOverlay', style:{ color:dio.boja, weight:2,
           opacity:0.95, fillColor:dio.boja, fillOpacity:0.28, interactive:false } }).addTo(_povArhLayer);
+        // Same boja kao pojas kojem pripadaju — pojedinačna detekcija ispod
+        // spojene površine, na zahtjev sa terena ("vrati tačke").
+        _povArhCrtajTacke(tackeGodine.filter(p => new Date(p.dt).getUTCMonth() === dio.mjesec), dio.boja);
       });
     // Puna godišnja unija je NAJSKUPLJI račun u ovoj sekciji (turf unija preko
     // cijele sezone). U režimu "samo skorašnje" se NE računa uopšte — ionako
     // bi obuhvatila i ono što je starije od 2 mjeseca, a oznaka godine se
     // može zakačiti na već izračunatu geometriju skorašnjeg mjeseca.
     const r = samoSkore ? null : _povArhRacunaj(g);
-    if (r && r.geom && !tekuca) L.geoJSON(r.geom, {
-      pane: 'demOverlay',
-      // interactive:false je OBAVEZAN — canvas pane iznad drugog inače pojede
-      // sve klikove ispod sebe (dokumentovana zamka iz v3.101.0).
-      style: { color:_povArhBoja(g), weight:2, opacity:0.95, fillColor:_povArhBoja(g), fillOpacity:0.28, interactive:false }
-    }).addTo(_povArhLayer);
+    if (r && r.geom && !tekuca) {
+      L.geoJSON(r.geom, {
+        pane: 'demOverlay',
+        // interactive:false je OBAVEZAN — canvas pane iznad drugog inače pojede
+        // sve klikove ispod sebe (dokumentovana zamka iz v3.101.0).
+        style: { color:_povArhBoja(g), weight:2, opacity:0.95, fillColor:_povArhBoja(g), fillOpacity:0.28, interactive:false }
+      }).addTo(_povArhLayer);
+      _povArhCrtajTacke(tackeGodine, _povArhBoja(g));
+    }
     const oznakaGeom = (r && r.geom) ? r.geom : sidro;
-    if (!oznakaGeom) return;
-    const c = _povArhCentar(oznakaGeom);
-    L.marker([c[1], c[0]], {
-      pane: 'pozariPane', interactive: false,
-      icon: L.divIcon({ className:'', iconSize:[54,18], iconAnchor:[27,9],
-        html: `<div style="background:${tekuca ? '#e2e8f0' : _POV_STARE_BOJA};color:#0f172a;font-size:11px;font-weight:800;
-               text-align:center;border-radius:9px;padding:1px 0;box-shadow:0 1px 3px rgba(0,0,0,.5);">${g}</div>` })
-    }).addTo(_povArhLayer);
+    if (oznakaGeom) {
+      const c = _povArhCentar(oznakaGeom);
+      L.marker([c[1], c[0]], {
+        pane: 'pozariPane', interactive: false,
+        icon: L.divIcon({ className:'', iconSize:[54,18], iconAnchor:[27,9],
+          html: `<div style="background:${tekuca ? '#e2e8f0' : _POV_STARE_BOJA};color:#0f172a;font-size:11px;font-weight:800;
+                 text-align:center;border-radius:9px;padding:1px 0;box-shadow:0 1px 3px rgba(0,0,0,.5);">${g}</div>` })
+      }).addTo(_povArhLayer);
+    }
+    // Veći (višednevni) požari dobijaju SVOJU tačku — klik otvara simulaciju
+    // razvoja po danima (na zahtjev). Ista logika grupisanja kao svuda u
+    // Požarima (_poziGrupisi), samo filtrirana na trajanje ≥ _POV_SIM_MIN_H.
+    _povArhVelikiPozari(g).forEach(vg => {
+      let ha = NaN;
+      try { const gg = _poziOpozGeom(vg.pts); if (gg) ha = turf.area(gg) / 10000; } catch(e) {}
+      L.marker([vg.la, vg.lo], {
+        pane: 'pozariPane', zIndexOffset: 1200,
+        icon: L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+          html: '<div style="font-size:14px;background:#4c1d95;border:2px solid #c4b5fd;border-radius:50%;' +
+                'width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:#fff;' +
+                'box-shadow:0 1px 4px rgba(0,0,0,.5);">🕰</div>' })
+      }).bindPopup(_povArhVelikiPopupHtml(vg, g, ha), { maxWidth:280, className:'kml-info-popup' }).addTo(_povArhLayer);
+    });
   });
   _povArhLayer.addTo(map);
 }
 function _povArhCentar(geom) {
   try { return turf.centroid(geom).geometry.coordinates; } catch(e) { return [0, 0]; }
+}
+
+// Pojedinačne detekcije ispod spojene površine ("vrati tačke", v1.4.1) —
+// polygon sam po sebi sakriva odakle stvarno dolazi. Dijeljeni canvas
+// renderer (isti obrazac kao _poziCanvasRenderer za live sloj) da stotine/
+// hiljade tačaka ne naprave posebne DOM čvorove. interactive:false — canvas
+// pane iznad drugog inače pojede sve klikove ispod (v3.101.0).
+let _povArhTackeRenderer = null;
+function _povArhCrtajTacke(pts, boja) {
+  if (!pts || !pts.length || typeof L === 'undefined') return;
+  if (!_povArhTackeRenderer && L.canvas) _povArhTackeRenderer = L.canvas({ pane:'demOverlay', padding:0.35 });
+  pts.forEach(p => {
+    L.circleMarker([p.la, p.lo], { renderer:_povArhTackeRenderer || undefined, pane:'demOverlay',
+      radius:3, color:'#fff', weight:1, fillColor:boja, fillOpacity:0.9, opacity:0.9, interactive:false
+    }).addTo(_povArhLayer);
+  });
+}
+
+// ── Veći (višednevni) požari u arhivi — info + simulacija po danima ────────
+// "Veći požar" = trajao BAR jedan pun dan između prve i zadnje detekcije.
+// Isti prag stila kao ostale konstante u ovoj sekciji (_POZ_FRONT_MS=6h,
+// _POZ_TEMPO_MIN_H=6h) — 24h je razumna donja granica da se izdvoje požari
+// koji su se STVARNO širili kroz vrijeme, ne jedan prelet sa dvije detekcije
+// u razmaku od par minuta.
+const _POV_SIM_MIN_H = 24;
+function _povArhVelikiPozari(godina) {
+  const pts = _povArhTacke(godina);
+  if (!pts.length) return [];
+  return _poziGrupisi(pts).filter(g =>
+    isFinite(g.prvi) && isFinite(g.zadnji) && (g.zadnji - g.prvi) >= _POV_SIM_MIN_H * 3600000);
+}
+// Ključ stabilan preko ponovnog grupisanja (isti obrazac kao _poziAnimKljuc) —
+// dugme u popupu nosi (godina, ključ), NE cijeli objekat (izbjegava JSON u
+// onclick atributu), a _povArhSimOtvoriKljuc ponovo nađe grupu po ključu.
+function _povArhSimKljuc(g) { return g ? _poziEvtKljuc(g, 200) : ''; }
+
+function _povArhVelikiPopupHtml(vg, godina, ha) {
+  const fmt = t => isFinite(t) ? new Date(t).toLocaleString('bs-BA') : '—';
+  const red = (l, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:11px;">
+    <span style="color:#94a3b8;">${l}</span><b style="color:#e2e8f0;text-align:right;">${v}</b></div>`;
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:220px;">
+    <div style="font-size:14px;font-weight:800;color:#c4b5fd;margin-bottom:6px;">🕰 Veći požar — ${_escHtml(String(godina))}</div>
+    ${red('Početak', fmt(vg.prvi))}
+    ${red('Zadnje viđen', fmt(vg.zadnji))}
+    ${red('Trajanje', _poziTrajanje(vg.prvi, vg.zadnji))}
+    ${red('Procijenjena površina', _poziPovrsTxt(ha))}
+    ${red('Detekcije', String(vg.broj))}
+    <button onclick="map.closePopup();_povArhSimOtvoriKljuc('${_escHtml(String(godina))}','${_povArhSimKljuc(vg)}')"
+      style="width:100%;margin-top:9px;padding:8px;border:1px solid #a78bfa;border-radius:8px;background:#4c1d95;color:#fff;font-weight:700;cursor:pointer;">
+      ▶ Simulacija po danima
+    </button>
+  </div>`;
+}
+
+// Stanje simulacije — ZASEBNO od live _poziAnim* (koji radi nad _poziEvts/
+// _poziPts, prozor 24h-30d). Arhiva ima svoje podatke (godine/mjeseci,
+// _povArhTacke) i svoj sloj, pa dijeljenje state-a sa live simulacijom bi
+// značilo da uključivanje jedne tiho pokvari/prepiše drugu.
+let _povArhSimLayer = null;
+let _povArhSimGodina = null, _povArhSimSel = '';
+let _povArhSimCut = null, _povArhSimTimer = null;
+
+function _povArhSimGrupa() {
+  if (!_povArhSimGodina) return null;
+  return _povArhVelikiPozari(_povArhSimGodina).find(g => _povArhSimKljuc(g) === _povArhSimSel) || null;
+}
+// Jedan korak = jedan kalendarski dan u kojem je satelit vidio ovaj požar —
+// isti obrazac kao _poziAnimKoraci (živi sloj), namjerno paralelan kod
+// umjesto dijeljenja funkcije, jer bi dijeljenje zahtijevalo da _poziAnimKoraci
+// zna i za arhivski oblik podataka bez prave koristi (isti kod, drugi izvor).
+function _povArhSimKoraci(g) {
+  const poDanu = new Map();
+  (g?.pts || []).forEach(p => {
+    const t = Date.parse(p.dt); if (!isFinite(t)) return;
+    const dan = new Date(t).toISOString().slice(0, 10);
+    const x = poDanu.get(dan) || { dan, cut:t, broj:0 };
+    x.cut = Math.max(x.cut, t); x.broj++;
+    poDanu.set(dan, x);
+  });
+  return [...poDanu.values()].sort((a, b) => a.cut - b.cut);
+}
+function _povArhSimOtvoriKljuc(godina, kljuc) {
+  const g = _povArhVelikiPozari(godina).find(x => _povArhSimKljuc(x) === kljuc);
+  if (g) _povArhSimOtvori(godina, g);
+}
+function _povArhSimOtvori(godina, g) {
+  _povArhSimStop();
+  _povArhSimGodina = godina; _povArhSimSel = _povArhSimKljuc(g); _povArhSimCut = null;
+  switchTab('karta');
+  // switchTab('karta') sam zove map.invalidateSize() poslije 50ms (karta je
+  // bila display:none) — pomjeranje pogleda ide TEK poslije, isti obrazac
+  // kao _poziZoom.
+  setTimeout(() => {
+    map.setView([g.la, g.lo], Math.max(map.getZoom(), g.spanM > 2000 ? 12 : 13));
+    _povArhSimRender();
+    _povArhSimHudRender();
+  }, 80);
+}
+function _povArhSimZatvori() {
+  _povArhSimStop();
+  _povArhSimGodina = null; _povArhSimSel = ''; _povArhSimCut = null;
+  if (_povArhSimLayer) { try { map.removeLayer(_povArhSimLayer); } catch(e) {} _povArhSimLayer = null; }
+  document.getElementById('pov-arh-sim-hud')?.remove();
+}
+function _povArhSimRender() {
+  if (_povArhSimLayer) { try { map.removeLayer(_povArhSimLayer); } catch(e) {} _povArhSimLayer = null; }
+  const g = _povArhSimGrupa();
+  if (!g || typeof L === 'undefined') return;
+  const pts = isFinite(_povArhSimCut) ? g.pts.filter(p => (Date.parse(p.dt) || 0) <= _povArhSimCut) : g.pts;
+  _povArhSimLayer = L.layerGroup([], { pane:'pozariPane' });
+  const renderer = L.canvas ? L.canvas({ pane:'pozariPane', padding:0.35 }) : undefined;
+  pts.forEach(p => {
+    L.circleMarker([p.la, p.lo], { renderer, pane:'pozariPane', radius:5, color:'#fff', weight:2,
+      fillColor:'#a78bfa', fillOpacity:1, opacity:1 }).addTo(_povArhSimLayer);
+  });
+  let geom = null;
+  try { geom = pts.length ? _poziOpozGeom(pts) : null; } catch(e) {}
+  if (geom) L.geoJSON(geom, { pane:'demOverlay', interactive:false,
+    style:{ color:'#a78bfa', weight:2, opacity:0.9, fillColor:'#a78bfa', fillOpacity:0.22 } }).addTo(_povArhSimLayer);
+  _povArhSimLayer.addTo(map);
+}
+function _povArhSimSetKorak(i) {
+  const g = _povArhSimGrupa(), k = _povArhSimKoraci(g);
+  if (!k.length) return;
+  const n = Math.max(0, Math.min(k.length - 1, Number(i) || 0));
+  _povArhSimCut = k[n].cut;
+  _povArhSimRender(); _povArhSimHudRender();
+}
+function _povArhSimStop() { if (_povArhSimTimer) { clearInterval(_povArhSimTimer); _povArhSimTimer = null; } }
+function _povArhSimPlay() {
+  if (_povArhSimTimer) { _povArhSimStop(); _povArhSimHudRender(); return; }
+  const g = _povArhSimGrupa(); if (!g) return;
+  const k = _povArhSimKoraci(g); if (!k.length) return;
+  let i = k.findIndex(x => x.cut >= _povArhSimCut);
+  if (!isFinite(_povArhSimCut) || i < 0 || i >= k.length - 1) i = -1;
+  _povArhSimSetKorak(i + 1);
+  _povArhSimTimer = setInterval(() => {
+    const gg = _povArhSimGrupa(), kk = _povArhSimKoraci(gg);
+    if (!gg || !kk.length) { _povArhSimStop(); _povArhSimHudRender(); return; }
+    let j = kk.findIndex(x => x.cut >= _povArhSimCut);
+    if (j < 0) j = 0;
+    if (j >= kk.length - 1) { _povArhSimStop(); _povArhSimHudRender(); return; }
+    _povArhSimSetKorak(j + 1);
+  }, 850);
+  _povArhSimHudRender();
+}
+function _povArhSimHudRender() {
+  let el = document.getElementById('pov-arh-sim-hud');
+  const g = _povArhSimGrupa();
+  if (!g) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'pov-arh-sim-hud'; map.getContainer().appendChild(el); }
+  el.style.cssText = 'position:absolute;z-index:1000;left:10px;right:10px;bottom:82px;max-height:46%;overflow:auto;' +
+    'background:#0f172af2;border:1px solid #a78bfa;border-radius:13px;padding:10px 12px;color:#e2e8f0;' +
+    'box-shadow:0 8px 28px #0009;box-sizing:border-box;';
+  const k = _povArhSimKoraci(g), zadnji = k.length - 1;
+  const idx = isFinite(_povArhSimCut) ? Math.max(0, k.findIndex(x => x.cut >= _povArhSimCut)) : zadnji;
+  const pts = isFinite(_povArhSimCut) ? g.pts.filter(p => (Date.parse(p.dt) || 0) <= _povArhSimCut) : g.pts;
+  let haSad = NaN, haSve = NaN;
+  try { const gs = pts.length ? _poziOpozGeom(pts) : null; if (gs) haSad = turf.area(gs) / 10000; } catch(e) {}
+  try { const gv = _poziOpozGeom(g.pts); if (gv) haSve = turf.area(gv) / 10000; } catch(e) {}
+  const fmt = t => isFinite(t) ? new Date(t).toLocaleString('bs-BA') : '—';
+  const red = (l, v) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px;">' +
+    '<span style="color:#94a3b8;">' + l + '</span><b style="text-align:right;color:#e2e8f0;">' + v + '</b></div>';
+  const korak = k[idx] || null;
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><div style="font-size:13px;font-weight:800;color:#c4b5fd;flex:1;">🕰 Simulacija — historijski požar (' + _escHtml(String(_povArhSimGodina)) + ')</div>' +
+    '<button onclick="_povArhSimZatvori()" style="border:0;background:#334155;color:white;border-radius:50%;width:27px;height:27px;font-size:18px;">×</button></div>' +
+    red('Početak požara', fmt(g.prvi)) + red('Zadnje viđenje', fmt(g.zadnji)) + red('Trajanje', _poziTrajanje(g.prvi, g.zadnji)) +
+    red('Ukupna procjena', _poziPovrsTxt(haSve)) + red('Detekcije', String(g.broj)) +
+    '<div style="margin-top:7px;padding-top:7px;border-top:1px solid #334155;"><div style="font-size:10.5px;color:#c4b5fd;margin-bottom:5px;">' +
+    (korak ? ('Dan ' + (idx + 1) + '/' + k.length + ' · ' + new Date(korak.cut).toLocaleDateString('bs-BA') + ' · ' + pts.length + '/' + g.broj + ' detekcija · ≈ ' + _poziPovrsTxt(haSad)) : 'Nema vremenskih koraka') +
+    '</div><div style="display:flex;gap:7px;align-items:center;"><button onclick="_povArhSimPlay()" style="padding:7px 10px;border:1px solid #a78bfa;border-radius:8px;background:#4c1d95;color:white;font-weight:700;">' +
+    (_povArhSimTimer ? '⏸ Pauza' : '▶ Play') + '</button>' +
+    '<input type="range" min="0" max="' + Math.max(0, zadnji) + '" value="' + Math.max(0, idx) + '" oninput="_povArhSimSetKorak(this.value)" style="flex:1;accent-color:#a78bfa;" ' + (k.length < 2 ? 'disabled' : '') + '></div>' +
+    '<div style="font-size:9px;color:#64748b;margin-top:4px;">Karta kumulativno prikazuje tačke i procijenjenu površinu do izabranog dana.</div></div>';
 }
 
 // Broj zapisa u godini, VEĆ FILTRIRAN na blizinu (v1.1.2) — i dalje jeftino
@@ -16813,6 +17016,9 @@ function _povArhKarticaHtml() {
       svojih telefona već zabilježili, ali SAMO u krugu ${_POZ_RADIUS_KM} km od tebe
       (isti krug kao panel iznad) — požar koji je kolega zabilježio negdje drugdje u
       firmi se ovdje ne prikazuje.
+      <br><br>Na karti se, ispod spojene površine, vide i same detekcije (sitne tačke).
+      Požari koji su trajali ${_POV_SIM_MIN_H}+ sati imaju posebnu 🕰 tačku — klik otvara
+      podatke (početak, trajanje, površina) i simulaciju razvoja po danima.
     </div>`;
   if (!godine.length) {
     return uvod + `<div style="padding:10px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;
