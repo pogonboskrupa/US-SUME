@@ -166,5 +166,38 @@ t('_updMcdDist sakriva udaljenost dok je crtanje aktivno', () => {
   assert.ok(src.includes('drawing-active'), 'mora provjeriti drawing-active prije prikaza udaljenosti');
 });
 
+console.log('\nMeni "Mjerenja & Tragovi" — pločice usklađene sa ab-izmjeri-menu (v1.4.5):');
+// Isti alat je imao DVA ulaza — dugme Izmjeri na karti (već imalo lijepe SVG
+// ikonice) i Meni → Mjerenja & Tragovi (samo emoji, Površina bio goli ◻
+// karakter) — izgledali su kao dva različita alata.
+
+function extractBlock(startMarker) {
+  const s = HTML.indexOf(startMarker);
+  assert.ok(s >= 0, 'nije nađen blok ' + startMarker);
+  const e = HTML.indexOf('<!-- OFFLINE MODAL -->', s);
+  assert.ok(e > s, 'nije nađen kraj bloka');
+  return HTML.slice(s, e);
+}
+const MJTRG_DROPDOWN = extractBlock('<div id="mjtrg-dropdown"');
+
+t('mjtrg-dropdown više ne koristi emoji ikonice za Udaljenost/Površinu/Nagib/Tragove', () => {
+  ['📏', '◻', '📐', '🗺'].forEach(emoji =>
+    assert.ok(!MJTRG_DROPDOWN.includes(emoji), 'emoji "' + emoji + '" ne smije ostati u mjtrg-dropdown'));
+});
+
+t('sve četiri pločice imaju SVG ikonicu', () => {
+  const brojSvg = (MJTRG_DROPDOWN.match(/<svg /g) || []).length;
+  assert.strictEqual(brojSvg, 4, 'Udaljenost/Površina/Nagib/Tragovi — po jedna SVG ikonica svaka');
+});
+
+t('Površina ima prepoznatljivu poligon ikonicu (ne prazan kvadratić)', () => {
+  assert.ok(MJTRG_DROPDOWN.includes('polygon points='), 'Površina mora imati nacrtan poligon, ne tekstualni znak');
+});
+
+t('sve četiri pločice zadržavaju svoje akcije (onclick), samo je izgled promijenjen', () => {
+  ["_msrSetMode('dist')", "_msrSetMode('area')", "_msrSetMode('nagib')", "_mjtrgTab('trg')"]
+    .forEach(action => assert.ok(MJTRG_DROPDOWN.includes(action), 'nedostaje akcija: ' + action));
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);
