@@ -113,14 +113,16 @@ function makeArh(opts) {
                extractFn('_povArhKesOcisti'),
                extractFn('_povArhSpojiServerske'), extractConst('_POV_SIM_MIN_H'),
                extractFn('_povArhVelikiPozari'), extractFn('_povArhSimKljuc'),
-               extractFn('_povArhSimKoraci')].join('\n');
+               extractFn('_povArhSimKoraci'), extractFn('_povArhTackaPopupHtml'),
+               extractFn('_poziPovrsTxt'), extractFn('_poziTrajanje')].join('\n');
   const keys = Object.keys(sandbox);
   const mod = new Function(...keys, src +
     '\nreturn { _povArhUcitaj,_povArhSacuvaj,_povArhDan,_povArhKljuc,_povArhDodaj,' +
     '_povArhGodine,_povArhTacke,_povArhRacunaj,_povMjesecBoja,_povArhBoja,_povArhBrojZapisa,' +
     '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom,' +
     '_povArhSamoSkore,_povArhPostaviSamoSkore,_povMjesecSkori,_povGodineSkore,' +
-    '_povArhRacunajMjesec,_povArhRacunajSkore,_povArhVelikiPozari,_povArhSimKljuc,_povArhSimKoraci };'
+    '_povArhRacunajMjesec,_povArhRacunajSkore,_povArhVelikiPozari,_povArhSimKljuc,_povArhSimKoraci,' +
+    '_povArhTackaPopupHtml };'
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
   mod._olEnqueued = olEnqueued;
@@ -688,6 +690,45 @@ t('_povArhSimKoraci na praznoj/nedostajućoj grupi vraća prazan niz, ne baca', 
   const A = makeArh({});
   assert.deepStrictEqual(A._povArhSimKoraci(null), []);
   assert.deepStrictEqual(A._povArhSimKoraci({ pts: [] }), []);
+});
+
+console.log('\nPopup arhivske tačke — klik pokazuje kojem požaru pripada (v1.4.3):');
+// Tačke su ranije bile interactive:false (dokumentovana canvas-klik zamka),
+// pa klik na njih nije mogao ništa pokazati. Sad su klikabilne i nose popup
+// sa vremenom detekcije + (kad je grupa poznata) početkom, trajanjem i
+// procijenjenom površinom POŽARA kojem ta tačka pripada.
+
+function makeTackaEnv() {
+  const constSrc = ['_POZ_OPOZ_MAX_UNIJA', '_POZ_OPOZ_MAXEDGE_M'].map(n => extractConst(n)).join('\n');
+  const src = [extractFn('_poziOpozGeom'), extractFn('_poziPovrsTxt'), extractFn('_poziTrajanje'), extractFn('_povArhTackaPopupHtml')].join('\n');
+  const fn = new Function('turf', constSrc + '\n' + src + '\nreturn _povArhTackaPopupHtml;')(turf);
+  return fn;
+}
+
+t('sa poznatom grupom: popup nosi početak, trajanje i procijenjenu površinu', () => {
+  const popupFn = makeTackaEnv();
+  const gr = {
+    prvi: Date.parse(iso(2026, 3, 1, 8)),
+    zadnji: Date.parse(iso(2026, 3, 3, 10)),
+    broj: 3,
+    pts: [
+      det(45.50, 16.90, iso(2026, 3, 1, 8)),
+      det(45.502, 16.902, iso(2026, 3, 2, 9)),
+      det(45.504, 16.904, iso(2026, 3, 3, 10)),
+    ],
+  };
+  const html = popupFn(det(45.502, 16.902, iso(2026, 3, 2, 9)), gr);
+  assert.ok(html.includes('Požar — počeo'), 'mora prikazati kad je požar počeo');
+  assert.ok(html.includes('Trajanje'), 'mora prikazati trajanje požara');
+  assert.ok(html.includes('Procijenjena površina'), 'mora prikazati procijenjenu površinu');
+  assert.ok(html.includes('3'), 'mora prikazati broj detekcija u požaru');
+});
+
+t('bez poznate grupe: popup i dalje prikazuje vrijeme detekcije, bez bacanja', () => {
+  const popupFn = makeTackaEnv();
+  const html = popupFn(det(45.50, 16.90, iso(2026, 3, 1, 8)), undefined);
+  assert.ok(html.includes('Vrijeme'), 'vrijeme same detekcije mora ostati vidljivo');
+  assert.ok(!html.includes('Trajanje'), 'bez grupe se ne izmišlja trajanje požara');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

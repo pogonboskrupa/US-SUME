@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.2';
+const APP_VER = 'v1.4.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16815,6 +16815,14 @@ function _povArhRender(force) {
     // turf-a) i dijele između crtanja tačaka po mjesecu i pune-godine grane
     // niže, umjesto da svaka grana čita localStorage/mapira zasebno.
     const tackeGodine = _povArhTacke(g);
+    // Grupisanje SVIH tačaka godine u požare, JEDNOM — da klik na BILO KOJU
+    // tačku može pokazati kojem požaru pripada (kad se desio, koliko je
+    // trajao, kolika mu je površina), ne samo "vrijeme ove detekcije".
+    // WeakMap po REFERENCI objekta (isti niz koji _poziGrupisi prima i vraća
+    // u g.pts, bez kloniranja) — ne po koordinatama, jer bi zaokruživanje
+    // moglo pogrešno spojiti dvije bliske ali različite tačke.
+    const grupaPoTacki = new WeakMap();
+    try { _poziGrupisi(tackeGodine).forEach(gr => gr.pts.forEach(p => grupaPoTacki.set(p, gr))); } catch(e) {}
     mjeseci.map(mjesec => ({ mjesec, geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
       .forEach(dio => {
         if (!dio.geom) return;
@@ -16823,7 +16831,7 @@ function _povArhRender(force) {
           opacity:0.95, fillColor:dio.boja, fillOpacity:0.28, interactive:false } }).addTo(_povArhLayer);
         // Same boja kao pojas kojem pripadaju — pojedinačna detekcija ispod
         // spojene površine, na zahtjev sa terena ("vrati tačke").
-        _povArhCrtajTacke(tackeGodine.filter(p => new Date(p.dt).getUTCMonth() === dio.mjesec), dio.boja);
+        _povArhCrtajTacke(tackeGodine.filter(p => new Date(p.dt).getUTCMonth() === dio.mjesec), dio.boja, grupaPoTacki);
       });
     // Puna godišnja unija je NAJSKUPLJI račun u ovoj sekciji (turf unija preko
     // cijele sezone). U režimu "samo skorašnje" se NE računa uopšte — ionako
@@ -16837,7 +16845,7 @@ function _povArhRender(force) {
         // sve klikove ispod sebe (dokumentovana zamka iz v3.101.0).
         style: { color:_povArhBoja(g), weight:2, opacity:0.95, fillColor:_povArhBoja(g), fillOpacity:0.28, interactive:false }
       }).addTo(_povArhLayer);
-      _povArhCrtajTacke(tackeGodine, _povArhBoja(g));
+      _povArhCrtajTacke(tackeGodine, _povArhBoja(g), grupaPoTacki);
     }
     const oznakaGeom = (r && r.geom) ? r.geom : sidro;
     if (oznakaGeom) {
@@ -16873,17 +16881,46 @@ function _povArhCentar(geom) {
 // Pojedinačne detekcije ispod spojene površine ("vrati tačke", v1.4.1) —
 // polygon sam po sebi sakriva odakle stvarno dolazi. Dijeljeni canvas
 // renderer (isti obrazac kao _poziCanvasRenderer za live sloj) da stotine/
-// hiljade tačaka ne naprave posebne DOM čvorove. interactive:false — canvas
-// pane iznad drugog inače pojede sve klikove ispod (v3.101.0).
+// hiljade tačaka ne naprave posebne DOM čvorove.
+//
+// KLIKABILNE (v1.4.3, na zahtjev — ranije interactive:false). Namjerno u
+// pozariPane, NE demOverlay gdje su poligoni — dva različita canvas
+// renderera u ISTOM pane-u se rangiraju po DOM redoslijedu kreiranja, koji
+// zavisi od toga šta se GDJE ELDJE u app-u prvo dotaklo taj pane (krhko,
+// teško za predvidjeti) — ako bi poligonov (podrazumijevani) canvas ispao
+// iznad ovog, tiho bi pojeo klikove na tačke (dokumentovana zamka v3.101.0).
+// Live sloj (_poziRender) rješava isto ovako: tačke u pozariPane, poligoni
+// u demOverlay — odvojeni pane-ovi umjesto nadmetanja unutar istog.
 let _povArhTackeRenderer = null;
-function _povArhCrtajTacke(pts, boja) {
+function _povArhCrtajTacke(pts, boja, grupaPoTacki) {
   if (!pts || !pts.length || typeof L === 'undefined') return;
-  if (!_povArhTackeRenderer && L.canvas) _povArhTackeRenderer = L.canvas({ pane:'demOverlay', padding:0.35 });
+  if (!_povArhTackeRenderer && L.canvas) _povArhTackeRenderer = L.canvas({ pane:'pozariPane', padding:0.35 });
   pts.forEach(p => {
-    L.circleMarker([p.la, p.lo], { renderer:_povArhTackeRenderer || undefined, pane:'demOverlay',
-      radius:3, color:'#fff', weight:1, fillColor:boja, fillOpacity:0.9, opacity:0.9, interactive:false
-    }).addTo(_povArhLayer);
+    L.circleMarker([p.la, p.lo], { renderer:_povArhTackeRenderer || undefined, pane:'pozariPane',
+      radius:4, color:'#fff', weight:1, fillColor:boja, fillOpacity:0.9, opacity:0.9
+    }).bindPopup(_povArhTackaPopupHtml(p, grupaPoTacki && grupaPoTacki.get(p)), { maxWidth:260, className:'kml-info-popup' })
+      .addTo(_povArhLayer);
   });
+}
+// Popup jedne detekcije — kad se desila, i (ako je grupa poznata) kojem
+// požaru pripada: kad je taj požar počeo, koliko je trajao i kolika mu je
+// procijenjena površina. Geometrija/površina se računa TEK na klik (ne pri
+// crtanju stotina tačaka) — ista logika (_poziOpozGeom) kao svuda u Požarima.
+function _povArhTackaPopupHtml(p, gr) {
+  const fmt = t => isFinite(t) ? new Date(t).toLocaleString('bs-BA') : '—';
+  const red = (l, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:11px;">
+    <span style="color:#94a3b8;">${l}</span><b style="color:#e2e8f0;text-align:right;">${v}</b></div>`;
+  let ha = NaN;
+  if (gr) { try { const gg = _poziOpozGeom(gr.pts); if (gg) ha = turf.area(gg) / 10000; } catch(e) {} }
+  return `<div style="background:#0f172a;color:#e2e8f0;padding:9px 11px;border-radius:10px;min-width:205px;">
+    <div style="font-size:13px;font-weight:800;color:#fdba74;margin-bottom:5px;">🔥 Detekcija</div>
+    ${red('Vrijeme', fmt(Date.parse(p.dt)))}
+    ${gr ? red('Požar — počeo', fmt(gr.prvi)) : ''}
+    ${gr ? red('Trajanje', _poziTrajanje(gr.prvi, gr.zadnji)) : ''}
+    ${gr ? red('Procijenjena površina', _poziPovrsTxt(ha)) : ''}
+    ${gr ? red('Detekcija u ovom požaru', String(gr.broj)) : ''}
+    ${!gr ? `<div style="font-size:10px;color:#64748b;margin-top:4px;">Nema podataka o cijelom požaru za ovu tačku.</div>` : ''}
+  </div>`;
 }
 
 // ── Veći (višednevni) požari u arhivi — info + simulacija po danima ────────
