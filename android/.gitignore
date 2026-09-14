@@ -4,6 +4,11 @@
 /.gradle/
 /local.properties
 
+# Preuzima ga bootstrap-wrapper.ps1 pri prvom buildu (provjera SHA-256 nad
+# službenim Gradle 8.4 wrapper-om) - nije git-tracked, ne treba ni biti
+# vidljiv kao lokalna izmjena koja bi blokirala build-apk.ps1 sledeći put.
+/gradle/wrapper/gradle-wrapper.jar
+
 # Assets su kopija web fajlova - generišu se sa copy-assets.sh
 /app/src/main/assets/
 
