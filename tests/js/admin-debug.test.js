@@ -60,6 +60,28 @@ t('FIRMS API ključ se nikad ne ispisuje u debug URL-u', () => {
   assert.ok(out.includes('/api/area/csv/***/'));
 });
 
+t('admin ima zaseban debug sječe / vjetroizvala', () => {
+  assert.match(HTML, /Pokreni debug sječe \/ vjetroizvala/);
+  assert.ok(extractFn('_adminDebugRunSjeca').includes('_sjeLoad(true, true)'));
+  assert.ok(extractFn('_sjeDebugPublish').includes("'sjeca-vjetroizvale'"));
+});
+
+t('GFW ključ se uklanja iz odgovora prije spremanja debug zapisa', () => {
+  const src = extractFn('_sjeDebugOcisti') + '\nreturn _sjeDebugOcisti;';
+  const safe = new Function('_poziGfwKljuc', src)(() => 'GFW_TAJNI_KLJUC');
+  const out = safe('server kaže GFW_TAJNI_KLJUC i https://x.test/?token=DRUGA_TAJNA');
+  assert.ok(!out.includes('GFW_TAJNI_KLJUC'));
+  assert.ok(!out.includes('DRUGA_TAJNA'));
+});
+
+t('debug sječe bilježi mrežni put, HTTP, parsiranje, filtriranje i keš', () => {
+  const src = extractFn('_sjeDebugText');
+  ['Dataset: gfw_integrated_alerts/latest','HTTP:','Primljeno iz GFW:','Grupisanih alarma:','Korišten keš nakon greške:'].forEach(x => assert.ok(src.includes(x), x));
+  const dohvat = extractFn('_poziDohvatiJedan');
+  assert.ok(dohvat.includes('preview:pregled'));
+  assert.ok(dohvat.includes('bytes:String'));
+});
+
 t('riješeni debug ima eksplicitno dugme za brisanje', () => {
   assert.match(HTML, /Obriši kao riješeno/);
   assert.ok(extractFn('_adminDebugResolve').includes("_debugRemove(id)"));

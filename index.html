@@ -4269,7 +4269,11 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           style="width:100%;padding:10px;background:#7c2d12;border:1px solid #f97316;border-radius:9px;color:#fed7aa;font-size:12px;font-weight:700;cursor:pointer;">
           🔥 Pokreni novi debug požara
         </button>
-        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Dohvata trenutni period i zapisuje rezultat svakog izvora. API ključevi su automatski skriveni.</div>
+        <button onclick="_adminDebugRunSjeca()"
+          style="width:100%;padding:10px;margin-top:8px;background:#713f12;border:1px solid #d97706;border-radius:9px;color:#fde68a;font-size:12px;font-weight:700;cursor:pointer;">
+          🪵 Pokreni debug sječe / vjetroizvala
+        </button>
+        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Dohvata trenutni period i zapisuje mrežni put, HTTP odgovor, parsiranje, filtriranje i keš. API ključevi su automatski skriveni.</div>
         <div id="admin-debug-list"></div>
       </div>
     </div>
@@ -5017,7 +5021,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.2';
+const APP_VER = 'v1.3.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -6593,6 +6597,14 @@ async function _adminDebugRunFire() {
   showToast('🔥 Pokrećem debug požara…');
   try { await _poziLoad(true); }
   catch(e) { showToast('❌ Debug požara: ' + (e?.message || e)); }
+  _adminDebugRender();
+}
+async function _adminDebugRunSjeca() {
+  if (!sbProfile?.is_admin) return;
+  if (_sjeBusy) { showToast('⏳ Dohvat sječe / vjetroizvala već traje'); return; }
+  showToast('🪵 Pokrećem debug sječe / vjetroizvala…');
+  try { await _sjeLoad(true, true); }
+  catch(e) { showToast('❌ Debug sječe: ' + (e?.message || e)); }
   _adminDebugRender();
 }
 
@@ -13657,17 +13669,18 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
   const parser = opts.parser || _poziParseCsv;
   const provjera = opts.provjera || /latitude/i;
   const zaglavlja = opts.headers || null;
-  const ocijeni = (txt, native) => {
+  const pregled = txt => String(txt || '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').slice(0, 500);
+  const ocijeni = (txt, native, status) => {
     const pts = parser(txt);
-    if (!pts.length && !provjera.test(txt)) return { ok:false, naziv, greska:'neočekivan odgovor' };
-    return { ok:true, naziv, pts, native: !!native };
+    if (!pts.length && !provjera.test(txt)) return { ok:false, naziv, greska:'neočekivan odgovor', native:!!native, status:status || 0, bytes:String(txt || '').length, preview:pregled(txt) };
+    return { ok:true, naziv, pts, native: !!native, status:status || 200, bytes:String(txt || '').length };
   };
   // U APK-u prvo native put (nema CORS); u browseru ga nema pa ide fetch().
   if (_nativeNetDostupan()) {
     try {
       const r = await _nativeNetFetch(url, ms || 20000, zaglavlja);
-      if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, native:true });
-      return _dbgVrati(ocijeni(r.text, true));
+      if (r.status && r.status >= 400) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, native:true, status:r.status, bytes:String(r.text || '').length, preview:pregled(r.text) });
+      return _dbgVrati(ocijeni(r.text, true, r.status));
     } catch(e) {
       return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e), native:true });
     }
@@ -13679,8 +13692,8 @@ async function _poziDohvatiJedan(naziv, url, ms, opts) {
     const o = { mode:'cors' };
     if (zaglavlja) o.headers = zaglavlja;
     const r = await _fetchT(url, ms || 15000, o);
-    if (!r.ok) return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status });
-    return _dbgVrati(ocijeni(await r.text(), false));
+    if (!r.ok) { const txt=await r.text(); return _dbgVrati({ ok:false, naziv, greska:'HTTP ' + r.status, status:r.status, bytes:String(txt || '').length, preview:pregled(txt) }); }
+    return _dbgVrati(ocijeni(await r.text(), false, r.status));
   } catch(e) {
     return _dbgVrati({ ok:false, naziv, greska: _poziGreskaTxt(e) });
   }
@@ -15495,6 +15508,65 @@ let _sjeLayer = null;
 let _sjeMeta = null;
 let _sjeOn = false;
 let _sjeBusy = false;
+let _sjeDebugRun = null;
+
+function _sjeDebugKljucUKesu() {
+  try { const x=JSON.parse(localStorage.getItem(_POZ_KLJUCEVI_KES)||'null'); return !!String(x?.gfw||'').trim(); }
+  catch(e) { return false; }
+}
+function _sjeDebugOcisti(v) {
+  let s=String(v||'');const k=String(_poziGfwKljuc()||'');if(k)s=s.split(k).join('***');
+  return s.replace(/([?&](?:key|api_key|token)=)[^&\s]+/gi,'$1***').slice(0,700);
+}
+function _sjeDebugStart(okvir, ref, url, kljuc) {
+  let kes=null;try{kes=JSON.parse(localStorage.getItem(_SJE_CACHE_KEY)||'null')}catch(e){}
+  _sjeDebugRun={startedAt:Date.now(),state:'u toku',okvir,
+    ref:{la:Number(ref?.la),lo:Number(ref?.lo),gps:!!ref?.gps},url:_poziDebugSafeUrl(url),
+    online:navigator.onLine,native:_nativeNetDostupan(),keyMemory:!!kljuc,keyCache:_sjeDebugKljucUKesu(),
+    cacheExists:!!kes,cacheAgeMs:kes?.ts?Date.now()-kes.ts:null};
+  _sjeDebugPublish();
+}
+function _sjeDebugRange(pts) {
+  const t=(pts||[]).map(p=>Date.parse(p.dt)).filter(Number.isFinite).sort((a,b)=>a-b);
+  return t.length?new Date(t[0]).toISOString()+' → '+new Date(t[t.length-1]).toISOString():'nema datuma';
+}
+function _sjeDebugFinish(state, data) {
+  if(!_sjeDebugRun)return;Object.assign(_sjeDebugRun,data||{});_sjeDebugRun.state=state;_sjeDebugRun.finishedAt=Date.now();_sjeDebugPublish();
+}
+function _sjeDebugText() {
+  const d=_sjeDebugRun;if(!d)return '';
+  const refOk=Number.isFinite(d.ref?.la)&&Number.isFinite(d.ref?.lo);
+  const out=['=== DEBUG SJEČA / VJETROIZVALE '+APP_VER+' ===',
+    'Početak: '+new Date(d.startedAt).toLocaleString()+' · stanje: '+d.state,
+    'Period: '+_sjeOkvirNaziv(d.okvir)+' ('+d.okvir+') · radijus: '+_SJE_RADIUS_KM+' km',
+    'Referenca: '+(refOk?(d.ref.la.toFixed(5)+', '+d.ref.lo.toFixed(5)):'nepoznata')+' · '+(d.ref?.gps?'GPS':'centar karte'),
+    'Veza: navigator.onLine='+d.online+' · put='+(d.native?'native APK':'browser/fetch'),
+    'GFW ključ: memorija='+(d.keyMemory?'DA':'NE')+' · lokalni keš='+(d.keyCache?'DA':'NE'),
+    'Dataset: gfw_integrated_alerts/latest',
+    'Očekivana polja: longitude, latitude, gfw_integrated_alerts__date, gfw_integrated_alerts__confidence',
+    'URL: '+d.url,'', 'ZAHTJEV:'];
+  if(d.requestOk==null)out.push('⏳ zahtjev još traje');
+  else {
+    out.push((d.requestOk?'✅ uspjeh':'❌ neuspjeh')+' · '+(d.requestMs??'—')+'ms · '+(d.requestNative?'native APK':'browser/fetch'));
+    out.push('HTTP: '+(d.httpStatus||'nije dostupan')+' · tijelo: '+(d.bytes??'—')+' znakova');
+    if(d.requestError)out.push('Greška: '+d.requestError);
+    if(d.preview)out.push('Odgovor servera: '+d.preview);
+  }
+  out.push('', 'REZULTAT:');
+  if(d.raw!=null)out.push('Primljeno iz GFW: '+d.raw);
+  if(d.filtered!=null)out.push('U krugu '+_SJE_RADIUS_KM+' km: '+d.filtered);
+  if(d.groups!=null)out.push('Grupisanih alarma: '+d.groups);
+  if(d.rawRange)out.push('Raspon datuma primljenih: '+d.rawRange);
+  if(d.filteredRange)out.push('Raspon datuma u krugu: '+d.filteredRange);
+  out.push('Keš prije testa: '+(d.cacheExists?'DA'+(d.cacheAgeMs!=null?' · star '+Math.round(d.cacheAgeMs/60000)+' min':''):'NE'));
+  if(d.usedCache!=null)out.push('Korišten keš nakon greške: '+(d.usedCache?'DA':'NE'));
+  if(d.fatal)out.push('Interna greška: '+d.fatal);
+  out.push('', 'Ukupno trajanje: '+(Date.now()-d.startedAt)+'ms');
+  return out.join('\n');
+}
+function _sjeDebugPublish() {
+  if(!_sjeDebugRun)return;_debugUpsert('sjeca-vjetroizvale','Sječa / vjetroizvale — GFW dohvat',_sjeDebugText(),_sjeDebugRun.state);
+}
 
 function _sjeUrl(okvir, ref) {
   const o = _SJE_OKVIRI.find(x => x.id === okvir) || _SJE_OKVIRI[1];
@@ -15554,21 +15626,27 @@ function _sjeBrojRijec(n) {
   return n + ' alarma';
 }
 
-async function _sjeLoad(tiho) {
+async function _sjeLoad(tiho, dijagnostika) {
   if (_sjeBusy) return;
   const kljuc = _poziGfwKljuc();
+  const okvir = _sjeOkvir();
+  const ref = _poziRefTacka();
+  const url = _sjeUrl(okvir, ref);
+  if (dijagnostika) _sjeDebugStart(okvir, ref, url, kljuc);
   if (!kljuc) {
     _sjeMeta = { greska:'nema-kljuca' };
+    if (dijagnostika) _sjeDebugFinish('greška',{requestOk:false,requestMs:0,requestError:'GFW ključ nije učitan u memoriju aplikacije',usedCache:false});
     _sjeRenderPanel();
     return;
   }
   _sjeBusy = true;
   _sjeStatusSet('⏳ Dohvatam alarme…');
   try {
-    const okvir = _sjeOkvir();
-    const ref = _poziRefTacka();
-    const r = await _poziDohvatiJedan('GFW integrisani alarmi', _sjeUrl(okvir, ref), 25000,
+    const t0=Date.now();
+    const r = await _poziDohvatiJedan('GFW integrisani alarmi', url, 25000,
       { headers:{ 'x-api-key': kljuc }, parser:_sjeParse, provjera:/"data"\s*:/ });
+    if (dijagnostika) Object.assign(_sjeDebugRun,{requestOk:!!r.ok,requestMs:Date.now()-t0,
+      requestNative:!!r.native,httpStatus:r.status||0,bytes:r.bytes,requestError:r.greska||'',preview:_sjeDebugOcisti(r.preview)});
     if (r.ok) {
       _sjePts = _sjeFilterBlizu(r.pts, ref);
       _sjeMeta = { dohvacenoMs:Date.now(), ukupno:r.pts.length, kes:false, okvir, refGps:ref.gps };
@@ -15586,15 +15664,23 @@ async function _sjeLoad(tiho) {
         _sjeStatusSet('❌ ' + r.greska);
         if (!tiho) _dlgConfirm('Alarmi smetnje vegetacije nisu dostupni.\n\n' + r.greska + '\n\n' + _poziSavjet(r.greska),
           { title:'🪵 Sječa i vjetroizvale', okLabel:'U redu' });
+        if (dijagnostika) _sjeDebugFinish('greška',{raw:0,filtered:0,groups:0,usedCache:false,rawRange:'nema datuma',filteredRange:'nema datuma'});
         return;
       }
       _sjePts = _sjeFilterBlizu(c.pts || [], ref);
       _sjeMeta = { dohvacenoMs:c.ts, ukupno:(c.pts||[]).length, kes:true, okvir:c.okvir || okvir, refGps:ref.gps };
     }
     _sjeEvts = _poziOznaciNove(_poziGrupeBlizu(_poziGrupisi(_sjePts, _SJE_GRUPA_M), ref), _SJE_SEEN_KEY, 1000);
+    if (dijagnostika) _sjeDebugFinish(_sjeMeta?.kes?'keš':'uspjeh',{
+      raw:r.ok?r.pts.length:(_sjeMeta?.ukupno||0),filtered:_sjePts.length,groups:_sjeEvts.length,
+      rawRange:_sjeDebugRange(r.ok?r.pts:_sjePts),filteredRange:_sjeDebugRange(_sjePts),usedCache:!!_sjeMeta?.kes});
     _sjeRender();
     _sjeStatusSet(_sjeSazetak().kratko);
     if (!tiho) showToast(_sjeSazetak().toast);
+  } catch(e) {
+    _sjeMeta={greska:e?.message||String(e)};
+    if(dijagnostika)_sjeDebugFinish('greška',{fatal:_sjeDebugOcisti(e?.stack||e?.message||e),usedCache:false});
+    _sjeStatusSet('❌ '+_sjeMeta.greska);
   } finally {
     _sjeBusy = false;
   }

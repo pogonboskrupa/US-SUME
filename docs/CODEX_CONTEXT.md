@@ -75,6 +75,10 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
   referentne karte i markera požara. Klik na pojas otvara detalje incidenta
   direktno na karti, a dnevni replay kumulativno prikazuje samo tačke i
   procijenjenu geometriju odabranog požara; ostali požari se ne filtriraju.
+- Od v1.3.3 admin DEBUG ima zaseban zapis za GFW smetnje vegetacije. Bilježi
+  period, referencu, prisutnost ključa, native/browser put, HTTP status,
+  veličinu i očišćeni isječak greške, broj primljenih/filtriranih/grupisanih
+  alarma i korištenje lokalnog keša. Vrijednost API ključa se ne zapisuje.
 
 ## 2. Pet prioritetnih nalaza
 
