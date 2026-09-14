@@ -4270,6 +4270,19 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           🔥 Pokreni novi debug požara
         </button>
         <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Dohvata trenutni period i zapisuje rezultat svakog izvora. API ključevi su automatski skriveni.</div>
+
+        <button onclick="_adminDebugKlikNow()"
+          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
+          🖱 Provjeri klikabilnost sada
+        </button>
+        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Radi SAMO ako su 📁 Lista oznaka/KML ili ✏ Nacrtaj vlaku ručno trenutno na ekranu (Karta/Projekat tab) — u suprotnom otvori taj tab pa ponovi. Nezavisno od ovoga, svaki STVARAN promašen dodir na ta dva dugmeta se automatski zabilježi ovdje čim se desi, bez obzira gdje si u tom trenutku.</div>
+
+        <button onclick="_adminDebugMapStuckNow()"
+          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
+          🗺 Provjeri "Učitavam kartu" sada
+        </button>
+        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Zapisuje da li je indikator BAŠ SADA prikazan, koliko dugo, i cijelu istoriju ovog učitavanja karte.</div>
+
         <div id="admin-debug-list"></div>
       </div>
     </div>
@@ -5017,7 +5030,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.2';
+const APP_VER = 'v1.3.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -6593,6 +6606,50 @@ async function _adminDebugRunFire() {
   showToast('🔥 Pokrećem debug požara…');
   try { await _poziLoad(true); }
   catch(e) { showToast('❌ Debug požara: ' + (e?.message || e)); }
+  _adminDebugRender();
+}
+
+// Ručna provjera "koje dugme sad stvarno može primiti klik" — radi SAMO za
+// dugmad koja su TRENUTNO na ekranu (Karta/Projekat tab), _KLIK_WATCH hvatač
+// (gore) pokriva slučaj kad admin nije baš na tom tabu dok se problem desi.
+function _adminDebugKlikNow() {
+  if (!sbProfile?.is_admin) return;
+  const lines = _KLIK_WATCH.map(w => {
+    let btn; try { btn = document.querySelector(w.sel); } catch(e) { btn = null; }
+    if (!btn) return w.label + ': nije u DOM-u';
+    const r = btn.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return w.label + ': trenutno nije na ekranu — otvori Kartu/Projekat panel gdje se nalazi pa ponovi provjeru';
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const ok = top === btn || btn.contains(top);
+    return w.label + ': ' + (ok ? '✅ klikabilno' : '❌ BLOKIRANO — na sredini dugmeta stoji ' + _klikDijagOpis(top));
+  });
+  _debugUpsert('klik-provjera-rucna', 'Ručna provjera klikabilnosti', lines.join('\n'), lines.some(l => l.includes('❌')) ? 'blokirano' : 'ok');
+  showToast('🖱 Provjera zapisana u DEBUG');
+  _adminDebugRender();
+}
+
+// Trenutno (živo) stanje "Učitavam kartu" indikatora — dopunjuje istoriju
+// koraka (_mapLoadDiagText, v1.1.6/v1.1.7) sa "da li je BAŠ SADA i dalje
+// prikazan i koliko dugo", jer istorija sama po sebi ne kaže je li se
+// otkucaj ikad završio.
+function _adminDebugMapStuckNow() {
+  if (!sbProfile?.is_admin) return;
+  const el = document.getElementById('map-restore-indicator');
+  const showing = !!(el && el.classList.contains('show'));
+  const elapsed = (_mapRestoreIndicatorShownAt != null) ? Math.round((performance.now() - _mapRestoreIndicatorShownAt) / 1000) : null;
+  const sqlAktivne = (typeof _sqlLayers !== 'undefined' ? _sqlLayers : []).filter(sl => sl.visible && map.hasLayer(sl.layer)).map(sl => sl.name);
+  const tileAktivni = Object.keys(TL).filter(k => map.hasLayer(TL[k]));
+  const lines = [
+    'Trenutno stanje indikatora: ' + (showing ? '⚠ PRIKAZAN ("Učitavam kartu…")' : '✅ skriven'),
+    'Prošlo od prikazivanja: ' + (elapsed != null ? elapsed + 's' : '— (nije prikazan u ovoj sesiji)'),
+    'Aktivni SQLite slojevi: ' + (sqlAktivne.length ? sqlAktivne.join(', ') : 'nijedan'),
+    'Aktivni tile slojevi: ' + (tileAktivni.length ? tileAktivni.join(', ') : 'nijedan'),
+    '',
+    '— Istorija ovog učitavanja —',
+    _mapLoadDiagText() || '(nema zabilježenog toka)',
+  ];
+  _debugUpsert('mapa-zaglavljena', 'Učitavam kartu — trenutno stanje', lines.join('\n'), showing ? 'zaglavljeno' : 'ok');
+  showToast(showing ? '⚠ I dalje prikazan — zapisano u DEBUG' : '✅ Trenutno skriven — zapisano u DEBUG');
   _adminDebugRender();
 }
 
@@ -17014,6 +17071,52 @@ function _debugRemove(id) {
   try { localStorage.setItem(_ADMIN_DEBUG_KEY, JSON.stringify(all)); } catch(e) {}
   try { if (typeof _adminDebugRender === 'function') _adminDebugRender(); } catch(e) {}
 }
+
+// ── Hvatač "dugme ne reaguje" (v1.3.2) ──────────────────────────────────────
+// Terenska prijava: 📁 Lista oznaka/KML i ✏ Nacrtaj vlaku ručno ponekad ne
+// reaguju na dodir, i restart app-a ne pomaže. Ta dugmad su vidljiva SAMO na
+// Karta/Projekat tabu (nv-badge/#pd-draw-vlaka-btn se sakriju na drugim
+// tabovima preko _setMapUIVisible), pa dijagnostika iz #debug-panel-a NE MOŽE
+// naknadno "pogoditi" pravo mjesto klika — sandbox isto ne može reprodukovati
+// stvaran render Android WebView-a (vidi CLAUDE.md "Osirotjeli #dlg-overlay").
+// Zato se prati SVAKI stvaran klik u capture fazi: ako korisnik tapne TAČNO
+// unutar granica ovih dugmadi a browser klik dodijeli NEKOM DRUGOM elementu,
+// to je direktan dokaz da nešto (nevidljiv overlay, pogrešan z-index...)
+// presreće dodir — upisuje se u ISTI centralni DEBUG (📁 admin ga vidi u
+// 🛠 DEBUG tabu na ISTOM uređaju gdje se problem desio).
+const _KLIK_WATCH = [
+  { sel: '#oznake-btn', label: '📁 Lista oznaka/KML (srednje dugme ispod biranja mapa)' },
+  { sel: '#pd-draw-vlaka-btn', label: '✏ Nacrtaj vlaku ručno' },
+];
+function _klikDijagOpis(el) {
+  if (!el) return '(nema mete — klik nije stigao ni do jednog elementa)';
+  const cs = getComputedStyle(el);
+  const cls = (typeof el.className === 'string' && el.className.trim()) ? '.' + el.className.trim().replace(/\s+/g, '.') : '';
+  return '<' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + cls + '> · z-index:' + cs.zIndex + ' · position:' + cs.position + ' · pointer-events:' + cs.pointerEvents + ' · opacity:' + cs.opacity;
+}
+function _klikDijagInstall() {
+  document.addEventListener('click', function(e) {
+    _KLIK_WATCH.forEach(w => {
+      let btn; try { btn = document.querySelector(w.sel); } catch(err) { return; }
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return; // trenutno nije na ekranu (drugi tab) - nema šta provjeriti
+      const cx = e.clientX, cy = e.clientY;
+      if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return; // klik nije bio na ovom dugmetu
+      if (btn === e.target || btn.contains(e.target)) return; // klik je stigao do dugmeta - sve OK
+      const lines = [
+        'Dugme: ' + w.label + ' (' + w.sel + ')',
+        'Vrijeme: ' + new Date().toLocaleString(),
+        'Klik na (' + cx + ',' + cy + ') je stigao do: ' + _klikDijagOpis(e.target),
+        'Umjesto do samog dugmeta: ' + _klikDijagOpis(btn),
+      ];
+      _debugUpsert('klik-blokada-' + w.sel.replace(/\W/g, ''), 'Dugme ne reaguje na dodir — ' + w.label, lines.join('\n'), 'zabilježeno');
+      try { console.warn('[klik-dijagnoza] ' + lines.join(' | ')); } catch(err) {}
+    });
+  }, true);
+}
+try { _klikDijagInstall(); } catch(e) {}
+
 const _MAP_LOAD_DIAG_KEY = 'tvlake_map_startup_diag_v1';
 let _mapLoadDiag = null;
 try { _mapLoadDiag = JSON.parse(localStorage.getItem(_MAP_LOAD_DIAG_KEY) || 'null'); } catch(e) {}
