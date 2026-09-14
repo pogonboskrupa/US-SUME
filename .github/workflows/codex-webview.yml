@@ -21,12 +21,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Testovi idu PRIJE Android SDK setupa: oni ne trebaju ni SDK ni Gradle, a
+      # kad setup-android padne (kao 2026-09-14 na uklonjenom 'tools' paketu)
+      # ovaj korak se preskakao pa se iz CI-ja nije vidjelo ni da li kod valja.
+      - name: Lokalni JavaScript testovi
+        run: for f in tests/js/*.test.js; do node "$f" || exit 1; done
       - uses: android-actions/setup-android@v3
+        with:
+          # Podrazumijevano instalira 'tools platform-tools', a legacy 'tools'
+          # paket je uklonjen iz Google repozitorija — sdkmanager tad pada sa
+          # "Failed to find package 'tools'" i cijeli build stane prije ijednog
+          # koraka koji je stvarno naš.
+          packages: 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.4'
-      - name: Lokalni JavaScript testovi
-        run: for f in tests/js/*.test.js; do node "$f" || exit 1; done
       - name: Assets i WebView debug APK
         run: |
           bash android/copy-assets.sh
