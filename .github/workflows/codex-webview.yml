@@ -31,6 +31,41 @@ jobs:
         run: |
           bash android/copy-assets.sh
           gradle -p android --no-daemon assembleDebug
+      - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
+        # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
+        # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
+        # ipak fali ključni sadržaj (mala, tiho nepotpuna karta na terenu).
+        # Provjera raspakuje STVARNI APK i gleda šta je unutra, ne pretpostavlja
+        # na osnovu toga da je gradle vratio exit 0.
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "GRESKA: APK fajl nije pronađen u outputs/apk/debug/"
+            exit 1
+          fi
+          echo "APK fajl: $APK_PATH"
+          echo "Veličina APK fajla (kompresovan): $(du -h "$APK_PATH" | cut -f1)"
+
+          rm -rf /tmp/apk-check
+          mkdir -p /tmp/apk-check
+          unzip -q "$APK_PATH" -d /tmp/apk-check
+          echo "Veličina raspakovanog APK-a: $(du -sh /tmp/apk-check | cut -f1)"
+
+          MISSING=0
+          for f in assets/index.html assets/GRANICE.kml; do
+            if [ ! -s "/tmp/apk-check/$f" ]; then
+              echo "NEDOSTAJE ili je prazan: $f"
+              MISSING=1
+            else
+              echo "OK: $f ($(du -h "/tmp/apk-check/$f" | cut -f1))"
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "GRESKA: APK ne sadrži očekivane asset fajlove — build se prekida,"
+            echo "artefakt se NE objavljuje (bolje bez APK-a nego sa tiho nepotpunim)."
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: US-SUME-CODEX-debug-${{ github.sha }}
