@@ -1351,24 +1351,6 @@ select:focus { outline:none; border-color:#3b82f6; }
   transition:transform 0.15s, border-color 0.1s; flex-shrink:0;
 }
 .msr-swatch.on { border-color:#fff; transform:scale(1.25); }
-/* Crosshair overlay na mapi */
-#msr-xhair {
-  display:none; position:fixed;
-  top:50%; left:50%;
-  width:28px; height:28px;
-  transform:translate(-50%,-50%);
-  border:2px solid rgba(255,255,255,0.9);
-  border-radius:50%;
-  box-shadow:0 0 0 1px rgba(0,0,0,0.6);
-  pointer-events:none; z-index:850;
-}
-#msr-xhair::before, #msr-xhair::after {
-  content:''; position:absolute;
-  background:rgba(255,255,255,0.92);
-  box-shadow:0 0 2px rgba(0,0,0,0.9);
-}
-#msr-xhair::before { left:-12px; right:-12px; top:50%; height:2px; transform:translateY(-50%); }
-#msr-xhair::after  { top:-12px; bottom:-12px; left:50%; width:2px; transform:translateX(-50%); }
 .msr-seg {
   background:#0f172a; border:1px solid #1e3a5f;
   border-radius:7px; padding:8px 10px; margin-bottom:6px;
@@ -5022,7 +5004,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.3';
+const APP_VER = 'v1.4.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -22546,7 +22528,7 @@ function _tragoviRender() {
         const modeLabel = mode==='area'?'◻ Površina':mode==='nagib'?'📐 Nagib':'📏 Distanca';
         let detail = _msrFmt(lenM);
         if (mode === 'area' && m.pts.length >= 3) {
-          const aM2 = _msrSphericalArea(m.pts);
+          const aM2 = _msrPoligonPovrsina(m.pts);
           detail = fmtHa(aM2/10000)+' · obim '+_msrFmt(lenM);
         }
         const meta = [dt, modeLabel, detail, m.pts.length+' tač.', m.gj?'GJ: '+_escHtml(m.gj):'', m.odjel?'Odj: '+_escHtml(m.odjel):''].filter(Boolean).join(' · ');
@@ -29595,7 +29577,15 @@ function _updMcdDist() {
   const el = document.getElementById('mcd-dist');
   if (!el) return;
   const dot = document.getElementById('map-center-dot');
-  if (!gpsOn || !lastP || !dot || dot.style.display === 'none') {
+  // Udaljenost do moje pozicije je korisna dok se samo panuje kartom, ali dok
+  // je crosshair AKTIVAN ALAT za precizno tapkanje tačaka (mjerenje, ručno
+  // crtanje vlake...) taj tekst sjedi tačno ispod njega i smeta baš na mjestu
+  // gdje korisnik gleda — terenska prijava za mjerenje površina ("prikaz
+  // udaljenosti... smeta tokom obilježavanja"). Sakriva se dok traje bilo koje
+  // aktivno crtanje (main.drawing-active), ne samo za mjerenje površina —
+  // isti uzrok, ista posljedica za svaki alat koji koristi ovaj crosshair.
+  const crtanjeAktivno = document.getElementById('main')?.classList.contains('drawing-active');
+  if (!gpsOn || !lastP || !dot || dot.style.display === 'none' || crtanjeAktivno) {
     el.style.display = 'none'; return;
   }
   const c = map.getCenter();
@@ -29949,7 +29939,9 @@ function _msrHaversine(lat1,lng1,lat2,lng2) {
   const a=Math.sin(dlat/2)**2+Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dlng/2)**2;
   return 2*R*Math.asin(Math.sqrt(a));
 }
-// Spherical excess formula — geodetska površina poligona u m²
+// Spherical excess formula — geodetska površina poligona u m². Tačna SAMO za
+// PROST (samo-nepresijecajući) poligon — vidi _msrPoligonPovrsina ispod za
+// slučaj kad korisnik pređe preko već obiđene linije.
 function _msrSphericalArea(pts) {
   const R = 6371000, toR = Math.PI / 180;
   const n = pts.length;
@@ -29961,6 +29953,37 @@ function _msrSphericalArea(pts) {
     area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
   }
   return Math.abs(area * R * R / 2);
+}
+// Površina otporna na SAMO-PRESIJECANJE (v1.4.4, terenska prijava: "dupli
+// poligoni koji se preklapaju — nemoj mjeriti obje površine"). Kad korisnik
+// obilježava granicu (tap po tap ili "Crtaj" dok pomjera mapu) i pređe preko
+// već ucrtanog dijela — ispravljanje greške, zaobilaženje prepreke — nastaje
+// SAMO-PRESIJECAJUĆI prsten (dvije "latice" koje se preklapaju). Naivna
+// shoelace/spherical-excess formula (_msrSphericalArea) je definisana SAMO za
+// prost poligon; nad samo-presijecajućim prstenom daje pogrešan zbir umjesto
+// stvarno pokrivene površine.
+// turf.unkinkPolygon razdvoji prsten NA MJESTU SVAKOG samopresjeka u skup
+// prostih poligona; ti dijelovi se onda SPAJAJU (turf.union), NE saberu —
+// spajanje jednom broji dio koji se preklapa, sabiranje bi ga brojalo dvaput
+// (tačno ono što je prijavljeno). Za prost poligon (nema presjeka)
+// unkinkPolygon vrati istu geometriju u jednom komadu — union jednog elementa
+// sa samim sobom je no-op, pa se ponašanje za "normalan" slučaj ne mijenja.
+function _msrPoligonPovrsina(pts) {
+  const fallback = () => _msrSphericalArea(pts);
+  if (typeof turf === 'undefined' || !pts || pts.length < 3) return fallback();
+  try {
+    const ring = pts.map(p => [p.lng, p.lat]);
+    ring.push(ring[0]);
+    const raspareno = turf.unkinkPolygon(turf.polygon([ring]));
+    const feats = raspareno && raspareno.features;
+    if (!feats || !feats.length) return fallback();
+    let unija = feats[0];
+    for (let i = 1; i < feats.length; i++) {
+      try { unija = turf.union(unija, feats[i]) || unija; } catch(e) {}
+    }
+    const a = turf.area(unija);
+    return isFinite(a) && a > 0 ? a : fallback();
+  } catch(e) { return fallback(); }
 }
 // fetch sa rokom (v3.102.1). Na terenu navigator.onLine laže 'true' na mrtvoj
 // vezi (OS-S4), pa poziv ne PADNE nego VISI — bez roka `await fetch(...)` nikad
@@ -30015,7 +30038,7 @@ function _msrRedraw() {
 
     // Poligon (≥3 tačaka)
     if (pts.length >= 3) {
-      const areaM2 = _msrSphericalArea(pts);
+      const areaM2 = _msrPoligonPovrsina(pts);
       const areaLbl = areaM2 >= 10000
         ? (areaM2/10000).toFixed(2)+' ha'
         : Math.round(areaM2).toLocaleString('bs')+' m²';
@@ -30073,6 +30096,7 @@ function _msrRedraw() {
 }
 
 function _msrUpdPanel() {
+  _msrUpdUndoBtn();
   const totalBox = document.getElementById('msr-total-box');
   if (!totalBox) return;
   const pts = _msrPts;
@@ -30119,7 +30143,7 @@ function _msrUpdPanel() {
 
   const areaRow = document.getElementById('msr-area-row');
   if (_msrMode === 'area' && pts.length >= 3) {
-    const areaM2 = _msrSphericalArea(pts);
+    const areaM2 = _msrPoligonPovrsina(pts);
     areaRow.style.display = 'block';
     document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
     document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
@@ -30173,11 +30197,20 @@ function msrStart() {
   map.on('dblclick', _msrMapDblClick);
   const btn = document.getElementById('btn-msr-start');
   if (btn) { btn.textContent='⏹ Završi'; btn.style.background='#dc2626'; }
-  const xh = document.getElementById('msr-xhair');
-  if (xh) xh.style.display = '';
+  // Zajednički crosshair (v1.4.4) — #msr-xhair je bio position:fixed prema
+  // CIJELOM prozoru (top:50%/left:50%), pa se nije poklapao sa map.getCenter()
+  // (mjerenje uzima) čim iznad karte postoji BILO ŠTA (traka na vrhu i sl.) —
+  // terenski prijavljeno kao "loše centriranje kad se iscrtava". #map-center-dot
+  // je position:absolute UNUTAR #map (isti obrazac kao ručno crtanje vlake),
+  // pa je stvarno tačno na map.getCenter() bez obzira šta je oko karte.
+  document.getElementById('main')?.classList.add('drawing-active');
+  const dot = document.getElementById('map-center-dot');
+  if (dot) { dot.style.display = 'flex'; dot.onclick = (e) => { e.stopPropagation(); msrAddCenter(); }; }
+  _updMcdDist();
   const hint = document.getElementById('msr-hint');
   const modeHints = { dist: 'Klikaj tačke — mjeri ukupnu udaljenost.', area: 'Klikaj ≥3 tačke — poligon se zatvara automatski.', nagib: 'Klikni 2 tačke — nagib se računa automatski.' };
   if (hint) hint.innerHTML = (modeHints[_msrMode] || 'Klikaj tačke.') + '<br><small style="color:#475569">⊕ Pozicija tačke · vuci da pomjeriš · desni klik briši</small>';
+  _msrUpdUndoBtn();
 }
 function _msrSyncRegistry() {
   if (!_mqmId) return;
@@ -30197,14 +30230,17 @@ function msrStop(skipSave) {
   }
   const btn = document.getElementById('btn-msr-start');
   if (btn) { btn.textContent='▶ Počni'; btn.style.background=''; }
-  const xh = document.getElementById('msr-xhair');
-  if (xh) xh.style.display = 'none';
+  document.getElementById('main')?.classList.remove('drawing-active');
+  const dot = document.getElementById('map-center-dot');
+  if (dot) { dot.style.display = 'none'; dot.onclick = null; }
+  _updMcdDist();
   const hint = document.getElementById('msr-hint');
   if (_msrPts.length >= 2) {
     if (hint) hint.innerHTML = 'Vuci tačke za korekciju · <small style="color:#475569">desni klik = obriši tačku</small>';
   } else {
     if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
   }
+  _msrUpdUndoBtn();
   // Auto-ponudi snimanje ako ima ≥2 tačaka; preskoči ako editujemo postojeći zapis
   if (!skipSave && _msrPts.length >= 2 && !_mqmId) _mqmOpen();
 }
@@ -30219,8 +30255,30 @@ function msrClear() {
   }
   _msrUpdPanel();
   _msrDrawAllSaved();
+  _msrUpdUndoBtn();
   const hint = document.getElementById('msr-hint');
   if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
+}
+// Poništi zadnju dodanu tačku (v1.4.4, na zahtjev — mjerenje nije imalo undo,
+// samo brisanje CIJELE tačke preko desnog klika na marker). Isti resursi kao
+// dodavanje tačke (redraw/panel/registry), plus reset _msrDrawLastPt — u
+// "Crtaj" (auto-dodavanje dok se mapa pomjera) modu bi bez toga prag od
+// MSR_DRAW_MIN_M i dalje mjerio od OBRISANE tačke, pa bi sljedeća tačka nakon
+// undo-a mogla tiho odbiti da se doda ako je karta ostala blizu tog mjesta.
+function msrUndo() {
+  if (!_msrPts.length) return;
+  _msrPts.pop();
+  _msrDrawLastPt = _msrPts.length
+    ? { la: _msrPts[_msrPts.length - 1].lat, lo: _msrPts[_msrPts.length - 1].lng }
+    : null;
+  _msrRedraw();
+  _msrUpdPanel();
+  _msrSyncRegistry();
+  _msrUpdUndoBtn();
+}
+function _msrUpdUndoBtn() {
+  const btn = document.getElementById('btn-msr-undo');
+  if (btn) btn.style.display = (_msrOn && _msrPts.length) ? '' : 'none';
 }
 function msrActivateIfNeeded() {
   _msrUpdPanel();
@@ -30428,7 +30486,7 @@ function _msrDrawAllSaved() {
         if (pct!=null) html += `<div style="font-size:13px;color:#374151;">📐 Nagib: ${pct>0?'+':''}${pct}%</div>`;
         if (ang!=null) html += `<div style="font-size:13px;color:#374151;">🧭 Azimut: ${ang}°</div>`;
       } else if (mode === 'area' && m.pts.length >= 3) {
-        const aM2 = _msrSphericalArea(m.pts);
+        const aM2 = _msrPoligonPovrsina(m.pts);
         html += `<div style="font-size:13px;color:#374151;">📏 Obim: ${_msrFmt(totalDist)}</div>`;
         html += `<div style="font-size:13px;color:#374151;">◻ ${Math.round(aM2).toLocaleString('bs')} m²  (${fmtHa(aM2/10000)})</div>`;
         const fop = Math.round((m.fillOpacity||0.18)*100);
@@ -30478,7 +30536,7 @@ function _msrDrawAllSaved() {
       _msrSavedLayer.addLayer(poly);
       if (_lineStyle.msrArea) {
         const c = poly.getBounds().getCenter();
-        const aM2 = _msrSphericalArea(m.pts);
+        const aM2 = _msrPoligonPovrsina(m.pts);
         _msrSavedLayer.addLayer(_msrTextMk(c.lat, c.lng, (aM2/10000).toFixed(2) + ' ha'));
       }
     } else {
@@ -42287,11 +42345,21 @@ if (typeof AndroidDownload !== 'undefined') {
           </button>
         </div>
 
-        <!-- Crtaj (dodaj tačke automatski dok se mapa pomjera — kao kod crtanja vlake) -->
-        <label id="msr-draw-row" style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:#94a3b8;cursor:pointer;">
-          <input type="checkbox" id="msr-draw-chk" onchange="_msrToggleDraw(this.checked)" style="width:16px;height:16px;flex-shrink:0;">
-          ✍️ Crtaj — dodaj tačke dok pomjeraš mapu
-        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <!-- Crtaj (dodaj tačke automatski dok se mapa pomjera — kao kod crtanja vlake) -->
+          <label id="msr-draw-row" style="display:flex;align-items:center;gap:7px;flex:1;font-size:12px;color:#94a3b8;cursor:pointer;">
+            <input type="checkbox" id="msr-draw-chk" onchange="_msrToggleDraw(this.checked)" style="width:16px;height:16px;flex-shrink:0;">
+            ✍️ Crtaj — dodaj tačke dok pomjeraš mapu
+          </label>
+          <!-- Poništi zadnju tačku (v1.4.4) — dosad je jedini način ispravke
+               bio desni klik TAČNO na postojeći marker, nezgodno na mobilnom
+               i nemoguće za tek dodanu tačku dok je "Crtaj" još uključen. -->
+          <button id="btn-msr-undo" onclick="msrUndo()" title="Poništi zadnju tačku" style="display:none;
+            padding:7px 10px;border:1px solid #475569;border-radius:8px;background:#1e293b;
+            color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            ↶ Poništi
+          </button>
+        </div>
 
         <!-- Rezultati (vidljivi kad je mjerenje aktivno) -->
         <div id="msr-total-box" style="display:none;background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:10px 12px;margin-top:10px;">
@@ -42587,9 +42655,6 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
   </div>
 </div>
-
-<!-- Crosshair za mjerenje -->
-<div id="msr-xhair" style="display:none;"></div>
 
 <!-- === Quick meta prompt — po završetku mjerenja === -->
 <div id="msr-quick-meta" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:8500;
