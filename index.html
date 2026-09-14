@@ -1850,6 +1850,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   text-shadow:0 1px 2px rgba(0,0,0,0.8);
   border-width:2.5px;
 }
+.poz-mk-trokut.svjez { animation:pozPuls 1.6s ease-in-out infinite; transform-origin:center; }
 /* Pojedinačni piksel unutar grupe — vidi se doseg, ne otima pažnju */
 .poz-mk-mala { width:6px; height:6px; margin:2px; border-width:1px; opacity:0.75; box-shadow:none; }
 /* Alarm smetnje vegetacije (sječa/vjetroizvala) — kvadrat, ne krug: na prvi
@@ -5021,9 +5022,13 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.4';
+const APP_VER = 'v1.3.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
+
+// v1.3.5: uklonjen je modul "Operativni incident"; ukloni i njegove ranije
+// lokalno spremljene skice/tačke da obrisana funkcija ne ostavlja mrtve podatke.
+try { localStorage.removeItem('tvlake_pozari_incidenti_v1'); } catch(e) {}
 
 // Jednokratno čišćenje zaostataka uklonjene vremenske prognoze (v3.85.0).
 // _wipeAllLocalUserData() briše iste ključeve, ali se ona pokreće SAMO kad se na
@@ -13225,6 +13230,20 @@ function _poziDebugFinish(state, data) {
   _poziDebugRun.finishedAt = Date.now();
   _poziDebugPublish();
 }
+function _poziDebugPrikaz() {
+  const grupe = _poziEvts || [];
+  const tacke = grupe.reduce((n, g) => n + ((g.pts || []).length), 0);
+  const trokuti = grupe.filter(g => Number(g.broj) > 1).length;
+  const pojedinacne = grupe.filter(g => Number(g.broj) <= 1).length;
+  const anim = typeof _poziAnimGrupa === 'function' ? _poziAnimGrupa() : null;
+  const koraci = anim && typeof _poziAnimKoraci === 'function' ? _poziAnimKoraci(anim).length : 0;
+  return {
+    prikazUkljucen:!!_poziOn, layerNaMapi:!!(_poziLayer && map?.hasLayer?.(_poziLayer)),
+    tacke, trokuti, pojedinacne, markerUkupno:tacke + trokuti,
+    periodi:grupe.filter(g => isFinite(g.prvi) && isFinite(g.zadnji)).length,
+    animOdabran:!!_poziAnimSel, animKoraci:koraci, animRadi:!!_poziAnimTimer
+  };
+}
 function _poziDebugText() {
   const d = _poziDebugRun;
   if (!d) return '';
@@ -13254,6 +13273,27 @@ function _poziDebugText() {
     if (d.greske?.length) out.push('Djelimične greške: ' + d.greske.join(' · '));
     if (d.greska) out.push('Greška: ' + d.greska);
     if (d.kes) out.push('Prikazan je lokalni keš: DA');
+    if (d.perf) {
+      out.push('', 'PERFORMANSE:');
+      out.push('Mrežni dohvat: ' + d.perf.dohvat + 'ms');
+      out.push('Filter + keš: ' + d.perf.filterKes + 'ms');
+      out.push('Grupisanje: ' + d.perf.grupisanje + 'ms');
+      out.push('Crtanje karte: ' + d.perf.crtanje + 'ms');
+      out.push('Arhiva + obavijesti: ' + d.perf.nakonCrtanja + 'ms');
+      out.push('Ukupno obrađivanje: ' + d.perf.ukupno + 'ms');
+      out.push('Canvas tačke: ' + (d.perf.canvas ? 'DA' : 'NE') + ' · cache projekcija: ' + d.perf.projCache);
+    }
+    if (d.prikaz) {
+      const p = d.prikaz;
+      out.push('', 'PRIKAZ NA KARTI:');
+      out.push('Detekcije zadano uključene: ' + (p.prikazUkljucen ? 'DA' : 'NE'));
+      out.push('Sloj dodat na kartu: ' + (p.layerNaMapi ? 'DA' : 'NE'));
+      out.push('Vidljive satelitske tačke: ' + p.tacke);
+      out.push('Glavni trokut markeri: ' + p.trokuti + ' · pojedinačni markeri: ' + p.pojedinacne);
+      out.push('Ukupno nacrtanih markera: ' + p.markerUkupno);
+      out.push('Grupe sa periodom od–do: ' + p.periodi + '/' + (d.grupa ?? 0));
+      out.push('Simulacija: ' + (p.animOdabran ? ('odabrana · ' + p.animKoraci + ' dnevnih koraka' + (p.animRadi ? ' · PLAY' : ' · pauza')) : 'nije odabrana'));
+    }
   }
   out.push('', 'Ukupno trajanje: ' + (Date.now() - d.startedAt) + 'ms');
   return out.join('\n');
@@ -13891,9 +13931,12 @@ async function _poziLoad(tiho) {
   _poziStatusSet('⏳ Dohvatam detekcije…');
   const _dbgOkvir = _poziOkvir();
   _poziDebugStart(_dbgOkvir, _poziRefTacka());
+  const _perf0 = performance.now();
+  let _perfDohvat = _perf0, _perfFilter = _perf0, _perfGrupe = _perf0, _perfCrtanje = _perf0;
   try {
     const okvir = _dbgOkvir;
     const r = await _poziDohvati(okvir);
+    _perfDohvat = performance.now();
     const ref = _poziRefTacka();
     if (r.ok) {
       _poziSaveCache(r.pts, r.izvori, okvir);
@@ -13919,8 +13962,11 @@ async function _poziLoad(tiho) {
       _poziPts = _poziFilterBlizu(c.pts || [], ref);
       _poziMeta = { izvori:c.izvori || (c.izvor ? [c.naziv] : []), dohvacenoMs:c.ts, ukupno:(c.pts||[]).length, kes:true, okvir, refGps:ref.gps };
     }
+    _perfFilter = performance.now();
     _poziEvts = _poziOznaciNove(_poziGrupeBlizu(_poziGrupisi(_poziPts), ref));
+    _perfGrupe = performance.now();
     _poziRender();
+    _perfCrtanje = performance.now();
     // "Zadnjih 5 godina" (v3.119.0) — pasivno bilježenje, RADI BEZ OBZIRA na to
     // da li je taj prekidač uključen. Snima SAMO grupe koje su baš OVDJE prvi
     // put označene kao 'nov' (jedini pouzdan trenutak "sad sam je prvi put
@@ -13944,7 +13990,14 @@ async function _poziLoad(tiho) {
       result:r.ok ? 'mrežni dohvat završen' : 'mreža nije uspjela — prikazan odgovarajući keš',
       ukupno:_poziMeta?.ukupno ?? _dbgSve.length, uKrugu:_poziPts.length, grupa:_poziEvts.length,
       raspon:_poziDebugRange(_dbgSve), rasponKrug:_poziDebugRange(_poziPts),
-      izvori:_poziMeta?.izvori || [], greske:r.greske || [], greska:r.ok ? '' : r.greska, kes:!r.ok
+      izvori:_poziMeta?.izvori || [], greske:r.greske || [], greska:r.ok ? '' : r.greska, kes:!r.ok,
+      prikaz:_poziDebugPrikaz(),
+      perf:{
+        dohvat:Math.round(_perfDohvat-_perf0), filterKes:Math.round(_perfFilter-_perfDohvat),
+        grupisanje:Math.round(_perfGrupe-_perfFilter), crtanje:Math.round(_perfCrtanje-_perfGrupe),
+        nakonCrtanja:Math.round(performance.now()-_perfCrtanje), ukupno:Math.round(performance.now()-_perf0),
+        canvas:!!_poziCanvasRenderer, projCache:_poziProj._cache?.size || 0
+      }
     });
   } catch(e) {
     _poziDebugFinish('greška', { result:'neočekivan prekid', greska:e?.message || String(e) });
@@ -14092,14 +14145,16 @@ function _poziIcon(p) {
 function _poziIconGrupa(g) {
   const st = _poziMkStarost(Date.parse(g.dt));   // g.dt = NAJNOVIJA detekcija požara
   const svjez = st.id === 'h6';
-  // Marker raste sa brojem detekcija (v3.113.3): požar viđen 12 puta je i na
-  // karti krupniji od onog viđenog dvaput, pa se "koliko je ovo veliko" vidi
-  // prije nego se pročita broj. Kapa na 36 px — iznad toga marker počinje
-  // prekrivati susjedne požare umjesto da ih razlikuje.
-  const w = Math.round(Math.min(34, 16 + Math.max(0, g.broj - 1) * 1.5));
+  // Jedan glavni TROKUT označava cijeli povezani požar. Pojedinačni satelitski
+  // pikseli ostaju vidljivi ispod njega; broj u trokutu kaže koliko ih grupa ima.
+  const w = Math.round(Math.min(44, 30 + Math.max(0, g.broj - 2) * 0.7));
+  const h = Math.round(w * 0.9);
   return L.divIcon({
-    className: '', iconSize: [w + 6, w + 6], iconAnchor: [(w + 6) / 2, (w + 6) / 2],
-    html: `<div class="poz-mk poz-mk-grupa${svjez ? ' svjez' : ''}" style="background:${st.fill};width:${w}px;height:${w}px;">${g.broj}</div>`
+    className: '', iconSize: [w, h], iconAnchor: [w / 2, h / 2],
+    html: `<svg class="poz-mk-trokut${svjez ? ' svjez' : ''}" width="${w}" height="${h}" viewBox="0 0 100 90" style="overflow:visible;filter:drop-shadow(0 2px 4px #000a)">
+      <polygon points="50,3 97,86 3,86" fill="${st.fill}" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+      <text x="50" y="65" text-anchor="middle" fill="#fff" stroke="#0008" stroke-width="2" paint-order="stroke" font-size="35" font-weight="800">${g.broj}</text>
+    </svg>`
   });
 }
 
@@ -14108,8 +14163,8 @@ function _poziIconGrupa(g) {
 function _poziIconTacka(p) {
   const st = _poziMkStarost(Date.parse(p.dt));
   return L.divIcon({
-    className: '', iconSize: [10, 10], iconAnchor: [5, 5],
-    html: `<div class="poz-mk poz-mk-mala" style="background:${st.fill};"></div>`
+    className: '', iconSize: [12, 12], iconAnchor: [6, 6],
+    html: `<div class="poz-mk poz-mk-mala" style="background:${st.fill};width:10px;height:10px;border:2px solid #fff;box-shadow:0 1px 4px #000;opacity:1;"></div>`
   });
 }
 
@@ -14624,7 +14679,16 @@ function _poziPrognozaHtml(pr) {
 function _poziProj(g) {
   if (!g) return null;
   if (g._proj !== undefined) return g._proj;
+  const cache = _poziProj._cache || (_poziProj._cache = new Map());
+  const pts = g.pts || [];
+  const sig = pts.map(p => [Number(p.la).toFixed(5), Number(p.lo).toFixed(5), p.dt || '', p.rez || ''].join(',')).sort().join('|');
+  if (cache.has(sig)) {
+    g._proj = cache.get(sig);
+    return g._proj;
+  }
   g._proj = _poziOpozProjekcija(g);
+  cache.set(sig, g._proj);
+  while (cache.size > 80) cache.delete(cache.keys().next().value);
   return g._proj;
 }
 
@@ -14637,6 +14701,7 @@ let _poziIncLayer = null;
 let _poziIncEdit = null; // {mode:'granica'|'tacka', pts:[], tip}
 let _poziAnimCut = null, _poziAnimTimer = null;
 let _poziAnimSel = '', _poziAnimBand = null;
+function _poziAnimKljuc(g) { return g ? (g._animKljuc || _poziEvtKljuc(g, 200)) : ''; }
 
 function _poziIncRead() {
   try { const x=JSON.parse(localStorage.getItem(_POZ_INC_KEY)||'{}'); return x && typeof x==='object' ? x : {}; } catch(e) { return {}; }
@@ -14761,8 +14826,8 @@ function _poziIncRenderLayer(){
 }
 function _poziAnimGrupa(){
   const evts=_poziEvts||[];
-  if(!_poziAnimSel)return _poziIncGrupa()||evts[0]||null;
-  return evts.find(g=>_poziIncKljuc(g)===_poziAnimSel)||null;
+  if(!_poziAnimSel)return evts[0]||null;
+  return evts.find(g=>_poziAnimKljuc(g)===_poziAnimSel)||null;
 }
 function _poziAnimRange(){
   const g=_poziAnimGrupa(),izvor=g?.pts||_poziPts||[];
@@ -14781,7 +14846,7 @@ function _poziAnimGrupe(){
   if(!isFinite(_poziAnimCut))return _poziEvts||[];
   if(_poziAnimSel){
     return (_poziEvts||[]).map(g=>{
-      if(_poziIncKljuc(g)!==_poziAnimSel)return g;
+      if(_poziAnimKljuc(g)!==_poziAnimSel)return g;
       const pts=(g.pts||[]).filter(p=>(Date.parse(p.dt)||0)<=_poziAnimCut);
       if(!pts.length)return null;
       // Već potvrđene tačke pripadaju istom odabranom incidentu. Ogroman prag
@@ -14794,7 +14859,7 @@ function _poziAnimGrupe(){
   const pts=(_poziPts||[]).filter(p=>(Date.parse(p.dt)||0)<=_poziAnimCut),ref=_poziRefTacka();
   return _poziGrupeBlizu(_poziGrupisi(pts),ref).map(g=>({...g,nov:false}));
 }
-function _poziAnimSet(v){const r=_poziAnimRange();if(!r)return;if(!_poziAnimSel){const g=_poziIncGrupa();if(g)_poziAnimSel=_poziIncKljuc(g);}_poziAnimCut=r[0]+(r[1]-r[0])*(Number(v)/100);_poziRender();_poziMapHudRender();const el=document.getElementById('pozi-anim-datum');if(el)el.textContent=new Date(_poziAnimCut).toLocaleString('bs-BA');}
+function _poziAnimSet(v){const r=_poziAnimRange();if(!r)return;if(!_poziAnimSel){const g=(_poziEvts||[])[0];if(g)_poziAnimSel=_poziAnimKljuc(g);}_poziAnimCut=r[0]+(r[1]-r[0])*(Number(v)/100);_poziRender();_poziMapHudRender();const el=document.getElementById('pozi-anim-datum');if(el)el.textContent=new Date(_poziAnimCut).toLocaleString('bs-BA');}
 function _poziAnimStop(){if(_poziAnimTimer){clearInterval(_poziAnimTimer);_poziAnimTimer=null;}}
 function _poziAnimSetKorak(i){
   const g=_poziAnimGrupa(),k=_poziAnimKoraci(g);if(!k.length)return;
@@ -14803,7 +14868,7 @@ function _poziAnimSetKorak(i){
 }
 function _poziAnimPlay(){
   if(_poziAnimTimer){_poziAnimStop();_poziMapHudRender();return;}
-  const g=_poziAnimGrupa();if(!g)return;if(!_poziAnimSel)_poziAnimSel=_poziIncKljuc(g);
+  const g=_poziAnimGrupa();if(!g)return;if(!_poziAnimSel)_poziAnimSel=_poziAnimKljuc(g);
   const k=_poziAnimKoraci(g);if(!k.length)return;
   let i=k.findIndex(x=>x.cut>=_poziAnimCut);if(!isFinite(_poziAnimCut)||i<0||i>=k.length-1)i=-1;
   _poziAnimSetKorak(i+1);
@@ -14816,9 +14881,10 @@ function _poziMapHudClose(){
   document.getElementById('pozi-map-hud')?.remove();_poziRender();
 }
 function _poziMapOtvori(g,tr){
-  _poziAnimStop();_poziAnimSel=_poziIncKljuc(g);_poziIncSel=_poziAnimSel;
+  if(!g)return;
+  _poziAnimStop();_poziAnimSel=_poziAnimKljuc(g);
   _poziAnimCut=null;_poziAnimBand=tr?{id:tr.id,naziv:tr.naziv,ha:tr.ha,od:tr.od,do:tr.do,broj:tr.broj}:null;
-  _poziIncRenderLayer();_poziMapHudRender();
+  _poziMapHudRender();
 }
 function _poziMapHudRender(){
   let el=document.getElementById('pozi-map-hud');const g=_poziAnimGrupa();
@@ -14913,6 +14979,7 @@ function _poziOpozAzuriraj() {
   if (typeof _demLegendUpdate === 'function') _demLegendUpdate();
 }
 
+let _poziCanvasRenderer = null;
 function _poziRender() {
   if (_poziLayer) { try { map.removeLayer(_poziLayer); } catch(e) {} }
   _poziLayer = L.layerGroup([], { pane:'pozariPane' });
@@ -14921,13 +14988,17 @@ function _poziRender() {
     if (g.broj > 1) {
       // Prvo sitne tačke (ispod), pa marker grupe (iznad) — redoslijed dodavanja
       // u layerGroup određuje ko je na vrhu kad se preklapaju.
+      if (!_poziCanvasRenderer && L.canvas) _poziCanvasRenderer = L.canvas({ pane:'pozariPane', padding:0.35 });
       g.pts.forEach(p => {
-        L.marker([p.la, p.lo], { icon:_poziIconTacka(p), pane:'pozariPane', zIndexOffset:800 })
+        const st = _poziMkStarost(Date.parse(p.dt));
+        L.circleMarker([p.la, p.lo], { renderer:_poziCanvasRenderer || undefined, pane:'pozariPane', radius:5,
+          color:'#fff', weight:2, fillColor:st.fill, fillOpacity:1, opacity:1 })
           .bindPopup(_poziPopupHtml(p, ref), { maxWidth:280, className:'kml-info-popup' })
           .addTo(_poziLayer);
       });
       const mk = L.marker([g.la, g.lo], { icon:_poziIconGrupa(g), pane:'pozariPane', zIndexOffset:950 });
       mk.bindPopup(_poziGrupaPopupHtml(g, ref), { maxWidth:290, className:'kml-info-popup' });
+      mk.on('dblclick', () => _poziMapOtvori(g, null));
       mk.addTo(_poziLayer);
       g._mk = mk;   // _poziZoom otvara BAŠ ovaj marker — bez oslanjanja na redoslijed u nizu
     } else {
@@ -14956,7 +15027,6 @@ function _poziRender() {
 
   _poziOpozAzuriraj();
   _poziSmjerAzuriraj();
-  _poziIncRenderLayer();
 }
 
 // Popup markera GRUPE — sažetak cijelog požara, ne jedne detekcije.
@@ -14993,6 +15063,7 @@ function _poziGrupaPopupHtml(g, ref) {
     <div style="font-size:10px;color:#475569;margin-top:8px;line-height:1.4;">
       Sitne tačke oko markera su pojedinačni satelitski pikseli — pokazuju doseg, nisu zasebni požari.
     </div>
+    <button onclick="map.closePopup();_poziMapOtvori((_poziEvts||[]).find(x=>_poziAnimKljuc(x)==='${_poziAnimKljuc(g)}')||null,null)" style="width:100%;margin-top:9px;padding:8px;border:1px solid #f97316;border-radius:8px;background:#7c2d12;color:#fff;font-weight:700;cursor:pointer;">▶ Prikaži kretanje po danima</button>
   </div>`;
 }
 
@@ -16733,7 +16804,9 @@ let _poziPrikazPotvrdjen = false;
 // ovaj korak gasio sve checkbox-e i uklanjao slojeve pri SVAKOM ulasku, zbog
 // čega su već učitani požari nestajali i u istoj sesiji i poslije restarta.
 function _poziObnoviPrikaz() {
-  _poziOn = localStorage.getItem(_POZ_ON_KEY) === '1';
+  // Satelitske tačke su osnovni požarni podatak i pri prvom korištenju moraju
+  // biti vidljive. Korisnik ih i dalje može ručno isključiti (eksplicitno '0').
+  _poziOn = localStorage.getItem(_POZ_ON_KEY) !== '0';
   _povGodOn = _povGodOnStanje();
   _povHistOn = _povHistOnStanje();
   _poziPrikazPotvrdjen = _poziOn || _poziHeatOn() || _poziSmjerOn() || _poziOpozOn()
@@ -16741,7 +16814,8 @@ function _poziObnoviPrikaz() {
 
   if (_poziOn) {
     if (!_poziEvts.length) _poziObnoviIzKesa();
-    else _poziRender();
+    else if (!_poziLayer) _poziRender();
+    else if (!map.hasLayer(_poziLayer)) _poziLayer.addTo(map);
   }
   if (_povGodOn) {
     if (!_povGodEvts.length) {
@@ -16870,33 +16944,6 @@ function _sjeSadrzajHtml() {
          </div>`)
 
   );
-}
-
-function _poziIncidentKarticaHtml(kart, prekidac) {
-  if(!_poziEvts?.length) return kart('🚒 Operativni incident','Terenski rad, analiza i izvještaj','<div style="font-size:11px;color:#64748b">Uključi detekcije i odaberi požar.</div>');
-  const g=_poziIncGrupa()||_poziEvts[0]; if(!_poziIncSel)_poziIncSel=_poziIncKljuc(g);
-  const inc=_poziIncGet(g,true),pr=_poziProj(g),pou=_poziPovrsPouzdanost(g,pr),odj=_poziOdjeli(g,inc);
-  const ref=_poziRefTacka(),d=dst(ref.la,ref.lo,g.la,g.lo),preleti=new Set((g.pts||[]).map(p=>String(p.dt||'').slice(0,13))).size;
-  const smjer=_poziMet?.kodPozara&&isFinite(_poziMet.kodPozara.vjetarSmjer)?_azimutSmjer((_poziMet.kodPozara.vjetarSmjer+180)%360):'nema svježeg vjetra';
-  const fmt=t=>isFinite(t)?new Date(t).toLocaleString('bs-BA'):'—';
-  const red=(l,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:11px"><span style="color:#64748b">'+l+'</span><span style="color:#e2e8f0;text-align:right">'+v+'</span></div>';
-  const opc=_poziEvts.map((x,i)=>'<option value="'+_poziIncKljuc(x)+'" '+(_poziIncKljuc(x)===_poziIncKljuc(g)?'selected':'')+'>Požar '+(i+1)+' · '+fmtL(x.d)+' · '+x.broj+' det.</option>').join('');
-  const odjeli=odj.pogodjeni.length?odj.pogodjeni.map(x=>'<div style="font-size:11px;color:#cbd5e1;padding:2px 0">'+_escHtml(x.ime)+' <b style="float:right;color:#fb923c">'+x.ha.toFixed(2)+' ha</b></div>').join(''):'<div style="font-size:10px;color:#64748b">Nema presjeka ili granice odjela nisu učitane.</div>';
-  const ug=odj.ugrozeni.length?'<div style="font-size:10px;color:#fbbf24;margin-top:5px">U krugu 500 m: '+odj.ugrozeni.map(_escHtml).join(', ')+'</div>':'';
-  const tipovi=[['paljenje','🔥 Paljenje'],['front','⚠ Front'],['pristup','🚒 Pristup'],['voda','💧 Voda'],['ekipa','👷 Ekipa'],['izlaz','➡ Izlaz']];
-  const tacke=(inc.points||[]).map((p,i)=>'<span style="display:inline-flex;gap:4px;align-items:center;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:4px 6px;font-size:10px;color:#cbd5e1">'+_escHtml(p.tip)+' <b onclick="_poziIncObrisiTacku('+i+')" style="color:#f87171;cursor:pointer">×</b></span>').join(' ');
-  const admin=!sbProfile?.is_admin?'':('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #334155"><button onclick="_poziIncCrtajGranicu()" style="width:100%;padding:9px;border:1px solid #22c55e;border-radius:8px;background:#14532d55;color:#86efac;font-weight:700">✏ Nacrtaj terensku granicu</button>'+prekidac('_poziIncVerifikuj(this.checked)',!!inc.verified,'✓ Admin potvrđuje terensku granicu')+'</div>');
-  const rr=_poziAnimRange(), anim=rr?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #334155"><div style="font-size:11px;font-weight:700;color:#e2e8f0">⏱ Razvoj požara kroz vrijeme</div><div id="pozi-anim-datum" style="font-size:10px;color:#7dd3fc;margin:4px 0">'+fmt(_poziAnimCut||rr[1])+'</div><div style="display:flex;gap:7px;align-items:center"><button onclick="_poziAnimPlay()" style="padding:6px 10px;border:1px solid #334155;border-radius:7px;background:#0f172a;color:white">▶/Ⅱ</button><input id="pozi-anim" type="range" min="0" max="100" value="'+(isFinite(_poziAnimCut)?Math.round(100*(_poziAnimCut-rr[0])/Math.max(1,rr[1]-rr[0])):100)+'" oninput="_poziAnimSet(this.value)" style="flex:1;accent-color:#f97316"></div></div>'):'';
-  return kart('🚒 Operativni incident','Odabrani požar · lokalno spremljen i dostupan bez mreže',
-    '<select onchange="_poziIncSelect(this.value)" style="width:100%;padding:8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;margin-bottom:8px">'+opc+'</select>'+
-    red('Početak',fmt(g.prvi))+red('Kraj / zadnje viđenje',fmt(g.zadnji))+red('Trajanje',_poziTrajanje(g.prvi,g.zadnji))+red('Preleti',preleti)+red('Senzori',_escHtml((g.sateliti||[]).join(', ')||'—'))+red('FRP max',g.frpMax?g.frpMax.toFixed(1)+' MW':'—')+red('Udaljenost',fmtL(d))+red('Mogući smjer',smjer)+red('Površina',_poziPovrsTxt(pr?.haUkupno))+red('Pouzdanost','<b style="color:'+pou.boja+'">'+pou.txt+'</b><br><small>'+pou.razlog+'</small>')+
-    '<div style="margin-top:9px;padding:8px;background:#0f172a;border-radius:8px">'+prekidac('_poziOpozToggle(this.checked)',_poziOpozOn(),'🟧 Satelitska procjena')+prekidac("_instToggle('opozareno',this.checked);_poziRenderPanel()",!!_ovlState.opozareno,'🗺 EFFIS (zaseban sloj)')+prekidac('_poziFieldToggle(this.checked)',_poziFieldOn(),'🟩 Terenska granica')+'</div>'+admin+rr+
-    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #334155"><div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:5px">Odjeli</div>'+odjeli+ug+'</div>'+
-    '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px">Operativne tačke — tap na karti</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">'+tipovi.map(x=>'<button onclick="_poziIncDodajTacku(\''+x[0]+'\')" style="padding:7px 2px;background:#0f172a;border:1px solid #334155;border-radius:7px;color:#cbd5e1;font-size:10px">'+x[1]+'</button>').join('')+'</div><div style="margin-top:6px">'+tacke+'</div></div>'+
-    '<button onclick="startLocPhoto()" style="width:100%;margin-top:9px;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#cbd5e1">📷 Dodaj GPS fotografiju ('+_poziIncFotos(g,inc).length+' u granici)</button>'+
-    '<textarea onchange="_poziIncSnimiNapomenu(this.value)" placeholder="Napomena sa terena, ekipe i intervencije…" style="width:100%;box-sizing:border-box;min-height:70px;margin-top:10px;padding:8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px">'+_escHtml(inc.notes||'')+'</textarea>'+
-    '<button onclick="_poziIncIzvjestaj()" style="width:100%;margin-top:8px;padding:10px;background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;color:white;font-weight:700">📄 PDF izvještaj / štampa</button>'+anim+
-    '<div style="font-size:9.5px;color:#64748b;margin-top:8px">📴 Incident, terenska granica, tačke, napomene i posljednji satelitski podaci čuvaju se na uređaju. Putevi/vode/odjeli dostupni su offline ako su njihovi slojevi prethodno učitani.</div>');
 }
 
 function _poziSadrzajHtml() {
@@ -17123,7 +17170,9 @@ function _poziSadrzajHtml() {
       + prognSazetak
       + `</div>`)
 
-    + _poziIncidentKarticaHtml(kart, prekidac)
+    + kart('⏱ Simulacija kretanja požara',
+      'Dodirni glavni trokut na karti pa izaberi „Prikaži kretanje po danima“',
+      `<div style="font-size:11px;color:#94a3b8;line-height:1.5;">Replay kumulativno prikazuje stvarne satelitske tačke i procijenjenu površinu za svaki dan. Ne izmišlja kretanje između satelitskih preleta.</div>`)
 
     + kart('📅 Duži period — ova godina / historija',
       'Šta se dešavalo ranije, ne samo šta gori sada · dva NEZAVISNA prekidača',
@@ -17256,6 +17305,29 @@ function _mapRestoreIndicatorHide() {
   const el = document.getElementById('map-restore-indicator');
   if (el) el.classList.remove('show');
 }
+
+// Razlikuj stvarno ponovno učitavanje dokumenta od običnog povratka iz
+// pozadine. SQLite worker/OPFS veza ne može preživjeti novi WebView dokument,
+// pa je ovaj podatak presudan kad se na telefonu opet pojavi "Učitavam kartu".
+function _appLifecycleDebug(eventName, persisted) {
+  let broj = 1;
+  try { broj = Number(sessionStorage.getItem('tvlake_page_load_count') || 0) + (eventName === 'load' ? 1 : 0); if (eventName === 'load') sessionStorage.setItem('tvlake_page_load_count', String(broj)); } catch(e) {}
+  let nav = 'nepoznato';
+  try { nav = performance.getEntriesByType?.('navigation')?.[0]?.type || nav; } catch(e) {}
+  const txt = [
+    'Događaj: ' + eventName,
+    'Učitavanja u ovoj app sesiji: ' + broj,
+    'Navigation tip: ' + nav,
+    'Page persisted/BFCache: ' + (persisted ? 'DA' : 'NE'),
+    'Vidljivost: ' + (document.visibilityState || 'nepoznato'),
+    'Vrijeme: ' + new Date().toLocaleString('bs-BA')
+  ].join('\n');
+  _debugUpsert('app-lifecycle', 'Zašto se karta ponovo učitava', txt,
+    broj > 1 && eventName === 'load' ? 'ponovno učitan dokument' : 'informacija');
+}
+_appLifecycleDebug('load', false);
+window.addEventListener('pageshow', e => { if (e.persisted) _appLifecycleDebug('pageshow', true); });
+window.addEventListener('pagehide', e => _appLifecycleDebug('pagehide', !!e.persisted));
 // Vrati zadnju kartu ili defaultuj na Topo
 (function _restoreLastMap() {
   let restoredKey = '⛰ Topo';
@@ -17858,7 +17930,6 @@ let _dblClickGuard = false;
 map.on('click', e => {
   // Klik na mapu dok je panel otvoren — vrati se na kartu
   if (_activeTab !== 'karta') { switchTab('karta'); return; }
-  if (typeof _poziIncMapClick === 'function' && _poziIncMapClick(e.latlng)) return;
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
@@ -33766,6 +33837,18 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
 // korisnik nije imao ŠTA da aktivira ni ikakav trag da karta postoji.
 let _sqlRestoreFailed = [];
 async function sqlmapRestoreAll() {
+  // Jedan restore po JS sesiji. Ako dva startup puta stignu skoro istovremeno,
+  // drugi više ne otvara isti višestotni MB fajl i ne gradi drugi Leaflet sloj.
+  if (sqlmapRestoreAll._running) {
+    _mapLoadDiagStep('dupli restore preskočen', 'prethodno učitavanje još traje');
+    return;
+  }
+  if (sqlmapRestoreAll._done && _sqlLayers.length) {
+    _mapLoadDiagStep('dupli restore preskočen', 'karta je već otvorena u ovoj sesiji');
+    _mapRestoreIndicatorHide();
+    return;
+  }
+  sqlmapRestoreAll._running = true;
   // Sav sadržaj funkcije ide kroz try/finally (v1.1.3) — _mapRestoreIndicatorHide()
   // mora opaliti na SVAKOM izlazu (uspjeh, "nema karata", pad u catch-u niže,
   // rani return iz _sqlCrashCheck-a), inače indikator "Učitavam kartu…" ostane
@@ -33956,6 +34039,8 @@ async function sqlmapRestoreAll() {
     _mapLoadDiagStep('restore završen', Math.round(_tTot) + 'ms unutar funkcije · indikator skriven');
     _mapLoadDiagFinish(shownAny ? 'karta prikazana' : 'završeno bez offline karte');
     _mapRestoreIndicatorHide();
+    sqlmapRestoreAll._running = false;
+    sqlmapRestoreAll._done = shownAny || _sqlLayers.length > 0;
   }
 }
 
