@@ -78,6 +78,8 @@ function makeArh(opts) {
     localStorage: o.ls || mkLS(),
     turf,
     _POV_ARH_KEY: 'tvlake_pozari_arhiva',
+    _POV_ARH_SKORO_KEY: 'tvlake_pozari_arh_skoro',
+    _POZ_SVE_DANA: 60,
     _POV_ARH_GODINA: 5,
     _POV_ARH_MAX_GOD: o.maxGod || 20000,
     _POZ_GRUPA_M: 1500,
@@ -102,14 +104,20 @@ function makeArh(opts) {
                extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
                extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povMjesecBoja'), extractFn('_povArhBoja'),
                extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhKesKljuc'),
+               extractFn('_povArhSamoSkore'), extractFn('_povArhPostaviSamoSkore'),
+               extractFn('_povMjesecSkori'), extractFn('_povGodineSkore'),
                extractFn('_povArhIzracunata'),
-               extractFn('_povArhRacunajTacke'), extractFn('_povArhRacunaj'), extractFn('_povArhKesOcisti'),
+               extractFn('_povArhRacunajTacke'), extractFn('_povArhRacunaj'),
+               extractFn('_povArhRacunajMjesec'), extractFn('_povArhRacunajSkore'),
+               extractFn('_povArhKesOcisti'),
                extractFn('_povArhSpojiServerske')].join('\n');
   const keys = Object.keys(sandbox);
   const mod = new Function(...keys, src +
     '\nreturn { _povArhUcitaj,_povArhSacuvaj,_povArhDan,_povArhKljuc,_povArhDodaj,' +
     '_povArhGodine,_povArhTacke,_povArhRacunaj,_povMjesecBoja,_povArhBoja,_povArhBrojZapisa,' +
-    '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom };'
+    '_povArhIzracunata,_povArhKesOcisti,_povArhSpojiServerske,_poziGrupisi,_poziOpozGeom,' +
+    '_povArhSamoSkore,_povArhPostaviSamoSkore,_povMjesecSkori,_povGodineSkore,' +
+    '_povArhRacunajMjesec,_povArhRacunajSkore };'
   )(...keys.map(k => sandbox[k]));
   mod._ls = sandbox.localStorage;
   mod._olEnqueued = olEnqueued;
@@ -537,6 +545,77 @@ t('GPS fix koji stigne NAKON prvog izračuna daje SVJEŽ rezultat, ne stari keš
   const posljeGps = A._povArhRacunaj(GOD);
   assert.strictEqual(posljeGps.brojDetekcija, 1, 'poslije fixa vidi se zapis blizu STVARNE pozicije');
   assert.notDeepStrictEqual(prijeGps.geom, posljeGps.geom, 'ne smije ostati zaglavljen na geometriji od pogrešne ref. tačke');
+});
+
+console.log('\n"Prikaži sve" izuzima požare starije od 2 mjeseca (v1.4.0):');
+// Zahtjev sa terena: dugme "Prikaži sve" ne smije više uključivati sve što je
+// ikad gorjelo. Prozor je zadnja 2 mjeseca (_POZ_SVE_DANA), a stare sezone
+// ostaju dostupne preko checkboxa po godini.
+
+t('_povMjesecSkori: tekući mjesec JESTE u prozoru, a mjesec od prije pola godine NIJE', () => {
+  const A = makeArh({});
+  const sada = Date.UTC(2026, 8, 14);   // 14.9.2026
+  assert.strictEqual(A._povMjesecSkori(2026, 8, sada), true,  'septembar (tekući)');
+  assert.strictEqual(A._povMjesecSkori(2026, 7, sada), true,  'avgust — unutar 60 dana');
+  assert.strictEqual(A._povMjesecSkori(2026, 2, sada), false, 'mart — davno van prozora');
+});
+
+t('_povMjesecSkori: BUDUĆI mjesec nije "skorašnji" (pokvaren sat na uređaju)', () => {
+  const A = makeArh({});
+  const sada = Date.UTC(2026, 8, 14);
+  assert.strictEqual(A._povMjesecSkori(2026, 10, sada), false, 'novembar još nije došao');
+});
+
+t('_povGodineSkore: u septembru je to SAMO tekuća godina', () => {
+  const A = makeArh({});
+  assert.deepStrictEqual(A._povGodineSkore(Date.UTC(2026, 8, 14)), ['2026']);
+});
+
+t('_povGodineSkore: u januaru prozor preskače granicu godine, pa ulazi i prethodna', () => {
+  const A = makeArh({});
+  assert.deepStrictEqual(A._povGodineSkore(Date.UTC(2026, 0, 10)), ['2025', '2026']);
+});
+
+t('_povArhSamoSkore: podrazumijevano ISKLJUČEN, pamti se kroz localStorage', () => {
+  const A = makeArh({});
+  assert.strictEqual(A._povArhSamoSkore(), false, 'bez izričitog uključenja filter ne postoji');
+  A._povArhPostaviSamoSkore(true);
+  assert.strictEqual(A._povArhSamoSkore(), true);
+  A._povArhPostaviSamoSkore(false);
+  assert.strictEqual(A._povArhSamoSkore(), false);
+});
+
+t('_povArhRacunajSkore broji SAMO zadnja 2 mjeseca, _povArhRacunaj i dalje cijelu godinu', () => {
+  const A = makeArh({});
+  const sada = new Date();
+  const mj = sada.getUTCMonth(), god = sada.getUTCFullYear();
+  // Jedna detekcija danas, jedna davno (januar) — u godini u kojoj januar
+  // sigurno nije unutar prozora od 60 dana od danas.
+  const danas = new Date(Date.UTC(god, mj, Math.min(sada.getUTCDate(), 28), 10)).toISOString();
+  A._povArhDodaj([det(44.90, 16.20, danas), det(45.20, 16.60, iso(god, 1, 15))]);
+
+  const cijela = A._povArhRacunaj(god);
+  assert.strictEqual(cijela.brojDetekcija, 2, 'puna godina vidi obje detekcije');
+
+  const skore = A._povArhRacunajSkore(god);
+  const januarUProzoru = A._povMjesecSkori(god, 0);
+  assert.strictEqual(skore.brojDetekcija, januarUProzoru ? 2 : 1,
+    'prozor od 2 mjeseca izbacuje januarsku detekciju (osim ako je i sam januar skorašnji)');
+});
+
+t('_povArhIzracunata razlikuje keš pune godine od keša prozora od 2 mjeseca', () => {
+  const A = makeArh({});
+  const god = new Date().getUTCFullYear();
+  A._povArhDodaj([det(44.90, 16.20, new Date().toISOString())]);
+
+  A._povArhRacunaj(god);                               // izračunata PUNA godina
+  assert.strictEqual(A._povArhIzracunata(god), true);
+
+  A._povArhPostaviSamoSkore(true);                     // u režimu prozora to je DRUGI keš
+  assert.strictEqual(A._povArhIzracunata(god), false,
+    'puna godina ne smije prolaziti kao da je prozor već izračunat');
+  A._povArhRacunajSkore(god);
+  assert.strictEqual(A._povArhIzracunata(god), true);
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

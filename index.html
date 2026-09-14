@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.3.9';
+const APP_VER = 'v1.4.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -16538,13 +16538,25 @@ function _povArhRacunajMjesec(godina, mjesec) {
   const pts = _povArhTacke(godina).filter(p => new Date(p.dt).getUTCMonth() === mjesec);
   return (_povArhKes[k] = _povArhRacunajTacke(pts));
 }
+// Isto što i _povArhRacunaj, ali SAMO za zadnja 2 mjeseca — brojka u kartici
+// mora odgovarati onome što je stvarno nacrtano na karti u režimu "Prikaži
+// sve". Grupisanje ide kroz isti _povArhRacunajTacke (ne zbir po mjesecima),
+// jer bi požar koji gori preko granice mjeseca inače bio brojan dvaput.
+function _povArhRacunajSkore(godina) {
+  const k = _povArhKesKljuc(godina) + '#skoro';
+  if (_povArhKes[k] !== undefined) return _povArhKes[k];
+  const pts = _povArhTacke(godina).filter(p => _povMjesecSkori(godina, new Date(p.dt).getUTCMonth()));
+  return (_povArhKes[k] = _povArhRacunajTacke(pts));
+}
 // Da li je godina VEĆ izračunata — jeftina provjera, bez pokretanja geometrije.
 // Kartica je koristi da odluči šta smije prikazati odmah: bez ovoga bi se pri
 // SVAKOM crtanju panela računalo svih 5 godina, a `_poziRenderPanel` se zove na
 // svaki meteo/GPS/toast događaj. Izmjereno: 284 ms po punoj sezoni (12 dugih
 // požara, 2595 zapisa) u sandboxu — na telefonu višestruko više, pa bi pet
 // godina zaledilo panel na nekoliko sekundi pri svakom otvaranju.
-function _povArhIzracunata(godina) { return _povArhKes[_povArhKesKljuc(godina)] !== undefined; }
+function _povArhIzracunata(godina) {
+  return _povArhKes[_povArhKesKljuc(godina) + (_povArhSamoSkore() ? '#skoro' : '')] !== undefined;
+}
 
 // Briše keš SAMO za pogođenu godinu (pod TRENUTNOM referentnom tačkom — vidi
 // _povArhKesKljuc). Redovna osvježavanja mogu dodati jedino u TEKUĆU godinu,
@@ -16556,7 +16568,7 @@ function _povArhKesOcisti(godina) {
     const prefiks = _povArhKesKljuc(godina);
     Object.keys(_povArhKes).filter(k => k === prefiks || k.startsWith(prefiks + '#')).forEach(k => delete _povArhKes[k]);
   }
-  if (_povArhUkljucene().length) _povArhRender();   // ako je neka godina na karti, prekrij novom geometrijom
+  if (_povArhUkljucene().length) _povArhRender(true);   // geometrija se PROMIJENILA — prisilno prekrij novom
 }
 
 // ── Dijeljena arhiva — povuci zapise SA SERVERA i spoji u lokalnu (v1.1.1) ──
@@ -16647,6 +16659,14 @@ function _povArhBoja(godina) {
 }
 
 const _POV_ARH_ON_KEY = 'tvlake_pozari_arh_on';
+// "Prikaži sve" NE uključuje požare starije od 2 mjeseca (eksplicitan zahtjev
+// sa terena). Razlog je i praktičan i mjerljiv: cijela arhiva od 5 godina se
+// pri svakom crtanju panela pretvara u turf unije po sezoni, što je najskuplji
+// posao u ovoj sekciji — a šumaru na terenu su tada bitni požari koji GORE
+// ili su tek ugašeni, ne šta je gorjelo prije tri godine. Stare godine ostaju
+// dostupne, samo ih korisnik sada bira SAM (checkbox po godini niže).
+const _POV_ARH_SKORO_KEY = 'tvlake_pozari_arh_skoro';
+const _POZ_SVE_DANA = 60;   // "skorašnje" = zadnja 2 mjeseca
 let _povArhLayer = null;
 
 function _povArhUkljucene() {
@@ -16654,42 +16674,101 @@ function _povArhUkljucene() {
   try { a = JSON.parse(localStorage.getItem(_POV_ARH_ON_KEY)); } catch(e) { a = null; }
   return Array.isArray(a) ? a.map(String) : [];
 }
+// Režim se uključuje ISKLJUČIVO iz "Prikaži sve" i gasi se čim korisnik sam
+// dirne bilo koju godinu — ručni izbor godine je nedvosmislena izjava "hoću
+// baš tu sezonu cijelu", i tiho je odbiti filterom bi bilo pogrešno.
+function _povArhSamoSkore() {
+  try { return localStorage.getItem(_POV_ARH_SKORO_KEY) === '1'; } catch(e) { return false; }
+}
+function _povArhPostaviSamoSkore(on) {
+  try { localStorage.setItem(_POV_ARH_SKORO_KEY, on ? '1' : '0'); } catch(e) {}
+}
+// Da li mjesec (UTC) ima IJEDAN dan unutar zadnjih _POZ_SVE_DANA dana.
+// Gleda se KRAJ mjeseca, ne početak: tekući mjesec je skorašnji i prvog dana,
+// a mjesec od prije 2 mjeseca je djelimično unutar prozora pa ostaje.
+function _povMjesecSkori(godina, mjesec, sada) {
+  const now = sada === undefined ? Date.now() : sada;
+  const krajMjeseca = Date.UTC(+godina, mjesec + 1, 1) - 1;
+  const pocetakMjeseca = Date.UTC(+godina, mjesec, 1);
+  return krajMjeseca >= now - _POZ_SVE_DANA * 86400000 && pocetakMjeseca <= now;
+}
+// Godine koje UOPŠTE imaju mjesec unutar prozora — tekuća uvijek, a prethodna
+// samo kad je januar/februar (prozor tada preskače granicu godine).
+function _povGodineSkore(sada) {
+  const now = sada === undefined ? Date.now() : sada;
+  const god = new Date(now).getUTCFullYear();
+  const out = [];
+  [god - 1, god].forEach(g => {
+    for (let m = 0; m < 12; m++) if (_povMjesecSkori(g, m, now)) { out.push(String(g)); return; }
+  });
+  return out;
+}
 function _povArhToggleGod(godina, on) {
   const g = String(godina);
   const set = new Set(_povArhUkljucene());
   if (on) set.add(g); else set.delete(g);
   try { localStorage.setItem(_POV_ARH_ON_KEY, JSON.stringify([...set])); } catch(e) {}
-  _povArhRender();
+  _povArhPostaviSamoSkore(false);   // ručni izbor godine ukida filter od 2 mjeseca
+  _povArhRender(true);
   _poziRenderPanel();
 }
 
-function _povArhRender() {
-  if (_povArhLayer) { try { map.removeLayer(_povArhLayer); } catch(e) {} _povArhLayer = null; }
+// Potpis zadnjeg crtanja: koje godine + odakle se mjeri (referentna tačka
+// ulazi u geometriju preko _povArhTacke filtera) + da li je aktivan "samo
+// skorašnje" režim. _povArhKarticaHtml zove ovu funkciju pri SVAKOM crtanju
+// kartice, a crtanje znači rušenje i ponovnu izgradnju svih L.geoJSON
+// slojeva sezone — bez ovog poređenja se isti posao radio desetinama puta
+// bez ijedne stvarne promjene. Na promjenu geometrije (_povArhKesOcisti)
+// crtanje se traži eksplicitno sa force=true.
+let _povArhRenderPotpis = '';
+function _povArhRender(force) {
   const god = _povArhUkljucene();
+  const potpis = god.slice().sort().join(',') + '|' + _povArhKesKljuc('') + '|' + (_povArhSamoSkore() ? 'skoro' : 'sve');
+  if (!force && _povArhLayer && potpis === _povArhRenderPotpis
+      && typeof map !== 'undefined' && map.hasLayer(_povArhLayer)) return;
+  _povArhRenderPotpis = potpis;
+  if (_povArhLayer) { try { map.removeLayer(_povArhLayer); } catch(e) {} _povArhLayer = null; }
   if (!god.length || typeof L === 'undefined') return;
   _povArhLayer = L.layerGroup([], { pane:'demOverlay' });
+  const samoSkore = _povArhSamoSkore();
+  const skoreGodine = samoSkore ? _povGodineSkore() : null;
   // Starije godine se crtaju PRVE pa novije preko njih — inače bi stara,
   // veća sezona prekrila ono što je gorjelo ove godine.
   god.slice().sort().forEach(g => {
     const tekuca = +g === new Date().getUTCFullYear();
-    if (tekuca) {
-      _POV_MJESECI_POZARA.map(mjesec => {
-        return { geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] };
-      }).forEach(dio => {
+    // Filter od 2 mjeseca: godina koja NEMA nijedan mjesec unutar prozora se
+    // preskače u cijelosti (sve njeno je starije od 2 mjeseca).
+    if (samoSkore && !skoreGodine.includes(String(g))) return;
+    // U režimu "samo skorašnje" ide se po mjesecima za SVAKU godinu (ne samo
+    // tekuću) i kroz svih 12 mjeseci, ne samo sezonskih Mar–Nov: kad je
+    // januar, prozor od 2 mjeseca pokriva decembar i januar, koji u sezonskoj
+    // listi ne postoje — bez toga bi ti mjeseci tiho ispali iz prikaza.
+    const mjeseci = samoSkore
+      ? [0,1,2,3,4,5,6,7,8,9,10,11].filter(m => _povMjesecSkori(g, m))
+      : (tekuca ? _POV_MJESECI_POZARA : []);
+    let sidro = null;   // geometrija na koju se kači oznaka godine
+    mjeseci.map(mjesec => ({ geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
+      .forEach(dio => {
         if (!dio.geom) return;
+        if (!sidro) sidro = dio.geom;
         L.geoJSON(dio.geom, { pane:'demOverlay', style:{ color:dio.boja, weight:2,
           opacity:0.95, fillColor:dio.boja, fillOpacity:0.28, interactive:false } }).addTo(_povArhLayer);
       });
-    }
-    const r = _povArhRacunaj(g);
-    if (!r || !r.geom) return;
-    if (!tekuca) L.geoJSON(r.geom, {
+    // Puna godišnja unija je NAJSKUPLJI račun u ovoj sekciji (turf unija preko
+    // cijele sezone). U režimu "samo skorašnje" se NE računa uopšte — ionako
+    // bi obuhvatila i ono što je starije od 2 mjeseca, a oznaka godine se
+    // može zakačiti na već izračunatu geometriju skorašnjeg mjeseca.
+    const r = samoSkore ? null : _povArhRacunaj(g);
+    if (r && r.geom && !tekuca) L.geoJSON(r.geom, {
       pane: 'demOverlay',
       // interactive:false je OBAVEZAN — canvas pane iznad drugog inače pojede
       // sve klikove ispod sebe (dokumentovana zamka iz v3.101.0).
       style: { color:_povArhBoja(g), weight:2, opacity:0.95, fillColor:_povArhBoja(g), fillOpacity:0.28, interactive:false }
     }).addTo(_povArhLayer);
-    L.marker([r.geom.geometry ? _povArhCentar(r.geom)[1] : 0, r.geom.geometry ? _povArhCentar(r.geom)[0] : 0], {
+    const oznakaGeom = (r && r.geom) ? r.geom : sidro;
+    if (!oznakaGeom) return;
+    const c = _povArhCentar(oznakaGeom);
+    L.marker([c[1], c[0]], {
       pane: 'pozariPane', interactive: false,
       icon: L.divIcon({ className:'', iconSize:[54,18], iconAnchor:[27,9],
         html: `<div style="background:${tekuca ? '#e2e8f0' : _POV_STARE_BOJA};color:#0f172a;font-size:11px;font-weight:800;
@@ -16745,11 +16824,16 @@ function _povArhKarticaHtml() {
         preko GFW ključa ("Ova godina" iznad); bez ključa pamti se od danas nadalje.</div>
       </div>`;
   }
+  const samoSkore = _povArhSamoSkore();
   const redovi = godine.map(g => {
     const on = ukljucene.has(String(g));
     // Geometrija se računa SAMO za godine koje su uključene ili su već
     // izračunate ranije u ovoj sesiji — vidi napomenu uz _povArhIzracunata.
-    const r = (on || _povArhIzracunata(g)) ? _povArhRacunaj(g) : undefined;
+    // U režimu "Prikaži sve" računa se samo prozor od 2 mjeseca, da brojka
+    // odgovara nacrtanom i da se izbjegne puna godišnja unija.
+    const r = (on || _povArhIzracunata(g))
+      ? (samoSkore ? _povArhRacunajSkore(g) : _povArhRacunaj(g))
+      : undefined;
     const boja = +g === new Date().getUTCFullYear() ? '#e2e8f0' : _POV_STARE_BOJA;
     const desno = r === undefined
       ? `<span style="color:#64748b;">${_povArhBrojZapisa(g)} detekcija · uključi da izračunaš</span>`
@@ -16765,7 +16849,17 @@ function _povArhKarticaHtml() {
         <span style="flex:1;text-align:right;font-size:12px;">${desno}</span>
       </label>`;
   }).join('');
-  return uvod + redovi
+  // Bez ovoga bi korisnik koji je pritisnuo "Prikaži sve" vidio uključenu
+  // godinu na karti, a na njoj samo dio sezone — i to bi izgledalo kao da
+  // arhiva nema stare podatke, umjesto da su namjerno izostavljeni.
+  const skoroNapomena = samoSkore
+    ? `<div style="font-size:10.5px;color:#fdba74;line-height:1.45;margin:8px 0;padding:7px 9px;
+         background:#7c2d1233;border:1px solid #9a3412;border-radius:8px;">
+         Prikazuju se samo zadnja 2 mjeseca (tako je postavilo "Prikaži sve").
+         Za cijelu sezonu isključi pa ponovo uključi godinu ispod — filter se tada gasi.
+       </div>`
+    : '';
+  return uvod + skoroNapomena + redovi
     + `<div style="font-size:10px;color:#475569;line-height:1.45;margin-top:8px;">
          Nije retroaktivno — pamti se od verzije u kojoj je ovo uvedeno, i samo za period
          dok je app korištena. Ako te nema sedmicu dana usred požara, taj dio nedostaje.
@@ -16924,12 +17018,24 @@ function _poziResetPrikaza() {
   _poziObnoviPrikaz();
 }
 
+// "Prikaži sve" = sve što je AKTUELNO (zadnja 2 mjeseca), ne sve što je ikad
+// gorjelo. Zahtjev sa terena, i sa dva razloga:
+//   • šumaru su bitni požari koji gore ili su tek ugašeni — poligoni od prije
+//     tri godine preko istog terena samo zatrpaju kartu;
+//   • historijski prikazi su i najskuplji (turf unije preko cijele sezone po
+//     godini), pa su bili glavni uzrok trzanja panela.
+// Stare sezone nisu uklonjene — biraju se pojedinačno, prekidačima niže.
 function _poziPrikaziSve() {
   _poziPrikazPotvrdjen = true;
   _poziHeatSet(true); _poziSmjerToggle(true); _poziOpozToggle(true); _poziPrognToggle(true);
-  _povGodToggle(true); _povHistToggle(true);
-  try { localStorage.setItem(_POV_ARH_ON_KEY, JSON.stringify(_povArhGodine().map(String))); } catch(e) {}
-  _povArhRender();
+  // "Ova godina" (od 1. januara) i "Zadnjih 5 godina" po definiciji nose
+  // požare starije od 2 mjeseca — ostaju isključeni.
+  _povGodToggle(false); _povHistToggle(false);
+  _povArhPostaviSamoSkore(true);
+  const imaUArhivi = _povArhGodine().map(String);
+  const skore = _povGodineSkore().filter(g => imaUArhivi.includes(g));
+  try { localStorage.setItem(_POV_ARH_ON_KEY, JSON.stringify(skore)); } catch(e) {}
+  _povArhRender(true);
   _instToggle('opozareno', true); _instToggle('fwi', true);
   _poziToggle(true);
   _poziRenderPanel();
@@ -16943,7 +17049,33 @@ function _poziPostaviPodtab(id) {
   _poziRenderPanel();
 }
 
+// Crtanje panela je NAJSKUPLJA stvar u ovoj sekciji: gradi se ogroman HTML
+// string (kartice, liste, legende) i uz njega, kroz _povArhKarticaHtml, i
+// ponovno crtanje arhivske geometrije na karti. A zove se sa 38 mjesta —
+// između ostalog iz _poziStatusSet, koji opali na SVAKI GPS/meteo/status
+// događaj. Dvije posljedice koje se na terenu osjete kao trzanje:
+//   1) panel se crtao i kad korisnik uopšte NIJE u sekciji Požari (npr. snima
+//      vlaku na Karti) — čist trošak, rezultat niko ne vidi;
+//   2) jedan korisnički potez (uključi prikaz → učitaj → status → meteo) je
+//      davao ČETIRI puna crtanja u istom tiku umjesto jednog.
+// Zato: dok panel nije na ekranu, samo se zapamti da je zaostao (nacrta se
+// pri sljedećem otvaranju sekcije), a više poziva u istom tiku se sliju u
+// jedno crtanje kroz requestAnimationFrame.
+let _poziPanelZakazan = false;
+let _poziPanelZaostao = false;
 function _poziRenderPanel() {
+  if (typeof _activeTab !== 'undefined' && _activeTab !== 'pozari') { _poziPanelZaostao = true; return; }
+  if (_poziPanelZakazan) return;
+  _poziPanelZakazan = true;
+  const crtaj = () => {
+    _poziPanelZakazan = false;
+    _poziPanelZaostao = false;
+    try { _poziRenderPanelSad(); } catch(e) { console.error('Požari panel:', e); }
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(crtaj);
+  else setTimeout(crtaj, 0);
+}
+function _poziRenderPanelSad() {
   const el = document.getElementById('poz-body');
   if (!el) return;
   const akt = _poziPodtab();
@@ -17193,7 +17325,7 @@ function _poziSadrzajHtml() {
   const mjeseciSezone = _POV_MJESECI_POZARA.map(i => ({ naziv:mjeseci[i], boja:_POV_MJESEC_BOJE[i] }));
   const glavniPrikaz = `<div style="background:linear-gradient(135deg,#7c2d12,#c2410c);border:1px solid #f97316;border-radius:14px;padding:14px;margin-bottom:12px;">
       <button onclick="_poziPrikaziSve()" style="width:100%;padding:13px;border:0;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:15px;font-weight:800;cursor:pointer;">🔥 Prikaži sve</button>
-      <div style="font-size:10.5px;color:#fed7aa;line-height:1.45;margin-top:8px;text-align:center;">Uključuje sve požarne prikaze odjednom i pamti izbor za sljedeći ulazak. Obavještenja se ne uključuju automatski.</div>
+      <div style="font-size:10.5px;color:#fed7aa;line-height:1.45;margin-top:8px;text-align:center;">Uključuje sve prikaze za zadnja 2 mjeseca i pamti izbor za sljedeći ulazak. Starije sezone se biraju pojedinačno niže. Obavještenja se ne uključuju automatski.</div>
       ${_poziPrikazPotvrdjen ? '<div style="font-size:11px;color:#bbf7d0;text-align:center;margin-top:6px;font-weight:700;">✓ Prikazi su uključeni i ostaju zapamćeni</div>' : ''}
     </div>`;
   const legendaGodine = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:12px;margin-bottom:12px;">
@@ -32410,7 +32542,17 @@ class MiniSqlite {
     const off=(n-1)*this.ps;
     let d;
     if(this.sync){ d=new Uint8Array(this.ps); try{ this.sync.read(d,{at:off}); }catch(e){ if(this.file) d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); } }
-    else { d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); }
+    else {
+      try { d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); }
+      catch(e) {
+        // Pozadinski sync handle (velike karte, vidi load-opfs) je mogao stici
+        // i uzeti ekskluzivni lock BAS dok je ovo File citanje bilo u letu —
+        // tada File citanje pukne, a sync handle vec radi. Bez ovog fallbacka
+        // bi se ta jedna plocica tiho izgubila umjesto da se procita brze.
+        if(!this.sync) throw e;
+        d=new Uint8Array(this.ps); this.sync.read(d,{at:off});
+      }
+    }
     if(this._c.size>2048) this._c.delete(this._c.keys().next().value);
     this._c.set(n,d); return d;
   }
@@ -33030,8 +33172,11 @@ self.onmessage = async ({data:msg}) => {
       // stranici preko file.slice().arrayBuffer()). Glavna optimizacija brzine — profil
       // pokazao avg čitanje 100ms/pločica. Fallback na File ako sync nije podržan.
       let sync = null;
+      // Velike OPFS karte otvaraj bez sporog ekskluzivnog sync handle-a:
+      // izmjereno na terenu (UNSKO_2GB) da createSyncAccessHandle() na 2 GB
+      // fajlu blokira cold start oko 40 s prije nego se ijedna plocica
+      // nacrta. Male karte ga uzimaju odmah — tamo je trenutan.
       const file = await fh.getFile();
-      // Velike OPFS karte otvaraj bez sporog ekskluzivnog sync handle-a.
       const _syncMax = 512 * 1024 * 1024;
       if (file.size <= _syncMax) {
         try { sync = await fh.createSyncAccessHandle(); } catch(e) {}
@@ -33139,6 +33284,24 @@ self.onmessage = async ({data:msg}) => {
       } // kraj if(msg.diag)
       dbs[msg.name] = {mini, fmt, engine:'custom', zOff:mini._zOff||17};
       self.postMessage({id, ok:true, fmt, meta});
+      // Karta je od ovog trenutka upotrebljiva (async File citanje). Ali async
+      // citanje JEDNE stranice kosta ~25 ms naspram mikrosekundi preko sync
+      // handle-a, a jedna plocica trazi vise stranica — bez ovoga bi velika
+      // karta zauvijek ostala spora/trzava umjesto samo sporo otvorena.
+      // Zato se sync handle sada trazi U POZADINI: cold start se ne blokira
+      // (odgovor je vec poslat iznad), a cim handle stigne (i 40 s kasnije)
+      // prikaci se na istu MiniSqlite instancu i sva sljedeca citanja idu
+      // punom brzinom. Vec procitane stranice ostaju u _c kesu.
+      if (!sync) {
+        fh.createSyncAccessHandle().then(h => {
+          const inst = dbs[msg.name];
+          // Karta je u medjuvremenu zatvorena ili zamijenjena drugom — handle
+          // se mora zatvoriti, inace ostaje visjeti ekskluzivni lock na fajlu.
+          if (!inst || inst.mini !== mini) { try { h.close(); } catch(e) {} return; }
+          mini.sync = h;
+          self.postMessage({type:'opfs-sync-ready', name:msg.name});
+        }).catch(() => {});
+      }
       } catch(opfsErr) { self.postMessage({id, ok:false, error:'OPFS: '+opfsErr.message}); }
     }
     else if (msg.type === 'tile') {
@@ -33210,7 +33373,17 @@ function _sqlWorkerEnsure() {
   const url = URL.createObjectURL(new Blob([_SQL_WORKER_SRC], {type:'application/javascript'}));
   _sqlW = new Worker(url);
   URL.revokeObjectURL(url);
-  _sqlW.onmessage = ({data:d}) => { const cb=_sqlWCbs[d.id]; if(cb){delete _sqlWCbs[d.id];cb(d);} };
+  _sqlW.onmessage = ({data:d}) => {
+    // Nezatražena poruka iz workera (nema id, pa nema ni callbacka): velika
+    // OPFS karta je u pozadini dobila sync handle i od sad čita punom
+    // brzinom. Zapisuje se u dijagnostiku učitavanja da se sa terena vidi
+    // JE LI i KADA nadogradnja stigla, bez USB debug pristupa.
+    if (d && d.type === 'opfs-sync-ready') {
+      try { _mapLoadDiagStep('brzo čitanje spremno', 'OPFS sync handle prikačen u pozadini — ' + (d.name || '')); } catch(e) {}
+      return;
+    }
+    const cb=_sqlWCbs[d.id]; if(cb){delete _sqlWCbs[d.id];cb(d);}
+  };
   _sqlW.onerror = (e) => {
     console.error('SQL Worker error:', e.message);
     _sqlmapStatus('❌ Worker greška: ' + (e.message||'nepoznato'));
