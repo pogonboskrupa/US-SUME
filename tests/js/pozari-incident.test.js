@@ -19,7 +19,11 @@ t('detekcije su zadano uključene osim nakon ručnog isključivanja',()=>assert.
 t('grupa ima glavni trokut i zadržava sitne satelitske tačke na canvasu',()=>['poz-mk-trokut','<polygon points="50,3 97,86 3,86"','L.circleMarker([p.la, p.lo]','_poziCanvasRenderer'].forEach(x=>assert.ok(html.includes(x))));
 t('tekuća godina se zakazuje u pozadini',()=>assert.ok(html.includes('function _povGodLoadPozadina(')));
 t('pojas projekcije je iznad karte i otvara detalje požara',()=>{assert.ok(html.includes("map.createPane('pozariPovrsPane')"));assert.ok(html.includes("pane:'pozariPovrsPane', interactive:true"));assert.ok(html.includes("l.on('click',()=>_poziMapOtvori(g,tr))"));});
-t('detalji i Play se prikazuju direktno na karti',()=>['pozi-map-hud','Početak požara','Ukupna procjena','▶ Play','Karta kumulativno prikazuje tačke'].forEach(x=>assert.ok(html.includes(x))));
+// v1.4.2: modal je smanjen (zahtjev sa terena) — info redovi idu u
+// dvokolonsku mrežu (_poziHudMreza) umjesto punih redova, a dugme Play/Pauza
+// je ikonica bez teksta da stane u uži red. Provjerava se da su elementi i
+// dalje TU (kompaktnije, ne uklonjeni), ne stara doslovna oznaka teksta.
+t('detalji i Play se prikazuju direktno na karti',()=>['pozi-map-hud','Početak požara','Ukupna procjena','_poziAnimPlay()','_poziHudMreza'].forEach(x=>assert.ok(html.includes(x))));
 t('vremenska crta grupiše detekcije po danima',()=>{const k=api._poziAnimKoraci({pts:[{dt:'2026-09-10T08:00:00Z'},{dt:'2026-09-10T18:00:00Z'},{dt:'2026-09-12T09:00:00Z'}]});assert.equal(k.length,2);assert.equal(k[0].broj,2);assert.equal(k[0].cut,Date.parse('2026-09-10T18:00:00Z'));});
 t('replay filtrira samo odabrani požar, ne sve požare',()=>{const a={id:'A',pts:[{dt:'2026-09-10T08:00:00Z'},{dt:'2026-09-12T08:00:00Z'}],d:1},b={id:'B',pts:[{dt:'2026-09-12T08:00:00Z'}],d:2};const run=new Function('_poziAnimCut','_poziAnimSel','_poziEvts','_poziAnimKljuc','_poziGrupisi','_poziPts','_poziRefTacka','_poziGrupeBlizu',fn('_poziAnimGrupe')+';return _poziAnimGrupe()');const out=run(Date.parse('2026-09-10T23:00:00Z'),'A',[a,b],g=>g._animKljuc||g.id,pts=>[{id:'A',pts,la:1,lo:1}],[],()=>({}),x=>x);assert.equal(out.length,2);assert.equal(out[0].pts.length,1);assert.equal(out[1],b);assert.equal(out[0]._animKljuc,'A');});
 t('glavni trokut nudi simulaciju direktno na karti',()=>assert.ok(html.includes('▶ Prikaži kretanje po danima')));

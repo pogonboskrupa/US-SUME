@@ -5022,7 +5022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.1';
+const APP_VER = 'v1.4.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -14408,6 +14408,11 @@ async function _poziSmjerAzuriraj() {
   if (_poziSmjerLayer) { try { map.removeLayer(_poziSmjerLayer); } catch(e) {} _poziSmjerLayer = null; }
   if (_poziSmjerBusy || !_poziSmjerOn() || !_poziOn || !_poziEvts.length) return;
   const g = _poziEvts[0];
+  // Pravac širenja NEMA SMISLA za požar koji više ne gori — "TEŽI da ide"
+  // pretpostavlja aktivan front, ne trag onoga što je već prošlo. Isti prag
+  // kao _poziStatusPozara (zadnja detekcija ≤24h) odlučuje da li se ijedna
+  // strelica uopšte pokušava izračunati.
+  if (_poziStatusPozara(g) !== 'aktivan') return;
   // Vjetar mora biti baš ZA OVAJ (najbliži) požar, ne bilo koji stari — _poziMet.naj
   // je referenca na _poziEvts objekat kod kojeg je vjetar zadnji put dohvaćen.
   const met = (_poziMet && _poziMet.naj === g) ? _poziMet.kodPozara : null;
@@ -14955,6 +14960,46 @@ function _poziAnimPlay(){
   _poziMapHudRender();
 }
 
+// ── Zajednička geometrija HUD-a simulacije (živi i arhivski, v1.4.2) ───────
+// Modal je terenski prijavljen kao PREVELIK — zauzimao je do 46% visine
+// karte + 82px, pa je čest slučaj (mali telefon, dosta info redova) da požar
+// koji korisnik upravo otvara ostane skriven ISPOD panela. Smanjeno na 34% +
+// 70px, a redovi informacija idu u DVOKOLONSKU mrežu (upola manje redova za
+// isti sadržaj — ništa nije uklonjeno, samo zgusnuto).
+const _POZ_HUD_MAXH_PCT = 0.34;
+const _POZ_HUD_BOTTOM_PX = 70;
+function _poziHudCss() {
+  return 'position:absolute;z-index:1000;left:10px;right:10px;bottom:' + _POZ_HUD_BOTTOM_PX + 'px;' +
+    'max-height:' + Math.round(_POZ_HUD_MAXH_PCT * 100) + '%;overflow:auto;background:#0f172af2;border-radius:13px;' +
+    'padding:8px 10px;color:#e2e8f0;box-shadow:0 8px 28px #0009;box-sizing:border-box;';
+}
+// Dvokolonska mreža info redova — [labela, vrijednost][] → HTML. Isti sadržaj
+// kao prije, upola manje visine (2 stavke po redu umjesto 1).
+function _poziHudMreza(redovi) {
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:4px;">' +
+    redovi.filter(Boolean).map(([l, v]) =>
+      '<div><div style="font-size:9px;color:#94a3b8;">' + l + '</div>' +
+      '<div style="font-size:11px;font-weight:700;color:#e2e8f0;">' + v + '</div></div>'
+    ).join('') + '</div>';
+}
+// Centrira TAČKU unutar VIDLJIVOG dijela karte, ne cijelog ekrana — HUD (živi
+// ili arhivski) dokira dno i prekriva donjih ~34%+70px, pa običan setView na
+// tačku ostavi baš nju skrivenu ispod panela čim se otvori. project/unproject
+// na ISTOM zoomu (ne panBy) — razlika dvije projekcije je nedvosmislena, nema
+// nagađanja smjera panovanja.
+function _poziHudLatLng(la, lo, zoom) {
+  try {
+    const z = zoom != null ? zoom : map.getZoom();
+    const size = map.getSize();
+    const hudPx = Math.min(size.y * _POZ_HUD_MAXH_PCT + _POZ_HUD_BOTTOM_PX, size.y * 0.65);
+    const vidljivaVisina = Math.max(100, size.y - hudPx);
+    const pomjeraj = (size.y / 2) - (vidljivaVisina / 2);
+    if (pomjeraj <= 0) return L.latLng(la, lo);
+    const p = map.project([la, lo], z);
+    return map.unproject(L.point(p.x, p.y + pomjeraj), z);
+  } catch(e) { return L.latLng(la, lo); }
+}
+
 function _poziMapHudClose(){
   _poziAnimStop();_poziAnimCut=null;_poziAnimSel='';_poziAnimBand=null;
   document.getElementById('pozi-map-hud')?.remove();_poziRender();
@@ -14963,24 +15008,39 @@ function _poziMapOtvori(g,tr){
   if(!g)return;
   _poziAnimStop();_poziAnimSel=_poziAnimKljuc(g);
   _poziAnimCut=null;_poziAnimBand=tr?{id:tr.id,naziv:tr.naziv,ha:tr.ha,od:tr.od,do:tr.do,broj:tr.broj}:null;
+  // Centriraj NA POŽAR (ne samo "otvori HUD gdje god karta trenutno gleda") —
+  // isti razlog kao arhivska simulacija: požar treba biti u VIDLJIVOM dijelu
+  // ekrana, ne iza panela koji se upravo otvara.
+  try { map.setView(_poziHudLatLng(g.la, g.lo), map.getZoom(), { animate:false }); } catch(e) {}
   _poziMapHudRender();
 }
 function _poziMapHudRender(){
   let el=document.getElementById('pozi-map-hud');const g=_poziAnimGrupa();
   if(!_poziAnimSel||!g){if(el)el.remove();return;}
   if(!el){el=document.createElement('div');el.id='pozi-map-hud';map.getContainer().appendChild(el);}
-  el.style.cssText='position:absolute;z-index:1000;left:10px;right:10px;bottom:82px;max-height:46%;overflow:auto;background:#0f172af2;border:1px solid #f97316;border-radius:13px;padding:10px 12px;color:#e2e8f0;box-shadow:0 8px 28px #0009;box-sizing:border-box';
+  el.style.cssText=_poziHudCss()+'border:1px solid #f97316;';
   const k=_poziAnimKoraci(g),zadnji=k.length-1,idx=isFinite(_poziAnimCut)?Math.max(0,k.findIndex(x=>x.cut>=_poziAnimCut)):zadnji;
   const prikaz=(_poziAnimGrupe()||[]).find(x=>x._animKljuc===_poziAnimSel)||g;
   const prSve=_poziProj(g),prSad=_poziProj(prikaz),pou=_poziPovrsPouzdanost(g,prSve);
   const ref=_poziRefTacka(),udalj=dst(ref.la,ref.lo,g.la,g.lo),smjer=_azimutSmjer(_bearing(ref.la,ref.lo,g.la,g.lo)),gk=wgsToMGI(g.la,g.lo);
   const fmt=t=>isFinite(t)?new Date(t).toLocaleString('bs-BA'):'—';
-  const red=(l,v)=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px"><span style="color:#94a3b8">'+l+'</span><b style="text-align:right;color:#e2e8f0">'+v+'</b></div>';
   const band=_poziAnimBand?'<div style="margin:6px 0;padding:6px 8px;border-radius:8px;background:#7c2d123d;border:1px solid #9a3412;font-size:10.5px;color:#fdba74">Kliknuti pojas: <b>'+_escHtml(_poziAnimBand.naziv)+'</b> · ≈ '+_poziPovrsTxt(_poziAnimBand.ha)+'<br><span style="color:#cbd5e1">'+_escHtml(_poziPeriodPojasa(_poziAnimBand.od,_poziAnimBand.do))+'</span></div>':'';
   const korak=k[idx]||null,detSad=(prikaz?.pts||[]).length;
-  el.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div style="font-size:13px;font-weight:800;color:#fb923c;flex:1">🔥 Razvoj odabranog požara</div><button onclick="_poziMapHudClose()" style="border:0;background:#334155;color:white;border-radius:50%;width:27px;height:27px;font-size:18px">×</button></div>'+band+
-    red('Stanje',_poziStatusPozara(g))+red('Početak požara',fmt(g.prvi))+red('Zadnje viđenje',fmt(g.zadnji))+red('Trajanje',_poziTrajanje(g.prvi,g.zadnji))+red('Ukupna procjena',_poziPovrsTxt(prSve?.haUkupno))+red('Detekcije',g.broj+' · '+_escHtml((g.sateliti||[]).join(', ')||'—'))+red('FRP max',g.frpMax?g.frpMax.toFixed(1)+' MW':'—')+red('Raspon detekcija',g.spanM>0?fmtL(g.spanM):'—')+red('Udaljenost',fmtL(udalj)+' '+smjer+(ref.gps?'':' (od centra karte)'))+red('Pouzdanost','<span style="color:'+pou.boja+'">'+pou.txt+'</span>')+(gk?'<div style="font-size:10px;color:#fbbf24;font-family:monospace;margin-top:4px">Y: '+gk.y+' · X: '+gk.x+'</div>':'')+
-    '<div style="margin-top:7px;padding-top:7px;border-top:1px solid #334155"><div style="font-size:10.5px;color:#7dd3fc;margin-bottom:5px">'+(korak?('Dan '+(idx+1)+'/'+k.length+' · '+new Date(korak.cut).toLocaleDateString('bs-BA')+' · '+detSad+'/'+g.broj+' detekcija · ≈ '+_poziPovrsTxt(prSad?.haUkupno)):'Nema vremenskih koraka')+'</div><div style="display:flex;gap:7px;align-items:center"><button onclick="_poziAnimPlay()" style="padding:7px 10px;border:1px solid #f97316;border-radius:8px;background:#7c2d12;color:white;font-weight:700">'+(_poziAnimTimer?'⏸ Pauza':'▶ Play')+'</button><input type="range" min="0" max="'+Math.max(0,zadnji)+'" value="'+Math.max(0,idx)+'" oninput="_poziAnimSetKorak(this.value)" style="flex:1;accent-color:#f97316" '+(k.length<2?'disabled':'')+'></div><div style="font-size:9px;color:#64748b;margin-top:4px">Karta kumulativno prikazuje tačke i procijenjenu površinu do izabranog dana.</div></div>';
+  const mreza=_poziHudMreza([
+    ['Stanje',_poziStatusPozara(g)],
+    ['Trajanje',_poziTrajanje(g.prvi,g.zadnji)],
+    ['Početak požara',fmt(g.prvi)],
+    ['Zadnje viđenje',fmt(g.zadnji)],
+    ['Ukupna procjena',_poziPovrsTxt(prSve?.haUkupno)],
+    ['Detekcije',g.broj+' · '+_escHtml((g.sateliti||[]).join(', ')||'—')],
+    g.frpMax?['FRP max',g.frpMax.toFixed(1)+' MW']:null,
+    g.spanM>0?['Raspon detekcija',fmtL(g.spanM)]:null,
+    ['Udaljenost',fmtL(udalj)+' '+smjer+(ref.gps?'':' (centar karte)')],
+    ['Pouzdanost','<span style="color:'+pou.boja+'">'+pou.txt+'</span>'],
+  ]);
+  el.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div style="font-size:12.5px;font-weight:800;color:#fb923c;flex:1">🔥 Razvoj odabranog požara</div><button onclick="_poziMapHudClose()" style="border:0;background:#334155;color:white;border-radius:50%;width:24px;height:24px;font-size:16px;flex-shrink:0">×</button></div>'+band+mreza+
+    (gk?'<div style="font-size:9.5px;color:#fbbf24;font-family:monospace;margin-top:4px">Y: '+gk.y+' · X: '+gk.x+'</div>':'')+
+    '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #334155"><div style="font-size:10px;color:#7dd3fc;margin-bottom:4px">'+(korak?('Dan '+(idx+1)+'/'+k.length+' · '+new Date(korak.cut).toLocaleDateString('bs-BA')+' · '+detSad+'/'+g.broj+' det. · ≈ '+_poziPovrsTxt(prSad?.haUkupno)):'Nema vremenskih koraka')+'</div><div style="display:flex;gap:7px;align-items:center"><button onclick="_poziAnimPlay()" style="padding:6px 9px;border:1px solid #f97316;border-radius:8px;background:#7c2d12;color:white;font-weight:700;font-size:12.5px">'+(_poziAnimTimer?'⏸':'▶')+'</button><input type="range" min="0" max="'+Math.max(0,zadnji)+'" value="'+Math.max(0,idx)+'" oninput="_poziAnimSetKorak(this.value)" style="flex:1;accent-color:#f97316" '+(k.length<2?'disabled':'')+'></div></div>';
 }
 function _poziIncIzvjestaj(){
   const g=_poziIncGrupa(),inc=_poziIncGet(g,true);if(!g||!inc)return;const pr=_poziProj(g),odj=_poziOdjeli(g,inc),pou=_poziPovrsPouzdanost(g,pr),fotos=_poziIncFotos(g,inc),skica=_poziIncSvg(g,inc);
@@ -16899,9 +16959,11 @@ function _povArhSimOtvori(godina, g) {
   switchTab('karta');
   // switchTab('karta') sam zove map.invalidateSize() poslije 50ms (karta je
   // bila display:none) — pomjeranje pogleda ide TEK poslije, isti obrazac
-  // kao _poziZoom.
+  // kao _poziZoom. _poziHudLatLng pomjera cilj tako da bude u VIDLJIVOM
+  // dijelu ekrana, ne iza panela koji se odmah otvara ispod (v1.4.2).
   setTimeout(() => {
-    map.setView([g.la, g.lo], Math.max(map.getZoom(), g.spanM > 2000 ? 12 : 13));
+    const zoom = Math.max(map.getZoom(), g.spanM > 2000 ? 12 : 13);
+    map.setView(_poziHudLatLng(g.la, g.lo, zoom), zoom, { animate:false });
     _povArhSimRender();
     _povArhSimHudRender();
   }, 80);
@@ -16959,9 +17021,7 @@ function _povArhSimHudRender() {
   const g = _povArhSimGrupa();
   if (!g) { if (el) el.remove(); return; }
   if (!el) { el = document.createElement('div'); el.id = 'pov-arh-sim-hud'; map.getContainer().appendChild(el); }
-  el.style.cssText = 'position:absolute;z-index:1000;left:10px;right:10px;bottom:82px;max-height:46%;overflow:auto;' +
-    'background:#0f172af2;border:1px solid #a78bfa;border-radius:13px;padding:10px 12px;color:#e2e8f0;' +
-    'box-shadow:0 8px 28px #0009;box-sizing:border-box;';
+  el.style.cssText = _poziHudCss() + 'border:1px solid #a78bfa;';
   const k = _povArhSimKoraci(g), zadnji = k.length - 1;
   const idx = isFinite(_povArhSimCut) ? Math.max(0, k.findIndex(x => x.cut >= _povArhSimCut)) : zadnji;
   const pts = isFinite(_povArhSimCut) ? g.pts.filter(p => (Date.parse(p.dt) || 0) <= _povArhSimCut) : g.pts;
@@ -16969,19 +17029,22 @@ function _povArhSimHudRender() {
   try { const gs = pts.length ? _poziOpozGeom(pts) : null; if (gs) haSad = turf.area(gs) / 10000; } catch(e) {}
   try { const gv = _poziOpozGeom(g.pts); if (gv) haSve = turf.area(gv) / 10000; } catch(e) {}
   const fmt = t => isFinite(t) ? new Date(t).toLocaleString('bs-BA') : '—';
-  const red = (l, v) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px;">' +
-    '<span style="color:#94a3b8;">' + l + '</span><b style="text-align:right;color:#e2e8f0;">' + v + '</b></div>';
   const korak = k[idx] || null;
-  el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><div style="font-size:13px;font-weight:800;color:#c4b5fd;flex:1;">🕰 Simulacija — historijski požar (' + _escHtml(String(_povArhSimGodina)) + ')</div>' +
-    '<button onclick="_povArhSimZatvori()" style="border:0;background:#334155;color:white;border-radius:50%;width:27px;height:27px;font-size:18px;">×</button></div>' +
-    red('Početak požara', fmt(g.prvi)) + red('Zadnje viđenje', fmt(g.zadnji)) + red('Trajanje', _poziTrajanje(g.prvi, g.zadnji)) +
-    red('Ukupna procjena', _poziPovrsTxt(haSve)) + red('Detekcije', String(g.broj)) +
-    '<div style="margin-top:7px;padding-top:7px;border-top:1px solid #334155;"><div style="font-size:10.5px;color:#c4b5fd;margin-bottom:5px;">' +
-    (korak ? ('Dan ' + (idx + 1) + '/' + k.length + ' · ' + new Date(korak.cut).toLocaleDateString('bs-BA') + ' · ' + pts.length + '/' + g.broj + ' detekcija · ≈ ' + _poziPovrsTxt(haSad)) : 'Nema vremenskih koraka') +
-    '</div><div style="display:flex;gap:7px;align-items:center;"><button onclick="_povArhSimPlay()" style="padding:7px 10px;border:1px solid #a78bfa;border-radius:8px;background:#4c1d95;color:white;font-weight:700;">' +
-    (_povArhSimTimer ? '⏸ Pauza' : '▶ Play') + '</button>' +
-    '<input type="range" min="0" max="' + Math.max(0, zadnji) + '" value="' + Math.max(0, idx) + '" oninput="_povArhSimSetKorak(this.value)" style="flex:1;accent-color:#a78bfa;" ' + (k.length < 2 ? 'disabled' : '') + '></div>' +
-    '<div style="font-size:9px;color:#64748b;margin-top:4px;">Karta kumulativno prikazuje tačke i procijenjenu površinu do izabranog dana.</div></div>';
+  const mreza = _poziHudMreza([
+    ['Trajanje', _poziTrajanje(g.prvi, g.zadnji)],
+    ['Detekcije', String(g.broj)],
+    ['Početak požara', fmt(g.prvi)],
+    ['Zadnje viđenje', fmt(g.zadnji)],
+    ['Ukupna procjena', _poziPovrsTxt(haSve)],
+  ]);
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><div style="font-size:12.5px;font-weight:800;color:#c4b5fd;flex:1;">🕰 Simulacija — ' + _escHtml(String(_povArhSimGodina)) + '</div>' +
+    '<button onclick="_povArhSimZatvori()" style="border:0;background:#334155;color:white;border-radius:50%;width:24px;height:24px;font-size:16px;flex-shrink:0;">×</button></div>' +
+    mreza +
+    '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #334155;"><div style="font-size:10px;color:#c4b5fd;margin-bottom:4px;">' +
+    (korak ? ('Dan ' + (idx + 1) + '/' + k.length + ' · ' + new Date(korak.cut).toLocaleDateString('bs-BA') + ' · ' + pts.length + '/' + g.broj + ' det. · ≈ ' + _poziPovrsTxt(haSad)) : 'Nema vremenskih koraka') +
+    '</div><div style="display:flex;gap:7px;align-items:center;"><button onclick="_povArhSimPlay()" style="padding:6px 9px;border:1px solid #a78bfa;border-radius:8px;background:#4c1d95;color:white;font-weight:700;font-size:12.5px;">' +
+    (_povArhSimTimer ? '⏸' : '▶') + '</button>' +
+    '<input type="range" min="0" max="' + Math.max(0, zadnji) + '" value="' + Math.max(0, idx) + '" oninput="_povArhSimSetKorak(this.value)" style="flex:1;accent-color:#a78bfa;" ' + (k.length < 2 ? 'disabled' : '') + '></div></div>';
 }
 
 // Broj zapisa u godini, VEĆ FILTRIRAN na blizinu (v1.1.2) — i dalje jeftino
@@ -17522,8 +17585,15 @@ function _poziSadrzajHtml() {
            ⚠ Vjetar duva OD požara KA tvojoj poziciji.
          </div>` : '')
       + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">`
-      + prekidac('_poziSmjerToggle(this.checked)', _poziSmjerOn(), '🧭 Prikaži okvirni pravac širenja (vjetar + nagib terena)')
-      + `<div style="font-size:10px;color:#64748b;line-height:1.4;margin-top:2px;">Nije prognoza širenja — samo pravac kuda vatra TEŽI da ide (uzbrdo i niz vjetar).</div>`
+      // "TEŽI da ide" pretpostavlja aktivan front — za požar bez detekcije u
+      // zadnjih 24h (vjerovatno ugašen) prikaz smjera nema smisla, pa se
+      // prekidač i ne nudi (isti prag kao _poziSmjerAzuriraj koji stvarno
+      // crta strelicu), samo se objasni ZAŠTO ga nema umjesto da nestane bez
+      // traga.
+      + (_poziStatusPozara(_poziEvts[0]) === 'aktivan'
+        ? prekidac('_poziSmjerToggle(this.checked)', _poziSmjerOn(), '🧭 Prikaži okvirni pravac širenja (vjetar + nagib terena)')
+          + `<div style="font-size:10px;color:#64748b;line-height:1.4;margin-top:2px;">Nije prognoza širenja — samo pravac kuda vatra TEŽI da ide (uzbrdo i niz vjetar).</div>`
+        : `<div style="font-size:10.5px;color:#64748b;line-height:1.4;">🧭 Pravac širenja se prikazuje samo dok je požar aktivan (zadnja detekcija unutar 24h) — ovaj je vjerovatno već ugašen.</div>`)
       + `</div>`);
   }
 
