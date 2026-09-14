@@ -5,7 +5,11 @@ $Jar = Join-Path $Dir 'gradle-wrapper.jar'
 $Temp = Join-Path $Dir 'gradle-wrapper.download'
 try {
     Invoke-WebRequest 'https://raw.githubusercontent.com/gradle/gradle/v8.4.0/gradle/wrapper/gradle-wrapper.jar' -OutFile $Temp -TimeoutSec 60 -UseBasicParsing
-    $Expected = (Invoke-WebRequest 'https://services.gradle.org/distributions/gradle-8.4-wrapper.jar.sha256' -TimeoutSec 30 -UseBasicParsing).Content.Trim().ToLower()
+    $ShaResp = Invoke-WebRequest 'https://services.gradle.org/distributions/gradle-8.4-wrapper.jar.sha256' -TimeoutSec 30 -UseBasicParsing
+    # Windows PowerShell 5.1 sa -UseBasicParsing zna vratiti .Content kao byte[] (ne
+    # string) kad server ne pošalje jasan tekstualni content-type — dekodovati ručno.
+    $ShaText = if ($ShaResp.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($ShaResp.Content) } else { $ShaResp.Content }
+    $Expected = $ShaText.Trim().ToLower()
     if ($Expected -notmatch '^[0-9a-f]{64}$') { throw 'Neispravan službeni checksum' }
     if ((Get-FileHash $Temp -Algorithm SHA256).Hash.ToLower() -ne $Expected) { throw 'Wrapper checksum se ne podudara' }
     Move-Item -Force $Temp $Jar
