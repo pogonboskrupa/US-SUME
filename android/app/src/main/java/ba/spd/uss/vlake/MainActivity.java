@@ -605,7 +605,18 @@ public class MainActivity extends Activity {
 
                     String tag = rel.optString("tag_name", "");
                     String verNova = tag.startsWith("v") ? tag.substring(1) : tag;
-                    String verTrenutna = BuildConfig.VERSION_NAME;
+                    // NE BuildConfig.VERSION_NAME — od Android Gradle Plugin-a 8.0
+                    // BuildConfig klasa se NE generiše podrazumijevano (traži
+                    // buildFeatures { buildConfig true }), pa build pada na
+                    // "cannot find symbol". PackageManager je usput i tačniji
+                    // izvor: vraća verziju APK-a koji je STVARNO instaliran.
+                    // Debug build nosi versionNameSuffix "-debug" (1.5.2-debug) —
+                    // parseSegment() ispod čisti ne-brojeve pa poređenje radi.
+                    String verTrenutna = "0";
+                    try {
+                        verTrenutna = getPackageManager()
+                                .getPackageInfo(getPackageName(), 0).versionName;
+                    } catch (Exception ignored) {}
                     if (verNova.isEmpty() || !jeNovija(verNova, verTrenutna)) {
                         postStatus("✓ Već imaš najnoviju verziju (v" + verTrenutna + ")");
                         return;
