@@ -182,6 +182,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
         webView.addJavascriptInterface(new NetBridge(), "AndroidNet");
         webView.addJavascriptInterface(new AppNotifBridge(), "AndroidNotif");
+        webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -571,6 +572,178 @@ public class MainActivity extends Activity {
                 if (ch == '"' || ch == '\\') b.append('\\').append(ch);
                 else if (ch == '\n') b.append("\\n");
                 else if (ch == '\r') b.append("\\r");
+                else if (ch < 0x20 || ch > 0x7e) b.append(String.format("\\u%04x", (int) ch));
+                else b.append(ch);
+            }
+            return b.append('"').toString();
+        }
+    }
+
+    // ── Auto-update: preuzmi i instaliraj najnoviji APK direktno iz app-a ──
+    // Zašto postoji: "Ažuriraj aplikaciju" u Meniju je ranije za APK korisnike
+    // samo otvarala GitHub Actions listu radnji — korisnik je morao ručno naći
+    // zadnji uspješan build, prijaviti se na GitHub, skinuti .zip artefakt
+    // (Actions artefakti traže login i ističu za 90 dana), raspakovati ga i
+    // instalirati. GitHub Release je JAVNO dostupan preko stabilnog URL-a bez
+    // prijave (codex-webview.yml ga objavljuje/ažurira poslije svakog uspješnog
+    // builda) — ovaj most ga nalazi preko API-ja i instalira jednim tapom.
+    //
+    // /releases/latest NIJE korišten namjerno — taj GitHub endpoint EKSPLICITNO
+    // isključuje prerelease objave, a CI ovdje objavljuje baš prerelease (debug
+    // build, ne zvaničan release). Zato se čita obična lista (/releases,
+    // sortirana najnovije-prvo) i uzima prvi element.
+    class UpdateBridge {
+        private static final String RELEASES_URL =
+                "https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1";
+
+        @JavascriptInterface
+        public void checkAndInstall() {
+            new Thread(() -> {
+                try {
+                    org.json.JSONObject rel = dohvatiJson(RELEASES_URL);
+                    if (rel == null) { postStatus("⚠ Ne mogu provjeriti novu verziju (nema interneta?)"); return; }
+
+                    String tag = rel.optString("tag_name", "");
+                    String verNova = tag.startsWith("v") ? tag.substring(1) : tag;
+                    String verTrenutna = BuildConfig.VERSION_NAME;
+                    if (verNova.isEmpty() || !jeNovija(verNova, verTrenutna)) {
+                        postStatus("✓ Već imaš najnoviju verziju (v" + verTrenutna + ")");
+                        return;
+                    }
+
+                    String apkUrl = null;
+                    org.json.JSONArray assets = rel.optJSONArray("assets");
+                    if (assets != null) {
+                        for (int i = 0; i < assets.length(); i++) {
+                            org.json.JSONObject a = assets.getJSONObject(i);
+                            if (a.optString("name", "").endsWith(".apk")) {
+                                apkUrl = a.optString("browser_download_url", null);
+                                break;
+                            }
+                        }
+                    }
+                    if (apkUrl == null) {
+                        postStatus("⚠ Nova verzija v" + verNova + " postoji, ali APK nije pronađen u objavi");
+                        return;
+                    }
+
+                    postStatus("⬇ Preuzimam verziju v" + verNova + "…");
+                    File dir = new File(getCacheDir(), "update");
+                    if (!dir.exists()) dir.mkdirs();
+                    File apk = new File(dir, "US-SUME-v" + verNova + ".apk");
+                    if (!preuzmiFajl(apkUrl, apk)) {
+                        postStatus("⚠ Preuzimanje nije uspjelo — provjeri vezu i pokušaj ponovo");
+                        return;
+                    }
+                    runOnUiThread(() -> instalirajApk(apk));
+                } catch (Exception e) {
+                    postStatus("⚠ Greška pri ažuriranju: " + e.getClass().getSimpleName());
+                }
+            }).start();
+        }
+
+        private org.json.JSONObject dohvatiJson(String urlStr) throws IOException {
+            URL u = new URL(urlStr);
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            try {
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("Accept", "application/vnd.github+json");
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                int status = c.getResponseCode();
+                if (status != 200) return null;
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream is = c.getInputStream()) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                }
+                // /releases (lista) vraća JSON NIZ — uzmi prvi (najnoviji) element.
+                org.json.JSONArray arr = new org.json.JSONArray(bos.toString("UTF-8"));
+                return arr.length() > 0 ? arr.getJSONObject(0) : null;
+            } finally {
+                c.disconnect();
+            }
+        }
+
+        private boolean preuzmiFajl(String urlStr, File dest) throws IOException {
+            URL u = new URL(urlStr);
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            try {
+                // GitHub Release asset preusmjerava na objects.githubusercontent.com —
+                // standardan GET redirect, HttpURLConnection ga prati sam (za razliku
+                // od NetBridge-a gore, koji ručno prati 307/308 SAMO zbog POST tijela).
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(20000);
+                c.setReadTimeout(30000);
+                int status = c.getResponseCode();
+                if (status != 200) return false;
+                try (InputStream is = c.getInputStream(); FileOutputStream fos = new FileOutputStream(dest)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+                }
+                return true;
+            } finally {
+                c.disconnect();
+            }
+        }
+
+        private void instalirajApk(File apk) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && !getPackageManager().canRequestPackageInstalls()) {
+                postStatus("Dozvoli instalaciju iz ovog izvora pa pokušaj ponovo");
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception ignored) {}
+                return;
+            }
+            Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                    getPackageName() + ".fileprovider", apk);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        }
+
+        // Poredi "X.Y.Z" segment po segment (numerički, ne leksikografski) — projekat
+        // svaki segment drži na 0-9 (vidi CLAUDE.md šema brojeva verzije), ali provjera
+        // ostaje ispravna i ako se to pravilo ikad promijeni (npr. "1.5.10" > "1.5.9").
+        private boolean jeNovija(String a, String b) {
+            String[] pa = a.split("\\.");
+            String[] pb = b.split("\\.");
+            for (int i = 0; i < Math.max(pa.length, pb.length); i++) {
+                int va = i < pa.length ? parseSegment(pa[i]) : 0;
+                int vb = i < pb.length ? parseSegment(pb[i]) : 0;
+                if (va != vb) return va > vb;
+            }
+            return false;
+        }
+
+        private int parseSegment(String s) {
+            try { return Integer.parseInt(s.replaceAll("[^0-9]", "")); }
+            catch (Exception e) { return 0; }
+        }
+
+        private void postStatus(String msg) {
+            runOnUiThread(() -> {
+                if (webView == null) return;
+                webView.evaluateJavascript(
+                        "if(typeof _azurirajStatus==='function')_azurirajStatus(" + jsStr(msg) + ")", null);
+            });
+        }
+
+        // Isti razlog kao NetBridge.jsStr (zaseban primjerak — mali, ne vrijedi
+        // dijeliti preko refaktora dvije nezavisne klase): navodnik/backslash iz
+        // poruke bi razbio ubačeni JS bez escape-ovanja.
+        private String jsStr(String s) {
+            if (s == null) return "null";
+            StringBuilder b = new StringBuilder("\"");
+            for (int i = 0; i < s.length(); i++) {
+                char ch = s.charAt(i);
+                if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+                else if (ch == '\n') b.append("\\n");
                 else if (ch < 0x20 || ch > 0x7e) b.append(String.format("\\u%04x", (int) ch));
                 else b.append(ch);
             }

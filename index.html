@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.1';
+const APP_VER = 'v1.5.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -36424,8 +36424,15 @@ function applyUpdate() {
 }
 
 // Ručna akcija iz menija: na webu aktivira novi Service Worker i osvježi
-// aplikaciju; APK ne može sam sebe instalirati (to Android namjerno blokira),
-// pa korisnika vodi na zadnji CODEX build nakon jasne provjere verzije.
+// aplikaciju. APK ne može sam sebe zamijeniti u letu (Android to namjerno
+// blokira), ali OD v1.5.2 MOŽE preuzeti i pokrenuti instalaciju novog APK-a
+// jednim tapom preko AndroidUpdate mosta (MainActivity.java) — CI
+// (codex-webview.yml) poslije svakog uspješnog builda objavljuje GitHub
+// Release sa APK-om kao javno dostupan asset (bez potrebe za login-om, za
+// razliku od Actions artefakta koji je ranije bio jedina opcija).
+// _APK_BUILD_URL ostaje SAMO kao fallback za APK koji je instaliran PRIJE
+// ovog moста (kokoška-i-jaje: taj most se ne može sam dodati u već instaliran
+// APK) — na takvom APK-u window.AndroidUpdate ne postoji.
 const _APK_BUILD_URL = 'https://github.com/pogonboskrupa/US-SUME/actions/workflows/codex-webview.yml?query=branch%3ACODEX-US-SUME';
 async function azurirajAplikaciju() {
   if (typeof _anyRecOn === 'function' && _anyRecOn()) {
@@ -36445,6 +36452,14 @@ async function azurirajAplikaciju() {
     return;
   }
 
+  if (window.AndroidUpdate && typeof window.AndroidUpdate.checkAndInstall === 'function') {
+    showToast('🔄 Provjeravam novu verziju…');
+    try { window.AndroidUpdate.checkAndInstall(); }
+    catch(e) { showToast('⚠ Ažuriranje nije uspjelo pokrenuti — pokušaj ponovo'); }
+    return;
+  }
+
+  // Fallback za APK koji još nema AndroidUpdate most (vidi komentar gore).
   showToast('🔄 Provjeravam verziju…');
   let latest = null;
   try {
@@ -36465,6 +36480,14 @@ async function azurirajAplikaciju() {
     ]);
     if (izbor === 0) window.location.href = _APK_BUILD_URL;
   }
+}
+
+// Poziva se iz MainActivity.UpdateBridge (native strana) sa statusom toka
+// preuzimanja/instalacije ("Preuzimam verziju vX…", "Već imaš najnoviju"...).
+// Zaseban toast red umjesto _dlg-a — provjera radi u pozadini (Thread na
+// native strani), korisnik u međuvremenu i dalje koristi app.
+function _azurirajStatus(msg) {
+  if (typeof msg === 'string' && msg) showToast(msg);
 }
 
 // ─── PROVJERA NAJNOVIJE VERZIJE (posebno bitno za APK) ───────────────────────

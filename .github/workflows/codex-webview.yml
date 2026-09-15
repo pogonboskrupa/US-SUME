@@ -5,7 +5,7 @@ on:
     branches:
       - CODEX-US-SUME
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     if: github.ref == 'refs/heads/CODEX-US-SUME'
@@ -80,3 +80,29 @@ jobs:
           name: US-SUME-CODEX-debug-${{ github.sha }}
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      # Actions artifact (gore) traži GitHub login za preuzimanje i ističe za
+      # 90 dana — korisnik je morao ručno naći run, ući u nalog, skinuti .zip,
+      # raspakovati, instalirati. GitHub Release asset je JAVNO dostupan preko
+      # stabilnog URL-a bez prijave — to omogućava "Ažuriraj aplikaciju" u Meniju
+      # (AndroidUpdate.checkAndInstall, MainActivity.java) da automatski nađe
+      # najnoviju verziju preko /releases/latest API-ja i preuzme APK direktno.
+      - name: Izvuci versionName iz build.gradle
+        id: verzija
+        run: |
+          V=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
+          if [ -z "$V" ]; then echo "GRESKA: versionName nije pronađen"; exit 1; fi
+          echo "verzija=$V" >> "$GITHUB_OUTPUT"
+      - name: Objavi/ažuriraj GitHub Release sa APK-om (za auto-update u app-u)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.verzija.outputs.verzija }}
+          name: v${{ steps.verzija.outputs.verzija }} (debug)
+          prerelease: true
+          files: android/app/build/outputs/apk/debug/*.apk
+          # Ako glob gore ne pogodi nijedan fajl (npr. build output struktura
+          # se promijeni), akcija MORA pasti — bolje nego tiho objaviti release
+          # bez APK-a, što bi auto-update u app-u pronašao ali ne mogao skinuti.
+          fail_on_unmatched_files: true
+          # softprops/action-gh-release je idempotentan po tag_name-u — isti
+          # versionName u više commit-ova (npr. popravka bez bump-a verzije)
+          # samo AŽURIRA postojeći release/asset, ne pada na "tag already exists".

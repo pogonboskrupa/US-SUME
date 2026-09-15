@@ -48,6 +48,60 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 ## Mogućnosti izgrađene do sada (ne smiju se pokvariti)
 
+- **"Ažuriraj aplikaciju" u Meniju sada instalira najnoviji APK jednim tapom
+  (v1.5.2)**: na eksplicitan zahtjev — do tada je taj isti meni-item za APK
+  korisnike samo otvarao GitHub Actions listu radnji, a korisnik je morao
+  ručno naći zadnji uspješan build, prijaviti se na GitHub (Actions artefakti
+  traže login čak i na javnom repou), skinuti `.zip`, raspakovati i ručno
+  instalirati `.apk`.
+  - **GitHub Release umjesto Actions artefakta**: `codex-webview.yml` sad
+    poslije uspješnog builda objavljuje/ažurira GitHub Release (tag `vX.Y.Z`
+    iz `versionName`, `prerelease:true` jer su ovo debug buildovi, ne
+    zvanični release) sa APK-om kao PRILOGOM — release asset je javno
+    dostupan preko stabilnog URL-a BEZ prijave, za razliku od Actions
+    artefakta (login + ističe za 90 dana). `softprops/action-gh-release@v2`
+    je idempotentan po `tag_name`-u — isti `versionName` u više commit-ova
+    (popravka bez bump-a verzije) samo ažurira postojeći release, ne pada na
+    "tag already exists". Job je zato dobio `permissions: contents: write`
+    (bilo `read`).
+  - **`/releases/latest` NAMJERNO NIJE korišten** — taj GitHub API endpoint
+    EKSPLICITNO isključuje prerelease objave (dokumentovano ponašanje), a
+    ovdje se SVAKI release objavljuje kao prerelease. `MainActivity.
+    UpdateBridge` zato čita `/releases?per_page=1` (obična lista, sortirana
+    najnovije-prvo, UKLJUČUJE prerelease) i uzima prvi element.
+  - **Native `UpdateBridge`** (`AndroidUpdate` JS most, isti obrazac kao
+    `NetBridge`/`AppNotifBridge`): dohvati JSON sa GitHub API-ja (obično
+    `HttpURLConnection`, GitHub API šalje CORS zaglavlja pa bi i `fetch()`
+    iz JS-a radio, ali instalacija APK-a SVEJEDNO mora ići kroz native kod —
+    logično je i preuzimanje uraditi tamo, jedan Java put od kraja do kraja),
+    poredi `tag_name` (bez `v` prefiksa) sa `BuildConfig.VERSION_NAME`
+    (numerička usporedba segment-po-segment, ne leksikografska), preuzme
+    `.apk` asset u `getCacheDir()/update/` (već pokriveno postojećim
+    `cache-path name="cache" path="."` u `filepaths.xml` — nije trebalo
+    mijenjati FileProvider konfiguraciju), i pokrene instalaciju preko
+    `Intent.ACTION_VIEW` + `FileProvider` URI.
+  - **`REQUEST_INSTALL_PACKAGES` je NOVA dozvola** (Android 8+, "posebna"
+    dozvola — ne traži se kroz obični `ActivityCompat.requestPermissions`
+    dijalog nego kroz `Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`). Ako
+    korisnik nije odobrio, `UpdateBridge` otvori taj ekran i stane — ne
+    pokušava instalirati bez dozvole (Android bi to i tako odbio, ali tiho
+    bez objašnjenja).
+  - **Kokoška-i-jaje, riješeno starim fallback-om**: APK instaliran PRIJE
+    ove izmjene nema `AndroidUpdate` most (nije mogao doći iz budućnosti u
+    prošlost) — `azurirajAplikaciju()` u JS-u zato PRVO provjerava
+    `window.AndroidUpdate?.checkAndInstall`, i SAMO ako ne postoji pada na
+    stari put (otvori GitHub Actions listu). Znači: baš OVU verziju (v1.5.2)
+    korisnik mora instalirati ručno JEDNOM (postojećim putem), a SVAKA
+    sljedeća ide jednim tapom. Webapp (ne-APK) grana je NETAKNUTA — i dalje
+    ide kroz service worker `reg.update()`, ovo se nje ne tiče.
+  - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
+    `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
+  - Test: `tests/js/apk-auto-update.test.js` (7) — JS grana (bridge postoji/
+    ne postoji/nepotpun, webapp netaknuta, greška u mostu ne ruši funkciju,
+    `_azurirajStatus` prosljeđuje/ignoriše ulaz) nad STVARNIM kodom. Java
+    strana (`UpdateBridge`) se ne može kompajlirati iz sandboxa (nema Android
+    SDK-a — vidi "Provjereno a NIJE bug" ispod) — provjerena je ručno (brojanje
+    zagrada, XML/YAML parsiranje), isti princip kao `NetBridge` (v3.105.0).
 - **Offline-first sync**: `_OL` red čekanja (`static/js/offline-layer.js`) —
   sve upisi (vlake, tragovi, doznaka, projekti) rade lokalno prvo, pa se šalju
   na Supabase čim ima interneta. Idempotentno (klijentski UUID-ovi), sa
