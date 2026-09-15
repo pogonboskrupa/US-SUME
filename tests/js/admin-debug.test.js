@@ -52,36 +52,6 @@ t('isti problem osvježava jednu karticu umjesto dupliranja', () => {
   assert.strictEqual(all.pozari.state, 'uspjeh');
 });
 
-t('FIRMS API ključ se nikad ne ispisuje u debug URL-u', () => {
-  const src = extractFn('_poziDebugSafeUrl') + '\nreturn _poziDebugSafeUrl;';
-  const safe = new Function(src)();
-  const out = safe('https://firms.modaps.eosdis.nasa.gov/api/area/csv/TAJNI_KLJUC/VIIRS/1,2,3,4/5');
-  assert.ok(!out.includes('TAJNI_KLJUC'));
-  assert.ok(out.includes('/api/area/csv/***/'));
-});
-
-t('admin ima zaseban debug sječe / vjetroizvala', () => {
-  assert.match(HTML, /Pokreni debug sječe \/ vjetroizvala/);
-  assert.ok(extractFn('_adminDebugRunSjeca').includes('_sjeLoad(true, true)'));
-  assert.ok(extractFn('_sjeDebugPublish').includes("'sjeca-vjetroizvale'"));
-});
-
-t('GFW ključ se uklanja iz odgovora prije spremanja debug zapisa', () => {
-  const src = extractFn('_sjeDebugOcisti') + '\nreturn _sjeDebugOcisti;';
-  const safe = new Function('_poziGfwKljuc', src)(() => 'GFW_TAJNI_KLJUC');
-  const out = safe('server kaže GFW_TAJNI_KLJUC i https://x.test/?token=DRUGA_TAJNA');
-  assert.ok(!out.includes('GFW_TAJNI_KLJUC'));
-  assert.ok(!out.includes('DRUGA_TAJNA'));
-});
-
-t('debug sječe bilježi mrežni put, HTTP, parsiranje, filtriranje i keš', () => {
-  const src = extractFn('_sjeDebugText');
-  ['Dataset: gfw_integrated_alerts/latest','Metoda:','geometrija:','HTTP:','Primljeno iz GFW:','Grupisanih alarma:','Korišten keš nakon greške:'].forEach(x => assert.ok(src.includes(x), x));
-  const dohvat = extractFn('_poziDohvatiJedan');
-  assert.ok(dohvat.includes('preview:pregled'));
-  assert.ok(dohvat.includes('bytes:String'));
-});
-
 t('riješeni debug ima eksplicitno dugme za brisanje', () => {
   assert.match(HTML, /Obriši kao riješeno/);
   assert.ok(extractFn('_adminDebugResolve').includes("_debugRemove(id)"));

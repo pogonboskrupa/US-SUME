@@ -1,12 +1,11 @@
 // Proximity fallback za sačuvana mjerenja (v1.5.4) — testovi nad STVARNIM
 // kodom iz index.html.
 //
-// Zašto: mjerenja se crtaju u pane 'tragMsrLines' (z-index 410), a panel
-// Požari u 'pozariPovrsPane' (640) i 'pozariPane' (645) — oba IZNAD. Leaflet
+// Zašto: mjerenja se crtaju u pane 'tragMsrLines' (z-index 410). Leaflet
 // canvas renderer je JEDAN <canvas> preko cijele karte koji sam hvata DOM
-// klik, pa gornji pojede klik i popup mjerenja nikad ne opali. v1.4.8 je taj
-// slučaj ostavila kao svjesno ograničenje jer je bio rijedak; otkad su tačke
-// i opožarena površina UVIJEK uključene, postao je trajno stanje.
+// klik, pa BILO KOJI drugi interaktivni canvas sloj sa VIŠIM z-indexom pojede
+// klik i popup mjerenja nikad ne opali. Fallback ostaje kao opšta odbrana,
+// isti princip kao proximity fallback za vlake/uvezeni KML (v3.101.0).
 
 const fs = require('fs');
 const path = require('path');

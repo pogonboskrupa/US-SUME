@@ -48,6 +48,18 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 ## Mogućnosti izgrađene do sada (ne smiju se pokvariti)
 
+> **Napomena (v1.5.7)**: sekcija **Požari** (FIRMS/GFW/EFFIS detekcije, Sječa/
+> vjetroizvale, arhiva po godinama, heatmap, projekcija opožarene površine) i
+> **Projektovanje šumskog puta** su UKLONJENE iz ove aplikacije i izdvojene u
+> posebnu, zasebnu app — obje su usporavale ovu app, a firma ih dalje razvija
+> u novom repozitoriju. Svi bulleti ispod koji opisuju Požari (`_pozi*`,
+> `_pov*`, `_sje*`) i Projektovanje šumskog puta (`_rd*`, `static/js/
+> road-design.js`) opisuju kod koji VIŠE NE POSTOJI u ovom repozitoriju —
+> ostavljeni su kao istorijski zapis (terenske dijagnoze, CORS/API zamke,
+> odluke o dizajnu) za slučaj da zatreba u novoj app-i; git historija prije
+> ove izmjene ima puni kod na koji se odnose. Ne dodavati nove Požari/
+> Projektovanje-puta izmjene ovdje — to ide u novi repozitorij.
+
 - **"Ažuriraj aplikaciju" u Meniju sada instalira najnoviji APK jednim tapom
   (v1.5.2)**: na eksplicitan zahtjev — do tada je taj isti meni-item za APK
   korisnike samo otvarao GitHub Actions listu radnji, a korisnik je morao
@@ -1553,248 +1565,29 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   — nije dirana jer korisnik nije tražio uklanjanje odatle, samo iz popupa
   koji se otvara klikom na marker.
 
-## Požari — revert na opt-in prikaz (v1.5.6)
+## Požari — implementacioni dnevnik (v1.5.4/v1.5.5/v1.5.6) — UKLONJENO (v1.5.7)
 
-Na eksplicitan zahtjev: "Prikaži sve u sekciji Požari ugasi. Napravi da se
-tiho učitavaju teži dijelovi sekcije. Aplikacija ne smije štekati."
-
-- **Uzrok**: v1.5.4 je postavila "Prikaži detekcije" (`_poziOn`) i "Prikaži
-  projekciju/opožarenu površinu" (`_poziOpozOn`) na podrazumijevano
-  UKLJUČENO ("uređaj koji nikad nije dirao ovaj prekidač dobija prikaz
-  odmah"). Korisnik je tu odluku sad eksplicitno poništio — oba prekidača se
-  vraćaju na opt-in (isključeno dok korisnik SAM ne uključi), isti obrazac
-  kao prije v1.5.4.
-  - `_poziOpozOn()`: `!== '0'` → `=== '1'`.
-  - `_poziOn` (u `_poziObnoviPrikaz()`): `!== '0'` → `=== '1'`.
-  `_poziToggle`/`_poziOpozToggle` (funkcije koje UPISUJU vrijednost pri
-  ručnom klikanju) nisu dirane — pišu `'1'`/`'0'` identično bez obzira na
-  default.
-- **Šta OSTAJE netaknuto, namjerno**: cijela tiha/lijena infrastruktura iz
-  v1.5.4/v1.5.5 (`_povArh*` red za arhivu po godinama, `_poziProj`/
-  `_poziProjRed` lijeni red za mapni sloj/listu/karticu, heatmap downsample
-  u `_PoziHeat`) i dalje postoji i i dalje radi identično KAD korisnik ručno
-  uključi prikaz — revert mijenja SAMO podrazumijevano stanje dva prekidača,
-  ne uklanja rad uložen u to da se, jednom uključeno, ne smrzne app.
-  - `_povArhServerSinkOpp()` (poziv iz `korak('povArh', ...)` u
-    `_startupRestore`) ostaje BEZUSLOVAN, nezavisan od `_poziOn`/
-    `_poziOpozOn` — ovo JESTE "tiho učitavanje teže sekcije" koje korisnik
-    traži da se zadrži: arhiva se sinhronizuje u pozadini od starta, pa kad
-    korisnik KASNIJE uključi prikaz, podaci su već tu i render je gladak,
-    bez čekanja na mrežu u tom trenutku.
-  - `_poziAutoTreba()`/`_poziAutoSync()` (10-minutni auto-refresh) ostaju
-    vezani za `_activeTab === 'pozari'` ILI uključena obavještenja — namjerno
-    nezavisni od ova dva prekidača otkad je uveden (v3.114.1), nije mijenjano.
-  - `_poziObnoviPrikaz()` je VEĆ prije ove izmjene preskakala sve teške grane
-    (`if (_poziOn) {...}`, `if (_povGodOn) {...}`, `if (_povHistOn) ...`, `if
-    (_povArhUkljucene().length) ...`) kad su prekidači isključeni — nikakvo
-    dodatno gejtovanje tu nije trebalo.
-- **Testovi ažurirani da prate NOVI default** (tri fajla su testirala v1.5.4
-  ponašanje doslovno, regexom nad izvornim kodom — morali su se promijeniti
-  zajedno sa samim kodom, ne dodavati novi testovi pored starih):
-  `tests/js/pozari-lijeni-racun.test.js` ("Uvijek uključeni prikazi" →
-  "Opt-in prikazi"), `tests/js/pozari.test.js` (prekidač projekcije,
-  `assert.strictEqual(fns._poziOpozOn(), true)` → `false` za prazan
-  `localStorage`), `tests/js/pozari-incident.test.js` (ista provjera
-  `!== '0'` → `=== '1'` nad sirovim tekstom `index.html`). Testovi koji
-  postavljaju vrijednost EKSPLICITNO prije provjere (uključivanje/
-  isključivanje prekidača) nisu dirani — ne zavise od defaulta.
-- **Poznata zamka izbjegnuta**: `pozari-opoz-lijeni.test.js` i
-  `pozari-heat-throttle.test.js` (oba iz v1.5.5) su provjerena grep-om da NE
-  pretpostavljaju default-ON — koriste eksplicitne mock vrijednosti
-  (`_poziOpozOn: () => true`) u sopstvenom sandboxu, pa ih revert defaulta
-  ne dotiče.
-
-## Požari — preostala dva izvora usporenja, poslije v1.5.4 (v1.5.5)
-
-Nastavak posla iz v1.5.4 — korisnik je pitao "šta uraditi da požari sekcija ne
-usporava aplikaciju?". Istraga (statička analiza koda, bez pristupa uređaju) je
-pronašla DVA preostala mjesta gdje sekcija radi STVARAN posao SINHRONO na
-putevima koji se okidaju često (svaki meteo/GPS/toast događaj, svaki pan/zoom
-karte) — `_povArh*` (v1.5.4) je ostao netaknut, potvrđen ispravnim.
-
-### Heatmap redraw — downsample interne rezolucije
-
-- **`_PoziHeat._redraw()` je radio pun `getImageData`/`putImageData` preko
-  CIJELOG vidljivog viewporta, na SVAKI `moveend`/`zoomend`/`resize`** dok je
-  opcioni "🔥 Prikaži i kao heatmap" prekidač uključen — najveći pojedinačni
-  trošak u sekciji, jer se ponavlja pri SVAKOM pomjeranju karte, ne samo pri
-  osvježavanju podataka.
-  - **`_reset()` sad smanjuje backing buffer** (`canvas.width/height`)
-    faktorom `_scale` (podrazumijevano 0.5 → 4× manje piksela za
-    `getImageData`/`putImageData`), dok `canvas.style.width/height` ostaje
-    PUNA CSS veličina — canvas se na ekranu ne smanjuje, samo interno ima
-    manje piksela. Canvas prije NIJE imao eksplicitan CSS `style.width/height`
-    (oslanjao se na 1:1 default) — bez toga bi downsample fizički smanjio
-    canvas na ekranu.
-  - **`_redraw()` koristi `ctx.setTransform(scale,...)` PRIJE crtanja** —
-    koordinate tačaka (`pt.x/y`, radijus `r`) ostaju u punim CSS/mapa
-    pikselima, transform ih automatski mapira na manji buffer, bez ručnog
-    množenja.
-  - **KRITIČNO: transform se resetuje NA `1,0,0,1,0,0` PRIJE
-    `getImageData`/`putImageData`**, i te dvije funkcije čitaju
-    `this._canvas.width/height` (stvarna, već smanjena veličina), NE
-    `map.getSize()` (puna veličina mape) — `getImageData`/`putImageData`
-    UVIJEK rade u sirovim device-pikselima backing buffera i IGNORIŠU
-    trenutni transform; poziv sa punom veličinom mape na smanjenom canvasu bi
-    tražio više piksela nego što backing buffer ima.
-  - **Vizuelno provjereno Playwright reprodukcijom** (stvarni `_PoziHeat`
-    izvučen iz `index.html` prije/poslije, isti obrazac kao dokumentovani
-    heatmap repro iz v3.112.2/v3.112.4): piksel-diff prije/poslije — 1.8%
-    piksela se razlikuje za >10/255 (rub blob-a, očekivano od resample-a),
-    prosječna razlika 0.32/255 — zanemarljivo. Na NAJVEĆEM zumu (DPR 2, jedna
-    izolovana tačka) nema vidljive pikselizacije — blob ostaje glatko
-    zamućen jer je efekat već namjerno gausovski (isti šablon `_tpl`), ne
-    oštra grafika.
-  - **NIJE dodat dodatni throttle na `moveend`/`zoomend`** — Leaflet ih već
-    okida na KRAJ gesta (ne kontinuirano tokom drag-a), isti obrazac kao svi
-    ostali `map.on('moveend zoomend', ...)` handleri u fajlu bez throttle-a.
-    **NIJE dodata idle-callback odgoda za sam redraw** — downsample je sam
-    dovoljno smanjio trošak; dodatna odgoda bi unijela vidljiv lag (heatmap
-    "kasni" za markerima pri pan-u) bez izmjerene koristi.
-  - Test: `tests/js/pozari-heat-throttle.test.js` (5) nad STVARNIM `_PoziHeat`
-    (object-literal ekstrakcija, drugačiji obrazac od `function`-potpisa koji
-    `extractFn` hvata). **Provjereno da 4/5 pada na kodu prije izmjene.**
-
-### `_poziProj` — TRI hot-path poziva, ne jedan
-
-- **`_poziProj` JESTE memoizovan** (Map po sadržajnom potpisu tačaka grupe,
-  kapa 80, LRU) — ali na PROMAŠAJ keša (nova grupa ili grupa sa novom
-  detekcijom — česta situacija dok požar aktivno gori i FIRMS/GFW javljaju
-  nove detekcije na 10 min), `_poziOpozProjekcija` radi concave hull + buffer
-  union po trakama starosti SINHRONO. To je bilo prihvatljivo dok se ovaj
-  račun radio samo u popup-ima (jedna grupa, na eksplicitnu korisnikovu
-  akciju), ali TRI mjesta ga zovu u petlji nad SVIM vidljivim grupama:
-  mapni sloj (`_poziOpozAzuriraj`), SVAKI red liste (`_poziRedHtml`) i sažetak
-  kartice — sve tri se pozivaju na SVAKI meteo/GPS/toast događaj dok je panel
-  otvoren (isto onoliko često koliko i `_povArhKarticaHtml`, v1.5.4).
-  **Popravka SAMO mapnog sloja bi ostavila listu i karticu da i dalje sinhrono
-  forsiraju isti račun** — poništavajući svrhu popravke za korisnika koji drži
-  panel otvoren (najčešći slučaj za nekoga ko prati požar). Pokriveno testom
-  koji eksplicitno hvata baš taj propust (Invarijanta 4/5 u
-  `pozari-opoz-lijeni.test.js`).
-- **Isti red-čekanja + `requestIdleCallback` obrazac kao `_povArh*` (v1.5.4),
-  ali NEZAVISNA implementacija** — `_poziProjRed`/`_poziProjZakazi`/
-  `_poziProjPokreniObradu`/`_poziProjTraziCrtanje`. Namjerno se NE dijeli
-  infrastruktura sa `_povArh*`: taj kod ima specifičnu semantiku (ključ po
-  godini/mjesecu) čije bi generalizovanje unijelo rizik u kod koji je već
-  ispravan i ne treba se dirati. Stil ovog repoa favorizuje eksplicitne,
-  samostalne blokove po funkciji, ne dijeljene apstrakcije.
-- **`_poziProj(g, samoKes)`** — isti API oblik kao
-  `_povArhRacunaj(godina, samoKes)`. Na promašaju sa `samoKes:true` zakazuje
-  posao i vraća `undefined` ("još nije spremno", isto značenje kao
-  `_povArhKes[k]===undefined`). Svi pozivaoci BEZ drugog argumenta ostaju
-  POTPUNO nepromijenjeni (sinhroni) — to su detalj-pogledi (izvještaj o
-  incidentu, HUD simulacije za JEDAN odabran požar, `index.html:15227, 15248,
-  15446, 15468`), gdje kratko sinhrono čekanje za JEDNU grupu na eksplicitnu
-  korisnikovu akciju ostaje prihvatljivo i namjerno nepromijenjeno.
-- **`_poziOpozAzuriraj`**: na `undefined` grupa se PRESKAČE u tom prolazu
-  crtanja sloja — marker/tačka grupe i dalje postoji (crta ih `_poziRender()`
-  odvojeno, prije ovog poziva), samo bez površine dok se ne izračuna.
-  `_poziProjTraziCrtanje()` (throttlovano 350ms, isti period kao
-  `_povArhTraziCrtanje`) ponovo poziva ovu funkciju kad se posao završi.
-- **`_poziRedHtml`**: `undefined` se ponaša identično kao postojeći slučaj
-  "nema geometrije" — red u listi jednostavno ne prikazuje "ha" broj taj put,
-  pojavi se na sljedeći prirodni render panela.
-- **Sažetak kartice — POSEBNA PAŽNJA na najbliži požar**: naivna primjena
-  istog obrasca (`sProj = _poziEvts.map(g => _poziProj(g,true)?g:null)
-  .filter(Boolean)`, pa `sProj[0]` kao "najbliži") bi imala PRAVI bug, ne samo
-  kašnjenje — ako je BAŠ najbliži požar (`_poziEvts[0]`) u obradi, filtriranje
-  bi tiho odabralo SLJEDEĆI dostupan (DALJI) požar pod istim natpisom
-  "najbliži požar — ukupno zahvaćeno". Zato se `_poziEvts[0]` provjerava
-  ODVOJENO, PRIJE filtriranja liste: ako je u obradi, cijeli sažetak (opoz i
-  progn) prikazuje "⏳ Računam procjenu površine…" umjesto pogrešne tvrdnje.
-  Pokriveno testom (`racuna === undefined` provjera u kodu).
-- **NAMJERNO se ne forsira eksplicitan `_poziRenderPanel()` poziv** iz
-  `_poziProjTraziCrtanje()` — isti princip kao `_povArhTraziCrtanje`, koji
-  takođe ne forsira puni panel rerender, samo redraw mapnog sloja. Panel HTML
-  se prirodno osvježi na sljedeći od desetina drugih okidača (meteo/GPS/toast).
-- **Invalidacija**: sadržajni potpis (`sig`) je VEĆ dovoljan — promjena
-  sadržaja grupe daje NOVI `sig`, stara (zastarjela) stavka reda se, ako se
-  izračuna nakon promjene, upiše pod STARIM ključem — bezopasno, nikad se više
-  ne pogodi. Nije potrebna eksplicitna invalidacija reda ni TTL na kešu.
-  Dodana je SAMO kapa na sam red (`_POZI_PROJ_RED_MAX=40`, `shift()`
-  najstarijeg pri prekoračenju) — zaštita od neograničenog rasta pri scenariju
-  "desetine požara + brzi uzastopni refresh-evi".
-- Test: `tests/js/pozari-opoz-lijeni.test.js` (9) nad STVARNIM kodom.
-  **Provjereno da svih 9 pada na kodu prije izmjene.**
-
-## Požari — uvijek vidljivo, teško računanje u pozadini (v1.5.4)
-
-Na zahtjev: "hoću da uvijek ima prikaz tački i opožarene površine... teži
-podaci poput podataka o cijeloj godini hoću da se polako i skriveno prikazuju
-tj. pametno. Da ne koči mobitel."
-
-- **`_poziOpozOn()` je podrazumijevano UKLJUČEN** (`!== '0'`, isti obrazac kao
-  `_poziOn`) — bilo `=== '1'`. Ovo je SVJESNO odustajanje od ranijeg pravila
-  "ne nameći sloj koji korisnik nije tražio": opožarena površina je osnovni
-  požarni podatak, ne dodatak. Isključivanje i dalje radi i pamti se; test u
-  `pozari.test.js` koji je čuvao staro pravilo je prepravljen, ne obrisan, sa
-  objašnjenjem zašto je pravilo promijenjeno.
-- **Posljedica koju je trebalo riješiti U ISTOM POTEZU**: v1.4.8 je kao
-  "svjesno preostalo ograničenje" ostavila da klik na mjerenje ne prolazi dok
-  su tačke požara STVARNO prikazane (njihov canvas je legitiman i iznad).
-  Dok je sloj bio podrazumijevano isključen, to je bio rijedak slučaj. Otkad
-  je uvijek uključen, postalo bi TRAJNO stanje — mjerenje se ne bi moglo
-  kliknuti nikad. Vidi sekciju o mjerenjima ispod.
-
-### Teški račun ide u red, po jednu jedinicu u praznom hodu
-
-- **Uzrok zamrzavanja je bio stvaran i izmjeren**: `_povArhRender` je SINHRONO
-  računao turf uniju za svaki mjesec i za svaku punu godinu. JavaScript je
-  jednonitan — dok turf radi, telefon ne prima dodir, ne skroluje i ne crta.
-  Izmjereno 284 ms po punoj sezoni u sandboxu (v3.122.0), na telefonu
-  višestruko više; pet godina × dvanaest mjeseci je sekunde nepomičnog ekrana
-  pri SVAKOM otvaranju panela.
-- **Rješenje nije manje podataka nego drugačiji raspored posla.** Svaka
-  jedinica (jedan mjesec jedne godine, ili puna godišnja unija) ide u
-  `_povArhRed` i računa se po JEDNA po `requestIdleCallback`-u (rezerva:
-  `setTimeout` 60 ms za WebView bez njega). Između dvije jedinice ekran diše.
-  Kako koja završi, karta se ponovo iscrta — površina "izrasta" dio po dio.
-- **`samoKes` je ono što to omogućava**: crtanje i kartica pitaju "je li ovo
-  spremno?" i NIKAD ne pokreću račun same. `undefined` = nije računato
-  (zakaži), `null` = računato i nema geometrije (ne pokušavaj ponovo). Test
-  to čuva kao INVARIJANTU nad kodom: svaki poziv `_povArhRacunaj*` unutar
-  `_povArhRender` i `_povArhKarticaHtml` mora nositi `, true)`.
-- **Kartica je bila gori krivac od karte**: `_poziRenderPanel` se zove na svaki
-  meteo/GPS/toast događaj, pa je sinhroni račun tamo ledio panel pri svakom
-  takvom događaju, ne samo pri otvaranju.
-- **Crtanje je throttlovano na 350 ms** — bez toga bi svaka od ~60 jedinica
-  okinula svoje puno ponovno crtanje sloja i pojela baš ono rasterećenje
-  zbog kojeg je posao razbijen.
-- **Grupisanje tačaka godine (`_poziGrupisi`) se KEŠIRA po godini**
-  (`_povArhGrupeKes`) — treba ga svako crtanje (da klik na tačku zna kojem
-  požaru pripada), a postepeni račun izaziva desetak crtanja po godini.
-- **`_povArhKesOcisti` prazni i RED, ne samo keš** — jedinica zakazana nad
-  starim zapisima bi svoj rezultat upisala POSLIJE čišćenja i tiho vratila
-  zastarjelu geometriju u keš koji je upravo proglašen nevažećim. Pokriveno
-  testom.
-- **Napredak je VIDLJIV** (`#pov-arh-stanje`, "⏳ Računam u pozadini… još N") —
-  prazno polje pored uključene godine se inače čita kao "nema podataka", a
-  zapravo se računa. Isti princip kao "Učitavam kartu…" indikator (v1.1.3):
-  posao koji traje mora biti vidljiv, inače izgleda kao kvar.
-- **Defekt uhvaćen vlastitim testom**: prvi `_povArhPreostalo()` je brojao
-  `_povArhRed.length + (_povArhRadi ? 1 : 0)`, a `_povArhRadi` je `true` već od
-  trenutka kad je obrada ZAKAZANA — dok posao još stoji u redu. Jedan posao je
-  bio brojan dvaput. Dodan `_povArhTekuci` (posao koji je stvarno izvađen iz
-  reda).
-- **"Ova godina" (mrežni dohvat) je već bio odgođen** iza paint-a
-  (`_povGodLoadPozadina`, `requestAnimationFrame` + 80 ms) — taj dio nije dirán.
-- **NIJE dirano**: `_poziOpozAzuriraj` (živi panel, prozor 24h–7d u krugu
-  100 km) i dalje računa sinhrono. `_poziProj` je memoizovan po grupi, broj
-  grupa je mali, i taj put je već radio za svakoga ko je prekidač imao
-  uključen. Ako se sa terena javi zastoj i tu, isti obrazac (red + `samoKes`)
-  se prenosi — ali bez izmjerenog dokaza da treba, to bi bio rizik bez dobiti.
-- Testovi: `tests/js/pozari-lijeni-racun.test.js` (17) nad STVARNIM kodom —
-  ponašanje planera (jedan takt = jedna jedinica, isti posao se ne zakazuje
-  dvaput, pad jednog ne zaustavlja red, crtanje se skuplja) i invarijante nad
-  kodom (nijedan sinhroni račun u crtanju ni u kartici, čišćenje prazni red).
-  **Provjereno da 15 od 17 pada na kodu prije izmjene.**
+Tri sekcije koje su ovdje ranije stajale ("uvijek vidljivo, teško računanje
+u pozadini" v1.5.4, "preostala dva izvora usporenja" v1.5.5, "revert na
+opt-in prikaz" v1.5.6) su dokumentovale rad na kodu koji je u v1.5.7 uklonjen
+zajedno sa cijelom sekcijom Požari (izdvojena u posebnu app — vidi napomenu
+na vrhu "Mogućnosti izgrađene do sada"). Pun tekst tih sekcija (lijeni red za
+arhivu po godinama i za projekciju opožarene površine, heatmap downsample,
+opt-in vs. uvijek-uključeno rasprava) dostupan je u git historiji ovog fajla
+prije v1.5.7 — vrijedan referenci ako se sličan "teško računanje u pozadini"
+problem pojavi u novoj app-i, ali ne opisuje kod koji ovdje i dalje postoji.
 
 ## Mjerenja — klik ispod požarnog canvasa (v1.5.4)
 
 Terenska prijava, ponovljena kroz više verzija: "i dalje ne mogu kliknuti na
 npr. izmjerenu površinu, da imam info modal kolika je površina, i da je mogu
 editovati ili obrisati".
+
+**Napomena (v1.5.7)**: `pozariPovrsPane`/`pozariPane` (pomenuti ispod) više
+ne postoje — Požari je izdvojena u posebnu app. Fallback mehanizam
+(`_msrHitTest` i dalje u kodu) je OSTAO kao opšta odbrana za BILO KOJI budući
+interaktivni canvas sloj sa višim z-indexom, ne samo za Požari — istorija
+ispod objašnjava ZAŠTO postoji, ne opisuje trenutno stanje slojeva na karti.
 
 - **Popup je SVE TO VEĆ IMAO** — površinu u m² i ha, obim, klizač providnosti,
   dugme Edituj i dugme Obriši. Problem nikad nije bio sadržaj nego to što klik
@@ -1833,6 +1626,69 @@ editovati ili obrisati".
 - **Zamka pri pisanju testa**: mock karte je koordinatu čitao kao
   `ll.lng || ll.lo` — a `0 || undefined` je `undefined`, pa je svaka tačka na
   nuli davala `NaN` i test je padao na MOCKU, ne na kodu. `??` umjesto `||`.
+
+## Požari i Projektovanje šumskog puta — izdvojeni u posebnu app (v1.5.7)
+
+**Uzrok**: obje sekcije su usporavale ovu app (mrežni dohvat FIRMS/GFW/EFFIS,
+turf.js geometrijski proračuni, DEM routing za trasu puta) i pored optimizacija
+iz v1.5.4/v1.5.5/v1.5.6. Firma je odlučila da ih razvija dalje u ZASEBNOJ,
+novoj aplikaciji (gdje planira dodati još mogućnosti oko požara), a ova
+(glavna terenska app za vlake/doznaku/tragove) da radi brže i bez tog tereta.
+
+- **Uklonjeno iz `index.html`**: sve `_pozi*`/`_POZ_*`/`_pov*`/`_sje*`/
+  `_SJE_*`/`_PoziHeat`/`_klikDebug*` identifikatore (dohvat/parsiranje FIRMS/
+  GFW/EFFIS, grupisanje, heatmap, projekcija opožarene površine i njen lijeni
+  red, notifikacije, admin ključevi, incident/HUD simulacija, arhiva po
+  godinama i njen server sink); Leaflet pane-ove `pozariPovrsPane`/
+  `pozariPane` i sve slojeve koji su u njih crtali; panel `#pozari-panel` i
+  stavku "🔥 Požari" iz menija; korake `korak('poziKljucevi', ...)`/
+  `korak('pozari', ...)`/`korak('povArh', ...)`/`korak('sjeca', ...)` iz
+  `_startupRestore()`; debug dugmad "Pokreni novi debug požara"/"Pokreni
+  debug sječe" i funkcije `_adminDebugRunFire`/`_adminDebugRunSjeca`; debug
+  karticu "Klikovi na karti" (`_klikDebugRender`/`_klikOslobodiSada`); CSS
+  klase `.poz-*`/`.pov-*`/`.sje-*` i `@keyframes pozPuls`; `_OVL.fwi`/
+  `_OVL.opozareno` EFFIS slojeve i `_EFFIS_CACHE`/`CachedEffis`.
+- **Uklonjeno**: sav `_rd*` kod i `showRoadDesignModal()` (komentar u kodu je
+  eksplicitno govorio "nema veze sa vlaka/projekat konceptom" — čist,
+  samostalan blok), HTML modal "PROJEKTOVANJE ŠUMSKOG PUTA", stavka menija,
+  i CIJELI fajl `static/js/road-design.js` (bio potpuno samostalan modul,
+  ni sa čim drugim nije dijelio kod — vidi njegov vlastiti header komentar).
+  **`_rdpSimplify`** (~generička Douglas-Peucker simplifikacija na drugom
+  mjestu u fajlu, koristi je i GPS uglačavanje) je NAMJERNO OSTAVLJENA — ime
+  liči na road-design prefiks `_rd*`, ali nema veze s njim (provjereno grep-om
+  svih poziva prije brisanja).
+- **`sw.js`**: uklonjen `EFFIS_CACHE`, EFFIS routing grana u fetch handleru, i
+  `static/js/road-design.js` iz `APP_SHELL` precache liste (fajl je obrisan —
+  da je ostao u listi, instalacija service workera bi pucala na 404).
+- **Testovi obrisani**: `pozari.test.js`, `pozari-arhiva.test.js`,
+  `pozari-canvas-klik.test.js`, `pozari-heat-throttle.test.js`,
+  `pozari-incident.test.js`, `pozari-lijeni-racun.test.js`,
+  `pozari-opoz-lijeni.test.js`, `pozari-panel-throttle.test.js`,
+  `firms-api-sources.test.js`, `pozi-hud-simulacija.test.js`,
+  `road-design.test.js`. **Djelimično uređeni** (Požari-specifični testovi
+  uklonjeni, generički ostali): `admin-debug.test.js` (testovi FIRMS/GFW
+  debug ključeva uklonjeni, testovi generičkog DEBUG mehanizma ostali),
+  `msr-klik-fallback.test.js` (samo komentar ažuriran — sam mehanizam ostaje).
+- **Migracije `20260909_pozari_kljucevi_admin.sql`/
+  `20260911_pozari_arhiva_dijeljena.sql` uklonjene iz repoa** — tabele
+  `pozari_kljucevi`/`pozari_arhiva` NISU brisane sa produkcijskog Supabase
+  servera (nema DROP TABLE), samo se ovaj repo više na njih ne povezuje.
+- **Dijeljena infrastruktura koja NIJE dirana** (koristi je i dalje ostatak
+  app-e): `_getTerrariumTile`/`_terrariumDecodeTile`/`_TERR_CACHE` (DEM keš —
+  Nagib/N.V./Ekspozicija/Konture), `turf` biblioteka, `makeCachedTileLayer`,
+  `_msrHitTest`/`_msrTackaUPoligonu` (mjerenja fallback — ostaje kao opšta
+  odbrana, vidi sekciju iznad), `_nativeNetFetch`/`_nativeNetDostupan` su
+  UKLONJENI (bili su isključivo za FIRMS/GFW), ali Java `MainActivity.
+  NetBridge`/`AppNotifBridge` NISU dirani — postali su neiskorišteni sa JS
+  strane, ali su bezopasni (mrtav kod, ne pucaju, ne zovu se), a Java izmjena
+  bi tražila pun CI rebuild bez jasne koristi. Kandidat za buduće čišćenje.
+- **`_demLegendUpdate`** (dijeljena DEM legenda) je izgubila Požari grane
+  (`_poziLegendaTrake`/`_poziLegendaMarkeri`) — funkcija se vratila na
+  jednostavan oblik (samo Ekspozicija/N.V.), rani-izlaz komentar iz v3.113.1
+  ("NEMA ranog izlaza zbog projekcije opožarene površine") je uklonjen jer
+  više ne vrijedi.
+- Sintaks-provjera i cijela test suita (31 preostalih fajlova) prošli 0/0
+  padova poslije uklanjanja.
 
 ## DEBUG — sadržaj obrisan, alat ostaje (v1.5.4)
 

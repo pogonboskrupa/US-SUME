@@ -10,6 +10,11 @@ sigurnosni certifikat niti potvrda rada na telefonu. Funkcionalni kod nije
 mijenjan. Dokumentacija razlikuje potvrđeno ponašanje izvornog koda,
 izolovane reprodukcije i historijske tvrdnje koje nisu ponovo provjerene.
 
+**Napomena (v1.5.6+)**: sekcija Požari i Projektovanje šumskog puta su od
+verzije v1.5.6 uklonjene iz ove aplikacije i izdvojene u posebnu app —
+opisi i nalazi o njima ispod su historijski (opisuju stanje PRIJE izdvajanja),
+kod na koji upućuju više ne postoji u ovom repozitoriju.
+
 ## 1. Identitet i arhitektura — potvrđeno u kodu
 
 Glavni proizvod je Dendro Map / US-SUME: HTML/JavaScript terenska GIS
@@ -27,10 +32,8 @@ projekat su zasebne cjeline u istom repozitoriju, ne izvršno jezgro tog APK-a.
 | Crash recovery | `_crashSaveVlaka`, `_crashSaveTrag`, `_crashCheck`, `_nativeBufUzmi` | Snapshot na 30 s i dopuna iz native fajla; potvrđeni nedostaci ispod |
 | Offline karte | `makeCachedTileLayer`, `_SQL_WORKER_SRC`, `sqlmapRestoreAll` | Cache Storage pločice; SQLite/MBTiles kroz worker, IndexedDB i OPFS |
 | Doznaka | `dozSaveOdjel`, `dozVlakeLoadKml`, `_dozProcessGpsPoint` | Odjeli/projekti, granice, članovi, pojasevi, stabla i povezane vlake |
-| Požari | `_poziDohvati`, `_poziLoad`, `_poziSazetak`, `_povArhServerSinkOpp` | FIRMS/GFW detekcije, keš, grupisanje i lokalna/dijeljena godišnja arhiva |
 | Satelitski slojevi | `_s2KljucUcitaj`, `_s2TokenUzmi`, Wayback funkcije, SW routing | CDSE OAuth/WMS, historijski Esri slojevi; runtime dostupnost nije provjerena |
-| Projektovanje puta | `static/js/road-design.js`, `rdFindRoute`, `rdValidateRoute`; `_routeToVlaka` | Pretraga trase preko ubrizganog DEM uzorka, nagib/dužina/zaokreti; rezultat postaje vlaka |
-| Android | `android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java`, `GpsService.java` | WebViewAssetLoader, životni ciklus, foreground GPS, native mostovi |
+| Android | `android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java`, `GpsService.java` | WebViewAssetLoader, životni ciklus, foreground GPS, native mostovi. `NetBridge`/`AppNotifBridge` su otkako je Požari izdvojena NEISKORIŠTENI iz JS-a (namjerno netaknuti, vidi CLAUDE.md) |
 | Backend | `supabase/migrations/`, `supabase/functions/handle-registration-action/index.ts` | Auth, RLS, poslovne tabele, RPC i potpisani linkovi za odobrenje |
 | Python | `main.py`, `geo/` | CLI udaljenost, azimut, nagib, površina i lokalni server; 45 testova |
 | Flutter | `doznaka/`, `.github/workflows/build.yml` | Odvojen Forestry Tracker build iz Dart fragmenata; nije Java WebView APK |
@@ -236,10 +239,7 @@ Supabase sesijom; nisu pokretane migracije, workflowi, deployment ni instalacija
 | loc-popup-trag | 5 | 0 |
 | map-restore-indicator | 12 | 0 |
 | offline-layer | 13 | 0 |
-| pozari-arhiva | 40 | 0 |
-| pozari | 195 | 0 |
 | rec-bar | 15 | 0 |
-| road-design | 13 | 0 |
 | sentinel2 | 20 | 0 |
 | sqlmap-idb-split | 16 | 0 |
 | startup-restore | 7 | 0 |

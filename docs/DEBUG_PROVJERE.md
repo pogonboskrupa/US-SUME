@@ -30,33 +30,13 @@ nagađanju na daljinu.
 
 Svaki se zavodi pod svojim `id`-jem; novi pokušaj osvježava isti zapis.
 
-### `pozari` — Požari: dohvat i filtriranje
-- **Pokreće:** dugme „🔥 Pokreni novi debug požara" (`_adminDebugRunFire`), i
-  „Provjeri izvore" u samom panelu Požari (`_poziProvjeriIzvore`).
-- **Šta bilježi:** za svaki izvor (FIRMS arhive, FIRMS Area API, GFW) — način
-  pristupa (native most `AndroidNet` ili browser `fetch()`), HTTP status ili tip
-  greške, broj parsiranih redova, broj poslije filtera udaljenosti, stanje keša.
-- **Šta je njime utvrđeno:** da FIRMS ne šalje CORS zaglavlja ni za arhivu ni za
-  `/api/` rutu (v3.105.0). To je bio treći terenski test — dobra veza 215 KB/s,
-  najmanji okvir, unesen MAP_KEY, i **svih pet izvora „odbijeno odmah"**. Tek taj
-  ispis je opravdao pisanje native Java mosta; bez njega bi to bio preuranjen
-  native kod bez dokaza da treba.
-- **Način provjere:** korisnik pokrene dugme na stvarnom uređaju i pošalje ispis.
-  Jedini pouzdan put — sandbox ne može dozvati `firms.modaps.eosdis.nasa.gov`.
-- **Ishod:** riješeno. `AndroidNet` most zaobilazi CORS u APK-u; u webapp-u
-  blokada ostaje i UI to otvoreno kaže umjesto da nudi MAP_KEY kao rješenje.
-- **Zamka koju je otkrio:** „Provjeri izvore" radi SVOJ, potpuno odvojen dohvat
-  i NE upisuje rezultat u `_poziPts`/`_poziEvts`. Zato „sve piše OK" dokazuje
-  samo da mreža radi — ne i da je ono na ekranu svježe (v3.114.0).
-
-### `sjeca-vjetroizvale` — Sječa / vjetroizvale: GFW dohvat
-- **Pokreće:** dugme „🪵 Pokreni debug sječe" (`_adminDebugRunSjeca`).
-- **Šta bilježi:** isto kao gore, ali za `gfw_integrated_alerts` SQL upit —
-  sastavljeni URL, HTTP odgovor, broj alarma, prag grupisanja.
-- **Šta je njime utvrđeno:** da integrisani sloj (a ne zaseban
-  `umd_glad_dist_alerts`) ima dosljedna imena polja, i da DIST-ALERT jedini od
-  GFW alarma pokriva BiH (~44.9°N) — ostali su tropski pojas.
-- **Ishod:** riješeno, sloj radi uz GFW ključ koji postavlja admin (v3.124.0).
+### `pozari` i `sjeca-vjetroizvale` — UKLONJENI (sekcija Požari izdvojena)
+Dijagnostički zapisi za FIRMS/GFW dohvat, native `AndroidNet` most i debug
+dugmad „Pokreni novi debug požara"/„Pokreni debug sječe" su nestali zajedno sa
+cijelom sekcijom Požari, koja je izdvojena u posebnu aplikaciju (uzrok: sekcija
+je usporavala ovu app; vidi CLAUDE.md). Historija istrage (CORS na FIRMS-u,
+`AndroidNet` most, GFW integrisani alarmi) ostaje u git historiji ovog fajla
+prije te izmjene, ako zatreba.
 
 ### `map-startup` — Učitavanje offline karte
 - **Pokreće:** samo od sebe, pri svakom pokretanju sa SQLite/MBTiles kartom.
@@ -140,24 +120,15 @@ jedina tačka kroz koju prolazi sav Supabase saobraćaj). Nema periodičnog ping
 - **Provjera:** `tests/js/net-kvalitet.test.js` (19) nad stvarnim kodom i
   stvarnim `reliable-fetch.js`, plus Playwright reprodukcija sva tri stanja.
 
-### Klikovi na karti — `klik-debug-card`
-Broj canvasa u požarnom pane-u i je li sloj požara stvarno prikazan. Kad canvas
-postoji a sloj NIJE prikazan, to je blokada — kartica to kaže crvenim i nudi
-dugme „Oslobodi klikove".
-
-- **Uzrok dokazan Playwright reprodukcijom nad stvarnim Leafletom**, ne nagađan:
-  (1) samo izmjerena površina → klik radi; (2) + jedna tačka u `pozariPane` →
-  klik mrtav; (3) tačka uklonjena sa karte → **i dalje mrtav**, canvas zaostao;
-  (4) renderer uklonjen → klik radi.
-- **Leaflet NIKAD sam ne ukloni canvas renderer** kad nestane zadnji sloj koji ga
-  koristi. Taj canvas je jedan element preko cijele karte na z-indexu 645.
-- **Provjera:** `tests/js/pozari-canvas-klik.test.js` (24) nad stvarnim kodom.
-  Provjereno da padaju na starom kodu.
-- **Ograničenje koje je v1.4.8 ostavila svjesno, a v1.5.4 zatvorila:** dok su
-  tačke požara STVARNO prikazane, njihov canvas je legitiman i klik na mjerenje
-  ispod nije prolazio. Otkad su tačke i opožarena površina uvijek uključene, to
-  je prestalo biti rijedak slučaj — zato mjerenja sad imaju proximity fallback
-  (`_msrHitTest`), isti obrazac koji vlake i KML imaju od v3.101.0.
+### Klikovi na karti — `klik-debug-card` — UKLONJENO (sekcija Požari izdvojena)
+Ova kartica je dijagnosticirala isključivo zaostali canvas u `pozariPane`/
+`pozariPovrsPane` (z-index 640/645) — ta dva pane-a više ne postoje otkad je
+sekcija Požari izdvojena. **Opšta pouka ostaje relevantna i dalje** (vidi
+CLAUDE.md, "Canvas pane iznad drugog pojede sve klikove", v3.101.0): svaki
+NOVI interaktivni Leaflet canvas sloj koji se doda u ovu app iznad
+`tragMsrLines` (z-index 410) treba isti tretman (proximity fallback ili
+eksplicitno oslobađanje renderera) — `_msrHitTest` fallback za mjerenja
+ostaje kao opšta odbrana, ne veže se za jedan konkretan sloj.
 
 ---
 
