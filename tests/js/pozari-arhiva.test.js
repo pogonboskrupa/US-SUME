@@ -105,6 +105,9 @@ function makeArh(opts) {
                extractFn('_povArhKljuc'), extractFn('_povArhEnqueue'), extractFn('_povArhDodaj'),
                extractFn('_povArhGodine'), extractFn('_povArhTacke'), extractFn('_povMjesecBoja'), extractFn('_povArhBoja'),
                extractFn('_povArhBrojZapisa'), extractConst('_povArhKes'), extractFn('_povArhKesKljuc'),
+               // v1.5.4: keš grupisanja i red čekanja lijenog računa — _povArhKesOcisti
+               // ih od tada prazni zajedno sa geometrijskim kešem.
+               'const _povArhGrupeKes = {};', 'const _povArhRed = [];',
                extractFn('_povArhSamoSkore'), extractFn('_povArhPostaviSamoSkore'),
                extractFn('_povMjesecSkori'), extractFn('_povGodineSkore'),
                extractFn('_povArhIzracunata'),

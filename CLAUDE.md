@@ -1553,6 +1553,142 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   — nije dirana jer korisnik nije tražio uklanjanje odatle, samo iz popupa
   koji se otvara klikom na marker.
 
+## Požari — uvijek vidljivo, teško računanje u pozadini (v1.5.4)
+
+Na zahtjev: "hoću da uvijek ima prikaz tački i opožarene površine... teži
+podaci poput podataka o cijeloj godini hoću da se polako i skriveno prikazuju
+tj. pametno. Da ne koči mobitel."
+
+- **`_poziOpozOn()` je podrazumijevano UKLJUČEN** (`!== '0'`, isti obrazac kao
+  `_poziOn`) — bilo `=== '1'`. Ovo je SVJESNO odustajanje od ranijeg pravila
+  "ne nameći sloj koji korisnik nije tražio": opožarena površina je osnovni
+  požarni podatak, ne dodatak. Isključivanje i dalje radi i pamti se; test u
+  `pozari.test.js` koji je čuvao staro pravilo je prepravljen, ne obrisan, sa
+  objašnjenjem zašto je pravilo promijenjeno.
+- **Posljedica koju je trebalo riješiti U ISTOM POTEZU**: v1.4.8 je kao
+  "svjesno preostalo ograničenje" ostavila da klik na mjerenje ne prolazi dok
+  su tačke požara STVARNO prikazane (njihov canvas je legitiman i iznad).
+  Dok je sloj bio podrazumijevano isključen, to je bio rijedak slučaj. Otkad
+  je uvijek uključen, postalo bi TRAJNO stanje — mjerenje se ne bi moglo
+  kliknuti nikad. Vidi sekciju o mjerenjima ispod.
+
+### Teški račun ide u red, po jednu jedinicu u praznom hodu
+
+- **Uzrok zamrzavanja je bio stvaran i izmjeren**: `_povArhRender` je SINHRONO
+  računao turf uniju za svaki mjesec i za svaku punu godinu. JavaScript je
+  jednonitan — dok turf radi, telefon ne prima dodir, ne skroluje i ne crta.
+  Izmjereno 284 ms po punoj sezoni u sandboxu (v3.122.0), na telefonu
+  višestruko više; pet godina × dvanaest mjeseci je sekunde nepomičnog ekrana
+  pri SVAKOM otvaranju panela.
+- **Rješenje nije manje podataka nego drugačiji raspored posla.** Svaka
+  jedinica (jedan mjesec jedne godine, ili puna godišnja unija) ide u
+  `_povArhRed` i računa se po JEDNA po `requestIdleCallback`-u (rezerva:
+  `setTimeout` 60 ms za WebView bez njega). Između dvije jedinice ekran diše.
+  Kako koja završi, karta se ponovo iscrta — površina "izrasta" dio po dio.
+- **`samoKes` je ono što to omogućava**: crtanje i kartica pitaju "je li ovo
+  spremno?" i NIKAD ne pokreću račun same. `undefined` = nije računato
+  (zakaži), `null` = računato i nema geometrije (ne pokušavaj ponovo). Test
+  to čuva kao INVARIJANTU nad kodom: svaki poziv `_povArhRacunaj*` unutar
+  `_povArhRender` i `_povArhKarticaHtml` mora nositi `, true)`.
+- **Kartica je bila gori krivac od karte**: `_poziRenderPanel` se zove na svaki
+  meteo/GPS/toast događaj, pa je sinhroni račun tamo ledio panel pri svakom
+  takvom događaju, ne samo pri otvaranju.
+- **Crtanje je throttlovano na 350 ms** — bez toga bi svaka od ~60 jedinica
+  okinula svoje puno ponovno crtanje sloja i pojela baš ono rasterećenje
+  zbog kojeg je posao razbijen.
+- **Grupisanje tačaka godine (`_poziGrupisi`) se KEŠIRA po godini**
+  (`_povArhGrupeKes`) — treba ga svako crtanje (da klik na tačku zna kojem
+  požaru pripada), a postepeni račun izaziva desetak crtanja po godini.
+- **`_povArhKesOcisti` prazni i RED, ne samo keš** — jedinica zakazana nad
+  starim zapisima bi svoj rezultat upisala POSLIJE čišćenja i tiho vratila
+  zastarjelu geometriju u keš koji je upravo proglašen nevažećim. Pokriveno
+  testom.
+- **Napredak je VIDLJIV** (`#pov-arh-stanje`, "⏳ Računam u pozadini… još N") —
+  prazno polje pored uključene godine se inače čita kao "nema podataka", a
+  zapravo se računa. Isti princip kao "Učitavam kartu…" indikator (v1.1.3):
+  posao koji traje mora biti vidljiv, inače izgleda kao kvar.
+- **Defekt uhvaćen vlastitim testom**: prvi `_povArhPreostalo()` je brojao
+  `_povArhRed.length + (_povArhRadi ? 1 : 0)`, a `_povArhRadi` je `true` već od
+  trenutka kad je obrada ZAKAZANA — dok posao još stoji u redu. Jedan posao je
+  bio brojan dvaput. Dodan `_povArhTekuci` (posao koji je stvarno izvađen iz
+  reda).
+- **"Ova godina" (mrežni dohvat) je već bio odgođen** iza paint-a
+  (`_povGodLoadPozadina`, `requestAnimationFrame` + 80 ms) — taj dio nije dirán.
+- **NIJE dirano**: `_poziOpozAzuriraj` (živi panel, prozor 24h–7d u krugu
+  100 km) i dalje računa sinhrono. `_poziProj` je memoizovan po grupi, broj
+  grupa je mali, i taj put je već radio za svakoga ko je prekidač imao
+  uključen. Ako se sa terena javi zastoj i tu, isti obrazac (red + `samoKes`)
+  se prenosi — ali bez izmjerenog dokaza da treba, to bi bio rizik bez dobiti.
+- Testovi: `tests/js/pozari-lijeni-racun.test.js` (17) nad STVARNIM kodom —
+  ponašanje planera (jedan takt = jedna jedinica, isti posao se ne zakazuje
+  dvaput, pad jednog ne zaustavlja red, crtanje se skuplja) i invarijante nad
+  kodom (nijedan sinhroni račun u crtanju ni u kartici, čišćenje prazni red).
+  **Provjereno da 15 od 17 pada na kodu prije izmjene.**
+
+## Mjerenja — klik ispod požarnog canvasa (v1.5.4)
+
+Terenska prijava, ponovljena kroz više verzija: "i dalje ne mogu kliknuti na
+npr. izmjerenu površinu, da imam info modal kolika je površina, i da je mogu
+editovati ili obrisati".
+
+- **Popup je SVE TO VEĆ IMAO** — površinu u m² i ha, obim, klizač providnosti,
+  dugme Edituj i dugme Obriši. Problem nikad nije bio sadržaj nego to što klik
+  do njega ne stiže. Zato nije dodavan nikakav nov modal.
+- **Uzrok**: mjerenja su u pane-u `tragMsrLines` (z-index 410), panel Požari
+  crta u `pozariPovrsPane` (640) i `pozariPane` (645) — oba IZNAD. Svaki
+  Leaflet canvas renderer je JEDAN `<canvas>` preko CIJELE karte koji sam hvata
+  DOM klik pa tek onda traži svoj sloj pod prstom. Isti mehanizam koji je
+  odavno natjerao vlake i uvezeni KML na proximity fallback (v3.101.0).
+- **Dokazano Playwright reprodukcijom nad STVARNIM Leafletom iz `static/libs`**,
+  ne nagađano: (1) samo izmjerena površina → direktan klik prolazi (1); (2)
+  dodana JEDNA tačka u `pozariPane` → direktan klik **0**, fallback uhvatio
+  ispravno mjerenje po imenu. To je tačno prijava sa terena.
+- **`_msrPopupHtml(m)` je IZVUČEN** iz `_msrDrawAllSaved`-ovog forEach
+  closure-a u samostalnu funkciju. Dok je bio zatvoren, popup se "izvana"
+  uopšte nije mogao sastaviti. Sloj i fallback sada dijele ISTI popup — test
+  to čuva, jer bi dvije verzije popupa vremenom razišle.
+- **`_msrHitTest` traži u PIKSELIMA, ne u metrima** (tolerancija 22 px) — meta
+  je prst na ekranu, pa mora biti ista na svakom zumu.
+- **`_msrTackaUPoligonu` radi ray casting u EKRANSKIM koordinatama**, ne u
+  stepenima: na ~44.9°N je 1° dužine skoro upola kraći od 1° širine, pa bi test
+  u stepenima bio izobličen.
+- **Poligon se zatvara `(i+1) % n`, linija se NE zatvara** — bez toga lijeva
+  stranica poligona ne bi postojala kao meta, a kod linije bi se izmislila
+  spojnica zadnje→prve tačke koje na karti nema. Oba smjera pokrivena testom.
+- **Mjerenje koje se UPRAVO EDITUJE (`_mqmId`) se preskače** — `_msrDrawAllSaved`
+  ga ne crta u sačuvanom sloju, pa ne smije biti ni klikabilno.
+- **Redoslijed u `map.on('click')`: mjerenja PRIJE vlaka.** Na karti su i
+  iznad njih (`tragMsrLines` 410 > `vlakeLines` 400), pa kad klik stigne
+  normalno gornji sloj pobjeđuje — i fallback mora poštovati isti redoslijed,
+  inače bi mjerenje nacrtano preko vlake bilo neklikabilno baš u slučaju zbog
+  kojeg fallback i postoji. Test čuva i taj redoslijed i odnos z-indeksa na
+  kojem počiva.
+- Testovi: `tests/js/msr-klik-fallback.test.js` (17) nad STVARNIM kodom.
+  **Provjereno da 16 od 17 pada prije izmjene.**
+- **Zamka pri pisanju testa**: mock karte je koordinatu čitao kao
+  `ll.lng || ll.lo` — a `0 || undefined` je `undefined`, pa je svaka tačka na
+  nuli davala `NaN` i test je padao na MOCKU, ne na kodu. `??` umjesto `||`.
+
+## DEBUG — sadržaj obrisan, alat ostaje (v1.5.4)
+
+Na zahtjev: "obriši trenutne debugove ali ih upiši u fajl da su provjeravani i
+način provjere."
+
+- **`docs/DEBUG_PROVJERE.md`** je trajan zapis: svaki dijagnostički alat, koji
+  problem je njime utvrđen, kako je provjeren i sa kakvim ishodom. Uključuje i
+  "Provjereno a NIJE bug" spisak, da se ne troši vrijeme na ponovnu istragu.
+- **Obrisan je SADRŽAJ** (`localStorage` ključ `tvlake_admin_debug_v1`),
+  jednokratno pri prvom pokretanju v1.5.4 (zastavica `tvlake_debug_ocisceno_v154`
+  nosi verziju, pa se ne izvrši ponovo i ne briše zapise nastale POSLIJE).
+- **Nije obrisana mašinerija** (`_debugUpsert`, kartice "Terenski rad" i
+  "Klikovi na karti"). To su terenski alati koji se pale tek kad se problem
+  stvarno pojavi. Sandbox ne može dozvati vanjski server, kompajlirati Javu ni
+  dotaći OPFS stvarnog telefona — bez njih bi svaka sljedeća prijava sa terena
+  ponovo bila nagađanje, a projekat ima dokumentovanu istoriju od pet
+  promašenih pretpostavki na istom render-bugu (v3.111.1 → v3.111.7).
+- Dodano dugme **"Obriši sve"** u zaglavlju panela — do sada se moglo samo
+  jedan po jedan, a kapa je 12 zapisa.
+
 ## Sekcija Vlake
 
 - **Dužina MREŽE vlaka je bila UDVOSTRUČENA (v3.118.0)** — najskuplja greška u

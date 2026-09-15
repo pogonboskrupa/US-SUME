@@ -4300,10 +4300,14 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#93c5fd;padding:7px 10px;font-size:13px;cursor:pointer;">
           <svg class="ic"><use href="#ic-nazad"/></svg>
         </button>
-        <div>
+        <div style="flex:1;">
           <div style="font-weight:700;color:#f87171;font-size:15px;">🛠 DEBUG</div>
           <div style="font-size:11px;color:#64748b;margin-top:2px;">Aktivni tehnički problemi — samo administrator</div>
         </div>
+        <button onclick="_adminDebugObrisiSve()" title="Obriši sve zapise"
+          style="flex-shrink:0;background:#14532d;border:1px solid #22c55e;border-radius:9px;color:#bbf7d0;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+          Obriši sve
+        </button>
       </div>
       <div style="padding:14px 16px;">
         <button onclick="_adminDebugRunFire()"
@@ -5077,7 +5081,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.3';
+const APP_VER = 'v1.5.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5134,6 +5138,25 @@ _authStatusSync();
 // v1.3.5: uklonjen je modul "Operativni incident"; ukloni i njegove ranije
 // lokalno spremljene skice/tačke da obrisana funkcija ne ostavlja mrtve podatke.
 try { localStorage.removeItem('tvlake_pozari_incidenti_v1'); } catch(e) {}
+
+// Jednokratno čišćenje naslijeđenih DEBUG zapisa (v1.5.4, na zahtjev:
+// "obriši trenutne debugove ali ih upiši u fajl da su provjeravani i način
+// provjere"). Svaki zapis koji je do sada stajao u panelu opisan je u
+// docs/DEBUG_PROVJERE.md — šta je provjeravao, kako je provjeren i sa kakvim
+// ishodom — pa brisanje ne gubi nalaz, samo prazni ekran.
+//
+// Sama mašinerija (_debugUpsert i kartice) OSTAJE: to su terenski alati koji
+// se pale tek kad se problem stvarno pojavi, i bez njih bi sljedeća prijava
+// sa terena opet bila nagađanje. Briše se SADRŽAJ, ne alat.
+//
+// Ključ zastavice nosi verziju, pa se čišćenje izvrši tačno jednom po uređaju
+// i ne briše zapise koji nastanu POSLIJE ove verzije.
+try {
+  if (localStorage.getItem('tvlake_debug_ocisceno_v154') !== '1') {
+    localStorage.removeItem('tvlake_admin_debug_v1');
+    localStorage.setItem('tvlake_debug_ocisceno_v154', '1');
+  }
+} catch(e) {}
 
 // Jednokratno čišćenje zaostataka uklonjene vremenske prognoze (v3.85.0).
 // _wipeAllLocalUserData() briše iste ključeve, ali se ona pokreće SAMO kad se na
@@ -7014,6 +7037,19 @@ async function _adminDebugCopy(id) {
     showToast('📋 Debug kopiran');
   } catch(e) { showToast('⚠ Kopiranje nije uspjelo'); }
 }
+// Obriši SVE zapise odjednom. Do sada se moglo samo jedan po jedan, a poslije
+// duže dijagnostike (kapa je 12 zapisa) to je bio niz od desetak potvrda.
+async function _adminDebugObrisiSve() {
+  if (!sbProfile?.is_admin) return;
+  const n = Object.keys(_debugRead()).length;
+  if (!n) { showToast('Nema zapisa za brisanje'); return; }
+  if (!await _dlgConfirm('Obrisati svih ' + n + ' debug zapisa?',
+      { title:'DEBUG — obriši sve', danger:true })) return;
+  try { localStorage.removeItem(_ADMIN_DEBUG_KEY); } catch(e) {}
+  try { _adminDebugRender(); } catch(e) {}
+  showToast('✓ Debug zapisi obrisani');
+}
+
 async function _adminDebugResolve(id) {
   if (!sbProfile?.is_admin) return;
   const all = _debugRead();
@@ -15436,7 +15472,11 @@ function _poziIncIzvjestaj(){
   w.document.write('<!doctype html><meta charset="utf-8"><title>Izvještaj požara</title><style>body{font:14px Arial;margin:28px;color:#111}h1{color:#b91c1c}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:7px}small{color:#555}</style><h1>Izvještaj o požaru</h1><p><b>Incident:</b> '+_escHtml(inc.naziv)+'</p>'+skica+'<p><b>Period:</b> '+_escHtml(_poziPeriodPojasa(g.prvi,g.zadnji))+'<br><b>Trajanje:</b> '+_escHtml(_poziTrajanje(g.prvi,g.zadnji))+'<br><b>Detekcije:</b> '+g.broj+' · '+_escHtml((g.sateliti||[]).join(', '))+'<br><b>Satelitska procjena:</b> '+_escHtml(_poziPovrsTxt(pr?.haUkupno))+' · pouzdanost '+pou.txt+'<br><b>Terenska granica:</b> '+(inc.fieldGeom?(inc.verified?'potvrđena':'nacrtana'):'nije unesena')+'<br><b>EFFIS:</b> zaseban Copernicus sloj — '+(_ovlState.opozareno?'uključen':'nije uključen')+'</p><h2>Zahvaćeni odjeli</h2><table><tr><th>Odjel</th><th>Površina</th></tr>'+rows+'</table><h2>Operativne tačke</h2><p>'+((inc.points||[]).map(p=>_escHtml(p.tip)+' — '+p.la.toFixed(5)+', '+p.lo.toFixed(5)).join('<br>')||'Nema')+'</p><h2>Fotografije</h2><div>'+slike+'</div><h2>Napomena</h2><p>'+_escHtml(inc.notes||'—').replace(/\n/g,'<br>')+'</p><small>Izvori se prikazuju odvojeno; satelitska procjena nije mjerena granica. '+APP_VER+'</small><script>setTimeout(()=>window.print(),500)<\/script>');w.document.close();
 }
 
-function _poziOpozOn() { return localStorage.getItem(_POZ_OPOZ_KEY) === '1'; }
+// Podrazumijevano UKLJUČENO (v1.5.4, na zahtjev: "hoću da uvijek ima prikaz
+// tačaka i opožarene površine"). Isti obrazac kao _poziOn: gasi ga samo
+// EKSPLICITAN '0', pa uređaj koji nikad nije dirao ovaj prekidač dobija
+// površinu odmah, a onaj ko ju je svjesno isključio ostaje isključen.
+function _poziOpozOn() { return localStorage.getItem(_POZ_OPOZ_KEY) !== '0'; }
 function _poziOpozToggle(on) {
   try { localStorage.setItem(_POZ_OPOZ_KEY, on ? '1' : '0'); } catch(e) {}
   _poziOpozAzuriraj();
@@ -16956,6 +16996,19 @@ function _povArhKesKljuc(godina) {
   return godina + '@' + ref.la.toFixed(1) + ',' + ref.lo.toFixed(1);
 }
 
+// Grupisanje svih tačaka jedne godine u požare je skupo kao i unija, a treba
+// ga SVAKO crtanje (da klik na tačku zna kojem požaru pripada). Kešira se po
+// godini + referentnoj tački, istim ključem kao geometrija — inače bi ga
+// postepeno crtanje ponavljalo desetak puta po godini.
+const _povArhGrupeKes = {};
+function _povArhGrupaPoTacki(godina, tackeGodine) {
+  const k = _povArhKesKljuc(godina) + '#grupe';
+  if (_povArhGrupeKes[k]) return _povArhGrupeKes[k];
+  const wm = new WeakMap();
+  try { _poziGrupisi(tackeGodine).forEach(gr => gr.pts.forEach(p => wm.set(p, gr))); } catch(e) {}
+  return (_povArhGrupeKes[k] = wm);
+}
+
 function _povArhRacunajTacke(pts) {
   if (!pts.length || typeof turf === 'undefined') return null;
   let geom = null, brojPozara = 0;
@@ -16973,29 +17026,128 @@ function _povArhRacunajTacke(pts) {
     : null;
 }
 
-function _povArhRacunaj(godina) {
+// ── Teški račun se NE radi u jednom potezu (v1.5.4) ─────────────────────────
+// Na zahtjev sa terena: "teži podaci poput podataka o cijeloj godini hoću da
+// se polako i skriveno prikazuju tj. pametno, da ne koči mobitel."
+//
+// Problem je bio stvaran i mjerljiv: _povArhRender je SINHRONO računao uniju
+// za svaki mjesec i za svaku punu godinu. JavaScript je jednonitan, pa dok
+// turf radi uniju telefon ne prima dodir, ne skroluje i ne crta — app izgleda
+// zamrznuto. Izmjereno 284 ms po punoj sezoni u sandboxu (v3.122.0), a na
+// telefonu višestruko više; pet godina puta dvanaest mjeseci je sekunde
+// nepomičnog ekrana pri svakom otvaranju panela.
+//
+// Rješenje NIJE manje podataka nego drugačiji raspored posla: svaka jedinica
+// (jedan mjesec jedne godine, ili puna godišnja unija) ide u red i računa se
+// po JEDNA po praznom hodu browsera. Između dvije jedinice ekran diše. Kako
+// koja završi, karta se ponovo iscrta — pa površina "izrasta" dio po dio
+// umjesto da telefon stoji dok se sve ne izračuna.
+//
+// `samoKes` je ono što to omogućava: crtanje pita "je li ovo spremno?" i
+// NIKAD ne pokrene račun samo. undefined = nije računato (zakaži), null =
+// računato i nema geometrije (ne pokušavaj ponovo).
+const _povArhRed = [];          // red čekanja: thunk-ovi koji rade JEDAN račun
+let _povArhRadi = false;        // vrti li se već obrada (da se ne pokrene dvaput)
+let _povArhTekuci = null;       // posao koji je UPRAVO izvađen iz reda
+let _povArhCrtajTajmer = null;  // throttle za ponovno crtanje
+
+function _povArhZakazi(kljuc, posao) {
+  if (_povArhKes[kljuc] !== undefined) return;                 // već izračunato
+  if (_povArhRed.some(r => r.kljuc === kljuc)) return;         // već u redu
+  _povArhRed.push({ kljuc, posao });
+  _povArhPokreniObradu();
+}
+
+// requestIdleCallback radi posao TEK kad browser nema prečeg — tačno ono što
+// "polako i skriveno" znači. Gdje ga nema (stariji Android WebView), setTimeout
+// od 60 ms daje isti efekat: dovoljno pauze da dodir i skrol prođu između
+// dvije jedinice.
+function _povArhSljedeciTakt(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 900 });
+  else setTimeout(fn, 60);
+}
+
+function _povArhPokreniObradu() {
+  if (_povArhRadi || !_povArhRed.length) return;
+  _povArhRadi = true;
+  _povArhSljedeciTakt(function korak() {
+    const r = _povArhRed.shift();
+    if (!r) { _povArhRadi = false; _povArhTekuci = null; _povArhTraziCrtanje(); _povArhStanjeRender(); return; }
+    _povArhTekuci = r;
+    // Jedan pad ne smije zaustaviti cijeli red — ostale godine su nezavisne.
+    // null u kešu znači "računato, nema geometrije" pa se posao ne ponavlja.
+    try { r.posao(); } catch(e) { _povArhKes[r.kljuc] = null; }
+    _povArhTekuci = null;
+    _povArhTraziCrtanje();
+    _povArhStanjeRender();
+    if (_povArhRed.length) _povArhSljedeciTakt(korak);
+    else { _povArhRadi = false; _povArhTraziCrtanje(); _povArhStanjeRender(); }
+  });
+}
+
+// Crtanje se skuplja u jedan poziv na 350 ms. Bez toga bi svaka od 60 jedinica
+// (5 godina x 12 mjeseci) okinula svoje puno ponovno crtanje sloja, pa bi
+// rasterećenje glavne niti pojeo sam prikaz.
+function _povArhTraziCrtanje() {
+  if (_povArhCrtajTajmer) return;
+  _povArhCrtajTajmer = setTimeout(() => {
+    _povArhCrtajTajmer = null;
+    try { if (_povArhUkljucene().length) _povArhRender(true); } catch(e) {}
+  }, 350);
+}
+
+// Koliko je posla ostalo — kartica to pokazuje umjesto da prazno polje izgleda
+// kao "nema podataka" dok se u pozadini računa.
+// Broji se red PLUS posao koji je upravo izvađen iz njega. `_povArhRadi` se
+// NE smije koristiti za ovo: ona je true već od trenutka kad je obrada
+// zakazana, dok posao još stoji u redu — pa bi jedan posao bio brojan dvaput.
+function _povArhPreostalo() { return _povArhRed.length + (_povArhTekuci ? 1 : 0); }
+function _povArhStanjeRender() {
+  const el = document.getElementById('pov-arh-stanje');
+  if (!el) return;
+  const n = _povArhPreostalo();
+  el.innerHTML = n
+    ? '<span style="color:#93c5fd;">⏳ Računam u pozadini… još ' + n + '</span>'
+    : '';
+}
+
+function _povArhRacunaj(godina, samoKes) {
   const k = _povArhKesKljuc(godina);
   if (_povArhKes[k] !== undefined) return _povArhKes[k];
+  if (samoKes) {
+    _povArhZakazi(k, () => { _povArhKes[k] = _povArhRacunajTacke(_povArhTacke(godina)); });
+    return undefined;
+  }
   const pts = _povArhTacke(godina);
   const rez = _povArhRacunajTacke(pts);
   _povArhKes[k] = rez;
   return rez;
 }
-function _povArhRacunajMjesec(godina, mjesec) {
+function _povArhRacunajMjesec(godina, mjesec, samoKes) {
   const k = _povArhKesKljuc(godina) + '#m' + mjesec;
   if (_povArhKes[k] !== undefined) return _povArhKes[k];
-  const pts = _povArhTacke(godina).filter(p => new Date(p.dt).getUTCMonth() === mjesec);
-  return (_povArhKes[k] = _povArhRacunajTacke(pts));
+  const izracunaj = () => _povArhRacunajTacke(
+    _povArhTacke(godina).filter(p => new Date(p.dt).getUTCMonth() === mjesec));
+  if (samoKes) {
+    _povArhZakazi(k, () => { _povArhKes[k] = izracunaj(); });
+    return undefined;
+  }
+  return (_povArhKes[k] = izracunaj());
 }
 // Isto što i _povArhRacunaj, ali SAMO za zadnja 2 mjeseca — brojka u kartici
 // mora odgovarati onome što je stvarno nacrtano na karti u režimu "Prikaži
 // sve". Grupisanje ide kroz isti _povArhRacunajTacke (ne zbir po mjesecima),
 // jer bi požar koji gori preko granice mjeseca inače bio brojan dvaput.
-function _povArhRacunajSkore(godina) {
+function _povArhRacunajSkore(godina, samoKes) {
   const k = _povArhKesKljuc(godina) + '#skoro';
   if (_povArhKes[k] !== undefined) return _povArhKes[k];
-  const pts = _povArhTacke(godina).filter(p => _povMjesecSkori(godina, new Date(p.dt).getUTCMonth()));
-  return (_povArhKes[k] = _povArhRacunajTacke(pts));
+  const izracunaj = () => _povArhRacunajTacke(
+    _povArhTacke(godina).filter(p => _povMjesecSkori(godina, new Date(p.dt).getUTCMonth())));
+  if (samoKes) {
+    _povArhZakazi(k, () => { _povArhKes[k] = izracunaj(); });
+    return undefined;
+  }
+  return (_povArhKes[k] = izracunaj());
 }
 // Da li je godina VEĆ izračunata — jeftina provjera, bez pokretanja geometrije.
 // Kartica je koristi da odluči šta smije prikazati odmah: bez ovoga bi se pri
@@ -17012,10 +17164,21 @@ function _povArhIzracunata(godina) {
 // pa prošle ostaju izračunate do kraja sesije — bez ovoga bi svako
 // osvježavanje na 10 min poništilo sav posao za sve godine.
 function _povArhKesOcisti(godina) {
-  if (godina === undefined) Object.keys(_povArhKes).forEach(k => delete _povArhKes[k]);
-  else {
+  // Red čekanja se prazni ZAJEDNO sa kešom: jedinica koja je zakazana nad
+  // STARIM zapisima bi svoj rezultat upisala POSLIJE čišćenja i tiho vratila
+  // zastarjelu geometriju u keš koji je upravo proglašen nevažećim.
+  if (godina === undefined) {
+    Object.keys(_povArhKes).forEach(k => delete _povArhKes[k]);
+    Object.keys(_povArhGrupeKes).forEach(k => delete _povArhGrupeKes[k]);
+    _povArhRed.length = 0;
+  } else {
     const prefiks = _povArhKesKljuc(godina);
-    Object.keys(_povArhKes).filter(k => k === prefiks || k.startsWith(prefiks + '#')).forEach(k => delete _povArhKes[k]);
+    const pogodjen = k => k === prefiks || k.startsWith(prefiks + '#');
+    Object.keys(_povArhKes).filter(pogodjen).forEach(k => delete _povArhKes[k]);
+    Object.keys(_povArhGrupeKes).filter(pogodjen).forEach(k => delete _povArhGrupeKes[k]);
+    for (let i = _povArhRed.length - 1; i >= 0; i--) {
+      if (pogodjen(_povArhRed[i].kljuc)) _povArhRed.splice(i, 1);
+    }
   }
   if (_povArhUkljucene().length) _povArhRender(true);   // geometrija se PROMIJENILA — prisilno prekrij novom
 }
@@ -17210,9 +17373,11 @@ function _povArhRender(force) {
     // WeakMap po REFERENCI objekta (isti niz koji _poziGrupisi prima i vraća
     // u g.pts, bez kloniranja) — ne po koordinatama, jer bi zaokruživanje
     // moglo pogrešno spojiti dvije bliske ali različite tačke.
-    const grupaPoTacki = new WeakMap();
-    try { _poziGrupisi(tackeGodine).forEach(gr => gr.pts.forEach(p => grupaPoTacki.set(p, gr))); } catch(e) {}
-    mjeseci.map(mjesec => ({ mjesec, geom:(_povArhRacunajMjesec(g, mjesec) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
+    // Keširano po godini: postepeni račun izaziva desetak ponovnih crtanja, a
+    // bez keša bi se grupisanje cijele godine ponovilo u svakom od njih — i
+    // pojelo baš ono rasterećenje zbog kojeg je posao razbijen na jedinice.
+    const grupaPoTacki = _povArhGrupaPoTacki(g, tackeGodine);
+    mjeseci.map(mjesec => ({ mjesec, geom:(_povArhRacunajMjesec(g, mjesec, true) || {}).geom, boja:_POV_MJESEC_BOJE[mjesec] }))
       .forEach(dio => {
         if (!dio.geom) return;
         if (!sidro) sidro = dio.geom;
@@ -17226,7 +17391,7 @@ function _povArhRender(force) {
     // cijele sezone). U režimu "samo skorašnje" se NE računa uopšte — ionako
     // bi obuhvatila i ono što je starije od 2 mjeseca, a oznaka godine se
     // može zakačiti na već izračunatu geometriju skorašnjeg mjeseca.
-    const r = samoSkore ? null : _povArhRacunaj(g);
+    const r = samoSkore ? null : _povArhRacunaj(g, true);
     if (r && r.geom && !tekuca) {
       L.geoJSON(r.geom, {
         pane: 'demOverlay',
@@ -17607,12 +17772,19 @@ function _povArhKarticaHtml() {
     // izračunate ranije u ovoj sesiji — vidi napomenu uz _povArhIzracunata.
     // U režimu "Prikaži sve" računa se samo prozor od 2 mjeseca, da brojka
     // odgovara nacrtanom i da se izbjegne puna godišnja unija.
+    // samoKes:true — kartica NIKAD ne pokreće turf uniju u svojoj niti.
+    // _poziRenderPanel se zove na svaki meteo/GPS/toast događaj, pa bi
+    // sinhroni račun ovdje zaledio panel pri svakom takvom događaju, ne samo
+    // pri otvaranju. Račun se zakazuje u pozadinski red i brojka se pojavi
+    // sama kad bude gotova (panel se ponovo crta iz _povArhTraziCrtanje).
     const r = (on || _povArhIzracunata(g))
-      ? (samoSkore ? _povArhRacunajSkore(g) : _povArhRacunaj(g))
+      ? (samoSkore ? _povArhRacunajSkore(g, true) : _povArhRacunaj(g, true))
       : undefined;
     const boja = +g === new Date().getUTCFullYear() ? '#e2e8f0' : _POV_STARE_BOJA;
     const desno = r === undefined
-      ? `<span style="color:#64748b;">${_povArhBrojZapisa(g)} detekcija · uključi da izračunaš</span>`
+      ? (on
+          ? `<span style="color:#93c5fd;">${_povArhBrojZapisa(g)} detekcija · ⏳ računam…</span>`
+          : `<span style="color:#64748b;">${_povArhBrojZapisa(g)} detekcija · uključi da izračunaš</span>`)
       : r
       ? `<b style="color:#e2e8f0;">${_escHtml(_poziPovrsTxt(r.ha))}</b>
          <span style="color:#64748b;"> · ${_povBrojRijecPozar(r.brojPozara)}</span>`
@@ -17635,7 +17807,14 @@ function _povArhKarticaHtml() {
          Za cijelu sezonu isključi pa ponovo uključi godinu ispod — filter se tada gasi.
        </div>`
     : '';
-  return uvod + skoroNapomena + redovi
+  // Vidljiv trag pozadinskog računa. Bez njega prazno polje pored uključene
+  // godine izgleda kao "nema podataka", a zapravo se upravo računa — isti
+  // princip kao "Učitavam kartu…" indikator (v1.1.3): posao koji traje mora
+  // biti VIDLJIV, inače se čita kao kvar.
+  const stanje = `<div id="pov-arh-stanje" style="font-size:11px;text-align:center;margin:6px 0 2px;">`
+    + (_povArhPreostalo() ? `<span style="color:#93c5fd;">⏳ Računam u pozadini… još ${_povArhPreostalo()}</span>` : '')
+    + `</div>`;
+  return uvod + skoroNapomena + redovi + stanje
     + `<div style="font-size:10px;color:#475569;line-height:1.45;margin-top:8px;">
          Nije retroaktivno — pamti se od verzije u kojoj je ovo uvedeno, i samo za period
          dok je app korištena. Ako te nema sedmicu dana usred požara, taj dio nedostaje.
@@ -19001,6 +19180,15 @@ map.on('click', e => {
         if (d < bestD) { bestD = d; bestI = i; }
       }
     });
+    // Sačuvana mjerenja se provjeravaju PRIJE vlaka jer su i na karti IZNAD
+    // njih (pane 'tragMsrLines' 410 > 'vlakeLines' 400) — kad klik stigne
+    // normalno, gornji sloj pobjeđuje, pa i fallback mora poštovati isti
+    // redoslijed, inače bi mjerenje nacrtano preko vlake bilo neklikabilno
+    // baš u slučaju zbog kojeg fallback i postoji. Vidi _msrHitTest.
+    {
+      const mm = _msrHitTest(e.latlng);
+      if (mm) { _msrOpenPopupNa(mm, e.latlng); return; }
+    }
     if (bestI >= 0 && bestD <= HIT_PX) {
       selI(bestI);
       showVlakaPopup(bestI, e.latlng);
@@ -30966,18 +31154,13 @@ function _msrSetFillOpacity(id, val) {
   if (lbl) lbl.textContent = Math.round(m.fillOpacity * 100) + '%';
 }
 
-function _msrDrawAllSaved() {
-  if (!window.map) return;
-  if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup().addTo(map); }
-  _msrSavedLayer.clearLayers();
-  _msrRegistry.forEach(m => {
-    if (m.id === _mqmId) return;
-    if (!m.pts || m.pts.length < 2) return;
-    const color  = m.color || '#fbbf24';
-    const mode   = m.mode  || 'dist';
-    const latlngs = m.pts.map(p => [p.lat, p.lng]);
-
-    const buildPopup = () => {
+// Sadržaj popupa sačuvanog mjerenja. IZVUČEN iz _msrDrawAllSaved-a (gdje je
+// bio zatvoren u forEach closure-u) da ga može otvoriti i proximity fallback
+// iz map.on('click') — isti obrazac kao _kmlOpenPopup (v3.101.0). Dok je bio
+// zatvoren, "izvana" se popup uopšte nije mogao sastaviti.
+function _msrPopupHtml(m) {
+    {
+      const mode = m.mode || 'dist';
       let totalDist = 0, totalUp = 0, totalDn = 0;
       for (let i = 0; i < m.pts.length - 1; i++) {
         const a = m.pts[i], b = m.pts[i+1];
@@ -31023,7 +31206,95 @@ function _msrDrawAllSaved() {
         <button onclick="_msrAskDelete('${m.id}')" style="padding:5px 8px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
       </div></div>`;
       return html;
-    };
+    }
+}
+
+// ── Zašto sačuvana mjerenja trebaju fallback preko map.on('click') ──────────
+// Mjerenja se crtaju u pane 'tragMsrLines' (z-index 410), a panel Požari crta
+// u 'pozariPovrsPane' (640) i 'pozariPane' (645) — OBA IZNAD. Svaki Leaflet
+// canvas renderer je JEDAN <canvas> preko CIJELE karte koji sam hvata DOM klik
+// pa tek onda traži svoj sloj pod prstom, pa gornji canvas pokupi klik i
+// _msrOpenPopup nikad ne opali. To je isti mehanizam koji je već davno
+// natjerao vlake i uvezeni KML na proximity fallback (v3.101.0), i isti koji
+// je v1.4.8/v1.4.9 rješavala za ZAOSTALE (prazne) canvase.
+//
+// v1.4.8 je taj slučaj izričito ostavila kao "svjesno preostalo ograničenje":
+// dok su tačke požara STVARNO prikazane, njihov canvas je legitiman i klik na
+// mjerenje ispod ne prolazi. Otkad su (v1.5.4, na zahtjev) tačke i opožarena
+// površina UVIJEK uključene, to ograničenje prestaje biti rijedak slučaj i
+// postaje trajno stanje — mjerenje se ne bi moglo kliknuti NIKAD. Zato
+// fallback sad postoji.
+//
+// Vraća mjerenje pod klikom ili null. Traži se u pikselima (ne metrima) jer
+// je meta prst na ekranu, pa tolerancija mora biti ista na svakom zumu.
+const _MSR_HIT_PX = 22;
+function _msrHitTest(latlng) {
+  if (!window.map || !Array.isArray(_msrRegistry) || !_msrRegistry.length) return null;
+  let klikPx;
+  try { klikPx = map.latLngToContainerPoint(latlng); } catch(e) { return null; }
+  let naj = null, najD = Infinity;
+  _msrRegistry.forEach(m => {
+    // Mjerenje koje se upravo EDITUJE nije nacrtano u sačuvanom sloju
+    // (_msrDrawAllSaved ga preskače) — ne smije se moći ni kliknuti.
+    if (m.id === _mqmId) return;
+    if (!m.pts || m.pts.length < 2) return;
+    const zatvoren = (m.mode || 'dist') === 'area' && m.pts.length >= 3;
+    // Poligon: klik UNUTAR ispune pogađa odmah (udaljenost 0), jer se i sama
+    // ispuna crta kao klikabilna kad je canvas ne pokrije.
+    if (zatvoren && _msrTackaUPoligonu(latlng, m.pts)) {
+      if (najD > 0) { naj = m; najD = 0; }
+      return;
+    }
+    let px;
+    try { px = m.pts.map(pt => map.latLngToContainerPoint(L.latLng(pt.lat, pt.lng))); } catch(e) { return; }
+    const zadnji = zatvoren ? px.length : px.length - 1;
+    for (let i = 0; i < zadnji; i++) {
+      const d = _distToSegPx(klikPx, px[i], px[(i + 1) % px.length]);
+      if (d < najD) { najD = d; naj = m; }
+    }
+  });
+  return (naj && najD <= _MSR_HIT_PX) ? naj : null;
+}
+
+// Ray casting u EKRANSKIM koordinatama, ne u stepenima — na ovoj geografskoj
+// širini je 1° dužine skoro upola kraći od 1° širine, pa bi test u stepenima
+// bio izobličen. Ekran je već projektovan, pa je poređenje pošteno.
+function _msrTackaUPoligonu(latlng, pts) {
+  let px, k;
+  try {
+    px = pts.map(p => map.latLngToContainerPoint(L.latLng(p.lat, p.lng)));
+    k = map.latLngToContainerPoint(latlng);
+  } catch(e) { return false; }
+  let unutra = false;
+  for (let i = 0, j = px.length - 1; i < px.length; j = i++) {
+    const presijeca = (px[i].y > k.y) !== (px[j].y > k.y) &&
+      k.x < (px[j].x - px[i].x) * (k.y - px[i].y) / (px[j].y - px[i].y) + px[i].x;
+    if (presijeca) unutra = !unutra;
+  }
+  return unutra;
+}
+
+// Otvara ISTI popup koji nosi i sam sloj (površina/dužina + Edituj + Obriši) —
+// bez ovoga bi fallback morao imati svoju, drugu verziju popupa koja bi se
+// vremenom razišla sa onom na sloju.
+function _msrOpenPopupNa(m, latlng) {
+  if (!m || !window.map) return;
+  try {
+    L.popup({ maxWidth: 260 }).setLatLng(latlng).setContent(_msrPopupHtml(m)).openOn(map);
+  } catch(e) {}
+}
+
+function _msrDrawAllSaved() {
+  if (!window.map) return;
+  if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup().addTo(map); }
+  _msrSavedLayer.clearLayers();
+  _msrRegistry.forEach(m => {
+    if (m.id === _mqmId) return;
+    if (!m.pts || m.pts.length < 2) return;
+    const color  = m.color || '#fbbf24';
+    const mode   = m.mode  || 'dist';
+    const latlngs = m.pts.map(p => [p.lat, p.lng]);
+    const buildPopup = () => _msrPopupHtml(m);
 
     const gw = _lineStyle.msrW || 4;
     // Tekstualna oznaka na karti (dužina na sredini linije / površina u centru poligona)
