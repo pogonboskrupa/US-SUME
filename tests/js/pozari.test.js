@@ -1641,13 +1641,13 @@ console.log('Prekidač projekcije (_poziOpozOn/_poziOpozToggle):');
     extractFn('_poziOpozOn') + '\n' + extractFn('_poziOpozToggle') + '\nreturn { _poziOpozOn, _poziOpozToggle };'
   )(sandbox.localStorage, sandbox._POZ_OPOZ_KEY, sandbox._poziOpozAzuriraj, sandbox._poziRenderPanel);
 
-  // v1.5.4, na eksplicitan zahtjev ("hoću da uvijek ima prikaz tački i
-  // opožarene površine"). Ranije je ovaj test čuvao SUPROTNO pravilo — da se
-  // sloj ne nameće korisniku koji ga nije tražio. Korisnik je od toga svjesno
-  // odustao za OVAJ sloj: opožarena površina je osnovni požarni podatak, a ne
-  // dodatak. Isključivanje i dalje radi i pamti se (testovi ispod).
-  t('podrazumijevano UKLJUČENO (osnovni požarni podatak, na zahtjev)', () => {
-    assert.strictEqual(fns._poziOpozOn(), true);
+  // v1.5.4 je ovo postavila na podrazumijevano UKLJUČENO ("hoću da uvijek ima
+  // prikaz tački i opožarene površine"). Korisnik je kasnije (v1.5.6) tražio
+  // nazad opt-in ("Prikaži sve u sekciji Požari ugasi") — sam prekidač i
+  // tiho/lijeno računanje ispod njega (v1.5.4/v1.5.5) ostaju netaknuti, mijenja
+  // se samo PODRAZUMIJEVANO stanje.
+  t('podrazumijevano ISKLJUČENO (opt-in, revert na eksplicitan zahtjev)', () => {
+    assert.strictEqual(fns._poziOpozOn(), false);
   });
   t('uključivanje pamti izbor i odmah precrtava kartu + panel', () => {
     fns._poziOpozToggle(true);

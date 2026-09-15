@@ -15,7 +15,7 @@ t('trajanje daje dane, sate i minute',()=>assert.equal(api._poziTrajanje(0,(2*14
 t('površina sa više senzora i preleta ima visoku pouzdanost',()=>{const pts=Array.from({length:8},(_,i)=>({dt:'2026-09-'+String(10+(i%3)).padStart(2,'0')+'T'+String(i).padStart(2,'0')+':00:00Z'}));assert.equal(api._poziPovrsPouzdanost({broj:8,sateliti:['A','B'],pts},{haUkupno:40}).id,'visoka');});
 t('UI razdvaja satelitsku procjenu i EFFIS',()=>['Satelitska procjena','Copernicus EFFIS'].forEach(x=>assert.ok(html.includes(x))));
 t('Operativni incident kartica je uklonjena',()=>assert.ok(!html.includes('function _poziIncidentKarticaHtml(')));
-t('detekcije su zadano uključene osim nakon ručnog isključivanja',()=>assert.ok(html.includes("_poziOn = localStorage.getItem(_POZ_ON_KEY) !== '0'")));
+t('detekcije su zadano isključene (opt-in) dok korisnik ručno ne uključi',()=>assert.ok(html.includes("_poziOn = localStorage.getItem(_POZ_ON_KEY) === '1'")));
 t('grupa ima glavni trokut i zadržava sitne satelitske tačke na canvasu',()=>['poz-mk-trokut','<polygon points="50,3 97,86 3,86"','L.circleMarker([p.la, p.lo]','_poziCanvasRenderer'].forEach(x=>assert.ok(html.includes(x))));
 t('tekuća godina se zakazuje u pozadini',()=>assert.ok(html.includes('function _povGodLoadPozadina(')));
 t('pojas projekcije je iznad karte i otvara detalje požara',()=>{assert.ok(html.includes("map.createPane('pozariPovrsPane')"));assert.ok(html.includes("pane:'pozariPovrsPane', interactive:true"));assert.ok(html.includes("l.on('click',()=>_poziMapOtvori(g,tr))"));});

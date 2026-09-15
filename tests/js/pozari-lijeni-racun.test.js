@@ -219,17 +219,17 @@ t('prazan hod se koristi kad postoji, sa vremenskom rezervom', () => {
   if (!/setTimeout/.test(f)) throw new Error('nema rezerve za WebView bez requestIdleCallback');
 });
 
-// ── Uvijek uključeni prikazi ────────────────────────────────────────────────
+// ── Opt-in prikazi (revert v1.5.4 → v1.5.6) ─────────────────────────────────
 
-t('tačke požara su podrazumijevano UKLJUČENE', () => {
-  if (!/_poziOn\s*=\s*localStorage\.getItem\(_POZ_ON_KEY\)\s*!==\s*'0'/.test(SRC))
-    throw new Error('tačke se više ne uključuju podrazumijevano');
+t('tačke požara su podrazumijevano ISKLJUČENE (opt-in)', () => {
+  if (!/_poziOn\s*=\s*localStorage\.getItem\(_POZ_ON_KEY\)\s*===\s*'1'/.test(SRC))
+    throw new Error('tačke se ne vraćaju na opt-in ponašanje');
 });
 
-t('opožarena površina je podrazumijevano UKLJUČENA', () => {
+t('opožarena površina je podrazumijevano ISKLJUČENA (opt-in)', () => {
   const f = extractFn('_poziOpozOn');
-  if (!/!==\s*'0'/.test(f))
-    throw new Error('_poziOpozOn i dalje traži eksplicitno ukljucivanje (=== \'1\')');
+  if (!/===\s*'1'/.test(f))
+    throw new Error('_poziOpozOn i dalje podrazumijeva uključeno (treba === \'1\')');
 });
 
 t('oba se i dalje mogu ručno ISKLJUČITI (nije zaključano)', () => {

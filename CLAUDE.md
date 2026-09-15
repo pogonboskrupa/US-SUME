@@ -1553,6 +1553,57 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   — nije dirana jer korisnik nije tražio uklanjanje odatle, samo iz popupa
   koji se otvara klikom na marker.
 
+## Požari — revert na opt-in prikaz (v1.5.6)
+
+Na eksplicitan zahtjev: "Prikaži sve u sekciji Požari ugasi. Napravi da se
+tiho učitavaju teži dijelovi sekcije. Aplikacija ne smije štekati."
+
+- **Uzrok**: v1.5.4 je postavila "Prikaži detekcije" (`_poziOn`) i "Prikaži
+  projekciju/opožarenu površinu" (`_poziOpozOn`) na podrazumijevano
+  UKLJUČENO ("uređaj koji nikad nije dirao ovaj prekidač dobija prikaz
+  odmah"). Korisnik je tu odluku sad eksplicitno poništio — oba prekidača se
+  vraćaju na opt-in (isključeno dok korisnik SAM ne uključi), isti obrazac
+  kao prije v1.5.4.
+  - `_poziOpozOn()`: `!== '0'` → `=== '1'`.
+  - `_poziOn` (u `_poziObnoviPrikaz()`): `!== '0'` → `=== '1'`.
+  `_poziToggle`/`_poziOpozToggle` (funkcije koje UPISUJU vrijednost pri
+  ručnom klikanju) nisu dirane — pišu `'1'`/`'0'` identično bez obzira na
+  default.
+- **Šta OSTAJE netaknuto, namjerno**: cijela tiha/lijena infrastruktura iz
+  v1.5.4/v1.5.5 (`_povArh*` red za arhivu po godinama, `_poziProj`/
+  `_poziProjRed` lijeni red za mapni sloj/listu/karticu, heatmap downsample
+  u `_PoziHeat`) i dalje postoji i i dalje radi identično KAD korisnik ručno
+  uključi prikaz — revert mijenja SAMO podrazumijevano stanje dva prekidača,
+  ne uklanja rad uložen u to da se, jednom uključeno, ne smrzne app.
+  - `_povArhServerSinkOpp()` (poziv iz `korak('povArh', ...)` u
+    `_startupRestore`) ostaje BEZUSLOVAN, nezavisan od `_poziOn`/
+    `_poziOpozOn` — ovo JESTE "tiho učitavanje teže sekcije" koje korisnik
+    traži da se zadrži: arhiva se sinhronizuje u pozadini od starta, pa kad
+    korisnik KASNIJE uključi prikaz, podaci su već tu i render je gladak,
+    bez čekanja na mrežu u tom trenutku.
+  - `_poziAutoTreba()`/`_poziAutoSync()` (10-minutni auto-refresh) ostaju
+    vezani za `_activeTab === 'pozari'` ILI uključena obavještenja — namjerno
+    nezavisni od ova dva prekidača otkad je uveden (v3.114.1), nije mijenjano.
+  - `_poziObnoviPrikaz()` je VEĆ prije ove izmjene preskakala sve teške grane
+    (`if (_poziOn) {...}`, `if (_povGodOn) {...}`, `if (_povHistOn) ...`, `if
+    (_povArhUkljucene().length) ...`) kad su prekidači isključeni — nikakvo
+    dodatno gejtovanje tu nije trebalo.
+- **Testovi ažurirani da prate NOVI default** (tri fajla su testirala v1.5.4
+  ponašanje doslovno, regexom nad izvornim kodom — morali su se promijeniti
+  zajedno sa samim kodom, ne dodavati novi testovi pored starih):
+  `tests/js/pozari-lijeni-racun.test.js` ("Uvijek uključeni prikazi" →
+  "Opt-in prikazi"), `tests/js/pozari.test.js` (prekidač projekcije,
+  `assert.strictEqual(fns._poziOpozOn(), true)` → `false` za prazan
+  `localStorage`), `tests/js/pozari-incident.test.js` (ista provjera
+  `!== '0'` → `=== '1'` nad sirovim tekstom `index.html`). Testovi koji
+  postavljaju vrijednost EKSPLICITNO prije provjere (uključivanje/
+  isključivanje prekidača) nisu dirani — ne zavise od defaulta.
+- **Poznata zamka izbjegnuta**: `pozari-opoz-lijeni.test.js` i
+  `pozari-heat-throttle.test.js` (oba iz v1.5.5) su provjerena grep-om da NE
+  pretpostavljaju default-ON — koriste eksplicitne mock vrijednosti
+  (`_poziOpozOn: () => true`) u sopstvenom sandboxu, pa ih revert defaulta
+  ne dotiče.
+
 ## Požari — preostala dva izvora usporenja, poslije v1.5.4 (v1.5.5)
 
 Nastavak posla iz v1.5.4 — korisnik je pitao "šta uraditi da požari sekcija ne

@@ -5081,7 +5081,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.5';
+const APP_VER = 'v1.5.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -15583,11 +15583,14 @@ function _poziIncIzvjestaj(){
   w.document.write('<!doctype html><meta charset="utf-8"><title>Izvještaj požara</title><style>body{font:14px Arial;margin:28px;color:#111}h1{color:#b91c1c}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:7px}small{color:#555}</style><h1>Izvještaj o požaru</h1><p><b>Incident:</b> '+_escHtml(inc.naziv)+'</p>'+skica+'<p><b>Period:</b> '+_escHtml(_poziPeriodPojasa(g.prvi,g.zadnji))+'<br><b>Trajanje:</b> '+_escHtml(_poziTrajanje(g.prvi,g.zadnji))+'<br><b>Detekcije:</b> '+g.broj+' · '+_escHtml((g.sateliti||[]).join(', '))+'<br><b>Satelitska procjena:</b> '+_escHtml(_poziPovrsTxt(pr?.haUkupno))+' · pouzdanost '+pou.txt+'<br><b>Terenska granica:</b> '+(inc.fieldGeom?(inc.verified?'potvrđena':'nacrtana'):'nije unesena')+'<br><b>EFFIS:</b> zaseban Copernicus sloj — '+(_ovlState.opozareno?'uključen':'nije uključen')+'</p><h2>Zahvaćeni odjeli</h2><table><tr><th>Odjel</th><th>Površina</th></tr>'+rows+'</table><h2>Operativne tačke</h2><p>'+((inc.points||[]).map(p=>_escHtml(p.tip)+' — '+p.la.toFixed(5)+', '+p.lo.toFixed(5)).join('<br>')||'Nema')+'</p><h2>Fotografije</h2><div>'+slike+'</div><h2>Napomena</h2><p>'+_escHtml(inc.notes||'—').replace(/\n/g,'<br>')+'</p><small>Izvori se prikazuju odvojeno; satelitska procjena nije mjerena granica. '+APP_VER+'</small><script>setTimeout(()=>window.print(),500)<\/script>');w.document.close();
 }
 
-// Podrazumijevano UKLJUČENO (v1.5.4, na zahtjev: "hoću da uvijek ima prikaz
-// tačaka i opožarene površine"). Isti obrazac kao _poziOn: gasi ga samo
-// EKSPLICITAN '0', pa uređaj koji nikad nije dirao ovaj prekidač dobija
-// površinu odmah, a onaj ko ju je svjesno isključio ostaje isključen.
-function _poziOpozOn() { return localStorage.getItem(_POZ_OPOZ_KEY) !== '0'; }
+// Podrazumijevano ISKLJUČENO — opt-in (v1.5.6, revert v1.5.4 na eksplicitan
+// zahtjev "Prikaži sve u sekciji Požari ugasi"). v1.5.4 je ovo postavila na
+// podrazumijevano UKLJUČENO; korisnik je kasnije tražio nazad opt-in. Traži
+// EKSPLICITAN '1' da bi se prikazala. Lijeni/tihi mehanizam učitavanja
+// (_poziProjRed/_poziProjZakazi, v1.5.5) OSTAJE — kad korisnik SAM uključi
+// ovaj prekidač, podaci se i dalje računaju u pozadini, po jedan po taktu,
+// ne sinhrono u jednom potezu.
+function _poziOpozOn() { return localStorage.getItem(_POZ_OPOZ_KEY) === '1'; }
 function _poziOpozToggle(on) {
   try { localStorage.setItem(_POZ_OPOZ_KEY, on ? '1' : '0'); } catch(e) {}
   _poziOpozAzuriraj();
@@ -18063,9 +18066,13 @@ let _poziPrikazPotvrdjen = false;
 // ovaj korak gasio sve checkbox-e i uklanjao slojeve pri SVAKOM ulasku, zbog
 // čega su već učitani požari nestajali i u istoj sesiji i poslije restarta.
 function _poziObnoviPrikaz() {
-  // Satelitske tačke su osnovni požarni podatak i pri prvom korištenju moraju
-  // biti vidljive. Korisnik ih i dalje može ručno isključiti (eksplicitno '0').
-  _poziOn = localStorage.getItem(_POZ_ON_KEY) !== '0';
+  // Podrazumijevano ISKLJUČENO — opt-in (v1.5.6, revert v1.5.4 na eksplicitan
+  // zahtjev "Prikaži sve u sekciji Požari ugasi"). Traži EKSPLICITAN '1' da
+  // bi se prikaz uključio; tihi/lijeni mehanizmi ispod (arhiva po godinama,
+  // _poziProj red) i dalje rade u pozadini nezavisno od ovog prekidača, pa
+  // kad korisnik SAM uključi prikaz, podaci su već spremni i pojavljuju se
+  // glatko.
+  _poziOn = localStorage.getItem(_POZ_ON_KEY) === '1';
   _povGodOn = _povGodOnStanje();
   _povHistOn = _povHistOnStanje();
   _poziPrikazPotvrdjen = _poziOn || _poziHeatOn() || _poziSmjerOn() || _poziOpozOn()
