@@ -653,7 +653,13 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        private org.json.JSONObject dohvatiJson(String urlStr) throws IOException {
+        // throws i org.json.JSONException, ne samo IOException: JSONException je
+        // PROVJERENI (checked) izuzetak u Androidovom org.json-u, pa ga javac
+        // odbija pustiti neprijavljenog. Pozivalac ga hvata zajedno sa ostalim
+        // kvarovima kroz catch (Exception e) i pretvara u čitljivu poruku
+        // korisniku — pokvaren/nepotpun JSON sa GitHub-a je isti ishod kao
+        // prekinuta veza: ažuriranje nije uspjelo, pokušaj ponovo.
+        private org.json.JSONObject dohvatiJson(String urlStr) throws IOException, org.json.JSONException {
             URL u = new URL(urlStr);
             HttpURLConnection c = (HttpURLConnection) u.openConnection();
             try {

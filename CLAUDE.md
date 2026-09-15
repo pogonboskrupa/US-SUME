@@ -94,6 +94,16 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     korisnik mora instalirati ručno JEDNOM (postojećim putem), a SVAKA
     sljedeća ide jednim tapom. Webapp (ne-APK) grana je NETAKNUTA — i dalje
     ide kroz service worker `reg.update()`, ovo se nje ne tiče.
+  - **FIKSAN debug ključ je OBAVEZAN dio ove mogućnosti** (`android/app/
+    dendromap-debug.keystore`, `signingConfigs.debug` u `build.gradle`, izuzetak
+    `!app/dendromap-debug.keystore` u `.gitignore`). Android dozvoljava update
+    PREKO postojeće instalacije SAMO uz ISTI potpis, a podrazumijevani AGP debug
+    ključ se generiše po MAŠINI (`~/.android/debug.keystore`) — na GitHub
+    Actions runneru to znači NOV, nasumičan ključ pri SVAKOM build-u. Bez ovoga
+    bi `UpdateBridge` uredno provjerio verziju, preuzeo APK i tek na samom kraju
+    pao na "App not installed", bez ijednog objašnjenja. Lozinka je javna i to
+    je svjesno prihvaćeno: debug ključ ne potpisuje ništa što ide na Play Store
+    (release ključ je zaseban i ostaje VAN repoa, iza `US_SUME_*` env varijabli).
   - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
     `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
   - Test: `tests/js/apk-auto-update.test.js` (7) — JS grana (bridge postoji/
@@ -2048,6 +2058,86 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     `_locPopupSnimiTrag` zatvara popup i zove `fabSnimTrag()` TAČNO jednom;
     `_updGpsSwitch` postavlja tekst/boju prema `_tragOn` u oba smjera; poziv
     bez elemenata u DOM-u (popup nikad otvoren) ne baca.
+
+## Login ekran
+
+- **Redizajn (v1.5.3)** — na zahtjev "redizajniraj login screen". Nije bila samo
+  estetika: ekran je iznosio TRI TVRDNJE koje nisu bile potkrijepljene ničim, a
+  po njima korisnik na terenu odlučuje je li problem u vezi ili u nalogu.
+  - **Verzija je bila HARDKODOVANA `v2.4`** u markupu, gore desno — broj koji ne
+    postoji nigdje drugdje u projektu, dok je isti ekran DOLJE ispisivao stvarni
+    `APP_VER`. Dvije različite verzije na istom ekranu. Sad se puni iz `APP_VER`,
+    i to na TAČNO JEDNOM mjestu (statusni red gore); zaseban `#auth-app-ver` red u
+    podnožju je uklonjen — dvije iste brojke jedna ispod druge su šum, a
+    oslobođen red je vrijedan na niskom ekranu sa otvorenom tastaturom.
+  - **"SISTEM AKTIVAN" sa zelenom pulsirajućom tačkom BEZ IJEDNE PROVJERE** —
+    fiksan tekst u markupu. Na mrtvoj vezi (dokumentovano: `navigator.onLine`
+    LAŽE `true`, OS-S4) ekran je i dalje tvrdio da je sistem aktivan, pa bi
+    korisnik neuspjelu prijavu pripisao nalogu/PIN-u umjesto vezi. Sad to radi
+    `_authStatusSync()` nad `_netKvalitet()` (IZMJERENO stanje, v1.4.6 — isti
+    izvor koji puni tačkicu u gornjoj traci app-a): crveno "NEMA VEZE — OFFLINE",
+    žuto "SLABA VEZA", zeleno "VEZA U REDU". `navigator.onLine` je samo gruba
+    rezerva dok nema nijednog izmjerenog uzorka, i tad se čita kao "ima signala",
+    ne kao "sve radi".
+  - **Zove se i iz `_showAuthScreen()` i jednom odmah pri parsiranju** — korisnik
+    bez keširanog profila vidi login od prvog trenutka, a tada ga ne otvara
+    nijedan `_showAuthScreen()` poziv. Uz `online`/`offline` listenere, pa se
+    oznaka mijenja i dok korisnik stoji na ekranu.
+  - **Emoji ikonice u poljima (👤/📋/🔐) → SVG sprite** (`#ic-korisnik`,
+    `#ic-dokument`, `#ic-kljuc`) — dokumentovana OEM WebView zamka (v3.83.0/
+    v3.84.0) koju je login ekran jedini u app-u još nosio. Usput su bile plave/
+    narandžaste, jedine dvije boje van zeleno-zlatne palete na ekranu.
+  - **Kvačica u "Ostani prijavljen" se CRTA CSS-om** (`.auth-cbx::after`,
+    rotiran ugao), ne ispisuje kao znak "✓" — isti razlog kao ikonice. Prije je
+    kvadratić bio PRAZAN zelen kvadrat: **uhvaćeno na screenshotu, ne testom** —
+    stanje "uključeno" se čitalo samo kao obojena kutija. Cijeli red je dodirna
+    meta (`onclick` na redu, NE i na kvadratiću — inače bi klik na kvadratić
+    okinuo dvaput i tiho se vratio nazad).
+  - **Dodirne mete podignute na Android minimum**: polja 37→48 px (`font-size`
+    15 px — ispod 16 px WebView zumira formu), primarno dugme 40→50 px,
+    sekundarno 46 px, kvadratić 22 px. Mjereno Playwright-om, nije procijenjeno.
+  - **`@media (max-height:700px)` i `(max-height:560px)`** — sa otvorenom
+    tastaturom ekran ostane na ~40 % visine; logo/razmaci se skupljaju. Ekran je
+    `overflow-y:auto`, pa i na 420 px ništa nije nedostupno (provjereno:
+    `scrollHeight > clientHeight` na svakoj visini ispod 915 px).
+  - **`.auth-org-name` uklonjen** — ispisivao je "ŠPD UNSKO-SANSKE ŠUME D.O.O."
+    tačno ispod logotipa koji taj isti tekst već sadrži kao dio slike.
+  - Testovi: `tests/js/auth-login-redizajn.test.js` (18) nad STVARNIM kodom —
+    ponašanje (`_authStatusSync` za sva tri stanja + prelaz koji mora očistiti
+    staru klasu + `_netKvalitet` koji BACA ne smije oboriti login, `_authToggle
+    Zapamti` drži vizuelno i stvarno stanje usklađenim) i INVARIJANTE nad
+    markupom (nijedna ručno upisana verzija, verzija na tačno jednom mjestu,
+    nijedan emoji u ikonicama polja, svaka dodirna meta ≥ 44 px, kvačica se
+    crta a ne ispisuje). **Provjereno da svih 18 pada na kodu prije izmjene.**
+  - **Zamka pri pisanju tih testova**: asercija "nema "SISTEM AKTIVAN" u
+    markupu" je pala na KOMENTARU koji objašnjava da je taj tekst uklonjen —
+    slice markupa mora prvo izbaciti HTML komentare, inače dokumentacija
+    izmjene obara test te iste izmjene.
+
+## Java strana (android/) — sandbox je NE kompajlira
+
+- **Dva CI pada zaredom na `.java` koji je "strukturno provjeren"** (v1.5.2 →
+  v1.5.3). Sandbox nema Android SDK, pa je Java do sada provjeravana ručno
+  (brojanje zagrada, čitanje) — to hvata sintaksu, ali NE hvata pravila tipova.
+  Oba pada su bila baš to:
+  1. `BuildConfig.VERSION_NAME` — od AGP 8.0 se `BuildConfig` NE generiše
+     podrazumijevano (traži `buildFeatures { buildConfig true }`), projekat je na
+     8.2.2. Riješeno čitanjem iz `PackageManager`-a (usput tačniji izvor —
+     verzija APK-a koji je STVARNO instaliran).
+  2. `unreported exception JSONException` — u Androidovom `org.json` su
+     `new JSONObject(String)`, `new JSONArray(String)`, `getJSONObject`,
+     `getString`, `put(String,Object)` PROVJERENI (checked) izuzeci. Pozivalac
+     jeste imao `catch (Exception e)`, ali javac provjerava PO METODI: pomoćna
+     `dohvatiJson` je deklarisala samo `throws IOException`, pa je JSONException
+     "pobjegao" kroz njenu granicu.
+- **Pravilo**: svaki novi `org.json` poziv u `.java` mora biti ILI unutar
+  `try/catch` U ISTOJ METODI, ILI ta metoda mora deklarisati
+  `throws org.json.JSONException`. `opt*` varijante (`optString`, `optJSONArray`)
+  NE bacaju — koristiti njih gdje god vrijednost smije nedostajati.
+- **Praktična posljedica**: CI je JEDINI kompajler za ovaj kod. Java izmjena se
+  ne smije proglasiti gotovom dok `codex-webview.yml` ne prođe zeleno — a kad
+  padne, log imenuje tačan red (`mcp__github__get_job_logs` sa
+  `failed_only:true`), pa se ne nagađa.
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 

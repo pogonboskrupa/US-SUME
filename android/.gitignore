@@ -17,6 +17,11 @@
 # Signing
 *.jks
 *.keystore
+# IZUZETAK: fiksan DEBUG ključ je NAMJERNO u repou (vidi signingConfigs.debug u
+# app/build.gradle). Bez njega svaki CI build dobija nasumičan ključ i "Ažuriraj
+# aplikaciju" pada na "App not installed" jer Android odbija update sa drugim
+# potpisom. Release ključ ostaje van repoa (US_SUME_* env varijable).
+!app/dendromap-debug.keystore
 
 # IDE
 /.idea/

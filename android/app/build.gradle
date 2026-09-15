@@ -10,8 +10,8 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 422
-        versionName "1.5.2"
+        versionCode 423
+        versionName "1.5.3"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
@@ -24,6 +24,29 @@ android {
                 keyAlias System.getenv('US_SUME_KEY_ALIAS')
                 keyPassword System.getenv('US_SUME_KEY_PASSWORD')
             }
+        }
+        // FIKSAN debug ključ, commit-ovan u repo (dendromap-debug.keystore).
+        // Android dozvoljava update APK-a PREKO postojećeg SAMO ako je potpis
+        // ISTI. Podrazumijevani AGP debug ključ se generiše po MAŠINI
+        // (~/.android/debug.keystore) — na GitHub Actions runneru to znači NOV,
+        // nasumičan ključ pri SVAKOM build-u, pa bi "Ažuriraj aplikaciju"
+        // (UpdateBridge) preuzeo APK i tek na kraju pao sa "App not installed",
+        // bez ijednog objašnjenja korisniku. Sa fiksnim ključem svaki CI build
+        // nosi isti potpis i update se instalira preko starog, bez gubitka
+        // lokalnih podataka (deinstalacija briše offline karte, tragove, red
+        // čekanja — sve ono zbog čega app uopšte radi na terenu).
+        //
+        // Lozinka je javna i to je U REDU: debug ključ NE potpisuje ništa što
+        // ide na Play Store (release ključ je zaseban, ostaje van repoa i traži
+        // US_SUME_* env varijable — vidi gore). Rizik je uzak i svjesno
+        // prihvaćen: neko sa ovim ključem bi mogao napraviti APK koji Android
+        // prihvata kao update OVE debug instalacije, ali samo ako korisnika
+        // navede da ga ručno instalira iz nepoznatog izvora.
+        debug {
+            storeFile file('dendromap-debug.keystore')
+            storePassword 'dendromap'
+            keyAlias 'dendromap-debug'
+            keyPassword 'dendromap'
         }
     }
 
