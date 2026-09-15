@@ -1,0 +1,490 @@
+// =====================================================================
+// Testovi za OFFLINE-FIRST ulazak u aplikaciju (initAuth u index.html).
+// Pokretanje:  node tests/js/auth-offline-first.test.js
+// ---------------------------------------------------------------------
+// Zašto ovaj test postoji: ovo je najviše puta prijavljeni bug s terena —
+// login ekran se pojavi korisniku koji je uredno prijavljen, na slabom ili
+// nikakvom signalu. Uzrok je uvijek bio isti oblik greške: startup logika
+// je ČEKALA mrežu da odluči šta prikazati, a na slaboj vezi mrežni poziv ne
+// padne nego VISI. Zato se ovdje ne testira reimplementacija nego STVARNI
+// izvorni kod: initAuth i _upgradeToOnlineSession se izvlače direktno iz
+// index.html i izvršavaju nad lažnim (mock) okruženjem.
+//
+// Ključna invarijanta koju svi testovi čuvaju:
+//   Ako postoji keširani profil, korisnik ulazi u app ODMAH i NIJEDNA
+//   kasnija mrežna putanja ne smije podići login ekran preko njega.
+// =====================================================================
+'use strict';
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+
+// ── Izvuci funkciju iz index.html po imenu (brace matching) ───────────
+function extractFn(name) {
+  const start = HTML.indexOf('async function ' + name + '(');
+  assert.ok(start >= 0, 'nije nađena funkcija ' + name + ' u index.html');
+  let i = HTML.indexOf('{', start), depth = 0;
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') { depth--; if (depth === 0) return HTML.slice(start, i + 1); }
+  }
+  throw new Error('nezatvorena funkcija ' + name);
+}
+
+const SRC_INIT_AUTH = extractFn('initAuth');
+const SRC_UPGRADE   = extractFn('_upgradeToOnlineSession');
+const SRC_SHOW_APP  = extractFn('showApp');
+
+// _revealApp nije async — izvuci ga posebno
+function extractPlainFn(name) {
+  const start = HTML.indexOf('function ' + name + '(');
+  assert.ok(start >= 0, 'nije nađena funkcija ' + name);
+  let i = HTML.indexOf('{', start), depth = 0;
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') { depth--; if (depth === 0) return HTML.slice(start, i + 1); }
+  }
+  throw new Error('nezatvorena funkcija ' + name);
+}
+const SRC_REVEAL = extractPlainFn('_revealApp');
+const SRC_DO_LOGIN = extractFn('doLogin');
+const SRC_AUTH_BUSY = extractPlainFn('_authBusy');
+
+// ── Mock okruženje ────────────────────────────────────────────────────
+// Vraća { run, adv, log, state } — `run` pokreće initAuth, `adv` pomjera
+// lažne tajmere, `log` bilježi šta je pozvano.
+function makeEnv({ cached = null, saved = null, online = true, sb = null } = {}) {
+  const log = [];
+  const timers = [];
+  let profileAfterLoad = null;   // šta server "vrati" pri sbLoadProfile u nadogradnji
+  let __setProfile = () => {};
+  const state = { sbUser: null, sbProfile: null, offlineMode: null, appEntered: false };
+
+  const env = {
+    _OL: { PROFILE: 'p', load: () => cached },
+    _profileLoad: () => cached,
+    _loadSavedUser: () => saved,
+    navigator: { onLine: online },
+    console: { error: () => {}, warn: () => {}, log: () => {} },
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+
+    __log: (m) => log.push(m),
+    showToast: (t) => log.push('toast:' + t),
+    _showAuthScreen: () => log.push('AUTH_SCREEN'),
+    authShowPending: () => log.push('PENDING'),
+    sbLoadProfile: async () => { log.push('sbLoadProfile'); if (profileAfterLoad) __setProfile(profileAfterLoad); },
+    sbStartRealtime: () => log.push('sbStartRealtime'),
+    _reloadCoreData: () => log.push('_reloadCoreData'),
+    _processOfflineQueue: () => log.push('_processOfflineQueue'),
+    _isOfflineMode: false,
+    _appEntered: false,
+    sb,
+  };
+
+  // Sandbox: globalne koje kod MIJENJA (sbUser, sbProfile, _appEntered,
+  // _isOfflineMode) moraju živjeti UNUTAR sandboxa kao let — inače im dodjela
+  // iz izvučenog koda ne bi bila vidljiva. showApp i _setOfflineMode se isto
+  // definišu unutar, jer u pravoj aplikaciji baš one postavljaju _appEntered i
+  // _isOfflineMode; mock im služi samo za bilježenje poziva.
+  const params = Object.keys(env).filter(k => !['_appEntered', '_isOfflineMode'].includes(k));
+  const factory = new Function(
+    params.join(','),
+    `let sbUser = null, sbProfile = null, _appEntered = false, _isOfflineMode = false;
+     function showApp() { _appEntered = true; __log('showApp'); }
+     function _setOfflineMode(v) { _isOfflineMode = v; __log('offlineMode:' + v); }
+     ${SRC_UPGRADE}
+     ${SRC_INIT_AUTH}
+     return { initAuth, setProfile: (p) => { sbProfile = p; },
+              snapshot: () => ({ sbUser, sbProfile, _appEntered, _isOfflineMode }) };`
+  );
+  const api = factory(...params.map(k => env[k]));
+
+  __setProfile = api.setProfile;
+
+  return {
+    log,
+    state,
+    snapshot: api.snapshot,
+    __setProfileAfterLoad: (p) => { profileAfterLoad = p; },
+    run: () => api.initAuth(),
+    // Pokreni sve zakazane tajmere do zadanog vremena. NAMJERNO bez await na
+    // callback: u scenariju slabog signala taj callback ostaje zauvijek visiti
+    // (upravo to i testiramo) — await bi zaglavio sam test. Umjesto toga
+    // pustimo mikrotaskove da se slegnu i onda gledamo šta je log zabilježio.
+    adv: async (untilMs) => {
+      timers.filter(t => t.ms <= untilMs).forEach(t => { try { t.fn(); } catch(e) {} });
+      await new Promise(r => setImmediate(r));
+      await new Promise(r => setImmediate(r));
+    },
+  };
+}
+
+const CACHED = { id: 'u1', email: 'u1@x.com', ime: 'Test', prezime: 'Korisnik' };
+
+let _pass = 0, _fail = 0;
+async function test(name, fn) {
+  try { await fn(); _pass++; console.log('  ✓', name); }
+  catch (e) { _fail++; console.error('  ✗', name, '\n    →', e.message); }
+}
+
+(async () => {
+console.log('auth-offline-first.test.js\n');
+
+await test('profil keš drugog korisnika se odbija kad sesija ima poznat uid', async () => {
+  const src = extractPlainFn('_profileLoad');
+  const field = { id:'field-1', ime:'Terenski' };
+  const admin = { id:'admin-1', ime:'Admin', is_admin:true };
+  const store = new Map([
+    ['tvlake_ol_profile', field],
+    ['tvlake_ol_profile_user_admin-1', admin]
+  ]);
+  const fn = new Function('_OL,_PROFILE_BY_USER_PREFIX', src + '\nreturn _profileLoad;')(
+    { PROFILE:'tvlake_ol_profile', load:k => store.get(k) || null },
+    'tvlake_ol_profile_user_'
+  );
+  assert.equal(fn('admin-1'), admin, 'admin dobija svoj profil, ne zadnji terenski');
+  store.delete('tvlake_ol_profile_user_admin-1');
+  assert.equal(fn('admin-1'), null, 'legacy profil pogrešnog id-a mora biti odbijen');
+});
+
+// ── 1. Keširan profil + STVARNO offline ────────────────────────────────
+await test('Keširan profil + offline → app ODMAH, bez login ekrana', async () => {
+  const env = makeEnv({ cached: CACHED, online: false, sb: {} });
+  await env.run();
+  assert.ok(env.log.includes('showApp'), 'showApp mora biti pozvan odmah');
+  assert.ok(!env.log.includes('AUTH_SCREEN'), 'login ekran se NE smije prikazati');
+  assert.ok(env.log.includes('offlineMode:true'), 'offline oznaka mora biti upaljena');
+  assert.equal(env.snapshot().sbProfile.id, 'u1', 'profil se preuzima iz keša');
+});
+
+// ── 2. NAJVAŽNIJI SLUČAJ: navigator.onLine laže 'true', mreža visi ─────
+// Ovo je tačan scenario prijavljen s terena (slab signal): svaki mrežni
+// poziv ostaje neriješen zauvijek. Korisnik SVEJEDNO mora ući odmah.
+await test('Slab signal (onLine laže true, svi pozivi VISE) → app ODMAH, login se nikad ne pojavi', async () => {
+  const hang = () => new Promise(() => {});           // nikad se ne riješi
+  const env = makeEnv({
+    cached: CACHED, saved: { ime: 'Test', prezime: 'Korisnik', pin: '1234' }, online: true,
+    sb: {
+      auth: { onAuthStateChange: () => {}, signInWithPassword: hang, getUser: hang },
+      rpc: hang,
+    },
+  });
+  await env.run();
+  assert.ok(env.log.includes('showApp'), 'app mora biti otvoren ODMAH, bez čekanja mreže');
+  const idxShowApp = env.log.indexOf('showApp');
+  assert.ok(idxShowApp >= 0 && idxShowApp <= 2, 'showApp mora biti među PRVIM potezima, ne poslije mrežnih pokušaja');
+
+  // Pusti sve tajmere (800ms auto-login, 4500ms fallback) — i dalje ništa ne smije
+  // podići login ekran preko korisnika koji već radi.
+  await env.adv(5000);
+  assert.ok(!env.log.includes('AUTH_SCREEN'), 'login ekran se NE smije pojaviti ni poslije isteka svih fallback tajmera');
+});
+
+// ── 3. Stvarno online: tiha nadogradnja na punu sesiju ────────────────
+await test('Ima signala → poslije trenutnog ulaska tiho se nadogradi na pravu sesiju (bez drugog showApp)', async () => {
+  let authCb = null;
+  const env = makeEnv({
+    cached: CACHED, online: true,
+    sb: { auth: { onAuthStateChange: (cb) => { authCb = cb; } } },
+  });
+  await env.run();
+  assert.ok(env.log.includes('showApp'), 'app se otvara odmah iz keša');
+  assert.ok(typeof authCb === 'function', 'onAuthStateChange mora biti registrovan kad ima (navodno) mreže');
+
+  // Supabase potvrdi stvarnu sesiju
+  await authCb('INITIAL_SESSION', { user: { id: 'u1', email: 'u1@x.com' } });
+
+  assert.equal(env.log.filter(x => x === 'showApp').length, 1,
+    'showApp NE smije biti pozvan drugi put (dupli restore slojeva karte)');
+  assert.ok(env.log.includes('_reloadCoreData'), 'poslije nadogradnje moraju se povući svježi podaci');
+  assert.ok(env.log.includes('_processOfflineQueue'), 'red čekanja mora biti poslan na server');
+  assert.ok(env.log.includes('sbStartRealtime'), 'realtime kanali se moraju uključiti');
+  assert.equal(env.snapshot().sbUser.id, 'u1');
+  assert.ok(!env.snapshot().sbUser._cachedStub, 'sbUser više ne smije biti keš-zamjena nego prava sesija');
+});
+
+// ── 4. Bez keširanog profila — login je jedina opcija ─────────────────
+await test('Nema keširanog profila → login ekran (nema se na šta osloniti)', async () => {
+  const env = makeEnv({ cached: null, online: true, sb: { auth: { onAuthStateChange: () => {} } } });
+  await env.run();
+  assert.ok(env.log.includes('AUTH_SCREEN'), 'bez keša mora tražiti prijavu');
+  assert.ok(!env.log.includes('showApp'), 'bez keša NE smije otvoriti app');
+});
+
+// ── 5. Regresija: Supabase klijent uopšte ne postoji ──────────────────
+await test('Keširan profil + Supabase klijent nedostupan → app ODMAH (ne login)', async () => {
+  const env = makeEnv({ cached: CACHED, online: true, sb: null });
+  await env.run();
+  assert.ok(env.log.includes('showApp'), 'keš mora pustiti korisnika u app i bez Supabase klijenta');
+  assert.ok(!env.log.includes('AUTH_SCREEN'), 'login ekran se NE smije prikazati');
+});
+
+// ── 6. Opoziv pristupa otkriven tek pri online nadogradnji ───────────
+await test('Pristup opozvan dok se radilo offline → nadogradnja ga uhvati (pending ekran)', async () => {
+  let authCb = null;
+  const env = makeEnv({
+    cached: CACHED, online: true,
+    sb: { auth: { onAuthStateChange: (cb) => { authCb = cb; } } },
+  });
+  // Server pri nadogradnji javi da korisnik VIŠE nije odobren
+  env.__setProfileAfterLoad({ id: 'u1', odobren: false, is_admin: false });
+  await env.run();
+  await authCb('INITIAL_SESSION', { user: { id: 'u1' } });
+  assert.ok(env.log.includes('AUTH_SCREEN') && env.log.includes('PENDING'),
+    'opozvan pristup mora odmah završiti na ekranu "čeka se odobrenje"');
+  assert.ok(!env.log.includes('_reloadCoreData'),
+    'opozvanom korisniku se NE smiju povlačiti podaci sa servera');
+});
+
+// ── 7. Logo se NE smije zadržati na ekranu poslije uspješne prijave ──
+// Prijavljeno: "ne smije se pokazivati slika poslije logovanja". showApp() je
+// ranije sklanjao login ekran TEK poslije _checkDeviceUserSwitch (i eventualne
+// 3s provjere odobrenja) — sve to vrijeme je uvećani logo stajao preko app-a.
+await test('showApp: login ekran (logo) se sklanja PRIJE sporih provjera, ne poslije', async () => {
+  const seen = [];
+  const el = () => ({ style: new Proxy({}, { set: (t, k, v) => { t[k] = v; return true; } }) });
+  const els = { 'auth-screen': el(), 'wrapper': el() };
+  let switchResolved = false;
+
+  const env = {
+    document: { getElementById: (id) => els[id] || el() },
+    // Odobren korisnik (odobren nije false) — gate ne blokira. MORA biti
+    // postavljeno PRIJE konstrukcije sandboxa: vrijednosti se hvataju tada.
+    sbProfile: { id: 'u1', odobren: true },
+    sbUser: { id: 'u1' },
+    // Namjerno SPORA provjera promjene korisnika — simulira stvarni slučaj
+    _checkDeviceUserSwitch: async () => {
+      // U trenutku dok ovo traje, login ekran već MORA biti sklonjen.
+      seen.push('switch:auth-screen=' + els['auth-screen'].style.display);
+      await new Promise(r => setTimeout(r, 20));
+      switchResolved = true;
+    },
+    _showAuthScreen: () => seen.push('AUTH_SCREEN'),
+    authShowPending: () => {}, _OL: { save: () => {}, PROFILE: 'p' },
+    sb: null, switchTab: () => {}, loadProj: () => {}, sbInitData: () => {},
+    _processOfflineQueue: () => {}, sqlmapRestoreAll: () => {}, _setOfflineMode: () => {},
+    // v3.102.2: obnova podataka je izdvojena iz showApp() u _startupRestore()
+    // (čeka DOMContentLoaded i osigurava svaki korak zasebno) — vidi
+    // tests/js/startup-restore.test.js. Ovdje je dovoljan mock.
+    _startupRestore: () => {},
+    navigator: { onLine: true, storage: null }, isVodeci: () => false,
+    setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+    console: { error(){}, warn(){}, log(){} },
+  };
+  const params = Object.keys(env);
+  const api = new Function(params.join(','),
+    `let _appEntered = false;
+     ${SRC_REVEAL}
+     ${SRC_SHOW_APP}
+     return { showApp, entered: () => _appEntered };`)(...params.map(k => env[k]));
+
+  const p = api.showApp();
+  // ODMAH, prije nego se ijedan await razriješi:
+  assert.equal(els['auth-screen'].style.display, 'none',
+    'login ekran mora biti sklonjen ODMAH, ne poslije provjera');
+  assert.equal(els['wrapper'].style.display, 'flex', 'glavni prozor mora biti prikazan odmah');
+  assert.ok(!switchResolved, 'test mora provjeravati stanje PRIJE nego spora provjera završi');
+  await p;
+  assert.ok(seen.some(s => s === 'switch:auth-screen=none'),
+    'i tokom spore provjere promjene korisnika logo mora već biti sklonjen');
+  assert.ok(!seen.includes('AUTH_SCREEN'), 'odobrenom korisniku se login ekran ne smije vratiti');
+});
+
+// ── 8. Logo nestaje ODMAH po pritisku "Prijavi se" ───────────────────
+// Između klika i showApp() idu ČETIRI mrežna poziva; na slaboj vezi to su
+// sekunde tokom kojih se velika slika ne smije zadržati na ekranu.
+await test('doLogin: logo se sakriva čim prijava krene, ne tek kad se app otvori', async () => {
+  const logoBox = { style: { display: '' } };
+  const fields = { 'auth-ime': { value: 'Test' }, 'auth-prezime': { value: 'K' },
+                   'auth-pin': { value: '123456' }, 'auth-err': { style: {} },
+                   'auth-zapamti': { checked: false } };
+  let logoWhenNetworkStarted = null;
+
+  const env = {
+    document: {
+      getElementById: (id) => fields[id] || { style: {}, value: '' },
+      querySelector: (sel) => sel === '.auth-logo-box' ? logoBox : null,
+    },
+    _OL: { load: () => null, PROFILE: 'p' }, _loadSavedUser: () => null,
+    _clearSavedUser: () => {}, _setOfflineMode: () => {}, showToast: () => {},
+    showAuthErr: () => {}, localStorage: { setItem: () => {} },
+    navigator: { onLine: true },
+    sbLoadProfile: async () => {}, showApp: async () => {},
+    sb: {
+      // Prvi mrežni poziv — u tom trenutku logo VEĆ mora biti sakriven
+      rpc: async () => { logoWhenNetworkStarted = logoBox.style.display; return { data: 'a@b.c', error: null }; },
+      auth: {
+        signInWithPassword: async () => ({ error: null }),
+        getUser: async () => ({ data: { user: { id: 'u1' } } }),
+      },
+    },
+    console: { error(){}, warn(){}, log(){} },
+  };
+  const params = Object.keys(env);
+  const api = new Function(params.join(','),
+    `let _authInFlight = false, _appEntered = false;
+     ${SRC_AUTH_BUSY}
+     ${SRC_DO_LOGIN}
+     return { doLogin };`)(...params.map(k => env[k]));
+
+  await api.doLogin();
+  assert.equal(logoWhenNetworkStarted, 'none',
+    'logo mora biti sakriven PRIJE prvog mrežnog poziva, ne poslije prijave');
+});
+
+
+// ── SIGURNOSNA MREŽA (v3.117.0) ───────────────────────────────────────
+// Najuporniji oblik ovog buga: initAuth je ISPRAVAN, ali ne stigne odlučiti
+// prije nego istekne "sigurnosni" tajmer — pa tajmer prisili login ekran
+// preko korisnika koji ima savršeno ispravan keširani profil. Podizanje roka
+// (2000→6000 ms) je samo smanjilo vjerovatnoću; nijedan rok nije dovoljno
+// velik da to garantovano ne dođe na sporom uređaju ili hladnom startu.
+// Pravilo koje ovi testovi čuvaju: MREŽA (ni tajmer) NE ODLUČUJE ko smije u
+// app — keš odlučuje. Login je zadnja opcija, samo bez keširanog profila.
+const SRC_ULAZ  = extractPlainFn('_ulazNaKesu');
+// STVARNA funkcija iz index.html (v3.128.1) — ranije je ovaj test držao ručno
+// prepisano "isto kao u index.html" tijelo; sad se izvlači pravi kod, isti
+// koji zovu i window.onerror/unhandledrejection hendleri (vidi testove ispod).
+const SRC_MREZA = extractPlainFn('_sigurnosnaMrezaPokusaj');
+
+function makeMreza({ cached = null, appEntered = false, authDisp = 'none', wrapDisp = 'none' }) {
+  const log = [];
+  const el = {
+    'auth-screen': { style: { display: authDisp } },
+    'wrapper':     { style: { display: wrapDisp } },
+  };
+  const env = {
+    _OL: { PROFILE: 'p', load: () => cached },
+    _profileLoad: () => cached,
+    _setOfflineMode: () => { log.push('offline-mode'); },
+    showApp: () => { log.push('showApp'); el['wrapper'].style.display = 'flex'; },
+    showToast: (m) => { log.push('toast:' + m); },
+    authShowLogin: () => { log.push('LOGIN'); },
+    document: { getElementById: (id) => el[id] || null },
+  };
+  const params = Object.keys(env);
+  const api = new Function(params.join(','),
+    `let _appEntered = ${appEntered ? 'true' : 'false'};
+     let sbUser = null, sbProfile = null;
+     ${SRC_ULAZ}
+     ${SRC_MREZA}
+     return { mreza: _sigurnosnaMrezaPokusaj, _ulazNaKesu, stanje: () => ({ sbUser, sbProfile }) };`
+  )(...params.map(k => env[k]));
+  return { api, log, el };
+}
+
+await test('Sigurnosna mreža + keširan profil → ULAZ U APP, NIKAD login', async () => {
+  const { api, log, el } = makeMreza({ cached: CACHED });
+  api.mreza();
+  assert.ok(!log.includes('LOGIN'), 'login se NE smije pojaviti kad postoji keširani profil');
+  assert.ok(log.includes('showApp'), 'korisnik mora ući u app');
+  assert.ok(log.includes('offline-mode'), 'mora biti označen offline režim');
+  assert.notEqual(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža BEZ keširanog profila → login (jedini ispravan ishod)', async () => {
+  const { api, log, el } = makeMreza({ cached: null });
+  api.mreza();
+  assert.ok(log.includes('LOGIN'), 'bez keša se nemamo na šta osloniti');
+  assert.equal(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža kad je korisnik VEĆ u app-u → ne dira ekran', async () => {
+  const { api, log, el } = makeMreza({ cached: CACHED, appEntered: true });
+  api.mreza();
+  assert.deepEqual(log, [], 'ništa se ne smije desiti korisniku koji već radi');
+  assert.notEqual(el['auth-screen'].style.display, 'flex');
+});
+
+await test('Sigurnosna mreža kad je login VEĆ prikazan → ne pokreće ulazak', async () => {
+  const { api, log } = makeMreza({ cached: CACHED, authDisp: 'flex' });
+  api.mreza();
+  assert.deepEqual(log, [], 'odluka je već donesena, ne preglasavaj je');
+});
+
+await test('_ulazNaKesu: korumpiran/nepotpun keš NE pušta u app (nema id)', async () => {
+  const { api, log } = makeMreza({ cached: { email: 'x@y.z' } });   // bez id
+  assert.equal(api._ulazNaKesu(), false, 'profil bez id nije upotrebljiv');
+  assert.ok(!log.includes('showApp'));
+});
+
+await test('_ulazNaKesu: sbUser se označava kao _cachedStub (nije prava sesija)', async () => {
+  const { api } = makeMreza({ cached: CACHED });
+  assert.equal(api._ulazNaKesu(), true);
+  const st = api.stanje();
+  assert.equal(st.sbUser._cachedStub, true,
+    'bez _cachedStub bi kasnije provjere mislile da imamo pravu Supabase sesiju');
+  assert.equal(st.sbUser.id, CACHED.id);
+  assert.equal(st.sbProfile, CACHED);
+});
+
+await test('_ulazNaKesu: _OL nedostupan (skripta se nije učitala) → false, ne baca', async () => {
+  const api = new Function('document,showApp,showToast,_setOfflineMode',
+    `let _appEntered = false; let sbUser = null, sbProfile = null;
+     ${SRC_ULAZ}
+     return { _ulazNaKesu };`
+  )({ getElementById: () => null }, () => {}, () => {}, () => {});
+  assert.equal(api._ulazNaKesu(), false);
+});
+
+// ── window.onerror / unhandledrejection okidaju sigurnosnu mrežu (v3.128.1) ──
+// Terenska prijava: trajno crn ekran pri PRVOM offline otvaranju na uređaju
+// koji je ranije bio prijavljen SA signalom (dakle ima keširan profil).
+// initAuth() je async funkcija pozvana bez .catch() na kraju glavnog JS bloka
+// — neuhvaćeno odbijeno obećanje ili sinhrona greška NEGDJE unutra (prije nego
+// stigne do showApp()) prekine taj lanac potpuno tiho. Ovi testovi provjeravaju
+// da OBA hendlera stvarno pozivaju _sigurnosnaMrezaPokusaj(), izvlačeći STVARAN
+// tekst iz index.html (brace-matching od poznatog markera), ne pretpostavku.
+function extractStatement(marker) {
+  const start = HTML.indexOf(marker);
+  assert.ok(start >= 0, 'nije nađen marker: ' + marker);
+  let i = HTML.indexOf('{', start), depth = 0;
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        // Ako je izjava zapravo poziv funkcije (npr. addEventListener(...)),
+        // pokupi i zatvarajuću ")" i ";" odmah iza posljednje "}" — bez toga
+        // bi izvučen tekst bio sintaksno nepotpun (fali kraj poziva).
+        let j = i + 1;
+        while (j < HTML.length && /[)\s;]/.test(HTML[j])) j++;
+        return HTML.slice(start, j);
+      }
+    }
+  }
+  throw new Error('nezatvorena izjava za marker: ' + marker);
+}
+
+await test('window.onerror poziva _sigurnosnaMrezaPokusaj()', async () => {
+  const src = extractStatement('window.onerror=function(m,s,l){');
+  let called = false;
+  const sandbox = { window: {}, console: { error: () => {} }, _sigurnosnaMrezaPokusaj: () => { called = true; } };
+  const params = Object.keys(sandbox);
+  new Function(params.join(','), src + '\nwindow.onerror("neka greška", "x.js", 12);')(
+    ...params.map(k => sandbox[k])
+  );
+  assert.ok(called, 'window.onerror mora pokušati spasiti ekran, ne samo logovati');
+});
+
+await test('unhandledrejection listener poziva _sigurnosnaMrezaPokusaj()', async () => {
+  const src = extractStatement("window.addEventListener('unhandledrejection', function(ev) {");
+  let called = false;
+  const handlers = {};
+  const sandbox = {
+    window: { addEventListener: (evt, fn) => { handlers[evt] = fn; } },
+    console: { error: () => {} },
+    _sigurnosnaMrezaPokusaj: () => { called = true; },
+  };
+  const params = Object.keys(sandbox);
+  new Function(params.join(','), src)(...params.map(k => sandbox[k]));
+  assert.ok(typeof handlers.unhandledrejection === 'function', 'listener mora biti registrovan');
+  handlers.unhandledrejection({ reason: new Error('test odbijeno obećanje') });
+  assert.ok(called, 'unhandledrejection mora pokušati spasiti ekran, ne samo logovati');
+});
+
+console.log(`\n${_pass} prošlo, ${_fail} palo`);
+process.exit(_fail > 0 ? 1 : 0);
+})();

@@ -1,0 +1,108 @@
+name: CODEX WebView provjera i APK
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - CODEX-US-SUME
+permissions:
+  contents: write
+jobs:
+  apk:
+    if: github.ref == 'refs/heads/CODEX-US-SUME'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # Testovi idu PRIJE Android SDK setupa: oni ne trebaju ni SDK ni Gradle, a
+      # kad setup-android padne (kao 2026-09-14 na uklonjenom 'tools' paketu)
+      # ovaj korak se preskakao pa se iz CI-ja nije vidjelo ni da li kod valja.
+      - name: Lokalni JavaScript testovi
+        run: for f in tests/js/*.test.js; do node "$f" || exit 1; done
+      - uses: android-actions/setup-android@v3
+        with:
+          # Podrazumijevano instalira 'tools platform-tools', a legacy 'tools'
+          # paket je uklonjen iz Google repozitorija — sdkmanager tad pada sa
+          # "Failed to find package 'tools'" i cijeli build stane prije ijednog
+          # koraka koji je stvarno naš.
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+      - name: Assets i WebView debug APK
+        run: |
+          bash android/copy-assets.sh
+          gradle -p android --no-daemon assembleDebug
+      - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
+        # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
+        # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
+        # ipak fali ključni sadržaj (mala, tiho nepotpuna karta na terenu).
+        # Provjera raspakuje STVARNI APK i gleda šta je unutra, ne pretpostavlja
+        # na osnovu toga da je gradle vratio exit 0.
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "GRESKA: APK fajl nije pronađen u outputs/apk/debug/"
+            exit 1
+          fi
+          echo "APK fajl: $APK_PATH"
+          echo "Veličina APK fajla (kompresovan): $(du -h "$APK_PATH" | cut -f1)"
+
+          rm -rf /tmp/apk-check
+          mkdir -p /tmp/apk-check
+          unzip -q "$APK_PATH" -d /tmp/apk-check
+          echo "Veličina raspakovanog APK-a: $(du -sh /tmp/apk-check | cut -f1)"
+
+          MISSING=0
+          for f in assets/index.html assets/GRANICE.kml; do
+            if [ ! -s "/tmp/apk-check/$f" ]; then
+              echo "NEDOSTAJE ili je prazan: $f"
+              MISSING=1
+            else
+              echo "OK: $f ($(du -h "/tmp/apk-check/$f" | cut -f1))"
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "GRESKA: APK ne sadrži očekivane asset fajlove — build se prekida,"
+            echo "artefakt se NE objavljuje (bolje bez APK-a nego sa tiho nepotpunim)."
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: US-SUME-CODEX-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      # Actions artifact (gore) traži GitHub login za preuzimanje i ističe za
+      # 90 dana — korisnik je morao ručno naći run, ući u nalog, skinuti .zip,
+      # raspakovati, instalirati. GitHub Release asset je JAVNO dostupan preko
+      # stabilnog URL-a bez prijave — to omogućava "Ažuriraj aplikaciju" u Meniju
+      # (AndroidUpdate.checkAndInstall, MainActivity.java) da automatski nađe
+      # najnoviju verziju preko /releases/latest API-ja i preuzme APK direktno.
+      - name: Izvuci versionName iz build.gradle
+        id: verzija
+        run: |
+          V=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
+          if [ -z "$V" ]; then echo "GRESKA: versionName nije pronađen"; exit 1; fi
+          echo "verzija=$V" >> "$GITHUB_OUTPUT"
+      - name: Objavi/ažuriraj GitHub Release sa APK-om (za auto-update u app-u)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.verzija.outputs.verzija }}
+          name: v${{ steps.verzija.outputs.verzija }} (debug)
+          prerelease: true
+          files: android/app/build/outputs/apk/debug/*.apk
+          # Ako glob gore ne pogodi nijedan fajl (npr. build output struktura
+          # se promijeni), akcija MORA pasti — bolje nego tiho objaviti release
+          # bez APK-a, što bi auto-update u app-u pronašao ali ne mogao skinuti.
+          fail_on_unmatched_files: true
+          # softprops/action-gh-release je idempotentan po tag_name-u — isti
+          # versionName u više commit-ova (npr. popravka bez bump-a verzije)
+          # samo AŽURIRA postojeći release/asset, ne pada na "tag already exists".

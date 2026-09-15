@@ -3,6 +3,10 @@ package ba.spd.uss.vlake;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -10,9 +14,12 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.Base64;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.DownloadListener;
 import android.webkit.GeolocationPermissions;
@@ -29,19 +36,47 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends Activity {
 
     private WebView webView;
+    // Statički — preživljava uništenje OVE Activity instance. Kad korisnik potpuno
+    // zatvori app (swipe iz recent apps) dok snimanje traje, Android zove Activity
+    // onDestroy() (task je uklonjen), ali PROCES ostaje živ jer GpsService (foreground
+    // servis) i dalje radi u istom procesu. Ako bismo tad uništili WebView, JS/GPS
+    // watch bi umro zajedno s Activity-jem — notifikacija bi i dalje pisala "snima"
+    // dok se stvarno ništa ne bilježi. Umjesto toga, WebView se NAMJERNO ne uništava
+    // (vidi onDestroy) dok je isRecordingActive true — nastavlja da izvršava JS u
+    // pozadini, "osiroćen" bez Activity-ja. Kad korisnik ponovo otvori app, onCreate
+    // ga prepozna i PONOVO ISKORISTI (ne pravi novi WebView, ne zove loadUrl) — JS
+    // stanje snimanja (vlake[]/_tragPts/watchPosition) ostaje netaknuto.
+    private static WebView sWebView;
+    // Isti razlog kao sWebView: dok je snimanje aktivno kad se Activity uništi,
+    // onDestroy() NE smije unregistrovati ovaj receiver (inače Pauza/Stop dugmad
+    // na notifikaciji tiho prestanu raditi dok je app zatvoren). Statički, da
+    // sljedeći onCreate() (ponovno otvaranje app-a dok se i dalje snima) prepozna
+    // već-registrovani receiver i PONOVO GA ISKORISTI umjesto da registruje drugi
+    // (dupli receiver = svaka notifikacijska akcija bi se izvršila dvaput).
+    private static BroadcastReceiver sRecActionReceiver;
+    private boolean reusedWebView = false;
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assetLoader;
     private BroadcastReceiver recActionReceiver;
@@ -49,6 +84,19 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE = 1;
     private static final int REQ_PERMS = 2;
     private static final int REQ_BG_LOC = 3;
+    private static final int REQ_CAMERA = 4;
+    private android.webkit.PermissionRequest pendingCameraRequest;
+    // Postavlja se preko GpsBridge dok GPS snimanje (vlaka/trag/pojas) traje.
+    // WebView.onPause() je dokumentovano da "best-effort pauzira geolocation" —
+    // ako se pozove dok se snima, navigator.geolocation.watchPosition() prestaje
+    // primati nove tačke čim korisnik izađe iz app-a (ekran ugašen ili prebačen
+    // na drugu app), pa snimanje vlake/traga/pojasa izgleda "prekinuto" iako je
+    // foreground servis i dalje aktivan. Zato onPause() u Activity-ju MORA
+    // preskočiti webView.onPause() dok je snimanje u toku.
+    // STATIC (ne instance polje) — mora preživjeti uništenje ove Activity instance
+    // dok je sWebView "osiroćen" u pozadini (vidi napomenu gore); nova Activity
+    // instanca poslije ponovnog otvaranja app-a čita ISTU vrijednost.
+    private static volatile boolean isRecordingActive = false;
     private static final String APP_URL =
             "https://appassets.androidplatform.net/assets/index.html";
 
@@ -63,19 +111,36 @@ public class MainActivity extends Activity {
             getWindow().setDecorFitsSystemWindows(false);
         }
 
-        webView = new WebView(this);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        if (sWebView != null) {
+            // Ponovno otvaranje app-a dok je snimanje preživjelo u pozadini (vidi
+            // napomenu kod sWebView) — iskoristi ISTI WebView, ne pravi novi i ne
+            // zovi loadUrl (to bi resetovalo JS stanje i prekinulo snimanje).
+            webView = sWebView;
+            reusedWebView = true;
+            ViewGroup oldParent = (ViewGroup) webView.getParent();
+            if (oldParent != null) oldParent.removeView(webView);
+        } else {
+            webView = new WebView(this);
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            sWebView = webView;
+        }
         setContentView(webView);
 
         hideSystemUI();
         requestPermissions();
+        // Uvijek rebinduj listenere/JS mostove na OVU (trenutnu) Activity instancu —
+        // i kod ponovnog korištenja WebView-a, jer DownloadBridge/GpsBridge/ShareBridge/
+        // WebViewClient/WebChromeClient su non-static inner klase koje interno drže
+        // referencu na staru (uništenu) Activity instancu ako se ne obnove.
         setupWebView();
         registerRecActionReceiver();
 
-        if (savedInstanceState != null) {
-            webView.restoreState(savedInstanceState);
-        } else {
-            webView.loadUrl(APP_URL);
+        if (!reusedWebView) {
+            if (savedInstanceState != null) {
+                webView.restoreState(savedInstanceState);
+            } else {
+                webView.loadUrl(APP_URL);
+            }
         }
     }
 
@@ -85,18 +150,27 @@ public class MainActivity extends Activity {
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
-        ws.setAllowFileAccess(true);
+        ws.setAllowFileAccess(false);
         ws.setAllowContentAccess(true);
-        ws.setAllowFileAccessFromFileURLs(true);
-        ws.setAllowUniversalAccessFromFileURLs(true);
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
         ws.setGeolocationEnabled(true);
-        // LOAD_CACHE_ELSE_NETWORK: koristi cache kad nema interneta (CDN biblioteke dostupne offline)
-        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        // LOAD_DEFAULT (ne LOAD_CACHE_ELSE_NETWORK!): LOAD_CACHE_ELSE_NETWORK koristi
+        // keširan odgovor BEZ OBZIRA na starost — ignoriše Cache-Control/no-cache
+        // zaglavlja čak i dok je internet dostupan. Za CDN biblioteke (Leaflet, turf...)
+        // to je bezopasno, ali za Supabase API pozive (npr. "da li me je admin odobrio?")
+        // znači da WebView zauvijek servira PRVI keširani odgovor umjesto svježeg —
+        // korisnik registrovan na APK-u ostaje zaglavljen na "čeka se odobrenje" i
+        // nakon što ga admin odobri na webu, jer APK nikad stvarno ne pita server
+        // ponovo. LOAD_DEFAULT poštuje stvarna cache zaglavlja sa servera: CDN fajlovi
+        // se i dalje keširaju (imaju long max-age), a Supabase odgovori (bez cache
+        // zaglavlja ili no-cache) se uvijek dohvataju svježe kad ima interneta.
+        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setTextZoom(100);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
 
         assetLoader = new WebViewAssetLoader.Builder()
@@ -105,6 +179,10 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
         webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
+        webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
+        webView.addJavascriptInterface(new NetBridge(), "AndroidNet");
+        webView.addJavascriptInterface(new AppNotifBridge(), "AndroidNotif");
+        webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -125,6 +203,16 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {}
                 return true;
             }
+
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                // Reload/navigacija resetuje JS stanje (recOn/_tragOn/_dozGpsOn = false),
+                // ali native isRecordingActive bi bez ovoga ostao zaglavljen na true —
+                // onPause() bi ZAUVIJEK preskakao webView.onPause() (GPS + JS rade u
+                // pozadini trajno = prazna baterija). Nova stranica = snimanje ne postoji.
+                isRecordingActive = false;
+                super.onPageStarted(view, url, favicon);
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -132,6 +220,67 @@ public class MainActivity extends Activity {
             public void onGeolocationPermissionsShowPrompt(String origin,
                     GeolocationPermissions.Callback callback) {
                 callback.invoke(origin, true, true);
+            }
+
+            // getUserMedia({video:true}) za QR skener (dijeljenje pojaseva) — bez ovog
+            // override-a WebView tiho odbija svaki kamera zahtjev, čak i ako app ima
+            // CAMERA dozvolu u manifestu. Ako runtime dozvola još nije data, zatraži je
+            // pa odgovori tek u onRequestPermissionsResult.
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                boolean wantsCamera = false;
+                for (String res : request.getResources()) {
+                    if (android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)) wantsCamera = true;
+                }
+                if (!wantsCamera) { request.deny(); return; }
+                if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(request.getResources());
+                } else {
+                    pendingCameraRequest = request;
+                    ActivityCompat.requestPermissions(MainActivity.this,
+                            new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+                }
+            }
+
+            // Bez ovih override-a WebView za JS alert()/confirm() prikazuje SVOJ
+            // default dijalog sa naslovom "The page at 'https://appassets...' says:"
+            // (URL porijekla umjesto imena aplikacije) — zbunjujuće za korisnika jer
+            // app nikad ne izgleda kao da je učitana sa "web stranice". Ovdje pravimo
+            // identičan dijalog ali sa nazivom aplikacije kao naslovom.
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message,
+                    final android.webkit.JsResult result) {
+                // WebView (i JS u njemu) namjerno ostaje živ dok se Activity gasi
+                // (snimanje u pozadini) — alert() u tom prozoru bi bacio
+                // BadTokenException pri show(). Otkaži i preskoči dijalog.
+                if (isFinishing() || isDestroyed()) { result.cancel(); return true; }
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle(getString(R.string.app_name))
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok,
+                                (dialog, which) -> result.confirm())
+                        .setOnCancelListener(dialog -> result.cancel())
+                        .setCancelable(false)
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message,
+                    final android.webkit.JsResult result) {
+                if (isFinishing() || isDestroyed()) { result.cancel(); return true; }
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle(getString(R.string.app_name))
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok,
+                                (dialog, which) -> result.confirm())
+                        .setNegativeButton(android.R.string.cancel,
+                                (dialog, which) -> result.cancel())
+                        .setOnCancelListener(dialog -> result.cancel())
+                        .setCancelable(false)
+                        .show();
+                return true;
             }
 
             @Override
@@ -236,9 +385,444 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ── Native obavještenja (zaobilazi WebView Notification API) ────────────
+    // Zašto postoji: korisnik je na STVARNOM telefonu dobio "Ovaj uređaj ne
+    // podržava obavještenja" pri uključivanju upozorenja na nov požar. Uzrok:
+    // Android WebView na mnogim OEM verzijama uopšte NEMA implementiran
+    // window.Notification (JS Notifications API) — 'Notification' in window
+    // je false — iako sistem sasvim normalno prikazuje prave Android
+    // notifikacije. Ista zamka je već riješena za GPS snimanje (vidi
+    // GpsService — foreground servis koristi NotificationManager direktno,
+    // ne window.Notification), i sad se isto rješenje primjenjuje ovdje:
+    // obična (ne-foreground, ne-ongoing) native notifikacija preko
+    // NotificationManagerCompat, potpuno nezavisna od WebView Notification API-ja.
+    class AppNotifBridge {
+        private static final String CHANNEL_ID = "pozari_upozorenja";
+        private static final int NOTIF_ID_BASE = 5000;
+        private int seq = 0;
+
+        private void ensureChannel() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
+                    NotificationChannel ch = new NotificationChannel(
+                            CHANNEL_ID, "Upozorenja na požar",
+                            NotificationManager.IMPORTANCE_HIGH);
+                    ch.setDescription("Nov požar u zadanom krugu od tvoje pozicije");
+                    nm.createNotificationChannel(ch);
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public void show(String naslov, String tijelo) {
+            runOnUiThread(() -> {
+                ensureChannel();
+                Intent openApp = new Intent(MainActivity.this, MainActivity.class);
+                openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                PendingIntent pending = PendingIntent.getActivity(MainActivity.this,
+                        1000 + (seq % 100), openApp,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                Notification n = new NotificationCompat.Builder(MainActivity.this, CHANNEL_ID)
+                        .setContentTitle(naslov)
+                        .setContentText(tijelo)
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(tijelo))
+                        .setSmallIcon(android.R.drawable.stat_sys_warning)
+                        .setContentIntent(pending)
+                        .setAutoCancel(true)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .build();
+                try {
+                    androidx.core.app.NotificationManagerCompat.from(MainActivity.this)
+                            .notify(NOTIF_ID_BASE + (seq++ % 20), n);
+                } catch (SecurityException e) {
+                    // POST_NOTIFICATIONS nije odobrena (Android 13+, korisnik odbio pri startu) —
+                    // tiho preskoči, JS stranu ionako ne čeka nikakav odgovor odavde.
+                }
+            });
+        }
+    }
+
+    // ── Native HTTP most (zaobilazi CORS) ──────────────────────────────────
+    // Zašto postoji: NASA FIRMS (detekcije požara) ne šalje CORS zaglavlja —
+    // ni arhivski CSV izvozi (/data/...), ni Area API sa MAP_KEY-em (/api/...).
+    // Terenski test sa dobrom vezom (215 KB/s), najmanjim okvirom (24h) i
+    // unesenim ključem dao je "odbijeno odmah" na SVIH pet izvora. CORS je
+    // pravilo BROWSERA i iz JavaScripta se ne može zaobići — ali native Java
+    // HTTP poziv ga uopšte nema. Zato JS strana (_poziDohvatiJedan) prvo
+    // proba ovaj most, pa tek onda fetch() (koji ostaje za webapp u browseru).
+    //
+    // NAMJERNO NIJE opšti proxy: samo https i samo NASA FIRMS host. Bez tog
+    // ograničenja bi bilo koji JS na stranici — uključujući nešto ubačeno kroz
+    // uvezeni KML/GeoJSON sadržaj — mogao preko native sloja dohvatiti bilo
+    // šta, zaobilazeći sve zaštite koje browser inače nameće.
+    class NetBridge {
+        private static final int MAX_BYTES = 12 * 1024 * 1024;   // evropski 7d CSV zna biti krupan
+
+        private boolean dozvoljenHost(String host) {
+            if (host == null) return false;
+            // Locale.ROOT namjerno: na turskom locale-u "I".toLowerCase() daje "ı",
+            // pa bi poređenje hosta tiho palo i most bi bio mrtav bez ikakve poruke.
+            String h = host.toLowerCase(java.util.Locale.ROOT);
+            return h.equals("firms.modaps.eosdis.nasa.gov")
+                || h.endsWith(".modaps.eosdis.nasa.gov")
+                || h.equals("data-api.globalforestwatch.org");
+        }
+
+        // zaglavljaJson: {"x-api-key":"..."} ili null. tijeloJson je null za
+        // GET, a za GFW raster upit sadrži SQL i obaveznu GeoJSON geometriju.
+        // GFW zaglavlja i POST u browseru okidaju CORS preflight — ovdje ne,
+        // jer native poziv nema CORS uopste.
+        @JavascriptInterface
+        public void fetchText(final String id, final String url, final int timeoutMs,
+                              final String zaglavljaJson, final String tijeloJson) {
+            new Thread(() -> {
+                int status = 0;
+                String b64 = "";
+                String greska = null;
+                HttpURLConnection c = null;
+                try {
+                    URL u = new URL(url);
+                    if (!"https".equalsIgnoreCase(u.getProtocol()) || !dozvoljenHost(u.getHost())) {
+                        greska = "nedozvoljena adresa";
+                    } else {
+                        int t = timeoutMs > 0 ? timeoutMs : 20000;
+                        byte[] body = (tijeloJson != null && !tijeloJson.isEmpty())
+                                ? tijeloJson.getBytes(java.nio.charset.StandardCharsets.UTF_8) : null;
+                        org.json.JSONObject zg = (zaglavljaJson != null && zaglavljaJson.length() > 2)
+                                ? new org.json.JSONObject(zaglavljaJson) : null;
+                        // HttpURLConnection na Androidu ne prati pouzdano 307/308 za POST.
+                        // GFW `/latest` upravo tako preusmjerava na dnevnu verziju dataseta,
+                        // zato redirect pratimo ručno i ponavljamo ISTU metodu i tijelo.
+                        for (int redirect = 0; redirect <= 5; redirect++) {
+                            c = (HttpURLConnection) u.openConnection();
+                            c.setConnectTimeout(t);
+                            c.setReadTimeout(t);
+                            c.setInstanceFollowRedirects(false);
+                            c.setRequestProperty("User-Agent", "DendroMap-Android");
+                            c.setRequestProperty("Accept", "text/csv,application/json,text/plain,*/*");
+                            if (zg != null) {
+                                java.util.Iterator<String> it = zg.keys();
+                                while (it.hasNext()) {
+                                    String k = it.next();
+                                    c.setRequestProperty(k, zg.optString(k, ""));
+                                }
+                            }
+                            if (body != null) {
+                                c.setRequestMethod("POST");
+                                c.setDoOutput(true);
+                                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                                try (OutputStream os = c.getOutputStream()) { os.write(body); }
+                            }
+                            status = c.getResponseCode();
+                            if (status != 307 && status != 308 && status != 301 && status != 302) break;
+                            String location = c.getHeaderField("Location");
+                            if (location == null || redirect == 5) { greska = "neispravno preusmjerenje"; break; }
+                            URL next = new URL(u, location);
+                            if (!"https".equalsIgnoreCase(next.getProtocol()) || !dozvoljenHost(next.getHost())) {
+                                greska = "nedozvoljeno preusmjerenje"; break;
+                            }
+                            c.disconnect(); c = null; u = next;
+                        }
+                        InputStream is = (greska != null || c == null) ? null
+                                : ((status >= 400) ? c.getErrorStream() : c.getInputStream());
+                        if (is != null) {
+                            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                            byte[] buf = new byte[16384];
+                            int n, ukupno = 0;
+                            while ((n = is.read(buf)) > 0) {
+                                ukupno += n;
+                                if (ukupno > MAX_BYTES) { greska = "odgovor prevelik"; break; }
+                                bos.write(buf, 0, n);
+                            }
+                            is.close();
+                            if (greska == null) b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+                        }
+                    }
+                } catch (Exception e) {
+                    // Java baca konkretne izuzetke (SocketTimeoutException,
+                    // UnknownHostException...) — za razliku od fetch() koji sve
+                    // svede na jednu genericnu gresku. Proslijedi ime klase da
+                    // JS strana moze reci sta se STVARNO desilo.
+                    greska = e.getClass().getSimpleName();
+                    if (e.getMessage() != null) greska += ": " + e.getMessage();
+                } finally {
+                    if (c != null) c.disconnect();
+                }
+                final int fStatus = status;
+                final String fB64 = b64;
+                final String fGreska = greska;
+                runOnUiThread(() -> {
+                    if (webView == null) return;
+                    StringBuilder js = new StringBuilder("if(typeof _nativeNetOdgovor==='function')_nativeNetOdgovor(");
+                    js.append(jsStr(id)).append(',').append(fStatus).append(',')
+                      .append(jsStr(fB64)).append(',').append(fGreska == null ? "null" : jsStr(fGreska)).append(')');
+                    webView.evaluateJavascript(js.toString(), null);
+                });
+            }).start();
+        }
+
+        // Base64 i imena izuzetaka su bezbjedni znakovi, ali navodnik/backslash
+        // iz poruke izuzetka bi razbio ubaceni JS — zato se svaki string escape-uje.
+        private String jsStr(String s) {
+            if (s == null) return "null";
+            StringBuilder b = new StringBuilder("\"");
+            for (int i = 0; i < s.length(); i++) {
+                char ch = s.charAt(i);
+                if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+                else if (ch == '\n') b.append("\\n");
+                else if (ch == '\r') b.append("\\r");
+                else if (ch < 0x20 || ch > 0x7e) b.append(String.format("\\u%04x", (int) ch));
+                else b.append(ch);
+            }
+            return b.append('"').toString();
+        }
+    }
+
+    // ── Auto-update: preuzmi i instaliraj najnoviji APK direktno iz app-a ──
+    // Zašto postoji: "Ažuriraj aplikaciju" u Meniju je ranije za APK korisnike
+    // samo otvarala GitHub Actions listu radnji — korisnik je morao ručno naći
+    // zadnji uspješan build, prijaviti se na GitHub, skinuti .zip artefakt
+    // (Actions artefakti traže login i ističu za 90 dana), raspakovati ga i
+    // instalirati. GitHub Release je JAVNO dostupan preko stabilnog URL-a bez
+    // prijave (codex-webview.yml ga objavljuje/ažurira poslije svakog uspješnog
+    // builda) — ovaj most ga nalazi preko API-ja i instalira jednim tapom.
+    //
+    // /releases/latest NIJE korišten namjerno — taj GitHub endpoint EKSPLICITNO
+    // isključuje prerelease objave, a CI ovdje objavljuje baš prerelease (debug
+    // build, ne zvaničan release). Zato se čita obična lista (/releases,
+    // sortirana najnovije-prvo) i uzima prvi element.
+    class UpdateBridge {
+        private static final String RELEASES_URL =
+                "https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1";
+
+        @JavascriptInterface
+        public void checkAndInstall() {
+            new Thread(() -> {
+                try {
+                    org.json.JSONObject rel = dohvatiJson(RELEASES_URL);
+                    if (rel == null) { postStatus("⚠ Ne mogu provjeriti novu verziju (nema interneta?)"); return; }
+
+                    String tag = rel.optString("tag_name", "");
+                    String verNova = tag.startsWith("v") ? tag.substring(1) : tag;
+                    // NE BuildConfig.VERSION_NAME — od Android Gradle Plugin-a 8.0
+                    // BuildConfig klasa se NE generiše podrazumijevano (traži
+                    // buildFeatures { buildConfig true }), pa build pada na
+                    // "cannot find symbol". PackageManager je usput i tačniji
+                    // izvor: vraća verziju APK-a koji je STVARNO instaliran.
+                    // Debug build nosi versionNameSuffix "-debug" (1.5.2-debug) —
+                    // parseSegment() ispod čisti ne-brojeve pa poređenje radi.
+                    String verTrenutna = "0";
+                    try {
+                        verTrenutna = getPackageManager()
+                                .getPackageInfo(getPackageName(), 0).versionName;
+                    } catch (Exception ignored) {}
+                    if (verNova.isEmpty() || !jeNovija(verNova, verTrenutna)) {
+                        postStatus("✓ Već imaš najnoviju verziju (v" + verTrenutna + ")");
+                        return;
+                    }
+
+                    String apkUrl = null;
+                    org.json.JSONArray assets = rel.optJSONArray("assets");
+                    if (assets != null) {
+                        for (int i = 0; i < assets.length(); i++) {
+                            org.json.JSONObject a = assets.getJSONObject(i);
+                            if (a.optString("name", "").endsWith(".apk")) {
+                                apkUrl = a.optString("browser_download_url", null);
+                                break;
+                            }
+                        }
+                    }
+                    if (apkUrl == null) {
+                        postStatus("⚠ Nova verzija v" + verNova + " postoji, ali APK nije pronađen u objavi");
+                        return;
+                    }
+
+                    postStatus("⬇ Preuzimam verziju v" + verNova + "…");
+                    File dir = new File(getCacheDir(), "update");
+                    if (!dir.exists()) dir.mkdirs();
+                    File apk = new File(dir, "US-SUME-v" + verNova + ".apk");
+                    if (!preuzmiFajl(apkUrl, apk)) {
+                        postStatus("⚠ Preuzimanje nije uspjelo — provjeri vezu i pokušaj ponovo");
+                        return;
+                    }
+                    runOnUiThread(() -> instalirajApk(apk));
+                } catch (Exception e) {
+                    postStatus("⚠ Greška pri ažuriranju: " + e.getClass().getSimpleName());
+                }
+            }).start();
+        }
+
+        // throws i org.json.JSONException, ne samo IOException: JSONException je
+        // PROVJERENI (checked) izuzetak u Androidovom org.json-u, pa ga javac
+        // odbija pustiti neprijavljenog. Pozivalac ga hvata zajedno sa ostalim
+        // kvarovima kroz catch (Exception e) i pretvara u čitljivu poruku
+        // korisniku — pokvaren/nepotpun JSON sa GitHub-a je isti ishod kao
+        // prekinuta veza: ažuriranje nije uspjelo, pokušaj ponovo.
+        private org.json.JSONObject dohvatiJson(String urlStr) throws IOException, org.json.JSONException {
+            URL u = new URL(urlStr);
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            try {
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("Accept", "application/vnd.github+json");
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                int status = c.getResponseCode();
+                if (status != 200) return null;
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream is = c.getInputStream()) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                }
+                // /releases (lista) vraća JSON NIZ — uzmi prvi (najnoviji) element.
+                org.json.JSONArray arr = new org.json.JSONArray(bos.toString("UTF-8"));
+                return arr.length() > 0 ? arr.getJSONObject(0) : null;
+            } finally {
+                c.disconnect();
+            }
+        }
+
+        private boolean preuzmiFajl(String urlStr, File dest) throws IOException {
+            URL u = new URL(urlStr);
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            try {
+                // GitHub Release asset preusmjerava na objects.githubusercontent.com —
+                // standardan GET redirect, HttpURLConnection ga prati sam (za razliku
+                // od NetBridge-a gore, koji ručno prati 307/308 SAMO zbog POST tijela).
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(20000);
+                c.setReadTimeout(30000);
+                int status = c.getResponseCode();
+                if (status != 200) return false;
+                try (InputStream is = c.getInputStream(); FileOutputStream fos = new FileOutputStream(dest)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+                }
+                return true;
+            } finally {
+                c.disconnect();
+            }
+        }
+
+        private void instalirajApk(File apk) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && !getPackageManager().canRequestPackageInstalls()) {
+                postStatus("Dozvoli instalaciju iz ovog izvora pa pokušaj ponovo");
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception ignored) {}
+                return;
+            }
+            Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                    getPackageName() + ".fileprovider", apk);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        }
+
+        // Poredi "X.Y.Z" segment po segment (numerički, ne leksikografski) — projekat
+        // svaki segment drži na 0-9 (vidi CLAUDE.md šema brojeva verzije), ali provjera
+        // ostaje ispravna i ako se to pravilo ikad promijeni (npr. "1.5.10" > "1.5.9").
+        private boolean jeNovija(String a, String b) {
+            String[] pa = a.split("\\.");
+            String[] pb = b.split("\\.");
+            for (int i = 0; i < Math.max(pa.length, pb.length); i++) {
+                int va = i < pa.length ? parseSegment(pa[i]) : 0;
+                int vb = i < pb.length ? parseSegment(pb[i]) : 0;
+                if (va != vb) return va > vb;
+            }
+            return false;
+        }
+
+        private int parseSegment(String s) {
+            try { return Integer.parseInt(s.replaceAll("[^0-9]", "")); }
+            catch (Exception e) { return 0; }
+        }
+
+        private void postStatus(String msg) {
+            runOnUiThread(() -> {
+                if (webView == null) return;
+                webView.evaluateJavascript(
+                        "if(typeof _azurirajStatus==='function')_azurirajStatus(" + jsStr(msg) + ")", null);
+            });
+        }
+
+        // Isti razlog kao NetBridge.jsStr (zaseban primjerak — mali, ne vrijedi
+        // dijeliti preko refaktora dvije nezavisne klase): navodnik/backslash iz
+        // poruke bi razbio ubačeni JS bez escape-ovanja.
+        private String jsStr(String s) {
+            if (s == null) return "null";
+            StringBuilder b = new StringBuilder("\"");
+            for (int i = 0; i < s.length(); i++) {
+                char ch = s.charAt(i);
+                if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+                else if (ch == '\n') b.append("\\n");
+                else if (ch < 0x20 || ch > 0x7e) b.append(String.format("\\u%04x", (int) ch));
+                else b.append(ch);
+            }
+            return b.append('"').toString();
+        }
+    }
+
+    // navigator.share() u Android WebView-u (za razliku od Chrome-a) ne otvara
+    // sistemski share-sheet za fajlove — canShare({files:[...]}) tiho vraća
+    // false, pa JS strana bez ovog mosta nema kako da ponudi Viber/Messenger/
+    // Bluetooth. Ovdje se koristi VEĆ postojeći FileProvider (isti kao za
+    // kameru) da se privremeni fajl u cache-u podijeli preko pravog
+    // Intent.ACTION_SEND chooser-a.
+    class ShareBridge {
+        @JavascriptInterface
+        public void shareFile(String filename, String dataUrl, String title, String text) {
+            try {
+                String base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
+                byte[] data = Base64.decode(base64, Base64.DEFAULT);
+
+                File dir = new File(getCacheDir(), "shared");
+                if (!dir.exists()) dir.mkdirs();
+                File file = new File(dir, filename);
+                FileOutputStream fos = new FileOutputStream(file);
+                fos.write(data);
+                fos.close();
+
+                Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                        getPackageName() + ".fileprovider", file);
+                String mime = guessMime(filename);
+
+                Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                sendIntent.setType(mime);
+                sendIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                if (text != null) sendIntent.putExtra(Intent.EXTRA_TEXT, text);
+                if (title != null) sendIntent.putExtra(Intent.EXTRA_SUBJECT, title);
+                sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                Intent chooser = Intent.createChooser(sendIntent,
+                        title != null ? title : "Pošalji");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                runOnUiThread(() -> startActivity(chooser));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Greška pri dijeljenju: " + e.getMessage(),
+                        Toast.LENGTH_SHORT).show());
+            }
+        }
+
+        private String guessMime(String filename) {
+            if (filename.endsWith(".kml")) return "application/vnd.google-earth.kml+xml";
+            if (filename.endsWith(".gpx")) return "application/gpx+xml";
+            if (filename.endsWith(".geojson")) return "application/geo+json";
+            if (filename.endsWith(".json")) return "application/json";
+            return "application/octet-stream";
+        }
+    }
+
     class GpsBridge {
         @JavascriptInterface
         public void startRecording(String title) {
+            isRecordingActive = true;
             requestBackgroundLocationIfNeeded();
             Intent intent = new Intent(MainActivity.this, GpsService.class);
             intent.putExtra("title", title != null ? title : "GPS Snimanje");
@@ -251,9 +835,25 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void stopRecording() {
+            isRecordingActive = false;
             Intent intent = new Intent(MainActivity.this, GpsService.class);
             intent.setAction("stop");
             startService(intent);
+            // Ako je OVA Activity već uništena (korisnik je zatvorio/swipe-ovao app
+            // dok je snimanje trajalo — WebView je bio namjerno pošteđen u onDestroy,
+            // vidi napomenu kod sWebView), niko drugi neće pozvati webView.destroy()
+            // jer je taj poziv baš tad bio preskočen. Sad kad je snimanje stvarno
+            // gotovo, oslobodi ga — inače ostaje "osiroćen" u memoriji zauvijek.
+            if (isFinishing() || isDestroyed()) {
+                runOnUiThread(() -> {
+                    if (webView != null) { webView.destroy(); }
+                    if (sWebView == webView) sWebView = null;
+                    if (recActionReceiver != null) {
+                        try { unregisterReceiver(recActionReceiver); } catch (Exception ignored) {}
+                    }
+                    sRecActionReceiver = null;
+                });
+            }
         }
 
         @JavascriptInterface
@@ -272,10 +872,68 @@ public class MainActivity extends Activity {
                     Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                     == PackageManager.PERMISSION_GRANTED;
         }
+
+        // Doze/App Standby (stock Android) i OEM "battery manager"-i (Xiaomi/Samsung/
+        // Huawei i sl.) znaju ubiti CIJELI proces — foreground servis i sve — kad
+        // procijene da je app "u pozadini", npr. baš kad stigne telefonski poziv i
+        // sistemu zatreba RAM/prioritet za njega. WebView-preživljavanje i native GPS
+        // bafer (GpsService) štite od Activity-only uništenja, ali ne od ovoga — ako
+        // proces umre, umre i native bafer. Izuzeće od Doze/App Standby (stock Android
+        // API) je jedina prenosiva odbrana; OEM-specifične "autostart/protected apps"
+        // postavke se ne mogu tražiti programski, samo standardnim Android putem.
+        @JavascriptInterface
+        public boolean hasBatteryOptExemption() {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return true;
+            return pm.isIgnoringBatteryOptimizations(getPackageName());
+        }
+
+        @JavascriptInterface
+        public void requestBatteryOptExemption() {
+            try {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } catch (Exception e) {
+                // Neki OEM-i blokiraju direktni zahtjev — otvori opću listu izuzeća
+                // umjesto da korisnik ostane bez ijedne opcije.
+                try {
+                    startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // Poziva se sinhrono iz JS-a (visibilitychange, app opet vidljiv) — vraća
+        // sve tačke koje je GpsService prikupio preko native LocationManager-a dok
+        // je WebView bio "osiroćen"/bez prozora (vidi napomenu kod sWebView i kod
+        // GpsService.BUFFER_LOCK). Čitanje rotira fajl u pending; briše ga tek
+        // zaseban ack nakon trajnog JS journala. Metoda ima povratnu vrijednost
+        // pa je WebView poziva sinhrono i odmah dobija JSON paket.
+        @JavascriptInterface
+        public String readNativeBuffer() {
+            try {
+                String[] batch = new NativeGpsBuffer(getFilesDir()).read();
+                return new org.json.JSONObject().put("token", batch[0]).put("raw", batch[1]).toString();
+            } catch (Exception e) { return ""; } // no ack, file remains intact
+        }
+
+        @JavascriptInterface
+        public boolean ackNativeBuffer(String token) {
+            try { return new NativeGpsBuffer(getFilesDir()).ack(token); }
+            catch (IOException e) { return false; }
+        }
+
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerRecActionReceiver() {
+        if (sRecActionReceiver != null) {
+            // Već registrovan (preživio iz prethodne Activity instance dok je
+            // snimanje trajalo) — reuse, ne registruj drugi. onReceive ionako
+            // uvijek čita TRENUTNI webView field, pa ostaje ispravan.
+            recActionReceiver = sRecActionReceiver;
+            return;
+        }
         recActionReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -287,6 +945,7 @@ public class MainActivity extends Activity {
                 }
             }
         };
+        sRecActionReceiver = recActionReceiver;
         IntentFilter filter = new IntentFilter("ba.spd.uss.vlake.REC_ACTION");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(recActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
@@ -347,6 +1006,20 @@ public class MainActivity extends Activity {
                             "GPS dozvola je potrebna za snimanje vlaka",
                             Toast.LENGTH_LONG).show();
                 }
+            }
+        } else if (requestCode == REQ_CAMERA) {
+            if (pendingCameraRequest != null) {
+                boolean granted = grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+                if (granted) {
+                    pendingCameraRequest.grant(pendingCameraRequest.getResources());
+                } else {
+                    pendingCameraRequest.deny();
+                    Toast.makeText(this,
+                            "Dozvola za kameru je potrebna za skeniranje QR koda",
+                            Toast.LENGTH_LONG).show();
+                }
+                pendingCameraRequest = null;
             }
         }
     }
@@ -411,17 +1084,36 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        webView.onPause();
+        // Dok traje GPS snimanje NE smijemo pauzirati WebView — Android
+        // dokumentacija za WebView.onPause() eksplicitno navodi da pauzira i
+        // geolocation, što bi prekinulo watchPosition() čim korisnik izađe iz
+        // app-a. Foreground servis (GpsService) + partial wake lock drže CPU
+        // budnim, a nepauzirani WebView drži JS/GPS watch živim u pozadini.
+        if (!isRecordingActive) {
+            webView.onPause();
+        }
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        if (recActionReceiver != null) {
+        // Isto kao WebView ispod — dok snimanje traje, receiver MORA ostati
+        // registrovan da Pauza/Stop dugmad na notifikaciji i dalje rade dok je
+        // app zatvoren (vidi napomenu kod sRecActionReceiver).
+        if (recActionReceiver != null && !isRecordingActive) {
             try { unregisterReceiver(recActionReceiver); } catch (Exception ignored) {}
+            sRecActionReceiver = null;
         }
-        if (webView != null) {
+        // Dok snimanje traje NAMJERNO ne uništavamo WebView (vidi napomenu kod
+        // sWebView) — Activity se gasi (npr. swipe iz recent apps), ali proces
+        // ostaje živ zbog GpsService foreground servisa, i JS/GPS watch treba
+        // nastaviti raditi u pozadini dok korisnik ne zaustavi snimanje ili
+        // ponovo otvori app. webView.destroy() se tad odgađa do stvarnog kraja
+        // snimanja (vidi GpsBridge.stopRecording) ili do sljedećeg onCreate-a
+        // koji ponovo iskoristi isti WebView.
+        if (webView != null && !isRecordingActive) {
             webView.destroy();
+            sWebView = null;
         }
         super.onDestroy();
     }
