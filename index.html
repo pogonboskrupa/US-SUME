@@ -5081,7 +5081,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.4';
+const APP_VER = 'v1.5.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -14727,34 +14727,62 @@ const _PoziHeat = L.Layer.extend({
     gctx.fillRect(0, 0, 1, 256);
     this._palette = gctx.getImageData(0, 0, 1, 256).data;
   },
+  // ── Downsample interne rezolucije (v1.5.5) ──────────────────────────────
+  // Prije ove izmjene je _redraw() radio getImageData/putImageData preko
+  // CIJELOG vidljivog viewporta, na SVAKI moveend/zoomend/resize (dok je
+  // heatmap uključen) — to je bio najskuplji sinhroni posao u cijeloj
+  // sekciji Požari, jer se ponavlja pri SVAKOM pomjeranju karte, ne samo pri
+  // osvježavanju podataka. `_scale` (podrazumijevano 0.5) smanjuje backing
+  // buffer 4x (scale²) — CSS veličina ostaje puna (`canvas.style.width/
+  // height`, vidi _reset), pa se canvas na ekranu ne smanjuje, samo interno
+  // ima manje piksela za pixel-loop niže. Efekat je vizuelno zanemarljiv jer
+  // je heatmap već namjerno gausovski zamućen "blob" (isti šablon `_tpl`),
+  // ne oštra grafika — blago mekši rub na jako uvećanom zumu je prihvatljiv.
   _redraw() {
     if (!this._map || !this._ctx) return;
     const ctx = this._ctx, r = this._r, size = this._map.getSize();
+    const scale = this._scale || 1;
+    // Transform mapira crtanje (koordinate OSTAJU u punim CSS/mapa pikselima,
+    // ne treba ih ručno množiti sa scale) na manji backing buffer. clearRect
+    // pod ovim transformom tačno pokriva cijeli (manji) canvas.
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, size.x, size.y);
+    if (this._latlngs.length) {
+      const bounds = this._map.getBounds().pad(0.25);
+      this._latlngs.forEach(p => {
+        const ll = L.latLng(p[0], p[1]);
+        if (!bounds.contains(ll)) return;
+        const pt = this._map.latLngToContainerPoint(ll);
+        // Zadani alfa 0.4 (v3.112.3, bio 0.15 u v3.112.2) — nizak alfa je
+        // namjerno biran da se "usijanost" gradi TEK preklapanjem više tačaka
+        // (učestale detekcije istog požara), ali sa narandžastom paletom
+        // (v3.112.3, prije rainbow) je 0.15 na terenu ispalo NEVIDLJIVO: pravi
+        // topo/satelit/karta pozadine su već zeleno/braon/bež, i blijeda
+        // narandžasta na 15% providnosti se stopi u pozadinu — potvrđeno
+        // Playwright screenshot testom (izolovana tačka na simuliranoj topo
+        // podlozi vidljiva samo kao jedva primjetna mrlja). Rainbow paleta je
+        // imala PLAVU boju za nisku gustoću — hladan ton na toploj zeleno/
+        // braon podlozi ima prirodan kontrast čak i na 15%; topla narandžasta
+        // na toploj podlozi taj kontrast nema, pa treba viši alfa da nadoknadi.
+        // 0.4 je i dalje ispod potpune neprozirnosti (gušći klaster i dalje
+        // izgleda "vruće" jače od usamljene tačke), ali usamljena detekcija
+        // više nije praktično nevidljiva.
+        ctx.globalAlpha = Math.max(Math.min(p[2] ?? 0.4, 1), 0.05);
+        ctx.drawImage(this._tpl, pt.x - r, pt.y - r);
+      });
+    }
+    // OBAVEZAN reset transforma PRIJE getImageData/putImageData — te dvije
+    // funkcije rade UVIJEK u sirovim device-pikselima backing buffera i
+    // IGNORIŠU trenutni transform, pa ostavljanje scale-a aktivnog ne bi
+    // ništa pokvarilo, ali je zbunjujuće/rizično za buduće izmjene ostaviti
+    // transform primijenjen preko poziva koji ga ne poštuje.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (!this._latlngs.length) return;
-    const bounds = this._map.getBounds().pad(0.25);
-    this._latlngs.forEach(p => {
-      const ll = L.latLng(p[0], p[1]);
-      if (!bounds.contains(ll)) return;
-      const pt = this._map.latLngToContainerPoint(ll);
-      // Zadani alfa 0.4 (v3.112.3, bio 0.15 u v3.112.2) — nizak alfa je
-      // namjerno biran da se "usijanost" gradi TEK preklapanjem više tačaka
-      // (učestale detekcije istog požara), ali sa narandžastom paletom
-      // (v3.112.3, prije rainbow) je 0.15 na terenu ispalo NEVIDLJIVO: pravi
-      // topo/satelit/karta pozadine su već zeleno/braon/bež, i blijeda
-      // narandžasta na 15% providnosti se stopi u pozadinu — potvrđeno
-      // Playwright screenshot testom (izolovana tačka na simuliranoj topo
-      // podlozi vidljiva samo kao jedva primjetna mrlja). Rainbow paleta je
-      // imala PLAVU boju za nisku gustoću — hladan ton na toploj zeleno/
-      // braon podlozi ima prirodan kontrast čak i na 15%; topla narandžasta
-      // na toploj podlozi taj kontrast nema, pa treba viši alfa da nadoknadi.
-      // 0.4 je i dalje ispod potpune neprozirnosti (gušći klaster i dalje
-      // izgleda "vruće" jače od usamljene tačke), ali usamljena detekcija
-      // više nije praktično nevidljiva.
-      ctx.globalAlpha = Math.max(Math.min(p[2] ?? 0.4, 1), 0.05);
-      ctx.drawImage(this._tpl, pt.x - r, pt.y - r);
-    });
-    const img = ctx.getImageData(0, 0, size.x, size.y);
+    // KRITIČNO: dimenzije MORAJU biti stvarna (već smanjena) veličina
+    // backing buffera (`this._canvas.width/height`), NE puna veličina mape
+    // (`size.x/size.y`) — na downsample-ovanom canvasu bi potonje tražilo
+    // više piksela nego što backing buffer ima.
+    const img = ctx.getImageData(0, 0, this._canvas.width, this._canvas.height);
     const d = img.data, pal = this._palette;
     for (let i = 3; i < d.length; i += 4) {
       const a = d[i];
@@ -14767,7 +14795,14 @@ const _PoziHeat = L.Layer.extend({
   _reset() {
     const size = this._map.getSize();
     L.DomUtil.setPosition(this._canvas, this._map.containerPointToLayerPoint([0, 0]));
-    this._canvas.width = size.x; this._canvas.height = size.y;
+    const scale = this._scale || (this._scale = this.options.scale || 0.5);
+    this._canvas.width = Math.max(1, Math.round(size.x * scale));
+    this._canvas.height = Math.max(1, Math.round(size.y * scale));
+    // CSS veličina ostaje PUNA — bez ovoga bi se manji backing buffer i
+    // FIZIČKI smanjio na ekranu (canvas nema svoj style.width/height, pa bi
+    // browser default renderovao 1:1 sa `width`/`height` atributima).
+    this._canvas.style.width = size.x + 'px';
+    this._canvas.style.height = size.y + 'px';
     this._redraw();
   }
 });
@@ -15182,7 +15217,79 @@ function _poziPrognozaHtml(pr) {
 // nanovo (_poziOznaciNove pravi nove objekte), pa keš prestaje važiti sam od
 // sebe kad stignu novi podaci. `undefined` = još nije računato, `null` = nema
 // projekcije (npr. bez Turf-a) i ne treba pokušavati ponovo.
-function _poziProj(g) {
+// ── Lijeni red za _poziProj promašaje (v1.5.5) ──────────────────────────────
+// _poziProj JESTE memoizovan (keš niže, po sadržajnom potpisu tačaka grupe),
+// ali na PROMAŠAJ (nova grupa ili grupa sa novom detekcijom — česta situacija
+// dok požar aktivno gori i FIRMS/GFW javljaju nove detekcije na 10 min),
+// _poziOpozProjekcija radi concave hull + buffer union po trakama starosti
+// SINHRONO. To je bilo prihvatljivo dok se ovaj račun radio samo u popup-ima
+// (jedna grupa, na eksplicitnu korisnikovu akciju), ali TRI mjesta ga zovu u
+// petlji nad SVIM vidljivim grupama na SVAKI meteo/GPS/toast događaj:
+// _poziOpozAzuriraj (mapni sloj), _poziRedHtml (svaki red liste) i sažetak
+// kartice — sve njih pokreće `_poziRenderPanel`/`_poziRender`, koji se zovu
+// vrlo često. Isti red-čekanja + requestIdleCallback obrazac kao `_povArh*`
+// (v1.5.4), ali NEZAVISNA implementacija — ne dijeli infrastrukturu, jer
+// `_povArhRed` ima specifičnu semantiku (ključ po godini/mjesecu) čije bi
+// generalizovanje unijelo rizik u kod koji je već ispravan.
+const _poziProjRed = [];        // {kljuc, posao} — isti oblik kao _povArhRed
+let _poziProjRadi = false;
+let _poziProjTekuci = null;     // posao upravo izvađen iz reda (vidi _povArhPreostalo zamku, v1.5.4)
+let _poziProjCrtajTajmer = null;
+const _POZI_PROJ_RED_MAX = 40;  // zaštita od neograničenog rasta (desetine požara + brzi refresh-evi)
+
+function _poziProjSljedeciTakt(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 900 });
+  else setTimeout(fn, 60);
+}
+function _poziProjZakazi(kljuc, g) {
+  if (_poziProjRed.some(r => r.kljuc === kljuc)) return;
+  if (_poziProjRed.length >= _POZI_PROJ_RED_MAX) _poziProjRed.shift(); // najstariji ispada
+  _poziProjRed.push({ kljuc, posao: () => {
+    g._proj = _poziOpozProjekcija(g);
+    _poziProj._cache.set(kljuc, g._proj);
+    while (_poziProj._cache.size > 80) _poziProj._cache.delete(_poziProj._cache.keys().next().value);
+  }});
+  _poziProjPokreniObradu();
+}
+function _poziProjPokreniObradu() {
+  if (_poziProjRadi || !_poziProjRed.length) return;
+  _poziProjRadi = true;
+  _poziProjSljedeciTakt(function korak() {
+    const r = _poziProjRed.shift();
+    if (!r) { _poziProjRadi = false; _poziProjTekuci = null; _poziProjTraziCrtanje(); return; }
+    _poziProjTekuci = r;
+    // Jedan pad ne smije zaustaviti cijeli red — ostale grupe su nezavisne.
+    try { r.posao(); } catch(e) {}
+    _poziProjTekuci = null;
+    _poziProjTraziCrtanje();
+    if (_poziProjRed.length) _poziProjSljedeciTakt(korak);
+    else { _poziProjRadi = false; _poziProjTraziCrtanje(); }
+  });
+}
+// Throttlovano na 350ms (isti period kao _povArhTraziCrtanje) — bez toga bi
+// svaka od desetak jedinica okinula svoj puni redraw mapnog sloja.
+// NAMJERNO se ne forsira puni _poziRenderPanel() — isti princip kao
+// _povArhTraziCrtanje, koji takođe ne forsira puni panel rerender. Panel
+// (lista/kartica) se prirodno osvježi na sljedeći od desetina drugih
+// okidača (meteo/GPS/toast), a mapni sloj je najvidljivija reprezentacija
+// ("površina se pojavljuje na karti") pa se njegov redraw traži eksplicitno.
+function _poziProjTraziCrtanje() {
+  if (_poziProjCrtajTajmer) return;
+  _poziProjCrtajTajmer = setTimeout(() => {
+    _poziProjCrtajTajmer = null;
+    try { if (typeof _poziOpozAzuriraj === 'function' && _poziOpozOn() && _poziOn) _poziOpozAzuriraj(); } catch(e) {}
+  }, 350);
+}
+
+// `samoKes:true` — isti princip kao _povArhRacunaj(godina, samoKes): NIKAD ne
+// pokreće turf sinhrono, samo zakazuje i vraća `undefined` ("još nije
+// spremno", isto značenje kao _povArhKes[k]===undefined) dok se ne izračuna.
+// Svi pozivaoci koji NE prosljeđuju drugi argument ostaju POTPUNO
+// nepromijenjeni (sinhroni, identični ponašanju prije ove izmjene) — to su
+// detalj-pogledi (izvještaj o incidentu, HUD simulacije za JEDAN odabran
+// požar), gdje je kratko sinhrono čekanje za JEDNU grupu na eksplicitnu
+// korisnikovu akciju i dalje prihvatljivo.
+function _poziProj(g, samoKes) {
   if (!g) return null;
   if (g._proj !== undefined) return g._proj;
   const cache = _poziProj._cache || (_poziProj._cache = new Map());
@@ -15191,6 +15298,10 @@ function _poziProj(g) {
   if (cache.has(sig)) {
     g._proj = cache.get(sig);
     return g._proj;
+  }
+  if (samoKes) {
+    _poziProjZakazi(sig, g);
+    return undefined;
   }
   g._proj = _poziOpozProjekcija(g);
   cache.set(sig, g._proj);
@@ -15517,7 +15628,13 @@ function _poziOpozAzuriraj() {
   const grp = L.layerGroup([], { pane: 'pozariPovrsPane' });
   let nacrtano = 0;
   (typeof _poziAnimGrupe === 'function' ? _poziAnimGrupe() : (_poziEvts || [])).forEach(g => {
-    const pr = _poziProj(g);
+    // samoKes:true (v1.5.5) — na promašaj keša grupa se PRESKAČE u ovom
+    // prolazu (marker/tačka grupe i dalje postoji, crta ih _poziRender()
+    // odvojeno prije ovog poziva), a posao se zakazuje u pozadinski red.
+    // Kad _poziProjTraziCrtanje() (throttlovano 350ms) ponovo pozove ovu
+    // funkciju, keš je popunjen i površina se docrta.
+    const pr = _poziProj(g, true);
+    if (pr === undefined) return; // još se računa u pozadini
     if (!pr) return;
     // Jedan piksel = jedan FIKSAN krug (uvijek isti, vidi napomenu uz
     // _poziOpozProjekcija) — crtanje takvog poligona na karti bi TIHO tvrdilo
@@ -15675,7 +15792,11 @@ function _poziRedHtml(g, i, ref) {
     : (g.sateliti[0] || '1 detekcija');
   // Površina u listi (v3.113.1) — ranije se vidjela tek klikom na marker, pa je
   // za poređenje "koji je od ovih požara veliki" trebalo otvarati jedan po jedan.
-  const pr = _poziOpozOn() ? _poziProj(g) : null;
+  // samoKes:true (v1.5.5) — _poziRedHtml se zove za SVAKI red na SVAKI render
+  // panela (svaki meteo/GPS/toast događaj); undefined (u obradi) se ponaša
+  // identično kao pr===null (nema broja ovaj put), broj se pojavi kad
+  // _poziRenderPanel opet prirodno okine (obično prije nego se i primijeti).
+  const pr = _poziOpozOn() ? _poziProj(g, true) : null;
   const povrs = pr && isFinite(pr.haUkupno) ? _poziPovrsTxt(pr.haUkupno) : '';
   const period = _poziPeriodPojasa(g.prvi, g.zadnji);
   // Tačka lijevo nosi STAROST (ista boja kao marker na karti), ne pouzdanost —
@@ -18200,7 +18321,20 @@ function _poziSadrzajHtml() {
   let opozSazetak = '';
   let prognSazetak = '';
   if ((_poziOpozOn() || _poziPrognOn()) && _poziOn) {
-    const sProj = (_poziEvts || []).map(g => _poziProj(g) ? g : null).filter(Boolean);
+    // samoKes:true (v1.5.5) — OVAJ blok se zove na svaki render panela.
+    // POSEBNA PAŽNJA na najbliži požar (_poziEvts[0], pretpostavljeno
+    // nearest-first sortom): ako je BAŠ ON u obradi (promašaj keša), NE
+    // smije se tiho pasti na sljedeći dostupan (dalji) požar pod istim
+    // "najbliži požar" natpisom niže — to bi bila POGREŠNA tvrdnja, ne samo
+    // kašnjenje. Zato se taj slučaj provjerava odvojeno, prije filtriranja.
+    const najblizi = (_poziEvts || [])[0] || null;
+    const racuna = najblizi ? _poziProj(najblizi, true) : null;
+    if (najblizi && racuna === undefined) {
+      const cekaj = `<div style="font-size:11px;color:#93c5fd;margin-top:8px;">⏳ Računam procjenu površine…</div>`;
+      if (_poziOpozOn()) opozSazetak = cekaj;
+      if (_poziPrognOn()) prognSazetak = cekaj;
+    } else {
+    const sProj = (_poziEvts || []).map(g => _poziProj(g, true) ? g : null).filter(Boolean);
     if (!sProj.length) {
       const prazno = `<div style="font-size:11px;color:#94a3b8;margin-top:8px;">${
         (_poziEvts || []).length ? 'Nema dovoljno detekcija za procjenu površine.' : 'Trenutno nema detekcija u krugu ' + _POZ_RADIUS_KM + ' km.'
@@ -18249,6 +18383,7 @@ function _poziSadrzajHtml() {
            </div>`;
       }
       if (_poziPrognOn()) prognSazetak = _poziPrognozaHtml(pr);
+    }
     }
   }
 

@@ -1553,6 +1553,120 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
   — nije dirana jer korisnik nije tražio uklanjanje odatle, samo iz popupa
   koji se otvara klikom na marker.
 
+## Požari — preostala dva izvora usporenja, poslije v1.5.4 (v1.5.5)
+
+Nastavak posla iz v1.5.4 — korisnik je pitao "šta uraditi da požari sekcija ne
+usporava aplikaciju?". Istraga (statička analiza koda, bez pristupa uređaju) je
+pronašla DVA preostala mjesta gdje sekcija radi STVARAN posao SINHRONO na
+putevima koji se okidaju često (svaki meteo/GPS/toast događaj, svaki pan/zoom
+karte) — `_povArh*` (v1.5.4) je ostao netaknut, potvrđen ispravnim.
+
+### Heatmap redraw — downsample interne rezolucije
+
+- **`_PoziHeat._redraw()` je radio pun `getImageData`/`putImageData` preko
+  CIJELOG vidljivog viewporta, na SVAKI `moveend`/`zoomend`/`resize`** dok je
+  opcioni "🔥 Prikaži i kao heatmap" prekidač uključen — najveći pojedinačni
+  trošak u sekciji, jer se ponavlja pri SVAKOM pomjeranju karte, ne samo pri
+  osvježavanju podataka.
+  - **`_reset()` sad smanjuje backing buffer** (`canvas.width/height`)
+    faktorom `_scale` (podrazumijevano 0.5 → 4× manje piksela za
+    `getImageData`/`putImageData`), dok `canvas.style.width/height` ostaje
+    PUNA CSS veličina — canvas se na ekranu ne smanjuje, samo interno ima
+    manje piksela. Canvas prije NIJE imao eksplicitan CSS `style.width/height`
+    (oslanjao se na 1:1 default) — bez toga bi downsample fizički smanjio
+    canvas na ekranu.
+  - **`_redraw()` koristi `ctx.setTransform(scale,...)` PRIJE crtanja** —
+    koordinate tačaka (`pt.x/y`, radijus `r`) ostaju u punim CSS/mapa
+    pikselima, transform ih automatski mapira na manji buffer, bez ručnog
+    množenja.
+  - **KRITIČNO: transform se resetuje NA `1,0,0,1,0,0` PRIJE
+    `getImageData`/`putImageData`**, i te dvije funkcije čitaju
+    `this._canvas.width/height` (stvarna, već smanjena veličina), NE
+    `map.getSize()` (puna veličina mape) — `getImageData`/`putImageData`
+    UVIJEK rade u sirovim device-pikselima backing buffera i IGNORIŠU
+    trenutni transform; poziv sa punom veličinom mape na smanjenom canvasu bi
+    tražio više piksela nego što backing buffer ima.
+  - **Vizuelno provjereno Playwright reprodukcijom** (stvarni `_PoziHeat`
+    izvučen iz `index.html` prije/poslije, isti obrazac kao dokumentovani
+    heatmap repro iz v3.112.2/v3.112.4): piksel-diff prije/poslije — 1.8%
+    piksela se razlikuje za >10/255 (rub blob-a, očekivano od resample-a),
+    prosječna razlika 0.32/255 — zanemarljivo. Na NAJVEĆEM zumu (DPR 2, jedna
+    izolovana tačka) nema vidljive pikselizacije — blob ostaje glatko
+    zamućen jer je efekat već namjerno gausovski (isti šablon `_tpl`), ne
+    oštra grafika.
+  - **NIJE dodat dodatni throttle na `moveend`/`zoomend`** — Leaflet ih već
+    okida na KRAJ gesta (ne kontinuirano tokom drag-a), isti obrazac kao svi
+    ostali `map.on('moveend zoomend', ...)` handleri u fajlu bez throttle-a.
+    **NIJE dodata idle-callback odgoda za sam redraw** — downsample je sam
+    dovoljno smanjio trošak; dodatna odgoda bi unijela vidljiv lag (heatmap
+    "kasni" za markerima pri pan-u) bez izmjerene koristi.
+  - Test: `tests/js/pozari-heat-throttle.test.js` (5) nad STVARNIM `_PoziHeat`
+    (object-literal ekstrakcija, drugačiji obrazac od `function`-potpisa koji
+    `extractFn` hvata). **Provjereno da 4/5 pada na kodu prije izmjene.**
+
+### `_poziProj` — TRI hot-path poziva, ne jedan
+
+- **`_poziProj` JESTE memoizovan** (Map po sadržajnom potpisu tačaka grupe,
+  kapa 80, LRU) — ali na PROMAŠAJ keša (nova grupa ili grupa sa novom
+  detekcijom — česta situacija dok požar aktivno gori i FIRMS/GFW javljaju
+  nove detekcije na 10 min), `_poziOpozProjekcija` radi concave hull + buffer
+  union po trakama starosti SINHRONO. To je bilo prihvatljivo dok se ovaj
+  račun radio samo u popup-ima (jedna grupa, na eksplicitnu korisnikovu
+  akciju), ali TRI mjesta ga zovu u petlji nad SVIM vidljivim grupama:
+  mapni sloj (`_poziOpozAzuriraj`), SVAKI red liste (`_poziRedHtml`) i sažetak
+  kartice — sve tri se pozivaju na SVAKI meteo/GPS/toast događaj dok je panel
+  otvoren (isto onoliko često koliko i `_povArhKarticaHtml`, v1.5.4).
+  **Popravka SAMO mapnog sloja bi ostavila listu i karticu da i dalje sinhrono
+  forsiraju isti račun** — poništavajući svrhu popravke za korisnika koji drži
+  panel otvoren (najčešći slučaj za nekoga ko prati požar). Pokriveno testom
+  koji eksplicitno hvata baš taj propust (Invarijanta 4/5 u
+  `pozari-opoz-lijeni.test.js`).
+- **Isti red-čekanja + `requestIdleCallback` obrazac kao `_povArh*` (v1.5.4),
+  ali NEZAVISNA implementacija** — `_poziProjRed`/`_poziProjZakazi`/
+  `_poziProjPokreniObradu`/`_poziProjTraziCrtanje`. Namjerno se NE dijeli
+  infrastruktura sa `_povArh*`: taj kod ima specifičnu semantiku (ključ po
+  godini/mjesecu) čije bi generalizovanje unijelo rizik u kod koji je već
+  ispravan i ne treba se dirati. Stil ovog repoa favorizuje eksplicitne,
+  samostalne blokove po funkciji, ne dijeljene apstrakcije.
+- **`_poziProj(g, samoKes)`** — isti API oblik kao
+  `_povArhRacunaj(godina, samoKes)`. Na promašaju sa `samoKes:true` zakazuje
+  posao i vraća `undefined` ("još nije spremno", isto značenje kao
+  `_povArhKes[k]===undefined`). Svi pozivaoci BEZ drugog argumenta ostaju
+  POTPUNO nepromijenjeni (sinhroni) — to su detalj-pogledi (izvještaj o
+  incidentu, HUD simulacije za JEDAN odabran požar, `index.html:15227, 15248,
+  15446, 15468`), gdje kratko sinhrono čekanje za JEDNU grupu na eksplicitnu
+  korisnikovu akciju ostaje prihvatljivo i namjerno nepromijenjeno.
+- **`_poziOpozAzuriraj`**: na `undefined` grupa se PRESKAČE u tom prolazu
+  crtanja sloja — marker/tačka grupe i dalje postoji (crta ih `_poziRender()`
+  odvojeno, prije ovog poziva), samo bez površine dok se ne izračuna.
+  `_poziProjTraziCrtanje()` (throttlovano 350ms, isti period kao
+  `_povArhTraziCrtanje`) ponovo poziva ovu funkciju kad se posao završi.
+- **`_poziRedHtml`**: `undefined` se ponaša identično kao postojeći slučaj
+  "nema geometrije" — red u listi jednostavno ne prikazuje "ha" broj taj put,
+  pojavi se na sljedeći prirodni render panela.
+- **Sažetak kartice — POSEBNA PAŽNJA na najbliži požar**: naivna primjena
+  istog obrasca (`sProj = _poziEvts.map(g => _poziProj(g,true)?g:null)
+  .filter(Boolean)`, pa `sProj[0]` kao "najbliži") bi imala PRAVI bug, ne samo
+  kašnjenje — ako je BAŠ najbliži požar (`_poziEvts[0]`) u obradi, filtriranje
+  bi tiho odabralo SLJEDEĆI dostupan (DALJI) požar pod istim natpisom
+  "najbliži požar — ukupno zahvaćeno". Zato se `_poziEvts[0]` provjerava
+  ODVOJENO, PRIJE filtriranja liste: ako je u obradi, cijeli sažetak (opoz i
+  progn) prikazuje "⏳ Računam procjenu površine…" umjesto pogrešne tvrdnje.
+  Pokriveno testom (`racuna === undefined` provjera u kodu).
+- **NAMJERNO se ne forsira eksplicitan `_poziRenderPanel()` poziv** iz
+  `_poziProjTraziCrtanje()` — isti princip kao `_povArhTraziCrtanje`, koji
+  takođe ne forsira puni panel rerender, samo redraw mapnog sloja. Panel HTML
+  se prirodno osvježi na sljedeći od desetina drugih okidača (meteo/GPS/toast).
+- **Invalidacija**: sadržajni potpis (`sig`) je VEĆ dovoljan — promjena
+  sadržaja grupe daje NOVI `sig`, stara (zastarjela) stavka reda se, ako se
+  izračuna nakon promjene, upiše pod STARIM ključem — bezopasno, nikad se više
+  ne pogodi. Nije potrebna eksplicitna invalidacija reda ni TTL na kešu.
+  Dodana je SAMO kapa na sam red (`_POZI_PROJ_RED_MAX=40`, `shift()`
+  najstarijeg pri prekoračenju) — zaštita od neograničenog rasta pri scenariju
+  "desetine požara + brzi uzastopni refresh-evi".
+- Test: `tests/js/pozari-opoz-lijeni.test.js` (9) nad STVARNIM kodom.
+  **Provjereno da svih 9 pada na kodu prije izmjene.**
+
 ## Požari — uvijek vidljivo, teško računanje u pozadini (v1.5.4)
 
 Na zahtjev: "hoću da uvijek ima prikaz tački i opožarene površine... teži
