@@ -116,5 +116,59 @@ t('otvaranje istog panela dva puta ostaje ispravno (idempotentno)', () => {
   assert.strictEqual(els['oznake-panel'].style.display, 'block');
 });
 
+console.log('\nswitchTab() zatvara oba overlay-a kad korisnik promijeni tab:');
+
+function makeSwitchTabEnv() {
+  const els = {
+    'oznake-bg': mkEl(), 'oznake-panel': mkEl(),
+    'layer-sheet-bg': mkEl(), 'layer-sheet': mkEl(),
+  };
+  els['oznake-panel'].style.display = 'block';
+  els['oznake-bg'].style.display = 'block';
+  els['layer-sheet'].style.display = 'block';
+  els['layer-sheet-bg'].style.display = 'block';
+  const document = { getElementById: (id) => els[id] || null };
+  let calledClose = 0, calledSheet = 0;
+  const sandbox = {
+    document,
+    closeOznakePanel: () => { calledClose++; els['oznake-bg'].style.display = 'none'; els['oznake-panel'].style.display = 'none'; },
+    closeLayerSheet: () => { calledSheet++; els['layer-sheet-bg'].style.display = 'none'; els['layer-sheet'].style.display = 'none'; },
+    _activeTab: 'karta',
+    sbProfile: { is_admin: true },
+  };
+  const start = HTML.indexOf('function switchTab(tab) {');
+  assert.ok(start >= 0, 'nije nađena funkcija switchTab');
+  let i = HTML.indexOf('{', start), depth = 0;
+  for (; i < HTML.length; i++) {
+    if (HTML[i] === '{') depth++;
+    else if (HTML[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  // Izvuci SAMO dio koji nas zanima (do prve linije _activeTab = tab;) — ostatak
+  // funkcije zove desetine drugih pomoćnih funkcija koje ne postoje u sandboxu.
+  const full = HTML.slice(start, i + 1);
+  const cut = full.indexOf('_activeTab = tab;');
+  const src = full.slice(0, cut + '_activeTab = tab;'.length) + '\n}';
+  const keys = Object.keys(sandbox);
+  const fn = new Function(...keys, src + '\nreturn switchTab;');
+  const switchTabFn = fn(...keys.map(k => sandbox[k]));
+  return { switchTabFn, els, counts: () => ({ calledClose, calledSheet }) };
+}
+
+t('promjena taba zatvara Oznake panel i Slojeve karte kad su ostali otvoreni', () => {
+  const { switchTabFn, els, counts } = makeSwitchTabEnv();
+  switchTabFn('projekat');
+  assert.strictEqual(els['oznake-panel'].style.display, 'none');
+  assert.strictEqual(els['layer-sheet'].style.display, 'none');
+  assert.strictEqual(counts().calledClose, 1);
+  assert.strictEqual(counts().calledSheet, 1);
+});
+
+t('poziv sa ISTIM tabom (nema stvarne promjene) ne zatvara overlay-e', () => {
+  const { switchTabFn, els, counts } = makeSwitchTabEnv();
+  switchTabFn('karta');
+  assert.strictEqual(els['oznake-panel'].style.display, 'block', 'nije bilo promjene taba, panel ostaje');
+  assert.strictEqual(counts().calledClose, 0);
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);

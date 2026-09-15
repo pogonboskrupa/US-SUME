@@ -2054,6 +2054,41 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
     bez obzira kojim redoslijedom korisnik dođe do njih.
   - Test: `tests/js/oznake-layersheet-stack.test.js` (3), nad STVARNIM kodom
     izvučenim iz `index.html` — provjereno da PADA na kodu prije ove izmjene.
+  - **PRAVI uzrok kako je panel uopšte ostajao otvoren, potvrđen dokazom sa
+    terena (v1.5.1)**: korisnik je poslao konzolni ispis vlastitog
+    dijagnostičkog alata (nije dio ovog repozitorija — provjereno grep-om,
+    string "klik-dijagnoza" ne postoji nigdje u kodu; vjerovatno bookmarklet/
+    ekstenzija koja hvata `elementFromPoint` na svaki klik) koji je pokazao:
+    klik na `#oznake-btn` je STIGAO DO `#oznake-bg` (`z-index:4499`,
+    `position:fixed`, `pointer-events:auto`, `opacity:1`) UMJESTO do samog
+    dugmeta. To je NEZAVISNA potvrda da je `#oznake-panel` bio otvoren u tom
+    trenutku (njegov backdrop, po dizajnu, prekriva sve ispod SEBE — otud
+    "fajl nije vidljiv" iz prve prijave), a mutual-close popravka gore ne
+    objašnjava KAKO je panel uopšte ostao otvoren dok korisnik ne pokušava
+    otvoriti Slojeve karte. Pravi propust: `switchTab()` NIJE zatvarao
+    `#oznake-panel`/`#layer-sheet` pri promjeni taba — korisnik otvori 📁
+    Oznake (npr. preko dugmeta u Terenu), pređe na drugi tab BEZ X-a, overlay
+    ostaje `display:block` preko cijele app-e uklj. povratak na Kartu, gdje
+    njegov backdrop guta SVAKI klik na `#map-ctrl-bar` (uklj. baš dugme koje
+    bi ga trebalo zatvoriti/otvoriti — tap na bg samo zove `closeOznakePanel()`,
+    ispravno ponašanje modala, ali korisnik to ne vidi kao "zatvaranje" nego
+    kao "dugme ne radi").
+  - Popravka: `switchTab(tab)` na početku (prije bilo čega drugog) zatvara oba
+    overlay-a KAD SE TAB STVARNO MIJENJA (`tab !== prev`) — modal ne smije
+    preživjeti navigaciju na drugi tab, bez obzira odakle je otvoren.
+    `closeOznakePanel()`/`closeLayerSheet()` su usput dobili provjeru
+    postojanja elementa (`if (el) el.style.display = ...`) umjesto golog
+    `document.getElementById(...).style...` — sad se pozivaju iz `switchTab()`
+    na SVAKU promjenu taba, uklj. prvi poziv iz `_startupRestore()`, pa
+    nedostajući element (teorijski, ako DOM još nije potpuno parsiran) ne
+    smije oboriti cijelu funkciju (isti princip kao "SVI paneli sa provjerom
+    postojanja", v3.102.2).
+  - 2 nova testa u `tests/js/oznake-layersheet-stack.test.js` (5 ukupno) —
+    izvučen STVARNI `switchTab` (samo dio prije poziva na desetine drugih
+    pomoćnih funkcija koje ne postoje u sandboxu, izrezano do reda
+    `_activeTab = tab;`): promjena taba zatvara oba otvorena overlay-a; poziv
+    sa ISTIM tabom (npr. redovno ponovno renderovanje) ih NE dira. Provjereno
+    da PADA na v1.5.0 kodu (mutual-close bez switchTab zatvaranja).
   - **Ako se problem PONOVI i poslije ove izmjene**: znači da postoji i TREĆI
     način da se `#oznake-panel` prikaže bez prolaska kroz `openOznakePanel()`
     (npr. direktno postavljanje `style.display` negdje drugo) — sljedeći

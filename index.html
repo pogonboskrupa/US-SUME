@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.0';
+const APP_VER = 'v1.5.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -18589,8 +18589,10 @@ async function _lsFillCardBadges() {
 }
 
 function closeLayerSheet() {
-  document.getElementById('layer-sheet-bg').style.display = 'none';
-  document.getElementById('layer-sheet').style.display   = 'none';
+  const bg = document.getElementById('layer-sheet-bg');
+  const sh = document.getElementById('layer-sheet');
+  if (bg) bg.style.display = 'none';
+  if (sh) sh.style.display = 'none';
 }
 
 // Aktivira tile sloj — isključuje SQLite i opciono granice
@@ -26272,8 +26274,10 @@ function openOznakePanel() {
 }
 
 function closeOznakePanel() {
-  document.getElementById('oznake-bg').style.display = 'none';
-  document.getElementById('oznake-panel').style.display = 'none';
+  const bg = document.getElementById('oznake-bg');
+  const pn = document.getElementById('oznake-panel');
+  if (bg) bg.style.display = 'none';
+  if (pn) pn.style.display = 'none';
   _kmlEditIdx = -1;
 }
 
@@ -30076,6 +30080,20 @@ function _updFabVisibility() {
 function switchTab(tab) {
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
+  // v1.5.1: #oznake-panel i #layer-sheet su bottom-sheet modali nad kartom
+  // (otvaraju se preko dugmadi na #map-ctrl-bar ILI preko dugmeta u Terenu),
+  // ali ništa ih dosad nije zatvaralo pri promjeni taba. Korisnik bi otvorio
+  // 📁 Oznake pa se prebacio na drugi tab (Meni, Projekat, Teren...) BEZ X-a
+  // — overlay je ostajao 'block' preko cijele aplikacije, uklj. povratak na
+  // Kartu, gdje je #oznake-bg (z-index 4499) gutao SVAKI klik na
+  // #map-ctrl-bar dugmad (uklj. baš #oznake-btn koji bi ga trebao zatvoriti) —
+  // terenski dokaz: dijagnostički alat je zabilježio klik na #oznake-btn koji
+  // je stigao do #oznake-bg umjesto do dugmeta. Zatvori oba na SVAKU promjenu
+  // taba — modal ne smije preživjeti navigaciju.
+  if (tab !== prev) {
+    if (typeof closeOznakePanel === 'function') closeOznakePanel();
+    if (typeof closeLayerSheet === 'function') closeLayerSheet();
+  }
   _activeTab = tab;
   if (prev === 'doznaka' && tab !== 'doznaka') {
     dozCancelDraw();
