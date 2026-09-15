@@ -5019,7 +5019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.4.9';
+const APP_VER = 'v1.5.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 
@@ -18322,6 +18322,11 @@ function _lsRenderSqlite() {
 }
 
 function _openLayerSheet() {
+  // v1.5.0: #oznake-panel i #layer-sheet se nikad nisu zatvarali jedan drugog —
+  // ako je Oznake panel ostao otvoren (npr. korisnik ga otvorio pa se prebacio
+  // na Slojeve karte bez X-a), oba su se prikazivala ISTOVREMENO, jedno preko
+  // drugog (potvrđeno screenshot-om s terena). Zatvori ga prije otvaranja ovog.
+  if (typeof closeOznakePanel === 'function') closeOznakePanel();
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
   _lsTab('karte');
@@ -26257,6 +26262,10 @@ function _kmlFeatureCount(grp) {
 }
 
 function openOznakePanel() {
+  // v1.5.0: isti razlog kao u _openLayerSheet() — zatvori Slojeve karte ako
+  // su ostali otvoreni, da se dva bottom-sheet-a ne prikažu jedan preko
+  // drugog (dva nezavisna modal-sistema koja se dosad nisu zatvarala međusobno).
+  if (typeof closeLayerSheet === 'function') closeLayerSheet();
   document.getElementById('oznake-bg').style.display = 'block';
   document.getElementById('oznake-panel').style.display = 'block';
   _rndOznakePanel();

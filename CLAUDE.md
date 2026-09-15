@@ -2022,6 +2022,44 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **`#oznake-panel` i `#layer-sheet` se nikad nisu zatvarali jedan drugog —
+  prikazani ISTOVREMENO, jedan preko drugog (v1.5.0)**: terenska prijava
+  (garbled, razjašnjena kroz `AskUserQuestion` i dva screenshot-a) — "fajl
+  koji treba biti vidljiv odmah se vidi tek kad otvorim 📁 panel", pa potom
+  screenshot koji pokazuje `#layer-sheet` (⛰ Slojevi karte, "🗺 Karte" pod-tab
+  aktivan) i `#oznake-panel` ("📁 Prikazane oznake", 0 stavki) OBA prikazana
+  odjednom, jedan preko drugog, uz opis "pojavi se [Oznake panel] jedino kad
+  kliknem Karte iznad".
+  - **Kod pregledan liniju po liniju prije zaključka** (nema pristupa uređaju
+    za live repro): `_lsTab()`, `switchTab()` i `_openLayerSheet()` NIGDJE ne
+    pozivaju `openOznakePanel()`, niti obrnuto — grep za `openOznakePanel(`
+    pokazuje SAMO dva poziva (📁 dugme na karti, "≡ Prikazani slojevi i
+    oznake" u Terenu), nijedan iz Slojeva karte. Ova dva bottom-sheet modala
+    su potpuno NEZAVISNA i nikad se nisu zatvarala međusobno — isti obrazac
+    kao dokumentovani osirotjeli `#dlg-overlay` (v3.119.1) i canvas-pane
+    curenje (v1.4.8/v1.4.9): stanje jednog modala preživi prelazak na drugi,
+    jer NIŠTA ga ne čisti.
+  - **Redoslijed koji proizvodi bug**: korisnik otvori 📁 Oznake panel (ili
+    preko dugmeta u Terenu), pa se — BEZ da klikne X — prebaci i otvori ⛰
+    Slojeve karte. `_openLayerSheet()` samo doda SVOJ overlay/sheet preko
+    postojećeg stanja; Oznake panel ostaje prikazan ISPOD (kasnije u DOM-u =
+    viši z-index), pa korisnik vidi oba odjednom. Prije toga (dok je iza
+    Oznake panela bio samo providan tamni `#oznake-bg`, bez drugog sheet-a
+    za kontrast) je lako moglo izgledati kao da "fajl nije vidljiv" — tamna
+    poluprovidna pozadina (`rgba(0,0,0,0.45)`) prekriva CIJELU kartu ispod
+    zaboravljenog panela.
+  - **Popravka**: `openOznakePanel()` i `_openLayerSheet()` sad na početku
+    zovu jedan drugog "close" (`closeLayerSheet()`/`closeOznakePanel()`) —
+    nikad dva nezavisna full-screen/bottom-sheet modala istovremeno vidljiva,
+    bez obzira kojim redoslijedom korisnik dođe do njih.
+  - Test: `tests/js/oznake-layersheet-stack.test.js` (3), nad STVARNIM kodom
+    izvučenim iz `index.html` — provjereno da PADA na kodu prije ove izmjene.
+  - **Ako se problem PONOVI i poslije ove izmjene**: znači da postoji i TREĆI
+    način da se `#oznake-panel` prikaže bez prolaska kroz `openOznakePanel()`
+    (npr. direktno postavljanje `style.display` negdje drugo) — sljedeći
+    korak bi bio grep za `oznake-panel.*display\s*=\s*.block` da se nađe to
+    treće mjesto, ne dalje nagađanje o `_lsTab`/`switchTab`.
+
 - **Osirotjeli `#dlg-overlay` — dugme "ne reaguje NIGDJE", bez ijedne JS
   greške (v3.119.1)**: terenska prijava "Nacrtaj vlaku ručno ne radi, ne
   može se kliknuti" — potvrđeno kroz `AskUserQuestion` da je problem baš
