@@ -4969,7 +4969,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.8';
+const APP_VER = 'v1.5.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8521,8 +8521,8 @@ function mdpFinish() {
   document.getElementById('manual-draw-panel').style.display = 'none';
   document.getElementById('main').classList.remove('drawing-active');
   const dot = document.getElementById('map-center-dot');
-  dot.style.display = 'none';
   dot.onclick = null;
+  _mcdRestoreVisibility();
   map.doubleClickZoom.enable();
   _mdpIdx = null;
   _mdpUndoStack = [];
@@ -11936,6 +11936,16 @@ function _terenQueryPoint(lat, lng) {
 
 // === NADMORSKA VISINA ===
 let _elevTimer = null, _elevLat = null, _elevLng = null, _gpsAlt = false;
+// v1.5.9: dok je GPS uključen i šalje visinu, N.V. prati TVOJU živu visinu
+// (_gpsAlt=true, 📡 ikonica) — ali karta se NE pomjera automatski dok se ništa
+// ne snima (vidi onP: panTo se zove SAMO tokom recOn/tragOn), pa korisnik koji
+// samo ručno pomjera kartu (gleda drugi odjel) ostaje zaglavljen na SVOJOJ
+// visini umjesto da vidi visinu ispod crosshair-a — GPS watch stalno šalje
+// nove fiksove pa _gpsAlt nikad sam ne padne na false. _userPannedAway prati
+// da li je korisnik SVJESNO odmakao kartu (dragstart) — dok je true, moveend
+// osvježava N.V. za centar karte bez obzira na _gpsAlt; vraća se na false kad
+// se korisnik ponovo centrira na svoju poziciju (fabLokacija) ili ugasi GPS.
+let _userPannedAway = false;
 
 function debouncedUpdElev(lat, lng, ms) {
   _elevLat = lat; _elevLng = lng;
@@ -14110,13 +14120,17 @@ map.on('dblclick', e => {
 });
 
 map.on('mousemove', e => {
-  if (!_gpsAlt) debouncedUpdElev(e.latlng.lat, e.latlng.lng, 300);
+  if (!_gpsAlt || _userPannedAway) debouncedUpdElev(e.latlng.lat, e.latlng.lng, 300);
   if (activeTool === 'addline' && actI !== null) drawPreviewUpdate(e.latlng);
 });
 
 // Kad korisnik povuče mapu tokom snimanja → automatski oslobodi praćenje
 map.on('dragstart', () => {
   if ((recOn && !recPaused) || _tragOn) _setFreeView(true);
+  // Ručno pomjeranje karte znači da korisnik gleda NEKO DRUGO mjesto, ne
+  // svoju GPS poziciju — N.V. treba pratiti centar karte (vidi komentar uz
+  // _userPannedAway), ne ostati zaglavljena na GPS visini.
+  _userPannedAway = true;
 });
 
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
@@ -14134,7 +14148,7 @@ map.on('move', () => {
 map.on('moveend', () => {
   const c = map.getCenter();
   updMGI(c.lat, c.lng);
-  if (!_gpsAlt || _recFreeView) debouncedUpdElev(c.lat, c.lng, 450);
+  if (!_gpsAlt || _recFreeView || _userPannedAway) debouncedUpdElev(c.lat, c.lng, 450);
 });
 
 // === RAZMJERA KARTE (live) ===
@@ -16738,6 +16752,7 @@ function stopGPS() {
   if (wid) navigator.geolocation.clearWatch(wid);
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
+  _userPannedAway = false;
   if (_compassConeOn) togCompassCone();
   _clearRadiusRings(); _radiusOn = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
@@ -17107,13 +17122,13 @@ function onP(p) {
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   _updRecSignal(ac);
   _precizCollect(la, lo, ac);
-  if (al != null) {
+  if (al != null && !_userPannedAway) {
     _gpsAlt = true;
     const nvGpsTxt = Math.round(filtAl ?? al) + ' m 📡';
     document.getElementById('onv').textContent = nvGpsTxt;
     const nvVal = document.getElementById('nv-val');
     if (nvVal) nvVal.textContent = nvGpsTxt;
-  } else {
+  } else if (al == null) {
     _gpsAlt = false;
     debouncedUpdElev(la, lo, 200);
   }
@@ -18355,6 +18370,9 @@ function _locPopupSnimiTrag() {
   fabSnimTrag();
 }
 function fabLokacija() {
+  // Vraćanje na svoju poziciju znači "opet prati moju GPS visinu" — vidi
+  // komentar uz _userPannedAway.
+  _userPannedAway = false;
   if (lastP) {
     map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
   } else {
@@ -25114,6 +25132,22 @@ function showKmlInfo(msg) {
   setTimeout(()=>el.style.display='none', 5000);
 }
 
+// Vrati crosshair (#map-center-dot) na OSNOVNO stanje — vidljiv na Karta/
+// Mjerenje tabu, sakriven drugdje (isto pravilo koje _setMapUIVisible već
+// primjenjuje preko _mapFullScreen). Svaki alat koji privremeno PREUZME dot
+// (Izmjeri, ručno crtanje vlake, crtanje pojasa/granice doznake) MORA njime
+// vratiti vidljivost kad završi, ne tvrdim `style.display='none'` — dot je
+// DIJELJEN sa opštim always-visible crosshair-om, pa bi tvrdo gašenje trajno
+// sakrilo tačku (i onemogućilo N.V. da prati centar karte, vidi moveend niže)
+// sve dok se tab ručno ne promijeni. Terenska prijava (v1.5.9): "nema tačke,
+// N.V. ne radi kako pomjeram kartu" — uzrok je bio switchTab('karta') koji
+// pozove _setMapUIVisible(false,true) (dot='flex') pa ODMAH ZATIM msrStop(true)
+// koji je tvrdo postavljao dot='none', poništavajući to u istom pozivu.
+function _mcdRestoreVisibility() {
+  const dot = document.getElementById('map-center-dot');
+  if (dot) dot.style.display = _mapFullScreen ? 'flex' : 'none';
+}
+
 // Tab switching
 function _setMapUIVisible(toolbar, mapOnly) {
   const tb = document.getElementById('map-toolbar');
@@ -25782,7 +25816,8 @@ function msrStop(skipSave) {
   if (btn) { btn.textContent='▶ Počni'; btn.style.background=''; }
   document.getElementById('main')?.classList.remove('drawing-active');
   const dot = document.getElementById('map-center-dot');
-  if (dot) { dot.style.display = 'none'; dot.onclick = null; }
+  if (dot) dot.onclick = null;
+  _mcdRestoreVisibility();
   _updMcdDist();
   const hint = document.getElementById('msr-hint');
   if (_msrPts.length >= 2) {
@@ -35623,7 +35658,7 @@ function _dozDrawCleanup() {
   _dozDragLastPt = null;
   document.getElementById('main').classList.remove('drawing-active');
   document.getElementById('main').classList.remove('draw-drag-on');
-  document.getElementById('map-center-dot').style.display = 'none';
+  _mcdRestoreVisibility();
 }
 
 function dozAddPointAtCenter() {

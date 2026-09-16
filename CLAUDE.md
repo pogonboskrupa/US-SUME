@@ -2365,6 +2365,79 @@ način provjere."
     slice markupa mora prvo izbaciti HTML komentare, inače dokumentacija
     izmjene obara test te iste izmjene.
 
+## Kamera direktno iz app-e (Uslikaj lokaciju) + N.V./crosshair popravke (v1.5.9)
+
+- **"Uslikaj lokaciju" je otvarala Galeriju umjesto Kamere na APK-u**: JS strana
+  (`startLocPhoto`) je oduvijek ispravno nudila `<input type="file"
+  capture="environment">` za granu "Kamera" — ali Android WebView-ov
+  `onShowFileChooser` je u `MainActivity.java` samo zvao
+  `fileChooserParams.createIntent()`, a taj standardni WebView helper gradi
+  OBIČAN `ACTION_GET_CONTENT` chooser koji na mnogim OEM WebView verzijama
+  IGNORIŠE `capture` atribut — dobro poznato, dugo dokumentovano ograničenje
+  WebView-a (podrška za `capture` kroz `createIntent()` je nepouzdana), ne bug
+  u JS-u. Popravljeno u `onShowFileChooser`: kad `fileChooserParams
+  .isCaptureEnabled()` javi da je `capture` traženo, sami gradimo
+  `ACTION_IMAGE_CAPTURE` intent na FileProvider fajl (`getCacheDir()/camera/`,
+  već pokriven postojećim `cache-path name="cache" path="."` u
+  `filepaths.xml`) i pokrećemo ga DIREKTNO umjesto chooser-a — ako na uređaju
+  nema kamera app-a (`resolveActivity` vrati null), tiho pada nazad na stari
+  `createIntent()` chooser. `onActivityResult` sad zna da `ACTION_IMAGE_CAPTURE`
+  ne vraća URI kroz `Intent data` (fajl je već napisan na `EXTRA_OUTPUT`), pa
+  novo polje `cameraPhotoUri` nosi taj URI kroz taj poziv. Galerija grana
+  (`loc-photo-gal`, bez `capture`) je NETAKNUTA — i dalje ide kroz obični
+  chooser. **Traži pun rebuild u Android Studiju** (mijenjan `.java`).
+- **Crosshair (`#map-center-dot`) je bio TRAJNO nevidljiv, a N.V. se nije
+  ažurirala dok se karta pomjera uz uključenu lokaciju** — terenska prijava
+  "nadmorska visina ne radi kako pomičem centar, i tačke nema, a treba da bude
+  dok je uključena lokacija". Dva NEZAVISNA uzroka, oba u istoj funkcionalnoj
+  cjelini (crosshair na centru karte + N.V. badge):
+  1. **`msrStop()`/`mdpFinish()`/`_dozDrawCleanup()` su tvrdo gasile dijeljeni
+     crosshair** (`dot.style.display = 'none'`) bez obzira je li karta i dalje
+     u punom prikazu. `switchTab('karta')` (`_startupRestore` je zove pri
+     SVAKOM pokretanju) prvo zove `_setMapUIVisible(false, true)` (postavi
+     dot na `'flex'`) pa ODMAH ZATIM `msrStop(true)` (čisti eventualno
+     zaglavljen alat Izmjeri) — a `msrStop` je tu istu vrijednost odmah
+     prepisivala nazad na `'none'`, u ISTOM pozivu funkcije. Rezultat: dot
+     nikad nije bio vidljiv na svježe pokrenutoj app-i, čak ni na Karta tabu,
+     bez obzira je li GPS uključen ili ne — dokazano Playwright reprodukcijom
+     (offline-first ulazak preko keširanog profila + mock geolokacije):
+     `#map-center-dot` je ostajao `'none'` i poslije eksplicitnog
+     `switchTab('karta')` poziva. Isti obrazac (tvrdo `'none'` poslije
+     privremenog preuzimanja crosshair-a za svoj alat) je bio i u
+     `mdpFinish()` (ručno crtanje vlake) i `_dozDrawCleanup()` (crtanje
+     pojasa/granice doznake) — sve troje popravljeno novom
+     `_mcdRestoreVisibility()` (vraća `'flex'`/`'none'` prema `_mapFullScreen`,
+     ne na tvrdo) umjesto direktnog pisanja `'none'`.
+  2. **N.V. je bila zaglavljena na GPS visini i van konteksta gdje GPS prati
+     kartu**: `onP()` (svaki GPS fiks) postavlja `_gpsAlt=true` i prikazuje
+     TVOJU živu visinu (📡 ikonica) SVAKI PUT kad fiks nosi visinu — a mapa se
+     NE pomjera automatski dok se ništa ne snima (`map.panTo` u `onP()` radi
+     SAMO tokom `recOn`/`_tragOn`). Van snimanja korisnik koji ručno panuje na
+     drugi odjel dobija fiks za fiksom (GPS watch radi cijelo vrijeme dok je
+     "lokacija" uključena), pa `_gpsAlt` nikad sam ne padne na `false`, a
+     `moveend`-ov uslov `(!_gpsAlt || _recFreeView)` (drugi dio vezan
+     isključivo za AKTIVNO snimanje) ostaje trajno neispunjen — N.V. badge
+     ostaje zaglavljen na GPS visini bez obzira koliko se karta pomjeri.
+     Nov `_userPannedAway` prati da li je korisnik SVJESNO odmakao kartu
+     (`map.on('dragstart', ...)`, postavlja se bez obzira na snimanje) — dok
+     je `true`, `moveend`/`mousemove` osvježavaju N.V. za centar karte bez
+     obzira na `_gpsAlt`; `onP()` prestaje prepisivati N.V. GPS-visinom dok
+     je `_userPannedAway` (mapa je namjerno odmaknuta od tvoje pozicije).
+     Vraća se na `false` (opet prati živu GPS visinu) na `fabLokacija()`
+     (dugme "Centriraj"/"Moja lokacija") i na `stopGPS()`.
+  - Provjereno Playwright reprodukcijom (offline-first ulazak preko keširanog
+    profila, mock geolokacije, `page.route` blokiran mrežni saobraćaj van
+    same-origin static fajlova): dot je `'flex'` odmah pri pokretanju na Karta
+    tabu, ostaje `'flex'` poslije `msrStart()`→`msrStop(true)` ciklusa (prije
+    popravke padao na `'none'`); ručni `dragstart`+`moveend` poziva
+    `debouncedUpdElev` bez obzira na `_gpsAlt`; `fabLokacija()` vraća
+    `_userPannedAway` na `false`.
+  - Test `tests/js/msr-povrsina.test.js` — "msrStop uklanja drawing-active i
+    sakriva crosshair" je EKSPLICITNO tražio staro (pogrešno) ponašanje
+    (`dot.style.display = 'none'`) — prepisan da traži `_mcdRestoreVisibility()`
+    poziv i da GRC (asercija) eksplicitno provjerava da tvrdo `'none'` NIJE
+    prisutno; dodan i test za samu `_mcdRestoreVisibility`.
+
 ## Java strana (android/) — sandbox je NE kompajlira
 
 - **Dva CI pada zaredom na `.java` koji je "strukturno provjeren"** (v1.5.2 →

@@ -155,10 +155,21 @@ t('msrStart koristi map-center-dot i postavlja drawing-active na #main', () => {
   assert.ok(src.includes("getElementById('map-center-dot')"), 'mora koristiti ZAJEDNIČKI crosshair, ne poseban element');
 });
 
-t('msrStop uklanja drawing-active i sakriva crosshair', () => {
+t('msrStop uklanja drawing-active i vraća crosshair na osnovno stanje (v1.5.9)', () => {
+  // Crosshair je DIJELJEN sa opštim always-visible indikatorom na Karta/
+  // Mjerenje tabu (_setMapUIVisible) — msrStop NE SMIJE ga tvrdo sakriti
+  // (`style.display = 'none'`), jer bi to poništilo _setMapUIVisible('flex')
+  // koji switchTab('karta') zove NEPOSREDNO PRIJE msrStop(true) u istom
+  // pozivu, i trajno sakrilo tačku dok se tab ručno ne promijeni.
   const src = extractFn('msrStop');
   assert.ok(src.includes("classList.remove('drawing-active')"));
-  assert.ok(src.includes("dot.style.display = 'none'"));
+  assert.ok(!/dot\.style\.display\s*=\s*'none'/.test(src), 'ne smije tvrdo gasiti dot — mora zvati _mcdRestoreVisibility()');
+  assert.ok(src.includes('_mcdRestoreVisibility()'), 'mora vratiti dot na osnovno stanje preko _mcdRestoreVisibility');
+});
+
+t('_mcdRestoreVisibility vraća dot prema _mapFullScreen, ne tvrdom stanju', () => {
+  const src = extractFn('_mcdRestoreVisibility');
+  assert.ok(/_mapFullScreen\s*\?\s*'flex'\s*:\s*'none'/.test(src));
 });
 
 t('_updMcdDist sakriva udaljenost dok je crtanje aktivno', () => {

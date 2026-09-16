@@ -75,6 +75,10 @@ public class MainActivity extends Activity {
     private static BroadcastReceiver sRecActionReceiver;
     private boolean reusedWebView = false;
     private ValueCallback<Uri[]> fileCallback;
+    // Postavljen SAMO dok traje <input capture> zahtjev preusmjeren na
+    // ACTION_IMAGE_CAPTURE (vidi onShowFileChooser) — ACTION_IMAGE_CAPTURE ne
+    // vraca URI kroz Intent data, fajl je vec napisan na ovaj EXTRA_OUTPUT.
+    private Uri cameraPhotoUri;
     private WebViewAssetLoader assetLoader;
     private BroadcastReceiver recActionReceiver;
 
@@ -286,6 +290,34 @@ public class MainActivity extends Activity {
                     fileCallback.onReceiveValue(null);
                 }
                 fileCallback = filePathCallback;
+                cameraPhotoUri = null;
+                // <input capture="environment"> mora otvoriti kameru DIREKTNO —
+                // fileChooserParams.createIntent() gradi obican ACTION_GET_CONTENT
+                // chooser koji na mnogim OEM WebView verzijama IGNORISE capture
+                // atribut i ponudi Galeriju/Fajlove umjesto kamere (poznato
+                // WebView ogranicenje — podrska za capture kroz createIntent() je
+                // nepouzdana). Kad je capture trazen, sami gradimo
+                // ACTION_IMAGE_CAPTURE na FileProvider fajl umjesto chooser-a.
+                if (fileChooserParams.isCaptureEnabled()) {
+                    try {
+                        File dir = new File(getCacheDir(), "camera");
+                        if (!dir.exists()) dir.mkdirs();
+                        File photo = new File(dir, "IMG_" + System.currentTimeMillis() + ".jpg");
+                        Uri photoUri = FileProvider.getUriForFile(MainActivity.this,
+                                getPackageName() + ".fileprovider", photo);
+                        Intent camIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                        camIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                        if (camIntent.resolveActivity(getPackageManager()) != null) {
+                            cameraPhotoUri = photoUri;
+                            startActivityForResult(camIntent, REQ_FILE);
+                            return true;
+                        }
+                    } catch (Exception e) {
+                        cameraPhotoUri = null;
+                        // padni na obican chooser ispod
+                    }
+                }
                 Intent intent = fileChooserParams.createIntent();
                 try {
                     startActivityForResult(intent, REQ_FILE);
@@ -827,17 +859,24 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQ_FILE && fileCallback != null) {
             Uri[] results = null;
-            if (resultCode == RESULT_OK && data != null) {
-                if (data.getClipData() != null) {
-                    int n = data.getClipData().getItemCount();
-                    results = new Uri[n];
-                    for (int i = 0; i < n; i++) {
-                        results[i] = data.getClipData().getItemAt(i).getUri();
+            if (resultCode == RESULT_OK) {
+                if (cameraPhotoUri != null) {
+                    // ACTION_IMAGE_CAPTURE ne vraca URI kroz Intent data — fajl je
+                    // vec napisan direktno na EXTRA_OUTPUT prije nego se ovo pozove.
+                    results = new Uri[]{cameraPhotoUri};
+                } else if (data != null) {
+                    if (data.getClipData() != null) {
+                        int n = data.getClipData().getItemCount();
+                        results = new Uri[n];
+                        for (int i = 0; i < n; i++) {
+                            results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                    } else if (data.getDataString() != null) {
+                        results = new Uri[]{Uri.parse(data.getDataString())};
                     }
-                } else if (data.getDataString() != null) {
-                    results = new Uri[]{Uri.parse(data.getDataString())};
                 }
             }
+            cameraPhotoUri = null;
             fileCallback.onReceiveValue(results);
             fileCallback = null;
         }
