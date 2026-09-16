@@ -10,24 +10,50 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 131
-        versionName "3.27.2"
+        versionCode 429
+        versionName "1.5.9"
     }
 
+    // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
+    def releaseStore = System.getenv('US_SUME_KEYSTORE')
     signingConfigs {
         release {
-            // Popunite prije generisanja release APK-a:
-            // storeFile     file('keystore.jks')
-            // storePassword 'STORE_PASSWORD'
-            // keyAlias      'KEY_ALIAS'
-            // keyPassword   'KEY_PASSWORD'
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('US_SUME_STORE_PASSWORD')
+                keyAlias System.getenv('US_SUME_KEY_ALIAS')
+                keyPassword System.getenv('US_SUME_KEY_PASSWORD')
+            }
+        }
+        // FIKSAN debug ključ, commit-ovan u repo (dendromap-debug.keystore).
+        // Android dozvoljava update APK-a PREKO postojećeg SAMO ako je potpis
+        // ISTI. Podrazumijevani AGP debug ključ se generiše po MAŠINI
+        // (~/.android/debug.keystore) — na GitHub Actions runneru to znači NOV,
+        // nasumičan ključ pri SVAKOM build-u, pa bi "Ažuriraj aplikaciju"
+        // (UpdateBridge) preuzeo APK i tek na kraju pao sa "App not installed",
+        // bez ijednog objašnjenja korisniku. Sa fiksnim ključem svaki CI build
+        // nosi isti potpis i update se instalira preko starog, bez gubitka
+        // lokalnih podataka (deinstalacija briše offline karte, tragove, red
+        // čekanja — sve ono zbog čega app uopšte radi na terenu).
+        //
+        // Lozinka je javna i to je U REDU: debug ključ NE potpisuje ništa što
+        // ide na Play Store (release ključ je zaseban, ostaje van repoa i traži
+        // US_SUME_* env varijable — vidi gore). Rizik je uzak i svjesno
+        // prihvaćen: neko sa ovim ključem bi mogao napraviti APK koji Android
+        // prihvata kao update OVE debug instalacije, ali samo ako korisnika
+        // navede da ga ručno instalira iz nepoznatog izvora.
+        debug {
+            storeFile file('dendromap-debug.keystore')
+            storePassword 'dendromap'
+            keyAlias 'dendromap-debug'
+            keyPassword 'dendromap'
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            // signingConfig signingConfigs.release
+            if (releaseStore) signingConfig signingConfigs.release
         }
         debug {
             applicationIdSuffix ".debug"
@@ -41,7 +67,7 @@ android {
     }
 
     aaptOptions {
-        noCompress "html", "js", "css", "json", "png", "svg", "kml", "geojson"
+        noCompress "html", "js", "css", "json", "png", "svg", "kml", "geojson", "wasm"
     }
 }
 
@@ -65,5 +91,14 @@ dependencies {
     implementation('androidx.webkit:webkit:1.10.0') {
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
+}
+
+// Nikad ne prijavi nepotpisan release kao spreman APK za korisnika.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name == 'assembleRelease' || it.name == 'bundleRelease' }) {
+        ['US_SUME_KEYSTORE', 'US_SUME_STORE_PASSWORD', 'US_SUME_KEY_ALIAS', 'US_SUME_KEY_PASSWORD'].each {
+            if (!System.getenv(it)) throw new GradleException("Nedostaje release konfiguracija: " + it)
+        }
     }
 }
