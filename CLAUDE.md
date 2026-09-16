@@ -1063,6 +1063,100 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **Traži pun rebuild u Android Studiju** (mijenjani `.java` i
   `AndroidManifest.xml`) — sam `copy-assets` NE prenosi ni Javu ni manifest.
 
+- **Pauza tokom GPS snimanja NIJE bila poznata native replay-u — dva ogledalna
+  bug-a (v1.5.8)**: nalazi #2 i #3 iz PR bot recenzije. `GpsService` (native)
+  NE ZNA za pauzu — `"pause".equals(action)` samo pošalje broadcast JS-u
+  (`sendBroadcastToWeb("pause")`), servis i dalje piše SVAKI GPS fiks u
+  native journal dok je snimanje uključeno, uključujući period dok je JS
+  strana pauzirana. `_drainNativeGpsBuffer()` je do sada provjeravao SAMO
+  trenutno (ne)pauzirano stanje pri replay-u, što je davalo dva suprotna
+  ishoda: (a) trenutno PAUZIRAN → čak i tačke snimljene PRIJE pauze se tiho
+  odbace (provjera gleda stanje KAO SADA, ne KAO TADA), a bafer se svejedno
+  obriše — trajan gubitak; (b) trenutno NASTAVLJEN → tačke snimljene TOKOM
+  pauze se pogrešno ubace u trag/vlaku/pojas jer provjera ne zna da je taj
+  period bio pauziran.
+  - **`_tragPauseWin`/`_recPauseWin`/`_dozPauseWin`** — po tipu snimanja,
+    niz intervala `{start, end}` (`end:null` = pauza još traje), pune se u
+    `togTragPause()`/`toggleRecPause()`/`dozPauseGPS()`. `_uPauziIntervalu(win,
+    t)` provjerava da li ISTORIJSKI TAJMSTAMP tačke pada u neki zabilježeni
+    interval — ne trenutno stanje prekidača.
+  - `_addTragPoint`/`_vlakaProcessGpsPoint`/`_dozProcessGpsPoint` su dobili
+    novi parametar `bypassPauzu` — kad je `true`, tačka se obrađuje ČAK I
+    AKO je snimanje TRENUTNO pauzirano (potrebno jer je replay tačke iz
+    prije pauze, a stanje se u međuvremenu promijenilo). `_drainNativeGpsBuffer`
+    sad za svaku tačku provjerava pripada li pauzi za taj tip PRIJE nego
+    odluči da li je ubaci (`bypassPauzu:true`) ili preskoči (unutar pauze) —
+    u oba slučaja `_nativeReplayLast.X` napreduje, jer je tačka legitimno
+    OBRAĐENA (odluka "preskoči" nije isto što i "izgubljena").
+  - Zatvoreni intervali pauze se čiste (`_pauziOcistiZatvorene`) nakon
+    uspješnog `_nativeBufPotvrdi()` — inače bi niz rastao neograničeno kroz
+    dug terenski dan sa više pauza.
+  - **Notifikacija "Stop" nije praznila native bafer prije finalizacije
+    (nalaz #2)**: `_nativeRecAction('stop')` je odmah zvao
+    `stopRec()`/`fabSnimTrag()`/`dozStopGPS()` — sve tačke koje je servis
+    prikupio dok je WebView bio u pozadini (i još nisu stigle preko
+    redovnog `visibilitychange` puta) su se gubile jer finalizacija zatvara
+    snimanje prije nego bafer dobije priliku. Funkcija je sad `async` i
+    prvo zove `await _drainNativeGpsBuffer()` (u `try/catch`, jer stop mora
+    proći i ako drain padne) prije finalizacije. Oba pozivaoca (SW poruka i
+    `MainActivity.registerRecActionReceiver` preko `evaluateJavascript`) su
+    fire-and-forget, pa `async` ne traži izmjenu na Java strani.
+- **Doznaka (pojas) nije imala NIKAKAV oporavak nakon ubijenog procesa
+  (v1.5.8, nalaz #1)**: `_dozSaveLivePts()` je od ranije pisao snimak u
+  `_DOZ_LIVE_KEY` ("ako Android ubije WebView u backgroundu, ne gubimo
+  liniju" — postojeći komentar uz ključ), ali ga NIŠTA nikad nije čitalo
+  nazad — za razliku od vlake/traga, `_crashCheck()` je taj ključ potpuno
+  ignorisao i rano izlazio (`if (!snapV && !snapT) return;`) prije nego je
+  doznaka uopšte razmotrena. Praktično: prekid procesa usred snimanja
+  pojasa doznake je značio TRAJAN gubitak cijelog snimljenog pojasa, bez
+  ijednog dijaloga za oporavak.
+  - `_crashCheck()` sad čita i `_DOZ_LIVE_KEY` (`snapD`), uključuje ga u
+    dijalog oporavka i granu obrade — potpuno isti obrazac kao vlaka/trag:
+    obnovi `_dozGpsPts`/`_dozGpsLen`/`_dozGpsProjId`/`_dozGpsUserId`,
+    ponovo nacrta `_dozGpsTrackLayer`, postavi `_dozGpsOn=true`, obnovi
+    UI dugmadi/status, pokrene `_bgRecStart` i nov `watchPosition`, pa
+    dopuni native baferom (tačke novije od `snapD.ts`, isti prag tačnosti
+    ≤20m kao živi put).
+  - **`_dozGpsUserId` NIJE bio dio snimka** (`_dozSaveLivePts` čuva samo
+    `projId/pts/len/ts`) — oporavak zato zahtijeva da je korisnik i dalje
+    prijavljen (`sbUser.id`), isti korisnik koji je snimanje započeo;
+    bez sesije oporavak baca čitljivu grešku umjesto da nagađa identitet.
+  - Ako korisnik ODBIJE oporavak, `_DOZ_LIVE_KEY` se briše zajedno sa
+    vlaka/trag ključevima — isti razlog kao za njih (pripada prekinutoj
+    sesiji, ne smije iscuriti u sljedeće snimanje).
+  - Native bafer (`bufPts`) je VEĆ uzet jednom u `_crashCheck()` (dijeljen sa
+    vlaka/trag granama), pa doznaka grana ne pravi drugi destruktivni poziv.
+- **Java `NetBridge`/`AppNotifBridge` uklonjeni (v1.5.8)** — obje klase su
+  bile isključivo za FIRMS/GFW CORS-zaobilaženje i Požari notifikacije;
+  poslije v1.5.7 (Požari izdvojeni u posebnu app) njihovi JEDINI JS pozivaoci
+  (`_nativeNetFetch`/`_nativeNetDostupan`/`_nativeNetOdgovor`,
+  `_poziNotifNativnoDostupan` i srodne) su već bili obrisani, pa su ostale
+  mrtav kod — registrovane kao `AndroidNet`/`AndroidNotif` JS mostovi koje
+  ništa više ne poziva. Uklonjene obje klase, njihove `addJavascriptInterface`
+  registracije i sad-nepotrebni importi (`NotificationChannel`/
+  `NotificationManager`/`androidx.core.app.NotificationCompat`). `UpdateBridge`/
+  `ShareBridge`/`GpsBridge`/`DownloadBridge` nisu dirani.
+- **`_loadOdsjeciSQLite` i cijeli "Odsjeci" podsistem obrisani kao mrtav kod
+  (v1.5.8)**: praćenje poziva unazad je pokazalo da JEDINO mjesto koje je
+  moglo postaviti `_isSqliteVector:true` bilo unutar same `_loadOdsjeciSQLite`
+  — a tu funkciju nigdje ništa nije zvalo. Cijeli lanac (`_odsjeciLayerGrp`/
+  `_odsjeciFeatures`/`_odsjeciByGj`/`_odsjeciGjVisible`/`_odsjeciSearchQ`,
+  `_parseSpatialiteWkb`, `_GJ_COLORS`/`_gjColor`, `_ODSJECI_SQLITE_URL`/
+  `_ODSJECI_IDB_KEY`, `_odsjeciTogGj`/`_odsjeciZoom`/`_odsjeciDoSearch`/
+  `_odsjeciPanelHtml`, i ternarni poziv `_odsjeciPanelHtml()` u KML editor
+  markupu) je bio potpuno nedostižan. Uz njega obrisana i `autoLoadStorageBucket`
+  (bucketi za koje je pravljena su davno uklonjeni sa Supabase Storage-a —
+  postojeći komentar uz `autoLoadAllKmlBuckets` je to već govorio; funkcija
+  se sad ni ne poziva). Helperi `_registerServerPlaceholder`/`_loadOneKml`/
+  `_loadOneShp`/`_reprojectGeometry` su PROVJERENI grep-om da ih i dalje
+  koristi drugi, živi kod — nisu dirani.
+- **build-apk.ps1 — upozorenje na "App not installed" sad objašnjava rizik
+  gubitka podataka (v1.5.8, nalaz #4)**: poruka je do sada samo govorila
+  "obriši/deinstaliraj stariju verziju" bez napomene da to briše lokalno
+  sačuvane terenske podatke (tragovi, vlake, doznaka, red za sync) koji
+  nisu sinhronizovani. Sad prvo savjetuje da se PRIJE deinstalacije sačeka/
+  izveze sync.
+
 - **"Ova godina" (uživo) i "Zadnjih 5 godina" (lokalna historija) — v3.119.0**:
   na zahtjev "prati požare za duži period, tj. u tekućoj godini... i dodatno
   da se pamti za zadnjih 5 godina", u novoj kartici "📅 Duži period" sa DVA

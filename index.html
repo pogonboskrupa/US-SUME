@@ -4969,7 +4969,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.7';
+const APP_VER = 'v1.5.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12121,7 +12121,12 @@ async function _crashCheck() {
   try {
   const snapV = (() => { try { const r = localStorage.getItem(_CRASH_VLAKA_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
   const snapT = (() => { try { const r = localStorage.getItem(_CRASH_TRAG_KEY);  return r ? JSON.parse(r) : null; } catch { return null; } })();
-  if (!snapV && !snapT) return;
+  // Doznaka (v1.5.8) — _DOZ_LIVE_KEY je do sada bio SAMO pisan (_dozSaveLivePts),
+  // nikad čitan pri pokretanju: pojas doznake nije imao NIKAKAV oporavak nakon
+  // ubijenog procesa, za razliku od vlake/traga. Isti razlog uzima se u obzir
+  // i ovdje: rani return prije ove dopune bi doznaku uvijek preskočio.
+  const snapD = (() => { try { const r = localStorage.getItem(_DOZ_LIVE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
+  if (!snapV && !snapT && !snapD) return;
 
   // Prikaži dijalog oporavka
   const age = (snap) => {
@@ -12131,6 +12136,7 @@ async function _crashCheck() {
   let msg = '⚠ Nađeno nedovršeno snimanje:\n\n';
   if (snapV) msg += `• Vlaka "${snapV.nm || '?'}" — ${snapV.pts.length} tač. (${age(snapV)} ago)\n`;
   if (snapT) msg += `• Trag — ${snapT.pts.length} tač. (${age(snapT)} ago)\n`;
+  if (snapD) msg += `• Pojas doznake — ${(snapD.pts || []).length} tač. (${age(snapD)} ago)\n`;
   msg += '\nŽeliš li oporaviti?';
 
   const ok = await _dlgConfirm(msg, { okLabel: 'Oporavi', cancelLabel: 'Odbaci' });
@@ -12148,7 +12154,7 @@ async function _crashCheck() {
   let bufPts;
   try { bufPts = _nativeBufUzmi(); } catch(e) { showToast('⚠ Oporavak čeka slobodnu memoriju'); return; }
 
-  if (!ok) { _crashClearVlaka(); _crashClearTrag(); _nativeBufPotvrdi(); return; }
+  if (!ok) { _crashClearVlaka(); _crashClearTrag(); try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {} _nativeBufPotvrdi(); return; }
 
   if (snapV) {
     try {
@@ -12225,6 +12231,57 @@ async function _crashCheck() {
       localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts:_tragPts, ts:Date.now() }));
       _crashStartTimer();
     } catch(e) { showToast('⚠ Greška pri oporavku traga: ' + e.message); }
+  }
+
+  if (snapD) {
+    try {
+      if (!sbUser || !sbUser.id) throw new Error('Nema prijavljenog korisnika — otvori pojas ručno');
+      _dozSelId = snapD.projId;
+      _dozGpsProjId = snapD.projId;
+      _dozGpsUserId = sbUser.id;
+      _dozGpsPts = Array.isArray(snapD.pts) ? snapD.pts : [];
+      _dozGpsLen = snapD.len || 0;
+      _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsStartTs = Date.now();
+      _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+      _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
+      _dozGpsElevData = []; _dozGpsFullPts = [];
+      _dozLastLiveFixTs = 0;
+      if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
+      _dozGpsTrackLayer = L.layerGroup().addTo(map);
+      for (let i = 1; i < _dozGpsPts.length; i++) {
+        const prev = _dozGpsPts[i - 1], cur = _dozGpsPts[i];
+        L.polyline([[prev[0], prev[1]], [cur[0], cur[1]]], { color: '#4ade80', weight: 3, opacity: 0.9 }).addTo(_dozGpsTrackLayer);
+      }
+      _dozGpsOn = true;
+      const dbtn = document.getElementById('doz-gps-btn');
+      if (dbtn) { dbtn.textContent = '⏹ Zaustavi GPS'; dbtn.style.background = '#2d0a0a'; dbtn.style.color = '#f87171'; dbtn.style.borderColor = '#7f1d1d'; }
+      const dpause = document.getElementById('doz-gps-pause');
+      if (dpause) { dpause.style.display = ''; dpause.textContent = '⏸'; dpause.style.background = '#422006'; dpause.style.borderColor = '#92400e'; dpause.style.color = '#fbbf24'; }
+      const dstatus = document.getElementById('doz-gps-status');
+      if (dstatus) dstatus.style.display = 'block';
+      _dozUpdGpsStats(null);
+      _bgRecStart('pojas doznake');
+      _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
+        _dozLastLiveFixTs = pos.timestamp || Date.now();
+        if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
+        const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
+        await _dozProcessGpsPoint(lat, lng, alt, acc, speed);
+      }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+      // Isti princip kao vlaka/trag: dopuni fiksovima koje je native servis
+      // prikupio POSLIJE zadnjeg snimka stanja (snapD.ts), uklj. cijeli period
+      // dok je proces bio mrtav.
+      const prijeDopune = _dozGpsPts.length;
+      for (const p of bufPts) {
+        if (p.t <= (snapD.ts || 0)) continue;
+        if (p.ac > 20) continue; // isti prag kao _dozProcessGpsPoint
+        await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t, true);
+      }
+      const dodatoD = _dozGpsPts.length - prijeDopune;
+      showToast(`✅ Oporavljen pojas doznake: ${_dozGpsPts.length} tačaka`
+        + (dodatoD ? ` (${dodatoD} iz pozadinskog snimanja)` : '')
+        + ' — snimanje nastavljeno');
+    } catch(e) { showToast('⚠ Greška pri oporavku doznake: ' + e.message); }
   }
   } finally { _crashCheck._busy = false; }
 }
@@ -15985,6 +16042,7 @@ function stopRec() {
 function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
+  if (recPaused) _pauziOtvoriProzor(_recPauseWin); else _pauziZatvoriProzor(_recPauseWin);
   _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
   if (recPaused && _precizActive) _precizReset();  // D3-Q: ne ostavljaj dugme zaglavljeno na "n/10"
   if (recPaused) {
@@ -17110,8 +17168,8 @@ function onP(p) {
 // Date.now() bi svaku historijsku tačku vidio kao "sad", pa bi speed-gate
 // odbacio cijeli niz (prividno ogromna brzina), a poslije replay-a bi prvi
 // živi fix izgledao kao nula proteklog vremena.
-function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs) {
-  if (!recOn || recPaused || actI === null) return;
+function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs, bypassPauzu) {
+  if (!recOn || (recPaused && !bypassPauzu) || actI === null) return;
 
   // 1. FILTER TAČNOSTI
   if (ac > GPS_MAX_ACC) return;
@@ -17340,6 +17398,35 @@ function _anyRecOn() { return recOn || _tragOn || _dozGpsOn; }
 // _startRecNotification() bez argumenata već radi, uključujući dužinu).
 const _nativeSessionSince = { vlaka:0, trag:0, doznaka:0 };
 const _nativeReplayLast = { vlaka:0, trag:0, doznaka:0 };
+// Intervali pauze po tipu snimanja (v1.5.8) — GpsService (native) NE zna za
+// pauzu (šalje samo broadcast JS-u), pa native journal i dalje prima SVAKI
+// fix dok je snimanje uključeno, uključujući period dok je JS strana
+// pauzirana. Bez ovoga _drainNativeGpsBuffer je imao dva ogledalna bug-a:
+// (a) trenutno PAUZIRAN → čak i tačke snimljene PRIJE pauze se tiho odbace
+// (obrazac tačke i dalje provjerava _tragPaused/recPaused/_dozGpsPaused KAO
+// SADA, ne kao TADA), a journal se svejedno obriše — trajan gubitak; (b)
+// trenutno NASTAVLJEN → tačke snimljene TOKOM pauze se pogrešno ubace u trag/
+// vlaku/pojas jer provjera gleda samo trenutno (ne)pauzirano stanje. Svaki
+// interval `{start, end}` (`end:null` = pauza još traje) se puni u toggle
+// funkciji pauze/nastavka za dati tip, a _drainNativeGpsBuffer provjerava
+// pripada li ISTORIJSKI TAJMSTAMP tačke nekom intervalu — ne trenutno stanje.
+const _tragPauseWin = [];
+const _recPauseWin  = [];
+const _dozPauseWin  = [];
+function _uPauziIntervalu(win, t) {
+  return win.some(w => t >= w.start && (w.end === null || t < w.end));
+}
+function _pauziOtvoriProzor(win) { win.push({ start: Date.now(), end: null }); }
+function _pauziZatvoriProzor(win) {
+  const last = win[win.length - 1];
+  if (last && last.end === null) last.end = Date.now();
+}
+// Nakon uspješnog drain-a prošli intervali više nisu potrebni (journal koji
+// su opisivali je obrisan) — zadrži SAMO eventualno još otvoren (tekući)
+// interval, inače bi niz rastao neograničeno tokom dugog terenskog dana.
+function _pauziOcistiZatvorene(win) {
+  for (let i = win.length - 1; i >= 0; i--) if (win[i].end !== null) win.splice(i, 1);
+}
 function _bgRecStart(label) {
   const now = Date.now();
   if (recOn && !_nativeSessionSince.vlaka) _nativeSessionSince.vlaka = now;
@@ -17480,8 +17567,13 @@ if ('serviceWorker' in navigator) {
 // Android native notification actions (pause/stop from Foreground Service).
 // Jedan foreground service opslužuje sva tri tipa snimanja — Stop/Pauza iz
 // notifikacije se rutira na ono što je trenutno aktivno.
-function _nativeRecAction(action) {
+async function _nativeRecAction(action) {
   if (action === 'stop') {
+    // Ispuni native bafer PRIJE finalizacije — bez ovoga bi tačke snimljene
+    // dok je WebView bio u pozadini (i još nisu stigle preko redovnog
+    // visibilitychange puta) bile trajno izgubljene: stopRec()/fabSnimTrag()/
+    // dozStopGPS() zatvaraju snimanje i briše se prilika da se bafer iskoristi.
+    try { await _drainNativeGpsBuffer(); } catch(e) {}
     if (recOn)          stopRec();
     else if (_tragOn)   fabSnimTrag();
     else if (_dozGpsOn) dozStopGPS();
@@ -18348,6 +18440,7 @@ function _fabSnimTragBegin() {
 function togTragPause() {
   if (!_tragOn) return;
   _tragPaused = !_tragPaused;
+  if (_tragPaused) _pauziOtvoriProzor(_tragPauseWin); else _pauziZatvoriProzor(_tragPauseWin);
   const ico = document.getElementById('ab-trag-pauza-ico');
   const txt = document.getElementById('ab-trag-pauza-txt');
   const btn = document.getElementById('ab-trag-pauza');
@@ -18391,8 +18484,8 @@ let _tragLiveSeg = null;// živi "rubber-band" segment do trenutne pozicije
 let _tragLastMoveT = 0; // timestamp zadnjeg stvarnog pomaka (za auto-pauzu)
 const _TRAG_AUTOPAUSE_MS = 120000; // 2 min mirovanja → auto-pauza
 
-function _addTragPoint(la, lo, ac, al, sp, nowOverride) {
-  if (!_tragOn || _tragPaused) return;
+function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
+  if (!_tragOn || (_tragPaused && !bypassPauzu)) return;
 
   // 1. Odbaci samo katastrofalno loše fikseve
   if (ac > 50) return;
@@ -18567,22 +18660,33 @@ async function _drainNativeGpsBuffer() {
   const pts = _nativeBufUzmi();
   if (!pts.length) return;
   for (const p of pts) {
+    // GpsService (native) ne zna za pauzu — provjerava se ISTORIJSKI tajmstamp
+    // tačke naspram zabilježenih intervala pauze za dati tip, ne trenutno
+    // (ne)pauzirano stanje. Van intervala = bypassPauzu=true (uključi je iako
+    // je snimanje TRENUTNO možda pauzirano); unutar intervala = tačka je
+    // legitimno viđena/obrađena (napreduje _nativeReplayLast), ali se NE ubacuje.
     if (_tragOn && p.t > Math.max(_tragLastT, _onPLastFixTs, _nativeSessionSince.trag, _nativeReplayLast.trag)) {
-      _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t);
+      if (!_uPauziIntervalu(_tragPauseWin, p.t)) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t, true);
       _nativeReplayLast.trag = p.t;
     }
     if (recOn && p.t > Math.max(_onPLastFixTs, _nativeSessionSince.vlaka, _nativeReplayLast.vlaka)) {
-      _vlakaProcessGpsPoint(p.la, p.lo, p.ac, _filteredAlt(p.al) ?? p.al ?? 0, p.sp, p.t);
+      if (!_uPauziIntervalu(_recPauseWin, p.t)) _vlakaProcessGpsPoint(p.la, p.lo, p.ac, _filteredAlt(p.al) ?? p.al ?? 0, p.sp, p.t, true);
       _nativeReplayLast.vlaka = p.t;
     }
     if (_dozGpsOn && p.t > Math.max(_dozLastLiveFixTs, _nativeSessionSince.doznaka, _nativeReplayLast.doznaka)) {
-      await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t);
+      if (!_uPauziIntervalu(_dozPauseWin, p.t)) await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t, true);
       _nativeReplayLast.doznaka = p.t;
     }
   }
   if (recOn && !_saveLocalVlake()) throw new Error('GPS lokalni upis nije uspio');
   if (_tragOn) localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts:_tragPts, ts:Date.now() }));
   _nativeBufPotvrdi();
+  // Zatvoreni intervali pauze su svoj posao obavili (odlučili sudbinu svih
+  // tačaka do sada drenairanih) — brišu se da niz ne raste neograničeno kroz
+  // dug terenski dan sa više pauza.
+  _pauziOcistiZatvorene(_tragPauseWin);
+  _pauziOcistiZatvorene(_recPauseWin);
+  _pauziOcistiZatvorene(_dozPauseWin);
   } catch(e) { showToast('⚠ GPS dopuna čeka sigurno spremanje: ' + e.message); }
   finally { _drainNativeGpsBuffer._busy = false; }
 
@@ -21731,7 +21835,6 @@ function _renderKmlEditor(i) {
     </div>` : '';
 
   return `<div class="oz-kml-editor" onclick="event.stopPropagation()">
-    ${k._isSqliteVector ? _odsjeciPanelHtml() : ''}
     <div class="oz-ed-field">
       <div class="oz-ed-label">Ime</div>
       <input class="oz-ed-input" type="text" value="${_escHtml(k.name)}"
@@ -31550,327 +31653,6 @@ function geojsonOdjeliRestore() {
   } catch(e) {}
 }
 
-// ── UNSKO_odsjeci.sqlite — vektorski sloj odsjeka ────────────────────────────
-const _ODSJECI_SQLITE_URL = SUPA_URL + '/storage/v1/object/public/SQLITE%20VECTOR/UNSKO_odsjeci.sqlite';
-const _ODSJECI_IDB_KEY    = 'tvlake_odsjeci_sqlite_v1';
-let   _odsjeciLayerGrp    = null;
-let   _odsjeciFeatures    = [];   // [{gj,odjel,odsjek,gaz,povrHa,bounds}] — jedna stavka po SQLite redu
-let   _odsjeciByGj        = {};   // gj string → L.layerGroup (za toggle po GJ)
-let   _odsjeciGjVisible   = {};   // gj string → boolean
-let   _odsjeciSearchQ     = '';   // aktivni query u filter panelu
-
-// Boje po GJ
-const _GJ_COLORS = {
-  'RISOVAC KRUPA':  '#4ade80',
-  'VOJSKOVA':       '#60a5fa',
-  'GRMEČ JASENICA': '#fb923c',
-  'GOMILA':         '#c084fc',
-};
-function _gjColor(gj) { return _GJ_COLORS[(gj||'').toUpperCase()] || '#94a3b8'; }
-
-// ── SpatiaLite WKB parser ──────────────────────────────────────────────────────
-// Format: [0x00][endian][srid:4][mbr:32][0x7C][wkb...]
-// ROBUSTNO: eksplicitna dužina DataView-a + bounds-guard na svako čitanje
-// (sprječava "Offset is outside of bounds" RangeError) + podrška za Z/M
-// koordinate (3D/4D geometrija ima 3-4 doubla po tački, ne 2).
-function _parseSpatialiteWkb(bytes) {
-  if (!bytes || bytes.length < 44) return null;
-  if (bytes[0] !== 0x00 || bytes[38] !== 0x7C) return null;
-  const blen = bytes.byteLength;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, blen);
-  let pos = 39;
-  const le = bytes[pos++] === 0x01;
-
-  const _OOB = { oob: true };
-  function rU32() { if (pos + 4 > blen) throw _OOB; const v = view.getUint32(pos, le); pos += 4; return v; }
-  function rF64() { if (pos + 8 > blen) throw _OOB; const v = view.getFloat64(pos, le); pos += 8; return v; }
-  function rByte() { if (pos + 1 > blen) throw _OOB; return bytes[pos++]; }
-
-  // Broj koordinata po tački iz ISO WKB tipa:
-  //   3=Polygon(2D), 1003=PolygonZ, 2003=PolygonM, 3003=PolygonZM
-  function dimsOf(t) { const z = (t >= 1000 && t < 2000) || t >= 3000; const m = (t >= 2000); return 2 + (z ? 1 : 0) + (m ? 1 : 0); }
-
-  function parseRing(nd) {
-    const n = rU32();
-    if (n < 0 || n > 5e6) throw _OOB;          // sanity protiv smeća
-    const pts = [];
-    for (let i = 0; i < n; i++) {
-      const x = rF64(), y = rF64();
-      for (let k = 2; k < nd; k++) rF64();     // preskoči Z / M
-      try { const [lng, lat] = proj4('EPSG:3908', 'WGS84', [x, y]); pts.push([lat, lng]); }
-      catch { pts.push([y, x]); }
-    }
-    return pts;
-  }
-  function parsePoly(nd) {
-    const nr = rU32();
-    if (nr < 0 || nr > 1e6) throw _OOB;
-    const rings = [];
-    for (let i = 0; i < nr; i++) rings.push(parseRing(nd));
-    return rings;
-  }
-
-  const polys = [];
-  try {
-    const gt = rU32();
-    const base = gt % 1000;                     // 3=polygon, 6=multipolygon (bez Z/M)
-    if (base === 3) {
-      polys.push(parsePoly(dimsOf(gt)));
-    } else if (base === 6) {
-      const n = rU32();
-      if (n < 0 || n > 1e6) return polys;
-      for (let i = 0; i < n; i++) {
-        rByte();                                // sub byte order (isti endian u praksi)
-        const st = rU32();
-        if (st % 1000 === 3) polys.push(parsePoly(dimsOf(st)));
-        else break;                             // nepoznata sub-geometrija
-      }
-    }
-  } catch(e) {
-    if (e !== _OOB) throw e;                     // pravu grešku propagiraj, OOB progutaj
-  }
-  return polys;
-}
-
-// ── Loader ────────────────────────────────────────────────────────────────────
-async function _loadOdsjeciSQLite() {
-  if (!_MiniSqliteMain) return;
-
-  // 1. Fetch (online) ili IDB cache (offline)
-  let buf = null;
-  if (navigator.onLine) {
-    try {
-      const r = await fetch(_ODSJECI_SQLITE_URL, { cache: 'no-store' });
-      if (r.ok) { buf = await r.arrayBuffer(); _kmlcSave(_ODSJECI_IDB_KEY, buf); }
-    } catch(e) { console.warn('odsjeci fetch:', e.message); }
-  }
-  if (!buf && _kmlcKeys.has(_ODSJECI_IDB_KEY)) {
-    try { const c = await _kmlcGet(_ODSJECI_IDB_KEY); if (c) buf = c instanceof ArrayBuffer ? c : c.buffer; }
-    catch {}
-  }
-  if (!buf || !buf.byteLength) return;
-
-  try {
-    // 2. Otvori SQLite, pronađi tabelu odsjeci
-    const mini = new _MiniSqliteMain(new File([buf], 'odsjeci.sqlite'));
-    await mini.init();
-
-    let odsjeciRoot = 0, colSql = '';
-    await mini._scanLeaves(1, (rid, r) => {
-      if (r[0] === 'table' && r[1]?.toLowerCase() === 'odsjeci') { odsjeciRoot = r[3]; colSql = r[4] || ''; }
-    });
-    if (!odsjeciRoot) { console.warn('Tabela odsjeci nije nađena'); return; }
-
-    // Parsiraj redosljed kolona iz CREATE TABLE
-    const colNames = (colSql.match(/\(([^)]+)\)/)?.[1] || '')
-      .split(',').map(c => c.trim().split(/\s+/)[0].toLowerCase().replace(/["'`]/g,''));
-
-    // ROBUSTNA detekcija offseta: pročitaj PRVI red i nađi geom kolonu po
-    // SpatiaLite potpisu (byte[0]=0x00, byte[38]=0x7C). Iz nje izvedi offset
-    // između deklarisanih kolona (CREATE TABLE) i stvarnih u payload-u.
-    // Tako radi bez obzira da li je rowid-alias (id) kolona prisutna kao null
-    // ili izostavljena — što je ranije uzrokovalo "0 poligona".
-    const _isWkbBlob = v => v && (v instanceof Uint8Array || v.buffer) &&
-      v.length >= 44 && v[0] === 0x00 && v[38] === 0x7C;
-    // Skeniraj prvih nekoliko redova dok ne nađemo onaj s validnim geom blob-om
-    // (prvi red može imati null geometriju → tad detekcija mora ići dalje).
-    let geomActualIdx = -1, _probed = 0;
-    try {
-      await mini._scanLeaves(odsjeciRoot, (rid, r) => {
-        for (let j = 0; j < r.length; j++) { if (_isWkbBlob(r[j])) { geomActualIdx = j; throw new Error('stop'); } }
-        if (++_probed >= 50) throw new Error('stop');
-      });
-    } catch(e) { if (e?.message !== 'stop') throw e; }
-    if (geomActualIdx < 0) { showToast('⚠ Odsjeci: nije nađena geometrijska kolona u bazi'); return; }
-
-    const declaredGeom = colNames.indexOf('geom');
-    const colOffset = (geomActualIdx >= 0 && declaredGeom >= 0) ? (declaredGeom - geomActualIdx) : 0;
-    const ci = n => { const i = colNames.indexOf(n); return i >= 0 ? i - colOffset : -1; };
-    const iGeom = geomActualIdx >= 0 ? geomActualIdx : (ci('geom') >= 0 ? ci('geom') : 5);
-    const iGj=ci('gj')>=0?ci('gj'):0, iOdj=ci('odjel')>=0?ci('odjel'):1,
-          iOdsk=ci('odsjek')>=0?ci('odsjek'):2, iGaz=ci('gaz_klasa')>=0?ci('gaz_klasa'):3,
-          iPov=ci('povrsina_m2')>=0?ci('povrsina_m2'):4;
-    console.log('Odsjeci kolone:', { colNames, geomActualIdx, declaredGeom, colOffset, iGj, iOdj, iOdsk, iGaz, iPov, iGeom });
-
-    // 3. Skeniraj sve redove, kreiraj Leaflet poligone (grupirano po GJ)
-    if (_odsjeciLayerGrp) { try { map.removeLayer(_odsjeciLayerGrp); } catch {} }
-    _odsjeciLayerGrp = L.layerGroup();
-    _odsjeciFeatures  = [];
-    _odsjeciByGj      = {};
-    _odsjeciGjVisible = {};
-    let cnt = 0;
-
-    await mini._scanLeaves(odsjeciRoot, (rid, row) => {
-      const gj=row[iGj]||'', odjel=row[iOdj]||'', odsjek=row[iOdsk]||'',
-            gaz=row[iGaz]||'', povrHa=row[iPov]?(row[iPov]/10000).toFixed(2):'?';
-      const blob = row[iGeom];
-      if (!blob) return;
-      const polys = _parseSpatialiteWkb(blob);
-      if (!polys?.length) return;
-
-      // Osiguraj GJ sub-grupu
-      if (!_odsjeciByGj[gj]) {
-        _odsjeciByGj[gj] = L.layerGroup();
-        _odsjeciGjVisible[gj] = true;
-        _odsjeciLayerGrp.addLayer(_odsjeciByGj[gj]);
-      }
-
-      const col = _gjColor(gj);
-      const popupHtml = `<div style="font-size:13px;line-height:1.8">
-        <b style="font-size:15px;color:#e2e8f0">${odjel}/${odsjek}</b><br>
-        <span style="color:#64748b;font-size:11px">${gj}</span><br>
-        Gaz. klasa: <b>${gaz||'—'}</b><br>
-        Površina: <b>${povrHa} ha</b>
-      </div>`;
-
-      let featureBounds = null;
-      for (const rings of polys) {
-        if (!rings[0]?.length) continue;
-        const poly = L.polygon(rings, {
-          color: col, weight: 1.5, opacity: 0.9,
-          fillColor: col, fillOpacity: 0.07,
-          interactive: true
-        });
-        poly.bindPopup(popupHtml, { maxWidth: 220 });
-        _odsjeciByGj[gj].addLayer(poly);
-        try {
-          const b = poly.getBounds();
-          if (b.isValid()) featureBounds = featureBounds ? featureBounds.extend(b) : L.latLngBounds(b.getSouthWest(), b.getNorthEast());
-        } catch {}
-        cnt++;
-      }
-
-      if (featureBounds) {
-        _odsjeciFeatures.push({ gj, odjel: String(odjel), odsjek: String(odsjek), gaz, povrHa, bounds: featureBounds });
-        // Integriraj u graniceOdjeli (za globalni zoom/search)
-        const nm = odjel + (odsjek ? '/' + odsjek : '');
-        if (!graniceOdjeli.find(o => o.name === nm && o._gjSql === gj)) {
-          graniceOdjeli.push({ name: nm, _gjSql: gj, bounds: featureBounds });
-        }
-      }
-    });
-
-    if (!cnt) { showToast('⚠ Odsjeci: nisu nađeni poligoni u bazi'); return; }
-    graniceOdjeli.sort((a,b) => a.name.localeCompare(b.name, 'bs'));
-
-    // Dodaj u kmlLs da se pojavi u layer panelu
-    const existingIdx = kmlLs.findIndex(k => k._isSqliteVector);
-    if (existingIdx >= 0) kmlLs.splice(existingIdx, 1);
-    kmlLs.push({
-      name: '🗂 Odsjeci (SQLite)',
-      grp: _odsjeciLayerGrp,
-      col: '#4ade80', dash: '', weight: 1.5, opacity: 0.9,
-      vis: true, fill: true, fillCol: '#4ade80', fillPattern: 'solid', fillOpacity: 0.07,
-      _isSqliteVector: true
-    });
-    _odsjeciLayerGrp.addTo(map);
-
-    // Zumiraj na granice sloja
-    try {
-      const bounds = _odsjeciLayerGrp.getBounds();
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-    } catch {}
-
-    if (typeof rndKml === 'function') rndKml();
-    if (typeof _geojsonOdjeliUpdUI === 'function') _geojsonOdjeliUpdUI();
-    showToast(`✅ Odsjeci: ${cnt} poligona učitano`);
-    console.log(`✅ Odsjeci SQLite: ${cnt} poligona učitano, colOffset=${colOffset}`);
-  } catch(e) {
-    console.error('_loadOdsjeciSQLite:', e);
-    showToast('❌ Greška pri učitavanju odsjeci: ' + e.message);
-  }
-}
-
-// ── Odsjeci filter / search helpers ──────────────────────────────────────────
-
-function _odsjeciTogGj(gj) {
-  _odsjeciGjVisible[gj] = !_odsjeciGjVisible[gj];
-  const grp = _odsjeciByGj[gj];
-  if (grp) {
-    if (_odsjeciGjVisible[gj]) _odsjeciLayerGrp.addLayer(grp);
-    else _odsjeciLayerGrp.removeLayer(grp);
-  }
-  _rndOznakePanel();
-}
-
-function _odsjeciZoom(idx) {
-  const f = _odsjeciFeatures[idx];
-  if (!f?.bounds) return;
-  // Osiguraj vidljivost GJ podgrupe
-  if (_odsjeciByGj[f.gj] && !_odsjeciGjVisible[f.gj]) {
-    _odsjeciGjVisible[f.gj] = true;
-    _odsjeciLayerGrp.addLayer(_odsjeciByGj[f.gj]);
-  }
-  // Osiguraj da je cijeli sloj vidljiv na mapi
-  const kIdx = kmlLs.findIndex(k => k._isSqliteVector);
-  if (kIdx >= 0 && !kmlLs[kIdx].vis) { kmlLs[kIdx].vis = true; _odsjeciLayerGrp.addTo(map); }
-  map.fitBounds(f.bounds, { padding: [30, 30] });
-  _rndOznakePanel();
-}
-
-function _odsjeciDoSearch(q) {
-  _odsjeciSearchQ = q;
-  _rndOznakePanel();
-}
-
-function _odsjeciPanelHtml() {
-  if (!_odsjeciFeatures.length) return '';
-  const gjs = Object.keys(_odsjeciByGj).sort((a, b) => a.localeCompare(b, 'bs'));
-
-  const gjHtml = gjs.map(gj => {
-    const col  = _gjColor(gj);
-    const cnt  = _odsjeciFeatures.filter(f => f.gj === gj).length;
-    const chk  = _odsjeciGjVisible[gj] ? 'checked' : '';
-    const gjE  = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer;border-radius:6px;">
-      <input type="checkbox" ${chk} onchange="event.stopPropagation();_odsjeciTogGj('${gjE}')" style="accent-color:${col}">
-      <span style="width:10px;height:10px;border-radius:2px;background:${col};flex-shrink:0;"></span>
-      <span style="flex:1;font-size:12px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(gj)}</span>
-      <span style="font-size:11px;color:#475569;flex-shrink:0">${cnt}</span>
-    </label>`;
-  }).join('');
-
-  const q = _odsjeciSearchQ.trim().toLowerCase();
-  let resultsHtml = '';
-  if (q.length >= 1) {
-    const matches = _odsjeciFeatures
-      .map((f, idx) => ({ f, idx }))
-      .filter(({ f }) =>
-        f.odjel.toLowerCase().includes(q) ||
-        f.odsjek.toLowerCase().includes(q) ||
-        f.gj.toLowerCase().includes(q)
-      ).slice(0, 25);
-
-    if (!matches.length) {
-      resultsHtml = `<div style="font-size:12px;color:#475569;padding:6px 2px">Nema rezultata za "${_escHtml(q)}"</div>`;
-    } else {
-      resultsHtml = matches.map(({ f, idx }) => {
-        const col = _gjColor(f.gj);
-        return `<div onclick="event.stopPropagation();_odsjeciZoom(${idx})"
-          style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px;margin-bottom:1px;"
-          onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
-          <span style="width:8px;height:8px;border-radius:1px;background:${col};flex-shrink:0"></span>
-          <span style="flex:1;font-size:12px;color:#e2e8f0"><b>${_escHtml(f.odjel)}/${_escHtml(f.odsjek)}</b></span>
-          <span style="font-size:10px;color:#64748b;flex-shrink:0">${_escHtml(f.povrHa)} ha</span>
-          <span style="font-size:12px;color:#3b82f6;flex-shrink:0">⊕</span>
-        </div>`;
-      }).join('');
-    }
-  }
-
-  return `<div onclick="event.stopPropagation()" style="padding:2px 0 10px;border-bottom:1px solid #334155;margin-bottom:10px;">
-    <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Gospodarske jedinice</div>
-    ${gjHtml}
-    <div style="margin-top:10px">
-      <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px">Pretraga odjela / odsjeka</div>
-      <input class="oz-ed-input" type="search" placeholder="Npr. 23 ili 23/a ili naziv GJ…"
-        value="${_escHtml(_odsjeciSearchQ)}"
-        oninput="event.stopPropagation();_odsjeciDoSearch(this.value)"
-        style="margin-bottom:4px;">
-      <div style="max-height:160px;overflow-y:auto;">${resultsHtml}</div>
-    </div>
-  </div>`;
-}
 
 // ── Proj4 definicije za Bosanske koordinatne sisteme ─────────────────────────
 proj4.defs('EPSG:31276', '+proj=tmerc +lat_0=0 +lon_0=18 +k=0.9999 +x_0=6500000 +y_0=0 +ellps=bessel +towgs84=682,-203,480,0,0,0,0 +units=m +no_defs');
@@ -33235,66 +33017,13 @@ function _reprojectGeometry(geom, fromCrs) {
   if (geom.geometries)  geom.geometries.forEach(g => _reprojectGeometry(g, fromCrs));
 }
 
-// ── Glavna funkcija: učitaj cijeli bucket (root + podfolderi, KML + SHP) ─────
-async function autoLoadStorageBucket(bucketName, getOpts, extractOdjeli = false) {
-  try {
-    let allFiles = null;
-    const listKey = 'listing:' + bucketName;
-    try {
-      allFiles = await _listBucketAll(bucketName);
-      if (allFiles.length) _kmlcSave(listKey, JSON.stringify(allFiles)); // cache listing for offline
-    } catch { allFiles = null; }
-
-    // If network fetch failed or returned empty, try cached listing
-    if (!allFiles || !allFiles.length) {
-      if (_kmlcKeys.has(listKey)) {
-        const raw = await _kmlcGet(listKey);
-        if (raw) { try { allFiles = JSON.parse(raw); } catch { allFiles = []; } }
-      }
-    }
-
-    if (!allFiles || !allFiles.length) { console.warn(`Bucket "${bucketName}" prazan`); return; }
-
-    const supported = allFiles.filter(f => /\.(kml|shp)$/i.test(f.name));
-    if (!supported.length) { console.warn(`Bucket "${bucketName}": nema KML/SHP fajlova`); return; }
-
-    // Set svih postojećih putanja — da SHP ne traži .dbf/.prj koji ne postoje (400 noise)
-    const existingPaths = new Set(allFiles.map(f => f.path));
-
-    let didFit = false;
-    for (const file of supported) {
-      const opts = typeof getOpts === 'function' ? getOpts(file.name) : { ...getOpts };
-      const key = bucketName + '/' + file.path;
-      // OPT-IN: učitaj (i renderuj) SAMO fajlove koje je korisnik ranije skinuo
-      // (postoje u IDB kešu). Ostale samo registruj kao placeholder u panelu — bez
-      // fetch-a i bez rendera — dok ih korisnik ne skine dugmetom ⬇.
-      if (!_kmlcKeys.has('file:' + key)) {
-        _registerServerPlaceholder(bucketName, file, opts, extractOdjeli);
-        continue;
-      }
-      let grp = null;
-      if (/\.kml$/i.test(file.name)) {
-        grp = await _loadOneKml(bucketName, file, opts, extractOdjeli);
-      } else if (/\.shp$/i.test(file.name)) {
-        grp = await _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths);
-      }
-
-      // fitBounds samo pri prvom otvaranju app (nema sačuvane pozicije) da ne pregazi korisnikov prikaz
-      if (grp && !didFit && extractOdjeli && !localStorage.getItem('tvlake_last_pos')) {
-        try { const b = grp.getBounds(); if (b.isValid()) { map.fitBounds(b, { padding: [30,30] }); didFit = true; } } catch {}
-      }
-    }
-    rndKml();
-  } catch(e) {
-    console.warn(`autoLoadStorageBucket("${bucketName}") greška:`, e.message);
-  }
-}
 
 // Poziva se iz sbInitData() nakon prijave
 // Bucketi (Granice odjela, ODJELI_ODSJECI, odsjeci SQLite) su namjerno obrisani
 // sa Supabase Storage-a — ne pokušavaj ih više učitati (svaki neuspjeli fetch
-// i dalje troši egress). autoLoadStorageBucket()/_loadOdsjeciSQLite() ostaju
-// definisane ali se nigdje više ne pozivaju.
+// i dalje troši egress). Cijeli "Odsjeci" podsistem (_loadOdsjeciSQLite,
+// _odsjeciPanelHtml i srodne funkcije) i autoLoadStorageBucket() su zbog toga
+// bili potpuno mrtav kod (v1.5.8) — obrisani, ne samo neaktivni.
 async function autoLoadAllKmlBuckets() {}
 
 // =====================================================================
@@ -34740,6 +34469,7 @@ let _dozLastLiveFixTs = 0;
 function dozPauseGPS() {
   if (!_dozGpsOn) return;
   _dozGpsPaused = !_dozGpsPaused;
+  if (_dozGpsPaused) _pauziOtvoriProzor(_dozPauseWin); else _pauziZatvoriProzor(_dozPauseWin);
   const btn = document.getElementById('doz-gps-pause');
   const st = document.getElementById('doz-gps-status');
   if (_dozGpsPaused) {
@@ -35115,10 +34845,10 @@ async function _dozStartGPSBegin() {
 // _drainNativeGpsBuffer replay-a (sa tsMs = stvarno historijsko vrijeme
 // fiksa, da recorded_at u bazi ostane tačan umjesto "sad" za tačku snimljenu
 // prije nekoliko minuta dok je app bio zatvoren).
-async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs) {
+async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu) {
   if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
   if (acc > 20) { _dozUpdGpsStats(acc); return; }
-  if (_dozGpsPaused) { _dozUpdGpsStats(acc); return; }
+  if (_dozGpsPaused && !bypassPauzu) { _dozUpdGpsStats(acc); return; }
   const prev = _dozGpsPts[_dozGpsPts.length - 1];
   if (prev) {
     const d = dst(prev[0], prev[1], lat, lng);

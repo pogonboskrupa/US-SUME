@@ -142,8 +142,11 @@ if ($ApkPath) {
     $DestPath = Join-Path $Desktop $DestName
     Copy-Item $ApkPath.FullName $DestPath
     Write-Host "Kopirano na Desktop: $DestName" -ForegroundColor Cyan
-    Write-Host "`nPRIJE INSTALACIJE: obriši/deinstaliraj stariju verziju s telefona ako Android" -ForegroundColor Yellow
-    Write-Host "ne ponudi 'Update' nego 'App not installed' grešku." -ForegroundColor Yellow
+    Write-Host "`nAko Android ponudi 'App not installed' umjesto 'Update' (razlicit potpis" -ForegroundColor Yellow
+    Write-Host "od instaliranog APK-a) - NE deinstaliraj odmah: telefon lokalno cuva" -ForegroundColor Yellow
+    Write-Host "terenske podatke (tragovi, vlake, doznaka, red za sync) koji se time" -ForegroundColor Yellow
+    Write-Host "trajno brisu ako nisu vec sinhronizovani. Prvo izvezi/sacekaj sync, pa tek" -ForegroundColor Yellow
+    Write-Host "onda deinstaliraj staru verziju." -ForegroundColor Yellow
 } else {
     Write-Host "APK nije pronađen u outputs/ folderu." -ForegroundColor Red
 }

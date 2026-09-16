@@ -4,8 +4,6 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -36,7 +34,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
@@ -180,8 +177,6 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
         webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
-        webView.addJavascriptInterface(new NetBridge(), "AndroidNet");
-        webView.addJavascriptInterface(new AppNotifBridge(), "AndroidNotif");
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
 
         webView.setWebViewClient(new WebViewClient() {
@@ -385,200 +380,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ── Native obavještenja (zaobilazi WebView Notification API) ────────────
-    // Zašto postoji: korisnik je na STVARNOM telefonu dobio "Ovaj uređaj ne
-    // podržava obavještenja" pri uključivanju upozorenja na nov požar. Uzrok:
-    // Android WebView na mnogim OEM verzijama uopšte NEMA implementiran
-    // window.Notification (JS Notifications API) — 'Notification' in window
-    // je false — iako sistem sasvim normalno prikazuje prave Android
-    // notifikacije. Ista zamka je već riješena za GPS snimanje (vidi
-    // GpsService — foreground servis koristi NotificationManager direktno,
-    // ne window.Notification), i sad se isto rješenje primjenjuje ovdje:
-    // obična (ne-foreground, ne-ongoing) native notifikacija preko
-    // NotificationManagerCompat, potpuno nezavisna od WebView Notification API-ja.
-    class AppNotifBridge {
-        private static final String CHANNEL_ID = "pozari_upozorenja";
-        private static final int NOTIF_ID_BASE = 5000;
-        private int seq = 0;
-
-        private void ensureChannel() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationManager nm = getSystemService(NotificationManager.class);
-                if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
-                    NotificationChannel ch = new NotificationChannel(
-                            CHANNEL_ID, "Upozorenja na požar",
-                            NotificationManager.IMPORTANCE_HIGH);
-                    ch.setDescription("Nov požar u zadanom krugu od tvoje pozicije");
-                    nm.createNotificationChannel(ch);
-                }
-            }
-        }
-
-        @JavascriptInterface
-        public void show(String naslov, String tijelo) {
-            runOnUiThread(() -> {
-                ensureChannel();
-                Intent openApp = new Intent(MainActivity.this, MainActivity.class);
-                openApp.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                PendingIntent pending = PendingIntent.getActivity(MainActivity.this,
-                        1000 + (seq % 100), openApp,
-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                Notification n = new NotificationCompat.Builder(MainActivity.this, CHANNEL_ID)
-                        .setContentTitle(naslov)
-                        .setContentText(tijelo)
-                        .setStyle(new NotificationCompat.BigTextStyle().bigText(tijelo))
-                        .setSmallIcon(android.R.drawable.stat_sys_warning)
-                        .setContentIntent(pending)
-                        .setAutoCancel(true)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .build();
-                try {
-                    androidx.core.app.NotificationManagerCompat.from(MainActivity.this)
-                            .notify(NOTIF_ID_BASE + (seq++ % 20), n);
-                } catch (SecurityException e) {
-                    // POST_NOTIFICATIONS nije odobrena (Android 13+, korisnik odbio pri startu) —
-                    // tiho preskoči, JS stranu ionako ne čeka nikakav odgovor odavde.
-                }
-            });
-        }
-    }
-
-    // ── Native HTTP most (zaobilazi CORS) ──────────────────────────────────
-    // Zašto postoji: NASA FIRMS (detekcije požara) ne šalje CORS zaglavlja —
-    // ni arhivski CSV izvozi (/data/...), ni Area API sa MAP_KEY-em (/api/...).
-    // Terenski test sa dobrom vezom (215 KB/s), najmanjim okvirom (24h) i
-    // unesenim ključem dao je "odbijeno odmah" na SVIH pet izvora. CORS je
-    // pravilo BROWSERA i iz JavaScripta se ne može zaobići — ali native Java
-    // HTTP poziv ga uopšte nema. Zato JS strana (_poziDohvatiJedan) prvo
-    // proba ovaj most, pa tek onda fetch() (koji ostaje za webapp u browseru).
-    //
-    // NAMJERNO NIJE opšti proxy: samo https i samo NASA FIRMS host. Bez tog
-    // ograničenja bi bilo koji JS na stranici — uključujući nešto ubačeno kroz
-    // uvezeni KML/GeoJSON sadržaj — mogao preko native sloja dohvatiti bilo
-    // šta, zaobilazeći sve zaštite koje browser inače nameće.
-    class NetBridge {
-        private static final int MAX_BYTES = 12 * 1024 * 1024;   // evropski 7d CSV zna biti krupan
-
-        private boolean dozvoljenHost(String host) {
-            if (host == null) return false;
-            // Locale.ROOT namjerno: na turskom locale-u "I".toLowerCase() daje "ı",
-            // pa bi poređenje hosta tiho palo i most bi bio mrtav bez ikakve poruke.
-            String h = host.toLowerCase(java.util.Locale.ROOT);
-            return h.equals("firms.modaps.eosdis.nasa.gov")
-                || h.endsWith(".modaps.eosdis.nasa.gov")
-                || h.equals("data-api.globalforestwatch.org");
-        }
-
-        // zaglavljaJson: {"x-api-key":"..."} ili null. tijeloJson je null za
-        // GET, a za GFW raster upit sadrži SQL i obaveznu GeoJSON geometriju.
-        // GFW zaglavlja i POST u browseru okidaju CORS preflight — ovdje ne,
-        // jer native poziv nema CORS uopste.
-        @JavascriptInterface
-        public void fetchText(final String id, final String url, final int timeoutMs,
-                              final String zaglavljaJson, final String tijeloJson) {
-            new Thread(() -> {
-                int status = 0;
-                String b64 = "";
-                String greska = null;
-                HttpURLConnection c = null;
-                try {
-                    URL u = new URL(url);
-                    if (!"https".equalsIgnoreCase(u.getProtocol()) || !dozvoljenHost(u.getHost())) {
-                        greska = "nedozvoljena adresa";
-                    } else {
-                        int t = timeoutMs > 0 ? timeoutMs : 20000;
-                        byte[] body = (tijeloJson != null && !tijeloJson.isEmpty())
-                                ? tijeloJson.getBytes(java.nio.charset.StandardCharsets.UTF_8) : null;
-                        org.json.JSONObject zg = (zaglavljaJson != null && zaglavljaJson.length() > 2)
-                                ? new org.json.JSONObject(zaglavljaJson) : null;
-                        // HttpURLConnection na Androidu ne prati pouzdano 307/308 za POST.
-                        // GFW `/latest` upravo tako preusmjerava na dnevnu verziju dataseta,
-                        // zato redirect pratimo ručno i ponavljamo ISTU metodu i tijelo.
-                        for (int redirect = 0; redirect <= 5; redirect++) {
-                            c = (HttpURLConnection) u.openConnection();
-                            c.setConnectTimeout(t);
-                            c.setReadTimeout(t);
-                            c.setInstanceFollowRedirects(false);
-                            c.setRequestProperty("User-Agent", "DendroMap-Android");
-                            c.setRequestProperty("Accept", "text/csv,application/json,text/plain,*/*");
-                            if (zg != null) {
-                                java.util.Iterator<String> it = zg.keys();
-                                while (it.hasNext()) {
-                                    String k = it.next();
-                                    c.setRequestProperty(k, zg.optString(k, ""));
-                                }
-                            }
-                            if (body != null) {
-                                c.setRequestMethod("POST");
-                                c.setDoOutput(true);
-                                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                                try (OutputStream os = c.getOutputStream()) { os.write(body); }
-                            }
-                            status = c.getResponseCode();
-                            if (status != 307 && status != 308 && status != 301 && status != 302) break;
-                            String location = c.getHeaderField("Location");
-                            if (location == null || redirect == 5) { greska = "neispravno preusmjerenje"; break; }
-                            URL next = new URL(u, location);
-                            if (!"https".equalsIgnoreCase(next.getProtocol()) || !dozvoljenHost(next.getHost())) {
-                                greska = "nedozvoljeno preusmjerenje"; break;
-                            }
-                            c.disconnect(); c = null; u = next;
-                        }
-                        InputStream is = (greska != null || c == null) ? null
-                                : ((status >= 400) ? c.getErrorStream() : c.getInputStream());
-                        if (is != null) {
-                            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                            byte[] buf = new byte[16384];
-                            int n, ukupno = 0;
-                            while ((n = is.read(buf)) > 0) {
-                                ukupno += n;
-                                if (ukupno > MAX_BYTES) { greska = "odgovor prevelik"; break; }
-                                bos.write(buf, 0, n);
-                            }
-                            is.close();
-                            if (greska == null) b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
-                        }
-                    }
-                } catch (Exception e) {
-                    // Java baca konkretne izuzetke (SocketTimeoutException,
-                    // UnknownHostException...) — za razliku od fetch() koji sve
-                    // svede na jednu genericnu gresku. Proslijedi ime klase da
-                    // JS strana moze reci sta se STVARNO desilo.
-                    greska = e.getClass().getSimpleName();
-                    if (e.getMessage() != null) greska += ": " + e.getMessage();
-                } finally {
-                    if (c != null) c.disconnect();
-                }
-                final int fStatus = status;
-                final String fB64 = b64;
-                final String fGreska = greska;
-                runOnUiThread(() -> {
-                    if (webView == null) return;
-                    StringBuilder js = new StringBuilder("if(typeof _nativeNetOdgovor==='function')_nativeNetOdgovor(");
-                    js.append(jsStr(id)).append(',').append(fStatus).append(',')
-                      .append(jsStr(fB64)).append(',').append(fGreska == null ? "null" : jsStr(fGreska)).append(')');
-                    webView.evaluateJavascript(js.toString(), null);
-                });
-            }).start();
-        }
-
-        // Base64 i imena izuzetaka su bezbjedni znakovi, ali navodnik/backslash
-        // iz poruke izuzetka bi razbio ubaceni JS — zato se svaki string escape-uje.
-        private String jsStr(String s) {
-            if (s == null) return "null";
-            StringBuilder b = new StringBuilder("\"");
-            for (int i = 0; i < s.length(); i++) {
-                char ch = s.charAt(i);
-                if (ch == '"' || ch == '\\') b.append('\\').append(ch);
-                else if (ch == '\n') b.append("\\n");
-                else if (ch == '\r') b.append("\\r");
-                else if (ch < 0x20 || ch > 0x7e) b.append(String.format("\\u%04x", (int) ch));
-                else b.append(ch);
-            }
-            return b.append('"').toString();
-        }
-    }
-
     // ── Auto-update: preuzmi i instaliraj najnoviji APK direktno iz app-a ──
     // Zašto postoji: "Ažuriraj aplikaciju" u Meniju je ranije za APK korisnike
     // samo otvarala GitHub Actions listu radnji — korisnik je morao ručno naći
@@ -688,8 +489,7 @@ public class MainActivity extends Activity {
             HttpURLConnection c = (HttpURLConnection) u.openConnection();
             try {
                 // GitHub Release asset preusmjerava na objects.githubusercontent.com —
-                // standardan GET redirect, HttpURLConnection ga prati sam (za razliku
-                // od NetBridge-a gore, koji ručno prati 307/308 SAMO zbog POST tijela).
+                // standardan GET redirect, HttpURLConnection ga prati sam.
                 c.setInstanceFollowRedirects(true);
                 c.setConnectTimeout(20000);
                 c.setReadTimeout(30000);
@@ -751,9 +551,8 @@ public class MainActivity extends Activity {
             });
         }
 
-        // Isti razlog kao NetBridge.jsStr (zaseban primjerak — mali, ne vrijedi
-        // dijeliti preko refaktora dvije nezavisne klase): navodnik/backslash iz
-        // poruke bi razbio ubačeni JS bez escape-ovanja.
+        // Zaseban mali primjerak (ne vrijedi dijeliti preko refaktora): navodnik/
+        // backslash iz poruke bi razbio ubačeni JS bez escape-ovanja.
         private String jsStr(String s) {
             if (s == null) return "null";
             StringBuilder b = new StringBuilder("\"");
