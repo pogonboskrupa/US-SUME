@@ -4969,7 +4969,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.5.9';
+const APP_VER = 'v1.6.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10292,8 +10292,15 @@ function deleteTacka(idx) {
 }
 
 // ── Persistence ──
+// v1.6.0: ovaj upis je bio POTPUNO nezaštićen — ni try/catch ni provjera. Pri
+// punoj localStorage kvoti `setItem` BACA, pa bi greška izletjela usred
+// pozivaoca (npr. usred brisanja/preimenovanja tačke) i prekinula ga na pola,
+// a tačke obilježene na terenu bi tiho ostale nesačuvane. Ide kroz isti
+// zajednički put kao tragovi/mjerenja/doznaka (v1.4.7/v1.4.9) i vraća bool.
 function _saveTacke() {
-  localStorage.setItem(_TACKE_KEY, JSON.stringify(_tacke.map(({la,lo,ts,nm})=>({la,lo,ts,nm}))));
+  return _localSetKriticno(_TACKE_KEY,
+    JSON.stringify(_tacke.map(({la,lo,ts,nm})=>({la,lo,ts,nm}))),
+    'Tačke na karti');
 }
 
 function _restoreTacke() {
@@ -11957,10 +11964,9 @@ async function fetchElev() {
   const lat = _elevLat, lng = _elevLng;
   if (lat == null) return;
   try {
-    const ctrl = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(4000) : undefined;
-    const r = await fetch(
+    const r = await _fetchT(
       `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
-      ctrl ? { signal: ctrl } : {}
+      4000
     );
     const d = await r.json();
     const nv = d.elevation?.[0];
@@ -12077,26 +12083,54 @@ const _CRASH_VLAKA_KEY = 'tvlake_crash_vlaka_v2';
 const _CRASH_TRAG_KEY  = 'tvlake_crash_trag_v2';
 let _crashSaveTimer = null;
 
+// v1.6.0: neuspjeh crash-snimka se više NE guta u console.warn. Ovo je jedina
+// mreža koja hvata snimanje kad OEM battery manager ubije CIJELI proces (vidi
+// "Pozadinsko snimanje" u CLAUDE.md) — kad localStorage kvota pukne (izmjereno
+// u v1.4.7: realno već za ~6 terenskih dana), zaštita TIHO prestane postojati i
+// korisnik to sazna TEK kad izgubi cijelo snimanje, bez ijednog znaka ranije.
+// Doznaka je istu popravku dobila u v1.4.9; vlaka i trag, dva NAJKORIŠTENIJA
+// snimanja, ostali su bez nje.
+// Javlja se JEDNOM po snimanju, ne na svakih 30 s (obje funkcije zove tajmer) —
+// zastavica se vraća na prvi uspješan upis, pa se sljedeći kvar smije opet javiti.
+let _crashUpisPaoV = false;
+let _crashUpisPaoT = false;
+
 function _crashSaveVlaka() {
   if (!recOn || recPaused || actI === null) return;
   const v = vlake[actI];
   if (!v || v.pts.length < 2) return;
+  let tekst;
   try {
-    const snap = {
+    tekst = JSON.stringify({
       pts: v.pts.map(p => [p.la, p.lo, p.al ?? p.elev ?? null]),
       nm: v.nm, br: v.br, kr: v.kr, color: v.color,
       projektId: v.projektId || _aktivniProjektId,
       ts: Date.now()
-    };
-    localStorage.setItem(_CRASH_VLAKA_KEY, JSON.stringify(snap));
-  } catch(e) { console.warn('crash-save vlaka:', e); }
+    });
+  } catch(e) { return; }   // neserijalizovan snimak nije stvar kvote
+  try {
+    localStorage.setItem(_CRASH_VLAKA_KEY, tekst);
+    _crashUpisPaoV = false;
+  } catch(e) {
+    if (_crashUpisPaoV) return;
+    _crashUpisPaoV = true;
+    _localSetKriticno(_CRASH_VLAKA_KEY, tekst, 'Zaštita snimanja vlake');
+  }
 }
 
 function _crashSaveTrag() {
   if (!_tragOn || _tragPaused || _tragPts.length < 2) return;
+  let tekst;
+  try { tekst = JSON.stringify({ pts: _tragPts, ts: Date.now() }); }
+  catch(e) { return; }
   try {
-    localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts: _tragPts, ts: Date.now() }));
-  } catch(e) { console.warn('crash-save trag:', e); }
+    localStorage.setItem(_CRASH_TRAG_KEY, tekst);
+    _crashUpisPaoT = false;
+  } catch(e) {
+    if (_crashUpisPaoT) return;
+    _crashUpisPaoT = true;
+    _localSetKriticno(_CRASH_TRAG_KEY, tekst, 'Zaštita snimanja traga');
+  }
 }
 
 function _crashStartTimer() {
@@ -12832,6 +12866,28 @@ map.createPane('refKarte');    map.getPane('refKarte').style.zIndex    = 620;
 map.createPane('putevi');      map.getPane('putevi').style.zIndex      = 390;
 map.createPane('demOverlay'); map.getPane('demOverlay').style.zIndex = 250;
 const _puteviRenderer = L.canvas({ pane: 'putevi', padding: 0.3 });
+
+// v1.6.0: opšta zaštita od ZAOSTALOG canvas renderera (v1.4.8/v1.4.9 klasa).
+// Leaflet sam napravi renderer po pane-u kad u njega uđe prvi canvas sloj bez
+// eksplicitne `renderer:` opcije, kešira ga u map._paneRenderers i NIKAD ga ne
+// vrati — čak ni kad zadnji sloj koji ga je koristio nestane sa karte. Taj
+// canvas je JEDAN element preko CIJELE karte, pa i potpuno prazan guta svaki
+// dodir sloju ispod (terenski prijavljeno dvaput: "izmjere površine i ostalo
+// nije klikabilno"). Mehanizam koji je to čistio uklonjen je u v1.5.7 zajedno
+// sa Požarima, pa je zaštita ovdje vraćena kao OPŠTA, bez veze sa tom sekcijom.
+// `delete map._paneRenderers[ime]` je OBAVEZAN, ne kozmetika: bez njega
+// _getPaneRenderer vrati već uklonjen renderer i sljedeći sloj crta u odvojen,
+// otkačen canvas koji se više nikad ne prikaže.
+function _oslobodiPaneRenderer(ime) {
+  try {
+    const r = map._paneRenderers && map._paneRenderers[ime];
+    if (!r) return false;
+    if (map.hasLayer(r)) map.removeLayer(r);
+    delete map._paneRenderers[ime];
+    return true;
+  } catch(e) { return false; }
+}
+
 // _WC_CACHE/CachedWCover mora biti definisan PRIJE TL (referenciran unutar njega).
 const _WC_CACHE    = 'tvlake-wcover-v1';
 // WMS varijanta iste keš/timeout/retry logike kao CachedTopo/CachedSat (vidi
@@ -12921,21 +12977,19 @@ async function _getTerrariumTile(z, x, y) {
   // pločica jednostavno vrati null (isti tretman kao svaka druga greška
   // ispod) — pozivalac to već zna da protumači kao "nedostupno" i pređe na
   // Open-Meteo fallback (koji ima svoj 15s timeout).
-  const sig = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined;
-  const fetchOpts = sig ? { mode:'cors', signal: sig } : { mode:'cors' };
   let blob = null;
   if ('caches' in window) {
     try {
       const cache = await caches.open(_TERR_CACHE);
       let resp = await cache.match(url);
       if (!resp) {
-        resp = await fetch(url, fetchOpts);
+        resp = await _fetchT(url, 10000, { mode:'cors' });
         if (resp?.ok) { cache.put(url, resp.clone()); } else return null;
       }
       blob = await resp.blob();
     } catch { return null; }
   } else {
-    blob = await fetch(url, fetchOpts).then(r=>r.ok?r.blob():null).catch(()=>null);
+    blob = await _fetchT(url, 10000, { mode:'cors' }).then(r=>r.ok?r.blob():null).catch(()=>null);
   }
   if (!blob) return null;
   if (typeof createImageBitmap !== 'undefined') return createImageBitmap(blob);
@@ -19903,6 +19957,12 @@ function _refCalibStop() {
   _refCalibTmp = null;
   map.off('click', _refCalibClick);
   _refHideSnapTargets();
+  // Pojas sigurnosti: markeri kalibracije su od v1.6.0 divIcon (bez canvasa),
+  // ali uređaj koji je kalibrirao PRIJE ovog update-a — ili bilo koji budući
+  // canvas sloj u ovom pane-u — ostavio bi renderer na z-indexu 620 koji guta
+  // sve dodire. Oslobađa se ovdje jer u 'refKarte' ništa drugo ne crta u canvas
+  // (slike su <img> sa pointer-events:none, ostali markeri su divIcon).
+  _oslobodiPaneRenderer('refKarte');
   // Vrati providnost na vrijednost slidera
   const opaEl = document.getElementById('refkarta-opa');
   if (_refOverlay && opaEl) _refOverlay.setOpacity(parseInt(opaEl.value)/100);
@@ -19914,9 +19974,21 @@ function _refCalibClick(e) {
     const px = _refLatLngToImgPx(e.latlng);
     if (!px) return;
     _refCalibTmp = px;
-    // Plavi marker = tačka na slici (kako je sada)
-    L.circleMarker(e.latlng, { radius:7, color:'#fff', weight:2, fillColor:'#38bdf8', fillOpacity:1, pane:'refKarte' })
-      .addTo(_refCalibLayer);
+    // Plavi marker = tačka na slici (kako je sada).
+    // v1.6.0: NAMJERNO divIcon, a NE L.circleMarker. Karta radi sa
+    // preferCanvas:true, pa bi circleMarker natjerao Leaflet da za pane
+    // 'refKarte' (z-index 620 — IZNAD mjerenja 410, vlaka 400 i oznaka 401)
+    // napravi canvas renderer preko CIJELE karte. Taj canvas guta SVAKI dodir
+    // ispod sebe, a Leaflet ga NIKAD sam ne ukloni — ostajao bi i nakon
+    // _refCalibLayer.clearLayers(), dakle do kraja sesije. Dokazano
+    // reprodukcijom: jedna kalibraciona tačka = 0 klikova na izmjerenu
+    // površinu, i poslije brisanja markera. Zeleni marker ispod je oduvijek
+    // divIcon; ovim je cijeli kalibracioni tok bez canvasa.
+    L.marker(e.latlng, {
+      pane:'refKarte', interactive:false,
+      icon: L.divIcon({ className:'', iconSize:[18,18], iconAnchor:[9,9],
+        html:'<div style="width:14px;height:14px;border-radius:50%;background:#38bdf8;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.6);"></div>' })
+    }).addTo(_refCalibLayer);
     _refCalibStage = 'map';
   } else {
     // Zeleni marker = gdje stvarno treba. Ako je snap uključen, veži na centar odjela.
@@ -25576,10 +25648,32 @@ function _msrPoligonPovrsina(pts) {
 // već imaju catch/fallback (DEM mreža, keš) rade svoj posao.
 // Isti obrazac je već postojao kod Terrarium pločica i batch visina — ovo ga
 // samo ujednačava na jednom mjestu.
+// v1.6.0: rok se NE smije oslanjati na AbortSignal.timeout(). Ta metoda postoji
+// tek od Chrome/WebView 103 (2022), a minSdk je 24 (Android 7) i WebView na
+// terenskom uređaju zna biti godinama star bez Play Store update-a. Tamo je
+// `typeof AbortSignal.timeout === 'function'` bilo FALSE i helper je TIHO padao
+// na `undefined` signal — dakle na fetch BEZ IKAKVOG ROKA, tačno onaj OS-S4 bug
+// (poziv VISI umjesto da padne) zbog kojeg _fetchT uopšte i postoji. Bug je bio
+// sakriven u fallback grani i vidio bi se SAMO na starom uređaju, nikad ovdje.
+// AbortController + setTimeout radi na svakom WebView-u koji app uopšte podržava
+// (isti obrazac koji reliableFetch već koristi za sav Supabase saobraćaj).
+// Tajmer se NAMJERNO ne čisti kad odgovor stigne: AbortSignal.timeout se gasi u
+// zadanom roku bez obzira na fazu, pa štiti i ČITANJE TIJELA odgovora (spor
+// curak bajtova poslije zaglavlja je isti kvar) — prekid već završenog zahtjeva
+// je no-op, a jedan zaostao tajmer je jeftiniji od nezaštićenog body reada.
 function _fetchT(url, ms = 12000, opts = {}) {
-  const sig = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
-    ? AbortSignal.timeout(ms) : undefined;
-  return fetch(url, sig ? { ...opts, signal: sig } : opts);
+  const ctl = new AbortController();
+  const upstream = opts.signal;
+  if (upstream) {
+    if (upstream.aborted) ctl.abort(upstream.reason);
+    else upstream.addEventListener('abort', () => ctl.abort(upstream.reason), { once: true });
+  }
+  setTimeout(() => {
+    const e = new Error('timeout ' + ms + 'ms');
+    e.name = 'TimeoutError';
+    ctl.abort(e);
+  }, ms);
+  return fetch(url, { ...opts, signal: ctl.signal });
 }
 
 // Isti razlog kao _fetchT, ali za Supabase pozive (nisu fetch() pa nemaju
@@ -27641,8 +27735,7 @@ async function _demFetchGridOpenMeteo(bounds, res) {
     for (let attempt = 0; ; attempt++) {
       let r;
       try {
-        const sig = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined;
-        r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLons}`, sig ? {signal:sig} : {});
+        r = await _fetchT(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLons}`, 15000);
       } catch(err) {
         throw new Error('Mrežna greška — provjerite konekciju');
       }
@@ -31030,7 +31123,13 @@ async function startOfflineDownload() {
       if (existing) { skipped++; done++; }
       else {
         try {
-          const resp = await fetch(url, { mode: 'cors' });
+          // Rok je OBAVEZAN, ne kozmetika: petlja ide SEKVENCIJALNO kroz sve
+          // pločice, pa jedna koja VISI (OS-S4 — mrtva veza koju navigator.onLine
+          // prijavljuje kao 'true') zaustavi CIJELO preuzimanje offline karte na
+          // neodređeno. Korisnik gleda zamrznut progress bar i jedini izlaz mu je
+          // "Zaustavi". Sa rokom pločica samo padne u `failed` granu koja već
+          // postoji i petlja ide dalje.
+          const resp = await _fetchT(url, 15000, { mode: 'cors' });
           if (resp.ok) {
             try { await cache.put(url, resp); done++; }
             catch(qe) { if (qe && qe.name === 'QuotaExceededError') quotaHit = true; failed++; done++; }
@@ -31191,7 +31290,10 @@ async function azurirajAplikaciju() {
   showToast('🔄 Provjeravam verziju…');
   let latest = null;
   try {
-    const r = await fetch(_LIVE_BASE + 'sw.js?_v=' + Date.now(), { cache:'no-store' });
+    // Bez roka bi ovo na mrtvoj vezi VISILO, a ne palo — korisnik bi trajno
+    // ostao na toastu "Provjeravam verziju…" i catch ispod se nikad ne bi
+    // izvršio (poziv koji visi ne baca ništa).
+    const r = await _fetchT(_LIVE_BASE + 'sw.js?_v=' + Date.now(), 10000, { cache:'no-store' });
     const m = r.ok ? (await r.text()).match(/APP_VERSION\s*=\s*['"]([\d.]+)['"]/): null;
     latest = m ? m[1] : null;
   } catch(e) {}
@@ -31243,7 +31345,7 @@ async function _checkLatestVersion() {
     const isAPK = location.hostname === 'appassets.androidplatform.net';
     // Na webu se čita relativno (isti origin); u APK-u sa žive Pages objave.
     const base = isAPK ? _LIVE_BASE : './';
-    const r = await fetch(base + 'sw.js?_v=' + Date.now(), { cache: 'no-store' });
+    const r = await _fetchT(base + 'sw.js?_v=' + Date.now(), 10000, { cache: 'no-store' });
     if (!r.ok) return;
     const txt = await r.text();
     const m = txt.match(/APP_VERSION\s*=\s*['"]([\d.]+)['"]/);
@@ -34787,7 +34889,14 @@ function _dozQrHandleScanned(text) {
 // ─── Prikaz/upravljanje primljenim pojasevima (localStorage, per-uređaj) ──
 let _dozQrLayers = {};
 function _dozQrLoad() { try { return JSON.parse(localStorage.getItem(_DOZ_QR_KEY) || '[]'); } catch { return []; } }
-function _dozQrSave(arr) { try { localStorage.setItem(_DOZ_QR_KEY, JSON.stringify(arr)); } catch(e) {} }
+// v1.6.0: neuspjeh se više ne guta. QR dijeljenje je NAMJERNO potpuno offline i
+// peer-to-peer (ni pošiljalac ni primalac ne trebaju internet) — što znači da
+// primljeni pojas NE POSTOJI nigdje drugdje: ako ovaj upis tiho padne, jedini
+// način da se vrati je da kolega ponovo pokaže QR kod, a on je do tada obično
+// već otišao. Nenadoknadivo isto kao snimljen trag (v1.4.7).
+function _dozQrSave(arr) {
+  return _localSetKriticno(_DOZ_QR_KEY, JSON.stringify(arr), 'Primljeni pojas (QR)');
+}
 
 function _dozQrDraw(entry) {
   if (_dozQrLayers[entry.id]) { try { map.removeLayer(_dozQrLayers[entry.id]); } catch(e) {} }
@@ -35208,6 +35317,22 @@ async function dozConfirmSave() {
     dozCancelDraw();
     showToast('📴 Zona sačuvana lokalno — sinhronizuje se kad bude mreže');
   }
+  } catch(e) {
+    // v1.6.0: vanjski try je imao SAMO `finally` (reset zastavice), bez catch-a.
+    // Unutrašnji try/catch hvata mrežni neuspjeh i sprema u red čekanja, ali sve
+    // što pukne PRIJE njega — npr. `sbUser.id` kad sesija u međuvremenu nestane,
+    // ili nedostajuće polje u DOM-u — izletjelo bi nečujno: modal ostane otvoren,
+    // dugme "Sačuvaj" izgleda mrtvo (sljedeći tap samo ponovi isti pad), a
+    // #tab-bar i #action-bar OSTAJU SAKRIVENI jer dozCancelDraw() nikad ne
+    // stigne da se izvrši — korisnik ostane bez navigacije i bez objašnjenja.
+    showToast('⚠ Zona nije sačuvana: ' + (e?.message || e));
+    try { document.getElementById('doz-save-modal').style.display = 'none'; } catch(e2) {}
+    // Isti ishod kao dozCancelSave: poligon se odbacuje (da zaostao
+    // _dozPendingSavePolygon ne bi kasnije ušao u tuđi upis), a UI se vraća u
+    // ispravno stanje. Uzrok je najčešće trajan do ponovne prijave, pa je
+    // čist ekran korisniji od modala koji se ne da spasiti.
+    _dozPendingSavePolygon = null;
+    dozCancelDraw();   // vraća #tab-bar/#action-bar i čisti stanje crtanja
   } finally {
     _dozSaveInFlight = false;
   }

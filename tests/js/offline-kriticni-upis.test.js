@@ -210,5 +210,79 @@ t('_dozSaveLivePts više nema goli catch', () => {
   assert.ok(!/catch\s*\{\s*\}/.test(extractFn('_dozSaveLivePts')));
 });
 
+console.log('\nCrash-zaštita snimanja VLAKE i TRAGA (v1.6.0):');
+// UZROK: _crashSaveVlaka/_crashSaveTrag su neuspjeh gutali u console.warn —
+// ista klasa kao doznaka u v1.4.9, samo za dva NAJKORIŠTENIJA snimanja. Kad
+// kvota pukne, jedina mreža koja hvata ubijen proces tiho prestane postojati.
+
+function runCrash(tip, greskaUvijek) {
+  const toasts = [];
+  const store = {};
+  const localStorage = {
+    setItem: (k, v) => { if (greskaUvijek) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; } store[k] = v; },
+    getItem: (k) => store[k] ?? null, key: () => null, length: 0
+  };
+  const zajedno = [extractFn('_lsZauzetoKB'), extractFn('_localSetKriticno'),
+    'let _crashUpisPaoV=false, _crashUpisPaoT=false;',
+    extractFn('_crashSaveVlaka'), extractFn('_crashSaveTrag')].join('\n');
+  const keys = ['localStorage', 'showToast', '_debugUpsert', 'recOn', 'recPaused', 'actI',
+    'vlake', '_aktivniProjektId', '_CRASH_VLAKA_KEY', '_tragOn', '_tragPaused', '_tragPts', '_CRASH_TRAG_KEY'];
+  const vals = [localStorage, (m) => toasts.push(m), () => {},
+    tip === 'vlaka', false, 0,
+    [{ nm: 'T1', br: 1, kr: 0, color: '#fff', pts: [{ la: 1, lo: 1, al: 5 }, { la: 1.1, lo: 1.1, al: 6 }] }],
+    null, 'ck_vlaka',
+    tip === 'trag', false, [[1, 1, 5, 1, 3], [1.1, 1.1, 6, 2, 3]], 'ck_trag'];
+  const api = new Function(...keys, zajedno + '\nreturn { _crashSaveVlaka, _crashSaveTrag };')(...vals);
+  return { api, toasts, store };
+}
+
+t('KLJUČNO: puna kvota kod vlake GLASNO javi (dosad samo console.warn)', () => {
+  const e = runCrash('vlaka', true);
+  e.api._crashSaveVlaka();
+  assert.strictEqual(e.toasts.length, 1, 'neuspjeh crash-zaštite vlake mora doći do korisnika');
+  assert.ok(/vlake/i.test(e.toasts[0]), 'mora imenovati šta je ostalo bez zaštite: ' + e.toasts[0]);
+});
+
+t('KLJUČNO: puna kvota kod traga GLASNO javi', () => {
+  const e = runCrash('trag', true);
+  e.api._crashSaveTrag();
+  assert.strictEqual(e.toasts.length, 1);
+  assert.ok(/traga/i.test(e.toasts[0]), 'mora imenovati trag: ' + e.toasts[0]);
+});
+
+t('kvar se javi JEDNOM, ne na svakom otkucaju tajmera (30 s)', () => {
+  const e = runCrash('vlaka', true);
+  for (let i = 0; i < 10; i++) e.api._crashSaveVlaka();
+  assert.strictEqual(e.toasts.length, 1, 'tajmer kuca stalno — toast po otkucaju bi bio neupotrebljiv');
+});
+
+t('uspješan upis ne uznemirava i stvarno upiše snimak', () => {
+  const e = runCrash('vlaka', false);
+  e.api._crashSaveVlaka();
+  assert.strictEqual(e.toasts.length, 0);
+  assert.ok(e.store['ck_vlaka'], 'snimak mora zaista biti upisan');
+});
+
+t('ni vlaka ni trag više ne gutaju grešku u console.warn', () => {
+  for (const fn of ['_crashSaveVlaka', '_crashSaveTrag']) {
+    assert.ok(!/console\.warn/.test(extractFn(fn)), fn + ' i dalje guta neuspjeh u konzolu');
+    assert.ok(/_localSetKriticno/.test(extractFn(fn)), fn + ' mora ići kroz zajednički siguran upis');
+  }
+});
+
+console.log('\nOstali nenadoknadivi upisi (v1.6.0):');
+
+t('_saveTacke više nije POTPUNO nezaštićen (bio bez ijednog try/catch)', () => {
+  const src = extractFn('_saveTacke');
+  assert.ok(/_localSetKriticno/.test(src),
+    'gola setItem pri punoj kvoti BACA usred pozivaoca i prekine ga na pola');
+});
+
+t('_dozQrSave ne guta grešku — primljeni QR pojas ne postoji nigdje drugdje', () => {
+  const src = extractFn('_dozQrSave');
+  assert.ok(!/catch\s*\(?e?\)?\s*\{\s*\}/.test(src), 'goli catch znači tih gubitak tuđeg pojasa');
+  assert.ok(/_localSetKriticno/.test(src));
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);

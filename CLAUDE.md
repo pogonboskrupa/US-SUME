@@ -2463,6 +2463,113 @@ način provjere."
   padne, log imenuje tačan red (`mcp__github__get_job_logs` sa
   `failed_only:true`), pa se ne nagađa.
 
+## Audit terenskog rizika — Dio 1: gubitak podataka i zaglavljivanje (v1.6.0)
+
+Sistematski prolaz kroz četiri klase kvara koje su u historiji ovog projekta
+ujele po dvaput ili više. Nijedna nije došla kao terenska prijava — tražene su
+namjerno, prije nego što se jave.
+
+- **Rok mrežnog poziva je TIHO nestajao na starijem WebView-u** — najskuplji
+  nalaz, jer je poništavao zaštitu koja je izgledala kao da postoji. `_fetchT`
+  (uveden u v3.102.1 baš protiv OS-S4 "poziv VISI umjesto da padne") rok je
+  pravio preko `AbortSignal.timeout()`, a ta metoda postoji tek od Chrome/
+  WebView **103 (2022)**. `minSdk` je 24 (Android 7) i WebView na terenskom
+  uređaju zna biti godinama star bez Play Store update-a — tamo je provjera
+  `typeof AbortSignal.timeout === 'function'` bila `false` i helper je padao na
+  `undefined` signal, dakle na `fetch` **bez ikakvog roka**. Bug je bio sakriven
+  u fallback grani: u sandboxu i na svakom modernom browseru rok radi, pa se ne
+  bi vidio nikad osim na stvarnom starom uređaju.
+  - Dokazano izvlačenjem STARE funkcije iz git HEAD-a i puštanjem u sandboxu
+    bez `AbortSignal.timeout`: 300 ms poslije isteka roka od 30 ms poziv **još
+    nije pao**, a `signal` uopšte nije bio proslijeđen `fetch`-u.
+  - `reliableFetch` (Supabase transport) je OD POČETKA radio ispravno —
+    `AbortController` + `setTimeout` + `Promise.race`, radi svuda. `_fetchT` je
+    sad prebačen na isti obrazac, a tri mjesta koja su imala vlastitu kopiju
+    degradirajuće grane (`fetchElev`, `_getTerrariumTile`, batch visine) idu
+    kroz njega.
+  - **Tajmer se NAMJERNO ne čisti** kad odgovor stigne: `AbortSignal.timeout` se
+    gasi u roku bez obzira na fazu, pa štiti i ČITANJE TIJELA odgovora (spor
+    curak bajtova poslije zaglavlja je isti kvar — vidi zašto `reliableFetch`
+    tijelo izričito štiti). Prekid već završenog zahtjeva je no-op.
+  - **Tri poziva nisu imala rok uopšte**, svi popravljeni: bulk preuzimanje
+    offline karte (sekvencijalna petlja — jedna pločica koja visi zaustavi
+    CIJELO preuzimanje, korisnik gleda zamrznut progress bar), fallback provjera
+    verzije (zaglavi na toastu "Provjeravam verziju…", a `catch` se nikad ne
+    izvrši jer poziv koji visi ne baca) i `_checkLatestVersion`.
+  - **`fetch(_refImg.src)` je NAMJERNO ostao bez roka** — to je `blob:` URL iz
+    `URL.createObjectURL`, lokalni fajl bez mreže.
+  - Provjereno da mrežnu površinu više ništa ne zaobilazi: `XMLHttpRequest` nema
+    nigdje (0), `fetchTile` u `makeCachedTileLayer` već koristi `AbortController`.
+  - Test: `tests/js/fetch-rok.test.js` (8) — ponašanje u sandboxu BEZ
+    `AbortSignal.timeout` (veza koja visi stvarno pada, signal se prosljeđuje,
+    prekid pozivaoca se poštuje uz njegov razlog) + invarijanta da se
+    `AbortSignal.timeout` više ne pojavljuje u kodu.
+
+- **Crash-zaštita snimanja VLAKE i TRAGA je mogla tiho nestati** — ista klasa
+  koju je doznaka dobila popravljenu u v1.4.9, samo za dva NAJKORIŠTENIJA
+  snimanja. `_crashSaveVlaka`/`_crashSaveTrag` su neuspjeh upisa gutali u
+  `console.warn`. Kad localStorage kvota pukne (izmjereno u v1.4.7: realno već
+  za ~6 terenskih dana), jedina mreža koja hvata snimanje pri ubijenom procesu
+  prestane postojati — a korisnik to sazna TEK kad izgubi cijelo snimanje.
+  Sada idu kroz `_localSetKriticno`, uz zastavicu da se javi JEDNOM po snimanju
+  (tajmer kuca na 30 s, toast po otkucaju bi bio neupotrebljiv).
+- **`_saveTacke` nije imao NIKAKAV try/catch** — gola `setItem` pri punoj kvoti
+  BACA, pa bi greška izletjela usred pozivaoca i prekinula ga na pola, a tačke
+  obilježene na terenu ostale nesačuvane.
+- **`_dozQrSave` je gutao grešku golim `catch(e) {}`** — QR dijeljenje je
+  NAMJERNO potpuno offline i peer-to-peer, što znači da primljeni pojas ne
+  postoji nigdje drugdje: jedini način da se vrati je da kolega ponovo pokaže
+  QR kod, a on je do tada obično već otišao. Nenadoknadivo isto kao snimljen trag.
+- **Trijaža ostalih ~350 tihih `catch` blokova**: kriterij je bio "može li
+  korisnik izgubljeno ponovo napraviti". Sve što ostaje tiho (sort, filter,
+  providnost, stilovi, keš tema, sačuvane rute vodiča, keš stabala) je ili
+  ponovo dohvatljivo ili ponovo podesivo — tišina je tamo ispravna, ne previd.
+- Testovi: `tests/js/offline-kriticni-upis.test.js` prošireno na 24 (+7).
+
+- **Zaostao canvas renderer je i dalje gutao SVE dodire — živ slučaj, bez
+  zaštite** (v1.4.8/v1.4.9 klasa). Mehanizam koji je to čistio
+  (`_poziCanvasOslobodi`) uklonjen je u v1.5.7 zajedno sa Požarima, pa je od
+  tada `map._paneRenderers` bio potpuno nečuvan (grep: 0 pogodaka).
+  - **Uzrok: JEDNA linija.** Kalibracija referentne karte je plavu tačku crtala
+    kao `L.circleMarker(..., pane:'refKarte')`. Karta radi sa
+    `preferCanvas:true`, pa Leaflet za taj pane sam napravi canvas renderer,
+    kešira ga i NIKAD ne vrati. Pane `refKarte` je na **z-indexu 620** — iznad
+    mjerenja (410), vlaka (400) i oznaka (401) — a taj canvas je JEDAN element
+    preko CIJELE karte.
+  - **Dokazano Playwright reprodukcijom nad STVARNIM Leafletom iz `static/libs`**,
+    sa istim rasporedom pane-ova kao produkcija: (1) samo izmjerena površina →
+    klik prolazi (1 hvatanje); (2) dodana JEDNA kalibraciona tačka → **0
+    hvatanja**; (3) markeri obrisani i sloj uklonjen sa karte → **I DALJE 0**,
+    canvas ostaje, `map._paneRenderers['refKarte']` i dalje postoji; (4)
+    renderer oslobođen → klik ponovo radi. Dakle: jedna kalibraciona tačka je
+    ubijala sve klikove na karti do kraja sesije.
+  - Popravka ima dva sloja: plava tačka je sad `divIcon` marker (DOM, bez
+    canvasa — zeleni marker u `_refCalibRedrawMarkers` je oduvijek bio takav,
+    pa je cijeli kalibracioni tok sada dosljedan), a vraćena je i OPŠTA
+    `_oslobodiPaneRenderer(ime)` koju `_refCalibStop` zove kao pojas sigurnosti
+    za uređaje koji su kalibrirali PRIJE ovog update-a. `delete
+    map._paneRenderers[ime]` je obavezan dio — bez njega `_getPaneRenderer`
+    vrati već uklonjen renderer i sljedeći sloj crta u otkačen canvas.
+  - Ista reprodukcija poslije popravke: canvas se u `refKarte` **uopšte ne
+    stvara**, klik prolazi u sva četiri koraka.
+  - Test: `tests/js/pane-renderer-klik.test.js` (8), uklj. invarijantu da
+    nijedan `circleMarker`/`polyline`/`polygon` više ne ide u pane 620.
+
+- **`dozConfirmSave` je imao `try` sa `finally` ali BEZ `catch`** — unutrašnji
+  `try/catch` uredno hvata mrežni neuspjeh i sprema u red čekanja, ali sve što
+  pukne PRIJE njega (npr. `sbUser.id` kad sesija u međuvremenu nestane, ili
+  nedostajuće polje u DOM-u) izletjelo bi nečujno: modal ostane otvoren, dugme
+  "Sačuvaj" izgleda mrtvo (sljedeći tap samo ponovi isti pad), a `#tab-bar` i
+  `#action-bar` OSTAJU SAKRIVENI jer `dozCancelDraw()` nikad ne stigne — korisnik
+  ostane bez navigacije i bez objašnjenja.
+- **Provjereno a NIJE bug** (da se ne troši vrijeme na ponovnu istragu):
+  `#tab-bar` nema z-index, pa ga svih 38 full-screen overlay-a prekriva — znači
+  korisnik NE MOŽE otići na drugi tab dok je modal otvoren, pa se overlay ne
+  može "zaboraviti" navigacijom (v1.5.1 klasa je zatvorena). `#map-center-dot`
+  poslije v1.5.9 više nigdje nema tvrdo `display='none'`. `_refShowSnapTargets`
+  i `_refCalibRedrawMarkers` koriste `divIcon`, ne canvas. `AffineImageOverlay`
+  postavlja `pointerEvents:'none'`, a `L.imageOverlay` put `interactive:false`.
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni

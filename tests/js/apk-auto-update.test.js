@@ -56,6 +56,13 @@ function makeEnv(opts = {}) {
       : {},
     navigator: { serviceWorker: { getRegistration: async () => null } },
     fetch: async () => { calls.fetch++; return { ok: false }; },
+    // v1.6.0: fallback put više ne zove goli fetch() nego _fetchT (fetch sa
+    // rokom) — sandbox ga mora imati, inače bi ReferenceError pao u postojeći
+    // try/catch i test bi mjerio 0 poziva iako fallback uredno radi. Broji u
+    // ISTI brojač jer je _fetchT u produkciji samo fetch sa rokom; delegiranje
+    // na `fetch(...)` ovdje NE bi radilo — unutar strelice to je Node-ov
+    // globalni fetch, ne ovaj stub (sandbox vrijednosti nisu u tom opsegu).
+    _fetchT: async () => { calls.fetch++; return { ok: false }; },
     _dlg: async () => { calls.dlg++; },
     _dlgActions: async () => { calls.dlgActions++; return -1; },
     _verCmp: () => 0,
