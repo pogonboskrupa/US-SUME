@@ -40,7 +40,8 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 - **PowerShell (Windows)**: `powershell -ExecutionPolicy Bypass -File android\build-apk.ps1`
   (pull + copy-assets + gradle build u jednom potezu; provjeri `-Branch` default
-  u skripti prije pokretanja ako grana nije `claude/branch-072026-sa9wz0`).
+  u skripti prije pokretanja ako grana nije `CODEX-US-SUME` — to je trenutni
+  default u `build-apk.ps1`).
 - Ili ručno: `android/copy-assets.ps1` / `.sh` pa build kroz Android Studio.
 - Kad se mijenja `AndroidManifest.xml` ili bilo koji `.java` fajl (nova
   dozvola, native most i sl.) — **treba pun rebuild u Android Studiju**, samo
@@ -2216,7 +2217,9 @@ način provjere."
   - Testovi: `tests/js/offline-kriticni-upis.test.js` (17, +5).
 
 - **Provjereno a NIJE bug** (da se ne troši vrijeme na ponovnu istragu):
-  1805 `function` deklaracija — **nijedno duplo ime** (zamka v3.102.1 čista).
+  Nijedno duplo ime funkcije (zamka v3.102.1 čista). Tačan broj deklaracija
+  raste sa svakom izmjenom pa se ovdje ne upisuje — mjeri se skenom iz
+  "Mrtav kod, runda 2" (v1.6.2); u v1.6.2 ih je bilo 1515.
   Nema localStorage ključa koji se čita a nigdje ne piše osim četiri
   namjerna (pišu se preko konstanti, a dva su samo-za-migraciju iz v3.125.0).
   `_loadOdsjeciSQLite` IMA `fetch` bez roka iznad offline IDB fallbacka
@@ -2645,6 +2648,91 @@ namjerno, prije nego se jave.
   **Provjereno da 20 od 21 pada na kodu prije izmjene** (prolazi samo
   invarijanta "`_dozProcessGpsPoint` i dalje baca", koja nikad nije bila
   pokvarena).
+
+## Audit terenskog rizika — Dio 3: vrući put, dijeljeni tajmer, mrtav kod (v1.6.2)
+
+- **Dijeljeni crash tajmer se gasio kad stane BILO KOJE od dva snimanja** —
+  jedini nalaz ovog dijela koji može koštati podatke. `_crashSaveTimer` je
+  JEDAN interval koji na 30 s zove `_crashSaveVlaka()` **i** `_crashSaveTrag()`,
+  a i `stopRec()` i stop-grana `fabSnimTrag()` su zvale `_crashStopTimer()`
+  BEZUSLOVNO — resetuju samo svoju zastavicu, ne provjeravaju drugu. Scenario
+  sa terena je sasvim običan: šumar pusti trag da snima cijeli obilazak, usput
+  snimi vlaku, završi vlaku i nastavi hodati — **od tog trenutka trag nema
+  crash-zaštitu**. Ako OEM battery manager tada ubije proces (dokumentovano
+  kao redovno), `_CRASH_TRAG_KEY` nosi snimak od trenutka kad je vlaka stala,
+  pa `_crashCheck` ponudi oporavak koji IZGLEDA uspješno a ćutke je izgubio
+  sve pređeno otad.
+  - `_crashStopIfIdle()` gasi tajmer tek kad ni vlaka ni trag ne snimaju, i
+    zove se TEK POSLIJE što je pozivalac spustio svoju zastavicu — isti
+    obrazac kao `_bgRecStopIfIdle()` koji stoji red iznad. Test čuva i taj
+    redoslijed: poziv prije `recOn = false` bi uvijek vidio `recOn:true` i
+    tajmer se ne bi ugasio nikad.
+  - Doznaka ne koristi ovaj tajmer (ima svoj `_dozSaveLivePts` po fiksu), pa
+    namjerno nije u uslovu.
+- **`updOvl()` je svake 2 s radio posao za element koji NIŠTA ne prikazuje**:
+  `#ovl-lines` je u markupu `display:none`, u bloku doslovno naslovljenom
+  "Sakriveni elementi koje JS još koristi", a grep nad cijelim fajlom daje
+  TAČNO dvije pojave tog id-a — sam element i ova funkcija. Funkcija ipak
+  prolazi `calcL` kroz SVE tačke SVIH vlaka (bez memoizacije, za razliku od
+  `rndList`-ovog `dMap` iz v3.118.0) i sastavlja HTML. **Izmjereno u
+  Chromium-u**: 0.47 ms za projekat od 24 vlake × 450 tačaka, 3.79 ms za
+  50 × 800 — na telefonu višestruko više, i to baš dok GPS snimanje ima
+  prioritet. Dodan rani izlaz na sakriven element; funkcija se NE briše (18
+  pozivalaca) pa nastavlja raditi ako se element ikad prikaže. Test čuva i
+  brojku pojava id-a — ako ga nešto ubuduće prikaže, test pada i tjera da se
+  rani izlaz preispita.
+- **`rndList()` se u istom otkucaju crtao i kad tab Vlake nije otvoren**:
+  `_scheduleOvlRnd` je GPS vrući put (svake 2 s cijelo snimanje), a tokom
+  snimanja je korisnik gotovo uvijek na Karti — tamo je `#action-bar` sa
+  kontrolama snimanja. Cijela lista se sastavljala i upisivala u DOM koji
+  niko ne gleda. **Izmjereno**: 1.86 ms po ciklusu za 24 vlake, 8.05 ms za
+  50 × 800 (od toga 5.93 ms sam DOM upis).
+  - Uslov je SAMO u `_scheduleOvlRnd`, ne u samoj `rndList` — ostalih ~40
+    pozivalaca (`selI`, brisanje, preimenovanje) mora proći bez obzira na tab.
+  - `updOvl` u istom otkucaju NAMJERNO ostaje van uslova (meta mu je karta,
+    ne panel) — test čuva i to, da ga buduća izmjena ne uvuče pod isti uslov.
+  - `switchTab('vlake')` sad zove `rndList()`. Usput popravlja i stariji
+    propust: ta grana dotad uopšte nije crtala listu, pa je i bez snimanja
+    ostajala na onome što je nacrtao neki drugi pozivalac.
+  - **`rndList` je zato morala dobiti `if (!el) return;`** — `switchTab` se
+    prvi put zove iz `_startupRestore` dok se markup možda još parsira, a
+    `el.innerHTML=''` nad nepostojećim `#vl` bi oborilo cijelo pokretanje
+    (dokumentovana zamka v3.102.2). **Uhvaćeno postojećim testom**
+    (`startup-restore.test.js`, slučaj "nijedan panel još ne postoji"), ne na
+    terenu — dokaz da se isplatilo napisati ga u v3.102.2.
+- **Mrtav kod, runda 2**: sken nad cijelim fajlom (1515 `function` deklaracija;
+  ime koje se pojavljuje samo na svojoj deklaraciji, uz izbacivanje redova koji
+  su cijeli komentar) našao je **67 funkcija bez ijednog pozivaoca**. Dvije su
+  lažno pozitivne — imenovani IIFE-ovi (`registerSW`, `_restoreLastMap`), koji
+  se pozivaju na licu mjesta.
+  - Uklonjeno je pet provjerenih preteča koje su zamijenjene živim funkcijama:
+    `fabSnimVlaku`, `mojaLokacija`, `togSnimTrag`, `nacrtajVlaku` (svi tanki
+    omotači oko `_openVlakaPicker`/`fabLokacija`/`fabSnimTrag`/`addV`) i
+    `toggleOvl`, koja je bila doslovno prazno tijelo `{}`. **Provjereno da
+    NIJE riječ o pokvarenim dugmadima**: živa dugmad zovu `fabSnimTrag()`,
+    `fabLokacija()` i `_projQuickRec()` — test to i čuva, da buduće čišćenje
+    ne ukloni zamjenu umjesto preteče.
+  - Ostalih ~60 NIJE dirano u ovom prolazu — svako traži praćenje vlastitog
+    lanca poziva (v1.5.8 obrazac), a pogrešno brisanje ruši terensku app bez
+    ikakve dobiti. Sken se ponavlja ovako:
+    `python3 -c "import re,io;s=io.open('index.html',encoding='utf8').read();b='\n'.join('' if re.match(r'\s*//',r) else r for r in s.split('\n'));print([n for n in sorted(set(re.findall(r'\bfunction (\w+)\s*\(',s))) if len(n)>2 and len(re.findall(r'\b'+n+r'\b',b))<=1])"`
+- **Provjereno a NIJE bug** (da se ne troši vrijeme na ponovnu istragu):
+  svih 35 `map.on(...)` registracija je uredno — imenovani handleri
+  (`_mdpOnMove`, `_onMapMoveDraw`, `_onMapMoveMsr`, `_onDozDragMove`,
+  `_refCalibClick`, `_msrMapClick`) imaju svoj `map.off`, a `_onLagerPlaceClick`/
+  `_routeOnStartClick`/`_routeOnEndClick` koriste `map.once` uz `off` kao
+  otkazivanje. Anonimni `this._map.on('zoomend moveend', …)` u
+  `makeCachedTileLayer` je gejtovan `this._hooked`-om i sloj je singleton u
+  `TL`, pa se ne gomila. Svi intervali koji se mogu pokrenuti više puta
+  (`_crashStartTimer`, `_startGpsWatchdog`, `_startSWHeartbeat`, `_liveBarTimer`)
+  prvo gase prethodni; `_recBarTimer` ima `if (!_recBarTimer)` branu. Sva
+  četiri `removeEventListener` para su uravnotežena, a listeneri na
+  `#share-loc-sheet` umiru sa elementom koji se `.remove()`-a.
+- Testovi: `tests/js/vruci-put.test.js` (22) nad STVARNIM kodom — ponašanje
+  `_crashStopIfIdle` u sve četiri kombinacije, `updOvl` nad vidljivim i
+  sakrivenim elementom, stvarni otkucaj `_scheduleOvlRnd` pušten u sandboxu
+  (van taba jedan poziv, na tabu dva), i invarijante nad markupom.
+  **Provjereno da 18 od 21 pada na kodu prije izmjene.**
 
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
@@ -3449,7 +3537,7 @@ namjerno, prije nego se jave.
     kao postojeći "sporo učitavanje" test), poruka NE izmišlja "PRIJE poziva"
     napomenu bez osnove.
 - **Dvije funkcije istog imena — zadnja tiho pobjeđuje** (v3.102.1): fajl ima
-  ~1430 `function` deklaracija u jednom `<script>` bloku; deklaracije se
+  preko 1500 `function` deklaracija u jednom `<script>` bloku; deklaracije se
   hoistuju pa kasnija bez ikakve greške zamijeni raniju. Tako je string-verzija
   `_hexToRgb` (vraća `"r,g,b"` za `rgba()`) gazila niz-verziju (`[r,g,b]`), pa
   je `const [r,g,b] = _hexToRgb(c)` destrukturirao PRVA TRI ZNAKA stringa i
@@ -3653,7 +3741,8 @@ namjerno, prije nego se jave.
 3. Podigni sve tri verzije (vidi gore). Izmjene samo dokumentacije (ovaj fajl,
    README) ne traže bump verzije.
 4. Commit poruka na bosanskom, objašnjava UZROK ne samo šta je promijenjeno.
-5. Push na `claude/branch-072026-sa9wz0` (PR #30 se sam ažurira).
+5. Push na `CODEX-US-SUME` (PR #32 se sam ažurira). Grana `claude/branch-072026-sa9wz0`
+   i PR #30 su ZATVORENO poglavlje — ne gurati tamo.
 6. **Terminologija je bosanska, ne srbijanska/hrvatska** ("historija" ne
    "istorija", "sistem" ne "sustav", i slično) — u NOVOM tekstu koji se piše
    (komentari, UI, commit poruke, CLAUDE.md). Ne prepravljati postojeći kod

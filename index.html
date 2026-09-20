@@ -4969,7 +4969,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.1';
+const APP_VER = 'v1.6.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12140,6 +12140,17 @@ function _crashStartTimer() {
 function _crashStopTimer() {
   if (_crashSaveTimer) { clearInterval(_crashSaveTimer); _crashSaveTimer = null; }
 }
+// Tajmer je DIJELJEN — jedan interval čuva I vlaku I trag. Zaustaviti ga
+// bezuslovno kad stane JEDNO snimanje znači da drugo, koje JOŠ TRAJE, ostane
+// bez 30-sekundne crash-zaštite, tiho i do kraja terenskog dana: ako OEM
+// battery manager tada ubije proces (dokumentovano kao redovno), _crashCheck
+// "oporavi" snimak od trenutka kad je ono PRVO snimanje stalo, i to izgleda
+// kao da je oporavak uspio. Zove se TEK POSLIJE što je pozivalac spustio svoju
+// zastavicu, pa čita živo stanje — isti obrazac kao _bgRecStopIfIdle.
+function _crashStopIfIdle() {
+  if (recOn || _tragOn) return;
+  _crashStopTimer();
+}
 function _crashClearVlaka() { try { localStorage.removeItem(_CRASH_VLAKA_KEY); } catch {} }
 function _crashClearTrag()  { try { localStorage.removeItem(_CRASH_TRAG_KEY);  } catch {} }
 
@@ -14414,7 +14425,6 @@ function closeMjtrgDropdown() {
 }
 
 // Koordinate HUD — no-op (stara funkcija ovl uklonjena)
-function toggleOvl() {}
 
 // === QGIS MAP TOOLBAR ===
 function setActiveTool(tool) {
@@ -15254,9 +15264,6 @@ function _pickVlaka(i) {
     _showKrakIzbor(i);
   }, 260);
 }
-function togSnimTrag() {
-  fabSnimTrag();
-}
 
 function _pickVlakaForTrag(i) {
   _closeVlakaPicker();
@@ -15430,10 +15437,6 @@ function _clearNastaviMarkers() {
   _nastaviVlakaIdx = null;
 }
 
-function mojaLokacija() {
-  switchTab('karta');
-  fabLokacija();
-}
 
 // Primarna akcija: kreiraj vlaku i odmah pokreni GPS snimanje
 function dodiISnimi() {
@@ -15453,16 +15456,6 @@ function dodiISnimi() {
 }
 
 // Sekundarna akcija: kreiraj vlaku i aktiviraj ručno crtanje
-function nacrtajVlaku() {
-  addV().then(() => {
-    setTimeout(() => {
-      if (actI !== null) {
-        switchTab('karta');
-        mtAddLine();
-      }
-    }, 30);
-  });
-}
 
 // ── LANČANO TRASIRANJE PREKO REFERENTNE SLIKE ────────────────────────────────
 // Cilj: brzo prevesti ručno ucrtane vlake sa (poravnate) slike u prave vlake bez
@@ -16071,7 +16064,6 @@ function _togRecBegin() {
 
 function stopRec() {
   if (!recOn) return;  // idempotentno — sprječava petlju ako native "Stop" odjekne nazad u JS
-  _crashStopTimer();
   _crashClearVlaka();  // normalno zaustavljanje — nema potrebe za oporavkom
   if (recOn && !recPaused && _recSegStart > 0) {
     _dayActiveMs += Date.now() - _recSegStart;
@@ -16090,6 +16082,7 @@ function stopRec() {
   // Wake lock / audio / SW heartbeat / notifikacija / native servis gase se tek ako
   // NIŠTA drugo ne snima (trag ili doznaka pojas mogu i dalje raditi u pozadini).
   _bgRecStopIfIdle();
+  _crashStopIfIdle();   // trag koji i dalje snima mora zadržati svoj auto-save
   const b = document.getElementById('brec');
   if (b) b.classList.remove('active');
   const banner = document.getElementById('rec-banner');
@@ -18521,9 +18514,9 @@ function fabSnimTrag() {
     _tragPts = [];
     _tragBuf = [];
     _tragLastT = 0;
-    _crashStopTimer();
     _crashClearTrag();  // normalno sačuvan
     _bgRecStopIfIdle(); // otpusti pozadinski servis ako ništa drugo ne snima
+    _crashStopIfIdle(); // vlaka koja i dalje snima mora zadržati svoj auto-save
   } else {
     _gpsStabilizeGate(_fabSnimTragBegin);
   }
@@ -18807,20 +18800,24 @@ async function _drainNativeGpsBuffer() {
 
 }
 
-function fabSnimVlaku() {
-  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
-  if (!_aktivniProjektId) {
-    showToast('⚠ Odaberi aktivan projekat u tabu Projekat');
-    return;
-  }
-  _openVlakaPicker('rec');
-}
 
 // === POINTS ===
 let _ovlRndTimer = 0;
 function _scheduleOvlRnd() {
   if (_ovlRndTimer) return;
-  _ovlRndTimer = setTimeout(() => { _ovlRndTimer = 0; updOvl(); rndList(); }, 2000);
+  // Ovo je GPS vrući put — kuca svake 2 s cijelo snimanje. rndList() puni #vl
+  // unutar #vlake-panel, a tokom snimanja je korisnik gotovo uvijek na Karti
+  // (tamo je #action-bar sa kontrolama snimanja), pa se cijela lista sastavi i
+  // upiše u DOM koji niko ne gleda. Izmjereno u Chromium-u: 1.86 ms po ciklusu
+  // za projekat od 24 vlake, 8.05 ms za 50 vlaka × 800 tačaka. Preskače se SAMO
+  // ovdje, ne u samoj rndList — ostalih 40-ak pozivalaca (selI, brisanje,
+  // preimenovanje...) mora proći bez obzira na tab. Svježina pri povratku je
+  // pokrivena: switchTab('vlake') sada zove rndList().
+  _ovlRndTimer = setTimeout(() => {
+    _ovlRndTimer = 0;
+    updOvl();
+    if (_activeTab === 'vlake') rndList();
+  }, 2000);
 }
 function addPt(i, la, lo, al, gap) {
   const v = vlake[i];
@@ -18875,6 +18872,16 @@ function updBan() {
 function updOvl() {
   const el = document.getElementById('ovl-lines');
   if (!el) return;
+  // #ovl-lines je u markupu TRAJNO display:none (blok "Sakriveni elementi koje
+  // JS još koristi") i NIŠTA ga nikad ne prikaže — provjereno grep-om, postoje
+  // samo dvije pojave tog id-a: sam element i ova funkcija. Bez ovog izlaza se
+  // svake 2 s tokom snimanja prođe calcL kroz SVE tačke SVIH vlaka (bez
+  // memoizacije, za razliku od rndList-ovog dMap) i sastavi HTML koji niko ne
+  // vidi. Izmjereno u Chromium-u: 0.47 ms za projekat od 24 vlake, 3.79 ms za
+  // 50 vlaka × 800 tačaka — na telefonu višestruko više, i to baš dok GPS
+  // snimanje ima prioritet. Funkcija se NE briše (18 pozivalaca): ako se
+  // element ikad ponovo prikaže, nastavlja raditi kao prije.
+  if (el.style.display === 'none') return;
   if (vlake.length === 0) { el.innerHTML='<span style="color:#475569;font-size:11px;">— nema vlaka —</span>'; return; }
   el.innerHTML = vlake.map((v,i) => {
     const len = calcL(v.pts);
@@ -19038,6 +19045,11 @@ function _vlBrojVlaka(n) {
 // === LIST ===
 function rndList() {
   const el=document.getElementById('vl'), nv=document.getElementById('nv');
+  // switchTab('vlake') je zove pri ulasku u tab, a switchTab se prvi put zove
+  // iz _startupRestore dok se markup možda još parsira — čitanje .innerHTML
+  // nepostojećeg elementa bi tu oborilo cijelo pokretanje (dokumentovana zamka
+  // v3.102.2: "Pokretanje dira DOM koji JOŠ NE POSTOJI").
+  if (!el) return;
   el.innerHTML='';
 
   // Filtriraj po aktivnom projektu
@@ -25474,6 +25486,12 @@ function switchTab(tab) {
     _setMapUIVisible(false, false);
     msrStop(true);
     _notifClear('vlake');
+    // Lista se tokom snimanja NE osvježava dok je ovaj tab zatvoren (vidi
+    // _scheduleOvlRnd) — pa se mora osvježiti pri ulasku, inače bi korisnik
+    // vidio stanje od trenutka kad je zadnji put bio ovdje. Usput popravlja i
+    // stariji propust: ova grana dotad uopšte nije crtala listu, pa je i bez
+    // snimanja ostajala na onome što je nacrtao neki drugi pozivalac.
+    rndList();
     // Samoizlječenje (kao doznaka tab): prazan niz znači da initial fetch vjerovatno
     // nije uspio — pokušaj ponovo pri otvaranju taba
     if (!vlake.length) _reloadCoreData();

@@ -154,6 +154,9 @@ t('ne baca kad NIJEDAN panel još ne postoji u DOM-u', () => {
     terenRender(){}, terenRenderTragovi(){}, _tragoviRender(){}, _tragoviUpdBtn(){},
     _updFabVisibility(){}, _mapFullScreen: false, _setMapUIVisible(){},
     _notifClear(){}, _reloadCoreData(){}, vlake: [], _projekti: [],
+    // v1.6.2: grana taba Vlake sad osvježava listu pri ulasku (jer je vrući put
+    // više ne crta dok je tab zatvoren) — nova zavisnost switchTab-a.
+    rndList(){},
     updProjStats(){}, rndLog(){}, rndKolege(){}, rndKolegeVlakeList(){}, _rndBojaPresets(){},
     dozInit(){}, msrActivateIfNeeded(){}, _tragRegRender(){}, _demLegendUpdate(){},
   };
