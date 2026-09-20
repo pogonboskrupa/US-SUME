@@ -4969,7 +4969,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.0';
+const APP_VER = 'v1.6.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12200,6 +12200,12 @@ async function _crashCheck() {
 
   if (!ok) { _crashClearVlaka(); _crashClearTrag(); try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {} _nativeBufPotvrdi(); return; }
 
+  // Journal se smije obrisati tek kad je SVAKA grana oporavka svoje tačke
+  // trajno spremila. Grane greške gutaju u showToast, pa bez ove zastavice ne
+  // bi bilo načina razlikovati "sve je spremljeno" od "grana je pala i tačke
+  // postoje samo u memoriji" — a potvrda u drugom slučaju znači trajan gubitak.
+  let _svePersistirano = true;
+
   if (snapV) {
     try {
       const newI = _recoverVlakaSnapshot(snapV);
@@ -12231,7 +12237,7 @@ async function _crashCheck() {
       sbFlushVlaka(newI).catch(() => {});
       showToast(`✅ Oporavljena vlaka: ${vlake[newI].pts.length} tačaka`
         + (dodato ? ` (${dodato} iz pozadinskog snimanja)` : ''));
-    } catch(e) { showToast('⚠ Greška pri oporavku vlake: ' + e.message); }
+    } catch(e) { _svePersistirano = false; showToast('⚠ Greška pri oporavku vlake: ' + e.message); }
   }
 
   if (snapT) {
@@ -12274,7 +12280,7 @@ async function _crashCheck() {
         + ' — snimanje nastavljeno');
       localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts:_tragPts, ts:Date.now() }));
       _crashStartTimer();
-    } catch(e) { showToast('⚠ Greška pri oporavku traga: ' + e.message); }
+    } catch(e) { _svePersistirano = false; showToast('⚠ Greška pri oporavku traga: ' + e.message); }
   }
 
   if (snapD) {
@@ -12287,8 +12293,19 @@ async function _crashCheck() {
       _dozGpsLen = snapD.len || 0;
       _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsStartTs = Date.now();
       _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+      _pauziResetuj(_dozPauseWin);
+      _dozLiveUpisPao = false;
       _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
-      _dozGpsElevData = []; _dozGpsFullPts = [];
+      _dozGpsElevData = [];
+      // _dozGpsFullPts je JEDINI izvor za "Izvezi GPX" i za to da se dugme
+      // izvoza uopšte pojavi (dozStopGPS traži >= 2). Prazan niz poslije
+      // oporavka znači da bi izvoz tiho sadržavao SAMO tačke snimljene POSLIJE
+      // oporavka — sve prije prekida bi nestalo iz izvoza iako je uredno
+      // vraćeno na kartu. Snimak nosi samo [lat, lon] (bez visine i vremena),
+      // pa se visina upisuje kao 0 (isto kao živi put kad alt nedostaje), a
+      // vrijeme ostaje null — izmišljati tajmstamp bi bio lažan podatak.
+      _dozGpsFullPts = (Array.isArray(snapD.pts) ? snapD.pts : [])
+        .map(([la, lo]) => ({ lat: la, lon: lo, ele: 0, time: null, spd: 0 }));
       _dozLastLiveFixTs = 0;
       if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
       _dozGpsTrackLayer = L.layerGroup().addTo(map);
@@ -12309,7 +12326,13 @@ async function _crashCheck() {
         _dozLastLiveFixTs = pos.timestamp || Date.now();
         if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
         const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
-        await _dozProcessGpsPoint(lat, lng, alt, acc, speed);
+        // _dozProcessGpsPoint BACA kad lokalni upis ne uspije (puna kvota) — to
+        // je namjerno za native replay (journal se tad ne potvrdi pa se tačke
+        // pokušavaju ponovo), ali ovdje bi bez hvatanja postalo neuhvaćeno
+        // odbijanje obećanja na SVAKI fiks. Korisnik je već upozoren iz
+        // _dozBufferTrackPoint; ovdje se samo ne ruši watch callback.
+        try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed); }
+        catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
       }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
       // Isti princip kao vlaka/trag: dopuni fiksovima koje je native servis
@@ -12325,8 +12348,13 @@ async function _crashCheck() {
       showToast(`✅ Oporavljen pojas doznake: ${_dozGpsPts.length} tačaka`
         + (dodatoD ? ` (${dodatoD} iz pozadinskog snimanja)` : '')
         + ' — snimanje nastavljeno');
-    } catch(e) { showToast('⚠ Greška pri oporavku doznake: ' + e.message); }
+    } catch(e) { _svePersistirano = false; showToast('⚠ Greška pri oporavku doznake: ' + e.message); }
   }
+
+  // Bez ovoga journal preživi oporavak i ostane u localStorage-u dok ga ne
+  // pokupi neki kasniji _drainNativeGpsBuffer — koji se na webapp-u (nema
+  // AndroidGps) ili poslije odmah zaustavljenog snimanja nikad ne desi.
+  if (_svePersistirano) _nativeBufPotvrdi();
   } finally { _crashCheck._busy = false; }
 }
 let _mapFullScreen = false; // true kad je panel skriven i mapa zauzima cijeli ekran
@@ -16013,6 +16041,7 @@ function togRec() {
 function _togRecBegin() {
     _clearNastaviMarkers();
     recOn = true; recPaused = false; _recParentIdx = null;
+    _pauziResetuj(_recPauseWin);   // zaostala pauza prethodne sesije ne smije suditi novim tačkama
     _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
     // Timing: početak segmenta
     _initDayTiming();
@@ -16051,6 +16080,7 @@ function stopRec() {
   }
   _recSegStart = 0;
   recOn = false; recPaused = false; _recParentIdx = null;
+  _pauziZavrsi(_recPauseWin);     // stop usred pauze bi inače ostavio vječno otvoren interval
   _setFreeView(false);
   _clearRecPreview();
   _clearGpsGapMarkers();
@@ -17496,6 +17526,17 @@ function _pauziZatvoriProzor(win) {
 function _pauziOcistiZatvorene(win) {
   for (let i = win.length - 1; i >= 0; i--) if (win[i].end !== null) win.splice(i, 1);
 }
+// Snimanje zaustavljeno DOK JE PAUZIRANO ostavlja interval sa `end:null`, a
+// takav interval _uPauziIntervalu smatra "traje i dalje" za SVAKO buduće
+// vrijeme. _pauziOcistiZatvorene ga namjerno ne briše (čuva tekuću pauzu), pa
+// bi zaostao zauvijek i u SLJEDEĆEM snimanju native replay tiho odbacio SVAKU
+// tačku (a _nativeReplayLast bi napredovao, dakle bez ponovnog pokušaja) —
+// tačno onaj trajni gubitak zbog kojeg su prozori pauze v1.5.8 i uvedeni.
+// Zato svaki stop zatvara tekući interval (_pauziZavrsi), a svaki start
+// odbacuje sve zaostalo iz prethodne sesije (_pauziResetuj): tačke nove sesije
+// po definiciji ne mogu pripadati pauzi one prethodne.
+function _pauziZavrsi(win) { _pauziZatvoriProzor(win); }
+function _pauziResetuj(win) { win.length = 0; }
 function _bgRecStart(label) {
   const now = Date.now();
   if (recOn && !_nativeSessionSince.vlaka) _nativeSessionSince.vlaka = now;
@@ -18449,6 +18490,7 @@ function fabSnimTrag() {
   if (_tragOn) {
     _tragOn = false;
     _tragPaused = false;
+    _pauziZavrsi(_tragPauseWin);   // stop usred pauze bi inače ostavio vječno otvoren interval
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLiveClear();
     const bt = document.getElementById('btrag');
@@ -18492,6 +18534,7 @@ function _fabSnimTragBegin() {
     _setFreeView(false);
     _tragOn     = true;
     _tragPaused = false;
+    _pauziResetuj(_tragPauseWin);  // zaostala pauza prethodne sesije ne smije suditi novim tačkama
     _tragPts = [];
     _tragBuf = [];
     _tragLastT = 0;
@@ -34708,7 +34751,9 @@ function dozExportGPX() {
   const name = odjel?.name || 'Doznaka';
   let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="US SUME">\n<trk><name>${name}</name><trkseg>\n`;
   pts.forEach(p => {
-    gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele || 0}</ele><time>${p.time || ''}</time></trkpt>\n`;
+    // Prazan <time></time> je neispravan GPX — tačka oporavljena iz snimka
+    // nema poznato vrijeme, pa se element izostavlja umjesto da se piše prazan.
+    gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele || 0}</ele>${p.time ? `<time>${p.time}</time>` : ''}</trkpt>\n`;
   });
   gpx += `</trkseg></trk>\n</gpx>`;
   const blob = new Blob([gpx], { type: 'application/gpx+xml' });
@@ -34953,9 +34998,14 @@ async function _dozStartGPSBegin() {
   _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
   _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+  _pauziResetuj(_dozPauseWin);   // zaostala pauza prethodne sesije ne smije suditi novim tačkama
   _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
   _dozGpsElevData = []; _dozGpsFullPts = [];
   _dozLastLiveFixTs = 0;
+  // Zastavica "već sam javio da lokalni upis pada" vrijedi PO SNIMANJU. Bez
+  // reseta bi drugo snimanje poslije pune kvote prošlo bez ijednog upozorenja
+  // da mu crash-zaštita uopšte ne radi.
+  _dozLiveUpisPao = false;
   if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
   _dozGpsTrackLayer = L.layerGroup().addTo(map);
   _dozGpsPoly = null;
@@ -34979,7 +35029,11 @@ async function _dozStartGPSBegin() {
     _dozLastLiveFixTs = pos.timestamp || Date.now();
     if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
-    await _dozProcessGpsPoint(lat, lng, alt, acc, speed);
+    // Vidi napomenu uz isti obrazac u grani oporavka (_crashCheck): baceni
+    // izuzetak iz _dozProcessGpsPoint je signal za native replay, ne razlog da
+    // uživo watch callback ostane sa neuhvaćenim odbijanjem obećanja.
+    try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed); }
+    catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
   }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
 }
@@ -35137,6 +35191,7 @@ function dozStopGPS() {
   _dozGpsOn = false;
   _dozGpsProjId = null; _dozGpsUserId = null;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
+  _pauziZavrsi(_dozPauseWin);    // stop usred pauze bi inače ostavio vječno otvoren interval
   _bgRecStopIfIdle();  // otpusti pozadinski servis/lock ako ništa drugo ne snima
   try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {}
   const btn = document.getElementById('doz-gps-btn');

@@ -2570,6 +2570,82 @@ namjerno, prije nego što se jave.
   i `_refCalibRedrawMarkers` koriste `divIcon`, ne canvas. `AffineImageOverlay`
   postavlja `pointerEvents:'none'`, a `L.imageOverlay` put `interactive:false`.
 
+## Audit terenskog rizika — Dio 2: doznaka (pojas) i prozori pauze (v1.6.1)
+
+Sekcija doznake je imala 116 `doz*` funkcija i **nijedan vlastiti test**, a
+grana oporavka poslije ubijenog procesa (v1.5.8) nikad nije bila provjerena.
+Nijedan od pet nalaza ispod nije došao kao terenska prijava — traženi su
+namjerno, prije nego se jave.
+
+- **Snimanje zaustavljeno DOK JE PAUZIRANO gasilo je native replay SLJEDEĆE
+  sesije** — najskuplji nalaz, i pogađa SVA TRI tipa snimanja (vlaka, trag,
+  doznaka), ne samo doznaku. `_pauziOtvoriProzor` upisuje `{start, end:null}`,
+  a `_uPauziIntervalu` takav interval čita kao "traje i dalje" za SVAKO buduće
+  vrijeme. `_pauziOcistiZatvorene` ga NAMJERNO ne briše (inače bi se tekuća
+  pauza izgubila usred snimanja), a **nijedan stop ga nije zatvarao**:
+  `stopRec`, `fabSnimTrag` i `dozStopGPS` resetuju samo zastavicu
+  (`recPaused`/`_tragPaused`/`_dozGpsPaused`), ne i prozor. Posljedica: korisnik
+  koji pauzira, vrati se do vozila i tamo zaustavi snimanje ostavlja vječno
+  otvoren interval — u sljedećem snimanju `_drainNativeGpsBuffer` za svaku
+  tačku iz native journala zaključi "unutar pauze", preskoči je, **a
+  `_nativeReplayLast` svejedno napreduje** (po dizajnu: "preskočeno" nije isto
+  što i "izgubljeno"), pa nema ni ponovnog pokušaja. To je tačno onaj trajni
+  gubitak zbog kojeg su prozori pauze u v1.5.8 i uvedeni.
+  - `_pauziZavrsi(win)` se zove na SVAKOM stopu (zatvara tekući interval, pa
+    tačke iz te zadnje pauze i dalje budu ispravno prosuđene ako drain stigne
+    odmah poslije), `_pauziResetuj(win)` na SVAKOM startu (tačke nove sesije po
+    definiciji ne mogu pripadati pauzi prethodne). Oba su nužna: čišćenje
+    poslije drain-a se na webapp-u (nema `AndroidGps`) ne desi nikad.
+  - `_pauziResetuj` mijenja niz NA MJESTU (`win.length = 0`) — `_tragPauseWin`/
+    `_recPauseWin`/`_dozPauseWin` su `const`, ne mogu se prevezati.
+- **Uživo watch doznake nije hvatao izuzetak iz `_dozProcessGpsPoint`**: ta
+  funkcija NAMJERNO baca kad lokalni upis ne uspije (`_dozBufferTrackPoint`
+  vrati `false`) — to je signal koji native replay-u treba, jer bez njega bi
+  `_drainNativeGpsBuffer` potvrdio journal za tačke koje nisu nigdje spremljene.
+  Ali `watchPosition(async pos => { ... await _dozProcessGpsPoint(...) })` nije
+  imao `try/catch`, pa je pri punoj kvoti SVAKI fiks postajao neuhvaćeno
+  odbijanje obećanja (od v3.128.1 to usput budi i `_sigurnosnaMrezaPokusaj`),
+  a `_dozUpdGpsStats`/`_dozCheckBandCross` se nikad nisu izvršili — statistika
+  zamrzne bez objašnjenja. Oba callbacka (start i grana oporavka) sad hvataju i
+  svejedno osvježe statistiku; korisnik je već upozoren iz `_dozBufferTrackPoint`.
+- **`_nativeBufPotvrdi()` se NIJE zvao na putu PRIHVATANJA oporavka**
+  (`_crashCheck`) — samo na putu odbijanja. Journal je zato preživljavao
+  oporavak i čekao neki kasniji `_drainNativeGpsBuffer`, koji se na webapp-u
+  ili poslije odmah zaustavljenog snimanja ne desi nikad (rasla bi localStorage
+  kvota — izmjereno u v1.4.7 da je realno tijesna). Potvrda je sad na kraju,
+  ali **uslovljena** `_svePersistirano`: sve tri grane oporavka gutaju greške u
+  `showToast`, pa bi bezuslovna potvrda za palu granu značila trajan gubitak.
+- **Oporavljen pojas je tiho ispadao iz izvoza GPX**: grana `snapD` je
+  postavljala `_dozGpsFullPts = []`, a to je JEDINI izvor za `dozExportGPX` i
+  za uslov pod kojim se dugme izvoza uopšte pojavi (`dozStopGPS` traži `>= 2`).
+  Pojas bi bio uredno vraćen na kartu, a izvoz bi sadržavao samo tačke
+  snimljene POSLIJE oporavka. Sad se `_dozGpsFullPts` obnavlja iz snimka;
+  snimak nosi samo `[lat, lon]`, pa visina ide kao 0 (isto kao živi put kad
+  `alt` nedostaje), a **vrijeme ostaje `null` — upisati "sad" bi bio lažan
+  podatak**. `dozExportGPX` zato izostavlja `<time>` element kad vrijeme nije
+  poznato, umjesto da piše neispravan prazan `<time></time>`.
+- **`_dozLiveUpisPao` se nije resetovao po snimanju**: zastavica postoji da se
+  kvar lokalnog upisa javi JEDNOM po snimanju, a ne po GPS tački (v1.4.9), i
+  resetuje se na prvi uspješan upis. Ako se nikad ne oporavi, drugo snimanje
+  prolazi bez IJEDNOG upozorenja da mu crash-zaštita uopšte ne radi. Sad se
+  resetuje u `_dozStartGPSBegin` i u grani oporavka.
+- **Provjereno a NIJE bug** (da se ne troši vrijeme na ponovnu istragu): red
+  čekanja doznake (`_DOZ_TRACK_BUF_KEY` u `_processOfflineQueue`) je bezbjedan
+  — dodjela `_qid`-eva i upis nazad nemaju `await` između sebe (nema
+  ispreplitanja u jednonitnom JS-u), a poslije svakog uspješnog slanja se
+  bafer ČITA NANOVO i filtrira, pa tačka pristigla tokom `await`-a preživi.
+  `_nativeSessionSince` (postavlja se u `_bgRecStart`) već čini ZATVORENE
+  prozore prethodne sesije bezopasnim — samo otvoren interval je bio problem.
+  Replay u `_crashCheck` ne provjerava prozore pauze, i to je ispravno: hladan
+  start poslije ubijenog procesa počinje sa praznim nizom.
+- Testovi: `tests/js/doznaka-gps.test.js` (21) nad STVARNIM kodom — ponašanje
+  prozora pauze (puštaju se stvarni helperi, bez ijednog mocka; jedan test
+  namjerno dokazuje da bi BEZ zatvaranja ista tačka bila odbačena, da asercija
+  ne prođe iz pogrešnog razloga) i invarijante nad izvučenim funkcijama.
+  **Provjereno da 20 od 21 pada na kodu prije izmjene** (prolazi samo
+  invarijanta "`_dozProcessGpsPoint` i dalje baca", koja nikad nije bila
+  pokvarena).
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni
