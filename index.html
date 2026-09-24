@@ -711,7 +711,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 }
 #vlaka-picker {
   position:fixed; bottom:0; left:0; right:0; z-index:9800;
-  display:flex; flex-direction:column; max-height:78vh;
+  display:flex; flex-direction:column; max-height:78vh;max-height:78dvh;
   background:#0f172a;
   border-radius:16px 16px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,0.5);
   transform:translateY(100%); transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
@@ -772,7 +772,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 #trag-reg-modal.open { display:flex; }
 #trag-reg-box {
   background:#0f172a; border:1px solid #1e3a5f; border-radius:16px 16px 0 0;
-  width:100%; max-width:560px; max-height:82vh;
+  width:100%; max-width:560px; max-height:82vh;max-height:82dvh;
   display:flex; flex-direction:column;
   box-shadow:0 -4px 32px rgba(0,0,0,0.7);
 }
@@ -1153,7 +1153,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 }
 #imv-modal {
   display:none; position:fixed; left:50%; bottom:0; transform:translateX(-50%);
-  z-index:2401; width:min(460px, 100vw); max-height:86vh;
+  z-index:2401; width:min(460px, 100vw); max-height:86vh;max-height:86dvh;
   background:#fff; border-radius:20px 20px 0 0;
   box-shadow:0 -8px 40px rgba(0,0,0,0.18);
   flex-direction:column; overflow:hidden;
@@ -1348,7 +1348,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #izmjeri-panel {
   position:fixed;
   left:0; right:0; bottom:0;
-  max-height:55vh;
+  max-height:55vh;max-height:55dvh;
   background:rgba(15,23,42,0.96);
   border-top:2px solid #1e3a5f;
   border-radius:14px 14px 0 0;
@@ -1377,7 +1377,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* === Mjerenja & Tragovi panel === */
 #mjtrg-panel {
   position:fixed; left:0; right:0; bottom:0;
-  max-height:15vh;
+  max-height:15vh;max-height:15dvh;
   background:rgba(15,23,42,0.97);
   border-top:2px solid #1e3a5f;
   border-radius:14px 14px 0 0;
@@ -2056,7 +2056,7 @@ select:focus { outline:none; border-color:#3b82f6; }
   background:#16213e; border:1px solid #0f3460;
   border-radius:10px; padding:22px;
   width:420px; max-width:94vw;
-  max-height:90vh; overflow-y:auto;
+  max-height:90vh;max-height:90dvh; overflow-y:auto;
 }
 .print-mbox h3 { font-size:16px; color:#4ade80; margin-bottom:14px; }
 .print-row { display:flex; gap:10px; margin-bottom:10px; align-items:flex-end; }
@@ -2072,7 +2072,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #pm-box {
   background:#0f172a; border:1px solid #1e3a5f;
   border-radius:12px; padding:0;
-  width:680px; max-width:96vw; max-height:92vh;
+  width:680px; max-width:96vw; max-height:92vh;max-height:92dvh;
   display:flex; flex-direction:column;
   box-shadow:0 12px 40px rgba(0,0,0,0.8);
 }
@@ -2185,7 +2185,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #izv-box {
   background:#0f172a; border:1px solid #1e3a5f;
   border-radius:12px; padding:0;
-  width:680px; max-width:96vw; max-height:92vh;
+  width:680px; max-width:96vw; max-height:92vh;max-height:92dvh;
   display:flex; flex-direction:column;
   box-shadow:0 12px 40px rgba(0,0,0,0.8);
 }
@@ -2215,7 +2215,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #nagib-panel {
   display:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
   z-index:9000; background:#0f172aee; border:1.5px solid #334155; border-radius:12px;
-  padding:14px 16px; width:460px; max-width:96vw; max-height:70vh; overflow-y:auto;
+  padding:14px 16px; width:460px; max-width:96vw; max-height:70vh;max-height:70dvh; overflow-y:auto;
   box-shadow:0 8px 32px rgba(0,0,0,0.8); color:#e2e8f0; font-size:12px;
 }
 #nagib-panel.show { display:block; }
@@ -2322,7 +2322,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #mapfav-modal.open { display:flex; }
 #mapfav-box {
   background:#111827; border-radius:16px 16px 0 0;
-  width:100%; max-width:600px; max-height:82vh;
+  width:100%; max-width:600px; max-height:82vh;max-height:82dvh;
   display:flex; flex-direction:column;
   box-shadow:0 -6px 40px rgba(0,0,0,0.8);
 }
@@ -2393,7 +2393,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #sqlmap-box {
   background:#16213e; border:1px solid #0f3460;
   border-radius:10px; padding:22px;
-  width:400px; max-width:94vw; max-height:88vh;
+  width:400px; max-width:94vw; max-height:88vh;max-height:88dvh;
   overflow-y:auto;
 }
 #sqlmap-box h3 { font-size:16px; color:#38bdf8; margin-bottom:14px; }
@@ -2419,7 +2419,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* ── Offline Map Manager ─────────────────────────────────────────── */
 #mapmgr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:9999; align-items:center; justify-content:center; }
 #mapmgr-modal.show { display:flex; }
-#mapmgr-box { background:#16213e; border:1px solid #0f3460; border-radius:10px; padding:20px; width:440px; max-width:96vw; max-height:90vh; overflow-y:auto; }
+#mapmgr-box { background:#16213e; border:1px solid #0f3460; border-radius:10px; padding:20px; width:440px; max-width:96vw; max-height:90vh;max-height:90dvh; overflow-y:auto; }
 #mapmgr-box h3 { font-size:16px; color:#38bdf8; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
 .mapmgr-storage { background:#0f172a; border:1px solid #1e3a5f; border-radius:8px; padding:10px 12px; margin-bottom:12px; }
 .mapmgr-storage-txt { font-size:11px; color:#94a3b8; margin-bottom:6px; display:flex; justify-content:space-between; }
@@ -2477,7 +2477,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #loadmap-status { font-size:12px; color:#38bdf8; min-height:16px; text-align:center; margin:6px 0; }
 #loadmap-sheet { display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,.6); align-items:flex-end; }
 #loadmap-sheet.show { display:flex; }
-#loadmap-sheet-box { background:#16213e; border-top:1px solid #0f3460; border-radius:16px 16px 0 0; width:100%; max-height:80vh; overflow-y:auto; padding:18px 18px 24px; box-shadow:0 -8px 30px rgba(0,0,0,.5); }
+#loadmap-sheet-box { background:#16213e; border-top:1px solid #0f3460; border-radius:16px 16px 0 0; width:100%; max-height:80vh;max-height:80dvh; overflow-y:auto; padding:18px 18px 24px; box-shadow:0 -8px 30px rgba(0,0,0,.5); }
 #loadmap-sheet-box h4 { margin:0 0 12px; font-size:15px; color:#38bdf8; }
 .lm-sheet-file { background:#0f172a; border:1px solid #1e3a5f; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
 .lm-sheet-file .nm { font-size:13px; color:#e2e8f0; font-weight:600; word-break:break-all; }
@@ -2686,12 +2686,12 @@ select:focus { outline:none; border-color:#3b82f6; }
 #doz-create-modal {
   position:fixed; inset:0; background:rgba(0,0,0,0.75);
   display:none; align-items:center; justify-content:center;
-  z-index:1100; padding:16px;
+  z-index:3500; padding:16px;
 }
 #doz-create-box {
   background:#16213e; border:1px solid #1e3a5f;
   border-radius:14px; padding:20px; width:100%; max-width:380px;
-  max-height:90vh; overflow-y:auto;
+  max-height:90vh;max-height:90dvh; overflow-y:auto;
 }
 #doz-create-box h3 { margin:0 0 14px; font-size:15px; color:#4ade80; }
 .doz-create-error { color:#f87171; font-size:12px; margin-top:6px; min-height:16px; }
@@ -2699,7 +2699,7 @@ select:focus { outline:none; border-color:#3b82f6; }
 #doz-save-modal {
   position:fixed; inset:0; background:rgba(0,0,0,0.75);
   display:none; align-items:center; justify-content:center;
-  z-index:1200; padding:16px;
+  z-index:3500; padding:16px;
 }
 #doz-save-box {
   background:#16213e; border:1px solid #1e3a5f;
@@ -3079,7 +3079,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 .ttm-colsbtn { flex-shrink:0;display:flex;align-items:center;gap:6px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#a5b4fc;font-size:12px;font-weight:600;padding:8px 13px;cursor:pointer; }
 .ttm-colsbtn:active { opacity:0.7; }
 .ttm-tools { position:relative; }
-#ttm-cols-menu { position:absolute;top:calc(100% - 4px);right:14px;z-index:20;width:220px;max-height:52vh;overflow:auto;-webkit-overflow-scrolling:touch;background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,0.7);padding:8px; }
+#ttm-cols-menu { position:absolute;top:calc(100% - 4px);right:14px;z-index:20;width:220px;max-height:52vh;max-height:52dvh;overflow:auto;-webkit-overflow-scrolling:touch;background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,0.7);padding:8px; }
 #ttm-cols-menu .ttm-cm-hd { display:flex;gap:6px;margin-bottom:7px; }
 #ttm-cols-menu .ttm-cm-hd button { flex:1;padding:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;color:#94a3b8;font-size:11px;font-weight:600;cursor:pointer; }
 #ttm-cols-menu .ttm-cm-hd button:active { opacity:0.7; }
@@ -3164,7 +3164,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   align-items:center; justify-content:center; touch-action:manipulation;
 }
 #foto-fullscreen-img {
-  max-width:96vw; max-height:86vh; border-radius:8px;
+  max-width:96vw; max-height:86vh;max-height:86dvh; border-radius:8px;
   object-fit:contain; display:block;
 }
 #foto-fullscreen-close {
@@ -3188,7 +3188,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 #share-foto-box {
   background:#0f1f3d; border-radius:16px 16px 0 0; border-top:2px solid #1e3a5f;
   width:100%; max-width:480px; padding:20px 18px 36px;
-  box-shadow:0 -6px 28px rgba(0,0,0,0.65); max-height:75vh; display:flex; flex-direction:column;
+  box-shadow:0 -6px 28px rgba(0,0,0,0.65); max-height:75vh;max-height:75dvh; display:flex; flex-direction:column;
 }
 #share-foto-box h3 { margin:0 0 14px; font-size:15px; color:#e2e8f0; }
 #share-foto-list  { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin-bottom:16px; }
@@ -3286,7 +3286,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   z-index: 4500;
   padding: 16px 16px 36px;
   box-shadow: 0 -4px 24px rgba(0,0,0,0.6);
-  max-height: 82vh;
+  max-height: 82vh;max-height: 82dvh;
   overflow-y: auto;
 }
 /* ── Offline SQLite karte unutar layer sheeta ── */
@@ -3318,7 +3318,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   background: #0f1f3d;
   border-radius: 16px 16px 0 0;
   z-index: 4500; padding: 0 0 32px;
-  max-height: 80vh; overflow-y: auto;
+  max-height: 80vh;max-height: 80dvh; overflow-y: auto;
 }
 #oznake-header {
   display: flex; align-items: center; gap: 10px;
@@ -3538,6 +3538,49 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 }
 .layer-opt.active .lopt-sub { color: #86efac; }
 .inst-layer-row { display:flex; align-items:center; gap:8px; padding:10px 8px; border:1px solid #1e3a5f; border-radius:8px; margin-bottom:8px; background:rgba(15,23,42,0.6); }
+/* === MODALI — zajednička pravila visine i širine (v1.6.7) ===
+   Izmjereno u Chromiumu na 360x640, 390x844, 740x360 (položen telefon) i
+   1024x768 (tablet): pojedini dijalozi nisu imali gornju granicu visine
+   (Sačuvaj zonu je na položenom telefonu izlazio 28px preko ekrana, pa se
+   dugme Sačuvaj nije moglo dohvatiti), a donji paneli su se na širokom
+   ekranu razvlačili preko cijele širine. dvh prati stvarno vidljivu visinu
+   (traka adrese, tastatura); gdje ga WebView ne zna, ostaje vh red iznad. */
+#modal .mbox, .offline-mbox, #profil-box, #doz-save-box, #del-modal,
+#guide-choice-modal > div, #doz-qr-show-modal > div {
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+}
+#lager-dlg {
+  max-height: calc(100vh - 90px);
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+}
+#dlg-sheet, #tacka-modal, #sto-dalje-sheet {
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: 600px) {
+  /* left:0/right:0 + max-width + margin auto centrira fiksni panel bez
+     transform-a, koji dio panela već koristi za animaciju ulaska. */
+  #dlg-sheet, #tacka-modal, #sto-dalje-sheet, #oznake-panel, #syncq-panel, #mjtrg-dropdown {
+    max-width: 560px; margin-left: auto; margin-right: auto;
+  }
+  #layer-sheet { max-width: 640px; margin-left: auto; margin-right: auto; }
+  #loadmap-sheet { justify-content: center; }
+  #loadmap-sheet-box { max-width: 560px; }
+}
+@media (min-width: 820px) {
+  /* Punoekranske stranice: tekst u koloni od 760px, ali skrol ostaje preko
+     cijele širine (padding umjesto sužavanja samog skrol-kontejnera). */
+  #help-body { padding-left: calc((100% - 760px) / 2); padding-right: calc((100% - 760px) / 2); }
+  #loadmap-body { padding-left: max(16px, calc((100% - 760px) / 2)); padding-right: max(16px, calc((100% - 760px) / 2)); }
+}
+/* === KRAJ MODALI === */
 </style>
 </head>
 <body>
@@ -5088,7 +5131,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.6';
+const APP_VER = 'v1.6.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -36378,7 +36421,7 @@ function _dozShowMemberPicker(users) {
   const modal = document.createElement('div');
   modal.id = 'doz-member-picker';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;z-index:2000;padding:0 0 0 0;';
-  modal.innerHTML = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px 14px 0 0;padding:16px;width:100%;max-width:400px;max-height:70vh;overflow-y:auto;">
+  modal.innerHTML = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px 14px 0 0;padding:16px;width:100%;max-width:400px;max-height:70vh;max-height:70dvh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;color:#e2e8f0;">Dodaj projektanta</div>
       <button onclick="document.getElementById('doz-member-picker').remove()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
@@ -36474,7 +36517,7 @@ if (typeof AndroidDownload !== 'undefined') {
   display:none;position:fixed;top:0;right:0;
   background:#16213e;border:1px solid #0f3460;border-radius:8px;
   min-width:250px;max-width:calc(100vw - 12px);z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
-  touch-action:manipulation;max-height:80vh;overflow-y:auto;overscroll-behavior:contain;padding-bottom:4px;">
+  touch-action:manipulation;max-height:80vh;max-height:80dvh;overflow-y:auto;overscroll-behavior:contain;padding-bottom:4px;">
   <div class="mdrop-hdr">Karta</div>
   <div class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()"><span class="mdrop-ico">📂</span>Dodaj KML fajl</div>
@@ -36507,7 +36550,7 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
 <div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99500;">
-  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,94vw);max-height:88vh;overflow-y:auto;background:#16213e;border:1px solid #0f3460;border-radius:14px;padding:16px;">
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,94vw);max-height:88vh;max-height:88dvh;overflow-y:auto;background:#16213e;border:1px solid #0f3460;border-radius:14px;padding:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-weight:700;color:#e2e8f0;font-size:15px;">🖌 Stil linija</div>
       <button onclick="closeStilLinija()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
@@ -37614,7 +37657,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- UPRAVLJANJE OFFLINE PODACIMA PO KARTI -->
 <div id="cachemgr-modal" style="display:none;position:fixed;inset:0;z-index:99020;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:16px;"
   onclick="if(event.target===this)closeCacheMgr()">
-  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:430px;max-height:86vh;overflow-y:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
+  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:430px;max-height:86vh;max-height:86dvh;overflow-y:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h3 style="margin:0;font-size:15px;color:#7dd3fc;">💾 Offline podaci po karti</h3>
       <button onclick="closeCacheMgr()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
@@ -37626,7 +37669,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- TEMATSKE KARTE PANEL -->
 <div id="tem-modal" style="display:none;position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:16px;"
   onclick="if(event.target===this)closeTemModal()">
-  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:440px;max-height:86vh;overflow-y:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
+  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:440px;max-height:86vh;max-height:86dvh;overflow-y:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h3 style="margin:0;font-size:15px;color:#4ade80;">📊 Tematske karte</h3>
       <button onclick="closeTemModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
@@ -37950,7 +37993,7 @@ if (typeof AndroidDownload !== 'undefined') {
     </button>
     <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:11px;">
       <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:7px;">📋 Sačuvane rute</div>
-      <div id="guide-routes-list" style="max-height:38vh;overflow-y:auto;"></div>
+      <div id="guide-routes-list" style="max-height:38vh;max-height:38dvh;overflow-y:auto;"></div>
     </div>
   </div>
 </div>
@@ -38340,7 +38383,7 @@ if (typeof AndroidDownload !== 'undefined') {
       style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="sdl-vlake-list"
-    style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto;padding-right:2px;">
+    style="display:flex;flex-direction:column;gap:6px;max-height:55vh;max-height:55dvh;overflow-y:auto;padding-right:2px;">
   </div>
 </div>
 
@@ -38573,7 +38616,8 @@ if (typeof AndroidDownload !== 'undefined') {
     <div style="margin-top:8px;font-size:10px;color:#334155;line-height:1.5;">
       Nagibi, N.V., Strane i Konture dijele isti keš (terrarium DEM pločice, max zum 14→uvećanje).
     </div>
-
+  </div><!-- /ls-pane-inst — bez ovog zatvaranja (izgubljeno u v3.103.1) su dijalozi,
+       📁 panel oznaka i ostalo iza #layer-sheet završavali UNUTAR njega, skriveni. -->
 
   <!-- Tab: Granice -->
   <div id="ls-pane-granice" style="display:none;">
@@ -38658,7 +38702,7 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
-<div id="syncq-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:70vh;background:#0f172a;border-top:1px solid #334155;border-radius:16px 16px 0 0;z-index:4000;flex-direction:column;overflow:hidden;">
+<div id="syncq-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:70vh;max-height:70dvh;background:#0f172a;border-top:1px solid #334155;border-radius:16px 16px 0 0;z-index:4000;flex-direction:column;overflow:hidden;">
   <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #1e293b;flex-shrink:0;">
     <span style="font-size:15px;font-weight:700;color:#e2e8f0;flex:1">⟳ Pending sync operacije</span>
     <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0"><svg class="ic"><use href="#ic-zatvori"/></svg></button>

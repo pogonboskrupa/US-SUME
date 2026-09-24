@@ -2761,6 +2761,18 @@ namjerno, prije nego se jave.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **Jedan nezatvoren `<div>` sakrije sve što slijedi u markupu (v1.6.7)**: u
+  v3.103.1 je iz `#layer-sheet` nestalo zatvaranje `#ls-pane-inst`. Browser to
+  ne prijavljuje — svi elementi iza (`#dlg-sheet`/`#dlg-overlay` = SVI `_dlg`
+  dijalozi, `#oznake-panel`, `#syncq-panel`, `#share-foto-dlg`, `#imv-modal`,
+  `#foto-fullscreen`) postali su djeca skrivenog `#layer-sheet`-a i nisu se
+  mogli prikazati dok panel podloga nije otvoren. Na terenu: "📁 i ✏ Nacrtaj
+  vlaku ručno ne reaguju" (Nacrtaj prvo traži naziv kroz `_dlgPrompt`). Uzrok
+  NIJE bio ni nevidljiv overlay (v3.119.1) ni z-index — nađen tek mjerenjem
+  `parentElement` u pravom browser parseru. `tests/js/dom-struktura.test.js`
+  sad provjerava saldo `<div>` u cijelom `<body>`; kod brisanja dijela markupa
+  (npr. uklanjanje sekcije) pokrenuti ga prije commit-a.
+
 - **`#oznake-panel` i `#layer-sheet` se nikad nisu zatvarali jedan drugog —
   prikazani ISTOVREMENO, jedan preko drugog (v1.5.0)**: terenska prijava
   (garbled, razjašnjena kroz `AskUserQuestion` i dva screenshot-a) — "fajl
