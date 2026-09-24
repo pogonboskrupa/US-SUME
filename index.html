@@ -3581,6 +3581,138 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   #loadmap-body { padding-left: max(16px, calc((100% - 760px) / 2)); padding-right: max(16px, calc((100% - 760px) / 2)); }
 }
 /* === KRAJ MODALI === */
+/* === TRAGOVI PANEL I MJERENJE (v1.6.8) ===
+   Panel Tragovi: sažetak, akcije kao pločice (ikona iznad natpisa — tekst ne
+   prelama na 360px), tabovi Tragovi/Mjerenja i kartice sa istaknutom
+   vrijednošću (km / ha / %). Mjerenje: način, rezultat uživo i dugmad u
+   jednom pogledu. */
+.tv-head { margin: 2px 2px 12px; }
+.tv-title { font-size: 18px; font-weight: 800; color: #f1f5f9; }
+.tv-sum { font-size: 12px; color: #94a3b8; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tv-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.tv-act {
+  --c1: #94a3b8; --c2: #64748b; --sh: rgba(100,116,139,0.35);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 4px; min-height: 74px; border-radius: 14px;
+  border: 1px solid #1e3a5f; background: #16213e; color: #e2e8f0;
+  font-size: 12px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.tv-act-ico {
+  width: 38px; height: 38px; border-radius: 12px; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, var(--c1), var(--c2));
+  box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.3);
+  transition: transform 0.12s;
+}
+.tv-act-ico .ic { width: 21px; height: 21px; margin: 0; vertical-align: 0; }
+.tv-act:active .tv-act-ico { transform: scale(0.92); }
+.tv-act-trag  { --c1:#fb923c; --c2:#ea580c; --sh:rgba(234,88,12,0.35); }
+.tv-act-trag.on { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); border-color: #7f1d1d; background: #2a0f14; color: #fecaca; }
+.tv-act-trag.on .tv-act-ico { animation: abPulsCrveni 1.6s ease-out infinite; }
+.tv-act-tacka { --c1:#60a5fa; --c2:#2563eb; --sh:rgba(37,99,235,0.35); }
+.tv-act-foto  { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.35); }
+.tv-act-msr   { --c1:#2dd4bf; --c2:#0d9488; --sh:rgba(13,148,136,0.35); }
+.tv-seg, .msr-modes {
+  display: flex; gap: 3px; padding: 3px; border-radius: 12px;
+  background: #0b1220; border: 1px solid #1e293b;
+}
+.tv-seg { margin-bottom: 10px; }
+.tv-seg button, .msr-modes button {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+  border: none; background: transparent; color: #94a3b8; cursor: pointer;
+  font-size: 13px; font-weight: 700; padding: 9px 4px; border-radius: 9px;
+  -webkit-tap-highlight-color: transparent;
+}
+.tv-seg button.on, .msr-modes button.on { background: #1e3a5f; color: #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.tv-seg button span {
+  min-width: 18px; padding: 0 6px; border-radius: 9px; background: #334155;
+  color: #e2e8f0; font-size: 11px; line-height: 18px;
+}
+.tv-seg button span:empty { display: none; }
+.tv-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0 2px 4px; }
+.tv-toolbar-lbl { font-size: 11px; color: #64748b; }
+.tv-chip {
+  background: #16213e; border: 1px solid #334155; color: #cbd5e1;
+  font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 16px; cursor: pointer;
+}
+.tv-grp {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #64748b; margin: 12px 4px 6px;
+}
+.tv-grp-n { color: #475569; }
+.tv-card {
+  background: #16213e; border: 1px solid #1e3a5f; border-radius: 14px;
+  margin-bottom: 8px; overflow: hidden;
+  content-visibility: auto; contain-intrinsic-size: auto 110px;
+}
+.tv-card.skriven { opacity: 0.6; }
+.tv-card-top { display: flex; align-items: center; gap: 10px; padding: 11px 12px 9px; cursor: pointer; }
+.tv-bar { width: 5px; align-self: stretch; min-height: 34px; border-radius: 3px; background: var(--tv-c); flex-shrink: 0; }
+.tv-card-info { flex: 1; min-width: 0; }
+.tv-card-name { font-size: 14.5px; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-card-meta { font-size: 11.5px; color: #8492a6; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-card-val { font-size: 16px; font-weight: 800; color: #4ade80; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tv-mod.dist  ~ .tv-card-val { color: #fcd34d; }
+.tv-mod.area  ~ .tv-card-val { color: #c4b5fd; }
+.tv-mod.nagib ~ .tv-card-val { color: #fdba74; }
+.tv-card-btns { display: flex; gap: 6px; padding: 0 12px 11px; }
+.tv-card-btns button {
+  min-height: 38px; min-width: 42px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: #0f172a; border: 1px solid #334155; color: #cbd5e1; border-radius: 10px;
+  padding: 0 10px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.tv-card-btns button:first-child { flex: 1; }
+.tv-card-btns button .ic { margin: 0; }
+.tv-card-btns .del { color: #f87171; border-color: #7f1d1d; }
+.tv-card .tred-row { margin: 0 12px 12px; }
+.tv-mod { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+.tv-mod .ic { width: 20px; height: 20px; margin: 0; vertical-align: 0; }
+.tv-mod.dist  { background: linear-gradient(180deg, #fbbf24, #d97706); }
+.tv-mod.area  { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+.tv-mod.nagib { background: linear-gradient(180deg, #fb923c, #ea580c); }
+.tv-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: #64748b; font-size: 13px; text-align: center;
+  padding: 28px 12px; border: 1px dashed #1e3a5f; border-radius: 14px;
+}
+.tv-empty > .ic { width: 32px; height: 32px; color: #334155; }
+
+.msr-hud { padding: 12px 14px 12px !important; }
+.msr-modes button { font-size: 12.5px; padding: 8px 4px; }
+.msr-modes button .ic { width: 17px; height: 17px; margin: 0; }
+.msr-res { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 2px 2px; }
+.msr-res-val { font-size: 30px; font-weight: 800; color: #4ade80; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; }
+.msr-res-val.prazno { color: #475569; }
+.msr-res-sub { font-size: 12px; color: #94a3b8; text-align: right; }
+.msr-hint { font-size: 12px; color: #64748b; margin: 2px 2px 10px; line-height: 1.4; }
+.msr-btns { display: flex; gap: 6px; }
+.msr-b {
+  min-height: 46px; padding: 0 10px; border-radius: 12px; cursor: pointer; white-space: nowrap;
+  border: 1px solid #334155; background: #16213e; color: #e2e8f0;
+  font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 7px;
+  -webkit-tap-highlight-color: transparent;
+}
+.msr-b .ic { width: 19px; height: 19px; margin: 0; vertical-align: 0; }
+.msr-b-add { flex: 1; background: #0c4a6e; border-color: #0284c7; color: #e0f2fe; }
+.msr-b-add:disabled { opacity: 0.4; cursor: default; }
+.msr-b-go { flex: 1; background: #1d4ed8; border-color: #3b82f6; color: #fff; }
+.msr-b-go.on { background: #15803d; border-color: #22c55e; }
+.msr-b:active:not(:disabled) { transform: scale(0.97); }
+.msr-draw { position: relative; display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12.5px; color: #cbd5e1; cursor: pointer; }
+.msr-draw input { position: absolute; opacity: 0; width: 0; height: 0; }
+.msr-draw-sw { width: 38px; height: 22px; border-radius: 11px; background: #334155; position: relative; flex-shrink: 0; transition: background 0.15s; }
+.msr-draw-sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.msr-draw input:checked + .msr-draw-sw { background: #22c55e; }
+.msr-draw input:checked + .msr-draw-sw::after { transform: translateX(16px); }
+.msr-draw input:focus-visible + .msr-draw-sw { outline: 2px solid #38bdf8; outline-offset: 2px; }
+.msr-det { margin-top: 10px; background: #0b1220; border: 1px solid #1e293b; border-radius: 10px; padding: 6px 10px; }
+.msr-det-row { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; padding: 3px 0; }
+.msr-det-row b { color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.msr-det-row b.up { color: #34d399; }
+.msr-det-row b.dn { color: #f87171; }
+@media (prefers-reduced-motion: reduce) { .tv-act-trag.on .tv-act-ico { animation: none; } }
+/* === KRAJ TRAGOVI I MJERENJE === */
 </style>
 </head>
 <body>
@@ -4536,33 +4668,50 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
     <!-- ═══ TRAGOVI PANEL ═══ -->
     <div id="tragovi-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;padding:12px;">
 
-      <!-- Snimi trag dugme -->
-      <!-- Akcijska dugmad -->
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button id="btrag-panel" onclick="fabSnimTrag()" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(239,68,68,0.25);background:#1e293b;color:#f87171;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-          <span id="btrag-panel-ico"><svg class="ic"><use href="#ic-snimaj"/></svg></span>
+      <!-- Sažetak: koliko je čega i ukupna dužina — vidi se prije liste -->
+      <div class="tv-head">
+        <div>
+          <div class="tv-title">Tragovi i mjerenja</div>
+          <div class="tv-sum" id="tv-sum">—</div>
+        </div>
+      </div>
+
+      <!-- Akcije: ikona iznad natpisa da tekst ne prelama na uskom ekranu -->
+      <div class="tv-actions">
+        <button id="btrag-panel" class="tv-act tv-act-trag" onclick="fabSnimTrag()">
+          <span class="tv-act-ico" id="btrag-panel-ico"><svg class="ic"><use href="#ic-snimaj"/></svg></span>
           <span id="btrag-panel-txt">Snimi trag</span>
         </button>
-        <button onclick="switchTab('karta');setTimeout(()=>_tackaFromTragovi(),50);" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(96,165,250,0.25);background:#1e293b;color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-          <svg class="ic"><use href="#ic-pozicija"/></svg> <span>Snimi tačku</span>
+        <button class="tv-act tv-act-tacka" onclick="switchTab('karta');setTimeout(()=>_tackaFromTragovi(),50);">
+          <span class="tv-act-ico"><svg class="ic"><use href="#ic-pozicija"/></svg></span>
+          <span>Tačka</span>
         </button>
-        <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);" style="flex:1;padding:12px 8px;border-radius:12px;border:1px solid rgba(251,191,36,0.25);background:#1e293b;color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-          <svg class="ic"><use href="#ic-kamera"/></svg> <span>Uslikaj</span>
+        <button class="tv-act tv-act-foto" onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);">
+          <span class="tv-act-ico"><svg class="ic"><use href="#ic-kamera"/></svg></span>
+          <span>Uslikaj</span>
+        </button>
+        <button class="tv-act tv-act-msr" onclick="switchTab('karta');setTimeout(()=>_izmjeriPick('dist'),50);">
+          <span class="tv-act-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>
+          <span>Izmjeri</span>
         </button>
       </div>
 
-      <!-- Lista tragova -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:0.05em;">SNIMLJENI TRAGOVI <span id="tragovi-count" style="color:#4ade80;"></span></span>
-        <button onclick="_tragoviGrpToggle()" style="font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:4px 10px;cursor:pointer;" title="Grupiraj">≡ Grupiraj</button>
+      <!-- Tabovi: Tragovi | Mjerenja — jedna lista na ekranu umjesto dvije jedna ispod druge -->
+      <div class="tv-seg" role="tablist">
+        <button id="tv-seg-trg" class="on" onclick="_tragoviSetTab('trg')">Tragovi <span id="tragovi-count"></span></button>
+        <button id="tv-seg-msr" onclick="_tragoviSetTab('msr')">Mjerenja <span id="tragovi-msr-count"></span></button>
       </div>
-      <div id="tragovi-list"></div>
 
-      <!-- Mjerenja -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;padding-top:12px;border-top:1px solid #1e3a5f;">
-        <span style="font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:0.05em;">MJERENJA <span id="tragovi-msr-count" style="color:#fbbf24;"></span></span>
+      <div id="tv-pane-trg">
+        <div class="tv-toolbar">
+          <span class="tv-toolbar-lbl">Grupiši</span>
+          <button id="tv-grp-btn" class="tv-chip" onclick="_tragoviGrpToggle()" title="Promijeni grupisanje">Po datumu</button>
+        </div>
+        <div id="tragovi-list"></div>
       </div>
-      <div id="tragovi-msr-list"></div>
+      <div id="tv-pane-msr" style="display:none;">
+        <div id="tragovi-msr-list"></div>
+      </div>
 
     </div>
 
@@ -5131,7 +5280,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.7';
+const APP_VER = 'v1.6.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -18459,23 +18608,72 @@ function _tragoviUpdBtn() {
   const ico = document.getElementById('btrag-panel-ico');
   const txt = document.getElementById('btrag-panel-txt');
   if (!btn) return;
-  if (_tragOn) {
-    btn.style.background = 'rgba(239,68,68,0.15)';
-    btn.style.borderColor = 'rgba(239,68,68,0.5)';
-    if (ico) ico.textContent = '⏹';
-    if (txt) txt.textContent = 'Zaustavi snimanje';
-  } else {
-    btn.style.background = '#1e293b';
-    btn.style.borderColor = 'rgba(239,68,68,0.25)';
-    if (ico) ico.textContent = '🔴';
-    if (txt) txt.textContent = 'Snimi trag';
-  }
+  btn.classList.toggle('on', !!_tragOn);
+  // SVG, ne emoji (🔴/⏹ se na Androidu crtaju različito po uređaju).
+  if (ico) ico.innerHTML = '<svg class="ic"><use href="#' + (_tragOn ? 'ic-stop' : 'ic-snimaj') + '"/></svg>';
+  if (txt) txt.textContent = _tragOn ? 'Zaustavi' : 'Snimi trag';
 }
 
+// Koji tab (Tragovi/Mjerenja) je otvoren — pamti se po uređaju.
+var _TV_TAB_KEY = 'tvlake_tragovi_tab';
+var _tragoviTab = 'trg';
+try { if (localStorage.getItem(_TV_TAB_KEY) === 'msr') _tragoviTab = 'msr'; } catch(e) {}
+function _tragoviSetTab(t) {
+  _tragoviTab = t === 'msr' ? 'msr' : 'trg';
+  try { localStorage.setItem(_TV_TAB_KEY, _tragoviTab); } catch(e) {}
+  _tragoviRender();
+}
+
+var _TV_GRP_LBL = { date: 'Po datumu', gj: 'Po GJ', none: 'Bez grupa' };
 function _tragoviGrpToggle() {
   const opts = ['date','gj','none'];
   _tragoviGrpBy = opts[(opts.indexOf(_tragoviGrpBy)+1) % opts.length];
   _tragoviRender();
+}
+
+// Glavna vrijednost mjerenja za karticu: površina (ha), nagib (%) ili dužina.
+function _tvMsrVrijednost(m) {
+  const mode = m.mode || 'dist';
+  const pts = m.pts || [];
+  const lenM = _msrPts2Len(pts);
+  if (mode === 'area') {
+    if (pts.length < 3) return { v: '—', sub: pts.length + ' tač.' };
+    return { v: fmtHa(_msrPoligonPovrsina(pts) / 10000), sub: 'obim ' + _msrFmt(lenM) };
+  }
+  if (mode === 'nagib') {
+    const a = pts[0], z = pts[pts.length - 1];
+    if (!a || !z || pts.length < 2) return { v: '—', sub: '' };
+    const d = _msrHaversine(a.lat, a.lng, z.lat, z.lng);
+    const dh = (a.elev != null && z.elev != null) ? z.elev - a.elev : null;
+    if (dh == null || !(d > 0)) return { v: '—', sub: 'dužina ' + _msrFmt(d) };
+    const pct = dh / d * 100;
+    return { v: (pct > 0 ? '+' : '') + pct.toFixed(1) + ' %', sub: 'dužina ' + _msrFmt(d) };
+  }
+  return { v: _msrFmt(lenM), sub: pts.length + ' tač.' };
+}
+var _TV_MSR_MOD = {
+  dist:  { lbl: 'Distanca', ico: 'ic-uglomjer', cls: 'dist' },
+  area:  { lbl: 'Površina', ico: 'ic-kvadrat',  cls: 'area' },
+  nagib: { lbl: 'Nagib',    ico: 'ic-visina',   cls: 'nagib' },
+};
+function _tragoviMsrRowHtml(m) {
+  const mod = _TV_MSR_MOD[m.mode] || _TV_MSR_MOD.dist;
+  const val = _tvMsrVrijednost(m);
+  const meta = [fmtDateShort(m.date), val.sub, m.odjel ? 'Odj. ' + _escHtml(m.odjel) : ''].filter(Boolean).join(' · ');
+  return `<div class="tv-card" style="--tv-c:${m.color || '#fbbf24'};">
+    <div class="tv-card-top" onclick="_msrRegZoom('${m.id}')">
+      <span class="tv-mod ${mod.cls}"><svg class="ic"><use href="#${mod.ico}"/></svg></span>
+      <div class="tv-card-info">
+        <div class="tv-card-name">${_escHtml(m.name)}</div>
+        <div class="tv-card-meta">${mod.lbl} · ${meta}</div>
+      </div>
+      <div class="tv-card-val">${val.v}</div>
+    </div>
+    <div class="tv-card-btns">
+      <button onclick="_msrRegZoom('${m.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Prikaži i uredi</button>
+      <button class="del" onclick="_msrAskDelete('${m.id}')" aria-label="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
+    </div>
+  </div>`;
 }
 
 function _tragoviRender() {
@@ -18484,69 +18682,61 @@ function _tragoviRender() {
   const notif = document.getElementById('notif-tragovi');
   if (!el) return;
   const n = _tragRegistry.length;
-  if (cnt) cnt.textContent = n ? `(${n})` : '';
+  const mn = _msrRegistry.length;
+  if (cnt) cnt.textContent = n ? n : '';
   if (notif) notif.textContent = n || '';
+  const msrCnt = document.getElementById('tragovi-msr-count');
+  if (msrCnt) msrCnt.textContent = mn ? mn : '';
+
+  const sum = document.getElementById('tv-sum');
+  if (sum) {
+    const ukupno = _tragRegistry.reduce((s, t) => s + _tragCalcLen(t.pts), 0);
+    sum.textContent = (n ? n + (n === 1 ? ' trag' : ' traga') + ' · ' + _tragFmtLen(ukupno) : 'Nema tragova')
+      + ' · ' + (mn ? mn + (mn === 1 ? ' mjerenje' : ' mjerenja') : 'nema mjerenja');
+  }
+  const isMsr = _tragoviTab === 'msr';
+  const segT = document.getElementById('tv-seg-trg'), segM = document.getElementById('tv-seg-msr');
+  if (segT) segT.classList.toggle('on', !isMsr);
+  if (segM) segM.classList.toggle('on', isMsr);
+  const paneT = document.getElementById('tv-pane-trg'), paneM = document.getElementById('tv-pane-msr');
+  if (paneT) paneT.style.display = isMsr ? 'none' : '';
+  if (paneM) paneM.style.display = isMsr ? '' : 'none';
+  const grpBtn = document.getElementById('tv-grp-btn');
+  if (grpBtn) grpBtn.textContent = _TV_GRP_LBL[_tragoviGrpBy] || 'Po datumu';
+
+  // Mjerenja se crtaju UVIJEK — ranije je rani izlaz za "nema tragova"
+  // preskakao ovu sekciju, pa se mjerenja nisu vidjela dok ne postoji trag.
+  const msrEl = document.getElementById('tragovi-msr-list');
+  if (msrEl) {
+    msrEl.innerHTML = mn
+      ? _msrRegistry.map(_tragoviMsrRowHtml).join('')
+      : `<div class="tv-empty"><svg class="ic"><use href="#ic-uglomjer"/></svg>
+           <div>Nema sačuvanih mjerenja.</div>
+           <button class="tv-chip" onclick="switchTab('karta');setTimeout(()=>_izmjeriPick('dist'),50);">Počni mjerenje</button></div>`;
+  }
+
   if (!n) {
-    el.innerHTML = '<div class="treg-empty">Nema sačuvanih tragova.<br>Klikni <b>Snimi trag</b> gore.</div>';
+    el.innerHTML = `<div class="tv-empty"><svg class="ic"><use href="#ic-trag"/></svg>
+      <div>Nema sačuvanih tragova.</div>
+      <button class="tv-chip" onclick="fabSnimTrag()">Snimi prvi trag</button></div>`;
     return;
   }
-  // Grupiraj
   let groups = [];
   if (_tragoviGrpBy === 'none') {
     groups = [{ label: null, items: _tragRegistry }];
-  } else if (_tragoviGrpBy === 'gj') {
-    const map2 = new Map();
-    _tragRegistry.forEach(t => {
-      const k = t.gj || '—';
-      if (!map2.has(k)) map2.set(k, []);
-      map2.get(k).push(t);
-    });
-    groups = [...map2.entries()].map(([k,v]) => ({ label:'GJ: '+k, items:v }));
   } else {
     const map2 = new Map();
     _tragRegistry.forEach(t => {
-      const k = fmtDateShort(t.date);
+      const k = _tragoviGrpBy === 'gj' ? (t.gj || '—') : fmtDateShort(t.date);
       if (!map2.has(k)) map2.set(k, []);
       map2.get(k).push(t);
     });
-    groups = [...map2.entries()].map(([k,v]) => ({ label:k, items:v }));
+    groups = [...map2.entries()].map(([k, v]) => ({ label: (_tragoviGrpBy === 'gj' ? 'GJ ' : '') + k, items: v }));
   }
   el.innerHTML = groups.map(g => `
-    ${g.label ? `<div class="mjtrg-grp-hdr">📅 ${g.label} <span class="mjtrg-grp-cnt">${g.items.length}</span></div>` : ''}
+    ${g.label ? `<div class="tv-grp"><span>${_escHtml(g.label)}</span><span class="tv-grp-n">${g.items.length}</span></div>` : ''}
     ${g.items.map(t => _tragoviRowHtml(t)).join('')}
   `).join('');
-
-  // Mjerenja sekcija u istom panelu
-  const msrEl = document.getElementById('tragovi-msr-list');
-  const msrCnt = document.getElementById('tragovi-msr-count');
-  if (msrEl) {
-    const mn = _msrRegistry.length;
-    if (msrCnt) msrCnt.textContent = mn ? `(${mn})` : '';
-    if (!mn) {
-      msrEl.innerHTML = '<div class="treg-empty" style="padding:8px 0;">Nema sačuvanih mjerenja.</div>';
-    } else {
-      msrEl.innerHTML = _msrRegistry.map(m => {
-        const dt = fmtDateShort(m.date);
-        const lenM = _msrPts2Len(m.pts);
-        const mode = m.mode || 'dist';
-        const modeLabel = mode==='area'?'◻ Površina':mode==='nagib'?'📐 Nagib':'📏 Distanca';
-        let detail = _msrFmt(lenM);
-        if (mode === 'area' && m.pts.length >= 3) {
-          const aM2 = _msrPoligonPovrsina(m.pts);
-          detail = fmtHa(aM2/10000)+' · obim '+_msrFmt(lenM);
-        }
-        const meta = [dt, modeLabel, detail, m.pts.length+' tač.', m.gj?'GJ: '+_escHtml(m.gj):'', m.odjel?'Odj: '+_escHtml(m.odjel):''].filter(Boolean).join(' · ');
-        return `<div class="treg-row" style="margin-bottom:8px;border-left:3px solid ${m.color||'#fbbf24'};">
-          <div class="treg-name" onclick="_msrRegZoom('${m.id}')">${_escHtml(m.name)}</div>
-          <div class="treg-meta">${meta}</div>
-          <div class="treg-btns">
-            <button onclick="_msrRegZoom('${m.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Edituj</button>
-            <button onclick="_msrAskDelete('${m.id}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
-          </div>
-        </div>`;
-      }).join('');
-    }
-  }
 }
 
 function _tragoviRowHtml(t) {
@@ -18555,23 +18745,26 @@ function _tragoviRowHtml(t) {
   const vis = t.visible !== false;
   const w = t.weight || 3;
   const style = t.dashStyle || 'solid';
-  const styles = {solid:'━━━', dash:'╌╌╌', dot:'···'};
-  return `<div class="treg-row" style="margin-bottom:8px;gap:6px;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div style="width:4px;height:36px;border-radius:2px;background:${t.color};flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div class="treg-name" onclick="_tragRegZoom('${t.id}')" title="Zoom na karti">${_escHtml(t.name)}</div>
-        <div class="treg-meta">${dt} · ${_tragFmtLen(lenM)} · ${t.pts.length} tač.${t.odjel?' · '+_escHtml(t.odjel):''}</div>
+  // Datum se ne ponavlja na kartici kad je već naslov grupe iznad nje.
+  const meta = [_tragoviGrpBy === 'date' ? '' : dt, t.pts.length + ' tač.', t.odjel ? 'Odj. ' + _escHtml(t.odjel) : '', t.gj && _tragoviGrpBy !== 'gj' ? 'GJ ' + _escHtml(t.gj) : ''].filter(Boolean).join(' · ');
+  return `<div class="tv-card${vis ? '' : ' skriven'}" style="--tv-c:${t.color};">
+    <div class="tv-card-top" onclick="_tragRegZoom('${t.id}')" title="Prikaži na karti">
+      <span class="tv-bar"></span>
+      <div class="tv-card-info">
+        <div class="tv-card-name">${_escHtml(t.name)}</div>
+        <div class="tv-card-meta">${meta}</div>
       </div>
-      <button onclick="_tragoviToggleEdit('${t.id}')" style="background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;padding:5px 10px;font-size:13px;cursor:pointer;" title="Uredi"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
+      <div class="tv-card-val">${_tragFmtLen(lenM)}</div>
     </div>
-    <div class="treg-btns">
-      <button onclick="_tragRegZoom('${t.id}')"><svg class="ic"><use href="#ic-karta"/></svg> Zoom</button>
-      <button onclick="_tragRegToggle('${t.id}');_tragoviRender()">${vis?'<svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij':'<svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži'}</button>
-      <button onclick="_tragRegShare('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
-      <button class="del-btn" onclick="if(confirm('Obrisati trag?'))_tragRegDelete('${t.id}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
+    <div class="tv-card-btns">
+      <button onclick="_tragRegZoom('${t.id}')"><svg class="ic"><use href="#ic-karta"/></svg> Karta</button>
+      <button onclick="_tragRegToggle('${t.id}');_tragoviRender()" aria-label="${vis ? 'Sakrij' : 'Prikaži'}">${vis ? '<svg class="ic"><use href="#ic-sakrij"/></svg>' : '<svg class="ic"><use href="#ic-prikazi"/></svg>'}</button>
+      <button onclick="_tragRegShare('${t.id}')" aria-label="Pošalji"><svg class="ic"><use href="#ic-posalji"/></svg></button>
+      <button onclick="_tragoviToggleEdit('${t.id}')" aria-label="Uredi"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
+      <button class="del" onclick="_tragoviObrisi('${t.id}')" aria-label="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     </div>
     <div id="tred-${t.id}" style="display:none;" class="tred-row">
+      <button class="tv-chip" style="align-self:flex-start;" onclick="_tragoviUgladi('${t.id}')"><svg class="ic"><use href="#ic-alat"/></svg> Ugladi trag…</button>
       <div>
         <label>Naziv</label>
         <input id="tred-nm-${t.id}" value="${_escHtml(t.name)}" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;font-size:13px;" onchange="_tragoviSetName('${t.id}',this.value)">
@@ -18606,6 +18799,27 @@ function _tragoviRowHtml(t) {
       </div>
     </div>
   </div>`;
+}
+
+// Ugladi živi u listi Mjerenja i tragovi (treg-ugl-*): otvori baš taj trag
+// tamo umjesto da se isti alat i ID-evi dupliraju u ovom panelu.
+function _tragoviUgladi(id) {
+  switchTab('mjtrg');
+  _mjtrgTab('trg');
+  setTimeout(() => {
+    const box = document.getElementById('treg-ugl-' + id);
+    if (box && box.style.display === 'none' && typeof _uglTragOtvori === 'function') _uglTragOtvori(id);
+    const row = box && box.closest('.treg-row');
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 120);
+}
+
+// HTML dijalog umjesto native confirm() — isti izgled kao ostatak app-a.
+async function _tragoviObrisi(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const ok = await _dlgConfirm('Obrisati trag "' + t.name + '"? Ova radnja se ne može poništiti.', { title: 'Obriši trag', danger: true });
+  if (ok) _tragRegDelete(id);
 }
 
 function _tragoviToggleEdit(id) {
@@ -25855,27 +26069,24 @@ function _msrSetMode(m) {
   const modeLabels = { dist:'📏 Udaljenost', area:'◻ Površina', nagib:'📐 Nagib' };
   const badge = document.getElementById('msr-mode-badge');
   if (badge) badge.textContent = modeLabels[m] || m;
-  // legacy inline buttons (ako postoje)
   ['dist','area','nagib'].forEach(k => {
     const b = document.getElementById('msrm-'+k);
-    if (b) {
-      b.style.background = k===m ? '#1e3a5f' : 'none';
-      b.style.color      = k===m ? '#38bdf8' : '#64748b';
-    }
+    if (b) b.classList.toggle('on', k === m);
   });
   // Ako je nagib, ostavi samo 2 tačke
   if (m === 'nagib' && _msrPts.length > 2) {
     _msrPts = _msrPts.slice(0, 2);
-    _msrRedraw(); _msrUpdPanel();
   }
+  // Karta mora odmah pokazati novi način (zatvoren poligon za površinu).
+  if (_msrPts.length) _msrRedraw();
   _msrUpdPanel();
   const hints = {
-    dist:  'Klikaj tačke — mjeri ukupnu udaljenost.',
-    area:  'Klikaj ≥3 tačke — poligon se zatvara automatski.',
-    nagib: 'Klikni 2 tačke — nagib se računa automatski.'
+    dist:  'Tapni tačke na karti — mjeri se ukupna dužina.',
+    area:  'Tapni bar 3 tačke — površina se zatvara sama.',
+    nagib: 'Tapni 2 tačke — nagib se računa sam.'
   };
   const hint = document.getElementById('msr-hint');
-  if (hint && !_msrOn) hint.textContent = hints[m];
+  if (hint) hint.textContent = _msrOn ? hints[m] + ' Ili postavi nišan i tapni Dodaj tačku.' : hints[m];
   // "Crtaj" nema smisla za nagib (fiksno 2 tačke, ne kontinuiran niz) — sakrij i isključi
   const drawRow = document.getElementById('msr-draw-row');
   if (drawRow) drawRow.style.display = (m === 'nagib') ? 'none' : '';
@@ -25912,7 +26123,7 @@ function _msrToggleDraw(on) {
     if (!_msrOn) msrStart(); // auto-pokreni mjerenje ako još nije aktivno
     map.on('move', _onMapMoveMsr);
     const hint = document.getElementById('msr-hint');
-    if (hint) hint.innerHTML = '✍️ Crtaj uključeno — pomjeraj mapu, tačke se dodaju same.<br><small style="color:#475569">Isključi kvačicu za ručno klikanje</small>';
+    if (hint) hint.textContent = 'Crtaj je uključen — pomjeraj kartu, tačke se dodaju same.';
   } else {
     map.off('move', _onMapMoveMsr);
     _msrRedraw(); // markeri za editovanje su bili sakriveni dok se crtalo — vrati ih odmah
@@ -25935,7 +26146,9 @@ function _mjtrgTab(t) {
   document.getElementById('mjtrg-sec-msr').style.display = isMsr ? '' : 'none';
   document.getElementById('mjtrg-sec-trg').style.display = isMsr ? 'none' : '';
   const panel = document.getElementById('mjtrg-panel');
-  if (panel) panel.style.maxHeight = isMsr ? '15vh' : '65vh';
+  // Mjerenje: panel onoliko visok koliko mu sadržaj treba (ranije fiksnih 15vh
+  // = ~96px na telefonu, pa je rezultat bio ispod ruba).
+  if (panel) panel.style.maxHeight = isMsr ? 'min(60vh, 440px)' : '65vh';
   if (!isMsr) { _tragRegRender(); _msrRegRender(); }
 }
 
@@ -26133,8 +26346,48 @@ function _msrRedraw() {
   }
 }
 
+// "1 tačka / 2 tačke / 5 tačaka"
+function _msrBrojTacaka(n) {
+  const d = n % 10, dd = n % 100;
+  if (d === 1 && dd !== 11) return n + ' tačka';
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + ' tačke';
+  return n + ' tačaka';
+}
+// Glavni rezultat na vrhu panela — ranije je bio u polju ispod ruba panela
+// (visokog 15vh), pa se tokom mjerenja uopšte nije vidjelo koliko je izmjereno.
+function _msrUpdGlavni() {
+  const vEl = document.getElementById('msr-main-val');
+  const sEl = document.getElementById('msr-main-sub');
+  if (!vEl || !sEl) return;
+  const pts = _msrPts, n = pts.length;
+  let len = 0;
+  for (let i = 0; i < n - 1; i++) len += _msrHaversine(pts[i].lat, pts[i].lng, pts[i+1].lat, pts[i+1].lng);
+  let v = '—', sub = _msrBrojTacaka(n);
+  if (_msrMode === 'area') {
+    if (n >= 3) { v = fmtHa(_msrPoligonPovrsina(pts) / 10000); sub += ' · obim ' + _msrFmt(len); }
+    else sub += ' · za površinu trebaju bar 3';
+  } else if (_msrMode === 'nagib') {
+    if (n >= 2) {
+      const a = pts[0], z = pts[n - 1];
+      const d = _msrHaversine(a.lat, a.lng, z.lat, z.lng);
+      const dh = (a.elev != null && z.elev != null) ? z.elev - a.elev : null;
+      if (dh != null && d > 0) {
+        const pct = dh / d * 100;
+        v = (pct > 0 ? '+' : '') + pct.toFixed(1) + ' %';
+        sub = 'dužina ' + _msrFmt(d) + ' · ugao ' + (Math.atan(dh / d) * 180 / Math.PI).toFixed(1) + '°';
+      } else { v = '…'; sub = 'dužina ' + _msrFmt(d) + ' · čitam visinu'; }
+    } else sub += ' · nagib računam iz 2 tačke';
+  } else if (n >= 2) {
+    v = _msrFmt(len);
+  }
+  vEl.textContent = v;
+  vEl.classList.toggle('prazno', v === '—');
+  sEl.textContent = sub;
+}
+
 function _msrUpdPanel() {
   _msrUpdUndoBtn();
+  _msrUpdGlavni();
   const totalBox = document.getElementById('msr-total-box');
   if (!totalBox) return;
   const pts = _msrPts;
@@ -26154,35 +26407,39 @@ function _msrUpdPanel() {
     // Labela - promijeni naslove za nagib
     const labels = totalBox.querySelectorAll('[data-lbl]');
     labels.forEach(l => {
-      if (l.dataset.lbl==='up')   l.textContent = '📐 Nagib:';
-      if (l.dataset.lbl==='down') l.textContent = '🧭 Azimut:';
+      if (l.dataset.lbl==='up')   l.textContent = 'Nagib';
+      // Ovo je ugao nagiba u stepenima (atan(dh/d)), NE azimut — ranije pogrešno nazvano.
+      if (l.dataset.lbl==='down') l.textContent = 'Ugao';
     });
     return;
   }
 
   // dist / area mode
-  let totalDist = 0, totalUp = 0, totalDn = 0;
+  let totalDist = 0, totalUp = 0, totalDn = 0, imaVisina = false;
   for (let i = 0; i < pts.length-1; i++) {
     const a=pts[i], b=pts[i+1];
     totalDist += _msrHaversine(a.lat,a.lng,b.lat,b.lng);
     if (a.elev != null && b.elev != null) {
+      imaVisina = true;
       const dh = b.elev - a.elev;
       if (dh > 0) totalUp += dh; else totalDn -= dh;
     }
   }
   document.getElementById('msr-total-dist').textContent = _msrFmt(totalDist);
-  document.getElementById('msr-total-up').textContent   = Math.round(totalUp) + ' m';
-  document.getElementById('msr-total-down').textContent = Math.round(totalDn) + ' m';
+  // Bez ijedne poznate visine (offline, DEM nedostupan) "0 m" bi se čitalo kao
+  // izmjerena nula — nije mjereno, pa crtica.
+  document.getElementById('msr-total-up').textContent   = imaVisina ? Math.round(totalUp) + ' m' : '—';
+  document.getElementById('msr-total-down').textContent = imaVisina ? Math.round(totalDn) + ' m' : '—';
   // Vrati labele ako su promijenjene
   const upLbl = totalBox.querySelector('[data-lbl="up"]');
   const dnLbl = totalBox.querySelector('[data-lbl="down"]');
-  if (upLbl) upLbl.textContent = '⬆ Uspona:';
-  if (dnLbl) dnLbl.textContent = '⬇ Silaza:';
+  if (upLbl) upLbl.textContent = '⬆ Uspon';
+  if (dnLbl) dnLbl.textContent = '⬇ Silaz';
 
   const areaRow = document.getElementById('msr-area-row');
   if (_msrMode === 'area' && pts.length >= 3) {
     const areaM2 = _msrPoligonPovrsina(pts);
-    areaRow.style.display = 'block';
+    areaRow.style.display = '';
     document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
     document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
   } else {
@@ -26234,7 +26491,7 @@ function msrStart() {
   map.on('click', _msrMapClick);
   map.on('dblclick', _msrMapDblClick);
   const btn = document.getElementById('btn-msr-start');
-  if (btn) { btn.textContent='⏹ Završi'; btn.style.background='#dc2626'; }
+  if (btn) { btn.innerHTML = '<svg class="ic"><use href="#ic-potvrdi"/></svg> Završi'; btn.classList.add('on'); }
   // Zajednički crosshair (v1.4.4) — #msr-xhair je bio position:fixed prema
   // CIJELOM prozoru (top:50%/left:50%), pa se nije poklapao sa map.getCenter()
   // (mjerenje uzima) čim iznad karte postoji BILO ŠTA (traka na vrhu i sl.) —
@@ -26246,9 +26503,10 @@ function msrStart() {
   if (dot) { dot.style.display = 'flex'; dot.onclick = (e) => { e.stopPropagation(); msrAddCenter(); }; }
   _updMcdDist();
   const hint = document.getElementById('msr-hint');
-  const modeHints = { dist: 'Klikaj tačke — mjeri ukupnu udaljenost.', area: 'Klikaj ≥3 tačke — poligon se zatvara automatski.', nagib: 'Klikni 2 tačke — nagib se računa automatski.' };
-  if (hint) hint.innerHTML = (modeHints[_msrMode] || 'Klikaj tačke.') + '<br><small style="color:#475569">⊕ Pozicija tačke · vuci da pomjeriš · desni klik briši</small>';
+  const modeHints = { dist: 'Tapni tačke na karti — mjeri se ukupna dužina.', area: 'Tapni bar 3 tačke — površina se zatvara sama.', nagib: 'Tapni 2 tačke — nagib se računa sam.' };
+  if (hint) hint.textContent = (modeHints[_msrMode] || 'Tapni tačke.') + ' Ili postavi nišan i tapni Dodaj tačku.';
   _msrUpdUndoBtn();
+  _msrUpdGlavni();
 }
 function _msrSyncRegistry() {
   if (!_mqmId) return;
@@ -26267,7 +26525,7 @@ function msrStop(skipSave) {
     _msrToggleDraw(false);
   }
   const btn = document.getElementById('btn-msr-start');
-  if (btn) { btn.textContent='▶ Počni'; btn.style.background=''; }
+  if (btn) { btn.innerHTML = '<svg class="ic"><use href="#ic-pocni"/></svg> Počni'; btn.classList.remove('on'); }
   document.getElementById('main')?.classList.remove('drawing-active');
   const dot = document.getElementById('map-center-dot');
   if (dot) dot.onclick = null;
@@ -26275,9 +26533,9 @@ function msrStop(skipSave) {
   _updMcdDist();
   const hint = document.getElementById('msr-hint');
   if (_msrPts.length >= 2) {
-    if (hint) hint.innerHTML = 'Vuci tačke za korekciju · <small style="color:#475569">desni klik = obriši tačku</small>';
+    if (hint) hint.textContent = 'Gotovo. Tačke možeš vući za korekciju.';
   } else {
-    if (hint) hint.innerHTML = 'Pritisni ▶ Počni pa klikaj tačke na karti ili koristi ⊕ Pozicija tačke.';
+    if (hint) hint.textContent = 'Pritisni Počni, pa tapni kartu ili dodaj tačku na nišanu.';
   }
   _msrUpdUndoBtn();
   // Auto-ponudi snimanje ako ima ≥2 tačaka; preskoči ako editujemo postojeći zapis
@@ -26296,7 +26554,7 @@ function msrClear() {
   _msrDrawAllSaved();
   _msrUpdUndoBtn();
   const hint = document.getElementById('msr-hint');
-  if (hint) hint.textContent = 'Pritisni dugme pa klikaj tačke na karti. Dvostruki klik ili "Završi" za kraj.';
+  if (hint) hint.textContent = 'Pritisni Počni, pa tapni kartu ili dodaj tačku na nišanu.';
 }
 // Poništi zadnju dodanu tačku (v1.4.4, na zahtjev — mjerenje nije imalo undo,
 // samo brisanje CIJELE tačke preko desnog klika na marker). Isti resursi kao
@@ -26318,6 +26576,8 @@ function msrUndo() {
 function _msrUpdUndoBtn() {
   const btn = document.getElementById('btn-msr-undo');
   if (btn) btn.style.display = (_msrOn && _msrPts.length) ? '' : 'none';
+  const add = document.getElementById('btn-msr-add');
+  if (add) add.disabled = !_msrOn;
 }
 function msrActivateIfNeeded() {
   _msrUpdPanel();
@@ -37732,58 +37992,56 @@ if (typeof AndroidDownload !== 'undefined') {
     <!-- IZMJERI PANEL -->
     <div id="mjtrg-panel">
       <!-- IZMJERA -->
-      <div id="mjtrg-sec-msr" class="sec" style="border-bottom:none;padding:10px 14px 12px;">
-        <!-- Gumbi -->
-        <div style="display:flex;gap:8px;">
-          <button id="btn-msr-start" class="btn g" onclick="msrToggle()"
-            style="flex:1;padding:11px;font-size:14px;font-weight:700;border-radius:10px;"><svg class="ic"><use href="#ic-pocni"/></svg> Počni mjerenje</button>
-          <button onclick="msrAddCenter()"
-            style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
-                   padding:11px 8px;border:2px solid #1e3a5f;border-radius:10px;
-                   background:#0f172a;color:#38bdf8;font-size:13px;font-weight:600;cursor:pointer;">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;">
-              <circle cx="9" cy="9" r="7.5" stroke="#38bdf8" stroke-width="1.5"/>
-              <line x1="9" y1="1" x2="9" y2="5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="9" y1="13" x2="9" y2="17" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="1" y1="9" x2="5" y2="9" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="13" y1="9" x2="17" y2="9" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-              <circle cx="9" cy="9" r="1.5" fill="#38bdf8"/>
-            </svg>
-            Pozicija tačke
-          </button>
+      <div id="mjtrg-sec-msr" class="sec msr-hud" style="border-bottom:none;">
+        <!-- Način mjerenja — ranije se birao SAMO iz menija Izmjeri i nigdje se
+             nije vidjelo šta se trenutno mjeri. -->
+        <div class="msr-modes" role="tablist">
+          <button id="msrm-dist" onclick="_msrSetMode('dist')"><svg class="ic"><use href="#ic-uglomjer"/></svg> Distanca</button>
+          <button id="msrm-area" onclick="_msrSetMode('area')"><svg class="ic"><use href="#ic-kvadrat"/></svg> Površina</button>
+          <button id="msrm-nagib" onclick="_msrSetMode('nagib')"><svg class="ic"><use href="#ic-visina"/></svg> Nagib</button>
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-          <!-- Crtaj (dodaj tačke automatski dok se mapa pomjera — kao kod crtanja vlake) -->
-          <label id="msr-draw-row" style="display:flex;align-items:center;gap:7px;flex:1;font-size:12px;color:#94a3b8;cursor:pointer;">
-            <input type="checkbox" id="msr-draw-chk" onchange="_msrToggleDraw(this.checked)" style="width:16px;height:16px;flex-shrink:0;">
-            ✍️ Crtaj — dodaj tačke dok pomjeraš mapu
-          </label>
+        <!-- Glavni rezultat uživo: vidi se od prve tačke, bez skrolanja panela -->
+        <div class="msr-res">
+          <div class="msr-res-val" id="msr-main-val">—</div>
+          <div class="msr-res-sub" id="msr-main-sub">0 tačaka</div>
+        </div>
+        <div class="msr-hint" id="msr-hint">Pritisni Počni, pa dodaj tačke na karti.</div>
+
+        <div class="msr-btns">
+          <button id="btn-msr-add" class="msr-b msr-b-add" onclick="msrAddCenter()" title="Dodaj tačku u centru karte (nišan)">
+            <svg class="ic"><use href="#ic-meta"/></svg> Dodaj tačku
+          </button>
           <!-- Poništi zadnju tačku (v1.4.4) — dosad je jedini način ispravke
-               bio desni klik TAČNO na postojeći marker, nezgodno na mobilnom
-               i nemoguće za tek dodanu tačku dok je "Crtaj" još uključen. -->
-          <button id="btn-msr-undo" onclick="msrUndo()" title="Poništi zadnju tačku" style="display:none;
-            padding:7px 10px;border:1px solid #475569;border-radius:8px;background:#1e293b;
-            color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
-            ↶ Poništi
+               bio desni klik TAČNO na postojeći marker, nezgodno na mobilnom. -->
+          <button id="btn-msr-undo" class="msr-b" onclick="msrUndo()" title="Poništi zadnju tačku" aria-label="Poništi zadnju tačku" style="display:none;">
+            <svg class="ic"><use href="#ic-vrati"/></svg>
+          </button>
+          <button id="btn-msr-start" class="msr-b msr-b-go" onclick="msrToggle()">
+            <svg class="ic"><use href="#ic-pocni"/></svg> Počni
           </button>
         </div>
 
-        <!-- Rezultati (vidljivi kad je mjerenje aktivno) -->
-        <div id="msr-total-box" style="display:none;background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:10px 12px;margin-top:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Ukupno</span>
-            <b id="msr-total-dist" style="color:#4ade80;font-size:15px;font-family:monospace;">0 m</b>
+        <!-- Crtaj (dodaj tačke automatski dok se mapa pomjera — kao kod crtanja vlake) -->
+        <label id="msr-draw-row" class="msr-draw">
+          <input type="checkbox" id="msr-draw-chk" onchange="_msrToggleDraw(this.checked)">
+          <span class="msr-draw-sw"></span>
+          <span>Crtaj — tačke se dodaju same dok pomjeraš kartu</span>
+        </label>
+
+        <!-- Detalji (vidljivi od 2 tačke) -->
+        <div id="msr-total-box" style="display:none;" class="msr-det">
+          <div class="msr-det-row" style="display:none;">
+            <span>Ukupno</span><b id="msr-total-dist">0 m</b>
           </div>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
-            <div style="font-size:11px;color:#94a3b8;"><span data-lbl="up">⬆ Uspona:</span> <b id="msr-total-up" style="color:#34d399;">0 m</b></div>
-            <div style="font-size:11px;color:#94a3b8;"><span data-lbl="down">⬇ Silaza:</span> <b id="msr-total-down" style="color:#f87171;">0 m</b></div>
+          <div class="msr-det-row">
+            <span data-lbl="up">⬆ Uspon</span><b id="msr-total-up" class="up">0 m</b>
           </div>
-          <div id="msr-area-row" style="display:none;border-top:1px solid #1e3a5f;padding-top:6px;margin-top:4px;">
-            <div style="display:flex;gap:14px;flex-wrap:wrap;">
-              <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-m2" style="color:#a78bfa;font-family:monospace;">—</b> m²</div>
-              <div style="font-size:12px;color:#94a3b8;">◻ <b id="msr-area-ha" style="color:#a78bfa;font-family:monospace;">—</b> ha</div>
-            </div>
+          <div class="msr-det-row">
+            <span data-lbl="down">⬇ Silaz</span><b id="msr-total-down" class="dn">0 m</b>
+          </div>
+          <div id="msr-area-row" style="display:none;" class="msr-det-row">
+            <span>Površina</span><b><span id="msr-area-m2">—</span> m² · <span id="msr-area-ha">—</span> ha</b>
           </div>
         </div>
       </div>
