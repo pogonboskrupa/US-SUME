@@ -993,8 +993,12 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
 /* ═══ TRAG SNIMANJE — action-bar stilovi ═══ */
-#action-bar.trag-mode { border-top-color:#f97316; background:rgba(255,255,255,0.92); }
-#ab-trag-pauza.resuming .ab-ico { background:#dcfce7 !important; color:#16a34a !important; }
+#action-bar.trag-mode { border-top: 2px solid #f97316; }
+#action-bar #ab-trag-pauza .ab-ico { --c1:#fbbf24; --c2:#ca8a04; --sh:rgba(202,138,4,0.4); }
+#action-bar #ab-trag-pauza { color: #92400e; }
+#action-bar #ab-trag-kraj  .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
+#action-bar #ab-trag-kraj  { color: #b91c1c; }
+#action-bar #ab-trag-pauza.resuming .ab-ico { --c1:#4ade80; --c2:#16a34a; --sh:rgba(22,163,74,0.4); }
 
 /* ═══ TRAG QUICK META (post-recording panel above action-bar) ═══ */
 #trag-quick-meta {
@@ -2897,18 +2901,23 @@ body.recbar-on #main { padding-bottom: 54px; }
 #rb-pauza { background: #422006; color: #fbbf24; flex-shrink: 0; }
 #rb-kraj  { background: #7f1d1d; color: #fecaca; flex-shrink: 0; }
 
+/* === DONJA TRAKA — dizajn (v1.6.6) ===
+   Ikona je obojena "pločica" sa bijelim simbolom umjesto pastelnog kruga na
+   bijelom: pastel gubi kontrast na jakom terenskom suncu. Boje po funkciji ostaju
+   iste porodice kao ranije, samo zasićenije; natpisi 10.5px/700 umjesto 9px/600.
+   Visina trake je i dalje kompaktna (~56px) — korisnik je ranije tražio tanju. */
 #action-bar {
   display: none;
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  background: rgba(255,255,255,0.95);
-  border-top: 0.5px solid rgba(0,0,0,0.12);
-  box-shadow: 0 -1px 0 rgba(0,0,0,0.04), 0 -4px 16px rgba(0,0,0,0.06);
-  /* Padding stisnut još jednom (v3.101.2) — traka -10% visine, na traženje
-     korisnika. Dugmad (v3.101.1, +15%) i tekst ostaju iste veličine, samo je
-     razmak oko njih tanji. */
-  padding: 1px 6px calc(env(safe-area-inset-bottom, 0px) + 1.5px);
+  background: rgba(255,255,255,0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border-top: 1px solid rgba(15,23,42,0.08);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -6px 22px rgba(15,23,42,0.12);
+  padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 2px);
   gap: 2px;
   justify-content: space-around;
 }
@@ -2918,75 +2927,99 @@ body.recbar-on #main { padding-bottom: 54px; }
   border: none;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 1.5px;
+  gap: 2px;
   cursor: pointer;
-  padding: 1px 0;
-  transition: all 0.15s ease;
-  color: #6b7280;
-  font-size: 9px;
-  font-weight: 600;
+  padding: 0;
+  color: #334155;
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: 0.1px;
+  line-height: 1.15;
+  -webkit-tap-highlight-color: transparent;
 }
-#action-bar button:active { transform: scale(0.88); opacity: 0.7; }
 #action-bar .ab-ico {
-  /* +15% na traženje korisnika (v3.101.1): 28→32px. font-size raste isto — sve
-     ugniježđene .ic SVG ikonice su u em jedinicama pa prate ovo automatski
-     (uklj. i override-e ispod: #ab-loc/#btragovi/#ab-izmjeri .ic). */
-  width: 32px; height: 32px; border-radius: 16px;
+  --c1: #94a3b8; --c2: #64748b; --sh: rgba(100,116,139,0.35);
+  position: relative;
+  width: 42px; height: 32px; border-radius: 11px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  transition: box-shadow 0.15s, transform 0.15s;
+  font-size: 15px; line-height: 1;
+  color: #fff;
+  background: linear-gradient(180deg, var(--c1), var(--c2));
+  box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35);
+  transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
 }
-#action-bar .ab-ico img { width: 16px; height: 16px; object-fit: contain; filter: none; }
-/* Button icon colors — softer pastels on white */
-#brec     .ab-ico { background: #dcfce7; color: #16a34a; }
-#brec     { color: #16a34a; }
-#btrag    .ab-ico { background: #fee2e2; color: #dc2626; }
-#btrag    { color: #dc2626; }
-#ab-tacka .ab-ico { background: #fef3c7; color: #d97706; }
-#ab-tacka { color: #92400e; }
-#ab-loc   .ab-ico { background: #dbeafe; color: #2563eb; }
-#ab-loc   { color: #1d4ed8; }
-/* Lokacija/Tragovi/Izmjeri (donja traka) — ikonice uvećane unutar ISTOG kruga
-   (.ab-ico ostaje 28px), na traženje korisnika. .ic je inače 1.26em posvuda
-   (i sam taj bazni iznos je +20% od originalnog 1.05em — vidi .ic definiciju
-   gore); ovdje samo lokalni override, ne dira globalnu klasu. Lokacija je
-   dobila dva uzastopna uvećanja od 20% pa još jedno (1.05→1.26→1.512→
-   1.8144em); Tragovi i Izmjeri su dobili jedno pa još jedno (1.05→1.26→
-   1.638→1.9656em). */
-#ab-loc .ic { width: 1.8144em; height: 1.8144em; }
-#btragovi .ic, #ab-izmjeri .ic { width: 1.9656em; height: 1.9656em; }
-#ab-centar .ab-ico { background: #d1fae5; color: #059669; }
-#ab-centar { color: #047857; }
-#route-suggest-btn.active { background:#4c1d95 !important; border-color:#7c3aed !important; color:#c4b5fd !important; box-shadow:0 0 0 2px rgba(167,139,250,0.3); }
-#ab-krak-l .ab-ico { background: #cffafe; color: #0891b2; }
-#ab-krak-l { color: #0e7490; }
-#ab-krak-d .ab-ico { background: #ffedd5; color: #ea580c; }
-#ab-krak-d { color: #c2410c; }
-#ab-nazad  .ab-ico { background: #ede9fe; color: #7c3aed; }
-#ab-nazad  { color: #6d28d9; }
-#ab-kraj   .ab-ico { background: #fee2e2; color: #dc2626; }
-#ab-kraj   { color: #dc2626; }
-#ab-pauza  .ab-ico { background: #fef9c3; color: #a16207; }
-#ab-pauza  { color: #92400e; }
-#ab-izmjeri .ab-ico { background: #f0fdf4; color: #16a34a; }
-#ab-izmjeri { color: #15803d; width: 100%; }
-/* Active states */
-#btrag.active .ab-ico { background: #ef4444; color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,0.25); }
-#btrag.active { color: #ef4444; }
-#brec.active  .ab-ico { background: #22c55e; color: #fff; box-shadow: 0 0 0 3px rgba(34,197,94,0.25); }
-#brec.active  { color: #16a34a; }
-#ab-pauza.resuming .ab-ico { background: #22c55e; color: #fff; }
+#action-bar button:active .ab-ico { transform: scale(0.9); }
+#action-bar .ab-ico .ic { width: 22px; height: 22px; margin: 0; vertical-align: 0; }
+#ab-loc .ab-ico .ic, #btragovi .ab-ico .ic, #ab-izmjeri .ab-ico .ic { width: 25px; height: 25px; }
+#action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain; filter: brightness(0) invert(1); }
+
+#brec       .ab-ico { --c1:#34d399; --c2:#059669; --sh:rgba(5,150,105,0.4); }
+#action-bar #brec       { color: #047857; }
+#btragovi   .ab-ico { --c1:#fb923c; --c2:#ea580c; --sh:rgba(234,88,12,0.4); }
+#action-bar #btragovi   { color: #c2410c; }
+#btrag      .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
+#action-bar #btrag      { color: #b91c1c; }
+#ab-tacka   .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.4); }
+#action-bar #ab-tacka   { color: #92400e; }
+#ab-izmjeri .ab-ico { --c1:#2dd4bf; --c2:#0d9488; --sh:rgba(13,148,136,0.4); }
+#action-bar #ab-izmjeri { color: #0f766e; width: 100%; }
+#ab-centar  .ab-ico { --c1:#818cf8; --c2:#4f46e5; --sh:rgba(79,70,229,0.4); }
+#action-bar #ab-centar  { color: #4338ca; }
+#ab-krak-l  .ab-ico { --c1:#22d3ee; --c2:#0891b2; --sh:rgba(8,145,178,0.4); }
+#action-bar #ab-krak-l  { color: #0e7490; }
+#ab-krak-d  .ab-ico { --c1:#fb923c; --c2:#ea580c; --sh:rgba(234,88,12,0.4); }
+#action-bar #ab-krak-d  { color: #c2410c; }
+#ab-nazad   .ab-ico { --c1:#a78bfa; --c2:#7c3aed; --sh:rgba(124,58,237,0.4); }
+#action-bar #ab-nazad   { color: #6d28d9; }
+#ab-kraj    .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
+#action-bar #ab-kraj    { color: #b91c1c; }
+#ab-pauza   .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.4); }
+#action-bar #ab-pauza   { color: #92400e; }
+#ab-pauza.resuming .ab-ico { --c1:#4ade80; --c2:#16a34a; --sh:rgba(22,163,74,0.4); }
+
+/* Lokacija nosi STANJE GPS-a (_updLocBtn): isključen = svijetla pločica sa
+   plavim simbolom; traži signal = žuta + puls; ima fiks = plava + preciznost. */
+#ab-loc .ab-ico { background: #e0e7ff; color: #2563eb; box-shadow: inset 0 0 0 1.5px #c7d2fe; }
+#action-bar #ab-loc { color: #1e40af; }
+#ab-loc.gps-trazi .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.45);
+  background: linear-gradient(180deg, var(--c1), var(--c2)); color: #fff;
+  box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35); animation: abPuls 1.4s ease-out infinite; }
+#action-bar #ab-loc.gps-trazi { color: #92400e; }
+#ab-loc.gps-ok .ab-ico { --c1:#60a5fa; --c2:#1d4ed8; --sh:rgba(29,78,216,0.45);
+  background: linear-gradient(180deg, var(--c1), var(--c2)); color: #fff;
+  box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35); }
+#action-bar #ab-loc.gps-ok { color: #1d4ed8; }
+.ab-acc { display: none; position: absolute; top: -7px; right: -12px; padding: 1px 5px; border-radius: 8px;
+  font-size: 9px; font-weight: 800; line-height: 13px; background: #fff; color: #15803d;
+  border: 1.5px solid #22c55e; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+#ab-loc.gps-ok .ab-acc { display: block; }
+.ab-acc.srednji { color: #a16207; border-color: #f59e0b; }
+.ab-acc.slab    { color: #b91c1c; border-color: #ef4444; }
+/* Centar se ističe kad je karta odmaknuta od tvoje pozicije (_userPannedAway). */
+#ab-centar.odmaknuto .ab-ico { animation: abPulsPlavi 1.6s ease-out infinite; }
+
+#btrag.active .ab-ico { box-shadow: 0 0 0 3px rgba(239,68,68,0.3); }
+#brec.active  .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.45); animation: abPulsCrveni 1.6s ease-out infinite; }
+#action-bar #brec.active  { color: #b91c1c; }
+@keyframes abPuls { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,0.55); } 100% { box-shadow: 0 0 0 9px rgba(245,158,11,0); } }
+@keyframes abPulsPlavi { 0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); } 100% { box-shadow: 0 0 0 9px rgba(99,102,241,0); } }
+@keyframes abPulsCrveni { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); } 100% { box-shadow: 0 0 0 9px rgba(239,68,68,0); } }
+@media (prefers-reduced-motion: reduce) {
+  #ab-loc.gps-trazi .ab-ico, #ab-centar.odmaknuto .ab-ico, #brec.active .ab-ico { animation: none; }
+}
+/* Oznaka aktivne vlake je bedž na uglu ikone, ne treći red — inače bi ikona
+   "Snimi vlaku" stajala više od ikona susjednih dugmadi. */
+#action-bar #brec { position: relative; }
 #action-bar #brec-nm {
-  font-size: 8px; color: #b45309; line-height: 1;
-  max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  position: absolute; top: -2px; left: calc(50% + 11px);
+  font-size: 9px; font-weight: 800; color: #92400e; background: #fff; border: 1.5px solid #f59e0b;
+  border-radius: 8px; padding: 0 5px; line-height: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#action-bar.rec-mode .ab-ico { width: 30px; height: 30px; font-size: 14px; }
-#action-bar.rec-mode button { font-size: 8px; }
-#action-bar.paused-mode button { font-size: 8px; }
-/* Active icon img filter for white bg → show original color */
-#brec.active .ab-ico img { filter: brightness(0) invert(1); }
+#action-bar #brec-nm:empty { display: none; }
+#action-bar.rec-mode .ab-ico { width: 38px; height: 30px; font-size: 14px; }
+#action-bar.rec-mode button, #action-bar.paused-mode button { font-size: 9.5px; }
+/* === KRAJ DONJA TRAKA === */
 .leaflet-popup-content { font-family: inherit; color: #e2e8f0; }
 .kml-info-popup .leaflet-popup-content-wrapper { background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);padding:0; }
 .kml-info-popup .leaflet-popup-content { margin:0;font-size:13px; }
@@ -3172,12 +3205,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 #share-foto-ok     { background:#3b82f6; color:#fff; }
 #share-foto-ok:active { background:#2563eb; }
 #share-foto-cancel { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
-#action-bar #ab-krak-l { color: #38bdf8; }
-#action-bar #ab-krak-d { color: #f97316; }
-#action-bar #ab-krak-l:active { background: rgba(56,189,248,0.1); }
-#action-bar #ab-krak-d:active { background: rgba(249,115,22,0.1); }
-#action-bar #ab-nazad { color: #a78bfa; }
-#action-bar #ab-nazad:active { background: rgba(167,139,250,0.1); }
+
 #action-bar #ab-nazad-nm {
   font-size: 9px; color: #fbbf24; line-height: 1;
   max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -3194,51 +3222,59 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   pointer-events: none;
 }
 #map-ctrl-bar > * { pointer-events: auto; }
+/* Gornje kontrole karte (v1.6.6): tamno "staklo" + blur da se čitaju na
+   svakoj podlozi (topo, satelit, offline), 40px dodirna meta umjesto 34px,
+   SVG ikone umjesto ＋/－/⭐ znakova fonta (OEM WebView ih crta različito). */
 #map-zoom-btns {
   display: flex;
   flex-direction: column;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-  border-radius: 5px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(15,23,42,0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148,163,184,0.28);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
 #map-zoom-btns button {
-  width: 34px; height: 34px;
-  background: #16213e;
-  border: 1px solid #334155;
-  border-top: none;
-  border-radius: 0;
-  color: #e2e8f0;
-  font-size: 20px;
-  font-weight: 300;
+  width: 40px; height: 40px;
+  background: transparent;
+  border: none;
+  color: #f1f5f9;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  line-height: 1;
   padding: 0;
   transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
-#map-zoom-btns button:first-child {
-  border-top: 1px solid #334155;
-  border-radius: 5px 5px 0 0;
-}
-#map-zoom-btns button:last-child { border-radius: 0 0 5px 5px; }
-#map-zoom-btns button:active { background: #1e3a5f; }
+#map-zoom-btns button + button { border-top: 1px solid rgba(148,163,184,0.22); }
+#map-zoom-btns button .ic { width: 20px; height: 20px; margin: 0; vertical-align: 0; stroke-width: 2.4; }
+#map-zoom-btns button:active { background: rgba(56,189,248,0.25); }
 #map-layer-btns {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 #layer-switch-btn, #map-fav-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px;
-  background: #16213e;
-  border: 1px solid #334155;
-  border-radius: 5px;
+  width: 40px; height: 40px;
+  background: rgba(15,23,42,0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148,163,184,0.28);
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   color: #e2e8f0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-  transition: background 0.15s;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: background 0.15s, transform 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
-#layer-switch-btn:active, #map-fav-btn:active { background: #1e3a5f; }
+#layer-switch-btn .ic, #map-fav-btn .ic, #oznake-btn .ic { width: 21px; height: 21px; margin: 0; vertical-align: 0; }
+#map-fav-btn { color: #fbbf24; }
+#map-fav-btn .ic { fill: currentColor; stroke-width: 1.5; }
+#layer-switch-btn:active, #map-fav-btn:active, #oznake-btn:active { background: rgba(56,189,248,0.25); transform: scale(0.93); }
 
 /* ── Layer switcher bottom sheet ────────────────────────── */
 #layer-sheet {
@@ -3442,13 +3478,16 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 .oz-pat-btn svg { display: block; }
 #oznake-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px;
-  background: #16213e;
-  border: 1px solid #1e3a5f;
-  border-radius: 8px; cursor: pointer; color: #cbd5e1;
-  font-size: 15px; transition: background .15s;
+  width: 40px; height: 40px;
+  background: rgba(15,23,42,0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148,163,184,0.28);
+  border-radius: 12px; cursor: pointer; color: #e2e8f0;
+  font-size: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: background .15s, transform .12s;
+  -webkit-tap-highlight-color: transparent;
 }
-#oznake-btn:active { background: #1e3a5f; }
 #layer-sheet h3 {
   text-align: center;
   font-size: 13px;
@@ -4751,13 +4790,13 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       <!-- Kontrolni panel odmah ispod nv-badge: zoom lijevo, slojevi desno -->
       <div id="map-ctrl-bar" style="display:none;">
         <div id="map-zoom-btns">
-          <button onclick="map.zoomIn()" title="Uvećaj">＋</button>
-          <button onclick="map.zoomOut()" title="Umanji">－</button>
+          <button onclick="map.zoomIn()" title="Uvećaj" aria-label="Uvećaj"><svg class="ic"><use href="#ic-dodaj"/></svg></button>
+          <button onclick="map.zoomOut()" title="Umanji" aria-label="Umanji"><svg class="ic" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
         <div id="map-layer-btns">
           <button id="layer-switch-btn" onclick="_openLayerSheet()" title="Promijeni sloj karte"><svg class="ic"><use href="#ic-podloga"/></svg></button>
           <button id="oznake-btn" onclick="openOznakePanel()" title="Lista oznaka i KML fajlova"><svg class="ic"><use href="#ic-folder"/></svg></button>
-          <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte">⭐</button>
+          <button id="map-fav-btn" onclick="openMapFavs()" title="Omiljene karte" aria-label="Omiljene karte"><svg class="ic"><use href="#ic-zvijezda"/></svg></button>
           <span id="sync-status-dot" class="sync-dot sync-dot--off" title="Realtime sync" style="margin:6px 2px 0 4px;"></span>
         </div>
       </div>
@@ -5049,7 +5088,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.5';
+const APP_VER = 'v1.6.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -14394,6 +14433,7 @@ map.on('dragstart', () => {
   // svoju GPS poziciju — N.V. treba pratiti centar karte (vidi komentar uz
   // _userPannedAway), ne ostati zaglavljena na GPS visini.
   _userPannedAway = true;
+  _updCentarBtn();
 });
 
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
@@ -16788,6 +16828,43 @@ function _initForestSwitch() {
 }
 setTimeout(_initForestSwitch, 100);
 
+// Dugme Lokacija nosi stanje GPS-a: isključen / traži signal / fiks + preciznost.
+// Zove se na SVAKI fiks, pa DOM dira samo kad se prikaz stvarno promijeni.
+let _locBtnKljuc = '';
+function _updLocBtn() {
+  const btn = document.getElementById('ab-loc');
+  if (!btn) return;
+  // _lastGpsFixTime je `let` niže u istom bloku — pri ranom pozivu je u TDZ-u.
+  let fixT = 0;
+  try { fixT = _lastGpsFixTime || 0; } catch(e) {}
+  const svjez = !!lastP && (Date.now() - fixT < 30000);
+  const stanje = !gpsOn ? '' : (svjez ? 'gps-ok' : 'gps-trazi');
+  const ac = (stanje === 'gps-ok' && isFinite(lastP.ac)) ? Math.round(lastP.ac) : null;
+  const ton = ac == null ? '' : ac <= 10 ? '' : ac <= 25 ? 'srednji' : 'slab';
+  const kljuc = stanje + '|' + ac + '|' + ton;
+  if (kljuc !== _locBtnKljuc) {
+    _locBtnKljuc = kljuc;
+    btn.classList.toggle('gps-trazi', stanje === 'gps-trazi');
+    btn.classList.toggle('gps-ok', stanje === 'gps-ok');
+    const acc = document.getElementById('ab-loc-acc');
+    if (acc) {
+      acc.textContent = ac == null ? '' : '±' + (ac > 99 ? '99+' : ac) + 'm';
+      acc.className = 'ab-acc' + (ton ? ' ' + ton : '');
+    }
+    btn.title = !gpsOn ? 'Moja lokacija (GPS isključen)'
+      : stanje === 'gps-ok' ? 'Moja lokacija — preciznost ±' + ac + ' m'
+      : 'Moja lokacija — tražim GPS signal';
+  }
+  _updCentarBtn();
+}
+function _updCentarBtn() {
+  const b = document.getElementById('ab-centar');
+  if (b) b.classList.toggle('odmaknuto', !!(_userPannedAway && gpsOn && lastP));
+}
+// Fiksovi zastanu bez greške (krošnja, tunel) — bez ovoga bi dugme i dalje
+// tvrdilo "ima signala". Jeftino: DOM se dira samo na promjenu stanja.
+setInterval(() => { if (gpsOn) _updLocBtn(); }, 10000);
+
 function _updGpsSwitch() {
   const sw = document.getElementById('gps-switch');
   if (sw) sw.classList.toggle('on', gpsOn);
@@ -16797,8 +16874,7 @@ function _updGpsSwitch() {
   if (rs) rs.classList.toggle('on', _radiusOn);
   const fs = document.getElementById('forest-switch');
   if (fs) fs.classList.toggle('on', _forestMode);
-  const btn = document.getElementById('ab-loc');
-  if (btn) btn.style.color = gpsOn ? '#22c55e' : '';
+  _updLocBtn();
   // Dugme "Snimi trag" mora pokazati STVARNO stanje kad se popup otvori —
   // trag je mogao biti započet negdje drugo (Tragovi tab), pa bi "Snimi
   // trag" ovdje TIHO drugi put pokrenulo/prekinulo snimanje da tekst laže.
@@ -17363,6 +17439,7 @@ function onP(p) {
   lastP = { la, lo, al: filtAl ?? 0, ac };
   _lastGpsFixTime = Date.now();
   _gpsRestartCount = 0;
+  _updLocBtn();
   if (_gpsStabCb) { try { _gpsStabCb(la, lo, ac); } catch(e) {} }
   _addTragPoint(la, lo, ac, al, gpsSpeed);
   _updMcdDist();
@@ -17571,6 +17648,7 @@ function _restartGpsWatch(reason) {
 // ── GPS ERROR — auto-restart ─────────────────────────────────────────────────
 function onPE(e) {
   document.getElementById('gps-info').textContent = 'GPS: greška — ' + e.message;
+  _updLocBtn();
   if (recOn && gpsOn && _gpsRestartCount < 5) {
     setTimeout(() => {
       if (_restartGpsWatch('error')) _gpsRestartCount++;
@@ -18638,6 +18716,7 @@ function fabLokacija() {
   // Vraćanje na svoju poziciju znači "opet prati moju GPS visinu" — vidi
   // komentar uz _userPannedAway.
   _userPannedAway = false;
+  _updCentarBtn();
   if (lastP) {
     map.setView([lastP.la, lastP.lo], Math.max(map.getZoom(), 16));
   } else {
@@ -18734,7 +18813,7 @@ function togTragPause() {
     _tragLiveClear();
     _tragBuf = [];
     _tragLastT = 0;
-    if (ico) ico.textContent = '▶';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pocni"/></svg>';
     if (txt) txt.textContent = 'Nastavi';
     if (btn) btn.classList.add('resuming');
     showToast('⏸ Snimanje traga pauzirano');
@@ -18747,7 +18826,7 @@ function togTragPause() {
     // ništa se ne upisuje dok se ručno ne pauzira/nastavi ponovo.
     _tragLastT = Date.now();
     _tragLastMoveT = Date.now();
-    if (ico) ico.textContent = '⏸';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pauza"/></svg>';
     if (txt) txt.textContent = 'Pauza';
     if (btn) btn.classList.remove('resuming');
     showToast('🔴 Snimanje traga nastavljeno');
@@ -18847,7 +18926,7 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
     const ico = document.getElementById('ab-trag-pauza-ico');
     const txt = document.getElementById('ab-trag-pauza-txt');
     const btn = document.getElementById('ab-trag-pauza');
-    if (ico) ico.textContent = '▶';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pocni"/></svg>';
     if (txt) txt.textContent = 'Nastavi';
     if (btn) btn.classList.add('resuming');
     showToast('⏸ Trag pauziran — dugo mirovanje (2 min)');
@@ -25559,7 +25638,7 @@ function _updFabVisibility() {
     const kt = g('ab-kraj-txt'); if (kt) kt.textContent = 'Završi';
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
-    if (ico) ico.textContent = '▶'; if (txt) txt.textContent = 'Nastavi';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pocni"/></svg>'; if (txt) txt.textContent = 'Nastavi';
     const bPauza = g('ab-pauza');
     if (bPauza) bPauza.classList.add('resuming');
     if (ab) { ab.classList.remove('rec-mode'); ab.classList.add('paused-mode'); }
@@ -25569,7 +25648,7 @@ function _updFabVisibility() {
     show('ab-kraj', false);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
-    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pauza"/></svg>'; if (txt) txt.textContent = 'Pauza';
     const bPauza = g('ab-pauza');
     if (bPauza) bPauza.classList.remove('resuming');
     if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
@@ -25579,7 +25658,7 @@ function _updFabVisibility() {
     show('ab-kraj', false);
     show('ab-pauza', true);
     const ico = g('ab-pauza-ico'), txt = g('ab-pauza-txt');
-    if (ico) ico.textContent = '⏸'; if (txt) txt.textContent = 'Pauza';
+    if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pauza"/></svg>'; if (txt) txt.textContent = 'Pauza';
     const bPauza = g('ab-pauza');
     if (bPauza) bPauza.classList.remove('resuming');
     if (ab) { ab.classList.add('rec-mode'); ab.classList.remove('paused-mode'); }
@@ -38054,11 +38133,11 @@ if (typeof AndroidDownload !== 'undefined') {
     <span id="ab-nazad-nm"></span>
   </button>
   <button id="ab-krak-l" onclick="noviKrakStrana('L')" title="Novi lijevi krak" style="display:none;">
-    <span class="ab-ico">⊕</span>
+    <span class="ab-ico"><svg class="ic"><use href="#ic-dodaj"/></svg></span>
     <span>Lijevi krak</span>
   </button>
   <button id="ab-krak-d" onclick="noviKrakStrana('D')" title="Novi desni krak" style="display:none;">
-    <span class="ab-ico">⊕</span>
+    <span class="ab-ico"><svg class="ic"><use href="#ic-dodaj"/></svg></span>
     <span>Desni krak</span>
   </button>
   <!-- Pauza / Nastavi (tokom snimanja) -->
@@ -38135,7 +38214,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="ab-loc-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
     <button id="ab-loc" onclick="_toggleLocPopup()" title="Moja lokacija">
-      <span class="ab-ico"><svg class="ic"><use href="#ic-gps"/></svg></span>
+      <span class="ab-ico"><svg class="ic"><use href="#ic-gps"/></svg><span class="ab-acc" id="ab-loc-acc"></span></span>
       <span>Lokacija</span>
     </button>
     <div id="ab-loc-popup" style="display:none;position:fixed;bottom:68px;left:50%;transform:translateX(-50%);
@@ -38174,11 +38253,11 @@ if (typeof AndroidDownload !== 'undefined') {
   </button>
   <!-- Trag snimanje kontrole -->
   <button id="ab-trag-pauza" onclick="togTragPause()" title="Pauziraj / Nastavi trag" style="display:none;">
-    <span class="ab-ico" id="ab-trag-pauza-ico" style="background:#ca8a04;"><svg class="ic"><use href="#ic-pauza"/></svg></span>
+    <span class="ab-ico" id="ab-trag-pauza-ico"><svg class="ic"><use href="#ic-pauza"/></svg></span>
     <span id="ab-trag-pauza-txt">Pauza</span>
   </button>
   <button id="ab-trag-kraj" onclick="fabSnimTrag()" title="Završi snimanje traga" style="display:none;">
-    <span class="ab-ico" style="background:#dc2626;"><svg class="ic"><use href="#ic-stop"/></svg></span>
+    <span class="ab-ico"><svg class="ic"><use href="#ic-stop"/></svg></span>
     <span>Završi</span>
   </button>
   <div id="ab-trag-stats" style="display:none;flex:1;text-align:center;color:#c2410c;font-size:11px;font-weight:700;align-self:center;line-height:1.4;">
