@@ -47,6 +47,7 @@ async function ta(name, fn) {
 function makeEnv(opts = {}) {
   const toasts = [];
   const calls = { checkAndInstall: 0, fetch: 0, dlg: 0, dlgActions: 0, reload: 0 };
+  const napredak = [];
   const sandbox = {
     _anyRecOn: () => false,
     showToast: (m) => toasts.push(m),
@@ -66,6 +67,8 @@ function makeEnv(opts = {}) {
     _dlg: async () => { calls.dlg++; },
     _dlgActions: async () => { calls.dlgActions++; return -1; },
     _verCmp: () => 0,
+    // v1.6.5: APK put otvara panel ažuriranja umjesto toasta.
+    _azurirajNapredak: (x) => napredak.push(x),
     APP_VER: 'v1.5.2',
     _LIVE_BASE: 'https://pogonboskrupa.github.io/US-SUME/',
   };
@@ -73,7 +76,7 @@ function makeEnv(opts = {}) {
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, src + '\nreturn { azurirajAplikaciju, _azurirajStatus };')
     (...keys.map(k => sandbox[k]));
-  return { api, toasts, calls, sandbox };
+  return { api, toasts, calls, sandbox, napredak };
 }
 
 console.log('azurirajAplikaciju() — APK sa AndroidUpdate mostom:');
@@ -81,23 +84,25 @@ console.log('azurirajAplikaciju() — APK sa AndroidUpdate mostom:');
 (async () => {
   await ta('poziva AndroidUpdate.checkAndInstall() umjesto starog fetch/dijalog puta', async () => {
     let called = 0;
-    const { api, toasts, calls } = makeEnv({
+    const { api, calls, napredak } = makeEnv({
       isAPK: true,
       androidUpdate: { checkAndInstall: () => { called++; } },
     });
     await api.azurirajAplikaciju();
     assert.strictEqual(called, 1, 'AndroidUpdate.checkAndInstall() mora biti pozvan tačno jednom');
     assert.strictEqual(calls.fetch, 0, 'stari sw.js fetch fallback se NE smije pozvati kad most postoji');
-    assert.ok(toasts.some(t => /Provjeravam/.test(t)), 'mora dati vidljiv znak da nešto radi: ' + toasts);
+    assert.strictEqual(napredak[0] && napredak[0].faza, 'provjera', 'panel mora odmah pokazati korak Provjera');
   });
 
   await ta('pad AndroidUpdate.checkAndInstall() (baci grešku) ne ruši funkciju', async () => {
-    const { api, toasts } = makeEnv({
+    const { api, napredak } = makeEnv({
       isAPK: true,
       androidUpdate: { checkAndInstall: () => { throw new Error('boom'); } },
     });
     await api.azurirajAplikaciju(); // ne smije baciti
-    assert.ok(toasts.some(t => /nije uspjel/i.test(t)), 'mora javiti da pokretanje nije uspjelo: ' + toasts);
+    const zadnji = napredak[napredak.length - 1];
+    assert.strictEqual(zadnji && zadnji.faza, 'greska', 'panel mora preći u grešku');
+    assert.ok(/nije uspjel/i.test(zadnji.poruka), 'mora javiti da pokretanje nije uspjelo: ' + zadnji.poruka);
   });
 
   console.log('\nazurirajAplikaciju() — APK BEZ AndroidUpdate mosta (fallback, star APK):');
@@ -141,6 +146,58 @@ console.log('azurirajAplikaciju() — APK sa AndroidUpdate mostom:');
     api._azurirajStatus(undefined);
     api._azurirajStatus(42);
     assert.deepStrictEqual(toasts, []);
+  });
+
+  console.log('\n_updBrzinaEta / _updMB — brzina i preostalo vrijeme preuzimanja:');
+
+  const helpers = new Function(extractFn('_updMB') + '\n' + extractFn('_updBrzinaEta') + '\nreturn { _updMB, _updBrzinaEta };')();
+
+  t('manje od dva uzorka ili prekratak razmak ne izmišlja brzinu', () => {
+    assert.deepStrictEqual(helpers._updBrzinaEta([], 0, 100), { brzina:'', eta:'' });
+    assert.deepStrictEqual(helpers._updBrzinaEta([{ t:0, b:0 }], 0, 100), { brzina:'', eta:'' });
+    assert.deepStrictEqual(helpers._updBrzinaEta([{ t:0, b:0 }, { t:500, b:9e6 }], 9e6, 2e7), { brzina:'', eta:'' });
+  });
+
+  t('računa MB/s i preostale sekunde iz uzoraka', () => {
+    const r = helpers._updBrzinaEta([{ t:0, b:0 }, { t:2000, b:4 * 1048576 }], 4 * 1048576, 24 * 1048576);
+    assert.strictEqual(r.brzina, '2.0 MB/s');
+    assert.strictEqual(r.eta, 'još ~10 s');
+  });
+
+  t('spora veza: KB/s i minute', () => {
+    const r = helpers._updBrzinaEta([{ t:0, b:0 }, { t:4000, b:200 * 1024 }], 200 * 1024, 20 * 1048576);
+    assert.strictEqual(r.brzina, '50 KB/s');
+    assert.ok(/min$/.test(r.eta), 'preko minute mora ići u minute: ' + r.eta);
+  });
+
+  t('bajtovi koji ne rastu (zastoj) ne daju brzinu', () => {
+    assert.deepStrictEqual(helpers._updBrzinaEta([{ t:0, b:500 }, { t:3000, b:500 }], 500, 1000), { brzina:'', eta:'' });
+  });
+
+  t('_updMB formatira jednu decimalu, preko 100 MB cijeli broj', () => {
+    assert.strictEqual(helpers._updMB(23.4 * 1048576), '23.4 MB');
+    assert.strictEqual(helpers._updMB(150 * 1048576), '150 MB');
+    assert.strictEqual(helpers._updMB(undefined), '0.0 MB');
+  });
+
+  console.log('\nJava UpdateBridge — invarijante (sandbox ne kompajlira Javu):');
+  const JAVA = fs.readFileSync(path.join(__dirname, '../../android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java'), 'utf8');
+
+  t('preuzimanje nastavlja od prekida (Range) i ponavlja pokušaj', () => {
+    assert.ok(/setRequestProperty\("Range", "bytes=" \+ vec \+ "-"\)/.test(JAVA), 'nema Range nastavka');
+    assert.ok(/MAX_POKUSAJA/.test(JAVA) && /preuzmiSaNastavkom/.test(JAVA), 'nema petlje ponovnih pokušaja');
+  });
+
+  t('nepotpun fajl se ne predaje instalaciji (provjera veličine iz objave)', () => {
+    assert.ok(/optLong\("size"/.test(JAVA), 'veličina asseta se ne čita iz objave');
+    assert.ok(/dio\.length\(\) != apkVelicina/.test(JAVA), 'nema provjere veličine prije instalacije');
+  });
+
+  t('svaka faza koju Java šalje postoji u JS tabeli faza', () => {
+    const faze = new Set([...JAVA.matchAll(/napredak\("([a-z]+)"/g)].map(m => m[1]));
+    const js = extractFn('_azurirajNapredak') && HTML.slice(HTML.indexOf('const _UPD_FAZE'), HTML.indexOf('const _UPD_ZAVRSNE'));
+    for (const f of faze) assert.ok(new RegExp('\\b' + f + ':').test(js), 'JS ne zna fazu "' + f + '"');
+    assert.ok(faze.size >= 7, 'očekivano bar 7 faza, nađeno ' + faze.size);
   });
 
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

@@ -1555,6 +1555,62 @@ select:focus { outline:none; border-color:#3b82f6; }
   .mdrop-hdr { padding-top:7px; }
 }
 
+/* === AŽURIRANJE APLIKACIJE (panel preuzimanja/instalacije) === */
+#upd-bg { position:fixed; inset:0; background:rgba(2,6,23,0.62); z-index:99990; display:none; align-items:flex-end; justify-content:center; }
+#upd-bg.show { display:flex; }
+#upd-sheet { width:100%; max-width:440px; background:#16213e; border:1px solid #0f3460; border-bottom:none; border-radius:18px 18px 0 0;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.45); color:#e2e8f0;
+  transform:translateY(0); animation:updUp .22s ease-out; box-sizing:border-box; }
+@keyframes updUp { from { transform:translateY(40px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+.upd-head { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.upd-head-ico { width:42px; height:42px; border-radius:12px; background:#0f3460; color:#38bdf8; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.upd-head-ico svg { width:22px; height:22px; }
+.upd-title { font-size:17px; font-weight:700; line-height:1.2; }
+.upd-ver { font-size:12px; color:#94a3b8; margin-top:3px; font-variant-numeric:tabular-nums; }
+.upd-steps { display:flex; align-items:flex-start; margin:0 2px 18px; }
+.upd-step { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; font-size:11px; color:#64748b; font-weight:600; text-align:center; }
+.upd-step:not(:last-child)::after { content:''; position:absolute; top:14px; left:calc(50% + 18px); right:calc(-50% + 18px); height:2px; background:#334155; border-radius:1px; }
+.upd-step.done:not(:last-child)::after { background:#22c55e; }
+.upd-dot { width:30px; height:30px; border-radius:50%; border:2px solid #334155; background:#0f172a; display:flex; align-items:center; justify-content:center; color:#64748b; box-sizing:border-box; }
+.upd-dot svg { width:15px; height:15px; }
+.upd-step.active { color:#e2e8f0; }
+.upd-step.active .upd-dot { border-color:#38bdf8; color:#38bdf8; box-shadow:0 0 0 4px rgba(56,189,248,0.18); animation:updPuls 1.6s ease-in-out infinite; }
+.upd-step.done { color:#86efac; }
+.upd-step.done .upd-dot { border-color:#22c55e; background:#22c55e; color:#052e16; }
+.upd-step.warn .upd-dot { border-color:#fbbf24; color:#fbbf24; box-shadow:0 0 0 4px rgba(251,191,36,0.16); animation:none; }
+.upd-step.err { color:#fca5a5; }
+.upd-step.err .upd-dot { border-color:#f87171; color:#f87171; animation:none; box-shadow:none; }
+@keyframes updPuls { 0%,100% { box-shadow:0 0 0 3px rgba(56,189,248,0.12); } 50% { box-shadow:0 0 0 7px rgba(56,189,248,0.22); } }
+.upd-prog { margin-bottom:14px; }
+.upd-prog-top { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; font-variant-numeric:tabular-nums; }
+.upd-pct { font-size:30px; font-weight:800; letter-spacing:-0.02em; line-height:1; }
+.upd-pct small { font-size:15px; font-weight:700; color:#94a3b8; margin-left:1px; }
+.upd-mb { font-size:12px; color:#94a3b8; }
+.upd-bar { height:10px; border-radius:6px; background:#0f172a; border:1px solid #1e293b; overflow:hidden; position:relative; }
+.upd-fill { height:100%; width:0; border-radius:6px; background:linear-gradient(90deg,#0ea5e9,#38bdf8); transition:width .3s ease; position:relative; overflow:hidden; }
+.upd-fill.moving::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent); animation:updSjaj 1.4s linear infinite; }
+.upd-fill.ok { background:linear-gradient(90deg,#16a34a,#22c55e); }
+.upd-fill.warn { background:linear-gradient(90deg,#d97706,#fbbf24); }
+.upd-fill.err { background:#ef4444; }
+.upd-bar.indet .upd-fill { width:35% !important; position:absolute; animation:updIndet 1.3s ease-in-out infinite; }
+@keyframes updSjaj { from { transform:translateX(-100%); } to { transform:translateX(100%); } }
+@keyframes updIndet { from { left:-35%; } to { left:100%; } }
+.upd-speed { display:flex; justify-content:space-between; font-size:11.5px; color:#64748b; margin-top:7px; font-variant-numeric:tabular-nums; min-height:15px; }
+.upd-msg { font-size:13px; line-height:1.45; padding:10px 12px; border-radius:10px; margin-bottom:12px; background:#0f3460; color:#bae6fd; border:1px solid #1e40af55; }
+.upd-msg.warn { background:#422006; color:#fde68a; border-color:#92400e; }
+.upd-msg.err { background:#450a0a; color:#fecaca; border-color:#991b1b; }
+.upd-msg.ok { background:#052e16; color:#bbf7d0; border-color:#166534; }
+.upd-note { font-size:11.5px; color:#94a3b8; line-height:1.45; margin:-2px 2px 14px; display:flex; gap:7px; }
+.upd-note svg { width:14px; height:14px; flex-shrink:0; margin-top:1px; color:#22c55e; }
+.upd-btns { display:flex; gap:8px; }
+.upd-btn { flex:1; min-height:46px; border-radius:11px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; }
+.upd-btn svg { width:16px; height:16px; }
+.upd-btn.pri { background:#0284c7; border-color:#0ea5e9; color:#fff; }
+.upd-btn.dng { background:transparent; border-color:#7f1d1d; color:#fca5a5; }
+@media (prefers-reduced-motion: reduce) {
+  #upd-sheet, .upd-step.active .upd-dot, .upd-fill.moving::after, .upd-bar.indet .upd-fill { animation:none; }
+}
+
 /* iOS-style toggle switch (Moja lokacija / GPS) */
 .gps-switch {
   position:relative; width:42px; height:24px; border-radius:12px;
@@ -4993,7 +5049,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.4';
+const APP_VER = 'v1.6.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -31462,9 +31518,9 @@ async function azurirajAplikaciju() {
   }
 
   if (window.AndroidUpdate && typeof window.AndroidUpdate.checkAndInstall === 'function') {
-    showToast('🔄 Provjeravam novu verziju…');
+    _azurirajNapredak({ faza:'provjera', poruka:'Provjeravam novu verziju…' });
     try { window.AndroidUpdate.checkAndInstall(); }
-    catch(e) { showToast('⚠ Ažuriranje nije uspjelo pokrenuti — pokušaj ponovo'); }
+    catch(e) { _azurirajNapredak({ faza:'greska', poruka:'Ažuriranje nije uspjelo pokrenuti — pokušaj ponovo.' }); }
     return;
   }
 
@@ -31500,6 +31556,192 @@ async function azurirajAplikaciju() {
 // native strani), korisnik u međuvremenu i dalje koristi app.
 function _azurirajStatus(msg) {
   if (typeof msg === 'string' && msg) showToast(msg);
+}
+
+// ─── Panel ažuriranja: provjera → preuzimanje → instalacija ────────────────
+// Native UpdateBridge šalje {faza, primljeno, ukupno, verzija, poruka} kroz
+// _azurirajNapredak. Ranije je cijeli tok bio par toastova, pa se ~20 MB
+// preuzimanja na terenskoj vezi nije vidjelo nikako, a prekid je izgledao kao
+// sirovo "SocketException".
+const _UPD_KORACI = [
+  { label:'Provjera', ico:'ic-trazi' },
+  { label:'Preuzimanje', ico:'ic-uvezi' },
+  { label:'Instalacija', ico:'ic-uredjaj' },
+];
+// korak: indeks aktivnog koraka; null = ostaje zadnji aktivni (greška/otkaz na tom koraku)
+const _UPD_FAZE = {
+  provjera:    { korak:0,    ton:'' },
+  preuzimanje: { korak:1,    ton:'' },
+  ponovo:      { korak:1,    ton:'warn' },
+  dozvola:     { korak:2,    ton:'warn' },
+  instalacija: { korak:2,    ton:'' },
+  najnovija:   { korak:3,    ton:'ok' },
+  greska:      { korak:null, ton:'err' },
+  otkazano:    { korak:null, ton:'' },
+};
+const _UPD_ZAVRSNE = ['najnovija', 'greska', 'otkazano', 'instalacija', 'dozvola'];
+const _updStanje = { korak:0, faza:'', ver:'', uzorci:[], prim:0, uk:0 };
+
+function _updMB(b) {
+  const mb = (Number(b) || 0) / 1048576;
+  return (mb >= 100 ? mb.toFixed(0) : mb.toFixed(1)) + ' MB';
+}
+
+// Brzina iz uzoraka zadnjih ~4 s (ne od početka — poslije prekida i nastavka
+// prosjek od početka bi lagao), preostalo vrijeme iz te brzine.
+function _updBrzinaEta(uzorci, prim, uk) {
+  if (!Array.isArray(uzorci) || uzorci.length < 2) return { brzina:'', eta:'' };
+  const a = uzorci[0], z = uzorci[uzorci.length - 1];
+  const dt = (z.t - a.t) / 1000;
+  if (dt < 0.8 || z.b <= a.b) return { brzina:'', eta:'' };
+  const bps = (z.b - a.b) / dt;
+  const brzina = bps >= 1048576 ? (bps / 1048576).toFixed(1) + ' MB/s' : Math.round(bps / 1024) + ' KB/s';
+  let eta = '';
+  if (uk > 0 && prim < uk) {
+    const s = Math.ceil((uk - prim) / bps);
+    eta = s < 60 ? 'još ~' + s + ' s' : 'još ~' + Math.ceil(s / 60) + ' min';
+  }
+  return { brzina, eta };
+}
+
+function _updId(id) { return document.getElementById(id); }
+
+function _updEl() {
+  let bg = _updId('upd-bg');
+  if (bg) return bg;
+  bg = document.createElement('div');
+  bg.id = 'upd-bg';
+  bg.innerHTML =
+    '<div id="upd-sheet" role="dialog" aria-modal="true" aria-labelledby="upd-title">' +
+      '<div class="upd-head"><div class="upd-head-ico"><svg class="ic"><use href="#ic-uvezi"/></svg></div>' +
+        '<div><div class="upd-title" id="upd-title">Ažuriranje aplikacije</div><div class="upd-ver" id="upd-ver"></div></div></div>' +
+      '<div class="upd-steps" id="upd-steps">' +
+        _UPD_KORACI.map((k, i) => '<div class="upd-step" data-i="' + i + '"><div class="upd-dot"><svg class="ic"><use href="#' + k.ico + '"/></svg></div>' + k.label + '</div>').join('') +
+      '</div>' +
+      '<div class="upd-prog" id="upd-prog">' +
+        '<div class="upd-prog-top"><div class="upd-pct" id="upd-pct"></div><div class="upd-mb" id="upd-mb"></div></div>' +
+        '<div class="upd-bar" id="upd-bar"><div class="upd-fill" id="upd-fill"></div></div>' +
+        '<div class="upd-speed"><span id="upd-brzina"></span><span id="upd-eta"></span></div>' +
+      '</div>' +
+      '<div class="upd-msg" id="upd-msg"></div>' +
+      '<div class="upd-note" id="upd-note"><svg class="ic"><use href="#ic-potvrdi"/></svg>' +
+        '<span>Ažuriranje zadržava tvoje podatke — offline karte, tragove, vlake i sve što čeka sinhronizaciju.</span></div>' +
+      '<div class="upd-btns" id="upd-btns"></div>' +
+    '</div>';
+  bg.addEventListener('click', e => {
+    if (e.target === bg && _UPD_ZAVRSNE.includes(_updStanje.faza)) _updZatvori();
+  });
+  document.body.appendChild(bg);
+  return bg;
+}
+
+function _updZatvori() {
+  const bg = _updId('upd-bg');
+  if (bg) bg.classList.remove('show');
+}
+
+function _updOtkazi() {
+  try { if (window.AndroidUpdate && typeof window.AndroidUpdate.cancel === 'function') window.AndroidUpdate.cancel(); } catch(e) {}
+  const m = _updId('upd-msg');
+  if (m) { m.className = 'upd-msg'; m.textContent = 'Otkazujem…'; }
+}
+
+function _updPonovo() { azurirajAplikaciju(); }
+
+function _updDugme(tip, ico, tekst, akcija) {
+  return '<button class="upd-btn' + (tip ? ' ' + tip : '') + '" onclick="' + akcija + '">' +
+    (ico ? '<svg class="ic"><use href="#' + ico + '"/></svg>' : '') + tekst + '</button>';
+}
+
+function _azurirajNapredak(p) {
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch(e) { return; } }
+  if (!p || !_UPD_FAZE[p.faza]) return;
+  let bg;
+  try { bg = _updEl(); } catch(e) { if (p.poruka) showToast(p.poruka); return; }
+  const f = _UPD_FAZE[p.faza], st = _updStanje;
+  const prim = Number(p.primljeno) || 0, uk = Number(p.ukupno) || 0;
+
+  if (p.faza === 'provjera') { st.uzorci = []; st.prim = 0; st.uk = 0; st.ver = ''; }
+  if (p.verzija && p.faza !== 'najnovija') st.ver = p.verzija;
+  if (f.korak !== null) st.korak = f.korak;
+  st.faza = p.faza;
+  if (p.faza === 'preuzimanje' || p.faza === 'ponovo') {
+    if (prim < st.prim) st.uzorci = [];
+    st.prim = prim; st.uk = uk;
+  }
+  if (p.faza === 'preuzimanje') {
+    const sad = Date.now();
+    st.uzorci.push({ t:sad, b:prim });
+    st.uzorci = st.uzorci.filter(u => sad - u.t <= 4000);
+  } else if (p.faza === 'ponovo') {
+    st.uzorci = [];
+  }
+  bg.classList.add('show');
+
+  const lok = String(typeof APP_VER === 'string' ? APP_VER : '').replace(/^v/, '');
+  _updId('upd-ver').textContent = st.ver
+    ? 'v' + lok + '  →  v' + st.ver
+    : 'Instalirana verzija v' + (p.faza === 'najnovija' && p.verzija ? p.verzija : lok);
+
+  bg.querySelectorAll('.upd-step').forEach(el => {
+    const i = Number(el.dataset.i);
+    let cls = '';
+    if (i < st.korak) cls = 'done';
+    else if (i === st.korak) cls = f.ton === 'err' ? 'err' : f.ton === 'warn' ? 'warn' : (p.faza === 'otkazano' ? '' : 'active');
+    el.className = 'upd-step' + (cls ? ' ' + cls : '');
+    const use = el.querySelector('use');
+    if (use) use.setAttribute('href', '#' + (cls === 'done' ? 'ic-potvrdi' : cls === 'err' ? 'ic-zatvori' : _UPD_KORACI[i].ico));
+  });
+
+  const prog = _updId('upd-prog'), bar = _updId('upd-bar'), fill = _updId('upd-fill');
+  const pct = _updId('upd-pct'), mb = _updId('upd-mb');
+  const brz = _updId('upd-brzina'), eta = _updId('upd-eta');
+  const bezNapretka = p.faza === 'najnovija' || ((p.faza === 'greska' || p.faza === 'otkazano') && st.korak === 0);
+  prog.style.display = bezNapretka ? 'none' : '';
+  bar.classList.remove('indet');
+  fill.className = 'upd-fill';
+  brz.textContent = ''; eta.textContent = '';
+  const pUk = uk || st.uk, pPrim = prim || st.prim;
+  if (p.faza === 'provjera' || ((p.faza === 'preuzimanje' || p.faza === 'ponovo') && !(pUk > 0))) {
+    bar.classList.add('indet');
+    fill.classList.add('moving');
+    pct.innerHTML = '';
+    mb.textContent = p.faza === 'provjera' ? 'Tražim najnoviju objavu…' : _updMB(pPrim);
+  } else {
+    const done = ['instalacija', 'dozvola'].includes(p.faza);
+    const proc = done ? 100 : (pUk > 0 ? Math.min(100, Math.floor(pPrim / pUk * 100)) : 0);
+    fill.style.width = proc + '%';
+    pct.innerHTML = proc + '<small>%</small>';
+    mb.textContent = pUk > 0 ? (done ? _updMB(pUk) : _updMB(pPrim) + ' / ' + _updMB(pUk)) : '';
+    if (p.faza === 'preuzimanje') {
+      fill.classList.add('moving');
+      const be = _updBrzinaEta(st.uzorci, pPrim, pUk);
+      brz.textContent = be.brzina; eta.textContent = be.eta;
+    } else if (p.faza === 'ponovo' || p.faza === 'dozvola') fill.classList.add('warn');
+    else if (p.faza === 'instalacija') fill.classList.add('ok');
+    else if (p.faza === 'greska') fill.classList.add('err');
+  }
+
+  const msg = _updId('upd-msg');
+  msg.className = 'upd-msg' + (f.ton ? ' ' + f.ton : '');
+  msg.textContent = p.faza === 'preuzimanje'
+    ? 'Preuzimam novu verziju. Možeš nastaviti raditi — samo ne zatvaraj aplikaciju.'
+    : (p.poruka || '');
+  _updId('upd-note').style.display = ['instalacija', 'dozvola'].includes(p.faza) ? '' : 'none';
+
+  let btns = '';
+  if (['provjera', 'preuzimanje', 'ponovo'].includes(p.faza)) {
+    btns = _updDugme('dng', 'ic-zatvori', 'Otkaži', '_updOtkazi()');
+  } else if (p.faza === 'instalacija') {
+    btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-ponovi', 'Instaliraj ponovo', '_updPonovo()');
+  } else if (p.faza === 'dozvola') {
+    btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-naprijed', 'Nastavi', '_updPonovo()');
+  } else if (p.faza === 'najnovija') {
+    btns = _updDugme('pri', 'ic-potvrdi', 'U redu', '_updZatvori()');
+  } else {
+    btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-ponovi', 'Pokušaj ponovo', '_updPonovo()');
+  }
+  _updId('upd-btns').innerHTML = btns;
 }
 
 // ─── PROVJERA NAJNOVIJE VERZIJE (posebno bitno za APK) ───────────────────────

@@ -403,73 +403,222 @@ public class MainActivity extends Activity {
     // isključuje prerelease objave, a CI ovdje objavljuje baš prerelease (debug
     // build, ne zvaničan release). Zato se čita obična lista (/releases,
     // sortirana najnovije-prvo) i uzima prvi element.
+    // Prekid koji je tražio KORISNIK (dugme Otkaži) — odvojen od mrežnog kvara da
+    // se ne bi ponovo pokušavao i da se ne javlja kao greška veze.
+    private static class OtkazanoException extends IOException {
+        OtkazanoException() { super("otkazano"); }
+    }
+
     class UpdateBridge {
         private static final String RELEASES_URL =
                 "https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1";
+        // Terenska veza zna pući usred preuzimanja (slab signal, prelaz Wi-Fi <->
+        // mobilni, promjena ćelije) — to je bio uzrok "SocketException". Svaki
+        // sljedeći pokušaj NASTAVLJA od već preuzetog bajta (HTTP Range), ne od nule.
+        private static final int MAX_POKUSAJA = 6;
+        private static final long NAPREDAK_MS = 300;
+        private final java.util.concurrent.atomic.AtomicBoolean radi =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        private volatile boolean otkazano = false;
+        private volatile boolean preuzimanjePocelo = false;
+        private long zadnjiNapredak = 0;
 
         @JavascriptInterface
         public void checkAndInstall() {
+            if (!radi.compareAndSet(false, true)) return;
+            otkazano = false;
+            preuzimanjePocelo = false;
             new Thread(() -> {
+                PowerManager.WakeLock wl = null;
                 try {
-                    org.json.JSONObject rel = dohvatiJson(RELEASES_URL);
-                    if (rel == null) { postStatus("⚠ Ne mogu provjeriti novu verziju (nema interneta?)"); return; }
-
-                    String tag = rel.optString("tag_name", "");
-                    String verNova = tag.startsWith("v") ? tag.substring(1) : tag;
-                    // NE BuildConfig.VERSION_NAME — od Android Gradle Plugin-a 8.0
-                    // BuildConfig klasa se NE generiše podrazumijevano (traži
-                    // buildFeatures { buildConfig true }), pa build pada na
-                    // "cannot find symbol". PackageManager je usput i tačniji
-                    // izvor: vraća verziju APK-a koji je STVARNO instaliran.
-                    // Debug build nosi versionNameSuffix "-debug" (1.5.2-debug) —
-                    // parseSegment() ispod čisti ne-brojeve pa poređenje radi.
-                    String verTrenutna = "0";
-                    try {
-                        verTrenutna = getPackageManager()
-                                .getPackageInfo(getPackageName(), 0).versionName;
-                    } catch (Exception ignored) {}
-                    if (verNova.isEmpty() || !jeNovija(verNova, verTrenutna)) {
-                        postStatus("✓ Već imaš najnoviju verziju (v" + verTrenutna + ")");
-                        return;
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "DendroMap:update");
+                        wl.acquire(15 * 60 * 1000L);
                     }
-
-                    String apkUrl = null;
-                    org.json.JSONArray assets = rel.optJSONArray("assets");
-                    if (assets != null) {
-                        for (int i = 0; i < assets.length(); i++) {
-                            org.json.JSONObject a = assets.getJSONObject(i);
-                            if (a.optString("name", "").endsWith(".apk")) {
-                                apkUrl = a.optString("browser_download_url", null);
-                                break;
-                            }
-                        }
-                    }
-                    if (apkUrl == null) {
-                        postStatus("⚠ Nova verzija v" + verNova + " postoji, ali APK nije pronađen u objavi");
-                        return;
-                    }
-
-                    postStatus("⬇ Preuzimam verziju v" + verNova + "…");
-                    File dir = new File(getCacheDir(), "update");
-                    if (!dir.exists()) dir.mkdirs();
-                    File apk = new File(dir, "US-SUME-v" + verNova + ".apk");
-                    if (!preuzmiFajl(apkUrl, apk)) {
-                        postStatus("⚠ Preuzimanje nije uspjelo — provjeri vezu i pokušaj ponovo");
-                        return;
-                    }
-                    runOnUiThread(() -> instalirajApk(apk));
+                    tok();
+                } catch (OtkazanoException e) {
+                    napredak("otkazano", 0, 0, null, "Preuzimanje otkazano");
                 } catch (Exception e) {
-                    postStatus("⚠ Greška pri ažuriranju: " + e.getClass().getSimpleName());
+                    napredak("greska", 0, 0, null, opisGreske(e));
+                } finally {
+                    if (wl != null && wl.isHeld()) { try { wl.release(); } catch (Exception ignored) {} }
+                    radi.set(false);
                 }
-            }).start();
+            }, "DendroMap-update").start();
         }
 
-        // throws i org.json.JSONException, ne samo IOException: JSONException je
-        // PROVJERENI (checked) izuzetak u Androidovom org.json-u, pa ga javac
-        // odbija pustiti neprijavljenog. Pozivalac ga hvata zajedno sa ostalim
-        // kvarovima kroz catch (Exception e) i pretvara u čitljivu poruku
-        // korisniku — pokvaren/nepotpun JSON sa GitHub-a je isti ishod kao
-        // prekinuta veza: ažuriranje nije uspjelo, pokušaj ponovo.
+        @JavascriptInterface
+        public void cancel() { otkazano = true; }
+
+        private void tok() throws IOException, org.json.JSONException {
+            napredak("provjera", 0, 0, null, "Provjeravam novu verziju…");
+            org.json.JSONObject rel = dohvatiJson(RELEASES_URL);
+            if (rel == null) {
+                napredak("greska", 0, 0, null, "Ne mogu provjeriti novu verziju — nema interneta ili GitHub ne odgovara.");
+                return;
+            }
+            String tag = rel.optString("tag_name", "");
+            String verNova = tag.startsWith("v") ? tag.substring(1) : tag;
+            // NE BuildConfig.VERSION_NAME — od AGP 8.0 se BuildConfig ne generiše
+            // podrazumijevano. PackageManager vraća verziju STVARNO instaliranog APK-a;
+            // "-debug" sufiks čisti parseSegment().
+            String verTrenutna = "0";
+            try {
+                verTrenutna = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception ignored) {}
+            if (verNova.isEmpty() || !jeNovija(verNova, verTrenutna)) {
+                napredak("najnovija", 0, 0, verTrenutna, "Već imaš najnoviju verziju (v" + verTrenutna + ")");
+                return;
+            }
+
+            String apkUrl = null;
+            long apkVelicina = -1;
+            org.json.JSONArray assets = rel.optJSONArray("assets");
+            if (assets != null) {
+                for (int i = 0; i < assets.length(); i++) {
+                    org.json.JSONObject a = assets.getJSONObject(i);
+                    if (a.optString("name", "").endsWith(".apk")) {
+                        apkUrl = a.optString("browser_download_url", null);
+                        apkVelicina = a.optLong("size", -1);
+                        break;
+                    }
+                }
+            }
+            if (apkUrl == null) {
+                napredak("greska", 0, 0, verNova, "Nova verzija v" + verNova + " postoji, ali APK nije pronađen u objavi.");
+                return;
+            }
+
+            File dir = new File(getCacheDir(), "update");
+            if (!dir.exists() && !dir.mkdirs()) throw new IOException("ne mogu napraviti folder za preuzimanje");
+            File apk = new File(dir, "US-SUME-v" + verNova + ".apk");
+            File dio = new File(dir, apk.getName() + ".part");
+            ocistiStare(dir, apk.getName(), dio.getName());
+
+            // Već preuzet i potpun (npr. korisnik je otkazao Android instalaciju pa
+            // tapnuo "Instaliraj ponovo") — ne skida se ponovo.
+            boolean gotov = apk.exists() && (apkVelicina <= 0 || apk.length() == apkVelicina);
+            if (!gotov) {
+                if (apk.exists()) //noinspection ResultOfMethodCallIgnored
+                    apk.delete();
+                preuzmiSaNastavkom(apkUrl, dio, apkVelicina, verNova);
+                // Veza koja se tiho zatvori prije kraja daje NEPOTPUN APK, a Android na
+                // njemu javi samo "greška pri parsiranju paketa" — zato provjera veličine.
+                if (apkVelicina > 0 && dio.length() != apkVelicina) {
+                    throw new IOException("preuzet fajl nije potpun (" + dio.length() + " od " + apkVelicina + " B)");
+                }
+                if (!dio.renameTo(apk)) throw new IOException("ne mogu spremiti preuzeti fajl");
+            }
+            long v = apk.length();
+            napredak("instalacija", v, v, verNova, "Otvaram Android instalaciju…");
+            final String ver = verNova;
+            runOnUiThread(() -> instalirajApk(apk, ver));
+        }
+
+        private void preuzmiSaNastavkom(String url, File dio, long ukupno, String ver) throws IOException {
+            preuzimanjePocelo = true;
+            IOException zadnja = null;
+            for (int pokusaj = 1; pokusaj <= MAX_POKUSAJA; pokusaj++) {
+                if (otkazano) throw new OtkazanoException();
+                try {
+                    preuzmiDio(url, dio, ukupno, ver, pokusaj);
+                    return;
+                } catch (OtkazanoException e) {
+                    throw e;
+                } catch (IOException e) {
+                    zadnja = e;
+                }
+                if (pokusaj == MAX_POKUSAJA) break;
+                long cekaj = Math.min(2000L << (pokusaj - 1), 16000L);
+                napredak("ponovo", dio.length(), ukupno, ver,
+                        "Veza prekinuta — nastavljam za " + (cekaj / 1000) + " s (pokušaj "
+                                + (pokusaj + 1) + "/" + MAX_POKUSAJA + ")");
+                for (long t = 0; t < cekaj; t += 250) {
+                    if (otkazano) throw new OtkazanoException();
+                    try { Thread.sleep(250); } catch (InterruptedException ie) { throw new OtkazanoException(); }
+                }
+            }
+            throw zadnja != null ? zadnja : new IOException("preuzimanje nije uspjelo");
+        }
+
+        private void preuzmiDio(String urlStr, File dio, long ukupno, String ver, int pokusaj) throws IOException {
+            long vec = dio.exists() ? dio.length() : 0;
+            if (ukupno > 0 && vec > ukupno) {
+                //noinspection ResultOfMethodCallIgnored
+                dio.delete();
+                vec = 0;
+            }
+            if (ukupno > 0 && vec == ukupno) return;
+
+            HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
+            try {
+                // Asset preusmjerava na CDN (objects.githubusercontent.com) — GET
+                // redirect prati sam HttpURLConnection, Range zaglavlje ostaje.
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(20000);
+                c.setReadTimeout(30000);
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                if (vec > 0) c.setRequestProperty("Range", "bytes=" + vec + "-");
+                int status = c.getResponseCode();
+                boolean nastavak;
+                if (status == 206) {
+                    nastavak = true;
+                } else if (status == 200) {
+                    // Server nije poslušao Range — kreće se ispočetka, bez miješanja
+                    // starog i novog sadržaja u istom fajlu.
+                    nastavak = false;
+                    vec = 0;
+                } else if (status == 416) {
+                    //noinspection ResultOfMethodCallIgnored
+                    dio.delete();
+                    throw new IOException("HTTP 416");
+                } else {
+                    throw new IOException("HTTP " + status);
+                }
+                long ocekivano = ukupno > 0 ? ukupno
+                        : (c.getContentLengthLong() > 0 ? vec + c.getContentLengthLong() : -1);
+                long primljeno = vec;
+                napredak("preuzimanje", primljeno, ocekivano, ver,
+                        pokusaj > 1 ? "Nastavljam preuzimanje…" : "Preuzimam…");
+                try (InputStream is = c.getInputStream();
+                     FileOutputStream fos = new FileOutputStream(dio, nastavak)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = is.read(buf)) > 0) {
+                        if (otkazano) throw new OtkazanoException();
+                        fos.write(buf, 0, n);
+                        primljeno += n;
+                        long sad = System.currentTimeMillis();
+                        if (sad - zadnjiNapredak >= NAPREDAK_MS) {
+                            zadnjiNapredak = sad;
+                            napredak("preuzimanje", primljeno, ocekivano, ver, "Preuzimam…");
+                        }
+                    }
+                }
+                if (ocekivano > 0 && primljeno < ocekivano) {
+                    throw new IOException("veza zatvorena prije kraja");
+                }
+                napredak("preuzimanje", primljeno, ocekivano > 0 ? ocekivano : primljeno, ver, "Preuzeto");
+            } finally {
+                c.disconnect();
+            }
+        }
+
+        private void ocistiStare(File dir, String zadrzi1, String zadrzi2) {
+            File[] svi = dir.listFiles();
+            if (svi == null) return;
+            for (File f : svi) {
+                String ime = f.getName();
+                if (!ime.equals(zadrzi1) && !ime.equals(zadrzi2)) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+        }
+
+        // throws org.json.JSONException: provjeren izuzetak u Androidovom org.json-u,
+        // javac ga ne pušta neprijavljenog (vidi CLAUDE.md "Java strana").
         private org.json.JSONObject dohvatiJson(String urlStr) throws IOException, org.json.JSONException {
             URL u = new URL(urlStr);
             HttpURLConnection c = (HttpURLConnection) u.openConnection();
@@ -494,49 +643,49 @@ public class MainActivity extends Activity {
             }
         }
 
-        private boolean preuzmiFajl(String urlStr, File dest) throws IOException {
-            URL u = new URL(urlStr);
-            HttpURLConnection c = (HttpURLConnection) u.openConnection();
-            try {
-                // GitHub Release asset preusmjerava na objects.githubusercontent.com —
-                // standardan GET redirect, HttpURLConnection ga prati sam.
-                c.setInstanceFollowRedirects(true);
-                c.setConnectTimeout(20000);
-                c.setReadTimeout(30000);
-                int status = c.getResponseCode();
-                if (status != 200) return false;
-                try (InputStream is = c.getInputStream(); FileOutputStream fos = new FileOutputStream(dest)) {
-                    byte[] buf = new byte[65536];
-                    int n;
-                    while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
-                }
-                return true;
-            } finally {
-                c.disconnect();
-            }
-        }
-
-        private void instalirajApk(File apk) {
+        private void instalirajApk(File apk, String ver) {
+            long v = apk.length();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     && !getPackageManager().canRequestPackageInstalls()) {
-                postStatus("Dozvoli instalaciju iz ovog izvora pa pokušaj ponovo");
+                napredak("dozvola", v, v, ver,
+                        "Dozvoli instalaciju iz ove aplikacije, vrati se i tapni Nastavi.");
                 try {
                     startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                             Uri.parse("package:" + getPackageName())));
                 } catch (Exception ignored) {}
                 return;
             }
-            Uri uri = FileProvider.getUriForFile(MainActivity.this,
-                    getPackageName() + ".fileprovider", apk);
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
+            try {
+                Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                        getPackageName() + ".fileprovider", apk);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, "application/vnd.android.package-archive");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                napredak("instalacija", v, v, ver,
+                        "Potvrdi \"Instaliraj\" u Android prozoru. Aplikacija se zatim sama zatvori i otvori novu verziju.");
+            } catch (Exception e) {
+                napredak("greska", v, v, ver, "Ne mogu otvoriti Android instalaciju: " + e.getClass().getSimpleName());
+            }
         }
 
-        // Poredi "X.Y.Z" segment po segment (numerički, ne leksikografski) — projekat
-        // svaki segment drži na 0-9 (vidi CLAUDE.md šema brojeva verzije), ali provjera
-        // ostaje ispravna i ako se to pravilo ikad promijeni (npr. "1.5.10" > "1.5.9").
+        private String opisGreske(Exception e) {
+            String ime = e.getClass().getSimpleName();
+            if (e instanceof java.net.UnknownHostException)
+                return "Nema interneta — server nije dostupan. Provjeri vezu pa pokušaj ponovo.";
+            if (e instanceof java.net.SocketTimeoutException)
+                return "Veza je prespora — server ne odgovara na vrijeme. Pokušaj ponovo na boljem signalu.";
+            if (e instanceof java.net.SocketException || e instanceof javax.net.ssl.SSLException)
+                return preuzimanjePocelo
+                        ? "Veza je pukla tokom preuzimanja (" + ime + "). Preuzeti dio je sačuvan — Pokušaj ponovo nastavlja odakle je stalo."
+                        : "Veza je pukla (" + ime + ") — provjeri signal pa pokušaj ponovo.";
+            if (e instanceof org.json.JSONException)
+                return "GitHub je vratio neočekivan odgovor. Pokušaj ponovo za par minuta.";
+            String m = e.getMessage();
+            return "Ažuriranje nije uspjelo: " + (m != null && !m.isEmpty() ? m : ime);
+        }
+
+        // Poredi "X.Y.Z" segment po segment (numerički, ne leksikografski).
         private boolean jeNovija(String a, String b) {
             String[] pa = a.split("\\.");
             String[] pb = b.split("\\.");
@@ -553,16 +702,28 @@ public class MainActivity extends Activity {
             catch (Exception e) { return 0; }
         }
 
-        private void postStatus(String msg) {
+        private void napredak(String faza, long primljeno, long ukupno, String ver, String poruka) {
+            String json;
+            try {
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("faza", faza);
+                o.put("primljeno", primljeno);
+                o.put("ukupno", ukupno);
+                o.put("verzija", ver == null ? "" : ver);
+                o.put("poruka", poruka == null ? "" : poruka);
+                json = o.toString();
+            } catch (org.json.JSONException e) {
+                json = "{\"faza\":\"greska\",\"poruka\":\"\"}";
+            }
+            final String js = "if(typeof _azurirajNapredak==='function')_azurirajNapredak(" + jsStr(json)
+                    + ");else if(typeof _azurirajStatus==='function')_azurirajStatus(" + jsStr(poruka) + ")";
             runOnUiThread(() -> {
                 if (webView == null) return;
-                webView.evaluateJavascript(
-                        "if(typeof _azurirajStatus==='function')_azurirajStatus(" + jsStr(msg) + ")", null);
+                webView.evaluateJavascript(js, null);
             });
         }
 
-        // Zaseban mali primjerak (ne vrijedi dijeliti preko refaktora): navodnik/
-        // backslash iz poruke bi razbio ubačeni JS bez escape-ovanja.
+        // Navodnik/backslash/ne-ASCII iz poruke bi razbio ubačeni JS bez escape-ovanja.
         private String jsStr(String s) {
             if (s == null) return "null";
             StringBuilder b = new StringBuilder("\"");
