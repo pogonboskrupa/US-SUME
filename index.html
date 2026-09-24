@@ -1360,13 +1360,26 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 
 /* === MENI DROPDOWN === */
+/* Tap target >=44px i 15px/600: čitljivo na suncu i s rukavicama na terenu */
 .mdrop-item {
-  padding:10px 16px;font-size:13px;font-weight:bold;
-  color:#cbd5e1;cursor:pointer;transition:background 0.12s;
-  white-space:nowrap;
+  padding:12px 16px 12px 12px;min-height:44px;box-sizing:border-box;
+  font-size:15px;font-weight:600;line-height:20px;letter-spacing:0.01em;
+  color:#e2e8f0;cursor:pointer;transition:background 0.12s;
+  white-space:nowrap;-webkit-tap-highlight-color:transparent;
 }
-.mdrop-item:hover { background:#0f3460;color:#fff; }
-.mdrop-sep { height:1px;background:#0f3460;margin:2px 0; }
+.mdrop-item:hover, .mdrop-item:active { background:#0f3460;color:#fff; }
+/* Emoji su različite širine — fiksna kolona drži sav tekst u istoj liniji */
+.mdrop-ico { display:inline-block;width:28px;text-align:center;margin-right:8px;font-size:17px; }
+.mdrop-sep { height:1px;background:#0f3460;margin:4px 0; }
+.mdrop-hdr {
+  padding:10px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.08em;
+  text-transform:uppercase;color:#64748b;pointer-events:none;
+}
+.mdrop-hdr:first-child { padding-top:8px; }
+@media (max-height: 760px) {
+  .mdrop-item { padding-top:9px;padding-bottom:9px;min-height:40px; }
+  .mdrop-hdr { padding-top:7px; }
+}
 
 /* iOS-style toggle switch (Moja lokacija / GPS) */
 .gps-switch {
@@ -4489,7 +4502,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l,c,e){console.error('JS GREŠKA:',m,'linja',l,e);if(typeof showToast==='function'){showToast('⚠ Greška: '+m.slice(0,80),4000);}return false;};
-const APP_VER = 'v3.52.2';
+const APP_VER = 'v3.52.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -11858,7 +11871,14 @@ function toggleMenuDropdown(e) {
   if (dd.style.display === 'none') {
     const btn = document.getElementById('menu-btn');
     const r = btn.getBoundingClientRect();
-    const ddW = 220;
+    // Stvarna širina (zavisi od najduže vidljive stavke i uloge korisnika) — fiksna
+    // pretpostavka je puštala širi meni da izađe preko desne ivice ekrana.
+    dd.style.visibility = 'hidden';
+    dd.style.left = '0px';
+    dd.style.display = 'block';
+    const ddW = dd.offsetWidth;
+    dd.style.display = 'none';
+    dd.style.visibility = '';
     let left = r.left;
     // Ne izlazi desno
     if (left + ddW > window.innerWidth - 6) left = window.innerWidth - ddW - 6;
@@ -31914,34 +31934,35 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="menu-dropdown" style="
   display:none;position:fixed;top:0;right:0;
   background:#16213e;border:1px solid #0f3460;border-radius:8px;
-  min-width:220px;z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
-  touch-action:manipulation;max-height:80vh;overflow-y:auto;overscroll-behavior:contain;">
-  <div class="mdrop-item" style="color:#60a5fa;font-weight:700;" onclick="closeMenuDropdown();showWeatherPanel()">🌧 Prognoza</div>
+  min-width:250px;max-width:calc(100vw - 12px);z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  touch-action:manipulation;max-height:80vh;overflow-y:auto;overscroll-behavior:contain;padding-bottom:4px;">
+  <div class="mdrop-hdr">Karta</div>
+  <div class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()"><span class="mdrop-ico">📂</span>Dodaj KML fajl</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</div>
+  <div class="mdrop-item" style="color:#60a5fa;" onclick="closeMenuDropdown();showWeatherPanel()"><span class="mdrop-ico">🌧</span>Prognoza</div>
   <div class="mdrop-sep"></div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showExport()">⬆ KML Export</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()">🖨 Print / Štampanje</div>
-  <div class="mdrop-item" style="color:#38bdf8;font-weight:700;" onclick="closeMenuDropdown();openLoadMapScreen()">🗺 UČITAJ KARTU</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()">📂 Dodaj KML fajl</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showTemModal()">📊 Tematska karta</div>
+  <div class="mdrop-hdr">Teren</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showShareLocMenu()"><span class="mdrop-ico">📍</span>Podijeli lokaciju</div>
+  <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do lokacije</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</div>
   <div class="mdrop-sep"></div>
-  <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()">📊 Upravljanje projektima</div>
-  <div class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()">📅 Sedmični / mjesečni izvještaji</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()">📏 Mjerenja &amp; Tragovi</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()">🖌 Stil linija</div>
+  <div class="mdrop-hdr">Projekti i izvoz</div>
+  <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</div>
+  <div class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showExport()"><span class="mdrop-ico">⬆</span>KML izvoz</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</div>
   <div class="mdrop-sep"></div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()">🗺 Granice Odjela</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()">📷 Uslikaj lokaciju</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showShareLocMenu()">📍 Podijeli lokaciju</div>
-  <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()">🧭 Vodi me do lokacije</div>
-  <div class="mdrop-sep"></div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showHelp()">📖 Upute za korištenje</div>
-  <div class="mdrop-sep"></div>
-  <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')">🔑 Admin — Korisnici</div>
-  <div class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')">⚙ Postavke</div>
-  <div class="mdrop-item" id="menu-user-label" style="color:#64748b;font-size:11px;pointer-events:none;padding:6px 14px;">—</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()">🔑 Promijeni PIN</div>
-  <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()">⎋ Odjava</div>
-  <div style="color:#475569;font-size:9px;text-align:center;padding:6px 0 2px;letter-spacing:0.05em;" id="menu-app-ver"></div>
+  <div class="mdrop-hdr" id="menu-user-label" style="text-transform:none;letter-spacing:0.02em;font-size:12px;">—</div>
+  <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico">👥</span>Admin — korisnici</div>
+  <div class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')"><span class="mdrop-ico">⚙</span>Postavke</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</div>
+  <div class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico">📖</span>Upute za korištenje</div>
+  <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico">🚪</span>Odjava</div>
+  <div style="color:#64748b;font-size:11px;text-align:center;padding:6px 0 4px;letter-spacing:0.05em;" id="menu-app-ver"></div>
 </div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
