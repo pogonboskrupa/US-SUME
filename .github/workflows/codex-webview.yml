@@ -36,10 +36,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.4'
+          # Podrazumijevano setup-gradle keš SPREMA samo na default grani repoa;
+          # CODEX-US-SUME to nije, pa je keš bio read-only i svaki build je
+          # ponovo skidao sve Gradle/AGP zavisnosti sa Maven Centrala — što je
+          # 2026-09-24 palo na "429 Too Many Requests" prije ijednog kompajliranja.
+          cache-read-only: false
       - name: Assets i WebView debug APK
         run: |
           bash android/copy-assets.sh
-          gradle -p android --no-daemon assembleDebug
+          # Više pokušaja sa dužim razmakom za dohvat zavisnosti (podrazumijevano
+          # 3 pokušaja / 1 s) — za prvi build bez keša kad Maven vrati 429.
+          gradle -p android --no-daemon \
+            -Dorg.gradle.internal.repository.max.retries=6 \
+            -Dorg.gradle.internal.repository.initial.backoff=3000 \
+            assembleDebug
       - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
         # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
         # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
