@@ -93,15 +93,16 @@ test('removeFromQueue briše TAČNO jednu operaciju po _qid', () => {
   assert.equal(after[0].payload.datum, 'b');
 });
 
-test('bumpRetry: 4x false (op ostaje), 5. put true (op uklonjena)', () => {
+test('bumpRetry: 4x false (op ostaje), 5. put true (op zadržana za ručni retry)', () => {
   _OL.enqueue({ type: 'upsert_vlaka', payload: { nm: 'T1', korisnik_id: 'u1' } });
   const qid = _OL.loadQueue()[0]._qid;
   for (let i = 1; i <= 4; i++) {
     assert.equal(_OL.bumpRetry(qid, 5), false, `pokušaj ${i} ne smije odbaciti`);
     assert.equal(_OL.loadQueue().length, 1, 'op mora ostati u redu');
   }
-  assert.equal(_OL.bumpRetry(qid, 5), true, '5. pokušaj mora odbaciti');
-  assert.equal(_OL.loadQueue().length, 0);
+  assert.equal(_OL.bumpRetry(qid, 5), true, '5. pokušaj mora označiti blokadu');
+  assert.equal(_OL.loadQueue().length, 1);
+  assert.equal(_OL.loadQueue()[0]._blocked, true);
 });
 
 test('bumpRetry za nepostojeći ključ vraća false i ne dira red', () => {
@@ -111,14 +112,14 @@ test('bumpRetry za nepostojeći ključ vraća false i ne dira red', () => {
 });
 
 // ── kapacitet i korupcija ─────────────────────────────────────────────
-test('red ograničen na 500 — najstarije ispadaju uz upozorenje', () => {
+test('red preko 500 zadržava najstarije uz upozorenje', () => {
   for (let i = 0; i < 501; i++) {
     _OL.enqueue({ type: 'upsert_log', payload: { datum: 'd' + i, korisnik_id: 'u1' } });
   }
   const q = _OL.loadQueue();
-  assert.equal(q.length, 500);
-  assert.equal(q[0].payload.datum, 'd1', 'najstarija (d0) mora ispasti');
-  assert.ok(_toasts.some(t => t.includes('prepun')), 'korisnik mora vidjeti upozorenje');
+  assert.equal(q.length, 501);
+  assert.equal(q[0].payload.datum, 'd0', 'najstarija mora ostati');
+  assert.ok(_toasts.some(t => t.includes('500')), 'korisnik mora vidjeti upozorenje');
 });
 
 test('korumpiran JSON u redu/kešu ne ruši ništa — vraća prazno/null', () => {
@@ -127,13 +128,32 @@ test('korumpiran JSON u redu/kešu ne ruši ništa — vraća prazno/null', () =
   assert.deepEqual(_OL.loadQueue(), []);
   assert.equal(_OL.load(_OL.VLAKE), null);
   _OL.enqueue({ type: 'upsert_vlaka', payload: { nm: 'T1', korisnik_id: 'u1' } });
-  assert.equal(_OL.loadQueue().length, 1, 'enqueue mora raditi preko korumpiranog stanja');
+  assert.equal(localStorage.getItem(_OL.QUEUE), '{nevalidno', 'oštećen original ne smije biti prepisan');
 });
 
 test('save/load roundtrip čuva strukturu podataka', () => {
   const rows = [{ nm: 'T1', pts: [{ la: 44.1, lo: 16.2 }] }];
   _OL.save(_OL.VLAKE, rows);
   assert.deepEqual(_OL.load(_OL.VLAKE), rows);
+});
+
+test('quota greška vraća neuspjeh i ne mijenja prethodni red', () => {
+  _OL.enqueue({type:'delete_vlaka',payload:{id:'a'}});
+  const original = localStorage.setItem;
+  localStorage.setItem = () => {throw new Error('quota');};
+  try {
+    assert.equal(_OL.enqueue({type:'delete_vlaka',payload:{id:'b'}}),false);
+    assert.equal(_OL.save(_OL.VLAKE,[]),false);
+    assert.equal(_OL.loadQueue().length,1);
+  } finally {localStorage.setItem=original;}
+});
+test('doznaka projekat ima stabilan UUID kroz ponovne pokušaje', () => {
+  const payload = {name:'RK70'};
+  _OL.enqueue({type:'insert_doz_project',payload});
+  assert.match(payload.id,/^[0-9a-f-]{36}$/);
+  const op = _OL.loadQueue()[0];
+  _OL.bumpRetry(op._qid,5);
+  assert.equal(_OL.loadQueue()[0].payload.id,payload.id);
 });
 
 // ── _genUUID fallback ─────────────────────────────────────────────────

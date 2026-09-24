@@ -1,17 +1,29 @@
 package ba.spd.uss.vlake;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Locale;
 
 public class GpsService extends Service {
 
@@ -23,6 +35,22 @@ public class GpsService extends Service {
     // "zaboravljenog" lock-a ako servis ikad ne dobije "stop" akciju.
     private PowerManager.WakeLock wakeLock;
 
+    // ── Native GPS bafer (nezavisan od WebView-a) ────────────────────────────
+    // isRecordingActive (MainActivity) drži WebView živ dok se snima, ali to NE
+    // garantuje da navigator.geolocation.watchPosition() nastavlja da dostavlja
+    // fiksove dok WebView nema nijedan prozor (Activity uništena, "osiroćen" u
+    // pozadini) — Chromium interno može ograničiti geolokaciju za stranicu bez
+    // prikaza, nezavisno od toga da li je JS kontekst živ. Zato GpsService ovdje
+    // SAM prikuplja pozicije preko LocationManager-a (potpuno nezavisno od
+    // WebView-a) dok snimanje traje, i piše ih u fajl. Kad se app ponovo otvori
+    // (WebView dobije prozor), JS strana (_drainNativeGpsBuffer, na
+    // visibilitychange) povuče sve što je native sloj prikupio u međuvremenu i
+    // popuni prazninu u tragu/vlaci — umjesto prave linije preko cijelog perioda.
+    public static final Object BUFFER_LOCK = NativeGpsBuffer.LOCK;
+    private static final String BUFFER_FILENAME = "gps_native_buffer.jsonl";
+    private LocationManager locationManager;
+    private LocationListener locationListener;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -31,12 +59,22 @@ public class GpsService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_NOT_STICKY;
+        if (intent == null) {
+            // START_STICKY restart od sistema (proces ubijen pa vraćen) — intent
+            // je null. Bez ponovnog startForeground() + wake lock-a servis bi se
+            // vratio "gol" (na O+ i rizik 'did not call startForeground' kill-a),
+            // a snimanje u WebView-u bi tiho umrlo. Podigni oboje odmah.
+            acquireWakeLock();
+            showForegroundNotification("GPS Snimanje", "Traktorske vlake — GPS snimanje aktivno");
+            startNativeLocationUpdates();
+            return START_STICKY;
+        }
 
         String action = intent.getAction();
         if ("stop".equals(action)) {
             sendBroadcastToWeb("stop");
             releaseWakeLock();
+            stopNativeLocationUpdates();
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
@@ -62,7 +100,70 @@ public class GpsService extends Service {
 
         acquireWakeLock();
         showForegroundNotification(title, "Traktorske vlake — GPS snimanje aktivno");
+        // Ovo je stvarni početak NOVE sesije snimanja (poziv iz MainActivity) —
+        // obriši ostatke starog, nepovučenog bafera da se stari fiksovi ne uvuku
+        // u novi trag. Za razliku od intent==null grane iznad (restart servisa
+        // nakon što je sistem ubio proces USRED snimanja) — tu se ništa ne briše,
+        // jer bi to obrisalo baš one fiksove koje native bafer treba da sačuva.
+        // Retain unacknowledged fixes across start/restart. JS filters session time.
+        startNativeLocationUpdates();
         return START_STICKY;
+    }
+
+    private void startNativeLocationUpdates() {
+        if (locationManager != null) return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (locationManager == null) return;
+        locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                appendToBuffer(location);
+            }
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+            @Override
+            public void onProviderEnabled(String provider) {}
+            @Override
+            public void onProviderDisabled(String provider) {}
+        };
+        try {
+            // SAMO GPS provider, namjerno bez NETWORK_PROVIDER-a: mrežni fiksovi
+            // (bazne stanice/wifi) znaju biti pomjereni desetine metara uz
+            // prijavljeno "dobro" accuracy — naizmjenično isprepleteni sa pravim
+            // GPS fiksovima u baferu prave cik-cak liniju koju JS filteri po
+            // tačnosti ne mogu pouzdano uhvatiti. Na terenu (šuma) network
+            // provider ionako nema šta ponuditi.
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER, 2000L, 0f, locationListener);
+            }
+        } catch (SecurityException ignored) {
+            // dozvola oduzeta između provjere i poziva — nema šta, pobjegli fiksovi
+            // se ionako ne mogu ni dobiti preko WebView-a u istoj situaciji
+        }
+    }
+
+    private void stopNativeLocationUpdates() {
+        if (locationManager != null && locationListener != null) {
+            try { locationManager.removeUpdates(locationListener); } catch (SecurityException ignored) {}
+        }
+        locationManager = null;
+        locationListener = null;
+    }
+
+    private void appendToBuffer(Location location) {
+        String line = String.format(Locale.US,
+            "{\"la\":%.7f,\"lo\":%.7f,\"ac\":%.2f,\"al\":%.2f,\"sp\":%.2f,\"t\":%d}",
+            location.getLatitude(), location.getLongitude(),
+            location.hasAccuracy() ? location.getAccuracy() : 999.0,
+            location.hasAltitude() ? location.getAltitude() : 0.0,
+            location.hasSpeed() ? location.getSpeed() : 0.0, location.getTime());
+        try { new NativeGpsBuffer(getFilesDir()).append(line); }
+        catch (IOException e) { android.util.Log.e("US-SUME", "GPS storage write failed"); }
     }
 
     private void acquireWakeLock() {
@@ -127,6 +228,7 @@ public class GpsService extends Service {
     private void sendBroadcastToWeb(String action) {
         Intent i = new Intent("ba.spd.uss.vlake.REC_ACTION");
         i.putExtra("action", action);
+        i.setPackage(getPackageName());
         sendBroadcast(i);
     }
 
@@ -141,6 +243,23 @@ public class GpsService extends Service {
         }
     }
 
+    // Korisnik je izbacio app iz "recent apps" (swipe) usred snimanja. Activity
+    // se uništava, ali snimanje MORA teći dalje — zato se ovdje NE zove
+    // stopSelf(). Uz android:stopWithTask="false" u manifestu ovo je drugi,
+    // nezavisan sloj iste namjere: dio OEM ROM-ova ignoriše manifest atribut,
+    // a neki sistemi ovdje očekuju izričito ponašanje. Foreground notifikacija i
+    // wake lock se preventivno obnavljaju jer je poslije uklanjanja taska
+    // zabilježeno da servis ostane bez vidljive notifikacije (a bez nje ga
+    // Android smije ugasiti kao "obični" pozadinski servis).
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        acquireWakeLock();
+        showForegroundNotification("GPS Snimanje", "Snimanje se nastavlja — app je zatvorena");
+        startNativeLocationUpdates();
+        // super se NAMJERNO ne zove: podrazumijevana implementacija u nekim
+        // slučajevima zaustavi servis zajedno sa taskom.
+    }
+
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
@@ -150,6 +269,7 @@ public class GpsService extends Service {
     @Override
     public void onDestroy() {
         releaseWakeLock();
+        stopNativeLocationUpdates();
         super.onDestroy();
     }
 }
