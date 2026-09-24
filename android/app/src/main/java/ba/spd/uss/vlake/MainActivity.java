@@ -50,7 +50,12 @@ public class MainActivity extends Activity {
     private static final int REQ_PERMS = 2;
     private static final int REQ_BG_LOC = 3;
     private static final int REQ_CAMERA = 4;
+    private static final int REQ_CAPTURE = 5;
+    private static final int REQ_CAPTURE_PERM = 6;
     private android.webkit.PermissionRequest pendingCameraRequest;
+    private Uri pendingCaptureUri;
+    private File pendingCaptureFile;
+    private Intent pendingFallbackIntent;
     // Postavlja se preko GpsBridge dok GPS snimanje (vlaka/trag/pojas) traje.
     // WebView.onPause() je dokumentovano da "best-effort pauzira geolocation" —
     // ako se pozove dok se snima, navigator.geolocation.watchPosition() prestaje
@@ -218,15 +223,20 @@ public class MainActivity extends Activity {
                 }
                 fileCallback = filePathCallback;
                 Intent intent = fileChooserParams.createIntent();
-                try {
-                    startActivityForResult(intent, REQ_FILE);
-                } catch (Exception e) {
-                    fileCallback = null;
-                    Toast.makeText(MainActivity.this,
-                            "Ne mogu otvoriti birač fajlova", Toast.LENGTH_SHORT).show();
-                    return false;
+                // createIntent() je uvijek ACTION_GET_CONTENT (galerija/fajlovi) i
+                // ignoriše <input capture> — bez ovoga "Kamera" otvara galeriju.
+                if (fileChooserParams.isCaptureEnabled() && acceptsImages(fileChooserParams)) {
+                    pendingFallbackIntent = intent;
+                    if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                            == PackageManager.PERMISSION_GRANTED) {
+                        launchCameraCapture();
+                    } else {
+                        ActivityCompat.requestPermissions(MainActivity.this,
+                                new String[]{Manifest.permission.CAMERA}, REQ_CAPTURE_PERM);
+                    }
+                    return true;
                 }
-                return true;
+                return launchFilePicker(intent);
             }
         });
 
@@ -439,11 +449,32 @@ public class MainActivity extends Activity {
                 }
                 pendingCameraRequest = null;
             }
+        } else if (requestCode == REQ_CAPTURE_PERM) {
+            boolean granted = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (granted) {
+                launchCameraCapture();
+            } else {
+                Toast.makeText(this,
+                        "Bez dozvole za kameru — otvaram galeriju",
+                        Toast.LENGTH_LONG).show();
+                launchFallbackPicker();
+            }
         }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_CAPTURE) {
+            Uri uri = pendingCaptureUri;
+            File file = pendingCaptureFile;
+            pendingCaptureUri = null;
+            pendingCaptureFile = null;
+            pendingFallbackIntent = null;
+            boolean ok = resultCode == RESULT_OK && uri != null && file != null && file.length() > 0;
+            deliverFileResult(ok ? new Uri[]{uri} : null);
+            return;
+        }
         if (requestCode == REQ_FILE && fileCallback != null) {
             Uri[] results = null;
             if (resultCode == RESULT_OK && data != null) {
@@ -457,6 +488,68 @@ public class MainActivity extends Activity {
                     results = new Uri[]{Uri.parse(data.getDataString())};
                 }
             }
+            fileCallback.onReceiveValue(results);
+            fileCallback = null;
+        }
+    }
+
+    private static boolean acceptsImages(WebChromeClient.FileChooserParams params) {
+        String[] types = params.getAcceptTypes();
+        if (types == null || types.length == 0) return true;
+        for (String t : types) {
+            if (t == null || t.isEmpty() || t.startsWith("image/") || t.equals("*/*")) return true;
+        }
+        return false;
+    }
+
+    private boolean launchFilePicker(Intent intent) {
+        try {
+            startActivityForResult(intent, REQ_FILE);
+            return true;
+        } catch (Exception e) {
+            deliverFileResult(null);
+            Toast.makeText(this, "Ne mogu otvoriti birač fajlova", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+    }
+
+    // Puna rezolucija ide u fajl preko FileProvider-a (EXTRA_OUTPUT); bez toga
+    // kamera vraća samo thumbnail u data extra, a WebView-u treba content:// URI.
+    private void launchCameraCapture() {
+        try {
+            File dir = new File(getCacheDir(), "captures");
+            if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("mkdirs");
+            File[] old = dir.listFiles();
+            if (old != null) {
+                for (File f : old) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+            pendingCaptureFile = new File(dir, "foto_" + System.currentTimeMillis() + ".jpg");
+            pendingCaptureUri = androidx.core.content.FileProvider.getUriForFile(
+                    this, getPackageName() + ".fileprovider", pendingCaptureFile);
+            Intent cam = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            cam.putExtra(MediaStore.EXTRA_OUTPUT, pendingCaptureUri);
+            cam.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(cam, REQ_CAPTURE);
+        } catch (Exception e) {
+            pendingCaptureUri = null;
+            pendingCaptureFile = null;
+            Toast.makeText(this, "Kamera nije dostupna — otvaram galeriju", Toast.LENGTH_SHORT).show();
+            launchFallbackPicker();
+        }
+    }
+
+    private void launchFallbackPicker() {
+        Intent fb = pendingFallbackIntent;
+        pendingFallbackIntent = null;
+        if (fb != null) launchFilePicker(fb);
+        else deliverFileResult(null);
+    }
+
+    private void deliverFileResult(Uri[] results) {
+        if (fileCallback != null) {
             fileCallback.onReceiveValue(results);
             fileCallback = null;
         }

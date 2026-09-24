@@ -4489,7 +4489,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l,c,e){console.error('JS GREŠKA:',m,'linja',l,e);if(typeof showToast==='function'){showToast('⚠ Greška: '+m.slice(0,80),4000);}return false;};
-const APP_VER = 'v3.52.1';
+const APP_VER = 'v3.52.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -8823,8 +8823,8 @@ function startLocPhoto() {
   const sheet = document.createElement('div');
   sheet.style.cssText = 'background:#1e293b;border-radius:16px 16px 0 0;width:100%;max-width:400px;padding:12px 16px 20px;';
   sheet.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-bottom:10px;">Izvor slike</div>'
-    + '<button id="_foto-cam" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">📷 Kamera</button>'
-    + '<button id="_foto-gal" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">🖼 Galerija</button>'
+    + '<button id="_foto-cam" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">📷 Uslikaj kamerom</button>'
+    + '<button id="_foto-gal" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;">🖼 Izaberi iz galerije</button>'
     + '<button id="_foto-cancel" style="width:100%;padding:14px;background:transparent;border:none;color:#64748b;font-size:14px;cursor:pointer;">Otkaži</button>';
   bg.appendChild(sheet);
   document.body.appendChild(bg);
