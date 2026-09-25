@@ -51,7 +51,7 @@ function hav(la1, lo1, la2, lo2) {
 function makeEnv(st) {
   const ids = ['tragovi-list', 'tragovi-count', 'notif-tragovi', 'tragovi-msr-count', 'tv-sum', 'tv-seg-trg', 'tv-seg-msr',
     'tv-pane-trg', 'tv-pane-msr', 'tv-grp-btn', 'tragovi-msr-list', 'btrag-panel', 'btrag-panel-ico', 'btrag-panel-txt',
-    'msr-main-val', 'msr-main-sub'];
+    'msr-main-val', 'msr-main-sub', 'tv-trazi-wrap'];
   const els = Object.fromEntries(ids.map(i => [i, el()]));
   const scope = {
     document: { getElementById: id => els[id] || null },
@@ -65,7 +65,9 @@ function makeEnv(st) {
     _msrPoligonPovrsina: () => 52684, _msrHaversine: hav,
     _escHtml: s => String(s).replace(/</g, '&lt;'),
   };
-  const src = [extractVar('_tragoviTab'), extractVar('_TV_GRP_LBL'), extractVar('_TV_MSR_MOD')].join('\n')
+  const src = [extractVar('_tragoviTab'), extractVar('_TV_GRP_LBL'), extractVar('_TV_MSR_MOD'),
+    'var _tvOtvoren = ' + JSON.stringify(st.otvoren || null) + ', _tvTrazi = ' + JSON.stringify(st.trazi || '') + ';',
+    ['_tragIme', '_tragVrijeme', '_tvBoja'].map(extractFn).join('\n')].join('\n')
     .replace("var _tragoviTab = 'trg';", "var _tragoviTab = " + JSON.stringify(st.tab || 'trg') + ";")
     + '\n' + ['_tvMsrVrijednost', '_tragoviMsrRowHtml', '_tragoviRender', '_tragoviRowHtml', '_tragoviUpdBtn', '_msrBrojTacaka', '_msrUpdGlavni'].map(extractFn).join('\n')
     + '\nreturn { _tvMsrVrijednost, _tragoviRender, _tragoviUpdBtn, _msrBrojTacaka, _msrUpdGlavni };';
@@ -93,6 +95,14 @@ t('sažetak broji tragove, ukupnu dužinu i mjerenja', () => {
   assert.strictEqual(els['tv-sum'].textContent, '2 traga · 0.60 km · 1 mjerenje');
 });
 
+t('množina u sažetku: 5 tragova, 22 traga', () => {
+  const mk = n => Array.from({ length: n }, (_, i) => ({ ...TRG, id: 't' + i }));
+  let e = makeEnv({ trg: mk(5) }); e.api._tragoviRender();
+  assert.ok(/^5 tragova/.test(e.els['tv-sum'].textContent), e.els['tv-sum'].textContent);
+  e = makeEnv({ trg: mk(22) }); e.api._tragoviRender();
+  assert.ok(/^22 traga/.test(e.els['tv-sum'].textContent));
+});
+
 t('tab Mjerenja sakriva listu tragova i obrnuto', () => {
   const { api, els } = makeEnv({ trg: [TRG], msr: [AREA], tab: 'msr' });
   api._tragoviRender();
@@ -102,7 +112,7 @@ t('tab Mjerenja sakriva listu tragova i obrnuto', () => {
 });
 
 t('kartica traga nosi dužinu, a brisanje ide kroz HTML dijalog, ne native confirm()', () => {
-  const { api, els } = makeEnv({ trg: [TRG] });
+  const { api, els } = makeEnv({ trg: [TRG], otvoren: 'trag_1' });
   api._tragoviRender();
   const h = els['tragovi-list'].innerHTML;
   assert.ok(h.includes('0.30 km'), 'nema dužine na kartici');
@@ -128,6 +138,32 @@ t('dugme Snimi trag mijenja SVG ikonu i tekst, bez emojija', () => {
   off.api._tragoviUpdBtn();
   assert.ok(off.els['btrag-panel-ico'].innerHTML.includes('#ic-snimaj'));
   assert.ok(!/[🔴⏹]/u.test(off.els['btrag-panel-ico'].innerHTML + on.els['btrag-panel-ico'].innerHTML));
+});
+
+t('radnje samo na ODABRANOJ kartici; uređivanje i tačke se ne iscrtavaju unaprijed', () => {
+  const T2 = { ...TRG, id: 'trag_2', pts: Array.from({ length: 3000 }, (_, i) => [44.9 + i * 1e-5, 16.1, 0, 0, 5]) };
+  const { api, els } = makeEnv({ trg: [TRG, T2], otvoren: 'trag_1' });
+  api._tragoviRender();
+  const h = els['tragovi-list'].innerHTML;
+  assert.strictEqual((h.match(/class="tv-card-btns"/g) || []).length, 1, 'radnje na više kartica');
+  assert.ok(!h.includes('tred-pt-row'), 'lista tačaka je iscrtana unaprijed');
+  assert.ok(h.length < 20000, 'HTML liste raste sa brojem tačaka: ' + h.length);
+});
+
+t('trag bez imena dobije naziv iz datuma/vremena, ne prazan naslov', () => {
+  const { api, els } = makeEnv({ trg: [{ ...TRG, name: '', pts: [[44.9, 16.1, 0, Date.parse('2026-09-24T08:05:00'), 5], [44.91, 16.1, 0, Date.parse('2026-09-24T09:20:00'), 5]] }] });
+  api._tragoviRender();
+  const h = els['tragovi-list'].innerHTML;
+  assert.ok(/Trag 2026-09-24 08:05/.test(h) && /bez-imena/.test(h));
+  assert.ok(/08:05 · 1 h 15 min/.test(h), 'nema početka/trajanja');
+});
+
+t('pretraga filtrira po nazivu/odjelu i kaže kad nema pogodaka', () => {
+  const A = { ...TRG, id: 'a', name: 'Granica potok', odjel: '15' }, B = { ...TRG, id: 'b', name: 'Obilazak', odjel: '14a' };
+  let e = makeEnv({ trg: [A, B], trazi: '14a' }); e.api._tragoviRender();
+  assert.ok(e.els['tragovi-list'].innerHTML.includes('Obilazak') && !e.els['tragovi-list'].innerHTML.includes('Granica'));
+  e = makeEnv({ trg: [A, B], trazi: 'xyz' }); e.api._tragoviRender();
+  assert.ok(/Nijedan trag ne odgovara/.test(e.els['tragovi-list'].innerHTML));
 });
 
 console.log('\nPanel mjerenja — rezultat uživo:');

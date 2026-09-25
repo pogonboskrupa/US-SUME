@@ -3805,6 +3805,13 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 .tv-card-btns button:first-child { flex: 1; }
 .tv-card-btns button .ic { margin: 0; }
 .tv-card-btns .del { color: #f87171; border-color: #7f1d1d; }
+.tv-trg.otvoren { border-color: var(--tv-c); box-shadow: 0 0 0 1px var(--tv-c) inset; }
+.tv-card-name.bez-imena { color: #94a3b8; font-style: italic; font-weight: 600; }
+.tv-oko { background: none; border: none; color: #94a3b8; padding: 8px; margin: -8px -6px -8px -2px; cursor: pointer; border-radius: 10px; flex-shrink: 0; }
+.tv-oko .ic { width: 20px; height: 20px; margin: 0; }
+.tv-card.skriven .tv-oko { color: #64748b; }
+.tv-trazi { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; background: #0f172a; border: 1px solid #1e3a5f; border-radius: 16px; padding: 0 10px; color: #64748b; }
+.tv-trazi input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0; font-size: 13.5px; padding: 7px 0; }
 .tv-card .tred-row { margin: 0 12px 12px; }
 .tv-mod { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
 .tv-mod .ic { width: 20px; height: 20px; margin: 0; vertical-align: 0; }
@@ -4868,6 +4875,8 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
       <div id="tv-pane-trg">
         <div class="tv-toolbar">
+          <label class="tv-trazi" id="tv-trazi-wrap" style="display:none;"><svg class="ic"><use href="#ic-trazi"/></svg>
+            <input id="tv-trazi" type="search" placeholder="Traži trag…" autocomplete="off" oninput="_tvTrazi=this.value;_tragoviRender()"></label>
           <span class="tv-toolbar-lbl">Grupiši</span>
           <button id="tv-grp-btn" class="tv-chip" onclick="_tragoviGrpToggle()" title="Promijeni grupisanje">Po datumu</button>
         </div>
@@ -5442,7 +5451,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.6';
+const APP_VER = 'v1.7.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -18697,7 +18706,7 @@ function _tragRegRender() {
     const vis = t.visible !== false;
     const meta = [dt, _tragFmtLen(lenM), t.pts.length+' tač.', t.gj?'GJ: <b>'+_escHtml(t.gj)+'</b>':'', t.odjel?'Odj: <b>'+_escHtml(t.odjel)+'</b>':''].filter(Boolean).join(' · ');
     return `<div class="treg-row">
-      <div class="treg-name" onclick="_tragRegZoom('${t.id}')" style="border-left:3px solid ${t.color};padding-left:8px;">${_escHtml(t.name)}</div>
+      <div class="treg-name" onclick="_tragRegZoom('${t.id}')" style="border-left:3px solid ${_tvBoja(t.color)};padding-left:8px;">${_escHtml(_tragIme(t))}</div>
       <div class="treg-meta">${meta}</div>
       <div id="treg-edit-${t.id}" style="display:none;" class="treg-meta-edit">
         <div class="mf-col"><label>Naziv</label><input id="treg-ei-name-${t.id}" value="${_escHtml(t.name)}"></div>
@@ -18862,7 +18871,10 @@ function _tragoviRender() {
   const sum = document.getElementById('tv-sum');
   if (sum) {
     const ukupno = _tragRegistry.reduce((s, t) => s + _tragCalcLen(t.pts), 0);
-    sum.textContent = (n ? n + (n === 1 ? ' trag' : ' traga') + ' · ' + _tragFmtLen(ukupno) : 'Nema tragova')
+    // 1 trag / 2–4 traga / 5+ tragova (ranije "5 traga")
+    const d = n % 10, dd = n % 100;
+    const rijec = (d === 1 && dd !== 11) ? ' trag' : (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) ? ' traga' : ' tragova';
+    sum.textContent = (n ? n + rijec + ' · ' + _tragFmtLen(ukupno) : 'Nema tragova')
       + ' · ' + (mn ? mn + (mn === 1 ? ' mjerenje' : ' mjerenja') : 'nema mjerenja');
   }
   const isMsr = _tragoviTab === 'msr';
@@ -18892,17 +18904,25 @@ function _tragoviRender() {
       <button class="tv-chip" onclick="fabSnimTrag()">Snimi prvi trag</button></div>`;
     return;
   }
+  const trWrap = document.getElementById('tv-trazi-wrap');
+  if (trWrap) trWrap.style.display = (n > 5 || _tvTrazi) ? '' : 'none';
+  const q = String(_tvTrazi || '').trim().toLowerCase();
+  const izvor = q ? _tragRegistry.filter(t => [_tragIme(t), t.odjel, t.gj].some(x => String(x || '').toLowerCase().includes(q))) : _tragRegistry;
+  if (q && !izvor.length) {
+    el.innerHTML = `<div class="tv-empty"><div>Nijedan trag ne odgovara „${_escHtml(_tvTrazi.trim())}".</div></div>`;
+    return;
+  }
   let groups = [];
   if (_tragoviGrpBy === 'none') {
-    groups = [{ label: null, items: _tragRegistry }];
+    groups = [{ label: null, items: izvor }];
   } else {
     const map2 = new Map();
-    _tragRegistry.forEach(t => {
-      const k = _tragoviGrpBy === 'gj' ? (t.gj || '—') : fmtDateShort(t.date);
+    izvor.forEach(t => {
+      const k = _tragoviGrpBy === 'gj' ? (t.gj ? 'GJ ' + t.gj : 'Bez GJ') : fmtDateShort(t.date);
       if (!map2.has(k)) map2.set(k, []);
       map2.get(k).push(t);
     });
-    groups = [...map2.entries()].map(([k, v]) => ({ label: (_tragoviGrpBy === 'gj' ? 'GJ ' : '') + k, items: v }));
+    groups = [...map2.entries()].map(([k, v]) => ({ label: k, items: v }));
   }
   el.innerHTML = groups.map(g => `
     ${g.label ? `<div class="tv-grp"><span>${_escHtml(g.label)}</span><span class="tv-grp-n">${g.items.length}</span></div>` : ''}
@@ -18910,40 +18930,82 @@ function _tragoviRender() {
   `).join('');
 }
 
+// ─── Tragovi — kartice (v1.7.7) ─────────────────────────────────────────────
+// Odabrana kartica (tap) otvara radnje; drugi tap na odabranu vodi na kartu —
+// isti obrazac kao lista vlaka. Ranije je SVAKA kartica stalno nosila red od 5
+// dugmadi (~210 px po tragu). Oko (prikaži/sakrij) ostaje uvijek vidljivo jer
+// se koristi najčešće.
+var _tvOtvoren = null;
+var _tvTrazi = '';
+// Naziv za prikaz: trag sačuvan bez imena je imao PRAZAN naslov kartice.
+function _tragIme(t) {
+  if (t && String(t.name || '').trim()) return String(t.name).trim();
+  const ms = t && t.pts && t.pts[0] && t.pts[0][3];
+  const d = new Date(isFinite(ms) && ms ? ms : (t && t.date) || Date.now());
+  return 'Trag ' + fmtDateShort(d.toISOString()) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+// Početak i trajanje snimanja iz vremena tačaka ([la, lo, alt, ts, acc]).
+function _tragVrijeme(t) {
+  const pts = (t && t.pts) || [];
+  const t0 = pts.length ? pts[0][3] : null, t1 = pts.length ? pts[pts.length - 1][3] : null;
+  if (!isFinite(t0) || !isFinite(t1) || !t0 || !t1 || t1 < t0) return '';
+  const d0 = new Date(t0);
+  const poc = String(d0.getHours()).padStart(2, '0') + ':' + String(d0.getMinutes()).padStart(2, '0');
+  const min = Math.round((t1 - t0) / 60000);
+  const traj = min < 1 ? '' : min < 60 ? min + ' min' : Math.floor(min / 60) + ' h' + (min % 60 ? ' ' + (min % 60) + ' min' : '');
+  return traj ? poc + ' · ' + traj : poc;
+}
+function _tvBoja(c) { return /^#[0-9a-fA-F]{3,8}$/.test(String(c || '')) ? c : '#f97316'; }
+function _tvOdaberi(id) {
+  if (_tvOtvoren === id) { _tragRegZoom(id); return; }
+  _tvOtvoren = id;
+  _tragoviRender();
+}
+
 function _tragoviRowHtml(t) {
   const lenM = _tragCalcLen(t.pts);
   const dt = fmtDateShort(t.date);
   const vis = t.visible !== false;
-  const w = t.weight || 3;
-  const style = t.dashStyle || 'solid';
+  const otvoren = _tvOtvoren === t.id;
+  const bezImena = !String(t.name || '').trim();
   // Datum se ne ponavlja na kartici kad je već naslov grupe iznad nje.
-  const meta = [_tragoviGrpBy === 'date' ? '' : dt, t.pts.length + ' tač.', t.odjel ? 'Odj. ' + _escHtml(t.odjel) : '', t.gj && _tragoviGrpBy !== 'gj' ? 'GJ ' + _escHtml(t.gj) : ''].filter(Boolean).join(' · ');
-  return `<div class="tv-card${vis ? '' : ' skriven'}" style="--tv-c:${t.color};">
-    <div class="tv-card-top" onclick="_tragRegZoom('${t.id}')" title="Prikaži na karti">
+  const meta = [_tragoviGrpBy === 'date' ? '' : dt, _tragVrijeme(t), t.pts.length + ' tač.', t.odjel ? 'Odj. ' + _escHtml(t.odjel) : '', t.gj && _tragoviGrpBy !== 'gj' ? 'GJ ' + _escHtml(t.gj) : ''].filter(Boolean).join(' · ');
+  return `<div class="tv-card tv-trg${vis ? '' : ' skriven'}${otvoren ? ' otvoren' : ''}" style="--tv-c:${_tvBoja(t.color)};">
+    <div class="tv-card-top" onclick="_tvOdaberi('${t.id}')" title="${otvoren ? 'Prikaži na karti' : 'Otvori radnje'}">
       <span class="tv-bar"></span>
       <div class="tv-card-info">
-        <div class="tv-card-name">${_escHtml(t.name)}</div>
+        <div class="tv-card-name${bezImena ? ' bez-imena' : ''}">${_escHtml(_tragIme(t))}</div>
         <div class="tv-card-meta">${meta}</div>
       </div>
       <div class="tv-card-val">${_tragFmtLen(lenM)}</div>
+      <button class="tv-oko" onclick="event.stopPropagation();_tragRegToggle('${t.id}');_tragoviRender()" aria-label="${vis ? 'Sakrij sa karte' : 'Prikaži na karti'}" title="${vis ? 'Sakrij sa karte' : 'Prikaži na karti'}">${vis ? '<svg class="ic"><use href="#ic-prikazi"/></svg>' : '<svg class="ic"><use href="#ic-sakrij"/></svg>'}</button>
     </div>
-    <div class="tv-card-btns">
+    ${otvoren ? `<div class="tv-card-btns">
       <button onclick="_tragRegZoom('${t.id}')"><svg class="ic"><use href="#ic-karta"/></svg> Karta</button>
-      <button onclick="_tragRegToggle('${t.id}');_tragoviRender()" aria-label="${vis ? 'Sakrij' : 'Prikaži'}">${vis ? '<svg class="ic"><use href="#ic-sakrij"/></svg>' : '<svg class="ic"><use href="#ic-prikazi"/></svg>'}</button>
-      <button onclick="_tragRegShare('${t.id}')" aria-label="Pošalji"><svg class="ic"><use href="#ic-posalji"/></svg></button>
-      <button onclick="_tragoviToggleEdit('${t.id}')" aria-label="Uredi"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
-      <button class="del" onclick="_tragoviObrisi('${t.id}')" aria-label="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
+      <button onclick="_tragRegShare('${t.id}')" aria-label="Pošalji" title="Pošalji"><svg class="ic"><use href="#ic-posalji"/></svg></button>
+      <button onclick="_tragoviToggleEdit('${t.id}')" aria-label="Uredi" title="Uredi"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
+      <button onclick="_tragoviUgladi('${t.id}')" aria-label="Ugladi" title="Ugladi trag"><svg class="ic"><use href="#ic-alat"/></svg></button>
+      <button class="del" onclick="_tragoviObrisi('${t.id}')" aria-label="Obriši" title="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     </div>
-    <div id="tred-${t.id}" style="display:none;" class="tred-row">
-      <button class="tv-chip" style="align-self:flex-start;" onclick="_tragoviUgladi('${t.id}')"><svg class="ic"><use href="#ic-alat"/></svg> Ugladi trag…</button>
+    <div id="tred-${t.id}" style="display:none;" class="tred-row"></div>` : ''}
+  </div>`;
+}
+
+// Uređivanje se gradi TEK kad se otvori. Ranije je za SVAKI trag pri SVAKOM
+// crtanju liste nastajao i skriveni red za SVAKU GPS tačku — trag od 6 h ima
+// ~4000 tačaka, pa su to bile hiljade DOM elemenata koje niko ne vidi.
+function _tragoviEditHtml(t) {
+  const w = t.weight || 3;
+  const style = t.dashStyle || 'solid';
+  return `
       <div>
         <label>Naziv</label>
-        <input id="tred-nm-${t.id}" value="${_escHtml(t.name)}" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;font-size:13px;" onchange="_tragoviSetName('${t.id}',this.value)">
+        <input id="tred-nm-${t.id}" value="${_escHtml(t.name || '')}" placeholder="${_escHtml(_tragIme(t))}" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;font-size:13px;" onchange="_tragoviSetName('${t.id}',this.value)">
       </div>
       <div style="display:flex;gap:12px;align-items:center;">
         <div>
           <label>Boja</label>
-          <input type="color" value="${t.color}" onchange="_tragoviSetColor('${t.id}',this.value)">
+          <input type="color" value="${_tvBoja(t.color)}" onchange="_tragoviSetColor('${t.id}',this.value)">
         </div>
         <div style="flex:1;">
           <label>Debljina: <span id="tred-w-lbl-${t.id}">${w}px</span></label>
@@ -18955,21 +19017,30 @@ function _tragoviRowHtml(t) {
         <div class="tred-style-btns">
           <button class="${style==='solid'?'active':''}" onclick="_tragoviSetStyle('${t.id}','solid')"><svg class="ic"><use href="#ic-puna"/></svg> Puna</button>
           <button class="${style==='dash'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dash')"><svg class="ic"><use href="#ic-crtkana"/></svg> Iscrtkana</button>
-          <button class="${style==='dot'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dot')">· Točkasta</button>
+          <button class="${style==='dot'?'active':''}" onclick="_tragoviSetStyle('${t.id}','dot')">· Tačkasta</button>
         </div>
       </div>
       <div>
         <label style="cursor:pointer;" onclick="_tragoviTogglePts('${t.id}')">📍 Tačke (${t.pts.length}) <span style="color:#475569;">▾</span></label>
-        <div id="tred-pts-${t.id}" style="display:none;" class="tred-pts-list">
-          ${t.pts.map((p,i) => `<div class="tred-pt-row">
+        <div id="tred-pts-${t.id}" style="display:none;" class="tred-pts-list"></div>
+      </div>`;
+}
+// Lista tačaka: najviše 500 redova odjednom — brisanje pojedinačne tačke je
+// alat za očigledan GPS odskok, ne za listanje hiljada koordinata.
+var _TV_PTS_MAX = 500;
+function _tragoviPtsHtml(t) {
+  const n = t.pts.length, max = Math.min(n, _TV_PTS_MAX);
+  let h = '';
+  for (let i = 0; i < max; i++) {
+    const p = t.pts[i];
+    h += `<div class="tred-pt-row">
             <span class="tred-pt-idx">#${i+1}</span>
-            <span>${p[0].toFixed(6)}, ${p[1].toFixed(6)}${p[2]?' · '+Math.round(p[2])+'m':''}</span>
+            <span>${(+p[0]).toFixed(6)}, ${(+p[1]).toFixed(6)}${p[2]?' · '+Math.round(p[2])+'m':''}</span>
             <button class="tred-pt-del" onclick="_tragoviDelPt('${t.id}',${i})" title="Obriši tačku"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-          </div>`).join('')}
-        </div>
-      </div>
-    </div>
-  </div>`;
+          </div>`;
+  }
+  if (n > max) h += `<div class="tred-pt-row" style="color:#64748b;justify-content:center;">…još ${n - max} tačaka (za čišćenje koristi Ugladi)</div>`;
+  return h;
 }
 
 // Ugladi živi u listi Mjerenja i tragovi (treg-ugl-*): otvori baš taj trag
@@ -18989,17 +19060,26 @@ function _tragoviUgladi(id) {
 async function _tragoviObrisi(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
-  const ok = await _dlgConfirm('Obrisati trag "' + t.name + '"? Ova radnja se ne može poništiti.', { title: 'Obriši trag', danger: true });
+  const ok = await _dlgConfirm('Obrisati trag "' + _tragIme(t) + '"? Ova radnja se ne može poništiti.', { title: 'Obriši trag', danger: true });
   if (ok) _tragRegDelete(id);
 }
 
 function _tragoviToggleEdit(id) {
   const el = document.getElementById('tred-'+id);
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (!el) return;
+  const otvara = el.style.display === 'none';
+  if (otvara && !el.childElementCount) {
+    const t = _tragRegistry.find(x => x.id === id);
+    if (t) el.innerHTML = _tragoviEditHtml(t);
+  }
+  el.style.display = otvara ? '' : 'none';
 }
 function _tragoviTogglePts(id) {
   const el = document.getElementById('tred-pts-'+id);
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (!el) return;
+  const otvara = el.style.display === 'none';
+  if (otvara) { const t = _tragRegistry.find(x => x.id === id); if (t) el.innerHTML = _tragoviPtsHtml(t); }
+  el.style.display = otvara ? '' : 'none';
 }
 function _tragoviSetName(id, val) {
   const t = _tragRegistry.find(x => x.id === id);
