@@ -168,5 +168,14 @@ t('panel mjerenja nije ograničen na 15vh (rezultat je bio ispod ruba)', () => {
   assert.ok(!/maxHeight = isMsr \? '15vh'/.test(HTML));
 });
 
+t('dugmad u prozorčićima iznad donje trake ne nasljeđuju raspored dugmadi trake (v1.7.0)', () => {
+  // "#action-bar button" (ikona IZNAD teksta) je pogađao i dugmad unutar
+  // Moja lokacija / Izmjeri prozorčića — oni su bili visoki pola ekrana.
+  const css = HTML.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/#action-bar button[\s,{]/.test(css), 'široki selektor "#action-bar button" se vratio');
+  assert.ok(/id="ab-loc-popup" class="ab-pop"/.test(HTML) && /id="ab-izmjeri-menu" class="ab-pop"/.test(HTML));
+  assert.ok(!/totalBox\.style\.display = 'block'/.test(HTML), '.msr-det je flex, block bi ga pregazio');
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);
