@@ -5432,7 +5432,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.4';
+const APP_VER = 'v1.7.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -34242,6 +34242,7 @@ let _dozLoadGen  = 0;  // D4-D: generation token — spriječi stariji odgovor d
 let _dozMembers  = [];
 let _dozMarkings = [];
 let _dozTracks   = [];
+var _dozFitId = null;   // odjel na koji je karta već centrirana (vidi dozRenderMapLayers)
 let _dozDrawType = null;
 let _dozDrawPts  = [];
 let _dozDrawLayer= null;
@@ -34476,10 +34477,16 @@ function _dozSubProject(projectId) {
       event: 'INSERT', schema: 'public', table: 'doz_track_points',
       filter: 'project_id=eq.' + projectId
     }, payload => {
-      const by = payload.new?.user_id;
+      const r = payload.new;
+      const by = r?.user_id;
       if (by && by !== sbUser?.id) {
+        // Tačka kolege ide DIREKTNO u _dozTracks (realtime nosi cijeli red) —
+        // ranije je svaka nova tačka nakon 5 s ponovo preuzimala SVE tačke
+        // odjela sa servera (hiljade redova, na slaboj vezi sporo i skupo).
+        // Puni reload i dalje radi catch-up pri ponovnom spajanju.
+        if (r.project_id === _dozSelId && r.latitude != null) _dozTracks.push(r);
         clearTimeout(_dozTrackRefreshTimer);
-        _dozTrackRefreshTimer = setTimeout(() => dozLoadLayers(projectId).then(() => dozRenderDetail()), 5000);
+        _dozTrackRefreshTimer = setTimeout(() => _dozOsvjeziTragove(projectId), 2000);
       }
     })
     .subscribe(status => {
@@ -34487,6 +34494,24 @@ function _dozSubProject(projectId) {
       // socket bio pao — povuci svježe pojaseve/oznake kolega čim ima konekcije.
       if (status === 'SUBSCRIBED') _dozSchedCatchup(1200);
     });
+}
+
+// Ponovo iscrtaj tragove/pojaseve/statistiku iz onoga što je već u memoriji
+// (bez mreže). Karta se NE centrira ponovo (_dozFitId).
+function _dozOsvjeziTragove(projectId) {
+  if (!projectId || projectId !== _dozSelId) return;
+  try { dozRenderMapLayers(); } catch(e) {}
+  try { dozRenderDetail(); } catch(e) {}
+  try { _dozCacheLayers(projectId); } catch(e) {}
+}
+// Vlastito snimanje: pojasevi/statistika se osvježe najviše jednom u 15 s —
+// računica pojaseva je skupa i ne smije ići na svaku GPS tačku (vrući put).
+let _dozLiveRacunTs = 0;
+function _dozLiveRacunMozda() {
+  const now = Date.now();
+  if (now - _dozLiveRacunTs < 15000) return;
+  _dozLiveRacunTs = now;
+  setTimeout(() => _dozOsvjeziTragove(_dozSelId), 0);
 }
 
 // Throttled reload doznaka slojeva otvorenog odjela (pandan _schedKolegeFullSync za vlake)
@@ -34513,6 +34538,7 @@ function _dozEnsureChannel() {
 // ─── Select Odjel ────────────────────────────────────────────────
 async function dozSelectOdjel(id) {
   _dozSelId = id;
+  _dozFitId = null;   // novo otvaranje (i istog odjela) → centriraj ponovo
   _OL.save(_OL.DOZ_SEL_ID, id);
   _dozClearOverview();
   dozTreesClear();
@@ -34670,7 +34696,13 @@ function dozRenderMapLayers() {
         interactive: true
       }).addTo(map);
       _dozBoundaryLayer.on('click', () => _dozShowBoundaryPopup(odjel));
-      if (_dozBoundaryLayer.getLayers().length) map.fitBounds(_dozBoundaryLayer.getBounds(), { padding:[30,30] });
+      // Karta se centrira SAMO pri otvaranju odjela. Ranije je svako
+      // osvježavanje (trag kolege stiže realtime-om, ~svakih 5 s dok snima)
+      // vraćalo kartu na granicu odjela, usred gledanja nekog drugog dijela.
+      if (_dozFitId !== odjel.id && _dozBoundaryLayer.getLayers().length) {
+        map.fitBounds(_dozBoundaryLayer.getBounds(), { padding:[30,30] });
+        _dozFitId = odjel.id;
+      }
     } catch(e) {}
   }
 
@@ -34680,15 +34712,8 @@ function dozRenderMapLayers() {
 
   // Tracks grouped by user
   _dozTracksLayer = L.layerGroup().addTo(map);
-  const byUser = {};
-  // Dedup po user_id+recorded_at — štiti od rijetkog double-insert (live + offline buffer)
-  const _seenPt = new Set();
-  _dozTracks.forEach(p => {
-    const sig = p.user_id + '|' + p.recorded_at;
-    if (_seenPt.has(sig)) return;
-    _seenPt.add(sig);
-    (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
-  });
+  // Serverske + moje neposlane tačke, dedup po vremenu (ms), sortirano.
+  const byUser = _dozTragoviPoKorisniku();
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
   const GAP_MS = 5 * 60 * 1000; // 5 min pauza → nova sesija
@@ -34698,7 +34723,7 @@ function dozRenderMapLayers() {
     const segments = [[]];
     pts.forEach((p, i) => {
       if (i > 0) {
-        const dt = new Date(p.recorded_at) - new Date(pts[i-1].recorded_at);
+        const dt = _dozTackaMs(p) - _dozTackaMs(pts[i-1]);
         if (dt > GAP_MS) segments.push([]);
       }
       segments[segments.length - 1].push([p.latitude, p.longitude]);
@@ -34743,16 +34768,50 @@ function _dozGetBoundaryGeoJSON(odjel) {
   return null;
 }
 
-function _dozBuildUserTracks() {
+// ─── Tragovi projektanata — JEDAN izvor za prikaz i sve računice (v1.7.5) ───
+// Ranije je svaka funkcija (karta, pojasevi, dužine, statistika) sama grupisala
+// _dozTracks i sama radila dedup, i to po TEKSTU vremena ('user|recorded_at').
+// Server vraća '...+00:00', telefon piše '...Z' — ista tačka iz lokalnog bafera
+// i sa servera nije bila prepoznata kao ista. Sad: vrijeme se svodi na ms, a
+// pored serverskih tačaka ulaze i MOJE još neposlane (offline bafer), da se
+// vlastiti trag vidi i računa i prije sinkronizacije.
+function _dozTackaMs(p) { const t = Date.parse(p && p.recorded_at); return isFinite(t) ? t : NaN; }
+function _dozTragoviPoKorisniku() {
   const byUser = {};
   const seen = new Set();
-  const GAP_MS = 5 * 60 * 1000;
-  _dozTracks.forEach(p => {
-    const sig = p.user_id + '|' + p.recorded_at;
+  const dodaj = p => {
+    if (!p || p.latitude == null || p.longitude == null || !p.user_id) return;
+    const ms = _dozTackaMs(p);
+    const sig = p.user_id + '|' + (isFinite(ms) ? ms : p.recorded_at);
     if (seen.has(sig)) return;
     seen.add(sig);
     (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
-  });
+  };
+  (_dozTracks || []).forEach(dodaj);
+  try {
+    JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]')
+      .filter(p => p && p.project_id === _dozSelId).forEach(dodaj);
+  } catch(e) {}
+  // Redoslijed po VREMENU, ne po dolasku — tačke kolege stižu realtime-om, a
+  // offline snimljene kasnije i sa starijim vremenom; bez sortiranja bi linija
+  // skakala naprijed-nazad i pojas bi se računao nad pogrešnom geometrijom.
+  Object.values(byUser).forEach(a => a.sort((x, y) => (_dozTackaMs(x) || 0) - (_dozTackaMs(y) || 0)));
+  return byUser;
+}
+// Potpis stanja tragova — kad se ne promijeni, skupa geometrija se ne računa ponovo.
+function _dozTragoviPotpis(byUser) {
+  return Object.keys(byUser).sort().map(u => {
+    const a = byUser[u]; return u + ':' + a.length + ':' + (_dozTackaMs(a[a.length - 1]) || 0);
+  }).join(',');
+}
+let _dozUTMemo = { k: null, v: null };
+let _dozBandsMemo = { k: null, v: null };
+
+function _dozBuildUserTracks() {
+  const byUser = _dozTragoviPoKorisniku();
+  const memoK = (_dozSelId || '') + '#' + _dozTragoviPotpis(byUser);
+  if (_dozUTMemo.k === memoK) return _dozUTMemo.v;
+  const GAP_MS = 5 * 60 * 1000;
 
   const allLines = [];
   Object.entries(byUser).forEach(([uid, pts]) => {
@@ -34760,7 +34819,7 @@ function _dozBuildUserTracks() {
     const segments = [[]];
     pts.forEach((p, i) => {
       if (i > 0) {
-        const dt = new Date(p.recorded_at) - new Date(pts[i - 1].recorded_at);
+        const dt = _dozTackaMs(p) - _dozTackaMs(pts[i - 1]);
         if (dt > GAP_MS) segments.push([]);
       }
       segments[segments.length - 1].push([p.longitude, p.latitude]);
@@ -34770,9 +34829,9 @@ function _dozBuildUserTracks() {
     });
   });
 
-  if (allLines.length <= 1) return allLines;
+  if (allLines.length <= 1) { _dozUTMemo = { k: memoK, v: allLines }; return allLines; }
 
-  return allLines.map(track => {
+  const rez = allLines.map(track => {
     const others = allLines.filter(t => t.uid !== track.uid);
     if (!others.length) return track;
     const coords = turf.getCoords(track.line);
@@ -34802,6 +34861,8 @@ function _dozBuildUserTracks() {
     if (filtered.length < 2) return track;
     return { uid: track.uid, line: turf.lineString(filtered) };
   });
+  _dozUTMemo = { k: memoK, v: rez };
+  return rez;
 }
 
 function _dozComputeBands(odjel) {
@@ -34809,6 +34870,10 @@ function _dozComputeBands(odjel) {
   if (!bndFeat) return [];
   const userTracks = _dozBuildUserTracks();
   if (!userTracks.length) return [];
+  // Ista računica se traži 2–3 puta po osvježavanju (karta, statistika, popup
+  // granice) — memo po stanju tragova + vanjskom rubu + odjelu.
+  const bk = (odjel.id || '') + '|' + _DOZ_BAND_OUTER_M + '|' + _dozUTMemo.k;
+  if (_dozBandsMemo.k === bk) return _dozBandsMemo.v;
 
   const uidSet = [...new Set(userTracks.map(t => t.uid))];
   const bands = [];
@@ -34840,7 +34905,40 @@ function _dozComputeBands(odjel) {
       } catch(e) {}
     });
   });
+  _dozBandsMemo = { k: bk, v: bands };
   return bands;
+}
+
+// Pređena (pokrivena) površina — SPOJENA geometrija, ne zbir pojaseva.
+// Pojas se pravi po SEGMENTU traga: projektant koji prođe isti dio dvaput ima
+// dva pojasa preko istog tla, a pojasevi dvojice projektanata se preklapaju
+// (bafer se prilagođava samo po sredini traga). Zbir je tu površinu brojao
+// dvaput i pokrivenost je mogla preći 100 %. Isto pravilo kao "ukupno je
+// spojena geometrija" kod traka starosti (v3.113.1).
+let _dozPokrMemo = { k: null, v: null };
+function _dozPokrivenost(odjel) {
+  const bands = _dozComputeBands(odjel);
+  if (_dozPokrMemo.k === _dozBandsMemo.k && _dozPokrMemo.v && bands === _dozBandsMemo.v) return _dozPokrMemo.v;
+  const spoji = (a, b) => { if (!a) return b; if (!b) return a; try { return turf.union(a, b) || a; } catch(e) { return a; } };
+  const poUid = {};
+  bands.forEach(b => { poUid[b.uid] = spoji(poUid[b.uid], b.polygon); });
+  const poKorisniku = {};
+  let sve = null;
+  Object.entries(poUid).forEach(([uid, g]) => {
+    poKorisniku[uid] = g ? turf.area(g) / 10000 : 0;
+    sve = spoji(sve, g);
+  });
+  const ukupnoHa = sve ? turf.area(sve) / 10000 : 0;
+  const zbir = Object.values(poKorisniku).reduce((s, v) => s + v, 0);
+  const v = { poKorisniku, ukupnoHa, preklopHa: Math.max(0, zbir - ukupnoHa) };
+  _dozPokrMemo = { k: _dozBandsMemo.k, v };
+  return v;
+}
+
+function _dozImeClana(uid) {
+  const member = _dozMembers.find(m => m.user_id === uid);
+  const k = member && member._korisnik;
+  return (k && `${k.ime || ''} ${k.prezime || ''}`.trim()) || 'Projektant';
 }
 
 function _dozRenderBands(odjel) {
@@ -34853,8 +34951,7 @@ function _dozRenderBands(odjel) {
 
   bands.forEach(b => {
     const col = DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length];
-    const member = _dozMembers.find(m => m.user_id === b.uid);
-    const name = member?._korisnik ? (`${member._korisnik.ime || ''} ${member._korisnik.prezime || ''}`.trim()) : 'Projektant';
+    const name = _escHtml(_dozImeClana(b.uid));
     const lyr = L.geoJSON(b.polygon, {
       style: { color: col, weight: 1.5, fillColor: col, fillOpacity: 0.18 },
       interactive: true
@@ -34881,29 +34978,27 @@ function _dozShowBoundaryPopup(odjel) {
     if (bndFeat) totalArea = turf.area(bndFeat) / 10000;
   } catch(e) {}
 
-  const byUser = {};
-  bands.forEach(b => {
-    byUser[b.uid] = (byUser[b.uid] || 0) + b.areaHa;
-  });
+  const pokr = _dozPokrivenost(odjel);
+  const byUser = pokr.poKorisniku;
 
   let rows = '';
   Object.entries(byUser).forEach(([uid, ha]) => {
     const col = DOZ_ENG_COLORS[(mIdx[uid] ?? 0) % DOZ_ENG_COLORS.length];
-    const member = _dozMembers.find(m => m.user_id === uid);
-    const name = member?._korisnik ? (`${member._korisnik.ime || ''} ${member._korisnik.prezime || ''}`.trim()) : 'Projektant';
+    const name = _escHtml(_dozImeClana(uid));
     rows += `<tr><td style="padding:2px 6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col};margin-right:4px;vertical-align:middle;"></span>${name}</td><td style="padding:2px 6px;text-align:right;font-family:monospace;font-weight:700;">${ha.toFixed(2)} ha</td></tr>`;
   });
 
-  const coveredHa = Object.values(byUser).reduce((s, v) => s + v, 0);
-  const pct = totalArea > 0 ? ((coveredHa / totalArea) * 100).toFixed(0) : '—';
+  const coveredHa = pokr.ukupnoHa;
+  const pct = totalArea > 0 ? Math.min(100, (coveredHa / totalArea) * 100).toFixed(0) : '—';
 
   const html = `<div style="min-width:200px;font-size:12px;color:#1e293b;">
-    <b style="font-size:14px;color:#000;">${odjel.name || 'Odjel'}</b>
+    <b style="font-size:14px;color:#000;">${_escHtml(odjel.name || 'Odjel')}</b>
     <div style="color:#475569;margin:4px 0;">Ukupna površina: <b style="color:#000;">${totalArea.toFixed(2)} ha</b></div>
     ${rows ? `<div style="margin-top:6px;border-top:1px solid #ddd;padding-top:4px;">
       <div style="font-weight:700;margin-bottom:3px;color:#000;">Pojasevi projektanata:</div>
       <table style="width:100%;border-collapse:collapse;">${rows}</table>
       <div style="color:#475569;margin-top:4px;">Pokriveno: <b style="color:#000;">${coveredHa.toFixed(2)} ha</b> (${pct}%)</div>
+      ${pokr.preklopHa >= 0.01 ? `<div style="color:#b45309;margin-top:2px;">Preklapanje pojaseva: <b>${pokr.preklopHa.toFixed(2)} ha</b></div>` : ''}
     </div>` : '<div style="color:#64748b;margin-top:6px;">Nema GPS tragova — pojasevi nisu formirani</div>'}
   </div>`;
 
@@ -35549,21 +35644,14 @@ function dozZoomMarking(id) {
 // ─── Render Detail Panel ─────────────────────────────────────────
 
 // Dužina GPS traga po korisniku (sa 5-min gap segmentacijom, kao na mapi)
-function _dozTrackLenByUser() {
+function _dozTrackLenByUser(byUserIn) {
   const GAP_MS = 5 * 60 * 1000;
-  const byUser = {};
-  const seen = new Set();
-  _dozTracks.forEach(p => {
-    const sig = p.user_id + '|' + p.recorded_at;
-    if (seen.has(sig)) return;
-    seen.add(sig);
-    (byUser[p.user_id] = byUser[p.user_id] || []).push(p);
-  });
+  const byUser = byUserIn || _dozTragoviPoKorisniku();
   const lens = {};
   Object.entries(byUser).forEach(([uid, pts]) => {
     let len = 0;
     for (let i = 1; i < pts.length; i++) {
-      const dt = new Date(pts[i].recorded_at) - new Date(pts[i-1].recorded_at);
+      const dt = _dozTackaMs(pts[i]) - _dozTackaMs(pts[i-1]);
       if (dt > GAP_MS) continue; // pauza — ne spajaj segmente
       len += dst(pts[i-1].latitude, pts[i-1].longitude, pts[i].latitude, pts[i].longitude);
     }
@@ -35581,11 +35669,12 @@ function dozRenderDetail() {
     let bndHa = 0;
     try { const bf = _dozGetBoundaryGeoJSON(odjel); if (bf) bndHa = turf.area(bf) / 10000; } catch(e) {}
     const markedHa = _dozMarkings.reduce((s, m) => s + (parseFloat(m.area_ha) || 0), 0);
-    const bands = _dozComputeBands(odjel);
-    const bandHa = bands.reduce((s, b) => s + b.areaHa, 0);
-    const bandPct = bndHa > 0 ? Math.round(bandHa / bndHa * 100) : 0;
-    const totalTrackLen = Object.values(_dozTrackLenByUser()).reduce((s, v) => s + v, 0);
-    const nPts = _dozTracks.length;
+    const pokr = _dozPokrivenost(odjel);
+    const bandHa = pokr.ukupnoHa;
+    const bandPct = bndHa > 0 ? Math.min(100, Math.round(bandHa / bndHa * 100)) : 0;
+    const byUserT = _dozTragoviPoKorisniku();
+    const totalTrackLen = Object.values(_dozTrackLenByUser(byUserT)).reduce((s, v) => s + v, 0);
+    const nPts = Object.values(byUserT).reduce((s, a) => s + a.length, 0);
     const created = odjel.created_at ? fmtDateShort(odjel.created_at) : '—';
     const kpi = (val, lbl, col) => `<div class="pm-kpi"><div class="pm-kpi-val" style="font-size:14px;${col ? 'color:' + col + ';' : ''}">${val}</div><div class="pm-kpi-lbl">${lbl}</div></div>`;
     statsEl.innerHTML = `
@@ -35600,11 +35689,12 @@ function dozRenderDetail() {
       ${bndHa > 0 ? `<div style="margin-top:8px;height:7px;background:#1e293b;border-radius:4px;overflow:hidden;">
         <div style="height:100%;width:${Math.min(100, bandPct)}%;background:linear-gradient(90deg,#166534,#4ade80);border-radius:4px;transition:width 0.4s;"></div>
       </div>
-      <div style="font-size:10px;color:#64748b;margin-top:3px;">Pokrivenost odjela pojasevima: ${bandPct}%</div>` : ''}`;
+      <div style="font-size:10px;color:#64748b;margin-top:3px;">Pokrivenost odjela pojasevima: ${bandPct}%${pokr.preklopHa >= 0.01 ? ` · <span style="color:#fbbf24;">preklapanje ${fmtHa(pokr.preklopHa)}</span>` : ''}</div>` : ''}`;
   }
 
-  // Members — sa dužinom pređenog GPS traga
+  // Members — sa dužinom pređenog GPS traga i pokrivenom površinom
   const trackLens = _dozTrackLenByUser();
+  const pokrClan = odjel ? _dozPokrivenost(odjel).poKorisniku : {};
   const ml = document.getElementById('doz-members-list');
   ml.innerHTML = _dozMembers.length
     ? _dozMembers.map((m, i) => {
@@ -35618,6 +35708,7 @@ function dozRenderDetail() {
             ${m.role === 'manager' ? '<span style="color:#fbbf24;font-size:10px;"> ★</span>' : ''}
           </div>
           ${tl > 0 ? `<span class="doz-member-len">👣 ${fmtL(tl)}</span>` : ''}
+          ${pokrClan[m.user_id] > 0 ? `<span class="doz-member-len" style="color:#4ade80;">▦ ${fmtHa(pokrClan[m.user_id])}</span>` : ''}
         </div>`;
       }).join('')
     : '<div class="doz-empty">Nema članova</div>';
@@ -36121,6 +36212,7 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   if (navigator.onLine) _processOfflineQueue().catch(() => {});
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
+  if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
 }
 
 // ─── Upozorenje kad projektant uđe u tuđi pojas ─────────────────
@@ -36132,6 +36224,10 @@ function _dozCheckBandCross(lat, lng) {
   if (!_dozGpsOn || !_dozGpsUserId || !_dozCrossWarnEnabled) return;
   const now = Date.now();
   if (now - _dozCrossWarnTs < 15000) return;
+  // Provjera najviše svakih 5 s — gradnja tragova je O(n²) (nearestPointOnLine
+  // po tački), a ova funkcija se zove na SVAKU GPS tačku.
+  if (now - (_dozCheckBandCross._t || 0) < 5000) return;
+  _dozCheckBandCross._t = now;
 
   const userTracks = _dozBuildUserTracks();
   const otherTracks = userTracks.filter(t => t.uid !== _dozGpsUserId);
@@ -36162,8 +36258,7 @@ function _dozCheckBandCross(lat, lng) {
       _dozCrossWarnTs = now;
       const mIdx = {};
       _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
-      const member = _dozMembers.find(m => m.user_id === closestOther.uid);
-      const name = member?._korisnik ? (`${member._korisnik.ime || ''} ${member._korisnik.prezime || ''}`.trim()) : 'Projektant';
+      const name = _escHtml(_dozImeClana(closestOther.uid));
       const col = DOZ_ENG_COLORS[(mIdx[closestOther.uid] ?? 0) % DOZ_ENG_COLORS.length];
       showToast(`⚠ Prelazite u pojas: ${name}`);
       if (_dozCrossMarker) map.removeLayer(_dozCrossMarker);

@@ -2761,6 +2761,20 @@ namjerno, prije nego se jave.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **Doznaka — tragovi projektanata i pređena površina (v1.7.5)**: sve
+  računice (karta, pojasevi, dužine, statistika, popup granice) idu kroz
+  `_dozTragoviPoKorisniku()` — serverske tačke + MOJE neposlane iz
+  `_DOZ_TRACK_BUF_KEY` (samo otvoreni odjel), dedup po vremenu u **ms** (server
+  vraća `+00:00`, telefon `Z` — tekstualni dedup ih nije spajao), sortirano po
+  vremenu. **Pokrivena površina je SPOJENA geometrija (`_dozPokrivenost`,
+  `turf.union`), nikad zbir pojaseva** — pojas se pravi po segmentu traga, pa
+  isti dio pređen dvaput davao je duplu površinu (izmjereno: 4.35 ha umjesto
+  2.18 ha). Preklop dvojice projektanata se prikazuje zasebno. Karta se
+  centrira samo pri otvaranju odjela (`_dozFitId`); tačka kolege iz realtime-a
+  ide direktno u `_dozTracks` (bez ponovnog preuzimanja svih tačaka). Skupa
+  geometrija je memoizovana po potpisu tragova; `_dozCheckBandCross` (GPS vrući
+  put) računa najviše svakih 5 s. Test: `tests/js/doznaka-tragovi.test.js`.
+
 - **Tastatura je prekrivala donje listove — adjustResize NE radi uz edge-to-edge
   (v1.7.3)**: terenski screenshot "Snimi vlaku" — polje za broj i dugme "Idi"
   ispod tastature. `android:windowSoftInputMode="adjustResize"` jeste u
