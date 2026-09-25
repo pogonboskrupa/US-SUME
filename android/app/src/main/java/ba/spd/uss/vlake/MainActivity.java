@@ -29,12 +29,16 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import android.content.BroadcastReceiver;
@@ -126,7 +130,16 @@ public class MainActivity extends Activity {
             webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
             sWebView = webView;
         }
-        setContentView(webView);
+        // WebView ide u omotač kojem se donji padding podešava na visinu
+        // tastature (vidi primijeniTastaturu). Direktno setContentView(webView)
+        // + edge-to-edge/immersive = Android IGNORIŠE adjustResize, pa WebView
+        // ostaje pune visine i sve što je prikačeno za dno (donji listovi,
+        // dijalozi) završi ISPOD tastature.
+        FrameLayout root = new FrameLayout(this);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+        primijeniTastaturu(root);
 
         hideSystemUI();
         requestPermissions();
@@ -1095,6 +1108,24 @@ public class MainActivity extends Activity {
             fileCallback.onReceiveValue(results);
             fileCallback = null;
         }
+    }
+
+    /**
+     * adjustResize u manifestu NE radi uz setDecorFitsSystemWindows(false)
+     * (API 30+) ni uz immersive SYSTEM_UI_FLAG_FULLSCREEN (starije verzije) —
+     * prozor se tada ne smanjuje kad se pojavi tastatura. Umjesto toga se čita
+     * IME inset i za njegovu visinu podigne dno omotača: WebView postane niži,
+     * CSS viewport se skupi i position:fixed/bottom:0 elementi prirodno stanu
+     * IZNAD tastature — bez ijedne izmjene u web kodu po elementu.
+     */
+    private void primijeniTastaturu(View root) {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            int dno = Math.max(0, ime.bottom);
+            if (v.getPaddingBottom() != dno) v.setPadding(0, 0, 0, dno);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
     }
 
     private void hideSystemUI() {

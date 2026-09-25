@@ -2761,6 +2761,26 @@ namjerno, prije nego se jave.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **Tastatura je prekrivala donje listove — adjustResize NE radi uz edge-to-edge
+  (v1.7.3)**: terenski screenshot "Snimi vlaku" — polje za broj i dugme "Idi"
+  ispod tastature. `android:windowSoftInputMode="adjustResize"` jeste u
+  manifestu, ali ga Android IGNORIŠE čim je `setDecorFitsSystemWindows(false)`
+  (API 30+) ili immersive `SYSTEM_UI_FLAG_FULLSCREEN` (starije) — a
+  `MainActivity` radi oboje. WebView zato ostaje pune visine i SVE što je
+  `position:fixed; bottom:0` (donji listovi, `_dlg` dijalozi, Snimi vlaku)
+  završi ispod tastature. Popravka je na jednom mjestu, ne po elementu:
+  WebView je u `FrameLayout` omotaču kojem `primijeniTastaturu()` postavlja
+  donji padding = `WindowInsetsCompat.Type.ime()` — CSS viewport se skupi i
+  fiksni elementi sami stanu iznad tastature. Za webapp isto radi
+  `interactive-widget=resizes-content` u viewport meta (Chrome 108+ inače
+  smanjuje samo VIZUELNI viewport). Treći sloj je `_tastaturaDoPolja()` —
+  polje pri dnu dugog skrolabilnog modala se pomjeri u vidljivo tek kad se
+  viewport stvarno smanjio. Audit sa prikazom od 400 px (simulirana otvorena
+  tastatura): svih 16 fiksnih kontejnera sa poljem za unos dosežno. **Traži
+  pun rebuild** (mijenjan `.java`). Test: `tests/js/tastatura.test.js`.
+  **Ne vraćati `setContentView(webView)` direktno** — omotač je ono što nosi
+  padding.
+
 - **Jedan nezatvoren `<div>` sakrije sve što slijedi u markupu (v1.6.7)**: u
   v3.103.1 je iz `#layer-sheet` nestalo zatvaranje `#ls-pane-inst`. Browser to
   ne prijavljuje — svi elementi iza (`#dlg-sheet`/`#dlg-overlay` = SVI `_dlg`

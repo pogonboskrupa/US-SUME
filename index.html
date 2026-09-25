@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="max-age=86400">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -5414,7 +5414,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.2';
+const APP_VER = 'v1.7.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -32524,6 +32524,37 @@ function _dlgClose() {
 // NE dira overlay ako je _dlgResolve i dalje postavljen — to znači da
 // korisnik ima OTVOREN dijalog na koji legitimno treba odgovoriti (npr.
 // otvorio dijalog pa prebacio app, vraća se da odgovori).
+// Tastatura i fokusirano polje (v1.7.3). U APK-u MainActivity smanji WebView za
+// visinu tastature (IME inset), u browseru to radi interactive-widget u viewport
+// meta — pa donji listovi sami stanu iznad tastature. Ovo je treći sloj: polje
+// u dugom obrascu/listu koje je i dalje ispod ruba (npr. pri dnu skrolabilnog
+// modala) se pomjeri u vidljivo tek kad se viewport stvarno smanjio.
+function _tastaturaPoljeVidljivo(el) {
+  if (!el || !el.getBoundingClientRect) return false;
+  const r = el.getBoundingClientRect();
+  const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  return r.top >= 0 && r.bottom <= h - 8;
+}
+function _tastaturaJeUnos(el) {
+  if (!el || !el.tagName) return false;
+  const t = el.tagName;
+  if (t === 'TEXTAREA' || el.isContentEditable) return true;
+  if (t !== 'INPUT') return false;
+  return !['checkbox', 'radio', 'range', 'button', 'submit', 'color', 'file', 'hidden'].includes((el.type || '').toLowerCase());
+}
+function _tastaturaDoPolja() {
+  const el = document.activeElement;
+  if (!_tastaturaJeUnos(el) || _tastaturaPoljeVidljivo(el)) return;
+  try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { try { el.scrollIntoView(); } catch (e2) {} }
+}
+(function () {
+  let t = null;
+  const kasnije = () => { clearTimeout(t); t = setTimeout(_tastaturaDoPolja, 320); };
+  document.addEventListener('focusin', e => { if (_tastaturaJeUnos(e.target)) kasnije(); });
+  window.addEventListener('resize', kasnije);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', kasnije);
+})();
+
 function _dlgHealOrphanedOverlay() {
   if (_dlgResolve) return false;
   const ov = document.getElementById('dlg-overlay');
