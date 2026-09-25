@@ -1849,9 +1849,12 @@ select:focus { outline:none; border-color:#3b82f6; }
 .proj-card:hover { border-color:#3b82f6; }
 .proj-card.aktivan { border-color:#4ade80; background:rgba(74,222,128,0.06); }
 .proj-card-title { font-size:13px; font-weight:bold; color:#e2e8f0; margin-bottom:3px; padding-right:40px; }
-.proj-card.aktivan .proj-card-title { padding-right:80px; }
+.proj-card.aktivan .proj-card-title { padding-right:48px; }
 .proj-card-sub { font-size:11px; color:#64748b; line-height:1.6; }
 .proj-card-badge { display:inline-block; font-size:10px; font-weight:bold; color:#4ade80; border:1px solid #4ade80; border-radius:3px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+.pd-akcije { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+.pd-akcije .btn { margin:0 !important; width:100% !important; min-height:44px; font-size:12px !important; padding:8px 6px !important;
+  display:flex !important; align-items:center; justify-content:center; gap:5px; text-align:center; line-height:1.2; }
 .proj-card-vchip { display:inline-block; font-size:10px; color:#4ade80; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.25); border-radius:4px; padding:1px 6px; margin-top:3px; }
 .proj-card-akt {
   position:absolute; right:8px; top:50%; transform:translateY(-50%);
@@ -1861,7 +1864,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .proj-card-akt:active { background:#1e3a5f; }
 .proj-card-rec {
-  position:absolute; right:44px; top:50%; transform:translateY(-50%);
+  /* Aktivni projekat nema dugme "Aktiviraj", pa Snimi stoji uz desni rub —
+     na right:44px je visio na sredini kartice sa praznim prostorom desno. */
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
   width:32px; height:32px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4);
   color:#ef4444; border-radius:7px; font-size:14px; cursor:pointer;
   display:flex; align-items:center; justify-content:center; line-height:1;
@@ -4446,7 +4451,8 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       <div class="sec" id="proj-detalji-sec" style="display:none;">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
           <button onclick="showProjektiList()" style="background:none;border:none;color:#60a5fa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid #1e3a5f;"><svg class="ic"><use href="#ic-nazad"/></svg> Nazad</button>
-          <div class="sec-t" style="margin:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pd-title">—</div>
+          <!-- text-transform:none — .sec-t je uppercase, a oznaka odjela "14a" nije "14A". -->
+          <div class="sec-t" style="margin:0;font-size:16px;color:#fbbf24;text-transform:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pd-title">—</div>
         </div>
         <div id="pd-info" style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.9;background:rgba(15,23,42,0.6);border-radius:6px;padding:9px 11px;border:1px solid #1e3a5f;"></div>
         <div id="pd-dist-warn" style="display:none;margin-bottom:10px;"></div>
@@ -4465,17 +4471,21 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           </div>
         </div>
         <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
+        <!-- Sporedne radnje u mreži 2×N (v1.7.6) umjesto 6 dugmadi preko cijele
+             širine jedno ispod drugog. Aktiviraj ostaje puna širina iznad. -->
+        <div class="pd-akcije">
         <button class="btn" id="pd-zoom-odjel-btn" onclick="zoomNaOdjel()" style="width:100%;margin-bottom:6px;background:#0f2940;border:1px solid #1e3a5f;color:#60a5fa;font-size:13px;padding:8px;border-radius:8px;font-weight:600;"><svg class="ic"><use href="#ic-karta"/></svg> Zoom na odjel</button>
         <button class="btn" id="pd-draw-vlaka-btn" onclick="startManualVlakaDraw()" style="width:100%;margin-bottom:6px;background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff;font-size:13px;padding:9px;border-radius:8px;font-weight:600;letter-spacing:0.3px;"><svg class="ic"><use href="#ic-crtaj"/></svg> Nacrtaj vlaku ručno</button>
         <button class="btn" id="pd-vlake-btn" onclick="toggleProjektVlakeVisible(_pdProjektId)" style="width:100%;margin-bottom:6px;background:#0f1f2e;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij vlake</button>
-        <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-uvezi"/></svg> Izvezi projekat kao KML</button>
+        <button class="btn" onclick="exportProjektKml()" style="width:100%;margin-bottom:6px;background:#0f3460;border:1px solid #1e3a5f;color:#60a5fa;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-uvezi"/></svg> Izvezi KML</button>
         <button class="btn" id="pd-share-code-btn" onclick="shareProjektCode()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;"><svg class="ic"><use href="#ic-kljuc"/></svg> Podijeli šifrom (teren)</button>
-        <button class="btn" id="pd-transfer-btn" onclick="transferProjektUI()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;"><svg class="ic"><use href="#ic-zamijeni"/></svg> Predaj projekat drugom projektantu</button>
+        <button class="btn" id="pd-transfer-btn" onclick="transferProjektUI()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;"><svg class="ic"><use href="#ic-zamijeni"/></svg> Predaj projekat</button>
+        </div>
         <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button>
       </div>
 
       <!-- REKAP -->
-      <div class="sec">
+      <div class="sec proj-akt-only">
         <div class="sec-hdr" style="margin-bottom:6px;">
           <div class="sec-t">📊 Rekap Projekta</div>
           <button class="btn g" style="margin:0;font-size:11px;padding:5px 10px;" onclick="exportProjektPDF()"><svg class="ic"><use href="#ic-dokument"/></svg> Izvezi PDF</button>
@@ -4486,7 +4496,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       </div>
 
       <!-- TERENSKE I TEHNIČKE STATISTIKE -->
-      <div class="sec">
+      <div class="sec proj-akt-only">
         <div class="sec-hdr" style="margin-bottom:6px;">
           <div class="sec-t">🏔 Terenske statistike</div>
           <button class="btn gr" style="margin:0;font-size:11px;padding:5px 10px;" onclick="exportTerenStats()"><svg class="ic"><use href="#ic-uvezi"/></svg> Izvezi</button>
@@ -4533,7 +4543,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
       </div>
 
       <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
-      <div class="sec">
+      <div class="sec proj-akt-only">
         <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
         <div id="std-card">
           <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za izračun STD</div>
@@ -5432,7 +5442,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.5';
+const APP_VER = 'v1.7.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8209,7 +8219,7 @@ function _renderProjGroup(list) {
   const ro = typeof isReadOnly === 'function' && isReadOnly();
   let html = '';
   for (const [gj, projekti] of byGj) {
-    html += `<div class="proj-gj-header">${gj ? 'GJ ' + gj : 'Bez GJ'}</div>`;
+    html += `<div class="proj-gj-header">${gj ? 'GJ ' + _escHtml(gj) : 'Bez GJ'}</div>`;
     for (const p of projekti) {
       const isAkt  = p.id === _aktivniProjektId;
       const nClan  = (p.clanovi || []).length;
@@ -8228,7 +8238,7 @@ function _renderProjGroup(list) {
       html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
         ${recBtn}${aktBtn}
         <div class="proj-card-title">
-          ${p.odjel || '—'}
+          ${_escHtml(p.odjel || '—')}
           ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
           ${p._pendingSync ? '<span style="font-size:10px;color:#f59e0b;margin-left:4px;">⏳ čeka sync</span>' : ''}
         </div>
@@ -8263,7 +8273,7 @@ function rndProjektiList() {
     : _projekti;
 
   if (!lista.length) {
-    el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema rezultata za „${term}".</div>`;
+    el.innerHTML = `<div style="color:#475569;font-size:12px;text-align:center;padding:14px;">Nema rezultata za „${_escHtml(term)}".</div>`;
     return;
   }
 
@@ -8277,7 +8287,7 @@ function rndProjektiList() {
     });
     let html = '';
     Object.keys(bySum).sort((a,b) => a.localeCompare(b,'bs')).forEach(sum => {
-      html += `<div class="proj-section-sep" style="color:#fbbf24;">${sum}</div>`;
+      html += `<div class="proj-section-sep" style="color:#fbbf24;">${_escHtml(sum)}</div>`;
       html += _renderProjGroup(bySum[sum]);
     });
     el.innerHTML = html;
@@ -8431,8 +8441,12 @@ async function saveNovProjekt() {
   }
 }
 
+function _projAktSekcije(prikazi) {
+  document.querySelectorAll('#proj-panel .proj-akt-only').forEach(el => { el.style.display = prikazi ? '' : 'none'; });
+}
 function showProjektiList() {
   _pdProjektId = null;
+  _projAktSekcije(true);
   document.getElementById('proj-detalji-sec').style.display = 'none';
   document.getElementById('nov-proj-sec').style.display = 'none';
   document.getElementById('proj-list-sec').style.display = '';
@@ -8454,12 +8468,12 @@ function showProjektDetalji(id) {
   const pdLen   = _ukupnoVlakeM(pdVlake);
   const pdGust  = (p.povrsina > 0 && pdLen > 0) ? Math.round(pdLen / p.povrsina) + ' m/ha' : null;
   document.getElementById('pd-info').innerHTML = [
-    p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${p.gj}` : '',
+    p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${_escHtml(p.gj)}` : '',
     p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${fmtHa(p.povrsina)}` : '',
     p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
-    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : (kolegeMap[p.korisnik_id]?.ime || p.korisnik_id.slice(0,8))}`,
+    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : _escHtml(kolegeMap[p.korisnik_id]?.ime || String(p.korisnik_id || '').slice(0,8) || '—')}`,
     pdVlake.length ? `<b style="color:#4ade80;">Vlake:</b> ${pdVlake.length} · ${fmtL(pdLen)}${pdGust ? ' · ' + pdGust : ''}` : '',
-    isReadOnly() && p.sumarija ? `<b style="color:#fbbf24;">Šumarija:</b> ${p.sumarija}` : ''
+    isReadOnly() && p.sumarija ? `<b style="color:#fbbf24;">Šumarija:</b> ${_escHtml(p.sumarija)}` : ''
   ].filter(Boolean).join('<br>');
 
   // Clanovi
@@ -8471,7 +8485,7 @@ function showProjektDetalji(id) {
   clanEl.innerHTML = allMembers.map(m => {
     const info = kolegeMap[m.korisnik_id];
     const color = m.isVlasnik ? (sbProfile?.boja || '#4ade80') : (info?.color || '#94a3b8');
-    const name  = m.isVlasnik ? (sbProfile ? sbProfile.ime + ' ' + sbProfile.prezime : 'Ti') : (info?.ime || m.korisnik_id.slice(0,8));
+    const name  = _escHtml(m.isVlasnik ? (sbProfile ? sbProfile.ime + ' ' + (sbProfile.prezime || '') : 'Ti') : (info?.ime || String(m.korisnik_id || '').slice(0,8) || 'Projektant'));
     const tag   = m.korisnik_id === sbUser.id ? ' <span style="font-size:10px;color:#64748b;">(ti)</span>' : '';
     const del   = m.canDel ? `<button class="clan-del" onclick="removeProjektClan('${id}','${m.korisnik_id}')" title="Ukloni"><svg class="ic"><use href="#ic-zatvori"/></svg></button>` : '';
     return `<div class="clan-row"><div class="clan-dot" style="background:${color}"></div><div class="clan-name">${name}${tag}</div>${del}</div>`;
@@ -8499,6 +8513,11 @@ function showProjektDetalji(id) {
 
   // Upozorenje o razmaku vlaka
   _checkProjDistWarn(id);
+
+  // Rekap / Terenske statistike / STD ispod računaju AKTIVNI projekat. Dok se
+  // gleda detalj NEKOG DRUGOG projekta, stajale su ispod njegovih podataka kao
+  // da su njegove — sakrij ih; "Detaljna statistika" iznad je za ovaj projekat.
+  _projAktSekcije(isAkt);
 
   // Detaljna statistika — resetuj na sklopljeno (drugi projekat = svježi podaci)
   const statsSec = document.getElementById('pd-stats-sec');
@@ -9556,7 +9575,7 @@ function _updPdVlakeBtn(id) {
   const btn = document.getElementById('pd-vlake-btn');
   if (!btn) return;
   const isHidden = _getHiddenProjektIds().has(id);
-  btn.textContent = isHidden ? '👁 Prikaži vlake' : '🙈 Sakrij vlake';
+  btn.innerHTML = isHidden ? '<svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži vlake' : '<svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij vlake';
 }
 
 function _updVlakeMapVisibility() {
@@ -23938,7 +23957,15 @@ function onOdjelChange() {
   sbLoadKolegeVlake();
 }
 
-function getIme()   { return document.getElementById('p-ime').value.trim() || 'Nepoznat'; }
+// p-ime puni profil sa servera ili aktiviranje projekta; pri offline ulazu na
+// kešu (_ulazNaKesu) ga ništa ne puni, pa su Terenske statistike pisale
+// "Nepoznat (ti)" — rezerva je keširani profil.
+function getIme()   {
+  const v = (document.getElementById('p-ime')?.value || '').trim();
+  if (v) return v;
+  const pr = typeof sbProfile !== 'undefined' && sbProfile ? `${sbProfile.ime || ''} ${sbProfile.prezime || ''}`.trim() : '';
+  return pr || 'Nepoznat';
+}
 function getOdjel() { return document.getElementById('p-odjel').value.trim() || ''; }
 function todayStr() { return new Date().toISOString().slice(0,10); }
 function fmtDate(s) {
@@ -25132,9 +25159,14 @@ function updProjStats() {
   const myTotal = _ukupnoVlakeM(projVlake);
   const _pv     = _projPovrsinaHa();
   const pov     = _pv.ha;
-  const odjel   = getOdjel();
-  const sumarija= document.getElementById('p-sumarija').value.trim();
-  const datum   = document.getElementById('p-datum').value;
+  // Izvor istine je zapis projekta, ne skrivena DOM polja (zamka v3.102.0):
+  // p-datum puni samo aktiviranje, a loadProj() pri pokretanju upisuje DANAŠNJI
+  // datum kad ga nema — pa je Rekap poslije obnove iz keša pisao "Početak: danas".
+  const aktP    = (_projekti || []).find(x => x.id === _aktivniProjektId) || null;
+  const odjel   = (aktP && aktP.odjel) || getOdjel();
+  const sumarija= aktP ? [aktP.gj ? 'GJ ' + aktP.gj : '', aktP.sumarija || ''].filter(Boolean).join(' · ')
+                       : document.getElementById('p-sumarija').value.trim();
+  const datum   = (aktP && aktP.datum) || document.getElementById('p-datum').value;
 
   // aggregate all projektanti across entire log history
   const allP = {};
@@ -25162,11 +25194,11 @@ function updProjStats() {
   // Rekap ostaje kratak pregled samog PROJEKTA (kad je počet, ko sve radi na
   // njemu, površina) — razrada dužina ide u statistike ispod.
   document.getElementById('rekap-card').innerHTML = `
-    ${odjel ? `<div style="font-size:14px;font-weight:bold;color:#fbbf24;margin-bottom:2px;">${odjel}</div>` : ''}
-    ${sumarija ? `<div style="font-size:11px;color:#64748b;margin-bottom:8px;">${sumarija}</div>` : ''}
+    ${odjel ? `<div style="font-size:14px;font-weight:bold;color:#fbbf24;margin-bottom:2px;">${_escHtml(odjel)}</div>` : ''}
+    ${sumarija ? `<div style="font-size:11px;color:#64748b;margin-bottom:8px;">${_escHtml(sumarija)}</div>` : ''}
     <div class="stat-card-title" style="margin-top:4px;">Projekt</div>
     <div class="stat-row"><span class="stat-name">Početak</span><span class="stat-val blue">${datum?fmtDate(datum):'—'}</span></div>
-    <div class="stat-row"><span class="stat-name">Projektanata</span><span class="stat-val">${Object.keys(allP).length}</span></div>
+    <div class="stat-row"><span class="stat-name">Projektanata</span><span class="stat-val">${aktP ? 1 + (aktP.clanovi || []).length : Object.keys(allP).length}</span></div>
     <div class="stat-row"><span class="stat-name">Dana rada</span><span class="stat-val">${nDana}</span></div>
     <div class="stat-row"><span class="stat-name">Površina</span><span class="stat-val blue">${pov>0?fmtHa(pov)+(_pv.src==='KML'?' <span style="font-size:9px;color:#64748b;font-weight:normal;">(iz KML)</span>':''):'—'}</span></div>
     <div style="margin-top:10px;font-size:11px;color:#475569;text-align:center;">Dužine po projektantu i gustoća mreže → <b style="color:#64748b;">Terenske statistike</b> ispod</div>`;
@@ -26229,6 +26261,10 @@ function switchTab(tab) {
     // nije uspio — pokušaj ponovo pri otvaranju taba
     if (!vlake.length) _reloadCoreData();
   } else if (tab==='projekat') {
+    // _mapFullScreen MORA pasti prije msrStop — msrStop preko
+    // _mcdRestoreVisibility() vraća nišan karte na 'flex' dok je taj flag
+    // true, pa je (dolazeći sa Karte) bijeli krug ostajao preko panela.
+    _mapFullScreen = false;
     pproj.scrollTop=0; updProjStats(); rndLog(); rndKolege(); rndKolegeVlakeList(); _rndBojaPresets();
     _setMapUIVisible(false, false);
     msrStop(true);
