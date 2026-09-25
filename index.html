@@ -580,12 +580,12 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* Vlaka list — PRO kartice */
 .vrow {
-  display:flex; align-items:stretch; border-radius:6px; margin-bottom:4px;
+  display:flex; align-items:stretch; border-radius:10px; margin-bottom:6px;
   cursor:pointer; background:#0f172a; border:1px solid #1e293b;
   overflow:hidden; transition:border-color 0.15s, background 0.15s;
 }
 .vrow:hover { border-color:#3b82f6; background:#0f1f3a; }
-.vrow.act   { border-color:#fbbf24; background:#151200; }
+.vrow.act   { border-color:#fbbf24; background:#16140a; box-shadow:0 0 0 1px rgba(251,191,36,0.25); }
 /* PERF: svaki red vlake je težak (5 akcijskih dugmadi s krugovima) — na dužim
    listama (30+ vlaka) to su stotine elemenata koje browser boji i van ekrana.
    content-visibility:auto preskače render/layout redova koji nisu vidljivi →
@@ -596,11 +596,36 @@ input:focus { outline:none; border-color:#3b82f6; }
 .treg-row { content-visibility:auto; contain-intrinsic-size:auto 90px; }
 .doz-odjel-card { content-visibility:auto; contain-intrinsic-size:auto 74px; }
 .vcard-stripe { width:4px; flex-shrink:0; }
-.vcard-info { flex:1; padding:5px 8px; min-width:0; }
-.vcard-top { display:flex; align-items:baseline; justify-content:space-between; gap:5px; }
-.vcard-name { font-weight:700; font-size:13px; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.vcard-km { font-size:12px; font-weight:700; color:#4ade80; white-space:nowrap; flex-shrink:0; }
-.vcard-sub { font-size:10px; color:#475569; margin-top:1px; }
+.vcard-info { flex:1; padding:7px 10px; min-width:0; }
+/* v1.7.1: ime lijevo (uz ↳ i L/D oznaku), dužina desno. space-between je
+   raspoređivao 4–6 elemenata jednako po redu pa je dužina "plutala" po sredini,
+   a ↳ i L/D su stajali daleko od imena kojem pripadaju. */
+.vcard-top { display:flex; align-items:center; gap:6px; }
+.vcard-name { font-weight:800; font-size:14px; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.vcard-km { margin-left:auto; font-size:13px; font-weight:800; color:#4ade80; white-space:nowrap; flex-shrink:0; font-variant-numeric:tabular-nums; }
+.vcard-arrow { color:#64748b; font-size:11px; }
+.vcard-sub { font-size:10.5px; color:#64748b; margin-top:1px; }
+/* "Završava na putu" je unos, ne podatak — podatak ("izlaz na put") već stoji u
+   redu ispod imena. Kontrola se zato prikazuje samo na ODABRANOM kraku, isto kao
+   dugmad; ranije je svaki krak nosio cijeli red checkboxa. */
+.vcard-naputu { display:none; align-items:center; gap:8px; cursor:pointer; margin-top:7px; font-size:12px; color:#7dd3fc; }
+.vrow.act .vcard-naputu { display:flex; }
+.vact {
+  flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:7px 2px 6px; border-radius:12px; cursor:pointer;
+  border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04);
+  -webkit-tap-highlight-color:transparent; transition:transform .1s, background .12s;
+}
+.vact:active { transform:scale(0.95); background:rgba(255,255,255,0.08); }
+.vact-ico {
+  width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  color:var(--vc); background:rgba(148,163,184,0.14);
+  background:color-mix(in srgb, var(--vc) 20%, transparent);
+}
+.vact-ico .ic { width:18px; height:18px; margin:0; vertical-align:0; }
+.vact-lbl { font-size:10.5px; font-weight:600; color:#cbd5e1; }
+.vbuf-btns { display:flex; gap:8px; }
+.vbuf-btns .btn { flex:1; margin:0; }
 .vcard-btns { display:none; }
 /* Vlake card — action buttons (bottom-bar stil).
    Prikazuju se SAMO na odabranoj vlaci (.vrow.act). Ranije je svaki red nosio
@@ -611,9 +636,9 @@ input:focus { outline:none; border-color:#3b82f6; }
    odjednom. Odabir je već postojao (actI/selI) i sad ima vidljivu svrhu. */
 .vcard-actions {
   display: none;
-  gap: 4px;
-  margin-top: 5px;
-  padding-top: 4px;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,0.05);
 }
 .vrow.act .vcard-actions { display: flex; }
@@ -662,20 +687,24 @@ input:focus { outline:none; border-color:#3b82f6; }
 .action-btn.btn-record.recording .btn-icon { animation: bl 1s infinite; }
 /* Project header chip */
 #vlake-proj-hdr {
-  display:flex; align-items:center; gap:6px;
   background:#0a1628; border:1px solid #1e3a5f;
-  border-radius:6px; padding:5px 8px; margin-bottom:6px; font-size:11px;
+  border-radius:10px; padding:8px 10px; margin-bottom:8px; font-size:12px;
 }
+.vph-top { display:flex; align-items:center; gap:8px; }
 .vph-lbl { flex:1; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .vph-lbl b { color:#e2e8f0; }
 .vph-dist { color:#4ade80; font-family:monospace; font-size:10px; white-space:nowrap; }
-.vph-nav { background:none; border:none; color:#475569; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
-.vph-nav:hover { color:#94a3b8; }
+.vph-nav { background:none; border:none; color:#7dd3fc; cursor:pointer; font-size:11.5px; font-weight:700; padding:4px 2px; line-height:1; white-space:nowrap; }
+.vph-nav:hover { color:#bae6fd; }
+.vph-stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:8px; }
+.vph-stat { background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:6px 4px; text-align:center; min-width:0; }
+.vph-stat b { display:block; font-size:15px; font-weight:800; color:#e2e8f0; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.vph-stat span { display:block; font-size:10px; color:#64748b; margin-top:1px; white-space:nowrap; }
 /* Traka nagiba iznad liste vlaka (v3.118.0) */
 #vl-nagib-traka {
   display:flex; align-items:center; gap:6px; flex-wrap:wrap;
   background:#0a1628; border:1px solid #1e3a5f;
-  border-radius:6px; padding:4px 8px; margin-bottom:6px; font-size:11px;
+  border-radius:10px; padding:6px 10px; margin-bottom:8px; font-size:11.5px;
 }
 .vnt-lbl { color:#94a3b8; white-space:nowrap; }
 .vnt-sel {
@@ -4089,7 +4118,9 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
     <div id="panel">
 
       <!-- SNIMANJE -->
-      <div class="sec">
+      <!-- display:none (v1.7.1): sekcija nosi SAMO skrivena polja, a njen padding
+           i rub su iznad liste vlaka pravili praznu traku od ~25px. -->
+      <div class="sec" style="display:none;">
         <!-- Skriveni elementi za JS kompatibilnost (addV čita ibr/ikr) -->
         <div style="display:none;" id="np">T1</div>
         <div style="display:none;" id="nd">Vlaka 1 — matična trasa</div>
@@ -4164,8 +4195,10 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           <div style="width:14px;height:14px;border-radius:3px;background:rgba(239,68,68,0.55);border:1px solid #ef4444;flex-shrink:0;"></div>
           <span style="font-size:11px;color:#94a3b8;">Mrtva zona (preklapanje) — uvijek crvena</span>
         </div>
-        <button class="btn b" onclick="drawBuffers()"><svg class="ic"><use href="#ic-buffer"/></svg> PRIKAŽI BUFFERE</button>
-        <button class="btn gr" onclick="clearBuffers()"><svg class="ic"><use href="#ic-zatvori"/></svg> UKLONI BUFFERE</button>
+        <div class="vbuf-btns">
+          <button class="btn b" onclick="drawBuffers()"><svg class="ic"><use href="#ic-buffer"/></svg> PRIKAŽI</button>
+          <button class="btn gr" onclick="clearBuffers()"><svg class="ic"><use href="#ic-zatvori"/></svg> UKLONI</button>
+        </div>
       </div>
 
       <!-- REFERENTNA KARTA -->
@@ -5351,7 +5384,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.0';
+const APP_VER = 'v1.7.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -19486,6 +19519,12 @@ function showVlakaOnMap(i) {
   zmV(i);
 }
 
+function _vlKrakRijec(n) {
+  const d = n % 10, dd = n % 100;
+  if (d === 1 && dd !== 11) return 'krak';
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 'kraka';
+  return 'krakova';
+}
 function _renderVlakaRow(el, v, i, depth, dPre) {
   const d   = (dPre != null) ? dPre : calcL(v.pts);
   const row = document.createElement('div');
@@ -19521,7 +19560,12 @@ function _renderVlakaRow(el, v, i, depth, dPre) {
   const elevRow = (elvHtml || roadDistHtml || nagHtml)
     ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}${nagHtml}</div>` : '';
   const stripeStyle = isKrak ? `background:${v.color};opacity:.6` : `background:${v.color}`;
-  const krakArrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
+  const krakArrow   = isKrak ? `<span class="vcard-arrow">↳</span>` : '';
+  // Dugme odabrane vlake — jedan obrazac umjesto pet kopija inline stilova.
+  const act = (onclick, ico, boja, lbl) => `<button class="vact" style="--vc:${boja};" onclick="event.stopPropagation();${onclick}">
+          <span class="vact-ico"><svg class="ic"><use href="#${ico}"/></svg></span><span class="vact-lbl">${lbl}</span></button>`;
+  const snimIco = isRecThis && !recPaused ? 'ic-snimaj' : isRecThis && recPaused ? 'ic-pauza' : 'ic-pocni';
+  const snimLbl = isRecThis && !recPaused ? 'Snima' : isRecThis && recPaused ? 'Pauza' : 'Snimi';
   row.innerHTML = `
     <div class="vcard-stripe" style="${stripeStyle}"></div>
     <div class="vcard-info">
@@ -19534,32 +19578,17 @@ function _renderVlakaRow(el, v, i, depth, dPre) {
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
       ${elevRow}
-      ${isKrak && !isReadOnly() ? `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:5px;font-size:11px;color:#7dd3fc;" onclick="event.stopPropagation();">
-        <input type="checkbox" onchange="event.stopPropagation();listToggleNaPutu(${i},this.checked)" ${v.naPutu?'checked':''} style="width:14px;height:14px;flex-shrink:0;">
+      ${isKrak && !isReadOnly() ? `<label class="vcard-naputu" onclick="event.stopPropagation();">
+        <input type="checkbox" onchange="event.stopPropagation();listToggleNaPutu(${i},this.checked)" ${v.naPutu?'checked':''} style="width:16px;height:16px;flex-shrink:0;">
         🛣 Završava na putu <span style="color:#64748b;">(samo dužina kraka)</span>
       </label>` : ''}
       ${nasaviBtn}
       <div class="vcard-actions">
-        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
-          <span style="width:38px;height:38px;border-radius:50%;background:rgba(232,69,60,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#e8453c;">${isRecThis&&!recPaused?'<svg class="ic"><use href="#ic-snimaj"/></svg>':isRecThis&&recPaused?'<svg class="ic"><use href="#ic-pauza"/></svg>':'<svg class="ic"><use href="#ic-pocni"/></svg>'}</span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.5);">${isRecThis&&!recPaused?'Snima':isRecThis&&recPaused?'Pauza':'Snimi'}</span>
-        </button>`}
-        <button onclick="event.stopPropagation();showVlakaOnMap(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
-          <span style="width:38px;height:38px;border-radius:50%;background:rgba(74,158,255,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#4a9eff;"><svg class="ic"><use href="#ic-karta"/></svg></span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Karta</span>
-        </button>
-        <button onclick="event.stopPropagation();showElevProfile(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
-          <span style="width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#34d399;"><svg class="ic"><use href="#ic-visina"/></svg></span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Profil</span>
-        </button>
-        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();selI(${i});togEdit()" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
-          <span style="width:38px;height:38px;border-radius:50%;background:rgba(245,166,35,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#f5a623;"><svg class="ic"><use href="#ic-alat"/></svg></span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Uredi</span>
-        </button>`}
-        ${isReadOnly() ? '' : `<button onclick="event.stopPropagation();dlV(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 6px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);cursor:pointer;">
-          <span style="width:38px;height:38px;border-radius:50%;background:rgba(100,116,139,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;color:#94a3b8;"><svg class="ic"><use href="#ic-zatvori"/></svg></span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.5);">Briši</span>
-        </button>`}
+        ${isReadOnly() ? '' : act(`selI(${i});switchTab('karta');${recOn?'':'setTimeout(togRec,30);'}`, snimIco, '#f87171', snimLbl)}
+        ${act(`showVlakaOnMap(${i})`, 'ic-karta', '#60a5fa', 'Karta')}
+        ${act(`showElevProfile(${i})`, 'ic-visina', '#34d399', 'Profil')}
+        ${isReadOnly() ? '' : act(`selI(${i});togEdit()`, 'ic-alat', '#fbbf24', 'Uredi')}
+        ${isReadOnly() ? '' : act(`dlV(${i})`, 'ic-zatvori', '#94a3b8', 'Briši')}
       </div>
     </div>`;
   // Prvi tap odabire vlaku (otvara njena dugmad), drugi tap na VEĆ odabranu je
@@ -19647,7 +19676,7 @@ function rndList() {
     return ka !== kb ? ka - kb : String(a.nm).localeCompare(String(b.nm));
   });
   const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
-  document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount}k` : '');
+  document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount} ${_vlKrakRijec(krakCount)}` : '');
 
   // Dužina i nagib se računaju u JEDNOM prolazu i prosljeđuju redovima — calcL
   // je O(n) po vlaci, a treba i zaglavlju (ukupno/gustoća) i svakom redu.
@@ -19673,11 +19702,21 @@ function rndList() {
       const _pv = _projPovrsinaHa();
       const densHtml = (_pv.ha > 0 && totalDist > 0)
         ? `<span class="vph-dist" style="color:#60a5fa;" title="Gustoća mreže vlaka (${_pv.ha} ha${_pv.src==='KML'?' iz KML':''})">${Math.round(totalDist/_pv.ha)} m/ha</span>` : '';
-      hdr.style.display = 'flex';
+      // v1.7.1: sažetak projekta kao tri broja (ukupno / gustoća / broj), ne
+      // jedan red sitnog monospace teksta — to su pokazatelji po kojima se
+      // ocjenjuje mreža vlaka, pa moraju biti čitljivi na prvi pogled.
+      const densVal = (_pv.ha > 0 && totalDist > 0) ? Math.round(totalDist / _pv.ha) + ' m/ha' : '—';
+      hdr.style.display = 'block';
       hdr.innerHTML = `
-        <span class="vph-lbl">📁 <b>${lbl}</b></span>
-        <span class="vph-dist">${fmtL(totalDist)}</span>${densHtml}
-        <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">▸</button>`;
+        <div class="vph-top">
+          <span class="vph-lbl">📁 <b>${lbl}</b></span>
+          <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">Projekti ▸</button>
+        </div>
+        <div class="vph-stats">
+          <div class="vph-stat"><b style="color:#4ade80;">${fmtL(totalDist)}</b><span>ukupno</span></div>
+          <div class="vph-stat" title="${densHtml ? 'Gustoća mreže vlaka (' + _pv.ha + ' ha' + (_pv.src==='KML' ? ' iz KML' : '') + ')' : 'Površina projekta nije poznata'}"><b style="color:#60a5fa;">${densVal}</b><span>gustoća</span></div>
+          <div class="vph-stat"><b>${rootVlake.length}${krakCount ? ' + ' + krakCount : ''}</b><span>${krakCount ? 'vlake + kraci' : 'vlake'}</span></div>
+        </div>`;
     } else {
       hdr.style.display = 'none';
     }

@@ -370,7 +370,7 @@ function pokreniRndList({ samoStrme }) {
     '_vlNagib', '_vlNagibLimit', '_projPovrsinaHa', 'fmtL', '_vlNagibTrakaRender',
     '_renderVlakaRow', 'updOvl', 'updProjStats', '_vlSamoStrme', 'clearTimeout',
     'setTimeout', 'localStorage',
-    src + '\nrndList();'
+    extractFn('_vlKrakRijec') + '\n' + src + '\nrndList();'
   );
   fn(
     { getElementById: id => els[id] || null, createDocumentFragment: () => ({ appendChild() {} }) },
@@ -418,6 +418,22 @@ t('filtrirano je poredano najstrmije prvo', () => {
   const maxovi = nacrtano.map(r => F._vlNagib(vlake[r.i], F.calcL(vlake[r.i].pts)).max);
   for (let i = 1; i < maxovi.length; i++)
     assert.ok(maxovi[i - 1] >= maxovi[i], 'poredak nije opadajući: ' + maxovi.join(','));
+});
+
+grupa('Lista vlaka — izgled (v1.7.1):');
+
+t('sklonidba: 1 krak / 2 kraka / 5 krakova / 11 krakova / 21 krak / 22 kraka', () => {
+  const f = new Function(extractFn('_vlKrakRijec') + '\nreturn _vlKrakRijec;')();
+  assert.deepStrictEqual([1, 2, 5, 11, 21, 22].map(f), ['krak', 'kraka', 'krakova', 'krakova', 'krak', 'kraka']);
+});
+
+t('"Završava na putu" je vidljivo samo na ODABRANOM kraku, a dugmad bez inline kopija stilova', () => {
+  const css = HTML.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(/\.vcard-naputu \{ display:none;/.test(css) && /\.vrow\.act \.vcard-naputu \{ display:flex; \}/.test(css));
+  const row = extractFn('_renderVlakaRow');
+  assert.ok(row.includes('class="vcard-naputu"'));
+  assert.ok(!/width:38px;height:38px/.test(row), 'dugmad se ponovo prave inline stilovima');
+  assert.ok(!/justify-content:space-between/.test((css.match(/\.vcard-top \{[^}]*\}/) || [''])[0]));
 });
 
 // =====================================================================
