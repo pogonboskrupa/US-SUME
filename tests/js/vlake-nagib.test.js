@@ -347,7 +347,8 @@ grupa('rndList — filter "samo preko limita" (STVARNI rndList iz index.html):')
 // listi i sa KOJIM indeksom — indeks je veza red ↔ vlake[], i filtriranje ga
 // ne smije pomjeriti (ista klasa greške kao selI po poziciji u DOM-u i kao
 // trake udaljenosti u Požarima).
-function pokreniRndList({ samoStrme }) {
+function pokreniRndList(opts) {
+  const { samoStrme } = opts;
   const nacrtano = [];   // {i, nm, depth}
   const els = {};
   const mkEl = () => ({
@@ -358,7 +359,7 @@ function pokreniRndList({ samoStrme }) {
 
   // Tri vlake: T1 blaga, T2 strma, T1.1 krak koji je strm iako mu je
   // roditelj blag. Redoslijed u vlake[] NIJE redoslijed prikaza.
-  const vlake = [
+  const vlake = opts.vlake || [
     Object.assign(vlakaNagiba(5, 5, 40),  { nm: 'T2',   kr: 0, projektId: 'P' }),   // i=0
     Object.assign(vlakaSaStrminom(5, 34, 5, 10, 30), { nm: 'T1.1', kr: 1, projektId: 'P' }), // i=1
     Object.assign(vlakaSaStrminom(5, 26, 5, 10, 20), { nm: 'T1',  kr: 0, projektId: 'P' })   // i=2
@@ -370,7 +371,9 @@ function pokreniRndList({ samoStrme }) {
     '_vlNagib', '_vlNagibLimit', '_projPovrsinaHa', 'fmtL', '_vlNagibTrakaRender',
     '_renderVlakaRow', 'updOvl', 'updProjStats', '_vlSamoStrme', 'clearTimeout',
     'setTimeout', 'localStorage',
-    extractFn('_vlKrakRijec') + '\n' + src + '\nrndList();'
+    ['_vlKrakRijec', '_vlTraziNorm', '_vlOdgovara', '_vlSkupKljuc'].map(extractFn).join('\n') +
+    `\nvar _vlSort = ${JSON.stringify(opts.sort || 'naziv')}, _vlTrazi = ${JSON.stringify(opts.trazi || '')}, _vlSkupljeni = new Set(${JSON.stringify(opts.skupljeni || [])});\n` +
+    src + '\nrndList();'
   );
   fn(
     { getElementById: id => els[id] || null, createDocumentFragment: () => ({ appendChild() {} }) },
@@ -418,6 +421,35 @@ t('filtrirano je poredano najstrmije prvo', () => {
   const maxovi = nacrtano.map(r => F._vlNagib(vlake[r.i], F.calcL(vlake[r.i].pts)).max);
   for (let i = 1; i < maxovi.length; i++)
     assert.ok(maxovi[i - 1] >= maxovi[i], 'poredak nije opadajući: ' + maxovi.join(','));
+});
+
+grupa('Lista vlaka — pretraga, sort, kraci (v1.7.2):');
+
+t('pretraga je ravna lista sa STVARNIM indeksom — krak se nađe i bez matične', () => {
+  const { nacrtano } = pokreniRndList({ samoStrme: false, trazi: 't1.1' });
+  assert.deepStrictEqual(nacrtano.map(r => [r.nm, r.i, r.depth]), [['T1.1', 1, 1]]);
+});
+
+t('sklopljena grana: krakovi matične vlake se ne crtaju, ostale vlake da', () => {
+  const { nacrtano } = pokreniRndList({ samoStrme: false, skupljeni: ['P|T1'] });
+  assert.deepStrictEqual(nacrtano.map(r => r.nm), ['T1', 'T2']);
+});
+
+t('sort "Dužina" stavlja dužu granu prvu, "Naziv" ostaje po broju', () => {
+  const mk = () => [
+    Object.assign(vlakaNagiba(3, 5, 5),  { nm: 'T1', kr: 0, projektId: 'P' }),
+    Object.assign(vlakaNagiba(3, 5, 60), { nm: 'T2', kr: 0, projektId: 'P' })
+  ];
+  assert.deepStrictEqual(pokreniRndList({ samoStrme: false, sort: 'duzina', vlake: mk() }).nacrtano.map(r => r.nm), ['T2', 'T1']);
+  assert.deepStrictEqual(pokreniRndList({ samoStrme: false, sort: 'naziv', vlake: mk() }).nacrtano.map(r => r.nm), ['T1', 'T2']);
+});
+
+t('krak istog imena iz DRUGOG projekta se ne crta ispod ovdašnje matične vlake', () => {
+  const v = [
+    Object.assign(vlakaNagiba(3, 5, 10), { nm: 'T1',   kr: 0, projektId: 'P' }),
+    Object.assign(vlakaNagiba(3, 5, 10), { nm: 'T1.1', kr: 1, projektId: 'X' })
+  ];
+  assert.deepStrictEqual(pokreniRndList({ samoStrme: false, vlake: v }).nacrtano.map(r => r.nm), ['T1']);
 });
 
 grupa('Lista vlaka — izgled (v1.7.1):');

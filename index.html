@@ -625,6 +625,25 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vact-ico .ic { width:18px; height:18px; margin:0; vertical-align:0; }
 .vact-lbl { font-size:10.5px; font-weight:600; color:#cbd5e1; }
 .vbuf-btns { display:flex; gap:8px; }
+/* Pretraga + sort iznad liste vlaka (v1.7.2) */
+#vl-alati { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.vla-trazi {
+  flex:1 1 150px; min-width:0; display:flex; align-items:center; gap:6px;
+  background:#0f172a; border:1px solid #1e3a5f; border-radius:10px; padding:0 10px; color:#64748b;
+}
+.vla-trazi input { flex:1; min-width:0; background:none; border:none; outline:none; color:#e2e8f0; font-size:14px; padding:8px 0; }
+.vla-trazi:focus-within { border-color:#3b82f6; }
+.vla-sort { display:flex; background:#0b1220; border:1px solid #1e293b; border-radius:10px; padding:2px; gap:2px; }
+.vla-sort button { background:none; border:none; color:#94a3b8; font-size:11.5px; font-weight:700; padding:7px 9px; border-radius:8px; cursor:pointer; }
+.vla-sort button.on { background:#1e3a5f; color:#f1f5f9; }
+/* Oznaka krakova na matičnoj vlaci — tap sklapa/rasklapa granu. */
+.vkr-tog {
+  display:inline-flex; align-items:center; gap:5px; margin-left:8px; padding:2px 8px;
+  background:rgba(125,211,252,0.1); border:1px solid rgba(125,211,252,0.25); border-radius:10px;
+  color:#7dd3fc; font-size:10.5px; font-weight:700; cursor:pointer; vertical-align:1px;
+}
+.vkr-ar { width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid currentColor; transition:transform .15s; }
+.vkr-tog.skupljen .vkr-ar { transform:rotate(-90deg); }
 .vbuf-btns .btn { flex:1; margin:0; }
 .vcard-btns { display:none; }
 /* Vlake card — action buttons (bottom-bar stil).
@@ -4146,6 +4165,17 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
         </div>
         <div id="vlake-proj-hdr" style="display:none;"></div>
         <div id="vl-nagib-traka" style="display:none;"></div>
+        <!-- Pretraga i sortiranje (v1.7.2) — statični markup, pa ponovno crtanje
+             liste ne dira polje u koje korisnik upravo kuca. -->
+        <div id="vl-alati" style="display:none;">
+          <label class="vla-trazi"><svg class="ic"><use href="#ic-trazi"/></svg>
+            <input id="vl-trazi" type="search" placeholder="Traži vlaku…" autocomplete="off" oninput="_vlTraziSet(this.value)"></label>
+          <div class="vla-sort" id="vl-sort">
+            <button data-s="naziv" onclick="_vlSortSet('naziv')">Naziv</button>
+            <button data-s="duzina" onclick="_vlSortSet('duzina')">Dužina</button>
+            <button data-s="nagib" onclick="_vlSortSet('nagib')">Nagib</button>
+          </div>
+        </div>
         <div id="vl"></div>
         <div id="nv" style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.8;">
           Odaberite projekat za prikaz vlaka.
@@ -5384,7 +5414,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.1';
+const APP_VER = 'v1.7.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -19525,7 +19555,7 @@ function _vlKrakRijec(n) {
   if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 'kraka';
   return 'krakova';
 }
-function _renderVlakaRow(el, v, i, depth, dPre) {
+function _renderVlakaRow(el, v, i, depth, dPre, grana) {
   const d   = (dPre != null) ? dPre : calcL(v.pts);
   const row = document.createElement('div');
   const isKrak = depth > 0;
@@ -19576,7 +19606,7 @@ function _renderVlakaRow(el, v, i, depth, dPre) {
         ${sbUser ? `<span class="vsync-icon" data-vi="${i}" title="${v.sbId ? 'Sačuvano na server' : 'Čeka sync...'}" style="font-size:11px;opacity:0.7;margin-left:2px;color:${v.sbId ? '#4ade80' : '#94a3b8'};">☁</span>` : ''}
         <span class="vcard-caret"></span>
       </div>
-      <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}</div>
+      <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}${grana ? `<button class="vkr-tog${grana.skupljen ? ' skupljen' : ''}" onclick="event.stopPropagation();_vlKrakToggle(${i})" title="${grana.skupljen ? 'Prikaži krakove' : 'Sakrij krakove'}"><span class="vkr-ar"></span>${grana.nKrak} ${_vlKrakRijec(grana.nKrak)} · s kracima ${fmtL(grana.ukupnoM)}</button>` : ''}</div>
       ${elevRow}
       ${isKrak && !isReadOnly() ? `<label class="vcard-naputu" onclick="event.stopPropagation();">
         <input type="checkbox" onchange="event.stopPropagation();listToggleNaPutu(${i},this.checked)" ${v.naPutu?'checked':''} style="width:16px;height:16px;flex-shrink:0;">
@@ -19625,6 +19655,31 @@ function _krakStranaBadge(strana) {
 // Namjerno se NE prikazuje kad nijedna vlaka nema visine (nacrtane bez GPS-a)
 // — prazna kontrola koja ništa ne mijenja je samo šum na malom ekranu.
 let _vlSamoStrme = false;
+// Pretraga / sort / sklopljeni kraci (v1.7.2). var, ne let: rndList se može
+// pozvati iz ranog startup koda prije nego izvršavanje stigne do ovog reda (TDZ).
+var _VL_SORT_KEY = 'tvlake_vl_sort';
+var _vlSort = (function () { try { const v = localStorage.getItem('tvlake_vl_sort'); return ['naziv', 'duzina', 'nagib'].includes(v) ? v : 'naziv'; } catch (e) { return 'naziv'; } })();
+var _vlTrazi = '';
+// Sklopljeni kraci se NE pamte trajno — to je gustoća trenutnog pregleda, ne
+// postavka; poslije restarta se sve vidi (ništa sakriveno bez objašnjenja).
+var _vlSkupljeni = new Set();
+function _vlSkupKljuc(v) { return (v.projektId || '') + '|' + v.nm; }
+function _vlTraziNorm() { return String(_vlTrazi || '').trim().toLowerCase(); }
+function _vlOdgovara(v, q) {
+  return String(v.nm || '').toLowerCase().includes(q) || String(v.lager || '').toLowerCase().includes(q);
+}
+function _vlTraziSet(t) { _vlTrazi = String(t || ''); rndList(); }
+function _vlSortSet(s) {
+  _vlSort = ['naziv', 'duzina', 'nagib'].includes(s) ? s : 'naziv';
+  try { localStorage.setItem(_VL_SORT_KEY, _vlSort); } catch (e) {}
+  rndList();
+}
+function _vlKrakToggle(i) {
+  const v = vlake[i]; if (!v) return;
+  const k = _vlSkupKljuc(v);
+  if (_vlSkupljeni.has(k)) _vlSkupljeni.delete(k); else _vlSkupljeni.add(k);
+  rndList();
+}
 function _vlNagibFilterToggle(on) { _vlSamoStrme = !!on; rndList(); }
 function _vlNagibTrakaRender(nVlaka, nPreko, prekoMUk, limit) {
   const el = document.getElementById('vl-nagib-traka');
@@ -19671,10 +19726,11 @@ function rndList() {
   // Bez aktivnog projekta ne prikazuj NIŠTA u listi (ni orphan vlake) — samo
   // poruka/dugme za čišćenje ispod (blok "noProjects && vlake.length > 0") ostaje.
   const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : [];
-  const rootVlake    = allProjVlake.filter(v => v.kr === 0).sort((a, b) => {
+  const poNazivu = (a, b) => {
     const ka = _stdSortKey(a.nm), kb = _stdSortKey(b.nm);
     return ka !== kb ? ka - kb : String(a.nm).localeCompare(String(b.nm));
-  });
+  };
+  const rootVlake    = allProjVlake.filter(v => v.kr === 0).sort(poNazivu);
   const krakCount    = allProjVlake.filter(v => v.kr !== 0).length;
   document.getElementById('vc').textContent = rootVlake.length + (krakCount ? ` · ${krakCount} ${_vlKrakRijec(krakCount)}` : '');
 
@@ -19737,9 +19793,12 @@ function rndList() {
     nv.style.display = 'none';
   }
 
-  // Indeksirana mapa djece: O(n) umjesto O(n²)
+  // Indeksirana mapa djece: O(n) umjesto O(n²). SAMO vlake aktivnog projekta —
+  // ranije se gradila nad CIJELIM vlake[], pa bi krak "T1.1" iz drugog
+  // projekta (isto ime, drugi odjel) bio nacrtan ispod ovdašnje T1.
   const childMap = new Map();
   vlake.forEach((k, ki) => {
+    if (k.projektId !== _aktivniProjektId) return;
     const pnm = k.nm.split('.').slice(0, -1).join('.');
     if (pnm) {
       if (!childMap.has(pnm)) childMap.set(pnm, []);
@@ -19748,14 +19807,41 @@ function rndList() {
   });
   const frag = document.createDocumentFragment();
   const rendered = new Set();
+  // Ukupna dužina podstabla (vlaka + svi njeni kraci) — za sort "Dužina" i za
+  // oznaku sklopljenih krakova. Memo po imenu, jedan prolaz po crtanju.
+  const subM = new Map();
+  const podstablo = v => {
+    if (subM.has(v.nm)) return subM.get(v.nm);
+    let m = dMap.get(v) || 0, n = 0;
+    (childMap.get(v.nm) || []).forEach(c => { const r = podstablo(c.v); m += r.m; n += 1 + r.n; });
+    const r = { m, n }; subM.set(v.nm, r); return r;
+  };
   function renderWithChildren(v, i, depth) {
     if (rendered.has(i)) return;
     rendered.add(i);
-    _renderVlakaRow(frag, v, i, depth, dMap.get(v));
     const ch = childMap.get(v.nm);
-    if (ch) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
+    const skupljen = !!ch && _vlSkupljeni.has(_vlSkupKljuc(v));
+    const ps = ch ? podstablo(v) : null;
+    _renderVlakaRow(frag, v, i, depth, dMap.get(v), ch ? { nKrak: ps.n, ukupnoM: ps.m, skupljen } : null);
+    if (ch && !skupljen) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
   }
-  if (_vlSamoStrme && nPreko > 0) {
+  const q = _vlTraziNorm();
+  const alati = document.getElementById('vl-alati');
+  if (alati) {
+    alati.style.display = allProjVlake.length >= 2 ? '' : 'none';
+    alati.querySelectorAll('#vl-sort button').forEach(b => b.classList.toggle('on', b.dataset.s === _vlSort));
+  }
+  if (q) {
+    // Pretraga je RAVNA lista (kao filter nagiba) — krak koji odgovara mora se
+    // vidjeti i kad mu matična vlaka ne odgovara. Indeks ostaje STVARNI indeks.
+    let arr = allProjVlake.filter(v => _vlOdgovara(v, q));
+    if (_vlSamoStrme && nPreko > 0) arr = arr.filter(v => { const st = _vlNagib(v, dMap.get(v)); return st && st.prekoM > 0; });
+    arr.sort(poNazivu).forEach(v => _renderVlakaRow(frag, v, vlake.indexOf(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
+    if (!arr.length && allProjVlake.length) {
+      nv.style.display = 'block';
+      nv.textContent = `Nijedna vlaka ne odgovara "${_vlTrazi.trim()}".`;
+    }
+  } else if (_vlSamoStrme && nPreko > 0) {
     // Filtrirani prikaz je RAVAN (bez hijerarhije) — krak koji prelazi limit
     // mora biti vidljiv i kad njegova matična vlaka ne prelazi. Dubina se zato
     // izvodi iz v.kr, ne iz mjesta u stablu, da krak zadrži svoju oznaku
@@ -19768,7 +19854,13 @@ function rndList() {
       .sort((a, b) => (_vlNagib(b, dMap.get(b)).max - _vlNagib(a, dMap.get(a)).max))
       .forEach(v => _renderVlakaRow(frag, v, vlake.indexOf(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
   } else {
-    rootVlake.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+    let roots = rootVlake;
+    if (_vlSort === 'duzina') roots = rootVlake.slice().sort((a, b) => podstablo(b).m - podstablo(a).m || poNazivu(a, b));
+    else if (_vlSort === 'nagib') {
+      const mx = v => { const st = _vlNagib(v, dMap.get(v)); return st ? st.max : -1; };
+      roots = rootVlake.slice().sort((a, b) => mx(b) - mx(a) || poNazivu(a, b));
+    }
+    roots.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
   }
   el.appendChild(frag);
   updOvl();
