@@ -993,11 +993,15 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb.freeview { background:#0a1a0a; color:#4ade80; flex:0 0 auto; padding:10px; }
 
 /* ═══ TRAG SNIMANJE — action-bar stilovi ═══ */
-#action-bar.trag-mode { border-top: 2px solid #f97316; }
+#action-bar.trag-mode { box-shadow: inset 0 2px 0 #f97316, 0 -8px 24px rgba(0,0,0,0.4); }
 #action-bar #ab-trag-pauza .ab-ico { --c1:#fbbf24; --c2:#ca8a04; --sh:rgba(202,138,4,0.4); }
-#action-bar #ab-trag-pauza { color: #92400e; }
 #action-bar #ab-trag-kraj  .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
-#action-bar #ab-trag-kraj  { color: #b91c1c; }
+#ab-trag-stats { flex: 1.6; min-width: 0; align-self: center; text-align: center; line-height: 1.3; white-space: nowrap; }
+#ab-trag-stats .ab-ts-lbl { display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #fdba74; }
+#ab-trag-stats .ab-ts-lbl::before { content: ''; width: 7px; height: 7px; border-radius: 50%;
+  background: #ef4444; animation: rbPuls 1.4s ease-in-out infinite; }
+#ab-trag-info { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
 #action-bar #ab-trag-pauza.resuming .ab-ico { --c1:#4ade80; --c2:#16a34a; --sh:rgba(22,163,74,0.4); }
 
 /* ═══ TRAG QUICK META (post-recording panel above action-bar) ═══ */
@@ -1272,8 +1276,13 @@ select:focus { outline:none; border-color:#3b82f6; }
   /* iOS: env(safe-area-inset-top) gura traku ispod notch-a/Dynamic Island-a
      (status bar je black-translucent → sadržaj bi inače išao pod vrh). Na
      Androidu/desktopu je inset 0 → nema promjene. */
-  padding:env(safe-area-inset-top, 0px) 8px 0;
-  background:#16213e; border-bottom:2px solid #0f3460;
+  padding:env(safe-area-inset-top, 0px) 6px 0;
+  /* v1.6.9: ista tamna porodica kao kontrole karte i donja traka (jedan
+     vizuelni sistem umjesto tri), tanka svijetla linija umjesto debelog
+     plavog ruba. */
+  background:linear-gradient(180deg, #121c31 0%, #0d1628 100%);
+  border-bottom:1px solid rgba(148,163,184,0.16);
+  box-shadow:0 2px 10px rgba(0,0,0,0.35);
   flex-shrink:0; align-items:center;
   overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
   scrollbar-width:none;
@@ -1288,16 +1297,32 @@ select:focus { outline:none; border-color:#3b82f6; }
 .tab-btn {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:2px;
-  padding:6px 2px 5px; border:none; border-radius:6px 6px 0 0;
-  font-size:10.5px; font-weight:bold; cursor:pointer;
-  background:transparent; color:#94a3b8;
-  border-bottom:2px solid transparent;
-  transition:all 0.15s; margin-bottom:-2px;
+  padding:5px 2px 5px; border:none; border-radius:0;
+  font-size:10.5px; font-weight:700; letter-spacing:0.01em; cursor:pointer;
+  background:transparent; color:#9aa8bd;
+  transition:color 0.15s;
   position:relative;
   flex:1; min-width:52px; white-space:nowrap; text-align:center;
+  -webkit-tap-highlight-color:transparent;
 }
-.tab-btn:hover { color:#cbd5e1; }
-.tab-btn.active { color:#4ade80; border-bottom-color:#4ade80; background:rgba(74,222,128,0.14); }
+/* v1.6.9: aktivni tab = "pilula" iza ikone (obrazac donje navigacije na
+   Androidu). Stari obojeni pravougaonik sa zaobljenim gornjim uglovima je
+   zauzimao cijelu širinu taba i na uskim telefonima se lijepio uz susjedni.
+   Pilula prati currentColor, pa i trajno obojeni tabovi (Korisnici amber,
+   Obavještenja ljubičasta, Teren zelena — inline color) dobiju pilulu SVOJE
+   boje. rgba prvo, color-mix poslije: stariji WebView (< 111) color-mix ne
+   zna i zadrži zelenu. */
+.tab-btn .tbi {
+  box-sizing:content-box; padding:2px 14px; border-radius:14px;
+  transition:background 0.18s, transform 0.12s;
+}
+@media (hover:hover) { .tab-btn:hover { color:#cbd5e1; } .tab-btn:hover .tbi { background:rgba(148,163,184,0.12); } }
+.tab-btn:active .tbi { transform:scale(0.92); }
+.tab-btn.active { color:#4ade80; }
+.tab-btn.active .tbi {
+  background:rgba(74,222,128,0.18);
+  background:color-mix(in srgb, currentColor 20%, transparent);
+}
 /* Ikonice trake (Meni + 7 tabova) — crtane umjesto emoji, jer se emoji na
    raznim telefonima/OS verzijama renderuje potpuno drugačije (Samsung/Xiaomi/
    stariji Android), a ponekad i kao prazan kvadratić. Fiksna px veličina (ne
@@ -1322,11 +1347,11 @@ select:focus { outline:none; border-color:#3b82f6; }
   flex-shrink:0;
 }
 .tab-notif {
-  display:none; position:absolute; top:0; left:calc(50% + 4px);
+  display:none; position:absolute; top:1px; left:calc(50% + 7px);
   min-width:15px; height:15px; border-radius:8px;
   background:#ef4444; color:#fff; font-size:8.5px; font-weight:bold;
   line-height:15px; text-align:center; padding:0 3px;
-  box-shadow:0 0 0 2px #16213e;
+  box-shadow:0 0 0 2px #111a2e;
   animation: notif-pop .3s ease;
 }
 .tab-notif.show { display:inline-block; }
@@ -1531,9 +1556,10 @@ select:focus { outline:none; border-color:#3b82f6; }
      čitljiva) preglednost trake je bitnija od par piksela horizontalne
      uštede; 5 kratkih labela (Meni/Karta/Projekat/Vlake/Doznaka) i dalje
      stane bez horizontalnog skrola i na uskim telefonima (~360px). */
-  #tab-bar { gap:1px; padding:0 2px; }
+  #tab-bar { gap:1px; padding:env(safe-area-inset-top, 0px) 2px 0; }
   .tab-btn { padding:5px 1px 4px; font-size:11px; min-width:0; }
   .tbi { width:19px; height:19px; }
+  .tab-btn .tbi { padding:2px 11px; }
   #offline-badge { margin-left:4px !important; }
 }
 
@@ -2869,23 +2895,30 @@ select:focus { outline:none; border-color:#3b82f6; }
   z-index: 1600;
   align-items: stretch;
   gap: 6px;
-  background: #0b1220;
-  border-top: 1px solid #1e293b;
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.45);
-  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  /* v1.6.9: isti "dok" kao #action-bar — traka snimanja je njen nastavak
+     na drugim panelima, pa mora izgledati kao ista stvar. */
+  background: rgba(13,21,38,0.96);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border-top: 1px solid rgba(148,163,184,0.16);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  padding: 7px 8px calc(env(safe-area-inset-bottom, 0px) + 7px);
 }
 body.recbar-on #main { padding-bottom: 54px; }
 #rec-bar button {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  border: none; border-radius: 10px; cursor: pointer;
+  border: none; border-radius: 12px; cursor: pointer;
   font-size: 12px; font-weight: 700;
-  padding: 8px 10px;
+  padding: 9px 12px;
+  -webkit-tap-highlight-color: transparent;
   transition: transform 0.1s ease, opacity 0.15s ease;
 }
 #rec-bar button:active { transform: scale(0.95); opacity: 0.85; }
 #rb-go {
   flex: 1; min-width: 0;
-  background: #14233c; color: #e2e8f0;
+  background: rgba(148,163,184,0.1); color: #e2e8f0;
+  box-shadow: inset 0 0 0 1px rgba(148,163,184,0.14);
   justify-content: flex-start !important; text-align: left;
 }
 #rb-go > span { min-width: 0; }
@@ -2898,26 +2931,33 @@ body.recbar-on #main { padding-bottom: 54px; }
 }
 #rec-bar.pauzirano #rb-dot { background: #fbbf24; animation: none; }
 @keyframes rbPuls { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
-#rb-pauza { background: #422006; color: #fbbf24; flex-shrink: 0; }
-#rb-kraj  { background: #7f1d1d; color: #fecaca; flex-shrink: 0; }
+/* Pauza/Završi kao obojene pločice — iste boje kao u #action-bar. */
+#rb-pauza { background: linear-gradient(180deg, #fbbf24, #d97706); color: #1c1003; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(217,119,6,0.35); }
+#rb-kraj  { background: linear-gradient(180deg, #f87171, #dc2626); color: #fff; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(220,38,38,0.35); }
+#rb-dot { box-shadow: 0 0 0 3px rgba(239,68,68,0.22); }
+#rec-bar.pauzirano #rb-dot { box-shadow: 0 0 0 3px rgba(251,191,36,0.22); }
 
-/* === DONJA TRAKA — dizajn (v1.6.6) ===
+/* === DONJA TRAKA — dizajn (v1.6.6, tamni "dok" od v1.6.9) ===
    Ikona je obojena "pločica" sa bijelim simbolom umjesto pastelnog kruga na
-   bijelom: pastel gubi kontrast na jakom terenskom suncu. Boje po funkciji ostaju
-   iste porodice kao ranije, samo zasićenije; natpisi 10.5px/700 umjesto 9px/600.
-   Visina trake je i dalje kompaktna (~56px) — korisnik je ranije tražio tanju. */
+   bijelom: pastel gubi kontrast na jakom terenskom suncu. Od v1.6.9 je podloga
+   tamna, ista porodica kao gornja traka i kontrole karte — bijela traka je bila
+   jedini svijetli element na ekranu karte, pa je izgledala "zalijepljeno".
+   Natpisi su neutralni svijetli; funkciju nosi boja pločice, ne boja teksta
+   (osam obojenih natpisa na tamnom je šarenilo). Visina ostaje ~56px. */
 #action-bar {
   display: none;
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 1600;
-  background: rgba(255,255,255,0.9);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  backdrop-filter: blur(14px) saturate(1.4);
-  border-top: 1px solid rgba(15,23,42,0.08);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -6px 22px rgba(15,23,42,0.12);
-  padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 2px);
+  background: rgba(13,21,38,0.94);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border-top: 1px solid rgba(148,163,184,0.16);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  padding: 5px 6px calc(env(safe-area-inset-bottom, 0px) + 3px);
   gap: 2px;
   justify-content: space-around;
 }
@@ -2930,7 +2970,7 @@ body.recbar-on #main { padding-bottom: 54px; }
   gap: 2px;
   cursor: pointer;
   padding: 0;
-  color: #334155;
+  color: #dbe4f0;
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.1px;
@@ -2945,7 +2985,7 @@ body.recbar-on #main { padding-bottom: 54px; }
   font-size: 15px; line-height: 1;
   color: #fff;
   background: linear-gradient(180deg, var(--c1), var(--c2));
-  box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow: 0 3px 10px var(--sh), inset 0 1px 0 rgba(255,255,255,0.3);
   transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
 }
 #action-bar button:active .ab-ico { transform: scale(0.9); }
@@ -2954,41 +2994,28 @@ body.recbar-on #main { padding-bottom: 54px; }
 #action-bar .ab-ico img { width: 22px; height: 22px; object-fit: contain; filter: brightness(0) invert(1); }
 
 #brec       .ab-ico { --c1:#34d399; --c2:#059669; --sh:rgba(5,150,105,0.4); }
-#action-bar #brec       { color: #047857; }
 #btragovi   .ab-ico { --c1:#fb923c; --c2:#ea580c; --sh:rgba(234,88,12,0.4); }
-#action-bar #btragovi   { color: #c2410c; }
 #btrag      .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
-#action-bar #btrag      { color: #b91c1c; }
 #ab-tacka   .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.4); }
-#action-bar #ab-tacka   { color: #92400e; }
 #ab-izmjeri .ab-ico { --c1:#2dd4bf; --c2:#0d9488; --sh:rgba(13,148,136,0.4); }
-#action-bar #ab-izmjeri { color: #0f766e; width: 100%; }
+#action-bar #ab-izmjeri { width: 100%; }
 #ab-centar  .ab-ico { --c1:#818cf8; --c2:#4f46e5; --sh:rgba(79,70,229,0.4); }
-#action-bar #ab-centar  { color: #4338ca; }
 #ab-krak-l  .ab-ico { --c1:#22d3ee; --c2:#0891b2; --sh:rgba(8,145,178,0.4); }
-#action-bar #ab-krak-l  { color: #0e7490; }
 #ab-krak-d  .ab-ico { --c1:#fb923c; --c2:#ea580c; --sh:rgba(234,88,12,0.4); }
-#action-bar #ab-krak-d  { color: #c2410c; }
 #ab-nazad   .ab-ico { --c1:#a78bfa; --c2:#7c3aed; --sh:rgba(124,58,237,0.4); }
-#action-bar #ab-nazad   { color: #6d28d9; }
 #ab-kraj    .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.4); }
-#action-bar #ab-kraj    { color: #b91c1c; }
 #ab-pauza   .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.4); }
-#action-bar #ab-pauza   { color: #92400e; }
 #ab-pauza.resuming .ab-ico { --c1:#4ade80; --c2:#16a34a; --sh:rgba(22,163,74,0.4); }
 
-/* Lokacija nosi STANJE GPS-a (_updLocBtn): isključen = svijetla pločica sa
-   plavim simbolom; traži signal = žuta + puls; ima fiks = plava + preciznost. */
-#ab-loc .ab-ico { background: #e0e7ff; color: #2563eb; box-shadow: inset 0 0 0 1.5px #c7d2fe; }
-#action-bar #ab-loc { color: #1e40af; }
+/* Lokacija nosi STANJE GPS-a (_updLocBtn): isključen = prozirna pločica sa
+   plavim obrubom; traži signal = žuta + puls; ima fiks = plava + preciznost. */
+#ab-loc .ab-ico { background: rgba(96,165,250,0.14); color: #93c5fd; box-shadow: inset 0 0 0 1.5px rgba(147,197,253,0.45); }
 #ab-loc.gps-trazi .ab-ico { --c1:#fbbf24; --c2:#d97706; --sh:rgba(217,119,6,0.45);
   background: linear-gradient(180deg, var(--c1), var(--c2)); color: #fff;
   box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35); animation: abPuls 1.4s ease-out infinite; }
-#action-bar #ab-loc.gps-trazi { color: #92400e; }
 #ab-loc.gps-ok .ab-ico { --c1:#60a5fa; --c2:#1d4ed8; --sh:rgba(29,78,216,0.45);
   background: linear-gradient(180deg, var(--c1), var(--c2)); color: #fff;
   box-shadow: 0 2px 6px var(--sh), inset 0 1px 0 rgba(255,255,255,0.35); }
-#action-bar #ab-loc.gps-ok { color: #1d4ed8; }
 .ab-acc { display: none; position: absolute; top: -7px; right: -12px; padding: 1px 5px; border-radius: 8px;
   font-size: 9px; font-weight: 800; line-height: 13px; background: #fff; color: #15803d;
   border: 1.5px solid #22c55e; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
@@ -2999,8 +3026,9 @@ body.recbar-on #main { padding-bottom: 54px; }
 #ab-centar.odmaknuto .ab-ico { animation: abPulsPlavi 1.6s ease-out infinite; }
 
 #btrag.active .ab-ico { box-shadow: 0 0 0 3px rgba(239,68,68,0.3); }
+/* Natpis aktivnog snimanja jedini ostaje obojen — to je stanje, ne ukras. */
+#action-bar #brec.active, #action-bar #ab-trag-kraj, #action-bar #ab-kraj { color: #fca5a5; }
 #brec.active  .ab-ico { --c1:#f87171; --c2:#dc2626; --sh:rgba(220,38,38,0.45); animation: abPulsCrveni 1.6s ease-out infinite; }
-#action-bar #brec.active  { color: #b91c1c; }
 @keyframes abPuls { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,0.55); } 100% { box-shadow: 0 0 0 9px rgba(245,158,11,0); } }
 @keyframes abPulsPlavi { 0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); } 100% { box-shadow: 0 0 0 9px rgba(99,102,241,0); } }
 @keyframes abPulsCrveni { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); } 100% { box-shadow: 0 0 0 9px rgba(239,68,68,0); } }
@@ -5280,7 +5308,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.6.8';
+const APP_VER = 'v1.6.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -38561,8 +38589,8 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="ab-ico"><svg class="ic"><use href="#ic-stop"/></svg></span>
     <span>Završi</span>
   </button>
-  <div id="ab-trag-stats" style="display:none;flex:1;text-align:center;color:#c2410c;font-size:11px;font-weight:700;align-self:center;line-height:1.4;">
-    <div style="font-size:8px;color:#9ca3af;font-weight:600;letter-spacing:0.5px;">SNIMANJE TRAGA</div>
+  <div id="ab-trag-stats" style="display:none;">
+    <div class="ab-ts-lbl">SNIMANJE TRAGA</div>
     <span id="ab-trag-info">0 tač. · 0 m</span>
   </div>
 </div>
