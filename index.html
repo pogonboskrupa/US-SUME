@@ -2618,6 +2618,25 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 .doz-odjel-card:hover { border-color:#4ade80; }
 .doz-odjel-card.selected { border-color:#4ade80; border-left-color:#4ade80; background:linear-gradient(160deg,#0f2a1a,#0c1f14); }
+/* v1.7.4: lijevi rub nosi status (isti kod boja kao čip), pa se u dugoj listi
+   aktivni odjel vidi bez čitanja. */
+.doz-odjel-card.st-active    { border-left-color:#4ade80; }
+.doz-odjel-card.st-paused    { border-left-color:#fbbf24; }
+.doz-odjel-card.st-completed { border-left-color:#60a5fa; }
+/* Oko je bilo crno na tamnoj kartici (dugme bez boje → currentColor crn). */
+.doz-odjel-oko { background:none; border:none; color:#94a3b8; cursor:pointer; padding:6px; margin:-6px -4px -6px 0; flex-shrink:0; line-height:1; border-radius:8px; }
+.doz-odjel-oko .ic { width:20px; height:20px; margin:0; }
+.doz-odjel-oko.skriven { color:#475569; }
+.doz-sazetak { display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:11.5px; color:#94a3b8; margin:2px 2px 10px; }
+.doz-sazetak b { color:#e2e8f0; }
+.doz-sazetak .a { color:#4ade80; } .doz-sazetak .p { color:#fbbf24; } .doz-sazetak .c { color:#60a5fa; }
+.doz-ico-btn { width:auto; margin:0; padding:6px 10px; background:#0f172a; border:1px solid #1e3a5f; color:#94a3b8; }
+.doz-ico-btn .ic { margin:0; }
+/* .btn je display:block;width:100% — u redu sa naslovom (Projektanti/Vlake/
+   Pojasevi) to je dugme razvlačilo preko cijelog reda, a naslov lomilo u dva
+   reda. Dugmad sa flex:1 (GPS, bufferi) i dalje popunjavaju red — inline flex
+   pobjeđuje. */
+#doznaka-panel [style*="display:flex"] > .btn { width:auto; flex-shrink:0; }
 .doz-odjel-name { font-size:13.5px; font-weight:700; color:#e2e8f0; margin-bottom:5px; }
 .doz-odjel-meta { display:flex; gap:8px; align-items:center; font-size:11px; color:#64748b; flex-wrap:wrap; }
 .doz-status-chip { padding:2px 9px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.3px; }
@@ -2629,7 +2648,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   background:linear-gradient(135deg,#132a45,#0f172a); border-bottom:2px solid #1e3a5f; flex-shrink:0;
 }
 .doz-detail-hdr h3 { margin:0; font-size:14.5px; color:#fbbf24; flex:1; word-break:break-word; }
-.doz-back-btn { background:none; border:none; color:#4ade80; font-size:22px; cursor:pointer; padding:0; line-height:1; }
+.doz-back-btn { background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.25); color:#4ade80; font-size:24px; cursor:pointer;
+  width:38px; height:38px; border-radius:10px; line-height:1; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0 0 3px; }
 .doz-detail-meta { font-size:11px; color:#64748b; white-space:nowrap; }
 .doz-member-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #1e293b; font-size:12px; }
 .doz-member-row:last-child { border-bottom:none; }
@@ -4857,15 +4877,13 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
         <div class="sec">
           <div class="sec-hdr">
             <div class="sec-t">🌲 Odjeli za doznaku</div>
-            <button class="btn b" style="margin:0;padding:5px 12px;font-size:12px;" onclick="dozShowCreateOdjel()">+ Novi</button>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button class="btn doz-ico-btn" onclick="dozLoadOdjeli()" title="Osvježi listu odjela"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
+              <button class="btn b" style="margin:0;padding:6px 12px;font-size:12px;" onclick="dozShowCreateOdjel()">+ Novi</button>
+            </div>
           </div>
-          <button class="btn" style="background:#0f172a;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;margin-bottom:10px;" onclick="dozLoadOdjeli()"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
+          <div id="doz-odjeli-sazetak" class="doz-sazetak"></div>
           <div id="doz-odjeli-list"><div class="doz-empty">Učitavam odjele...</div></div>
-        </div>
-        <div class="sec" style="border-top:1px solid #0f3460;padding-top:10px;">
-          <div style="font-size:10px;color:#334155;line-height:1.6;text-align:center;">
-            GPS tragovi projektanata · Obilježavanje zona<br>Saradnja u realnom vremenu · Supabase sync
-          </div>
         </div>
       </div>
 
@@ -4876,7 +4894,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
           <h3 id="doz-detail-name">Odjel</h3>
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
-        <div id="doz-status-row" style="display:flex;gap:5px;padding:0 2px 4px;"></div>
+        <div id="doz-status-row" style="display:flex;gap:6px;padding:8px 12px 4px;"></div>
 
         <div class="sec">
           <div class="sec-t">📊 Statistika</div>
@@ -5414,7 +5432,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.3';
+const APP_VER = 'v1.7.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -34366,17 +34384,33 @@ function _dozRestoreBoundaryStyleUI() {
 function dozRenderOdjeli() {
   const el = document.getElementById('doz-odjeli-list');
   if (!_dozOdjeli.length) {
-    el.innerHTML = '<div class="doz-empty">Nema odjela. Kreiraj prvi →</div>'; return;
+    const sz0 = document.getElementById('doz-odjeli-sazetak'); if (sz0) sz0.innerHTML = '';
+    el.innerHTML = '<div class="doz-empty">Nema odjela. Kreiraj prvi sa "+ Novi".</div>'; return;
   }
   const hidden = _getDozHiddenIds();
-  el.innerHTML = _dozOdjeli.map(o => {
+  // Aktivni prvi, pa pauzirani, pa završeni — unutar grupe redoslijed kao sa
+  // servera (najnoviji prvi). Sortira se KOPIJA: _dozOdjeli redoslijed nosi i
+  // boju granice u overview sloju (DOZ_ENG_COLORS[i]), ne smije se pomjeriti.
+  const _red = { active: 0, paused: 1, completed: 2 };
+  const prikaz = _dozOdjeli.slice().sort((a, b) => (_red[a.status || 'active'] ?? 3) - (_red[b.status || 'active'] ?? 3));
+  const sz = document.getElementById('doz-odjeli-sazetak');
+  if (sz) {
+    const n = st => _dozOdjeli.filter(o => (o.status || 'active') === st).length;
+    const ha = _dozOdjeli.reduce((s, o) => s + (parseFloat(o.known_area_ha) || 0), 0);
+    sz.innerHTML = `<span><b>${_dozOdjeli.length}</b> ${_dozOdjeli.length === 1 ? 'odjel' : 'odjela'}</span>` +
+      (n('active') ? `<span class="a">● ${n('active')} aktivno</span>` : '') +
+      (n('paused') ? `<span class="p">● ${n('paused')} pauza</span>` : '') +
+      (n('completed') ? `<span class="c">● ${n('completed')} završeno</span>` : '') +
+      (ha > 0 ? `<span style="margin-left:auto;">${fmtHa(ha)}</span>` : '');
+  }
+  el.innerHTML = prikaz.map(o => {
     const status = o.status || 'active';
     const label  = status === 'active' ? 'Aktivno' : status === 'completed' ? 'Završeno' : 'Pauza';
     const isHidden = hidden.has(o.id);
-    return `<div class="doz-odjel-card${_dozSelId===o.id?' selected':''}" onclick="dozSelectOdjel('${o.id}')">
+    return `<div class="doz-odjel-card st-${status}${_dozSelId===o.id?' selected':''}" onclick="dozSelectOdjel('${o.id}')">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div class="doz-odjel-name" style="flex:1;min-width:0;">${o.name}</div>
-        <button onclick="toggleDozOdjelVisible('${o.id}',event)" title="${isHidden ? 'Prikaži na karti' : 'Sakrij sa karte'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;opacity:${isHidden?'0.4':'1'};flex-shrink:0;line-height:1;">${isHidden ? '<svg class="ic"><use href="#ic-sakrij"/></svg>' : '<svg class="ic"><use href="#ic-prikazi"/></svg>'}</button>
+        <div class="doz-odjel-name" style="flex:1;min-width:0;">${_escHtml(o.name)}</div>
+        <button class="doz-odjel-oko${isHidden ? ' skriven' : ''}" onclick="toggleDozOdjelVisible('${o.id}',event)" title="${isHidden ? 'Prikaži na karti' : 'Sakrij sa karte'}">${isHidden ? '<svg class="ic"><use href="#ic-sakrij"/></svg>' : '<svg class="ic"><use href="#ic-prikazi"/></svg>'}</button>
       </div>
       <div class="doz-odjel-meta">
         ${o.known_area_ha ? `<span>📐 ${fmtHa(o.known_area_ha)}</span>` : ''}
@@ -34498,7 +34532,7 @@ async function dozSelectOdjel(id) {
   if (_dozShareBtn) _dozShareBtn.style.display = (odjel.created_by && odjel.created_by === sbUser?.id) ? '' : 'none';
   _dozQrRenderReceived();
   _dozRenderStatusRow();
-  await dozLoadLayers(id);
+  await dozLoadLayers(id, { odmahIzKesa: true });
   _dozAutoLinkVlake(odjel);
   _dozTreesRestoreForOdjel(id);
   dozRenderDetail();
@@ -34544,10 +34578,24 @@ function _dozShowLinkedVlake() {
   if (typeof _dozTreePts !== 'undefined' && _dozTreePts.length) dozTreesAnalyze();
 }
 
-async function dozLoadLayers(projectId) {
+async function dozLoadLayers(projectId, opts) {
   if (!projectId) return;
   const cacheKey = pid => pid; // per-project cache suffix
   const myGen = ++_dozLoadGen;  // D4-D: spriječi da stariji (spori) odgovor prepiše novije odabrani odjel
+  // v1.7.4 OFFLINE-FIRST: pri OTVARANJU odjela odmah prikaži keš, pa ga mreža
+  // zamijeni kad stigne. Ranije se keš čitao tek kad mrežni poziv PADNE — a na
+  // mrtvoj vezi (navigator.onLine laže, OS-S4) to je do 15 s praznog detalja:
+  // prazna statistika, "Nema članova", nijedna zona. Uz to su do tada na ekranu
+  // stajali slojevi PRETHODNO otvorenog odjela. Samo pri otvaranju — kod
+  // osvježavanja (realtime, catch-up) bi vraćanje na stariji keš treptalo.
+  let izKesa = false;
+  if (opts && opts.odmahIzKesa) {
+    const c0 = _dozLoadCachedLayers(projectId);
+    _dozMembers = c0 ? c0.members : []; _dozMarkings = c0 ? c0.markings : []; _dozTracks = c0 ? c0.tracks : [];
+    izKesa = !!c0;
+    try { dozRenderMapLayers(); } catch(e) {}
+    try { dozRenderDetail(); } catch(e) {}
+  }
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
       sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
@@ -34575,7 +34623,7 @@ async function dozLoadLayers(projectId) {
     if (c) {
       _dozMembers = c.members; _dozMarkings = c.markings; _dozTracks = c.tracks;
       showToast('📴 Doznaka slojevi iz keša');
-    } else {
+    } else if (!izKesa) {
       _dozMembers = []; _dozMarkings = []; _dozTracks = [];
     }
   }
