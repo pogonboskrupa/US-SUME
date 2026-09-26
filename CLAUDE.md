@@ -2792,6 +2792,42 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Teren — redizajn + vozilo + dnevno svjetlo (v1.8.2)**: na zahtjev
+  "unaprijedi teren, dizajn, pregled, dodaj nešto dobro". Pozicija je gore
+  (odjel, GK Y/X kroz `_stpBroj` — WebView bez bs lokala daje "6,354,662",
+  N.V., tačnost sa trakom u boji), brze radnje u mreži 3×2, a tri liste
+  (tačke/tragovi/mjerenja) su jedna kartica sa tabovima (`_trnTab`,
+  `tvlake_teren_tab`). Uz to:
+  - **N.V. ide iz DEM-a** (`_trnNv` → `_nvDemSync`, isti izvor kao N.V. na
+    karti), GPS visina samo kao "≈ … (GPS)" rezerva — Teren je do sada pisao
+    sirovu GPS visinu iznad elipsoida (~45 m previše, v1.7.8). **Ponovno
+    crtanje SAMO kad je pločica stvarno stigla** (`ok`) — neuspjeh se vraća
+    odmah iz negativnog keša, pa bi bezuslovno crtanje vrtilo petlju.
+  - **Svježina GPS-a je vidljiva** (`_trnFixRender`): ispod krošnji fiks zna
+    stati minutama, a brojevi su izgledali tačno. Otkucaj od 5 s
+    (`_trnTickStart`) osvježava svježinu, vezu/sync i sunce i kad GPS ćuti;
+    sam se gasi kad Teren nije otvoren.
+  - **Vozilo je OBIČNA TAČKA imena "Vozilo"** (`_TRN_VOZILO_NM`) — namjerno
+    ne zaseban zapis: tačka već ima marker, offline čuvanje i navigaciju
+    (`vodiMeDoTacke` + strelica na kompasu). Drugo označavanje je premješta
+    (uz potvrdu), ne pravi duplikat.
+  - **Dnevno svjetlo** (`_sunceVrijeme`/`_sunceDan`/`_sunceStanje`): algoritam
+    "Almanac for Computers", potpuno offline; provjereno na Sarajevu 23.09.
+    (06:34/18:44, odstupanje < 2 min). "Mrak" = kraj građanskog sumraka (96°).
+  - **Lagano crtanje na GPS fiks**: `terenRender()` (onP) crta samo ono što
+    zavisi od pozicije; `terenRender(true)` (otvaranje taba) i liste i učitane
+    projekte. Red za sync se čita iz localStorage samo pri otvaranju i na
+    otkucaj, ne na svaki fiks.
+  - Lista tačaka je sortirana najbliže-prvo, dugmad nose STVARNI indeks u
+    `_tacke` (v3.102.0 pravilo). Brisanje traga/mjerenja sa Terena ide kroz
+    `_dlgConfirm` — `_msrAskDelete` otvara potvrdu sa KARTE koja je na Terenu
+    bila sakrivena, a lista se crtala prije odgovora. Klik na mjerenje sa
+    Terena samo ga prikaže (`terenZoomMsr`); `_msrRegZoom` otvara uređivanje.
+  - `_terenUpdTragUI` je godinama tražio `#trn-trag-active` itd. kojih nije
+    bilo u markupu — kartica "Snimanje traga" ih sad ima, pa taj postojeći
+    poziv iz `fabSnimTrag`/`togTragPause` opet radi.
+  - Test: `tests/js/teren.test.js`.
+
 - **KML izvoz sa traga, uklonjeni "KML izvoz"/"Podijeli lokaciju", Stil linija
   sa pregledom (v1.8.1)**: na zahtjev. "⬆ KML izvoz" iz Menija je izvozio SAMO
   vlake kroz tekstualni modal (`#modal`, `showExport`/`dlKML`/`cpKML` —

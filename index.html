@@ -468,6 +468,98 @@ html, body { height:100%; font-family: Arial, sans-serif; background:#1a1a2e; co
 .trn-btn-row { display:flex; gap:8px; }
 .trn-btn-row .trn-btn { width:auto; flex:1; }
 
+/* ── Teren panel (v1.8.2) ─────────────────────────────────────────────────── */
+.trn-head { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 16px 10px; background:linear-gradient(180deg,#0b1220 70%,rgba(11,18,32,0.92)); border-bottom:1px solid #14532d; }
+.trn-title { font-weight:800; color:#34d399; font-size:17px; display:flex; align-items:center; gap:6px; }
+.trn-sub { color:#64748b; font-size:11px; margin-top:1px; }
+.trn-chips { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; max-width:62%; }
+.trn-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:700;
+  white-space:nowrap; background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+.trn-chip i { width:7px; height:7px; border-radius:50%; background:currentColor; display:inline-block; }
+.trn-chip.ok { color:#34d399; border-color:rgba(52,211,153,0.35); background:rgba(6,78,59,0.35); }
+.trn-chip.warn { color:#fbbf24; border-color:rgba(251,191,36,0.35); background:rgba(120,53,15,0.3); }
+.trn-chip.bad { color:#f87171; border-color:rgba(248,113,113,0.35); background:rgba(127,29,29,0.3); }
+button.trn-chip { cursor:pointer; font-family:inherit; }
+.trn-body { padding:12px 14px 18px; display:flex; flex-direction:column; gap:12px; }
+.trn-card { background:#111c30; border:1px solid #1e3a5f; border-radius:16px; padding:14px; scroll-margin-top:72px; }
+.trn-card-h { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;
+  font-size:13px; font-weight:700; color:#e2e8f0; }
+.trn-card-h > span:first-child { display:flex; align-items:center; gap:6px; }
+.trn-muted { color:#64748b; }
+.trn-pill { font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; background:#1e293b; color:#94a3b8; white-space:nowrap; }
+.trn-pill.ok { background:rgba(6,78,59,0.4); color:#34d399; }
+.trn-pill.warn { background:rgba(120,53,15,0.45); color:#fbbf24; }
+.trn-pill.bad { background:rgba(127,29,29,0.45); color:#fca5a5; }
+.trn-hero { background:linear-gradient(160deg,#0f2a24,#111c30 60%); border-color:#14532d; }
+.trn-odjel { font-size:18px; font-weight:800; color:#34d399; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.trn-odjel small { font-size:12px; font-weight:500; color:#64748b; }
+.trn-tiles { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.trn-tile { background:rgba(11,18,32,0.7); border:1px solid #1e293b; border-radius:12px; padding:9px 11px; min-width:0; }
+.trn-tile span { display:block; font-size:10.5px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; }
+.trn-tile b { display:block; margin-top:2px; font-family:ui-monospace,monospace; font-size:17px; color:#e2e8f0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trn-tile.gk b { color:#fbbf24; }
+.trn-accbar { display:block; height:4px; border-radius:2px; background:#1e293b; margin-top:6px; overflow:hidden; }
+.trn-accbar > i { display:block; height:100%; width:0; border-radius:2px; background:#64748b; transition:width .3s, background .3s; }
+.trn-fix { margin-top:10px; font-size:12px; color:#64748b; display:flex; align-items:center; gap:6px; }
+.trn-fix i { width:8px; height:8px; border-radius:50%; background:#64748b; display:inline-block; flex-shrink:0; }
+.trn-fix.ok i { background:#34d399; box-shadow:0 0 0 3px rgba(52,211,153,0.2); }
+.trn-fix.warn { color:#fbbf24; } .trn-fix.warn i { background:#fbbf24; }
+.trn-quick { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.trn-quick button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:66px;
+  background:#111c30; border:1px solid #1e3a5f; border-radius:14px; color:#cbd5e1; font-size:12px; font-weight:600;
+  cursor:pointer; font-family:inherit; transition:transform .1s, background .15s; padding:8px 4px; }
+.trn-quick button .ic { width:22px; height:22px; color:#34d399; }
+.trn-quick button:active { transform:scale(0.95); background:#16263f; }
+.trn-quick button.rec { background:rgba(127,29,29,0.45); border-color:#ef4444; color:#fecaca; }
+.trn-quick button.rec .ic { color:#f87171; }
+.trn-live { border-color:#ef4444; background:linear-gradient(160deg,rgba(127,29,29,0.35),#111c30 70%); }
+.trn-rec { width:10px; height:10px; border-radius:50%; background:#ef4444; display:inline-block; animation:trnPuls 1.4s infinite; }
+@keyframes trnPuls { 0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,0.6); } 50% { box-shadow:0 0 0 6px rgba(239,68,68,0); } }
+.trn-live-stats { font-family:ui-monospace,monospace; font-size:20px; font-weight:800; color:#fecaca; margin-bottom:10px; }
+.trn-voz { font-size:13px; color:#94a3b8; margin-bottom:10px; line-height:1.4; }
+.trn-voz b { font-size:22px; color:#7dd3fc; font-family:ui-monospace,monospace; }
+.trn-kompas { display:flex; align-items:center; gap:16px; }
+.trn-rose { position:relative; width:112px; height:112px; flex-shrink:0; }
+.trn-rose svg { width:100%; height:100%; display:block; }
+.trn-needle { position:absolute; top:50%; left:50%; width:4px; height:44px; border-radius:2px;
+  background:linear-gradient(to top,#64748b 50%,#f87171 50%); transform-origin:bottom center;
+  transform:translate(-50%,-100%) rotate(0deg); transition:transform .18s linear; }
+.trn-target { position:absolute; top:50%; left:50%; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent;
+  border-bottom:40px solid #38bdf8; transform-origin:bottom center; transform:translate(-50%,-100%) rotate(0deg);
+  filter:drop-shadow(0 0 3px rgba(56,189,248,0.8)); transition:transform .18s linear; }
+.trn-hub { position:absolute; top:50%; left:50%; width:9px; height:9px; border-radius:50%; background:#e2e8f0; transform:translate(-50%,-50%); }
+.trn-heading { font-size:30px; font-weight:800; color:#34d399; font-family:ui-monospace,monospace; line-height:1.1; }
+.trn-nav { margin-top:12px; padding:10px 12px; background:#0a1f38; border:1px solid #1e3a5f; border-radius:12px; }
+.trn-nav-dist { font-size:28px; font-weight:800; color:#38bdf8; font-family:ui-monospace,monospace; margin-top:2px; }
+.trn-x { background:none; border:none; color:#94a3b8; font-size:12px; cursor:pointer; padding:4px 6px; display:flex; align-items:center; gap:4px; font-family:inherit; }
+.trn-sun { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.trn-sun > div { background:rgba(11,18,32,0.7); border:1px solid #1e293b; border-radius:12px; padding:8px 10px; text-align:center; }
+.trn-sun span { display:block; font-size:10.5px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; }
+.trn-sun b { display:block; font-size:17px; color:#e2e8f0; font-family:ui-monospace,monospace; margin-top:2px; }
+.trn-sun .trn-sun-bar { grid-column:1 / -1; padding:0; border:none; background:none; }
+.trn-sun-bar i { display:block; height:6px; border-radius:3px; background:linear-gradient(90deg,#1e293b,#fbbf24 20%,#fde68a 50%,#fbbf24 80%,#1e293b); position:relative; }
+.trn-sun-bar i b { position:absolute; top:-4px; width:4px; height:14px; margin:0 0 0 -2px; border-radius:2px; background:#f8fafc; box-shadow:0 0 0 2px #0b1220; }
+.trn-seg { display:flex; background:#0b1220; border:1px solid #1e293b; border-radius:12px; padding:3px; gap:3px; margin-bottom:10px; }
+.trn-seg button { flex:1; padding:9px 4px; border:none; border-radius:9px; background:none; color:#94a3b8; font-size:12.5px;
+  font-weight:700; cursor:pointer; font-family:inherit; }
+.trn-seg button span { font-size:11px; color:#64748b; font-weight:600; margin-left:2px; }
+.trn-seg button.on { background:#16263f; color:#e2e8f0; box-shadow:0 1px 4px rgba(0,0,0,0.35); }
+.trn-seg button.on span { color:#34d399; }
+.trn-list > div { display:flex; flex-direction:column; gap:6px; }
+.trn-row { display:flex; align-items:center; gap:8px; padding:9px 10px; background:#0b1220; border:1px solid #1e293b; border-radius:12px; }
+.trn-row-main { flex:1; min-width:0; cursor:pointer; }
+.trn-row-t { font-size:13px; color:#e2e8f0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trn-row-s { font-size:11.5px; color:#64748b; margin-top:1px; }
+.trn-row-btn { padding:8px 9px; background:#16263f; border:1px solid #1e3a5f; border-radius:9px; color:#60a5fa; font-size:12px;
+  cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap; font-family:inherit; }
+.trn-row-btn.green { color:#34d399; } .trn-row-btn.red { color:#f87171; background:#1e293b; border-color:#334155; }
+.trn-empty { color:#475569; font-size:12.5px; text-align:center; padding:14px 8px; }
+.trn-link { width:100%; margin-top:8px; padding:9px; background:none; border:1px dashed #334155; border-radius:10px; color:#60a5fa;
+  font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit; }
+.trn-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
 /* PANEL */
 #panel {
   width:270px; flex-shrink:0;
@@ -3939,6 +4031,8 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 <symbol id="ic-gps" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><line x1="12" y1="1.8" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22.2"/><line x1="1.8" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22.2" y2="12"/></symbol>
 <symbol id="ic-satelit" viewBox="0 0 24 24"><path d="M8.4 8.4L4.9 4.9a1 1 0 0 1 0-1.4l1.4-1.4a1 1 0 0 1 1.4 0l3.5 3.5z"/><path d="M15.6 15.6l3.5 3.5a1 1 0 0 1 0 1.4l-1.4 1.4a1 1 0 0 1-1.4 0l-3.5-3.5z"/><path d="M10.2 13.8L7.4 16.6"/><circle cx="12" cy="12" r="3.4"/></symbol>
 <symbol id="ic-pipeta" viewBox="0 0 24 24"><path d="M12 3.5s5 6 5 9.2a5 5 0 0 1-10 0C7 9.5 12 3.5 12 3.5z"/></symbol>
+<symbol id="ic-vozilo" viewBox="0 0 24 24"><path d="M3.5 16.5v-4.2l2-5.1a1.8 1.8 0 0 1 1.7-1.2h9.6a1.8 1.8 0 0 1 1.7 1.2l2 5.1v4.2"/><rect x="2.5" y="12.3" width="19" height="4.8" rx="1.2"/><circle cx="7" cy="14.7" r="1" fill="currentColor" stroke="none"/><circle cx="17" cy="14.7" r="1" fill="currentColor" stroke="none"/><line x1="5.2" y1="17.1" x2="5.2" y2="19.4"/><line x1="18.8" y1="17.1" x2="18.8" y2="19.4"/><line x1="5.6" y1="12.3" x2="18.4" y2="12.3"/></symbol>
+<symbol id="ic-sunce" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><line x1="12" y1="2.5" x2="12" y2="4.8"/><line x1="12" y1="19.2" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="4.8" y2="12"/><line x1="19.2" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="6.9" y2="6.9"/><line x1="17.1" y1="17.1" x2="18.7" y2="18.7"/><line x1="5.3" y1="18.7" x2="6.9" y2="17.1"/><line x1="17.1" y1="6.9" x2="18.7" y2="5.3"/></symbol>
 <symbol id="ic-kompas" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="15.6,8.4 13.2,13.2 8.4,15.6 10.8,10.8"/></symbol>
 <symbol id="ic-trag" viewBox="0 0 24 24"><path d="M3.5 20c1.6-4.4 4.6-6.8 8.2-7.4" stroke-dasharray="3 2.6"/><circle cx="3.5" cy="20" r="2.1" fill="currentColor" stroke="none"/><path d="M17.4 12.2s3.6-3.4 3.6-6a3.6 3.6 0 1 0-7.2 0c0 2.6 3.6 6 3.6 6z"/><circle cx="17.4" cy="6.1" r="1.35"/></symbol>
 <symbol id="ic-crtaj" viewBox="0 0 24 24"><path d="M4 20l1.2-4.4L16.1 4.7a2.3 2.3 0 0 1 3.2 3.2L8.4 18.8z"/><line x1="14.6" y1="6.2" x2="17.8" y2="9.4"/></symbol>
@@ -4729,129 +4823,157 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
     </div>
 
     <!-- ═══ TEREN PANEL (ŠPD US ŠUME terenski korisnici) ═══ -->
-    <div id="teren-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0f172a;">
-      <!-- Header -->
-      <div style="padding:14px 16px 10px;border-bottom:1px solid #14532d;flex-shrink:0;background:linear-gradient(135deg,#064e3b22,transparent);">
-        <div style="font-weight:700;color:#34d399;font-size:16px;">🧭 Teren — navigacija</div>
-        <div style="color:#64748b;font-size:11px;margin-top:2px;">Orijentacija, geolociranje i karte</div>
+    <!-- v1.8.2: redizajn — pozicija gore (odjel, GK, N.V. iz DEM-a, tačnost),
+         brze radnje u mreži, snimanje traga uživo, vozilo, dnevno svjetlo,
+         jedna lista sa tabovima umjesto tri kartice jedna ispod druge. -->
+    <div id="teren-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0b1220;">
+      <div class="trn-head">
+        <div style="min-width:0;">
+          <div class="trn-title"><svg class="ic"><use href="#ic-kompas"/></svg> Teren</div>
+          <div class="trn-sub">Pozicija i orijentacija</div>
+        </div>
+        <div class="trn-chips" id="trn-chips"></div>
       </div>
 
-      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px;">
+      <div class="trn-body">
 
-        <!-- MOJA POZICIJA -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📍 Moja pozicija</span>
-            <span id="trn-gps-dot" style="font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>GPS</span>
+        <!-- POZICIJA -->
+        <section class="trn-card trn-hero">
+          <div class="trn-odjel" id="trn-odjel">—</div>
+          <div class="trn-tiles">
+            <div class="trn-tile gk"><span>Y (GK)</span><b id="trn-y">—</b></div>
+            <div class="trn-tile gk"><span>X (GK)</span><b id="trn-x">—</b></div>
+            <div class="trn-tile"><span id="trn-alt-lbl">Nadmorska visina</span><b id="trn-alt">— m</b></div>
+            <div class="trn-tile"><span>Tačnost GPS-a</span><b id="trn-acc">— m</b><i class="trn-accbar"><i id="trn-accbar"></i></i></div>
           </div>
-          <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:13px;">
-            <span style="color:#fbbf24;">Y (GK)</span><span id="trn-y" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
-            <span style="color:#fbbf24;">X (GK)</span><span id="trn-x" style="color:#fbbf24;font-family:monospace;font-weight:700;">—</span>
-            <span style="color:#64748b;">Visina</span><span id="trn-alt" style="color:#34d399;font-family:monospace;">— m</span>
-            <span style="color:#64748b;">Tačnost</span><span id="trn-acc" style="color:#94a3b8;font-family:monospace;">— m</span>
-          </div>
-          <div id="trn-odjel" style="margin-top:10px;padding:9px 12px;background:#0a2f1f;border:1px solid #14532d;border-radius:10px;font-size:13px;font-weight:700;color:#34d399;">🌲 Odjel: —</div>
-          <div class="trn-btn-row" style="margin-top:12px;">
-            <button class="trn-btn trn-btn-primary" onclick="fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg> Centriraj</button>
-            <button class="trn-btn trn-btn-outline blue" onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj</button>
-            <button class="trn-btn trn-btn-outline green" onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
-          </div>
-          <button class="trn-btn trn-btn-outline amber" style="margin-top:8px;" onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg> Uslikaj lokaciju</button>
-          <button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" style="margin-top:8px;" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> Uključi/isključi GPS</button>
+          <div class="trn-fix" id="trn-gps-dot">GPS isključen</div>
+        </section>
+
+        <!-- BRZE RADNJE -->
+        <div class="trn-quick">
+          <button onclick="fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
+          <button onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg><span>Kopiraj</span></button>
+          <button onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg><span>Pošalji</span></button>
+          <button onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg><span>Tačka</span></button>
+          <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg><span>Uslikaj</span></button>
+          <button id="trn-q-trag" onclick="terenTogTrag()"><svg class="ic"><use href="#ic-trag"/></svg><span id="trn-q-trag-txt">Snimi trag</span></button>
         </div>
 
-        <!-- DIJELJENJE KRETANJA -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📡 Dijeljenje kretanja</span>
-            <span id="trn-share-status" style="font-size:11px;color:#64748b;">isključeno</span>
+        <!-- SNIMANJE TRAGA UŽIVO (samo dok snima) -->
+        <section class="trn-card trn-live" id="trn-trag-active" style="display:none;">
+          <div class="trn-card-h">
+            <span><i class="trn-rec"></i> Snimanje traga</span>
+            <span id="trn-trag-status" class="trn-muted">snima</span>
           </div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Kolege i nadzor vide tvoju poziciju na karti uživo dok je dijeljenje uključeno.</div>
-          <button id="trn-share-btn" class="trn-btn trn-btn-share" style="padding:13px;font-size:14px;" onclick="terenTogShare()"><svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje</button>
-        </div>
+          <div class="trn-live-stats" id="trn-trag-stats">0 tač. · 0 m</div>
+          <div class="trn-btn-row">
+            <button id="trn-trag-pause" class="trn-btn trn-btn-outline amber" onclick="terenPauseTrag()">⏸ Pauza</button>
+            <button class="trn-btn trn-btn-danger" onclick="terenStopTrag()"><svg class="ic"><use href="#ic-stop"/></svg> Završi</button>
+          </div>
+        </section>
+
+        <!-- VOZILO -->
+        <section class="trn-card">
+          <div class="trn-card-h">
+            <span><svg class="ic"><use href="#ic-vozilo"/></svg> Vozilo</span>
+            <span class="trn-muted" id="trn-voz-kad"></span>
+          </div>
+          <div class="trn-voz" id="trn-voz-info">Označi gdje si ostavio vozilo — kompas te vraća do njega i bez signala.</div>
+          <div class="trn-btn-row">
+            <button class="trn-btn trn-btn-outline" onclick="terenVoziloOznaci()"><svg class="ic"><use href="#ic-pozicija"/></svg> Označi ovdje</button>
+            <button id="trn-voz-vodi" class="trn-btn trn-btn-accent" onclick="terenVoziloVodi()"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
+          </div>
+        </section>
 
         <!-- KOMPAS -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;align-items:center;gap:16px;">
-            <div style="position:relative;width:84px;height:84px;flex-shrink:0;">
-              <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #334155;"></div>
-              <div style="position:absolute;top:3px;left:50%;transform:translateX(-50%);font-size:9px;color:#f87171;font-weight:700;">S</div>
-              <div style="position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-size:9px;color:#64748b;">J</div>
-              <div style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#64748b;">Z</div>
-              <div style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;color:#64748b;">I</div>
-              <div id="trn-compass-needle" style="position:absolute;top:50%;left:50%;width:3px;height:36px;background:linear-gradient(to top,#64748b 50%,#f87171 50%);transform-origin:bottom center;transform:translate(-50%,-100%) rotate(0deg);border-radius:2px;transition:transform 0.18s linear;"></div>
-              <!-- Strelica prema cilju navigacije — vidljiva samo dok je "Vodi me do tačke" aktivno.
-                   Rotira po RELATIVNOM azimutu (cilj − azimut uređaja), ne apsolutnom, pa uvijek
-                   pokazuje stvarni smjer hoda dok se korisnik okreće (vidi _updateNavArrows). -->
-              <div id="trn-compass-target" style="display:none;position:absolute;top:50%;left:50%;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:32px solid #38bdf8;transform-origin:bottom center;transform:translate(-50%,-100%) rotate(0deg);filter:drop-shadow(0 0 3px rgba(56,189,248,0.8));transition:transform 0.18s linear;"></div>
-              <div style="position:absolute;top:50%;left:50%;width:7px;height:7px;background:#e2e8f0;border-radius:50%;transform:translate(-50%,-50%);"></div>
+        <section class="trn-card">
+          <div class="trn-kompas">
+            <div class="trn-rose">
+              <svg viewBox="0 0 100 100" aria-hidden="true">
+                <circle cx="50" cy="50" r="46" fill="#0b1220" stroke="#334155" stroke-width="2"/>
+                <g stroke="#475569" stroke-width="1.4">
+                  <line x1="50" y1="6" x2="50" y2="13"/><line x1="50" y1="87" x2="50" y2="94"/>
+                  <line x1="6" y1="50" x2="13" y2="50"/><line x1="87" y1="50" x2="94" y2="50"/>
+                  <line x1="18.9" y1="18.9" x2="22.4" y2="22.4"/><line x1="81.1" y1="18.9" x2="77.6" y2="22.4"/>
+                  <line x1="18.9" y1="81.1" x2="22.4" y2="77.6"/><line x1="81.1" y1="81.1" x2="77.6" y2="77.6"/>
+                </g>
+                <g font-size="10" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">
+                  <text x="50" y="25" fill="#f87171">S</text><text x="50" y="84" fill="#64748b">J</text>
+                  <text x="20" y="54" fill="#64748b">Z</text><text x="80" y="54" fill="#64748b">I</text>
+                </g>
+              </svg>
+              <div id="trn-compass-needle" class="trn-needle"></div>
+              <!-- Strelica prema cilju navigacije — vidljiva samo dok je "Vodi me" aktivno.
+                   Rotira po RELATIVNOM azimutu (cilj − azimut uređaja), vidi _updateNavArrows. -->
+              <div id="trn-compass-target" class="trn-target" style="display:none;"></div>
+              <div class="trn-hub"></div>
             </div>
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Kompas</div>
-              <div id="trn-heading" style="font-size:22px;font-weight:700;color:#34d399;font-family:monospace;">—°</div>
-              <div id="trn-heading-dir" style="font-size:11px;color:#64748b;">azimut uređaja</div>
+            <div style="min-width:0;flex:1;">
+              <div class="trn-muted" style="font-size:11px;">Azimut uređaja</div>
+              <div id="trn-heading" class="trn-heading">—°</div>
+              <div id="trn-heading-dir" class="trn-muted" style="font-size:12px;">azimut nedostupan</div>
             </div>
           </div>
-          <!-- Aktivna navigacija do tačke ("🧭 Vodi") — udaljenost krupno, ista strelica (plava) -->
-          <div id="trn-nav-target" style="display:none;margin-top:12px;padding:10px 12px;background:#0a1f38;border:1px solid #1e3a5f;border-radius:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <div style="font-size:11px;color:#60a5fa;">🎯 <span id="trn-nav-name">Cilj</span></div>
-              <button onclick="stopTackaNav()" style="background:none;border:none;color:#64748b;font-size:11px;cursor:pointer;padding:2px 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg> Prekini</button>
+          <div id="trn-nav-target" class="trn-nav" style="display:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="font-size:12px;color:#7dd3fc;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Cilj: <b id="trn-nav-name">—</b></div>
+              <button onclick="stopTackaNav()" class="trn-x"><svg class="ic"><use href="#ic-zatvori"/></svg> Prekini</button>
             </div>
-            <div id="trn-nav-dist" style="font-size:26px;font-weight:800;color:#38bdf8;font-family:monospace;margin-top:2px;">— m</div>
+            <div id="trn-nav-dist" class="trn-nav-dist">— m</div>
           </div>
-        </div>
+        </section>
+
+        <!-- DNEVNO SVJETLO -->
+        <section class="trn-card">
+          <div class="trn-card-h">
+            <span><svg class="ic"><use href="#ic-sunce"/></svg> Dnevno svjetlo</span>
+            <span id="trn-sun-ostalo" class="trn-pill"></span>
+          </div>
+          <div class="trn-sun" id="trn-sun"></div>
+        </section>
+
+        <!-- MOJI PODACI -->
+        <section class="trn-card">
+          <div class="trn-seg" role="tablist">
+            <button id="trn-seg-tacke" onclick="terenSetTab('tacke')">Tačke <span id="trn-tacke-cnt">0</span></button>
+            <button id="trn-seg-trag" onclick="terenSetTab('trag')">Tragovi <span id="trn-trag-cnt">0</span></button>
+            <button id="trn-seg-msr" onclick="terenSetTab('msr')">Mjerenja <span id="trn-msr-cnt">0</span></button>
+          </div>
+          <div id="trn-pane-tacke" class="trn-list"><div id="trn-tacke-list"></div></div>
+          <div id="trn-pane-trag" class="trn-list" style="display:none;"><div id="trn-trag-list"></div></div>
+          <div id="trn-pane-msr" class="trn-list" style="display:none;"><div id="trn-msr-list"></div></div>
+        </section>
+
+        <!-- DIJELJENJE KRETANJA -->
+        <section class="trn-card">
+          <div class="trn-card-h">
+            <span><svg class="ic"><use href="#ic-satelit"/></svg> Dijeljenje kretanja</span>
+            <span id="trn-share-status" class="trn-muted">isključeno</span>
+          </div>
+          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Kolege i nadzor vide tvoju poziciju na karti uživo dok je dijeljenje uključeno.</div>
+          <button id="trn-share-btn" class="trn-btn trn-btn-share" onclick="terenTogShare()"><svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje</button>
+        </section>
 
         <!-- UČITAJ PROJEKAT (šifra od projektanta) -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">📥 Učitaj projekat</div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Ukucaj šifru koju ti je dao projektant (npr. RK70ABGH) — vlake odjela se prikažu na karti.</div>
-          <button class="trn-btn trn-btn-accent" style="padding:13px;font-size:14px;" onclick="terenUcitajProjekat()"><svg class="ic"><use href="#ic-kljuc"/></svg> Ukucaj šifru</button>
+        <section class="trn-card">
+          <div class="trn-card-h"><span><svg class="ic"><use href="#ic-kljuc"/></svg> Projekat od projektanta</span></div>
+          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Ukucaj šifru (npr. RK70ABGH) — vlake odjela se prikažu na karti i ostaju offline.</div>
+          <button class="trn-btn trn-btn-accent" onclick="terenUcitajProjekat()"><svg class="ic"><use href="#ic-kljuc"/></svg> Ukucaj šifru</button>
           <div id="trn-shared-list" style="display:flex;flex-direction:column;gap:6px;margin-top:10px;"></div>
-        </div>
+        </section>
 
         <!-- KARTE I SLOJEVI -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">🗄 Karte i slojevi</div>
-          <button class="trn-btn trn-btn-outline blue" style="margin-bottom:8px;" onclick="openMapManager()"><svg class="ic"><use href="#ic-slojevi"/></svg> Upravljanje offline kartama</button>
-          <button class="trn-btn trn-btn-outline" style="margin-bottom:8px;" onclick="document.getElementById('kf').click()"><svg class="ic"><use href="#ic-folder"/></svg> Dodaj KML fajl</button>
-          <button class="trn-btn trn-btn-outline" style="margin-bottom:8px;" onclick="openOznakePanel()">≡ Prikazani slojevi i oznake</button>
-          <button class="trn-btn trn-btn-outline" onclick="_openLayerSheet()"><svg class="ic"><use href="#ic-podloga"/></svg> Promijeni podlogu karte</button>
-        </div>
+        <section class="trn-card">
+          <div class="trn-card-h"><span><svg class="ic"><use href="#ic-slojevi"/></svg> Karte i slojevi</span></div>
+          <div class="trn-grid2">
+            <button class="trn-btn trn-btn-outline blue" onclick="openMapManager()"><svg class="ic"><use href="#ic-arhiva"/></svg> Offline karte</button>
+            <button class="trn-btn trn-btn-outline" onclick="_openLayerSheet()"><svg class="ic"><use href="#ic-podloga"/></svg> Podloga</button>
+            <button class="trn-btn trn-btn-outline" onclick="document.getElementById('kf').click()"><svg class="ic"><use href="#ic-folder"/></svg> Dodaj KML</button>
+            <button class="trn-btn trn-btn-outline" onclick="openOznakePanel()"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikazano</button>
+          </div>
+        </section>
 
-        <!-- TAČKE / WAYPOINTS -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📌 Tačke</span>
-            <span id="trn-tacke-cnt" style="font-size:11px;color:#64748b;">0</span>
-          </div>
-          <button class="trn-btn trn-btn-accent" style="margin-bottom:10px;" onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg> Označi trenutnu poziciju</button>
-          <div id="trn-tacke-list" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih tačaka</div>
-          </div>
-        </div>
-
-        <!-- MOJI TRAGOVI -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">🗺 Moji tragovi</span>
-            <span id="trn-trag-cnt" style="font-size:11px;color:#64748b;">0</span>
-          </div>
-          <div id="trn-trag-list" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema snimljenih tragova</div>
-          </div>
-        </div>
-
-        <!-- MJERENJA -->
-        <div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px;padding:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:700;color:#e2e8f0;">📏 Mjerenja</span>
-            <span id="trn-msr-cnt" style="font-size:11px;color:#64748b;">0</span>
-          </div>
-          <div id="trn-msr-list" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih mjerenja</div>
-          </div>
-        </div>
+        <button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> <span id="trn-gps-btn-txt">Uključi GPS</span></button>
 
       </div>
     </div>
@@ -5337,7 +5459,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.1';
+const APP_VER = 'v1.8.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10388,7 +10510,7 @@ function _createTacka(la, lo, nm) {
   _tacke.push({la, lo, ts, nm, marker: m});
   _saveTacke();
   map.setView([la, lo], Math.max(map.getZoom(), 15), {animate: true});
-  showToast(`📍 ${nm || ('Tačka ' + (idx+1))} dodana`);
+  showToast(`📍 ${nm ? 'Tačka „' + nm + '“' : 'Tačka ' + (idx+1)} dodana`);
 }
 
 // ── Popup ──
@@ -11750,44 +11872,304 @@ function _azimutSmjer(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function terenRender() {
+// v1.8.2: pun = true (otvaranje taba) crta i liste koje se ne mijenjaju sa GPS-om
+// (učitani projekti, tragovi, mjerenja). Na svaki GPS fiks (onP) ide lagana
+// verzija — samo ono što zavisi od pozicije.
+function terenRender(pun) {
+  _trnPozicijaRender();
+  _terenUpdShareUI();
+  terenUpdCompass();
+  _trnVoziloRender();
+  _trnSunceRender();
+  if (pun) { _trnSyncBroj(); terenRenderShared(); }
+  _trnChipsRender();
+  _trnPodaciRender(!!pun);
+  _terenUpdTragUI();
+  _trnTickStart();
+}
+
+const _trnPad = n => String(n).padStart(2, '0');
+// Trajanje u sekundama → "45 s" / "12 min" / "2 h 5 min"
+function _trnTrajanje(sek) {
+  const s = Math.max(0, Math.round(sek));
+  if (s < 60) return s + ' s';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' min';
+  return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+}
+// Vrijeme bez toLocaleString — WebView bez bs lokala daje drugačije formate.
+function _trnKad(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return '—';
+  const sad = new Date();
+  const hm = _trnPad(d.getHours()) + ':' + _trnPad(d.getMinutes());
+  if (d.toDateString() === sad.toDateString()) return 'danas ' + hm;
+  return _trnPad(d.getDate()) + '.' + _trnPad(d.getMonth() + 1) + '. ' + hm;
+}
+
+// Tačnost GPS-a → tekst, boja i punjenje trake (manje metara = puna zelena traka)
+function _trnTacnost(ac) {
+  if (ac == null || !isFinite(ac)) return { txt: '— m', boja: '#64748b', pct: 0 };
+  const a = Math.round(ac);
+  const boja = a <= 5 ? '#34d399' : a <= 12 ? '#a3e635' : a <= 25 ? '#fbbf24' : '#f87171';
+  return { txt: '±' + a + ' m', boja, pct: Math.max(6, Math.min(100, Math.round(100 - (a - 3) * 3))) };
+}
+
+// Nadmorska visina tvoje pozicije: DEM (isti izvor kao N.V. na karti, radi
+// offline iz keša), GPS visina samo kao rezerva — ona je iznad elipsoida,
+// u BiH ~45 m iznad stvarne nadmorske (v1.7.8), pa se označi "≈" i "(GPS)".
+var _trnNvCeka = false;
+function _trnNv(la, lo, gpsAl) {
+  let dem;
+  try { dem = _nvDemSync(la, lo); } catch(e) { dem = null; }
+  if (dem != null && isFinite(dem)) return { txt: Math.round(dem) + ' m', izvor: 'dem' };
+  if (dem === undefined && !_trnNvCeka) {
+    _trnNvCeka = true;
+    // Ponovo crtaj SAMO kad je pločica stvarno stigla — neuspjeh se vraća
+    // odmah iz negativnog keša, pa bi bezuslovno crtanje vrtilo petlju.
+    Promise.resolve().then(() => _nvDemUcitaj(la, lo)).then(ok => {
+      _trnNvCeka = false;
+      if (ok && _activeTab === 'teren') _trnPozicijaRender();
+    }, () => { _trnNvCeka = false; });
+  }
+  const gps = (gpsAl != null && gpsAl !== 0 && isFinite(gpsAl)) ? Math.round(gpsAl) : null;
+  return { txt: gps != null ? '≈ ' + gps + ' m' : '— m', izvor: 'gps' };
+}
+
+function _trnPozicijaRender() {
   const g = id => document.getElementById(id);
-  // Pozicija
+  if (!g('trn-y')) return;
+  const bar = g('trn-accbar');
   if (lastP) {
     const c = wgsToMGI(lastP.la, lastP.lo);
-    g('trn-y').textContent = c ? c.y.toLocaleString('bs') : '—';
-    g('trn-x').textContent = c ? c.x.toLocaleString('bs') : '—';
-    g('trn-alt').textContent = (lastP.al != null ? Math.round(lastP.al) : '—') + ' m';
-    g('trn-acc').textContent = (lastP.ac != null ? '±' + Math.round(lastP.ac) : '—') + ' m';
-    const dot = g('trn-gps-dot');
-    if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block;"></span>GPS aktivan';
+    g('trn-y').textContent = c ? _stpBroj(c.y) : '—';
+    g('trn-x').textContent = c ? _stpBroj(c.x) : '—';
+    const nv = _trnNv(lastP.la, lastP.lo, lastP.al);
+    g('trn-alt').textContent = nv.txt;
+    const lbl = g('trn-alt-lbl');
+    if (lbl) lbl.textContent = nv.izvor === 'gps' ? 'Visina (GPS)' : 'Nadmorska visina';
+    const q = _trnTacnost(lastP.ac);
+    g('trn-acc').textContent = q.txt;
+    g('trn-acc').style.color = q.boja;
+    if (bar) { bar.style.width = q.pct + '%'; bar.style.background = q.boja; }
   } else {
-    ['trn-y','trn-x'].forEach(id => g(id).textContent = '—');
+    g('trn-y').textContent = '—'; g('trn-x').textContent = '—';
     g('trn-alt').textContent = '— m'; g('trn-acc').textContent = '— m';
-    const dot = g('trn-gps-dot');
-    if (dot) dot.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#64748b;display:inline-block;"></span>Nema GPS-a';
+    g('trn-acc').style.color = '';
+    if (bar) bar.style.width = '0';
   }
-  // Trenutni odjel (iz granica na karti)
+  _trnFixRender();
   const odEl = g('trn-odjel');
   if (odEl) {
-    if (!graniceOdjeli.length) odEl.innerHTML = '🌲 Odjel: <span style="color:#64748b;font-weight:400;">granice nisu učitane</span>';
-    else if (!lastP)           odEl.innerHTML = '🌲 Odjel: <span style="color:#64748b;font-weight:400;">—</span>';
-    else if (_trnCurOdjel)     odEl.innerHTML = '🌲 Odjel: ' + _escHtml(_trnCurOdjel);
-    else                       odEl.innerHTML = '🌲 Odjel: <span style="color:#64748b;font-weight:400;">izvan učitanih odjela</span>';
+    const nm = _trnCurOdjel ? String(_trnCurOdjel) : '';
+    if (!graniceOdjeli.length) odEl.innerHTML = '🌲 <small>Granice odjela nisu učitane</small>';
+    else if (!lastP)           odEl.innerHTML = '🌲 <small>Odjel — čekam GPS poziciju</small>';
+    else if (nm)               odEl.innerHTML = '🌲 ' + _escHtml(/^odjel/i.test(nm) ? nm : 'Odjel ' + nm);
+    else                       odEl.innerHTML = '🌲 <small>Izvan učitanih odjela</small>';
   }
-  // Dijeljenje kretanja — stanje dugmeta
-  _terenUpdShareUI();
-  // Kompas
-  terenUpdCompass();
-  // Tačke
-  terenRenderTacke();
-  // Učitani projekti (šifra)
-  terenRenderShared();
-  // Tragovi + Mjerenja
-  terenRenderTragovi();
-  terenRenderMjerenja();
-  // Trag stats
-  if (_tragOn) terenUpdTragStats();
+}
+
+// Svježina GPS pozicije. Stara pozicija se ranije nije razlikovala od svježe —
+// ispod krošnji fiks zna stati minutama, a brojevi su i dalje izgledali tačno.
+function _trnFixRender() {
+  const el = document.getElementById('trn-gps-dot');
+  const gb = document.getElementById('trn-gps-btn-txt');
+  if (gb) gb.textContent = gpsOn ? 'Isključi GPS' : 'Uključi GPS';
+  if (!el) return;
+  let fixT = 0;
+  try { fixT = _lastGpsFixTime || 0; } catch(e) {}
+  let cls = '', txt;
+  if (!gpsOn) txt = 'GPS isključen — uključi ga dugmetom na dnu';
+  else if (!lastP || !fixT) { cls = 'warn'; txt = 'Tražim GPS signal…'; }
+  else {
+    const s = (Date.now() - fixT) / 1000;
+    if (s <= 30) { cls = 'ok'; txt = 'GPS aktivan · pozicija ' + (s < 3 ? 'upravo osvježena' : 'od prije ' + Math.round(s) + ' s'); }
+    else { cls = 'warn'; txt = 'Pozicija stara ' + _trnTrajanje(s) + ' — izađi na čistinu ili sačekaj signal'; }
+  }
+  el.className = 'trn-fix' + (cls ? ' ' + cls : '');
+  el.innerHTML = '<i></i>' + _escHtml(txt);
+}
+
+// Broj izmjena koje čekaju slanje — čita red iz localStorage, pa se NE računa
+// na svaki GPS fiks nego pri otvaranju taba i na otkucaj od 5 s.
+var _trnSyncN = 0;
+function _trnSyncBroj() {
+  try { _trnSyncN = _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id).length; } catch(e) {}
+}
+
+function _trnChipsRender() {
+  const el = document.getElementById('trn-chips');
+  if (!el) return;
+  const out = [];
+  let fixT = 0;
+  try { fixT = _lastGpsFixTime || 0; } catch(e) {}
+  if (!gpsOn) out.push('<span class="trn-chip"><i></i>GPS isklj.</span>');
+  else if (lastP && Date.now() - fixT < 30000) out.push('<span class="trn-chip ok"><i></i>GPS</span>');
+  else out.push('<span class="trn-chip warn"><i></i>GPS traži</span>');
+  let k = 'nepoznato';
+  try { k = _isOfflineMode ? 'nema' : _netKvalitet(); } catch(e) {}
+  const V = { dobra: ['ok', 'Online'], slaba: ['warn', 'Slab signal'], nema: ['bad', 'Offline'] };
+  const v = V[k] || ['', (typeof navigator !== 'undefined' && navigator.onLine === false) ? 'Offline' : 'Veza'];
+  out.push('<span class="trn-chip ' + v[0] + '"><i></i>' + v[1] + '</span>');
+  if (_trnSyncN > 0) out.push('<button class="trn-chip warn" onclick="openSyncQueuePanel()" title="Izmjene čekaju slanje">⟳ ' + _trnSyncN + ' čeka</button>');
+  el.innerHTML = out.join('');
+}
+
+// ── Teren: vozilo — obična tačka imena "Vozilo" ─────────────────────────────
+// Namjerno NIJE zaseban zapis: tačka već ima marker na karti, offline čuvanje
+// (_saveTacke) i navigaciju (vodiMeDoTacke + strelica na kompasu), pa povratak
+// do vozila radi i bez signala istim putem kao svaka druga tačka.
+const _TRN_VOZILO_NM = 'Vozilo';
+function _trnVoziloIdx() { return _tacke.findIndex(t => t && t.nm === _TRN_VOZILO_NM); }
+
+function _trnVoziloRender() {
+  const info = document.getElementById('trn-voz-info');
+  const kad = document.getElementById('trn-voz-kad');
+  const vodi = document.getElementById('trn-voz-vodi');
+  if (!info) return;
+  const i = _trnVoziloIdx();
+  if (i < 0) {
+    info.textContent = 'Označi gdje si ostavio vozilo — kompas te vraća do njega i bez signala.';
+    if (kad) kad.textContent = '';
+    if (vodi) { vodi.disabled = true; vodi.style.opacity = '0.45'; }
+    return;
+  }
+  const t = _tacke[i];
+  if (kad) kad.textContent = 'označeno ' + _trnKad(t.ts);
+  if (vodi) { vodi.disabled = false; vodi.style.opacity = ''; }
+  if (!lastP) { info.textContent = 'Uključi GPS da vidiš udaljenost i smjer do vozila.'; return; }
+  const b = Math.round(_bearing(lastP.la, lastP.lo, t.la, t.lo));
+  info.innerHTML = '<b>' + _fmtDist(_haversine(lastP.la, lastP.lo, t.la, t.lo)) + '</b> &nbsp;smjer ' + b + '° ' + _azimutSmjer(b);
+}
+
+async function terenVoziloOznaci() {
+  if (!lastP) { showToast('Nema GPS signala — uključi GPS'); return; }
+  const i = _trnVoziloIdx();
+  if (i >= 0) {
+    if (!await _dlgConfirm('Premjestiti oznaku vozila na tvoju trenutnu poziciju?', { title: 'Vozilo' })) return;
+    const t = _tacke[i];
+    t.la = lastP.la; t.lo = lastP.lo; t.ts = Date.now();
+    if (t.marker) { t.marker.setLatLng([t.la, t.lo]); _setupTackaPopup(t.marker, i, t.la, t.lo, t.ts, t.nm); }
+    _saveTacke();
+    showToast('Vozilo označeno na tvojoj poziciji');
+  } else {
+    _createTacka(lastP.la, lastP.lo, _TRN_VOZILO_NM);
+  }
+  terenRender();
+}
+
+function terenVoziloVodi() {
+  const i = _trnVoziloIdx();
+  if (i < 0) { showToast('Prvo označi vozilo'); return; }
+  vodiMeDoTacke(i);
+  if (!lastP) showToast('Uključi GPS — strelica na kompasu pokazuje put do vozila');
+  terenRender();
+}
+
+// ── Teren: dnevno svjetlo (izlazak/zalazak/mrak) ────────────────────────────
+// Algoritam iz "Almanac for Computers" (US Naval Observatory), tačnost ~1–2 min
+// — dovoljno za "koliko mi još ostaje svjetla", bez mreže. zenit 90.833° =
+// izlazak/zalazak (refrakcija + poluprečnik Sunca), 96° = kraj građanskog
+// sumraka (u šumi se prakično ne vidi ranije od toga).
+function _sunceVrijeme(datum, lat, lon, zenit, izlaz) {
+  const r = Math.PI / 180;
+  const N = Math.round((Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()) - Date.UTC(datum.getFullYear(), 0, 0)) / 864e5);
+  const lngH = lon / 15;
+  const t = N + ((izlaz ? 6 : 18) - lngH) / 24;
+  const M = 0.9856 * t - 3.289;
+  let L = M + 1.916 * Math.sin(M * r) + 0.020 * Math.sin(2 * M * r) + 282.634;
+  L = ((L % 360) + 360) % 360;
+  let RA = Math.atan(0.91764 * Math.tan(L * r)) / r;
+  RA = ((RA % 360) + 360) % 360;
+  RA = (RA + Math.floor(L / 90) * 90 - Math.floor(RA / 90) * 90) / 15;
+  const sinDec = 0.39782 * Math.sin(L * r);
+  const cosDec = Math.cos(Math.asin(sinDec));
+  const cosH = (Math.cos(zenit * r) - sinDec * Math.sin(lat * r)) / (cosDec * Math.cos(lat * r));
+  if (cosH > 1 || cosH < -1) return null;  // polarni dan/noć
+  const H = (izlaz ? 360 - Math.acos(cosH) / r : Math.acos(cosH) / r) / 15;
+  const T = H + RA - 0.06571 * t - 6.622;
+  const UT = (((T - lngH) % 24) + 24) % 24;
+  return new Date(Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()) + UT * 3600e3);
+}
+function _sunceDan(datum, lat, lon) {
+  return {
+    svitanje: _sunceVrijeme(datum, lat, lon, 96, true),
+    izlaz:    _sunceVrijeme(datum, lat, lon, 90.833, true),
+    zalaz:    _sunceVrijeme(datum, lat, lon, 90.833, false),
+    mrak:     _sunceVrijeme(datum, lat, lon, 96, false),
+  };
+}
+// Stanje dana u trenutku `sad`: tekst i ton za oznaku, položaj na traci (0–100)
+function _sunceStanje(s, sad) {
+  const t = sad.getTime();
+  if (!s.izlaz || !s.zalaz) return { cls: '', txt: '—', pos: 50 };
+  const iz = s.izlaz.getTime(), za = s.zalaz.getTime();
+  const sv = s.svitanje ? s.svitanje.getTime() : iz - 1800e3;
+  const mr = s.mrak ? s.mrak.getTime() : za + 1800e3;
+  const kl = v => Math.max(0, Math.min(100, v));
+  if (t < sv) return { cls: 'bad', txt: 'noć — izlazak za ' + _trnTrajanje((iz - t) / 1000), pos: 0 };
+  if (t < iz) return { cls: 'warn', txt: 'svitanje — izlazak za ' + _trnTrajanje((iz - t) / 1000), pos: kl(20 * (t - sv) / (iz - sv)) };
+  if (t < za) {
+    const ost = (za - t) / 1000;
+    return { cls: ost < 3600 ? 'warn' : 'ok', txt: 'još ' + _trnTrajanje(ost) + ' svjetla', pos: kl(20 + 60 * (t - iz) / (za - iz)) };
+  }
+  if (t < mr) return { cls: 'bad', txt: 'sumrak — mrak za ' + _trnTrajanje((mr - t) / 1000), pos: kl(80 + 20 * (t - za) / (mr - za)) };
+  return { cls: 'bad', txt: 'mrak', pos: 100 };
+}
+
+function _trnSunceRender() {
+  const el = document.getElementById('trn-sun');
+  const pill = document.getElementById('trn-sun-ostalo');
+  if (!el) return;
+  let la = 44.8, lo = 16.0;
+  if (lastP) { la = lastP.la; lo = lastP.lo; }
+  else { try { const c = map.getCenter(); la = c.lat; lo = c.lng; } catch(e) {} }
+  const sad = new Date();
+  const s = _sunceDan(sad, la, lo);
+  const hm = d => d ? _trnPad(d.getHours()) + ':' + _trnPad(d.getMinutes()) : '—';
+  const st = _sunceStanje(s, sad);
+  if (pill) { pill.className = 'trn-pill' + (st.cls ? ' ' + st.cls : ''); pill.textContent = st.txt; }
+  el.innerHTML = '<div><span>Izlazak</span><b>' + hm(s.izlaz) + '</b></div>'
+    + '<div><span>Zalazak</span><b>' + hm(s.zalaz) + '</b></div>'
+    + '<div><span>Mrak</span><b>' + hm(s.mrak) + '</b></div>'
+    + '<div class="trn-sun-bar"><i><b style="left:' + st.pos.toFixed(1) + '%"></b></i></div>';
+}
+
+// Otkucaj dok je Teren otvoren: svježina GPS-a, veza/sync i sunce se mijenjaju
+// i kad GPS ne javlja ništa (upravo tad je bitno vidjeti da je pozicija stara).
+var _trnTick = null;
+function _trnTickStart() {
+  if (_trnTick) return;
+  _trnTick = setInterval(() => {
+    if (_activeTab !== 'teren') { clearInterval(_trnTick); _trnTick = null; return; }
+    _trnSyncBroj(); _trnFixRender(); _trnChipsRender(); _trnSunceRender();
+  }, 5000);
+}
+
+// ── Teren: moji podaci — tabovi Tačke / Tragovi / Mjerenja ──────────────────
+var _trnTab = (() => { try { return localStorage.getItem('tvlake_teren_tab') || 'tacke'; } catch(e) { return 'tacke'; } })();
+function terenSetTab(tab) {
+  _trnTab = tab;
+  try { localStorage.setItem('tvlake_teren_tab', tab); } catch(e) {}
+  _trnPodaciRender(true);
+}
+function _trnPodaciRender(sve) {
+  if (!['tacke', 'trag', 'msr'].includes(_trnTab)) _trnTab = 'tacke';
+  ['tacke', 'trag', 'msr'].forEach(k => {
+    const p = document.getElementById('trn-pane-' + k);
+    const b = document.getElementById('trn-seg-' + k);
+    if (p) p.style.display = k === _trnTab ? '' : 'none';
+    if (b) b.classList.toggle('on', k === _trnTab);
+  });
+  const cnt = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
+  cnt('trn-tacke-cnt', _tacke.length);
+  cnt('trn-trag-cnt', _tragRegistry.length);
+  cnt('trn-msr-cnt', _msrRegistry.length);
+  // Tačke nose udaljenost od tebe pa se osvježavaju sa GPS-om; tragovi i
+  // mjerenja se ne mijenjaju pomjeranjem, pa samo pri otvaranju/promjeni taba.
+  if (_trnTab === 'tacke') terenRenderTacke();
+  else if (sve && _trnTab === 'trag') terenRenderTragovi();
+  else if (sve && _trnTab === 'msr') terenRenderMjerenja();
 }
 
 // ── Teren: trenutni odjel (tačka-u-poligonu nad granicama) ───────────────────
@@ -12017,33 +12399,48 @@ function terenRenderTacke() {
   if (cnt) cnt.textContent = _tacke.length;
   if (!list) return;
   if (!_tacke.length) {
-    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih tačaka</div>';
+    list.innerHTML = '<div class="trn-empty">Nema sačuvanih tačaka — dugme "Tačka" gore označava tvoju poziciju.</div>';
     return;
   }
-  list.innerHTML = _tacke.map((t, i) => {
-    let dist = '', azi = '';
-    if (lastP) {
-      dist = _fmtDist(_haversine(lastP.la, lastP.lo, t.la, t.lo));
+  // Najbliže prvo kad ima GPS-a; indeks koji dugmad nose ostaje STVARNI indeks
+  // u _tacke (pozicija u listi nije indeks u nizu — v3.102.0).
+  const redovi = _tacke.map((t, i) => ({ t, i, d: lastP ? _haversine(lastP.la, lastP.lo, t.la, t.lo) : null }));
+  if (lastP) redovi.sort((a, b) => a.d - b.d);
+  list.innerHTML = redovi.map(({ t, i, d }) => {
+    const nm = t.nm || ('Tačka ' + (i + 1));
+    const voz = t.nm === _TRN_VOZILO_NM;
+    let sub;
+    if (d != null) {
       const b = Math.round(_bearing(lastP.la, lastP.lo, t.la, t.lo));
-      azi = `${b}° ${_azimutSmjer(b)}`;
-    }
-    const nm = t.nm || ('Tačka ' + (i+1));
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(nm)}</div>
-        ${lastP ? `<div style="font-size:11px;color:#64748b;">📏 ${dist} · 🧭 ${azi}</div>` : '<div style="font-size:11px;color:#475569;">nema GPS-a</div>'}
+      sub = _fmtDist(d) + ' · ' + b + '° ' + _azimutSmjer(b);
+    } else sub = 'nema GPS-a · ' + _trnKad(t.ts);
+    const aktivna = _tackaNavIdx === i;
+    return `<div class="trn-row"${aktivna ? ' style="border-color:#38bdf8;"' : ''}>
+      <div class="trn-row-main" onclick="terenZoomTacka(${i})">
+        <div class="trn-row-t">${voz ? '<svg class="ic" style="color:#7dd3fc;"><use href="#ic-vozilo"/></svg> ' : ''}${_escHtml(nm)}</div>
+        <div class="trn-row-s">${sub}${aktivna ? ' · <span style="color:#38bdf8;">navigacija</span>' : ''}</div>
       </div>
-      <button onclick="terenShareTacka(${i})" style="padding:7px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#34d399;font-size:12px;cursor:pointer;" title="Podijeli koordinate"><svg class="ic"><use href="#ic-posalji"/></svg></button>
-      <button onclick="vodiMeDoTacke(${i})" style="padding:7px 10px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-naprijed"/></svg> Vodi</button>
+      <button class="trn-row-btn green" onclick="terenShareTacka(${i})" title="Podijeli koordinate"><svg class="ic"><use href="#ic-posalji"/></svg></button>
+      <button class="trn-row-btn" onclick="vodiMeDoTacke(${i});terenRender()"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi</button>
     </div>`;
   }).join('');
+}
+
+function terenZoomTacka(i) {
+  const t = _tacke[i];
+  if (!t) return;
+  switchTab('karta');
+  setTimeout(() => {
+    map.setView([t.la, t.lo], Math.max(map.getZoom(), 16));
+    try { t.marker && t.marker.openPopup(); } catch(e) {}
+  }, 80);
 }
 
 function terenMarkHere() {
   if (!lastP) { showToast('Nema GPS signala — uključi GPS'); return; }
   const nm = 'T' + (_tacke.length + 1);
   _createTacka(lastP.la, lastP.lo, nm);
-  terenRenderTacke();
+  terenSetTab('tacke');
 }
 
 function terenCopyCoords() {
@@ -12068,19 +12465,17 @@ function terenPauseTrag() { togTragPause(); _terenUpdTragUI(); }
 function terenStopTrag() { fabSnimTrag(); }
 
 function _terenUpdTragUI() {
-  const idle = document.getElementById('trn-trag-idle');
   const active = document.getElementById('trn-trag-active');
   const status = document.getElementById('trn-trag-status');
   const pauseBtn = document.getElementById('trn-trag-pause');
+  const q = document.getElementById('trn-q-trag');
+  const qt = document.getElementById('trn-q-trag-txt');
+  if (active) active.style.display = _tragOn ? '' : 'none';
+  if (q) q.classList.toggle('rec', !!_tragOn);
+  if (qt) qt.textContent = _tragOn ? 'Završi trag' : 'Snimi trag';
   if (_tragOn) {
-    if (idle) idle.style.display = 'none';
-    if (active) active.style.display = '';
-    if (status) { status.textContent = _tragPaused ? '⏸ pauzirano' : '🔴 snima'; status.style.color = _tragPaused ? '#fbbf24' : '#ef4444'; }
-    if (pauseBtn) { pauseBtn.textContent = _tragPaused ? '▶ Nastavi' : '⏸ Pauza'; pauseBtn.style.color = _tragPaused ? '#34d399' : '#fbbf24'; }
-  } else {
-    if (idle) idle.style.display = '';
-    if (active) active.style.display = 'none';
-    if (status) { status.textContent = 'neaktivno'; status.style.color = '#64748b'; }
+    if (status) { status.textContent = _tragPaused ? 'pauzirano' : 'snima'; status.style.color = _tragPaused ? '#fbbf24' : '#fca5a5'; }
+    if (pauseBtn) pauseBtn.textContent = _tragPaused ? '▶ Nastavi' : '⏸ Pauza';
   }
   terenUpdTragStats();
 }
@@ -12090,7 +12485,9 @@ function terenUpdTragStats() {
   if (!el || !_tragOn) return;
   const n = _tragPts.length;
   const d = _tragCalcLen(_tragPts);
-  el.textContent = `${n} tač. · ${_tragFmtLen(d)}`;
+  const t0 = n ? Number(_tragPts[0][3]) : NaN;
+  const traje = isFinite(t0) && t0 > 0 ? ' · ' + _trnTrajanje((Date.now() - t0) / 1000) : '';
+  el.textContent = `${_tragFmtLen(d)} · ${n} tač.${traje}`;
 }
 
 function terenRenderTragovi() {
@@ -12099,25 +12496,30 @@ function terenRenderTragovi() {
   if (cnt) cnt.textContent = _tragRegistry.length;
   if (!list) return;
   if (!_tragRegistry.length) {
-    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema snimljenih tragova</div>';
+    list.innerHTML = '<div class="trn-empty">Nema snimljenih tragova — dugme "Snimi trag" gore počinje snimanje.</div>';
     return;
   }
-  list.innerHTML = _tragRegistry.slice(0, 20).map(t => {
-    const dt = new Date(t.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const redovi = _tragRegistry.slice(0, 20).map(t => {
     const len = _tragFmtLen(_tragCalcLen(t.pts));
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
-      <div style="width:4px;height:28px;border-radius:2px;background:${t.color||'#f97316'};flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(t.name)}</div>
-        <div style="font-size:11px;color:#64748b;">${dt} · ${len} · ${t.pts.length} tač.</div>
+    return `<div class="trn-row">
+      <div style="width:4px;align-self:stretch;border-radius:2px;background:${_escHtml(t.color || '#f97316')};flex-shrink:0;"></div>
+      <div class="trn-row-main" onclick="_tragRegZoom('${t.id}')">
+        <div class="trn-row-t">${_escHtml(_tragIme(t))}</div>
+        <div class="trn-row-s">${_trnKad(t.date)} · ${len} · ${t.pts.length} tač.</div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0;">
-        <button onclick="_tragRegZoom('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:11px;cursor:pointer;" title="Prikaži na karti"><svg class="ic"><use href="#ic-karta"/></svg></button>
-        <button onclick="_tragKmlMeni('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#34d399;font-size:11px;cursor:pointer;" title="Izvezi kao KML / podijeli"><svg class="ic"><use href="#ic-posalji"/></svg></button>
-        <button onclick="_tragRegDelete('${t.id}');terenRenderTragovi()" style="padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f87171;font-size:11px;cursor:pointer;" title="Briši"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-      </div>
+      <button class="trn-row-btn green" onclick="_tragKmlMeni('${t.id}')" title="Izvezi kao KML / podijeli"><svg class="ic"><use href="#ic-posalji"/></svg> KML</button>
+      <button class="trn-row-btn red" onclick="terenObrisiTrag('${t.id}')" title="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     </div>`;
   }).join('');
+  list.innerHTML = redovi + `<button class="trn-link" onclick="switchTab('tragovi')">Svi tragovi (${_tragRegistry.length}) →</button>`;
+}
+
+async function terenObrisiTrag(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  if (!await _dlgConfirm('Obrisati trag "' + _tragIme(t) + '"?', { danger: true })) return;
+  _tragRegDelete(id);
+  terenRender(true);
 }
 
 // ── Teren: dijeljenje tačke ──────────────────────────────────────────────────
@@ -12153,25 +12555,39 @@ function terenRenderMjerenja() {
   if (cnt) cnt.textContent = _msrRegistry.length;
   if (!list) return;
   if (!_msrRegistry.length) {
-    list.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px;">Nema sačuvanih mjerenja</div>';
+    list.innerHTML = '<div class="trn-empty">Nema sačuvanih mjerenja — mjeri se na Karti (Izmjeri).</div>';
     return;
   }
   list.innerHTML = _msrRegistry.slice(0, 20).map(m => {
-    const dt = new Date(m.date).toLocaleString('bs-BA', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    const lenM = _msrPts2Len(m.pts);
-    const len = _msrFmt(lenM);
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;">
-      <div style="width:4px;height:28px;border-radius:2px;background:${m.color||'#fbbf24'};flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escHtml(m.name)}</div>
-        <div style="font-size:11px;color:#64748b;">${dt} · ${len} · ${m.pts.length} tač.</div>
+    const len = _msrFmt(_msrPts2Len(m.pts));
+    return `<div class="trn-row">
+      <div style="width:4px;align-self:stretch;border-radius:2px;background:${_escHtml(m.color || '#fbbf24')};flex-shrink:0;"></div>
+      <div class="trn-row-main" onclick="terenZoomMsr('${m.id}')">
+        <div class="trn-row-t">${_escHtml(m.name || 'Mjerenje')}</div>
+        <div class="trn-row-s">${_trnKad(m.date)} · ${len} · ${m.pts.length} tač.</div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0;">
-        <button onclick="_msrRegZoom('${m.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:11px;cursor:pointer;" title="Prikaži na karti"><svg class="ic"><use href="#ic-karta"/></svg></button>
-        <button onclick="_msrAskDelete('${m.id}');terenRenderMjerenja()" style="padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f87171;font-size:11px;cursor:pointer;" title="Briši"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-      </div>
+      <button class="trn-row-btn" onclick="_msrRegZoom('${m.id}')" title="Uredi mjerenje"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
+      <button class="trn-row-btn red" onclick="terenObrisiMsr('${m.id}')" title="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     </div>`;
   }).join('');
+}
+
+// Samo prikaz na karti — _msrRegZoom otvara UREĐIVANJE (dugme olovke).
+function terenZoomMsr(id) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m || !m.pts.length) return;
+  switchTab('karta');
+  setTimeout(() => map.fitBounds(L.latLngBounds(m.pts.map(p => [p.lat, p.lng])), { padding: [40, 40] }), 80);
+}
+
+// Brisanje ide kroz _dlgConfirm: #msr-del-confirm je potvrda sa karte i na
+// Terenu je bila sakrivena ispod panela, a lista se crtala prije odgovora.
+async function terenObrisiMsr(id) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m) return;
+  if (!await _dlgConfirm('Obrisati mjerenje "' + (m.name || 'Mjerenje') + '"?', { danger: true })) return;
+  _msrRegDelete(id);
+  terenRender(true);
 }
 
 // ── Teren: info o tački na karti (KML/odjeli atributi) ───────────────────────
@@ -26476,7 +26892,7 @@ function switchTab(tab) {
   if (tab === 'admin')    adminLoadUsers();
   if (tab === 'postavke') postavkeLoadEmails();
   if (tab === 'debug')    _adminDebugRender();
-  if (tab === 'teren')   { terenRender(); terenRenderTragovi(); }
+  if (tab === 'teren')   terenRender(true);
   if (tab === 'tragovi') { _tragoviRender(); _tragoviUpdBtn(); }
   _updFabVisibility();
   if (tab==='karta') {
