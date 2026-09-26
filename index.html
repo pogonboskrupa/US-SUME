@@ -2124,22 +2124,78 @@ select:focus { outline:none; border-color:#3b82f6; }
 .gl-preset:hover { transform:scale(1.25); border-color:#60a5fa; }
 .gl-preset.active { border-color:#fff; transform:scale(1.15); }
 
-/* Print modal */
-#print-modal {
-  display:none; position:fixed; inset:0;
-  background:rgba(0,0,0,0.82); z-index:9999;
-  align-items:center; justify-content:center;
+/* === ŠTAMPA — pregled spreman za štampu (v1.8.0) ===
+   Karta dobije TAČNU veličinu papira u CSS px (96 dpi, pa 1 mm na papiru =
+   1 mm u CSS-u) i samo se vizuelno umanji transform-om da stane na ekran.
+   Leaflet zato učita pločice za CIJELI list, a ono što se vidi je tačno ono
+   što se štampa. */
+body.stampa-on #tab-bar, body.stampa-on #action-bar, body.stampa-on #rec-bar,
+body.stampa-on #main > :not(#map) { display:none !important; }
+body.stampa-on #main { background:#2b3342; }
+body.stampa-on #map {
+  position:absolute !important; flex:none !important; transform-origin:0 0;
+  box-shadow:0 8px 34px rgba(0,0,0,0.55); background:#fff;
 }
-#print-modal.show { display:flex; }
-.print-mbox {
-  background:#16213e; border:1px solid #0f3460;
-  border-radius:10px; padding:22px;
-  width:420px; max-width:94vw;
-  max-height:90vh;max-height:90dvh; overflow-y:auto;
+body.stampa-on #map > :not(.leaflet-pane):not(.leaflet-control-container):not(.stp-el),
+body.stampa-on .leaflet-control-container { display:none !important; }
+.stp-el { display:none; position:absolute; z-index:1000; pointer-events:none; font-family:Arial,Helvetica,sans-serif; color:#111; }
+body.stampa-on .stp-el { display:block; }
+body.stampa-on .stp-el.stp-prazno { display:none; }
+#print-naslov {
+  top:5mm; left:50%; transform:translateX(-50%); max-width:70%;
+  background:#fff; border:0.35mm solid #111; padding:2mm 7mm 1.8mm; text-align:center;
+  box-shadow:0 0 0 0.8mm rgba(255,255,255,0.9);
 }
-.print-mbox h3 { font-size:16px; color:#4ade80; margin-bottom:14px; }
-.print-row { display:flex; gap:10px; margin-bottom:10px; align-items:flex-end; }
-.print-row > div { flex:1; }
+#print-naslov .pn-1 { font-size:14pt; font-weight:bold; letter-spacing:0.2pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#print-naslov .pn-2 { font-size:7.5pt; color:#444; margin-top:0.6mm; white-space:nowrap; }
+#print-legend {
+  bottom:5mm; right:5mm; background:#fff; border:0.35mm solid #111;
+  box-shadow:0 0 0 0.8mm rgba(255,255,255,0.9); padding:2.5mm 4mm 2mm; font-size:7.5pt; max-width:45%;
+}
+#print-legend .pl-title { font-weight:bold; font-size:8.5pt; margin-bottom:1.5mm; text-align:center; border-bottom:0.25mm solid #999; padding-bottom:1mm; letter-spacing:0.5pt; }
+#print-legend .pl-row { display:flex; align-items:center; gap:2.5mm; margin:1.2mm 0; white-space:nowrap; }
+#print-legend .pl-sym { width:13mm; height:3.5mm; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+#print-legend .pl-sym svg { width:13mm; height:3.5mm; }
+#print-north { top:5mm; left:5mm; text-align:center; background:rgba(255,255,255,0.9); border-radius:1mm; padding:1mm 1.5mm 0.5mm; }
+#print-north svg { width:6mm; height:8mm; display:block; margin:0 auto; }
+#print-north .pn-lbl { font-weight:bold; font-size:7pt; }
+#print-scalebar { bottom:5mm; left:5mm; background:#fff; border:0.3mm solid #111; padding:1.5mm 2.5mm 1.2mm; font-size:7pt; }
+#print-scalebar .psb-mj { font-weight:bold; font-size:8pt; text-align:center; margin-bottom:1mm; }
+#print-scalebar .psb-bar { display:flex; height:2mm; border:0.3mm solid #111; }
+#print-scalebar .psb-seg { flex:1; height:100%; }
+#print-scalebar .psb-labels { display:flex; justify-content:space-between; margin-top:0.8mm; gap:3mm; white-space:nowrap; }
+/* Kontrole pregleda — van #wrapper-a (fixed stvara vlastiti sloj), iznad njega */
+#stampa-kontrole {
+  display:none; position:fixed; left:0; right:0; bottom:0; z-index:5500;
+  background:rgba(13,21,38,0.97); border-top:1px solid #1e3a5f;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom)); color:#e2e8f0;
+  box-shadow:0 -6px 24px rgba(0,0,0,0.45); max-height:62vh; max-height:62dvh; overflow-y:auto;
+}
+body.stampa-on #stampa-kontrole { display:block; }
+.stk-red { display:flex; align-items:center; gap:6px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; }
+.stk-red::-webkit-scrollbar { display:none; }
+.stk-lbl { font-size:10.5px; color:#64748b; text-transform:uppercase; letter-spacing:0.6px; min-width:52px; flex-shrink:0; }
+.stk-chip {
+  flex-shrink:0; padding:7px 11px; min-height:36px; border-radius:18px; border:1px solid #1e3a5f;
+  background:#14233c; color:#cbd5e1; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.stk-chip.sel { background:#1d4ed8; border-color:#3b82f6; color:#fff; }
+.stk-chip.prek { display:inline-flex; align-items:center; gap:6px; }
+.stk-chip.prek input { width:16px; height:16px; accent-color:#3b82f6; margin:0; }
+#stk-uredi { border-top:1px solid #1e293b; padding-top:8px; margin-bottom:8px; }
+#stk-uredi .stk-polja { display:flex; gap:8px; margin-bottom:8px; }
+#stk-uredi .stk-polja label { flex:1; font-size:11px; color:#94a3b8; }
+#stk-uredi input[type=text], #stk-uredi input[type=number] {
+  width:100%; margin-top:3px; padding:9px 10px; background:#0f172a; border:1px solid #334155;
+  border-radius:8px; color:#e2e8f0; font-size:16px; box-sizing:border-box;
+}
+.stk-leg { display:flex; flex-wrap:wrap; gap:6px; }
+.stk-leg label { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #1e3a5f; border-radius:16px; font-size:12px; color:#cbd5e1; background:#0f172a; }
+.stk-leg label input { accent-color:#3b82f6; margin:0; }
+.stk-akcije { display:flex; gap:8px; }
+.stk-akcije button { flex:1; min-height:46px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; }
+.stk-zatvori { background:#1e293b; border:1px solid #334155; color:#cbd5e1; }
+.stk-stampaj { flex:2 !important; background:#16a34a; border:1px solid #22c55e; color:#fff; }
 
 /* === UPRAVLJANJE PROJEKTIMA === */
 #pm-modal {
@@ -2806,80 +2862,21 @@ select:focus { outline:none; border-color:#3b82f6; }
 }
 #doz-save-box h3 { margin:0 0 14px; font-size:14px; }
 
-/* === PRINT STYLES === */
+/* === PRINT STYLES (v1.8.0) — štampa se isključivo pregled (body.stampa-on) === */
 @media print {
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  body { background: #fff !important; overflow: visible !important; }
-  #wrapper { display:block !important; height:auto !important; }
-  #tab-bar, #panel, #proj-panel, #mjtrg-panel, #rec-banner, #draw-banner, #modal, #print-modal,
-  #print-toolbar, #map-center-dot, #nv-badge, #map-toolbar, #dem-legend, .leaflet-control-container,
-  #dlg-overlay, #dlg-sheet, #action-bar, #rec-bar, #trag-quick-meta, #map-ctrl-bar, #scale-menu { display:none !important; }
-  #main { display:block !important; overflow:visible !important; }
-  #map {
-    width: var(--print-map-w, 297mm) !important;
-    height: var(--print-map-h, 210mm) !important;
-    position: relative !important;
-    page-break-inside: avoid;
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  html, body { height:auto !important; overflow:visible !important; background:#fff !important; }
+  body > :not(#wrapper), #stampa-kontrole { display:none !important; }
+  body.stampa-on #wrapper > :not(#main), body.stampa-on #main > :not(#map) { display:none !important; }
+  body.stampa-on #wrapper, body.stampa-on #main {
+    position:static !important; display:block !important; overflow:visible !important;
+    height:auto !important; background:#fff !important;
   }
-  #print-header {
-    display:block !important;
-    font-family:Arial,sans-serif;
-    padding:6mm 10mm 4mm;
-    border-bottom: 1.5px solid #000;
-    margin-bottom:3mm;
+  body.stampa-on #map {
+    position:relative !important; left:0 !important; top:0 !important; transform:none !important;
+    box-shadow:none !important; margin:0 !important; page-break-inside:avoid; break-inside:avoid;
   }
-  #print-footer {
-    display:flex !important;
-    font-family:Arial,sans-serif;
-    font-size:8pt;
-    padding:3mm 10mm;
-    border-top:1px solid #aaa;
-    color:#555;
-    justify-content:space-between;
-  }
-  #print-legend {
-    display:block !important;
-    position:absolute; bottom:8mm; right:8mm;
-    background:rgba(255,255,255,0.96);
-    /* Bijeli outline + tanak tamni prsten oko njega — legenda ostaje čitljiva bez obzira
-       na boju karte ispod (tamna satelitska/hillshade podloga, šuma, itd.), isti princip
-       kao halo oko markera na karti (vidi _pickJunctionOnVlaka). */
-    border:2.5px solid #fff;
-    box-shadow:0 0 0 1px rgba(0,0,0,0.55), 0 2px 10px rgba(0,0,0,0.4);
-    padding:4mm 5mm 3mm;
-    font-family:Arial,sans-serif; font-size:8pt; color:#222;
-    z-index:9000;
-  }
-  #print-legend .pl-title {
-    font-weight:bold; font-size:9pt; margin-bottom:2mm;
-    text-align:center; border-bottom:0.5px solid #999; padding-bottom:1.5mm;
-  }
-  #print-legend .pl-row {
-    display:flex; align-items:center; gap:3mm; margin:1.5mm 0;
-    white-space:nowrap;
-  }
-  #print-legend .pl-sym { width:18mm; height:4mm; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  #print-north {
-    display:flex !important; flex-direction:column; align-items:center;
-    position:absolute; top:6mm; left:6mm; z-index:9000;
-    background:rgba(255,255,255,0.85); border-radius:2px; padding:1mm 1.5mm;
-  }
-  #print-north .pn-lbl { font-family:Arial,sans-serif; font-weight:bold; font-size:7pt; color:#000; margin-top:0.3mm; }
-  #print-scalebar {
-    display:block !important;
-    position:absolute; bottom:8mm; left:8mm; z-index:9000;
-    background:rgba(255,255,255,0.9); border:0.5px solid #000;
-    padding:2mm 3mm; font-family:Arial,sans-serif; font-size:7pt; color:#000;
-  }
-  #print-scalebar .psb-bar { display:flex; height:2.2mm; border:0.4px solid #000; }
-  #print-scalebar .psb-seg { flex:1; height:100%; }
-  #print-scalebar .psb-labels { display:flex; justify-content:space-between; margin-top:1mm; gap:3mm; white-space:nowrap; }
 }
-#print-header { display:none; }
-#print-footer { display:none; }
-#print-legend { display:none; }
-#print-north { display:none; }
-#print-scalebar { display:none; }
 
 /* ── Custom dialog sheet — iOS style ─────────────────────── */
 #dlg-overlay {
@@ -5080,15 +5077,16 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
     <div id="map">
       <!-- DEM legenda (N.V. + Strane svijeta) -->
       <div id="dem-legend" style="display:none;"></div>
-      <!-- Print legenda — sloj PREKO karte (vidljivo samo pri štampanju, @media print) -->
-      <div id="print-legend" style="display:none;"></div>
-      <!-- Print sjever/razmjerna traka — Leaflet karta se ne rotira, sjever je uvijek gore -->
-      <div id="print-north" style="display:none;">
-        <svg width="7mm" height="9mm" viewBox="0 0 20 26"><polygon points="10,0 17,26 10,20 3,26" fill="#000"/></svg>
+      <!-- Štampa (v1.8.0) — elementi lista, vidljivi samo u pregledu/štampi -->
+      <div id="print-naslov" class="stp-el stp-prazno"></div>
+      <div id="print-legend" class="stp-el stp-prazno"></div>
+      <div id="print-north" class="stp-el">
+        <svg viewBox="0 0 20 26"><polygon points="10,0 17,26 10,20 3,26" fill="#111"/></svg>
         <div class="pn-lbl">S</div>
       </div>
-      <div id="print-scalebar" style="display:none;">
-        <div class="psb-bar"><div class="psb-seg" style="background:#000;"></div><div class="psb-seg" style="background:#fff;"></div></div>
+      <div id="print-scalebar" class="stp-el">
+        <div class="psb-mj" id="psb-mj"></div>
+        <div class="psb-bar" id="psb-bar"><div class="psb-seg" style="background:#111;"></div><div class="psb-seg" style="background:#fff;"></div></div>
         <div class="psb-labels"><span>0</span><span id="psb-mid"></span><span id="psb-full"></span></div>
       </div>
 
@@ -5294,130 +5292,8 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
   </div>
 </div>
 
-<!-- PRINT HEADER (visible only when printing) -->
-<div id="print-header">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-    <div>
-      <div style="font-size:16pt;font-weight:bold;" id="ph-odjel">Traktorske vlake</div>
-      <div style="font-size:10pt;color:#444;" id="ph-sumarija"></div>
-    </div>
-    <div style="text-align:right;font-size:9pt;color:#555;">
-      <div id="ph-datum"></div>
-      <div id="ph-scale-lbl"></div>
-    </div>
-  </div>
-</div>
-<div id="print-footer">
-  <span id="pf-left"></span>
-  <span id="pf-right"></span>
-</div>
-
-<!-- PRINT MODAL -->
-<div id="print-modal" onclick="if(event.target===this)closePrintModal()">
-  <div class="print-mbox">
-    <h3>🖨 Štampanje Karte</h3>
-
-    <!-- Mod izbora -->
-    <div style="display:flex;gap:6px;margin-bottom:14px;">
-      <button class="scale-btn sel" id="pm-gj"   onclick="setPrintMode('gj')"   style="flex:1;"><svg class="ic"><use href="#ic-folder"/></svg> Po G.J. / Odjelu</button>
-      <button class="scale-btn"     id="pm-view" onclick="setPrintMode('view')" style="flex:1;"><svg class="ic"><use href="#ic-karta"/></svg> Trenutni prikaz</button>
-    </div>
-
-    <!-- MOD 1: G.J. / Odjel -->
-    <div id="print-gj-section">
-      <div class="lbl" style="margin-bottom:5px;">Gospodarska Jedinica</div>
-      <select id="print-gj" onchange="onPrintGJChange()"
-        style="width:100%;padding:8px 10px;background:#0f172a;border:1px solid #374151;
-               border-radius:5px;color:#eee;font-size:13px;margin-bottom:10px;">
-        <option value="">— Odaberi G.J. —</option>
-      </select>
-
-      <div class="lbl" style="margin-bottom:5px;">Odjel / Odsjek</div>
-      <select id="print-odjel" onchange="onPrintOdjelChange()"
-        style="width:100%;padding:8px 10px;background:#0f172a;border:1px solid #374151;
-               border-radius:5px;color:#eee;font-size:13px;">
-        <option value="">— Cijela G.J. —</option>
-      </select>
-      <div id="print-odjel-info" style="font-size:11px;color:#64748b;margin-top:4px;min-height:16px;"></div>
-    </div>
-
-    <!-- MOD 2: Trenutni prikaz -->
-    <div id="print-view-section" style="display:none;">
-      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:10px 12px;font-size:12px;color:#94a3b8;margin-bottom:4px;">
-        🗺 Štampa tačno ono što je trenutno vidljivo na karti.<br>
-        Postavi kadriranje na mapi, pa odaberi razmjeru i format.
-      </div>
-      <div id="print-view-info" style="font-size:11px;color:#64748b;margin-top:4px;min-height:16px;"></div>
-    </div>
-
-    <!-- Format papira -->
-    <div style="margin:12px 0 10px;">
-      <div class="lbl" style="margin-bottom:6px;">Format papira</div>
-      <div style="display:flex;gap:6px;">
-        <button class="scale-btn sel" id="pfmt-a4l" onclick="setPaperFmt('A4L')">A4 Landscape</button>
-        <button class="scale-btn"     id="pfmt-a4p" onclick="setPaperFmt('A4P')">A4 Portrait</button>
-        <button class="scale-btn"     id="pfmt-a3l" onclick="setPaperFmt('A3L')">A3 Landscape</button>
-      </div>
-    </div>
-
-    <!-- Razmjera -->
-    <div style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <div class="lbl" style="margin:0;">Razmjera karte</div>
-        <span id="pm-gps-acc" style="font-size:11px;color:#94a3b8;" title="Trenutna tačnost GPS pozicije"></span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="scale-btn"     id="pscl-5k"   onclick="setScale(5000)">1:5 000</button>
-        <button class="scale-btn sel" id="pscl-10k"  onclick="setScale(10000)">1:10 000</button>
-        <button class="scale-btn"     id="pscl-25k"  onclick="setScale(25000)">1:25 000</button>
-        <button class="scale-btn"     id="pscl-50k"  onclick="setScale(50000)">1:50 000</button>
-        <button class="scale-btn"     id="pscl-cust" onclick="setScale('custom')">Prilagođena</button>
-      </div>
-      <div id="custom-scale-row" style="display:none;margin-top:8px;align-items:center;gap:8px;">
-        <span style="font-size:13px;color:#94a3b8;">1 :</span>
-        <input type="number" id="custom-scale-val" value="10000" min="500" max="500000" step="500"
-          style="width:110px;padding:7px 10px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:14px;"
-          oninput="updatePrintInfo()">
-        <button class="scale-btn" onclick="applyCustomScale()" style="padding:7px 12px;"><svg class="ic"><use href="#ic-potvrdi"/></svg> Primijeni</button>
-      </div>
-    </div>
-
-    <div id="print-info" style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Učitavanje...</div>
-
-    <div class="print-preview-bar">
-      <span>📐 Dimenzije:</span>
-      <b id="pi-dims">—</b>
-      <span style="margin-left:auto;">Površina:</span>
-      <b id="pi-area">—</b>
-    </div>
-
-    <!-- Legenda -->
-    <div style="margin:12px 0 0;">
-      <div class="lbl" style="margin-bottom:6px;">Legenda na karti</div>
-      <div id="print-legend-opts" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;">
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="vlaka" checked> Traktorska vlaka</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="krak" checked> Krak</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="lager" checked> Lager</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="kamput"> Kamionski put</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_odjela"> Granica odjela</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_odsjeka"> Granica odsjeka</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="potok"> Potok</label>
-        <label style="display:flex;align-items:center;gap:4px;color:#cbd5e1;cursor:pointer;"><input type="checkbox" class="pl-chk" value="gr_privat"> Granica sa privatnim posjedom</label>
-      </div>
-      <div style="margin-top:8px;display:flex;gap:6px;align-items:center;">
-        <input type="text" id="print-legend-custom" placeholder="Dodaj stavku…"
-          style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:12px;">
-        <button class="scale-btn" onclick="_plAddCustom()" style="padding:6px 10px;font-size:12px;">＋</button>
-      </div>
-      <div id="print-legend-custom-list" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
-    </div>
-
-    <div class="mbtns" style="margin-top:12px;">
-      <button class="btn g" onclick="doPrint()"><svg class="ic"><use href="#ic-stampaj"/></svg> ŠTAMPAJ</button>
-      <button class="btn gr" onclick="closePrintModal()">Zatvori</button>
-    </div>
-  </div>
-</div>
+<!-- ŠTAMPA — kontrole pregleda (v1.8.0); sadržaj crta _stpKontroleRender() -->
+<div id="stampa-kontrole"></div>
 
 <!-- MODAL -->
 <div id="modal" onclick="if(event.target===this)closeM()">
@@ -5451,7 +5327,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.9';
+const APP_VER = 'v1.8.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12669,20 +12545,28 @@ async function fetchElev() {
 // signala) treba moći preuzeti UNAPRIJED. Namjerno EKSPLICITNO, na klik — ne
 // automatski uz učitanu SQLite kartu: karta cijele regije zna pokriti stotine
 // pločica, a tiho trošenje desetina MB mobilnih podataka nije prihvatljivo.
-// Preuzima se samo _NV_DEM_Z (to je jedini zum koji N.V. čita kao osnovni).
-const _NV_DEM_KB = 90;            // prosječna Terrarium z12 pločica (izmjereno ~60–130 KB)
+// Dva paketa (v1.8.0): samo N.V. čita osnovni _NV_DEM_Z; Nagib, Konture,
+// Hipsometrija i Ekspozicija traže pločicu na ZUMU KARTE, najviše z14
+// (maxNativeZoom:14 u _OVL), pa im offline trebaju z12–z14 — na terenskom
+// zumu (15–17) crtaju iz z14, na preglednom iz z12/z13.
+const _NV_DEM_KB = 90;            // prosječna Terrarium pločica (izmjereno ~60–130 KB)
 const _NV_DEM_MAX_PLOCICA = 600;  // ~54 MB — iznad toga neka korisnik suzi područje
+const _NV_DEM_PAKETI = [
+  { id: 'nv',  ime: 'Samo nadmorska visina (N.V.)', zumovi: [12] },
+  { id: 'sve', ime: 'N.V. + Nagib + Konture',       zumovi: [12, 13, 14] },
+];
 var _nvDemDlUToku = false;
 
-function _nvDemPlociceZa(b) {
+function _nvDemPlociceZa(b, zumovi) {
   if (!b) return [];
-  const z = _NV_DEM_Z;
   const s = Math.max(-85, b.getSouth()), n = Math.min(85, b.getNorth());
-  const x0 = Math.floor(_termLon2x(b.getWest(), z)), x1 = Math.floor(_termLon2x(b.getEast(), z));
-  const y0 = Math.floor(_termLat2y(n, z)), y1 = Math.floor(_termLat2y(s, z));
   const out = [];
-  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
-    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) out.push({ z, x, y });
+  for (const z of (zumovi || [_NV_DEM_Z])) {
+    const x0 = Math.floor(_termLon2x(b.getWest(), z)), x1 = Math.floor(_termLon2x(b.getEast(), z));
+    const y0 = Math.floor(_termLat2y(n, z)), y1 = Math.floor(_termLat2y(s, z));
+    for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
+      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) out.push({ z, x, y });
+  }
   return out;
 }
 
@@ -12746,28 +12630,39 @@ function _nvDemPodrucja() {
   return opc.map(o => ({ ...o, plocice: _nvDemPlociceZa(o.b) }));
 }
 
+function _nvDemOpisTxt(n) {
+  return n > _NV_DEM_MAX_PLOCICA ? 'Preveliko područje (' + _nvDemVelicinaTxt(n) + ')' : _nvDemVelicinaTxt(n);
+}
+
 async function nvDemPreuzmiUi() {
-  if (_nvDemDlUToku) { showToast('⏳ Preuzimanje visina je već u toku'); return; }
-  if (navigator.onLine === false) { showToast('Za preuzimanje visina treba internet'); return; }
-  const opc = _nvDemPodrucja();
-  if (!opc.length) { showToast('Nema područja za preuzimanje'); return; }
-  const i = await _dlgActions('⛰ Preuzmi visine za offline', opc.map(o => ({
-    label: _escHtml(o.ime) + '<br><span style="font-size:11px;opacity:.7;">' +
-      (o.plocice.length > _NV_DEM_MAX_PLOCICA ? 'Preveliko područje (' + _nvDemVelicinaTxt(o.plocice.length) + ')' : _nvDemVelicinaTxt(o.plocice.length)) + '</span>'
+  if (_nvDemDlUToku) { showToast('⏳ Preuzimanje terena je već u toku'); return; }
+  if (navigator.onLine === false) { showToast('Za preuzimanje terena treba internet'); return; }
+  const podr = _nvDemPodrucja();
+  if (!podr.length) { showToast('Nema područja za preuzimanje'); return; }
+  const i = await _dlgActions('⛰ Preuzmi teren za offline — područje', podr.map(o => ({
+    label: _escHtml(o.ime) + '<br><span style="font-size:11px;opacity:.7;">' + _nvDemOpisTxt(o.plocice.length) + ' (samo N.V.)</span>'
   })));
-  if (i == null || !opc[i]) return;
-  const o = opc[i];
+  if (i == null || !podr[i]) return;
+  // Drugi korak: šta preuzeti — uz svaki paket stvarna veličina za IZABRANO područje.
+  const paketi = _NV_DEM_PAKETI.map(pk => ({ ...pk, plocice: _nvDemPlociceZa(podr[i].b, pk.zumovi) }));
+  const j = await _dlgActions('⛰ Šta preuzeti?', paketi.map(pk => ({
+    label: _escHtml(pk.ime) + '<br><span style="font-size:11px;opacity:.7;">' + _nvDemOpisTxt(pk.plocice.length) + '</span>'
+  })));
+  if (j == null || !paketi[j]) return;
+  const o = { ime: podr[i].ime, plocice: paketi[j].plocice };
   if (o.plocice.length > _NV_DEM_MAX_PLOCICA) {
     showToast('⚠ Područje je preveliko — izaberi odjel ili manji prikaz karte');
     return;
   }
   _nvDemDlUToku = true;
-  showToast('⏳ Preuzimam visine: 0 / ' + o.plocice.length);
+  showToast('⏳ Preuzimam teren: 0 / ' + o.plocice.length);
   try {
-    const r = await _nvDemPreuzmi(o.plocice, (k, n) => { if (k % 5 === 0 || k === n) showToast('⏳ Preuzimam visine: ' + k + ' / ' + n); });
-    showToast(r.kvota ? '⚠ Nema više prostora — preuzeto ' + r.novih + ' pločica visina'
-      : r.gresaka ? '⚠ Visine: ' + (r.novih + r.vec) + ' / ' + r.ukupno + ' spremno, ' + r.gresaka + ' nije uspjelo — pokreni ponovo da dopuniš'
-      : '✅ Visine spremne za offline (' + r.ukupno + ' pločica' + (r.vec ? ', ' + r.vec + ' već postojalo' : '') + ')');
+    const r = await _nvDemPreuzmi(o.plocice, (k, n) => { if (k % 5 === 0 || k === n) showToast('⏳ Preuzimam teren: ' + k + ' / ' + n); });
+    showToast(r.kvota ? '⚠ Nema više prostora — preuzeto ' + r.novih + ' pločica terena'
+      : r.gresaka ? '⚠ Teren: ' + (r.novih + r.vec) + ' / ' + r.ukupno + ' spremno, ' + r.gresaka + ' nije uspjelo — pokreni ponovo da dopuniš'
+      : '✅ Teren spreman za offline (' + r.ukupno + ' pločica' + (r.vec ? ', ' + r.vec + ' već postojalo' : '') + ')');
+    // DEM slojevi (Nagib/Konture...) ne znaju da su pločice stigle — osvježi ih.
+    try { Object.keys(_ovlState).forEach(k => { if (_ovlState[k] && _OVL[k]?.redraw) _OVL[k].redraw(); }); } catch (e) {}
     try { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 50); } catch (e) {}
     if (typeof _lsRenderCache === 'function') _lsRenderCache();
     if (document.getElementById('cachemgr-modal')?.style.display === 'flex') _cacheMgrRender(true);
@@ -14546,7 +14441,7 @@ async function _lsRenderCache() {
       <button onclick="showCacheMgr()" style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;color:#7dd3fc;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-postavke"/></svg> Upravljaj</button>
     </div>
     <div style="font-size:11px;color:#64748b;margin-top:4px;">Sve što pogledaš online automatski se čuva za offline — po karti posebno.</div>
-    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin-top:8px;padding:8px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi nadmorske visine za offline</button>`;
+    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin-top:8px;padding:8px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi teren za offline (N.V., nagib, konture)</button>`;
   _lsFillCardBadges();
 }
 
@@ -14653,7 +14548,7 @@ async function _cacheMgrRender(rescan) {
   try { const est = await navigator.storage.estimate(); estTxt = ` · aplikacija ukupno ≈ ${Math.round((est.usage || 0) / 1048576)} MB`; } catch(e) {}
   body.innerHTML = `
     ${rows}
-    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin:2px 0 8px;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi nadmorske visine za područje</button>
+    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin:2px 0 8px;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi teren za područje (N.V., nagib, konture)</button>
     <div style="font-size:11px;color:#64748b;margin:4px 2px 10px;">Ukupno pločica: <b style="color:#94a3b8">${totCount.toLocaleString('bs')}</b> · ≈ ${_cmgrFmtMb(totBytes)}${estTxt}</div>
     <div style="display:flex;gap:7px;">
       <button onclick="closeCacheMgr();openLoadMapScreen()" style="flex:1;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-karta"/></svg> Offline karte (fajlovi)</button>
@@ -27817,16 +27712,7 @@ function escHtml(s) {
 // =====================================================================
 // === PRINT / ŠTAMPANJE ===
 // =====================================================================
-let printScale = 10000;
-let paperFmt = 'A4L';
-let printMode  = 'gj'; // 'gj' | 'view'
-
-// Paper dimensions in mm (printable area, minus ~10mm margins)
-const PAPER = {
-  A4L: { w: 277, h: 190, label: 'A4 Landscape' },
-  A4P: { w: 190, h: 277, label: 'A4 Portrait' },
-  A3L: { w: 400, h: 277, label: 'A3 Landscape' }
-};
+// Stanje i logika štampe su niže, iza _getGJGroups (v1.8.0).
 
 // Fuzzy match naziv odjela u graniceOdjeli (KML bounds)
 function findGraniceOdjel(naziv) {
@@ -27910,206 +27796,6 @@ function _getGJGroups() {
   return groups;
 }
 
-function setPrintMode(mode) {
-  printMode = mode;
-  document.getElementById('pm-gj').classList.toggle('sel', mode === 'gj');
-  document.getElementById('pm-view').classList.toggle('sel', mode === 'view');
-  document.getElementById('print-gj-section').style.display  = mode === 'gj'   ? '' : 'none';
-  document.getElementById('print-view-section').style.display = mode === 'view' ? '' : 'none';
-  updatePrintInfo();
-}
-
-function showPrintModal() {
-  // Popuni G.J. dropdown iz učitanih slojeva
-  const gjSel = document.getElementById('print-gj');
-  const gjGroups = _getGJGroups();
-  gjSel.innerHTML = '<option value="">— Odaberi G.J. —</option>';
-  Object.keys(gjGroups).sort().forEach(folder => {
-    const opt = document.createElement('option');
-    opt.value = folder;
-    opt.textContent = folder;
-    gjSel.appendChild(opt);
-  });
-
-  // Resetuj odjel dropdown
-  document.getElementById('print-odjel').innerHTML = '<option value="">— Cijela G.J. —</option>';
-  document.getElementById('print-odjel-info').textContent = '';
-
-  setPrintMode(printMode);
-  document.getElementById('print-modal').classList.add('show');
-  updatePrintInfo();
-}
-
-function onPrintGJChange() {
-  const folder = document.getElementById('print-gj').value;
-  const odjelSel = document.getElementById('print-odjel');
-  odjelSel.innerHTML = '<option value="">— Cijela G.J. —</option>';
-  document.getElementById('print-odjel-info').textContent = '';
-
-  if (!folder) { updatePrintInfo(); return; }
-
-  // Filtriraj graniceOdjeli koji leže unutar G.J. bounds-a
-  const gjGroups = _getGJGroups();
-  const gjBounds = gjGroups[folder];
-  const odjeli = gjBounds
-    ? graniceOdjeli.filter(o => { try { return gjBounds.contains(o.bounds.getCenter()); } catch { return false; } })
-    : graniceOdjeli;
-
-  odjeli.forEach(o => {
-    const opt = document.createElement('option');
-    opt.value = o.name;
-    opt.textContent = o.name;
-    odjelSel.appendChild(opt);
-  });
-
-  updatePrintInfo();
-}
-
-function onPrintOdjelChange() {
-  const naziv = document.getElementById('print-odjel').value;
-  const info  = document.getElementById('print-odjel-info');
-  if (!naziv) { info.textContent = ''; updatePrintInfo(); return; }
-  const bounds = getOdjelBounds(naziv);
-  if (!bounds || !bounds.isValid()) { info.textContent = ''; updatePrintInfo(); return; }
-  const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
-  const wM = Math.abs(ne.lng - sw.lng) * 111320 * Math.cos(((ne.lat+sw.lat)/2) * Math.PI/180);
-  const hM = Math.abs(ne.lat - sw.lat) * 111320;
-  const ha = wM * hM / 10000;
-  info.textContent = `≈ ${Math.round(wM)} m × ${Math.round(hM)} m · ${fmtHa(ha)}`;
-  updatePrintInfo();
-}
-function closePrintModal() {
-  document.getElementById('print-modal').classList.remove('show');
-}
-
-function setPaperFmt(fmt) {
-  paperFmt = fmt;
-  document.querySelectorAll('[id^="pfmt-"]').forEach(b => b.classList.remove('sel'));
-  document.getElementById('pfmt-' + fmt.toLowerCase()).classList.add('sel');
-  updatePrintInfo();
-}
-
-function setScale(s) {
-  document.querySelectorAll('[id^="pscl-"]').forEach(b => b.classList.remove('sel'));
-  const custRow = document.getElementById('custom-scale-row');
-  if (s === 'custom') {
-    custRow.style.display = 'flex';
-    document.getElementById('pscl-cust').classList.add('sel');
-    return;
-  }
-  custRow.style.display = 'none';
-  printScale = s;
-  const map2id = {5000:'5k', 10000:'10k', 25000:'25k', 50000:'50k'};
-  if (map2id[s]) document.getElementById('pscl-' + map2id[s]).classList.add('sel');
-  updatePrintInfo();
-}
-
-function applyCustomScale() {
-  const v = parseInt(document.getElementById('custom-scale-val').value);
-  if (isNaN(v) || v < 500 || v > 500000) { showToast('⚠ Unesite razmjeru između 500 i 500 000'); return; }
-  printScale = v;
-  updatePrintInfo();
-}
-
-function updatePrintInfo() {
-  // GPS preciznost — kontekst pri štampanju (npr. ako se štampa trenutni
-  // prikaz sa live pozicijom, korisnik odmah vidi koliko je ta tačka precizna).
-  const accEl = document.getElementById('pm-gps-acc');
-  if (accEl) {
-    const ac = lastP?.ac;
-    if (ac == null) {
-      accEl.textContent = '';
-    } else {
-      const col = ac <= 5 ? '#4ade80' : ac <= 10 ? '#eab308' : ac <= 15 ? '#fb923c' : '#f87171';
-      accEl.style.color = col;
-      accEl.textContent = `📡 ±${Math.round(ac)} m`;
-    }
-  }
-
-  const p = PAPER[paperFmt];
-  const realW_m  = (p.w / 1000) * printScale;
-  const realH_m  = (p.h / 1000) * printScale;
-  const realW_km = (realW_m / 1000).toFixed(2);
-  const realH_km = (realH_m / 1000).toFixed(2);
-  const areaHa   = realW_m * realH_m / 10000;
-
-  // Prikaz info za "trenutni prikaz" mod
-  if (printMode === 'view') {
-    const b = map.getBounds();
-    const sw = b.getSouthWest(), ne = b.getNorthEast();
-    const lat = (sw.lat + ne.lat) / 2;
-    const vW = Math.abs(ne.lng - sw.lng) * 111320 * Math.cos(lat * Math.PI / 180);
-    const vH = Math.abs(ne.lat - sw.lat) * 111320;
-    document.getElementById('print-view-info').textContent =
-      `Vidljivo: ≈ ${Math.round(vW)} m × ${Math.round(vH)} m`;
-  }
-
-  const gjNm    = document.getElementById('print-gj')?.value    || '';
-  const odjelNm = document.getElementById('print-odjel')?.value || '';
-  const lokacija = odjelNm ? `<br>Odjel: <b>${odjelNm}</b>` : gjNm ? `<br>G.J.: <b>${gjNm}</b>` : '';
-
-  document.getElementById('print-info').innerHTML =
-    `Razmjera: <b>1 : ${printScale.toLocaleString('bs')}</b> · Format: <b>${p.label}</b> (${p.w} × ${p.h} mm)<br>` +
-    `Isječak: <b>${realW_km} km × ${realH_km} km</b> · <b>≈ ${fmtHa(areaHa)}</b>${lokacija}`;
-  document.getElementById('pi-dims').textContent = `${p.w} × ${p.h} mm`;
-  document.getElementById('pi-area').textContent = `≈ ${fmtHa(areaHa)}`;
-}
-
-// ─── PRINT LEGEND ─────────────────────────────────────────────
-let _plCustomItems = [];
-
-const _PL_SYMBOLS = {
-  vlaka:     { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="2.5"/></svg>`, label: 'TRAKTORSKA VLAKA' },
-  krak:      { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1.5"/></svg>`, label: 'KRAK' },
-  lager:     { svg: `<svg width="50" height="10"><rect x="5" y="1" width="40" height="8" fill="none" stroke="#d00" stroke-width="1.5"/><line x1="5" y1="5" x2="45" y2="5" stroke="#d00" stroke-width="1"/><line x1="15" y1="1" x2="15" y2="9" stroke="#d00" stroke-width="0.8"/><line x1="25" y1="1" x2="25" y2="9" stroke="#d00" stroke-width="0.8"/><line x1="35" y1="1" x2="35" y2="9" stroke="#d00" stroke-width="0.8"/></svg>`, label: 'LAGER' },
-  kamput:    { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#555" stroke-width="3"/></svg>`, label: 'KAMIONSKI PUT' },
-  gr_odjela: { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/></svg>`, label: 'GRANICA ODJELA' },
-  gr_odsjeka:{ svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#000" stroke-width="1" stroke-dasharray="2,3"/></svg>`, label: 'GRANICA ODSJEKA' },
-  potok:     { svg: `<svg width="50" height="10"><path d="M0 5 Q8 1 16 5 Q24 9 32 5 Q40 1 50 5" fill="none" stroke="#2563eb" stroke-width="1.5"/></svg>`, label: 'POTOK' },
-  gr_privat: { svg: `<svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#a020a0" stroke-width="1.5" stroke-dasharray="8,2,2,2"/></svg>`, label: 'GRANICA SA PRIVATNIM POSJEDOM' },
-};
-
-function _plAddCustom() {
-  const inp = document.getElementById('print-legend-custom');
-  const txt = inp.value.trim();
-  if (!txt) return;
-  _plCustomItems.push(txt);
-  inp.value = '';
-  _plRenderCustom();
-}
-
-function _plRemoveCustom(i) {
-  _plCustomItems.splice(i, 1);
-  _plRenderCustom();
-}
-
-function _plRenderCustom() {
-  const el = document.getElementById('print-legend-custom-list');
-  el.innerHTML = _plCustomItems.map((t, i) =>
-    `<span style="display:inline-flex;align-items:center;gap:4px;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:3px 8px;font-size:11px;color:#cbd5e1;">
-      ${t} <span onclick="_plRemoveCustom(${i})" style="cursor:pointer;color:#f87171;font-weight:bold;">✕</span>
-    </span>`
-  ).join('');
-}
-
-function _buildPrintLegend() {
-  const el = document.getElementById('print-legend');
-  const checked = [...document.querySelectorAll('.pl-chk:checked')].map(cb => cb.value);
-  const hasItems = checked.length > 0 || _plCustomItems.length > 0;
-  if (!hasItems) { el.innerHTML = ''; return; }
-
-  let html = '<div class="pl-title">LEGENDA</div>';
-  for (const key of checked) {
-    const s = _PL_SYMBOLS[key];
-    if (!s) continue;
-    html += `<div class="pl-row"><div class="pl-sym">${s.svg}</div><div>${s.label}</div></div>`;
-  }
-  for (const txt of _plCustomItems) {
-    html += `<div class="pl-row"><div class="pl-sym"><svg width="50" height="10"><line x1="0" y1="5" x2="50" y2="5" stroke="#666" stroke-width="1.5" stroke-dasharray="4,2"/></svg></div><div>${txt.toUpperCase()}</div></div>`;
-  }
-  el.innerHTML = html;
-}
-
 // ─── PRINT SCALE BAR ──────────────────────────────────────────
 // Zaokruži na "lijep" broj (1/2/5 × 10^n) tako da traka na papiru bude čitljiva.
 function _niceScaleLen(maxM) {
@@ -28122,103 +27808,407 @@ function _niceScaleLen(maxM) {
 function _fmtScaleLen(m) {
   return m >= 1000 ? ((m / 1000).toFixed(m % 1000 === 0 ? 0 : 1) + ' km') : (Math.round(m) + ' m');
 }
-function _buildScaleBar() {
-  const targetMM = 40; // željena širina trake na papiru
-  const maxRealM = targetMM * printScale / 1000;
-  const niceM = _niceScaleLen(maxRealM);
-  const barMM = niceM * 1000 / printScale;
-  document.getElementById('print-scalebar').querySelector('.psb-bar').style.width = barMM + 'mm';
-  document.getElementById('psb-mid').textContent = _fmtScaleLen(niceM / 2);
-  document.getElementById('psb-full').textContent = _fmtScaleLen(niceM);
+// ─── ŠTAMPA — pregled spreman za štampu (v1.8.0) ───────────────────────────
+// Stari tok (modal → window.print()) u APK-u NIJE RADIO UOPŠTE: Android WebView
+// window.print() tiho ignoriše. Uz to se karta na veličinu papira razvlačila tek
+// u trenutku štampe — Leaflet za to nije znao, pa su pločice bile učitane samo
+// za ekran i ostatak lista je ostajao prazan.
+// Sada karta u pregledu DOBIJE tačnu veličinu lista (CSS px na 96 dpi, pa je
+// mm u CSS-u mm na papiru) i samo se vizuelno umanji da stane na ekran — ono
+// što se vidi je tačno ono što se štampa. Mjerilo je TAČNO jer se zum računa
+// razlomljeno (zoomSnap 0), ne zaokružuje na cijeli nivo kao ranije.
+// Štampa: APK → AndroidPrint (PrintManager: štampač ili "Sačuvaj kao PDF"),
+// webapp → window.print().
+const _STP_FORMATI = {
+  A4L: { w: 281, h: 194, papir: [297, 210], ime: 'A4 ↔' },
+  A4P: { w: 194, h: 281, papir: [210, 297], ime: 'A4 ↕' },
+  A3L: { w: 404, h: 281, papir: [420, 297], ime: 'A3 ↔' },
+  A3P: { w: 281, h: 404, papir: [297, 420], ime: 'A3 ↕' },
+};
+const _STP_MARGINA_MM = 8;
+const _STP_PX_MM = 96 / 25.4;
+const _STP_M_PO_PX_PAPIRA = 0.0254 / 96;           // 1 CSS px na papiru, u metrima
+const _STP_MJERILA = [500, 1000, 2000, 2500, 5000, 7500, 10000, 12500, 15000, 20000, 25000, 50000, 100000, 200000];
+const _STP_BRZA = [2500, 5000, 10000, 25000, 50000];
+const _STP_KEY = 'tvlake_stampa_v1';
+var _stp = null;   // stanje otvorenog pregleda; null = zatvoren
+
+// Ručno, ne toLocaleString('bs'): WebView bez bs lokala tiho pada na en-US
+// ("10,000"), a na karti se mjerilo piše "1 : 10 000".
+function _stpBroj(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0'); }
+function _stpDatum(d) {
+  const z = x => String(x).padStart(2, '0');
+  return z(d.getDate()) + '.' + z(d.getMonth() + 1) + '.' + d.getFullYear() + '.';
 }
 
-function doPrint() {
-  const p = PAPER[paperFmt];
+function _stpZoomZaMjerilo(mj, lat) {
+  return Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) / (mj * _STP_M_PO_PX_PAPIRA));
+}
+function _stpMjeriloZaZoom(z, lat) {
+  return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z) / _STP_M_PO_PX_PAPIRA;
+}
+// Prvo "lijepo" mjerilo koje NIJE sitnije od traženog — zaokruživanje naniže bi
+// odsjeklo rub odjela koji je trebao stati na list.
+function _stpLijepoMjerilo(mj) {
+  const n = _STP_MJERILA.find(x => x >= mj * 0.999);
+  if (n) return n;
+  const mag = Math.pow(10, Math.floor(Math.log10(mj)));
+  return [1, 2, 5, 10].map(k => k * mag).find(x => x >= mj);
+}
+function _stpDimPx(fmt) {
+  const f = _STP_FORMATI[fmt] || _STP_FORMATI.A4L;
+  return { w: Math.round(f.w * _STP_PX_MM), h: Math.round(f.h * _STP_PX_MM) };
+}
+// Mjerilo pri kojem okvir (L.LatLngBounds) stane na list, uz ~8 % zraka.
+function _stpMjeriloZaOkvir(b, fmt) {
+  const { w, h } = _stpDimPx(fmt);
+  const lat = (b.getNorth() + b.getSouth()) / 2;
+  const wM = Math.abs(b.getEast() - b.getWest()) * 111320 * Math.cos(lat * Math.PI / 180);
+  const hM = Math.abs(b.getNorth() - b.getSouth()) * 110574;
+  const mPoPx = Math.max(wM / w, hM / h) * 1.08;
+  return _stpLijepoMjerilo(Math.max(mPoPx / _STP_M_PO_PX_PAPIRA, 500));
+}
 
-  if (printMode === 'gj') {
-    // Mod 1: centriraj na odabrani odjel ili G.J.
-    const odjelNaziv = document.getElementById('print-odjel').value;
-    const gjFolder   = document.getElementById('print-gj').value;
-    let bounds = null;
-    if (odjelNaziv) {
-      bounds = getOdjelBounds(odjelNaziv);
-    } else if (gjFolder) {
-      const gjGroups = _getGJGroups();
-      bounds = gjGroups[gjFolder] || null;
-    }
-    if (bounds && bounds.isValid()) {
-      map.setView(bounds.getCenter(), map.getZoom(), { animate: false });
-    }
-    // Postavi zoom za odabranu razmjeru
-    const center = map.getCenter();
-    const zoom = calcZoomForScale(printScale, center.lat, p.w, p.h);
-    map.setZoom(zoom, { animate: false });
-  } else {
-    // Mod 2: trenutni prikaz — samo postavi zoom za razmjeru, centar ostaje isti
-    const center = map.getCenter();
-    const zoom = calcZoomForScale(printScale, center.lat, p.w, p.h);
-    map.setZoom(zoom, { animate: false });
+function _stpPostavkeUcitaj() {
+  try { const v = JSON.parse(localStorage.getItem(_STP_KEY) || 'null'); if (v && typeof v === 'object') return v; } catch (e) {}
+  return {};
+}
+function _stpPostavkeSacuvaj() {
+  if (!_stp) return;
+  try {
+    localStorage.setItem(_STP_KEY, JSON.stringify({ fmt: _stp.fmt, naslov: _stp.naslov, legenda: _stp.legenda,
+      leg: [..._stp.leg], custom: _stp.custom }));
+  } catch (e) { /* UI postavka — gubitak je bezopasan */ }
+}
+
+// Boje vlaka/kraka se čitaju iz STVARNIH postavki — crna linija u legendi uz
+// plavu vlaku na karti bi legendu učinila pogrešnom.
+function _stpSimboli() {
+  const bv = (typeof getBojaVlake === 'function') ? getBojaVlake() : '#60a5fa';
+  const bk = (typeof getBojaKraka === 'function') ? getBojaKraka() : '#f87171';
+  const ln = (c, w, d) => `<svg viewBox="0 0 50 10"><line x1="0" y1="5" x2="50" y2="5" stroke="${c}" stroke-width="${w}"${d ? ` stroke-dasharray="${d}"` : ''}/></svg>`;
+  return {
+    vlaka:     { svg: ln(bv, 3), label: 'Traktorska vlaka' },
+    krak:      { svg: ln(bk, 2), label: 'Krak' },
+    lager:     { svg: `<svg viewBox="0 0 50 10"><rect x="5" y="1" width="40" height="8" fill="none" stroke="#d00" stroke-width="1.5"/><line x1="5" y1="5" x2="45" y2="5" stroke="#d00" stroke-width="1"/></svg>`, label: 'Lager' },
+    kamput:    { svg: ln('#f97316', 3.5), label: 'Kamionski put' },
+    gr_odjela: { svg: ln('#111', 1.5, '6,3'), label: 'Granica odjela' },
+    gr_odsjeka:{ svg: ln('#111', 1, '2,3'), label: 'Granica odsjeka' },
+    potok:     { svg: `<svg viewBox="0 0 50 10"><path d="M0 5 Q8 1 16 5 Q24 9 32 5 Q40 1 50 5" fill="none" stroke="#2563eb" stroke-width="1.5"/></svg>`, label: 'Potok' },
+    gr_privat: { svg: ln('#a020a0', 1.5, '8,2,2,2'), label: 'Granica sa privatnim posjedom' },
+    konture:   { svg: ln('rgba(120,72,0,0.9)', 1.2), label: 'Izohipse (20 m)' },
+    nagib:     { svg: `<svg viewBox="0 0 50 10"><rect x="8" y="1" width="34" height="8" fill="rgb(220,90,90)"/></svg>`, label: 'Nagib preko 30 %' },
+  };
+}
+// Podrazumijevana legenda = ono što je na karti STVARNO prikazano.
+function _stpLegendaPodrazumijevano() {
+  const out = new Set();
+  try {
+    const vis = (vlake || []).filter(v => !_aktivniProjektId || !v.projektId || v.projektId === _aktivniProjektId);
+    if (vis.some(v => !v.kr)) out.add('vlaka');
+    if (vis.some(v => v.kr)) out.add('krak');
+    if (vis.some(v => !v.kr && v.lager)) out.add('lager');
+  } catch (e) {}
+  try { if (_puteviLayerFg && map.hasLayer(_puteviLayerFg)) out.add('kamput'); } catch (e) {}
+  try { if (graniceOdjeli && graniceOdjeli.length) out.add('gr_odjela'); } catch (e) {}
+  try { if (_ovlState.kont) out.add('konture'); if (_ovlState.slope) out.add('nagib'); } catch (e) {}
+  return out;
+}
+
+function _stpAktivniProjekat() {
+  try { return (_projekti || []).find(p => p.id === _aktivniProjektId) || null; } catch (e) { return null; }
+}
+
+function _stpNaslovTekst() {
+  if (!_stp) return '';
+  const od = (_stp.odjel || '').trim(), gj = (_stp.gj || '').trim();
+  const dijelovi = [];
+  if (od) dijelovi.push(/^odjel/i.test(od) ? od : 'Odjel ' + od);
+  if (gj) dijelovi.push(/^g\.?\s*j\.?(\s|$)/i.test(gj) ? gj : 'G.J. ' + gj);
+  return dijelovi.join('  ·  ');
+}
+
+function _stpOverlays() {
+  if (!_stp) return;
+  const nasl = document.getElementById('print-naslov');
+  const t = _stpNaslovTekst();
+  if (nasl) {
+    const ima = _stp.naslov && !!t;
+    nasl.classList.toggle('stp-prazno', !ima);
+    if (ima) {
+      const sum = (typeof sbProfile !== 'undefined' && sbProfile?.sumarija) || '';
+      const dat = _stpDatum(new Date());
+      nasl.innerHTML = `<div class="pn-1">${_escHtml(t)}</div><div class="pn-2">${_escHtml([sum, dat].filter(Boolean).join('  ·  '))}</div>`;
+    } else nasl.innerHTML = '';
   }
-
-  // Set CSS vars for print size
-  const root = document.documentElement;
-  root.style.setProperty('--print-map-w', p.w + 'mm');
-  root.style.setProperty('--print-map-h', p.h + 'mm');
-
-  // Populate header/footer
-  const gjFolder   = document.getElementById('print-gj')?.value    || '';
-  const odjelPrint = document.getElementById('print-odjel')?.value || '';
-  const odjel = odjelPrint || gjFolder || document.getElementById('p-odjel').value || 'Traktorske vlake';
-  const sum = document.getElementById('p-sumarija').value || '';
-  const ime = document.getElementById('p-ime').value || '';
-  const datum = fmtDate(new Date().toISOString());
-
-  document.getElementById('ph-odjel').textContent = odjel;
-  document.getElementById('ph-sumarija').textContent = sum;
-  document.getElementById('ph-datum').textContent = datum;
-  document.getElementById('ph-scale-lbl').textContent = `Razmjera 1 : ${printScale.toLocaleString('bs')}`;
-
-  // Dužina PO vlaki pa sabrano — ne smiju se spajati tačke različitih vlaka u
-  // jedan niz (calcL bi tad dodao lažnu udaljenost između kraja jedne i početka
-  // druge vlake, jer bi ih tretirao kao jednu neprekinutu liniju).
-  const totalM = Math.round(vlake.reduce((s, v) => s + calcL(v.pts), 0));
-  const brVlaka = vlake.filter(v => !v.kr).length;
-  const brLager = vlake.filter(v => !v.kr && v.lager).length;
-  document.getElementById('pf-left').textContent =
-    `${ime ? 'Projektant: ' + ime + ' · ' : ''}Vlaka: ${brVlaka}${brLager ? ' · Lageri: ' + brLager : ''} · Ukupno: ${fmtL(totalM)}`;
-  document.getElementById('pf-right').textContent = `Razmjera 1 : ${printScale.toLocaleString('bs')} · ${p.label}`;
-
-  _buildPrintLegend();
-  _buildScaleBar();
-
-  closePrintModal();
-
-  // Delay to allow tiles to load
-  setTimeout(() => {
-    map.invalidateSize();
-    setTimeout(() => window.print(), 800);
-  }, 300);
+  const leg = document.getElementById('print-legend');
+  if (leg) {
+    const sim = _stpSimboli();
+    const redovi = Object.keys(sim).filter(k => _stp.leg.has(k)).map(k =>
+      `<div class="pl-row"><div class="pl-sym">${sim[k].svg}</div><div>${sim[k].label}</div></div>`);
+    _stp.custom.forEach(txt => redovi.push(
+      `<div class="pl-row"><div class="pl-sym"><svg viewBox="0 0 50 10"><line x1="0" y1="5" x2="50" y2="5" stroke="#555" stroke-width="1.5" stroke-dasharray="4,2"/></svg></div><div>${_escHtml(txt)}</div></div>`));
+    const ima = _stp.legenda && redovi.length > 0;
+    leg.classList.toggle('stp-prazno', !ima);
+    leg.innerHTML = ima ? '<div class="pl-title">LEGENDA</div>' + redovi.join('') : '';
+  }
+  _stpSkalaTraka();
 }
 
-/**
- * Calculates the Leaflet zoom level so that the map width covers
- * `realWidth_mm` mm at scale `scale` (1:scale), given latitude `lat`.
- */
-function calcZoomForScale(scale, lat, widthMM, heightMM) {
-  // Real-world width in metres
-  const realW_m = (widthMM / 1000) * scale;
-  // Earth circumference at given latitude
-  const metersPerDegLon = 111320 * Math.cos(lat * Math.PI / 180);
-  // Degrees covered by map
-  const degLon = realW_m / metersPerDegLon;
-
-  // Leaflet tile size = 256px, each zoom level doubles
-  // At zoom 0, full world = 360° = 256px
-  // pixelsNeeded for the paper width in px (96dpi → 1mm ≈ 3.779px)
-  const px = widthMM * 3.7795;
-  const z = Math.log2((px * 360) / (degLon * 256));
-  return Math.max(1, Math.min(20, Math.round(z)));
+// Traka se računa iz STVARNOG m/px karte, pa ostaje tačna i kad se list
+// pomjeri na drugu geografsku širinu.
+function _stpSkalaTraka() {
+  if (!_stp) return;
+  const bar = document.getElementById('psb-bar');
+  if (!bar) return;
+  const lat = map.getCenter().lat;
+  const mPoPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+  const lijepo = _niceScaleLen(mPoPx * 40 * _STP_PX_MM);
+  bar.style.width = (lijepo / mPoPx) + 'px';
+  document.getElementById('psb-mid').textContent = _fmtScaleLen(lijepo / 2);
+  document.getElementById('psb-full').textContent = _fmtScaleLen(lijepo);
+  document.getElementById('psb-mj').textContent = '1 : ' + _stpBroj(_stp.mjerilo);
 }
+
+function _stpRaspored() {
+  if (!_stp) return;
+  const el = document.getElementById('map');
+  const main = document.getElementById('main');
+  if (!el || !main) return;
+  const { w, h } = _stpDimPx(_stp.fmt);
+  const kon = document.getElementById('stampa-kontrole');
+  const r = main.getBoundingClientRect();
+  const dolje = kon ? kon.offsetHeight : 0;
+  const avW = Math.max(100, r.width - 20), avH = Math.max(100, r.height - dolje - 20);
+  const sk = Math.min(avW / w, avH / h, 1);
+  const c = map.getCenter();
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  el.style.left = Math.round((r.width - w * sk) / 2) + 'px';
+  el.style.top = Math.round(10 + (avH - h * sk) / 2) + 'px';
+  el.style.transform = 'scale(' + sk + ')';
+  map.invalidateSize({ pan: false });
+  map.setView(c, _stpZoomZaMjerilo(_stp.mjerilo, c.lat), { animate: false });
+  _stpOverlays();
+}
+
+function _stpOdjelBounds() {
+  if (!_stp || !_stp.odjel) return null;
+  try { const b = getOdjelBounds(_stp.odjel); return b && b.isValid() ? b : null; } catch (e) { return null; }
+}
+
+function stampaOtvori() {
+  if (_stp) return;
+  try { if (typeof _activeTab !== 'undefined' && _activeTab !== 'karta') switchTab('karta'); } catch (e) {}
+  try { closeLayerSheet(); } catch (e) {}
+  try { closeOznakePanel(); } catch (e) {}
+  const post = _stpPostavkeUcitaj();
+  const ap = _stpAktivniProjekat();
+  const c0 = map.getCenter(), z0 = map.getZoom();
+  _stp = {
+    fmt: _STP_FORMATI[post.fmt] ? post.fmt : 'A4L',
+    naslov: post.naslov !== false,
+    legenda: post.legenda !== false,
+    leg: Array.isArray(post.leg) ? new Set(post.leg) : _stpLegendaPodrazumijevano(),
+    custom: Array.isArray(post.custom) ? post.custom.filter(x => typeof x === 'string').slice(0, 12) : [],
+    odjel: String(ap?.odjel || (typeof getOdjel === 'function' ? getOdjel() : '') || '').trim(),
+    gj: String(ap?.gj || '').trim(),
+    mjerilo: 10000,
+    okvirOdjel: false,
+    uredi: false,
+    prev: { center: c0, zoom: z0, snap: map.options.zoomSnap, h: {} },
+  };
+  document.body.classList.add('stampa-on');
+  map.options.zoomSnap = 0;
+  // Mjerilo bira korisnik dugmadima — pinch bi ga tiho pokvario.
+  ['touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard'].forEach(k => {
+    if (map[k]) { _stp.prev.h[k] = map[k].enabled(); map[k].disable(); }
+  });
+  // Početni kadar: cijeli odjel projekta ako mu je granica poznata, inače
+  // trenutni prikaz sa najbližim "lijepim" mjerilom.
+  const b = _stpOdjelBounds();
+  if (b) {
+    _stp.okvirOdjel = true;
+    _stp.mjerilo = _stpMjeriloZaOkvir(b, _stp.fmt);
+    map.setView(b.getCenter(), map.getZoom(), { animate: false });
+  } else {
+    _stp.mjerilo = _stpLijepoMjerilo(_stpMjeriloZaZoom(z0, c0.lat));
+  }
+  _stpKontroleRender();
+  _stpRaspored();
+  window.addEventListener('resize', _stpRaspored);
+  // Android "Nazad" zatvara pregled (MainActivity zove webView.goBack()).
+  try { history.pushState({ stampa: 1 }, ''); _stp.historija = true; } catch (e) {}
+}
+// Ulaz iz Menija (naziv zadržan — "🖨 Print / štampanje").
+function showPrintModal() { stampaOtvori(); }
+
+function _stpZatvoriInterno() {
+  if (!_stp) return;
+  const p = _stp.prev;
+  _stp = null;
+  window.removeEventListener('resize', _stpRaspored);
+  document.body.classList.remove('stampa-on');
+  const el = document.getElementById('map');
+  if (el) ['width', 'height', 'left', 'top', 'transform'].forEach(k => { el.style[k] = ''; });
+  map.options.zoomSnap = p.snap;
+  Object.keys(p.h).forEach(k => { if (p.h[k] && map[k]) map[k].enable(); });
+  map.invalidateSize({ pan: false });
+  map.setView(p.center, p.zoom, { animate: false });
+  const kon = document.getElementById('stampa-kontrole');
+  if (kon) kon.innerHTML = '';
+}
+function stampaZatvori() {
+  if (!_stp) return;
+  if (_stp.historija && history.state && history.state.stampa) { try { history.back(); return; } catch (e) {} }
+  _stpZatvoriInterno();
+}
+window.addEventListener('popstate', () => { if (_stp) _stpZatvoriInterno(); });
+
+function _stpFormat(fmt) {
+  if (!_stp || !_STP_FORMATI[fmt]) return;
+  _stp.fmt = fmt;
+  const b = _stp.okvirOdjel ? _stpOdjelBounds() : null;
+  if (b) _stp.mjerilo = _stpMjeriloZaOkvir(b, fmt);
+  _stpPostavkeSacuvaj();
+  _stpKontroleRender();
+  _stpRaspored();
+}
+function _stpMjerilo(mj) {
+  if (!_stp) return;
+  mj = Math.round(+mj);
+  if (!(mj >= 200 && mj <= 1000000)) { showToast('⚠ Mjerilo između 1:200 i 1:1 000 000'); return; }
+  _stp.mjerilo = mj; _stp.okvirOdjel = false;
+  const c = map.getCenter();
+  map.setView(c, _stpZoomZaMjerilo(mj, c.lat), { animate: false });
+  _stpKontroleRender(); _stpOverlays();
+}
+function _stpNaOdjel() {
+  if (!_stp) return;
+  const b = _stpOdjelBounds();
+  if (!b) { showToast('Nema granice za odjel "' + (_stp.odjel || '') + '" — upiši odjel u "Uredi" ili pomjeri kartu ručno'); return; }
+  _stp.okvirOdjel = true;
+  _stp.mjerilo = _stpMjeriloZaOkvir(b, _stp.fmt);
+  const c = b.getCenter();
+  map.setView(c, _stpZoomZaMjerilo(_stp.mjerilo, c.lat), { animate: false });
+  _stpKontroleRender(); _stpOverlays();
+}
+function _stpPrekidac(k, v) {
+  if (!_stp) return;
+  _stp[k] = !!v;
+  _stpPostavkeSacuvaj(); _stpOverlays();
+}
+function _stpPolje(k, v) {
+  if (!_stp) return;
+  _stp[k] = String(v || '').slice(0, 80);
+  _stpOverlays();
+}
+function _stpLegStavka(k, on) {
+  if (!_stp) return;
+  if (on) _stp.leg.add(k); else _stp.leg.delete(k);
+  _stpPostavkeSacuvaj(); _stpOverlays();
+}
+function _stpDodajStavku() {
+  const inp = document.getElementById('stk-nova-stavka');
+  const t = (inp?.value || '').trim().slice(0, 60);
+  if (!t || !_stp) return;
+  _stp.custom.push(t);
+  _stpPostavkeSacuvaj(); _stpKontroleRender(); _stpOverlays();
+}
+function _stpUkloniStavku(i) {
+  if (!_stp) return;
+  _stp.custom.splice(i, 1);
+  _stpPostavkeSacuvaj(); _stpKontroleRender(); _stpOverlays();
+}
+function _stpUredi() {
+  if (!_stp) return;
+  _stp.uredi = !_stp.uredi;
+  _stpKontroleRender(); _stpRaspored();
+}
+
+function _stpKontroleRender() {
+  const el = document.getElementById('stampa-kontrole');
+  if (!el || !_stp) return;
+  const chip = (sel, on, txt) => `<button class="stk-chip${sel ? ' sel' : ''}" onclick="${on}">${txt}</button>`;
+  const fmt = Object.keys(_STP_FORMATI).map(k => chip(_stp.fmt === k, `_stpFormat('${k}')`, _STP_FORMATI[k].ime)).join('');
+  const mjTxt = m => '1:' + _stpBroj(m);
+  const mj = chip(_stp.okvirOdjel, '_stpNaOdjel()', 'Cijeli odjel' + (_stp.okvirOdjel ? ' · ' + mjTxt(_stp.mjerilo) : ''))
+    + _STP_BRZA.map(m => chip(!_stp.okvirOdjel && _stp.mjerilo === m, `_stpMjerilo(${m})`, mjTxt(m))).join('')
+    + (!_stp.okvirOdjel && !_STP_BRZA.includes(_stp.mjerilo) ? chip(true, '_stpUredi()', mjTxt(_stp.mjerilo)) : '');
+  const sim = _stpSimboli();
+  const uredi = !_stp.uredi ? '' : `<div id="stk-uredi">
+      <div class="stk-polja">
+        <label>Odjel<input type="text" value="${_escHtml(_stp.odjel)}" oninput="_stpPolje('odjel',this.value)" placeholder="npr. 14"></label>
+        <label>Gospodarska jedinica<input type="text" value="${_escHtml(_stp.gj)}" oninput="_stpPolje('gj',this.value)" placeholder="npr. Una"></label>
+      </div>
+      <div class="stk-polja">
+        <label>Drugo mjerilo 1 :<input type="number" inputmode="numeric" min="200" step="500" value="${_stp.mjerilo}" onchange="_stpMjerilo(this.value)"></label>
+      </div>
+      <div class="stk-lbl" style="margin-bottom:6px;">Stavke legende</div>
+      <div class="stk-leg">${Object.keys(sim).map(k =>
+        `<label><input type="checkbox" ${_stp.leg.has(k) ? 'checked' : ''} onchange="_stpLegStavka('${k}',this.checked)">${sim[k].label}</label>`).join('')}${
+        _stp.custom.map((t, i) => `<label style="border-style:dashed;">${_escHtml(t)} <span onclick="_stpUkloniStavku(${i})" style="color:#f87171;font-weight:bold;cursor:pointer;">✕</span></label>`).join('')}
+      </div>
+      <div class="stk-polja" style="margin-top:8px;align-items:flex-end;">
+        <label>Vlastita stavka<input type="text" id="stk-nova-stavka" placeholder="npr. Stovarište" onkeydown="if(event.key==='Enter')_stpDodajStavku()"></label>
+        <button class="stk-chip" onclick="_stpDodajStavku()">＋ Dodaj</button>
+      </div>
+    </div>`;
+  el.innerHTML = `
+    <div class="stk-red"><span class="stk-lbl">Papir</span>${fmt}</div>
+    <div class="stk-red"><span class="stk-lbl">Mjerilo</span>${mj}</div>
+    <div class="stk-red">
+      <label class="stk-chip prek"><input type="checkbox" ${_stp.naslov ? 'checked' : ''} onchange="_stpPrekidac('naslov',this.checked)">Naslov (odjel, G.J.)</label>
+      <label class="stk-chip prek"><input type="checkbox" ${_stp.legenda ? 'checked' : ''} onchange="_stpPrekidac('legenda',this.checked)">Legenda</label>
+      <button class="stk-chip${_stp.uredi ? ' sel' : ''}" onclick="_stpUredi()">${_stp.uredi ? 'Gotovo ▴' : 'Uredi ▾'}</button>
+    </div>
+    ${uredi}
+    <div class="stk-akcije">
+      <button class="stk-zatvori" onclick="stampaZatvori()">Zatvori</button>
+      <button class="stk-stampaj" onclick="stampaStampaj()"><svg class="ic"><use href="#ic-stampaj"/></svg> Štampaj / PDF</button>
+    </div>`;
+}
+
+// Leaflet GridLayer.isLoading() — čeka se da pločice lista stignu, inače bi
+// štampa uhvatila sive rupe. Rok postoji: offline pločice koje nikad ne stignu
+// ne smiju zaključati dugme.
+async function _stpCekajPlocice(rokMs) {
+  const t0 = Date.now();
+  const ucitava = () => { let da = false; try { map.eachLayer(l => { if (l.isLoading && l.isLoading()) da = true; }); } catch (e) {} return da; };
+  if (!ucitava()) return true;
+  showToast('⏳ Čekam da se karta učita…');
+  while (ucitava() && Date.now() - t0 < rokMs) await new Promise(r => setTimeout(r, 200));
+  return !ucitava();
+}
+
+function _stpPageCss() {
+  const f = _STP_FORMATI[_stp.fmt];
+  let st = document.getElementById('stp-page-css');
+  if (!st) { st = document.createElement('style'); st.id = 'stp-page-css'; document.head.appendChild(st); }
+  st.textContent = `@page { size: ${f.papir[0]}mm ${f.papir[1]}mm; margin: ${_STP_MARGINA_MM}mm; }`;
+}
+
+var _stpStampaUToku = false;
+async function stampaStampaj() {
+  if (!_stp || _stpStampaUToku) return;
+  _stpStampaUToku = true;
+  try {
+    _stpPageCss();
+    await _stpCekajPlocice(8000);
+    if (!_stp) return;
+    const ime = (_stpNaslovTekst() || 'Karta').replace(/[\\/:*?"<>|]+/g, '-');
+    if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+      window.AndroidPrint.print(ime, _stp.fmt);
+      return;
+    }
+    window.print();
+  } catch (e) {
+    showToast('⚠ Štampanje nije uspjelo: ' + (e?.message || e));
+  } finally {
+    _stpStampaUToku = false;
+  }
+}
+map.on('moveend zoomend', () => { if (_stp) _stpSkalaTraka(); });
 
 // === OFFLINE MODAL ===
 function lngLatToTile(lat, lng, z) {

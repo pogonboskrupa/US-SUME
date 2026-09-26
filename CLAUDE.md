@@ -2787,6 +2787,36 @@ namjerno, prije nego se jave.
     kvota prekida. **Stari "📥 Preuzmi kartu za offline" modal
     (`showOfflineModal`/`startOfflineDownload`) NEMA NIJEDNOG pozivaoca** — mrtav
     UI; zato preuzimanje visina nije kačeno na njega.
+  - **Paket za Nagib i Konture (v1.8.0)**: drugi korak izbora nudi "Samo
+    N.V." (z12) ili "N.V. + Nagib + Konture" (z12–z14) — DEM slojevi čitaju
+    pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
+    pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
+
+- **Štampa u APK-u nije radila UOPŠTE — pregled spreman za štampu (v1.8.0)**:
+  Android WebView `window.print()` tiho ignoriše, a `MainActivity` nije imao
+  print most. Sad `PrintBridge` (`AndroidPrint.print(ime, format)`) zove
+  `PrintManager` nad `webView.createPrintDocumentAdapter` (štampač ili
+  "Sačuvaj kao PDF"); webapp i dalje ide kroz `window.print()`. Drugi kvar
+  starog toka: karta se na veličinu papira razvlačila TEK u trenutku štampe,
+  Leaflet za to nije znao pa su pločice bile samo za ekran, a zum se
+  zaokruživao na cijeli nivo (mjerilo nije bilo tačno). Novi tok
+  (`stampaOtvori`, ulaz i dalje `showPrintModal` iz Menija): `body.stampa-on`,
+  `#map` dobije TAČNU veličinu lista u CSS px (96 dpi → mm u CSS-u = mm na
+  papiru) i samo se `transform: scale` umanji na ekranu — WYSIWYG, a Leaflet
+  1.9 sam uračunava skaliranje kontejnera za povlačenje. Mjerilo je tačno jer
+  je `zoomSnap` 0 dok je pregled otvoren (pinch zum isključen, mjerilo se bira
+  dugmadima; sve se vraća u `_stpZatvoriInterno`). Naslov (odjel · G.J.,
+  opcion) gore u sredini, legenda (opciona, stavke po izboru, boje vlaka/
+  kraka iz stvarnih postavki) dolje desno, mjerilo + traka dolje lijevo,
+  sjever gore lijevo — svi su `.stp-el` UNUTAR `#map`, pa ih nosi isto
+  umanjenje i ista štampa. Android "Nazad" zatvara pregled (`history.
+  pushState` + `popstate`, bez Java izmjene). Brojevi/datum se formatiraju
+  ručno (`_stpBroj`/`_stpDatum`) — WebView bez bs lokala daje "10,000".
+  **Zamka pri izmjeni**: marker za rez markupa mora biti PRVI sljedeći
+  element — `<!-- SQLITEDB OFFLINE MAP MODAL -->` je ~33 000 linija niže i
+  jedan `cut()` je obrisao pola fajla (uhvaćeno `git diff --stat`, vraćeno
+  iz HEAD-a). **Traži pun rebuild** (mijenjan `.java`). Test:
+  `tests/js/stampa.test.js`.
 
 - **Doznaka — tragovi projektanata i pređena površina (v1.7.5)**: sve
   računice (karta, pojasevi, dužine, statistika, popup granice) idu kroz

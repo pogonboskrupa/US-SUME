@@ -13,6 +13,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.PowerManager;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
@@ -196,6 +199,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
+        webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -799,6 +803,37 @@ public class MainActivity extends Activity {
             if (filename.endsWith(".geojson")) return "application/geo+json";
             if (filename.endsWith(".json")) return "application/json";
             return "application/octet-stream";
+        }
+    }
+
+    // Android WebView NE implementira window.print() — poziv je tiha no-op
+    // operacija, pa "Print / štampanje" u APK-u nije radilo baš ništa. Štampa
+    // ide kroz sistemski PrintManager nad samim WebView sadržajem (poštuje
+    // @media print CSS), a korisnik u dijalogu bira štampač ili "Sačuvaj kao
+    // PDF". Format i orijentacija se predlažu iz JS-a; dijalog ih i dalje
+    // dozvoljava promijeniti.
+    class PrintBridge {
+        @JavascriptInterface
+        public void print(String jobName, String format) {
+            runOnUiThread(() -> {
+                try {
+                    String ime = (jobName == null || jobName.trim().isEmpty()) ? "Dendro Map" : jobName.trim();
+                    String f = format == null ? "A4L" : format;
+                    PrintAttributes.MediaSize ms = f.startsWith("A3")
+                            ? PrintAttributes.MediaSize.ISO_A3 : PrintAttributes.MediaSize.ISO_A4;
+                    ms = f.endsWith("P") ? ms.asPortrait() : ms.asLandscape();
+                    PrintAttributes attrs = new PrintAttributes.Builder()
+                            .setMediaSize(ms)
+                            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                            .build();
+                    PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                    PrintDocumentAdapter adapter = webView.createPrintDocumentAdapter(ime);
+                    pm.print(ime, adapter, attrs);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this,
+                            "Štampanje nije uspjelo: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
         }
     }
 

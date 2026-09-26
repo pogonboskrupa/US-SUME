@@ -223,8 +223,20 @@ t('procjena veličine je čitljiva (sklonidba + MB)', () => {
   assert.strictEqual(api._nvDemVelicinaTxt(100), '100 pločica · ≈ 9 MB');
 });
 
+t('paket "N.V. + Nagib + Konture" pokriva z12–z14 (DEM slojevi čitaju do maxNativeZoom 14)', () => {
+  const { api } = env();
+  const b = bnd(LAT - 0.01, LNG - 0.012, LAT + 0.01, LNG + 0.012);
+  const samoNv = api._nvDemPlociceZa(b, [12]), sve = api._nvDemPlociceZa(b, [12, 13, 14]);
+  assert.deepStrictEqual([...new Set(sve.map(t => t.z))].sort(), [12, 13, 14]);
+  assert.ok(sve.length > samoNv.length);
+  const [x14, y14] = tile(14);
+  assert.ok(sve.some(t => t.z === 14 && t.x === x14 && t.y === y14), 'z14 pločica centra mora biti u paketu');
+  assert.ok(/maxNativeZoom:14/.test(HTML.slice(HTML.indexOf('const _OVL = {'), HTML.indexOf('const _OVL = {') + 800)),
+    'ako DEM slojevi promijene maxNativeZoom, paket zumova mora pratiti');
+});
+
 t('dugme za preuzimanje postoji u Slojevima karte i u Upravljanju offline podacima', () => {
-  assert.ok(/onclick="nvDemPreuzmiUi\(\)"[^`]*Preuzmi nadmorske visine za offline/.test(extractFn('_lsRenderCache')));
+  assert.ok(/onclick="nvDemPreuzmiUi\(\)"[^`]*Preuzmi teren za offline/.test(extractFn('_lsRenderCache')));
   assert.ok(/nvDemPreuzmiUi\(\)/.test(extractFn('_cacheMgrRender')));
   const ui = extractFn('nvDemPreuzmiUi');
   assert.ok(/_escHtml\(o\.ime\)/.test(ui), 'ime karte/odjela ide u HTML akcije — mora biti escape-ovano');
