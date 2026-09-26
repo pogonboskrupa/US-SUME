@@ -802,6 +802,7 @@ public class MainActivity extends Activity {
             if (filename.endsWith(".gpx")) return "application/gpx+xml";
             if (filename.endsWith(".geojson")) return "application/geo+json";
             if (filename.endsWith(".json")) return "application/json";
+            if (filename.endsWith(".csv")) return "text/csv";
             return "application/octet-stream";
         }
     }

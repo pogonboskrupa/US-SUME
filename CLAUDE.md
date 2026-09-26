@@ -2792,6 +2792,36 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Tabela atributa — filteri, zbirni red, površina, CSV za Excel (v1.8.6)**:
+  na zahtjev "unaprijedi tabelu atributa". `_temTblRedovi(entry)` je JEDAN
+  filter+sort (pretraga, čipovi klasa aktivne teme uklj. "bez podatka",
+  "U prikazu karte" preko `map.getBounds()`) koji dijele prikaz I izvoz — CSV
+  sadrži tačno ono što se vidi (ranije je izvozio SVE bez obzira na pretragu).
+  Indeks reda ostaje ORIGINALNI (`r.i`) za klik → zoom.
+  - **Kolona "Površina (ha)"** (`_TEM_HA_COL = '__ha'`, `_temTblVal`) računa se
+    iz geometrije (`_temPovrsinaHa`), odmah iza odjel/GJ; `_temColLabel` je zna.
+  - **Zbirni red** (`_temTblZbir`, sticky `tfoot`): površina se SABIRA (Σ),
+    ostale brojčane kolone USREDNJAVAJU (ø) — zbir visine/zalihe po ha nema
+    smisla. Računa se nad FILTRIRANIM redovima; kolona bez ijedne vrijednosti
+    nema prosjek (ne 0).
+  - **Decimale ujednačene po koloni** (`_temTblDec`, 0–2 prema podacima) i
+    decimalni zarez — prije je ista kolona pokazivala "435" i "435.20". Prazno
+    je "—", ne prazna ćelija.
+  - **CSV: ";" + decimalni ZAREZ + BOM** (`_temTblCsv`) — tačka uz ";" Excel na
+    bs/hr postavkama čita kao tekst ili datum. Puna preciznost (ranije
+    `toFixed(2)`). Izvoz nudi Podijeli (`AndroidShare.shareFile`) ili Sačuvaj;
+    `ShareBridge.guessMime` je dobio `.csv` → `text/csv` (**traži pun rebuild**).
+  - **Izbor kolona se pamti kao SKRIVENE** (`tvlake_tem_tbl_skrivene`, po karti) —
+    kolona koja se tek pojavi u novom fajlu je vidljiva, ne tiho izostavljena.
+  - **Zamka: globalno `.lbl { display:block; margin… }`** (~linija 648). Ćelija
+    `<td class="stick lbl">` je time postala blok i ispala iz tabele (sticky
+    zbirni red se raspao); ista klasa u v1.8.5 pregledu teme je davala visoke
+    redove. Nađeno mjerenjem `getComputedStyle` (`display:"block"` na td), ne
+    nagađanjem. **Nove klase ne zvati `lbl`** — test to čuva.
+  - Alatna traka se na telefonu lomi (pretraga preko cijele širine, dugmad
+    ispod) — ranije je placeholder bio odsječen na "Pretraži a".
+  - Test: `tests/js/tematska.test.js` (23, +8).
+
 - **Tematska karta — pregled teme, kategorije, palete (v1.8.5)**: na zahtjev
   "unaprijedi tematska karta sekciju". Uz redizajn panela (kartica po karti,
   prekidač vidljivosti, akcije 2×2), dodano:

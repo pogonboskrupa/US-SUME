@@ -43,13 +43,16 @@ for (;;) { j0 = HTML.indexOf('`', j0); if (HTML[j0 - 1] !== '\\') break; j0++; }
 const SRC = new Function('_SQLJS_CDN', '_SQLJS_LOCAL', 'return `' + HTML.slice(a0, j0) + '`;')('cdn/', 'local/');
 const MiniSqlite = new Function(SRC.slice(SRC.indexOf('class MiniSqlite {'), SRC.indexOf('// ── Kraj MiniSqlite')) + '\nreturn MiniSqlite;')();
 
-const KONST = ['_TEM_REG_KEY', '_TEM_RAMP', '_TEM_PALETE', '_TEM_KAT_BOJE', '_TEM_KAT_MAX', '_TEM_LEG_KEY', '_TEM_MAX_CLASSES'];
+const KONST = ['_TEM_TBL_MAX', '_TEM_HA_COL', '_TEM_TBL_KOL_KEY', '_TEM_REG_KEY', '_TEM_RAMP', '_TEM_PALETE', '_TEM_KAT_BOJE', '_TEM_KAT_MAX', '_TEM_LEG_KEY', '_TEM_MAX_CLASSES'];
 const FUNK = ['_temRampFor', '_temKatBoje', '_temNum', '_temBr', '_temHa', '_temPrstenM2', '_temPovrsinaHa',
   '_temKlasaIdx', '_temBojaZa', '_temKlaseOpis', '_temJednakiIntervali', '_temStatistika', '_temDraftIz',
   '_temRegSave', '_temById', '_temColLabel', '_parseGpkgGeom', '_temResolveTr', '_gpkgParseBuf', '_temPopupHtml',
   '_temQuantiles', '_temApplyTheme', '_temOboji', '_temSetOpacity', '_temLegSkupljena', '_temLegToggle',
   '_temLegendUpd', '_temFmtVal', '_temPregledHtml', '_temClassEdHtml', '_temEdPovuci', '_temEdScrapeDom',
-  '_temEdPaleta', '_temEdObrni', '_temEdAuto', '_temClassEdApply', '_temClassEdReset', '_escHtml', '_jsAttr'];
+  '_temEdPaleta', '_temEdObrni', '_temEdAuto', '_temClassEdApply', '_temClassEdReset', '_escHtml', '_jsAttr',
+  '_temTblVal', '_temTblCols', '_temTblNum', '_temTblSkrivene', '_temTblSelSet', '_temTblSelSacuvaj', '_temTblVisibleCols',
+  '_temTblGranice', '_temTblRedovi', '_temTblDec', '_temTblBroj', '_temTblZbir', '_temTblCsv', '_temTblCsvIme',
+  '_temTblChipsHtml', '_temTblRender'];
 
 function napravi() {
   const ls = {}, toasti = [], el = {};
@@ -65,20 +68,30 @@ function napravi() {
     polygon: (rings, opts) => ({ style: { ...opts },
       setStyle(st) { Object.assign(this.style, st); }, bindPopup(fn) { this._pop = fn; },
       getLatLngs: () => rings.map(r => r.map(([lat, lng]) => ({ lat, lng }))),
-      getBounds: () => ({ isValid: () => false }) }),
+      getBounds() { const ll = rings[0]; const la = ll.map(p => p[0]), lo = ll.map(p => p[1]);
+        return L.latLngBounds({ lat: Math.min(...la), lng: Math.min(...lo) }, { lat: Math.max(...la), lng: Math.max(...lo) }); } }),
     latLngBounds: () => ({ isValid: () => false, extend() { return this; } }),
     DomEvent: { disableClickPropagation() {}, disableScrollPropagation() {} }
   };
   class FakeFile { constructor(parts) { const b = Buffer.from(parts[0]); this.size = b.length;
     this.slice = (x, y) => ({ arrayBuffer: async () => b.buffer.slice(b.byteOffset + x, b.byteOffset + Math.min(y, b.length)) }); } }
   const src = 'let _temMaps = [], _temRenderer = null, _temEdOpenId = null, _temEdDraft = {};\n'
+    + 'let _temTblId = null, _temTblSort = { col: null, dir: 1 }, _temTblQ = "", _temTblSelById = {}, _temTblKlase = new Set(), _temTblUPrikazu = false;\n'
     + 'const KORISNIK_PAL = ["#f97316","#818cf8"];\nfunction _temModalRender() {}\n'
     + KONST.map(extractConst).join('\n') + '\n' + FUNK.map(extractFn).join('\n')
     + '\nreturn { get maps() { return _temMaps; }, setEd(id, d) { _temEdOpenId = id; if (d) _temEdDraft[id] = d; }, get draft() { return _temEdDraft; },'
+    + 'tbl(o) { if ("id" in o) _temTblId = o.id; if ("q" in o) _temTblQ = o.q; if ("sort" in o) _temTblSort = o.sort; if ("klase" in o) _temTblKlase = new Set(o.klase); if ("prikaz" in o) _temTblUPrikazu = o.prikaz; if (o.resetSel) _temTblSelById = {}; },'
     + FUNK.map(f => f + ',').join('') + '};';
+  // Prikaz karte za filter "U prikazu karte": pravougaonik u stepenima
+  const bnd = (s, w, n, e) => ({ isValid: () => true, s, w, n, e,
+    extend(o) { return bnd(Math.min(this.s, o.s), Math.min(this.w, o.w), Math.max(this.n, o.n), Math.max(this.e, o.e)); },
+    intersects(o) { return !(o.s > this.n || o.n < this.s || o.w > this.e || o.e < this.w); },
+    getSouthWest() { return { lat: this.s, lng: this.w }; }, getNorthEast() { return { lat: this.n, lng: this.e }; } });
+  const mapa = { _b: null, getBounds() { return this._b; } };
+  L.latLngBounds = (sw, ne) => bnd(sw.lat, sw.lng, ne.lat, ne.lng);
   const api = new Function('L', 'map', 'document', 'localStorage', 'showToast', 'File', '_MiniSqliteMain', 'proj4', src)(
-    L, {}, document, localStorage, m => toasti.push(m), FakeFile, MiniSqlite, () => { throw new Error('proj4'); });
-  return { api, ls, toasti, el, mkEl };
+    L, mapa, document, localStorage, m => toasti.push(m), FakeFile, MiniSqlite, () => { throw new Error('proj4'); });
+  return { api, ls, toasti, el, mkEl, mapa, bnd };
 }
 async function ucitaj() {
   const env = napravi();
@@ -253,6 +266,108 @@ t('tabela atributa i opacity koriste ISTI klasifikator (_temBojaZa / _temOboji)'
   assert.ok(extractFn('_temTblRender').includes('_temBojaZa(cls, v)'));
   assert.ok(extractFn('_temSetOpacity').includes('_temOboji(entry)'));
   assert.ok(!/Number\(f\.attrs\[/.test(HTML), 'Number(f.attrs[...]) pretvara prazno u 0 — koristiti _temNum');
+});
+
+// ── Tabela atributa (v1.8.6) ───────────────────────────────────────────────
+t('tabela: kolona "Površina (ha)" iz geometrije stoji odmah iza odjel/GJ', async () => {
+  const { api, entry } = await ucitaj();
+  const { cols } = api._temTblCols(entry);
+  assert.deepStrictEqual(cols.slice(0, 3), ['odjel', 'gj', '__ha']);
+  assert.strictEqual(api._temColLabel(entry, '__ha'), 'Površina (ha)');
+  assert.ok(Math.abs(api._temTblVal(entry.features[0], '__ha') - 82.07) < 0.5);
+  assert.ok(api._temTblNum(entry, '__ha') && api._temTblNum(entry, 'visina') && !api._temTblNum(entry, 'gj'));
+});
+
+t('tabela: pretraga + filter klase + sort; prazne vrijednosti na dno; indeks je ORIGINALNI', async () => {
+  const { api, entry } = await ucitaj();
+  api._temApplyTheme(entry.id, 'zaliha_m3_ha');
+  api.tbl({ id: entry.id, q: '', klase: [-1], sort: { col: 'odjel', dir: 1 }, prikaz: false });
+  const bez = api._temTblRedovi(entry);
+  assert.strictEqual(bez.length, 2, 'filter "bez podatka" daje 2 odsjeka');
+  bez.forEach(r => assert.strictEqual(entry.features[r.i], r.f));
+  api.tbl({ klase: [], sort: { col: 'zaliha_m3_ha', dir: -1 } });
+  const svi = api._temTblRedovi(entry);
+  assert.strictEqual(svi.length, 30);
+  assert.ok(svi[0].f.attrs.zaliha_m3_ha >= svi[1].f.attrs.zaliha_m3_ha);
+  assert.strictEqual(svi[29].f.attrs.zaliha_m3_ha, null, 'prazno ide na dno i kod silaznog sorta');
+  api.tbl({ q: '12c', sort: { col: 'odjel', dir: 1 } });
+  assert.deepStrictEqual(api._temTblRedovi(entry).map(r => r.f.attrs.odjel), ['12c']);
+  // pretraga gleda SVE vidljive kolone, ne samo odjel (starost 120 sadrži "12")
+  api.tbl({ q: '120' });
+  assert.ok(api._temTblRedovi(entry).every(r => r.f.attrs.starost === 120 || Object.values(r.f.attrs).some(v => String(v).includes('120'))));
+});
+
+t('tabela: "U prikazu karte" zadržava samo odsjeke koji sijeku trenutni prikaz', async () => {
+  const { api, entry, mapa, bnd } = await ucitaj();
+  mapa._b = bnd(44.9001, 16.1001, 44.9050, 16.1050);   // unutar prvog odsjeka (10a)
+  api.tbl({ id: entry.id, q: '', klase: [], prikaz: true, sort: { col: null, dir: 1 } });
+  assert.deepStrictEqual(api._temTblRedovi(entry).map(r => r.f.attrs.odjel), ['10a']);
+});
+
+t('tabela: decimale ujednačene po koloni, decimalni zarez (nema "435" pored "435.20")', async () => {
+  const { api, entry } = await ucitaj();
+  assert.strictEqual(api._temTblDec(entry, 'zaliha_m3_ha'), 1);
+  assert.strictEqual(api._temTblDec(entry, 'starost'), 0);
+  assert.strictEqual(api._temTblBroj(435, 1), '435,0');
+  assert.strictEqual(api._temTblBroj(2461.2, 2), '2 461,20');
+  assert.strictEqual(api._temTblBroj(null, 1), '');
+});
+
+t('tabela: zbirni red — površina se SABIRA, ostalo USREDNJAVA, nad filtriranim redovima', async () => {
+  const { api, entry } = await ucitaj();
+  api._temApplyTheme(entry.id, 'zaliha_m3_ha');
+  api.tbl({ id: entry.id, q: '', klase: [-1], prikaz: false, sort: { col: null, dir: 1 } });
+  const rows = api._temTblRedovi(entry);
+  const z = api._temTblZbir(entry, ['odjel', '__ha', 'visina', 'zaliha_m3_ha'], rows);
+  assert.strictEqual(z[0], null, 'tekstualna kolona nema zbir');
+  assert.strictEqual(z[1].tip, 'Σ');
+  assert.ok(Math.abs(z[1].v - rows.reduce((s, r) => s + api._temTblVal(r.f, '__ha'), 0)) < 1e-9);
+  assert.strictEqual(z[2].tip, 'ø');
+  assert.ok(Math.abs(z[2].v - rows.reduce((s, r) => s + r.f.attrs.visina, 0) / rows.length) < 1e-9);
+  assert.strictEqual(z[3], null, 'kolona u kojoj su SVE vrijednosti prazne nema prosjek (ne 0)');
+});
+
+t('tabela: izbor kolona se pamti kao SKRIVENE — nova kolona u fajlu ostaje vidljiva', async () => {
+  const { api, entry, ls } = await ucitaj();
+  const sel = api._temTblSelSet(entry);
+  sel.delete('starost');
+  api._temTblSelSacuvaj(entry);
+  assert.deepStrictEqual(JSON.parse(ls.tvlake_tem_tbl_skrivene)[entry.id], ['starost']);
+  api.tbl({ resetSel: true });                    // nova sesija
+  entry.features[0].attrs.nova_kolona = 5;        // nova verzija fajla donijela kolonu
+  const vid = api._temTblVisibleCols(entry);
+  assert.ok(!vid.includes('starost'));
+  assert.ok(vid.includes('nova_kolona'));
+});
+
+t('CSV: ";" + decimalni zarez + BOM, samo filtrirani redovi, puna preciznost, escape', async () => {
+  const { api, entry } = await ucitaj();
+  entry.features[0].attrs.gj = 'Una; "Sana"';
+  api.tbl({ id: entry.id, q: '10a', klase: [], prikaz: false, sort: { col: 'odjel', dir: 1 } });
+  const csv = api._temTblCsv(entry);
+  assert.ok(csv.startsWith('﻿'));
+  const [hd, red, ...ost] = csv.slice(1).split('\r\n');
+  assert.strictEqual(ost.length, 0, 'samo jedan red poslije filtera');
+  assert.ok(hd.startsWith('odjel;gj;Površina (ha);'));
+  assert.ok(red.startsWith('10a;"Una; ""Sana""";'), red);
+  const brojevi = red.slice('10a;"Una; ""Sana""";'.length).split(';');
+  assert.ok(/^\d+,\d+$/.test(brojevi[0]), 'površina sa zarezom: ' + red);
+  assert.ok(!/\d\.\d/.test(red), 'nijedna decimalna tačka: ' + red);
+  assert.strictEqual(api._temTblCsvIme({ name: 'master odsjeci.gpkg' }), 'Tabela_master_odsjeci.csv');
+});
+
+t('tabela: render — zbirni red i "—" za prazno; bez klase "lbl" (globalno .lbl je display:block)', async () => {
+  const { api, entry, el, mkEl } = await ucitaj();
+  api._temApplyTheme(entry.id, 'zaliha_m3_ha');
+  ['ttm-scroll', 'ttm-foot', 'ttm-chips', 'ttm-sub', 'ttm-colsbtn'].forEach(id => { el[id] = mkEl(id); });
+  api.tbl({ id: entry.id, q: '', klase: [], prikaz: false, sort: { col: 'odjel', dir: 1 } });
+  api._temTblRender();
+  const h = el['ttm-scroll'].innerHTML;
+  assert.ok(h.includes('<tfoot>') && h.includes('<em>Σ</em>') && h.includes('<em>ø</em>'));
+  assert.ok(h.includes('class="nil">—'));
+  assert.ok(!/class="[^"]*\blbl\b/.test(h + el['ttm-chips'].innerHTML + api._temPregledHtml(entry)));
+  assert.ok(el['ttm-chips'].innerHTML.includes('bez podatka'));
+  assert.strictEqual(el['ttm-sub'].textContent, '30 odsjeka · ' + api._temHa(entry.features.reduce((s, f) => s + api._temPovrsinaHa(f), 0)));
 });
 
 Promise.all(cekaj).then(() => {
