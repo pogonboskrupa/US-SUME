@@ -5459,7 +5459,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.2';
+const APP_VER = 'v1.8.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -29876,9 +29876,9 @@ class MiniSqlite {
       if(type==='table'&&name?.toLowerCase()==='tiles'){this.tilesRoot=rootPage;
         if(sql){const s=sql.toLowerCase();const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');const m=_p1>=0&&_p2>_p1?[null,s.slice(_p1+1,_p2)]:null;
           // PRIMARY KEY (x,y,z,s) → red kolona automatskog indeksa (sqlite_autoindex), čiji je sql NULL
-          const pkm=s.match(/primary\s+key\s*\(([^)]*)\)/);
-          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'\x60\[\]]/g,'').split(/\s+/)[0]).filter(Boolean);
-          if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\s+/)[0]);
+          const pkm=s.match(/primary\\s+key\\s*\\(([^)]*)\\)/);
+          if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'\x60\\[\\]]/g,'').split(/\\s+/)[0]).filter(Boolean);
+          if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\\s+/)[0].replace(/["'\x60\\[\\]]/g,''));
             const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
             else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
@@ -29897,7 +29897,7 @@ class MiniSqlite {
         // Kolone iz CREATE TABLE (default po GeoPackage specifikaciji: id,zoom_level,tile_column,tile_row,tile_data)
         let cols=[]; const s=(tinfo.sql||'').toLowerCase();
         const _p1=s.indexOf('('),_p2=s.lastIndexOf(')');
-        if(_p1>=0&&_p2>_p1) cols=s.slice(_p1+1,_p2).split(',').map(c=>c.trim().split(/\s+/)[0].replace(/["'\x60\[\]]/g,''));
+        if(_p1>=0&&_p2>_p1) cols=s.slice(_p1+1,_p2).split(',').map(c=>c.trim().split(/\\s+/)[0].replace(/["'\x60\\[\\]]/g,''));
         const gci=n=>cols.indexOf(n);
         this.colZ=gci('zoom_level')>=0?gci('zoom_level'):1;
         this.colX=gci('tile_column')>=0?gci('tile_column'):2;
@@ -30489,7 +30489,7 @@ self.onmessage = async ({data:msg}) => {
           if(r[0]==='table'||r[0]==='index'||r[0]==='view')
             schemas.push(r[0].slice(0,3)+':'+r[1]+'@'+r[3]);
           if(r[0]==='index'&&r[2]?.toLowerCase()==='tiles')
-            idxSqlStr=(r[4]||'nosql').toLowerCase().replace(/\s+/g,' ').slice(0,120);
+            idxSqlStr=(r[4]||'nosql').toLowerCase().replace(/\\s+/g,' ').slice(0,120);
         });
         schemaDump=schemas.join('|');
       }catch(e){schemaDump='e:'+e.message;}

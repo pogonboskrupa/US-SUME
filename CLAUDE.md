@@ -2792,6 +2792,28 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **SQLiteDB preko 20 MB "učitana a ne vidi se" — regex u template stringu
+  (v1.8.3)**: karte veće od `_SQL_LARGE` (20 MB) idu kroz OPFS i vlastiti
+  čitač `MiniSqlite`, koji živi UNUTAR `_SQL_WORKER_SRC = \`...\`` (worker kao
+  string). **U template stringu je `\s` obično slovo `s`, `\(` je `(`, `\[` je
+  `[`** — backslash tiho nestane. Tako je `split(/\s+/)` u workeru postao
+  `split(/s+/)` (dijeli po slovu s), a `/primary\s+key\s*\(/` nikad nije
+  pogodio. Nazivi kolona `x int`/`z int` se nisu svodili na `x`/`z`, SQLiteDB
+  (RMaps/Locus/OruxMaps) se nije prepoznao i padao je na zadani `mbtiles` —
+  pločice su se tražile po pogrešnim kolonama (zum "554–22" = x kolona), karta
+  "učitana" a prazna. Male karte idu kroz `sql.js` (pravi SQL) pa su radile, što
+  je grešku sakrivalo od jula (608a601). **Svaki regex UNUTAR `_SQL_WORKER_SRC`
+  mora imati udvostručen backslash (`\\s`, `\\(`)**; `\x60` (backtick) je
+  namjeran i ostaje. Test `tests/js/sqlmap-worker-src.test.js` izvršava izvor
+  KAO VRIJEDNOST STRINGA (ne sirov tekst iz fajla — sirov tekst je zdrav, zato
+  se greška nije vidjela u Node repro-u), traži svaki izgubljeni backslash i
+  čita male SQLiteDB/MBTiles fajlove iz `tests/fixtures/`. **Fixture mora imati
+  STVARNE koordinate** (BiH, z12 x≈2231): heuristika zum-pomaka za RMaps
+  (`_zOff`) iz najvećeg x zaključuje zum, pa x=100 daje pogrešan zum.
+  **Zamka u Playwright-u**: s pogrešnim formatom `_sqlmapMetaAutoZoom` dobije
+  minzoom 555 i headless Chromium se sruši ("Target page... closed") — nije
+  sandbox, nego ista greška.
+
 - **Teren — redizajn + vozilo + dnevno svjetlo (v1.8.2)**: na zahtjev
   "unaprijedi teren, dizajn, pregled, dodaj nešto dobro". Pozicija je gore
   (odjel, GK Y/X kroz `_stpBroj` — WebView bez bs lokala daje "6,354,662",
