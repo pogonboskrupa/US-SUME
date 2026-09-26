@@ -2792,6 +2792,41 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Tematska karta — pregled teme, kategorije, palete (v1.8.5)**: na zahtjev
+  "unaprijedi tematska karta sekciju". Uz redizajn panela (kartica po karti,
+  prekidač vidljivosti, akcije 2×2), dodano:
+  - **Pregled teme** (`_temPregledHtml`/`_temStatistika`): po klasi broj
+    odsjeka, površina i udio u ukupnoj površini, plus prosjek i prosjek
+    PONDERISAN POVRŠINOM (mali odsjek sa ekstremnom vrijednošću inače vuče
+    obični prosjek koliko i velik). Površina se računa iz geometrije
+    (`_temPovrsinaHa`, sferna formula kao `turf.area`, rupe se oduzimaju,
+    keš `f._ha`) — radi bez mreže i biblioteke; prikazuje se i u popupu.
+  - **Kategorijske teme** (`entry.catCols`): pretežno tekstualna kolona sa
+    2..`_TEM_KAT_MAX` (20) različitih vrijednosti (uređajni razred, vrsta…).
+    Broj odjela ima stotine vrijednosti pa NIJE tema. Ručne boje se čuvaju PO
+    VRIJEDNOSTI (`styles[col].catColors`), ne po poziciji — nova vrijednost u
+    fajlu ne pomjera boje ostalih.
+  - **Editor**: palete (`_TEM_PALETE`), ⇄ obrni, automatske klase (kvantili /
+    jednaki intervali, 3–9) — sve puni draft, trajno tek na "Zapiši".
+    `_temEdPovuci` čita DOM ali zadržava vrijednost iz drafta za polje kojeg
+    nema — prva verzija je bez DOM-a pisala zadanu paletu preko drafta
+    (uhvaćeno testom).
+  - **Legenda** se dodirom skuplja u traku boja (`tvlake_tem_leg_skupljena`),
+    ima red "bez podatka" kad ga ima, i ne propušta klik do karte
+    (`L.DomEvent.disableClickPropagation`).
+  - **Bug: odsjek bez vrijednosti bojio se kao NAJNIŽA klasa** —
+    `Number(null) === 0`, pa je prazna zaliha postajala 0, upadala u prvu
+    klasu i vukla minimum/kvantile na nulu. Sad sve ide kroz `_temNum`
+    (prazno → NaN) i jedan klasifikator `_temKlasaIdx`/`_temBojaZa` koji
+    dijele karta, legenda, pregled, popup i tabela atributa.
+    `Number(f.attrs[...])` se ne smije vraćati (test to čuva).
+  - Kvantili se dedupliciraju, pa zna biti manje granica nego boja —
+    `_temKlaseOpis`/`_temDraftIz` prikazuju samo dostižne klase (editor je
+    ranije dobijao 5 boja i 4 granice).
+  - Test: `tests/js/tematska.test.js` (15) čita fixture
+    `tests/fixtures/tematska-mini.gpkg` (30 odsjeka, generisan Python
+    `sqlite3` — GP zaglavlje + WKB) STVARNIM MiniSqlite-om i `_gpkgParseBuf`.
+
 - **Debug prikaz samo za admina (v1.8.4)**: na zahtjev "obriši debug kod
   korisnika, ostavi debug samo kod admina". DEBUG tab i stavka menija su već
   bili admin-only; ono što je curilo običnom korisniku: blok "🔬 Debug
