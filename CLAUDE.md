@@ -2792,6 +2792,20 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Debug prikaz samo za admina (v1.8.4)**: na zahtjev "obriši debug kod
+  korisnika, ostavi debug samo kod admina". DEBUG tab i stavka menija su već
+  bili admin-only; ono što je curilo običnom korisniku: blok "🔬 Debug
+  učitavanja pri ulazu" na ekranu Učitaj kartu (`_loadmapRenderStartupDiag`),
+  tehnički zapis čitača `[ps=… tr=…]` i oznaka motora `[worker]` u statusu
+  offline karte, i "⏱ Zadnje učitavanje trajalo…" poslije sporog restore-a.
+  Sve je sad iza `isAdmin()`. **Dijagnostika se i dalje BILJEŽI**
+  (`_mapLoadDiag`, `_debugUpsert`) — mijenja se samo ko je vidi, pa admin na
+  istom uređaju i dalje ima trag. `sqlmapShowDebug`/`sqlmapDebugPro`/
+  `sqlmapToggleLiveHud`/`_sqlmapTestTile` nemaju nijednog pozivaoca (a
+  `#sqlmap-debug-out` ne postoji u markupu) — mrtav kod, korisniku nevidljiv,
+  kandidat za brisanje. Novi prikaz koji je tehnička dijagnostika ide iza
+  `isAdmin()`. Test: `tests/js/debug-samo-admin.test.js`.
+
 - **SQLiteDB preko 20 MB "učitana a ne vidi se" — regex u template stringu
   (v1.8.3)**: karte veće od `_SQL_LARGE` (20 MB) idu kroz OPFS i vlastiti
   čitač `MiniSqlite`, koji živi UNUTAR `_SQL_WORKER_SRC = \`...\`` (worker kao

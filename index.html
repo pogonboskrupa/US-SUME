@@ -5459,7 +5459,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.3';
+const APP_VER = 'v1.8.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -31143,7 +31143,9 @@ async function sqlmapLoadFile(file) {
       _sqlPrewarm(name);
       _sqlmapMetaAutoZoom(r.meta);
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
-      const dI=r.meta?._d?' ['+r.meta._d+']':'';
+      // Tehnički zapis čitača (stranice, kolone, test pločice) vidi samo admin —
+      // korisniku je šum; admin ga i dalje ima u DEBUG tabu preko _mapLoadDiag.
+      const dI=(r.meta?._d && isAdmin())?' ['+r.meta._d+']':'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
       showToast('✅ Karta TRAJNO sačuvana — ostat će i nakon zatvaranja app-a');
       } catch(opfsE) { _opfsFailed = true; _opfsErrMsg = opfsE.message || String(opfsE); _opfsDel(name+'.sqlmap'); console.error('OPFS save fail:', opfsE); }
@@ -31211,7 +31213,7 @@ async function _sqlmapLoadDirect(file, name) {
   _sqlmapMetaAutoZoom(r.meta);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
   const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='gpkg'?'GeoPackage':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
-  _sqlmapStatus('✅ ' + name + ' (' + (file.size/1024/1024|0) + ' MB, ' + fmtLabel + ')' + zI + ' [' + eng + ']');
+  _sqlmapStatus('✅ ' + name + ' (' + (file.size/1024/1024|0) + ' MB, ' + fmtLabel + ')' + zI + (isAdmin() ? ' [' + eng + ']' : ''));
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
 
@@ -31522,7 +31524,7 @@ async function sqlmapRestoreAll() {
         ? (' · PRIJE poziva ' + _prijeStarta + 'ms (auth/startup gate, ne sam SQLite)')
         : '';
       console.warn('SQLmap restore sporo: unutra ' + Math.round(_tTot) + 'ms, od prikaza indikatora ' + Math.round(_tOdPrikaza||_tTot) + 'ms [' + _detalj + ']' + _prijeTxt);
-      _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt);
+      if (isAdmin()) _sqlmapStatus('⏱ Zadnje učitavanje trajalo ' + ((_tOdPrikaza||_tTot)/1000).toFixed(1) + 's (unutar funkcije ' + (_tTot/1000).toFixed(1) + 's) — ' + _detalj + _prijeTxt);
     }
     _mapLoadDiagStep('restore završen', Math.round(_tTot) + 'ms unutar funkcije · indikator skriven');
     _mapLoadDiagFinish(shownAny ? 'karta prikazana' : 'završeno bez offline karte');
@@ -32341,7 +32343,8 @@ function _loadmapStatus(t) { const e = document.getElementById('loadmap-status')
 function _loadmapRenderStartupDiag() {
   const el = document.getElementById('loadmap-startup-debug');
   if (!el) return;
-  const txt = _mapLoadDiagText();
+  // Debug učitavanja je alat za admina (v1.8.4) — običan korisnik ga ne vidi.
+  const txt = isAdmin() ? _mapLoadDiagText() : '';
   el.classList.toggle('show', !!txt);
   el.innerHTML = txt
     ? '<div class="lm-startup-diag-head"><span>🔬 Debug učitavanja pri ulazu</span><button type="button" onclick="_mapLoadDiagCopy(event)">Kopiraj</button></div>' + _escHtml(txt)

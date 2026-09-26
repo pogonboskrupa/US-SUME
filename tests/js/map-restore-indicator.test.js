@@ -140,6 +140,8 @@ function makeRestoreEnv(opts) {
     _sqlFailKey: name => 'fail_' + name,
     _sqlEnsureBaseLayer: n => calls.ensureBase.push(n),
     _sqlmapStatus: msg => calls.status.push(msg),
+    // v1.8.4: raščlana sporog učitavanja je debug — vidi je samo admin.
+    isAdmin: () => (o.admin !== undefined ? o.admin : true),
     _mapLoadDiagStep: (label, detail) => calls.diag.push({ label, detail }),
     _mapLoadDiagName: () => {},
     _mapLoadDiagFinish: state => { calls.diagState = state; },
@@ -288,6 +290,21 @@ await t('sporo učitavanje (>1.5s ukupno) upisuje raščlanu po koracima u _sqlm
   assert.ok(msg.includes('list'), 'raščlana mora imenovati "list" korak');
   assert.ok(msg.includes('load-opfs'), 'raščlana mora imenovati "load-opfs" korak (ne load-idb za OPFS kartu)');
   assert.ok(msg.includes('karta1'), 'raščlana mora imenovati KOJA karta je spora, ne samo tip koraka');
+});
+
+await t('sporo učitavanje kod korisnika koji NIJE admin: raščlana se ne prikazuje (v1.8.4)', async () => {
+  const env = makeRestoreEnv({
+    admin: false,
+    perf: makeSlowPerf(1000),
+    wCall: async (msg) => {
+      if (msg.type === 'list') return { ok: true, rows: [{ name: 'karta1', savedAt: 1, opfs: true }] };
+      if (msg.type === 'load-opfs') return { ok: true, fmt: 'mbtiles', meta: {} };
+      return { ok: false };
+    }
+  });
+  await env.run();
+  assert.strictEqual(env.calls.status.length, 0, 'korisnik ne smije vidjeti tehničku raščlanu');
+  assert.ok(env.calls.diag.length > 0, 'dijagnostika se i dalje bilježi (za admin DEBUG)');
 });
 
 await t('brzo učitavanje (<1.5s) NE piše ništa u _sqlmapStatus — bez šuma na normalan restart', async () => {
