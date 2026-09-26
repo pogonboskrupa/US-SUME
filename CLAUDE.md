@@ -2792,6 +2792,26 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **KML izvoz sa traga, uklonjeni "KML izvoz"/"Podijeli lokaciju", Stil linija
+  sa pregledom (v1.8.1)**: na zahtjev. "⬆ KML izvoz" iz Menija je izvozio SAMO
+  vlake kroz tekstualni modal (`#modal`, `showExport`/`dlKML`/`cpKML` —
+  uklonjeno); `mkKML`/`kmlPreuzmi`/`kmlPodijeli`/`_shareKmlOrDownload` ostaju
+  jer ih koriste drugi tokovi. Trag se sad izvozi sa SAMOG traga (kartica u
+  Tragovima, popup na karti, Teren) kroz `_tragKmlMeni` → Podijeli
+  (`_tragRegShare`, AndroidShare/Web Share) ili Sačuvaj .kml (`_tragKmlSacuvaj`).
+  Trag bez imena je ranije davao fajl ".kml" i prazan `<name>` — sad oba idu
+  kroz `_tragIme` (`_tragKmlIme` čisti znakove zabranjene u imenu fajla, čuva
+  dijakritiku). Brisanje iz popupa ide kroz `_dlgConfirm`, ne native
+  `confirm()`. **"Podijeli lokaciju" — uklonjen SAMO meni tok**
+  (`showShareLocMenu`, action sheet, `_sharePoint`); Teren "Dijeli moje
+  kretanje" (`terenTogShare`/`_startShareLive`) i PRIJEM lokacija kolega
+  (`_onSharePoint` — stariji APK-ovi i dalje šalju `loc-point`) ostaju.
+  **Stil linija**: pregled `_stilPregledSvg(ls)` je ČISTA funkcija stila (trag,
+  mjerenje, vlaka, tačka) i koristi ISTE dash nizove kao karta (`'8 4'`/
+  `'2 6'`) — test to čuva. **Klizač NE smije zvati `_stilRender()`** — ponovno
+  crtanje panela usred povlačenja prekida dodir prsta; `_stilSet` za range
+  osvježava samo broj i pregled. Test: `tests/js/stil-kml-meni.test.js`.
+
 - **Štampa u APK-u nije radila UOPŠTE — pregled spreman za štampu (v1.8.0)**:
   Android WebView `window.print()` tiho ignoriše, a `MainActivity` nije imao
   print most. Sad `PrintBridge` (`AndroidPrint.print(ime, format)`) zove

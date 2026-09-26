@@ -1169,13 +1169,49 @@ input:focus { outline:none; border-color:#3b82f6; }
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 /* Stil linija modal */
-.stil-row { display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12px; color:#94a3b8; }
-.stil-row span:first-child { flex:0 0 auto; min-width:96px; }
-.stil-row input[type=range] { flex:1; accent-color:#38bdf8; }
-.stil-row b { color:#e2e8f0; font-size:12px; min-width:34px; text-align:right; font-variant-numeric:tabular-nums; }
-.stil-row input[type=checkbox] { width:18px; height:18px; accent-color:#38bdf8; margin-left:auto; }
-.stil-dash { flex:1; padding:6px 4px; background:#1e293b; border:1px solid #334155; border-radius:8px; color:#94a3b8; font-size:11px; cursor:pointer; }
-.stil-dash.on { border-color:#4ade80; color:#4ade80; }
+/* === STIL LINIJA (v1.8.1) === */
+#stil-modal { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:99500; }
+.stl-sheet {
+  position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+  width:min(460px,100vw); max-height:92vh; max-height:92dvh; overflow-y:auto;
+  background:#0f172a; border:1px solid #1e3a5f; border-bottom:none; border-radius:18px 18px 0 0;
+  padding:12px 14px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -8px 30px rgba(0,0,0,0.5);
+}
+@media (min-width:600px) { .stl-sheet { bottom:auto; top:50%; transform:translate(-50%,-50%); border-radius:16px; border-bottom:1px solid #1e3a5f; } }
+.stl-hdr { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.stl-hdr h3 { flex:1; margin:0; font-size:16px; color:#e2e8f0; }
+.stl-reset { background:#14233c; border:1px solid #1e3a5f; color:#94a3b8; border-radius:16px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+.stl-x { background:none; border:none; color:#64748b; font-size:18px; cursor:pointer; padding:4px 6px; }
+#stil-pregled { position:sticky; top:-12px; z-index:2; border-radius:12px; overflow:hidden; border:1px solid #1e3a5f; margin-bottom:10px; background:#e7eddc; line-height:0; }
+#stil-pregled svg { width:100%; height:auto; display:block; }
+.stl-tabs { display:flex; gap:4px; background:#16213e; border:1px solid #1e3a5f; border-radius:12px; padding:3px; margin-bottom:10px; }
+.stl-tab { flex:1; min-height:36px; border:none; border-radius:9px; background:none; color:#94a3b8; font-size:13px; font-weight:600; cursor:pointer; }
+.stl-tab.on { background:#1d4ed8; color:#fff; }
+.stl-kartica { background:#16213e; border:1px solid #1e3a5f; border-radius:12px; padding:6px 12px; }
+.stl-red { display:flex; align-items:center; gap:10px; min-height:44px; border-bottom:1px solid #1e293b; }
+.stl-red:last-child { border-bottom:none; }
+.stl-red.stl-kol { flex-direction:column; align-items:stretch; gap:6px; padding:8px 0; }
+.stl-lbl { flex:0 0 112px; font-size:13px; color:#cbd5e1; }
+.stl-kol .stl-lbl { flex:none; }
+.stl-red input[type=range] { flex:1; accent-color:#3b82f6; min-width:0; }
+.stl-val { min-width:48px; text-align:right; font-size:13px; color:#e2e8f0; font-variant-numeric:tabular-nums; }
+.stl-segs { flex:1; display:flex; gap:4px; }
+.stl-seg { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px; min-height:44px; border:1px solid #334155; border-radius:9px; background:#0f172a; color:#94a3b8; font-size:11px; cursor:pointer; }
+.stl-seg.on { border-color:#3b82f6; color:#93c5fd; background:#172554; }
+.stl-boje { display:flex; flex-wrap:wrap; gap:8px; }
+.stl-boja { width:32px; height:32px; border-radius:50%; border:2px solid #334155; cursor:pointer; padding:0; position:relative; }
+.stl-boja.on { border-color:#fff; box-shadow:0 0 0 2px #3b82f6; }
+.stl-boja.vlastita { width:auto; padding:0 10px; border-radius:16px; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:600; }
+.stl-boja-izbor { display:inline-flex; align-items:center; justify-content:center; color:#cbd5e1; font-size:16px; background:#0f172a; overflow:hidden; }
+.stl-boja-izbor input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.stl-prek { cursor:pointer; }
+.stl-prek input { position:absolute; opacity:0; width:0; height:0; }
+.stl-prek i { margin-left:auto; width:42px; height:24px; border-radius:12px; background:#334155; position:relative; transition:background .15s; flex-shrink:0; }
+.stl-prek i::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .15s; }
+.stl-prek input:checked + i { background:#22c55e; }
+.stl-prek input:checked + i::after { left:21px; }
+.stl-napomena { font-size:11px; color:#64748b; margin:8px 2px 0; line-height:1.4; }
+
 .boja-dash-btn { padding:5px 8px; background:#1e293b; border:1px solid #334155; border-radius:7px; color:#94a3b8; font-size:11px; cursor:pointer; }
 .boja-dash-btn.on { border-color:#60a5fa; color:#60a5fa; }
 #edp-proj b { color:#334155; font-weight:700; }
@@ -1260,19 +1296,6 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vkrak-badge-l { display:inline-block; font-size:10px; font-weight:bold; color:#38bdf8; background:rgba(56,189,248,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 .vkrak-badge-d { display:inline-block; font-size:10px; font-weight:bold; color:#fb923c; background:rgba(251,146,60,0.15); border-radius:3px; padding:1px 5px; margin-right:3px; }
 
-/* Export modal */
-#modal {
-  display:none; position:fixed; inset:0;
-  background:rgba(0,0,0,0.78); z-index:9999;
-  align-items:center; justify-content:center;
-}
-#modal.show { display:flex; }
-.mbox {
-  background:#16213e; border:1px solid #0f3460;
-  border-radius:10px; padding:20px;
-  width:380px; max-width:92vw;
-}
-.mbox h3 { font-size:16px; color:#4ade80; margin-bottom:12px; }
 textarea {
   width:100%; height:180px;
   background:#0f172a; border:1px solid #374151;
@@ -3682,7 +3705,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
    dugme Sačuvaj nije moglo dohvatiti), a donji paneli su se na širokom
    ekranu razvlačili preko cijele širine. dvh prati stvarno vidljivu visinu
    (traka adrese, tastatura); gdje ga WebView ne zna, ostaje vh red iznad. */
-#modal .mbox, .offline-mbox, #profil-box, #doz-save-box, #del-modal,
+.offline-mbox, #profil-box, #doz-save-box, #del-modal,
 #guide-choice-modal > div, #doz-qr-show-modal > div {
   max-height: calc(100vh - 24px);
   max-height: calc(100dvh - 24px);
@@ -5295,19 +5318,6 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 <!-- ŠTAMPA — kontrole pregleda (v1.8.0); sadržaj crta _stpKontroleRender() -->
 <div id="stampa-kontrole"></div>
 
-<!-- MODAL -->
-<div id="modal" onclick="if(event.target===this)closeM()">
-  <div class="mbox">
-    <h3>⬆ Export KML</h3>
-    <textarea id="etxt" readonly></textarea>
-    <div class="mbtns">
-      <button class="btn g" onclick="kmlModalShare()"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
-      <button class="btn b" onclick="dlKML()">⬇ Preuzmi .kml</button>
-      <button class="btn gr" onclick="cpKML()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj</button>
-      <button class="btn gr" onclick="closeM()">Zatvori</button>
-    </div>
-  </div>
-</div>
 
 <script>
 window.onerror=function(m,s,l){let t='JS GREŠKA: '+m+' (linija '+l+')';if(m==='Script error.'&&!l){t+=' — vjerovatno prekinuto učitavanje eksterne biblioteke (mreža ili browser ekstenzija). Osvježi stranicu.';}console.error(t,s,l);_sigurnosnaMrezaPokusaj();};
@@ -5327,7 +5337,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.0';
+const APP_VER = 'v1.8.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -11397,119 +11407,10 @@ function _updKoleguLiveBar() {
   bar.innerHTML = `<span class="live-dot"></span>${active.join(', ')} snima${active.length > 1 ? 'ju' : ''}`;
 }
 
-// ─── PODIJELI LOKACIJU ──────────────────────────────────────────────────────
-
-function showShareLocMenu() {
-  if (!lastP) { showToast('⚠ Uključi GPS pa pokušaj ponovo'); return; }
-  if (!sb || !sbProfile?.sumarija) { showToast('⚠ Potrebna je prijava i veza sa serverom'); return; }
-  if (!_shareChannelReady) {
-    showToast('⚠ Kanal za dijeljenje se povezuje...');
-    if (sbProfile?.sumarija) sbStartRealtime();
-    return;
-  }
-
-  if (_shareLiveOn) {
-    _showShareActionSheet([]);
-    return;
-  }
-
-  const entries = Object.entries(kolegeMap);
-  if (entries.length === 0) { showToast('⚠ Nema kolega u šumariji'); return; }
-
-  const sheet = document.createElement('div');
-  sheet.id = 'share-loc-sheet';
-  sheet.style.cssText = 'position:fixed;inset:0;z-index:99500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);';
-
-  let listHtml = entries.map(([kid, info]) => {
-    const name = info.ime;
-    const color = info.color || '#3b82f6';
-    return `<label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #334155;cursor:pointer;">
-      <input type="checkbox" value="${kid}" class="share-kol-cb" style="width:20px;height:20px;accent-color:${color};" checked>
-      <span style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0;">${name.charAt(0)}</span>
-      <span style="color:#e2e8f0;font-size:14px;font-weight:500;">${name}</span>
-    </label>`;
-  }).join('');
-
-  sheet.innerHTML = `<div style="background:#1e293b;border-radius:14px 14px 0 0;width:100%;max-width:400px;padding:18px 16px 24px;box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
-    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:4px;text-align:center;">📍 Podijeli lokaciju</div>
-    <div style="font-size:12px;color:#94a3b8;text-align:center;margin-bottom:12px;">Odaberi sa kim želiš podijeliti</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <button onclick="_shareSelAll(true)" style="flex:1;padding:6px;background:#334155;color:#94a3b8;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Označi sve</button>
-      <button onclick="_shareSelAll(false)" style="flex:1;padding:6px;background:#334155;color:#94a3b8;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Odznači sve</button>
-    </div>
-    <div style="max-height:240px;overflow-y:auto;margin-bottom:14px;">${listHtml}</div>
-    <button onclick="_shareLocNext()" style="width:100%;padding:13px;margin-bottom:8px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">Dalje <svg class="ic"><use href="#ic-naprijed"/></svg></button>
-    <button onclick="_closeShareSheet()" style="width:100%;padding:13px;background:#334155;color:#94a3b8;border:none;border-radius:10px;font-size:14px;cursor:pointer;">Otkaži</button>
-  </div>`;
-  sheet.addEventListener('click', e => { if (e.target === sheet) _closeShareSheet(); });
-  document.body.appendChild(sheet);
-}
-
-function _shareSelAll(val) {
-  document.querySelectorAll('.share-kol-cb').forEach(cb => cb.checked = val);
-}
-
-function _shareLocNext() {
-  const checked = [...document.querySelectorAll('.share-kol-cb:checked')].map(cb => cb.value);
-  if (checked.length === 0) { showToast('⚠ Odaberi barem jednu osobu'); return; }
-  _closeShareSheet();
-  _showShareActionSheet(checked);
-}
-
-function _showShareActionSheet(selectedIds) {
-  _shareTargetIds = selectedIds;
-  const sheet = document.createElement('div');
-  sheet.id = 'share-loc-sheet';
-  sheet.style.cssText = 'position:fixed;inset:0;z-index:99500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);';
-  const liveLabel = _shareLiveOn ? '⏹ Zaustavi dijeljenje kretanja' : '🔴 Podijeli kretanje';
-  const liveColor = _shareLiveOn ? '#f87171' : '#22c55e';
-  const countTxt = _shareLiveOn ? '' : ` (${selectedIds.length})`;
-  sheet.innerHTML = `<div style="background:#1e293b;border-radius:14px 14px 0 0;width:100%;max-width:400px;padding:18px 16px 24px;box-shadow:0 -4px 20px rgba(0,0,0,0.5);">
-    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:14px;text-align:center;">📍 Način dijeljenja${countTxt}</div>
-    <button onclick="_sharePoint();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-pozicija"/></svg> Podijeli tačku</button>
-    <button onclick="_toggleShareLive();_closeShareSheet()" style="width:100%;padding:13px;margin-bottom:8px;background:${liveColor};color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">${liveLabel}</button>
-    <button onclick="_closeShareSheet()" style="width:100%;padding:13px;background:#334155;color:#94a3b8;border:none;border-radius:10px;font-size:14px;cursor:pointer;">Otkaži</button>
-  </div>`;
-  sheet.addEventListener('click', e => { if (e.target === sheet) _closeShareSheet(); });
-  document.body.appendChild(sheet);
-}
-
-function _closeShareSheet() {
-  const s = document.getElementById('share-loc-sheet');
-  if (s) s.remove();
-}
-
-async function _sharePoint() {
-  if (!lastP) { showToast('⚠ GPS pozicija nije dostupna'); return; }
-  if (!_rtShareChannel || !_shareChannelReady) { showToast('⚠ Kanal nije spreman — pokušaj ponovo'); return; }
-  try {
-    const res = await _rtShareChannel.send({
-      type: 'broadcast', event: 'loc-point',
-      payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, t: Date.now(), to: _shareTargetIds }
-    });
-    if (res === 'ok' || res === 'CHANNEL_OK' || res === 'SUBSCRIBED') {
-      const names = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
-      showToast('📍 Tačka podijeljena: ' + (names.length <= 3 ? names.join(', ') : names.slice(0,2).join(', ') + ' +' + (names.length-2)));
-    } else {
-      console.warn('share-loc send result:', res);
-      showToast('⚠ Greška pri slanju: ' + (res || 'unknown'));
-    }
-  } catch(e) {
-    console.error('share-loc send error:', e);
-    showToast('⚠ Greška: ' + (e.message || e));
-  }
-}
-
-function _toggleShareLive() {
-  if (_shareLiveOn) {
-    _stopShareLive();
-    showToast('⏹ Dijeljenje kretanja zaustavljeno');
-  } else {
-    _startShareLive();
-    const sn = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
-    showToast('🔴 Dijelite kretanje sa: ' + sn.join(', '));
-  }
-}
+// ─── DIJELJENJE KRETANJA (Teren → "Dijeli moje kretanje") ──────────────────
+// Meni "Podijeli lokaciju" (izbor kolega + "podijeli tačku") je uklonjen u
+// v1.8.1 na zahtjev; ostaje dijeljenje kretanja iz Terena i PRIJEM lokacija
+// kolega (kanal i dalje sluša loc-point, jer ga šalju stariji APK-ovi).
 
 function _startShareLive() {
   if (_shareLiveOn) return;
@@ -11554,7 +11455,7 @@ function _updShareLiveIndicator() {
       const tNames = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
       const tLabel = tNames.length <= 2 ? tNames.join(', ') : tNames.slice(0,2).join(', ') + ' +' + (tNames.length-2);
       el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim sa: ' + tLabel;
-      el.onclick = () => showShareLocMenu();
+      el.onclick = () => switchTab('teren');
       document.body.appendChild(el);
     }
   } else {
@@ -12212,7 +12113,7 @@ function terenRenderTragovi() {
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button onclick="_tragRegZoom('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#60a5fa;font-size:11px;cursor:pointer;" title="Prikaži na karti"><svg class="ic"><use href="#ic-karta"/></svg></button>
-        <button onclick="_tragRegShare('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#34d399;font-size:11px;cursor:pointer;" title="Pošalji kao KML"><svg class="ic"><use href="#ic-posalji"/></svg></button>
+        <button onclick="_tragKmlMeni('${t.id}')" style="padding:6px 8px;background:#0f3460;border:1px solid #1e3a5f;border-radius:8px;color:#34d399;font-size:11px;cursor:pointer;" title="Izvezi kao KML / podijeli"><svg class="ic"><use href="#ic-posalji"/></svg></button>
         <button onclick="_tragRegDelete('${t.id}');terenRenderTragovi()" style="padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#f87171;font-size:11px;cursor:pointer;" title="Briši"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
       </div>
     </div>`;
@@ -18602,43 +18503,124 @@ function _tqmClose() {
 // ─── STIL LINIJA — globalne postavke (Meni → 🖌 Stil linija) ─────────────────
 // Defaulti za tragove/mjerenja/tačke; pojedinačne izmjene na tragu (popup) i
 // dalje imaju prednost za taj trag. Čuva se lokalno po uređaju.
-const _LSTYLE_KEY = 'tvlake_stil_linija';
-let _lineStyle = {
+const _LSTYLE_DEFAULT = {
   tragW: 4, tragOp: 85, tragDash: 'solid', tragCol: '', tragLen: false,
   msrW: 4, msrFillOp: 18, msrArea: true, msrLen: false,
   tackaScale: 100, vlakaDotScale: 100, lagerScale: 100
 };
+const _LSTYLE_KEY = 'tvlake_stil_linija';
+let _lineStyle = { ..._LSTYLE_DEFAULT };
 try { Object.assign(_lineStyle, JSON.parse(localStorage.getItem(_LSTYLE_KEY) || '{}')); } catch(e) {}
 function _lineStyleSave() { try { localStorage.setItem(_LSTYLE_KEY, JSON.stringify(_lineStyle)); } catch(e) {} }
 
+// v1.8.1: panel je preuređen — pregled uživo na vrhu (vidi se TAČNO šta klizač
+// radi, bez zatvaranja panela i traženja traga na karti), kartice po temi i
+// "Vrati zadano". Markup se gradi iz JS-a da kontrole i stanje ne bi mogli
+// razići (ranije su se vrijednosti ručno prepisivale u 12 polja pri otvaranju).
+const _STIL_BOJE = ['#f97316', '#ef4444', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ffffff'];
+const _STIL_DASH = { solid: null, dash: '8 4', dot: '2 6' };
+var _stilTabAkt = 'trag';
+
+// Pregled je ČISTA funkcija stila (bez DOM-a) — iste formule kao na karti:
+// debljina u px, dash nizovi kao u _tragRegAddLayer, veličine tačke/lagera/
+// krajeva vlake po istim baznim mjerama (24×32, 28×13, 6 px).
+function _stilPregledSvg(ls) {
+  const tc = ls.tragCol || '#f97316';
+  const dash = _STIL_DASH[ls.tragDash] ? ` stroke-dasharray="${_STIL_DASH[ls.tragDash]}"` : '';
+  const halo = 'paint-order="stroke" stroke="#000" stroke-width="3" stroke-linejoin="round"';
+  const lbl = (x, y, t) => `<text x="${x}" y="${y}" font-size="11" font-weight="700" fill="#fff" text-anchor="middle" ${halo}>${t}</text>`;
+  const ts = (ls.tackaScale || 100) / 100, W = 24 * ts, H = 32 * ts;
+  const ds = 6 * (ls.vlakaDotScale || 100) / 100;
+  const lg = (ls.lagerScale || 100) / 100, LW = 28 * lg, LH = 13 * lg;
+  const bv = (typeof getBojaVlake === 'function') ? getBojaVlake() : '#60a5fa';
+  const dot = (x, y, c) => `<circle cx="${x}" cy="${y}" r="${ds / 2 + 0.75}" fill="${c}" stroke="#fff" stroke-width="1.5"/>`;
+  return `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pregled stila">
+    <rect width="340" height="150" fill="#e7eddc"/>
+    <path d="M-10 40 Q 80 10 170 35 T 350 30 M-10 85 Q 90 55 180 80 T 350 70 M-10 130 Q 100 100 190 125 T 350 115" fill="none" stroke="#b9a37a" stroke-width="1" opacity=".55"/>
+    <polygon points="232,22 322,36 312,118 226,104" fill="#fbbf24" fill-opacity="${(ls.msrFillOp ?? 18) / 100}" stroke="#fbbf24" stroke-opacity=".9" stroke-width="${ls.msrW || 4}" stroke-linejoin="round"/>
+    ${ls.msrArea ? lbl(273, 74, '0,82 ha') : ''}${ls.msrLen ? lbl(318, 80, '86 m') : ''}
+    <path d="M14 136 C 60 114, 72 66, 122 74 S 190 44, 206 18" fill="none" stroke="${tc}" stroke-opacity="${(ls.tragOp || 85) / 100}" stroke-width="${ls.tragW || 4}" stroke-linecap="round"${dash}/>
+    ${ls.tragLen ? lbl(120, 66, '248 m') : ''}
+    <polyline points="22,40 96,56 142,30" fill="none" stroke="${bv}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <g transform="translate(${22 - LW / 2},${40 - LH / 2})"><rect width="${LW}" height="${LH}" fill="#fff"/><polygon points="0,0 ${LW},0 ${LW},${LH}" fill="#000"/><line x1="0" y1="0" x2="${LW}" y2="${LH}" stroke="#fff" stroke-width="1.5"/></g>
+    ${dot(22, 40, '#4ade80')}${dot(142, 30, '#f87171')}
+    <g transform="translate(${170 - W / 2},${140 - H}) scale(${ts})"><path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20S24 21 24 12C24 5.37 18.63 0 12 0z" fill="#fbbf24" stroke="#92400e" stroke-width="1.4"/><circle cx="12" cy="12" r="5.5" fill="#fff"/><text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#92400e">1</text></g>
+  </svg>`;
+}
+
+function _stilKlizac(key, lbl, min, max, step, suf) {
+  const v = _lineStyle[key];
+  return `<div class="stl-red"><span class="stl-lbl">${lbl}</span>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${v}" oninput="_stilSet('${key}',+this.value,this)" data-suf="${suf}">
+    <b class="stl-val">${v}${suf}</b></div>`;
+}
+function _stilPrekidac(key, lbl) {
+  return `<label class="stl-red stl-prek"><span class="stl-lbl">${lbl}</span>
+    <input type="checkbox" ${_lineStyle[key] ? 'checked' : ''} onchange="_stilSet('${key}',this.checked)"><i></i></label>`;
+}
+
+function _stilRender() {
+  const box = document.getElementById('stil-sadrzaj');
+  if (!box) return;
+  const ls = _lineStyle, tab = _stilTabAkt;
+  const dashBtn = (d, t) => `<button class="stl-seg${ls.tragDash === d ? ' on' : ''}" onclick="_stilSet('tragDash','${d}')">
+      <svg viewBox="0 0 40 8" width="40" height="8"><line x1="2" y1="4" x2="38" y2="4" stroke="currentColor" stroke-width="3" stroke-linecap="round"${_STIL_DASH[d] ? ` stroke-dasharray="${_STIL_DASH[d]}"` : ''}/></svg>${t}</button>`;
+  const boje = `<button class="stl-boja vlastita${!ls.tragCol ? ' on' : ''}" onclick="_stilSet('tragCol','')" title="Svaki trag svojom bojom">Svoja</button>`
+    + _STIL_BOJE.map(c => `<button class="stl-boja${ls.tragCol === c ? ' on' : ''}" style="background:${c};" onclick="_stilSet('tragCol','${c}')" aria-label="Boja ${c}"></button>`).join('')
+    + `<label class="stl-boja stl-boja-izbor${ls.tragCol && !_STIL_BOJE.includes(ls.tragCol) ? ' on' : ''}" title="Druga boja" style="${ls.tragCol && !_STIL_BOJE.includes(ls.tragCol) ? 'background:' + ls.tragCol : ''}">＋<input type="color" value="${ls.tragCol || '#f97316'}" onchange="_stilSet('tragCol',this.value)"></label>`;
+  const sekcije = {
+    trag: `${_stilKlizac('tragW', 'Debljina', 1, 10, 1, ' px')}
+      ${_stilKlizac('tragOp', 'Prozirnost', 20, 100, 5, '%')}
+      <div class="stl-red"><span class="stl-lbl">Linija</span><div class="stl-segs">${dashBtn('solid', 'Puna')}${dashBtn('dash', 'Crtice')}${dashBtn('dot', 'Tačke')}</div></div>
+      <div class="stl-red stl-kol"><span class="stl-lbl">Boja svih tragova</span><div class="stl-boje">${boje}</div></div>
+      ${_stilPrekidac('tragLen', 'Dužina na tragu')}`,
+    msr: `${_stilKlizac('msrW', 'Debljina', 1, 10, 1, ' px')}
+      ${_stilKlizac('msrFillOp', 'Ispuna poligona', 0, 100, 5, '%')}
+      ${_stilPrekidac('msrArea', 'Površina u poligonu')}
+      ${_stilPrekidac('msrLen', 'Dužina na liniji')}`,
+    tacke: `${_stilKlizac('tackaScale', 'Oznaka tačke', 50, 200, 10, '%')}
+      ${_stilKlizac('vlakaDotScale', 'Početak/kraj vlake', 50, 200, 10, '%')}
+      ${_stilKlizac('lagerScale', 'Lager', 50, 200, 10, '%')}`,
+  };
+  const tabBtn = (id, t) => `<button class="stl-tab${tab === id ? ' on' : ''}" onclick="_stilTab('${id}')">${t}</button>`;
+  box.innerHTML = `
+    <div class="stl-tabs">${tabBtn('trag', 'Tragovi')}${tabBtn('msr', 'Mjerenja')}${tabBtn('tacke', 'Tačke i vlake')}</div>
+    <div class="stl-kartica">${sekcije[tab] || ''}</div>
+    <div class="stl-napomena">${tab === 'trag' ? 'Trag kojem je boja/debljina/linija posebno podešena (u njegovom popupu) zadržava svoju.' : 'Vrijedi za sve na ovom uređaju — mijenja se odmah i na karti.'}</div>`;
+  _stilPregled();
+}
+function _stilPregled() {
+  const el = document.getElementById('stil-pregled');
+  if (el) el.innerHTML = _stilPregledSvg(_lineStyle);
+}
+function _stilTab(id) { _stilTabAkt = id; _stilRender(); }
+
 function openStilLinija() {
-  const g = id => document.getElementById(id);
-  g('stil-tragW').value = _lineStyle.tragW;       g('stil-tragW-v').textContent = _lineStyle.tragW;
-  g('stil-tragOp').value = _lineStyle.tragOp;     g('stil-tragOp-v').textContent = _lineStyle.tragOp + '%';
-  g('stil-msrW').value = _lineStyle.msrW;         g('stil-msrW-v').textContent = _lineStyle.msrW;
-  g('stil-msrFillOp').value = _lineStyle.msrFillOp; g('stil-msrFillOp-v').textContent = _lineStyle.msrFillOp + '%';
-  g('stil-tackaScale').value = _lineStyle.tackaScale; g('stil-tackaScale-v').textContent = _lineStyle.tackaScale + '%';
-  g('stil-vlakaDotScale').value = _lineStyle.vlakaDotScale; g('stil-vlakaDotScale-v').textContent = _lineStyle.vlakaDotScale + '%';
-  g('stil-lagerScale').value = _lineStyle.lagerScale; g('stil-lagerScale-v').textContent = _lineStyle.lagerScale + '%';
-  g('stil-tragLen').checked = !!_lineStyle.tragLen;
-  g('stil-msrArea').checked = !!_lineStyle.msrArea;
-  g('stil-msrLen').checked = !!_lineStyle.msrLen;
-  g('stil-tragColOn').checked = !!_lineStyle.tragCol;
-  if (_lineStyle.tragCol) g('stil-tragCol').value = _lineStyle.tragCol;
-  document.querySelectorAll('.stil-dash').forEach(b => b.classList.toggle('on', b.dataset.d === _lineStyle.tragDash));
-  g('stil-modal').style.display = '';
+  _stilRender();
+  document.getElementById('stil-modal').style.display = '';
 }
 function closeStilLinija() { document.getElementById('stil-modal').style.display = 'none'; }
+
+async function _stilVratiZadano() {
+  if (!await _dlgConfirm('Vratiti sve postavke stila na zadane vrijednosti?', { title: 'Vrati zadano', okLabel: 'Vrati' })) return;
+  Object.assign(_lineStyle, _LSTYLE_DEFAULT);
+  _lineStyleSave();
+  _stilApply();
+  _stilRender();
+}
 
 function _stilSet(key, val, el) {
   _lineStyle[key] = val;
   _lineStyleSave();
-  // Osvježi prikaz vrijednosti pored slidera / stanje dash dugmadi
-  if (el) {
-    const v = document.getElementById(el.id + '-v');
-    if (v) v.textContent = val + (/Op|Scale/.test(el.id) ? '%' : '');
+  if (el && el.type === 'range') {
+    // Klizač: samo broj pored njega + pregled — ponovno crtanje panela bi
+    // prekinulo povlačenje prsta.
+    const b = el.parentElement && el.parentElement.querySelector('.stl-val');
+    if (b) b.textContent = val + (el.dataset.suf || '');
+    _stilPregled();
+  } else {
+    _stilRender();
   }
-  if (key === 'tragDash') document.querySelectorAll('.stil-dash').forEach(b => b.classList.toggle('on', b.dataset.d === val));
   _stilApply();
 }
 
@@ -18710,13 +18692,13 @@ function _tragPopupHtml(t, lenM) {
   const w = t.weight || 3;
   const style = t.dashStyle || 'solid';
   return `<div class="trag-popup">
-    <b>${_escHtml(t.name)}</b>
+    <b>${_escHtml(_tragIme(t))}</b>
     <div class="trag-popup-meta">${dt}<br>${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
     <div class="trag-popup-btns">
       <button onclick="_tragRegRename('${t.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Preimenuj</button>
-      <button onclick="_tragRegShare('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
+      <button onclick="_tragKmlMeni('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> KML / Podijeli</button>
       <button onclick="_tragRegToggle('${t.id}');_tragPopupRefresh('${t.id}')" id="tvis-${t.id}">${t.visible!==false?'<svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij':'<svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži'}</button>
-      <button onclick="if(confirm('Obrisati trag?'))_tragRegDelete('${t.id}')" style="color:#f87171;border-color:#7f1d1d;"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
+      <button onclick="_tragPopupObrisi('${t.id}')" style="color:#f87171;border-color:#7f1d1d;"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
     </div>
     <div style="margin-top:8px;border-top:1px solid #334155;padding-top:8px;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
@@ -18732,6 +18714,12 @@ function _tragPopupHtml(t, lenM) {
       </div>
     </div>
   </div>`;
+}
+
+// Native confirm() je u WebView-u ružan i blokira nit — isti _dlgConfirm kao svuda.
+async function _tragPopupObrisi(id) {
+  try { map.closePopup(); } catch (e) {}
+  if (await _dlgConfirm('Obrisati trag?', { danger: true })) _tragRegDelete(id);
 }
 
 function _tragPopupRefresh(id) {
@@ -18902,7 +18890,7 @@ function _tragRegRender() {
         <button onclick="_uglTragOtvori('${t.id}')" title="Poravna vraćanje istim putem i mirovanje u mjestu"><svg class="ic"><use href="#ic-alat"/></svg> Ugladi</button>
         ${_uglMoguciPovratak('trag', t) ? `<button onclick="_uglVrati();_tragRegRender();"><svg class="ic"><use href="#ic-nazad"/></svg> Vrati</button>` : ''}
         <button onclick="_tragRegEditMeta('${t.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Meta</button>
-        <button onclick="_tragRegShare('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
+        <button onclick="_tragKmlMeni('${t.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> KML</button>
         <button class="del-btn" onclick="_tragRegDelete('${t.id}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
       </div>
     </div>`;
@@ -19145,7 +19133,7 @@ function _tragoviRowHtml(t) {
     </div>
     ${otvoren ? `<div class="tv-card-btns">
       <button onclick="_tragRegZoom('${t.id}')"><svg class="ic"><use href="#ic-karta"/></svg> Karta</button>
-      <button onclick="_tragRegShare('${t.id}')" aria-label="Pošalji" title="Pošalji"><svg class="ic"><use href="#ic-posalji"/></svg></button>
+      <button onclick="_tragKmlMeni('${t.id}')" title="Izvezi kao KML / podijeli"><svg class="ic"><use href="#ic-posalji"/></svg> KML</button>
       <button onclick="_tragoviToggleEdit('${t.id}')" aria-label="Uredi" title="Uredi"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
       <button onclick="_tragoviUgladi('${t.id}')" aria-label="Ugladi" title="Ugladi trag"><svg class="ic"><use href="#ic-alat"/></svg></button>
       <button class="del" onclick="_tragoviObrisi('${t.id}')" aria-label="Obriši" title="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
@@ -19316,9 +19304,9 @@ function _tragToKml(t) {
   const coords = t.pts.map(p => `${p[1]},${p[0]},0`).join('\n              ');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
-<Document><name>${_escXml(t.name)}</name>
+<Document><name>${_escXml(_tragIme(t))}</name>
   <Placemark>
-    <name>${_escXml(t.name)}</name>
+    <name>${_escXml(_tragIme(t))}</name>
     <Style><LineStyle><color>${_hexToKmlColor(t.color||'#f97316')}</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
     <LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString>
   </Placemark>
@@ -19334,31 +19322,43 @@ function _tragToKml(t) {
 async function _tragRegShare(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
-  const fname = t.name.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.kml';
-  const kml = _tragToKml(t);
-  if (typeof AndroidShare !== 'undefined' && AndroidShare.shareFile) {
-    try {
-      const dataUrl = 'data:application/vnd.google-earth.kml+xml;base64,' + btoa(unescape(encodeURIComponent(kml)));
-      AndroidShare.shareFile(fname, dataUrl, t.name, `Trag: ${t.name}`);
-      return;
-    } catch(e) {}
-  }
-  const file = new File([kml], fname, {type:'application/vnd.google-earth.kml+xml'});
-  if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-    try {
-      await navigator.share({ files: [file], title: t.name, text: `Trag: ${t.name}` });
-      return;
-    } catch(e) {
-      if (e && e.name === 'AbortError') return; // korisnik otkazao dijeljenje
-    }
-  }
-  // Fallback — preuzmi KML lokalno
+  const ime = _tragIme(t);
+  await _shareKmlOrDownload(_tragKmlIme(t), _tragToKml(t), ime, 'Trag: ' + ime, () => _tragKmlSacuvaj(id));
+}
+
+// Ime fajla iz naziva traga — dijakritika ostaje (Android je podržava), a
+// izbacuju se samo znakovi koje sistem fajlova ne dozvoljava. Ranije je
+// `t.name.replace(...)` za trag bez imena davalo fajl ".kml".
+function _tragKmlIme(t) {
+  const osnova = String(_tragIme(t) || 'trag').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 60);
+  return (osnova || 'trag') + '.kml';
+}
+
+// Sačuvaj na uređaj: u APK-u <a download> presreće AndroidDownload most
+// (blob → Downloads), u browseru je obično preuzimanje.
+function _tragKmlSacuvaj(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([kml], {type:'application/vnd.google-earth.kml+xml'}));
-  a.download = fname;
+  a.href = URL.createObjectURL(new Blob([_tragToKml(t)], { type: 'application/vnd.google-earth.kml+xml' }));
+  a.download = _tragKmlIme(t);
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  showToast('📥 KML preuzet (dijeljenje fajlova nije podržano na ovom uređaju)');
+  showToast('💾 Sačuvano: ' + a.download);
+}
+
+// Jedan ulaz za izvoz traga (v1.8.1) — kartica traga, popup na karti i Teren.
+// Zamjenjuje meni "KML izvoz" (izvozio je samo vlake, nikad tragove).
+async function _tragKmlMeni(id) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  try { map.closePopup(); } catch (e) {}
+  const i = await _dlgActions('📄 ' + _tragIme(t) + ' — KML', [
+    { label: '<svg class="ic"><use href="#ic-posalji"/></svg> Podijeli (Viber, WhatsApp, e-mail…)' },
+    { label: '<svg class="ic"><use href="#ic-uvezi"/></svg> Sačuvaj .kml na telefon' },
+  ]);
+  if (i === 0) _tragRegShare(id);
+  else if (i === 1) _tragKmlSacuvaj(id);
 }
 
 function _toggleLocPopup() {
@@ -23434,11 +23434,6 @@ function mkKML() {
   }).filter(Boolean).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n  <n>Traktorske Vlake</n>\n${pms}\n</Document>\n</kml>`;
 }
-function showExport(){document.getElementById('etxt').value=mkKML();document.getElementById('modal').classList.add('show');}
-function closeM(){document.getElementById('modal').classList.remove('show');}
-function dlKML(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([mkKML()],{type:'application/vnd.google-earth.kml+xml'}));a.download='vlake.kml';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
-function cpKML(){navigator.clipboard.writeText(document.getElementById('etxt').value);showToast('Kopirano!');}
-function kmlModalShare(){ _shareKmlOrDownload('vlake.kml', mkKML(), 'Traktorske vlake', 'Traktorske vlake', dlKML); }
 
 // === PANEL MOBILE ===
 function togglePanel(){
@@ -37537,14 +37532,12 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr">Teren</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showShareLocMenu()"><span class="mdrop-ico">📍</span>Podijeli lokaciju</div>
   <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr">Projekti i izvoz</div>
   <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</div>
   <div class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showExport()"><span class="mdrop-ico">⬆</span>KML izvoz</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr" id="menu-user-label" style="text-transform:none;letter-spacing:0.02em;font-size:12px;">—</div>
@@ -37559,51 +37552,15 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
-<div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99500;">
-  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,94vw);max-height:88vh;max-height:88dvh;overflow-y:auto;background:#16213e;border:1px solid #0f3460;border-radius:14px;padding:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-weight:700;color:#e2e8f0;font-size:15px;">🖌 Stil linija</div>
-      <button onclick="closeStilLinija()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+<div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;">
+  <div class="stl-sheet">
+    <div class="stl-hdr">
+      <h3>🖌 Stil linija</h3>
+      <button class="stl-reset" onclick="_stilVratiZadano()">Vrati zadano</button>
+      <button class="stl-x" onclick="closeStilLinija()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </div>
-    <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Globalni stil — vrijedi za sve tragove, mjerenja i tačke. Pojedinačna izmjena na tragu (kroz njegov popup) ima prednost za taj trag.</div>
-
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:700;color:#f97316;margin-bottom:10px;">📍 Tragovi (linije)</div>
-      <div class="stil-row"><span>Debljina</span><input type="range" min="1" max="10" value="4" id="stil-tragW" oninput="_stilSet('tragW',+this.value,this)"><b id="stil-tragW-v">4</b></div>
-      <div class="stil-row"><span>Prozirnost</span><input type="range" min="20" max="100" value="85" id="stil-tragOp" oninput="_stilSet('tragOp',+this.value,this)"><b id="stil-tragOp-v">85%</b></div>
-      <div class="stil-row"><span>Stil</span>
-        <span style="display:flex;gap:4px;flex:1;">
-          <button class="stil-dash" data-d="solid" onclick="_stilSet('tragDash','solid')"><svg class="ic"><use href="#ic-puna"/></svg> Puna</button>
-          <button class="stil-dash" data-d="dash" onclick="_stilSet('tragDash','dash')"><svg class="ic"><use href="#ic-crtkana"/></svg> Crtice</button>
-          <button class="stil-dash" data-d="dot" onclick="_stilSet('tragDash','dot')">· Tačke</button>
-        </span>
-      </div>
-      <div class="stil-row"><span>Jedna boja za sve</span>
-        <input type="checkbox" id="stil-tragColOn" onchange="_stilSet('tragCol', this.checked ? document.getElementById('stil-tragCol').value : '')">
-        <input type="color" id="stil-tragCol" value="#f97316" onchange="if(document.getElementById('stil-tragColOn').checked)_stilSet('tragCol',this.value)" style="width:32px;height:24px;border:none;background:none;cursor:pointer;">
-      </div>
-      <div class="stil-row"><span>Prikaži dužinu na tragu</span><input type="checkbox" id="stil-tragLen" onchange="_stilSet('tragLen',this.checked)"></div>
-    </div>
-
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:10px;">📏 Mjerenja (linije i poligoni)</div>
-      <div class="stil-row"><span>Debljina</span><input type="range" min="1" max="10" value="4" id="stil-msrW" oninput="_stilSet('msrW',+this.value,this)"><b id="stil-msrW-v">4</b></div>
-      <div class="stil-row"><span>Ispuna poligona</span><input type="range" min="0" max="100" value="18" id="stil-msrFillOp" oninput="_stilSet('msrFillOp',+this.value,this)"><b id="stil-msrFillOp-v">18%</b></div>
-      <div class="stil-row"><span>Površina unutar poligona</span><input type="checkbox" id="stil-msrArea" onchange="_stilSet('msrArea',this.checked)"></div>
-      <div class="stil-row"><span>Dužina na liniji</span><input type="checkbox" id="stil-msrLen" onchange="_stilSet('msrLen',this.checked)"></div>
-    </div>
-
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:10px;">📌 Tačke</div>
-      <div class="stil-row"><span>Veličina</span><input type="range" min="50" max="200" step="10" value="100" id="stil-tackaScale" oninput="_stilSet('tackaScale',+this.value,this)"><b id="stil-tackaScale-v">100%</b></div>
-    </div>
-
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:12px;">
-      <div style="font-size:13px;font-weight:700;color:#a3e635;margin-bottom:10px;">🟢🔴 Vlaka/krak — početak i kraj</div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Početak = sitna zelena tačka, kraj = sitna crvena tačka.</div>
-      <div class="stil-row"><span>Veličina tačke</span><input type="range" min="50" max="200" step="10" value="100" id="stil-vlakaDotScale" oninput="_stilSet('vlakaDotScale',+this.value,this)"><b id="stil-vlakaDotScale-v">100%</b></div>
-      <div class="stil-row"><span>Veličina lagera</span><input type="range" min="50" max="200" step="10" value="100" id="stil-lagerScale" oninput="_stilSet('lagerScale',+this.value,this)"><b id="stil-lagerScale-v">100%</b></div>
-    </div>
+    <div id="stil-pregled"></div>
+    <div id="stil-sadrzaj"></div>
   </div>
 </div>
 
