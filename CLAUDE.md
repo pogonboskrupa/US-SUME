@@ -2761,6 +2761,22 @@ namjerno, prije nego se jave.
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
 
+- **N.V. (nadmorska visina) iz DEM-a, uživo i offline (v1.7.8)**: prijava
+  "kako idem po karti želim da se mijenja nadmorska visina". Tri uzroka:
+  (1) N.V. je dolazila ISKLJUČIVO sa Open-Meteo API-ja — bez signala nikad;
+  (2) `fetchElev` je visinu centra upisivao samo uz `!_gpsAlt`, a `onP` pri
+  odmaknutoj karti `_gpsAlt` ostavlja `true` — visina se dohvati pa BACI, pa
+  se pomjeranjem karte uz uključen GPS N.V. nikad nije mijenjala; (3) GPS
+  visina iz Geolocation API-ja je iznad WGS84 ELIPSOIDA (~45 m više od
+  nadmorske u BiH). Sad `_nvZaTacku`/`_nvZaPoziciju` čitaju Terrarium DEM
+  (`_TERR_CACHE`, isti keš kao Nagib/Konture) — prvo SAMO keš (z12, pa
+  z13/14/11/10), tek onda mreža (obrnuto bi na mrtvoj vezi čekalo 10 s);
+  dekodirane pločice su u memoriji (LRU 12), pa `map.on('move')` mijenja broj
+  u svakom frame-u bez I/O. GPS visina (📡) je samo rezerva kad DEM nema
+  pločicu; bez ijednog izvora piše "— m", ne stari broj sa drugog mjesta.
+  Visina SNIMLJENIH tačaka (uspon/pad) NIJE dirana. Test:
+  `tests/js/nv-dem.test.js`.
+
 - **Doznaka — tragovi projektanata i pređena površina (v1.7.5)**: sve
   računice (karta, pojasevi, dužine, statistika, popup granice) idu kroz
   `_dozTragoviPoKorisniku()` — serverske tačke + MOJE neposlane iz

@@ -5451,7 +5451,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.7';
+const APP_VER = 'v1.7.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12478,40 +12478,189 @@ function _terenQueryPoint(lat, lng) {
 
 // === NADMORSKA VISINA ===
 let _elevTimer = null, _elevLat = null, _elevLng = null, _gpsAlt = false;
-// v1.5.9: dok je GPS uključen i šalje visinu, N.V. prati TVOJU živu visinu
-// (_gpsAlt=true, 📡 ikonica) — ali karta se NE pomjera automatski dok se ništa
-// ne snima (vidi onP: panTo se zove SAMO tokom recOn/tragOn), pa korisnik koji
-// samo ručno pomjera kartu (gleda drugi odjel) ostaje zaglavljen na SVOJOJ
-// visini umjesto da vidi visinu ispod crosshair-a — GPS watch stalno šalje
-// nove fiksove pa _gpsAlt nikad sam ne padne na false. _userPannedAway prati
-// da li je korisnik SVJESNO odmakao kartu (dragstart) — dok je true, moveend
-// osvježava N.V. za centar karte bez obzira na _gpsAlt; vraća se na false kad
-// se korisnik ponovo centrira na svoju poziciju (fabLokacija) ili ugasi GPS.
+// v1.5.9: dok je GPS uključen, N.V. prati TVOJU poziciju (_gpsAlt=true) — ali
+// karta se NE pomjera automatski dok se ništa ne snima (vidi onP: panTo SAMO
+// tokom recOn/tragOn), pa korisnik koji ručno pomjera kartu (gleda drugi odjel)
+// treba vidjeti visinu ispod crosshair-a. _userPannedAway prati da li je
+// korisnik SVJESNO odmakao kartu (dragstart); vraća se na false kad se ponovo
+// centrira (fabLokacija) ili ugasi GPS.
 let _userPannedAway = false;
+
+// v1.7.8: N.V. se čita iz Terrarium DEM-a (isti keš kao Nagib/N.V./Konture),
+// ne više isključivo sa Open-Meteo API-ja. Tri razloga, sva tri izmjerena na
+// terenskom obrascu rada:
+//  1. Open-Meteo traži mrežu — u šumi bez signala N.V. nikad nije stigla.
+//     DEM pločica iz Cache Storage-a radi offline.
+//  2. Mrežni poziv po pomjeranju (450 ms debounce + odziv) = visina "kasni" i
+//     mijenja se tek kad se prst digne. Dekodirana pločica u memoriji daje
+//     visinu SINHRONO, pa se broj mijenja u svakom frame-u pomjeranja.
+//  3. GPS visina iz Geolocation API-ja je visina iznad WGS84 ELIPSOIDA, ne
+//     nadmorska — u BiH je geoid ~45 m iznad elipsoida, pa je 📡 broj bio
+//     sistematski previsok, uz vertikalni šum GPS-a. Zato i pri praćenju
+//     pozicije DEM ima prednost; GPS visina (📡) ostaje samo rezerva kad DEM
+//     pločica nije dostupna. Visina SNIMLJENIH tačaka (uspon/pad) se NE dira.
+const _NV_DEM_Z = 12;             // ~27 m/px na 45°N — rezolucija samog SRTM-a
+const _NV_DEM_Z_REZERVA = [13, 14, 11, 10]; // već keširano od DEM slojeva
+const _NV_DEM_MEM_MAX = 12;       // 256 KB po pločici
+const _NV_DEM_NEMA_MS = 30000;    // "nema pločice" se ponovo proba poslije 30 s
+var _nvDemMem = new Map();        // "z/x/y" -> Float32Array (LRU po redoslijedu umetanja)
+var _nvDemNema = new Map();       // "x/y" (na _NV_DEM_Z) -> vrijeme neuspjeha
+var _nvDemCeka = new Map();       // "x/y" -> Promise (jedan dohvat po pločici)
+var _nvZahtjev = 0;               // novi zahtjev poništava zakašnjele odgovore
+
+function _nvPostavi(txt) {
+  const a = document.getElementById('onv');
+  if (a) a.textContent = txt;
+  const b = document.getElementById('nv-val');
+  if (b) b.textContent = txt;
+}
+
+function _nvMemUzmi(k) {
+  const v = _nvDemMem.get(k);
+  if (v) { _nvDemMem.delete(k); _nvDemMem.set(k, v); }
+  return v;
+}
+function _nvMemStavi(k, v) {
+  _nvDemMem.set(k, v);
+  while (_nvDemMem.size > _NV_DEM_MEM_MAX) _nvDemMem.delete(_nvDemMem.keys().next().value);
+}
+
+// Bilinearno očitavanje unutar jedne pločice. Susjedi preko ivice se
+// ograničavaju na ivicu pločice — razlika je ispod jednog piksela (~27 m), a
+// izbjegava se čekanje na susjednu pločicu usred pomjeranja.
+function _nvDemOcitaj(elev, fx, fy, tx, ty) {
+  const px = Math.max(0, Math.min(255, (fx - tx) * 256 - 0.5));
+  const py = Math.max(0, Math.min(255, (fy - ty) * 256 - 0.5));
+  const x0 = Math.floor(px), y0 = Math.floor(py);
+  const x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
+  const dx = px - x0, dy = py - y0;
+  const v = elev[y0*256+x0]*(1-dx)*(1-dy) + elev[y0*256+x1]*dx*(1-dy)
+          + elev[y1*256+x0]*(1-dx)*dy     + elev[y1*256+x1]*dx*dy;
+  // Terrarium "nema podatka" / more kodira se kao ~-32768 ili ispod nule
+  return (Number.isFinite(v) && v > -500) ? v : null;
+}
+
+// Sinhrono: visina iz VEĆ dekodirane pločice u memoriji, ili undefined kad je
+// treba tek učitati. Poziva se u svakom frame-u pomjeranja — bez I/O.
+function _nvDemSync(lat, lng) {
+  if (lat == null || lng == null || Math.abs(lat) > 85) return null;
+  for (const z of [_NV_DEM_Z, ..._NV_DEM_Z_REZERVA]) {
+    const fx = _termLon2x(lng, z), fy = _termLat2y(lat, z);
+    const tx = Math.floor(fx), ty = Math.floor(fy);
+    const elev = _nvMemUzmi(z + '/' + tx + '/' + ty);
+    if (elev) return _nvDemOcitaj(elev, fx, fy, tx, ty);
+  }
+  return undefined;
+}
+
+async function _nvKesSamo(z, x, y) {
+  if (!('caches' in window)) return null;
+  try {
+    const c = await caches.open(_TERR_CACHE);
+    const r = await c.match(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`);
+    if (!r) return null;
+    const blob = await r.blob();
+    return typeof createImageBitmap !== 'undefined' ? await createImageBitmap(blob) : null;
+  } catch { return null; }
+}
+
+// Učitaj pločicu za tačku: PRVO samo keš (osnovni pa rezervni zumovi — ms,
+// radi offline), TEK ONDA mreža za osnovni zum. Obrnut redoslijed bi na mrtvoj
+// vezi (navigator.onLine laže) čekao 10 s na istek prije keša koji već postoji.
+async function _nvDemUcitaj(lat, lng) {
+  const bx = Math.floor(_termLon2x(lng, _NV_DEM_Z)), by = Math.floor(_termLat2y(lat, _NV_DEM_Z));
+  const kljuc = bx + '/' + by;
+  const pao = _nvDemNema.get(kljuc);
+  if (pao && Date.now() - pao < _NV_DEM_NEMA_MS) return false;
+  if (_nvDemCeka.has(kljuc)) return _nvDemCeka.get(kljuc);
+  const p = (async () => {
+    const zumovi = [_NV_DEM_Z, ..._NV_DEM_Z_REZERVA];
+    for (const z of zumovi) {
+      const x = Math.floor(_termLon2x(lng, z)), y = Math.floor(_termLat2y(lat, z));
+      const img = await _nvKesSamo(z, x, y);
+      if (img) { _nvMemStavi(z + '/' + x + '/' + y, _terrariumDecodeTile(img)); return true; }
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    const img = await _getTerrariumTile(_NV_DEM_Z, bx, by).catch(() => null);
+    if (img) { _nvMemStavi(_NV_DEM_Z + '/' + bx + '/' + by, _terrariumDecodeTile(img)); return true; }
+    return false;
+  })().then(ok => {
+    if (ok) _nvDemNema.delete(kljuc); else _nvDemNema.set(kljuc, Date.now());
+    return ok;
+  }).catch(() => { _nvDemNema.set(kljuc, Date.now()); return false; })
+    .finally(() => _nvDemCeka.delete(kljuc));
+  _nvDemCeka.set(kljuc, p);
+  return p;
+}
+if (typeof window !== 'undefined' && window.addEventListener)
+  window.addEventListener('online', () => _nvDemNema.clear());
+
+// N.V. za centar karte (ili tačku pod kursorom). Iz memorije odmah; inače
+// učitaj pločicu, pa Open-Meteo kao zadnja rezerva (online bez DEM-a).
+// Kad nijedan izvor nema podatak piše "— m" — stari broj sa DRUGOG mjesta bi
+// bio laž, a karta je upravo pomjerena.
+async function _nvZaTacku(lat, lng) {
+  const moj = ++_nvZahtjev;
+  const odmah = _nvDemSync(lat, lng);
+  if (odmah !== undefined) { _nvPostavi(odmah != null ? Math.round(odmah) + ' m' : '— m'); return; }
+  const ok = await _nvDemUcitaj(lat, lng);
+  if (moj !== _nvZahtjev) return;
+  if (ok) {
+    const v = _nvDemSync(lat, lng);
+    if (v !== undefined) { _nvPostavi(v != null ? Math.round(v) + ' m' : '— m'); return; }
+  }
+  let nv = null;
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+    try {
+      const r = await _fetchT(
+        `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
+        4000
+      );
+      nv = (await r.json())?.elevation?.[0];
+    } catch(e) { /* nema mreže — ispod "— m" */ }
+  }
+  if (moj !== _nvZahtjev) return;
+  _nvPostavi(nv != null ? Math.round(nv) + ' m' : '— m');
+}
+
+// N.V. za TVOJU GPS poziciju: DEM na tvojoj tački, GPS visina (📡) samo kad
+// DEM pločica nije dostupna ni u kešu ni sa mreže.
+function _nvZaPoziciju(la, lo, gpsAl) {
+  const moj = ++_nvZahtjev;
+  const rezerva = () => _nvPostavi(gpsAl != null ? Math.round(gpsAl) + ' m 📡' : '— m');
+  const odmah = _nvDemSync(la, lo);
+  if (odmah != null) { _nvPostavi(Math.round(odmah) + ' m'); return; }
+  if (odmah === null) { rezerva(); return; }
+  // Dok se pločica učitava, ne ostavljaj stari broj sa druge tačke.
+  if (gpsAl != null) rezerva();
+  _nvDemUcitaj(la, lo).then(() => {
+    if (moj !== _nvZahtjev) return;
+    const v = _nvDemSync(la, lo);
+    if (v != null) _nvPostavi(Math.round(v) + ' m'); else rezerva();
+  });
+}
+
+// Da li N.V. treba da prati centar karte (a ne tvoju GPS poziciju).
+function _nvPratiCentar() {
+  return !_gpsAlt || _recFreeView || _userPannedAway;
+}
 
 function debouncedUpdElev(lat, lng, ms) {
   _elevLat = lat; _elevLng = lng;
   clearTimeout(_elevTimer);
+  // Pločica je već u memoriji → odmah, bez čekanja (vidi razlog 2 iznad).
+  if (_nvDemSync(lat, lng) !== undefined) { _nvZaTacku(lat, lng); return; }
   _elevTimer = setTimeout(fetchElev, ms || 450);
 }
 
 async function fetchElev() {
   const lat = _elevLat, lng = _elevLng;
   if (lat == null) return;
-  try {
-    const r = await _fetchT(
-      `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
-      4000
-    );
-    const d = await r.json();
-    const nv = d.elevation?.[0];
-    if (nv != null && !_gpsAlt) {
-      const nvTxt = Math.round(nv) + ' m';
-      document.getElementById('onv').textContent = nvTxt;
-      const nvVal = document.getElementById('nv-val');
-      if (nvVal) nvVal.textContent = nvTxt;
-    }
-  } catch(e) { /* ignore */ }
+  // Bez provjere _gpsAlt ovdje: pozivaoci (moveend/mousemove) već odlučuju da
+  // li se prati centar. Stara provjera `!_gpsAlt` je tiho BACALA visinu centra
+  // kad je karta odmaknuta dok GPS radi — onP tad _gpsAlt ne spušta, pa se
+  // N.V. nikad nije mijenjala pomjeranjem karte (prijava v1.7.8).
+  await _nvZaTacku(lat, lng);
 }
 
 // === COLORS ===
@@ -14818,12 +14967,18 @@ map.on('move', () => {
     _updMcdDist();
     const c = map.getCenter();
     updMGI(c.lat, c.lng);
+    // N.V. uživo dok se karta vuče — samo iz pločice već u memoriji (bez I/O u
+    // frame-u); nova pločica se učita na moveend.
+    if (_nvPratiCentar()) {
+      const v = _nvDemSync(c.lat, c.lng);
+      if (v !== undefined) { _nvZahtjev++; _nvPostavi(v != null ? Math.round(v) + ' m' : '— m'); }
+    }
   });
 });
 map.on('moveend', () => {
   const c = map.getCenter();
   updMGI(c.lat, c.lng);
-  if (!_gpsAlt || _recFreeView || _userPannedAway) debouncedUpdElev(c.lat, c.lng, 450);
+  if (_nvPratiCentar()) debouncedUpdElev(c.lat, c.lng, 250);
 });
 
 // === RAZMJERA KARTE (live) ===
@@ -17455,6 +17610,8 @@ function stopGPS() {
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
   _userPannedAway = false;
+  // N.V. se vraća na centar karte — inače ostaje visina zadnje GPS pozicije.
+  try { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 100); } catch(e) {}
   if (_compassConeOn) togCompassCone();
   _clearRadiusRings(); _radiusOn = false;
   document.getElementById('gps-info').textContent = 'GPS: isključen';
@@ -17825,15 +17982,13 @@ function onP(p) {
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   _updRecSignal(ac);
   _precizCollect(la, lo, ac);
-  if (al != null && !_userPannedAway) {
+  // N.V. prati tvoju poziciju dok karta nije svjesno odmaknuta — DEM na tvojoj
+  // tački, GPS visina (📡) samo kao rezerva (vidi _nvZaPoziciju). _gpsAlt znači
+  // "N.V. prati poziciju", pa važi i kad GPS ne šalje visinu.
+  if (!_userPannedAway && !_recFreeView) {
     _gpsAlt = true;
-    const nvGpsTxt = Math.round(filtAl ?? al) + ' m 📡';
-    document.getElementById('onv').textContent = nvGpsTxt;
-    const nvVal = document.getElementById('nv-val');
-    if (nvVal) nvVal.textContent = nvGpsTxt;
-  } else if (al == null) {
-    _gpsAlt = false;
-    debouncedUpdElev(la, lo, 200);
+    clearTimeout(_elevTimer);
+    _nvZaPoziciju(la, lo, filtAl ?? al);
   }
 
   // Marker pozicije (SVG s kompasom)
