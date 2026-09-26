@@ -5451,7 +5451,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.7.8';
+const APP_VER = 'v1.7.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12663,6 +12663,117 @@ async function fetchElev() {
   await _nvZaTacku(lat, lng);
 }
 
+// ── Preuzimanje visina (DEM) za offline (v1.7.9) ─────────────────────────────
+// N.V. offline radi samo za pločice već u _TERR_CACHE. One se spreme usput dok
+// se karta pregleda online, ali područje u koje se tek ide (a tamo nema
+// signala) treba moći preuzeti UNAPRIJED. Namjerno EKSPLICITNO, na klik — ne
+// automatski uz učitanu SQLite kartu: karta cijele regije zna pokriti stotine
+// pločica, a tiho trošenje desetina MB mobilnih podataka nije prihvatljivo.
+// Preuzima se samo _NV_DEM_Z (to je jedini zum koji N.V. čita kao osnovni).
+const _NV_DEM_KB = 90;            // prosječna Terrarium z12 pločica (izmjereno ~60–130 KB)
+const _NV_DEM_MAX_PLOCICA = 600;  // ~54 MB — iznad toga neka korisnik suzi područje
+var _nvDemDlUToku = false;
+
+function _nvDemPlociceZa(b) {
+  if (!b) return [];
+  const z = _NV_DEM_Z;
+  const s = Math.max(-85, b.getSouth()), n = Math.min(85, b.getNorth());
+  const x0 = Math.floor(_termLon2x(b.getWest(), z)), x1 = Math.floor(_termLon2x(b.getEast(), z));
+  const y0 = Math.floor(_termLat2y(n, z)), y1 = Math.floor(_termLat2y(s, z));
+  const out = [];
+  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
+    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) out.push({ z, x, y });
+  return out;
+}
+
+function _nvDemVelicinaTxt(n) {
+  const mb = n * _NV_DEM_KB / 1024;
+  return n + (n === 1 ? ' pločica' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? ' pločice' : ' pločica')
+    + ' · ≈ ' + (mb < 1 ? '< 1' : Math.round(mb)) + ' MB';
+}
+
+// Preuzmi nedostajuće pločice u _TERR_CACHE. Već keširane se preskaču (ponovno
+// pokretanje samo dopuni prekinuto). Odgovor koji NIJE slika se ne kešira —
+// ista zamka kao v3.111.7 (200 OK sa HTML/XML tijelom = otrovan keš zauvijek).
+async function _nvDemPreuzmi(plocice, onNapredak) {
+  const rez = { ukupno: plocice.length, novih: 0, vec: 0, gresaka: 0, kvota: false };
+  if (!('caches' in window)) { rez.gresaka = plocice.length; return rez; }
+  const cache = await caches.open(_TERR_CACHE);
+  let i = 0;
+  for (const t of plocice) {
+    i++;
+    const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${t.z}/${t.x}/${t.y}.png`;
+    try {
+      if (await cache.match(url)) rez.vec++;
+      else {
+        const r = await _fetchT(url, 15000, { mode: 'cors' });
+        const ct = (r && r.headers && r.headers.get && r.headers.get('Content-Type')) || '';
+        if (!r || !r.ok || (ct && !/^image\//i.test(ct))) rez.gresaka++;
+        else {
+          try { await cache.put(url, r); rez.novih++; }
+          catch (qe) { rez.gresaka++; if (qe && qe.name === 'QuotaExceededError') { rez.kvota = true; break; } }
+        }
+      }
+    } catch (e) { rez.gresaka++; }
+    if (onNapredak) { try { onNapredak(i, plocice.length); } catch (e) {} }
+  }
+  _nvDemNema.clear();   // N.V. odmah proba ponovo, ne čeka 30 s pauzu neuspjeha
+  return rez;
+}
+
+// Izbor područja: trenutni prikaz, odjel projekta, područja učitanih offline karata.
+function _nvDemPodrucja() {
+  const opc = [];
+  // Na bliskom zumu je prikaz ~1 km — premalo za dan na terenu; zato najmanje
+  // ~20 × 20 km oko centra (±0.1° širine, ±0.14° dužine na ~45°N).
+  try {
+    const c = map.getCenter();
+    const b = map.getBounds().pad(0.5).extend([[c.lat - 0.1, c.lng - 0.14], [c.lat + 0.1, c.lng + 0.14]]);
+    opc.push({ ime: 'Okolina trenutnog prikaza (najmanje ~20 km)', b });
+  } catch (e) {}
+  try {
+    const od = typeof getOdjel === 'function' ? getOdjel() : '';
+    const g = od && typeof findGraniceOdjel === 'function' ? findGraniceOdjel(od) : null;
+    if (g && g.bounds) opc.push({ ime: 'Odjel projekta: ' + g.name, b: g.bounds.pad(0.2) });
+  } catch (e) {}
+  try {
+    (_sqlLayers || []).forEach(sl => {
+      const bb = String(sl.meta?.bounds || '').split(',').map(Number);
+      if (bb.length === 4 && bb.every(Number.isFinite))
+        opc.push({ ime: 'Offline karta: ' + sl.name, b: L.latLngBounds([bb[1], bb[0]], [bb[3], bb[2]]) });
+    });
+  } catch (e) {}
+  return opc.map(o => ({ ...o, plocice: _nvDemPlociceZa(o.b) }));
+}
+
+async function nvDemPreuzmiUi() {
+  if (_nvDemDlUToku) { showToast('⏳ Preuzimanje visina je već u toku'); return; }
+  if (navigator.onLine === false) { showToast('Za preuzimanje visina treba internet'); return; }
+  const opc = _nvDemPodrucja();
+  if (!opc.length) { showToast('Nema područja za preuzimanje'); return; }
+  const i = await _dlgActions('⛰ Preuzmi visine za offline', opc.map(o => ({
+    label: _escHtml(o.ime) + '<br><span style="font-size:11px;opacity:.7;">' +
+      (o.plocice.length > _NV_DEM_MAX_PLOCICA ? 'Preveliko područje (' + _nvDemVelicinaTxt(o.plocice.length) + ')' : _nvDemVelicinaTxt(o.plocice.length)) + '</span>'
+  })));
+  if (i == null || !opc[i]) return;
+  const o = opc[i];
+  if (o.plocice.length > _NV_DEM_MAX_PLOCICA) {
+    showToast('⚠ Područje je preveliko — izaberi odjel ili manji prikaz karte');
+    return;
+  }
+  _nvDemDlUToku = true;
+  showToast('⏳ Preuzimam visine: 0 / ' + o.plocice.length);
+  try {
+    const r = await _nvDemPreuzmi(o.plocice, (k, n) => { if (k % 5 === 0 || k === n) showToast('⏳ Preuzimam visine: ' + k + ' / ' + n); });
+    showToast(r.kvota ? '⚠ Nema više prostora — preuzeto ' + r.novih + ' pločica visina'
+      : r.gresaka ? '⚠ Visine: ' + (r.novih + r.vec) + ' / ' + r.ukupno + ' spremno, ' + r.gresaka + ' nije uspjelo — pokreni ponovo da dopuniš'
+      : '✅ Visine spremne za offline (' + r.ukupno + ' pločica' + (r.vec ? ', ' + r.vec + ' već postojalo' : '') + ')');
+    try { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 50); } catch (e) {}
+    if (typeof _lsRenderCache === 'function') _lsRenderCache();
+    if (document.getElementById('cachemgr-modal')?.style.display === 'flex') _cacheMgrRender(true);
+  } finally { _nvDemDlUToku = false; }
+}
+
 // === COLORS ===
 // Zelene boje (#22c55e, #4ade80, #34d399) isključene — ista boja kao poligon GRANICE
 const PAL = ['#60a5fa','#f87171','#fbbf24','#a78bfa','#fb923c','#38bdf8','#f472b6','#e879f9','#94a3b8','#f59e0b'];
@@ -14434,7 +14545,8 @@ async function _lsRenderCache() {
       <div style="flex:1;min-width:0;font-size:12px;color:#94a3b8;">💾 Offline pločice: <b style="color:#4ade80">${count.toLocaleString()}</b>${mbTxt}</div>
       <button onclick="showCacheMgr()" style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;color:#7dd3fc;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-postavke"/></svg> Upravljaj</button>
     </div>
-    <div style="font-size:11px;color:#64748b;margin-top:4px;">Sve što pogledaš online automatski se čuva za offline — po karti posebno.</div>`;
+    <div style="font-size:11px;color:#64748b;margin-top:4px;">Sve što pogledaš online automatski se čuva za offline — po karti posebno.</div>
+    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin-top:8px;padding:8px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi nadmorske visine za offline</button>`;
   _lsFillCardBadges();
 }
 
@@ -14452,7 +14564,7 @@ const _CMGR_ROWS = [
   { id: 'wcover', ico: '🌍',  name: 'Pokrivenost zemljišta', sub: 'ESA WorldCover', cache: _WC_CACHE },
   { id: 'elev',  ico: '🏔',  name: 'Sjenčenje terena', sub: 'Hillshade',       cache: 'tvlake-elev-v1' },
   { id: 'slope', ico: '📐',  name: 'Nagib terena',    sub: 'Shaded relief',    cache: 'tvlake-slope-v1' },
-  { id: 'terr',  ico: '🗻',  name: 'Teren (DEM)',     sub: 'Visinski podaci',  cache: 'tvlake-terr-v1' },
+  { id: 'terr',  ico: '🗻',  name: 'Teren (DEM)',     sub: 'Visinski podaci · N.V. offline',  cache: 'tvlake-terr-v1' },
   { id: 'nv',    ico: '🏷',  name: 'Nadmorske visine', sub: 'Open-Meteo keš',  cache: 'tvlake-nv-v1' },
   { id: 'wayback', ico: '📅', name: 'Vremenska traka', sub: 'Esri Wayback',    cache: _WB_TILE_CACHE },
 ];
@@ -14541,6 +14653,7 @@ async function _cacheMgrRender(rescan) {
   try { const est = await navigator.storage.estimate(); estTxt = ` · aplikacija ukupno ≈ ${Math.round((est.usage || 0) / 1048576)} MB`; } catch(e) {}
   body.innerHTML = `
     ${rows}
+    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin:2px 0 8px;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi nadmorske visine za područje</button>
     <div style="font-size:11px;color:#64748b;margin:4px 2px 10px;">Ukupno pločica: <b style="color:#94a3b8">${totCount.toLocaleString('bs')}</b> · ≈ ${_cmgrFmtMb(totBytes)}${estTxt}</div>
     <div style="display:flex;gap:7px;">
       <button onclick="closeCacheMgr();openLoadMapScreen()" style="flex:1;padding:9px;background:#14233c;border:1px solid #1e3a5f;border-radius:9px;color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-karta"/></svg> Offline karte (fajlovi)</button>

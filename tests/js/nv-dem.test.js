@@ -40,7 +40,10 @@ function env(opts = {}) {
   const mreza = new Map(opts.mreza || []);       // url -> Float32Array
   const dom = { onv: { textContent: '' }, 'nv-val': { textContent: '' } };
   const log = { mreza: [], meteo: 0 };
-  const caches = { open: async () => ({ match: async (u) => kes.has(u) ? { blob: async () => kes.get(u) } : undefined }) };
+  const caches = { open: async () => ({
+    match: async (u) => kes.has(u) ? { blob: async () => kes.get(u) } : undefined,
+    put: async (u, r) => { if (opts.kvotaPoslije != null && kes.size >= opts.kvotaPoslije) { const e = new Error('q'); e.name = 'QuotaExceededError'; throw e; } kes.set(u, r); },
+  }) };
   const navigator = { onLine: opts.online !== false };
   const g = {
     document: { getElementById: (id) => dom[id] || null },
@@ -51,14 +54,15 @@ function env(opts = {}) {
     _TERR_CACHE: 'tvlake-terr-v1',
     _termLon2x: lon2x, _termLat2y: lat2y,
     _getTerrariumTile: async (z, x, y) => { const u = URL_T(z, x, y); log.mreza.push(u); return mreza.get(u) || null; },
-    _fetchT: async () => { log.meteo++; if (opts.meteo == null) throw new Error('mreža'); return { json: async () => ({ elevation: [opts.meteo] }) }; },
+    _fetchT: async (u) => { if (opts.dl) { log.mreza.push(u); return opts.dl(u); } log.meteo++; if (opts.meteo == null) throw new Error('mreža'); return { json: async () => ({ elevation: [opts.meteo] }) }; },
     _recFreeView: false,
     setTimeout: (f) => { f(); return 1; }, clearTimeout: () => {},
   };
   const names = Object.keys(g);
   const api = new Function(...names, BLOK + `
     return { _nvDemOcitaj, _nvDemSync, _nvDemUcitaj, _nvZaTacku, _nvZaPoziciju, _nvPratiCentar,
-             fetchElev, debouncedUpdElev, _NV_DEM_Z,
+             fetchElev, debouncedUpdElev, _NV_DEM_Z, _nvDemPlociceZa, _nvDemPreuzmi, _nvDemVelicinaTxt,
+             get nemaVel() { return _nvDemNema.size; },
              set gpsAlt(v) { _gpsAlt = v; }, set pannedAway(v) { _userPannedAway = v; } };`)(...names.map(k => g[k]));
   return { api, dom, log, kes, navigator };
 }
@@ -160,6 +164,71 @@ t('pozicija: DEM ima prednost nad elipsoidnom GPS visinom; 📡 samo kao rezerva
   bez.api._nvZaPoziciju(LAT, LNG, 566);
   await new Promise(r => setTimeout(r, 5));
   assert.strictEqual(bez.dom['nv-val'].textContent, '566 m 📡');
+});
+
+// ── Preuzimanje visina za offline (v1.7.9) ───────────────────────────────
+const bnd = (s, w, n, e) => ({ getSouth: () => s, getWest: () => w, getNorth: () => n, getEast: () => e });
+const slika = () => ({ ok: true, headers: { get: () => 'image/png' } });
+
+t('područje odjela (~2 km) pokriva 1–4 pločice z12, i sve su tačno one koje N.V. čita', () => {
+  const { api } = env();
+  const pl = api._nvDemPlociceZa(bnd(LAT - 0.01, LNG - 0.012, LAT + 0.01, LNG + 0.012));
+  assert.ok(pl.length >= 1 && pl.length <= 4, 'dobio ' + pl.length);
+  assert.ok(pl.every(t => t.z === api._NV_DEM_Z));
+  assert.ok(pl.some(t => t.x === X12 && t.y === Y12), 'pločica tačke u centru mora biti u listi');
+  // BiH (~5.5° × 3.5°) ne smije proći kao "malo"
+  assert.ok(api._nvDemPlociceZa(bnd(42.5, 15.7, 45.3, 19.6)).length > 600);
+});
+
+t('preuzimanje: keširane se preskaču, nove se spreme, ponovni poziv ne dira mrežu', async () => {
+  const { api, log, kes } = env({ kes: [[URL_T(12, X12, Y12), ravnaPlocica(1)]], dl: slika });
+  const pl = [{ z: 12, x: X12, y: Y12 }, { z: 12, x: X12 + 1, y: Y12 }];
+  const r = await api._nvDemPreuzmi(pl);
+  assert.deepStrictEqual([r.ukupno, r.novih, r.vec, r.gresaka], [2, 1, 1, 0]);
+  assert.ok(kes.has(URL_T(12, X12 + 1, Y12)));
+  const n = log.mreza.length;
+  const r2 = await api._nvDemPreuzmi(pl);
+  assert.strictEqual(r2.vec, 2); assert.strictEqual(log.mreza.length, n);
+});
+
+t('odgovor koji NIJE slika (200 OK sa HTML-om) se ne kešira — ne truje N.V.', async () => {
+  const { api, kes } = env({ dl: () => ({ ok: true, headers: { get: () => 'text/html' } }) });
+  const r = await api._nvDemPreuzmi([{ z: 12, x: X12, y: Y12 }]);
+  assert.strictEqual(r.gresaka, 1); assert.strictEqual(kes.size, 0);
+});
+
+t('mrežna greška na jednoj pločici ne prekida ostale; puna kvota prekida odmah', async () => {
+  let k = 0;
+  const a = env({ dl: () => { if (k++ === 0) throw new Error('istek'); return slika(); } });
+  const r = await a.api._nvDemPreuzmi([{ z: 12, x: 1, y: 1 }, { z: 12, x: 2, y: 1 }, { z: 12, x: 3, y: 1 }]);
+  assert.deepStrictEqual([r.gresaka, r.novih], [1, 2]);
+  const b = env({ dl: slika, kvotaPoslije: 1 });
+  const r2 = await b.api._nvDemPreuzmi([{ z: 12, x: 1, y: 1 }, { z: 12, x: 2, y: 1 }, { z: 12, x: 3, y: 1 }]);
+  assert.ok(r2.kvota); assert.strictEqual(r2.novih, 1);
+  assert.strictEqual(b.log.mreza.length, 2, 'poslije pune kvote nema daljih preuzimanja');
+});
+
+t('poslije preuzimanja N.V. odmah proba ponovo (briše pauzu neuspjeha)', async () => {
+  const { api } = env({ online: false });
+  await api._nvDemUcitaj(LAT, LNG);            // offline, nema keša → upamćen neuspjeh
+  assert.strictEqual(api.nemaVel, 1);
+  await api._nvDemPreuzmi([]);
+  assert.strictEqual(api.nemaVel, 0);
+});
+
+t('procjena veličine je čitljiva (sklonidba + MB)', () => {
+  const { api } = env();
+  assert.strictEqual(api._nvDemVelicinaTxt(1), '1 pločica · ≈ < 1 MB');
+  assert.strictEqual(api._nvDemVelicinaTxt(3), '3 pločice · ≈ < 1 MB');
+  assert.strictEqual(api._nvDemVelicinaTxt(100), '100 pločica · ≈ 9 MB');
+});
+
+t('dugme za preuzimanje postoji u Slojevima karte i u Upravljanju offline podacima', () => {
+  assert.ok(/onclick="nvDemPreuzmiUi\(\)"[^`]*Preuzmi nadmorske visine za offline/.test(extractFn('_lsRenderCache')));
+  assert.ok(/nvDemPreuzmiUi\(\)/.test(extractFn('_cacheMgrRender')));
+  const ui = extractFn('nvDemPreuzmiUi');
+  assert.ok(/_escHtml\(o\.ime\)/.test(ui), 'ime karte/odjela ide u HTML akcije — mora biti escape-ovano');
+  assert.ok(/_NV_DEM_MAX_PLOCICA/.test(ui), 'preveliko područje se odbija');
 });
 
 t('invarijante: onP ne piše GPS visinu direktno, move handler čita N.V. iz memorije', () => {

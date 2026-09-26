@@ -2776,6 +2776,17 @@ namjerno, prije nego se jave.
   pločicu; bez ijednog izvora piše "— m", ne stari broj sa drugog mjesta.
   Visina SNIMLJENIH tačaka (uspon/pad) NIJE dirana. Test:
   `tests/js/nv-dem.test.js`.
+  - **Preuzimanje visina unaprijed (v1.7.9)**: dugme "Preuzmi nadmorske
+    visine za offline" u Slojevima karte (kartica memorije) i u Upravljanju
+    offline podacima (`nvDemPreuzmiUi`). Područje se bira: okolina prikaza
+    (najmanje ~20 km), odjel projekta, ili `meta.bounds` učitane SQLite karte;
+    uz svako piše broj pločica i ≈ MB, a preko 600 pločica (~54 MB) se odbija.
+    Preuzima se samo z12 (`_NV_DEM_Z`). NAMJERNO na klik, ne automatski uz
+    SQLite kartu — karta regije zna pokriti stotine pločica, tiho trošenje
+    mobilnih podataka nije prihvatljivo. Ne-slika odgovor se ne kešira, puna
+    kvota prekida. **Stari "📥 Preuzmi kartu za offline" modal
+    (`showOfflineModal`/`startOfflineDownload`) NEMA NIJEDNOG pozivaoca** — mrtav
+    UI; zato preuzimanje visina nije kačeno na njega.
 
 - **Doznaka — tragovi projektanata i pređena površina (v1.7.5)**: sve
   računice (karta, pojasevi, dužine, statistika, popup granice) idu kroz
