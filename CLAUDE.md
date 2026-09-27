@@ -2802,17 +2802,17 @@ namjerno, prije nego se jave.
   nazivima polja (`Gazdinsk_1`/`Gazdinskak`/`Gaz_klasa_`/`GK`,
   `Odsjek`/`ODSJEK`/`ODSJEK_ID`, odjel kao `12.000000000000000`) — uzima se
   prvo neprazno. Duplikati (isti WKT) i točke (mjerne x,y tačke, ne oznake)
-  se izbacuju. Dijelovi bez naziva GJ su imenovani po opisu korisnika, i
-  svako ime je provjereno susjedstvom poligona: sjever = Baštra Ćorkovača,
-  prema Cazinu = Gomila, prema Sanskom Mostu lijevo od ceste = Vojskova
-  (graniči s Risovcem 14 km), Grmeč Jasenica krajnji istok. Vojskova (~44 %
-  površine) u izvoru nema ni odjel ni GK, samo površinu. **Svaka GJ broji
-  odjele od 1**, pa je broj odjela jedinstven samo UNUTAR GJ — odjel se nikad
-  ne prikazuje/traži bez GJ. Po tom pravilu su "Risovac Krupa" odjeli 61/71
-  (Risovac inače ima 1–13), potpuno okruženi Vojskovom i 2,7–4,4 km od
-  Risovca, prebačeni u Vojskovu uz napomenu "u izvoru označeno kao Risovac
-  Krupa". 5 poligona bez ikakvih atributa leži UNUTAR Grmeč Jasenice (7,7 km
-  zajedničke granice) i pripada njoj.
+  se izbacuju. Dijelovi bez naziva GJ su imenovani tek kad ih je korisnik
+  potvrdio BOJAMA na karti (tekstualni opis "prema Cazinu / lijevo od ceste"
+  je prvo dao pogrešno ime — pouka: za imenovanje područja tražiti potvrdu
+  na karti, ne zaključivati iz opisa pravca): sjever = Baštra Ćorkovača,
+  prema Cazinu = Gomila, jugozapadni blok = Risovac Krupa (zajedno sa
+  imenovanim dijelom; u izvoru ima samo površinu, bez odjela i GK), Grmeč
+  Jasenica istok. **Vojskove NEMA u ovom KML-u** (neobojeno područje u
+  sredini). **Svaka GJ broji odjele od 1**, pa je broj odjela jedinstven samo
+  UNUTAR GJ — odjel se nikad ne prikazuje/traži bez GJ. 5 poligona bez
+  ikakvih atributa leži UNUTAR Grmeč Jasenice (7,7 km zajedničke granice) i
+  pripada njoj.
   Izmjene u app-u koje je taj fajl otkrio:
   - **TEXT kolona je KATEGORIJA, ne brojčana tema** — gazdinska klasa ("4211")
     izgleda kao broj, pa je bila bojena gradijentom kao da je 4211 > 3211
