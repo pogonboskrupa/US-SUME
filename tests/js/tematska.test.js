@@ -43,7 +43,7 @@ for (;;) { j0 = HTML.indexOf('`', j0); if (HTML[j0 - 1] !== '\\') break; j0++; }
 const SRC = new Function('_SQLJS_CDN', '_SQLJS_LOCAL', 'return `' + HTML.slice(a0, j0) + '`;')('cdn/', 'local/');
 const MiniSqlite = new Function(SRC.slice(SRC.indexOf('class MiniSqlite {'), SRC.indexOf('// ── Kraj MiniSqlite')) + '\nreturn MiniSqlite;')();
 
-const KONST = ['_TEM_TBL_MAX', '_TEM_HA_COL', '_TEM_TBL_KOL_KEY', '_TEM_REG_KEY', '_TEM_RAMP', '_TEM_PALETE', '_TEM_KAT_BOJE', '_TEM_KAT_MAX', '_TEM_LEG_KEY', '_TEM_MAX_CLASSES'];
+const KONST = ['_TEM_TBL_KORAK', '_temColl', '_TEM_KAT_MAX_TXT', '_TEM_POV_RE', '_TEM_ID_RE', '_TEM_NAZIVI', '_TEM_PG_MAX', '_temPgSve', '_TEM_HA_COL', '_TEM_TBL_KOL_KEY', '_TEM_REG_KEY', '_TEM_RAMP', '_TEM_PALETE', '_TEM_KAT_BOJE', '_TEM_KAT_MAX', '_TEM_LEG_KEY', '_TEM_MAX_CLASSES'];
 const FUNK = ['_temRampFor', '_temKatBoje', '_temNum', '_temBr', '_temHa', '_temPrstenM2', '_temPovrsinaHa',
   '_temKlasaIdx', '_temBojaZa', '_temKlaseOpis', '_temJednakiIntervali', '_temStatistika', '_temDraftIz',
   '_temRegSave', '_temById', '_temColLabel', '_parseGpkgGeom', '_temResolveTr', '_gpkgParseBuf', '_temPopupHtml',
@@ -52,7 +52,7 @@ const FUNK = ['_temRampFor', '_temKatBoje', '_temNum', '_temBr', '_temHa', '_tem
   '_temEdPaleta', '_temEdObrni', '_temEdAuto', '_temClassEdApply', '_temClassEdReset', '_escHtml', '_jsAttr',
   '_temTblVal', '_temTblCols', '_temTblNum', '_temTblSkrivene', '_temTblSelSet', '_temTblSelSacuvaj', '_temTblVisibleCols',
   '_temTblGranice', '_temTblRedovi', '_temTblDec', '_temTblBroj', '_temTblZbir', '_temTblCsv', '_temTblCsvIme',
-  '_temTblChipsHtml', '_temTblRender'];
+  '_temTblChipsHtml', '_temTblRender', '_temPgSveToggle', '_temTblDodaj', '_temTblNaSkrol'];
 
 function napravi() {
   const ls = {}, toasti = [], el = {};
@@ -76,7 +76,7 @@ function napravi() {
   class FakeFile { constructor(parts) { const b = Buffer.from(parts[0]); this.size = b.length;
     this.slice = (x, y) => ({ arrayBuffer: async () => b.buffer.slice(b.byteOffset + x, b.byteOffset + Math.min(y, b.length)) }); } }
   const src = 'let _temMaps = [], _temRenderer = null, _temEdOpenId = null, _temEdDraft = {};\n'
-    + 'let _temTblId = null, _temTblSort = { col: null, dir: 1 }, _temTblQ = "", _temTblSelById = {}, _temTblKlase = new Set(), _temTblUPrikazu = false;\n'
+    + 'let _temTblId = null, _temTblSort = { col: null, dir: 1 }, _temTblQ = "", _temTblSelById = {}, _temTblKlase = new Set(), _temTblUPrikazu = false, _temTblCtx = null;\n'
     + 'const KORISNIK_PAL = ["#f97316","#818cf8"];\nfunction _temModalRender() {}\n'
     + KONST.map(extractConst).join('\n') + '\n' + FUNK.map(extractFn).join('\n')
     + '\nreturn { get maps() { return _temMaps; }, setEd(id, d) { _temEdOpenId = id; if (d) _temEdDraft[id] = d; }, get draft() { return _temEdDraft; },'
@@ -114,7 +114,7 @@ t('fixture: 30 odsjeka, brojčane teme + kategorijska "uredjajni_razred"; odjel/
   assert.strictEqual(entry.features.length, 30);
   assert.deepStrictEqual(entry.cols, ['cetinari_pct', 'starost', 'visina', 'zaliha_m3_ha']);
   // odjel ima 30 različitih vrijednosti (> 20), gj samo jednu — nijedno nije tema
-  assert.deepStrictEqual(entry.catCols, ['uredjajni_razred']);
+  assert.deepStrictEqual(entry.catCols, ['gazdinska_klasa', 'minirano', 'uredjajni_razred']);
 });
 
 t('odsjek BEZ vrijednosti ostaje bez podatka — ne upada u najnižu klasu (Number(null) je 0)', async () => {
@@ -348,7 +348,7 @@ t('CSV: ";" + decimalni zarez + BOM, samo filtrirani redovi, puna preciznost, es
   assert.ok(csv.startsWith('﻿'));
   const [hd, red, ...ost] = csv.slice(1).split('\r\n');
   assert.strictEqual(ost.length, 0, 'samo jedan red poslije filtera');
-  assert.ok(hd.startsWith('odjel;gj;Površina (ha);'));
+  assert.ok(hd.startsWith('Odjel;GJ;Površina (ha);'), hd);
   assert.ok(red.startsWith('10a;"Una; ""Sana""";'), red);
   const brojevi = red.slice('10a;"Una; ""Sana""";'.length).split(';');
   assert.ok(/^\d+,\d+$/.test(brojevi[0]), 'površina sa zarezom: ' + red);
@@ -368,6 +368,79 @@ t('tabela: render — zbirni red i "—" za prazno; bez klase "lbl" (globalno .l
   assert.ok(!/class="[^"]*\blbl\b/.test(h + el['ttm-chips'].innerHTML + api._temPregledHtml(entry)));
   assert.ok(el['ttm-chips'].innerHTML.includes('bez podatka'));
   assert.strictEqual(el['ttm-sub'].textContent, '30 odsjeka · ' + api._temHa(entry.features.reduce((s, f) => s + api._temPovrsinaHa(f), 0)));
+});
+
+// ── .gpkg granice taksacije (v1.8.7): TEXT šifre, oznake, površina iz fajla ──
+t('TEXT kolona sa brojčanim šiframa (gazdinska klasa "4411") je KATEGORIJA, ne brojčana tema', async () => {
+  const { entry } = await ucitaj();
+  assert.ok(!entry.cols.includes('gazdinska_klasa'), 'kvantili nad šiframa nemaju smisla');
+  assert.ok(entry.catCols.includes('gazdinska_klasa'), '25 šifri (> 20) i dalje je tema jer je kolona TEXT');
+});
+
+t('TEXT oznaka sa JEDNOM vrijednošću (minirano "Da") je tema; odjel/odsjek/napomena nikad', async () => {
+  const { api, entry } = await ucitaj();
+  assert.ok(entry.catCols.includes('minirano'));
+  assert.ok(!entry.catCols.includes('odjel'), 'odjel je oznaka (30 vrijednosti), nije tema');
+  assert.ok(!entry.catCols.includes('gj'), 'GJ sa jednom vrijednošću BEZ praznih nije oznaka');
+  api._temApplyTheme(entry.id, 'minirano');
+  const st = api._temStatistika(entry);
+  assert.strictEqual(st.klase[0].n, 3);
+  assert.strictEqual(st.bez.n, 27);
+});
+
+t('pregled: kategorija sa > 12 vrijednosti prikazuje 12 najvećih + "još N", a na zahtjev sve', async () => {
+  const { api, entry } = await ucitaj();
+  api._temApplyTheme(entry.id, 'gazdinska_klasa');
+  const kratko = api._temPregledHtml(entry);
+  assert.strictEqual((kratko.match(/class="tem-pg-row"/g) || []).length, 12);
+  assert.ok(kratko.includes('+ još 13 vrijednosti'));
+  api._temPgSveToggle(entry.id);
+  const dugo = api._temPregledHtml(entry);
+  assert.strictEqual((dugo.match(/class="tem-pg-row"/g) || []).length, 25);
+  assert.ok(dugo.includes('prikaži samo 12 najvećih'));
+});
+
+t('fajl sa kolonom povrsina_ha: tabela je koristi umjesto izračunate, zbir je Σ, popup bez "≈"', () => {
+  const { api } = napravi();
+  const pol = { getLatLngs: () => [[{ lat: 44.9, lng: 16.1 }, { lat: 44.9, lng: 16.11 }, { lat: 44.91, lng: 16.11 }]] };
+  const f = (o, s, ha) => ({ attrs: { gj: 'Grmeč Jasenica', odjel: o, odsjek: s, povrsina_ha: ha }, polys: [pol] });
+  const entry = { id: 'e', name: 'granica.gpkg', features: [f('81', 'e', 1.2), f('81', 'f', 3.4)], cols: ['povrsina_ha'], catCols: [], styles: {}, colLabels: {}, theme: null, _cls: null };
+  const { cols } = api._temTblCols(entry);
+  assert.deepStrictEqual(cols, ['odjel', 'odsjek', 'gj', 'povrsina_ha'], 'nema dodatne izračunate __ha kolone');
+  const z = api._temTblZbir(entry, cols, entry.features.map((x, i) => ({ i, f: x })));
+  assert.strictEqual(z[3].tip, 'Σ');
+  assert.ok(Math.abs(z[3].v - 4.6) < 1e-9);
+  const h = api._temPopupHtml(entry, entry.features[0]);
+  assert.ok(h.includes('81<span class="ods">e</span>'), 'zaglavlje nosi odjel i odsjek');
+  assert.ok(h.includes('>1,2 ha<') && !h.includes('≈'), 'površina iz fajla, ne procjena');
+  assert.ok(!h.includes('>Površina (ha)<'), 'površina nije ponovljena kao red');
+});
+
+t('prikazni nazivi poznatih kolona (ŠVZV, Ugroženost, Gazdinska klasa); ručni naziv ima prednost', () => {
+  const { api } = napravi();
+  assert.strictEqual(api._temColLabel({}, 'svzv'), 'ŠVZV');
+  assert.strictEqual(api._temColLabel({}, 'gazdinska_klasa'), 'Gazdinska klasa');
+  assert.strictEqual(api._temColLabel({ colLabels: { svzv: 'Zaštitne šume' } }, 'svzv'), 'Zaštitne šume');
+  assert.strictEqual(api._temColLabel({}, 'neka_kolona'), 'neka kolona');
+});
+
+t('tabela: velik fajl se crta po dijelovima (300 odmah, ostatak skrolom), zbir i dalje nad SVIM redovima', () => {
+  const { api, el, mkEl } = napravi();
+  const pol = { getLatLngs: () => [[{ lat: 44.9, lng: 16.1 }, { lat: 44.9, lng: 16.11 }, { lat: 44.91, lng: 16.11 }]] };
+  const features = Array.from({ length: 650 }, (_, i) => ({ attrs: { odjel: String(i + 1), povrsina_ha: 1 }, polys: [pol] }));
+  const entry = { id: 'v', name: 'v', features, cols: ['povrsina_ha'], catCols: [], styles: {}, colLabels: {}, theme: null, _cls: null };
+  api.maps.push(entry);
+  ['ttm-scroll', 'ttm-foot', 'ttm-chips', 'ttm-sub', 'ttm-colsbtn'].forEach(id => { el[id] = mkEl(id); });
+  api.tbl({ id: 'v', q: '', klase: [], prikaz: false, sort: { col: 'odjel', dir: 1 } });
+  api._temTblRender();
+  const h = el['ttm-scroll'].innerHTML;
+  assert.strictEqual((h.match(/<tr onclick/g) || []).length, 300);
+  assert.ok(h.includes('<em>Σ</em> 650,00'), 'zbir nad svih 650, ne nad nacrtanih 300');
+  const tb = Object.assign(mkEl('ttm-tbody'), { html: '', insertAdjacentHTML(p, x) { this.html += x; } });
+  el['ttm-tbody'] = tb;
+  api._temTblDodaj(); api._temTblDodaj(); api._temTblDodaj();
+  assert.strictEqual((tb.html.match(/<tr onclick/g) || []).length, 350, 'docrtano tačno ostatak, bez duplikata');
+  assert.ok(tb.html.includes('_temTblRowClick(649)'));
 });
 
 Promise.all(cekaj).then(() => {

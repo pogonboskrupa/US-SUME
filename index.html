@@ -3297,6 +3297,7 @@ body.recbar-on #main { padding-bottom: 54px; }
 .tem-card-row.hot .k { color:#86efac; }
 .tem-card-row.hot .v { color:#4ade80;font-weight:800; }
 .tem-card-hd .odjel.sm { font-size:14px; }
+.tem-card-hd .odjel .ods { margin-left:2px;color:#bbf7d0; }
 .tem-card-hd .gj { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
 .tem-card-hd .ha { background:rgba(0,0,0,0.25);color:#dcfce7;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700; }
 .tem-card-row .v .chip { display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle;box-shadow:0 0 0 1px rgba(255,255,255,0.25); }
@@ -3321,13 +3322,14 @@ body.recbar-on #main { padding-bottom: 54px; }
 .tem-pg-sum b { color:#f1f5f9; }
 .tem-pg-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:11.5px; }
 .tem-pg-row .sw { width:12px;height:12px;border-radius:3px;flex-shrink:0;box-shadow:0 0 0 1px rgba(255,255,255,0.15); }
-.tem-pg-row .rng { width:92px;flex-shrink:0;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums; }
-.tem-pg-row .bar { flex:1;min-width:24px;height:7px;background:#16233a;border-radius:4px;overflow:hidden; }
+.tem-pg-row .rng { flex:0 1 96px;min-width:0;color:#e2e8f0;line-height:1.25;overflow-wrap:anywhere;font-variant-numeric:tabular-nums; }
+.tem-pg-row .bar { flex:1 1 0;min-width:10px;height:7px;background:#16233a;border-radius:4px;overflow:hidden; }
 .tem-pg-row .bar b { display:block;height:100%;border-radius:4px; }
-.tem-pg-row .val { flex-shrink:0;color:#94a3b8;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.tem-pg-row .val { flex-shrink:0;font-size:10.5px;color:#94a3b8;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap; }
 .tem-pg-row .val em { font-style:normal;color:#cbd5e1;font-weight:700;display:inline-block;min-width:32px; }
 .tem-pg-row.bez .sw, .tem-pg-row.bez .bar b { background:repeating-linear-gradient(45deg,#475569 0 3px,#1e293b 3px 6px); }
 .tem-pg-row.bez .rng { color:#64748b;font-style:italic; }
+.tem-pg-vise { display:block;width:100%;margin:4px 0 2px;padding:6px;background:none;border:1px dashed #273b5c;border-radius:7px;color:#93c5fd;font-size:11px;cursor:pointer; }
 .tem-pg-leg { font-size:9.5px;color:#475569;margin-top:5px;text-align:right; }
 .tem-op { display:flex;align-items:center;gap:9px;margin-top:10px; }
 .tem-op span { font-size:11.5px;color:#94a3b8;flex-shrink:0; }
@@ -5572,7 +5574,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.6';
+const APP_VER = 'v1.8.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -33802,6 +33804,15 @@ const _TEM_PALETE = {
 const _TEM_KAT_BOJE = ['#2563eb','#f97316','#16a34a','#dc2626','#9333ea','#ca8a04',
   '#0891b2','#db2777','#65a30d','#7c3aed','#ea580c','#0d9488'];
 const _TEM_KAT_MAX = 20;   // tekstualna kolona sa više različitih vrijednosti nije tema (npr. broj odjela)
+// Kolona deklarisana kao TEXT u .gpkg je šifra, ne mjera (gazdinska klasa "4411" izgleda kao
+// broj, ali kvantili nad šiframa nemaju smisla) — uvijek kategorija, i sa više vrijednosti.
+const _TEM_KAT_MAX_TXT = 80;
+const _TEM_POV_RE = /^povr[sš]ina(_ha)?$/i;
+const _TEM_ID_RE = /^(odjel|odsjek|odjel_odsjek|odsjek_id|napomena|opis)$/i;   // oznake/slobodan tekst — nikad tema
+// Prikazni nazivi uobičajenih kolona šumarskog .gpkg-a (npr. granica taksacije) — samo prikaz.
+const _TEM_NAZIVI = { gj: 'GJ', odjel: 'Odjel', odsjek: 'Odsjek', gazdinska_klasa: 'Gazdinska klasa',
+  gk_grupa: 'Grupa gazd. klase', povrsina_ha: 'Površina (ha)', ugrozenost: 'Ugroženost',
+  svzv: 'ŠVZV', minirano: 'Minirano', napomena: 'Napomena' };   // kolona površine iz fajla (zamjenjuje izračunatu)
 
 // Boje za proizvoljan broj klasa (n≥2) — interpolacija duž sidrenih boja palete.
 function _temRampFor(n, ramp) {
@@ -33958,7 +33969,7 @@ function _temById(id) { return _temMaps.find(m => m.id === id); }
 function _temColLabel(entry, col) {
   if (!col) return '';
   if (col === '__ha') return 'Površina (ha)';   // izračunata kolona tabele (_TEM_HA_COL)
-  return (entry?.colLabels && entry.colLabels[col]) || col.replace(/_/g, ' ');
+  return (entry?.colLabels && entry.colLabels[col]) || _TEM_NAZIVI[String(col).toLowerCase()] || col.replace(/_/g, ' ');
 }
 
 // GPKG geometrija: 'GP' magic + flags + srs_id + envelope, pa standardni WKB.
@@ -34082,11 +34093,13 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
   if (!ft) { showToast('⚠ U GPKG fajlu nije nađena tabela s poligonima'); return null; }
 
   // 4. Imena kolona + offset (rowid-alias može pomjeriti payload — isti obrazac kao odsjeci)
-  const colNames = (ft.sql.match(/\(([\s\S]+)\)/)?.[1] || '').split(',')
-    .map(c => c.trim().split(/\s+/)[0].toLowerCase().replace(/["'`]/g, ''));
+  const colDefs = (ft.sql.match(/\(([\s\S]+)\)/)?.[1] || '').split(',').map(c => c.trim().split(/\s+/));
+  const colNames = colDefs.map(d => (d[0] || '').toLowerCase().replace(/["'`]/g, ''));
+  const colTypes = colDefs.map(d => (d[1] || '').toUpperCase());
   const declaredGeom = colNames.findIndex(n => /geom|shape/.test(n));
   const colOffset = declaredGeom >= 0 ? (declaredGeom - geomIdx) : 0;
   const attrName = j => colNames[j + colOffset] || ('kolona_' + j);
+  const attrTxt = j => /^(TEXT|VARCHAR|CHAR|CLOB|NVARCHAR)/.test(colTypes[j + colOffset] || '');
 
   // 5. Novi entry u registru (restore zadržava id/temu/vidljivost/ručne klase)
   _temRenderer = _temRenderer || L.canvas({ padding: 0.3 });
@@ -34121,11 +34134,11 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
       if (nm === 'fid' || nm === 'id') continue;
       const v = row[j];
       attrs[nm] = (v instanceof Uint8Array) ? null : v;
-      const st = numStats[nm] = numStats[nm] || { num: 0, tot: 0, vals: new Set(), mnogo: false };
+      const st = numStats[nm] = numStats[nm] || { num: 0, tot: 0, vals: new Set(), mnogo: false, txt: attrTxt(j) };
       if (v != null && v !== '') {
         st.tot++;
         if (Number.isFinite(Number(v))) st.num++;
-        if (!st.mnogo) { st.vals.add(String(v)); if (st.vals.size > _TEM_KAT_MAX) { st.mnogo = true; st.vals.clear(); } }
+        if (!st.mnogo) { st.vals.add(String(v)); if (st.vals.size > (st.txt ? _TEM_KAT_MAX_TXT : _TEM_KAT_MAX)) { st.mnogo = true; st.vals.clear(); } }
       }
     }
     const f = { attrs, polys: [] };
@@ -34151,13 +34164,17 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
   if (!cnt) { showToast('⚠ GPKG: nije parsiran nijedan poligon'); return null; }
   entry.cols = Object.keys(numStats).filter(n => {
     const s = numStats[n];
-    return s.tot >= 3 && s.num / s.tot >= 0.8;
+    return s.tot >= 3 && s.num / s.tot >= 0.8 && !s.txt;
   }).sort();
   // Kategorijske teme: pretežno tekstualna kolona sa 2..20 različitih vrijednosti
-  // (uređajni razred, vrsta, GJ...). Broj odjela ima stotine vrijednosti — nije tema.
+  // (uređajni razred, vrsta, GJ...), a TEXT kolona do 80. Broj odjela ima stotine
+  // vrijednosti — nije tema. TEXT kolona sa JEDNOM vrijednošću je tema samo ako dio
+  // odsjeka nema podatak: to je oznaka (npr. minirano "Da") i vrijedi je istaći na karti.
+  const nF = entry.features.length;
   entry.catCols = Object.keys(numStats).filter(n => {
     const s = numStats[n];
-    return s.tot >= 3 && s.num / s.tot < 0.8 && !s.mnogo && s.vals.size >= 2;
+    if (s.tot < 3 || s.mnogo || _TEM_ID_RE.test(n) || !(s.txt || s.num / s.tot < 0.8)) return false;
+    return s.vals.size >= 2 || (s.txt && s.vals.size === 1 && s.tot < nF);
   }).sort();
   entry._bounds = allBounds;
   _temMaps.push(entry);
@@ -34181,18 +34198,23 @@ function _temPopupHtml(entry, f) {
   const findKey = (...names) => entries.find(([k]) =>
     names.includes(k.toLowerCase()) || names.includes(_temColLabel(entry, k).toLowerCase()))?.[0];
   const kOdjel = findKey('odjel', 'odsjek', 'odjel/odsjek');
+  let kOdsjek = findKey('odsjek');
+  if (kOdsjek === kOdjel) kOdsjek = null;
   const kGj = findKey('gj', 'gazdinska jedinica');
+  const kPov = entries.find(([k]) => _TEM_POV_RE.test(k))?.[0];
   const odjelV = kOdjel ? f.attrs[kOdjel] : null;
+  const odsjekV = kOdsjek ? f.attrs[kOdsjek] : null;
   const gjV = kGj ? f.attrs[kGj] : null;
-  const ha = _temPovrsinaHa(f);
-  const haTxt = ha > 0 ? `<span class="ha" title="Površina izračunata iz geometrije">≈ ${_temHa(ha)}</span>` : '';
+  // Površina iz fajla (npr. povrsina_ha) ima prednost; inače procjena iz geometrije.
+  const haF = kPov ? _temNum(f.attrs[kPov]) : NaN, ha = Number.isFinite(haF) ? haF : _temPovrsinaHa(f);
+  const haTxt = ha > 0 ? `<span class="ha" title="Površina odsjeka">${Number.isFinite(haF) ? '' : '≈ '}${_temHa(ha)}</span>` : '';
   const header = `<div class="tem-card-hd">
-    ${odjelV != null ? `<div class="odjel">${_escHtml(String(odjelV))}</div>` : `<div class="odjel sm">${_escHtml(entry.name)}</div>`}
+    ${odjelV != null ? `<div class="odjel">${_escHtml(String(odjelV))}${odsjekV != null ? `<span class="ods">${_escHtml(String(odsjekV))}</span>` : ''}</div>` : `<div class="odjel sm">${_escHtml(entry.name)}</div>`}
     <div class="gj">${gjV != null ? _escHtml(String(gjV)) : ''}${haTxt}</div>
   </div>`;
   const cls = entry._cls;
   const rows = entries
-    .filter(([k]) => k !== kOdjel && k !== kGj)
+    .filter(([k]) => k !== kOdjel && k !== kOdsjek && k !== kGj && k !== kPov)
     .map(([k, v]) => {
       const hot = k === entry.theme;
       const boja = hot ? _temBojaZa(cls, v) : null;
@@ -34431,7 +34453,7 @@ let _temTblSelById = {};      // id karte → Set izabranih kolona
 let _temTblColsOpen = false;  // da li je birač kolona otvoren
 let _temTblKlase = new Set(); // filter po klasi aktivne teme (indeks klase, -1 = bez podatka)
 let _temTblUPrikazu = false;  // samo odsjeci koji su u trenutnom prikazu karte
-const _TEM_TBL_MAX = 1200;    // perf kapa za crtanje; pretraga/filter sužava (izvoz nema kapu)
+const _TEM_TBL_KORAK = 300;  // redova po dijelu crtanja (ostatak se docrtava skrolom)
 const _TEM_HA_COL = '__ha';   // izračunata kolona: površina odsjeka iz geometrije
 const _TEM_TBL_KOL_KEY = 'tvlake_tem_tbl_skrivene';   // {mapId: [skrivene kolone]}
 
@@ -34457,8 +34479,10 @@ function _temTblCols(entry) {
   const kGj = findKey('gj', 'gazdinska jedinica');
   const locked = [kOdjel, kOdsjek].filter(Boolean);   // uvijek prikazane, nisu u pickeru
   const head = [kOdjel, kOdsjek, kGj].filter(Boolean);
-  const rest = keys.filter(k => !head.includes(k));
-  return { cols: [...head, _TEM_HA_COL, ...rest], kOdjel, kOdsjek, kGj, locked };
+  // Fajl koji već nosi površinu (povrsina_ha) ne dobija drugu, izračunatu kolonu pored nje.
+  const kPov = keys.find(k => _TEM_POV_RE.test(k)) || _TEM_HA_COL;
+  const rest = keys.filter(k => !head.includes(k) && k !== kPov);
+  return { cols: [...head, kPov, ...rest], kOdjel, kOdsjek, kGj, locked };
 }
 function _temTblNum(entry, col) { return col === _TEM_HA_COL || entry.cols.includes(col); }
 
@@ -34492,7 +34516,8 @@ function showTemTable(id) {
   const entry = _temById(id);
   if (!entry) return;
   _temTblId = id;
-  _temTblSort = { col: _temTblCols(entry).kOdjel || null, dir: 1 };   // default: po broju odjela ↑
+  const tk = _temTblCols(entry);
+  _temTblSort = { col: tk.kGj || tk.kOdjel || null, dir: 1 };   // default: po GJ, pa odjelu i odsjeku ↑
   _temTblQ = '';
   _temTblKlase = new Set();
   _temTblUPrikazu = false;
@@ -34643,14 +34668,21 @@ function _temTblRedovi(entry) {
   const sc = _temTblSort.col;
   if (sc) {
     const isNum = _temTblNum(entry, sc);
+    // Jednake vrijednosti se redaju po GJ → odjel → odsjek: bez toga sort po odjelu
+    // miješa "1a" iz tri različite GJ, a sort po GJ ostavlja odjele nasumično.
+    const { kGj, kOdjel, kOdsjek } = _temTblCols(entry);
+    const dalje = [kGj, kOdjel, kOdsjek].filter(k => k && k !== sc);
+    const txt = (x, y) => _temColl.compare(String(x ?? ''), String(y ?? ''));
     rows.sort((a, b) => {
       const av = _temTblVal(a.f, sc), bv = _temTblVal(b.f, sc);
       const ae = av == null || av === '', be = bv == null || bv === '';
-      if (ae && be) return 0;
-      if (ae) return 1;               // prazne vrijednosti uvijek na dno
-      if (be) return -1;
-      const cmp = isNum ? _temNum(av) - _temNum(bv) : String(av).localeCompare(String(bv), 'bs', { numeric: true });
-      return cmp * _temTblSort.dir;
+      if (ae !== be) return ae ? 1 : -1;   // prazne vrijednosti uvijek na dno
+      if (!ae) {
+        const cmp = isNum ? _temNum(av) - _temNum(bv) : txt(av, bv);
+        if (cmp) return cmp * _temTblSort.dir;
+      }
+      for (const k of dalje) { const c = txt(a.f.attrs[k], b.f.attrs[k]); if (c) return c; }
+      return 0;
     });
   }
   return rows;
@@ -34688,7 +34720,7 @@ function _temTblZbir(entry, cols, rows) {
     const vals = rows.map(r => _temNum(_temTblVal(r.f, c))).filter(Number.isFinite);
     if (!vals.length) return null;
     const s = vals.reduce((a, b) => a + b, 0);
-    return c === _TEM_HA_COL ? { tip: 'Σ', v: s, dec: 2 } : { tip: 'ø', v: s / vals.length, dec: Math.max(1, _temTblDec(entry, c)) };
+    return (c === _TEM_HA_COL || _TEM_POV_RE.test(c)) ? { tip: 'Σ', v: s, dec: 2 } : { tip: 'ø', v: s / vals.length, dec: Math.max(1, _temTblDec(entry, c)) };
   });
 }
 
@@ -34742,7 +34774,6 @@ function _temTblRender() {
     foot.textContent = `Prikazano 0 od ${total}`;
     return;
   }
-  const shown = rows.slice(0, _TEM_TBL_MAX);
   const cls = entry._cls;
   const sc = _temTblSort.col;
   const dec = cols.map(c => _temTblNum(entry, c) ? _temTblDec(entry, c) : null);
@@ -34752,10 +34783,11 @@ function _temTblRender() {
   const thead = '<tr>' + cols.map((c, ci) =>
     `<th class="${klasa(c, ci)}" onclick="_temTblSortBy(${ci})">${_escHtml(_temColLabel(entry, c))}${arw(c)}</th>`).join('') + '</tr>';
 
-  const tbody = shown.map(r => {
+  const klase = cols.map((c, ci) => klasa(c, ci));
+  const redHtml = r => {
     const tds = cols.map((c, ci) => {
       const v = _temTblVal(r.f, c);
-      const k = klasa(c, ci);
+      const k = klase[ci];
       if (v == null || v === '') return `<td${k ? ` class="${k}"` : ''}><span class="nil">—</span></td>`;
       const boja = c === entry.theme ? _temBojaZa(cls, v) : null;
       const chip = boja ? `<span class="chip" style="background:${boja};"></span>` : '';
@@ -34763,7 +34795,11 @@ function _temTblRender() {
       return `<td${k ? ` class="${k}"` : ''}>${chip}${_escHtml(txt)}</td>`;
     }).join('');
     return `<tr onclick="_temTblRowClick(${r.i})">${tds}</tr>`;
-  }).join('');
+  };
+  // Crta se po dijelovima: 1635 odsjeka × 10 kolona odjednom je ~1 s i na desktopu.
+  // Prvi dio odmah, ostatak kad se skrolom približi kraju (_temTblDodaj).
+  _temTblCtx = { rows, redHtml, shown: Math.min(rows.length, _TEM_TBL_KORAK) };
+  const tbody = rows.slice(0, _temTblCtx.shown).map(redHtml).join('');
 
   const zbir = _temTblZbir(entry, cols, rows);
   const tfoot = '<tr>' + cols.map((c, ci) => {
@@ -34772,12 +34808,27 @@ function _temTblRender() {
     return z ? `<td class="num" title="${z.tip === 'Σ' ? 'Zbir' : 'Prosjek'}"><em>${z.tip}</em> ${_escHtml(_temTblBroj(z.v, z.dec))}</td>` : '<td></td>';
   }).join('') + '</tr>';
 
-  scroll.innerHTML = `<table class="ttm-tbl"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`;
+  scroll.innerHTML = `<table class="ttm-tbl"><thead>${thead}</thead><tbody id="ttm-tbody">${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`;
   scroll.scrollTop = 0;
-  const capNote = rows.length > _TEM_TBL_MAX ? ` · crta se prvih ${_TEM_TBL_MAX} (suzi pretragom)` : '';
-  foot.innerHTML = `Prikazano <b>${rows.length}</b> od ${total}${capNote}`
+  scroll.onscroll = _temTblNaSkrol;
+  foot.innerHTML = `Prikazano <b>${rows.length}</b> od ${total}`
     + (filtrirano ? ` · <button class="ttm-reset" onclick="_temTblFilteriPonisti()">poništi filtere</button>` : '')
     + `<span class="leg">Σ zbir · ø prosjek</span>`;
+}
+
+let _temTblCtx = null;
+// Jedan collator za sve sortove — localeCompare sa opcijama gradi novi pri SVAKOM poređenju.
+const _temColl = new Intl.Collator('bs', { numeric: true });
+function _temTblDodaj() {
+  const c = _temTblCtx, tb = document.getElementById('ttm-tbody');
+  if (!c || !tb || c.shown >= c.rows.length) return;
+  const do_ = Math.min(c.rows.length, c.shown + _TEM_TBL_KORAK);
+  tb.insertAdjacentHTML('beforeend', c.rows.slice(c.shown, do_).map(c.redHtml).join(''));
+  c.shown = do_;
+}
+function _temTblNaSkrol() {
+  const s = document.getElementById('ttm-scroll');
+  if (s && s.scrollTop + s.clientHeight > s.scrollHeight - 800) _temTblDodaj();
 }
 
 // Klik na red → zumira na taj odsjek na karti i otvori popup
@@ -34907,14 +34958,24 @@ function _temModalRender() {
     </button>`;
 }
 
+const _TEM_PG_MAX = 12;
+const _temPgSve = new Set();   // karte kojima je u pregledu otvorena puna lista kategorija
+function _temPgSveToggle(id) { if (_temPgSve.has(id)) _temPgSve.delete(id); else _temPgSve.add(id); _temModalRender(); }
+
 // Pregled teme: po klasi boja, raspon/vrijednost, broj odsjeka, površina i udio (traka).
 function _temPregledHtml(m) {
   const st = _temStatistika(m);
   if (!st) return '';
-  const opis = _temKlaseOpis(m._cls);
+  let opis = _temKlaseOpis(m._cls);
+  // Kategorija sa mnogo vrijednosti (gazdinska klasa ~70): najveće po površini prve, a
+  // lista se skraćuje na 12 dok korisnik ne zatraži sve — inače pregled postane zid redova.
+  const dugo = m._cls.cat && opis.length > _TEM_PG_MAX;
+  if (dugo) opis = opis.slice().sort((a, b) => st.klase[b.i].ha - st.klase[a.i].ha);
+  const sve = !dugo || _temPgSve.has(m.id);
   const maxHa = Math.max(0.0001, ...opis.map(k => st.klase[k.i].ha), st.bez.ha);
   const red = (boja, lbl, n, ha, bez) => {
-    const pct = st.ukupnoHa > 0 ? Math.round(ha / st.ukupnoHa * 100) : 0;
+    const u = st.ukupnoHa > 0 ? ha / st.ukupnoHa * 100 : 0;
+    const pct = u > 0 && u < 0.5 ? '&lt;1' : Math.round(u);
     return `<div class="tem-pg-row${bez ? ' bez' : ''}">
       <i class="sw" style="${boja ? 'background:' + boja : ''}"></i>
       <span class="rng">${_escHtml(lbl)}</span>
@@ -34922,7 +34983,11 @@ function _temPregledHtml(m) {
       <span class="val">${n} · ${_temHa(ha)} <em>${pct}%</em></span>
     </div>`;
   };
-  const rows = opis.map(k => red(k.boja, k.lbl, st.klase[k.i].n, st.klase[k.i].ha, false)).join('')
+  const skr = sve ? opis : opis.slice(0, _TEM_PG_MAX), ost = opis.slice(skr.length);
+  const ostHa = ost.reduce((a, k) => a + st.klase[k.i].ha, 0);
+  const rows = skr.map(k => red(k.boja, k.lbl, st.klase[k.i].n, st.klase[k.i].ha, false)).join('')
+    + (ost.length ? `<button class="tem-pg-vise" onclick="_temPgSveToggle('${_jsAttr(m.id)}')">+ još ${ost.length} vrijednosti · ${_temHa(ostHa)} — prikaži sve</button>` : '')
+    + (dugo && sve ? `<button class="tem-pg-vise" onclick="_temPgSveToggle('${_jsAttr(m.id)}')">prikaži samo ${_TEM_PG_MAX} najvećih</button>` : '')
     + (st.bez.n ? red(null, 'bez podatka', st.bez.n, st.bez.ha, true) : '');
   const sum = m._cls.cat
     ? (() => {

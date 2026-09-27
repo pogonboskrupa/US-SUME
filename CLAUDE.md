@@ -2792,6 +2792,47 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **GeoPackage granica iz KML-a + tematska karta prilagođena "pravom" fajlu
+  (v1.8.7)**: na zahtjev "napravi geopackage od granica taksacije 2021, uzmi
+  GJ, gazdinsku klasu, odjel, odsjek, površinu iz poligona". Fajl se pravi
+  VAN repoa (firmini podaci — ne commit-ovati): Python `shapely`/`pyproj`,
+  površina u EPSG:3035 (jednaka površina), tabela `odsjeci(gj, odjel, odsjek,
+  gazdinska_klasa, gk_grupa, povrsina_ha, ugrozenost, svzv, minirano,
+  napomena)`, `MULTIPOLYGON` u 4326. KML je spoj više izvora sa RAZLIČITIM
+  nazivima polja (`Gazdinsk_1`/`Gazdinskak`/`Gaz_klasa_`/`GK`,
+  `Odsjek`/`ODSJEK`/`ODSJEK_ID`, odjel kao `12.000000000000000`) — uzima se
+  prvo neprazno. Duplikati (isti WKT) i točke (mjerne x,y tačke, ne oznake)
+  se izbacuju. Dijelovi bez naziva GJ dobijaju OZNAKU PO STRANI SVIJETA
+  ("Nepoznata GJ (jug)"…) — ime se ne izmišlja; "jug" (~43 % površine) u
+  izvoru nema ni odjel ni GK, samo površinu.
+  Izmjene u app-u koje je taj fajl otkrio:
+  - **TEXT kolona je KATEGORIJA, ne brojčana tema** — gazdinska klasa ("4211")
+    izgleda kao broj, pa je bila bojena gradijentom kao da je 4211 > 3211
+    "više". `_gpkgParseBuf` čita deklarisane tipove iz `CREATE TABLE`; TEXT
+    ide u `catCols` (kapa `_TEM_KAT_MAX_TXT` = 80, jer GK ima ~70 vrijednosti),
+    nikad u `cols`.
+  - **Zastavica sa jednom vrijednošću ("Da" / prazno) JESTE tema** (minirano,
+    ŠVZV) — ali samo kad nije svaki red popunjen; `_TEM_ID_RE` (odjel, odsjek,
+    napomena…) nikad nije tema — to su identifikatori.
+  - **`povrsina_ha` iz fajla zamjenjuje računatu `__ha`** (`_TEM_POV_RE`) —
+    u tabeli, zbirnom redu (Σ) i popupu (bez "≈", jer je upisana). Dvije
+    kolone površine koje se razlikuju u drugoj decimali samo bune.
+  - **Tabela 1600+ redova je trajala ~1 s** — izmjereno: filter/sort ~50 ms,
+    ostatak je DOM. Sad se crta u komadima (`_TEM_TBL_KORAK` = 300,
+    `insertAdjacentHTML` na skrol, `_temTblDodaj`/`_temTblNaSkrol`) → ~100 ms;
+    Σ se i dalje računa nad SVIM filtriranim redovima. Sortiranje ide kroz
+    JEDAN `Intl.Collator('bs',{numeric:true})` (novi po poređenju je skup),
+    prazno uvijek zadnje, a izjednačenje se razbija po GJ → odjel → odsjek.
+  - **Pregled teme sa mnogo kategorija** prikazuje 12 najvećih po površini +
+    "još N — prikaži sve" (`_TEM_PG_MAX`, `_temPgSve`); dugi nazivi se lome u
+    dva reda (`.rng` `overflow-wrap:anywhere`) umjesto "Nepoznata GJ …" šest
+    puta jedno ispod drugog; udio ispod 0,5 % piše "<1%", ne "0%".
+  - Zaglavlja kolona imaju ljudske nazive (`_TEM_NAZIVI`), popup piše
+    "81e" (odjel + odsjek).
+  - Fixture `tests/fixtures/tematska-mini.gpkg` ima i `gazdinska_klasa`
+    (TEXT, 25 vrijednosti) i `minirano` — zaseban `random.Random`, pa stare
+    vrijednosti/testovi nisu pomjereni. Test: `tests/js/tematska.test.js` (29).
+
 - **Tabela atributa — filteri, zbirni red, površina, CSV za Excel (v1.8.6)**:
   na zahtjev "unaprijedi tabelu atributa". `_temTblRedovi(entry)` je JEDAN
   filter+sort (pretraga, čipovi klasa aktivne teme uklj. "bez podatka",
