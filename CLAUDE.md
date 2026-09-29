@@ -2795,6 +2795,38 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Modali tokom snimanja vlake — dizajn i pregled (v1.9.0)**: na zahtjev
+  "unaprijedi modale tokom snimanja vlaka". Stanje je prvo snimljeno
+  Playwright-om kroz cijeli tok (izbor vlake → izbor kraka → stabilizacija GPS-a
+  → snimanje → pauza → krak → Završi → lager → "Šta dalje").
+  - **Drugi red trake snimanja bio je ISPOD `#action-bar`-a** (`#rec-banner`
+    `bottom:8px`, a `#action-bar` je `fixed` preko dna karte, z 1600): precizna
+    tačka, slobodan pogled i nastavak kraka nisu se mogli dotaći — vidjela se
+    samo obojena ivica. Sad `bottom: calc(var(--ab-h) + 8px)`, a `--ab-h` i
+    `body.ab-on` puni `_abVisinaSync()` (iz `_updFabVisibility`, kroz rAF jer
+    se sadržaj trake mijenja niže u funkciji). Dugmad koja `#action-bar` već
+    ima (pauza, L/D krak, nazad, stop) nose `.rb-dup` i skrivaju se samo dok je
+    `#action-bar` vidljiv — ID-jevi i handleri ostaju (kod ih i dalje puni).
+  - Traka: oznaka stanja SNIMA/PAUZA (CSS, bez JS-a), boja vlake, **vrijeme
+    snimanja bez pauza** (`_recSesijaMs` se sabira na ISTA tri mjesta kao
+    `_dayActiveMs`: pauza, povratak na roditelja, stop), red objašnjenja pauze.
+    Sporedna dugmad imaju natpis — i u stanjima koja mijenjaju `innerHTML`
+    (`_precizReset/_precizTacka/_precizFinish/_precizCollect/_setFreeView`).
+  - **Zajednički donji listovi** (`.rs-sheet` + `.rs-bg`, `_rsList(id, otvori)`
+    — pozadina je obavezna, inače dodir pored ide na kartu): izbor kraka
+    (pokazuje ime kraka koji će nastati — `_nextKrakNm`, ranije se broj saznavao
+    tek poslije starta), lager (bio okvir na vrhu preko kontrola karte, bez
+    pozadine, "Preskoči" je izlazio van okvira) i "Snimanje završeno" (sažetak:
+    dužina/tačke/vrijeme iz `_recZadnja` koji `stopRec` pamti PRIJE reseta;
+    lista po stablu, upravo snimljena istaknuta, "Gotovo").
+  - **Lista vlaka po stablu** (`_vlRedoslijed`/`_vlCmpNm`: T1, T1.1, T1.2, T2,
+    T10 — brojčano) u izboru vlake i u "Šta dalje"; nosi STVARNE indekse u
+    `vlake[]`. Dugme "Idi" pokazuje šta će se desiti (`_vpickGoTekst`: `▶ T14`
+    postojeća / `+ T14` nova).
+  - **Toast ide iznad trake snimanja i otvorenog lista** (`_toastDno`) — "T1.1
+    sačuvana lokalno…" je stajao preko liste "Šta dalje" i preko statistike.
+  - Test: `tests/js/vlaka-snimanje-ui.test.js` (21, pada na starom kodu).
+
 - **Offline karta: prazan rub dok se vuče + Doznaka offline (v1.8.9)**: na
   zahtjev "provjeri doznaka sekciju offline i prikaz sqlitedb/mbtiles karte (dok
   skrolam nema tileova na perifernim mjestima)".
