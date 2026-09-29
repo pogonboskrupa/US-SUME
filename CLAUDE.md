@@ -2795,6 +2795,47 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Povratak istom trasom tokom snimanja vlake — bez petlje/kuke (v1.9.1)**:
+  terenski screenshot: okret sa kolicima, par metara nazad pa opet naprijed →
+  petlja od ~5 m na vlaci. Tačke povratka padaju par metara u STRANU od puta
+  naprijed, pa povratak izgleda kao novi paralelan komad, a tačka na samom
+  okretu daje bočnu kuku. **Ovo je svjesno odstupanje od ranijeg "snimanje se
+  ne mijenja"** (komentar u `_vlakaProcessGpsPoint`, v3.120.0) — na eksplicitan
+  zahtjev "što bliže realnom kretanju". Odluka NE gleda ugao zaokreta (to je i
+  dalje odbijeno — pogađa pravu vratnju), nego POLOŽAJ prema već snimljenoj
+  liniji: vlaka je geometrija puta, ponovni prolaz joj ne dodaje ništa.
+  - `_vlRetraceTest`: tačka ≥ 2 m IZA vrha (duž linije) i unutar koridora w od
+    linije se ne upisuje; linija čeka dok se vrh ne prođe. **Histereza**: ulaz
+    traži 2 m, a dok povratak traje dovoljno je 0.3 m — bez nje kratak kosi
+    segment same tačke okreta prekine povratak prerano i ostavi šiljak.
+  - **w = 2 × tačnost, 6–9 m** (`_vlRetraceSirina`) — koridor od 6 m je u
+    simulaciji ostavljao petlju u 10 % slučajeva (tačke povratka padnu van).
+    Serpentina sa krakovima 12 m razmaka ostaje cijela.
+  - **Sumnjiv vrh** (`_vlVrhSumnjiv`: kratak skok ≤ w sa zaokretom > 60°) —
+    GPS na okretu zna skočiti i 6 m u stranu; takav vrh svojim kosim segmentom
+    "zaklanja" liniju pa povratak izgleda kao da je ispred. Povratak se zato
+    provjerava prema liniji bez njega, a na ulazu se skida (`_vlRetraceObreziVrh`).
+    Na izlazu NAPRIJED `_vlRetraceSkiniSiljak` skida preostali šiljak — ali SAMO
+    kad se izlazi preko vrha: kad se siđe sa SREDINE linije (> 2w od vrha), vrh je
+    stvaran kraj hoda (prva verzija ga je skidala i gubila metre), pa se umjesto
+    toga doda tačka NA liniji gdje se sišlo (nema tetive preko šume).
+  - **Nikad ispod `_vlRetraceZastita`** — tačke prije ove sesije
+    (`_vlSesijaPocetak`) i `junctionOnParent` spojevi krakova se ne skidaju;
+    tačka sa oznakom `gap` se ne skida.
+  - Za vrijeme povratka `_lastPtAcceptedAt` se osvježava (GPS radi) — inače bi
+    izlaz javio lažan "GPS prekid". Poruka "Hodaš po već snimljenom dijelu" tek
+    na 3. odbijen fiks (kratak okret ne treba poruku, a jedan odskok nije povratak).
+  - Prva tačka poslije `vratiSeNaRoditelja` preskače ovu provjeru (ima svoj trim).
+  - **Izmjereno** (stvarni `_vlakaProcessGpsPoint`, 100 GPS šumova ±1.2 m,
+    povratak 5 m u stranu, stvarna trasa 70 m): staro petlja 100/100, dužina
+    79–97 m; novo 0/100, 68–79 m. Pravo hodanje 60 m: 0 lažnih poruka.
+  - **Zamka iz razvoja**: prva verzija je iz provjere izuzimala zadnji segment
+    (protiv bočnog odskoka na vrhu) — prošla je jedan scenario, a pala na 6/40
+    šumova; tek petlja kroz mnogo nasumičnih šumova je pokazala stvarnu stopu.
+    Za GPS logiku jedan "lijep" scenario nije dokaz.
+  - Test: `tests/js/vlaka-povratak.test.js` (13), uklj. 40 šumova, serpentinu,
+    oštar ugao 90°, silazak sa sredine i nastavak postojeće vlake.
+
 - **Modali tokom snimanja vlake — dizajn i pregled (v1.9.0)**: na zahtjev
   "unaprijedi modale tokom snimanja vlaka". Stanje je prvo snimljeno
   Playwright-om kroz cijeli tok (izbor vlake → izbor kraka → stabilizacija GPS-a

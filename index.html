@@ -5650,7 +5650,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.9.0';
+const APP_VER = 'v1.9.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -17581,6 +17581,7 @@ function _togRecBegin() {
     _initDayTiming();
     _recSegStart = Date.now();
     _recSesijaMs = 0;
+    _vlRetrace = null; _vlSesijaPocetak = {};
     if (_recTimeTimer) clearInterval(_recTimeTimer);
     _recTimeTimer = setInterval(_recTimeRender, 1000);
     _recTimeRender();
@@ -17619,6 +17620,7 @@ function stopRec() {
   _recSegStart = 0;
   if (_recTimeTimer) { clearInterval(_recTimeTimer); _recTimeTimer = null; }
   _recZadnja = { idx: actI, ms: _recSesijaMs };   // sažetak za "Snimanje završeno"
+  _vlRetrace = null;
   recOn = false; recPaused = false; _recParentIdx = null;
   _pauziZavrsi(_recPauseWin);     // stop usred pauze bi inače ostavio vječno otvoren interval
   _setFreeView(false);
@@ -18891,6 +18893,109 @@ function onP(p) {
 // Date.now() bi svaku historijsku tačku vidio kao "sad", pa bi speed-gate
 // odbacio cijeli niz (prividno ogromna brzina), a poslije replay-a bi prvi
 // živi fix izgledao kao nula proteklog vremena.
+// ── Hod po već snimljenom dijelu vlake (v1.9.1) ─────────────────────────────
+// Terenska prijava (screenshot): okrenuo se sa kolicima, vratio par metara istim
+// putem pa opet naprijed — na liniji je ostala PETLJA/kuka od ~5 m. GPS tačke
+// povratka padaju par metara u stranu od puta naprijed, pa povratak izgleda kao
+// novi, paralelan komad trase, a tačka na samom mjestu okreta daje bočnu kuku.
+// Vlaka je GEOMETRIJA puta, ne historija hoda: ponovni prolaz istom trasom joj
+// ne dodaje ništa. Zato se tačka koja leži IZA vrha linije, unutar koridora
+// širine w od već snimljenog dijela, ne upisuje — linija čeka dok se ne prođe
+// njen vrh, pa nastavlja odatle.
+// Namjerno se ne gleda UGAO zaokreta (odbijeno ranije — pogađa i pravu vratnju),
+// nego položaj u odnosu na već snimljenu liniju: prava serpentina čiji su
+// krakovi razmaknuti više od w ostaje netaknuta. w = 2 × tačnost, ograničeno
+// na 6–9 m: izmjereno simulacijom (100 GPS šumova, povratak 5 m u stranu kao na
+// terenskom snimku) je koridor od 6 m ostavljao petlju u 10 % slučajeva jer dio
+// tačaka povratka padne van njega. Serpentina sa krakovima 12 m razmaka ostaje
+// cijela; okret uži od ~9 m se na vlaci ionako ne vozi.
+const _VL_RETRACE_MIN_W = 6, _VL_RETRACE_MAX_W = 9;
+function _vlRetraceSirina(ac) {
+  return Math.max(_VL_RETRACE_MIN_W, Math.min(_VL_RETRACE_MAX_W, (ac > 0 ? ac : 4) * 2));
+}
+// Projekcija tačke na snimljenu liniju. Vraća {la, lo, d, iza} kad tačka leži
+// najmanje 2 m IZA vrha (mjereno duž linije) i unutar w od nje; inače null
+// (tačka je ispred vrha — normalno snimanje). Prva verzija je izuzimala zadnji
+// segment (da bočni odskok na vrhu ne proglasi sljedeći korak naprijed
+// povratkom) — ali je tada povratak unutar tog segmenta prolazio neprepoznat, a
+// provjera šiljka pri izlasku je skidala i ispravne tačke (uhvaćeno simulacijom
+// kroz 40 GPS šumova). Bočni odskok sad rješava _vlRetraceSkiniSiljak.
+// `minIza` je histereza: ULAZ u povratak traži ≥ 2 m iza vrha (jedan GPS
+// odskok nije povratak), a kad povratak već traje, traje dok se vrh ne prođe
+// (0.3 m) — inače kratak kosi segment same tačke okreta, bliži od prave linije,
+// prekine povratak prerano i ostavi šiljak.
+function _vlRetraceTest(pts, la, lo, w, minIza) {
+  const n = pts ? pts.length : 0;
+  if (n < 3) return null;
+  const kx = Math.cos(la * Math.PI / 180) * MPDEG, ky = MPDEG;
+  const X = q => (q.lo - lo) * kx, Y = q => (q.la - la) * ky;
+  let best = null;
+  const segL = [];
+  for (let i = 0; i < n - 1; i++) {
+    const ax = X(pts[i]), ay = Y(pts[i]), dx = X(pts[i + 1]) - ax, dy = Y(pts[i + 1]) - ay;
+    const L2 = dx * dx + dy * dy;
+    segL.push(Math.sqrt(L2));
+    const t = L2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+    const px = ax + t * dx, py = ay + t * dy, d = Math.hypot(px, py);
+    if (!best || d < best.d) best = { d, i, t, px, py };
+  }
+  if (!best || best.d > w) return null;
+  let iza = (1 - best.t) * segL[best.i];
+  for (let k = best.i + 1; k < segL.length; k++) iza += segL[k];
+  if (iza < (minIza ?? 2)) return null;
+  return { la: la + best.py / ky, lo: lo + best.px / kx, d: best.d, iza };
+}
+// Ugao skretanja u tački b (0° = pravo, 180° = potpuni povratak).
+function _vlUgaoSkretanja(a, b, c) {
+  const kx = Math.cos(b.la * Math.PI / 180);
+  const x1 = (b.lo - a.lo) * kx, y1 = b.la - a.la, x2 = (c.lo - b.lo) * kx, y2 = c.la - b.la;
+  const n1 = Math.hypot(x1, y1), n2 = Math.hypot(x2, y2);
+  if (!n1 || !n2) return 0;
+  return Math.acos(Math.max(-1, Math.min(1, (x1 * x2 + y1 * y2) / (n1 * n2)))) * 180 / Math.PI;
+}
+// Vrh je SUMNJIV kad je kratak (≤ w) bočni skok sa zaokretom > 60° — tipično
+// tačka upisana baš u trenutku okreta (GPS zna skočiti i 6 m u stranu). Takav
+// vrh bi svojim kosim segmentom "zaklonio" pravu liniju: tačke povratka padaju
+// na njega, blizu vrha, i izgledaju kao da su ISPRED. Zato se povratak provjerava
+// prema liniji bez sumnjivog vrha, a pri ulasku u povratak se on skida.
+function _vlVrhSumnjiv(pts, w, zastita) {
+  const n = pts.length;
+  if (n < 3 || n - 1 <= zastita) return false;
+  const b = pts[n - 2], c = pts[n - 1];
+  if (c.gap || dst(b.la, b.lo, c.la, c.lo) > w) return false;
+  return _vlUgaoSkretanja(pts[n - 3], b, c) > 60;
+}
+// Na početku povratka skini tačku(e) upisane u samom okretu. Najviše 3 i nikad
+// ispod `zastita` (tačke prije ove sesije i spojevi krakova se ne diraju).
+function _vlRetraceObreziVrh(pts, w, zastita) {
+  let skinuto = 0;
+  while (skinuto < 3 && _vlVrhSumnjiv(pts, w, zastita)) { pts.pop(); skinuto++; }
+  return skinuto;
+}
+// Pri IZLASKU iz povratka poznata je i tačka naprijed (f), pa se vidi šiljak
+// koji na ulazu nije mogao: vrh do kojeg se samo stiglo pa okrenulo stoji
+// bočno od pravca prethodna → f. Skida se ako je to oštar zaokret (> 60°) na
+// kratkom skoku (≤ w). Obično hodanje na izlazu pravi mali ugao pa vrh ostaje.
+function _vlRetraceSkiniSiljak(pts, f, w, zastita) {
+  let skinuto = 0;
+  while (pts.length > 2 && pts.length - 1 > zastita && skinuto < 2) {
+    const n = pts.length, b = pts[n - 2], c = pts[n - 1];
+    if (c.gap || dst(b.la, b.lo, c.la, c.lo) > w) break;
+    if (_vlUgaoSkretanja(b, c, f) <= 60) break;
+    pts.pop(); skinuto++;
+  }
+  return skinuto;
+}
+let _vlRetrace = null;          // { idx, zadnja } dok se hoda po snimljenom
+let _vlSesijaPocetak = {};      // idx vlake → zadnji indeks prije ove sesije
+function _vlRetraceZastita(idx) {
+  let z = _vlSesijaPocetak[idx] ?? 0;
+  vlake.forEach(x => {
+    if (x && typeof x.junctionOnParent === 'number' && x !== vlake[idx] && _parentOf(x) === idx) z = Math.max(z, x.junctionOnParent);
+  });
+  return z;
+}
+
 function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs, bypassPauzu) {
   if (!recOn || (recPaused && !bypassPauzu) || actI === null) return;
 
@@ -18950,6 +19055,50 @@ function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs, bypassPauzu) {
     // nemoguća kretanja; rezidualni šum se čisti ručno preko "🔧 Ugladi trag"
     // (_smoothVlakaStart/_dpSimplifyGeo) poslije snimanja, na zahtjev korisnika
     // — ne tiho u realnom vremenu dok se snima.
+    // v1.9.1: povratak ISTOM trasom se ipak prepoznaje uživo — ali po POLOŽAJU
+    // u odnosu na već snimljenu liniju (korak 6 ispod), ne po uglu zaokreta.
+  }
+
+  // 6. HOD PO VEĆ SNIMLJENOM DIJELU (v1.9.1) — vidi _vlRetraceTest. Prva tačka
+  //    poslije povratka na roditelja ide svojim putem (trim spoja ispod).
+  if (_vlSesijaPocetak[actI] === undefined) _vlSesijaPocetak[actI] = Math.max(0, v.pts.length - 1);
+  if (!(_parentReturnIdx !== null && actI === _parentReturnIdx)) {
+    const w = _vlRetraceSirina(ac);
+    const uToku = !!(_vlRetrace && _vlRetrace.idx === actI);
+    const zastita = _vlRetraceZastita(actI);
+    const osnova = !uToku && _vlVrhSumnjiv(v.pts, w, zastita) ? v.pts.slice(0, -1) : v.pts;
+    const proj = _vlRetraceTest(osnova, sla, slo, w, uToku ? 0.3 : 2);
+    if (proj) {
+      if (!_vlRetrace || _vlRetrace.idx !== actI) {
+        _vlRetrace = { idx: actI, zadnja: null, br: 0 };
+        if (_vlRetraceObreziVrh(v.pts, w, zastita)) {
+          v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
+          scheduleVlakaSave(actI);
+          updBan();
+        }
+      }
+      // Javi tek na 3. odbijen fiks — jedan GPS odskok unazad nije povratak.
+      if (++_vlRetrace.br === 3) showToast('↩ Hodaš po već snimljenom dijelu — ne upisuje se dvaput');
+      // Mjesto NA liniji gdje je zadnji put bio — ako odatle siđe u stranu.
+      _vlRetrace.zadnja = { la: proj.la, lo: proj.lo, al: alt };
+      _lastPtAcceptedAt = nowMs;   // GPS radi — bez ovoga bi izlaz javio lažan "GPS prekid"
+      return;
+    }
+    if (_vlRetrace && _vlRetrace.idx === actI) {
+      const z = _vlRetrace.zadnja;
+      _vlRetrace = null;
+      const tip = v.pts[v.pts.length - 1];
+      if (z && tip && dst(tip.la, tip.lo, sla, slo) > 2 * w) {
+        // Sišao sa linije daleko od vrha (skrenuo sa sredine bez kraka): linija
+        // se vraća do mjesta skretanja NA liniji, inače bi nastala prava tetiva
+        // od vrha preko šume do nove pozicije. Vrh je ovdje STVARNI kraj hoda,
+        // pa se šiljak ne traži (prva verzija ga je skidala i gubila metre).
+        addPt(actI, z.la, z.lo, z.al);
+      } else if (_vlRetraceSkiniSiljak(v.pts, { la: sla, lo: slo }, w, zastita)) {
+        v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
+        scheduleVlakaSave(actI);
+      }
+    }
   }
 
   _lastRecTime = nowMs;
