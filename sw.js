@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '1.8.7';
+const APP_VERSION = '1.8.8';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -74,6 +74,9 @@ self.addEventListener('activate', event => {
 // kroz "Offline podaci po karti". Protiv browser evikcije pri punom disku se
 // štitimo sa navigator.storage.persist() (traži se iz aplikacije pri startu);
 // na stvarno punom disku cache.put baci QuotaExceededError i tiho se preskoči.
+// Rok za mrežu prije nego se stranica/statički fajl posluže iz keša (v1.8.8).
+const _APP_ROK_MS = 3500;
+
 function _tileRespond(event, cacheName) {
   event.respondWith(
     caches.open(cacheName).then(async cache => {
@@ -176,16 +179,29 @@ self.addEventListener('fetch', event => {
     // verziju do isteka max-age (~10 min) pa update kasni. Ostalo: normalan network-first.
     const isNav = event.request.mode === 'navigate';
     const req = isNav ? new Request(event.request, { cache: 'no-store' }) : event.request;
-    event.respondWith(
-      fetch(req)
-        .then(resp => {
-          if (resp.ok) {
-            try { const rc = resp.clone(); caches.open(APP_CACHE).then(c => c.put(event.request, rc)); } catch(e) {}
-          }
-          return resp;
-        })
-        .catch(() => caches.match(event.request))
-    );
+    // v1.8.8: mreža prva, ali NE bez roka. Ranije je fetch bez roka na mrtvoj
+    // vezi (navigator.onLine laže 'true') držao pokretanje app-a dok browser sam
+    // ne odustane — desetine sekundi praznog ekrana, a ispravna kopija je
+    // sve vrijeme bila u kešu. Sad: ako mreža ne odgovori za _APP_ROK_MS i keš
+    // ima kopiju, služi se keš; mreža se pusti da završi u pozadini i osvježi
+    // keš za sljedeće pokretanje (nova verzija i dalje stiže, samo kasnije).
+    const mreza = fetch(req).then(resp => {
+      if (resp.ok) {
+        const rc = resp.clone();
+        return caches.open(APP_CACHE).then(c => c.put(event.request, rc)).catch(() => {}).then(() => resp);
+      }
+      return resp;
+    });
+    mreza.catch(() => {});
+    event.waitUntil(mreza.catch(() => {}));
+    event.respondWith((async () => {
+      const kes = await caches.match(event.request);
+      if (!kes) return mreza.catch(() => caches.match(event.request));
+      return Promise.race([
+        mreza.then(r => r.ok ? r : kes).catch(() => kes),
+        new Promise(r => setTimeout(() => r(kes), _APP_ROK_MS))
+      ]);
+    })());
   }
 });
 

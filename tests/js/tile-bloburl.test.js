@@ -97,7 +97,7 @@ function makeEnv({ networkOk = true, cacheHit = null, contentType = 'image/png',
   }
 
   global.window = global; // kod provjerava `'caches' in window` — u Node-u nema window-a
-  global.document = { createElement: (tag) => (tag === 'img' ? new FakeImg() : { getContext: () => ({}), toBlob: (cb) => cb(new FakeBlob('canvas')) }) };
+  global.document = { createElement: (tag) => (tag === 'img' ? new FakeImg() : { getContext: () => ({ drawImage() {} }), toBlob: (cb) => cb(new FakeBlob('canvas')) }) };
   global.URL = {
     createObjectURL: (blob) => { const u = 'blob:' + (nextId++); blobStore.set(u, blob); created.push(u); return u; },
     revokeObjectURL: (u) => { revokes.push(u); blobStore.delete(u); },
@@ -237,6 +237,61 @@ t('prazan getTileUrl → nema fetch-a, nema blob-a (inače bi dohvatio SAMU STRA
   assert.strictEqual(fetched, 0, 'prazan URL NE smije okinuti mrežni zahtjev');
   assert.strictEqual(env.created.length, 0);
   assert.strictEqual(img._empty, true, 'pločica ostaje prazna (kandidat za _retryEmpty), ne slomljena slika');
+});
+
+console.log('Slab / mrtav signal (v1.8.8) — karta ne čeka mrežu koje nema:');
+
+t('izmjereno "nema" + pločica nije u kešu → odmah prazna, BEZ mrežnog zahtjeva', async () => {
+  const env = makeEnv({ networkOk: true });
+  let fetched = 0;
+  const realFetch = global.fetch;
+  global.fetch = async (u) => { fetched++; return realFetch(u); };
+  global._mrezaStanje = () => 'nema';
+  try {
+    const layer = makeLayer();
+    const t0 = Date.now();
+    const img = await new Promise(res => layer.createTile({ z: 10, x: 1, y: 1 }, (err, tile) => res(tile)));
+    assert.ok(Date.now() - t0 < 200, 'ne smije čekati rok mreže (ranije ~17 s)');
+    assert.strictEqual(fetched, 0, 'mrtva veza se ne gađa');
+    assert.strictEqual(img._empty, true, 'ostaje kandidat za ponovni pokušaj kad se veza vrati');
+  } finally { delete global._mrezaStanje; }
+});
+
+t('slaba veza + roditelj u kešu → zamućen roditelj ODMAH, prava pločica ga zamijeni kad stigne', async () => {
+  const env = makeEnv({ networkOk: true, cacheHit: 'https://x/9/0/0.png' });
+  let pustiMrezu;
+  const cekaMrezu = new Promise(r => { pustiMrezu = r; });
+  const realFetch = global.fetch;
+  global.fetch = async (u) => { await cekaMrezu; return realFetch(u); };
+  global._mrezaStanje = () => 'slaba';
+  try {
+    const layer = makeLayer();
+    const img = await new Promise(res => layer.createTile({ z: 10, x: 1, y: 1 }, (err, tile) => res(tile)));
+    assert.strictEqual(img._empty, true, 'prvo se vidi roditelj (još nije prava pločica)');
+    assert.strictEqual(env.created.length, 1, 'roditelj je nacrtan bez čekanja mreže');
+    pustiMrezu();
+    await new Promise(r => setTimeout(r, 30));
+    assert.strictEqual(env.created.length, 2, 'prava pločica stigla i zamijenila roditelja');
+    assert.strictEqual(img._empty, false);
+  } finally { delete global._mrezaStanje; }
+});
+
+t('izmjereno "nema" → _retryEmpty ne troši pokušaje (vraćaju se kad veza dođe)', async () => {
+  makeEnv({ networkOk: true });
+  global._mrezaStanje = () => 'nema';
+  try {
+    const layer = makeLayer();
+    let pozvan = 0;
+    layer._tileZoom = 10;
+    layer._tiles = { a: { coords: { z: 10 }, el: { _empty: true, _load: () => { pozvan++; } } } };
+    layer._retryEmpty();
+    await new Promise(r => setTimeout(r, 450));
+    assert.strictEqual(pozvan, 0);
+    global._mrezaStanje = () => 'dobra';
+    layer._retryEmpty();
+    await new Promise(r => setTimeout(r, 450));
+    assert.strictEqual(pozvan, 1, 'kad veza postoji, pokušaj ide');
+  } finally { delete global._mrezaStanje; }
 });
 
 (async () => {

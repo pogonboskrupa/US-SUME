@@ -77,6 +77,7 @@ function makeEnv({ readyState = 'complete', pucaju = [] } = {}) {
     _restoreTacke: step('tacke'), _restoreFotos: step('fotos'),
     _localKmlRestore: step('localKml'), _kmlcInit: step('kmlcInit'),
     _temRestore: step('temRestore'), isVodeci: () => false, showProjectManagement: () => {},
+    _mrezaProbaj: () => true,
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_STARTUP + '\nreturn { _startupRestore };')(...keys.map(k => sandbox[k]));

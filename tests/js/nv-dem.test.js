@@ -49,6 +49,8 @@ function env(opts = {}) {
     document: { getElementById: (id) => dom[id] || null },
     window: { caches },                      // 'caches' in window
     caches, navigator,
+    // v1.8.8: odluka o vezi — ovdje isto što i OS kaže (izmjereno stanje se testira u net-kvalitet)
+    _mrezaProbaj: () => navigator.onLine !== false,
     createImageBitmap: async (b) => b,
     _terrariumDecodeTile: (img) => img,
     _TERR_CACHE: 'tvlake-terr-v1',

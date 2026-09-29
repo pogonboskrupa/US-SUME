@@ -311,6 +311,7 @@ await test('doLogin: logo se sakriva čim prijava krene, ne tek kad se app otvor
     _clearSavedUser: () => {}, _setOfflineMode: () => {}, showToast: () => {},
     showAuthErr: () => {}, localStorage: { setItem: () => {} },
     navigator: { onLine: true },
+    _mrezaProbaj: () => true, _mrezaStanje: () => 'dobra', _isNetworkErr: () => false,
     sbLoadProfile: async () => {}, showApp: async () => {},
     sb: {
       // Prvi mrežni poziv — u tom trenutku logo VEĆ mora biti sakriven

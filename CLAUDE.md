@@ -2079,6 +2079,9 @@ način provjere."
     "kad ima neta, koristi online značajke", a sužavanje gate-ova na izmjereno
     stanje bi online funkcije GASILO na slaboj vezi na kojoj one još rade (samo
     sporije). Mjerenje je za sada ISKLJUČIVO vidljivost, ne odlučivanje.
+    **Prevaziđeno u v1.8.8**: odluke sad prate izmjereno stanje, ali slaba veza
+    i dalje propušta lagane radnje — gase se samo na IZMJERENO mrtvoj vezi (vidi
+    "Offline i slab signal" u Poznatim zamkama).
   - **Debug sekcija "Terenski rad"** (`_netDebugRender`, kartica u `#debug-panel`):
     izmjereno stanje, medijan odziva, broj neuspjelih, dubina reda za sync, broj
     otvorenih offline karata — i `navigator.onLine` ISPISAN pored toga, crvenom
@@ -2791,6 +2794,66 @@ namjerno, prije nego se jave.
     N.V." (z12) ili "N.V. + Nagib + Konture" (z12–z14) — DEM slojevi čitaju
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
+
+- **Offline i slab signal — odluke prate IZMJERENO stanje veze (v1.8.8)**: na
+  zahtjev "mora raditi offline i pri slabom signalu; online stavke neka rade
+  kad signal dozvoli". Mjerenje iz v1.4.6 je do sada bilo SAMO prikaz — sve
+  odluke su i dalje pitale `navigator.onLine`, koji na mrtvoj vezi laže `true`.
+  Provjereno u pravom Chromium-u (Playwright, `page.route` koji VISI =
+  mrtva veza uz onLine=true), staro naspram novog:
+  - **Oporavak prekinutog snimanja se na mrtvoj vezi NIJE POJAVLJIVAO** (ni za
+    80 s): `_crashCheck`, QR pojasevi i projekti sa šifrom su bili na KRAJU
+    `sbInitData`, iza svih mrežnih učitavanja, a pad ijednog ih je preskakao.
+    Sad idu čim su VLASTITE vlake učitane (ne prije — `_applyVlakeRows` gradi
+    `vlake[]` iznova) i u `finally`. Mrtva veza: 18 s; OS-offline: odmah.
+  - **Vrata transporta** (`setNetGate` u `reliable-fetch.js` ←
+    `_netDozvoliZahtjev`): na izmjereno "nema" ili OS-offline Supabase poziv pada
+    ODMAH, bez mreže. **Greška nosi ime `AbortError`** (tip `TypeError`, poruka sa
+    "fetch") — supabase-js (postgrest) SAM ponavlja neuspio GET 3× (1+2+4 s)
+    osim za AbortError; bez toga je svaki odbijeni poziv i dalje trajao ~7 s.
+    Brzi neuspjeh se NE javlja posmatraču — inače bi osvježio "zadnji uzorak" i
+    proba ne bi nikad došla na red.
+  - **`_mrezaProbaj(traziDobru)`** — jedna odluka za sve: 'nema' → ne (osim
+    probe), 'slaba' → lagano da / teško ne, 'dobra'/'nepoznato' → da.
+    **Proba**: na 'nema' jednom u `_NET_PROBA_MS` (30 s) pusti se jedan pravi
+    pokušaj, a njegov tok dobija prozor `_NET_PROZOR_MS` (20 s) da završi posao.
+    `_mrezaStanje()` samo ČITA stanje (za poruke) — ne troši probu; pozivalac
+    koji sam zove `_mrezaProbaj` pa odmah funkciju koja ga opet pita bi
+    PRVU potrošio, a drugu odbio (zato red za sync pozivaoci zovu bez provjere —
+    red sam odlučuje). `_mrezaSila()` = izričita radnja korisnika (Sync sad,
+    odjava, preuzimanje, test veze) prolazi bez obzira na stanje.
+  - **Proba MORA napraviti pravi zahtjev**: periodični otkucaj na 'nema' zove
+    `_reloadCoreData()`. Bez toga se proba trošila na token/realtime koji
+    često ne idu na mrežu — izmjereno: veza vraćena, prazan red, app to NIKAD
+    ne primijeti (do isteka uzoraka od 10 min). Uspjeh poslije 'nema' briše
+    stare kvarove (inače bi još 10 min bilo "slaba") i okida `_netVezaVracena`
+    (red, osvježavanje, prazne pločice) — i bez `online` eventa.
+  - **Red za sync**: mrežna greška VRAĆENA kao `{error}` sad prekida prolaz
+    (ranije je išao na sljedeću stavku — N × 15 s na mrtvoj vezi); poslije pada
+    `_SYNC_PAUZA_MS` (20 s) pauza sa JEDNIM odgođenim prolazom (doznaka ga zove
+    na svaku GPS tačku); `_processOfflineQueue(true)` preskače pauzu.
+    Fotografije (stotine KB) idu samo na dobroj vezi, i staju na prvom padu.
+  - **Rok transporta je rok BEZ NAPRETKA**: slanje dobija +1 s po KB tijela
+    (najviše 120 s), čitanje tijela navija rok na svaki komad, ukupno najviše
+    5 min. Ranije veći upis (vlaka ~50 KB, foto) na ~1-2 KB/s nikad nije mogao
+    stati u 15 s i ponavljao se zauvijek. Kvalitet se mjeri po `ttfb`, ne po
+    ukupnom trajanju (velik uredan odgovor nije slaba veza).
+  - **Karta**: pločica van keša na mrtvoj vezi je čekala ~17 s prazna; sad
+    'nema' → roditelj/prazno odmah, 'slaba' → roditelj odmah pa prava pločica
+    kad stigne; `_retryEmpty` ne troši pokušaje na mrtvu vezu.
+  - **Service worker**: stranica/statički fajlovi su bili mreža-prvo BEZ roka;
+    sad `_APP_ROK_MS` (3,5 s) pa keš, a mreža u pozadini osvježi keš.
+  - Novi projekat na slaboj vezi ide lokalno odmah (ne čeka server do 15 s);
+    prijava pada na keširani profil i kad mreža padne USRED prijave; profil
+    terena bez mreže koristi preuzeti DEM (rani izlaz ga je sakrivao);
+    preuzimanje terena na slaboj vezi pita.
+  - Izmjereno (mrtva veza, 60 s): Supabase zahtjeva 8 → 3; OS-offline:
+    40 → 0. Slaba veza (odgovor za 3 s): svih 11 poziva prolazi, stanje
+    "slaba". Debug "Terenski rad" pokazuje da su online radnje PAUZIRANE i kad
+    je sljedeća proba.
+  - Testovi: `tests/js/slab-signal.test.js` (26), `reliable-fetch.test.js`
+    (+4), `tile-bloburl.test.js` (+3). **Provjereno na starom kodu**: red šalje
+    sve 3 stavke, oporavak izostaje uz pad mreže, SW ne odgovori ni za 4 s.
 
 - **GeoPackage granica iz KML-a + tematska karta prilagođena "pravom" fajlu
   (v1.8.7)**: na zahtjev "napravi geopackage od granica taksacije 2021, uzmi

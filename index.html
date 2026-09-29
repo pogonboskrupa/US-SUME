@@ -5574,7 +5574,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.7';
+const APP_VER = 'v1.8.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5803,9 +5803,21 @@ let _netUzorci = [];
 
 function _netZabiljezi(ishod) {
   if (!ishod) return;
-  _netUzorci.push({ ok:!!ishod.ok, ms:Number(ishod.ms) || 0, vrsta:ishod.vrsta || 'ok', t:Date.now() });
+  let prije = null;
+  try { prije = _netKvalitet(); } catch(e) {}
+  // Odziv linka je vrijeme do zaglavlja (ttfb); ukupno trajanje uključuje i
+  // veličinu odgovora, pa bi velik uredan odgovor vezu lažno proglasio slabom.
+  const ms = ishod.ttfb != null ? ishod.ttfb : ishod.ms;
+  _netUzorci.push({ ok:!!ishod.ok, ms:Number(ms) || 0, vrsta:ishod.vrsta || 'ok', t:Date.now() });
   if (_netUzorci.length > _NET_UZORAKA) _netUzorci.shift();
   try { _netBadgeSync(); } catch(e) {}
+  if (prije === 'nema' && ishod.ok) {
+    // Kvarovi iz mrtvog perioda opisuju vezu koje više nema — da ostanu, stanje
+    // bi još do 10 min bilo "slaba" i teški upisi (fotografije) bi čekali bez razloga.
+    _netUzorci = _netUzorci.filter(u => u.ok);
+    try { _netBadgeSync(); } catch(e) {}
+    try { _netVezaVracena(); } catch(e) {}
+  }
 }
 function _netSvjezi() {
   const sad = Date.now();
@@ -5826,6 +5838,101 @@ function _netKvalitet() {
   const med = _netMedijanMs();
   if (palo > 0 || (med != null && med > _NET_SPORO_MS)) return 'slaba';
   return 'dobra';
+}
+
+// ─── ODLUKA: VRIJEDI LI SAD POKUŠATI ONLINE (v1.8.8) ─────────────────────────
+// Do sada su online radnje pitale SAMO navigator.onLine, a on na terenu laže
+// 'true' na mrtvoj vezi — pa je app i uz izmjereno "nema" slao zahtjev za
+// zahtjevom: svaki je visio do roka, pozadinski poslovi su se gomilali, a
+// korisnička radnja (novi projekat, ruta, profil terena) je stajala sekundama
+// prije nego pređe na lokalni put koji je ionako postojao.
+// Pravilo: neobavezna online radnja se radi kad veza to dopušta.
+//   'nema'   → ne pokušavaj; ali jednom u _NET_PROBA_MS pusti JEDAN pokušaj —
+//              on je proba (bez sintetičkog pinga), a uspjeh vraća sve na staro
+//              preko _netVezaVracena;
+//   'slaba'  → lagani pozivi da (sync malih upisa, osvježavanje), TEŠKI ne
+//              (fotografije, preuzimanje terena, korisnik koji čeka odgovor);
+//   'dobra' / 'nepoznato' → da.
+// Lokalni rad NIKAD ne zavisi od ovoga — ovo samo odlučuje da li se čeka mreža.
+const _NET_PROBA_MS = 30 * 1000;
+const _NET_PROZOR_MS = 20 * 1000;   // koliko dugo dodijeljena proba smije slati zahtjeve
+let _netProbaDo = 0, _netSilaDo = 0;
+function _mrezaProbaj(traziDobru) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  const k = _netKvalitet();
+  if (k === 'nema') {
+    if (traziDobru) return false;
+    const sad = Date.now();
+    if (sad < _netSilaDo) return true;   // proba je u toku — njen tok smije završiti posao
+    const zadnji = _netUzorci.length ? _netUzorci[_netUzorci.length - 1].t : 0;
+    if (sad - zadnji < _NET_PROBA_MS || sad < _netProbaDo) return false;
+    _netProbaDo = sad + _NET_PROBA_MS;   // samo JEDNA proba po prozoru, ne svi pozivaoci odjednom
+    _netSilaDo = sad + _NET_PROZOR_MS;
+    return true;
+  }
+  if (k === 'slaba' && traziDobru) return false;
+  return true;
+}
+// Korisnik je IZRIČITO tražio mrežnu radnju ("Sync sad", odjava, preuzimanje):
+// pusti zahtjeve kratko bez obzira na izmjereno stanje — možda zna da je signal
+// upravo došao, a jedan pravi pokušaj je i najbrža proba.
+function _mrezaSila(ms) { _netSilaDo = Math.max(_netSilaDo, Date.now() + (ms || _NET_PROZOR_MS)); }
+// Vrata transporta (reliableFetch): na izmjereno mrtvoj vezi Supabase poziv pada
+// ODMAH umjesto poslije 15 s — keš/red krenu odmah. Van 'nema' uvijek propušta.
+function _netDozvoliZahtjev() {
+  // OS kaže offline (to ne laže): browser bi i sam pao odmah, ALI supabase-js
+  // takav neuspjeh ponavlja 3 puta (1+2+4 s) — izmjereno: oporavak prekinutog
+  // snimanja bez signala se zato pojavljivao tek poslije ~16 s. Odbijanje na
+  // vratima ide bez ponavljanja. Izričita radnja korisnika (_mrezaSila) prolazi.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now() < _netSilaDo;
+  if (_netKvalitet() !== 'nema') return true;
+  return _mrezaProbaj();
+}
+try { if (typeof setNetGate === 'function') setNetGate(_netDozvoliZahtjev); } catch(e) {}
+// Samo ČITA stanje (za poruke korisniku) — za razliku od _mrezaProbaj ne troši probu.
+function _mrezaStanje() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'nema';
+  return _netKvalitet();
+}
+// Veliko preuzimanje koje je korisnik SAM tražio: bez veze se ne počinje (ne
+// ostavljati ga pred progress barom koji ne mrdne), a na slaboj vezi se pita —
+// korisnik zna je li mu to sad vrijedno trošiti, app ne zna.
+async function _mrezaZaPreuzimanje(sta) {
+  if (!_mrezaProbaj()) { showToast('📴 ' + sta + ' traži internet — sad nema veze'); return false; }
+  _mrezaSila(60000);
+  if (_mrezaStanje() !== 'slaba') return true;   // 'nema' ovdje = dodijeljena proba, neka pokuša
+  return !!(await _dlgConfirm(sta + ' na slabom signalu može trajati dugo i trošiti mobilne podatke. Pokušati ipak?',
+    { title: '📶 Slab signal', okLabel: 'Pokušaj' }));
+}
+// OS je javio da je veza TEK SAD uspostavljena — kvarovi izmjereni prije toga
+// opisuju vezu koje više nema, pa ne smiju blokirati prvi pokušaj.
+function _netZaboraviKvarove() {
+  _netUzorci = _netUzorci.filter(u => u.ok);
+  _netProbaDo = 0; _netSilaDo = 0;
+  try { _netBadgeSync(); } catch(e) {}
+  _netPonoviPlocice();
+}
+// Pločice koje su ostale prazne/zamućene dok veze nije bilo — ponovi dohvat.
+function _netPonoviPlocice() {
+  try {
+    if (typeof map === 'undefined' || !map) return;
+    map.eachLayer(l => { if (typeof l._retryEmpty === 'function') l._retryEmpty(); });
+  } catch(e) {}
+}
+// Veza se vratila BEZ 'online' eventa (tipično: signal oslabio pa ojačao, a OS
+// cijelo vrijeme tvrdio da je online) — pokreni isto što i 'online' event, inače
+// bi red za sync čekao sljedeći periodični otkucaj ili povratak u prvi plan.
+let _netVracenaT = null, _netVracenaZadnji = 0;
+function _netVezaVracena() {
+  if (_netVracenaT || Date.now() - _netVracenaZadnji < 60000) return;
+  _netVracenaT = setTimeout(() => {
+    _netVracenaT = null;
+    _netVracenaZadnji = Date.now();
+    _netPonoviPlocice();
+    if (typeof sbUser === 'undefined' || !sbUser) return;
+    try { if (typeof _processOfflineQueue === 'function') _processOfflineQueue(true); } catch(e) {}
+    try { if (typeof _reloadCoreData === 'function') _reloadCoreData(); } catch(e) {}
+  }, 800);
 }
 
 // Jedno mjesto koje odlučuje izgled tačkice — inače bi _setOfflineMode i
@@ -5996,7 +6103,8 @@ function _syncQueueFlushNow() {
     q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; } });
     localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
     showToast('↑ Pokušavam sync...');
-    _processOfflineQueue().then(_updSyncBadge).catch(() => showToast('❌ Sync nije uspio — provjeri vezu'));
+    _mrezaSila();
+    _processOfflineQueue(true).then(_updSyncBadge).catch(() => showToast('❌ Sync nije uspio — provjeri vezu'));
   } else {
     showToast('📴 Offline — sync nije moguć');
   }
@@ -6011,11 +6119,12 @@ function _fmtAgo(ts) {
 }
 
 window.addEventListener('online', () => {
+  try { _netZaboraviKvarove(); } catch(e) {}
   _setOfflineMode(false);
   showToast('🌐 Veza uspostavljena — sinkroniziram...');
   // Write strana (red čekanja) + read strana (projekti/vlake/dnevnik — oporavak
   // ako je initial fetch pri prijavi pao dok nije bilo veze)
-  setTimeout(() => { _processOfflineQueue(); _reloadCoreData(); }, 1000);
+  setTimeout(() => { _processOfflineQueue(true); _reloadCoreData(); }, 1000);
 });
 window.addEventListener('offline', () => {
   _setOfflineMode(true);
@@ -6052,12 +6161,29 @@ async function _tryRefreshSession() {
 }
 
 let _syncInProgress = false, _syncRerun = false;
-async function _processOfflineQueue() {
+// v1.8.8: poslije prolaza koji je stao na MREŽNOJ grešci, sljedeći ne kreće
+// prije _SYNC_PAUZA_MS. Ranije je svaki poziv (na doznaci je to SVAKA GPS tačka)
+// odmah pokretao novi prolaz, pa je mrtva/slaba veza gađana u petlji — prvi
+// upis u redu visi do roka, pada, rerun za 50 ms, i tako dok traje snimanje.
+// `sila` (ručni "Sync sad", vraćena veza) preskače pauzu.
+const _SYNC_PAUZA_MS = 20 * 1000;
+let _syncMrezaPalaU = 0, _syncOdgodaT = null;
+async function _processOfflineQueue(sila) {
   if (!sbUser || !sbProfile) return;
   // D2-A: spriječi PARALELNI prolaz (online event + restore + "Sync sad" + sbInitData mogu
   // se preklopiti → dupli inserti). Poziv koji naiđe tokom prolaza se ne gubi — re-okine se.
   if (_syncInProgress) { _syncRerun = true; return; }
+  if (sila !== true) {
+    const ceka = _SYNC_PAUZA_MS - (Date.now() - _syncMrezaPalaU);
+    if (ceka > 0) {
+      // Ne gubi poziv — jedan odgođen prolaz kad pauza istekne.
+      if (!_syncOdgodaT) _syncOdgodaT = setTimeout(() => { _syncOdgodaT = null; _processOfflineQueue(); }, ceka);
+      return;
+    }
+    if (!_mrezaProbaj()) return;
+  }
   _syncInProgress = true;
+  let _mrezaPala = false;
   try {
   const syncOwner = sbUser.id;
   const q = _OL.loadQueue(true);
@@ -6257,7 +6383,14 @@ async function _processOfflineQueue() {
         }
         break;   // prekini prolaz; ostatak reda ide u rerun (ako je refresh uspio) ili kasnije
       }
-      else if (!_isNetworkErr(err)) {
+      else if (_isNetworkErr(err)) {
+        // Mrežna greška vraćena kao {error} (ne bačena): ranije je petlja išla na
+        // SLJEDEĆU operaciju, pa je na mrtvoj vezi svaka čekala svoj rok od 15 s,
+        // jedna za drugom. Veza je ista za sve — prekini prolaz, ostatak čeka.
+        _mrezaPala = true;
+        break;
+      }
+      else {
         // Ne-mrežna greška (RLS, istekao token, privremeni 4xx/5xx). Ne odbacuj
         // odmah — daj 5 pokušaja prije nego se operacija proglasi trajno
         // neispravnom. Sprečava tihi gubitak snimljenih vlaka.
@@ -6271,13 +6404,14 @@ async function _processOfflineQueue() {
         }
       }
     } catch(e) {
-      if (_isNetworkErr(e)) break;
+      if (_isNetworkErr(e)) { _mrezaPala = true; break; }
       _OL.bumpRetry(op._qid ?? op.ts, 5, { code: e.code || '', message: e.message || String(e) });
     }
   }
   // ID dodijeli i trajno upiši PRIJE slanja, uključujući legacy bafer.
   try {
     if (sbUser?.id !== syncOwner) return;
+    if (_mrezaPala) throw new Error('veza pala u ovom prolazu');   // GPS tačke čekaju sljedeći
     const all = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
     all.forEach(pt => { if (!pt._qid) pt._qid = _genUUID(); });
     localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(all));
@@ -6286,7 +6420,8 @@ async function _processOfflineQueue() {
       const { _qid, ...payload } = pt;
       const { error } = await _sendDozTrackPoint(payload);
       if (error) {
-        if (_isNetworkErr(error) || _isAuthErr(error)) break;
+        if (_isNetworkErr(error)) { _mrezaPala = true; break; }
+        if (_isAuthErr(error)) break;
         continue; // FK/RLS greška ostaje sačuvana, bez gubitka GPS tačke
       }
       const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
@@ -6294,12 +6429,16 @@ async function _processOfflineQueue() {
       synced++;
     }
   } catch(e) { /* Lokalni bafer ostaje; pokušaj ponovo nakon povratka veze. */ }
-  // OS-V2: fotosi slikani offline (bez sbId) — pošalji ih sada
-  try { await _flushPendingFotos(); } catch(e) {}
+  // OS-V2: fotosi slikani offline (bez sbId) — pošalji ih sada. Fotografija je
+  // TEŽAK upis (stotine KB) — na slaboj vezi bi otimala propusnost vlakama i
+  // tačkama, pa čeka dobru vezu (ostaje sačuvana lokalno, šalje se poslije).
+  if (!_mrezaPala && _mrezaProbaj(true)) { try { await _flushPendingFotos(); } catch(e) {} }
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
   if (typeof _updSyncBadge === 'function') _updSyncBadge();
   } finally {
     _syncInProgress = false;
+    if (_mrezaPala) _syncMrezaPalaU = Date.now();
+    // Rerun ide kroz isti ulaz, pa poslije mrežnog pada poštuje pauzu (ne petlja).
     if (_syncRerun) { _syncRerun = false; setTimeout(_processOfflineQueue, 50); }   // obradi preskočeno/dodano
   }
 }
@@ -6669,8 +6808,8 @@ function _startupRestore() {
   korak('switchTab',   () => switchTab('karta'));
   korak('sqlmapRestore', () => sqlmapRestoreAll());
   korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
-  korak('sbInitData',  () => sbInitData());      // Supabase podaci u pozadini
-  if (navigator.onLine) korak('queue', () => _processOfflineQueue());
+  korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
+  korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
   // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
 
   // Ostali nekritični restores iza prvog painta
@@ -6678,7 +6817,7 @@ function _startupRestore() {
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
-    if (navigator.onLine && sbUser && sbProfile) {
+    if (_mrezaProbaj() && sbUser && sbProfile) {
       korak('flushTrag', () => (_tragRegistry || []).filter(t => !t.sbId && t.pts?.length).forEach(t => sbFlushTrag(t)));
     }
     korak('msrReg',    () => _msrRegLoad());
@@ -6697,7 +6836,7 @@ function _startupRestore() {
       }
     });
     // Vodeći projektant: nalog služi isključivo nadzoru — odmah otvori pregled
-    if (isVodeci() && navigator.onLine) korak('vodeci', () => showProjectManagement());
+    if (isVodeci() && _mrezaProbaj()) korak('vodeci', () => showProjectManagement());
   }, 80);
 }
 
@@ -6846,20 +6985,27 @@ async function doLogin() {
   document.getElementById('auth-err').style.display = 'none';
   if (!ime || !pin) { showAuthErr('Popunite ime i PIN'); return; }
 
-  // Offline login: keširani profil postoji, nema mreže — pusti u app
-  if (!sb || !navigator.onLine) {
+  // Offline login: keširani profil postoji i isti korisnik se prijavljuje —
+  // pusti u app bez servera. Vraća false ako se nema na šta osloniti.
+  const prijavaIzKesa = () => {
     const cached = _profileLoad();
     const saved = _loadSavedUser();
-    if (cached && saved && saved.ime === ime && saved.pin === pin) {
-      sbUser = { id: cached.id, email: cached.email || '' };
-      sbProfile = cached;
-      localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
-      _setOfflineMode(true);
-      showApp();
-      showToast('📴 Offline prijava — lokalni podaci');
-      return;
-    }
+    if (!(cached && cached.id && saved && saved.ime === ime && saved.pin === pin)) return false;
+    sbUser = { id: cached.id, email: cached.email || '', _cachedStub: true };
+    sbProfile = cached;
+    localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+    _setOfflineMode(true);
+    showApp();
+    showToast('📴 Offline prijava — lokalni podaci');
+    return true;
+  };
+  // v1.8.8: i IZMJERENO mrtva veza (navigator.onLine laže 'true') ide odmah na
+  // keš — ranije je čekala rok RPC-a pa javila "Server nedostupan" korisniku
+  // čiji je profil sve vrijeme bio na telefonu.
+  if (!sb || !_mrezaProbaj()) {
+    if (prijavaIzKesa()) return;
     if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
+    if (_mrezaStanje() === 'nema') { showAuthErr('Nema veze — prva prijava na ovom telefonu traži internet'); return; }
   }
 
   showAuthErr('Povezivanje sa serverom...');
@@ -6870,7 +7016,12 @@ async function doLogin() {
   try {
     const r = await sb.rpc('get_login_email', { p_ime: ime, p_prezime: prezime });
     email = r.data; lookupErr = r.error;
-  } catch(e) { showAuthErr('Server nedostupan: ' + e.message); return; }
+  } catch(e) {
+    // Mreža pala usred prijave — isti korisnik sa keširanim profilom ulazi offline.
+    if (prijavaIzKesa()) return;
+    showAuthErr('Server nedostupan: ' + e.message); return;
+  }
+  if (lookupErr && _isNetworkErr(lookupErr) && prijavaIzKesa()) return;
   if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen: ' + (lookupErr?.message||'nema emaila')); return; }
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
@@ -7036,9 +7187,9 @@ async function doLogout() {
   // pomiješaju sa sljedećim nalogom na istom uređaju). navigator.onLine na
   // terenu zna lagati 'true' na mrtvoj vezi (OS-S4), pa i ovo mora imati kočnicu.
   // Ako 5 s ne bude dovoljno, red ostaje u localStorage i ode na sljedećoj prijavi.
-  if (navigator.onLine && sbUser && sbProfile) {
+  if (_mrezaProbaj() && sbUser && sbProfile) {
     try {
-      const pq = _processOfflineQueue().catch(() => {});
+      const pq = _processOfflineQueue(true).catch(() => {});
       await Promise.race([pq, new Promise(r => setTimeout(r, 5000))]);
     } catch(e) {}
   }
@@ -7379,6 +7530,15 @@ function _netDebugRender() {
       med != null && med > _NET_SPORO_MS ? '#f59e0b' : '#cbd5e1');
   }
   h += _netRedHtml('navigator.onLine', String(osKaze), lazOs ? '#ef4444' : '#cbd5e1');
+  // v1.8.8: odluke prate IZMJERENO stanje — vidljivo je da su online radnje
+  // namjerno pauzirane (a ne pokvarene) i kad dolazi sljedeći pravi pokušaj.
+  if (k === 'nema' && osKaze) {
+    const zadnji = _netUzorci.length ? _netUzorci[_netUzorci.length - 1].t : 0;
+    const zaS = Math.max(0, Math.ceil((Math.max(zadnji + _NET_PROBA_MS, _netProbaDo) - Date.now()) / 1000));
+    h += _netRedHtml('Online radnje', zaS ? 'pauzirane — proba za ' + zaS + ' s' : 'pauzirane — proba na sljedećem pozivu', '#f59e0b');
+  } else if (k === 'slaba') {
+    h += _netRedHtml('Online radnje', 'lagane rade, teške čekaju (foto, preuzimanja)', '#f59e0b');
+  }
   h += _netRedHtml('Čeka u redu za sync', red == null ? '—' : String(red), red ? '#f59e0b' : '#22c55e');
   h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
   // Ovo je jedina brojka koja pokazuje koliko još terenskog rada STANE. Pregled
@@ -7406,9 +7566,12 @@ function _netDebugRender() {
   h += '<div style="margin-top:10px;font-size:10.5px;line-height:1.7;color:#94a3b8;">' +
     '<div style="color:#22c55e;font-weight:700;margin-bottom:2px;">Radi i bez veze</div>' +
     'GPS snimanje (vlaka, trag, doznaka) · preuzete offline karte · keširane pločice · ' +
-    'prijava sa keširanim profilom · mjerenja · sve izmjene idu u red i čekaju' +
+    'prijava sa keširanim profilom · mjerenja · novi projekat · N.V. i profil iz preuzetog ' +
+    'modela terena · sve izmjene idu u red i čekaju' +
     '<div style="color:#f59e0b;font-weight:700;margin:7px 0 2px;">Traži vezu (do tada keš ili prazno)</div>' +
-    'sinkronizacija sa serverom · Sentinel-2 i Vremenska traka' +
+    'sinkronizacija sa serverom · vlake kolega · ruta putem · Sentinel-2 i Vremenska traka' +
+    '<div style="color:#f59e0b;font-weight:700;margin:7px 0 2px;">Traži DOBRU vezu (na slaboj čeka)</div>' +
+    'slanje fotografija · preuzimanje terena (pita) · novi projekat direktno na server' +
     '</div>';
   el.innerHTML = h;
 }
@@ -7424,6 +7587,7 @@ async function _netTestSada() {
   let ishod;
   try {
     if (!sb) throw new Error('Supabase klijent nije napravljen');
+    _mrezaSila();   // pravi test — vrata transporta ga ne smiju odbiti na osnovu starih uzoraka
     const { error } = await sb.from('korisnici').select('id').limit(1);
     const ms = Date.now() - t0;
     ishod = error
@@ -8133,7 +8297,7 @@ async function _adminCheckPending(tiho) {
 // Admin koji app drži otvorenim danima inače ne bi vidio nove registracije bez
 // restarta — _adminCheckPending() se zvao samo iz sbInitData() pri pokretanju.
 function _adminSchedPendingCheck() {
-  if (!sbProfile?.is_admin || !navigator.onLine) return;
+  if (!sbProfile?.is_admin || !_mrezaProbaj()) return;
   const now = Date.now();
   if (now - _lastPendingCheck < 60000) return;
   _lastPendingCheck = now;
@@ -8158,30 +8322,47 @@ const _LIVE_BADGE_MS = 90000; // 90s — kolega se smatra aktivnim
 
 async function sbInitData() {
   if (!sbProfile) return;
-  // Projekti se učitavaju PRVI — _aktivniProjektId mora biti validan
-  // prije nego što vlake izračunaju vidljivost u _updVlakeMapVisibility()
-  await sbLoadProjekti();
-  // Sve ostale operacije paralelno — smanjuje waterfall
-  await Promise.all([
-    sbLoadVlake(),
-    sbLoadLog(),
-    sbLoadTextLabelsDB(),
-    sbLoadKolege(),
-    sbLoadOdjeli(),
-    loadGlobalKmlStyles()
-  ]);
-  sbStartRealtime();              // fire-and-forget
-  await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
-  sbLoadSharedFotos();            // fire-and-forget
-  dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
-  autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
-  if (navigator.onLine) _processOfflineQueue(); // flush any queued ops from offline sessions
-  _retryOrphanVlake();            // vlake bez sbId (npr. ranije trajno odbačene iz reda) — probaj opet
-  _trnSharedRestore();            // teren: vrati projekte učitane šifrom (localStorage keš)
-  _dozQrRestore();                // doznaka: vrati pojaseve primljene preko QR-a (localStorage keš)
-  _updSyncBadge();               // prikaži badge ako ima pending ops iz prošle sesije
-  if (sbProfile?.is_admin) _adminCheckPending().catch(() => {}); // badge+toast: registracije na čekanju
-  setTimeout(_crashCheck, 1500); // provjeri nedovršena snimanja (odgodi da se mapa inicijalizira)
+  // v1.8.8: LOKALNI oporavak (prekinuto snimanje, QR pojasevi, projekti sa
+  // šifrom, bedž reda) je stajao NA KRAJU, iza svih mrežnih učitavanja — na
+  // mrtvoj vezi (navigator.onLine laže) svako čeka svoj rok, pa se dijalog za
+  // oporavak prekinutog snimanja pojavljivao tek ~45 s poslije pokretanja, a
+  // ako bi ijedno učitavanje BACILO grešku, ne bi se pojavio NIKAD. Sad ide čim
+  // su vlake učitane (oporavak snimanja se oslanja na njih — _applyVlakeRows ih
+  // gradi iznova, pa ne smije ići prije), a `finally` ga garantuje i uz pad.
+  let lokalnoGotovo = false;
+  const lokalniOporavak = () => {
+    if (lokalnoGotovo) return;
+    lokalnoGotovo = true;
+    try { _trnSharedRestore(); } catch(e) {}  // teren: vrati projekte učitane šifrom (localStorage keš)
+    try { _dozQrRestore(); } catch(e) {}      // doznaka: vrati pojaseve primljene preko QR-a (localStorage keš)
+    try { _updSyncBadge(); } catch(e) {}      // prikaži badge ako ima pending ops iz prošle sesije
+    setTimeout(_crashCheck, 1500);            // provjeri nedovršena snimanja (odgodi da se mapa inicijalizira)
+  };
+  try {
+    // Projekti se učitavaju PRVI — _aktivniProjektId mora biti validan
+    // prije nego što vlake izračunaju vidljivost u _updVlakeMapVisibility()
+    await sbLoadProjekti();
+    // Sve ostale operacije paralelno — smanjuje waterfall
+    await Promise.all([
+      sbLoadVlake(),
+      sbLoadLog(),
+      sbLoadTextLabelsDB(),
+      sbLoadKolege(),
+      sbLoadOdjeli(),
+      loadGlobalKmlStyles()
+    ]);
+    lokalniOporavak();
+    sbStartRealtime();              // fire-and-forget
+    await sbLoadKolegeVlake();      // treba _aktivniProjektId iz sbLoadProjekti
+    sbLoadSharedFotos();            // fire-and-forget
+    dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
+    autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
+    _processOfflineQueue(); // flush any queued ops from offline sessions (red sam odlučuje o vezi)
+    _retryOrphanVlake();            // vlake bez sbId (npr. ranije trajno odbačene iz reda) — probaj opet
+    if (sbProfile?.is_admin) _adminCheckPending().catch(() => {}); // badge+toast: registracije na čekanju
+  } finally {
+    lokalniOporavak();
+  }
 }
 
 // Ponovno učitavanje srž podataka (projekti→vlake→dnevnik) kad initial fetch iz
@@ -8190,7 +8371,7 @@ async function sbInitData() {
 // svoje liste, pa je bezbjedno zvati ovo više puta.
 let _coreReloadBusy = false;
 async function _reloadCoreData() {
-  if (!sbUser || !sbProfile || !navigator.onLine || _coreReloadBusy) return;
+  if (!sbUser || !sbProfile || _coreReloadBusy || !_mrezaProbaj()) return;
   _coreReloadBusy = true;
   try {
     await sbLoadProjekti();   // prvo — _aktivniProjektId mora biti validan prije vlaka
@@ -8526,8 +8707,13 @@ async function saveNovProjekt() {
     showToast(msg);
   };
 
-  if (!navigator.onLine) {
-    createLocal('📋 Projekat kreiran — sinhronizira se kad budes online');
+  // v1.8.8: bez DOBRE veze se ne čeka server — na slaboj vezi je korisnik
+  // stajao do 15 s pred formom, a lokalni put (privremeni ID + red) postoji i
+  // daje isti ishod: projekat odmah upotrebljiv, na server stiže u pozadini.
+  if (!_mrezaProbaj(true)) {
+    createLocal(_mrezaStanje() === 'nema'
+      ? '📋 Projekat kreiran — sinhronizira se kad budeš online'
+      : '📶 Slab signal — projekat sačuvan lokalno, šalje se u pozadini');
     return;
   }
 
@@ -9880,7 +10066,7 @@ async function _sbFlushVlakaImpl(v, i, _retried) {
     payload: v.sbId ? { ...payload, id:v.sbId } : payload, knownRev:v.rev ?? null });
   if (!key) { _updateVlakaSyncIcon(i, 'error'); return; }
   _updateVlakaSyncIcon(i, 'queue');
-  if (navigator.onLine) _processOfflineQueue().catch(() => {});
+  _processOfflineQueue().catch(() => {});   // red sam odlučuje o vezi
 }
 
 async function _syncVlakaOperation(op) {
@@ -11335,8 +11521,10 @@ async function sbUploadFoto(f, idx) {
       _locFotos[idx].sbId = data.id;
       _saveFotos();
       _kmlcDelete('fotofull:' + f.ts).catch(() => {}); // OS-V2: full je na serveru — IDB kopija više ne treba
+      return true;
     }
-  } catch(e) {} // offline — _flushPendingFotos ponovo pokušava pri povratku veze
+    return !(error && _isNetworkErr(error));
+  } catch(e) { return false; } // offline — _flushPendingFotos ponovo pokušava pri povratku veze
 }
 
 // OS-V2: pošalji sve fotose koji nisu stigli na server (offline pri slikanju).
@@ -11350,7 +11538,9 @@ async function _flushPendingFotos() {
       try { f.full = await _kmlcGet('fotofull:' + f.ts); } catch(e) {}
       if (!f.full) continue; // nema full nigdje — ne šalji polovičan zapis
     }
-    await sbUploadFoto(f, i);
+    // Veza je ista za sve fotografije — kad jedna padne na mreži, ne gađaj
+    // ostale (svaka je stotine KB i svaka bi čekala svoj rok).
+    if (await sbUploadFoto(f, i) === false) break;
   }
 }
 
@@ -12888,7 +13078,7 @@ async function _nvDemUcitaj(lat, lng) {
       const img = await _nvKesSamo(z, x, y);
       if (img) { _nvMemStavi(z + '/' + x + '/' + y, _terrariumDecodeTile(img)); return true; }
     }
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    if (!_mrezaProbaj()) return false;
     const img = await _getTerrariumTile(_NV_DEM_Z, bx, by).catch(() => null);
     if (img) { _nvMemStavi(_NV_DEM_Z + '/' + bx + '/' + by, _terrariumDecodeTile(img)); return true; }
     return false;
@@ -12918,7 +13108,7 @@ async function _nvZaTacku(lat, lng) {
     if (v !== undefined) { _nvPostavi(v != null ? Math.round(v) + ' m' : '— m'); return; }
   }
   let nv = null;
-  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+  if (_mrezaProbaj()) {
     try {
       const r = await _fetchT(
         `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`,
@@ -13068,7 +13258,7 @@ function _nvDemOpisTxt(n) {
 
 async function nvDemPreuzmiUi() {
   if (_nvDemDlUToku) { showToast('⏳ Preuzimanje terena je već u toku'); return; }
-  if (navigator.onLine === false) { showToast('Za preuzimanje terena treba internet'); return; }
+  if (!await _mrezaZaPreuzimanje('Preuzimanje terena')) return;
   const podr = _nvDemPodrucja();
   if (!podr.length) { showToast('Nema područja za preuzimanje'); return; }
   const i = await _dlgActions('⛰ Preuzmi teren za offline — područje', podr.map(o => ({
@@ -13659,6 +13849,21 @@ function makeCachedTileLayer(cacheName, baseClass) {
       // isRetry: naknadni pokušaj nad već završenom pločicom (_retryEmpty) —
       // done() se tada NE zove ponovo, samo se img.src zamijeni pravim sadržajem.
       const fromNet = async (isRetry) => {
+        // v1.8.8: pločica koje nema u kešu je na mrtvoj vezi čekala 8 s + 1,2 s +
+        // 8 s (~17 s) prije zamućenog roditelja — karta je dotle bila prazna i
+        // izgledala zamrznuto. Na izmjereno lošoj vezi roditelj ide ODMAH; na
+        // slaboj se prava pločica i dalje traži i zamijeni ga kad stigne, na
+        // mrtvoj se mreža ne dira (_retryEmpty pokušava kad se veza vrati).
+        if (!isRetry && typeof _mrezaStanje === 'function') {
+          const st = _mrezaStanje();
+          if (st === 'nema' || st === 'slaba') {
+            if (await parentFallback()) {
+              if (st === 'slaba') fromNet(true);
+              return;
+            }
+            if (st === 'nema') { img._empty = true; done(null, img); return; }
+          }
+        }
         let r = await fetchTile(url, 8000);
         if (!r || !r.ok) {
           // Kratka pauza pa JEDAN ponovni pokušaj — burst rate-limit (Google 429/403
@@ -13717,6 +13922,7 @@ function makeCachedTileLayer(cacheName, baseClass) {
       if (this._retryT) clearTimeout(this._retryT);
       this._retryT = setTimeout(() => {
         if (!this._map || navigator.onLine === false) return;
+        if (typeof _mrezaStanje === 'function' && _mrezaStanje() === 'nema') return;   // ne troši 3 pokušaja na mrtvu vezu
         for (const key in this._tiles) {
           const t = this._tiles[key];
           const el = t && t.el;
@@ -16875,7 +17081,7 @@ function lagerDlgSkip() {
 async function nextLagerNum() {
   const used = new Set(vlake.map(v => v.lager).filter(Boolean));
   let offline = false;
-  if (sbProfile?.sumarija && navigator.onLine) {
+  if (sbProfile?.sumarija && _mrezaProbaj()) {
     try {
       const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
       const query = sb.from('vlake').select('lager').eq('sumarija', sbProfile.sumarija).not('lager', 'is', null);
@@ -17086,9 +17292,9 @@ async function _checkBatteryOptHint() {
 // samo online) osvježimo profil i po potrebi izbacimo na ekran čekanja.
 let _lastOdobrenCheck = 0;
 async function _provjeriOpozivOdobrenja() {
-  if (!sb || !sbUser || !navigator.onLine) return;
+  if (!sb || !sbUser) return;
   const now = Date.now();
-  if (now - _lastOdobrenCheck < 60000) return;
+  if (now - _lastOdobrenCheck < 60000 || !_mrezaProbaj()) return;
   _lastOdobrenCheck = now;
   try {
     // ROK je obavezan: navigator.onLine na terenu laže 'true' na mrtvoj vezi, a
@@ -17127,12 +17333,13 @@ document.addEventListener('visibilitychange', async () => {
     _adminSchedPendingCheck();
     // Povratak u prvi plan — pokušaj sync (online event zna izostati na Androidu)
     if (navigator.onLine && sbUser) {
-      _processOfflineQueue();
+      _processOfflineQueue();   // red sam odlučuje o vezi
       // Vlake kolega ČIM ima konekcije: realtime u pozadini često tiho padne
       // (Android suspenduje WebSocket) pa su događaji propušteni — po povratku
       // provjeri kanal i povuci svježe vlake (throttle 15s da ne spamamo).
+      // Neobavezno — na izmjereno mrtvoj vezi se ne pokušava (v1.8.8).
       const now = Date.now();
-      if (now - _lastVisKolegeSync > 15000) {
+      if (now - _lastVisKolegeSync > 15000 && _mrezaProbaj()) {
         _lastVisKolegeSync = now;
         try {
           if (!_rtVlakeChannel || _rtVlakeChannel.state !== 'joined') sbStartRealtime();
@@ -17171,13 +17378,26 @@ window.addEventListener('pagehide', () => {
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
 setInterval(async () => {
   if (!navigator.onLine || !sbUser || !sbProfile) return;
+  // Red za sync prvi — sam odlučuje o vezi i poštuje pauzu poslije pada.
+  const q = _OL.loadQueue();
+  if (q.length) _processOfflineQueue();
+  // Sve ispod je neobavezno održavanje (token, tragovi, realtime) — na
+  // izmjereno mrtvoj vezi bi svaki od tih poziva visio do svog roka svake minute.
+  const bilaMrtva = _mrezaStanje() === 'nema';
+  if (!_mrezaProbaj()) return;
+  if (bilaMrtva) {
+    // Dodijeljena proba MORA napraviti pravi zahtjev — token/realtime ispod
+    // često ne idu na mrežu, pa bi se proba potrošila bez ijednog poziva i app
+    // ne bi primijetio da se veza vratila (izmjereno: prazan red = nikad).
+    // Uspjeh okida _netVezaVracena (red, osvježavanje, pločice).
+    _reloadCoreData();
+    return;
+  }
   // Osvježi Supabase token da ne istekne nakon dugog offlinea. Rok — na slaboj
   // vezi navigator.onLine laže 'true' pa poziv zna VISITI umjesto pasti; bez
   // roka bi ovaj interval (60s) stao na ovoj liniji zauvijek i nikad ne bi
-  // stigao do reda čekanja/realtime samoizlječenja ispod.
+  // stigao do realtime samoizlječenja ispod.
   try { await _withTimeout(sb.auth.getSession(), 10000); } catch(e) {}
-  const q = _OL.loadQueue();
-  if (q.length) _processOfflineQueue();
   // Flush tragova bez sbId koji su dodani dok smo bili offline
   (_tragRegistry || []).filter(t => !t.sbId && t.pts?.length).forEach(t => sbFlushTrag(t));
   // Samoizlječenje realtime kanala: ako je socket tiho pao (bez CLOSED eventa),
@@ -25079,7 +25299,7 @@ async function _pmOpenDetail(id) {
 
   // Dohvati podatke: vlake po projektu (svi projektanti) + dnevni log po odjelu
   let vlakeRows = [], logRows = [];
-  if (navigator.onLine && typeof sb !== 'undefined') {
+  if (_mrezaProbaj() && typeof sb !== 'undefined') {
     try {
       const { data } = await sb.from('vlake')
         .select('nm,br,kr,pts,lager,korisnik_id,projektant_ime,updated_at')
@@ -28848,10 +29068,16 @@ function showElevProfile(idx) {
   // Nacrtana vlaka bez GPS visina — povuci visine iz modela terena (open-meteo)
   const sig = v.pts.length + ':' + Math.round(calcL(v.pts)); // poništi keš ako su tačke mijenjane
   if (v._apiProfile?.sig === sig) { _renderElevProfile(v.nm, v._apiProfile.pts, v._apiProfile.alts, 'model terena'); return; }
-  if (!navigator.onLine) { showToast('Nema GPS visina — za profil terena potrebna je mreža'); return; }
-  showToast('⏳ Preuzimam visine terena…');
+  // v1.8.8: NEMA ranog izlaza bez mreže — _fetchProfileElev sam pada na
+  // preuzeti model terena (DEM za odjel), a rani izlaz je taj offline put
+  // potpuno sakrivao: profil je tražio mrežu i kad je teren već bio na telefonu.
+  showToast(_mrezaStanje() !== 'nema' ? '⏳ Preuzimam visine terena…' : '⏳ Tražim visine u preuzetom modelu terena…');
   _fetchProfileElev(v.pts).then(res => {
-    if (!res) { showToast('⚠ Visine trenutno nedostupne'); return; }
+    if (!res) {
+      showToast(_mrezaStanje() !== 'nema' ? '⚠ Visine trenutno nedostupne'
+        : '📴 Nema veze, a model terena za ovo područje nije preuzet (Vlake → 🏔 DEM offline)');
+      return;
+    }
     v._apiProfile = { ...res, sig }; // keš za sesiju
     _renderElevProfile(v.nm, res.pts, res.alts, 'model terena');
   });
@@ -29145,7 +29371,7 @@ async function _guideFinish() {
   showToast('⏳ Tražim rutu putem…');
 
   // Ruta PUTEM preko OSRM-a; bez mreže/rute → zračna linija kroz tapnute tačke
-  let route = navigator.onLine ? await _guideOsrmRoute(tapped) : null;
+  let route = _mrezaProbaj() ? await _guideOsrmRoute(tapped) : null;
   if (!route) {
     route = { pts: tapped, distM: calcL(tapped), durS: null, osrm: false };
     showToast('⚠ Ruta putem nedostupna — prikazujem zračnu liniju');
@@ -29566,7 +29792,12 @@ function _demElevForProfile(dem, pts) {
 // Proširi _fetchProfileElev da koristi offline DEM kad nema mreže
 const _origFetchProfileElev = _fetchProfileElev;
 _fetchProfileElev = async function(rawPts) {
-  if (navigator.onLine) return _origFetchProfileElev(rawPts);
+  // Mreža prva kad je upotrebljiva, ali njen neuspjeh (slaba veza, istek) NE
+  // znači "nema visina" — preuzeti DEM je rezerva i tad, ne samo bez signala.
+  if (_mrezaProbaj()) {
+    const r = await _origFetchProfileElev(rawPts).catch(() => null);
+    if (r) return r;
+  }
   const pts = _resampleLinePts(rawPts, 80);
   const b = L.latLngBounds(pts.map(p => [p.la, p.lo]));
   const dem = await _demForBounds(b);
@@ -29583,7 +29814,7 @@ async function demDownloadUi() {
   if (!match) { showToast('Nema KML granice za odjel ' + odjel); return; }
   const existing = await _demForOdjel(match.name);
   if (existing) { showToast('✅ DEM za ' + match.name + ' već postoji offline'); return; }
-  if (!navigator.onLine) { showToast('Potrebna mreža za preuzimanje DEM-a'); return; }
+  if (!await _mrezaZaPreuzimanje('Preuzimanje modela terena')) return;
   showToast('⏳ Preuzimam model terena za ' + match.name + '…');
   try {
     const dem = await _demDownloadForOdjel(match.name);
@@ -29671,7 +29902,7 @@ async function _routeOnEndClick(e) {
 
   let dem = await _demForBounds(bounds);
   if (!dem) {
-    if (!navigator.onLine) {
+    if (!_mrezaProbaj()) {
       const ok = await _dlgConfirm('⚠ Offline — DEM nije preuzet.\n\nPreuzmite model terena dok ste na mreži\n(Vlake panel → 🏔 DEM offline).\n\nNacrtati ravnu liniju start→kraj?');
       if (ok) { _routeFallbackLine(_routeStartLL, endLL); return; }
       routeSuggestCancel(); return;
@@ -35907,7 +36138,7 @@ function _dozSchedCatchup(delay = 1200) {
   clearTimeout(_dozCatchupTimer);
   _dozCatchupTimer = setTimeout(() => {
     _dozCatchupTimer = null;
-    if (!_dozSelId || !navigator.onLine) return;
+    if (!_dozSelId || !_mrezaProbaj()) return;
     dozLoadLayers(_dozSelId).then(() => { try { dozRenderDetail(); } catch(e) {} }).catch(() => {});
   }, delay);
 }
@@ -37595,7 +37826,9 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   };
   if (!_dozBufferTrackPoint(_dozPt)) throw new Error('GPS tačka nije trajno sačuvana');
   _dozGpsBuffered++;
-  if (navigator.onLine) _processOfflineQueue().catch(() => {});
+  // Zove se na SVAKU GPS tačku — red sam odlučuje o vezi i poštuje pauzu
+  // poslije mrežnog pada, pa slaba/mrtva veza nije gađana svakih par sekundi.
+  _processOfflineQueue().catch(() => {});
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
@@ -38401,7 +38634,7 @@ async function dozSaveOdjel() {
   _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
   dozCloseCreateOdjel(); dozRenderOdjeli(); _dozRenderOverview();
   showToast('📋 Odjel sačuvan — čeka sinhronizaciju');
-  if (navigator.onLine) _processOfflineQueue().catch(() => {});
+  _processOfflineQueue().catch(() => {});   // red sam odlučuje o vezi
 
 }
 
