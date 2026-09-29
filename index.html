@@ -5574,7 +5574,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.8.8';
+const APP_VER = 'v1.8.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6211,9 +6211,9 @@ async function _processOfflineQueue(sila) {
         const { error } = await sb.from('dnevni_log').upsert(op.payload, { onConflict: 'korisnik_id,datum' });
         err = error;
       } else if (op.type === 'insert_doz_marking') {
-        const { data, error } = await sb.from('doz_area_markings').insert(op.payload).select('id').single();
         // OS-S2: 23505 s klijentskim ID-jem = insert je VEĆ uspio (odgovor se izgubio) — uspjeh
-        err = (error && error.code === '23505' && op.payload.id) ? null : error;
+        const { data, error } = await _dozUpisiZonu(op.payload);
+        err = error;
         const newMkId = data?.id || op.payload.id;
         if (!err && newMkId && op._localId) {
           // D4-B: zamijeni privremeni 'local_' ID stvarnim server ID-jem da kasnije
@@ -31576,16 +31576,18 @@ let _mapInteracting = false;
 let _mainTileActive = 0;
 const _mainTileQueue = [];
 let _mainTileGen = 0;
-function _mainTileSchedule(fn, gen) {
+function _mainTileSchedule(fn, gen, pri) {
   return new Promise((resolve, reject) => {
     const run = () => {
       if (gen !== _mainTileGen) { resolve(null); return; }
       _mainTileActive++;
       Promise.resolve().then(fn).then(resolve, reject).finally(() => {
         _mainTileActive--;
-        if (_mainTileQueue.length) _mainTileQueue.shift()();
+        const next = _tileUzmiSljedeci(_mainTileQueue);
+        if (next) next();
       });
     };
+    run._pri = pri; run._odustani = () => resolve(null);
     if (_mainTileActive < 12) run(); else _mainTileQueue.push(run);
   });
 }
@@ -31602,8 +31604,68 @@ function _mainTileFlush() {
 // tile-ovi se obrađuju PRVI; zastarjeli iz prethodnog pogleda obrade se zadnji (popune
 // cache, korisno za placeholder). Konkurentnost sprječava zagušenje workera.
 let _wTileActive = 0;
-const _wTileStack = [];                 // LIFO — najnoviji zahtjev prvi
+const _wTileStack = [];                 // red čekanja — bira se po _tileUzmiSljedeci
 const _W_TILE_MAX_INFLIGHT = 6;
+
+// ── Pločice offline karte dok se karta vuče (v1.8.9) ─────────────────────────
+// Terenska prijava: "dok skrolam nema tileova na perifernim mjestima". Izmjereno
+// (Playwright, stvarni sloj nad SQLiteDB od 28 MB): za vrijeme povlačenja rub koji
+// ulazi u prikaz ostaje 0 % popunjen sve do puštanja prsta. Uzrok: `updateWhenIdle:
+// true` — Leaflet traži nove pločice TEK na `moveend`, a van prikaza ne drži ništa
+// unaprijed (keepBuffer samo NE BRIŠE već učitano). Za lokalni fajl čitanje je
+// jeftino (nema mreže ni podataka), pa se sad (1) pločice traže i TOKOM povlačenja
+// i (2) učitava se obruč od _SQL_TILE_OBRUC pločica oko prikaza, da rub bude
+// spreman prije nego uđe u vidno polje.
+const _SQL_TILE_OBRUC = 1;
+const _sqlGridObruc = {
+  _getTiledPixelBounds(center) {
+    const b = L.GridLayer.prototype._getTiledPixelBounds.call(this, center);
+    const p = this.getTileSize().multiplyBy(_SQL_TILE_OBRUC);
+    return L.bounds(b.min.subtract(p), b.max.add(p));
+  }
+};
+const _SQL_GRID_OPC = { tileSize:256, opacity:1, maxZoom:22, keepBuffer:6,
+  updateWhenZooming:false, updateWhenIdle:false, updateInterval:150 };
+
+// Obruč znači više zahtjeva odjednom, pa redoslijed postaje bitan: bira se
+// pločica NAJBLIŽA centru TRENUTNOG prikaza (ne redoslijed dolaska — stari LIFO
+// je unutar jednog `_update`-a obrađivao NAJDALJU pločicu prvu, jer Leaflet
+// zahtjeve pravi od centra prema rubu). Pločica koju Leaflet više ne drži
+// (uklonjena ili zamijenjena novom za isto mjesto) se ne čita — `null`.
+// Pločica van tekuće mreže (drugi zum, van keepBuffer-a) ide na kraj, ali se
+// NE odbacuje: ako je Leaflet ponovo uvrsti, a mi smo je završili praznom,
+// ostala bi prazna zauvijek.
+function _sqlTilePrio(lay, coords, el) {
+  try {
+    if (!lay._map) return null;
+    const t = lay._tiles && lay._tiles[lay._tileCoordsToKey(coords)];
+    if (!t || t.el !== el) return null;
+    const ctr = lay._map.project(lay._map.getCenter(), coords.z).unscaleBy(lay.getTileSize());
+    const d = Math.max(Math.abs(coords.x + 0.5 - ctr.x), Math.abs(coords.y + 0.5 - ctr.y));
+    return t.current ? d : d + 1000;
+  } catch(e) { return 0; }
+}
+// Uzima (i vadi iz reda) sljedeći zahtjev. Bez _pri (npr. pre-učitavanje) vrijedi
+// kao najniži prioritet; među jednakima pobjeđuje kasniji (stari LIFO obrazac).
+function _tileUzmiSljedeci(red) {
+  let best = -1, bestP = Infinity;
+  for (let i = red.length - 1; i >= 0; i--) {
+    const r = red[i];
+    const pr = r._pri ? r._pri() : 1e9;
+    if (pr === null) { red.splice(i, 1); if (best > i) best--; try { r._odustani && r._odustani(); } catch(e) {} continue; }
+    if (pr < bestP) { bestP = pr; best = i; }
+  }
+  if (best < 0) return null;
+  return red.splice(best, 1)[0];
+}
+// Leaflet `done()` traži pločicu po KLJUČU, ne po elementu — zakašnjeli odgovor
+// za uklonjenu pločicu bi proglasio "učitanom" NOVU pločicu na istom mjestu (još
+// praznu), pa bi Leaflet sklonio roditeljsku zamjenu ispod nje.
+function _sqlTileGotovo(lay, coords, el, done) {
+  const t = lay._tiles && lay._tiles[lay._tileCoordsToKey(coords)];
+  if (t && t.el !== el) return;
+  done(null, el);
+}
 
 // ── PROFILACIJA tile pipeline-a (mjeri gdje ide vrijeme) ───────────────────────
 const _tileProf = {
@@ -31617,7 +31679,7 @@ const _tileProf = {
 };
 const _now = () => (typeof performance!=='undefined'?performance.now():Date.now());
 
-function _wTileScheduleCall(msg) {
+function _wTileScheduleCall(msg, pri) {
   const enq = _now();
   return new Promise(resolve => {
     const run = () => {
@@ -31629,10 +31691,11 @@ function _wTileScheduleCall(msg) {
         resolve(r);
       }, () => resolve(null)).finally(() => {
         _wTileActive--;
-        const next = _wTileStack.pop();  // najnoviji (trenutni viewport) prvi
+        const next = _tileUzmiSljedeci(_wTileStack);  // najbliža centru prikaza prva
         if (next) next();
       });
     };
+    run._pri = pri; run._odustani = () => resolve(null);
     if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileStack.push(run);
   });
 }
@@ -31649,26 +31712,27 @@ function _zoomBounds(meta) {
 
 function _sqlmapCreateLayerMain(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
-  const MTileLayer = L.GridLayer.extend({
-    createTile(coords, done) {
+  const MTileLayer = L.GridLayer.extend(Object.assign({}, _sqlGridObruc, {
+    createTile(coords, _done) {
       // D2-7: <img> pločice (kao W sloj) — nativni composite, bez canvas nudge-a.
       const img = document.createElement('img');
       img.alt = '';
       const {x,y,z} = coords;
+      const done = () => _sqlTileGotovo(this, coords, img, _done);
       const inst = _mainMiniDbs[name];
-      if (!inst) { done(null, img); return img; }
+      if (!inst) { done(); return img; }
       const gen = _mainTileGen;
-      _mainTileSchedule(() => inst.mini.tile(z,x,y), gen).then(data => {
-        if (!data) { done(null, img); return; }
+      _mainTileSchedule(() => inst.mini.tile(z,x,y), gen, () => _sqlTilePrio(this, coords, img)).then(data => {
+        if (!data) { done(); return; }
         const url = URL.createObjectURL(new Blob([data], {type:_tileMime(data)}));
-        img.onload = () => { URL.revokeObjectURL(url); done(null, img); };
-        img.onerror = () => { URL.revokeObjectURL(url); done(null, img); };
+        img.onload = () => { URL.revokeObjectURL(url); done(); };
+        img.onerror = () => { URL.revokeObjectURL(url); done(); };
         img.src = url;
-      }).catch(() => done(null, img));
+      }).catch(() => done());
       return img;
     }
-  });
-  const layer = new MTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:6, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  }));
+  const layer = new MTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative}));
   return layer;
 }
 
@@ -32263,7 +32327,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
 
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
-  const WTileLayer = L.GridLayer.extend({
+  const WTileLayer = L.GridLayer.extend(Object.assign({}, _sqlGridObruc, {
     createTile(coords, done) {
       // D2-7: <img> pločice — browser ih kompozitira NATIVNO (kao Leaflet default/online
       // pločice). Gasi cijelu klasu "async canvas se ne re-kompozitira" problema (nestajanje
@@ -32276,10 +32340,11 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
         const dt = _now() - _ct0;
         _tileProf.done++; _tileProf.totalN++; _tileProf.totalSum += dt;
         if (dt > _tileProf.totalMax) { _tileProf.totalMax = dt; _tileProf.slowest = z+'/'+x+'/'+y+' '+(dt|0)+'ms'; }
-        done(null, img);
+        _sqlTileGotovo(this, coords, img, done);
       };
+      const _pri = () => _sqlTilePrio(this, coords, img);
       const _tryRead = (tries) => {
-        _wTileScheduleCall({type:'tile', name, z, x, y}).then(res => {
+        _wTileScheduleCall({type:'tile', name, z, x, y}, _pri).then(res => {
           if (res && res.data) {
             const url = URL.createObjectURL(new Blob([res.data], {type:_tileMime(res.data)}));
             const _r0 = _now();
@@ -32296,8 +32361,8 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       _tryRead(0);
       return img;
     }
-  });
-  const layer = new WTileLayer({tileSize:256, opacity:1, minNativeZoom:minNative, maxNativeZoom:maxNative, maxZoom:22, keepBuffer:6, updateWhenZooming:false, updateWhenIdle:true, updateInterval:150});
+  }));
+  const layer = new WTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative}));
   return layer;
 }
 
@@ -35914,11 +35979,30 @@ function dozInitTypePicker() {
 
 // ─── Load Odjeli ─────────────────────────────────────────────────
 async function dozLoadOdjeli() {
-  if (!sbUser) { document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Prijavite se za pristup</div>'; return; }
-  document.getElementById('doz-odjeli-list').innerHTML = '<div class="doz-empty">Učitavam...</div>';
+  const lista = document.getElementById('doz-odjeli-list');
+  if (!sbUser) { if (lista) lista.innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Prijavite se za pristup</div>'; return; }
+  // v1.8.9 OFFLINE-FIRST: keš se prikaže ODMAH, mreža ga samo zamijeni kad
+  // stigne. Ranije je lista stajala na "Učitavam..." dok mrežni poziv ne padne
+  // (na mrtvoj vezi do 15 s), iako su odjeli bili uredno na uređaju.
+  const kes = _OL.load(_OL.DOZ_ODJELI);
+  const imaKes = Array.isArray(kes) && kes.length > 0;
+  if (imaKes) {
+    _dozOdjeli = kes;
+    dozRenderOdjeli();
+    _dozRenderOverview();
+  } else if (lista) {
+    lista.innerHTML = '<div class="doz-empty">Učitavam...</div>';
+  }
+  if (!_mrezaProbaj()) {
+    if (!imaKes && lista) lista.innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Nema veze — odjeli će se učitati kad se pojavi signal.</div>';
+    return;
+  }
   try {
-    const { data: clanstva } = await sb.from('doz_project_members')
+    const { data: clanstva, error: eClan } = await sb.from('doz_project_members')
       .select('project_id').eq('user_id', sbUser.id).eq('is_active', true);
+    // Supabase mrežnu grešku VRAĆA, ne baca: bez ove provjere prazno članstvo
+    // (pad na slaboj vezi) bi iz liste i keša izbacilo sve odjele kolega.
+    if (eClan) throw eClan;
     const memberIds = (clanstva || []).map(c => c.project_id);
     let q = sb.from('doz_projects').select('*').order('created_at', { ascending: false });
     q = memberIds.length
@@ -35932,16 +36016,14 @@ async function dozLoadOdjeli() {
     dozRenderOdjeli();
     _dozRenderOverview();
   } catch(e) {
-    const cached = _OL.load(_OL.DOZ_ODJELI);
-    if (cached && cached.length) {
-      _dozOdjeli = cached;
-      dozRenderOdjeli();
-      _dozRenderOverview();
-      showToast('📴 Doznaka odjeli iz keša (offline)');
-    } else {
-      document.getElementById('doz-odjeli-list').innerHTML =
-        `<div class="doz-empty" style="color:#f87171;">Greška: ${e.message}<br><small>Provjerite da li su Supabase tabele kreirane.</small></div>`;
+    if (imaKes) {
+      if (_isNetworkErr(e)) showToast('📴 Doznaka odjeli iz keša (offline)');
+      return;
     }
+    if (!lista) return;
+    lista.innerHTML = _isNetworkErr(e)
+      ? '<div class="doz-empty" style="color:#fbbf24;">Nema veze — odjeli će se učitati kad se pojavi signal.</div>'
+      : `<div class="doz-empty" style="color:#f87171;">Greška: ${_escHtml(e.message || String(e))}<br><small>Provjerite da li su Supabase tabele kreirane.</small></div>`;
   }
 }
 
@@ -36243,11 +36325,18 @@ async function dozLoadLayers(projectId, opts) {
     const [mRes, mkRes, trRes] = await Promise.all([
       sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
       sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true).order('created_at', { ascending: false }),
-      sb.from('doz_track_points').select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId).order('recorded_at', { ascending: true })
+      _dozUcitajTacke(projectId)
     ]);
     if (myGen !== _dozLoadGen) return;  // novije selektovan drugi odjel u međuvremenu — odbaci
+    // v1.8.9: Supabase mrežnu grešku VRAĆA kao {error}, ne baca. Bez ove provjere
+    // pad na mrtvoj/slaboj vezi je dao prazne nizove koji su se ODMAH upisali u
+    // offline keš odjela (_dozCacheLayers ispod) — sljedeće otvaranje bez signala
+    // pokazalo bi odjel bez zona, članova i tragova.
+    const greska = mRes.error || mkRes.error || trRes.error;
+    if (greska) throw greska;
+    const prosli = _dozLoadCachedLayers(projectId);
     _dozMembers  = mRes.data  || [];
-    _dozMarkings = mkRes.data || [];
+    _dozMarkings = _dozPrimijeniRed(mkRes.data || [], projectId);
     _dozTracks   = trRes.data || [];
 
     if (_dozMembers.length) {
@@ -36255,7 +36344,10 @@ async function dozLoadLayers(projectId, opts) {
       const { data: kData } = await sb.from('korisnici').select('id,ime,prezime,boja').in('id', ids);
       if (myGen !== _dozLoadGen) return;
       const kMap = Object.fromEntries((kData || []).map(k => [k.id, k]));
-      _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || null }));
+      // Imena kolega iz prošlog keša ako ovaj poziv padne — inače bi keš ostao bez imena.
+      const kPrije = Object.fromEntries(((prosli && prosli.members) || [])
+        .filter(m => m._korisnik).map(m => [m.user_id, m._korisnik]));
+      _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || kPrije[m.user_id] || null }));
     }
     // Keširaj za offline
     _dozCacheLayers(projectId);
@@ -36272,6 +36364,56 @@ async function dozLoadLayers(projectId, opts) {
   }
   if (myGen !== _dozLoadGen) return;
   dozRenderMapLayers();
+}
+
+// Sve GPS tačke odjela, stranicu po stranicu. Supabase (PostgREST max-rows)
+// vraća NAJVIŠE 1000 redova po upitu — odjel sa više projektanata to pređe za
+// par sati snimanja, a upit je sortiran od najstarije, pa su se odsijecale baš
+// NAJNOVIJE tačke (današnji trag nije bio na karti, pređena površina manja) i
+// takav skraćen skup se upisivao u offline keš. Pomak raste za broj stvarno
+// vraćenih redova, pa radi i kad je server podešen na manji max-rows od 1000.
+const _DOZ_TACKE_STRANA = 1000;
+async function _dozUcitajTacke(projectId) {
+  const sve = [];
+  for (let od = 0, strana = 0; strana < 500; strana++) {
+    const { data, error } = await sb.from('doz_track_points')
+      .select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId)
+      .order('recorded_at', { ascending: true })
+      .range(od, od + _DOZ_TACKE_STRANA - 1);
+    if (error) return { data: null, error };
+    if (!data || !data.length) break;
+    for (const r of data) sve.push(r);
+    od += data.length;
+  }
+  return { data: sve, error: null };
+}
+
+// Zone koje još čekaju u redu za sync moraju ostati vidljive i kad server vrati
+// listu bez njih (slaba veza: čitanje prođe, upis još nije). Isto tako zona
+// obrisana offline ne smije "vaskrsnuti" dok brisanje ne stigne na server.
+function _dozPrimijeniRed(markings, projectId) {
+  let q = [];
+  try { q = _OL.loadQueue() || []; } catch(e) {}
+  const brisu = new Set(q.filter(o => o.type === 'delete_doz_marking').map(o => o.payload && o.payload.id));
+  const naServeru = new Set(markings.map(m => m.id));
+  const cekaju = q
+    .filter(o => o.type === 'insert_doz_marking' && o.payload && o.payload.project_id === projectId
+      && !(o.payload.id && naServeru.has(o.payload.id)))
+    .map(o => ({ ...o.payload, id: o._localId || o.payload.id }));
+  return [...cekaju, ...markings].filter(m => !brisu.has(m.id));
+}
+
+// Upis zone sa klijentskim ID-jem: odgovor izgubljen na slaboj vezi → ponovljeni
+// upis iz reda dobije 23505 i prepoznaje se kao uspjeh (bez ID-a bi nastala
+// DUPLA zona). Ako tabela ne prima tekstualni UUID (22P02), ponovi bez ID-a.
+async function _dozUpisiZonu(payload) {
+  let r = await sb.from('doz_area_markings').insert(payload).select('id').single();
+  if (r.error && r.error.code === '22P02' && payload.id) {
+    const { id, ...bezId } = payload;
+    r = await sb.from('doz_area_markings').insert(bezId).select('id').single();
+  }
+  if (r.error && r.error.code === '23505' && payload.id) return { data: { id: payload.id }, error: null };
+  return r;
 }
 
 function _dozCacheKey(projectId) {
@@ -37218,10 +37360,17 @@ async function dozSetStatus(status) {
     const othersToP = _dozOdjeli.filter(o => o.id !== _dozSelId && o.status === 'active');
     othersToP.forEach(o => { o.status = 'paused'; });
     if (othersToP.length) {
+      const ids = othersToP.map(o => o.id);
+      let ePauza = null;
       try {
-        const ids = othersToP.map(o => o.id);
-        await sb.from('doz_projects').update({ status: 'paused' }).in('id', ids);
-      } catch(e) {}
+        const r = await sb.from('doz_projects').update({ status: 'paused' }).in('id', ids);
+        ePauza = r && r.error;
+      } catch(e) { ePauza = e; }
+      // Ranije je neuspjeh bio tiho progutan: lokalno pauzirani, na serveru i
+      // dalje aktivni — kolege su vidjele dva aktivna odjela.
+      if (ePauza && _isNetworkErr(ePauza)) {
+        ids.forEach(id => _OL.enqueue({ type: 'upsert_doz_status', payload: { id, status: 'paused' } }));
+      }
       showToast(`⏸ ${othersToP.length} drugi projekat(a) pauziran(o)`);
     }
   }
@@ -38101,13 +38250,17 @@ async function dozConfirmSave() {
   // Računaj iz spremljene geometrije (_dozPendingSavePolygon), ne iz mutable _dozDrawPts
   const areaHa = _dozCalcGeomAreaHa(_dozPendingSavePolygon);
   const markingPayload = {
+    id: _genUUID(),
     project_id: _dozSelId, created_by: sbUser.id,
     marking_type: _dozDrawType, label, note,
     boundary_geojson: _dozPendingSavePolygon,
     area_ha: areaHa, is_visible: true
   };
   try {
-    const { error } = await sb.from('doz_area_markings').insert(markingPayload);
+    // Bez veze se ne čeka mrežni poziv (na mrtvoj vezi do 15 s sa otvorenim
+    // modalom) — zona ide lokalno i u red odmah.
+    if (!_mrezaProbaj()) throw new Error('offline');
+    const { error } = await _dozUpisiZonu(markingPayload);
     if (error) throw error;
     document.getElementById('doz-save-modal').style.display = 'none';
     _dozPendingSavePolygon = null;
@@ -38178,12 +38331,15 @@ async function dozDeleteMarking(id) {
       localStorage.setItem(_OL.QUEUE, JSON.stringify(q.filter(o => !(o.type === 'insert_doz_marking' && o._localId === id))));
     }
     _dozMarkings = _dozMarkings.filter(m => m.id !== id);
+    // Keš mora pratiti — inače se zona vrati pri sljedećem otvaranju bez signala.
+    _dozCacheLayers(_dozSelId);
     dozRenderMapLayers();
     dozRenderDetail();
     showToast(hasQueued ? '🗑 Zona uklonjena (nikad nije stigla na server)' : '🗑 Zona uklonjena lokalno');
     return;
   }
   try {
+    if (!_mrezaProbaj()) throw new Error('offline');
     const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id);
     if (error) throw error;
     showToast('🗑 Zona obrisana');
@@ -38191,7 +38347,13 @@ async function dozDeleteMarking(id) {
     dozRenderDetail();
   } catch(e) {
     _OL.enqueue({ type: 'delete_doz_marking', payload: { id } });
-    showToast('📴 Offline — brisanje čeka sinkronizaciju');
+    // Ranije je zona ostajala na karti i u kešu, pa je izgledalo da brisanje
+    // nije uspjelo (i drugi tap je stavljao isto brisanje ponovo u red).
+    _dozMarkings = _dozMarkings.filter(m => m.id !== id);
+    _dozCacheLayers(_dozSelId);
+    dozRenderMapLayers();
+    dozRenderDetail();
+    showToast('📴 Zona uklonjena — brisanje se sinhronizuje kad bude mreže');
   }
 }
 
@@ -38203,6 +38365,9 @@ async function dozDeleteOdjel() {
   const myRole = _dozMembers.find(m => m.user_id === sbUser?.id)?.role;
   const canDelete = odjel.created_by === sbUser?.id || myRole === 'manager';
   if (!canDelete) { showToast('Samo kreator/manager može obrisati odjel'); return; }
+  // Briše podatke cijelog tima u četiri koraka — bez veze bi pao na pola i
+  // ostavio odjel djelimično obrisan, pa se ni ne počinje.
+  if (!_mrezaProbaj()) { showToast('📴 Brisanje odjela traži vezu — pokušaj kad bude signala'); return; }
   if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo nepovratno briše GPS tragove, zone i članstva za CIJELI tim.`, { danger: true })) return;
   try {
     // Eksplicitno počisti child redove (ne oslanjaj se na DB CASCADE → bez orphana)
@@ -38640,12 +38805,16 @@ async function dozSaveOdjel() {
 
 // ─── Add Member (šumarija lista) ──────────────────────────────────
 async function dozAddMember() {
+  if (!_mrezaProbaj()) { showToast('📴 Dodavanje projektanta traži vezu'); return; }
   try {
-    const { data: me } = await sb.from('korisnici').select('sumarija').eq('id', sbUser.id).single();
+    const { data: me, error: eMe } = await sb.from('korisnici').select('sumarija').eq('id', sbUser.id).single();
+    // Mrežna greška nije "nisi registrovan u šumariji" — ranije je poruka lagala.
+    if (eMe && _isNetworkErr(eMe)) throw eMe;
     if (!me?.sumarija) { showToast('Nisi registrovan u šumariji'); return; }
-    const { data: users } = await sb.from('korisnici')
+    const { data: users, error: eUsers } = await sb.from('korisnici')
       // `*` — je_vodeci postoji tek nakon migracije 20260727 (vidi sbLoadKolege)
       .select('*').eq('sumarija', me.sumarija).neq('id', sbUser.id).order('prezime');
+    if (eUsers) throw eUsers;
     if (!users?.length) { showToast('Nema projektanata u šumariji'); return; }
     const vecClanovi = new Set(_dozMembers.map(m => m.user_id));
     // Vodeći Projektant je nadzorni nalog (isti obrazac kao kod dodavanja u vlake
@@ -38690,6 +38859,7 @@ function _dozShowMemberPicker(users) {
 
 async function _dozPickMember(userId) {
   document.getElementById('doz-member-picker')?.remove();
+  if (!_mrezaProbaj()) { showToast('📴 Dodavanje projektanta traži vezu'); return; }
   try {
     const { error } = await sb.from('doz_project_members').insert({
       project_id: _dozSelId, user_id: userId, role:'engineer',

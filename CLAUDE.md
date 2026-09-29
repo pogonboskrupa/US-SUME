@@ -2795,6 +2795,50 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Offline karta: prazan rub dok se vuče + Doznaka offline (v1.8.9)**: na
+  zahtjev "provjeri doznaka sekciju offline i prikaz sqlitedb/mbtiles karte (dok
+  skrolam nema tileova na perifernim mjestima)".
+  - **SQLite/MBTiles rub**: izmjereno Playwright-om nad stvarnim slojem (28 MB
+    SQLiteDB → OPFS čitač, 4 MB → sql.js; CPU 4–6× usporen): tokom povlačenja
+    rub koji ulazi u prikaz bio je u prosjeku 14–50 % popunjen, najgore 0 %, sve
+    do puštanja prsta. Uzrok: `updateWhenIdle:true` (Leaflet traži pločice tek
+    na `moveend`) i nijedna pločica van prikaza. Sad `_SQL_GRID_OPC`
+    (`updateWhenIdle:false`, `updateInterval:150`) + `_sqlGridObruc`
+    (`_getTiledPixelBounds` proširen za `_SQL_TILE_OBRUC` = 1 pločicu) na OBA
+    sloja (`_sqlmapCreateLayerW`/`_sqlmapCreateLayerMain`) → 100 % tokom
+    povlačenja. Online slojevi NISU dirani (mobilni podaci).
+  - **Redoslijed čitanja** (`_tileUzmiSljedeci`/`_sqlTilePrio`): stari LIFO je
+    unutar jednog `_update`-a čitao NAJDALJU pločicu prvu (Leaflet pravi
+    zahtjeve od centra ka rubu). Sad se bira najbliža centru TRENUTNOG prikaza;
+    uklonjena/zamijenjena pločica se ne čita (`null`, obećanje se razrješava);
+    pločica van tekuće mreže ide na kraj ali se NE odbacuje — ako je Leaflet
+    ponovo uvrsti, a završena je praznom, ostaje prazna zauvijek.
+  - **`_sqlTileGotovo`**: Leaflet `done()` traži pločicu po KLJUČU, pa bi
+    zakašnjeli odgovor proglasio "učitanom" NOVU (još praznu) pločicu na istom
+    mjestu i sklonio roditeljsku zamjenu ispod nje.
+  - **Zamka u test-fajlu**: pravi RMaps/MOBAC `info` čuva POHRANJENI (obrnuti)
+    zum (`MAX(z), MIN(z)`), ne web zum — test-fajl sa web zumom u `info` daje
+    "zoom 0–3" i praznu kartu na sql.js putu (OPFS čitač `info` ne čita).
+  - **Doznaka — Supabase mrežnu grešku VRAĆA (`{error}`), ne baca**:
+    `dozLoadLayers` je to čitao kao prazan odjel i ODMAH prepisivao offline
+    keš (`_dozCacheLayers`) praznim nizovima. Dokazano u browseru na mrtvoj
+    vezi: stari kod keš 3 zone → 0, novi čuva 3. Svaki `const { data } = await
+    sb...` čiji rezultat ide u keš MORA provjeriti `error`.
+  - `dozLoadOdjeli` prikazuje keš ODMAH (bilo 13,6 s "Učitavam..." na mrtvoj
+    vezi, sad 23 ms), bez veze ne zove mrežu, a pad upita članstva više ne
+    izbacuje odjele kolega iz keša.
+  - GPS tačke odjela idu stranicama (`_dozUcitajTacke`, pomak = stvarno vraćeni
+    redovi) — PostgREST max-rows (1000) je odsijecao NAJNOVIJE tačke.
+  - `_dozPrimijeniRed`: zona koja čeka u redu ostaje vidljiva kad server vrati
+    listu bez nje (slaba veza: čitanje prođe, upis ne), a offline obrisana ne
+    vaskrsava. Direktan upis zone nosi klijentski UUID (`_dozUpisiZonu`, 23505 =
+    uspjeh, 22P02 = ponovi bez ID-a) — bez njega je izgubljen odgovor + upis iz
+    reda davao DUPLU zonu. Offline brisanje sklanja zonu sa karte i iz keša.
+  - Brisanje odjela / dodavanje člana bez veze se ni ne počinju (brisanje je 4
+    koraka — pad na pola ostavlja djelimično obrisan odjel).
+  - Testovi: `tests/js/sqlmap-pan.test.js` (18), `tests/js/doznaka-offline.test.js`
+    (28, 27 pada na starom kodu), `doznaka-panel.test.js` sandbox dopunjen.
+
 - **Offline i slab signal — odluke prate IZMJERENO stanje veze (v1.8.8)**: na
   zahtjev "mora raditi offline i pri slabom signalu; online stavke neka rade
   kad signal dozvoli". Mjerenje iz v1.4.6 je do sada bilo SAMO prikaz — sve
