@@ -4,12 +4,24 @@
 /.gradle/
 /local.properties
 
+# Preuzet i SHA-256-provjeren od strane bootstrap-wrapper.ps1 (vidi taj fajl) —
+# NIJE u repou namjerno, ali build-apk.ps1 svoju "lokalne izmjene blokiraju
+# pull" provjeru radi preko `git status --porcelain`, koja bez ovog reda
+# prijavljuje preuzeti jar kao untracked promjenu i blokira SVAKI sljedeći
+# pokušaj build-a poslije prvog (jar ostaje na disku od prošlog puta).
+/gradle/wrapper/gradle-wrapper.jar
+
 # Assets su kopija web fajlova - generišu se sa copy-assets.sh
 /app/src/main/assets/
 
 # Signing
 *.jks
 *.keystore
+# IZUZETAK: fiksan DEBUG ključ je NAMJERNO u repou (vidi signingConfigs.debug u
+# app/build.gradle). Bez njega svaki CI build dobija nasumičan ključ i "Ažuriraj
+# aplikaciju" pada na "App not installed" jer Android odbija update sa drugim
+# potpisom. Release ključ ostaje van repoa (US_SUME_* env varijable).
+!app/dendromap-debug.keystore
 
 # IDE
 /.idea/
