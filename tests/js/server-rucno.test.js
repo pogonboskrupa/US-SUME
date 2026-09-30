@@ -55,10 +55,10 @@ function sekcija(n) { testovi.push([null, n]); }
 // Kapija iz index.html, sa podesivim prozorom (stvarni kod, stvarni _OL).
 function kapija() {
   const src = [
-    'let _serverSlanjeDo = 0, _serverSaljem = false;',
-    extractConst('_SERVER_PROZOR_MS'), extractConst('_SERVER_ZADNJE_KEY'),
+    'let _serverSaljem = false;',
+    extractConst('_SERVER_ZADNJE_KEY'),
     extractFn('_serverSlanjeDozvoljeno'), extractFn('_serverURed'), extractFn('_redUkloni'),
-    'return { _serverSlanjeDozvoljeno, _serverURed, _redUkloni, otvori: () => { _serverSlanjeDo = Date.now() + 60000; }, zatvori: () => { _serverSlanjeDo = 0; } };',
+    'return { _serverSlanjeDozvoljeno, _serverURed, _redUkloni, otvori: () => { _serverSaljem = true; }, zatvori: () => { _serverSaljem = false; } };',
   ].join('\n');
   return new Function('_OL', 'localStorage', '_updSyncBadge', src)(_OL, global.localStorage, () => {});
 }
@@ -325,7 +325,7 @@ function naCekanju(extra) {
   const g = { _OL, localStorage: global.localStorage, _DOZ_TRACK_BUF_KEY: 'buf', sbUser: { id: 'u1' },
     _tragZaSlanje: () => [], _locFotos: [], ...extra };
   const keys = Object.keys(g);
-  return new Function(...keys, extractFn('_serverNaCekanju') + '\nreturn _serverNaCekanju;')(...keys.map(x => g[x]));
+  return new Function(...keys, 'const _lsMemo = {};\n' + extractFn('_lsJsonMemo') + '\n' + extractFn('_serverNaCekanju') + '\nreturn _serverNaCekanju;')(...keys.map(x => g[x]));
 }
 
 t('_serverNaCekanju broji red, tragove van reda, pojas doznake kao jednu stavku i fotografije', () => {
@@ -347,20 +347,24 @@ function posaljiEnv(opts = {}) {
   _store.clear();
   const p = { red: [], trag: 0, toast: [], render: 0 };
   let cekaju = opts.cekaju ?? 3;
-  const src = ['let _serverSlanjeDo = 0, _serverSaljem = false; let _syncInProgress = false;',
-    extractConst('_SERVER_PROZOR_MS'), extractConst('_SERVER_ZADNJE_KEY'),
+  const src = ['let _serverSaljem = false; let _syncInProgress = false; let _syncMrezaPalaU = 0;',
+    extractConst('_SERVER_ZADNJE_KEY'),
     extractFn('_serverSlanjeDozvoljeno'), extractFn('serverPosalji'),
-    'return { serverPosalji, dozvoljeno: _serverSlanjeDozvoljeno, saljem: () => _serverSaljem };'].join('\n');
+    'return { serverPosalji, dozvoljeno: _serverSlanjeDozvoljeno, saljem: () => _serverSaljem, padMreze: () => { _syncMrezaPalaU = Date.now(); } };'].join('\n');
   const g = {
     sbUser: opts.bezPrijave ? null : { id: 'u1' }, sbProfile: { sumarija: 'S' }, _OL, localStorage: global.localStorage,
     navigator: { onLine: opts.offline ? false : true },
     showToast: m => p.toast.push(m), _mrezaSila: () => {}, _updSyncBadge: () => {}, _serverSazetakRender: () => { p.render++; },
     document: { getElementById: () => null }, openSyncQueuePanel: () => {},
     _serverNaCekanju: () => ({ stavki: cekaju }),
-    _tragZaSlanje: () => [{ name: 'A' }],
-    sbFlushTrag: async () => { p.trag++; p.tragDozvoljeno = api.dozvoljeno(); },
-    _processOfflineQueue: async (sila) => { p.red.push({ sila, dozvoljeno: api.dozvoljeno() }); cekaju = opts.poslije ?? 0; },
-    setTimeout,
+    _tragZaSlanje: () => opts.tragovi || [{ name: 'A' }],
+    sbFlushTrag: async (t) => { p.trag++; p.tragDozvoljeno = api.dozvoljeno(); return t && t.ish; },
+    _processOfflineQueue: async (sila) => {
+      p.red.push({ sila, dozvoljeno: api.dozvoljeno() });
+      cekaju = opts.poslije ?? 0;
+      if (opts.prolaz) opts.prolaz(p.red.length, api);
+    },
+    setTimeout, setInterval: () => 1, clearInterval: () => {},
   };
   const keys = Object.keys(g);
   const api = new Function(...keys, src)(...keys.map(x => g[x]));
@@ -428,6 +432,250 @@ t('Meni ima sekciju "Server" koja otvara panel', () => {
 t('panel ima dugme "Pošalji na server" i sažetak', () => {
   assert.ok(/id="syncq-posalji" onclick="serverPosalji\(\)"/.test(HTML));
   assert.ok(HTML.includes('id="syncq-sum"'));
+});
+
+// =====================================================================
+// v1.9.5 — brzina brojača i reda, i ispravke ručnog slanja
+// =====================================================================
+sekcija('\nv1.9.5 — kapija traje koliko i slanje:');
+
+t('KLJUČNO: kapija nema vremenski rok — otvorena je tačno dok traje slanje', () => {
+  const src = extractFn('_serverSlanjeDozvoljeno');
+  assert.ok(!/Date\.now/.test(src), 'rok od 3 min je zatvarao kapiju usred dugog slanja na slaboj vezi');
+  assert.ok(/_serverSaljem/.test(src));
+});
+
+t('tragovi: poslije pada MREŽE se ostali ne pokušavaju (svaki bi čekao svoj rok)', async () => {
+  const { api, p } = posaljiEnv({ tragovi: [{ ish: 'mreza' }, { ish: 'ok' }, { ish: 'ok' }] });
+  await api.serverPosalji();
+  assert.strictEqual(p.trag, 1);
+});
+
+t('pad mreže na tragovima: red se u istom slanju ni ne pokušava', async () => {
+  const { api, p } = posaljiEnv({ tragovi: [{ ish: 'mreza' }] });
+  await api.serverPosalji();
+  assert.strictEqual(p.red.length, 0);
+});
+
+t('tokom ručnog slanja procesor ne javlja svoju poruku (samo jedna, konačna)', () => {
+  assert.ok(/if \(synced && !_serverSaljem\) showToast/.test(extractFn('_processOfflineQueue')));
+});
+
+t('odjava: dijalog nema dupli "Odustani" (_dlgActions ga ima sam)', () => {
+  const src = extractFn('doLogout');
+  assert.ok(!/label: 'Odustani'/.test(src));
+});
+
+t('tragovi: greška BAZE za jedan trag ne zaustavlja ostale', async () => {
+  const { api, p } = posaljiEnv({ tragovi: [{ ish: 'greska' }, { ish: 'ok' }, { ish: 'ok' }] });
+  await api.serverPosalji();
+  assert.strictEqual(p.trag, 3);
+});
+
+t('poslije pada mreže u prolazu reda nema novog prolaza', async () => {
+  const { api, p } = posaljiEnv({
+    poslije: 2,
+    prolaz: (n, a) => { a.padMreze(); _OL.enqueue({ type: 'upsert_log', payload: { datum: 'x' + n, korisnik_id: 'u1' } }); },
+  });
+  await api.serverPosalji();
+  assert.strictEqual(p.red.length, 1);
+});
+
+t('novi prolaz SAMO za stavke koje ovo slanje još nije pokušalo (npr. vlake poslije upisa projekta)', async () => {
+  let dodano = false;
+  const { api, p } = posaljiEnv({
+    poslije: 1,
+    prolaz: (n) => {
+      if (!dodano) { dodano = true; _OL.enqueue({ type: 'upsert_vlaka', payload: { nm: 'T1', korisnik_id: 'u1', projekt_id: 'P' } }); return; }
+      // drugi prolaz: stavka je pokušana i pala → treći prolaz ne smije krenuti
+      const q = _OL.loadQueue(); q.forEach(o => { o._retries = 1; }); localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
+    },
+  });
+  await api.serverPosalji();
+  assert.strictEqual(p.red.length, 2, 'prolaza: ' + p.red.length);
+});
+
+t('stavka koja je upravo pala se ne gađa ponovo u istom slanju', async () => {
+  const { api, p } = posaljiEnv({
+    poslije: 1,
+    prolaz: () => {
+      _OL.enqueue({ type: 'upsert_log', payload: { datum: 'd', korisnik_id: 'u1' } });
+      const q = _OL.loadQueue(); q.forEach(o => { o._retries = 1; }); localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
+    },
+  });
+  await api.serverPosalji();
+  assert.strictEqual(p.red.length, 1);
+});
+
+t('trag: ishod slanja (red / ok / mreza / greska)', async () => {
+  const mk = (odg, rucno) => {
+    _store.clear();
+    const k = kapija(); if (rucno) k.otvori();
+    const { sb } = lazniSb(odg);
+    return tragFlush(k, sb);
+  };
+  const tr = () => ({ name: 'T', uuid: 'c1', pts: [[44, 16, 300], [44.1, 16.1, 300]] });
+  assert.strictEqual(await mk(null, false)(tr()), 'red');
+  assert.strictEqual(await mk(null, true)(tr()), 'ok');
+  // tragFlush sandbox: _isNetworkErr vraća false → 'greska'
+  assert.strictEqual(await mk(() => ({ data: null, error: { code: '42501', message: 'rls' } }), true)(tr()), 'greska');
+});
+
+t('trag: mrežna greška daje "mreza" (stvarni _isNetworkErr)', async () => {
+  _store.clear();
+  const k = kapija(); k.otvori();
+  const { sb } = lazniSb(() => ({ data: null, error: { message: 'Failed to fetch' } }));
+  const isNet = new Function(extractFn('_isNetworkErr') + '\nreturn _isNetworkErr;')();
+  const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen',
+    '_isAuthErr', '_isNetworkErr', '_tryRefreshSession', 'showToast', '_OL', '_serverURed',
+    extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
+    sb, { id: 'u1' }, { sumarija: 'S' }, () => 'g', () => {}, () => {}, () => 100, () => false, isNet,
+    async () => false, () => {}, _OL, k._serverURed);
+  assert.strictEqual(await f({ name: 'T', uuid: 'c1', pts: [[44, 16, 300], [44.1, 16.1, 300]] }), 'mreza');
+  assert.strictEqual(_OL.loadQueue().length, 1, 'neposlan trag mora ostati u redu');
+});
+
+t('sbFlushTrag prosljeđuje ishod pozivaocu', () => {
+  assert.ok(/return await t\._flushing;/.test(extractFn('sbFlushTrag')));
+});
+
+sekcija('\nv1.9.5 — brojač i red ne parsiraju cijeli dan bez potrebe:');
+
+function brojacEnv() {
+  const parsiranja = { n: 0 };
+  const J = { parse: (x) => { parsiranja.n++; return JSON.parse(x); }, stringify: JSON.stringify };
+  const g = { _OL, localStorage: global.localStorage, _DOZ_TRACK_BUF_KEY: 'buf', sbUser: { id: 'u1' },
+    _tragZaSlanje: (q) => { parsiranja.trag = Array.isArray(q); return []; }, _locFotos: [], JSON: J };
+  const keys = Object.keys(g);
+  const f = new Function(...keys, 'const _lsMemo = {};\n' + extractFn('_lsJsonMemo') + '\n' + extractFn('_serverNaCekanju') +
+    '\nreturn _serverNaCekanju;')(...keys.map(x => g[x]));
+  return { f, parsiranja };
+}
+
+t('KLJUČNO: nepromijenjen red se ne parsira ponovo', () => {
+  _store.clear();
+  _OL.enqueue({ type: 'upsert_log', payload: { datum: 'd', korisnik_id: 'u1' } });
+  localStorage.setItem('buf', JSON.stringify([{ user_id: 'u1' }]));
+  const { f, parsiranja } = brojacEnv();
+  f(); const prvi = parsiranja.n;
+  f(); f(); f();
+  assert.strictEqual(parsiranja.n, prvi, 'parsirano ponovo bez ikakve promjene');
+  assert.strictEqual(f().red, 1);
+});
+
+t('promijenjen red (bilo ko da je pisao) se čita svjež', () => {
+  _store.clear();
+  _OL.enqueue({ type: 'upsert_log', payload: { datum: 'd', korisnik_id: 'u1' } });
+  const { f } = brojacEnv();
+  assert.strictEqual(f().red, 1);
+  localStorage.setItem(_OL.QUEUE, JSON.stringify([...(_OL.loadQueue()), { type: 'upsert_log', payload: {}, _uid: 'u1' }]));
+  assert.strictEqual(f().red, 2);
+});
+
+t('red koji pozivalac već ima se ne parsira, i isti ide u brojanje tragova', () => {
+  _store.clear();
+  const { f, parsiranja } = brojacEnv();
+  const q = [{ type: 'upsert_log', payload: {}, _uid: 'u1' }];
+  localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
+  const n = f(q);
+  assert.strictEqual(n.red, 1);
+  assert.strictEqual(parsiranja.n, 0);
+  assert.strictEqual(parsiranja.trag, true);
+});
+
+t('oštećen red ne ruši brojač', () => {
+  _store.clear();
+  localStorage.setItem(_OL.QUEUE, '{oštećeno');
+  const { f } = brojacEnv();
+  assert.strictEqual(f().stavki, 0);
+});
+
+t('_OL.enqueue predaje upravo upisan red brojaču', () => {
+  _store.clear();
+  let dobio = null;
+  global._updSyncBadge = (q) => { dobio = q; };
+  try { _OL.enqueue({ type: 'upsert_log', payload: { datum: 'd', korisnik_id: 'u1' } }); }
+  finally { delete global._updSyncBadge; }
+  assert.ok(Array.isArray(dobio) && dobio.length === 1);
+});
+
+t('procesor reda čita red JEDNOM po stavci (ranije dva puta)', async () => {
+  const brojiCitanja = async (nOps) => {
+    let red = [];
+    for (let i = 0; i < nOps; i++) red.push({ type: 'delete_vlaka', payload: { id: 'a' + i }, _qid: String(i) });
+    let citanja = 0;
+    const g = {
+      Date, sbUser: { id: 'u1' }, sbProfile: { sumarija: 'S' },
+      _OL: { QUEUE: 'q', loadQueue: () => { citanja++; return red.map(o => ({ ...o })); }, removeFromQueue: (id) => { red = red.filter(o => o._qid !== id); },
+        bumpRetry: () => false, odgodi: () => {} },
+      sb: { from: () => ({ delete: () => ({ eq: async () => ({ error: null }) }) }) },
+      localStorage: { getItem: () => '[]', setItem: () => {} },
+      _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _flushPendingFotos: async () => {},
+      _mrezaProbaj: () => true, showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} }, setTimeout: () => 0,
+      _serverSlanjeDozvoljeno: () => true, _serverSaljem: true, _updSyncBadgeUskoro: () => {},
+    };
+    const src = [extractConst('_SYNC_PAUZA_MS'),
+      'let _syncMrezaPalaU = 0, _syncOdgodaT = null; let _syncInProgress = false, _syncRerun = false;',
+      extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_serverPrivremeno'), extractFn('_processOfflineQueue'),
+      'return _processOfflineQueue;'].join('\n');
+    const k = Object.keys(g);
+    await new Function(...k, src)(...k.map(x => g[x]))(true);
+    return citanja;
+  };
+  const jedna = await brojiCitanja(1), cetiri = await brojiCitanja(4);
+  assert.strictEqual(cetiri - jedna, 3, 'čitanja po stavci: ' + (cetiri - jedna) / 3);
+});
+
+t('koordinate na karti bez toLocaleString (prvi Intl poziv pri pokretanju)', () => {
+  const src = extractFn('updMGI').split('\n').filter(r => !/^\s*\/\//.test(r)).join('\n');
+  assert.ok(!/toLocale/.test(src));
+  assert.ok(/_stpBroj\(c\.y\)/.test(src));
+});
+
+sekcija('\nv1.9.5 — odjava i podsjetnik:');
+
+t('KLJUČNO: odjava ne pokušava tihi prolaz reda (kapija je zatvorena) nego pita', () => {
+  const src = extractFn('doLogout');
+  const prije = src.slice(0, src.indexOf('sb.auth.signOut'));
+  assert.ok(!/_processOfflineQueue\(/.test(prije), 'tihi pokušaj je udarao u zatvorenu kapiju');
+  assert.ok(/_serverNaCekanju\(\)/.test(prije) && /_dlgActions\(/.test(prije) && /serverPosalji\(\)/.test(prije));
+  assert.ok(/_serverTragoviURed\(\)/.test(prije), 'tragovi van reda se brišu pri prijavi drugog korisnika');
+});
+
+t('_serverTragoviURed stavlja u red tragove koji nisu u njemu', () => {
+  const pozvani = [];
+  const f = new Function('_tragZaSlanje', '_sbFlushTragImpl', extractFn('_serverTragoviURed') + '\nreturn _serverTragoviURed;')(
+    () => [{ uuid: 'a' }, { uuid: 'b' }], (t) => { pozvani.push(t.uuid); });
+  f();
+  assert.deepStrictEqual(pozvani, ['a', 'b']);
+});
+
+function podsjetnikEnv(n, saljem) {
+  const toasti = []; const sat = { t: 1e12 };
+  const f = new Function('_serverNaCekanju', 'showToast', 'sbUser', '_serverSaljem', 'Date',
+    'let _serverPodsjetnikZadnji = 0;\n' + extractFn('_serverPodsjetnik') + '\nreturn _serverPodsjetnik;')(
+    () => ({ stavki: n }), m => toasti.push(m), { id: 'u1' }, !!saljem, { now: () => sat.t });
+  return { f, toasti, sat };
+}
+
+t('podsjetnik kad se signal vrati: javi se, ali najviše jednom u 30 min', () => {
+  const e = podsjetnikEnv(4);
+  e.f(); e.f();
+  assert.strictEqual(e.toasti.length, 1);
+  assert.ok(/4/.test(e.toasti[0]) && /Server/.test(e.toasti[0]));
+  e.sat.t += 31 * 60000; e.f();
+  assert.strictEqual(e.toasti.length, 2);
+});
+
+t('podsjetnik šuti kad ništa ne čeka ili slanje već traje', () => {
+  const a = podsjetnikEnv(0); a.f(); assert.strictEqual(a.toasti.length, 0);
+  const b = podsjetnikEnv(3, true); b.f(); assert.strictEqual(b.toasti.length, 0);
+});
+
+t('podsjetnik je zakačen na vraćenu vezu i na online event', () => {
+  assert.ok(/_serverPodsjetnik\(\)/.test(extractFn('_netVezaVracena')));
+  const i = HTML.indexOf("showToast('🌐 Veza uspostavljena')");
+  assert.ok(i > 0 && /_serverPodsjetnik/.test(HTML.slice(i, i + 300)));
 });
 
 (async () => {

@@ -66,6 +66,7 @@ function makeNet({ onLine = true } = {}) {
     _netPonoviPlocice: () => { pozivi.plocice++; },
     sbUser: { id: 'u1' },
     _processOfflineQueue: (sila) => { pozivi.red.push(sila); },
+    _serverPodsjetnik: () => { pozivi.podsjetnik = (pozivi.podsjetnik || 0) + 1; },
     _reloadCoreData: () => { pozivi.jezgro++; },
   };
   const k = Object.keys(g);

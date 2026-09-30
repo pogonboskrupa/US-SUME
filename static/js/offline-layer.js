@@ -115,7 +115,7 @@ const _OL = {
       q.push({ ...op, ts: Date.now(), _qid: qid, _uid: uid });
       if (q.length === 501) showToast('⚠ Više od 500 izmjena čeka slanje — sve su zadržane');
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
-      if (typeof _updSyncBadge === 'function') _updSyncBadge();
+      if (typeof _updSyncBadge === 'function') _updSyncBadge(q);   // red je već u ruci — ne parsiraj ga opet
       return qid;
     } catch(e) { showToast('⚠ Offline operacija nije sačuvana — provjeri memoriju i izvezi podatke'); return false; }
   },

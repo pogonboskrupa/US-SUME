@@ -2795,14 +2795,68 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Brzina (srednji telefon) + ispravke ručnog slanja (v1.9.5)**: na zahtjev
+  "provjeri još jednom brzinu… i provjeri bugove i optimiziraj ručno slanje".
+  Mjereno Playwright-om uz CPU 4× (`perf/teski.cjs`, `brojac-browser.cjs`,
+  `slanje-cpu.cjs` u scratchpadu).
+  - **Pokretanje je nepromijenjeno i ne dira se ovdje**: vlake za 2,3–2,7 s,
+    najduži zastoj ~0,35 s — to je jednokratno izvršavanje glavnog JS bloka
+    (1,54 MB INLINE; trace: ~1,1 s parsiranja/kompajliranja na hladnom startu).
+    Izdvajanje u vanjski fajl bi dalo V8 code cache, ali APK servira kroz
+    `WebViewAssetLoader` (`shouldInterceptRequest`), gdje taj keš nije
+    zagarantovan, a svi testovi čitaju `index.html` — zaseban posao, ne usput.
+  - **Ručni režim (v1.9.4) je pustio red da raste cijeli dan** — ranije se
+    praznio čim ima mreže. Izmjereno sa 1,1 MB reda (20 tragova + 40 vlaka):
+    **brojač 38,9 ms → 0,2 ms** po crtanju (`_lsJsonMemo`: parsira samo kad se
+    string u localStorage stvarno promijenio, ko god da je pisao; `_OL.enqueue`
+    predaje upravo upisan red `_updSyncBadge(q)`). Brojač se crta pri svakom
+    upisu u red, na Terenu svakih 5 s i tokom doznake.
+  - **Procesor reda čita red JEDNOM po stavci** (bila su dva čitanja: `some` pa
+    `find`). Slanje cijelog dana (60 stavki): dugi zadaci 825 → 343 ms,
+    najduži 216 → 95 ms. Upis u red i dalje košta ~120 ms na 1,1 MB (parsiraj +
+    zapiši cijeli niz) — dešava se pri završetku snimanja/spremanju, ne po GPS
+    tački; trajno rješenje (tačke traga van reda / IndexedDB) je zaseban posao.
+  - `updMGI` (koordinate na karti) ide kroz `_stpBroj`, ne `toLocaleString('bs')`
+    — bio je PRVI Intl poziv pri pokretanju, a WebView bez bs lokala ionako daje
+    "6,354,662".
+  - **Bug: kapija je imala rok od 3 min** — na slaboj vezi pun dan traje duže, pa
+    se kapija zatvarala usred slanja i ostatak je tiho čekao sljedeći pritisak.
+    Sad je `_serverSlanjeDozvoljeno()` = `_serverSaljem` (otvorena tačno dok
+    traje `serverPosalji`, zatvara se u `finally`); zaglavljeno slanje nije
+    moguće jer svaki zahtjev ima rok u transportu.
+  - **Bug: odjava je tiho ostavljala neposlano** — `doLogout` je prije odjave
+    zvao `_processOfflineQueue(true)`, a to od v1.9.4 udara u zatvorenu kapiju.
+    Sad pita (`_dlgActions`): "Pošalji pa se odjavi" / "Odjavi se bez slanja";
+    "Odustani" dijalog ima sam. Prije odjave tragovi van reda idu u red
+    (`_serverTragoviURed`) — red je vezan za korisnika (`_uid`) i preživljava
+    tuđu prijavu, a registar tragova i lista fotografija NE (`_wipeAllLocalUserData`),
+    što dijalog kaže kad ima fotografija. Neodobren/opozvan nalog se ne pita.
+  - **Tragovi pri slanju staju na prvom padu MREŽE** (`_sbFlushTragImpl` vraća
+    `'ok'|'red'|'mreza'|'greska'`, `sbFlushTrag` ga prosljeđuje) — ranije bi
+    svaki trag čekao svoj rok na istoj mrtvoj vezi; greška baze za jedan trag ne
+    zaustavlja ostale. Poslije pada mreže red se u istom slanju ni ne pokušava.
+  - **Dodatni prolazi reda samo za NEPOKUŠANE stavke** (npr. vlake koje dobiju
+    pravi ID projekta tek kad projekat prođe) — ranije je do 3 prolaza ponovo
+    gađalo i ono što je upravo palo (sa `sila` razmak ne važi). Staje i kad
+    prolaz javi pad mreže (`_syncMrezaPalaU`).
+  - Brojke u panelu i na traci se osvježavaju tokom slanja (1,5 s) — na slaboj
+    vezi slanje traje minutama. Procesor tokom ručnog slanja ne javlja svoju
+    poruku (bile su dvije jedna preko druge).
+  - **Podsjetnik** `_serverPodsjetnik` na vraćenu vezu (`_netVezaVracena`,
+    `online` event): "Signal je tu — čeka slanje: N", najviše jednom u 30 min.
+  - Provjereno u browseru: 0 automatskih upisa; mrtva veza → stane poslije prvog
+    traga, ostalo sačuvano; podsjetnik; slanje; odjava sa dijalogom (Odustani
+    ostaje u app-u, "Pošalji pa se odjavi" pošalje pa login).
+  - Test: `tests/js/server-rucno.test.js` (55; 24 nova, svi padaju na v1.9.4).
+
 - **Slanje na server SAMO ručno — Meni → Server (v1.9.4)**: na zahtjev "sync
   uradi da korisnik mora ručno poslati… u meni dodaj sekciju Server". Do sada
   je app slala sama: otkucaj na 60 s, pokretanje, povratak u prvi plan, vraćena
   veza, i red na SVAKU GPS tačku doznake. Sad se sve i dalje čuva ODMAH lokalno
   i u redu (`_OL`), a na server ide tek na "⬆ Pošalji na server".
   - **Jedna kapija**: `_serverSlanjeDozvoljeno()` je istina samo dok traje
-    `serverPosalji()` (`_serverSlanjeDo`, rok `_SERVER_PROZOR_MS` = 3 min kao
-    gornja granica ako slanje zapne; zatvara se u `finally`). `_processOfflineQueue`
+    `serverPosalji()` (zatvara se u `finally`; rok od 3 min iz v1.9.4 je
+    uklonjen u v1.9.5 — zatvarao je kapiju usred dugog slanja). `_processOfflineQueue`
     je provjerava PRIJE svega — i `sila=true` (online event, `_netVezaVracena`)
     je automatski put, pa ne otvara kapiju. Van nje samo osvježi brojač
     (`_updSyncBadgeUskoro`, najviše jednom u 5 s — doznaka zove red na svaku tačku).

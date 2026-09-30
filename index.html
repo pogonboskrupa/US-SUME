@@ -5650,7 +5650,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.9.4';
+const APP_VER = 'v1.9.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6006,6 +6006,7 @@ function _netVezaVracena() {
     _netVracenaZadnji = Date.now();
     _netPonoviPlocice();
     if (typeof sbUser === 'undefined' || !sbUser) return;
+    _serverPodsjetnik();
     try { if (typeof _processOfflineQueue === 'function') _processOfflineQueue(true); } catch(e) {}
     try { if (typeof _reloadCoreData === 'function') _reloadCoreData(); } catch(e) {}
   }, 800);
@@ -6090,10 +6091,31 @@ function _localSetKriticno(key, vrijednost, opis) {
 // lokalno i u redu za sync — mijenja se samo KO odlučuje kad ide na server.
 // Jedna kapija za sve upise: _serverSlanjeDozvoljeno() je istina samo dok traje
 // ručno slanje. Preuzimanje (vlake kolega, realtime, projekti) NIJE dirano.
-let _serverSlanjeDo = 0, _serverSaljem = false;
-const _SERVER_PROZOR_MS = 3 * 60 * 1000;   // gornja granica ako slanje zapne
+// v1.9.5: kapija je otvorena TAČNO dok traje serverPosalji() (zatvara se u
+// finally), a ne fiksne 3 min — na slaboj vezi pun terenski dan (~1,2 MB)
+// traje duže, pa je rok zatvarao kapiju usred slanja i ostatak je tiho čekao
+// sljedeći pritisak. Zaglavljeno slanje nije moguće: svaki zahtjev ima rok u
+// transportu (reliableFetch), a prolaz reda završava sa zadnjom stavkom.
+let _serverSaljem = false;
 const _SERVER_ZADNJE_KEY = 'tvlake_server_zadnje_slanje';
-function _serverSlanjeDozvoljeno() { return Date.now() < _serverSlanjeDo; }
+function _serverSlanjeDozvoljeno() { return _serverSaljem; }
+// Brojač se crta pri svakom upisu u red, svakih 5 s na Terenu i tokom doznake,
+// a red bez slanja naraste na cijeli terenski dan (izmjereno: 20 tragova + 40
+// vlaka = 1,2 MB, ~14 ms po parsiranju na desktopu, ~55 ms na srednjem
+// telefonu). Čitanje stringa je jeftino, parsiranje nije — parsira se samo kad
+// se sadržaj stvarno promijenio, bez obzira KO je pisao (poređenje stringova).
+// Vraćena vrijednost je dijeljena: samo za čitanje.
+const _lsMemo = {};
+function _lsJsonMemo(key) {
+  let raw = null;
+  try { raw = localStorage.getItem(key); } catch(e) {}
+  const m = _lsMemo[key];
+  if (m && m.raw === raw) return m.v;
+  let v = null;
+  try { v = raw ? JSON.parse(raw) : null; } catch(e) { v = null; }
+  _lsMemo[key] = { raw, v };
+  return v;
+}
 // Direktan upis koji nije dozvoljen ide u red (isti put kao bez signala) —
 // vraća true kad je operacija stavljena u red i pozivalac ne treba ništa dalje.
 function _serverURed(op) {
@@ -6114,24 +6136,49 @@ function _redUkloni(pred) {
     return q.length - ost.length;
   } catch(e) { return 0; }
 }
+// Tragovi koji nisu ni u redu (npr. snimljeni prije v1.9.4) žive samo u
+// registru, a njega briše prijava drugog korisnika — red preživljava (_uid).
+function _serverTragoviURed() {
+  try { _tragZaSlanje().forEach(t => { try { _sbFlushTragImpl(t); } catch(e) {} }); } catch(e) {}
+}
+// Podsjetnik kad se signal vrati: slanje je ručno, a na terenu je baš taj
+// trenutak (izlazak iz šume, vozilo) prilika koju je lako propustiti. Najviše
+// jednom u 30 min — inače bi slab signal koji dolazi i odlazi stalno zvonio.
+let _serverPodsjetnikZadnji = 0;
+function _serverPodsjetnik() {
+  try {
+    if (_serverSaljem || typeof sbUser === 'undefined' || !sbUser) return;
+    if (Date.now() - _serverPodsjetnikZadnji < 30 * 60000) return;
+    const n = _serverNaCekanju().stavki;
+    if (!n) return;
+    _serverPodsjetnikZadnji = Date.now();
+    showToast('📶 Signal je tu — čeka slanje: ' + n + ' (Meni → Server)');
+  } catch(e) {}
+}
 // Šta čeka slanje. Doznaka pojas je JEDNA stavka (stotine tačaka su jedan hod),
 // fotografija bez punog snimka nigdje se ne broji — nikad se ne bi mogla poslati.
-function _serverNaCekanju() {
+// qZadan: red koji pozivalac već ima u ruci (_OL.enqueue ga je upravo upisao) —
+// bez njega bi se isti red odmah parsirao još jednom.
+function _serverNaCekanju(qZadan) {
   const uid = typeof sbUser !== 'undefined' ? sbUser?.id : null;
   const r = { red: 0, blok: 0, tragovi: 0, doz: 0, foto: 0, stavki: 0 };
+  let q = null;
+  try { q = Array.isArray(qZadan) ? qZadan : _lsJsonMemo(_OL.QUEUE); } catch(e) {}
+  if (!Array.isArray(q)) q = [];
+  const moji = q.filter(op => !op._uid || op._uid === uid);
+  r.red = moji.length; r.blok = moji.filter(op => op._blocked).length;
   try {
-    const q = _OL.loadQueue().filter(op => !op._uid || op._uid === uid);
-    r.red = q.length; r.blok = q.filter(op => op._blocked).length;
+    const b = _lsJsonMemo(_DOZ_TRACK_BUF_KEY);
+    r.doz = Array.isArray(b) ? b.filter(p => p.user_id === uid).length : 0;
   } catch(e) {}
-  try { r.doz = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]').filter(p => p.user_id === uid).length; } catch(e) {}
-  try { r.tragovi = _tragZaSlanje().length; } catch(e) {}
+  try { r.tragovi = _tragZaSlanje(q).length; } catch(e) {}
   try { r.foto = (_locFotos || []).filter(f => !f.sbId && !f._nemaFull).length; } catch(e) {}
   r.stavki = r.red + r.tragovi + r.foto + (r.doz ? 1 : 0);
   return r;
 }
 
-function _updSyncBadge() {
-  const cnt = _serverNaCekanju().stavki;
+function _updSyncBadge(qZadan) {
+  const cnt = _serverNaCekanju(qZadan).stavki;
   const badge = document.getElementById('sync-badge');
   const cntEl = document.getElementById('sync-badge-cnt');
   if (badge) {
@@ -6271,10 +6318,12 @@ async function serverPosalji() {
   const prije = _serverNaCekanju();
   if (!prije.stavki) { showToast('✓ Sve je već poslano'); _serverSazetakRender(); return; }
   _serverSaljem = true;
-  _serverSlanjeDo = Date.now() + _SERVER_PROZOR_MS;
-  _mrezaSila(_SERVER_PROZOR_MS);
+  _mrezaSila(60000);
   _serverSazetakRender();
   showToast('⬆ Šaljem na server…');
+  // Na slaboj vezi slanje traje minutama — brojke u panelu i na traci moraju
+  // pokazivati da napreduje, inače izgleda kao da je zaglavilo.
+  const napredak = setInterval(() => { try { _updSyncBadge(); _serverSazetakRender(); } catch(e) {} }, 1500);
   try {
     // Izričit zahtjev — i ono što je ranije odbijeno ili čeka razmak ide ODMAH.
     try {
@@ -6282,21 +6331,37 @@ async function serverPosalji() {
       q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; op._odgode = 0; delete op._retryAt; } });
       localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
     } catch(e) {}
-    // Tragovi koji nisu ni u redu (snimljeni prije ove verzije) — jedan po jedan,
-    // da na slaboj vezi ne dijele propusnost. Neuspjeh ih stavlja u red.
-    for (const t of _tragZaSlanje()) { try { await sbFlushTrag(t); } catch(e) {} }
-    // Uspješan upis projekta zna dodati nove stavke u red (vlake sa pravim ID-jem
-    // projekta) — još jedan prolaz dok god napreduje, najviše tri.
-    for (let k = 0; k < 3; k++) {
+    // Tragovi koji nisu ni u redu — jedan po jedan, da na slaboj vezi ne dijele
+    // propusnost. Neuspjeh ih stavlja u red; na padu MREŽE se ostali ni ne
+    // pokušavaju (svaki bi čekao svoj rok na istoj mrtvoj vezi).
+    let mrezaPala = false;
+    for (const t of _tragZaSlanje()) {
+      let ish = null;
+      try { ish = await sbFlushTrag(t); } catch(e) {}
+      if (ish === 'mreza') { mrezaPala = true; break; }
+    }
+    // Uspješan upis projekta dodaje u red vlake sa pravim ID-jem projekta — njih
+    // šalje sljedeći prolaz. Novi prolaz ima smisla SAMO za stavke koje ovaj
+    // pritisak još nije pokušao; ono što je upravo palo ne gađa se ponovo, a
+    // poslije pada mreže se staje.
+    // Poslije pada mreže na tragovima red se ni ne pokušava — na istoj mrtvoj
+    // vezi bi samo čekao svoj rok.
+    for (let k = 0; !mrezaPala && k < 3; k++) {
       for (let c = 0; _syncInProgress && c < 600; c++) await new Promise(r => setTimeout(r, 100));
-      const n0 = _serverNaCekanju().stavki;
+      _mrezaSila(60000);
+      const t0 = Date.now();
       await _processOfflineQueue(true);
-      const n1 = _serverNaCekanju().stavki;
-      if (!n1 || n1 >= n0) break;
+      if (_syncMrezaPalaU >= t0) break;
+      let neprobane = 0;
+      try {
+        neprobane = _OL.loadQueue(true).filter(op => (!op._uid || op._uid === sbUser?.id) &&
+          !op._blocked && !op._retries && !op._odgode).length;
+      } catch(e) {}
+      if (!neprobane) break;
     }
   } catch(e) {
   } finally {
-    _serverSlanjeDo = 0;
+    clearInterval(napredak);
     _serverSaljem = false;
   }
   const poslije = _serverNaCekanju();
@@ -6326,6 +6391,7 @@ window.addEventListener('online', () => {
   try { _netZaboraviKvarove(); } catch(e) {}
   _setOfflineMode(false);
   showToast('🌐 Veza uspostavljena');
+  setTimeout(_serverPodsjetnik, 3500);   // poslije ove poruke, ne preko nje
   // Write strana (red čekanja) + read strana (projekti/vlake/dnevnik — oporavak
   // ako je initial fetch pri prijavi pao dok nije bilo veze)
   setTimeout(() => { _processOfflineQueue(true); _reloadCoreData(); }, 1000);
@@ -6422,9 +6488,13 @@ async function _processOfflineQueue(sila) {
     if (op._blocked) continue;
     // Stavka koja je nedavno pala čeka svoj razmak — ručni "Sync sad" ide odmah.
     if (sila !== true && op._retryAt && op._retryAt > Date.now()) continue;
-    if (!_OL.loadQueue(true).some(current => String(current._qid ?? current.ts) === String(op._qid ?? op.ts))) continue;
+    // Stavka je mogla nestati ili se promijeniti dok je prethodna išla na mrežu.
+    // JEDNO čitanje reda po stavci (ranije dva): kad se šalje ručno, red nosi
+    // cijeli terenski dan pa je svako parsiranje ~55 ms na srednjem telefonu.
+    const _tren = _OL.loadQueue(true).find(current => String(current._qid ?? current.ts) === String(op._qid ?? op.ts));
+    if (!_tren) continue;
     try {
-      Object.assign(op, _OL.loadQueue(true).find(current => String(current._qid ?? current.ts) === String(op._qid ?? op.ts)));
+      Object.assign(op, _tren);
       let err = null;
       if (op.type === 'upsert_vlaka') {
         err = await _syncVlakaOperation(op);
@@ -6678,7 +6748,8 @@ async function _processOfflineQueue(sila) {
   // tačkama, pa čeka dobru vezu (ostaje sačuvana lokalno, šalje se poslije).
   // Ručno slanje: korisnik je SAM tražio da ide sve, pa i na slabom signalu.
   if (!_mrezaPala && (_serverSaljem || _mrezaProbaj(true))) { try { await _flushPendingFotos(); } catch(e) {} }
-  if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
+  // Ručno slanje javlja ishod SAMO (serverPosalji) — dvije poruke jedna preko druge su šum.
+  if (synced && !_serverSaljem) showToast(`✅ Poslano na server: ${synced}`);
   if (typeof _updSyncBadge === 'function') _updSyncBadge();
   } finally {
     _syncInProgress = false;
@@ -7430,15 +7501,34 @@ async function doLogout() {
   // ostajala nedovršena i korisnik bi ostao u aplikaciji bez ikakve poruke
   // ("odjava ne radi offline"). Isti Promise.race obrazac koristi i showApp().
 
-  // Pokušaj isporučiti zaostale offline operacije prije odjave (da se ne
-  // pomiješaju sa sljedećim nalogom na istom uređaju). navigator.onLine na
-  // terenu zna lagati 'true' na mrtvoj vezi (OS-S4), pa i ovo mora imati kočnicu.
-  // Ako 5 s ne bude dovoljno, red ostaje u localStorage i ode na sljedećoj prijavi.
-  if (_mrezaProbaj() && sbUser && sbProfile) {
-    try {
-      const pq = _processOfflineQueue(true).catch(() => {});
-      await Promise.race([pq, new Promise(r => setTimeout(r, 5000))]);
-    } catch(e) {}
+  // v1.9.5: slanje je ručno (v1.9.4), pa je raniji tihi pokušaj slanja ovdje
+  // udarao u zatvorenu kapiju i odjava je ostavljala sve neposlano BEZ riječi.
+  // Sad korisnik bira. Red je vezan za korisnika (_uid) i preživljava odjavu i
+  // tuđu prijavu; registar tragova i lista fotografija NE preživljavaju tuđu
+  // prijavu (_wipeAllLocalUserData), zato tragovi van reda idu u red prije odjave.
+  if (sbUser && sbProfile) {
+    let n = { stavki: 0, foto: 0 };
+    try { n = _serverNaCekanju(); } catch(e) {}
+    // Opozvan/neodobren nalog (dugme Odjava na ekranu "Čeka se odobrenje") ne
+    // može slati — server odbija — pa ga ne pitamo; podaci samo ostaju sačuvani.
+    const mozeSlati = sbProfile.odobren !== false || sbProfile.is_admin;
+    if (n.stavki && !mozeSlati) _serverTragoviURed();
+    else if (n.stavki) {
+      const i = await _dlgActions('☁ Neposlano: ' + n.stavki, [
+        { label: '⬆ Pošalji pa se odjavi' },
+        { label: 'Odjavi se bez slanja<br><span style="font-size:11px;opacity:.7;">Ostaje na ovom telefonu i šalje se kad se opet prijaviš' +
+          (n.foto ? ' (fotografije se brišu ako se ovdje prijavi neko drugi)' : '') + '</span>' }
+      ]);   // "Odustani" dijalog ima sam (vraća null)
+      if (i == null) return;
+      if (i === 0) {
+        await serverPosalji();
+        let ost = 0;
+        try { ost = _serverNaCekanju().stavki; } catch(e) {}
+        if (ost && !await _dlgConfirm('Nije sve poslano — ' + ost + ' čeka. Odjaviti se svejedno? Ostaje sačuvano na ovom telefonu.',
+          { title: '☁ Server', okLabel: 'Odjavi se' })) return;
+      }
+      _serverTragoviURed();
+    }
   }
 
   // signOut() šalje mrežni zahtjev na /auth/v1/logout i usput uzima navigator.locks
@@ -10492,7 +10582,7 @@ async function sbFlushTrag(t) {
   }
   t._flushing = _sbFlushTragImpl(t);
   try {
-    await t._flushing;
+    return await t._flushing;
   } finally {
     t._flushing = null;
     if (t._flushPending) {
@@ -10502,8 +10592,10 @@ async function sbFlushTrag(t) {
   }
 }
 
+// Ishod (v1.9.5): 'ok' | 'red' (čeka ručno slanje) | 'mreza' | 'greska' — ručno
+// slanje po 'mreza' prestaje slati ostale tragove umjesto da svaki čeka rok.
 async function _sbFlushTragImpl(t, _retried) {
-  if (!sbUser || !sbProfile || !t?.pts?.length) return;
+  if (!sbUser || !sbProfile || !t?.pts?.length) return null;
   // Upis registra SAMO kad je uuid tek dodijeljen (mora biti trajan PRIJE slanja,
   // inače bi izgubljen odgovor + restart dao drugi uuid → duplikat). Ranije je
   // SVAKI pokušaj slanja prepisivao cijeli registar (sve tačke svih tragova):
@@ -10526,7 +10618,7 @@ async function _sbFlushTragImpl(t, _retried) {
   };
   // v1.9.4: van ručnog slanja trag ide u red (dedup po client_uuid — nova verzija
   // istog traga zamjenjuje staru), a na server tek na "Pošalji na server".
-  if (_serverURed({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload })) return;
+  if (_serverURed({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload })) return 'red';
   try {
     if (t.sbId) {
       const { error } = await sb.from('tragovi').update(payload).eq('id', t.sbId);
@@ -10545,11 +10637,12 @@ async function _sbFlushTragImpl(t, _retried) {
         t.sbId = f.data.id; _tragRegSaveUskoro();
         const u = await sb.from('tragovi').update(payload).eq('id', t.sbId);
         if (u.error) throw u.error;
-        return;
+        return 'ok';
       }
       if (error) throw error;
       if (data) { t.sbId = data.id; _tragRegSaveUskoro(); }
     }
+    return 'ok';
   } catch(e) {
     if (!_retried && _isAuthErr(e) && await _tryRefreshSession()) return _sbFlushTragImpl(t, true);
     // Ne-mrežna greška (RLS, nedostajuća kolona...) se inače tiho gomilala u redu
@@ -10561,6 +10654,7 @@ async function _sbFlushTragImpl(t, _retried) {
       showToast('⚠ Trag nije sinkroniziran: ' + (e?.message || 'greška') + code);
     }
     _OL.enqueue({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload });
+    return _isNetworkErr(e) ? 'mreza' : 'greska';
   }
 }
 
@@ -12529,8 +12623,11 @@ const _defZoom   = Math.round(zoomForScale(DEFAULT_VIEW_MGI.scale, _defCenter[0]
 function updMGI(lat, lon) {
   const c = wgsToMGI(lat, lon);
   if (c) {
-    document.getElementById('omgi-y').textContent = c.y.toLocaleString('bs');
-    document.getElementById('omgi-x').textContent = c.x.toLocaleString('bs');
+    // _stpBroj, ne toLocaleString('bs'): ovo je PRVI Intl poziv pri pokretanju
+    // (učitavanje lokalnih podataka, ~35 ms na srednjem telefonu), a WebView bez
+    // bs lokala ionako tiho daje "6,354,662" — ista zamka kao u štampi (v1.8.0).
+    document.getElementById('omgi-y').textContent = _stpBroj(c.y);
+    document.getElementById('omgi-x').textContent = _stpBroj(c.x);
   }
 }
 
@@ -19802,10 +19899,11 @@ let _tragRegSaveT = null;
 // Tragovi koje treba poslati direktno: bez sbId i NE već u redu za sync. Trag koji
 // čeka u redu tamo ima razmak između pokušaja i dedup; direktno slanje uz to je
 // na slaboj vezi svakih 60 s ponovo slalo cijeli trag (~50 KB) uzalud (v1.9.3).
-function _tragZaSlanje() {
+function _tragZaSlanje(qZadan) {
   let uRedu = new Set();
   try {
-    uRedu = new Set(_OL.loadQueue(true).filter(o => o.type === 'upsert_trag' && o.payload?.client_uuid)
+    const red = Array.isArray(qZadan) ? qZadan : _OL.loadQueue(true);
+    uRedu = new Set(red.filter(o => o.type === 'upsert_trag' && o.payload?.client_uuid)
       .map(o => o.payload.client_uuid));
   } catch(e) {}
   return (_tragRegistry || []).filter(t => !t.sbId && t.pts?.length && !(t.uuid && uRedu.has(t.uuid)));
