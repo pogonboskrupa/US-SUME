@@ -2795,6 +2795,48 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Slanje na server SAMO ručno — Meni → Server (v1.9.4)**: na zahtjev "sync
+  uradi da korisnik mora ručno poslati… u meni dodaj sekciju Server". Do sada
+  je app slala sama: otkucaj na 60 s, pokretanje, povratak u prvi plan, vraćena
+  veza, i red na SVAKU GPS tačku doznake. Sad se sve i dalje čuva ODMAH lokalno
+  i u redu (`_OL`), a na server ide tek na "⬆ Pošalji na server".
+  - **Jedna kapija**: `_serverSlanjeDozvoljeno()` je istina samo dok traje
+    `serverPosalji()` (`_serverSlanjeDo`, rok `_SERVER_PROZOR_MS` = 3 min kao
+    gornja granica ako slanje zapne; zatvara se u `finally`). `_processOfflineQueue`
+    je provjerava PRIJE svega — i `sila=true` (online event, `_netVezaVracena`)
+    je automatski put, pa ne otvara kapiju. Van nje samo osvježi brojač
+    (`_updSyncBadgeUskoro`, najviše jednom u 5 s — doznaka zove red na svaku tačku).
+  - **Direktni upisi idu u red** kad kapija nije otvorena (`_serverURed(op)`):
+    trag (`_sbFlushTragImpl`), dnevni log, odjel (već poznat se ni ne stavlja),
+    tekstualne oznake, brisanje vlake/traga, status/zone doznake, preimenovanje
+    vlake (novo ime nosi upis iz reda po id-ju), fotografija pri slikanju. **Novi
+    upis zajedničkih podataka mora ići kroz `_serverURed` ili red** — nikad
+    direktno van ručnog slanja.
+  - **Namjerno NIJE dirano** (izričite radnje, rade odmah kao i prije):
+    kreiranje projekta na dobroj vezi, članovi projekta, šifre za dijeljenje,
+    brisanje odjela doznake, dijeljenje fotografije sa kolegama, admin,
+    referentne karte. Preuzimanje (vlake kolega, realtime, projekti) je netaknuto.
+  - **Brisanje neposlanog ne smije vaskrsnuti na serveru** (`_redUkloni`):
+    vlaka/trag obrisan prije slanja imao je upis i dalje u redu, pa bi "Pošalji"
+    napravilo ono što je korisnik obrisao. Bug je postojao i ranije (offline),
+    ručni režim ga čini svakodnevnim.
+  - **Prazan set tekstualnih oznaka**: brisanje ZADNJE oznake stavljalo je `[]`
+    koji (a) nije zamjenjivao stariji pun set u redu (dedup je čitao korisnika
+    iz `payload[0]`) i (b) u redu nije radio ništa — oznake bi se vratile. Op
+    sad nosi `korisnik_id`, dedup i procesor ga čitaju.
+  - **Brojač** (`_serverNaCekanju`): red + tragovi van reda + pojas doznake kao
+    JEDNA stavka + fotografije (bez onih čija puna slika ne postoji nigdje —
+    `f._nemaFull`, inače bi brojač zauvijek stajao). Isti broj je na `#sync-badge`,
+    u Meniju i na Terenu.
+  - Ručno slanje: resetuje razmake/blokade (izričit zahtjev), šalje tragove
+    jedan po jedan, pa red do 3 prolaza dok napreduje (upis projekta dodaje
+    vlake sa pravim ID-jem); fotografije idu i na slaboj vezi (korisnik je tražio).
+    Vrijeme zadnjeg slanja `tvlake_server_zadnje_slanje`.
+  - Provjereno u browseru: 9 s poslije pokretanja 0 upisa (red + neposlan trag
+    čekaju, brojač 2), klik → `POST tragovi` + `POST dnevni_log`, "Sve poslano".
+  - Test: `tests/js/server-rucno.test.js` (31, 29 pada na starom kodu);
+    sandboxi `slab-signal`, `server-komunikacija`, `brzina` dobili otvorenu kapiju.
+
 - **Brzina — zaleđen ekran pri pokretanju i periodičnom sync-u (v1.9.3)**: na
   pitanje "može li se optimizovati da app radi brže". Prvo MJERENO, ne nagađano:
   Playwright harness sa realnim teškim podacima (40 vlaka × 225 tačaka, 20

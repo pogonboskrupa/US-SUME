@@ -140,6 +140,7 @@ function makeRed(greskaZa) {
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
     _dozPosaljiKomad: async () => ({ ok: [], error: null }), _dozPosaljiPojedinacno: async () => ({ ok: [], error: null }), _DOZ_KOMAD: 100,
     _flushPendingFotos: async () => {}, _mrezaProbaj: () => true,
+    _serverSlanjeDozvoljeno: () => true, _serverSaljem: false, _updSyncBadgeUskoro: () => {},
     showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} },
     setTimeout: (fn, ms) => { tajmeri.push({ fn, ms }); return tajmeri.length; },
   };
@@ -264,6 +265,7 @@ t('red: provjera postojanja traga koja padne NE vodi u INSERT (duplikat)', async
   const g = { sbUser: { id: 'u1' }, sbProfile: {}, _OL, sb, localStorage: global.localStorage, _DOZ_TRACK_BUF_KEY: 'buf',
     _genUUID: () => 'x', _dozPosaljiKomad: async () => ({ ok: [] }), _dozPosaljiPojedinacno: async () => ({ ok: [] }), _DOZ_KOMAD: 100,
     _flushPendingFotos: async () => {}, _mrezaProbaj: () => true, showToast: () => {}, _updSyncBadge: () => {},
+    _serverSlanjeDozvoljeno: () => true, _serverSaljem: false, _updSyncBadgeUskoro: () => {},
     console: { warn() {} }, setTimeout: () => 0, _tragRegistry: [], _tragRegSave: () => {} };
   const k = Object.keys(g);
   const run = new Function(...k, src)(...k.map(x => g[x]));
@@ -282,9 +284,9 @@ t('trag: INSERT vrati 23505 (raniji upis prošao) → preuzme postojeći red, be
   });
   const tr = { name: 'Trag', uuid: 'c1', pts: [[44, 16, 300], [44.1, 16.1, 301]] };
   const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen', '_isAuthErr', '_isNetworkErr',
-    '_tryRefreshSession', 'showToast', '_OL', extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
+    '_tryRefreshSession', 'showToast', '_OL', '_serverURed', extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
     sb, { id: 'u1' }, { sumarija: 'S' }, () => 'g', () => {}, () => {}, () => 100, () => false, () => false, async () => false,
-    m => toasti.push(m), { enqueue: o => enq.push(o) });
+    m => toasti.push(m), { enqueue: o => enq.push(o) }, () => false);
   await f(tr);
   assert.strictEqual(tr.sbId, 'srv-7');
   assert.deepStrictEqual(toasti, [], 'poruka o grešci za trag koji je već na serveru');
@@ -296,8 +298,8 @@ t('fotografija koja je već gore (izgubljen odgovor) se NE šalje ponovo', async
   const { sb, log } = lazniSb(q => (q.op === 'select' ? { data: [{ id: 'f9' }], error: null } : { data: { id: 'NOVI' }, error: null }));
   const fotos = [{ la: 44, lo: 16, ts: 123, thumb: 't', full: 'f', sbId: null }];
   const src = [extractFn('_fotoNaServeru'), extractFn('sbUploadFoto'), 'return sbUploadFoto;'].join('\n');
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', '_isNetworkErr', src)(
-    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {}, () => false);
+  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', '_isNetworkErr', '_serverSlanjeDozvoljeno', '_updSyncBadge', src)(
+    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {}, () => false, () => true, () => {});
   const r = await f(fotos[0], 0);
   assert.strictEqual(r, true);
   assert.strictEqual(fotos[0].sbId, 'f9');
@@ -308,8 +310,8 @@ t('fotografija: provjera padne na mreži → ni INSERT ni nastavak sa sljedećom
   const { sb, log } = lazniSb(() => ({ data: null, error: { message: 'Failed to fetch' } }));
   const fotos = [{ la: 44, lo: 16, ts: 123, thumb: 't', full: 'f', sbId: null }];
   const src = [extractFn('_isNetworkErr'), extractFn('_fotoNaServeru'), extractFn('sbUploadFoto'), 'return sbUploadFoto;'].join('\n');
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', src)(
-    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {});
+  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', '_serverSlanjeDozvoljeno', '_updSyncBadge', src)(
+    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {}, () => true, () => {});
   assert.strictEqual(await f(fotos[0], 0), false);
   assert.ok(!log.some(q => q.op === 'insert'));
 });

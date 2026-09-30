@@ -55,10 +55,10 @@ function tragEnv() {
     return l;
   } };
   const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen',
-    '_isAuthErr', '_isNetworkErr', '_tryRefreshSession', 'showToast', '_OL',
+    '_isAuthErr', '_isNetworkErr', '_tryRefreshSession', 'showToast', '_OL', '_serverURed',
     extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
     sb, { id: 'u1' }, { sumarija: 'S' }, () => 'novi-uuid', () => { upisi.odmah++; }, () => { upisi.uskoro++; },
-    () => 100, () => false, () => false, async () => false, () => {}, { enqueue() {} });
+    () => 100, () => false, () => false, async () => false, () => {}, { enqueue() {} }, () => false);
   return { f, upisi };
 }
 

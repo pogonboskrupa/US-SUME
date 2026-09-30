@@ -84,10 +84,19 @@ const _OL = {
           (o.payload.client_uuid ?? null) === (op.payload.client_uuid ?? null));
         if (idx >= 0) q.splice(idx, 1);
       }
-      // Deduplicate upsert_labels — uvijek samo zadnji set oznaka za korisnika
+      // Deduplicate upsert_labels — uvijek samo zadnji set oznaka za korisnika.
+      // Prazan set (sve oznake obrisane) nema korisnika u payload-u, pa ga nosi
+      // op.korisnik_id — inače bi stariji, pun set ostao u redu i poslije
+      // brisanja vratio oznake na server (v1.9.4).
       if (op.type === 'upsert_labels') {
-        const idx = q.findIndex(o => o.type === 'upsert_labels' &&
-          o.payload?.[0]?.korisnik_id === op.payload?.[0]?.korisnik_id);
+        const kid = o => o.payload?.[0]?.korisnik_id || o.korisnik_id || null;
+        const idx = q.findIndex(o => o.type === 'upsert_labels' && kid(o) && kid(o) === kid(op));
+        if (idx >= 0) q.splice(idx, 1);
+      }
+      // Deduplicate upsert_odjel — isti naziv u istoj šumariji je isti upis.
+      if (op.type === 'upsert_odjel') {
+        const idx = q.findIndex(o => o.type === 'upsert_odjel' &&
+          o.payload?.sumarija === op.payload?.sumarija && o.payload?.naziv === op.payload?.naziv);
         if (idx >= 0) q.splice(idx, 1);
       }
       // D2-B: jedinstveni ključ (_qid) — ts sam zna kolidirati za 2 op. u istoj ms,

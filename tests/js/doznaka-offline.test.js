@@ -238,7 +238,7 @@ t('dozConfirmSave šalje zonu SA klijentskim ID-jem, isti ide i u red', () => {
   const src = extractFn('dozConfirmSave');
   assert.ok(/id: _genUUID\(\)/.test(src), 'bez ID-a: izgubljen odgovor + ponovni upis iz reda = dupla zona');
   assert.ok(src.includes('_dozUpisiZonu(markingPayload)'));
-  assert.ok(/if \(!_mrezaProbaj\(\)\) throw/.test(src), 'na mrtvoj vezi čeka do 15 s sa otvorenim modalom');
+  assert.ok(/if \(!_serverSlanjeDozvoljeno\(\) \|\| !_mrezaProbaj\(\)\) throw/.test(src), 'na mrtvoj vezi čeka do 15 s sa otvorenim modalom');
 });
 
 t('red čekanja koristi isti upis zone', () => {

@@ -237,6 +237,8 @@ function makeRed(opts = {}) {
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
     _flushPendingFotos: async () => { pozivi.fotos++; },
     _mrezaProbaj: (teska) => (opts.mreza ? opts.mreza(teska) : true),
+    // v1.9.4: slanje je ručno — ovi testovi mjere ponašanje DOK ručno slanje traje.
+    _serverSlanjeDozvoljeno: () => opts.rucno !== false, _serverSaljem: false, _updSyncBadgeUskoro: () => { pozivi.badge = (pozivi.badge || 0) + 1; },
     showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} },
     setTimeout: (fn, ms) => { pozivi.tajmeri.push({ fn, ms }); return pozivi.tajmeri.length; },
   };

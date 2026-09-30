@@ -4476,7 +4476,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="12,5.5 15,12 12,18.5" stroke-width="1.2"/><polygon points="12,5.5 9,12 12,18.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> Teren</button>
     <span id="vodeci-badge" onclick="closeMenuDropdown();showProjectManagement()" title="Nadzorni nalog — pregled rada svih projektanata šumarije" style="display:none;background:#0e7490;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;">👔 VODEĆI PROJEKTANT</span>
     <span id="offline-badge" title="Nema signala — radi lokalno" style="display:none;width:9px;height:9px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 2px rgba(220,38,38,0.3);margin-left:auto;flex-shrink:0;align-self:center;"></span>
-    <span id="sync-badge" onclick="openSyncQueuePanel()" style="display:none;background:#f59e0b;color:#000;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:4px;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;" title="Pending operacije čekaju sync">⟳ <span id="sync-badge-cnt">0</span></span>
+    <span id="sync-badge" onclick="openSyncQueuePanel()" style="display:none;background:#f59e0b;color:#000;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:4px;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;" title="Podaci čekaju slanje na server (Meni → Server)">⟳ <span id="sync-badge-cnt">0</span></span>
   </div>
 
   <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
@@ -5650,7 +5650,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.9.3';
+const APP_VER = 'v1.9.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6083,18 +6083,74 @@ function _localSetKriticno(key, vrijednost, opis) {
   }
 }
 
+// ─── SERVER: slanje SAMO na zahtjev korisnika (v1.9.4) ────────────────────────
+// Na zahtjev: podaci se na server šalju ISKLJUČIVO dugmetom "Pošalji na server"
+// (Meni → Server), ne sami od sebe (periodični otkucaj na 60 s, povratak u prvi
+// plan, vraćena veza, svaka GPS tačka doznake...). Sve se i dalje ČUVA odmah
+// lokalno i u redu za sync — mijenja se samo KO odlučuje kad ide na server.
+// Jedna kapija za sve upise: _serverSlanjeDozvoljeno() je istina samo dok traje
+// ručno slanje. Preuzimanje (vlake kolega, realtime, projekti) NIJE dirano.
+let _serverSlanjeDo = 0, _serverSaljem = false;
+const _SERVER_PROZOR_MS = 3 * 60 * 1000;   // gornja granica ako slanje zapne
+const _SERVER_ZADNJE_KEY = 'tvlake_server_zadnje_slanje';
+function _serverSlanjeDozvoljeno() { return Date.now() < _serverSlanjeDo; }
+// Direktan upis koji nije dozvoljen ide u red (isti put kao bez signala) —
+// vraća true kad je operacija stavljena u red i pozivalac ne treba ništa dalje.
+function _serverURed(op) {
+  if (_serverSlanjeDozvoljeno()) return false;
+  _OL.enqueue(op);
+  return true;
+}
+// Ukloni iz reda operacije koje više ne smiju otići (npr. neposlana vlaka koja
+// je u međuvremenu obrisana). Red se pregleda iznova prije svake stavke, pa i
+// prolaz koji je u toku preskoči uklonjeno.
+function _redUkloni(pred) {
+  try {
+    const q = _OL.loadQueue(true);
+    const ost = q.filter(o => !pred(o));
+    if (ost.length === q.length) return 0;
+    localStorage.setItem(_OL.QUEUE, JSON.stringify(ost));
+    _updSyncBadge();
+    return q.length - ost.length;
+  } catch(e) { return 0; }
+}
+// Šta čeka slanje. Doznaka pojas je JEDNA stavka (stotine tačaka su jedan hod),
+// fotografija bez punog snimka nigdje se ne broji — nikad se ne bi mogla poslati.
+function _serverNaCekanju() {
+  const uid = typeof sbUser !== 'undefined' ? sbUser?.id : null;
+  const r = { red: 0, blok: 0, tragovi: 0, doz: 0, foto: 0, stavki: 0 };
+  try {
+    const q = _OL.loadQueue().filter(op => !op._uid || op._uid === uid);
+    r.red = q.length; r.blok = q.filter(op => op._blocked).length;
+  } catch(e) {}
+  try { r.doz = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]').filter(p => p.user_id === uid).length; } catch(e) {}
+  try { r.tragovi = _tragZaSlanje().length; } catch(e) {}
+  try { r.foto = (_locFotos || []).filter(f => !f.sbId && !f._nemaFull).length; } catch(e) {}
+  r.stavki = r.red + r.tragovi + r.foto + (r.doz ? 1 : 0);
+  return r;
+}
+
 function _updSyncBadge() {
-  const q   = _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id);
-  const cnt = q.length;
+  const cnt = _serverNaCekanju().stavki;
   const badge = document.getElementById('sync-badge');
   const cntEl = document.getElementById('sync-badge-cnt');
-  if (!badge) return;
-  if (cnt > 0) {
-    badge.style.display = 'inline-block';
-    if (cntEl) cntEl.textContent = cnt;
-  } else {
-    badge.style.display = 'none';
+  if (badge) {
+    if (cnt > 0) {
+      badge.style.display = 'inline-block';
+      if (cntEl) cntEl.textContent = cnt;
+    } else {
+      badge.style.display = 'none';
+    }
   }
+  const mc = document.getElementById('mdrop-server-cnt');
+  if (mc) { if (mc.firstElementChild) mc.firstElementChild.textContent = String(cnt); mc.style.display = cnt > 0 ? '' : 'none'; }
+}
+// Doznaka zove red na SVAKU GPS tačku — bez slanja to je samo osvježavanje
+// brojača, a brojanje čita cijeli bafer, pa najviše jednom u 5 s.
+let _updSyncBadgeT = null;
+function _updSyncBadgeUskoro() {
+  if (_updSyncBadgeT) return;
+  _updSyncBadgeT = setTimeout(() => { _updSyncBadgeT = null; try { _updSyncBadge(); } catch(e) {} }, 5000);
 }
 
 const _OP_LABELS = {
@@ -6119,19 +6175,16 @@ function openSyncQueuePanel() {
   const pan  = document.getElementById('syncq-panel');
   if (!list || !pan) return;
 
-  let gpsCount = 0;
-  try { gpsCount = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]').filter(p => p.user_id === sbUser?.id).length; } catch(e) {}
+  _serverSazetakRender();
   if (!q.length) {
-    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:#475569;font-size:13px;">Nema pending operacija — sve je sinkronizirano ✓</div>';
+    list.innerHTML = '';
   } else {
     list.innerHTML = q.map((op, i) => {
       const lbl   = _OP_LABELS[op.type] || op.type;
       const nm    = op.payload?.nm || op.payload?.datum || op.payload?.naziv || '';
       const ret   = op._retries ? `<span style="color:#f87171;font-size:10px"> (${op._retries} pokušaja)</span>` : '';
       const age   = op.ts ? _fmtAgo(op.ts) : '';
-      // Stavka u razmaku ne visi — kaže se kad ide sljedeći pokušaj (ili "Sync sad").
-      const zaS   = op._retryAt ? Math.round((op._retryAt - Date.now()) / 1000) : 0;
-      const odg   = zaS > 0 ? `<div style="font-size:10px;color:#fbbf24">⏳ sljedeći pokušaj za ${zaS >= 60 ? Math.round(zaS / 60) + ' min' : zaS + ' s'}</div>` : '';
+      const odg   = op._blocked ? '<div style="font-size:10px;color:#fbbf24">⏸ više puta odbijeno — šalje se ponovo tek na "Pošalji na server"</div>' : '';
       const errTxt = op._lastErr ? `${op._lastErr.message || ''}${op._lastErr.code ? ' [' + op._lastErr.code + ']' : ''}` : '';
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1e293b;">
         <div style="flex:1;min-width:0;">
@@ -6148,7 +6201,6 @@ function openSyncQueuePanel() {
     }).join('');
   }
 
-  if (gpsCount) list.insertAdjacentHTML('beforeend', '<div style="padding:12px;color:#fbbf24">GPS tačke koje čekaju slanje: ' + gpsCount + '. Sačuvane su za ponovni pokušaj/izvoz.</div>');
   if (bg)  bg.style.display  = 'block';
   pan.style.display = 'flex';
 }
@@ -6160,8 +6212,8 @@ function closeSyncQueuePanel() {
   if (pan) pan.style.display = 'none';
 }
 
-function _syncQueueDiscard(ts) {
-  if (!confirm('Trajno odbaciti ovu nesinhronizovanu izmjenu? Prvo izvezi podatke.')) return;
+async function _syncQueueDiscard(ts) {
+  if (!await _dlgConfirm('Trajno odbaciti ovu neposlanu izmjenu? Prvo izvezi podatke.', { danger: true })) return;
   const op = _OL.loadQueue(true).find(o => String(o._qid ?? o.ts) === String(ts));
   if (op?._uid && op._uid !== sbUser?.id) return;
   _OL.removeFromQueue(ts);
@@ -6169,25 +6221,97 @@ function _syncQueueDiscard(ts) {
   openSyncQueuePanel(); // re-render
 }
 
-function _syncQueueClearAll() {
-  if (!confirm('Obrisati sve pending operacije? Ovo trajno briše nesinkronizirane izmjene.')) return;
+async function _syncQueueClearAll() {
+  if (!await _dlgConfirm('Obrisati sve neposlane izmjene iz reda? Ovo ih trajno briše sa telefona.', { danger: true })) return;
   try { localStorage.setItem(_OL.QUEUE, JSON.stringify(_OL.loadQueue(true).filter(op => op._uid && op._uid !== sbUser?.id))); } catch {}
   _updSyncBadge();
   openSyncQueuePanel();
 }
 
-function _syncQueueFlushNow() {
-  closeSyncQueuePanel();
-  if (navigator.onLine) {
-    const q = _OL.loadQueue(true);
-    q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; op._odgode = 0; delete op._retryAt; } });
-    localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
-    showToast('↑ Pokušavam sync...');
-    _mrezaSila();
-    _processOfflineQueue(true).then(_updSyncBadge).catch(() => showToast('❌ Sync nije uspio — provjeri vezu'));
-  } else {
-    showToast('📴 Offline — sync nije moguć');
+// Stari naziv ("Sync sada") — sad je to isto što i "Pošalji na server".
+function _syncQueueFlushNow() { return serverPosalji(); }
+
+function _serverZadnje() {
+  try { return Number(localStorage.getItem(_SERVER_ZADNJE_KEY)) || 0; } catch(e) { return 0; }
+}
+// Sažetak na vrhu panela Server: šta čeka, stanje veze, kad je zadnji put poslano.
+function _serverSazetakRender() {
+  const el = document.getElementById('syncq-sum');
+  if (!el) return;
+  const n = _serverNaCekanju();
+  const st = _mrezaStanje();
+  const veza = st === 'nema' ? '<span style="color:#f87171">nema veze</span>'
+    : st === 'slaba' ? '<span style="color:#fbbf24">slaba veza</span>'
+    : '<span style="color:#4ade80">' + (st === 'dobra' ? 'veza u redu' : 'veza nije izmjerena') + '</span>';
+  const z = _serverZadnje();
+  const red = (ikona, txt, br) => br ? '<div style="display:flex;justify-content:space-between;padding:3px 0"><span>' + ikona + ' ' + txt + '</span><b>' + br + '</b></div>' : '';
+  const stavke = red('↑', 'Izmjene u redu (vlake, zone, log…)', n.red) + red('〰', 'Tragovi', n.tragovi) +
+    red('📍', 'Doznaka — GPS tačke pojasa', n.doz) + red('📷', 'Fotografije', n.foto);
+  el.innerHTML =
+    '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">' + veza + ' · zadnje slanje: ' + (z ? _escHtml(_fmtAgo(z).toLowerCase()) : 'nikad') + '</div>' +
+    (n.stavki
+      ? '<div style="font-size:13px;color:#e2e8f0">' + stavke + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:6px">Sačuvano je na telefonu. Kolege ovo vide tek kad pošalješ.</div>'
+      : '<div style="font-size:13px;color:#4ade80">✓ Sve je poslano — ništa ne čeka.</div>') +
+    (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — razlog je ispod.</div>' : '') +
+    (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
+  const b = document.getElementById('syncq-posalji');
+  if (b) { b.disabled = _serverSaljem || !n.stavki; b.style.opacity = b.disabled ? '0.5' : '1'; }
+}
+
+// Ručno slanje svega što čeka. Otvara kapiju samo dok slanje traje: svi
+// automatski pozivi reda (GPS tačka, povratak u prvi plan...) i dalje ne šalju.
+async function serverPosalji() {
+  if (_serverSaljem) return;
+  if (!sbUser || !sbProfile) { showToast('⚠ Prijavi se da bi slao na server'); return; }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    showToast('📴 Nema veze — sve ostaje sačuvano na telefonu, pošalji kad bude signala');
+    return;
   }
+  const prije = _serverNaCekanju();
+  if (!prije.stavki) { showToast('✓ Sve je već poslano'); _serverSazetakRender(); return; }
+  _serverSaljem = true;
+  _serverSlanjeDo = Date.now() + _SERVER_PROZOR_MS;
+  _mrezaSila(_SERVER_PROZOR_MS);
+  _serverSazetakRender();
+  showToast('⬆ Šaljem na server…');
+  try {
+    // Izričit zahtjev — i ono što je ranije odbijeno ili čeka razmak ide ODMAH.
+    try {
+      const q = _OL.loadQueue(true);
+      q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; op._odgode = 0; delete op._retryAt; } });
+      localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
+    } catch(e) {}
+    // Tragovi koji nisu ni u redu (snimljeni prije ove verzije) — jedan po jedan,
+    // da na slaboj vezi ne dijele propusnost. Neuspjeh ih stavlja u red.
+    for (const t of _tragZaSlanje()) { try { await sbFlushTrag(t); } catch(e) {} }
+    // Uspješan upis projekta zna dodati nove stavke u red (vlake sa pravim ID-jem
+    // projekta) — još jedan prolaz dok god napreduje, najviše tri.
+    for (let k = 0; k < 3; k++) {
+      for (let c = 0; _syncInProgress && c < 600; c++) await new Promise(r => setTimeout(r, 100));
+      const n0 = _serverNaCekanju().stavki;
+      await _processOfflineQueue(true);
+      const n1 = _serverNaCekanju().stavki;
+      if (!n1 || n1 >= n0) break;
+    }
+  } catch(e) {
+  } finally {
+    _serverSlanjeDo = 0;
+    _serverSaljem = false;
+  }
+  const poslije = _serverNaCekanju();
+  if (!poslije.stavki) {
+    try { localStorage.setItem(_SERVER_ZADNJE_KEY, String(Date.now())); } catch(e) {}
+    showToast('✅ Sve poslano na server');
+  } else if (poslije.stavki < prije.stavki) {
+    try { localStorage.setItem(_SERVER_ZADNJE_KEY, String(Date.now())); } catch(e) {}
+    showToast('⚠ Poslano djelimično — ' + poslije.stavki + ' čeka. Pokušaj ponovo.');
+  } else {
+    showToast('❌ Slanje nije uspjelo — sve ostaje sačuvano na telefonu. Provjeri signal.');
+  }
+  _updSyncBadge();
+  const pan = document.getElementById('syncq-panel');
+  if (pan && pan.style.display !== 'none') openSyncQueuePanel(); else _serverSazetakRender();
 }
 
 function _fmtAgo(ts) {
@@ -6201,7 +6325,7 @@ function _fmtAgo(ts) {
 window.addEventListener('online', () => {
   try { _netZaboraviKvarove(); } catch(e) {}
   _setOfflineMode(false);
-  showToast('🌐 Veza uspostavljena — sinkroniziram...');
+  showToast('🌐 Veza uspostavljena');
   // Write strana (red čekanja) + read strana (projekti/vlake/dnevnik — oporavak
   // ako je initial fetch pri prijavi pao dok nije bilo veze)
   setTimeout(() => { _processOfflineQueue(true); _reloadCoreData(); }, 1000);
@@ -6265,6 +6389,9 @@ const _SYNC_PAUZA_MS = 20 * 1000;
 let _syncMrezaPalaU = 0, _syncOdgodaT = null;
 async function _processOfflineQueue(sila) {
   if (!sbUser || !sbProfile) return;
+  // v1.9.4: na server SAMO kad korisnik to zatraži (Meni → Server). Automatski
+  // pozivi (GPS tačka, otkucaj, vraćena veza) ovdje samo osvježe brojač.
+  if (!_serverSlanjeDozvoljeno()) { _updSyncBadgeUskoro(); return; }
   // D2-A: spriječi PARALELNI prolaz (online event + restore + "Sync sad" + sbInitData mogu
   // se preklopiti → dupli inserti). Poziv koji naiđe tokom prolaza se ne gubi — re-okine se.
   if (_syncInProgress) { _syncRerun = true; return; }
@@ -6458,9 +6585,11 @@ async function _processOfflineQueue(sila) {
         if (Array.isArray(op.payload) && op.payload.length > 0) {
           const r = await _syncTextLabelsServer(op.payload[0].korisnik_id, op.payload);
           err = r.error;
-        } else if (op.payload?.[0]?.korisnik_id) {
-          // Prazan set — obriši sve oznake korisnika
-          const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.payload[0].korisnik_id);
+        } else if (op.korisnik_id || op._uid) {
+          // Prazan set — obriši sve oznake korisnika. Prazan niz nema iz čega
+          // pročitati korisnika, pa ga op nosi sama (v1.9.4; ranije se brisanje
+          // zadnje oznake iz reda nikad nije izvršilo).
+          const { error } = await sb.from('text_labels').delete().eq('korisnik_id', op.korisnik_id || op._uid);
           err = error;
         }
       } else if (op.type === 'insert_pozari_arhiva') {
@@ -6547,7 +6676,8 @@ async function _processOfflineQueue(sila) {
   // OS-V2: fotosi slikani offline (bez sbId) — pošalji ih sada. Fotografija je
   // TEŽAK upis (stotine KB) — na slaboj vezi bi otimala propusnost vlakama i
   // tačkama, pa čeka dobru vezu (ostaje sačuvana lokalno, šalje se poslije).
-  if (!_mrezaPala && _mrezaProbaj(true)) { try { await _flushPendingFotos(); } catch(e) {} }
+  // Ručno slanje: korisnik je SAM tražio da ide sve, pa i na slabom signalu.
+  if (!_mrezaPala && (_serverSaljem || _mrezaProbaj(true))) { try { await _flushPendingFotos(); } catch(e) {} }
   if (synced) showToast(`✅ Sinkronizirano ${synced} stavki iz offline reda`);
   if (typeof _updSyncBadge === 'function') _updSyncBadge();
   } finally {
@@ -6933,7 +7063,9 @@ function _startupRestore() {
     korak('tragReg',       () => _tragRegLoad());
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
     if (_mrezaProbaj() && sbUser && sbProfile) {
-      korak('flushTrag', () => _tragZaSlanje().forEach(t => sbFlushTrag(t)));
+      // v1.9.4: neposlani tragovi se NE šalju pri pokretanju — idu na "Pošalji na
+  // server" (Meni → Server), a do tada ih brojač na traci pokazuje.
+  korak('syncBadge', () => _updSyncBadge());
     }
     korak('msrReg',    () => _msrRegLoad());
     korak('refRepo',   () => _refRepoLoad());
@@ -8827,8 +8959,8 @@ async function saveNovProjekt() {
   // daje isti ishod: projekat odmah upotrebljiv, na server stiže u pozadini.
   if (!_mrezaProbaj(true)) {
     createLocal(_mrezaStanje() === 'nema'
-      ? '📋 Projekat kreiran — sinhronizira se kad budeš online'
-      : '📶 Slab signal — projekat sačuvan lokalno, šalje se u pozadini');
+      ? '📋 Projekat kreiran — pošalji ga kroz Meni → Server kad budeš online'
+      : '📶 Slab signal — projekat sačuvan lokalno, pošalji ga kroz Meni → Server');
     return;
   }
 
@@ -9207,7 +9339,7 @@ function _predloziSifru(odjel, gj) {
 async function shareProjektCode() {
   const p = _projekti.find(x => x.id === _pdProjektId);
   if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik može podijeliti šifrom'); return; }
-  if (p._pendingSync) { showToast('⚠ Projekat još nije sinhronizovan na server — pokušaj za koji minut'); return; }
+  if (p._pendingSync) { showToast('⚠ Projekat još nije na serveru — prvo ga pošalji (Meni → Server)'); return; }
   const sug = _predloziSifru(p.odjel, p.gj);
   const raw = await _dlgPrompt('Šifra za dijeljenje (4–16 slova/cifara).\nMožeš je promijeniti u bilo koju:', sug, { title: '🔑 Podijeli šifrom', okLabel: 'Napravi šifru' });
   if (raw === null) return;
@@ -9230,7 +9362,7 @@ async function shareDoznakaCode() {
   if (!odjel) { showToast('Nema odabranog odjela'); return; }
   if (odjel.created_by !== sbUser?.id) { showToast('Samo vlasnik može podijeliti šifrom'); return; }
   if (odjel._pendingSync || String(odjel.id || '').startsWith('local-')) {
-    showToast('⚠ Doznaka još nije sinhronizovana na server — pokušaj za koji minut'); return;
+    showToast('⚠ Doznaka još nije na serveru — prvo je pošalji (Meni → Server)'); return;
   }
   const sug = _predloziSifru(odjel.name, '');
   const raw = await _dlgPrompt('Šifra za dijeljenje doznake (4–16 slova/cifara).\nMožeš je promijeniti u bilo koju:', sug, { title: '🔑 Podijeli doznaku šifrom', okLabel: 'Napravi šifru' });
@@ -10313,7 +10445,8 @@ async function renameVlaka(i, newNm) {
   }
   // DB: prvo preimenuj postojeći red po id — upsert poslije pogađa isti red preko novog nm.
   // Uhvati novi rev iz odgovora da naredni sbFlushVlaka ne javi lažni konflikt.
-  if (v.sbId && sbUser) {
+  // Van ručnog slanja novo ime nosi upis iz reda (sbFlushVlaka ispod, po id-ju).
+  if (v.sbId && sbUser && _serverSlanjeDozvoljeno()) {
     try {
       const { data: rn } = await sb.from('vlake').update({ nm: newNm, br: v.br, kr: v.kr }).eq('id', v.sbId).select('rev, updated_at').single();
       if (rn) { if (rn.rev != null) v.rev = rn.rev; v.updatedAt = rn.updated_at || v.updatedAt; }
@@ -10329,9 +10462,15 @@ async function sbDeleteVlaka(v) {
   if (!v) return;
   v._deleted = true;  // spriječi budući sbFlushVlaka da ovu vlaku ipak insert-uje
   if (v._flushing) { try { await v._flushing; } catch(e) {} }  // sačekaj in-flight insert da dobijemo sbId
+  // Neposlana verzija ove vlake u redu više ne smije otići (vidi sbDeleteTrag).
+  if (sbUser) _redUkloni(o => o.type === 'upsert_vlaka' && (v.sbId
+    ? o.payload?.id === v.sbId
+    : (!o.payload?.id && o.payload?.nm === v.nm && o.payload?.korisnik_id === sbUser.id &&
+       (o.payload?.projekt_id ?? null) === (v.projektId || null))));
   if (!v.sbId || !sbUser) return;
   const cached = _OL.load(_OL.VLAKE) || [];
   _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
+  if (_serverURed({ type: 'delete_vlaka', payload: { id: v.sbId } })) return;
   try {
     const { error } = await sb.from('vlake').delete().eq('id', v.sbId);
     if (error) _OL.enqueue({ type: 'delete_vlaka', payload: { id: v.sbId } });
@@ -10385,6 +10524,9 @@ async function _sbFlushTragImpl(t, _retried) {
     boja: t.color || '#f97316',
     updated_at: new Date().toISOString()
   };
+  // v1.9.4: van ručnog slanja trag ide u red (dedup po client_uuid — nova verzija
+  // istog traga zamjenjuje staru), a na server tek na "Pošalji na server".
+  if (_serverURed({ type: 'upsert_trag', payload: t.sbId ? { ...payload, id: t.sbId } : payload })) return;
   try {
     if (t.sbId) {
       const { error } = await sb.from('tragovi').update(payload).eq('id', t.sbId);
@@ -10426,7 +10568,12 @@ async function sbDeleteTrag(t) {
   if (!t) return;
   t._deleted = true;  // spriječi budući sbFlushTrag da ovaj trag ipak insert-uje (D3-E pattern)
   if (t._flushing) { try { await t._flushing; } catch(e) {} }
+  // Neposlana verzija ovog traga u redu više ne smije otići — inače bi obrisan
+  // trag (koji nikad nije ni stigao na server) tamo nastao poslije brisanja.
+  _redUkloni(o => o.type === 'upsert_trag' &&
+    ((t.uuid && o.payload?.client_uuid === t.uuid) || (t.sbId && o.payload?.id === t.sbId)));
   if (!t?.sbId || !sbUser) return;
+  if (_serverURed({ type: 'delete_trag', payload: { id: t.sbId } })) return;
   try {
     const { error } = await sb.from('tragovi').delete().eq('id', t.sbId);
     if (error) throw error;
@@ -10724,6 +10871,7 @@ async function sbSaveLogEntry(date, ime, totalM, vSnap, odjel, timing) {
     work_end:       timing?.workEnd    || null,
     active_min:     timing?.activeMin  ?? null
   };
+  if (_serverURed({ type: 'upsert_log', payload })) return;
   try {
     const { error } = await sb.from('dnevni_log').upsert(payload, { onConflict: 'korisnik_id,datum' });
     if (error) throw error;
@@ -10801,6 +10949,12 @@ function debouncedSaveOdjel() {
 async function sbSaveOdjel(naziv) {
   if (!sbUser || !sbProfile?.sumarija || !naziv) return;
   const payload = { sumarija: sbProfile.sumarija, naziv, korisnik_id: sbUser.id };
+  if (!_serverSlanjeDozvoljeno()) {
+    // Odjel koji je već na dijeljenom popisu ne treba ni čekati u redu.
+    if ((_OL.load(_OL.ODJELI) || []).some(r => r.naziv === naziv)) return;
+    _OL.enqueue({ type: 'upsert_odjel', payload });
+    return;
+  }
   try {
     // D2-G: dijeljena lista odjela po šumariji — ignoreDuplicates sprječava da drugi
     // korisnik koji spremi ISTI naziv tiho prepiše korisnik_id (vlasništvo) prvog kreatora.
@@ -10882,12 +11036,13 @@ async function sbSaveTextLabels() {
   }));
   // Uvijek keširaj lokalno — db sync je best-effort
   _OL.save(_OL.LABELS, rows);
+  if (_serverURed({ type: 'upsert_labels', payload: rows, korisnik_id: sbUser.id })) return;
   try {
     const { error } = await _syncTextLabelsServer(sbUser.id, rows);
     if (error) throw error;
   } catch(e) {
     // offline ili greška — stavi u red za sync pri ponovnom signalu
-    _OL.enqueue({ type: 'upsert_labels', payload: rows });
+    _OL.enqueue({ type: 'upsert_labels', payload: rows, korisnik_id: sbUser.id });
   }
 }
 
@@ -11679,6 +11834,8 @@ async function _fotoNaServeru(f) {
 
 async function sbUploadFoto(f, idx) {
   if (!sbUser || !sbProfile || f.sbId) return;
+  // v1.9.4: slika čeka ručno slanje (Meni → Server); puna rezolucija je u IDB-u.
+  if (!_serverSlanjeDozvoljeno()) { _updSyncBadge(); return false; }
   try {
     const ima = await _fotoNaServeru(f);
     if (ima.error) return !_isNetworkErr(ima.error);
@@ -11711,7 +11868,7 @@ async function _flushPendingFotos() {
     if (f.sbId) continue;
     if (!f.full) {
       try { f.full = await _kmlcGet('fotofull:' + f.ts); } catch(e) {}
-      if (!f.full) continue; // nema full nigdje — ne šalji polovičan zapis
+      if (!f.full) { f._nemaFull = true; continue; } // nema full nigdje — ne šalji polovičan zapis (i ne broji ga kao "čeka")
     }
     // Veza je ista za sve fotografije — kad jedna padne na mreži, ne gađaj
     // ostale (svaka je stotine KB i svaka bi čekala svoj rok).
@@ -12505,7 +12662,7 @@ function _trnFixRender() {
 // na svaki GPS fiks nego pri otvaranju taba i na otkucaj od 5 s.
 var _trnSyncN = 0;
 function _trnSyncBroj() {
-  try { _trnSyncN = _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id).length; } catch(e) {}
+  try { _trnSyncN = _serverNaCekanju().stavki; } catch(e) {}
 }
 
 function _trnChipsRender() {
@@ -17621,9 +17778,8 @@ window.addEventListener('pagehide', () => {
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
 setInterval(async () => {
   if (!navigator.onLine || !sbUser || !sbProfile) return;
-  // Red za sync prvi — sam odlučuje o vezi i poštuje pauzu poslije pada.
-  const q = _OL.loadQueue();
-  if (q.length) _processOfflineQueue();
+  // v1.9.4: otkucaj više NE šalje na server (red, tragovi) — samo na izričit
+  // zahtjev korisnika (Meni → Server). Ispod je samo održavanje veze.
   // Sve ispod je neobavezno održavanje (token, tragovi, realtime) — na
   // izmjereno mrtvoj vezi bi svaki od tih poziva visio do svog roka svake minute.
   const bilaMrtva = _mrezaStanje() === 'nema';
@@ -17641,8 +17797,6 @@ setInterval(async () => {
   // roka bi ovaj interval (60s) stao na ovoj liniji zauvijek i nikad ne bi
   // stigao do realtime samoizlječenja ispod.
   try { await _withTimeout(sb.auth.getSession(), 10000); } catch(e) {}
-  // Flush tragova bez sbId koji su dodani dok smo bili offline
-  _tragZaSlanje().forEach(t => sbFlushTrag(t));
   // Samoizlječenje realtime kanala: ako je socket tiho pao (bez CLOSED eventa),
   // vlake kolega prestaju stizati — ponovo se pretplati (SUBSCRIBED okida catch-up).
   try {
@@ -17790,8 +17944,12 @@ function stopRec() {
     const _recNm = _recV?.nm || '';
     const _recPts = _recV?.pts?.length || 0;
     sbFlushVlaka(actI).then(() => {
-      if (_recV?.sbId) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
-      else showToast(`📴 ${_recNm} sačuvana lokalno — sync kad bude veze`);
+      // v1.9.4: na server ide tek ručno — sbId sam znači samo da je RANIJA
+      // verzija gore, ne i ova (ranije je tu pisalo "sačuvana na server").
+      let ceka = true;
+      try { ceka = !_recV?.sbId || _OL.loadQueue().some(o => o.type === 'upsert_vlaka' && o.payload?.id === _recV.sbId); } catch(e) {}
+      if (!ceka) showToast(`☁ ${_recNm} sačuvana na server (${_recPts} tačaka)`);
+      else showToast(`💾 ${_recNm} sačuvana (${_recPts} tačaka) — kolegama ide na Meni → Server`);
     });
   }
   // Spremi i sve ostale vlake s pending timerima (npr. krak koji se još nije snimio)
@@ -37941,6 +38099,8 @@ async function dozSetStatus(status) {
       const ids = othersToP.map(o => o.id);
       let ePauza = null;
       try {
+        // v1.9.4: van ručnog slanja ide u red kao da nema mreže (grana ispod).
+        if (!_serverSlanjeDozvoljeno()) throw new Error('fetch: čeka ručno slanje');
         const r = await sb.from('doz_projects').update({ status: 'paused' }).in('id', ids);
         ePauza = r && r.error;
       } catch(e) { ePauza = e; }
@@ -37955,6 +38115,10 @@ async function dozSetStatus(status) {
 
   _dozRenderStatusRow();
   dozRenderOdjeli();
+  if (_serverURed({ type: 'upsert_doz_status', payload: { id: _dozSelId, status } })) {
+    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
+    return;
+  }
   try {
     const { error } = await sb.from('doz_projects').update({ status }).eq('id', _dozSelId);
     if (error) throw error;
@@ -37965,7 +38129,7 @@ async function dozSetStatus(status) {
     if (_isNetworkErr(e)) {
       _OL.enqueue({ type: 'upsert_doz_status', payload: { id: _dozSelId, status } });
       _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
-      showToast('📴 Status promijenjen lokalno — sinhronizuje se kad bude mreže');
+      showToast('📴 Status promijenjen lokalno — pošalji ga kroz Meni → Server');
     } else {
       odjel.status = prev;
       _dozRenderStatusRow();
@@ -38882,7 +39046,7 @@ async function dozConfirmSave() {
   try {
     // Bez veze se ne čeka mrežni poziv (na mrtvoj vezi do 15 s sa otvorenim
     // modalom) — zona ide lokalno i u red odmah.
-    if (!_mrezaProbaj()) throw new Error('offline');
+    if (!_serverSlanjeDozvoljeno() || !_mrezaProbaj()) throw new Error('offline');
     const { error } = await _dozUpisiZonu(markingPayload);
     if (error) throw error;
     document.getElementById('doz-save-modal').style.display = 'none';
@@ -38904,7 +39068,7 @@ async function dozConfirmSave() {
     document.getElementById('doz-save-modal').style.display = 'none';
     _dozPendingSavePolygon = null;
     dozCancelDraw();
-    showToast('📴 Zona sačuvana lokalno — sinhronizuje se kad bude mreže');
+    showToast('💾 Zona sačuvana — kolegama ide kad je pošalješ (Meni → Server)');
   }
   } catch(e) {
     // v1.6.0: vanjski try je imao SAMO `finally` (reset zastavice), bez catch-a.
@@ -38962,7 +39126,7 @@ async function dozDeleteMarking(id) {
     return;
   }
   try {
-    if (!_mrezaProbaj()) throw new Error('offline');
+    if (!_serverSlanjeDozvoljeno() || !_mrezaProbaj()) throw new Error('offline');
     const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id);
     if (error) throw error;
     showToast('🗑 Zona obrisana');
@@ -38976,7 +39140,7 @@ async function dozDeleteMarking(id) {
     _dozCacheLayers(_dozSelId);
     dozRenderMapLayers();
     dozRenderDetail();
-    showToast('📴 Zona uklonjena — brisanje se sinhronizuje kad bude mreže');
+    showToast('🗑 Zona uklonjena — kolegama nestaje kad pošalješ (Meni → Server)');
   }
 }
 
@@ -39421,7 +39585,7 @@ async function dozSaveOdjel() {
   _dozOdjeli.unshift(novi);
   _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
   dozCloseCreateOdjel(); dozRenderOdjeli(); _dozRenderOverview();
-  showToast('📋 Odjel sačuvan — čeka sinhronizaciju');
+  showToast('📋 Odjel sačuvan — na server ide kroz Meni → Server');
   _processOfflineQueue().catch(() => {});   // red sam odlučuje o vezi
 
 }
@@ -39577,6 +39741,9 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</div>
   <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</div>
+  <div class="mdrop-sep"></div>
+  <div class="mdrop-hdr">Server</div>
+  <div class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji podatke na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr">Projekti i izvoz</div>
   <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</div>
@@ -41724,14 +41891,17 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
 <div id="syncq-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:70vh;max-height:70dvh;background:#0f172a;border-top:1px solid #334155;border-radius:16px 16px 0 0;z-index:4000;flex-direction:column;overflow:hidden;">
   <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #1e293b;flex-shrink:0;">
-    <span style="font-size:15px;font-weight:700;color:#e2e8f0;flex:1">⟳ Pending sync operacije</span>
+    <span style="font-size:15px;font-weight:700;color:#e2e8f0;flex:1">☁ Server</span>
     <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
-  <div id="syncq-list" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
-  <div style="padding:12px 16px;border-top:1px solid #1e293b;display:flex;gap:8px;flex-shrink:0;">
+  <div id="syncq-sum" style="padding:12px 16px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>
+  <div id="syncq-list" style="overflow-y:auto;flex:1;padding:4px 0;"></div>
+  <div style="padding:12px 16px 0;flex-shrink:0;">
+    <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid rgba(59,130,246,.5);background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
+  </div>
+  <div style="padding:10px 16px 12px;display:flex;gap:8px;flex-shrink:0;">
     <button onclick="openSyncQueuePanel()" style="flex:1;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
-    <button onclick="_syncQueueFlushNow()" style="flex:1;padding:9px;border-radius:8px;border:1px solid rgba(59,130,246,.4);background:rgba(59,130,246,.12);color:#60a5fa;font-size:13px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-pocni"/></svg> Sync sada</button>
-    <button onclick="_exportFieldRecovery()" style="padding:9px;border-radius:8px;">Izvezi oporavak</button>
+    <button onclick="_exportFieldRecovery()" style="flex:1;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;cursor:pointer;">Izvezi oporavak</button>
     <button onclick="_syncQueueClearAll()" style="padding:9px 14px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:13px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši sve</button>
   </div>
 </div>
