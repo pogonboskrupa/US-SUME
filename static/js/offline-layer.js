@@ -132,6 +132,10 @@ const _OL = {
   // errInfo (opciono) { code, message } se pamti na op._lastErr — bez ovoga
   // korisnik na terenu mora moći vidjeti ZAŠTO nešto ne sinkronizira u
   // "Pending sync operacije" panelu, bez gubitka same operacije.
+  // v1.9.2: svaki pokušaj nosi i RAZMAK do sljedećeg (_retryAt, 30 s pa
+  // udvostručeno, najviše 15 min). Prolaz reda se okida na svaku GPS tačku
+  // doznake, pa bi bez razmaka svih 5 pokušaja izgorjelo za 5 sekundi — kratka
+  // smetnja servera bi operaciju gurnula u "ručni pokušaj".
   bumpRetry(key, maxRetries, errInfo) {
     try {
       const k = String(key);
@@ -139,6 +143,7 @@ const _OL = {
       const op = q.find(o => String(o._qid ?? o.ts) === k);   // D2-B: po _qid
       if (!op) return false;
       op._retries = (op._retries || 0) + 1;
+      op._retryAt = Date.now() + this.razmakMs(op._retries);
       if (errInfo) op._lastErr = errInfo;
       if (op._retries >= (maxRetries || 5)) {
         op._blocked = true;
@@ -148,6 +153,24 @@ const _OL = {
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
       return false;
     } catch(e) { return false; }
+  },
+
+  razmakMs(n) { return Math.min(15 * 60000, 30000 * Math.pow(2, Math.max(0, n - 1))); },
+
+  // Prolazna greška servera (baza se restartuje, preopterećena, istekao rok
+  // upita): operacija je ispravna i proći će kad se server oporavi — odgodi je
+  // uz isti razmak, ali NE troši njene pokušaje (nikad ne ide u "ručni pokušaj").
+  odgodi(key, errInfo) {
+    try {
+      const k = String(key);
+      const q = this.loadQueue(true);
+      const op = q.find(o => String(o._qid ?? o.ts) === k);
+      if (!op) return;
+      op._odgode = Math.min(6, (op._odgode || 0) + 1);
+      op._retryAt = Date.now() + this.razmakMs(op._odgode);
+      if (errInfo) op._lastErr = errInfo;
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+    } catch(e) {}
   }
 };
 

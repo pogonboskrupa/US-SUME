@@ -55,7 +55,7 @@ function env(opts) {
   const toasts = [];
   const v = { nm: 'T1', pts: (opts.pocetne || []).map(q => ({ ...q })), poly: { setLatLngs() {}, addLatLng() {} } };
   const vlake = [v].concat(opts.ostale || []);
-  const imena = ['_vlVrhSumnjiv', '_vlRetraceSkiniSiljak', '_vlRetraceSirina', '_vlRetraceTest', '_vlUgaoSkretanja', '_vlRetraceObreziVrh',
+  const imena = ['_rtLa', '_rtLo', '_vlVrhSumnjiv', '_vlRetraceSkiniSiljak', '_vlRetraceSirina', '_vlRetraceTest', '_vlUgaoSkretanja', '_vlRetraceObreziVrh',
     '_vlRetraceZastita', '_vlakaProcessGpsPoint', 'dst'];
   const src =
     'const MPDEG = 111320, GPS_MAX_ACC = ' + konst('GPS_MAX_ACC') + ', GPS_MAX_JUMP = ' + konst('GPS_MAX_JUMP') +
@@ -138,7 +138,7 @@ t('isti scenario kroz 40 različitih GPS šumova — petlja/šiljak nikad ne ost
 });
 
 t('šiljak se skida samo pri izlasku iz povratka i samo kad je oštar', () => {
-  const f = new Function(extractFn('dst') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' +
+  const f = new Function(extractFn('dst') + '\n' + extractFn('_rtLa') + '\n' + extractFn('_rtLo') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' +
     extractFn('_vlRetraceSkiniSiljak') + '\nreturn _vlRetraceSkiniSiljak;')();
   const siljak = [uLL(0, 0), uLL(10, 0), uLL(20, 0), uLL(22, 3)];
   assert.strictEqual(f(siljak, uLL(24, 0), 6, 0), 1);
@@ -216,7 +216,7 @@ t('povratak ne javlja lažan "GPS prekid" poslije dužeg hoda po snimljenom', ()
 console.log('Zaštita već snimljenog:');
 
 t('kuka na vrhu se skida, ali NIKAD tačke iz ranije sesije', () => {
-  const f = new Function(extractFn('dst') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' + extractFn('_vlVrhSumnjiv') + '\n' +
+  const f = new Function(extractFn('dst') + '\n' + extractFn('_rtLa') + '\n' + extractFn('_rtLo') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' + extractFn('_vlVrhSumnjiv') + '\n' +
     extractFn('_vlRetraceObreziVrh') + '\nreturn _vlRetraceObreziVrh;')();
   const pts = [uLL(0, 0), uLL(10, 0), uLL(20, 0), uLL(20, 3)];   // zadnja = kuka (90°+)
   const p1 = pts.map(q => ({ ...q }));
@@ -227,7 +227,7 @@ t('kuka na vrhu se skida, ali NIKAD tačke iz ranije sesije', () => {
 });
 
 t('tačka sa oznakom GPS prekida se ne skida', () => {
-  const f = new Function(extractFn('dst') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' + extractFn('_vlVrhSumnjiv') + '\n' +
+  const f = new Function(extractFn('dst') + '\n' + extractFn('_rtLa') + '\n' + extractFn('_rtLo') + '\n' + extractFn('_vlUgaoSkretanja') + '\n' + extractFn('_vlVrhSumnjiv') + '\n' +
     extractFn('_vlRetraceObreziVrh') + '\nreturn _vlRetraceObreziVrh;')();
   const p = [uLL(0, 0), uLL(10, 0), uLL(20, 0), { ...uLL(19, 3), gap: true }];
   assert.strictEqual(f(p, 6, 0), 0);

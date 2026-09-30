@@ -153,6 +153,7 @@ function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
     map: { removeLayer(){} },
     L: { polyline: () => ({ addTo(){return this;}, bindTooltip(){return this;}, addLatLng(){}, setLatLngs(){} }) },
     _tragLiveClear: () => {},
+    _tragRetraceReset: () => {},
     _lineStyle: { tragW: 3 },
     _updFabVisibility: () => {},
     _updTragStats: () => {},

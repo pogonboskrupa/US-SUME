@@ -5650,7 +5650,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v1.9.1';
+const APP_VER = 'v1.9.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6129,12 +6129,16 @@ function openSyncQueuePanel() {
       const nm    = op.payload?.nm || op.payload?.datum || op.payload?.naziv || '';
       const ret   = op._retries ? `<span style="color:#f87171;font-size:10px"> (${op._retries} pokušaja)</span>` : '';
       const age   = op.ts ? _fmtAgo(op.ts) : '';
+      // Stavka u razmaku ne visi — kaže se kad ide sljedeći pokušaj (ili "Sync sad").
+      const zaS   = op._retryAt ? Math.round((op._retryAt - Date.now()) / 1000) : 0;
+      const odg   = zaS > 0 ? `<div style="font-size:10px;color:#fbbf24">⏳ sljedeći pokušaj za ${zaS >= 60 ? Math.round(zaS / 60) + ' min' : zaS + ' s'}</div>` : '';
       const errTxt = op._lastErr ? `${op._lastErr.message || ''}${op._lastErr.code ? ' [' + op._lastErr.code + ']' : ''}` : '';
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1e293b;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;color:#e2e8f0;font-weight:600;">${lbl}${ret}</div>
           ${nm ? `<div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(String(nm))}</div>` : ''}
           ${errTxt ? `<div style="font-size:10.5px;color:#f87171;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_escHtml(errTxt)}">⚠ ${_escHtml(errTxt)}</div>` : ''}
+          ${odg}
           ${age ? `<div style="font-size:10px;color:#475569">${age}</div>` : ''}
         </div>
         <button onclick="_syncQueueDiscard('${op._qid ?? op.ts}')"
@@ -6176,7 +6180,7 @@ function _syncQueueFlushNow() {
   closeSyncQueuePanel();
   if (navigator.onLine) {
     const q = _OL.loadQueue(true);
-    q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; } });
+    q.forEach(op => { if (!op._uid || op._uid === sbUser?.id) { op._blocked = false; op._retries = 0; op._odgode = 0; delete op._retryAt; } });
     localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
     showToast('↑ Pokušavam sync...');
     _mrezaSila();
@@ -6213,6 +6217,21 @@ function _isNetworkErr(err) {
   if (err.code && /^\d|^PGRST|^2\d|^4\d/.test(String(err.code))) return false; // Postgres/PostgREST kod → nije mreža
   const m = (err.message || '').toLowerCase();
   return m.includes('fetch') || m.includes('network') || m.includes('failed') || m.includes('timeout') || !err.code;
+}
+
+// Prolazna greška SERVERA (v1.9.2) — veza radi, ali baza/PostgREST trenutno ne
+// može: 'server' = cijeli server (restart, nema konekcije, preopterećen) — nema
+// smisla slati ostatak reda; 'upit' = samo ovaj upit (istekao rok, zaključavanje,
+// serijalizacija) — ostale stavke mogu proći. Obje su ispravne operacije koje
+// će proći kasnije, pa NE smiju trošiti pokušaje (vidi _OL.odgodi).
+function _serverPrivremeno(err) {
+  if (!err) return null;
+  const st = err.status || err.statusCode;
+  const c = String(err.code || '');
+  if (/^PGRST00[0-3]$/.test(c) || /^08/.test(c) || /^53/.test(c) || /^57P/.test(c)) return 'server';
+  if (c === '57014' || c === '40001' || c === '40P01' || c === '55P03') return 'upit';
+  if (typeof st === 'number' && st >= 500 && st !== 501) return 'server';
+  return null;
 }
 
 // D2-D: istek tokena (NE RLS/403). Na ovu grešku osvježimo sesiju i pokušamo ponovo,
@@ -6274,6 +6293,8 @@ async function _processOfflineQueue(sila) {
     // odbačena). Preskoči; wipe pri promjeni korisnika ih čisti.
     if (op._uid && sbUser?.id && op._uid !== sbUser.id) continue;
     if (op._blocked) continue;
+    // Stavka koja je nedavno pala čeka svoj razmak — ručni "Sync sad" ide odmah.
+    if (sila !== true && op._retryAt && op._retryAt > Date.now()) continue;
     if (!_OL.loadQueue(true).some(current => String(current._qid ?? current.ts) === String(op._qid ?? op.ts))) continue;
     try {
       Object.assign(op, _OL.loadQueue(true).find(current => String(current._qid ?? current.ts) === String(op._qid ?? op.ts)));
@@ -6400,9 +6421,14 @@ async function _processOfflineQueue(sila) {
           const lookupVal = op.payload.client_uuid || op.payload.nm;
           const findLocal = () => _tragRegistry.find(t =>
             (op.payload.client_uuid ? t.uuid === op.payload.client_uuid : t.name === op.payload.nm) && !t.sbId);
-          const { data: exT } = await sb.from('tragovi').select('id')
+          const { data: exT, error: exErr } = await sb.from('tragovi').select('id')
             .eq('korisnik_id', op.payload.korisnik_id).eq(lookupCol, lookupVal).maybeSingle();
-          if (exT?.id) {
+          // v1.9.2: provjera koja NIJE uspjela nije "nema ga" — na slaboj vezi bi
+          // pala provjera + prošao insert napravili DUPLI trag (raniji upis je
+          // možda prošao, samo mu se izgubio odgovor). Stavka čeka.
+          if (exErr) {
+            err = exErr;
+          } else if (exT?.id) {
             const { error } = await sb.from('tragovi').update(op.payload).eq('id', exT.id);
             err = error;
             if (!err) {
@@ -6459,6 +6485,10 @@ async function _processOfflineQueue(sila) {
         }
         break;   // prekini prolaz; ostatak reda ide u rerun (ako je refresh uspio) ili kasnije
       }
+      else if (_serverPrivremeno(err)) {
+        _OL.odgodi(op._qid ?? op.ts, { code: err?.code || '', message: err?.message || String(err) });
+        if (_serverPrivremeno(err) === 'server') { _mrezaPala = true; break; }
+      }
       else if (_isNetworkErr(err)) {
         // Mrežna greška vraćena kao {error} (ne bačena): ranije je petlja išla na
         // SLJEDEĆU operaciju, pa je na mrtvoj vezi svaka čekala svoj rok od 15 s,
@@ -6491,18 +6521,27 @@ async function _processOfflineQueue(sila) {
     const all = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
     all.forEach(pt => { if (!pt._qid) pt._qid = _genUUID(); });
     localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(all));
-    for (const pt of all.filter(p => p.user_id === syncOwner)) {
-      if (sbUser?.id !== syncOwner) break;
-      const { _qid, ...payload } = pt;
-      const { error } = await _sendDozTrackPoint(payload);
-      if (error) {
-        if (_isNetworkErr(error)) { _mrezaPala = true; break; }
-        if (_isAuthErr(error)) break;
-        continue; // FK/RLS greška ostaje sačuvana, bez gubitka GPS tačke
+    // v1.9.2: u SERIJAMA po odjelu (vidi _dozPosaljiKomad), ne tačka po tačka.
+    const grupe = {};
+    all.filter(p => p.user_id === syncOwner).forEach(p => { (grupe[p.project_id] = grupe[p.project_id] || []).push(p); });
+    vanjska: for (const g of Object.values(grupe)) {
+      g.sort((a, b) => Date.parse(a.recorded_at) - Date.parse(b.recorded_at));
+      for (let i = 0; i < g.length; i += _DOZ_KOMAD) {
+        if (sbUser?.id !== syncOwner) break vanjska;
+        const komad = g.slice(i, i + _DOZ_KOMAD);
+        let r = await _dozPosaljiKomad(komad);
+        // Jedna loša tačka (FK/RLS) ne smije držati cijelu seriju — ta serija ide
+        // pojedinačno, pa dobre prođu, a loša ostaje sačuvana.
+        if (r.error && !_isNetworkErr(r.error) && !_isAuthErr(r.error)) r = await _dozPosaljiPojedinacno(komad);
+        if (r.ok.length) {
+          const ok = new Set(r.ok);
+          const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+          localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(current.filter(p => !ok.has(p._qid))));
+          synced += r.ok.length;
+        }
+        if (r.error && _isNetworkErr(r.error)) { _mrezaPala = true; break vanjska; }
+        if (r.error && _isAuthErr(r.error)) break vanjska;
       }
-      const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
-      localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(current.filter(p => p._qid !== pt._qid)));
-      synced++;
     }
   } catch(e) { /* Lokalni bafer ostaje; pokušaj ponovo nakon povratka veze. */ }
   // OS-V2: fotosi slikani offline (bez sbId) — pošalji ih sada. Fotografija je
@@ -10145,6 +10184,24 @@ async function _sbFlushVlakaImpl(v, i, _retried) {
   _processOfflineQueue().catch(() => {});   // red sam odlučuje o vezi
 }
 
+// Je li red na serveru isti kao lokalni upis (bez updated_at — server ga sam
+// postavlja). Poredi se kanonski (redoslijed ključeva u jsonb-u nije isti kao
+// u JS objektu), a nepostojeća kolona vrijedi kao null.
+function _jsonKanon(x) {
+  if (Array.isArray(x)) return x.map(_jsonKanon);
+  if (x && typeof x === 'object') {
+    const o = {};
+    Object.keys(x).sort().forEach(k => { if (x[k] !== undefined) o[k] = _jsonKanon(x[k]); });
+    return o;
+  }
+  return x === undefined ? null : x;
+}
+function _vlakaIstiSadrzaj(payload, row) {
+  if (!payload || !row) return false;
+  return Object.keys(payload).every(k => k === 'updated_at' ||
+    JSON.stringify(_jsonKanon(payload[k] ?? null)) === JSON.stringify(_jsonKanon(row[k] ?? null)));
+}
+
 async function _syncVlakaOperation(op) {
   const { id, ...payload } = op.payload;
   let target = id, result;
@@ -10159,6 +10216,15 @@ async function _syncVlakaOperation(op) {
     let query = sb.from('vlake').update(payload).eq('id',target);
     if (id && op.knownRev != null) query = query.eq('rev',op.knownRev);
     result = await query.select('id,rev,updated_at');
+    if (!result.error && !result.data?.length && id && op.knownRev != null) {
+      // v1.9.2: na slaboj vezi server zna PRIHVATITI upis a odgovor se izgubi.
+      // Revizija je tada već podignuta, pa ponovljeni upis sa starom revizijom
+      // ne pogodi ništa — to nije konflikt nego ISTI upis. Ako je na serveru
+      // tačno ovaj sadržaj, preuzmi njegovu reviziju; inače je stvaran konflikt.
+      const srv = await sb.from('vlake').select('*').eq('id', target).maybeSingle();
+      if (srv.error) return srv.error;
+      if (srv.data && _vlakaIstiSadrzaj(payload, srv.data)) result = { data: [srv.data], error: null };
+    }
     if (!result.error && !result.data?.length) return {
       code:'LOCAL_CONFLICT', message:'Vlaka je promijenjena na serveru ili nemaš pravo upisa. Lokalna izmjena je sačuvana za pregled/izvoz.'
     };
@@ -10319,6 +10385,20 @@ async function _sbFlushTragImpl(t, _retried) {
       if (error) throw error;
     } else {
       const { data, error } = await sb.from('tragovi').insert(payload).select('id').single();
+      if (error && error.code === '23505') {
+        // v1.9.2: raniji upis JE prošao, samo mu se na slaboj vezi izgubio odgovor
+        // (jedinstven ključ korisnik_id + client_uuid). To nije greška — preuzmi
+        // postojeći red. Ranije je periodični flush (60 s) svaki put javljao
+        // "Trag nije sinkroniziran: duplicate key" za trag koji je već gore.
+        const f = await sb.from('tragovi').select('id')
+          .eq('korisnik_id', payload.korisnik_id).eq('client_uuid', payload.client_uuid).maybeSingle();
+        if (f.error) throw f.error;
+        if (!f.data?.id) throw error;
+        t.sbId = f.data.id; _tragRegSave();
+        const u = await sb.from('tragovi').update(payload).eq('id', t.sbId);
+        if (u.error) throw u.error;
+        return;
+      }
       if (error) throw error;
       if (data) { t.sbId = data.id; _tragRegSave(); }
     }
@@ -11580,10 +11660,23 @@ async function shareFoto(tsKey, sharedWith) {
 }
 
 // Jednokratni upload foto u Supabase odmah po slikanju (da se dobije sbId)
+// v1.9.2: fotografija nema klijentski ID ni jedinstven ključ u bazi, pa je na
+// slaboj vezi (upis prošao, odgovor izgubljen) svaki ponovni pokušaj pravio JOŠ
+// JEDAN red od stotine KB — i kolega je dobijao istu sliku dvaput. Prije upisa
+// se zato provjeri da li je ova slika (isti korisnik + isti ts snimanja) već gore.
+async function _fotoNaServeru(f) {
+  const { data, error } = await sb.from('loc_fotos').select('id')
+    .eq('korisnik_id', sbUser.id).eq('ts', f.ts).limit(1);
+  if (error) return { error };
+  return { id: data?.[0]?.id || null };
+}
+
 async function sbUploadFoto(f, idx) {
   if (!sbUser || !sbProfile || f.sbId) return;
   try {
-    const { data, error } = await sb.from('loc_fotos')
+    const ima = await _fotoNaServeru(f);
+    if (ima.error) return !_isNetworkErr(ima.error);
+    const { data, error } = ima.id ? { data: { id: ima.id }, error: null } : await sb.from('loc_fotos')
       .insert({
         korisnik_id: sbUser.id,
         sumarija:    sbProfile.sumarija,
@@ -11630,8 +11723,15 @@ async function sbSaveFoto(f, idx, sharedWith) {
         .eq('id', f.sbId)
         .eq('korisnik_id', sbUser.id));
     } else {
-      // Slika još nije u DB (offline pri slikanju) — puni INSERT
-      ({ data, error } = await sb.from('loc_fotos')
+      // Slika još nije u DB (offline pri slikanju) — puni INSERT, osim ako je
+      // raniji upis ipak prošao (izgubljen odgovor) — tada samo dijeljenje.
+      const ima = await _fotoNaServeru(f);
+      if (ima.error) error = ima.error;
+      else if (ima.id) {
+        _locFotos[idx].sbId = ima.id;
+        ({ error } = await sb.from('loc_fotos').update({ shared_with: sharedWith })
+          .eq('id', ima.id).eq('korisnik_id', sbUser.id));
+      } else ({ data, error } = await sb.from('loc_fotos')
         .insert({
           korisnik_id: sbUser.id,
           sumarija:    sbProfile.sumarija,
@@ -11790,16 +11890,42 @@ let _shareTargetIds = [];   // kome dijelim (prazno = svima)
 let _shareChannelReady = false;
 
 function _sbRemoveRtChannels() {
-  [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel, _rtShareChannel].forEach(ch => {
+  const stari = [_rtVlakeChannel, _rtOdjeliChannel, _rtFotosChannel, _rtClanoviChannel, _rtDozGlobalChannel, _rtShareChannel];
+  // Prvo odveži pa tek onda zatvori: removeChannel okida 'CLOSED' na subscribe
+  // callback, a taj kanal više nije "naš" (vidi _onRtStatus).
+  _rtVlakeChannel = _rtOdjeliChannel = _rtFotosChannel = _rtClanoviChannel = _rtDozGlobalChannel = _rtShareChannel = null;
+  stari.forEach(ch => {
     try { if (ch) sb.removeChannel(ch); } catch(e) {}
   });
-  _rtVlakeChannel = _rtOdjeliChannel = _rtFotosChannel = _rtClanoviChannel = _rtDozGlobalChannel = _rtShareChannel = null;
   _shareChannelReady = false;
   _stopShareLive();
 }
 
-function _onRtStatus(status) {
+// Obnova realtime kanala (v1.9.2). Ranije je SVAKI 'CLOSED'/'TIMED_OUT' zakazivao
+// sbStartRealtime za 8 s — a sbStartRealtime sam zatvara stari kanal, što okida
+// novi 'CLOSED'. Izmjereno: na mrtvoj vezi 6 kanala srušeno i ponovo otvoreno
+// svakih 8 s, zauvijek; na SPOROJ vezi (prijava kanala > 8 s) novi kanal je bio
+// srušen prije nego se stigao prijaviti, pa se realtime nikad nije uspostavio.
+// Sad: jedan tajmer, događaji starih kanala se ne broje, razmak raste do 2 min,
+// a na izmjereno mrtvoj vezi se čeka (socket se ionako sam ponovo spaja).
+let _rtObnovaT = null, _rtObnovaN = 0;
+function _rtZakaziObnovu() {
+  if (_rtObnovaT) return;
+  const ms = Math.min(120000, 8000 * Math.pow(2, _rtObnovaN));
+  _rtObnovaN = Math.min(_rtObnovaN + 1, 4);
+  _rtObnovaT = setTimeout(() => {
+    _rtObnovaT = null;
+    if (_rtVlakeChannel && _rtVlakeChannel.state === 'joined') return;
+    if (typeof _mrezaStanje === 'function' && _mrezaStanje() === 'nema') { _rtZakaziObnovu(); return; }
+    sbStartRealtime();
+  }, ms);
+}
+
+function _onRtStatus(status, ch) {
+  if (ch && ch !== _rtVlakeChannel) return;   // zatvoren/zamijenjen kanal — nije stanje veze
   if (status === 'SUBSCRIBED') {
+    _rtObnovaN = 0;
+    if (_rtObnovaT) { clearTimeout(_rtObnovaT); _rtObnovaT = null; }
     _updSyncDot('ok');
     // Catch-up: realtime NE reproducira događaje propuštene dok je socket bio pao
     // (pozadina/sleep). Svaki (re)join → povuci svježe vlake kolega da se prikažu
@@ -11809,10 +11935,7 @@ function _onRtStatus(status) {
     try { _dozEnsureChannel(); _dozSchedCatchup(1500); } catch(e) {}
   } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
     _updSyncDot('err');
-    // Auto-reconnect nakon 8s
-    setTimeout(() => {
-      if (!_rtVlakeChannel || _rtVlakeChannel.state !== 'joined') sbStartRealtime();
-    }, 8000);
+    _rtZakaziObnovu();
   }
 }
 
@@ -12102,12 +12225,13 @@ function sbStartRealtime() {
   if (!sbProfile?.sumarija) return;
   _sbRemoveRtChannels();
 
-  _rtVlakeChannel = sb.channel('vlake-rt-' + Date.now())
+  const vCh = sb.channel('vlake-rt-' + Date.now())
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'vlake',
       filter: `sumarija=eq.${sbProfile.sumarija}`
-    }, _onVlakaRtEvent)
-    .subscribe(_onRtStatus);
+    }, _onVlakaRtEvent);
+  _rtVlakeChannel = vCh;
+  vCh.subscribe(st => _onRtStatus(st, vCh));
 
   _rtOdjeliChannel = sb.channel('odjeli-rt-' + Date.now())
     .on('postgres_changes', {
@@ -13648,6 +13772,8 @@ async function _crashCheck() {
         { color: '#f97316', weight: _lineStyle.tragW, opacity: 0.85, pane: 'tragMsrLines' }).addTo(map);
       _tragOn = true; _tragPaused = false;
       _tragBuf = [];
+      // Tačke prije prekida su već snimljene — povratak ih ne smije skidati.
+      _tragRetraceReset(_tragPts.length - 1);
       // KLJUČNO: bez ovoga _tragLastT ostaje 0 (svježe učitana stranica) — prva
       // sljedeća GPS tačka bi računala dtS kao lažnih 1s umjesto stvarnog
       // razmaka od prekida, pa bi speed-gate (d/dtS > 35) tu i SVAKU narednu
@@ -17516,7 +17642,10 @@ setInterval(async () => {
   // Samoizlječenje realtime kanala: ako je socket tiho pao (bez CLOSED eventa),
   // vlake kolega prestaju stizati — ponovo se pretplati (SUBSCRIBED okida catch-up).
   try {
-    if (typeof _rtVlakeChannel !== 'undefined' && (!_rtVlakeChannel || _rtVlakeChannel.state !== 'joined')) sbStartRealtime();
+    // 'joining' = biblioteka se upravo prijavljuje (na sporoj vezi traje) — ne
+    // ruši joj pokušaj; zakazana obnova (_rtObnovaT) ima prednost.
+    if (typeof _rtVlakeChannel !== 'undefined' && !_rtObnovaT &&
+        (!_rtVlakeChannel || (_rtVlakeChannel.state !== 'joined' && _rtVlakeChannel.state !== 'joining'))) sbStartRealtime();
   } catch(e) {}
   // Doznaka per-projekat kanal — isti tretman (SUBSCRIBED okida catch-up pojaseva)
   try { _dozEnsureChannel(); } catch(e) {}
@@ -18910,6 +19039,10 @@ function onP(p) {
 // tačaka povratka padne van njega. Serpentina sa krakovima 12 m razmaka ostaje
 // cijela; okret uži od ~9 m se na vlaci ionako ne vozi.
 const _VL_RETRACE_MIN_W = 6, _VL_RETRACE_MAX_W = 9;
+// Tačka vlake je objekat {la, lo}, tačka traga niz [la, lo, alt, ts, acc] —
+// ista geometrija povratka služi oba (v1.9.2), pa se koordinata čita kroz ovo.
+function _rtLa(p) { return p.la ?? p[0]; }
+function _rtLo(p) { return p.lo ?? p[1]; }
 function _vlRetraceSirina(ac) {
   return Math.max(_VL_RETRACE_MIN_W, Math.min(_VL_RETRACE_MAX_W, (ac > 0 ? ac : 4) * 2));
 }
@@ -18924,31 +19057,34 @@ function _vlRetraceSirina(ac) {
 // odskok nije povratak), a kad povratak već traje, traje dok se vrh ne prođe
 // (0.3 m) — inače kratak kosi segment same tačke okreta, bliži od prave linije,
 // prekine povratak prerano i ostavi šiljak.
-function _vlRetraceTest(pts, la, lo, w, minIza) {
+// `od` (opcion): linija se gleda tek od tog indeksa — trag tako isključuje dio
+// prije dugog povratka (vidi _addTragPoint).
+function _vlRetraceTest(pts, la, lo, w, minIza, od) {
   const n = pts ? pts.length : 0;
-  if (n < 3) return null;
+  const i0 = od > 0 ? od : 0;
+  if (n - i0 < 3) return null;
   const kx = Math.cos(la * Math.PI / 180) * MPDEG, ky = MPDEG;
-  const X = q => (q.lo - lo) * kx, Y = q => (q.la - la) * ky;
+  const X = q => (_rtLo(q) - lo) * kx, Y = q => (_rtLa(q) - la) * ky;
   let best = null;
   const segL = [];
-  for (let i = 0; i < n - 1; i++) {
+  for (let i = i0; i < n - 1; i++) {
     const ax = X(pts[i]), ay = Y(pts[i]), dx = X(pts[i + 1]) - ax, dy = Y(pts[i + 1]) - ay;
     const L2 = dx * dx + dy * dy;
-    segL.push(Math.sqrt(L2));
+    segL[i] = Math.sqrt(L2);
     const t = L2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
     const px = ax + t * dx, py = ay + t * dy, d = Math.hypot(px, py);
     if (!best || d < best.d) best = { d, i, t, px, py };
   }
   if (!best || best.d > w) return null;
   let iza = (1 - best.t) * segL[best.i];
-  for (let k = best.i + 1; k < segL.length; k++) iza += segL[k];
+  for (let k = best.i + 1; k < n - 1; k++) iza += segL[k];
   if (iza < (minIza ?? 2)) return null;
   return { la: la + best.py / ky, lo: lo + best.px / kx, d: best.d, iza };
 }
 // Ugao skretanja u tački b (0° = pravo, 180° = potpuni povratak).
 function _vlUgaoSkretanja(a, b, c) {
-  const kx = Math.cos(b.la * Math.PI / 180);
-  const x1 = (b.lo - a.lo) * kx, y1 = b.la - a.la, x2 = (c.lo - b.lo) * kx, y2 = c.la - b.la;
+  const kx = Math.cos(_rtLa(b) * Math.PI / 180);
+  const x1 = (_rtLo(b) - _rtLo(a)) * kx, y1 = _rtLa(b) - _rtLa(a), x2 = (_rtLo(c) - _rtLo(b)) * kx, y2 = _rtLa(c) - _rtLa(b);
   const n1 = Math.hypot(x1, y1), n2 = Math.hypot(x2, y2);
   if (!n1 || !n2) return 0;
   return Math.acos(Math.max(-1, Math.min(1, (x1 * x2 + y1 * y2) / (n1 * n2)))) * 180 / Math.PI;
@@ -18962,7 +19098,7 @@ function _vlVrhSumnjiv(pts, w, zastita) {
   const n = pts.length;
   if (n < 3 || n - 1 <= zastita) return false;
   const b = pts[n - 2], c = pts[n - 1];
-  if (c.gap || dst(b.la, b.lo, c.la, c.lo) > w) return false;
+  if (c.gap || dst(_rtLa(b), _rtLo(b), _rtLa(c), _rtLo(c)) > w) return false;
   return _vlUgaoSkretanja(pts[n - 3], b, c) > 60;
 }
 // Na početku povratka skini tačku(e) upisane u samom okretu. Najviše 3 i nikad
@@ -18980,7 +19116,7 @@ function _vlRetraceSkiniSiljak(pts, f, w, zastita) {
   let skinuto = 0;
   while (pts.length > 2 && pts.length - 1 > zastita && skinuto < 2) {
     const n = pts.length, b = pts[n - 2], c = pts[n - 1];
-    if (c.gap || dst(b.la, b.lo, c.la, c.lo) > w) break;
+    if (c.gap || dst(_rtLa(b), _rtLo(b), _rtLa(c), _rtLo(c)) > w) break;
     if (_vlUgaoSkretanja(b, c, f) <= 60) break;
     pts.pop(); skinuto++;
   }
@@ -20531,6 +20667,7 @@ function fabSnimTrag() {
     _tragPts = [];
     _tragBuf = [];
     _tragLastT = 0;
+    _tragRetraceReset(0);
     _crashClearTrag();  // normalno sačuvan
     _bgRecStopIfIdle(); // otpusti pozadinski servis ako ništa drugo ne snima
     _crashStopIfIdle(); // vlaka koja i dalje snima mora zadržati svoj auto-save
@@ -20548,6 +20685,7 @@ function _fabSnimTragBegin() {
     _tragPts = [];
     _tragBuf = [];
     _tragLastT = 0;
+    _tragRetraceReset(0);
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLiveClear();
     _tragLine = L.polyline([], { color: '#f97316', weight: _lineStyle.tragW, opacity: 0.85, pane: 'tragMsrLines' }).addTo(map);
@@ -20574,6 +20712,7 @@ function togTragPause() {
     _tragLiveClear();
     _tragBuf = [];
     _tragLastT = 0;
+    _tragRetrace = null;
     if (ico) ico.innerHTML = '<svg class="ic"><use href="#ic-pocni"/></svg>';
     if (txt) txt.textContent = 'Nastavi';
     if (btn) btn.classList.add('resuming');
@@ -20601,6 +20740,54 @@ function _updTragStats() {
   const n = _tragPts.length;
   const d = _tragCalcLen(_tragPts);
   el.textContent = `${n} tač. · ${_tragFmtLen(d)}`;
+}
+
+// ─── Povratak istim putem tokom snimanja traga (v1.9.2) ─────────────────────
+const _TRAG_RETRACE_MAX_M = 30;
+let _tragRetrace = null;     // { zadnja, sidro: tačke NA liniji, br } dok se hoda po snimljenom
+let _tragRetraceBaza = 0;    // tačke prije ovog indeksa se ne gledaju (i ne skidaju)
+function _tragRetraceReset(baza) { _tragRetrace = null; _tragRetraceBaza = baza > 0 ? baza : 0; }
+function _tragLineSync() { if (_tragLine) _tragLine.setLatLngs(_tragPts.map(p => [p[0], p[1]])); }
+// Vraća true kad se tačka upisuje normalno, false kad je hod po snimljenom.
+function _tragRetraceKorak(la, lo, ac, al, now) {
+  const w = _vlRetraceSirina(ac), baza = _tragRetraceBaza, uToku = !!_tragRetrace;
+  const osnova = !uToku && _vlVrhSumnjiv(_tragPts, w, baza) ? _tragPts.slice(0, -1) : _tragPts;
+  const proj = _vlRetraceTest(osnova, la, lo, w, uToku ? 0.3 : 2, baza);
+  const naLiniji = proj ? [proj.la, proj.lo, al, now, Math.round(ac)] : null;
+  if (proj && proj.iza > _TRAG_RETRACE_MAX_M) {
+    // Dug povratak: od ovog mjesta je to nov dio hoda. Prva tačka ide NA liniju
+    // (tetiva od vrha leži preko već snimljenog, ne preko šume), a stari dio
+    // se više ne gleda — inače bi svaki korak nazad opet bio "povratak".
+    if (uToku) { _tragPts.push(naLiniji); if (_tragLine) _tragLine.addLatLng([proj.la, proj.lo]); }
+    _tragRetraceReset(_tragPts.length - 1);
+    return true;
+  }
+  if (proj) {
+    if (!uToku) {
+      _tragRetrace = { zadnja: null, sidro: null, br: 0 };
+      if (_vlRetraceObreziVrh(_tragPts, w, baza)) { _tragLineSync(); _updTragStats(); }
+    }
+    if (++_tragRetrace.br === 3) showToast('↩ Hodaš po već snimljenom dijelu traga — ne upisuje se dvaput');
+    // Hod nazad JESTE kretanje (auto-pauza ne smije okinuti), ali stajanje
+    // iza vrha nije. Pomak se mjeri od SIDRA koje se pomjera tek kad je pređeno
+    // 2 m — od prethodnog fiksa bi spor hod (1 m po fiksu) izgledao kao mirovanje.
+    const s = _tragRetrace.sidro;
+    if (!s || dst(s[0], s[1], proj.la, proj.lo) >= 2) { _tragLastMoveT = now; _tragRetrace.sidro = naLiniji; }
+    _tragRetrace.zadnja = naLiniji;
+    return false;
+  }
+  if (uToku) {
+    const z = _tragRetrace.zadnja, tip = _tragPts[_tragPts.length - 1];
+    _tragRetrace = null;
+    if (z && tip && dst(tip[0], tip[1], la, lo) > 2 * w) {
+      // Sišao sa linije daleko od vrha — linija se vraća do mjesta silaska.
+      _tragPts.push(z);
+      if (_tragLine) _tragLine.addLatLng([z[0], z[1]]);
+    } else if (_vlRetraceSkiniSiljak(_tragPts, [la, lo], w, baza)) {
+      _tragLineSync();
+    }
+  }
+  return true;
 }
 
 let _tragBuf = [];      // kružni buffer zadnja 3 raw GPS fixa za median filtar
@@ -20657,16 +20844,23 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
     } else {
       // SPEED-GATE umjesto fiksne udaljenosti: dozvoli brzo kretanje vozila,
       // odbaci samo nemoguće skokove (GPS spike). 35 m/s ≈ 126 km/h.
-      // Namjerno BEZ bearing/near-reversal provjere — ako se korisnik stvarno
-      // vrati istim tragom (npr. krajem kratke doznaka trake), taj skoro-
-      // U-okret mora ostati snimljen kao stvarno kretanje. Filtriranje po
-      // uglu zaokreta neizbježno pogađa i pravu vratnju (ne samo GPS
-      // multipath), a na korisniku je da pauzira snimanje ako ne želi da se
-      // neki dio zabilježi — ne na algoritmu da nagađa namjeru.
+      // Namjerno BEZ bearing/near-reversal provjere — filtriranje po uglu
+      // zaokreta neizbježno pogađa i pravu vratnju, ne samo GPS multipath.
+      // Kratak povratak istim putem (v1.9.2) se prepoznaje po POLOŽAJU u
+      // odnosu na već snimljeni trag (korak 3b), a dug povratak ostaje
+      // snimljen kao stvarno kretanje.
       const dtS = _tragLastT ? Math.max(0.5, (now - _tragLastT) / 1000) : 1;
       if (d / dtS > 35) commit = false;
     }
   }
+
+  // 3b. HOD PO VEĆ SNIMLJENOM DIJELU (v1.9.2) — ista geometrija kao vlaka
+  //     (_vlRetraceTest): okret par metara nazad pa opet naprijed ne smije
+  //     ostaviti petlju. Razlika od vlake: trag je HISTORIJA hoda, ne samo
+  //     geometrija puta. Povratak dalji od _TRAG_RETRACE_MAX_M (ode 500 m putem
+  //     i vrati se) je stvarno kretanje i snima se — inače bi dužina traga
+  //     tiho izgubila pola pređenog.
+  if (commit) commit = _tragRetraceKorak(mla, mlo, ac, al, now);
 
   if (commit) {
     _tragPts.push([mla, mlo, al, now, Math.round(ac)]);  // [la, lo, alt, timestamp, accuracy_m]
@@ -20684,6 +20878,7 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
     _tragLiveClear();
     _tragBuf = [];
     _tragLastT = 0;
+    _tragRetrace = null;
     const ico = document.getElementById('ab-trag-pauza-ico');
     const txt = document.getElementById('ab-trag-pauza-txt');
     const btn = document.getElementById('ab-trag-pauza');
@@ -38403,6 +38598,51 @@ function _dozCheckBandCross(lat, lng) {
 
 // RPC zaključava jednu logičku GPS tačku na serveru. Kompatibilni fallback
 // koristi postojeće kolone (id u staroj šemi može biti bigserial, ne UUID).
+// Slanje doznaka GPS tačaka u SERIJAMA (v1.9.2). Ranije je svaka tačka bila
+// svoj zahtjev (uz RPC, a bez njega DVA — provjera + upis), a poslije svake se
+// CIJELI bafer parsirao i prepisivao. Dan doznake bez signala (hiljade tačaka)
+// je tako na slaboj vezi značio sat vremena zahtjeva, a sve novo u redu (vlaka
+// sačuvana u međuvremenu) čekalo je iza toga. Sad: jedna provjera postojećih u
+// vremenskom prozoru serije + jedan upis onih kojih nema. Idempotentno isto kao
+// RPC (tačka = vlasnik + odjel + vrijeme + koordinate), a ne traži migraciju.
+const _DOZ_KOMAD = 100;
+function _dozTackaKljuc(t, la, lo) { return Date.parse(t) + '|' + Number(la) + '|' + Number(lo); }
+async function _dozPosaljiKomad(komad) {
+  const ms = komad.map(p => Date.parse(p.recorded_at)).filter(Number.isFinite);
+  if (!ms.length) return { ok: [], error: { code: '22023', message: 'Neispravno vrijeme GPS tačke' } };
+  const ima = await sb.from('doz_track_points').select('recorded_at,latitude,longitude')
+    .eq('user_id', komad[0].user_id).eq('project_id', komad[0].project_id)
+    .gte('recorded_at', new Date(Math.min(...ms)).toISOString())
+    .lte('recorded_at', new Date(Math.max(...ms)).toISOString())
+    .limit(5000);
+  if (ima.error) return { ok: [], error: ima.error };
+  // PostgREST vraća najviše 1000 redova (max-rows). Širok prozor (npr. stara
+  // zaglavljena tačka od prije par dana u istoj seriji) bi dao nepotpunu
+  // provjeru → duplikate. Takva serija ide pojedinačno (vidi pozivaoca).
+  if ((ima.data || []).length >= 1000) return { ok: [], error: { code: 'KOMAD_SIROK', message: 'preširok prozor serije' } };
+  const postoji = new Set((ima.data || []).map(r => _dozTackaKljuc(r.recorded_at, r.latitude, r.longitude)));
+  const nove = komad.filter(p => !postoji.has(_dozTackaKljuc(p.recorded_at, p.latitude, p.longitude)))
+    .map(({ _qid, ...p }) => p);
+  if (nove.length) {
+    const { error } = await sb.from('doz_track_points').insert(nove);
+    if (error) return { ok: [], error };
+  }
+  return { ok: komad.map(p => p._qid), error: null };
+}
+async function _dozPosaljiPojedinacno(komad) {
+  const ok = [];
+  for (const pt of komad) {
+    const { _qid, ...payload } = pt;
+    const { error } = await _sendDozTrackPoint(payload);
+    if (error) {
+      if (_isNetworkErr(error) || _isAuthErr(error)) return { ok, error };
+      continue;   // FK/RLS greška ostaje sačuvana, bez gubitka GPS tačke
+    }
+    ok.push(_qid);
+  }
+  return { ok, error: null };
+}
+
 async function _sendDozTrackPoint(payload) {
   const result = await sb.rpc('codex_save_gps_point', { p:payload });
   if (!result.error || result.error.code !== 'PGRST202') return result;

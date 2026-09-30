@@ -2795,6 +2795,81 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Povratak istim putem i kod TRAGA + audit komunikacije sa serverom
+  (v1.9.2)**: na zahtjev "uradi isto i za snimanje traga… i detaljno provjeri
+  kako app komunicira sa serverom… bez signala ili na slabijem signalu".
+  - **Trag** (`_tragRetraceKorak`, poziva se iz `_addTragPoint` prije upisa):
+    ista geometrija kao vlaka (`_vlRetraceTest` & co. sad čitaju koordinatu
+    kroz `_rtLa`/`_rtLo`, pa rade i nad nizom `[la,lo,…]` traga i nad objektom
+    vlake). **Razlika je namjerna**: trag je HISTORIJA hoda, vlaka geometrija
+    puta. Povratak dalji od `_TRAG_RETRACE_MAX_M` (30 m) je stvarno kretanje i
+    SNIMA se: prva tačka ide NA liniju (tetiva leži preko snimljenog, ne preko
+    šume), a `_tragRetraceBaza` isključi stari dio iz provjere — inače bi svaki
+    korak nazad opet bio "povratak". Bez toga bi "ode putem 500 m pa se vrati"
+    izgubilo pola dužine traga.
+  - **Auto-pauza za vrijeme povratka**: hod nazad JESTE kretanje, stajanje iza
+    vrha nije. Pomak se mjeri od SIDRA koje se pomjera tek poslije 2 m — prva
+    verzija je mjerila od prethodnog fiksa (1 m po fiksu) pa je spor hod nazad
+    izgledao kao mirovanje i okidao auto-pauzu (uhvaćeno testom).
+  - Oporavak prekinutog traga postavlja bazu na zadnju tačku prije prekida —
+    povratak ne skida ništa snimljeno prije.
+  - Izmjereno (stvarni `_addTragPoint`, 100 šumova ±1.2 m, povratak 5 m u
+    stranu): petlja staro 100/100, novo 0/100; dužina 81–100 m → 71–82 m
+    (stvarno 70). Test: `tests/js/trag-povratak.test.js` (8).
+  - **Red za sync — razmak između pokušaja** (`_OL.bumpRetry` → `_retryAt`,
+    30 s pa duplo, najviše 15 min): prolaz reda se okida na SVAKU GPS tačku
+    doznake, a ne-mrežna greška nije imala nikakav razmak — 5 pokušaja je
+    izgorjelo za 5 sekundi i vlaka je završila u "ručnom pokušaju". Stavka u
+    razmaku se preskače (panel kaže "sljedeći pokušaj za …"), ručni "Sync sad"
+    ide odmah i briše razmak.
+  - **Prolazne greške servera ne troše pokušaje** (`_serverPrivremeno`,
+    `_OL.odgodi`): PGRST000–003, 08xxx, 53xxx, 57Pxx, HTTP 5xx = pao cijeli
+    server → prekini prolaz + pauza; 57014/40001/40P01/55P03 = pao samo taj
+    upit → ostale stavke idu dalje. Ispravna operacija ne smije u "ručni
+    pokušaj" zato što se baza restartovala.
+  - **Izgubljen odgovor (upis prošao, odgovor nije stigao) — najčešći kvar
+    slabe veze, provjeren za svaki upis**:
+    - vlaka: provjera revizije je ponovljeni upis vidjela kao KONFLIKT (rev je
+      već podignut) → "ručni pokušaj" za podatke koji su već gore. Sad se
+      sadržaj sa servera poredi kanonski (`_vlakaIstiSadrzaj`/`_jsonKanon`,
+      redoslijed ključeva jsonb-a nije isti kao u JS-u, `updated_at` se ne
+      poredi) — isti sadržaj = uspjeh uz serversku reviziju.
+    - trag (živi put): drugi INSERT vraća 23505 (jedinstven `korisnik_id +
+      client_uuid`) — ranije je periodični flush svakih 60 s javljao "Trag nije
+      sinkroniziran: duplicate key". Sad preuzme postojeći red.
+    - trag (red): pala PROVJERA postojanja se čitala kao "nema ga" → INSERT.
+    - fotografija: nema ključa idempotentnosti → svaki ponovni pokušaj je bio
+      JOŠ JEDAN red od stotine KB i kolega je dobijao istu sliku dvaput.
+      `_fotoNaServeru` provjeri (korisnik + `ts` snimanja) prije upisa.
+    - `dnevni_log`/`text_labels`/`odjeli` (upsert), zone doznake i projekti
+      (klijentski UUID), brisanja — već su bili idempotentni, nije dirano.
+  - **Doznaka GPS tačke u SERIJAMA** (`_dozPosaljiKomad`, `_DOZ_KOMAD` = 100):
+    ranije tačka po tačka (uz neizvršen RPC `codex_save_gps_point` čak DVA
+    zahtjeva po tački), a poslije svake cijeli bafer parsiran i prepisan
+    (O(n²)). Dan doznake bez signala je na slaboj vezi bio sat vremena
+    zahtjeva, a sve novo u redu je čekalo iza. Sad: jedna provjera postojećih u
+    vremenskom prozoru serije + jedan INSERT — idempotentno kao RPC, bez
+    migracije. **PostgREST max-rows (1000)**: preširok prozor bi dao nepotpunu
+    provjeru → duplikate, pa takva serija (i serija sa lošom tačkom — FK/RLS)
+    ide pojedinačno kroz stari put.
+  - **Realtime** (`_rtZakaziObnovu`): `removeChannel` okida `CLOSED` na
+    subscribe callback (provjereno u `static/libs/supabase.min.js`), a svaki
+    `CLOSED` je zakazivao `sbStartRealtime` za 8 s — koji opet zatvara kanal.
+    Izmjereno simulacijom nad stvarnim kodom: mrtva veza 10 min = 74 obnove
+    (444 kanala); SPORA veza (prijava > 8 s) = kanal srušen prije prijave,
+    realtime se NIKAD ne uspostavi. Sad: događaji starog kanala se ignorišu
+    (`_onRtStatus(st, ch)`, odveži pa zatvori u `_sbRemoveRtChannels`), jedan
+    tajmer, razmak 8 s → 2 min, na izmjereno mrtvoj vezi se čeka; periodični
+    otkucaj ne ruši kanal u stanju `joining`. Rezultat: 74 → 1, spora veza se
+    prijavi iz drugog pokušaja.
+  - **Provjereno a NIJE bug**: auth nema `SIGNED_OUT` grane koja bi izbacila
+    korisnika na login kad osvježavanje tokena padne na mreži (supabase-js
+    mrežni pad refresh-a ponavlja, ne odjavljuje); 5xx sa HTML tijelom
+    (gateway) postgrest-js vraća bez `code` → `_isNetworkErr` ga već tretira
+    kao mrežu; SW/transport/karta su pokriveni u v1.8.8.
+  - Test: `tests/js/server-komunikacija.test.js` (23) — svih 23 pada na starom
+    kodu. `slab-signal.test.js` i `gps-bg-buffer.test.js` sandboxi dopunjeni.
+
 - **Povratak istom trasom tokom snimanja vlake — bez petlje/kuke (v1.9.1)**:
   terenski screenshot: okret sa kolicima, par metara nazad pa opet naprijed →
   petlja od ~5 m na vlaci. Tačke povratka padaju par metara u STRANU od puta

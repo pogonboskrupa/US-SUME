@@ -214,7 +214,7 @@ console.log('\nRed za sync (_processOfflineQueue) na slaboj/mrtvoj vezi:');
 const SRC_Q = [
   extractConst('_SYNC_PAUZA_MS'),
   'let _syncMrezaPalaU = 0, _syncOdgodaT = null; let _syncInProgress = false, _syncRerun = false;',
-  extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_processOfflineQueue'),
+  extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_serverPrivremeno'), extractFn('_processOfflineQueue'),
 ].join('\n');
 
 function makeRed(opts = {}) {
@@ -229,6 +229,7 @@ function makeRed(opts = {}) {
       loadQueue: () => red.map(o => ({ ...o })),
       removeFromQueue: (id) => { red = red.filter(o => o._qid !== id); },
       bumpRetry: (id) => { pozivi.retry.push(id); return false; },
+      odgodi: (id) => { pozivi.odgode = (pozivi.odgode || []).concat(id); },
     },
     sb: { from: () => ({ delete: () => ({ eq: async (_k, id) => { pozivi.brisanja.push(id); return { error: opts.greska || null }; } }) }),
           auth: { refreshSession: async () => ({ data: {} }) } },
