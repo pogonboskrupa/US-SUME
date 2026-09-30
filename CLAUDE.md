@@ -2795,6 +2795,42 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Na server idu SAMO vlake projekta i doznaka (v1.9.6)**: prijava "tragovi…
+  javlja da nije poslano na server… vlake u projektu i pojas doznake bi trebale
+  biti samo slane na server". Obim razriješen kroz `AskUserQuestion`: na server
+  idu vlake projekta, projekti i sve iz doznake (pojas, zone, odjeli, status) +
+  odjeli šumarije; **tragovi, dnevnik rada, tekstualne oznake i fotografije
+  ostaju SAMO na telefonu** — ne šalju se i ne broje se u "čeka slanje".
+  Zamjenjuje sve što v1.9.2–v1.9.5 unosi ispod kažu o slanju tragova/foto.
+  - **Serverski put tragova je UKLONJEN, ne ugašen** (`sbFlushTrag`,
+    `_sbFlushTragImpl`, `sbDeleteTrag`, `_tragZaSlanje`, `_tragRegSaveUskoro`,
+    `_serverTragoviURed`, grane `upsert_trag`/`delete_trag` u procesoru) — app
+    tragove sa servera NIKAD nije čitala nazad (provjereno grep-om i nad
+    migracijama), pa bi ostao samo mrtav kod. Stari redovi u tabeli `tragovi`
+    na serveru nisu brisani.
+  - **Zaostale stavke u redu** (`_SERVER_SAMO_LOKALNO`: `upsert_trag`,
+    `delete_trag`, `upsert_log`, `upsert_labels`) se izbacuju: pri pokretanju
+    (`korak('syncBadge')`), na početku ručnog slanja i u procesoru (bez slanja).
+    Nije gubitak — podatak je u svom lokalnom registru, u redu je bila kopija.
+  - **Dnevnik: serverska lista je ZAMJENJIVALA lokalnu** (`_applyLogRows`), pa bi
+    bez slanja svaki novi unos nestao pri sljedećem pokretanju. Sad se spaja:
+    lokalni dan/projektant (`tvlake_log`) ima prednost, stari serverski zapisi
+    ostaju vidljivi (nov telefon), rezultat se upisuje lokalno. `sbClearLog`
+    (izričito brisanje) i dalje briše i na serveru — inače bi spajanje vratilo
+    obrisano.
+  - **Tekstualne oznake**: `sbSaveTextLabels` piše samo `_OL.LABELS`;
+    `sbLoadTextLabelsDB` čita server SAMO kad lokalnog zapisa nema (inače bi
+    server vraćao stari set preko novog). `_syncTextLabelsServer` uklonjen.
+  - **Fotografija** se ne šalje sama (`sbUploadFoto`/`_flushPendingFotos`
+    uklonjeni; puna slika trajno ostaje u IDB-u `fotofull:`). Izričito
+    "Podijeli sa kolegama" (`sbSaveFoto`) i dalje radi — to je korisnikov izbor.
+  - "Maloprijed" → "Maloprije" (`_fmtAgo`).
+  - Provjereno u browseru: stari red (trag + dnevnik + oznake + vlaka) poslije
+    pokretanja ima samo vlaku, lokalni dnevnik ostaje, slanje ide samo `vlake`.
+  - Test: `tests/js/server-rucno.test.js` (50; 12 novih, 11 pada na v1.9.5 —
+    jedan je kontrolni). Testovi slanja tragova/fotografija uklonjeni iz
+    `brzina`, `server-komunikacija`, `slab-signal`.
+
 - **Brzina (srednji telefon) + ispravke ručnog slanja (v1.9.5)**: na zahtjev
   "provjeri još jednom brzinu… i provjeri bugove i optimiziraj ručno slanje".
   Mjereno Playwright-om uz CPU 4× (`perf/teski.cjs`, `brojac-browser.cjs`,

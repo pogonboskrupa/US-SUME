@@ -45,83 +45,8 @@ let pass = 0, fail = 0;
 const testovi = [];
 function t(name, fn) { testovi.push([name, fn]); }
 
-// ── Slanje traga ne smije prepisivati cijeli registar ─────────────────
-function tragEnv() {
-  const upisi = { odmah: 0, uskoro: 0 };
-  const sb = { from: () => {
-    const l = { insert() { return l; }, update() { return l; }, select() { return l; }, eq() { return l; },
-      single() { return l; }, maybeSingle() { return l; },
-      then(res) { return Promise.resolve({ data: { id: 'srv-1' }, error: null }).then(res); } };
-    return l;
-  } };
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen',
-    '_isAuthErr', '_isNetworkErr', '_tryRefreshSession', 'showToast', '_OL', '_serverURed',
-    extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
-    sb, { id: 'u1' }, { sumarija: 'S' }, () => 'novi-uuid', () => { upisi.odmah++; }, () => { upisi.uskoro++; },
-    () => 100, () => false, () => false, async () => false, () => {}, { enqueue() {} }, () => false);
-  return { f, upisi };
-}
 
-console.log('Slanje traga:');
-
-t('KLJUČNO: trag koji već ima uuid se šalje BEZ prepisivanja cijelog registra', async () => {
-  const e = tragEnv();
-  await e.f({ name: 'T', uuid: 'u-1', pts: [[44, 16, 300], [44.1, 16.1, 300]] });
-  assert.strictEqual(e.upisi.odmah, 0, 'registar prepisan ' + e.upisi.odmah + '× prije slanja');
-});
-
-t('trag BEZ uuid-a: uuid se upiše trajno PRIJE slanja (inače restart = drugi uuid = duplikat)', async () => {
-  const e = tragEnv();
-  const tr = { name: 'T', pts: [[44, 16, 300], [44.1, 16.1, 300]] };
-  await e.f(tr);
-  assert.strictEqual(tr.uuid, 'novi-uuid');
-  assert.strictEqual(e.upisi.odmah, 1);
-});
-
-t('dobijeni sbId ide kroz spojeni upis (20 tragova = 1 upis, ne 20)', async () => {
-  const e = tragEnv();
-  const tr = { name: 'T', uuid: 'u-1', pts: [[44, 16, 300], [44.1, 16.1, 300]] };
-  await e.f(tr);
-  assert.strictEqual(tr.sbId, 'srv-1');
-  assert.strictEqual(e.upisi.uskoro, 1);
-  assert.strictEqual(e.upisi.odmah, 0);
-});
-
-t('_tragRegSaveUskoro spaja više poziva u JEDAN upis', async () => {
-  let upisa = 0; const tajmeri = [];
-  const f = new Function('_tragRegSave', 'setTimeout',
-    'let _tragRegSaveT = null;\n' + extractFn('_tragRegSaveUskoro') + '\nreturn _tragRegSaveUskoro;')(
-    () => { upisa++; }, (fn) => { tajmeri.push(fn); return tajmeri.length; });
-  for (let i = 0; i < 20; i++) f();
-  assert.strictEqual(tajmeri.length, 1);
-  tajmeri[0]();
-  assert.strictEqual(upisa, 1);
-  f();
-  assert.strictEqual(tajmeri.length, 2, 'poslije upisa novi poziv opet zakazuje');
-});
-
-console.log('\nTragovi koji već čekaju u redu:');
-
-t('_tragZaSlanje preskače trag koji čeka u redu (red ima razmak i dedup)', () => {
-  _store.clear();
-  _OL.enqueue({ type: 'upsert_trag', payload: { nm: '2026-09-30', korisnik_id: 'u1', client_uuid: 'u-A', pts: [] } });
-  const reg = [
-    { name: 'A', uuid: 'u-A', pts: [[1, 1]] },
-    { name: 'B', uuid: 'u-B', pts: [[1, 1]] },
-    { name: 'C', uuid: 'u-C', pts: [[1, 1]], sbId: 's' },
-    { name: 'D', pts: [[1, 1]] },
-  ];
-  const f = new Function('_OL', '_tragRegistry', extractFn('_tragZaSlanje') + '\nreturn _tragZaSlanje;')(_OL, reg);
-  assert.deepStrictEqual(f().map(x => x.name), ['B', 'D']);
-});
-
-t('oštećen red ne ruši slanje — šalje se sve neposlano', () => {
-  _store.clear();
-  localStorage.setItem(_OL.QUEUE, '{oštećeno');
-  const f = new Function('_OL', '_tragRegistry', extractFn('_tragZaSlanje') + '\nreturn _tragZaSlanje;')(
-    _OL, [{ name: 'A', uuid: 'u-A', pts: [[1, 1]] }]);
-  assert.strictEqual(f().length, 1);
-});
+console.log('Red za sync:');
 
 t('dva traga ISTOG dana (isto ime) oba ostaju u redu — dedup gleda client_uuid', () => {
   _store.clear();

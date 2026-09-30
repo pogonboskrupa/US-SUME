@@ -140,6 +140,7 @@ function makeRed(greskaZa) {
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
     _dozPosaljiKomad: async () => ({ ok: [], error: null }), _dozPosaljiPojedinacno: async () => ({ ok: [], error: null }), _DOZ_KOMAD: 100,
     _flushPendingFotos: async () => {}, _mrezaProbaj: () => true,
+    _SERVER_SAMO_LOKALNO: new Set(['upsert_trag', 'delete_trag', 'upsert_log', 'upsert_labels']), 
     _serverSlanjeDozvoljeno: () => true, _serverSaljem: false, _updSyncBadgeUskoro: () => {},
     showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} },
     setTimeout: (fn, ms) => { tajmeri.push({ fn, ms }); return tajmeri.length; },
@@ -253,67 +254,6 @@ t('_vlakaIstiSadrzaj: redoslijed ključeva nebitan, nepostojeća kolona = null, 
   assert.ok(f({ a: null }, {}));
   assert.ok(!f({ a: 1 }, { a: 2 }));
   assert.ok(!f({ pts: [{ la: 1 }] }, { pts: [{ la: 1 }, { la: 2 }] }));
-});
-
-t('red: provjera postojanja traga koja padne NE vodi u INSERT (duplikat)', async () => {
-  _store.clear();
-  const { sb, log } = lazniSb(q => (q.op === 'select' ? { data: null, error: { message: 'Failed to fetch' } } : { data: { id: 'n' }, error: null }));
-  const src = [extractConst('_SYNC_PAUZA_MS'),
-    'let _syncMrezaPalaU = 0, _syncOdgodaT = null; let _syncInProgress = false, _syncRerun = false;',
-    extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_serverPrivremeno'), extractFn('_processOfflineQueue'),
-    'return _processOfflineQueue;'].join('\n');
-  const g = { sbUser: { id: 'u1' }, sbProfile: {}, _OL, sb, localStorage: global.localStorage, _DOZ_TRACK_BUF_KEY: 'buf',
-    _genUUID: () => 'x', _dozPosaljiKomad: async () => ({ ok: [] }), _dozPosaljiPojedinacno: async () => ({ ok: [] }), _DOZ_KOMAD: 100,
-    _flushPendingFotos: async () => {}, _mrezaProbaj: () => true, showToast: () => {}, _updSyncBadge: () => {},
-    _serverSlanjeDozvoljeno: () => true, _serverSaljem: false, _updSyncBadgeUskoro: () => {},
-    console: { warn() {} }, setTimeout: () => 0, _tragRegistry: [], _tragRegSave: () => {} };
-  const k = Object.keys(g);
-  const run = new Function(...k, src)(...k.map(x => g[x]));
-  _OL.enqueue({ type: 'upsert_trag', payload: { korisnik_id: 'u1', client_uuid: 'c1', nm: 'T', pts: [] } });
-  await run();
-  assert.ok(!log.some(q => q.op === 'insert'), 'poslat INSERT iako se nije znalo postoji li trag');
-  assert.strictEqual(_OL.loadQueue(true).length, 1, 'stavka čeka');
-});
-
-t('trag: INSERT vrati 23505 (raniji upis prošao) → preuzme postojeći red, bez poruke o grešci', async () => {
-  const toasti = [], enq = [];
-  const { sb, log } = lazniSb(q => {
-    if (q.op === 'insert') return { data: null, error: { code: '23505', message: 'duplicate key' } };
-    if (q.op === 'select') return { data: { id: 'srv-7' }, error: null };
-    if (q.op === 'update') return { data: null, error: null };
-  });
-  const tr = { name: 'Trag', uuid: 'c1', pts: [[44, 16, 300], [44.1, 16.1, 301]] };
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen', '_isAuthErr', '_isNetworkErr',
-    '_tryRefreshSession', 'showToast', '_OL', '_serverURed', extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
-    sb, { id: 'u1' }, { sumarija: 'S' }, () => 'g', () => {}, () => {}, () => 100, () => false, () => false, async () => false,
-    m => toasti.push(m), { enqueue: o => enq.push(o) }, () => false);
-  await f(tr);
-  assert.strictEqual(tr.sbId, 'srv-7');
-  assert.deepStrictEqual(toasti, [], 'poruka o grešci za trag koji je već na serveru');
-  assert.deepStrictEqual(enq, []);
-  assert.ok(log.some(q => q.op === 'update'), 'sadržaj nije osvježen');
-});
-
-t('fotografija koja je već gore (izgubljen odgovor) se NE šalje ponovo', async () => {
-  const { sb, log } = lazniSb(q => (q.op === 'select' ? { data: [{ id: 'f9' }], error: null } : { data: { id: 'NOVI' }, error: null }));
-  const fotos = [{ la: 44, lo: 16, ts: 123, thumb: 't', full: 'f', sbId: null }];
-  const src = [extractFn('_fotoNaServeru'), extractFn('sbUploadFoto'), 'return sbUploadFoto;'].join('\n');
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', '_isNetworkErr', '_serverSlanjeDozvoljeno', '_updSyncBadge', src)(
-    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {}, () => false, () => true, () => {});
-  const r = await f(fotos[0], 0);
-  assert.strictEqual(r, true);
-  assert.strictEqual(fotos[0].sbId, 'f9');
-  assert.ok(!log.some(q => q.op === 'insert'), 'duplikat fotografije');
-});
-
-t('fotografija: provjera padne na mreži → ni INSERT ni nastavak sa sljedećom', async () => {
-  const { sb, log } = lazniSb(() => ({ data: null, error: { message: 'Failed to fetch' } }));
-  const fotos = [{ la: 44, lo: 16, ts: 123, thumb: 't', full: 'f', sbId: null }];
-  const src = [extractFn('_isNetworkErr'), extractFn('_fotoNaServeru'), extractFn('sbUploadFoto'), 'return sbUploadFoto;'].join('\n');
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_locFotos', '_saveFotos', '_kmlcDelete', '_serverSlanjeDozvoljeno', '_updSyncBadge', src)(
-    sb, { id: 'u1' }, { sumarija: 'S' }, fotos, () => {}, async () => {}, () => true, () => {});
-  assert.strictEqual(await f(fotos[0], 0), false);
-  assert.ok(!log.some(q => q.op === 'insert'));
 });
 
 // =====================================================================

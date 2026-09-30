@@ -239,6 +239,7 @@ function makeRed(opts = {}) {
     _flushPendingFotos: async () => { pozivi.fotos++; },
     _mrezaProbaj: (teska) => (opts.mreza ? opts.mreza(teska) : true),
     // v1.9.4: slanje je ručno — ovi testovi mjere ponašanje DOK ručno slanje traje.
+    _SERVER_SAMO_LOKALNO: new Set(['upsert_trag', 'delete_trag', 'upsert_log', 'upsert_labels']), 
     _serverSlanjeDozvoljeno: () => opts.rucno !== false, _serverSaljem: false, _updSyncBadgeUskoro: () => { pozivi.badge = (pozivi.badge || 0) + 1; },
     showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} },
     setTimeout: (fn, ms) => { pozivi.tajmeri.push({ fn, ms }); return pozivi.tajmeri.length; },
@@ -293,16 +294,7 @@ await t('izmjereno mrtva veza → prolaz se ni ne pokreće', async () => {
   assert.deepStrictEqual(r.pozivi.brisanja, []);
 });
 
-await t('fotografije (težak upis) čekaju dobru vezu; na dobroj idu', async () => {
-  const slaba = makeRed({ ops: [], mreza: (teska) => !teska });
-  await slaba.api._processOfflineQueue();
-  assert.strictEqual(slaba.pozivi.fotos, 0);
-  const dobra = makeRed({ ops: [] });
-  await dobra.api._processOfflineQueue();
-  assert.strictEqual(dobra.pozivi.fotos, 1);
-});
-
-console.log('\nPokretanje (sbInitData) — lokalni oporavak ne čeka mrežu:');
+await console.log('\nPokretanje (sbInitData) — lokalni oporavak ne čeka mrežu:');
 function makeInit(opts) {
   const log = [];
   const g = {
