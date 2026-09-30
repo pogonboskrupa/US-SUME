@@ -281,9 +281,9 @@ t('trag: INSERT vrati 23505 (raniji upis prošao) → preuzme postojeći red, be
     if (q.op === 'update') return { data: null, error: null };
   });
   const tr = { name: 'Trag', uuid: 'c1', pts: [[44, 16, 300], [44.1, 16.1, 301]] };
-  const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragCalcLen', '_isAuthErr', '_isNetworkErr',
+  const f = new Function('sb', 'sbUser', 'sbProfile', '_genUUID', '_tragRegSave', '_tragRegSaveUskoro', '_tragCalcLen', '_isAuthErr', '_isNetworkErr',
     '_tryRefreshSession', 'showToast', '_OL', extractFn('_sbFlushTragImpl') + '\nreturn _sbFlushTragImpl;')(
-    sb, { id: 'u1' }, { sumarija: 'S' }, () => 'g', () => {}, () => 100, () => false, () => false, async () => false,
+    sb, { id: 'u1' }, { sumarija: 'S' }, () => 'g', () => {}, () => {}, () => 100, () => false, () => false, async () => false,
     m => toasti.push(m), { enqueue: o => enq.push(o) });
   await f(tr);
   assert.strictEqual(tr.sbId, 'srv-7');

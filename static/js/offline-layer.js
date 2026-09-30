@@ -72,12 +72,16 @@ const _OL = {
           o.payload.korisnik_id === op.payload.korisnik_id);
         if (idx >= 0) q.splice(idx, 1);
       }
-      // Deduplicate upsert_trag — čuvaj samo zadnju verziju po (nm, korisnik, id)
+      // Deduplicate upsert_trag — čuvaj samo zadnju verziju po (nm, korisnik, id,
+      // client_uuid). v1.9.3: client_uuid je obavezan dio ključa — ime traga je
+      // samo DATUM, pa su dva traga istog dana (oba neposlana) imala isti ključ i
+      // drugi je tiho izbacivao prvog iz reda.
       if (op.type === 'upsert_trag') {
         const idx = q.findIndex(o => o.type === 'upsert_trag' &&
           o.payload.nm === op.payload.nm &&
           o.payload.korisnik_id === op.payload.korisnik_id &&
-          (o.payload.id ?? null) === (op.payload.id ?? null));
+          (o.payload.id ?? null) === (op.payload.id ?? null) &&
+          (o.payload.client_uuid ?? null) === (op.payload.client_uuid ?? null));
         if (idx >= 0) q.splice(idx, 1);
       }
       // Deduplicate upsert_labels — uvijek samo zadnji set oznaka za korisnika

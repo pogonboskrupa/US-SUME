@@ -2795,6 +2795,53 @@ namjerno, prije nego se jave.
     pločicu na zumu karte do `maxNativeZoom:14`, pa im sam z12 offline ne
     pomaže na terenskom zumu. Test čuva da paket prati `maxNativeZoom`.
 
+- **Brzina — zaleđen ekran pri pokretanju i periodičnom sync-u (v1.9.3)**: na
+  pitanje "može li se optimizovati da app radi brže". Prvo MJERENO, ne nagađano:
+  Playwright harness sa realnim teškim podacima (40 vlaka × 225 tačaka, 20
+  neposlanih tragova × 1000 tačaka, aktivan projekat, keširan profil), CPU
+  usporen 4× (srednji Android telefon), CPU profil pokretanja.
+  - **Prije**: vlake vidljive tek za 7,5–9,2 s; najduži zadatak (ekran ne
+    reaguje na dodir) 1,8–2,8 s; ukupno blokirano 2,6–3,7 s. **Poslije**: 2,3–2,6 s;
+    0,27–0,52 s; 1,1–1,5 s.
+  - **Najveći krivac (3,2 s): `_sbFlushTragImpl` je na SVAKOM pokušaju slanja
+    JEDNOG traga zvao `_tragRegSave()`** — prepis CIJELOG registra (sve tačke
+    svih tragova, ~1 MB JSON) u localStorage, a poslije uspjeha još jednom.
+    Pokretanje šalje svaki neposlani trag, a periodični otkucaj (60 s) isto —
+    dakle na terenu BEZ signala (tragovi ostaju neposlani) zamrzavanje se
+    ponavljalo svake minute. Sad se registar upisuje samo kad je `uuid` tek
+    dodijeljen (MORA biti trajan prije slanja — inače izgubljen odgovor +
+    restart = drugi uuid = duplikat), a dobijeni `sbId` ide kroz
+    `_tragRegSaveUskoro` (jedan spojeni upis za više tragova; gubitak `sbId`-a
+    nije gubitak podataka — sljedeće slanje ga nađe po `client_uuid`).
+  - **0,7 s: linija vlake se gradila tačku po tačku** (`v.pts.forEach(p =>
+    poly.addLatLng(...))` u `_applyVlakeRows`) — Leaflet poslije SVAKE tačke
+    ponovo projektuje i iscrta cijelu liniju, dakle kvadratno. Sad se linija
+    pravi odjednom (`L.polyline(sve tačke)`); isto u grani oporavka prekinute
+    vlake (`_crashCheck`). **Novi kod koji puni liniju iz niza tačaka ne smije
+    koristiti `addLatLng` u petlji** — `addLatLng` je za JEDNU tačku uživo (GPS).
+  - **`_tragZaSlanje()`**: periodični otkucaj i pokretanje šalju direktno samo
+    tragove koji NISU već u redu za sync. Trag u redu ima razmak između
+    pokušaja (v1.9.2) i dedup; direktno slanje uz to je na slaboj vezi svake
+    minute ponovo slalo cijeli trag (~50 KB) uzalud.
+  - **Dedup `upsert_trag` u redu sad uključuje `client_uuid`** — ime traga je
+    samo DATUM, pa su dva neposlana traga istog dana imala isti ključ i drugi
+    je tiho izbacivao prvog iz reda (lokalno je ostajao, ali nije se slao kroz
+    red).
+  - `_appLifecycleDebug` (debug zapis na SVAKOM pokretanju) je vrijeme pisao
+    preko `toLocaleString('bs-BA')` — prvi Intl poziv učitava podatke o lokalu
+    (33–86 ms uz CPU 4×). Sad ručno formatirano.
+  - **Mjereno i NAMJERNO nije dirano**: prelaz tabova ~120–200 ms uz CPU 4×
+    (većinom stilovi/layout, 5659 DOM elemenata, ~2000 CSS pravila — ~35 ms na
+    pravom telefonu); zum karte je Leaflet koji projektuje ~29 000 tačaka
+    (inherentno); `turf.min.js` (604 KB, sinhrono u zaglavlju) košta ~50 ms
+    evaluacije uz CPU 4× — `defer` bi promijenio redoslijed izvršavanja prema
+    inline skriptama, rizik veći od dobiti. Glavni JS blok (1,56 MB INLINE) se
+    kompajlira pri svakom pokretanju (V8 code cache radi samo za vanjske
+    skripte) — izdvajanje u vanjski fajl bi pomoglo, ali svih 57 testova čita
+    funkcije iz `index.html`, pa je to zaseban, veliki posao.
+  - Test: `tests/js/brzina.test.js` (10) — svih 10 pada na starom kodu.
+    Harness: scratchpad `perf/teski.cjs` (PROFIL_START / PROFIL_ZUM / TRACE_TAB).
+
 - **Povratak istim putem i kod TRAGA + audit komunikacije sa serverom
   (v1.9.2)**: na zahtjev "uradi isto i za snimanje traga… i detaljno provjeri
   kako app komunicira sa serverom… bez signala ili na slabijem signalu".
