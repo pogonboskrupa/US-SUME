@@ -4495,7 +4495,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
     <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg> Meni</button>
     <button class="tab-btn active" onclick="switchTab('karta')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,6 9,4 15,6 21,4 21,18 15,20 9,18 3,20"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/></svg> Karta</button>
     <button class="tab-btn" onclick="switchTab('projekat')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,7 3,19 21,19 21,9 11,9 9,6 3,6"/></svg> Projekat</button>
-    <button class="tab-btn" onclick="switchTab('vlake')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="4,19 4,6 19,19"/><g stroke-width="1.3"><line x1="7.75" y1="9.25" x2="8.93" y2="7.89"/><line x1="10.75" y1="11.85" x2="11.93" y2="10.49"/><line x1="13.75" y1="14.45" x2="14.93" y2="13.09"/><line x1="16.75" y1="17.05" x2="17.93" y2="15.69"/></g></svg> Vlake<span class="tab-notif" id="notif-vlake"></span></button>
+    <button type="button" class="tab-btn" id="vlake-tab-btn" onclick="switchTab('vlake')" title="Vlake projekta — snimljene i nacrtane"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v15"/><path d="M10 20v-4l4-4V8l-3-3"/><path d="M14 12l3 2"/><path d="M3 20h18"/></svg><span class="vlake-tab-label">Vlake</span><span class="tab-notif" id="notif-vlake"></span></button>
     <button class="tab-btn" onclick="switchTab('doznaka')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="12,3 6,11 18,11"/><polygon points="12,8 5,17 19,17"/><line x1="12" y1="17" x2="12" y2="21"/><circle cx="18" cy="6" r="3.2" stroke-width="1.6"/></svg> Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="16.5" cy="8.5" r="2.6"/><path d="M11 21c0-3.6 2.5-6.3 5.5-6.3S22 17.4 22 21"/><circle cx="9" cy="8" r="3.3"/><path d="M2.5 21c0-4.3 3-7.5 6.5-7.5s6.5 3.2 6.5 7.5"/></svg> Korisnici<span class="tab-notif" id="notif-admin"></span></button>
     <button class="tab-btn" id="postavke-tab-btn" style="display:none;color:#a78bfa;" onclick="switchTab('postavke')"><svg class="tbi" viewBox="0 0 24 24" stroke-width="1.5"><polygon points="22.1,12 19.39,15.06 19.14,19.14 15.06,19.39 12,22.1 8.94,19.39 4.86,19.14 4.61,15.06 1.9,12 4.61,8.94 4.86,4.86 8.94,4.61 12,1.9 15.06,4.61 19.14,4.86 19.39,8.94"/><circle cx="12" cy="12" r="5.3" stroke-width="1.6"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg> Obavještenja</button>
@@ -5678,7 +5678,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.4';
+const APP_VER = 'v2.1.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6549,6 +6549,10 @@ async function serverPosalji() {
   serverPosalji._priprema = true;
   _serverSazetakRender();
   try {
+    // Brojač GPS tačaka mora biti spreman i odmah nakon pokretanja aplikacije.
+    // Prazan memorijski brojač prije učitavanja IDB-a nije potvrda slanja.
+    if (typeof FieldStore !== 'undefined') await FieldStore.init();
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
     await _flushAllPendingVlake();
     if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
     await _retryOrphanVlake();
@@ -6608,7 +6612,7 @@ async function serverPosalji() {
   if (!poslije.stavki) {
     try { localStorage.setItem(_SERVER_ZADNJE_KEY, String(Date.now())); } catch(e) {}
     showToast('✅ Sve poslano na server');
-  } else if (poslije.stavki < prije.stavki) {
+  } else if (poslije.stavki < prije.stavki || poslije.red < prije.red || poslije.doz < prije.doz) {
     try { localStorage.setItem(_SERVER_ZADNJE_KEY, String(Date.now())); } catch(e) {}
     showToast('⚠ Poslano djelimično — ' + poslije.stavki + ' čeka. Pokušaj ponovo.');
   } else {
@@ -39378,7 +39382,10 @@ async function dozConfirmSave() {
     // D4-B: pamti privremeni ID i uz payload u redu čekanja da kasnije brisanje
     // (prije nego se ovaj insert sinhronizuje) može ispravno pronaći/otkazati red.
     const localId = 'local_' + Date.now();
-    _OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload, _localId: localId });
+    if (!_OL.enqueue({ type: 'insert_doz_marking', payload: markingPayload, _localId: localId })) {
+      showToast('⚠ Zona nije sačuvana u redu za slanje — oslobodi memoriju i pokušaj ponovo');
+      return; // ostavi geometriju i modal otvorene za ponovni pokušaj/izvoz
+    }
     // Dodaj u lokalni keš da se prikaže i offline
     _dozMarkings.unshift({ ...markingPayload, id: localId });
     _dozCacheLayers(_dozSelId);
@@ -40080,7 +40087,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </section></div>
   <footer class="mdrop-footer">
     <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
-    <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije US ŠUME"><div><b>US ŠUME · Vlake</b><span id="menu-app-ver"></span></div></div>
+    <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije DENDRO MAP"><div><b>DENDRO MAP</b><span id="menu-app-ver"></span></div></div>
   </footer>
 </div>
 

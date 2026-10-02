@@ -24,6 +24,10 @@ menu_start = SOURCE.index('<div id="menu-dropdown"')
 menu = SOURCE[menu_start:SOURCE.index('<!-- ─── STIL LINIJA MODAL', menu_start)]
 action_start = SOURCE.index('<div id="action-bar">')
 action = SOURCE[action_start:SOURCE.index('<!--', SOURCE.index('\n</div>\n', action_start)+10)]
+tab_start = SOURCE.index('<div id="tab-bar">')
+tabs = SOURCE[tab_start:SOURCE.index('<!-- MAP TOOLBAR', tab_start)]
+sprite_start = SOURCE.rfind('<svg', 0, SOURCE.index('<symbol id="ic-zatvori"'))
+sprite = SOURCE[sprite_start:SOURCE.index('</svg>', sprite_start)+6]
 styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', SOURCE[:SOURCE.index('</head>')], re.S))
 styles += '\n' + (ROOT / 'static/css/field-design.css').read_text()
 print_start = SOURCE.index('const _STP_FORMATI =')
@@ -31,6 +35,7 @@ print_js = SOURCE[print_start:SOURCE.index("map.on('moveend zoomend'", print_sta
 javascript = 'const APP_VER='+json.dumps(VERSION)+';'+'''
  let sbUser={id:'A'},sbProfile={id:'A',ime:'Emina',prezime:'Projektant',sumarija:'Šumarija Bos.Krupa'};
 let _aktivniProjektId='P',_activeTab='karta',vlake=[],_projekti=[{id:'P',odjel:'105',gj:'Gornja Una'}];
+const switchTab=(t)=>{_activeTab=t;document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',(b.getAttribute('onclick')||'').includes("switchTab('"+t+"')")));};
 const isVodeci=()=>false,isSpdField=()=>false,getOdjelBounds=()=>null,showToast=()=>{};
 const map={options:{zoomSnap:1},center:{lat:44.9,lng:16},zoom:13,getCenter(){return this.center;},getZoom(){return this.zoom;},setView(c,z){this.center=c;this.zoom=z;},invalidateSize(){}};
 ''' + '\n'.join(function(n) for n in ['_escHtml','_niceScaleLen','_fmtScaleLen','_menuIdentityRender','toggleMenuDropdown','closeMenuDropdown']) + '\n' + print_js
@@ -42,9 +47,9 @@ javascript += "\nconst kolegeMap={B:{ime:'Amir Kolega'}};let dnevniLog=[],server
 javascript += '\n'+'\n'.join(function(n) for n in ['dst','calcL','calcElev','fmtL','fmtHa','fmtDate','fmtDateShort','_esc','_pmOpenDetail','_pmBuildDetail','_vlakeStatsSecsHtml','_pmTime'])+'\n'+pm_code
 javascript += '\n'+(ROOT/'static/js/server-panel.js').read_text()
 fixture = '<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color"><style>' + styles + '''
-#menu-btn{position:fixed;left:10px;top:8px;width:60px;height:44px;z-index:9999}
+#tab-bar{position:fixed;left:0;right:0;top:0;z-index:900}
 #wrapper{position:fixed;inset:0}#main{position:absolute;inset:60px 0 65px}#map{position:absolute;inset:0;background:repeating-linear-gradient(30deg,#dce9d5 0 35px,#e9f1e4 36px 70px)}
-</style></head><body><div id="wrapper"><button id="menu-btn" onclick="toggleMenuDropdown(event)">Meni</button><div id="main"><div id="map">
+</style></head><body>''' + sprite + '<div id="wrapper">' + tabs + '''<div id="main"><div id="map">
 <div id="print-naslov" class="stp-el"></div><div id="print-legend" class="stp-el"></div>
 <div id="print-scalebar" class="stp-el"><div id="psb-mj"></div><div id="psb-bar"></div><span id="psb-mid"></span><span id="psb-full"></span></div>
 </div></div>''' + action + '</div>' + menu + pm_html + '<div id="stampa-kontrole"></div><script>' + javascript + '</script></body></html>'
@@ -62,6 +67,8 @@ async def main():
                 await r.fulfill(content_type='text/html', body=fixture)
             elif path == '/icon-192.png':
                 await r.fulfill(content_type='image/png', body=(ROOT/'icon-192.png').read_bytes())
+            elif path == '/forwarder.svg':
+                await r.fulfill(content_type='image/svg+xml', body=(ROOT/'forwarder.svg').read_bytes())
             else:
                 await r.fulfill(status=404, body='fixture only')
         await page.route('**/*', route)
@@ -76,7 +83,7 @@ async def main():
                 await page.wait_for_function('document.querySelector(".mdrop-brand img").complete')
                 assert await page.locator('#menu-user-label').inner_text() == 'Emina Projektant'
                 assert await page.locator('#menu-app-ver').inner_text() == 'Verzija '+VERSION
-                assert await page.locator('.mdrop-brand b').inner_text() == 'US ŠUME · Vlake'
+                assert await page.locator('.mdrop-brand b').inner_text() == 'DENDRO MAP'
                 assert await page.locator('#menu-user-role').inner_text() == 'Projektant · Šumarija Bos.Krupa'
                 assert await page.locator('.mdrop-brand img').evaluate('(e)=>e.naturalWidth') == 192
                 dims = await page.evaluate('''()=>{const m=document.querySelector('#menu-dropdown'),f=document.querySelector('.mdrop-footer'),s=document.querySelector('.mdrop-sections');const b=m.getBoundingClientRect(),fb=f.getBoundingClientRect();return {left:b.left,right:b.right,bottom:b.bottom,footer:fb.bottom,scroll:s.clientHeight,width:m.clientWidth,content:m.scrollWidth};}''')
@@ -84,6 +91,14 @@ async def main():
                 assert dims['footer']<=height and dims['scroll']>40 and dims['content']<=dims['width'], dims
                 await page.screenshot(path=str(OUT/f'menu-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeMenuDropdown()')
+                await page.click('#vlake-tab-btn')
+                assert await page.evaluate('_activeTab') == 'vlake'
+                assert await page.locator('#vlake-tab-btn').evaluate('(e)=>e.classList.contains("active")')
+                nav = await page.locator('#vlake-tab-btn').evaluate('(e)=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height,icon:getComputedStyle(e.querySelector(".tbi")).color,bg:getComputedStyle(e.querySelector(".tbi")).backgroundColor}}')
+                assert nav['left']>=0 and nav['right']<=width and nav['height']>=48, nav
+                assert nav['icon']=='rgb(255, 255, 255)' and nav['bg']=='rgb(22, 101, 52)', nav
+                await page.screenshot(path=str(OUT/f'vlake-button-{theme}-{width}-{height}.png'))
+                await page.evaluate("switchTab('karta')")
                 if theme=='day':
                     colors=await page.evaluate('''()=>['ab-loc','ab-izmjeri'].map(id=>getComputedStyle(document.getElementById(id)).color)''')
                     assert colors==['rgb(16, 32, 51)','rgb(16, 32, 51)'],colors

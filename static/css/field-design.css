@@ -5,6 +5,14 @@ html #tab-bar {box-shadow:none;}
 html .tab-btn {min-height:56px;min-width:56px;font-size:12px;gap:3px;}
 html .tab-btn.active {font-weight:800;}
 html .tab-btn .tbi {padding:2px 10px;}
+/* Vlake: jasan ulaz u zajedničku mrežu, sa stanjem odabranog taba. */
+html #vlake-tab-btn {font-weight:800;}
+html #vlake-tab-btn .tbi {border:1px solid #475569;border-radius:12px;background:#1e293b;color:#bae6fd;padding:3px 10px;}
+html #vlake-tab-btn.active .tbi {background:#166534;color:#fff;border-color:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.16);}
+html #vlake-tab-btn .vlake-tab-label {line-height:1.4;letter-spacing:.15px;}
+html #vlake-tab-btn .tab-notif {border:2px solid var(--field-bg);}
+html[data-field-theme=day] #vlake-tab-btn .tbi {background:#e0f2fe;color:#075985;border-color:#7dd3fc;}
+html[data-field-theme=day] #vlake-tab-btn.active .tbi {background:#166534;color:#fff;border-color:#166534;box-shadow:0 0 0 2px #bbf7d0;}
 html #field-status {top:calc(56px + env(safe-area-inset-top,0px));font-size:12px;}
 html .sec {padding:14px 12px;}
 html .sec-t {font-size:13px;color:var(--field-muted);letter-spacing:.3px;line-height:1.5;}

@@ -915,3 +915,39 @@ updaterov `/releases?per_page=1` vraća ovu objavu. APK SHA-256:
 Android versionCode 484, postojeći fiksni debug potpis. Korisnik pokreće
 Meni → Ažuriraj aplikaciju; instalacija i saradnja na dva fizička telefona
 nisu potvrđene u ovom okruženju.
+
+## 29. Provjera slanja vlaka/doznake i naziv DENDRO MAP — 2.1.5 / Android 485
+
+Korisnik traži provjeru slanja nacrtanih i GPS snimljenih vlaka i pojaseva
+doznake, naziv DENDRO MAP u Meniju i bolji dizajn dugmeta Vlake.
+Slanje ostaje isključivo ručno preko Meni → Server → Pošalji na server.
+Oba načina unosa vlake prolaze kroz addPt/scheduleVlakaSave/sbFlushVlaka i
+upsert_vlaka → tabelu vlake. GPS pojas ide kroz trajni FieldStore dnevnik
+i serije doz_track_points; obojeni poligon pojasa računa se iz tih tačaka
+i granice odjela. Nacrtane zone šalju boundary_geojson u doz_area_markings.
+
+Nađen i ponovljen problem hladnog pokretanja: brojač prije učitanog IDB-a
+može prijaviti nula GPS tačaka i serverPosalji kaže da je sve već poslano.
+Priprema sada čeka FieldStore.init i provjerava vlasnika nakon await-a;
+greška dnevnika prekida slanje bez lažnog uspjeha. Djelimični uspjeh mjeri
+i smanjenje broja GPS tačaka, jer je pojas u zbirnom brojaču jedna stavka.
+Kod pune memorije nacrtana zona ne zatvara modal niti gubi geometriju ako
+enqueue nije potvrdio upis; prikazuje poruku i ostavlja ponovni pokušaj.
+
+Novi server-vlake-doznaka.test.js koristi izvorne funkcije, cijeli procesor
+reda i lažni server/dnevnik. Deset provjera: oba načina unosa vlake preko
+addPt, zona i 205 GPS tačaka jednim pritiskom, bez automatskih upisa;
+hladni dnevnik, greška IDB-a, pad veze, RLS sa djelimičnim potvrdama,
+izgubljen odgovor bez duplikata, promjena naloga, nova tačka tokom slanja,
+legacy bafer/tuđi podaci i puna memorija zone. Na izvornoj 2.1.4 pada pet
+ovih provjera; na 2.1.5 prolazi svih deset. Supabase je lažan: ne potvrđuje
+trenutne produkcijske dozvole/RLS ili razmjenu na dva stvarna telefona.
+
+Meni zadržava korisnika/logo/verziju, naziv i alt loga sada DENDRO MAP.
+Glavni tab Vlake dobio identitet vlake/kraka, obrubljenu ikonu, čitljiv
+natpis i zelenu odabranu ikonu u oba moda. Callback i notif-vlake ostaju
+postojeći. Browser fixture sada koristi stvarnu gornju traku i SVG sprite,
+provjerava klik/aktivno stanje/kontrast/veličinu dugmeta i novi naziv na
+četiri veličine u dvije teme uz ranije provjere projekata/štampe.
+Lokalno prolazi 74 JS testna fajla, pet inline blokova i Python sintaksa.
+Objava i ishod GitHub APK/browser workflowa provjeravaju se nakon pusha.
