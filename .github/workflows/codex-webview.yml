@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - CODEX-US-SUME
+      - CODEX-US-SUME-2026-10-01
 permissions:
   contents: write
 jobs:
   apk:
-    if: github.ref == 'refs/heads/CODEX-US-SUME'
+    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +86,10 @@ jobs:
             echo "artefakt se NE objavljuje (bolje bez APK-a nego sa tiho nepotpunim)."
             exit 1
           fi
+      - name: Provjeri SHA-256 svih web assets u APK-u
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          python3 android/assets.py verify --apk "$APK_PATH"
       - uses: actions/upload-artifact@v4
         with:
           name: US-SUME-CODEX-debug-${{ github.sha }}

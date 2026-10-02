@@ -9,7 +9,9 @@
 # pull" provjeru radi preko `git status --porcelain`, koja bez ovog reda
 # prijavljuje preuzeti jar kao untracked promjenu i blokira SVAKI sljedeći
 # pokušaj build-a poslije prvog (jar ostaje na disku od prošlog puta).
-/gradle/wrapper/gradle-wrapper.jar
+# The official Gradle 8.4 wrapper JAR is verified and committed so CI/builds
+# do not depend on a machine-local bootstrap step.
+!/gradle/wrapper/gradle-wrapper.jar
 
 # Assets su kopija web fajlova - generišu se sa copy-assets.sh
 /app/src/main/assets/

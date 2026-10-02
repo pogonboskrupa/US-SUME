@@ -110,6 +110,23 @@ await t('izmjereno mrtva veza (OS i dalje kaže online) → ne pokušava', () =>
   assert.strictEqual(api._mrezaProbaj(true), false);
 });
 
+await t('dva zadnja pada zaustavljaju mrežu i poslije ranije dobre veze', () => {
+  const { api } = makeNet();
+  for (let i = 0; i < 8; i++) api.uzorak(true, 60000);
+  api._netZabiljezi({ ok: false, ms: 15000, vrsta: 'istek' });
+  api._netZabiljezi({ ok: false, ms: 15000, vrsta: 'istek' });
+  assert.strictEqual(api._netKvalitet(), 'nema');
+  assert.strictEqual(api._netDozvoliZahtjev(), false);
+});
+
+await t('neuspjela proba odmah zatvara prozor za naredne zahtjeve', () => {
+  const { api } = makeNet();
+  api.uzorak(false, 31000);
+  assert.strictEqual(api._netDozvoliZahtjev(), true);
+  api._netZabiljezi({ ok: false, ms: 100, vrsta: 'greska' });
+  assert.strictEqual(api._netDozvoliZahtjev(), false);
+});
+
 await t('mrtva veza: poslije 30 s JEDNA proba, njen tok smije završiti, ostali čekaju sljedeći prozor', () => {
   const { api, sat } = makeNet();
   api.uzorak(false, 31000);
@@ -370,6 +387,59 @@ await t('nema keša (prvo pokretanje) → čeka mrežu, ne vraća prazno', async
   const odgovori = makeSW({ kes: undefined, mreza: () => new Promise(r => setTimeout(() => r(new Response('mreza')), 20)) });
   const r = await odgovori('https://app.test/index.html');
   assert.strictEqual(await r.text(), 'mreza');
+});
+
+console.log('\nOsvježavanje vlaka na prekinutoj vezi:');
+function makeVlakeLoader(odgovor) {
+  const primjene = [], citanja = [];
+  const lokalne = [{ id: 'v1', pts: [{ la: 44, lo: 16 }] }];
+  const g = {
+    isReadOnly: () => false, sbUser: { id: 'u1' }, sbProfile: { sumarija: 'S' },
+    localStorage: { getItem: () => 'u1', setItem() {}, removeItem() {} },
+    LOCAL_VLAKE_KEY: 'vlake',
+    _loadLocalVlake: () => { citanja.push('lokalne'); return lokalne; },
+    _applyVlakeRows: rows => primjene.push(rows),
+    _OL: { VLAKE: 'kes', save() {}, load: () => { citanja.push('kes'); return lokalne; } },
+    sb: { from: () => { const q = { select: () => q, eq: () => q,
+      then: (ok, fail) => Promise.resolve().then(odgovor).then(ok, fail) }; return q; } },
+  };
+  const api = new Function(...Object.keys(g), extractFn('sbLoadVlake') + ';return sbLoadVlake;')(...Object.values(g));
+  return { api, primjene, citanja };
+}
+await t('pozadinski tok poziva osvježavanje bez ponovnog lokalnog restore-a', async () => {
+  const pozivi = [];
+  const g = {
+    sbUser: { id: 'u1' }, sbProfile: {}, _mrezaProbaj: () => true,
+    sbLoadProjekti: async () => {}, sbLoadVlake: async arg => pozivi.push(arg),
+    sbLoadLog: async () => {}, autoLoadAllKmlBuckets() {}, sbLoadSharedFotos() {}, sbLoadKolegeVlake() {},
+  };
+  const fn = new Function(...Object.keys(g), 'let _coreReloadBusy = false;\n' +
+    extractFn('_reloadCoreData') + ';return _reloadCoreData;')(...Object.values(g));
+  await fn();
+  assert.deepStrictEqual(pozivi, [true]);
+});
+await t('pozadinski neuspjeh ne parsira keš i ne precrtava postojeće vlake', async () => {
+  const h = makeVlakeLoader(() => ({ error: { message: 'Failed to fetch' } }));
+  await h.api(true); await h.api(true);
+  assert.deepStrictEqual(h.citanja, []);
+  assert.deepStrictEqual(h.primjene, []);
+});
+await t('bačena mrežna greška također čuva postojeći prikaz', async () => {
+  const h = makeVlakeLoader(() => { throw new TypeError('Failed to fetch'); });
+  await h.api(true);
+  assert.deepStrictEqual(h.primjene, []);
+});
+await t('prvi offline ulazak i dalje učitava lokalne vlake', async () => {
+  const h = makeVlakeLoader(() => ({ error: { message: 'Failed to fetch' } }));
+  await h.api();
+  assert.ok(h.citanja.includes('lokalne') && h.primjene.length > 0);
+});
+await t('uspješno osvježavanje primjenjuje nove serverske podatke', async () => {
+  const rows = [{ id: 'v2', pts: [] }];
+  const h = makeVlakeLoader(() => ({ data: rows, error: null }));
+  await h.api(true);
+  assert.deepStrictEqual(h.primjene, [rows]);
+  assert.deepStrictEqual(h.citanja, []);
 });
 
 console.log('\nInvarijante nad kodom:');

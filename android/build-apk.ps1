@@ -3,8 +3,8 @@
 # Ili iz android/ foldera:         powershell -ExecutionPolicy Bypass -File build-apk.ps1
 
 param(
-    [ValidateSet("CODEX-US-SUME")]
-    [string]$Branch  = "CODEX-US-SUME",
+    [ValidateSet("CODEX-US-SUME", "CODEX-US-SUME-2026-10-01")]
+    [string]$Branch  = "CODEX-US-SUME-2026-10-01",
     [ValidateSet("debug", "release")]
     [string]$BuildType = "debug"   # "debug" ili "release"
 )
@@ -42,7 +42,7 @@ if ($LocalChanges) {
 
 $CurrentBranch = git branch --show-current
 if ($LASTEXITCODE -ne 0 -or $CurrentBranch -ne $Branch) {
-    throw "Build se pokreće samo sa CODEX-US-SUME. Skripta ne mijenja grane."
+    throw "Build se pokreće samo sa odobrenom CODEX-US-SUME granom. Skripta ne mijenja grane."
 }
 git fetch origin $Branch
 if ($LASTEXITCODE -ne 0) { throw "git fetch nije uspio" }
@@ -66,42 +66,8 @@ Write-Host "`n[2/3] Kopiranje assets u android/app/src/main/assets/..." -Foregro
 
 $AssetsDir = Join-Path $AndroidDir "app\src\main\assets"
 
-# Očisti i napravi foldere
-if (Test-Path $AssetsDir) { Remove-Item $AssetsDir -Recurse -Force }
-$null = New-Item -ItemType Directory -Path $AssetsDir
-$null = New-Item -ItemType Directory -Path "$AssetsDir\geo"
-$null = New-Item -ItemType Directory -Path "$AssetsDir\doznaka"
-$null = New-Item -ItemType Directory -Path "$AssetsDir\PUTEVI"
-$null = New-Item -ItemType Directory -Path "$AssetsDir\static"
-$null = New-Item -ItemType Directory -Path "$AssetsDir\.well-known"
-
-# Glavni fajlovi
-$MainFiles = @("index.html","manifest.json","sw.js","icon-192.png","icon-512.png","apple-touch-icon.png")
-foreach ($f in $MainFiles) {
-    $src = Join-Path $ProjectDir $f
-    if (Test-Path $src) { Copy-Item $src "$AssetsDir\" }
-}
-
-# Opcionalni fajlovi (ne grešiti ako ne postoje)
-# forwarder.png i "FORVARDER IKONA.png" (~2.3MB svaki) namjerno izostavljeni —
-# UI koristi isključivo forwarder.svg, PNG varijante se nigdje ne referenciraju.
-$OptFiles = @("forwarder.svg","GRANICE.kml")
-foreach ($f in $OptFiles) {
-    $src = Join-Path $ProjectDir $f
-    if (Test-Path $src) { Copy-Item $src "$AssetsDir\" }
-}
-
-# Folderi s podacima
-$Folders = @("geo","doznaka","PUTEVI","static",".well-known")
-foreach ($folder in $Folders) {
-    $src = Join-Path $ProjectDir $folder
-    if (Test-Path $src) {
-        Copy-Item "$src\*" "$AssetsDir\$folder\" -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
-$sizeKB = [math]::Round((Get-ChildItem $AssetsDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1KB)
-Write-Host "      OK - Ukupna velicina assets: $sizeKB KB" -ForegroundColor Green
+# Jedan manifest i jedna PowerShell procedura; greška kopiranja prekida build.
+& (Join-Path $AndroidDir 'copy-assets.ps1')
 
 # Verzija koja IDE u APK — provjeri OVO prije nego čekaš gradle build (par minuta).
 # Ako ovo ispiše staru verziju, build gore u [1/3] nije stvarno povukao izmjene.

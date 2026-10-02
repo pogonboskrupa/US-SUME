@@ -448,3 +448,78 @@ ne tvrdi da je 950 MB baza otvorena trenutno.
   uključujući offline, pa se tek zatim mogu osvježiti mrežom.
 - Godišnji prikaz i opožarene površine prikazuju sezonu mart–novembar;
   januar, februar i decembar se ne crtaju niti se nude u legendi.
+
+## 12. Slab signal — v1.9.7 (2026-10-01)
+
+Na zahtjev korisnika rad se nastavlja na novoj grani
+`CODEX-US-SUME-2026-10-01`, od `0eba708`, umjesto historijske radne grane.
+
+- Potvrđeno testom: pozadinski `sbLoadVlake` na neuspješan dohvat ponovo
+  čita lokalne vlake i serverski keš te dvaput poziva obradu/prikaz vlaka.
+  `_reloadCoreData` sada koristi osvježavanje bez obnove lokalnog keša;
+  mrežni neuspjeh zadržava postojeće objekte i prikaz. Prvi ulazak i dalje
+  obnavlja lokalne podatke, a uspješan dohvat primjenjuje serverske izmjene.
+- Dva uzastopna mrežna pada zatvaraju automatski mrežni pristup i kada
+  postoje raniji uspješni uzorci. Neuspjela proba odmah zatvara svoj prozor.
+  Povremena proba i povratak veze ostaju podržani.
+- Regresijski testovi nad izvornim funkcijama: prije izmjene pet padova,
+  poslije izmjene `slab-signal.test.js` 32/32. Ovo potvrđuje uklanjanje
+  nepotrebnog rada, ne trajanje zamrzavanja na stvarnom uređaju.
+- Web/SW/Android verzija 1.9.7, Android versionCode 467. APK nije izgrađen
+  niti instaliran; potreban je terenski test slabog signala na novom APK-u.
+
+## 13. Pregled ručnog slanja — v1.9.8
+
+Na korisnikov zahtjev za širim pregledom i uz odobren sljedeći push,
+`saveNovProjekt` sada uvijek čuva projekat u redu prije potvrde uspjeha.
+Osvježavanje projekata vraća neposlane iz reda prije validacije aktivnog
+projekta, a potvrda doznake čuva keš stabala kada UUID ostaje isti.
+Detalji, testovi i otvoreni nalazi: `docs/PREGLED_KODA_2026-10-01.md`.
+Slanje terenskog reda ostaje ručno; pozadinsko preuzimanje nije ukinuto.
+
+## 14. Ručno slanje i offline odziv — v1.9.9 (2026-10-01)
+
+Korisnik je razjasnio cilj: ručno slanje ostaje; prioritet su brzina i
+zamrzavanje na osrednjim uređajima bez interneta. Automatsko slanje nije cilj.
+
+- `_retryOrphanVlake` je pri svakom init-u ponovo obrađivao sve vlake bez
+  server ID-a, čak i identične već spremljenim operacijama. Svaki flush
+  serijalizuje cijeli lokalni registar, keš i queue. Sada jedan pregled reda
+  pronalazi identične operacije; one se ne prepisuju i zadržavaju blocked/retry
+  status. Novija geometrija/metapodaci i vlake bez operacije se i dalje čuvaju.
+- Oporavak prepušta glavnu nit između vlaka; nakon pauze ponovo provjerava
+  vlasnika, prisutnost i brisanje vlake. Ovo ne odgađa izvorni terenski upis:
+  radi se o naknadnom oporavku već lokalno sačuvanih podataka.
+- Ručno slanje GPS serije na privremenom server/SQL kvaru više ne prelazi na
+  stotinu pojedinačnih pokušaja niti nastavlja ostale serije. Nepotvrđene
+  tačke ostaju u baferu. Pojedinačni put ostaje za FK/RLS greške; prekida se
+  ako server tokom tog puta postane nedostupan.
+- Regresije: 40 identičnih vlaka bez ponovnog flush-a, novija geometrija i
+  metapodaci, promjena korisnika/brisanje tokom pauze, oštećen red; 220 GPS
+  tačaka i privremeni pad daju jedan serijski pokušaj, nula pojedinačnih,
+  nepromijenjen bafer. Ručni režim ostaje pokriven postojećim testovima.
+- Verzije: web/SW/Android 1.9.9, versionCode 469. Nije izvršen Android build,
+  instalacija ni mjerenje na telefonu. Ovo uklanja konkretan nepotreban rad,
+  ne dokazuje da su svi uzroci zamrzavanja uklonjeni. Sinhroni localStorage
+  velikih GPS registara i native disk sync ostaju kandidati za profiliranje.
+
+## 15. Prvi dio pregleda — 2.0.0 / Android 470
+
+Korisnik traži pregled i testiranje u tri cjeline, počevši od lokalnog rada.
+Popravljena su dva reproducirana propusta pri padu lokalnog upisa: doznaka
+više ne pomjera memorijsku geometriju prije potvrde bafera; završavanje traga
+ne briše crash snapshot niti gasi snimanje kad registar nije sačuvan.
+Oporavak doznake crta jednu liniju umjesto jednog sloja po segmentu.
+Detalji i preostali rizici: docs/PREGLED_DIO_1_OFFLINE_2026-10-01.md.
+
+## 16. Drugi dio pregleda — 2.0.1 / Android 471
+
+Ručno slanje: nepoznate operacije se zadržavaju uz objašnjenje; UPDATE
+statusa/zone zahtijeva potvrđen ciljani ID; zakašnjeli odgovor projekta/zone
+ne mijenja lokalne podatke novog naloga. Cijeli ručni ciklus se zaustavlja
+pri promjeni vlasnika. Osam novih regresijskih provjera prolazi.
+Obim i otvoreni nalazi: docs/PREGLED_DIO_2_RUCNO_SUPABASE_2026-10-01.md.
+
+## 17. Treći dio pregleda — 2.0.2 / Android 472
+
+Tile bitmap cache ima tvrdu granicu. Dodan je manifest assets, atomarna Python priprema, Gradle `syncWebAssets` prije `preBuild`, stroge kopije i SHA-256 provjera APK-a. Svih 62 JS + 6 Python assets provjera prolaze. Wrapper JAR je vraćen i provjeren; lokalni build je sada blokiran nedostupnom Gradle 8.4 distribucijom (`UnknownHostException`).

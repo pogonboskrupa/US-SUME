@@ -4494,3 +4494,31 @@ namjerno, prije nego se jave.
    Panelu Požari za obrazac: preimenovanje identifikatora + localStorage
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
+
+## Važeći cilj — 2026-10-01, v1.9.9
+
+Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
+uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.
+Optimizacije moraju čuvati lokalne podatke i ručni režim. Oporavak neposlanih
+vlaka preskače identičan već sačuvan red; novije lokalne izmjene i dalje ga
+ažuriraju. Privremeni pad servera tokom ručnog slanja GPS serije prekida
+prolaz bez pojedinačnog bombardovanja servera. Detalji: docs/CODEX_CONTEXT.md,
+odjeljak 14. Novi APK zahtijeva regeneraciju assets i puni build.
+
+### Lokalno spremanje — 2.0.0
+
+Doznaka mora potvrditi trajni bafer prije pomjeranja lokalne geometrije i
+filtera udaljenosti. `_tragRegAdd` može vratiti null pri padu trajnog upisa:
+pozivalac tada ne smije potvrditi završetak niti obrisati crash snapshot.
+Oporavljeni jednobojni pojas crta se jednom linijom, bez sloja po segmentu.
+
+### Potvrda ručnog slanja — 2.0.1
+
+Nulti broj izmijenjenih redova nije potvrda slanja statusa/zone: provjeriti
+vraćeni ciljani ID. Nepoznat tip operacije ne smije biti obrisan iz queue.
+Vlasnika provjeriti odmah nakon mrežnog odgovora, prije lokalne migracije
+ID-jeva/keša. Jedan ručni ciklus pripada nalogu koji ga je započeo.
+
+### Karte i build — 2.0.2
+
+Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokreće `syncWebAssets`, provjerava verzije i required assets; CI SHA-256 poredi APK sa izvornim fajlovima. Wrapper JAR je sada vraćen i checksum-provjeren; lokalno okruženje nema DNS pristup Gradle distribuciji.

@@ -10,8 +10,8 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 466
-        versionName "1.9.6"
+        versionCode 472
+        versionName "2.0.2"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
@@ -102,3 +102,28 @@ gradle.taskGraph.whenReady { graph ->
         }
     }
 }
+
+// Android Studio i direktni Gradle build također moraju nositi svjež web kod.
+def webRoot = rootProject.projectDir.parentFile
+def assetSpec = new groovy.json.JsonSlurper().parse(new File(webRoot, 'android/assets-manifest.json'))
+def syncWebAssets = tasks.register('syncWebAssets', Sync) {
+    from(webRoot) {
+        assetSpec.files.each { include it }
+        assetSpec.directories.each { include it + '/**' }
+    }
+    into(layout.projectDirectory.dir('src/main/assets'))
+    // Validacija se mora izvršiti i kad Gradle smatra izlaz ažurnim.
+    outputs.upToDateWhen { false }
+    doFirst {
+        (assetSpec.files + assetSpec.required).each { name ->
+            def f = new File(webRoot, name)
+            if (!f.isFile() || f.length() == 0) throw new GradleException('Nedostaje obavezni web fajl: ' + name)
+        }
+        def html = new File(webRoot, 'index.html').getText('UTF-8') =~ /APP_VER\s*=\s*'v([0-9.]+)'/
+        def sw = new File(webRoot, 'sw.js').getText('UTF-8') =~ /APP_VERSION\s*=\s*'([0-9.]+)'/
+        if (!html.find() || !sw.find() || html.group(1) != android.defaultConfig.versionName || sw.group(1) != android.defaultConfig.versionName) {
+            throw new GradleException('Web/SW/Android verzije nisu usklađene')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn(syncWebAssets) }

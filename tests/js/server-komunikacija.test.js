@@ -128,7 +128,7 @@ t('_serverPrivremeno razlikuje pad servera, pad upita i stvarnu grešku', () => 
   assert.strictEqual(f(null), null);
 });
 
-function makeRed(greskaZa) {
+function makeRed(greskaZa, overrides = {}) {
   _store.clear();
   const brisanja = [];
   const tajmeri = [];
@@ -145,6 +145,7 @@ function makeRed(greskaZa) {
     showToast: () => {}, _updSyncBadge: () => {}, console: { warn() {} },
     setTimeout: (fn, ms) => { tajmeri.push({ fn, ms }); return tajmeri.length; },
   };
+  Object.assign(g, overrides);
   const src = [extractConst('_SYNC_PAUZA_MS'),
     'let _syncMrezaPalaU = 0, _syncOdgodaT = null; let _syncInProgress = false, _syncRerun = false;',
     extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_serverPrivremeno'), extractFn('_processOfflineQueue'),
@@ -153,6 +154,20 @@ function makeRed(greskaZa) {
   const api = new Function(...k, src)(...k.map(x => g[x]));
   return { api, brisanja, tajmeri };
 }
+
+t('ručni procesor na privremenom GPS kvaru staje bez 100 pojedinačnih pokušaja', async () => {
+  let serije = 0, pojedinacno = 0;
+  const r = makeRed(() => null, {
+    _dozPosaljiKomad: async () => { serije++; return { ok: [], error: { code: 'PGRST002' } }; },
+    _dozPosaljiPojedinacno: async () => { pojedinacno++; return { ok: [], error: null }; }
+  });
+  const buf = Array.from({ length: 220 }, (_, i) => ({ _qid: 'g' + i, user_id: 'u1', project_id: 'p', recorded_at: new Date(i * 1000).toISOString() }));
+  localStorage.setItem('buf', JSON.stringify(buf));
+  await r.api._processOfflineQueue(true);
+  assert.strictEqual(serije, 1); assert.strictEqual(pojedinacno, 0);
+  assert.deepStrictEqual(JSON.parse(localStorage.getItem('buf')), buf);
+  assert.ok(r.api.pauza() > 0);
+});
 
 t('SCENARIO: kratka smetnja servera dok doznaka šalje prolaz na svaku GPS tačku → vlaka NE završava u "ručnom pokušaju"', async () => {
   // Server 30 s vraća PGRST002 (baza se restartuje), GPS tačka svake sekunde okida prolaz.
@@ -262,7 +277,7 @@ t.sekcija('Doznaka GPS tačke u serijama:');
 function dozEnv(odgovori) {
   const { sb, log } = lazniSb(odgovori);
   const src = [extractConst('_DOZ_KOMAD'), extractFn('_isNetworkErr'), extractFn('_isAuthErr'), extractFn('_dozTackaKljuc'),
-    extractFn('_dozPosaljiKomad'), extractFn('_dozPosaljiPojedinacno'), extractFn('_sendDozTrackPoint'),
+    extractFn('_serverPrivremeno'), extractFn('_dozPosaljiKomad'), extractFn('_dozPosaljiPojedinacno'), extractFn('_sendDozTrackPoint'),
     'return { _dozPosaljiKomad, _dozPosaljiPojedinacno };'].join('\n');
   const api = new Function('sb', src)(sb);
   return { api, log };
@@ -305,6 +320,18 @@ t('mrežni pad usred serije: ništa nije označeno poslanim (ostaje u baferu)', 
   const r = await e.api._dozPosaljiKomad(tacke(20, 0));
   assert.deepStrictEqual(r.ok, []);
   assert.ok(/fetch/.test(r.error.message));
+});
+
+t('privremeni pad servera prekida pojedinačno slanje GPS tačaka', async () => {
+  let pokusaja = 0;
+  const e = dozEnv(q => {
+    pokusaja++;
+    return { error: { code: 'PGRST000', message: 'database unavailable' } };
+  });
+  const r = await e.api._dozPosaljiPojedinacno(tacke(100, 0));
+  assert.deepStrictEqual(r.ok, []);
+  assert.strictEqual(r.error.code, 'PGRST000');
+  assert.strictEqual(pokusaja, 1);
 });
 
 t('pojedinačni rezervni put: loša tačka (FK) ostaje, dobre prolaze', async () => {
