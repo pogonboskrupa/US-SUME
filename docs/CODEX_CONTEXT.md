@@ -1041,3 +1041,22 @@ počinje od ove verzije: staro globalno vrijeme bez vlasnika se ne pripisuje
 nalogu/projektu. Browser fixture proširen stvarnim Server pregledom na
 četiri veličine u oba moda; JS regresije provjeravaju scope, grupe i
 potvrde slanja kroz cijeli lažni serverski tok, uz prethodnih 75 fajlova.
+
+Potvrđeno 2026-10-02: workflow `37059980041`, job `111013969207`,
+uspješan za commit `1cf07611375ac39ff95f257fbc90076d850342e8`. Prolazi
+75/75 JS testnih fajlova, oba browser fixture-a i SHA-256 provjera 30
+APK web resursa, uključujući novi lokalni SHP modul. Sačuvano 75 PNG
+pregleda i jedan PDF; pregledani skrol Menija/identitet, dnevna/tamna
+navigacija, SHP podtab, novi Server i konvertovani poligon na Leaflet karti.
+Server zadržava svoj položaj skrola između otvaranja, zato neke slike
+prikazuju listu na dnu; prva slika pokazuje projekat i grupe za slanje.
+
+Javni nedraft debug release `v2.1.6` sadrži `app-debug.apk` (21.663.663
+bajta), uploaded. Tag pokazuje tačno izgrađeni commit, a updaterov
+`/releases?per_page=1` vraća v2.1.6. Android versionCode 486; postojeći
+fiksni debug potpis. SHA-256 APK-a:
+`2a2874e481d2f078a5d5b9b778e5a4f9294d2b6e825381984f8672664acfde1e`.
+Ažuriranje: Meni → Ažuriraj aplikaciju. Browser je provjerio capture input
+i GPS snapshot; stvarni Android senzor/kamera i dozvole na fizičkom
+telefonu nisu pokrenuti. Supabase/RLS i živo GPS/rutiranje nisu provjereni
+ovim fixture-ima; produkcijska baza i uređaji nisu mijenjani.
