@@ -39,8 +39,8 @@
     return calcL(pts);
   }
   function metres(n) { return n == null ? '—' : Math.round(n).toLocaleString('bs-BA') + ' m'; }
-  function model() {
-    const project = sync(), uid = currentUid();
+  function model(projectId) {
+    const project = projectId ? allowed().find(p=>p.id===projectId) : sync(), uid = currentUid();
     if (!project) return {project:null, rows:[], authors:[], total:0, incomplete:0, downloaded:null};
     const q = _OL.loadQueue().filter(op => !op._uid || op._uid === uid), items = new Map(), ids = new Map();
     const meta = metadata(project.id), currentIds = meta ? new Set(meta.ids) : null;

@@ -856,3 +856,41 @@ funkcije uz lažni projekat/kartu: Meni 320/390/768 i pejzaž 568×320 u dvije
 teme, vidljiv footer, boje Lokacija/Izmjeri, opise, legendu i PDF. Pokreće se
 na GitHub runneru prije APK-a jer lokalni Chromium blokira sandbox.
 Stvarno štampanje/instalacija na fizičkom Android uređaju nisu potvrđeni.
+
+APK 2.1.3 je objavljen: workflow `37049513747` uspješan, tag na
+`e5408b23b86f272b0b5ab7742725e22faef2b39f`. Naknadno je ispravljen UTF-8
+samo u browser fixtureu i dodata provjera naših slova/učitanog loga;
+workflow `37049836057` za `f1d96b15e28cf121727e71face0675cca6373164`
+takođe uspješan. Runtime APK resursi nisu promijenjeni tim testnim commitom.
+
+## 28. Upravljanje projektima — 2.1.4 / Android 484
+
+Na dodatni korisnikov zahtjev redizajnirani lista i detalj sekcije unutar
+Menija. Pretraga odjela/G.J./vlasnika i filter svih/aktivnog/vlastitih/
+dijeljenih projekata rade lokalno; zbirni pregled ostaje za cijeli skup.
+Kartice kao dostupna dugmad imaju odjel, G.J., vlasnika, aktivni status,
+broj glavnih vlaka/krakova, ukupnu dužinu, datum i površinu. ID prolazi
+kroz escapirani data atribut, ne interpolaciju u JavaScript string.
+
+Kartice običnog projektanta sada koriste isti zadnji dostupni zajednički
+skup kao Server (uključujući preuzete vlake kolega). Model prihvata opcionalni
+ID projekta bez mijenjanja izabranog projekta u Serveru ili na karti.
+Offline detalj koristi isti skup; tačke su kopirane prije obogaćivanja
+visina tako da pregled ne mijenja keš ili živo snimanje. Novi mrežni upiti
+nisu uvedeni; admin/vodeći zadržavaju postojeće RPC agregate i filter šumarije.
+
+Detalj ima istaknut odjel/G.J./vlasnika/dužinu, jasne postojeće akcije,
+kartice osnovnih podataka/statistike/projektanata/radnih dana, čitljive
+veličine slova i tabele sa horizontalnim skrolom. Stilovi su ograničeni
+na PM modal, koriste obje teme i prilagođavaju se telefonu/pejzažu/tabletu.
+Granice/geo podaci, podloge, dozvole i postojeći izvještaj ostaju isti.
+
+Krakovi se grupišu po autoru i oznaci: dva projektanta sa T1 više ne
+prikazuju isti krak dvaput u zajedničkoj tabeli.
+Lokalno prolazi 73 JS testna fajla, uključujući osam novih regresija PM-a,
+pet inline blokova i server-panel.js. Browser fixture proširen stvarnim PM
+funkcijama i lažnim projektima, zajedničkim kešom i kartom: lista i detalj
+na četiri veličine u obje teme, filteri i tabele; ostaju provjere Menija,
+naših slova, Dnevnog moda i štampe/PDF-a. APK objavljuje postojeći workflow
+po zahtjevu za ažuriranje unutar aplikacije. Stvarni telefoni/Supabase i
+fizička štampa nisu testirani.

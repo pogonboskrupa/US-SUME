@@ -5,7 +5,8 @@ from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = (ROOT / 'index.html').read_text()
-OUT = ROOT / 'outputs/ui-2.1.3'
+OUT = ROOT / 'outputs/ui-preview'
+VERSION = re.search(r"const APP_VER = '([^']+)'", SOURCE)[1]
 
 def function(name):
     match = re.search(r'(?:async )?function ' + name + r'\(', SOURCE)
@@ -27,20 +28,26 @@ styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', SOURCE[:SOURCE.index
 styles += '\n' + (ROOT / 'static/css/field-design.css').read_text()
 print_start = SOURCE.index('const _STP_FORMATI =')
 print_js = SOURCE[print_start:SOURCE.index("map.on('moveend zoomend'", print_start)]
-javascript = '''
-const APP_VER='v2.1.3'; let sbUser={id:'A'},sbProfile={id:'A',ime:'Emina',prezime:'Projektant',sumarija:'Šumarija Bos.Krupa'};
+javascript = 'const APP_VER='+json.dumps(VERSION)+';'+'''
+ let sbUser={id:'A'},sbProfile={id:'A',ime:'Emina',prezime:'Projektant',sumarija:'Šumarija Bos.Krupa'};
 let _aktivniProjektId='P',_activeTab='karta',vlake=[],_projekti=[{id:'P',odjel:'105',gj:'Gornja Una'}];
 const isVodeci=()=>false,isSpdField=()=>false,getOdjelBounds=()=>null,showToast=()=>{};
 const map={options:{zoomSnap:1},center:{lat:44.9,lng:16},zoom:13,getCenter(){return this.center;},getZoom(){return this.zoom;},setView(c,z){this.center=c;this.zoom=z;},invalidateSize(){}};
 ''' + '\n'.join(function(n) for n in ['_escHtml','_niceScaleLen','_fmtScaleLen','_menuIdentityRender','toggleMenuDropdown','closeMenuDropdown']) + '\n' + print_js
 javascript += '\n' + (ROOT / 'static/js/field-design.js').read_text()
+pm_start=SOURCE.index('<div id="pm-modal"')
+pm_html=SOURCE[pm_start:SOURCE.index('<!-- ─── IZVJEŠTAJI',pm_start)]
+pm_code=SOURCE[SOURCE.index('let _pmDetailId ='):SOURCE.index('function _isManualVlaka(')]
+javascript += "\nconst kolegeMap={B:{ime:'Amir Kolega'}};let dnevniLog=[],serverRows=[];const _OL={VLAKE:'vlake',load:()=>serverRows,loadQueue:()=>[]};const _kvcLoad=()=>[];const _mrezaProbaj=()=>false;const _enrichVlakeElevation=async()=>{};"
+javascript += '\n'+'\n'.join(function(n) for n in ['dst','calcL','calcElev','fmtL','fmtHa','fmtDate','fmtDateShort','_esc','_pmOpenDetail','_pmBuildDetail','_vlakeStatsSecsHtml','_pmTime'])+'\n'+pm_code
+javascript += '\n'+(ROOT/'static/js/server-panel.js').read_text()
 fixture = '<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color"><style>' + styles + '''
 #menu-btn{position:fixed;left:10px;top:8px;width:60px;height:44px;z-index:9999}
 #wrapper{position:fixed;inset:0}#main{position:absolute;inset:60px 0 65px}#map{position:absolute;inset:0;background:repeating-linear-gradient(30deg,#dce9d5 0 35px,#e9f1e4 36px 70px)}
 </style></head><body><div id="wrapper"><button id="menu-btn" onclick="toggleMenuDropdown(event)">Meni</button><div id="main"><div id="map">
 <div id="print-naslov" class="stp-el"></div><div id="print-legend" class="stp-el"></div>
 <div id="print-scalebar" class="stp-el"><div id="psb-mj"></div><div id="psb-bar"></div><span id="psb-mid"></span><span id="psb-full"></span></div>
-</div></div>''' + action + '</div>' + menu + '<div id="stampa-kontrole"></div><script>' + javascript + '</script></body></html>'
+</div></div>''' + action + '</div>' + menu + pm_html + '<div id="stampa-kontrole"></div><script>' + javascript + '</script></body></html>'
 
 async def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -68,7 +75,7 @@ async def main():
                 await page.wait_for_timeout(450)
                 await page.wait_for_function('document.querySelector(".mdrop-brand img").complete')
                 assert await page.locator('#menu-user-label').inner_text() == 'Emina Projektant'
-                assert await page.locator('#menu-app-ver').inner_text() == 'Verzija v2.1.3'
+                assert await page.locator('#menu-app-ver').inner_text() == 'Verzija '+VERSION
                 assert await page.locator('.mdrop-brand b').inner_text() == 'US ŠUME · Vlake'
                 assert await page.locator('#menu-user-role').inner_text() == 'Projektant · Šumarija Bos.Krupa'
                 assert await page.locator('.mdrop-brand img').evaluate('(e)=>e.naturalWidth') == 192
@@ -80,6 +87,35 @@ async def main():
                 if theme=='day':
                     colors=await page.evaluate('''()=>['ab-loc','ab-izmjeri'].map(id=>getComputedStyle(document.getElementById(id)).color)''')
                     assert colors==['rgb(16, 32, 51)','rgb(16, 32, 51)'],colors
+        await page.evaluate("""()=>{_projekti=Array.from({length:18},(_,i)=>({id:i?'P'+i:'P',odjel:i?String(200+i):'105',gj:i%3===0?'Gornja Una':'Grmeč',datum:'2026-10-02',povrsina:42.5,korisnik_id:i%2?'B':'A',clanovi:[{korisnik_id:'A'}]}));serverRows=_projekti.flatMap(p=>[0,1,2].map((k)=>({id:p.id+'-'+k,nm:k===2?'T1 - krak 1':'T'+(k+1),br:k+1,kr:k===2?1:0,projekt_id:p.id,korisnik_id:k?'B':'A',projektant_ime:k?'Amir Kolega':'Emina Projektant',pts:[{la:44.9,lo:16,al:300},{la:44.903,lo:16,al:340}]})));} """)
+        for theme in ['day','dark']:
+            await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+            for width,height in [(320,568),(390,800),(768,900),(568,320)]:
+                await page.set_viewport_size({'width':width,'height':height})
+                await page.evaluate('showProjectManagement()')
+                assert await page.locator('button.pm-card').count()==18
+                dims=await page.locator('#pm-box').evaluate('(e)=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,width:e.clientWidth,content:e.scrollWidth}}')
+                assert dims['left']>=0 and dims['right']<=width and dims['bottom']<=height and dims['content']<=dims['width'],dims
+                await page.screenshot(path=str(OUT/f'projects-{theme}-{width}-{height}.png'))
+                await page.select_option('#pm-filter','active')
+                assert await page.locator('button.pm-card').count()==1
+                await page.locator('button.pm-card').click()
+                await page.wait_for_selector('.pm-detail-hero')
+                assert 'Odjel 105' in await page.locator('.pm-detail-hero').inner_text()
+                assert 'Amir Kolega' in await page.locator('#pm-detail-body').inner_text()
+                assert '3 vlaka i krakova' in await page.locator('.pm-hero-length').inner_text()
+                assert await page.locator('.pm-table-scroll').count()>=2
+                overflow=await page.locator('#pm-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth')
+                assert overflow
+                await page.screenshot(path=str(OUT/f'project-detail-{theme}-{width}-{height}.png'))
+                await page.click('#pm-back-btn')
+                await page.select_option('#pm-filter','shared')
+                await page.fill('#pm-search','Amir')
+                assert await page.locator('button.pm-card').count()==9
+                await page.fill('#pm-search','nepostojeći')
+                assert await page.locator('button.pm-card').count()==0
+                assert 'Nema projekata' in await page.locator('#pm-list-inner').inner_text()
+                await page.evaluate('closeProjectManagement()')
         await page.set_viewport_size({'width':390,'height':800})
         await page.evaluate('document.documentElement.dataset.fieldTheme="day";stampaOtvori();_stpUredi()')
         await page.locator('textarea').nth(0).fill('Plan vlaka 2026\nOpis radilišta <test>')
@@ -102,6 +138,6 @@ async def main():
         await page.pdf(path=str(OUT/'karta-provjera.pdf'),width='297mm',height='210mm',print_background=True)
         assert not errors,errors
         await browser.close()
-    print('OK: Meni 8 veličina/tema, stalni footer, Dnevni kontrast, opisi, legenda i print/PDF')
+    print('OK: Meni, projekti/detalji 8 veličina/tema, filteri, stalni footer, Dnevni kontrast, opisi i print/PDF')
 
 asyncio.run(main())

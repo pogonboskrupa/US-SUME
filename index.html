@@ -5678,7 +5678,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.3';
+const APP_VER = 'v2.1.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -25891,9 +25891,39 @@ function _fmtDateTime(s) {
 // ══════════════════════════════════════════════════════════════════════════
 let _pmDetailId = null;
 let _pmLastData = null;
+let _pmSearch = '', _pmFilter = 'all';
+
+function _pmFilterList(query,mode) {
+  if (query !== undefined) _pmSearch = String(query);
+  if (mode !== undefined) _pmFilter = ['all','active','mine','shared'].includes(mode) ? mode : 'all';
+  _pmRenderList();
+}
+function _pmMatchProject(p,owner) {
+  const q=_pmSearch.trim().toLocaleLowerCase('bs');
+  const text=[p.odjel,p.gj,p.sumarija,p.datum,owner].filter(Boolean).join(' ').toLocaleLowerCase('bs');
+  return (!q || text.includes(q)) && (_pmFilter==='all' || _pmFilter==='active' && p.id===_aktivniProjektId || _pmFilter==='mine' && p.korisnik_id===sbUser?.id || _pmFilter==='shared' && p.korisnik_id!==sbUser?.id);
+}
+function _pmListCaption(shown,total) {
+  const el=document.getElementById('pm-list-caption');
+  if(el)el.textContent='Prikazano '+shown+' od '+total+' projekata · Sažetak svih dostupnih projekata';
+}
+function _pmProjectRows(p) {
+  if(typeof _serverProjektModel==='function')return _serverProjektModel(p.id).rows.filter(r=>r.metres!==null);
+  return vlake.filter(v=>v.projektId===p.id && (v.pts || []).length>=2).map(v=>({...v,korisnik_id:sbUser?.id}));
+}
+function _pmCardHtml(p,owner,nV,nK,len) {
+  const active=p.id===_aktivniProjektId;
+  return `<button type="button" class="pm-card${active?' pm-current':''}" data-project="${_escHtml(p.id)}" onclick="_pmOpenDetail(this.dataset.project)">
+    <span class="pm-card-top"><span class="pm-card-odjel">${_escHtml(/^odjel/i.test(p.odjel || '') ? p.odjel : 'Odjel '+(p.odjel || '—'))}</span>${active?'<span class="pm-card-akt">Aktivan</span>':''}<span class="pm-card-arrow" aria-hidden="true">›</span></span>
+    <span class="pm-card-gj">${_escHtml(p.gj || 'Gospodarska jedinica nije unesena')}</span>
+    <span class="pm-card-owner">Vlasnik: ${_escHtml(owner)}</span>
+    <span class="pm-card-metrics"><span><b>${nV}</b><small>Vlaka</small></span><span><b>${nK}</b><small>Krakova</small></span><span><b>${fmtL(len)}</b><small>Ukupna dužina</small></span></span>
+    <span class="pm-card-foot"><span>Kreirano ${_escHtml(fmtDateShort(p.datum))}</span><span>${Number(p.povrsina)>0?fmtHa(Number(p.povrsina)):'Površina —'}</span></span>
+  </button>`;
+}
 
 function _pmUserName(id) {
-  if (id && sbUser && id === sbUser.id) return sbProfile ? (sbProfile.ime + ' ' + sbProfile.prezime) : 'Ja';
+  if (id && sbUser && id === sbUser.id) return sbProfile ? [sbProfile.ime,sbProfile.prezime].filter(Boolean).join(' ') : 'Ja';
   return (kolegeMap[id] && kolegeMap[id].ime) || 'Nepoznat';
 }
 
@@ -25901,6 +25931,9 @@ let _pmAdminRows = null; // admin/vodeći: agregati projekata (RPC), {_err} na g
 let _pmDozRows   = null; // vodeći: doznaka odjeli šumarije (RPC)
 
 async function showProjectManagement() {
+  _pmSearch='';_pmFilter='all';
+  const search=document.getElementById('pm-search'),filter=document.getElementById('pm-filter');
+  if(search)search.value='';if(filter)filter.value='all';
   document.getElementById('pm-modal').classList.add('show');
   if (sbProfile?.is_admin || isVodeci()) {
     // Nadzor: in-memory `vlake` je prazan (read-only nalog) pa se brojevi po
@@ -25962,15 +25995,17 @@ function _pmRenderList() {
   let el = document.getElementById('pm-list');
   if (sbProfile?.is_admin || isVodeci()) { _pmRenderAdminList(el); return; }
   if (!_projekti.length) {
-    el.innerHTML = '<div class="pm-empty">Nema projekata.</div>';
+    _pmListCaption(0,0);
+    el.innerHTML = '<div class="pm-empty">Još nema projekata.<br>Napravi projekat u sekciji Projekti.</div>';
     return;
   }
 
   // ── Zbirni pregled (dashboard) ──
+  const projectRows = new Map(_projekti.map(p=>[p.id,_pmProjectRows(p)]));
   let sumLen = 0, sumPov = 0, sumVlaka = 0;
   const allDesigners = new Set();
   _projekti.forEach(p => {
-    const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
+    const pv = projectRows.get(p.id);
     sumVlaka += pv.length;
     sumLen += pv.reduce((s, v) => s + calcL(v.pts), 0);
     sumPov += parseFloat(p.povrsina) || 0;
@@ -25983,7 +26018,7 @@ function _pmRenderList() {
   const skpi = (v, l) => `<div class="pm-skpi"><div class="pm-skpi-v">${v}</div><div class="pm-skpi-l">${l}</div></div>`;
   el.innerHTML = `<div class="pm-summary">
     ${skpi(_projekti.length, 'Projekata')}
-    ${skpi(sumVlaka, 'Vlaka')}
+    ${skpi(sumVlaka, 'Vlaka i krakova')}
     ${skpi((sumLen / 1000).toFixed(1) + ' km', 'Ukupno vlaka')}
     ${skpi(sumPov > 0 ? fmtHa(sumPov) : '—', 'Površina')}
     ${skpi(allDesigners.size, 'Projektanata')}
@@ -25994,41 +26029,30 @@ function _pmRenderList() {
   const sorted = (typeof _sortByGjDatum === 'function') ? _sortByGjDatum(_projekti) : _projekti.slice();
   const byGj = new Map();
   for (const p of sorted) {
+    if(!_pmMatchProject(p,_pmUserName(p.korisnik_id)))continue;
     const key = p.gj || '';
     if (!byGj.has(key)) byGj.set(key, []);
     byGj.get(key).push(p);
   }
   let html = '';
+  _pmListCaption([...byGj.values()].reduce((n,ps)=>n+ps.length,0),_projekti.length);
   for (const [gj, projekti] of byGj) {
     html += `<div class="pm-gj-hdr">${gj ? '🗂 GJ ' + _esc(gj) : 'Bez GJ'}</div>`;
     for (const p of projekti) {
-      const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
-      const nV = pv.filter(v => v.kr === 0).length;
+      const pv = projectRows.get(p.id);
+      const nV = pv.filter(v => (v.kr || 0) === 0).length;
       const nK = pv.filter(v => v.kr > 0).length;
       const len = pv.reduce((s, v) => s + calcL(v.pts), 0);
-      const nClan = 1 + (p.clanovi ? p.clanovi.length : 0);
-      const isAkt = p.id === _aktivniProjektId;
-      html += `
-        <div class="pm-card" onclick="_pmOpenDetail('${p.id}')">
-          <div class="pm-card-top">
-            <span class="pm-card-odjel">${_esc(p.odjel || '—')}</span>
-            ${isAkt ? '<span class="pm-card-akt">AKTIVAN</span>' : ''}
-          </div>
-          <div class="pm-card-meta">
-            <span>📐 <b>${nV}</b> vlaka${nK ? ' · <b>' + nK + '</b> krak.' : ''}</span>
-            <span>📏 <b>${fmtL(len)}</b></span>
-            <span>👥 <b>${nClan}</b></span>
-            <span>📅 ${fmtDateShort(p.datum)}</span>
-          </div>
-        </div>`;
+      html += _pmCardHtml(p,_pmUserName(p.korisnik_id),nV,nK,len);
     }
   }
-  el.innerHTML = html;
+  el.innerHTML = html || '<div class="pm-empty">Nema projekata za ovu pretragu ili filter.</div>';
 }
 
 // Admin lista: svi projekti svih šumarija, brojevi sa servera (admin_projekti_pregled).
 // Detalj (_pmOpenDetail) radi nepromijenjen — ionako dohvata vlake server-side po projektu.
 function _pmRenderAdminList(el) {
+  _pmListCaption(0,Array.isArray(_pmAdminRows)?_pmAdminRows.length:0);
   if (_pmAdminRows === null) {
     el.innerHTML = sbProfile?.is_admin
       ? '<div class="pm-empty">⏳ Učitavam projekte svih šumarija...</div>'
@@ -26067,7 +26091,9 @@ function _pmRenderAdminList(el) {
 
   // Grupisanje: ŠUMARIJA → GJ (RPC već sortira sumarija, gj, datum DESC)
   let html = '', curSum = null, curGj = null;
-  for (const r of rows) {
+  const filtered=rows.filter(r=>_pmMatchProject(r,r.vlasnik || _pmUserName(r.korisnik_id)));
+  _pmListCaption(filtered.length,rows.length);
+  for (const r of filtered) {
     const s = r.sumarija || '—';
     if (s !== curSum) {
       curSum = s; curGj = null;
@@ -26079,19 +26105,7 @@ function _pmRenderAdminList(el) {
       curGj = g;
       html += `<div class="pm-gj-hdr">${g ? '🗂 GJ ' + _esc(g) : 'Bez GJ'}</div>`;
     }
-    html += `
-      <div class="pm-card" onclick="_pmOpenDetail('${r.id}')">
-        <div class="pm-card-top">
-          <span class="pm-card-odjel">${_esc(r.odjel || '—')}</span>
-          <span style="font-size:10px;color:#64748b;">${_esc(r.vlasnik || '—')}</span>
-        </div>
-        <div class="pm-card-meta">
-          <span>📐 <b>${r.maticnih}</b> vlaka${Number(r.krakova) ? ' · <b>' + r.krakova + '</b> krak.' : ''}</span>
-          <span>📏 <b>${fmtL(Number(r.ukupno_m || 0))}</b></span>
-          <span>📅 ${fmtDateShort(r.datum)}</span>
-          ${r.zadnja_izmjena ? '<span>✏ ' + fmtDateShort(r.zadnja_izmjena) + '</span>' : ''}
-        </div>
-      </div>`;
+    html += _pmCardHtml(r,r.vlasnik || _pmUserName(r.korisnik_id),Number(r.maticnih || 0),Number(r.krakova || 0),Number(r.ukupno_m || 0));
   }
 
   // Vodeći: sekcija doznake šumarije (read-only pregled sa statistikama)
@@ -26121,7 +26135,7 @@ function _pmRenderAdminList(el) {
       </div>`;
     }
   }
-  el.innerHTML = html;
+  el.innerHTML = html || '<div class="pm-empty">Nema projekata za ovu pretragu ili filter.</div>';
 }
 
 function _isManualVlaka(r) {
@@ -26213,9 +26227,9 @@ async function _pmOpenDetail(id) {
   }
   // Fallback na lokalne podatke ako server ne vrati ništa (offline)
   if (!vlakeRows.length) {
-    vlakeRows = vlake.filter(v => v.projektId === id).map(v => ({
-      nm: v.nm, br: v.br, kr: v.kr, pts: v.pts, lager: v.lager, korisnik_id: sbUser?.id,
-      projektant_ime: v.projektantIme, updated_at: v.updatedAt
+    vlakeRows = _pmProjectRows(p).map(v => ({
+      nm: v.nm, br: v.br, kr: v.kr, pts: (v.pts || []).map(pt=>({...pt})), lager: v.lager, korisnik_id: v.korisnik_id || sbUser?.id,
+      projektant_ime: v.projektant_ime || v.ime || v.projektantIme, updated_at: v.updated_at || v.updatedAt
     }));
   }
   if (!logRows.length && typeof dnevniLog !== 'undefined') {
@@ -26841,10 +26855,12 @@ function _vlakeStatsSecsHtml(pov, rows) {
     const mainV = valid.filter(r => (r.kr || 0) === 0).sort((a, b) => (a.br || 0) - (b.br || 0));
     const krakovi = valid.filter(r => (r.kr || 0) > 0);
     const krakoviByNm = {};
+    const ownerKey = (r,nm) => String(r.korisnik_id || r.projektant_ime || '') + '::' + nm;
     krakovi.forEach(r => {
       const base = (r.nm || '').replace(/\s*-\s*krak.*$/i, '').trim();
-      if (!krakoviByNm[base]) krakoviByNm[base] = [];
-      krakoviByNm[base].push(r);
+      const key = ownerKey(r,base);
+      if (!krakoviByNm[key]) krakoviByNm[key] = [];
+      krakoviByNm[key].push(r);
     });
 
     html += `<div class="pm-sec">
@@ -26873,15 +26889,15 @@ function _vlakeStatsSecsHtml(pov, rows) {
     mainV.forEach(r => {
       html += vlRow(r, false);
       const base = (r.nm || '').trim();
-      (krakoviByNm[base] || []).sort((a, b) => (a.kr || 0) - (b.kr || 0)).forEach(k => {
+      (krakoviByNm[ownerKey(r,base)] || []).sort((a, b) => (a.kr || 0) - (b.kr || 0)).forEach(k => {
         html += vlRow(k, true);
       });
     });
     // Krakovi koji nemaju odgovarajuću glavnu vlaku
-    const matched = new Set(mainV.map(r => (r.nm || '').trim()));
+    const matched = new Set(mainV.map(r => ownerKey(r,(r.nm || '').trim())));
     krakovi.filter(r => {
       const base = (r.nm || '').replace(/\s*-\s*krak.*$/i, '').trim();
-      return !matched.has(base);
+      return !matched.has(ownerKey(r,base));
     }).forEach(r => html += vlRow(r, false));
 
     html += `<tr style="border-top:1px solid #334155;font-weight:bold;">
@@ -26947,14 +26963,14 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
   const row = (l, v) => `<div class="pm-row"><span class="pm-row-l">${l}</span><span class="pm-row-v">${v}</span></div>`;
 
   const isAkt = p.id === _aktivniProjektId;
-  let html = '';
+  let html = `<div class="pm-detail-hero"><div><span class="pm-eyebrow">${isAkt ? 'Aktivni projekat' : 'Pregled projekta'}</span><h2>${_escHtml(/^odjel/i.test(p.odjel || '') ? p.odjel : 'Odjel '+(p.odjel || '—'))}</h2><p>${_escHtml(p.gj || 'Gospodarska jedinica nije unesena')}</p><small>Vlasnik: ${_escHtml(_pmUserName(p.korisnik_id))}</small></div><div class="pm-hero-length"><b>${fmtL(valid.reduce((n,r)=>n+calcL(r.pts),0))}</b><span>${valid.length} vlaka i krakova</span></div></div>`;
 
   // Akcije
   html += `<div class="pm-actions">
     <button class="pm-act-btn" onclick="_pmShowOnMap()"><svg class="ic"><use href="#ic-karta"/></svg> Prikaži na karti</button>
     <button class="pm-act-btn ${isAkt ? 'dis' : 'g'}" ${isAkt ? 'disabled' : 'onclick="_pmAktiviraj()"'}>${isAkt ? '<svg class="ic"><use href="#ic-potvrdi"/></svg> Aktivan' : '<svg class="ic"><use href="#ic-brzo"/></svg> Aktiviraj'}</button>
     <button class="pm-act-btn" onclick="_pmExportReport()"><svg class="ic"><use href="#ic-stampaj"/></svg> Izvještaj</button>
-    <button class="pm-act-btn" onclick="_pmNagibAnaliza()" style="background:#7c3aed;"><svg class="ic"><use href="#ic-uglomjer"/></svg> Analiza nagiba</button>
+    <button class="pm-act-btn" onclick="_pmNagibAnaliza()"><svg class="ic"><use href="#ic-uglomjer"/></svg> Analiza nagiba</button>
   </div>`;
 
   // Osnovno
@@ -27023,7 +27039,7 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
   }
   html += `</div>`;
 
-  return html;
+  return html.replaceAll('<table class="pm-tbl">','<div class="pm-table-scroll" tabindex="0" aria-label="Tabela projekta"><table class="pm-tbl">').replaceAll('</table>','</table></div>');
 }
 
 function _pmTime(s) {
@@ -40082,15 +40098,15 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- ─── UPRAVLJANJE PROJEKTIMA MODAL ──────────────────────────────────── -->
-<div id="pm-modal" onclick="if(event.target===this)closeProjectManagement()">
+<div id="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-title" onclick="if(event.target===this)closeProjectManagement()">
   <div id="pm-box">
     <div id="pm-hdr">
       <button id="pm-back-btn" onclick="_pmShowList()"><svg class="ic"><use href="#ic-nazad"/></svg> Nazad</button>
       <h3 id="pm-title">📊 Upravljanje projektima</h3>
-      <button id="pm-close-btn" onclick="closeProjectManagement()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+      <button id="pm-close-btn" aria-label="Zatvori upravljanje projektima" onclick="closeProjectManagement()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </div>
     <div id="pm-body">
-      <div id="pm-list-wrap"><div id="pm-list"></div></div>
+      <div id="pm-list-wrap"><div class="pm-intro"><b>Projekti na jednom mjestu</b><p>Odjel, gospodarska jedinica i projektanti, uz dužine i izvještaje.</p></div><div class="pm-toolbar"><input id="pm-search" type="search" aria-label="Pretraži projekte" placeholder="Odjel, G.J. ili projektant…" oninput="_pmFilterList(this.value)"><select id="pm-filter" aria-label="Filter projekata" onchange="_pmFilterList(undefined,this.value)"><option value="all">Svi projekti</option><option value="active">Aktivni projekat</option><option value="mine">Moji projekti</option><option value="shared">Dijeljeni sa mnom</option></select></div><p id="pm-list-caption" class="pm-caption"></p><div class="pm-data-note">Prikaz zadnjih dostupnih podataka. Zajedničke vlake osvježi u Serveru.</div><div id="pm-list"></div></div>
       <div id="pm-detail" style="display:none;"><div id="pm-detail-body"></div></div>
     </div>
   </div>
