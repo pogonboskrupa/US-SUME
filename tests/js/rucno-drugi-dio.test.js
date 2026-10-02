@@ -30,6 +30,7 @@ test('ručno slanje ne nastavlja pod novim nalogom niti javlja lažni uspjeh',as
  let sends=0;const messages=[];
  const env={sbUser:{id:'u1'},sbProfile:{},navigator:{onLine:true},
  _serverSaljem:false,_syncInProgress:false,_syncMrezaPalaU:0,
+ _flushAllPendingVlake:async()=>{},_retryOrphanVlake:async()=>{},
  _serverNaCekanju:()=>({stavki:1}),_SERVER_SAMO_LOKALNO:new Set(),
  _OL:{QUEUE:'q',loadQueue:()=>[{_uid:'u2',type:'insert_projekt'}]},localStorage:{setItem(){}},
  _mrezaSila(){},_serverSazetakRender(){},_updSyncBadge(){},
@@ -42,3 +43,4 @@ test('ručno slanje ne nastavlja pod novim nalogom niti javlja lažni uspjeh',as
  assert.ok(!messages.some(m=>m.includes('Sve poslano')));
 });
 (async()=>{let failed=0;for(const[n,f]of tests){try{await f();console.log('OK '+n);}catch(e){failed++;console.log('FAIL '+n+': '+e.message);}}console.log(`${tests.length-failed}/${tests.length}`);if(failed)process.exitCode=1;})();
+

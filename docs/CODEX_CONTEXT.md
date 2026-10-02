@@ -734,3 +734,46 @@ kružne, zaobljene i kvadratne maske, uključujući prikaz na 48px; to je
 simulacija, ne Android launcher screenshot. Prolazi 69 JS testnih fajlova,
 Gradle debug build i SHA-256 provjera svih 27 web runtime assets u APK-u.
 Nije izvršena instalacija niti provjera na stvarnim Android launcherima.
+
+
+## 25. Slanje i preuzimanje vlaka u zajedničkom projektu — 2.1.1 / Android 481
+
+Korisnik je izričito otvorio najnoviju granu `CODEX-US-SUME-2026-10-01`
+i prijavio da druga vlaka ne stiže drugom projektantu u verziji 2.1.0.
+Ovaj zadatak koristi taj izabrani izvor (`8887494`), umjesto historijske
+radne grane 1.9.6 iz uvodnih uputa. Git clone nije dostupan zbog nedostupnog
+proxyja; tačni izvorni fajlovi i testni resursi preuzeti su GitHub konektorom.
+Lokalni Git snapshot služi za diff, nije kopija udaljene commit historije.
+
+Potvrđeni klijentski propusti i popravke:
+- Ručni pritisak ranije provjerava samo postojeći red, prije debounce upisa
+  nove vlake. Sada čeka lokalno spremanje odgođenih vlaka i oporavlja vlake
+  bez serverskog ID-ja prije otvaranja kapije slanja. Prazan red više ne
+  onemogućava dugme; priprema može otkriti neposlanu lokalnu vlaku. Dupli tap,
+  promjena naloga, oštećen red i puna memorija ne daju lažnu potvrdu slanja.
+- Pregled/preuzimanje primljenih vlaka ranije isključuje vlastite projekte,
+  pa vlasnik ne preuzima doprinos člana. Sada obuhvata vlasništvo i članstvo,
+  uz isključenje vlastitih vlaka iz pregleda kolega.
+- Ručno preuzimanje ranije samo sprema geometriju u keš. Sada istim odgovorom
+  osvježava i aktivnu kartu, bez ponovnog upita.
+- Učitavanje kolega ne filtrira autore po zastarjeloj lokalnoj listi članova:
+  projekat i postojeći server RLS ostaju autoritet za čitanje. Sve stranice
+  vlaka se preuzimaju prije primjene. Zakašnjeli odgovor ne precrtava drugi
+  nalog/projekat niti noviji paralelni dohvat. Pad druge stranice zadržava
+  raniju kartu/keš. Neuspjelo trajno keširanje ne javlja uspjeh preuzimanja.
+
+Regresijska provjera `tests/js/server-dvije-vlake.test.js`: 14/14, sa
+stvarnim izvornim funkcijama i lažnim serverom/kartom. Na izvornom 2.1.0
+reproducirano: poslije prvog slanja T1, drugi pritisak prije debouncea ne
+šalje T2; vlasnik ne preuzima vlake člana; ručno preuzimanje ne crta novu
+vlaku u aktivnom projektu. Testovi pokrivaju i 201 vlaku kroz tri stranice,
+pad stranice, promjenu naloga/projekta, paralelne odgovore i lokalnu kvotu.
+Prolaze svih 70 JS testnih fajlova i sintaksa pet inline JS blokova.
+
+Nema SQL migracije ni pristupa stvarnim podacima/proizvodnoj Supabase bazi.
+Ovo nije potvrda stvarnih produkcijskih RLS pravila, WebSocket isporuke niti
+ponašanja dva fizička Android telefona. APK nije izgrađen ni instaliran.
+Commit koristi `[skip ci]` jer postojeći push workflow automatski objavljuje
+APK, a ovaj zahtjev je popravka koda. Potreban je naknadni puni APK build iz
+2.1.1 i terenska provjera: pošiljalac ručno pošalje T1 pa T2; primalac
+osvježi panel Server i provjeri obje vlake na karti, kao vlasnik i kao član.

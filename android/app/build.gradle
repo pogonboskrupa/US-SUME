@@ -10,8 +10,8 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 480
-        versionName "2.1.0"
+        versionCode 481
+        versionName "2.1.1"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
@@ -127,3 +127,4 @@ def syncWebAssets = tasks.register('syncWebAssets', Sync) {
     }
 }
 tasks.named('preBuild').configure { dependsOn(syncWebAssets) }
+

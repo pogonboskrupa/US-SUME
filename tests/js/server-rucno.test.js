@@ -263,6 +263,7 @@ function posaljiEnv(opts = {}) {
     document: { getElementById: () => null }, openSyncQueuePanel: () => {},
     _SERVER_SAMO_LOKALNO: new Set(['upsert_trag', 'delete_trag', 'upsert_log', 'upsert_labels']),
     _serverNaCekanju: () => ({ stavki: cekaju }),
+    _flushAllPendingVlake: async () => {}, _retryOrphanVlake: async () => {},
     _tragZaSlanje: () => opts.tragovi || [{ name: 'A' }],
     sbFlushTrag: async (t) => { p.trag++; p.tragDozvoljeno = api.dozvoljeno(); return t && t.ish; },
     _processOfflineQueue: async (sila) => {
@@ -680,3 +681,4 @@ t('"maloprije", ne "maloprijed"', () => {
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
   process.exit(fail ? 1 : 0);
 })();
+

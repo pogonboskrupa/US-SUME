@@ -5655,7 +5655,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.0';
+const APP_VER = 'v2.1.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6325,11 +6325,11 @@ function _serverSazetakRender() {
       ? '<div style="font-size:13px;color:#e2e8f0">' + stavke + '</div>' +
         '<div style="font-size:11px;color:#64748b;margin-top:6px">Sačuvano je na telefonu. Kolege ovo vide tek kad pošalješ.</div>' +
         '<div style="font-size:11px;color:#64748b;margin-top:2px">Tragovi, dnevnik, oznake i fotografije ostaju samo na telefonu.</div>'
-      : '<div style="font-size:13px;color:#4ade80">✓ Sve je poslano — ništa ne čeka.</div>') +
+      : '<div style="font-size:13px;color:#4ade80">✓ Red za slanje je prazan.</div>') +
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   const b = document.getElementById('syncq-posalji');
-  if (b) { b.disabled = _serverSaljem || !n.stavki; b.style.opacity = b.disabled ? '0.5' : '1'; }
+  if (b) { b.disabled = _serverSaljem || !!serverPosalji._priprema; b.style.opacity = b.disabled ? '0.5' : '1'; }
 }
 
 function _serverPrimljenoKljuc() { return 'tvlake_server_primljeno_v1_' + (sbUser?.id || ''); }
@@ -6342,7 +6342,7 @@ function _serverPrimljenoIzKesa() {
   try {
     const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
     for (const p of _projekti) {
-      if (p.korisnik_id !== sbUser.id && (p.clanovi || []).some(c=>c.korisnik_id===sbUser.id)) {
+      if (p.korisnik_id === sbUser.id || (p.clanovi || []).some(c=>c.korisnik_id===sbUser.id)) {
         _serverPrimljenoZapamti(p.id,Object.values(all[p.id] || {}));
       }
     }
@@ -6352,7 +6352,7 @@ function _serverPrimljenoIzKesa() {
 function _serverPrimljenoZapamti(projektId, rows) {
   const uid = sbUser?.id;
   const p = _projekti.find(x => x.id === projektId);
-  if (!uid || !p || p.korisnik_id === uid || !(p.clanovi || []).some(c => c.korisnik_id === uid)) return;
+  if (!uid || !p || !(p.korisnik_id === uid || (p.clanovi || []).some(c => c.korisnik_id === uid))) return;
   const feed = _serverPrimljenoUcitaj();
   for (const row of rows) {
     if (!row.korisnik_id || row.korisnik_id === uid) continue;
@@ -6375,13 +6375,13 @@ function _serverPrimljenoRender() {
   const el = document.getElementById('syncq-primljeno');
   if (!el) return;
   const uid = sbUser?.id;
-  const projects = new Map(_projekti.filter(p => p.korisnik_id !== uid &&
+  const projects = new Map(_projekti.filter(p => p.korisnik_id === uid ||
     (p.clanovi || []).some(c => c.korisnik_id === uid)).map(p => [p.id,p]));
   const rows = _serverPrimljenoUcitaj().filter(x => projects.has(x.projektId));
   const count = rows.filter(x => x.novo).length;
   el.innerHTML = '<div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px">↓ Primljeno iz dijeljenih projekata' +
     (count ? ' · ' + count + ' novih' : '') + '</div>' +
-    '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">Projekti u koje te dodao drugi projektant. Prikaz čuva zadnje preuzete podatke i radi offline.</div>' +
+    '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">Vlake kolega u projektima čiji si vlasnik ili član. Zadnji preuzeti podaci dostupni su i offline.</div>' +
     (rows.length ? rows.slice(0,50).map(x => {
       const p = projects.get(x.projektId);
       return '<div style="padding:8px 0;border-top:1px solid #1e293b;font-size:12px;color:#cbd5e1">' +
@@ -6396,7 +6396,7 @@ function _serverPrimljenoRender() {
 }
 async function _serverPrimljenoOtvori(id) {
   const p = _projekti.find(x => x.id === id);
-  if (!p || !(p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)) return;
+  if (!p || !(p.korisnik_id === sbUser?.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser?.id))) return;
   const feed = _serverPrimljenoUcitaj();
   feed.forEach(x => { if (x.projektId === id) x.novo = false; });
   try { localStorage.setItem(_serverPrimljenoKljuc(), JSON.stringify(feed)); } catch(e) {}
@@ -6410,7 +6410,7 @@ const _serverPrimljenoRtRows = new Map();
 function _serverPrimljenoRealtime(row) {
   const uid=sbUser?.id;
   const p=_projekti.find(p=>p.id===row.projekt_id);
-  if (!uid || !p || p.korisnik_id===uid || !(p.clanovi || []).some(c=>c.korisnik_id===uid)) return;
+  if (!uid || !p || !(p.korisnik_id===uid || (p.clanovi || []).some(c=>c.korisnik_id===uid))) return;
   _serverPrimljenoRtRows.set(row.id || row.projekt_id+'::'+row.korisnik_id+'::'+row.nm,{row,uid});
   if (_serverPrimljenoRtTimer) return;
   _serverPrimljenoRtTimer=setTimeout(()=>{
@@ -6425,6 +6425,18 @@ function _serverPrimljenoRealtime(row) {
     for (const [id,rows] of groups) _kvcSave(id,rows);
   },1000);
 }
+// Primijeni odgovor tek nakon svih stranica i provjere naloga. RLS ostaje
+// autoritet za pristup; lokalni spisak članova može kasniti za serverom.
+async function _vlakePreuzmiStranice(upit, owner) {
+  const rows = [];
+  for (let offset = 0;; offset += 100) {
+    const page = await upit().order('id').range(offset, offset + 99);
+    if (sbUser?.id !== owner) throw { code:'OWNER_CHANGED', message:'Promijenjen nalog' };
+    if (page.error) throw page.error;
+    rows.push(...(page.data || []));
+    if ((page.data || []).length < 100) return rows;
+  }
+}
 async function serverPreuzmiDijeljeno() {
   if (_serverPrimljenoBusy || !sbUser || !sbProfile) return;
   if (navigator.onLine === false) { showToast('📴 Nema veze — prikazujem zadnje preuzete podatke'); return; }
@@ -6436,46 +6448,47 @@ async function serverPreuzmiDijeljeno() {
     const membership = await sb.from('projekt_clanovi').select('projekt_id').eq('korisnik_id',owner);
     if (membership.error) throw membership.error;
     if (sbUser?.id !== owner) return;
+    const owned = await sb.from('projekti').select('*').eq('korisnik_id',owner);
+    if (owned.error) throw owned.error;
+    if (sbUser?.id !== owner) return;
     const ids = [...new Set((membership.data || []).map(x => x.projekt_id))];
-    if (!ids.length) {
-      for (const p of _projekti) if (p.korisnik_id!==owner) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
-      _OL.save(_OL.PROJEKTI,_projekti);
-      showToast('Nema dijeljenih projekata u kojima si član'); return;
-    }
-    const result = await sb.from('projekti').select('*').in('id',ids).neq('korisnik_id',owner);
+    const result = ids.length ? await sb.from('projekti').select('*').in('id',ids) : {data:[]};
     if (result.error) throw result.error;
     if (sbUser?.id !== owner) return;
-    const projects = result.data || [];
-    if (!projects.length) { showToast('Nema projekata drugih projektanata'); return; }
-    const rows = [];
-    for (let offset=0;;offset+=100) {
-      _mrezaSila(60000);
-      const page = await sb.from('vlake').select('*').in('projekt_id',projects.map(p=>p.id))
-        .neq('korisnik_id',owner).order('id').range(offset,offset+99);
-      if (page.error) throw page.error;
-      if (sbUser?.id !== owner) return;
-      rows.push(...(page.data || []));
-      if ((page.data || []).length < 100) break;
+    const projects = [...new Map([...(owned.data || []), ...(result.data || [])].map(p=>[p.id,p])).values()];
+    if (!projects.length) {
+      for (const p of _projekti) if (p.korisnik_id!==owner) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
+      _OL.save(_OL.PROJEKTI,_projekti);
+      showToast('Nema projekata u kojima si vlasnik ili član'); return;
     }
+    const rows = await _vlakePreuzmiStranice(() => {
+      _mrezaSila(60000);
+      return sb.from('vlake').select('*').in('projekt_id',projects.map(p=>p.id)).neq('korisnik_id',owner);
+    }, owner);
     for (const p of _projekti) {
       if (p.korisnik_id!==owner && !ids.includes(p.id)) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
     }
     for (const p of projects) {
       const old = _projekti.find(x=>x.id===p.id);
       const clanovi = old?.clanovi || [];
-      if (!clanovi.some(c=>c.korisnik_id===owner)) clanovi.push({korisnik_id:owner});
+      if (p.korisnik_id!==owner && !clanovi.some(c=>c.korisnik_id===owner)) clanovi.push({korisnik_id:owner});
       const value = {...p,clanovi};
       if (old) _projekti[_projekti.indexOf(old)] = value; else _projekti.push(value);
     }
     _OL.save(_OL.PROJEKTI,_projekti);
     for (const p of projects) {
-      _kvcSave(p.id,rows.filter(r=>r.projekt_id===p.id));
+      if (_kvcSave(p.id,rows.filter(r=>r.projekt_id===p.id)) === false) throw new Error('Primljene vlake nisu sačuvane na telefonu');
       // Prepusti glavnu nit između projekata — veći keš ne blokira dodir/GPS.
       await new Promise(r=>setTimeout(r,0));
       if (sbUser?.id !== owner) return;
     }
+    // Preuzimanje mora osvježiti i aktivnu kartu, bez drugog mrežnog upita.
+    if (projects.some(p=>p.id===_aktivniProjektId)) {
+      await sbLoadKolegeVlake(rows.filter(r=>r.projekt_id===_aktivniProjektId));
+      if (sbUser?.id !== owner) return;
+    }
     rndProjektiList();
-    showToast('✓ Preuzeto ' + rows.length + ' vlaka iz dijeljenih projekata');
+    showToast('✓ Preuzeto ' + rows.length + ' vlaka kolega');
   } catch(e) { showToast('⚠ Preuzimanje nije uspjelo — zadnji lokalni podaci ostaju dostupni'); }
   finally { _serverPrimljenoBusy=false; _serverPrimljenoRender(); }
 }
@@ -6483,12 +6496,25 @@ async function serverPreuzmiDijeljeno() {
 // Ručno slanje svega što čeka. Otvara kapiju samo dok slanje traje: svi
 // automatski pozivi reda (GPS tačka, povratak u prvi plan...) i dalje ne šalju.
 async function serverPosalji() {
-  if (_serverSaljem) return;
+  if (_serverSaljem || serverPosalji._priprema) return;
   if (!sbUser || !sbProfile) { showToast('⚠ Prijavi se da bi slao na server'); return; }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     showToast('📴 Nema veze — sve ostaje sačuvano na telefonu, pošalji kad bude signala');
     return;
   }
+  const pripremaOwner = sbUser.id;
+  serverPosalji._priprema = true;
+  _serverSazetakRender();
+  try {
+    await _flushAllPendingVlake();
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
+    await _retryOrphanVlake();
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
+    _OL.loadQueue(true); // oštećen red se ne smije proglasiti praznim/poslanim
+  } catch(e) {
+    showToast('⚠ Priprema slanja nije uspjela — lokalni podaci ostaju sačuvani');
+    return;
+  } finally { serverPosalji._priprema = false; _serverSazetakRender(); }
   const prije = _serverNaCekanju();
   if (!prije.stavki) { showToast('✓ Sve je već poslano'); _serverSazetakRender(); return; }
   _serverSaljem = true;
@@ -8817,7 +8843,7 @@ async function sbInitData() {
     dozLoadOdjeli().catch(()=>{});  // fire-and-forget — _dozOdjeli za realtime obavijesti
     autoLoadAllKmlBuckets();        // fire-and-forget (granice u pozadini)
     _processOfflineQueue(); // flush any queued ops from offline sessions (red sam odlučuje o vezi)
-    _retryOrphanVlake();            // vlake bez sbId (npr. ranije trajno odbačene iz reda) — probaj opet
+    _retryOrphanVlake().catch(() => {}); // vlake bez sbId (npr. ranije trajno odbačene iz reda) — probaj opet
     if (sbProfile?.is_admin) _adminCheckPending().catch(() => {}); // badge+toast: registracije na čekanju
   } finally {
     lokalniOporavak();
@@ -10441,15 +10467,18 @@ function scheduleVlakaSave(i) {
 // da podaci prežive gašenje WebView-a, NE i da su stigli na server prije nego
 // korisnik npr. odmah otvori drugi uređaj da provjeri sync (ručno crtanje traje
 // par sekundi — kraće od 2.5s debouncea, pa bi vlaka ostala samo lokalno).
-function _flushAllPendingVlake() {
+async function _flushAllPendingVlake() {
+  const pending = [];
   Object.keys(_vlakaSaveTimers).forEach(k => {
     const ki = parseInt(k);
     if (!isNaN(ki) && _vlakaSaveTimers[ki]) {
       clearTimeout(_vlakaSaveTimers[ki]);
       delete _vlakaSaveTimers[ki];
-      sbFlushVlaka(ki);
+      pending.push(sbFlushVlaka(ki));
     }
   });
+  const results = await Promise.all(pending);
+  if (results.includes(false)) throw new Error('Vlaka nije sačuvana u redu za slanje');
 }
 
 // Vlake koje imaju tačke ali nikad nisu dobile sbId (nikad uspješno spašene na
@@ -10472,7 +10501,7 @@ async function _retryOrphanVlake() {
     const payload = _vlakaSyncPayload(v);
     const postoji = q.some(op => op.type === 'upsert_vlaka' && (!op._uid || op._uid === owner) &&
       _vlakaIstiSadrzaj(payload, op.payload || {}));
-    if (!postoji) await sbFlushVlaka(i);
+    if (!postoji && await sbFlushVlaka(i) === false) throw new Error('Vlaka nije sačuvana u redu za slanje');
   }
 }
 
@@ -10497,12 +10526,11 @@ async function sbFlushVlaka(i) {
   // ne smiju oba ući u INSERT granu prije nego prvi dobije sbId (duplicate-save race).
   if (v._flushing) {
     v._flushPending = true;
-    await v._flushing.catch(() => {});
-    return;
+    return await v._flushing;
   }
   v._flushing = _sbFlushVlakaImpl(v, i);
   try {
-    await v._flushing;
+    return await v._flushing;
   } finally {
     v._flushing = null;
     if (v._flushPending) {
@@ -10539,7 +10567,7 @@ async function _sbFlushVlakaImpl(v, i, _retried) {
 
   const key = _OL.enqueue({ type:'upsert_vlaka',
     payload: v.sbId ? { ...payload, id:v.sbId } : payload, knownRev:v.rev ?? null });
-  if (!key) { _updateVlakaSyncIcon(i, 'error'); return; }
+  if (!key) { _updateVlakaSyncIcon(i, 'error'); return false; }
   _updateVlakaSyncIcon(i, 'queue');
   _processOfflineQueue().catch(() => {});   // red sam odlučuje o vezi
 }
@@ -10812,7 +10840,8 @@ function _kvcSave(projektId, rows) {
     });
     localStorage.setItem(_KVC_KEY, JSON.stringify(all));
     _serverPrimljenoZapamti(projektId, rows);
-  } catch(e) {}
+    return true;
+  } catch(e) { return false; }
 }
 
 function _kvcLoad(projektId) {
@@ -10843,9 +10872,14 @@ function _kvcPurgeStale() {
 }
 
 // ─── KOLEGE VLAKE (read-only prikaz na mapi) ─────────────────────────────────
-async function sbLoadKolegeVlake() {
+async function sbLoadKolegeVlake(preuzeteVlake) {
   if (!sbProfile?.sumarija || !sbUser) return;
+  const owner = sbUser.id;
+  const seq = sbLoadKolegeVlake._seq = (sbLoadKolegeVlake._seq || 0) + 1;
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
+
+  const aktId = _aktivniProjektId;
+  const josAktivan = () => sbUser?.id === owner && _aktivniProjektId === aktId && sbLoadKolegeVlake._seq === seq;
 
   // Brisanje postojećeg prikaza tek kad znamo da imamo čime zamijeniti —
   // raniji kod je čistio kartu PRIJE guardova/upita pa je tranzijentni mrežni
@@ -10861,13 +10895,11 @@ async function sbLoadKolegeVlake() {
   if ((isAdmin() || isVodeci()) && akt) {
     let dbData = null;
     try {
-      const { data, error } = await sb.from('vlake')
-        .select('id, updated_at, nm, korisnik_id, pts, boja, kr')
-        .eq('projekt_id', akt.id);
-      if (error) throw error;
-      dbData = data || [];
+      dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
+        .select('id, updated_at, nm, korisnik_id, pts, boja, kr, na_putu')
+        .eq('projekt_id', akt.id), owner);
     } catch(e) {}
-    if (dbData === null) return; // mrežni neuspjeh — zadrži postojeći prikaz
+    if (!josAktivan() || dbData === null) return; // mrežni neuspjeh — zadrži postojeći prikaz
     clearAll();
     dbData.forEach(row => {
       if (!row.pts || row.pts.length < 2) return;
@@ -10885,31 +10917,19 @@ async function sbLoadKolegeVlake() {
     return;
   }
 
-  let memberIds = [];
-  if (akt) {
-    const all = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
-    memberIds = all.filter(id => id !== sbUser.id);
+  if (!akt || !(akt.korisnik_id === owner || (akt.clanovi || []).some(c=>c.korisnik_id===owner))) {
+    clearAll(); rndList(); return;
   }
-
-  if (memberIds.length === 0) { clearAll(); rndList(); return; }
 
   let dbData = null;
   try {
-    // Filtriraj SAMO po projektu + članovima. Raniji dodatni `.eq('sumarija', ...)`
-    // filter je bio redundantan (projekt_id + memberIds + RLS već sve ograničavaju)
-    // i AKTIVNO štetan: ako su dva člana istog projekta u različitim šumarijama
-    // (npr. admin premjestio nekoga, ili saradnja preko šumarija), vlake dijeljene
-    // kroz projekat su ispadale iz prikaza jer im je sumarija ≠ mojoj. Zato
-    // "kolega ne vidi podijeljeni projekat" — dijeljenje radi na serveru (RLS), ali
-    // klijent ih je tiho odfiltrirao. Uklonjeno.
-    let q = sb.from('vlake')
-      .select('id, updated_at, nm, korisnik_id, pts, boja, kr')
-      .in('korisnik_id', memberIds)
-      .eq('projekt_id', akt.id);
-    const { data, error } = await q;
-    if (error) throw error;
-    dbData = data || [];
+    // Pristup je ograničen projektom i RLS-om. Zastarjela lokalna lista
+    // članova ne smije sakriti novu vlaku drugog člana istog projekta.
+    dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
+      .select('id, updated_at, nm, korisnik_id, pts, boja, kr, na_putu')
+      .neq('korisnik_id',owner).eq('projekt_id',akt.id), owner);
   } catch(e) {} // offline — koristimo samo cache
+  if (!josAktivan()) return;
 
   const cachedAll = _kvcLoad(akt.id);
   // Offline/neuspjeh BEZ keša — zadrži što je već na karti umjesto brisanja
@@ -17874,7 +17894,7 @@ document.addEventListener('visibilitychange', async () => {
     try { if (typeof _dozSaveLivePts === 'function') _dozSaveLivePts(); } catch(e) {}
     // I pokušaj odmah poslati na server (ne samo lokalno) — inače tek nacrtana
     // vlaka ostaje nevidljiva na drugom uređaju dok se debounce ne izvrši.
-    try { if (typeof _flushAllPendingVlake === 'function') _flushAllPendingVlake(); } catch(e) {}
+    try { if (typeof _flushAllPendingVlake === 'function') _flushAllPendingVlake().catch(() => {}); } catch(e) {}
     // Upozorenje "app u pozadini — snimanje može stati" ima smisla SAMO na
     // iOS/PWA gdje pozadinski GPS zaista ne radi. U APK-u (AndroidGps definisan)
     // foreground service drži snimanje živim, pa bi upozorenje bilo pogrešno.
@@ -17890,7 +17910,7 @@ document.addEventListener('visibilitychange', async () => {
 window.addEventListener('pagehide', () => {
   try { if (typeof _saveLocalVlake === 'function') _saveLocalVlake(); } catch(e) {}
   try { if (typeof _dozSaveLivePts === 'function') _dozSaveLivePts(); } catch(e) {}
-  try { if (typeof _flushAllPendingVlake === 'function') _flushAllPendingVlake(); } catch(e) {}
+  try { if (typeof _flushAllPendingVlake === 'function') _flushAllPendingVlake().catch(() => {}); } catch(e) {}
 });
 
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
@@ -42222,3 +42242,4 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/tab-data.js"></script>
 </body>
 </html>
+

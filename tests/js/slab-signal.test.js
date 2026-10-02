@@ -321,7 +321,7 @@ function makeInit(opts) {
     sbLoadKolege: async () => {}, sbLoadOdjeli: async () => {}, loadGlobalKmlStyles: async () => {},
     sbStartRealtime: () => {}, sbLoadKolegeVlake: opts.kolege || (async () => {}),
     sbLoadSharedFotos: () => {}, dozLoadOdjeli: async () => {}, autoLoadAllKmlBuckets: () => {},
-    _processOfflineQueue: () => {}, _retryOrphanVlake: () => {}, _adminCheckPending: async () => {},
+    _processOfflineQueue: () => {}, _retryOrphanVlake: async () => {}, _adminCheckPending: async () => {},
     _trnSharedRestore: () => log.push('sifra'), _dozQrRestore: () => log.push('qr'),
     _updSyncBadge: () => log.push('bedz'),
     _crashCheck: () => log.push('oporavak'),
@@ -457,3 +457,4 @@ await t('profil terena bez mreže koristi preuzeti model terena (nema ranog izla
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);
 })();
+
