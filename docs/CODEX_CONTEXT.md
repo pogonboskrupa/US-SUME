@@ -951,3 +951,19 @@ provjerava klik/aktivno stanje/kontrast/veličinu dugmeta i novi naziv na
 četiri veličine u dvije teme uz ranije provjere projekata/štampe.
 Lokalno prolazi 74 JS testna fajla, pet inline blokova i Python sintaksa.
 Objava i ishod GitHub APK/browser workflowa provjeravaju se nakon pusha.
+
+Potvrđeno 2026-10-02: workflow `37054954895`, job `110997263293`, uspješan
+za commit `e1b485b1a7a5872b1a9ec4b76362e8d656eb880c`. Prvi pregled je
+provjeravao boju tokom postojećeg CSS prijelaza (180 ms); fixture sada čeka
+konačnu boju. Runtime nije mijenjan tim testnim commitom. Prolaze 74/74 JS
+fajla, browser provjere u oba moda/četiri veličine i SHA-256 provjera 29
+resursa u APK-u. Sačuvana 33 PNG pregleda i jedan PDF; vizuelno pregledani
+DENDRO MAP footer i aktivno/neaktivno dugme Vlake na telefonu u oba moda.
+
+Javni nedraft debug release `v2.1.5` sadrži `app-debug.apk` (21.641.695
+bajta), stanje uploaded; tag pokazuje izgrađeni commit. `/releases?per_page=1`
+vraća v2.1.5, dostupnu preko Meni → Ažuriraj aplikaciju. Android versionCode
+485 i postojeći fiksni debug potpis. SHA-256 APK-a:
+`733255e7de3eab7206617f3309dc2f8f87aba70e71bf28b5d1d38da7e14b1faf`.
+Stvarni telefoni, produkcijska Supabase baza/RLS i fizička štampa nisu
+provjereni; nijedna produkcijska migracija ili instalacija nije izvršena.
