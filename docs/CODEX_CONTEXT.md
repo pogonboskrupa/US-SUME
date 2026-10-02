@@ -894,3 +894,24 @@ na četiri veličine u obje teme, filteri i tabele; ostaju provjere Menija,
 naših slova, Dnevnog moda i štampe/PDF-a. APK objavljuje postojeći workflow
 po zahtjevu za ažuriranje unutar aplikacije. Stvarni telefoni/Supabase i
 fizička štampa nisu testirani.
+
+Potvrđeno 2026-10-02: prva browser provjera otkrila je postojeći skriveni
+povratak iz detalja (prazan inline display ponovo aktivira CSS display:none).
+Detalj sada izričito postavlja inline-flex; regresija i stvarni klik u
+browseru prolaze. Popravka uključena prije prve objave APK-a 2.1.4.
+
+Workflow `37052260164`, job `110988276766`, uspješan za commit
+`8a41e1a2479a6a9b8e16ecd6f25d54204275df2d`: 73/73 JS testna fajla,
+browser pregled Menija i projekata na četiri veličine u obje teme,
+filteri/povratak, opisi štampe/PDF i provjera 29 APK web resursa.
+Sačuvano 25 PNG pregleda i jedan PDF; vizuelno provjereni lista/detalj
+projekata, oba moda i footer Menija. Fixture koristi lažne lokalne podatke
+i zamjenu karte; ne potvrđuje stvarno crtanje geometrije ili native štampu.
+
+Nedraft javna debug objava `v2.1.4` sadrži `app-debug.apk` (21.640.363
+bajta), stanje uploaded. Tag pokazuje navedeni izgrađeni commit; native
+updaterov `/releases?per_page=1` vraća ovu objavu. APK SHA-256:
+`63a50be05efe308e810291649b54ea23a9cba2fc1fc1030074ce9c5fc1e86625`.
+Android versionCode 484, postojeći fiksni debug potpis. Korisnik pokreće
+Meni → Ažuriraj aplikaciju; instalacija i saradnja na dva fizička telefona
+nisu potvrđene u ovom okruženju.
