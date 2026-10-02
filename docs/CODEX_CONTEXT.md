@@ -677,3 +677,40 @@ simulirano aktivno snimanje, ne mijenja red niti pokreće vanjske zahtjeve.
 Vizuelno pregledane screenshot slike listi vlaka/projekata/doznake i panela
 Server/Spremno za teren. Dnevni prikaz nije provjeren na fizičkom telefonu
 pod suncem; stvarni Android GPS i produkcijski Supabase ostaju neprovjereni.
+
+## 23. KML vlake vezane za projekat — 2.0.9 / Android 479
+
+U detaljima projekta dodano je „Uvezi vlake (KML)”. Ciljni projekat i korisnik
+zaključavaju se pri otvaranju; dopušteni su vlastiti projekti i članstvo, ne
+pregledni nalozi. KML LineString/MultiGeometry i gx:Track postaju normalni
+lokalni objekti vlaka s projektom, tačkama/visinama, brojem, krakom i stranom.
+Postojeći klik/popup/Edituj i editor geometrije ostaju isti kao za snimane
+vlake. GPX kompatibilnost je zadržana. Poligoni se više ne upisuju pri samom
+pregledu fajla: granice imaju odvojeni postojeći „Dodaj KML fajl” tok.
+
+Pregled ne mijenja podatke; odustajanje i zakašnjelo čitanje iz prethodnog
+modala ne preusmjeravaju uvoz. Nazivi su normalizovani i jedinstveni u
+projektu, uključujući batch; T5.1 zahtijeva T5, a ugniježđeni krak svog
+roditelja. XML nazivi se escapiraju. Neispravne KML koordinate ne smiju
+tiho spojiti preostale tačke preko preskočenog dijela. Za telefon je uvoz
+ograničen na 20 MB, 1000 linija i 200000 tačaka; prevelik fajl se odbija,
+ne skraćuje. Cijeli uvoz se prvo trajno lokalno snimi; puna memorija
+odustaje bez dodavanja na kartu/red. Slanje ostaje isključivo ručno.
+Red i keš se pripremaju jednim batch zapisom, bez ponovnog serijalizovanja
+svih GPS tačaka za svaku pojedinu liniju. Ako red ne stane u memoriju,
+trajna lokalna kopija ostaje i poruka ne tvrdi da je pripremljen za slanje.
+
+Preimenovanje sada ažurira i postojeću neposlanu operaciju za istog
+korisnika/projekat, umjesto da stari naziv kasnije napravi dupli red.
+Editor i Doznaka čuvaju identitet vlake/korisnika preko async dijaloga.
+Roditeljsko preimenovanje ne preimenuje automatski sve potomke (postojeće
+ponašanje); krakovi imaju zasebno preimenovanje u editoru.
+
+Provjere: 68 JS testnih fajlova, 51 Python test, pet inline JS blokova,
+browser testovi KML/ručno slanje/tabovi/slab signal/dizajn. Novi browser
+test stvarno bira KML fajl, provjerava ciljni projekat uprkos drugom aktivnom,
+roditeljski krak, popup/editor, preimenovanje bez stare queue stavke,
+punu memoriju, promjenu korisnika, escaping, prefiksirane namespaceove,
+MultiGeometry/gx:Track, zakašnjeli FileReader i obnovu nakon reload-a.
+Lokalni debug APK je izgrađen i svih 27 runtime assets SHA-256 provjereno.
+Pravi Android birač fajlova, GPS i produkcijski Supabase nisu testirani.

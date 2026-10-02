@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const html=fs.readFileSync(require('node:path').join(__dirname,'../../index.html'),'utf8');
+const start=html.indexOf('function _impProjektDozvoljen('),end=html.indexOf('function impVlakaOpen(',start);
+const ctx={_projekti:[{id:'own',korisnik_id:'u'},{id:'shared',korisnik_id:'other',clanovi:[{korisnik_id:'u'}]},{id:'foreign',korisnik_id:'other'}],sbUser:{id:'u'},isReadOnly:()=>false};
+vm.createContext(ctx);vm.runInContext(html.slice(start,end),ctx);
+for(const [input,expected] of [['1','T1'],['t01.02.003','T1.2.3'],['T0',''],['1.0',''],['9007199254740992',''],[' Glavna vlaka ','Glavna vlaka']]) assert.equal(ctx._impNormalName(input),expected);
+assert.equal(ctx._impProjektDozvoljen('own'),true);assert.equal(ctx._impProjektDozvoljen('shared'),true);assert.equal(ctx._impProjektDozvoljen('foreign'),false);assert.equal(ctx._impProjektDozvoljen('missing'),false);
+ctx.isReadOnly=()=>true;assert.equal(ctx._impProjektDozvoljen('own'),false);ctx.isReadOnly=()=>false;ctx.sbUser=null;assert.equal(ctx._impProjektDozvoljen('own'),false);
+const confirm=html.slice(html.indexOf('async function impVlakaConfirm('),html.indexOf('function deaktivirajProjekt('));
+assert.ok(confirm.includes('const target = _impTarget, projId = target?.id'));
+assert.ok(confirm.indexOf('if (!_saveLocalVlake())')<confirm.indexOf('L.polyline('),'layers before durable save');
+assert.ok(confirm.indexOf('_applyProjektFields(')<confirm.indexOf('_vlakaSyncPayload('),'wrong project sync metadata');
+assert.equal((confirm.match(/localStorage\.setItem\(_OL\.QUEUE/g)||[]).length,1,'queue serialized repeatedly per line');
+const reader=html.slice(html.indexOf('async function impVlakaFile('),html.indexOf('function _impParseTracks('));
+assert.ok(reader.includes('generation!==_impGeneration'));assert.ok(reader.includes('target.uid!==sbUser?.id'));assert.ok(!reader.includes('.addTo(map)'),'preview mutates map');
+console.log('KML import helpers/permissions, fixed target, durable ordering, preview isolation: passed');
