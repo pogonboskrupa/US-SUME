@@ -107,6 +107,16 @@ const root=path.resolve(__dirname,'../..');
    return {count:FieldStore.count(sbUser.id),n:live?.pts.length,last:live?.pts.slice(-2),project:_dozOdjeli.some(p=>p.id==='odjel-test')};
   },copy);
   assert.deepEqual(restored,{count:1203,n:1202,last:[[44.2,16],[44.21,16]],project:true});
+  const normal=await fresh.evaluate(async()=>{
+   _dozGpsOn=false;_activeTab='projekat';_aktivniProjektId='normal-test';
+   _projekti.push({id:'normal-test',korisnik_id:sbUser.id,gj:'Test GJ',odjel:'106'});
+   const copy=await _fieldMakeBackup();
+   copy.data.vlake=[{id:'vlaka-copy',nm:'T7',br:7,kr:0,boja:'#4ade80',projekt_id:'normal-test',pts:[{la:44,lo:16,al:400},{la:44.01,lo:16.01,al:410}]}];
+   copy.sha256=await _fieldChecksum(copy.data);
+   const file={size:JSON.stringify(copy).length,text:async()=>JSON.stringify(copy)};
+   await fieldImportBackup(file);await fieldImportBackup(file);
+   return vlake.filter(v=>v.nm==='T7'&&v.projektId==='normal-test').map(v=>v.pts.length);
+  });assert.deepEqual(normal,[2],'obnovljena vlaka odmah postoji u memoriji i ne duplira se');
   await freshCtx.close();
   const corrupt=await page.evaluate(async()=>{
    localStorage.setItem('tvlake_doz_track_buf','{broken');

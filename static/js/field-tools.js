@@ -178,6 +178,9 @@ async function fieldImportBackup(file) {
     localStorage.removeItem(stage);
     if(d.scope.doz)_dozOdjeli=_OL.load(_OL.DOZ_ODJELI)||[];
     _projekti=_OL.load(_OL.PROJEKTI)||[];
+    // loadProj obnavlja samo formulare, ne geometriju. Nove vlake dodaj odmah,
+    // bez mreže i bez diranja novijih objekata koji su već u memoriji.
+    _applyVlakeRows(d.vlake.filter(row=>!vlake.some(v=>v.nm===row.nm && v.projektId===row.projekt_id)));
     loadProj();_tragRegLoad();_msrRegLoad();_localKmlRestore();geojsonOdjeliRestore();_updSyncBadge();rndProjektiList();
     showToast('✓ Kopija vraćena lokalno — ništa nije poslano na server');fieldCheckReady();
   }catch(e){showToast('⚠ Obnova nije završena: '+e.message+'. Izvorni fajl ostaje sačuvan.');}

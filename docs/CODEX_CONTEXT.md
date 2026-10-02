@@ -612,3 +612,10 @@ ponovljeni uvoz, vlasnička izolacija, oštećena kopija i zabrana ponovnog
 stavljanja potvrđenih tačaka u outbox. Ovo nije šest sati rada na stvarnom
 Android telefonu, logcat/ANR mjerenje, gubitak fizičkog napajanja niti
 produkcijska Supabase provjera. To ostaje terenski korak provjere APK-a.
+
+### Dopuna 2.0.6 / Android 476
+
+Završna provjera obnove normalnog projekta pokazala je da `loadProj()` vraća
+samo formulare, ne vlake. Uvoz sada odmah crta samo nedostajuće vlake iz
+kopije, bez mreže i bez zamjene novijih objekata u memoriji. Dodana je provjera
+geometrije normalnog projekta u čistom profilu i ponovljenog uvoza.
