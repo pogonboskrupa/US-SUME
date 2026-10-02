@@ -140,6 +140,16 @@ function makeLayer(TILE_CACHE_NAME) {
 
 console.log('Blob URL se NE revoke-uje prerano (samo na tileunload/zamjenu):');
 
+t('stvarni Response: keš kopija se pravi prije čitanja tijela', async () => {
+  const env = makeEnv();
+  global.fetch = async () => new Response('test-tile', {headers:{'content-type':'image/png'}});
+  let saved;
+  global.caches.open = async () => ({match:async()=>undefined, put:async(u,r)=>{saved=await r.text();}});
+  await new Promise(res => makeLayer().createTile({z:10,x:1,y:1}, (err,tile)=>res(tile)));
+  assert.strictEqual(saved, 'test-tile');
+  assert.strictEqual(env.created.length, 1);
+});
+
 t('mrežni uspjeh: onload NE revoke-uje blob odmah', async () => {
   const { revokes, created } = makeEnv({ networkOk: true });
   const layer = makeLayer();
@@ -257,7 +267,7 @@ t('izmjereno "nema" + pločica nije u kešu → odmah prazna, BEZ mrežnog zahtj
   } finally { delete global._mrezaStanje; }
 });
 
-t('slaba veza + roditelj u kešu → zamućen roditelj ODMAH, prava pločica ga zamijeni kad stigne', async () => {
+t('slaba veza + roditelj u kešu → roditelj odmah, mreža tek nakon oporavka', async () => {
   const env = makeEnv({ networkOk: true, cacheHit: 'https://x/9/0/0.png' });
   let pustiMrezu;
   const cekaMrezu = new Promise(r => { pustiMrezu = r; });
@@ -271,6 +281,10 @@ t('slaba veza + roditelj u kešu → zamućen roditelj ODMAH, prava pločica ga 
     assert.strictEqual(env.created.length, 1, 'roditelj je nacrtan bez čekanja mreže');
     pustiMrezu();
     await new Promise(r => setTimeout(r, 30));
+    assert.strictEqual(env.created.length, 1, 'slaba veza ne preuzima pločice u pozadini');
+    global._mrezaStanje = () => 'dobra';
+    await img._load(true);
+    await new Promise(r => setTimeout(r, 5));
     assert.strictEqual(env.created.length, 2, 'prava pločica stigla i zamijenila roditelja');
     assert.strictEqual(img._empty, false);
   } finally { delete global._mrezaStanje; }
@@ -292,6 +306,31 @@ t('izmjereno "nema" → _retryEmpty ne troši pokušaje (vraćaju se kad veza do
     await new Promise(r => setTimeout(r, 450));
     assert.strictEqual(pozvan, 1, 'kad veza postoji, pokušaj ide');
   } finally { delete global._mrezaStanje; }
+});
+
+t('timeout obuhvata tijelo slike čak i kada zaglavlja odmah stignu', async () => {
+  makeEnv();
+  const realTimeout=global.setTimeout;
+  let calls=0;
+  global.setTimeout=(f,ms)=>realTimeout(f,ms>=1200?10:ms);
+  global.fetch=async()=>{calls++;return{ok:true,headers:{get:()=> 'image/png'},blob:()=>new Promise(()=>{}),clone:()=>({})};};
+  global._mrezaStanje=()=> 'dobra';
+  global._netZabiljezi=s=>{if(!s.ok)global._mrezaStanje=()=> 'nema';};
+  try {
+    const layer=makeLayer();
+    const img=await Promise.race([new Promise(res=>layer.createTile({z:10,x:1,y:1},(_,t)=>res(t))),
+      new Promise((_,rej)=>realTimeout(()=>rej(new Error('tijelo slike visi')),200))]);
+    assert.equal(img._empty,true);assert.equal(calls,1,'mrtva veza se ne ponavlja');
+  } finally {global.setTimeout=realTimeout;delete global._mrezaStanje;delete global._netZabiljezi;}
+});
+
+t('uklonjena pločica ne dobija zakašnjeli blob URL', async () => {
+  const e=makeEnv();let release;
+  global.fetch=()=>new Promise(r=>{release=()=>r({ok:true,headers:{get:()=> 'image/png'},blob:async()=>({}),clone:()=>({})});});
+  const layer=makeLayer(),img=layer.createTile({z:10,x:1,y:1},()=>{});
+  await new Promise(r=>setTimeout(r,5));layer.fire('tileunload',{tile:img});release();
+  await new Promise(r=>setTimeout(r,5));assert.equal(img._discarded,true);
+  assert.ok(!img._blobUrl);assert.ok(e.created.every(u=>e.revokes.includes(u)));
 });
 
 (async () => {

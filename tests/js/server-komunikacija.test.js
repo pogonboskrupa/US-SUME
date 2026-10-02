@@ -361,6 +361,7 @@ function rtEnv(stanje) {
   };
   const src = `let _rtVlakeChannel=null,_rtOdjeliChannel=null,_rtFotosChannel=null,_rtClanoviChannel=null,_rtDozGlobalChannel=null,_rtShareChannel=null,_shareChannelReady=false;
   let _rtObnovaT = null, _rtObnovaN = 0;
+  function _mrezaProbaj(){return true;}
   function _stopShareLive(){} function _updSyncDot(){} function _schedKolegeFullSync(){} function _dozEnsureChannel(){} function _dozSchedCatchup(){}
   function _onVlakaRtEvent(){} function sbLoadOdjeli(){} function _updKoleguLiveBar(){} function _onSharePoint(){} function _onShareLive(){} function _onShareStop(){}
   ${['_sbRemoveRtChannels', '_rtZakaziObnovu', '_onRtStatus', 'sbStartRealtime'].map(extractFn).join('\n')}

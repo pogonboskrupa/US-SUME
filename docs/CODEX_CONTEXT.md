@@ -541,3 +541,27 @@ assets i više se ne umeću u APK. Čisti `assembleDebug` je uspješan; Python
 alat je zatim SHA-256 provjerio svih 22 runtime fajlova u APK-u. Prolaze svih
 63 JS testnih fajlova, 51 Python provjera i sintaksa pet inline JS blokova.
 APK nije instaliran niti testiran na stvarnom telefonu.
+
+## 19. Slab signal, GPS prikaz i primljeni podaci — 2.0.4 / Android 474
+
+Slaba izmjerena veza sada zaustavlja pozadinske HTTP/Realtime tokove i
+učitavanje pločica; lokalni rad nastavlja odmah. Ručna mrežna radnja otvara
+ograničen prozor, a periodična proba provjerava oporavak veze. Slanje terenskih
+podataka ostaje ručno. Keširana pločica ili roditelj prikazuju se bez čekanja;
+rok obuhvata i tijelo odgovora. Iskrcana pločica odbacuje zakašnjeli odgovor.
+GPS doznaka koristi Canvas i linije do 128 segmenata, ne zaseban sloj po fiksu.
+
+Panel „Pošalji podatke na server” prikazuje nove/ažurirane vlake drugih članova
+projekata čiji je vlasnik drugi projektant. Ručno osvježavanje provjerava
+članstvo i preuzima podatke u postojeći geometrijski keš. Odvojeni sažetak ima
+najviše 200 stavki, izolovan je po nalogu i dostupan offline. Realtime izmjene
+se grupišu prije upisa; zakašnjeli odgovor ne prelazi na novi nalog.
+
+Prolazi svih 65 JS testnih fajlova, 51 Python test, sintaksa pet inline blokova i obje browser
+provjere. Simulacija Chrome CPU 4×: 40 vlaka / 32.000 tačaka lokalno dostupno
+za 1,8 s; 1.500 GPS segmenata koristi 12 slojeva umjesto 1.500. Slaba veza daje
+nula pozadinskih zahtjeva u provjeri; pregled preuzetog projekta radi offline
+i ne šalje podatke. Lokalni assembleDebug uspješan; SHA-256 svih 22 runtime
+fajlova u APK-u potvrđen. Ovo nisu mjerenja na stvarnom telefonu niti provjera
+produkcijskih Supabase prava. Offline podloge moraju biti ranije uvezene ili
+keširane. Nema migracije baze.

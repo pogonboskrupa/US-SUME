@@ -94,11 +94,11 @@ await t('bez uzoraka (nepoznato) → pokušava — prvi poziv i JESTE mjerenje',
   assert.strictEqual(api._mrezaProbaj(true), true);
 });
 
-await t('slaba veza → lagano da (sync malih upisa), teško ne (fotografije, korisnik koji čeka)', () => {
+await t('slaba veza → offline i za lagane i za teške automatske radnje', () => {
   const { api } = makeNet();
   api.uzorak(true); api.uzorak(false);
   assert.strictEqual(api._netKvalitet(), 'slaba');
-  assert.strictEqual(api._mrezaProbaj(), true);
+  assert.strictEqual(api._mrezaProbaj(), false);
   assert.strictEqual(api._mrezaProbaj(true), false);
 });
 

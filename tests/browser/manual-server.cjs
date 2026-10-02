@@ -13,7 +13,7 @@ const root=path.resolve(__dirname,'../..');
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${server.address().port}`; let browser;
  try{
-  browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+  browser=await chromium.launch({headless:true,executablePath:process.env.US_SUME_BROWSER,args:['--no-sandbox']});
   const ctx=await browser.newContext({serviceWorkers:'block',viewport:{width:412,height:850}});
   const writes=[];
   await ctx.route('**/*',async route=>{

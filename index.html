@@ -5650,7 +5650,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.0.3';
+const APP_VER = 'v2.0.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5890,13 +5890,14 @@ function _netZabiljezi(ishod) {
   if (!ishod.ok) _netSilaDo = 0;
   if (_netUzorci.length > _NET_UZORAKA) _netUzorci.shift();
   try { _netBadgeSync(); } catch(e) {}
-  if (prije === 'nema' && ishod.ok) {
+  if ((prije === 'nema' || prije === 'slaba') && ishod.ok && Number(ms) <= _NET_SPORO_MS) {
     // Kvarovi iz mrtvog perioda opisuju vezu koje više nema — da ostanu, stanje
     // bi još do 10 min bilo "slaba" i teški upisi (fotografije) bi čekali bez razloga.
-    _netUzorci = _netUzorci.filter(u => u.ok);
+    _netUzorci = _netUzorci.filter(u => u.ok && u.ms <= _NET_SPORO_MS);
     try { _netBadgeSync(); } catch(e) {}
     try { _netVezaVracena(); } catch(e) {}
   }
+  try { _netPrimijeniRezim(); } catch(e) {}
 }
 function _netSvjezi() {
   const sad = Date.now();
@@ -5930,27 +5931,29 @@ function _netKvalitet() {
 //   'nema'   → ne pokušavaj; ali jednom u _NET_PROBA_MS pusti JEDAN pokušaj —
 //              on je proba (bez sintetičkog pinga), a uspjeh vraća sve na staro
 //              preko _netVezaVracena;
-//   'slaba'  → lagani pozivi da (sync malih upisa, osvježavanje), TEŠKI ne
+//   'slaba'  → lokalni rad; mreža samo na izričit zahtjev ili kratku probu
 //              (fotografije, preuzimanje terena, korisnik koji čeka odgovor);
 //   'dobra' / 'nepoznato' → da.
 // Lokalni rad NIKAD ne zavisi od ovoga — ovo samo odlučuje da li se čeka mreža.
 const _NET_PROBA_MS = 30 * 1000;
 const _NET_PROZOR_MS = 20 * 1000;   // koliko dugo dodijeljena proba smije slati zahtjeve
 let _netProbaDo = 0, _netSilaDo = 0;
-function _mrezaProbaj(traziDobru) {
+function _mrezaProbaj(traziDobru, proba = false) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   const k = _netKvalitet();
-  if (k === 'nema') {
+  const sad = Date.now();
+  if (sad < _netSilaDo && !traziDobru) return true;
+  // Slab signal: lokalni rad odmah; samo periodična proba ili ručna radnja
+  // otvara mrežu. Povratak u panel/GPS fiks ne pokreću čekanje na server.
+  if (k === 'slaba' && !proba) return false;
+  if (k === 'nema' || k === 'slaba') {
     if (traziDobru) return false;
-    const sad = Date.now();
-    if (sad < _netSilaDo) return true;   // proba je u toku — njen tok smije završiti posao
     const zadnji = _netUzorci.length ? _netUzorci[_netUzorci.length - 1].t : 0;
     if (sad - zadnji < _NET_PROBA_MS || sad < _netProbaDo) return false;
     _netProbaDo = sad + _NET_PROBA_MS;   // samo JEDNA proba po prozoru, ne svi pozivaoci odjednom
     _netSilaDo = sad + _NET_PROZOR_MS;
     return true;
   }
-  if (k === 'slaba' && traziDobru) return false;
   return true;
 }
 // Korisnik je IZRIČITO tražio mrežnu radnju ("Sync sad", odjava, preuzimanje):
@@ -5965,7 +5968,6 @@ function _netDozvoliZahtjev() {
   // snimanja bez signala se zato pojavljivao tek poslije ~16 s. Odbijanje na
   // vratima ide bez ponavljanja. Izričita radnja korisnika (_mrezaSila) prolazi.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now() < _netSilaDo;
-  if (_netKvalitet() !== 'nema') return true;
   return _mrezaProbaj();
 }
 try { if (typeof setNetGate === 'function') setNetGate(_netDozvoliZahtjev); } catch(e) {}
@@ -5978,18 +5980,29 @@ function _mrezaStanje() {
 // ostavljati ga pred progress barom koji ne mrdne), a na slaboj vezi se pita —
 // korisnik zna je li mu to sad vrijedno trošiti, app ne zna.
 async function _mrezaZaPreuzimanje(sta) {
-  if (!_mrezaProbaj()) { showToast('📴 ' + sta + ' traži internet — sad nema veze'); return false; }
+  if (navigator.onLine === false) { showToast('📴 ' + sta + ' traži internet — sad nema veze'); return false; }
+  if (_mrezaStanje() === 'slaba' && !await _dlgConfirm(sta + ' na slabom signalu može trajati dugo i trošiti mobilne podatke. Pokušati ipak?',
+    { title: '📶 Slab signal', okLabel: 'Pokušaj' })) return false;
   _mrezaSila(60000);
-  if (_mrezaStanje() !== 'slaba') return true;   // 'nema' ovdje = dodijeljena proba, neka pokuša
-  return !!(await _dlgConfirm(sta + ' na slabom signalu može trajati dugo i trošiti mobilne podatke. Pokušati ipak?',
-    { title: '📶 Slab signal', okLabel: 'Pokušaj' }));
+  return true;
+}
+let _netRealtimePauziran = false;
+function _netPrimijeniRezim() {
+  if (typeof sb === 'undefined' || !sb?.realtime) return;
+  const k = _mrezaStanje();
+  const pauza = k === 'slaba' || k === 'nema';
+  if (pauza === _netRealtimePauziran) return;
+  _netRealtimePauziran = pauza;
+  if (pauza) sb.realtime.disconnect();
+  else sb.realtime.connect();
 }
 // OS je javio da je veza TEK SAD uspostavljena — kvarovi izmjereni prije toga
 // opisuju vezu koje više nema, pa ne smiju blokirati prvi pokušaj.
 function _netZaboraviKvarove() {
-  _netUzorci = _netUzorci.filter(u => u.ok);
+  _netUzorci = [];
   _netProbaDo = 0; _netSilaDo = 0;
   try { _netBadgeSync(); } catch(e) {}
+  try { _netPrimijeniRezim(); } catch(e) {}
   _netPonoviPlocice();
 }
 // Pločice koje su ostale prazne/zamućene dok veze nije bilo — ponovi dohvat.
@@ -6031,7 +6044,7 @@ function _netBadgeSync() {
     el.style.display = 'inline-block';
     el.style.background = '#f59e0b';
     el.style.boxShadow = '0 0 0 2px rgba(245,158,11,0.3)';
-    el.title = 'Slab signal — online značajke rade, ali sporo';
+    el.title = 'Slab signal — radi offline iz lokalnih podataka; slanje je ručno';
   } else {
     el.style.display = 'none';
   }
@@ -6040,6 +6053,7 @@ try { if (typeof setNetObserver === 'function') setNetObserver(_netZabiljezi); }
 
 function _setOfflineMode(offline) {
   _isOfflineMode = offline;
+  try { _netPrimijeniRezim(); } catch(e) {}
   try { _netBadgeSync(); } catch(e) {
     const el = document.getElementById('offline-badge');
     if (el) el.style.display = offline ? 'inline-block' : 'none';
@@ -6226,6 +6240,8 @@ function openSyncQueuePanel() {
   if (!list || !pan) return;
 
   _serverSazetakRender();
+  _serverPrimljenoIzKesa();
+  _serverPrimljenoRender();
   if (!q.length) {
     list.innerHTML = '';
   } else {
@@ -6307,6 +6323,153 @@ function _serverSazetakRender() {
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   const b = document.getElementById('syncq-posalji');
   if (b) { b.disabled = _serverSaljem || !n.stavki; b.style.opacity = b.disabled ? '0.5' : '1'; }
+}
+
+function _serverPrimljenoKljuc() { return 'tvlake_server_primljeno_v1_' + (sbUser?.id || ''); }
+function _serverPrimljenoUcitaj() {
+  try { const data = JSON.parse(localStorage.getItem(_serverPrimljenoKljuc()) || '[]'); return Array.isArray(data) ? data : []; }
+  catch(e) { return []; }
+}
+function _serverPrimljenoIzKesa() {
+  if (_serverPrimljenoUcitaj().length || !sbUser) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(_KVC_KEY) || '{}');
+    for (const p of _projekti) {
+      if (p.korisnik_id !== sbUser.id && (p.clanovi || []).some(c=>c.korisnik_id===sbUser.id)) {
+        _serverPrimljenoZapamti(p.id,Object.values(all[p.id] || {}));
+      }
+    }
+  } catch(e) {}
+}
+// Samo sažeci: geometrija ostaje u postojećem kešu vlaka, bez druge velike kopije.
+function _serverPrimljenoZapamti(projektId, rows) {
+  const uid = sbUser?.id;
+  const p = _projekti.find(x => x.id === projektId);
+  if (!uid || !p || p.korisnik_id === uid || !(p.clanovi || []).some(c => c.korisnik_id === uid)) return;
+  const feed = _serverPrimljenoUcitaj();
+  for (const row of rows) {
+    if (!row.korisnik_id || row.korisnik_id === uid) continue;
+    const key = projektId + '::' + (row.id || row.korisnik_id + '::' + row.nm);
+    const previous = feed.find(x => x.key === key);
+    const revision = String(row.updated_at || row.rev || '') + ':' + (row.pts?.length || 0);
+    if (previous && previous.revision === revision) continue;
+    const item = { key, projektId, nm:row.nm || 'Vlaka', uid:row.korisnik_id,
+      ime:row.ime || kolegeMap[row.korisnik_id]?.ime || 'Projektant',
+      revision, ts:Date.now(), updatedAt:row.updated_at || null, novo:true,
+      vrsta:previous ? 'Ažurirano' : 'Dodano', points:row.pts?.length || 0 };
+    if (previous) feed.splice(feed.indexOf(previous), 1);
+    feed.unshift(item);
+  }
+  try { localStorage.setItem(_serverPrimljenoKljuc(), JSON.stringify(feed.slice(0,200))); }
+  catch(e) { showToast('⚠ Pregled primljenih podataka nije sačuvan; vlake ostaju u lokalnom kešu'); }
+  _serverPrimljenoRender();
+}
+function _serverPrimljenoRender() {
+  const el = document.getElementById('syncq-primljeno');
+  if (!el) return;
+  const uid = sbUser?.id;
+  const projects = new Map(_projekti.filter(p => p.korisnik_id !== uid &&
+    (p.clanovi || []).some(c => c.korisnik_id === uid)).map(p => [p.id,p]));
+  const rows = _serverPrimljenoUcitaj().filter(x => projects.has(x.projektId));
+  const count = rows.filter(x => x.novo).length;
+  el.innerHTML = '<div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px">↓ Primljeno iz dijeljenih projekata' +
+    (count ? ' · ' + count + ' novih' : '') + '</div>' +
+    '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">Projekti u koje te dodao drugi projektant. Prikaz čuva zadnje preuzete podatke i radi offline.</div>' +
+    (rows.length ? rows.slice(0,50).map(x => {
+      const p = projects.get(x.projektId);
+      return '<div style="padding:8px 0;border-top:1px solid #1e293b;font-size:12px;color:#cbd5e1">' +
+        (x.novo ? '<span style="color:#4ade80">● Novo na ovom telefonu · </span>' : '') + _escHtml(x.vrsta) + ': <b>' + _escHtml(x.nm) + '</b>' +
+        '<div style="font-size:11px;color:#94a3b8">' + _escHtml(p.gj || '') + ' · ' + _escHtml(p.odjel || 'Projekat') +
+        ' · ' + _escHtml(x.ime) + ' · ' + x.points + ' tačaka</div>' +
+        '<button data-projekt="' + _escHtml(x.projektId) + '" onclick="_serverPrimljenoOtvori(this.dataset.projekt)" style="margin-top:5px;padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#7dd3fc">Pogledaj projekat</button></div>';
+    }).join('') : '<div style="font-size:12px;color:#94a3b8">Još nema preuzetih podataka. Osvježi kad imaš vezu.</div>');
+  const b = document.getElementById('syncq-preuzmi');
+  if (b) b.disabled = _serverPrimljenoBusy;
+}
+async function _serverPrimljenoOtvori(id) {
+  const p = _projekti.find(x => x.id === id);
+  if (!p || !(p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)) return;
+  const feed = _serverPrimljenoUcitaj();
+  feed.forEach(x => { if (x.projektId === id) x.novo = false; });
+  try { localStorage.setItem(_serverPrimljenoKljuc(), JSON.stringify(feed)); } catch(e) {}
+  closeSyncQueuePanel();
+  await aktivirajProjekt(id);
+  switchTab('karta');
+}
+let _serverPrimljenoBusy = false;
+let _serverPrimljenoRtTimer = null;
+const _serverPrimljenoRtRows = new Map();
+function _serverPrimljenoRealtime(row) {
+  const uid=sbUser?.id;
+  const p=_projekti.find(p=>p.id===row.projekt_id);
+  if (!uid || !p || p.korisnik_id===uid || !(p.clanovi || []).some(c=>c.korisnik_id===uid)) return;
+  _serverPrimljenoRtRows.set(row.id || row.projekt_id+'::'+row.korisnik_id+'::'+row.nm,{row,uid});
+  if (_serverPrimljenoRtTimer) return;
+  _serverPrimljenoRtTimer=setTimeout(()=>{
+    _serverPrimljenoRtTimer=null;
+    const groups=new Map();
+    for (const item of _serverPrimljenoRtRows.values()) {
+      if (item.uid!==sbUser?.id) continue;
+      if (!groups.has(item.row.projekt_id)) groups.set(item.row.projekt_id,[]);
+      groups.get(item.row.projekt_id).push(item.row);
+    }
+    _serverPrimljenoRtRows.clear();
+    for (const [id,rows] of groups) _kvcSave(id,rows);
+  },1000);
+}
+async function serverPreuzmiDijeljeno() {
+  if (_serverPrimljenoBusy || !sbUser || !sbProfile) return;
+  if (navigator.onLine === false) { showToast('📴 Nema veze — prikazujem zadnje preuzete podatke'); return; }
+  const owner = sbUser.id;
+  _serverPrimljenoBusy = true;
+  _serverPrimljenoRender();
+  try {
+    _mrezaSila(60000);
+    const membership = await sb.from('projekt_clanovi').select('projekt_id').eq('korisnik_id',owner);
+    if (membership.error) throw membership.error;
+    if (sbUser?.id !== owner) return;
+    const ids = [...new Set((membership.data || []).map(x => x.projekt_id))];
+    if (!ids.length) {
+      for (const p of _projekti) if (p.korisnik_id!==owner) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
+      _OL.save(_OL.PROJEKTI,_projekti);
+      showToast('Nema dijeljenih projekata u kojima si član'); return;
+    }
+    const result = await sb.from('projekti').select('*').in('id',ids).neq('korisnik_id',owner);
+    if (result.error) throw result.error;
+    if (sbUser?.id !== owner) return;
+    const projects = result.data || [];
+    if (!projects.length) { showToast('Nema projekata drugih projektanata'); return; }
+    const rows = [];
+    for (let offset=0;;offset+=100) {
+      _mrezaSila(60000);
+      const page = await sb.from('vlake').select('*').in('projekt_id',projects.map(p=>p.id))
+        .neq('korisnik_id',owner).order('id').range(offset,offset+99);
+      if (page.error) throw page.error;
+      if (sbUser?.id !== owner) return;
+      rows.push(...(page.data || []));
+      if ((page.data || []).length < 100) break;
+    }
+    for (const p of _projekti) {
+      if (p.korisnik_id!==owner && !ids.includes(p.id)) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
+    }
+    for (const p of projects) {
+      const old = _projekti.find(x=>x.id===p.id);
+      const clanovi = old?.clanovi || [];
+      if (!clanovi.some(c=>c.korisnik_id===owner)) clanovi.push({korisnik_id:owner});
+      const value = {...p,clanovi};
+      if (old) _projekti[_projekti.indexOf(old)] = value; else _projekti.push(value);
+    }
+    _OL.save(_OL.PROJEKTI,_projekti);
+    for (const p of projects) {
+      _kvcSave(p.id,rows.filter(r=>r.projekt_id===p.id));
+      // Prepusti glavnu nit između projekata — veći keš ne blokira dodir/GPS.
+      await new Promise(r=>setTimeout(r,0));
+      if (sbUser?.id !== owner) return;
+    }
+    rndProjektiList();
+    showToast('✓ Preuzeto ' + rows.length + ' vlaka iz dijeljenih projekata');
+  } catch(e) { showToast('⚠ Preuzimanje nije uspjelo — zadnji lokalni podaci ostaju dostupni'); }
+  finally { _serverPrimljenoBusy=false; _serverPrimljenoRender(); }
 }
 
 // Ručno slanje svega što čeka. Otvara kapiju samo dok slanje traje: svi
@@ -7816,7 +7979,7 @@ function _netDebugRender() {
     const zaS = Math.max(0, Math.ceil((Math.max(zadnji + _NET_PROBA_MS, _netProbaDo) - Date.now()) / 1000));
     h += _netRedHtml('Online radnje', zaS ? 'pauzirane — proba za ' + zaS + ' s' : 'pauzirane — proba na sljedećem pozivu', '#f59e0b');
   } else if (k === 'slaba') {
-    h += _netRedHtml('Online radnje', 'lagane rade, teške čekaju (foto, preuzimanja)', '#f59e0b');
+    h += _netRedHtml('Online radnje', 'lokalni rad — slanje i preuzimanje na ručni zahtjev', '#f59e0b');
   }
   h += _netRedHtml('Čeka u redu za sync', red == null ? '—' : String(red), red ? '#f59e0b' : '#22c55e');
   h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
@@ -10603,9 +10766,10 @@ function _kvcSave(projektId, rows) {
     rows.forEach(r => {
       if (!r.pts || r.pts.length < 2) return;
       const key = r.korisnik_id + '::' + r.nm;
-      all[projektId][key] = { nm: r.nm, korisnik_id: r.korisnik_id, pts: r.pts, boja: r.boja, ime: r.ime || null };
+      all[projektId][key] = { id:r.id || null, updated_at:r.updated_at || null, nm: r.nm, korisnik_id: r.korisnik_id, pts: r.pts, boja: r.boja, ime: r.ime || null };
     });
     localStorage.setItem(_KVC_KEY, JSON.stringify(all));
+    _serverPrimljenoZapamti(projektId, rows);
   } catch(e) {}
 }
 
@@ -10655,9 +10819,10 @@ async function sbLoadKolegeVlake() {
   if ((isAdmin() || isVodeci()) && akt) {
     let dbData = null;
     try {
-      const { data } = await sb.from('vlake')
-        .select('nm, korisnik_id, pts, boja, kr')
+      const { data, error } = await sb.from('vlake')
+        .select('id, updated_at, nm, korisnik_id, pts, boja, kr')
         .eq('projekt_id', akt.id);
+      if (error) throw error;
       dbData = data || [];
     } catch(e) {}
     if (dbData === null) return; // mrežni neuspjeh — zadrži postojeći prikaz
@@ -10696,10 +10861,11 @@ async function sbLoadKolegeVlake() {
     // "kolega ne vidi podijeljeni projekat" — dijeljenje radi na serveru (RLS), ali
     // klijent ih je tiho odfiltrirao. Uklonjeno.
     let q = sb.from('vlake')
-      .select('nm, korisnik_id, pts, boja, kr')
+      .select('id, updated_at, nm, korisnik_id, pts, boja, kr')
       .in('korisnik_id', memberIds)
       .eq('projekt_id', akt.id);
-    const { data } = await q;
+    const { data, error } = await q;
+    if (error) throw error;
     dbData = data || [];
   } catch(e) {} // offline — koristimo samo cache
 
@@ -11974,6 +12140,10 @@ function _onVlakaRtEvent(payload) {
   }
 
   // Tuđi događaji se obrađuju SAMO ako je autor član mog aktivnog projekta
+  // Pregled Server pamti i dodavanja u dijeljeni projekat koji trenutno nije aktivan.
+  if ((payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new?.pts?.length >= 2) {
+    if (typeof _serverPrimljenoRealtime === 'function') _serverPrimljenoRealtime(payload.new);
+  }
   const akt = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
   if (!akt) return; // nema aktivnog projekta — ignoriši tuđe vlake
   const memberIds = [akt.korisnik_id, ...(akt.clanovi || []).map(c => c.korisnik_id)];
@@ -12236,7 +12406,7 @@ function _notifKolegaName(korisnikId) {
 }
 
 function sbStartRealtime() {
-  if (!sbProfile?.sumarija) return;
+  if (!sbProfile?.sumarija || !_mrezaProbaj(true)) return;
   _sbRemoveRtChannels();
 
   const vCh = sb.channel('vlake-rt-' + Date.now())
@@ -13982,6 +14152,7 @@ function makeCachedTileLayer(cacheName, baseClass) {
       // (`tileunload`, van keepBuffer opsega), preko `setSrc` ispod koji i sam
       // revoke-uje prethodni URL prije nego dodijeli novi (retry/reload istog img).
       const setSrc = (u) => {
+        if (img._discarded) { try { URL.revokeObjectURL(u); } catch(e) {} return; }
         if (img._blobUrl) { try { URL.revokeObjectURL(img._blobUrl); } catch(e) {} }
         img._blobUrl = u;
         img.src = u;
@@ -13993,13 +14164,18 @@ function makeCachedTileLayer(cacheName, baseClass) {
         // da ne zauzimaju pool konekcija ispred pločica finalnog zooma.
         this.on('tileunload', ev => {
           const el = ev.tile;
+          if (el) el._discarded = true;
           if (el && el._ctls) { el._ctls.forEach(c => { try { c.abort(); } catch(e) {} }); el._ctls.clear(); }
           if (el && el._blobUrl) { try { URL.revokeObjectURL(el._blobUrl); } catch(e) {} el._blobUrl = null; }
         });
         // Pločice bez pravog sadržaja (mreža pala / rate-limit / prekinut zoom):
         // ponovi dohvat kad se pogled smiri. Radi i za pločice koje Leaflet REUSE-a
         // bez novog createTile poziva (zoom in pa out) — ključni scenario.
-        if (this._map) this._map.on('zoomend moveend', () => this._retryEmpty());
+      }
+      if (this._map && !this._retryMap) {
+        this._retryMap = this._map;
+        this._retryMapHandler = () => this._retryEmpty();
+        this._retryMap.on('zoomend moveend', this._retryMapHandler);
       }
 
       // Dohvat s TIMEOUTOM — na terenskoj mreži zahtjev zna visiti beskonačno
@@ -14014,11 +14190,32 @@ function makeCachedTileLayer(cacheName, baseClass) {
       const fetchTile = (u, ms) => new Promise(resolve => {
         const ctl = new AbortController();
         img._ctls.add(ctl);
-        const t = setTimeout(() => ctl.abort(), ms);
-        const finish = (r) => { clearTimeout(t); img._ctls.delete(ctl); resolve(r); };
+        let finished = false;
+        const started = Date.now();
+        const finish = (r) => { if (finished) return; finished = true; clearTimeout(t); img._ctls.delete(ctl); resolve(r); };
+        // Rok obuhvata i blob(), ne samo zaglavlja. Timeout razrješava Promise
+        // čak i kada transport ili service worker ne poslušaju abort odmah.
+        const t = setTimeout(() => {
+          if (!img._discarded && typeof _netZabiljezi === 'function') _netZabiljezi({ok:false,ms:Date.now()-started,vrsta:'istek'});
+          finish(null); ctl.abort();
+        }, ms);
+        if (typeof ctl.signal.addEventListener === 'function') ctl.signal.addEventListener('abort', () => finish(null), {once:true});
         Promise.resolve(this.options.authHeadersFn ? this.options.authHeadersFn() : null)
           .catch(() => null)
-          .then(hdrs => fetch(u, { mode: 'cors', signal: ctl.signal, headers: hdrs || undefined }))
+          .then(hdrs => {
+            if (img._discarded || ctl.signal.aborted) return null;
+            return fetch(u, { mode: 'cors', signal: ctl.signal, headers: hdrs || undefined });
+          })
+          .then(async r => {
+            if (!r || finished) return null;
+            const ttfb = Date.now() - started;
+            if (r.ok && jeSlika(r)) {
+              r._tileCacheResponse = r.clone();
+              r._tileBlob = await r.blob();
+            }
+            if (!finished && !img._discarded && typeof _netZabiljezi === 'function') _netZabiljezi({ok:true,ms:Date.now()-started,ttfb,vrsta:'ok'});
+            return r;
+          })
           .then(finish)
           .catch(() => finish(null));
       });
@@ -14047,6 +14244,7 @@ function makeCachedTileLayer(cacheName, baseClass) {
             cx.imageSmoothingEnabled = true;
             const sub = sz.x / scale;
             cx.drawImage(bmp, (coords.x - px * scale) * sub, (coords.y - py * scale) * sub, sub, sub, 0, 0, sz.x, sz.y);
+            if (typeof bmp.close === 'function') bmp.close();
             const blob = await new Promise(res => cv.toBlob(res));
             if (!blob) continue;
             const u = URL.createObjectURL(blob);
@@ -14063,19 +14261,18 @@ function makeCachedTileLayer(cacheName, baseClass) {
       // isRetry: naknadni pokušaj nad već završenom pločicom (_retryEmpty) —
       // done() se tada NE zove ponovo, samo se img.src zamijeni pravim sadržajem.
       const fromNet = async (isRetry) => {
+        if (img._discarded) return;
         // v1.8.8: pločica koje nema u kešu je na mrtvoj vezi čekala 8 s + 1,2 s +
         // 8 s (~17 s) prije zamućenog roditelja — karta je dotle bila prazna i
         // izgledala zamrznuto. Na izmjereno lošoj vezi roditelj ide ODMAH; na
-        // slaboj se prava pločica i dalje traži i zamijeni ga kad stigne, na
-        // mrtvoj se mreža ne dira (_retryEmpty pokušava kad se veza vrati).
-        if (!isRetry && typeof _mrezaStanje === 'function') {
+        // slaboj i mrtvoj se mreža ne dira (_retryEmpty pokušava kad se
+        // dobra veza vrati).
+        if (typeof _mrezaStanje === 'function') {
           const st = _mrezaStanje();
           if (st === 'nema' || st === 'slaba') {
-            if (await parentFallback()) {
-              if (st === 'slaba') fromNet(true);
-              return;
-            }
-            if (st === 'nema') { img._empty = true; done(null, img); return; }
+            if (isRetry) return;
+            if (await parentFallback()) return;
+            img._empty = true; done(null, img); return;
           }
         }
         let r = await fetchTile(url, 8000);
@@ -14083,14 +14280,15 @@ function makeCachedTileLayer(cacheName, baseClass) {
           // Kratka pauza pa JEDAN ponovni pokušaj — burst rate-limit (Google 429/403
           // pri učitavanju cijelog ekrana) i tranzijentni prekidi konekcije.
           await new Promise(rs => setTimeout(rs, 1200));
-          r = await fetchTile(url, 8000);
+          if (img._discarded) return;
+          if (typeof _mrezaStanje !== 'function' || !['nema','slaba'].includes(_mrezaStanje())) r = await fetchTile(url, 8000);
         }
         // 200 OK koji NIJE slika (WMS ServiceException, HTML stranica greške) se
         // tretira kao NEUSPJEH — ne kešira se i ne postaje img.src (inače:
         // slomljena slika po pločici → siva mreža preko cijele karte).
         if (r && r.ok && jeSlika(r)) {
-          try { const c = await caches.open(cacheName); c.put(url, r.clone()); } catch(e) {}
-          const u = URL.createObjectURL(await r.blob());
+          try { const c = await caches.open(cacheName); await c.put(url, r._tileCacheResponse); } catch(e) {}
+          const u = URL.createObjectURL(r._tileBlob);
           img.onload = () => { img._empty = false; if (!isRetry) done(null, img); };
           img.onerror = () => { if (!isRetry) done(null, img); };
           setSrc(u);
@@ -14103,6 +14301,8 @@ function makeCachedTileLayer(cacheName, baseClass) {
       };
 
       const load = async (isRetry) => {
+        if (img._discarded || img._loadBusy) return;
+        img._loadBusy = true;
         try {
           if ('caches' in window) {
             const c = await caches.open(cacheName);
@@ -14122,7 +14322,8 @@ function makeCachedTileLayer(cacheName, baseClass) {
             }
           }
           await fromNet(isRetry);
-        } catch(e) { fromNet(isRetry); }
+        } catch(e) { await fromNet(isRetry); }
+        finally { img._loadBusy = false; }
       };
       img._load = load;   // koristi ga _retryEmpty
       load(false);
@@ -14136,17 +14337,25 @@ function makeCachedTileLayer(cacheName, baseClass) {
       if (this._retryT) clearTimeout(this._retryT);
       this._retryT = setTimeout(() => {
         if (!this._map || navigator.onLine === false) return;
-        if (typeof _mrezaStanje === 'function' && _mrezaStanje() === 'nema') return;   // ne troši 3 pokušaja na mrtvu vezu
+        if (typeof _mrezaStanje === 'function' && ['nema','slaba'].includes(_mrezaStanje())) return;
         for (const key in this._tiles) {
           const t = this._tiles[key];
           const el = t && t.el;
-          if (!el || !el._empty || !el._load) continue;
+          if (!el || !el._empty || !el._load || el._loadBusy || el._discarded) continue;
           if (t.coords.z !== this._tileZoom) continue;
           el._retryN = (el._retryN || 0) + 1;
           if (el._retryN > 3) continue;
           el._load(true);
         }
       }, 400);
+    },
+
+    onRemove(map) {
+      clearTimeout(this._retryT);
+      if (this._retryMap) this._retryMap.off('zoomend moveend', this._retryMapHandler);
+      this._retryMap = this._retryMapHandler = null;
+      const base = baseClass || L.TileLayer;
+      return base.prototype.onRemove.call(this, map);
     },
 
     // NE zovemo L.TileLayer default: img bez src-a ima .complete === true pa bi
@@ -17634,8 +17843,9 @@ setInterval(async () => {
   // zahtjev korisnika (Meni → Server). Ispod je samo održavanje veze.
   // Sve ispod je neobavezno održavanje (token, tragovi, realtime) — na
   // izmjereno mrtvoj vezi bi svaki od tih poziva visio do svog roka svake minute.
-  const bilaMrtva = _mrezaStanje() === 'nema';
-  if (!_mrezaProbaj()) return;
+  const stanje = _mrezaStanje();
+  const bilaMrtva = stanje === 'nema' || stanje === 'slaba';
+  if (!_mrezaProbaj(false, true)) return;
   if (bilaMrtva) {
     // Dodijeljena proba MORA napraviti pravi zahtjev — token/realtime ispod
     // često ne idu na mrežu, pa bi se proba potrošila bez ijednog poziva i app
@@ -28038,6 +28248,15 @@ function _msrPoligonPovrsina(pts) {
 // curak bajtova poslije zaglavlja je isti kvar) — prekid već završenog zahtjeva
 // je no-op, a jedan zaostao tajmer je jeftiniji od nezaštićenog body reada.
 function _fetchT(url, ms = 12000, opts = {}) {
+  if (/^https?:\/\//i.test(String(url)) && typeof _netDozvoliZahtjev === 'function' && !_netDozvoliZahtjev()) {
+    const error = new TypeError('Failed to fetch (slab signal — radi se lokalno)');
+    error.name = 'AbortError';
+    // API terena može već biti u SW kešu: posluži ga bez pokušaja mreže.
+    if (typeof caches !== 'undefined' && opts.cache !== 'no-store') {
+      return caches.match(url).then(r => { if (r) return r; throw error; });
+    }
+    return Promise.reject(error);
+  }
   const ctl = new AbortController();
   const upstream = opts.signal;
   if (upstream) {
@@ -33857,6 +34076,7 @@ function applyUpdate() {
 // APK) — na takvom APK-u window.AndroidUpdate ne postoji.
 const _APK_BUILD_URL = 'https://github.com/pogonboskrupa/US-SUME/actions/workflows/codex-webview.yml?query=branch%3ACODEX-US-SUME';
 async function azurirajAplikaciju() {
+  if (typeof _mrezaSila === 'function') _mrezaSila(60000);
   if (typeof _anyRecOn === 'function' && _anyRecOn()) {
     showToast('⚠ Prvo završi ili pauziraj GPS snimanje');
     return;
@@ -36716,7 +36936,7 @@ function _dozRenderOverview() {
 // ─── Per-project realtime subscription ───────────────────────────
 function _dozSubProject(projectId) {
   if (_dozActiveChannel) { sb.removeChannel(_dozActiveChannel); _dozActiveChannel = null; }
-  if (!projectId) return;
+  if (!projectId || !_mrezaProbaj(true)) return;
   _dozActiveChannel = sb.channel('doz-proj-' + projectId + '-' + Date.now())
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'doz_area_markings',
@@ -36792,9 +37012,9 @@ function _dozSchedCatchup(delay = 1200) {
 // Samoizlječenje per-projekat doznaka kanala: sbStartRealtime ga NE obnavlja
 // (nije u _sbRemoveRtChannels), pa poslije pada socketa može ostati mrtav.
 function _dozEnsureChannel() {
-  if (!_dozSelId) return;
+  if (!_dozSelId || !_mrezaProbaj(true)) return;
   try {
-    if (!_dozActiveChannel || _dozActiveChannel.state !== 'joined') _dozSubProject(_dozSelId);
+    if (!_dozActiveChannel || !['joined', 'joining'].includes(_dozActiveChannel.state)) _dozSubProject(_dozSelId);
   } catch(e) {}
 }
 
@@ -38540,17 +38760,43 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   if (prev) {
     const kmh = spdMs * 3.6;
     const col = kmh < 1 ? '#60a5fa' : kmh < 3 ? '#4ade80' : kmh < 6 ? '#fbbf24' : '#ef4444';
-    L.polyline([[prev[0], prev[1]], [lat, lng]], { color: col, weight: 3, opacity: 0.9 }).addTo(_dozGpsTrackLayer);
+    _dozGpsDodajSegment(_dozGpsTrackLayer, prev, [lat, lng], col);
   }
   _dozGpsPts.push([lat, lng]);
   _dozSaveLivePts();
   _dozGpsBuffered++;
-  // Zove se na SVAKU GPS tačku — red sam odlučuje o vezi i poštuje pauzu
-  // poslije mrežnog pada, pa slaba/mrtva veza nije gađana svakih par sekundi.
-  _processOfflineQueue().catch(() => {});
+  // Tačka je već trajno u baferu. Slanje pokreće samo Meni → Server.
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
+}
+
+// Ista boja ide u jednu liniju, ali najviše 128 segmenata po liniji: Leaflet
+// pri addLatLng ponovo projektuje sve tačke te linije. Time i dug snimak ima
+// ograničen posao po fiksu, bez SVG elementa za svaka dva susjedna fiksa.
+function _dozGpsDodajSegment(group, prev, pt, color) {
+  if (!group) return;
+  if (!group._gpsRenderer) {
+    group._gpsRenderer = L.canvas({ padding:0.3 });
+    if (typeof group.on === 'function') group.on('remove', () => {
+      if (group._gpsRenderer._map) group._gpsRenderer._map.removeLayer(group._gpsRenderer);
+    });
+  }
+  let seg = group._gpsSegment;
+  if (!seg || seg.color !== color || seg.n >= 128) {
+    seg = { color, n:1, pts:[prev,pt], line:L.polyline([prev, pt], {
+      color, weight:3, opacity:0.9, interactive:false, renderer:group._gpsRenderer
+    }).addTo(group) };
+    group._gpsSegment = seg;
+    if (group._gpsRenderer._container) group._gpsRenderer._container.style.pointerEvents = 'none';
+  } else {
+    seg.pts.push(pt); seg.n++;
+    // Native replay može donijeti stotine fikseva u jednom prolazu. Geometrija
+    // se osvježi jednom po frame-u umjesto projekcije cijelog segmenta po fiksu.
+    if (typeof requestAnimationFrame === 'function') {
+      if (!seg.frame) seg.frame = requestAnimationFrame(() => { seg.frame=0; seg.line.setLatLngs(seg.pts); });
+    } else seg.line.addLatLng(pt);
+  }
 }
 
 // ─── Upozorenje kad projektant uđe u tuđi pojas ─────────────────
@@ -41723,7 +41969,13 @@ if (typeof AndroidDownload !== 'undefined') {
     <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="syncq-sum" style="padding:12px 16px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>
-  <div id="syncq-list" style="overflow-y:auto;flex:1;padding:4px 0;"></div>
+  <div style="overflow-y:auto;flex:1;min-height:0;">
+    <div style="padding:12px 16px;border-bottom:1px solid #334155;">
+      <div id="syncq-primljeno"></div>
+      <button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button>
+    </div>
+    <div id="syncq-list" style="padding:4px 0;"></div>
+  </div>
   <div style="padding:12px 16px 0;flex-shrink:0;">
     <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid rgba(59,130,246,.5);background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
   </div>

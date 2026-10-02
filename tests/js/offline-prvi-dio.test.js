@@ -20,6 +20,7 @@ function gps() {
     _dozGpsTrackLayer:{}, _dozGpsBuffered:0, _dozSelId:null,
     _dozBufferTrackPoint:p => { events.push('write'); if(fail)return false; durable.push(p);return true; },
     _dozSaveLivePts:()=>events.push('snapshot'), _dozUpdGpsStats(){}, _dozCheckBandCross(){},
+    _dozGpsDodajSegment:()=>events.push('draw'),
     _processOfflineQueue:async()=>{}, L:{polyline:()=>({addTo(){events.push('draw');}})} };
   vm.createContext(env);vm.runInContext(fn('_dozProcessGpsPoint'),env);
   return { env, durable, events, recover:()=>{fail=false;} };
