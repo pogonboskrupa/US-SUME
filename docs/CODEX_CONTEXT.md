@@ -823,3 +823,36 @@ nedraft release `v2.1.2` sadrži `app-debug.apk` (21.617.963 bajta), stanje
 Native updaterov `/releases?per_page=1` vraća ovu objavu; korisnik može
 pokrenuti Meni → Ažuriraj aplikaciju. Stvarna instalacija, vizuelni izgled
 i saradnja na dva fizička telefona nisu potvrđeni ovom CI provjerom.
+
+## 27. Štampa, Dnevni mod i glavni Meni — 2.1.3 / Android 483
+
+Korisnik traži prilagodljiv opis gore u sredini štampanog lista umjesto
+automatske šumarije, opis legende, bolji pregled štampe, popravku svijetlog
+teksta u dnevnom prikazu i novi dizajn Menija s jasno vidljivim korisnikom,
+logom, nazivom aplikacije i verzijom na dnu. Sve ide u isti naredni APK.
+
+Štampa ima dva višeredna opisa (do 300 znakova) i opcionalno preimenovanje
+standardnih simbola (do 80 znakova), uz očuvanje boje/crteža simbola. Opisi i
+nazivi se pamte lokalno u postojećim postavkama; odjel/G.J. i dalje dolaze
+iz aktivnog projekta. Šumarija se automatski više ne ispisuje u zaglavlju.
+Datum ostaje, dugi naslov/opis/legenda se prelamaju. Vlastite stavke su
+ograničene na 12 i dobile dostupno dugme uklanjanja. Veći pregled sklapa
+postavke bez mijenjanja mjerila, formata ili podataka. Native PrintManager
+i dimenzije lista/mjerilo ostaju postojeći tok.
+
+Meni ima pet sekcija u karticama, stvarna dugmad sa postojećim akcijama i
+ID-jevima za dozvole. Skroluju se samo sekcije, footer ostaje vidljiv:
+ime/prezime iz profila prijavljenog korisnika, uloga/šumarija, centriran
+postojeći logo `icon-192.png`, US ŠUME · Vlake i verzija. Otvaranje ponovo
+provjerava nalog; stari profil drugog naloga ne prikazuje tuđe ime.
+Postavka teme je preimenovana u Dnevni mod. Ispravljeni Lokacija/Izmjeri
+u omotačima donje trake, ugašena GPS ikona, statusi i preostali svijetli
+natpisi u statistici/slojevima/oznakama. Kontrole štampe prate obje teme.
+
+Lokalno prolazi 72/72 JS testnih fajlova, pet inline blokova i sintaksa
+field-design.js. Štampa sada ima 17 provjera, dodana je promjena identiteta
+Menija kroz različite naloge. Browser fixture koristi stvarni HTML/CSS i
+funkcije uz lažni projekat/kartu: Meni 320/390/768 i pejzaž 568×320 u dvije
+teme, vidljiv footer, boje Lokacija/Izmjeri, opise, legendu i PDF. Pokreće se
+na GitHub runneru prije APK-a jer lokalni Chromium blokira sandbox.
+Stvarno štampanje/instalacija na fizičkom Android uređaju nisu potvrđeni.

@@ -7,8 +7,10 @@ function env(saved,fail=false) {
  vm.runInNewContext(source,context);return {context,attributes,meta,button,events,storage,toasts};
 }
 const dark=env();assert.equal(dark.context.document.documentElement.dataset.fieldTheme,'dark');assert.equal(dark.storage.size,0);
+assert.match(dark.button.innerHTML,/Dnevni mod/);assert.ok(!dark.button.innerHTML.includes('za sunce'));
 dark.context.window.toggleFieldTheme();assert.equal(dark.context.document.documentElement.dataset.fieldTheme,'day');assert.equal(dark.attributes['aria-pressed'],'true');assert.equal(dark.meta.content,'#f8fafc');assert.equal(dark.storage.get('tvlake_field_theme_v1'),'day');
 const day=env('day');assert.equal(day.context.document.documentElement.dataset.fieldTheme,'day');day.events.DOMContentLoaded();assert.match(day.button.innerHTML,/uključen/);
+assert.match(day.button.innerHTML,/Dnevni mod — uključen/);assert.equal(day.button.title,'Isključi Dnevni mod');
 day.context.window.toggleFieldTheme();assert.equal(day.context.document.documentElement.dataset.fieldTheme,'dark');assert.equal(day.attributes['aria-pressed'],'false');
 assert.equal(env('unknown').context.document.documentElement.dataset.fieldTheme,'dark');
 const full=env(null,true);full.context.window.toggleFieldTheme();assert.equal(full.context.document.documentElement.dataset.fieldTheme,'day');assert.equal(full.toasts.length,1);

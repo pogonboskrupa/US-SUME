@@ -2351,14 +2351,17 @@ body.stampa-on .stp-el.stp-prazno { display:none; }
   background:#fff; border:0.35mm solid #111; padding:2mm 7mm 1.8mm; text-align:center;
   box-shadow:0 0 0 0.8mm rgba(255,255,255,0.9);
 }
-#print-naslov .pn-1 { font-size:14pt; font-weight:bold; letter-spacing:0.2pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#print-naslov .pn-1 { font-size:14pt; font-weight:bold; letter-spacing:0.2pt; overflow-wrap:anywhere; line-height:1.25; }
+#print-naslov .pn-opis { font-size:10pt; line-height:1.4; margin-top:1.2mm; white-space:pre-wrap; overflow-wrap:anywhere; }
 #print-naslov .pn-2 { font-size:7.5pt; color:#444; margin-top:0.6mm; white-space:nowrap; }
 #print-legend {
   bottom:5mm; right:5mm; background:#fff; border:0.35mm solid #111;
-  box-shadow:0 0 0 0.8mm rgba(255,255,255,0.9); padding:2.5mm 4mm 2mm; font-size:7.5pt; max-width:45%;
+  box-shadow:0 0 0 0.8mm rgba(255,255,255,0.9); padding:2.5mm 4mm 2mm; font-size:8.5pt; max-width:42%; box-sizing:border-box;
 }
 #print-legend .pl-title { font-weight:bold; font-size:8.5pt; margin-bottom:1.5mm; text-align:center; border-bottom:0.25mm solid #999; padding-bottom:1mm; letter-spacing:0.5pt; }
-#print-legend .pl-row { display:flex; align-items:center; gap:2.5mm; margin:1.2mm 0; white-space:nowrap; }
+#print-legend .pl-row { display:flex; align-items:center; gap:2.5mm; margin:1.5mm 0; line-height:1.35; }
+#print-legend .pl-row>div:last-child { min-width:0; overflow-wrap:anywhere; }
+#print-legend .pl-opis { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.4; margin-bottom:2mm; padding-bottom:1.5mm; border-bottom:0.2mm solid #ccc; }
 #print-legend .pl-sym { width:13mm; height:3.5mm; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 #print-legend .pl-sym svg { width:13mm; height:3.5mm; }
 #print-north { top:5mm; left:5mm; text-align:center; background:rgba(255,255,255,0.9); border-radius:1mm; padding:1mm 1.5mm 0.5mm; }
@@ -2401,6 +2404,25 @@ body.stampa-on #stampa-kontrole { display:block; }
 .stk-akcije button { flex:1; min-height:46px; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; }
 .stk-zatvori { background:#1e293b; border:1px solid #334155; color:#cbd5e1; }
 .stk-stampaj { flex:2 !important; background:#16a34a; border:1px solid #22c55e; color:#fff; }
+html #stampa-kontrole { background:var(--field-card,#0f172a);color:var(--field-ink,#f1f5f9);border-color:var(--field-border,#475569);padding-top:12px; }
+.stk-head { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px; }
+.stk-head b { display:block;font-size:16px; }.stk-head small { display:block;margin-top:4px;color:var(--field-muted,#b0bfd2);font-size:12px; }
+html #stampa-kontrole .stk-chip,html #stampa-kontrole .stk-leg label,html #stampa-kontrole .stk-zatvori { background:var(--field-bg,#111c30);color:var(--field-ink,#f1f5f9);border-color:var(--field-border,#475569);min-height:44px; }
+html #stampa-kontrole .stk-chip.sel { background:#1e40af;border-color:#60a5fa;color:#fff; }
+html #stampa-kontrole .stk-lbl,html #stampa-kontrole label { color:var(--field-muted,#b0bfd2);font-size:12px; }
+html #stk-uredi { border-color:var(--field-border,#475569); }
+.stk-tekst { display:block;margin-bottom:12px;line-height:1.5; }
+html #stk-uredi :is(input[type=text],input[type=number],textarea) { background:var(--field-bg,#111c30);color:var(--field-ink,#f1f5f9);border:1px solid var(--field-border,#475569);border-radius:8px;padding:10px;font:16px system-ui;box-sizing:border-box;min-height:44px; }
+#stk-uredi textarea { width:100%;margin-top:5px;resize:vertical; }
+html #stk-uredi ::placeholder { color:var(--field-muted,#b0bfd2);opacity:1; }
+.stk-hint { color:var(--field-muted,#b0bfd2);font-size:12px;line-height:1.5;margin:6px 0 10px; }
+.stk-leg-nazivi { margin:12px 0; }.stk-leg-nazivi summary { padding:10px 0;font-size:13px;color:var(--field-ink,#f1f5f9);cursor:pointer; }
+.stk-leg-edit { display:flex;align-items:center;gap:10px;margin:7px 0; }.stk-leg-edit>span { width:50px;flex-shrink:0; }.stk-leg-edit svg { width:50px;height:14px; }.stk-leg-edit input { width:100%;min-width:0; }
+.stk-remove { border:0;border-radius:6px;background:transparent;color:#ef4444;min-width:36px;min-height:36px;cursor:pointer; }
+html[data-field-theme=day] .stk-remove { color:#991b1b; }
+.stk-akcije { position:sticky;bottom:0;background:var(--field-card,#0f172a);padding:8px 0 2px; }
+html #stampa-kontrole :is(button,input,textarea,summary):focus-visible { outline:3px solid #3b82f6;outline-offset:2px; }
+@media(max-width:420px) { #stk-uredi .stk-polja { flex-wrap:wrap; }#stk-uredi .stk-polja label { min-width:135px; }.stk-head .stk-chip { padding:8px;font-size:12px; } }
 
 /* === UPRAVLJANJE PROJEKTIMA === */
 #pm-modal {
@@ -4470,7 +4492,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
   <div id="field-status" role="status" style="display:none;"></div>
 
   <div id="tab-bar">
-    <button class="tab-btn" id="menu-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg> Meni</button>
+    <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg> Meni</button>
     <button class="tab-btn active" onclick="switchTab('karta')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,6 9,4 15,6 21,4 21,18 15,20 9,18 3,20"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/></svg> Karta</button>
     <button class="tab-btn" onclick="switchTab('projekat')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,7 3,19 21,19 21,9 11,9 9,6 3,6"/></svg> Projekat</button>
     <button class="tab-btn" onclick="switchTab('vlake')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="4,19 4,6 19,19"/><g stroke-width="1.3"><line x1="7.75" y1="9.25" x2="8.93" y2="7.89"/><line x1="10.75" y1="11.85" x2="11.93" y2="10.49"/><line x1="13.75" y1="14.45" x2="14.93" y2="13.09"/><line x1="16.75" y1="17.05" x2="17.93" y2="15.69"/></g></svg> Vlake<span class="tab-notif" id="notif-vlake"></span></button>
@@ -5656,7 +5678,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.2';
+const APP_VER = 'v2.1.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7158,16 +7180,13 @@ async function sbLoadProfile() {
   } catch(e) {}
   if (!data) data = _profileLoad(sbUser?.id); // samo keš OVOG korisnika
   sbProfile = data;
+  if (typeof _menuIdentityRender === 'function') _menuIdentityRender();
   if (!data) return;
-  const fullName = (data.ime + ' ' + (data.prezime || '')).trim();
+  const fullName = ((data.ime || '') + ' ' + (data.prezime || '')).trim();
   document.getElementById('p-ime').value = fullName;
   if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
-  const lbl = document.getElementById('menu-user-label');
-  if (lbl) lbl.textContent = (data.is_admin ? '★ ' : '👤 ') + fullName;
   const vodeciBadge = document.getElementById('vodeci-badge');
   if (vodeciBadge) vodeciBadge.style.display = isVodeci() ? '' : 'none';
-  const verEl = document.getElementById('menu-app-ver');
-  if (verEl) verEl.textContent = APP_VER;
   // ── Vidljivost UI po ulozi — DETERMINISTIČKI za sve uloge ──────────────────
   // SPA: odjava → prijava drugog korisnika ide BEZ reload-a stranice, pa svaki
   // element MORA biti eksplicitno postavljen u OBA smjera. Jednosmjerno sakrivanje
@@ -16260,7 +16279,7 @@ async function setMapScaleCustom() {
 // Close dropdowns when clicking outside
 document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
-  if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) dd.style.display = 'none';
+  if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) closeMenuDropdown();
   // mjtrg bottom sheet se zatvara preko #mjtrg-sheet-bg overlay-a
   const kp = document.getElementById('krak-picker');
   if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
@@ -16295,17 +16314,27 @@ document.addEventListener('keydown', e => {
 });
 
 // === MENI DROPDOWN ===
+function _menuIdentityRender() {
+  const p = sbUser && sbProfile?.id === sbUser.id ? sbProfile : null;
+  const name = document.getElementById('menu-user-label');
+  if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? 'Profil nije dostupan' : 'Nije prijavljen';
+  const role = document.getElementById('menu-user-role');
+  if (role) role.textContent = p ? [p.is_admin ? 'Administrator' : typeof isVodeci === 'function' && isVodeci() ? 'Vodeći projektant' : typeof isSpdField === 'function' && isSpdField() ? 'Terenski korisnik' : 'Projektant',p.sumarija].filter(Boolean).join(' · ') : '';
+  const version = document.getElementById('menu-app-ver');
+  if (version) version.textContent = 'Verzija ' + APP_VER;
+}
 function toggleMenuDropdown(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
   const dd = document.getElementById('menu-dropdown');
   if (dd.style.display === 'none') {
+    _menuIdentityRender();
     const btn = document.getElementById('menu-btn');
     const r = btn.getBoundingClientRect();
     // Stvarna širina (zavisi od najduže vidljive stavke i uloge korisnika) — fiksna
     // pretpostavka je puštala širi meni da izađe preko desne ivice ekrana.
     dd.style.visibility = 'hidden';
     dd.style.left = '0px';
-    dd.style.display = 'block';
+    dd.style.display = 'flex';
     const ddW = dd.offsetWidth;
     dd.style.display = 'none';
     dd.style.visibility = '';
@@ -16322,14 +16351,16 @@ function toggleMenuDropdown(e) {
     // ispada van vidljivog dijela i nema način da se dođe do njega.
     dd.style.maxHeight = Math.max(150, window.innerHeight - r.bottom - 12) + 'px';
     dd.style.pointerEvents = 'none';
-    dd.style.display = 'block';
+    dd.style.display = 'flex';
+    btn.setAttribute('aria-expanded','true');
     setTimeout(() => { dd.style.pointerEvents = ''; }, 400);
   } else {
-    dd.style.display = 'none';
+    closeMenuDropdown();
   }
 }
 function closeMenuDropdown() {
   document.getElementById('menu-dropdown').style.display = 'none';
+  document.getElementById('menu-btn')?.setAttribute('aria-expanded','false');
 }
 function toggleMjtrgDropdown(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
@@ -29519,7 +29550,7 @@ function _stpPostavkeSacuvaj() {
   if (!_stp) return;
   try {
     localStorage.setItem(_STP_KEY, JSON.stringify({ fmt: _stp.fmt, naslov: _stp.naslov, legenda: _stp.legenda,
-      leg: [..._stp.leg], custom: _stp.custom }));
+      leg: [..._stp.leg], custom: _stp.custom, opis: _stp.opis, opisLegende: _stp.opisLegende, legLabels: _stp.legLabels }));
   } catch (e) { /* UI postavka — gubitak je bezopasan */ }
 }
 
@@ -29575,24 +29606,23 @@ function _stpOverlays() {
   const nasl = document.getElementById('print-naslov');
   const t = _stpNaslovTekst();
   if (nasl) {
-    const ima = _stp.naslov && !!t;
+    const ima = _stp.naslov && !!(t || _stp.opis);
     nasl.classList.toggle('stp-prazno', !ima);
     if (ima) {
-      const sum = (typeof sbProfile !== 'undefined' && sbProfile?.sumarija) || '';
       const dat = _stpDatum(new Date());
-      nasl.innerHTML = `<div class="pn-1">${_escHtml(t)}</div><div class="pn-2">${_escHtml([sum, dat].filter(Boolean).join('  ·  '))}</div>`;
+      nasl.innerHTML = `${t ? `<div class="pn-1">${_escHtml(t)}</div>` : ''}${_stp.opis ? `<div class="pn-opis">${_escHtml(_stp.opis)}</div>` : ''}<div class="pn-2">${_escHtml(dat)}</div>`;
     } else nasl.innerHTML = '';
   }
   const leg = document.getElementById('print-legend');
   if (leg) {
     const sim = _stpSimboli();
     const redovi = Object.keys(sim).filter(k => _stp.leg.has(k)).map(k =>
-      `<div class="pl-row"><div class="pl-sym">${sim[k].svg}</div><div>${sim[k].label}</div></div>`);
+      `<div class="pl-row"><div class="pl-sym">${sim[k].svg}</div><div>${_escHtml(_stp.legLabels?.[k] || sim[k].label)}</div></div>`);
     _stp.custom.forEach(txt => redovi.push(
       `<div class="pl-row"><div class="pl-sym"><svg viewBox="0 0 50 10"><line x1="0" y1="5" x2="50" y2="5" stroke="#555" stroke-width="1.5" stroke-dasharray="4,2"/></svg></div><div>${_escHtml(txt)}</div></div>`));
-    const ima = _stp.legenda && redovi.length > 0;
+    const ima = _stp.legenda && !!(redovi.length || _stp.opisLegende);
     leg.classList.toggle('stp-prazno', !ima);
-    leg.innerHTML = ima ? '<div class="pl-title">LEGENDA</div>' + redovi.join('') : '';
+    leg.innerHTML = ima ? '<div class="pl-title">LEGENDA</div>' + (_stp.opisLegende ? '<div class="pl-opis">'+_escHtml(_stp.opisLegende)+'</div>' : '') + redovi.join('') : '';
   }
   _stpSkalaTraka();
 }
@@ -29653,11 +29683,15 @@ function stampaOtvori() {
     legenda: post.legenda !== false,
     leg: Array.isArray(post.leg) ? new Set(post.leg) : _stpLegendaPodrazumijevano(),
     custom: Array.isArray(post.custom) ? post.custom.filter(x => typeof x === 'string').slice(0, 12) : [],
+    opis: typeof post.opis === 'string' ? post.opis.slice(0,300) : '',
+    opisLegende: typeof post.opisLegende === 'string' ? post.opisLegende.slice(0,300) : '',
+    legLabels: Object.fromEntries(Object.keys(_stpSimboli()).filter(k=>typeof post.legLabels?.[k]==='string').map(k=>[k,post.legLabels[k].slice(0,80)])),
     odjel: String(ap?.odjel || (typeof getOdjel === 'function' ? getOdjel() : '') || '').trim(),
     gj: String(ap?.gj || '').trim(),
     mjerilo: 10000,
     okvirOdjel: false,
     uredi: false,
+    sazeto: false,
     prev: { center: c0, zoom: z0, snap: map.options.zoomSnap, h: {} },
   };
   document.body.classList.add('stampa-on');
@@ -29741,9 +29775,20 @@ function _stpPrekidac(k, v) {
   _stpPostavkeSacuvaj(); _stpOverlays();
 }
 function _stpPolje(k, v) {
-  if (!_stp) return;
-  _stp[k] = String(v || '').slice(0, 80);
+  if (!_stp || !['odjel','gj','opis','opisLegende'].includes(k)) return;
+  _stp[k] = String(v || '').slice(0, k === 'opis' || k === 'opisLegende' ? 300 : 80);
+  if (k === 'opis' || k === 'opisLegende') _stpPostavkeSacuvaj();
   _stpOverlays();
+}
+function _stpLegNaziv(k,v) {
+  if (!_stp || !Object.keys(_stpSimboli()).includes(k)) return;
+  (_stp.legLabels ||= {})[k] = String(v || '').slice(0,80);
+  _stpPostavkeSacuvaj(); _stpOverlays();
+}
+function _stpPregled() {
+  if (!_stp) return;
+  _stp.sazeto = !_stp.sazeto;
+  _stpKontroleRender(); _stpRaspored();
 }
 function _stpLegStavka(k, on) {
   if (!_stp) return;
@@ -29754,6 +29799,7 @@ function _stpDodajStavku() {
   const inp = document.getElementById('stk-nova-stavka');
   const t = (inp?.value || '').trim().slice(0, 60);
   if (!t || !_stp) return;
+  if (_stp.custom.length >= 12) { showToast('Najviše 12 vlastitih stavki legende'); return; }
   _stp.custom.push(t);
   _stpPostavkeSacuvaj(); _stpKontroleRender(); _stpOverlays();
 }
@@ -29765,6 +29811,7 @@ function _stpUkloniStavku(i) {
 function _stpUredi() {
   if (!_stp) return;
   _stp.uredi = !_stp.uredi;
+  _stp.sazeto = false;
   _stpKontroleRender(); _stpRaspored();
 }
 
@@ -29783,20 +29830,25 @@ function _stpKontroleRender() {
         <label>Odjel<input type="text" value="${_escHtml(_stp.odjel)}" oninput="_stpPolje('odjel',this.value)" placeholder="npr. 14"></label>
         <label>Gospodarska jedinica<input type="text" value="${_escHtml(_stp.gj)}" oninput="_stpPolje('gj',this.value)" placeholder="npr. Una"></label>
       </div>
+      <label class="stk-tekst">Opis u gornjem srednjem dijelu<textarea maxlength="300" rows="2" oninput="_stpPolje('opis',this.value)" placeholder="npr. Plan traktorskih vlaka · Radilište 2026">${_escHtml(_stp.opis || '')}</textarea></label>
+      <label class="stk-tekst">Opis legende<textarea maxlength="300" rows="2" oninput="_stpPolje('opisLegende',this.value)" placeholder="Napomena uz simbole i linije…">${_escHtml(_stp.opisLegende || '')}</textarea></label>
       <div class="stk-polja">
         <label>Drugo mjerilo 1 :<input type="number" inputmode="numeric" min="200" step="500" value="${_stp.mjerilo}" onchange="_stpMjerilo(this.value)"></label>
       </div>
       <div class="stk-lbl" style="margin-bottom:6px;">Stavke legende</div>
       <div class="stk-leg">${Object.keys(sim).map(k =>
         `<label><input type="checkbox" ${_stp.leg.has(k) ? 'checked' : ''} onchange="_stpLegStavka('${k}',this.checked)">${sim[k].label}</label>`).join('')}${
-        _stp.custom.map((t, i) => `<label style="border-style:dashed;">${_escHtml(t)} <span onclick="_stpUkloniStavku(${i})" style="color:#f87171;font-weight:bold;cursor:pointer;">✕</span></label>`).join('')}
+        _stp.custom.map((t, i) => `<label style="border-style:dashed;">${_escHtml(t)} <button type="button" aria-label="Ukloni stavku" onclick="_stpUkloniStavku(${i})" class="stk-remove">✕</button></label>`).join('')}
       </div>
+      <details class="stk-leg-nazivi"><summary>Uredi nazive simbola</summary>${Object.keys(sim).map(k=>`<label class="stk-leg-edit"><span>${sim[k].svg}</span><input type="text" maxlength="80" aria-label="${_escHtml(sim[k].label)}" value="${_escHtml(_stp.legLabels?.[k] || '')}" placeholder="${_escHtml(sim[k].label)}" oninput="_stpLegNaziv('${k}',this.value)"></label>`).join('')}</details>
       <div class="stk-polja" style="margin-top:8px;align-items:flex-end;">
         <label>Vlastita stavka<input type="text" id="stk-nova-stavka" placeholder="npr. Stovarište" onkeydown="if(event.key==='Enter')_stpDodajStavku()"></label>
         <button class="stk-chip" onclick="_stpDodajStavku()">＋ Dodaj</button>
       </div>
     </div>`;
   el.innerHTML = `
+    <div class="stk-head"><div><b>Pregled za štampu</b><small>${_STP_FORMATI[_stp.fmt].ime} · ${mjTxt(_stp.mjerilo)}</small></div><button class="stk-chip" aria-expanded="${!_stp.sazeto}" onclick="_stpPregled()">${_stp.sazeto ? 'Postavke ▴' : 'Veći pregled ▾'}</button></div>
+    ${_stp.sazeto ? '' : `
     <div class="stk-red"><span class="stk-lbl">Papir</span>${fmt}</div>
     <div class="stk-red"><span class="stk-lbl">Mjerilo</span>${mj}</div>
     <div class="stk-red">
@@ -29804,7 +29856,7 @@ function _stpKontroleRender() {
       <label class="stk-chip prek"><input type="checkbox" ${_stp.legenda ? 'checked' : ''} onchange="_stpPrekidac('legenda',this.checked)">Legenda</label>
       <button class="stk-chip${_stp.uredi ? ' sel' : ''}" onclick="_stpUredi()">${_stp.uredi ? 'Gotovo ▴' : 'Uredi ▾'}</button>
     </div>
-    ${uredi}
+    ${uredi}<p class="stk-hint">Pomjeri kartu prstom. Opis i legendu mijenjaj kroz Uredi.</p>`}
     <div class="stk-akcije">
       <button class="stk-zatvori" onclick="stampaZatvori()">Zatvori</button>
       <button class="stk-stampaj" onclick="stampaStampaj()"><svg class="ic"><use href="#ic-stampaj"/></svg> Štampaj / PDF</button>
@@ -39975,43 +40027,45 @@ if (typeof AndroidDownload !== 'undefined') {
 
 </script>
 
-<!-- MENI DROPDOWN — direktno u body da izbjegne sve stacking context probleme -->
-<div id="menu-dropdown" style="
-  display:none;position:fixed;top:0;right:0;
-  background:#16213e;border:1px solid #0f3460;border-radius:8px;
-  min-width:250px;max-width:calc(100vw - 12px);z-index:99000;box-shadow:0 8px 24px rgba(0,0,0,0.6);
-  touch-action:manipulation;max-height:80vh;max-height:80dvh;overflow-y:auto;overscroll-behavior:contain;padding-bottom:4px;">
-  <div class="mdrop-hdr">Karta</div>
-  <div class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()"><span class="mdrop-ico">📂</span>Dodaj KML fajl</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</div>
-  <div class="mdrop-sep"></div>
-  <div class="mdrop-hdr">Teren</div>
-  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni prikaz za sunce</button>
-  <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</div>
-  <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</div>
-  <div class="mdrop-sep"></div>
+<!-- Glavni Meni: sekcije se skrolaju, korisnik i verzija ostaju na dnu. -->
+<div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
+  <div class="mdrop-top"><div><b>Meni</b><small>Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
+  <div class="mdrop-sections"><section class="mdrop-section">
+  <div class="mdrop-hdr">Karte i slojevi</div>
+  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()"><span class="mdrop-ico">📂</span>Dodaj KML fajl</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</button>
+  </section><section class="mdrop-section">
+  <div class="mdrop-hdr">Rad na terenu</div>
+  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
+  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
+  </section><section class="mdrop-section">
   <div class="mdrop-hdr">Server</div>
-  <div class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji podatke na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></div>
-  <div class="mdrop-sep"></div>
+  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Server · vlake projekta<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
+  </section><section class="mdrop-section">
   <div class="mdrop-hdr">Projekti i izvoz</div>
-  <div class="mdrop-item" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</div>
-  <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</div>
-  <div class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</div>
-  <div class="mdrop-sep"></div>
-  <div class="mdrop-hdr" id="menu-user-label" style="text-transform:none;letter-spacing:0.02em;font-size:12px;">—</div>
-  <div class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico">👥</span>Admin — korisnici</div>
-  <div class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')"><span class="mdrop-ico">🔔</span>Obavještenja</div>
-  <div class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico">🛠</span>DEBUG</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</div>
-  <div class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico">🔄</span>Ažuriraj aplikaciju</div>
-  <div class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico">📖</span>Upute za korištenje</div>
-  <div class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico">🚪</span>Odjava</div>
-  <div style="color:#94a3b8;font-size:11px;text-align:center;padding:6px 0 4px;letter-spacing:0.05em;" id="menu-app-ver"></div>
+  <button type="button" class="mdrop-item" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</button>
+  <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</button>
+  <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</button>
+  </section><section class="mdrop-section">
+  <div class="mdrop-hdr">Račun i pomoć</div>
+  <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico">👥</span>Admin — korisnici</button>
+  <button type="button" class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')"><span class="mdrop-ico">🔔</span>Obavještenja</button>
+  <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico">🛠</span>DEBUG</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</button>
+  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico">🔄</span>Ažuriraj aplikaciju</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico">📖</span>Upute za korištenje</button>
+  <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico">🚪</span>Odjava</button>
+  </section></div>
+  <footer class="mdrop-footer">
+    <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
+    <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije US ŠUME"><div><b>US ŠUME · Vlake</b><span id="menu-app-ver"></span></div></div>
+  </footer>
 </div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->

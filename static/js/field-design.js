@@ -11,8 +11,8 @@
     const button=document.getElementById('field-theme-toggle');
     if(button) {
       button.setAttribute('aria-pressed',String(theme==='day'));
-      button.innerHTML='<span class="mdrop-ico" aria-hidden="true">'+(theme==='day'?'☀':'☾')+'</span><span>'+(theme==='day'?'Dnevni prikaz — uključen':'Dnevni prikaz za sunce')+'</span>';
-      button.title=theme==='day'?'Prebaci na tamni prikaz':'Prebaci na dnevni prikaz visokog kontrasta';
+      button.innerHTML='<span class="mdrop-ico" aria-hidden="true">'+(theme==='day'?'☀':'☾')+'</span><span>'+(theme==='day'?'Dnevni mod — uključen':'Dnevni mod')+'</span>';
+      button.title=theme==='day'?'Isključi Dnevni mod':'Uključi Dnevni mod';
     }
   }
   window.toggleFieldTheme=function () {
