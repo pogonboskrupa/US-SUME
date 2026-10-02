@@ -92,6 +92,8 @@ async def main():
                 await page.screenshot(path=str(OUT/f'menu-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeMenuDropdown()')
                 await page.click('#vlake-tab-btn')
+                # Postojeći prijelaz pozadine ikone traje 180 ms; provjeri završno stanje.
+                await page.wait_for_function('getComputedStyle(document.querySelector("#vlake-tab-btn .tbi")).backgroundColor === "rgb(22, 101, 52)"')
                 assert await page.evaluate('_activeTab') == 'vlake'
                 assert await page.locator('#vlake-tab-btn').evaluate('(e)=>e.classList.contains("active")')
                 nav = await page.locator('#vlake-tab-btn').evaluate('(e)=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height,icon:getComputedStyle(e.querySelector(".tbi")).color,bg:getComputedStyle(e.querySelector(".tbi")).backgroundColor}}')
