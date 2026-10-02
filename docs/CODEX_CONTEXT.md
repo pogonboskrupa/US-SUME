@@ -714,3 +714,23 @@ punu memoriju, promjenu korisnika, escaping, prefiksirane namespaceove,
 MultiGeometry/gx:Track, zakašnjeli FileReader i obnovu nakon reload-a.
 Lokalni debug APK je izgrađen i svih 27 runtime assets SHA-256 provjereno.
 Pravi Android birač fajlova, GPS i produkcijski Supabase nisu testirani.
+
+## 24. Vidljivija Android ikona — 2.1.0 / Android 480
+
+Na zahtjev korisnika povećan je samo unutarnji grb (~10.2% linearno), bez
+redizajna, raster obrade, promjene boja, vanjskog okvira ili login/splash
+grafike. Manifest koristi nove `ic_launcher_visible` i `round_visible`
+resurse. Android 8+ adaptivna maska zadržava postojeću zelenu pozadinu;
+foreground XML proširuje postojeći providni bitmap simetrično za 5.5dp
+na 108dp platnu. Android 7 ima zaseban 48dp fallback s 53dp grbom, zelenom
+podlogom i očuvanim ovalnim okvirom za roundIcon. PWA PNG ikone nisu
+mijenjane; ovaj zahvat odnosi se na instaliranu Android aplikaciju.
+
+Novi Node test čita stvarne PNG alpha piksele u pet density varijanti i
+provjerava da povećani grb (uz rub piksela/interpolaciju) stane u centralni
+66dp sigurni krug i da dijagonala crteža ostane <=61% platna. Provjerava i
+manifest/XML veze i odvojeni fallback. Browser preview upoređuje stare/nove
+kružne, zaobljene i kvadratne maske, uključujući prikaz na 48px; to je
+simulacija, ne Android launcher screenshot. Prolazi 69 JS testnih fajlova,
+Gradle debug build i SHA-256 provjera svih 27 web runtime assets u APK-u.
+Nije izvršena instalacija niti provjera na stvarnim Android launcherima.
