@@ -619,3 +619,31 @@ Završna provjera obnove normalnog projekta pokazala je da `loadProj()` vraća
 samo formulare, ne vlake. Uvoz sada odmah crta samo nedostajuće vlake iz
 kopije, bez mreže i bez zamjene novijih objekata u memoriji. Dodana je provjera
 geometrije normalnog projekta u čistom profilu i ponovljenog uvoza.
+
+## 21. Pregled podataka po tabovima — 2.0.7 / Android 477
+
+Korisnik je izabrao upgrade broj 2. Novi `static/js/tab-data.js` koristi samo
+lokalne podatke: nema novih mrežnih zahtjeva ni automatskog slanja. Aktivni
+projekat je vidljiv u panelima, dok je zasebni odjel doznake jasno označen
+kao povezan ili zaseban; navigacija ne mijenja odjel niti zaustavlja GPS.
+
+Pretraga, sort, filter neposlanih vlaka, stranica i položaj panela pamte se
+po korisniku/projektu tokom otvorene sesije. Nije trajna postavka nakon
+restarta. Veće liste vlaka, kolega i reda slanja crtaju po 60 kartica na
+stranici (nije virtualni beskonačni scroll). Hijerarhijski redoslijed krakova
+i stvarni `data-vi` indeks su očuvani; izbor s karte otvara odgovarajuću
+stranicu ako vlaka nije skrivena pretragom/filterom. Kartice razlikuju lokalne
+izmjene u redu od potvrđene serverske kopije. Kolege imaju lokalnu pretragu
+po nazivu vlake/imenu. Panel Server ima Za slanje / Primljeno / Problemi;
+problematične operacije ostaju i u redu za slanje, ništa se ne odbacuje.
+Brojači i primljeni feed ostaju ograničeni na trenutnog korisnika/članstvo.
+
+Provjere: svih 66 JS testnih fajlova, 51 Python test i četiri browser skripte.
+Novi `tests/browser/tab-data.cjs` testira 240 vlaka/180 vlaka kolega, 60 DOM
+kartica, izbor druge stranice, pretragu i povratak položaja, izolaciju stanja
+projekata, neposlanu izmjenu već potvrđene vlake, filtre server panela i tuđi
+red. Chromium s CPU 4× prikazuje stranicu za približno 28–72 ms (sintetički mali
+tragovi, ne mjerenje fizičkog telefona); pregled ne pravi vanjske zahtjeve.
+Regresijske provjere ručnog slanja, slabog signala, IndexedDB GPS oporavka i
+sigurnosnih kopija su očuvane. Novi modul je u SW shellu i obaveznim Android
+assetima. Pravi srednjerangirani Android i produkcijski Supabase nisu testirani.

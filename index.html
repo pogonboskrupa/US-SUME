@@ -5652,7 +5652,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.0.6';
+const APP_VER = 'v2.0.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6236,7 +6236,7 @@ const _OP_LABELS = {
 };
 
 function openSyncQueuePanel() {
-  const q    = _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id);
+  let q    = _OL.loadQueue().filter(op => !op._uid || op._uid === sbUser?.id);
   const list = document.getElementById('syncq-list');
   const bg   = document.getElementById('syncq-bg');
   const pan  = document.getElementById('syncq-panel');
@@ -6245,6 +6245,7 @@ function openSyncQueuePanel() {
   _serverSazetakRender();
   _serverPrimljenoIzKesa();
   _serverPrimljenoRender();
+  if (typeof _tabServerPrepare === 'function') q = _tabServerPrepare(q);
   if (!q.length) {
     list.innerHTML = '';
   } else {
@@ -6322,7 +6323,7 @@ function _serverSazetakRender() {
         '<div style="font-size:11px;color:#64748b;margin-top:6px">Sačuvano je na telefonu. Kolege ovo vide tek kad pošalješ.</div>' +
         '<div style="font-size:11px;color:#64748b;margin-top:2px">Tragovi, dnevnik, oznake i fotografije ostaju samo na telefonu.</div>'
       : '<div style="font-size:13px;color:#4ade80">✓ Sve je poslano — ništa ne čeka.</div>') +
-    (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — razlog je ispod.</div>' : '') +
+    (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   const b = document.getElementById('syncq-posalji');
   if (b) { b.disabled = _serverSaljem || !n.stavki; b.style.opacity = b.disabled ? '0.5' : '1'; }
@@ -6388,6 +6389,7 @@ function _serverPrimljenoRender() {
     }).join('') : '<div style="font-size:12px;color:#94a3b8">Još nema preuzetih podataka. Osvježi kad imaš vezu.</div>');
   const b = document.getElementById('syncq-preuzmi');
   if (b) b.disabled = _serverPrimljenoBusy;
+  if (typeof _tabServerCounts === 'function') _tabServerCounts();
 }
 async function _serverPrimljenoOtvori(id) {
   const p = _projekti.find(x => x.id === id);
@@ -9574,6 +9576,7 @@ async function aktivirajProjekt(id) {
   if (typeof id !== 'string') id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p) return;
+  if (typeof _tabRemember === 'function') _tabRemember(_activeTab);
   _aktivniProjektId = id;
   localStorage.setItem('tvlake_akt_proj', id);
   _applyProjektFields(p);
@@ -9583,6 +9586,7 @@ async function aktivirajProjekt(id) {
   updProjStats(); rndLog();
   rndList();  // Vlake tab filtrira po _aktivniProjektId — mora se re-renderovati odmah,
               // inače lista ostaje prazna/stara dok korisnik ručno ne osvježi.
+  if (typeof _tabRestore === 'function') _tabRestore(_activeTab);
   _updFabVisibility();
   _updVlakeMapVisibility();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel, p.gj);
@@ -17597,6 +17601,7 @@ function flipVlakaDir() {
 
 function selI(i) {
   actI = i;
+  if (typeof _tabReveal === 'function') _tabReveal(i);
   // Brzo označavanje bez ponovnog crtanja liste. VAŽNO: red se traži po
   // data-vi (indeks u vlake[]), NE po poziciji u DOM-u — lista se crta
   // SORTIRANO i hijerarhijski (rootVlake sort + renderWithChildren), a vlake[]
@@ -21422,6 +21427,7 @@ function _renderVlakaRow(el, v, i, depth, dPre, grana) {
         <span class="vcard-caret"></span>
       </div>
       <div class="vcard-sub">${v.pts.length} tačaka${lagerInfo}${grana ? `<button class="vkr-tog${grana.skupljen ? ' skupljen' : ''}" onclick="event.stopPropagation();_vlKrakToggle(${i})" title="${grana.skupljen ? 'Prikaži krakove' : 'Sakrij krakove'}"><span class="vkr-ar"></span>${grana.nKrak} ${_vlKrakRijec(grana.nKrak)} · s kracima ${fmtL(grana.ukupnoM)}</button>` : ''}</div>
+      ${typeof _tabRowStatus === 'function' ? _tabRowStatus(v) : ''}
       ${elevRow}
       ${isKrak && !isReadOnly() ? `<label class="vcard-naputu" onclick="event.stopPropagation();">
         <input type="checkbox" onchange="event.stopPropagation();listToggleNaPutu(${i},this.checked)" ${v.naPutu?'checked':''} style="width:16px;height:16px;flex-shrink:0;">
@@ -21483,10 +21489,11 @@ function _vlTraziNorm() { return String(_vlTrazi || '').trim().toLowerCase(); }
 function _vlOdgovara(v, q) {
   return String(v.nm || '').toLowerCase().includes(q) || String(v.lager || '').toLowerCase().includes(q);
 }
-function _vlTraziSet(t) { _vlTrazi = String(t || ''); rndList(); }
+function _vlTraziSet(t) { _vlTrazi = String(t || ''); if (typeof _tabChanged === 'function') _tabChanged(); rndList(); }
 function _vlSortSet(s) {
   _vlSort = ['naziv', 'duzina', 'nagib'].includes(s) ? s : 'naziv';
   try { localStorage.setItem(_VL_SORT_KEY, _vlSort); } catch (e) {}
+  if (typeof _tabChanged === 'function') _tabChanged();
   rndList();
 }
 function _vlKrakToggle(i) {
@@ -21495,7 +21502,7 @@ function _vlKrakToggle(i) {
   if (_vlSkupljeni.has(k)) _vlSkupljeni.delete(k); else _vlSkupljeni.add(k);
   rndList();
 }
-function _vlNagibFilterToggle(on) { _vlSamoStrme = !!on; rndList(); }
+function _vlNagibFilterToggle(on) { _vlSamoStrme = !!on; if (typeof _tabChanged === 'function') _tabChanged(); rndList(); }
 function _vlNagibTrakaRender(nVlaka, nPreko, prekoMUk, limit) {
   const el = document.getElementById('vl-nagib-traka');
   if (!el) return;
@@ -21534,6 +21541,7 @@ function rndList() {
   // v3.102.2: "Pokretanje dira DOM koji JOŠ NE POSTOJI").
   if (!el) return;
   el.innerHTML='';
+  const pendingOnly = typeof _tabListPrepare === 'function' && _tabListPrepare();
 
   // Filtriraj po aktivnom projektu
   const hasProj = !!_aktivniProjektId;
@@ -21541,6 +21549,7 @@ function rndList() {
   // Bez aktivnog projekta ne prikazuj NIŠTA u listi (ni orphan vlake) — samo
   // poruka/dugme za čišćenje ispod (blok "noProjects && vlake.length > 0") ostaje.
   const allProjVlake = hasProj ? vlake.filter(v => v.projektId === _aktivniProjektId) : [];
+  const vlIndex = new Map(vlake.map((v,i) => [v,i]));
   const poNazivu = (a, b) => {
     const ka = _stdSortKey(a.nm), kb = _stdSortKey(b.nm);
     return ka !== kb ? ka - kb : String(a.nm).localeCompare(String(b.nm));
@@ -21621,6 +21630,11 @@ function rndList() {
     }
   });
   const frag = document.createDocumentFragment();
+  const dataRows = [];
+  const renderRow = (...args) => {
+    if (typeof _tabListRender === 'function') dataRows.push(args);
+    else _renderVlakaRow(frag, ...args);
+  };
   const rendered = new Set();
   // Ukupna dužina podstabla (vlaka + svi njeni kraci) — za sort "Dužina" i za
   // oznaku sklopljenih krakova. Memo po imenu, jedan prolaz po crtanju.
@@ -21637,7 +21651,7 @@ function rndList() {
     const ch = childMap.get(v.nm);
     const skupljen = !!ch && _vlSkupljeni.has(_vlSkupKljuc(v));
     const ps = ch ? podstablo(v) : null;
-    _renderVlakaRow(frag, v, i, depth, dMap.get(v), ch ? { nKrak: ps.n, ukupnoM: ps.m, skupljen } : null);
+    renderRow(v, i, depth, dMap.get(v), ch ? { nKrak: ps.n, ukupnoM: ps.m, skupljen } : null);
     if (ch && !skupljen) ch.forEach(c => renderWithChildren(c.v, c.i, depth + 1));
   }
   const q = _vlTraziNorm();
@@ -21646,12 +21660,13 @@ function rndList() {
     alati.style.display = allProjVlake.length >= 2 ? '' : 'none';
     alati.querySelectorAll('#vl-sort button').forEach(b => b.classList.toggle('on', b.dataset.s === _vlSort));
   }
-  if (q) {
+  if (q || pendingOnly) {
     // Pretraga je RAVNA lista (kao filter nagiba) — krak koji odgovara mora se
     // vidjeti i kad mu matična vlaka ne odgovara. Indeks ostaje STVARNI indeks.
     let arr = allProjVlake.filter(v => _vlOdgovara(v, q));
+    if (pendingOnly) arr = arr.filter(v => _tabPending(v));
     if (_vlSamoStrme && nPreko > 0) arr = arr.filter(v => { const st = _vlNagib(v, dMap.get(v)); return st && st.prekoM > 0; });
-    arr.sort(poNazivu).forEach(v => _renderVlakaRow(frag, v, vlake.indexOf(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
+    arr.sort(poNazivu).forEach(v => renderRow(v, vlIndex.get(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
     if (!arr.length && allProjVlake.length) {
       nv.style.display = 'block';
       nv.textContent = `Nijedna vlaka ne odgovara "${_vlTrazi.trim()}".`;
@@ -21667,7 +21682,7 @@ function rndList() {
     allProjVlake
       .filter(v => { const st = _vlNagib(v, dMap.get(v)); return st && st.prekoM > 0; })
       .sort((a, b) => (_vlNagib(b, dMap.get(b)).max - _vlNagib(a, dMap.get(a)).max))
-      .forEach(v => _renderVlakaRow(frag, v, vlake.indexOf(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
+      .forEach(v => renderRow(v, vlIndex.get(v), v.kr === 0 ? 0 : 1, dMap.get(v)));
   } else {
     let roots = rootVlake;
     if (_vlSort === 'duzina') roots = rootVlake.slice().sort((a, b) => podstablo(b).m - podstablo(a).m || poNazivu(a, b));
@@ -21675,8 +21690,9 @@ function rndList() {
       const mx = v => { const st = _vlNagib(v, dMap.get(v)); return st ? st.max : -1; };
       roots = rootVlake.slice().sort((a, b) => mx(b) - mx(a) || poNazivu(a, b));
     }
-    roots.forEach(v => { const i = vlake.indexOf(v); renderWithChildren(v, i, 0); });
+    roots.forEach(v => { const i = vlIndex.get(v); renderWithChildren(v, i, 0); });
   }
+  if (typeof _tabListRender === 'function') _tabListRender(frag, dataRows);
   el.appendChild(frag);
   updOvl();
   // Defer project stats update to avoid blocking during rapid updates
@@ -27318,11 +27334,12 @@ function rndKolegeVlakeList() {
   const cnt = document.getElementById('kolege-vc');
   if (!el || !sec) return;
 
-  const entries = Object.entries(kolegeVlakeMap);
+  let entries = Object.entries(kolegeVlakeMap);
   if (!entries.length) { sec.style.display = 'none'; return; }
 
   sec.style.display = 'block';
   cnt.textContent   = entries.length;
+  if (typeof _tabColleagues === 'function') entries = _tabColleagues(entries);
 
   let lastIme = null;
   const html = entries.map(([key, kv]) => {
@@ -27345,7 +27362,7 @@ function rndKolegeVlakeList() {
       </div>
     </div>`;
   }).join('');
-  el.innerHTML = html;
+  el.innerHTML = html || '<div style="padding:12px;color:#94a3b8;font-size:12px;">Nijedna vlaka kolege ne odgovara pretrazi.</div>';
 }
 
 // === DNEVNIK ===
@@ -27961,6 +27978,7 @@ function _abVisinaSync() {
 function switchTab(tab) {
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
+  if (typeof _tabRemember === 'function') _tabRemember(prev);
   // v1.5.1: #oznake-panel i #layer-sheet su bottom-sheet modali nad kartom
   // (otvaraju se preko dugmadi na #map-ctrl-bar ILI preko dugmeta u Terenu),
   // ali ništa ih dosad nije zatvaralo pri promjeni taba. Korisnik bi otvorio
@@ -28091,6 +28109,7 @@ function switchTab(tab) {
     if (_mapFullScreen) { if (typeof _demLegendUpdate === 'function') _demLegendUpdate(); }
     else demLegendEl.style.display = 'none';
   }
+  if (typeof _tabRestore === 'function') _tabRestore(tab);
 }
 
 // =====================================================================
@@ -37073,6 +37092,7 @@ async function dozSelectOdjel(id) {
   _dozAutoLinkVlake(odjel);
   _dozTreesRestoreForOdjel(id);
   dozRenderDetail();
+  if (typeof _tabContext === 'function') _tabContext();
 }
 
 function _dozAutoLinkVlake(odjel) {
@@ -42055,12 +42075,15 @@ if (typeof AndroidDownload !== 'undefined') {
     <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="syncq-sum" style="padding:12px 16px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>
+  <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
   <div style="overflow-y:auto;flex:1;min-height:0;">
-    <div style="padding:12px 16px;border-bottom:1px solid #334155;">
+    <div id="data-server-received" style="padding:12px 16px;border-bottom:1px solid #334155;">
       <div id="syncq-primljeno"></div>
       <button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button>
     </div>
     <div id="syncq-list" style="padding:4px 0;"></div>
+    <div id="data-server-empty" class="data-context"></div>
+    <div id="data-server-pager"></div>
   </div>
   <div style="padding:12px 16px 0;flex-shrink:0;">
     <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid rgba(59,130,246,.5);background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
@@ -42159,5 +42182,16 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 <script src="static/js/field-tools.js"></script>
+<style>
+.data-context {flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#122238;border-bottom:1px solid #334155;font-size:12px;color:#cbd5e1;}
+.data-context span {flex:1;overflow-wrap:anywhere;}.data-context small{width:100%;color:#94a3b8;}
+.data-controls,.data-pager {display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;flex-shrink:0;}
+.data-controls small{width:100%;color:#94a3b8;font-size:11px;}.data-controls input{width:100%;min-height:44px;border:1px solid #475569;border-radius:8px;background:#0f172a;color:#e2e8f0;padding:8px;font-size:16px;}.data-pager span{flex:1;text-align:center;font-size:12px;color:#cbd5e1;}
+.data-context button,.data-controls button,.data-pager button {min-height:44px;border:1px solid #334155;background:#1e293b;color:#cbd5e1;border-radius:8px;padding:6px 10px;cursor:pointer;}
+.data-controls button[aria-pressed=true],.data-controls button[aria-selected=true] {background:#1d4ed8;color:white;border-color:#60a5fa;}.data-pager button:disabled{opacity:.4;cursor:default;}
+.data-row-status{font-size:10px;color:#94a3b8;margin-top:3px;}
+[hidden]{display:none!important;}
+</style>
+<script src="static/js/tab-data.js"></script>
 </body>
 </html>
