@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'../..');
+const trace=message=>{if(process.env.US_SUME_TEST_TRACE)console.log(message);};
 (async()=>{
  const server=http.createServer((req,res)=>{
   if(req.url==='/blank'){res.end('<html></html>');return;}
@@ -29,6 +30,7 @@ const root=path.resolve(__dirname,'../..');
   });
   await page.goto(url+'/index.html',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>typeof FieldStore!=='undefined'&&FieldStore.ready&&_startupRestore._done);
+  trace('Startup / IndexedDB spremni');
   const migration=await page.evaluate(()=>({own:FieldStore.count(sbUser.id),other:FieldStore.count('other'),old:localStorage.getItem('tvlake_doz_track_buf')}));
   assert.deepEqual(migration,{own:1,other:1,old:null});
   const cdp=await ctx.newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
@@ -46,6 +48,7 @@ const root=path.resolve(__dirname,'../..');
     first100:times.slice(0,100).reduce((a,b)=>a+b,0),last100:times.slice(-100).reduce((a,b)=>a+b,0)};
   });
   assert.equal(long.count,1201);assert.equal(long.sessionPoints,1200);assert.equal(long.full,1200);assert.equal(long.legacyWrites,0);
+  trace('1200 GPS tačaka potvrđeno');
   assert.equal(await page.evaluate(async()=>{const n=_dozGpsPts.length;await _crashCheck();return n===_dozGpsPts.length;}),true,'startup recovery prepisuje živo snimanje');
   const failure=await page.evaluate(async()=>{
    const before=_dozGpsPts.length,put=IDBObjectStore.prototype.put;
@@ -57,6 +60,7 @@ const root=path.resolve(__dirname,'../..');
   });
   assert.equal(failure.failed,true);assert.equal(failure.before,failure.afterFailure);
   assert.deepEqual(failure.last,[[44.2,16],[44.21,16]]);assert.deepEqual(failure.last,failure.durable);
+  trace('Puna memorija / oporavak potvrđeni');
   const before=requests.length;
   const copy=await page.evaluate(async()=>{
    _activeTab='doznaka';_dozSelId='odjel-test';_dozOdjeli=[{id:'odjel-test',name:'TEST 105',created_by:sbUser.id}];
@@ -71,6 +75,7 @@ const root=path.resolve(__dirname,'../..');
   },copy);assert.equal(integrity,true);
   // Ponovno otvaranje zasebne stranice: nema in-memory GPS niza prethodne stranice.
   const cold=await ctx.newPage();await cold.goto(url+'/blank');await cold.addScriptTag({url:url+'/static/js/field-store.js'});
+  trace('Hladno otvaranje za oporavak');
   const recovery=await cold.evaluate(async uid=>{await FieldStore.init();const s=await FieldStore.live(uid);return{n:s.pts.length,last:s.pts.slice(-2),time:s.fullPts[0].time};},copy.data.uid);
   assert.equal(recovery.n,1202);assert.deepEqual(recovery.last,[[44.2,16],[44.21,16]]);assert.ok(recovery.time);
   await page.evaluate(async copy=>{
@@ -100,6 +105,7 @@ const root=path.resolve(__dirname,'../..');
    localStorage.setItem('tvlake_device_last_user',uid);localStorage.setItem('tvlake_local_vlake_uid',uid);
   },copy.data.uid);
   await fresh.goto(url+'/index.html');await fresh.waitForFunction(()=>FieldStore.ready);
+  trace('Čist profil spreman za obnovu');
   const restored=await fresh.evaluate(async copy=>{
    _dlgConfirm=async()=>true;
    await fieldImportBackup({size:JSON.stringify(copy).length,text:async()=>JSON.stringify(copy)});
@@ -117,6 +123,7 @@ const root=path.resolve(__dirname,'../..');
    await fieldImportBackup(file);await fieldImportBackup(file);
    return vlake.filter(v=>v.nm==='T7'&&v.projektId==='normal-test').map(v=>v.pts.length);
   });assert.deepEqual(normal,[2],'obnovljena vlaka odmah postoji u memoriji i ne duplira se');
+  trace('Obnova i vlasnička izolacija potvrđene; zatvaranje testnog profila');
   await freshCtx.close();
   const corrupt=await page.evaluate(async()=>{
    localStorage.setItem('tvlake_doz_track_buf','{broken');
@@ -125,6 +132,7 @@ const root=path.resolve(__dirname,'../..');
    return {failed,kept};
   });assert.deepEqual(corrupt,{failed:true,kept:true});
   assert.deepEqual(errors,[]);
+  trace('Sve provjere prolaze; screenshot');
   await page.screenshot({path:path.resolve(root,'outputs/field-upgrade.png'),fullPage:false});
   console.log(JSON.stringify({checks:18,cpuThrottle:4,...long,recoveryPoints:recovery.n,roundTrip:true,freshRestore:true,ownerIsolation:true,pageErrors:errors.length}));
  }finally{if(browser)await browser.close();server.close();}

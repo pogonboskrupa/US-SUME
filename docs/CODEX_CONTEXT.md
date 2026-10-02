@@ -647,3 +647,33 @@ tragovi, ne mjerenje fizičkog telefona); pregled ne pravi vanjske zahtjeve.
 Regresijske provjere ručnog slanja, slabog signala, IndexedDB GPS oporavka i
 sigurnosnih kopija su očuvane. Novi modul je u SW shellu i obaveznim Android
 assetima. Pravi srednjerangirani Android i produkcijski Supabase nisu testirani.
+
+## 22. Dizajn za teren — 2.0.8 / Android 478
+
+Korisnik je odabrao broj 3 iz prethodnog prijedloga: čitljivost, dodirne
+površine i dnevni prikaz. `static/css/field-design.css` je zaseban sloj nad
+postojećim izgledom, bez prepisivanja navigacije ili GPS/pohrana/sync koda.
+Tekst navigacije je 11.5–12 px (prethodno 10.5 px), dodirna visina 56 px;
+osnovna dugmad i dijalozi imaju najmanje 48 px. Kartice, statusi, pretraga i
+sažeci imaju čitljiviji tekst i ujednačene rubove. Akcije ostaju tekstualno
+označene Snimi / Pauza / Nastavi / Završi, bez premještanja ili novih radnji.
+Traka aktivnog snimanja ostaje dostupna; vrh je usklađen s višom navigacijom.
+
+U Meni → Teren dodano je dugme „Dnevni prikaz za sunce”. Tamni prikaz ostaje
+zadani; izbor se pamti kao postavka uređaja `tvlake_field_theme_v1` i primjenjuje
+prije prvog crtanja. JS modul `field-design.js` ne pristupa projektu, GPS-u,
+redu slanja ni mreži. Puna memorija ne ruši promjenu teme, nego upozori da
+postavka nije trajno upisana. Dnevna tema koristi svijetle površine i tamni
+tekst, semantičke statuse i jasno označene radnje; ne mijenja rastere, boje
+vlaka ili geometriju. Nema novih fontova, slika, mrežnih biblioteka ili filtera
+nad kartom. Oba fajla su u SW shellu i obaveznim APK runtime assetima (27).
+
+Provjere: svih 67 JS testnih fajlova, 51 Python test, inline sintaksa i pet
+browser skripti. Novi unit test provjerava lokalnu postavku/obnovu, ARIA stanje,
+nepoznatu vrijednost i punu memoriju. Browser provjerava 320/360/412/768 px,
+obnovu teme nakon reload-a, kontrast boje naslova i primarnog dugmeta, dodirne
+visine, modale i odsustvo horizontalnog prelijevanja. Promjena teme ne gasi
+simulirano aktivno snimanje, ne mijenja red niti pokreće vanjske zahtjeve.
+Vizuelno pregledane screenshot slike listi vlaka/projekata/doznake i panela
+Server/Spremno za teren. Dnevni prikaz nije provjeren na fizičkom telefonu
+pod suncem; stvarni Android GPS i produkcijski Supabase ostaju neprovjereni.

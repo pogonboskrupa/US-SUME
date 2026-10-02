@@ -1,0 +1,114 @@
+/* Terenski dizajn: sistemski fontovi, bez novih slika, filtera rastera i animacija. */
+html {--field-bg:#111c30;--field-card:#0f172a;--field-ink:#f1f5f9;--field-muted:#b0bfd2;--field-border:#475569;}
+html[data-field-theme=day] {--field-bg:#eef2f6;--field-card:#fff;--field-ink:#102033;--field-muted:#475569;--field-border:#94a3b8;color-scheme:light;}
+html #tab-bar {box-shadow:none;}
+html .tab-btn {min-height:56px;min-width:56px;font-size:12px;gap:3px;}
+html .tab-btn.active {font-weight:800;}
+html .tab-btn .tbi {padding:2px 10px;}
+html #field-status {top:calc(56px + env(safe-area-inset-top,0px));font-size:12px;}
+html .sec {padding:14px 12px;}
+html .sec-t {font-size:13px;color:var(--field-muted);letter-spacing:.3px;line-height:1.5;}
+html .vrow,html .proj-card,html .doz-odjel-card {border-radius:12px;border-color:var(--field-border);margin-bottom:10px;}
+html .vcard-info {padding:10px;}
+html .vcard-name,html .proj-card-title {font-size:16px;}
+html .vcard-km {font-size:15px;}
+html .stat-card-title,html .stat-row,html .doz-odjel-name {font-size:14px;line-height:1.6;}
+html .doz-status-chip {font-size:12px;}
+html .vcard-sub,html .data-row-status,html .proj-card-sub,html .doz-sazetak,html .trn-sub {font-size:12px;line-height:1.55;color:var(--field-muted);}
+html .data-context {font-size:14px;line-height:1.5;}
+html .data-controls small {font-size:12px;}
+html .vact-lbl {font-size:12px;}
+html .vla-sort button,html .vph-nav,html .vnt-sel {min-height:44px;}
+html .vph-stat span {font-size:12px;}
+html .vcard-actions {flex-wrap:wrap;gap:6px;}
+html .vact {min-width:58px;min-height:68px;}
+html .btn,html .doz-ico-btn,html .doz-odjel-oko,html .doz-back-btn,html .proj-card-akt,html .proj-card-rec,html .btn-nastavi {min-height:48px;}
+html .doz-odjel-oko,html .doz-back-btn,html .proj-card-akt,html .proj-card-rec {min-width:48px;}
+html .proj-card-title {padding-right:54px;}
+html .proj-card.aktivan .proj-card-title {padding-right:54px;}
+html .mdrop-item {min-height:48px;box-sizing:border-box;font-size:14px;}
+html button.mdrop-item {display:flex;align-items:center;width:100%;text-align:left;border:0;background:transparent;color:inherit;font-family:inherit;}
+html .mdrop-hdr {font-size:12px;}
+html .field-sheet,html #dlg-sheet,html #syncq-panel {border-radius:18px 18px 0 0;}
+html .field-row,html #dlg-msg {font-size:14px;line-height:1.65;}
+html #dlg-sheet button,html #syncq-panel button,html .field-sheet button {min-height:48px;}
+html #syncq-panel button[onclick="closeSyncQueuePanel()"] {min-width:48px;}
+html #rec-bar button {min-height:48px;}
+html #rb-kraj,html #brec {font-weight:800;}
+html #action-bar > button,html #ab-izmjeri-wrap > button,html #ab-loc-wrap > button {min-height:56px;font-size:12px;}
+html #wrapper button:focus-visible,html #menu-dropdown button:focus-visible,html #syncq-panel button:focus-visible,html .field-sheet button:focus-visible {outline:3px solid #38bdf8;outline-offset:2px;}
+html #panel input:not([type=checkbox]):not([type=radio]):not([type=range]),html #proj-panel input:not([type=checkbox]):not([type=radio]):not([type=range]),html #doznaka-panel input:not([type=checkbox]):not([type=radio]):not([type=range]) {font-size:16px;min-height:44px;}
+
+/* Na suncu se mijenja samo UI, ne podloge, boje projekata ili geometrija. */
+html[data-field-theme=day] body,html[data-field-theme=day] #wrapper {background:var(--field-bg);color:var(--field-ink);}
+html[data-field-theme=day] #panel,html[data-field-theme=day] #proj-panel,html[data-field-theme=day] #doznaka-panel,html[data-field-theme=day] #teren-panel,html[data-field-theme=day] #tragovi-panel,html[data-field-theme=day] #admin-panel,html[data-field-theme=day] #postavke-panel,html[data-field-theme=day] #debug-panel {background:var(--field-bg)!important;color:var(--field-ink);border-color:var(--field-border);}
+html[data-field-theme=day] #tab-bar,html[data-field-theme=day] #action-bar,html[data-field-theme=day] #menu-dropdown,html[data-field-theme=day] .trn-head {background:#f8fafc!important;border-color:var(--field-border)!important;color:var(--field-ink);}
+html[data-field-theme=day] .tab-btn {color:#475569!important;}
+html[data-field-theme=day] .tab-btn.active {color:#14532d!important;}
+html[data-field-theme=day] .tab-btn.active .tbi {background:#dcfce7;}
+html[data-field-theme=day] .sec {border-color:#cbd5e1;}
+html[data-field-theme=day] .vrow,html[data-field-theme=day] .proj-card,html[data-field-theme=day] .doz-odjel-card,html[data-field-theme=day] .trn-card,html[data-field-theme=day] .trn-hero,html[data-field-theme=day] .treg-row {background:var(--field-card);border-color:var(--field-border);color:var(--field-ink);}
+html[data-field-theme=day] .vrow.act {background:#fff7ed;border-color:#9a3412;box-shadow:0 0 0 1px #9a3412;}
+html[data-field-theme=day] .proj-card.aktivan,html[data-field-theme=day] .doz-odjel-card.selected {background:#f0fdf4;border-color:#166534;}
+html[data-field-theme=day] .vcard-name,html[data-field-theme=day] .proj-card-title,html[data-field-theme=day] .doz-detail-hdr h3,html[data-field-theme=day] .doz-odjel-name,html[data-field-theme=day] .doz-sazetak b {color:var(--field-ink);}
+html[data-field-theme=day] .vcard-km,html[data-field-theme=day] .proj-card-badge,html[data-field-theme=day] .proj-card-vchip,html[data-field-theme=day] .trn-title,html[data-field-theme=day] .trn-odjel {color:#14532d;border-color:#166534;}
+html[data-field-theme=day] .vcard-actions {border-color:#cbd5e1;}
+html[data-field-theme=day] .vact {background:#f1f5f9;border-color:#94a3b8;}
+html[data-field-theme=day] .vact-lbl {color:var(--field-ink);}
+html[data-field-theme=day] .vact-ico {background:#e2e8f0;color:#1e3a5f;}
+html[data-field-theme=day] .vact:last-child .vact-ico {color:#991b1b;}
+html[data-field-theme=day] .vkr-tog,html[data-field-theme=day] .doz-odjel-oko,html[data-field-theme=day] .doz-back-btn,html[data-field-theme=day] .vcard-arrow {color:#334155;}
+html[data-field-theme=day] .data-context,html[data-field-theme=day] .data-controls button,html[data-field-theme=day] .data-pager button {background:#fff;color:var(--field-ink);border-color:var(--field-border);}
+html[data-field-theme=day] .data-context button {background:#e2e8f0;color:#102033;border-color:#94a3b8;}
+html[data-field-theme=day] .data-context small,html[data-field-theme=day] .data-controls small,html[data-field-theme=day] .data-pager span {color:var(--field-muted);}
+html[data-field-theme=day] .data-controls button[aria-selected=true],html[data-field-theme=day] .data-controls button[aria-pressed=true] {background:#1e40af;color:#fff;border-color:#1e40af;}
+html[data-field-theme=day] .data-controls input,html[data-field-theme=day] #vl-trazi,html[data-field-theme=day] #proj-trazi {background:#fff;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] #vlake-proj-hdr,html[data-field-theme=day] .vph-stat,html[data-field-theme=day] #vl-nagib-traka,html[data-field-theme=day] .vla-trazi,html[data-field-theme=day] .vla-sort {background:#fff;border-color:#94a3b8;}
+html[data-field-theme=day] .vph-lbl,html[data-field-theme=day] .vph-lbl b,html[data-field-theme=day] .vph-stat b {color:#102033;}
+html[data-field-theme=day] .vph-stat span,html[data-field-theme=day] .vnt-lbl,html[data-field-theme=day] .vla-sort button {color:#475569;}
+html[data-field-theme=day] .vph-nav,html[data-field-theme=day] .vnt-f {color:#1e40af;}
+html[data-field-theme=day] .vla-sort button.on {background:#1e40af;color:#fff;}
+html[data-field-theme=day] .vnt-sel {background:#f1f5f9;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] .vnt-ok {color:#14532d;}
+html[data-field-theme=day] .vnt-bad {color:#854d0e;}
+html[data-field-theme=day] .stat-card,html[data-field-theme=day] .doz-zone-row,html[data-field-theme=day] .doz-member-row,html[data-field-theme=day] .trn-tile {background:#fff;border-color:#94a3b8;color:#102033;}
+html[data-field-theme=day] .stat-row,html[data-field-theme=day] .proj-stat-cell {border-color:#cbd5e1;color:#475569;}
+html[data-field-theme=day] .stat-row span:last-child,html[data-field-theme=day] .proj-stat-cell.nm,html[data-field-theme=day] .doz-member-name,html[data-field-theme=day] .doz-zone-name {color:#102033;}
+html[data-field-theme=day] .stat-name,html[data-field-theme=day] .stat-card-title,html[data-field-theme=day] .trn-tile span {color:#475569;}
+html[data-field-theme=day] .trn-tile b {color:#102033;}
+html[data-field-theme=day] .stat-val.blue {color:#1e40af;}
+html[data-field-theme=day] .stat-val.red {color:#991b1b;}
+html[data-field-theme=day] .stat-val.yellow,html[data-field-theme=day] .stat-val.orange {color:#854d0e;}
+html[data-field-theme=day] .doz-odjel-meta,html[data-field-theme=day] .doz-zone-meta,html[data-field-theme=day] .doz-detail-meta {color:#475569;}
+html[data-field-theme=day] .doz-status-chip.active,html[data-field-theme=day] .doz-sazetak .a {color:#14532d;border-color:#166534;}
+html[data-field-theme=day] .doz-status-chip.paused,html[data-field-theme=day] .doz-sazetak .p {color:#854d0e;border-color:#854d0e;}
+html[data-field-theme=day] .doz-status-chip.completed,html[data-field-theme=day] .doz-sazetak .c {color:#1e40af;border-color:#1e40af;}
+html[data-field-theme=day] .doz-ico-btn {background:#fff;border-color:#64748b;color:#102033;}
+html[data-field-theme=day] #syncq-panel,html[data-field-theme=day] .field-sheet,html[data-field-theme=day] #dlg-sheet,html[data-field-theme=day] #oznake-panel,html[data-field-theme=day] #layer-sheet {background:#fff!important;color:#102033;border-color:#94a3b8;}
+html[data-field-theme=day] #dlg-title,html[data-field-theme=day] #dlg-msg {color:#102033;}
+html[data-field-theme=day] .field-sheet button,html[data-field-theme=day] .field-sheet select {background:#f1f5f9;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] .field-row.good {color:#14532d;}
+html[data-field-theme=day] .field-row.warn {color:#854d0e;}
+html[data-field-theme=day] .field-row {border-color:#cbd5e1;}
+html[data-field-theme=day] .field-note {color:#475569;}
+html[data-field-theme=day] #syncq-panel button:not(#syncq-posalji):not(#syncq-preuzmi):not([aria-selected=true]) {background:#f1f5f9!important;color:#102033!important;border-color:#94a3b8!important;}
+html[data-field-theme=day] #syncq-panel button[onclick="_syncQueueClearAll()"] {background:#fff1f2!important;color:#991b1b!important;border-color:#991b1b!important;}
+html[data-field-theme=day] #field-status {background:#f0fdf4;color:#14532d;border-color:#166534;}
+html[data-field-theme=day] #field-status.warn {background:#fff7ed;color:#9a3412;border-color:#9a3412;}
+html[data-field-theme=day] #rec-bar {background:#fff7ed;border-color:#9a3412;}
+html[data-field-theme=day] #rb-go,html[data-field-theme=day] #rb-tip,html[data-field-theme=day] #rb-info,html[data-field-theme=day] #action-bar > button,html[data-field-theme=day] #action-bar .ab-ts-lbl,html[data-field-theme=day] #ab-trag-info {color:#102033;}
+html[data-field-theme=day] .mdrop-item,html[data-field-theme=day] .mdrop-hdr {color:#102033!important;}
+html[data-field-theme=day] .mdrop-item:active,html[data-field-theme=day] .mdrop-item:hover {background:#e2e8f0;color:#102033;}
+html[data-field-theme=day] .mdrop-sep {background:#cbd5e1;}
+/* Dinamički stari inline sažeci: neutralni i semantički tekst, bez map SVG-a. */
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#teren-panel,#tragovi-panel,#syncq-panel,.field-sheet,#menu-dropdown) :is([style*="color:#e2e8f0"],[style*="color:#f1f5f9"],[style*="color:#cbd5e1"]):not(button) {color:#102033!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#teren-panel,#tragovi-panel,#syncq-panel,.field-sheet,#menu-dropdown) :is([style*="color:#64748b"],[style*="color:#94a3b8"],[style*="color:#475569"]) {color:#475569!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#syncq-panel,.field-sheet) :is([style*="color:#4ade80"],[style*="color:#bbf7d0"]):not(button) {color:#14532d!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#syncq-panel,.field-sheet) :is([style*="color:#f87171"],[style*="color:#fca5a5"]):not(button) {color:#991b1b!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#syncq-panel,.field-sheet) :is([style*="color:#fbbf24"],[style*="color:#fde68a"]):not(button) {color:#854d0e!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#syncq-panel,.field-sheet) :is([style*="color:#60a5fa"],[style*="color:#7dd3fc"],[style*="color:#38bdf8"]):not(button) {color:#1e40af!important;}
+html[data-field-theme=day] #syncq-posalji {color:#fff!important;background:#1e40af!important;}
+html[data-field-theme=day] #syncq-preuzmi {color:#fff!important;background:#166534!important;}
+html[data-field-theme=day] .btn:disabled {background:#e2e8f0!important;color:#475569!important;}
+@media(max-width:420px) {html .tab-btn{min-width:54px;font-size:11.5px;}html .vcard-actions .vact{flex:1 1 58px;}html .data-context{padding:8px 10px;}html #field-status{font-size:11.5px;}}
+@media(prefers-reduced-motion:reduce) {html .vrow,html .tab-btn,html .tab-btn .tbi,html .vact {transition:none;}}

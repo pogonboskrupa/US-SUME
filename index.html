@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="USS Vlake">
 <meta name="theme-color" content="#16213e">
+<script src="static/js/field-design.js"></script>
 <title>Dendro Map</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -4181,6 +4182,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 @media (prefers-reduced-motion: reduce) { .tv-act-trag.on .tv-act-ico { animation: none; } }
 /* === KRAJ TRAGOVI I MJERENJE === */
 </style>
+<link rel="stylesheet" href="static/css/field-design.css">
 </head>
 <body>
 
@@ -5652,7 +5654,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.0.7';
+const APP_VER = 'v2.0.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -39917,6 +39919,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr">Teren</div>
+  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni prikaz za sunce</button>
   <div class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</div>
   <div class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</div>
