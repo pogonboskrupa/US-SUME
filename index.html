@@ -4464,6 +4464,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 </script>
 
 <div id="wrapper" style="display:none;">
+  <div id="field-status" role="status" style="display:none;"></div>
 
   <div id="tab-bar">
     <button class="tab-btn" id="menu-btn" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg> Meni</button>
@@ -4715,6 +4716,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
     <!-- PROJEKAT PANEL -->
     <div id="proj-panel">
+      <button class="btn" onclick="openFieldPanel()" style="margin:8px;min-height:44px;">✓ Spremno za teren / sigurnosna kopija</button>
 
       <!-- Hidden inputs — auto-filled by active project, used by saveProj/getOdjel/etc. -->
       <input type="hidden" id="p-odjel">
@@ -5650,7 +5652,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.0.4';
+const APP_VER = 'v2.0.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5858,6 +5860,7 @@ function _loadLocalVlake() {
 // izvršavanja; _OL/_genUUID/_DOZ_TRACK_BUF_KEY su globalno vidljivi kao i prije.
 </script>
 <script src="static/js/offline-layer.js"></script>
+<script src="static/js/field-store.js"></script>
 <script>
 
 let _isOfflineMode = false;
@@ -6187,8 +6190,8 @@ function _serverNaCekanju(qZadan) {
   const moji = q.filter(op => (!op._uid || op._uid === uid) && !_SERVER_SAMO_LOKALNO.has(op.type));
   r.red = moji.length; r.blok = moji.filter(op => op._blocked).length;
   try {
-    const b = _lsJsonMemo(_DOZ_TRACK_BUF_KEY);
-    r.doz = Array.isArray(b) ? b.filter(p => p.user_id === uid).length : 0;
+    if(typeof FieldStore !== 'undefined' && FieldStore.ready) r.doz=FieldStore.count(uid);
+    else {const b=_lsJsonMemo(_DOZ_TRACK_BUF_KEY);r.doz=Array.isArray(b)?b.filter(p=>p.user_id===uid).length:0;}
   } catch(e) {}
   r.stavki = r.red + (r.doz ? 1 : 0);
   return r;
@@ -6829,9 +6832,9 @@ async function _processOfflineQueue(sila) {
   try {
     if (sbUser?.id !== syncOwner) return;
     if (_mrezaPala) throw new Error('veza pala u ovom prolazu');   // GPS tačke čekaju sljedeći
-    const all = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+    const all = typeof FieldStore !== 'undefined' ? await FieldStore.read(syncOwner) : JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
     all.forEach(pt => { if (!pt._qid) pt._qid = _genUUID(); });
-    localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(all));
+    if (typeof FieldStore === 'undefined') localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(all));
     // v1.9.2: u SERIJAMA po odjelu (vidi _dozPosaljiKomad), ne tačka po tačka.
     const grupe = {};
     all.filter(p => p.user_id === syncOwner).forEach(p => { (grupe[p.project_id] = grupe[p.project_id] || []).push(p); });
@@ -6848,8 +6851,11 @@ async function _processOfflineQueue(sila) {
         }
         if (r.ok.length) {
           const ok = new Set(r.ok);
-          const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
-          localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(current.filter(p => !ok.has(p._qid))));
+          if (typeof FieldStore !== 'undefined') await FieldStore.acknowledge(syncOwner,[...ok]);
+          else {
+            const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
+            localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(current.filter(p => !ok.has(p._qid))));
+          }
           synced += r.ok.length;
         }
         if (r.error && (_isNetworkErr(r.error) || _serverPrivremeno(r.error))) { _mrezaPala = true; break vanjska; }
@@ -7233,6 +7239,7 @@ function _startupRestore() {
   korak('switchTab',   () => switchTab('karta'));
   korak('sqlmapRestore', () => sqlmapRestoreAll());
   korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
+  if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); _updSyncBadge(); });
   korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
   korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
   // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
@@ -7877,11 +7884,16 @@ async function _restoreFieldData(uid) {
   } finally { db.close(); }
 }
 
-function _exportFieldRecovery() {
+async function _exportFieldRecovery() {
+  const exportOwner=sbUser?.id;
   const values = {};
   for (const key of _fieldArchiveKeys()) values[key] = localStorage.getItem(key);
-  values[_OL.QUEUE] = JSON.stringify(_OL.loadQueue(true).filter(op => !op._uid || op._uid === sbUser?.id));
+  values[_OL.QUEUE] = JSON.stringify(_OL.loadQueue(true).filter(op => !op._uid || op._uid === exportOwner));
   values.liveVlake = vlake.map(v => ({ nm:v.nm, pts:v.pts, projektId:v.projektId, br:v.br, kr:v.kr }));
+  if (typeof FieldStore !== 'undefined') values.fieldStore = await FieldStore.exportOwner(exportOwner).catch(e=>{
+    showToast('⚠ GPS baza nije pročitana — izvoz sadrži ostale dostupne podatke');return {error:e.message};
+  });
+  if(sbUser?.id!==exportOwner){showToast('⚠ Nalog je promijenjen — izvoz zaustavljen');return;}
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify({ version:1, uid:sbUser?.id, values },null,2)], {type:'application/json'}));
   a.download = 'US-SUME-oporavak-' + new Date().toISOString().slice(0,10) + '.json';
@@ -13870,6 +13882,9 @@ function _recoverVlakaSnapshot(snap) {
 }
 
 async function _crashCheck() {
+  // Zakašnjela startup provjera ne smije vraćati snimak preko živog snimanja.
+  if ((typeof recOn!=='undefined' && recOn) || (typeof _tragOn!=='undefined' && _tragOn) ||
+    (typeof _dozGpsOn!=='undefined' && _dozGpsOn)) return;
   if (_crashCheck._busy) return;
   _crashCheck._busy = true;
   try {
@@ -13879,7 +13894,10 @@ async function _crashCheck() {
   // nikad čitan pri pokretanju: pojas doznake nije imao NIKAKAV oporavak nakon
   // ubijenog procesa, za razliku od vlake/traga. Isti razlog uzima se u obzir
   // i ovdje: rani return prije ove dopune bi doznaku uvijek preskočio.
-  const snapD = (() => { try { const r = localStorage.getItem(_DOZ_LIVE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
+  const snapD = (typeof FieldStore !== 'undefined' && sbUser?.id ? await FieldStore.live(sbUser.id).catch(e=>{
+    showToast('⚠ GPS dnevnik doznake nije pročitan; sačuvani podaci nisu obrisani');return null;
+  }) : null) ||
+    (() => { try { const r = localStorage.getItem(_DOZ_LIVE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
   if (!snapV && !snapT && !snapD) return;
 
   // Prikaži dijalog oporavka
@@ -13908,7 +13926,10 @@ async function _crashCheck() {
   let bufPts;
   try { bufPts = _nativeBufUzmi(); } catch(e) { showToast('⚠ Oporavak čeka slobodnu memoriju'); return; }
 
-  if (!ok) { _crashClearVlaka(); _crashClearTrag(); try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {} _nativeBufPotvrdi(); return; }
+  if (!ok) {
+    if (typeof FieldStore !== 'undefined' && snapD?.id) await FieldStore.finish(snapD.id,sbUser?.id);
+    _crashClearVlaka(); _crashClearTrag(); try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {} _nativeBufPotvrdi(); return;
+  }
 
   // Journal se smije obrisati tek kad je SVAKA grana oporavka svoje tačke
   // trajno spremila. Grane greške gutaju u showToast, pa bez ove zastavice ne
@@ -13996,6 +14017,10 @@ async function _crashCheck() {
       _dozSelId = snapD.projId;
       _dozGpsProjId = snapD.projId;
       _dozGpsUserId = sbUser.id;
+      _dozGpsSessionId = snapD.id || _genUUID();
+      _dozGpsStopping = false;
+      if (typeof FieldStore !== 'undefined' && !snapD.id) await FieldStore.seedSession({id:_dozGpsSessionId,
+        uid:sbUser.id,projId:snapD.projId,len:snapD.len || 0,ts:snapD.ts},snapD.pts || []);
       _dozGpsPts = Array.isArray(snapD.pts) ? snapD.pts : [];
       _dozGpsLen = snapD.len || 0;
       _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsStartTs = Date.now();
@@ -14011,7 +14036,7 @@ async function _crashCheck() {
       // vraćeno na kartu. Snimak nosi samo [lat, lon] (bez visine i vremena),
       // pa se visina upisuje kao 0 (isto kao živi put kad alt nedostaje), a
       // vrijeme ostaje null — izmišljati tajmstamp bi bio lažan podatak.
-      _dozGpsFullPts = (Array.isArray(snapD.pts) ? snapD.pts : [])
+      _dozGpsFullPts = snapD.fullPts || (Array.isArray(snapD.pts) ? snapD.pts : [])
         .map(([la, lo]) => ({ lat: la, lon: lo, ele: 0, time: null, spd: 0 }));
       _dozLastLiveFixTs = 0;
       if (_dozGpsTrackLayer) map.removeLayer(_dozGpsTrackLayer);
@@ -14030,7 +14055,8 @@ async function _crashCheck() {
       _dozUpdGpsStats(null);
       _bgRecStart('pojas doznake');
       _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
-        _dozLastLiveFixTs = pos.timestamp || Date.now();
+        if (_dozGpsStopping) return;
+        const fixTs = pos.timestamp || Date.now();
         if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
         const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
         // _dozProcessGpsPoint BACA kad lokalni upis ne uspije (puna kvota) — to
@@ -14038,7 +14064,7 @@ async function _crashCheck() {
         // pokušavaju ponovo), ali ovdje bi bez hvatanja postalo neuhvaćeno
         // odbijanje obećanja na SVAKI fiks. Korisnik je već upozoren iz
         // _dozBufferTrackPoint; ovdje se samo ne ruši watch callback.
-        try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed); }
+        try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed, fixTs); _dozLastLiveFixTs = fixTs; }
         catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
       }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
@@ -19820,7 +19846,7 @@ async function _nativeRecAction(action) {
     try { await _drainNativeGpsBuffer(); } catch(e) {}
     if (recOn)          stopRec();
     else if (_tragOn)   fabSnimTrag();
-    else if (_dozGpsOn) dozStopGPS();
+    else if (_dozGpsOn) await dozStopGPS();
   } else if (action === 'pause') {
     if (recOn)          toggleRecPause();
     else if (_tragOn)   togTragPause();
@@ -20188,6 +20214,7 @@ function _tragRegAdd(pts) {
   const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
   const t = {
     id, color, pts, visible: true,
+    projektId:_aktivniProjektId || null,
     date: new Date().toISOString(),
     name: 'Trag ' + fmtDateShort(new Date().toISOString()),
     gj: aktP?.gj || '',
@@ -28613,6 +28640,7 @@ function _mqmOpen() {
   const now  = new Date();
   const entry = {
     id: 'mr_' + Date.now(),
+    projektId:_aktivniProjektId || null,
     name: 'Mjerenje ' + fmtDateShort(now.toISOString()),
     date: now.toISOString(),
     gj: aktP?.gj || '',
@@ -37332,7 +37360,7 @@ function _dozTragoviPoKorisniku() {
   };
   (_dozTracks || []).forEach(dodaj);
   try {
-    JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]')
+    (typeof FieldStore !== 'undefined' && FieldStore.ready ? FieldStore.view(sbUser?.id) : JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]'))
       .filter(p => p && p.project_id === _dozSelId).forEach(dodaj);
   } catch(e) {}
   // Redoslijed po VREMENU, ne po dolasku — tačke kolege stižu realtime-om, a
@@ -38328,8 +38356,8 @@ let _dozGpsPaused = false, _dozGpsPausedTime = 0, _dozGpsPauseStart = 0;
 let _dozGpsMaxSpd = 0, _dozGpsSpdSum = 0, _dozGpsSpdCnt = 0;
 let _dozGpsElevData = [];
 let _dozGpsFullPts = [];
-// Timestamp zadnjeg SIROVOG fiksa koji je watchPosition uživo isporučio (ne
-// samo onih koji su prošli filter/commit) — koristi ga _drainNativeGpsBuffer
+// Timestamp zadnjeg uspješno obrađenog fiksa (uključujući filtrirane).
+// Ne napreduje kad trajni upis padne — koristi ga _drainNativeGpsBuffer
 // da pri replay-u native bafera preskoči tačke koje su VEĆ obrađene uživo.
 // Bez ovoga bi svaki povratak u app ponovo poslao (dupli insert u
 // doz_track_points!) sve tačke prikupljene dok je app bio u prvom planu, jer
@@ -38356,6 +38384,7 @@ function dozPauseGPS() {
 }
 
 function _dozUpdGpsStats(acc) {
+  if (typeof _fieldStatusUpdate==='function') _fieldStatusUpdate.accuracyDoz=acc;
   const el = document.getElementById('doz-gps-stats');
   if (!el) return;
   el.style.display = 'block';
@@ -38673,6 +38702,8 @@ function _dozQrRenderReceived() {
 let _dozGpsPoly = null;        // perzistentna polilinija (inkrementalno crtanje)
 let _dozGpsProjId = null;      // uhvaćen na startu — ne mijenja se tokom snimanja
 let _dozGpsUserId = null;
+let _dozGpsSessionId = null;
+let _dozGpsStopping = false;
 const _DOZ_GPS_MIN_DIST = 3;   // metara — minimalni razmak između tačaka (filtrira GPS šum)
 
 function dozStartGPS() {
@@ -38683,11 +38714,25 @@ function dozStartGPS() {
 }
 
 async function _dozStartGPSBegin() {
+  const startingUid=sbUser?.id,startingProject=_dozSelId;
+  if (typeof FieldStore !== 'undefined') {
+    try {
+      await FieldStore.init();
+      const unfinished=await FieldStore.live(sbUser?.id);
+      if (unfinished || localStorage.getItem(_DOZ_LIVE_KEY)) {
+        if (recOn || _tragOn) { showToast('⚠ Prvo završi aktivno snimanje pa oporavi prethodni pojas'); return; }
+        await _crashCheck();
+        if (_dozGpsOn || await FieldStore.live(sbUser?.id)) return;
+      }
+    } catch(e) { showToast('⚠ GPS dnevnik nije provjeren — prethodni podaci ostaju sačuvani'); return; }
+  }
+  if (_dozGpsOn || !startingUid || sbUser?.id!==startingUid || _dozSelId!==startingProject) return;
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   _dozGpsOn = true;
   _dozGpsPts = [];
   _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
   _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;
+  _dozGpsSessionId = _genUUID(); _dozGpsStopping = false;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
   _pauziResetuj(_dozPauseWin);   // zaostala pauza prethodne sesije ne smije suditi novim tačkama
   _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
@@ -38715,15 +38760,15 @@ async function _dozStartGPSBegin() {
   if (!_gpsStabWasOn) stopGPS();
 
   _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
-    // Zabilježi SIROVI fix ODMAH (prije bilo kakvog filtriranja) — vidi
-    // napomenu kod _dozLastLiveFixTs. Ovo mora ostati prvo u callbacku.
-    _dozLastLiveFixTs = pos.timestamp || Date.now();
+    // Native dopuna smije preskočiti fix tek poslije uspješnog trajnog upisa.
+    const fixTs = pos.timestamp || Date.now();
+    if (_dozGpsStopping) return;
     if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
     const { latitude:lat, longitude:lng, altitude:alt, accuracy:acc, speed } = pos.coords;
     // Vidi napomenu uz isti obrazac u grani oporavka (_crashCheck): baceni
     // izuzetak iz _dozProcessGpsPoint je signal za native replay, ne razlog da
     // uživo watch callback ostane sa neuhvaćenim odbijanjem obećanja.
-    try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed); }
+    try { await _dozProcessGpsPoint(lat, lng, alt, acc, speed, fixTs); _dozLastLiveFixTs = fixTs; }
     catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
   }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
@@ -38735,6 +38780,21 @@ async function _dozStartGPSBegin() {
 // fiksa, da recorded_at u bazi ostane tačan umjesto "sad" za tačku snimljenu
 // prije nekoliko minuta dok je app bio zatvoren).
 async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu) {
+  const capturedUser=_dozGpsUserId,capturedProject=_dozGpsProjId;
+  const capturedSession=typeof _dozGpsSessionId==='undefined'?null:_dozGpsSessionId;
+  // Watch i native replay mogu se preklopiti dok IDB radi. Obradi ih redom.
+  const previous = _dozProcessGpsPoint._tail || Promise.resolve();
+  let release;
+  _dozProcessGpsPoint._tail = new Promise(resolve => { release=resolve; });
+  await previous;
+  try {
+  if (_dozProcessGpsPoint._retry) {
+    await _dozProcessGpsPoint._retry();
+    _dozProcessGpsPoint._retry = null;
+  }
+  const commit = async () => {
+  if (_dozGpsUserId!==capturedUser || _dozGpsProjId!==capturedProject) return;
+  if (typeof _dozGpsSessionId!=='undefined' && _dozGpsSessionId!==capturedSession) return;
   if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
   if (acc > 20) { _dozUpdGpsStats(acc); return; }
   if (_dozGpsPaused && !bypassPauzu) { _dozUpdGpsStats(acc); return; }
@@ -38751,7 +38811,12 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
     latitude:lat, longitude:lng, altitude:alt || null, accuracy:acc,
     speed:speed || null, recorded_at:isoTs
   };
-  if (!_dozBufferTrackPoint(_dozPt)) throw new Error('GPS tačka nije trajno sačuvana');
+  if (!await _dozBufferTrackPoint(_dozPt,{count:_dozGpsPts.length+1,len:_dozGpsLen+d})) {
+    _dozProcessGpsPoint._retry = commit;
+    throw new Error('GPS tačka nije trajno sačuvana');
+  }
+  if (_dozGpsUserId!==_dozPt.user_id || _dozGpsProjId!==_dozPt.project_id ||
+    (typeof sbUser!=='undefined' && sbUser?.id!==_dozPt.user_id)) return;
   _dozGpsLen += d;
   if (spdMs > _dozGpsMaxSpd) _dozGpsMaxSpd = spdMs;
   _dozGpsSpdSum += spdMs; _dozGpsSpdCnt++;
@@ -38769,6 +38834,9 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
+  };
+  await commit();
+  } finally { release(); }
 }
 
 // Ista boja ide u jednu liniju, ali najviše 128 segmenata po liniji: Leaflet
@@ -38919,14 +38987,20 @@ async function _sendDozTrackPoint(payload) {
 
 // Spremi GPS tačku u offline buffer (poziva se i pri mrežnoj i pri DB/RLS grešci).
 // Sinhrono (bez await) → atomarno u single-thread JS, ne može se ispreplitati.
-function _dozBufferTrackPoint(pt) {
+async function _dozBufferTrackPoint(pt,stats) {
   try {
+    if (!pt._qid) pt._qid = _genUUID();
+    if (typeof FieldStore !== 'undefined') {
+      await FieldStore.append(pt,{id:_dozGpsSessionId,uid:pt.user_id,projId:pt.project_id,...stats});
+      _dozLiveUpisPao = false;
+      return true;
+    }
     const buf = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
     if (!pt._qid) pt._qid = _genUUID();
     buf.push(pt);
     localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(buf));
     return true;
-  } catch(e) { showToast('⚠ GPS tačka nije sačuvana — provjeri memoriju'); return false; }
+  } catch(e) { _dozLiveUpisPao = true; showToast('⚠ GPS tačka nije sačuvana — provjeri memoriju'); return false; }
 }
 
 // Spasi live trag lokalno — ako Android ubije WebView u backgroundu, ne gubimo liniju
@@ -38936,6 +39010,8 @@ const _DOZ_LIVE_KEY = 'tvlake_doz_live';
 let _dozLiveUpisPao = false;
 function _dozSaveLivePts() {
   if (!(_dozGpsOn && _dozGpsPts.length)) return true;
+  // Session i puna tačka su već u istoj IDB transakciji. Bez ponovne kopije.
+  if (typeof FieldStore !== 'undefined') return !_dozLiveUpisPao;
   const tekst = JSON.stringify({ projId:_dozGpsProjId, pts:_dozGpsPts, len:_dozGpsLen, ts:Date.now() });
   try {
     localStorage.setItem(_DOZ_LIVE_KEY, tekst);
@@ -38953,7 +39029,16 @@ function _dozSaveLivePts() {
   }
 }
 
-function dozStopGPS() {
+async function dozStopGPS() {
+  if (typeof FieldStore !== 'undefined') {
+    if (_dozGpsStopping) return;
+    _dozGpsStopping = true;
+    try {
+      await (_dozProcessGpsPoint._tail || Promise.resolve());
+      if (_dozProcessGpsPoint._retry) { await _dozProcessGpsPoint._retry(); _dozProcessGpsPoint._retry=null; }
+      await FieldStore.finish(_dozGpsSessionId,_dozGpsUserId);
+    } catch(e) { _dozGpsStopping=false; showToast('⚠ Završetak nije sačuvan — ponovi ili izvezi snimak'); return; }
+  }
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   const wasOn = _dozGpsOn;
   _dozGpsOn = false;
@@ -39820,6 +39905,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji podatke na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></div>
   <div class="mdrop-sep"></div>
   <div class="mdrop-hdr">Projekti i izvoz</div>
+  <div class="mdrop-item" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</div>
   <div class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</div>
   <div class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</div>
   <div class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</div>
@@ -42045,5 +42131,33 @@ if (typeof AndroidDownload !== 'undefined') {
   <div id="foto-fullscreen-meta"></div>
 </div>
 
+<style>
+#field-status {position:absolute;left:6px;right:6px;top:54px;z-index:1700;padding:6px 9px;border-radius:7px;background:#10251f;color:#bbf7d0;font-size:11px;line-height:1.5;pointer-events:none;border:1px solid #4ade8055;}
+#field-status.warn {background:#451a03;color:#fde68a;border-color:#f59e0b;}
+.field-recording #panel,.field-recording #proj-panel,.field-recording #doznaka-panel,.field-recording #teren-panel,.field-recording #tragovi-panel {padding-top:var(--field-status-height,44px);}
+.field-recording #map-ctrl-bar {top:calc(32px + var(--field-status-height,44px));}
+#field-panel {position:fixed;inset:0;z-index:90000;background:#070f1be6;align-items:center;justify-content:center;padding:12px;}
+.field-sheet {background:#101c30;border:1px solid #334155;border-radius:14px;width:100%;max-width:560px;max-height:90dvh;max-height:90vh;overflow:auto;padding:16px;color:#e2e8f0;}
+.field-sheet button,.field-sheet select {min-height:44px;padding:9px 12px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#e2e8f0;font-size:14px;}
+.field-row {padding:9px 0;border-bottom:1px solid #334155;font-size:13px;line-height:1.55;}
+.field-row.good {color:#bbf7d0;}.field-row.warn {color:#fde68a;}
+#field-check strong {display:block;padding:12px 0;font-size:14px;}
+.field-note {font-size:12px;color:#94a3b8;line-height:1.6;}
+</style>
+<div id="field-panel" role="dialog" aria-modal="true" aria-labelledby="field-title" style="display:none;" onclick="if(event.target===this)closeFieldPanel()">
+  <div class="field-sheet">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><h3 id="field-title">Spremno za teren</h3><button onclick="closeFieldPanel()" aria-label="Zatvori">✕</button></div>
+    <p class="field-note">Provjera aktivnog projekta; u tabu Doznaka provjerava odabrani odjel. Sve provjere su lokalne, bez mreže.</p>
+    <label>Zoom podloge <select id="field-zoom"><option value="14">14 — pregled</option><option value="15" selected>15 — radni</option><option value="16">16 — detalji</option><option value="17">17 — detalji+</option></select></label>
+    <button onclick="fieldCheckReady()">Provjeri ponovo</button>
+    <div id="field-check"></div>
+    <button onclick="closeFieldPanel();openLoadMapScreen()">Učitaj / provjeri offline kartu</button>
+    <h3>Sigurnosna kopija projekta</h3>
+    <p class="field-note">Vlake, tragovi, mjerenja, GPS dnevnik, pojasevi/stabla u kešu, red za slanje i lokalni KML ovog naloga. Stari tragovi/mjerenja se pridružuju po GJ i odjelu. Velike rasterske karte, fotografije i referentne slike nisu uključene — njihove fajlove sačuvaj zasebno. Kopiju sačuvaj izvan aplikacije; sadrži lokacije i projektne podatke.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;"><button onclick="fieldExportBackup()">↓ Izvezi sigurnosnu kopiju</button><button onclick="document.getElementById('field-backup-file').click()">↑ Vrati kopiju</button></div>
+    <input id="field-backup-file" type="file" accept="application/json,.json" style="display:none;" onchange="fieldImportBackup(this.files[0])">
+  </div>
+</div>
+<script src="static/js/field-tools.js"></script>
 </body>
 </html>

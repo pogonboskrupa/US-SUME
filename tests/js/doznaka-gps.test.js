@@ -155,7 +155,7 @@ console.log('\nUživo watch — baceni izuzetak ne smije ostati neuhvaćen:');
 t('oba doznaka watch callbacka hvataju pad _dozProcessGpsPoint', () => {
   const mjesta = BEZ_KOM.split('\n')
     .map((r, i) => ({ r, br: i + 1 }))
-    .filter(x => /await _dozProcessGpsPoint\(lat, lng, alt, acc, speed\)/.test(x.r));
+    .filter(x => /await _dozProcessGpsPoint\(lat, lng, alt, acc, speed, fixTs\)/.test(x.r));
   assert.strictEqual(mjesta.length, 2,
     'očekivana su tačno dva uživo watch poziva (start + oporavak), nađeno: ' + mjesta.length);
   mjesta.forEach(x => {
@@ -167,7 +167,7 @@ t('oba doznaka watch callbacka hvataju pad _dozProcessGpsPoint', () => {
 
 t('_dozProcessGpsPoint i dalje BACA (signal koji native replay-u treba)', () => {
   const src = extractFn('_dozProcessGpsPoint');
-  assert.ok(/if \(!_dozBufferTrackPoint\(_dozPt\)\) throw/.test(src),
+  assert.ok(/if \(!await _dozBufferTrackPoint\(_dozPt,.*\)\) \{\s*_dozProcessGpsPoint\._retry = commit;\s*throw/.test(src),
     'bez bacanja _drainNativeGpsBuffer bi potvrdio journal za tačke koje nisu spremljene');
 });
 
@@ -184,7 +184,7 @@ t('KLJUČNO: journal se potvrđuje TEK kad je svaka grana spremila svoje', () =>
 
 t('oporavak obnavlja _dozGpsFullPts (inače izvoz GPX tiho gubi sve prije prekida)', () => {
   const src = extractFn('_crashCheck');
-  assert.ok(/_dozGpsFullPts = \(Array\.isArray\(snapD\.pts\)/.test(src),
+  assert.ok(/_dozGpsFullPts = snapD.fullPts \|\| \(Array\.isArray\(snapD\.pts\)/.test(src),
     '_dozGpsFullPts je jedini izvor za GPX i za to da se dugme izvoza pojavi');
 });
 

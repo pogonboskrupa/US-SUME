@@ -565,3 +565,50 @@ i ne šalje podatke. Lokalni assembleDebug uspješan; SHA-256 svih 22 runtime
 fajlova u APK-u potvrđen. Ovo nisu mjerenja na stvarnom telefonu niti provjera
 produkcijskih Supabase prava. Offline podloge moraju biti ranije uvezene ili
 keširane. Nema migracije baze.
+
+## 20. Terenski upgrade — 2.0.5 / Android 475
+
+Na zahtjev „ODRADI 1” uveden je lokalni `tvlake-field-journal` IndexedDB
+dnevnik (`static/js/field-store.js`). Doznaka svaki prihvaćeni fix upisuje u
+pending, geometriju sesije i mali opis sesije u JEDNOJ transakciji. UI se
+pomjera tek nakon complete; podržani WebView koristi strict durability.
+Nema serijalizacije cijelog GPS bafera niti live niza po fiksu. Vlaka i trag
+zadržavaju postojeću pohranu/native zaštitu i snapshot na 30 s — nisu masovno
+migrirani. Serijski commit sprječava preklop live/native callbacka; neuspjela
+tačka se ponavlja prije novije. Završetak čeka upis u letu i ne gasi snimanje
+ako završetak nije potvrđen. Zakašnjeli startup recovery ne prepisuje živi
+snimak. Tačke i potvrde slanja su odvojene po vlasniku; manual sync ostaje.
+
+Stari GPS bafer se prenosi, ponovo čita i provjerava prije brisanja originala.
+Oštećen original ostaje netaknut. Stabilni legacy identiteti i receipts
+sprječavaju ponovno slanje potvrđenih tačaka iz stare kopije/arhive. Aktivna
+sesija vraća pune koordinate, visine i vremena; legacy snapshot čuva oznaku
+nepoznatog vremena umjesto izmišljanja. Journal ostaje pri promjeni naloga,
+ali drugi nalog ga ne vidi niti šalje. Nema produkcijske SQL migracije.
+
+Meni i Projekat imaju „Spremno za teren / sigurnosna kopija”:
+- provjera projekta, granica, lokalnih podataka/kolega i outbox-a;
+- ograničena iscrpna Cache Storage provjera odabranog obuhvata i zoom-a,
+  najviše 2048 pločica, bez mreže; drugi zoom nije time potvrđen;
+- SQLite podloga se navodi kao otvorena, ali metapodaci nisu dokaz odsustva
+  rupa, zato se ne daje lažno zeleno „spremno”; obuhvat vlaka bez granice je
+  također nepotpuna potvrda;
+- stalni status snimanja kroz tabove: tačnost GPS-a, trajanje, tačke,
+  potvrđen upis/greška, veza i broj stavki za ručno slanje;
+- JSON izvoz s SHA-256 i lokalna obnova samo istog naloga, bez prepisivanja
+  postojećih ID-jeva. Uključuje projektne vlake/kolege, doznaka keš/GPS sesije,
+  red za slanje, tragove/mjerenja i lokalni KML/GeoJSON naloga. Doznaka može
+  uključiti povezani projekat vlaka. Stari tragovi/mjerenja bez projektId se
+  pridružuju po GJ/odjelu; novi ga pamte eksplicitno. Rasteri, fotografije i
+  referentne slike su jasno ISKLJUČENI i čuvaju se zasebno. Uvoz ima limit
+  30 MB, potvrdu korisnika i preflight kopiju; nema automatskog slanja.
+
+Provjere: svih 66 JS testnih fajlova (10 novih ciljanih provjera), tri browser
+skripte, 51 Python test i sintaksa. Stvarni Chromium IndexedDB + CPU 4×:
+1200 sintetičkih tačaka s vremenskim oznakama šest sati snimanja, nula upisa
+starog velikog bafera; simulirani QuotaExceededError ne pomjera liniju,
+naknadni oporavak vraća 1202 tačke. Provjerena i obnova na čistom profilu,
+ponovljeni uvoz, vlasnička izolacija, oštećena kopija i zabrana ponovnog
+stavljanja potvrđenih tačaka u outbox. Ovo nije šest sati rada na stvarnom
+Android telefonu, logcat/ANR mjerenje, gubitak fizičkog napajanja niti
+produkcijska Supabase provjera. To ostaje terenski korak provjere APK-a.
