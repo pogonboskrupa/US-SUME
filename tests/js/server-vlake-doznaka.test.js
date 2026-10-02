@@ -33,7 +33,7 @@ function setup({legacy=false}={}){
     if(e.afterWrite&&call.mode!=='select')e.afterWrite(call);
     return Promise.resolve({data:call.single?rows[0]||null:rows.slice(0,call.limit),error:e.lostReply?.(call)||null}).then(ok,bad);
    }};return q;}};
- vm.createContext(e);vm.runInContext(fs.readFileSync('static/js/offline-layer.js','utf8'),e);e.ol=vm.runInContext('_OL',e);vm.runInContext(names.map(fn).join('\n'),e);
+ vm.createContext(e);vm.runInContext(fs.readFileSync('static/js/offline-layer.js','utf8'),e);e.ol=vm.runInContext('_OL',e);vm.runInContext(names.map(fn).join('\n'),e);e.window=e;e._dozOdjeli=[{id:'D',name:'Doznaka 105'}];e.kolegeMap={};vm.runInContext(fs.readFileSync('static/js/server-panel.js','utf8'),e);
  const point=(i,uid='A')=>({_qid:'gps-'+uid+'-'+i,user_id:uid,project_id:'D',latitude:44+i*.001,longitude:16,altitude:300,accuracy:5,recorded_at:new Date(Date.UTC(2026,9,2,10,0,i)).toISOString()});
  const addVlaka=(nm,recorded)=>{const i=e.vlake.length;e.vlake.push({nm,projektId:'P',br:i+1,kr:0,color:'green',pts:[],poly:{addLatLng(){}}});e.recOn=recorded;e.addPt(i,44,16,300);e.addPt(i,44.001,16,310);e.recOn=false;return e.vlake[i];};
  return {e,store,messages,requests,pending,db,point,addVlaka};
@@ -46,6 +46,7 @@ test('jedan pritisak šalje nacrtanu vlaku, GPS vlaku, zonu i GPS pojas, bez aut
  for(let i=0;i<205;i++)await e._dozBufferTrackPoint(h.point(i));
  await e._processOfflineQueue(true);assert.equal(h.requests.length,0);
  await e.serverPosalji();assert.deepEqual(h.db.vlake.map(r=>r.nm),['T1','T2']);
+ const receipts=JSON.parse(h.store.get('tvlake_server_transfers_v1_A'));assert.ok(receipts['project:P'].ts>0);assert.ok(receipts['doz:D'].ts>0);
  assert.equal(h.db.vlake[0].pts.length,2);assert.equal(h.db.vlake[1].projekt_id,'P');
  assert.equal(h.db.doz_area_markings.length,1);assert.equal(h.db.doz_area_markings[0].label,'Zaštitna zona');assert.equal(h.db.doz_area_markings[0].boundary_geojson.type,'Polygon');
  assert.equal(h.db.doz_track_points.length,205);assert.equal(h.pending.length,0);assert.equal(e.ol.loadQueue().length,0);
@@ -60,7 +61,7 @@ test('neuspjelo otvaranje GPS dnevnika ne proglašava prazan red poslanim',async
 });
 test('mrežni pad ostavlja oboje vlaka i GPS pojas za sljedeći pokušaj',async()=>{
  const h=setup();h.addVlaka('T1',false);h.addVlaka('T2',true);h.pending.push(h.point(1));h.e.error=c=>c.mode==='insert'?{message:'Failed to fetch'}:null;
- await h.e.serverPosalji();assert.equal(h.e.ol.loadQueue().length,2);assert.equal(h.pending.length,1);assert.equal(h.db.vlake.length,0);
+ await h.e.serverPosalji();assert.equal(h.e.ol.loadQueue().length,2);assert.equal(h.pending.length,1);assert.equal(h.db.vlake.length,0);assert.equal(h.store.has('tvlake_server_transfers_v1_A'),false);
  h.e.error=null;await h.e.serverPosalji();assert.equal(h.db.vlake.length,2);assert.equal(h.db.doz_track_points.length,1);assert.equal(h.pending.length,0);
 });
 test('RLS odbijena GPS tačka ostaje lokalno; uspješne potvrde se uklone pojedinačno',async()=>{

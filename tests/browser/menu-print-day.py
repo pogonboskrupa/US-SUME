@@ -86,10 +86,14 @@ async def main():
                 assert await page.locator('.mdrop-brand b').inner_text() == 'DENDRO MAP'
                 assert await page.locator('#menu-user-role').inner_text() == 'Projektant · Šumarija Bos.Krupa'
                 assert await page.locator('.mdrop-brand img').evaluate('(e)=>e.naturalWidth') == 192
-                dims = await page.evaluate('''()=>{const m=document.querySelector('#menu-dropdown'),f=document.querySelector('.mdrop-footer'),s=document.querySelector('.mdrop-sections');const b=m.getBoundingClientRect(),fb=f.getBoundingClientRect();return {left:b.left,right:b.right,bottom:b.bottom,footer:fb.bottom,scroll:s.clientHeight,width:m.clientWidth,content:m.scrollWidth};}''')
+                dims = await page.evaluate('''()=>{const m=document.querySelector('#menu-dropdown'),f=document.querySelector('.mdrop-footer'),s=document.querySelector('.mdrop-scroll');const b=m.getBoundingClientRect(),fb=f.getBoundingClientRect();return {left:b.left,right:b.right,bottom:b.bottom,footerTop:fb.top,scroll:s.clientHeight,top:s.scrollTop,width:m.clientWidth,content:m.scrollWidth};}''')
                 assert dims['left']>=0 and dims['right']<=width and dims['bottom']<=height, dims
-                assert dims['footer']<=height and dims['scroll']>40 and dims['content']<=dims['width'], dims
+                assert dims['top']==0 and dims['scroll']>40 and dims['content']<=dims['width'], dims
                 await page.screenshot(path=str(OUT/f'menu-{theme}-{width}-{height}.png'))
+                bottom = await page.evaluate('''()=>{const s=document.querySelector('.mdrop-scroll');s.scrollTop=s.scrollHeight;const f=document.querySelector('.mdrop-footer').getBoundingClientRect(),b=s.getBoundingClientRect();return {top:s.scrollTop,footerTop:f.top,footerBottom:f.bottom,scrollBottom:b.bottom};}''')
+                assert bottom['top']>0 and abs(dims['footerTop']-bottom['footerTop']-bottom['top'])<2, (dims,bottom)
+                assert bottom['footerBottom']<=bottom['scrollBottom']+1 and bottom['footerTop']>=0, bottom
+                await page.screenshot(path=str(OUT/f'menu-bottom-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeMenuDropdown()')
                 await page.click('#vlake-tab-btn')
                 # Postojeći prijelaz pozadine ikone traje 180 ms; provjeri završno stanje.
@@ -155,6 +159,6 @@ async def main():
         await page.pdf(path=str(OUT/'karta-provjera.pdf'),width='297mm',height='210mm',print_background=True)
         assert not errors,errors
         await browser.close()
-    print('OK: Meni, projekti/detalji 8 veličina/tema, filteri, stalni footer, Dnevni kontrast, opisi i print/PDF')
+    print('OK: Meni, projekti/detalji 8 veličina/tema, filteri, identitet na kraju skrola, Dnevni kontrast, opisi i print/PDF')
 
 asyncio.run(main())

@@ -967,3 +967,77 @@ vraća v2.1.5, dostupnu preko Meni → Ažuriraj aplikaciju. Android versionCode
 `733255e7de3eab7206617f3309dc2f8f87aba70e71bf28b5d1d38da7e14b1faf`.
 Stvarni telefoni, produkcijska Supabase baza/RLS i fizička štampa nisu
 provjereni; nijedna produkcijska migracija ili instalacija nije izvršena.
+
+## 30. Skrol Menija, navigacija, kamera i lokalni SHP uvoz — 2.1.6 / Android 486
+
+Korisnik traži da se identitet/logo/verzija Menija vidi na kraju skrola,
+bolji pregled Vodi me do odjela/lokacije, direktnu kameru bez galerije i
+SHP podtab u Dodaj KML fajl. Footer sada ide unutar mdrop-scroll zajedno
+sa sekcijama, zaglavlje ostaje iznad skrola; svaki novi otvor počinje od
+vrha. Naziv DENDRO MAP, korisnik, logo i verzija ostaju u podnožju.
+
+Navigacija ima zasebno zaglavlje i jedan skrol, jasna dva izbora polaska,
+GPS status, upute za odredište i međutačke, pretragu sačuvanih ruta i
+odvojene radnje prikaza/dijeljenja/brisanja. Brisanje i dalje traži potvrdu,
+nazivi/ID ruta escapirani. Izračun rute, profil i sačuvani podaci ostaju
+postojeći. Boje prate oba moda, dugmad imaju najmanje 44 px dodirne visine.
+
+Uslikaj lokaciju direktno klikne capture=environment input nakon GPS
+provjere, uz snapshot pozicije prije snimanja. Galerija input uklonjen.
+Native WebChromeClient više nema fallback na galeriju pri odbijenoj dozvoli
+ili nedostupnoj kameri: završi callback i javi razlog. Kamera i puna
+rezolucija preko FileProvider-a ostaju postojeće. Obični file chooser sada
+izričito postavlja EXTRA_ALLOW_MULTIPLE za prateće SHP fajlove.
+
+Novi local-layer-import.js i modal imaju KML/SHP podtabove. Već uključene
+shapefile/proj4 biblioteke čitaju stvarni SHP/DBF, grupišu prateće fajlove
+po nazivu, čitaju PRJ i CPG, konvertuju u WGS84 KML, zadržavaju atribute,
+nazive i unutrašnje rupe poligona. SHX/SBN/SBX/QIX se mogu izabrati uz
+SHP, parser ne zahtijeva njihove indekse. Više SHP slojeva po odabiru je
+podržano; svaki fajl do 32 MB i do 50.000 geometrija po sloju. Bez PRJ-a
+GPS koordinate se prepoznaju, koordinate u metrima zahtijevaju izbor MGI
+zone 5/6 ili odgovarajući PRJ; ne pretpostavlja se položaj. UTM PRJ koji
+sadrži WGS84 pravilno se projektuje, ne proglašava GPS koordinatama.
+
+Sloj se dodaje na Leaflet kartu tek nakon potvrđenog IDB upisa i malog
+localStorage registra; time se veliki geometrijski sadržaj ne duplira u
+localStorage. I stari inline KML i novi IDB sadržaj se obnavljaju offline.
+Upisi su serijalizovani, dupli nazivi dobijaju broj i ne brišu prethodni
+sloj. Promjena naloga prekida novi prikaz. Brisanje sadržaja čeka uspješan
+upis registra; puna memorija ne može dati lažnu potvrdu. Terenska kopija
+materijalizuje sav KML iz IDB-a i obnova ga vraća u IDB prije učitavanja.
+Novi modul je u service-worker shellu i obaveznim Android assets.
+
+Lokalno prolazi 75 JS testnih fajlova, svih pet inline skripti i Python
+sintaksa browser fixture-a. Petnaest novih regresija koristi stvarni
+binary SHP/DBF parser i proj4; persistence/failover testovi koriste lažne
+IDB/DOM objekte. Browser provjere uključuju stvarni modal/CSS, Leaflet,
+DOMParser i IndexedDB sa lokalnim SHP/DBF, uvoz/obnovu/backup i greške,
+uz ranije Meni/projekti/štampa provjere. Workflow ishod, APK i slike se
+provjeravaju nakon pusha. Produkcijska baza, GPS/rutiranje i fizička
+Android kamera nisu testirani ovim lokalnim fixture-ima.
+
+Dodatni zahtjev u istom radu: Server · vlake projekta preimenovan u
+Pošalji na server. Uklonjen izbor projekta i tri zbirne kartice (vlake,
+ukupna dužina, broj projektanata). Pregled prati aktivni dostupan projekat;
+čitati drugi projekat za PM izvještaj ne mijenja kontekst. Bez aktivnog
+projekta nema tihog izbora prvog drugog projekta. Zajednička lista i puni
+ispis ostaju dostupni, uz pojedinačnu dužinu i jasno Šalje/Poslao ime.
+
+Šta će biti poslano grupiše sve vlastite stavke po stvarnom odredištu,
+uključujući nacrtane/GPS vlake, zone doznake i GPS tačke iz FieldStore-a.
+Prikazuje projekat, ime pošiljaoca i vrstu/naziv; preko 40 stavki grupe
+upućuje na paginirani Za slanje. I dalje se šalje cijeli vlastiti red iz
+svih projekata; prikaz to izričito navodi. Otvaranje učitava hladni GPS
+IDB bez mreže; ne prikazuje lažno prazan GPS dnevnik dok nije spreman.
+
+Precizno vrijeme posljednjeg slanja na telefonu čuva se po nalogu tek
+nakon potvrđene operacije/serije u _processOfflineQueue, sa odredištem i
+imenom. Neuspjeh, promjena naloga, lokalno odbacivanje ili otvaranje panela
+ne pišu vrijeme slanja. Djelimični uspjeh bilježi samo potvrđene stavke.
+Posljednji prijem aktivnog projekta koristi već potvrđeni datum punog
+serverskog preuzimanja, i kad lista nije mijenjana. Novi registar slanja
+počinje od ove verzije: staro globalno vrijeme bez vlasnika se ne pripisuje
+nalogu/projektu. Browser fixture proširen stvarnim Server pregledom na
+četiri veličine u oba moda; JS regresije provjeravaju scope, grupe i
+potvrde slanja kroz cijeli lažni serverski tok, uz prethodnih 75 fajlova.

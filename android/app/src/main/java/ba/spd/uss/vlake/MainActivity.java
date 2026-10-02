@@ -94,7 +94,6 @@ public class MainActivity extends Activity {
     private android.webkit.PermissionRequest pendingCameraRequest;
     private Uri pendingCaptureUri;
     private File pendingCaptureFile;
-    private Intent pendingFallbackIntent;
     // Postavlja se preko GpsBridge dok GPS snimanje (vlaka/trag/pojas) traje.
     // WebView.onPause() je dokumentovano da "best-effort pauzira geolocation" —
     // ako se pozove dok se snima, navigator.geolocation.watchPosition() prestaje
@@ -312,7 +311,6 @@ public class MainActivity extends Activity {
                 // createIntent() je uvijek ACTION_GET_CONTENT (galerija/fajlovi) i
                 // ignoriše <input capture> — bez ovoga "Kamera" otvara galeriju.
                 if (fileChooserParams.isCaptureEnabled() && acceptsImages(fileChooserParams)) {
-                    pendingFallbackIntent = intent;
                     if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
                             == PackageManager.PERMISSION_GRANTED) {
                         launchCameraCapture();
@@ -322,6 +320,8 @@ public class MainActivity extends Activity {
                     }
                     return true;
                 }
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
+                        fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
                 return launchFilePicker(intent);
             }
         });
@@ -1047,9 +1047,9 @@ public class MainActivity extends Activity {
                 launchCameraCapture();
             } else {
                 Toast.makeText(this,
-                        "Bez dozvole za kameru — otvaram galeriju",
+                        "Dozvoli pristup kameri pa ponovo izaberi Uslikaj lokaciju",
                         Toast.LENGTH_LONG).show();
-                launchFallbackPicker();
+                deliverFileResult(null);
             }
         }
     }
@@ -1061,7 +1061,6 @@ public class MainActivity extends Activity {
             File file = pendingCaptureFile;
             pendingCaptureUri = null;
             pendingCaptureFile = null;
-            pendingFallbackIntent = null;
             boolean ok = resultCode == RESULT_OK && uri != null && file != null && file.length() > 0;
             deliverFileResult(ok ? new Uri[]{uri} : null);
             return;
@@ -1127,16 +1126,9 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             pendingCaptureUri = null;
             pendingCaptureFile = null;
-            Toast.makeText(this, "Kamera nije dostupna — otvaram galeriju", Toast.LENGTH_SHORT).show();
-            launchFallbackPicker();
+            Toast.makeText(this, "Kamera nije dostupna", Toast.LENGTH_SHORT).show();
+            deliverFileResult(null);
         }
-    }
-
-    private void launchFallbackPicker() {
-        Intent fb = pendingFallbackIntent;
-        pendingFallbackIntent = null;
-        if (fb != null) launchFilePicker(fb);
-        else deliverFileResult(null);
     }
 
     private void deliverFileResult(Uri[] results) {

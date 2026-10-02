@@ -5678,7 +5678,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.5';
+const APP_VER = 'v2.1.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6267,6 +6267,14 @@ function openSyncQueuePanel() {
   const bg   = document.getElementById('syncq-bg');
   const pan  = document.getElementById('syncq-panel');
   if (!list || !pan) return;
+
+  if(typeof FieldStore!=='undefined' && !FieldStore.ready && !openSyncQueuePanel._journalLoading) {
+    const owner=sbUser?.id;
+    openSyncQueuePanel._journalLoading=true;
+    FieldStore.init().then(()=>{if(sbUser?.id===owner && pan.style.display==='flex')openSyncQueuePanel();})
+      .catch(()=>showToast('⚠ Lokalni GPS dnevnik nije učitan; provjeri memoriju telefona'))
+      .finally(()=>{openSyncQueuePanel._journalLoading=false;});
+  }
 
   _serverSazetakRender();
   _serverPrimljenoIzKesa();
@@ -6864,7 +6872,10 @@ async function _processOfflineQueue(sila) {
         err = { code:'UNSUPPORTED_OPERATION', message:'Nepoznat tip operacije: ' + String(op.type || '') };
       }
       if (sbUser?.id !== syncOwner) break;
-      if (!err) { _OL.removeFromQueue(op._qid ?? op.ts); synced++; }
+      if (!err) {
+        if(typeof _serverTransferConfirmed==='function') _serverTransferConfirmed(op,syncOwner);
+        _OL.removeFromQueue(op._qid ?? op.ts); synced++;
+      }
       else if (_isAuthErr(err)) {
         // D2-D: istekao token → osvježi sesiju (jednom) i re-okini prolaz s NOVIM tokenom.
         // Op ostaje u redu (ne bumpRetry/odbacivanje). Re-okini SAMO ako je refresh dao
@@ -6934,6 +6945,7 @@ async function _processOfflineQueue(sila) {
             const current = JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY) || '[]');
             localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(current.filter(p => !ok.has(p._qid))));
           }
+          if(typeof _serverTransferConfirmed==='function') _serverTransferConfirmed({type:'doz_track_points',payload:komad.find(p=>ok.has(p._qid)),_count:r.ok.length},syncOwner);
           synced += r.ok.length;
         }
         if (r.error && (_isNetworkErr(r.error) || _serverPrivremeno(r.error))) { _mrezaPala = true; break vanjska; }
@@ -7235,9 +7247,7 @@ async function sbLoadProfile() {
   const routeBtn = document.getElementById('route-suggest-btn');
   if (routeBtn) routeBtn.parentElement.style.display = isAdm ? 'none' : '';
   const fotoCam = document.getElementById('loc-photo-cam');
-  const fotoGal = document.getElementById('loc-photo-gal');
   if (fotoCam) fotoCam.disabled = isAdm;
-  if (fotoGal) fotoGal.disabled = isAdm;
 
   _updFabVisibility();
 }
@@ -11735,33 +11745,11 @@ let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za f
 
 function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
+  const inp = document.getElementById('loc-photo-cam');
+  if (!inp || inp.disabled) return;
   _fotoSnapPos = { la: lastP.la, lo: lastP.lo };
-  // Action sheet: kamera ili galerija
-  const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99998;display:flex;align-items:flex-end;justify-content:center;';
-  const sheet = document.createElement('div');
-  sheet.style.cssText = 'background:#1e293b;border-radius:16px 16px 0 0;width:100%;max-width:400px;padding:12px 16px 20px;';
-  sheet.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-bottom:10px;">Izvor slike</div>'
-    + '<button id="_foto-cam" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;"><svg class="ic"><use href="#ic-kamera"/></svg> Uslikaj kamerom</button>'
-    + '<button id="_foto-gal" style="width:100%;padding:14px;background:#334155;border:none;border-radius:10px;color:#f1f5f9;font-size:15px;margin-bottom:8px;cursor:pointer;"><svg class="ic"><use href="#ic-slika"/></svg> Izaberi iz galerije</button>'
-    + '<button id="_foto-cancel" style="width:100%;padding:14px;background:transparent;border:none;color:#64748b;font-size:14px;cursor:pointer;">Otkaži</button>';
-  bg.appendChild(sheet);
-  document.body.appendChild(bg);
-  const close = () => bg.remove();
-  bg.addEventListener('click', e => { if (e.target === bg) { _fotoSnapPos = null; close(); } });
-  document.getElementById('_foto-cancel').onclick = () => { _fotoSnapPos = null; close(); };
-  document.getElementById('_foto-cam').onclick = () => {
-    close();
-    const inp = document.getElementById('loc-photo-cam');
-    inp.value = '';
-    inp.click();
-  };
-  document.getElementById('_foto-gal').onclick = () => {
-    close();
-    const inp = document.getElementById('loc-photo-gal');
-    inp.value = '';
-    inp.click();
-  };
+  inp.value = '';
+  inp.click();
 }
 
 async function onLocPhotoSelected(input) {
@@ -16356,6 +16344,8 @@ function toggleMenuDropdown(e) {
     dd.style.maxHeight = Math.max(150, window.innerHeight - r.bottom - 12) + 'px';
     dd.style.pointerEvents = 'none';
     dd.style.display = 'flex';
+    const scroll = dd.querySelector('.mdrop-scroll');
+    if (scroll) scroll.scrollTop = 0;
     btn.setAttribute('aria-expanded','true');
     setTimeout(() => { dd.style.pointerEvents = ''; }, 400);
   } else {
@@ -23553,21 +23543,8 @@ function _dpSimplify2D(pts, eps) {
 function dropK(e) { e.preventDefault(); document.getElementById('kml-drop').classList.remove('over'); [...e.dataTransfer.files].filter(f=>f.name.endsWith('.kml')).forEach(ldK); }
 function fileK(e) { [...e.target.files].forEach(ldK); e.target.value=''; }
 function ldK(file) {
-  const r=new FileReader();
-  r.onload=ev=>{
-    try {
-      const col=KCOLS[kmlCI%KCOLS.length]; kmlCI++;
-      const doc=new DOMParser().parseFromString(ev.target.result,'text/xml');
-      const grp=pkml(doc,col); grp.addTo(map);
-      const _autoTag = file.name.match(/^(\d+)/)?.[1] || '';
-      kmlLs.push({name:file.name,_origName:file.name,grp,col,dash:'',weight:2,opacity:0.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:0.35,tag:_autoTag,_loadedAt:Date.now()});
-      _localKmlSaveContent(file.name, ev.target.result, col);
-      _glCollapsed.delete('Lokalni / —');
-      rndGraniceModal();
-      try{const b=grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[20,20]});}catch(x){}
-    } catch(x){showToast('⚠ Greška KML: '+x.message);}
-  };
-  r.readAsText(file);
+  const owner=sbUser?.id;
+  return file.text().then(content=>_localLayerKml(file.name,content,owner)).catch(e=>showToast('⚠ Greška KML: '+e.message));
 }
 function pkml(doc, col, op) {
   op = op ?? 0.9;
@@ -23581,7 +23558,8 @@ function pkml(doc, col, op) {
       if (cs.length > 2) {
         // fillOpacity 0.001 (ne 0) — vizuelno nevidljivo, ali fill ostaje
         // "painted" pa klik unutar poligona radi (vidi napomenu u applyKmlStyle).
-        const l = L.polygon(cs, {color:col, weight:2, opacity:op, fillOpacity:0.001});
+        const holes = [...pg.querySelectorAll('innerBoundaryIs coordinates')].map(c=>pcs(c.textContent)).filter(r=>r.length>2);
+        const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fillOpacity:0.001});
         l._kmlIsPolygon = true;
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(_escHtml(name), {sticky:true});
@@ -24511,12 +24489,17 @@ function _ozZoomKml(i) {
 }
 
 // ── Lokalni KML persistence ───────────────────────────────────────────────────
-function _localKmlSaveContent(origName, content, col) {
+async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id) {
+  const cacheKey='local-kml:'+_genUUID();
   try {
+    await _kmlcSave(cacheKey,content);
+    if(await _kmlcGet(cacheKey)!==content)throw new Error('IDB nije potvrdio upis');
+    if(sbUser?.id!==owner) { await _kmlcDelete(cacheKey); return false; }
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
-    store[origName] = { content, col, dash: '', weight: 2, opacity: 0.9, vis: true, displayName: origName };
+    Object.defineProperty(store,origName,{value:{cacheKey,col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName},enumerable:true,configurable:true,writable:true});
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
-  } catch(e) { console.warn('KML nije sačuvan lokalno (prevelik fajl?):', e); }
+    return true;
+  } catch(e) { await _kmlcDelete(cacheKey); console.warn('KML nije sačuvan lokalno:',e); return false; }
 }
 
 function _localKmlSaveAll() {
@@ -24541,22 +24524,29 @@ function _localKmlSaveAll() {
     });
     // Ukloni stavke koje više nisu u kmlLs
     const activeNames = new Set(kmlLs.filter(k => !k._key).map(k => k._origName || k.name));
+    const droppedCaches=[];
     for (const key of Object.keys(store)) {
-      if (!activeNames.has(key)) delete store[key];
+      if (!activeNames.has(key)) { if(store[key].cacheKey)droppedCaches.push(store[key].cacheKey); delete store[key]; }
     }
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
+    droppedCaches.forEach(key=>_kmlcDelete(key));
   } catch(e) { console.warn('_localKmlSaveAll error:', e); }
 }
 
-function _localKmlRestore() {
+async function _localKmlRestore() {
   try {
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
     if (!Object.keys(store).length) return;
-    Object.entries(store).forEach(([origName, data]) => {
-      if (kmlLs.find(k => (k._origName || k.name) === origName && !k._key)) return;
+    const owner=sbUser?.id;
+    for(const [origName,data] of Object.entries(store)) {
+      if (kmlLs.find(k => (k._origName || k.name) === origName && !k._key)) continue;
       try {
+        const content=data.cacheKey?await _kmlcGet(data.cacheKey):data.content;
+        if(sbUser?.id!==owner)return;
+        if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
+        if(typeof content!=='string')throw new Error('Nedostaje lokalni sadržaj sloja');
         const col = data.col || KCOLS[kmlCI % KCOLS.length]; kmlCI++;
-        const doc = new DOMParser().parseFromString(data.content, 'text/xml');
+        const doc = new DOMParser().parseFromString(content, 'text/xml');
         const grp = pkml(doc, col);
         grp.addTo(map);
         if (data.vis === false) map.removeLayer(grp);
@@ -24570,7 +24560,7 @@ function _localKmlRestore() {
         });
         applyKmlStyle(kmlLs.length - 1);
       } catch(e) { console.warn('KML restore greška:', origName, e); }
-    });
+    }
     _glCollapsed.delete('Lokalni / —');
     rndGraniceModal();
     if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
@@ -30194,6 +30184,10 @@ let _guideActiveRouteId = null; // id sačuvane rute čiji je popup trenutno vez
 
 function showGuideChoice() {
   document.getElementById('guide-choice-modal').style.display = 'flex';
+  const search = document.getElementById('guide-routes-search');
+  if (search) search.value = '';
+  const status = document.getElementById('guide-location-status');
+  if (status) status.textContent = lastP ? 'GPS pozicija je spremna' : 'GPS će se pokrenuti ako izabereš svoju lokaciju';
   _guideRenderRoutes();
 }
 function closeGuideChoice() {
@@ -30451,19 +30445,16 @@ function _guideRenderRoutes() {
   const el = document.getElementById('guide-routes-list');
   if (!el) return;
   const arr = _guideRoutesLoad();
-  if (!arr.length) { el.innerHTML = '<div style="font-size:11px;color:#475569;text-align:center;padding:8px 0;">Nema sačuvanih ruta.</div>'; return; }
-  el.innerHTML = arr.map(r => {
+  const query = (document.getElementById('guide-routes-search')?.value || '').trim().toLocaleLowerCase('bs');
+  const filtered = arr.filter(r => String(r.name || 'Ruta').toLocaleLowerCase('bs').includes(query));
+  const count = document.getElementById('guide-routes-count');
+  if (count) count.textContent = filtered.length + ' / ' + arr.length;
+  if (!filtered.length) { el.innerHTML = '<div class="guide-empty">' + (arr.length ? 'Nema ruta za ovu pretragu.' : 'Još nema sačuvanih ruta. Izaberi polazak i napravi prvu rutu.') + '</div>'; return; }
+  el.innerHTML = filtered.map(r => {
     const durMin = r.durS != null ? Math.round(r.durS / 60) : null;
     const meta = `${fmtL(r.distM || 0)}${durMin != null ? ' · 🚙 ' + (durMin >= 60 ? Math.floor(durMin / 60) + ' h ' + (durMin % 60) + ' min' : durMin + ' min') : ''}${r.osrm ? '' : ' · zračna'}`;
-    return `<div style="display:flex;align-items:center;gap:8px;background:#16213e;border:1px solid #1e3a5f;border-radius:9px;padding:8px 10px;margin-bottom:6px;">
-      <div style="flex:1;min-width:0;cursor:pointer;" onclick="_guideViewRoute('${r.id}')">
-        <div style="font-size:12.5px;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🧭 ${_escHtml(r.name || 'Ruta')}</div>
-        <div style="font-size:10.5px;color:#64748b;">${meta}</div>
-      </div>
-      <button onclick="_guideViewRoute('${r.id}')" style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;border-radius:7px;color:#7dd3fc;font-size:12px;padding:6px 9px;cursor:pointer;"><svg class="ic"><use href="#ic-prikazi"/></svg></button>
-      <button onclick="event.stopPropagation();_guideShareRoute('${r.id}')" style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;border-radius:7px;color:#34d399;font-size:12px;padding:6px 9px;cursor:pointer;"><svg class="ic"><use href="#ic-posalji"/></svg></button>
-      <button onclick="_guideDeleteRoute('${r.id}')" style="flex-shrink:0;background:rgba(220,38,38,0.10);border:1px solid #7f1d1d;border-radius:7px;color:#f87171;font-size:12px;padding:6px 9px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
-    </div>`;
+    return `<article class="guide-route"><button type="button" class="guide-route-main" data-id="${_escHtml(String(r.id))}" onclick="_guideViewRoute(this.dataset.id)"><b>${_escHtml(r.name || 'Ruta')}</b><small>${meta}</small><span>Prikaži rutu →</span></button>
+      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="if(confirm('Obrisati rutu?'))_guideDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
   }).join('');
 }
 
@@ -40050,13 +40041,13 @@ if (typeof AndroidDownload !== 'undefined') {
 
 </script>
 
-<!-- Glavni Meni: sekcije se skrolaju, korisnik i verzija ostaju na dnu. -->
+<!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
   <div class="mdrop-top"><div><b>Meni</b><small>Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
-  <div class="mdrop-sections"><section class="mdrop-section">
+  <div class="mdrop-scroll"><div class="mdrop-sections"><section class="mdrop-section">
   <div class="mdrop-hdr">Karte i slojevi</div>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();document.getElementById('kf').click()"><span class="mdrop-ico">📂</span>Dodaj KML fajl</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openLayerImport()"><span class="mdrop-ico">📂</span>Dodaj KML fajl / SHP</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</button>
@@ -40068,7 +40059,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr">Server</div>
-  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Server · vlake projekta<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
+  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr">Projekti i izvoz</div>
   <button type="button" class="mdrop-item" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</button>
@@ -40089,6 +40080,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
     <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije DENDRO MAP"><div><b>DENDRO MAP</b><span id="menu-app-ver"></span></div></div>
   </footer>
+  </div>
 </div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
@@ -41483,23 +41475,17 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- VODI ME DO ODJELA/LOKACIJE — izbor moda -->
-<div id="guide-choice-modal" style="display:none;position:fixed;inset:0;z-index:99030;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:16px;"
-  onclick="if(event.target===this)closeGuideChoice()">
-  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:380px;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <h3 style="margin:0;font-size:15px;color:#a78bfa;">🧭 Vodi me do odjela/lokacije</h3>
-      <button onclick="closeGuideChoice()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-    </div>
-    <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">Za odlazak kombijem/autom do terena — ruta ide <b style="color:#e2e8f0;">putem</b> (OSRM). Tapni tačke na karti (može i međutačke); dobijaš dužinu, profil, nagib i vrijeme dolaska.</div>
-    <button onclick="_guideStart(true)" style="width:100%;padding:13px;margin-bottom:9px;background:linear-gradient(135deg,#1d4ed8,#2563eb);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span>Od moje lokacije<br><span style="font-size:11px;font-weight:400;opacity:0.85;">Start = trenutna GPS pozicija</span></span>
-    </button>
-    <button onclick="_guideStart(false)" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:20px;"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span>Od tačke do tačke<br><span style="font-size:11px;font-weight:400;opacity:0.85;">Sam biraš početak i kraj</span></span>
-    </button>
-    <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:11px;">
-      <div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:7px;">📋 Sačuvane rute</div>
-      <div id="guide-routes-list" style="max-height:38vh;max-height:38dvh;overflow-y:auto;"></div>
+<div id="guide-choice-modal" class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title" style="display:none;" onclick="if(event.target===this)closeGuideChoice()">
+  <div class="guide-sheet">
+    <header class="guide-header"><div><span class="guide-eyebrow">Navigacija do terena</span><h2 id="guide-title">Vodi me do odjela/lokacije</h2></div><button type="button" onclick="closeGuideChoice()" aria-label="Zatvori navigaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+    <div class="guide-body">
+      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Izaberi kako želiš krenuti</b><p>Odredište odaberi na karti. Možeš dodati i međutačke do odjela ili radilišta.</p><span id="guide-location-status" class="guide-status"></span></div></div>
+      <div class="guide-choices">
+        <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Od moje lokacije</b><small>Kreni od svoje GPS pozicije</small></span><span aria-hidden="true">›</span></button>
+        <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Od tačke do tačke</b><small>Izaberi početak i odredište na karti</small></span><span aria-hidden="true">›</span></button>
+      </div>
+      <p class="guide-note">Za izračun vožnje dostupnim putevima potrebna je veza. Sačuvanu rutu možeš ponovo prikazati i offline.</p>
+      <section class="guide-saved"><div class="guide-saved-heading"><h3>Sačuvane rute</h3><span id="guide-routes-count"></span></div><input id="guide-routes-search" type="search" aria-label="Pretraži sačuvane rute" placeholder="Traži rutu po nazivu…" oninput="_guideRenderRoutes()"><div id="guide-routes-list"></div></section>
     </div>
   </div>
 </div>
@@ -42178,10 +42164,20 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 
+<div id="layer-import-modal" class="layer-modal" role="dialog" aria-modal="true" aria-labelledby="layer-import-title" style="display:none;" onclick="if(event.target===this)closeLayerImport()">
+  <div class="layer-sheet">
+    <header class="guide-header"><div><span class="guide-eyebrow">Karte i slojevi</span><h2 id="layer-import-title">Dodaj fajl na kartu</h2></div><button type="button" onclick="closeLayerImport()" aria-label="Zatvori uvoz"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+    <div class="layer-body">
+      <div class="layer-tabs" role="tablist" aria-label="Format fajla"><button type="button" id="layer-tab-kml" role="tab" aria-selected="true" aria-controls="layer-import-kml" onclick="layerImportTab('kml')">KML</button><button type="button" id="layer-tab-shp" role="tab" aria-selected="false" aria-controls="layer-import-shp" onclick="layerImportTab('shp')">SHP i prateći fajlovi</button></div>
+      <section id="layer-import-kml" role="tabpanel" aria-labelledby="layer-tab-kml"><h3>KML sloj</h3><p>Učitaj tačke, linije i granice. Sloj se prikazuje na karti i ostaje dostupan offline.</p><button type="button" class="layer-pick" onclick="document.getElementById('layer-file-kml').click()"><svg class="ic"><use href="#ic-uvezi"/></svg>Izaberi KML fajlove</button><input id="layer-file-kml" type="file" accept=".kml" multiple hidden onchange="layerImportFiles(this,'kml')"></section>
+      <section id="layer-import-shp" role="tabpanel" aria-labelledby="layer-tab-shp" hidden><h3>Shapefile sloj</h3><p>Odaberi <b>.shp</b> i prateće fajlove istog naziva zajedno. Konverzija i prikaz na karti su automatski.</p><div class="layer-file-hint"><b>Primjer: odjeli.shp + odjeli.dbf + odjeli.prj</b><span>DBF čuva nazive i atribute, PRJ položaj na karti, CPG naša slova. Možeš dodati i SHX, SBN, SBX ili QIX.</span></div><label class="layer-crs-label" for="layer-shp-crs">Projekcija koordinata</label><select id="layer-shp-crs"><option value="auto">Automatski iz PRJ fajla</option><option value="EPSG:4326">WGS84 — GPS koordinate</option><option value="EPSG:31276">MGI zona 6 — BiH</option><option value="EPSG:31275">MGI zona 5</option></select><p class="guide-note">Ako nema PRJ-a, GPS koordinate se prepoznaju automatski. Za koordinate u metrima izaberi odgovarajuću projekciju.</p><button type="button" class="layer-pick" onclick="document.getElementById('layer-file-shp').click()"><svg class="ic"><use href="#ic-uvezi"/></svg>Izaberi SHP i prateće fajlove</button><input id="layer-file-shp" type="file" accept=".shp,.dbf,.prj,.shx,.cpg,.sbn,.sbx,.qix" multiple hidden onchange="layerImportFiles(this,'shp')"></section>
+      <div id="layer-import-status" class="layer-status" role="status" aria-live="polite">Slojeve poslije pronađi u Granicama odjela / Oznakama.</div>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="loc-photo-cam" accept="image/*" capture="environment"
-  style="display:none" onchange="onLocPhotoSelected(this)">
-<input type="file" id="loc-photo-gal" accept="image/*"
-  style="display:none" onchange="onLocPhotoSelected(this)">
+  style="display:none" onchange="onLocPhotoSelected(this)" oncancel="_fotoSnapPos=null">
 
 <!-- ══ OZNAKE PANEL ══════════════════════════════════════════════════ -->
 <div id="oznake-bg" onclick="closeOznakePanel()"></div>
@@ -42219,14 +42215,16 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
-<div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Server i vlake projekta" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
-  <div class="sp-header"><div><b>☁ Server</b><small>Zajednički projekti i terenski podaci</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
-  <div class="sp-project-context"><label for="server-project-select">PROJEKAT</label><select id="server-project-select" onchange="_serverProjektSelect(this.value)"></select><div id="server-identity"></div></div>
+<div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Pošalji na server" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
+  <div class="sp-header"><div><b>Pošalji na server</b><small>Sadržaj, projekat i potvrde razmjene</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
   <div id="syncq-sum"></div>
   <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
   <div id="server-scroll" style="overflow-y:auto;flex:1;min-height:0;">
+    <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
+    <div id="server-send-preview"></div>
     <div id="server-project-view">
       <div id="server-project-summary"></div>
+      <h3 class="sp-section-heading">Podaci u projektu</h3>
       <div id="server-project-authors"></div>
       <div class="sp-project-actions"><button id="server-project-refresh" onclick="_serverProjektRefresh()">↓ Osvježi server</button><button id="server-project-map" onclick="_serverProjektMap()">Na karti</button><button id="server-project-print" onclick="_serverProjektReport()">Ispis svih vlaka</button></div>
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
@@ -42234,10 +42232,10 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
     <div id="data-server-received" style="padding:12px 16px;" hidden><div id="syncq-primljeno"></div><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button></div>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
+    <div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div>
   </div>
   <div class="sp-bottom"><p>Slanje je ručno i obuhvata sve projekte na ovom telefonu. Kolege vide tvoje izmjene nakon slanja.</p>
     <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
-    <div class="sp-bottom-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div>
   </div>
 </div>
 
@@ -42340,5 +42338,6 @@ if (typeof AndroidDownload !== 'undefined') {
 </style>
 <script src="static/js/tab-data.js"></script>
 <script src="static/js/server-panel.js"></script>
+<script src="static/js/local-layer-import.js"></script>
 </body>
 </html>

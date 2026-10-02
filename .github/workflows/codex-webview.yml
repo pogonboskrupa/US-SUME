@@ -35,6 +35,7 @@ jobs:
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
           python tests/browser/menu-print-day.py
+          python tests/browser/menu-tools.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

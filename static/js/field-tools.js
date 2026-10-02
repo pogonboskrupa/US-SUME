@@ -108,7 +108,7 @@ async function _fieldMakeBackup() {
     measurements:_fieldJson(_MSR_REG_KEY,[]).filter(t=>t.projektId===scope.id || (!t.projektId && t.gj===scope.p.gj && t.odjel===scope.p.odjel)),
     dozLayers:_OL.load(_OL.DOZ_MEMBERS)?.[uid+':'+scope.id] || null,
     trees:_fieldJson(_DOZ_TREES_DATA_KEY,{})[scope.id] || null,
-    kml:_fieldJson(_LOCAL_KML_KEY,{}),
+    kml:typeof _localLayerSnapshot==='function'?await _localLayerSnapshot():_fieldJson(_LOCAL_KML_KEY,{}),
     geojson:_fieldJson(_GEOJSON_LS_KEY,null),
     boundary:_fieldBounds(scope).exact ? graniceOdjeli.filter(o=>String(o.name).trim().toLowerCase()===String(scope.p.odjel||scope.p.name||'').trim().toLowerCase()).map(o=>({name:o.name,ring:o.ring})):[],
     journal:await FieldStore.exportOwner(uid,scope.id),
@@ -164,7 +164,7 @@ async function fieldImportBackup(file) {
     const kolege=_fieldJson(_KVC_KEY,{});kolege[colleaguePid] ||= {};
     for(const row of d.kolege){const key=row.korisnik_id+'::'+row.nm;if(!kolege[colleaguePid][key])kolege[colleaguePid][key]=row;}
     changes.set(_KVC_KEY,JSON.stringify(kolege));
-    const kml=_fieldJson(_LOCAL_KML_KEY,{});for(const [name,value]of Object.entries(d.kml || {}))if(!Object.prototype.hasOwnProperty.call(kml,name))Object.defineProperty(kml,name,{value,enumerable:true});
+    const kml=_fieldJson(_LOCAL_KML_KEY,{});for(const [name,value]of Object.entries(d.kml || {}))if(!Object.prototype.hasOwnProperty.call(kml,name))Object.defineProperty(kml,name,{value:typeof _localLayerBackupValue==='function'?await _localLayerBackupValue(name,value,uid):value,enumerable:true});
     changes.set(_LOCAL_KML_KEY,JSON.stringify(kml));
     if(d.geojson && !localStorage.getItem(_GEOJSON_LS_KEY))changes.set(_GEOJSON_LS_KEY,JSON.stringify(d.geojson));
     if(d.dozLayers){const all=_OL.load(_OL.DOZ_MEMBERS)||{};all[uid+':'+d.scope.id] ||= d.dozLayers;changes.set(_OL.DOZ_MEMBERS,JSON.stringify({ts:Date.now(),data:all}));}
@@ -181,7 +181,7 @@ async function fieldImportBackup(file) {
     // loadProj obnavlja samo formulare, ne geometriju. Nove vlake dodaj odmah,
     // bez mreže i bez diranja novijih objekata koji su već u memoriji.
     _applyVlakeRows(d.vlake.filter(row=>!vlake.some(v=>v.nm===row.nm && v.projektId===row.projekt_id)));
-    loadProj();_tragRegLoad();_msrRegLoad();_localKmlRestore();geojsonOdjeliRestore();_updSyncBadge();rndProjektiList();
+    loadProj();_tragRegLoad();_msrRegLoad();await _localKmlRestore();geojsonOdjeliRestore();_updSyncBadge();rndProjektiList();
     showToast('✓ Kopija vraćena lokalno — ništa nije poslano na server');fieldCheckReady();
   }catch(e){showToast('⚠ Obnova nije završena: '+e.message+'. Izvorni fajl ostaje sačuvan.');}
   finally{input.value='';}

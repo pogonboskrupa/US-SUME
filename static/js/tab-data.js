@@ -115,7 +115,7 @@
     const tabs = document.getElementById('data-server-tabs');
     const shared = new Set((_projekti || []).filter(p => p.korisnik_id === sbUser?.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)).map(p => p.id));
     const receivedCount = _serverPrimljenoUcitaj().filter(x => shared.has(x.projektId)).length;
-    if (tabs) tabs.innerHTML = [['project','Vlake projekta',typeof _serverProjektModel==='function' ? _serverProjektModel().rows.length : 0],['send','Za slanje',q.length],['received','Primljeno',receivedCount],['problems','Problemi',problem.length]].map(([id,label,n]) => '<button role="tab" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')">'+label+' ('+n+')</button>').join('');
+    if (tabs) tabs.innerHTML = [['project','Pregled',typeof _serverProjektModel==='function' ? _serverProjektModel().rows.length : 0],['send','Za slanje',q.length],['received','Primljeno',receivedCount],['problems','Problemi',problem.length]].map(([id,label,n]) => '<button role="tab" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')">'+label+' ('+n+')</button>').join('');
     return problem;
   }
   function serverPrepare(q) {
@@ -125,6 +125,7 @@
     if (list) list.hidden = serverTab==='received';
     const project = document.getElementById('server-project-view');
     if(project)project.hidden=serverTab!=='project';
+    const preview=document.getElementById('server-send-preview');if(preview)preview.hidden=serverTab!=='project'&&serverTab!=='send';
     if(list)list.hidden=serverTab==='received'||serverTab==='project';
     const rows = serverTab==='problems' ? problem : q.filter(o=>typeof _SERVER_SAMO_LOKALNO==='undefined' || !_SERVER_SAMO_LOKALNO.has(o.type));
     serverPage = Math.max(0,Math.min(serverPage,Math.ceil(rows.length/size)-1));

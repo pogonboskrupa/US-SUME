@@ -132,12 +132,13 @@ html[data-field-theme=day] .btn:disabled {background:#e2e8f0!important;color:#47
 @media(max-width:420px) {html .tab-btn{min-width:54px;font-size:11.5px;}html .vcard-actions .vact{flex:1 1 58px;}html .data-context{padding:8px 10px;}html #field-status{font-size:11.5px;}}
 @media(prefers-reduced-motion:reduce) {html .vrow,html .tab-btn,html .tab-btn .tbi,html .vact {transition:none;}}
 
-/* Glavni Meni: skrolaju se samo sekcije, identitet i verzija su uvijek vidljivi. */
+/* Glavni Meni: identitet i verzija pojavljuju se na kraju skrola. */
 html #menu-dropdown {position:fixed;top:0;right:0;z-index:99000;width:min(440px,calc(100vw - 12px));min-width:0;max-width:calc(100vw - 12px);max-height:85dvh;flex-direction:column;overflow:hidden;box-sizing:border-box;background:var(--field-card);color:var(--field-ink);border:1px solid var(--field-border);border-radius:18px;box-shadow:0 12px 36px rgba(0,0,0,.35);touch-action:manipulation;}
 .mdrop-top {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--field-border);flex-shrink:0;}
 .mdrop-top b {display:block;font-size:19px;}.mdrop-top small {display:block;margin-top:3px;font-size:12px;color:var(--field-muted);}
 html #menu-dropdown .mdrop-top button {width:44px;height:44px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);color:var(--field-ink);font-size:20px;}
-.mdrop-sections {overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1;padding:10px;display:grid;grid-template-columns:1fr;gap:10px;align-content:start;}
+.mdrop-scroll {overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1;}
+.mdrop-sections {padding:10px;display:grid;grid-template-columns:1fr;gap:10px;align-content:start;}
 .mdrop-section {background:var(--field-bg);border:1px solid var(--field-border);border-radius:12px;padding:4px;min-width:0;}
 html #menu-dropdown .mdrop-hdr {padding:8px 10px 5px;font:700 11px system-ui;letter-spacing:.4px;text-transform:uppercase;color:var(--field-muted)!important;}
 html #menu-dropdown .mdrop-item {padding:10px 8px;min-height:48px;font:600 13px system-ui;line-height:1.45;white-space:normal;overflow-wrap:anywhere;border-radius:8px;color:var(--field-ink)!important;gap:5px;}
@@ -153,6 +154,38 @@ html #menu-dropdown #menu-user-label {display:block;margin:3px 0;font-size:17px;
 #menu-app-ver {display:inline-block;font-size:11px;font-weight:700;color:var(--field-muted);line-height:1.6;}
 @media(min-width:390px) {.mdrop-sections{grid-template-columns:1fr 1fr;}.mdrop-section:last-child{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;}.mdrop-section:last-child .mdrop-hdr{grid-column:1 / -1;}}
 @media(max-height:650px) {.mdrop-top{padding:6px 12px;}.mdrop-top small{display:none;}.mdrop-footer{padding-top:6px;padding-bottom:6px;}.mdrop-brand{margin-top:4px;flex-direction:row;justify-content:center;gap:9px;}.mdrop-brand img{width:32px;height:32px;}}
+
+/* Navigacija i lokalni uvoz: jedan skrol, jasne opcije i čitljiv dnevni prikaz. */
+html #guide-choice-modal,html #layer-import-modal {position:fixed;inset:0;z-index:99030;background:rgba(2,6,23,.72);align-items:center;justify-content:center;padding:12px;box-sizing:border-box;}
+html #guide-choice-modal .guide-sheet,html #layer-import-modal .layer-sheet {display:flex;flex-direction:column;box-sizing:border-box;width:100%;max-width:600px;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);padding:0;border:1px solid var(--field-border);border-radius:20px;overflow:hidden;background:var(--field-card);color:var(--field-ink);box-shadow:0 16px 44px rgba(0,0,0,.35);}
+.guide-header {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px;border-bottom:1px solid var(--field-border);flex-shrink:0;}
+.guide-eyebrow {display:block;font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--field-muted);margin-bottom:4px;}
+.guide-header h2 {font-size:20px;line-height:1.35;margin:0;overflow-wrap:anywhere;}
+.guide-header button {width:44px;height:44px;flex-shrink:0;border:1px solid var(--field-border);background:var(--field-bg);border-radius:12px;color:var(--field-ink);}
+.guide-body,.layer-body {padding:17px;overflow:auto;min-height:0;overscroll-behavior:contain;}
+.guide-intro {display:flex;gap:12px;padding:14px;border-radius:14px;background:var(--field-bg);border:1px solid var(--field-border);}
+.guide-intro>.ic {width:28px;height:28px;flex-shrink:0;color:#60a5fa;}
+.guide-intro b {font-size:16px;}.guide-intro p,.layer-body p {margin:6px 0;font-size:13px;line-height:1.65;color:var(--field-muted);}
+.guide-status {display:inline-block;margin-top:5px;font-size:12px;font-weight:600;color:var(--field-muted);}
+.guide-choices {display:grid;gap:10px;margin-top:14px;}
+.guide-choice {display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--field-bg);color:var(--field-ink);border:1px solid var(--field-border);border-radius:14px;padding:13px;font-family:inherit;min-height:78px;cursor:pointer;}
+.guide-choice>span:nth-child(2) {flex:1;min-width:0;}.guide-choice b {display:block;font-size:15px;line-height:1.5;}.guide-choice small {display:block;margin-top:3px;font-size:12px;line-height:1.5;color:var(--field-muted);}.guide-choice>span:last-child {font-size:25px;color:var(--field-muted);}
+.guide-choice-icon {display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;background:#1e40af;color:#fff;border-radius:12px;}.guide-choice:nth-child(2) .guide-choice-icon {background:#166534;}
+.guide-note {font-size:12px;line-height:1.65;color:var(--field-muted);margin:12px 0;}
+.guide-saved {border-top:1px solid var(--field-border);margin-top:17px;padding-top:15px;}.guide-saved-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;}.guide-saved h3,.layer-body h3 {font-size:16px;margin:0 0 9px;}.guide-saved-heading>span {font-size:12px;color:var(--field-muted);}
+#guide-routes-search,#layer-shp-crs {box-sizing:border-box;width:100%;min-height:46px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);color:var(--field-ink);padding:10px 12px;font-size:16px;margin:3px 0 12px;}
+.guide-route {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;padding:12px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg);margin-top:9px;}
+.guide-route-main {border:0;background:transparent;color:var(--field-ink);text-align:left;padding:0;font-family:inherit;cursor:pointer;min-width:0;min-height:48px;}
+.guide-route-main b {display:block;font-size:14px;line-height:1.5;overflow-wrap:anywhere;}.guide-route-main small {display:block;font-size:12px;color:var(--field-muted);line-height:1.6;margin:3px 0;}.guide-route-main>span {font-size:12px;font-weight:700;color:#7dd3fc;}
+.guide-route-actions {display:flex;gap:7px;}.guide-route-actions button {display:flex;gap:4px;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-card);color:var(--field-ink);padding:8px;font:600 12px system-ui;cursor:pointer;}.guide-route-actions .ic {width:17px;height:17px;margin:0;}.guide-route-actions button.guide-delete {color:#fca5a5;}
+.guide-empty {font-size:13px;line-height:1.7;color:var(--field-muted);padding:22px 10px;text-align:center;}
+.layer-tabs {display:flex;gap:8px;margin-bottom:18px;}.layer-tabs button {flex:1;min-height:48px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);border-radius:12px;padding:10px;font:700 13px system-ui;}.layer-tabs button[aria-selected=true] {background:#1e40af;color:#fff;border-color:#1e40af;}
+.layer-pick {display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;background:#166534;color:#fff;border:1px solid #166534;border-radius:12px;padding:12px;font:700 14px system-ui;cursor:pointer;}.layer-pick:disabled {opacity:.55;cursor:wait;}
+.layer-file-hint {padding:13px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:12px;margin:13px 0;overflow-wrap:anywhere;}.layer-file-hint b {display:block;font-size:13px;line-height:1.6;}.layer-file-hint span {display:block;font-size:12px;line-height:1.7;color:var(--field-muted);margin-top:4px;}.layer-crs-label {font-size:12px;font-weight:700;}
+.layer-status {margin-top:18px;border-top:1px solid var(--field-border);padding-top:13px;font-size:13px;line-height:1.7;color:var(--field-muted);overflow-wrap:anywhere;}
+html[data-field-theme=day] .guide-route-main>span {color:#1e40af;}html[data-field-theme=day] .guide-route-actions button.guide-delete {color:#991b1b;}html[data-field-theme=day] .guide-intro>.ic {color:#1e40af;}
+:is(#guide-choice-modal,#layer-import-modal) :is(button,input,select):focus-visible {outline:3px solid #3b82f6;outline-offset:2px;}
+@media(max-width:420px) {.guide-header{padding:13px;}.guide-header h2{font-size:18px;}.guide-body,.layer-body{padding:13px;}.guide-route{grid-template-columns:1fr;}.guide-route-actions button{flex:1;}}
 
 /* Upravljanje projektima: pregled, kartice i detalji u istom sistemu boja. */
 html #pm-modal {background:rgba(2,6,23,.72);padding:12px;box-sizing:border-box;}
