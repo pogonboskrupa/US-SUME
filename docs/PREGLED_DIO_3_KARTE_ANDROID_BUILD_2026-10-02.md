@@ -39,3 +39,10 @@ Službeni Gradle 8.4 wrapper JAR je vraćen i SHA-256 provjeren (`0336f591bc0ec9
 - Nema mjerenja hladnog starta i pomjeranja velike SQLite karte na stvarnom osrednjem Android telefonu.
 - `FileDescriptor.sync()` pri svakom GPS fiksu može uticati na odziv; potrebno je Android profiliranje.
 - `onDestroy()`/OEM lifecycle zahtijeva test sa pozivom, zaključavanjem ekrana, swipe iz recent apps i prekidom napajanja.
+
+## Naknadna potvrda — v2.0.3
+
+Nakon oporavka oštećenog `index.html` i ispravke runtime assets manifesta,
+lokalni `gradlew clean assembleDebug` je uspješan. `android/assets.py verify`
+je SHA-256 provjerio svih 22 spakovana web fajlova. APK nije instaliran ni
+terenski testiran na stvarnom Android uređaju.

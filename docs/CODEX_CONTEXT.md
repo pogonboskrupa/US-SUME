@@ -523,3 +523,21 @@ Obim i otvoreni nalazi: docs/PREGLED_DIO_2_RUCNO_SUPABASE_2026-10-01.md.
 ## 17. Treći dio pregleda — 2.0.2 / Android 472
 
 Tile bitmap cache ima tvrdu granicu. Dodan je manifest assets, atomarna Python priprema, Gradle `syncWebAssets` prije `preBuild`, stroge kopije i SHA-256 provjera APK-a. Svih 62 JS + 6 Python assets provjera prolaze. Wrapper JAR je vraćen i provjeren; lokalni build je sada blokiran nedostupnom Gradle 8.4 distribucijom (`UnknownHostException`).
+
+## 18. Oporavak zadnjeg commita — 2.0.3 / Android 473
+
+Otkriveno je da je `index.html` u commitu 2.0.2 sadržavao umetnutu poruku
+alata o skraćenom izlazu i da je zbog toga nedostajala većina aplikacijskog
+koda. Vraćena je posljednja cjelovita verzija i ponovo su primijenjene
+provjerene izmjene iz pregleda 1–3: rad bez mreže, ručno slanje, trajni GPS
+upis, oporavak traga/doznake, zaštita promjene naloga i ograničen bitmap keš.
+PowerShell priprema assets-a više nema znak koji Windows PowerShell pogrešno
+tumači bez UTF-8 BOM-a. `.well-known` ostaje u web repozitoriju, ali nije u
+APK manifestu jer Androidov `aapt` izostavlja skrivene direktorije. Iz
+`PUTEVI/` se pakuje samo korišteni `putevi.geojson`; izvorni shapefile s
+dijakritičkim nazivom nije runtime asset i `aapt` mu je mijenjao ime. Python
+paket `geo/` i zasebni Flutter izvor `doznaka/` također nisu WebView runtime
+assets i više se ne umeću u APK. Čisti `assembleDebug` je uspješan; Python
+alat je zatim SHA-256 provjerio svih 22 runtime fajlova u APK-u. Prolaze svih
+63 JS testnih fajlova, 51 Python provjera i sintaksa pet inline JS blokova.
+APK nije instaliran niti testiran na stvarnom telefonu.
