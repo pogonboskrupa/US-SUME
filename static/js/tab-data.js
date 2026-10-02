@@ -3,7 +3,7 @@
   'use strict';
   const panels = {vlake:'panel', projekat:'proj-panel', doznaka:'doznaka-panel', tragovi:'tragovi-panel'};
   const states = new Map();
-  let scope = '', state, serverTab = 'send', serverPage = 0, pending = new Set(), lastRows = [];
+  let scope = '', state, serverTab = 'project', serverPage = 0, serverScope = '', pending = new Set(), lastRows = [];
   const size = 60;
   function key() { return (sbUser?.id || 'guest') + ':' + (_aktivniProjektId || 'none'); }
   function sync() {
@@ -109,12 +109,13 @@
     return rows.slice(state.colleaguePage*size,(state.colleaguePage+1)*size);
   }
   function serverCounts(q) {
-    q=q || _OL.loadQueue().filter(o => !o._uid || o._uid === sbUser?.id);
+    if(serverScope !== (sbUser?.id || '')) {serverScope=sbUser?.id || '';serverTab='project';serverPage=0;}
+    q=(q || _OL.loadQueue()).filter(o => (!o._uid || o._uid === sbUser?.id) && (typeof _SERVER_SAMO_LOKALNO==='undefined' || !_SERVER_SAMO_LOKALNO.has(o.type)));
     const problem = q.filter(o => o._blocked || o._lastErr || o._retries);
     const tabs = document.getElementById('data-server-tabs');
-    const shared = new Set((_projekti || []).filter(p => p.korisnik_id !== sbUser?.id && (p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)).map(p => p.id));
+    const shared = new Set((_projekti || []).filter(p => p.korisnik_id === sbUser?.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)).map(p => p.id));
     const receivedCount = _serverPrimljenoUcitaj().filter(x => shared.has(x.projektId)).length;
-    if (tabs) tabs.innerHTML = [['send','Za slanje',q.length],['received','Primljeno',receivedCount],['problems','Problemi',problem.length]].map(([id,label,n]) => '<button role="tab" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')">'+label+' ('+n+')</button>').join('');
+    if (tabs) tabs.innerHTML = [['project','Vlake projekta',typeof _serverProjektModel==='function' ? _serverProjektModel().rows.length : 0],['send','Za slanje',q.length],['received','Primljeno',receivedCount],['problems','Problemi',problem.length]].map(([id,label,n]) => '<button role="tab" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')">'+label+' ('+n+')</button>').join('');
     return problem;
   }
   function serverPrepare(q) {
@@ -122,18 +123,22 @@
     const received = document.getElementById('data-server-received'), list = document.getElementById('syncq-list');
     if (received) received.hidden = serverTab!=='received';
     if (list) list.hidden = serverTab==='received';
-    const rows = serverTab==='problems' ? problem : q;
+    const project = document.getElementById('server-project-view');
+    if(project)project.hidden=serverTab!=='project';
+    if(list)list.hidden=serverTab==='received'||serverTab==='project';
+    const rows = serverTab==='problems' ? problem : q.filter(o=>typeof _SERVER_SAMO_LOKALNO==='undefined' || !_SERVER_SAMO_LOKALNO.has(o.type));
     serverPage = Math.max(0,Math.min(serverPage,Math.ceil(rows.length/size)-1));
     const nav = document.getElementById('data-server-pager');
-    if (nav) { nav.innerHTML=''; nav.hidden=serverTab==='received'; pager(nav,rows.length,serverPage,'_tabServerPage'); }
+    if (nav) { nav.innerHTML=''; nav.hidden=serverTab==='received'||serverTab==='project'; pager(nav,rows.length,serverPage,'_tabServerPage'); }
     const empty = document.getElementById('data-server-empty');
-    if (empty) { empty.hidden=serverTab==='received'||!!rows.length; empty.textContent=serverTab==='problems'?'Nema zabilježenih problema pri slanju.':'Nema operacija u redu. GPS tačke doznake prikazane su u sažetku iznad.'; }
+    if (empty) { empty.hidden=serverTab==='received'||serverTab==='project'||!!rows.length; empty.textContent=serverTab==='problems'?'Nema zabilježenih problema pri slanju.':'Nema operacija u redu. GPS tačke doznake prikazane su u sažetku iznad.'; }
     return rows.slice(serverPage*size,(serverPage+1)*size);
   }
   Object.assign(window, {_tabRemember:remember, _tabRestore:restore, _tabContext:context, _tabListPrepare:prepare, _tabPending:isPending, _tabRowStatus:status, _tabListRender:render, _tabFilter:filter, _tabPage:page, _tabChanged:changed, _tabServerPrepare:serverPrepare, _tabServerCounts:serverCounts, _tabColleagues:colleagues, _tabReveal:reveal,
     _tabColleaguePage(value) { sync(); state.colleaguePage=Math.max(0,value|0); rndKolegeVlakeList(); },
-    _tabServer(value) { serverTab=['send','received','problems'].includes(value)?value:'send'; serverPage=0; openSyncQueuePanel(); },
+    _tabServer(value) { serverTab=['project','send','received','problems'].includes(value)?value:'project'; serverPage=0; openSyncQueuePanel(); },
     _tabServerPage(value) { serverPage=Math.max(0,value|0); openSyncQueuePanel(); }
   });
   context();
 })();
+

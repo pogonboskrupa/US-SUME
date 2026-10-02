@@ -100,7 +100,7 @@ jobs:
       # raspakovati, instalirati. GitHub Release asset je JAVNO dostupan preko
       # stabilnog URL-a bez prijave — to omogućava "Ažuriraj aplikaciju" u Meniju
       # (AndroidUpdate.checkAndInstall, MainActivity.java) da automatski nađe
-      # najnoviju verziju preko /releases/latest API-ja i preuzme APK direktno.
+      # najnoviju verziju preko /releases?per_page=1 i preuzme APK direktno.
       - name: Izvuci versionName iz build.gradle
         id: verzija
         run: |
@@ -111,8 +111,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.verzija.outputs.verzija }}
+          target_commitish: ${{ github.sha }}
           name: v${{ steps.verzija.outputs.verzija }} (debug)
           prerelease: true
+          body: |
+            APK za ažuriranje kroz Meni → Ažuriraj aplikaciju.
+            Izvor: ${{ github.sha }}
+            JavaScript testovi i provjera SHA-256 web resursa u APK-u izvršavaju se prije objave.
           files: android/app/build/outputs/apk/debug/*.apk
           # Ako glob gore ne pogodi nijedan fajl (npr. build output struktura
           # se promijeni), akcija MORA pasti — bolje nego tiho objaviti release

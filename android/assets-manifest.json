@@ -1,5 +1,35 @@
 {
-  "files": ["index.html", "manifest.json", "sw.js", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "forwarder.svg", "GRANICE.kml", "PUTEVI/putevi.geojson"],
-  "directories": ["static"],
-  "required": ["static/js/offline-layer.js", "static/js/reliable-fetch.js", "static/js/field-store.js", "static/js/field-tools.js", "static/js/tab-data.js", "static/js/field-design.js", "static/css/field-design.css", "static/libs/leaflet.min.js", "static/libs/leaflet.min.css", "static/libs/proj4.js", "static/libs/turf.min.js", "static/libs/supabase.min.js", "static/libs/shapefile.min.js", "static/libs/sql-wasm.js", "static/libs/sql-wasm.wasm"]
+  "files": [
+    "index.html",
+    "manifest.json",
+    "sw.js",
+    "icon-192.png",
+    "icon-512.png",
+    "apple-touch-icon.png",
+    "forwarder.svg",
+    "GRANICE.kml",
+    "PUTEVI/putevi.geojson"
+  ],
+  "directories": [
+    "static"
+  ],
+  "required": [
+    "static/js/offline-layer.js",
+    "static/js/reliable-fetch.js",
+    "static/js/field-store.js",
+    "static/js/field-tools.js",
+    "static/js/tab-data.js",
+    "static/js/field-design.js",
+    "static/css/field-design.css",
+    "static/libs/leaflet.min.js",
+    "static/libs/leaflet.min.css",
+    "static/libs/proj4.js",
+    "static/libs/turf.min.js",
+    "static/libs/supabase.min.js",
+    "static/libs/shapefile.min.js",
+    "static/libs/sql-wasm.js",
+    "static/libs/sql-wasm.wasm",
+    "static/js/server-panel.js",
+    "static/css/server-panel.css"
+  ]
 }

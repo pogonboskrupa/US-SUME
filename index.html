@@ -4183,6 +4183,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 /* === KRAJ TRAGOVI I MJERENJE === */
 </style>
 <link rel="stylesheet" href="static/css/field-design.css">
+<link rel="stylesheet" href="static/css/server-panel.css">
 </head>
 <body>
 
@@ -5655,7 +5656,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.1';
+const APP_VER = 'v2.1.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6255,25 +6256,27 @@ function openSyncQueuePanel() {
     list.innerHTML = q.map((op, i) => {
       const lbl   = _OP_LABELS[op.type] || op.type;
       const nm    = op.payload?.nm || op.payload?.datum || op.payload?.naziv || '';
-      const ret   = op._retries ? `<span style="color:#f87171;font-size:10px"> (${op._retries} pokušaja)</span>` : '';
+      const ret   = op._retries ? `<span style="color:#f87171;font-size:10px"> (${_escHtml(String(op._retries))} pokušaja)</span>` : '';
       const age   = op.ts ? _fmtAgo(op.ts) : '';
       const odg   = op._blocked ? '<div style="font-size:10px;color:#fbbf24">⏸ više puta odbijeno — šalje se ponovo tek na "Pošalji na server"</div>' : '';
       const errTxt = op._lastErr ? `${op._lastErr.message || ''}${op._lastErr.code ? ' [' + op._lastErr.code + ']' : ''}` : '';
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1e293b;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">${lbl}${ret}</div>
+          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">${_escHtml(lbl)}${ret}</div>
           ${nm ? `<div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(String(nm))}</div>` : ''}
+          ${typeof _serverOpContext === 'function' ? _serverOpContext(op) : ''}
           ${errTxt ? `<div style="font-size:10.5px;color:#f87171;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_escHtml(errTxt)}">⚠ ${_escHtml(errTxt)}</div>` : ''}
           ${odg}
           ${age ? `<div style="font-size:10px;color:#475569">${age}</div>` : ''}
         </div>
-        <button onclick="_syncQueueDiscard('${op._qid ?? op.ts}')"
+        <button data-key="${_escHtml(String(op._qid ?? op.ts))}" onclick="_syncQueueDiscard(this.dataset.key)"
           style="border:none;background:none;color:#64748b;font-size:16px;cursor:pointer;flex-shrink:0;padding:4px 6px;"
           title="Odbaci operaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
       </div>`;
     }).join('');
   }
 
+  if (typeof _serverPanelRender === 'function') _serverPanelRender();
   if (bg)  bg.style.display  = 'block';
   pan.style.display = 'flex';
 }
@@ -6328,6 +6331,7 @@ function _serverSazetakRender() {
       : '<div style="font-size:13px;color:#4ade80">✓ Red za slanje je prazan.</div>') +
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
+  if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
   const b = document.getElementById('syncq-posalji');
   if (b) { b.disabled = _serverSaljem || !!serverPosalji._priprema; b.style.opacity = b.disabled ? '0.5' : '1'; }
 }
@@ -6423,6 +6427,7 @@ function _serverPrimljenoRealtime(row) {
     }
     _serverPrimljenoRtRows.clear();
     for (const [id,rows] of groups) _kvcSave(id,rows);
+    if (typeof _serverPanelRender==='function' && document.getElementById('syncq-panel')?.style.display==='flex') _serverPanelRender();
   },1000);
 }
 // Primijeni odgovor tek nakon svih stranica i provjere naloga. RLS ostaje
@@ -6437,7 +6442,19 @@ async function _vlakePreuzmiStranice(upit, owner) {
     if ((page.data || []).length < 100) return rows;
   }
 }
-async function serverPreuzmiDijeljeno() {
+// Preuzimanje vlastitog rada s drugog uređaja ne smije prepisati živu
+// lokalnu izmjenu koja čeka debounce, slanje ili završetak GPS snimanja.
+function _serverPrimijeniMojeVlake(rows,owner) {
+  const pending=_OL.loadQueue().filter(o=>o.type==='upsert_vlaka' && (!o._uid || o._uid===owner));
+  _applyVlakeRows(rows.filter(row=>{
+    if(row.korisnik_id!==owner)return false;
+    const i=vlake.findIndex(v=>v.sbId===row.id || v.nm===row.nm && v.projektId===row.projekt_id);
+    if(i<0)return true;
+    const busy=typeof _vlakaSaveTimers!=='undefined' && _vlakaSaveTimers[i] || typeof recOn!=='undefined' && recOn && actI===i;
+    return !busy && !pending.some(o=>o.payload?.id===row.id || o.payload?.nm===row.nm && o.payload?.projekt_id===row.projekt_id);
+  }));
+}
+async function serverPreuzmiDijeljeno(projektId) {
   if (_serverPrimljenoBusy || !sbUser || !sbProfile) return;
   if (navigator.onLine === false) { showToast('📴 Nema veze — prikazujem zadnje preuzete podatke'); return; }
   const owner = sbUser.id;
@@ -6455,7 +6472,7 @@ async function serverPreuzmiDijeljeno() {
     const result = ids.length ? await sb.from('projekti').select('*').in('id',ids) : {data:[]};
     if (result.error) throw result.error;
     if (sbUser?.id !== owner) return;
-    const projects = [...new Map([...(owned.data || []), ...(result.data || [])].map(p=>[p.id,p])).values()];
+    const projects = [...new Map([...(owned.data || []), ...(result.data || [])].map(p=>[p.id,p])).values()].filter(p=>!projektId || p.id===projektId);
     if (!projects.length) {
       for (const p of _projekti) if (p.korisnik_id!==owner) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
       _OL.save(_OL.PROJEKTI,_projekti);
@@ -6463,7 +6480,7 @@ async function serverPreuzmiDijeljeno() {
     }
     const rows = await _vlakePreuzmiStranice(() => {
       _mrezaSila(60000);
-      return sb.from('vlake').select('*').in('projekt_id',projects.map(p=>p.id)).neq('korisnik_id',owner);
+      return sb.from('vlake').select('*').in('projekt_id',projects.map(p=>p.id));
     }, owner);
     for (const p of _projekti) {
       if (p.korisnik_id!==owner && !ids.includes(p.id)) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
@@ -6476,8 +6493,12 @@ async function serverPreuzmiDijeljeno() {
       if (old) _projekti[_projekti.indexOf(old)] = value; else _projekti.push(value);
     }
     _OL.save(_OL.PROJEKTI,_projekti);
+    // Istom nalogu na drugom uređaju trebaju i njegove serverske vlake.
+    if (typeof _applyVlakeRows === 'function') _serverPrimijeniMojeVlake(rows,owner);
     for (const p of projects) {
-      if (_kvcSave(p.id,rows.filter(r=>r.projekt_id===p.id)) === false) throw new Error('Primljene vlake nisu sačuvane na telefonu');
+      const projektRows=rows.filter(r=>r.projekt_id===p.id);
+      if (_kvcSave(p.id,projektRows) === false) throw new Error('Primljene vlake nisu sačuvane na telefonu');
+      if (typeof _serverProjektPreuzeto === 'function' && _serverProjektPreuzeto(p.id,projektRows) === false) throw new Error('Pregled projekta nije sačuvan');
       // Prepusti glavnu nit između projekata — veći keš ne blokira dodir/GPS.
       await new Promise(r=>setTimeout(r,0));
       if (sbUser?.id !== owner) return;
@@ -6488,9 +6509,9 @@ async function serverPreuzmiDijeljeno() {
       if (sbUser?.id !== owner) return;
     }
     rndProjektiList();
-    showToast('✓ Preuzeto ' + rows.length + ' vlaka kolega');
+    showToast('✓ Preuzeto ' + rows.length + ' vlaka projekta');
   } catch(e) { showToast('⚠ Preuzimanje nije uspjelo — zadnji lokalni podaci ostaju dostupni'); }
-  finally { _serverPrimljenoBusy=false; _serverPrimljenoRender(); }
+  finally { _serverPrimljenoBusy=false; _serverPrimljenoRender(); if (typeof _serverPanelRender==='function') _serverPanelRender(); }
 }
 
 // Ručno slanje svega što čeka. Otvara kapiju samo dok slanje traje: svi
@@ -10459,7 +10480,7 @@ function _syncIbr() {
 
 function scheduleVlakaSave(i) {
   clearTimeout(_vlakaSaveTimers[i]);
-  _vlakaSaveTimers[i] = setTimeout(() => sbFlushVlaka(i), 2500);
+  _vlakaSaveTimers[i] = setTimeout(() => { delete _vlakaSaveTimers[i]; sbFlushVlaka(i); }, 2500);
 }
 
 // Odmah pošalji na server sve vlake koje čekaju debounced sačuvanje (2.5s timer).
@@ -10836,10 +10857,15 @@ function _kvcSave(projektId, rows) {
     rows.forEach(r => {
       if (!r.pts || r.pts.length < 2) return;
       const key = r.korisnik_id + '::' + r.nm;
-      all[projektId][key] = { id:r.id || null, updated_at:r.updated_at || null, nm: r.nm, korisnik_id: r.korisnik_id, pts: r.pts, boja: r.boja, ime: r.ime || null };
+      // Preimenovani serverski ID je ista vlaka, ne još jedna stara kopija.
+      if (r.id) for (const oldKey of Object.keys(all[projektId])) {
+        if (oldKey!==key && all[projektId][oldKey].id===r.id) delete all[projektId][oldKey];
+      }
+      all[projektId][key] = { ...r, id:r.id || null, ime:r.projektant_ime || r.ime || null, projekt_id:projektId };
     });
     localStorage.setItem(_KVC_KEY, JSON.stringify(all));
     _serverPrimljenoZapamti(projektId, rows);
+    if (typeof _serverProjektDopuni === 'function') _serverProjektDopuni(projektId,rows);
     return true;
   } catch(e) { return false; }
 }
@@ -10896,7 +10922,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     let dbData = null;
     try {
       dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
-        .select('id, updated_at, nm, korisnik_id, pts, boja, kr, na_putu')
+        .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev')
         .eq('projekt_id', akt.id), owner);
     } catch(e) {}
     if (!josAktivan() || dbData === null) return; // mrežni neuspjeh — zadrži postojeći prikaz
@@ -10926,7 +10952,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     // Pristup je ograničen projektom i RLS-om. Zastarjela lokalna lista
     // članova ne smije sakriti novu vlaku drugog člana istog projekta.
     dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
-      .select('id, updated_at, nm, korisnik_id, pts, boja, kr, na_putu')
+      .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev')
       .neq('korisnik_id',owner).eq('projekt_id',akt.id), owner);
   } catch(e) {} // offline — koristimo samo cache
   if (!josAktivan()) return;
@@ -42116,29 +42142,25 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
-<div id="syncq-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:70vh;max-height:70dvh;background:#0f172a;border-top:1px solid #334155;border-radius:16px 16px 0 0;z-index:4000;flex-direction:column;overflow:hidden;">
-  <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid #1e293b;flex-shrink:0;">
-    <span style="font-size:15px;font-weight:700;color:#e2e8f0;flex:1">☁ Server</span>
-    <button onclick="closeSyncQueuePanel()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-  </div>
-  <div id="syncq-sum" style="padding:12px 16px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>
+<div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Server i vlake projekta" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
+  <div class="sp-header"><div><b>☁ Server</b><small>Zajednički projekti i terenski podaci</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
+  <div class="sp-project-context"><label for="server-project-select">PROJEKAT</label><select id="server-project-select" onchange="_serverProjektSelect(this.value)"></select><div id="server-identity"></div></div>
+  <div id="syncq-sum"></div>
   <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
-  <div style="overflow-y:auto;flex:1;min-height:0;">
-    <div id="data-server-received" style="padding:12px 16px;border-bottom:1px solid #334155;">
-      <div id="syncq-primljeno"></div>
-      <button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button>
+  <div id="server-scroll" style="overflow-y:auto;flex:1;min-height:0;">
+    <div id="server-project-view">
+      <div id="server-project-summary"></div>
+      <div id="server-project-authors"></div>
+      <div class="sp-project-actions"><button id="server-project-refresh" onclick="_serverProjektRefresh()">↓ Osvježi server</button><button id="server-project-map" onclick="_serverProjektMap()">Na karti</button><button id="server-project-print" onclick="_serverProjektReport()">Ispis svih vlaka</button></div>
+      <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
+      <div id="server-project-list"></div><div id="server-project-pager"></div>
     </div>
-    <div id="syncq-list" style="padding:4px 0;"></div>
-    <div id="data-server-empty" class="data-context"></div>
-    <div id="data-server-pager"></div>
+    <div id="data-server-received" style="padding:12px 16px;" hidden><div id="syncq-primljeno"></div><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button></div>
+    <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
   </div>
-  <div style="padding:12px 16px 0;flex-shrink:0;">
-    <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid rgba(59,130,246,.5);background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
-  </div>
-  <div style="padding:10px 16px 12px;display:flex;gap:8px;flex-shrink:0;">
-    <button onclick="openSyncQueuePanel()" style="flex:1;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
-    <button onclick="_exportFieldRecovery()" style="flex:1;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#94a3b8;font-size:13px;cursor:pointer;">Izvezi oporavak</button>
-    <button onclick="_syncQueueClearAll()" style="padding:9px 14px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#f87171;font-size:13px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši sve</button>
+  <div class="sp-bottom"><p>Slanje je ručno i obuhvata sve projekte na ovom telefonu. Kolege vide tvoje izmjene nakon slanja.</p>
+    <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
+    <div class="sp-bottom-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div>
   </div>
 </div>
 
@@ -42240,6 +42262,6 @@ if (typeof AndroidDownload !== 'undefined') {
 [hidden]{display:none!important;}
 </style>
 <script src="static/js/tab-data.js"></script>
+<script src="static/js/server-panel.js"></script>
 </body>
 </html>
-

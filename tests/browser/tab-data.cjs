@@ -55,7 +55,7 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'../..');
    for(let i=0;i<80;i++)_OL.enqueue({type:'delete_vlaka',payload:{id:'del'+i},_lastErr:i===0?{message:'Odbijeno'}:undefined,_blocked:i===0});
    const q=_OL.loadQueue(true);q.push({type:'delete_vlaka',payload:{id:'foreign'},_uid:'other',_qid:'foreign'});
    localStorage.setItem(_OL.QUEUE,JSON.stringify(q));_OL.loadQueue(true);
-   openSyncQueuePanel();
+   openSyncQueuePanel();_tabServer('send');
   });
   assert.equal(await page.locator('#syncq-list > div').count(),60);
   assert.match(await page.locator('#data-server-tabs').innerText(),/Za slanje \(81\)/);
@@ -66,3 +66,4 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'../..');
   console.log(JSON.stringify({checks:21,cpuThrottle:4,vlake:240,colleagueVlake:180,...metrics,offline:true,pageErrors:errors.length,externalReviewRequests:external.length-startupRequests}));
  }finally{if(browser)await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

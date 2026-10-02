@@ -777,3 +777,39 @@ Commit koristi `[skip ci]` jer postojeći push workflow automatski objavljuje
 APK, a ovaj zahtjev je popravka koda. Potreban je naknadni puni APK build iz
 2.1.1 i terenska provjera: pošiljalac ručno pošalje T1 pa T2; primalac
 osvježi panel Server i provjeri obje vlake na karti, kao vlasnik i kao član.
+
+## 26. Server: zajednički pregled projekta — 2.1.2 / Android 482
+
+Korisnik traži završetak popravke, jasniji Server, projekat/projektanta,
+zajednički ispis svih vlaka sa dužinama, zatim izričito novu verziju za
+ažuriranje unutar aplikacije. Taj posljednji zahtjev autorizuje puni APK
+build i objavu kroz postojeći push workflow odabrane grane
+`CODEX-US-SUME-2026-10-01`; ovaj commit nema `[skip ci]`.
+
+`server-panel.js` i pripadajući CSS uvode početni tab Vlake projekta:
+izbor dostupnog projekta, prijavljeni projektant, broj vlaka, zbir zasebnih
+dužina, pregled i filter po projektantima, pretragu i paginaciju 60 redova.
+Puni HTML ispis obuhvata sve vlake odabranog projekta i zbir po autorima,
+nezavisno od pretrage/stranice/filtera. Iste oznake kod različitih autora
+ostaju zasebne; isti serverski ID nakon preimenovanja ne duplicira red.
+Geometrija bez dvije validne tačke nema lažnu nultu dužinu.
+
+Ručni refresh preuzima sve dozvoljene vlake odabranog projekta, uključujući
+vlastite sa drugih uređaja. Preuzimanje čuva lokalni debounce, queue i
+aktivno GPS snimanje. Izbor projekta u Serveru sam ne mijenja aktivnu kartu.
+Pregled ne šalje podatke automatski. Neposlane/stare kopije imaju vidljiv
+status; postojeće kopije koje nedostaju u novom odgovoru se ne brišu.
+Zadnje potpuno preuzimanje pamti se po nalogu/projektu, ne po globalnom
+telefonu; neispravni metapodaci ne ruše panel. Red slanja pokazuje kontekst
+projekta i autora, tekst i ključ u HTML-u su escapirani. Brojač Primljeno
+uključuje i vlastite projekte, lokalne operacije ne povećavaju broj slanja.
+
+Svi novi runtime resursi dodani su u SW i Android assets manifest.
+Objava APK-a koristi postojeći fiksni debug potpis; release tag sada
+izričito pokazuje commit koji je izgrađen umjesto default grane.
+Prolazi 71/71 JS testnih fajlova, uključujući 23 provjere novog panela,
+14 regresija slanja/preuzimanja, sintaksa pet inline blokova i tri modula.
+Pripremljen je browser fixture za dva izgleda i četiri širine; Chromium
+lokalno blokira sandbox i vizuelna provjera nije završena. Nema pristupa
+produkcijskoj Supabase bazi, migracije ni instalacije na stvarni telefon.
+Ishod GitHub APK builda/objave provjerava se odvojeno nakon pusha.
