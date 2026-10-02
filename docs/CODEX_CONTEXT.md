@@ -813,3 +813,13 @@ Pripremljen je browser fixture za dva izgleda i četiri širine; Chromium
 lokalno blokira sandbox i vizuelna provjera nije završena. Nema pristupa
 produkcijskoj Supabase bazi, migracije ni instalacije na stvarni telefon.
 Ishod GitHub APK builda/objave provjerava se odvojeno nakon pusha.
+
+Potvrđeno 2026-10-02: workflow `37047479985`, job `110972380755`, uspješan.
+Izgrađen commit `7bda9b0b5a7446af29a6eb32545d92c9e119a30e`, 71 JS
+testnih fajlova i APK SHA-256 provjera 29 web resursa prolaze. Najnoviji
+nedraft release `v2.1.2` sadrži `app-debug.apk` (21.617.963 bajta), stanje
+`uploaded`; tag pokazuje tačan izgrađeni commit. APK SHA-256:
+`b6201d75b3b3ab68a5a2de6b8b11580646299d05bb70aeae43a89d537b6d7edc`.
+Native updaterov `/releases?per_page=1` vraća ovu objavu; korisnik može
+pokrenuti Meni → Ažuriraj aplikaciju. Stvarna instalacija, vizuelni izgled
+i saradnja na dva fizička telefona nisu potvrđeni ovom CI provjerom.
