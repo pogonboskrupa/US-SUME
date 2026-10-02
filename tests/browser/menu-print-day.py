@@ -34,7 +34,7 @@ const isVodeci=()=>false,isSpdField=()=>false,getOdjelBounds=()=>null,showToast=
 const map={options:{zoomSnap:1},center:{lat:44.9,lng:16},zoom:13,getCenter(){return this.center;},getZoom(){return this.zoom;},setView(c,z){this.center=c;this.zoom=z;},invalidateSize(){}};
 ''' + '\n'.join(function(n) for n in ['_escHtml','_niceScaleLen','_fmtScaleLen','_menuIdentityRender','toggleMenuDropdown','closeMenuDropdown']) + '\n' + print_js
 javascript += '\n' + (ROOT / 'static/js/field-design.js').read_text()
-fixture = '<!DOCTYPE html><html lang="bs"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color"><style>' + styles + '''
+fixture = '<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color"><style>' + styles + '''
 #menu-btn{position:fixed;left:10px;top:8px;width:60px;height:44px;z-index:9999}
 #wrapper{position:fixed;inset:0}#main{position:absolute;inset:60px 0 65px}#map{position:absolute;inset:0;background:repeating-linear-gradient(30deg,#dce9d5 0 35px,#e9f1e4 36px 70px)}
 </style></head><body><div id="wrapper"><button id="menu-btn" onclick="toggleMenuDropdown(event)">Meni</button><div id="main"><div id="map">
@@ -69,6 +69,9 @@ async def main():
                 await page.wait_for_function('document.querySelector(".mdrop-brand img").complete')
                 assert await page.locator('#menu-user-label').inner_text() == 'Emina Projektant'
                 assert await page.locator('#menu-app-ver').inner_text() == 'Verzija v2.1.3'
+                assert await page.locator('.mdrop-brand b').inner_text() == 'US ŠUME · Vlake'
+                assert await page.locator('#menu-user-role').inner_text() == 'Projektant · Šumarija Bos.Krupa'
+                assert await page.locator('.mdrop-brand img').evaluate('(e)=>e.naturalWidth') == 192
                 dims = await page.evaluate('''()=>{const m=document.querySelector('#menu-dropdown'),f=document.querySelector('.mdrop-footer'),s=document.querySelector('.mdrop-sections');const b=m.getBoundingClientRect(),fb=f.getBoundingClientRect();return {left:b.left,right:b.right,bottom:b.bottom,footer:fb.bottom,scroll:s.clientHeight,width:m.clientWidth,content:m.scrollWidth};}''')
                 assert dims['left']>=0 and dims['right']<=width and dims['bottom']<=height, dims
                 assert dims['footer']<=height and dims['scroll']>40 and dims['content']<=dims['width'], dims
