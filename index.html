@@ -26202,7 +26202,7 @@ async function _pmOpenDetail(id) {
   _pmDetailId = id;
   document.getElementById('pm-list-wrap').style.display = 'none';
   document.getElementById('pm-detail').style.display = '';
-  document.getElementById('pm-back-btn').style.display = '';
+  document.getElementById('pm-back-btn').style.display = 'inline-flex';
   document.getElementById('pm-title').textContent = '📂 ' + (p.odjel || '—') + (p.gj ? ' · GJ ' + p.gj : '');
   document.getElementById('pm-body').scrollTop = 0;
   const d = document.getElementById('pm-detail-body');
