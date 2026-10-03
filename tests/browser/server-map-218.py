@@ -25,7 +25,7 @@ extra+='''
 _locFotos.push({marker:_buildFotoMarker(44.902,16.002,'','',0,1,true)});
 _sharedFotos.push({marker:_buildFotoMarker(44.903,16.002,'','',1,2,false)});
 _createTacka(44.904,16.002,'Test');
-textLabels.push({marker:L.marker([44.905,16.002]).addTo(map)});
+textLabels.push({marker:L.marker([44.905,16.002],{icon:L.divIcon({html:'Oznaka'})}).addTo(map)});
 _msrRegistry.push({id:'m'});_msrSavedLayer.addLayer(L.polyline([[44.904,16.001],[44.905,16.001]]));
 _tragRegistry.push({id:'t',pts:[[44.902,16.003],[44.905,16.003]],visible:true});_tragRegAddLayer(_tragRegistry[0]);
 map.setView([44.9005,16],16,{animate:false});_tvVisibilityRender();
@@ -44,7 +44,9 @@ async def main():
    path=r.request.url.split('ui.test',1)[1].split('?',1)[0]
    if path=='/':await r.fulfill(content_type='text/html',body=fixture)
    elif path.startswith('/static/libs/'):
-    f=b.ROOT/path.lstrip('/');await r.fulfill(content_type=mimetypes.guess_type(str(f))[0] or 'application/octet-stream',body=f.read_bytes())
+    f=b.ROOT/path.lstrip('/')
+    if f.is_file():await r.fulfill(content_type=mimetypes.guess_type(str(f))[0] or 'application/octet-stream',body=f.read_bytes())
+    else:await r.fulfill(status=404,body='fixture only')
    else:await r.fulfill(status=404,body='fixture only')
   await page.route('**/*',route);await page.goto('https://ui.test/')
   assert not errors,errors
