@@ -136,7 +136,8 @@ async def main():
                 await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=e.scrollHeight')
                 await page.screenshot(path=str(OUT/f'server-project-{theme}-{width}-{height}.png'))
                 await page.evaluate("_tabServer('sent')")
-                await page.locator('#server-sent-items summary').first.click()
+                group=page.locator('#server-sent-items details').first
+                if not await group.evaluate('(e)=>e.open'):await group.locator('summary').click()
                 assert 'Vlaka · T1' in await page.locator('#server-sent-items').inner_text()
                 await page.screenshot(path=str(OUT/f'server-sent-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeSyncQueuePanel()')
