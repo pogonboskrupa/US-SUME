@@ -146,7 +146,9 @@ async def main():
             await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
             for width,height in [(320,568),(390,650),(768,800),(568,320)]:
                 await page.set_viewport_size({'width':width,'height':height})
-                await page.evaluate("map.closePopup();map.invalidateSize();map.fitBounds(kmlLs[0].grp.getBounds(),{animate:false});_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],kmlLs[0].grp.getBounds().getCenter())")
+                await page.evaluate("map.closePopup()")
+                await page.locator(".kml-info-popup").wait_for(state="detached")
+                await page.evaluate("map.invalidateSize();map.fitBounds(kmlLs[0].grp.getBounds(),{animate:false});_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],kmlLs[0].grp.getBounds().getCenter())")
                 await page.get_by_role('button',name='Stil fajla',exact=True).click()
                 await page.wait_for_timeout(400)
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
@@ -162,7 +164,9 @@ async def main():
         assert await page.locator('.le-popup').is_visible()
         await page.evaluate("_layerStyleChange(0,'dash','6 4');_layerStyleChange(0,'dash','');_layerStyleChange(0,'col','#8b5cf6');_layerStyleChange(0,'weight',4);_layerStyleChange(0,'fill',true);_layerStyleChange(0,'fillOpacity',45)")
         assert await page.evaluate('kmlLs[0].grp.getLayers()[0].options.dashArray') is None
-        await page.evaluate("map.closePopup();_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],map.getCenter());_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")
+        await page.evaluate("map.closePopup()")
+        await page.locator(".kml-info-popup").wait_for(state="detached")
+        await page.evaluate("_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],map.getCenter());_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")
         await page.locator('.le-fields input').fill('Čuvar <b>105</b>')
         await page.locator('.le-fields textarea').fill('Nova napomena & opis')
         await page.evaluate('_kmlPopSave(kmlLs[0].grp.getLayers()[0]._kmlPopupId)')
