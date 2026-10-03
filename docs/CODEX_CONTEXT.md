@@ -1233,3 +1233,17 @@ Browser map-library-219.py provjerava pravi Leaflet, filter/grupni prikaz,
 KML uređivanje, Server proširenje i klik te osam veličina/tema.
 CI/APK ishod slijedi nakon izgradnje. Produkcijski Supabase i stvarni Android
 uređaj nisu korišteni za ove provjere.
+
+2.1.9 potvrđeno objavljena: workflow **37151708190** (svi koraci uspješni),
+release/tag v2.1.9 na **d535e0fc86917d73f074e7c32c794a6a7a2d10f3**.
+app-debug.apk **21.694.789 B**, SHA256
+**0eea77d11dfd032ac728ea45beae287373ab55e000b2b0912c657acd2f862cd6**.
+Javni APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.1.9/app-debug.apk
+CI prošli 77 JS test fajlova, četiri browser skripte, build i SHA256 provjera
+svih **34** web assets. UI artefakt **11284028702**, 108 PNG i print PDF.
+Pregledani library-day-320-568, library-dark-568-320 i server-grouped-day-390.
+Dva prethodna pokušaja stala su na starim browser očekivanjima: sadržaj
+zatvorenih grupa je skriven; već otvorena grupa se pri sljedećoj temi ne
+smije klikom zatvoriti prije provjere. Ispravke su samo u browser testu;
+isti funkcionalni kod je prošao konačnu provjeru i izgradnju.
+Nije testirana fizička instalacija na Androidu niti produkcijski Supabase.
