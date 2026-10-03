@@ -1063,7 +1063,7 @@ ovim fixture-ima; produkcijska baza i uređaji nisu mijenjani.
 
 ## 31. Server, uređivanje KML-a i povratak na roditelja — 2.1.7
 
-Web/SW/Android 2.1.7, versionCode 487. Preuzimanje projekata/vlaka i
+Web/SW/Android 2.1.7, versionCode 487. Preuzimanje vlaka i
 članova/zona doznake ide do prazne stranice, s pomakom po stvarnom broju
 redova. Kraća stranica više ne znači kraj ako je serverski max-rows manji
 od traženog. Dostizanje sigurnosnog limita vraća grešku, ne nepotpun uspjeh.
@@ -1105,3 +1105,42 @@ fixture proširen pravim Leaflet popupom, stilom i lokalnim DOMParser/IDB
 čuvanjem naziva/opisa, obnovom i provjerom osam veličina/tema. Ishod CI-ja,
 APK i vizuelni pregled bit će dopisani nakon izgradnje. Produkcijski
 Supabase/RLS i fizički Android GPS nisu testirani ovim provjerama.
+
+Potvrđeno 2026-10-03: finalni commit 2.1.7
+`703d3d6acbf331abe5f3f6f88e6bd4adf401b1fa`, workflow `37100908878`, job
+`111140090410` uspješan. 76 JS fajlova, browser provjere i provjera 31 APK
+resursa prolaze. U toku provjere ispravljeno ponovno postavljanje popup
+HTML-a, preklapanje s koordinatama i animacija pri uvozu; web/SW/Android
+verzije su provjerene na 2.1.7. Sačuvano 83 PNG + PDF artefakta; vizuelno
+pregledani ključni KML/Server prikazi i PDF.
+Release v2.1.7 sadrži uploaded app-debug.apk, 21.663.365 bajta, code 487;
+tag pokazuje finalni commit, updater vidi novu verziju. SHA-256:
+`fdce2c3f2457731bf3769c7fcaa99c8c2caf5432804c81ce584e3ff7615b9ec3`.
+Nakon objave započet je korisnikov odvojeni pregled u tri uzastopna dijela:
+`docs/ANALIZA_KODA_2026-10-03.md`. Novi nalazi u tom izvještaju nisu
+samoinicijativno popravljani.
+
+## 32. Završen pregled koda u tri dijela — 2026-10-03
+
+`docs/ANALIZA_KODA_2026-10-03.md` sadrži redom završene dijelove: lokalni
+podaci/GPS, server/saradnja, karte/UI/ažuriranja. Za svaki su navedeni
+pregledani tokovi, dobro ponašanje, problemi, preporuke i granice provjere.
+`node docs/audit/reprodukcije.cjs` potvrđuje 9 nalaza nad stvarnim izdvojenim
+funkcijama uz lažne zavisnosti. Argument 1, 2 ili 3 bira pojedinačni dio.
+Skripta očekuje postojeće kvarove; nije dokaz da su popravljeni.
+
+P1: A1 završetak vlake ignorira false potvrdu upisa i briše snapshot;
+A2 nastavak od sredine odmah odsijeca ostatak; B1 23505 nekritički potvrđuje
+ID zone; C1 drugi poziv `_localKmlSaveAll()` iz settera briše neučitan sloj;
+C4 IDB kvar pune fotografije ostaje skriven iza poruke dodavanja.
+P2: B2 početne liste projekata/članstva nisu paginirane (paginacija vlaka
+ne pokriva te upite); B3 max-rows manji od 1000 može zaobići detekciju
+postojeće GPS tačke; C2 cache.put odbijanje nije uhvaćeno; C3 stari rezultat
+rute poništi novi izbor nakon otkazivanja. B1/B3 uticaj u produkciji zavisi
+i od constraint-a baze. Kasnije SQL migracije zatvaraju raniji samoupis
+članstva; stara politika nije prijavljena kao aktuelan kvar.
+
+Funkcionalni kod nije mijenjan tokom ovog pregleda, prema uputi AGENTS.md.
+Verzija ostaje 2.1.7 / 487. Produkcijski Supabase i fizički Android uređaj
+nisu korišteni za reprodukcije. Izvještaj nije revizija svake linije niti
+zasebnih Flutter/Python proizvoda u repozitoriju.
