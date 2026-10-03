@@ -1296,3 +1296,26 @@ Uska CSS ispravka koristi field-ink i čitljiv odabrani stil. Web/SW/Android
 2.2.1, code 491. Browser dodaje provjeru istog kontrasta naziva i konteksta;
 fixture i mjerenje čitaju stvarnu verziju iz izvora. Funkcionalni tokovi boja
 i slanja nisu mijenjani ovom završnom ispravkom. Konačni CI ishod slijedi.
+
+2.2.1 potvrđeno objavljena: workflow **37156338599**, svi koraci uspješni,
+release/tag na **5e8163dee7aa39382aca3b78ae7e82185019c758**. APK
+**21.707.777 B**, SHA256
+**c044c74abc052e60632ee61e7f068089227f5bc40a28d0ad8d1b5e9b6deaecf8**.
+https://github.com/pogonboskrupa/US-SUME/releases/download/v2.2.1/app-debug.apk
+78 JS fajlova, pet browser skripti, 34 web assets SHA256 i APK build prošli.
+UI artefakt **11285907703**; pregledan project-colors-day-320-568 i potvrđen
+kontrast, prethodno pregledani spisak i horizontalne upute 2.2.0.
+Prvi 2.2.0 CI zastao na zaostaloj vlaci T1 iz reda slanja osnovnog fixture-a;
+izolacija testnog reda dala uspješan 37155897278. Funkcionalni kod boja ostao isti.
+
+Analiza nakon objave: artefakt **11285492647**, svih 36 uzoraka u
+`docs/performance/redmi-note-13-pro-2.2.1.json`, tumačenje u
+`docs/ANALIZA_BRZINE_REDMI_NOTE_13_PRO_2026-10-03.md`. CPU 4x: učitavanje
+10k tačaka 54.9/59.4ms online/offline, 50k 220.4/226.2ms, 100k 353.4/360.9ms.
+Bez stvarne mreže/GPS-a/pločica/punog startup-a/native mosta/telefona. CPU4x
+ije usporavanje desktopa, nije emulacija Redmi procesora.
+Važan potvrđen nalaz: generisani JSON 100k tačaka ~5.4MB, prikaz uspijeva,
+_saveLocalVlake ne uspijeva ni u jednom ponavljanju (quota). 10k i 50k prolaze.
+To nije univerzalni limit broja tačaka niti dokaz server greške; dokumentovan
+prioritet preseljenja velikog lokalnog keša u IndexedDB, bez neodobrene migracije.
+Fizički Android i produkcijski Supabase nisu korišteni.
