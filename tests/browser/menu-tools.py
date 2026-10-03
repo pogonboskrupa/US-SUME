@@ -145,9 +145,10 @@ async def main():
             await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
             for width,height in [(320,568),(390,650),(768,800),(568,320)]:
                 await page.set_viewport_size({'width':width,'height':height})
-                await page.evaluate("map.closePopup();map.invalidateSize();map.fitBounds(kmlLs[0].grp.getBounds());_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],kmlLs[0].grp.getBounds().getCenter())")
+                await page.evaluate("map.closePopup();map.invalidateSize();map.fitBounds(kmlLs[0].grp.getBounds(),{animate:false});_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],kmlLs[0].grp.getBounds().getCenter())")
                 await page.get_by_role('button',name='Stil fajla',exact=True).click()
                 await page.wait_for_timeout(400)
+                await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
                 await bounds(page,'.leaflet-popup-content',width,height)
                 await bounds(page,'#nv-badge',width,height)
                 assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
