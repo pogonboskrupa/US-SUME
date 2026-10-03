@@ -5666,7 +5666,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.6';
+const APP_VER = 'v2.1.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -23555,7 +23555,7 @@ function _kmlOpenPopup(layer, latlng) {
   if (_dozKmlSelMode && layer._kmlIsPolygon) { _dozKmlSelToggle(layer); return; }
   const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
   layer._kmlPopupId = uid;
-  L.popup({ maxWidth: 300, minWidth: 200, keepInView: true, className: 'kml-info-popup' })
+  L.popup({ maxWidth: 300, minWidth: 200, keepInView: true, autoPanPaddingTopLeft: [12,56], autoPanPaddingBottomRight: [12,12], className: 'kml-info-popup' })
     .setLatLng(latlng)
     .setContent(_kmlPopupHtml(layer, uid))
     .openOn(map);

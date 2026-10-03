@@ -49,11 +49,11 @@ function _layerPopupHtml(layer,uid) {
 function _layerPopupLayout() {
   const popup=map._popup;if(!popup)return;
   const element=popup.getElement(),content=element?.querySelector('.leaflet-popup-content');
-  if(content)content.style.maxHeight=Math.max(80,Math.min(500,window.innerHeight*.64,map.getSize().y-64))+'px';
+  if(content)content.style.maxHeight=Math.max(80,Math.min(500,window.innerHeight*.64,map.getSize().y-100))+'px';
   popup._updateLayout();popup._updatePosition();
   // Mjeri stvarni prozor nakon proširenja; CSS max-height nije Leaflet maxHeight.
-  const box=element.getBoundingClientRect(),area=map.getContainer().getBoundingClientRect(),pad=12;
+  const box=element.getBoundingClientRect(),area=map.getContainer().getBoundingClientRect(),pad=12,topPad=56;
   const dx=box.left<area.left+pad?box.left-area.left-pad:Math.max(0,box.right-area.right+pad);
-  const dy=box.top<area.top+pad?box.top-area.top-pad:Math.max(0,box.bottom-area.bottom+pad);
+  const dy=box.top<area.top+topPad?box.top-area.top-topPad:Math.max(0,box.bottom-area.bottom+pad);
   if(dx||dy)map.panBy([dx,dy],{animate:false});
 }

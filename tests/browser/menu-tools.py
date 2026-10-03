@@ -154,6 +154,7 @@ async def main():
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
                 assert not errors,errors
                 await bounds(page,'.leaflet-popup-content',width,height)
+                assert await page.locator('.kml-info-popup').evaluate('(e)=>e.getBoundingClientRect().top')>=55
                 await bounds(page,'#nv-badge',width,height)
                 assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
