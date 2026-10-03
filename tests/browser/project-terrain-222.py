@@ -7,6 +7,7 @@ u=importlib.util.module_from_spec(spec);spec.loader.exec_module(u);b=u.b
 code='\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_aspColor','_instUpdateStats','_instClear','_mapFavRender','openMapFavs','closeMapFavs','_mapFavThumbHtml','_tileThumbUrl','setLayerSqlite','_saveLastMap'])
 code+='''
 const _TERR_CACHE='fixture-terr-222',_ELEV_CACHE='fixture-elev-222',_LASTMAP_KEY='fixture-last';
+activeTool='select'; // isto početno stanje kao aplikacija; osnovni popup fixture ima null
 const _OVL={slope:L.layerGroup(),ekspo:L.layerGroup()},_fetchT=(url,ms,opts)=>fetch(url,opts);
 let confirmHook=async()=>true;const _dlgConfirm=(...args)=>confirmHook(...args);
 const TL={Topo:L.layerGroup().addTo(map)},_sqlLayers=[{name:'Odjel 105 — kompletna lokalna karta',fmt:'mbtiles',layer:L.layerGroup(),visible:false},{name:'Odjel 2',fmt:'gpkg',layer:L.layerGroup(),visible:false}];
@@ -49,7 +50,7 @@ async def main():
    else:await r.abort()
   await page.route('**/*',route);await page.goto('https://ui.test/');await page.evaluate('terrainReady');assert not errors,errors
   assert await page.locator('#project-terrain-slope').is_disabled()
-  await page.click('#project-polygon-draw');assert await page.evaluate('ProjectTerrain.isDrawing()')
+  await page.click('#project-polygon-draw');assert await page.evaluate('ProjectTerrain.isDrawing()'),await page.evaluate('({activeTool,recOn,_msrOn,_guideOn,textToolOn})')
   await page.click('#map',position={'x':110,'y':100});assert '1 tačaka' in await page.locator('#project-draw-count').inner_text();await page.click('#project-draw-undo')
   await page.evaluate('polyRing.forEach(p=>map.fire("click",{latlng:L.latLng(p)}))');await page.click('#project-draw-undo')
   assert await page.evaluate('ProjectTerrain.isDrawing()');assert '3 tačaka' in await page.locator('#project-draw-count').inner_text()
