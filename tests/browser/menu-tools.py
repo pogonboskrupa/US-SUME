@@ -152,6 +152,11 @@ async def main():
                 await bounds(page,'#nv-badge',width,height)
                 assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
+        await page.locator('.le-swatch[aria-label=\"Boja #8b5cf6\"]').click()
+        assert await page.locator('.le-popup').is_visible()
+        await page.get_by_role('button',name='Isprekidana',exact=True).click()
+        await page.get_by_role('button',name='Puna',exact=True).click()
+        assert await page.locator('.le-popup').is_visible()
         await page.evaluate("_layerStyleChange(0,'dash','6 4');_layerStyleChange(0,'dash','');_layerStyleChange(0,'col','#8b5cf6');_layerStyleChange(0,'weight',4);_layerStyleChange(0,'fill',true);_layerStyleChange(0,'fillOpacity',45)")
         assert await page.evaluate('kmlLs[0].grp.getLayers()[0].options.dashArray') is None
         await page.evaluate("map.closePopup();_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],map.getCenter());_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")

@@ -36,7 +36,7 @@ function _layerEditorHtml(i) {
 function _layerPopupHtml(layer,uid) {
   const esc=s=>_escHtml(String(s??'')),i=_kmlPopFindIdx(uid),k=kmlLs[i],attrs=Object.entries(layer._kmlExtData||{});
   const type=layer._kmlIsPolygon?'Poligon':layer._kmlIsPoint?'Tačka':'Linija';
-  return '<article class="le-popup"><header class="le-heading"><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
+  return '<article class="le-popup" onclick="event.stopPropagation()"><header class="le-heading"><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
     (layer._kmlDesc?'<p class="le-description">'+esc(layer._kmlDesc)+'</p>':'')+
     '<div class="le-actions"><button type="button" onclick="_kmlPopEditStart(\''+uid+'\')">Naziv i opis</button><button type="button" onclick="_kmlPopStyleToggle(\''+uid+'\')">Stil fajla</button><button type="button" onclick="_kmlPopZoom(\''+uid+'\')">Približi</button></div>'+
     '<div id="'+uid+'-edit" class="le-fields" style="display:none"><label>Naziv objekta<input id="'+uid+'-name-in" maxlength="160" value="'+esc(layer._kmlName)+'"></label><label>Opis / napomena<textarea id="'+uid+'-desc-in" rows="3" maxlength="2000">'+esc(layer._kmlDesc)+'</textarea></label><small>'+(k?._key?'Izmjena naziva i opisa važi za ovaj prikaz server fajla.':'Naziv i opis čuvaju se u lokalnom fajlu.')+'</small><div class="le-actions"><button type="button" onclick="_kmlPopSave(\''+uid+'\')">'+(k?._key?'Primijeni':'Sačuvaj')+'</button><button type="button" onclick="_kmlPopCancel(\''+uid+'\')">Odustani</button></div></div>'+
