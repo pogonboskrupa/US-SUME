@@ -23555,7 +23555,7 @@ function _kmlOpenPopup(layer, latlng) {
   if (_dozKmlSelMode && layer._kmlIsPolygon) { _dozKmlSelToggle(layer); return; }
   const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
   layer._kmlPopupId = uid;
-  L.popup({ maxWidth: 300, minWidth: 200, className: 'kml-info-popup' })
+  L.popup({ maxWidth: 300, minWidth: 200, keepInView: true, className: 'kml-info-popup' })
     .setLatLng(latlng)
     .setContent(_kmlPopupHtml(layer, uid))
     .openOn(map);

@@ -141,7 +141,7 @@ async def main():
         assert '<innerBoundaryIs>' in data['backup']['Odjeli.kml']['content'] and 'content' not in data['meta']['Odjeli.kml']
         await page.evaluate('closeLayerImport()');await page.screenshot(path=str(OUT/'shp-converted-map.png'))
         await page.evaluate("document.querySelector('#nv-val').textContent='532 m';document.querySelector('#omgi-y').textContent='6501234';document.querySelector('#omgi-x').textContent='4978901';document.querySelector('#map-scale-val').textContent='25 000'")
-        await page.evaluate('''()=>{window.panDebug=[];const orig=map.panBy.bind(map);map.panBy=function(offset,options){const before=map._popup?.getElement()?.getBoundingClientRect().toJSON();const result=orig(offset,options);panDebug.push({offset,options,before,after:map._popup?.getElement()?.getBoundingClientRect().toJSON()});return result;};}''')
+        await page.wait_for_function('!map._animatingZoom && !(map._panAnim && map._panAnim._inProgress)')
         for theme in ['day','dark']:
             await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
             for width,height in [(320,568),(390,650),(768,800),(568,320)]:
@@ -151,8 +151,6 @@ async def main():
                 await page.wait_for_timeout(400)
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
                 assert not errors,errors
-                print('PAN',await page.evaluate('panDebug'),flush=True)
-                print('POPUP',await page.evaluate('({size:map.getSize(),box:map.getContainer().getBoundingClientRect().toJSON(),popup:map._popup.getElement().getBoundingClientRect().toJSON(),pos:map._popup._containerBottom,pan:map._getMapPanePos(),anim:map._panAnim?._inProgress})'),flush=True)
                 await bounds(page,'.leaflet-popup-content',width,height)
                 await bounds(page,'#nv-badge',width,height)
                 assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
