@@ -1247,3 +1247,43 @@ zatvorenih grupa je skriven; već otvorena grupa se pri sljedećoj temi ne
 smije klikom zatvoriti prije provjere. Ispravke su samo u browser testu;
 isti funkcionalni kod je prošao konačnu provjeru i izgradnju.
 Nije testirana fizička instalacija na Androidu niti produkcijski Supabase.
+
+## 35. Boje i zajednički pregled aktivnog projekta, Meni i upute — 2.2.0
+
+Web/SW/Android 2.2.0, versionCode 490 (prelaz poslije 2.1.9).
+Korisnik traži da postavke Boje vlaka za aktivni projekat odmah važe i za
+vlastite i kolegine glavne/krake, zajednički numerički spisak s projektantom,
+novi dizajn Snimi vlaku, ulaz Instalirane karte u Meniju i ažurirane upute.
+
+Postavke su lokalne po korisniku/projektu (`tvlake_projekt_boje_v2_...`), sa
+čitanjem legacy stilova kao osnovom. Promjena odmah stilizira već učitane
+polilinije; primjenjuje se i nakon obnove/aktivacije/preuzimanja/realtime-a.
+Izvorna boja/koordinate vlake i kolegini serverski podaci se ne prepisuju.
+Glavne/kraci imaju odvojene boje; debljina/dash važe i za kolege. Bez aktivnog
+projekta kontrole su onemogućene; greška memorije ne daje lažan uspjeh.
+Zajednički spisak u Projekat tabu spaja serverski lokalni model i živi prikaz
+kolega, razlikuje autore kod istog naziva, izostavlja adminovu duplu vlastitu
+kopiju i sortira T1.2/T1.10/T2/T10 numerički. Svaki red ima projektanta,
+dužinu i klik na kartu; duži spisak ima Prikaži još. Kolegina lista također
+numerički sortira i ispisuje escapiranog projektanta na svakom redu.
+
+Snimi vlaku je primarno dugme sa ikonom, opisom GPS snimanje i oznakom vlake,
+uz isti postojeći tok biranja/snimanja. Instalirane karte otvaraju postojeći
+Instalirane podtab prozora slojeva, bez dupliranja mehanizma karata.
+Upute ažuriraju DENDRO MAP, pripremu terena, Boje i spisak, novi preglednik,
+KML/SHP, ručno slanje/prijem, GPS doznaku, kameru, Dnevni mod i print opise.
+Uklonjene pogrešne tvrdnje o automatskom slanju ručnih vlaka/GPS doznake.
+
+Lokalno prošlo 78 JS test fajlova i pet inline skripti. Nova browser skripta
+provjerava stvarni Leaflet stil vlastitih/koleginih linija, realtime, lokalne
+preferencije na reloadu bez mreže, numeraciju, Snimi dugme, instalirani tab i
+upute kroz 8 kombinacija veličine/teme. Fixture reload je lokalni test preferencija,
+ne dokaz kompletnog startup-a APK-a. CI/APK ishod slijedi.
+
+Nakon objave korisnik traži analizu brzine za Redmi Note 13 Pro (online/offline).
+`tests/browser/performance-redmi.py` se izvršava POSLIJE objave APK-a i bilježi
+realni Leaflet Canvas, aktualne boje/listu i _saveLocalVlake, 100/500 vlaka i
+10k/50k/100k tačaka, 3 ponavljanja, CPU 1x/4x, navigator online/offline.
+CPU 4x nije emulacija Redmi procesora. Ne mjeri GPS, backend, pločice, pun
+startup, sve labele niti native most. Zaseban JSON artefakt služi kao dokaz,
+a analiza mora navesti ove granice i ne izmišljati vremena stvarnog telefona.

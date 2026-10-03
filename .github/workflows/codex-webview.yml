@@ -38,6 +38,7 @@ jobs:
           python tests/browser/menu-tools.py
           python tests/browser/server-map-218.py
           python tests/browser/map-library-219.py
+          python tests/browser/project-vlake-220.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -143,3 +144,12 @@ jobs:
           # softprops/action-gh-release je idempotentan po tag_name-u — isti
           # versionName u više commit-ova (npr. popravka bez bump-a verzije)
           # samo AŽURIRA postojeći release/asset, ne pada na "tag already exists".
+
+      - name: Analiza brzine poslije objave APK-a
+        run: python tests/browser/performance-redmi.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Analiza-brzine-${{ github.sha }}
+          path: outputs/performance/
+          if-no-files-found: ignore

@@ -4861,8 +4861,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </div>
 
       <!-- BOJE VLAKA -->
-      <div class="sec">
+      <div class="sec proj-akt-only project-colors">
         <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
+        <p id="boja-project-context"></p><p class="project-vl-note">Boje i stil svih glavnih vlaka i krakova ovog projekta, uključujući kolege. Postavke prikaza pamte se na tvom telefonu.</p>
         <div style="display:flex;flex-direction:column;gap:10px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <span style="font-size:13px;color:#e2e8f0;">Glavna vlaka</span>
@@ -4895,6 +4896,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </div>
       </div>
+
+      <section class="sec proj-akt-only project-vlake"><div class="sec-t">Vlake aktivnog projekta</div><p class="project-vl-note">Od manjeg ka većem broju · vlastite i kolegine vlake zajedno</p><small id="project-vlake-count"></small><div id="project-vlake-list"></div><button id="project-vlake-more" class="btn" onclick="_projektVlakeMore()" hidden>Prikaži još</button></section>
 
       <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
       <div class="sec proj-akt-only">
@@ -5669,7 +5672,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.9';
+const APP_VER = 'v2.2.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7813,6 +7816,7 @@ async function doLogout() {
   kmlLs.forEach(k => { if (k.grp) try { map.removeLayer(k.grp); } catch(e) {} });
   kmlLs = [];
   if(typeof _serverPreviewClose==='function')_serverPreviewClose();
+  if(typeof _projektVlakePreviewClose==='function')_projektVlakePreviewClose();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
   // dobija nazad kroz _temRestore; promjena korisnika ih briše kroz _wipeAllLocalUserData)
   try { _temRemoveAll(true); } catch(e) {}
@@ -9427,7 +9431,7 @@ function _pdToggleStats() {
   }
   const p = _projekti.find(x => x.id === _pdProjektId);
   if (!p) return;
-  const rows = vlake
+  const rows = (_pdProjektId===_aktivniProjektId&&typeof _projektVlakeRows==='function'?_projektVlakeRows().map(r=>({nm:r.nm,br:r.br,kr:r.kr??(r.nm.includes('.')?1:0),pts:r.pts||[],lager:r.lager,projektId:_pdProjektId,projektantIme:r.ime})):vlake)
     .filter(v => v.projektId === _pdProjektId && v.pts.length >= 2)
     .map(v => ({ nm: v.nm, br: v.br, kr: v.kr, pts: v.pts, lager: v.lager, projektant_ime: v.projektantIme }));
   sec.innerHTML = rows.length
@@ -9668,6 +9672,7 @@ async function aktivirajProjekt(id) {
   if (typeof _tabRestore === 'function') _tabRestore(_activeTab);
   _updFabVisibility();
   _updVlakeMapVisibility();
+  if(typeof _rndBojaPresets==='function')_rndBojaPresets();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel, p.gj);
   await sbLoadKolegeVlake();
   sbStartRealtime();
@@ -10428,6 +10433,7 @@ function _updPdVlakeBtn(id) {
 }
 
 function _updVlakeMapVisibility() {
+  if(typeof _vlakaStilApply==='function')_vlakaStilApply();
   const hidden = _getHiddenProjektIds();
   // Pokupi br-ove vlaka koje pripadaju skrivenim projektima (matične + krakovi)
   const hiddenBrs = new Set();
@@ -10942,7 +10948,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     kolegeLabels.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
     kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
   };
-  const rndList = () => { if (typeof rndKolegeVlakeList === 'function') rndKolegeVlakeList(); };
+  const rndList = () => { if(typeof _vlakaStilApply==='function')_vlakaStilApply();if (typeof rndKolegeVlakeList === 'function') rndKolegeVlakeList(); };
 
   // Admin/vodeći nadzorni pregled: prikaži SVE vlake aktivnog projekta (svih korisnika)
   if ((isAdmin() || isVodeci()) && akt) {
@@ -10964,7 +10970,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
         { color, weight: 3, opacity: 0.7, dashArray: kid === sbUser?.id ? null : '10,6', interactive: true }).addTo(map);
       poly.bindTooltip(_escHtml(`${info.ime}: ${row.nm}`), { sticky: true, opacity: 0.85 });
       kolegeVlake.push(poly);
-      kolegeVlakeMap[mapKey] = { poly, color, pts: row.pts, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, na_putu: !!row.na_putu };
+      kolegeVlakeMap[mapKey] = { poly, color, pts: row.pts, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, na_putu: !!row.na_putu };
       attachPolyClick(poly, mapKey);
     });
     rndList();
@@ -11026,7 +11032,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     kolegeVlake.push(poly);
     const labels = _placeLabelMarkers(row.pts, row.nm, 498);
     labels.forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[mapKey] = { poly, color, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, pts: row.pts || [], labels, na_putu: !!row.na_putu };
+    kolegeVlakeMap[mapKey] = { poly, color, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, pts: row.pts || [], labels, na_putu: !!row.na_putu };
   });
   rndList();
 }
@@ -12274,9 +12280,11 @@ function _patchKolegaVlaka(row) {
   if (e) {
     e.poly.setLatLngs(latLngs);
     e.pts = row.pts;
-    if (row.boja && row.boja !== e.poly.options.color) {
-      e.poly.setStyle({ color: row.boja });
-    }
+    if(row.boja)e.color=row.boja;
+    e.br=row.br??e.br;e.kr=row.kr??e.kr;e.sbId=row.id||e.sbId;
+    if(row.projektant_ime)e.ime=row.projektant_ime;
+    e.poly.setStyle(typeof _vlakaPrikazStyle==='function'?_vlakaPrikazStyle(e):{color:e.color});
+    if(typeof _projektVlakeRender==='function')_projektVlakeRender();
     // Premjesti naziv-labelu na novu sredinu (inače ostane na staroj poziciji
     // dok kolega snima) — samo ako ovaj zapis ima svoje labele (ne-admin prikaz).
     if (e.labels) {
@@ -13789,67 +13797,108 @@ function _bojaZaId(id) {
 }
 let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 
-// ── Default boje vlaka / krakova ─────────────────────────────────────────────
+// Boje i stil prikaza po projektu i prijavljenom korisniku.
 const _BOJA_KEY = 'tvlake_boje_v1';
 const _BOJA_PRESETS = ['#60a5fa','#4ade80','#fbbf24','#f87171','#a78bfa','#fb923c','#38bdf8','#e2e8f0'];
-function _loadBoje() {
-  try { return JSON.parse(localStorage.getItem(_BOJA_KEY) || '{}'); } catch { return {}; }
+function _bojaProjektKey(id) { return 'tvlake_projekt_boje_v2_'+(sbUser?.id||'guest')+'_'+id; }
+function _loadBoje(id = typeof _aktivniProjektId==='undefined' ? null : _aktivniProjektId) {
+  const read=key=>{try{const b=JSON.parse(localStorage.getItem(key)||'{}');return b&&typeof b==='object'&&!Array.isArray(b)?b:{};}catch(e){return {};}};
+  const b={...read(_BOJA_KEY),...(id?read(_bojaProjektKey(id)):{})};
+  for(const k of ['vlaka','krak'])if(!/^#[a-f\d]{6}$/i.test(b[k]||''))delete b[k];
+  if(!Number.isFinite(b.weight)||b.weight<2||b.weight>8)delete b.weight;
+  if(!['solid','dash','dot'].includes(b.dash))delete b.dash;
+  return b;
 }
-function _saveBoje(b) { localStorage.setItem(_BOJA_KEY, JSON.stringify(b)); }
+function _saveBoje(b) {
+  if(!_aktivniProjektId){showToast('Prvo aktiviraj projekat za boje vlaka.');return false;}
+  try{localStorage.setItem(_bojaProjektKey(_aktivniProjektId),JSON.stringify(b));return true;}
+  catch(e){showToast('Boje nisu sačuvane — provjeri memoriju telefona.');return false;}
+}
 function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
-function getBojaKraka()  { return _loadBoje().krak  || '#f87171'; }
-// Debljina/stil linije vlaka — za razliku od boje (fiksirana po vlaci u trenutku
-// crtanja), ovo je čisto vizuelna postavka bez semantike, pa se — isto kao Stil
-// linija za tragove/mjerenja — primjenjuje ODMAH i na već nacrtane vlake/krakove.
+function getBojaKraka() { return _loadBoje().krak || '#f87171'; }
 function getVlakaWeight() { return _loadBoje().weight || 4; }
-function getVlakaDash()   { return _loadBoje().dash   || 'solid'; }
-function getVlakaDashArray() {
-  const d = getVlakaDash();
-  return d === 'dot' ? '2 6' : (d === 'dash' ? '8 4' : null);
+function getVlakaDash() { return _loadBoje().dash || 'solid'; }
+function getVlakaDashArray() { const d=getVlakaDash();return d==='dot'?'2 6':d==='dash'?'8 4':null; }
+function _vlakaPrikazColor(v) {
+  const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId);
+  const kr=Number(v.kr)>0||String(v.nm||'').includes('.');
+  const base=v.color||v.boja;return b[kr?'krak':'vlaka']||(/^#[a-f\d]{6}$/i.test(base||'')?base:'#60a5fa');
 }
-function _bojaVlChange(col) {
-  const b = _loadBoje(); b.vlaka = col; _saveBoje(b);
-  document.getElementById('boja-vl-pick').value = col;
-  _rndBojaPresets();
+function _vlakaPrikazStyle(v) {
+  const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId),d=b.dash||'solid';
+  return {color:_vlakaPrikazColor(v),weight:b.weight||4,dashArray:d==='dot'?'2 6':d==='dash'?'8 4':null};
 }
-function _bojaKrChange(col) {
-  const b = _loadBoje(); b.krak = col; _saveBoje(b);
-  document.getElementById('boja-kr-pick').value = col;
-  _rndBojaPresets();
+function _bojaChange(prop,value) {
+  if(['vlaka','krak'].includes(prop)&&!/^#[a-f\d]{6}$/i.test(value))return;
+  if(prop==='weight'&&(!Number.isFinite(value)||value<2||value>8))return;
+  if(prop==='dash'&&!['solid','dash','dot'].includes(value))return;
+  if(!['vlaka','krak','weight','dash'].includes(prop))return;
+  const b={vlaka:getBojaVlake(),krak:getBojaKraka(),..._loadBoje(),[prop]:value};
+  if(!_saveBoje(b))return;
+  _vlakaStilApply();_rndBojaPresets();
 }
-function _bojaWChange(val) {
-  const b = _loadBoje(); b.weight = val; _saveBoje(b);
-  const v = document.getElementById('boja-weight-v'); if (v) v.textContent = val;
-  _vlakaStilApply();
-}
-function _bojaDashChange(val) {
-  const b = _loadBoje(); b.dash = val; _saveBoje(b);
-  document.querySelectorAll('.boja-dash-btn').forEach(btn => btn.classList.toggle('on', btn.dataset.d === val));
-  _vlakaStilApply();
-}
-// Live primjena debljine/stila na sve trenutno nacrtane VLASTITE vlake/krakove
-// (boja kolega ima namjernu semantiku — isprekidano za tuđe — pa se tu ne dira).
+function _bojaVlChange(col) { _bojaChange('vlaka',col); }
+function _bojaKrChange(col) { _bojaChange('krak',col); }
+function _bojaWChange(val) { _bojaChange('weight',val); }
+function _bojaDashChange(val) { _bojaChange('dash',val); }
 function _vlakaStilApply() {
-  const weight = getVlakaWeight(), dashArray = getVlakaDashArray();
-  try { (vlake || []).forEach(v => { if (v.poly) v.poly.setStyle({ weight, dashArray }); }); } catch(e) {}
+  for(const v of vlake||[])if(v.poly)v.poly.setStyle(_vlakaPrikazStyle(v));
+  for(const v of Object.values(kolegeVlakeMap||{}))if(v.poly)v.poly.setStyle(_vlakaPrikazStyle(v));
+  _projektVlakeRender();
 }
 function _rndBojaPresets() {
-  const vlCol = getBojaVlake(), krCol = getBojaKraka();
-  const vlEl = document.getElementById('boja-vl-presets');
-  const krEl = document.getElementById('boja-kr-presets');
-  if (!vlEl || !krEl) return;
-  document.getElementById('boja-vl-pick').value = vlCol;
-  document.getElementById('boja-kr-pick').value = krCol;
-  vlEl.innerHTML = _BOJA_PRESETS.map(c =>
-    `<span onclick="_bojaVlChange('${c}')" style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c===vlCol?'#fff':'transparent'};flex-shrink:0;"></span>`
-  ).join('');
-  krEl.innerHTML = _BOJA_PRESETS.map(c =>
-    `<span onclick="_bojaKrChange('${c}')" style="width:20px;height:20px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c===krCol?'#fff':'transparent'};flex-shrink:0;"></span>`
-  ).join('');
-  const wEl = document.getElementById('boja-weight'), wvEl = document.getElementById('boja-weight-v');
-  if (wEl) { wEl.value = getVlakaWeight(); if (wvEl) wvEl.textContent = getVlakaWeight(); }
-  const dash = getVlakaDash();
-  document.querySelectorAll('.boja-dash-btn').forEach(btn => btn.classList.toggle('on', btn.dataset.d === dash));
+  const vlCol=getBojaVlake(),krCol=getBojaKraka(),disabled=!_aktivniProjektId;
+  const context=document.getElementById('boja-project-context');
+  if(context){const p=(_projekti||[]).find(p=>p.id===_aktivniProjektId);context.textContent=p?[p.gj,p.odjel?'Odjel '+p.odjel:''].filter(Boolean).join(' · '):'Aktiviraj projekat da podesiš njegove boje.';}
+  for(const [type,col,handler]of [['vl',vlCol,'_bojaVlChange'],['kr',krCol,'_bojaKrChange']]){
+    const pick=document.getElementById('boja-'+type+'-pick'),presets=document.getElementById('boja-'+type+'-presets');
+    if(pick){pick.value=col;pick.disabled=disabled;}
+    if(presets)presets.innerHTML=_BOJA_PRESETS.map(c=>'<button type="button" aria-label="Boja '+c+'" aria-pressed="'+(c===col)+'" '+(disabled?'disabled ':'')+'onclick="'+handler+'(\''+c+'\')" style="--boja:'+c+'"></button>').join('');
+  }
+  const w=document.getElementById('boja-weight'),wv=document.getElementById('boja-weight-v');
+  if(w){w.value=getVlakaWeight();w.disabled=disabled;}if(wv)wv.textContent=getVlakaWeight();
+  document.querySelectorAll('.boja-dash-btn').forEach(btn=>{btn.classList.toggle('on',btn.dataset.d===getVlakaDash());btn.disabled=disabled;});
+  _projektVlakeRender();
+}
+let _projektVlakeLimit=40,_projektVlakeScope='',_projektVlakePreview=null;
+function _projektVlakeRows() {
+  if(!_aktivniProjektId)return [];
+  let rows=[];
+  if(typeof _serverProjektModel==='function')rows=_serverProjektModel(_aktivniProjektId).rows;
+  else rows=vlake.filter(v=>!v._deleted&&v.projektId===_aktivniProjektId).map(v=>({...v,korisnik_id:sbUser?.id,id:v.sbId,ime:v.projektantIme||getIme()}));
+  const items=new Map(rows.map(r=>[r.korisnik_id+'::'+r.nm,r]));
+  for(const [key,v]of Object.entries(kolegeVlakeMap||{})){
+    if(v.projektId!==_aktivniProjektId)continue;
+    const uid=v.korisnikId||key.split('::')[0];
+    if(uid===sbUser?.id)continue; // adminov prikaz ne duplira vlastite vlake
+    items.set(key,{...items.get(key),id:v.sbId||items.get(key)?.id,nm:v.nm||key.split('::').slice(1).join('::'),kr:v.kr,pts:v.pts,boja:v.color,korisnik_id:uid,projekt_id:v.projektId,ime:v.ime});
+  }
+  return [...items.values()].map(r=>({...r,displayColor:_vlakaPrikazColor(r)})).sort((a,b)=>String(a.nm).localeCompare(String(b.nm),'bs',{numeric:true})||String(a.ime||'').localeCompare(String(b.ime||''),'bs')||String(a.korisnik_id).localeCompare(String(b.korisnik_id)));
+}
+function _projektVlakeIdentity(r) { return JSON.stringify([r.korisnik_id,r.id||null,r.nm]); }
+function _projektVlakeRender() {
+  const el=document.getElementById('project-vlake-list');if(!el)return;
+  const scope=(sbUser?.id||'')+':'+(_aktivniProjektId||'');if(scope!==_projektVlakeScope){_projektVlakeScope=scope;_projektVlakeLimit=40;_projektVlakePreviewClose();}
+  const rows=_projektVlakeRows(),count=document.getElementById('project-vlake-count');if(count)count.textContent=rows.length+' vlaka / krakova';
+  el.innerHTML=rows.slice(0,_projektVlakeLimit).map(r=>'<button type="button" class="project-vl-row" data-item="'+_escHtml(_projektVlakeIdentity(r))+'" onclick="_projektVlakeZoom(this.dataset.item)"><span class="project-vl-dot" style="background:'+r.displayColor+'"></span><span><b>'+_escHtml(r.nm)+'</b><small>'+_escHtml(r.ime||'Projektant')+(r.korisnik_id===sbUser?.id?' · ti':' · kolega')+'</small></span><strong>'+fmtL(calcL(r.pts||[]))+' ↗</strong></button>').join('')||'<p class="project-vl-empty">'+(_aktivniProjektId?'Nema vlaka u lokalnom pregledu ovog projekta. Preuzmi zajedničke podatke kroz Server.':'Aktiviraj projekat za zajednički spisak vlaka.')+'</p>';
+  const more=document.getElementById('project-vlake-more');if(more){more.hidden=rows.length<=_projektVlakeLimit;more.textContent='Prikaži još ('+Math.max(0,rows.length-_projektVlakeLimit)+')';}
+}
+function _projektVlakeMore() { _projektVlakeLimit+=40;_projektVlakeRender(); }
+function _projektVlakePreviewClose() { if(_projektVlakePreview)map.removeLayer(_projektVlakePreview);_projektVlakePreview=null; }
+function _projektVlakeZoom(key) {
+  const r=_projektVlakeRows().find(r=>_projektVlakeIdentity(r)===key);if(!r)return;
+  const own=r.korisnik_id===sbUser?.id?vlake.find(v=>v.projektId===_aktivniProjektId&&(r.id?v.sbId===r.id:v.nm===r.nm)):null;
+  const shared=kolegeVlakeMap[r.korisnik_id+'::'+r.nm];
+  let layer=own?.poly||shared?.poly;
+  try{
+    _projektVlakePreviewClose();
+    if(!layer){if(!r.pts?.length){showToast('Vlaka nema sačuvan položaj. Preuzmi podatke projekta.');return;}layer=L.polyline(r.pts.map(p=>[p.la,p.lo]),_vlakaPrikazStyle(r));_projektVlakePreview=layer;}
+    const bounds=layer.getBounds();if(!bounds.isValid())return;
+    layer.addTo(map);switchTab('karta');map.invalidateSize();map.fitBounds(bounds,{padding:[40,40],maxZoom:18});
+    if(own&&typeof showVlakaPopup==='function')showVlakaPopup(vlake.indexOf(own),bounds.getCenter());
+    else if(shared&&typeof showKolegeVlakaInfo==='function')showKolegeVlakaInfo(r.korisnik_id+'::'+r.nm,bounds.getCenter());
+    else layer.bindPopup('<b>'+_escHtml(r.nm)+'</b><br>'+_escHtml(r.ime||'Projektant')+'<br><button onclick="_projektVlakePreviewClose()">Zatvori pregled</button>').openPopup();
+  }catch(e){showToast('Položaj vlake nije dostupan. Preuzmi podatke projekta.');}
 }
 
 function buildC() {
@@ -16599,7 +16648,7 @@ function _edpColorPicked(col) {
   v.color = col;
   const dot = document.getElementById('edp-color-dot');
   if (dot) dot.style.background = col;
-  try { v.poly.setStyle({ color: col }); } catch(e) {}
+  try { v.poly.setStyle({ color: typeof _vlakaPrikazColor==='function'?_vlakaPrikazColor(v):col }); } catch(e) {}
   v.updatedAt = new Date().toISOString();
   rndList();       // stripe boja u listi
   sbFlushVlaka(actI);
@@ -21461,7 +21510,8 @@ function _renderVlakaRow(el, v, i, depth, dPre, grana) {
   const nagHtml = _vlNagibHtml(v, d);
   const elevRow = (elvHtml || roadDistHtml || nagHtml)
     ? `<div class="vcard-elev">${elvHtml}${roadDistHtml}${nagHtml}</div>` : '';
-  const stripeStyle = isKrak ? `background:${v.color};opacity:.6` : `background:${v.color}`;
+  const displayColor=typeof _vlakaPrikazColor==='function'?_vlakaPrikazColor(v):v.color;
+  const stripeStyle = isKrak ? `background:${displayColor};opacity:.6` : `background:${displayColor}`;
   const krakArrow   = isKrak ? `<span class="vcard-arrow">↳</span>` : '';
   // Dugme odabrane vlake — jedan obrazac umjesto pet kopija inline stilova.
   const act = (onclick, ico, boja, lbl) => `<button class="vact" style="--vc:${boja};" onclick="event.stopPropagation();${onclick}">
@@ -27034,31 +27084,27 @@ function rndKolegeVlakeList() {
   const cnt = document.getElementById('kolege-vc');
   if (!el || !sec) return;
 
-  let entries = Object.entries(kolegeVlakeMap);
+  if(typeof _projektVlakeRender==='function')_projektVlakeRender();
+  let entries = Object.entries(kolegeVlakeMap).filter(([,v])=>v.projektId===_aktivniProjektId).sort((a,b)=>String(a[1].nm||a[0].split('::').slice(1).join('::')).localeCompare(String(b[1].nm||b[0].split('::').slice(1).join('::')),'bs',{numeric:true}));
   if (!entries.length) { sec.style.display = 'none'; return; }
 
   sec.style.display = 'block';
   cnt.textContent   = entries.length;
   if (typeof _tabColleagues === 'function') entries = _tabColleagues(entries);
 
-  let lastIme = null;
   const html = entries.map(([key, kv]) => {
     const nm      = key.split('::').slice(1).join('::');
     const d       = calcL(kv.pts);
     const isKrak  = nm.includes('.');
     const arrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
-    const imeSep  = (!isKrak && kv.ime !== lastIme)
-      ? `<div style="font-size:10px;color:#475569;margin:4px 0 2px;padding-left:2px;">${kv.ime}</div>` : '';
-    if (!isKrak) lastIme = kv.ime;
-    const escKey  = key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `${imeSep}<div class="vrow${isKrak?' vrow-krak':''} vrow-kolega"
-        onclick="(function(){const kv=kolegeVlakeMap['${escKey}'];if(kv?.poly&&kv.poly.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30],animate:true});switchTab('karta');})()">
-      <div class="vcard-stripe" style="background:${kv.color}"></div>
+    return `<div class="vrow${isKrak?' vrow-krak':''} vrow-kolega" data-key="${_escHtml(key)}"
+        onclick="const kv=kolegeVlakeMap[this.dataset.key];if(kv?.poly?.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30]});switchTab('karta');">
+      <div class="vcard-stripe" style="background:${kv.poly?.options?.color||kv.color}"></div>
       <div class="vcard-info">
         <div class="vcard-top">
-          ${arrow}<span class="vcard-name">${nm}</span>
+          ${arrow}<span class="vcard-name">${_escHtml(nm)}</span>
           <span class="vcard-km">${fmtL(d)}</span>
-        </div>
+        </div><small class="project-vl-note">${_escHtml(kv.ime||'Projektant')}</small>
       </div>
     </div>`;
   }).join('');
@@ -39605,6 +39651,7 @@ function dozBackToList() {
 
 // ─── HELP MODAL ───────────────────────────────────────────────────────────────
 function showHelp() {
+  const v=document.getElementById('help-app-version');if(v)v.textContent='DENDRO MAP · '+APP_VER;
   document.getElementById('help-modal').classList.add('open');
 }
 function closeHelp() {
@@ -39655,6 +39702,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-scroll"><div class="mdrop-sections"><section class="mdrop-section">
   <div class="mdrop-hdr">Karte i slojevi</div>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
+  <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico">🏔</span>Instalirane karte</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openLayerImport()"><span class="mdrop-ico">📂</span>Dodaj KML fajl / SHP</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
@@ -39756,141 +39804,18 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- ─── HELP MODAL ─────────────────────────────────────────────────────── -->
 <div id="help-modal">
   <div id="help-hdr">
-    <h2>📖 Upute za korištenje</h2>
+    <div><h2>Upute za korištenje</h2><small id="help-app-version"></small></div>
     <button id="help-close" onclick="closeHelp()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="help-tabs">
-    <button class="help-tab active" onclick="helpTab('gen',this)">Generalije</button>
+    <button class="help-tab active" onclick="helpTab('gen',this)">Prvi koraci</button>
     <button class="help-tab" onclick="helpTab('vlake',this)">Vlake</button>
     <button class="help-tab" onclick="helpTab('doznaka',this)">Doznaka</button>
     <button class="help-tab" onclick="helpTab('simboli',this)">Simboli</button>
   </div>
   <div id="help-body">
 
-    <!-- ── GENERALIJE ─────────────────────────── -->
-    <div id="help-pane-gen">
-
-      <div class="help-sec">
-        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>🗺 Šta je ova aplikacija?
-        </div>
-        <div class="help-sec-body">
-          <div class="help-row">
-            <div class="help-icon">🌲</div>
-            <div class="help-txt">
-              <b>USS Vlake — Aplikacija za šumariju</b>
-              <span>Alat za projektovanje traktorskih vlaka, GPS snimanje, označavanje zona doznake i upravljanje KML fajlovima. Radi u browseru na telefonu ili računaru, bez instalacije.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-sec">
-        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>📲 Instalacija na telefon
-        </div>
-        <div class="help-sec-body">
-          <div class="help-row">
-            <div class="help-icon">🤖</div>
-            <div class="help-txt"><b>Android</b><span>Preporučeno: instalirajte APK aplikaciju (dobijate je od administratora). Alternativa: otvorite app u Chrome-u → meni (⋮) → <b>"Dodaj na početni ekran"</b> / "Instaliraj aplikaciju".</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🍎</div>
-            <div class="help-txt"><b>iPhone / iPad (Safari)</b><span>1) Otvorite adresu aplikacije u <b>Safariju</b> (ne Chrome). 2) Tapnite dugme <b>Podijeli</b> — kvadrat sa strelicom ⬆ na dnu ekrana. 3) U listi odaberite <b>"Add to Home Screen"</b> / <b>"Dodaj na početni ekran"</b>. 4) Tapnite <b>Add / Dodaj</b>. Aplikacija se pojavljuje kao ikona na početnom ekranu i otvara se preko cijelog ekrana, radi i offline.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">⚠</div>
-            <div class="help-txt"><b>iOS ograničenje</b><span>Na iPhone-u GPS snimanje radi samo dok je aplikacija na ekranu — ne zaključavajte telefon i ne prebacujte se u druge aplikacije tokom snimanja (iOS ne dozvoljava pozadinski GPS u web aplikacijama). Za dugotrajna terenska snimanja preporučujemo Android uređaj s APK aplikacijom.</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-sec">
-        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>🧭 Navigacija — tabovi
-        </div>
-        <div class="help-sec-body">
-          <div class="help-row">
-            <div class="help-icon">☰</div>
-            <div class="help-txt"><b>Meni</b><span>Otvara padajući meni sa svim alatima: GPS, Export, Print, Dodavanje KML fajlova, Uslikaj lokaciju, Promjena PIN-a i ove upute.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📁</div>
-            <div class="help-txt"><b>Projekat</b><span>Pretraga i brza aktivacija projekata, kartice sa statistikama (dužina vlaka, broj krakova, projektanti), rekap, terenske statistike, boje vlaka, STD izračun, dnevnik radova, izvoz PDF/KML.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📐</div>
-            <div class="help-txt"><b>Vlake</b><span>Crtanje i upravljanje traktorskim vlakama, mjerenja distanci i površina, buffer zone, referentna karta.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🌲</div>
-            <div class="help-txt"><b>Doznaka</b><span>Kreiranje odjela za doznaku, ucrtavanje granica, označavanje zona (zaštitne, prioritetne, sjemenjaci...), GPS praćenje projektanata.</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-sec">
-        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>🗂 Oznake — bočni panel
-        </div>
-        <div class="help-sec-body">
-          <div class="help-diagram">Oznake panel se otvara automatski i prikazuje sve slojeve vidljive na mapi. Tap na sloj otvara editor boja i stilova.</div>
-          <div class="help-row">
-            <div class="help-icon">📂</div>
-            <div class="help-txt"><b>Učitani fajlovi (lokalni)</b><span>KML fajlovi koje ste ručno učitali sa uređaja. Čuvaju se lokalno u browseru. Možete ih preimenovati, promijeniti boju, providnost i uzorak punjenja, te dodati tag/odjel za pretragu.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🌐</div>
-            <div class="help-txt"><b>Server fajlovi</b><span>KML fajlovi sa Supabase servera, grupisani po GJ (Gospodarskoj jedinici). Svaka GJ je sklopiva grupa — tapnite na naziv GJ da proširite ili skupite listu.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📡</div>
-            <div class="help-txt"><b>GPS tragovi</b><span>Snimljeni GPS putevi. Prikazuju se kao linije na mapi u boji dodijeljenoj korisniku.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📷</div>
-            <div class="help-txt"><b>Foto oznake</b><span>Fotografije snimljene na lokaciji. Prikazuju se kao markeri na mapi. Mogu se dijeliti s kolegama.</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-sec">
-        <div class="help-sec-hdr" onclick="toggleHelpSec(this)">
-          <span class="h-arrow">▶</span>🛠 Alati iz menija
-        </div>
-        <div class="help-sec-body">
-          <div class="help-row">
-            <div class="help-icon">📡</div>
-            <div class="help-txt"><b>GPS</b><span>Uključi/isključi GPS snimanje lokacije u realnom vremenu. Tačka plave boje prikazuje vašu poziciju na mapi.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">⬆</div>
-            <div class="help-txt"><b>KML Export</b><span>Izvoz svih vlaka i slojeva u KML format za Google Earth ili GIS softver.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🗺</div>
-            <div class="help-txt"><b>Offline karte</b><span>U prozoru karte (dugme za slojeve) → <b>📂 Dodaj / upravljaj offline kartama</b> učitajte .mbtiles / .sqlitedb kartu za rad bez interneta. Online prikazi (satelit, topo...) se automatski pamte dok ste online i rade i offline — zauzeće memorije i brisanje su u istom prozoru, ispod zaglavlja.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📂</div>
-            <div class="help-txt"><b>Dodaj KML fajl</b><span>Učitaj KML fajl s uređaja i prikaži ga na mapi kao poseban sloj. Pojavljuje se u sekciji "Učitani fajlovi".</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🔑</div>
-            <div class="help-txt"><b>Promijeni PIN</b><span>Promjena vlastitog PIN-a za prijavu. Ako ste PIN zaboravili, na login ekranu tapnite "Zaboravljen PIN?" — administrator ga resetuje.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">📷</div>
-            <div class="help-txt"><b>Uslikaj lokaciju</b><span>Uslikajte tačku na terenu — foto se veže za GPS koordinate i pojavljuje na mapi kao marker.</span></div>
-          </div>
-          <div class="help-row">
-            <div class="help-icon">🏷</div>
-            <div class="help-txt"><b>Tekst na karti</b><span>Dodajte tekstualnu oznaku direktno na mapu — korisno za napomene i reference tačaka.</span></div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /gen -->
+    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane karte</b><span>Dostupno direktno iz Menija i iz prozora slojeva. Uključi ili isključi prikazane slojeve, pogledaj zauzeće keša i po potrebi oslobodi prostor.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>U tabu Projekat odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji na server</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Preuzmi vlake projekata ili doznaku. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
 
     <!-- ── VLAKE ───────────────────────────────── -->
     <div id="help-pane-vlake" style="display:none;">
@@ -39910,11 +39835,11 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">👥</div>
-            <div class="help-txt"><b>Vlake kolega</b><span>Ispod vaših vlaka prikazuje se sekcija "Vlake kolega" sa vlakama svih projektanata na istom projektu. Svaki projektant ima svoju boju — odmah se vidi ko je projektovao koju vlaku. Promjene se sinhronizuju u realnom vremenu.</span></div>
+            <div class="help-txt"><b>Vlake kolega</b><span>Vlake kolega iz istog projekta vidiš u zajedničkom spisku Projekta i u sekciji Vlake kolega. Ime projektanta piše uz svaku vlaku. Preuzmi nove podatke kroz Server; klikom na koleginu vlaku otvaraš pregled i bafer.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">🎨</div>
-            <div class="help-txt"><b>Boje vlaka</b><span>U Projekat tabu postoji sekcija "Boje vlaka" gdje birate boju za glavne vlake i krakove (isti projektant — ista boja).</span></div>
+            <div class="help-txt"><b>Boje vlaka</b><span>U sekciji Boje vlaka aktivnog projekta odaberi boju glavnih vlaka i krakova. Odmah se mijenja prikaz vlastitih i koleginih linija tog projekta; postavke prikaza su lokalne po nalogu i projektu.</span></div>
           </div>
         </div>
       </div>
@@ -39930,8 +39855,8 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <ul class="help-steps">
             <li data-n="1.">Aktivirajte projekat u <b>Projekat</b> tabu</li>
-            <li data-n="2.">Otvorite <b>Vlake</b> tab i odaberite vlaku (ili dodajte novu)</li>
-            <li data-n="3.">Pritisnite <b>▶ Snimi GPS</b> na vlaki — pojavljuje se modal za izbor</li>
+            <li data-n="2.">Pritisnite veliko dugme <b>Snimi vlaku</b> na karti ili uđite iz aktivnog projekta</li>
+            <li data-n="3.">U izboru odaberite novu vlaku ili postojeću vlaku/krak za nastavak</li>
             <li data-n="4.">Kod nove matične vlake odmah na početku (na kamionskom putu) nudi se <b>broj lagera</b> — potvrdite, izmijenite, odaberite postojeći lager u blizini ili preskočite (ponudiće se ponovo na kraju)</li>
             <li data-n="5.">Odaberite <b>▶ Snimi direktno</b> za nastavak matične trase, ili <b>⊕ Lijevi krak</b> / <b>⊕ Desni krak</b> za odvajanje</li>
             <li data-n="6.">Hodajte trasom — baner prikazuje dužinu, broj tačaka i nagib terena</li>
@@ -40039,7 +39964,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon" style="color:#4ade80;">✓</div>
-            <div class="help-txt"><b>Završi</b><span>Završava crtanje i čuva vlaku. Tačke se odmah sinhronizuju na server.</span></div>
+            <div class="help-txt"><b>Završi</b><span>Završava crtanje i čuva vlaku lokalno. Za slanje kolegama koristi Meni → Pošalji na server.</span></div>
           </div>
         </div>
       </div>
@@ -40325,7 +40250,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon" style="font-size:16px;">📴</div>
             <div class="help-txt">
               <b>Offline rad</b>
-              <span>GPS tačke se čuvaju lokalno i šalju na server čim se pojavi internet. Možete snimati pojaseve i bez mrežnog signala — podaci se neće izgubiti.</span>
+              <span>GPS tačke pojasa čuvaju se lokalno i dok nema signala. Kada imaš mrežu otvori Meni → Pošalji na server, provjeri Za slanje i potvrdi slanje. Zatim pregledaj potvrde u Poslano.</span>
             </div>
           </div>
         </div>
@@ -40350,7 +40275,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">🔄</div>
-            <div class="help-txt"><b>Realtime sinhronizacija</b><span>Sve promjene (novi pojasevi, zone, članovi) se sinhronizuju u realnom vremenu preko Supabase servera. Ne trebate ručno osvježavati — podaci stižu automatski.</span></div>
+            <div class="help-txt"><b>Realtime sinhronizacija</b><span>Kolege vide podatke nakon slanja na server. Za pouzdan prijem koristi Preuzmi doznaku u Server pregledu ili Osvježi slojeve u odjelu; realtime obavijesti dopunjuju prikaz dok je veza dostupna.</span></div>
           </div>
         </div>
       </div>
@@ -41266,7 +41191,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
-    <span>Snimi vlaku</span>
+    <span class="brec-copy"><strong>Snimi vlaku</strong><small>GPS snimanje</small></span>
     <span id="brec-nm">T1</span>
   </button>
   <button id="btragovi" onclick="switchTab('tragovi')" title="Tragovi — snimanje i baza tragova" style="display:none;">
