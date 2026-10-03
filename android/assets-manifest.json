@@ -35,6 +35,8 @@
     "static/js/map-visibility.js",
     "static/js/map-library.js",
     "static/css/map-library.css",
-    "static/css/server-panel.css"
+    "static/css/server-panel.css",
+    "static/js/map-catalog.js",
+    "static/js/project-terrain.js"
   ]
 }

@@ -1313,9 +1313,73 @@ Analiza nakon objave: artefakt **11285492647**, svih 36 uzoraka u
 `docs/ANALIZA_BRZINE_REDMI_NOTE_13_PRO_2026-10-03.md`. CPU 4x: učitavanje
 10k tačaka 54.9/59.4ms online/offline, 50k 220.4/226.2ms, 100k 353.4/360.9ms.
 Bez stvarne mreže/GPS-a/pločica/punog startup-a/native mosta/telefona. CPU4x
-ije usporavanje desktopa, nije emulacija Redmi procesora.
+je usporavanje desktopa, nije emulacija Redmi procesora.
 Važan potvrđen nalaz: generisani JSON 100k tačaka ~5.4MB, prikaz uspijeva,
 _saveLocalVlake ne uspijeva ni u jednom ponavljanju (quota). 10k i 50k prolaze.
 To nije univerzalni limit broja tačaka niti dokaz server greške; dokumentovan
 prioritet preseljenja velikog lokalnog keša u IndexedDB, bez neodobrene migracije.
 Fizički Android i produkcijski Supabase nisu korišteni.
+
+
+## 36. Karte i nacrtani poligon odjela — 2.2.2
+
+Korisnik traži raniju veličinu Snimi vlaku, unapređenje Instaliranih i
+Omiljenih karata, crtanje poligona odjela u projektu i checkbox-e za
+nagib strogo preko 30% i ekspoziciju ograničene na taj poligon u dnu taba.
+Web/SW/Android 2.2.2, code 492. Odobrenje novih APK izdanja ostaje iz sesije.
+
+Snimi: vraćen raniji markup/dimenzije i uklonjena proširena primarna kartica.
+Karte: zajednički naslov/prozračan prikaz oba moda, Lokalni fajlovi i Slojevi
+terena odvojeni u Instaliranim. Puni nazivi, aktivna karta, spremljena ali
+neučitana karta i ponovni pokušaj kroz postojeći sqlmapRetryOne; nema novog
+mehanizma uvoza. Broj keširanih pločica ne predstavlja kompletnu pokrivenost.
+Omiljene: pristupačno dugme aktivacije i zasebno Uredi, aktivnost/dostupnost,
+lokalni fajl nasuprot online podlozi, puni nazivi i responsive kartice.
+Akcije preko stabilnih naziva/identiteta, ne inline imena u JavaScriptu.
+Topo + Nagib se može dodati u favorite kao postojeći složeni prikaz.
+Brisanje zajedničkog DEM keša traži potvrdu s opisom četiri pogođena sloja.
+
+Novi static/js/project-terrain.js: poligon po nalogu/projektu u lokalnom
+ključu tvlake_project_polygon_v1_<uid>_<pid>. NE šalje geometriju na server,
+ne dodaje produkcijsku kolonu/migraciju. UI i upute jasno kažu da je lokalno.
+Tapkanje karte, Vrati tačku, Sačuvaj, Odustani. 3–500 tačaka, koordinatne
+provjere, odbijanje samopresjeka i degenerisanog poligona. Stara granica se
+zamijeni tek nakon uspješnog upisa; quota ostavlja nacrt i stari zapis.
+Promjena projekta/naloga, odjava i drugi alat otkazuju nacrt. Aktivno
+snimanje/alat blokira ulaz. Vraća prethodno stanje doubleClickZoom.
+Privremeno isključuje feature hit-test dok mapa prima tačke poligona.
+Prikaz/sakrivanje granice, površina/tačke, Na karti, potvrđeno uklanjanje.
+Nacrtana granica zamjenjuje automatski highlight; brisanje vraća postojeći.
+Površina projekta i dalje poštuje ručni unos, zatim nacrtani poligon/KML.
+
+Checkbox-i na kraju Projekat taba: Nagib preko 30%, Ekspozicija. Posebni
+Canvas GridLayer slojevi u pane 260/261, ispod vlaka, sa stvarnim polygon
+clip-om. Procenti iz elevacijskih gradijenata i geografske veličine piksela;
+percent <=30 potpuno transparentan. Ekspozicija je smjer N/E/S/W niz padinu.
+DEM je postojeći Terrarium/cache; dijeljeni decoded cache do 24 pločice,
+prikaz do native zoom 14 kao postojeći teren. Granica nije izmijenjena
+uključivanjem slojeva. Nedostajuća DEM pločica daje poruku o nepotpunom
+terenu, ne lažno "ravno". Lokalna raster podloga sama ne sadrži DEM.
+Preuzimanje terena nudi nacrtani poligon kao prvi obuhvat i paket sa
+z12–14 za nagib/ekspoziciju. Brisanje/dopuna DEM-a invalidira novi cache.
+
+Poligon ulazi u terensku sigurnosnu kopiju kao optional projectPolygon;
+stare kopije su kompatibilne. Obnova validira, ne prepisuje noviji postojeći
+poligon i uključena je u postojeći localStorage stage/rollback. Granica
+se koristi i za provjeru pokrivenosti offline podloge aktivnog projekta.
+Upute opisuju crtanje, lokalni status, prag >30% i preuzimanje DEM-a.
+SW shell i Android required manifest uključuju oba nova modula.
+
+Lokalno: 81 JS test fajl; novi testovi geometrije/procenata/smjerova,
+kataloga i backup roundtrip-a, stare kopije i quota rollback-a. Inline i
+novi browser fixture JS prošli syntax-check. Browser project-terrain-222.py
+koristi pravi Leaflet, Terrarium PNG decode/Cache Storage, strogu masku
+nagiba i polygon clip, tap/undo/cancel/quota, odvajanje projekta/naloga,
+reload bez mreže i 24 prikaza kartica/projekta u obje teme/četiri veličine.
+CI izvršava šest browser skripti prije APK-a; ishod slijedi. Stvarni Android
+uređaj i produkcijski Supabase nisu korišteni za ove provjere.
+
+Projektni nagib/ekspozicija isključuju odgovarajući globalni DEM sloj da
+izvan poligona ne ostane globalno bojenje. Uključivanje općeg nagiba/ekspozicije
+u Instaliranim ili Topo+Nagib isključuje odgovarajući projektni checkbox.
+UI opisuje ovu zamjenu; geometrija i vlake ostaju iste.

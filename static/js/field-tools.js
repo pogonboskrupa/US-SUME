@@ -17,6 +17,8 @@ function _fieldBounds(scope) {
     try {const gj=typeof scope.p.boundary_geojson==='string'?JSON.parse(scope.p.boundary_geojson):scope.p.boundary_geojson;
       const bounds=L.geoJSON(gj).getBounds();if(bounds.isValid())return {bounds,exact:true};}catch(e){}
   }
+  const drawn=!scope.doz&&typeof ProjectTerrain!=='undefined'?ProjectTerrain.dataFor(scope.id)?.ring:null;
+  if(drawn)return {bounds:L.latLngBounds(drawn),exact:true};
   const name=String(scope.p?.odjel || scope.p?.name || '').trim().toLowerCase();
   const boundary=name && graniceOdjeli.find(o=>String(o.name).trim().toLowerCase()===name);
   if(boundary?.bounds?.isValid())return {bounds:boundary.bounds,exact:true};
@@ -101,6 +103,7 @@ async function _fieldMakeBackup() {
     appVersion:APP_VER,scope:{id:scope.id,doz:scope.doz,project:scope.p,linkedProject:scope.doz?_projekti.find(p=>p.id===scope.vlakaId)||null:null},
     vlake:vlake.filter(v=>v.projektId===scope.vlakaId).map(v=>({id:v.sbId,nm:v.nm,br:v.br,kr:v.kr,pts:v.pts,
       boja:v.color,projekt_id:v.projektId,updated_at:v.updatedAt,lager:v.lager,strana:v.strana,lager_pt:v.lagerPt,na_putu:v.naPutu})),
+    projectPolygon:typeof ProjectTerrain!=='undefined'?(ProjectTerrain.dataFor(scope.vlakaId)?.ring?ProjectTerrain.dataFor(scope.vlakaId):null):null,
     kolege:_kvcLoad(scope.vlakaId),
     queue:_OL.loadQueue(true).filter(op=>(!op._uid || op._uid===uid) &&
       [op.payload?.projekt_id,op.payload?.project_id,op.payload?.id].some(id=>id===scope.id || id===scope.vlakaId)),
@@ -137,6 +140,7 @@ async function _fieldValidateBackup(copy) {
   if(!d.journal || !Array.isArray(d.journal.pending) || !Array.isArray(d.journal.points) || !Array.isArray(d.journal.sessions))throw new Error('Nedostaje GPS dnevnik');
   for(const key of ['vlake','kolege','queue','tracks','measurements'])if(!Array.isArray(d[key]))throw new Error('Nedostaje '+key);
   for(const v of d.vlake)if(![d.scope.id,d.scope.linkedProject?.id].includes(v.projekt_id) || !Array.isArray(v.pts) || v.pts.some(p=>!Number.isFinite(p.la)||Math.abs(p.la)>90||!Number.isFinite(p.lo)||Math.abs(p.lo)>180))throw new Error('Neispravna geometrija vlake');
+  if(d.projectPolygon && (typeof ProjectTerrain==='undefined'||!ProjectTerrain.validateRing(d.projectPolygon.ring).ring))throw new Error('Neispravan poligon projekta');
   if(d.queue.some(op=>op._uid && op._uid!==d.uid))throw new Error('Tuđe operacije u kopiji');
   return d;
 }
@@ -161,6 +165,7 @@ async function fieldImportBackup(file) {
     changes.set(_MSR_REG_KEY,JSON.stringify(_fieldMerge(_fieldJson(_MSR_REG_KEY,[]),d.measurements)));
     changes.set(_OL.QUEUE,JSON.stringify(_fieldMerge(_OL.loadQueue(true),d.queue)));
     const colleaguePid=d.scope.linkedProject?.id || d.scope.id;
+    if(d.projectPolygon&&typeof ProjectTerrain!=='undefined'){const key=ProjectTerrain.keyFor(uid,colleaguePid);if(!_fieldJson(key,null)?.ring)changes.set(key,JSON.stringify({ring:ProjectTerrain.validateRing(d.projectPolygon.ring).ring,slope:d.projectPolygon.slope===true,aspect:d.projectPolygon.aspect===true,visible:d.projectPolygon.visible!==false}));}
     const kolege=_fieldJson(_KVC_KEY,{});kolege[colleaguePid] ||= {};
     for(const row of d.kolege){const key=row.korisnik_id+'::'+row.nm;if(!kolege[colleaguePid][key])kolege[colleaguePid][key]=row;}
     changes.set(_KVC_KEY,JSON.stringify(kolege));

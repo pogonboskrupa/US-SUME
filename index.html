@@ -4937,6 +4937,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div id="kml-share-info" style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.5;display:none;"></div>
       </div>
 
+
+      <section class="sec proj-akt-only project-polygon">
+        <div class="sec-t">Poligon odjela i teren</div>
+        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
+        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
+        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
+        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
+        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
+          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
+          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
+          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
+          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
+          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
+        </div>
+      </section>
     </div><!-- /proj-panel -->
 
     <!-- ═══ ADMIN — KORISNICI PANEL ═══ -->
@@ -5672,7 +5687,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.2.1';
+const APP_VER = 'v2.2.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7319,6 +7334,7 @@ function _startupRestore() {
 
   korak('switchTab',   () => switchTab('karta'));
   korak('sqlmapRestore', () => sqlmapRestoreAll());
+  korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
   korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
   if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); _updSyncBadge(); });
   korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
@@ -7817,6 +7833,7 @@ async function doLogout() {
   kmlLs = [];
   if(typeof _serverPreviewClose==='function')_serverPreviewClose();
   if(typeof _projektVlakePreviewClose==='function')_projektVlakePreviewClose();
+  if(typeof ProjectTerrain!=='undefined')ProjectTerrain.reset();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
   // dobija nazad kroz _temRestore; promjena korisnika ih briše kroz _wipeAllLocalUserData)
   try { _temRemoveAll(true); } catch(e) {}
@@ -10433,6 +10450,7 @@ function _updPdVlakeBtn(id) {
 }
 
 function _updVlakeMapVisibility() {
+  if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();
   if(typeof _vlakaStilApply==='function')_vlakaStilApply();
   const hidden = _getHiddenProjektIds();
   // Pokupi br-ove vlaka koje pripadaju skrivenim projektima (matične + krakovi)
@@ -13665,7 +13683,7 @@ const _NV_DEM_KB = 90;            // prosječna Terrarium pločica (izmjereno ~6
 const _NV_DEM_MAX_PLOCICA = 600;  // ~54 MB — iznad toga neka korisnik suzi područje
 const _NV_DEM_PAKETI = [
   { id: 'nv',  ime: 'Samo nadmorska visina (N.V.)', zumovi: [12] },
-  { id: 'sve', ime: 'N.V. + Nagib + Konture',       zumovi: [12, 13, 14] },
+  { id: 'sve', ime: 'N.V. + Nagib + Ekspozicija + Konture',       zumovi: [12, 13, 14] },
 ];
 var _nvDemDlUToku = false;
 
@@ -13720,6 +13738,8 @@ async function _nvDemPreuzmi(plocice, onNapredak) {
 // Izbor područja: trenutni prikaz, odjel projekta, područja učitanih offline karata.
 function _nvDemPodrucja() {
   const opc = [];
+  const drawn=typeof ProjectTerrain!=='undefined'?ProjectTerrain.dataFor()?.ring:null;
+  if(drawn)opc.push({ime:'Nacrtani poligon odjela projekta',b:L.latLngBounds(drawn).pad(.05)});
   // Na bliskom zumu je prikaz ~1 km — premalo za dan na terenu; zato najmanje
   // ~20 × 20 km oko centra (±0.1° širine, ±0.14° dužine na ~45°N).
   try {
@@ -13774,6 +13794,7 @@ async function nvDemPreuzmiUi() {
       : r.gresaka ? '⚠ Teren: ' + (r.novih + r.vec) + ' / ' + r.ukupno + ' spremno, ' + r.gresaka + ' nije uspjelo — pokreni ponovo da dopuniš'
       : '✅ Teren spreman za offline (' + r.ukupno + ' pločica' + (r.vec ? ', ' + r.vec + ' već postojalo' : '') + ')');
     // DEM slojevi (Nagib/Konture...) ne znaju da su pločice stigle — osvježi ih.
+    if(typeof ProjectTerrain!=='undefined')ProjectTerrain.invalidateDEM();
     try { Object.keys(_ovlState).forEach(k => { if (_ovlState[k] && _OVL[k]?.redraw) _OVL[k].redraw(); }); } catch (e) {}
     try { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 50); } catch (e) {}
     if (typeof _lsRenderCache === 'function') _lsRenderCache();
@@ -15860,6 +15881,7 @@ function setLayer(key) {
   Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
 
   if (key === '_nagib') {
+    if(typeof ProjectTerrain!=='undefined')ProjectTerrain.toggle('slope',false);
     TL['⛰ Topo'].addTo(map);
     if (!map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
     const btn = document.getElementById('layer-switch-btn');
@@ -15937,6 +15959,7 @@ function _tileThumbUrl(tpl, _unused, x, y, arcgis) {
 }
 
 function _mapFavThumbHtml(fav) {
+  if(fav.type!=='sqlite'&&!fav.tileUrl)return '<div class="mfav-thumb-placeholder">🗺</div>';
   if (fav.type === 'sqlite') {
     return `<div class="mfav-thumb-placeholder">🗄</div>`;
   }
@@ -15959,6 +15982,7 @@ function _mapFavThumbHtml(fav) {
 }
 
 function _mapFavRender() {
+  if(typeof MapCatalog!=='undefined')return MapCatalog.renderFavorites();
   const el = document.getElementById('mapfav-grid');
   if (!el) return;
   const activeKey = _activeLayerKey();
@@ -16007,10 +16031,10 @@ async function mapFavAddCurrent() {
     const name = await _dlgPrompt('Naziv ove offline karte:', sqlActive.name, { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
-  } else if (activeKey === '_granice') {
-    const name = await _dlgPrompt('Naziv:', 'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
+  } else if (['_granice','_nagib'].includes(activeKey)) {
+    const name = await _dlgPrompt('Naziv:', activeKey==='_nagib'?'Topo + Nagib terena':'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
     if (!name) return;
-    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: '_granice', tileUrl: '', arcgis: false };
+    fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: activeKey, tileUrl: '', arcgis: false };
   } else if (activeKey && TL[activeKey]) {
     const layer = TL[activeKey];
     const tileUrl = layer._url || '';
@@ -16081,6 +16105,7 @@ let _dblClickGuard = false;
 map.on('click', e => {
   // Klik na mapu dok je panel otvoren — vrati se na kartu
   if (_activeTab !== 'karta') { switchTab('karta'); return; }
+  if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.isDrawing())return;
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
@@ -24468,6 +24493,7 @@ function _lsTab(name) {
     const btn  = document.getElementById('ls-tab-' + p);
     if (!pane || !btn) return;
     const active = p === name;
+    btn.setAttribute('aria-selected',String(active));
     pane.style.display = active ? '' : 'none';
     btn.style.background  = active ? '#1e3a5f' : '#0f172a';
     btn.style.borderColor = active ? '#334155' : '#1e293b';
@@ -24477,6 +24503,7 @@ function _lsTab(name) {
 }
 
 function _instToggle(id, on) {
+  if(on&&typeof ProjectTerrain!=='undefined'&&['slope','ekspo'].includes(id))ProjectTerrain.toggle(id==='slope'?'slope':'aspect',false);
   if (on) _OVL[id].addTo(map);
   else map.removeLayer(_OVL[id]);
   _ovlState[id] = on;
@@ -24529,8 +24556,11 @@ async function _instClear(id) {
   };
   const cn = cacheMap[id];
   if (!cn) return;
+  const msg=cn===_TERR_CACHE?'Obrisati zajednički DEM keš? Uklanjaju se offline podaci za nagib, nadmorske visine, ekspoziciju i konture.': 'Obrisati sačuvane pločice sjenčenja reljefa?';
+  if(!await _dlgConfirm(msg,{danger:true}))return;
   await caches.delete(cn);
   if (cn === _TERR_CACHE) {
+    if(typeof ProjectTerrain!=='undefined')ProjectTerrain.invalidateDEM();
     if (_ovlState.slope) _OVL.slope.redraw();
     if (_ovlState.nv)    _OVL.nv.redraw();
     if (_ovlState.ekspo) _OVL.ekspo.redraw();
@@ -24543,6 +24573,7 @@ async function _instClear(id) {
 }
 
 async function _instUpdateStats() {
+  if(typeof MapCatalog!=='undefined')MapCatalog.renderInstalled();
   if (!('caches' in window)) return;
   const pairs = [
     ['elev',  _ELEV_CACHE],
@@ -29081,6 +29112,8 @@ function _projPovrsinaHa() {
     ? _projekti.find(p => p.id === _aktivniProjektId) : null;
   const apHa = parseFloat(ap?.povrsina) || 0;
   if (apHa > 0) return { ha: apHa, src: 'projekat' };
+  const drawn=typeof ProjectTerrain!=='undefined'?ProjectTerrain.dataFor()?.ring:null;
+  if(drawn){const ha=_ringAreaHa(drawn);if(ha>0)return {ha:Math.round(ha*100)/100,src:'nacrtani poligon'};}
   const odjel = typeof getOdjel === 'function' ? getOdjel() : '';
   const o = findGraniceOdjel(odjel);
   if (o?.ring?.length >= 3) {
@@ -34456,6 +34489,7 @@ function _hideProjektOdjelHighlight() {
 
 function _showProjektOdjelHighlight(odjelName, gj) {
   _hideProjektOdjelHighlight();
+  if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.dataFor()?.ring)return;
   const match = _findGraniceMatch(odjelName, gj);
   if (!match?.ring) return;
   _projektOdjelLayer = L.polygon(match.ring, {
@@ -39815,7 +39849,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="help-body">
 
-    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane karte</b><span>Dostupno direktno iz Menija i iz prozora slojeva. Uključi ili isključi prikazane slojeve, pogledaj zauzeće keša i po potrebi oslobodi prostor.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>U tabu Projekat odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji na server</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Preuzmi vlake projekata ili doznaku. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
+    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>U tabu Projekat odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U dnu taba Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji na server</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Preuzmi vlake projekata ili doznaku. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
 
     <!-- ── VLAKE ───────────────────────────────── -->
     <div id="help-pane-vlake" style="display:none;">
@@ -41070,10 +41104,10 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="mapfav-modal" onclick="if(event.target===this)closeMapFavs()">
   <div id="mapfav-box">
     <h3>
-      <span>FAVORITE MAPS &amp; SETS</span>
+      <span><b>Omiljene karte</b><small id="mapfav-count"></small></span>
       <button onclick="closeMapFavs()" style="background:none;border:none;color:#475569;font-size:18px;cursor:pointer;padding:0;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </h3>
-    <div id="mapfav-grid"></div>
+    <p class="catalog-intro">Tvoje podloge za brzi prelazak. Lokalni fajlovi i online karte jasno su označeni.</p><div id="mapfav-grid"></div>
     <div style="padding:8px 10px;flex-shrink:0;">
       <button onclick="closeMapFavs()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Zatvori</button>
     </div>
@@ -41191,7 +41225,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
     <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
-    <span class="brec-copy"><strong>Snimi vlaku</strong><small>GPS snimanje</small></span>
+    <span>Snimi vlaku</span>
     <span id="brec-nm">T1</span>
   </button>
   <button id="btragovi" onclick="switchTab('tragovi')" title="Tragovi — snimanje i baza tragova" style="display:none;">
@@ -41427,6 +41461,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- Layer switcher bottom sheet -->
 <div id="layer-sheet-bg" onclick="closeLayerSheet()"></div>
 <div id="layer-sheet">
+  <header class="catalog-head"><div><small>Podloge i slojevi</small><h2>Karte na jednom mjestu</h2></div><button type="button" onclick="closeLayerSheet()" aria-label="Zatvori karte">✕</button></header>
   <!-- Sub-tab bar -->
   <div id="ls-tabs" style="display:flex;gap:4px;margin-bottom:14px;">
     <button id="ls-tab-karte" onclick="_lsTab('karte')"
@@ -41567,94 +41602,10 @@ if (typeof AndroidDownload !== 'undefined') {
 
   <!-- Tab: Instalirane karte -->
   <div id="ls-pane-inst" style="display:none;">
-    <h3>🏔 Instalirane karte</h3>
-    <p style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.6;">Slojevi se keširaju automatski dok pregledaš kartu. Brisanjem keša oslobađaš prostor.</p>
-    <!-- Hipsometrija -->
-    <div class="inst-layer-row" id="inst-elev-row">
-      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
-        <input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"
-          style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;flex-shrink:0;">
-        <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Hipsometrija</div>
-          <div style="font-size:11px;color:#64748b;">Sjenčanje reljefa — hillshade sloj</div>
-          <div id="inst-elev-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
-        </div>
-      </label>
-      <button onclick="_instClear('elev')" title="Obriši keš"
-        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
-        <svg class="ic"><use href="#ic-obrisi"/></svg>
-      </button>
-    </div>
-    <!-- Nagibi terena -->
-    <div class="inst-layer-row" id="inst-slope-row">
-      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
-        <input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"
-          style="width:18px;height:18px;accent-color:#fb923c;cursor:pointer;flex-shrink:0;">
-        <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Nagib terena</div>
-          <div style="font-size:11px;color:#64748b;">Nagibi ≥30% — nijanse crvene</div>
-          <div id="inst-slope-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
-        </div>
-      </label>
-      <button onclick="_instClear('slope')" title="Obriši keš"
-        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
-        <svg class="ic"><use href="#ic-obrisi"/></svg>
-      </button>
-    </div>
-    <!-- Nadmorska visina — prikaz u bojama (DEM canvas) -->
-    <div class="inst-layer-row" id="inst-nv-row">
-      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
-        <input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"
-          style="width:18px;height:18px;accent-color:#4ade80;cursor:pointer;flex-shrink:0;">
-        <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">N.V. — prikaz u bojama</div>
-          <div style="font-size:11px;color:#64748b;">Hipsometrija na karti (200m pojasevi)</div>
-          <div id="inst-nv-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
-        </div>
-      </label>
-      <button onclick="_instClear('nv')" title="Obriši keš"
-        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
-        <svg class="ic"><use href="#ic-obrisi"/></svg>
-      </button>
-    </div>
-    <!-- Strane svijeta (Ekspozicija) -->
-    <div class="inst-layer-row" id="inst-ekspo-row">
-      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
-        <input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"
-          style="width:18px;height:18px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0;">
-        <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Strane svijeta</div>
-          <div style="font-size:11px;color:#64748b;">Ekspozicija padine — S/J/I/Z</div>
-          <div id="inst-ekspo-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
-        </div>
-      </label>
-      <button onclick="_instClear('ekspo')" title="Obriši keš"
-        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
-        <svg class="ic"><use href="#ic-obrisi"/></svg>
-      </button>
-    </div>
-    <!-- Konture (izohipse) — v3.103.0. Isti DEM keš kao gornja tri, nema novog
-         mrežnog izvora. -->
-    <div class="inst-layer-row" id="inst-kont-row">
-      <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">
-        <input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"
-          style="width:18px;height:18px;accent-color:#b45309;cursor:pointer;flex-shrink:0;">
-        <div>
-          <div style="font-size:13px;color:#e2e8f0;font-weight:600;">Konture (izohipse)</div>
-          <div style="font-size:11px;color:#64748b;">Linije nadmorske visine, korak 20m</div>
-          <div id="inst-kont-stat" style="font-size:11px;color:#475569;margin-top:1px;">—</div>
-        </div>
-      </label>
-      <button onclick="_instClear('kont')" title="Obriši keš"
-        style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">
-        <svg class="ic"><use href="#ic-obrisi"/></svg>
-      </button>
-    </div>
-    <div style="margin-top:8px;font-size:10px;color:#334155;line-height:1.5;">
-      Nagibi, N.V., Strane i Konture dijele isti keš (terrarium DEM pločice, max zum 14→uvećanje).
-    </div>
-  </div><!-- /ls-pane-inst — bez ovog zatvaranja (izgubljeno u v3.103.1) su dijalozi,
-       📁 panel oznaka i ostalo iza #layer-sheet završavali UNUTAR njega, skriveni. -->
+    <div class="catalog-hero"><span>RAD BEZ INTERNETA</span><h3>Instalirane karte</h3><p>Lokalni fajl pokriva područje koje sadrži. Online keš čuva samo ranije pregledane dijelove.</p></div>
+    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section>
+    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><p class="catalog-intro">Broj sačuvanih pločica govori šta je u kešu; ne potvrđuje pokrivenost cijelog odjela.</p><article class="inst-layer-row" id="inst-elev-row"><label><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-slope-row"><label><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi ≥30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article><p class="catalog-intro">Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
+  </div><!-- /ls-pane-inst -->
 
   <!-- Tab: Granice -->
   <div id="ls-pane-granice" style="display:none;">
@@ -41854,5 +41805,8 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/layer-editor.js"></script>
 <script src="static/js/map-visibility.js"></script>
 <script src="static/js/map-library.js"></script>
+<div id="project-draw-toolbar" hidden><div><b>Crtanje poligona odjela</b><small id="project-draw-count"></small></div><div class="project-draw-actions"><button id="project-draw-undo" type="button" onclick="ProjectTerrain.undo()">↶ Vrati tačku</button><button id="project-draw-save" type="button" onclick="ProjectTerrain.finish()">✓ Sačuvaj</button><button type="button" onclick="ProjectTerrain.cancel()">Odustani</button></div></div>
+<script src="static/js/map-catalog.js"></script>
+<script src="static/js/project-terrain.js"></script>
 </body>
 </html>

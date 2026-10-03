@@ -39,6 +39,7 @@ jobs:
           python tests/browser/server-map-218.py
           python tests/browser/map-library-219.py
           python tests/browser/project-vlake-220.py
+          python tests/browser/project-terrain-222.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
