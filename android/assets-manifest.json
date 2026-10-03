@@ -31,6 +31,7 @@
     "static/libs/sql-wasm.wasm",
     "static/js/server-panel.js",
     "static/js/local-layer-import.js",
+    "static/js/layer-editor.js",
     "static/css/server-panel.css"
   ]
 }

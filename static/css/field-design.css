@@ -251,3 +251,28 @@ html[data-field-theme=day] #pm-modal [style*="color:#60a5fa"] {color:#1e40af!imp
 html[data-field-theme=day] #pm-modal [style*="color:#f87171"] {color:#991b1b!important;}
 @media(min-width:720px) {html #pm-list-inner{grid-template-columns:1fr 1fr;}html #pm-modal .pm-actions{grid-template-columns:repeat(4,minmax(0,1fr));}}
 @media(max-width:420px) {html #pm-modal{padding:6px;}html #pm-box{max-height:calc(100dvh - 12px);border-radius:16px;}html #pm-body{padding:12px;}.pm-toolbar{flex-wrap:wrap;}.pm-toolbar select{width:100%;max-width:100%;}.pm-detail-hero{padding:14px;flex-direction:column;align-items:stretch;}.pm-hero-length{text-align:left;}.pm-detail-hero h2{font-size:23px;}html #pm-modal .pm-sec{padding:12px;}}
+
+/* Terenske vrijednosti: veći brojevi, cijele koordinate i na uskom telefonu. */
+html #nv-badge{flex-wrap:wrap;row-gap:3px;padding:5px 8px;line-height:1.4;}
+html #nv-badge #nv-val{font-size:14px;}
+html #nv-badge .nv-coord{font-size:12px;font-variant-numeric:tabular-nums;}
+html #nv-badge .nv-lbl{font-size:10px;}
+html #nv-badge #map-scale-val{font-size:11px;}
+@media(max-width:359px){html #nv-badge .nv-sep{margin:0 4px;}html #nv-badge{padding:5px 6px;}}
+
+/* KML/SHP: zajedničko uređivanje fajla i objekta na karti. */
+.le-editor,.le-popup{color:var(--field-ink);background:var(--field-card);font:14px/1.5 system-ui;text-align:left;overflow-wrap:anywhere;}
+.le-editor{margin:6px 8px 16px;padding:14px;border:1px solid var(--field-border);border-radius:14px;}
+.le-heading{margin-bottom:13px;}.le-heading>span{display:block;font-size:10px;letter-spacing:.4px;color:var(--field-muted);}.le-heading>b{display:block;font-size:17px;line-height:1.5;margin:3px 0;}.le-heading>small{display:block;color:var(--field-muted);font-size:12px;}
+.le-fields{display:grid;gap:12px;margin:12px 0;}.le-fields>label{display:grid;gap:5px;font-size:12px;font-weight:600;}.le-fields input,.le-fields textarea{box-sizing:border-box;width:100%;min-height:44px;border-radius:10px;border:1px solid var(--field-border);padding:10px;background:var(--field-bg);color:var(--field-ink);font:16px system-ui;}.le-fields>small{font-size:11px;color:var(--field-muted);}
+.le-preview{border:1px solid var(--field-border);border-radius:11px;background:var(--field-bg);padding:4px 10px;text-align:center;}.le-preview svg{display:block;width:100%;height:44px;}.le-preview>span{font-size:10px;color:var(--field-muted);}
+.le-section{border-top:1px solid var(--field-border);margin-top:14px;padding-top:12px;}.le-section h4{font-size:14px;margin:0 0 10px;}.le-colors{display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+.le-colors button.le-swatch{width:44px;height:44px;min-width:44px;min-height:44px;padding:7px;border:2px solid transparent;border-radius:10px;background:var(--field-bg);box-shadow:inset 0 0 0 7px var(--field-bg);background-color:var(--swatch);cursor:pointer;}
+.le-colors button[aria-pressed=true]{border-color:var(--field-ink);}.le-custom{display:flex;align-items:center;gap:8px;min-height:44px;font-size:12px;color:var(--field-muted);}.le-custom input{width:44px;height:44px;border:0;padding:5px;background:var(--field-bg);}
+.le-range{display:block;margin:12px 0;}.le-range>span{display:flex;justify-content:space-between;font-size:12px;gap:8px;}.le-range output{font-weight:700;}.le-range input{width:100%;height:44px;margin:0;accent-color:#2563eb;}
+.le-options,.le-actions{display:flex;flex-wrap:wrap;gap:6px;}.le-options button,.le-actions button{min-height:44px;flex:1 1 90px;border:1px solid var(--field-border);border-radius:9px;padding:8px;color:var(--field-ink);background:var(--field-bg);font:600 12px system-ui;cursor:pointer;}.le-options button[aria-pressed=true]{background:#1e40af;border-color:#1e40af;color:#fff;}.le-actions{margin-top:12px;}.le-actions .le-danger{color:#fca5a5;}
+.le-switch{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;margin-bottom:10px;}.le-switch small{display:block;color:var(--field-muted);font-size:11px;}.le-switch input{width:24px;height:24px;accent-color:#2563eb;}
+.le-description{white-space:pre-wrap;max-height:100px;overflow:auto;color:var(--field-muted);font-size:13px;}.le-attributes{margin-top:14px;border-top:1px solid var(--field-border);}.le-attributes summary{padding:13px 0;cursor:pointer;font-weight:600;}.le-attributes dl{max-height:180px;overflow:auto;margin:0;}.le-attributes dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px;padding:6px 0;border-bottom:1px solid var(--field-border);font-size:12px;}.le-attributes dt{color:var(--field-muted);}.le-attributes dd{margin:0;}
+.kml-info-popup .leaflet-popup-content-wrapper{background:var(--field-card);color:var(--field-ink);border:1px solid var(--field-border);border-radius:15px;}.kml-info-popup .leaflet-popup-tip{background:var(--field-card);}.kml-info-popup .leaflet-popup-content{margin:18px 14px 12px;max-height:min(64vh,500px);max-height:min(64dvh,500px);overflow:auto;width:min(320px,calc(100vw - 64px))!important;}.kml-info-popup a.leaflet-popup-close-button{color:var(--field-ink);width:30px;height:30px;font-size:22px;}
+html[data-field-theme=day] .le-actions .le-danger{color:#991b1b;}
+.le-editor :is(button,input,textarea):focus-visible,.le-popup :is(button,input,textarea,summary):focus-visible{outline:3px solid #3b82f6;outline-offset:2px;}

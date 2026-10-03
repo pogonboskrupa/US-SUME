@@ -72,11 +72,11 @@ t('otvaranje odjela: keš se prikaže PRIJE nego mreža odgovori', async () => {
   const log = [];
   let pustiMrezu;
   const mreza = new Promise(r => { pustiMrezu = r; });
-  const q = () => { const o = { select: () => o, eq: () => o, order: () => o, in: () => o, then: (res, rej) => mreza.then(res, rej) }; return o; };
+  const q = () => { const o = { select: () => o, eq: () => o, order: () => o, in: () => o, range:()=>o, then: (res, rej) => mreza.then(res, rej) }; return o; };
   const st = { members: null, markings: null, gen: 0 };
   const src = extractFn('dozLoadLayers');
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail', 'showToast', 'console', 'S', '_dozUcitajTacke', '_dozPrimijeniRed',
-    'let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + src +
+    'const sbUser={id:"me"};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+src +
     '\nreturn { run: (id, o) => dozLoadLayers(id, o), get: () => ({ _dozMembers, _dozMarkings, _dozTracks }) };');
   const api = fn({ from: q },
     () => ({ members: [{ user_id: 'u1' }], markings: [{ id: 'm1' }], tracks: [] }),
@@ -90,10 +90,10 @@ t('otvaranje odjela: keš se prikaže PRIJE nego mreža odgovori', async () => {
 });
 
 t('mrežna greška poslije keša ne briše već prikazane podatke', async () => {
-  const q = () => { const o = { select: () => o, eq: () => o, order: () => o, in: () => o, then: (res, rej) => Promise.reject(new Error('mreza')).then(res, rej) }; return o; };
+  const q = () => { const o = { select: () => o, eq: () => o, order: () => o, in: () => o, range:()=>o, then: (res, rej) => Promise.reject(new Error('mreza')).then(res, rej) }; return o; };
   let poziv = 0;
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail', 'showToast', 'console', '_dozUcitajTacke', '_dozPrimijeniRed',
-    'let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('dozLoadLayers') +
+    'const sbUser={id:"me"};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
     '\nreturn { run: (id, o) => dozLoadLayers(id, o), get: () => ({ _dozMembers, _dozMarkings }) };');
   const api = fn({ from: q }, () => (poziv++ === 0 ? { members: [1, 2], markings: [3], tracks: [] } : null),
     () => {}, () => {}, () => {}, () => {}, { error() {} }, () => Promise.reject(new Error('mreza')), m => m);
@@ -105,3 +105,4 @@ Promise.all(cekaj).then(() => {
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
   process.exit(fail ? 1 : 0);
 });
+

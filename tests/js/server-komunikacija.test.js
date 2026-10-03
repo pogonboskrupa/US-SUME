@@ -134,7 +134,7 @@ function makeRed(greskaZa, overrides = {}) {
   const tajmeri = [];
   const g = {
     sbUser: { id: 'u1' }, sbProfile: { sumarija: 'S' }, _OL,
-    sb: { from: () => ({ delete: () => ({ eq: async (_k, id) => { brisanja.push(id); return { error: greskaZa(id) }; } }) }),
+    sb: { from: () => ({ delete: () => ({ eq: (_k, id) => ({select:async()=>{ brisanja.push(id); return { data:[{id}],error: greskaZa(id) }; }}) }) }),
           auth: { refreshSession: async () => ({ data: {} }) } },
     localStorage: global.localStorage,
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
@@ -154,6 +154,15 @@ function makeRed(greskaZa, overrides = {}) {
   const api = new Function(...k, src)(...k.map(x => g[x]));
   return { api, brisanja, tajmeri };
 }
+
+t('brisanje bez vraćenog ID-ja ostaje u redu i ne potvrđuje slanje', async () => {
+  let confirmed=0;
+  const r=makeRed(()=>null,{sb:{from:()=>({delete:()=>({eq:()=>({select:async()=>({data:[],error:null})})})})},_serverTransferConfirmed:()=>confirmed++});
+  _OL.enqueue({type:'delete_vlaka',payload:{id:'v1'}});
+  await r.api._processOfflineQueue(true);
+  assert.strictEqual(_OL.loadQueue(true).length,1);
+  assert.strictEqual(confirmed,0);
+});
 
 t('ručni procesor na privremenom GPS kvaru staje bez 100 pojedinačnih pokušaja', async () => {
   let serije = 0, pojedinacno = 0;
@@ -410,3 +419,4 @@ t('KLJUČNO: spora veza (prijava kanala traje 9 s) — kanal se NA KRAJU prijavi
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
   process.exit(fail ? 1 : 0);
 })();
+

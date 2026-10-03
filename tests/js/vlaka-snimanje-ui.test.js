@@ -182,7 +182,7 @@ t('dugmad koja #action-bar već ima su označena rb-dup; sporedni alati imaju na
     assert.ok(new RegExp('class="[^"]*rb-dup[^"]*" id="' + id + '"').test(red), id);
   }
   assert.ok(/class="rb stop rb-dup"/.test(red));
-  for (const lbl of ['Precizna tačka', 'Nastavi krak', 'Slobodan pogled']) assert.ok(red.includes(lbl), lbl);
+  for (const lbl of ['Precizna tačka', 'Slobodan pogled']) assert.ok(red.includes(lbl), lbl);
   assert.ok(/body\.ab-on #rec-row2 \.rb-dup \{ display:none !important; \}/.test(HTML));
 });
 t('pauza je vidljiva i tekstom (PAUZA + objašnjenje), ne samo bojom okvira', () => {
@@ -240,3 +240,4 @@ t('sažetak + lista po stablu + istaknuta upravo snimljena (stvarni indeksi)', (
 
 console.log(`\n${pass} prošlo, ${fail} palo`);
 process.exit(fail ? 1 : 0);
+

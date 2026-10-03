@@ -1135,7 +1135,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* ═══ v1.9.0 — tok snimanja vlake: traka + donji listovi ═══
    Traka snimanja je stajala na bottom:8px — ISPOD #action-bar-a (fixed, z 1600),
-   pa se drugi red dugmadi (precizna tačka, slobodan pogled, nastavi krak) nije
+   pa se drugi red dugmadi (precizna tačka i slobodan pogled) nije
    mogao dotaći, a vidio se samo kao obojena ivica. --ab-h puni _abVisinaSync. */
 #rec-banner { bottom:calc(var(--ab-h, 0px) + 8px); font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
 #rec-row1 { gap:10px; padding:10px 12px 6px; border-bottom:none; }
@@ -5476,17 +5476,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       <!-- Učitavanje offline SQLite karte pri pokretanju (v1.1.3) -->
       <div id="map-restore-indicator"><div class="mri-spin"></div><span>Učitavam kartu…</span></div>
 
-      <!-- Krak picker popup — samo za nastavak postojećeg kraka -->
-      <div id="krak-picker" style="display:none;position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:600;background:rgba(10,17,35,0.97);border:1.5px solid #0ea5e9;border-radius:10px;padding:10px;min-width:200px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,0.7);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div style="font-size:11px;font-weight:bold;color:#64748b;letter-spacing:0.8px;text-transform:uppercase;">↪ Nastavi krak</div>
-          <button onclick="_closeKrakPicker()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-        </div>
-        <div id="krak-picker-list"></div>
-        <div id="krak-picker-empty" style="display:none;font-size:12px;color:#475569;text-align:center;padding:8px 0;">Nema postojećih krakova</div>
-      </div>
-      <!-- Modal: izbor kraka prije početka snimanja (v1.9.0: donji list, sa
-           imenima krakova koji će nastati — ranije plutajući okvir bez pozadine) -->
       <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
         <span class="nv-icon">⛰</span>
@@ -5554,7 +5543,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <button class="rb" id="btn-preciz" onclick="_precizTacka()" title="Precizna tačka (prosjek 10 fikseva)" style="background:#1e3a5f;color:#38bdf8;font-size:13px;min-width:32px;"><svg class="ic"><use href="#ic-pozicija"/></svg><span class="rb-lbl">Precizna tačka</span></button>
           <button class="rb krak-l rb-dup" id="btn-krak-l" onclick="noviKrakStrana('L')" oncontextmenu="event.preventDefault();noviKrakStranaPick('L')" title="Novi lijevi krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb krak-d rb-dup" id="btn-krak-d" onclick="noviKrakStrana('D')" oncontextmenu="event.preventDefault();noviKrakStranaPick('D')" title="Novi desni krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
-          <button class="rb picker" id="btn-krak-picker" onclick="startKrakOdOvdje()" title="Nastavi postojeći krak"><svg class="ic"><use href="#ic-ponovi"/></svg><span class="rb-lbl">Nastavi krak</span></button>
           <button class="rb back rb-dup" id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;"><svg class="ic"><use href="#ic-vrati"/></svg></button>
           <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju"><svg class="ic"><use href="#ic-otkljucaj"/></svg><span class="rb-lbl">Slobodan pogled</span></button>
           <button class="rb stop rb-dup"   onclick="stopRec()" title="Zaustavi snimanje"><svg class="ic"><use href="#ic-stop"/></svg></button>
@@ -6464,13 +6452,15 @@ function _serverPrimljenoRealtime(row) {
 // autoritet za pristup; lokalni spisak članova može kasniti za serverom.
 async function _vlakePreuzmiStranice(upit, owner) {
   const rows = [];
-  for (let offset = 0;; offset += 100) {
+  for (let offset = 0, n = 0; n < 5000; n++) {
     const page = await upit().order('id').range(offset, offset + 99);
     if (sbUser?.id !== owner) throw { code:'OWNER_CHANGED', message:'Promijenjen nalog' };
     if (page.error) throw page.error;
-    rows.push(...(page.data || []));
-    if ((page.data || []).length < 100) return rows;
+    if (!page.data?.length) return rows;
+    rows.push(...page.data);
+    offset += page.data.length;
   }
+  throw new Error('Previše stranica podataka; prethodna lokalna kopija je sačuvana');
 }
 // Preuzimanje vlastitog rada s drugog uređaja ne smije prepisati živu
 // lokalnu izmjenu koja čeka debounce, slanje ili završetak GPS snimanja.
@@ -6504,7 +6494,7 @@ async function serverPreuzmiDijeljeno(projektId) {
     if (sbUser?.id !== owner) return;
     const projects = [...new Map([...(owned.data || []), ...(result.data || [])].map(p=>[p.id,p])).values()].filter(p=>!projektId || p.id===projektId);
     if (!projects.length) {
-      for (const p of _projekti) if (p.korisnik_id!==owner) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
+      for (const p of _projekti) if (p.korisnik_id!==owner && (!projektId || p.id===projektId) && !ids.includes(p.id)) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
       _OL.save(_OL.PROJEKTI,_projekti);
       showToast('Nema projekata u kojima si vlasnik ili član'); return;
     }
@@ -6755,8 +6745,8 @@ async function _processOfflineQueue(sila) {
       if (op.type === 'upsert_vlaka') {
         err = await _syncVlakaOperation(op);
       } else if (op.type === 'delete_vlaka') {
-        const { error } = await sb.from('vlake').delete().eq('id', op.payload.id);
-        err = error;
+        const { data, error } = await sb.from('vlake').delete().eq('id', op.payload.id).select('id');
+        err = error || ((data || []).some(r=>String(r.id)===String(op.payload.id)) ? null : {code:'NO_CONFIRMATION',message:'Server nije potvrdio brisanje vlake'});
       } else if (op.type === 'insert_doz_marking') {
         // OS-S2: 23505 s klijentskim ID-jem = insert je VEĆ uspio (odgovor se izgubio) — uspjeh
         const { data, error } = await _dozUpisiZonu(op.payload);
@@ -16273,8 +16263,6 @@ document.addEventListener('click', e => {
   const dd = document.getElementById('menu-dropdown');
   if (dd && !dd.contains(e.target) && !e.target.closest('#menu-btn')) closeMenuDropdown();
   // mjtrg bottom sheet se zatvara preko #mjtrg-sheet-bg overlay-a
-  const kp = document.getElementById('krak-picker');
-  if (kp && !kp.contains(e.target) && !e.target.closest('#btn-krak-picker')) kp.style.display = 'none';
   const sm = document.getElementById('scale-menu');
   if (sm && !sm.contains(e.target) && !e.target.closest('#map-scale-click')) sm.style.display = 'none';
   const lp = document.getElementById('ab-loc-popup');
@@ -17757,9 +17745,9 @@ function _updBanner() {
     document.getElementById('rec-parent-nm').textContent = par.nm;
     parentRow.style.display = 'flex';
     btnNazad.style.display = '';
-    btnNazad.innerHTML = '<svg class="ic"><use href="#ic-vrati"/></svg> ' + par.nm;
+    btnNazad.innerHTML = '<svg class="ic"><use href="#ic-vrati"/></svg> Vrati na ' + _escHtml(par.nm);
     if (abNazad)   abNazad.style.display = '';
-    if (abNazadNm) abNazadNm.textContent = par.nm;
+    if (abNazadNm) abNazadNm.textContent = 'Vrati na '+par.nm;
   } else {
     parentRow.style.display = 'none';
     btnNazad.style.display = 'none';
@@ -17785,7 +17773,7 @@ function _updRecStatusBar() {
   document.getElementById('rsb-len').textContent = v ? fmtL(calcL(v.pts)) : '';
   const pauseBtn = document.getElementById('rsb-pause');
   if (recPaused) {
-    pauseBtn.textContent = '▶ Nastavi'; pauseBtn.title = 'Nastavi snimanje';
+    pauseBtn.textContent = '▶ Nastavi '+(v?.nm||''); pauseBtn.title = 'Nastavi snimanje na odabranoj vlaci';
   } else {
     pauseBtn.textContent = '⏸ Pauza'; pauseBtn.title = 'Pauza';
   }
@@ -18099,6 +18087,7 @@ function stopRec() {
   _recZadnja = { idx: actI, ms: _recSesijaMs };   // sažetak za "Snimanje završeno"
   _vlRetrace = null;
   recOn = false; recPaused = false; _recParentIdx = null;
+  _parentReturnIdx=null;_parentReturnTrimToIdx=-1;
   _pauziZavrsi(_recPauseWin);     // stop usred pauze bi inače ostavio vječno otvoren interval
   _setFreeView(false);
   _clearRecPreview();
@@ -18348,7 +18337,6 @@ async function noviKrakStranaPick(strana) {
 function noviKrakStrana(strana, overrideNm) {
   const drawing = activeTool === 'addline';
   if ((!recOn && !drawing) || actI === null) return;
-  _closeKrakPicker();
   const parentIdx = actI;
   const parentV   = vlake[parentIdx];
   if (parentV.pts.length === 0) { showToast('Snimi bar jednu tačku na vlaci!'); return; }
@@ -18413,61 +18401,6 @@ function noviKrakStrana(strana, overrideNm) {
 }
 
 // Picker za nastavak postojećeg kraka
-function startKrakOdOvdje() {
-  const drawing = activeTool === 'addline';
-  if ((!recOn && !drawing) || actI === null) return;
-  const parentV = vlake[actI];
-
-  // Pronađi sve krake ove vlake (novi L/D stil i stari . stil)
-  const postojeci = vlake
-    .map((v, i) => ({ v, i }))
-    .filter(({ v }) => v.kr > 0 && v.nm.startsWith(parentV.nm + '.'));
-
-  const list  = document.getElementById('krak-picker-list');
-  const empty = document.getElementById('krak-picker-empty');
-  if (postojeci.length === 0) {
-    list.innerHTML = '';
-    empty.style.display = '';
-  } else {
-    empty.style.display = 'none';
-    list.innerHTML = postojeci.map(({ v, i }) => {
-      const m = Math.round(v.pts.length > 1
-        ? v.pts.reduce((s, p, j) => j === 0 ? 0 : s + ptDist(v.pts[j-1], p), 0) : 0);
-      const badge = _krakStranaBadge(v.strana);
-      return `<button onclick="odaberiKrak(${i})" style="display:flex;align-items:center;gap:6px;width:100%;text-align:left;background:rgba(14,165,233,0.10);border:1px solid #1e3a5f;border-radius:6px;color:#e2e8f0;padding:8px 10px;margin-bottom:5px;font-size:13px;font-weight:bold;cursor:pointer;">
-        ${badge}<span style="color:#e2e8f0;">${v.nm}</span>
-        <span style="font-size:11px;color:#64748b;margin-left:auto;">${v.pts.length} tač. · ${m} m</span>
-      </button>`;
-    }).join('');
-  }
-  document.getElementById('krak-picker').style.display = '';
-}
-
-function _closeKrakPicker() {
-  document.getElementById('krak-picker').style.display = 'none';
-}
-
-function odaberiKrak(krakIdx) {
-  _closeKrakPicker();
-  const drawing = activeTool === 'addline';
-  if ((!recOn && !drawing) || actI === null) return;
-  _recParentIdx = actI;
-  actI = krakIdx;
-  if (recOn) {
-    // Isti princip kao noviKrakStrana: topli filter dok se aktivno snima
-    _kfSoftReset();
-    selI(krakIdx);
-    _updBanner();
-    showToast('↪ Nastavak snimanja ' + vlake[krakIdx].nm);
-  } else {
-    selI(krakIdx);
-    _stopAddLine(false);
-    mtAddLine();
-    showToast('↪ Nastavljam crtanje kraka ' + vlake[krakIdx].nm);
-  }
-}
-
-
 function _updBl2() {
   if (actI === null) return;
   const v = vlake[actI];
@@ -18524,6 +18457,8 @@ let _parentReturnTrimToIdx = -1;
 
 function vratiSeNaRoditelja() {
   if (!recOn || _recParentIdx === null) return;
+  const child=vlake[actI],target=vlake[_recParentIdx];
+  if(!child || !target || target._deleted || child.projektId!==target.projektId) {showToast('Roditeljska vlaka nije dostupna u ovom projektu');return;}
   const krakIdx = actI;
   if (krakIdx !== null) {
     updateVlakaLabel(krakIdx);
@@ -18558,7 +18493,10 @@ function vratiSeNaRoditelja() {
   if (_recSegStart > 0) { _recSesijaMs += Date.now() - _recSegStart; _dayActiveMs += Date.now() - _recSegStart; _recSegStart = 0; }
   _dayWorkEnd = new Date().toISOString();
   _saveDayTiming(todayStr());
+  if(!recPaused)_pauziOtvoriProzor(_recPauseWin);
   recPaused = true;
+  _lastPtAcceptedAt=0;
+  if(_precizActive)_precizReset();
   _clearRecPreview();
   const banner = document.getElementById('rec-banner');
   const btn = document.getElementById('btn-pause');
@@ -18569,7 +18507,7 @@ function vratiSeNaRoditelja() {
   _updBanner();
   _updFabVisibility();
 
-  document.getElementById('rec-stats').textContent = '⏸ Hodaj nazad, ▶';
+  document.getElementById('rec-stats').textContent = '⏸ Povratak na '+vlake[actI].nm+' — zatim Nastavi';
 
   showToast('↩ ' + vlake[actI].nm + ' — GPS pauziran. Pritisni ▶ kad stigneš na vlaku.');
 }
@@ -23549,7 +23487,7 @@ function ldK(file) {
 function pkml(doc, col, op) {
   op = op ?? 0.9;
   const g = L.featureGroup();
-  doc.querySelectorAll('Placemark').forEach(pm => {
+  doc.querySelectorAll('Placemark').forEach((pm,pmIndex) => {
     const name = pm.querySelector('name')?.textContent?.trim() || '';
     const desc = pm.querySelector('description')?.textContent?.trim() || '';
     const extData = _parseKmlExtData(pm);
@@ -23561,7 +23499,7 @@ function pkml(doc, col, op) {
         const holes = [...pg.querySelectorAll('innerBoundaryIs coordinates')].map(c=>pcs(c.textContent)).filter(r=>r.length>2);
         const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fillOpacity:0.001});
         l._kmlIsPolygon = true;
-        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
+        l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(_escHtml(name), {sticky:true});
         _bindKmlPopup(l);
         l.addTo(g);
@@ -23571,7 +23509,7 @@ function pkml(doc, col, op) {
       const cs = pcs(ls.querySelector('coordinates')?.textContent);
       if (cs.length > 1) {
         const l = L.polyline(cs, {color:col, weight:2, dashArray:'6,4', opacity:op});
-        l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
+        l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(_escHtml(name), {sticky:true});
         _bindKmlPopup(l);
         l.addTo(g);
@@ -23582,7 +23520,7 @@ function pkml(doc, col, op) {
       if (cs.length > 0) {
         const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
         m._kmlIsPoint = true;
-        m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
+        m._kmlPmIndex=pmIndex;m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
         if (name) m.bindTooltip(_escHtml(name));
         _bindKmlPopup(m);
         m.addTo(g);
@@ -23739,68 +23677,7 @@ function _kmlRingDistPx(latlngs, cp) {
   return m;
 }
 
-function _kmlPopupHtml(layer, uid) {
-  const nm = layer._kmlName || '';
-  const desc = layer._kmlDesc || '';
-  const ext = layer._kmlExtData || {};
-  const extKeys = Object.keys(ext);
-  const type = layer._kmlIsPolygon ? 'Poligon' : (layer._kmlIsPoint ? 'Tačka' : 'Linija');
-  const typeIco = layer._kmlIsPolygon ? '▣' : (layer._kmlIsPoint ? '●' : '━');
-
-  let coords = '';
-  if (layer._kmlIsPoint && layer.getLatLng) {
-    const ll = layer.getLatLng();
-    const gk = wgsToMGI(ll.lat, ll.lng);
-    coords = gk ? `<div style="font-size:11px;color:#fbbf24;font-family:monospace;margin-top:4px;">Y: ${gk.y} · X: ${gk.x}</div>` : '';
-  } else if (layer._kmlIsPolygon && layer.getBounds) {
-    const c = layer.getBounds().getCenter();
-    const gk = wgsToMGI(c.lat, c.lng);
-    coords = gk ? `<div style="font-size:11px;color:#fbbf24;font-family:monospace;margin-top:4px;">Centar Y: ${gk.y} · X: ${gk.x}</div>` : '';
-  }
-
-  let extHtml = '';
-  if (extKeys.length) {
-    extHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #334155;">` +
-      extKeys.map(k => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;">
-        <span style="color:#94a3b8;">${_escHtml(k)}</span>
-        <span style="color:#e2e8f0;text-align:right;max-width:60%;word-break:break-all;">${_escHtml(ext[k])}</span>
-      </div>`).join('') + `</div>`;
-  }
-
-  let descHtml = '';
-  if (desc) {
-    // Uvijek escape-uj — opis dolazi iz KML fajla korisnika/kolege (uvoz/dijeljenje),
-    // nikad ne umeći sirov HTML (XSS preko <description>). Novi red → <br> radi čitljivosti.
-    descHtml = `<div style="margin-top:6px;font-size:12px;color:#cbd5e1;line-height:1.4;max-height:120px;overflow-y:auto;">
-      ${_escHtml(desc).replace(/\n/g, '<br>')}
-    </div>`;
-  }
-
-  return `<div style="background:#0f172a;color:#e2e8f0;padding:10px 12px;border-radius:10px;min-width:180px;">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-      <span style="color:#64748b;font-size:13px;">${typeIco}</span>
-      <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">${type}</span>
-    </div>
-    <div id="${uid}-nm" style="font-size:14px;font-weight:700;color:#f1f5f9;cursor:pointer;" onclick="_kmlPopEditName('${uid}',this)" title="Klikni za izmjenu">${nm ? _escHtml(nm) : '<span style=color:#475569>Bez naziva</span>'}</div>
-    ${coords}
-    ${descHtml}
-    ${extHtml}
-    <div style="margin-top:8px;display:flex;gap:6px;">
-      <button onclick="_kmlPopEditStart('${uid}')" style="flex:1;padding:6px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-crtaj"/></svg> Uredi</button>
-      <button onclick="_kmlPopStyleToggle('${uid}')" style="flex:1;padding:6px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-boja"/></svg> Stil</button>
-      <button onclick="_kmlPopZoom('${uid}')" style="padding:6px 10px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-trazi"/></svg></button>
-    </div>
-    <div id="${uid}-edit" style="display:none;margin-top:8px;">
-      <input id="${uid}-name-in" value="${_escAttr(nm)}" placeholder="Naziv" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;margin-bottom:4px;box-sizing:border-box;">
-      <textarea id="${uid}-desc-in" placeholder="Opis / napomena" rows="3" style="width:100%;padding:6px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;resize:vertical;box-sizing:border-box;">${_escHtml(desc)}</textarea>
-      <div style="display:flex;gap:6px;margin-top:6px;">
-        <button onclick="_kmlPopSave('${uid}')" style="flex:1;padding:6px;background:#059669;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Sačuvaj</button>
-        <button onclick="_kmlPopCancel('${uid}')" style="padding:6px 10px;background:#475569;border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-      </div>
-    </div>
-    <div id="${uid}-style" style="display:none;margin-top:8px;">${_kmlPopStylePanel(uid, layer)}</div>
-  </div>`;
-}
+function _kmlPopupHtml(layer, uid) { return _layerPopupHtml(layer,uid); }
 
 function _escAttr(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;'); }
 
@@ -23830,7 +23707,7 @@ function _kmlPopEditName(uid, el) {
 
 function _kmlPopEditStart(uid) {
   const ed = document.getElementById(uid + '-edit');
-  if (ed) ed.style.display = '';
+  if (ed) {ed.style.display = '';map._popup?.update();}
 }
 
 function _kmlPopCancel(uid) {
@@ -23838,19 +23715,23 @@ function _kmlPopCancel(uid) {
   if (ed) ed.style.display = 'none';
 }
 
-function _kmlPopSave(uid) {
-  const layer = _kmlPopFindLayer(uid);
-  if (!layer) return;
-  const newName = document.getElementById(uid + '-name-in')?.value?.trim() || '';
-  const newDesc = document.getElementById(uid + '-desc-in')?.value?.trim() || '';
-  layer._kmlName = newName;
-  layer._kmlDesc = newDesc;
-  if (layer.getTooltip?.()) layer.unbindTooltip();
-  if (newName) layer.bindTooltip(newName, { sticky: true });
-  const nmEl = document.getElementById(uid + '-nm');
-  if (nmEl) nmEl.innerHTML = newName ? _escHtml(newName) : '<span style=color:#475569>Bez naziva</span>';
-  _kmlPopCancel(uid);
-  showToast('✓ Sačuvano');
+async function _kmlPopSave(uid) {
+  const layer=_kmlPopFindLayer(uid),i=_kmlPopFindIdx(uid),k=kmlLs[i];
+  if(!layer || !k || layer._saving)return;
+  const newName=document.getElementById(uid+'-name-in')?.value?.trim()||'';
+  const newDesc=document.getElementById(uid+'-desc-in')?.value?.trim()||'';
+  layer._saving=true;
+  try {
+    if(!k._key)await _localLayerPatchFeature(k,layer._kmlPmIndex,newName,newDesc);
+    const change=l=>{l._kmlName=newName;l._kmlDesc=newDesc;if(l.getTooltip?.())l.unbindTooltip();if(newName)l.bindTooltip(_escHtml(newName),{sticky:true});};
+    if(!k._key)k.grp.eachLayer(l=>{if(l._kmlPmIndex===layer._kmlPmIndex)change(l);});else change(layer);
+    const nm=document.getElementById(uid+'-nm');if(nm)nm.textContent=newName||'Bez naziva';
+    const article=nm?.closest('.le-popup');let desc=article?.querySelector('.le-description');
+    if(!desc && newDesc && article){desc=document.createElement('p');desc.className='le-description';article.querySelector('header').after(desc);}
+    if(desc){desc.textContent=newDesc;desc.hidden=!newDesc;}
+    _kmlPopCancel(uid);showToast(k._key?'Primijenjeno u ovom prikazu':'✓ Naziv i opis sačuvani u lokalnom fajlu');
+  }catch(e){showToast('⚠ Izmjena nije sačuvana: '+e.message);}
+  finally{layer._saving=false;}
 }
 
 function _kmlPopZoom(uid) {
@@ -23870,76 +23751,13 @@ function _kmlPopStyleToggle(uid) {
     el.style.display = '';
     const i = _kmlPopFindIdx(uid);
     if (i >= 0) el.innerHTML = _kmlPopStylePanel(uid, null, i);
+    map._popup?.update();
   } else {
     el.style.display = 'none';
   }
 }
 
-function _kmlPopStylePanel(uid, layer, idx) {
-  let i = idx !== undefined ? idx : _kmlPopFindIdx(uid);
-  if (i < 0) return '';
-  const k = kmlLs[i];
-  const col = k.col || '#ef4444';
-  const isPoly = !!(layer ? layer._kmlIsPolygon : _kmlGrpHasPolygon(i));
-  const COLS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#ffffff','#000000'];
-  const swatches = COLS.map(c => {
-    const sel = c === col ? 'outline:2px solid #fff;outline-offset:1px;' : '';
-    return `<span onclick="_kpSetCol('${uid}',${i},'${c}')" style="width:22px;height:22px;border-radius:4px;background:${c};cursor:pointer;display:inline-block;${sel}border:1px solid #475569;"></span>`;
-  }).join('');
-
-  const w = k.weight || 2;
-  const dashOpts = [
-    { v: '', l: '━━━' }, { v: '10,6', l: '╌╌╌' }, { v: '4,4', l: '┄┄┄' }, { v: '2,6', l: '· · ·' }
-  ].map(d => {
-    const sel = (k.dash || '') === d.v ? 'background:#334155;color:#fff;' : 'color:#94a3b8;';
-    return `<button onclick="_kpSetDash('${uid}',${i},'${d.v}')" style="padding:3px 6px;border:1px solid #334155;border-radius:4px;font-size:13px;cursor:pointer;background:transparent;${sel}">${d.l}</button>`;
-  }).join('');
-
-  let fillHtml = '';
-  if (isPoly) {
-    const fillOn = k.fill ? 'checked' : '';
-    const fc = k.fillCol || col;
-    const fo = k.fillOpacity ?? 0.35;
-    const fillSwatches = COLS.map(c => {
-      const sel = c === fc ? 'outline:2px solid #fff;outline-offset:1px;' : '';
-      return `<span onclick="_kpSetFillCol('${uid}',${i},'${c}')" style="width:18px;height:18px;border-radius:3px;background:${c};cursor:pointer;display:inline-block;${sel}border:1px solid #475569;"></span>`;
-    }).join('');
-    const patterns = [
-      { v: 'solid', l: '▓' }, { v: 'diagonal', l: '╱' }, { v: 'crosshatch', l: '╳' },
-      { v: 'horizontal', l: '═' }, { v: 'vertical', l: '║' }, { v: 'dots', l: '⠿' }
-    ].map(p => {
-      const sel = (k.fillPattern || 'solid') === p.v ? 'background:#334155;color:#fff;' : 'color:#94a3b8;';
-      return `<button onclick="_kpSetFillPat('${uid}',${i},'${p.v}')" style="padding:2px 5px;border:1px solid #334155;border-radius:4px;font-size:13px;cursor:pointer;background:transparent;${sel}">${p.l}</button>`;
-    }).join('');
-    fillHtml = `
-      <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;">
-        <label style="display:flex;align-items:center;gap:6px;color:#94a3b8;font-size:11px;cursor:pointer;margin-bottom:6px;">
-          <input type="checkbox" ${fillOn} onchange="_kpSetFill('${uid}',${i},this.checked)" style="accent-color:#3b82f6;"> Ispuna
-        </label>
-        <div id="${uid}-fill-opts" style="${k.fill ? '' : 'display:none;'}">
-          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${fillSwatches}</div>
-          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${patterns}</div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="color:#94a3b8;font-size:10px;">Prozirnost</span>
-            <input type="range" min="0.05" max="1" step="0.05" value="${fo}" oninput="_kpSetFillOp('${uid}',${i},this.value)" style="flex:1;height:4px;">
-          </div>
-        </div>
-      </div>`;
-  }
-
-  return `
-    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Boja linije</div>
-    <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${swatches}
-      <input type="color" value="${col}" onchange="_kpSetCol('${uid}',${i},this.value)" style="width:22px;height:22px;border:none;padding:0;background:none;cursor:pointer;">
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-      <span style="color:#94a3b8;font-size:10px;">Debljina</span>
-      <input type="range" min="1" max="8" step="0.5" value="${w}" oninput="_kpSetWeight('${uid}',${i},this.value)" style="flex:1;height:4px;">
-      <span style="color:#64748b;font-size:10px;">${w}px</span>
-    </div>
-    <div style="display:flex;gap:3px;margin-bottom:2px;">${dashOpts}</div>
-    ${fillHtml}`;
-}
+function _kmlPopStylePanel(uid, layer, idx) { return _layerStyleControls(idx!==undefined?idx:_kmlPopFindIdx(uid)); }
 
 function _kmlGrpHasPolygon(i) {
   let has = false;
@@ -24100,6 +23918,7 @@ function saveKmlStyles() {
       tag: k.tag || '' };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
+  if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
 }
 
 // Reset a single layer back to admin global default
@@ -24145,7 +23964,7 @@ function applyKmlStyle(i) {
   if (!k) return;
   const op = k.opacity ?? 0.9;
   const base = { color: k.col, weight: k.weight || 2, opacity: op };
-  if (k.dash) base.dashArray = k.dash; else delete base.dashArray;
+  base.dashArray = k.dash || null;
 
   let patUrl = null;
   if (k.fill && k.fillPattern && k.fillPattern !== 'solid') {
@@ -24502,7 +24321,7 @@ async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id) {
   } catch(e) { await _kmlcDelete(cacheKey); console.warn('KML nije sačuvan lokalno:',e); return false; }
 }
 
-function _localKmlSaveAll() {
+function _localKmlSaveAll(prune=true) {
   try {
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
     kmlLs.forEach(k => {
@@ -24526,11 +24345,12 @@ function _localKmlSaveAll() {
     const activeNames = new Set(kmlLs.filter(k => !k._key).map(k => k._origName || k.name));
     const droppedCaches=[];
     for (const key of Object.keys(store)) {
-      if (!activeNames.has(key)) { if(store[key].cacheKey)droppedCaches.push(store[key].cacheKey); delete store[key]; }
+      if (prune && !activeNames.has(key)) { if(store[key].cacheKey)droppedCaches.push(store[key].cacheKey); delete store[key]; }
     }
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
     droppedCaches.forEach(key=>_kmlcDelete(key));
-  } catch(e) { console.warn('_localKmlSaveAll error:', e); }
+    return true;
+  } catch(e) { console.warn('_localKmlSaveAll error:', e);return false; }
 }
 
 async function _localKmlRestore() {
@@ -24572,113 +24392,7 @@ function _ozKmlToggleEdit(i) {
   _rndOznakePanel();
 }
 
-function _renderKmlEditor(i) {
-  const k = kmlLs[i];
-  const op   = Math.round((k.opacity  ?? 0.9)  * 100);
-  const fop  = Math.round((k.fillOpacity ?? 0.35) * 100);
-  const fp   = k.fillPattern || 'solid';
-  const fc   = k.fillCol || k.col;
-  const PRESET = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'];
-
-  const lineDots = PRESET.map(c =>
-    `<span class="oz-ed-dot${k.col===c?' act':''}" style="background:${c}" onclick="event.stopPropagation();_kmlSetColR(${i},'${c}')"></span>`
-  ).join('');
-  const fillDots = PRESET.map(c =>
-    `<span class="oz-ed-dot${fc===c?' act':''}" style="background:${c}" onclick="event.stopPropagation();_kmlSetFillCol(${i},'${c}')"></span>`
-  ).join('');
-
-  // SVG pattern preview icons
-  const PAT = [
-    ['solid',        `<svg width="20" height="16"><rect width="20" height="16" fill="#3b82f6" rx="2"/></svg>`],
-    ['diagonal',     `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><line x1="0" y1="16" x2="16" y2="0" stroke="#60a5fa" stroke-width="2"/><line x1="4" y1="20" x2="20" y2="4" stroke="#60a5fa" stroke-width="2"/><line x1="-4" y1="12" x2="12" y2="-4" stroke="#60a5fa" stroke-width="2"/></svg>`],
-    ['diagonal-rev', `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><line x1="0" y1="0" x2="16" y2="16" stroke="#60a5fa" stroke-width="2"/><line x1="4" y1="-4" x2="20" y2="12" stroke="#60a5fa" stroke-width="2"/><line x1="-4" y1="4" x2="12" y2="20" stroke="#60a5fa" stroke-width="2"/></svg>`],
-    ['crosshatch',   `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><line x1="0" y1="16" x2="16" y2="0" stroke="#60a5fa" stroke-width="1.5"/><line x1="4" y1="20" x2="20" y2="4" stroke="#60a5fa" stroke-width="1.5"/><line x1="0" y1="0" x2="16" y2="16" stroke="#60a5fa" stroke-width="1.5"/><line x1="4" y1="-4" x2="20" y2="12" stroke="#60a5fa" stroke-width="1.5"/></svg>`],
-    ['horizontal',   `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><line x1="0" y1="5" x2="20" y2="5" stroke="#60a5fa" stroke-width="2"/><line x1="0" y1="11" x2="20" y2="11" stroke="#60a5fa" stroke-width="2"/></svg>`],
-    ['vertical',     `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><line x1="6" y1="0" x2="6" y2="16" stroke="#60a5fa" stroke-width="2"/><line x1="14" y1="0" x2="14" y2="16" stroke="#60a5fa" stroke-width="2"/></svg>`],
-    ['dots',         `<svg width="20" height="16" style="background:#1e293b;border-radius:2px"><circle cx="5" cy="5" r="2" fill="#60a5fa"/><circle cx="15" cy="5" r="2" fill="#60a5fa"/><circle cx="5" cy="13" r="2" fill="#60a5fa"/><circle cx="15" cy="13" r="2" fill="#60a5fa"/></svg>`],
-  ];
-  const patBtns = PAT.map(([id, svg]) =>
-    `<button class="oz-pat-btn${fp===id?' act':''}" onclick="event.stopPropagation();_kmlSetFillPattern(${i},'${id}')" title="${id}">${svg}</button>`
-  ).join('');
-
-  const fillExtra = k.fill ? `
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Boja punjenja</div>
-      <div class="oz-ed-colors">
-        ${fillDots}
-        <input type="color" class="oz-ed-color-pick" value="${fc}"
-          oninput="event.stopPropagation();_kmlFillColLive(${i},this.value)"
-          onchange="event.stopPropagation();_kmlSetFillCol(${i},this.value)">
-      </div>
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Uzorak</div>
-      <div class="oz-ed-patterns">${patBtns}</div>
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Providnost punjenja <span id="oz-fop-lbl-${i}">${fop}%</span></div>
-      <input type="range" class="oz-ed-range" min="5" max="100" step="5" value="${fop}"
-        oninput="event.stopPropagation();_kmlFillOpacityLive(${i},this.value)"
-        onchange="event.stopPropagation();_kmlSetFillOpacity(${i},this.value/100)">
-    </div>` : '';
-
-  return `<div class="oz-kml-editor" onclick="event.stopPropagation()">
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Ime</div>
-      <input class="oz-ed-input" type="text" value="${_escHtml(k.name)}"
-        onchange="event.stopPropagation();_kmlSetNameR(${i},this.value)" placeholder="Naziv sloja">
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Odjel / Tag</div>
-      <input class="oz-ed-input" type="text" value="${_escHtml(k.tag||'')}"
-        onchange="event.stopPropagation();_kmlSaveTag(${i},this.value)" placeholder="npr. 85 ili Odjel C">
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Boja linije</div>
-      <div class="oz-ed-colors">
-        ${lineDots}
-        <input type="color" class="oz-ed-color-pick" value="${k.col}"
-          oninput="event.stopPropagation();_kmlColorLive(${i},this.value)"
-          onchange="event.stopPropagation();_kmlSetColR(${i},this.value)">
-      </div>
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Debljina linije</div>
-      <div class="oz-ed-weight-row">
-        ${[1,1.5,2,3,4,5].map(ww=>`<button class="oz-wt-btn${(k.weight||2)===ww?' act':''}" onclick="event.stopPropagation();setKmlWeight(${i},${ww});_rndOznakePanel()" title="${ww}px"><span class="oz-wt-line" style="height:${Math.max(1,Math.round(ww))}px"></span></button>`).join('')}
-      </div>
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Stil linije</div>
-      <div class="oz-ed-dash-row">
-        <button class="oz-dash-btn${(k.dash||'')=== ''    ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'');_rndOznakePanel()" title="Puna linija"><svg class="ic"><use href="#ic-puna"/></svg><svg class="ic"><use href="#ic-puna"/></svg><svg class="ic"><use href="#ic-puna"/></svg></button>
-        <button class="oz-dash-btn${(k.dash||'')==='6 4'  ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'6 4');_rndOznakePanel()" title="Isprekidana"><svg class="ic"><use href="#ic-crtkana"/></svg> <svg class="ic"><use href="#ic-crtkana"/></svg> <svg class="ic"><use href="#ic-crtkana"/></svg></button>
-        <button class="oz-dash-btn${(k.dash||'')==='12 6' ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'12 6');_rndOznakePanel()" title="Dugo isprekidana">╍ ╍</button>
-        <button class="oz-dash-btn${(k.dash||'')==='2 4'  ?' act':''}" onclick="event.stopPropagation();setKmlDash(${i},'2 4');_rndOznakePanel()" title="Tačkasta">· · ·</button>
-      </div>
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label">Providnost linije <span id="oz-op-lbl-${i}">${op}%</span></div>
-      <input type="range" class="oz-ed-range" min="5" max="100" step="5" value="${op}"
-        oninput="event.stopPropagation();_kmlOpacityLive(${i},this.value)"
-        onchange="event.stopPropagation();_kmlSetOpR(${i},this.value/100)">
-    </div>
-    <div class="oz-ed-field">
-      <div class="oz-ed-label oz-ed-toggle-row">
-        Punjenje poligona
-        <label class="oz-ed-toggle">
-          <input type="checkbox" ${k.fill?'checked':''} onchange="event.stopPropagation();_kmlSetFill(${i},this.checked)">
-          <div class="oz-ed-toggle-track"></div>
-        </label>
-      </div>
-    </div>
-    ${fillExtra}
-    <div class="oz-ed-btns">
-      <button class="oz-ed-btn" onclick="event.stopPropagation();_ozZoomKml(${i})"><svg class="ic"><use href="#ic-karta"/></svg> Zoom</button>
-      <button class="oz-ed-btn danger" onclick="event.stopPropagation();_dlgConfirm('Ukloniti sloj?',{danger:true}).then(ok=>{if(ok)delK(${i})})"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
-    </div>
-  </div>`;
-}
+function _renderKmlEditor(i) { return _layerEditorHtml(i); }
 
 function _ozBucketToggleGroup(gj) {
   _ozBucketExpanded.has(gj) ? _ozBucketExpanded.delete(gj) : _ozBucketExpanded.add(gj);
@@ -36945,6 +36659,8 @@ function dozInitTypePicker() {
 
 // ─── Load Odjeli ─────────────────────────────────────────────────
 async function dozLoadOdjeli() {
+  const owner=sbUser?.id, generation=(dozLoadOdjeli._gen||0)+1;dozLoadOdjeli._gen=generation;
+  const valid=()=>sbUser?.id===owner && dozLoadOdjeli._gen===generation;
   const lista = document.getElementById('doz-odjeli-list');
   if (!sbUser) { if (lista) lista.innerHTML = '<div class="doz-empty" style="color:#fbbf24;">Prijavite se za pristup</div>'; return; }
   // v1.8.9 OFFLINE-FIRST: keš se prikaže ODMAH, mreža ga samo zamijeni kad
@@ -36968,6 +36684,7 @@ async function dozLoadOdjeli() {
       .select('project_id').eq('user_id', sbUser.id).eq('is_active', true);
     // Supabase mrežnu grešku VRAĆA, ne baca: bez ove provjere prazno članstvo
     // (pad na slaboj vezi) bi iz liste i keša izbacilo sve odjele kolega.
+    if(!valid())return false;
     if (eClan) throw eClan;
     const memberIds = (clanstva || []).map(c => c.project_id);
     let q = sb.from('doz_projects').select('*').order('created_at', { ascending: false });
@@ -36975,13 +36692,16 @@ async function dozLoadOdjeli() {
       ? q.or(`created_by.eq.${sbUser.id},id.in.(${memberIds.join(',')})`)
       : q.eq('created_by', sbUser.id);
     const { data, error } = await q;
+    if(!valid())return false;
     if (error) throw error;
     const pending = (_OL.load(_OL.DOZ_ODJELI) || []).filter(o => o._pendingSync && o.created_by === sbUser.id);
     _dozOdjeli = [...pending.filter(o => !(data || []).some(d => d.id === o.id)), ...(data || [])];
-    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
+    if(_OL.save(_OL.DOZ_ODJELI, _dozOdjeli)===false)throw Error('Odjeli nisu sačuvani na telefonu');
     dozRenderOdjeli();
     _dozRenderOverview();
+    return true;
   } catch(e) {
+    if(!valid())return false;
     if (imaKes) {
       if (_isNetworkErr(e)) showToast('📴 Doznaka odjeli iz keša (offline)');
       return;
@@ -37271,7 +36991,9 @@ function _dozShowLinkedVlake() {
 }
 
 async function dozLoadLayers(projectId, opts) {
-  if (!projectId) return;
+  if (!projectId) return false;
+  const owner=sbUser?.id;
+  const valid=()=>sbUser?.id===owner && myGen===_dozLoadGen;
   const cacheKey = pid => pid; // per-project cache suffix
   const myGen = ++_dozLoadGen;  // D4-D: spriječi da stariji (spori) odgovor prepiše novije odabrani odjel
   // v1.7.4 OFFLINE-FIRST: pri OTVARANJU odjela odmah prikaži keš, pa ga mreža
@@ -37290,11 +37012,11 @@ async function dozLoadLayers(projectId, opts) {
   }
   try {
     const [mRes, mkRes, trRes] = await Promise.all([
-      sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),
-      sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true).order('created_at', { ascending: false }),
+      _dozReadList(()=>sb.from('doz_project_members').select('*').eq('project_id', projectId).eq('is_active', true),owner),
+      _dozReadList(()=>sb.from('doz_area_markings').select('*').eq('project_id', projectId).eq('is_visible', true),owner),
       _dozUcitajTacke(projectId)
     ]);
-    if (myGen !== _dozLoadGen) return;  // novije selektovan drugi odjel u međuvremenu — odbaci
+    if (!valid()) return false;  // novije selektovan drugi odjel u međuvremenu — odbaci
     // v1.8.9: Supabase mrežnu grešku VRAĆA kao {error}, ne baca. Bez ove provjere
     // pad na mrtvoj/slaboj vezi je dao prazne nizove koji su se ODMAH upisali u
     // offline keš odjela (_dozCacheLayers ispod) — sljedeće otvaranje bez signala
@@ -37302,24 +37024,24 @@ async function dozLoadLayers(projectId, opts) {
     const greska = mRes.error || mkRes.error || trRes.error;
     if (greska) throw greska;
     const prosli = _dozLoadCachedLayers(projectId);
-    _dozMembers  = mRes.data  || [];
-    _dozMarkings = _dozPrimijeniRed(mkRes.data || [], projectId);
-    _dozTracks   = trRes.data || [];
+    let members = mRes.data || [];
 
-    if (_dozMembers.length) {
-      const ids = [...new Set(_dozMembers.map(m => m.user_id).filter(Boolean))];
+    if (members.length) {
+      const ids = [...new Set(members.map(m => m.user_id).filter(Boolean))];
       const { data: kData } = await sb.from('korisnici').select('id,ime,prezime,boja').in('id', ids);
-      if (myGen !== _dozLoadGen) return;
+      if (!valid()) return false;
       const kMap = Object.fromEntries((kData || []).map(k => [k.id, k]));
       // Imena kolega iz prošlog keša ako ovaj poziv padne — inače bi keš ostao bez imena.
       const kPrije = Object.fromEntries(((prosli && prosli.members) || [])
         .filter(m => m._korisnik).map(m => [m.user_id, m._korisnik]));
-      _dozMembers = _dozMembers.map(m => ({ ...m, _korisnik: kMap[m.user_id] || kPrije[m.user_id] || null }));
+      members = members.map(m => ({ ...m, _korisnik: kMap[m.user_id] || kPrije[m.user_id] || null }));
     }
     // Keširaj za offline
-    _dozCacheLayers(projectId);
+    if(!valid())return false;
+    _dozMembers=members;_dozMarkings=_dozPrimijeniRed(mkRes.data||[],projectId);_dozTracks=trRes.data||[];
+    if(_dozCacheLayers(projectId)===false)throw Error('Slojevi nisu sačuvani na telefonu');
   } catch(e) {
-    if (myGen !== _dozLoadGen) return;
+    if (!valid()) return false;
     console.error('dozLoadLayers', e);
     const c = _dozLoadCachedLayers(projectId);
     if (c) {
@@ -37328,9 +37050,13 @@ async function dozLoadLayers(projectId, opts) {
     } else if (!izKesa) {
       _dozMembers = []; _dozMarkings = []; _dozTracks = [];
     }
+    dozRenderMapLayers();
+    if(opts?.strict)throw e;
+    return false;
   }
-  if (myGen !== _dozLoadGen) return;
+  if (!valid()) return false;
   dozRenderMapLayers();
+  return true;
 }
 
 // Sve GPS tačke odjela, stranicu po stranicu. Supabase (PostgREST max-rows)
@@ -37339,20 +37065,25 @@ async function dozLoadLayers(projectId, opts) {
 // NAJNOVIJE tačke (današnji trag nije bio na karti, pređena površina manja) i
 // takav skraćen skup se upisivao u offline keš. Pomak raste za broj stvarno
 // vraćenih redova, pa radi i kad je server podešen na manji max-rows od 1000.
+async function _dozReadList(query,owner) {
+  try {return {data:await _vlakePreuzmiStranice(query,owner),error:null};}
+  catch(error){return {data:null,error};}
+}
 const _DOZ_TACKE_STRANA = 1000;
 async function _dozUcitajTacke(projectId) {
-  const sve = [];
+  const sve = [], owner=sbUser?.id;
   for (let od = 0, strana = 0; strana < 500; strana++) {
     const { data, error } = await sb.from('doz_track_points')
       .select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId)
-      .order('recorded_at', { ascending: true })
+      .order('recorded_at', { ascending: true }).order('user_id', { ascending:true }).order('latitude', {ascending:true}).order('longitude', {ascending:true})
       .range(od, od + _DOZ_TACKE_STRANA - 1);
+    if(sbUser?.id!==owner)return {data:null,error:{code:'OWNER_CHANGED',message:'Promijenjen nalog'}};
     if (error) return { data: null, error };
-    if (!data || !data.length) break;
+    if (!data || !data.length) return {data:sve,error:null};
     for (const r of data) sve.push(r);
     od += data.length;
   }
-  return { data: sve, error: null };
+  return {data:null,error:{code:'PAGE_LIMIT',message:'Preuzimanje nije potpuno; prethodni podaci su sačuvani'}};
 }
 
 // Zone koje još čekaju u redu za sync moraju ostati vidljive i kad server vrati
@@ -37360,7 +37091,7 @@ async function _dozUcitajTacke(projectId) {
 // obrisana offline ne smije "vaskrsnuti" dok brisanje ne stigne na server.
 function _dozPrimijeniRed(markings, projectId) {
   let q = [];
-  try { q = _OL.loadQueue() || []; } catch(e) {}
+  try { q = (_OL.loadQueue() || []).filter(o=>!o._uid || o._uid===sbUser?.id); } catch(e) {}
   const brisu = new Set(q.filter(o => o.type === 'delete_doz_marking').map(o => o.payload && o.payload.id));
   const naServeru = new Set(markings.map(m => m.id));
   const cekaju = q
@@ -37397,8 +37128,8 @@ function _dozCacheLayers(projectId) {
       keys.sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0));
       keys.slice(0, keys.length - 5).forEach(k => delete all[k]);
     }
-    _OL.save(_OL.DOZ_MEMBERS, all);
-  } catch(e) {}
+    return _OL.save(_OL.DOZ_MEMBERS, all)!==false;
+  } catch(e) {return false;}
 }
 
 function _dozLoadCachedLayers(projectId) {
@@ -40354,7 +40085,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">↪</div>
-            <div class="help-txt"><b>Nastavi postojeći krak</b><span>Ako ste ranije prekinuli snimanje kraka, tapnite ↪ da nastavite od tačke gdje ste stali.</span></div>
+            <div class="help-txt"><b>Nastavi ranije snimanje</b><span>U izboru vlake odaberite postojeću vlaku ili krak i nastavite od njegovog kraja.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">↩</div>
@@ -40383,7 +40114,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">↪</div>
-            <div class="help-txt"><b>Nastavi krak</b><span>Otvara listu postojećih krakova i nastavlja snimanje od kraja odabranog.</span></div>
+            <div class="help-txt"><b>Povratak na roditelja</b><span>Završi rad na djetetu dugmetom Vrati na roditelja. Povratak je pauziran; pritisni Nastavi kada stigneš na roditeljsku vlaku.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">↩</div>
@@ -42230,7 +41961,7 @@ if (typeof AndroidDownload !== 'undefined') {
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
     </div>
-    <div id="data-server-received" style="padding:12px 16px;" hidden><div id="syncq-primljeno"></div><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Osvježi podatke dijeljenih projekata</button></div>
+    <div id="data-server-received" style="padding:12px 16px;" hidden><div id="syncq-primljeno"></div><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()" class="server-doz-refresh">↓ Preuzmi doznaku</button><p id="server-doz-status" class="sp-note"></p></div>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     <div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div>
   </div>
@@ -42339,5 +42070,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/tab-data.js"></script>
 <script src="static/js/server-panel.js"></script>
 <script src="static/js/local-layer-import.js"></script>
+<script src="static/js/layer-editor.js"></script>
 </body>
 </html>

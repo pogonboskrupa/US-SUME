@@ -249,7 +249,7 @@ function makeRed(opts = {}) {
       bumpRetry: (id) => { pozivi.retry.push(id); return false; },
       odgodi: (id) => { pozivi.odgode = (pozivi.odgode || []).concat(id); },
     },
-    sb: { from: () => ({ delete: () => ({ eq: async (_k, id) => { pozivi.brisanja.push(id); return { error: opts.greska || null }; } }) }),
+    sb: { from: () => ({ delete: () => ({ eq: (_k, id) => ({ select: async () => { pozivi.brisanja.push(id); return { data:[{id}], error: opts.greska || null }; } }) }) }),
           auth: { refreshSession: async () => ({ data: {} }) } },
     localStorage: { getItem: () => '[]', setItem: () => {} },
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),

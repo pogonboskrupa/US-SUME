@@ -120,6 +120,9 @@
   function render() {
     const p = sync(), context=byId('server-project-label');
     if(context)context.textContent=label(p);
+    const dz=byId('server-doz-status');
+    if(dz){let saved=null;try{saved=JSON.parse(localStorage.getItem('tvlake_server_doz_received_'+currentUid())||'null');}catch(e){}
+      dz.textContent=saved?'Doznaka: '+saved.label+' · primljeno '+timestamp(saved.ts):'Preuzmi listu odjela doznake i slojeve trenutno otvorenog odjela.';}
     const who = byId('server-identity');
     if (who) who.textContent = 'Prijavljen: ' + name(currentUid()) + (p ? ' · ' + (p.korisnik_id===currentUid() ? 'Vlasnik projekta' : 'Član / pregled projekta') : '');
     const root = byId('server-project-view'); if (!root) return;
@@ -152,6 +155,23 @@
   Object.assign(window,{
     _serverPanelSazetak(n,st){renderPending();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
     _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,
+    async _serverPreuzmiDoznaku(){
+      if(_serverPreuzmiDoznaku.busy)return;
+      const uid=currentUid();if(!uid)return;
+      _serverPreuzmiDoznaku.busy=true;const btn=byId('server-doz-refresh');if(btn)btn.disabled=true;
+      try{
+        _mrezaSila(60000);
+        if(await dozLoadOdjeli()!==true)throw Error('Odjeli nisu preuzeti');
+        if(currentUid()!==uid)return;
+        const id=typeof _dozSelId!=='undefined'?_dozSelId:null,odjel=(_dozOdjeli||[]).find(o=>o.id===id);
+        let label='Lista odjela';
+        if(odjel){if(await dozLoadLayers(id,{strict:true})!==true)throw Error('Slojevi nisu preuzeti');label=odjel.name+' — zone, članovi i GPS pojasevi';}
+        if(currentUid()!==uid)return;
+        localStorage.setItem('tvlake_server_doz_received_'+uid,JSON.stringify({ts:Date.now(),label}));
+        showToast(odjel?'✓ Doznaka preuzeta i sačuvana offline':'✓ Odjeli doznake preuzeti. Otvori odjel za njegove zone i pojaseve.');
+      }catch(e){showToast('⚠ Preuzimanje doznake nije završeno — '+e.message);}
+      finally{_serverPreuzmiDoznaku.busy=false;if(btn)btn.disabled=false;render();}
+    },
     _serverPanelRender:render,_serverProjektModel:model,_serverProjektPreuzeto:downloaded,_serverOpContext:opContext,
     _serverProjektAuthor(value){sync();author=String(value);page=0;render();},
     _serverProjektSearch(value){search=String(value);page=0;render();},

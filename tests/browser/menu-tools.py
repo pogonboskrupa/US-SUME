@@ -27,12 +27,12 @@ server_html=section('<div id="syncq-bg"','<!-- Share foto')
 body=section('<div id="guide-choice-modal"','<!-- PROFIL VISINA MODAL -->')+section('<div id="layer-import-modal"','<!-- ══ OZNAKE PANEL')
 js='''
 let sbUser={id:'A'},sbProfile={ime:'Emina',prezime:'Projektant'},lastP={la:44.9,lo:16},_fotoSnapPos=null;
-const _LOCAL_KML_KEY='fixture_local',_GUIDE_ROUTES_KEY='fixture_routes';
+const _LOCAL_KML_KEY='fixture_local',_GUIDE_ROUTES_KEY='fixture_routes',_KML_USER_STYLES_KEY='fixture_styles';let _dozKmlSelMode=false;
 const _KMLC_DB='fixture_cache',_KMLC_STORE='files';let _kmlcDB=null,_kmlcKeys=new Set();
 let kmlLs=[],kmlCI=0;const KCOLS=['#16a34a','#2563eb'],_glCollapsed=new Set();
 const map=L.map('map').setView([44.9,16],13),_genUUID=()=>crypto.randomUUID();
 let chosenStart=null,selectedRoute=null,sharedRoute=null,_guideActiveRouteId=null;
-const showToast=()=>{},rndGraniceModal=()=>{},_rndOznakePanel=()=>{},applyKmlStyle=()=>{},_guideClearResult=()=>{};
+const showToast=()=>{},rndGraniceModal=()=>{},_rndOznakePanel=()=>{},_guideClearResult=()=>{};
 const _guideStart=x=>{chosenStart=x;closeGuideChoice()},_guideViewRoute=x=>selectedRoute=x,_guideShareRoute=x=>sharedRoute=x;
 const onLocPhotoSelected=()=>{};
 let _projekti=[{id:'P',korisnik_id:'A',odjel:'105',gj:'Gornja Una'},{id:'Q',korisnik_id:'B',clanovi:[{korisnik_id:'A'}],odjel:'206',gj:'Grmeč'}],_aktivniProjektId='P',_dozOdjeli=[{id:'D',name:'Doznaka 107'}],vlake=[],kolegeMap={B:{ime:'Amir Kolega'}},_vlakaSaveTimers={};
@@ -45,10 +45,11 @@ let _serverSaljem=false,_serverPrimljenoBusy=false,_vlTrazi='',_vlSort='naziv',_
 const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},serverPosalji=()=>{},isAdmin=()=>false,isVodeci=()=>false;
 
 '''
-js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll'])
+js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
+js+='\n'+(ROOT/'static/js/layer-editor.js').read_text()
 js+='\n'+'\n'.join(re.findall(r"proj4.defs\('EPSG:3127[56]', [^\n]+",SOURCE))
 js+='\n'+(ROOT/'static/js/local-layer-import.js').read_text()+'\n'+(ROOT/'static/js/tab-data.js').read_text()+'\n'+(ROOT/'static/js/server-panel.js').read_text()
-fixture='<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+styles+'\n#map{position:fixed;inset:0;background:#e4ecd9}.leaflet-container{background:#e4ecd9}</style></head><body>'+sprite+'<div id="map"></div>'+body+server_html+'<button id="camera-test" onclick="startLocPhoto()" style="position:fixed;top:10px;right:10px;z-index:1000">Uslikaj</button><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/shapefile.min.js"></script><script src="/static/libs/proj4.js"></script><script>'+js+'</script></body></html>'
+fixture='<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+styles+'\n#map{position:fixed;inset:0;background:#e4ecd9}.leaflet-container{background:#e4ecd9}</style></head><body>'+sprite+'<div id="map"></div>'+section('<div id="nv-badge">','<!-- Meni za izbor razmjere -->')+body+server_html+'<button id="camera-test" onclick="startLocPhoto()" style="position:fixed;top:10px;right:10px;z-index:1000">Uslikaj</button><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/shapefile.min.js"></script><script src="/static/libs/proj4.js"></script><script>'+js+'</script></body></html>'
 
 def polygon():
     rings=[[(16,44.9),(16,44.91),(16.01,44.91),(16.01,44.9),(16,44.9)],[(16.002,44.902),(16.008,44.902),(16.008,44.908),(16.002,44.908),(16.002,44.902)]]
@@ -125,6 +126,7 @@ async def main():
                 assert 'Još nije potvrđeno' not in await page.locator('#server-project-summary').inner_text()
                 scroll=await page.locator('#server-scroll').evaluate('(e)=>({height:e.clientHeight,width:e.clientWidth,content:e.scrollWidth})')
                 assert scroll['height']>=35 and scroll['content']<=scroll['width'],scroll
+                await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=0')
                 await page.screenshot(path=str(OUT/f'server-send-{theme}-{width}-{height}.png'))
                 await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=e.scrollHeight')
                 await page.screenshot(path=str(OUT/f'server-project-{theme}-{width}-{height}.png'))
@@ -138,8 +140,31 @@ async def main():
         assert data['bounds']=='16,44.9,16.01,44.91',data
         assert '<innerBoundaryIs>' in data['backup']['Odjeli.kml']['content'] and 'content' not in data['meta']['Odjeli.kml']
         await page.evaluate('closeLayerImport()');await page.screenshot(path=str(OUT/'shp-converted-map.png'))
+        await page.evaluate("document.querySelector('#nv-val').textContent='532 m';document.querySelector('#omgi-y').textContent='6501234';document.querySelector('#omgi-x').textContent='4978901';document.querySelector('#map-scale-val').textContent='25 000'")
+        for theme in ['day','dark']:
+            await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+            for width,height in [(320,568),(390,650),(768,800),(568,320)]:
+                await page.set_viewport_size({'width':width,'height':height})
+                await page.evaluate("map.closePopup();map.invalidateSize();map.fitBounds(kmlLs[0].grp.getBounds());_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],kmlLs[0].grp.getBounds().getCenter())")
+                await page.get_by_role('button',name='Stil fajla',exact=True).click()
+                await page.wait_for_timeout(400)
+                await bounds(page,'.leaflet-popup-content',width,height)
+                await bounds(page,'#nv-badge',width,height)
+                assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
+                await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
+        await page.evaluate("_layerStyleChange(0,'dash','6 4');_layerStyleChange(0,'dash','');_layerStyleChange(0,'col','#8b5cf6');_layerStyleChange(0,'weight',4);_layerStyleChange(0,'fill',true);_layerStyleChange(0,'fillOpacity',45)")
+        assert await page.evaluate('kmlLs[0].grp.getLayers()[0].options.dashArray') is None
+        await page.evaluate("map.closePopup();_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],map.getCenter());_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")
+        await page.locator('.le-fields input').fill('Čuvar <b>105</b>')
+        await page.locator('.le-fields textarea').fill('Nova napomena & opis')
+        await page.evaluate('_kmlPopSave(kmlLs[0].grp.getLayers()[0]._kmlPopupId)')
+        assert await page.locator('.le-description').inner_text()=='Nova napomena & opis'
+        assert await page.locator('.le-heading>b').inner_text()=='Čuvar <b>105</b>'
+        assert await page.locator('.le-heading>b>b').count()==0
         await page.reload();await page.evaluate('_localKmlRestore()')
         assert await page.evaluate('kmlLs.length')==1
+        restored=await page.evaluate('({name:kmlLs[0].grp.getLayers()[0]._kmlName,desc:kmlLs[0].grp.getLayers()[0]._kmlDesc,col:kmlLs[0].col,weight:kmlLs[0].weight,fill:kmlLs[0].fillOpacity})')
+        assert restored=={'name':'Čuvar <b>105</b>','desc':'Nova napomena & opis','col':'#8b5cf6','weight':4,'fill':.45},restored
         assert await page.evaluate('kmlLs[0].grp.getLayers()[0].getLatLngs().length')==2
         await page.evaluate('map.fitBounds(kmlLs[0].grp.getBounds())');await page.screenshot(path=str(OUT/'shp-offline-restored.png'))
         await page.evaluate('openLayerImport();layerImportTab("shp")')

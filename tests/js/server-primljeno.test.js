@@ -13,8 +13,8 @@ function env(){const store=new Map(),el={innerHTML:''},requests=[],messages=[];
  _kvcSave:(id,rows)=>e._serverPrimljenoZapamti(id,rows)};
  const responses={projekt_clanovi:[{projekt_id:'shared'}],projekti:[{id:'shared',korisnik_id:'other',gj:'GJ',odjel:'105'}],
  vlake:[{id:'v1',projekt_id:'shared',korisnik_id:'other',nm:'T1',pts:[[44,16],[45,17]],updated_at:'2026-10-02'}]};
- e.sb={from(table){requests.push(table);const q={select(){return q;},eq(){return q;},neq(){return q;},in(){return q;},order(){return q;},
- range(){return q;},then(ok,bad){return Promise.resolve(e.response?e.response(table):{data:responses[table],error:null}).then(ok,bad);}};return q;}};
+ e.sb={from(table){requests.push(table);let offset=0,end=Infinity;const q={select(){return q;},eq(){return q;},neq(){return q;},in(){return q;},order(){return q;},
+ range(a,b){offset=a;end=b;return q;},then(ok,bad){return Promise.resolve(e.response?e.response(table):{data:responses[table],error:null}).then(r=>({...r,data:Array.isArray(r.data)?r.data.slice(offset,end+1):r.data})).then(ok,bad);}};return q;}};
  vm.createContext(e);vm.runInContext(['_vlakePreuzmiStranice','_serverPrimljenoKljuc','_serverPrimljenoUcitaj','_serverPrimljenoZapamti','_serverPrimljenoRender','serverPreuzmiDijeljeno'].map(fn).join('\n'),e);
  return {e,store,el,requests,messages};}
 const row={id:'v1',nm:'T1',korisnik_id:'other',pts:[[44,16],[45,17]],updated_at:'2026-10-02'};
@@ -31,7 +31,7 @@ test('pregled radi offline bez zahtjeva i izolovan je po nalogu',()=>{const h=en
  h.e.navigator.onLine=false;h.e._serverPrimljenoRender();assert.match(h.el.innerHTML,/T1/);assert.equal(h.requests.length,0);
  h.e.sbUser={id:'next'};h.e._serverPrimljenoRender();assert.doesNotMatch(h.el.innerHTML,/T1/);});
 test('ručno preuzimanje samo čita server i pamti sažetak dijeljenih podataka',async()=>{const h=env();await h.e.serverPreuzmiDijeljeno();
- assert.deepEqual(h.requests,['projekt_clanovi','projekti','projekti','vlake']);assert.equal(h.e._serverPrimljenoUcitaj().length,1);assert.equal(h.e._serverPrimljenoBusy,false);});
+ assert.deepEqual(h.requests,['projekt_clanovi','projekti','projekti','vlake','vlake']);assert.equal(h.e._serverPrimljenoUcitaj().length,1);assert.equal(h.e._serverPrimljenoBusy,false);});
 test('mrežni pad zadržava prethodni pregled i ne javlja uspjeh',async()=>{const h=env();h.e._serverPrimljenoZapamti('shared',[row]);
  h.e.response=()=>({error:{message:'fetch failed'}});await h.e.serverPreuzmiDijeljeno();assert.equal(h.e._serverPrimljenoUcitaj().length,1);
  assert.ok(h.messages.some(m=>m.includes('nije uspjelo')));});

@@ -44,11 +44,12 @@ function t(name, fn) { testovi.push([name, fn]); }
 
 // Lanac upita koji na kraju vrati zadani odgovor (thenable, kao postgrest).
 function upit(odgovor, log, ime) {
-  const o = {};
+  const o = {};let offset=0,end=Infinity;
   ['select', 'eq', 'neq', 'order', 'in', 'or', 'range', 'update', 'insert', 'single'].forEach(k => {
     o[k] = (...a) => { if (log) log.push(ime + '.' + k + (k === 'range' ? '(' + a.join(',') + ')' : '')); return o; };
   });
-  o.then = (res, rej) => Promise.resolve(typeof odgovor === 'function' ? odgovor() : odgovor).then(res, rej);
+  o.range=(a,b)=>{offset=a;end=b;return o;};
+  o.then=(res,rej)=>Promise.resolve(typeof odgovor==='function'?odgovor():odgovor).then(r=>({...r,data:Array.isArray(r?.data)?r.data.slice(offset,end+1):r?.data})).then(res,rej);
   return o;
 }
 
@@ -58,7 +59,7 @@ function loadLayersEnv(o) {
   const sb = { from: tab => upit(o.odg[tab] || { data: [], error: null }) };
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail',
     'showToast', 'console', '_dozUcitajTacke', '_dozPrimijeniRed',
-    'let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('dozLoadLayers') +
+    "const sbUser={id:'me'};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n" + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
     '\nreturn { run: (id, op) => dozLoadLayers(id, op), get: () => ({ _dozMembers, _dozMarkings, _dozTracks }) };');
   const api = fn(sb, () => o.kes || null,
     () => { st.keširano++; st.kes = api.get(); },
@@ -123,7 +124,7 @@ t('serverske zone prolaze kroz _dozPrimijeniRed (red čekanja)', async () => {
 
 // ── _dozPrimijeniRed ──────────────────────────────────────────────────────
 function red(q) {
-  return new Function('_OL', extractFn('_dozPrimijeniRed') + '\nreturn _dozPrimijeniRed;')({ loadQueue: () => q });
+  return new Function('_OL', "const sbUser={id:'me'};"+extractFn('_dozPrimijeniRed') + '\nreturn _dozPrimijeniRed;')({ loadQueue: () => q });
 }
 console.log('Zone iz reda čekanja:');
 
@@ -150,7 +151,7 @@ t('zona drugog odjela se ne miješa', () => {
 });
 
 t('pokvaren red ne ruši učitavanje', () => {
-  const f = new Function('_OL', extractFn('_dozPrimijeniRed') + '\nreturn _dozPrimijeniRed;')(
+  const f = new Function('_OL', "const sbUser={id:'me'};"+extractFn('_dozPrimijeniRed') + '\nreturn _dozPrimijeniRed;')(
     { loadQueue: () => { throw new Error('x'); } });
   assert.deepStrictEqual(f([{ id: 's1' }], 'o1').map(m => m.id), ['s1']);
 });
@@ -173,7 +174,7 @@ function tackeEnv(ukupno, maxRows, greskaNaStrani) {
     };
     return o;
   } };
-  const fn = new Function('sb', 'const _DOZ_TACKE_STRANA = 1000;\n' + extractFn('_dozUcitajTacke') + '\nreturn _dozUcitajTacke;')(sb);
+  const fn = new Function('sb', "const sbUser={id:'me'},_DOZ_TACKE_STRANA = 1000;\n" + extractFn('_dozUcitajTacke') + '\nreturn _dozUcitajTacke;')(sb);
   return { fn, log };
 }
 console.log('GPS tačke odjela — stranice:');
@@ -370,3 +371,4 @@ t('dozSetStatus: pad pauziranja ostalih ide u red (ne guta se tiho)', () => {
   console.log(`\n${pass} prošlo, ${fail} palo`);
   process.exit(fail ? 1 : 0);
 })();
+

@@ -112,7 +112,7 @@ test('zastarjela lista kolega ne odbacuje vlaku drugog člana istog projekta',as
 test('preuzimanje svih stranica (201 vlaka), bez odsijecanja na prvom odgovoru',async()=>{
   const h=setup();for(let i=1;i<=201;i++)h.database.push(h.row('T'+i));
   await h.e.serverPreuzmiDijeljeno();assert.equal(h.e.kolegeVlake.length,201);
-  assert.deepEqual(h.requests.filter(r=>r.table==='vlake').map(r=>r.start),[0,100,200]);
+  assert.deepEqual(h.requests.filter(r=>r.table==='vlake').map(r=>r.start),[0,100,200,201]);
 });
 test('pad druge stranice ostavlja raniji keš i kartu, bez lažnog uspjeha',async()=>{
   const h=setup();h.database.push(h.row('T1'));await h.e.serverPreuzmiDijeljeno();const before=h.store.get('kvc');

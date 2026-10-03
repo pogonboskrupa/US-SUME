@@ -1060,3 +1060,48 @@ Ažuriranje: Meni → Ažuriraj aplikaciju. Browser je provjerio capture input
 i GPS snapshot; stvarni Android senzor/kamera i dozvole na fizičkom
 telefonu nisu pokrenuti. Supabase/RLS i živo GPS/rutiranje nisu provjereni
 ovim fixture-ima; produkcijska baza i uređaji nisu mijenjani.
+
+## 31. Server, uređivanje KML-a i povratak na roditelja — 2.1.7
+
+Web/SW/Android 2.1.7, versionCode 487. Preuzimanje projekata/vlaka i
+članova/zona doznake ide do prazne stranice, s pomakom po stvarnom broju
+redova. Kraća stranica više ne znači kraj ako je serverski max-rows manji
+od traženog. Dostizanje sigurnosnog limita vraća grešku, ne nepotpun uspjeh.
+Filtrirani prazan odgovor jednog projekta ne briše članstvo drugih.
+Brisanje vlake traži vraćeni ciljani ID; nula redova ostaje u redu bez
+lažnog vremena slanja. Ako je prethodno brisanje prošlo, ali je odgovor
+izgubljen, ponavljanje ostaje nepotvrđeno i zahtijeva provjeru.
+
+Doznaka provjerava nalog i generaciju odgovora prije zamjene prikaza/keša,
+uključujući dodatni dohvat imena projektanata. Red drugog naloga ne
+primjenjuje se na zone. Neuspješan trajni upis slojeva vraća stari keš.
+Dugme Preuzmi doznaku potvrđuje listu dostupnih odjela i slojeve trenutno
+otvorenog odjela; ako odjel nije otvoren, jasno traži otvaranje odjela za
+slojeve. Ne tvrdi da je preuzelo sve zone svih odjela. Vrijeme potvrđenog
+prijema doznake odvojeno je od prijema vlaka i vezano za nalog.
+
+Zajednički KML/SHP editor: naziv i oznaka fajla, pregled linije, paleta,
+prilagođena boja, debljina, vrsta linije, vidljivost, ispuna i šrafure.
+Popup ima odvojene Naziv i opis / Stil fajla / Približi te atribute.
+Naziv/opis lokalnog objekta mijenjaju odgovarajući Placemark u IDB KML-u:
+novi sadržaj se potvrđuje prije zamjene registra i uklanjanja starog.
+Geometrija i ostali atributi se čuvaju. Za server fajl tekst izričito kaže
+da je izmjena naziva/opisa samo u tom prikazu; lični stil ostaje lokalno.
+Stil lokalnog fajla se sada čuva i kroz popup, a povratak sa isprekidane
+na punu liniju zaista uklanja Leaflet dashArray. Sačuvaj stil ne briše
+registar još neučitanog lokalnog fajla. Nazivi tooltips su HTML-escaped.
+
+Uklonjeni Nastavi krak i stari picker; postoje Lijevi/Desni krak i izbor
+postojeće vlake. Vrati na [naziv roditelja] odmah čuva dijete, bira
+roditelja i pauzira GPS. Sada otvara i historijski interval pauze, da
+native bafer ne ubaci hodanje nazad po kasnijem pražnjenju. Nastavi navodi
+aktivnu vlaku; završetak briše zaostale oznake povratka. Veći prikaz:
+nadmorska visina 14 px, koordinate 12 px, uz prelamanje na uskom ekranu.
+
+Regresije koriste stvarne funkcije uz lažan server/GPS: ograničenje stranice
+na 40, greška kasnije stranice, promjena naloga tokom imena, nepotvrđeno
+brisanje, dijete-roditelj-djed, pauza i očuvanje tačaka/registra. Browser
+fixture proširen pravim Leaflet popupom, stilom i lokalnim DOMParser/IDB
+čuvanjem naziva/opisa, obnovom i provjerom osam veličina/tema. Ishod CI-ja,
+APK i vizuelni pregled bit će dopisani nakon izgradnje. Produkcijski
+Supabase/RLS i fizički Android GPS nisu testirani ovim provjerama.

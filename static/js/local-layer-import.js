@@ -146,3 +146,33 @@ async function _localLayerBackupValue(name,data,owner=sbUser?.id) {
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; obnova sloja je prekinuta');
   const value={...data,cacheKey};delete value.content;return value;
 }
+
+// Izmjena naziva/opisa lokalnog Placemark-a, uz potvrdu trajnog upisa.
+function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
+  const run=async()=>{
+    const original=k._origName||k.name;
+    const initial=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}')[original];
+    if(!initial || !Number.isInteger(pmIndex))throw Error('Izvorni objekat nije dostupan');
+    const source=initial.cacheKey?await _kmlcGet(initial.cacheKey):initial.content;
+    if(typeof source!=='string')throw Error('Nedostaje lokalni fajl');
+    const doc=new DOMParser().parseFromString(source,'text/xml'),pm=doc.querySelectorAll('Placemark')[pmIndex];
+    if(!pm || doc.querySelector('parsererror'))throw Error('Objekat nije pronađen u fajlu');
+    for(const [tag,value]of [['name',name],['description',description]]) {
+      let node=[...pm.children].find(n=>n.localName===tag);
+      if(!node){node=doc.createElementNS(pm.namespaceURI,tag);pm.insertBefore(node,pm.firstChild);}
+      node.textContent=value;
+    }
+    const content=new XMLSerializer().serializeToString(doc),key='local-kml:edit:'+_genUUID();
+    try {
+      await _kmlcSave(key,content);
+      if(await _kmlcGet(key)!==content)throw Error('Memorija nije potvrdila izmjenu');
+      if(sbUser?.id!==owner)throw Error('Nalog je promijenjen');
+      const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}'),current=store[original];
+      if(!current || current.cacheKey!==initial.cacheKey || current.content!==initial.content)throw Error('Sloj je promijenjen; otvori ga ponovo');
+      store[original]={...current,cacheKey:key};delete store[original].content;
+      localStorage.setItem(_LOCAL_KML_KEY,JSON.stringify(store));
+    }catch(e){await _kmlcDelete(key);throw e;}
+    if(initial.cacheKey)await _kmlcDelete(initial.cacheKey);
+  };
+  const result=_layerCommitTail.catch(()=>{}).then(run);_layerCommitTail=result;return result;
+}
