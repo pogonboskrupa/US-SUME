@@ -73,7 +73,7 @@ async def main():
   await page.evaluate("document.querySelector('#vis-panel').style.display='block'")
   await page.get_by_role('button',name='Sakrij sve',exact=True).click()
   assert await page.evaluate('_tvVisibilityModel().every(r=>r.visible===0)')
-  assert await page.evaluate('!map.hasLayer(_tragHitLayers.t)&&!map.hasLayer(_tragLenMk.t)')
+  assert await page.evaluate('!map.hasLayer(_tragHitLayers.t)&&(!_tragLenMk.t||!map.hasLayer(_tragLenMk.t))')
   await page.evaluate("_createTacka(44.9,16,'Skrivena');_locFotos.push({marker:_buildFotoMarker(44.9,16,'','',2,3,true)})")
   assert await page.evaluate("!map.hasLayer(_tacke.at(-1).marker)&&!map.hasLayer(_locFotos.at(-1).marker)")
   assert await page.evaluate('_tragRegistry[0].pts.length')==2
