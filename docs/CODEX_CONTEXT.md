@@ -1383,3 +1383,12 @@ Projektni nagib/ekspozicija isključuju odgovarajući globalni DEM sloj da
 izvan poligona ne ostane globalno bojenje. Uključivanje općeg nagiba/ekspozicije
 u Instaliranim ili Topo+Nagib isključuje odgovarajući projektni checkbox.
 UI opisuje ovu zamjenu; geometrija i vlake ostaju iste.
+
+2.2.2 je objavljena kroz CI 37158931360 (svi koraci uspješni), APK 21.740.571 B.
+Prvi testni pokušaj 37158716053 imao je fixture activeTool=null umjesto
+produkcijskog select; ispravljen fixture, bez izmjene funkcije crtanja.
+Pregled PNG artefakta otkrio je CSS skupljanje redova omiljenih karata u
+maloj visini ekrana. Završno izdanje 2.2.3/code 493 dodaje max-content
+redove u skrolajućem gridu i uvijek vidljivo Uredi, bez naslijeđenog left.
+Browser dodatno provjerava minimalnu visinu i cijeli sadržaj kartica te
+vidljivost Uredi u obje teme/sve četiri veličine.

@@ -86,6 +86,9 @@ async def main():
     assert await page.locator('#layer-sheet').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
     await page.screenshot(path=str(b.OUT/f'installed-maps-{theme}-{w}-{h}.png'))
     await page.evaluate('closeLayerSheet();openMapFavs()');await b.bounds(page,'#mapfav-box',w,h)
+    # Kartice moraju ostati čitljive i kada je visina ekrana manja od liste.
+    assert await page.locator('.mfav-card').evaluate_all('(cards)=>cards.every(e=>e.clientHeight>=112&&e.scrollHeight<=e.clientHeight+1)'),await page.locator('.mfav-card').evaluate_all('(cards)=>cards.map(e=>({height:e.clientHeight,content:e.scrollHeight}))')
+    assert await page.locator('.mfav-edit-btn').first.evaluate('(e)=>Number(getComputedStyle(e).opacity)===1')
     await page.screenshot(path=str(b.OUT/f'favorite-maps-{theme}-{w}-{h}.png'));await page.evaluate('closeMapFavs()')
   await page.set_viewport_size({'width':390,'height':800});await page.evaluate('openMapFavs()')
   await page.locator('[data-fav-action=open]').first.click();assert await page.evaluate('_sqlLayers[0].visible')
