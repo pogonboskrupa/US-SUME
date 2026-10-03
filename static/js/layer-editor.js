@@ -48,5 +48,12 @@ function _layerPopupHtml(layer,uid) {
 // Nakon promjene sadržaja izmjeri postojeći DOM i pomjeri popup u vidljivi dio.
 function _layerPopupLayout() {
   const popup=map._popup;if(!popup)return;
-  popup._updateLayout();popup._updatePosition();popup._adjustPan();
+  const element=popup.getElement(),content=element?.querySelector('.leaflet-popup-content');
+  if(content)content.style.maxHeight=Math.max(80,Math.min(500,window.innerHeight*.64,map.getSize().y-64))+'px';
+  popup._updateLayout();popup._updatePosition();
+  // Mjeri stvarni prozor nakon proširenja; CSS max-height nije Leaflet maxHeight.
+  const box=element.getBoundingClientRect(),area=map.getContainer().getBoundingClientRect(),pad=12;
+  const dx=box.left<area.left+pad?box.left-area.left-pad:Math.max(0,box.right-area.right+pad);
+  const dy=box.top<area.top+pad?box.top-area.top-pad:Math.max(0,box.bottom-area.bottom+pad);
+  if(dx||dy)map.panBy([dx,dy],{animate:false});
 }
