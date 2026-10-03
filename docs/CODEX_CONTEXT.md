@@ -1181,3 +1181,55 @@ pokrivaju potvrde, naloge, projekte, doznaku, escaping i granicu evidencije.
 Nova browser provjera server-map-218.py koristi pravi Leaflet/Turf za obični
 i admin klik, fallback, bafer i grupnu vidljivost. CI/build/release ishod
 slijedi nakon izgradnje. Nema produkcijskih upisa niti fizičke instalacije.
+
+2.1.8 potvrđeno objavljena: workflow 37133223351, commit/tag
+f219ea71186018ff4b7aecec4c2bca80ce73c70a, app-debug.apk 21.677.793 B,
+SHA256 a241f1c03822f2275e13e12b1169158ec1d454e8492b08b11009fa972657c2d9.
+CI browseri i izgradnja prošli. Pregledane slike uskog Dnevnog moda, Servera
+i kolegine vlake s baferom. Dvije prethodne CI korekcije bile su samo fixture
+(divIcon bez nedostajućeg PNG-a; test ne pita Leaflet za uklonjeni undefined sloj).
+
+## 34. Preglednik Oznake i grupisani Server — 2.1.9
+
+Web/SW/Android 2.1.9, versionCode 489. Korisnik je zadao preglednik sa
+pojedinačnim i grupnim kontrolama, sortiranje, uklanjanje obavijesti o
+učitanoj tematskoj karti i sažimanje Servera na posljednja tri projekta.
+
+Oznake: Sve / Učitani fajlovi / Fotografije / Tragovi / Server fajlovi,
+pretraga, sortiranje po odjelu, datumu, udaljenosti od SREDINE prikaza karte
+(ne GPS položaja) ili nazivu. Grupe po odjelu razlikuju gospodarske jedinice.
+Grupne radnje uključuju sve filtrirane rezultate, i nakon prve stranice.
+Prikaz/sakrivanje, približavanje, uređivanje, izvoz lokalnog KML-a/traga,
+fotografija i postojeće dijeljenje, potvrda pojedinačnog brisanja.
+Server placeholder se preuzima samo izričitom radnjom. Podijeljena fotografija
+se ovdje uklanja samo s telefona. Opisi fotografija/napomene su lokalni po
+nalogu. Fotografije iz kamere pamte odjel/projekat u trenutku otvaranja kamere;
+stare bez odjela/datuma ostaju označene kao nepoznate. Vidljivost pojedinačnih
+fotografija radi i nakon grupnog skrivanja, odvojena po nalogu.
+
+Usko popravljeni nalaz C1 audita: setter-i više ne pruniraju neučitane
+lokalne fajlove. Brisanje prvo potvrđuje upis registra i uklanja samo odabrani
+fajl, ne ostale neučitane. Greška upisa registra zadržava sloj/podatke.
+Stabilan identitet i ponovna provjera naloga nakon potvrde brisanja.
+Historijska reprodukcija docs/audit/reprodukcije.cjs opisuje 2.1.7 i nije
+regresijski test za ispravljeni C1; novi test je tests/js/map-library.test.js.
+
+Server: Primljeno/Poslano grupišu se po projektu ili datumu razmjene
+(Europe/Sarajevo). Ista posljednja tri projekta po najnovijoj potvrđenoj
+razmjeni u oba taba; grupe početno zatvorene, svi evidentirani redovi unutar
+grupe dostupni proširenjem. Evidencija i dalje ima granicu 500 po smjeru.
+Ne brišu se stariji projekti ni podaci. Klik vlake/zone/GPS pojasa koristi
+stabilan identitet potvrde i lokalni keš geometrije, prikaže privremeno
+istaknuti sloj na karti. Ne mijenja aktivni projekat niti prekida snimanje.
+Zatvaranje pregleda/odjava uklanja taj sloj. Nedostajući keš daje jasnu poruku,
+bez pogađanja druge vlake istog imena. GPS pojasevi odvojeni na prekidima >5min.
+Lokalni Tragovi se i dalje ne šalju serveru; ovo ne mijenja protokol slanja.
+Ukinut uspješni GPKG toast (uključujući restore), greške učitavanja ostaju.
+
+Lokalno 77/77 JS test fajlova i pet inline skripti prošli. Nove regresije:
+filtrirane grupne radnje preko 40 stavki, foto izolacija, C1 i quota,
+brisanje uz promjenu naloga, tri projekta/dani/timezone/identiteti.
+Browser map-library-219.py provjerava pravi Leaflet, filter/grupni prikaz,
+KML uređivanje, Server proširenje i klik te osam veličina/tema.
+CI/APK ishod slijedi nakon izgradnje. Produkcijski Supabase i stvarni Android
+uređaj nisu korišteni za ove provjere.

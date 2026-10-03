@@ -37,6 +37,7 @@ jobs:
           python tests/browser/menu-print-day.py
           python tests/browser/menu-tools.py
           python tests/browser/server-map-218.py
+          python tests/browser/map-library-219.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

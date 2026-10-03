@@ -325,3 +325,12 @@ Predloženi prioritet popravki: A1/C1/C4 (trajnost terenskog rada), A2
 GPS duplikati), C3/C2 (kasni odgovori i keš). Prema `AGENTS.md`, izbor
 naredne funkcionalne popravke pripada korisniku; ovaj commit dodaje izvještaj
 i dijagnostiku, bez promjene aplikacije. Objavljena verzija ostaje **2.1.7**.
+
+### Naknadna ciljana izmjena — 2.1.9
+
+Na izričiti zahtjev za unapređenje preglednika Oznake ispravljen je **C1**:
+uređivanje stila/naziva/oznake ne uklanja neučitane lokalne KML fajlove,
+a brisanje uklanja samo izabrani unos nakon uspješnog upisa registra.
+Regresije su u `tests/js/map-library.test.js`, uključujući nedostatak memorije.
+Gornji pregled i skripta reprodukcija ostaju historijski nalaz za 2.1.7;
+ostali nalazi nisu time proglašeni ispravljenim.

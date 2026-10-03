@@ -31,7 +31,7 @@ function _layerStyleChange(i,prop,value,commit=true) {
 }
 function _layerEditorHtml(i) {
   const k=kmlLs[i];if(!k)return '';
-  return '<section class="le-editor" onclick="event.stopPropagation()"><header class="le-heading"><span>UREĐIVANJE SLOJA</span><b>'+_escHtml(k.name)+'</b><small>Stil se primjenjuje odmah i čuva na telefonu.</small></header><div class="le-fields"><label>Naziv fajla<input type="text" maxlength="160" value="'+_escHtml(k.name)+'" onchange="_kmlSetNameR('+i+',this.value)"></label><label>Odjel / oznaka<input type="text" maxlength="80" value="'+_escHtml(k.tag||'')+'" placeholder="npr. Odjel 105" onchange="_kmlSaveTag('+i+',this.value)"></label></div>'+_layerStyleControls(i)+'<div class="le-actions"><button type="button" onclick="_ozZoomKml('+i+')">Prikaži na karti</button><button type="button" class="le-danger" onclick="_dlgConfirm(\'Ukloniti ovaj sloj s telefona?\',{danger:true}).then(ok=>{if(ok)delK('+i+')})">Ukloni sloj</button></div></section>';
+  return '<section class="le-editor" onclick="event.stopPropagation()"><header class="le-heading"><span>UREĐIVANJE SLOJA</span><b>'+_escHtml(k.name)+'</b><small>Stil se primjenjuje odmah i čuva na telefonu.</small></header><div class="le-fields"><label>Naziv fajla<input type="text" maxlength="160" value="'+_escHtml(k.name)+'" onchange="_kmlSetNameR('+i+',this.value)"></label><label>Odjel / oznaka<input type="text" maxlength="80" value="'+_escHtml(k.tag||'')+'" placeholder="npr. Odjel 105" onchange="_kmlSaveTag('+i+',this.value)"></label></div>'+_layerStyleControls(i)+'<div class="le-actions"><button type="button" onclick="_ozZoomKml('+i+')">Prikaži na karti</button><button type="button" class="le-danger" onclick="_layerRemove('+i+')">Ukloni sloj</button></div></section>';
 }
 function _layerPopupHtml(layer,uid) {
   const esc=s=>_escHtml(String(s??'')),i=_kmlPopFindIdx(uid),k=kmlLs[i],attrs=Object.entries(layer._kmlExtData||{});
@@ -56,4 +56,11 @@ function _layerPopupLayout() {
   const dx=box.left<area.left+pad?box.left-area.left-pad:Math.max(0,box.right-area.right+pad);
   const dy=box.top<area.top+topPad?box.top-area.top-topPad:Math.max(0,box.bottom-area.bottom+pad);
   if(dx||dy)map.panBy([dx,dy],{animate:false});
+}
+
+async function _layerRemove(i) {
+  const k=kmlLs[i],owner=sbUser?.id;if(!k)return;
+  if(!await _dlgConfirm(k._key?'Ukloniti offline kopiju? Fajl ostaje na serveru.':'Trajno ukloniti lokalni sloj s telefona?',{danger:true})||sbUser?.id!==owner)return;
+  const current=kmlLs.indexOf(k);if(current<0)return;
+  if(k._key)await _srvDelete([k._key]);else delK(current);
 }

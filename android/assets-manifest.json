@@ -33,6 +33,8 @@
     "static/js/local-layer-import.js",
     "static/js/layer-editor.js",
     "static/js/map-visibility.js",
+    "static/js/map-library.js",
+    "static/css/map-library.css",
     "static/css/server-panel.css"
   ]
 }

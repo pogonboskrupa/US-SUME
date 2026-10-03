@@ -4206,6 +4206,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 </style>
 <link rel="stylesheet" href="static/css/field-design.css">
 <link rel="stylesheet" href="static/css/server-panel.css">
+<link rel="stylesheet" href="static/css/map-library.css">
 </head>
 <body>
 
@@ -5668,7 +5669,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.8';
+const APP_VER = 'v2.1.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7811,6 +7812,7 @@ async function doLogout() {
 
   kmlLs.forEach(k => { if (k.grp) try { map.removeLayer(k.grp); } catch(e) {} });
   kmlLs = [];
+  if(typeof _serverPreviewClose==='function')_serverPreviewClose();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
   // dobija nazad kroz _temRestore; promjena korisnika ih briše kroz _wipeAllLocalUserData)
   try { _temRemoveAll(true); } catch(e) {}
@@ -11739,7 +11741,8 @@ function startLocPhoto() {
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
   const inp = document.getElementById('loc-photo-cam');
   if (!inp || inp.disabled) return;
-  _fotoSnapPos = { la: lastP.la, lo: lastP.lo };
+  const project=(_projekti||[]).find(p=>p.id===_aktivniProjektId);
+  _fotoSnapPos = { la: lastP.la, lo: lastP.lo, odjel:project?.odjel||'', gj:project?.gj||'' };
   inp.value = '';
   inp.click();
 }
@@ -11761,7 +11764,7 @@ async function onLocPhotoSelected(input) {
     ]);
     const idx = _locFotos.length;
     const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, true);
-    _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null});
+    _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null, odjel:pos.odjel||'', gj:pos.gj||''});
     _saveFotos();
     // OS-V2: full u IndexedDB dok ne stigne na server — localStorage čuva samo thumb,
     // a Android ubija WebView pri povratku iz kamere; bez ovoga offline foto trajno
@@ -11794,7 +11797,7 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
     html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
   const m = L.marker([la, lo], {icon: ico});
-  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos'))m.addTo(map);
+  if(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos'))m.addTo(map);
   _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }
@@ -12129,8 +12132,8 @@ function _saveFotos() {
   // full ostaje samo u memoriji; pri ponovnom otvaranju app-a uzima se iz Supabase
   try {
     localStorage.setItem(_FOTO_KEY, JSON.stringify(
-      _locFotos.map(({la,lo,ts,thumb,shared,sharedWith,sbId}) =>
-        ({la,lo,ts,thumb,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null}))
+      _locFotos.map(({la,lo,ts,thumb,shared,sharedWith,sbId,odjel,gj}) =>
+        ({la,lo,ts,thumb,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null,odjel:odjel||'',gj:gj||''}))
     ));
   } catch(e) { showToast('⚠ Premalo prostora za čuvanje fotosa'); }
 }
@@ -12138,10 +12141,10 @@ function _saveFotos() {
 function _restoreFotos() {
   try {
     const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
-    d.forEach(({la,lo,ts,thumb,shared,sharedWith,sbId}, i) => {
+    d.forEach(({la,lo,ts,thumb,shared,sharedWith,sbId,odjel,gj}, i) => {
       // full je null dok se ne učita iz Supabase (openFotoFullscreen ga fetchuje)
       const m = _buildFotoMarker(la, lo, thumb, thumb, i, ts, true, !!shared);
-      _locFotos.push({la, lo, ts, thumb, full: null, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null});
+      _locFotos.push({la, lo, ts, thumb, full: null, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null, odjel:odjel||'',gj:gj||''});
       // OS-V2: foto slikan offline pa app restartovan — full čeka u IndexedDB
       if (!sbId) {
         const fi = _locFotos.length - 1;
@@ -24076,19 +24079,28 @@ function togK(i) {
   k.vis ? map.removeLayer(k.grp) : k.grp.addTo(map);
   k.vis = !k.vis;
   saveKmlStyles();
-  _localKmlSaveAll();
+  _localKmlSaveAll(false);
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
 function delK(i) {
   const k = kmlLs[i];
+  if (!k) return false;
+  if (!k._key) {
+    try {
+      const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}'),name=k._origName||k.name,cacheKey=store[name]?.cacheKey;
+      delete store[name];
+      localStorage.setItem(_LOCAL_KML_KEY,JSON.stringify(store));
+      if(cacheKey)_kmlcDelete(cacheKey).catch(()=>{});
+    } catch(e) {showToast('Sloj nije obrisan — registar nije sačuvan');return false;}
+  }
   if (k.grp) map.removeLayer(k.grp);
   // Bucket fajl: sačuvaj vis:false da se ne auto-učita idući put (ostaje u panelu kao 🙈)
   if (k._key) _kmlPersistHidden(k._key);
   kmlLs.splice(i, 1);
   _kmlEditIdx = -1;
   saveKmlStyles();
-  _localKmlSaveAll();
+  _localKmlSaveAll(false);
   rndGraniceModal();
   if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
 }
@@ -24153,185 +24165,7 @@ function togOzSec(sec) {
 }
 
 function _rndOznakePanel() {
-  const localEl  = document.getElementById('oz-sec-local');
-  const bucketEl = document.getElementById('oz-sec-bucket');
-  const fotoEl   = document.getElementById('oz-sec-foto');
-  if (!localEl) return;
-
-  const localOpen  = !_ozCollapsed.has('local');
-  const bucketOpen = !_ozCollapsed.has('bucket');
-  const fotoOpen   = !_ozCollapsed.has('foto');
-
-  // Arrows
-  ['local','bucket','foto'].forEach(s => {
-    const arr = document.getElementById('oz-arr-' + s);
-    if (arr) arr.className = 'oz-sec-arrow' + (!_ozCollapsed.has(s) ? ' open' : '');
-  });
-
-  // ── KML — razdvoji lokalne i bucket ──
-  const localKmls  = kmlLs.map((k, i) => ({k, i})).filter(x => !x.k._key);
-  const bucketKmls = kmlLs.map((k, i) => ({k, i})).filter(x =>  x.k._key);
-
-  const _kmlRow = ({k, i}) => {
-    const shortName = k.name.replace(/^.*\//, '');
-    // Server placeholder = fajl dostupan na serveru ali nije skinut (nema grp, _key postoji)
-    const isPlaceholder = !!k._key && k._downloaded === false;
-    if (isPlaceholder) {
-      const kb = _b64keys([k._key]);
-      return `<div class="oz-row" style="opacity:0.62;">
-        <div class="oz-row-color" style="background:#475569;width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
-        <div class="oz-row-info">
-          <div class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</div>
-          <div class="oz-row-meta" style="color:#64748b;">nije preuzeto</div>
-        </div>
-        <button class="oz-dl-btn" onclick="event.stopPropagation();_srvDownload('${kb}')" title="Skini za offline">⬇</button>
-      </div>`;
-    }
-    const cnt  = _kmlFeatureCount(k.grp);
-    const lenM = _kmlCalcLen(k.grp);
-    const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
-    const tagChip = k.tag ? `<span class="oz-tag-chip">${_escHtml(k.tag)}</span>` : '';
-    const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
-    const isEdit = _kmlEditIdx === i;
-    // Per-fajl 🗑 samo za skinute server fajlove (lokalni KML-ovi nemaju _key)
-    const delBtn = (k._key && k._downloaded)
-      ? `<button class="oz-dl-btn cached" onclick="event.stopPropagation();_srvDelete('${_b64keys([k._key])}')" title="Obriši offline kopiju"><svg class="ic"><use href="#ic-obrisi"/></svg></button>`
-      : '';
-    return `<div class="oz-row${k.vis?'':' hidden-layer'}" onclick="event.stopPropagation();_ozKmlToggleEdit(${i})">
-      <div id="oz-kml-sw-${i}" class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
-      <div class="oz-row-info">
-        <div class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</div>
-        <div class="oz-row-meta">${tagChip}${meta}</div>
-      </div>
-      ${delBtn}
-      <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">
-        ${k.vis ? '<svg class="ic"><use href="#ic-prikazi"/></svg>' : '<svg class="ic"><use href="#ic-sakrij"/></svg>'}
-      </button>
-      <span class="oz-expand-arrow${isEdit?' open':''}">›</span>
-    </div>
-    ${isEdit ? _renderKmlEditor(i) : ''}`;
-  };
-
-  // ── Lokalni — search + sort + filter ──
-  document.getElementById('oz-cnt-local').textContent = localKmls.length;
-  if (!localOpen) { localEl.style.display = 'none'; }
-  else {
-    localEl.style.display = '';
-    const sortLabels = {recent:'🕐 Nedavno', name:'📝 Naziv', proximity:'📍 Blizina'};
-    const searchBar = `<div class="oz-search-wrap">
-      <div class="oz-search-row">
-        <span class="oz-search-icon">🔍</span>
-        <input class="oz-search-input" type="search" placeholder="Pretraži po imenu ili odjelu…"
-          value="${_escHtml(_ozLocalSearch)}"
-          oninput="event.stopPropagation();_ozSetSearch(this.value)">
-        <button class="oz-sort-btn${_ozLocalSort!=='recent'?' active':''}"
-          onclick="event.stopPropagation();_ozCycleSort()"
-          title="Promijeni redoslijed">${sortLabels[_ozLocalSort]}</button>
-      </div>
-    </div>`;
-
-    let filtered = localKmls.filter(({k}) => {
-      if (!_ozLocalSearch) return true;
-      const q = _ozLocalSearch.toLowerCase();
-      return k.name.toLowerCase().includes(q) || (k.tag||'').toLowerCase().includes(q);
-    });
-
-    if (_ozLocalSort === 'name') {
-      filtered = [...filtered].sort((a,b) => (a.k.tag||a.k.name).localeCompare(b.k.tag||b.k.name));
-    } else if (_ozLocalSort === 'proximity') {
-      const pos = posMk ? posMk.getLatLng() : null;
-      filtered = [...filtered].sort((a,b) => {
-        if (!pos) return 0;
-        const da = _kmlDistFromPos(a.k, pos), db = _kmlDistFromPos(b.k, pos);
-        return da - db;
-      });
-    } else {
-      filtered = [...filtered].sort((a,b) => (b.k._loadedAt||0) - (a.k._loadedAt||0));
-    }
-
-    if (!localKmls.length) {
-      localEl.innerHTML = searchBar + '<div class="oz-empty">Nema učitanih lokalnih fajlova.</div>';
-    } else if (!filtered.length) {
-      localEl.innerHTML = searchBar + '<div class="oz-empty">Nema rezultata za "' + _escHtml(_ozLocalSearch) + '".</div>';
-    } else {
-      localEl.innerHTML = searchBar + filtered.map(x => _kmlRow(x)).join('');
-    }
-  }
-
-  // Bucket — grupiraj po GJ (prvi segment _folder ili _bucket)
-  document.getElementById('oz-cnt-bucket').textContent = bucketKmls.length;
-  if (!bucketOpen) { bucketEl.style.display = 'none'; }
-  else {
-    bucketEl.style.display = '';
-    if (!bucketKmls.length) {
-      bucketEl.innerHTML = '<div class="oz-empty">Nema server fajlova.</div>';
-    } else {
-      const gjGroups = {};
-      bucketKmls.forEach(({k, i}) => {
-        const gj = k._folder ? k._folder.split('/')[0] : (k._bucket || '—');
-        if (!gjGroups[gj]) gjGroups[gj] = [];
-        gjGroups[gj].push({k, i});
-      });
-      let html = '';
-      Object.entries(gjGroups).sort(([a],[b]) => a.localeCompare(b,'bs')).forEach(([gj, items]) => {
-        const collapsed = !_ozBucketExpanded.has(gj);
-        const dlItems = items.filter(x => x.k._downloaded);
-        const anyVis = dlItems.some(x => x.k.vis);
-        const allVis = dlItems.length > 0 && dlItems.every(x => x.k.vis);
-        const visIcon = allVis ? '👁' : anyVis ? '◑' : '🙈';
-        const gjEsc = gj.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        const idxArr = JSON.stringify(dlItems.map(x => x.i));  // vis toggle samo za skinute
-        const notDlKeys  = _b64keys(items.filter(x => !x.k._downloaded).map(x => x.k._key));
-        const dlKeys     = _b64keys(dlItems.map(x => x.k._key));
-        const allCached  = items.every(x => x.k._downloaded);
-        const someCached = items.some(x => x.k._downloaded);
-        const offlineBadge = allCached
-          ? `<span class="oz-offline-badge">✓ offline</span>`
-          : someCached
-          ? `<span class="oz-offline-badge partial">↻ djel.</span>`
-          : '';
-        // ⬇ preuzmi sve neskinute; 🗑 obriši sve skinute (mogu se pojaviti oba za miješanu grupu)
-        const dlBtn = (allCached ? '' :
-          `<button class="oz-dl-btn" onclick="event.stopPropagation();_srvDownload('${notDlKeys}')" title="Skini grupu za offline">⬇</button>`)
-          + (someCached ?
-          `<button class="oz-dl-btn cached" onclick="event.stopPropagation();_srvDelete('${dlKeys}')" title="Obriši offline kopiju grupe"><svg class="ic"><use href="#ic-obrisi"/></svg></button>` : '');
-        html += `<div class="oz-gj-hdr" onclick="event.stopPropagation();_ozBucketToggleGroup('${gjEsc}')">
-          <span class="oz-gj-arrow${collapsed?'':' open'}">›</span>
-          <span class="oz-gj-name">${_escHtml(gj)}</span>
-          <span class="oz-gj-cnt">${items.length}</span>
-          ${offlineBadge}
-          ${dlBtn}
-          ${dlItems.length ? `<button class="oz-vis-btn${allVis?' on':anyVis?' half':''}"
-            onclick="event.stopPropagation();_ozBucketToggleGroupVis(${idxArr})"
-            title="${allVis?'Sakrij grupu':'Prikaži grupu'}">${visIcon}</button>` : ''}
-        </div>`;
-        if (!collapsed) html += items.map(x => _kmlRow(x)).join('');
-      });
-      bucketEl.innerHTML = html;
-    }
-  }
-
-  // ── Foto oznake ──
-  const locN    = (typeof _locFotos    !== 'undefined') ? _locFotos.length    : 0;
-  const shareN  = (typeof _sharedFotos !== 'undefined') ? _sharedFotos.length : 0;
-  const fotoTot = locN + shareN;
-  document.getElementById('oz-cnt-foto').textContent = fotoTot;
-  if (!fotoOpen) { fotoEl.style.display = 'none'; }
-  else {
-    fotoEl.style.display = '';
-    if (!fotoTot) {
-      fotoEl.innerHTML = '<div class="oz-empty">Nema foto oznaka.</div>';
-    } else {
-      let html = '';
-      if (locN) html += `<div class="oz-row"><div class="oz-row-icon">📷</div><div class="oz-row-info"><div class="oz-row-name">Moje fotografije</div><div class="oz-row-meta">${locN} ${locN===1?'fotografija':'fotografija'}</div></div></div>`;
-      if (shareN) html += `<div class="oz-row"><div class="oz-row-icon">👥</div><div class="oz-row-info"><div class="oz-row-name">Podijeljene fotografije</div><div class="oz-row-meta">${shareN} ${shareN===1?'fotografija':'fotografija'}</div></div></div>`;
-      fotoEl.innerHTML = html;
-    }
-  }
-
-  // Total badge
-  const total = kmlLs.length + fotoTot;
-  document.getElementById('oz-total-badge').textContent = total + (total===1?' stavka':' stavki');
+  if(typeof _libraryRender==='function')_libraryRender();
 }
 
 function _ozZoomKml(i) {
@@ -24349,7 +24183,7 @@ async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id) {
     if(await _kmlcGet(cacheKey)!==content)throw new Error('IDB nije potvrdio upis');
     if(sbUser?.id!==owner) { await _kmlcDelete(cacheKey); return false; }
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
-    Object.defineProperty(store,origName,{value:{cacheKey,col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName},enumerable:true,configurable:true,writable:true});
+    Object.defineProperty(store,origName,{value:{cacheKey,col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName,_loadedAt:Date.now()},enumerable:true,configurable:true,writable:true});
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
     return true;
   } catch(e) { await _kmlcDelete(cacheKey); console.warn('KML nije sačuvan lokalno:',e); return false; }
@@ -24373,7 +24207,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].fillPattern  = k.fillPattern || 'solid';
       store[origName].fillOpacity  = k.fillOpacity ?? 0.35;
       store[origName].tag          = k.tag || '';
-      store[origName]._loadedAt    = k._loadedAt || Date.now();
+      store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
     // Ukloni stavke koje više nisu u kmlLs
     const activeNames = new Set(kmlLs.filter(k => !k._key).map(k => k._origName || k.name));
@@ -24410,7 +24244,7 @@ async function _localKmlRestore() {
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
           fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
-          tag: data.tag || '', _loadedAt: data._loadedAt || Date.now()
+          tag: data.tag || '', _loadedAt: data._loadedAt || 0
         });
         applyKmlStyle(kmlLs.length - 1);
       } catch(e) { console.warn('KML restore greška:', origName, e); }
@@ -24440,7 +24274,7 @@ function _ozBucketToggleGroupVis(indices) {
     kmlLs[i].vis = !allVis;
     allVis ? map.removeLayer(kmlLs[i].grp) : kmlLs[i].grp.addTo(map);
   });
-  saveKmlStyles(); _localKmlSaveAll(); rndGraniceModal();
+  saveKmlStyles(); _localKmlSaveAll(false); rndGraniceModal();
   _rndOznakePanel();
 }
 
@@ -24481,20 +24315,21 @@ function _kmlRenameDone(i, input) {
 function _kmlSaveTag(i, val) {
   if (!kmlLs[i]) return;
   kmlLs[i].tag = val.trim();
-  saveKmlStyles(); _localKmlSaveAll();
+  saveKmlStyles(); _localKmlSaveAll(false);
+  _rndOznakePanel();
 }
 
 function _kmlSetFill(i, on) {
   if (!kmlLs[i]) return;
   kmlLs[i].fill = on;
-  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(); rndGraniceModal();
+  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(false); rndGraniceModal();
   _rndOznakePanel();
 }
 
 function _kmlSetFillCol(i, col) {
   if (!kmlLs[i]) return;
   kmlLs[i].fillCol = col;
-  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll();
+  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(false);
   _rndOznakePanel();
 }
 
@@ -24507,7 +24342,7 @@ function _kmlFillColLive(i, col) {
 function _kmlSetFillPattern(i, pat) {
   if (!kmlLs[i]) return;
   kmlLs[i].fillPattern = pat;
-  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll();
+  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(false);
   _rndOznakePanel();
 }
 
@@ -24522,7 +24357,7 @@ function _kmlFillOpacityLive(i, pct) {
 function _kmlSetFillOpacity(i, val) {
   if (!kmlLs[i]) return;
   kmlLs[i].fillOpacity = parseFloat(val);
-  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(); rndGraniceModal();
+  applyKmlStyle(i); saveKmlStyles(); _localKmlSaveAll(false); rndGraniceModal();
 }
 
 function _kmlColorLive(i, col) {
@@ -24545,12 +24380,13 @@ function _kmlSetNameR(i, val) {
   if (!kmlLs[i]) return;
   kmlLs[i].name = val.trim() || kmlLs[i].name;
   saveKmlStyles();
-  _localKmlSaveAll();
+  _localKmlSaveAll(false);
+  _rndOznakePanel();
 }
 
 function _kmlSetColR(i, col) {
   setKmlColor(i, col);
-  _localKmlSaveAll();
+  _localKmlSaveAll(false);
   _rndOznakePanel();
 }
 
@@ -24559,7 +24395,7 @@ function _kmlSetOpR(i, val) {
   kmlLs[i].opacity = parseFloat(val);
   applyKmlStyle(i);
   saveKmlStyles();
-  _localKmlSaveAll();
+  _localKmlSaveAll(false);
   rndGraniceModal();
 }
 
@@ -35197,7 +35033,7 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
   if (entry.visible) entry.grp.addTo(map);
 
   if (opts?.fit && allBounds && allBounds.isValid()) map.fitBounds(allBounds, { padding: [20, 20] });
-  showToast(`✅ ${name}: ${entry.features.length} odsjeka · ${entry.cols.length + entry.catCols.length} tema`);
+  // Uspješno učitavanje prikazano je u panelu karata, bez obavijesti.
 
   // Vrati zapamćenu temu (restore poslije restarta)
   if (saved?.theme && (entry.cols.includes(saved.theme) || entry.catCols.includes(saved.theme))) _temApplyTheme(entry.id, saved.theme);
@@ -41954,36 +41790,11 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- ══ OZNAKE PANEL ══════════════════════════════════════════════════ -->
 <div id="oznake-bg" onclick="closeOznakePanel()"></div>
-<div id="oznake-panel">
-  <div id="oznake-header">
-    <span class="oz-title">🗂 Prikazane oznake</span>
-    <span class="oz-total" id="oz-total-badge">0</span>
-    <button class="oz-close" onclick="closeOznakePanel()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-  </div>
-
-  <!-- Učitani fajlovi (lokalni) — default collapsed -->
-  <div class="oz-sec-hdr" onclick="togOzSec('local')">
-    <span class="oz-sec-arrow" id="oz-arr-local">▶</span>
-    <span class="oz-sec-label">📂 Učitani fajlovi</span>
-    <span class="oz-sec-cnt" id="oz-cnt-local">0</span>
-  </div>
-  <div class="oz-sec-body" id="oz-sec-local"></div>
-
-  <!-- Foto oznake -->
-  <div class="oz-sec-hdr" onclick="togOzSec('foto')">
-    <span class="oz-sec-arrow" id="oz-arr-foto">▶</span>
-    <span class="oz-sec-label">Foto oznake</span>
-    <span class="oz-sec-cnt" id="oz-cnt-foto">0</span>
-  </div>
-  <div class="oz-sec-body" id="oz-sec-foto"></div>
-
-  <!-- Server / bucket fajlovi -->
-  <div class="oz-sec-hdr" onclick="togOzSec('bucket')">
-    <span class="oz-sec-arrow" id="oz-arr-bucket">▶</span>
-    <span class="oz-sec-label">🌐 Server fajlovi</span>
-    <span class="oz-sec-cnt" id="oz-cnt-bucket">0</span>
-  </div>
-  <div class="oz-sec-body" id="oz-sec-bucket"></div>
+<div id="oznake-panel" role="dialog" aria-modal="true" aria-label="Preglednik oznaka">
+  <header id="oznake-header"><div><span class="ml-eyebrow">SADRŽAJ KARTE</span><h2>Preglednik oznaka</h2><small id="oz-total-badge">0 stavki</small></div><button class="oz-close" onclick="closeOznakePanel()" aria-label="Zatvori preglednik">×</button></header>
+  <div class="ml-toolbar"><input id="library-search" type="search" placeholder="Traži naziv, odjel ili opis…" aria-label="Pretraži oznake" oninput="_librarySearch(this.value)"><div id="library-tabs" role="tablist" aria-label="Vrsta oznaka"></div><div class="ml-sort-row"><label for="library-sort">Sortiraj</label><select id="library-sort" onchange="_librarySort(this.value)"><option value="department">Po odjelu</option><option value="date">Po datumu — novije prvo</option><option value="proximity">Blizina sredini karte</option><option value="name">Po nazivu</option></select><button onclick="closeOznakePanel();openLayerImport()">+ Dodaj fajl</button></div><div class="ml-bulk"><span id="library-summary"></span><div><button onclick="_libraryGroup(true)">Prikaži rezultate</button><button onclick="_libraryGroup(false)">Sakrij rezultate</button></div></div></div>
+  <div id="library-list" aria-live="polite"></div><button id="library-more" class="ml-load-more" onclick="_libraryMore()" hidden>Prikaži još</button>
+  <p class="ml-footnote">Grupne radnje važe za rezultate pretrage, uključujući sljedeće stranice. Prikaz ne briše podatke. Server fajl prvo preuzmi za offline korištenje.</p>
 </div>
 
 <!-- Sync queue viewer panel -->
@@ -42003,8 +41814,8 @@ if (typeof AndroidDownload !== 'undefined') {
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
     </details>
-    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Pregled posljednjih primljenih stavki po projektu i projektantu.</p><div class="sp-download-actions"><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()">↓ Preuzmi doznaku</button></div><p id="server-doz-status" class="sp-note"></p><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
-    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div id="server-sent-items"></div></section>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><div class="sp-download-actions"><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()">↓ Preuzmi doznaku</button></div><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
     <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     </details>
@@ -42117,5 +41928,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/local-layer-import.js"></script>
 <script src="static/js/layer-editor.js"></script>
 <script src="static/js/map-visibility.js"></script>
+<script src="static/js/map-library.js"></script>
 </body>
 </html>
