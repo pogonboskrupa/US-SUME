@@ -1287,3 +1287,12 @@ realni Leaflet Canvas, aktualne boje/listu i _saveLocalVlake, 100/500 vlaka i
 CPU 4x nije emulacija Redmi procesora. Ne mjeri GPS, backend, pločice, pun
 startup, sve labele niti native most. Zaseban JSON artefakt služi kao dokaz,
 a analiza mora navesti ove granice i ne izmišljati vremena stvarnog telefona.
+
+### Završni kontrast i verzija 2.2.1
+
+2.2.0 objavljena i sintetičko mjerenje završeno na workflow 37155897278.
+Vizuelni pregled otkrio svijetle inline natpise Boje vlaka u Dnevnom modu.
+Uska CSS ispravka koristi field-ink i čitljiv odabrani stil. Web/SW/Android
+2.2.1, code 491. Browser dodaje provjeru istog kontrasta naziva i konteksta;
+fixture i mjerenje čitaju stvarnu verziju iz izvora. Funkcionalni tokovi boja
+i slanja nisu mijenjani ovom završnom ispravkom. Konačni CI ishod slijedi.

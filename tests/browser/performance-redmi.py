@@ -29,7 +29,7 @@ async function perfRun(n,m){
 fixture=u.fixture.replace('</body>','<script>'+extra+'</script></body>')
 async def main():
  out=b.ROOT/'outputs/performance';out.mkdir(parents=True,exist_ok=True)
- report={'version':'2.2.0','method':'Chromium desktop CI, real Leaflet canvas and source color/list/localStorage functions; 3 repetitions; CPU 1x/4x, navigator online/offline; no real phone, tile fetch, GPS, authentication, backend, full startup, labels or APK bridge','hardware':platform.platform(),'samples':[],'summary':[]}
+ report={'version':u.APP_VERSION,'method':'Chromium desktop CI, real Leaflet canvas and source color/list/localStorage functions; 3 repetitions; CPU 1x/4x, navigator online/offline; no real phone, tile fetch, GPS, authentication, backend, full startup, labels or APK bridge','hardware':platform.platform(),'samples':[],'summary':[]}
  async with async_playwright() as p:
   browser=await p.chromium.launch(headless=True,**({'executable_path':os.environ['UI_CHROMIUM']} if os.environ.get('UI_CHROMIUM') else {}));report['browser']=browser.version
   context=await browser.new_context(viewport={'width':393,'height':851});page=await context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))

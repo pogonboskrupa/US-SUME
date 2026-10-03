@@ -1,5 +1,5 @@
 """Stvarni Leaflet: boje vlastitih/koleginih vlaka, projekat, Snimi vlaku i upute."""
-import asyncio,importlib.util,mimetypes,os
+import asyncio,importlib.util,mimetypes,os,re
 from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('shared',Path(__file__).with_name('server-map-218.py'))
@@ -7,8 +7,10 @@ s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s);b=s.b
 start=b.SOURCE.index('// Boje i stil prikaza po projektu')
 code=b.SOURCE[start:b.SOURCE.index('function buildC()',start)]
 code+='\n'.join(b.function(n) for n in ['_patchKolegaVlaka','togSnimVlaku','_openLayerSheet','closeLayerSheet','_lsTab','showHelp','closeHelp','helpTab','toggleHelpSec'])
+APP_VERSION=re.search(r"const APP_VER = 'v([^']+)'",b.SOURCE).group(1)
+code+="\nconst APP_VER='v"+APP_VERSION+"';"
 code+='''
-const APP_VER='v2.2.0';let pickerClicks=0;
+let pickerClicks=0;
 const _openVlakaPicker=()=>{pickerClicks++},_schedKolegeFullSync=()=>{};
 const _ovlState={},_wbOn=false,_instUpdateStats=()=>{},_lsRenderSqlite=()=>{},_activeLayerKey=()=>'',_lsRenderGranice=()=>{},_lsRenderCache=()=>{},_lsRenderTem=()=>{};
 function uiProjectShow(){document.querySelector('#fixture-project').style.display='block';}
@@ -53,6 +55,8 @@ async def main():
     await page.set_viewport_size({'width':w,'height':h})
     await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;uiProjectShow();document.querySelector('#fixture-project').scrollTop=0}",theme)
     await b.bounds(page,'#brec',w,h)
+    if theme=='day':
+     assert await page.locator('.project-colors>div:last-child>div>span').first.evaluate("e=>getComputedStyle(e).color")==await page.locator('#boja-project-context').evaluate("e=>getComputedStyle(e).color")
     assert await page.evaluate("document.querySelector('#fixture-project').scrollWidth<=document.querySelector('#fixture-project').clientWidth+1")
     await page.screenshot(path=str(b.OUT/f'project-colors-{theme}-{w}-{h}.png'))
     await page.locator('#fixture-project').evaluate('(e)=>e.scrollTop=e.scrollHeight')
