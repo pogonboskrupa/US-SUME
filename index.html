@@ -23707,7 +23707,7 @@ function _kmlPopEditName(uid, el) {
 
 function _kmlPopEditStart(uid) {
   const ed = document.getElementById(uid + '-edit');
-  if (ed) {ed.style.display = '';map._popup?.update();}
+  if (ed) {ed.style.display = '';_layerPopupLayout();}
 }
 
 function _kmlPopCancel(uid) {
@@ -23751,7 +23751,7 @@ function _kmlPopStyleToggle(uid) {
     el.style.display = '';
     const i = _kmlPopFindIdx(uid);
     if (i >= 0) el.innerHTML = _kmlPopStylePanel(uid, null, i);
-    map._popup?.update();
+    _layerPopupLayout();
   } else {
     el.style.display = 'none';
   }

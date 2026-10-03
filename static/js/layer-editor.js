@@ -27,6 +27,7 @@ function _layerStyleChange(i,prop,value,commit=true) {
   if(!commit)return;
   try {saveKmlStyles();}catch(e){showToast('⚠ Stil nije sačuvan — provjeri memoriju telefona');return;}
   document.querySelectorAll('.le-style[data-layer="'+i+'"]').forEach(el=>{el.outerHTML=_layerStyleControls(i);});
+  _layerPopupLayout();
 }
 function _layerEditorHtml(i) {
   const k=kmlLs[i];if(!k)return '';
@@ -41,4 +42,11 @@ function _layerPopupHtml(layer,uid) {
     '<div id="'+uid+'-edit" class="le-fields" style="display:none"><label>Naziv objekta<input id="'+uid+'-name-in" maxlength="160" value="'+esc(layer._kmlName)+'"></label><label>Opis / napomena<textarea id="'+uid+'-desc-in" rows="3" maxlength="2000">'+esc(layer._kmlDesc)+'</textarea></label><small>'+(k?._key?'Izmjena naziva i opisa važi za ovaj prikaz server fajla.':'Naziv i opis čuvaju se u lokalnom fajlu.')+'</small><div class="le-actions"><button type="button" onclick="_kmlPopSave(\''+uid+'\')">'+(k?._key?'Primijeni':'Sačuvaj')+'</button><button type="button" onclick="_kmlPopCancel(\''+uid+'\')">Odustani</button></div></div>'+
     '<div id="'+uid+'-style" style="display:none">'+_layerStyleControls(i)+'</div>'+
     (attrs.length?'<details class="le-attributes"><summary>Atributi objekta ('+attrs.length+')</summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl></details>':'')+'</article>';
+}
+
+// Leaflet update() ponovo postavlja HTML i uklanja otvorene kontrole.
+// Nakon promjene sadržaja izmjeri postojeći DOM i pomjeri popup u vidljivi dio.
+function _layerPopupLayout() {
+  const popup=map._popup;if(!popup)return;
+  popup._updateLayout();popup._updatePosition();popup._adjustPan();
 }
