@@ -149,6 +149,8 @@ async def main():
                 await page.get_by_role('button',name='Stil fajla',exact=True).click()
                 await page.wait_for_timeout(400)
                 await page.screenshot(path=str(OUT/f'kml-style-{theme}-{width}-{height}.png'))
+                assert not errors,errors
+                print('POPUP',await page.evaluate('({size:map.getSize(),box:map.getContainer().getBoundingClientRect().toJSON(),popup:map._popup.getElement().getBoundingClientRect().toJSON(),pos:map._popup._containerBottom,pan:map._getMapPanePos(),anim:map._panAnim?._inProgress})'),flush=True)
                 await bounds(page,'.leaflet-popup-content',width,height)
                 await bounds(page,'#nv-badge',width,height)
                 assert await page.locator('.le-swatch').first.evaluate('(e)=>e.getBoundingClientRect().height')>=44
