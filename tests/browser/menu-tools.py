@@ -121,6 +121,7 @@ async def main():
                 assert 'Emina Projektant' in await page.locator('#server-identity').inner_text()
                 await page.evaluate("_tabServer('send')")
                 assert await page.locator('.sp-send-group').count()==2
+                for summary in await page.locator('.sp-send-group summary').all():await summary.click()
                 assert '1 GPS tačaka' in await page.locator('#server-send-preview').inner_text()
                 assert 'Projektant: Amir Kolega' in await page.locator('#server-received-items').text_content()
                 assert 'Poslao: Emina Projektant' in await page.locator('#server-project-summary').inner_text()
@@ -135,6 +136,7 @@ async def main():
                 await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=e.scrollHeight')
                 await page.screenshot(path=str(OUT/f'server-project-{theme}-{width}-{height}.png'))
                 await page.evaluate("_tabServer('sent')")
+                await page.locator('#server-sent-items summary').first.click()
                 assert 'Vlaka · T1' in await page.locator('#server-sent-items').inner_text()
                 await page.screenshot(path=str(OUT/f'server-sent-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeSyncQueuePanel()')
