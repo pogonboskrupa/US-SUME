@@ -1321,7 +1321,7 @@ prioritet preseljenja velikog lokalnog keša u IndexedDB, bez neodobrene migraci
 Fizički Android i produkcijski Supabase nisu korišteni.
 
 
-## 36. Karte i nacrtani poligon odjela — 2.2.2
+## 36. Karte i nacrtani poligon odjela — 2.2.3
 
 Korisnik traži raniju veličinu Snimi vlaku, unapređenje Instaliranih i
 Omiljenih karata, crtanje poligona odjela u projektu i checkbox-e za
@@ -1392,3 +1392,13 @@ maloj visini ekrana. Završno izdanje 2.2.3/code 493 dodaje max-content
 redove u skrolajućem gridu i uvijek vidljivo Uredi, bez naslijeđenog left.
 Browser dodatno provjerava minimalnu visinu i cijeli sadržaj kartica te
 vidljivost Uredi u obje teme/sve četiri veličine.
+
+Završni CI 37159324242, commit a90d97cc3e17b6ebe52608b7d9d0a0a3a490eb7b:
+81 lokalni JS test fajl + svih šest Chromium/Leaflet browser provjera
+uspješni. PNG artefakt 11287002109 (24 nova prikaza) pregledan; omiljene
+kartice se više ne skupljaju/odsijecaju i Uredi je vidljiv bez hover-a.
+APK build i provjera sadržaja/SHA-256 web assets uspješni; GitHub v2.2.3
+objavljen, app-debug.apk uploaded, 21.740.659 B (~20,73 MiB),
+SHA-256 8b78107991485dcd7d586d6152dc5c7f94f22e8dd03eb51bb84fa8731b553a88.
+Native updater čita releases?per_page=1 i vidi v2.2.3 kao prvo izdanje.
+Nije izvršena fizička instalacija na telefon ni izmjena Supabase-a.
