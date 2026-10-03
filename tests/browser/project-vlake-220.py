@@ -13,6 +13,7 @@ const _openVlakaPicker=()=>{pickerClicks++},_schedKolegeFullSync=()=>{};
 const _ovlState={},_wbOn=false,_instUpdateStats=()=>{},_lsRenderSqlite=()=>{},_activeLayerKey=()=>'',_lsRenderGranice=()=>{},_lsRenderCache=()=>{},_lsRenderTem=()=>{};
 function uiProjectShow(){document.querySelector('#fixture-project').style.display='block';}
 window.fixtureReady=(async()=>{
+ _OL.loadQueue=()=>[]; // izolovan projekat bez reda slanja iz osnovnog Server testa
  for(const nm of ['T10','T1.10','T1.2']){const poly=L.polyline([[44.9,16],[44.901,16.001]],{color:'#112233'}).addTo(map);vlake.push({nm,kr:nm.includes('.')?1:0,sbId:nm,projektId:'P',color:'#112233',pts:fixturePoints,poly});}
  await sbLoadKolegeVlake([...fixtureRows,{...fixtureRows[0],id:'rC',nm:'T2.1',kr:1}]);_rndBojaPresets();
  document.querySelector('#action-bar').style.display='flex';
@@ -42,7 +43,8 @@ async def main():
   await page.route('**/*',route);await page.goto('https://ui.test/');await page.evaluate('fixtureReady');assert not errors,errors
   await page.evaluate("_bojaVlChange('#123456');_bojaKrChange('#654321')")
   assert await page.evaluate("vlake[0].poly.options.color==='#123456'&&vlake[1].poly.options.color==='#654321'&&kolegeVlakeMap['B::T2'].poly.options.color==='#123456'&&kolegeVlakeMap['B::T2.1'].poly.options.color==='#654321'")
-  assert await page.evaluate('_projektVlakeRows().map(r=>r.nm)')==['T1.2','T1.10','T2','T2.1','T10']
+  names=await page.evaluate('_projektVlakeRows().map(r=>r.nm)')
+  assert names==['T1.2','T1.10','T2','T2.1','T10'],names
   assert 'Amir Kolega' in await page.locator('#project-vlake-list').inner_text()
   await page.evaluate("_patchKolegaVlaka({...fixtureRows[0],boja:'#ffffff',kr:0})")
   assert await page.evaluate("kolegeVlakeMap['B::T2'].poly.options.color==='#123456'")
