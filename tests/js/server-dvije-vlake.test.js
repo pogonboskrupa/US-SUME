@@ -29,7 +29,7 @@ function setup(uid = 'member') {
     showToast:m=>messages.push(m),_escHtml:String,_mrezaSila(){},_updSyncBadge(){},_updSyncBadgeUskoro(){},
     _serverSazetakRender(){},openSyncQueuePanel(){},rndProjektiList(){},rndKolegeVlakeList(){},
     getOdjel:()=> '105',isReadOnly:()=> false,isAdmin:()=> false,isVodeci:()=> false,
-    _saveLocalVlake(){},_updateVlakaSyncIcon(){},_placeLabelMarkers:()=> [],
+    attachPolyClick(poly,key){poly.clickKey=key;},_saveLocalVlake(){},_updateVlakaSyncIcon(){},_placeLabelMarkers:()=> [],
     _serverNaCekanju:()=>({stavki:e.ol.loadQueue().length}),
     setTimeout:(f)=>setTimeout(f,0),clearTimeout,setInterval:()=>1,clearInterval(){},
     map:{removeLayer(){},},console,

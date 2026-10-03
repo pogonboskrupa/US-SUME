@@ -1144,3 +1144,40 @@ Funkcionalni kod nije mijenjan tokom ovog pregleda, prema uputi AGENTS.md.
 Verzija ostaje 2.1.7 / 487. Produkcijski Supabase i fizički Android uređaj
 nisu korišteni za reprodukcije. Izvještaj nije revizija svake linije niti
 zasebnih Flutter/Python proizvoda u repozitoriju.
+
+
+## 33. Jednostavniji Server, kolegine vlake i grupni prikaz — 2.1.8
+
+Web/SW/Android 2.1.8, versionCode 488. Korisnik je izričito zadao ova tri
+funkcionalna zadatka nakon analize; nalazi audita nisu paketno popravljani.
+
+Server ima Primljeno / Poslano / Za slanje. Potvrđene stavke nose projekat,
+projektanta, sadržaj, dužinu/broj GPS tačaka i vrijeme. Evidencija je odvojena
+po nalogu i smjeru, do 500 malih zapisa, bez kopiranja geometrije. Prethodne
+server kopije vlaka ostaju pregledne i bez nove evidencije; nepoznato vrijeme
+je tako označeno. Detalji ranijih slanja ne izmišljaju se. Zona/GPS prijem
+se bilježi nakon potvrde lokalnog keša, iz sirovog serverskog odgovora prije
+miješanja neposlanih zona. Prikaz doznake grupiše GPS po projektantu. Ručni
+režim slanja, puni ispis vlaka aktivnog projekta i izvoz kopije ostaju.
+Detalji reda/greške i alati kopije su sklopivi da ne dupliraju glavni pregled.
+
+Kolegine vlake u običnom i admin/vodećem prikazu dobijaju isti 24px dodirni
+sloj i fallback najbliže vidljive linije kao vlastite. Popup prikazuje
+projekat/projektanta, dužinu i bafer/približavanje, bez editovanja/brisanja
+tuđeg rada. Nazivi se escapiraju. Bafer može biti za jednu odabranu vlaku;
+zajednički prikaz uključuje kolege aktivnog projekta i izostavlja adminovu
+duplu kopiju vlastitih vlaka. Hit-sloj prati geometriju i uklanjanje linije.
+
+Tragovi dobijaju Prikaži sve / Sakrij sve i zasebne kontrole fotografija
+(vlastite i podijeljene), tragova, tačaka, mjerenja i tekstualnih oznaka.
+Postavke fotografija/tačaka/mjerenja/oznaka pamte se po korisniku i primjenjuju
+na nove/obnovljene markere. Tragovi koriste postojeći visible po zapisu,
+uključujući hit-sloj i oznaku dužine. Aktivno GPS snimanje i aktivna izmjera
+nisu sakriveni; podaci se ne brišu i ove radnje ne šalju ništa na server.
+Skrivena sačuvana mjerenja isključena su i iz fallback klika.
+
+Lokalno 76/76 JS fajlova i pet inline skripti prolaze. Proširene regresije
+pokrivaju potvrde, naloge, projekte, doznaku, escaping i granicu evidencije.
+Nova browser provjera server-map-218.py koristi pravi Leaflet/Turf za obični
+i admin klik, fallback, bafer i grupnu vidljivost. CI/build/release ishod
+slijedi nakon izgradnje. Nema produkcijskih upisa niti fizičke instalacije.

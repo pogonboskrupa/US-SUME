@@ -119,17 +119,24 @@ async def main():
                 assert await page.locator('#server-project-select').count()==0 and await page.locator('.sp-metrics').count()==0
                 assert await page.locator('#server-project-label').inner_text()=='Gornja Una · Odjel 105'
                 assert 'Emina Projektant' in await page.locator('#server-identity').inner_text()
+                await page.evaluate("_tabServer('send')")
                 assert await page.locator('.sp-send-group').count()==2
                 assert '1 GPS tačaka' in await page.locator('#server-send-preview').inner_text()
-                assert 'Poslao: Amir Kolega' in await page.locator('#server-project-list').inner_text()
+                assert 'Projektant: Amir Kolega' in await page.locator('#server-received-items').text_content()
                 assert 'Poslao: Emina Projektant' in await page.locator('#server-project-summary').inner_text()
                 assert 'Još nije potvrđeno' not in await page.locator('#server-project-summary').inner_text()
                 scroll=await page.locator('#server-scroll').evaluate('(e)=>({height:e.clientHeight,width:e.clientWidth,content:e.scrollWidth})')
                 assert scroll['height']>=35 and scroll['content']<=scroll['width'],scroll
                 await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=0')
                 await page.screenshot(path=str(OUT/f'server-send-{theme}-{width}-{height}.png'))
+                await page.evaluate("_tabServer('received')")
+                assert await page.locator('#data-server-received').is_visible()
+                assert not await page.locator('#data-server-sent').is_visible()
                 await page.locator('#server-scroll').evaluate('(e)=>e.scrollTop=e.scrollHeight')
                 await page.screenshot(path=str(OUT/f'server-project-{theme}-{width}-{height}.png'))
+                await page.evaluate("_tabServer('sent')")
+                assert 'Vlaka · T1' in await page.locator('#server-sent-items').inner_text()
+                await page.screenshot(path=str(OUT/f'server-sent-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeSyncQueuePanel()')
 
         await page.set_viewport_size({'width':390,'height':800});await page.evaluate('document.documentElement.dataset.fieldTheme="day";openLayerImport();layerImportTab("shp")')
@@ -201,4 +208,4 @@ async def main():
         await browser.close()
     print('OK: navigacija/SHP tab 8 veličina i tema; pravi SHP+DBF, rupa, Leaflet, IDB/reload, backup, greške, dupli fajlovi, kamera')
 
-asyncio.run(main())
+if __name__=='__main__':asyncio.run(main())

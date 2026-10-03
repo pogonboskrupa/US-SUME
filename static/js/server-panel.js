@@ -30,7 +30,10 @@
   }
   function downloaded(id, rows) {
     const data = {ts:Date.now(), ids:rows.map(r => r.id).filter(Boolean)};
-    try { localStorage.setItem('tvlake_server_project_v1_' + currentUid() + '_' + id, JSON.stringify(data)); return true; }
+    try { localStorage.setItem('tvlake_server_project_v1_' + currentUid() + '_' + id, JSON.stringify(data));
+      const p=allowed().find(p=>p.id===id);
+      saveTransfers('received',rows.map(r=>({projectKey:'project:'+id,project:label(p),uid:r.korisnik_id,author:name(r.korisnik_id,r),item:'Vlaka · '+r.nm,detail:metres(length(r.pts)),ts:data.ts})), 'project:'+id);
+      return true; }
     catch(e) { return false; }
   }
   function length(pts) {
@@ -95,9 +98,42 @@
       h[dest.key]={ts:Date.now(),uid:owner,ime:name(owner),label:dest.label};
       const entries=Object.entries(h).sort((a,b)=>(b[1]?.ts||0)-(a[1]?.ts||0)).slice(0,100);
       localStorage.setItem('tvlake_server_transfers_v1_'+owner,JSON.stringify(Object.fromEntries(entries)));
+      saveTransfers('sent',[{projectKey:dest.key,project:dest.label,uid:owner,author:name(owner),item:operationLabel(op),detail:op.type==='upsert_vlaka'?metres(length(op.payload?.pts)):op._count?op._count+' GPS tačaka':'Potvrđeno na serveru',ts:Date.now()}]);
     }catch(e){console.warn('Vrijeme slanja nije sačuvano',e);}
   }
   function timestamp(ts) {return Number.isFinite(ts)&&ts>0?new Date(ts).toLocaleString('bs-BA'):'Još nije potvrđeno';}
+  function operationLabel(op) {
+    const labels={upsert_vlaka:'Vlaka',delete_vlaka:'Obrisana vlaka',insert_projekt:'Novi projekat',upsert_odjel:'Podaci odjela',insert_doz_project:'Novi odjel doznake',insert_doz_marking:'Zona doznake',delete_doz_marking:'Obrisana zona doznake',upsert_doz_status:'Status doznake',doz_track_points:'Snimljeni pojas doznake'};
+    const p=op.payload||{};return (labels[op.type]||'Podaci projekta')+(p.nm||p.name?' · '+(p.nm||p.name):'');
+  }
+  function transfers(direction) {
+    try {const raw=localStorage.getItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction);
+      if(raw===null&&direction==='received')return allowed().flatMap(p=>{const m=model(p.id);return m.rows.filter(r=>!r.pending&&!r.deleting&&!r.stale).map(r=>({projectKey:'project:'+p.id,project:label(p),uid:r.korisnik_id,author:r.ime,item:'Vlaka · '+r.nm,detail:metres(r.metres),ts:m.downloaded?.ts||0}));});
+      const rows=JSON.parse(raw||'[]');return Array.isArray(rows)?rows:[];}catch(e){return [];}
+  }
+  function saveTransfers(direction,rows,replaceProject) {
+    const old=transfers(direction).filter(r=>!replaceProject||r.projectKey!==replaceProject);
+    // Samo potvrde i mali opis, bez geometrije, fotografija ili GPS dnevnika.
+    try {localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify([...rows,...old].sort((a,b)=>b.ts-a.ts).slice(0,500)));}
+    catch(e){console.warn('Pregled razmjene nije sačuvan',e);}
+  }
+  function dozReceived(id,markings,tracks,members,owner) {
+    if(owner!==currentUid())return;
+    const project='Doznaka · '+((_dozOdjeli||[]).find(p=>p.id===id)?.name||id),projectKey='doz:'+id,ts=Date.now();
+    const who=uid=>{const k=(members||[]).find(m=>m.user_id===uid)?._korisnik;return k?[k.ime,k.prezime].filter(Boolean).join(' '):name(uid);};
+    const rows=markings.map(r=>({projectKey,project,uid:r.user_id||r.created_by,author:who(r.user_id||r.created_by),item:'Zona doznake'+(r.name?' · '+r.name:''),detail:'Nacrtana zona / oznaka',ts}));
+    const groups=new Map();for(const pt of tracks){const uid=pt.user_id;groups.set(uid,(groups.get(uid)||0)+1);}
+    for(const [uid,count] of groups)rows.push({projectKey,project,uid,author:who(uid),item:'Snimljeni pojas doznake',detail:count+' GPS tačaka',ts});
+    saveTransfers('received',rows,projectKey);
+  }
+  function renderTransfers() {
+    for(const direction of ['received','sent']){
+      const el=byId('server-'+direction+'-items');if(!el)continue;
+      const rows=transfers(direction),limit=transferLimits[direction];
+      el.innerHTML=rows.length?rows.slice(0,limit).map(r=>'<article class="sp-transfer-item"><div><b>'+esc(r.item)+'</b><strong>'+esc(r.detail)+'</strong></div><span>Projekat: <b>'+esc(r.project)+'</b></span><span>Projektant: '+esc(r.author)+'</span><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Lokalna server kopija · vrijeme prijema nije evidentirano')+'</small></article>').join('')+(rows.length>limit?'<button class="sp-more" onclick="_serverTransferMore(\''+direction+'\')">Prikaži još ('+(rows.length-limit)+')</button>':''):'<div class="sp-empty">'+(direction==='received'?'Preuzmi podatke da ovdje vidiš stavke, projekat i projektanta.':'Još nema detaljnih potvrda slanja. Ovdje se bilježe naredna uspješna slanja.')+'</div>';
+    }
+  }
+  const transferLimits={received:60,sent:60};
   function pendingGroups() {
     const uid=currentUid(),groups=new Map(),q=_OL.loadQueue().filter(o=>(!o._uid||o._uid===uid)&&!_SERVER_SAMO_LOKALNO.has(o.type));
     const add=(op,text)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[]});groups.get(d.key).items.push(text);};
@@ -135,6 +171,7 @@
     const sent=Object.values(history()).filter(x=>Number.isFinite(x?.ts)).sort((a,b)=>b.ts-a.ts)[0];
     if(summary)summary.innerHTML='<div class="sp-times"><div><span>Posljednje slanje s ovog telefona</span><b>'+esc(timestamp(sent?.ts))+'</b>'+(sent?'<small>'+esc(sent.label)+'<br>Poslao: '+esc(sent.ime)+'</small>':'')+'</div><div><span>Posljednji prijem ovog projekta</span><b>'+esc(timestamp(m.downloaded?.ts))+'</b></div></div>';
     renderPending();
+    renderTransfers();
     const authors=byId('server-project-authors');
     if(authors)authors.innerHTML=m.authors.length ? '<div class="sp-authors"><button aria-pressed="'+(!author)+'" data-author="" onclick="_serverProjektAuthor(this.dataset.author)"><b>Svi</b></button>'+m.authors.map(a=>'<button aria-pressed="'+(author===a.id)+'" data-author="'+esc(a.id)+'" onclick="_serverProjektAuthor(this.dataset.author)"><b>'+esc(a.ime)+'</b></button>').join('')+'</div>' : '';
     const list=byId('server-project-list');
@@ -154,7 +191,8 @@
   }
   Object.assign(window,{
     _serverPanelSazetak(n,st){renderPending();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
-    _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,
+    _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,_serverTransfers:transfers,_serverDozReceived:dozReceived,
+    _serverTransferMore(direction){if(!Object.hasOwn(transferLimits,direction))return;transferLimits[direction]+=60;renderTransfers();},
     async _serverPreuzmiDoznaku(){
       if(_serverPreuzmiDoznaku.busy)return;
       const uid=currentUid();if(!uid)return;

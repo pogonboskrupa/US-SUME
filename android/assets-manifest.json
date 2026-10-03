@@ -32,6 +32,7 @@
     "static/js/server-panel.js",
     "static/js/local-layer-import.js",
     "static/js/layer-editor.js",
+    "static/js/map-visibility.js",
     "static/css/server-panel.css"
   ]
 }

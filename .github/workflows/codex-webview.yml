@@ -36,6 +36,7 @@ jobs:
           python -m playwright install --with-deps chromium
           python tests/browser/menu-print-day.py
           python tests/browser/menu-tools.py
+          python tests/browser/server-map-218.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

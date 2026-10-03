@@ -5241,6 +5241,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </button>
       </div>
 
+      <section id="tv-visibility" aria-label="Prikaz podataka na karti"></section>
+
       <!-- Tabovi: Tragovi | Mjerenja — jedna lista na ekranu umjesto dvije jedna ispod druge -->
       <div class="tv-seg" role="tablist">
         <button id="tv-seg-trg" class="on" onclick="_tragoviSetTab('trg')">Tragovi <span id="tragovi-count"></span></button>
@@ -5666,7 +5668,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.1.7';
+const APP_VER = 'v2.1.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10960,7 +10962,8 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
         { color, weight: 3, opacity: 0.7, dashArray: kid === sbUser?.id ? null : '10,6', interactive: true }).addTo(map);
       poly.bindTooltip(_escHtml(`${info.ime}: ${row.nm}`), { sticky: true, opacity: 0.85 });
       kolegeVlake.push(poly);
-      kolegeVlakeMap[mapKey] = { poly, pts: row.pts, nm: row.nm, ime: info.ime, na_putu: !!row.na_putu };
+      kolegeVlakeMap[mapKey] = { poly, color, pts: row.pts, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, na_putu: !!row.na_putu };
+      attachPolyClick(poly, mapKey);
     });
     rndList();
     return;
@@ -11017,14 +11020,11 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
       { color, weight: 3, opacity: 0.7, dashArray: '10,6', interactive: true }
     ).addTo(map);
     poly.bindTooltip(_escHtml(`${info.ime}: ${row.nm}`), { sticky: true, opacity: 0.85 });
-    poly.on('click', function(e) {
-      L.DomEvent.stopPropagation(e);
-      showKolegeVlakaInfo(mapKey, e.latlng);
-    });
+    attachPolyClick(poly, mapKey);
     kolegeVlake.push(poly);
     const labels = _placeLabelMarkers(row.pts, row.nm, 498);
     labels.forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[mapKey] = { poly, color, ime: info.ime, pts: row.pts || [], labels, na_putu: !!row.na_putu };
+    kolegeVlakeMap[mapKey] = { poly, color, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, pts: row.pts || [], labels, na_putu: !!row.na_putu };
   });
   rndList();
 }
@@ -11296,7 +11296,8 @@ function _tackaExitPlaceMode() {
 function _createTacka(la, lo, nm) {
   const ts  = Date.now();
   const idx = _tacke.length;
-  const m   = L.marker([la, lo], {icon: _tačkaIcon(idx+1, nm)}).addTo(map);
+  const m   = L.marker([la, lo], {icon: _tačkaIcon(idx+1, nm)});
+  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))m.addTo(map);
   _setupTackaPopup(m, idx, la, lo, ts, nm);
   _tacke.push({la, lo, ts, nm, marker: m});
   _saveTacke();
@@ -11641,7 +11642,8 @@ function _restoreTacke() {
   try {
     const d = JSON.parse(localStorage.getItem(_TACKE_KEY) || '[]');
     d.forEach(({la,lo,ts,nm}, i) => {
-      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1, nm)}).addTo(map);
+      const m = L.marker([la,lo], {icon: _tačkaIcon(i+1, nm)});
+      if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))m.addTo(map);
       _setupTackaPopup(m, i, la, lo, ts, nm);
       _tacke.push({la, lo, ts, nm, marker: m});
     });
@@ -11791,7 +11793,8 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
     className:'', iconSize:[46,56], iconAnchor:[23,56], popupAnchor:[0,-58],
     html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
-  const m = L.marker([la, lo], {icon: ico}).addTo(map);
+  const m = L.marker([la, lo], {icon: ico});
+  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos'))m.addTo(map);
   _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }
@@ -16071,9 +16074,9 @@ map.on('click', e => {
   if (!recOn && activeTool !== 'edit' && activeTool !== 'delnode' && activeTool !== 'merge' && activeTool !== 'addline' && activeTool !== 'addpoint') {
     const HIT_PX = 22; // touch-friendly threshold in pixels
     const clickPx = map.latLngToContainerPoint(e.latlng);
-    let bestI = -1, bestD = Infinity;
+    let bestI = -1, bestD = Infinity, bestKey = null;
     vlake.forEach((v, i) => {
-      if (!v.poly || v.pts.length < 2) return;
+      if (!v.poly || !map.hasLayer(v.poly) || v.pts.length < 2) return;
       for (let j = 0; j < v.pts.length - 1; j++) {
         const a = map.latLngToContainerPoint(L.latLng(v.pts[j].la, v.pts[j].lo));
         const b = map.latLngToContainerPoint(L.latLng(v.pts[j+1].la, v.pts[j+1].lo));
@@ -16081,6 +16084,15 @@ map.on('click', e => {
         if (d < bestD) { bestD = d; bestI = i; }
       }
     });
+    for (const [key, v] of Object.entries(kolegeVlakeMap)) {
+      if (!v.poly || !map.hasLayer(v.poly) || !v.pts) continue;
+      for (let j=1;j<v.pts.length;j++) {
+        const a=map.latLngToContainerPoint(L.latLng(v.pts[j-1].la,v.pts[j-1].lo));
+        const b=map.latLngToContainerPoint(L.latLng(v.pts[j].la,v.pts[j].lo));
+        const d=_distToSegPx(clickPx,a,b);
+        if(d<bestD){bestD=d;bestKey=key;}
+      }
+    }
     // Sačuvana mjerenja se provjeravaju PRIJE vlaka jer su i na karti IZNAD
     // njih (pane 'tragMsrLines' 410 > 'vlakeLines' 400) — kad klik stigne
     // normalno, gornji sloj pobjeđuje, pa i fallback mora poštovati isti
@@ -16090,6 +16102,7 @@ map.on('click', e => {
       const mm = _msrHitTest(e.latlng);
       if (mm) { _msrOpenPopupNa(mm, e.latlng); return; }
     }
+    if (bestKey && bestD <= HIT_PX) { showKolegeVlakaInfo(bestKey,e.latlng); return; }
     if (bestI >= 0 && bestD <= HIT_PX) {
       selI(bestI);
       showVlakaPopup(bestI, e.latlng);
@@ -20523,6 +20536,7 @@ function _tragoviMsrRowHtml(m) {
 }
 
 function _tragoviRender() {
+  if(typeof _tvVisibilityRender==='function')_tvVisibilityRender();
   const el = document.getElementById('tragovi-list');
   const cnt = document.getElementById('tragovi-count');
   const notif = document.getElementById('notif-tragovi');
@@ -21816,7 +21830,7 @@ function _delConfirm() {
 }
 
 // === VLAKA POPUP ===
-let _vpIdx = null, _vpJustOpened = false;
+let _vpIdx = null, _vpJustOpened = false, _vpSharedKey = null, _vpBufferId = null;
 
 // Pixel-space distance from point p to segment p1-p2
 function _distToSegPx(p, p1, p2) {
@@ -21837,7 +21851,7 @@ function _activateVlakaEdit(idx) {
 }
 
 let _lastVlakaClickTs = 0;
-function attachPolyClick(poly) {
+function attachPolyClick(poly, colleagueKey) {
   // Nevidljivi široki sloj (24px) za lakši klik/tap po cijeloj dužini vlake
   const hit = L.polyline(poly.getLatLngs(), {
     weight: 24, opacity: 0.001, color: '#000',
@@ -21858,9 +21872,11 @@ function attachPolyClick(poly) {
     if (now - _lastVlakaClickTs < 150) return;  // spriječi dvostruki okidač
     _lastVlakaClickTs = now;
     if (recOn) return;
-    if (activeTool === 'edit' || activeTool === 'delnode' || activeTool === 'merge') return;
+    if (['edit','delnode','merge','addline','addpoint'].includes(activeTool)) return;
+    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null) return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
+    if (colleagueKey) { showKolegeVlakaInfo(colleagueKey, e.latlng); return; }
     const idx = vlake.findIndex(vv => vv.poly === poly);
     if (idx >= 0) { selI(idx); showVlakaPopup(idx, e.latlng); }
   }
@@ -21869,7 +21885,9 @@ function attachPolyClick(poly) {
 }
 
 function showVlakaPopup(i, latlng) {
+  closeVlakaPopup();
   const v = vlake[i];
+  if (!v) return;
   _vpIdx = i;
   _vpJustOpened = true;
   setTimeout(() => { _vpJustOpened = false; }, 80);
@@ -21903,9 +21921,11 @@ function showVlakaPopup(i, latlng) {
 function _positionPopup(latlng) {
   const popup = document.getElementById('vlaka-popup');
   popup.style.display = 'block';
+  _vpBufferLabel();
   const cp  = map.latLngToContainerPoint(latlng);
   const mr  = document.getElementById('map').getBoundingClientRect();
-  const pw  = 270, ph = 220;
+  const bounds = popup.getBoundingClientRect();
+  const pw = bounds.width || 270, ph = bounds.height || 220;
   let left  = mr.left + cp.x + 12;
   let top   = mr.top  + cp.y - 20;
   if (left + pw > window.innerWidth  - 8) left = mr.left + cp.x - pw - 12;
@@ -21920,29 +21940,41 @@ function showKolegeVlakaInfo(key, latlng) {
   const kv = kolegeVlakeMap[key];
   if (!kv) return;
   closeVlakaPopup();
-  _vpIdx = null;
+  _vpSharedKey = key;
   _vpJustOpened = true;
   setTimeout(() => { _vpJustOpened = false; }, 80);
-  const len = calcL(kv.pts);
-  const nm  = key.split('::').slice(1).join('::');
-  document.getElementById('vp-nm').innerHTML =
-    `<span style="color:${kv.color};">${nm}</span>
-     <span style="font-size:10px;color:#475569;margin-left:5px;">👥 ${kv.ime || 'Kolega'}</span>`;
+  const nm = kv.nm || key.split('::').slice(1).join('::');
+  const project = (_projekti || []).find(p=>p.id===(kv.projektId || _aktivniProjektId));
+  document.getElementById('vp-nm').textContent = nm + ' · vlaka kolege';
   document.getElementById('vp-info').innerHTML = `
-    <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
-    <div class="vp-row">📍 Tačaka GPS: <b>${kv.pts.length}</b></div>
-    <div class="vp-row">👤 Projektant: <b>${kv.ime || 'Kolega'}</b></div>
-  `;
-  // Sakrij edit dugmad — kolega vlaka je read-only
+    <div class="vp-row">📁 Projekat: <b>${_escHtml([project?.gj,project?.odjel].filter(Boolean).join(' · ') || '—')}</b></div>
+    <div class="vp-row">📏 Dužina: <b>${fmtL(calcL(kv.pts))}</b></div>
+    <div class="vp-row">📍 Tačaka: <b>${kv.pts.length}</b></div>
+    <div class="vp-row">👤 Projektant: <b>${_escHtml(kv.ime || 'Kolega')}</b></div>
+    <div class="vp-row">Preuzeto sa servera · pregled</div>`;
   document.getElementById('vlaka-popup-btns').style.display = 'none';
   _positionPopup(latlng);
+}
+
+function vpBuffer() {
+  const v = _vpSharedKey ? kolegeVlakeMap[_vpSharedKey] : vlake[_vpIdx];
+  if (!v || v.pts.length < 2) return;
+  const id = _vpSharedKey || 'my:'+_vpIdx;
+  if (_vpBufferId === id && bufLayers.length) { clearBuffers(); return; }
+  drawBuffers([v]);
+  _vpBufferId = id;
+  _vpBufferLabel();
+}
+function _vpBufferLabel() {
+  const button=document.getElementById('vp-buffer');
+  if(button)button.textContent=_vpBufferId===(_vpSharedKey||'my:'+_vpIdx)&&bufLayers.length?'Sakrij bafer':'Bafer ±'+bufRadius+' m';
 }
 
 function closeVlakaPopup() {
   document.getElementById('vlaka-popup').style.display = 'none';
   const btns = document.getElementById('vlaka-popup-btns');
   if (btns) btns.style.display = '';  // restore for next open
-  _vpIdx = null;
+  _vpIdx = null; _vpSharedKey = null;
 }
 
 function vpEdit() {
@@ -21955,6 +21987,7 @@ function vpEdit() {
 }
 
 function vpZoom() {
+  if (_vpSharedKey) {const v=kolegeVlakeMap[_vpSharedKey];if(v?.poly)map.fitBounds(v.poly.getBounds(),{padding:[35,35]});return;}
   if (_vpIdx === null) return;
   zmV(_vpIdx);
 }
@@ -22167,7 +22200,8 @@ function updateVlakaLabel(i) {
   };
   const _junctionClick = (e) => {
     if (recOn) return;
-    if (activeTool === 'edit' || activeTool === 'delnode' || activeTool === 'merge') return;
+    if (['edit','delnode','merge','addline','addpoint'].includes(activeTool)) return;
+    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null) return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv === v);
@@ -25407,9 +25441,11 @@ function geoJsonToLeaflet(gj, opts) {
   });
 }
 
-function drawBuffers() {
+function drawBuffers(selected) {
   clearBuffers();
-  const validVlake = vlake.filter(v => v.pts.length >= 2);
+  const mine=vlake.filter(v=>!_aktivniProjektId || v.projektId===_aktivniProjektId);
+  const shared=Object.entries(kolegeVlakeMap).filter(([key])=>!key.startsWith((sbUser?.id||'')+'::')).map(([key,v])=>({...v,nm:v.nm||key.split('::').slice(1).join('::')}));
+  const validVlake = (Array.isArray(selected)?selected:[...mine,...shared]).filter(v => v.pts.length >= 2);
   if (validVlake.length === 0) return; // nothing to buffer, skip silently
 
   const polys = []; // {gj, vlaka} pairs
@@ -25430,7 +25466,7 @@ function drawBuffers() {
       fillOpacity: bufFillOp
     });
     lyr.addTo(map);
-    lyr.bindTooltip(`Buffer ${v.nm} ±${bufRadius}m`, { sticky: true, opacity: 0.85 });
+    lyr.bindTooltip(_escHtml(`Bafer ${v.nm} ±${bufRadius}m`), { sticky: true, opacity: 0.85 });
     bufLayers.push(lyr);
   });
 
@@ -25450,7 +25486,7 @@ function drawBuffers() {
         });
         lyr.addTo(map);
         lyr.bindTooltip(
-          `⚠ Mrtva zona: ${polys[i].v.nm} ∩ ${polys[j].v.nm}`,
+          _escHtml(`⚠ Mrtva zona: ${polys[i].v.nm} ∩ ${polys[j].v.nm}`),
           { sticky: true, opacity: 0.95 }
         );
         deadLayers.push(lyr);
@@ -25472,6 +25508,7 @@ function clearBuffers() {
   bufLayers.forEach(l => map.removeLayer(l));
   deadLayers.forEach(l => map.removeLayer(l));
   bufLayers = []; deadLayers = [];
+  _vpBufferId=null;_vpBufferLabel();
   const el = document.getElementById('buf-status');
   if (el) el.style.display = 'none';
 }
@@ -28714,6 +28751,7 @@ function _msrPopupHtml(m) {
 // je meta prst na ekranu, pa tolerancija mora biti ista na svakom zumu.
 const _MSR_HIT_PX = 22;
 function _msrHitTest(latlng) {
+  if(typeof _tvCategoryOn==='function'&&!_tvCategoryOn('measurements'))return null;
   if (!window.map || !Array.isArray(_msrRegistry) || !_msrRegistry.length) return null;
   let klikPx;
   try { klikPx = map.latLngToContainerPoint(latlng); } catch(e) { return null; }
@@ -28771,7 +28809,9 @@ function _msrOpenPopupNa(m, latlng) {
 
 function _msrDrawAllSaved() {
   if (!window.map) return;
-  if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup().addTo(map); }
+  if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup(); }
+  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('measurements'))_msrSavedLayer.addTo(map);
+  else map.removeLayer(_msrSavedLayer);
   _msrSavedLayer.clearLayers();
   _msrRegistry.forEach(m => {
     if (m.id === _mqmId) return;
@@ -29060,7 +29100,7 @@ function createTextMarker(lbl) {
     iconAnchor: [0, lbl.size / 2]
   });
   const mk = L.marker([lbl.lat, lbl.lng], { icon, draggable: true, zIndexOffset: 1000 });
-  mk.addTo(map);
+  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('labels'))mk.addTo(map);
   mk.on('click', function(e) {
     L.DomEvent.stopPropagation(e);
     openTextDialog(lbl.lat, lbl.lng, lbl.id);
@@ -37040,6 +37080,7 @@ async function dozLoadLayers(projectId, opts) {
     if(!valid())return false;
     _dozMembers=members;_dozMarkings=_dozPrimijeniRed(mkRes.data||[],projectId);_dozTracks=trRes.data||[];
     if(_dozCacheLayers(projectId)===false)throw Error('Slojevi nisu sačuvani na telefonu');
+    if(typeof _serverDozReceived==='function')_serverDozReceived(projectId,mkRes.data||[],trRes.data||[],members,owner);
   } catch(e) {
     if (!valid()) return false;
     console.error('dozLoadLayers', e);
@@ -37756,7 +37797,7 @@ function dozDrawBuf() {
           style: { color: '#ef4444', weight: 2, opacity: 1, fillColor: '#ef4444', fillOpacity: 0.55, dashArray: '4,3' },
           interactive: false
         }).addTo(map);
-        lyr.bindTooltip(`⚠ Mrtva zona: ${polys[i].v.nm} ∩ ${polys[j].v.nm}`, { sticky: true, opacity: 0.95 });
+        lyr.bindTooltip(_escHtml(`⚠ Mrtva zona: ${polys[i].v.nm} ∩ ${polys[j].v.nm}`), { sticky: true, opacity: 0.95 });
         _dozBufDeadLayers.push(lyr);
       } catch(e) {}
     }
@@ -40953,6 +40994,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="vp-info"></div>
+  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()">Približi</button></div>
   <div class="vp-btns" id="vlaka-popup-btns">
     <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
     <button onclick="vpLager()" style="background:#92400e;color:#fbbf24;"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>
@@ -41953,17 +41995,20 @@ if (typeof AndroidDownload !== 'undefined') {
   <div id="server-scroll" style="overflow-y:auto;flex:1;min-height:0;">
     <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
     <div id="server-send-preview"></div>
-    <div id="server-project-view">
-      <div id="server-project-summary"></div>
+    <div id="server-project-summary"></div>
+    <details id="server-project-view"><summary>Vlake aktivnog projekta · pregled i ispis</summary>
       <h3 class="sp-section-heading">Podaci u projektu</h3>
       <div id="server-project-authors"></div>
       <div class="sp-project-actions"><button id="server-project-refresh" onclick="_serverProjektRefresh()">↓ Osvježi server</button><button id="server-project-map" onclick="_serverProjektMap()">Na karti</button><button id="server-project-print" onclick="_serverProjektReport()">Ispis svih vlaka</button></div>
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
-    </div>
-    <div id="data-server-received" style="padding:12px 16px;" hidden><div id="syncq-primljeno"></div><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()" style="margin-top:8px;width:100%;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#dcfce7;">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()" class="server-doz-refresh">↓ Preuzmi doznaku</button><p id="server-doz-status" class="sp-note"></p></div>
+    </details>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Pregled posljednjih primljenih stavki po projektu i projektantu.</p><div class="sp-download-actions"><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()">↓ Preuzmi doznaku</button></div><p id="server-doz-status" class="sp-note"></p><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div id="server-sent-items"></div></section>
+    <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
-    <div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div>
+    </details>
+    <details class="sp-recovery"><summary>Sigurnosna kopija i red slanja</summary><div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div></details>
   </div>
   <div class="sp-bottom"><p>Slanje je ručno i obuhvata sve projekte na ovom telefonu. Kolege vide tvoje izmjene nakon slanja.</p>
     <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
@@ -42071,5 +42116,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/server-panel.js"></script>
 <script src="static/js/local-layer-import.js"></script>
 <script src="static/js/layer-editor.js"></script>
+<script src="static/js/map-visibility.js"></script>
 </body>
 </html>
