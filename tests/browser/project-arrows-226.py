@@ -55,6 +55,7 @@ async def main():
     await page.screenshot(path=str(b.OUT/f'arrows-department-10000-{theme}-{mode}.png'))
   await page.evaluate('map.removeLayer(testDepartment)')
   await page.evaluate("VlakaDirection.change('placement','on')")
+  await page.evaluate('block.addTo(map)')
   await tap_fraction(page,.2);assert await page.evaluate('blockClicks')==1;await page.evaluate('map.removeLayer(block)')
   # Prekid/otkaz ne mijenjaju prethodnu razdjelnicu; tačka van vlake odbijena.
   await page.evaluate('VlakaDirection.startPick(testV)');await page.keyboard.press('Escape');assert not await page.evaluate('VlakaDirection.isPicking()');assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02
