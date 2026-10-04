@@ -1803,3 +1803,16 @@ SQLite bez raster tabela, neispravno zaglavlje i zakašnjeli izbor. Bez
 vanjskih mrežnih poziva. 26 PNG na 320/390/568/800px u dva moda, pregledani
 day390, dark320 i landscape pregled. Novi browser test u CI-u (ukupno16).
 CI/APK provjera slijedi. Nije testirano na fizičkom Xiaomi uređaju.
+
+ZAVRŠENO 2.3.3: remote b66c3a2c98a2f1eed7cd46d2ad7ca62dbaa1ffa0,
+CI37229255029/job111515257513success (90JS,16browser,Android build,
+51assetSHA,emulator offlineOCR gate,analiza brzine nakon objave).
+CI26novihPNG; day390/dark320/landscape pregledani. APK23.962.716B,
+ba.spd.uss.vlake.debug / 2.3.3-debug / code503; svih51webassetGitSHA
+isto remote tree9ff3b8a72d9e0f094e721f3ab73c23ed72d1c684,
+izmijenjeniwebfajloviisto lokalno,15launcherPNGisto2.3.2,GRANICEsačuvan.
+CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+isto2.3.2; SHA256preuzetogAPK-a istoReleaseAPI digest:
+15fff7e3a51a923f0ae577a740ea84d42e6b1e67591f187fd406052f10e20b5d.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.3
+Objavljeno za Meni → Ažuriraj aplikaciju; fizički Xiaomi nije testiran.
