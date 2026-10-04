@@ -4609,7 +4609,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </div>
 
       <!-- REFERENTNA KARTA -->
-      <div class="sec">
+      <div class="sec reference-card" id="reference-card">
         <div class="sec-t">🗺 Referentna karta (1:10000)</div>
         <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
         <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
@@ -4651,7 +4651,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </label>
           <!-- Detekcija linija -->
           <div style="border-top:1px solid #1e293b;padding-top:8px;margin-top:4px;">
-            <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">🔍 Automatska detekcija vlaka:</div>
+            <h4 class="ref-heading">Vlake označene na papiru</h4><p class="ref-note">U obzir ulaze samo linije uz oznaku <b>T + broj</b>, npr. T12. Granice i izohipse bez takve oznake se odbacuju. Nejasnu vezu oznake i linije provjeri prije uvoza.</p><div class="ref-presets"><button type="button" onclick="ReferenceVlakePreset('dark')">Crne vlake</button><button type="button" onclick="ReferenceVlakePreset('blue')">Plave vlake</button></div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
               <span style="font-size:11px;color:#64748b;white-space:nowrap;">Detektuj po:</span>
               <select id="refkarta-detect-mode" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;font-size:11px;"
@@ -4671,7 +4671,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <div id="refkarta-color-opts" style="display:none;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                 <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja vlake:</span>
-                <input type="color" id="refkarta-detect-color" value="#8B3A2F" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
+                <input type="color" id="refkarta-detect-color" value="#1e40af" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
                 <button onclick="_refPickColorFromMap()" style="padding:2px 6px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:4px;font-size:10px;cursor:pointer;" title="Uzmi boju sa slike"><svg class="ic"><use href="#ic-pipeta"/></svg> Uzmi</button>
               </div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -4689,9 +4689,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Zadrži samo deblje (olovkom) crtane linije — izbaci tanke štampane izohipse i tekst.">Debljina olovke:</span>
-              <input type="range" id="refkarta-bold" min="0" max="3" value="1" style="flex:1;accent-color:#22c55e;"
+              <input type="range" id="refkarta-bold" min="0" max="3" value="0" style="flex:1;accent-color:#22c55e;"
                      oninput="document.getElementById('refkarta-bold-val').textContent=this.value==0?'sve':this.value">
-              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">1</span>
+              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">sve</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
               <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Spoji krajeve linija koji su blizu i približno u istom smjeru — vlaka prekinuta na presjeku postaje jedna.">Spoji prekide:</span>
@@ -4700,7 +4700,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
               <span id="refkarta-join-val" style="font-size:11px;color:#38bdf8;min-width:28px;text-align:right;">14px</span>
             </div>
             <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
-                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake (beta)</button>
+                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
+            <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
+            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">APK čita oznake na uređaju, bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
             <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
               <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
                 <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
@@ -4721,8 +4723,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <input type="checkbox" id="refkarta-imp-vis" checked onchange="refKartaImportedVisible(this.checked)" style="width:15px;height:15px;accent-color:#f97316;">
             <span>Prikaži detektovane vlake <b id="refkarta-imp-count" style="color:#f97316;"></b></span>
           </label>
+          <div id="refkarta-results" class="ref-results"></div>
           <button class="btn" style="width:100%;margin-top:5px;font-size:12px;background:#14532d;color:#4ade80;border:1px solid #166534;"
-                  onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
+                  id="refkarta-import-btn" onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
           <button class="btn" style="width:100%;margin-top:5px;font-size:11px;background:#1c0c02;color:#fb923c;border:1px solid #7c2d12;"
                   onclick="refKartaClearImported()"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši detektovane</button>
         </div>
@@ -5530,6 +5533,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span id="sync-status-dot" class="sync-dot sync-dot--off" title="Realtime sync" style="margin:6px 2px 0 4px;"></span>
         </div>
       </div>
+      <div id="reference-quick-controls"><button type="button" id="refkarta-quick" hidden onclick="ReferenceVlake.toggleQuick()" aria-pressed="false">Ref. karta · Sakrij</button><button type="button" id="refkarta-label-cancel" hidden onclick="ReferenceVlake.stopMark()">Odustani od oznake</button></div>
       <!-- Kolege live indicator -->
       <div id="kolege-live-bar"></div>
       <!-- ═══ GPS SNIMANJE BANNER ═══ -->
@@ -5687,7 +5691,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.2.3';
+const APP_VER = 'v2.2.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -9751,7 +9755,7 @@ async function startManualVlakaDraw() {
   }
 
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+  const poly = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(nm), { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
   const strVal = kr > 0 ? (kr % 2 !== 0 ? 'L' : 'D') : null;
@@ -10138,7 +10142,7 @@ async function impVlakaConfirm() {
   const created = [];
   for (let idx=start;idx<vlake.length;idx++) {
     const t=vlake[idx],color=t.color;
-    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(_escHtml(t.nm), { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
     t.poly=poly;
@@ -10407,7 +10411,7 @@ function _applyVlakeRows(rows) {
     // Linija se gradi odjednom: addLatLng po tački tjera Leaflet da poslije SVAKE
     // tačke ponovo projektuje i iscrta cijelu liniju — kvadratno (izmjereno 0,7 s
     // za 40 vlaka pri pokretanju, v1.9.3).
-    const poly  = L.polyline((row.pts || []).map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+    const poly  = L.polyline((row.pts || []).map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(_escHtml(row.nm), { sticky: true, opacity: 0.9 });
     const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', lagerPt: row.lager_pt || null, naPutu: !!row.na_putu, pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null, rev: row.rev != null ? row.rev : null };
     vlake.push(v);
@@ -10474,6 +10478,7 @@ function _updVlakeMapVisibility() {
       } catch(e) {}
     });
   });
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 
 async function sbLoadVlake(osvjeziSamo) {
@@ -12314,6 +12319,7 @@ function _patchKolegaVlaka(row) {
   } else {
     _schedKolegeFullSync(500);
   }
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 
 function _schedKolegeFullSync(delay = 4000) {
@@ -13838,8 +13844,13 @@ function _saveBoje(b) {
 function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
 function getBojaKraka() { return _loadBoje().krak || '#f87171'; }
 function getVlakaWeight() { return _loadBoje().weight || 4; }
+function getVlakaLineCap() { return getVlakaDash()==='dash'?'butt':'round'; }
 function getVlakaDash() { return _loadBoje().dash || 'solid'; }
-function getVlakaDashArray() { const d=getVlakaDash();return d==='dot'?'2 6':d==='dash'?'8 4':null; }
+function _vlakaStroke(d,weight,zoom) {
+ const w=weight||4,z=Number.isFinite(zoom)?zoom:15,f=Math.max(.55,Math.min(1,Math.pow(2,(z-15)*.2)));
+ return d==='dot'?{dashArray:'0.01 '+Math.max(w+2,8*f).toFixed(2),lineCap:'round'}:d==='dash'?{dashArray:Math.max(w*1.6,9*f).toFixed(2)+' '+Math.max(1.5,Math.min(3,w*.6)*f).toFixed(2),lineCap:'butt'}:{dashArray:null,lineCap:'round'};
+}
+function getVlakaDashArray() { return _vlakaStroke(getVlakaDash(),getVlakaWeight(),typeof map!=='undefined'?map.getZoom():15).dashArray; }
 function _vlakaPrikazColor(v) {
   const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId);
   const kr=Number(v.kr)>0||String(v.nm||'').includes('.');
@@ -13847,7 +13858,7 @@ function _vlakaPrikazColor(v) {
 }
 function _vlakaPrikazStyle(v) {
   const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId),d=b.dash||'solid';
-  return {color:_vlakaPrikazColor(v),weight:b.weight||4,dashArray:d==='dot'?'2 6':d==='dash'?'8 4':null};
+  return {color:_vlakaPrikazColor(v),weight:b.weight||4,..._vlakaStroke(d,b.weight||4,typeof map!=='undefined'?map.getZoom():15)};
 }
 function _bojaChange(prop,value) {
   if(['vlaka','krak'].includes(prop)&&!/^#[a-f\d]{6}$/i.test(value))return;
@@ -13856,7 +13867,7 @@ function _bojaChange(prop,value) {
   if(!['vlaka','krak','weight','dash'].includes(prop))return;
   const b={vlaka:getBojaVlake(),krak:getBojaKraka(),..._loadBoje(),[prop]:value};
   if(!_saveBoje(b))return;
-  _vlakaStilApply();_rndBojaPresets();
+  _vlakaStilApply();_rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 function _bojaVlChange(col) { _bojaChange('vlaka',col); }
 function _bojaKrChange(col) { _bojaChange('krak',col); }
@@ -14024,7 +14035,7 @@ function _recoverVlakaSnapshot(snap) {
   const existing = vlake.findIndex(v => v.nm === nm && (v.projektId || null) === pid);
   if (existing >= 0) return existing;
   const color = snap.color || '#f97316';
-  const poly = L.polyline([], { color, weight:getVlakaWeight(), dashArray:getVlakaDashArray(),
+  const poly = L.polyline([], { color, weight:getVlakaWeight(), dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round',
     opacity:0.9, pane:'vlakeLines', renderer:_vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(nm), { sticky:true, opacity:0.9 });
   attachPolyClick(poly);
@@ -16106,6 +16117,7 @@ map.on('click', e => {
   // Klik na mapu dok je panel otvoren — vrati se na kartu
   if (_activeTab !== 'karta') { switchTab('karta'); return; }
   if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.isDrawing())return;
+  if(typeof ReferenceVlake!=='undefined'&&ReferenceVlake.isMarking())return;
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
@@ -17654,7 +17666,7 @@ function vcCancel() {
 async function _doCreateVlaka(br, kr) {
   const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([],{color,weight:getVlakaWeight(),dashArray:getVlakaDashArray(),opacity:0.9,pane:'vlakeLines',renderer:_vlakeRenderer}).addTo(map);
+  const poly = L.polyline([],{color,weight:getVlakaWeight(),dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round',opacity:0.9,pane:'vlakeLines',renderer:_vlakeRenderer}).addTo(map);
   poly.bindTooltip(_escHtml(nm),{sticky:true,opacity:0.9});
   attachPolyClick(poly);
   vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,projektId:_aktivniProjektId||null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
@@ -18443,7 +18455,7 @@ function noviKrakStrana(strana, overrideNm) {
 
   const krakNm = overrideNm || _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
-  const poly   = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+  const poly   = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(krakNm), { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
@@ -21993,6 +22005,7 @@ function showVlakaPopup(i, latlng) {
       <span style="font-size:11px;color:#7dd3fc;">🛣 Završava na putu <span style="color:#64748b;">(mjeri samo dužinu kraka)</span></span>
     </label>` : ''}
   `;
+  if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(v));
   _positionPopup(latlng);
 }
 
@@ -22030,6 +22043,7 @@ function showKolegeVlakaInfo(key, latlng) {
     <div class="vp-row">📍 Tačaka: <b>${kv.pts.length}</b></div>
     <div class="vp-row">👤 Projektant: <b>${_escHtml(kv.ime || 'Kolega')}</b></div>
     <div class="vp-row">Preuzeto sa servera · pregled</div>`;
+  if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(kv));
   document.getElementById('vlaka-popup-btns').style.display = 'none';
   _positionPopup(latlng);
 }
@@ -22316,6 +22330,7 @@ function updateVlakaLabel(i) {
     }).addTo(map);
   }
   _scheduleDeclutterLabels();
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.draw(v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22349,6 +22364,7 @@ function _loadPutevi() {
           }
         }
       }).addTo(map);
+      if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
       // Primijeni sačuvano stanje vidljivosti
       if (!_puteviVisible) togglePutevi(false);
       const cb = document.getElementById('putevi-toggle');
@@ -22368,6 +22384,7 @@ function togglePutevi(show) {
   try { localStorage.setItem('tvlake_putevi_visible', show ? '1' : '0'); } catch(e) {}
 }
 
+let _refVisible = true, _refLoadSeq = 0;
 let _refImg = null;       // HTMLImageElement
 let _refBounds = null;    // [[south,west],[north,east]]
 let _refOverlay = null;   // L.imageOverlay / AffineImageOverlay (aktivna, nesačuvana)
@@ -22381,20 +22398,9 @@ let _refCalibTmp = null;   // privremeni {imgX,imgY} dok se čeka ciljni klik
 let _refCalibLayer = null; // L.layerGroup s markerima kontrolnih tačaka
 
 function refKartaLoad(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => {
-    _refImg = img;
-    _refCPs = [];
-    if (_refCalibLayer) _refCalibLayer.clearLayers();
-    document.getElementById('refkarta-ctrl').style.display = '';
-    showToast('✓ Karta učitana — klikni "Fituj" da postaviš na mapu');
-    refKartaFitView();
-  };
-  img.onerror = () => showToast('⚠ Greška pri učitavanju slike');
-  img.src = url;
+  const file=e.target.files[0];if(!file)return;const token=++_refLoadSeq,url=URL.createObjectURL(file),img=new Image();
+  img.onload=()=>{if(token!==_refLoadSeq){URL.revokeObjectURL(url);return;}const previous=_refImg?.src;ReferenceVlake.invalidate(true);_refImg=img;_refVisible=true;_refCPs=[];if(_refCalibOn)_refCalibStop();if(_refCalibLayer)_refCalibLayer.clearLayers();document.getElementById('refkarta-ctrl').style.display='';ReferenceVlake.showQuick();refKartaFitView();if(previous?.startsWith('blob:'))URL.revokeObjectURL(previous);showToast('Karta učitana. Poravnaj je pa detektuj vlake uz oznake T + broj.');};
+  img.onerror=()=>{URL.revokeObjectURL(url);if(token===_refLoadSeq)showToast('Greška pri učitavanju slike.');};img.src=url;
 }
 
 function refKartaFitView() {
@@ -22501,6 +22507,7 @@ const AffineImageOverlay = L.Layer.extend({
 
 // Prikaži aktivnu sliku — afino ako ima ≥2 kontrolne tačke, inače bbox
 function _placeRefOverlay() {
+  if(typeof ReferenceVlake!=='undefined')ReferenceVlake.invalidate();
   if (_refOverlay) { map.removeLayer(_refOverlay); _refOverlay = null; }
   if (!_refImg) return;
   const opa = parseInt(document.getElementById('refkarta-opa').value) / 100;
@@ -22513,7 +22520,9 @@ function _placeRefOverlay() {
   }
   const saveBtn = document.getElementById('refkarta-save-btn');
   if (saveBtn) saveBtn.style.display = '';
+  if(!_refVisible&&_refOverlay)map.removeLayer(_refOverlay);
   _refApplyClipPath();
+  if(typeof ReferenceVlake!=='undefined')ReferenceVlake.refreshQuick();
 }
 
 // ─── Clip slike po poligonu odjela ─────────────────────────────────────────
@@ -22631,15 +22640,17 @@ function refKartaSetOpacity(v) {
 }
 
 function refKartaSetVisible(v) {
-  if (!_refOverlay) return;
-  if (v) _refOverlay.addTo(map); else map.removeLayer(_refOverlay);
+  _refVisible=!!v;if(!_refOverlay)return;if(v)_refOverlay.addTo(map);else map.removeLayer(_refOverlay);
+  if(typeof ReferenceVlake!=='undefined'){if(v)ReferenceVlake.showQuick();else ReferenceVlake.refreshQuick();}
 }
 
 function refKartaRemove() {
+  ++_refLoadSeq;const oldSrc=_refImg?.src;if(typeof ReferenceVlake!=='undefined')ReferenceVlake.invalidate(true);
   if (_refCalibOn) _refCalibStop();
   if (_refManualFitOn) { _refHideFitHandles(); _refManualFitOn = false; }
   if (_refOverlay) { map.removeLayer(_refOverlay); _refOverlay = null; }
   _refImg = null; _refBounds = null; _refCPs = [];
+  if(oldSrc?.startsWith('blob:'))URL.revokeObjectURL(oldSrc);
   _refClipToOdjel = false;
   const cb = document.getElementById('refkarta-clip');
   if (cb) cb.checked = false;
@@ -22648,6 +22659,7 @@ function refKartaRemove() {
   const saveBtn = document.getElementById('refkarta-save-btn');
   if (saveBtn) { saveBtn.style.display = 'none'; saveBtn.disabled = false; saveBtn.innerHTML = '<svg class="ic"><use href="#ic-server"/></svg> Sačuvaj na server'; }
   refKartaClearImported();
+  ReferenceVlake.refreshQuick();
 }
 
 // ─── Kalibracija preko kontrolnih tačaka ──────────────────────────────────────
@@ -22660,6 +22672,7 @@ function _refLatLngToImgPx(latlng) {
       return { x:cp.imgX, y:cp.imgY, X:lp.x, Y:lp.y };
     });
     const M = _refAffineFromPairs(pairs);
+    if(!M)return null;
     const lp = map.latLngToLayerPoint(latlng);
     const det = M.a*M.d - M.b*M.c;
     if (Math.abs(det) < 1e-12) return null;
@@ -22690,6 +22703,7 @@ function _refCalibToggle() {
 function _refCalibStart() {
   if (!_refImg) { showToast('⚠ Prvo učitaj sliku'); return; }
   if (!_refOverlay) { showToast('⚠ Prvo postavi sliku (Fituj u prikaz)'); return; }
+  refKartaSetVisible(true);
   _refCalibOn = true;
   _refCalibStage = 'img';
   _refCalibTmp = null;
@@ -22870,45 +22884,11 @@ function refKartaImportedVisible(v) {
 }
 
 function refKartaClearImported() {
-  if (_refImpGroup) { map.removeLayer(_refImpGroup); _refImpGroup = null; }
-  _refDetectedLines = [];
-  document.getElementById('refkarta-imp-ctrl').style.display = 'none';
+  if(typeof ReferenceVlake!=='undefined'){ReferenceVlake.invalidate();return;}
+  if(_refImpGroup){map.removeLayer(_refImpGroup);_refImpGroup=null;}_refDetectedLines=[];document.getElementById('refkarta-imp-ctrl').style.display='none';
 }
 
-async function refKartaImportDetected() {
-  if (!_aktivniProjektId) { showToast('⚠ Aktiviraj projekat prije importa!'); return; }
-  if (!_refDetectedLines.length) { showToast('⚠ Nema detektovanih linija za import'); return; }
-  const lines = _refDetectedLines.filter(l => l.length >= 2);
-  if (!lines.length) { showToast('⚠ Nema validnih linija'); return; }
-  if (lines.length > 40) {
-    const ok = await _dlgConfirm(`Detektovano je ${lines.length} linija — rezultat može biti bučan. Nastavi?`);
-    if (!ok) return;
-  }
-  const created = [];
-  const color = getBojaVlake();
-  for (const latlngs of lines) {
-    const br = _nextMainBr();
-    const nm = `T${br}`;
-    const pts = latlngs.map(([la, lo]) => ({ la, lo, al: 0 }));
-    const poly = L.polyline(latlngs, { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
-    poly.bindTooltip(_escHtml(nm), { sticky: true, opacity: 0.9 });
-    attachPolyClick(poly);
-    vlake.push({ nm, br, kr: 0, strana: null, color, lager: '', pts, poly, wpts: [], sbId: null, projektId: _aktivniProjektId, projektantIme: getIme(), labelMk: null, lagerMk: null, extraLabels: [], updatedAt: new Date().toISOString() });
-    const idx = vlake.length - 1;
-    updateVlakaLabel(idx);
-    sbFlushVlaka(idx);
-    created.push(idx);
-  }
-  refKartaClearImported();
-  _saveLocalVlake();
-  rndList(); updBan(); updOvl(); updProjStats(); _updVlakeMapVisibility();
-  const allPts = created.flatMap(i => vlake[i].pts.map(p => [p.la, p.lo]));
-  if (allPts.length) {
-    switchTab('karta');
-    map.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
-  }
-  showToast(`✓ Kreirano ${created.length} vlaka iz detekcije`);
-}
+async function refKartaImportDetected() { await ReferenceVlake.importSelected(); }
 
 // ─── Repozitorij referentnih slika (Supabase) ─────────────────────────────────
 
@@ -22928,6 +22908,7 @@ async function _refRepoLoad() {
 }
 
 function _refRepoRender() {
+  if(typeof ReferenceVlake!=='undefined')ReferenceVlake.refreshQuick();
   const el = document.getElementById('refkarta-repo-list');
   if (!el) return;
   if (!_refRepoData.length) {
@@ -23201,6 +23182,11 @@ function _lsSlope(xs, ys) {
 
 // ─── Line Detection Pipeline ───────────────────────────────────────────────
 
+function ReferenceVlakePreset(type) {
+ document.getElementById('refkarta-detect-mode').value=type==='blue'?'color':'dark';
+ if(type==='blue')document.getElementById('refkarta-detect-color').value='#1e40af';
+ document.getElementById('refkarta-bold').value='0';document.getElementById('refkarta-bold-val').textContent='sve';_refDetModeChanged();
+}
 function _refDetModeChanged() {
   const mode = document.getElementById('refkarta-detect-mode').value;
   document.getElementById('refkarta-dark-opts').style.display = mode === 'dark' ? '' : 'none';
@@ -23216,11 +23202,9 @@ function _refPickColorFromMap() {
   map.once('click', function(e) {
     _refColorPickActive = false;
     map.getContainer().style.cursor = '';
-    const [[south, west], [north, east]] = _refBounds;
-    const lat = e.latlng.lat, lng = e.latlng.lng;
-    if (lat < south || lat > north || lng < west || lng > east) { showToast('⚠ Klikni unutar slike!'); return; }
-    const px = (lng - west) / (east - west) * _refImg.width;
-    const py = (north - lat) / (north - south) * _refImg.height;
+    const p=_refLatLngToImgPx(e.latlng);
+    if(!p||p.imgX<0||p.imgY<0||p.imgX>=_refImg.width||p.imgY>=_refImg.height){showToast('Klikni unutar slike!');return;}
+    const px=p.imgX,py=p.imgY;
     const c = document.createElement('canvas'); c.width = 1; c.height = 1;
     const cx = c.getContext('2d');
     cx.drawImage(_refImg, px, py, 1, 1, 0, 0, 1, 1);
@@ -23231,7 +23215,7 @@ function _refPickColorFromMap() {
   });
 }
 
-function refKartaRunDetect() {
+async function refKartaRunDetect() {
   if (!_refImg || !_refBounds) { showToast('⚠ Postavi kartu na mapu!'); return; }
   const btn = document.getElementById('refkarta-detect-btn');
   btn.innerHTML = '<svg class="ic"><use href="#ic-cekanje"/></svg> Detektujem...'; btn.disabled = true;
@@ -23246,10 +23230,10 @@ function refKartaRunDetect() {
     targetColor = [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
     colorTol = parseInt(document.getElementById('refkarta-color-tol').value);
   }
-  setTimeout(() => {
-    try { _refKartaDoDetect(threshold, minLen, mode, targetColor, colorTol, boldPasses, joinPx); }
-    catch(err) { showToast('⚠ Greška u detekciji: ' + err.message); }
-    finally { btn.innerHTML = '<svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake (beta)'; btn.disabled = false; }
+  setTimeout(async () => {
+    try { await _refKartaDoDetect(threshold, minLen, mode, targetColor, colorTol, boldPasses, joinPx); }
+    catch(err) { document.getElementById('refkarta-detect-status').textContent=err.message;showToast('Detekcija: '+err.message); }
+    finally { btn.innerHTML = '<svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj'; btn.disabled = false; }
   }, 60);
 }
 
@@ -23259,107 +23243,8 @@ function _colorDistRGB(r1, g1, b1, r2, g2, b2) {
   return Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
 }
 
-function _refKartaDoDetect(threshold, minLen, mode, targetColor, colorTol, boldPasses, joinPx) {
-  boldPasses = boldPasses || 0; joinPx = joinPx || 0;
-  // 1. Downsample image for performance (max 1200px wide)
-  const MAX_W = 1200;
-  const scale = Math.min(1, MAX_W / _refImg.width);
-  const W = Math.round(_refImg.width  * scale);
-  const H = Math.round(_refImg.height * scale);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(_refImg, 0, 0, W, H);
-  const data = ctx.getImageData(0, 0, W, H).data;
-
-  // 2. Binarize based on mode
-  const bin = new Uint8Array(W * H);
-  if (mode === 'color' && targetColor) {
-    const [tr, tg, tb] = targetColor;
-    for (let i = 0; i < W * H; i++) {
-      const dist = _colorDistRGB(data[i*4], data[i*4+1], data[i*4+2], tr, tg, tb);
-      bin[i] = dist < colorTol ? 1 : 0;
-    }
-  } else {
-    for (let i = 0; i < W * H; i++) {
-      const gray = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
-      bin[i] = gray < threshold ? 1 : 0;
-    }
-  }
-
-  // 2b. Mask outside odjel polygon + erode boundary strip
-  if (_refBounds && graniceOdjeli.length && graniceOdjeli[0].ring) {
-    const [[ms, mw], [mn, me]] = _refBounds;
-    const ring = graniceOdjeli[0].ring;
-    const mc = document.createElement('canvas');
-    mc.width = W; mc.height = H;
-    const mx = mc.getContext('2d');
-    mx.beginPath();
-    ring.forEach(([lat, lon], i) => {
-      const px = (lon - mw) / (me - mw) * W;
-      const py = (mn - lat) / (mn - ms) * H;
-      if (i === 0) mx.moveTo(px, py); else mx.lineTo(px, py);
-    });
-    mx.closePath();
-    mx.fillStyle = '#fff';
-    mx.fill();
-    mx.globalCompositeOperation = 'destination-out';
-    mx.lineWidth = Math.max(6, Math.round(W * 0.012));
-    mx.strokeStyle = '#fff';
-    mx.stroke();
-    const md = mx.getImageData(0, 0, W, H).data;
-    for (let i = 0; i < W * H; i++) {
-      if (md[i * 4 + 3] === 0) bin[i] = 0;
-    }
-  }
-
-  // 2c. Remove small connected components (text, numbers, kote)
-  _refRemoveSmallComponents(bin, W, H, Math.max(20, Math.round(W * 0.025)));
-
-  // 2d. Filter debljine — zadrži SAMO deblje (olovkom) crtane linije, izbaci
-  // tanke štampane izohipse/tekst/sitne granice. Ključno za ovakvu podlogu gdje
-  // je ručna mreža vlaka nacrtana b: erodiraj boldPasses puta u kopiju pa zadrži
-  // samo komponente koje prežive eroziju (imaju "srž" → potez je bar 2*boldPasses+1 px debeo).
-  if (boldPasses > 0) _refBoldFilter(bin, W, H, boldPasses);
-
-  // 3. Zhang-Suen morphological thinning → 1-pixel skeleton
-  _zhangSuenThin(bin, W, H);
-
-  // 4. Trace skeleton pixels into ordered polylines
-  const scaledMinLen = Math.max(3, Math.round(minLen * scale));
-  let paths = _traceSkeleton(bin, W, H, scaledMinLen);
-
-  // 4b. Spoji prekinute segmente — krajevi blizu i približno kolinearni postaju
-  // jedna linija (vlaka isprekidana na presjeku s drugom vlakom/putem).
-  if (joinPx > 0) paths = _refJoinPaths(paths, Math.max(2, Math.round(joinPx * scale)));
-
-  // 5. Convert pixel [x,y] → [lat,lon]
-  const [[south, west], [north, east]] = _refBounds;
-  const lines = paths.map(path =>
-    path.map(([px, py]) => [
-      north - (py / H) * (north - south),
-      west  + (px / W) * (east  - west)
-    ])
-  );
-
-  // 6. Place on map as separate layer
-  refKartaClearImported();
-  _refImpGroup = L.layerGroup();
-  lines.forEach(latlngs => {
-    if (latlngs.length < 2) return;
-    L.polyline(latlngs, {
-      color: '#f97316', weight: 2.5, opacity: 0.9,
-      dashArray: '8 5', interactive: false
-    }).addTo(_refImpGroup);
-  });
-  _refImpGroup.addTo(map);
-
-  _refDetectedLines = lines.filter(l => l.length >= 2);
-  document.getElementById('refkarta-imp-ctrl').style.display = '';
-  document.getElementById('refkarta-imp-count').textContent = `(${_refDetectedLines.length})`;
-  document.getElementById('refkarta-imp-vis').checked = true;
-  showToast(`✓ Detektovano ${_refDetectedLines.length} linija`);
+async function _refKartaDoDetect(threshold,minLen,mode,targetColor,colorTol,boldPasses,joinPx) {
+  await ReferenceVlake.detect({threshold,minLength:minLen,mode,color:targetColor,tolerance:colorTol,bold:boldPasses,join:joinPx});
 }
 
 // Zadrži samo DEBLJE poteze (ručno crtane vlake), izbaci tanke štampane linije.
@@ -40055,6 +39940,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon">🔗</div>
             <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu: kliknite na krajnju tačku (zelenu/crvenu) jedne vlake, pa na krajnju tačku druge.</span></div>
           </div>
+          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Smjer privlačenja</b><span>U detaljima vlake odaberite automatski prema najbližem učitanom putu, prema početku, prema kraju ili dvosmjerno. Do 300 m prikazuje se jedna strelica, za duže vlake dvije. Dvosmjerno: sredina razdvaja dionicu i smjer se nakon nje obrće. Postavka prikaza je lokalna po korisniku/projektu/vlaci. Ako put nije pronađen blizu krajeva, izaberite smjer ručno.</span></div></div>
         </div>
       </div>
 
@@ -40066,7 +39952,7 @@ if (typeof AndroidDownload !== 'undefined') {
           <div class="help-diagram">Učitajte sliku papirne karte (1:10000) ili ortofota i preklopite je na digitalnu mapu. Koristite za prijenos vlaka s papira u digitalni format ili kao vizualnu podlogu.</div>
           <div class="help-row">
             <div class="help-icon">📷</div>
-            <div class="help-txt"><b>Učitaj sliku karte</b><span>Odaberite sliku (foto ili sken) s uređaja. Pojavljuje se preklopljena na mapi.</span></div>
+            <div class="help-txt"><b>Učitaj sliku karte</b><span>Odaberite sliku (foto ili sken) s uređaja. Na karti koristite dugme „Ref. karta · Sakrij / Prikaži“ za brzo poređenje s digitalnom podlogom; poravnanje i providnost ostaju sačuvani dok je slika učitana.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">📐</div>
@@ -40082,7 +39968,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">🔍</div>
-            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>Algoritam pokušava prepoznati trase vlaka iz slike koristeći kontrast. Podesite "Prag tame" i "Min. dužina" klizačima za bolje rezultate. Detektovane vlake se prikazuju kao narandžaste linije.</span></div>
+            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>APK prvo čita oznake T + broj na uređaju (i bez interneta), zatim povezuje oznake s crnim ili plavim linijama. Linije bez oznake nisu vlake. Nečitljiv natpis možete označiti ručno: upišite T12 i dodirnite taj natpis na slici. Pregledajte prijedloge; nejasne veze nisu unaprijed izabrane. Uvoz čuva T brojeve i ne prepisuje postojeće vlake.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">☁</div>
@@ -41806,6 +41692,8 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/map-visibility.js"></script>
 <script src="static/js/map-library.js"></script>
 <div id="project-draw-toolbar" hidden><div><b>Crtanje poligona odjela</b><small id="project-draw-count"></small></div><div class="project-draw-actions"><button id="project-draw-undo" type="button" onclick="ProjectTerrain.undo()">↶ Vrati tačku</button><button id="project-draw-save" type="button" onclick="ProjectTerrain.finish()">✓ Sačuvaj</button><button type="button" onclick="ProjectTerrain.cancel()">Odustani</button></div></div>
+<script src="static/js/reference-vlake.js"></script>
+<script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
 </body>

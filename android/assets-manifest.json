@@ -37,6 +37,8 @@
     "static/css/map-library.css",
     "static/css/server-panel.css",
     "static/js/map-catalog.js",
-    "static/js/project-terrain.js"
+    "static/js/project-terrain.js",
+    "static/js/reference-vlake.js",
+    "static/js/vlaka-direction.js"
   ]
 }

@@ -1402,3 +1402,48 @@ objavljen, app-debug.apk uploaded, 21.740.659 B (~20,73 MiB),
 SHA-256 8b78107991485dcd7d586d6152dc5c7f94f22e8dd03eb51bb84fa8731b553a88.
 Native updater čita releases?per_page=1 i vidi v2.2.3 kao prvo izdanje.
 Nije izvršena fizička instalacija na telefon ni izmjena Supabase-a.
+
+
+## 37. Referentna karta, T oznake i smjer vlaka — 2.2.4
+
+Korisnik traži prepoznavanje vlaka na papirnoj topo karti samo uz T + broj,
+brzo prikaži/sakrij; potvrdio crne/plave linije. Dodao popravku crtica/tačaka
+i 1 strelicu do 300 m / 2 preko 300 m, dvosmjerno s razdvajanjem na polovini
+(potvrda „da“). Web/SW/Android 2.2.4, code 494. Postojeće odobrenje APK izdanja.
+
+static/js/reference-vlake.js + Android ReferenceOcrBridge.java, bundled
+com.google.mlkit:text-recognition:16.0.1: OCR na uređaju bez slanja slike/
+preuzimanja modela. Četiri rotacije slike, bbox vraćen u izvorne piksele.
+Obavezna stroga oznaka T + pozitivan cijeli broj (bez nagađanja 7/I kao T/1);
+spajanje T i broja samo blizu/u istom OCR redu. Prvo čitanje teksta, zatim
+uklanjanje textbox-ova iz maske linija, filtriranje/join postojećeg skeleta.
+Najbliži put uz oznaku; bez oznake i zatvorene konture nisu prijedlog.
+Nejasne veze nisu automatski odabrane. Spisak izbora i Na karti; uvoz čuva
+izvorni T broj, odbija postojeći broj u istom projektu i prvo potvrđuje lokalni
+upis; quota vraća promjene u memoriji i zadržava rezultat, bez slanja.
+Stari async OCR odgovor ne vrijedi za drugu sliku/projekat/nalog/poravnanje.
+Ručna potvrda: upis T broja, dodir stvarnog natpisa, ponovno detektovanje.
+Web bez native mosta nudi taj put, nema fallback uvoz neoznačenih linija.
+Afino poravnanje se koristi i za detekciju/masku/pipetu.
+
+Brzo dugme na karti skriva refKarte pane (aktivna + serverske učitane slike),
+ne briše poravnanje/providnost; ponovno fitovanje poštuje skriveno stanje.
+Novi učitani fajl uklanja stari rezultat/oznaku, stale onload ne zamijeni novi
+fajl, blob URL se oslobađa. Ref otkrivene linije u posebnom neinteraktivnom
+pane-u 625; oznake/kalibracija bez Leaflet canvas-a koji bi gutao klikove.
+
+static/js/vlaka-direction.js: lokalna postavka prikaza po korisniku/projektu/
+autoru+nazivu vlake, bez Supabase kolona/migracija. Auto poredi krajeve s
+najbližim segmentom učitanih puteva (prostorni grid; do 250 m), ili lagerom/
+krakom „na putu“. Bez pouzdanog puta nema izmišljenog auto smjera. Ručno
+početak/kraj/dvosmjerno/sakrij, i za vlake kolega. Dvosmjerno: kratka vlaka
+jedna ↔ na sredini, duža dvije spoljne strelice + ↔ mjesto razdvajanja.
+Neinteraktivni SVG markeri uz liniju, obnova zoom/geometrija/sakrivanje,
+lokalni prikaz smjera nije nova promjena geometrije ni serverski atribut.
+Stil: crtice butt kapice (vidljiv ravni potez/gusta praznina), tačke 0.01px
+round (stvarni krug), debljina/zoom prilagođeni CSS px.
+
+Lokalno prošla 83 JS test fajla i svih 5 inline JS sintaksi. Novi browser
+fixture i Android offline instrumentacijski OCR test pred objavom kroz CI;
+rezultati slijede. Fizička korisnička karta/telefon i produkcijski Supabase
+nisu korišteni. Nečitljiv rukopis i oznaka uz dvije linije traže provjeru.

@@ -1,0 +1,6 @@
+const assert=require('node:assert/strict'),d=require('../../static/js/vlaka-direction.js'),fs=require('node:fs'),vm=require('node:vm');
+assert.deepEqual(d.markerPlan(300,'start'),[{f:.5,sign:-1}]);assert.equal(d.markerPlan(301,'end').length,2);assert.deepEqual(d.markerPlan(500,'both').map(p=>p.sign),[-1,0,1]);assert.deepEqual(d.markerPlan(100,'both'),[{f:.5,sign:0}]);assert.equal(d.markerPlan(100,'off').length,0);
+assert.equal(d.chooseEnd(10,150),'start');assert.equal(d.chooseEnd(250,5),'end');assert.equal(d.chooseEnd(300,400),null);assert.equal(d.chooseEnd(Infinity,Infinity),null);assert(d.segmentDistance({la:45,lo:16},[45,15],[45,17])<.001);
+const s=fs.readFileSync('index.html','utf8'),code=s.slice(s.indexOf('function _vlakaStroke('),s.indexOf('function getVlakaDashArray(')),c={};vm.createContext(c);vm.runInContext(code,c);
+for(const w of [2,4,8])for(const z of [11,13,15,18]){const dash=c._vlakaStroke('dash',w,z);assert.equal(dash.lineCap,'butt');const [ink,gap]=dash.dashArray.split(' ').map(Number);assert(ink>=gap*3);const dot=c._vlakaStroke('dot',w,z);assert.equal(dot.lineCap,'round');assert.equal(Number(dot.dashArray.split(' ')[0]),.01);assert(Number(dot.dashArray.split(' ')[1])>w);}
+console.log('OK: one/two arrows, midline reversal, no invented road when distant; dash/dot cap and dense scale patterns');

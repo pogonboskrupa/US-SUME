@@ -199,6 +199,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
         webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
+        webView.addJavascriptInterface(new ReferenceOcrBridge(webView), "AndroidReferenceOcr");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
