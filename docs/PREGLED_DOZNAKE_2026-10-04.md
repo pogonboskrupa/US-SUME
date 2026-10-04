@@ -1,4 +1,4 @@
-# Pregled Doznake — 2.2.7, 4.10.2026.
+# Pregled Doznake — 2.2.8, 4.10.2026.
 
 Pregled je urađen sukcesivno kroz tri cjeline nad Android WebView aplikacijom (`index.html`), njenim lokalnim redom i GPS dnevnikom. Flutter direktorij nije proizvod koji ovaj APK pokreće. Nisu izvršavane produkcijske migracije ni upisi u Supabase.
 
@@ -56,3 +56,6 @@ Prikaz fotografija/tragova/tačaka/mjerenja/teksta pamti se po nalogu i ponovo p
 Lokalno: svih 85 JavaScript test fajlova prošlo; pet inline JS blokova i promijenjeni moduli imaju ispravnu sintaksu. Novi regresijski testovi provjeravaju hladan ponovni ulaz/preferencije po nalogu, online podlogu uz postojeću SQL kartu, spori odabir odjela, tačno povezivanje, rupe u površini, izvoz ispravnog odjela, atomsku promjenu statusa i zabranu OCR-a bez mreže. Postojeći offline test dodatno provjerava neuspjelo brisanje pri punoj memoriji.
 
 Pripremljen browser test sa stvarnim Leaflet/Doznaka HTML-om za odabir, GPX/XML/segmente, reload prikaza i 16 PNG prikaza u dvije teme/četiri veličine. Android instrumentacijski test provjerava da se OCR odbija bez stvarnog interneta. CI provjerava da APK nema ugrađene OCR modele/native pipeline i da je manji od 30 MB. Rezultat builda i browser/Android provjera dopunjava se nakon izvršavanja; stvarno online čitanje preuzetim Google Play modelom nije mjereno na korisnikovom telefonu.
+
+
+Prva izvršena CI provjera 2.2.7 (37188603263) prošla je browser/build/Android uslov i svih 39 asset SHA provjera. Objavljeni APK ima 22.621.388 B (22,62 MB), SHA-256 3d4226e9327f4fd5a0e9156337f4f17b71441c9177384b50700254d890f40562. Pregled stvarnih PNG-a otkrio je slab kontrast zaglavlja i KPI kartica Doznake u Dnevnom modu; dopunjeni su CSS i browser provjera boja. Završna verzija zato je 2.2.8/code498, uz sve navedene funkcionalne popravke. Rezultat završne objave slijedi.

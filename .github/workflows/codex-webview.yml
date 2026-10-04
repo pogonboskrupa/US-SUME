@@ -121,7 +121,7 @@ jobs:
           with ZipFile(apk) as z:
               assert not any('libmlkit_google_ocr_pipeline.so' in n or 'mlkit-google-ocr-models/' in n for n in z.namelist()), 'Ugrađeni OCR je ostao u APK-u'
           size=apk.stat().st_size
-          print(f'APK 2.2.7: {size:,} B = {size/1000000:.2f} MB; prethodni 65.14 MB')
+          print(f'APK: {size:,} B = {size/1000000:.2f} MB; prethodni 65.14 MB')
           assert size < 30_000_000, 'APK nije smanjen ispod 30 MB'
           PYCODE
       - name: Pripremi KVM za provjeru OCR mrežnog uslova

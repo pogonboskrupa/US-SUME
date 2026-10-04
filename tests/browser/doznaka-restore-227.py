@@ -52,8 +52,12 @@ async def main():
   await page.evaluate("dozSelectOdjel('D105')")
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(568,320),(800,600)]:
-    await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#doznaka-panel').scrollTop=0}",theme)
+    await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#doznaka-panel').scrollTop=0;window.scrollTo(0,0)}",theme)
     assert await page.evaluate("document.querySelector('#doznaka-panel').scrollWidth<=document.querySelector('#doznaka-panel').clientWidth+1")
+    colors=await page.evaluate("()=>{const css=getComputedStyle(document.documentElement);return {ink:css.getPropertyValue('--field-ink').trim(),card:css.getPropertyValue('--field-card').trim(),bg:css.getPropertyValue('--field-bg').trim(),head:getComputedStyle(document.querySelector('.doz-detail-hdr')).backgroundColor,kpi:getComputedStyle(document.querySelector('.pm-kpi')).backgroundColor};}")
+    rgb=lambda h:'rgb('+', '.join(str(int(h[i:i+2],16)) for i in [1,3,5])+')'
+    assert colors['head']==rgb(colors['card']) and colors['kpi']==rgb(colors['bg']),colors
+    assert await page.locator('#doz-detail-name').evaluate('(e)=>getComputedStyle(e).color')==rgb(colors['ink'])
     await page.screenshot(path=str(b.OUT/f'doznaka-{theme}-{w}-{h}.png'))
     await page.get_by_role('button',name='Zone',exact=True).click();await page.wait_for_timeout(450);await page.screenshot(path=str(b.OUT/f'doznaka-zones-{theme}-{w}-{h}.png'))
   assert not errors,errors;await browser.close()

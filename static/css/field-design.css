@@ -336,3 +336,13 @@ html[data-field-theme=day] #doz-panel-detail .doz-zone-name {color:#102033!impor
 html[data-field-theme=day] #doz-status-row button {color:#334155!important;background:#e2e8f0!important;}
 html #doz-status-row button[aria-pressed=true] {border-width:2px!important;font-weight:800!important;}
 html[data-field-theme=day] #doz-status-row button[aria-pressed=true] {color:#14532d!important;background:#dcfce7!important;}
+
+/* Završni pregled PNG-a: zaglavlje/KPI i neaktivni statusi koriste boje teme. */
+html #doznaka-panel .doz-detail-hdr {background:var(--field-card);border-color:var(--field-border);}
+html #doznaka-panel .doz-detail-hdr h3 {color:var(--field-ink);}
+html #doznaka-panel .doz-detail-meta {color:var(--field-muted);font-size:12px;}
+html #doznaka-panel .pm-kpi {background:var(--field-bg);border-color:var(--field-border);}
+html #doznaka-panel .pm-kpi-lbl {color:var(--field-muted);font-size:11px;}
+html #doznaka-panel .pm-kpi-val {color:var(--field-ink)!important;}
+html #doznaka-panel #doz-status-row button[aria-pressed=false] {color:var(--field-muted)!important;background:var(--field-card)!important;border-color:var(--field-border)!important;}
+html #doznaka-panel .doz-member-name {color:var(--field-ink);}

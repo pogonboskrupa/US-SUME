@@ -1591,3 +1591,10 @@ Doznaka analiza stabala trenutno koristi vlastite povezane vlake.
 Nema produkcijske migracije/upisa. Lokalno 85 JS test fajlova i pet inline
 sintaksi prošlo. Browser/native/build rezultati slijede u istoj bilješci.
 Web/SW/Android 2.2.7, versionCode 497.
+
+
+CI 37188603263 objavio 2.2.7: APK 22.621.388 B, nema ugrađenog OCR modela,
+39 asset SHA i browser/native mrežni uslov prošli. PNG Doznaka day320
+pokazao tamno zaglavlje/tamne KPI kartice s day slovima. Dopunjene tematske
+boje zaglavlja/KPI/članova/neaktivnih statusa i browser assertions. Završni
+build 2.2.8/code498; ne prepisivati već objavljeni APK istim brojem verzije.
