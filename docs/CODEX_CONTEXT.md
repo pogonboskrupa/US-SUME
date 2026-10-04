@@ -1443,7 +1443,29 @@ lokalni prikaz smjera nije nova promjena geometrije ni serverski atribut.
 Stil: crtice butt kapice (vidljiv ravni potez/gusta praznina), tačke 0.01px
 round (stvarni krug), debljina/zoom prilagođeni CSS px.
 
-Lokalno prošla 83 JS test fajla i svih 5 inline JS sintaksi. Novi browser
-fixture i Android offline instrumentacijski OCR test pred objavom kroz CI;
-rezultati slijede. Fizička korisnička karta/telefon i produkcijski Supabase
-nisu korišteni. Nečitljiv rukopis i oznaka uz dvije linije traže provjeru.
+Lokalno prošla 83 JS test fajla i svih 5 inline JS sintaksi. GitHub CI run
+37184286191, commit 2dc3f6eb78868353a4a31626aafa124defa7cd8b: svi JS testovi,
+svih 7 browser skripti, Android build/provjera asset SHA-256 i stvarni
+Android OCR na emulatoru bez aktivne mreže prošli. Browser OCR je fixture;
+instrumentacijski test odvojeno koristi stvarni ML Kit i crne T12/plave T3
+natpise, provjerava broj i vraćene koordinate. 16 referentnih PNG prikaza,
+pregledani dnevni panel 320x568 i brzo dugme 390x800. v2.2.4 objavljena
+2026-10-04; APK 65.120.508 B,
+SHA-256 52aac8e8d761966e7bd7dafd9499ec0e2c6043fdb5ceaa2645b05d5ea6c65c38.
+Raniji CI pokušaji popravili su fixture pane, povrat funkcije iz evaluate,
+otvoreni fixture panel i provjeru OCR riječi po redu; nisu preskočeni testovi.
+Fizička korisnička karta/telefon i produkcijski Supabase nisu korišteni.
+Nečitljiv rukopis i oznaka uz dvije linije traže provjeru.
+
+## 38. Ručna oznaka referentne karte — završna 2.2.5
+
+Konačna provjera našla presretanje dodira postojećim klikabilnim vlakama/
+markerima pri ručnom označavanju natpisa T. Privremena CSS klasa
+reference-marking isključuje hit-test Leaflet canvas/markera/interaktivnih
+putanja samo dok se bira natpis. Završetak, Escape, skrivanje, nova slika i
+poništavanje vraćaju normalne dodire. Browser test sada koristi stvarni
+touchscreen.tap preko markera (bez map.fire), provjerava da marker ne dobije
+klik tokom označavanja, a dobije ga poslije; provjerava i Escape.
+Web/SW/Android 2.2.5, code 495. JS provjere referentne karte, smjerova i
+projekata te Python sintaksa prošle; završni CI/izdanje slijede. 2.2.4 se ne
+prepisuje drugim APK-om istog broja verzije.

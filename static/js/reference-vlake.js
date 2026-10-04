@@ -32,7 +32,7 @@ function pixelToLL(x,y){
  const [[s,w],[n,e]]=_refBounds;return [n-y/_refImg.height*(n-s),w+x/_refImg.width*(e-w)];
 }
 function existingNames(){if(typeof _projektVlakeRows==='function')return new Set(_projektVlakeRows().map(r=>r.nm));return new Set(vlake.filter(v=>v.projektId===_aktivniProjektId).map(v=>v.nm));}
-function stopMark(){if(marking){map.off('click',marking);marking=null;map.getContainer().style.cursor='';}if($('refkarta-label-cancel'))$('refkarta-label-cancel').hidden=true;}
+function stopMark(){if(marking){map.off('click',marking);marking=null;map.getContainer().style.cursor='';}map.getContainer().classList.remove('reference-marking');if($('refkarta-label-cancel'))$('refkarta-label-cancel').hidden=true;}
 function invalidate(newImage=false){generation++;stopMark();if(pending){clearTimeout(pending.timer);pending.reject(Error('Prepoznavanje je otkazano.'));pending=null;}rows=[];snapshot='';_refDetectedLines=[];if(newImage)manual=[];if(_refImpGroup){map.removeLayer(_refImpGroup);_refImpGroup=null;}if($('refkarta-imp-ctrl'))$('refkarta-imp-ctrl').style.display='none';if($('refkarta-results'))$('refkarta-results').replaceChildren();}
 function refreshQuick(){
  const button=$('refkarta-quick');if(!button)return;const all=[_refOverlay,...Object.values(_refRepoOverlays)].filter(Boolean),visible=all.some(l=>map.hasLayer(l))&&!quickHidden;button.hidden=!all.length;
@@ -54,7 +54,7 @@ function render(){
 async function addLabel(){
  if(!_refImg||!_refBounds){say('Prvo učitaj i poravnaj referentnu kartu.');return;}
  const text=await _dlgPrompt('Upiši oznaku koju vidiš na papiru, npr. T12:', '',{title:'Oznaka vlake na papiru'});if(text===null)return;const nm=nameOf(text);if(!nm){say('Potrebno je slovo T i cijeli broj vlake, npr. T12.');return;}
- const stamp=currentStamp();stopMark();refKartaSetVisible(true);showQuick();if(typeof switchTab==='function')switchTab('karta');say('Dodirni sredinu cijelog natpisa '+nm+' na referentnoj karti.');map.getContainer().style.cursor='crosshair';$('refkarta-label-cancel').hidden=false;
+ const stamp=currentStamp();stopMark();refKartaSetVisible(true);showQuick();if(typeof switchTab==='function')switchTab('karta');say('Dodirni sredinu cijelog natpisa '+nm+' na referentnoj karti.');map.getContainer().style.cursor='crosshair';map.getContainer().classList.add('reference-marking');$('refkarta-label-cancel').hidden=false;
  marking=e=>{if(currentStamp()!==stamp){stopMark();return;}const p=_refLatLngToImgPx(e.latlng);if(!p||!Number.isFinite(p.imgX)||!Number.isFinite(p.imgY)||p.imgX<0||p.imgY<0||p.imgX>_refImg.width||p.imgY>_refImg.height){say('Dodirni oznaku unutar slike.');return;}
   const h=Math.max(8,Math.min(30,_refImg.height*.025)),w=Math.max(10,nm.length*h*.65);manual.push({text:nm,nm,x0:p.imgX-w,y0:p.imgY-h,x1:p.imgX+w,y1:p.imgY+h,manual:true});stopMark();say(nm+' označena. Pokreni detekciju linija.');$('refkarta-detect-status').textContent=manual.length+' ručno označenih natpisa T + broj.';};map.on('click',marking);
 }

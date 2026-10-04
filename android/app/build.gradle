@@ -11,8 +11,8 @@ android {
         minSdk 24
         targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 494
-        versionName "2.2.4"
+        versionCode 495
+        versionName "2.2.5"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
@@ -131,4 +131,3 @@ def syncWebAssets = tasks.register('syncWebAssets', Sync) {
     }
 }
 tasks.named('preBuild').configure { dependsOn(syncWebAssets) }
-

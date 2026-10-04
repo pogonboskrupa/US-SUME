@@ -24,7 +24,7 @@ fixture=u.fixture.replace("switchTab=()=>{},selI","switchTab=()=>{document.query
 async def main():
  b.OUT.mkdir(parents=True,exist_ok=True)
  async with async_playwright() as p:
-  browser=await p.chromium.launch(headless=True,**({'executable_path':os.environ['UI_CHROMIUM']} if os.environ.get('UI_CHROMIUM') else {}));page=await browser.new_page(viewport={'width':390,'height':800});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+  browser=await p.chromium.launch(headless=True,**({'executable_path':os.environ['UI_CHROMIUM']} if os.environ.get('UI_CHROMIUM') else {}));page=await browser.new_page(viewport={'width':390,'height':800},has_touch=True);errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   async def route(r):
    if r.request.url=='https://ui.test/':await r.fulfill(content_type='text/html',body=fixture)
    elif r.request.url.startswith('https://ui.test/'):
@@ -48,11 +48,18 @@ async def main():
   await page.click('#refkarta-quick');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden';await page.click('#refkarta-quick')
   # Rukopis koji OCR nije pročitao: stvarni natpis ručno, bez native mosta.
   await page.evaluate('window.savedOCR=window.AndroidReferenceOcr;delete window.AndroidReferenceOcr')
+  # Stvarni dodir kroz postojeći klikabilni marker; nakon kraja/otkaza klikovi se vraćaju.
+  await page.evaluate("()=>{window.labelLL=L.latLng(ReferenceVlake.pixelToLL(140,425));map.setView(labelLL,15,{animate:false});window.markerClicks=0;window.blockingMarker=L.marker(labelLL,{icon:L.divIcon({className:'reference-test-marker',html:'<b style=\"display:block;background:red;width:40px;height:40px\">X</b>',iconSize:[40,40],iconAnchor:[20,20]}),bubblingMouseEvents:false}).on('click',()=>markerClicks++).addTo(map);}")
   await page.evaluate('ReferenceVlake.addLabel()');assert await page.evaluate('ReferenceVlake.isMarking()')
-  await page.evaluate("map.fire('click',{latlng:L.latLng(ReferenceVlake.pixelToLL(140,425))})")
+  await page.keyboard.press('Escape');assert await page.evaluate("!ReferenceVlake.isMarking()&&!map.getContainer().classList.contains('reference-marking')")
+  await page.evaluate('ReferenceVlake.addLabel()')
+  xy=await page.evaluate('()=>{const p=map.latLngToContainerPoint(labelLL),r=map.getContainer().getBoundingClientRect();return {x:r.left+p.x,y:r.top+p.y}}')
+  await page.touchscreen.tap(xy['x'],xy['y']);assert await page.evaluate('markerClicks')==0
   assert not await page.evaluate('ReferenceVlake.isMarking()');await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts)
   assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T7'],await page.locator('#refkarta-detect-status').inner_text()
-  await page.evaluate('async()=>{await ReferenceVlake.importSelected();window.AndroidReferenceOcr=savedOCR}')
+  assert await page.evaluate("!map.getContainer().classList.contains('reference-marking')")
+  await page.touchscreen.tap(xy['x'],xy['y']);assert await page.evaluate('markerClicks')==1
+  await page.evaluate('async()=>{map.removeLayer(blockingMarker);await ReferenceVlake.importSelected();window.AndroidReferenceOcr=savedOCR}')
   # Nov projekat/poravnanje otkazuje odgovor starog OCR-a.
   await page.evaluate("()=>{holdOCR=true;window.oldDetect=ReferenceVlake.detect("+str(opts).replace('None','null').replace("'",'"')+");}")
   await page.evaluate("_aktivniProjektId='Q';ReferenceVlake.ocrReply({id:ocrId,words})");await page.evaluate('oldDetect');assert await page.evaluate('_refDetectedLines.length')==0
