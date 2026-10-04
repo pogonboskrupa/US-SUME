@@ -1537,5 +1537,24 @@ razdjelnicu, stabilnost pri produžavanju/povratku, bez legacy sredine,
 kontrast obruba i <15% širine. Novi browser test project-arrows-226.py
 provjerava stvarni dodir preko markera, stale/cancel/quota, GPS nastavak,
 projektne/naložne postavke, vlastite/kolegine strelice, stvarni SVG/Canvas
-outline i 16 PNG prikaza. CI/release rezultati slijede. Nije korišten fizički
-telefon, pravi GPS/putevi niti produkcijski Supabase.
+outline i 16 PNG prikaza. GitHub CI 37186507598 na
+0f0533900eb78223327c19156d213306c099fafd uspješan: svih 84 JS test fajla,
+8 browser skripti, build i svih 39 web asset SHA-256 provjera, Android offline
+OCR instrumentacijski test te sintetička analiza brzine online/offline.
+Pregledani PNG: projektne strelice day 320x568 i dark 390x800, popup day
+320x568. Nove kontrole su čitljive i bez horizontalnog prelivanja.
+
+v2.2.6 objavljena 2026-10-04; latest /releases?per_page=1 vraća v2.2.6 i
+app-debug.apk 65.143.787 B. Preuzet CI artefakt, upoređeni svi 6 promijenjenih
+web asset fajlova s lokalnim izvorima i izračunat APK SHA-256 koji je jednak
+Release digestu:
+c264df8804f97c733dfd37f71ec4fe391ac32494e2e8955316626c26902cc19e.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.6
+Meni → Ažuriraj aplikaciju, Android code 496, isti postojeći debug potpis.
+Nije korišten fizički telefon, pravi GPS/putevi niti produkcijski Supabase.
+
+Primijećen postojeći izgled izvan novih kontrola: metapodaci u gornjem dijelu
+vlaka popupa u Dnevnom modu su presvijetli na bijeloj podlozi (PNG day 320).
+Nije mijenjan taj postojeći stil u ovom zadatku; prema AGENTS korisnik bira
+narednu zasebnu popravku. Nove kontrole smjera u istom popupu imaju dobar
+kontrast.
