@@ -55,7 +55,9 @@ async def main():
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#doznaka-panel').scrollTop=0;window.scrollTo(0,0)}",theme)
     assert await page.evaluate("document.querySelector('#doznaka-panel').scrollWidth<=document.querySelector('#doznaka-panel').clientWidth+1")
     colors=await page.evaluate("()=>{const css=getComputedStyle(document.documentElement);return {ink:css.getPropertyValue('--field-ink').trim(),card:css.getPropertyValue('--field-card').trim(),bg:css.getPropertyValue('--field-bg').trim(),head:getComputedStyle(document.querySelector('.doz-detail-hdr')).backgroundColor,kpi:getComputedStyle(document.querySelector('.pm-kpi')).backgroundColor};}")
-    rgb=lambda h:'rgb('+', '.join(str(int(h[i:i+2],16)) for i in [1,3,5])+')'
+    def rgb(h):
+     h=h.lstrip('#');h=''.join(c*2 for c in h) if len(h)==3 else h
+     return 'rgb('+', '.join(str(int(h[i:i+2],16)) for i in [0,2,4])+')'
     assert colors['head']==rgb(colors['card']) and colors['kpi']==rgb(colors['bg']),colors
     assert await page.locator('#doz-detail-name').evaluate('(e)=>getComputedStyle(e).color')==rgb(colors['ink'])
     await page.screenshot(path=str(b.OUT/f'doznaka-{theme}-{w}-{h}.png'))
