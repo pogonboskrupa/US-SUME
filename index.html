@@ -5722,7 +5722,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.2';
+const APP_VER = 'v2.3.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -33356,10 +33356,15 @@ let _loadmapPending = [];          // odabrane datoteke koje čekaju potvrdu (bo
 let _loadmapRecentShown = [];      // top 10 nedavnih (index-bazirani handleri)
 let _loadmapManageShown = [];      // filtrirane karte u upravljanju
 let _loadmapManageQ = '';
+let _loadmapPickToken = 0;
+let _loadmapManageToken = 0;
+let _loadmapRecentToken = 0;
+let _loadmapOpening = false;
 
 function openLoadMapScreen() {
   document.getElementById('loadmap-modal').classList.add('show');
   _loadmapStatus('');
+  _loadmapTab('add');
   _loadmapRenderStartupDiag();
   const s = document.getElementById('loadmap-search'); if (s) s.value = '';
   _loadmapManageQ = '';
@@ -33370,7 +33375,22 @@ function closeLoadMapScreen() {
   document.getElementById('loadmap-modal').classList.remove('show');
   loadmapCancelSheet();
 }
-function _loadmapStatus(t) { const e = document.getElementById('loadmap-status'); if (e) e.textContent = t || ''; }
+function _loadmapTab(tab) {
+  const maps = tab === 'maps';
+  for (const key of ['add','maps']) {
+    const pane=document.getElementById('loadmap-pane-'+key),button=document.getElementById('loadmap-tab-'+key);
+    if(pane)pane.hidden=(key==='maps')!==maps;
+    if(button)button.setAttribute('aria-selected',String((key==='maps')===maps));
+  }
+  const body=document.getElementById('loadmap-body');if(body)body.scrollTop=0;
+}
+function _loadmapStatus(t) {
+  const e=document.getElementById('loadmap-status');if(!e)return;
+  e.textContent=t||''; e.dataset.state=String(t||'').startsWith('❌')?'error':String(t||'').startsWith('✅')?'ok':'info';
+}
+function _loadmapBadges(m) {
+  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved?'lm-badge-saved':'lm-badge-session')+'">'+(m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
+}
 function _loadmapRenderStartupDiag() {
   const el = document.getElementById('loadmap-startup-debug');
   if (!el) return;
@@ -33413,41 +33433,23 @@ async function _loadmapDetect(file) {
 
 // Odabir/drop datoteka → otvori bottom sheet s pregledom (metapodaci + validacija)
 async function loadmapHandleFiles(fileList) {
-  const files = Array.from(fileList || []);
-  const fi = document.getElementById('loadmap-file-input'); if (fi) fi.value = '';
-  if (!files.length) return;
-  _loadmapPending = files;
-  const listEl = document.getElementById('loadmap-sheet-list');
-  document.getElementById('loadmap-sheet-title').textContent =
-    files.length > 1 ? ('Pregled — ' + files.length + ' datoteka') : 'Pregled datoteke';
-  listEl.innerHTML = '<div class="lm-empty">⏳ Analiza…</div>';
-  document.getElementById('loadmap-sheet').classList.add('show');
-  const rows = [];
-  for (const f of files) {
-    const d = await _loadmapDetect(f);
-    const big = f.size > 100 * 1024 * 1024;
-    rows.push(
-      '<div class="lm-sheet-file">' +
-        '<div class="nm">📄 ' + _escHtml(f.name) + '</div>' +
-        '<div class="det">' +
-          'Format: <b>' + d.fmt + '</b> · Veličina: ' + _mapMgrFmtSize(f.size) + '<br>' +
-          'CRS: EPSG:3857 (pretpostavljeno) · ' +
-          'SQLite zaglavlje: ' + (d.headerOk
-            ? '<span class="ok">✓ valjano</span>'
-            : '<span class="bad">✗ nije SQLite baza</span>') +
-          (big ? '<br>⚠ Velika datoteka — učitavanje može potrajati' : '') +
-          (!d.valid ? ('<br><span class="bad">' + _loadmapErr('corrupt') + '</span>') : '') +
-        '</div>' +
-      '</div>'
-    );
+  const files=Array.from(fileList||[]),fi=document.getElementById('loadmap-file-input');if(fi)fi.value='';if(!files.length)return;
+  const token=++_loadmapPickToken;_loadmapPending=[];
+  const listEl=document.getElementById('loadmap-sheet-list'),button=document.getElementById('loadmap-confirm');button.disabled=true;button.textContent='Provjeravam…';
+  document.getElementById('loadmap-sheet-title').textContent=files.length===1?'Pregled karte':files.length+' odabranih fajlova';
+  listEl.innerHTML='<div class="lm-empty">Provjeravam odabrane fajlove…</div>';document.getElementById('loadmap-sheet').classList.add('show');
+  const rows=[],valid=[];
+  for(const f of files){
+    const d=await _loadmapDetect(f);if(token!==_loadmapPickToken)return;
+    if(d.valid)valid.push(f);
+    const name=f.name.replace(/\.[^.]+$/,''),replace=_sqlLayers.some(sl=>sl.name===name);
+    rows.push('<article class="lm-sheet-file '+(d.valid?'':'is-invalid')+'"><span class="lm-file-icon"><svg class="ic"><use href="#ic-'+(d.valid?'karta':'zatvori')+'"/></svg></span><div><div class="nm">'+_escHtml(f.name)+'</div><div class="lm-file-meta"><b>'+_escHtml(d.fmt)+'</b><span>'+_mapMgrFmtSize(f.size)+'</span></div><span class="'+(d.valid?'ok':'bad')+'">'+(d.valid?'✓ Zaglavlje provjereno':'Fajl nije SQLite karta — neće biti učitan')+'</span>'+(replace&&d.valid?'<p class="lm-replace-note">Zamijenit će učitanu kartu istog naziva.</p>':'')+(f.size>100*1024*1024?'<p class="lm-hint">Veća karta — otvaranje može potrajati.</p>':'')+'</div></article>');
   }
-  listEl.innerHTML = rows.join('');
+  if(token!==_loadmapPickToken)return;
+  _loadmapPending=valid;listEl.innerHTML=rows.join('');button.disabled=!valid.length;button.textContent=valid.length?(valid.length===1?'Učitaj kartu':'Učitaj karte · '+valid.length):'Nema karata za učitavanje';
 }
-
 function loadmapCancelSheet() {
-  const sh = document.getElementById('loadmap-sheet');
-  if (sh) sh.classList.remove('show');
-  _loadmapPending = [];
+  ++_loadmapPickToken;const sh=document.getElementById('loadmap-sheet');if(sh)sh.classList.remove('show');_loadmapPending=[];
 }
 
 // Potvrda → sekvencijalno (batch) učitavanje preko postojećeg loadera
@@ -33471,12 +33473,15 @@ async function loadmapConfirmLoad() {
   for (let i = 0; i < files.length; i++) {
     _loadmapStatus('⏳ Učitavam ' + (i + 1) + '/' + files.length + ': ' + files[i].name + '…');
     try {
+      const name=files[i].name.replace(/\.[^.]+$/,'');
       await sqlmapLoadFile(files[i]);
+      if(!_sqlLayers.some(sl=>sl.name===name))throw Error('Karta nije otvorena');
       ok++;
-      await _loadmapThumb(files[i].name.replace(/\.[^.]+$/, ''));
+      await _loadmapThumb(name);
     } catch (e) { fail++; console.error('loadmap load', e); }
   }
-  _loadmapStatus('✅ Učitano ' + ok + (fail ? (' · ❌ ' + fail + ' neuspjelo') : ''));
+  _loadmapStatus((ok ? '✅ Učitano ' + ok : '❌ Nijedna karta nije učitana') + (fail ? (' · ' + fail + ' neuspjelo') : ''));
+  if(ok)_loadmapTab('maps');
   _loadmapRenderRecent();
   _loadmapRenderManage();
 }
@@ -33514,46 +33519,26 @@ async function _loadmapThumb(name) {
   } catch (e) {}
 }
 function _loadmapThumbHtml(name) {
-  let d = null; try { d = localStorage.getItem('lm_thumb_' + name); } catch (e) {}
-  return d ? '<img class="lm-thumb" src="' + d + '">' : '<div class="lm-thumb">🗺</div>';
+  let d='';try{d=localStorage.getItem('lm_thumb_'+name)||'';}catch(e){}
+  const real=/^data:image\/(png|jpeg|webp);base64,[a-z\d+/=]+$/i.test(d);
+  return '<img class="lm-thumb" loading="lazy" decoding="async" src="'+_escHtml(real?d:'static/img/map-previews/local.svg')+'" alt="'+_escHtml(real?'Pregled karte '+name:'Ilustracija lokalne karte')+'">';
 }
-
-// ── NEDAVNE KARTE (top 10, tap = aktiviraj, long-press = obriši) ────────────────
 async function _loadmapRenderRecent() {
-  const el = document.getElementById('loadmap-recent'); if (!el) return;
-  const maps = (await _mapMgrCollect()).slice(0, 10);
-  _loadmapRecentShown = maps;
-  if (!maps.length) { el.innerHTML = '<div class="lm-empty">Još nema učitanih karata.</div>'; return; }
-  el.innerHTML = maps.map((m, i) => {
-    const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
-    const dInfo = m.savedAt ? ' · ' + _mapMgrFmtDate(m.savedAt) : '';
-    const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
-    return '<div class="lm-card' + (m.visible ? ' active' : '') + '"' +
-      ' onclick="_loadmapRecentTap(' + i + ')"' +
-      ' oncontextmenu="event.preventDefault();_loadmapRecentDel(' + i + ')"' +
-      ' ontouchstart="_loadmapLpStart(' + i + ')" ontouchend="_loadmapLpEnd()" ontouchmove="_loadmapLpEnd()">' +
-      '<div class="lm-card-top">' +
-        _loadmapThumbHtml(m.name) +
-        '<div class="lm-card-info">' +
-          '<div class="lm-card-nm">' + (m.visible ? '<span class="on">● </span>' : '') + _escHtml(m.name) + '</div>' +
-          '<div class="lm-card-meta">' + _mapMgrFmtLabel(m.fmt) + zInfo + sizeInfo + dInfo + '</div>' +
-        '</div>' +
-      '</div></div>';
-  }).join('');
+  const el=document.getElementById('loadmap-recent');if(!el)return;
+  const token=++_loadmapRecentToken,maps=(await _mapMgrCollect()).slice(0,10);if(token!==_loadmapRecentToken)return;
+  _loadmapRecentShown=maps;const count=document.getElementById('loadmap-recent-count');if(count)count.textContent=maps.length?maps.length+' '+(maps.length===1?'karta':maps.length<5?'karte':'karata'):'';
+  el.innerHTML=maps.length?maps.map((m,i)=>'<button type="button" class="lm-recent-card'+(m.visible?' active':'')+'" onclick="_loadmapRecentTap('+i+')" aria-label="'+_escHtml('Prikaži kartu '+m.name)+'">'+_loadmapThumbHtml(m.name)+'<span class="lm-recent-copy"><b>'+_escHtml(m.name)+'</b><small>'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.visible?' · vidljiva':'')+'</small></span></button>').join(''):'<div class="lm-empty">Karte koje dodaš bit će ovdje za brzi pristup.</div>';
 }
-let _loadmapLpTimer = null, _loadmapLpFired = false;
-function _loadmapLpStart(i) { _loadmapLpFired = false; clearTimeout(_loadmapLpTimer); _loadmapLpTimer = setTimeout(() => { _loadmapLpFired = true; _loadmapRecentDel(i); }, 600); }
-function _loadmapLpEnd() { clearTimeout(_loadmapLpTimer); }
-function _loadmapRecentTap(i) {
-  if (_loadmapLpFired) { _loadmapLpFired = false; return; }
-  const m = _loadmapRecentShown[i]; if (!m) return;
-  const idx = _sqlLayers.findIndex(l => l.name === m.name);
-  if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
-  setLayerSqlite(idx);
-  _sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);   // skoči NA podatke (medijanski centar)
-  showToast('🗄 ' + m.name);
-  closeLoadMapScreen();
+async function _loadmapShow(name) {
+  if(_loadmapOpening)return false;_loadmapOpening=true;
+  try{
+    let idx=_sqlLayers.findIndex(l=>l.name===name);
+    if(idx<0){_loadmapStatus('⏳ Otvaram sačuvanu kartu: '+name);await sqlmapRetryOne(name);idx=_sqlLayers.findIndex(l=>l.name===name);}
+    if(idx<0){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo ili učitaj izvorni fajl.');return false;}
+    setLayerSqlite(idx);_sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);closeLoadMapScreen();return true;
+  }catch(e){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo.');return false;}finally{_loadmapOpening=false;}
 }
+async function _loadmapRecentTap(i) { const m=_loadmapRecentShown[i];if(m)await _loadmapShow(m.name); }
 async function _loadmapRecentDel(i) {
   const m = _loadmapRecentShown[i]; if (!m) return;
   if (!await _dlgConfirm('Obrisati kartu iz povijesti "' + m.name + '"?', { danger: true })) return;
@@ -33568,69 +33553,18 @@ async function _loadmapRecentDel(i) {
 // ── UPRAVLJANJE (sve karte: aktiviraj/deaktiviraj/info/obriši + prozirnost + z-index) ──
 function _loadmapManageSearch(q) { _loadmapManageQ = q || ''; _loadmapRenderManage(); }
 async function _loadmapRenderManage() {
-  const list = document.getElementById('loadmap-manage'); if (!list) return;
-  const maps = await _mapMgrCollect();
-  const mapsBytes = maps.reduce((s, m) => s + (m.size || 0), 0);
-  const szEl = document.getElementById('loadmap-size');
-  if (szEl) szEl.textContent = _mapMgrFmtSize(mapsBytes) + ' · ' + maps.length + ' ' + (maps.length === 1 ? 'karta' : 'karata');
-  try {
-    if (navigator.storage?.estimate) {
-      const est = await navigator.storage.estimate();
-      const used = est.usage || 0, quota = est.quota || 0;
-      const pct = quota ? Math.min(100, used / quota * 100) : 0;
-      const bar = document.getElementById('loadmap-bar'); if (bar) bar.style.width = pct.toFixed(1) + '%';
-      const qt = document.getElementById('loadmap-quota');
-      if (qt) qt.textContent = quota ? (_mapMgrFmtSize(used) + ' / ' + _mapMgrFmtSize(quota)) : _mapMgrFmtSize(used);
-    }
-  } catch (e) {}
-  const q = _loadmapManageQ.trim().toLowerCase();
-  _loadmapManageShown = q ? maps.filter(m => m.name.toLowerCase().includes(q)) : maps;
-  if (!_loadmapManageShown.length) {
-    list.innerHTML = '<div class="lm-empty">' + (maps.length ? 'Nema rezultata za pretragu.' : 'Nema učitanih offline karata.') + '</div>';
-    return;
-  }
-  list.innerHTML = _loadmapManageShown.map((m, i) => {
-    const sl = _sqlLayers.find(l => l.name === m.name);
-    const zInfo = (m.meta && m.meta.minzoom != null) ? ' · zoom ' + m.meta.minzoom + '–' + m.meta.maxzoom : '';
-    const sizeInfo = m.size ? ' · ' + _mapMgrFmtSize(m.size) : '';
-    const store = m.saved ? (m.opfs ? '💾 OPFS' : '💾 baza') : '⏳ sesija';
-    const crs = (m.meta && (m.meta.crs || m.meta.srs)) ? (m.meta.crs || m.meta.srs) : 'EPSG:3857';
-    const op = sl ? Math.round((sl.layer.options.opacity ?? 1) * 100) : 100;
-    const opRow = sl
-      ? '<div class="lm-op-row"><span>Providnost</span>' +
-        '<input type="range" min="0" max="100" value="' + op + '" oninput="_loadmapSetOpacity(' + i + ',this.value)">' +
-        '<span id="lm-op-' + i + '">' + op + '%</span>' +
-        '<span style="margin-left:8px;">Sloj:</span><span class="lm-z-btns">' +
-        '<button onclick="_loadmapZ(' + i + ',-1)" title="Ispod">▼</button>' +
-        '<button onclick="_loadmapZ(' + i + ',1)" title="Iznad">▲</button></span></div>'
-      : '';
-    return '<div class="lm-card' + (m.visible ? ' active' : '') + '">' +
-      '<div class="lm-card-top">' +
-        _loadmapThumbHtml(m.name) +
-        '<div class="lm-card-info">' +
-          '<div class="lm-card-nm">' + (m.visible ? '<span class="on">● </span>' : '') + _escHtml(m.name) + '</div>' +
-          '<div class="lm-card-meta">' + _mapMgrFmtLabel(m.fmt) + zInfo + sizeInfo + '</div>' +
-          '<div class="lm-card-meta">' + store + ' · ' + crs + (m.loaded ? '' : ' · ⚠ nije učitana') + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="lm-card-btns">' +
-        '<button class="btn ' + (m.visible ? 'b' : 'gr') + '" onclick="_loadmapActivate(' + i + ')">' + (m.visible ? '<svg class="ic"><use href="#ic-prikazi"/></svg> Aktivna' : '<svg class="ic"><use href="#ic-prikazi"/></svg> Aktiviraj') + '</button>' +
-        (m.visible ? '<button class="btn gr" onclick="_loadmapDeactivate(' + i + ')"><svg class="ic"><use href="#ic-sakrij"/></svg> Deaktiviraj</button>' : '') +
-        '<button class="btn gr" onclick="_loadmapInfo(' + i + ')">ℹ Info</button>' +
-        '<button class="btn gr" style="color:#f87171;" onclick="_loadmapDelete(' + i + ')"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>' +
-      '</div>' + opRow +
-    '</div>';
-  }).join('');
+  const list=document.getElementById('loadmap-manage');if(!list)return;
+  const token=++_loadmapManageToken,maps=await _mapMgrCollect();if(token!==_loadmapManageToken)return;
+  const szEl=document.getElementById('loadmap-size');if(szEl)szEl.textContent=_mapMgrFmtSize(maps.reduce((n,m)=>n+(m.size||0),0));
+  const count=document.getElementById('loadmap-count');if(count)count.textContent=maps.length;
+  const q=_loadmapManageQ.trim().toLocaleLowerCase('bs');_loadmapManageShown=q?maps.filter(m=>m.name.toLocaleLowerCase('bs').includes(q)):maps;
+  list.innerHTML=_loadmapManageShown.length?_loadmapManageShown.map((m,i)=>{
+    const sl=_sqlLayers.find(l=>l.name===m.name),op=sl?Math.round((sl.layer.options.opacity??1)*100):100;
+    return '<article class="lm-card'+(m.visible?' active':'')+'"><div class="lm-card-top">'+_loadmapThumbHtml(m.name)+'<div class="lm-card-info"><div class="lm-card-nm">'+_escHtml(m.name)+'</div><div class="lm-card-meta">'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.size?' · '+_mapMgrFmtSize(m.size):'')+'</div>'+_loadmapBadges(m)+'</div></div><div class="lm-card-btns"><button class="lm-primary" onclick="_loadmapActivate('+i+')"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži na karti</button>'+(m.visible?'<button class="lm-secondary" onclick="_loadmapDeactivate('+i+')"><svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij</button>':'')+'</div><details class="lm-card-details"><summary>Detalji i podešavanja</summary>'+(m.savedAt?'<p>Dodana: '+_escHtml(_mapMgrFmtDate(m.savedAt))+'</p>':'')+(m.meta?.minzoom!=null?'<p>Uvećanje: '+_escHtml(m.meta.minzoom)+'–'+_escHtml(m.meta.maxzoom)+'</p>':'')+(sl?'<label class="lm-opacity"><span>Jačina prikaza <b id="lm-op-'+i+'">'+op+'%</b></span><input aria-label="'+_escHtml('Jačina prikaza '+m.name)+'" type="range" min="0" max="100" value="'+op+'" oninput="_loadmapSetOpacity('+i+',this.value)"></label><div class="lm-layer-order"><span>Redoslijed sloja</span><button onclick="_loadmapZ('+i+',-1)" aria-label="Pomjeri sloj ispod">↓ Ispod</button><button onclick="_loadmapZ('+i+',1)" aria-label="Pomjeri sloj iznad">↑ Iznad</button></div>':'<p>Karta je sačuvana. Prikaži je da otvoriš podešavanja.</p>')+'<div class="lm-details-actions"><button onclick="_loadmapInfo('+i+')">Informacije o karti</button><button class="lm-delete" onclick="_loadmapDelete('+i+')"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button></div></details></article>';
+  }).join(''):'<div class="lm-empty"><svg class="ic"><use href="#ic-karta"/></svg><b>'+ (maps.length?'Nema karata s tim nazivom':'Tvoje karte na jednom mjestu')+'</b><p>'+(maps.length?'Promijeni ili obriši pretragu.':'Dodaj prvu kartu za korištenje njenog područja bez interneta.')+'</p>'+(maps.length?'':'<button class="lm-primary" onclick="_loadmapTab(\'add\')">Dodaj kartu</button>')+'</div>';
+  try{if(navigator.storage?.estimate){const est=await navigator.storage.estimate();if(token!==_loadmapManageToken)return;const used=est.usage||0,quota=est.quota||0,bar=document.getElementById('loadmap-bar'),qt=document.getElementById('loadmap-quota');if(bar)bar.style.width=(quota?Math.min(100,used/quota*100):0)+'%';if(qt)qt.textContent=quota?_mapMgrFmtSize(used)+' / '+_mapMgrFmtSize(quota):_mapMgrFmtSize(used);}}catch(e){}
 }
-function _loadmapActivate(i) {
-  const m = _loadmapManageShown[i]; if (!m) return;
-  const idx = _sqlLayers.findIndex(l => l.name === m.name);
-  if (idx < 0) { showToast('Karta nije učitana — otvori je ponovo iz datoteke'); return; }
-  setLayerSqlite(idx);
-  _sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);   // skoči NA podatke (medijanski centar)
-  showToast('🗄 ' + m.name);
-  _loadmapRenderManage(); _loadmapRenderRecent();
-}
+async function _loadmapActivate(i) { const m=_loadmapManageShown[i];if(m)await _loadmapShow(m.name); }
 function _loadmapDeactivate(i) {
   const m = _loadmapManageShown[i]; if (!m) return;
   const sl = _sqlLayers.find(l => l.name === m.name);
@@ -40597,70 +40531,36 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- ═══ UČITAJ KARTU — konsolidirani ekran ═══ -->
-<div id="loadmap-modal">
-  <div id="loadmap-hdr">
-    <h3>🗺 Učitaj kartu</h3>
-    <button id="loadmap-close" onclick="closeLoadMapScreen()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-  </div>
+<div id="loadmap-modal" role="dialog" aria-modal="true" aria-labelledby="loadmap-title">
+  <header id="loadmap-hdr"><span class="lm-header-icon"><svg class="ic"><use href="#ic-karta"/></svg></span><div><small>KARTE NA TELEFONU</small><h2 id="loadmap-title">Učitaj kartu</h2></div><button id="loadmap-close" onclick="closeLoadMapScreen()" aria-label="Zatvori učitavanje karte"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+  <nav class="lm-tabs" role="tablist" aria-label="Učitavanje i moje karte"><button id="loadmap-tab-add" role="tab" aria-selected="true" aria-controls="loadmap-pane-add" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj kartu</button><button id="loadmap-tab-maps" role="tab" aria-selected="false" aria-controls="loadmap-pane-maps" onclick="_loadmapTab('maps')"><svg class="ic"><use href="#ic-slojevi"/></svg> Moje karte <span id="loadmap-count">0</span></button></nav>
   <div id="loadmap-body">
-
-    <!-- IZBOR IZVORA -->
-    <div class="lm-section">
-      <div class="lm-section-title">📂 Izbor izvora</div>
-      <div class="lm-src-row">
-        <button class="lm-src-btn" onclick="loadmapPickFiles()"><span class="ico"><svg class="ic"><use href="#ic-uredjaj"/></svg></span>Interna pohrana</button>
-        <button class="lm-src-btn" onclick="loadmapPickFiles()"><span class="ico"><svg class="ic"><use href="#ic-sacuvaj"/></svg></span>SD kartica</button>
-        <button class="lm-src-btn" onclick="document.getElementById('loadmap-recent-sec').scrollIntoView({behavior:'smooth'})"><span class="ico"><svg class="ic"><use href="#ic-vrijeme"/></svg></span>Nedavno</button>
+    <div id="loadmap-status" role="status" aria-live="polite"></div>
+    <section id="loadmap-pane-add" role="tabpanel" aria-labelledby="loadmap-tab-add">
+      <div class="lm-hero"><img src="static/img/map-previews/local.svg" alt="Ilustracija topografske karte"><div class="lm-hero-copy"><span>LOKALNA PODLOGA</span><h3>Karta spremna za teren</h3><p>Učitaj kartu iz fajla i koristi njeno područje bez interneta.</p></div><span class="lm-offline-tag"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Offline</span></div>
+      <div class="lm-upload-box" id="loadmap-drop" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="loadmapHandleDrop(event)">
+        <h3>Odaberi kartu sa uređaja</h3><p>Interna memorija, SD kartica ili povezani oblak — sve kroz isti izbor fajlova.</p>
+        <button class="lm-primary" id="loadmap-pick" onclick="loadmapPickFiles()"><svg class="ic"><use href="#ic-folder"/></svg> Odaberi fajlove <span>＋</span></button>
+        <div class="lm-formats"><span>MBTiles</span><span>SQLite</span><span>Raster GeoPackage</span></div>
+        <small>Možeš odabrati više karata. Na računaru možeš i prevući fajlove ovdje.</small>
       </div>
-      <div class="lm-drop" id="loadmap-drop"
-        onclick="loadmapPickFiles()"
-        ondragover="event.preventDefault();this.classList.add('drag-over')"
-        ondragleave="this.classList.remove('drag-over')"
-        ondrop="loadmapHandleDrop(event)">
-        <div style="font-size:30px;margin-bottom:6px;">🗺</div>
-        <div>Klikni ili prevuci kartu ovdje</div>
-        <div style="font-size:11px;margin-top:5px;color:#475569;">.mbtiles · .sqlitedb · .gpkg · .db — može i više odjednom</div>
-      </div>
-      <!-- Bez accept ograničenja — vidi napomenu kod sqlmap-file-input (iOS greyed-out fix).
-           _loadmapDetect() poslije odabira provjerava SQLite magic header i jasno javlja
-           grešku ako fajl nije validan, pa filtriranje na nivou <input> nije potrebno. -->
-      <input type="file" id="loadmap-file-input" multiple
-        style="display:none;" onchange="loadmapHandleFiles(this.files)">
-      <div class="lm-hint">ℹ Sustav otvara izbornik datoteka uređaja — odatle biraš internu memoriju, SD karticu ili oblak (Drive/Dropbox).</div>
-      <div id="loadmap-status"></div>
-    </div>
-
-    <!-- NEDAVNE KARTE -->
-    <div class="lm-section" id="loadmap-recent-sec">
-      <div class="lm-section-title">🕒 Nedavne karte <span style="font-weight:400;text-transform:none;color:#475569;">(tap = aktiviraj · drži = obriši)</span></div>
-      <div id="loadmap-recent"></div>
-      <div id="loadmap-startup-debug" class="lm-startup-diag"></div>
-    </div>
-
-    <!-- UPRAVLJANJE SVIM KARTAMA -->
-    <div class="lm-section">
-      <div class="lm-section-title">🗂 Sve karte — upravljanje</div>
-      <div class="mapmgr-storage">
-        <div class="mapmgr-storage-txt"><span>Offline karte: <b id="loadmap-size">–</b></span><span id="loadmap-quota">–</span></div>
-        <div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="loadmap-bar" style="width:0%;"></div></div>
-      </div>
-      <input type="text" id="loadmap-search" class="mapmgr-search" placeholder="🔍 Pretraži karte po nazivu…" oninput="_loadmapManageSearch(this.value)">
-      <div id="loadmap-manage"></div>
-    </div>
-
+      <input type="file" id="loadmap-file-input" multiple style="display:none" onchange="loadmapHandleFiles(this.files)">
+      <div class="lm-next"><span>1</span><div><b>Odaberi fajl</b><small>.mbtiles · .sqlitedb · .sqlite · .db · .gpkg</small></div><span>2</span><div><b>Pregledaj i učitaj</b><small>Provjeri naziv i veličinu prije dodavanja.</small></div></div>
+      <details class="lm-help"><summary>Koju vrstu fajla mogu učitati?</summary><p>Ovdje učitavaš rastersku kartu — sliku podloge sa sačuvanim područjem i nivoima uvećanja. Vektorski GeoPackage i PBF podloge nisu rasterske karte.</p><p>Za linije, vlake i granice u KML/SHP fajlu koristi učitavanje oznaka.</p><button onclick="closeLoadMapScreen();openLayerImport()">Učitaj KML / SHP <span>↗</span></button></details>
+    </section>
+    <section id="loadmap-pane-maps" role="tabpanel" aria-labelledby="loadmap-tab-maps" hidden>
+      <section class="lm-section" id="loadmap-recent-sec"><div class="lm-section-heading"><div><h3>Brzi pristup</h3><small>Nedavno dodane karte</small></div><span id="loadmap-recent-count"></span></div><div id="loadmap-recent"></div><div id="loadmap-startup-debug" class="lm-startup-diag"></div></section>
+      <section class="lm-section"><div class="lm-section-heading"><div><h3>Moje karte</h3><small>Prikaži, sakrij ili podesi izgled podloge.</small></div></div>
+        <div class="lm-library-tools"><svg class="ic"><use href="#ic-trazi"/></svg><input type="search" id="loadmap-search" placeholder="Traži kartu po nazivu…" aria-label="Traži lokalnu kartu" oninput="_loadmapManageSearch(this.value)"></div>
+        <div id="loadmap-manage"></div>
+      </section>
+      <details class="lm-help lm-storage"><summary>Prostor za karte <b id="loadmap-size">–</b></summary><p>Iskorišteni prostor aplikacije: <span id="loadmap-quota">–</span></p><div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="loadmap-bar" style="width:0%"></div></div><p>Brisanje karte uklanja njenu kopiju iz aplikacije. Izvorni fajl sačuvaj za ponovno učitavanje.</p></details>
+      <button class="lm-secondary" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj još jednu kartu</button>
+    </section>
   </div>
 </div>
-
-<!-- bottom sheet nakon odabira datoteke -->
-<div id="loadmap-sheet" onclick="if(event.target===this)loadmapCancelSheet()">
-  <div id="loadmap-sheet-box">
-    <h4 id="loadmap-sheet-title">Pregled datoteke</h4>
-    <div id="loadmap-sheet-list"></div>
-    <div class="lm-sheet-btns">
-      <button class="btn gr" onclick="loadmapCancelSheet()"><svg class="ic"><use href="#ic-zatvori"/></svg> Otkaži</button>
-      <button class="btn b" onclick="loadmapConfirmLoad()"><svg class="ic"><use href="#ic-uvezi"/></svg> Učitaj</button>
-    </div>
-  </div>
+<div id="loadmap-sheet" role="dialog" aria-modal="true" aria-labelledby="loadmap-sheet-title" onclick="if(event.target===this)loadmapCancelSheet()">
+  <div id="loadmap-sheet-box"><div class="lm-sheet-head"><div><small>PRIJE UČITAVANJA</small><h4 id="loadmap-sheet-title">Pregled fajlova</h4></div><button onclick="loadmapCancelSheet()" aria-label="Zatvori pregled fajlova">×</button></div><div id="loadmap-sheet-list"></div><p class="lm-sheet-note">Sadržaj rasterske karte provjerava se pri otvaranju. Neispravni fajlovi iz ovog pregleda se preskaču.</p><div class="lm-sheet-btns"><button class="lm-secondary" onclick="loadmapCancelSheet()">Odustani</button><button class="lm-primary" id="loadmap-confirm" disabled onclick="loadmapConfirmLoad()"><svg class="ic"><use href="#ic-uvezi"/></svg> Učitaj</button></div></div>
 </div>
 
 <!-- VLAKA INFO POPUP -->

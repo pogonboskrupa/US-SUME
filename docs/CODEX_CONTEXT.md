@@ -1773,3 +1773,33 @@ d98a1b8389e06e3e672658da7d71a4ae5700e32bf41e6de4c6cfc3636e33e010.
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.2
 Local484a23e različit remoteparent; ponovo samoexplicitpaths atopremote.
 Bez fizičkogXiaomi/produkcijskogSupabase/mjerenjaLiDARgreške.
+
+## 45. Učitaj kartu: novi raspored i pregled lokalnih karata — 2.3.3
+
+2.3.3/code503 sva tri mjesta. Prva sekcija Menija dobila dva jasna podtaba:
+Dodaj kartu / Moje karte. Jedan sistemski izbor više fajlova umjesto tri
+dugmeta za isti picker; slikovni uvod, podržani raster formati, KML/SHP
+prečica i jasna dva koraka. Sačuvane karte: horizontalni brzi pristup,
+pretraga, stvarna keširana minijatura ili označena ilustracija, status
+vidljivosti i čuvanja, veliko Prikaži na karti / Sakrij, sklopivi detalji,
+prozirnost, redoslijed, informacije i eksplicitno brisanje uz potvrdu.
+Zauzeće karata odvojeno od browser kvote prostora aplikacije; kvota nije
+slobodna memorija telefona. Dnevni/tamni/landscape, 44px dugmad i mali ekran.
+
+Pregled prije dodavanja: zaglavlje SQLite, veličina, format, neispravni
+fajlovi preskočeni, potvrda blokirana tokom provjere ili bez valjanih
+fajlova. Zaglavlje ne potvrđuje da baza sadrži raster: to provjerava engine.
+Zakašnjela provjera ne nadjačava novi/otkazan izbor; kasna pretraga/popisi
+ne prepisuju novije rezultate. UI broj uspjeha provjerava stvarno otvoreni
+sloj jer postojeći sqlmapLoadFile interno hvata greške bez return rezultata.
+Sačuvana a neotvorena karta sada koristi postojeći sqlmapRetryOne preko
+IDB/OPFS umjesto zahtjeva za ponovnim izborom izvornog fajla. SQLite engine,
+formati, baze i native kod nisu mijenjani; nema novih biblioteka/resursa.
+
+Lokalno: 90JS programa + inline sintaksa; stvarni Leaflet/SQL.js Worker/
+IndexedDB i sintetička MBTiles PNG karta, učitavanje i offline restart,
+pretraga, prozirnost, z-index, skrivanje, odbijeno/potvrđeno brisanje,
+SQLite bez raster tabela, neispravno zaglavlje i zakašnjeli izbor. Bez
+vanjskih mrežnih poziva. 26 PNG na 320/390/568/800px u dva moda, pregledani
+day390, dark320 i landscape pregled. Novi browser test u CI-u (ukupno16).
+CI/APK provjera slijedi. Nije testirano na fizičkom Xiaomi uređaju.
