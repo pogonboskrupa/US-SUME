@@ -5,13 +5,28 @@ on:
     branches:
       - CODEX-US-SUME
       - CODEX-US-SUME-2026-10-01
+concurrency:
+  group: codex-webview-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: write
+  actions: write
 jobs:
   apk:
     if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # Jednokratno uklanjanje provjere koja je ostala u testnom čekanju prije
+      # uvođenja concurrency grupe. Ostale grane/radnje se ne dodiruju.
+      - name: Prekini zastarjelu provjeru sa testnim čekanjem
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api repos/${{ github.repository }}/actions/runs/37205646511 --jq .status)
+          if [ "$status" != "completed" ]; then
+            gh api --method POST repos/${{ github.repository }}/actions/runs/37205646511/cancel
+          fi
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
