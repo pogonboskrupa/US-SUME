@@ -16,3 +16,5 @@ test('self-intersecting rough polygon refused',()=>{const im=border(image());im.
 test('transparent unloaded tiles cannot generate lines',()=>{const im=border(image());for(let k=3;k<im.data.length;k+=4)im.data[k]=0;assert.equal(B.detect(im).ok,false);});
 test('malformed or excessive images and points refused',()=>{assert.equal(B.detect({...image(),width:4000}).ok,false);assert.equal(B.detect({...image(),points:[[0,0],[NaN,1],[40,40]]}).ok,false);assert.equal(B.detect({...image(),points:Array(65).fill([40,40])}).ok,false);});
 test('slightly irregular dash centres preserve bends',()=>{const im=border(image());rect(im,145,60,50,4,[255,255,255]);rect(im,154,57,18,4,[20,20,20]);const r=B.detect(im);assert.equal(r.ok,true,r.reason);assert.ok(r.points.some(p=>p[1]<60));});
+
+test('OCR punctuation cannot erase true boundary dashes',()=>{const im=border(image());im.words=[{text:'---',x0:45,y0:45,x1:325,y1:70}];const r=B.detect(im);assert.equal(r.ok,true,r.reason);});

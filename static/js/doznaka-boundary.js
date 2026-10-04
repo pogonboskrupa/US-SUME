@@ -18,7 +18,7 @@ function detect(input){
  if(!Array.isArray(points)||points.length<3||points.length>64||points.some(p=>p.length!==2||!p.every(Number.isFinite)||p[0]<0||p[1]<0||p[0]>=W||p[1]>=H)||crosses(points)||area(points)<100)return fail('Nacrtaj jednostavnu približnu granicu, bez ukrštanja.');
  const mask=new Uint8Array(W*H),queue=new Int32Array(W*H);
  for(let i=0;i<mask.length;i++){const k=i*4,r=data[k],g=data[k+1],b=data[k+2];if(data[k+3]<200)continue;if(r<85&&g<85&&b<100)mask[i]=1;else if(b>70&&b>r*1.25+15&&b>g*1.1+5&&r<140&&g<180)mask[i]=2;}
- for(const box of words){if(![box.x0,box.y0,box.x1,box.y1].every(Number.isFinite))continue;for(let y=Math.max(0,Math.floor(box.y0)-1);y<Math.min(H,Math.ceil(box.y1)+1);y++)mask.fill(0,y*W+Math.max(0,Math.floor(box.x0)-1),y*W+Math.min(W,Math.ceil(box.x1)+1));}
+ for(const box of words){if(!/[A-Za-z0-9\u00C0-\u024F]/.test(String(box.text||'')))continue;if(![box.x0,box.y0,box.x1,box.y1].every(Number.isFinite))continue;for(let y=Math.max(0,Math.floor(box.y0)-1);y<Math.min(H,Math.ceil(box.y1)+1);y++)mask.fill(0,y*W+Math.max(0,Math.floor(box.x0)-1),y*W+Math.min(W,Math.ceil(box.x1)+1));}
  const components=[];
  for(let seed=0;seed<mask.length;seed++){
   const ink=mask[seed];if(!ink)continue;let head=0,tail=1,n=0,sx=0,sy=0,sxx=0,syy=0,sxy=0;queue[0]=seed;mask[seed]=0;
