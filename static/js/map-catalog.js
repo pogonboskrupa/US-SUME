@@ -5,6 +5,11 @@
   const local=()=>typeof _sqlLayers!=='undefined'?_sqlLayers:[];
   const deferred=()=>typeof _sqlRestoreFailed!=='undefined'?_sqlRestoreFailed:[];
   const icon=id=>'<svg class="ic"><use href="#ic-'+id+'"/></svg>';
+  function localPreview(name){
+    let thumb='';try{thumb=localStorage.getItem('lm_thumb_'+name)||'';}catch(e){}
+    const saved=/^data:image\/(png|jpeg|webp);base64,[a-z\d+/=]+$/i.test(thumb);
+    return '<span class="installed-preview"><img loading="lazy" decoding="async" src="'+esc(saved?thumb:'static/img/map-previews/local.svg')+'" alt="'+esc(saved?'Pregled karte '+name:'Ilustracija lokalne karte')+'"><span class="installed-preview-tag">'+(saved?'Pregled područja':'Lokalni fajl')+'</span></span>';
+  }
   function localRows(){
     const rows=new Map(local().map(sl=>[sl.name,{name:sl.name,sl,active:!!sl.visible&&map.hasLayer(sl.layer)}]));
     for(const item of deferred())if(!rows.has(item.name))rows.set(item.name,{name:item.name,deferred:!!item.deferred,error:!item.deferred});
@@ -13,7 +18,7 @@
   function renderInstalled(){
     const el=document.getElementById('installed-local-list');if(!el)return;
     const rows=localRows(),count=document.getElementById('installed-local-count');if(count)count.textContent=rows.length+' karata na telefonu';
-    el.innerHTML=rows.length?rows.map(row=>'<article class="installed-map'+(row.active?' is-active':'')+'"><span class="catalog-symbol">'+icon('arhiva')+'</span><div class="catalog-copy"><b>'+esc(row.name)+'</b><small>'+esc(row.sl?String(row.sl.fmt||'SQLite').toUpperCase()+' · lokalni fajl':row.error?'Otvaranje nije uspjelo':'Sačuvana · trenutno nije učitana')+'</small><span class="catalog-status">'+(row.active?'✓ Aktivna karta':row.error?'Potrebno ponovno otvaranje':'Dostupna na telefonu')+'</span></div><button type="button" data-map-action="open" data-map-name="'+esc(row.name)+'">'+(row.active?'Prikaži':row.error?'Pokušaj':'Otvori')+'</button></article>').join(''):'<div class="catalog-empty"><b>Nema lokalnih karata</b><p>Učitaj MBTiles, SQLite ili raster GeoPackage za cijelo područje rada bez interneta.</p><button type="button" onclick="closeLayerSheet();openLoadMapScreen()">Učitaj kartu</button></div>';
+    el.innerHTML=rows.length?rows.map(row=>'<article class="installed-map'+(row.active?' is-active':'')+'">'+localPreview(row.name)+'<div class="catalog-copy"><b>'+esc(row.name)+'</b><small>'+esc(row.sl?String(row.sl.fmt||'SQLite').toUpperCase()+' · lokalni fajl':row.error?'Otvaranje nije uspjelo':'Sačuvana · trenutno nije učitana')+'</small><span class="catalog-status">'+(row.active?'✓ Aktivna karta':row.error?'Potrebno ponovno otvaranje':'Dostupna na telefonu')+'</span></div><button type="button" data-map-action="open" data-map-name="'+esc(row.name)+'">'+(row.active?'Prikaži':row.error?'Pokušaj':'Otvori')+'</button></article>').join(''):'<div class="catalog-empty"><b>Nema lokalnih karata</b><p>Učitaj MBTiles, SQLite ili raster GeoPackage za cijelo područje rada bez interneta.</p><button type="button" onclick="closeLayerSheet();openLoadMapScreen()">Učitaj kartu</button></div>';
   }
   async function openLocal(name){
     let i=local().findIndex(sl=>sl.name===name);

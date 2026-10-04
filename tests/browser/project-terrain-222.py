@@ -83,6 +83,11 @@ async def main():
     await page.screenshot(path=str(b.OUT/f'project-terrain-{theme}-{w}-{h}.png'))
     await page.evaluate("document.querySelector('#fixture-project').style.display='none';_openLayerSheet();_lsTab('inst')")
     await b.bounds(page,'#layer-sheet',w,h);assert await page.locator('#installed-local-count').inner_text()=='3 karata na telefonu'
+    assert await page.locator('#ls-pane-inst .catalog-section').first.locator('h4').inner_text()=='Slojevi terena'
+    assert await page.locator('#ls-pane-inst .inst-layer-row').first.get_attribute('id')=='inst-slope-row'
+    assert await page.locator('#ls-pane-inst .inst-layer-row img').count()==5
+    assert await page.locator('#installed-local-list .installed-preview img').count()==3
+    await page.wait_for_function("Array.from(document.querySelectorAll('#ls-pane-inst .inst-layer-row img')).every(i=>i.complete&&i.naturalWidth>0)")
     assert await page.locator('#layer-sheet').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
     await page.screenshot(path=str(b.OUT/f'installed-maps-{theme}-{w}-{h}.png'))
     await page.evaluate('closeLayerSheet();openMapFavs()');await b.bounds(page,'#mapfav-box',w,h)

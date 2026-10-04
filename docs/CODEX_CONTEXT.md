@@ -1612,3 +1612,33 @@ https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.8
 Nema fizičkog uređaja/GPS/produkcijskog Supabase testa; online čitanje
 novim Play modelom nije instrumentacijski potvrđeno (testira se zabrana
 bez validiranog interneta). Prvi model može tražiti čekanje i ponovni tap.
+
+## 41. Nova DENDRO MAP ikona i terenski scenarij 5.400 m — 2.2.9
+
+Korisnik dostavio novu šumsku Dendro map ikonu, zamjena svih brend resursa,
+login JPEG → icon-512.png, pet Android gustoća/adaptive/round/fallback,
+PWA/favicon/Menu/Apple/notifikacije. Novi icon-maskable.png u SW i Android
+asset manifestu; master docs/DENDRO_MAP_ICON.png i android/generate-icons.py.
+Nativni splash prethodno bez slike ostaje takav; samo promjena resursa/boje.
+Web/SW/Android 2.2.9, versionCode499.
+
+Korisnik traži provjeru 3 km vlastitih + 2,4 km kolege na osrednjem telefonu,
+bez/slabog signala. tests/js/teren-5400.test.js: osam integritet scenarija,
+756+604 tačke, offline GPS zapis/keš/red, restart/crash snapshot, 10 timeouta,
+izgubljena potvrda upisa, ručno slanje/preuzimanje/idempotentnost, kolegin
+offline keš i stvarni gate kvaliteta mreže. Prošlo i na assetima objavljenog
+APK-a 2.2.8 i na sadašnjem izvoru. Mocks nisu produkcijski dokaz.
+tests/browser/field-offline-5400.py dodan u CI PRIJE builda: Leaflet/Turf,
+CPU1x/4x, 393x851, 1.360 i 5.410 tačaka, 24 ponavljanja i testni weak/dead
+transport. CPU4x nije emulacija Redmi uređaja. Ne mijenjati GPS/server kod
+samo zbog pregleda; stvarni telefon/baterija/background/prod nisu testirani.
+Detalji: docs/TEREN_5400_I_IKONA_2026-10-04.md. CI/objava slijede.
+
+Tokom rada korisnik tražio da Instalirane karte prvo prikazuju nagib,
+ekspoziciju i ostale terenske slojeve kao slike. Pet ilustrativnih slikovnih
+kartica ispred lokalnih karata, lokalni fajlovi sa stvarnim spremljenim
+lm_thumb_* thumbnailom ili SVG fallbackom; šest lokalnih SVG-a u SW precache.
+Postojeće radnje/checkbox/pamćenje izbora ostaju. Dopunjen postojeći browser
+project-terrain-222.py za redoslijed, slike i day/dark responsive pregled.
+Dodatna deveta integritet provjera: jedna vlaka 3 km / 751 tačka, odbijanje
+GPS tačnosti 40m, označen 2-min GPS prekid i p95 obrade fiksa u Node cloudu.

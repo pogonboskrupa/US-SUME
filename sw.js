@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '2.2.8';
+const APP_VERSION = '2.2.9';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -49,6 +49,14 @@ const APP_SHELL = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable.png',
+  './static/img/map-previews/slope.svg',
+  './static/img/map-previews/ekspo.svg',
+  './static/img/map-previews/elev.svg',
+  './static/img/map-previews/nv.svg',
+  './static/img/map-previews/kont.svg',
+  './static/img/map-previews/local.svg',
+  './apple-touch-icon.png',
   './forwarder.svg',
   './PUTEVI/putevi.geojson',
   './.well-known/assetlinks.json'

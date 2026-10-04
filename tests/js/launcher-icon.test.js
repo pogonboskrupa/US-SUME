@@ -17,12 +17,12 @@ function rgba(file){
 const manifest=fs.readFileSync(path.join(root,'android/app/src/main/AndroidManifest.xml'),'utf8');
 assert.ok(manifest.includes('android:icon="@mipmap/ic_launcher_visible"'));assert.ok(manifest.includes('android:roundIcon="@mipmap/ic_launcher_round_visible"'));
 const layer=fs.readFileSync(path.join(res,'drawable/ic_launcher_foreground_visible.xml'),'utf8');
-for(const edge of ['left','top','right','bottom'])assert.ok(layer.includes(`android:${edge}="-5.5dp"`));
+assert.ok(!layer.includes('-5.5dp'),'nova puna ikona nema povećanje starog grba');
 assert.ok(layer.includes('@mipmap/ic_launcher_foreground'));assert.ok(layer.includes('android:gravity="fill"'));
 for(const name of ['ic_launcher_visible','ic_launcher_round_visible']){
  const adaptive=fs.readFileSync(path.join(res,'mipmap-anydpi-v26',name+'.xml'),'utf8');
  assert.ok(adaptive.includes('@color/ic_launcher_background'));assert.ok(adaptive.includes('@drawable/ic_launcher_foreground_visible'));
- const legacy=fs.readFileSync(path.join(res,'mipmap-anydpi',name+'.xml'),'utf8');assert.ok(legacy.includes('-2.5dp'));assert.ok(legacy.includes('android:gravity="fill"'));assert.ok(legacy.includes('@mipmap/ic_launcher_foreground'));assert.ok(legacy.includes('@color/ic_launcher_background'));
+ const legacy=fs.readFileSync(path.join(res,'mipmap-anydpi',name+'.xml'),'utf8');assert.ok(legacy.includes('48dp'));assert.ok(legacy.includes('android:gravity="fill"'));assert.ok(legacy.includes(name.includes('round')?'@mipmap/ic_launcher_round':'@mipmap/ic_launcher'));
 }
 const results=[];
 for(const density of ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']){
@@ -31,11 +31,19 @@ for(const density of ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']){
  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(out[(y*w+x)*4+3]>0){
   minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
   // Include pixel corners + 1 target pixel interpolation allowance.
-  radius=Math.max(radius,Math.hypot(Math.abs(x+.5-w/2)+.5,Math.abs(y+.5-h/2)+.5)*119/108+1);
+  radius=Math.max(radius,Math.hypot(Math.abs(x+.5-w/2)+.5,Math.abs(y+.5-h/2)+.5)+1);
  }
  assert.ok(radius<=w*33/108,`${density}: artwork exceeds central 66dp safe circle (${radius})`);
- const diagonal=Math.hypot(maxX-minX+1,maxY-minY+1)*119/108/w;
+ const diagonal=Math.hypot(maxX-minX+1,maxY-minY+1)/w;
  assert.ok(diagonal<=.61,`${density}: bounding diagonal exceeds safe-zone rule (${diagonal})`);
  results.push({density,radius:Math.round(radius*100)/100,safeRadius:w*33/108});
 }
-console.log(JSON.stringify({enlargement:'10.2%',safeZone:true,densities:results}));
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+assert.ok(!html.includes('src="data:image/jpeg;base64,'));
+assert.ok(html.includes('src="icon-512.png"'));assert.ok(html.includes('src="icon-192.png"'));
+const web=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
+assert.equal(web.icons.find(i=>i.purpose==='maskable').src,'icon-maskable.png');
+const assets=JSON.parse(fs.readFileSync(path.join(root,'android/assets-manifest.json'),'utf8')).files;
+for(const name of ['icon-192.png','icon-512.png','icon-maskable.png','apple-touch-icon.png'])assert.ok(assets.includes(name));
+const {w,h,out}=rgba(path.join(root,'icon-maskable.png'));assert.equal(w,512);assert.equal(h,512);
+console.log(JSON.stringify({brand:'DENDRO MAP',safeZone:true,densities:results}));
