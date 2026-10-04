@@ -346,3 +346,7 @@ html #doznaka-panel .pm-kpi-lbl {color:var(--field-muted);font-size:11px;}
 html #doznaka-panel .pm-kpi-val {color:var(--field-ink)!important;}
 html #doznaka-panel #doz-status-row button[aria-pressed=false] {color:var(--field-muted)!important;background:var(--field-card)!important;border-color:var(--field-border)!important;}
 html #doznaka-panel .doz-member-name {color:var(--field-ink);}
+html #doznaka-panel .pm-kpi-grid {grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+html #doznaka-panel .pm-kpi {min-width:0;}
+html #doznaka-panel .pm-kpi-val,html #doznaka-panel .pm-kpi-lbl {overflow-wrap:anywhere;white-space:normal;}
+@media(max-width:350px){html #doznaka-panel .pm-kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr))!important;}}

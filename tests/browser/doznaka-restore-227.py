@@ -53,7 +53,8 @@ async def main():
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(568,320),(800,600)]:
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#doznaka-panel').scrollTop=0;window.scrollTo(0,0)}",theme)
-    assert await page.evaluate("document.querySelector('#doznaka-panel').scrollWidth<=document.querySelector('#doznaka-panel').clientWidth+1")
+    layout=await page.evaluate("()=>{const p=document.querySelector('#doznaka-panel'),r=p.getBoundingClientRect();return {width:p.clientWidth,scroll:p.scrollWidth,overflow:[...p.querySelectorAll('*')].filter(e=>{const b=e.getBoundingClientRect();return b.width>0&&b.right>r.right+1}).map(e=>({id:e.id,tag:e.tagName,cls:e.className,width:e.getBoundingClientRect().width})).slice(0,12)}}")
+    assert layout['scroll']<=layout['width']+1,(theme,w,h,layout)
     colors=await page.evaluate("()=>{const css=getComputedStyle(document.documentElement);return {ink:css.getPropertyValue('--field-ink').trim(),card:css.getPropertyValue('--field-card').trim(),bg:css.getPropertyValue('--field-bg').trim(),head:getComputedStyle(document.querySelector('.doz-detail-hdr')).backgroundColor,kpi:getComputedStyle(document.querySelector('.pm-kpi')).backgroundColor};}")
     def rgb(h):
      h=h.lstrip('#');h=''.join(c*2 for c in h) if len(h)==3 else h
