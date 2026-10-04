@@ -23,6 +23,8 @@
 <script src="static/libs/supabase.min.js" onerror="_libErr('Supabase')"></script>
 <script src="static/libs/shapefile.min.js" onerror="_libErr('Shapefile')"></script>
 <script src="static/js/reliable-fetch.js"></script>
+<script src="static/js/dem-quality.js"></script>
+<script src="static/js/doznaka-bands.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded',function(){
   if(!_libErrNames.length)return;
@@ -2393,7 +2395,7 @@ body.stampa-on #stampa-kontrole { display:block; }
 #stk-uredi { border-top:1px solid #1e293b; padding-top:8px; margin-bottom:8px; }
 #stk-uredi .stk-polja { display:flex; gap:8px; margin-bottom:8px; }
 #stk-uredi .stk-polja label { flex:1; font-size:11px; color:#94a3b8; }
-#stk-uredi input[type=text], #stk-uredi input[type=number] {
+#stk-uredi select, #stk-uredi input[type=text], #stk-uredi input[type=number] {
   width:100%; margin-top:3px; padding:9px 10px; background:#0f172a; border:1px solid #334155;
   border-radius:8px; color:#e2e8f0; font-size:16px; box-sizing:border-box;
 }
@@ -3089,6 +3091,10 @@ html #stampa-kontrole :is(button,input,textarea,summary):focus-visible { outline
 }
 #doz-save-box h3 { margin:0 0 14px; font-size:14px; }
 
+.stk-print-layer { border-bottom:1px solid #334155; padding:10px 0; }
+.stk-print-layer b { display:block; font-size:12px; overflow-wrap:anywhere; margin-bottom:6px; }
+.stk-print-layer input[type=color] { width:100%; height:38px; background:transparent; border:1px solid #334155; border-radius:8px; margin-top:3px; }
+#print-legend .pl-sym:has(svg + svg) { height:auto; flex-direction:column; }
 /* === PRINT STYLES (v1.8.0) — štampa se isključivo pregled (body.stampa-on) === */
 @media print {
   * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
@@ -5716,7 +5722,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.1';
+const APP_VER = 'v2.3.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -13540,7 +13546,7 @@ let _userPannedAway = false;
 //     sistematski previsok, uz vertikalni šum GPS-a. Zato i pri praćenju
 //     pozicije DEM ima prednost; GPS visina (📡) ostaje samo rezerva kad DEM
 //     pločica nije dostupna. Visina SNIMLJENIH tačaka (uspon/pad) se NE dira.
-const _NV_DEM_Z = 12;             // ~27 m/px na 45°N — rezolucija samog SRTM-a
+const _NV_DEM_Z = 12;             // ~27 m/px na 45°N; EU-DEM izvor približno 30 m u BiH
 const _NV_DEM_Z_REZERVA = [13, 14, 11, 10]; // već keširano od DEM slojeva
 const _NV_DEM_MEM_MAX = 12;       // 256 KB po pločici
 const _NV_DEM_NEMA_MS = 30000;    // "nema pločice" se ponovo proba poslije 30 s
@@ -13572,12 +13578,8 @@ function _nvMemStavi(k, v) {
 function _nvDemOcitaj(elev, fx, fy, tx, ty) {
   const px = Math.max(0, Math.min(255, (fx - tx) * 256 - 0.5));
   const py = Math.max(0, Math.min(255, (fy - ty) * 256 - 0.5));
-  const x0 = Math.floor(px), y0 = Math.floor(py);
-  const x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
-  const dx = px - x0, dy = py - y0;
-  const v = elev[y0*256+x0]*(1-dx)*(1-dy) + elev[y0*256+x1]*dx*(1-dy)
-          + elev[y1*256+x0]*(1-dx)*dy     + elev[y1*256+x1]*dx*dy;
-  // Terrarium "nema podatka" / more kodira se kao ~-32768 ili ispod nule
+  const v = DemQuality.bilinear(elev,256,256,px,py);
+  // Nedostajuće visine ne interpoliraju se; negativna visina sama nije NoData.
   return (Number.isFinite(v) && v > -500) ? v : null;
 }
 
@@ -13619,11 +13621,11 @@ async function _nvDemUcitaj(lat, lng) {
     for (const z of zumovi) {
       const x = Math.floor(_termLon2x(lng, z)), y = Math.floor(_termLat2y(lat, z));
       const img = await _nvKesSamo(z, x, y);
-      if (img) { _nvMemStavi(z + '/' + x + '/' + y, _terrariumDecodeTile(img)); return true; }
+      if (img) { try { _nvMemStavi(z + '/' + x + '/' + y, _terrariumDecodeTile(img)); } finally { if(img.close)img.close(); } return true; }
     }
     if (!_mrezaProbaj()) return false;
     const img = await _getTerrariumTile(_NV_DEM_Z, bx, by).catch(() => null);
-    if (img) { _nvMemStavi(_NV_DEM_Z + '/' + bx + '/' + by, _terrariumDecodeTile(img)); return true; }
+    if (img) { try { _nvMemStavi(_NV_DEM_Z + '/' + bx + '/' + by, _terrariumDecodeTile(img)); } finally { if(img.close)img.close(); } return true; }
     return false;
   })().then(ok => {
     if (ok) _nvDemNema.delete(kljuc); else _nvDemNema.set(kljuc, Date.now());
@@ -13748,16 +13750,26 @@ async function _nvDemPreuzmi(plocice, onNapredak) {
   const rez = { ukupno: plocice.length, novih: 0, vec: 0, gresaka: 0, kvota: false };
   if (!('caches' in window)) { rez.gresaka = plocice.length; return rez; }
   const cache = await caches.open(_TERR_CACHE);
+  const validImage=async r=>{
+    if(!r?.ok)return false;
+    const ct=r.headers?.get('Content-Type')||'';if(ct&&!/^image\//i.test(ct))return false;
+    if(typeof createImageBitmap==='undefined')return true;
+    let img;
+    try{img=await createImageBitmap(await r.clone().blob());return img.width===256&&img.height===256&&_terrariumDecodeTile(img).some(Number.isFinite);}
+    catch(e){return false;}finally{if(img?.close)img.close();}
+  };
   let i = 0;
   for (const t of plocice) {
     i++;
     const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${t.z}/${t.x}/${t.y}.png`;
     try {
-      if (await cache.match(url)) rez.vec++;
+      const old=await cache.match(url);
+      if (old&&await validImage(old)) rez.vec++;
       else {
+        if(old){try{await cache.delete(url);}catch(e){}}
         const r = await _fetchT(url, 15000, { mode: 'cors' });
         const ct = (r && r.headers && r.headers.get && r.headers.get('Content-Type')) || '';
-        if (!r || !r.ok || (ct && !/^image\//i.test(ct))) rez.gresaka++;
+        if (!r || !r.ok || (ct && !/^image\//i.test(ct)) || !await validImage(r)) rez.gresaka++;
         else {
           try { await cache.put(url, r); rez.novih++; }
           catch (qe) { rez.gresaka++; if (qe && qe.name === 'QuotaExceededError') { rez.kvota = true; break; } }
@@ -14984,36 +14996,30 @@ function _aspColor(deg, mag) {
 }
 async function _getTerrariumTile(z, x, y) {
   const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
-  // Slab signal (ne isto što i offline!) zna ostaviti fetch da visi neodređeno
-  // dugo umjesto da brzo padne — bez ovog timeout-a, _demFetchGridTerrarium
-  // (Promise.all nad više pločica) bi se zaglavio ZAUVIJEK na "Učitavam model
-  // terena…" jer nijedna pločica ne bi ni uspjela ni pala. Sa timeout-om
-  // pločica jednostavno vrati null (isti tretman kao svaka druga greška
-  // ispod) — pozivalac to već zna da protumači kao "nedostupno" i pređe na
-  // Open-Meteo fallback (koji ima svoj 15s timeout).
-  let blob = null;
-  if ('caches' in window) {
-    try {
-      const cache = await caches.open(_TERR_CACHE);
-      let resp = await cache.match(url);
-      if (!resp) {
-        resp = await _fetchT(url, 10000, { mode:'cors' });
-        if (resp?.ok) { cache.put(url, resp.clone()); } else return null;
-      }
-      blob = await resp.blob();
-    } catch { return null; }
-  } else {
-    blob = await _fetchT(url, 10000, { mode:'cors' }).then(r=>r.ok?r.blob():null).catch(()=>null);
+  let cache=null,resp=null;
+  try { if ('caches' in window) {cache=await caches.open(_TERR_CACHE);resp=await cache.match(url);} } catch(e) {}
+  const decode=async r=>{
+    if(!r?.ok)return null;
+    const ct=r.headers?.get('Content-Type')||'';
+    if(ct&&!/^image\//i.test(ct))return null;
+    const blob=await r.blob();let img;
+    if(typeof createImageBitmap!=='undefined')img=await createImageBitmap(blob);
+    else img=await new Promise(resolve=>{const objectUrl=URL.createObjectURL(blob),image=new Image();
+      const finish=value=>{URL.revokeObjectURL(objectUrl);resolve(value);};
+      image.onload=()=>finish(image);image.onerror=()=>finish(null);image.src=objectUrl;});
+    if(img&&(img.width!==256||img.height!==256)){if(img.close)img.close();return null;}
+    return img;
+  };
+  if(resp){try{const img=await decode(resp);if(img)return img;}catch(e){}
+    try{await cache?.delete(url);}catch(e){}
   }
-  if (!blob) return null;
-  if (typeof createImageBitmap !== 'undefined') return createImageBitmap(blob);
-  return new Promise(res => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => res(img);
-    img.onerror = () => res(null);
-    img.src = URL.createObjectURL(blob);
-  });
+  if(typeof _mrezaProbaj==='function'&&!_mrezaProbaj())return null;
+  try{
+    resp=await _fetchT(url,10000,{mode:'cors'});const saved=cache?resp.clone():null;
+    const img=await decode(resp);if(!img)return null;
+    if(cache&&saved){try{await cache.put(url,saved);}catch(e){/* Kvota ne smije blokirati online prikaz. */}}
+    return img;
+  }catch(e){return null;}
 }
 // Dekoduje jednu 256x256 Terrarium pločicu (već preuzetu/keširanu preko
 // _getTerrariumTile) u Float32Array elevacija (elev = R*256 + G + B/256 -
@@ -15026,8 +15032,10 @@ function _terrariumDecodeTile(bitmapOrImg) {
   tc.drawImage(bitmapOrImg, 0, 0, 256, 256);
   const raw = tc.getImageData(0, 0, 256, 256).data;
   const elev = new Float32Array(256 * 256);
-  for (let i = 0; i < 256 * 256; i++)
-    elev[i] = raw[i*4]*256 + raw[i*4+1] + raw[i*4+2]/256 - 32768;
+  for (let i = 0; i < 256 * 256; i++) {
+    const h=raw[i*4]*256+raw[i*4+1]+raw[i*4+2]/256-32768;
+    elev[i]=raw[i*4+3]&&DemQuality.valid(h)?h:NaN;
+  }
   return elev;
 }
 function _makeDemCanvasLayer(mode) {
@@ -15037,7 +15045,7 @@ function _makeDemCanvasLayer(mode) {
       canvas.width = canvas.height = 256;
       _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
         if (!src) { done(null, canvas); return; }
-        const elev = _terrariumDecodeTile(src);
+        const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
         const ctx = canvas.getContext('2d');
         const out = ctx.createImageData(256, 256);
         const od  = out.data;
@@ -15046,17 +15054,11 @@ function _makeDemCanvasLayer(mode) {
             const idx = py*256+px;
             let rgba;
             if (mode === 'nv') {
-              rgba = _nvColor(elev[idx]);
+              rgba = Number.isFinite(elev[idx])?_nvColor(elev[idx]):[0,0,0,0];
             } else {
-              const x0=Math.max(0,px-1), x1=Math.min(255,px+1);
-              const y0=Math.max(0,py-1), y1=Math.min(255,py+1);
-              const dzdx = elev[py*256+x1] - elev[py*256+x0];
-              const dzdy = elev[y1*256+px] - elev[y0*256+px];
-              // Aspect = compass direction the slope faces (downhill direction).
-              // Tile y increases southward, so geographic N component = -dzdy.
-              // atan2(-dzdx, dzdy) gives bearing from North, clockwise.
-              const asp  = (Math.atan2(-dzdx, dzdy)*180/Math.PI + 360) % 360;
-              rgba = _aspColor(asp, Math.hypot(dzdx, dzdy));
+              const metres=Math.cos(_tile2lat(coords.y+(py+.5)/256,coords.z)*Math.PI/180)*156543.03392/2**coords.z;
+              const g=DemQuality.gradient(elev,px,py,metres);
+              rgba=Number.isFinite(g.percent)&&g.percent>.01?_aspColor(g.bearing,1.5):[0,0,0,0];
             }
             od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
           }
@@ -15091,6 +15093,7 @@ function _contourColor(level) {
 // spoji parove prema prosjeku 4 ugla (standardna konvencija, sprječava da se
 // linija sama sebe siječe).
 function _msCellSegments(tl, tr, br, bl, level, x, y) {
+  if(![tl,tr,br,bl,level].every(Number.isFinite))return null;
   const e = {};
   if ((tl >= level) !== (tr >= level)) e.T = [x + (level - tl) / (tr - tl), y];
   if ((tr >= level) !== (br >= level)) e.R = [x + 1, y + (level - tr) / (br - tr)];
@@ -15106,8 +15109,9 @@ function _msCellSegments(tl, tr, br, bl, level, x, y) {
 }
 
 function _drawContours(ctx, elev, W, H, step) {
+  if(!Number.isFinite(step)||step<=0)return;
   let min = Infinity, max = -Infinity;
-  for (let i = 0; i < elev.length; i++) { const v = elev[i]; if (v < min) min = v; if (v > max) max = v; }
+  for (let i = 0; i < elev.length; i++) { const v = elev[i]; if(!Number.isFinite(v))continue; if (v < min) min = v; if (v > max) max = v; }
   if (!isFinite(min) || max - min < step) return;   // premali raspon — nema šta crtati
   const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
   ctx.lineJoin = 'round';
@@ -15134,7 +15138,7 @@ const DemContour = L.GridLayer.extend({
     canvas.width = canvas.height = 256;
     _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
       if (!src) { done(null, canvas); return; }
-      const elev = _terrariumDecodeTile(src);
+      const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
       _drawContours(canvas.getContext('2d'), elev, 256, 256, _CONTOUR_STEP);
       done(null, canvas);
     }).catch(() => done(null, canvas));
@@ -15157,7 +15161,7 @@ function _termLat2y(lat, z) {
   return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
 }
 function _slopeColor(pct) {
-  if (pct < 30) return [0, 0, 0, 0];
+  if (!Number.isFinite(pct) || pct <= 30) return [0, 0, 0, 0];
   const t = Math.min(1, (pct - 30) / 80); // 0 pri 30%, 1 pri 110%+
   return [
     Math.round(230 - t * 50),   // R: 230→180
@@ -15172,7 +15176,7 @@ const DemSlopeClass = L.GridLayer.extend({
     canvas.width = canvas.height = 256;
     _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
       if (!src) { done(null, canvas); return; }
-      const elev = _terrariumDecodeTile(src);
+      const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
       // Geografska veličina piksela u metrima na ovoj geografskoj širini
       const lat  = _tile2lat(coords.y + 0.5, coords.z);
       const pixM = Math.cos(lat * Math.PI / 180) * 156543.03392 / Math.pow(2, coords.z);
@@ -15182,11 +15186,8 @@ const DemSlopeClass = L.GridLayer.extend({
       for (let py = 0; py < 256; py++) {
         for (let px = 0; px < 256; px++) {
           const idx = py * 256 + px;
-          const x0 = Math.max(0, px-1), x1 = Math.min(255, px+1);
-          const y0 = Math.max(0, py-1), y1 = Math.min(255, py+1);
-          const dzdx = (elev[py*256+x1] - elev[py*256+x0]) / ((x1-x0) * pixM);
-          const dzdy = (elev[y1*256+px] - elev[y0*256+px]) / ((y1-y0) * pixM);
-          const pct  = Math.sqrt(dzdx*dzdx + dzdy*dzdy) * 100;
+          const metres=Math.cos(_tile2lat(coords.y+(py+.5)/256,coords.z)*Math.PI/180)*156543.03392/2**coords.z;
+          const pct=DemQuality.gradient(elev,px,py,metres).percent;
           const rgba = _slopeColor(pct);
           od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
         }
@@ -15253,7 +15254,7 @@ function _wbParsiraj(json) {
   return Object.values(json || {})
     .map(rel => {
       const m = /(\d{4}-\d{2}-\d{2})\)/.exec(rel.itemTitle || '');
-      return (m && rel.itemURL) ? { date: m[1], url: rel.itemURL } : null;
+      return (m && rel.itemURL) ? { date: m[1], url: rel.itemURL, ...(rel.metadataLayerUrl?{metadataUrl:rel.metadataLayerUrl}:{}) } : null;
     })
     .filter(Boolean)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -15302,8 +15303,9 @@ function _wbRestoreBase() {
   _wbPrevKey = null;
 }
 
-function _wbPostaviDatum(url) {
+function _wbPostaviDatum(url,winterGeometry) {
   if (!url) return;
+  if(typeof WbWinter!=='undefined'){WbWinter.cancel();if(winterGeometry)WbWinter.apply(winterGeometry);}
   _wbCurUrl = url;
   _wbTileLayer.setUrl(url);
   if (!map.hasLayer(_wbTileLayer)) _wbTileLayer.addTo(map);
@@ -15311,7 +15313,7 @@ function _wbPostaviDatum(url) {
   const st = document.getElementById('wb-status');
   if (st && rel) {
     const zima = ['12','01','02'].includes(rel.date.slice(5,7));
-    st.textContent = (zima ? '🌨 Zimski snimak · ' : '') + rel.date
+    st.textContent = 'Objava arhive: ' + rel.date
       + ' · datum je release-a, ne garantovano tačan datum snimka na tvojoj lokaciji';
   }
 }
@@ -15339,7 +15341,7 @@ async function _wbToggle(on) {
   const sel = document.getElementById('wb-datum');
   if (sel) {
     sel.innerHTML = _wbReleases.map(r =>
-      `<option value="${_escHtml(r.url)}">${['12','01','02'].includes(r.date.slice(5,7)) ? '🌨 ' : ''}${r.date}</option>`
+      `<option value="${_escHtml(r.url)}">Objava ${r.date}</option>`
     ).join('');
     sel.value = _wbReleases[0].url;
   }
@@ -15348,6 +15350,7 @@ async function _wbToggle(on) {
 }
 
 function _wbTrazZimu() {
+  if(typeof WbWinter!=='undefined')return WbWinter.search();
   const zima = _wbNajblizaZima();
   if (!zima) { showToast('⚠ Nema zimskog snimka u arhivi'); return; }
   const sel = document.getElementById('wb-datum');
@@ -22356,12 +22359,7 @@ function updateVlakaLabel(i) {
     // drži oznaku čitljivom bez obzira koliko je simbol smanjen.
     const fontPx = Math.max(8, Math.round(9 * _lgS));
     const extraH = fontPx + 5; // prostor za red teksta ispod simbola, prati font
-    const svgSym = `<svg width="${LW}" height="${LH}" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.9))">
-      <rect x="0" y="0" width="${LW}" height="${LH}" fill="white"/>
-      <polygon points="0,0 ${LW},0 ${LW},${LH}" fill="black"/>
-      <line x1="0" y1="0" x2="${LW}" y2="${LH}" stroke="white" stroke-width="1.5"/>
-      <rect x="0.5" y="0.5" width="${LW-1}" height="${LH-1}" fill="none" stroke="#888" stroke-width="0.5"/>
-    </svg>
+    const svgSym = _stpLagerSvg(LW, LH, true) + `
     <div style="color:#fbbf24;font-weight:bold;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>`;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
       icon: L.divIcon({
@@ -29162,37 +29160,116 @@ function _stpPostavkeSacuvaj() {
   } catch (e) { /* UI postavka — gubitak je bezopasan */ }
 }
 
-// Boje vlaka/kraka se čitaju iz STVARNIH postavki — crna linija u legendi uz
-// plavu vlaku na karti bi legendu učinila pogrešnom.
-function _stpSimboli() {
-  const bv = (typeof getBojaVlake === 'function') ? getBojaVlake() : '#60a5fa';
-  const bk = (typeof getBojaKraka === 'function') ? getBojaKraka() : '#f87171';
-  const ln = (c, w, d) => `<svg viewBox="0 0 50 10"><line x1="0" y1="5" x2="50" y2="5" stroke="${c}" stroke-width="${w}"${d ? ` stroke-dasharray="${d}"` : ''}/></svg>`;
-  return {
-    vlaka:     { svg: ln(bv, 3), label: 'Traktorska vlaka' },
-    krak:      { svg: ln(bk, 2), label: 'Krak' },
-    lager:     { svg: `<svg viewBox="0 0 50 10"><rect x="5" y="1" width="40" height="8" fill="none" stroke="#d00" stroke-width="1.5"/><line x1="5" y1="5" x2="45" y2="5" stroke="#d00" stroke-width="1"/></svg>`, label: 'Lager' },
-    kamput:    { svg: ln('#f97316', 3.5), label: 'Kamionski put' },
-    gr_odjela: { svg: ln('#111', 1.5, '6,3'), label: 'Granica odjela' },
-    gr_odsjeka:{ svg: ln('#111', 1, '2,3'), label: 'Granica odsjeka' },
-    potok:     { svg: `<svg viewBox="0 0 50 10"><path d="M0 5 Q8 1 16 5 Q24 9 32 5 Q40 1 50 5" fill="none" stroke="#2563eb" stroke-width="1.5"/></svg>`, label: 'Potok' },
-    gr_privat: { svg: ln('#a020a0', 1.5, '8,2,2,2'), label: 'Granica sa privatnim posjedom' },
-    konture:   { svg: ln('rgba(120,72,0,0.9)', 1.2), label: 'Izohipse (20 m)' },
-    nagib:     { svg: `<svg viewBox="0 0 50 10"><rect x="8" y="1" width="34" height="8" fill="rgb(220,90,90)"/></svg>`, label: 'Nagib preko 30 %' },
-  };
+// Isti znak lagera koriste karta i legenda, uključujući PDF/Android štampu.
+function _stpLagerSvg(w = 28, h = 13, shadow = false) {
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block;${shadow ? 'filter:drop-shadow(0 1px 2px rgba(0,0,0,0.9))' : ''}"><rect width="${w}" height="${h}" fill="white"/><polygon points="0,0 ${w},0 ${w},${h}" fill="black"/><line x1="0" y1="0" x2="${w}" y2="${h}" stroke="white" stroke-width="1.5"/><rect x="0.5" y="0.5" width="${w-1}" height="${h-1}" fill="none" stroke="#888" stroke-width="0.5"/></svg>`;
 }
-// Podrazumijevana legenda = ono što je na karti STVARNO prikazano.
-function _stpLegendaPodrazumijevano() {
-  const out = new Set();
+function _stpPutanje(layer) {
+  const out = [];
+  const walk = l => { if (!l) return; if (l.eachLayer) l.eachLayer(walk); else if (l.setStyle && l.options) out.push(l); };
+  walk(layer); return out;
+}
+// Samo vidljivi slojevi. Naziv/tag daje prijedlog vrste; korisnik ga može ispraviti.
+function _stpSlojevi() {
+  const out = [], seen = new Set();
+  const add = (id, name, role, layers) => {
+    layers = layers.filter(l => { if (seen.has(l)) return false; seen.add(l); return true; });
+    if (layers.length) out.push({id, name, role: /privatn/i.test(name) ? 'gr_privat' : (_stp?.roles && Object.prototype.hasOwnProperty.call(_stp.roles,id) ? _stp.roles[id] : role), layers});
+  };
   try {
-    const vis = (vlake || []).filter(v => !_aktivniProjektId || !v.projektId || v.projektId === _aktivniProjektId);
-    if (vis.some(v => !v.kr)) out.add('vlaka');
-    if (vis.some(v => v.kr)) out.add('krak');
-    if (vis.some(v => !v.kr && v.lager)) out.add('lager');
+    const all = [...(vlake || []), ...Object.values(typeof kolegeVlakeMap === 'undefined' ? {} : kolegeVlakeMap)];
+    for (const kr of [false, true]) add(kr ? 'krak' : 'vlaka', kr ? 'Krakovi' : 'Vlake', kr ? 'krak' : 'vlaka',
+      all.filter(v => !!(Number(v.kr)>0) === kr && v.poly && map.hasLayer(v.poly)).map(v => v.poly));
   } catch (e) {}
-  try { if (_puteviLayerFg && map.hasLayer(_puteviLayerFg)) out.add('kamput'); } catch (e) {}
-  try { if (graniceOdjeli && graniceOdjeli.length) out.add('gr_odjela'); } catch (e) {}
-  try { if (_ovlState.kont) out.add('konture'); if (_ovlState.slope) out.add('nagib'); } catch (e) {}
+  try { if (map.hasLayer(_puteviLayerFg)) add('kamput','Kamionski putevi','kamput',_stpPutanje(_puteviLayerFg)); } catch (e) {}
+  try { for (const [i,k] of kmlLs.entries()) {
+    if (!k.grp || !map.hasLayer(k.grp)) continue;
+    const t = String(k.tag || '') + ' ' + String(k.name || '');
+    const role = /privatn/i.test(t) ? 'gr_privat' : /odsjek/i.test(t) ? 'gr_odsjeka' : /odjel|granic/i.test(t) ? 'gr_odjela' : /potok/i.test(t) ? 'potok' : /kamionsk/i.test(t) ? 'kamput' : '';
+    add('kml:'+(k._key || k.name || i),k.name || 'Učitani sloj',role,_stpPutanje(k.grp));
+  }} catch (e) {}
+  try { for (const t of _tragRegistry) { const l=_tragLayers[t.id]; if(l && map.hasLayer(l)) add('trag:'+t.id,t.nm || t.name || 'Trag','', [l]); }} catch(e) {}
+  try { if (_dozBoundaryLayer && map.hasLayer(_dozBoundaryLayer)) add('doz-granica','Odjel doznake','gr_odjela',_stpPutanje(_dozBoundaryLayer)); } catch(e) {}
+  return out;
+}
+function _stpStilVrati() {
+  if (!_stp?.originalStyles) return;
+  for (const [l,style] of _stp.originalStyles) l.setStyle(style);
+  _stp.originalStyles.clear();
+}
+function _stpStilPrimijeni() {
+  if (!_stp) return;
+  _stpStilVrati();
+  for (const row of _stpSlojevi()) {
+    const edit = _stp.styles[row.id] || {};
+    const style = row.role === 'gr_privat' ? {...edit,color:'#ff0000',dashArray:null,opacity:1} : edit;
+    if (!Object.keys(style).length) continue;
+    for (const l of row.layers) {
+      const original = {};
+      for (const k of Object.keys(style)) original[k] = l.options[k] ?? (k === 'dashArray' ? null : undefined);
+      _stp.originalStyles.set(l,original); l.setStyle(style);
+    }
+  }
+}
+function _stpStil(i,prop,value) {
+  if (!_stp) return;
+  const row = _stpSlojevi()[i]; if (!row) return;
+  if (prop === 'role') {
+    if (!['','vlaka','krak','kamput','gr_odjela','gr_odsjeka','potok','gr_privat'].includes(value)) return;
+    _stp.roles[row.id] = value;
+    if (value) _stp.leg.add(value);
+  } else {
+    if (!['color','weight','dashArray'].includes(prop)) return;
+    if (row.role === 'gr_privat' && prop !== 'weight') return;
+    if (prop === 'color' && !/^#[a-f\d]{6}$/i.test(value)) return;
+    if (prop === 'weight') { value = +value; if (!(value>=0.5 && value<=12)) return; }
+    if (prop === 'dashArray') { if (!['','8 4','0.01 8'].includes(value)) return; value = value || null; }
+    (_stp.styles[row.id] ||= {})[prop] = value;
+    if (prop === 'dashArray') _stp.styles[row.id].lineCap = value === '8 4' ? 'butt' : 'round';
+  }
+  _stpStilPrimijeni(); _stpKontroleRender(); _stpOverlays();
+}
+function _stpStilReset() {
+  if (!_stp) return;
+  _stpStilVrati(); _stp.styles = {}; _stp.roles = {};
+  _stpStilPrimijeni(); _stpKontroleRender(); _stpOverlays();
+}
+function _stpSimboli() {
+  const ln = (c,w,d,cap='round',outline=false) => {
+    c = _escHtml(String(c)); d = d ? _escHtml(String(d)) : '';
+    const line = (color,width) => `<line x1="2" y1="5" x2="48" y2="5" stroke="${color}" stroke-width="${width}" stroke-linecap="${cap === 'butt' ? 'butt' : 'round'}"${d ? ` stroke-dasharray="${d}"` : ''}/>`;
+    const n = /^#[a-f\d]{6}$/i.test(c) ? parseInt(c.slice(1),16) : 0;
+    const contrast = (((n>>16)*.299+((n>>8)&255)*.587+(n&255)*.114)>160) ? '#000' : '#fff';
+    return `<svg viewBox="0 0 50 10">${outline ? line(contrast,w*1.14) : ''}${line(c,w)}</svg>`;
+  };
+  const bv = typeof getBojaVlake === 'function' ? getBojaVlake() : '#60a5fa';
+  const bk = typeof getBojaKraka === 'function' ? getBojaKraka() : '#f87171';
+  const sim = {
+    vlaka:{svg:ln(bv,3),label:'Traktorska vlaka'}, krak:{svg:ln(bk,2),label:'Krak'},
+    lager:{svg:_stpLagerSvg(),label:'Lager'}, kamput:{svg:ln('#f97316',3.5),label:'Kamionski put'},
+    gr_odjela:{svg:ln('#111',1.5,'6,3'),label:'Granica odjela'},
+    gr_odsjeka:{svg:ln('#111',1,'2,3'),label:'Granica odsjeka'},
+    potok:{svg:ln('#2563eb',1.5),label:'Potok'},
+    gr_privat:{svg:ln('#ff0000',1.5),label:'Granica sa privatnim posjedom'},
+    konture:{svg:ln('rgba(120,72,0,0.9)',1.2),label:'Izohipse (20 m)'},
+    nagib:{svg:'<svg viewBox="0 0 50 10"><rect x="8" y="1" width="34" height="8" fill="rgb(220,90,90)"/></svg>',label:'Nagib preko 30 %'}
+  };
+  const groups = new Map();
+  for (const row of _stpSlojevi()) {
+    if (!sim[row.role] || row.role === 'gr_privat') continue;
+    const variants = groups.get(row.role) || new Set();
+    for (const l of row.layers) { const o=l.options; variants.add(ln(o.color || '#111',o.weight || 2,o.dashArray,o.lineCap,o.vlakaOutline)); }
+    groups.set(row.role,variants);
+  }
+  // Različite stvarne boje/stilovi ostaju vidljivi, uključujući vlake kolega.
+  for (const [role,variants] of groups) sim[role].svg = [...variants].join('');
+  return sim;
+}
+function _stpLegendaPodrazumijevano() {
+  const out = new Set(_stpSlojevi().map(r=>r.role).filter(Boolean));
+  try { for (const v of [...vlake,...Object.values(typeof kolegeVlakeMap === 'undefined' ? {} : kolegeVlakeMap)])
+    if (v.lagerMk && map.hasLayer(v.lagerMk)) out.add('lager'); } catch(e) {}
+  try { if (_ovlState.kont) out.add('konture'); if (_ovlState.slope) out.add('nagib'); } catch(e) {}
   return out;
 }
 
@@ -29300,8 +29377,10 @@ function stampaOtvori() {
     okvirOdjel: false,
     uredi: false,
     sazeto: false,
+    styles: {}, roles: {}, originalStyles: new Map(),
     prev: { center: c0, zoom: z0, snap: map.options.zoomSnap, h: {} },
   };
+  _stpStilPrimijeni();
   document.body.classList.add('stampa-on');
   map.options.zoomSnap = 0;
   // Mjerilo bira korisnik dugmadima — pinch bi ga tiho pokvario.
@@ -29330,6 +29409,7 @@ function showPrintModal() { stampaOtvori(); }
 function _stpZatvoriInterno() {
   if (!_stp) return;
   const p = _stp.prev;
+  _stpStilVrati();
   _stp = null;
   window.removeEventListener('resize', _stpRaspored);
   document.body.classList.remove('stampa-on');
@@ -29443,6 +29523,15 @@ function _stpKontroleRender() {
       <div class="stk-polja">
         <label>Drugo mjerilo 1 :<input type="number" inputmode="numeric" min="200" step="500" value="${_stp.mjerilo}" onchange="_stpMjerilo(this.value)"></label>
       </div>
+      <details class="stk-leg-nazivi"><summary>Izgled linija u štampi</summary>
+        <p class="stk-hint">Početni izgled prati kartu. Izmjene vrijede za ovaj pregled i PDF. Privatna granica je uvijek crvena puna linija.</p>
+        ${_stpSlojevi().map((r,i)=>{const o=r.layers[0].options,priv=r.role==='gr_privat';return `<div class="stk-print-layer"><b>${_escHtml(r.name)}</b><div class="stk-polja">
+          <label>Vrsta<select aria-label="Vrsta ${_escHtml(r.name)}" onchange="_stpStil(${i},'role',this.value)">${['','vlaka','krak','kamput','gr_odjela','gr_odsjeka','potok','gr_privat'].map(k=>`<option value="${k}" ${r.role===k?'selected':''}>${k?sim[k].label:'Drugi sloj'}</option>`).join('')}</select></label>
+          <label>Boja<input type="color" aria-label="Boja ${_escHtml(r.name)}" value="${/^#[a-f\d]{6}$/i.test(o.color||'')?o.color:'#111111'}" ${priv?'disabled':''} onchange="_stpStil(${i},'color',this.value)"></label></div><div class="stk-polja">
+          <label>Debljina<input type="number" aria-label="Debljina ${_escHtml(r.name)}" min="0.5" max="12" step="0.5" value="${o.weight||2}" onchange="_stpStil(${i},'weight',this.value)"></label>
+          <label>Linija<select aria-label="Linija ${_escHtml(r.name)}" ${priv?'disabled':''} onchange="_stpStil(${i},'dashArray',this.value)"><option value="" ${!o.dashArray?'selected':''}>Puna</option><option value="8 4" ${o.dashArray&&!String(o.dashArray).startsWith('0.01')?'selected':''}>Crtice</option><option value="0.01 8" ${String(o.dashArray).startsWith('0.01')?'selected':''}>Tačke</option></select></label></div></div>`;}).join('')}
+        <button class="stk-chip" onclick="_stpStilReset()">Vrati izgled s karte</button>
+      </details>
       <div class="stk-lbl" style="margin-bottom:6px;">Stavke legende</div>
       <div class="stk-leg">${Object.keys(sim).map(k =>
         `<label><input type="checkbox" ${_stp.leg.has(k) ? 'checked' : ''} onchange="_stpLegStavka('${k}',this.checked)">${sim[k].label}</label>`).join('')}${
@@ -29510,7 +29599,7 @@ async function stampaStampaj() {
     _stpStampaUToku = false;
   }
 }
-map.on('moveend zoomend', () => { if (_stp) _stpSkalaTraka(); });
+map.on('moveend zoomend', () => { if (_stp) { _stpStilPrimijeni(); _stpOverlays(); } });
 
 // === OFFLINE MODAL ===
 function lngLatToTile(lat, lng, z) {
@@ -29641,7 +29730,7 @@ async function _fetchProfileElev(rawPts) {
   try {
     const r = await _fetchT(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`, 12000);
     const d = await r.json();
-    if (!Array.isArray(d.elevation) || d.elevation.length !== pts.length) return null;
+    if (!r.ok || !Array.isArray(d.elevation) || d.elevation.length !== pts.length || !d.elevation.every(v=>typeof v==='number'&&DemQuality.valid(v))) return null;
     return { pts, alts: d.elevation };
   } catch { return null; }
 }
@@ -30149,21 +30238,10 @@ async function _demFetchGrid(bounds, res) {
 function _demGridBoundsAndStep(bounds, res) {
   const s = bounds.getSouth(), n = bounds.getNorth();
   const w = bounds.getWest(), e = bounds.getEast();
-  const degPerM = 1 / 111320;
-  let step = res * degPerM;
-  let rows = Math.ceil((n - s) / step);
-  let cols = Math.ceil((e - w) / step);
-  if (rows > 120 || cols > 120) {
-    // Math.min(120, ...) bi TIHO odsjekao sjeverni/istočni rub grida kad bi
-    // tražena oblast prešla 120x120 ćelija (npr. duža trasa u "Projektovanje
-    // šumskog puta" — DEM je originalno rađen za manje odjele). Umjesto da
-    // izgubi pokrivenost, rezolucija se grubi da CIJELA tražena oblast stane
-    // u 120x120 (manje tačno, ali potpuno).
-    const scale = Math.max(rows / 120, cols / 120);
-    step = step * scale;
-    rows = Math.ceil((n - s) / step);
-    cols = Math.ceil((e - w) / step);
-  }
+  if(![s,n,w,e,res].every(Number.isFinite)||res<=0||s>n||w>e)throw new Error('Neispravna granica DEM-a');
+  const step=Math.max(res/111320,(n-s)/119,(e-w)/119);
+  const rows=Math.max(2,Math.min(120,Math.ceil((n-s)/step)+1));
+  const cols=Math.max(2,Math.min(120,Math.ceil((e-w)/step)+1));
   return { s, n, w, e, step, rows, cols };
 }
 
@@ -30181,10 +30259,10 @@ async function _demFetchGridTerrarium(bounds, res) {
   const MAX_TILES_SIDE = 10;
   let txMin, txMax, tyMin, tyMax;
   for (;;) {
-    txMin = Math.floor(_termLon2x(w, z));
-    txMax = Math.floor(_termLon2x(e, z));
-    tyMin = Math.floor(_termLat2y(n, z)); // sjever = manji y u Web Mercator
-    tyMax = Math.floor(_termLat2y(s, z));
+    txMin = Math.floor(_termLon2x(w, z)-.5/256);
+    txMax = Math.floor(_termLon2x(w+(cols-1)*step, z)+.5/256);
+    tyMin = Math.floor(_termLat2y(s+(rows-1)*step, z)-.5/256); // sjever = manji y u Web Mercator
+    tyMax = Math.floor(_termLat2y(s, z)+.5/256);
     if ((txMax - txMin + 1) <= MAX_TILES_SIDE && (tyMax - tyMin + 1) <= MAX_TILES_SIDE) break;
     z--;
     if (z < 4) throw new Error('Oblast je prevelika za Terrarium pločice');
@@ -30202,7 +30280,7 @@ async function _demFetchGridTerrarium(bounds, res) {
   }
   const tileImgs = await Promise.all(tilePromises);
   const tileElevs = new Map(); // "tx:ty" -> Float32Array(256*256) | null
-  tileImgs.forEach((img, i) => tileElevs.set(tileKeys[i], img ? _terrariumDecodeTile(img) : null));
+  tileImgs.forEach((img,i)=>{try{tileElevs.set(tileKeys[i],img?_terrariumDecodeTile(img):null);}finally{if(img?.close)img.close();}});
   if (![...tileElevs.values()].some(v => v !== null)) {
     throw new Error('Terrarium DEM pločice nedostupne za ovu oblast');
   }
@@ -30213,15 +30291,9 @@ async function _demFetchGridTerrarium(bounds, res) {
   for (let r = 0; r < rows; r++) {
     const lat = s + r * step;
     const fy = _termLat2y(lat, z);
-    const ty = Math.max(tyMin, Math.min(tyMax, Math.floor(fy)));
-    const py = Math.max(0, Math.min(255, Math.round((fy - ty) * 256)));
     for (let c = 0; c < cols; c++) {
-      const lon = w + c * step;
-      const fx = _termLon2x(lon, z);
-      const tx = Math.max(txMin, Math.min(txMax, Math.floor(fx)));
-      const px = Math.max(0, Math.min(255, Math.round((fx - tx) * 256)));
-      const tileElev = tileElevs.get(tx + ':' + ty);
-      grid[r * cols + c] = tileElev ? tileElev[py * 256 + px] : NaN;
+      const fx = _termLon2x(w+c*step,z);
+      grid[r*cols+c]=DemQuality.tileSample(tileElevs,fx,fy);
     }
   }
   if (grid.some(v => Number.isNaN(v))) {
@@ -30263,7 +30335,7 @@ async function _demFetchGridOpenMeteo(bounds, res) {
         throw new Error('Mrežna greška — provjerite konekciju');
       }
       try { d = await r.json(); } catch { throw new Error('Neispravan odgovor servera'); }
-      if (Array.isArray(d.elevation)) break;
+      if (r.ok&&Array.isArray(d.elevation)&&d.elevation.length===Math.min(batchSize,lats.length-i)&&d.elevation.every(v=>typeof v==='number'&&DemQuality.valid(v))) break;
       const isRateLimit = /minut|limit/i.test(d.reason || '');
       if (isRateLimit && attempt < 2) {
         await new Promise(res => setTimeout(res, attempt === 0 ? 3000 : 8000));
@@ -30285,16 +30357,7 @@ function _demGetElev(dem, lat, lon) {
 }
 
 function _demBilinearElev(dem, lat, lon) {
-  const r = (lat - dem.south) / dem.step;
-  const c = (lon - dem.west) / dem.step;
-  const r0 = Math.max(0, Math.min(dem.rows - 2, Math.floor(r)));
-  const c0 = Math.max(0, Math.min(dem.cols - 2, Math.floor(c)));
-  const fr = r - r0, fc = c - c0;
-  const v00 = dem.grid[r0 * dem.cols + c0];
-  const v10 = dem.grid[(r0 + 1) * dem.cols + c0];
-  const v01 = dem.grid[r0 * dem.cols + c0 + 1];
-  const v11 = dem.grid[(r0 + 1) * dem.cols + c0 + 1];
-  return v00 * (1 - fr) * (1 - fc) + v10 * fr * (1 - fc) + v01 * (1 - fr) * fc + v11 * fr * fc;
+  return DemQuality.bilinear(dem.grid,dem.cols,dem.rows,(lon-dem.west)/dem.step,(lat-dem.south)/dem.step);
 }
 
 async function _demForOdjel(odjelName) {
@@ -30343,18 +30406,18 @@ function _demElevForProfile(dem, pts) {
 // Proširi _fetchProfileElev da koristi offline DEM kad nema mreže
 const _origFetchProfileElev = _fetchProfileElev;
 _fetchProfileElev = async function(rawPts) {
-  // Mreža prva kad je upotrebljiva, ali njen neuspjeh (slaba veza, istek) NE
-  // znači "nema visina" — preuzeti DEM je rezerva i tad, ne samo bez signala.
-  if (_mrezaProbaj()) {
-    const r = await _origFetchProfileElev(rawPts).catch(() => null);
-    if (r) return r;
+  const pts=_resampleLinePts(rawPts,80);if(!pts.length)return null;
+  // Lokalni DEM prvo: bez čekanja na mrtvu vezu kad je teren preuzet.
+  const alts=pts.map(p=>_nvDemSync(p.la,p.lo));
+  if(alts.every(Number.isFinite))return {pts,alts};
+  const dem=await _demForBounds(L.latLngBounds(pts.map(p=>[p.la,p.lo])));
+  if(dem){const values=_demElevForProfile(dem,pts);if(values.every(Number.isFinite))return {pts,alts:values};}
+  for(let i=0;i<pts.length;i++)if(!Number.isFinite(alts[i])){
+    await _nvDemUcitaj(pts[i].la,pts[i].lo);alts[i]=_nvDemSync(pts[i].la,pts[i].lo);
   }
-  const pts = _resampleLinePts(rawPts, 80);
-  const b = L.latLngBounds(pts.map(p => [p.la, p.lo]));
-  const dem = await _demForBounds(b);
-  if (!dem) return null;
-  const alts = _demElevForProfile(dem, pts);
-  return { pts, alts };
+  if(alts.every(Number.isFinite))return {pts,alts};
+  if(_mrezaProbaj())return _origFetchProfileElev(rawPts).catch(()=>null);
+  return null;
 };
 
 // UI za preuzimanje DEM-a za aktivni odjel
@@ -37155,53 +37218,24 @@ function _dozBuildUserTracks() {
   const allLines = [];
   Object.entries(byUser).forEach(([uid, pts]) => {
     if (pts.length < 2) return;
-    const segments = [[]];
+    const segments = [{points:[],startedAt:null,endedAt:null}];
     pts.forEach((p, i) => {
       if (i > 0) {
         const dt = _dozTackaMs(p) - _dozTackaMs(pts[i - 1]);
-        if (dt > GAP_MS) segments.push([]);
+        if (dt > GAP_MS) segments.push({points:[],startedAt:null,endedAt:null});
       }
-      segments[segments.length - 1].push([p.longitude, p.latitude]);
+      const seg=segments[segments.length-1];seg.points.push([p.longitude,p.latitude]);
+      if(!seg.startedAt)seg.startedAt=p.recorded_at;seg.endedAt=p.recorded_at;
     });
     segments.forEach(seg => {
-      if (seg.length >= 2) allLines.push({ uid, line: turf.lineString(seg) });
+      if (seg.points.length >= 2) allLines.push({uid,line:turf.lineString(seg.points),startedAt:seg.startedAt,endedAt:seg.endedAt});
     });
   });
 
-  if (allLines.length <= 1) { _dozUTMemo = { k: memoK, v: allLines }; return allLines; }
-
-  const rez = allLines.map(track => {
-    const others = allLines.filter(t => t.uid !== track.uid);
-    if (!others.length) return track;
-    const coords = turf.getCoords(track.line);
-    const filtered = [coords[0]];
-    let skipRun = 0;
-    for (let i = 1; i < coords.length; i++) {
-      const pt = turf.point(coords[i]);
-      let myDist = Infinity;
-      const myOthers = allLines.filter(t => t !== track && t.uid === track.uid);
-      myOthers.forEach(ml => {
-        const n = turf.nearestPointOnLine(ml.line, pt);
-        if (n.properties.dist < myDist) myDist = n.properties.dist;
-      });
-      let otherDist = Infinity;
-      others.forEach(ot => {
-        const n = turf.nearestPointOnLine(ot.line, pt);
-        if (n.properties.dist < otherDist) otherDist = n.properties.dist;
-      });
-      if (otherDist < myDist * 0.4 && otherDist < 0.015) {
-        skipRun++;
-        if (skipRun > 5) continue;
-      } else {
-        skipRun = 0;
-      }
-      filtered.push(coords[i]);
-    }
-    if (filtered.length < 2) return track;
-    return { uid: track.uid, line: turf.lineString(filtered) };
-  });
-  _dozUTMemo = { k: memoK, v: rez };
-  return rez;
+  // GPS tragovi ostaju cjeloviti. Preklop površina obrađuje geometrijska unija;
+  // blizina koleginog pojasa nije razlog za brisanje tačaka vlastitog traga.
+  _dozUTMemo = { k: memoK, v: allLines };
+  return allLines;
 }
 
 function _dozComputeBands(odjel) {
@@ -37211,11 +37245,14 @@ function _dozComputeBands(odjel) {
   if (!userTracks.length) return [];
   // Ista računica se traži 2–3 puta po osvježavanju (karta, statistika, popup
   // granice) — memo po stanju tragova + vanjskom rubu + odjelu.
-  const bk = (odjel.id || '') + '|' + _DOZ_BAND_OUTER_M + '|' + _dozUTMemo.k;
+  const bk = (odjel.id || '') + '|' + JSON.stringify(bndFeat.geometry) + '|' + _DOZ_BAND_OUTER_M + '|' + _dozUTMemo.k;
   if (_dozBandsMemo.k === bk) return _dozBandsMemo.v;
+  const joined=typeof DozBands!=='undefined'?DozBands.build(userTracks,bndFeat,_DOZ_BAND_OUTER_M,turf):null;
+  if(joined){_dozBandsMemo={k:bk,v:joined};return joined;}
 
   const uidSet = [...new Set(userTracks.map(t => t.uid))];
   const bands = [];
+  const boxes=new Map(userTracks.map(t=>[t,turf.bbox(t.line)]));
 
   uidSet.forEach(uid => {
     const myTracks = userTracks.filter(t => t.uid === uid);
@@ -37226,20 +37263,24 @@ function _dozComputeBands(odjel) {
         let bufDist = _DOZ_BAND_OUTER_M;
         if (otherTracks.length > 0) {
           let minDist = Infinity;
+          const sampled=turf.along(mt.line,turf.length(mt.line)/2),[lon,lat]=sampled.geometry.coordinates;
+          const marginLat=2*bufDist/111320,marginLon=marginLat/Math.max(.1,Math.cos(lat*Math.PI/180));
           otherTracks.forEach(ot => {
-            const sampled = turf.along(mt.line, turf.length(mt.line) / 2);
+            const b=boxes.get(ot);
+            // Daleki trag ne može suziti pojas. Preskoči skupu pretragu njegovih tačaka.
+            if(lon<b[0]-marginLon||lon>b[2]+marginLon||lat<b[1]-marginLat||lat>b[3]+marginLat)return;
             const nearest = turf.nearestPointOnLine(ot.line, sampled);
             if (nearest.properties.dist < minDist) minDist = nearest.properties.dist;
           });
           const halfDist = (minDist * 1000) / 2;
-          if (halfDist > 1 && halfDist < 200) bufDist = halfDist;
+          if (halfDist > 1 && halfDist < bufDist) bufDist = halfDist;
         }
         const buf = turf.buffer(mt.line, bufDist, { units: 'meters', steps: 4 });
         if (!buf) return;
         const clipped = turf.intersect(buf, bndFeat);
         if (clipped) {
           const areaHa = turf.area(clipped) / 10000;
-          bands.push({ uid, polygon: clipped, areaHa });
+          bands.push({ uid, polygon: clipped, areaHa, startedAt:mt.startedAt, endedAt:mt.endedAt });
         }
       } catch(e) {}
     });
@@ -37286,11 +37327,12 @@ function _dozRenderBands(odjel) {
   if (!bands.length) return;
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
-  const created = odjel?.created_at ? fmtDateShort(odjel.created_at) : '—';
+  const dates=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',dateStyle:'short'}),times=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',timeStyle:'short'});
 
   bands.forEach(b => {
     const col = DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length];
     const name = _escHtml(_dozImeClana(b.uid));
+    const start=new Date(b.startedAt),end=new Date(b.endedAt),work=Number.isFinite(start.getTime())?dates.format(start)+' · '+times.format(start)+(Number.isFinite(end.getTime())?'–'+times.format(end):''):'—';
     const lyr = L.geoJSON(b.polygon, {
       style: { color: col, weight: 1.5, fillColor: col, fillOpacity: 0.18 },
       interactive: true
@@ -37300,8 +37342,9 @@ function _dozRenderBands(odjel) {
         <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
         <b style="color:#000;">${name}</b>
       </div>
-      <div style="color:#475569;">Površina pojasa: <b style="color:#000;">${b.areaHa.toFixed(2)} ha</b></div>
-      <div style="color:#475569;">Projekat kreiran: <b style="color:#000;">${created}</b></div>
+      <div style="color:#475569;">Procjena površine pojasa: <b style="color:#000;">${b.areaHa.toFixed(2)} ha</b></div>
+      <div style="color:#475569;">${b.joined?'Zajednička granica sa susjednim pojasom':'Procjena iz GPS bafera'}</div>
+      <div style="color:#475569;">Rad na pojasu: <b style="color:#000;">${_escHtml(work)}</b></div>
     </div>`, { maxWidth: 220 });
   });
 }
@@ -37336,8 +37379,9 @@ function _dozShowBoundaryPopup(odjel) {
     ${rows ? `<div style="margin-top:6px;border-top:1px solid #ddd;padding-top:4px;">
       <div style="font-weight:700;margin-bottom:3px;color:#000;">Pojasevi projektanata:</div>
       <table style="width:100%;border-collapse:collapse;">${rows}</table>
-      <div style="color:#475569;margin-top:4px;">Pokriveno: <b style="color:#000;">${coveredHa.toFixed(2)} ha</b> (${pct}%)</div>
+      <div style="color:#475569;margin-top:4px;">Procjena pokrivenosti: <b style="color:#000;">${coveredHa.toFixed(2)} ha</b> (${pct}%)</div>
       ${pokr.preklopHa >= 0.01 ? `<div style="color:#b45309;margin-top:2px;">Preklapanje pojaseva: <b>${pokr.preklopHa.toFixed(2)} ha</b></div>` : ''}
+      <div style="color:#64748b;margin-top:6px;font-size:11px;">Tlocrtna površina iz GPS bafera; nije potvrda doznake svakog stabla.</div>
     </div>` : '<div style="color:#64748b;margin-top:6px;">Nema GPS tragova — pojasevi nisu formirani</div>'}
   </div>`;
 
@@ -41473,9 +41517,10 @@ if (typeof AndroidDownload !== 'undefined') {
         <div style="display:flex;gap:6px;">
           <select id="wb-datum" onchange="_wbPostaviDatum(this.value)"
             style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:13px;"></select>
-          <button onclick="_wbTrazZimu()" style="padding:8px 12px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#c4b5fd;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🌨 Zima</button>
+          <button id="wb-winter-search" onclick="WbWinter.search()" style="padding:8px 12px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#c4b5fd;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🌨 Zima · USK</button>
         </div>
         <div id="wb-status" style="font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.4;">—</div>
+        <div id="wb-winter-status" style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5;" role="status">Zima · USK provjerava stvarni datum snimanja na sredini karte. Stariji snimak nije prikaz trenutnog stanja šume.</div>
       </div>
     </div>
 
@@ -41541,7 +41586,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <!-- Tab: Instalirane karte -->
   <div id="ls-pane-inst" style="display:none;">
     <div class="catalog-hero"><span>RAD BEZ INTERNETA</span><h3>Instalirane karte</h3><p>Lokalni fajl pokriva područje koje sadrži. Online keš čuva samo ranije pregledane dijelove.</p></div>
-    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><p class="catalog-intro">Slikovni primjeri olakšavaju izbor sloja. Za rad bez signala preuzmi teren za područje rada.</p><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">≥30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi ≥30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
+    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><p class="catalog-intro">Mapzen/Terrarium: u provjerenom području BiH EU-DEM, približno 30 m. Veći zum ne povećava preciznost. Nagibi i izohipse su procjena; za rad bez signala preuzmi teren.</p><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
   </div><!-- /ls-pane-inst -->
 
   <!-- Tab: Granice -->
@@ -41613,7 +41658,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
 <div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Pošalji na server" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
-  <div class="sp-header"><div><b>Pošalji na server</b><small>Jedan pritisak za slanje i preuzimanje</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
+  <div class="sp-header"><div class="sp-brand"><span class="sp-brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 17a4 4 0 0 1-1-7.8A7 7 0 0 1 18.5 8a4.5 4.5 0 0 1-.5 9M9 20V12m-3 3 3-3 3 3m3-5v8m-3-3 3 3 3-3"/></svg></span><div><b>Pošalji na server</b><small>Razmjena podataka s kolegama</small></div></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
   <div id="syncq-sum"></div>
   <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
   <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
@@ -41628,8 +41673,8 @@ if (typeof AndroidDownload !== 'undefined') {
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
     </details>
-    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
-    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
+    <section id="data-server-received" class="sp-transfer-section"><h3><span class="sp-heading-icon" aria-hidden="true">↓</span> Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3><span class="sp-heading-icon" aria-hidden="true">↑</span> Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
     <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     </details>
@@ -41751,5 +41796,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
+<script src="static/js/winter-imagery.js"></script>
 </body>
 </html>

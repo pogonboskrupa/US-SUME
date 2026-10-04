@@ -101,7 +101,7 @@
       saveTransfers('sent',[{projectKey:dest.key,project:dest.label,uid:owner,author:name(owner),target:op.type==='upsert_vlaka'?{kind:'vlaka',id:op.payload?.id,nm:op.payload?.nm}:op.type==='doz_track_points'?{kind:'doz-track'}:op.type==='insert_doz_marking'?{kind:'zone',id:op.payload?.id}:null,item:operationLabel(op),detail:op.type==='upsert_vlaka'?metres(length(op.payload?.pts)):op._count?op._count+' GPS tačaka':'Potvrđeno na serveru',ts:Date.now()}]);
     }catch(e){console.warn('Vrijeme slanja nije sačuvano',e);}
   }
-  function timestamp(ts) {return Number.isFinite(ts)&&ts>0?new Date(ts).toLocaleString('bs-BA'):'Još nije potvrđeno';}
+  function timestamp(ts) {return Number.isFinite(ts)&&ts>0?new Date(ts).toLocaleString('bs-BA',{timeZone:'Europe/Sarajevo'}):'Još nije potvrđeno';}
   function operationLabel(op) {
     const labels={upsert_vlaka:'Vlaka',delete_vlaka:'Obrisana vlaka',insert_projekt:'Novi projekat',upsert_odjel:'Podaci odjela',insert_doz_project:'Novi odjel doznake',insert_doz_marking:'Zona doznake',delete_doz_marking:'Obrisana zona doznake',upsert_doz_status:'Status doznake',doz_track_points:'Snimljeni pojas doznake'};
     const p=op.payload||{};return (labels[op.type]||'Podaci projekta')+(p.nm||p.name?' · '+(p.nm||p.name):'');
@@ -150,7 +150,13 @@
       const el=byId('server-'+direction+'-items');if(!el)continue;
       const opened=new Set(Array.from(el.querySelectorAll?.('details[open]')||[],d=>d.dataset.group));
       const groups=grouped(direction);
-      el.innerHTML=groups.length?groups.map(g=>'<details class="sp-transfer-group" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><b>'+esc(g.title)+'</b><span>'+g.rows.length+' stavki · '+(g.ts?esc(timestamp(g.ts)):'Lokalna kopija')+'</span></summary>'+g.rows.map(r=>'<article class="sp-transfer-item"><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><span>Projekat: <b>'+esc(r.project)+'</b></span><span>Projektant: '+esc(r.author)+'</span><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+'</small></article>').join('')+'</details>').join(''):'<div class="sp-empty">'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Još nema potvrda slanja za posljednja tri projekta.')+'</div>';
+      el.innerHTML=groups.length?groups.map(g=>{
+        const authors=[...new Set(g.rows.map(r=>r.author).filter(Boolean))];
+        const who=(direction==='received'?'Od: ':'Poslao: ')+authors.slice(0,3).join(', ')+(authors.length>3?' · još '+(authors.length-3):'');
+        return '<details class="sp-transfer-group" data-direction="'+direction+'" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><div class="sp-group-title"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+esc(g.title)+'</b><em>'+g.rows.length+' stavki</em></div><span class="sp-group-people">'+esc(who)+'</span><span>'+ (g.ts?'Posljednja razmjena: '+esc(timestamp(g.ts)):'Lokalna kopija · prijem nije evidentiran')+'</span></summary>'+g.rows.map(r=>
+          '<article class="sp-transfer-item" data-direction="'+direction+'"><span class="sp-direction-badge">'+(direction==='received'?'↓ Primljeno':'↑ Potvrđeno slanje')+'</span><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><dl class="sp-item-context"><div><dt>Projekat</dt><dd>'+esc(r.project)+'</dd></div><div><dt>'+(direction==='received'?'Poslao':'Šalje')+'</dt><dd>'+esc(r.author)+(r.uid===currentUid()?' · ti':'')+'</dd></div></dl><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+'</small></article>').join('')+'</details>';
+      }).join(''):'<div class="sp-empty"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+ (direction==='received'?'Još nema primljenih stavki':'Još nema potvrđenog slanja')+'</b><span>'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Nakon uspješnog slanja ovdje će biti potvrde za posljednja tri projekta.')+'</span></div>';
+
     }
   }
   function transferMap(direction,itemKey){
@@ -260,7 +266,7 @@
     const input = byId('server-project-search'); if(input && input.value !== search) input.value=search;
     const summary=byId('server-project-summary');
     const sent=Object.values(history()).filter(x=>Number.isFinite(x?.ts)).sort((a,b)=>b.ts-a.ts)[0];
-    if(summary)summary.innerHTML='<div class="sp-times"><div><span>Posljednje slanje s ovog telefona</span><b>'+esc(timestamp(sent?.ts))+'</b>'+(sent?'<small>'+esc(sent.label)+'<br>Poslao: '+esc(sent.ime)+'</small>':'')+'</div><div><span>Posljednji prijem ovog projekta</span><b>'+esc(timestamp(m.downloaded?.ts))+'</b></div></div>';
+    if(summary)summary.innerHTML='<div class="sp-times"><div data-direction="sent"><span>↑ Posljednje slanje s ovog telefona</span><b>'+esc(timestamp(sent?.ts))+'</b>'+(sent?'<small>'+esc(sent.label)+'<br>Poslao: '+esc(sent.ime)+'</small>':'')+'</div><div data-direction="received"><span>↓ Posljednji prijem ovog projekta</span><b>'+esc(timestamp(m.downloaded?.ts))+'</b></div></div>';
     renderPending();
     renderTransfers();
     const authors=byId('server-project-authors');

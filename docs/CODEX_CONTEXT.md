@@ -1732,3 +1732,30 @@ karte; ne tvrditi postotak OCR/linijske uspješnosti ili brzinu pravog telefona.
 Lokalni neki netaknuti fajlovi razlikuju se od udaljene rekonstruisane baze:
 APK sva47 provjerenih asseta odgovara UDALJENOM branch stablu. I dalje samo
 explicit modified paths na remote base tree, nikad široki git push.
+
+## 44. DEM, potvrđena zima USK, spojeni pojasevi i pregled razmjene/štampe — 2.3.2
+
+2.3.2/code502 sva tri mjesta. DEM na stvarnom uzorku Bos.Krupe iz
+EUDEM izvora (AWS metadata, približno30m); bilinearno sa centrima piksela,
+šavovima pločica i NoData, gradient sa30m stencilom, strogo >30%, potpuni
+grid/OpenMeteo provjera, neispravan cache/decode/kvota i offline profil.
+Ne tvrditi RMSE ili LiDAR kvalitet. Copernicus GLO30 COG39.47MB bezCORS,
+Mapterhorn403; nije neprovjereno zamijenjen izvor. DemQuality modul uSW/APK.
+WinterImagery modul: Esri metadata SRC_DATE, ne datum objave, ≤2m, online,
+bounded pretraga i maska geoBoundaries USK. Stvarni Bihać14.01.2019,
+WV03 native.31m/sampled.30m potvrđen HTTP/tile; ne tvrditi cijeliUSK
+pokriven zimom. Sentinel2 stvarni Feb2026/10m preslab za pojedinačnevlake.
+DozBands: susjedni paralelni izohipsni tragovi sa identičnom međugranicom,
+obrezani odjelom. Dvosmisleni/ukršteni/udaljeni tragovi GPSfallback,
+bez izmišljanja obrade rupa ili promjene GPS-a. Uklonjeno izbacivanje
+vlastitih GPS tačaka kod kolege i širenje preko radijusa; granica u memo.
+Proba4×6dana×2/3pojasa=60/12.060tačaka,57.08ha,49.65procjena,7.43ostatak,
+0.00preklop. Jedan iznad drugog; alternativa2ekipepo2zasebna. PNG/PDF
+outputs/doznaka-sixdays; Node i Leaflet isti obračun, CPU4x1.77s,
+offline reload. Nije stvarni Xiaomi niti produkcijska doznaka.
+Štampa: zajednički SVG lagera, privatna crvena puna, stvarni stilovi karte
+i kolega u legendi, privremeni print editor po vidljivom sloju +Vrsta;
+Zatvori/Reset vraća stilove, PDF provjeren. Server novi3akcenta, autora
+i projekat u zatvorenoj grupi/stavci, stvarne potvrde i ista3projekta;
+jedno dugme/nema novih slanja. Sourced izvještaj:
+docs/DEM_ZIMA_DOZNAKA_2026-10-04.md. CI/APK provjera slijedi.

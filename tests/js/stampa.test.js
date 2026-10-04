@@ -162,7 +162,7 @@ function preview(saved={}) {
     _projekti:[{id:'P',odjel:'14',gj:'Una'}],_aktivniProjektId:'P',sbProfile:{sumarija:'Šumarija Bos.Krupa'},vlake:[],getOdjelBounds:()=>null,showToast(){}};
   vm.createContext(e);
   const constants=['_STP_FORMATI','_STP_PX_MM','_STP_M_PO_PX_PAPIRA','_STP_MJERILA','_STP_BRZA','_STP_KEY'].map(extractConst).join('\n');
-  const fns=['_stpBroj','_stpDatum','_stpZoomZaMjerilo','_stpMjeriloZaZoom','_stpLijepoMjerilo','_stpDimPx','_stpNaslovTekst','_escHtml','_stpSimboli','_stpLegendaPodrazumijevano','_stpAktivniProjekat','_stpPostavkeUcitaj','_stpPostavkeSacuvaj','_stpOverlays','stampaOtvori','_stpOdjelBounds','_stpKontroleRender','_stpPolje','_stpLegNaziv','_stpPregled','_stpUredi','_stpDodajStavku'].map(extractFn).join('\n');
+  const fns=['_stpBroj','_stpDatum','_stpZoomZaMjerilo','_stpMjeriloZaZoom','_stpLijepoMjerilo','_stpDimPx','_stpNaslovTekst','_escHtml','_stpLagerSvg','_stpPutanje','_stpSlojevi','_stpStilVrati','_stpStilPrimijeni','_stpSimboli','_stpLegendaPodrazumijevano','_stpAktivniProjekat','_stpPostavkeUcitaj','_stpPostavkeSacuvaj','_stpOverlays','stampaOtvori','_stpOdjelBounds','_stpKontroleRender','_stpPolje','_stpLegNaziv','_stpPregled','_stpUredi','_stpDodajStavku'].map(extractFn).join('\n');
   vm.runInContext('var _stp=null;'+constants+'\n'+fns+'\nfunction _stpSkalaTraka(){} function _stpRaspored(){_stpOverlays();}',e);
   return {e,els,store,state:()=>vm.runInContext('_stp',e)};
 }

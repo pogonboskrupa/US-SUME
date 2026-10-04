@@ -100,7 +100,7 @@ html[data-field-theme=day] .field-row.good {color:#14532d;}
 html[data-field-theme=day] .field-row.warn {color:#854d0e;}
 html[data-field-theme=day] .field-row {border-color:#cbd5e1;}
 html[data-field-theme=day] .field-note {color:#475569;}
-html[data-field-theme=day] #syncq-panel button:not(#syncq-posalji):not(#syncq-preuzmi):not([aria-selected=true]) {background:#f1f5f9!important;color:#102033!important;border-color:#94a3b8!important;}
+html[data-field-theme=day] #syncq-panel button:not(#syncq-posalji):not(#syncq-preuzmi):not([aria-selected=true]):not([role=tab]) {background:#f1f5f9!important;color:#102033!important;border-color:#94a3b8!important;}
 html[data-field-theme=day] #syncq-panel button[onclick="_syncQueueClearAll()"] {background:#fff1f2!important;color:#991b1b!important;border-color:#991b1b!important;}
 html[data-field-theme=day] #field-status {background:#f0fdf4;color:#14532d;border-color:#166534;}
 html[data-field-theme=day] #field-status.warn {background:#fff7ed;color:#9a3412;border-color:#9a3412;}

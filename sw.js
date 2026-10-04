@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.3.2';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -32,6 +32,10 @@ const APP_SHELL = [
   './static/js/vlaka-direction.js',
   './static/js/vlaka-outline.js',
   './static/js/project-terrain.js',
+  './static/js/dem-quality.js',
+  './static/js/doznaka-bands.js',
+  './static/js/winter-imagery.js',
+  './static/data/usk-boundary.geojson',
   './static/css/map-library.css',
   './static/css/server-panel.css',
   './static/js/field-design.js',

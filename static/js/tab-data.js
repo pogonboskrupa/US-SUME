@@ -118,7 +118,7 @@
     const receivedCount = _serverPrimljenoUcitaj().filter(x => shared.has(x.projektId)).length;
     const sentCount=typeof _serverTransfers==='function'?_serverTransfers('sent').length:0;
     const newReceived=typeof _serverTransfers==='function'?_serverTransfers('received').length:receivedCount;
-    if (tabs) tabs.innerHTML = [['received','Primljeno',newReceived],['sent','Poslano',sentCount],['send','Za slanje',typeof _serverNaCekanju==='function'?_serverNaCekanju().stavki:q.length]].map(([id,label,n]) => '<button role="tab" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')">'+label+' ('+n+')</button>').join('');
+    if (tabs) tabs.innerHTML = [['received','Primljeno',newReceived],['sent','Poslano',sentCount],['send','Za slanje',typeof _serverNaCekanju==='function'?_serverNaCekanju().stavki:q.length]].map(([id,label,n]) => '<button role="tab" data-direction="'+id+'" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')"><i aria-hidden="true">'+({received:'↓',sent:'↑',send:'◷'}[id])+'</i><span>'+label+' ('+n+')</span></button>').join('');
     return problem;
   }
   function serverPrepare(q) {

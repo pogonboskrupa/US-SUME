@@ -125,7 +125,7 @@ async def main():
                 assert await page.locator('.sp-send-group').count()==2
                 for summary in await page.locator('.sp-send-group summary').all():await summary.click()
                 assert '1 GPS tačaka' in await page.locator('#server-send-preview').inner_text()
-                assert 'Projektant: Amir Kolega' in await page.locator('#server-received-items').text_content()
+                assert 'Amir Kolega' in await page.locator('#server-received-items .sp-item-context').text_content()
                 assert 'Poslao: Emina Projektant' in await page.locator('#server-project-summary').inner_text()
                 assert 'Još nije potvrđeno' not in await page.locator('#server-project-summary').inner_text()
                 scroll=await page.locator('#server-scroll').evaluate('(e)=>({height:e.clientHeight,width:e.clientWidth,content:e.scrollWidth})')

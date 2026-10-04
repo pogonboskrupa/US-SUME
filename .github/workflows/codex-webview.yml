@@ -30,7 +30,9 @@ jobs:
       # kad setup-android padne (kao 2026-09-14 na uklonjenom 'tools' paketu)
       # ovaj korak se preskakao pa se iz CI-ja nije vidjelo ni da li kod valja.
       - name: Lokalni JavaScript testovi
-        run: for f in tests/js/*.test.js; do node "$f" || exit 1; done
+        run: |
+          for f in tests/js/*.test.js; do node "$f" || exit 1; done
+          node tests/simulation/doznaka-sixdays.js
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -38,6 +40,10 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
+          python tests/browser/server-design-232.py
+          python tests/browser/print-styles-232.py
+          python tests/browser/dem-winter-232.py
+          python tests/browser/doznaka-sixdays-232.py
           python tests/browser/doznaka-boundary-231.py
           python tests/browser/menu-print-day.py
           python tests/browser/menu-tools.py

@@ -41,17 +41,19 @@ function env(opts = {}) {
   const dom = { onv: { textContent: '' }, 'nv-val': { textContent: '' } };
   const log = { mreza: [], meteo: 0 };
   const caches = { open: async () => ({
-    match: async (u) => kes.has(u) ? { blob: async () => kes.get(u) } : undefined,
+    match: async (u) => kes.has(u) ? (kes.get(u)?.blob?kes.get(u):{ok:true,headers:{get:()=> 'image/png'},blob:async()=>kes.get(u),clone(){return this;}}) : undefined,
+    delete:async u=>kes.delete(u),
     put: async (u, r) => { if (opts.kvotaPoslije != null && kes.size >= opts.kvotaPoslije) { const e = new Error('q'); e.name = 'QuotaExceededError'; throw e; } kes.set(u, r); },
   }) };
   const navigator = { onLine: opts.online !== false };
   const g = {
+    DemQuality: require('../../static/js/dem-quality.js'),
     document: { getElementById: (id) => dom[id] || null },
     window: { caches },                      // 'caches' in window
     caches, navigator,
     // v1.8.8: odluka o vezi — ovdje isto što i OS kaže (izmjereno stanje se testira u net-kvalitet)
     _mrezaProbaj: () => navigator.onLine !== false,
-    createImageBitmap: async (b) => b,
+    createImageBitmap: async (b) => {if(b?.corrupt)throw Error('bad PNG');b.width=b.height=256;return b;},
     _terrariumDecodeTile: (img) => img,
     _TERR_CACHE: 'tvlake-terr-v1',
     _termLon2x: lon2x, _termLat2y: lat2y,
@@ -170,7 +172,7 @@ t('pozicija: DEM ima prednost nad elipsoidnom GPS visinom; 📡 samo kao rezerva
 
 // ── Preuzimanje visina za offline (v1.7.9) ───────────────────────────────
 const bnd = (s, w, n, e) => ({ getSouth: () => s, getWest: () => w, getNorth: () => n, getEast: () => e });
-const slika = () => ({ ok: true, headers: { get: () => 'image/png' } });
+const slika = () => ({ ok: true, headers: { get: () => 'image/png' },blob:async()=>ravnaPlocica(200),clone(){return this;} });
 
 t('područje odjela (~2 km) pokriva 1–4 pločice z12, i sve su tačno one koje N.V. čita', () => {
   const { api } = env();
@@ -198,6 +200,8 @@ t('odgovor koji NIJE slika (200 OK sa HTML-om) se ne kešira — ne truje N.V.',
   const r = await api._nvDemPreuzmi([{ z: 12, x: X12, y: Y12 }]);
   assert.strictEqual(r.gresaka, 1); assert.strictEqual(kes.size, 0);
 });
+
+t('oštećen PNG se ne broji kao spreman teren',async()=>{const {api,kes}=env({dl:()=>({ok:true,headers:{get:()=> 'image/png'},blob:async()=>({corrupt:true}),clone(){return this;}})});const r=await api._nvDemPreuzmi([{z:12,x:1,y:1}]);assert.equal(r.gresaka,1);assert.equal(kes.size,0);});
 
 t('mrežna greška na jednoj pločici ne prekida ostale; puna kvota prekida odmah', async () => {
   let k = 0;
@@ -267,3 +271,4 @@ t('invarijante: onP ne piše GPS visinu direktno, move handler čita N.V. iz mem
   console.log(`\n${pass} prošlo, ${fail} palo`);
   process.exit(fail ? 1 : 0);
 })();
+

@@ -47,10 +47,9 @@
   }
   function tileLat(y,z){return Math.atan(Math.sinh(Math.PI*(1-2*y/Math.pow(2,z))))*180/Math.PI;}
   function gradient(elev,px,py,z,y,pixelMetres){
-    const x0=Math.max(0,px-1),x1=Math.min(255,px+1),y0=Math.max(0,py-1),y1=Math.min(255,py+1);
     const metres=pixelMetres||Math.cos(tileLat(y+(py+.5)/256,z)*Math.PI/180)*156543.03392/Math.pow(2,z);
-    const dx=(elev[py*256+x1]-elev[py*256+x0])/((x1-x0)*metres),dy=(elev[y1*256+px]-elev[y0*256+px])/((y1-y0)*metres);
-    return {percent:Math.hypot(dx,dy)*100,bearing:(Math.atan2(-dx,dy)*180/Math.PI+360)%360};
+    const quality=root.DemQuality||(typeof require==='function'?require('./dem-quality.js'):null);
+    return quality.gradient(elev,px,py,metres);
   }
   function slopeRGBA(percent){
     if(!Number.isFinite(percent)||percent<=30)return [0,0,0,0];
@@ -75,7 +74,7 @@
   function status(){
     const el=node('project-terrain-status');if(!el)return;
     const layers=[slope,aspect].filter(Boolean),missing=layers.reduce((n,l)=>n+l._missing,0),ok=layers.reduce((n,l)=>n+l._ready,0);
-    el.textContent=!layers.length?'Podaci terena: DEM pločice. Za offline rad prethodno preuzmi područje.':missing?'Dio terena nije dostupan. Preuzmi DEM uz internet; prazan dio nije potvrda ravnog terena.':ok?'DEM prikaz učitan za dostupne pločice. Nagib je u procentima; prag je strogo >30%.':'Učitavam model terena…';
+    el.textContent=!layers.length?'Podaci terena: Mapzen / EU-DEM, približno 30 m u BiH. Za offline rad prethodno preuzmi područje.':missing?'Dio terena nije dostupan. Preuzmi DEM uz internet; prazan dio nije potvrda ravnog terena.':ok?'DEM prikaz učitan; veći zum ne dodaje preciznost. Nagib je u procentima; prag je strogo >30%.':'Učitavam model terena…';
   }
   function makeLayer(mode,ring){
     const owner=scope()?.key;
