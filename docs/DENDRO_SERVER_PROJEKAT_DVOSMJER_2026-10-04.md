@@ -49,7 +49,17 @@ Browser proširen za jednu ručnu razmjenu/disable, stvarne panele Projekat i
 Vlake, kompaktan baner, jedan ↔ i ekskluzivan odmak, poligon pri stvarnom
 app izračunu 1:10.000 te dnevni/tamni prikaz na 320/390px i landscape.
 
-CI browser/Android build, objava i sadržaj APK-a: u toku. Lokalni Chromium
+CI 37203728695 na 2f8750bdb4f2fc4651098dafa106659716bf62b5 uspješan:
+86 JS fajlova, 10 browser skripti, Android build/asset SHA provjera i online
+OCR offline gate instrumentacija. Pregledani PNG Server 320px, Projekat
+320px, dvosmjer/pored odjela 1:10.000 i kompaktni recording banner 320px.
+Prvi CI zaustavljen u testu SVGRect.toJSON; test ispravljen getBBox poljima.
+Objavljen v2.3.0: 23.890.289 B, code500. Preuzeti APK: sedam izmijenjenih
+web asseta byte-identično izvoru, GRANICE >10 MB, stvarni v2 cert isti kao
+2.2.9/2.2.8. Release SHA256 potvrđen:
+0f9bb3239c578a36d41ee7fd29f882e0929e482bb9867903de423622901b3ce8.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.0
+ Lokalni Chromium
 ograničen sandbox socket pravilima; pregled PNG-a radi se iz CI artefakta.
 Nije testirano na fizičkom Redmi/Xiaomi telefonu, stvarnom GPS-u ni
 produkcijskom Supabase-u. Simulacije ne potvrđuju potrošnju baterije/OEM

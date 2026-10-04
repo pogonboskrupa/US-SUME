@@ -1672,3 +1672,39 @@ Doznaka prijem: dostupna lista odjela + trenutno otvoren odjel, izričito na UI.
 Detalji: docs/DENDRO_SERVER_PROJEKAT_DVOSMJER_2026-10-04.md.
 Lokalnih 86 JS fajlova prošlo; prošireni 4 postojeća browser pregleda. CI/objava
 i provjera APK-a slijede. Bez fizičkog Android/prod Supabase testiranja.
+
+
+ZAVRŠENO 2.3.0: CI 37203728695 na 2f8750bdb4f2fc4651098dafa106659716bf62b5
+uspješan: 86 JS, 10 browser pregleda, Android build/SHA/OCR offline gate.
+APK 23.890.289 B, code500, objavljen v2.3.0. Preuzet APK: sedam promijenjenih
+web asseta identično HEAD prije novih 2.3.1 izmjena, GRANICE ostao, cert isti
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+SHA256 0f9bb3239c578a36d41ee7fd29f882e0929e482bb9867903de423622901b3ce8.
+Pregledani Server/Projekat/recording 320px i odjel+strelice 1:10.000 PNG.
+
+## 43. Online prijedlog granice odjela sa aktivne topo karte — 2.3.1
+
+Korisnik izričito potvrdio izvor: topografska podloga u aplikaciji, ne
+referentna slika. Novi static/js/doznaka-boundary.js, worker samog modula,
+Doznaka __boundary__ workflow dugme i mali status/prihvati/zadrži ručnu,
+crna/plava/auto, koridor20/50/100m. Ugrađeni Topo ili trenutno uključena
+lokalna raster karta; čita već prikazane tile slike/canvase, samo basemap,
+nikad snimak vectora/ličnih vlaka ili javni OCR servis. Navigator/native
+validated online gate i provjera poslije await. OCR postojećim Play mostom
+isključuje natpise; detektor piksela klasificira odvojene debele izdužene
+crtice uz sve stranice ručnog crteža. Tanke/pune/nepotpune/dvosmislene linije
+ne daju automatsku granicu. Worker max1,5MP/15s, georeferencija zamrznuta pri
+snimku. Bez novog modela/biblioteke ili native/Supabase migracije.
+Ručne tačke ne mijenjaju se do eksplicitnog prihvata zelene geometrije;
+Završi ostaje postojeće vraćanje granice u obrazac odjela. Potez/undo/cancel/
+finish/izvor/identitet štite od zakasnjelog odgovora. Fajl je u SW i Android
+manifestu, online-only pomoć uz offline-normalno crtanje.
+2.3.1/code501 sva tri mjesta. 87 lokalnih JS fajlova prošlo (12 novih
+geometrijskih scenarija), sva JS/inline/Python sintaksa. Novi stvarni Leaflet
+raster/worker browser test u CI prije APK-a. Detalji:
+docs/DOZNAKA_TOPO_GRANICA_2026-10-04.md. CI/objava slijede.
+Korisnik pitao Xiaomi/Nova smeđi okvir ikone: source background tamnozelen
+#002B18, foreground ranije scaled .42, nema smeđe u podešenoj pozadini.
+Odgovoreno da veličinu objašnjava app padding, boju može launcher/theme;
+bez screenshot/fizičkog uređaja uzrok nije potvrđen. Ikona nije ponovo
+mijenjana samo na osnovu pitanja.

@@ -63,6 +63,7 @@ async function addLabel(){
   const h=Math.max(8,Math.min(30,_refImg.height*.025)),w=Math.max(10,nm.length*h*.65);manual.push({text:nm,nm,x0:p.imgX-w,y0:p.imgY-h,x1:p.imgX+w,y1:p.imgY+h,manual:true});stopMark();say(nm+' označena. Pokreni detekciju linija.');$('refkarta-detect-status').textContent=manual.length+' ručno označenih natpisa T + broj.';};map.on('click',marking);
 }
 function ocr(canvas){if(!root.AndroidReferenceOcr?.recognize)return Promise.resolve([]);const id='ref_'+(++request);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{if(pending?.id===id)pending=null;reject(Error('Prepoznavanje nije završeno. Pokušaj manji izrez slike ili označi natpise ručno.'));},90000);pending={id,resolve,reject,timer};try{AndroidReferenceOcr.recognize(id,canvas.toDataURL('image/png'));}catch(e){clearTimeout(timer);pending=null;reject(e);}});}
+async function readWords(canvas){if((typeof navigator!=='undefined'&&navigator.onLine===false)||(root.AndroidReferenceOcr?.isOnline&&!root.AndroidReferenceOcr.isOnline()))throw Error('Prepoznavanje traži internet.');if(pending)throw Error('Drugo prepoznavanje još traje. Sačekaj završetak.');return ocr(canvas);}
 function ocrReply(result){if(!pending||pending.id!==result?.id)return;const p=pending;pending=null;clearTimeout(p.timer);result.error?p.reject(Error(result.error)):p.resolve(Array.isArray(result.words)?result.words:[]);}
 async function detect(options){
  if((typeof navigator!=='undefined'&&navigator.onLine===false)||(root.AndroidReferenceOcr?.isOnline&&!root.AndroidReferenceOcr.isOnline())){const message='Prepoznavanje traži internet. Poveži se i pokušaj ponovo.';if($('refkarta-detect-status'))$('refkarta-detect-status').textContent=message;say(message);return;}
@@ -94,7 +95,7 @@ async function importSelected(){
  }finally{importing=false;if(rows.length)render();}
 }
 function view(id){const r=rows[Number(id)];if(!r)return;if(typeof switchTab==='function')switchTab('karta');map.fitBounds(L.latLngBounds(r.latlngs),{padding:[30,40],maxZoom:19});}
-root.ReferenceVlake={nameOf,labelsFromWords,distanceToPath,linkPaths,pixelToLL,detect,ocrReply,addLabel,stopMark,isMarking:()=>!!marking,invalidate,refreshQuick,toggleQuick,showQuick,importSelected,selectRow,view};
+root.ReferenceVlake={nameOf,labelsFromWords,distanceToPath,linkPaths,pixelToLL,detect,readWords,ocrReply,addLabel,stopMark,isMarking:()=>!!marking,invalidate,refreshQuick,toggleQuick,showQuick,importSelected,selectRow,view};
 if(typeof module!=='undefined'&&module.exports)module.exports=root.ReferenceVlake;
 if(typeof document!=='undefined'){document.addEventListener('change',e=>{if(e.target.dataset?.refRow!==undefined)selectRow(e.target.dataset.refRow,e.target.checked);});document.addEventListener('click',e=>{const b=e.target.closest('[data-ref-view]');if(b)view(b.dataset.refView);});document.addEventListener('keydown',e=>{if(e.key==='Escape')stopMark();});}
 })(typeof window!=='undefined'?window:globalThis);

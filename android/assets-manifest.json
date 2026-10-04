@@ -40,6 +40,7 @@
     "static/js/map-catalog.js",
     "static/js/project-terrain.js",
     "static/js/reference-vlake.js",
+    "static/js/doznaka-boundary.js",
     "static/js/vlaka-outline.js",
     "static/js/vlaka-direction.js"
   ]

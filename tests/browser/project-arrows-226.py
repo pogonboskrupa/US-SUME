@@ -45,6 +45,7 @@ async def main():
    distances=await page.evaluate("testV._directionMarkers.map(m=>{const p=ptAtFrac(testV.pts,m._directionFraction),a=map.latLngToLayerPoint([p.la,p.lo]),b=map.latLngToLayerPoint(m.getLatLng());return Math.hypot(a.x-b.x,a.y-b.y)})")
    assert await page.evaluate('testV._directionMarkers.length')==before
    assert all(v>10 if mode=='beside' else v<1 for v in distances),distances
+  await page.evaluate('map.removeLayer(block)')
   # Pregled jednog odjela pri stvarnoj CSS razmjeri 1:10.000 (isti izračun kao app).
   await page.evaluate("window.testDepartment=L.polygon([[44.898,15.999],[44.902,15.999],[44.902,16.011],[44.898,16.011]],{color:'#64748b',weight:1.5,fillOpacity:.08}).addTo(map);map.options.zoomSnap=0;map.setView([44.9,16.005],zoomForScale(10000,44.9),{animate:false})")
   for theme in ['day','dark']:
