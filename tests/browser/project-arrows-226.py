@@ -36,7 +36,7 @@ async def main():
   assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02
   assert await page.evaluate('testV._directionMarkers.map(m=>m._directionSign)')==[-1,0,1]
   assert await page.evaluate("testV._directionMarkers.filter(m=>m._directionSign===0).length")==1
-  icon=await page.evaluate("()=>{const m=testV._directionMarkers.find(m=>m._directionSign===0),e=m.getElement().querySelector('svg'),p=e.querySelector('path:last-child');return {label:e.getAttribute('aria-label'),path:p.getAttribute('d'),stroke:p.getAttribute('stroke-width'),bounds:p.getBBox().toJSON()}}")
+  icon=await page.evaluate("()=>{const m=testV._directionMarkers.find(m=>m._directionSign===0),e=m.getElement().querySelector('svg'),p=e.querySelector('path:last-child');return {label:e.getAttribute('aria-label'),path:p.getAttribute('d'),stroke:p.getAttribute('stroke-width'),bounds:{width:p.getBBox().width,height:p.getBBox().height}}}")
   assert icon['label']=='Dvosmjer koji je odabrao projektant';assert 'L -9 0' in icon['path'] and 'L 9 0' in icon['path'];assert icon['bounds']['width']==18
   assert await page.locator('#project-arrow-placement').count()==1
   before=await page.evaluate('testV._directionMarkers.length')
