@@ -1642,3 +1642,18 @@ Postojeće radnje/checkbox/pamćenje izbora ostaju. Dopunjen postojeći browser
 project-terrain-222.py za redoslijed, slike i day/dark responsive pregled.
 Dodatna deveta integritet provjera: jedna vlaka 3 km / 751 tačka, odbijanje
 GPS tačnosti 40m, označen 2-min GPS prekid i p95 obrade fiksa u Node cloudu.
+
+
+ZAVRŠENO 2.2.9: CI 37193603513 na e26121a349f69e9ce83a6286bd93366d460df1cc
+uspješan: 86 JS fajlova, 10 browser skripti, Android build, web asset SHA,
+OCR offline network instrumentacija i sintetička analiza brzine. Teren
+artefakt 11300107120: 9 integritet scenarija i 24 browser mjerenja.
+CPU4x offline 1.360/5.410 tačaka: prikaz 23,6/34,6ms, upis 1,4/4,9ms;
+requestAnimationFrame mjerenje nije FPS niti stvarni Redmi. Pregledani PNG
+Instalirane day320/dark390. Release v2.2.9/API latest potvrđen, APK
+23.878.221 B (23,88 MB), code499. Preuzet APK, 15 web fajlova byte-identično,
+16 nativnih PNG-a piksel-identično, GRANICE ostao, nema OCR modela, stvarni
+signing cert isti kao 2.2.8 (v2 signing block provjera).
+APK SHA256: 5d3479e281f94d308a161f2e6c3dc061882d33bc5c117ece478c25abc19a673f.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.9
+Bez fizičkog uređaja/GPS/Xiaomi baterije i produkcijskog Supabase testa.
