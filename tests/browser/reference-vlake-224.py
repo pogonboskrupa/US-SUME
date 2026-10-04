@@ -6,6 +6,7 @@ spec=importlib.util.spec_from_file_location('project',Path(__file__).with_name('
 start=b.SOURCE.index('let _refVisible =');code=b.SOURCE[start:b.SOURCE.index('// ─── Repozitorij referentnih slika',start)]
 code+='\n'.join(b.function(n) for n in ['ReferenceVlakePreset','_refDetModeChanged','_refPickColorFromMap','refKartaRunDetect','_refKartaDoDetect','_refRemoveSmallComponents','_refBoldFilter','_zhangSuenThin','_traceSkeleton','_dpSimplify2D','_refJoinPaths','_saveLocalVlake','calcL','ptAtFrac','ptDist'])
 code+='''
+map.createPane('vlakeLines');
 const LOCAL_VLAKE_KEY='fixture-ref-vlake',graniceOdjeli=[];let _refDetectedLines=[];
 let saveCalls=[],confirmWait=null;const _dlgConfirm=async()=>true,_dlgPrompt=async()=> 'T7';
 const _vlakeRenderer=L.canvas({pane:'vlakeLines'}),_refRepoLoad=()=>{},_oslobodiPaneRenderer=()=>{},_mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
@@ -34,8 +35,11 @@ async def main():
   await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts)
   assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T3','T12'],await page.locator('#refkarta-detect-status').inner_text()
   # Linije bez T oznake i granica nisu predložene; originalni brojevi se čuvaju.
-  await page.context.set_offline(True);await page.evaluate('ReferenceVlake.importSelected()')
-  assert await page.evaluate('saveCalls')==['T3','T12'];assert await page.evaluate("JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY)).some(v=>v.nm==='T12'&&v.projekt_id==='P')")
+  await page.context.set_offline(True)
+  await page.evaluate("window.beforeCount=vlake.length;window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===LOCAL_VLAKE_KEY)throw new DOMException('full','QuotaExceededError');return oldSet.call(this,k,v)}")
+  await page.evaluate('ReferenceVlake.importSelected()');assert await page.evaluate('vlake.length===beforeCount&&saveCalls.length===0&&_refDetectedLines.length===2')
+  await page.evaluate('Storage.prototype.setItem=oldSet;ReferenceVlake.importSelected()')
+  assert await page.evaluate('saveCalls')==['T3','T12'],await page.evaluate('({saveCalls,count:vlake.length,rows:_refDetectedLines.map(r=>r.nm)})');assert await page.evaluate("JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY)).some(v=>v.nm==='T12'&&v.projekt_id==='P')")
   await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts);assert await page.evaluate('_refDetectedLines.length')==0;assert 'Već postoji' in await page.locator('#refkarta-results').inner_text()
   # Refitting ostaje skriven i ne briše geometriju; radi i za server overlay.
   await page.click('#refkarta-quick');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden';await page.evaluate('_placeRefOverlay()');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden'
@@ -53,6 +57,14 @@ async def main():
   assert await page.evaluate('dirV._directionMarkers.length')==3
   await page.evaluate("VlakaDirection.setPopup('start')");assert await page.evaluate('dirV._directionMarkers.length')==2
   await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='auto';await page.evaluate("sbUser={id:'A'}")
+  # Stvarni Leaflet Canvas: tačke su krugovi, crtice imaju kratke vidljive razmake.
+  for z in [13,15,17]:
+   for mode in ['dash','dot']:
+    result=await page.evaluate("""async ({z,mode})=>{map.setZoom(z,{animate:false});map.invalidateSize();const renderer=L.canvas({pane:'vlakeLines'}),ll=[map.containerPointToLatLng([35,110]),map.containerPointToLatLng([350,110])],line=L.polyline(ll,{color:'#ff00ff',weight:4,..._vlakaStroke(mode,4,z),renderer,pane:'vlakeLines'}).addTo(map);await new Promise(r=>setTimeout(r,80));const y=Math.round(map.latLngToLayerPoint(map.containerPointToLatLng([40,110])).y-renderer._bounds.min.y),x=Math.round(map.latLngToLayerPoint(map.containerPointToLatLng([40,110])).x-renderer._bounds.min.x),pixels=renderer._container.getContext('2d').getImageData(x,y,280,1).data;let runs=[],last=null,count=0;for(let i=0;i<280;i++){const ink=pixels[i*4]>200&&pixels[i*4+1]<80&&pixels[i*4+2]>200&&pixels[i*4+3]>100;if(ink===last)count++;else{if(last!==null)runs.push({ink:last,count});last=ink;count=1;}}map.removeLayer(line);map.removeLayer(renderer);return runs.slice(1,-1);} """,{'z':z,'mode':mode})
+    ink=[r['count'] for r in result if r['ink']];gaps=[r['count'] for r in result if not r['ink']]
+    assert len(ink)>10 and max(gaps)<=5,(z,mode,result)
+    if mode=='dot':assert max(ink)<=5,(z,mode,result)
+    else:assert min(ink)>=5 and max(ink)<=10,(z,mode,result)
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(568,320),(800,600)]:
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#fixture-project').style.display='none';document.querySelector('#fixture-ref').style.display='block';document.querySelector('#fixture-ref').scrollTop=0}",theme)
