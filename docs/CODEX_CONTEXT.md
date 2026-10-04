@@ -1467,5 +1467,26 @@ poništavanje vraćaju normalne dodire. Browser test sada koristi stvarni
 touchscreen.tap preko markera (bez map.fire), provjerava da marker ne dobije
 klik tokom označavanja, a dobije ga poslije; provjerava i Escape.
 Web/SW/Android 2.2.5, code 495. JS provjere referentne karte, smjerova i
-projekata te Python sintaksa prošle; završni CI/izdanje slijede. 2.2.4 se ne
-prepisuje drugim APK-om istog broja verzije.
+projekata te Python sintaksa prošle. GitHub CI 37184791115 na
+85c5c7a9c99684932a4358645c4ad6562eee5dd2 uspješan: svih 83 JS test fajla,
+svih 7 browser skripti (uključujući stvarni dodir), 38 web asset SHA-256
+provjera, Android build i stvarni instrumentacijski offline OCR. Sintetička
+analiza brzine online/offline također prošla; nije mjerenje fizičkog Redmi
+telefona. v2.2.5 objavljena 2026-10-04, latest /releases?per_page=1 vraća
+v2.2.5 sa app-debug.apk (65.120.728 B). Artefakt preuzet i APK SHA-256 lokalno
+izračunat te upoređen s GitHub Release digestom:
+8c09fe04123bc39a2e432ece17c400b581caadfec3670281c35cac54c8dab99a.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.5
+Ažuriranje: Meni → Ažuriraj aplikaciju; postojeći isti debug potpis.
+2.2.4 se ne prepisuje drugim APK-om istog broja verzije. Fizički telefon i
+stvarna korisnička papirna karta nisu testirani; smjer je lokalna postavka
+prikaza na telefonu, bez promjene serverske šeme.
+
+Napomena za nastavak: lokalni workspace je djelimična rekonstrukcija, sa
+nedostajućim ikonama/GRANICE.kml/putevima i nekim starijim kopijama biblioteka,
+manifest.json i drugih helpera. Lokalni assets.py verify staje već na
+icon-192.png; puni CI checkout je provjerio 38 fajlova. Ne zamjenjivati remote
+baseline tim lokalnim kopijama. Direktna provjera preuzetog APK-a potvrdila
+je prisustvo svih 35 eksplicitnih/lokalno pronađenih asset putanja, podudaranje
+18 raspoloživih lokalnih izvora i novu verziju/klasu reference-marking;
+autoritet za puni sadržaj ostaje CI SHA provjera i jednaki release/APK digest.
