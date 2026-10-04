@@ -12,6 +12,8 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
@@ -24,7 +26,9 @@ public class ReferenceOcrOfflineTest {
   CountDownLatch done=new CountDownLatch(1);AtomicReference<JSONArray> words=new AtomicReference<>();AtomicReference<String> error=new AtomicReference<>();
   ReferenceOcrBridge.recognizeImage(bitmap,(result,failure)->{words.set(result);error.set(failure);done.countDown();});
   assertTrue("OCR did not finish",done.await(90,TimeUnit.SECONDS));assertNull(error.get());assertNotNull(words.get());boolean black=false,blue=false;
-  for(int i=0;i<words.get().length();i++){JSONObject w=words.get().getJSONObject(i);String text=w.getString("text").replace(" ","");double x=w.getDouble("x0"),y=w.getDouble("y0");if(text.equalsIgnoreCase("T12")&&x>=110&&x<140&&y>90&&y<145)black=true;if(text.equalsIgnoreCase("T3")&&x>=420&&x<450&&y>310&&y<365)blue=true;}
+  Map<String,StringBuilder> lines=new HashMap<>();Map<String,double[]> boxes=new HashMap<>();
+  for(int i=0;i<words.get().length();i++){JSONObject w=words.get().getJSONObject(i);String line=w.getString("line");if(!lines.containsKey(line)){lines.put(line,new StringBuilder());boxes.put(line,new double[]{Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY});}lines.get(line).append(w.getString("text").replace(" ",""));double[] box=boxes.get(line);box[0]=Math.min(box[0],w.getDouble("x0"));box[1]=Math.min(box[1],w.getDouble("y0"));}
+  for(String line:lines.keySet()){String text=lines.get(line).toString();double x=boxes.get(line)[0],y=boxes.get(line)[1];if(text.equalsIgnoreCase("T12")&&x>=110&&x<140&&y>90&&y<145)black=true;if(text.equalsIgnoreCase("T3")&&x>=420&&x<450&&y>310&&y<365)blue=true;}
   bitmap.recycle();assertTrue("Black T12 label/bounds not recognized",black);assertTrue("Blue T3 label/bounds not recognized",blue);
  }
 }

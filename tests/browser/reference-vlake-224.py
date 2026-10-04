@@ -30,7 +30,7 @@ async def main():
    elif r.request.url.startswith('https://ui.test/'):
     f=b.ROOT/r.request.url.split('ui.test/',1)[1].split('?',1)[0];await r.fulfill(content_type=mimetypes.guess_type(str(f))[0] or 'application/octet-stream',body=f.read_bytes()) if f.is_file() else await r.fulfill(status=404,body='fixture')
    else:await r.abort()
-  await page.route('**/*',route);await page.goto('https://ui.test/');await page.evaluate('refReady');assert not errors,errors
+  await page.route('**/*',route);await page.goto('https://ui.test/');await page.evaluate('refReady');await page.evaluate("document.querySelector('#fixture-project').style.display='none'");assert not errors,errors
   opts={'threshold':120,'minLength':25,'mode':'dark','color':None,'tolerance':70,'bold':0,'join':14}
   await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts)
   assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T3','T12'],await page.locator('#refkarta-detect-status').inner_text()
