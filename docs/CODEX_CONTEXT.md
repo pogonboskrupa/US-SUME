@@ -1490,3 +1490,52 @@ baseline tim lokalnim kopijama. Direktna provjera preuzetog APK-a potvrdila
 je prisustvo svih 35 eksplicitnih/lokalno pronađenih asset putanja, podudaranje
 18 raspoloživih lokalnih izvora i novu verziju/klasu reference-marking;
 autoritet za puni sadržaj ostaje CI SHA provjera i jednaki release/APK digest.
+
+
+## 39. Projektantska razdjelnica, strelice projekta i outline — 2.2.6
+
+Korisnik je pojasnio da „polovica“ nije 50% dužine: projektant odlučuje gdje
+je bliži jedan ili drugi izlaz na put, samo ako vlaka ima dva izlaza. Ova
+uputa zamjenjuje ranije tumačenje iz 37/38. Dodan izbor dodirom na vlaku i
+GPS dugme „Dva izlaza na put · Razdjelnica ovdje“ na zadnjoj prihvaćenoj
+tački; pauza onemogućava označavanje „ovdje“. Početak/kraj/Auto i dalje nude
+jednosmjerni prikaz. Nema automatskog dvosmjera niti matematičke sredine.
+Stari string both bez tačke više ne crta strelice dok projektant ne odabere
+razdjelnicu. Korisnik izborom dva izlaza potvrđuje odgovarajući slučaj;
+program ne nagađa drugi izlaz iz topografske blizine puta.
+
+Smjer zapis ostaje u lokalnom korisnik/projekat/autor+naziv ključu v1,
+ali both zapis sada ima split {la,lo,atM}. Tačka se projicira na geometriju,
+atM razlikuje ponovni prolaz kroz isto mjesto, nastavak vlake ne pomjera
+razdjelnicu na novu polovinu. Izbor s karte mora biti unutar 40 m i između
+krajeva. Tokom snimanja dozvoljen kraj čeka nastavak prema drugom putu.
+Map hit-test se privremeno isključuje klasom direction-picking; završetak,
+Escape, drugi tab/projekat/nalog i uklanjanje vlake vraćaju normalne dodire.
+Upis prvo potvrđuje localStorage, quota zadržava stari položaj/postavke.
+
+Na samom dnu Projekta poslije poligona: Strelice prema putu, checkbox za
+prikaži/sakrij, debljina 1–6 px, veličina 18–48 px, boja ili boja vlake/kraka,
+broj Auto (1/2 preko 300 m) ili 1–8, izbor prikaza oznake razdjelnice,
+lista vlastitih/koleginih vlaka za uređivanje i reset samo izgleda. Kod dva
+izlaza najmanje po jedna strelica na svakoj strani; oznaka razdjelnice se ne
+broji u količinu strelica. Postavke izgleda odvojene po nalogu/projektu u
+ključu tvlake_direction_style_v1. Prikaz uključuje kolegine linije. Sve ove
+postavke su lokalne; nema nove Supabase šeme/upisa i promjene geometrije.
+
+Dodatni korisnički zahtjev: Boje vlaka → Dodaj outline. Opt-in checkbox,
+projektno polje outline, bijela/crna prema relativnoj luminanciji glavne
+boje. Ukupna debljina 1.14× glavne (14% proširenja, tj. 7% sa svake strane).
+static/js/vlaka-outline.js dodaje drugi Canvas stroke prije glavnog s istim
+dash/dot uzorkom/kapicama; SVG fallback zaseban neinteraktivni path prati
+geometriju/stil i uklanja se s linijom. Ne dodaje zaseban Leaflet/GIS sloj.
+Vlastite/kolegine vlake i kraci odmah dobijaju isti stil; nove linije također.
+PWA i APK manifest uključuju novi modul. Upute dopunjene.
+
+Web/SW/Android 2.2.6, code 496. Lokalno prošla 84 JS test fajla, 5 inline JS
+sintaksi i module/Python sintakse. Pure testovi provjeravaju 20%/80%
+razdjelnicu, stabilnost pri produžavanju/povratku, bez legacy sredine,
+kontrast obruba i <15% širine. Novi browser test project-arrows-226.py
+provjerava stvarni dodir preko markera, stale/cancel/quota, GPS nastavak,
+projektne/naložne postavke, vlastite/kolegine strelice, stvarni SVG/Canvas
+outline i 16 PNG prikaza. CI/release rezultati slijede. Nije korišten fizički
+telefon, pravi GPS/putevi niti produkcijski Supabase.

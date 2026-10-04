@@ -67,7 +67,7 @@ async def main():
   assert await page.evaluate('''()=>{const ll=ReferenceVlake.pixelToLL(400,300),actual=map.latLngToLayerPoint(ll),a=map.latLngToLayerPoint([44.9,16]),b=map.latLngToLayerPoint([44.895,16.008]);return Math.hypot(actual.x-(a.x+b.x)/2,actual.y-(a.y+b.y)/2)<2}''')
   await page.evaluate('_refCPs=[];_placeRefOverlay()')
   # Jedna/dvije strelice, srednji dvosmjer, lokalna postavka po nalogu.
-  await page.evaluate("window.dirV=vlake.find(v=>v.nm==='T12');_vpIdx=vlake.indexOf(dirV);_vpSharedKey=null;VlakaDirection.setPopup('both')")
+  await page.evaluate("()=>{window.dirV=vlake.find(v=>v.nm==='T12');_vpIdx=vlake.indexOf(dirV);_vpSharedKey=null;const p=ptAtFrac(dirV.pts,.2),atM=VlakaDirection.routeProjection(dirV.pts,p).atM;localStorage.setItem(VlakaDirection.storeKey('P'),JSON.stringify({[VlakaDirection.identity(dirV)]:{mode:'both',split:{...p,atM}}}));VlakaDirection.draw(dirV);}")
   assert await page.evaluate('dirV._directionMarkers.length')==3
   await page.evaluate("VlakaDirection.setPopup('start')");assert await page.evaluate('dirV._directionMarkers.length')==2
   await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='auto';await page.evaluate("sbUser={id:'A'}")

@@ -4897,6 +4897,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
               <button class="boja-dash-btn" data-d="dot" onclick="_bojaDashChange('dot')">· Tačke</button>
             </div>
           </div>
+          <label class="arrow-check outline-choice"><input id="boja-outline" type="checkbox" onchange="_bojaChange('outline',this.checked)"><span>Dodaj outline<small>Sitni bijeli / crni obrub prema glavnoj boji · ukupno proširenje 14%</small></span></label>
         </div>
       </div>
 
@@ -4955,7 +4956,25 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
         </div>
       </section>
+      <section class="sec proj-akt-only project-arrows">
+        <div class="sec-t">Strelice prema putu</div>
+        <b id="project-arrow-context"></b>
+        <p class="project-vl-note">Vlastite i kolegine vlake ovog projekta. Dva smjera koristi samo za vlaku s izlazom na put na oba kraja; mjesto razdvajanja određuje projektant.</p>
+        <label class="terrain-check"><input id="project-arrow-visible" type="checkbox" checked onchange="VlakaDirection.change('visible',this.checked)"><span><b>Prikaži strelice</b><small>Sakrij / prikaži sve strelice projekta</small></span><span id="project-arrow-preview" aria-hidden="true"></span></label>
+        <div class="arrow-style-grid">
+          <label>Debljina poteza <output id="project-arrow-width-value">2.5 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2.5" oninput="VlakaDirection.change('width',this.value)"></label>
+          <label>Veličina strelice <output id="project-arrow-size-value">30 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="2" value="30" oninput="VlakaDirection.change('size',this.value)"></label>
+          <label>Strelice po vlaci<select id="project-arrow-count" onchange="VlakaDirection.change('count',this.value)"><option value="0">Automatski: 1 / 2 preko 300 m</option><option value="1">1 strelica</option><option value="2">2 strelice</option><option value="3">3 strelice</option><option value="4">4 strelice</option><option value="6">6 strelica</option><option value="8">8 strelica</option></select></label>
+          <label>Boja strelica<input id="project-arrow-color" type="color" value="#2563eb" onchange="VlakaDirection.change('color',this.value)"></label>
+        </div>
+        <label class="arrow-check"><input id="project-arrow-inherit" type="checkbox" checked onchange="VlakaDirection.change('inherit',this.checked)"> Koristi boju vlake / kraka</label>
+        <label class="arrow-check"><input id="project-arrow-separator" type="checkbox" checked onchange="VlakaDirection.change('separator',this.checked)"> Prikaži oznaku razdjelnice</label>
+        <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka razdjelnice ne ulazi u broj strelica. Izgled i odabir razdjelnice čuvaju se na ovom telefonu.</p>
+        <div class="arrow-route-edit"><label for="project-arrow-route">Smjer i razdjelnica pojedine vlake</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
+        <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
+      </section>
     </div><!-- /proj-panel -->
+
 
     <!-- ═══ ADMIN — KORISNICI PANEL ═══ -->
     <div id="admin-panel" style="display:none;flex-direction:column;height:100%;overflow:hidden;background:#0f172a;">
@@ -5553,6 +5572,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span id="rec-signal" style="display:none;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;font-family:monospace;"></span>
           <div id="rec-slope" style="display:none;font-size:12px;font-weight:bold;font-family:monospace;"></div>
         </div>
+        <button id="rec-direction-split" type="button" hidden onclick="VlakaDirection.markRecording()" title="Samo za vlaku koja će izaći na put na oba kraja">Dva izlaza na put · Razdjelnica ovdje</button>
         <div id="rec-pause-row"><span style="font-size:15px;">⏸</span><span>Pauzirano — GPS tačke se ne bilježe. <b>Nastavi</b> ili <b>Završi</b> dolje.</span></div>
         <div id="bg-warning" style="display:none;background:#7c2d12;padding:4px 13px;font-size:11px;color:#fed7aa;text-align:center;">
           ⚠ App u pozadini — GPS može biti pauziran
@@ -5691,7 +5711,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.2.5';
+const APP_VER = 'v2.2.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -9755,7 +9775,7 @@ async function startManualVlakaDraw() {
   }
 
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+  const poly = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(nm), { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
   const strVal = kr > 0 ? (kr % 2 !== 0 ? 'L' : 'D') : null;
@@ -10142,7 +10162,7 @@ async function impVlakaConfirm() {
   const created = [];
   for (let idx=start;idx<vlake.length;idx++) {
     const t=vlake[idx],color=t.color;
-    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+    const poly = L.polyline(t.pts.map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(_escHtml(t.nm), { sticky: true, opacity: 0.9 });
     attachPolyClick(poly);
     t.poly=poly;
@@ -10411,7 +10431,7 @@ function _applyVlakeRows(rows) {
     // Linija se gradi odjednom: addLatLng po tački tjera Leaflet da poslije SVAKE
     // tačke ponovo projektuje i iscrta cijelu liniju — kvadratno (izmjereno 0,7 s
     // za 40 vlaka pri pokretanju, v1.9.3).
-    const poly  = L.polyline((row.pts || []).map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+    const poly  = L.polyline((row.pts || []).map(p => [p.la, p.lo]), { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
     poly.bindTooltip(_escHtml(row.nm), { sticky: true, opacity: 0.9 });
     const v = { nm: row.nm, br: row.br, kr: row.kr, strana: row.strana || null, color, lager: row.lager || '', lagerPt: row.lager_pt || null, naPutu: !!row.na_putu, pts: row.pts || [], poly, wpts: row.wpts || [], sbId: row.id || null, projektId: row.projekt_id || null, projektantIme: row.projektant_ime || null, labelMk: null, lagerMk: null, extraLabels: [], updatedAt: row.updated_at || null, rev: row.rev != null ? row.rev : null };
     vlake.push(v);
@@ -13834,6 +13854,7 @@ function _loadBoje(id = typeof _aktivniProjektId==='undefined' ? null : _aktivni
   for(const k of ['vlaka','krak'])if(!/^#[a-f\d]{6}$/i.test(b[k]||''))delete b[k];
   if(!Number.isFinite(b.weight)||b.weight<2||b.weight>8)delete b.weight;
   if(!['solid','dash','dot'].includes(b.dash))delete b.dash;
+  if(typeof b.outline!=='boolean')delete b.outline;
   return b;
 }
 function _saveBoje(b) {
@@ -13845,6 +13866,7 @@ function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
 function getBojaKraka() { return _loadBoje().krak || '#f87171'; }
 function getVlakaWeight() { return _loadBoje().weight || 4; }
 function getVlakaLineCap() { return getVlakaDash()==='dash'?'butt':'round'; }
+function getVlakaOutline() { return _loadBoje().outline===true; }
 function getVlakaDash() { return _loadBoje().dash || 'solid'; }
 function _vlakaStroke(d,weight,zoom) {
  const w=weight||4,z=Number.isFinite(zoom)?zoom:15,f=Math.max(.55,Math.min(1,Math.pow(2,(z-15)*.2)));
@@ -13858,13 +13880,14 @@ function _vlakaPrikazColor(v) {
 }
 function _vlakaPrikazStyle(v) {
   const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId),d=b.dash||'solid';
-  return {color:_vlakaPrikazColor(v),weight:b.weight||4,..._vlakaStroke(d,b.weight||4,typeof map!=='undefined'?map.getZoom():15)};
+  return {color:_vlakaPrikazColor(v),weight:b.weight||4,vlakaOutline:b.outline===true,..._vlakaStroke(d,b.weight||4,typeof map!=='undefined'?map.getZoom():15)};
 }
 function _bojaChange(prop,value) {
   if(['vlaka','krak'].includes(prop)&&!/^#[a-f\d]{6}$/i.test(value))return;
   if(prop==='weight'&&(!Number.isFinite(value)||value<2||value>8))return;
   if(prop==='dash'&&!['solid','dash','dot'].includes(value))return;
-  if(!['vlaka','krak','weight','dash'].includes(prop))return;
+  if(prop==='outline'&&typeof value!=='boolean')return;
+  if(!['vlaka','krak','weight','dash','outline'].includes(prop))return;
   const b={vlaka:getBojaVlake(),krak:getBojaKraka(),..._loadBoje(),[prop]:value};
   if(!_saveBoje(b))return;
   _vlakaStilApply();_rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
@@ -13880,6 +13903,7 @@ function _vlakaStilApply() {
 }
 function _rndBojaPresets() {
   const vlCol=getBojaVlake(),krCol=getBojaKraka(),disabled=!_aktivniProjektId;
+  const outline=document.getElementById('boja-outline');if(outline){outline.checked=getVlakaOutline();outline.disabled=disabled;}
   const context=document.getElementById('boja-project-context');
   if(context){const p=(_projekti||[]).find(p=>p.id===_aktivniProjektId);context.textContent=p?[p.gj,p.odjel?'Odjel '+p.odjel:''].filter(Boolean).join(' · '):'Aktiviraj projekat da podesiš njegove boje.';}
   for(const [type,col,handler]of [['vl',vlCol,'_bojaVlChange'],['kr',krCol,'_bojaKrChange']]){
@@ -14035,7 +14059,7 @@ function _recoverVlakaSnapshot(snap) {
   const existing = vlake.findIndex(v => v.nm === nm && (v.projektId || null) === pid);
   if (existing >= 0) return existing;
   const color = snap.color || '#f97316';
-  const poly = L.polyline([], { color, weight:getVlakaWeight(), dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round',
+  const poly = L.polyline([], { color, weight:getVlakaWeight(), dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false,
     opacity:0.9, pane:'vlakeLines', renderer:_vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(nm), { sticky:true, opacity:0.9 });
   attachPolyClick(poly);
@@ -16118,6 +16142,7 @@ map.on('click', e => {
   if (_activeTab !== 'karta') { switchTab('karta'); return; }
   if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.isDrawing())return;
   if(typeof ReferenceVlake!=='undefined'&&ReferenceVlake.isMarking())return;
+  if(typeof VlakaDirection!=='undefined'&&VlakaDirection.isPicking())return;
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
@@ -17666,7 +17691,7 @@ function vcCancel() {
 async function _doCreateVlaka(br, kr) {
   const nm = kr === 0 ? `T${br}` : `T${br}.${kr}`;
   const color = kr > 0 ? getBojaKraka() : getBojaVlake();
-  const poly = L.polyline([],{color,weight:getVlakaWeight(),dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round',opacity:0.9,pane:'vlakeLines',renderer:_vlakeRenderer}).addTo(map);
+  const poly = L.polyline([],{color,weight:getVlakaWeight(),dashArray:getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false,opacity:0.9,pane:'vlakeLines',renderer:_vlakeRenderer}).addTo(map);
   poly.bindTooltip(_escHtml(nm),{sticky:true,opacity:0.9});
   attachPolyClick(poly);
   vlake.push({nm,br,kr,color,lager:'',pts:[],poly,wpts:[],sbId:null,projektId:_aktivniProjektId||null,labelMk:null,lagerMk:null,extraLabels:[],updatedAt:new Date().toISOString()});
@@ -17861,6 +17886,7 @@ function _updBanner() {
 }
 
 function _updRecStatusBar() {
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.refreshRecording();
   const bar = document.getElementById('rec-status-bar');
   if (!bar) return;
   if (!recOn) {
@@ -18455,7 +18481,7 @@ function noviKrakStrana(strana, overrideNm) {
 
   const krakNm = overrideNm || _nextKrakNm(parentV.nm, strana);
   const color  = parentV.color;
-  const poly   = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
+  const poly   = L.polyline([], { color, weight: getVlakaWeight(), dashArray: getVlakaDashArray(), lineCap:typeof getVlakaLineCap==='function'?getVlakaLineCap():'round', vlakaOutline:typeof getVlakaOutline==='function'?getVlakaOutline():false, opacity: 0.9, pane: 'vlakeLines', renderer: _vlakeRenderer }).addTo(map);
   poly.bindTooltip(_escHtml(krakNm), { sticky: true, opacity: 0.9 });
   attachPolyClick(poly);
 
@@ -21456,6 +21482,7 @@ function addWP() {
   m.bindTooltip(_escHtml(`${v.nm} WP${v.wpts.length+1}`),{opacity:0.9}); v.wpts.push(m);
 }
 function updBan() {
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.refreshRecording();
   if (actI === null) return;
   const v = vlake[actI];
   if (recOn) {
@@ -27638,6 +27665,7 @@ function _abVisinaSync() {
 }
 
 function switchTab(tab) {
+  if(tab!=='karta'&&typeof VlakaDirection!=='undefined')VlakaDirection.cancelPick();
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
   if (typeof _tabRemember === 'function') _tabRemember(prev);
@@ -39940,7 +39968,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon">🔗</div>
             <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu: kliknite na krajnju tačku (zelenu/crvenu) jedne vlake, pa na krajnju tačku druge.</span></div>
           </div>
-          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Smjer privlačenja</b><span>U detaljima vlake odaberite automatski prema najbližem učitanom putu, prema početku, prema kraju ili dvosmjerno. Do 300 m prikazuje se jedna strelica, za duže vlake dvije. Dvosmjerno: sredina razdvaja dionicu i smjer se nakon nje obrće. Postavka prikaza je lokalna po korisniku/projektu/vlaci. Ako put nije pronađen blizu krajeva, izaberite smjer ručno.</span></div></div>
+          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Smjer privlačenja</b><span>U detaljima vlake odaberite automatski prema najbližem učitanom putu, prema početku, prema kraju ili dvosmjerno. Automatski broj strelica: jedna do 300 m, dvije za duže vlake. Dva smjera birajte samo za vlaku koja izlazi na put na oba kraja. Projektant dodirom na vlaku određuje razdjelnicu; ne postavlja se na matematičku polovinu. Tokom GPS snimanja koristite „Dva izlaza na put · Razdjelnica ovdje“ na zadnjoj sačuvanoj tački. Na dnu Projekta podesite prikaz, debljinu, veličinu, boju i broj strelica. Postavka prikaza je lokalna po korisniku/projektu/vlaci. U Bojama vlaka opcija „Dodaj outline“ daje sitni bijeli/crni obrub (14% ukupnog proširenja) za pune linije, crtice i tačke. Ako put nije pronađen blizu krajeva, izaberite smjer ručno.</span></div></div>
         </div>
       </div>
 
@@ -41693,6 +41721,8 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/map-library.js"></script>
 <div id="project-draw-toolbar" hidden><div><b>Crtanje poligona odjela</b><small id="project-draw-count"></small></div><div class="project-draw-actions"><button id="project-draw-undo" type="button" onclick="ProjectTerrain.undo()">↶ Vrati tačku</button><button id="project-draw-save" type="button" onclick="ProjectTerrain.finish()">✓ Sačuvaj</button><button type="button" onclick="ProjectTerrain.cancel()">Odustani</button></div></div>
 <script src="static/js/reference-vlake.js"></script>
+<div id="direction-pick-toolbar" hidden><b id="direction-pick-title"></b><p>Dodirni ovu vlaku gdje određuješ razdvajanje prema dva izlaza na put. Položaj se veže za vlaku.</p><button type="button" onclick="VlakaDirection.cancelPick()">Odustani</button></div>
+<script src="static/js/vlaka-outline.js"></script>
 <script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
