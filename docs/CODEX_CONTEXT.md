@@ -1759,3 +1759,17 @@ Zatvori/Reset vraća stilove, PDF provjeren. Server novi3akcenta, autora
 i projekat u zatvorenoj grupi/stavci, stvarne potvrde i ista3projekta;
 jedno dugme/nema novih slanja. Sourced izvještaj:
 docs/DEM_ZIMA_DOZNAKA_2026-10-04.md. CI/APK provjera slijedi.
+
+ZAVRŠENO 2.3.2: remote43178508823829c6b781edb1ddb9dcf660855c04,
+CI37223342175/job111497896539success;90JS i15 stvarnih browser programa,
+Android build +51assetSHA +manjiAPK +emulator offlineOCR gate,
+analiza brzine poslije objave. Pregledani CI Server day/dark i štampaPDF.
+APK23.947.824B (23.95MB), ba.spd.uss.vlake.debug/2.3.2-debug/code502.
+Svih51webresursa jednako remoteGitTree b3e4262cb13cfe0ac528f2d7acedc514d9961c37;
+izmijenjeni web fajlovi jednako lokalno;15launcherPNG nepromijenjeno,
+GRANICE>10MB, nema velikogOCRmodela. Potpis cert11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d isti2.3.1.
+Release/API prvi v2.3.2, digest istog preuzetogAPK-a:
+d98a1b8389e06e3e672658da7d71a4ae5700e32bf41e6de4c6cfc3636e33e010.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.2
+Local484a23e različit remoteparent; ponovo samoexplicitpaths atopremote.
+Bez fizičkogXiaomi/produkcijskogSupabase/mjerenjaLiDARgreške.

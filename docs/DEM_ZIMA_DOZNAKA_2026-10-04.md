@@ -181,3 +181,19 @@ navedena istraživanja javnih izvora su stvarni HTTP odgovori.
 - https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json
 - https://github.com/vannizhang/wayback-core#readme
 - https://www.geoboundaries.org/api/current/gbOpen/BIH/ADM2/
+
+## Isporuka i provjera APK-a
+
+Objavljena v2.3.2, native code502 / versionName2.3.2-debug.
+GitHub CI37223342175 uspješan: 90 JavaScript testnih fajlova, 15 browser
+programa, Android build, sva51webresursa prema udaljenomGitstablu,
+provjera manjih assets i Android emulator offline OCR.
+Preuzeti APK:23.947.824B, SHA256
+`d98a1b8389e06e3e672658da7d71a4ae5700e32bf41e6de4c6cfc3636e33e010`.
+Release digest potvrđuje isti fajl. Potpis isti kao2.3.1;15launcherPNG
+nepromijenjeno, GRANICE očuvan, nema velikogOCRmodela.
+Ažuriranje:Meni → Ažuriraj aplikaciju.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.2
+
+Nije mjeren fizički Xiaomi telefon, terenska DEM greška ili produkcijska
+Supabase razmjena. Regresijska provjera koristi lažne projekte/servise.
