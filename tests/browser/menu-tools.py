@@ -42,8 +42,10 @@ const fixtureRows=[{id:'rB',korisnik_id:'B',projekt_id:'P',nm:'T2',pts:fixturePo
 const _OL={VLAKE:'vlake',load:()=>fixtureRows,loadQueue:()=>fixtureQueue},_kvcLoad=()=>[],_SERVER_SAMO_LOKALNO=new Set(['upsert_trag','delete_trag','upsert_log','upsert_labels']);
 const FieldStore={ready:true,view:()=>[{user_id:'A',project_id:'D'}]},_serverPrimljenoIzKesa=()=>{},_serverPrimljenoRender=()=>{},_serverPrimljenoUcitaj=()=>[],_mrezaStanje=()=> 'dobra',_serverZadnje=()=>0,_serverNaCekanju=()=>({stavki:3,blok:0});
 let _serverSaljem=false,_serverPrimljenoBusy=false,_vlTrazi='',_vlSort='naziv',_vlSamoStrme=false,_activeTab='karta',_dozSelId=null,_dozLinkedProjektId=null;
-const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},serverPosalji=()=>{},isAdmin=()=>false,isVodeci=()=>false;
+const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},serverPosalji=async()=>{exchangeCalls.push('send');if(exchangeHold)await new Promise(r=>exchangeRelease=r);return {ok:true,pending:0}},isAdmin=()=>false,isVodeci=()=>false;
 
+let exchangeCalls=[],exchangeHold=false,exchangeRelease=null;
+const _mrezaSila=()=>{},serverPreuzmiDijeljeno=async()=>{exchangeCalls.push('vlake');return {ok:true,count:1,projects:1}},dozLoadOdjeli=async()=>{exchangeCalls.push('doz');return true},dozLoadLayers=async id=>{exchangeCalls.push('doz-'+id);return true};
 '''
 js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
 js+='\n'+(ROOT/'static/js/layer-editor.js').read_text()
@@ -141,6 +143,23 @@ async def main():
                 assert 'Vlaka · T1' in await page.locator('#server-sent-items').inner_text()
                 await page.screenshot(path=str(OUT/f'server-sent-{theme}-{width}-{height}.png'))
                 await page.evaluate('closeSyncQueuePanel()')
+
+        # Jedno dugme vodi cijelu razmjenu; disabled sprečava drugi pritisak.
+        await page.evaluate("openSyncQueuePanel();_dozSelId='D';exchangeCalls=[];exchangeHold=true")
+        await page.locator('#syncq-posalji').click();await page.wait_for_function('_serverRazmjena.busy')
+        assert await page.locator('#syncq-posalji').is_disabled()
+        assert await page.evaluate('exchangeCalls')==['send']
+        await page.evaluate('exchangeHold=false;exchangeRelease()');await page.wait_for_function('!_serverRazmjena.busy')
+        assert await page.evaluate('exchangeCalls')==['send','vlake','doz','doz-D']
+        assert await page.locator('.sp-exchange-steps [data-state=ok]').count()==3
+        assert await page.locator('#syncq-preuzmi,#server-doz-refresh,#server-project-refresh').count()==0
+        for theme in ['day','dark']:
+            for width,height in [(320,568),(390,800),(568,320)]:
+                await page.set_viewport_size({'width':width,'height':height});await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+                await bounds(page,'#syncq-panel',width,height)
+                assert await page.locator('#server-scroll').evaluate('e=>e.clientHeight')>=35
+                await page.screenshot(path=str(OUT/f'server-exchange-{theme}-{width}-{height}.png'))
+        await page.evaluate('closeSyncQueuePanel()')
 
         await page.set_viewport_size({'width':390,'height':800});await page.evaluate('document.documentElement.dataset.fieldTheme="day";openLayerImport();layerImportTab("shp")')
         await page.locator('#layer-file-shp').set_input_files([upload('Odjeli.SHP',polygon()),upload('odjeli.DBF',dbf()),upload('odjeli.cpg',b'65001'),upload('odjeli.shx',b'')])

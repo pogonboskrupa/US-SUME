@@ -337,7 +337,7 @@ t('Meni ima sekciju "Server" koja otvara panel', () => {
 });
 
 t('panel ima dugme "Pošalji na server" i sažetak', () => {
-  assert.ok(/id="syncq-posalji" onclick="serverPosalji\(\)"/.test(HTML));
+  assert.ok(/id="syncq-posalji" onclick="_serverRazmjena\(\)"/.test(HTML));
   assert.ok(HTML.includes('id="syncq-sum"'));
 });
 

@@ -175,14 +175,18 @@ t('_abVisinaSync upisuje visinu trake i body.ab-on', () => {
   assert.strictEqual(root['--ab-h'], '0px');
   assert.ok(!body.classList.contains('ab-on'));
 });
-t('dugmad koja #action-bar već ima su označena rb-dup; sporedni alati imaju natpis', () => {
+t('traka ne duplira dugmad; dvosmjer stoji između desnog kraka i pauze', () => {
   const i = HTML.indexOf('<div id="rec-row2">');
   const red = HTML.slice(i, HTML.indexOf('</div>', i));
   for (const id of ['btn-pause', 'btn-krak-l', 'btn-krak-d', 'btn-nazad']) {
     assert.ok(new RegExp('class="[^"]*rb-dup[^"]*" id="' + id + '"').test(red), id);
   }
   assert.ok(/class="rb stop rb-dup"/.test(red));
-  for (const lbl of ['Precizna tačka', 'Slobodan pogled']) assert.ok(red.includes(lbl), lbl);
+  for (const id of ['btn-preciz', 'btn-freeview']) assert.ok(!HTML.includes('id="'+id+'"'), id);
+  const ab=HTML.slice(HTML.indexOf('<div id="action-bar">'),HTML.indexOf('<!-- Trag quick meta panel'));
+  assert.ok(ab.indexOf('id="ab-krak-d"')<ab.indexOf('id="rec-direction-split"'));
+  assert.ok(ab.indexOf('id="rec-direction-split"')<ab.indexOf('id="ab-pauza"'));
+  assert.ok(/body\.ab-on #rec-row2 \{ display:none; \}/.test(HTML));
   assert.ok(/body\.ab-on #rec-row2 \.rb-dup \{ display:none !important; \}/.test(HTML));
 });
 t('pauza je vidljiva i tekstom (PAUZA + objašnjenje), ne samo bojom okvira', () => {

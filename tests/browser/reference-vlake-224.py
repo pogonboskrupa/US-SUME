@@ -83,7 +83,7 @@ async def main():
     else:assert min(ink)>=5 and max(ink)<=10,(z,mode,result)
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(568,320),(800,600)]:
-    await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#fixture-project').style.display='none';document.querySelector('#fixture-ref').style.display='block';document.querySelector('#fixture-ref').scrollTop=0}",theme)
+    await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;document.querySelector('#fixture-project').style.display='none';document.querySelector('#fixture-ref').style.display='block';document.querySelector('#reference-card').open=true;document.querySelector('#fixture-ref').scrollTop=0}",theme)
     assert await page.locator('#fixture-ref').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1');await page.screenshot(path=str(b.OUT/f'reference-panel-{theme}-{w}-{h}.png'))
     await page.evaluate("document.querySelector('#fixture-ref').style.display='none'");await b.bounds(page,'#refkarta-quick',w,h)
     await page.screenshot(path=str(b.OUT/f'reference-quick-{theme}-{w}-{h}.png'))

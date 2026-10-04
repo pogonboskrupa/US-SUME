@@ -2,7 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync('index.html','utf8');
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(start>=0,name);let d=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(start,i+1);}throw Error(name);}
-const ids=['server-received-items','server-sent-items','data-server-sent','server-project-label','server-send-preview','server-identity','server-project-view','server-project-summary','server-project-authors','server-project-search','server-project-list','server-project-pager','server-project-print','server-project-map','server-project-refresh','data-server-tabs','data-server-received','syncq-list','data-server-pager','data-server-empty'];
+const ids=['server-exchange-status','syncq-posalji','server-doz-status','server-doz-refresh','server-received-items','server-sent-items','data-server-sent','server-project-label','server-send-preview','server-identity','server-project-view','server-project-summary','server-project-authors','server-project-search','server-project-list','server-project-pager','server-project-print','server-project-map','server-project-refresh','data-server-tabs','data-server-received','syncq-list','data-server-pager','data-server-empty'];
 const pts=[{la:44,lo:16},{la:44.001,lo:16}];
 const row=(nm,uid='other',id=nm)=>({nm,korisnik_id:uid,projekt_id:'P',id,pts,projektant_ime:uid==='other'?'Amir Kolega':'Emina Projektant'});
 function setup(){const elements=new Map(ids.map(id=>[id,{innerHTML:'',textContent:'',value:'',style:{},scrollIntoView(){}}])),store=new Map(),queue=[],cache=[],serverRows=[],reports=[],calls=[];
@@ -14,7 +14,7 @@ const e={console,sbUser:{id:'me'},sbProfile:{ime:'Emina',prezime:'Projektant'},_
  _SERVER_SAMO_LOKALNO:new Set(['upsert_trag','upsert_log','upsert_labels','delete_trag']),_serverPrimljenoBusy:false,_serverSaljem:false,
  isAdmin:()=>false,isVodeci:()=>false,_openOrDownloadReport:(html,name)=>reports.push({html,name}),
  closeSyncQueuePanel(){},aktivirajProjekt:async id=>calls.push(id),switchTab(){},serverPosalji(){},_fmtAgo:()=> 'maloprije',
- _serverPrimljenoUcitaj:()=>e.received||[],_vlTrazi:'',_vlSort:'naziv',_vlSamoStrme:false,_activeTab:'karta',
+ _serverPrimljenoUcitaj:()=>e.received||[],_vlTrazi:'',_vlSort:'naziv',_vlSamoStrme:false,_activeTab:'karta',navigator:{onLine:true},showToast:m=>calls.push(m),_mrezaSila(){},
  _dozSelId:null,_dozLinkedProjektId:null,
  serverPreuzmiDijeljeno:async id=>calls.push(id),openSyncQueuePanel:()=>e._tabServerPrepare(queue)};
 e.window=e;vm.createContext(e);vm.runInContext([fn('dst'),fn('calcL')].join('\n'),e);vm.runInContext(fs.readFileSync('static/js/tab-data.js','utf8'),e);vm.runInContext(fs.readFileSync('static/js/server-panel.js','utf8'),e);
@@ -60,4 +60,53 @@ test('pregled ograničava oba taba na ista posljednja tri projekta, dan je saraj
  h.e._serverTransferGroup('project');assert.deepEqual(Array.from(h.e._serverTransferGroups('received'),r=>r.key),['project:S','project:R','project:P']);
 });
 test('potvrde nose identitet vlake i zone za pronalazak geometrije bez kopiranja GPS podataka',()=>{const h=setup();h.e._serverProjektPreuzeto('P',[row('T1','other','x')]);assert.equal(h.e._serverTransfers('received')[0].target.id,'x');h.e._serverSaljem=true;h.e._serverTransferConfirmed({type:'upsert_vlaka',payload:row('T1','me','y')},'me');assert.equal(h.e._serverTransfers('sent')[0].target.id,'y');});
+test('jedno dugme sukcesivno šalje, prima sve vlake pa otvorenu doznaku',async()=>{
+ const h=setup(),steps=[];h.e._dozSelId='D';h.e._dozOdjeli=[{id:'D',name:'Odjel 105'}];
+ h.e.serverPosalji=async()=>{steps.push('send');return {ok:true,pending:0};};
+ h.e.serverPreuzmiDijeljeno=async id=>{assert.equal(id,undefined);steps.push('vlake');return {ok:true,count:6,projects:2};};
+ h.e.dozLoadOdjeli=async()=>{steps.push('doz-list');return true;};h.e.dozLoadLayers=async(id,opt)=>{steps.push('doz-'+id);assert.equal(opt.strict,true);return true;};
+ await h.e._serverRazmjena();assert.deepEqual(steps,['send','vlake','doz-list','doz-D']);
+ const r=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.deepEqual([r.send.state,r.vlake.state,r.doz.state],['ok','ok','ok']);
+ assert.equal(h.e._serverSaljem,false);assert.equal(h.e._serverRazmjena.busy,false);assert.equal(h.elements.get('syncq-posalji').disabled,false);
+ assert.match(h.elements.get('server-exchange-status').innerHTML,/6 vlaka/);
+});
+test('offline pritisak ne šalje, ne preuzima i ne dira lokalni red',async()=>{
+ const h=setup();h.e.navigator.onLine=false;h.queue.push({type:'upsert_vlaka',payload:row('T1','me')});
+ let n=0;h.e.serverPosalji=async()=>n++;h.e.serverPreuzmiDijeljeno=async()=>n++;
+ await h.e._serverRazmjena();assert.equal(n,0);assert.equal(h.queue.length,1);assert.equal(h.store.size,0);
+});
+test('djelimično slanje nastavlja prijem ali ne prikazuje potpun uspjeh',async()=>{
+ const h=setup();h.e.serverPosalji=async()=>({ok:false,pending:2,partial:true});h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:4,projects:1});
+ h.e.dozLoadOdjeli=async()=>true;await h.e._serverRazmjena();
+ const r=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.equal(r.send.state,'partial');assert.equal(r.vlake.state,'ok');assert.match(r.send.text,/2 stavki/);
+ assert.ok(h.calls.some(m=>m.includes('nije završena u cijelosti')));assert.ok(!h.calls.includes('✓ Slanje i prijem završeni.'));
+});
+test('mrežni ili RLS pad prijema ostavlja prethodne potvrde i prikazuje problem',async()=>{
+ const h=setup();h.e._serverProjektPreuzeto('P',[row('T1')]);h.e.serverPosalji=async()=>({ok:true});h.e.serverPreuzmiDijeljeno=async()=>({ok:false});
+ h.e.dozLoadOdjeli=async()=>false;await h.e._serverRazmjena();
+ const r=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.equal(r.send.state,'ok');assert.equal(r.vlake.state,'error');assert.equal(r.doz.state,'error');assert.equal(h.e._serverTransfers('received').length,1);
+});
+test('neuspjela priprema ili izuzetak slanja ne zatvara prijem drugih podataka',async()=>{
+ const h=setup();h.e.serverPosalji=async()=>{throw Error('queue');};let got=0;h.e.serverPreuzmiDijeljeno=async()=>{got++;return {ok:true,count:0,projects:0};};h.e.dozLoadOdjeli=async()=>true;
+ await h.e._serverRazmjena();const r=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.equal(got,1);assert.equal(r.send.state,'error');assert.equal(r.vlake.state,'ok');
+});
+test('dvostruki pritisak ne pokreće konkurentnu razmjenu',async()=>{
+ const h=setup();let release,n=0;h.e.serverPosalji=()=>{n++;return new Promise(r=>release=r);};h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:0});h.e.dozLoadOdjeli=async()=>true;
+ const first=h.e._serverRazmjena();assert.equal(h.elements.get('syncq-posalji').disabled,true);await h.e._serverRazmjena();assert.equal(n,1);
+ release({ok:true});await first;assert.equal(h.e._serverRazmjena.busy,false);
+});
+test('promjena naloga zaustavlja naredni korak i ne pamti potvrdu drugom nalogu',async()=>{
+ const h=setup();h.e.serverPosalji=async()=>{h.e.sbUser={id:'other'};return {ok:true};};let n=0;h.e.serverPreuzmiDijeljeno=async()=>n++;
+ await h.e._serverRazmjena();assert.equal(n,0);assert.ok(!h.store.has('tvlake_server_exchange_v1_other'));assert.ok(!h.store.has('tvlake_server_exchange_v1_me'));assert.equal(h.e._serverRazmjena.busy,false);
+});
+test('prijem doznake koristi odjel iz početka razmjene, promjena taba ne mijenja cilj',async()=>{
+ const h=setup();h.e._dozSelId='D';h.e._dozOdjeli=[{id:'D',name:'105'},{id:'E',name:'206'}];h.e.serverPosalji=async()=>{h.e._dozSelId='E';return {ok:true};};h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:0});h.e.dozLoadOdjeli=async()=>true;
+ const ids=[];h.e.dozLoadLayers=async id=>{ids.push(id);return true;};await h.e._serverRazmjena();assert.deepEqual(ids,['D']);
+});
+test('bez otvorene doznake prijem liste odjela jasno razlikuje od prijema pojaseva',async()=>{
+ const h=setup();h.e.serverPosalji=async()=>({ok:true});h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:0});h.e.dozLoadOdjeli=async()=>true;
+ await h.e._serverRazmjena();const r=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.match(r.doz.text,/za pojaseve otvori odjel/);
+ const markup=html.slice(html.indexOf('<div id="syncq-panel"'),html.indexOf('<!-- Share foto'));
+ assert.match(markup,/onclick="_serverRazmjena\(\)"/);assert.ok(!/onclick="(?:serverPosalji|serverPreuzmiDijeljeno|_serverProjektRefresh|_serverPreuzmiDoznaku)\(/.test(markup));
+});
 (async()=>{let failed=0;for(const[n,f]of tests){try{await f();console.log('OK '+n);}catch(e){failed++;console.error('FAIL '+n+'\n'+e.stack);}}console.log(`${tests.length-failed}/${tests.length}`);if(failed)process.exitCode=1;})();

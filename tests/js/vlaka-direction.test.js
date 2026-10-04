@@ -9,3 +9,5 @@ assert.equal(d.chooseEnd(10,150),'start');assert.equal(d.chooseEnd(250,5),'end')
 const s=fs.readFileSync('index.html','utf8'),code=s.slice(s.indexOf('function _vlakaStroke('),s.indexOf('function getVlakaDashArray(')),c={};vm.createContext(c);vm.runInContext(code,c);
 for(const w of [2,4,8])for(const z of [11,13,15,18]){const dash=c._vlakaStroke('dash',w,z);assert.equal(dash.lineCap,'butt');const [ink,gap]=dash.dashArray.split(' ').map(Number);assert(ink>=gap*3);const dot=c._vlakaStroke('dot',w,z);assert.equal(dot.lineCap,'round');assert.equal(Number(dot.dashArray.split(' ')[0]),.01);assert(Number(dot.dashArray.split(' ')[1])>w);}
 console.log('OK: designer split at 20%/80%, no legacy midpoint, stable split when route grows/returns, manual counts, settings validation and dash/dot patterns');
+
+assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.equal(d.cleanSettings({placement:'both'}).placement,'on');assert.equal(d.cleanSettings({}).placement,'on');

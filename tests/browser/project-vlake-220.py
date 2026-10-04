@@ -23,7 +23,7 @@ window.fixtureReady=(async()=>{
  document.querySelector('#btragovi').style.display='flex';uiProjectShow();
 })();
 '''
-colors=b.section('      <!-- BOJE VLAKA -->','      <!-- SREDNJA TRANSPORTNA DISTANCA')
+colors=b.section('      <!-- BOJE VLAKA -->','      <!-- /BOJE VLAKA -->')+b.section('      <section class="sec proj-akt-only project-vlake"','      <details class="sec proj-akt-only workflow-group" id="project-reports"')
 action=b.section('<div id="action-bar">','<!-- Trag quick meta panel')
 help_html=b.section('<div id="help-modal">','<!-- M&T BOTTOM SHEET -->')
 sheet=b.section('<div id="layer-sheet-bg"','<!-- Modal: učitaj KML') if '<!-- Modal: učitaj KML' in b.SOURCE else b.section('<div id="layer-sheet-bg"','<div id="layer-import-modal"')
@@ -77,6 +77,26 @@ async def main():
   assert await page.evaluate('getBojaVlake()')=='#60a5fa'
   await page.evaluate("_aktivniProjektId='P';sbUser={id:'B'}")
   assert await page.evaluate('getBojaVlake()')=='#60a5fa'
+  # Cijeli stvarni panel: redoslijed, sklopive radnje i prikaz na uskom telefonu.
+  full_project=b.section('    <div id="proj-panel">','    </div><!-- /proj-panel -->')+'</div>'
+  full_vlake=b.section('    <div id="panel">','    </div><!-- /panel -->')+'</div>'
+  for theme in ['day','dark']:
+   for w,h in [(320,568),(390,800),(568,320)]:
+    await page.set_viewport_size({'width':w,'height':h})
+    await page.evaluate("([markup,theme])=>{document.documentElement.dataset.fieldTheme=theme;const root=document.querySelector('#fixture-project');root.innerHTML=markup;root.style.display='block';root.scrollTop=0;const p=document.querySelector('#proj-panel');p.style.cssText='display:block;width:100%;height:auto;position:static;overflow:visible';document.querySelector('#projekti-list').textContent='Odjel 105 · Gornja Una';_rndBojaPresets()}",[full_project,theme])
+    ids=await page.locator('#proj-panel>*').evaluate_all("es=>es.map(e=>e.id||e.className)")
+    assert ids.index('project-routes')<ids.index('project-reports')<ids.index('project-export')
+    assert ids.index('project-export')<ids.index('sec proj-akt-only project-polygon')<ids.index('sec proj-akt-only project-colors')<ids.index('sec proj-akt-only project-arrows')
+    assert not await page.locator('#project-reports').evaluate('e=>e.open')
+    await page.screenshot(path=str(b.OUT/f'project-workflow-{theme}-{w}-{h}.png'))
+    await page.locator('#project-reports>summary').click();assert await page.locator('#rekap-card').is_visible()
+    assert await page.locator('#fixture-project').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
+    await page.evaluate("markup=>{const root=document.querySelector('#fixture-project');root.innerHTML=markup;root.scrollTop=0;const p=document.querySelector('#panel');p.style.cssText='display:block;width:100%;height:auto;position:static;overflow:visible'}",full_vlake)
+    assert not await page.locator('#vlake-buffers').evaluate('e=>e.open') and not await page.locator('#reference-card').evaluate('e=>e.open')
+    await page.locator('#vlake-buffers>summary').click();assert await page.locator('#buf-sel').is_visible()
+    await page.locator('#reference-card>summary').click();assert await page.locator('#refkarta-file').count()==1
+    assert await page.locator('#fixture-project').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
+    await page.locator('#fixture-project').evaluate('e=>e.scrollTop=0');await page.screenshot(path=str(b.OUT/f'vlake-workflow-{theme}-{w}-{h}.png'))
   assert not errors,errors
   await browser.close()
  print('OK: vlastite/kolegine boje, realtime, offline preferencije, numerički spisak, Snimi, instalirane karte i upute; 24 PNG')

@@ -26,6 +26,7 @@
     const p = (_projekti || []).find(p => p.id === _aktivniProjektId);
     Object.entries(panels).forEach(([tab, id]) => {
       const panel = document.getElementById(id); if (!panel) return;
+      for(const control of panel.querySelectorAll?.('.workflow-write')||[])control.hidden=!p||(typeof isReadOnly==='function'&&isReadOnly())||(typeof isSpdField==='function'&&isSpdField());
       panel.style.overflowAnchor='none'; // zamjena redova ne smije pomjeriti zapamćen položaj
       let bar = panel.querySelector('.data-context');
       if (!bar) { bar = document.createElement('div'); bar.className = 'data-context'; panel.prepend(bar); }

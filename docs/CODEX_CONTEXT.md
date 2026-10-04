@@ -1657,3 +1657,18 @@ signing cert isti kao 2.2.8 (v2 signing block provjera).
 APK SHA256: 5d3479e281f94d308a161f2e6c3dc061882d33bc5c117ece478c25abc19a673f.
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.9
 Bez fizičkog uređaja/GPS/Xiaomi baterije i produkcijskog Supabase testa.
+
+## 42. Server jednom radnjom, reorganizacija panela i dvosmjer — 2.3.0
+
+Korisnik proširio zahtjev: jedno dugme slanje+prijem, pregledati/reorganizovati
+Projekat i Vlake, jedan dvosmjer ↔ umjesto razdjelnice, položaj Na vlaci ili
+Pored vlake (isključivo), sažeti snimanje bez precizne tačke/slobodnog pogleda.
+Implementirano u postojećim server-panel/vlaka-direction/tab-data modulima i
+HTML/CSS; 2.3.0/code500 u sva tri izvora. Dvosmjer u action-bar između desnog
+kraka i pauze, baner bez praznog drugog reda. Projektantska tačka/stari ključevi
+sačuvani. Server wrapper rezultat po koraku i nalogu, ručna write kapija samo
+tokom slanja, prijem poslije zatvaranja kapije, živ lokalni rad zaštićen.
+Doznaka prijem: dostupna lista odjela + trenutno otvoren odjel, izričito na UI.
+Detalji: docs/DENDRO_SERVER_PROJEKAT_DVOSMJER_2026-10-04.md.
+Lokalnih 86 JS fajlova prošlo; prošireni 4 postojeća browser pregleda. CI/objava
+i provjera APK-a slijede. Bez fizičkog Android/prod Supabase testiranja.

@@ -1135,8 +1135,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 
 /* ═══ v1.9.0 — tok snimanja vlake: traka + donji listovi ═══
    Traka snimanja je stajala na bottom:8px — ISPOD #action-bar-a (fixed, z 1600),
-   pa se drugi red dugmadi (precizna tačka i slobodan pogled) nije
-   mogao dotaći, a vidio se samo kao obojena ivica. --ab-h puni _abVisinaSync. */
+   pa se donji red dugmadi nije mogao dotaći. --ab-h puni _abVisinaSync. */
 #rec-banner { bottom:calc(var(--ab-h, 0px) + 8px); font-family:system-ui,-apple-system,'Segoe UI',sans-serif; }
 #rec-row1 { gap:10px; padding:10px 12px 6px; border-bottom:none; }
 .rec-stanje { display:inline-flex; align-items:center; gap:6px; flex-shrink:0; padding:4px 8px; border-radius:7px;
@@ -1163,6 +1162,7 @@ input:focus { outline:none; border-color:#3b82f6; }
 .rb-lbl { font-size:10px; font-weight:700; opacity:0.85; letter-spacing:0.02em; }
 /* Dugmad koja #action-bar već nosi (pauza, krakovi, nazad, stop) — ne dupliraj */
 body.ab-on #rec-row2 .rb-dup { display:none !important; }
+body.ab-on #rec-row2 { display:none; }
 body.ab-on #rec-row2 .rb { flex:1 1 0; }
 
 .rs-bg { display:none; position:fixed; inset:0; z-index:3200; background:rgba(2,6,23,0.6);
@@ -4523,8 +4523,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </div>
 
       <!-- MOJE VLAKE -->
-      <div class="sec">
-        <div class="sec-t">📋 Moje Vlake (<span id="vc">0</span>)</div>
+      <div class="sec" id="my-vlake-section">
+        <div class="sec-t">📋 Moje vlake (<span id="vc">0</span>)</div>
         <!-- Statusna traka snimanja — vidljiva samo tokom GPS snimanja -->
         <div id="rec-status-bar" style="display:none;">
           <div id="rsb-row1">
@@ -4538,6 +4538,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <button class="rsb-btn stop" onclick="stopRec()"><svg class="ic"><use href="#ic-stop"/></svg> Stop</button>
           </div>
         </div>
+        <div class="workflow-actions"><button type="button" class="workflow-write" onclick="togSnimVlaku()"><svg class="ic"><use href="#ic-pocni"/></svg> Snimi</button><button type="button" class="workflow-write" onclick="startManualVlakaDraw()"><svg class="ic"><use href="#ic-crtaj"/></svg> Nacrtaj</button><button type="button" onclick="switchTab('projekat')">Sve vlake projekta ↗</button></div>
         <div id="vlake-proj-hdr" style="display:none;"></div>
         <div id="vl-nagib-traka" style="display:none;"></div>
         <!-- Pretraga i sortiranje (v1.7.2) — statični markup, pa ponovno crtanje
@@ -4559,7 +4560,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <!-- VLAKE KOLEGA -->
       <div class="sec" id="kolege-vlake-sec" style="display:none;">
-        <div class="sec-t">👥 Vlake kolega (<span id="kolege-vc">0</span>)</div>
+        <div class="sec-t">👥 Vlake kolega u projektu (<span id="kolege-vc">0</span>)</div>
         <div id="kolege-vl"></div>
       </div>
 
@@ -4574,8 +4575,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </div>
 
       <!-- BUFFER -->
-      <div class="sec">
-        <div class="sec-t">📏 Buffer Zona</div>
+      <details class="sec workflow-group" id="vlake-buffers">
+        <summary><b>Bafer i preklapanje</b><small>Širina, boja i pokrivena površina vlaka</small></summary>
         <span class="lbl">Širina bafera</span>
         <select id="buf-sel" onchange="onBufChange()" style="width:100%;padding:8px 10px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:14px;margin-bottom:8px;">
           <option value="60">60 m (30L + 30D)</option>
@@ -4588,7 +4589,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <div id="buf-col-swatch" style="width:14px;height:14px;border-radius:3px;background:rgba(96,165,250,0.35);border:1px solid #60a5fa;flex-shrink:0;cursor:pointer;position:relative;">
               <input type="color" id="buf-col-pick" value="#60a5fa" oninput="_bufColChange(this.value)" style="opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer;padding:0;border:none;">
             </div>
-            <span style="font-size:11px;color:#94a3b8;">Boja buffera</span>
+            <span style="font-size:11px;color:#94a3b8;">Boja bafera</span>
           </div>
           <div style="display:flex;align-items:center;gap:5px;">
             <span style="font-size:10px;color:#64748b;">Prozirnost</span>
@@ -4604,11 +4605,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <button class="btn b" onclick="drawBuffers()"><svg class="ic"><use href="#ic-buffer"/></svg> PRIKAŽI</button>
           <button class="btn gr" onclick="clearBuffers()"><svg class="ic"><use href="#ic-zatvori"/></svg> UKLONI</button>
         </div>
-      </div>
+      </details>
 
       <!-- REFERENTNA KARTA -->
-      <div class="sec reference-card" id="reference-card">
-        <div class="sec-t">🗺 Referentna karta (1:10000)</div>
+      <details class="sec reference-card workflow-group" id="reference-card">
+        <summary><b>Referentna karta · 1:10.000</b><small>Slika papirne karte, poravnanje i prepoznavanje vlaka</small></summary>
         <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
         <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
           <svg class="ic"><use href="#ic-kamera"/></svg> Učitaj sliku karte
@@ -4700,7 +4701,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
                     onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
             <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
-            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">APK čita oznake na uređaju, bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
+            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">Prepoznavanje radi uz internet, na uređaju bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
             <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
               <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
                 <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
@@ -4737,13 +4738,12 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <div style="font-size:11px;color:#475569;">Klikni ↺ Osvježi za prikaz.</div>
           </div>
         </div>
-      </div>
+      </details>
 
     </div><!-- /panel -->
 
     <!-- PROJEKAT PANEL -->
     <div id="proj-panel">
-      <button class="btn" onclick="openFieldPanel()" style="margin:8px;min-height:44px;">✓ Spremno za teren / sigurnosna kopija</button>
 
       <!-- Hidden inputs — auto-filled by active project, used by saveProj/getOdjel/etc. -->
       <input type="hidden" id="p-odjel">
@@ -4809,6 +4809,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="sec-t" style="margin:0;font-size:16px;color:#fbbf24;text-transform:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pd-title">—</div>
         </div>
         <div id="pd-info" style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.9;background:rgba(15,23,42,0.6);border-radius:6px;padding:9px 11px;border:1px solid #1e3a5f;"></div>
+        <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
         <div id="pd-dist-warn" style="display:none;margin-bottom:10px;"></div>
         <button class="btn" id="pd-stats-btn" onclick="_pdToggleStats()" style="width:100%;margin-bottom:6px;background:#0f2940;border:1px solid #1e3a5f;color:#a5b4fc;font-size:13px;padding:8px;border-radius:8px;font-weight:600;"><svg class="ic"><use href="#ic-statistika"/></svg> Detaljna statistika</button>
         <div id="pd-stats-sec" style="display:none;margin-bottom:12px;background:rgba(15,23,42,0.6);border:1px solid #1e3a5f;border-radius:8px;padding:11px;"></div>
@@ -4824,7 +4825,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             </div>
           </div>
         </div>
-        <button class="btn g" id="pd-aktiviraj-btn" onclick="aktivirajProjekt()" style="width:100%;margin-bottom:6px;"></button>
         <!-- Sporedne radnje u mreži 2×N (v1.7.6) umjesto 6 dugmadi preko cijele
              širine jedno ispod drugog. Aktiviraj ostaje puna širina iznad. -->
         <div class="pd-akcije">
@@ -4836,9 +4836,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <button class="btn" id="pd-share-code-btn" onclick="shareProjektCode()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;"><svg class="ic"><use href="#ic-kljuc"/></svg> Podijeli šifrom (teren)</button>
         <button class="btn" id="pd-transfer-btn" onclick="transferProjektUI()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;"><svg class="ic"><use href="#ic-zamijeni"/></svg> Predaj projekat</button>
         </div>
-        <button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button>
+        <details class="workflow-danger"><summary>Brisanje projekta</summary><p class="project-vl-note">Brisanje je trajna radnja. Prvo sačuvaj sigurnosnu kopiju.</p><button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button></details>
       </div>
 
+      <nav class="workflow-nav proj-akt-only" aria-label="Sekcije aktivnog projekta"><button type="button" onclick="document.getElementById('project-routes').scrollIntoView({block:'start'})">Vlake projekta</button><button type="button" onclick="document.getElementById('project-reports').scrollIntoView({block:'start'})">Izvještaji</button><button type="button" onclick="document.querySelector('.project-polygon').scrollIntoView({block:'start'})">Prikaz karte</button></nav>
+      <section class="sec proj-akt-only project-vlake" id="project-routes"><div class="sec-t">Vlake aktivnog projekta</div><p class="project-vl-note">Od manjeg ka većem broju · vlastite i kolegine vlake zajedno</p><small id="project-vlake-count"></small><div id="project-vlake-list"></div><button id="project-vlake-more" class="btn" onclick="_projektVlakeMore()" hidden>Prikaži još</button></section>
+
+      <details class="sec proj-akt-only workflow-group" id="project-reports"><summary><b>Statistika i izvještaji</b><small>Dužine, površine, nagibi i transportna distanca</small></summary>
       <!-- REKAP -->
       <div class="sec proj-akt-only">
         <div class="sec-hdr" style="margin-bottom:6px;">
@@ -4861,6 +4865,61 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
       </div>
 
+      <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
+      <div class="sec proj-akt-only">
+        <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
+        <div id="std-card">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za izračun STD</div>
+        </div>
+      </div>
+
+      </details>
+      <!-- KOLEGE (skriveno, vodi se u detalji projekta) -->
+      <div id="kolege-list" style="display:none;"></div>
+
+      <!-- DNEVNIK RADOVA -->
+      <div class="sec">
+        <div class="sec-t">📅 Dnevnik Radova</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button class="btn b" style="margin:0;flex:1;font-size:12px;padding:8px;" onclick="logDan()"><svg class="ic"><use href="#ic-zabiljezi"/></svg> Zabilježi danas</button>
+          <button class="btn gr" style="margin:0;width:auto;padding:8px 12px;font-size:13px;" onclick="clearLog()" title="Obriši log"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
+        </div>
+        <div id="dnevni-log"></div>
+      </div>
+
+      <!-- IZVJEŠTAJI PO ODJELIMA (sekcija se skriva dok nema sadržaja — inače
+           je u panelu stajalo golo zaglavlje bez ijednog reda ispod) -->
+      <div class="sec" id="odjeli-rekap-sec" style="display:none;">
+        <div class="sec-t">📋 Izvještaji po Odjelima</div>
+        <div id="odjeli-rekap"></div>
+      </div>
+
+      <!-- KML DIJELJENJE -->
+      <details class="sec workflow-group" id="project-export">
+        <summary><b>Izvoz i sigurnosna kopija</b><small>KML fajl, dijeljenje i kopija za teren</small></summary>
+        <button class="btn g" style="margin-bottom:8px;" onclick="kmlPodijeli()"><svg class="ic"><use href="#ic-posalji"/></svg> POŠALJI FAJL (Viber/Mail/Bluetooth...)</button>
+        <button class="btn gr" style="margin-bottom:8px;" onclick="kmlNaMail()"><svg class="ic"><use href="#ic-mail"/></svg>️ Samo tekst na mail (bez fajla)</button>
+        <button class="btn gr" style="margin-bottom:8px;" onclick="kmlPreuzmi()"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Sačuvaj na uređaj</button>
+        <button class="btn gr" onclick="kmlKopiraj()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj KML tekst</button>
+        <div id="kml-share-info" style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.5;display:none;"></div>
+        <button class="btn" onclick="openFieldPanel()">✓ Spremno za teren / sigurnosna kopija</button>
+      </details>
+
+
+      <section class="sec proj-akt-only project-polygon">
+        <div class="sec-t">Poligon odjela i teren</div>
+        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
+        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
+        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
+        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
+        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
+          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
+          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
+          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
+          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
+          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
+        </div>
+      </section>
       <!-- BOJE VLAKA -->
       <div class="sec proj-akt-only project-colors">
         <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
@@ -4898,67 +4957,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <label class="arrow-check outline-choice"><input id="boja-outline" type="checkbox" onchange="_bojaChange('outline',this.checked)"><span>Dodaj outline<small>Sitni bijeli / crni obrub prema glavnoj boji · ukupno proširenje 14%</small></span></label>
         </div>
       </div>
-
-      <section class="sec proj-akt-only project-vlake"><div class="sec-t">Vlake aktivnog projekta</div><p class="project-vl-note">Od manjeg ka većem broju · vlastite i kolegine vlake zajedno</p><small id="project-vlake-count"></small><div id="project-vlake-list"></div><button id="project-vlake-more" class="btn" onclick="_projektVlakeMore()" hidden>Prikaži još</button></section>
-
-      <!-- SREDNJA TRANSPORTNA DISTANCA PRIVLAČENJA -->
-      <div class="sec proj-akt-only">
-        <div class="sec-t">📐 Srednja Transportna Distanca Privlačenja</div>
-        <div id="std-card">
-          <div style="color:#475569;font-size:12px;text-align:center;padding:4px;">Aktiviraj projekat za izračun STD</div>
-        </div>
-      </div>
-
-      <!-- KOLEGE (skriveno, vodi se u detalji projekta) -->
-      <div id="kolege-list" style="display:none;"></div>
-
-      <!-- DNEVNIK RADOVA -->
-      <div class="sec">
-        <div class="sec-t">📅 Dnevnik Radova</div>
-        <div style="display:flex;gap:6px;margin-bottom:10px;">
-          <button class="btn b" style="margin:0;flex:1;font-size:12px;padding:8px;" onclick="logDan()"><svg class="ic"><use href="#ic-zabiljezi"/></svg> Zabilježi danas</button>
-          <button class="btn gr" style="margin:0;width:auto;padding:8px 12px;font-size:13px;" onclick="clearLog()" title="Obriši log"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
-        </div>
-        <div id="dnevni-log"></div>
-      </div>
-
-      <!-- IZVJEŠTAJI PO ODJELIMA (sekcija se skriva dok nema sadržaja — inače
-           je u panelu stajalo golo zaglavlje bez ijednog reda ispod) -->
-      <div class="sec" id="odjeli-rekap-sec" style="display:none;">
-        <div class="sec-t">📋 Izvještaji po Odjelima</div>
-        <div id="odjeli-rekap"></div>
-      </div>
-
-      <!-- KML DIJELJENJE -->
-      <div class="sec">
-        <div class="sec-t">📤 Podijeli KML Odjela</div>
-        <button class="btn g" style="margin-bottom:8px;" onclick="kmlPodijeli()"><svg class="ic"><use href="#ic-posalji"/></svg> POŠALJI FAJL (Viber/Mail/Bluetooth...)</button>
-        <button class="btn gr" style="margin-bottom:8px;" onclick="kmlNaMail()"><svg class="ic"><use href="#ic-mail"/></svg>️ Samo tekst na mail (bez fajla)</button>
-        <button class="btn gr" style="margin-bottom:8px;" onclick="kmlPreuzmi()"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Sačuvaj na uređaj</button>
-        <button class="btn gr" onclick="kmlKopiraj()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj KML tekst</button>
-        <div id="kml-share-info" style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.5;display:none;"></div>
-      </div>
-
-
-      <section class="sec proj-akt-only project-polygon">
-        <div class="sec-t">Poligon odjela i teren</div>
-        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
-        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
-        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
-        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
-        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
-          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
-          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
-          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
-          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
-          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
-        </div>
-      </section>
+      <!-- /BOJE VLAKA -->
       <section class="sec proj-akt-only project-arrows">
         <div class="sec-t">Strelice prema putu</div>
         <b id="project-arrow-context"></b>
         <p class="project-vl-note">Vlastite i kolegine vlake ovog projekta. Dva smjera koristi samo za vlaku s izlazom na put na oba kraja; mjesto razdvajanja određuje projektant.</p>
         <label class="terrain-check"><input id="project-arrow-visible" type="checkbox" checked onchange="VlakaDirection.change('visible',this.checked)"><span><b>Prikaži strelice</b><small>Sakrij / prikaži sve strelice projekta</small></span><span id="project-arrow-preview" aria-hidden="true"></span></label>
+        <label class="arrow-placement">Položaj strelica<select id="project-arrow-placement" onchange="VlakaDirection.change('placement',this.value)"><option value="on">Na vlaci</option><option value="beside">Pored vlake</option></select></label><p class="project-vl-note">Jedan položaj za sve strelice i dvosmjer projekta. Pored vlake razmak prati debljinu linije i veličinu znaka. Za 1:10.000 preporučen je automatski broj i veličina 30 px.</p>
         <div class="arrow-style-grid">
           <label>Debljina poteza <output id="project-arrow-width-value">2.5 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2.5" oninput="VlakaDirection.change('width',this.value)"></label>
           <label>Veličina strelice <output id="project-arrow-size-value">30 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="2" value="30" oninput="VlakaDirection.change('size',this.value)"></label>
@@ -4966,9 +4971,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <label>Boja strelica<input id="project-arrow-color" type="color" value="#2563eb" onchange="VlakaDirection.change('color',this.value)"></label>
         </div>
         <label class="arrow-check"><input id="project-arrow-inherit" type="checkbox" checked onchange="VlakaDirection.change('inherit',this.checked)"> Koristi boju vlake / kraka</label>
-        <label class="arrow-check"><input id="project-arrow-separator" type="checkbox" checked onchange="VlakaDirection.change('separator',this.checked)"> Prikaži oznaku razdjelnice</label>
-        <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka razdjelnice ne ulazi u broj strelica. Izgled i odabir razdjelnice čuvaju se na ovom telefonu.</p>
-        <div class="arrow-route-edit"><label for="project-arrow-route">Smjer i razdjelnica pojedine vlake</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
+        <label class="arrow-check"><input id="project-arrow-separator" type="checkbox" checked onchange="VlakaDirection.change('separator',this.checked)"> Prikaži dvosmjer ↔</label>
+        <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka dvosmjera ne ulazi u broj strelica. Izgled i odabir dvosmjera čuvaju se na ovom telefonu.</p>
+        <div class="arrow-route-edit"><label for="project-arrow-route">Smjer pojedine vlake i dvosmjer ↔</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
         <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
       </section>
     </div><!-- /proj-panel -->
@@ -5575,7 +5580,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span id="rec-signal" style="display:none;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;white-space:nowrap;font-family:monospace;"></span>
           <div id="rec-slope" style="display:none;font-size:12px;font-weight:bold;font-family:monospace;"></div>
         </div>
-        <button id="rec-direction-split" type="button" hidden onclick="VlakaDirection.markRecording()" title="Samo za vlaku koja će izaći na put na oba kraja">Dva izlaza na put · Razdjelnica ovdje</button>
         <div id="rec-pause-row"><span style="font-size:15px;">⏸</span><span>Pauzirano — GPS tačke se ne bilježe. <b>Nastavi</b> ili <b>Završi</b> dolje.</span></div>
         <div id="bg-warning" style="display:none;background:#7c2d12;padding:4px 13px;font-size:11px;color:#fed7aa;text-align:center;">
           ⚠ App u pozadini — GPS može biti pauziran
@@ -5588,11 +5592,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
         <div id="rec-row2">
           <button class="rb pause rb-dup" id="btn-pause" onclick="toggleRecPause()" title="Pauza / Nastavi"><svg class="ic"><use href="#ic-pauza"/></svg></button>
-          <button class="rb" id="btn-preciz" onclick="_precizTacka()" title="Precizna tačka (prosjek 10 fikseva)" style="background:#1e3a5f;color:#38bdf8;font-size:13px;min-width:32px;"><svg class="ic"><use href="#ic-pozicija"/></svg><span class="rb-lbl">Precizna tačka</span></button>
           <button class="rb krak-l rb-dup" id="btn-krak-l" onclick="noviKrakStrana('L')" oncontextmenu="event.preventDefault();noviKrakStranaPick('L')" title="Novi lijevi krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ L<br><span id="krak-l-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb krak-d rb-dup" id="btn-krak-d" onclick="noviKrakStrana('D')" oncontextmenu="event.preventDefault();noviKrakStranaPick('D')" title="Novi desni krak (drži za izbor broja)" style="white-space:normal;line-height:1.1;">⊕ D<br><span id="krak-d-nm" style="font-size:10px;font-weight:normal;opacity:0.8;"></span></button>
           <button class="rb back rb-dup" id="btn-nazad"    onclick="vratiSeNaRoditelja()" title="Vrati na roditelja" style="display:none;"><svg class="ic"><use href="#ic-vrati"/></svg></button>
-          <button class="rb freeview" id="btn-freeview" onclick="toggleRecFreeView()" title="Slobodan pogled / Vrati na poziciju"><svg class="ic"><use href="#ic-otkljucaj"/></svg><span class="rb-lbl">Slobodan pogled</span></button>
           <button class="rb stop rb-dup"   onclick="stopRec()" title="Zaustavi snimanje"><svg class="ic"><use href="#ic-stop"/></svg></button>
         </div>
       </div>
@@ -5714,7 +5716,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.2.9';
+const APP_VER = 'v2.3.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6399,7 +6401,7 @@ function _serverSazetakRender() {
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
   const b = document.getElementById('syncq-posalji');
-  if (b) { b.disabled = _serverSaljem || !!serverPosalji._priprema; b.style.opacity = b.disabled ? '0.5' : '1'; }
+  if (b) { b.disabled = _serverSaljem || !!serverPosalji._priprema || _serverPrimljenoBusy || (typeof _serverRazmjena==='function' && !!_serverRazmjena.busy); b.style.opacity = b.disabled ? '0.5' : '1'; }
 }
 
 function _serverPrimljenoKljuc() { return 'tvlake_server_primljeno_v1_' + (sbUser?.id || ''); }
@@ -6523,8 +6525,8 @@ function _serverPrimijeniMojeVlake(rows,owner) {
   }));
 }
 async function serverPreuzmiDijeljeno(projektId) {
-  if (_serverPrimljenoBusy || !sbUser || !sbProfile) return;
-  if (navigator.onLine === false) { showToast('📴 Nema veze — prikazujem zadnje preuzete podatke'); return; }
+  if (_serverPrimljenoBusy || !sbUser || !sbProfile) return {ok:false};
+  if (navigator.onLine === false) { showToast('📴 Nema veze — prikazujem zadnje preuzete podatke'); return {ok:false}; }
   const owner = sbUser.id;
   _serverPrimljenoBusy = true;
   _serverPrimljenoRender();
@@ -6532,19 +6534,19 @@ async function serverPreuzmiDijeljeno(projektId) {
     _mrezaSila(60000);
     const membership = await sb.from('projekt_clanovi').select('projekt_id').eq('korisnik_id',owner);
     if (membership.error) throw membership.error;
-    if (sbUser?.id !== owner) return;
+    if (sbUser?.id !== owner) return {ok:false,ownerChanged:true};
     const owned = await sb.from('projekti').select('*').eq('korisnik_id',owner);
     if (owned.error) throw owned.error;
-    if (sbUser?.id !== owner) return;
+    if (sbUser?.id !== owner) return {ok:false,ownerChanged:true};
     const ids = [...new Set((membership.data || []).map(x => x.projekt_id))];
     const result = ids.length ? await sb.from('projekti').select('*').in('id',ids) : {data:[]};
     if (result.error) throw result.error;
-    if (sbUser?.id !== owner) return;
+    if (sbUser?.id !== owner) return {ok:false,ownerChanged:true};
     const projects = [...new Map([...(owned.data || []), ...(result.data || [])].map(p=>[p.id,p])).values()].filter(p=>!projektId || p.id===projektId);
     if (!projects.length) {
       for (const p of _projekti) if (p.korisnik_id!==owner && (!projektId || p.id===projektId) && !ids.includes(p.id)) p.clanovi=(p.clanovi || []).filter(c=>c.korisnik_id!==owner);
       _OL.save(_OL.PROJEKTI,_projekti);
-      showToast('Nema projekata u kojima si vlasnik ili član'); return;
+      showToast('Nema projekata u kojima si vlasnik ili član'); return {ok:true,count:0};
     }
     const rows = await _vlakePreuzmiStranice(() => {
       _mrezaSila(60000);
@@ -6569,27 +6571,28 @@ async function serverPreuzmiDijeljeno(projektId) {
       if (typeof _serverProjektPreuzeto === 'function' && _serverProjektPreuzeto(p.id,projektRows) === false) throw new Error('Pregled projekta nije sačuvan');
       // Prepusti glavnu nit između projekata — veći keš ne blokira dodir/GPS.
       await new Promise(r=>setTimeout(r,0));
-      if (sbUser?.id !== owner) return;
+      if (sbUser?.id !== owner) return {ok:false,ownerChanged:true};
     }
     // Preuzimanje mora osvježiti i aktivnu kartu, bez drugog mrežnog upita.
     if (projects.some(p=>p.id===_aktivniProjektId)) {
       await sbLoadKolegeVlake(rows.filter(r=>r.projekt_id===_aktivniProjektId));
-      if (sbUser?.id !== owner) return;
+      if (sbUser?.id !== owner) return {ok:false,ownerChanged:true};
     }
     rndProjektiList();
     showToast('✓ Preuzeto ' + rows.length + ' vlaka projekta');
-  } catch(e) { showToast('⚠ Preuzimanje nije uspjelo — zadnji lokalni podaci ostaju dostupni'); }
+    return {ok:true,count:rows.length,projects:projects.length};
+  } catch(e) { showToast('⚠ Preuzimanje nije uspjelo — zadnji lokalni podaci ostaju dostupni'); return {ok:false}; }
   finally { _serverPrimljenoBusy=false; _serverPrimljenoRender(); if (typeof _serverPanelRender==='function') _serverPanelRender(); }
 }
 
 // Ručno slanje svega što čeka. Otvara kapiju samo dok slanje traje: svi
 // automatski pozivi reda (GPS tačka, povratak u prvi plan...) i dalje ne šalju.
 async function serverPosalji() {
-  if (_serverSaljem || serverPosalji._priprema) return;
-  if (!sbUser || !sbProfile) { showToast('⚠ Prijavi se da bi slao na server'); return; }
+  if (_serverSaljem || serverPosalji._priprema) return {ok:false};
+  if (!sbUser || !sbProfile) { showToast('⚠ Prijavi se da bi slao na server'); return {ok:false}; }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     showToast('📴 Nema veze — sve ostaje sačuvano na telefonu, pošalji kad bude signala');
-    return;
+    return {ok:false};
   }
   const pripremaOwner = sbUser.id;
   serverPosalji._priprema = true;
@@ -6598,18 +6601,18 @@ async function serverPosalji() {
     // Brojač GPS tačaka mora biti spreman i odmah nakon pokretanja aplikacije.
     // Prazan memorijski brojač prije učitavanja IDB-a nije potvrda slanja.
     if (typeof FieldStore !== 'undefined') await FieldStore.init();
-    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return {ok:false,ownerChanged:true}; }
     await _flushAllPendingVlake();
-    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return {ok:false,ownerChanged:true}; }
     await _retryOrphanVlake();
-    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return; }
+    if (sbUser?.id !== pripremaOwner) { showToast('⚠ Slanje je prekinuto jer je promijenjen nalog'); return {ok:false,ownerChanged:true}; }
     _OL.loadQueue(true); // oštećen red se ne smije proglasiti praznim/poslanim
   } catch(e) {
     showToast('⚠ Priprema slanja nije uspjela — lokalni podaci ostaju sačuvani');
-    return;
+    return {ok:false};
   } finally { serverPosalji._priprema = false; _serverSazetakRender(); }
   const prije = _serverNaCekanju();
-  if (!prije.stavki) { showToast('✓ Sve je već poslano'); _serverSazetakRender(); return; }
+  if (!prije.stavki) { showToast('✓ Sve je već poslano'); _serverSazetakRender(); return {ok:true,pending:0}; }
   _serverSaljem = true;
   const syncOwner = sbUser.id;
   let ownerChanged = false;
@@ -6652,7 +6655,7 @@ async function serverPosalji() {
   if (ownerChanged) {
     showToast('⚠ Slanje je prekinuto jer je promijenjen nalog');
     _updSyncBadge();
-    return;
+    return {ok:false};
   }
   const poslije = _serverNaCekanju();
   if (!poslije.stavki) {
@@ -6667,6 +6670,7 @@ async function serverPosalji() {
   _updSyncBadge();
   const pan = document.getElementById('syncq-panel');
   if (pan && pan.style.display !== 'none') openSyncQueuePanel(); else _serverSazetakRender();
+  return {ok:!poslije.stavki,pending:poslije.stavki,partial:poslije.stavki<prije.stavki || poslije.red<prije.red || poslije.doz<prije.doz};
 }
 
 function _fmtAgo(ts) {
@@ -9327,7 +9331,7 @@ async function saveNovProjekt() {
 }
 
 function _projAktSekcije(prikazi) {
-  document.querySelectorAll('#proj-panel .proj-akt-only').forEach(el => { el.style.display = prikazi ? '' : 'none'; });
+  document.querySelectorAll('#proj-panel .proj-akt-only').forEach(el => { el.style.display = prikazi && !!_aktivniProjektId ? '' : 'none'; });
 }
 function showProjektiList() {
   _pdProjektId = null;
@@ -27580,6 +27584,7 @@ function _updFabVisibility() {
   // osvježila baš u modovima snimanja zbog kojih i postoji.
   try { _recBarSync(); } catch(e) {}
 
+  if(typeof VlakaDirection!=='undefined')VlakaDirection.refreshRecording();
   const inRec    = recOn;
   const isPaused = recPaused;
   const hasParent = inRec && _recParentIdx !== null && vlake[_recParentIdx];
@@ -39762,7 +39767,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="help-body">
 
-    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>U tabu Projekat odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U dnu taba Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji na server</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Preuzmi vlake projekata ili doznaku. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
+    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>Projekat prvo prikazuje listu projekata i vlake aktivnog projekta. Statistika i izvještaji te Izvoz i sigurnosna kopija proširuju se na dodir. Ispod su poligon odjela, boje i strelice. U Bojama vlaka odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U sekciji Poligon odjela i teren u tabu Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji i primi</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Jednim dugmetom Pošalji i primi šalješ rad i primaš vlake svih dostupnih projekata. Za doznaku se prima lista odjela te zone i GPS pojasevi odjela otvorenog u Doznaci. Tri statusa prikazuju koji je korak završen. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
 
     <!-- ── VLAKE ───────────────────────────────── -->
     <div id="help-pane-vlake" style="display:none;">
@@ -39848,7 +39853,7 @@ if (typeof AndroidDownload !== 'undefined') {
           <span class="h-arrow">▶</span>🎛 Kontrole snimanja (baner)
         </div>
         <div class="help-sec-body">
-          <div class="help-diagram">Tokom GPS snimanja, na vrhu ekrana pojavljuje se baner sa kontrolama. Evo šta svaki gumb radi:</div>
+          <div class="help-diagram">Tokom GPS snimanja, pri dnu karte pojavljuje se sažet baner sa stanjem, a kontrole su u donjoj traci. Evo šta svaki gumb radi:</div>
           <div class="help-row">
             <div class="help-icon">⏸</div>
             <div class="help-txt"><b>Pauza / Nastavi</b><span>Privremeno pauzira GPS snimanje (npr. kad stojite na jednom mjestu). Tapnite ponovo za nastavak. Tokom pauze, tačke se ne bilježe.</span></div>
@@ -39869,10 +39874,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon">↩</div>
             <div class="help-txt"><b>Vrati na roditelja</b><span>Završava trenutni krak i nastavlja snimanje matične trase.</span></div>
           </div>
-          <div class="help-row">
-            <div class="help-icon">🔓</div>
-            <div class="help-txt"><b>Slobodan pogled</b><span>Normalno mapa prati vašu GPS poziciju. Tapnite 🔓 da otključate mapu i slobodno je pomičete/zumirate. Tapnite ponovo da se vratite na praćenje pozicije.</span></div>
-          </div>
+          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Dvosmjer</b><span>Za vlaku s dva izlaza na put označi zadnju sačuvanu GPS tačku dugmetom između Desnog kraka i Pauze. To je jedan znak sa dva pravca; ti biraš mjesto promjene smjera.</span></div></div>
           <div class="help-row">
             <div class="help-icon" style="color:#f87171;">⏹</div>
             <div class="help-txt"><b>Stop</b><span>Završava snimanje. Svi podaci se automatski čuvaju.</span></div>
@@ -39968,7 +39970,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon">🔗</div>
             <div class="help-txt"><b>Spoji vlake</b><span>Spaja dvije vlake u jednu: kliknite na krajnju tačku (zelenu/crvenu) jedne vlake, pa na krajnju tačku druge.</span></div>
           </div>
-          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Smjer privlačenja</b><span>U detaljima vlake odaberite automatski prema najbližem učitanom putu, prema početku, prema kraju ili dvosmjerno. Automatski broj strelica: jedna do 300 m, dvije za duže vlake. Dva smjera birajte samo za vlaku koja izlazi na put na oba kraja. Projektant dodirom na vlaku određuje razdjelnicu; ne postavlja se na matematičku polovinu. Tokom GPS snimanja koristite „Dva izlaza na put · Razdjelnica ovdje“ na zadnjoj sačuvanoj tački. Na dnu Projekta podesite prikaz, debljinu, veličinu, boju i broj strelica. Postavka prikaza je lokalna po korisniku/projektu/vlaci. U Bojama vlaka opcija „Dodaj outline“ daje sitni bijeli/crni obrub (14% ukupnog proširenja) za pune linije, crtice i tačke. Ako put nije pronađen blizu krajeva, izaberite smjer ručno.</span></div></div>
+          <div class="help-row"><div class="help-icon">↔</div><div class="help-txt"><b>Smjer privlačenja</b><span>U detaljima vlake odaberite automatski prema najbližem učitanom putu, prema početku, prema kraju ili dvosmjerno. Automatski broj strelica: jedna do 300 m, dvije za duže vlake. Dva smjera birajte samo za vlaku koja izlazi na put na oba kraja. Projektant dodirom na vlaku određuje dvosmjer ↔; ne postavlja se na matematičku polovinu. Tokom GPS snimanja koristite „Dvosmjer“ na zadnjoj sačuvanoj tački. Na dnu Projekta podesite položaj (Na vlaci ili Pored vlake), prikaz, debljinu, veličinu, boju i broj strelica. Aktivna je samo jedna vrsta položaja. Za pregled odjela u mjerilu 1:10.000 počnite s automatskim brojem 1 / 2 i veličinom 30 px. Postavka prikaza je lokalna po korisniku/projektu/vlaci. U Bojama vlaka opcija „Dodaj outline“ daje sitni bijeli/crni obrub (14% ukupnog proširenja) za pune linije, crtice i tačke. Ako put nije pronađen blizu krajeva, izaberite smjer ručno.</span></div></div>
         </div>
       </div>
 
@@ -40198,7 +40200,7 @@ if (typeof AndroidDownload !== 'undefined') {
             <div class="help-icon" style="font-size:16px;">📴</div>
             <div class="help-txt">
               <b>Offline rad</b>
-              <span>GPS tačke pojasa čuvaju se lokalno i dok nema signala. Kada imaš mrežu otvori Meni → Pošalji na server, provjeri Za slanje i potvrdi slanje. Zatim pregledaj potvrde u Poslano.</span>
+              <span>GPS tačke pojasa čuvaju se lokalno i dok nema signala. Kada imaš mrežu otvori Meni → Pošalji na server, provjeri Za slanje i pritisni Pošalji i primi. Zatim pregledaj potvrde u Poslano.</span>
             </div>
           </div>
         </div>
@@ -40223,7 +40225,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">🔄</div>
-            <div class="help-txt"><b>Realtime sinhronizacija</b><span>Kolege vide podatke nakon slanja na server. Za pouzdan prijem koristi Preuzmi doznaku u Server pregledu ili Osvježi slojeve u odjelu; realtime obavijesti dopunjuju prikaz dok je veza dostupna.</span></div>
+            <div class="help-txt"><b>Realtime sinhronizacija</b><span>Kolege vide podatke nakon slanja na server. Za pouzdan prijem koristi Pošalji i primi u Server pregledu ili Osvježi slojeve u odjelu; realtime obavijesti dopunjuju prikaz dok je veza dostupna.</span></div>
           </div>
         </div>
       </div>
@@ -41160,6 +41162,9 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="ab-ico"><svg class="ic"><use href="#ic-dodaj"/></svg></span>
     <span>Desni krak</span>
   </button>
+  <button id="rec-direction-split" type="button" hidden onclick="VlakaDirection.markRecording()" title="Dva izlaza na put — označi dvosmjer na zadnjoj GPS tački">
+    <span class="ab-ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M8 7l-5 5 5 5M16 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span id="rec-direction-label">Dvosmjer</span>
+  </button>
   <!-- Pauza / Nastavi (tokom snimanja) -->
   <!-- ab-kraj je ISPRED ab-pauza — kad je pauzirano, Završi se pojavi na istom vizualnom mjestu kao Pauza -->
   <button id="ab-kraj" onclick="_krajVlake()" title="Završi snimanje" style="display:none;">
@@ -41589,8 +41594,9 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
 <div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Pošalji na server" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
-  <div class="sp-header"><div><b>Pošalji na server</b><small>Sadržaj, projekat i potvrde razmjene</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
+  <div class="sp-header"><div><b>Pošalji na server</b><small>Jedan pritisak za slanje i preuzimanje</small></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
   <div id="syncq-sum"></div>
+  <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
   <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
   <div id="server-scroll" style="overflow-y:auto;flex:1;min-height:0;">
     <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
@@ -41599,19 +41605,19 @@ if (typeof AndroidDownload !== 'undefined') {
     <details id="server-project-view"><summary>Vlake aktivnog projekta · pregled i ispis</summary>
       <h3 class="sp-section-heading">Podaci u projektu</h3>
       <div id="server-project-authors"></div>
-      <div class="sp-project-actions"><button id="server-project-refresh" onclick="_serverProjektRefresh()">↓ Osvježi server</button><button id="server-project-map" onclick="_serverProjektMap()">Na karti</button><button id="server-project-print" onclick="_serverProjektReport()">Ispis svih vlaka</button></div>
+      <div class="sp-project-actions"><button id="server-project-map" onclick="_serverProjektMap()">Na karti</button><button id="server-project-print" onclick="_serverProjektReport()">Ispis svih vlaka</button></div>
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
     </details>
-    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><div class="sp-download-actions"><button id="syncq-preuzmi" onclick="serverPreuzmiDijeljeno()">↓ Preuzmi vlake svih projekata</button><button id="server-doz-refresh" onclick="_serverPreuzmiDoznaku()">↓ Preuzmi doznaku</button></div><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
     <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
     <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     </details>
     <details class="sp-recovery"><summary>Sigurnosna kopija i red slanja</summary><div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div></details>
   </div>
-  <div class="sp-bottom"><p>Slanje je ručno i obuhvata sve projekte na ovom telefonu. Kolege vide tvoje izmjene nakon slanja.</p>
-    <button id="syncq-posalji" onclick="serverPosalji()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⬆ Pošalji na server</button>
+  <div class="sp-bottom"><p>Šalje tvoje izmjene iz svih projekata, zatim prima vlake kolega i doznaku. Bez signala podaci ostaju na telefonu.</p>
+    <button id="syncq-posalji" onclick="_serverRazmjena()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⇅ Pošalji i primi</button>
   </div>
 </div>
 

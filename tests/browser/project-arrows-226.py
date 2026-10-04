@@ -7,10 +7,10 @@ panel=b.section('      <section class="sec proj-akt-only project-arrows">','    
 toolbar=b.section('<div id="direction-pick-toolbar"','<script src="static/js/vlaka-outline.js">')
 extra='''
 let actI=null,recPaused=false,_puteviLayerFg=null;
-'''+ '\n'.join(b.function(n) for n in ['ptDist','ptAtFrac'])+'''
+'''+ '\n'.join(b.function(n) for n in ['ptDist','ptAtFrac','_abVisinaSync','zoomForScale'])+'''
 window.directionReady=new Promise(resolve=>window.addEventListener('DOMContentLoaded',async()=>{await fixtureReady;document.querySelector('#fixture-project').style.display='none';map.createPane('vlakeLines');window.testV=vlake.find(v=>v.nm==='T10');testV.pts=[{la:44.9,lo:16},{la:44.9,lo:16.004},{la:44.9,lo:16.01}];testV.poly.setLatLngs(testV.pts.map(p=>[p.la,p.lo]));window.peer=kolegeVlakeMap['B::T2'];VlakaDirection.refresh();resolve();},{once:true}));
 '''
-fixture=u.fixture.replace('</body>','<div id="fixture-arrows" style="display:none;position:fixed;inset:12px 0 88px;overflow:auto;background:var(--field-card);z-index:1800;padding:12px">'+panel+'</div>'+toolbar+'<button id="rec-direction-split" hidden onclick="VlakaDirection.markRecording()"></button><script>'+extra+'</script><script src="/static/js/vlaka-outline.js"></script><script src="/static/js/vlaka-direction.js"></script></body>')
+fixture=u.fixture.replace('</body>','<div id="fixture-arrows" style="display:none;position:fixed;inset:12px 0 88px;overflow:auto;background:var(--field-card);z-index:1800;padding:12px">'+panel+'</div>'+toolbar+b.section('      <!-- ═══ GPS SNIMANJE BANNER ═══ -->','      <!-- TRAG RECORDING BANNER -->')+'<script>'+extra+'</script><script src="/static/js/vlaka-outline.js"></script><script src="/static/js/vlaka-direction.js"></script></body>')
 async def tap_fraction(page,f):
  xy=await page.evaluate('f=>{const p=ptAtFrac(testV.pts,f),xy=map.latLngToContainerPoint([p.la,p.lo]),r=map.getContainer().getBoundingClientRect();return {x:r.left+xy.x,y:r.top+xy.y}}',f)
  await page.touchscreen.tap(xy['x'],xy['y'])
@@ -35,6 +35,25 @@ async def main():
   await tap_fraction(page,.2);assert await page.evaluate('blockClicks')==0;assert not await page.evaluate('VlakaDirection.isPicking()');assert await page.evaluate("!map.getContainer().classList.contains('direction-picking')")
   assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02
   assert await page.evaluate('testV._directionMarkers.map(m=>m._directionSign)')==[-1,0,1]
+  assert await page.evaluate("testV._directionMarkers.filter(m=>m._directionSign===0).length")==1
+  icon=await page.evaluate("()=>{const m=testV._directionMarkers.find(m=>m._directionSign===0),e=m.getElement().querySelector('svg'),p=e.querySelector('path:last-child');return {label:e.getAttribute('aria-label'),path:p.getAttribute('d'),stroke:p.getAttribute('stroke-width'),bounds:p.getBBox().toJSON()}}")
+  assert icon['label']=='Dvosmjer koji je odabrao projektant';assert 'L -9 0' in icon['path'] and 'L 9 0' in icon['path'];assert icon['bounds']['width']==18
+  assert await page.locator('#project-arrow-placement').count()==1
+  before=await page.evaluate('testV._directionMarkers.length')
+  for mode in ['beside','on','beside']:
+   await page.evaluate("mode=>{VlakaDirection.change('placement',mode);map.setZoom(14,{animate:false});VlakaDirection.refresh()}",mode)
+   distances=await page.evaluate("testV._directionMarkers.map(m=>{const p=ptAtFrac(testV.pts,m._directionFraction),a=map.latLngToLayerPoint([p.la,p.lo]),b=map.latLngToLayerPoint(m.getLatLng());return Math.hypot(a.x-b.x,a.y-b.y)})")
+   assert await page.evaluate('testV._directionMarkers.length')==before
+   assert all(v>10 if mode=='beside' else v<1 for v in distances),distances
+  # Pregled jednog odjela pri stvarnoj CSS razmjeri 1:10.000 (isti izračun kao app).
+  await page.evaluate("window.testDepartment=L.polygon([[44.898,15.999],[44.902,15.999],[44.902,16.011],[44.898,16.011]],{color:'#64748b',weight:1.5,fillOpacity:.08}).addTo(map);map.options.zoomSnap=0;map.setView([44.9,16.005],zoomForScale(10000,44.9),{animate:false})")
+  for theme in ['day','dark']:
+   for mode in ['on','beside']:
+    await page.evaluate("([theme,mode])=>{document.documentElement.dataset.fieldTheme=theme;VlakaDirection.change('placement',mode);document.querySelector('#map-scale-val').textContent='10 000'}",[theme,mode])
+    assert await page.evaluate('testV._directionMarkers.filter(m=>m._directionSign===0).length')==1
+    await page.screenshot(path=str(b.OUT/f'arrows-department-10000-{theme}-{mode}.png'))
+  await page.evaluate('map.removeLayer(testDepartment)')
+  await page.evaluate("VlakaDirection.change('placement','on')")
   await tap_fraction(page,.2);assert await page.evaluate('blockClicks')==1;await page.evaluate('map.removeLayer(block)')
   # Prekid/otkaz ne mijenjaju prethodnu razdjelnicu; tačka van vlake odbijena.
   await page.evaluate('VlakaDirection.startPick(testV)');await page.keyboard.press('Escape');assert not await page.evaluate('VlakaDirection.isPicking()');assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02
@@ -61,6 +80,17 @@ async def main():
   await page.evaluate("testV.pts.push({la:44.9,lo:16.02});testV.poly.setLatLngs(testV.pts.map(p=>[p.la,p.lo]));VlakaDirection.draw(testV)")
   assert abs(await page.evaluate('VlakaDirection.splitFor(testV).atM')-at)<1;assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.5)<.01
   await page.evaluate('recOn=false;actI=null;VlakaDirection.refreshRecording()')
+  # Stvarni sažeti panel i dvosmjer na donjoj traci; ostaje prostor za kartu.
+  for theme in ['day','dark']:
+   for w,h in [(320,568),(390,800),(568,320)]:
+    await page.set_viewport_size({'width':w,'height':h});await page.evaluate("t=>{document.documentElement.dataset.fieldTheme=t;recOn=true;recPaused=false;actI=vlake.indexOf(testV);document.querySelector('#rec-banner').classList.add('show');for(const e of document.querySelectorAll('#action-bar>button,#action-bar>div'))e.style.display=['ab-krak-l','ab-krak-d','rec-direction-split','ab-pauza'].includes(e.id)?'':'none';VlakaDirection.refreshRecording();_abVisinaSync()}",theme)
+    assert await page.locator('#btn-preciz,#btn-freeview').count()==0
+    for selector in ['#rec-banner','#action-bar','#rec-direction-split']:await b.bounds(page,selector,w,h)
+    assert await page.locator('#rec-direction-split').evaluate('e=>e.getBoundingClientRect().height')>=44
+    assert await page.locator('#rec-banner').evaluate('e=>e.getBoundingClientRect().height')<110
+    assert await page.locator('#rec-row2').is_hidden()
+    await page.screenshot(path=str(b.OUT/f'recording-compact-{theme}-{w}-{h}.png'))
+  await page.evaluate("recOn=false;actI=null;VlakaDirection.refreshRecording();document.querySelector('#rec-banner').classList.remove('show')")
   # Outline je isti za vlastite/kolegine linije i krakove; ne mijenja izvorne boje.
   await page.evaluate("window.sourceColor=testV.color;_bojaChange('outline',true)");assert await page.evaluate('testV.poly.options.vlakaOutline&&peer.poly.options.vlakaOutline');assert await page.evaluate('testV.color===sourceColor')
   # Stvarni SVG fallback: uvezan i pomjeren sa glavnim pathom, bez klikova i curenja.

@@ -150,7 +150,7 @@
       const el=byId('server-'+direction+'-items');if(!el)continue;
       const opened=new Set(Array.from(el.querySelectorAll?.('details[open]')||[],d=>d.dataset.group));
       const groups=grouped(direction);
-      el.innerHTML=groups.length?groups.map(g=>'<details class="sp-transfer-group" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><b>'+esc(g.title)+'</b><span>'+g.rows.length+' stavki · '+(g.ts?esc(timestamp(g.ts)):'Lokalna kopija')+'</span></summary>'+g.rows.map(r=>'<article class="sp-transfer-item"><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><span>Projekat: <b>'+esc(r.project)+'</b></span><span>Projektant: '+esc(r.author)+'</span><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+'</small></article>').join('')+'</details>').join(''):'<div class="sp-empty">'+(direction==='received'?'Preuzmi podatke za pregled projekata.':'Još nema potvrda slanja za posljednja tri projekta.')+'</div>';
+      el.innerHTML=groups.length?groups.map(g=>'<details class="sp-transfer-group" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><b>'+esc(g.title)+'</b><span>'+g.rows.length+' stavki · '+(g.ts?esc(timestamp(g.ts)):'Lokalna kopija')+'</span></summary>'+g.rows.map(r=>'<article class="sp-transfer-item"><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><span>Projekat: <b>'+esc(r.project)+'</b></span><span>Projektant: '+esc(r.author)+'</span><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+'</small></article>').join('')+'</details>').join(''):'<div class="sp-empty">'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Još nema potvrda slanja za posljednja tri projekta.')+'</div>';
     }
   }
   function transferMap(direction,itemKey){
@@ -198,14 +198,58 @@
     const el=byId('server-send-preview');if(!el)return;
     const groups=pendingGroups();
     const loading=typeof FieldStore!=='undefined'&&!FieldStore.ready;
-    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Dugme šalje navedene izmjene iz svih projekata. Tragovi, dnevnik, tekstualne oznake i fotografije ostaju lokalno.</p>';
+    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Pošalji i primi šalje navedene izmjene iz svih projekata. Tragovi, dnevnik, tekstualne oznake i fotografije ostaju lokalno.</p>';
+  }
+  let exchange=null;
+  function exchangeKey(owner){return 'tvlake_server_exchange_v1_'+owner;}
+  function renderExchange(){
+    const el=byId('server-exchange-status');if(!el)return;
+    const owner=currentUid();let state=exchange?.owner===owner?exchange:null;
+    if(!state)try{state=JSON.parse(localStorage.getItem(exchangeKey(owner))||'null');}catch(e){}
+    const button=byId('syncq-posalji'),busy=!!_serverRazmjena.busy||_serverSaljem||!!serverPosalji._priprema||_serverPrimljenoBusy||!!_serverPreuzmiDoznaku.busy;
+    if(button){button.disabled=busy;button.textContent=_serverRazmjena.busy?'⇅ '+(state?.phase||'Razmjena u toku…'):'⇅ Pošalji i primi';}
+    if(!state||state.owner!==owner){el.innerHTML='<p class="sp-note">Prvo šalje tvoje izmjene, zatim preuzima vlake dostupnih projekata i doznaku. Prijem ne briše neposlani rad.</p>';return;}
+    const symbols={waiting:'○',working:'↻',ok:'✓',partial:'!',error:'!'};
+    el.innerHTML='<div class="sp-exchange-steps">'+[['send','Slanje'],['vlake','Prijem vlaka'],['doz','Prijem doznake']].map(([key,label])=>{const step=state[key]||{state:'waiting',text:'Čeka'};return '<div data-state="'+esc(step.state)+'"><b>'+symbols[step.state]+' '+label+'</b><span>'+esc(step.text)+'</span></div>';}).join('')+'</div><small>'+(_serverRazmjena.busy?'Razmjena traje — sačekaj završetak.':'Posljednji pokušaj: '+esc(timestamp(state.ts)))+'</small>';
+  }
+  async function exchangeData(){
+    if(_serverRazmjena.busy||_serverSaljem||serverPosalji._priprema||_serverPrimljenoBusy||_serverPreuzmiDoznaku.busy)return;
+    const owner=currentUid();if(!owner||!sbProfile){showToast('Prijavi se za slanje i prijem podataka.');return;}
+    if(navigator.onLine===false){showToast('Bez signala — podaci ostaju na telefonu. Pritisni Pošalji i primi kada bude veze.');return;}
+    const selected=typeof _dozSelId!=='undefined'?_dozSelId:null;
+    _serverRazmjena.busy=true;
+    exchange={owner,ts:Date.now(),phase:'Šaljem izmjene…',send:{state:'working',text:'Priprema lokalnog rada'},vlake:{state:'waiting',text:'Nakon slanja'},doz:{state:'waiting',text:'Nakon prijema vlaka'}};
+    const alive=()=>currentUid()===owner;
+    async function run(key,phase,action,describe){
+      if(!alive())return;exchange.phase=phase;exchange[key]={state:'working',text:phase};renderExchange();
+      let result;try{result=await action();}catch(e){result={ok:false};}
+      if(!alive())return;exchange[key]=describe(result);renderExchange();
+    }
+    try{
+      renderExchange();
+      await run('send','Šaljem izmjene…',()=>serverPosalji(),r=>r?.ok?{state:'ok',text:'Sve pripremljene izmjene su potvrđene'}:{state:r?.partial?'partial':'error',text:r?.pending? r.pending+' stavki čeka — ponovi razmjenu':'Slanje nije završeno — rad ostaje na telefonu'});
+      if(!alive())return;
+      await run('vlake','Preuzimam vlake…',()=>serverPreuzmiDijeljeno(),r=>r?.ok?{state:'ok',text:r.count+' vlaka · '+(r.projects||0)+' projekata'}:{state:'error',text:'Prijem nije završen — koristi lokalnu kopiju'});
+      if(!alive())return;
+      await run('doz','Preuzimam doznaku…',()=>_serverPreuzmiDoznaku(selected),r=>r?.ok?{state:'ok',text:r.label+(r.open?'':' · za pojaseve otvori odjel')}:{state:'error',text:'Doznaka nije preuzeta — koristi lokalnu kopiju'});
+      if(!alive())return;
+      exchange.ts=Date.now();exchange.phase='Završeno';
+      try{localStorage.setItem(exchangeKey(owner),JSON.stringify(exchange));}catch(e){}
+      const ok=['send','vlake','doz'].every(k=>exchange[k].state==='ok');
+      showToast(ok?'✓ Slanje i prijem završeni.':'Razmjena nije završena u cijelosti. Pregledaj statuse i ponovi kada bude veze.');
+    }finally{
+      _serverRazmjena.busy=false;
+      if(!alive())exchange=null;
+      render();if(typeof _tabServerCounts==='function')_tabServerCounts();
+    }
   }
   function render() {
+    renderExchange();
     const p = sync(), context=byId('server-project-label');
     if(context)context.textContent=label(p);
     const dz=byId('server-doz-status');
     if(dz){let saved=null;try{saved=JSON.parse(localStorage.getItem('tvlake_server_doz_received_'+currentUid())||'null');}catch(e){}
-      dz.textContent=saved?'Doznaka: '+saved.label+' · primljeno '+timestamp(saved.ts):'Preuzmi listu odjela doznake i slojeve trenutno otvorenog odjela.';}
+      dz.textContent=saved?'Doznaka: '+saved.label+' · primljeno '+timestamp(saved.ts):'Prijem doznake: lista odjela i zone / GPS pojasevi odjela koji je otvoren u Doznaci.';}
     const who = byId('server-identity');
     if (who) who.textContent = 'Prijavljen: ' + name(currentUid()) + (p ? ' · ' + (p.korisnik_id===currentUid() ? 'Vlasnik projekta' : 'Član / pregled projekta') : '');
     const root = byId('server-project-view'); if (!root) return;
@@ -237,26 +281,29 @@
     _openOrDownloadReport(html.replace('</html>',breakdown+'</html>'),'Vlake_'+m.project.odjel);
   }
   Object.assign(window,{
-    _serverPanelSazetak(n,st){renderPending();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
+    _serverRazmjena:exchangeData,_serverRazmjenaStatus:renderExchange,
+    _serverPanelSazetak(n,st){renderPending();renderExchange();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
     _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,_serverTransfers:transfers,_serverDozReceived:dozReceived,
     _serverTransferGroups:grouped,_serverTransferMap:transferMap,
     _serverTransferGroup(value){groupMode=value==='day'?'day':'project';groupOwner=currentUid();renderTransfers();},
     _serverPreviewClose(){if(previewLayer)map.removeLayer(previewLayer);previewLayer=null;},
-    async _serverPreuzmiDoznaku(){
-      if(_serverPreuzmiDoznaku.busy)return;
-      const uid=currentUid();if(!uid)return;
+    async _serverPreuzmiDoznaku(selectedId=typeof _dozSelId!=='undefined'?_dozSelId:null){
+      if(_serverPreuzmiDoznaku.busy)return {ok:false};
+      const uid=currentUid();if(!uid||navigator.onLine===false)return {ok:false};
       _serverPreuzmiDoznaku.busy=true;const btn=byId('server-doz-refresh');if(btn)btn.disabled=true;
       try{
         _mrezaSila(60000);
         if(await dozLoadOdjeli()!==true)throw Error('Odjeli nisu preuzeti');
-        if(currentUid()!==uid)return;
-        const id=typeof _dozSelId!=='undefined'?_dozSelId:null,odjel=(_dozOdjeli||[]).find(o=>o.id===id);
+        if(currentUid()!==uid)return {ok:false,ownerChanged:true};
+        const id=selectedId,odjel=(_dozOdjeli||[]).find(o=>o.id===id);
         let label='Lista odjela';
         if(odjel){if(await dozLoadLayers(id,{strict:true})!==true)throw Error('Slojevi nisu preuzeti');label=odjel.name+' — zone, članovi i GPS pojasevi';}
-        if(currentUid()!==uid)return;
+        if(currentUid()!==uid)return {ok:false,ownerChanged:true};
+        if(selectedId&&!odjel)throw Error('Otvoreni odjel nije u preuzetom spisku');
         localStorage.setItem('tvlake_server_doz_received_'+uid,JSON.stringify({ts:Date.now(),label}));
         showToast(odjel?'✓ Doznaka preuzeta i sačuvana offline':'✓ Odjeli doznake preuzeti. Otvori odjel za njegove zone i pojaseve.');
-      }catch(e){showToast('⚠ Preuzimanje doznake nije završeno — '+e.message);}
+        return {ok:true,label,open:!!odjel};
+      }catch(e){showToast('⚠ Preuzimanje doznake nije završeno — '+e.message);return {ok:false};}
       finally{_serverPreuzmiDoznaku.busy=false;if(btn)btn.disabled=false;render();}
     },
     _serverPanelRender:render,_serverProjektModel:model,_serverProjektPreuzeto:downloaded,_serverOpContext:opContext,
