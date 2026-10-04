@@ -56,7 +56,7 @@ const api={detect,simplify,area,crosses};
 if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}
 if(typeof document==='undefined'){root.onmessage=e=>{try{root.postMessage(detect(e.data));}catch(err){root.postMessage(fail(err.message));}};return;}
 let generation=0,busy=false,worker=null,preview=null,proposal=null,stamp='',source=null,workerReject=null;
-const $=id=>document.getElementById(id),message=s=>{$('doz-boundary-status').textContent=s;};
+const $=id=>document.getElementById(id),message=s=>{const el=$('doz-boundary-status');if(el)el.textContent=s;};
 function online(){try{return navigator.onLine!==false&&(!root.AndroidReferenceOcr?.isOnline||root.AndroidReferenceOcr.isOnline());}catch(e){return false;}}
 function scope(){return JSON.stringify([typeof sbUser!=='undefined'?sbUser?.id:null,typeof _aktivniProjektId!=='undefined'?_aktivniProjektId:null,_dozDrawType,_dozNewOdjelDrawGj,_dozNewOdjelDrawOdjel,_dozDrawPts]);}
 function base(){const key=typeof _activeLayerKey==='function'?_activeLayerKey():null;if(key?.startsWith('_sqlite_'))return _sqlLayers[Number(key.slice(8))]?.layer;if(key==='⛰ Topo'||key==='_nagib'||key==='_granice')return TL['⛰ Topo'];return null;}
@@ -106,6 +106,6 @@ async function start(){
 }
 function accept(){if(!proposal)return;try{assertSource(generation);}catch(e){invalidate();message(e.message);return;}const points=proposal.map(p=>({...p}));invalidate();_dozDrawPts=points;_dozDragLastPt=null;_dozRedrawPreview();$('doz-draw-count').textContent=points.length+' tačaka';message('Prijedlog prihvaćen. Možeš doraditi tačke; Završi vraća granicu u obrazac odjela.');refresh();}
 root.DoznakaBoundary={...api,start,accept,invalidate,refresh,isBusy:()=>busy};
-function init(){refresh();window.addEventListener('online',refresh);window.addEventListener('offline',()=>{invalidate();message('Prepoznavanje traži internet. Ručno crtanje ostaje dostupno.');});map.on('layerremove',e=>{if(source===e.layer)invalidate();});}
+function init(){if(!$('doz-boundary-tools'))return;refresh();window.addEventListener('online',refresh);window.addEventListener('offline',()=>{invalidate();message('Prepoznavanje traži internet. Ručno crtanje ostaje dostupno.');});map.on('layerremove',e=>{if(source===e.layer)invalidate();});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(typeof window!=='undefined'?window:globalThis);

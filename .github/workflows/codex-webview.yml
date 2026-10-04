@@ -34,6 +34,7 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
+          python tests/browser/doznaka-boundary-231.py
           python tests/browser/menu-print-day.py
           python tests/browser/menu-tools.py
           python tests/browser/server-map-218.py
@@ -43,7 +44,6 @@ jobs:
           python tests/browser/reference-vlake-224.py
           python tests/browser/project-arrows-226.py
           python tests/browser/doznaka-restore-227.py
-          python tests/browser/doznaka-boundary-231.py
           python tests/browser/field-offline-5400.py
       - uses: actions/upload-artifact@v4
         if: always()
