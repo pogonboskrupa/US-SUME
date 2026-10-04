@@ -69,7 +69,7 @@ async function capture(ticket){
  // Nema crtanja dok fitBounds pomjera centar; pozivatelj je već pauzirao režim Crtaj.
  const end=Date.now()+6500;while(Date.now()<end){assertSource(ticket);if(!source.isLoading?.()&&Object.values(source._tiles||{}).some(t=>t.current&&t.loaded))break;await new Promise(r=>setTimeout(r,150));}
  assertSource(ticket);
- const size=map.getSize(),scale=Math.min(2,1400/Math.max(size.x,size.y),Math.sqrt(1500000/(size.x*size.y))),canvas=document.createElement('canvas');canvas.width=Math.floor(size.x*scale);canvas.height=Math.floor(size.y*scale);
+ const size=map.getSize(),centre=map.getCenter(),screenMpp=156543.03392*Math.cos(centre.lat*Math.PI/180)/Math.pow(2,map.getZoom()),searchMetres=Number($('doz-boundary-radius').value),scale=Math.min(2,1400/Math.max(size.x,size.y),Math.sqrt(1500000/(size.x*size.y)),100*screenMpp/searchMetres),canvas=document.createElement('canvas');canvas.width=Math.floor(size.x*scale);canvas.height=Math.floor(size.y*scale);
  const ctx=canvas.getContext('2d',{willReadFrequently:true}),rect=map.getContainer().getBoundingClientRect(),coverage=document.createElement('canvas');coverage.width=canvas.width;coverage.height=canvas.height;const cover=coverage.getContext('2d');let tiles=0;
  for(const tile of Object.values(source._tiles||{})){
   const el=tile.el;if(!tile.current||!tile.loaded||!el||el._empty||(el.tagName==='IMG'&&(!el.complete||!el.naturalWidth)))continue;
@@ -80,8 +80,7 @@ async function capture(ticket){
  if(!tiles)throw Error('Topo karta još nije učitana. Sačekaj prikaz ili odaberi instaliranu topografsku kartu.');
  let pixels;try{pixels=ctx.getImageData(0,0,canvas.width,canvas.height);}catch(e){throw Error('Ova podloga ne dozvoljava čitanje slike. Odaberi instaliranu topografsku kartu.');}
  const points=simplify(_dozDrawPts.map(p=>{const xy=map.latLngToContainerPoint(p);return [xy.x*scale,xy.y*scale];}),3);
- const centre=map.getCenter(),metresPerPixel=156543.03392*Math.cos(centre.lat*Math.PI/180)/Math.pow(2,map.getZoom())/scale,radius=Number($('doz-boundary-radius').value)/metresPerPixel;
- if(radius>100)throw Error('Područje pretrage je preširoko u ovom prikazu. Izaberi 20 m ili udalji kartu.');
+ const radius=Math.min(100,searchMetres*scale/screenMpp);
  const loaded=cover.getImageData(0,0,canvas.width,canvas.height).data;
  for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length],steps=Math.ceil(dist(a,b));for(let s=0;s<=steps;s++){const x=Math.round(a[0]+(b[0]-a[0])*s/(steps||1)),y=Math.round(a[1]+(b[1]-a[1])*s/(steps||1));if(x<0||y<0||x>=canvas.width||y>=canvas.height||!loaded[(y*canvas.width+x)*4+3])throw Error('Dio približne granice je izvan učitane karte. Sačekaj učitavanje svih pločica.');}}
  // Georeferencija je zamrznuta prije OCR/worker čekanja; kasniji pomak karte ne mijenja koordinate.
