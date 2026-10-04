@@ -1598,3 +1598,17 @@ CI 37188603263 objavio 2.2.7: APK 22.621.388 B, nema ugrađenog OCR modela,
 pokazao tamno zaglavlje/tamne KPI kartice s day slovima. Dopunjene tematske
 boje zaglavlja/KPI/članova/neaktivnih statusa i browser assertions. Završni
 build 2.2.8/code498; ne prepisivati već objavljeni APK istim brojem verzije.
+
+ZAVRŠENO 2.2.8: CI 37189273730 / 1abf830b7debac1d5e35bd809d4a0b2de4a0020a
+uspješan. 85 JS test fajlova, 9 browser skripti, 39 asset SHA, build,
+Android instrumentacijski uslov bez interneta i sintetička analiza brzine.
+Statistika minmax kolone + na 320 px dvije; PNG day320/dark390 pregledani.
+Release v2.2.8, latest API potvrđen, APK 22.622.560 B (22,62 MB), code498.
+Preuzet CI APK, šest promijenjenih web asseta identično lokalnom izvoru,
+GRANICE.kml ostao, nema ugrađenog OCR pipeline/modela. Izračunati SHA-256
+jednak release digestu:
+2b321b7af9d350ea1417dd342033ef92e57d87ab1968e570a40205b03069c4e0.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.8
+Nema fizičkog uređaja/GPS/produkcijskog Supabase testa; online čitanje
+novim Play modelom nije instrumentacijski potvrđeno (testira se zabrana
+bez validiranog interneta). Prvi model može tražiti čekanje i ponovni tap.

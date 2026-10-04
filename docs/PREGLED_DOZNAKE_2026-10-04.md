@@ -58,4 +58,12 @@ Lokalno: svih 85 JavaScript test fajlova prošlo; pet inline JS blokova i promij
 Pripremljen browser test sa stvarnim Leaflet/Doznaka HTML-om za odabir, GPX/XML/segmente, reload prikaza i 16 PNG prikaza u dvije teme/četiri veličine. Android instrumentacijski test provjerava da se OCR odbija bez stvarnog interneta. CI provjerava da APK nema ugrađene OCR modele/native pipeline i da je manji od 30 MB. Rezultat builda i browser/Android provjera dopunjava se nakon izvršavanja; stvarno online čitanje preuzetim Google Play modelom nije mjereno na korisnikovom telefonu.
 
 
-Prva izvršena CI provjera 2.2.7 (37188603263) prošla je browser/build/Android uslov i svih 39 asset SHA provjera. Objavljeni APK ima 22.621.388 B (22,62 MB), SHA-256 3d4226e9327f4fd5a0e9156337f4f17b71441c9177384b50700254d890f40562. Pregled stvarnih PNG-a otkrio je slab kontrast zaglavlja i KPI kartica Doznake u Dnevnom modu; dopunjeni su CSS i browser provjera boja. Završna verzija zato je 2.2.8/code498, uz sve navedene funkcionalne popravke. Rezultat završne objave slijedi.
+Prva izvršena CI provjera 2.2.7 (37188603263) prošla je browser/build/Android uslov i svih 39 asset SHA provjera. Objavljeni APK ima 22.621.388 B (22,62 MB), SHA-256 3d4226e9327f4fd5a0e9156337f4f17b71441c9177384b50700254d890f40562. Pregled stvarnih PNG-a otkrio je slab kontrast zaglavlja i KPI kartica Doznake u Dnevnom modu; dopunjeni su CSS i browser provjera boja. Završna verzija zato je 2.2.8/code498, uz sve navedene funkcionalne popravke. Završna provjera i objava navedene su ispod.
+
+Završna provjera **2.2.8**: GitHub CI **37189273730**, izvor **1abf830b7debac1d5e35bd809d4a0b2de4a0020a**, uspješan. Svih 85 JS test fajlova, svih devet browser skripti, Android build, 39 asset SHA-256 provjera, provjera odsustva ugrađenog OCR-a, Android instrumentacijski mrežni uslov i sintetička analiza online/offline brzine prošli su. Na ekranu 320 px statistika prelazi u dvije kolone; na širem ekranu u tri, uz provjeru horizontalnog prelivanja. Pregledani završni PNG Doznaka day320 i dark390.
+
+Objavljeni APK **22.622.560 B (22,62 MB)**, umjesto prethodnih 65.143.787 B — smanjenje približno 65%. Preuzet je APK iz CI artefakta, potvrđeno je odsustvo OCR pipeline/model assets, prisustvo GRANICE.kml i identičnost šest promijenjenih web fajlova s lokalnim izvorom. Izračunati SHA-256 jednak je digestu GitHub Release asseta:
+
+`2b321b7af9d350ea1417dd342033ef92e57d87ab1968e570a40205b03069c4e0`
+
+Objava: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.8 — ažuriranje kroz **Meni → Ažuriraj aplikaciju**, versionCode498 i isti postojeći potpis. Nije testiran fizički telefon, stvarni GPS ili stvarno online čitanje novim Google Play modelom; navedene automatizirane provjere to ne zamjenjuju.
