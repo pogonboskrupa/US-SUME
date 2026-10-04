@@ -1,5 +1,8 @@
 package ba.spd.uss.vlake;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -7,6 +10,7 @@ import android.graphics.Rect;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import com.google.mlkit.common.MlKitException;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -16,15 +20,25 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Bundled Latin OCR: fotografija se obrađuje na uređaju, bez preuzimanja modela. */
+/** OCR uz internet: mali APK, model preuzimaju Google Play servisi. */
 public final class ReferenceOcrBridge {
     private final WebView view;
     private final AtomicBoolean busy = new AtomicBoolean(false);
     public ReferenceOcrBridge(WebView view) { this.view = view; }
     public interface Callback { void done(JSONArray words, String error); }
 
+    public static boolean hasInternet(Context context) {
+        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return false;
+        NetworkCapabilities caps = cm.getNetworkCapabilities(cm.getActiveNetwork());
+        return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+    }
+    @JavascriptInterface public boolean isOnline() { return hasInternet(view.getContext()); }
+
     @JavascriptInterface public void recognize(String id, String dataUrl) {
         if (id == null || !id.matches("ref_[0-9]+")) return;
+        if (!isOnline()) { reply(id, new JSONArray(), "Prepoznavanje traži internet. Poveži se i pokušaj ponovo."); return; }
         if (dataUrl == null || !dataUrl.startsWith("data:image/png;base64,") || dataUrl.length() > 10000000) {
             reply(id, new JSONArray(), "Slika nije prihvaćena."); return;
         }
@@ -40,7 +54,7 @@ public final class ReferenceOcrBridge {
                 bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                 if (bitmap == null) throw new IllegalArgumentException("Slika nije čitljiva.");
                 final Bitmap image = bitmap;
-                recognizeImage(image, (words, error) -> { image.recycle(); busy.set(false); reply(id, words, error); });
+                recognizeImage(view.getContext(), image, (words, error) -> { image.recycle(); busy.set(false); reply(id, words, error); });
             } catch (Exception | OutOfMemoryError e) {
                 if (bitmap != null) bitmap.recycle(); busy.set(false); reply(id, new JSONArray(), "Prepoznavanje slike nije uspjelo.");
             }
@@ -53,7 +67,8 @@ public final class ReferenceOcrBridge {
         view.post(() -> { if ("https://appassets.androidplatform.net/assets/index.html".equals(view.getUrl()))
             view.evaluateJavascript("window.ReferenceVlake&&window.ReferenceVlake.ocrReply(" + result + ")", null); });
     }
-    public static void recognizeImage(Bitmap image, Callback callback) {
+    public static void recognizeImage(Context context, Bitmap image, Callback callback) {
+        if (!hasInternet(context)) { callback.done(new JSONArray(), "Prepoznavanje traži internet. Poveži se i pokušaj ponovo."); return; }
         TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
         scan(recognizer, image, 0, new JSONArray(), callback);
     }
@@ -84,7 +99,12 @@ public final class ReferenceOcrBridge {
                     }
                     lineId++;
                 }
-            } else error = "OCR model nije uspio pročitati sliku.";
+            } else {
+                Exception failure = task.getException();
+                error = failure instanceof MlKitException && ((MlKitException) failure).getErrorCode() == MlKitException.UNAVAILABLE
+                    ? "OCR model se preuzima putem Google Play servisa. Sačekaj uz internet pa ponovi prepoznavanje."
+                    : "Prepoznavanje nije uspjelo. Provjeri internet i Google Play servise pa pokušaj ponovo.";
+            }
             if (image != source) image.recycle();
             if (error != null || turn == 3) { recognizer.close(); callback.done(words, error); }
             else scan(recognizer, source, turn + 1, words, callback);

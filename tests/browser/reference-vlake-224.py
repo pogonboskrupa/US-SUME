@@ -36,10 +36,12 @@ async def main():
   assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T3','T12'],await page.locator('#refkarta-detect-status').inner_text()
   # Linije bez T oznake i granica nisu predložene; originalni brojevi se čuvaju.
   await page.context.set_offline(True)
+  await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts);assert await page.evaluate('_refDetectedLines.length')==2
   await page.evaluate("()=>{window.beforeCount=vlake.length;window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===LOCAL_VLAKE_KEY)throw new DOMException('full','QuotaExceededError');return oldSet.call(this,k,v)};}")
   await page.evaluate('ReferenceVlake.importSelected()');assert await page.evaluate('vlake.length===beforeCount&&saveCalls.length===0&&_refDetectedLines.length===2')
   await page.evaluate('Storage.prototype.setItem=oldSet;ReferenceVlake.importSelected()')
   assert await page.evaluate('saveCalls')==['T3','T12'],await page.evaluate('({saveCalls,count:vlake.length,rows:_refDetectedLines.map(r=>r.nm)})');assert await page.evaluate("JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY)).some(v=>v.nm==='T12'&&v.projekt_id==='P')")
+  await page.context.set_offline(False)
   await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts);assert await page.evaluate('_refDetectedLines.length')==0;assert 'Već postoji' in await page.locator('#refkarta-results').inner_text()
   # Refitting ostaje skriven i ne briše geometriju; radi i za server overlay.
   await page.click('#refkarta-quick');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden';await page.evaluate('_placeRefOverlay()');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden'
@@ -86,5 +88,5 @@ async def main():
     await page.evaluate("document.querySelector('#fixture-ref').style.display='none'");await b.bounds(page,'#refkarta-quick',w,h)
     await page.screenshot(path=str(b.OUT/f'reference-quick-{theme}-{w}-{h}.png'))
   await page.evaluate('refKartaRemove()');assert await page.evaluate('_refImg') is None;assert not errors,errors;await browser.close()
- print('OK: vrai raster, T-only filtering, original T numbers, offline import, duplicate protection, hidden fit, repo quick-toggle, stale OCR, affine coordinates, direction and 16 PNG')
+ print('OK: vrai raster, T-only filtering, original T numbers, online detection, offline import, duplicate protection, hidden fit, repo quick-toggle, stale OCR, affine coordinates, direction and 16 PNG')
 if __name__=='__main__':asyncio.run(main())

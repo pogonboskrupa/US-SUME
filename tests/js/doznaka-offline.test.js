@@ -313,9 +313,9 @@ function brisiEnv(o) {
   const sb = { from: () => { st.mreza++; return upit({ error: MREZNA }); } };
   const fn = new Function('sb', '_OL', '_dlgConfirm', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail',
     'showToast', '_mrezaProbaj', 'dozLoadLayers', 'localStorage',
-    'let _dozSelId = "o1"; let _dozMarkings = ' + JSON.stringify(o.zone) + ';\n' + extractFn('dozDeleteMarking') +
+    'const sbUser={id:"me"};let _dozSelId = "o1"; let _dozMarkings = ' + JSON.stringify(o.zone) + ';\n' + extractFn('dozDeleteMarking') +
     '\nreturn { run: dozDeleteMarking, get: () => _dozMarkings };');
-  const api = fn(sb, { enqueue: op => st.red.push(op), loadQueue: () => o.q || [], QUEUE: 'q' },
+  const api = fn(sb, { enqueue: op => o.quota ? false : st.red.push(op), loadQueue: () => o.q || [], QUEUE: 'q' },
     async () => true, () => { st.kes++; }, () => {}, () => {}, m => st.toast.push(m),
     () => o.mreza !== false, async () => {}, { setItem() {} });
   return { api, st };
@@ -358,9 +358,9 @@ t('brisanje odjela / dodavanje člana ne počinju bez veze', () => {
     'provjera veze PRIJE potvrde — ne pitati pa onda odbiti');
 });
 
-t('dozSetStatus: pad pauziranja ostalih ide u red (ne guta se tiho)', () => {
-  const src = extractFn('dozSetStatus');
-  assert.ok(/ids\.forEach\(id => _OL\.enqueue\(\{ type: 'upsert_doz_status', payload: \{ id, status: 'paused' \} \}\)\)/.test(src));
+t('puna memorija: neuspjelo brisanje ne uklanja zonu ni keš',async()=>{
+  const {api,st}=brisiEnv({zone:[{id:'s1'}],mreza:false,quota:true});
+  await api.run('s1');assert.strictEqual(api.get().length,1);assert.strictEqual(st.kes,0);assert.strictEqual(st.red.length,0);
 });
 
 (async () => {

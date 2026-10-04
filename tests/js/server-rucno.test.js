@@ -198,7 +198,7 @@ t('doznaka: zona, brisanje zone i status idu u red van ručnog slanja', () => {
   assert.ok(/!_serverSlanjeDozvoljeno\(\) \|\| !_mrezaProbaj\(\)/.test(extractFn('dozConfirmSave')));
   assert.ok(/!_serverSlanjeDozvoljeno\(\) \|\| !_mrezaProbaj\(\)/.test(extractFn('dozDeleteMarking')));
   const st = extractFn('dozSetStatus');
-  assert.ok(st.indexOf('_serverURed(') > 0 && st.indexOf('_serverURed(') < st.indexOf(".update({ status })"));
+  assert.ok(st.includes('localStorage.setItem(_OL.QUEUE') && !st.includes('sb.from('), 'status ide u atomski lokalni red; server piše procesor ručnog slanja');
 });
 
 t('preimenovanje vlake ne piše direktno van ručnog slanja', () => {

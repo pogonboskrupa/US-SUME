@@ -1,4 +1,4 @@
-/* Referentna karta: obavezna oznaka T + broj, pregled prije uvoza, offline OCR u APK-u. */
+/* Referentna karta: obavezna oznaka T + broj, pregled prije uvoza, OCR uz internet bez modela u APK-u. */
 (function(root){
 'use strict';
 let generation=0,request=0,pending=null,rows=[],snapshot='',manual=[],marking=null,quickHidden=false,importing=false;
@@ -34,14 +34,18 @@ function pixelToLL(x,y){
 function existingNames(){if(typeof _projektVlakeRows==='function')return new Set(_projektVlakeRows().map(r=>r.nm));return new Set(vlake.filter(v=>v.projektId===_aktivniProjektId).map(v=>v.nm));}
 function stopMark(){if(marking){map.off('click',marking);marking=null;map.getContainer().style.cursor='';}map.getContainer().classList.remove('reference-marking');if($('refkarta-label-cancel'))$('refkarta-label-cancel').hidden=true;}
 function invalidate(newImage=false){generation++;stopMark();if(pending){clearTimeout(pending.timer);pending.reject(Error('Prepoznavanje je otkazano.'));pending=null;}rows=[];snapshot='';_refDetectedLines=[];if(newImage)manual=[];if(_refImpGroup){map.removeLayer(_refImpGroup);_refImpGroup=null;}if($('refkarta-imp-ctrl'))$('refkarta-imp-ctrl').style.display='none';if($('refkarta-results'))$('refkarta-results').replaceChildren();}
+let quickScope=null;
+function quickLoad(){const uid=typeof sbUser!=='undefined'?sbUser?.id||'guest':'guest';if(quickScope===uid)return;quickScope=uid;try{quickHidden=localStorage.getItem('tvlake_reference_hidden_'+uid)==='1';}catch(e){quickHidden=false;}}
+function quickSave(){try{localStorage.setItem('tvlake_reference_hidden_'+quickScope,quickHidden?'1':'0');}catch(e){say('Prikaz je promijenjen; izbor nije sačuvan.');}}
 function refreshQuick(){
+ quickLoad();
  const button=$('refkarta-quick');if(!button)return;const all=[_refOverlay,...Object.values(_refRepoOverlays)].filter(Boolean),visible=all.some(l=>map.hasLayer(l))&&!quickHidden;button.hidden=!all.length;
  button.textContent=visible?'Ref. karta · Sakrij':'Ref. karta · Prikaži';button.setAttribute('aria-pressed',String(visible));button.title=visible?'Sakrij referentne slike':'Prikaži referentne slike';
  if(map.getPane('refKarte'))map.getPane('refKarte').style.visibility=quickHidden?'hidden':'';
  const cb=$('refkarta-vis');if(cb)cb.checked=!!_refOverlay&&map.hasLayer(_refOverlay)&&!quickHidden;
 }
-function toggleQuick(){const visible=[_refOverlay,...Object.values(_refRepoOverlays)].filter(Boolean).some(l=>map.hasLayer(l))&&!quickHidden;quickHidden=visible;if(!visible&&_refOverlay){_refVisible=true;_refOverlay.addTo(map);}if(quickHidden)stopMark();refreshQuick();}
-function showQuick(){quickHidden=false;refreshQuick();}
+function toggleQuick(){quickLoad();const visible=[_refOverlay,...Object.values(_refRepoOverlays)].filter(Boolean).some(l=>map.hasLayer(l))&&!quickHidden;quickHidden=visible;quickSave();if(!visible&&_refOverlay){_refVisible=true;_refOverlay.addTo(map);}if(quickHidden)stopMark();refreshQuick();}
+function showQuick(){quickLoad();quickHidden=false;quickSave();refreshQuick();}
 function selectRow(id,on){const row=rows[Number(id)];if(!row||row.conflict)return;if(on){for(const r of rows)if(r!==row&&(r.nm===row.nm||r.index===row.index))r.selected=false;}row.selected=!!on;render();}
 function render(){
  const box=$('refkarta-results');if(!box)return;const names=existingNames();for(const r of rows){r.conflict=names.has(r.nm);if(r.conflict)r.selected=false;}
@@ -61,9 +65,10 @@ async function addLabel(){
 function ocr(canvas){if(!root.AndroidReferenceOcr?.recognize)return Promise.resolve([]);const id='ref_'+(++request);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{if(pending?.id===id)pending=null;reject(Error('Prepoznavanje nije završeno. Pokušaj manji izrez slike ili označi natpise ručno.'));},90000);pending={id,resolve,reject,timer};try{AndroidReferenceOcr.recognize(id,canvas.toDataURL('image/png'));}catch(e){clearTimeout(timer);pending=null;reject(e);}});}
 function ocrReply(result){if(!pending||pending.id!==result?.id)return;const p=pending;pending=null;clearTimeout(p.timer);result.error?p.reject(Error(result.error)):p.resolve(Array.isArray(result.words)?result.words:[]);}
 async function detect(options){
+ if((typeof navigator!=='undefined'&&navigator.onLine===false)||(root.AndroidReferenceOcr?.isOnline&&!root.AndroidReferenceOcr.isOnline())){const message='Prepoznavanje traži internet. Poveži se i pokušaj ponovo.';if($('refkarta-detect-status'))$('refkarta-detect-status').textContent=message;say(message);return;}
  invalidate();const ticket=generation,stamp=currentStamp(),source=_refImg,status=$('refkarta-detect-status'),alive=()=>ticket===generation&&stamp===currentStamp()&&source===_refImg;
  const scale=Math.min(1,2400/Math.max(source.width,source.height),Math.sqrt(3600000/(source.width*source.height))),W=Math.round(source.width*scale),H=Math.round(source.height*scale),canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;canvas.getContext('2d').drawImage(source,0,0,W,H);
- status.textContent='Čitam oznake T + broj na uređaju…';const words=await ocr(canvas);if(!alive())return;
+ status.textContent='Čitam oznake T + broj · potreban internet…';const words=await ocr(canvas);if(!alive())return;
  const labels=labelsFromWords(words).concat(manual.map(w=>({...w,x0:w.x0*scale,x1:w.x1*scale,y0:w.y0*scale,y1:w.y1*scale})));if(!labels.length){status.textContent='Nijedna čitljiva oznaka T + broj. Dodaj oznake ručno; granice i ostale linije neće biti uvezene.';say(root.AndroidReferenceOcr?'Oznake nisu pročitane. Ručno označi T + broj.':'Automatsko čitanje oznaka dostupno je u novom APK-u. Ovdje označi T + broj ručno.');return;}
  status.textContent='Pronađeno '+labels.length+' oznaka. Povezujem ih s linijama…';await pause();if(!alive())return;
  const small=Math.min(1,1400/Math.max(W,H)),w=Math.round(W*small),h=Math.round(H*small),lineCanvas=document.createElement('canvas');lineCanvas.width=w;lineCanvas.height=h;const ctx=lineCanvas.getContext('2d');ctx.drawImage(canvas,0,0,w,h);const data=ctx.getImageData(0,0,w,h).data,bin=new Uint8Array(w*h);

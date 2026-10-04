@@ -5318,6 +5318,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
               <button class="btn b" style="margin:0;padding:6px 12px;font-size:12px;" onclick="dozShowCreateOdjel()">+ Novi</button>
             </div>
           </div>
+          <label class="doz-search"><span>Pronađi odjel</span><input id="doz-search" type="search" placeholder="Naziv odjela ili GJ" oninput="dozRenderOdjeli()"></label>
           <div id="doz-odjeli-sazetak" class="doz-sazetak"></div>
           <div id="doz-odjeli-list"><div class="doz-empty">Učitavam odjele...</div></div>
         </div>
@@ -5330,22 +5331,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <h3 id="doz-detail-name">Odjel</h3>
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
+        <div id="doz-context" class="doz-context"></div>
+        <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS snimanje</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake i bafer</button><button onclick="dozGoSection('team')">Tim</button></nav>
         <div id="doz-status-row" style="display:flex;gap:6px;padding:8px 12px 4px;"></div>
 
-        <div class="sec">
-          <div class="sec-t">📊 Statistika</div>
-          <div id="doz-stats-box" style="font-size:11px;color:#94a3b8;line-height:1.8;"></div>
-        </div>
-
-        <div class="sec">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div class="sec-t" style="margin:0;">👥 Projektanti</div>
-            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
-          </div>
-          <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
-        </div>
-
-        <div class="sec">
+        <div class="sec" id="doz-section-gps">
           <div class="sec-t">📍 GPS Trag projektanta</div>
           <div style="display:flex;gap:6px;margin-bottom:4px;">
             <button id="doz-gps-btn" class="btn g" onclick="dozToggleGPS()" style="flex:1;margin:0;"><svg class="ic"><use href="#ic-pozicija"/></svg> Počni GPS</button>
@@ -5361,6 +5351,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <button class="btn b" onclick="dozShareQR()" style="font-size:11px;padding:5px 10px;margin:0;"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji QR</button>
           </div>
         </div>
+
+
+        <div class="sec">
+          <div class="sec-t">📊 Statistika</div>
+          <div id="doz-stats-box" style="font-size:11px;color:#94a3b8;line-height:1.8;"></div>
+        </div>
+
+        <div class="sec" id="doz-section-team">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="sec-t" style="margin:0;">👥 Projektanti</div>
+            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
+          </div>
+          <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
+        </div>
+
 
         <div class="sec">
           <div class="sec-t">📐 Pojasevi</div>
@@ -5381,7 +5386,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </div>
 
-        <div class="sec">
+        <div class="sec" id="doz-section-vlake">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
             <div class="sec-t" style="margin:0;">🛤 Vlake</div>
             <button class="btn b" id="doz-vlake-toggle" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozToggleVlake()"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži</button>
@@ -5438,7 +5443,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div id="doz-trees-summary"></div>
         </div>
 
-        <div class="sec">
+        <div class="sec" id="doz-section-zones">
           <div class="sec-t">📐 Obilježene zone (<span id="doz-markings-count">0</span>)</div>
           <div id="doz-markings-summary"><span class="doz-empty">Nema označenih zona</span></div>
           <div id="doz-marked-area"></div>
@@ -5711,7 +5716,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.2.6';
+const APP_VER = 'v2.2.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7356,6 +7361,7 @@ function _startupRestore() {
 
   const korak = (ime, fn) => { try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } };
 
+  korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
   korak('switchTab',   () => switchTab('karta'));
   korak('sqlmapRestore', () => sqlmapRestoreAll());
   korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
@@ -7381,6 +7387,7 @@ function _startupRestore() {
     korak('fotos',     () => _restoreFotos());
     korak('localKml',  () => _localKmlRestore());
     korak('kmlcInit',  () => _kmlcInit());   // lista IDB ključeva za offline bedž
+    korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
     korak('temRestore',() => _temRestore()); // tematska .gpkg karta iz IDB (async)
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
     // CIJELI Cache Storage/IDB (sve offline pločice i karte odjednom). Uz persist()
@@ -14205,6 +14212,7 @@ async function _crashCheck() {
       _dozSelId = snapD.projId;
       _dozGpsProjId = snapD.projId;
       _dozGpsUserId = sbUser.id;
+      _dozGpsExportContext={projectId:_dozGpsProjId,userId:_dozGpsUserId};
       _dozGpsSessionId = snapD.id || _genUUID();
       _dozGpsStopping = false;
       if (typeof FieldStore !== 'undefined' && !snapD.id) await FieldStore.seedSession({id:_dozGpsSessionId,
@@ -15539,7 +15547,8 @@ window.addEventListener('pagehide', e => _appLifecycleDebug('pagehide', !!e.pers
       setTimeout(() => {
         if (_OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
       }, 500);
-    } else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
+    } else if (saved?.type === 'tl' && saved.key === '_granice') restoredKey = '⛰ Topo';
+    else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
   const iconSvg = {
@@ -15937,8 +15946,10 @@ function setLayer(key) {
     }
     const btn = document.getElementById('layer-switch-btn');
     if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-slojevi"/></svg>';
-    _saveLastMap('tl', '⛰ Topo');
+    _geojsonVisible=true;localStorage.setItem('tvlake_granice_visible','1');
+    _saveLastMap('tl', '_granice');
   } else {
+    _geojsonVisible=false;localStorage.setItem('tvlake_granice_visible','0');
     // Sakrij granice ako su bile aktivne
     if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer && map.hasLayer(_geojsonLayer)) {
       map.removeLayer(_geojsonLayer);
@@ -20301,9 +20312,10 @@ function _tragRegAddLayer(t) {
     if (e.originalEvent) e.originalEvent.stopPropagation();
     line.openPopup(e.latlng);
   });
-  if (t.visible !== false) { line.addTo(map); hit.addTo(map); }
+  const visible=typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false;
+  if (visible) { line.addTo(map); hit.addTo(map); }
   // Dužina na sredini traga (globalna opcija) — .vlaka-lbl klasa je uključuje u declutter
-  if (_lineStyle.tragLen && t.visible !== false && t.pts.length >= 2) {
+  if (_lineStyle.tragLen && visible && t.pts.length >= 2) {
     const mid = t.pts[Math.floor(t.pts.length / 2)];
     _tragLenMk[t.id] = L.marker([mid[0], mid[1]], {
       icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [0,0],
@@ -20498,7 +20510,7 @@ function _tragRegRender() {
   el.innerHTML = _renderGrouped(_tragRegistry, _trgGrpBy, t => {
     const lenM = _tragCalcLen(t.pts);
     const dt = fmtDateShort(t.date);
-    const vis = t.visible !== false;
+    const vis = typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false;
     const meta = [dt, _tragFmtLen(lenM), t.pts.length+' tač.', t.gj?'GJ: <b>'+_escHtml(t.gj)+'</b>':'', t.odjel?'Odj: <b>'+_escHtml(t.odjel)+'</b>':''].filter(Boolean).join(' · ');
     return `<div class="treg-row">
       <div class="treg-name" onclick="_tragRegZoom('${t.id}')" style="border-left:3px solid ${_tvBoja(t.color)};padding-left:8px;">${_escHtml(_tragIme(t))}</div>
@@ -20551,7 +20563,8 @@ function _tragRegZoom(id) {
 function _tragRegToggle(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
-  t.visible = t.visible === false ? true : false;
+  const on=typeof _tvTrackVisible==='function'?!_tvTrackVisible(t):t.visible===false;
+  if(typeof _tvTrackSet==='function')_tvTrackSet(t,on);else t.visible=on;
   // Re-kreiraj slojeve kroz jedinstvenu putanju — rukuje i oznakom dužine (tragLen)
   _tragRegAddLayer(t);
   const line = _tragLayers[id];
@@ -20760,7 +20773,7 @@ function _tvOdaberi(id) {
 function _tragoviRowHtml(t) {
   const lenM = _tragCalcLen(t.pts);
   const dt = fmtDateShort(t.date);
-  const vis = t.visible !== false;
+  const vis = typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false;
   const otvoren = _tvOtvoren === t.id;
   const bezImena = !String(t.name || '').trim();
   // Datum se ne ponavlja na kartici kad je već naslov grupe iznad nje.
@@ -24390,8 +24403,8 @@ function _ozTogTrag(id) {
   const t = (typeof _tragRegistry !== 'undefined') ? _tragRegistry.find(x => x.id === id) : null;
   if (!t) return;
   const layer = (typeof _tragLayers !== 'undefined') ? _tragLayers[id] : null;
-  const nowVis = t.visible !== false;
-  t.visible = !nowVis;
+  const nowVis = typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false;
+  if(typeof _tvTrackSet==='function')_tvTrackSet(t,!nowVis);else t.visible=!nowVis;
   if (layer) { nowVis ? map.removeLayer(layer) : layer.addTo(map); }
   if (typeof _tragRegSave === 'function') _tragRegSave();
   _rndOznakePanel();
@@ -32311,8 +32324,10 @@ async function sqlmapRestoreAll() {
   try {
   if (await _sqlCrashCheck()) { _mapLoadDiagStep('crash zaštita', 'automatsko učitavanje je preskočeno'); return; }
   _sqlRestoreFailed = [];
-  let lastSqlId = null;
-  try { const lm=JSON.parse(localStorage.getItem('tvlake_last_map')); if(lm?.type==='sqlite'&&lm.sqlId) lastSqlId=lm.sqlId; } catch(e){}
+  let lastSqlId = null, lastMap = null;
+  const restoreChoice=localStorage.getItem('tvlake_last_map');
+  const choiceUnchanged=()=>localStorage.getItem('tvlake_last_map')===restoreChoice;
+  try { lastMap=JSON.parse(restoreChoice); if(lastMap?.type==='sqlite'&&lastMap.sqlId) lastSqlId=lastMap.sqlId; } catch(e){}
 
   // Brzi OPFS put: naziv fizičkog fajla je pri uvozu uvijek "<ime>.sqlmap".
   // Ne čekaj IndexedDB `list` prije otvaranja zadnje karte — na stvarnom
@@ -32328,7 +32343,7 @@ async function sqlmapRestoreAll() {
       const fast = await _sqlWCall({ type:'load-opfs', name:lastSqlId,
         path:'/' + lastSqlId + '.sqlmap', fmt:null, meta:{} });
       localStorage.removeItem(_SQL_CRASH_KEY);
-      if (fast?.ok) {
+      if (fast?.ok && choiceUnchanged()) {
         const layer = _sqlmapCreateLayerW(lastSqlId, fast.fmt, fast.meta);
         Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
         layer.addTo(map);
@@ -32374,7 +32389,7 @@ async function sqlmapRestoreAll() {
     const _skipNow = _sqlSkipList();
     const _kandidati = rows.filter(e => !_skipNow.includes(e.name));
     const showName = (lastSqlId && _kandidati.some(e => e.name === lastSqlId))
-      ? lastSqlId : (_kandidati[0]?.name || null);
+      ? lastSqlId : (lastMap?.type==='tl' ? null : (_kandidati[0]?.name || null));
     _mapLoadDiagName(showName);
     rows.sort((a,b) => Number(b.name === showName) - Number(a.name === showName));
     const preskoci = _sqlSkipList();
@@ -32418,7 +32433,7 @@ async function sqlmapRestoreAll() {
         }
         const _tLayerT0 = performance.now();
         const layer = _sqlmapCreateLayerW(entry.name, lr.fmt, lr.meta);
-        const shouldShow = entry.name === showName;
+        const shouldShow = entry.name === showName && choiceUnchanged();
         if (shouldShow) {
           Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
           layer.addTo(map);
@@ -36658,7 +36673,9 @@ function dozRenderOdjeli() {
       (n('completed') ? `<span class="c">● ${n('completed')} završeno</span>` : '') +
       (ha > 0 ? `<span style="margin-left:auto;">${fmtHa(ha)}</span>` : '');
   }
-  el.innerHTML = prikaz.map(o => {
+  const query=(document.getElementById('doz-search')?.value||'').trim().toLocaleLowerCase('bs');
+  const results=prikaz.filter(o=>!query||String(o.name||'').toLocaleLowerCase('bs').includes(query));
+  el.innerHTML = results.map(o => {
     const status = o.status || 'active';
     const label  = status === 'active' ? 'Aktivno' : status === 'completed' ? 'Završeno' : 'Pauza';
     const isHidden = hidden.has(o.id);
@@ -36674,7 +36691,7 @@ function dozRenderOdjeli() {
         ${o._pendingSync ? '<span style="font-size:10px;color:#f59e0b;margin-left:4px;">⏳ čeka sync</span>' : ''}
       </div>
     </div>`;
-  }).join('');
+  }).join('')||'<div class="doz-empty">Nema odjela za uneseni naziv.</div>';
 }
 
 // Overview sloj — granice SVIH (ne-skrivenih) odjela istovremeno na karti, dok
@@ -36791,6 +36808,10 @@ function _dozEnsureChannel() {
 
 // ─── Select Odjel ────────────────────────────────────────────────
 async function dozSelectOdjel(id) {
+  const odjel = _dozOdjeli.find(o => o.id === id),owner=sbUser?.id;
+  if(!odjel)return;
+  const selection=(dozSelectOdjel._generation||0)+1;dozSelectOdjel._generation=selection;
+  if(_dozVlakeVisible)dozToggleVlake();
   _dozSelId = id;
   _dozFitId = null;   // novo otvaranje (i istog odjela) → centriraj ponovo
   _OL.save(_OL.DOZ_SEL_ID, id);
@@ -36798,8 +36819,6 @@ async function dozSelectOdjel(id) {
   dozTreesClear();
   dozRenderOdjeli();
   _dozSubProject(id);
-  const odjel = _dozOdjeli.find(o => o.id === id);
-  if (!odjel) return;
   document.getElementById('doz-panel-list').style.display   = 'none';
   document.getElementById('doz-panel-detail').style.display = 'flex';
   _dozRestoreBoundaryStyleUI();
@@ -36813,6 +36832,7 @@ async function dozSelectOdjel(id) {
   _dozQrRenderReceived();
   _dozRenderStatusRow();
   await dozLoadLayers(id, { odmahIzKesa: true });
+  if(sbUser?.id!==owner||_dozSelId!==id||dozSelectOdjel._generation!==selection)return;
   _dozAutoLinkVlake(odjel);
   _dozTreesRestoreForOdjel(id);
   dozRenderDetail();
@@ -36822,21 +36842,10 @@ async function dozSelectOdjel(id) {
 function _dozAutoLinkVlake(odjel) {
   _dozLinkedProjektId = null;
   if (!odjel?.name || !_projekti?.length) return;
-  const dn = odjel.name.toLowerCase().trim();
-  let best = null;
-  _projekti.forEach(p => {
-    if (!p.odjel) return;
-    const po = p.odjel.toLowerCase().trim();
-    const pg = (p.gj || '').toLowerCase().trim();
-    const combo = `${pg} · ${po}`;
-    if (dn === combo || dn === po || dn.includes(po) || po.includes(dn)) {
-      if (!best || po.length > (best._matchLen || 0)) { best = p; best._matchLen = po.length; }
-    }
-  });
-  if (best) {
-    _dozLinkedProjektId = best.id;
-    _dozShowLinkedVlake();
-  }
+  const norm=v=>String(v||'').trim().toLocaleLowerCase('bs').replace(/\s+/g,' ');
+  const parts=String(odjel.name).split('·'),number=norm(parts.at(-1)),gj=norm(odjel.gj||(parts.length>1?parts.slice(0,-1).join('·'):''));
+  const matches=_projekti.filter(p=>norm(p.odjel)===number&&(!gj||norm(p.gj)===gj));
+  if(matches.length===1){_dozLinkedProjektId=matches[0].id;_dozShowLinkedVlake();}
 }
 
 function _dozShowLinkedVlake() {
@@ -36944,7 +36953,7 @@ async function _dozUcitajTacke(projectId) {
   const sve = [], owner=sbUser?.id;
   for (let od = 0, strana = 0; strana < 500; strana++) {
     const { data, error } = await sb.from('doz_track_points')
-      .select('user_id,latitude,longitude,recorded_at').eq('project_id', projectId)
+      .select('user_id,latitude,longitude,altitude,speed,recorded_at').eq('project_id', projectId)
       .order('recorded_at', { ascending: true }).order('user_id', { ascending:true }).order('latitude', {ascending:true}).order('longitude', {ascending:true})
       .range(od, od + _DOZ_TACKE_STRANA - 1);
     if(sbUser?.id!==owner)return {data:null,error:{code:'OWNER_CHANGED',message:'Promijenjen nalog'}};
@@ -37069,8 +37078,8 @@ function dozRenderMapLayers() {
       const t = DOZ_TYPES[m.marking_type] || DOZ_TYPES.custom;
       const lyr = L.geoJSON(gj, { style:{ color:t.color, weight:2, fillColor:t.color, fillOpacity:0.2 } })
         .bindPopup(`<div style="min-width:160px;">
-          <b style="font-size:13px;">${t.emoji} ${m.label || t.label}</b>
-          ${m.note ? `<br><span style="color:#888;font-size:11px;">${m.note}</span>` : ''}
+          <b style="font-size:13px;">${t.emoji} ${_escHtml(m.label || t.label)}</b>
+          ${m.note ? `<br><span style="color:#888;font-size:11px;">${_escHtml(m.note)}</span>` : ''}
           <br><span style="color:#64748b;font-size:11px;">${m.area_ha ? fmtHa(m.area_ha) : ''}</span>
           <br><button onclick="dozDeleteMarking('${m.id}')" style="margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši</button>
         </div>`)
@@ -37436,7 +37445,7 @@ function _dozRenderLinkDropdown() {
   (_projekti || []).forEach(p => {
     const label = `${p.gj || ''} · ${p.odjel || ''}`.trim() || p.id.slice(0, 8);
     const nVlake = vlake.filter(v => v.projektId === p.id).length;
-    opts += `<option value="${p.id}" ${p.id === _dozLinkedProjektId ? 'selected' : ''}>${label} (${nVlake} vlaka)</option>`;
+    opts += `<option value="${p.id}" ${p.id === _dozLinkedProjektId ? 'selected' : ''}>${_escHtml(label)} (${nVlake} vlaka)</option>`;
   });
   sel.innerHTML = opts;
   if (status) {
@@ -37529,8 +37538,10 @@ function dozVlakeLoadKml(ev) {
     showToast('⚠ Prvo poveži odjel sa vlake projektom (padajući meni iznad)');
     return;
   }
+  const projectId=_dozLinkedProjektId,odjelId=_dozSelId,owner=sbUser?.id;
   const r = new FileReader();
   r.onload = e => {
+    if(sbUser?.id!==owner||_dozSelId!==odjelId||_dozLinkedProjektId!==projectId){showToast('Uvoz otkazan jer se odjel ili projekat promijenio');return;}
     try {
       const doc = new DOMParser().parseFromString(e.target.result, 'text/xml');
       const newIdxs = [];
@@ -37658,8 +37669,11 @@ function dozTreesLoadKml(ev) {
   const file = ev.target.files[0];
   ev.target.value = '';
   if (!file) return;
+  const odjelId=_dozSelId,owner=sbUser?.id;
+  if(!odjelId||!owner){showToast('Prvo odaberi odjel');return;}
   const r = new FileReader();
   r.onload = e => {
+    if(sbUser?.id!==owner||_dozSelId!==odjelId){showToast('Uvoz otkazan jer se odjel promijenio');return;}
     try {
       const doc = new DOMParser().parseFromString(e.target.result, 'text/xml');
       const pts = [];
@@ -37911,7 +37925,7 @@ function _dozRenderStatusRow() {
   const cur = odjel.status || 'active';
   el.innerHTML = _DOZ_STATUSES.map(s => {
     const on = s.key === cur;
-    return `<button onclick="dozSetStatus('${s.key}')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;
+    return `<button aria-pressed="${on}" onclick="dozSetStatus('${s.key}')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;
       background:${on ? s.color + '22' : 'rgba(15,23,42,0.7)'};
       border:1px solid ${on ? s.color : '#1e293b'};
       color:${on ? s.color : '#475569'};">${s.label}</button>`;
@@ -37919,56 +37933,22 @@ function _dozRenderStatusRow() {
 }
 
 async function dozSetStatus(status) {
-  const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
-  if (!odjel || odjel.status === status) return;
-  const prev = odjel.status;
-  odjel.status = status;
-
-  if (status === 'active') {
-    const othersToP = _dozOdjeli.filter(o => o.id !== _dozSelId && o.status === 'active');
-    othersToP.forEach(o => { o.status = 'paused'; });
-    if (othersToP.length) {
-      const ids = othersToP.map(o => o.id);
-      let ePauza = null;
-      try {
-        // v1.9.4: van ručnog slanja ide u red kao da nema mreže (grana ispod).
-        if (!_serverSlanjeDozvoljeno()) throw new Error('fetch: čeka ručno slanje');
-        const r = await sb.from('doz_projects').update({ status: 'paused' }).in('id', ids);
-        ePauza = r && r.error;
-      } catch(e) { ePauza = e; }
-      // Ranije je neuspjeh bio tiho progutan: lokalno pauzirani, na serveru i
-      // dalje aktivni — kolege su vidjele dva aktivna odjela.
-      if (ePauza && _isNetworkErr(ePauza)) {
-        ids.forEach(id => _OL.enqueue({ type: 'upsert_doz_status', payload: { id, status: 'paused' } }));
-      }
-      showToast(`⏸ ${othersToP.length} drugi projekat(a) pauziran(o)`);
-    }
-  }
-
-  _dozRenderStatusRow();
-  dozRenderOdjeli();
-  if (_serverURed({ type: 'upsert_doz_status', payload: { id: _dozSelId, status } })) {
-    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
-    return;
-  }
-  try {
-    const { error } = await sb.from('doz_projects').update({ status }).eq('id', _dozSelId);
-    if (error) throw error;
-    _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
-  } catch(e) {
-    // D4-I: mrežna greška ne smije tiho odbaciti promjenu statusa — zakaži sync
-    // za kasnije umjesto da se lokalna promjena vraća na staro.
-    if (_isNetworkErr(e)) {
-      _OL.enqueue({ type: 'upsert_doz_status', payload: { id: _dozSelId, status } });
-      _OL.save(_OL.DOZ_ODJELI, _dozOdjeli);
-      showToast('📴 Status promijenjen lokalno — pošalji ga kroz Meni → Server');
-    } else {
-      odjel.status = prev;
-      _dozRenderStatusRow();
-      dozRenderOdjeli();
-      showToast('Greška promjene statusa: ' + (e.message || ''));
-    }
-  }
+  if(!['active','paused','completed'].includes(status)||!sbUser?.id)return;
+  const odjel=_dozOdjeli.find(o=>o.id===_dozSelId);
+  if(!odjel||(odjel.status||'active')===status)return;
+  const changes=[{id:odjel.id,status}];
+  if(status==='active')for(const other of _dozOdjeli)if(other.id!==odjel.id&&other.status==='active')changes.push({id:other.id,status:'paused'});
+  try{
+    const ids=new Set(changes.map(c=>c.id)),uid=sbUser.id;
+    const q=_OL.loadQueue(true).filter(op=>!(op.type==='upsert_doz_status'&&op._uid===uid&&ids.has(op.payload?.id)));
+    for(const payload of changes)q.push({type:'upsert_doz_status',payload,_uid:uid,_qid:_genUUID(),ts:Date.now()});
+    localStorage.setItem(_OL.QUEUE,JSON.stringify(q));
+  }catch(e){showToast('⚠ Status nije sačuvan — prethodni izbor ostaje');return;}
+  for(const change of changes){const target=_dozOdjeli.find(o=>o.id===change.id);if(target)target.status=change.status;}
+  _OL.save(_OL.DOZ_ODJELI,_dozOdjeli);
+  _dozRenderStatusRow();dozRenderOdjeli();
+  if(typeof _updSyncBadge==='function')_updSyncBadge();
+  showToast('Status sačuvan — pošalji kroz Meni → Server'+(changes.length>1?' · ostali aktivni odjeli pauzirani':''));
 }
 
 // Zoom na zonu sa liste u panelu
@@ -38000,9 +37980,14 @@ function _dozTrackLenByUser(byUserIn) {
   return lens;
 }
 
+function dozGoSection(key) {
+  document.getElementById('doz-section-'+key)?.scrollIntoView({block:'start',behavior:'smooth'});
+}
 function dozRenderDetail() {
   // ── Statistika ──
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
+  const context=document.getElementById('doz-context');
+  if(context&&odjel){const myName=typeof getIme==='function'?getIme():'Projektant';context.textContent=odjel.name+' · '+myName+(odjel._pendingSync?' · odjel čeka slanje':'')+' · Podatke šalješ kroz Meni → Server';}
   const statsEl = document.getElementById('doz-stats-box');
   if (statsEl && odjel) {
     const totalHa = parseFloat(odjel.known_area_ha) || 0;
@@ -38096,7 +38081,7 @@ function dozRenderDetail() {
           <div class="doz-zone-name" style="color:${t.color};">${_escHtml(m.label || t.label)}</div>
           <div class="doz-zone-meta">${meta}</div>
         </div>
-        ${!isLocal ? `<button class="doz-zone-del" onclick="event.stopPropagation();dozDeleteMarking('${m.id}')" title="Obriši zonu"><svg class="ic"><use href="#ic-obrisi"/></svg></button>` : ''}
+        <button class="doz-zone-del" onclick="event.stopPropagation();dozDeleteMarking('${m.id}')" title="Obriši zonu"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
       </div>`;
     }).join('');
   }
@@ -38112,6 +38097,7 @@ let _dozGpsPaused = false, _dozGpsPausedTime = 0, _dozGpsPauseStart = 0;
 let _dozGpsMaxSpd = 0, _dozGpsSpdSum = 0, _dozGpsSpdCnt = 0;
 let _dozGpsElevData = [];
 let _dozGpsFullPts = [];
+let _dozGpsExportContext = null;
 // Timestamp zadnjeg uspješno obrađenog fiksa (uključujući filtrirane).
 // Ne napreduje kad trajni upis padne — koristi ga _drainNativeGpsBuffer
 // da pri replay-u native bafera preskoči tačke koje su VEĆ obrađene uživo.
@@ -38217,16 +38203,18 @@ function _dozDrawElevProfile() {
   ctx.fillText(`${Math.round(mn)}m`, 3, h - 3);
 }
 
+function _dozExportPoints() {
+  if(_dozGpsExportContext?.projectId===_dozSelId&&_dozGpsExportContext?.userId===sbUser?.id&&_dozGpsFullPts.length)return _dozGpsFullPts.slice();
+  return (_dozTragoviPoKorisniku()[sbUser?.id]||[]).map(p=>({lat:p.latitude,lon:p.longitude,ele:p.altitude,time:p.recorded_at,spd:p.speed}));
+}
 function dozExportGPX() {
-  if (!_dozGpsFullPts.length && !_dozTracks.length) { showToast('Nema tačaka za export'); return; }
-  const pts = _dozGpsFullPts.length ? _dozGpsFullPts : _dozTracks.filter(p => p.user_id === (sbUser?.id || '')).map(p => ({
-    lat: p.latitude, lon: p.longitude, ele: p.altitude || 0, time: p.recorded_at, spd: p.speed || 0
-  }));
+  const pts=_dozExportPoints();
   if (!pts.length) { showToast('Nema tačaka za export'); return; }
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   const name = odjel?.name || 'Doznaka';
-  let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="US SUME">\n<trk><name>${name}</name><trkseg>\n`;
-  pts.forEach(p => {
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="DENDRO MAP" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>${_escXml(name)}</name><trkseg>\n`;
+  pts.forEach((p,i) => {
+    if(i>0&&Date.parse(p.time)-Date.parse(pts[i-1].time)>5*60*1000)gpx+='</trkseg><trkseg>\n';
     // Prazan <time></time> je neispravan GPX — tačka oporavljena iz snimka
     // nema poznato vrijeme, pa se element izostavlja umjesto da se piše prazan.
     gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele || 0}</ele>${p.time ? `<time>${p.time}</time>` : ''}</trkpt>\n`;
@@ -38237,7 +38225,7 @@ function dozExportGPX() {
   const a = document.createElement('a');
   a.href = url; a.download = `${name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.gpx`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
   showToast('📥 GPX exportovan');
 }
 
@@ -38277,8 +38265,7 @@ async function dozShareQR() {
   // Preferiraj tek završeni GPS pojas (lakši — samo lat/lng); ako ga nema,
   // ponudi moj posljednji sinhronizovani pojas za ovaj odjel (isti fallback
   // obrazac kao dozExportGPX).
-  let raw = _dozGpsPts.length ? _dozGpsPts.slice()
-    : _dozTracks.filter(p => p.user_id === (sbUser?.id || '')).map(p => [p.latitude, p.longitude]);
+  const raw = _dozExportPoints().map(p=>[p.lat,p.lon]);
   if (!raw.length) { showToast('Nema snimljenog pojasa za slanje'); return; }
 
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
@@ -38391,6 +38378,7 @@ function _dozQrHandleScanned(text) {
   if (!payload || payload.t !== 'pojas' || !Array.isArray(payload.pts) || payload.pts.length < 2) {
     showToast('⚠ Ovo nije validan pojas-QR'); return;
   }
+  if(payload.pts.length>10000||payload.pts.some(p=>!Array.isArray(p)||p.length<2||!Number.isFinite(p[0])||!Number.isFinite(p[1])||Math.abs(p[0])>90||Math.abs(p[1])>180)){showToast('⚠ QR sadrži neispravne koordinate');return;}
   const entry = {
     id: 'qr_' + Date.now(),
     odjel: payload.odjel || '', gj: payload.gj || '',
@@ -38400,7 +38388,8 @@ function _dozQrHandleScanned(text) {
   };
   const arr = _dozQrLoad();
   arr.unshift(entry);
-  _dozQrSave(arr);
+  if(!_dozQrSave(arr)){showToast('⚠ Pojas nije sačuvan. Oslobodi memoriju pa ponovo skeniraj QR.');return;}
+  _dozQrDraw(entry);
   _dozQrRenderReceived();
   const b = L.latLngBounds(entry.pts.map(p => [p[0], p[1]]));
   if (b.isValid()) { switchTab('karta'); map.fitBounds(b, { padding: [30, 30] }); }
@@ -38409,7 +38398,7 @@ function _dozQrHandleScanned(text) {
 
 // ─── Prikaz/upravljanje primljenim pojasevima (localStorage, per-uređaj) ──
 let _dozQrLayers = {};
-function _dozQrLoad() { try { return JSON.parse(localStorage.getItem(_DOZ_QR_KEY) || '[]'); } catch { return []; } }
+function _dozQrLoad() { try {const value=JSON.parse(localStorage.getItem(_DOZ_QR_KEY)||'[]');return Array.isArray(value)?value:[];} catch { return []; } }
 // v1.6.0: neuspjeh se više ne guta. QR dijeljenje je NAMJERNO potpuno offline i
 // peer-to-peer (ni pošiljalac ni primalac ne trebaju internet) — što znači da
 // primljeni pojas NE POSTOJI nigdje drugdje: ako ovaj upis tiho padne, jedini
@@ -38431,8 +38420,8 @@ function _dozQrRestore() {
   try { _dozQrLoad().forEach(e => _dozQrDraw(e)); _dozQrRenderReceived(); } catch(e) {}
 }
 function _dozQrRemove(id) {
+  if(!_dozQrSave(_dozQrLoad().filter(e=>e.id!==id)))return;
   if (_dozQrLayers[id]) { try { map.removeLayer(_dozQrLayers[id]); } catch(e) {} delete _dozQrLayers[id]; }
-  _dozQrSave(_dozQrLoad().filter(e => e.id !== id));
   _dozQrRenderReceived();
 }
 function _dozQrZoom(id) {
@@ -38488,6 +38477,7 @@ async function _dozStartGPSBegin() {
   _dozGpsPts = [];
   _dozGpsSent = 0; _dozGpsBuffered = 0; _dozGpsLen = 0; _dozGpsStartTs = Date.now();
   _dozGpsProjId = _dozSelId; _dozGpsUserId = sbUser.id;
+  _dozGpsExportContext={projectId:_dozGpsProjId,userId:_dozGpsUserId};
   _dozGpsSessionId = _genUUID(); _dozGpsStopping = false;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
   _pauziResetuj(_dozPauseWin);   // zaostala pauza prethodne sesije ne smije suditi novim tačkama
@@ -38552,6 +38542,8 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   if (_dozGpsUserId!==capturedUser || _dozGpsProjId!==capturedProject) return;
   if (typeof _dozGpsSessionId!=='undefined' && _dozGpsSessionId!==capturedSession) return;
   if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180||!Number.isFinite(acc)||acc<0)return;
+  if(tsMs!=null&&(!Number.isFinite(tsMs)||tsMs<=0))return;
   if (acc > 20) { _dozUpdGpsStats(acc); return; }
   if (_dozGpsPaused && !bypassPauzu) { _dozUpdGpsStats(acc); return; }
   const prev = _dozGpsPts[_dozGpsPts.length - 1];
@@ -39010,30 +39002,22 @@ async function dozConfirmSave() {
 }
 
 function _dozCalcArea(pts) {
-  if (pts.length < 3) return 0;
-  const MPDEG = 111320;
-  let area = 0; const n = pts.length;
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const xi = pts[i].lng * MPDEG * Math.cos(pts[i].lat * Math.PI / 180);
-    const yi = pts[i].lat * MPDEG;
-    const xj = pts[j].lng * MPDEG * Math.cos(pts[j].lat * Math.PI / 180);
-    const yj = pts[j].lat * MPDEG;
-    area += xi * yj - xj * yi;
-  }
-  return Math.abs(area) / 2;
+  return _dozCalcGeomAreaHa({type:'Polygon',coordinates:[pts.map(p=>[p.lng,p.lat])]})*10000;
 }
 
 // ─── Delete Marking ────────────────────────────────────────────────
 async function dozDeleteMarking(id) {
+  const projectId=_dozSelId,owner=sbUser?.id;
   if (!await _dlgConfirm('Obriši obilježenu zonu?', { danger: true })) return;
+  if(!owner||sbUser?.id!==owner||_dozSelId!==projectId)return;
   // D4-B: markica kreirana offline (još nema pravi server ID) — insert nikad nije stigao
   // na server, pa "brisanje" mora otkazati red čekanja umjesto da gađa nepostojeći ID.
   if (String(id).startsWith('local_')) {
-    const q = _OL.loadQueue();
-    const hasQueued = q.some(o => o.type === 'insert_doz_marking' && o._localId === id);
+    let q;try{q=_OL.loadQueue(true);}catch(e){showToast('⚠ Red za slanje nije čitljiv — zona nije uklonjena');return;}
+    const hasQueued = q.some(o => o.type === 'insert_doz_marking' && o._localId === id && (!o._uid||o._uid===owner));
     if (hasQueued) {
-      localStorage.setItem(_OL.QUEUE, JSON.stringify(q.filter(o => !(o.type === 'insert_doz_marking' && o._localId === id))));
+      try{localStorage.setItem(_OL.QUEUE, JSON.stringify(q.filter(o => !(o.type === 'insert_doz_marking' && o._localId === id && (!o._uid||o._uid===owner)))));}
+      catch(e){showToast('⚠ Brisanje nije sačuvano — zona ostaje dostupna');return;}
     }
     _dozMarkings = _dozMarkings.filter(m => m.id !== id);
     // Keš mora pratiti — inače se zona vrati pri sljedećem otvaranju bez signala.
@@ -39045,13 +39029,16 @@ async function dozDeleteMarking(id) {
   }
   try {
     if (!_serverSlanjeDozvoljeno() || !_mrezaProbaj()) throw new Error('offline');
-    const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id);
+    const { error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', id).eq('project_id',projectId);
     if (error) throw error;
     showToast('🗑 Zona obrisana');
-    await dozLoadLayers(_dozSelId);
-    dozRenderDetail();
+    if(sbUser?.id!==owner||_dozSelId!==projectId)return;
+    await dozLoadLayers(projectId);
+    if(sbUser?.id===owner&&_dozSelId===projectId)dozRenderDetail();
   } catch(e) {
-    _OL.enqueue({ type: 'delete_doz_marking', payload: { id } });
+    if(sbUser?.id!==owner)return;
+    if(!_OL.enqueue({ type: 'delete_doz_marking', payload: { id,project_id:projectId } })){showToast('⚠ Brisanje nije sačuvano u redu — zona ostaje dostupna');return;}
+    if(_dozSelId!==projectId)return;
     // Ranije je zona ostajala na karti i u kešu, pa je izgledalo da brisanje
     // nije uspjelo (i drugi tap je stavljao isto brisanje ponovo u red).
     _dozMarkings = _dozMarkings.filter(m => m.id !== id);
@@ -39064,6 +39051,8 @@ async function dozDeleteMarking(id) {
 
 // ─── Delete Odjel ──────────────────────────────────────────────────
 async function dozDeleteOdjel() {
+  const projectId=_dozSelId,owner=sbUser?.id;
+  if(_dozGpsOn||(_dozGpsStopping&&_dozGpsUserId)){showToast('Prvo završi GPS snimanje');return;}
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   if (!odjel) return;
   // Samo kreator ili manager smije brisati — briše podatke cijelog tima
@@ -39074,18 +39063,22 @@ async function dozDeleteOdjel() {
   // ostavio odjel djelimično obrisan, pa se ni ne počinje.
   if (!_mrezaProbaj()) { showToast('📴 Brisanje odjela traži vezu — pokušaj kad bude signala'); return; }
   if (!await _dlgConfirm(`Obriši odjel "${odjel.name}"? Ovo nepovratno briše GPS tragove, zone i članstva za CIJELI tim.`, { danger: true })) return;
+  if(sbUser?.id!==owner||_dozSelId!==projectId)return;
   try {
     // Eksplicitno počisti child redove (ne oslanjaj se na DB CASCADE → bez orphana)
-    const { error: et } = await sb.from('doz_track_points').delete().eq('project_id', _dozSelId);
+    const { error: et } = await sb.from('doz_track_points').delete().eq('project_id', projectId);
     if (et) throw et;
-    const { error: ea } = await sb.from('doz_area_markings').delete().eq('project_id', _dozSelId);
+    if(sbUser?.id!==owner)return;
+    const { error: ea } = await sb.from('doz_area_markings').delete().eq('project_id', projectId);
     if (ea) throw ea;
-    const { error: em } = await sb.from('doz_project_members').delete().eq('project_id', _dozSelId);
+    if(sbUser?.id!==owner)return;
+    const { error: em } = await sb.from('doz_project_members').delete().eq('project_id', projectId);
     if (em) throw em;
-    const { error } = await sb.from('doz_projects').delete().eq('id', _dozSelId);
+    if(sbUser?.id!==owner)return;
+    const { error } = await sb.from('doz_projects').delete().eq('id', projectId);
     if (error) throw error;
     showToast('🗑 Odjel obrisan');
-    dozBackToList();
+    if(_dozSelId===projectId)dozBackToList();
     await dozLoadOdjeli();
   } catch(e) { showToast('Greška: ' + e.message); }
 }
@@ -39261,20 +39254,22 @@ function _dozMergeOdsjeci(odsjeci) {
 
 function _dozCalcGeomAreaHa(geom) {
   if (!geom) return 0;
-  const ringArea = ring => {
-    const R = 6371000;
-    const cos = Math.cos(ring[0][1] * Math.PI / 180);
-    let a = 0;
-    for (let i = 0; i < ring.length; i++) {
-      const p1 = ring[i], p2 = ring[(i+1) % ring.length];
-      const x1 = p1[0]*Math.PI/180*R*cos, y1 = p1[1]*Math.PI/180*R;
-      const x2 = p2[0]*Math.PI/180*R*cos, y2 = p2[1]*Math.PI/180*R;
-      a += x1*y2 - x2*y1;
+  if(geom.type==='Feature')return _dozCalcGeomAreaHa(geom.geometry);
+  const ringArea=ring=>{
+    if(!Array.isArray(ring)||ring.length<3)return 0;
+    const R=6371000,cos=Math.cos(ring[0][1]*Math.PI/180),origin=ring[0];
+    let area=0;
+    for(let i=0;i<ring.length;i++){
+      const a=ring[i],b=ring[(i+1)%ring.length];
+      const x1=(a[0]-origin[0])*Math.PI/180*R*cos,y1=(a[1]-origin[1])*Math.PI/180*R;
+      const x2=(b[0]-origin[0])*Math.PI/180*R*cos,y2=(b[1]-origin[1])*Math.PI/180*R;
+      area+=x1*y2-x2*y1;
     }
-    return Math.abs(a/2) / 10000;
+    return Math.abs(area)/20000;
   };
-  if (geom.type === 'Polygon')      return ringArea(geom.coordinates[0]);
-  if (geom.type === 'MultiPolygon') return geom.coordinates.reduce((s,p) => s + ringArea(p[0]), 0);
+  const polygon=rings=>Math.max(0,ringArea(rings[0])-rings.slice(1).reduce((sum,ring)=>sum+ringArea(ring),0));
+  if(geom.type==='Polygon')return polygon(geom.coordinates);
+  if(geom.type==='MultiPolygon')return geom.coordinates.reduce((sum,rings)=>sum+polygon(rings),0);
   return 0;
 }
 
@@ -39510,6 +39505,7 @@ async function dozSaveOdjel() {
 
 // ─── Add Member (šumarija lista) ──────────────────────────────────
 async function dozAddMember() {
+  const projectId=_dozSelId,owner=sbUser?.id;
   if (!_mrezaProbaj()) { showToast('📴 Dodavanje projektanta traži vezu'); return; }
   try {
     const { data: me, error: eMe } = await sb.from('korisnici').select('sumarija').eq('id', sbUser.id).single();
@@ -39529,6 +39525,7 @@ async function dozAddMember() {
     const dostupni = users.filter(u => !vecClanovi.has(u.id)
       && !u.je_vodeci && !/^vode[cć]i\s+projektant$/i.test((u.ime || '').trim()));
     if (!dostupni.length) { showToast('Svi projektanti su već dodani'); return; }
+    if(sbUser?.id!==owner||_dozSelId!==projectId)return;
     _dozShowMemberPicker(dostupni);
   } catch(e) { showToast('Greška: ' + e.message); }
 }
@@ -39549,6 +39546,7 @@ function _dozShowMemberPicker(users) {
   }).join('');
   const modal = document.createElement('div');
   modal.id = 'doz-member-picker';
+  modal.dataset.projectId=_dozSelId;modal.dataset.owner=sbUser?.id||'';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;z-index:2000;padding:0 0 0 0;';
   modal.innerHTML = `<div style="background:#16213e;border:1px solid #1e3a5f;border-radius:14px 14px 0 0;padding:16px;width:100%;max-width:400px;max-height:70vh;max-height:70dvh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -39563,23 +39561,27 @@ function _dozShowMemberPicker(users) {
 }
 
 async function _dozPickMember(userId) {
-  document.getElementById('doz-member-picker')?.remove();
+  const picker=document.getElementById('doz-member-picker'),projectId=picker?.dataset.projectId,owner=picker?.dataset.owner;
+  picker?.remove();
+  if(!projectId||sbUser?.id!==owner||_dozSelId!==projectId)return;
   if (!_mrezaProbaj()) { showToast('📴 Dodavanje projektanta traži vezu'); return; }
   try {
     const { error } = await sb.from('doz_project_members').insert({
-      project_id: _dozSelId, user_id: userId, role:'engineer',
+      project_id: projectId, user_id: userId, role:'engineer',
       track_color: DOZ_ENG_COLORS[_dozMembers.length % DOZ_ENG_COLORS.length],
       order_index: _dozMembers.length, is_active: true
     });
     if (error) { if (error.code==='23505') { showToast('Projektant je već član'); return; } throw error; }
+    if(sbUser?.id!==owner||_dozSelId!==projectId)return;
     showToast('✅ Projektant dodan');
-    await dozLoadLayers(_dozSelId);
-    dozRenderDetail();
+    await dozLoadLayers(projectId);
+    if(sbUser?.id===owner&&_dozSelId===projectId)dozRenderDetail();
   } catch(e) { showToast('Greška: ' + e.message); }
 }
 
 // ─── Back to List ─────────────────────────────────────────────────
 function dozBackToList() {
+  ++_dozLoadGen;
   _dozSelId = null;
   _OL.save(_OL.DOZ_SEL_ID, null);
   _dozSubProject(null);
@@ -39996,7 +39998,7 @@ if (typeof AndroidDownload !== 'undefined') {
           </div>
           <div class="help-row">
             <div class="help-icon">🔍</div>
-            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>APK prvo čita oznake T + broj na uređaju (i bez interneta), zatim povezuje oznake s crnim ili plavim linijama. Linije bez oznake nisu vlake. Nečitljiv natpis možete označiti ručno: upišite T12 i dodirnite taj natpis na slici. Pregledajte prijedloge; nejasne veze nisu unaprijed izabrane. Uvoz čuva T brojeve i ne prepisuje postojeće vlake.</span></div>
+            <div class="help-txt"><b>Automatska detekcija vlaka</b><span>Prepoznavanje traži internet; Google Play servisi prvi put preuzimaju OCR model. APK čita oznake T + broj i povezuje oznake s crnim ili plavim linijama. Linije bez oznake nisu vlake. Nečitljiv natpis možete označiti ručno: upišite T12 i dodirnite taj natpis na slici. Pregledajte prijedloge; nejasne veze nisu unaprijed izabrane. Uvoz čuva T brojeve i ne prepisuje postojeće vlake.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon">☁</div>

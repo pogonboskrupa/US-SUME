@@ -14,7 +14,7 @@
     kmlLs.forEach((k,i)=>{let position;try{const b=k.grp?.getBounds();if(b?.isValid())position=b.getCenter();}catch(e){}
       add({key:key(k._key?'server':'local',k._key||k._origName||k.name),category:k._key?'server':'local',ref:k,index:i,title:k.name||'Fajl',odjel:k.tag||'',gj:k._folder?.split('/')[0]||'',ts:date(k._loadedAt),position,visible:!!k.grp&&k.vis!==false&&map.hasLayer(k.grp),ready:!!k.grp,detail:k.grp?_kmlFeatureCount(k.grp)+' elemenata':'Nije preuzeto',color:k.col});});
     for(const [list,shared]of [[_locFotos,false],[_sharedFotos,true]])for(const f of list)add({key:key('photos',_tvPhotoKey(f,shared)),category:'photos',ref:f,shared,title:'Fotografija',odjel:f.odjel||'',gj:f.gj||'',ts:date(f.ts),position:[f.la,f.lo],visible:!!f.marker&&map.hasLayer(f.marker),ready:true,detail:shared?'Podijeljena fotografija':'Moja fotografija',thumb:f.thumb});
-    for(const t of _tragRegistry){const pts=t.pts||[],mid=pts[Math.floor(pts.length/2)];add({key:key('tracks',t.id),category:'tracks',ref:t,title:_tragIme(t),odjel:t.odjel||'',gj:t.gj||'',ts:date(t.date)||date(pts[0]?.[3]),position:mid?[mid[0],mid[1]]:null,visible:t.visible!==false,ready:true,detail:_tragFmtLen(_tragCalcLen(pts))+' · '+pts.length+' tačaka',color:t.color});}
+    for(const t of _tragRegistry){const pts=t.pts||[],mid=pts[Math.floor(pts.length/2)];add({key:key('tracks',t.id),category:'tracks',ref:t,title:_tragIme(t),odjel:t.odjel||'',gj:t.gj||'',ts:date(t.date)||date(pts[0]?.[3]),position:mid?[mid[0],mid[1]]:null,visible:typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false,ready:true,detail:_tragFmtLen(_tragCalcLen(pts))+' · '+pts.length+' tačaka',color:t.color});}
     return rows;
   }
   function filtered(){sync();const q=query.trim().toLocaleLowerCase('bs');const rows=model().filter(r=>(category==='all'||r.category===category)&&(!q||[r.title,r.odjel,r.gj,r.note,labels[r.category]].join(' ').toLocaleLowerCase('bs').includes(q)));
@@ -50,7 +50,7 @@
     for(const r of kml){r.ref.vis=on;on?r.ref.grp.addTo(map):map.removeLayer(r.ref.grp);}
     if(kml.length)try{saveKmlStyles();}catch(e){kml.forEach((r,i)=>{r.ref.vis=before[i];before[i]?r.ref.grp.addTo(map):map.removeLayer(r.ref.grp);});showToast('Prikaz fajlova nije sačuvan — provjeri memoriju.');}
     const photos=rows.filter(r=>r.category==='photos');if(photos.length)_tvPhotosSet(photos,on);
-    let changed=false;for(const r of rows){if(r.category==='tracks'){r.ref.visible=on;_tragRegAddLayer(r.ref);changed=true;}}
+    let changed=false;for(const r of rows){if(r.category==='tracks'){if(typeof _tvTrackSet==='function')_tvTrackSet(r.ref,on);else r.ref.visible=on;_tragRegAddLayer(r.ref);changed=true;}}
     if(changed)_tragRegSave();if(!on)map.closePopup();render();if(typeof _tvVisibilityRender==='function')_tvVisibilityRender();
   }
   async function action(actionName,k){

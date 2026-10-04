@@ -1558,3 +1558,36 @@ vlaka popupa u Dnevnom modu su presvijetli na bijeloj podlozi (PNG day 320).
 Nije mijenjan taj postojeći stil u ovom zadatku; prema AGENTS korisnik bira
 narednu zasebnu popravku. Nove kontrole smjera u istom popupu imaju dobar
 kontrast.
+
+## 40. Doznaka, pamćenje prikaza i manji APK — 2.2.7 (2026-10-04)
+
+Korisnik tražio detaljan pregled/popravke Doznake, zatim objasnio da OCR
+ne treba raditi bez interneta i tražio pamćenje skrivenih tragova/drugih
+slojeva te izabrane instalirane podloge. APK 2.2.6 65.143.787 B, od čega
+41.033.660 B četiri OCR native biblioteke. Zamjena na Google Play
+play-services-mlkit-text-recognition 19.0.1, manifest ocr model download,
+JS onLine i native validated network uslov. Nema modela u APK-u; prvi
+put model preuzimaju Play servisi i može trebati ponoviti nakon preuzimanja.
+Izričit korisnički zahtjev za OCR uz internet ima prednost nad općom
+offline smjernicom; GPS, lokalni podaci, karte i uvoz prethodnog rezultata
+ostaju offline.
+
+map-visibility: grupni tragovi imaju trajni izbor po nalogu i individualne
+izuzetke; hladna obnova se primjenjuje nakon autha i učitavanja podataka.
+Prikaz novih/obnovljenih oznaka poštuje izbor, aktivno snimanje je zasebno.
+Referentna karta quick-hide pamti se po nalogu. sqlmapRestoreAll ne bira
+najnoviji SQL fajl preko spremljene online podloge; async odgovor ne
+prepisuje noviji izbor. Topo+Granice čuva izbor i stanje granica.
+
+Doznaka: stale select i član/file-picker context, tačan GJ/odjel link,
+atomski lokalni red za statuse, čuvanje zone kad brisanje nije zapisano,
+uhvaćeni odjel/nalog za brisanje; GPX/QR pravilnog odjela/naloga i neposlane
+tačke, XML, visina, 5-min segmenti; validacija GPS/QR koordinata i upisa.
+Površina oduzima rupe i koristi zajednički lokalni račun. GPS prvi,
+pretraga odjela, identitet, prečice/kartice i čitljiviji day UI.
+Pregled sve tri cjeline i ograničenja: docs/PREGLED_DOZNAKE_2026-10-04.md.
+Važno: četiri postojeća brisanja odjela još nisu DB transakcija;
+Doznaka analiza stabala trenutno koristi vlastite povezane vlake.
+Nema produkcijske migracije/upisa. Lokalno 85 JS test fajlova i pet inline
+sintaksi prošlo. Browser/native/build rezultati slijede u istoj bilješci.
+Web/SW/Android 2.2.7, versionCode 497.

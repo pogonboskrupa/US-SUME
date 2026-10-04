@@ -11,8 +11,8 @@ android {
         minSdk 24
         targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 496
-        versionName "2.2.6"
+        versionCode 497
+        versionName "2.2.7"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
@@ -81,7 +81,8 @@ configurations.all {
 }
 
 dependencies {
-    implementation "com.google.mlkit:text-recognition:16.0.1"
+    // Model nije dio APK-a; Google Play servisi ga preuzimaju uz internet.
+    implementation "com.google.android.gms:play-services-mlkit-text-recognition:19.0.1"
     androidTestImplementation "androidx.test:runner:1.5.2"
     androidTestImplementation "androidx.test.ext:junit:1.1.5"
     implementation('androidx.core:core:1.12.0') {

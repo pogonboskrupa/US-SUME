@@ -42,6 +42,7 @@ jobs:
           python tests/browser/project-terrain-222.py
           python tests/browser/reference-vlake-224.py
           python tests/browser/project-arrows-226.py
+          python tests/browser/doznaka-restore-227.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,9 +112,21 @@ jobs:
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
           python3 android/assets.py verify --apk "$APK_PATH"
-      - name: Pripremi KVM za offline OCR test
+      - name: Provjeri manji APK bez ugrađenog OCR modela
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          from zipfile import ZipFile
+          apk=next(Path('android/app/build/outputs/apk/debug').glob('*.apk'))
+          with ZipFile(apk) as z:
+              assert not any('libmlkit_google_ocr_pipeline.so' in n or 'mlkit-google-ocr-models/' in n for n in z.namelist()), 'Ugrađeni OCR je ostao u APK-u'
+          size=apk.stat().st_size
+          print(f'APK 2.2.7: {size:,} B = {size/1000000:.2f} MB; prethodni 65.14 MB')
+          assert size < 30_000_000, 'APK nije smanjen ispod 30 MB'
+          PYCODE
+      - name: Pripremi KVM za provjeru OCR mrežnog uslova
         run: sudo chmod 666 /dev/kvm
-      - name: Stvarni Android OCR bez interneta
+      - name: Android odbija prepoznavanje bez interneta
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
