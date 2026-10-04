@@ -1699,7 +1699,7 @@ Ručne tačke ne mijenjaju se do eksplicitnog prihvata zelene geometrije;
 Završi ostaje postojeće vraćanje granice u obrazac odjela. Potez/undo/cancel/
 finish/izvor/identitet štite od zakasnjelog odgovora. Fajl je u SW i Android
 manifestu, online-only pomoć uz offline-normalno crtanje.
-2.3.1/code501 sva tri mjesta. 87 lokalnih JS fajlova prošlo (12 novih
+2.3.1/code501 sva tri mjesta. 87 lokalnih JS fajlova prošlo (13 novih
 geometrijskih scenarija), sva JS/inline/Python sintaksa. Novi stvarni Leaflet
 raster/worker browser test u CI prije APK-a. Detalji:
 docs/DOZNAKA_TOPO_GRANICA_2026-10-04.md. CI/objava slijede.
@@ -1708,3 +1708,27 @@ Korisnik pitao Xiaomi/Nova smeđi okvir ikone: source background tamnozelen
 Odgovoreno da veličinu objašnjava app padding, boju može launcher/theme;
 bez screenshot/fizičkog uređaja uzrok nije potvrđen. Ikona nije ponovo
 mijenjana samo na osnovu pitanja.
+
+
+ZAVRŠENO 2.3.1: CI37206197933 na b3ac6e888af3c47c43c1707488b55baad5f05d66
+uspješan (87JS,11browser,Android build,47assetSHA,emulator offline OCR gate,
+36 sintetičkih CPU1x/4x scenarija poslije objave). UI239 PNG; pregledani
+Doznaka day320/dark landscape i dvosmjer uz poligon1:10.000. Release v2.3.1
+latest API potvrđen. Preuzet APK23.908.299B, nativeManifest dekodiran
+ba.spd.uss.vlake.debug / 2.3.1-debug / code501. 47 svih repo web asseta prema
+udaljenom Git stablu identično;9 izmijenjenih web fajlova lokalno identično;
+15 launcher PNG-a identično2.3.0, GRANICE ostao, OCR bez velikog modela.
+Stvarni cert isti kao prethodni, SHA256release:
+c10d1828780dc75dab0a15ddf8bdb5a6ff6252854b951eb055b3d7d778828ec5.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.1
+
+Popravljen minimalni fixture/offline event bez Doznaka DOM-a, raster scale
+sada po koridoru20/50/100m, OCR '---' ne maskira prave crtice. Browser test
+zakasnjelog rezultata ispravljen (assignment Promise ranije čekao odgovor
+prije simulacije), CI37205646511 otkazan. Budući workflow concurrency+20min,
+jednokratni cancel/actionswrite uklonjeni. Testni red marker vrati se nakon
+PNG-a. Bez fizičkog Xiaomi/produkcijskog Supabase/stvarne šumarske topo
+karte; ne tvrditi postotak OCR/linijske uspješnosti ili brzinu pravog telefona.
+Lokalni neki netaknuti fajlovi razlikuju se od udaljene rekonstruisane baze:
+APK sva47 provjerenih asseta odgovara UDALJENOM branch stablu. I dalje samo
+explicit modified paths na remote base tree, nikad široki git push.
