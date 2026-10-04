@@ -15,7 +15,7 @@ let _puteviLayerFg=null;
 const words=[{text:'T12',x0:180,y0:100,x1:240,y1:132,line:'1'},{text:'T3',x0:550,y0:310,x1:598,y1:340,line:'2'},{text:'ODJEL',x0:90,y0:50,x1:190,y1:75,line:'3'},{text:'105',x0:200,y0:50,x1:248,y1:75,line:'3'}];
 let holdOCR=false,ocrId=null;
 window.AndroidReferenceOcr={recognize:(id,data)=>{ocrId=id;if(!holdOCR)setTimeout(()=>ReferenceVlake.ocrReply({id,words}),5)}};
-function makePaper(){const c=document.createElement('canvas');c.width=800;c.height=600;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,800,600);x.lineWidth=4;x.strokeStyle='#111';x.strokeRect(30,40,730,520);x.beginPath();x.moveTo(70,160);x.lineTo(350,160);x.stroke();x.strokeStyle='#1e40af';x.beginPath();x.moveTo(440,360);x.lineTo(740,360);x.moveTo(70,450);x.lineTo(330,450);x.stroke();x.font='bold 30px Arial';x.fillStyle='#111';x.fillText('T12',180,130);x.fillStyle='#1e40af';x.fillText('T3',550,338);x.fillStyle='#111';x.fillText('ODJEL 105',90,75);return c.toDataURL();}
+function makePaper(){const c=document.createElement('canvas');c.width=800;c.height=600;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,800,600);x.lineWidth=4;x.strokeStyle='#111';x.strokeRect(30,40,730,520);x.beginPath();x.moveTo(70,160);x.lineTo(350,160);x.stroke();x.strokeStyle='#1e40af';x.beginPath();x.moveTo(440,360);x.lineTo(740,360);x.moveTo(70,450);x.lineTo(330,450);x.stroke();x.font='bold 30px Arial';x.fillStyle='#111';x.fillText('T12',180,130);x.fillStyle='#1e40af';x.fillText('T3',550,338);x.fillStyle='#111';x.fillText('ODJEL 105',90,75);x.fillText('T7',120,435);return c.toDataURL();}
 window.refReady=new Promise(resolve=>window.addEventListener('DOMContentLoaded',async()=>{await fixtureReady;map.createPane('refKarte');map.getPane('refKarte').style.zIndex='620';_refImg=new Image();await new Promise(r=>{_refImg.onload=r;_refImg.src=makePaper()});_refBounds=[[44.89,16],[44.91,16.03]];document.querySelector('#refkarta-ctrl').style.display='';_placeRefOverlay();_puteviLayerFg=L.geoJSON({type:'FeatureCollection',features:[{type:'Feature',geometry:{type:'LineString',coordinates:[[16,44.899],[16,44.904]]}}]});resolve();},{once:true}));
 '''
 ref=b.section('      <!-- REFERENTNA KARTA -->','    </div><!-- /panel -->')
@@ -36,7 +36,7 @@ async def main():
   assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T3','T12'],await page.locator('#refkarta-detect-status').inner_text()
   # Linije bez T oznake i granica nisu predložene; originalni brojevi se čuvaju.
   await page.context.set_offline(True)
-  await page.evaluate("window.beforeCount=vlake.length;window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===LOCAL_VLAKE_KEY)throw new DOMException('full','QuotaExceededError');return oldSet.call(this,k,v)}")
+  await page.evaluate("()=>{window.beforeCount=vlake.length;window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k===LOCAL_VLAKE_KEY)throw new DOMException('full','QuotaExceededError');return oldSet.call(this,k,v)};}")
   await page.evaluate('ReferenceVlake.importSelected()');assert await page.evaluate('vlake.length===beforeCount&&saveCalls.length===0&&_refDetectedLines.length===2')
   await page.evaluate('Storage.prototype.setItem=oldSet;ReferenceVlake.importSelected()')
   assert await page.evaluate('saveCalls')==['T3','T12'],await page.evaluate('({saveCalls,count:vlake.length,rows:_refDetectedLines.map(r=>r.nm)})');assert await page.evaluate("JSON.parse(localStorage.getItem(LOCAL_VLAKE_KEY)).some(v=>v.nm==='T12'&&v.projekt_id==='P')")
@@ -46,8 +46,15 @@ async def main():
   await page.click('#refkarta-quick');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='';assert await page.locator('#refkarta-vis').is_checked()
   await page.evaluate("_refRepoOverlays.test=L.imageOverlay(_refImg.src,_refBounds,{pane:'refKarte'}).addTo(map);refKartaSetVisible(false);ReferenceVlake.refreshQuick()")
   await page.click('#refkarta-quick');assert await page.evaluate("map.getPane('refKarte').style.visibility")=='hidden';await page.click('#refkarta-quick')
+  # Rukopis koji OCR nije pročitao: stvarni natpis ručno, bez native mosta.
+  await page.evaluate('window.savedOCR=window.AndroidReferenceOcr;delete window.AndroidReferenceOcr')
+  await page.evaluate('ReferenceVlake.addLabel()');assert await page.evaluate('ReferenceVlake.isMarking()')
+  await page.evaluate("map.fire('click',{latlng:L.latLng(ReferenceVlake.pixelToLL(140,425))})")
+  assert not await page.evaluate('ReferenceVlake.isMarking()');await page.evaluate('(o)=>ReferenceVlake.detect(o)',opts)
+  assert await page.evaluate('_refDetectedLines.map(r=>r.nm)')==['T7'],await page.locator('#refkarta-detect-status').inner_text()
+  await page.evaluate('async()=>{await ReferenceVlake.importSelected();window.AndroidReferenceOcr=savedOCR}')
   # Nov projekat/poravnanje otkazuje odgovor starog OCR-a.
-  await page.evaluate("holdOCR=true;window.oldDetect=ReferenceVlake.detect("+str(opts).replace('None','null').replace("'",'"')+");")
+  await page.evaluate("()=>{holdOCR=true;window.oldDetect=ReferenceVlake.detect("+str(opts).replace('None','null').replace("'",'"')+");}")
   await page.evaluate("_aktivniProjektId='Q';ReferenceVlake.ocrReply({id:ocrId,words})");await page.evaluate('oldDetect');assert await page.evaluate('_refDetectedLines.length')==0
   await page.evaluate("_aktivniProjektId='P';holdOCR=false;_refCPs=[{imgX:0,imgY:0,lat:44.9,lng:16},{imgX:800,imgY:0,lat:44.901,lng:16.009},{imgX:800,imgY:600,lat:44.895,lng:16.008}]")
   assert await page.evaluate('''()=>{const ll=ReferenceVlake.pixelToLL(400,300),actual=map.latLngToLayerPoint(ll),a=map.latLngToLayerPoint([44.9,16]),b=map.latLngToLayerPoint([44.895,16.008]);return Math.hypot(actual.x-(a.x+b.x)/2,actual.y-(a.y+b.y)/2)<2}''')
