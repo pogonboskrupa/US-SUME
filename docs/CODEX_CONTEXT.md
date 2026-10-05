@@ -1871,3 +1871,29 @@ isto2.3.3. Preuzeti APK SHA256 jednak ReleaseAPI digest:
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.4
 Korisnik ažurira i ponavlja Pošalji i primi. Stari zabranjeni status kolege
 uklanja pojedinačno u detaljima grešaka; ne brisati cijeli red/bafer.
+
+## 47. Mjerenja i tragovi — modal 2.3.5
+
+Korisnik je tražio profesionalni izgled Meni → Mjerenja i tragovi te novu
+verziju za ažuriranje. Četiri sitne pločice zamijenjene su karticama 2×2 sa
+postojećim SVG ikonama, opisom i jedinicama; njihove postojeće radnje
+Udaljenost/Površina/Nagib/Tragovi su sačuvane. Zaglavlje, aktivni projekat
+(odjel/GJ), stanje snimanja GPS traga, brojači lokalnih sačuvanih mjerenja i
+tragova i dvije prečice do postojećih tabova registra. Brojači izričito
+navode svi projekti na uređaju; nije dodan pogrešan filter aktivnog projekta.
+Nazivi preko textContent, bez HTML umetanja ili mrežnih zahtjeva. Samo
+otvaranje/zatvaranje modala ne mijenja snimanje ili zapise.
+
+Scoped field-design.css, Dnevni/tamni prikaz, 44px kontrole, ograničena visina
+i zasebno skrolanje tijela uz stalno dostupno zatvaranje. Fokus, Tab ciklus,
+Escape i povratak fokusa na vidljivi okidač/menu dugme. Modal nema nove
+biblioteke/slike/animacije, ne obrađuje geometriju ili GPS tačke.
+
+Lokalno prošlo svih90JS testova i inlineJS syntax; novi
+tests/browser/measurements-235.py sa stvarnim markupom/CSS/funkcijama modala
+i postojećom _tragoviSetTab, ali kontrolisanim navigacijskim pozivima. Osam
+prikaza (320×568,390×800,568×320,800×600,oba moda), offline, četiri stara
+alata/dva registra, prazni brojači, dugi/zlonamjerni nazivi, fokus/overlay,
+stanje snimanja/pauze i očuvani registri pri otvaranju. Osam PNG u outputs.
+Test dodan u CI (ukupno18browser). Web/SW/Android2.3.5/code505. CI/APK
+provjera slijedi. Fizički Xiaomi nije testiran.
