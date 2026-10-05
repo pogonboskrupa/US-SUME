@@ -1966,3 +1966,23 @@ menu-tools.py i print-styles-232.py. CI dodan19.browser. Novi JS je u
 SWshell i requiredAPKassets; web/SW/Android2.3.6/code506. Nema novih
 biblioteka niti promjena nativeGPS/proizvodneSupabase baze. CI/APKprovjera
 slijedi; fizički Xiaomi/kompas na uređaju nisu testirani.
+
+
+ZAVRŠENO2.3.6: remote0580d572454e72f6d28124be52dde932af400b94,
+treefe1c3ea3c591fd065c6a365074f1eb8de480534c. CI37312651657/
+job111771592449success:90JS,19browser (uključujući Explorer offline sa
+checkboxom),Android build/52assetSHA,stvarni Android offlineOCRtest,
+36ponavljanja sintetičke online/offlineCPU1x/4xanalize. Bez preskočenih
+obaveznih provjera/reruna.
+
+Preuzeti APK outputs/app-debug-2.3.6.apk:23.999.077B (24,00MB),
+ba.spd.uss.vlake.debug/2.3.6-debug/code506. Svih52webasset identično
+remote tree; izmijenjeni webfajlovi identično lokalno. GRANICE sačuvan,
+15launcherPNG isto2.3.5, bez velikog offlineOCRmodela. CertSHA256
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+isti za update. APK SHA256 i ReleaseAPI digest:
+309e036dbbffe7f8b64cd5f533950bc286270307c1d561d6046685332654c71b.
+/releases?per_page=1 vraća v2.3.6 sa javnim app-debug.apk iste veličine.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.6
+Korisnik ažurira Meni → Ažuriraj aplikaciju. Fizički Xiaomi/kompas na
+uređaju nisu testirani; sintetička analiza nije mjerenje na telefonu.
