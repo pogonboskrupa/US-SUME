@@ -21,6 +21,7 @@ const map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:t
 L.DomEvent.disableClickPropagation(document.getElementById('record-control'));
 L.tileLayer('http://fixture.test/tile/{z}/{x}/{y}.png',{maxZoom:20}).addTo(map);
 const routeLine=L.polyline([[44.9,16],[44.901,16.0002],[44.902,16.0007],[44.904,16.001]],{color:'#ec4899',weight:5}).addTo(map);
+const probeMarker=L.marker([44.9,16],{icon:L.divIcon({className:'perspective-probe',html:'',iconSize:[2,2],iconAnchor:[1,1]}),interactive:false}).addTo(map);
 let clicks=0;map.on('click',e=>{clicks++;window.clicked=e.latlng});
 window.Explorer=ExplorerNavigation.create({map,getPosition:()=>lastP,getCompass:()=>({value:_compassHeading,ts:_compassLastUpdT}),isGpsOn:()=>gpsOn,onBearing:v=>_navLastBrng=v,toast:showToast});
 function tick(h,age=0,accuracy=6){_compassHeading=h;_compassLastUpdT=Date.now();lastP={...lastP,ac:accuracy,ts:Date.now()-age};Explorer.onFix({...lastP,speed:0,heading:null});Explorer.refresh();}
@@ -67,6 +68,8 @@ async def main():
    await page.wait_for_timeout(270);await page.evaluate('(h)=>tick(h)',heading)
    await page.wait_for_function('Math.abs(Explorer.angle-'+str(heading)+')<.01',timeout=1500)
    point=await page.evaluate('(()=>{const p=Explorer.screenPoint([lastP.la,lastP.lo]);return {x:p.x,y:p.y,w:document.getElementById("map").clientWidth,h:document.getElementById("map").clientHeight}})()')
+   probe=await page.locator('.perspective-probe').bounding_box();assert abs(probe['x']+probe['width']/2-point['x'])<3 and abs(probe['y']+probe['height']/2-point['y'])<3,(probe,point)
+   assert 'rotateX(48deg)' in await page.locator('.ex-world').get_attribute('style')
    assert abs(point['x']-point['w']/2)<2,point
    assert 90<point['y']<point['h']-120,point
    assert not await page.evaluate('map.dragging.enabled()')

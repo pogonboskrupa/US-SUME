@@ -25,6 +25,7 @@
 <script src="static/js/reliable-fetch.js"></script>
 <script src="static/js/dem-quality.js"></script>
 <script src="static/js/explorer-navigation.js"></script>
+<script src="static/js/access-policy.js"></script>
 <script src="static/js/doznaka-bands.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded',function(){
@@ -4448,11 +4449,10 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div style="margin:6px 0 12px;color:#fbbf24;"><svg class="ic" style="width:42px;height:42px;stroke-width:1.6;"><use href="#ic-cekanje"/></svg></div>
         <div style="font-size:17px;font-weight:700;color:#e8f0e9;margin-bottom:8px;">Čeka se odobrenje</div>
         <div style="font-size:14px;color:rgba(200,222,203,0.75);line-height:1.6;margin-bottom:16px;">
-          Registracija je zaprimljena. Administrator treba odobriti Vaš pristup prije nego
-          možete koristiti aplikaciju. Pokušajte ponovo kada Vas admin odobri.
+          Vaš zahtjev je sačuvan. Nakon isteka sedam dana probnog korištenja
+          potreban je adminov pristanak za nastavak rada. Pokušajte ponovo kada Vas admin odobri.
           <br><br>
-          <span style="color:#fbbf24;">⚠ Ako admin ne odobri u roku od 7 dana od registracije,
-          nalog se briše i registraciju treba popuniti ponovo.</span>
+          <span style="color:#fbbf24;">Zahtjev i lokalni podaci ostaju sačuvani. Registraciju ne trebate ponavljati.</span>
         </div>
         <button class="auth-btn-primary" onclick="_authRecheck()">
           <div class="auth-btn-primary-inner"><svg class="ic"><use href="#ic-zamijeni"/></svg> Provjeri ponovo</div>
@@ -5723,7 +5723,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.7';
+const APP_VER = 'v2.3.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7122,7 +7122,7 @@ async function _upgradeToOnlineSession() {
   // međuvremenu OPOZVAN (dok se radilo offline na keširanom profilu). Isti
   // tretman kao _provjeriOpozivOdobrenja — bez ovoga bi opozvan korisnik ostao
   // u app-u do sljedećeg vraćanja iz pozadine.
-  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin) {
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile))) {
     _showAuthScreen();
     authShowPending();
     return;
@@ -7294,6 +7294,7 @@ async function sbLoadProfile() {
   if (!data) data = _profileLoad(sbUser?.id); // samo keš OVOG korisnika
   sbProfile = data;
   if (typeof _menuIdentityRender === 'function') _menuIdentityRender();
+  if(typeof _accessTrialArm==='function'&&typeof _appEntered!=='undefined'&&_appEntered)_accessTrialArm();
   if (!data) return;
   const fullName = ((data.ime || '') + ' ' + (data.prezime || '')).trim();
   document.getElementById('p-ime').value = fullName;
@@ -7365,10 +7366,10 @@ async function showApp() {
   // "prva prijava u ovom učitavanju stranice" — tada u app-u još ništa nije
   // restaurirano, pa rano otkrivanje ne može pokazati podatke prethodnog
   // korisnika prije nego _checkDeviceUserSwitch odradi brisanje.
-  const _gateMozeBlokirati = !!(sbProfile && sbProfile.odobren === false && !sbProfile.is_admin);
+  const _gateMozeBlokirati = !!(sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)));
   if (!_gateMozeBlokirati && !_appEntered) _revealApp();
 
-  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && sbUser && sb) {
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)) && sbUser && sb) {
     try {
       const _tmo = new Promise((_, rej) => setTimeout(() => rej(new Error('_recheck_timeout')), 3000));
       const { data, error } = await Promise.race([
@@ -7380,7 +7381,7 @@ async function showApp() {
   // Gate odobrenja: neodobren korisnik NE ulazi u app. FAIL-SAFE — blokira samo kad je
   // odobren EKSPLICITNO false (prije primjene migracije kolona je undefined → ne blokira,
   // niko se ne zaključa). Admin uvijek prolazi.
-  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin) {
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile))) {
     _showAuthScreen();
     authShowPending();
     return;
@@ -7393,6 +7394,7 @@ async function showApp() {
   _revealApp();   // idempotentno — ako je gore već otkriveno, ovo ne mijenja ništa
   _setOfflineMode(!navigator.onLine);
   _startupRestore();
+  if(typeof _accessTrialArm==='function')_accessTrialArm();
 }
 
 // Sve što obnavlja podatke i dira DOM pri pokretanju. Izdvojeno iz showApp() iz
@@ -7480,23 +7482,6 @@ function authShowPending() {
 async function _authRecheck() {
   if (!sbUser) { authShowLogin(); return; }
   if (sb) {
-    // Prvo provjeri je li registracija ISTEKLA (7 dana bez PRVOG odobrenja —
-    // vidi 20260730_isticanje_registracije.sql). Ako jeste, server je nalog već
-    // obrisao (korisnici + auth.users) unutar ovog istog RPC poziva — ovdje samo
-    // pokažemo poruku i odjavimo lokalno, jer sesija sad pokazuje na nepostojeći
-    // nalog. Ako RPC ne postoji (migracija još nije primijenjena) ili je mreža
-    // spora, greška se tiho ignoriše i nastavlja se na običnu provjeru ispod —
-    // isticanje NIKAD ne smije blokirati normalno "Provjeri ponovo".
-    try {
-      const _tmoX = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
-      const { data: istekla, error: expErr } = await Promise.race([
-        sb.rpc('check_own_pending_expiry'), _tmoX
-      ]);
-      if (!expErr && istekla === true) {
-        await _registracijaIstekla();
-        return;
-      }
-    } catch(e) {}
 
     try {
       const _tmo = new Promise((_, rej) => setTimeout(() => rej(new Error('nema odgovora servera (5s)')), 5000));
@@ -7512,19 +7497,21 @@ async function _authRecheck() {
   showApp();  // gate ponovo provjerava sbProfile.odobren
 }
 
-// Nalog je obrisan jer admin nije odobrio u roku od 7 dana (vidi gore). Nalog
-// stvarno više ne postoji na serveru (auth.users je obrisan), pa je jedino
-// ispravno lokalno se odjaviti i uputiti korisnika da se registruje ponovo —
-// za razliku od običnog opoziva pristupa (_provjeriOpozivOdobrenja), gdje se
-// nalog i dalje čeka na eventualno odobrenje.
-async function _registracijaIstekla() {
-  try { await sb.auth.signOut({ scope: 'local' }); } catch(e) {}
-  sbUser = null; sbProfile = null;
-  _clearSavedUser();
-  _showAuthScreen();
-  authShowReg();
-  showAuthErr('Registracija je istekla jer nije odobrena u roku od 7 dana. Popunite ponovo.', true);
+// Probni rok ograničava korištenje; ne briše zahtjev, sesiju ili lokalne podatke.
+let _accessTrialStop=null;
+function _accessTrialArm(){
+  if(_accessTrialStop)_accessTrialStop();_accessTrialStop=null;
+  if(typeof AccessPolicy==='undefined')return;
+  _accessTrialStop=AccessPolicy.watch(()=>sbProfile,()=>{
+    // Pauza čuva aktivni rad i crash snapshot; korisnik nastavlja nakon odobrenja.
+    try{if(recOn&&!recPaused)toggleRecPause();}catch(e){}
+    try{if(_tragOn&&!_tragPaused)togTragPause();}catch(e){}
+    try{if(_dozGpsOn&&!_dozGpsPaused)dozPauseGPS();}catch(e){}
+    try{stopTackaNav();}catch(e){}
+    _showAuthScreen();authShowPending();
+  });
 }
+async function _registracijaIstekla(){_showAuthScreen();authShowPending();}
 // Zaboravljen PIN — neautentifikovan korisnik se ne može dokazati, pa upućujemo na admina.
 function _zaboravljenPin(e) {
   if (e) e.preventDefault();
@@ -7766,7 +7753,7 @@ async function doRegister() {
   // Novi korisnik NE ulazi odmah — čeka admin odobrenje (odobren=FALSE po defaultu).
   // showApp() bi ionako gate-ovao, ali eksplicitno pokazujemo pending s porukom.
   // (Ako migracija nije primijenjena, odobren je undefined → showApp gate propušta → app.)
-  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin) authShowPending();
+  if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile))) authShowPending();
   else showApp();
   } finally {
     _authInFlight = false;
@@ -7811,7 +7798,7 @@ async function doLogout() {
     try { n = _serverNaCekanju(); } catch(e) {}
     // Opozvan/neodobren nalog (dugme Odjava na ekranu "Čeka se odobrenje") ne
     // može slati — server odbija — pa ga ne pitamo; podaci samo ostaju sačuvani.
-    const mozeSlati = sbProfile.odobren !== false || sbProfile.is_admin;
+    const mozeSlati = sbProfile.odobren !== false || sbProfile.is_admin || (typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile));
     if (n.stavki && mozeSlati) {
       const i = await _dlgActions('☁ Neposlano: ' + n.stavki, [
         { label: '⬆ Pošalji pa se odjavi' },
@@ -7857,6 +7844,7 @@ async function doLogout() {
 
   try { stopTackaNav(); } catch(e) {}
 
+  if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
   sbUser = null; sbProfile = null;
 
   // Sve čišćenje ide u try/finally — GARANTOVANO se vraćamo na login ekran čak i ako
@@ -8587,7 +8575,7 @@ function _adminRenderUsers() {
   const blokCeka = ceka.length ? `
     <div style="margin-bottom:20px;border:1px solid #d97706;border-radius:10px;padding:10px;background:rgba(217,119,6,0.07);">
       <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:8px;">
-        ⏳ Čeka odobrenje (${ceka.length}) <span style="color:#a16207;font-weight:400;">· neodobreni se brišu sami</span>
+        ⏳ Čeka odobrenje (${ceka.length}) <span style="color:#a16207;font-weight:400;">· probni pristup 7 dana; zahtjev ostaje</span>
       </div>
       ${ceka.map(u => _admKarticaHtml(u)).join('')}
     </div>` : '';
@@ -8620,7 +8608,7 @@ function _admKarticaHtml(u) {
 
   const rok = u.istice_at ? Math.ceil((new Date(u.istice_at) - Date.now()) / 86400000) : null;
   const rokChip = (st === 'ceka' && rok !== null)
-    ? ` <span style="color:#f87171;font-size:10px;">· briše se za ${rok <= 0 ? '<1 dan' : rok + ' dan' + (rok === 1 ? '' : 'a')}</span>`
+    ? ` <span style="color:#f87171;font-size:10px;">${rok <= 0 ? '· probni pristup istekao — čeka admina' : '· probni pristup još ' + rok + ' dan' + (rok === 1 ? '' : 'a')}</span>`
     : '';
   const statusChip =
       st === 'admin'   ? ' <span style="color:#fbbf24;font-size:10px;">★ ADMIN</span>'
@@ -16517,6 +16505,7 @@ function _menuIdentityRender() {
   if (role) role.textContent = p ? [p.is_admin ? 'Administrator' : typeof isVodeci === 'function' && isVodeci() ? 'Vodeći projektant' : typeof isSpdField === 'function' && isSpdField() ? 'Terenski korisnik' : 'Projektant',p.sumarija].filter(Boolean).join(' · ') : '';
   const version = document.getElementById('menu-app-ver');
   if (version) version.textContent = 'Verzija ' + APP_VER;
+  if(role&&p&&typeof AccessPolicy!=='undefined'){const trial=AccessPolicy.state(p);if(trial.kind==='trial')role.textContent+=' · Probni pristup još '+Math.ceil(trial.remaining/86400000)+' dana';}
 }
 function toggleMenuDropdown(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
@@ -18136,7 +18125,7 @@ async function _provjeriOpozivOdobrenja() {
     if (error || !data) return;                 // mreža laže da radi — pusti na kešu
     sbProfile = data;
     _profileSave(data);
-    if (data.odobren === false && !data.is_admin) {
+    if (data.odobren === false && !data.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(data))) {
       _showAuthScreen();
       authShowPending();
     }
@@ -39916,7 +39905,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="help-body">
 
-    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>Projekat prvo prikazuje listu projekata i vlake aktivnog projekta. Statistika i izvještaji te Izvoz i sigurnosna kopija proširuju se na dodir. Ispod su poligon odjela, boje i strelice. U Bojama vlaka odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U sekciji Poligon odjela i teren u tabu Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji i primi</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Jednim dugmetom Pošalji i primi šalješ rad i primaš vlake svih dostupnih projekata. Za doznaku se prima lista odjela te zone i GPS pojasevi odjela otvorenog u Doznaci. Tri statusa prikazuju koji je korak završen. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Odaberi <b>Vodi me od moje lokacije</b> i dodirni cilj na karti. Karta prati tvoju poziciju i smjer; <b>Vodi me</b> na sačuvanoj tački otvara isti prikaz. GPS preciznost, smjer i zračna udaljenost su uvijek vidljivi. Explorer se uključuje samo tokom opcije <b>Vodi me</b> do tačke/traga ili lokacije iz Menija. Checkbox <b>Explorer prikaz</b> uključuje praćenje u smjeru kretanja. Isključi ga za obični pregled karte; cilj ostaje aktivan, a izbor se pamti za narednu navigaciju. Za offline podlogu prethodno učitaj kartu. <b>Pripremi rutu</b> i sačuvane rute ostaju u istom prozoru; Explorer na sačuvanoj ruti vodi prema njenom krajnjem cilju.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
+    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>Projekat prvo prikazuje listu projekata i vlake aktivnog projekta. Statistika i izvještaji te Izvoz i sigurnosna kopija proširuju se na dodir. Ispod su poligon odjela, boje i strelice. U Bojama vlaka odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U sekciji Poligon odjela i teren u tabu Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji i primi</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Jednim dugmetom Pošalji i primi šalješ rad i primaš vlake svih dostupnih projekata. Za doznaku se prima lista odjela te zone i GPS pojasevi odjela otvorenog u Doznaci. Tri statusa prikazuju koji je korak završen. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Odaberi <b>Vodi me od moje lokacije</b> i dodirni cilj na karti. Nagnuta karta u 3D perspektivi prati tvoju poziciju i smjer; <b>Vodi me</b> na sačuvanoj tački otvara isti prikaz. GPS preciznost, smjer i zračna udaljenost su uvijek vidljivi. Explorer se uključuje samo tokom opcije <b>Vodi me</b> do tačke/traga ili lokacije iz Menija. Checkbox <b>Explorer prikaz</b> uključuje praćenje u smjeru kretanja. Isključi ga za obični pregled karte; cilj ostaje aktivan, a izbor se pamti za narednu navigaciju. Za offline podlogu prethodno učitaj kartu. <b>Pripremi rutu</b> i sačuvane rute ostaju u istom prozoru; Explorer na sačuvanoj ruti vodi prema njenom krajnjem cilju.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
 
     <!-- ── VLAKE ───────────────────────────────── -->
     <div id="help-pane-vlake" style="display:none;">
@@ -41094,7 +41083,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="guide-sheet">
     <header class="guide-header"><div><span class="guide-eyebrow">Navigacija do terena</span><h2 id="guide-title">Vodi me do odjela/lokacije</h2></div><button type="button" onclick="closeGuideChoice()" aria-label="Zatvori navigaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
     <div class="guide-body">
-      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Istraži teren iz svoje pozicije</b><p>Karta prati tvoju GPS poziciju i okreće se u smjeru u kojem gledaš. Cilj odaberi dodirom na kartu.</p><span id="guide-location-status" class="guide-status"></span></div></div>
+      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Istraži teren iz svoje pozicije</b><p>Nagnuta karta u 3D perspektivi prati tvoju GPS poziciju i pokazuje teren ispred tebe u smjeru u kojem gledaš. Cilj odaberi dodirom na kartu.</p><span id="guide-location-status" class="guide-status"></span></div></div>
       <div class="guide-choices">
         <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Vodi me od moje lokacije</b><small>Odaberi cilj i kreni iz svoje GPS pozicije</small></span><span aria-hidden="true">›</span></button>
         <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Pripremi rutu</b><small>Početak, međutačke i odredište na karti</small></span><span aria-hidden="true">›</span></button>
@@ -41438,7 +41427,7 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- Tačka navigacioni panel -->
 <div id="explorer-top" hidden>
-  <div><span id="ex-mode">EXPLORER · PRATI ME</span><b id="ex-gps">Tražim GPS signal</b></div>
+  <div><span id="ex-mode">EXPLORER 3D · PRATI ME</span><b id="ex-gps">Tražim GPS signal</b></div>
   <button type="button" onclick="Explorer.requestCompass()" aria-label="Kompas"><span id="ex-north" aria-hidden="true">↑</span><small>S</small></button>
   <button type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button>
 </div>

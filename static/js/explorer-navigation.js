@@ -8,10 +8,14 @@ function bearing(a,b){const r=Math.PI/180,d=(b.lo-a.lo)*r;return norm(Math.atan2
 /* Leaflet ostaje u svom koordinatnom prostoru. Samo tokom praćenja koristi
  * veći kvadratni viewport u zasebnom rotiranom omotaču; kontrole ostaju ravne.
  * Interakcije se vraćaju prije Pregleda karte. Ne mijenjamo Leaflet prototipe. */
+function perspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),k=1-p.y*s/depth;return {x:p.x/k,y:p.y*c/k};}
+function unperspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),y=p.y/(c+p.y*s/depth);return {x:p.x*(1-y*s/depth),y};}
 function camera(map){
  const container=map.getContainer(),originalSize=map.getSize,originalMouse=map.mouseEventToContainerPoint;
- let world=null,anchor=null,side=0,size=null,angle=0,handlers=[],changing=false;
- function measure(){size=originalSize.call(map);side=Math.ceil(Math.hypot(size.x,size.y));if(world){world.style.width=world.style.height=side+'px';world.style.left=(size.x-side)/2+'px';world.style.top=(size.y-side)/2+'px';}}
+ let world=null,anchor=null,side=0,size=null,angle=0,handlers=[],changing=false,pitch=48*Math.PI/180,depth=900;
+ function measure(){size=originalSize.call(map);depth=Math.max(900,size.y*2.5);
+  const corners=[[-size.x/2,-size.y/2],[size.x/2,-size.y/2],[-size.x/2,size.y/2],[size.x/2,size.y/2]];
+  side=Math.ceil(2*Math.max(...corners.map(([x,y])=>{const p=unperspective({x,y},pitch,depth);return Math.hypot(p.x,p.y);}))+32);if(world){world.style.width=world.style.height=side+'px';world.style.left=(size.x-side)/2+'px';world.style.top=(size.y-side)/2+'px';}}
  function block(e){if(e.target!==container&&!world?.contains(e.target))return;e.stopImmediatePropagation();if(e.cancelable)e.preventDefault();}
  const events=['click','dblclick','contextmenu','mousedown','touchstart','wheel'];
  return {
@@ -23,19 +27,19 @@ function camera(map){
    world=document.createElement('div');world.className='ex-world';container.appendChild(world);world.appendChild(map._mapPane);
    measure();
    map.getSize=function(){return root.L.point(side,side);};
-   map.mouseEventToContainerPoint=function(e){const p=originalMouse.call(map,e),v=rotate({x:p.x-size.x/2,y:p.y-size.y/2},angle*Math.PI/180);return root.L.point(v.x+side/2,v.y+side/2);};
+   map.mouseEventToContainerPoint=function(e){const p=originalMouse.call(map,e),v=rotate(unperspective({x:p.x-size.x/2,y:p.y-size.y/2},pitch,depth),angle*Math.PI/180);return root.L.point(v.x+side/2,v.y+side/2);};
    handlers=['dragging','touchZoom','doubleClickZoom','scrollWheelZoom','boxZoom','keyboard'].map(k=>({h:map[k],enabled:!!map[k]?.enabled()}));
    handlers.forEach(x=>x.h?.disable());events.forEach(e=>container.addEventListener(e,block,{capture:true,passive:false}));
    changing=true;try{map.setView(center,map.getZoom(),{animate:false,reset:true});}finally{changing=false;}
   },
   update(pos,heading,y){
    if(!world)return;
-   angle=norm(heading||0);world.style.transform='rotate('+(-angle)+'deg)';
-   const v=rotate({x:0,y:y-size.y/2},angle*Math.PI/180),p=map.project([pos.la,pos.lo],map.getZoom());
+   angle=norm(heading||0);world.style.transform='perspective('+depth+'px) rotateX(48deg) rotate('+(-angle)+'deg)';
+   const v=rotate(unperspective({x:0,y:y-size.y/2},pitch,depth),angle*Math.PI/180),p=map.project([pos.la,pos.lo],map.getZoom());
    changing=true;try{map.setView(map.unproject(root.L.point(p.x-v.x,p.y-v.y),map.getZoom()),map.getZoom(),{animate:false});}finally{changing=false;}
   },
   resize(){if(!world)return;const center=map.getCenter();map._sizeChanged=true;measure();changing=true;try{map.setView(center,map.getZoom(),{animate:false,reset:true});}finally{changing=false;}},
-  screenPoint(ll){const p=map.latLngToContainerPoint(ll);if(!world)return p;const v=rotate({x:p.x-side/2,y:p.y-side/2},-angle*Math.PI/180);return root.L.point(v.x+size.x/2,v.y+size.y/2);},
+  screenPoint(ll){const p=map.latLngToContainerPoint(ll);if(!world)return p;const v=perspective(rotate({x:p.x-side/2,y:p.y-side/2},-angle*Math.PI/180),pitch,depth);return root.L.point(v.x+size.x/2,v.y+size.y/2);},
   stop(){
    if(!world)return;
    const center=map.getCenter();map.stop();map.getSize=originalSize;map.mouseEventToContainerPoint=originalMouse;
@@ -107,7 +111,7 @@ function create(options){
    options.onBearing?.(b);
   }else{if(arrow)arrow.style.opacity='.25';ui('ex-instruction',!gps?'Uključi GPS za praćenje':!fresh?'Čekam novu GPS poziciju':'Okreni telefon ili kreni za smjer');}
   if(g('ex-follow'))g('ex-follow').checked=follow;
-  ui('ex-mode',follow?'EXPLORER · PRATI ME':'NAVIGACIJA · PREGLED KARTE');
+  ui('ex-mode',follow?'EXPLORER 3D · PRATI ME':'NAVIGACIJA · PREGLED KARTE');
   const start=g('ex-gps-start');if(start)start.hidden=gps;
   const usable=visible&&!blocked,y=usable?layout():0;
   if(usable&&follow&&valid&&fresh&&gps&&now-lastView>=250){
@@ -173,5 +177,5 @@ function create(options){
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchChrome,{once:true});else watchChrome();
  return api;
 }
-root.ExplorerNavigation={create,distance,bearing,rotate};
+root.ExplorerNavigation={create,distance,bearing,rotate,perspective,unperspective};
 })(window);

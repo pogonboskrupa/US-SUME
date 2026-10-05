@@ -2025,3 +2025,57 @@ footer273.8px ody100.3, headerdo130px. Prvobitni prag240px bio premalen za
 puni portrait footer uz pauzu. Sažeti raspored sada kad je slobodno polje
 <400px portrait/<280px landscape. APK nije objavljen jer browser provjera
 pala prije builda. Ispravka i ponovni CI slijede.
+
+
+Završena provjera preklapanja2.3.7: remote8697fe1dcbb6917ff959c6a3be8a1ed40dd574e1,
+tree10567de4c9ac2ea49b1e6af57f518d202c3c15cf,CI37329500118/job111828681998success.
+90JS/20browser/Android build i offlineOCR/52assetSHA/36perf. Releasev2.3.7
+app-debug.apk24.004.473B,digest471dcba6cc8e221a03a71a321b2f08f88137ebf600f16555f4486799ce1e5a63.
+Release metadata provjerena; APK nije dodatno preuzet jer je korisnik za vrijeme
+CI-ja zatražio sljedeći upgrade (2.3.8). Fizički Xiaomi nije testiran.
+
+## 50. Explorer 3D perspektiva i probni pristup — 2.3.8 / code508
+
+Novi zahtjev: pogled ispred u3D i7dana od registracije za novog korisnika;
+po isteku čekanje odobrenja, bez automatskog brisanja. Aktivni task uključuje
+prethodnu popravku preklapanja i završni novi APK.
+
+Explorer sada CSS3Dperspektiva48° uz projekciju/inverziju stvarnih Leaflet
+koordinata, heading gore i korisnika niže u slobodnom polju. Veći viewport
+izračunat iz inverzije uglova, bez praznih uglova. Ovo je perspektiva ravne
+kartografske podloge; nije novi DEMmesh/izmišljeni reljef/ARkamera. Tačnost
+ciljeva/GPS-a ostaje ista; stop/pregled/modal obnavljaju običnu mapu. Nema
+novih velikih biblioteka/modela. Novi unit test projekcije i browser assert
+upoređuju matematički ekran sa stvarnim DOMmarkerom u šest smjerova.
+
+Probni pristup: static/js/access-policy.js koristi serverom postavljen
+probni_do; prvo_odobren_at razlikuje opozvani nalog od novog. Rok isključiv:
+now>=probni_do blokira. Admin/odobreni nastavljaju. Bez kolone/modula ostaje
+postojeće čekanje, nema klijentskog otključavanja stare baze. Pokretanje,
+recheck, nadogradnja sesije, provjera opoziva, odjava poštuju isto pravilo.
+Timer/visibility pauziraju aktivnu vlaku/trag/doznaku po isteku (bez brisanja
+snapshot/registara/naloga), čuvaju sesiju za adminovo naknadno odobrenje.
+Novi APK ne poziva stari destruktivni check_own_pending_expiry. Admin UI više
+ne piše brisanje; prikazuje kraj probnog roka i sačuvan zahtjev.
+
+supabase/migrations/20261005_probni_pristup_7_dana.sql: atomarna/idempotentna,
+probni rok sidri na auth.users.created_at+7dana, štiti created_at/probni_do/
+prvo_odobren_at od klijentskog produženja. je_odobren uključuje važeći probni
+rok uz postojeće RLS/članstva/uloge. Obje stare funkcije brisanja neutralizovane
+za stare APK/admin pozive; admin_get_all_users zadržava povratni potpis i sve
+zahtjeve. Postojeći čekatelji dobijaju samo preostali dio izvornog roka, ne
+novih7dana od migracije. Opozvani ne dobijaju probni rok. SQL nije primijenjen
+na produkcijsku bazu: nema Supabase/adminSQL alata ili kredencijala u ovom
+okruženju. Aktiviranje servera zahtijeva SQL Editor vlasnika baze. Ne tvrditi
+da7dana radi u produkciji samo zbog promjene APK-a. Server je autoritet za
+mrežni pristup; klijentski offline timer koristi sat uređaja/keš zaštićenog
+roka i nije sigurnosna zaštita protiv uređaja kojim napadač upravlja.
+
+Lokalno92JS skupova/5inlineJSsyntax prošli. Novi accessbrowser test stvarnog
+gate/timera/recheck, pauza bez brisanja, naknadno odobrenje/opoziv. CI21browser.
+Novi PostgreSQL16service isključivo testna baza; tests/sql/probni-pristup-238.sql
+primjenjuje stvarnu migraciju dvaput, provjerava RLS pod authenticated,
+važeći/istekli/opozvani nalog, pokušaj produženja datuma/samoodobrenja, stare
+RPCpozive bez brisanja, naknadno odobrenje/adminpregled svih zahtjeva.
+AccessPolicy uSWshell/requiredAPKassets. Web/SW/Android2.3.8/code508.
+CI/APKprovjera slijede; fizički Xiaomi i produkcijska Supabase nisu testirani.

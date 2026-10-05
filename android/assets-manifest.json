@@ -47,6 +47,7 @@
     "static/js/doznaka-boundary.js",
     "static/js/vlaka-outline.js",
     "static/js/vlaka-direction.js",
-    "static/js/explorer-navigation.js"
+    "static/js/explorer-navigation.js",
+    "static/js/access-policy.js"
   ]
 }
