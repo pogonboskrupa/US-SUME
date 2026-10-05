@@ -14,7 +14,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 function extractFn(name) {
   let start = HTML.indexOf('async function ' + name + '(');

@@ -5723,7 +5723,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.9';
+const APP_VER = 'v2.4.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -21535,7 +21535,19 @@ async function _drainNativeGpsBuffer() {
   try {
   const pts = _nativeBufUzmi();
   if (!pts.length) return;
+  const sessionKey = () => JSON.stringify([sbUser?.id, recOn, actI, _tragOn, _dozGpsOn,
+    _nativeSessionSince.vlaka, _nativeSessionSince.trag, _nativeSessionSince.doznaka]);
+  const session = sessionKey();
+  let processed = 0;
   for (const p of pts) {
+    // Dopuna poslije sat vremena u pozadini ne smije zauzeti cijeli UI tok.
+    // Journal ostaje dok se svi potrošači sigurno ne spreme; promjena sesije
+    // tokom predaha prekida ovaj prolaz prije upisa u drugo snimanje.
+    if (processed && processed % 16 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (sessionKey() !== session) throw new Error('Sesija snimanja promijenjena tokom dopune');
+    }
+    processed++;
     // GpsService (native) ne zna za pauzu — provjerava se ISTORIJSKI tajmstamp
     // tačke naspram zabilježenih intervala pauze za dati tip, ne trenutno
     // (ne)pauzirano stanje. Van intervala = bypassPauzu=true (uključi je iako
@@ -38264,6 +38276,19 @@ function dozPauseGPS() {
 
 function _dozUpdGpsStats(acc) {
   if (typeof _fieldStatusUpdate==='function') _fieldStatusUpdate.accuracyDoz=acc;
+  if (document.hidden) return;
+  // IDB/native dopuna može donijeti više tačaka prije sljedećeg frame-a.
+  // Spremanje ostaje po tački, a ekran crta samo najnovije potvrđeno stanje.
+  if (typeof requestAnimationFrame === 'function' && !_dozUpdGpsStats._drawing) {
+    _dozUpdGpsStats._accuracy = acc;
+    if (!_dozUpdGpsStats._frame) _dozUpdGpsStats._frame = requestAnimationFrame(() => {
+      _dozUpdGpsStats._frame = 0;
+      _dozUpdGpsStats._drawing = true;
+      try { _dozUpdGpsStats(_dozUpdGpsStats._accuracy); }
+      finally { _dozUpdGpsStats._drawing = false; }
+    });
+    return;
+  }
   const el = document.getElementById('doz-gps-stats');
   if (!el) return;
   el.style.display = 'block';
@@ -38290,18 +38315,25 @@ function _dozUpdGpsStats(acc) {
 }
 
 function _dozCalcElevGain() {
-  let gain = 0, loss = 0;
-  for (let i = 1; i < _dozGpsElevData.length; i++) {
-    const diff = _dozGpsElevData[i] - _dozGpsElevData[i - 1];
-    if (diff > 1) gain += diff;
-    else if (diff < -1) loss -= diff;
+  const data = _dozGpsElevData;
+  let memo = _dozCalcElevGain._memo;
+  if (!memo || memo.data !== data || memo.n > data.length) {
+    memo = { data, n:0, gain:0, loss:0 };
+    _dozCalcElevGain._memo = memo;
   }
-  return { gain, loss };
+  for (let i = Math.max(1, memo.n); i < data.length; i++) {
+    const diff = _dozGpsElevData[i] - _dozGpsElevData[i - 1];
+    if (diff > 1) memo.gain += diff;
+    else if (diff < -1) memo.loss -= diff;
+  }
+  memo.n = data.length;
+  return { gain:memo.gain, loss:memo.loss };
 }
 
 function _dozDrawElevProfile() {
+  if (document.hidden) return;
   const canvas = document.getElementById('doz-elev-canvas');
-  if (!canvas || _dozGpsElevData.length < 2) return;
+  if (!canvas || _dozGpsElevData.length < 2 || !canvas.getClientRects().length) return;
   document.getElementById('doz-gps-elev').style.display = 'block';
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
@@ -41712,7 +41744,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="oznake-panel" role="dialog" aria-modal="true" aria-label="Preglednik oznaka">
   <header id="oznake-header"><div><span class="ml-eyebrow">SADRŽAJ KARTE</span><h2>Preglednik oznaka</h2><small id="oz-total-badge">0 stavki</small></div><button class="oz-close" onclick="closeOznakePanel()" aria-label="Zatvori preglednik">×</button></header>
   <div class="ml-toolbar"><input id="library-search" type="search" placeholder="Traži naziv, odjel ili opis…" aria-label="Pretraži oznake" oninput="_librarySearch(this.value)"><div id="library-tabs" role="tablist" aria-label="Vrsta oznaka"></div><div class="ml-sort-row"><label for="library-sort">Sortiraj</label><select id="library-sort" onchange="_librarySort(this.value)"><option value="department">Po odjelu</option><option value="date">Po datumu — novije prvo</option><option value="proximity">Blizina sredini karte</option><option value="name">Po nazivu</option></select><button onclick="closeOznakePanel();openLayerImport()">+ Dodaj fajl</button></div><div class="ml-bulk"><span id="library-summary"></span><div><button onclick="_libraryGroup(true)">Prikaži rezultate</button><button onclick="_libraryGroup(false)">Sakrij rezultate</button></div></div></div>
-  <div id="library-list" aria-live="polite"></div><button id="library-more" class="ml-load-more" onclick="_libraryMore()" hidden>Prikaži još</button>
+  <section class="ml-folder-area" aria-label="Fajlovi i oznake na karti"><div class="ml-folder-heading"><svg class="ic" aria-hidden="true"><use href="#ic-folder"/></svg><span>Fajlovi i oznake<small>Tvoj pregled sadržaja karte</small></span></div><div id="library-list" aria-live="polite"></div><button id="library-more" class="ml-load-more" onclick="_libraryMore()" hidden>Prikaži još</button></section>
   <p class="ml-footnote">Grupne radnje važe za rezultate pretrage, uključujući sljedeće stranice. Prikaz ne briše podatke. Server fajl prvo preuzmi za offline korištenje.</p>
 </div>
 

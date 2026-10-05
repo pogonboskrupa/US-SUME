@@ -2215,3 +2215,42 @@ paint8.62s/console SW47.2). OCR offline prošao. Uveden native getProgress==100
 WebViewClient/assetLoader-a. JS uslovi/5s callback/90s ukupno ostaju.
 Diag artifact11360436331 sadrži stvarni logcat i JUnit2test/1failure/0skipped.
 APK nije objavljen prije uspješne Explorer instrumentacije.
+
+## 52. Višesatni teren i boja Preglednika — 2.4.0 / code510
+
+Zahtjev: pet sati naizmjeničnih vlaka i rada u aplikaciji, od toga sat
+doznake, uz nestajanje mobilnih podataka; zatim nova verzija za ažuriranje
+u aplikaciji i žućkast donji dio Preglednika oznaka.
+
+Native dopuna vlake je obrađivala cijeli bafer bez predaha za UI. Sada
+svakih 16 fikseva vraća event loop i provjerava nalog/sesiju/aktivnu vlaku.
+Promjena tokom predaha prekida prolaz bez potvrde journala. Trajni upis,
+GPS filteri, historijske pauze i ručno slanje ostaju autoritet.
+
+Doznaka je za svaku dopunjenu tačku crtala statistiku i dva puna prolaza
+visinskog profila. Prikaz sada spaja pozive u jedan animation frame,
+preskače skriven dokument/profil; računica uspona obrađuje samo nove visine.
+Nova ili skraćena serija resetuje memo. Originalne visine i izvozi ostaju puni.
+Regresija sa 1800 fikseva: 1 canvas crtanje umjesto 1799, bez gubitka tačaka.
+
+Novi field-five-hours.test.js simulira četiri puta 30 min vlake i 30 min
+čitanja/računica, zatim 60 min doznake sa pauzom i slabim GPS-om. 3600
+fikseva vlake ->3564 prihvaćena; 1800 fikseva doznake ->1723 prihvaćena.
+Nema automatskih serverskih upisa. To je Node sa kontrolisanom pohranom,
+GPS-om i Leafletom, nije mjerenje baterije ni pravog telefona.
+Četiri nove regresije padaju na prethodnom kodu. Test panela tragova je
+normalizovao CRLF pri čitanju izvora (Windows fixture je tražio samo LF).
+
+Novi browser field-five-hours.py izvršava puni proizvodni bootstrap,
+stvarni Leaflet/Canvas i IndexedDB uz CPU4x, kontrolisane GPS vremenske
+oznake i blokirane vanjske zahtjeve. Dodan u CI prije objave APK-a.
+CPU4x nije emulacija konkretnog Redmi modela; pet sati vremenskih oznaka
+nije pet sati stvarnog rada. CI/browser/Android rezultat treba dopisati
+poslije izvršenja. Lokalni browser launch odbijen spawn EPERM; nije prošao.
+ADB nema povezanog telefona. Baterija, zagrijavanje i Xiaomi OEM ubijanje
+procesa nisu potvrđeni. Produkcijski Supabase nije mijenjan.
+
+Preglednik dobiva zasebnu folder sekciju: topla žuta #f3dfa2, svijetle
+kartice, tamna slova i dugmad najmanje44px. Pretraga, kategorije, grupne
+radnje, uređivanje i paginacija koriste iste postojeće identitete/pozive.
+Oba prikaza (dnevni/tamni) zadržavaju istu boju foldera.
