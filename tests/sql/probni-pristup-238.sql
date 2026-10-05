@@ -2,7 +2,7 @@
 CREATE ROLE authenticated NOLOGIN; CREATE ROLE anon NOLOGIN;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
-CREATE TABLE auth.users(id uuid PRIMARY KEY,created_at timestamptz NOT NULL);
+CREATE TABLE auth.users(id uuid PRIMARY KEY,created_at timestamptz NOT NULL,last_sign_in_at timestamptz);
 CREATE TABLE public.korisnici(id uuid PRIMARY KEY REFERENCES auth.users(id),ime text,prezime text,sumarija text,login_email text,boja text,is_admin boolean DEFAULT false,odobren boolean DEFAULT false,je_vodeci boolean DEFAULT false,created_at timestamptz DEFAULT now(),prvo_odobren_at timestamptz);
 -- Postojeći trigger iz migracije 20260727: povlaštene kolone se ne mogu samostalno promijeniti.
 CREATE FUNCTION public.korisnici_zastita() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,auth AS $$
@@ -13,7 +13,7 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER trg_korisnici_zastita BEFORE INSERT OR UPDATE ON public.korisnici FOR EACH ROW EXECUTE FUNCTION public.korisnici_zastita();
-INSERT INTO auth.users VALUES
+INSERT INTO auth.users(id,created_at) VALUES
  ('00000000-0000-0000-0000-000000000001',now()-interval '6 days'),
  ('00000000-0000-0000-0000-000000000002',now()-interval '8 days'),
  ('00000000-0000-0000-0000-000000000003',now()-interval '30 days'),

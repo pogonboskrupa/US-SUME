@@ -2079,3 +2079,9 @@ važeći/istekli/opozvani nalog, pokušaj produženja datuma/samoodobrenja, star
 RPCpozive bez brisanja, naknadno odobrenje/adminpregled svih zahtjeva.
 AccessPolicy uSWshell/requiredAPKassets. Web/SW/Android2.3.8/code508.
 CI/APKprovjera slijede; fizički Xiaomi i produkcijska Supabase nisu testirani.
+
+Prvi CI238 37332202726/job111837842818:92JS prošli; stvarna SQL migracija i
+RLS/protected rok/bezbrisanja scenariji prošli do admin liste. SQLfixture je
+nepotpuno imitirao auth.users (nedostaje last_sign_in_at, postojeća Supabase
+kolona). Dopunjena testna tabela; produkcijska migracija nije mijenjana.
+Nijedan browser/APK korak nije izvršen u ovom neuspjelom pokušaju.
