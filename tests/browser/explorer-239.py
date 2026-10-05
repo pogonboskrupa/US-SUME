@@ -13,11 +13,15 @@ html=html.replace('</head>','<script src="/static/libs/leaflet.min.js"></script>
 adapter=re.search(r'window\.Explorer = ExplorerNavigation\.create\(\{.*?\n\}\);',source,re.S)[0]
 js=ex.js.replace("L.DomEvent.disableClickPropagation(document.getElementById('record-control'));",'')
 js=re.sub(r'window\.Explorer=ExplorerNavigation\.create\(\{.*?\}\);',lambda m:adapter,js,count=1,flags=re.S)
-js='let _onPLastFixTs=0;\n'+js+'''
+js=js.replace("switchTab=t=>{_activeTab=t;window.Explorer?.setVisible(t==='karta')},",'')
+js=js.replace('_updFabVisibility=()=>{}',"_updFabVisibility=()=>{const a=document.getElementById('action-bar');a.style.display='flex';document.body.classList.add('ab-on');document.documentElement.style.setProperty('--ab-h',a.offsetHeight+'px')}")
+js+='\n'+ex.b.function('switchTab')
+js='let _onPLastFixTs=0,_mapFullScreen=false;const msrStop=()=>{},_setMapUIVisible=()=>{};\n'+js+'''
 const fixtureTick=tick;
 tick=function(h,age=0,accuracy=6){_onPLastFixTs=Date.now()-age;fixtureTick(h,age,accuracy)};
 document.getElementById('auth-screen').style.display='none';
 document.getElementById('wrapper').style.display='flex';
+switchTab('karta');
 lastP=null;_compassLastUpdT=0;
 '''
 html=html.replace('</body>','<script>'+js+'</script></body>')
@@ -49,6 +53,7 @@ async def main():
   for w,h in [(390,800),(320,568),(568,320),(800,600)]:
    await page.set_viewport_size({'width':w,'height':h});await page.evaluate('lastP={la:44.9,lo:16,ac:6,al:510};tick(35)');await page.wait_for_timeout(350)
    assert await page.locator('#tacka-nav-panel').is_visible()
+   rect=await page.locator('#tacka-nav-panel').bounding_box();assert rect['x']>=0 and rect['x']+rect['width']<=w+1 and rect['y']>=0 and rect['y']+rect['height']<=h+1,rect
    assert await page.locator('#ex-follow').is_checked()
    assert await page.evaluate('!!document.querySelector(".ex-world")&&!map.dragging.enabled()')
    point=await page.evaluate('(()=>{const p=Explorer.screenPoint([lastP.la,lastP.lo]),r=map.getContainer().getBoundingClientRect();return {x:p.x+r.left,y:p.y+r.top}})()')

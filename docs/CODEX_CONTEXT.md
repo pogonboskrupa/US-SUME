@@ -2156,3 +2156,7 @@ U CI dodan prvi browser korak (ukupno22). Web/SW/Android2.3.9/code509.
 Lokalni Chromium je ranije blokiran sandbox socket pravilima; ne ponavljati
 stale permission launch. Relevantna browser/Android provjera ide na CI.
 Provjera i APK objava slijede; ne tvrditi isporuku prije uspješnog CI/APK-a.
+
+Lokalno92JS i5inline sintaksi prošli. Browser239 proširen i na stvarni
+switchTab (ostale auth/snimanje hooks kontrolisane), da se zatvore stvarni
+početni tab paneli i provjere granice navigacije uz stvarnu action-bar traku.
