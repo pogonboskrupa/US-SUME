@@ -2196,3 +2196,13 @@ Leaflet marker ili map pokušava serijalizirati cijeli ciklični graf aplikacije
 i Playwright javlja uništen executioncontext; mutirajuće testne evaluacije
 sada završavaju void0. Kontrolne boolean/JSON evaluacije ostaju iste, nema
 olabavljenja niti izmjena proizvodnog GPS koda. Native marker eval isto void0.
+
+CI37343121439/job111874916980:92JS/SQL/23browser/build/53assetSHA prošli.
+Native faza nije pokrenula testove: emulator-runner izvršava svaku script
+liniju u zasebnom sh procesu, pa cd android nije preživio i gradle je prijavio
+repo root bez settings.gradle. Popravka: jedan bash tests/android/explorer-offline.sh
+sa gradle -p android, istim offline uslovom, timeout180s i logcat artefaktom.
+Za stvarni WebView test izabran API34/google_apis (Android14/moderna JS podrška);
+novi test uslovno odobrava POST_NOTIFICATIONS na33+. Produkcija/minSDK/GPS
+nije mijenjana. Nema dokaza da API29 engine uzrokuje bug; ovo je izbor
+reprezentativnije platforme za trenutne telefone. APK još nije objavljen.

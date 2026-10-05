@@ -170,34 +170,12 @@ jobs:
       - name: Android Explorer WebView i OCR bez interneta
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
+          api-level: 34
           arch: x86_64
-          target: default
+          target: google_apis
           profile: pixel_2
           disable-animations: true
-          script: |
-            adb root
-            adb wait-for-device
-            adb shell settings put global airplane_mode_on 1
-            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
-            adb shell svc wifi disable
-            adb shell svc data disable
-            # Noviji emulator može zadržati VALIDATED Ethernet i kad su Wi-Fi
-            # i mobilni podaci ugašeni. Isključi samo njegov virtualni eth0;
-            # Android test i dalje mora potvrditi da internet nije dostupan.
-            adb shell 'if ip link show eth0 >/dev/null 2>&1; then ip link set eth0 down; fi'
-            adb logcat -c
-            mkdir -p outputs/android-test
-            cd android
-            set +e
-            timeout 180s gradle --no-daemon connectedDebugAndroidTest
-            TEST_RC=$?
-            set -e
-            adb logcat -d > ../outputs/android-test/logcat.txt
-            if [ "$TEST_RC" -ne 0 ]; then
-              tail -n 500 ../outputs/android-test/logcat.txt
-              exit "$TEST_RC"
-            fi
+          script: bash tests/android/explorer-offline.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
