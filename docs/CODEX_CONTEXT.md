@@ -1856,3 +1856,18 @@ GPS bafer i zonu. Postojeći mock-lanci ažurirani za dodatni filter vlasnika,
 bez slabljenja provjera. Novi test u CI (ukupno17browser). 2.3.4/code504 sva
 tri mjesta. CI/APK provjera slijedi. Produkcijski Supabase i fizički Xiaomi
 nisu testirani; ne tvrditi da su živa RLS pravila izmijenjena ili provjerena.
+
+ZAVRŠENO 2.3.4: remote1eb11d8196ebf704d635bbf899c9804761bd2bff,
+CI37275977639/job111652970113success (90JS,17browser,Android build,
+51assetSHA,offlineOCR emulator,analiza brzine36ponavljanja). Novi HTTP test
+prošao i lokalno sa stvarnom Supabase bibliotekom iz prethodnog APK-a
+(rekonstruisana lokalna biblioteka ima drugi SHA; nisu mijenjane biblioteke).
+APK23.966.552B, ba.spd.uss.vlake.debug/2.3.4-debug/code504. Svih51webasset
+isto remoteTree a825f442117cc84d2bbfb7580b03c32ce79a766e; izmijenjeniweb
+isto lokalno;15launcherPNGisto2.3.3,GRANICEsačuvan,nema velikogOCRmodela.
+CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+isto2.3.3. Preuzeti APK SHA256 jednak ReleaseAPI digest:
+85eb009cc83fe777f70267e8a1b6137817888a7d9e2f4f764f1a5f59686b3e6d.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.4
+Korisnik ažurira i ponavlja Pošalji i primi. Stari zabranjeni status kolege
+uklanja pojedinačno u detaljima grešaka; ne brisati cijeli red/bafer.
