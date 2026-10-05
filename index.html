@@ -5723,7 +5723,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.8';
+const APP_VER = 'v2.3.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -41438,7 +41438,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="ex-guidance"><div><div id="tnp-air">—</div><small id="ex-distance-label">Do cilja · zračna udaljenost</small></div><div class="ex-direction"><svg id="ex-direction-arrow" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27V5M6 15L16 5l10 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
   <div class="ex-live"><b id="ex-instruction">Čekam GPS signal</b><span id="ex-heading">Smjer nije dostupan</span></div>
   <div id="tnp-road" hidden></div><div id="tnp-elev" style="display:none;"></div>
-  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer prikaz</span></label><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
+  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer 3D</span></label><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
 </div>
 
 <!-- Tačka modal — unos naziva -->

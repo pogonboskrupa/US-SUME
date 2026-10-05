@@ -2118,3 +2118,41 @@ Fizički Xiaomi nije testiran. Produkcijski Supabase SQL nije izvršen jer
 nema administrativne veze u ovom okruženju. Potrebno jednom pokrenuti
 supabase/migrations/20261005_probni_pristup_7_dana.sql u SQL Editoru;
 APK sam ne otključava sedmodnevni rad/stare serverske funkcije brisanja.
+
+
+## 51. Explorer ostaje standardan — 2.3.9, 2026-10-05
+
+Korisnik prijavio da 2.3.8 ne uključuje 3D i prikazuje običnu kartu. Stvarna
+integracijska greška: Explorer overlaySelector obuhvata [role=dialog], a
+stalni #dlg-sheet ima display:block i transform:translateY(100%) i kad nije
+otvoren. getClientRects().length>0 i visibility!=hidden zato uvijek true;
+blocked ostaje true, paint vraća običnu kameru i sakriva navigaciju. Stari
+browser testovi nisu uključivali cijeli DOM (posebno taj zatvoren dijalog).
+Prolaz 2.3.8 izolovanih scenarija nije bio dokaz ove stvarne integracije.
+
+shown sada zahtijeva stvarni pravougaonik koji presijeca ekran. Otvoren
+modal i dalje suspenduje kameru; transitionend/cancel osvježavaju provjeru
+kad zatvoreni sheet izađe iz ekrana. Novo body childList praćenje otkriva
+naknadno dodane dijaloge ažuriranja, bez subtree praćenja GPS/Leaflet DOM-a.
+Atributi se i dalje prate samo na prozorima/trakama i njihovim roditeljima.
+
+Checkbox Explorer 3D uključuje nagnutu perspektivu odmah, i dok se čeka
+prvi fix ili je GPS pozicija zastarjela. U čekanju centar je trenutna karta
+ili zamrznuta prethodna kamera, a naslov kaže ČEKAM GPS. Bez svježeg GPS-a
+nema oznake TI, udaljenosti ili dolaska. Svježi fix vraća stvarno praćenje;
+pregled/stop/tab/modal i checkbox vraćaju originalne Leaflet interakcije.
+48° perspektiva i geografska projekcija nisu mijenjane. Terenski podaci,
+GPS snimanje/filteri, SQL/trial pravila i podloge nisu mijenjani.
+
+Novi tests/browser/explorer-239.py koristi CI Chromium, CI stvarni Leaflet,
+cijelo tijelo i CSS index.html, sve statične dijaloge, točan proizvodni
+Explorer getPosition/getCompass adapter. Auth/GPS/kompas su kontrolisani,
+bootstrap ostalih servisa nije izvršen; nema produkcijskih zahtjeva.
+Provjerava stari pogrešan predicate na stvarno zatvorenom dlg-sheet,
+aktivaciju prije GPS-a, stvarni DOMmarker vs projekcija u 4 veličine,
+animirano zatvaranje/naknadni dialog, gubitak GPS-a i checkbox/stop.
+To nije test na fizičkom Xiaomiju niti punom stvarnom Supabase loginu.
+U CI dodan prvi browser korak (ukupno22). Web/SW/Android2.3.9/code509.
+Lokalni Chromium je ranije blokiran sandbox socket pravilima; ne ponavljati
+stale permission launch. Relevantna browser/Android provjera ide na CI.
+Provjera i APK objava slijede; ne tvrditi isporuku prije uspješnog CI/APK-a.

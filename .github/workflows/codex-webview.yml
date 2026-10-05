@@ -55,6 +55,7 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
+          python tests/browser/explorer-239.py
           python tests/browser/access-238.py
           python tests/browser/overlays-237.py
           python tests/browser/explorer-236.py

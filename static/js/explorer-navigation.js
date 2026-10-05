@@ -58,7 +58,13 @@ function create(options){
  function heading(now){const c=options.getCompass();if(c&&finite(c.value)&&now-c.ts<5000)return {value:norm(c.value),source:'Kompas'};if(course&&now-course.ts<12000)return {value:course.value,source:'Smjer kretanja'};return null;}
  const overlaySelector='[aria-modal="true"],[role="dialog"],.rs-sheet,.ab-pop,#menu-dropdown,#layer-sheet,#tacka-modal,#profil-modal,#trag-reg-modal,#dlg-overlay,#mapfav-modal,#granice-modal,#offline-modal,#sqlmap-modal,#tem-modal,#stil-modal,#upd-bg,#trag-quick-meta,#guide-draw-banner,#draw-banner,#doz-draw-banner,#project-draw-toolbar,#msr-draw-banner';
  const reserveIds=['action-bar','rec-banner','rec-bar'];
- function shown(el){return !!el&&!el.hidden&&el.getClientRects().length>0&&root.getComputedStyle(el).visibility!=='hidden';}
+ function shown(el){
+  if(!el||el.hidden||!el.getClientRects().length||root.getComputedStyle(el).visibility==='hidden')return false;
+  // Npr. zatvoren #dlg-sheet ostaje display:block, ali translateY(100%)
+  // ga drži potpuno ispod ekrana. Postojanje DOM pravougaonika nije otvoren modal.
+  const r=el.getBoundingClientRect();
+  return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<root.innerHeight&&r.left<root.innerWidth;
+ }
  function paint(){
   const show=!!target&&visible&&!blocked,key=show+'|'+follow;
   if(chrome===key)return;chrome=key;
@@ -73,13 +79,22 @@ function create(options){
   paint();if(was!==blocked){lastView=0;lastCamera=null;}schedule();
  }
  function watchChrome(){
-  overlays=Array.from(document.querySelectorAll(overlaySelector));
-  const reserve=reserveIds.map(g).filter(Boolean),nodes=new Set([...overlays,...reserve]);
-  // Pratimo i roditelje: dialog može biti otvoren, a njegova pozadina sakrivena.
-  for(const el of Array.from(nodes))for(let parent=el.parentElement;parent;parent=parent.parentElement)nodes.add(parent);
-  if(root.MutationObserver){const observer=new root.MutationObserver(syncOverlays);nodes.forEach(el=>observer.observe(el,{attributes:true,attributeFilter:['style','class','hidden','open']}));}
+  const reserve=reserveIds.map(g).filter(Boolean),watched=new Set();
+  const observer=root.MutationObserver?new root.MutationObserver(syncOverlays):null;
+  function discover(){
+   overlays=Array.from(document.querySelectorAll(overlaySelector));
+   // Pratimo i roditelje: dialog može biti otvoren, a njegova pozadina sakrivena.
+   for(const el of [...overlays,...reserve])for(let node=el;node;node=node.parentElement){
+    if(watched.has(node))break;watched.add(node);observer?.observe(node,{attributes:true,attributeFilter:['style','class','hidden','open']});
+   }
+   syncOverlays();
+  }
+  discover();
+  // Novi dijalozi ažuriranja se dodaju direktno u body. Bez subtree praćenja karte/GPS-a.
+  if(root.MutationObserver)new root.MutationObserver(discover).observe(document.body,{childList:true});
+  // Zatvaranje transform animacijom ne mijenja atribute kad konačno izađe iz ekrana.
+  for(const event of ['transitionend','transitioncancel'])document.addEventListener(event,e=>{if(watched.has(e.target))syncOverlays();});
   if(root.ResizeObserver){const observer=new root.ResizeObserver(()=>{if(target)schedule();});reserve.forEach(el=>observer.observe(el));}
-  syncOverlays();
  }
  function layout(){
   const r=map.getContainer().getBoundingClientRect(),top=g('explorer-top'),panel=g('tacka-nav-panel');
@@ -111,14 +126,17 @@ function create(options){
    options.onBearing?.(b);
   }else{if(arrow)arrow.style.opacity='.25';ui('ex-instruction',!gps?'Uključi GPS za praćenje':!fresh?'Čekam novu GPS poziciju':'Okreni telefon ili kreni za smjer');}
   if(g('ex-follow'))g('ex-follow').checked=follow;
-  ui('ex-mode',follow?'EXPLORER 3D · PRATI ME':'NAVIGACIJA · PREGLED KARTE');
+  ui('ex-mode',follow?(gps&&fresh&&valid?'EXPLORER 3D · PRATI ME':'EXPLORER 3D · ČEKAM GPS'):'NAVIGACIJA · PREGLED KARTE');
   const start=g('ex-gps-start');if(start)start.hidden=gps;
   const usable=visible&&!blocked,y=usable?layout():0;
-  if(usable&&follow&&valid&&fresh&&gps&&now-lastView>=250){
+  // Checkbox uključuje perspektivu odmah, i dok se čeka prvi GPS fix.
+  // Tada je kamera na trenutnoj karti; nema lažnog markera/udaljenosti/dolaska.
+  const center=map.getCenter(),cameraPos=gps&&fresh&&valid?pos:lastCamera||{la:center.lat,lo:center.lng};
+  if(usable&&follow&&now-lastView>=250){
    lastView=now;const angle=h?.value??view.angle;
-   const changed=!view.active||!lastCamera||distance(pos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
-   if(changed){if(!view.active)view.start();view.update(pos,angle,y);lastCamera={...pos,angle,y,zoom:map.getZoom()};}
-  }else if(usable&&follow&&valid&&fresh&&gps&&deferred==null){
+   const changed=!view.active||!lastCamera||distance(cameraPos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
+   if(changed){if(!view.active)view.start();view.update(cameraPos,angle,y);lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom()};}
+  }else if(usable&&follow&&deferred==null){
    deferred=root.setTimeout(()=>{deferred=null;render();},Math.max(1,250-(now-lastView)));
   }
   const you=g('explorer-you');if(you){you.hidden=!(usable&&fieldRoom>=20&&follow&&fresh&&valid&&gps&&view.active);if(!you.hidden){const p=view.screenPoint([pos.la,pos.lo]),r=map.getContainer().getBoundingClientRect();you.style.left=(r.left+p.x)+'px';you.style.top=(r.top+p.y)+'px';you.dataset.heading=h?'known':'none';}}
