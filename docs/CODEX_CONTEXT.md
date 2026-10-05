@@ -1906,3 +1906,22 @@ virtualni Ethernet. CI fixture sada adb root + airplane mode + Wi-Fi/data
 disable + ako postoji eth0, ip link set eth0 down. Testni assert i native
 OCR uslov nisu oslabljeni/promijenjeni. Novi CI slijedi sa istim2.3.5/code505
 koji još nije objavljen; nije mijenjan funkcionalni kod zbog CI problema.
+
+ZAVRŠENO2.3.5: remote fca9faefff7712548744292d1ab88ca02d857208,
+tree ab0d2a5ca49fbc4c0225264856dbf0f580e2299c. CI37286799402/
+job111687501267success:90JS,18browser,Android build,51assetSHA,
+stvarni Android offlineOCR test sa izolovanom mrežom,36ponavljanja analize
+brzine. Ranija dva neuspjeha CI37284217727 nisu zaobiđena; ispravljena
+je izolacija mreže fixturea i kompletan novi CI prošao.
+
+Preuzeti APK outputs/app-debug-2.3.5.apk:23.974.488B (23,97MB),
+ba.spd.uss.vlake.debug/2.3.5-debug/code505. Svih51webasset isto remote
+tree; izmijenjeni web fajlovi isto lokalno. GRANICE sačuvan,15launcherPNG
+isto2.3.4, bez velikog offlineOCRmodela. CertSHA256
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+isto2.3.4; APK SHA256 isti ReleaseAPI digest:
+17ab5feeb10723b520a80e84b11fc76f95628a11de99f32dde64b8bf2df1ef40.
+/releases?per_page=1 vraća v2.3.5 sa javnim app-debug.apk.
+https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.5
+Korisnik ažurira preko Meni → Ažuriraj aplikaciju. Fizički Xiaomi nije
+testiran. Nema izmjena produkcijskog Supabase-a.
