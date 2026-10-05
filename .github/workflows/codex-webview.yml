@@ -213,6 +213,7 @@ jobs:
             APK za ažuriranje kroz Meni → Ažuriraj aplikaciju.
             Izvor: ${{ github.sha }}
             JavaScript testovi i provjera SHA-256 web resursa u APK-u izvršavaju se prije objave.
+            Za pravilo „7 dana probnog pristupa“ administrator Supabase baze treba jednom primijeniti [SQL migraciju](https://github.com/pogonboskrupa/US-SUME/blob/${{ github.sha }}/supabase/migrations/20261005_probni_pristup_7_dana.sql). APK samostalno ne mijenja serverska pravila.
           files: android/app/build/outputs/apk/debug/*.apk
           # Ako glob gore ne pogodi nijedan fajl (npr. build output struktura
           # se promijeni), akcija MORA pasti — bolje nego tiho objaviti release
