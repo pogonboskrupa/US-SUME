@@ -2189,3 +2189,10 @@ koristi stvarnu Activity sa lifecycle signalom i asinhroni UIpost+5srok.
 @Test90s i gradle180s sprečavaju neograničeno čekanje. Logcat i JUnitreport
 se čuvaju kao artifact na uspjeh/neuspjeh. Ne preskakati Explorer provjeru
 radi zelenog CI-ja; prvo dobiti konkretan rezultat/zapis i popraviti uzrok.
+
+CI37342337991/37342809445: kompletan proizvodni bootstrap, 3D prije GPS-a,
+stvarni onP i <3px DOMprojekcija potvrđeni kroz test. Evaluacija koja vraća
+Leaflet marker ili map pokušava serijalizirati cijeli ciklični graf aplikacije
+i Playwright javlja uništen executioncontext; mutirajuće testne evaluacije
+sada završavaju void0. Kontrolne boolean/JSON evaluacije ostaju iste, nema
+olabavljenja niti izmjena proizvodnog GPS koda. Native marker eval isto void0.
