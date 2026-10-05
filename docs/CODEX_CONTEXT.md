@@ -1986,3 +1986,36 @@ isti za update. APK SHA256 i ReleaseAPI digest:
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.6
 Korisnik ažurira Meni → Ažuriraj aplikaciju. Fizički Xiaomi/kompas na
 uređaju nisu testirani; sintetička analiza nije mjerenje na telefonu.
+
+
+## 49. Preklapanje Explorera i prozora — 2.3.7 / code507
+
+Korisnik prijavio preklapanje modala, traži novi APK. Dodatno precizira:
+Explorer samo kroz Vodi me do tačke/traga i Vodi me do lokacije iz Menija.
+Nova kamera se ne pokreće otvaranjem app/GPS/snimanjem. Checkbox bez aktivnog
+cilja ne aktivira navigaciju. Izbor se pamti, prikaz je vezan za cilj.
+Nazivi akcija su Vodi me; Explorer checkbox ostaje samo u aktivnoj navigaciji.
+Trag dobiva Vodi me u popupu/listi: najbliža važeća snimljena tačka prema
+poznatoj poziciji, bez pozicije početak. Cilj je snapshot; nema izmjena traga,
+vidljivosti registra ili upisa lažnih tačaka. Ovo nije rutiranje duž traga.
+
+Utvrđen uzrok: layout Explorera uzimao samo map rect, zanemarivao action-bar,
+rec-banner/rec-bar. Footer z1800 pokrivao snimanje/donju traku, a mjerenja/
+GPS/kratki prozori imali odvojen životni ciklus. Novi layout rezerviše stvarne
+rects donjih traka. Pri malom prostoru sažeti footer (udaljenost/checkbox/stop),
+bez sudara s trakom; puni prikaz se vraća kad ima prostora. Ekstremno malo
+polje sakrije pozicioni puck ako bi prekrio kontrole. Overlay/popup privremeno
+sakrije HUD i obnovi običnu mapu (metode/gestu), čuva cilj/izbor/GPS, pa vraća
+navigaciju tek kad su svi prozori zatvoreni i Karta vidljiva. MutationObserver
+prati postojeće overlay roots/roditelje; ResizeObserver rezervisane trake.
+Nema posmatranja cijelog DOM subtree niti novih poziva u GPS obradi.
+Guide/Mjerenja zatvaraju kratke GPS/Izmjeri popupove. Ne otkazuje se snimanje
+ili nečiji nacrt radi uklanjanja preklapanja.
+
+Lokalno90JS skupova/5inline syntax prošli. Browser launch lokalno blokiran
+sandbox socket/setsockopt pravilom; test se nije izvršio, nema lažnog lokalnog
+prolaza. Nova tests/browser/overlays-237.py provjerava stvarni markup traka,
+24kombinacije rasporeda/snimanje-pauza/modovi,6prozora, nested prozore,
+čuvanje cilja, checkbox, tab/stop, navigaciju do traga i sačuvanu geometriju.
+CI uključen prije APK builda, uz postojeći Explorer/regresijski skup (20browser).
+Web/SW/Android2.3.7/code507. CI/APKprovjera slijede. Fizički Xiaomi nije testiran.

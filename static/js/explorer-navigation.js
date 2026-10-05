@@ -47,17 +47,46 @@ function camera(map){
 }
 function create(options){
  const map=options.map,view=camera(map),g=id=>document.getElementById(id);
- let target=null,follow=true,visible=true,timer=null,goal=null,course=null,previous=null,lastView=0,lastCamera=null,pending=null,deferred=null,session=0;
+ let target=null,follow=true,visible=true,timer=null,goal=null,course=null,previous=null,lastView=0,lastCamera=null,pending=null,deferred=null,session=0,blocked=false,chrome=null,fieldRoom=0,overlays=[];
  const preferenceKey='tvlake_explorer_view_v1';
  function preference(){try{return root.localStorage.getItem(preferenceKey)!=='false';}catch(e){return true;}}
  const ui=(id,text)=>{const el=g(id);if(el&&el.textContent!==String(text))el.textContent=text;};
  function heading(now){const c=options.getCompass();if(c&&finite(c.value)&&now-c.ts<5000)return {value:norm(c.value),source:'Kompas'};if(course&&now-course.ts<12000)return {value:course.value,source:'Smjer kretanja'};return null;}
+ const overlaySelector='[aria-modal="true"],[role="dialog"],.rs-sheet,.ab-pop,#menu-dropdown,#layer-sheet,#tacka-modal,#profil-modal,#trag-reg-modal,#dlg-overlay,#mapfav-modal,#granice-modal,#offline-modal,#sqlmap-modal,#tem-modal,#stil-modal,#upd-bg,#trag-quick-meta,#guide-draw-banner,#draw-banner,#doz-draw-banner,#project-draw-toolbar,#msr-draw-banner';
+ const reserveIds=['action-bar','rec-banner','rec-bar'];
+ function shown(el){return !!el&&!el.hidden&&el.getClientRects().length>0&&root.getComputedStyle(el).visibility!=='hidden';}
+ function paint(){
+  const show=!!target&&visible&&!blocked,key=show+'|'+follow;
+  if(chrome===key)return;chrome=key;
+  document.body.classList.toggle('explorer-follow',show&&follow);
+  if(!show)view.stop();
+  if(g('explorer-top'))g('explorer-top').hidden=!show;
+  if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display=show?'flex':'none';
+  if(!show&&g('explorer-you'))g('explorer-you').hidden=true;
+ }
+ function syncOverlays(){
+  const was=blocked;blocked=overlays.some(shown)||!!map._popup?.isOpen();
+  paint();if(was!==blocked){lastView=0;lastCamera=null;}schedule();
+ }
+ function watchChrome(){
+  overlays=Array.from(document.querySelectorAll(overlaySelector));
+  const reserve=reserveIds.map(g).filter(Boolean),nodes=new Set([...overlays,...reserve]);
+  // Pratimo i roditelje: dialog može biti otvoren, a njegova pozadina sakrivena.
+  for(const el of Array.from(nodes))for(let parent=el.parentElement;parent;parent=parent.parentElement)nodes.add(parent);
+  if(root.MutationObserver){const observer=new root.MutationObserver(syncOverlays);nodes.forEach(el=>observer.observe(el,{attributes:true,attributeFilter:['style','class','hidden','open']}));}
+  if(root.ResizeObserver){const observer=new root.ResizeObserver(()=>{if(target)schedule();});reserve.forEach(el=>observer.observe(el));}
+  syncOverlays();
+ }
  function layout(){
   const r=map.getContainer().getBoundingClientRect(),top=g('explorer-top'),panel=g('tacka-nav-panel');
-  if(top){top.style.top=(r.top+10)+'px';top.style.left=(r.left+10)+'px';top.style.width=Math.max(0,r.width-20)+'px';}
-  if(panel){panel.style.bottom=Math.max(8,root.innerHeight-r.bottom+10)+'px';panel.style.left=(r.left+10)+'px';panel.style.width=Math.max(0,r.width-20)+'px';}
-  const max=r.height-(panel?.offsetHeight||170)-20,min=(top?.offsetHeight||60)+24;
-  return Math.max(25,Math.min(r.height-25,min+Math.max(0,max-min)*.76));
+  let edge=Math.min(r.bottom,root.innerHeight);
+  for(const id of reserveIds){const el=g(id);if(!shown(el))continue;const b=el.getBoundingClientRect();if(b.bottom>r.top&&b.top<edge&&b.right>r.left&&b.left<r.right)edge=Math.max(r.top,b.top);}
+  const crowded=edge-r.top<240;if(document.body.classList.contains('explorer-crowded')!==crowded)document.body.classList.toggle('explorer-crowded',crowded);
+  if(top){top.style.top=(r.top+10)+'px';top.style.left=(r.left+10)+'px';top.style.width=Math.max(0,r.width-20)+'px';top.hidden=crowded;}
+  if(panel){panel.style.bottom=Math.max(8,root.innerHeight-edge+10)+'px';panel.style.left=(r.left+10)+'px';panel.style.width=Math.max(0,r.width-20)+'px';panel.style.maxHeight=Math.max(44,edge-r.top-20)+'px';}
+  const min=(crowded?0:(top?.offsetHeight||60))+24,max=edge-r.top-(panel?.offsetHeight||170)-25;
+  fieldRoom=max-min;
+  return Math.max(20,Math.min(r.height-20,min+Math.max(0,max-min)*.76));
  }
  function render(){
   pending=null;if(!target)return;
@@ -80,42 +109,41 @@ function create(options){
   if(g('ex-follow'))g('ex-follow').checked=follow;
   ui('ex-mode',follow?'EXPLORER · PRATI ME':'NAVIGACIJA · PREGLED KARTE');
   const start=g('ex-gps-start');if(start)start.hidden=gps;
-  const y=visible?layout():0;
-  if(visible&&follow&&valid&&fresh&&gps&&now-lastView>=250){
+  const usable=visible&&!blocked,y=usable?layout():0;
+  if(usable&&follow&&valid&&fresh&&gps&&now-lastView>=250){
    lastView=now;const angle=h?.value??view.angle;
    const changed=!view.active||!lastCamera||distance(pos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
    if(changed){if(!view.active)view.start();view.update(pos,angle,y);lastCamera={...pos,angle,y,zoom:map.getZoom()};}
-  }else if(visible&&follow&&valid&&fresh&&gps&&deferred==null){
+  }else if(usable&&follow&&valid&&fresh&&gps&&deferred==null){
    deferred=root.setTimeout(()=>{deferred=null;render();},Math.max(1,250-(now-lastView)));
   }
-  const you=g('explorer-you');if(you){you.hidden=!(visible&&follow&&fresh&&valid&&gps&&view.active);if(!you.hidden){const p=view.screenPoint([pos.la,pos.lo]),r=map.getContainer().getBoundingClientRect();you.style.left=(r.left+p.x)+'px';you.style.top=(r.top+p.y)+'px';you.dataset.heading=h?'known':'none';}}
+  const you=g('explorer-you');if(you){you.hidden=!(usable&&fieldRoom>=20&&follow&&fresh&&valid&&gps&&view.active);if(!you.hidden){const p=view.screenPoint([pos.la,pos.lo]),r=map.getContainer().getBoundingClientRect();you.style.left=(r.left+p.x)+'px';you.style.top=(r.top+p.y)+'px';you.dataset.heading=h?'known':'none';}}
   if(g('ex-north'))g('ex-north').style.transform='rotate('+(-view.angle)+'deg)';
  }
  function schedule(){if(target&&pending==null)pending=root.requestAnimationFrame(render);}
  function stop(){
   session++;if(timer)root.clearInterval(timer);timer=null;if(pending!=null)root.cancelAnimationFrame(pending);pending=null;if(deferred!=null)root.clearTimeout(deferred);deferred=null;
   view.stop();lastCamera=null;if(goal){map.removeLayer(goal);goal=null;}target=null;course=null;previous=null;
-  document.body.classList.remove('explorer-follow','explorer-nav');
+  document.body.classList.remove('explorer-follow','explorer-nav','explorer-crowded');chrome=null;
   if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display='none';if(g('explorer-top'))g('explorer-top').hidden=true;
   if(g('explorer-you'))g('explorer-you').hidden=true;
  }
- function inspect(){if(!target)return;follow=false;view.stop();document.body.classList.remove('explorer-follow');render();}
+ function inspect(){if(!target)return;follow=false;view.stop();paint();render();}
  const api={
-  get active(){return !!target;},get following(){return !!target&&follow&&visible;},get angle(){return view.angle;},get destination(){return target;},get session(){return session;},screenPoint:ll=>view.screenPoint(ll),
+  get active(){return !!target;},get following(){return !!target&&follow&&visible&&!blocked;},get angle(){return view.angle;},get destination(){return target;},get session(){return session;},screenPoint:ll=>view.screenPoint(ll),
   start(t){
    if(!t||!finite(t.la)||!finite(t.lo)||Math.abs(t.la)>90||Math.abs(t.lo)>180)return false;
    stop();if(g('tnp-elev')){g('tnp-elev').style.display='none';g('tnp-elev').textContent='';}map.invalidateSize({animate:false,pan:false});target={...t};follow=preference();visible=true;lastView=0;session++;
    goal=root.L.circleMarker([t.la,t.lo],{radius:9,color:'#fff',weight:3,fillColor:'#16a34a',fillOpacity:1,interactive:false}).addTo(map);
-   document.body.classList.add('explorer-nav');document.body.classList.toggle('explorer-follow',follow);if(g('explorer-top'))g('explorer-top').hidden=false;
-   if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display='flex';
+   document.body.classList.add('explorer-nav');syncOverlays();
    if(map.getZoom()<16||map.getZoom()>19)map.setZoom(17,{animate:false});
    render();timer=root.setInterval(render,1000);return true;
   },
   stop,inspect,
   rename(name){if(target){target.name=String(name||'Odabrana lokacija');schedule();}},
   setExplorerEnabled(on){
-   on=!!on;try{root.localStorage.setItem(preferenceKey,String(on));}catch(e){}
-   if(!target)return;if(!on){inspect();return;}follow=true;lastCamera=null;lastView=0;document.body.classList.toggle('explorer-follow',visible);render();
+   if(!target)return false;on=!!on;try{root.localStorage.setItem(preferenceKey,String(on));}catch(e){}
+   if(!target)return;if(!on){inspect();return;}follow=true;lastCamera=null;lastView=0;paint();render();
   },
   toggleFollow(){api.setExplorerEnabled(!follow);},
   onHeading:schedule,
@@ -126,11 +154,7 @@ function create(options){
    else if(previous&&ts-previous.ts>0&&ts-previous.ts<12000&&finite(p.ac)&&p.ac<=20&&previous.ac<=20&&distance(previous,p)>Math.max(5,p.ac))course={value:bearing(previous,p),ts};
    previous={...p,ts};schedule();
   },
-  setVisible(on){
-   visible=on;if(!target)return;
-   if(!on){view.stop();document.body.classList.remove('explorer-follow');if(g('explorer-top'))g('explorer-top').hidden=true;if(g('explorer-you'))g('explorer-you').hidden=true;if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display='none';}
-   else{document.body.classList.toggle('explorer-follow',follow);if(g('explorer-top'))g('explorer-top').hidden=false;if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display='flex';lastView=0;render();}
-  },
+  setVisible(on){visible=!!on;paint();if(target&&visible&&!blocked){lastView=0;render();}},
   requestCompass:async function(){
    const token=session;
    try{if(root.DeviceOrientationEvent?.requestPermission){const result=await root.DeviceOrientationEvent.requestPermission();if(result!=='granted'&&token===session)options.toast?.('Dozvola za kompas nije odobrena; smjer kretanja se koristi kada je dostupan.');}}
@@ -142,9 +166,11 @@ function create(options){
   refresh:render
  };
  root.addEventListener('resize',()=>{if(target){view.resize();lastView=0;schedule();}});
- map.on('moveend',()=>{if(target&&follow&&visible&&view.active&&!view.changing){lastCamera=null;schedule();}});
+ map.on('moveend',()=>{if(target&&follow&&visible&&!blocked&&view.active&&!view.changing){lastCamera=null;schedule();}});
  if(root.ResizeObserver){const observer=new root.ResizeObserver(()=>{if(target&&visible){view.resize();lastView=0;schedule();}});observer.observe(map.getContainer());}
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&target){lastView=0;schedule();}});
+ map.on('popupopen popupclose',syncOverlays);
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchChrome,{once:true});else watchChrome();
  return api;
 }
 root.ExplorerNavigation={create,distance,bearing,rotate};

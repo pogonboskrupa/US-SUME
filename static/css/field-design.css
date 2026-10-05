@@ -433,3 +433,16 @@ html #tacka-nav-panel {position:fixed;left:10px;right:auto;bottom:10px;width:cal
 body.explorer-follow #map-center-dot,body.explorer-follow #nv-badge,body.explorer-follow #map-ctrl-bar,body.explorer-follow #scale-menu,body.explorer-follow #dem-legend,body.explorer-follow #loc-svg {visibility:hidden!important}body.explorer-pick #guide-draw-banner .undo,body.explorer-pick #guide-draw-banner .finish {display:none!important}body.explorer-pick #guide-draw-row2 {justify-content:flex-end}
 :is(#explorer-top,#tacka-nav-panel) button:focus-visible {outline:3px solid #38bdf8;outline-offset:-3px}.guide-route-actions {flex-wrap:wrap}
 @media(max-height:480px) {html #explorer-top {padding:5px 9px;border-radius:12px}#ex-mode {font-size:8px}#ex-gps {margin-top:1px;font-size:10px}html #tacka-nav-panel {padding:9px 11px;border-radius:13px;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px}body.explorer-nav #tacka-nav-panel {display:grid!important}html #tacka-nav-panel[style*="display: none"],html #tacka-nav-panel[style*="display:none"] {display:none!important}.ex-target {grid-column:1}.ex-target-icon,#ex-overview {display:none}.ex-guidance {grid-column:1;margin:3px 0}.ex-direction {width:36px;height:36px}#ex-direction-arrow {width:23px;height:23px}html #tnp-air {font-size:25px}#ex-distance-label {font-size:9px;margin:0}.ex-live {grid-column:1;padding:0;border:0}#ex-heading,html #tnp-elev {display:none!important}.ex-actions {grid-column:2;grid-row:1/4;flex-direction:column;justify-content:center;margin:0}.ex-actions>button {padding:7px 10px}.ex-zoom {margin:0;justify-content:center}#ex-instruction {font-size:10px}.ex-target small {font-size:8px}html #tnp-name {font-size:12px;max-height:36px}}
+
+/* Mala visina uz snimanje: navigacija ostaje iznad stvarnih traka, stop dostupan. */
+#ex-stop-compact {display:none}
+body.explorer-crowded #explorer-top {display:none!important}
+body.explorer-crowded #tacka-nav-panel {display:flex!important;flex-direction:row;align-items:center;gap:8px;padding:8px 10px;border-radius:13px;overflow-y:auto}
+body.explorer-crowded #tacka-nav-panel[style*="display: none"],body.explorer-crowded #tacka-nav-panel[style*="display:none"] {display:none!important}
+body.explorer-crowded :is(.ex-target,.ex-live,.ex-direction,.ex-zoom,#tnp-elev,#tnp-road,#ex-distance-label) {display:none!important}
+body.explorer-crowded .ex-guidance {margin:0;min-width:0;flex:1}
+body.explorer-crowded #tnp-air {font-size:18px;letter-spacing:0;overflow-wrap:anywhere}
+body.explorer-crowded .ex-actions {margin:0;flex-direction:row;flex-shrink:0;gap:6px}
+body.explorer-crowded .ex-toggle {padding:6px 8px;gap:6px;font-size:11px}
+body.explorer-crowded #ex-stop-compact {display:block;flex:0 0 44px;width:44px;min-height:44px;padding:0;font-size:24px}
+body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
