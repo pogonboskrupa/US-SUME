@@ -13,7 +13,7 @@ function setup(type, result, switchOwner=false){
  bumpRetry:(k,n,e)=>{errors.push(e);return false;},odgodi(){},load:()=>[],save:()=>{calls.push('save');}},
  vlake:[],_projekti:[],_aktivniProjektId:null,_dozMarkings:[],_dozOdjeli:[],_dozSelId:null,
  _DOZ_TREES_DATA_KEY:'trees',DOZ_ENG_COLORS:['green'],_updVlakeMapVisibility(){},rndProjektiList(){},
- sb:{from:table=>{calls.push(table);const q={};for(const k of ['update','eq','select','insert','single'])q[k]=()=>q;
+ sb:{from:table=>{calls.push(table);const q={};for(const k of ['update','eq','select','insert','single','maybeSingle'])q[k]=()=>q;
  q.then=(r,j)=>{if(switchOwner)env.sbUser={id:'u2'};return Promise.resolve(result).then(r,j);};return q;}}
  };
  vm.createContext(env);vm.runInContext('let _syncInProgress=false,_syncRerun=false,_syncMrezaPalaU=0,_syncOdgodaT=null;const _SYNC_PAUZA_MS=20000;'+['_isNetworkErr','_isAuthErr','_serverPrivremeno','_processOfflineQueue'].map(fn).join('\n'),env);
@@ -23,7 +23,7 @@ const tests=[];function test(n,f){tests.push([n,f]);}
 test('nepoznata operacija ostaje u redu s objašnjenjem',async()=>{const h=setup('future_operation',{});await h.run();assert.equal(JSON.parse(h.store.get('q')).length,1);assert.equal(h.errors[0]?.code,'UNSUPPORTED_OPERATION');assert.equal(h.calls.length,0);});
 for(const type of ['upsert_doz_status','delete_doz_marking']){
  test(type+': nula izmijenjenih redova nije potvrda uspjeha',async()=>{const h=setup(type,{data:[],error:null});await h.run();assert.equal(JSON.parse(h.store.get('q')).length,1);assert.equal(h.errors[0]?.code,'NO_CONFIRMATION');});
- test(type+': potvrđen red se uklanja iz queue',async()=>{const h=setup(type,{data:[{id:'id'}],error:null});await h.run();assert.equal(h.store.get('q'),'[]');assert.equal(h.errors.length,0);});
+ test(type+': potvrđen red se uklanja iz queue',async()=>{const h=setup(type,{data:[{id:'id',status:'active'}],error:null});await h.run();assert.equal(h.store.get('q'),'[]');assert.equal(h.errors.length,0);});
 }
 for(const type of ['insert_projekt','insert_doz_project'])test(type+': odgovor starog naloga ne mijenja podatke novog',async()=>{const h=setup(type,{data:{id:'id'},error:null},true);await h.run();assert.equal(JSON.parse(h.store.get('q')).length,1);assert.equal(h.calls.includes('save'),false);assert.equal(h.calls.includes('doz_project_members'),false);});
 test('ručno slanje ne nastavlja pod novim nalogom niti javlja lažni uspjeh',async()=>{
@@ -43,4 +43,3 @@ test('ručno slanje ne nastavlja pod novim nalogom niti javlja lažni uspjeh',as
  assert.ok(!messages.some(m=>m.includes('Sve poslano')));
 });
 (async()=>{let failed=0;for(const[n,f]of tests){try{await f();console.log('OK '+n);}catch(e){failed++;console.log('FAIL '+n+': '+e.message);}}console.log(`${tests.length-failed}/${tests.length}`);if(failed)process.exitCode=1;})();
-

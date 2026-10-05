@@ -134,7 +134,7 @@ function makeRed(greskaZa, overrides = {}) {
   const tajmeri = [];
   const g = {
     sbUser: { id: 'u1' }, sbProfile: { sumarija: 'S' }, _OL,
-    sb: { from: () => ({ delete: () => ({ eq: (_k, id) => ({select:async()=>{ brisanja.push(id); return { data:[{id}],error: greskaZa(id) }; }}) }) }),
+    sb: { from: () => {let id;const q={delete:()=>q,eq:(k,v)=>{if(k==='id')id=v;return q;},select:async()=>{brisanja.push(id);return {data:[{id}],error:greskaZa(id)};}};return q;},
           auth: { refreshSession: async () => ({ data: {} }) } },
     localStorage: global.localStorage,
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
@@ -419,4 +419,3 @@ t('KLJUČNO: spora veza (prijava kanala traje 9 s) — kanal se NA KRAJU prijavi
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
   process.exit(fail ? 1 : 0);
 })();
-

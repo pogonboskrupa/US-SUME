@@ -1816,3 +1816,43 @@ isto2.3.2; SHA256preuzetogAPK-a istoReleaseAPI digest:
 15fff7e3a51a923f0ae577a740ea84d42e6b1e67591f187fd406052f10e20b5d.
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.3
 Objavljeno za Meni → Ažuriraj aplikaciju; fizički Xiaomi nije testiran.
+
+## 46. Potvrda brisanja vlake i statusa odjela — 2.3.4
+
+Korisnik prijavio NO_CONFIRMATION za ciljani odjel i brisanje vlake.
+Reprodukovano kontrolisanim HTTP-om preko stvarnog Supabase JS SDK-a:
+DELETE nakon izgubljenog odgovora vraća [] jer je red već obrisan; prethodni
+procesor je svako [] smatrao greškom. Sada je DELETE ograničen ID-jem i
+vlasnikom, a prazan uspješan odgovor prati SELECT id,korisnik_id. Odsustvo
+potvrđuje konačno stanje; postojeći red/nepotpuni odgovor/neuspjelo čitanje
+ne uklanjaju zahtjev. Prije potvrde odsustva auth.getUser provjerava stvarnu
+prijavu vlasnika (jednom po prolazu); anonimni RLS [] uz keširani profil
+ne potvrđuje brisanje. Tuđa vidljiva vlaka daje WRITE_FORBIDDEN. RLS ostaje
+autoritet; odsustvo se potvrđuje u opsegu prijavljenog korisnika (politika
+repoa daje vlasniku SELECT vlastite vlake), bez zaobilaženja prava.
+sbDeleteVlaka koristi trajni red i tokom ručnog slanja, bez zasebnog
+nepotvrđenog DELETE-a; vlasnik se provjeri poslije in-flight upisa. Novi
+zahtjev nosi ime/projekat/vlasnika radi smislenog prikaza potvrde i greške.
+
+Doznaka: dozSetStatus automatski pauzirao SVE aktivne odjele, uključujući
+kolegine. Repo migracije20260611/20260713 doz_projects_update dozvoljavaju
+isključivo created_by=auth.uid(). UI sada status mijenja samo kreatoru, a
+pauzira samo njegove druge odjele. Član nastavlja snimati/slati pojaseve.
+UPDATE ograničen kreatorom, potvrda zahtijeva ID i traženi status. Na praznu
+mutaciju SELECT status/created_by: jednako željenom = završena operacija;
+različito/tuđe/nedostupno = sačuvan zahtjev uz preciznu grešku. Migracija
+legacy privremenog ID-ja sada obuhvata i payload.id upsert_doz_status.
+Stari odbijeni status se NE briše automatski: u detaljima grešaka korisnik
+može ukloniti samo taj zahtjev uz potvrdu koja jasno kaže da pojasevi/zone/
+vlake ostaju. Odbijena potvrda i promjena naloga ga ne uklanjaju. Poruke
+grešaka više nisu odsječene jednim redom. Nema produkcijske SQL migracije.
+
+Lokalno90JS programa + inline sintaksa; novi browserserver-confirm-234
+sa stvarnim Supabase klijentom i _OL, kontrolisanim PostgREST HTTP-om:
+izgubljen odgovor nakon izvršenog DELETE-a, ponavljanje i SELECT odsustva,
+RLS bez izmjene, tuđi vlasnik, anoniman keširani profil, 503 na čitanju, željeni/različiti/nedostupni
+status, legacy ID, kreator/kolega i selektivno uklanjanje statusa uz očuvan
+GPS bafer i zonu. Postojeći mock-lanci ažurirani za dodatni filter vlasnika,
+bez slabljenja provjera. Novi test u CI (ukupno17browser). 2.3.4/code504 sva
+tri mjesta. CI/APK provjera slijedi. Produkcijski Supabase i fizički Xiaomi
+nisu testirani; ne tvrditi da su živa RLS pravila izmijenjena ili provjerena.

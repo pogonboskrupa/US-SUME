@@ -249,7 +249,7 @@ function makeRed(opts = {}) {
       bumpRetry: (id) => { pozivi.retry.push(id); return false; },
       odgodi: (id) => { pozivi.odgode = (pozivi.odgode || []).concat(id); },
     },
-    sb: { from: () => ({ delete: () => ({ eq: (_k, id) => ({ select: async () => { pozivi.brisanja.push(id); return { data:[{id}], error: opts.greska || null }; } }) }) }),
+    sb: { from: () => {let id;const q={delete:()=>q,eq:(k,v)=>{if(k==='id')id=v;return q;},select:async()=>{pozivi.brisanja.push(id);return {data:[{id}],error:opts.greska||null};}};return q;},
           auth: { refreshSession: async () => ({ data: {} }) } },
     localStorage: { getItem: () => '[]', setItem: () => {} },
     _DOZ_TRACK_BUF_KEY: 'buf', _genUUID: () => 'x', _sendDozTrackPoint: async () => ({}),
@@ -457,4 +457,3 @@ await t('profil terena bez mreže koristi preuzeti model terena (nema ranog izla
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);
 })();
-

@@ -5342,7 +5342,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
         <div id="doz-context" class="doz-context"></div>
         <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS snimanje</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake i bafer</button><button onclick="dozGoSection('team')">Tim</button></nav>
-        <div id="doz-status-row" style="display:flex;gap:6px;padding:8px 12px 4px;"></div>
+        <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 4px;"></div>
 
         <div class="sec" id="doz-section-gps">
           <div class="sec-t">📍 GPS Trag projektanta</div>
@@ -5722,7 +5722,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.3';
+const APP_VER = 'v2.3.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6339,7 +6339,7 @@ function openSyncQueuePanel() {
           <div style="font-size:13px;color:#e2e8f0;font-weight:600;">${_escHtml(lbl)}${ret}</div>
           ${nm ? `<div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escHtml(String(nm))}</div>` : ''}
           ${typeof _serverOpContext === 'function' ? _serverOpContext(op) : ''}
-          ${errTxt ? `<div style="font-size:10.5px;color:#f87171;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_escHtml(errTxt)}">⚠ ${_escHtml(errTxt)}</div>` : ''}
+          ${errTxt ? `<div style="font-size:12px;color:#f87171;margin-top:4px;white-space:normal;overflow-wrap:anywhere" title="${_escHtml(errTxt)}">⚠ ${_escHtml(errTxt)}</div>` : ''}
           ${odg}
           ${age ? `<div style="font-size:10px;color:#475569">${age}</div>` : ''}
         </div>
@@ -6363,9 +6363,13 @@ function closeSyncQueuePanel() {
 }
 
 async function _syncQueueDiscard(ts) {
-  if (!await _dlgConfirm('Trajno odbaciti ovu neposlanu izmjenu? Prvo izvezi podatke.', { danger: true })) return;
+  const owner=sbUser?.id;
   const op = _OL.loadQueue(true).find(o => String(o._qid ?? o.ts) === String(ts));
-  if (op?._uid && op._uid !== sbUser?.id) return;
+  if (!op || (op._uid && op._uid !== owner)) return;
+  const question = op.type === 'upsert_doz_status'
+    ? 'Ukloniti ovaj neposlani zahtjev za promjenu statusa odjela? Snimljeni pojasevi, zone i vlake se ne brišu.'
+    : 'Trajno odbaciti ovu neposlanu izmjenu? Prvo izvezi podatke.';
+  if (!await _dlgConfirm(question, { danger: true }) || sbUser?.id !== owner) return;
   _OL.removeFromQueue(ts);
   _updSyncBadge();
   openSyncQueuePanel(); // re-render
@@ -6779,6 +6783,7 @@ async function _processOfflineQueue(sila) {
   // mora se izvršiti i kad korisnik nije imao drugih izmjena (petlja nad [] je no-op).
   let synced = 0;
   let _authRefreshed = false;   // D2-D: osvježi sesiju najviše jednom po prolazu
+  let _deleteAuthConfirmed = false;
   for (const op of [...q]) {
     if (sbUser?.id !== syncOwner) break;
     // OS-K1: operacija pripada DRUGOM korisniku (red preživljava promjenu naloga na
@@ -6803,8 +6808,36 @@ async function _processOfflineQueue(sila) {
       if (op.type === 'upsert_vlaka') {
         err = await _syncVlakaOperation(op);
       } else if (op.type === 'delete_vlaka') {
-        const { data, error } = await sb.from('vlake').delete().eq('id', op.payload.id).select('id');
-        err = error || ((data || []).some(r=>String(r.id)===String(op.payload.id)) ? null : {code:'NO_CONFIRMATION',message:'Server nije potvrdio brisanje vlake'});
+        if (!op.payload?.id) err = {code:'INVALID_OPERATION',message:'Brisanje nema ID vlake; stavka je sačuvana za pregled'};
+        else {
+          const { data, error } = await sb.from('vlake').delete().eq('id', op.payload.id).eq('korisnik_id', syncOwner).select('id');
+          err = error;
+          if (sbUser?.id !== syncOwner) break;
+          if (!err && !(data || []).some(r=>String(r.id)===String(op.payload.id))) {
+            // Izgubljen odgovor ili drugo brisanje istog ID-ja: DELETE vraća [].
+            // Potvrdi odsustvo čitanjem; prazan odgovor mutacije sam nije dokaz.
+            // Keširani profil nije potvrđena prijava. Anonimni RLS SELECT []
+            // ne smije biti proglašen uspješnim brisanjem vlastite vlake.
+            if (!_deleteAuthConfirmed) {
+              const auth = await sb.auth.getUser();
+              if (sbUser?.id !== syncOwner) break;
+              err = auth.error || (auth.data?.user?.id === syncOwner ? null : {
+                code:'AUTH_REQUIRED',status:401,message:'Prijava nije potvrđena; brisanje je sačuvano za ponovni pokušaj'
+              });
+              _deleteAuthConfirmed = !err;
+            }
+            if (!err) {
+              const check = await sb.from('vlake').select('id,korisnik_id').eq('id',op.payload.id).maybeSingle();
+              if (sbUser?.id !== syncOwner) break;
+              err = check.error || (check.data === null ? null : {
+                code:check.data?.korisnik_id && check.data.korisnik_id !== syncOwner ? 'WRITE_FORBIDDEN' : 'NO_CONFIRMATION',
+                message:check.data?.korisnik_id && check.data.korisnik_id !== syncOwner
+                  ? 'Vlaku može obrisati samo projektant koji ju je napravio; izmjena nije izvršena'
+                  : 'Vlaka je i dalje na serveru ili provjera nije potpuna; brisanje čeka ponovni pokušaj'
+              });
+            }
+          }
+        }
       } else if (op.type === 'insert_doz_marking') {
         // OS-S2: 23505 s klijentskim ID-jem = insert je VEĆ uspio (odgovor se izgubio) — uspjeh
         const { data, error } = await _dozUpisiZonu(op.payload);
@@ -6867,8 +6900,10 @@ async function _processOfflineQueue(sila) {
           // na ovom odjelu prije nego što je sam odjel stigao na server) — isti
           // obrazac kao insert_projekt za vlake.
           q.forEach(qOp => { if (qOp.payload?.project_id === _tempId) qOp.payload.project_id = realId; });
+          q.forEach(qOp => { if (qOp.type === 'upsert_doz_status' && qOp.payload?.id === _tempId) qOp.payload.id = realId; });
           const lq = _OL.loadQueue();
           lq.forEach(qOp => { if (qOp.payload?.project_id === _tempId) qOp.payload.project_id = realId; });
+          lq.forEach(qOp => { if (qOp.type === 'upsert_doz_status' && qOp.payload?.id === _tempId) qOp.payload.id = realId; });
           localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
           // Update in-memory zone (_dozMarkings) + keš ako je ovaj odjel trenutno otvoren
           (_dozMarkings || []).forEach(m => { if (m.project_id === _tempId) m.project_id = realId; });
@@ -6906,9 +6941,22 @@ async function _processOfflineQueue(sila) {
         err = error || (data || []).some(r => String(r.id) === String(op.payload.id))
           ? error : { code:'NO_CONFIRMATION', message:'Server nije potvrdio ciljanu zonu' };
       } else if (op.type === 'upsert_doz_status') {
-        const { data, error } = await sb.from('doz_projects').update({ status: op.payload.status }).eq('id', op.payload.id).select('id');
-        err = error || (data || []).some(r => String(r.id) === String(op.payload.id))
-          ? error : { code:'NO_CONFIRMATION', message:'Server nije potvrdio ciljani odjel' };
+        if (!op.payload?.id || !['active','paused','completed'].includes(op.payload.status)) {
+          err = {code:'INVALID_OPERATION',message:'Neispravan ID ili status odjela; stavka je sačuvana za pregled'};
+        } else {
+          const { data, error } = await sb.from('doz_projects').update({ status: op.payload.status }).eq('id', op.payload.id).eq('created_by',syncOwner).select('id,status');
+          err = error;
+          if (sbUser?.id !== syncOwner) break;
+          if (!err && !(data || []).some(r => String(r.id) === String(op.payload.id) && r.status === op.payload.status)) {
+            const check = await sb.from('doz_projects').select('id,status,created_by').eq('id',op.payload.id).maybeSingle();
+            if (sbUser?.id !== syncOwner) break;
+            if (check.error) err = check.error;
+            else if (check.data?.id === op.payload.id && check.data.status === op.payload.status) err = null;
+            else if (check.data === null) err = {code:'TARGET_NOT_FOUND',message:'Odjel nije dostupan na serveru. Pošalji novi odjel ili provjeri članstvo; status je sačuvan'};
+            else if (check.data?.created_by && check.data.created_by !== syncOwner) err = {code:'WRITE_FORBIDDEN',message:'Status odjela može mijenjati samo njegov kreator; snimljeni pojasevi šalju se zasebno'};
+            else err = {code:'NO_CONFIRMATION',message:'Status odjela nije promijenjen na serveru; provjeri pravo upisa i pokušaj ponovo'};
+          }
+        }
       } else if (op.type === 'insert_pozari_arhiva') {
         // Dijeljena arhiva požara (v1.1.1) — ignoreDuplicates jer isti
         // (godina,dan,la,lo) zapis sasvim OČEKIVANO stiže sa VIŠE uređaja
@@ -10839,8 +10887,10 @@ async function renameVlaka(i, newNm) {
 
 async function sbDeleteVlaka(v) {
   if (!v) return;
+  const owner = sbUser?.id;
   v._deleted = true;  // spriječi budući sbFlushVlaka da ovu vlaku ipak insert-uje
   if (v._flushing) { try { await v._flushing; } catch(e) {} }  // sačekaj in-flight insert da dobijemo sbId
+  if (sbUser?.id !== owner) return;
   // Neposlana verzija ove vlake u redu više ne smije otići — inače bi "Pošalji" napravilo obrisanu vlaku.
   if (sbUser) _redUkloni(o => o.type === 'upsert_vlaka' && (v.sbId
     ? o.payload?.id === v.sbId
@@ -10849,13 +10899,11 @@ async function sbDeleteVlaka(v) {
   if (!v.sbId || !sbUser) return;
   const cached = _OL.load(_OL.VLAKE) || [];
   _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
-  if (_serverURed({ type: 'delete_vlaka', payload: { id: v.sbId } })) return;
-  try {
-    const { error } = await sb.from('vlake').delete().eq('id', v.sbId);
-    if (error) _OL.enqueue({ type: 'delete_vlaka', payload: { id: v.sbId } });
-  } catch(e) {
-    _OL.enqueue({ type: 'delete_vlaka', payload: { id: v.sbId } });
-  }
+  // I tokom ručnog slanja koristi isti trajni red i provjeru potvrde.
+  // Direktni DELETE bez vraćenog ID-ja ranije je mogao tiho preskočiti upis.
+  return _OL.enqueue({ type: 'delete_vlaka', payload: {
+    id: v.sbId, korisnik_id: owner, projekt_id: v.projektId || null, nm: v.nm || null
+  } });
 }
 
 // ─── LABEL HELPERS (potrebni i za sbLoadKolegeVlake i za updateVlakaLabel) ────
@@ -37904,21 +37952,23 @@ function _dozRenderStatusRow() {
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   if (!odjel) { el.innerHTML = ''; return; }
   const cur = odjel.status || 'active';
+  const canEdit = odjel.created_by === sbUser?.id;
   el.innerHTML = _DOZ_STATUSES.map(s => {
     const on = s.key === cur;
-    return `<button aria-pressed="${on}" onclick="dozSetStatus('${s.key}')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;
+    return `<button aria-pressed="${on}" ${canEdit ? '' : 'disabled'} onclick="dozSetStatus('${s.key}')" style="flex:1;padding:5px 4px;font-size:11px;font-weight:600;border-radius:6px;cursor:${canEdit ? 'pointer' : 'default'};
       background:${on ? s.color + '22' : 'rgba(15,23,42,0.7)'};
       border:1px solid ${on ? s.color : '#1e293b'};
       color:${on ? s.color : '#475569'};">${s.label}</button>`;
-  }).join('');
+  }).join('') + (canEdit ? '' : '<span style="flex-basis:100%;font-size:11px;color:var(--field-muted,#94a3b8);padding-top:5px">Status odjela mijenja njegov kreator. Svoje pojaseve možeš snimati i poslati.</span>');
 }
 
 async function dozSetStatus(status) {
   if(!['active','paused','completed'].includes(status)||!sbUser?.id)return;
   const odjel=_dozOdjeli.find(o=>o.id===_dozSelId);
   if(!odjel||(odjel.status||'active')===status)return;
+  if(odjel.created_by!==sbUser.id){showToast('Status odjela može mijenjati samo njegov kreator');return;}
   const changes=[{id:odjel.id,status}];
-  if(status==='active')for(const other of _dozOdjeli)if(other.id!==odjel.id&&other.status==='active')changes.push({id:other.id,status:'paused'});
+  if(status==='active')for(const other of _dozOdjeli)if(other.id!==odjel.id&&other.status==='active'&&other.created_by===sbUser.id)changes.push({id:other.id,status:'paused'});
   try{
     const ids=new Set(changes.map(c=>c.id)),uid=sbUser.id;
     const q=_OL.loadQueue(true).filter(op=>!(op.type==='upsert_doz_status'&&op._uid===uid&&ids.has(op.payload?.id)));
@@ -37929,7 +37979,7 @@ async function dozSetStatus(status) {
   _OL.save(_OL.DOZ_ODJELI,_dozOdjeli);
   _dozRenderStatusRow();dozRenderOdjeli();
   if(typeof _updSyncBadge==='function')_updSyncBadge();
-  showToast('Status sačuvan — pošalji kroz Meni → Server'+(changes.length>1?' · ostali aktivni odjeli pauzirani':''));
+  showToast('Status sačuvan — pošalji kroz Meni → Server'+(changes.length>1?' · tvoji ostali aktivni odjeli pauzirani':''));
 }
 
 // Zoom na zonu sa liste u panelu
