@@ -81,7 +81,7 @@ function create(options){
   const r=map.getContainer().getBoundingClientRect(),top=g('explorer-top'),panel=g('tacka-nav-panel');
   let edge=Math.min(r.bottom,root.innerHeight);
   for(const id of reserveIds){const el=g(id);if(!shown(el))continue;const b=el.getBoundingClientRect();if(b.bottom>r.top&&b.top<edge&&b.right>r.left&&b.left<r.right)edge=Math.max(r.top,b.top);}
-  const crowded=edge-r.top<240;if(document.body.classList.contains('explorer-crowded')!==crowded)document.body.classList.toggle('explorer-crowded',crowded);
+  const crowded=edge-r.top<(root.innerHeight<=480?280:400);if(document.body.classList.contains('explorer-crowded')!==crowded)document.body.classList.toggle('explorer-crowded',crowded);
   if(top){top.style.top=(r.top+10)+'px';top.style.left=(r.left+10)+'px';top.style.width=Math.max(0,r.width-20)+'px';top.hidden=crowded;}
   if(panel){panel.style.bottom=Math.max(8,root.innerHeight-edge+10)+'px';panel.style.left=(r.left+10)+'px';panel.style.width=Math.max(0,r.width-20)+'px';panel.style.maxHeight=Math.max(44,edge-r.top-20)+'px';}
   const min=(crowded?0:(top?.offsetHeight||60))+24,max=edge-r.top-(panel?.offsetHeight||170)-25;

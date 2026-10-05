@@ -2019,3 +2019,9 @@ prolaza. Nova tests/browser/overlays-237.py provjerava stvarni markup traka,
 čuvanje cilja, checkbox, tab/stop, navigaciju do traga i sačuvanu geometriju.
 CI uključen prije APK builda, uz postojeći Explorer/regresijski skup (20browser).
 Web/SW/Android2.3.7/code507. CI/APKprovjera slijede. Fizički Xiaomi nije testiran.
+
+CI37328696203 test je reproducirao i drugi sudar:320×568, pauzirano snimanje,
+footer273.8px ody100.3, headerdo130px. Prvobitni prag240px bio premalen za
+puni portrait footer uz pauzu. Sažeti raspored sada kad je slobodno polje
+<400px portrait/<280px landscape. APK nije objavljen jer browser provjera
+pala prije builda. Ispravka i ponovni CI slijede.
