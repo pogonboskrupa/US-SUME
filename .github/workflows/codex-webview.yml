@@ -156,8 +156,16 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
+            adb root
+            adb wait-for-device
+            adb shell settings put global airplane_mode_on 1
+            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
             adb shell svc wifi disable
             adb shell svc data disable
+            # Noviji emulator može zadržati VALIDATED Ethernet i kad su Wi-Fi
+            # i mobilni podaci ugašeni. Isključi samo njegov virtualni eth0;
+            # Android test i dalje mora potvrditi da internet nije dostupan.
+            adb shell 'if ip link show eth0 >/dev/null 2>&1; then ip link set eth0 down; fi'
             cd android && gradle --no-daemon connectedDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:

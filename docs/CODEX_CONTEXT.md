@@ -1897,3 +1897,12 @@ alata/dva registra, prazni brojači, dugi/zlonamjerni nazivi, fokus/overlay,
 stanje snimanja/pauze i očuvani registri pri otvaranju. Osam PNG u outputs.
 Test dodan u CI (ukupno18browser). Web/SW/Android2.3.5/code505. CI/APK
 provjera slijedi. Fizički Xiaomi nije testiran.
+
+CI37284217727: prvi pokušaj prošao90JS/18browser/Android build/51asset,
+ali emulator izašao137 na svc data disable prije testa. Drugi pokušaj
+pokrenuo Android test, ali assertFalse(hasInternet) pao: emulator i nakon
+Wi-Fi/mobile disable imao VALIDATED internet. Emulator37.2.12 može imati
+virtualni Ethernet. CI fixture sada adb root + airplane mode + Wi-Fi/data
+disable + ako postoji eth0, ip link set eth0 down. Testni assert i native
+OCR uslov nisu oslabljeni/promijenjeni. Novi CI slijedi sa istim2.3.5/code505
+koji još nije objavljen; nije mijenjan funkcionalni kod zbog CI problema.
