@@ -2085,3 +2085,36 @@ RLS/protected rok/bezbrisanja scenariji prošli do admin liste. SQLfixture je
 nepotpuno imitirao auth.users (nedostaje last_sign_in_at, postojeća Supabase
 kolona). Dopunjena testna tabela; produkcijska migracija nije mijenjana.
 Nijedan browser/APK korak nije izvršen u ovom neuspjelom pokušaju.
+
+### Završna provjera i isporuka 2.3.8 — 2026-10-05
+
+Finalni kod d7f1cc752b88db0f70a87a5d719121e18cc62663; tree
+cijelost web sadržaja potvrđena kroz GitHub tree i stvarni APK. CI
+37332567063/job111839507922 SUCCESS:92JS skupova, PostgreSQL16 stvarna
+migracija dvaput +RLS/protected rok/istek/opoziv/bezbrisanja/adminodobrenje,
+21browser provjera, 24 rasporeda preklapanja, 8 Explorer pregleda i 6smjerova
+sa stvarnim DOMmarkerom u 3Dperspektivi, Android izrada i 1instrumentation
+mrežniuslovOCR test, 53SHA256assets, 36sintetičkih perf ponavljanja.
+Raniji CI37332464645 sa istim proizvodnim kodom je otkazan radi dodavanja
+obaveznog SQL uputstva u release bilješku; kompletan finalni CI nije otkazan.
+
+Preuzet artifact11355141993, provjeren stvarni APK:
+outputs/app-debug-2.3.8.apk, 24.006.916bytes (~22,89MiB).
+SHA256 c35fabcff697dc2812b8782df7a6ac50e4a9506e0107381006488991ed3fb66e.
+CertSHA256 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Binary AndroidManifest ba.spd.uss.vlake.debug/2.3.8-debug/code508.
+53webassets identična finalnom remoteGitTreeu, izmijenjeni webassets i
+lokalnom kodu; GRANICE>10MB sačuvan, offlineOCRmodel ne postoji.
+15launcherPNG identična prethodnom stvarnom APK2.3.6. Releasev2.3.8
+asset24.006.916/digest identični preuzetom i provjerenom APK-u; Meni
+Ažuriraj aplikaciju koristi objavljeni release. U release opisu eksplicitna
+jednokratna SQLaktivacija probnogpristupa.
+
+UIartifact11355146630 (~16,35MB) preuzet i pregledane stvarne CI slike
+Explorerday390×800 i recordingpausedday320×568: nagnuta kartografska
+perspektiva, čitljiv GPS/cilj/checkbox, kompaktan footer iznad snimanja.
+Testna topografska podloga je kontrolisani raster, ne stvarni DEMreljef.
+Fizički Xiaomi nije testiran. Produkcijski Supabase SQL nije izvršen jer
+nema administrativne veze u ovom okruženju. Potrebno jednom pokrenuti
+supabase/migrations/20261005_probni_pristup_7_dana.sql u SQL Editoru;
+APK sam ne otključava sedmodnevni rad/stare serverske funkcije brisanja.
