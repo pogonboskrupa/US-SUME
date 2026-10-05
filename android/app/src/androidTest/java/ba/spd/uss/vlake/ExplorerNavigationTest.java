@@ -59,7 +59,7 @@ public class ExplorerNavigationTest {
    assertEquals("true",eval(view,"getComputedStyle(document.querySelector('.ex-world')).transform.includes('matrix3d')&&document.getElementById('dlg-sheet').getBoundingClientRect().top>=innerHeight-1"));
    assertEquals("true",eval(view,"document.getElementById('tnp-air').textContent==='—'&&document.getElementById('explorer-you').hidden&&document.getElementById('ex-mode').textContent.includes('ČEKAM GPS')"));
    // Stvarni onP i getPosition adapter moraju dostaviti poziciju Exploreru.
-   eval(view,"_compassHeading=35;_compassLastUpdT=Date.now();onP({timestamp:Date.now(),coords:{latitude:44.9,longitude:16,altitude:510,accuracy:6,speed:0,heading:null}});window.exProbe=L.marker([44.9,16],{icon:L.divIcon({className:'ex-native-probe',iconSize:[2,2],iconAnchor:[1,1]}),interactive:false}).addTo(map)");
+   eval(view,"_compassHeading=35;_compassLastUpdT=Date.now();onP({timestamp:Date.now(),coords:{latitude:44.9,longitude:16,altitude:510,accuracy:6,speed:0,heading:null}});window.exProbe=L.marker([44.9,16],{icon:L.divIcon({className:'ex-native-probe',iconSize:[2,2],iconAnchor:[1,1]}),interactive:false}).addTo(map);void 0");
    until(view,"!document.getElementById('explorer-you').hidden&&document.getElementById('tnp-air').textContent!=='—'");
    JSONObject point=new JSONObject(eval(view,"(()=>{const p=Explorer.screenPoint([44.9,16]),r=map.getContainer().getBoundingClientRect(),b=document.querySelector('.ex-native-probe').getBoundingClientRect();return {dx:Math.abs(b.left+b.width/2-r.left-p.x),dy:Math.abs(b.top+b.height/2-r.top-p.y)}})()"));
    assertTrue(point.toString(),point.getDouble("dx")<3&&point.getDouble("dy")<3);
