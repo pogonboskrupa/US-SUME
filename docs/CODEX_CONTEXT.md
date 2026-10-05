@@ -2177,3 +2177,15 @@ zatvoren i animirani dijalog/checkbox/stop; provjera <3px DOMgeografije i
 neizmijenjenih registara. Ovo je emulator, nije fizički Xiaomi.
 CI connectedDebugAndroidTest sada treba izvršiti2 instrumentacije; nema
 novih runtime biblioteka/assets/Supabase migracija/izmjena native produkcije.
+
+CI37338061983/job111857774666:92JS/SQL/22browser/53assets/Android APK build
+prošli; dvije Android instrumentacije započele16:11:26UTC i nisu završile.
+Job prekoračio20min i otkazan; APK nije objavljen. Nema dokaza da je taj
+native test prošao. Dodat kompletan proizvodni browser bootstrap test
+(explorer-full-239.py, svi stvarni JS blokovi, kontrolisan authUI/GPS,
+vanjska mreža blokirana i GRANICE za ovaj test mali fixture). Ukupno23.
+Native test uklanja ActivityScenario/runOnMainSync čekanje UIidleness;
+koristi stvarnu Activity sa lifecycle signalom i asinhroni UIpost+5srok.
+@Test90s i gradle180s sprečavaju neograničeno čekanje. Logcat i JUnitreport
+se čuvaju kao artifact na uspjeh/neuspjeh. Ne preskakati Explorer provjeru
+radi zelenog CI-ja; prvo dobiti konkretan rezultat/zapis i popraviti uzrok.

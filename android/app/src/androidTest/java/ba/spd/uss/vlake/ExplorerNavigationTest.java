@@ -4,7 +4,13 @@ import android.Manifest;
 import android.content.Context;
 import android.view.View;
 import android.webkit.WebView;
-import androidx.test.core.app.ActivityScenario;
+import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
+import androidx.test.runner.lifecycle.ActivityLifecycleCallback;
+import androidx.test.runner.lifecycle.Stage;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.lang.reflect.Field;
@@ -21,22 +27,30 @@ import static org.junit.Assert.*;
 public class ExplorerNavigationTest {
  private String eval(WebView view,String script) throws Exception {
   AtomicReference<String> result=new AtomicReference<>();CountDownLatch latch=new CountDownLatch(1);
-  InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript(script,v->{result.set(v);latch.countDown();}));
+  new Handler(Looper.getMainLooper()).post(()->view.evaluateJavascript(script,v->{result.set(v);latch.countDown();}));
   assertTrue("WebView JS callback",latch.await(5,TimeUnit.SECONDS));return result.get();
  }
  private void until(WebView view,String condition) throws Exception {
+  Log.i("ExplorerCI","Provjera: "+condition);
   long limit=System.currentTimeMillis()+20000;String last="";
   do {last=eval(view,condition);if("true".equals(last))return;Thread.sleep(100);}while(System.currentTimeMillis()<limit);
-  fail("WebView uslov nije ispunjen: "+condition+"; rezultat="+last);
+  String info=eval(view,"JSON.stringify({ready:document.readyState,agent:navigator.userAgent,api:typeof window.Explorer})");
+  fail("WebView uslov nije ispunjen: "+condition+"; rezultat="+last+"; "+info);
  }
- @Test public void explorerRendersInActualOfflineApk() throws Exception {
+ @Test(timeout=90000) public void explorerRendersInActualOfflineApk() throws Exception {
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertFalse("Test mora ostati bez interneta",ReferenceOcrBridge.hasInternet(context));
   InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.ACCESS_COARSE_LOCATION);
   InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.ACCESS_FINE_LOCATION);
-  try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
-   AtomicReference<WebView> ref=new AtomicReference<>();
-   scenario.onActivity(a->{try{Field f=MainActivity.class.getDeclaredField("webView");f.setAccessible(true);ref.set((WebView)f.get(a));}catch(Exception e){throw new AssertionError(e);}});
+  AtomicReference<WebView> ref=new AtomicReference<>();AtomicReference<MainActivity> activityRef=new AtomicReference<>();CountDownLatch resumed=new CountDownLatch(1),registered=new CountDownLatch(1);
+  ActivityLifecycleCallback callback=(a,stage)->{if(a instanceof MainActivity&&stage==Stage.RESUMED){try{Field f=MainActivity.class.getDeclaredField("webView");f.setAccessible(true);ref.set((WebView)f.get(a));activityRef.set((MainActivity)a);resumed.countDown();}catch(Exception e){throw new AssertionError(e);}}};
+  Handler ui=new Handler(Looper.getMainLooper());
+  ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(callback);registered.countDown();});
+  assertTrue("Registracija lifecycle praćenja",registered.await(5,TimeUnit.SECONDS));
+  Log.i("ExplorerCI","Pokrećem stvarnu MainActivity bez čekanja UI idleness");
+  context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+  try {
+   assertTrue("MainActivity RESUMED",resumed.await(15,TimeUnit.SECONDS));
    WebView view=ref.get();assertNotNull(view);assertEquals(View.LAYER_TYPE_HARDWARE,view.getLayerType());
    until(view,"document.readyState==='complete'&&!!window.Explorer&&typeof onP==='function'");
    // Samo testni auth ulaz i GPS senzor su kontrolisani; sav proizvodni JS se izvršava.
@@ -57,6 +71,6 @@ public class ExplorerNavigationTest {
    assertEquals("true",eval(view,"!document.querySelector('.ex-world')&&map.dragging.enabled()&&Explorer.active"));
    eval(view,"Explorer.stop();gpsOn=false;map.removeLayer(exProbe);if(exPreference===null)localStorage.removeItem('tvlake_explorer_view_v1');else localStorage.setItem('tvlake_explorer_view_v1',exPreference)");
    assertEquals("true",eval(view,"!Explorer.active&&JSON.stringify([vlake,_tacke,_tragRegistry])===exSnapshot"));
-  }
+  } finally {ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback);MainActivity a=activityRef.get();if(a!=null)a.finish();});}
  }
 }

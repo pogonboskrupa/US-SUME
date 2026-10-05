@@ -55,6 +55,7 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
+          timeout 90s python tests/browser/explorer-full-239.py
           python tests/browser/explorer-239.py
           python tests/browser/access-238.py
           python tests/browser/overlays-237.py
@@ -166,7 +167,7 @@ jobs:
           PYCODE
       - name: Pripremi KVM za provjeru OCR mrežnog uslova
         run: sudo chmod 666 /dev/kvm
-      - name: Android odbija prepoznavanje bez interneta
+      - name: Android Explorer WebView i OCR bez interneta
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
@@ -185,7 +186,27 @@ jobs:
             # i mobilni podaci ugašeni. Isključi samo njegov virtualni eth0;
             # Android test i dalje mora potvrditi da internet nije dostupan.
             adb shell 'if ip link show eth0 >/dev/null 2>&1; then ip link set eth0 down; fi'
-            cd android && gradle --no-daemon connectedDebugAndroidTest
+            adb logcat -c
+            mkdir -p outputs/android-test
+            cd android
+            set +e
+            timeout 180s gradle --no-daemon connectedDebugAndroidTest
+            TEST_RC=$?
+            set -e
+            adb logcat -d > ../outputs/android-test/logcat.txt
+            if [ "$TEST_RC" -ne 0 ]; then
+              tail -n 500 ../outputs/android-test/logcat.txt
+              exit "$TEST_RC"
+            fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-provjera-${{ github.sha }}
+          path: |
+            outputs/android-test/
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: US-SUME-CODEX-debug-${{ github.sha }}
