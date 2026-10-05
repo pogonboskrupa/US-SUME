@@ -12,14 +12,15 @@ function perspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),k=
 function unperspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),y=p.y/(c+p.y*s/depth);return {x:p.x*(1-y*s/depth),y};}
 function camera(map){
  const container=map.getContainer(),originalSize=map.getSize,originalMouse=map.mouseEventToContainerPoint;
- let world=null,anchor=null,side=0,size=null,angle=0,handlers=[],changing=false,pitch=48*Math.PI/180,depth=900;
+ let world=null,anchor=null,side=0,size=null,angle=0,handlers=[],changing=false,pitch=48*Math.PI/180,depth=900,revision=0;
+ function transform(){if(world)world.style.transform='perspective('+depth+'px) rotateX(48deg) rotate('+(-angle)+'deg)';}
  function measure(){size=originalSize.call(map);depth=Math.max(900,size.y*2.5);
   const corners=[[-size.x/2,-size.y/2],[size.x/2,-size.y/2],[-size.x/2,size.y/2],[size.x/2,size.y/2]];
-  side=Math.ceil(2*Math.max(...corners.map(([x,y])=>{const p=unperspective({x,y},pitch,depth);return Math.hypot(p.x,p.y);}))+32);if(world){world.style.width=world.style.height=side+'px';world.style.left=(size.x-side)/2+'px';world.style.top=(size.y-side)/2+'px';}}
+  side=Math.ceil(2*Math.max(...corners.map(([x,y])=>{const p=unperspective({x,y},pitch,depth);return Math.hypot(p.x,p.y);}))+32);revision++;if(world){world.style.width=world.style.height=side+'px';world.style.left=(size.x-side)/2+'px';world.style.top=(size.y-side)/2+'px';transform();}}
  function block(e){if(e.target!==container&&!world?.contains(e.target))return;e.stopImmediatePropagation();if(e.cancelable)e.preventDefault();}
  const events=['click','dblclick','contextmenu','mousedown','touchstart','wheel'];
  return {
-  get active(){return !!world;},get changing(){return changing;},get angle(){return angle;},get size(){return size||originalSize.call(map);},
+  get active(){return !!world;},get changing(){return changing;},get angle(){return angle;},get revision(){return revision;},get size(){return size||originalSize.call(map);},
   start(){
    if(world)return;
    const center=map.getCenter();map.stop();anchor=document.createComment('Explorer viewport');
@@ -34,7 +35,7 @@ function camera(map){
   },
   update(pos,heading,y){
    if(!world)return;
-   angle=norm(heading||0);world.style.transform='perspective('+depth+'px) rotateX(48deg) rotate('+(-angle)+'deg)';
+   angle=norm(heading||0);transform();
    const v=rotate(unperspective({x:0,y:y-size.y/2},pitch,depth),angle*Math.PI/180),p=map.project([pos.la,pos.lo],map.getZoom());
    changing=true;try{map.setView(map.unproject(root.L.point(p.x-v.x,p.y-v.y),map.getZoom()),map.getZoom(),{animate:false});}finally{changing=false;}
   },
@@ -134,8 +135,8 @@ function create(options){
   const center=map.getCenter(),cameraPos=gps&&fresh&&valid?pos:lastCamera||{la:center.lat,lo:center.lng};
   if(usable&&follow&&now-lastView>=250){
    lastView=now;const angle=h?.value??view.angle;
-   const changed=!view.active||!lastCamera||distance(cameraPos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
-   if(changed){if(!view.active)view.start();view.update(cameraPos,angle,y);lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom()};}
+   const changed=!view.active||!lastCamera||lastCamera.revision!==view.revision||distance(cameraPos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
+   if(changed){if(!view.active)view.start();view.update(cameraPos,angle,y);lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom(),revision:view.revision};}
   }else if(usable&&follow&&deferred==null){
    deferred=root.setTimeout(()=>{deferred=null;render();},Math.max(1,250-(now-lastView)));
   }

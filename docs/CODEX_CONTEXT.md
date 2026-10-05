@@ -2160,3 +2160,20 @@ Provjera i APK objava slijede; ne tvrditi isporuku prije uspješnog CI/APK-a.
 Lokalno92JS i5inline sintaksi prošli. Browser239 proširen i na stvarni
 switchTab (ostale auth/snimanje hooks kontrolisane), da se zatvore stvarni
 početni tab paneli i provjere granice navigacije uz stvarnu action-bar traku.
+
+CI37336482087/job111852728618 zaustavio objavu: novi test sa stvarnim
+switchTab je uhvatio pomak DOMmarkera ~15px pri resize na320×568. Stvarni
+bug: measure mijenja depth/size, a world.transform ostaje na staroj dubini
+ako camera.y/zoom/GPS nisu promijenjeni. Sada measure ažurira CSStransform,
+a revision kamere prisiljava novi anchor i kad y ostane isti. Test nije
+olabavljen; zahtjev <3px ostaje. Raniji CI37335873115 je otkazan radi
+jačeg testa taba/rasporeda, nije objavio APK. Proizvodni2.3.9 još nije objavljen.
+
+Dodana Android instrumentation ExplorerNavigationTest: lansira stvarnu
+MainActivity i njen hardverski WebView, čita kompletan APK index.html i
+proizvodni JS (bez rezanja skripti), sve uz ugašenu emulator mrežu. Kontrolisan
+ulaz authUI i GPS senzor, stvarni switchTab/onP/getPosition/Leaflet/3Dmatrix,
+zatvoren i animirani dijalog/checkbox/stop; provjera <3px DOMgeografije i
+neizmijenjenih registara. Ovo je emulator, nije fizički Xiaomi.
+CI connectedDebugAndroidTest sada treba izvršiti2 instrumentacije; nema
+novih runtime biblioteka/assets/Supabase migracija/izmjena native produkcije.
