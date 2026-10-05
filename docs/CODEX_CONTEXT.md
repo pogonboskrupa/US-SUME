@@ -1925,3 +1925,44 @@ isto2.3.4; APK SHA256 isti ReleaseAPI digest:
 https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.5
 Korisnik ažurira preko Meni → Ažuriraj aplikaciju. Fizički Xiaomi nije
 testiran. Nema izmjena produkcijskog Supabase-a.
+
+
+## 48. Explorer navigacija i checkbox — 2.3.6 / code506
+
+Korisnik traži Vodi me do tačke/lokacije iz vlastite pozicije, pro dizajn,
+te checkbox za uključivanje/isključivanje Explorer prikaza. Oba ulaza
+koriste isti novi static/js/explorer-navigation.js. Sačuvana tačka ili
+jedan dodir cilja na karti pokreću GPS navigaciju; privremeni cilj ne
+upisuje novu terensku tačku. Sačuvane rute imaju Explorer za krajnji cilj;
+Pripremi rutu ostavlja postojeći planer/rutu/profil.
+
+Explorer je 2D karta okrenuta prema kompasu/smjeru kretanja, korisnik niže
+u vidljivom polju, uspravne kontrole i panel sa ciljem, zračnom udaljenošću,
+smjerom, preciznošću/starosti GPS-a i dostupnim visinskim razlikama. Nije
+3D teren/AR niti novo skretanje-po-skretanje rutiranje. Bez kompasa koristi
+pouzdan smjer kretanja; bez signala/novog fixa ne izmišlja smjer/udaljenost.
+Dolazak samo <=15m, preciznost<=15m, GPSfix mlađi5s. Offline radi GPS i
+navigacija, za podlogu treba prethodno sačuvana karta.
+
+Checkbox Explorer prikaz (dodirna površina>=44px) pamti samo izbor prikaza
+u tvlake_explorer_view_v1, bez automatskog pokretanja GPS-a/cilja pri ulasku.
+Isključen vraća sjever gore i gestu karte, cilj/GPS/terenski podaci ostaju.
+Pregled privremeno oslobađa mapu; checkbox vraća praćenje. Adapter privremeno
+omota mapPane i proširi viewport na dijagonalu kako rotacija ne otkriva
+prazne uglove; obnavlja metode/gestu/DOM prije pregleda, alata, štampe,
+promjene taba i završetka. Kontrole snimanja ostaju dostupne. Kamera max4Hz
+uz pragove promjene; nepomični GPS ne pomjera kartu stalno. GPS obrada i
+snimanje geometrije nisu izmijenjeni; automatski pan snimanja tokom aktivne
+navigacije na karti prepušta se Exploreru/pregledu. Kasni OSRM/profil
+odbačen nakon izbora novog cilja. Brisanje/preimenovanje aktivne tačke
+održava cilj/index; potvrđena odjava gasi navigaciju.
+
+Lokalno:90JS skupova i5inlineJSblokova sintaksa prošli. Novi browser test
+sa stvarnim Leaflet/canvas/pločicama, offline, kontrolisani GPS/kompas,
+8prikaza/6smjerova, oba ulaza, checkbox i pamćenje, tačne koordinate nakon
+obnove, kontrole snimanja, slab/star GPS, dolazak, GPS kurs, tabovi, ruta,
+zlonamjerni naziv, kasni OSRM/profil. Ranije u istom zadatku prošli
+menu-tools.py i print-styles-232.py. CI dodan19.browser. Novi JS je u
+SWshell i requiredAPKassets; web/SW/Android2.3.6/code506. Nema novih
+biblioteka niti promjena nativeGPS/proizvodneSupabase baze. CI/APKprovjera
+slijedi; fizički Xiaomi/kompas na uređaju nisu testirani.

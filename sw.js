@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '2.3.5';
+const APP_VERSION = '2.3.6';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -20,6 +20,7 @@ const APP_SHELL = [
   './static/js/offline-layer.js',
   './static/js/field-store.js',
   './static/js/field-tools.js',
+  './static/js/explorer-navigation.js',
   './static/js/tab-data.js',
   './static/js/server-panel.js',
   './static/js/local-layer-import.js',

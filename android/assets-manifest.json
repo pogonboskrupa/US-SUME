@@ -46,6 +46,7 @@
     "static/js/reference-vlake.js",
     "static/js/doznaka-boundary.js",
     "static/js/vlaka-outline.js",
-    "static/js/vlaka-direction.js"
+    "static/js/vlaka-direction.js",
+    "static/js/explorer-navigation.js"
   ]
 }

@@ -24,6 +24,7 @@
 <script src="static/libs/shapefile.min.js" onerror="_libErr('Shapefile')"></script>
 <script src="static/js/reliable-fetch.js"></script>
 <script src="static/js/dem-quality.js"></script>
+<script src="static/js/explorer-navigation.js"></script>
 <script src="static/js/doznaka-bands.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded',function(){
@@ -5722,7 +5723,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.5';
+const APP_VER = 'v2.3.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7853,6 +7854,8 @@ async function doLogout() {
       .filter(k => /^sb-.*-auth-token$/.test(k))
       .forEach(k => localStorage.removeItem(k));
   } catch(e) {}
+
+  try { stopTackaNav(); } catch(e) {}
 
   sbUser = null; sbProfile = null;
 
@@ -11532,6 +11535,11 @@ function _clearNavLayers() {
 // ── Navigation entry point ──
 function vodiMeDoTacke(idx) {
   if (idx < 0 || idx >= _tacke.length) return;
+  switchTab('karta');
+  if (typeof _guideOn !== 'undefined' && _guideOn) _guideCancel(true);
+  if (typeof _guideSession !== 'undefined') _guideSession++;
+  stopTackaNav();
+  if (!gpsOn) startGPS();
   map.closePopup();
   _clearNavLayers();
   _tackaNavIdx = idx;
@@ -11566,7 +11574,7 @@ function vodiMeDoTacke(idx) {
   const bounds = [];
   if (fromLa != null) bounds.push([fromLa, fromLo]);
   bounds.push([t.la, t.lo]);
-  if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds), {padding:[50,50], animate:true});
+  if (bounds.length > 1 && !window.Explorer) map.fitBounds(L.latLngBounds(bounds), {padding:[50,50], animate:true});
 
   if (!routeBuilt && !fromLa) showToast('Uključi GPS za navigaciju');
 }
@@ -11580,6 +11588,8 @@ async function _showNavPanel(idx) {
   const ab = document.getElementById('action-bar');
   panel.style.bottom = (ab && ab.style.display !== 'none') ? (ab.offsetHeight + 'px') : '0';
   panel.style.display = 'flex';
+  window.Explorer?.start({la:t.la,lo:t.lo,name:t.nm || ('Tačka ' + (idx + 1))});
+  window.Explorer?.requestCompass();
   _updateNavPanel(lastP?.la, lastP?.lo);
 
   const elevEl = document.getElementById('tnp-elev');
@@ -11595,6 +11605,7 @@ async function _showNavPanel(idx) {
 }
 
 function _updateNavPanel(la, lo) {
+  if (typeof window !== 'undefined' && window.Explorer?.active) { window.Explorer.refresh(); _updateNavElev(); return; }
   if (_tackaNavIdx === null) return;
   const t = _tacke[_tackaNavIdx];
   if (!t) return;
@@ -11687,7 +11698,7 @@ function _updateNavElev() {
   const elevEl = document.getElementById('tnp-elev');
   if (!elevEl || _tackaNavIdx === null) return;
   const t = _tacke[_tackaNavIdx];
-  if (!t?._elev) { elevEl.style.display = 'none'; return; }
+  if (t?._elev == null) { elevEl.style.display = 'none'; return; }
   const myElev = lastP?.al;
   if (myElev != null) {
     const diff = t._elev - myElev;
@@ -11702,6 +11713,7 @@ function _updateNavElev() {
 }
 
 function stopTackaNav() {
+  if (typeof window !== 'undefined') window.Explorer?.stop();
   _tackaNavIdx = null;
   _navLastBrng = null;
   _clearNavLayers();
@@ -11730,6 +11742,8 @@ function _fmtDist(m) {
 // ── Delete ──
 function deleteTacka(idx) {
   if (idx < 0 || idx >= _tacke.length) return;
+  if (_tackaNavIdx === idx) stopTackaNav();
+  else if (_tackaNavIdx !== null && idx < _tackaNavIdx) _tackaNavIdx--;
   map.removeLayer(_tacke[idx].marker);
   _tacke.splice(idx, 1);
   _tacke.forEach((t, i) => {
@@ -11836,6 +11850,7 @@ async function _renameTacka(idx) {
   const nw = await _dlgPrompt('Naziv tačke:', cur, { title: 'Preimenuj tačku' });
   if (nw === null) return;
   t.nm = nw.trim();
+  if (_tackaNavIdx === idx) window.Explorer?.rename(t.nm);
   t.marker.setIcon(_tačkaIcon(idx + 1, t.nm));
   _setupTackaPopup(t.marker, idx, t.la, t.lo, t.ts, t.nm);
   t.marker.openPopup();
@@ -14692,6 +14707,15 @@ const map = L.map('map',{
   tapTolerance:15,
   preferCanvas:true
 }).setView(_initMapCenter, _initMapZoom);
+window.Explorer = ExplorerNavigation.create({
+  map,
+  getPosition: () => lastP ? {...lastP,ts:_onPLastFixTs || 0} : null,
+  getCompass: () => ({value:_compassHeading == null ? null : (_compassHeading + (screen.orientation?.angle || window.orientation || 0) + 360) % 360,ts:_compassLastUpdT}),
+  isGpsOn: () => gpsOn,
+  onBearing: value => { _navLastBrng=value; if (_activeTab==='teren') _updateNavArrows(); },
+  toast: showToast
+});
+
 map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
 let _appStarted = false;
@@ -16589,6 +16613,7 @@ function _mjtrgSaved(tab) {
 
 // === QGIS MAP TOOLBAR ===
 function setActiveTool(tool) {
+  if (typeof window !== 'undefined' && tool!=='pan') window.Explorer?.inspect();
   const prev = activeTool;
   // Stop previous tool internals without triggering setActiveTool again
   if (prev === 'addline') {
@@ -19127,6 +19152,7 @@ function _angContinuity(prevAccum, targetDeg) {
 }
 
 function _updCompassOnMarker(heading) {
+  if (typeof window !== 'undefined') window.Explorer?.onHeading();
   if (_activeTab === 'teren') terenUpdCompass();
   if (_tackaNavIdx !== null) _updateNavArrows();  // strelica prati okretanje telefona uživo
   if (!posMk) return;
@@ -19517,11 +19543,12 @@ function onP(p) {
   if (typeof isSpdField === 'function' && isSpdField()) _trnUpdOdjel(la, lo);
 
   // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
-  if (((recOn && !recPaused) || _tragOn) && !_recFreeView) {
+  if (((recOn && !recPaused) || _tragOn) && !_recFreeView && !(typeof window !== 'undefined' && (window.Explorer?.active && _activeTab === 'karta'))) {
     map.panTo([la, lo], { animate: true, duration: 0.5 });
   }
 
   // Navigacija do tačke — ažuriraj panel i liniju
+  if (typeof window !== 'undefined') window.Explorer?.onFix({la,lo,ac,al:filtAl ?? al,speed:gpsSpeed,heading:gpsHeading,ts:p.timestamp || Date.now()});
   if (_tackaNavIdx !== null) _updateNavPanel(la, lo);
 
   // Live preview segment prati SVAKI fix (isto kao marker pozicije) — vidi _updRecPreview
@@ -27779,6 +27806,7 @@ function switchTab(tab) {
     if (typeof closeLayerSheet === 'function') closeLayerSheet();
   }
   _activeTab = tab;
+  if (typeof window !== 'undefined') window.Explorer?.setVisible(tab==='karta');
   if (prev === 'doznaka' && tab !== 'doznaka') {
     dozCancelDraw();
     if (_dozGpsOn) showToast('📍 GPS snimanje nastavlja u pozadini');
@@ -29440,6 +29468,7 @@ function stampaOtvori() {
   try { if (typeof _activeTab !== 'undefined' && _activeTab !== 'karta') switchTab('karta'); } catch (e) {}
   try { closeLayerSheet(); } catch (e) {}
   try { closeOznakePanel(); } catch (e) {}
+  if (typeof window !== 'undefined') window.Explorer?.setVisible(false);
   const post = _stpPostavkeUcitaj();
   const ap = _stpAktivniProjekat();
   const c0 = map.getCenter(), z0 = map.getZoom();
@@ -29502,6 +29531,7 @@ function _stpZatvoriInterno() {
   map.setView(p.center, p.zoom, { animate: false });
   const kon = document.getElementById('stampa-kontrole');
   if (kon) kon.innerHTML = '';
+  if (typeof window !== 'undefined') window.Explorer?.setVisible(_activeTab==='karta');
 }
 function stampaZatvori() {
   if (!_stp) return;
@@ -29943,6 +29973,8 @@ function closeProfilModal() {
 // vremena dolaska. Reuse: _fetchProfileElev/_renderElevProfile (isti #profil-modal
 // koji se koristi za profil vlake), calcL za dužinu.
 let _guideOn = false;
+let _guideExplorerPick = false;
+let _guideSession = 0;
 let _guidePts = [];          // {la,lo} tapnute tačke, redom
 let _guideMinPts = 0;        // 1 ako je tačka 0 auto-GPS (undo je ne smije ukloniti)
 let _guideMarkers = [];
@@ -29971,36 +30003,36 @@ function _guideClearResult() {
 }
 
 async function _guideStart(fromGps) {
+  _guideSession++;
   closeGuideChoice();
+  stopTackaNav();
   switchTab('karta');   // prebaci na kartu PRIJE postavljanja stanja (izbjegava regresiju viđenu kod doznake)
   _guideClearResult();
   _guideOn = true;
   _guidePts = [];
   _guideMinPts = 0;
+  _guideExplorerPick = !!fromGps;
+  document.body.classList.toggle('explorer-pick', _guideExplorerPick);
 
   const banner = document.getElementById('guide-draw-banner');
   if (banner) banner.style.display = 'flex';
   _updFabVisibility();
 
   if (fromGps) {
+    if (!gpsOn) startGPS();
     const lbl = document.getElementById('guide-draw-label');
-    if (lbl) lbl.textContent = '⏳ Tražim GPS poziciju…';
-    if (!lastP) {
-      startGPS();
-      let tries = 0;
-      while (!lastP && tries < 40 && _guideOn) { await new Promise(r => setTimeout(r, 250)); tries++; }
-    }
-    if (!lastP || !_guideOn) { if (_guideOn) { showToast('⚠ GPS pozicija nedostupna'); _guideCancel(); } return; }
-    _guideMinPts = 1;
-    _guideAddPoint({ lat: lastP.la, lng: lastP.lo }, true);
-  } else {
-    const lbl = document.getElementById('guide-draw-label');
-    if (lbl) lbl.textContent = '📌 Tapni POČETNU tačku';
+    if (lbl) lbl.textContent = 'Odaberi cilj na karti — Explorer se pokreće odmah';
+    document.getElementById('guide-draw-count').textContent = 'GPS prati tvoju lokaciju';
+    window.Explorer?.requestCompass();
+    return;
   }
+  const lbl = document.getElementById('guide-draw-label');
+  if (lbl) lbl.textContent = 'Tapni početnu tačku rute';
   _guideUpdBanner();
 }
 
 function _guideAddPoint(latlng, isStart) {
+  _guideSession++;
   _guidePts.push({ la: latlng.lat, lo: latlng.lng });
   const col = isStart ? '#4ade80' : '#a78bfa';
   const m = L.circleMarker([latlng.lat, latlng.lng], { radius: 6, color: col, fillColor: col, fillOpacity: 1, weight: 2 }).addTo(map);
@@ -30017,6 +30049,11 @@ function _guideAddPoint(latlng, isStart) {
 
 function _guideOnMapClick(latlng) {
   if (!_guideOn) return;
+  if (_guideExplorerPick) {
+    _guideCancel(true);
+    window.Explorer?.start({la:latlng.lat,lo:latlng.lng,name:'Lokacija na karti'});
+    return;
+  }
   _guideAddPoint(latlng, _guidePts.length === 0);
   _guideUpdBanner();
 }
@@ -30030,6 +30067,7 @@ function _guideUpdBanner() {
 
 function _guideUndo() {
   if (_guidePts.length <= _guideMinPts) { showToast('⚠ Nema šta poništiti'); return; }
+  _guideSession++;
   _guidePts.pop();
   const m = _guideMarkers.pop();
   if (m) { try { map.removeLayer(m); } catch(e) {} }
@@ -30041,7 +30079,10 @@ function _guideUndo() {
 }
 
 function _guideCancel(silent) {
+  _guideSession++;
   _guideOn = false;
+  _guideExplorerPick = false;
+  document.body.classList.remove('explorer-pick');
   _guidePts = []; _guideMinPts = 0;
   _guideMarkers.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
   _guideMarkers = [];
@@ -30091,11 +30132,13 @@ function _guideDrawResult(routePts, routeMeta) {
 
 async function _guideFinish() {
   if (_guidePts.length < 2) { showToast('⚠ Potrebne su bar 2 tačke (start i odredište)'); return; }
+  const token = _guideSession;
   const tapped = _guidePts.slice();
   showToast('⏳ Tražim rutu putem…');
 
   // Ruta PUTEM preko OSRM-a; bez mreže/rute → zračna linija kroz tapnute tačke
   let route = _mrezaProbaj() ? await _guideOsrmRoute(tapped) : null;
+  if (!_guideOn || token !== _guideSession) return;
   if (!route) {
     route = { pts: tapped, distM: calcL(tapped), durS: null, osrm: false };
     showToast('⚠ Ruta putem nedostupna — prikazujem zračnu liniju');
@@ -30103,8 +30146,10 @@ async function _guideFinish() {
 
   _guideCancel(true);   // ukloni banner + privremene markere/liniju — rezultat se crta ispod
 
+  const resultToken = _guideSession;
   let res = null;
   try { res = await _fetchProfileElev(route.pts); } catch(e) {}
+  if (resultToken !== _guideSession) return;
   const hasElev = !!res;
   const alts    = hasElev ? res.alts : route.pts.map(() => 0);
   const profPts = hasElev ? res.pts : route.pts;
@@ -30199,10 +30244,23 @@ function _guideDeleteRoute(id) {
   _guideRenderRoutes();
   showToast('🗑 Ruta obrisana');
 }
+function _guideExploreRoute(id) {
+  const r = _guideRoutesLoad().find(x => x.id === id);
+  if (!r || !r.pts?.length) return;
+  const p = r.pts[r.pts.length - 1];
+  closeGuideChoice(); if (_guideOn) _guideCancel(true); _guideSession++; stopTackaNav(); switchTab('karta');
+  _guideDrawResult(r.pts, r);
+  if (!gpsOn) startGPS();
+  window.Explorer?.start({la:p.la,lo:p.lo,name:r.name || 'Odredište rute'});
+  window.Explorer?.requestCompass();
+}
 function _guideViewRoute(id) {
   const r = _guideRoutesLoad().find(x => x.id === id);
   if (!r || !r.pts?.length) return;
   closeGuideChoice();
+  if (_guideOn) _guideCancel(true);
+  _guideSession++;
+  stopTackaNav();
   switchTab('karta');
   _guideDrawResult(r.pts, r);
   const hasElev = !!(r.alts && r.profPts);
@@ -30222,7 +30280,7 @@ function _guideRenderRoutes() {
     const durMin = r.durS != null ? Math.round(r.durS / 60) : null;
     const meta = `${fmtL(r.distM || 0)}${durMin != null ? ' · 🚙 ' + (durMin >= 60 ? Math.floor(durMin / 60) + ' h ' + (durMin % 60) + ' min' : durMin + ' min') : ''}${r.osrm ? '' : ' · zračna'}`;
     return `<article class="guide-route"><button type="button" class="guide-route-main" data-id="${_escHtml(String(r.id))}" onclick="_guideViewRoute(this.dataset.id)"><b>${_escHtml(r.name || 'Ruta')}</b><small>${meta}</small><span>Prikaži rutu →</span></button>
-      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="if(confirm('Obrisati rutu?'))_guideDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
+      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)">Explorer</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="if(confirm('Obrisati rutu?'))_guideDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
   }).join('');
 }
 
@@ -39832,7 +39890,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="help-body">
 
-    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>Projekat prvo prikazuje listu projekata i vlake aktivnog projekta. Statistika i izvještaji te Izvoz i sigurnosna kopija proširuju se na dodir. Ispod su poligon odjela, boje i strelice. U Bojama vlaka odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U sekciji Poligon odjela i teren u tabu Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji i primi</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Jednim dugmetom Pošalji i primi šalješ rad i primaš vlake svih dostupnih projekata. Za doznaku se prima lista odjela te zone i GPS pojasevi odjela otvorenog u Doznaci. Tri statusa prikazuju koji je korak završen. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Iz Menija odaberi cilj i pregledaj dostupnu rutu. Dostupnost izračuna rute zavisi od mreže i pružaoca podataka; prethodno sačuvane rute pregledaj u istom prozoru.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
+    <div id="help-pane-gen"><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🌲 DENDRO MAP — prije izlaska na teren</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">1</div><div class="help-txt"><b>Odaberi projekat</b><span>U tabu <b>Projekat</b> aktiviraj odjel u kojem radiš. Provjeri naziv odjela i gospodarsku jedinicu prije snimanja ili slanja.</span></div></div><div class="help-row"><div class="help-icon">2</div><div class="help-txt"><b>Pripremi podatke i podlogu</b><span>Dok imaš mrežu preuzmi zajedničke vlake i doznaku kroz <b>Meni → Pošalji na server</b>. Kartu za rad bez mreže učitaj kroz <b>Učitaj kartu</b>; dostupne slojeve pregledaj u <b>Instalirane karte</b>.</span></div></div><div class="help-row"><div class="help-icon">3</div><div class="help-txt"><b>Provjeri spremnost</b><span>Otvori <b>Meni → Spremno za teren / sigurnosna kopija</b>. Provjeri GPS dozvole, raspoloživu memoriju i napravi sigurnosnu kopiju terenskog rada.</span></div></div><div class="help-row"><div class="help-icon">4</div><div class="help-txt"><b>Ažuriranje aplikacije</b><span>Na Androidu koristi <b>Meni → Ažuriraj aplikaciju</b>. Ime prijavljenog korisnika, naziv DENDRO MAP i verzija nalaze se na kraju skrola Menija.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🗺 Karte, fajlovi i Dnevni mod</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🗺</div><div class="help-txt"><b>Učitaj kartu</b><span>Otvori lokalnu raster kartu (.mbtiles, .sqlitedb, .gpkg ili .db). Za cijeli odjel bez signala koristi preuzetu lokalnu kartu; online podloga ima samo ranije sačuvane dijelove.</span></div></div><div class="help-row"><div class="help-icon">🏔</div><div class="help-txt"><b>Instalirane i omiljene karte</b><span>U Meniju otvori Instalirane karte za lokalne fajlove, sačuvane pločice i teren. Omiljene karte otvori zvjezdicom na karti; prikaz označava aktivnu podlogu i razlikuje lokalne fajlove od online podloga.</span></div></div><div class="help-row"><div class="help-icon">📂</div><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>KML učitaj u KML podtabu. Za SHP zajedno odaberi .shp, odgovarajući .dbf i .prj; .shx i .cpg mogu biti priloženi. Učitavanje konvertuje sloj u lokalni KML za prikaz i daljnje uređivanje.</span></div></div><div class="help-row"><div class="help-icon">☀</div><div class="help-txt"><b>Dnevni mod</b><span>U Meniju uključi <b>Dnevni mod</b> za svijetlu podlogu i tamna slova na suncu. Ponovnim pritiskom vrati tamni prikaz.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📁 Aktivni projekat i zajedničke vlake</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🎨</div><div class="help-txt"><b>Boje vlaka</b><span>Projekat prvo prikazuje listu projekata i vlake aktivnog projekta. Statistika i izvještaji te Izvoz i sigurnosna kopija proširuju se na dodir. Ispod su poligon odjela, boje i strelice. U Bojama vlaka odaberi boju glavnih vlaka, boju krakova, debljinu i vrstu linije. Izbor odmah važi za postojeće i nove vlake svih projektanata u tom projektu; pamti se na tvom telefonu po projektu i nalogu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Poligon odjela</b><span>U sekciji Poligon odjela i teren u tabu Projekat nacrtaj granicu dodirom na kartu. Vrati posljednju tačku, sačuvaj najmanje tri tačke ili odustani. Nova granica zamjenjuje staru tek nakon uspješnog upisa. Uključi nagib strogo preko 30% i/ili ekspoziciju — slojevi su ograničeni na poligon. Za offline rad prethodno preuzmi teren; izbor i poligon su lokalni po nalogu i projektu.</span></div></div><div class="help-row"><div class="help-icon">📋</div><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Vlastite i kolegine vlake su zajedno, poredane numerički od manjeg ka većem broju, uz projektanta i dužinu. Klik otvara vlaku na karti. <b>Prikaži još</b> otvara ostatak dužeg spiska.</span></div></div><div class="help-row"><div class="help-icon">👥</div><div class="help-txt"><b>Rad s kolegama</b><span>U projektu se prikazuju dostupne zajedničke vlake. Koleginu vlaku možeš pregledati i prikazati njen bafer; uređuješ vlastite vlake. Razmjenu podataka obavi kroz Server.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>🏷 Preglednik Oznake — kontrola sadržaja karte</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">🔎</div><div class="help-txt"><b>Pronađi i sortiraj</b><span>Otvori <b>Listu oznaka/KML</b>. Podtabovi su Sve, Učitani fajlovi, Fotografije, Tragovi i Server fajlovi. Traži po nazivu, odjelu ili opisu. Sortiraj po odjelu, datumu, nazivu ili blizini <b>sredine trenutnog prikaza karte</b>.</span></div></div><div class="help-row"><div class="help-icon">👁</div><div class="help-txt"><b>Pojedinačno i grupno</b><span>Na stavci koristi Prikaži/Sakrij, Na karti ili Uredi. <b>Prikaži rezultate / Sakrij rezultate</b> važi za sve rezultate pretrage, uključujući stavke poslije prve stranice. Grupama odjela možeš upravljati zasebno.</span></div></div><div class="help-row"><div class="help-icon">🖌</div><div class="help-txt"><b>Uredi i sačuvaj</b><span>KML-u mijenjaj naziv, odjel, boju, debljinu, vrstu linije i ispunu. Fotografiji dodaj naziv/odjel/opis, a trag uređuj ili izvezi kao KML. Fotografiju otvori iz njenog pregleda; dijeljenje je u Više radnji.</span></div></div><div class="help-row"><div class="help-icon">🌐</div><div class="help-txt"><b>Server fajlovi i brisanje</b><span>Fajl bez lokalne kopije prvo preuzmi za offline korištenje. Uklanjanje offline kopije ostavlja fajl na serveru. Lokalno brisanje traži potvrdu. Stare fotografije bez odjela prikazuju se kao <b>Bez odjela</b>.</span></div></div><div class="help-row"><div class="help-icon">📍</div><div class="help-txt"><b>Tragovi i druge oznake</b><span>U tabu Tragovi možeš grupno prikazati/sakriti fotografije, tragove, tačke, mjerenja i tekstualne oznake. Prikaz/sakrivanje čuva podatke; aktivno snimanje ostaje vidljivo.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>☁ Server — ručno slanje i potvrđen prijem</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">⬆</div><div class="help-txt"><b>Pošalji na server</b><span>Otvori <b>Meni → Pošalji na server → Za slanje</b>. Provjeri sadržaj, projekte i projektanta, pa pritisni <b>Pošalji i primi</b>. Slanje obuhvata izmjene iz svih projekata na telefonu, uključujući nacrtane/snimljene vlake i podatke doznake.</span></div></div><div class="help-row"><div class="help-icon">↓</div><div class="help-txt"><b>Primljeno</b><span>Jednim dugmetom Pošalji i primi šalješ rad i primaš vlake svih dostupnih projekata. Za doznaku se prima lista odjela te zone i GPS pojasevi odjela otvorenog u Doznaci. Tri statusa prikazuju koji je korak završen. Pregled Primljeno i Poslano pokazuje posljednja tri projekta prema razmjeni; izaberi <b>Po projektu</b> ili <b>Po danima</b> i proširi grupu da vidiš stavke, projektanta i vrijeme.</span></div></div><div class="help-row"><div class="help-icon">↗</div><div class="help-txt"><b>Pronađi stavku na karti</b><span>Klikni na evidentiranu vlaku, zonu ili GPS pojas za njen lokalno sačuvani položaj. Ako položaj nije dostupan, preuzmi podatke projekta. Prikaz starijih projekata potraži u projektu; sažeti Server pregled ne briše podatke.</span></div></div><div class="help-row"><div class="help-icon">✓</div><div class="help-txt"><b>Provjera slanja</b><span>Poslano bilježi potvrđene upise. Vrijeme posljednjeg slanja i prijema je u Server pregledu. Ako slanje nije prošlo, otvori <b>Detalji i greške slanja</b>; sačuvane izmjene ostaju za naredni pokušaj.</span></div></div><div class="help-row"><div class="help-icon">📱</div><div class="help-txt"><b>Lokalni podaci</b><span>Samostalni Tragovi, dnevnik, mjerenja i tekstualne oznake ostaju na telefonu. Fotografije dijeli zasebno kroz njihovu opciju Podijeli fotografiju; njih ne šalje ovo dugme.</span></div></div></div></section><section class="help-sec"><div class="help-sec-hdr" onclick="toggleHelpSec(this)"><span class="h-arrow">▶</span>📷 Fotografije, navigacija i štampanje</div><div class="help-sec-body"><div class="help-row"><div class="help-icon">📷</div><div class="help-txt"><b>Uslikaj lokaciju</b><span><b>Meni → Uslikaj lokaciju</b> odmah otvara kameru. Fotografija pamti GPS lokaciju i odjel aktivan pri otvaranju kamere. U Oznakama je otvori, uredi opis ili podijeli s kolegama.</span></div></div><div class="help-row"><div class="help-icon">🧭</div><div class="help-txt"><b>Vodi me do odjela/lokacije</b><span>Odaberi <b>Explorer — prati me</b> i dodirni cilj na karti. Karta prati tvoju poziciju i smjer; <b>Vodi me</b> na sačuvanoj tački otvara isti prikaz. GPS preciznost, smjer i zračna udaljenost su uvijek vidljivi. Checkbox <b>Explorer prikaz</b> uključuje praćenje u smjeru kretanja. Isključi ga za obični pregled karte; cilj ostaje aktivan, a izbor se pamti za narednu navigaciju. Za offline podlogu prethodno učitaj kartu. <b>Pripremi rutu</b> i sačuvane rute ostaju u istom prozoru; Explorer na sačuvanoj ruti vodi prema njenom krajnjem cilju.</span></div></div><div class="help-row"><div class="help-icon">🖨</div><div class="help-txt"><b>Print / štampanje</b><span>Podesi prikaz karte, format i razmjeru. Unesi <b>vlastiti opis na vrhu karte</b> i <b>opis legende</b>, zatim provjeri pregled prije štampe ili izvoza PDF-a.</span></div></div><div class="help-row"><div class="help-icon">📡</div><div class="help-txt"><b>GPS na Androidu</b><span>APK podržava terensko snimanje; odobri tražene lokacijske i pozadinske dozvole. U web prikazu/iOS-u drži aplikaciju na ekranu tokom snimanja. Pauza prekida dodavanje tačaka; Nastavi ga vraća.</span></div></div></div></section></div>
 
     <!-- ── VLAKE ───────────────────────────────── -->
     <div id="help-pane-vlake" style="display:none;">
@@ -41010,12 +41068,12 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="guide-sheet">
     <header class="guide-header"><div><span class="guide-eyebrow">Navigacija do terena</span><h2 id="guide-title">Vodi me do odjela/lokacije</h2></div><button type="button" onclick="closeGuideChoice()" aria-label="Zatvori navigaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
     <div class="guide-body">
-      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Izaberi kako želiš krenuti</b><p>Odredište odaberi na karti. Možeš dodati i međutačke do odjela ili radilišta.</p><span id="guide-location-status" class="guide-status"></span></div></div>
+      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Istraži teren iz svoje pozicije</b><p>Karta prati tvoju GPS poziciju i okreće se u smjeru u kojem gledaš. Cilj odaberi dodirom na kartu.</p><span id="guide-location-status" class="guide-status"></span></div></div>
       <div class="guide-choices">
-        <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Od moje lokacije</b><small>Kreni od svoje GPS pozicije</small></span><span aria-hidden="true">›</span></button>
-        <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Od tačke do tačke</b><small>Izaberi početak i odredište na karti</small></span><span aria-hidden="true">›</span></button>
+        <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Explorer — prati me</b><small>Odaberi cilj i kreni iz svoje GPS pozicije</small></span><span aria-hidden="true">›</span></button>
+        <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Pripremi rutu</b><small>Početak, međutačke i odredište na karti</small></span><span aria-hidden="true">›</span></button>
       </div>
-      <p class="guide-note">Za izračun vožnje dostupnim putevima potrebna je veza. Sačuvanu rutu možeš ponovo prikazati i offline.</p>
+      <p class="guide-note">Explorer i sačuvane karte rade bez interneta. Smjer i zračna udaljenost vode prema cilju; izračun vožnje putevima u pripremi rute traži internet.</p>
       <section class="guide-saved"><div class="guide-saved-heading"><h3>Sačuvane rute</h3><span id="guide-routes-count"></span></div><input id="guide-routes-search" type="search" aria-label="Pretraži sačuvane rute" placeholder="Traži rutu po nazivu…" oninput="_guideRenderRoutes()"><div id="guide-routes-list"></div></section>
     </div>
   </div>
@@ -41353,15 +41411,19 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- Tačka navigacioni panel -->
-<div id="tacka-nav-panel">
-  <span id="tnp-arrow">⬆</span>
-  <div id="tnp-info">
-    <div id="tnp-name">—</div>
-    <div id="tnp-air">📡 Uključi GPS</div>
-    <div id="tnp-road" style="display:none;"></div>
-    <div id="tnp-elev" style="display:none;font-size:12px;font-weight:700;"></div>
-  </div>
-  <button id="tnp-stop" onclick="stopTackaNav()"><svg class="ic"><use href="#ic-zatvori"/></svg> Stop</button>
+<div id="explorer-top" hidden>
+  <div><span id="ex-mode">EXPLORER · PRATI ME</span><b id="ex-gps">Tražim GPS signal</b></div>
+  <button type="button" onclick="Explorer.requestCompass()" aria-label="Kompas"><span id="ex-north" aria-hidden="true">↑</span><small>S</small></button>
+  <button type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button>
+</div>
+<div id="explorer-you" hidden aria-hidden="true"><span></span><b>TI</b></div>
+<div id="tacka-nav-panel" role="region" aria-label="Explorer navigacija">
+  <span id="tnp-arrow" hidden></span>
+  <div class="ex-target"><span class="ex-target-icon" aria-hidden="true">◎</span><div><small>ODREDIŠTE</small><div id="tnp-name">—</div></div><button id="ex-overview" type="button" onclick="Explorer.overview()" aria-label="Pregled cijelog puta do cilja">Pregled</button></div>
+  <div class="ex-guidance"><div><div id="tnp-air">—</div><small id="ex-distance-label">Do cilja · zračna udaljenost</small></div><div class="ex-direction"><svg id="ex-direction-arrow" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27V5M6 15L16 5l10 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+  <div class="ex-live"><b id="ex-instruction">Čekam GPS signal</b><span id="ex-heading">Smjer nije dostupan</span></div>
+  <div id="tnp-road" hidden></div><div id="tnp-elev" style="display:none;"></div>
+  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer prikaz</span></label><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
 </div>
 
 <!-- Tačka modal — unos naziva -->
