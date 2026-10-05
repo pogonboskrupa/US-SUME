@@ -2215,3 +2215,40 @@ paint8.62s/console SW47.2). OCR offline prošao. Uveden native getProgress==100
 WebViewClient/assetLoader-a. JS uslovi/5s callback/90s ukupno ostaju.
 Diag artifact11360436331 sadrži stvarni logcat i JUnit2test/1failure/0skipped.
 APK nije objavljen prije uspješne Explorer instrumentacije.
+
+## 2026-10-05 — Explorer 2.3.9 završen i APK potvrđen
+
+CI37345450553/job111882751205 završen SUCCESS. Objavljeni izvor
+a8168b2d9e887b91d1956d6fb40cde3d27ab24a9. Prošli92JS grupe, testna
+PostgreSQL migracija/RLS,23browser provjere (uključuje kompletan stvarni
+JS bootstrap sa onP), Android build,53webassetSHA i oba Android testa.
+Native report: Android14/API34, WebView113.0.5672.136,2tests/0failures/
+0errors/0skipped. Explorer13.777s, OCR0.104s. Cijeli APK/proizvodni
+MainActivity/WebView/DOM/JS; kontrolisan authUI/GPS/kompas, mreža isključena.
+Provjereni početni3D bez GPS-a, svježi onP/oznaka/udaljenost, stvarni
+DOMmarker naspram projekcije <3px, dialogpause/resume, checkbox i stop,
+neizmijenjeni vlake/tačke/tragovi registri. Native progress je prešao100
+u17:08:15.595 prije JS; nema preskočenih testova ni oslabljenih uslova.
+36 analiza brzine prošle u CI-ju; nisu fizička mjerenja Redmi telefona.
+
+Preuzet stvarni CI APK i poređen sa javnim release assetom v2.3.9:
+https://github.com/pogonboskrupa/US-SUME/releases/download/v2.3.9/app-debug.apk
+24,008,156B (24.01MB), SHA256
+1cf52ce2f1361ef6f2ccba1a525702ccd2fd000d4b7d100f677aa27b9f8785c9.
+Paket ba.spd.uss.vlake.debug;2.3.9-debug/code509. CertSHA256 identičan238:
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+53assets identični remote izvoru, GRANICE>10MB očuvan, bez offlineOCRmodela,
+15launcherPNG identični238. Lokalni verify_apk_239.py i verify_native_239.py
+prošli; release veličina/digest/commit odgovaraju preuzetom APK-u. Artifact
+APK11360766710, Android11360412163, UI11360118443, teren11359948802.
+Potpis/paket omogućuju ažuriranje postojeće debug aplikacije kroz Meni.
+
+Popravljen stvarni blokator: zatvoren dlg-sheet je display:block ali izvan
+viewporta; stari shown ga je smatrao otvorenim i gasio perspektivu. Sada
+se provjerava vidljivi pravougaonik, završetak transform animacije i novi
+dialog. Kamera se uključuje bez GPS-a bez lažnih metrika; resize osvježava
+depth/transform/anchor revision. 48° nagnuta Leaflet karta, bez DEMmesha
+i bez novih runtime biblioteka. Explorer samo tokom vođenja do cilja,
+checkbox izbor pamćen. Fizički Xiaomi/GPU/senzori nisu testirani.
+Supabase trial SQL status ostaje kao238: pripremljen/testiran, nije
+primijenjen na produkciji; ovaj zadatak ne mijenja serverska pravila.
