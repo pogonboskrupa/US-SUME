@@ -31,6 +31,21 @@ public class ExplorerNavigationTest {
   new Handler(Looper.getMainLooper()).post(()->view.evaluateJavascript(script,v->{result.set(v);latch.countDown();}));
   assertTrue("WebView JS callback",latch.await(5,TimeUnit.SECONDS));return result.get();
  }
+ private void pageLoaded(WebView view) throws Exception {
+  // Cold WebView navigacija može odbaciti JS callback za prethodni about:blank.
+  // Ne mijenjamo proizvodni WebViewClient/assetLoader; čitamo native progress.
+  long limit=System.currentTimeMillis()+30000;Handler ui=new Handler(Looper.getMainLooper());
+  String last="";
+  do {
+   CountDownLatch latch=new CountDownLatch(1);AtomicReference<String> state=new AtomicReference<>();
+   ui.post(()->{state.set(view.getProgress()+"|"+view.getUrl());latch.countDown();});
+   assertTrue("WebView progress callback",latch.await(5,TimeUnit.SECONDS));
+   String status=state.get();if(!status.equals(last)){Log.i("ExplorerCI","Učitavanje: "+status);last=status;}
+   if(status.equals("100|https://appassets.androidplatform.net/assets/index.html"))return;
+   Thread.sleep(100);
+  }while(System.currentTimeMillis()<limit);
+  fail("APK stranica nije učitana: "+last);
+ }
  private void until(WebView view,String condition) throws Exception {
   Log.i("ExplorerCI","Provjera: "+condition);
   long limit=System.currentTimeMillis()+20000;String last="";
@@ -54,6 +69,7 @@ public class ExplorerNavigationTest {
   try {
    assertTrue("MainActivity RESUMED",resumed.await(15,TimeUnit.SECONDS));
    WebView view=ref.get();assertNotNull(view);assertEquals(View.LAYER_TYPE_HARDWARE,view.getLayerType());
+   pageLoaded(view);
    until(view,"document.readyState==='complete'&&!!window.Explorer&&typeof onP==='function'");
    // Samo testni auth ulaz i GPS senzor su kontrolisani; sav proizvodni JS se izvršava.
    eval(view,"window.exSnapshot=JSON.stringify([vlake,_tacke,_tragRegistry]);window.exPreference=localStorage.getItem('tvlake_explorer_view_v1');_revealApp();switchTab('karta');gpsOn=true;lastP=null;_onPLastFixTs=0;Explorer.start({la:44.904,lo:16.001,name:'CI cilj'});Explorer.setExplorerEnabled(true)");

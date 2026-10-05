@@ -2206,3 +2206,12 @@ Za stvarni WebView test izabran API34/google_apis (Android14/moderna JS podrška
 novi test uslovno odobrava POST_NOTIFICATIONS na33+. Produkcija/minSDK/GPS
 nije mijenjana. Nema dokaza da API29 engine uzrokuje bug; ovo je izbor
 reprezentativnije platforme za trenutne telefone. APK još nije objavljen.
+
+CI37344207039/job111878587027:92JS/SQL/23browser/Androidbuild/53SHA prošli.
+Android14/WebView113.0.5672.136: Explorer test istekao na prvoj JS evaluaciji
+dok se APK stranica još učitavala (RESUMED16:59:35.7, test fail42.0, prvi
+paint8.62s/console SW47.2). OCR offline prošao. Uveden native getProgress==100
++ tačan APK URL signal (rok30s) prije JS evaluacije, bez zamjene proizvodnog
+WebViewClient/assetLoader-a. JS uslovi/5s callback/90s ukupno ostaju.
+Diag artifact11360436331 sadrži stvarni logcat i JUnit2test/1failure/0skipped.
+APK nije objavljen prije uspješne Explorer instrumentacije.
