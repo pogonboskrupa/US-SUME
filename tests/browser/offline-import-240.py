@@ -51,6 +51,6 @@ async def main():
    await page.evaluate("window.removePromise=sqlmapRemove(_sqlLayers.findIndex(sl=>sl.name==='uvoz-1500'));void 0");await page.evaluate('removePromise')
    assert await page.evaluate("(async()=>{const r=await _sqlWCall({type:'list'});const root=await navigator.storage.getDirectory();const names=[];for await(const[n]of root.entries())names.push(n);return !_sqlLayers.length&&!r.rows.length&&!names.some(n=>n.endsWith('.sqlmap'));})()")
    assert not errors,errors
-   report={'fixture_bytes':1_500_000_000,'browser':browser.version,'layer_ms':layer_ms,'first_visible_tile_ms':tile_ms,'full_copy_ms':copied_ms,'offline_restart_tile_ms':restart_ms,'saved_size_exact':True,'delete_during_import':True,'field_data_unchanged':True,'physical_Xiaomi':False,'fixture':'Mala stvarna RMaps baza, proširena nultim bajtovima do 1,5 GB; držan rezultat do provjere ranog prikaza.'}
+   report={'fixture_bytes':1_500_000_000,'browser':await page.evaluate('navigator.userAgent'),'layer_ms':layer_ms,'first_visible_tile_ms':tile_ms,'full_copy_ms':copied_ms,'offline_restart_tile_ms':restart_ms,'saved_size_exact':True,'delete_during_import':True,'field_data_unchanged':True,'physical_Xiaomi':False,'fixture':'Mala stvarna RMaps baza, proširena nultim bajtovima do 1,5 GB; držan rezultat do provjere ranog prikaza.'}
    (out/'offline-import-240.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False),flush=True);await context.close()
 if __name__=='__main__':asyncio.run(main())
