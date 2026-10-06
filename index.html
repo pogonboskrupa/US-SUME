@@ -2033,6 +2033,13 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* Nenametljiv indikator dok se velika offline SQLite karta otvara u pozadini.
    Lagana tile podloga ostaje upotrebljiva ispod njega; SQLite je zamijeni tek
    kada je worker stvarno spreman. */
+#offline-import-status {display:flex;align-items:center;gap:12px;flex-shrink:0;padding:8px 14px;background:#123429;color:#ecfdf5;border-bottom:1px solid #3b7560;font-size:12px;}
+#offline-import-status > span {font-size:24px;color:#6ee7b7;}
+#offline-import-status > div {flex:1;min-width:0;}
+#offline-import-status b {display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#offline-import-status small {display:block;color:#c8e8db;font-size:10px;margin:3px 0;}
+#offline-import-status progress {width:100%;height:4px;display:block;accent-color:#6ee7b7;}
+#offline-import-status[hidden] {display:none!important;}
 #map-restore-indicator {
   position:absolute; top:72px; left:50%; transform:translateX(-50%);
   z-index:950; pointer-events:none; display:none;
@@ -4514,6 +4521,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
   <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
   <div id="map-toolbar" style="display:none;"></div>
 
+  <div id="offline-import-status" hidden role="status" aria-live="polite"><span aria-hidden="true">↓</span><div><b id="offline-import-name"></b><small>Karta radi · čuvam na telefon — ostavi aplikaciju otvorenu</small><progress id="offline-import-progress" max="100" value="0"></progress></div><strong id="offline-import-percent">0%</strong></div>
   <div id="main">
 
     <div id="panel">
@@ -5723,7 +5731,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.3.9';
+const APP_VER = 'v2.4.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5931,6 +5939,7 @@ function _loadLocalVlake() {
 // izvršavanja; _OL/_genUUID/_DOZ_TRACK_BUF_KEY su globalno vidljivi kao i prije.
 </script>
 <script src="static/js/offline-layer.js"></script>
+<script src="static/js/offline-import.js"></script>
 <script src="static/js/field-store.js"></script>
 <script>
 
@@ -15639,7 +15648,7 @@ const _LASTMAP_KEY = 'tvlake_last_map';
 let _mapFavs = [];
 
 function _saveLastMap(type, key, sqlId) {
-  try { localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key: key||null, sqlId: sqlId||null })); } catch(e) {}
+  try { const sl=type==='sqlite'&&typeof _sqlLayers!=='undefined'?_sqlLayers.find(l=>l.name===sqlId):null;localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key:key||null, sqlId:sqlId||null, ...(sl?.opfsName?{opfsName:sl.opfsName}:{}) })); } catch(e) {}
 }
 
 function _mapFavLoad() {
@@ -31446,6 +31455,19 @@ self.onmessage = async ({data:msg}) => {
       });
       self.postMessage({id,ok:true});
     }
+    else if (msg.type === 'idb-meta') {
+      const idb=await idbOpen();
+      const entry=await new Promise((resolve,reject)=>{const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+      self.postMessage({id,ok:true,entry:entry?{opfs:!!entry.opfs,opfsName:entry.opfsName||null}:null});
+    }
+    else if (msg.type === 'adopt-opfs') {
+      const inst=dbs[msg.name];if(!inst?.mini)throw Error('Karta više nije otvorena');
+      const fh=await (await navigator.storage.getDirectory()).getFileHandle(msg.opfsName);
+      const file=await fh.getFile();if(file.size!==msg.size)throw Error('Nepotpuna kopija karte');
+      inst.mini.file=file;
+      self.postMessage({id,ok:true});
+      fh.createSyncAccessHandle({mode:'read-only'}).then(h=>{if(dbs[msg.name]!==inst){h.close();return;}inst.mini.sync=h;}).catch(()=>{});
+    }
     else if (msg.type === 'load-idb') {
       const idb = await idbOpen();
       const entry = await new Promise((res,rej)=>{ const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); });
@@ -31683,7 +31705,7 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
-      await new Promise((res,rej)=>{ const tx=idb.transaction('maps','readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+      await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.objectStore('mapBufs').delete(msg.name); tx.oncomplete=res; tx.onerror=tx.onabort=()=>rej(tx.error||Error('Zapis prekinut')); });
       self.postMessage({id,ok:true});
     }
   } catch(err) {
@@ -32232,43 +32254,104 @@ async function _sqlmapWarnIfVector(name) {
   );
 }
 
+// Prvo otvaramo izvorni File; posebni worker kopira bez blokiranja pločica.
+// Novi zapis postaje važeći tek nakon zatvaranja kopije i IDB transakcije.
+const _sqlImports = new Map();
+let _sqlImportSeq = 0;
+function _sqlImportRender() {
+  const banner=document.getElementById('offline-import-status');if(!banner)return;
+  const job=_sqlImports.values().next().value,changed=banner.hidden!==!job;banner.hidden=!job;
+  if(changed)requestAnimationFrame(()=>map.invalidateSize({pan:false,debounceMoveend:true}));
+  if(!job)return;
+  document.getElementById('offline-import-name').textContent=job.name;
+  const pct=Math.min(99,Math.floor(job.written/job.total*100));
+  document.getElementById('offline-import-progress').value=pct;
+  document.getElementById('offline-import-percent').textContent=pct+'%';
+}
+async function _sqlImportDeleteFile(path) {
+  if(!path)return;
+  const root=await navigator.storage.getDirectory();
+  for(let n=0;n<8;n++){
+    try{await root.removeEntry(path);return;}
+    catch(e){if(e.name==='NotFoundError')return;if(n===7)throw e;await new Promise(r=>setTimeout(r,50*(n+1)));}
+  }
+}
+async function _sqlImportCancel(name) {
+  const job=_sqlImports.get(name);if(!job)return;
+  job.cancelled=true;job.copy?.cancel();await job.finished;
+}
+function _sqlImportSave(file,sl) {
+  const job={name:sl.name,total:file.size,written:0,cancelled:false,published:false,copy:null};
+  const path=sl.name+'.import-'+Date.now()+'-'+(++_sqlImportSeq)+'.sqlmap';
+  const valid=()=>!job.cancelled&&_sqlLayers.includes(sl)&&_sqlImports.get(sl.name)===job;
+  _sqlImports.set(sl.name,job);sl.saving=true;_sqlImportRender();
+  job.finished=(async()=>{
+    try{
+      const previous=await _sqlWCall({type:'idb-meta',name:sl.name});
+      if(!previous.ok)throw Error(previous.error);
+      if(!valid())return;
+      job.copy=OfflineMapImport.copy(file,path,p=>{job.written=p.done;_sqlImportRender();});
+      await job.copy.promise;
+      if(!valid())return;
+      const root=await navigator.storage.getDirectory(),fh=await root.getFileHandle(path),stored=await fh.getFile();
+      if(stored.size!==file.size)throw Error('Nepotpuna kopija karte');
+      if(!valid())return;
+      const published=await _sqlWCall({type:'idb-save-meta',name:sl.name,fmt:sl.fmt,meta:sl.meta,opfsName:path,size:file.size});
+      if(!published.ok){
+        // Worker može nestati poslije COMMIT-a, a prije odgovora. Tada se
+        // kopija ne smije obrisati: provjeri zapis drugim IDB pristupom.
+        let entry;
+        try{const db=await _sqlIdbOpen();entry=await new Promise((res,rej)=>{const r=db.transaction('maps','readonly').objectStore('maps').get(sl.name);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+        catch(e){job.published=true;throw Error('Potvrda čuvanja nije dostupna — kopija je zadržana.');}
+        if(entry?.opfsName!==path)throw Error(published.error);
+      }
+      job.published=true;sl.saved=true;sl.opfs=true;sl.opfsName=path;sl.size=file.size;
+      // Izbor druge podloge tokom kopiranja ostaje izbor korisnika.
+      try{const last=JSON.parse(localStorage.getItem(_LASTMAP_KEY)||'null');if(last?.type==='sqlite'&&last.sqlId===sl.name)_saveLastMap('sqlite',null,sl.name);}catch(e){}
+      if(valid()){
+        if(_mainMiniDbs[sl.name])_mainMiniDbs[sl.name].mini.file=stored;
+        else {const adopted=await _sqlWCall({type:'adopt-opfs',name:sl.name,opfsName:path,size:file.size});if(!adopted.ok)console.warn('Karta je sačuvana; trenutni prikaz čita izvor',adopted.error);}
+        showToast('✓ Karta sačuvana na telefonu: '+sl.name);
+      }
+      const old=previous.entry;
+      if(old?.opfs)await _sqlImportDeleteFile(old.opfsName||sl.name+'.sqlmap').catch(e=>console.warn('Stara kopija karte',e));
+    }catch(e){
+      if(!job.cancelled){console.warn('Čuvanje offline karte',e);showToast('⚠ Karta nije trajno sačuvana. Radi samo dok je aplikacija otvorena. Pokušaj ponovo: '+(e.message||e));}
+    }finally{
+      if(!job.published)await _sqlImportDeleteFile(path).catch(e=>console.warn('Nedovršena kopija karte',e));
+      if(_sqlImports.get(sl.name)===job)_sqlImports.delete(sl.name);
+      sl.saving=false;_sqlImportRender();_sqlmapRenderLayers();_lsRenderSqlite();
+      if(document.getElementById('mapmgr-modal')?.classList.contains('show'))_mapMgrRender();
+      if(document.getElementById('loadmap-screen')?.classList.contains('show'))_loadmapRenderManage();
+    }
+  })();
+  return job.finished;
+}
 async function sqlmapLoadFile(file) {
   if (!file) return;
   const name = file.name.replace(/\.[^.]+$/, '');
   const isLarge = file.size > _SQL_LARGE;
+  await _sqlImportCancel(name);
+  let remembered=false;
 
   const ex = _sqlLayers.findIndex(l => l.name === name);
   if (ex !== -1) {
     map.removeLayer(_sqlLayers[ex].layer);
     await _sqlWCall({type:'close', name});
-    if (_sqlLayers[ex].opfs) _opfsDel(name + '.sqlmap');
-    await _sqlIdbDeleteDirect(name).catch(()=>{});
+    delete _mainMiniDbs[name];
+    if (!isLarge) {if (_sqlLayers[ex].opfs) await _sqlImportDeleteFile(_sqlLayers[ex].opfsName || name+'.sqlmap');await _sqlIdbDeleteDirect(name).catch(()=>{});}
     _sqlLayers.splice(ex, 1);
   }
 
   try {
     let _opfsFailed = false, _opfsErrMsg = '';
     if (isLarge && _opfsAvail()) {
-      try {
-      _sqlmapStatus('⏳ Kopiranje na disk (' + (file.size/1024/1024|0) + ' MB)...');
-      const opfsName = name + '.sqlmap';
-      await _opfsStream(opfsName, file);
-      _sqlmapStatus('⏳ Otvarai OPFS kartu...');
-      const r = await _sqlWCall({type:'load-opfs', name, path:'/'+opfsName, fmt:null, meta:{}, diag:true});
-      if (!r.ok) throw new Error(r.error);
-      await _sqlWCall({type:'idb-save-meta', name, fmt:r.fmt, meta:r.meta, opfsName, size:file.size});
-      const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
-      layer.addTo(map);
-      _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:true});
-      _sqlPrewarm(name);
-      _sqlmapMetaAutoZoom(r.meta);
-      const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
-      // Tehnički zapis čitača (stranice, kolone, test pločice) vidi samo admin —
-      // korisniku je šum; admin ga i dalje ima u DEBUG tabu preko _mapLoadDiag.
-      const dI=(r.meta?._d && isAdmin())?' ['+r.meta._d+']':'';
-      _sqlmapStatus('✅ Karta sačuvana: ' + name + ' (' + (file.size/1024/1024|0) + ' MB, OPFS)'+zI+dI);
-      showToast('✅ Karta TRAJNO sačuvana — ostat će i nakon zatvaranja app-a');
-      } catch(opfsE) { _opfsFailed = true; _opfsErrMsg = opfsE.message || String(opfsE); _opfsDel(name+'.sqlmap'); console.error('OPFS save fail:', opfsE); }
+      await _sqlmapLoadDirect(file,name);
+      const sl=_sqlLayers.find(l=>l.name===name);
+      if(!sl)throw Error('Karta nije otvorena');
+      _saveLastMap('sqlite',null,name);remembered=true;
+      closeSqlMapModal();closeLoadMapScreen();switchTab('karta');
+      await _sqlImportSave(file,sl);
     }
     if (isLarge && (!_opfsAvail() || _opfsFailed)) {
       if (_opfsFailed) showToast('⚠ Trajno čuvanje nije uspjelo (' + _opfsErrMsg + ') — karta radi samo dok je app otvoren');
@@ -32291,7 +32374,7 @@ async function sqlmapLoadFile(file) {
     }
     // Novoučitana karta postaje aktivna "zadnja karta" → restore je sam prikaže
     // pri sljedećem otvaranju aplikacije.
-    if (_sqlLayers.find(l => l.name === name)) _saveLastMap('sqlite', null, name);
+    if (!remembered && _sqlLayers.find(l => l.name === name)) _saveLastMap('sqlite', null, name);
     _sqlmapRenderLayers(); _lsRenderSqlite();
     if (document.getElementById('mapmgr-modal')?.classList.contains('show')) _mapMgrRender();
     const fi = document.getElementById('sqlmap-file-input');
@@ -32561,7 +32644,7 @@ async function sqlmapRestoreAll() {
     try {
       localStorage.setItem(_SQL_CRASH_KEY, lastSqlId);
       const fast = await _sqlWCall({ type:'load-opfs', name:lastSqlId,
-        path:'/' + lastSqlId + '.sqlmap', fmt:null, meta:{} });
+        path:'/' + (lastMap.opfsName || lastSqlId + '.sqlmap'), fmt:null, meta:{} });
       localStorage.removeItem(_SQL_CRASH_KEY);
       if (fast?.ok && choiceUnchanged()) {
         const layer = _sqlmapCreateLayerW(lastSqlId, fast.fmt, fast.meta);
@@ -32569,7 +32652,7 @@ async function sqlmapRestoreAll() {
         layer.addTo(map);
         layer.redraw();
         _sqlLayers.push({ name:lastSqlId, fmt:fast.fmt, layer, visible:true,
-          meta:fast.meta, saved:true, opfs:true });
+          meta:fast.meta, saved:true, opfs:true, opfsName:lastMap.opfsName || lastSqlId+'.sqlmap' });
         _sqlPrewarm(lastSqlId);
         const btn = document.getElementById('layer-switch-btn');
         if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
@@ -32660,12 +32743,12 @@ async function sqlmapRestoreAll() {
           layer.redraw();
           const btn = document.getElementById('layer-switch-btn');
           if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
-          _saveLastMap('sqlite', null, entry.name);
+          try{localStorage.setItem(_LASTMAP_KEY,JSON.stringify({type:'sqlite',key:null,sqlId:entry.name,...(entry.opfs?{opfsName:entry.opfsName||entry.name+'.sqlmap'}:{})}));}catch(e){}
           shownAny = true;
         }
         _tBrk.push('sloj(' + entry.name + ') ' + Math.round(performance.now() - _tLayerT0) + 'ms');
         _mapLoadDiagStep('Leaflet sloj kreiran', Math.round(performance.now() - _tLayerT0) + 'ms' + (shouldShow ? ' · karta prikazana' : ''));
-        _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs});
+        _sqlLayers.push({name:entry.name, fmt:lr.fmt, layer, visible:shouldShow, meta:lr.meta, saved:true, opfs:!!entry.opfs, opfsName:entry.opfsName || entry.name+'.sqlmap'});
         if (shouldShow) _sqlPrewarm(entry.name);
       } catch(e) {
         console.warn('SQLmap restore error', entry.name, e);
@@ -32743,7 +32826,7 @@ async function sqlmapRetryOne(name) {
     }
     if (!lr.ok) { showToast('❌ "' + name + '" se i dalje ne može učitati (' + (lr.error||'?') + ')'); return; }
     const layer = _sqlmapCreateLayerW(entry.name, lr.fmt, lr.meta);
-    _sqlLayers.push({ name:entry.name, fmt:lr.fmt, layer, visible:false, meta:lr.meta, saved:true, opfs:!!entry.opfs });
+    _sqlLayers.push({ name:entry.name, fmt:lr.fmt, layer, visible:false, meta:lr.meta, saved:true, opfs:!!entry.opfs, opfsName:entry.opfsName || entry.name+'.sqlmap' });
     _sqlRestoreFailed = _sqlRestoreFailed.filter(f => f.name !== name);
     _sqlSkipRemove(name);                                  // vrati je u auto-učitavanje
     try { localStorage.removeItem(_sqlFailKey(name)); } catch(e) {}
@@ -33265,12 +33348,15 @@ function sqlmapSetOpacity(i, val) {
 async function sqlmapRemove(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
+  await _sqlImportCancel(sl.name);
+  const old=await _sqlWCall({type:'idb-meta',name:sl.name});
   map.removeLayer(sl.layer);
   await _sqlWCall({type:'close', name:sl.name});
-  if (sl.opfs) _opfsDel(sl.name+'.sqlmap');
-  if (sl.saved) await _sqlIdbDeleteDirect(sl.name).catch(()=>{});
+  delete _mainMiniDbs[sl.name];
+  await _sqlIdbDeleteDirect(sl.name);
+  if (sl.opfs||old.entry?.opfs) await _sqlImportDeleteFile(sl.opfsName || old.entry?.opfsName || sl.name+'.sqlmap');
   for (const [k, bmp] of _sqlTileBmpCache) { if (k.startsWith(sl.name+'/')) { if (bmp.close) try{bmp.close();}catch(e){} _sqlTileBmpCache.delete(k); } }
-  _sqlLayers.splice(i, 1);
+  const current=_sqlLayers.indexOf(sl);if(current>=0)_sqlLayers.splice(current, 1);
   _sqlmapRenderLayers(); _lsRenderSqlite();
   if (!_sqlLayers.length) _sqlmapStatus('');
 }
@@ -33281,6 +33367,7 @@ async function sqlmapConfirmDelete(i) {
   await sqlmapRemove(i);
 }
 async function sqlmapClearAll() {
+  await Promise.all(Array.from(_sqlImports.keys()).map(_sqlImportCancel));
   if (_sqlW) { _sqlW.terminate(); _sqlW = null; _sqlWCbs = {}; }
   for (const sl of _sqlLayers) { try{map.removeLayer(sl.layer);}catch(e){} }
   _sqlLayers = [];
@@ -33342,15 +33429,15 @@ async function _mapMgrCollect() {
     const sl = _sqlLayers.find(l => l.name === e.name);
     byName[e.name] = {
       name: e.name, fmt: e.fmt || sl?.fmt, meta: e.meta || sl?.meta || {},
-      size: e.size || 0, savedAt: e.savedAt || 0, opfs: !!e.opfs,
-      saved: true, loaded: !!sl, visible: !!(sl && sl.visible)
+      size: e.size || 0, savedAt: e.savedAt || 0, opfs: !!e.opfs,opfsName:e.opfsName,
+      saved: sl?!!sl.saved:true, loaded: !!sl, visible: !!(sl && sl.visible)
     };
   });
   // Karte koje su u memoriji ali nisu (još) u IDB listi — npr. sesijske / direct-load
   _sqlLayers.forEach(sl => {
     if (!byName[sl.name]) byName[sl.name] = {
       name: sl.name, fmt: sl.fmt, meta: sl.meta || {}, size: 0, savedAt: 0,
-      opfs: !!sl.opfs, saved: !!sl.saved, loaded: true, visible: !!sl.visible
+      opfs: !!sl.opfs, opfsName:sl.opfsName,saved: !!sl.saved, loaded: true, visible: !!sl.visible
     };
   });
   return Object.values(byName).sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
@@ -33452,7 +33539,7 @@ async function _mapMgrDelete(i) {
     await sqlmapRemove(idx);
   } else {
     try { await _sqlIdbDeleteDirect(name); } catch(e) {}
-    _opfsDel(name + '.sqlmap');
+    await _sqlImportDeleteFile(m.opfsName || name+'.sqlmap').catch(()=>{});
   }
   // Ukloni eventualnu referencu iz omiljenih
   const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === name);
@@ -33464,6 +33551,7 @@ async function _mapMgrDelete(i) {
 async function _mapMgrRename(i) {
   const m = _mapMgrShown[i]; if (!m) return;
   const name = m.name;
+  if(_sqlImports.has(name)){showToast('Karta se još čuva — preimenuj je nakon završetka');return;}
   const neu = await _dlgPrompt('Novi naziv karte:', name, { title: '✏ Preimenuj kartu' });
   const nn = neu?.trim();
   if (!nn || nn === name) return;
@@ -33543,7 +33631,8 @@ function _loadmapStatus(t) {
   e.textContent=t||''; e.dataset.state=String(t||'').startsWith('❌')?'error':String(t||'').startsWith('✅')?'ok':'info';
 }
 function _loadmapBadges(m) {
-  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved?'lm-badge-saved':'lm-badge-session')+'">'+(m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
+  const saving=_sqlImports.has(m.name);
+  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved&&!saving?'lm-badge-saved':'lm-badge-session')+'">'+(saving?'Čuvanje u toku…':m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
 }
 function _loadmapRenderStartupDiag() {
   const el = document.getElementById('loadmap-startup-debug');
@@ -33597,7 +33686,7 @@ async function loadmapHandleFiles(fileList) {
     const d=await _loadmapDetect(f);if(token!==_loadmapPickToken)return;
     if(d.valid)valid.push(f);
     const name=f.name.replace(/\.[^.]+$/,''),replace=_sqlLayers.some(sl=>sl.name===name);
-    rows.push('<article class="lm-sheet-file '+(d.valid?'':'is-invalid')+'"><span class="lm-file-icon"><svg class="ic"><use href="#ic-'+(d.valid?'karta':'zatvori')+'"/></svg></span><div><div class="nm">'+_escHtml(f.name)+'</div><div class="lm-file-meta"><b>'+_escHtml(d.fmt)+'</b><span>'+_mapMgrFmtSize(f.size)+'</span></div><span class="'+(d.valid?'ok':'bad')+'">'+(d.valid?'✓ Zaglavlje provjereno':'Fajl nije SQLite karta — neće biti učitan')+'</span>'+(replace&&d.valid?'<p class="lm-replace-note">Zamijenit će učitanu kartu istog naziva.</p>':'')+(f.size>100*1024*1024?'<p class="lm-hint">Veća karta — otvaranje može potrajati.</p>':'')+'</div></article>');
+    rows.push('<article class="lm-sheet-file '+(d.valid?'':'is-invalid')+'"><span class="lm-file-icon"><svg class="ic"><use href="#ic-'+(d.valid?'karta':'zatvori')+'"/></svg></span><div><div class="nm">'+_escHtml(f.name)+'</div><div class="lm-file-meta"><b>'+_escHtml(d.fmt)+'</b><span>'+_mapMgrFmtSize(f.size)+'</span></div><span class="'+(d.valid?'ok':'bad')+'">'+(d.valid?'✓ Zaglavlje provjereno':'Fajl nije SQLite karta — neće biti učitan')+'</span>'+(replace&&d.valid?'<p class="lm-replace-note">Zamijenit će učitanu kartu istog naziva.</p>':'')+(f.size>100*1024*1024?'<p class="lm-hint">Karta se prikazuje prije završetka čuvanja na telefon.</p>':'')+'</div></article>');
   }
   if(token!==_loadmapPickToken)return;
   _loadmapPending=valid;listEl.innerHTML=rows.join('');button.disabled=!valid.length;button.textContent=valid.length?(valid.length===1?'Učitaj kartu':'Učitaj karte · '+valid.length):'Nema karata za učitavanje';
@@ -33698,7 +33787,7 @@ async function _loadmapRecentDel(i) {
   if (!await _dlgConfirm('Obrisati kartu iz povijesti "' + m.name + '"?', { danger: true })) return;
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
-  else { try { await _sqlIdbDeleteDirect(m.name); } catch (e) {} _opfsDel(m.name + '.sqlmap'); }
+  else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
   try { localStorage.removeItem('lm_thumb_' + m.name); } catch (e) {}
   showToast('🗑 Obrisano: ' + m.name);
   _loadmapRenderRecent(); _loadmapRenderManage();
@@ -33740,7 +33829,7 @@ async function _loadmapDelete(i) {
   if (!await _dlgConfirm('Trajno obrisati kartu "' + m.name + '"?', { danger: true })) return;
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
-  else { try { await _sqlIdbDeleteDirect(m.name); } catch (e) {} _opfsDel(m.name + '.sqlmap'); }
+  else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
   try { localStorage.removeItem('lm_thumb_' + m.name); } catch (e) {}
   const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === m.name);
   if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
