@@ -5128,12 +5128,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </div>
 
       <div class="trn-body">
-        <section class="trn-card" aria-label="Pregled terenskog rada">
-          <div class="trn-section-label">Tvoj obilazak</div><h2 class="trn-work-title">Pregled terenskog rada</h2><p class="trn-work-note">Pozicija, podloga i zapis kretanja na jednom mjestu.</p>
-          <div class="trn-readiness"><div><svg class="ic" aria-hidden="true"><use href="#ic-gps"/></svg><span><b id="trn-ready-gps">GPS isključen</b><small>GPS radi i bez mobilnih podataka</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-karta"/></svg><span><b id="trn-ready-map">Provjeri offline podlogu</b><small id="trn-ready-map-name">Učitaj kartu prije izlaska na teren</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-trag"/></svg><span><b id="trn-ready-track">Obilazak nije pokrenut</b><small id="trn-ready-track-note">Pokreni Snimi trag za zapis kretanja</small></span></div></div>
-          <nav class="trn-nav-links" aria-label="Sekcije Terena"><button onclick="TerenWorkspace.jump('trn-position')">Pozicija</button><button onclick="TerenWorkspace.jump('trn-records')">Moji zapisi</button><button onclick="TerenWorkspace.jump('trn-resources')">Karte i projekti</button></nav>
-        </section>
-
         <!-- POZICIJA -->
         <section class="trn-card trn-hero" id="trn-position">
           <div class="trn-section-label">Gdje se nalaziš</div>
@@ -5168,19 +5162,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="trn-btn-row">
             <button id="trn-trag-pause" class="trn-btn trn-btn-outline amber" onclick="terenPauseTrag()">⏸ Pauza</button>
             <button class="trn-btn trn-btn-danger" onclick="terenStopTrag()"><svg class="ic"><use href="#ic-stop"/></svg> Završi</button>
-          </div>
-        </section>
-
-        <!-- VOZILO -->
-        <section class="trn-card">
-          <div class="trn-card-h">
-            <span><svg class="ic"><use href="#ic-vozilo"/></svg> Vozilo</span>
-            <span class="trn-muted" id="trn-voz-kad"></span>
-          </div>
-          <div class="trn-voz" id="trn-voz-info">Označi gdje si ostavio vozilo — kompas te vraća do njega i bez signala.</div>
-          <div class="trn-btn-row">
-            <button class="trn-btn trn-btn-outline" onclick="terenVoziloOznaci()"><svg class="ic"><use href="#ic-pozicija"/></svg> Označi ovdje</button>
-            <button id="trn-voz-vodi" class="trn-btn trn-btn-accent" onclick="terenVoziloVodi()"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
           </div>
         </section>
 
@@ -5745,7 +5726,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.4';
+const APP_VER = 'v2.4.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12807,7 +12788,6 @@ function terenRender(pun) {
   _trnPozicijaRender();
   _terenUpdShareUI();
   terenUpdCompass();
-  _trnVoziloRender();
   _trnSunceRender();
   if (pun) { _trnSyncBroj(); terenRenderShared(); }
   _trnChipsRender();

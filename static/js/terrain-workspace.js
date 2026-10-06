@@ -15,14 +15,6 @@ function render(full){
  if(!allowed())return;
  text('trn-profile-name',[sbProfile?.ime,sbProfile?.prezime].filter(Boolean).join(' ')||'Terenski pregled');
  text('trn-profile-role',isAdmin()?'Administratorski teren':'ŠPD US ŠUME · terenski nadzor');
- const fresh=!!(gpsOn&&lastP&&typeof _lastGpsFixTime!=='undefined'&&Date.now()-_lastGpsFixTime<=30000);
- text('trn-ready-gps',fresh?'Pozicija dostupna':gpsOn?'Čekam svjež signal':'GPS isključen');
- const gps=el('trn-ready-gps');if(gps)gps.dataset.state=fresh?'ok':'waiting';
- let sl=null;try{const key=_activeLayerKey();if(key?.startsWith('_sqlite_'))sl=_sqlLayers[Number(key.slice(8))];}catch(e){}
- text('trn-ready-map',sl?(sl.saved?'Lokalna karta spremna':'Karta otvorena · kopija u toku'):'Provjeri offline podlogu');
- text('trn-ready-map-name',sl?.name||'Učitaj kartu prije izlaska na teren');
- text('trn-ready-track',_tragOn?(_tragPaused?'Obilazak pauziran':'Obilazak se snima'):'Obilazak nije pokrenut');
- text('trn-ready-track-note',_tragOn?'Sačuvaj trag po završetku':'Pokreni Snimi trag za zapis kretanja');
  text('trn-stat-points',_tacke.length);text('trn-stat-tracks',_tragRegistry.length);text('trn-stat-measurements',_msrRegistry.length);
 }
 function rows(items,kind,label){

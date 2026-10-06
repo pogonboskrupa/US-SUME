@@ -2411,3 +2411,42 @@ Naslov glasi Pregled terenskog rada umjesto poruke Spremno sa nepoznatim
 GPS-om/podlogom. Browser provjerava kontrast teksta>=4.5 za6/18/40m i čeka
 kraj poruke potvrde prije screenshots. Potrebni završni CI/APK rezultat
 ovog izdanja dopisati nakon završetka. Produkcijski server nije mijenjan.
+
+
+## 58. Završena objava 2.4.4 — 2026-10-06
+
+Korisnik je izričito ponovio odobrenje nakon drugog odbijenog update_ref.
+CODEX-US-SUME i release v2.4.4 ciljaju b38e3ffc98519ab5b6a3519ca5c3dc9c1173778a.
+CI37503395807 je success:95JS, PostgreSQL/RLS, browser Teren/role/kontrast,
+petosatni ubrzani teren,1.5GB offline import, ostali browser testovi,
+APK SHA assets i Android instrumentacija3testa/0failure/0error.
+Vizuelno pregledani dnevni390px i adminski tamni320px PNG: neutralan naslov,
+tamniji čitljiv GPS tekst/statusi, Teren umjesto Obavještenja.
+
+APK code514/versionName2.4.4-debug, ba.spd.uss.vlake.debug,24,037,000B.
+SHA2564000d9c410cd9ef3750a74f99dec6205cf1efb43a11404d2d0b5330e5c8ec46e.
+CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Preuzeti APK dodatno provjeren:56Git blobova odgovara commit-u, GRANICE očuvan.
+Updaterski releases?per_page=1 vraća v2.4.4, draftfalse/prereleasetrue.
+
+Finalna 1.5GB sintetička karta: sloj81ms, prva pločica116ms, puna kopija10742ms,
+offline restart356ms; kopija tačne veličine, sigurno brisanje tokom uvoza.
+Pet sati ubrzanih oznaka CPU4x:3564vlaka/1723doznaka, IDB vraća1723/1723,
+p95vlaka1.2ms/doznaka4.6ms, najveći prelazak taba102.9ms,0vanjskih upisa.
+Ovo nije pet sati baterije/termike niti fizičko mjerenje Xiaomija. ADB nema uređaja.
+Produkcijski Supabase nije dodatno provjeravan/mijenjan; nalaz429 ostaje zaseban.
+Ovaj završni zapis je sačuvan lokalno poslije objave, bez nove CI/objave istog APK-a.
+
+
+## 59. Uklonjeni Vozilo i Tvoj obilazak iz Terena — 2.4.5 / code515
+
+Po izričitom zahtjevu korisnika uklonjene su obje kartice iz Terena za ŠPD
+ i admina: Vozilo i cijeli gornji Tvoj obilazak (statusi/prečice). Tab sada
+počinje karticom pozicije. Uklonjeno je osvježavanje nepostojećih statusa
+iz terrain-workspace modula i nepotrebni poziv rendera kartice vozila.
+Postojeća korisnička tačka imena Vozilo ostaje obična sačuvana tačka;
+zahtjev uklanja UI opciju, ne briše terenske podatke.
+Postojeći browser test potvrđuje odsustvo oba bloka i poziciju prve
+kartice za oba profila. Snimanje traga, GPS, kompas, pretraga, imenovana
+zapažanja i mjerenja ostaju funkcionalni. Nema serverskih promjena.
+CI i APK rezultat dopisati nakon objave.

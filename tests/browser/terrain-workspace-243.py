@@ -34,13 +34,16 @@ async def main():
   await page.fill('#trn-search','');await page.locator('#trn-records button').filter(has_text='+ Zapažanje').click()
   await page.fill('#dlg-input','Provjera obilaska');await page.locator('#dlg-ok').click()
   await page.wait_for_function("_tacke.some(t=>t.nm==='Provjera obilaska')")
-  await page.evaluate("_lastGpsFixTime=Date.now()-60000;TerenWorkspace.render(false)")
-  assert await page.locator('#trn-ready-gps').get_attribute('data-state')=='waiting'
+  await page.evaluate("_lastGpsFixTime=Date.now()-60000;_trnFixRender()")
+  assert 'Pozicija stara' in await page.locator('#trn-gps-dot').inner_text()
   await page.wait_for_timeout(2800) # Sačekaj da se poruka potvrde završi prije slika.
   out=ROOT/'outputs/ui-preview';out.mkdir(parents=True,exist_ok=True)
   for role in ['spd','admin']:
    await page.evaluate("async r=>{roleProfile={...roleProfile,is_admin:r==='admin'};await sbLoadProfile();switchTab('teren');}",role)
    assert await page.locator('#teren-tab-btn').is_visible()
+   assert await page.locator('#trn-voz-info, .trn-readiness, .trn-nav-links').count()==0
+   assert await page.get_by_text('Tvoj obilazak',exact=True).count()==0
+   assert await page.locator('#teren-panel .trn-body > section').first.get_attribute('id')=='trn-position'
    for theme in ['dark','day']:
     await page.evaluate('t=>document.documentElement.dataset.fieldTheme=t',theme)
     if theme=='day':
