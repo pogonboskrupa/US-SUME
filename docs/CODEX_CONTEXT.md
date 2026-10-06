@@ -2283,3 +2283,65 @@ Redmi benchmark niti velika baza s mnogo različitih pločica. Dodatni
 Android test koristi stvarni APK/MainActivity/WebView bez interneta,
 21 MB File iz iste male testne baze i ponovo učitava stranicu iz APK-a.
 CI, APK i izmjerena vremena još nisu potvrđeni; dopuniti poslije provjere.
+
+Međuprovjera CI37424221192/izvor9bccc1c0e143d600ba4254beb703b29e75971cbb:
+93 JS grupe, PostgreSQL testna baza,24 browser provjere, Android build i
+54 asset SHA provjere prošle. Puni browser/bootstrap test 1,5 GB:
+sloj74ms, prva dekodirana vidljiva pločica98ms, kompletna stvarna kopija
+13,682s, offline ponovno učitavanje stranice i pločica366ms. Chromium140
+na Linux CI-ju, mala RMaps struktura + nulti bajtovi do1,5GB; ne predstavlja
+1,5GB raznovrsnih pločica niti fizički telefon. Mjerenje pune kopije je iz
+izvornog worker promise-a prije testnog zadržavanja rezultata. Potvrđeni
+OPFS veličina1.500.000.000B, IDB zapis, fizički naziv u zadnjem izboru,
+brisanje tokom drugog uvoza bez naknadnog vraćanja karte i neizmijenjeni
+terenski registri. Nove provjere ne zamjenjuju postojeće browser/GPS teste.
+
+Android OfflineImportTest prošao10.682s na stvarnom APK/MainActivity/
+WebView113.0.5672.136, Android14/API34, mreža isključena. File je testno
+konstruisan iz16KB RMaps baze +21MB nula; FileChooser/content URI na
+fizičkom telefonu nije mjeren. Potvrđen rani sloj, banner, PNG dohvat prije
+saved, OPFS/IDB trajnost, nova WebView stranica i PNG dohvat bez izvornog
+File objekta. OCR prošao0.104s. Explorer je pao pri cold pokretanju (prije
+svog JS testa): native progress callback čekao je samo5s dok je UI red
+stajao70% za5,5s. UI/JS testni uslovi nisu ublaženi: pageLoaded callback
+sada koristi preostali dio postojećeg ukupnog30s roka, i dalje traži100%
+i isti APK URL; eval callback ostaje5s. Ponovljena CI provjera je u toku;
+APK ovog neuspješnog pokušaja NIJE objavljen. Dodatno otkriven i ispravljen
+stvarni bug _loadmapRenderManage: numerički zoom se prvo pretvara u tekst
+prije _escHtml (ranije s.replace is not a function u kompletnom bootstrapu).
+
+ZAVRŠENO — CI37425180618/job112143109948 SUCCESS; objavljeni izvor
+f1c3dff995e5b25786d4abf00aa5865d6911c16e. Prošle93 JS grupe,
+PostgreSQL testna migracija/RLS,24 browser provjere, Android build,
+54 web asset SHA provjere,3 Android testa i36 analiza brzine. Android
+report:3tests/0failures/0errors/0skipped; Explorer19.883s, offline
+uvoz+ponovno otvaranje11.906s, OCR0.029s. Android14/API34, stvarni
+MainActivity/kompletan APK/WebView113.0.5672.136, mreža isključena.
+Nema preskočenih native testova. Fizički Xiaomi/content URI provider nije
+mjeren; scenariji GPS/auth/File ulaza su kontrolisani kao gore.
+
+Završni browser report (Chromium140/Linux):1,5GB, prvi sloj80ms,
+vidljiva raster pločica109ms, puna kopija6445ms (6,445s), offline nova
+stranica+pločica427ms. U prethodnom CI-ju kopija13,682s; razlika hostova
+pokazuje zašto te brojeve ne treba prenositi na Redmi. Oba toka prikazuju
+kartu prije trajnog čuvanja. Testna kopija sadrži stvarnu malu RMaps bazu
+plus nulte bajtove; nije velika realna baza s mnogo različitih pločica.
+
+Preuzet CI APK, provjeren potpis/binarni manifest i poređen sa javnim
+release digestom. https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.0/app-debug.apk
+24.017.472B (24,02MB), SHA256
+0837ffb93b1d92cdd2cc93e91b9fce8c1541142d0ed5417530669b91edb137c6.
+Paket ba.spd.uss.vlake.debug;2.4.0-debug/code510; certSHA256
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+identičan239. Svih54 asset fajlova identično remote izvoru, GRANICE>10MB
+očuvan,15 launcher PNG identično239, bez ugrađenog offline OCR modela.
+verify_apk_240.py i verify_native_240.py prošli; veličina i digest APK-a
+jednaki javnom assetu. /releases?per_page=1 (isti endpoint kao updater)
+vratio v2.4.0 sa ovim APK-om. Omogućeno ažuriranje preko postojeće debug
+aplikacije uz očuvanje lokalnih podataka; ne preporučivati deinstalaciju.
+APK artifact11394407774; Android11394263060; UI11394737757;
+teren11394857427; analiza11394407820. Pošto je za prvi prikaz potreban
+izvorni File a trajnost dolazi naknadno, app treba ostaviti otvoren do
+poruke „Karta sačuvana na telefonu“. Fizičko kopiranje1,5GB ostaje;
+optimizirano je čekanje na upotrebljivu kartu. Produkcijski Supabase/trial
+SQL status nije mijenjan u ovom zadatku.
