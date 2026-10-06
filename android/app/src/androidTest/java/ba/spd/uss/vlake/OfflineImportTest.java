@@ -39,7 +39,9 @@ public class OfflineImportTest {
   do {
    CountDownLatch latch=new CountDownLatch(1);AtomicReference<String> state=new AtomicReference<>();
    ui.post(()->{state.set(view.getProgress()+"|"+view.getUrl());latch.countDown();});
-   assertTrue("WebView progress callback",latch.await(5,TimeUnit.SECONDS));
+   // Cold emulator može zadržati UI red >5 s tokom prvog parsiranja APK-a.
+   // I dalje važi isti ukupni rok od 30 s, isti progress=100 i isti URL.
+   assertTrue("WebView progress callback",latch.await(Math.max(1L,limit-System.currentTimeMillis()),TimeUnit.MILLISECONDS));
    String status=state.get();if(!status.equals(last)){Log.i("ExplorerCI","Učitavanje: "+status);last=status;}
    if(status.equals("100|https://appassets.androidplatform.net/assets/index.html"))return;
    Thread.sleep(100);
