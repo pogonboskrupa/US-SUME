@@ -51,6 +51,8 @@
     "static/js/explorer-navigation.js",
     "static/js/access-policy.js",
     "static/js/terrain-workspace.js",
-    "static/css/terrain-workspace.css"
+    "static/css/terrain-workspace.css",
+    "static/js/spd-profile.js",
+    "static/css/spd-profile.css"
   ]
 }

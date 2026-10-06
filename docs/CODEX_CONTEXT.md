@@ -2449,4 +2449,46 @@ zahtjev uklanja UI opciju, ne briše terenske podatke.
 Postojeći browser test potvrđuje odsustvo oba bloka i poziciju prve
 kartice za oba profila. Snimanje traga, GPS, kompas, pretraga, imenovana
 zapažanja i mjerenja ostaju funkcionalni. Nema serverskih promjena.
-CI i APK rezultat dopisati nakon objave.
+CI uspješan: https://github.com/pogonboskrupa/US-SUME/actions/runs/37508515822
+Commit: 68089fd927c220818ed6023a113f8a80ad924de1; izmjene samo CODEX-US-SUME.
+Browser provjere oba profila i oba načina boja prolaze; slike 390 px ŠPD
+i 320 px admin pregledane, prva kartica je pozicija, bez oba uklonjena bloka.
+Android XML: 3 testa, 0 grešaka/padova. APK assets: svih 56 Git blobova
+odgovara ovom commit-u, GRANICE.kml očuvan. Paket ba.spd.uss.vlake.debug,
+versionName 2.4.5-debug / versionCode515, potpis identičan ranijim izdanjima.
+APK 24.032.876 B; SHA256:
+0841ac4324466c09bae17daf80ddf2f9d39924631db1abec13202f2f97104468
+Release https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.4.5
+Updaterski /releases?per_page=1 potvrđuje v2.4.5 i app-debug.apk.
+Lokalni izlaz: outputs/app-debug-2.4.5.apk; slike Teren-dnevni-2.4.5.png
+i Teren-admin-2.4.5.png. Završni zapis je lokalno dopisan poslije objave.
+
+## 60. Detaljniji ŠPD korisnički profil — 2.4.6 / code516
+
+Zahtjev korisnika obuhvaćen ličnim ŠPD profilom iz Menija i zaglavlja Terena.
+Meni dobiva ŠPD prečice za profil, Teren i Moje zapise; naziv konteksta po ulozi.
+ŠPD Meni skriva Upravljanje projektima i projektnu provjeru Spremno za teren,
+jer taj profil nema projekat za tu provjeru; kopija zapisa dostupna je u novom
+profilu. Elementi se ponovo prikazuju po promjeni na druge uloge.
+Profil prikazuje identitet, dostupni pristup ili tačan probni rok, brojeve tačaka,
+tragova, mjerenja i fotografija na telefonu, aktivnu lokalnu kartu i status kopije,
+broj projekata učitanih šifrom, GPS/vezu/snimanje/dijeljenje i red slanja.
+Prečice vode u tačne postojeće liste (pretraga resetovana), fotografije koriste
+Preglednik oznaka sa filterom Fotografije. Tu su Dnevni mod, postojeći izvoz
+_exportFieldRecovery za sigurnosnu kopiju zapisa, PIN, ažuriranje i ŠPD upute.
+Kopija nema raster karte; nije obećana provjera pokrivenosti lokalne karte.
+
+Novi spd-profile.js/css su u SW i required Android assets. Nema novog timera,
+automatskog GPS/snimanja/dijeljenja ili mrežnog upita. Pregled je vremenski označen
+i ručno se osvježava; prati online/offline i povratak u aplikaciju. Status pristupa
+koristi postojeći AccessPolicy. Profil je samo za trenutni odobreni/probni ŠPD nalog;
+promjena korisnika, uloge, odjava ili istek probnog roka zatvara i čisti prikaz.
+Modal ima trap fokusa/Escape i inert pozadinu. Učitani projekti u Terenu prate
+boje oba moda, duža imena se lome, prazna lista daje jasnu uputu. Uklonjeni Vozilo
+i Tvoj obilazak nisu vraćeni. Projektna prava/produkcijski Supabase nisu mijenjani.
+
+Lokalno 96 JS skupova prolazi; svih 5 inline JS blokova sintaktički ispravno.
+Puni browser test prolazi na lokalnom Edge-u, s lažnim serverom: ŠPD/admin/projektant,
+320/390/800px, oba moda, profil/rok/pripadnost nalogu, prečice, pretraga i mjerenje;
+0 vanjskih upisa. Slike profila dnevni390/tamni320 i postavke vizuelno pregledane.
+CI i APK rezultat dopisati nakon objave. Fizički Redmi nije testiran.

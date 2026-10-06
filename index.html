@@ -4223,6 +4223,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 <link rel="stylesheet" href="static/css/server-panel.css">
 <link rel="stylesheet" href="static/css/map-library.css">
 <link rel="stylesheet" href="static/css/terrain-workspace.css">
+<link rel="stylesheet" href="static/css/spd-profile.css">
 </head>
 <body>
 
@@ -5123,6 +5124,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="trn-role" id="trn-profile-role">ŠPD US ŠUME · terenski nadzor</div>
           <div class="trn-title"><svg class="ic"><use href="#ic-kompas"/></svg> Teren</div>
           <div class="trn-sub" id="trn-profile-name">Tvoj terenski radni prostor</div>
+          <button type="button" id="trn-profile-open" hidden onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg> Moj profil</button>
         </div>
         <div class="trn-chips" id="trn-chips"></div>
       </div>
@@ -5726,7 +5728,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.5';
+const APP_VER = 'v2.4.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7507,6 +7509,7 @@ function _accessTrialArm(){
   if(_accessTrialStop)_accessTrialStop();_accessTrialStop=null;
   if(typeof AccessPolicy==='undefined')return;
   _accessTrialStop=AccessPolicy.watch(()=>sbProfile,()=>{
+    if(typeof SpdProfile!=='undefined')SpdProfile.close(false);
     // Pauza čuva aktivni rad i crash snapshot; korisnik nastavlja nakon odobrenja.
     try{if(recOn&&!recPaused)toggleRecPause();}catch(e){}
     try{if(_tragOn&&!_tragPaused)togTragPause();}catch(e){}
@@ -7850,6 +7853,7 @@ async function doLogout() {
 
   if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
   sbUser = null; sbProfile = null;
+  if(typeof SpdProfile!=='undefined')SpdProfile.sync();
 
   // Sve čišćenje ide u try/finally — GARANTOVANO se vraćamo na login ekran čak i ako
   // neki korak čišćenja (mapni sloj, realtime kanal, Doznaka state...) baci grešku.
@@ -13196,15 +13200,15 @@ function terenRenderShared() {
   const el = document.getElementById('trn-shared-list');
   if (!el) return;
   const arr = _trnSharedLoad();
-  if (!arr.length) { el.innerHTML = ''; return; }
+  if (!arr.length) { el.innerHTML = '<p class="trn-work-note">Još nema učitanih projekata. Zatraži šifru od projektanta i učitaj je dok imaš internet.</p>'; return; }
   el.innerHTML = arr.map(e => {
     const cnt = e.kind === 'doznaka' ? (e.markings || []).length + ' zona' : (e.vlake || []).length + ' vlaka';
-    return `<div style="display:flex;align-items:center;gap:8px;background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:8px 10px;">
+    return `<div class="trn-shared-row" style="display:flex;align-items:center;gap:8px;background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;padding:8px 10px;">
       <div style="flex:1;min-width:0;cursor:pointer;" onclick="terenZoomShared('${e.code}')">
-        <div style="font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📁 ${_escHtml(e.projekat?.odjel || e.code)}${e.projekat?.gj ? ' · ' + _escHtml(e.projekat.gj) : ''}</div>
-        <div style="font-size:11px;color:#64748b;">${cnt} · šifra ${e.code} · ${_escHtml(e.projekat?.vlasnik || '')}</div>
+        <div class="trn-shared-name" style="font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📁 ${_escHtml(e.projekat?.odjel || e.code)}${e.projekat?.gj ? ' · ' + _escHtml(e.projekat.gj) : ''}</div>
+        <div class="trn-shared-detail" style="font-size:11px;color:#64748b;">${cnt} · šifra ${e.code} · ${_escHtml(e.projekat?.vlasnik || '')}</div>
       </div>
-      <button onclick="terenRemoveShared('${e.code}')" style="background:none;border:none;color:#f87171;font-size:16px;cursor:pointer;padding:2px 6px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+      <button onclick="terenRemoveShared('${e.code}')" aria-label="Ukloni učitani projekat ${_escHtml(e.projekat?.odjel || e.code)}" style="background:none;border:none;color:#f87171;font-size:16px;cursor:pointer;padding:2px 6px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </div>`;
   }).join('');
 }
@@ -16510,6 +16514,7 @@ document.addEventListener('keydown', e => {
 
 // === MENI DROPDOWN ===
 function _menuIdentityRender() {
+  if(typeof SpdProfile!=='undefined')SpdProfile.sync();
   const p = sbUser && sbProfile?.id === sbUser.id ? sbProfile : null;
   const name = document.getElementById('menu-user-label');
   if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? 'Profil nije dostupan' : 'Nije prijavljen';
@@ -39918,8 +39923,12 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
-  <div class="mdrop-top"><div><b>Meni</b><small>Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
-  <div class="mdrop-scroll"><div class="mdrop-sections"><section class="mdrop-section">
+  <div class="mdrop-top"><div><b>Meni</b><small id="menu-context">Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
+  <div class="mdrop-scroll"><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
+    <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
+    <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
+    <button type="button" onclick="closeMenuDropdown();switchTab('teren');TerenWorkspace.search('');TerenWorkspace.jump('trn-records')">Moji zapisi</button>
+  </div><div class="mdrop-sections"><section class="mdrop-section">
   <div class="mdrop-hdr">Karte i slojevi</div>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
   <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico">🏔</span>Instalirane karte</button>
@@ -39937,8 +39946,8 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-hdr">Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
-  <div class="mdrop-hdr">Projekti i izvoz</div>
-  <button type="button" class="mdrop-item" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</button>
+  <div class="mdrop-hdr" id="menu-project-section-title">Projekti i izvoz</div>
+  <button type="button" class="mdrop-item" id="mdrop-readiness" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</button>
   <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</button>
   <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</button>
@@ -41963,6 +41972,43 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 <script src="static/js/field-tools.js"></script>
 <script src="static/js/terrain-workspace.js"></script>
+<div id="spd-profile" hidden onclick="if(event.target===this)SpdProfile.close()">
+  <section class="spd-sheet" role="dialog" aria-modal="true" aria-labelledby="spd-profile-title">
+    <header class="spd-sheet-head"><div><h2 id="spd-profile-title">Moj ŠPD profil</h2><small>Terenski korisnik · DENDRO MAP</small></div><button id="spd-close" type="button" onclick="SpdProfile.close()" aria-label="Zatvori ŠPD profil">×</button></header>
+    <div id="spd-profile-scroll">
+      <div class="spd-identity"><div id="spd-avatar" data-spd-value aria-hidden="true">ŠPD</div><div><div class="spd-eyebrow">Lični terenski profil</div><h3 id="spd-name" data-spd-value></h3><span id="spd-unit" data-spd-value></span></div></div>
+      <div id="spd-access" class="spd-access"><strong id="spd-access-title" data-spd-value></strong><p id="spd-access-note" data-spd-value></p></div>
+      <section class="spd-card"><h3>Moji zapisi</h3><p class="spd-note">Zapisi dostupni na ovom telefonu. Odaberi vrstu za pregled i pretragu.</p><div class="spd-stats">
+        <button type="button" onclick="SpdProfile.action('tacke')"><b id="spd-points" data-spd-value>0</b><span>Tačke</span><small>Pozicije i zapažanja ›</small></button>
+        <button type="button" onclick="SpdProfile.action('trag')"><b id="spd-tracks" data-spd-value>0</b><span>Tragovi</span><small>Sačuvana kretanja ›</small></button>
+        <button type="button" onclick="SpdProfile.action('msr')"><b id="spd-measurements" data-spd-value>0</b><span>Mjerenja</span><small>Dužine i površine ›</small></button>
+        <button type="button" onclick="SpdProfile.action('photos')"><b id="spd-photos" data-spd-value>0</b><span>Fotografije</span><small>Slike s lokacijom ›</small></button>
+      </div></section>
+      <section class="spd-card"><h3>Karte i projekti</h3>
+        <button type="button" class="spd-action" onclick="SpdProfile.action('maps')"><svg class="ic" aria-hidden="true"><use href="#ic-karta"/></svg><span><span id="spd-map-title" data-spd-value></span><small id="spd-map-note" data-spd-value></small></span>›</button>
+        <button type="button" class="spd-action" onclick="SpdProfile.action('project')"><svg class="ic" aria-hidden="true"><use href="#ic-folder"/></svg><span>Projekti od projektanta · <span id="spd-projects" data-spd-value>0</span><small>Pregledaj učitane projekte ili unesi novu šifru.</small></span>›</button>
+      </section>
+      <section class="spd-card"><h3>Stanje terenskog rada</h3><p class="spd-note">Pregled lokalnog stanja. Osvježi ga nakon promjene postavki ili signala.</p>
+        <dl class="spd-status"><div><dt>GPS</dt><dd id="spd-gps" data-spd-value></dd></div><div><dt>Internet</dt><dd id="spd-network" data-spd-value></dd></div><div><dt>Snimanje</dt><dd id="spd-recording" data-spd-value></dd></div><div><dt>Dijeljenje kretanja</dt><dd id="spd-sharing" data-spd-value></dd></div></dl>
+        <button type="button" class="spd-action" onclick="SpdProfile.action('queue')"><svg class="ic" aria-hidden="true"><use href="#ic-posalji"/></svg><span>Red slanja<small id="spd-queue" data-spd-value></small></span>›</button>
+        <button type="button" class="spd-action spd-action-primary" onclick="SpdProfile.action('terrain')"><svg class="ic" aria-hidden="true"><use href="#ic-kompas"/></svg><span>Otvori terenske alate<small>GPS, snimanje traga, zapažanja i mjerenja</small></span>›</button>
+      </section>
+      <section class="spd-card"><h3>Prikaz i čuvanje podataka</h3>
+        <button type="button" id="spd-theme" class="spd-action" aria-pressed="false" onclick="SpdProfile.action('theme')"><span id="spd-theme-label">Dnevni mod</span>☀</button>
+        <button type="button" class="spd-action" onclick="SpdProfile.action('backup')"><svg class="ic" aria-hidden="true"><use href="#ic-arhiva"/></svg><span>Sigurnosna kopija zapisa<small>JSON kopija terenskih podataka i reda slanja. Raster karte nisu uključene.</small></span>›</button>
+      </section>
+      <details class="spd-card spd-guide"><summary>Kako koristiti ŠPD profil</summary><ol>
+        <li><b>Pripremi podlogu.</b> Učitaj lokalnu kartu i provjeri područje koje pokriva prije rada bez signala.</li>
+        <li><b>Pregledaj projekat.</b> Projektant ti može dati šifru za pregled vlaka ili doznake. Šifru prvi put učitaj dok imaš internet.</li>
+        <li><b>Bilježi teren.</b> U Terenu uključi GPS, sačuvaj zapažanje, snimi trag ili izmjeri dužinu i površinu. GPS radi i bez mobilnih podataka.</li>
+        <li><b>Sačuvaj i provjeri.</b> Završi snimanje, provjeri Moje zapise i izvezi sigurnosnu kopiju. Dijeljenje kretanja uključi kada želiš da kolege vide tvoju poziciju i imaš vezu.</li>
+      </ol></details>
+      <section class="spd-card"><h3>Nalog i aplikacija</h3><button type="button" class="spd-action" onclick="SpdProfile.action('pin')"><svg class="ic" aria-hidden="true"><use href="#ic-kljuc"/></svg><span>Promijeni PIN</span>›</button><button type="button" class="spd-action" onclick="SpdProfile.action('update')"><span>Ažuriraj aplikaciju<small>Trenutna verzija <span id="spd-version" data-spd-value></span></small></span>›</button></section>
+      <div class="spd-bottom"><span id="spd-updated" data-spd-value></span><button type="button" id="spd-refresh" onclick="SpdProfile.action('refresh')">Osvježi pregled</button></div>
+    </div>
+  </section>
+</div>
+<script src="static/js/spd-profile.js"></script>
 <style>
 .data-context {flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#122238;border-bottom:1px solid #334155;font-size:12px;color:#cbd5e1;}
 .data-context span {flex:1;overflow-wrap:anywhere;}.data-context small{width:100%;color:#94a3b8;}

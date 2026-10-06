@@ -38,9 +38,54 @@ async def main():
   assert 'Pozicija stara' in await page.locator('#trn-gps-dot').inner_text()
   await page.wait_for_timeout(2800) # Sačekaj da se poruka potvrde završi prije slika.
   out=ROOT/'outputs/ui-preview';out.mkdir(parents=True,exist_ok=True)
+  # Puni ŠPD profil: lokalni zapisi, probni pristup, prečice i izolacija naloga.
+  assert await page.locator('#trn-profile-open').is_visible()
+  await page.locator('#trn-profile-open').click()
+  assert await page.locator('#spd-name').inner_text()=='Amir Nadzor'
+  assert await page.locator('#spd-points').inner_text()=='63'
+  assert await page.locator('#spd-access-title').inner_text()=='Pristup omogućen'
+  assert await page.evaluate('document.getElementById("wrapper").inert')
+  await page.locator('#spd-theme').click();assert await page.locator('#spd-theme').get_attribute('aria-pressed')=='true'
+  await page.locator('#spd-theme').click();assert await page.locator('#spd-theme').get_attribute('aria-pressed')=='false'
+  await page.locator('#spd-close').focus();await page.keyboard.press('Shift+Tab');assert await page.locator('#spd-refresh').evaluate('e=>e===document.activeElement')
+  for theme in ['dark','day']:
+   await page.evaluate('t=>{document.documentElement.dataset.fieldTheme=t;SpdProfile.render();}',theme)
+   for width,height in [(320,800),(390,800),(800,650)]:
+    await page.set_viewport_size({'width':width,'height':height})
+    await page.locator('#spd-profile-scroll').evaluate('e=>e.scrollTop=0')
+    assert await page.locator('.spd-sheet').evaluate('e=>e.scrollWidth<=e.clientWidth+1'),(theme,width)
+    assert await page.locator('#spd-profile button').evaluate_all('es=>es.every(e=>e.getBoundingClientRect().height>=47.5)')
+    await page.screenshot(path=str(out/f'spd-profil-{theme}-{width}.png'))
+   await page.locator('#spd-profile-scroll').evaluate('e=>e.scrollTop=e.scrollHeight')
+   await page.screenshot(path=str(out/f'spd-profil-postavke-{theme}.png'))
+  await page.keyboard.press('Escape');assert not await page.locator('#spd-profile').is_visible()
+  assert not await page.evaluate('document.getElementById("wrapper").inert')
+  await page.set_viewport_size({'width':390,'height':800})
+  await page.locator('#menu-btn').click();await page.wait_for_timeout(450)
+  assert await page.locator('#spd-menu-launch').is_visible()
+  assert not await page.locator('#mdrop-readiness').is_visible()
+  assert not await page.locator('#mdrop-upravljanje').is_visible()
+  await page.screenshot(path=str(out/'spd-meni.png'))
+  await page.locator('#spd-menu-launch button').first.click();assert await page.locator('#spd-profile').is_visible()
+  await page.keyboard.press('Escape');assert await page.locator('#menu-btn').evaluate('e=>e===document.activeElement')
+  await page.evaluate("async()=>{roleProfile={...roleProfile,odobren:false,probni_do:new Date(Date.now()+6*86400000).toISOString()};await sbLoadProfile();SpdProfile.open();}")
+  assert 'Probni pristup' in await page.locator('#spd-access-title').inner_text()
+  await page.locator('#spd-profile-scroll').evaluate('e=>e.scrollTop=0')
+  await page.screenshot(path=str(out/'spd-profil-probni.png'))
+  await page.locator("#spd-profile button[onclick=\"SpdProfile.action('trag')\"]").click()
+  assert await page.evaluate("_trnTab==='trag'&&_activeTab==='teren'")
+  await page.evaluate('SpdProfile.open()')
+  await page.locator("#spd-profile button[onclick=\"SpdProfile.action('photos')\"]").click()
+  assert await page.locator('#oznake-panel').is_visible()
+  assert await page.locator('#library-tabs button[data-category="photos"]').get_attribute('aria-selected')=='true'
+  await page.evaluate("closeOznakePanel();SpdProfile.open();sbUser={id:'22222222-2222-4222-8222-222222222222'};SpdProfile.sync();")
+  assert not await page.locator('#spd-profile').is_visible()
+  assert await page.locator('#spd-name').inner_text()==''
+  await page.evaluate("async()=>{sbUser={id:roleProfile.id};roleProfile={...roleProfile,odobren:true};await sbLoadProfile();switchTab('teren');}")
   for role in ['spd','admin']:
    await page.evaluate("async r=>{roleProfile={...roleProfile,is_admin:r==='admin'};await sbLoadProfile();switchTab('teren');}",role)
    assert await page.locator('#teren-tab-btn').is_visible()
+   assert await page.locator('#trn-profile-open').is_visible()==(role=='spd')
    assert await page.locator('#trn-voz-info, .trn-readiness, .trn-nav-links').count()==0
    assert await page.get_by_text('Tvoj obilazak',exact=True).count()==0
    assert await page.locator('#teren-panel .trn-body > section').first.get_attribute('id')=='trn-position'
@@ -64,9 +109,10 @@ async def main():
   assert await page.evaluate("_msrMode==='area'&&_msrOn")
   await page.evaluate("async()=>{msrStop(true);roleProfile={...roleProfile,is_admin:false,sumarija:'ŠUMARIJA BOS.KRUPA'};await sbLoadProfile();}")
   assert not await page.locator('#teren-tab-btn').is_visible()
+  assert not await page.locator('#spd-menu-launch').is_visible()
   assert await page.locator('#vlake-tab-btn').is_visible()
   assert not errors,errors
   assert not writes,writes
-  print(json.dumps({'roles':['spd','admin','projektant'],'search':True,'pagination':True,'namedPoint':True,'measurement':True,'externalWrites':len(writes),'physicalPhone':False}),flush=True)
+  print(json.dumps({'roles':['spd','admin','projektant'],'spdProfile':True,'trialProfile':True,'profileOwnership':True,'search':True,'pagination':True,'namedPoint':True,'measurement':True,'externalWrites':len(writes),'physicalPhone':False}),flush=True)
   await browser.close()
 if __name__=='__main__':asyncio.run(main())
