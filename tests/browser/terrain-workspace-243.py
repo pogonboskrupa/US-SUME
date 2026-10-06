@@ -36,12 +36,19 @@ async def main():
   await page.wait_for_function("_tacke.some(t=>t.nm==='Provjera obilaska')")
   await page.evaluate("_lastGpsFixTime=Date.now()-60000;TerenWorkspace.render(false)")
   assert await page.locator('#trn-ready-gps').get_attribute('data-state')=='waiting'
+  await page.wait_for_timeout(2800) # Sačekaj da se poruka potvrde završi prije slika.
   out=ROOT/'outputs/ui-preview';out.mkdir(parents=True,exist_ok=True)
   for role in ['spd','admin']:
    await page.evaluate("async r=>{roleProfile={...roleProfile,is_admin:r==='admin'};await sbLoadProfile();switchTab('teren');}",role)
    assert await page.locator('#teren-tab-btn').is_visible()
    for theme in ['dark','day']:
     await page.evaluate('t=>document.documentElement.dataset.fieldTheme=t',theme)
+    if theme=='day':
+     for accuracy in [6,18,40]:
+      await page.evaluate('a=>{lastP.ac=a;_trnPozicijaRender();}',accuracy)
+      contrast=await page.locator('#trn-acc').evaluate(r'''e=>{const rgb=s=>s.match(/[\d.]+/g).slice(0,3).map(Number),lum=s=>rgb(s).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((n,v,i)=>n+v*[.2126,.7152,.0722][i],0);let a=lum(getComputedStyle(e).color),b=lum(getComputedStyle(e.closest('.trn-tile')).backgroundColor);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);}''')
+      assert contrast>=4.5,(accuracy,contrast)
+     await page.evaluate('lastP.ac=6;_trnPozicijaRender()')
     for width,height in [(320,800),(390,800),(800,650)]:
      await page.set_viewport_size({'width':width,'height':height})
      await page.locator('#teren-panel').evaluate('e=>e.scrollTop=0')

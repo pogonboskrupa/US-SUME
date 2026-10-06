@@ -2398,3 +2398,16 @@ Paginacija/pretraga ne mijenjaju originalne nizove. Testovi provjeravaju
 identitet, paginaciju, promjenu naloga tokom zapažanja i stari GPS.
 Novi puni browser test: ŠPD/admin/projektant,320/390/800px, oba moda,
 imenovana tačka, površina, bez vanjskih upisa. CI rezultat tek dopisati.
+
+
+## 57. Završna vizuelna provjera Terena — 2.4.4 / code514
+
+Korisnik je ponovo odobrio objavu nakon odbijenog GitHub update_ref poziva.
+0901b4ef je objavljen na CODEX-US-SUME; CI37495958703 potvrđuje95JS,
+PostgreSQL i sve browser provjere, uključujući puni Teren. Prvi vizuelni
+pregled PNG-a pokazao je slab kontrast zelenog/žutog GPS teksta u dnevnom
+modu. Tamnije boje prate iste pragove kvalitetâ, a bar ostaje indikator.
+Naslov glasi Pregled terenskog rada umjesto poruke Spremno sa nepoznatim
+GPS-om/podlogom. Browser provjerava kontrast teksta>=4.5 za6/18/40m i čeka
+kraj poruke potvrde prije screenshots. Potrebni završni CI/APK rezultat
+ovog izdanja dopisati nakon završetka. Produkcijski server nije mijenjan.

@@ -5129,7 +5129,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <div class="trn-body">
         <section class="trn-card" aria-label="Pregled terenskog rada">
-          <div class="trn-section-label">Tvoj obilazak</div><h2 class="trn-work-title">Spremno za rad na terenu</h2><p class="trn-work-note">Pozicija, podloga i zapis kretanja na jednom mjestu.</p>
+          <div class="trn-section-label">Tvoj obilazak</div><h2 class="trn-work-title">Pregled terenskog rada</h2><p class="trn-work-note">Pozicija, podloga i zapis kretanja na jednom mjestu.</p>
           <div class="trn-readiness"><div><svg class="ic" aria-hidden="true"><use href="#ic-gps"/></svg><span><b id="trn-ready-gps">GPS isključen</b><small>GPS radi i bez mobilnih podataka</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-karta"/></svg><span><b id="trn-ready-map">Provjeri offline podlogu</b><small id="trn-ready-map-name">Učitaj kartu prije izlaska na teren</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-trag"/></svg><span><b id="trn-ready-track">Obilazak nije pokrenut</b><small id="trn-ready-track-note">Pokreni Snimi trag za zapis kretanja</small></span></div></div>
           <nav class="trn-nav-links" aria-label="Sekcije Terena"><button onclick="TerenWorkspace.jump('trn-position')">Pozicija</button><button onclick="TerenWorkspace.jump('trn-records')">Moji zapisi</button><button onclick="TerenWorkspace.jump('trn-resources')">Karte i projekti</button></nav>
         </section>
@@ -5745,7 +5745,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.3';
+const APP_VER = 'v2.4.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12880,11 +12880,13 @@ function _trnPozicijaRender() {
     const q = _trnTacnost(lastP.ac);
     g('trn-acc').textContent = q.txt;
     g('trn-acc').style.color = q.boja;
+    if(g('trn-acc').dataset)g('trn-acc').dataset.quality=lastP.ac==null||!Number.isFinite(lastP.ac)?'unknown':lastP.ac>25?'poor':lastP.ac>12?'fair':'good';
     if (bar) { bar.style.width = q.pct + '%'; bar.style.background = q.boja; }
   } else {
     g('trn-y').textContent = '—'; g('trn-x').textContent = '—';
     g('trn-alt').textContent = '— m'; g('trn-acc').textContent = '— m';
     g('trn-acc').style.color = '';
+    if(g('trn-acc').dataset)g('trn-acc').dataset.quality='unknown';
     if (bar) bar.style.width = '0';
   }
   _trnFixRender();
