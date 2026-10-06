@@ -56,7 +56,7 @@ t('"Debug učitavanja pri ulazu" na ekranu Učitaj kartu vidi samo admin', () =>
 
 t('tehnički zapis čitača, oznaka motora i raščlana vremena idu samo adminu', () => {
   const load = extractFn('sqlmapLoadFile');
-  assert.ok(/r\.meta\?\._d && isAdmin\(\)/.test(load), '[ps=… tr=…] mora biti iza isAdmin()');
+  assert.ok(!load.includes('._d') && !load.includes('diag:true'), 'Uvoz više ne računa niti prikazuje tešku dijagnostiku');
   assert.ok(/isAdmin\(\) \? ' \[' \+ eng \+ '\]' : ''/.test(extractFn('_sqlmapLoadDirect')), '[worker]/[main] samo adminu');
   assert.ok(/if \(isAdmin\(\)\) _sqlmapStatus\('⏱ Zadnje učitavanje/.test(extractFn('sqlmapRestoreAll')));
 });

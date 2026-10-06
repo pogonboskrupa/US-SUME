@@ -2254,3 +2254,92 @@ Preglednik dobiva zasebnu folder sekciju: topla žuta #f3dfa2, svijetle
 kartice, tamna slova i dugmad najmanje44px. Pretraga, kategorije, grupne
 radnje, uređivanje i paginacija koriste iste postojeće identitete/pozive.
 Oba prikaza (dnevni/tamni) zadržavaju istu boju foldera.
+
+
+## 2026-10-05 — Explorer 2.3.9 završen i APK potvrđen
+
+CI37345450553/job111882751205 završen SUCCESS. Objavljeni izvor
+a8168b2d9e887b91d1956d6fb40cde3d27ab24a9. Prošli92JS grupe, testna
+PostgreSQL migracija/RLS,23browser provjere (uključuje kompletan stvarni
+JS bootstrap sa onP), Android build,53webassetSHA i oba Android testa.
+Native report: Android14/API34, WebView113.0.5672.136,2tests/0failures/
+0errors/0skipped. Explorer13.777s, OCR0.104s. Cijeli APK/proizvodni
+MainActivity/WebView/DOM/JS; kontrolisan authUI/GPS/kompas, mreža isključena.
+Provjereni početni3D bez GPS-a, svježi onP/oznaka/udaljenost, stvarni
+DOMmarker naspram projekcije <3px, dialogpause/resume, checkbox i stop,
+neizmijenjeni vlake/tačke/tragovi registri. Native progress je prešao100
+u17:08:15.595 prije JS; nema preskočenih testova ni oslabljenih uslova.
+36 analiza brzine prošle u CI-ju; nisu fizička mjerenja Redmi telefona.
+
+Preuzet stvarni CI APK i poređen sa javnim release assetom v2.3.9:
+https://github.com/pogonboskrupa/US-SUME/releases/download/v2.3.9/app-debug.apk
+24,008,156B (24.01MB), SHA256
+1cf52ce2f1361ef6f2ccba1a525702ccd2fd000d4b7d100f677aa27b9f8785c9.
+Paket ba.spd.uss.vlake.debug;2.3.9-debug/code509. CertSHA256 identičan238:
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+53assets identični remote izvoru, GRANICE>10MB očuvan, bez offlineOCRmodela,
+15launcherPNG identični238. Lokalni verify_apk_239.py i verify_native_239.py
+prošli; release veličina/digest/commit odgovaraju preuzetom APK-u. Artifact
+APK11360766710, Android11360412163, UI11360118443, teren11359948802.
+Potpis/paket omogućuju ažuriranje postojeće debug aplikacije kroz Meni.
+
+Popravljen stvarni blokator: zatvoren dlg-sheet je display:block ali izvan
+viewporta; stari shown ga je smatrao otvorenim i gasio perspektivu. Sada
+se provjerava vidljivi pravougaonik, završetak transform animacije i novi
+dialog. Kamera se uključuje bez GPS-a bez lažnih metrika; resize osvježava
+depth/transform/anchor revision. 48° nagnuta Leaflet karta, bez DEMmesha
+i bez novih runtime biblioteka. Explorer samo tokom vođenja do cilja,
+checkbox izbor pamćen. Fizički Xiaomi/GPU/senzori nisu testirani.
+Supabase trial SQL status ostaje kao238: pripremljen/testiran, nije
+primijenjen na produkciji; ovaj zadatak ne mijenja serverska pravila.
+
+## 2026-10-06 — v2.4.0 / code510: prvi uvoz velikih SQLite karata
+
+Korisnik je precizirao: oko 40 s traje PRVI uvoz .sqlitedb/.db od 1,5 GB.
+Stari sqlmapLoadFile prvo je čekao kompletnu OPFS kopiju, zatim otvarao
+SQLite i računao dodatnu dijagnostiku. Novi tok čita potrebne SQLite
+stranice iz izvornog File objekta i prikazuje sloj prije završetka kopije.
+Posebni offline-import.js worker kopira u blokovima od 4 MB, odvojeno od
+workera za pločice. Banner prikazuje napredak i traži da app ostane otvoren.
+Prikaz nije potvrda trajnosti: saved postaje true tek nakon zatvaranja,
+provjere veličine OPFS fajla i uspješne IDB transakcije. Završetak čuvanja
+ne mijenja podlogu koju je korisnik u međuvremenu odabrao.
+
+Zamjena koristi jedinstveni fizički naziv: prethodni IDB zapis i prethodna
+kopija ostaju dok nova kopija nije potvrđena. OPFS naziv je u metapodacima
+i zadnjem izboru; restore, preimenovanje i brisanje koriste taj naziv.
+Prekid/brisanjem tokom uvoza zaustavlja se copy worker, čeka čišćenje i
+sprečava naknadno objavljivanje obrisane karte. Greška kvote ostavlja
+trenutni izvorni prikaz samo za sesiju i čuva ranije sačuvanu kopiju.
+Fajl se ne učitava cijeli u RAM. Manje karte zadržavaju postojeći SQL.js tok.
+Ovo skraćuje čekanje na PRIKAZ; ne uklanja fizičko kopiranje 1,5 GB.
+
+Lokalno: sintaksa svih inline blokova i modula; postojeće 92 JS grupe i
+nova offline-import grupa (7 scenarija) prošle. Novi CI test koristi
+stvarni proizvodni bootstrap/Leaflet/worker/OPFS/IDB i sintetičku RMaps
+bazu proširenu nultim bajtovima do 1.500.000.000 B. Mjeri prvi sloj,
+vidljivu pločicu, cijelu kopiju i offline ponovno otvaranje; nije fizički
+Redmi benchmark niti velika baza s mnogo različitih pločica. Dodatni
+Android test koristi stvarni APK/MainActivity/WebView bez interneta,
+21 MB File iz iste male testne baze i ponovo učitava stranicu iz APK-a.
+CI, APK i izmjerena vremena još nisu potvrđeni; dopuniti poslije provjere.
+
+
+## 54. Usklađen Preglednik oznaka — 2.4.1 / code511
+
+Korisnik je primijenio probni SQL, zatim zatražio manji kontrast između
+gornjeg i donjeg dijela Preglednika. Primjena SQL-a je korisnikova potvrda,
+nije nezavisna produkcijska provjera.
+
+CSS dobiva lokalnu, jedinstvenu toplu paletu: tamni maslinasto/sivi panel
+#282e25 i donji dio #33382b; dnevni krem panel #f6f3e9 i pješčani #eee7d3.
+Kartice, filteri, oznake i fokus prate tu paletu. Nema jarke žute površine
+uz tamnoplavo zaglavlje. Tekst ostaje kontrastan. Funkcije Preglednika
+nisu mijenjane. Postojeći browser test prati paletu oba režima.
+
+Objavljeni v2.4.0 u međuvremenu cilja f1c3dff, koji donosi offline uvoz
+karata sa zasebnim workerom i Android provjerom. Njegove promjene su
+usklađene u CODEX-US-SUME sa sačuvanim terenskim doradama c4482b2; nijedna
+druga grana nije mijenjana. CI izvršava i field-five-hours i offline-import.
+SQL/produkcijski server nisu mijenjani ovom doradom; potvrđeni nalaz429
+ostaje zaseban zadatak. CI i APK objavu dopuniti rezultatom nakon završetka.
