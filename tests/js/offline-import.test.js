@@ -1,14 +1,15 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync('index.html','utf8'),moduleSrc=fs.readFileSync('static/js/offline-import.js','utf8');
-async function workerCase({short=false,quota=false,delay=false}={}){
+async function workerCase({short=false,quota=false,delay=false,syncRead=false}={}){
  let revoked=0,closed=0,flushed=false,written=[],terminated=false,progress=[];
- const input=new Blob([new Uint8Array(5*1024*1024).fill(73)]);
+ let input=new Blob([new Uint8Array((syncRead?21:5)*1024*1024).fill(73)]),reads=0;
+ if(syncRead){const bytes=await input.arrayBuffer();input={size:bytes.byteLength,slice:(x,y)=>({bytes:bytes.slice(x,y)})};}
  const handle={write(bytes,{at}){if(quota)throw Error('QuotaExceededError');written.push([at,bytes]);return short?bytes.length-1:bytes.length;},truncate(){},flush(){flushed=true;},getSize(){return input.size;},close(){closed++;}};
  const blobs=new Map();let seq=0;
  class Worker{
   constructor(url){this.url=url;}
-  postMessage(m){Promise.resolve().then(async()=>{const source=await blobs.get(this.url).text();if(terminated)return;const self={postMessage:data=>{if(!terminated)this.onmessage({data});}};const navigator={storage:{getDirectory:async()=>({getFileHandle:async()=>({createSyncAccessHandle:async()=>{if(delay)await new Promise(r=>setTimeout(r,30));return handle;}})})}};vm.runInNewContext(source,{self,navigator,Uint8Array,Date,Error});await self.onmessage({data:m});});}
+  postMessage(m){Promise.resolve().then(async()=>{const source=await blobs.get(this.url).text();if(terminated)return;const self={postMessage:data=>{if(!terminated)this.onmessage({data});}};const navigator={storage:{getDirectory:async()=>({getFileHandle:async()=>({createSyncAccessHandle:async()=>{if(delay)await new Promise(r=>setTimeout(r,30));return handle;}})})}};const env={self,navigator,Uint8Array,Date,Error};if(syncRead)env.FileReaderSync=class{readAsArrayBuffer(part){reads++;return part.bytes;}};vm.runInNewContext(source,env);await self.onmessage({data:m});});}
   terminate(){terminated=true;}
  }
  const window={Worker,URL:{createObjectURL:b=>{const id='blob:'+seq++;blobs.set(id,b);return id;},revokeObjectURL:()=>revoked++}};
@@ -17,6 +18,7 @@ async function workerCase({short=false,quota=false,delay=false}={}){
  if(delay)job.cancel();
  if(short||quota||delay)await assert.rejects(job.promise,e=>delay?e.name==='AbortError':/Nepotpun|Quota/.test(e.message));else{assert.equal(await job.promise,input.size);assert.equal(written.length,2);assert.ok(written.every(([at,b])=>b.every(v=>v===73)));assert.ok(flushed);assert.equal(progress.at(-1).done,input.size);}
  assert.equal(revoked,1);if(!delay)assert.equal(closed,1,'Handle mora biti zatvoren prije završne poruke');
+ if(syncRead)assert.equal(reads,2,'21 MB treba pročitati u dva ograničena bloka');
 }
 async function persistenceCase({failure=false,cancel=false}={}){
  const store={name:'test',opfs:true,opfsName:'previous.sqlmap'},files=new Set(['previous.sqlmap']);let resolveCopy,rejectCopy,published=0;
@@ -32,4 +34,4 @@ async function persistenceCase({failure=false,cancel=false}={}){
  if(failure||cancel){assert.equal(store.opfsName,'previous.sqlmap');assert.deepEqual([...files],['previous.sqlmap']);}else{assert.ok(files.has(store.opfsName));assert.ok(!files.has('previous.sqlmap'));}
  assert.deepEqual(JSON.parse(last.value),{type:'tl',key:'topo'});
 }
-(async()=>{for(const opts of [{},{short:true},{quota:true},{delay:true}])await workerCase(opts);for(const opts of [{},{failure:true},{cancel:true}])await persistenceCase(opts);console.log('Offline uvoz: stvarni worker/5 MB/4 MB blokovi, bytes, kratki upis, quota, cancel, trajnost i sigurna zamjena — 7 provjera OK');})().catch(e=>{console.error(e);process.exit(1);});
+(async()=>{for(const opts of [{},{syncRead:true},{short:true},{quota:true},{delay:true}])await workerCase(opts);for(const opts of [{},{failure:true},{cancel:true}])await persistenceCase(opts);console.log('Offline uvoz: async/sync worker, 5/21 MB, bytes, kratki upis, quota, cancel, trajnost i sigurna zamjena — 8 provjera OK');})().catch(e=>{console.error(e);process.exit(1);});

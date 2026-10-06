@@ -4521,7 +4521,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
   <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
   <div id="map-toolbar" style="display:none;"></div>
 
-  <div id="offline-import-status" hidden role="status" aria-live="polite"><span aria-hidden="true">↓</span><div><b id="offline-import-name"></b><small>Karta radi · čuvam na telefon — ostavi aplikaciju otvorenu</small><progress id="offline-import-progress" max="100" value="0"></progress></div><strong id="offline-import-percent">0%</strong></div>
+  <div id="offline-import-status" hidden role="status" aria-live="polite"><span aria-hidden="true">↓</span><div><b id="offline-import-name"></b><small>Karta je otvorena · spremam kopiju za naredno pokretanje</small><progress id="offline-import-progress" max="100" value="0"></progress></div><strong id="offline-import-percent">0%</strong></div>
   <div id="main">
 
     <div id="panel">
@@ -5731,7 +5731,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.1';
+const APP_VER = 'v2.4.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -30890,7 +30890,7 @@ async function getSqlJs() {
 // Koristi File.slice().arrayBuffer() — radi bez ekskluzivnog OPFS locka.
 // Podržava MBTiles, RMaps/OruxMaps, AlpineQuest formate.
 class MiniSqlite {
-  constructor(file, sync) { this.file=file; this.sync=sync||null; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
+  constructor(file, sync) { this.file=file; this.sync=sync||null; this._reader=typeof FileReaderSync==='function'?new FileReaderSync():null; this.ps=4096; this._c=new Map(); this._idxColZ=0; this._idxColX=1; this._idxColY=2; this._idxSql=''; this._nIdxKeys=3; }
   async _pg(n) {
     if(n<=0) return new Uint8Array(this.ps);
     const cached=this._c.get(n); if(cached!==undefined){this._c.delete(n);this._c.set(n,cached);return cached;}
@@ -30898,14 +30898,17 @@ class MiniSqlite {
     let d;
     if(this.sync){ d=new Uint8Array(this.ps); try{ this.sync.read(d,{at:off}); }catch(e){ if(this.file) d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); } }
     else {
-      try { d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer()); }
+      try { const part=this.file.slice(off,off+this.ps); d=new Uint8Array(this._reader?this._reader.readAsArrayBuffer(part):await part.arrayBuffer()); }
       catch(e) {
         // Pozadinski sync handle (velike karte, vidi load-opfs) je mogao stici
         // i uzeti ekskluzivni lock BAS dok je ovo File citanje bilo u letu —
         // tada File citanje pukne, a sync handle vec radi. Bez ovog fallbacka
         // bi se ta jedna plocica tiho izgubila umjesto da se procita brze.
-        if(!this.sync) throw e;
-        d=new Uint8Array(this.ps); this.sync.read(d,{at:off});
+        if(!this.sync) {
+          if(!this._reader) throw e;
+          this._reader=null;
+          d=new Uint8Array(await this.file.slice(off,off+this.ps).arrayBuffer());
+        } else { d=new Uint8Array(this.ps); this.sync.read(d,{at:off}); }
       }
     }
     if(this._c.size>2048) this._c.delete(this._c.keys().next().value);
@@ -32363,7 +32366,9 @@ async function sqlmapLoadFile(file) {
       if(!sl)throw Error('Karta nije otvorena');
       _saveLastMap('sqlite',null,name);remembered=true;
       closeSqlMapModal();closeLoadMapScreen();switchTab('karta');
-      await _sqlImportSave(file,sl);
+      // Otvaranje je završeno. Trajnu kopiju prati zaseban posao, a ne
+      // promise kojim birač fajla i batch čekaju da je cijela karta otvorena.
+      _sqlImportSave(file,sl);
     }
     if (isLarge && (!_opfsAvail() || _opfsFailed)) {
       if (_opfsFailed) showToast('⚠ Trajno čuvanje nije uspjelo (' + _opfsErrMsg + ') — karta radi samo dok je app otvoren');

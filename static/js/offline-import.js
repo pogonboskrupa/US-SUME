@@ -8,11 +8,17 @@ self.onmessage=async({data:m})=>{
   const dir=await navigator.storage.getDirectory(),file=await dir.getFileHandle(m.path,{create:true});
   if(file.createSyncAccessHandle)try{handle=await file.createSyncAccessHandle();}catch(e){if(e.name!=='NotSupportedError')throw e;}
   if(!handle)writer=await file.createWritable();
-  const chunk=4*1024*1024;let off=0,last=0;
+  // Synchronous file reads stay in this dedicated worker. Bigger blocks
+  // reduce Android provider/Blob round trips without loading the whole map.
+  let reader=typeof FileReaderSync==='function'?new FileReaderSync():null;
+  const chunk=(reader?16:4)*1024*1024;let off=0,last=0;
   self.postMessage({type:'progress',done:0,total:m.file.size});
   while(off<m.file.size){
-   const bytes=await m.file.slice(off,Math.min(off+chunk,m.file.size)).arrayBuffer();
-   if(!bytes.byteLength)throw Error('Nepotpuno čitanje izvornog fajla');
+   const end=Math.min(off+chunk,m.file.size),part=m.file.slice(off,end);
+   let bytes;
+   try{bytes=reader?reader.readAsArrayBuffer(part):await part.arrayBuffer();}
+   catch(e){if(!reader)throw e;reader=null;bytes=await part.arrayBuffer();}
+   if(bytes.byteLength!==end-off)throw Error('Nepotpuno čitanje izvornog fajla');
    if(handle){if(handle.write(new Uint8Array(bytes),{at:off})!==bytes.byteLength)throw Error('Nepotpun upis karte');}
    else await writer.write(bytes);
    off+=bytes.byteLength;

@@ -52,6 +52,18 @@ function otvori(ime) {
 }
 const jePng = d => d && d[0] === 0x89 && d[1] === 0x50;
 
+t('worker FileReaderSync čita stvarnu SQLite bazu bez async Blob poziva', async () => {
+  let reads=0;
+  class Reader { readAsArrayBuffer(part) { reads++;return part.bytes; } }
+  const FastMini = new Function('FileReaderSync', SRC.slice(s, e) + '\nreturn MiniSqlite;')(Reader);
+  for(const [name,z,x,y] of [['rmaps-mini.sqlitedb',13,4463,2940],['mbtiles-mini.mbtiles',13,4462,2940]]){
+    const data=fs.readFileSync(path.join(__dirname,'../fixtures',name));
+    const file={size:data.length,slice:(a,b)=>({bytes:data.buffer.slice(data.byteOffset+a,data.byteOffset+Math.min(b,data.length)),arrayBuffer:()=>{throw Error('Async put ne smije biti pozvan');}})};
+    const mini=new FastMini(file);await mini.init();assert.ok(jePng(await mini.tile(z,x,y)));
+  }
+  assert.ok(reads>0);
+});
+
 t('SQLiteDB (RMaps/Locus/OruxMaps, PRIMARY KEY bez CREATE INDEX) se prepoznaje i čita', async () => {
   const m = otvori('rmaps-mini.sqlitedb');
   const r = await m.init();

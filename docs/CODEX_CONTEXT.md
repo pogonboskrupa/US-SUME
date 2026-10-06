@@ -2343,3 +2343,33 @@ usklađene u CODEX-US-SUME sa sačuvanim terenskim doradama c4482b2; nijedna
 druga grana nije mijenjana. CI izvršava i field-five-hours i offline-import.
 SQL/produkcijski server nisu mijenjani ovom doradom; potvrđeni nalaz429
 ostaje zaseban zadatak. CI i APK objavu dopuniti rezultatom nakon završetka.
+
+
+## 55. Brži prvi prikaz i završetak otvaranja karte — 2.4.2 / code512
+
+Novi zahtjev tokom builda 2.4.1: karta djeluje sporije i prikazuje dug
+pozadinski uvoz. sqlmapLoadFile je čekao cijeli _sqlImportSave iako je
+sloj već dodan; birač/batch je zato ostao u fazi otvaranja. Sada vraća
+kontrolu poslije otvaranja, dok zaseban job pouzdano objavljuje kopiju.
+Traka jasno kaže da je karta otvorena i da sprema kopiju za naredni start.
+
+MiniSqlite worker koristi FileReaderSync za male SQLite stranice iz File-a,
+uz postojeći async fallback i OPFS sync put. Posebni copier koristi 16MB
+blokove preko FileReaderSync, a bez podrške ostaje na 4MB async blokovima.
+Provjerava tačan broj pročitanih bajtova. Ne učitava cijelu kartu u RAM.
+Obje operacije i dalje rade izvan UI niti. Nalog/podaci GPS nisu dirani.
+
+Regresije: stvarni MBTiles/RMaps fajlovi pročitani sync putem bez async
+poziva; 21MB copier čita dva ograničena bloka i čuva sve bajtove; Android
+WebView i 1,5GB browser test traže da se otvaranje završi PRIJE završetka
+zadržane kopije. Copy/quota/cancel/atomic publish provjere ostaju.
+Mjerenja CI treba dopisati. Brzina nije potvrđena na fizičkom Xiaomiju;
+punih 1,5GB mora biti kopirano prije trajnog ponovnog otvaranja.
+
+Dodatna provjera miješanih verzija: stvarne izdvojene funkcije slanja iz
+2.3.8, objavljene2.4.0 i radne2.4.2, zajednički lažni Supabase, ukupno6vlaka
++615GPS tačaka; sve potvrđeno bez duplikata. To nije test tri APK-a ni
+produkcijskog RLS-a. Članstvo projekta vlaka i članstvo odjela doznake su
+odvojene tabele; recentni odobreni članovi ne trebaju identične verzije.
+Stariji APK bez probnog AccessPolicy može lokalno blokirati neodobrenog
+korisnika iako server daje probni rok; takav APK treba ažurirati.

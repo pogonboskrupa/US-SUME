@@ -25,7 +25,7 @@ async def main():
     else:await r.fulfill(status=404,body='fixture')
    await page.route('**/*',route);await page.goto(ORIGIN+'/');await page.wait_for_function("document.readyState==='complete'&&!!window.OfflineMapImport")
    assert await page.evaluate("typeof navigator.storage.getDirectory==='function'"),'OPFS nedostupan'
-   await page.evaluate("_revealApp();switchTab('karta');window.fieldSnapshot=JSON.stringify([vlake,_tacke,_tragRegistry]);window.copyHold=true;window.importClock=0;window.copyMs=0;window.originalCopy=OfflineMapImport.copy;OfflineMapImport.copy=(f,n,p)=>{const job=originalCopy(f,n,p);return {cancel:job.cancel,promise:job.promise.then(async bytes=>{window.copyMs=performance.now()-importClock;while(copyHold)await new Promise(r=>setTimeout(r,10));return bytes;})}};openLoadMapScreen();void 0")
+   await page.evaluate("_revealApp();switchTab('karta');window.fieldSnapshot=JSON.stringify([vlake,_tacke,_tragRegistry]);window.copyHold=true;window.importClock=0;window.copyMs=0;window.originalCopy=OfflineMapImport.copy;OfflineMapImport.copy=(f,n,p)=>{const job=originalCopy(f,n,p);return {cancel:job.cancel,promise:job.promise.then(async bytes=>{window.copyMs=performance.now()-importClock;while(copyHold)await new Promise(r=>setTimeout(r,10));return bytes;})}};window.originalOpen=sqlmapLoadFile;window.importReturned=false;sqlmapLoadFile=async f=>{const r=await originalOpen(f);importReturned=true;return r;};openLoadMapScreen();void 0")
    await page.locator('#loadmap-file-input').set_input_files(str(fixture));await page.wait_for_function('!document.getElementById("loadmap-confirm").disabled')
    print('ImportCI pohrana: '+json.dumps(await page.evaluate('navigator.storage.estimate()')),flush=True)
    await page.evaluate('importClock=performance.now();void 0');start=time.monotonic();await page.locator('#loadmap-confirm').click()
@@ -33,6 +33,7 @@ async def main():
    except Exception:
     print('ImportCI zastoj: '+json.dumps(await page.evaluate("({status:document.getElementById('loadmap-status').textContent,sql:document.getElementById('sqlmap-status').textContent,layers:_sqlLayers.map(l=>l.name),callbacks:Object.keys(_sqlWCbs),jobs:_sqlImports.size})")),flush=True);print(errors,flush=True);raise
    layer_ms=round((time.monotonic()-start)*1000)
+   await page.wait_for_function('importReturned',timeout=5000)
    await page.evaluate(CENTER);await page.wait_for_function(TILE,timeout=20000);tile_ms=round((time.monotonic()-start)*1000)
    assert await page.evaluate("_sqlLayers.find(sl=>sl.name==='uvoz-1500').saved===false&&_sqlImports.size===1&&!document.getElementById('offline-import-status').hidden&&!document.getElementById('loadmap-modal').classList.contains('show')")
    assert await page.evaluate("JSON.stringify([vlake,_tacke,_tragRegistry])===fieldSnapshot")
@@ -51,6 +52,6 @@ async def main():
    await page.evaluate("window.removePromise=sqlmapRemove(_sqlLayers.findIndex(sl=>sl.name==='uvoz-1500'));void 0");await page.evaluate('removePromise')
    assert await page.evaluate("(async()=>{const r=await _sqlWCall({type:'list'});const root=await navigator.storage.getDirectory();const names=[];for await(const[n]of root.entries())names.push(n);return !_sqlLayers.length&&!r.rows.length&&!names.some(n=>n.endsWith('.sqlmap'));})()")
    assert not errors,errors
-   report={'fixture_bytes':1_500_000_000,'browser':await page.evaluate('navigator.userAgent'),'layer_ms':layer_ms,'first_visible_tile_ms':tile_ms,'full_copy_ms':copied_ms,'offline_restart_tile_ms':restart_ms,'saved_size_exact':True,'delete_during_import':True,'field_data_unchanged':True,'physical_Xiaomi':False,'fixture':'Mala stvarna RMaps baza, proširena nultim bajtovima do 1,5 GB; držan rezultat do provjere ranog prikaza.'}
+   report={'fixture_bytes':1_500_000_000,'browser':await page.evaluate('navigator.userAgent'),'layer_ms':layer_ms,'first_visible_tile_ms':tile_ms,'full_copy_ms':copied_ms,'offline_restart_tile_ms':restart_ms,'open_returns_before_copy':True,'saved_size_exact':True,'delete_during_import':True,'field_data_unchanged':True,'physical_Xiaomi':False,'fixture':'Mala stvarna RMaps baza, proširena nultim bajtovima do 1,5 GB; držan rezultat do provjere ranog prikaza.'}
    (out/'offline-import-240.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False),flush=True);await context.close()
 if __name__=='__main__':asyncio.run(main())
