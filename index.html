@@ -4222,6 +4222,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 <link rel="stylesheet" href="static/css/field-design.css">
 <link rel="stylesheet" href="static/css/server-panel.css">
 <link rel="stylesheet" href="static/css/map-library.css">
+<link rel="stylesheet" href="static/css/terrain-workspace.css">
 </head>
 <body>
 
@@ -4511,7 +4512,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
     <button type="button" class="tab-btn" id="vlake-tab-btn" onclick="switchTab('vlake')" title="Vlake projekta — snimljene i nacrtane"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v15"/><path d="M10 20v-4l4-4V8l-3-3"/><path d="M14 12l3 2"/><path d="M3 20h18"/></svg><span class="vlake-tab-label">Vlake</span><span class="tab-notif" id="notif-vlake"></span></button>
     <button class="tab-btn" onclick="switchTab('doznaka')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="12,3 6,11 18,11"/><polygon points="12,8 5,17 19,17"/><line x1="12" y1="17" x2="12" y2="21"/><circle cx="18" cy="6" r="3.2" stroke-width="1.6"/></svg> Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="16.5" cy="8.5" r="2.6"/><path d="M11 21c0-3.6 2.5-6.3 5.5-6.3S22 17.4 22 21"/><circle cx="9" cy="8" r="3.3"/><path d="M2.5 21c0-4.3 3-7.5 6.5-7.5s6.5 3.2 6.5 7.5"/></svg> Korisnici<span class="tab-notif" id="notif-admin"></span></button>
-    <button class="tab-btn" id="postavke-tab-btn" style="display:none;color:#a78bfa;" onclick="switchTab('postavke')"><svg class="tbi" viewBox="0 0 24 24" stroke-width="1.5"><polygon points="22.1,12 19.39,15.06 19.14,19.14 15.06,19.39 12,22.1 8.94,19.39 4.86,19.14 4.61,15.06 1.9,12 4.61,8.94 4.86,4.86 8.94,4.61 12,1.9 15.06,4.61 19.14,4.86 19.39,8.94"/><circle cx="12" cy="12" r="5.3" stroke-width="1.6"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg> Obavještenja</button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="12,5.5 15,12 12,18.5" stroke-width="1.2"/><polygon points="12,5.5 9,12 12,18.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> Teren</button>
     <span id="vodeci-badge" onclick="closeMenuDropdown();showProjectManagement()" title="Nadzorni nalog — pregled rada svih projektanata šumarije" style="display:none;background:#0e7490;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;">👔 VODEĆI PROJEKTANT</span>
     <span id="offline-badge" title="Nema signala — radi lokalno" style="display:none;width:9px;height:9px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 2px rgba(220,38,38,0.3);margin-left:auto;flex-shrink:0;align-self:center;"></span>
@@ -5120,16 +5120,23 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
     <div id="teren-panel" style="display:none;flex-direction:column;height:100%;overflow-y:auto;background:#0b1220;">
       <div class="trn-head">
         <div style="min-width:0;">
+          <div class="trn-role" id="trn-profile-role">ŠPD US ŠUME · terenski nadzor</div>
           <div class="trn-title"><svg class="ic"><use href="#ic-kompas"/></svg> Teren</div>
-          <div class="trn-sub">Pozicija i orijentacija</div>
+          <div class="trn-sub" id="trn-profile-name">Tvoj terenski radni prostor</div>
         </div>
         <div class="trn-chips" id="trn-chips"></div>
       </div>
 
       <div class="trn-body">
+        <section class="trn-card" aria-label="Pregled terenskog rada">
+          <div class="trn-section-label">Tvoj obilazak</div><h2 class="trn-work-title">Spremno za rad na terenu</h2><p class="trn-work-note">Pozicija, podloga i zapis kretanja na jednom mjestu.</p>
+          <div class="trn-readiness"><div><svg class="ic" aria-hidden="true"><use href="#ic-gps"/></svg><span><b id="trn-ready-gps">GPS isključen</b><small>GPS radi i bez mobilnih podataka</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-karta"/></svg><span><b id="trn-ready-map">Provjeri offline podlogu</b><small id="trn-ready-map-name">Učitaj kartu prije izlaska na teren</small></span></div><div><svg class="ic" aria-hidden="true"><use href="#ic-trag"/></svg><span><b id="trn-ready-track">Obilazak nije pokrenut</b><small id="trn-ready-track-note">Pokreni Snimi trag za zapis kretanja</small></span></div></div>
+          <nav class="trn-nav-links" aria-label="Sekcije Terena"><button onclick="TerenWorkspace.jump('trn-position')">Pozicija</button><button onclick="TerenWorkspace.jump('trn-records')">Moji zapisi</button><button onclick="TerenWorkspace.jump('trn-resources')">Karte i projekti</button></nav>
+        </section>
 
         <!-- POZICIJA -->
-        <section class="trn-card trn-hero">
+        <section class="trn-card trn-hero" id="trn-position">
+          <div class="trn-section-label">Gdje se nalaziš</div>
           <div class="trn-odjel" id="trn-odjel">—</div>
           <div class="trn-tiles">
             <div class="trn-tile gk"><span>Y (GK)</span><b id="trn-y">—</b></div>
@@ -5137,16 +5144,17 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <div class="trn-tile"><span id="trn-alt-lbl">Nadmorska visina</span><b id="trn-alt">— m</b></div>
             <div class="trn-tile"><span>Tačnost GPS-a</span><b id="trn-acc">— m</b><i class="trn-accbar"><i id="trn-accbar"></i></i></div>
           </div>
-          <div class="trn-fix" id="trn-gps-dot">GPS isključen</div>
+          <div class="trn-fix" id="trn-gps-dot">GPS isključen</div><div class="trn-position-actions"><button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> <span id="trn-gps-btn-txt">Uključi GPS</span></button><button class="trn-btn trn-btn-outline" onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj koordinate</button></div>
         </section>
 
         <!-- BRZE RADNJE -->
-        <div class="trn-quick">
-          <button onclick="fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
-          <button onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg><span>Kopiraj</span></button>
-          <button onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg><span>Pošalji</span></button>
-          <button onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg><span>Tačka</span></button>
-          <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg><span>Uslikaj</span></button>
+        <div class="trn-section-label">Brze radnje</div>
+        <div class="trn-quick" aria-label="Terenski alati">
+          <button onclick="switchTab('karta');fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg><span>Moja pozicija</span></button>
+          <button onclick="TerenWorkspace.measure('dist')"><svg class="ic"><use href="#ic-uglomjer"/></svg><span>Izmjeri dužinu</span></button>
+          <button onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg><span>Podijeli poziciju</span></button>
+          <button onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg><span>Zabilježi tačku</span></button>
+          <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg><span>Fotografija</span></button>
           <button id="trn-q-trag" onclick="terenTogTrag()"><svg class="ic"><use href="#ic-trag"/></svg><span id="trn-q-trag-txt">Snimi trag</span></button>
         </div>
 
@@ -5224,15 +5232,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </section>
 
         <!-- MOJI PODACI -->
-        <section class="trn-card">
+        <section class="trn-card" id="trn-records">
+          <div class="trn-card-h"><span>Moji terenski zapisi</span><button class="trn-btn trn-btn-outline" onclick="TerenWorkspace.note()">+ Zapažanje</button></div>
+          <p class="trn-work-note">Sačuvane pozicije, tragovi obilazaka i mjerenja. Tačke su poredane od najbliže.</p>
+          <div class="trn-record-stats"><div><b id="trn-stat-points">0</b><span>tačaka</span></div><div><b id="trn-stat-tracks">0</b><span>tragova</span></div><div><b id="trn-stat-measurements">0</b><span>mjerenja</span></div></div>
+          <label class="trn-search">Pronađi zapis<input type="search" id="trn-search" maxlength="160" placeholder="Naziv tačke, traga ili mjerenja…" oninput="TerenWorkspace.search(this.value)"></label>
           <div class="trn-seg" role="tablist">
-            <button id="trn-seg-tacke" onclick="terenSetTab('tacke')">Tačke <span id="trn-tacke-cnt">0</span></button>
-            <button id="trn-seg-trag" onclick="terenSetTab('trag')">Tragovi <span id="trn-trag-cnt">0</span></button>
-            <button id="trn-seg-msr" onclick="terenSetTab('msr')">Mjerenja <span id="trn-msr-cnt">0</span></button>
+            <button id="trn-seg-tacke" role="tab" aria-controls="trn-pane-tacke" onclick="terenSetTab('tacke')">Tačke <span id="trn-tacke-cnt">0</span></button>
+            <button id="trn-seg-trag" role="tab" aria-controls="trn-pane-trag" onclick="terenSetTab('trag')">Tragovi <span id="trn-trag-cnt">0</span></button>
+            <button id="trn-seg-msr" role="tab" aria-controls="trn-pane-msr" onclick="terenSetTab('msr')">Mjerenja <span id="trn-msr-cnt">0</span></button>
           </div>
           <div id="trn-pane-tacke" class="trn-list"><div id="trn-tacke-list"></div></div>
           <div id="trn-pane-trag" class="trn-list" style="display:none;"><div id="trn-trag-list"></div></div>
           <div id="trn-pane-msr" class="trn-list" style="display:none;"><div id="trn-msr-list"></div></div>
+          <div class="trn-results"><span id="trn-result-count"></span><button id="trn-more" hidden class="trn-btn trn-btn-outline" onclick="TerenWorkspace.more()">Prikaži još 20</button></div>
+          <div class="trn-grid2 trn-measure-actions"><button class="trn-btn trn-btn-outline" onclick="TerenWorkspace.measure('dist')">Izmjeri dužinu</button><button class="trn-btn trn-btn-outline" onclick="TerenWorkspace.measure('area')">Izmjeri površinu</button></div>
         </section>
 
         <!-- DIJELJENJE KRETANJA -->
@@ -5246,7 +5260,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </section>
 
         <!-- UČITAJ PROJEKAT (šifra od projektanta) -->
-        <section class="trn-card">
+        <section class="trn-card" id="trn-resources">
           <div class="trn-card-h"><span><svg class="ic"><use href="#ic-kljuc"/></svg> Projekat od projektanta</span></div>
           <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Ukucaj šifru (npr. RK70ABGH) — vlake odjela se prikažu na karti i ostaju offline.</div>
           <button class="trn-btn trn-btn-accent" onclick="terenUcitajProjekat()"><svg class="ic"><use href="#ic-kljuc"/></svg> Ukucaj šifru</button>
@@ -5260,11 +5274,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <button class="trn-btn trn-btn-outline blue" onclick="openMapManager()"><svg class="ic"><use href="#ic-arhiva"/></svg> Offline karte</button>
             <button class="trn-btn trn-btn-outline" onclick="_openLayerSheet()"><svg class="ic"><use href="#ic-podloga"/></svg> Podloga</button>
             <button class="trn-btn trn-btn-outline" onclick="document.getElementById('kf').click()"><svg class="ic"><use href="#ic-folder"/></svg> Dodaj KML</button>
-            <button class="trn-btn trn-btn-outline" onclick="openOznakePanel()"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikazano</button>
+            <button class="trn-btn trn-btn-outline" onclick="openOznakePanel()"><svg class="ic"><use href="#ic-prikazi"/></svg> Oznake i fajlovi</button>
           </div>
         </section>
 
-        <button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> <span id="trn-gps-btn-txt">Uključi GPS</span></button>
+
 
       </div>
     </div>
@@ -5731,7 +5745,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.2';
+const APP_VER = 'v2.4.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7315,7 +7329,7 @@ async function sbLoadProfile() {
   // element MORA biti eksplicitno postavljen u OBA smjera. Jednosmjerno sakrivanje
   // (samo if-grana bez else) preživi iz prethodne prijave → projektant poslije
   // ŠPD-terenskog naloga na istom uređaju ostane bez Projekat/Vlake/Doznaka tabova.
-  const isAdm = !!data.is_admin;   // admin: nadzor, bez praktičnih alata
+  const isAdm = !!data.is_admin;   // admin: nadzor i lokalni alati Terena
   const isFld = isSpdField();      // ŠPD terenski: samo navigacija/orijentacija
   const isVod = isVodeci();        // vodeći projektant: read-only nadzor svoje šumarije
 
@@ -7328,7 +7342,7 @@ async function sbLoadProfile() {
   const dozTab  = document.querySelector(`button[onclick="switchTab('doznaka')"]`);
   if (adminTabBtn)    adminTabBtn.style.display    = isAdm ? '' : 'none';
   if (postavkeTabBtn) postavkeTabBtn.style.display = isAdm ? '' : 'none';
-  if (terenBtn)    terenBtn.style.display    = isFld ? '' : 'none';
+  if (terenBtn)    terenBtn.style.display    = (isFld || isAdm) ? '' : 'none';
   // Vodeći projektant: samo Karta + Meni (nadzor kroz "Upravljanje projektima")
   if (projBtn)     projBtn.style.display     = (isFld || isVod) ? 'none' : '';
   if (vlkBtn)      vlkBtn.style.display      = (isFld || isVod) ? 'none' : '';
@@ -7354,7 +7368,7 @@ async function sbLoadProfile() {
   const routeBtn = document.getElementById('route-suggest-btn');
   if (routeBtn) routeBtn.parentElement.style.display = isAdm ? 'none' : '';
   const fotoCam = document.getElementById('loc-photo-cam');
-  if (fotoCam) fotoCam.disabled = isAdm;
+  if (fotoCam) fotoCam.disabled = false; // lična terenska fotografija dostupna i adminu
 
   _updFabVisibility();
 }
@@ -12800,6 +12814,7 @@ function terenRender(pun) {
   _trnPodaciRender(!!pun);
   _terenUpdTragUI();
   _trnTickStart();
+  if(typeof TerenWorkspace!=='undefined')TerenWorkspace.render(!!pun);
 }
 
 const _trnPad = n => String(n).padStart(2, '0');
@@ -12893,7 +12908,7 @@ function _trnFixRender() {
   let fixT = 0;
   try { fixT = _lastGpsFixTime || 0; } catch(e) {}
   let cls = '', txt;
-  if (!gpsOn) txt = 'GPS isključen — uključi ga dugmetom na dnu';
+  if (!gpsOn) txt = 'GPS isključen — uključi ga ispod pozicije';
   else if (!lastP || !fixT) { cls = 'warn'; txt = 'Tražim GPS signal…'; }
   else {
     const s = (Date.now() - fixT) / 1000;
@@ -13057,6 +13072,7 @@ function _trnTickStart() {
   _trnTick = setInterval(() => {
     if (_activeTab !== 'teren') { clearInterval(_trnTick); _trnTick = null; return; }
     _trnSyncBroj(); _trnFixRender(); _trnChipsRender(); _trnSunceRender();
+    if(typeof TerenWorkspace!=='undefined')TerenWorkspace.render(false);
   }, 5000);
 }
 
@@ -13073,7 +13089,7 @@ function _trnPodaciRender(sve) {
     const p = document.getElementById('trn-pane-' + k);
     const b = document.getElementById('trn-seg-' + k);
     if (p) p.style.display = k === _trnTab ? '' : 'none';
-    if (b) b.classList.toggle('on', k === _trnTab);
+    if (b) {b.classList.toggle('on', k === _trnTab);b.setAttribute?.('aria-selected',String(k===_trnTab));}
   });
   const cnt = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
   cnt('trn-tacke-cnt', _tacke.length);
@@ -13238,6 +13254,7 @@ function _terenUpdShareUI() {
   const btn = document.getElementById('trn-share-btn');
   const st  = document.getElementById('trn-share-status');
   if (!btn) return;
+  if(btn.dataset)btn.dataset.active=String(!!_shareLiveOn);
   if (_shareLiveOn) {
     btn.textContent = '⏹ Zaustavi dijeljenje';
     btn.style.background = 'linear-gradient(135deg,#7f1d1d,#ef4444)';
@@ -13313,13 +13330,15 @@ function terenRenderTacke() {
   if (cnt) cnt.textContent = _tacke.length;
   if (!list) return;
   if (!_tacke.length) {
+    if(typeof TerenWorkspace!=='undefined')TerenWorkspace.rows([],'tacke',()=> '');
     list.innerHTML = '<div class="trn-empty">Nema sačuvanih tačaka — dugme "Tačka" gore označava tvoju poziciju.</div>';
     return;
   }
   // Najbliže prvo kad ima GPS-a; indeks koji dugmad nose ostaje STVARNI indeks
   // u _tacke (pozicija u listi nije indeks u nizu — v3.102.0).
-  const redovi = _tacke.map((t, i) => ({ t, i, d: lastP ? _haversine(lastP.la, lastP.lo, t.la, t.lo) : null }));
+  let redovi = _tacke.map((t, i) => ({ t, i, d: lastP ? _haversine(lastP.la, lastP.lo, t.la, t.lo) : null }));
   if (lastP) redovi.sort((a, b) => a.d - b.d);
+  if(typeof TerenWorkspace!=='undefined')redovi=TerenWorkspace.rows(redovi,'tacke',r=>r.t.nm);
   list.innerHTML = redovi.map(({ t, i, d }) => {
     const nm = t.nm || ('Tačka ' + (i + 1));
     const voz = t.nm === _TRN_VOZILO_NM;
@@ -13410,10 +13429,11 @@ function terenRenderTragovi() {
   if (cnt) cnt.textContent = _tragRegistry.length;
   if (!list) return;
   if (!_tragRegistry.length) {
+    if(typeof TerenWorkspace!=='undefined')TerenWorkspace.rows([],'trag',()=> '');
     list.innerHTML = '<div class="trn-empty">Nema snimljenih tragova — dugme "Snimi trag" gore počinje snimanje.</div>';
     return;
   }
-  const redovi = _tragRegistry.slice(0, 20).map(t => {
+  const redovi = (typeof TerenWorkspace!=='undefined'?TerenWorkspace.rows(_tragRegistry,'trag',_tragIme):_tragRegistry.slice(0,20)).map(t => {
     const len = _tragFmtLen(_tragCalcLen(t.pts));
     return `<div class="trn-row">
       <div style="width:4px;align-self:stretch;border-radius:2px;background:${_escHtml(t.color || '#f97316')};flex-shrink:0;"></div>
@@ -13469,10 +13489,11 @@ function terenRenderMjerenja() {
   if (cnt) cnt.textContent = _msrRegistry.length;
   if (!list) return;
   if (!_msrRegistry.length) {
+    if(typeof TerenWorkspace!=='undefined')TerenWorkspace.rows([],'msr',()=> '');
     list.innerHTML = '<div class="trn-empty">Nema sačuvanih mjerenja — mjeri se na Karti (Izmjeri).</div>';
     return;
   }
-  list.innerHTML = _msrRegistry.slice(0, 20).map(m => {
+  list.innerHTML = (typeof TerenWorkspace!=='undefined'?TerenWorkspace.rows(_msrRegistry,'msr',m=>m.name):_msrRegistry.slice(0,20)).map(m => {
     const len = _msrFmt(_msrPts2Len(m.pts));
     return `<div class="trn-row">
       <div style="width:4px;align-self:stretch;border-radius:2px;background:${_escHtml(m.color || '#fbbf24')};flex-shrink:0;"></div>
@@ -27819,6 +27840,7 @@ function _abVisinaSync() {
 }
 
 function switchTab(tab) {
+  if(tab==='postavke')tab='teren'; // stari sačuvani odabir Obavještenja otvara Teren
   if(tab!=='karta'&&typeof VlakaDirection!=='undefined')VlakaDirection.cancelPick();
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
@@ -39941,7 +39963,6 @@ if (typeof AndroidDownload !== 'undefined') {
   </section><section class="mdrop-section">
   <div class="mdrop-hdr">Račun i pomoć</div>
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico">👥</span>Admin — korisnici</button>
-  <button type="button" class="mdrop-item" id="menu-postavke-item" style="display:none;color:#a78bfa;" onclick="closeMenuDropdown();switchTab('postavke')"><span class="mdrop-ico">🔔</span>Obavještenja</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico">🛠</span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</button>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico">🔄</span>Ažuriraj aplikaciju</button>
@@ -41959,6 +41980,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 <script src="static/js/field-tools.js"></script>
+<script src="static/js/terrain-workspace.js"></script>
 <style>
 .data-context {flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#122238;border-bottom:1px solid #334155;font-size:12px;color:#cbd5e1;}
 .data-context span {flex:1;overflow-wrap:anywhere;}.data-context small{width:100%;color:#94a3b8;}

@@ -2373,3 +2373,28 @@ produkcijskog RLS-a. Članstvo projekta vlaka i članstvo odjela doznake su
 odvojene tabele; recentni odobreni članovi ne trebaju identične verzije.
 Stariji APK bez probnog AccessPolicy može lokalno blokirati neodobrenog
 korisnika iako server daje probni rok; takav APK treba ažurirati.
+
+
+## 56. ŠPD i administratorski Teren — 2.4.3 / code513
+
+Korisnik je proširio zadatak: značajno unaprijediti Teren za ŠPD US ŠUME,
+a adminu zamijeniti Obavještenja tabom Teren. Uklonjeni su tab i Meni
+prečica Obavještenja; stari tab odabir postavke vodi na Teren. Admin vidi
+Teren i može koristiti lične tačke, fotografije, tragove i mjerenja.
+Projektna prava/RLS nisu proširena. Ostali projektantski tabovi zadržavaju
+postojeće uslove; role UI je i dalje deterministički nakon promjene profila.
+
+Teren dobiva lokalni radni pregled GPS svježine, podloge i snimanja,
+sekcijsku navigaciju, GPS/kopiranje uz koordinatnu karticu, veće kontrole,
+pretragu svih vrsta zapisa i paginaciju20. Stvarni indeks tačke se čuva
+nakon sortiranja/pretrage. Novo imenovano zapažanje hvata poziciju i nalog
+PRIJE dijaloga, ponovo provjerava nalog prije spremanja i koristi postojeći
+lokalni _createTacka. Ugrađene prečice dužina/površina koriste postojeće
+mjerenje. Kartice/tekst prate Dnevni mod. Novi JS/CSS su u SW i APK manifestu.
+
+Nema novih serverskih poziva ni automatskog dijeljenja/slanja. Dashboard
+radi lagano na GPS renderu i postojećem5s otkucaju; nema novog intervala.
+Paginacija/pretraga ne mijenjaju originalne nizove. Testovi provjeravaju
+identitet, paginaciju, promjenu naloga tokom zapažanja i stari GPS.
+Novi puni browser test: ŠPD/admin/projektant,320/390/800px, oba moda,
+imenovana tačka, površina, bez vanjskih upisa. CI rezultat tek dopisati.
