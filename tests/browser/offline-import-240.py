@@ -25,10 +25,10 @@ async def main():
     else:await r.fulfill(status=404,body='fixture')
    await page.route('**/*',route);await page.goto(ORIGIN+'/');await page.wait_for_function("document.readyState==='complete'&&!!window.OfflineMapImport")
    assert await page.evaluate("typeof navigator.storage.getDirectory==='function'"),'OPFS nedostupan'
-   await page.evaluate("_revealApp();switchTab('karta');window.fieldSnapshot=JSON.stringify([vlake,_tacke,_tragRegistry]);window.copyHold=true;window.originalCopy=OfflineMapImport.copy;OfflineMapImport.copy=(f,n,p)=>{const job=originalCopy(f,n,p);return {cancel:job.cancel,promise:job.promise.then(async bytes=>{while(copyHold)await new Promise(r=>setTimeout(r,10));return bytes;})}};openLoadMapScreen();void 0")
+   await page.evaluate("_revealApp();switchTab('karta');window.fieldSnapshot=JSON.stringify([vlake,_tacke,_tragRegistry]);window.copyHold=true;window.importClock=0;window.copyMs=0;window.originalCopy=OfflineMapImport.copy;OfflineMapImport.copy=(f,n,p)=>{const job=originalCopy(f,n,p);return {cancel:job.cancel,promise:job.promise.then(async bytes=>{window.copyMs=performance.now()-importClock;while(copyHold)await new Promise(r=>setTimeout(r,10));return bytes;})}};openLoadMapScreen();void 0")
    await page.locator('#loadmap-file-input').set_input_files(str(fixture));await page.wait_for_function('!document.getElementById("loadmap-confirm").disabled')
    print('ImportCI pohrana: '+json.dumps(await page.evaluate('navigator.storage.estimate()')),flush=True)
-   start=time.monotonic();await page.locator('#loadmap-confirm').click()
+   await page.evaluate('importClock=performance.now();void 0');start=time.monotonic();await page.locator('#loadmap-confirm').click()
    try:await page.wait_for_function("_sqlLayers.some(sl=>sl.name==='uvoz-1500')",timeout=20000)
    except Exception:
     print('ImportCI zastoj: '+json.dumps(await page.evaluate("({status:document.getElementById('loadmap-status').textContent,sql:document.getElementById('sqlmap-status').textContent,layers:_sqlLayers.map(l=>l.name),callbacks:Object.keys(_sqlWCbs),jobs:_sqlImports.size})")),flush=True);print(errors,flush=True);raise
@@ -38,7 +38,7 @@ async def main():
    assert await page.evaluate("JSON.stringify([vlake,_tacke,_tragRegistry])===fieldSnapshot")
    # Zadržan je samo povratni rezultat kopiranja radi determinističke provjere;
    # puni fajl se stvarno kopira proizvodnim workerom, bez umjetnog čekanja u mjerenju.
-   await page.wait_for_function("_sqlImports.get('uvoz-1500').written===1500000000",timeout=120000);copied_ms=round((time.monotonic()-start)*1000)
+   await page.wait_for_function("_sqlImports.get('uvoz-1500').written===1500000000",timeout=120000);await page.wait_for_function('copyMs>0',timeout=10000);copied_ms=round(await page.evaluate('copyMs'))
    await page.evaluate('copyHold=false;void 0');await page.wait_for_function("_sqlLayers.find(sl=>sl.name==='uvoz-1500').saved&&_sqlImports.size===0",timeout=20000)
    meta=await page.evaluate("(async()=>{const r=await _sqlWCall({type:'list'});const e=r.rows.find(x=>x.name==='uvoz-1500');const fh=await(await navigator.storage.getDirectory()).getFileHandle(e.opfsName);return {saved:e.opfs,path:e.opfsName,size:(await fh.getFile()).size,last:JSON.parse(localStorage.getItem(_LASTMAP_KEY))};})()")
    assert meta['saved'] and meta['size']==1_500_000_000 and meta['last']['opfsName']==meta['path'],meta
