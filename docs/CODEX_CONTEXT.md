@@ -2536,3 +2536,32 @@ identični originalnomartifactu. Jednokratni workflow korak i actions:read
 scope uklonjeni; workflow vraćen identično prethodnoj2.4.6 verziji.
 Cleanup commit[skipci] ne mijenja aplikacijske resurse ni verziju;
 izrada2.4.7 iz cbacaf577b721449aedc89417e09c5b2ae99b0c1 nastavlja.
+
+
+## Završena objava Preglednika — 2.4.7, 2026-10-07
+
+CI37574969641 izcbacaf577b721449aedc89417e09c5b2ae99b0c1:96JS grupa,
+PostgreSQL/RLS testna baza, sve browser provjere (uključuju novi izgled
+i puni5h/CPU4x teren), APK build i58assetSHA provjera prošli.
+Android14/API34, stvarni MainActivity/WebView,3testa/0grešaka/0preskočenih:
+Explorer21.566s, offlineSQLite11.546s, OCRoffline0.234s.
+Job je FAILED samo na kreiranju Release-a403 Resource not accessible by
+integration: tag bi pokazivao commit sa privremenim workflow korakom.
+Release kreiran na očišćenom stablud012440625d9b6f12b95c3df30f2ee4cbddbfa80,
+sa istim aplikacijskim resursima; sourceAPK ostaje cbacaf577b721449aedc89417e09c5b2ae99b0c1.
+Objava već provjerenog APK-a završena zasebnimCI37576008962SUCCESS.
+Jednokratni publish job/input uklonjeni; workflow opet identičan2.4.6.
+
+JavniAPKpreuzet i identičan artefaktu:24,055,016B (~24.06MB),
+SHA2563b00b46a7eed60fa44c7ebe1a2ba815aeb45654f135eb4e0456a57ba9f26fd0c.
+Paketba.spd.uss.vlake.debug,2.4.7-debug/code517, certSHA256
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Sva58webasseta identična2.4.6 osim index/sw/novogCSS/JS preglednika.
+15launcherPNG i GRANICE>10MB očuvani, nema offlineOCRmodela.
+Updaterski /releases?per_page=1 potvrđuje v2.4.7/app-debug.apk.
+https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.7/app-debug.apk
+Fizički Xiaomi nije testiran; produkcijski Supabase nije mijenjan.
+Aktualni worktree /workspace/US-SUME-current, grana CODEX-US-SUME.
+Stariji /workspace/US-SUME je sačuvan sa njegovim nepoznatim/untracked
+fajlovima i starom granom; naredni rad početi od aktualnog worktree-a
+i provjeriti najnoviji Release i branch ref PRIJE izbora verzije.

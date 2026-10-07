@@ -1,11 +1,6 @@
 name: CODEX WebView provjera i APK
 on:
   workflow_dispatch:
-    inputs:
-      publish_verified_apk:
-        description: Jednokratna objava već provjerenog APK artefakta
-        type: boolean
-        default: false
   push:
     branches:
       - CODEX-US-SUME
@@ -17,7 +12,7 @@ permissions:
   contents: write
 jobs:
   apk:
-    if: (github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01') && !(github.event_name == 'workflow_dispatch' && github.event.inputs.publish_verified_apk == 'true')
+    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -239,26 +234,3 @@ jobs:
           name: Analiza-brzine-${{ github.sha }}
           path: outputs/performance/
           if-no-files-found: ignore
-
-  publish_verified_apk:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_verified_apk == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: read
-    steps:
-      - name: Objavi tačan provjereni APK 2.4.7
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download 37574969641 --repo pogonboskrupa/US-SUME \
-            --name US-SUME-CODEX-debug-cbacaf577b721449aedc89417e09c5b2ae99b0c1 \
-            --dir /tmp/dendro-verified-247
-          APK_VERIFIED=$(find /tmp/dendro-verified-247 -name '*.apk' -print -quit)
-          test -n "$APK_VERIFIED"
-          python3 - "$APK_VERIFIED" <<'PYCODE'
-          import hashlib,sys
-          from pathlib import Path
-          assert hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest() == '3b00b46a7eed60fa44c7ebe1a2ba815aeb45654f135eb4e0456a57ba9f26fd0c'
-          PYCODE
-          gh release upload v2.4.7 "$APK_VERIFIED" --clobber --repo pogonboskrupa/US-SUME
