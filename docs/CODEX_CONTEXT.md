@@ -2515,6 +2515,15 @@ Sintaksa5inlineblokova OK. APK/CI rezultat dopisati nakon objave.
 Prvi rad je počeo iz prethodne radne grane CODEX-US-SUME-2026-10-01
 i pripremio2.4.1, prije nego je završna provjera otkrila noviji CODEX-US-SUME
 sa2.4.6. Ispravljeno: dizajn prenesen na aktualni kod bez gubitka novijih
-izmjena. Raniji release2.4.1 vraćen na izvorni APK iz uspješnogCI37485155170
+izmjena. Raniji release2.4.1 treba vratiti na izvorni APK iz uspješnogCI37485155170
 i izvorni target/bodya2e668618a365574134bbf56085caa8e18637bb9.
 Ne koristiti novi dizajn u tom starom izdanju; konačna objava je2.4.7.
+
+CI37574648644 je zaustavljen jer field-five-hours.py hardkodira stare
+žute nijanse. Provjera ažurirana na novu neutralnu paletu bez slabljenja
+GPS/IDB/bez-upisa uslova; lokalni puni5h/CPU4x test prolazi.
+Izvorni2.4.1 APK iz CI-ja preuzet i potvrđen SHA256da312d1447061f7799fccfe1840f0044edbebc0f3216fbeb39b5456cf8a6beb7.
+Direktni binary upload kroz cloud proxy vraća Bad Content-Length; metadata
+ranije objave vraćena, asset čeka obnovu. Jednokratni korak u CI-ju
+preuzima originalni artifact i provjerava tačanSHA prije upload-a;
+ukloniti poslije uspješne obnove. Produkcijski Supabase nije mijenjan.

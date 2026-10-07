@@ -62,10 +62,10 @@ async def main():
   report['externalWrites']=len(writes)
   (out/'field-five-hours.json').write_text(json.dumps(report,indent=2))
   await page.screenshot(path=str(out/'folder-panel-240.png'))
-  # Tople površine prati odabrani režim; gornji/donji dio imaju blag prijelaz.
+  # Neutralne površine prate odabrani režim bez žutih foldera.
   for theme in ['day','dark']:
    await page.evaluate('(t)=>{document.documentElement.dataset.fieldTheme=t;}',theme)
-   assert await page.locator('.ml-folder-area').evaluate('(e)=>getComputedStyle(e).backgroundColor')=={'day':'rgb(238, 231, 211)','dark':'rgb(51, 56, 43)'}[theme]
+   assert await page.locator('.ml-folder-area').evaluate('(e)=>getComputedStyle(e).backgroundColor')=={'day':'rgb(241, 244, 244)','dark':'rgb(24, 36, 44)'}[theme]
    assert await page.locator('#oznake-panel').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
   await browser.close();print(json.dumps(report),flush=True)
 if __name__=='__main__':asyncio.run(main())

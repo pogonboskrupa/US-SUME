@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: write
+  actions: read
 jobs:
   apk:
     if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
@@ -30,6 +31,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+      # Jednokratno vraćanje ranije objave poslije kolizije broja verzije.
+      # Ukloniti ovaj korak nakon uspješnog vraćanja izvornog artefakta.
+      - name: Vrati izvorni APK ranije objave v2.4.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 37485155170 --repo pogonboskrupa/US-SUME \
+            --name US-SUME-CODEX-debug-a2e668618a365574134bbf56085caa8e18637bb9 \
+            --dir /tmp/dendro-original-241
+          APK_ORIGINAL=$(find /tmp/dendro-original-241 -name '*.apk' -print -quit)
+          test -n "$APK_ORIGINAL"
+          python3 - "$APK_ORIGINAL" <<'PYCODE'
+          import hashlib,sys
+          from pathlib import Path
+          assert hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest() == 'da312d1447061f7799fccfe1840f0044edbebc0f3216fbeb39b5456cf8a6beb7'
+          PYCODE
+          gh release upload v2.4.1 "$APK_ORIGINAL" --clobber --repo pogonboskrupa/US-SUME
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
