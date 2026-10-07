@@ -2527,3 +2527,12 @@ Direktni binary upload kroz cloud proxy vraća Bad Content-Length; metadata
 ranije objave vraćena, asset čeka obnovu. Jednokratni korak u CI-ju
 preuzima originalni artifact i provjerava tačanSHA prije upload-a;
 ukloniti poslije uspješne obnove. Produkcijski Supabase nije mijenjan.
+
+
+Obnova starog2.4.1 završena u CI37574969641 prije JS testova.
+GitHub release dodatno provjeren: targeta2e668618a365574134bbf56085caa8e18637bb9,
+app-debug.apk24,021,344B i digestda312d1447061f7799fccfe1840f0044edbebc0f3216fbeb39b5456cf8a6beb7
+identični originalnomartifactu. Jednokratni workflow korak i actions:read
+scope uklonjeni; workflow vraćen identično prethodnoj2.4.6 verziji.
+Cleanup commit[skipci] ne mijenja aplikacijske resurse ni verziju;
+izrada2.4.7 iz cbacaf577b721449aedc89417e09c5b2ae99b0c1 nastavlja.
