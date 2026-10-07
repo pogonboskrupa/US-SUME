@@ -2565,3 +2565,44 @@ Aktualni worktree /workspace/US-SUME-current, grana CODEX-US-SUME.
 Stariji /workspace/US-SUME je sačuvan sa njegovim nepoznatim/untracked
 fajlovima i starom granom; naredni rad početi od aktualnog worktree-a
 i provjeriti najnoviji Release i branch ref PRIJE izbora verzije.
+
+## Detaljan pregled Servera — 2026-10-07, aplikacija ostaje 2.4.7
+
+Novi zahtjev: provjeriti slanje/prijem, naročito nove korisnike; prijavljeni
+SocketException i `new row violates row-level security policy for table
+"projekt_clanovi"`. Ovo je pregled, ne aplikacijska/produkcijska popravka.
+Nalazi: docs/PREGLED_SERVERA_2026-10-07.md. Remote CODEX-US-SUME decd0e8 i
+lokalni HEAD imali su isti tree192a51af prije pregleda; najnoviji Release2.4.7.
+
+Reproducirano: confirmDodajClanove ne provjerava _pendingSync i neposlani
+projekat dobiva isti42501; nakon INSERT-a projekta isti član prolazi.
+sbLoadProjekti zanemaruje greške članstva/dijeljenih projekata, zamjenjuje
+keš, deaktivira aktivni dijeljeni projekat i _kvcPurgeStale briše kolegine
+vlake iz lokalnog keša. serverPreuzmiDijeljeno dopušta _cachedStub i prazan
+RLS SELECT tumači kao uspješnu nultu listu, bez potvrde serverskog pristupa.
+Catch prijema vraća samo ok:false; pojedinačni GPS fallback prešuti42501
+u error:null iako tačke ostaju u baferu. Ovo nisu riješeni bugovi.
+
+SQL test sa stvarnim politikama20260713 + restrictive je_odobren i
+migracijom20261005: važeći probni vlasnik/član radi, neposlani/tuđi projekt
+odbija članstvo; vraćen stari gate blokira probnog korisnika i SELECT
+vraća[]; istekao član također dobiva[]. §54 već bilježi korisnikovu potvrdu
+probnog SQL-a; stanje produkcijske funkcije nije nezavisno provjereno.
+Ne pokretati staru konsolidovanu migraciju naslijepo:20260713 briše
+naknadne restrictive politike;20260727 vraća stari gate i grandfathering.
+
+Supabase koristi WebView fetch/reliableFetch. Eksplicitni Java tretman
+SocketException je u GitHub APK updateru, ne projektnoj sinhronizaciji;
+bez loga/tačnog ekrana ne zaključivati koji se prenos prekinuo.
+
+Isporučeno: read-only supabase/dijagnostika_server_20261007.sql (pravila,
+funkcije, triggeri, brojevi novih naloga bez e-maila/tajni),
+tests/audit/server-247.cjs (7 namjernih reprodukcija postojećih problema,
+izvan regresijskog tests/js skupa), tests/sql/server-clanstvo-247.sql
+(isključivo prazna lokalna baza; uvozi stari probni fixture).
+14 relevantnih postojećihJS grupa prošlo; oba PostgreSQL fixturea
+prošla u izolovanomPG16 containeru bez mreže; dijagnostika radi i bez
+probni_do kolone. Browser server-confirm-234 prošao sa stvarnim Supabase
+klijentom i kontrolisanimHTTP, UI_CHROMIUM=/usr/bin/chromium.
+Fizički Xiaomi/mobilni signal/produkcijski Supabase nisu provjereni.
+Nema izmjene runtimea, verzije, workflowa, releasea ili produkcijskih podataka.
