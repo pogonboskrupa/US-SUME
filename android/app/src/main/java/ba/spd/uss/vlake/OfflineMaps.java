@@ -30,6 +30,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private final SharedPreferences refs;
     private final ExecutorService commands = Executors.newSingleThreadExecutor();
     private final Map<String, Entry> open = new HashMap<>();
+    private int generation;
     private static final class Entry {
         SQLiteDatabase db; ParcelFileDescriptor fd;
         String fmt, query; int offset = 17; JSONObject meta;
@@ -61,7 +62,8 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private JSONObject document(String id) throws Exception {String s=refs.getString(id,null);if(s==null)throw new java.io.IOException("Ponovo odaberi fajl karte");return new JSONObject(s);}
     private void progress(WebView view,long request,long bytes,long total){JSONObject p=new JSONObject();try{p.put("progress",bytes).put("total",total);}catch(Exception ignored){}reply(view,request,p);}
     private Entry load(String id,WebView view,long request) throws Exception {
-        synchronized(open){if(open.containsKey(id))return open.get(id);}
+        final int openingGeneration;
+        synchronized(open){if(open.containsKey(id))return open.get(id);openingGeneration=generation;}
         JSONObject doc=document(id);Uri uri=Uri.parse(doc.getString("uri"));Entry entry=new Entry();
         File owned=new File(context.getFilesDir(),"offline-maps/"+id+".sqlite");
         try {
@@ -93,7 +95,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                 }
             }
             inspect(entry);entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile());
-            synchronized(open){open.put(id,entry);}return entry;
+            synchronized(open){if(generation!=openingGeneration)throw new java.io.IOException("Učitavanje je prekinuto");open.put(id,entry);}return entry;
         }catch(Exception e){entry.close();throw e;}
     }
     private void inspect(Entry e) throws Exception {
@@ -119,11 +121,25 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         if(e.fmt.equals("rmaps")&&sample){
             // RMaps stores z=17-webZoom. Some exporters use ordinary XYZ instead.
             e.offset=17;
-            if(sampleZ>=0&&sampleZ<=22&&sampleX<(1L<<sampleZ)&&sampleY<(1L<<sampleZ))e.offset=0;
+            int inverted=17-sampleZ;
+            if(inverted<0||inverted>22||sampleX>=(1L<<inverted)||sampleY>=(1L<<inverted))e.offset=0;
         }
         int lo=0,hi=22;
         if(e.fmt.equals("rmaps")){hi=e.offset==0?22:e.offset;
-            if(table(db,"info"))try(Cursor c=db.rawQuery("SELECT minzoom,maxzoom FROM info LIMIT 1",null)){if(c.moveToFirst()){lo=c.getInt(0);hi=c.getInt(1);if(lo>hi){int a=lo;lo=hi;hi=a;}if(e.offset!=0){int a=lo;lo=e.offset-hi;hi=e.offset-a;}}}catch(Exception ignored){}
+            if(table(db,"info"))try(Cursor c=db.rawQuery("SELECT minzoom,maxzoom FROM info LIMIT 1",null)){if(c.moveToFirst()){
+                lo=c.getInt(0);hi=c.getInt(1);if(lo>hi){int a=lo;lo=hi;hi=a;}
+                int web=e.offset==0?sampleZ:e.offset-sampleZ;
+                if(e.offset!=0&&sampleZ>=lo&&sampleZ<=hi&&(web<lo||web>hi)){int a=lo;lo=e.offset-hi;hi=e.offset-a;}
+            }}catch(Exception ignored){}
+        }
+        if(!e.fmt.equals("rmaps")&&!e.meta.has("minzoom")&&!e.meta.has("maxzoom")){
+            // ORDER BY/LIMIT is cheap only when an ordered index supplies it. Never sort a huge table on startup.
+            boolean sorted=true;String sql="SELECT "+qz+" FROM "+qt+" ORDER BY "+qz;
+            try(Cursor plan=db.rawQuery("EXPLAIN QUERY PLAN "+sql+" LIMIT 1",null)){while(plan.moveToNext())if(plan.getString(3).contains("TEMP B-TREE"))sorted=false;}
+            if(sorted){
+                try(Cursor c=db.rawQuery(sql+" ASC LIMIT 1",null)){if(c.moveToFirst())lo=c.getInt(0);}
+                try(Cursor c=db.rawQuery(sql+" DESC LIMIT 1",null)){if(c.moveToFirst())hi=c.getInt(0);}
+            }
         }
         if(e.fmt.equals("gpkg")&&table(db,"gpkg_tile_matrix"))try(Cursor c=db.rawQuery("SELECT MIN(zoom_level),MAX(zoom_level) FROM gpkg_tile_matrix WHERE table_name=?",new String[]{t})){if(c.moveToFirst()&&!c.isNull(0)){lo=c.getInt(0);hi=c.getInt(1);}}
         if(!e.meta.has("minzoom"))e.meta.put("minzoom",lo);if(!e.meta.has("maxzoom"))e.meta.put("maxzoom",hi);
@@ -135,7 +151,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
             }
         }
     }
-    void closeAll(){synchronized(open){for(Entry e:open.values())e.close();open.clear();}}
+    void closeAll(){synchronized(open){generation++;for(Entry e:open.values())e.close();open.clear();}}
     private void remove(String id) throws Exception {
         JSONObject old=document(id);
         synchronized(open){Entry e=open.remove(id);if(e!=null)e.close();}
