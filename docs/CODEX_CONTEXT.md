@@ -2722,4 +2722,13 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Lokalno 100 JS grupa, simulacija, 5 inline sintaksi, LoadMap browser suite
   prošli. Novi MapDownloadsTest: kontrolisani transport, stvarni APK/native
   file/SQLite/IDB/WebView/Leaflet, restart i offline tile/delete/invalid HTML.
-  CI/APK provjera u toku; detalji docs/PREUZIMANJE_UNSKO_2026-10-07.md.
+  CI 37610697691 uspješan: 100 JS grupa, browseri, SQL/RLS i 5 Android
+  instrumentacijskih testova bez grešaka/preskakanja. Prvih 64 KB javnog
+  fajla potvrđuje stvarni MBTiles schema; puni GET prihvata AndroidDownloadManager
+  user agent bez cookies (pročitan samo header, ne cijeli fajl).
+- Objavljen APK v2.5.1: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.1/app-debug.apk
+  24.087.350 B, SHA256 dfb2df911029d25fcf848db1e1eda5e41fc8e2ac7721a9ba890b020318af3fda.
+  Izvor 9796c6bd1e7af89bdec2c1c73157a767c64193d3; manifest
+  ba.spd.uss.vlake.debug, 2.5.1-debug/521, isti stabilni certifikat i svih
+  61 assets hashova. Puni DownloadManager transfer/fizički Xiaomi i produkcijski
+  Supabase nisu testirani. Detalji docs/PREUZIMANJE_UNSKO_2026-10-07.md.
