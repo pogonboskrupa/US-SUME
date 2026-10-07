@@ -51,5 +51,14 @@ GPS, pohrana, server, geometrija i izračun površina nisu mijenjani.
 - Pregled 320 × 568, 390 × 800, 568 × 320 i 800 × 600, dnevni/tamni mod;
   sačuvani PNG pregledi u `outputs/ui-preview/`, vizuelno pregledani Vlake
   (dnevni) i Doznaka (tamni) na 320 px.
-- APK/CI rezultat se dopisuje nakon završetka. Fizički Xiaomi i produkcijska
-  Supabase baza nisu dio ove provjere.
+- CI [37602046578](https://github.com/pogonboskrupa/US-SUME/actions/runs/37602046578)
+  završio uspješno: svi browser testovi, probni SQL/RLS i 4 instrumentacijska
+  testa na Android 14 emulatoru, bez padova/preskakanja.
+- Konačni APK ima svih 60 web fajlova s identičnim hashovima izvornog koda,
+  versionName 2.4.9-debug, versionCode 519, postojeći stabilni potpis.
+  Veličina 24.071.423 B; SHA256
+  `59a588d1450218b6df925d6ac462ca6e546a222b1173bfb08c35dc26ea6d255d`.
+- [APK v2.4.9](https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.9/app-debug.apk)
+  objavljen je s izvornog commita `e8e778afe22360c3513e56f53bf59532dc3194a8`;
+  dostupan u Meni → Ažuriraj aplikaciju.
+- Fizički Xiaomi i produkcijska Supabase baza nisu dio ove provjere.

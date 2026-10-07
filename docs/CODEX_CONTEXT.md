@@ -2669,4 +2669,13 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Lokalno prošlo 99 JS grupa, 5 inline sintaksnih provjera, simulacija šest
   dana i prošireni project-vlake-220.py (svi help tabovi, tastatura, mali
   ekrani, offline pristup). Dokument: UPUTE_KORISTENJE_2026-10-07.md.
-- Web/SW/Android 2.4.9, versionCode 519. CI i provjera konačnog APK-a slijede.
+- Web/SW/Android 2.4.9, versionCode 519. CI 37602046578 uspješan (99 JS
+  grupa, svi browser testovi, probni SQL/RLS, 4 Android 14 instrumentacijska
+  testa bez padova). Izvor e8e778afe22360c3513e56f53bf59532dc3194a8.
+- APK v2.4.9 objavljen za postojeći in-app updater; provjeren paket
+  ba.spd.uss.vlake.debug, 2.4.9-debug/519, stabilni certifikat i svih 60
+  assets hashova. Veličina 24.071.423 B, SHA256
+  59a588d1450218b6df925d6ac462ca6e546a222b1173bfb08c35dc26ea6d255d.
+  Link: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.9/app-debug.apk
+  Fizički Xiaomi/produkcijski Supabase nisu testirani; poslovni tokovi nisu
+  mijenjani ovim zadatkom.
