@@ -5728,7 +5728,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.7';
+const APP_VER = 'v2.4.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -5937,6 +5937,7 @@ function _loadLocalVlake() {
 </script>
 <script src="static/js/offline-layer.js"></script>
 <script src="static/js/offline-import.js"></script>
+<script src="static/js/native-offline-maps.js"></script>
 <script src="static/js/field-store.js"></script>
 <script>
 
@@ -15655,7 +15656,7 @@ const _LASTMAP_KEY = 'tvlake_last_map';
 let _mapFavs = [];
 
 function _saveLastMap(type, key, sqlId) {
-  try { const sl=type==='sqlite'&&typeof _sqlLayers!=='undefined'?_sqlLayers.find(l=>l.name===sqlId):null;localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key:key||null, sqlId:sqlId||null, ...(sl?.opfsName?{opfsName:sl.opfsName}:{}) })); } catch(e) {}
+  try { const sl=type==='sqlite'&&typeof _sqlLayers!=='undefined'?_sqlLayers.find(l=>l.name===sqlId):null;localStorage.setItem(_LASTMAP_KEY, JSON.stringify({ type, key:key||null, sqlId:sqlId||null, ...(sl?.opfs?{opfsName:sl.opfsName}:{}) , ...(sl?.meta?._nativeId?{nativeId:sl.meta._nativeId}:{}) })); } catch(e) {}
 }
 
 function _mapFavLoad() {
@@ -30960,25 +30961,41 @@ class MiniSqlite {
     return vs;
   }
   // Read single column value from in-page payload only (no overflow). Fast for small integers.
-  _recCol(data,pos,pLen,col) {
-    const safe=Math.min(pLen,data.length-pos); const d=data.slice(pos,pos+safe);
-    let p=0; const[hSz,hL]=MiniSqlite._vi(d,p); p+=hL;
-    const ts=[]; while(p<hSz&&ts.length<=col){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
+  _recCol(data,pos,pLen,col,isIdx=false) {
+    const maxL=isIdx?Math.floor((this.ps-12)*64/255)-23:this.ps-35;
+    const minL=Math.floor((this.ps-12)*32/255)-23;
+    let local=pLen;
+    if(pLen>maxL){local=minL+(pLen-minL)%(this.ps-4);if(local>maxL)local=minL;}
+    const d=data.subarray(pos,pos+Math.min(local,data.length-pos));
+    let p=0;const[hSz,hL]=MiniSqlite._vi(d,p);p+=hL;
+    if(!Number.isFinite(hSz)||hSz>d.length)return undefined;
+    const ts=[];while(p<hSz&&ts.length<=col){const[t,tl]=MiniSqlite._vi(d,p);ts.push(t);p+=tl;}
     if(ts.length<=col)return undefined;
-    p=hSz; for(let i=0;i<col;i++)p+=MiniSqlite._sz(ts[i]);
-    const t=ts[col]; const sz=MiniSqlite._sz(t);
-    if(t===0)return null; if(t===8)return 0; if(t===9)return 1;
-    if(t>=13&&t%2===1)return new TextDecoder().decode(d.slice(p,p+sz));
+    p=hSz;for(let i=0;i<col;i++)p+=MiniSqlite._sz(ts[i]);
+    const t=ts[col],sz=MiniSqlite._sz(t);if(p+sz>d.length)return undefined;
+    if(t===0)return null;if(t===8)return 0;if(t===9)return 1;
+    if(t===7)return new DataView(d.buffer,d.byteOffset+p,8).getFloat64(0,false);
+    if(t>=13&&t%2===1)return new TextDecoder().decode(d.subarray(p,p+sz));
+    if(t>=12)return undefined;
     return MiniSqlite._ri(d,p,sz);
   }
-  async _scanLeaves(root,cb) {
+  async _scanLeaves(root,cb,filter) {
     const go=async(n)=>{
       const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===5?12:8);
-      if(t===5){for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);await go(MiniSqlite._u32(d,cp));}await go(MiniSqlite._u32(d,ho+8));}
-      else{for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid]=MiniSqlite._vi(d,p);p+=MiniSqlite._vi(d,cp+pLS)[1];cb(rid,await this._rec(d,p,pL));}}
+      if(t===5){
+        for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2);if(await go(MiniSqlite._u32(d,cp)))return true;}
+        return go(MiniSqlite._u32(d,ho+8));
+      }
+      for(let i=0;i<nc;i++){
+        const cp=MiniSqlite._u16(d,cpo+i*2);let p=cp;
+        const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;
+        if(filter&&!filter(d,p,pL))continue;
+        if(cb(rid,await this._rec(d,p,pL))===true)return true;
+      }
+      return false;
     };
-    await go(root);
+    return go(root);
   }
   async _idxSearch(n,v0,v1,v2) {
     const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
@@ -31003,16 +31020,19 @@ class MiniSqlite {
   // Index B-tree search by (v0,v1,v2) — works for both WITHOUT ROWID and covering indices
   // For 4-key PRIMARY KEY (x,y,z,s): matches first 3 keys, returns first hit regardless of 4th
   async _wRowSearch(n,v0,v1,v2) {
-    const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
-    const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===2?12:8);
-    for(let i=0;i<nc;i++){const cp=MiniSqlite._u16(d,cpo+i*2); let p=cp;
-      if(t===2){const ch=MiniSqlite._u32(d,p);p+=4;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;
-        const r=await this._rec(d,p,pL,true);const cmp=r[0]!==v0?(r[0]<v0?-1:1):r[1]!==v1?(r[1]<v1?-1:1):r[2]!==v2?(r[2]<v2?-1:1):0;
-        if(cmp>0) return this._wRowSearch(ch,v0,v1,v2);
-        if(cmp>=0) return r;}
-      else{const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const r=await this._rec(d,p,pL,true);
-        if(r[0]===v0&&r[1]===v1&&r[2]===v2)return r;}}
-    if(t===2) return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
+    const d=await this._pg(n),ho=n===1?100:0,t=d[ho];
+    const nc=MiniSqlite._u16(d,ho+3),cpo=ho+(t===2?12:8);
+    const key=[v0,v1,v2];
+    const cell=i=>{let p=MiniSqlite._u16(d,cpo+i*2),child=0;if(t===2){child=MiniSqlite._u32(d,p);p+=4;}const[len,size]=MiniSqlite._vi(d,p);return {p:p+size,len,child};};
+    const compare=c=>{
+      for(let k=0;k<3;k++){const v=this._recCol(d,c.p,c.len,k,true);if(v!==key[k])return v<key[k]?-1:1;}
+      return 0;
+    };
+    // Coordinate keys fit locally. Fetch image/overflow pages only on an exact match.
+    let lo=0,hi=nc;
+    while(lo<hi){const mid=(lo+hi)>>1;if(compare(cell(mid))<0)lo=mid+1;else hi=mid;}
+    if(lo<nc){const c=cell(lo);if(compare(c)===0)return this._rec(d,c.p,c.len,true);if(t===2)return this._wRowSearch(c.child,v0,v1,v2);}
+    if(t===2)return this._wRowSearch(MiniSqlite._u32(d,ho+8),v0,v1,v2);
     return null;
   }
   async init() {
@@ -31032,7 +31052,7 @@ class MiniSqlite {
           const pkm=s.match(/primary\\s+key\\s*\\(([^)]*)\\)/);
           if(pkm)this._pkCols=pkm[1].split(',').map(c=>c.trim().replace(/["'\x60\\[\\]]/g,'').split(/\\s+/)[0]).filter(Boolean);
           if(m){const cols=m[1].split(',').map(c=>c.trim().split(/\\s+/)[0].replace(/["'\x60\\[\\]]/g,''));
-            const ci=n=>cols.indexOf(n);
+            this._columnNames=cols;const ci=n=>cols.indexOf(n);
             if(ci('zoom_level')>=0){this.fmt='mbtiles';this.colZ=ci('zoom_level');this.colX=ci('tile_column');this.colY=ci('tile_row');this.colD=ci('tile_data');}
             else if(ci('z')>=0&&ci('image')>=0){this.fmt='rmaps';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('image');}
             else if(ci('z')>=0&&ci('tile')>=0){this.fmt='alpinequest';this.colZ=ci('z');this.colX=ci('x');this.colY=ci('y');this.colD=ci('tile');}}}
@@ -31040,6 +31060,17 @@ class MiniSqlite {
       if(type==='table'&&name?.toLowerCase()==='metadata') metaRoot=rootPage;
       if(type==='index'&&tbl?.toLowerCase()==='tiles'){this.idxRoot=rootPage;this._idxSql=sql||'';}
     });
+    // Choose a coordinate index, not whichever sqlite_master happens to list last.
+    if(this.fmt&&this._columnNames){
+      const zn=this._columnNames[this.colZ],xn=this._columnNames[this.colX],yn=this._columnNames[this.colY];
+      const candidates=(_idxByTbl.tiles||[]).map(idx=>{
+        const m=idx.sql.toLowerCase().match(/\\(([^)]*)\\)/);
+        const names=m?m[1].split(',').map(c=>c.trim().replace(/["'\\[\\]]/g,'').split(/\\s+/)[0]):this._pkCols;
+        return {...idx,names};
+      }).filter(idx=>idx.names&&[zn,xn,yn].every(n=>idx.names.slice(0,3).includes(n))&&!/\\bdesc\\b/i.test(idx.sql));
+      const selected=candidates[0];this.idxRoot=selected?.root||0;this._idxSql=selected?.sql||'';
+      if(selected){this._idxColZ=selected.names.indexOf(zn);this._idxColX=selected.names.indexOf(xn);this._idxColY=selected.names.indexOf(yn);}
+    }
     // GeoPackage (.gpkg): tile podaci su u korisničkoj tabeli (ime iz gpkg_contents)
     if(!this.fmt && _gpkgRoot>0){
       let tileTbl=null;
@@ -31078,7 +31109,7 @@ class MiniSqlite {
     if(ic&&ic[0]==='x'&&ic[1]==='y'){
       // OruxMaps/sqlitedb: index(x,y,z[,s]); table has (x,y,z,s,image)
       this.fmt='rmaps'; this._zm=0;
-      this.colX=0; this.colY=1; this.colZ=2; this.colD=4; // image blob at col 4
+      // Data-column position comes from the table, including RMaps files without s.
       this._idxColX=0; this._idxColY=1; this._idxColZ=2;
       this._nIdxKeys=ic.length; // 3 or 4 (with 's' column)
     }
@@ -31103,7 +31134,7 @@ class MiniSqlite {
       const scanRoot=this.noRowId?this.tilesRoot:this.idxRoot;
       if(scanRoot>0){
         try{
-          const fe=await this._firstIdxEntry(scanRoot);const le=await this._lastIdxEntry(scanRoot);
+          const fe=await this._firstIdxEntry(scanRoot,true);const le=await this._lastIdxEntry(scanRoot,true);
           if(fe&&le){
             const sz=fe[this._idxColZ],lz=le[this._idxColZ];
             const mns=Math.min(sz,lz),mxs=Math.max(sz,lz);
@@ -31163,9 +31194,9 @@ class MiniSqlite {
             const lat=Math.atan(Math.sinh(latR))*180/Math.PI;
             return (isFinite(lon)&&isFinite(lat))?{lon,lat,z:zz}:null;
           };
-          const a=toLL(await this._firstIdxEntry(sr2));
-          const b=toLL(await this._lastIdxEntry(sr2));
-          const mid=toLL(await this._middleIdxEntry(sr2));
+          const a=toLL(await this._firstIdxEntry(sr2,true));
+          const b=toLL(await this._lastIdxEntry(sr2,true));
+          const mid=toLL(await this._middleIdxEntry(sr2,true));
           if(a&&b&&(a.lon!==b.lon||a.lat!==b.lat)){
             const w=Math.min(a.lon,b.lon),ee=Math.max(a.lon,b.lon);
             const s=Math.min(a.lat,b.lat),n=Math.max(a.lat,b.lat);
@@ -31180,37 +31211,37 @@ class MiniSqlite {
     }
     return{fmt:this.fmt,meta:{minzoom:minz,maxzoom:maxz,...extraMeta}};
   }
-  async _firstIdxEntry(root) {
+  async _firstIdxEntry(root,keysOnly=false) {
     let n=root!=null?root:this.idxRoot;
     for(let depth=0;depth<32;depth++){
       const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);
       if(t===2){const cp=MiniSqlite._u16(d,cpo);n=MiniSqlite._u32(d,cp);}
-      else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
+      else{const cp=MiniSqlite._u16(d,cpo);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return keysOnly?[0,1,2].map(k=>this._recCol(d,p,pL,k,true)):await this._rec(d,p,pL,true);}
     }return null;
   }
-  async _lastIdxEntry(root) {
+  async _lastIdxEntry(root,keysOnly=false) {
     let n=root!=null?root:this.idxRoot;
     for(let depth=0;depth<32;depth++){
       const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);
       if(t===2){n=MiniSqlite._u32(d,ho+8);}
-      else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
+      else{const cp=MiniSqlite._u16(d,cpo+(nc-1)*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return keysOnly?[0,1,2].map(k=>this._recCol(d,p,pL,k,true)):await this._rec(d,p,pL,true);}
     }return null;
   }
   // MEDIJANSKI ulaz indeksa: silazi u SREDNJE dijete/ćeliju na svakom nivou. Indeks je
   // sortiran (zoom,col,row) pa je medijan ≈ PROSTORNI CENTAR pokrivenosti (pouzdana tačka
   // za centriranje, za razliku od prvog/zadnjeg = skewed uglovi).
-  async _middleIdxEntry(root) {
+  async _middleIdxEntry(root,keysOnly=false) {
     let n=root!=null?root:this.idxRoot;
     for(let depth=0;depth<32;depth++){
       const d=await this._pg(n);const ho=n===1?100:0;const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3);if(!nc)return null;
       const cpo=ho+(t===2?12:8);const mid=nc>>1;
       if(t===2){const cp=MiniSqlite._u16(d,cpo+mid*2);n=MiniSqlite._u32(d,cp);}
-      else{const cp=MiniSqlite._u16(d,cpo+mid*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return await this._rec(d,p,pL,true);}
+      else{const cp=MiniSqlite._u16(d,cpo+mid*2);let p=cp;const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;return keysOnly?[0,1,2].map(k=>this._recCol(d,p,pL,k,true)):await this._rec(d,p,pL,true);}
     }return null;
   }
   async _firstLeafSample() {
@@ -31264,10 +31295,10 @@ class MiniSqlite {
     let found=null;
     const zv2=this.fmt==='rmaps'?off-z:null;
     await this._scanLeaves(this.tilesRoot,(rid,r)=>{
-      if(found)return;
-      const okX=r[this.colX]===x, okZ=(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2));
-      const okY=tyCands.includes(r[this.colY]);
-      if(okX&&okZ&&okY)found=r[this.colD];
+      if(r[this.colX]===x&&(r[this.colZ]===z||(zv2!=null&&r[this.colZ]===zv2))&&tyCands.includes(r[this.colY])){found=r[this.colD];return true;}
+    },(d,p,len)=>{
+      const rx=this._recCol(d,p,len,this.colX),rz=this._recCol(d,p,len,this.colZ),ry=this._recCol(d,p,len,this.colY);
+      return rx===undefined||rz===undefined||ry===undefined||(rx===x&&(rz===z||(zv2!=null&&rz===zv2))&&tyCands.includes(ry));
     });
     return found;
   }
@@ -31477,12 +31508,13 @@ self.onmessage = async ({data:msg}) => {
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);
       });
+      if(dbs[msg.old]){dbs[msg.neu]=dbs[msg.old];delete dbs[msg.old];}
       self.postMessage({id,ok:true});
     }
     else if (msg.type === 'idb-meta') {
       const idb=await idbOpen();
       const entry=await new Promise((resolve,reject)=>{const req=idb.transaction('maps','readonly').objectStore('maps').get(msg.name);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
-      self.postMessage({id,ok:true,entry:entry?{opfs:!!entry.opfs,opfsName:entry.opfsName||null}:null});
+      self.postMessage({id,ok:true,entry:entry?{opfs:!!entry.opfs,opfsName:entry.opfsName||null,meta:entry.meta||{}}:null});
     }
     else if (msg.type === 'adopt-opfs') {
       const inst=dbs[msg.name];if(!inst?.mini)throw Error('Karta više nije otvorena');
@@ -31729,7 +31761,7 @@ self.onmessage = async ({data:msg}) => {
     }
     else if (msg.type === 'idb-save-meta') {
       const idb = await idbOpen();
-      await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:true,opfsName:msg.opfsName,size:msg.size}); tx.objectStore('mapBufs').delete(msg.name); tx.oncomplete=res; tx.onerror=tx.onabort=()=>rej(tx.error||Error('Zapis prekinut')); });
+      await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').put({name:msg.name,fmt:msg.fmt,meta:msg.meta,savedAt:Date.now(),opfs:!msg.meta?._nativeId,opfsName:msg.opfsName,size:msg.size}); tx.objectStore('mapBufs').delete(msg.name); tx.oncomplete=res; tx.onerror=tx.onabort=()=>rej(tx.error||Error('Zapis prekinut')); });
       self.postMessage({id,ok:true});
     }
   } catch(err) {
@@ -31772,6 +31804,11 @@ function _sqlWorkerEnsure() {
   };
 }
 function _sqlWCall(msg, transfers, timeoutMs) {
+  const native=window.NativeOfflineMaps?.handle(msg);if(native)return native;
+  if(msg.type==='idb-rename')return _sqlWCallWorker(msg,transfers,timeoutMs).then(r=>{if(r.ok)window.NativeOfflineMaps?.rename(msg.old,msg.neu);return r;});
+  return _sqlWCallWorker(msg,transfers,timeoutMs);
+}
+function _sqlWCallWorker(msg, transfers, timeoutMs) {
   _sqlWorkerEnsure();
   return new Promise(resolve => {
     const id = ++_sqlWSeq;
@@ -31850,7 +31887,9 @@ function _sqlIdbOpen() {
 }
 async function _sqlIdbDeleteDirect(name) {
   const idb=await _sqlIdbOpen();
-  return new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').delete(name); tx.objectStore('mapBufs').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+  const entry=await new Promise((res,rej)=>{const r=idb.transaction('maps','readonly').objectStore('maps').get(name);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+  await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').delete(name); tx.objectStore('mapBufs').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+  idb.close();if(entry?.meta?._nativeId)await NativeOfflineMaps.remove(entry.meta._nativeId);
 }
 async function _sqlIdbClearAll() {
   return new Promise((res,rej)=>{ const r=indexedDB.deleteDatabase('tvlake_sqlmaps'); r.onsuccess=res; r.onerror=()=>rej(r.error); });
@@ -32351,8 +32390,31 @@ function _sqlImportSave(file,sl) {
   })();
   return job.finished;
 }
+async function _sqlmapLoadNative(file) {
+  const name=file.name.replace(/\.[^.]+$/,'');await _sqlImportCancel(name);
+  const previous=await _sqlWCall({type:'idb-meta',name});
+  const result=await NativeOfflineMaps.request({type:'open',nativeId:file.nativeId});
+  if(!result.ok){await NativeOfflineMaps.remove(file.nativeId).catch(()=>{});throw Error(result.error);}
+  // Validate and publish before replacing a working map; a bad new file leaves it intact.
+  const published=await _sqlWCall({type:'idb-save-meta',name,fmt:result.fmt,meta:result.meta,size:file.size});
+  if(!published.ok){await NativeOfflineMaps.remove(file.nativeId).catch(()=>{});throw Error(published.error);}
+  const oldIndex=_sqlLayers.findIndex(l=>l.name===name);
+  if(oldIndex>=0){map.removeLayer(_sqlLayers[oldIndex].layer);_sqlLayers.splice(oldIndex,1);}
+  await _sqlWCall({type:'close',name});delete _mainMiniDbs[name];
+  const opened=await _sqlWCall({type:'load-native',name,nativeId:file.nativeId});
+  if(!opened.ok)throw Error(opened.error);
+  const layer=_sqlmapCreateLayerW(name,result.fmt,result.meta);
+  _sqlLayers.push({name,fmt:result.fmt,meta:result.meta,layer,visible:false,saved:true,opfs:false});
+  for(const [key,bmp]of _sqlTileBmpCache)if(key.startsWith(name+'/')){try{bmp.close?.();}catch(e){}_sqlTileBmpCache.delete(key);}
+  setLayerSqlite(_sqlLayers.length-1);_sqlmapMetaAutoZoom(result.meta);_sqlPrewarm(name);
+  _sqlmapRenderLayers();closeSqlMapModal();closeLoadMapScreen();switchTab('karta');
+  _sqlmapStatus('✅ '+name+' · '+(result.meta._nativeCopy?'Lokalna kopija':'Direktno čitanje fajla'));_sqlmapWarnIfVector(name);
+  if(previous.entry?.meta?._nativeId&&previous.entry.meta._nativeId!==file.nativeId)await NativeOfflineMaps.remove(previous.entry.meta._nativeId).catch(()=>{});
+  if(previous.entry?.opfs)await _sqlImportDeleteFile(previous.entry.opfsName||name+'.sqlmap').catch(()=>{});
+}
 async function sqlmapLoadFile(file) {
   if (!file) return;
+  if(file.nativeId)return _sqlmapLoadNative(file);
   const name = file.name.replace(/\.[^.]+$/, '');
   const isLarge = file.size > _SQL_LARGE;
   await _sqlImportCancel(name);
@@ -32669,7 +32731,7 @@ async function sqlmapRestoreAll() {
     _mapLoadDiagStep('brzi OPFS pokušaj', '/' + lastSqlId + '.sqlmap');
     try {
       localStorage.setItem(_SQL_CRASH_KEY, lastSqlId);
-      const fast = await _sqlWCall({ type:'load-opfs', name:lastSqlId,
+      const fast = await _sqlWCall({ type:lastMap.nativeId?'load-native':'load-opfs', nativeId:lastMap.nativeId, name:lastSqlId,
         path:'/' + (lastMap.opfsName || lastSqlId + '.sqlmap'), fmt:null, meta:{} });
       localStorage.removeItem(_SQL_CRASH_KEY);
       if (fast?.ok && choiceUnchanged()) {
@@ -32678,7 +32740,7 @@ async function sqlmapRestoreAll() {
         layer.addTo(map);
         layer.redraw();
         _sqlLayers.push({ name:lastSqlId, fmt:fast.fmt, layer, visible:true,
-          meta:fast.meta, saved:true, opfs:true, opfsName:lastMap.opfsName || lastSqlId+'.sqlmap' });
+          meta:fast.meta, saved:true, opfs:!fast.meta?._nativeId, opfsName:fast.meta?._nativeId?undefined:(lastMap.opfsName || lastSqlId+'.sqlmap') });
         _sqlPrewarm(lastSqlId);
         const btn = document.getElementById('layer-switch-btn');
         if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
@@ -32745,7 +32807,7 @@ async function sqlmapRestoreAll() {
           const opfsName = entry.opfsName || (entry.name + '.sqlmap');
           lr = await _sqlWCall({type:'load-opfs', name:entry.name, path:'/'+opfsName, fmt:entry.fmt, meta:entry.meta});
         } else {
-          lr = await _sqlWCall({type:'load-idb', name:entry.name});
+          lr = await _sqlWCall({type:'load-idb', name:entry.name, meta:entry.meta});
         }
         const _tLoadMs = Math.round(performance.now() - _tLoadT0);
         _tBrk.push((entry.opfs?'load-opfs':'load-idb') + '(' + entry.name + ') ' + _tLoadMs + 'ms');
@@ -32769,7 +32831,7 @@ async function sqlmapRestoreAll() {
           layer.redraw();
           const btn = document.getElementById('layer-switch-btn');
           if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
-          try{localStorage.setItem(_LASTMAP_KEY,JSON.stringify({type:'sqlite',key:null,sqlId:entry.name,...(entry.opfs?{opfsName:entry.opfsName||entry.name+'.sqlmap'}:{})}));}catch(e){}
+          try{localStorage.setItem(_LASTMAP_KEY,JSON.stringify({type:'sqlite',key:null,sqlId:entry.name,...(entry.opfs?{opfsName:entry.opfsName||entry.name+'.sqlmap'}:{}),...(entry.meta?._nativeId?{nativeId:entry.meta._nativeId}:{})}));}catch(e){}
           shownAny = true;
         }
         _tBrk.push('sloj(' + entry.name + ') ' + Math.round(performance.now() - _tLayerT0) + 'ms');
@@ -32848,7 +32910,7 @@ async function sqlmapRetryOne(name) {
       const opfsName = entry.opfsName || (entry.name + '.sqlmap');
       lr = await _sqlWCall({ type:'load-opfs', name:entry.name, path:'/'+opfsName, fmt:entry.fmt, meta:entry.meta });
     } else {
-      lr = await _sqlWCall({ type:'load-idb', name:entry.name });
+      lr = await _sqlWCall({ type:'load-idb', name:entry.name, meta:entry.meta });
     }
     if (!lr.ok) { showToast('❌ "' + name + '" se i dalje ne može učitati (' + (lr.error||'?') + ')'); return; }
     const layer = _sqlmapCreateLayerW(entry.name, lr.fmt, lr.meta);
@@ -33394,6 +33456,7 @@ async function sqlmapConfirmDelete(i) {
 }
 async function sqlmapClearAll() {
   await Promise.all(Array.from(_sqlImports.keys()).map(_sqlImportCancel));
+  await window.NativeOfflineMaps?.clear();
   if (_sqlW) { _sqlW.terminate(); _sqlW = null; _sqlWCbs = {}; }
   for (const sl of _sqlLayers) { try{map.removeLayer(sl.layer);}catch(e){} }
   _sqlLayers = [];
@@ -33596,7 +33659,11 @@ async function _mapMgrRename(i) {
   _mapFavs.forEach(f => { if (f.type === 'sqlite' && f.sqliteId === name) f.sqliteId = nn; });
   _mapFavSave();
   try { const lm = JSON.parse(localStorage.getItem('tvlake_last_map')); if (lm?.type === 'sqlite' && lm.sqlId === name) _saveLastMap('sqlite', null, nn); } catch(e) {}
-  if (sl?.layer) sl.layer.redraw();
+  if (sl?.layer) {
+    map.removeLayer(sl.layer);
+    sl.layer=_mainMiniDbs[nn]?_sqlmapCreateLayerMain(nn,sl.fmt,sl.meta):_sqlmapCreateLayerW(nn,sl.fmt,sl.meta);
+    if(sl.visible)sl.layer.addTo(map);
+  }
   _sqlmapRenderLayers(); _lsRenderSqlite();
   showToast('✏ Preimenovano u: ' + nn);
   _mapMgrRender();
@@ -33670,7 +33737,7 @@ function _loadmapRenderStartupDiag() {
     ? '<div class="lm-startup-diag-head"><span>🔬 Debug učitavanja pri ulazu</span><button type="button" onclick="_mapLoadDiagCopy(event)">Kopiraj</button></div>' + _escHtml(txt)
     : '';
 }
-function loadmapPickFiles() { document.getElementById('loadmap-file-input').click(); }
+function loadmapPickFiles(inputId) { window.AndroidOfflineMaps?.preparePicker();document.getElementById(inputId||'loadmap-file-input').click(); }
 
 // Lokalizirane poruke grešaka (prema specifikaciji)
 function _loadmapErr(code, extra) {
@@ -33692,6 +33759,7 @@ async function _loadmapDetect(file) {
     : (ext === '.sqlitedb' || ext === '.db' || ext === '.sqlite') ? 'SQLiteDB'
     : 'Nepoznat';
   let headerOk = false;
+  if(file.nativeId){const r=await NativeOfflineMaps.request({type:'probe',nativeId:file.nativeId});return {ext,fmt,headerOk:!!r.ok,valid:!!r.ok,size:file.size};}
   try {
     const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
     const magic = 'SQLite format 3\0';
@@ -33703,32 +33771,32 @@ async function _loadmapDetect(file) {
 // Odabir/drop datoteka → otvori bottom sheet s pregledom (metapodaci + validacija)
 async function loadmapHandleFiles(fileList) {
   const files=Array.from(fileList||[]),fi=document.getElementById('loadmap-file-input');if(fi)fi.value='';if(!files.length)return;
-  const token=++_loadmapPickToken;_loadmapPending=[];
+  loadmapCancelSheet();const token=++_loadmapPickToken;_loadmapPending=files.filter(f=>f.nativeId);
   const listEl=document.getElementById('loadmap-sheet-list'),button=document.getElementById('loadmap-confirm');button.disabled=true;button.textContent='Provjeravam…';
   document.getElementById('loadmap-sheet-title').textContent=files.length===1?'Pregled karte':files.length+' odabranih fajlova';
   listEl.innerHTML='<div class="lm-empty">Provjeravam odabrane fajlove…</div>';document.getElementById('loadmap-sheet').classList.add('show');
   const rows=[],valid=[];
   for(const f of files){
     const d=await _loadmapDetect(f);if(token!==_loadmapPickToken)return;
-    if(d.valid)valid.push(f);
+    if(d.valid)valid.push(f);else if(f.nativeId)NativeOfflineMaps.remove(f.nativeId).catch(()=>{});
     const name=f.name.replace(/\.[^.]+$/,''),replace=_sqlLayers.some(sl=>sl.name===name);
-    rows.push('<article class="lm-sheet-file '+(d.valid?'':'is-invalid')+'"><span class="lm-file-icon"><svg class="ic"><use href="#ic-'+(d.valid?'karta':'zatvori')+'"/></svg></span><div><div class="nm">'+_escHtml(f.name)+'</div><div class="lm-file-meta"><b>'+_escHtml(d.fmt)+'</b><span>'+_mapMgrFmtSize(f.size)+'</span></div><span class="'+(d.valid?'ok':'bad')+'">'+(d.valid?'✓ Zaglavlje provjereno':'Fajl nije SQLite karta — neće biti učitan')+'</span>'+(replace&&d.valid?'<p class="lm-replace-note">Zamijenit će učitanu kartu istog naziva.</p>':'')+(f.size>100*1024*1024?'<p class="lm-hint">Karta se prikazuje prije završetka čuvanja na telefon.</p>':'')+'</div></article>');
+    rows.push('<article class="lm-sheet-file '+(d.valid?'':'is-invalid')+'"><span class="lm-file-icon"><svg class="ic"><use href="#ic-'+(d.valid?'karta':'zatvori')+'"/></svg></span><div><div class="nm">'+_escHtml(f.name)+'</div><div class="lm-file-meta"><b>'+_escHtml(d.fmt)+'</b><span>'+_mapMgrFmtSize(f.size)+'</span></div><span class="'+(d.valid?'ok':'bad')+'">'+(d.valid?'✓ Zaglavlje provjereno':'Fajl nije SQLite karta — neće biti učitan')+'</span>'+(replace&&d.valid?'<p class="lm-replace-note">Zamijenit će učitanu kartu istog naziva.</p>':'')+(f.nativeId?'<p class="lm-hint">Direktno otvaranje. Zadrži ovaj fajl na telefonu za rad bez interneta.</p>':f.size>100*1024*1024?'<p class="lm-hint">Karta se prikazuje prije završetka čuvanja na telefon.</p>':'')+'</div></article>');
   }
   if(token!==_loadmapPickToken)return;
   _loadmapPending=valid;listEl.innerHTML=rows.join('');button.disabled=!valid.length;button.textContent=valid.length?(valid.length===1?'Učitaj kartu':'Učitaj karte · '+valid.length):'Nema karata za učitavanje';
 }
 function loadmapCancelSheet() {
-  ++_loadmapPickToken;const sh=document.getElementById('loadmap-sheet');if(sh)sh.classList.remove('show');_loadmapPending=[];
+  ++_loadmapPickToken;const sh=document.getElementById('loadmap-sheet');if(sh)sh.classList.remove('show');for(const f of _loadmapPending)if(f.nativeId)NativeOfflineMaps.remove(f.nativeId).catch(()=>{});_loadmapPending=[];
 }
 
 // Potvrda → sekvencijalno (batch) učitavanje preko postojećeg loadera
 async function loadmapConfirmLoad() {
   const files = _loadmapPending.slice();
-  loadmapCancelSheet();
+  _loadmapPending=[];loadmapCancelSheet();
   if (!files.length) return;
   // Gruba provjera prostora prije kopiranja velikih datoteka
   try {
-    const total = files.reduce((s, f) => s + f.size, 0);
+    const total = files.reduce((s, f) => s + (f.nativeId?0:f.size), 0);
     if (navigator.storage?.estimate) {
       const est = await navigator.storage.estimate();
       const free = (est.quota || 0) - (est.usage || 0);
@@ -40767,7 +40835,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <h3>🗄 Učitaj offline kartu (SQLiteDB)</h3>
 
     <div id="sqlmap-drop-zone" class="sqlmap-drop-zone"
-      onclick="document.getElementById('sqlmap-file-input').click()"
+      onclick="loadmapPickFiles('sqlmap-file-input')"
       ondragover="event.preventDefault();this.classList.add('drag-over')"
       ondragleave="this.classList.remove('drag-over')"
       ondrop="sqlmapHandleDrop(event)">
@@ -40803,7 +40871,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <h3>🗂 Upravljanje offline kartama</h3>
 
     <button class="btn b" style="width:100%;padding:10px;font-size:13px;font-weight:600;margin-bottom:12px;"
-      onclick="document.getElementById('sqlmap-file-input').click()"><svg class="ic"><use href="#ic-uvezi"/></svg> Učitaj novu kartu (.sqlitedb · .mbtiles · .gpkg)</button>
+      onclick="loadmapPickFiles('sqlmap-file-input')"><svg class="ic"><use href="#ic-uvezi"/></svg> Učitaj novu kartu (.sqlitedb · .mbtiles · .gpkg)</button>
 
     <div class="mapmgr-storage">
       <div class="mapmgr-storage-txt">

@@ -386,6 +386,7 @@ console.log('\nPoruka idb-rename (worker) — preimenuje companion mapBufs zapis
 
 function makeIdbRenameHarness(indexedDB) {
   const sandbox = {
+    dbs: {},
     idbOpen: () => indexedDB.open ? new Promise((res,rej) => {
       // koristi PRAVI idbOpen (migracija uključena) — konzistentno sa ostatkom sistema
       const keys2 = ['indexedDB'];
@@ -394,7 +395,7 @@ function makeIdbRenameHarness(indexedDB) {
     }) : null,
     self: { postMessage: (m) => { sandbox._posted = m; } },
   };
-  const keys = ['idbOpen', 'self'];
+  const keys = ['idbOpen', 'self', 'dbs'];
   const wrapped = 'async function run(msg, id) {\n' + BODY_IDB_RENAME + '\n}\nreturn { run };';
   const api = new Function(...keys, wrapped)(...keys.map(k => sandbox[k]));
   return { run: api.run, sandbox, indexedDB };

@@ -162,3 +162,50 @@ produkcijske baze **nisu provjereni**.
 
 Ovo je isporuka pregleda, dijagnostike i reprodukcija. Runtime aplikacije,
 RLS u produkciji, podaci i APK nisu mijenjani; verzija ostaje 2.4.7.
+
+## Dopuna: korisnikovi rezultati iz SQL Editora
+
+Korisnik je 7.10.2026. dostavio ispis politika osam projektnih/doznaka
+tabela i definicije četiri funkcije. Prikazane politike odgovaraju
+očekivanom vlasništvu/članstvu i svaka od tih tabela ima restrictive
+`zzz_odobren` za authenticated. Članstvo vlaka INSERT traži postojeći
+projekat čiji je vlasnik prijavljeni pozivalac. Članstvo doznake traži
+postojeći odjel čiji je kreator pozivalac.
+
+Prikazani `je_odobren()` već sadrži važeći `probni_do`, zahtjev
+`prvo_odobren_at IS NULL`, odobrenje/admin i SECURITY DEFINER. Prikazane
+`je_clan_projekta` i `je_doz_clan` prepoznaju vlasnika/kreatora i članove;
+funkcija `korisnici_probni_rok_zastita` odgovara pripremljenoj migraciji.
+Hipoteza o staroj definiciji gatea nije potvrđena ovim ispisom i za
+prikazane funkcije/politike nema opravdane izmjene.
+
+Ovo je korisnikov snapshot, ne naš izvršen produkcijski test. Nisu
+dostavljeni red pogođenog korisnika (`probni_do`, odobrenje, prvi datum),
+priključenost/aktivnost probnog triggera, ciljani server-projekat, njegov
+vlasnik niti identitet stvarne Supabase sesije pri grešci. Zato se ne može
+tvrditi da svi novi korisnici imaju ispravan probni rok niti da je tačan
+uzrok prijavljene greške već dokazan. Reproducirani aplikacijski bug
+dodavanja u neposlan projekat i greške keširanja ostaju zasebni nalazi.
+
+Naknadno dostavljen SELECT posljednjih 20 profila: svi imaju
+`odobren=true`, `probni_do=null` i upisan `prvo_odobren_at`. Za te redove
+prikazani gate trenutno dopušta pristup ako je prijavljena sesija baš
+odgovarajućeg korisnika. NULL probnog roka ne blokira već odobreni nalog.
+Iz ovog skupa se ne može zaključiti da postoji problem odobrenja niti
+opravdati popunjavanje probnih rokova odobrenim korisnicima. Ovo nije
+provjera stanja profila u trenutku ranijeg incidenta ni budućih registracija.
+Pogođeni korisnik, projekat i radnja još nisu identificirani; zatraženo je
+ime naloga, odjel/projekat i korak (dodavanje/predaja/slanje-prijem).
+Stvarna sesija i postojanje/vlasništvo ciljanog server-projekta ostaju
+ključni naredni dokazi. Nisu izvršene SQL ili aplikacijske izmjene.
+
+Korisnik je zatim identificirao pogođeni nalog i naveo da ciljani
+projekat vjerovatno još nije bio poslan, iako je vlaka već napravljena;
+u međuvremenu sve radi. To odgovara reproduciranom toku neposlanog
+projekta, ali nije nezavisan dokaz izvornog zahtjeva/server-logova.
+Incident više nije aktivan prema korisnikovoj potvrdi i ne treba dodatna
+SQL izmjena na osnovu dostavljenih podataka. Snimanje vlake prije slanja
+je podržan offline rad; problem je pokušaj upisa članstva dok projekat
+još nije na serveru. Zaštita dodavanja kolege na `_pendingSync` ostaje
+poznata, neimplementirana aplikacijska popravka, bez automatskog širenja
+ovog pregleda u novi zahvat. Nisu izvršene nove funkcionalne izmjene.

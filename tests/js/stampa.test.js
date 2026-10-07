@@ -15,7 +15,7 @@ const path = require('node:path');
 const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
 const JAVA = fs.readFileSync(path.join(__dirname,
   '../../android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java'), 'utf8')
-  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  .replace(/("(?:\\.|[^"\\])*")|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m, literal) => literal || '');
 
 function extractFn(name) {
   let start = HTML.indexOf('async function ' + name + '(');
@@ -190,4 +190,3 @@ t('ograničenja teksta i 12 stavki sprečavaju legendu da nekontrolisano raste',
 
 console.log(`\n${pass} prošlo, ${fail} palo`);
 process.exit(fail ? 1 : 0);
-

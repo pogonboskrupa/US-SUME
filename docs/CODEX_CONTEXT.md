@@ -2606,3 +2606,45 @@ probni_do kolone. Browser server-confirm-234 prošao sa stvarnim Supabase
 klijentom i kontrolisanimHTTP, UI_CHROMIUM=/usr/bin/chromium.
 Fizički Xiaomi/mobilni signal/produkcijski Supabase nisu provjereni.
 Nema izmjene runtimea, verzije, workflowa, releasea ili produkcijskih podataka.
+
+### Dopuna: SQL ispis dostavljen od korisnika, 2026-10-07
+
+Korisnik dostavio svih8 projektnih/doznaka politika i4 definicije:
+je_odobren, je_clan_projekta, je_doz_clan, korisnici_probni_rok_zastita.
+Prikazane politike odgovaraju očekivanim pravilima i imaju restrictive
+zzz_odobren. Gate već prihvata važeći probni_do uz prvo_odobren_at IS NULL;
+članstvo prepoznaje vlasnika/kreatora i članove, trigger-funkcija odgovara
+migraciji. Hipoteza starog gatea ovim ispisom nije potvrđena. Nije potrebna
+izmjena prikazanih funkcija ili politika na osnovu dostupnih rezultata.
+Ovo nije nezavisno izvršen produkcijski test niti provjera profilnih
+redova, aktivnog probnog triggera, ciljanog projekta/vlasnika ili JWT
+identiteta pri grešci. Ne proglašavati sedmodnevni pristup svakog naloga
+provjerenim i ne tvrditi da je aplikacijski pending-project bug dokazano
+uzrok korisnikovog incidenta bez tog konteksta. Aplikacija ostaje2.4.7.
+
+Naknadni profilni SELECT iz SQL Editora: svih20 prikazanih naloga trenutno
+odobren=true, probni_do=null, prvo_odobren_at upisan. NULL roka nije
+problem kod odobrenih; gate dopušta pristup tim profilima kada je JWT
+identitet odgovarajući. Nema osnove za SQL izmjenu probnog roka/odobrenja
+iz ovog ispisa. Nisu poznati pogođeni nalog/projekat/korak ni stanje u
+trenutku ranije greške; zatraženo jedno pojašnjenje (ime, odjel/projekat,
+dodavanje/predaja ili Pošalji i primi). Nastaviti provjerom ciljane sesije
+i server-projekta/vlasnika, ne tražiti ponovo iste funkcije/profilni spisak.
+Dokumentovati samo zbirni nalaz; imena i redovi korisnika nisu potrebni
+u repozitoriju. SQL/runtime/Release nisu mijenjani.
+
+Korisnik zatim identificirao pogođeni nalog i potvrđuje: projekat
+vjerovatno nije bio poslan i vlaka je već bila napravljena; sada sve radi.
+Aktivni incident smatra se prestalim prema toj potvrdi, bez nezavisnog
+dokaza izvorne sesije/server-logova. To odgovara reproduciranom pending
+projektnom toku; ne tražiti dalje iste SQL rezultate niti uvoditi SQL
+izmjene. Snimanje vlake prije slanja je normalan podržani offline rad;
+članstvo zahtijeva prethodno potvrđen serverski projekat. Nedostajuća
+_pendingSync zaštita dodavanja kolege ostaje neimplementirana popravka.
+Ovim pregledom runtime nije mijenjan; APK ostaje2.4.7.
+
+## 2026-10-07 — ponovno ubrzanje SQLite karata / v2.4.8 (518)
+
+Aktuelni zadatak je isključivo sporo učitavanje SQLiteDB/MBTiles. Server incident je korisnik potvrdio kao riješen; nisu mijenjani server ni produkcijski SQL. Detalji i mjerljivi troškovi: `docs/UCITAVANJE_SQLITE_2026-10-07.md`.
+
+MiniSqlite pretražuje ključeve binarno bez nepotrebnih BLOB-ova i zaustavlja skeniranje na pronađenoj pločici. APK ima zaseban read-only SAF/Android SQLite tok (`OfflineMaps.java`, `native-offline-maps.js`); source fajl ostaje na izabranom mjestu, a Android pamti read dozvolu. Samo izvori bez direktnog pristupa koriste privatnu kopiju. Legacy OPFS/IDB restore ostaje. Nova baza se validira prije zamjene stare; remove briše referencu/kopiju, nikada original. Verzije web/SW/Android su 2.4.8/518. Lokalno 98 JS grupa i relevantni stvarni browser testovi prolaze; native instrumentation/build u CI su sljedeća obavezna provjera prije isporuke.

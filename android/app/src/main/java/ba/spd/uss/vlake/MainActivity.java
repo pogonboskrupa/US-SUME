@@ -83,6 +83,8 @@ public class MainActivity extends Activity {
     private boolean reusedWebView = false;
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assetLoader;
+    private static OfflineMaps offlineMaps;
+    private volatile boolean mapFilePicker;
     private BroadcastReceiver recActionReceiver;
 
     private static final int REQ_FILE = 1;
@@ -190,8 +192,10 @@ public class MainActivity extends Activity {
             ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
 
+        if (offlineMaps == null) offlineMaps = new OfflineMaps(this);
         assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .addPathHandler("/offline-maps/", offlineMaps)
                 .build();
 
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
@@ -200,6 +204,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
         webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
         webView.addJavascriptInterface(new ReferenceOcrBridge(webView), "AndroidReferenceOcr");
+        webView.addJavascriptInterface(offlineMaps.new Bridge(webView, () -> mapFilePicker = true), "AndroidOfflineMaps");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -309,6 +314,10 @@ public class MainActivity extends Activity {
                 }
                 fileCallback = filePathCallback;
                 Intent intent = fileChooserParams.createIntent();
+                if (mapFilePicker) {
+                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType("*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                }
                 // createIntent() je uvijek ACTION_GET_CONTENT (galerija/fajlovi) i
                 // ignoriše <input capture> — bez ovoga "Kamera" otvara galeriju.
                 if (fileChooserParams.isCaptureEnabled() && acceptsImages(fileChooserParams)) {
@@ -1079,6 +1088,36 @@ public class MainActivity extends Activity {
                     results = new Uri[]{Uri.parse(data.getDataString())};
                 }
             }
+            boolean mapPick = mapFilePicker;
+            mapFilePicker = false;
+            if (mapPick && results != null) {
+                // Send small SAF descriptors, not a gigabyte File/Blob through Chromium.
+                org.json.JSONArray maps = new org.json.JSONArray();
+                boolean sqliteOnly = true;
+                for (Uri uri : results) {
+                    String name = "";
+                    try (android.database.Cursor c = getContentResolver().query(uri,
+                            new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                        if (c != null && c.moveToFirst()) name = c.getString(0);
+                    } catch (Exception ignored) {}
+                    if (!name.toLowerCase(java.util.Locale.ROOT).matches(".*\\.(sqlitedb|mbtiles|sqlite|db|gpkg)$")) sqliteOnly = false;
+                }
+                if (sqliteOnly) {
+                    try {
+                        for (Uri uri : results) {
+                            boolean persistent = false;
+                            try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); persistent = true; }
+                            catch (Exception ignored) {}
+                            maps.put(offlineMaps.select(uri, persistent));
+                        }
+                        fileCallback.onReceiveValue(null); fileCallback = null;
+                        webView.evaluateJavascript("loadmapHandleFiles(" + maps.toString() + ")", null);
+                        return;
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Ne mogu povezati kartu: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                }
+            }
             fileCallback.onReceiveValue(results);
             fileCallback = null;
         }
@@ -1225,6 +1264,7 @@ public class MainActivity extends Activity {
         // snimanja (vidi GpsBridge.stopRecording) ili do sljedećeg onCreate-a
         // koji ponovo iskoristi isti WebView.
         if (webView != null && !isRecordingActive) {
+            if (offlineMaps != null) offlineMaps.closeAll();
             webView.destroy();
             sWebView = null;
         }
