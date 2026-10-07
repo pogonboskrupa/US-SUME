@@ -50,7 +50,15 @@
     }
     const button=el('loadmap-download-refresh');if(button)button.disabled=refreshing||!available();
   }
-  function remember(s,status){states.set(s.id,{source:s,status});render();}
+  function remember(s,status){
+    const before=states.get(s.id)?.status;states.set(s.id,{source:s,status});render();
+    // Only transitions out of an active job notify; app-start resume of old states stays silent.
+    if(active(before)&&before.state!==status?.state&&typeof root.showToast==='function'){
+      const name=s.name.replace(/\.[^.]+$/,'');
+      if(status?.state==='installed')root.showToast('✓ Karta '+name+' preuzeta i spremna offline');
+      else if(status?.state==='failed')root.showToast('⚠ '+name+': '+(status.error||'preuzimanje nije uspjelo'));
+    }
+  }
   function schedule(){clearTimeout(timer);timer=null;if([...states.values()].some(r=>active(r.status)))timer=setTimeout(()=>resume(),1500);}
   function install(s,status){
     if(installers.has(s.id))return installers.get(s.id);

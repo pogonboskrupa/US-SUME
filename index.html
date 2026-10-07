@@ -5729,7 +5729,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.5.3';
+const APP_VER = 'v2.5.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -31968,6 +31968,9 @@ async function _sqlCrashCheck() {
 function _sqlmapStatus(msg) {
   const el = document.getElementById('sqlmap-status');
   if (el) el.textContent = msg;
+  // Stari #sqlmap-modal je skriven dok je otvoren ekran Učitaj kartu —
+  // bez ovoga status učitavanja ide u nevidljiv element.
+  if (document.getElementById('loadmap-modal')?.classList.contains('show')) _loadmapStatus(msg);
 }
 // Zoom map to tile bounds from MBTiles metadata.bounds or estimated from zoom centre
 function _sqlmapMetaAutoZoom(meta) {
@@ -34541,16 +34544,23 @@ function showToast(msg) {
     t.id = 'toast-msg';
     t.style.cssText = `position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
       background:#fff;border:none;border-radius:22px;
-      padding:8px 20px;font-size:13px;font-weight:600;color:#1e293b;z-index:9000;pointer-events:none;
+      padding:8px 20px;font-size:13px;font-weight:600;color:#1e293b;z-index:999800;pointer-events:none;
+      max-width:min(92vw,520px);width:max-content;text-align:center;overflow-wrap:anywhere;
       box-shadow:0 4px 16px rgba(0,0,0,0.12),0 0 0 0.5px rgba(0,0,0,0.06);
       transition:opacity 0.4s;`;
+    // z-index iznad svih ekrana (Učitaj kartu 10000, modali do 99999), a ispod
+    // #dlg-overlay (999900) — sa starim 9000 toast se crtao ISPOD otvorenog
+    // ekrana i obavijesti tokom preuzimanja karte bile su nevidljive.
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
     document.body.appendChild(t);
   }
   t.textContent = msg;
   try { t.style.bottom = _toastDno() + 'px'; } catch(e) {}
   t.style.opacity = '1';
   clearTimeout(t._to);
-  t._to = setTimeout(() => t.style.opacity = '0', 2500);
+  // Duže poruke (greške sa razlogom) trebaju više vremena za čitanje.
+  t._to = setTimeout(() => t.style.opacity = '0', Math.min(7000, 2500 + String(msg).length * 40));
 }
 
 // ─── Custom dialog system (replaces all native alert/confirm/prompt) ─────────

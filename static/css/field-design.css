@@ -512,3 +512,12 @@ body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
 #loadmap-download-message {font:12px/1.65 system-ui;color:var(--field-muted);margin-bottom:12px;overflow-wrap:anywhere;}
 #loadmap-download-message:empty {display:none;}
 html[data-field-theme=day] .lm-download-status[data-state=failed] {color:#991b1b;}
+/* v2.5.4: uputa na vrhu "Dodaj kartu" je samo orijentir — kompaktna traka,
+   da Dostupne karte i birač fajla budu vidljivi bez skrolanja na telefonu. */
+html #loadmap-modal .lm-hero {min-height:0;border-radius:14px;margin-bottom:12px;}
+html #loadmap-modal .lm-hero>img {opacity:.4;}
+html #loadmap-modal .lm-hero-copy {padding:11px 92px 11px 14px;max-width:none;}
+html #loadmap-modal .lm-hero-copy>span {display:none;}
+html #loadmap-modal .lm-hero h3 {font-size:15px;margin:0 0 2px;max-width:none;}
+html #loadmap-modal .lm-hero p {font-size:12px;line-height:1.45;max-width:none;}
+html #loadmap-modal .lm-offline-tag {top:50%;transform:translateY(-50%);}
