@@ -2679,3 +2679,25 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Link: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.9/app-debug.apk
   Fizički Xiaomi/produkcijski Supabase nisu testirani; poslovni tokovi nisu
   mijenjani ovim zadatkom.
+
+## 2026-10-07 — v2.5.0 (520): Skini kartu / Unsko_2021-2031
+
+- Korisnik daje Drive folder 16oB-Fu0oZLd7gH45O25UhsnGK5cp525_ i traži
+  opciju Skini kartu u Učitaj kartu. Read-only Drive listanje identificira
+  jedini fajl „Karta Unsko”, ID 1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny,
+  1.567.670.272 B; anyone/reader dozvola. Nisu mijenjani naziv/dozvole/fajl
+  na Driveu. Naziv kartice u aplikaciji je Unsko_2021-2031.
+- Kartica ima Skini kartu, veličinu, upute za Googleovu potvrdu velikog fajla
+  i povratak na Odaberi fajlove; izvorni folder ostaje dodatni link.
+  Javni download endpoint vraća HTTP 200 HTML „Virus scan warning” sa
+  download-form. Nije preuzet cijeli 1,57 GB fajl niti zaobiđena potvrda.
+- Preuzimanje obavlja Drive/preglednik; APK klik koristi postojeći Android
+  ACTION_VIEW handler bez zamjene WebView stranice, web link novi tab s
+  noopener/noreferrer. Bez mreže status objašnjava da preuzimanje treba vezu;
+  postojeći lokalni uvoz ostaje dostupan. GPS/server/SQLite tok nije mijenjan.
+- Lokalno prošlo 99 JS grupa, 5 inline sintaksi i prošireni load-map-233.py:
+  tačan link, novi tab, očuvana aplikacija, offline poruka, stvarni SQLite
+  uvoz/reload/brisanje i mali ekrani u oba moda. Android OfflineImportTest
+  proširen monitorom vanjskog Intent-a (blokira stvarno otvaranje Drivea;
+  kontrolisan navigator.onLine, emulator ostaje offline), stanje WebView-a
+  i učitana karta moraju ostati sačuvani. APK/CI provjera slijedi.

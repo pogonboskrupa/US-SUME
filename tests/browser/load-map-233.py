@@ -75,8 +75,12 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, **({'executable_path': os.environ['UI_CHROMIUM']} if os.environ.get('UI_CHROMIUM') else {}))
         ctx = await browser.new_context(viewport={'width': 390, 'height': 800})
-        external, errors = [], []
+        external, errors, downloads = [], [], []
         async def route(r):
+            if r.request.url.startswith('https://drive.google.com/uc?export=download&id='):
+                downloads.append(r.request.url)
+                await r.fulfill(content_type='text/html',body='<p>Drive download fixture</p>')
+                return
             if not r.request.url.startswith('https://ui.test/'):
                 external.append(r.request.url)
                 await r.abort()
@@ -99,6 +103,28 @@ async def main():
         assert await page.locator('#loadmap-file-input').get_attribute('accept') is None
         assert await page.locator('#loadmap-file-input').get_attribute('multiple') is not None
         assert await page.locator('.lm-src-btn').count() == 0
+        # Točan izvor, javni veliki fajl i novi tab umjesto zamjene karte aplikacije.
+        download=page.locator('#loadmap-unsko-download')
+        assert await page.locator('#loadmap-unsko-title').inner_text()=='Unsko_2021-2031'
+        assert await download.get_attribute('href')=='https://drive.google.com/uc?export=download&id=1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny'
+        assert await download.get_attribute('target')=='_blank'
+        assert 'noopener' in await download.get_attribute('rel')
+        await download.scroll_into_view_if_needed()
+        await page.screenshot(path=str(OUT/'download-unsko-250.png'))
+        async with ctx.expect_page() as opened:
+            await download.click()
+        drive=await opened.value
+        await drive.wait_for_load_state()
+        assert 'Drive download fixture' in await drive.locator('body').inner_text()
+        assert page.url=='https://ui.test/' and await page.locator('#loadmap-modal').is_visible()
+        assert len(downloads)==1
+        await drive.close()
+        await ctx.set_offline(True)
+        await download.click()
+        assert 'uključi internet' in await page.locator('#loadmap-status').inner_text()
+        assert len(downloads)==1
+        await ctx.set_offline(False)
+
 
         # Mješoviti izbor: samo prava SQLite zaglavlja mogu biti potvrđena.
         name = 'Topo Čuvar <105> & "sjever".mbtiles'
@@ -161,6 +187,7 @@ async def main():
                 await page.set_viewport_size({'width': width, 'height': height})
                 await page.evaluate('_loadmapTab("add")')
                 await bounded(page, '#loadmap-modal', width, height)
+                assert await page.locator('.lm-download-card').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
                 await bounded(page, '#loadmap-body', width, height)
                 assert await page.locator('#loadmap-pick').evaluate('e=>e.getBoundingClientRect().height') >= 44
                 await page.screenshot(path=str(OUT/f'loadmap-add-{theme}-{width}-{height}.png'))

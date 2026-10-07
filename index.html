@@ -5729,7 +5729,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.4.9';
+const APP_VER = 'v2.5.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -33760,6 +33760,21 @@ function _loadmapRenderStartupDiag() {
     ? '<div class="lm-startup-diag-head"><span>🔬 Debug učitavanja pri ulazu</span><button type="button" onclick="_mapLoadDiagCopy(event)">Kopiraj</button></div>' + _escHtml(txt)
     : '';
 }
+// Drive preuzima veliki fajl izvan aplikacije; postojeći Android URL handler
+// otvara preglednik/Drive bez reload-a WebView-a i bez prekida terenskog rada.
+function loadmapDownloadUnsko(event) {
+  if (navigator.onLine === false) {
+    _loadmapStatus('Za skidanje karte uključi internet. Već preuzetu kartu možeš učitati bez mreže.');
+    return false;
+  }
+  if (window.AndroidOfflineMaps) {
+    event.preventDefault();
+    window.location.assign(event.currentTarget.href);
+    return false;
+  }
+  return true; // Web: običan link u novom tabu, bez zamjene otvorene aplikacije.
+}
+
 function loadmapPickFiles(inputId) { window.AndroidOfflineMaps?.preparePicker();document.getElementById(inputId||'loadmap-file-input').click(); }
 
 // Lokalizirane poruke grešaka (prema specifikaciji)
@@ -40145,7 +40160,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori upute <b>Vlake</b> ili <b>Doznaka</b> iznad i prati korake za snimanje.</li>
 </ol></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Karta za rad bez interneta</button><div class="help-sec-body">
-<div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. Opcija <b>Skini kartu — Unsko_2021-2031</b> otvara Drive za preuzimanje; kada završi, vrati se i koristi <b>Odaberi fajlove</b>. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Zadrži originalni fajl</b><span>Android može čitati kartu direktno iz izabranog fajla. Nemoj ga brisati ili premještati dok ga koristiš u aplikaciji. Neki izvori traže kopiranje; tada prati prikazani napredak.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Instalirane karte</b><span>Tu pronađi učitane karte, nagib, ekspoziciju i ostale dostupne slojeve. Omiljene podloge otvaraš zvjezdicom na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Online podloga</b><span>Bez mreže mogu biti dostupni samo ranije sačuvani dijelovi. Za cijeli odjel unaprijed pripremi lokalnu kartu; teren za nagib i ekspoziciju preuzmi dok imaš vezu.</span></div></div>
@@ -40634,6 +40649,14 @@ if (typeof AndroidDownload !== 'undefined') {
     <div id="loadmap-status" role="status" aria-live="polite"></div>
     <section id="loadmap-pane-add" role="tabpanel" aria-labelledby="loadmap-tab-add">
       <div class="lm-hero"><img src="static/img/map-previews/local.svg" alt="Ilustracija topografske karte"><div class="lm-hero-copy"><span>LOKALNA PODLOGA</span><h3>Karta spremna za teren</h3><p>Učitaj kartu iz fajla i koristi njeno područje bez interneta.</p></div><span class="lm-offline-tag"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Offline</span></div>
+      <section class="lm-download-card" aria-labelledby="loadmap-unsko-title">
+        <div class="lm-download-heading"><span class="lm-download-icon" aria-hidden="true"><svg class="ic"><use href="#ic-uvezi"/></svg></span><div><small>KARTA ZA PREUZIMANJE</small><h3 id="loadmap-unsko-title">Unsko_2021-2031</h3></div></div>
+        <p>Preuzmi kartu s Google Drivea i sačuvaj je na telefonu za rad bez interneta.</p>
+        <div class="lm-download-meta"><span>Google Drive</span><span>oko 1,57 GB</span><span>Internet za preuzimanje</span></div>
+        <a id="loadmap-unsko-download" class="lm-download-button" href="https://drive.google.com/uc?export=download&amp;id=1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny" target="_blank" rel="noopener noreferrer" onclick="return loadmapDownloadUnsko(event)"><svg class="ic"><use href="#ic-uvezi"/></svg> Skini kartu <span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3h7v7M10 14L21 3M10 3H3v18h18v-7"/></svg></span></a>
+        <ol><li>Na Driveu potvrdi preuzimanje ako se pojavi upozorenje za veliki fajl. Izvorni fajl se zove <b>Karta Unsko</b>.</li><li>Kada se preuzimanje završi, vrati se ovdje i pritisni <b>Odaberi fajlove</b>. Izaberi preuzetu kartu.</li></ol>
+        <a class="lm-download-source" href="https://drive.google.com/drive/u/0/folders/16oB-Fu0oZLd7gH45O25UhsnGK5cp525_" target="_blank" rel="noopener noreferrer" onclick="return loadmapDownloadUnsko(event)">Otvori izvorni Drive folder <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3h7v7M10 14L21 3M10 3H3v18h18v-7"/></svg></a>
+      </section>
       <div class="lm-upload-box" id="loadmap-drop" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="loadmapHandleDrop(event)">
         <h3>Odaberi kartu sa uređaja</h3><p>Interna memorija, SD kartica ili povezani oblak — sve kroz isti izbor fajlova.</p>
         <button class="lm-primary" id="loadmap-pick" onclick="loadmapPickFiles()"><svg class="ic"><use href="#ic-folder"/></svg> Odaberi fajlove <span>＋</span></button>

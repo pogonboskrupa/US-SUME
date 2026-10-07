@@ -481,3 +481,22 @@ body.explorer-crowded .ex-actions {margin:0;flex-direction:row;flex-shrink:0;gap
 body.explorer-crowded .ex-toggle {padding:6px 8px;gap:6px;font-size:11px}
 body.explorer-crowded #ex-stop-compact {display:block;flex:0 0 44px;width:44px;min-height:44px;padding:0;font-size:24px}
 body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
+
+/* Karta Unsko: preuzimanje iz javnog Drive foldera, zatim postojeći lokalni uvoz. */
+.lm-download-card {padding:17px;border:1px solid var(--field-border);border-left:4px solid #29996c;border-radius:15px;background:var(--field-card);margin-bottom:15px;}
+.lm-download-heading {display:flex;align-items:center;gap:12px;}
+.lm-download-heading>div {min-width:0;}
+.lm-download-heading small {font:700 10px/1.5 system-ui;letter-spacing:.7px;color:var(--field-muted);}
+.lm-download-heading h3 {margin:3px 0 0;font:750 18px/1.4 system-ui;overflow-wrap:anywhere;}
+.lm-download-icon {width:42px;height:42px;display:grid;place-items:center;border-radius:11px;background:var(--lm-good-bg);color:var(--lm-good);flex-shrink:0;}
+.lm-download-icon .ic {width:23px;height:23px;margin:0;}
+.lm-download-card>p {font:13px/1.65 system-ui;color:var(--field-muted);margin:12px 0;}
+.lm-download-meta {display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.lm-download-meta span {font:600 11px/1.5 system-ui;padding:4px 7px;border:1px solid var(--field-border);border-radius:6px;background:var(--field-bg);color:var(--field-muted);}
+.lm-download-button {display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:11px;border-radius:11px;background:#166534;color:#fff;text-decoration:none;font:700 14px/1.5 system-ui;}
+.lm-download-button>span {margin-left:auto;}
+.lm-download-button .ic {margin:0;width:20px;height:20px;}
+.lm-download-card ol {margin:12px 0 4px;padding-left:19px;}
+.lm-download-card li {font:12px/1.7 system-ui;color:var(--field-muted);padding:4px 0;}
+.lm-download-source {display:inline-flex;align-items:center;gap:6px;min-height:44px;font:600 12px/1.5 system-ui;color:var(--lm-accent);text-underline-offset:3px;}
+.lm-download-card a:focus-visible {outline:3px solid var(--lm-accent);outline-offset:3px;}
