@@ -2700,4 +2700,12 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   uvoz/reload/brisanje i mali ekrani u oba moda. Android OfflineImportTest
   proširen monitorom vanjskog Intent-a (blokira stvarno otvaranje Drivea;
   kontrolisan navigator.onLine, emulator ostaje offline), stanje WebView-a
-  i učitana karta moraju ostati sačuvani. APK/CI provjera slijedi.
+  i učitana karta ostaju sačuvani. CI 37607948974 uspješan: 99 JS grupa,
+  puni browser skup, probni SQL/RLS i 4 Android 14 instrumentacijska testa
+  (bez grešaka/preskakanja). Izvor 938406f78dda83f6d1fabbbe4cc0b9be150c823b.
+- APK v2.5.0 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.0/app-debug.apk
+  Potvrđeni package ba.spd.uss.vlake.debug, 2.5.0-debug/520, isti stabilni
+  certifikat i svih 60 assets hashova. Veličina 24.075.715 B; SHA256
+  cafe2b08134ae50be3eed18876a738095613082f46cc852b779edf57f784295b.
+  Dostupan u Meni → Ažuriraj aplikaciju. Fizički Xiaomi, stvarno skidanje
+  cijelog 1,57 GB fajla na telefonu i produkcijski Supabase nisu testirani.
