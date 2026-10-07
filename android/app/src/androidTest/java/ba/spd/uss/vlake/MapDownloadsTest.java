@@ -99,8 +99,8 @@ public class MapDownloadsTest {
    Field f=MainActivity.class.getDeclaredField("offlineMaps");f.setAccessible(true);OfflineMaps maps=(OfflineMaps)f.get(null);
    download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");download.cancel();
    MapDownloadCatalog.Source source=new MapDownloadCatalog.Source(MapDownloads.FILE_ID,MapDownloads.NAME,bytes.length);
-   MapDownloads attachedJob=download;
-   MapDownloadCatalog attached=new MapDownloadCatalog(context,()->java.util.Collections.singletonList(source),item->attachedJob,"map-catalog-test");
+   MapDownloads attachedJob=download;java.util.List<MapDownloadCatalog.Source> sources=new java.util.ArrayList<>();sources.add(source);
+   MapDownloadCatalog attached=new MapDownloadCatalog(context,()->sources,item->attachedJob,"map-catalog-test");
    attached.list(true);
    try{attached.action(new JSONObject().put("type","start").put("sourceId","foreign-map-file-id"));fail("Karta izvan foldera prihvaćena");}catch(java.io.IOException expected){}
    assertEquals(0,transport.enqueues);
@@ -113,7 +113,7 @@ public class MapDownloadsTest {
    until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
    // Recreate native download controller and reload JS: job ID and progress survive.
    download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");MapDownloads recoveredJob=download;
-   MapDownloadCatalog recovered=new MapDownloadCatalog(context,()->java.util.Collections.singletonList(source),item->recoveredJob,"map-catalog-test");
+   MapDownloadCatalog recovered=new MapDownloadCatalog(context,()->sources,item->recoveredJob,"map-catalog-test");
    assertEquals("paused",download.status().getString("state"));
    CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
@@ -130,6 +130,10 @@ public class MapDownloadsTest {
    // Transfer marked complete but containing HTML must fail before catalogue registration.
    transport.bytes=new byte[bytes.length];transport.state="complete";download.start();long end=System.currentTimeMillis()+5000;while(transport.enqueues<2&&System.currentTimeMillis()<end)Thread.sleep(50);
    assertEquals("failed",download.status().getString("state"));assertFalse(transport.file.exists());
+   // A failed transfer whose Drive source was removed must release its partial file and report idle.
+   transport.state="failed";download.start();end=System.currentTimeMillis()+5000;while(transport.enqueues<3&&System.currentTimeMillis()<end)Thread.sleep(50);
+   assertTrue(transport.file.exists());sources.clear();recovered.list(true);
+   JSONObject removedState=recovered.statuses().getJSONArray("files").getJSONObject(0).getJSONObject("status");assertEquals("idle",removedState.getString("state"));assertFalse(transport.file.exists());
   }finally{
    if(download!=null)download.cancel();CountDownLatch removed=new CountDownLatch(1);ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback);if(activityRef.get()!=null)activityRef.get().finish();removed.countDown();});removed.await(5,TimeUnit.SECONDS);
   }

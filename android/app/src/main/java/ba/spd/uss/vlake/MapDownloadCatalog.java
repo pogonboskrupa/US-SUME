@@ -59,7 +59,10 @@ final class MapDownloadCatalog {
         JSONObject all=new JSONObject(prefs.getString("jobs","{}"));JSONArray out=new JSONArray();
         for(Iterator<String> keys=all.keys();keys.hasNext();){String id=keys.next();Source source=activeSource(id);JSONObject state=job(source).status();
             boolean listed=catalog.stream().anyMatch(s->s.id.equals(id));
-            if(listed||Arrays.asList("resolving","downloading","paused","ready").contains(state.optString("state")))out.put(source.json().put("status",state));
+            if(!listed&&state.optString("state").equals("failed"))state=job(source).cancel();
+            // Always reconcile terminal states, including jobs whose source disappeared from the folder.
+            // The UI hides inactive unlisted jobs; omission would leave their old progress polling forever.
+            out.put(source.json().put("status",state));
         }
         return new JSONObject().put("ok",true).put("files",out);
     }

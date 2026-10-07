@@ -2751,3 +2751,10 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   prošli. Novi Android parser/folder controller testovi; CI/APK u toku.
   Detalji docs/FOLDER_KARATA_2026-10-07.md. Fizički Xiaomi, puni transfer i
   produkcijski Supabase nisu testirani; Drive dozvole/fajlovi nisu mijenjani.
+
+- CI v2.5.2 37621884715 uspješan i APK objavljen. Završna v2.5.3/523
+  uključuje uočeni slučaj nestanka izvora tokom transfera: native status
+  uvijek vraća i završene/otkazane poslove izvan foldera, da JS ne zadrži
+  stari napredak. Failed neinstalirani posao izvan foldera otkazuje se i
+  uklanja svoju parcijalnu kopiju. Proširen stvarni Android/controller test
+  i JS provjera; završni CI/APK u toku.

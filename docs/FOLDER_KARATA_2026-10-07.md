@@ -1,4 +1,4 @@
-# Javni folder KARTA APP — v2.5.2
+# Javni folder KARTA APP — v2.5.3
 
 Korisnik je otvorio novi folder za buduće karte. Mail vlasnika nije potreban
 aplikaciji: preuzimanje je anonimno, bez Google prijave, API ključa ili
@@ -54,6 +54,9 @@ instaliranih bajtova istog Drive ID-a nije automatski update karte.
 - Android MapDownloadsTest proširen za folder controller/restart, odbijanje
   izvora izvan foldera, generičku Drive potvrdu, Unicode i long veličine,
   escaped JSON bez izvršavanja skripti. Transfer je kontrolisana fixture,
-  SQLite/HTML/native bridge/IDB/Leaflet su stvarni. CI/APK provjera u toku.
+  SQLite/HTML/native bridge/IDB/Leaflet su stvarni. CI 37621884715 za v2.5.2 prošao: puni browser/JS/SQL skup i šest Android
+  testova. Završna v2.5.3 provjerava i nestanak izvora tokom transfera:
+  terminalno stanje se vraća UI-ju, ne ostaje stari napredak; neuspješan
+  posao izvan foldera briše svoju djelimičnu kopiju. CI/APK v2.5.3 u toku.
 - Fizički Xiaomi, puni DownloadManager transfer 2,14 GB na stvarnoj mreži,
   OEM pozadinska ograničenja i produkcijski Supabase nisu testirani.
