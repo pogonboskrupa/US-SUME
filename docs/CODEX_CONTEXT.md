@@ -2492,3 +2492,29 @@ Puni browser test prolazi na lokalnom Edge-u, s lažnim serverom: ŠPD/admin/pro
 320/390/800px, oba moda, profil/rok/pripadnost nalogu, prečice, pretraga i mjerenje;
 0 vanjskih upisa. Slike profila dnevni390/tamni320 i postavke vizuelno pregledane.
 CI i APK rezultat dopisati nakon objave. Fizički Redmi nije testiran.
+
+
+## 2026-10-07 — Preglednik oznaka: mirniji kontrast — 2.4.7 / code517
+
+Korisnik traži ujednačen dizajn tamnog zaglavlja i žućkastog donjeg pregleda.
+Osnova je posljednja objavljena2.4.6, commit90979eed, CODEX-US-SUME.
+Paleta je lokalno ograničena na preglednik: bliske sivozelene površine,
+neutralni folderi, prigušene oznake KML/fotografija/GPS/servera. Donja
+ml-folder-area prati istu paletu uz blažu razliku kartica i grupnih redova.
+Dnevni mod ima svijetlu paletu. Kategorije se prelamaju bez bočnog skrola,
+kontrole najmanje44px, vidljiv fokus, Na karti blago istaknuto.
+KML editor nasljeđuje paletu samo unutar preglednika. Normalni/sekundarni
+tekst najmanje5.06:1u tamnom i4.93:1u dnevnom modu.
+
+Promjena samo CSS/prezentacijski markup (data-category i SVG folder),
+bez promjene modela, slanja, čuvanja ili geometrije.2.4.7/code517 na3mjesta.
+Lokalni browser preglednik prošao8kombinacija320/390/568/800px i day/dark
+sa grupnim radnjama preko paginacije, sortiranjem, foto i KML editorom.
+Sintaksa5inlineblokova OK. APK/CI rezultat dopisati nakon objave.
+
+Prvi rad je počeo iz prethodne radne grane CODEX-US-SUME-2026-10-01
+i pripremio2.4.1, prije nego je završna provjera otkrila noviji CODEX-US-SUME
+sa2.4.6. Ispravljeno: dizajn prenesen na aktualni kod bez gubitka novijih
+izmjena. Raniji release2.4.1 vraćen na izvorni APK iz uspješnogCI37485155170
+i izvorni target/bodya2e668618a365574134bbf56085caa8e18637bb9.
+Ne koristiti novi dizajn u tom starom izdanju; konačna objava je2.4.7.
