@@ -2778,3 +2778,16 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   funkcionalni serverski tokovi. Nema produkcijskog SQL-a ili mjerenja na
   telefonu. Nalazi/preporuke: OBAVIJESTI_TEREN_SERVER_2026-10-07.md.
 - Web/SW/Android 2.5.4/code524. CI i APK provjera u toku.
+
+## 2026-10-07 — v2.5.5: Rad na terenu za ostale korisnike + Explorer
+- Korisnik je proširio zadatak tokom CI-ja: ostalim profilima dodati Teren
+  u Meni, prvo i iznad Dnevnog moda, poboljšati sekciju i uključiti Explorer.
+  Menu entry vidljiv za projektante/vodeće; ŠPD/admin zadržavaju svoj tab.
+  Lokalni alati, novi projektni kontekst i Explorer kartica. Ranije pravilo
+  Explorer samo uz odredište zadržano; pitanje o slobodnom modu čeka odgovor.
+- CI 37642301405 v2.5.4 nije objavio APK: novi test čekanja obavijesti
+  nije prošao (10 s). FGS start dozvoljen; sada FOREGROUND_SERVICE_IMMEDIATE
+  izbjegava Android 12+ podrazumijevanu odgodu prikaza. Pri otkazivanju se
+  ne šalje lažna završna obavijest za prazan spisak. Isti test se ponavlja.
+- Teren browser provjerava i običnog projektanta, redoslijed, Explorer
+  navođenje/checkbox i male ekrane u oba moda. Novi APK 2.5.5/code525 u toku.

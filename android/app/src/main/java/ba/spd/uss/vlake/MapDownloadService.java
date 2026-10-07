@@ -45,7 +45,7 @@ public final class MapDownloadService extends Service {
                 if(watched.contains(id)&&!state.equals("idle"))visible.put(row);
             }
             String next=visible.toString();
-            if(!next.equals(last)){getSystemService(NotificationManager.class).notify(NOTICE,notice(this,visible,active));last=next;}
+            if((active||visible.length()>0)&&!next.equals(last)){getSystemService(NotificationManager.class).notify(NOTICE,notice(this,visible,active));last=next;}
             if(!active&&startId>0&&stopSelfResult(startId))
                 stopForeground(visible.length()==0?STOP_FOREGROUND_REMOVE:STOP_FOREGROUND_DETACH);
         } catch(Exception e) { // A temporary query failure must not cancel the downloaded bytes.
@@ -75,6 +75,7 @@ public final class MapDownloadService extends Service {
         PendingIntent tap=PendingIntent.getActivity(c,NOTICE,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         NotificationCompat.Builder b=new NotificationCompat.Builder(c,CHANNEL).setSmallIcon(R.drawable.ic_map_download)
             .setContentTitle(title).setContentText(body).setContentIntent(tap).setOngoing(ongoing).setAutoCancel(!ongoing)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setOnlyAlertOnce(true).setSilent(true).setShowWhen(false).setPriority(NotificationCompat.PRIORITY_LOW)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body+(lines.isEmpty()?"":"\n"+String.join("\n",lines.subList(0,Math.min(lines.size(),5))))));
         if(ongoing)b.setProgress(100,percent,total==0||state.equals("resolving")&&active==1);

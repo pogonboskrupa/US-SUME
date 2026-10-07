@@ -1,8 +1,8 @@
-/* Teren za ŠPD i admina: lokalni pregled, bez novih mrežnih poziva. */
+/* Rad na terenu za sve prijavljene korisnike: lokalni pregled, bez novih mrežnih poziva. */
 (function(root){
 'use strict';
 let query='',limit=20,selected='',lastCount=0,viewOwner=null;
-const allowed=()=>typeof isAdmin==='function'&&isAdmin() || typeof isSpdField==='function'&&isSpdField();
+const allowed=()=>!!sbUser?.id&&!!sbProfile;
 const el=id=>document.getElementById(id);
 function text(id,value){const e=el(id);if(e&&e.textContent!==String(value))e.textContent=value;}
 function syncOwner(){
@@ -14,7 +14,12 @@ function render(full){
  syncOwner();
  if(!allowed())return;
  text('trn-profile-name',[sbProfile?.ime,sbProfile?.prezime].filter(Boolean).join(' ')||'Terenski pregled');
- text('trn-profile-role',isAdmin()?'Administratorski teren':'ŠPD US ŠUME · terenski nadzor');
+ text('trn-profile-role',isAdmin()?'Administratorski teren':isSpdField()?'ŠPD US ŠUME · terenski nadzor':sbProfile.sumarija||'Terenski rad');
+ const project=typeof _projekti!=='undefined'?_projekti.find(p=>p.id===_aktivniProjektId):null;
+ text('trn-active-project',project?['Odjel '+(project.odjel||'—'),project.gj].filter(Boolean).join(' · '):'Bez aktivnog projekta');
+ const explorer=root.Explorer,check=el('trn-explorer-toggle');if(check)check.checked=explorer?.enabledPreference??true;
+ text('trn-explorer-state',explorer?.active?'Odredište: '+(explorer.destination?.name||'Odabrana lokacija'):'Odaberi odredište za prikaz u smjeru kretanja.');
+ text('trn-explorer-open',explorer?.active?'Nastavi navođenje':'Odaberi odredište');
  text('trn-stat-points',_tacke.length);text('trn-stat-tracks',_tragRegistry.length);text('trn-stat-measurements',_msrRegistry.length);
 }
 function rows(items,kind,label){
@@ -41,5 +46,8 @@ async function note(){
  terenSetTab('tacke');render(false);jump('trn-records');
 }
 function measure(mode){if(!allowed())return;switchTab('karta');_izmjeriPick(mode);}
-root.TerenWorkspace={render,rows,search,more,jump,note,measure};
+function open(){if(!allowed())return;closeMenuDropdown();switchTab('teren');el('teren-panel').scrollTop=0;}
+function explorerToggle(on){if(!allowed())return;root.Explorer?.setPreference(!!on);render(false);}
+function explorerOpen(){if(!allowed())return;switchTab('karta');if(root.Explorer?.active){root.Explorer.setExplorerEnabled(root.Explorer.enabledPreference);root.Explorer.setVisible(true);}else showGuideChoice();}
+root.TerenWorkspace={open,explorerToggle,explorerOpen,render,rows,search,more,jump,note,measure};
 })(window);

@@ -5123,8 +5123,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       <div class="trn-head">
         <div style="min-width:0;">
           <div class="trn-role" id="trn-profile-role">ŠPD US ŠUME · terenski nadzor</div>
-          <div class="trn-title"><svg class="ic"><use href="#ic-kompas"/></svg> Teren</div>
-          <div class="trn-sub" id="trn-profile-name">Tvoj terenski radni prostor</div>
+          <div class="trn-title"><svg class="ic"><use href="#ic-kompas"/></svg> Rad na terenu</div>
+          <div class="trn-sub" id="trn-profile-name">Tvoj terenski radni prostor</div><div id="trn-active-project" class="trn-project-context">Bez aktivnog projekta</div>
           <button type="button" id="trn-profile-open" hidden onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg> Moj profil</button>
         </div>
         <div class="trn-chips" id="trn-chips"></div>
@@ -5142,6 +5142,15 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <div class="trn-tile"><span>Tačnost GPS-a</span><b id="trn-acc">— m</b><i class="trn-accbar"><i id="trn-accbar"></i></i></div>
           </div>
           <div class="trn-fix" id="trn-gps-dot">GPS isključen</div><div class="trn-position-actions"><button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> <span id="trn-gps-btn-txt">Uključi GPS</span></button><button class="trn-btn trn-btn-outline" onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj koordinate</button></div>
+        </section>
+
+        <section class="trn-card trn-explorer" id="trn-explorer">
+          <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
+          <div class="trn-section-label">Orijentacija i navođenje</div>
+          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
+          <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
+          <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
+          <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
         </section>
 
         <!-- BRZE RADNJE -->
@@ -5729,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.5.4';
+const APP_VER = 'v2.5.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7329,6 +7338,7 @@ async function sbLoadProfile() {
   if (adminTabBtn)    adminTabBtn.style.display    = isAdm ? '' : 'none';
   if (postavkeTabBtn) postavkeTabBtn.style.display = isAdm ? '' : 'none';
   if (terenBtn)    terenBtn.style.display    = (isFld || isAdm) ? '' : 'none';
+  const terenMenu=document.getElementById('menu-field-work');if(terenMenu)terenMenu.hidden=isFld||isAdm;
   // Vodeći projektant: samo Karta + Meni (nadzor kroz "Upravljanje projektima")
   if (projBtn)     projBtn.style.display     = (isFld || isVod) ? 'none' : '';
   if (vlkBtn)      vlkBtn.style.display      = (isFld || isVod) ? 'none' : '';
@@ -27874,7 +27884,7 @@ function switchTab(tab) {
   const ptragovi = document.getElementById('tragovi-panel');
   document.querySelectorAll('.tab-btn').forEach(b => {
     const oc = b.getAttribute('onclick') || '';
-    b.classList.toggle('active', oc.includes(`switchTab('${tab}')`));
+    b.classList.toggle('active', oc.includes(`switchTab('${tab}')`) || (b.id==='menu-btn'&&tab==='teren'&&!isSpdField()&&!isAdmin()));
   });
   // SVI paneli sa provjerom postojanja. Prva četiri su je ranije nemala i
   // to je rušilo cijelo pokretanje: #mjtrg-panel je u markupu tek na ~35138, a
@@ -40025,6 +40035,13 @@ if (typeof AndroidDownload !== 'undefined') {
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren');TerenWorkspace.search('');TerenWorkspace.jump('trn-records')">Moji zapisi</button>
   </div><div class="mdrop-sections"><section class="mdrop-section">
+  <div class="mdrop-hdr">Rad na terenu</div>
+  <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true">🧭</span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
+  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
+  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
+  </section><section class="mdrop-section">
   <div class="mdrop-hdr">Karte i slojevi</div>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
   <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico">🏔</span>Instalirane karte</button>
@@ -40032,12 +40049,6 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</button>
-  </section><section class="mdrop-section">
-  <div class="mdrop-hdr">Rad na terenu</div>
-  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
-  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr">Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
@@ -40181,6 +40192,7 @@ if (typeof AndroidDownload !== 'undefined') {
 
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Dnevni mod, navigacija i štampanje</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Rad na terenu</b><span>Projektanti otvaraju Meni → Rad na terenu, iznad Dnevnog moda. ŠPD i administrator imaju i tab Teren. Tu su pozicija, aktivni projekat, tragovi, zapažanja i Explorer. Odaberi odredište; checkbox određuje hoće li karta pratiti tvoj smjer ili ostati u običnom prikazu.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Dnevni mod</b><span>Uključi u Meniju za tamna slova na svijetloj podlozi. Ponovni pritisak vraća tamni prikaz.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vodi me</b><span>Izaberi cilj na karti kroz <b>Vodi me do odjela/lokacije</b> ili <b>Vodi me</b> na sačuvanoj tački/tragu. Checkbox <b>Explorer prikaz</b> uključuje perspektivu i praćenje smjera. Udaljenost do cilja je zračna.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Print / štampanje</b><span>Prvo podesi sadržaj karte. Izaberi format i razmjeru, unesi svoj opis na vrhu i opis legende. Provjeri lager, linije i legendu u pregledu prije štampe ili PDF-a.</span></div></div>

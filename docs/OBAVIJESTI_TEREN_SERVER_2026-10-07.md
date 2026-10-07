@@ -1,4 +1,4 @@
-# Obavijesti, teren i server — v2.5.4
+# Obavijesti, Rad na terenu i server — v2.5.5
 
 Korisnik prijavljuje nevidljive pozadinske obavijesti tokom preuzimanja
 karte. Na fizičkom Xiaomiju nije reproduciran tačan zvuk/izgled. Potvrđeno
@@ -45,7 +45,11 @@ prijema, doznake i map download native/JS veze. Pokrenuto:
 - Android provjera proširena stvarnom objavom obavijesti preko foreground
   servisa: tekst/ikona/dodir, tihi kanal, čekanje veze, napredak i završetak,
   uz postojeći stvarni SQLite/IDB/WebView offline uvoz i oporavak.
-  CI i završni APK još nisu potvrđeni u trenutku ovog zapisa.
+  CI 37642301405 (v2.5.4) prošao JS/browser/SQL/build, ali novi Android
+  test nije dobio vidljivu obavijest u roku 10 s; APK nije objavljen.
+  Android zapis potvrđuje dozvoljen start servisa, bez izuzetka. U 2.5.5
+  traži se FOREGROUND_SERVICE_IMMEDIATE umjesto podrazumijevane odgode
+  Androida 12+, uz očuvanje istog testa vidljivosti. Konačni CI još čeka.
 
 ## Server — ponovo potvrđeno, odvojeno od popravke obavijesti
 
@@ -85,3 +89,16 @@ Detalji: PREGLED_SERVERA_2026-10-07.md.
    neposlane stavke i vrijeme posljednjeg uspješnog prijema na jednom mjestu.
 5. Provjera na fizičkom Redmi Note 13 Pro: puni transfer 2,14 GB, gašenje
    ekrana, slaba mreža, prekid aplikacije i stvarna potrošnja baterije.
+
+## Dopuna korisnikovog zahtjeva — Rad na terenu
+
+- Ostali korisnici sada imaju RAD NA TERENU kao prvu stavku Menija, iznad
+  Dnevnog moda. ŠPD i administrator zadržavaju svoj tab. Lokalni alati
+  dostupni svim prijavljenim profilima; nisu proširene serverske dozvole.
+- Preglednije zaglavlje s imenom, šumarijom i aktivnim projektom, te nova
+  Explorer kartica: izbor odredišta, nastavak navođenja i checkbox koji
+  pamti uključivanje perspektive. Ranije pravilo ostaje: Explorer uz cilj
+  navigacije. Opcionalno pitanje o slobodnom Exploreru čeka odgovor.
+- Proširen browser test provjerava običnog projektanta, redoslijed Menija,
+  checkbox i nastavak stvarne Explorer kamere, dnevni/tamni mod i širine
+  320/390/800 px. Lokalno prošao; prikazi outputs/ui-preview/rad-na-terenu-255-*.

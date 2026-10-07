@@ -153,6 +153,8 @@ function create(options){
  }
  function inspect(){if(!target)return;follow=false;view.stop();paint();render();}
  const api={
+  get enabledPreference(){return preference();},
+  setPreference(on){try{root.localStorage.setItem(preferenceKey,String(!!on));}catch(e){}if(target)api.setExplorerEnabled(on);},
   get active(){return !!target;},get following(){return !!target&&follow&&visible&&!blocked;},get angle(){return view.angle;},get destination(){return target;},get session(){return session;},screenPoint:ll=>view.screenPoint(ll),
   start(t){
    if(!t||!finite(t.la)||!finite(t.lo)||Math.abs(t.la)>90||Math.abs(t.lo)>180)return false;

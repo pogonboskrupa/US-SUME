@@ -13,6 +13,7 @@ function setup(){
  a.search('Tačka 42');assert.equal(h.e.visible.length,1);assert.equal(h.e.visible[0].index,42);assert.equal(h.nodes.get('trn-more').hidden,true);a.search('ne postoji');assert.equal(h.e.visible.length,0);
  let answer;h.e._dlgPrompt=()=>new Promise(r=>answer=r);const pending=a.note();h.e.lastP={la:45,lo:17};answer('Zapažanje');await pending;assert.deepEqual(h.saved[0],[44,16,'Zapažanje']);assert.equal(h.nodes.get('trn-search').value,'');
  const switched=a.note();h.e.sbUser={id:'B'};answer('Tuđa tačka');await switched;assert.equal(h.saved.length,1);
- a.measure('area');assert.equal(h.e.mode,'area');assert.equal(h.e.tab,'karta');h.e.isAdmin=()=>false;h.e.isSpdField=()=>false;h.e.mode=null;a.measure('dist');assert.equal(h.e.mode,null);
+ a.measure('area');assert.equal(h.e.mode,'area');assert.equal(h.e.tab,'karta');h.e.isAdmin=()=>false;h.e.isSpdField=()=>false;h.e.mode=null;a.measure('dist');assert.equal(h.e.mode,'dist');h.e.sbUser=null;h.e.mode=null;a.measure('area');assert.equal(h.e.mode,null);
+ h.e.sbUser={id:'C'};let enabled=null;h.e.Explorer={enabledPreference:false,setPreference:on=>enabled=on};a.explorerToggle(true);assert.equal(enabled,true);
  console.log('Teren: paginacija, pretraga/identitet, pozicija zapažanja i promjena naloga — OK');
 })().catch(e=>{console.error(e);process.exitCode=1;});

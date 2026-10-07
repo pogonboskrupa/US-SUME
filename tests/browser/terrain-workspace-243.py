@@ -111,6 +111,29 @@ async def main():
   assert not await page.locator('#teren-tab-btn').is_visible()
   assert not await page.locator('#spd-menu-launch').is_visible()
   assert await page.locator('#vlake-tab-btn').is_visible()
+  await page.locator('#menu-btn').click();await page.wait_for_timeout(450)
+  assert await page.locator('#menu-field-work').is_visible()
+  assert await page.locator('.mdrop-sections .mdrop-item').first.get_attribute('id')=='menu-field-work'
+  assert await page.evaluate("!!(document.getElementById('menu-field-work').compareDocumentPosition(document.getElementById('field-theme-toggle'))&Node.DOCUMENT_POSITION_FOLLOWING)")
+  await page.locator('#menu-field-work').click()
+  assert await page.locator('#teren-panel').is_visible()
+  assert await page.locator('#trn-profile-role').inner_text()=='ŠUMARIJA BOS.KRUPA'
+  await page.locator('#trn-explorer-toggle').uncheck();assert await page.evaluate('Explorer.enabledPreference===false&&!Explorer.active')
+  await page.locator('#trn-explorer-toggle').check();assert await page.evaluate('Explorer.enabledPreference===true&&!Explorer.active')
+  await page.locator('#trn-explorer-open').click();assert await page.evaluate("_activeTab==='karta'&&!Explorer.active")
+  await page.evaluate("closeGuideChoice();switchTab('karta');Explorer.start({la:44.904,lo:16.001,name:'Terensko odredište'});switchTab('teren');")
+  assert await page.locator('#trn-explorer-open').inner_text()=='Nastavi navođenje'
+  await page.locator('#trn-explorer-toggle').uncheck();assert await page.evaluate('Explorer.enabledPreference===false&&!Explorer.following')
+  await page.locator('#trn-explorer-toggle').check();await page.locator('#trn-explorer-open').click()
+  await page.wait_for_function("!!document.querySelector('.ex-world')&&Explorer.following")
+  await page.evaluate("Explorer.stop();switchTab('teren')")
+  for theme in ['day','dark']:
+   await page.evaluate('t=>document.documentElement.dataset.fieldTheme=t',theme)
+   for width in [320,390,800]:
+    await page.set_viewport_size({'width':width,'height':850})
+    await page.locator('#teren-panel').evaluate('e=>e.scrollTop=0')
+    assert await page.locator('#teren-panel').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
+    await page.screenshot(path=str(out/f'rad-na-terenu-255-{theme}-{width}.png'))
   assert not errors,errors
   assert not writes,writes
   print(json.dumps({'roles':['spd','admin','projektant'],'spdProfile':True,'trialProfile':True,'profileOwnership':True,'search':True,'pagination':True,'namedPoint':True,'measurement':True,'externalWrites':len(writes),'physicalPhone':False}),flush=True)
