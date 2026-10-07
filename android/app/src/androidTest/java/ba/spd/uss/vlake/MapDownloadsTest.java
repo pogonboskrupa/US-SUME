@@ -56,6 +56,13 @@ public class MapDownloadsTest {
   fail("WebView uslov nije ispunjen: "+condition+"; rezultat="+last+"; "+info);
  }
 
+ private android.app.Notification waitNotice(Context c,String content) throws Exception {
+  long end=System.currentTimeMillis()+10000;
+  do{for(android.service.notification.StatusBarNotification n:c.getSystemService(android.app.NotificationManager.class).getActiveNotifications())
+   if(n.getId()==MapDownloadService.NOTICE&&String.valueOf(n.getNotification().extras.getCharSequence(android.app.Notification.EXTRA_TEXT)).contains(content))return n.getNotification();
+   Thread.sleep(100);
+  }while(System.currentTimeMillis()<end);throw new AssertionError("Nema vidljive obavijesti: "+content);
+ }
  private static final class FixtureBackend implements MapDownloads.Backend {
   volatile String state="paused";volatile int enqueues=0,removes=0;volatile java.io.File file;volatile byte[] bytes;
   FixtureBackend(byte[] bytes){this.bytes=bytes;}
@@ -94,6 +101,7 @@ public class MapDownloadsTest {
   Handler ui=new Handler(Looper.getMainLooper());ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(callback);registered.countDown();});assertTrue(registered.await(5,TimeUnit.SECONDS));
   context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
   MapDownloads download=null;
+  Field singleton=MapDownloadCatalog.class.getDeclaredField("instance");singleton.setAccessible(true);Object originalCatalog=singleton.get(null);
   try{
    assertTrue(resumed.await(15,TimeUnit.SECONDS));WebView view=ref.get();pageLoaded(view);until(view,"document.readyState==='complete'&&!!window.MapDownloads&&typeof sqlmapLoadFile==='function'");
    Field f=MainActivity.class.getDeclaredField("offlineMaps");f.setAccessible(true);OfflineMaps maps=(OfflineMaps)f.get(null);
@@ -115,10 +123,24 @@ public class MapDownloadsTest {
    download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");MapDownloads recoveredJob=download;
    MapDownloadCatalog recovered=new MapDownloadCatalog(context,()->sources,item->recoveredJob,"map-catalog-test");
    assertEquals("paused",download.status().getString("state"));
+   if(Build.VERSION.SDK_INT>=33)InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.POST_NOTIFICATIONS);
+   singleton.set(null,recovered);MapDownloadService.ensure(context);
+   android.app.Notification paused=waitNotice(context,"Čekam internet");
+   assertEquals(source.name,paused.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString());
+   assertNotNull(paused.getSmallIcon());assertNotNull(paused.contentIntent);
+   assertTrue((paused.flags&android.app.Notification.FLAG_ONLY_ALERT_ONCE)!=0);
+   assertTrue((paused.flags&android.app.Notification.FLAG_ONGOING_EVENT)!=0);
+   android.app.NotificationChannel channel=context.getSystemService(android.app.NotificationManager.class).getNotificationChannel(MapDownloadService.CHANNEL);
+   assertEquals(android.app.NotificationManager.IMPORTANCE_LOW,channel.getImportance());assertNull(channel.getSound());assertFalse(channel.shouldVibrate());
+   transport.state="downloading";android.app.Notification progress=waitNotice(context,"50%");
+   assertEquals(50,progress.extras.getInt(android.app.Notification.EXTRA_PROGRESS));
+   transport.state="paused";waitNotice(context,"Čekam internet");
+
    CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
    until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
+   waitNotice(context,"Otvori aplikaciju");
    JSONObject status=download.status();String nativeId=status.getJSONObject("file").getString("nativeId");assertEquals("installed",status.getString("state"));
    assertFalse("Bez duple kopije",new java.io.File(context.getFilesDir(),"offline-maps/"+nativeId+".sqlite").exists());
    eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2021-2031',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");
@@ -135,6 +157,7 @@ public class MapDownloadsTest {
    assertTrue(transport.file.exists());sources.clear();recovered.list(true);
    JSONObject removedState=recovered.statuses().getJSONArray("files").getJSONObject(0).getJSONObject("status");assertEquals("idle",removedState.getString("state"));assertFalse(transport.file.exists());
   }finally{
+   context.stopService(new Intent(context,MapDownloadService.class));Thread.sleep(200);singleton.set(null,originalCatalog);context.getSystemService(android.app.NotificationManager.class).cancel(MapDownloadService.NOTICE);
    if(download!=null)download.cancel();CountDownLatch removed=new CountDownLatch(1);ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback);if(activityRef.get()!=null)activityRef.get().finish();removed.countDown();});removed.await(5,TimeUnit.SECONDS);
   }
  }

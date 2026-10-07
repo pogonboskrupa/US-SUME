@@ -2765,3 +2765,16 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   ba.spd.uss.vlake.debug/2.5.3-debug/523, stabilni certifikat i svih 61 assets
   hashova provjereni. Puni 2,14 GB mrežni transfer i fizički Xiaomi nisu
   testirani; javni fajl potvrđen anonimnom Range/header/schema provjerom.
+
+## 2026-10-07 — v2.5.4: tihe obavijesti preuzimanja i ponovni terenski pregled
+- Korisnik prijavljuje nevidljive obavijesti. Novi MapDownloadService prati
+  DownloadManager kroz zajednički singleton katalog, daje jedan tihi LOW
+  kanal/progres/dodir za pregled karata. Novi DM poslovi su notification-hidden;
+  starim poslovima se ne mijenjaju bajtovi ni status. Vidljiv razlog ako su
+  Android obavijesti isključene. Proširen stvarni instrumentacijski test.
+- 100 JS grupa, pet inline sintaksi, LoadMap browser, 5h CPU4x simulacija,
+  3+2,4 km simulacija i šest dana doznake prošli. Sedam audit reprodukcija
+  potvrđuje da raniji P1/P2 server problemi još postoje; nisu prepravljani
+  funkcionalni serverski tokovi. Nema produkcijskog SQL-a ili mjerenja na
+  telefonu. Nalazi/preporuke: OBAVIJESTI_TEREN_SERVER_2026-10-07.md.
+- Web/SW/Android 2.5.4/code524. CI i APK provjera u toku.

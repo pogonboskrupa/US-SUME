@@ -146,6 +146,7 @@ public class MainActivity extends Activity {
         setContentView(root);
         primijeniTastaturu(root);
 
+        if("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS".equals(getIntent().getAction()))MapDownloadService.openRequested=true;
         hideSystemUI();
         requestPermissions();
         // Uvijek rebinduj listenere/JS mostove na OVU (trenutnu) Activity instancu —
@@ -194,7 +195,7 @@ public class MainActivity extends Activity {
         }
 
         if (offlineMaps == null) offlineMaps = new OfflineMaps(this);
-        if (mapDownloads == null) try { mapDownloads = new MapDownloadCatalog(this, offlineMaps); }
+        if (mapDownloads == null) try { mapDownloads = MapDownloadCatalog.shared(this, offlineMaps); }
         catch (Exception e) { android.util.Log.w("MapCatalog", "Katalog karata nije dostupan"); }
         assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -850,6 +851,13 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);setIntent(intent);
+        if("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS".equals(intent.getAction()))MapDownloadService.openRequested=true;
+        if("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS".equals(intent.getAction())&&webView!=null)
+            webView.evaluateJavascript("window.MapDownloads&&MapDownloads.openFromNotification()",null);
     }
 
     class GpsBridge {

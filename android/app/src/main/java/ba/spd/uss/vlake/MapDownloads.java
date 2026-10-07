@@ -109,7 +109,7 @@ final class MapDownloads {
         public long enqueue(String url,File file){return manager.enqueue(new DownloadManager.Request(Uri.parse(url))
             .setTitle("Dendro Map · "+source.name).setDescription("Offline karta — preuzimanje")
             .setDestinationUri(Uri.fromFile(file)).setMimeType("application/octet-stream")
-            .setAllowedOverMetered(true).setAllowedOverRoaming(false).setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED));}
+            .setAllowedOverMetered(true).setAllowedOverRoaming(false).setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN));}
         public JSONObject query(long id) throws Exception {
             try(Cursor c=manager.query(new DownloadManager.Query().setFilterById(id))){
                 if(c==null||!c.moveToFirst())return new JSONObject().put("state","failed").put("error","Preuzimanje je uklonjeno. Pokušaj ponovo.");

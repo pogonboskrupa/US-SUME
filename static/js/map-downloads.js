@@ -3,6 +3,7 @@
   'use strict';
   const pending=new Map(),cards=new Map(),states=new Map(),busy=new Set(),installers=new Map();
   let seq=0,timer=null,polling=false,refreshing=false,catalog=[],installTail=Promise.resolve();
+  const sizeText=b=>b>=1e9?(b/1e9).toFixed(2).replace('.',',')+' GB':(Math.max(0,b)/1e6).toFixed(1).replace('.',',')+' MB';
   const active=s=>['resolving','downloading','paused','ready'].includes(s?.state);
   const available=()=>!!root.AndroidMapDownloads?.request;
   const el=id=>root.document?.getElementById(id);
@@ -28,23 +29,26 @@
     container.appendChild(c);cards.set(s.id,c);return c;
   }
   function render(){
+    const note=el('loadmap-download-notification-note');
+    if(note)try{note.hidden=typeof root.AndroidMapDownloads?.notificationsEnabled!=='function'||root.AndroidMapDownloads.notificationsEnabled();}catch(e){note.hidden=true;}
     const visible=new Map(catalog.map(s=>[s.id,s]));
     for(const [id,r]of states)if(active(r.status)||installers.has(id))visible.set(id,visible.get(id)||r.source);
     for(const [id,c]of cards)if(!visible.has(id)){c.remove();cards.delete(id);}
     for(const [id,s]of visible){
       const c=card(s);if(!c)continue;const status=states.get(id)?.status||{state:'idle'},installing=installers.has(id);
       c.querySelector('.lm-download-title').textContent=s.name.replace(/\.[^.]+$/,'');
-      c.querySelector('.lm-download-size').textContent=(s.size/1e9).toFixed(2).replace('.',',')+' GB';
+      c.querySelector('.lm-download-size').textContent=sizeText(s.size);
       const button=c.querySelector('.lm-download-button'),text=c.querySelector('.lm-download-status'),progress=c.querySelector('.lm-download-progress'),stop=c.querySelector('.lm-download-cancel');
       let label='Skini kartu',message='';
       if(installing||status.state==='ready'){label='Dodajem kartu…';message='Pripremam kartu za korištenje…';}
       else if(status.state==='resolving'){label='Pripremam preuzimanje…';message='Povezujem se s kartom…';}
       else if(['downloading','paused'].includes(status.state)){
-        label='Preuzimanje u toku…';message=(status.state==='paused'?'Čekam vezu — preuzimanje će se nastaviti. ':'Preuzimam: ')+(Math.max(0,status.bytes||0)/1e9).toFixed(2)+' / '+((status.total>0?status.total:s.size)/1e9).toFixed(2)+' GB';
+        const total=status.total>0?status.total:s.size,bytes=Math.max(0,status.bytes||0),percent=Math.min(100,Math.floor(bytes/total*100));
+        label=status.state==='paused'?'Čekam internet…':'Preuzimanje · '+percent+'%';message=(status.state==='paused'?'Čekam vezu — preuzimanje će se nastaviti. ':'')+sizeText(bytes)+' / '+sizeText(total)+' · Možeš nastaviti koristiti aplikaciju.';
       }else if(status.state==='installed'){label='Prikaži kartu';message='✓ Spremna za korištenje bez interneta';}
       else if(status.state==='failed'){label='Pokušaj ponovo';message=status.error||'Preuzimanje nije uspjelo. Pokušaj ponovo.';}
       button.textContent=label;button.disabled=busy.has(id)||active(status)||installing||!available();
-      text.textContent=message;text.dataset.state=status.state;
+      if(text.textContent!==message)text.textContent=message;text.dataset.state=status.state;
       progress.hidden=!['downloading','paused'].includes(status.state);progress.max=status.total>0?status.total:s.size;progress.value=Math.max(0,status.bytes||0);
       stop.hidden=!active(status)||status.state==='ready'||installing;stop.disabled=busy.has(id);
     }
@@ -109,5 +113,10 @@
   }
   async function cancel(id){const s=source(id);if(!s||busy.has(id)||installers.has(id))return;busy.add(id);render();
     try{const r=await request({type:'cancel',sourceId:id});remember(s,r.ok?r:{state:'failed',error:r.error});}finally{busy.delete(id);schedule();render();}}
-  root.MapDownloads={available,request,reply,resume,refresh,start,cancel};
+  async function openFromNotification(){
+    if(!available()||typeof sbUser==='undefined'||!sbUser)return;
+    const r=await request({type:'notice'});if(r.ok&&r.open&&typeof openLoadMapScreen==='function')openLoadMapScreen();
+  }
+  function notificationSettings(){root.AndroidMapDownloads?.notificationSettings?.();}
+  root.MapDownloads={notificationSettings,available,request,reply,resume,refresh,start,cancel,openFromNotification};
 })(typeof window!=='undefined'?window:globalThis);

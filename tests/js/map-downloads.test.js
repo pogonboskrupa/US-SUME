@@ -15,14 +15,15 @@ const box={window:root,Map,Set,Promise,Error,Number,setTimeout:(f,t)=>{const id=
  _sqlWCall:async()=>({ok:true,rows}),sqlmapLoadFile:async f=>{imports.push(f);rows.push({name:f.name.replace(/\.[^.]+$/,''),meta:{_nativeId:f.nativeId}});},_loadmapShow:async()=>{shows++;}};
 vm.runInNewContext(fs.readFileSync('static/js/map-downloads.js','utf8'),box);const api=root.MapDownloads;
 root.AndroidMapDownloads={request:(id,text)=>{const m=JSON.parse(text);calls.push(m);let r;
- if(m.type==='list')r={ok:true,files};else if(m.type==='statuses')r={ok:true,files:known.map(s=>({...s,status:states.get(s.id)||{state:'idle'}}))};
+ if(m.type==='notice')r={ok:true,open:!!root.noticeOpen},root.noticeOpen=false;else if(m.type==='list')r={ok:true,files};else if(m.type==='statuses')r={ok:true,files:known.map(s=>({...s,status:states.get(s.id)||{state:'idle'}}))};
  else {r=states.get(m.sourceId);if(m.type==='start')r={ok:true,state:'downloading',bytes:42,total:100};if(m.type==='installed')r={...r,state:'installed'};if(m.type==='cancel')r={ok:true,state:'idle'};states.set(m.sourceId,r);}
  queueMicrotask(()=>api.reply(id,r));}};
 const card=id=>nodes.find(n=>n.dataset.sourceId===id&&!n.removed),status=id=>card(id).querySelector('.lm-download-status');
 (async()=>{
+ box.sbUser={id:'tester'};let opened=0;box.openLoadMapScreen=()=>opened++;root.noticeOpen=true;await api.openFromNotification();await api.openFromNotification();assert.equal(opened,1);
  await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'2,14 GB');
  root.navigator.onLine=false;await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
- root.navigator.onLine=true;await Promise.all([api.start(A),api.start(B)]);assert.equal(card(A).querySelector('.lm-download-progress').value,42);
+ root.navigator.onLine=true;await Promise.all([api.start(A),api.start(B)]);assert.equal(card(A).querySelector('.lm-download-progress').value,42);assert.match(card(A).querySelector('.lm-download-button').textContent,/42%/);
  states.set(A,{...states.get(A),state:'paused'});await api.resume();assert.match(status(A).textContent,/Čekam vezu/);
  await api.cancel(A);assert.equal(card(A).querySelector('.lm-download-progress').hidden,true);assert.equal(states.get(B).state,'downloading');
  // Both completions must install sequentially, exactly once; manual same-name map is retained.

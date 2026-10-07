@@ -5729,7 +5729,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.5.3';
+const APP_VER = 'v2.5.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7431,7 +7431,7 @@ function _startupRestore() {
 
   korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
   korak('switchTab',   () => switchTab('karta'));
-  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(window.MapDownloads?.available())await MapDownloads.resume(); });
+  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(window.MapDownloads?.available()){await MapDownloads.resume();await MapDownloads.openFromNotification();} });
   korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
   korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
   if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); _updSyncBadge(); });
@@ -40640,6 +40640,7 @@ if (typeof AndroidDownload !== 'undefined') {
       <section id="loadmap-downloads" aria-labelledby="loadmap-download-title">
         <div class="lm-section-heading"><div><h3 id="loadmap-download-title">Dostupne karte</h3><small>KARTA APP · preuzmi i koristi offline</small></div><button type="button" id="loadmap-download-refresh" class="lm-secondary" onclick="MapDownloads.refresh()" aria-label="Osvježi dostupne karte">↻</button></div>
         <div id="loadmap-download-message" role="status" aria-live="polite"></div>
+        <div id="loadmap-download-notification-note" hidden>Android obavijesti su isključene. Napredak preuzimanja vidiš ovdje.<button type="button" class="lm-secondary" onclick="MapDownloads.notificationSettings()">Uključi obavijesti</button></div>
         <div id="loadmap-download-cards"></div>
       </section>
       <div class="lm-upload-box" id="loadmap-drop" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="loadmapHandleDrop(event)">

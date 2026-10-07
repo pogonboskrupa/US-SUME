@@ -512,3 +512,7 @@ body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
 #loadmap-download-message {font:12px/1.65 system-ui;color:var(--field-muted);margin-bottom:12px;overflow-wrap:anywhere;}
 #loadmap-download-message:empty {display:none;}
 html[data-field-theme=day] .lm-download-status[data-state=failed] {color:#991b1b;}
+
+#loadmap-download-notification-note {padding:12px;margin-bottom:12px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);color:var(--field-text);font:13px/1.6 system-ui;}
+#loadmap-download-notification-note[hidden] {display:none;}
+#loadmap-download-notification-note button {display:block;margin-top:8px;}

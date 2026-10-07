@@ -15,6 +15,12 @@ import java.util.regex.*;
 
 /** Only raster files listed in the user's fixed public folder may start a new download. */
 final class MapDownloadCatalog {
+    private static MapDownloadCatalog instance;
+    private Context notificationContext;
+    static synchronized MapDownloadCatalog shared(Context c,OfflineMaps maps) throws Exception {
+        if(instance==null)instance=new MapDownloadCatalog(c,maps==null?new OfflineMaps(c):maps);
+        return instance;
+    }
     static final String FOLDER_ID="1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0";
     static final class Source {
         final String id,name;final long size;
@@ -34,6 +40,7 @@ final class MapDownloadCatalog {
     private final java.util.concurrent.ExecutorService commands=Executors.newFixedThreadPool(2);
     MapDownloadCatalog(Context c,OfflineMaps maps) throws Exception {
         this(c.getApplicationContext(),MapDownloadCatalog::fetchFolder,productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
+        notificationContext=c.getApplicationContext();
         // v2.5.1 transfers remain resumable even though the source folder has changed.
         if(c.getSharedPreferences("unsko-download-v1",Context.MODE_PRIVATE).contains("file"))remember(new Source(MapDownloads.FILE_ID,MapDownloads.NAME,MapDownloads.SIZE));
     }
@@ -64,10 +71,12 @@ final class MapDownloadCatalog {
             // The UI hides inactive unlisted jobs; omission would leave their old progress polling forever.
             out.put(source.json().put("status",state));
         }
+        if(notificationContext!=null&&!MapDownloadService.isRunning())for(int i=0;i<out.length();i++)if(MapDownloadService.isActive(out.getJSONObject(i).getJSONObject("status").optString("state"))){MapDownloadService.ensure(notificationContext);break;}
         return new JSONObject().put("ok",true).put("files",out);
     }
     JSONObject action(JSONObject msg) throws Exception {
-        String type=msg.getString("type");if(type.equals("list"))return list(msg.optBoolean("refresh"));if(type.equals("statuses"))return statuses();
+        String type=msg.getString("type");if(type.equals("notice")){boolean open=MapDownloadService.openRequested;MapDownloadService.openRequested=false;return new JSONObject().put("ok",true).put("open",open);}
+        if(type.equals("list"))return list(msg.optBoolean("refresh"));if(type.equals("statuses"))return statuses();
         String id=msg.getString("sourceId");MapDownloads j;
         if(type.equals("start")){
             Source source=null;for(Source s:catalog)if(s.id.equals(id))source=s;
@@ -78,13 +87,23 @@ final class MapDownloadCatalog {
             if((state.equals("idle")||state.equals("failed"))&&(!saved.name.equals(source.name)||saved.size!=source.size)){
                 synchronized(this){jobs.remove(id);}saved=source;j=job(saved);
             }
-            remember(saved);return j.start().put("ok",true);
+            remember(saved);JSONObject started=j.start().put("ok",true);if(notificationContext!=null&&MapDownloadService.isActive(started.optString("state")))MapDownloadService.ensure(notificationContext);return started;
         }
         j=job(activeSource(id));JSONObject result;
         if(type.equals("cancel"))result=j.cancel();else if(type.equals("installed"))result=j.installed(msg.getString("nativeId"));else throw new IOException("Nepoznata radnja preuzimanja");return result.put("ok",true);
     }
     final class Bridge {
         private final WebView view;Bridge(WebView view){this.view=view;}
+        @JavascriptInterface public boolean notificationsEnabled(){
+            if(notificationContext==null)return true;
+            if(!androidx.core.app.NotificationManagerCompat.from(notificationContext).areNotificationsEnabled())return false;
+            if(android.os.Build.VERSION.SDK_INT>=26){android.app.NotificationChannel c=notificationContext.getSystemService(android.app.NotificationManager.class).getNotificationChannel(MapDownloadService.CHANNEL);if(c!=null&&c.getImportance()==android.app.NotificationManager.IMPORTANCE_NONE)return false;}
+            return true;
+        }
+        @JavascriptInterface public void notificationSettings(){
+            if(notificationContext==null)return;
+            try{android.content.Intent i=new android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,notificationContext.getPackageName()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);notificationContext.startActivity(i);}catch(RuntimeException ignored){}
+        }
         @JavascriptInterface public void request(long id,String raw){commands.execute(()->{
             JSONObject result;try{result=action(new JSONObject(raw));}catch(Exception e){result=new JSONObject();try{result.put("ok",false).put("error",e.getMessage());}catch(Exception ignored){}}
             final String text=result.toString();view.post(()->view.evaluateJavascript("window.MapDownloads&&MapDownloads.reply("+id+","+text+")",null));
