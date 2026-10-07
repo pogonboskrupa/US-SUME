@@ -25,7 +25,7 @@ window.fixtureReady=(async()=>{
 '''
 colors=b.section('      <!-- BOJE VLAKA -->','      <!-- /BOJE VLAKA -->')+b.section('      <section class="sec proj-akt-only project-vlake"','      <details class="sec proj-akt-only workflow-group" id="project-reports"')
 action=b.section('<div id="action-bar">','<!-- Trag quick meta panel')
-help_html=b.section('<div id="help-modal">','<!-- M&T BOTTOM SHEET -->')
+help_html=b.section('<div id="help-modal"','<!-- M&T BOTTOM SHEET -->')
 sheet=b.section('<div id="layer-sheet-bg"','<!-- Modal: učitaj KML') if '<!-- Modal: učitaj KML' in b.SOURCE else b.section('<div id="layer-sheet-bg"','<div id="layer-import-modal"')
 markup='<div id="fixture-project" style="position:fixed;inset:12px 0 88px;overflow:auto;z-index:1800;background:var(--field-bg);padding:12px">'+colors+'</div>'+action+help_html+sheet
 fixture=s.fixture.replace('</body>',markup+'<script>'+code+'</script></body>')
@@ -64,6 +64,36 @@ async def main():
     await page.evaluate('showHelp()');await page.locator('#help-pane-gen .help-sec-hdr').first.click()
     await b.bounds(page,'#help-modal',w,h)
     await page.screenshot(path=str(b.OUT/f'help-{theme}-{w}-{h}.png'))
+    if w==320:
+     # Stvarne upute moraju biti čitljive i potpuno dostupne i bez mreže.
+     for tab in ['gen','vlake','doznaka','simboli']:
+      await page.locator('.help-tab').nth(['gen','vlake','doznaka','simboli'].index(tab)).click()
+      pane=page.locator('#help-pane-'+tab)
+      assert await pane.is_visible()
+      assert await page.locator('#help-body').evaluate('e=>e.scrollTop')==0
+      if tab!='simboli':
+       assert await pane.locator('.help-start .help-steps li').count()>=5
+       assert await pane.locator('.help-start li').first.evaluate("e=>parseFloat(getComputedStyle(e).fontSize)")>=14
+      for header in await pane.locator('.help-sec-hdr').all():
+       body=header.locator('xpath=following-sibling::*[1]')
+       if not await body.is_visible():
+        await header.focus();await page.keyboard.press('Enter')
+       assert await body.is_visible()
+       assert await header.get_attribute('aria-expanded')=='true'
+      assert await page.locator('#help-body').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
+      if tab in ['vlake','doznaka']:
+       assert await pane.locator('svg[role=img]').count()==1
+       await page.locator('#help-body').evaluate('e=>e.scrollTop=0')
+       await page.screenshot(path=str(b.OUT/f'help-249-{tab}-{theme}.png'))
+      await page.locator('#help-body').evaluate('e=>e.scrollTop=e.scrollHeight')
+      assert await pane.locator('.help-sec-hdr').last.is_visible()
+     await page.locator('.help-tab').first.click()
+     assert await page.locator('#help-body').evaluate('e=>e.scrollTop')==0
+     assert 'v'+APP_VERSION in await page.locator('#help-app-version').inner_text()
+     for header in await page.locator('#help-modal .help-sec-hdr').all():
+      # Sakriveni tabovi se ovdje vraćaju preko iste stvarne funkcije.
+      if await header.get_attribute('aria-expanded')=='true':await header.evaluate('e=>toggleHelpSec(e)')
+
     await page.evaluate('closeHelp()')
     await page.evaluate("document.querySelector('#help-pane-gen .help-sec-body').classList.remove('open')")
   await page.set_viewport_size({'width':390,'height':800});await page.click('#brec');assert await page.evaluate('pickerClicks')==1
@@ -97,6 +127,15 @@ async def main():
     await page.locator('#reference-card>summary').click();assert await page.locator('#refkarta-file').count()==1
     assert await page.locator('#fixture-project').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
     await page.locator('#fixture-project').evaluate('e=>e.scrollTop=0');await page.screenshot(path=str(b.OUT/f'vlake-workflow-{theme}-{w}-{h}.png'))
+  # Već ugrađene upute rade nakon isključivanja mreže, bez dodatnog zahtjeva.
+  await page.context.set_offline(True)
+  await page.evaluate('showHelp()')
+  await page.locator('.help-tab').nth(2).click()
+  assert 'Počni GPS' in await page.locator('#help-pane-doznaka').inner_text()
+  await page.locator('#help-pane-doznaka .help-sec-hdr').nth(2).click()
+  assert 'jedan iznad drugog' in await page.locator('#help-pane-doznaka').inner_text()
+  await page.get_by_role('button',name='Zatvori upute',exact=True).click()
+  assert not await page.locator('#help-modal').is_visible()
   assert not errors,errors
   await browser.close()
  print('OK: vlastite/kolegine boje, realtime, offline preferencije, numerički spisak, Snimi, instalirane karte i upute; 24 PNG')

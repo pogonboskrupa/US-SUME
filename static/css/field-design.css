@@ -279,7 +279,42 @@ html[data-field-theme=day] .le-actions .le-danger{color:#991b1b;}
 /* Aktivni projekat: stvarni stil cijele mreže i zajednički numerički spisak. */
 .project-colors #boja-project-context{font-weight:700;color:var(--field-ink);font-size:13px;margin:0 0 8px;overflow-wrap:anywhere}.project-vl-note{color:var(--field-muted);font-size:12px;line-height:1.6;margin:5px 0 12px}.project-colors>div:last-child>div{flex-wrap:wrap}.project-colors #boja-vl-presets,.project-colors #boja-kr-presets{flex-wrap:wrap;gap:5px!important}.project-colors #boja-vl-presets button,.project-colors #boja-kr-presets button{height:30px;width:30px;flex-shrink:0;border:2px solid transparent;border-radius:8px;background:var(--boja);cursor:pointer;box-shadow:inset 0 0 0 1px #0003}.project-colors [aria-pressed=true]{outline:2px solid var(--field-ink);outline-offset:2px}.project-colors input[type=color]{width:44px!important;height:40px!important}.project-colors button:disabled,.project-colors input:disabled{opacity:.4;cursor:default}.project-colors .boja-dash-btn{min-height:40px}.project-vlake>small{display:block;color:var(--field-muted);margin:0 0 10px}html .project-vl-row{width:100%;min-height:62px;display:flex;align-items:center;gap:11px;text-align:left;padding:12px 10px;background:var(--field-bg);color:var(--field-ink);border:1px solid var(--field-border);border-radius:10px;margin:7px 0;cursor:pointer;font:inherit}.project-vl-row>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}.project-vl-row b{display:block;font-size:14px}.project-vl-row small{display:block;margin-top:4px;color:var(--field-muted);font-size:11px}.project-vl-row strong{font-size:12px;white-space:nowrap}.project-vl-dot{width:7px;height:34px;flex-shrink:0;border-radius:5px}.project-vl-empty{font-size:12px;color:var(--field-muted);line-height:1.6}#project-vlake-more[hidden]{display:none!important}
 @media(max-width:380px){.project-colors>div:last-child>div>span{width:100%}.project-colors>div:last-child>div>div{flex-wrap:wrap}.project-colors #boja-vl-presets,.project-colors #boja-kr-presets{max-width:240px}}
-html #help-modal{background:var(--field-bg);color:var(--field-ink)}html #help-hdr,html #help-tabs{background:var(--field-card);border-color:var(--field-border)}html #help-hdr h2{color:var(--field-ink);font-size:17px}#help-app-version{display:block;color:var(--field-muted);font-size:11px;margin-top:4px}html #help-tabs{overflow-x:auto}html .help-tab{flex-shrink:0;color:var(--field-muted);min-height:44px}html .help-tab.active{color:var(--field-ink)}html .help-sec{background:var(--field-card);border-color:var(--field-border)}html .help-sec-hdr{color:var(--field-ink);min-height:48px;font-size:13px}html .help-txt b{color:var(--field-ink)}html .help-txt span,html .help-steps li{color:var(--field-muted);font-size:13px;line-height:1.7}html .help-txt span b{color:var(--field-ink)}html .help-diagram{background:var(--field-bg);color:var(--field-ink);border-color:var(--field-border)}
+/* Upute v2.4.9: veliki čitljivi koraci i teme dostupne dodirom/tastaturom. */
+html #help-modal { background:var(--field-bg); color:var(--field-ink); }
+html #help-hdr,html #help-tabs {background:var(--field-card);border-color:var(--field-border);}
+html #help-hdr {padding-top:max(12px,env(safe-area-inset-top));}
+html #help-hdr h2 {font-size:18px;color:var(--field-ink);}
+html #help-app-version {display:block;margin-top:4px;font-size:12px;color:var(--field-muted);}
+html #help-close {min-width:44px;min-height:44px;color:var(--field-ink);}
+html .help-tab {min-height:48px;font-size:13px;color:var(--field-muted);letter-spacing:0;}
+html .help-tab.active {color:var(--field-ink);border-color:#29996c;background:rgba(41,153,108,.12);}
+html #help-body {padding:12px 12px max(28px,env(safe-area-inset-bottom));}
+.help-start {max-width:720px;margin:0 auto 16px;border:1px solid var(--field-border);border-radius:14px;background:var(--field-card);padding:16px;}
+.help-eyebrow {font-size:11px;font-weight:700;color:var(--field-muted);text-transform:uppercase;letter-spacing:.5px;}
+.help-start h3 {margin:6px 0;font-size:20px;line-height:1.35;}
+.help-start p {font-size:14px;line-height:1.65;margin:8px 0;color:var(--field-muted);}
+html .help-sec {max-width:720px;margin:0 auto 8px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-card);overflow:hidden;}
+html .help-sec-hdr {width:100%;min-height:52px;background:transparent;border:0;text-align:left;font:700 14px/1.55 system-ui;color:var(--field-ink);padding:12px;}
+html .help-sec-hdr .h-arrow {color:var(--field-muted);}
+html .help-sec-body {padding:0 12px 14px;}
+html .help-row {border-color:var(--field-border);padding:10px 0;}
+html .help-txt {min-width:0;}
+html .help-txt b {font-size:14px;color:var(--field-ink);line-height:1.55;}
+html .help-txt span {font-size:14px;color:var(--field-muted);line-height:1.7;}
+html .help-txt span b {display:inline;color:inherit;}
+html .help-icon {color:var(--field-ink);background:var(--field-bg);}
+html .help-steps {counter-reset:help-step;margin-top:10px;}
+html .help-steps li {font-size:14px;color:var(--field-muted);padding:9px 0 9px 32px;line-height:1.7;overflow-wrap:anywhere;}
+html .help-steps li b {color:var(--field-ink);}
+html .help-steps li::before {font-size:14px;color:var(--field-ink);top:10px;width:24px;text-align:center;background:var(--field-bg);border-radius:6px;}
+html .help-diagram {font-size:14px;line-height:1.7;color:var(--field-muted);background:var(--field-bg);border:1px solid var(--field-border);border-left:3px solid #29996c;padding:12px;margin-top:12px;}
+html .help-diagram>b {color:var(--field-ink);}
+.help-diagram p {margin:4px 0 0;}
+.help-figure {margin:12px 0;padding:10px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);color:var(--field-ink);}
+.help-figure svg {display:block;width:100%;height:auto;max-width:400px;margin:auto;}
+.help-figure figcaption {font-size:12px;line-height:1.6;color:var(--field-muted);margin-top:8px;}
+#help-modal button:focus-visible {outline:3px solid #3985c7;outline-offset:-3px;}
+
 
 /* Natpisi boja nasljeđuju kontrast aktivnog moda, uključujući Dnevni. */
 html .project-colors>div:last-child>div>span,html .project-colors #boja-weight-v{color:var(--field-ink)!important}

@@ -2652,3 +2652,21 @@ MiniSqlite pretražuje ključeve binarno bez nepotrebnih BLOB-ova i zaustavlja s
 Android test je dokazao da /proc/self/fd SQLite otvor vodi nazad na nedostupnu privatnu provider putanju i tada je prvi pristup kopirao fajl. Seekable zaštićeni dokumenti sada se čitaju preko istog FD-a i read-only SQL.js VFS-a (vendor dodatak `openReadOnlyFile`, `sql-document.js`, Os.pread binarni blokovi), bez kopije i uz 4 MB LRU. Pokriva normalizovani MBTiles, za razliku od MiniSqlite ograničenja na tiles tabele. Pri zamjeni se nova baza prvo otvara pod privremenim nazivom, validira i tek zatim aktivira. Native cilj testa bez kopije ostaje obavezan, nije ublažen. Lokalna nova VFS provjera čita 64 KB za 1,5 GB probnu bazu i oko 1,43 MB za zadnju pločicu normalizovane 34 MB baze; readonly upis odbijen.
 
 Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3df434b735062fbd2d65bb success; 99 JS grupa, puni browser skup, 4 Android offline testa (0 grešaka). Native 1,5 GB content:// proba otvorena za 3.070 ms bez kopije, normalizovani MBTiles/rename/reload/neispravna zamjena/pipe/original svi potvrđeni. Kontrolisani URI/grant i sintetički fajlovi; fizički Xiaomi nije testiran. APK 24.083.687 B, SHA-256 6dd857625a5079bae0afd870045414ea53d2ab93e732ad27272e1695a0874f70, isti debug cert, 60 assets provjereno. Detalji u izvještaju. Ponovo izabrati original kroz Učitaj kartu za novi direktni FD tok; stari OPFS importi ostaju. Završna dokumentacija ne mijenja APK ni zahtijeva ponovno izvršavanje punog CI-ja.
+
+## 2026-10-07 — v2.4.9: razumljive upute za Vlake i Doznaku
+
+- Korisnik traži jednostavne upute s naglaskom na vlake i doznaku. Ugrađeni
+  help-modal je prepisan prema stvarnim kontrolama; brzi početak je odmah
+  vidljiv, dodatne teme se proširuju. Dodane lokalne SVG sheme krakova i
+  četiri projektanta po izohipsama. Upute ne traže mrežu.
+- Ispravljeni zastarjeli nazivi i suprotni opisi povratka s kraka. Razlikuju
+  procjenu pokrivenosti od stvarno završene doznake, ukupnu širinu bafera od
+  vanjskog ruba, QR lokalni pregled od servera, odjel doznake od aktivnog
+  projekta vlaka i lokalno spremanje od potvrđenog slanja.
+- Izgled u postojećem field-design.css: 14 px tekst/koraci, dnevni i tamni
+  mod, teme kao dugmad s aria-expanded, promjena taba vraća skrol. Nema
+  promjena GPS/pohrane/servera/geometrije.
+- Lokalno prošlo 99 JS grupa, 5 inline sintaksnih provjera, simulacija šest
+  dana i prošireni project-vlake-220.py (svi help tabovi, tastatura, mali
+  ekrani, offline pristup). Dokument: UPUTE_KORISTENJE_2026-10-07.md.
+- Web/SW/Android 2.4.9, versionCode 519. CI i provjera konačnog APK-a slijede.
