@@ -2709,3 +2709,17 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   cafe2b08134ae50be3eed18876a738095613082f46cc852b779edf57f784295b.
   Dostupan u Meni → Ažuriraj aplikaciju. Fizički Xiaomi, stvarno skidanje
   cijelog 1,57 GB fajla na telefonu i produkcijski Supabase nisu testirani.
+
+## 2026-10-07 — v2.5.1: Unsko karta se sama preuzima i dodaje
+- Korisnik je zamijenio v2.5.0 vanjski Drive/ručni import: samo Skini kartu,
+  nakon završetka dostupna u Mojim kartama. Nova MapDownloads native/JS
+  funkcija rješava javnu Drive potvrdu, Android DownloadManager pozadinski
+  posao/napredak/nastavak, app-owned fajl i postojeći native atomski import.
+  OfflineMaps otvara preuzetu SQLite bazu direktno, bez druge kopije.
+- Potvrđen stvarni HTTP 206 Range 0–15 i SQLite header izvornog fajla od
+  1.567.670.272 B; cijeli fajl nije preuzet u cloudu. Novo je ograničeni
+  native downloader; nema promjena produkcijskog servera/SQL-a.
+- Lokalno 100 JS grupa, simulacija, 5 inline sintaksi, LoadMap browser suite
+  prošli. Novi MapDownloadsTest: kontrolisani transport, stvarni APK/native
+  file/SQLite/IDB/WebView/Leaflet, restart i offline tile/delete/invalid HTML.
+  CI/APK provjera u toku; detalji docs/PREUZIMANJE_UNSKO_2026-10-07.md.

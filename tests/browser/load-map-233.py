@@ -30,7 +30,7 @@ fixture = ('<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8">'
            '<link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>' + b.styles +
            '\n#map{position:fixed;inset:0;background:#dae8ce}</style></head><body>' + b.sprite +
            '<div id="map"></div>' + b.section('<div id="loadmap-modal"', '<!-- VLAKA INFO POPUP -->') +
-           '<script src="/static/libs/leaflet.min.js"></script><script>' + js + '</script></body></html>')
+           '<script src="/static/libs/leaflet.min.js"></script><script src="/static/js/map-downloads.js"></script><script>' + js + '</script></body></html>')
 
 
 def png():
@@ -77,10 +77,6 @@ async def main():
         ctx = await browser.new_context(viewport={'width': 390, 'height': 800})
         external, errors, downloads = [], [], []
         async def route(r):
-            if r.request.url.startswith('https://drive.google.com/uc?export=download&id='):
-                downloads.append(r.request.url)
-                await r.fulfill(content_type='text/html',body='<p>Drive download fixture</p>')
-                return
             if not r.request.url.startswith('https://ui.test/'):
                 external.append(r.request.url)
                 await r.abort()
@@ -103,28 +99,29 @@ async def main():
         assert await page.locator('#loadmap-file-input').get_attribute('accept') is None
         assert await page.locator('#loadmap-file-input').get_attribute('multiple') is not None
         assert await page.locator('.lm-src-btn').count() == 0
-        # Točan izvor, javni veliki fajl i novi tab umjesto zamjene karte aplikacije.
+        # Bez ručnog Drive taba/uputa. Android bridge kontroliše preuzimanje;
+        # stvarna instalacija/SQLite/tiles/reload provjeravaju se na emulatoru.
         download=page.locator('#loadmap-unsko-download')
         assert await page.locator('#loadmap-unsko-title').inner_text()=='Unsko_2021-2031'
-        assert await download.get_attribute('href')=='https://drive.google.com/uc?export=download&id=1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny'
-        assert await download.get_attribute('target')=='_blank'
-        assert 'noopener' in await download.get_attribute('rel')
-        await download.scroll_into_view_if_needed()
-        await page.screenshot(path=str(OUT/'download-unsko-250.png'))
-        async with ctx.expect_page() as opened:
-            await download.click()
-        drive=await opened.value
-        await drive.wait_for_load_state()
-        assert 'Drive download fixture' in await drive.locator('body').inner_text()
-        assert page.url=='https://ui.test/' and await page.locator('#loadmap-modal').is_visible()
-        assert len(downloads)==1
-        await drive.close()
+        assert await download.get_attribute('href') is None
+        assert await page.locator('.lm-download-card ol,.lm-download-source').count()==0
+        await page.evaluate("window.downloadState={ok:true,state:'idle'};window.downloadCalls=[];window.AndroidMapDownloads={request:(id,text)=>{const msg=JSON.parse(text);downloadCalls.push(msg.type);if(msg.type==='start')downloadState={ok:true,state:'downloading',bytes:400000000,total:1567670272};if(msg.type==='cancel')downloadState={ok:true,state:'idle'};queueMicrotask(()=>MapDownloads.reply(id,downloadState));}};MapDownloads.resume()")
+        await page.wait_for_function("!document.getElementById('loadmap-unsko-download').disabled")
         await ctx.set_offline(True)
         await download.click()
-        assert 'uključi internet' in await page.locator('#loadmap-status').inner_text()
-        assert len(downloads)==1
+        assert 'uključi internet' in await page.locator('#loadmap-unsko-status').inner_text()
+        assert await page.evaluate("!downloadCalls.includes('start')")
         await ctx.set_offline(False)
-
+        await download.click()
+        await page.wait_for_function("document.getElementById('loadmap-unsko-progress').value===400000000")
+        assert len(ctx.pages)==1 and page.url=='https://ui.test/'
+        await page.evaluate("downloadState={ok:true,state:'paused',bytes:400000000,total:1567670272};MapDownloads.resume()")
+        await page.wait_for_function("document.getElementById('loadmap-unsko-status').textContent.includes('Čekam vezu')")
+        await download.scroll_into_view_if_needed()
+        await page.screenshot(path=str(OUT/'download-unsko-251.png'))
+        await page.locator('#loadmap-unsko-cancel').click()
+        await page.wait_for_function("document.getElementById('loadmap-unsko-progress').hidden&&!document.getElementById('loadmap-unsko-download').disabled")
+        assert await page.evaluate("downloadCalls.includes('cancel')")
 
         # Mješoviti izbor: samo prava SQLite zaglavlja mogu biti potvrđena.
         name = 'Topo Čuvar <105> & "sjever".mbtiles'

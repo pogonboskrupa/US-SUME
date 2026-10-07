@@ -482,7 +482,7 @@ body.explorer-crowded .ex-toggle {padding:6px 8px;gap:6px;font-size:11px}
 body.explorer-crowded #ex-stop-compact {display:block;flex:0 0 44px;width:44px;min-height:44px;padding:0;font-size:24px}
 body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
 
-/* Karta Unsko: preuzimanje iz javnog Drive foldera, zatim postojeći lokalni uvoz. */
+/* Karta Unsko: jedno dugme, preuzimanje i automatsko dodavanje. */
 .lm-download-card {padding:17px;border:1px solid var(--field-border);border-left:4px solid #29996c;border-radius:15px;background:var(--field-card);margin-bottom:15px;}
 .lm-download-heading {display:flex;align-items:center;gap:12px;}
 .lm-download-heading>div {min-width:0;}
@@ -496,7 +496,12 @@ body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
 .lm-download-button {display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:11px;border-radius:11px;background:#166534;color:#fff;text-decoration:none;font:700 14px/1.5 system-ui;}
 .lm-download-button>span {margin-left:auto;}
 .lm-download-button .ic {margin:0;width:20px;height:20px;}
-.lm-download-card ol {margin:12px 0 4px;padding-left:19px;}
-.lm-download-card li {font:12px/1.7 system-ui;color:var(--field-muted);padding:4px 0;}
-.lm-download-source {display:inline-flex;align-items:center;gap:6px;min-height:44px;font:600 12px/1.5 system-ui;color:var(--lm-accent);text-underline-offset:3px;}
-.lm-download-card a:focus-visible {outline:3px solid var(--lm-accent);outline-offset:3px;}
+#loadmap-unsko-status {font:12px/1.7 system-ui;color:var(--field-muted);margin-top:10px;overflow-wrap:anywhere;}
+#loadmap-unsko-status[data-state=installed] {color:var(--lm-good);}
+#loadmap-unsko-status[data-state=failed] {color:var(--lm-danger);}
+#loadmap-unsko-progress {width:100%;height:9px;margin-top:14px;accent-color:#29996c;}
+.lm-download-button {width:100%;border:0;cursor:pointer;box-sizing:border-box;}
+.lm-download-button:disabled {opacity:.7;cursor:default;}
+#loadmap-unsko-cancel {margin-top:10px;width:100%;}
+.lm-download-card [hidden] {display:none!important;}
+.lm-download-card button:focus-visible {outline:3px solid var(--lm-accent);outline-offset:3px;}

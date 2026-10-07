@@ -76,26 +76,6 @@ public class OfflineImportTest {
    eval(view,"window.tileOK=false;_sqlWCall({type:'tile',name:'native-offline',z:13,x:4463,y:2940}).then(r=>tileOK=!!r.data&&r.data[0]===137);void 0");until(view,"tileOK");
    eval(view,"holdSave=false;void 0");until(view,"_sqlImports.size===0&&_sqlLayers.find(l=>l.name==='native-offline').saved");
    assertEquals("true",eval(view,"JSON.parse(localStorage.getItem(_LASTMAP_KEY)).opfsName===_sqlLayers.find(l=>l.name==='native-offline').opfsName"));
-   // Velika javna karta ide u vanjski preglednik, bez promjene otvorenog APK-a.
-   // Internet flag je kontrolisan; emulator ostaje offline i Intent je blokiran.
-   eval(view,"openLoadMapScreen();Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});document.getElementById('loadmap-unsko-download').click();void 0");
-   assertEquals("true",eval(view,"document.getElementById('loadmap-status').textContent.includes('uključi internet')&&document.getElementById('loadmap-unsko-title').textContent==='Unsko_2021-2031'"));
-   CountDownLatch externalOpened=new CountDownLatch(1);AtomicReference<String> externalUrl=new AtomicReference<>();
-   android.app.Instrumentation.ActivityMonitor monitor=new android.app.Instrumentation.ActivityMonitor(){
-    @Override public android.app.Instrumentation.ActivityResult onStartActivity(Intent intent){
-     if(Intent.ACTION_VIEW.equals(intent.getAction())&&intent.getDataString()!=null&&intent.getDataString().startsWith("https://drive.google.com/uc?")){
-      externalUrl.set(intent.getDataString());externalOpened.countDown();return new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null);
-     }
-     return null;
-    }
-   };
-   InstrumentationRegistry.getInstrumentation().addMonitor(monitor);
-   try{
-    eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-unsko-download').click();void 0");
-    assertTrue("Drive ACTION_VIEW otvoren",externalOpened.await(10,TimeUnit.SECONDS));
-    assertEquals("https://drive.google.com/uc?export=download&id=1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny",externalUrl.get());
-    assertEquals("true",eval(view,"importToken==='first'&&_sqlLayers.some(l=>l.name==='native-offline'&&l.saved)&&JSON.stringify([vlake,_tacke,_tragRegistry])===workBefore"));
-   }finally{InstrumentationRegistry.getInstrumentation().removeMonitor(monitor);eval(view,"delete navigator.onLine;closeLoadMapScreen();void 0");}
    CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    until(view,"document.readyState==='complete'&&typeof importToken==='undefined'&&typeof sqlmapRestoreAll==='function'");
    eval(view,"_revealApp();switchTab('karta');window.restorePromise=sqlmapRestoreAll();void 0");until(view,"_sqlLayers.some(l=>l.name==='native-offline'&&l.saved&&l.opfs)");

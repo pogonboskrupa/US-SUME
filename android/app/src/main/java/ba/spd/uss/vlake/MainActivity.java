@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assetLoader;
     private static OfflineMaps offlineMaps;
+    private static MapDownloads mapDownloads;
     private volatile boolean mapFilePicker;
     private BroadcastReceiver recActionReceiver;
 
@@ -193,6 +194,7 @@ public class MainActivity extends Activity {
         }
 
         if (offlineMaps == null) offlineMaps = new OfflineMaps(this);
+        if (mapDownloads == null) mapDownloads = new MapDownloads(this, offlineMaps);
         assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .addPathHandler("/offline-maps/", offlineMaps)
@@ -205,6 +207,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
         webView.addJavascriptInterface(new ReferenceOcrBridge(webView), "AndroidReferenceOcr");
         webView.addJavascriptInterface(offlineMaps.new Bridge(webView, () -> mapFilePicker = true), "AndroidOfflineMaps");
+        webView.addJavascriptInterface(mapDownloads.new Bridge(webView), "AndroidMapDownloads");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override

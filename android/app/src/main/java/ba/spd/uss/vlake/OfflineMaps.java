@@ -63,6 +63,21 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         if(!refs.edit().putString(id,doc.toString()).commit())throw new java.io.IOException("Ne mogu sačuvati pristup karti");
         return new JSONObject().put("name",name).put("size",size).put("nativeId",id);
     }
+    boolean hasDocument(String id){return refs.contains(id);}
+    JSONObject registerDownload(File file,String name) throws Exception {
+        File root=new File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),"offline-maps");
+        if(!file.getCanonicalFile().getParentFile().equals(root.getCanonicalFile())||!file.isFile())throw new java.io.IOException("Karta nije dostupna");
+        String id=UUID.randomUUID().toString();
+        JSONObject doc=new JSONObject().put("uri",Uri.fromFile(file).toString()).put("name",name).put("size",file.length()).put("download",true);
+        if(!refs.edit().putString(id,doc.toString()).commit())throw new java.io.IOException("Ne mogu sačuvati kartu");
+        return new JSONObject().put("name",name).put("size",file.length()).put("nativeId",id);
+    }
+    void discardDownload(String id) throws Exception {remove(id);}
+    private File downloaded(JSONObject doc) throws Exception {
+        File file=new File(Uri.parse(doc.getString("uri")).getPath());
+        File root=new File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),"offline-maps");
+        if(!file.getCanonicalFile().getParentFile().equals(root.getCanonicalFile()))throw new java.io.IOException("Nepoznata lokacija karte");return file;
+    }
     private static String quote(String s){return "\""+s.replace("\"","\"\"")+"\"";}
     private static boolean table(SQLiteDatabase db,String name){try(Cursor c=db.rawQuery("SELECT 1 FROM sqlite_master WHERE name=? AND type IN ('table','view') LIMIT 1",new String[]{name})){return c.moveToFirst();}}
     private static Map<String,String> columns(SQLiteDatabase db,String table){Map<String,String> out=new HashMap<>();try(Cursor c=db.rawQuery("PRAGMA table_info("+quote(table)+")",null)){while(c.moveToNext())out.put(c.getString(1).toLowerCase(java.util.Locale.ROOT),c.getString(1));}return out;}
@@ -74,7 +89,8 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         JSONObject doc=document(id);Uri uri=Uri.parse(doc.getString("uri"));Entry entry=new Entry();
         File owned=new File(context.getFilesDir(),"offline-maps/"+id+".sqlite");
         try {
-            if(owned.isFile()) entry.db=SQLiteDatabase.openDatabase(owned.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
+            if(doc.optBoolean("download")) entry.db=SQLiteDatabase.openDatabase(downloaded(doc).getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
+            else if(owned.isFile()) entry.db=SQLiteDatabase.openDatabase(owned.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
             else {
                 boolean direct=false;
                 // Cloud/pipe providers do not provide random access. They alone need a local copy.
@@ -170,6 +186,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         if(!refs.edit().remove(id).commit())throw new java.io.IOException("Uklanjanje karte nije uspjelo");
         new File(context.getFilesDir(),"offline-maps/"+id+".sqlite").delete();
         boolean used=false;for(Object raw:refs.getAll().values())if(new JSONObject(String.valueOf(raw)).optString("uri").equals(old.optString("uri")))used=true;
+        if(!used&&old.optBoolean("download"))downloaded(old).delete();
         if(!used&&old.optBoolean("persistent"))try{context.getContentResolver().releasePersistableUriPermission(Uri.parse(old.getString("uri")),android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
     }
     private void reply(WebView view,long request,JSONObject result){view.post(()->view.evaluateJavascript("window.NativeOfflineMaps&&NativeOfflineMaps.reply("+request+","+result.toString()+")",null));}
@@ -181,7 +198,8 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
             JSONObject result=new JSONObject();try{
                 JSONObject msg=new JSONObject(text);String type=msg.getString("type"),id=msg.optString("nativeId");
                 if(type.equals("probe")){
-                    try(InputStream in=context.getContentResolver().openInputStream(Uri.parse(document(id).getString("uri")))){
+                    JSONObject doc=document(id);
+                    try(InputStream in=doc.optBoolean("download")?new java.io.FileInputStream(downloaded(doc)):context.getContentResolver().openInputStream(Uri.parse(doc.getString("uri")))){
                         byte[] h=new byte[16];int p=0,n;if(in==null)throw new java.io.IOException("Fajl nije dostupan");
                         while(p<16&&(n=in.read(h,p,16-p))>0)p+=n;
                         if(p!=16||!new String(h,StandardCharsets.US_ASCII).equals("SQLite format 3\u0000"))throw new java.io.IOException("Fajl nije SQLite karta");
