@@ -2345,3 +2345,23 @@ izvorni File a trajnost dolazi naknadno, app treba ostaviti otvoren do
 poruke „Karta sačuvana na telefonu“. Fizičko kopiranje1,5GB ostaje;
 optimizirano je čekanje na upotrebljivu kartu. Produkcijski Supabase/trial
 SQL status nije mijenjan u ovom zadatku.
+
+
+## 2026-10-07 — Preglednik oznaka, ujednačen dizajn — 2.4.1 / code511
+
+Korisnik traži blaži kontrast između tamnog vrha i žućkastih foldera.
+Preglednik koristi zasebnu, lokalno ograničenu sivu paletu: bliske nijanse
+zaglavlja, podloge, kartica i grupa odjela. SVG folder prati muted zeleni
+akcent; KML, fotografije, GPS i server razlikuju se malim oznakama u
+prigušenim nijansama. Dnevni mod ima odgovarajuću svijetlu paletu.
+Kategorije se prelamaju pa nema skrivenih tabova iza horizontalnog skrola;
+Na karti je blago istaknuto dugme. Kontrole ostaju najmanje44px i fokus
+je vidljiv. KML editor nasljeđuje istu paletu samo unutar preglednika.
+
+Promjena je CSS i prezentacijski markup (data-category i SVG folder),
+bez promjene modela, slanja, čuvanja, geometrije ili vidljivosti slojeva.
+Sva3broja verzije ažurirana2.4.1/code511. Lokalno prošle93 postojeće JS
+grupe, sintaksa5inline JS blokova, preglednik u8kombinacija day/dark
+320/390/568/800px (grupni prikaz/sakrivanje preko paginacije, sortiranje,
+fotografije i KML editor) i vizuelni pregled PNG. Bez novog runtime paketa.
+APK/CI i provjera stvarnog telefona još nisu potvrđeni; dopuniti ishod.
