@@ -31452,8 +31452,11 @@ async function queryTile(name, z, x, y) {
       else if (engine==='sqljs') td = db.exec('SELECT tile FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
       else td = db.selectValue('SELECT tile FROM tiles WHERE x=? AND y=? AND z=?',[x,y,z]);
     } else {
-      const off=inst.zOff||17;
-      if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); if(!td) td = _stmtQuery(inst.stmt, x, y, off-z); }
+      const off=inst.zOff??17;
+      if (inst.stmt) {
+        const zs=inst.nativeDocument?(off===0?[z]:[off-z,z]):[z,off-z];
+        for(const zv of zs){td=_stmtQuery(inst.stmt,x,y,zv);if(td)break;}
+      }
       else if (engine==='sqljs') {
         td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+z)[0]?.values?.[0]?.[0];
         if (!td) td = db.exec('SELECT image FROM tiles WHERE x='+x+' AND y='+y+' AND z='+(off-z))[0]?.values?.[0]?.[0];
@@ -31523,6 +31526,25 @@ self.onmessage = async ({data:msg}) => {
       inst.mini.file=file;
       self.postMessage({id,ok:true});
       fh.createSyncAccessHandle({mode:'read-only'}).then(h=>{if(dbs[msg.name]!==inst){h.close();return;}inst.mini.sync=h;}).catch(()=>{});
+    }
+    else if (msg.type === 'rename-live') {
+      if(!dbs[msg.old])throw Error('Karta nije otvorena');
+      dbs[msg.neu]=dbs[msg.old];delete dbs[msg.old];self.postMessage({id,ok:true});
+    }
+    else if (msg.type === 'load-native-pages') {
+      const SQL=await getSqlJs();
+      if(typeof SqlDocument==='undefined')importScripts(SQLLOCAL+'../js/sql-document.js');
+      let db;
+      try{
+        if(!/^[a-f0-9-]{36}$/.test(msg.nativeId))throw Error('Nevažeći identifikator karte');
+        const url=new URL('/offline-maps/'+msg.nativeId,SQLLOCAL).href;
+        db=SQL.openReadOnlyFile(SqlDocument.httpSource(msg.size,url));
+        const fmt=detectFmt(makeSqlJsExec(db));if(!fmt)throw Error('Nije podržana raster SQLite karta');
+        const info=SqlDocument.metadata(db,fmt);
+        const meta={...info.meta,_nativeId:msg.nativeId,_nativePages:true,_nativeSize:msg.size,_nativeCopy:false};
+        dbs[msg.name]={db,fmt,engine:'sqljs',nativeDocument:true,zOff:info.zOff,gpkgT:fmt==='gpkg'?info.table:null};
+        _prepStmt(dbs[msg.name]);self.postMessage({id,ok:true,fmt,meta});
+      }catch(e){if(db)try{db.close();}catch(ignore){}throw e;}
     }
     else if (msg.type === 'load-idb') {
       const idb = await idbOpen();
@@ -32393,7 +32415,8 @@ function _sqlImportSave(file,sl) {
 async function _sqlmapLoadNative(file) {
   const name=file.name.replace(/\.[^.]+$/,'');await _sqlImportCancel(name);
   const previous=await _sqlWCall({type:'idb-meta',name});
-  const result=await NativeOfflineMaps.request({type:'open',nativeId:file.nativeId});
+  const candidate='native-candidate-'+file.nativeId;
+  const result=await _sqlWCall({type:'load-native',name:candidate,nativeId:file.nativeId});
   if(!result.ok){await NativeOfflineMaps.remove(file.nativeId).catch(()=>{});throw Error(result.error);}
   // Validate and publish before replacing a working map; a bad new file leaves it intact.
   const published=await _sqlWCall({type:'idb-save-meta',name,fmt:result.fmt,meta:result.meta,size:file.size});
@@ -32401,8 +32424,7 @@ async function _sqlmapLoadNative(file) {
   const oldIndex=_sqlLayers.findIndex(l=>l.name===name);
   if(oldIndex>=0){map.removeLayer(_sqlLayers[oldIndex].layer);_sqlLayers.splice(oldIndex,1);}
   await _sqlWCall({type:'close',name});delete _mainMiniDbs[name];
-  const opened=await _sqlWCall({type:'load-native',name,nativeId:file.nativeId});
-  if(!opened.ok)throw Error(opened.error);
+  await NativeOfflineMaps.activate(candidate,name);
   const layer=_sqlmapCreateLayerW(name,result.fmt,result.meta);
   _sqlLayers.push({name,fmt:result.fmt,meta:result.meta,layer,visible:false,saved:true,opfs:false});
   for(const [key,bmp]of _sqlTileBmpCache)if(key.startsWith(name+'/')){try{bmp.close?.();}catch(e){}_sqlTileBmpCache.delete(key);}

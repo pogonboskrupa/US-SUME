@@ -86,7 +86,7 @@ public class NativeOfflineMapsTest {
    eval(view,"nativeTile=false;_sqlWCall({type:'tile',name:'native-renamed',z:13,x:4462,y:2940}).then(r=>nativeTile=!!r.data&&r.data[0]===137);void 0");until(view,"nativeTile");
    maps.closeAll();CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    until(view,"document.readyState==='complete'&&typeof nativeOpened==='undefined'&&NativeOfflineMaps.available()");
-   eval(view,"_revealApp();switchTab('karta');sqlmapRestoreAll();void 0");until(view,"_sqlLayers.some(l=>l.name==='native-renamed'&&l.visible)");
+   eval(view,"_revealApp();switchTab('karta');sqlmapRestoreAll();void 0");until(view,"_sqlLayers.some(l=>l.name==='native-renamed'&&l.visible)&&!sqlmapRestoreAll._running");
    eval(view,"nativeTile=false;_sqlWCall({type:'tile',name:'native-renamed',z:13,x:4462,y:2940}).then(r=>nativeTile=!!r.data&&r.data[0]===137);void 0");until(view,"nativeTile");
    // Failed replacement must preserve the old persisted map, including when currently deferred.
    JSONObject invalid=maps.select(android.net.Uri.parse("content://ba.spd.uss.vlake.offline.fixture/bad"),true);

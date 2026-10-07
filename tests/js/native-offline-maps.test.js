@@ -16,5 +16,11 @@ vm.runInNewContext(fs.readFileSync('static/js/native-offline-maps.js','utf8'),bo
  assert.equal((await api.handle({type:'tile',name:'renamed',z:13,x:4462,y:2940})).data[0],137);
  await api.handle({type:'close',name:'renamed'});assert.equal(api.handle({type:'tile',name:'renamed'}),null);
  await api.handle({type:'load-native',name:'reopened',nativeId:'doc-id'});await api.remove('doc-id');assert.equal(api.handle({type:'tile',name:'reopened'}),null);
+
+ root.AndroidOfflineMaps.request=(id,text)=>{const msg=JSON.parse(text);queueMicrotask(()=>api.reply(id,{ok:true,meta:{_nativePages:true,_nativeSize:1500000000,_nativeId:msg.nativeId}}));};
+ box._sqlWCallWorker=async msg=>{sent.push(msg);return {ok:true,fmt:'rmaps',meta:{_nativePages:true,_nativeId:msg.nativeId}};};
+ await api.handle({type:'load-native',name:'candidate',nativeId:'pages-id'});await api.activate('candidate','protected-doc');
+ assert.equal(api.handle({type:'tile',name:'protected-doc',z:13,x:1,y:1}),null,'Page documents use the SQL Worker tile engine');
+ await api.handle({type:'close',name:'protected-doc'});assert.ok(sent.some(s=>s.type==='rename-live')&&sent.some(s=>s.type==='close'&&s.name==='protected-doc'));
  await api.clear();assert.equal(timers.size,0);console.log('Native maps: legacy fallthrough, absent Android, progress, binary tiles, rename, close, reopen, remove and clear — OK');
 })().catch(e=>{for(const t of timers)clearTimeout(t);console.error(e);process.exitCode=1;});

@@ -20,6 +20,7 @@ const APP_SHELL = [
   './static/js/offline-layer.js',
   './static/js/offline-import.js',
   './static/js/native-offline-maps.js',
+  './static/js/sql-document.js',
   './static/js/field-store.js',
   './static/js/field-tools.js',
   './static/js/terrain-workspace.js',

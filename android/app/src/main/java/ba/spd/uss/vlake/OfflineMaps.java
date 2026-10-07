@@ -33,6 +33,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private int generation;
     private static final class Entry {
         SQLiteDatabase db; ParcelFileDescriptor fd;
+        boolean pages; long size;
         String fmt, query; int offset = 17; JSONObject meta;
         synchronized void close() { if(db!=null)db.close(); db=null; if(fd!=null)try{fd.close();}catch(Exception ignored){} fd=null; }
         synchronized byte[] tile(int z,int x,int y) {
@@ -43,6 +44,12 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                 if(c.moveToFirst()&&!c.isNull(0))return c.getBlob(0);
             }
             return null;
+        }
+        synchronized byte[] read(long offset,int length) throws Exception {
+            if(fd==null||offset<0||length<1||length>65536||offset>size)throw new java.io.IOException("Nevažeće čitanje karte");
+            byte[] bytes=new byte[(int)Math.min(length,size-offset)];int at=0,n;
+            while(at<bytes.length&&(n=Os.pread(fd.getFileDescriptor(),bytes,at,bytes.length-at,offset+at))>0)at+=n;
+            if(at!=bytes.length)throw new java.io.IOException("Fajl karte je promijenjen ili nije dostupan");return bytes;
         }
     }
     OfflineMaps(Context context) { this.context=context.getApplicationContext();refs=this.context.getSharedPreferences("offline-map-documents-v1",Context.MODE_PRIVATE); }
@@ -76,7 +83,10 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                     if(entry.fd==null)throw new java.io.IOException("Fajl nije dostupan");
                     byte[] header=new byte[16];int read=Os.pread(entry.fd.getFileDescriptor(),header,0,16,0);
                     if(read!=16||!new String(header,StandardCharsets.US_ASCII).equals("SQLite format 3\u0000"))throw new java.io.IOException("Fajl nije SQLite karta");
-                    entry.db=SQLiteDatabase.openDatabase("/proc/self/fd/"+entry.fd.getFd(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
+                    entry.size=Os.fstat(entry.fd.getFileDescriptor()).st_size;
+                    if(entry.size<16)throw new java.io.IOException("Izvor ne podržava direktno čitanje");
+                    try{entry.db=SQLiteDatabase.openDatabase("/proc/self/fd/"+entry.fd.getFd(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);}
+                    catch(android.database.sqlite.SQLiteCantOpenDatabaseException inaccessiblePath){entry.pages=true;}
                     direct=true;
                 }catch(Exception directError){entry.close();}
                 if(!direct){
@@ -94,7 +104,9 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                     entry.db=SQLiteDatabase.openDatabase(owned.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
                 }
             }
-            inspect(entry);entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile());
+            if(entry.pages){entry.fmt="native-pages";entry.meta=new JSONObject().put("_nativePages",true).put("_nativeSize",entry.size);}
+            else inspect(entry);
+            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile());
             synchronized(open){if(generation!=openingGeneration)throw new java.io.IOException("Učitavanje je prekinuto");open.put(id,entry);}return entry;
         }catch(Exception e){entry.close();throw e;}
     }
@@ -188,6 +200,11 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     @Override public WebResourceResponse handle(String path){
         try{
             String[] p=path.split("/");if(p.length!=4||!p[0].matches("[a-f0-9-]{36}"))throw new IllegalArgumentException();
+            if(p[1].equals("read")){
+                Entry entry;synchronized(open){entry=open.get(p[0]);}if(entry==null)throw new java.io.IOException("Karta je zatvorena");
+                byte[] bytes=entry.read(Long.parseLong(p[2]),Integer.parseInt(p[3]));
+                return new WebResourceResponse("application/octet-stream",null,200,"OK",java.util.Collections.singletonMap("Cache-Control","no-store"),new ByteArrayInputStream(bytes));
+            }
             int z=Integer.parseInt(p[1]),x=Integer.parseInt(p[2]),y=Integer.parseInt(p[3]);
             if(z<0||z>22||x<0||y<0||x>=(1<<z)||y>=(1<<z))throw new IllegalArgumentException();
             Entry entry;synchronized(open){entry=open.get(p[0]);}byte[] bytes=entry==null?null:entry.tile(z,x,y);

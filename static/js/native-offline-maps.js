@@ -25,21 +25,25 @@
   function handle(msg){
     if(msg.type==='load-native'||(msg.type==='load-idb'&&msg.meta?._nativeId)){
       const nativeId=msg.nativeId||msg.meta._nativeId;
-      return request({type:'open',nativeId}).then(r=>{if(r.ok)loaded.set(msg.name,nativeId);return r;});
+      return request({type:'open',nativeId}).then(async r=>{
+        if(r.ok&&r.meta?._nativePages)r=await _sqlWCallWorker({type:'load-native-pages',name:msg.name,nativeId,size:r.meta._nativeSize});
+        if(r.ok)loaded.set(msg.name,{nativeId,pages:!!r.meta?._nativePages});return r;
+      });
     }
-    const nativeId=loaded.get(msg.name);
-    if(msg.type==='tile'&&nativeId)return (async()=>{
+    const entry=loaded.get(msg.name),nativeId=entry?.nativeId;
+    if(msg.type==='tile'&&nativeId&&!entry.pages)return (async()=>{
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
       try{
         const r=await fetch('/offline-maps/'+nativeId+'/'+msg.z+'/'+msg.x+'/'+msg.y,{signal:controller.signal,cache:'no-store'});
         return r.ok?{data:new Uint8Array(await r.arrayBuffer())}:r.status===404?{data:null}:{ok:false,error:'Greška čitanja karte'};
       }catch(e){return {ok:false,error:e.name==='AbortError'?'timeout':e.message};}finally{clearTimeout(timer);}
     })();
-    if(msg.type==='close'&&nativeId){loaded.delete(msg.name);return request({type:'close',nativeId});}
+    if(msg.type==='close'&&nativeId){loaded.delete(msg.name);return (async()=>{if(entry.pages)await _sqlWCallWorker({type:'close',name:msg.name});return request({type:'close',nativeId});})();}
     return null;
   }
   function rename(oldName,newName){if(loaded.has(oldName)){loaded.set(newName,loaded.get(oldName));loaded.delete(oldName);}}
-  async function remove(nativeId){if(!nativeId)return;const r=await request({type:'remove',nativeId});if(!r.ok)throw Error(r.error);for(const [n,id]of loaded)if(id===nativeId)loaded.delete(n);}
+  async function activate(oldName,newName){const e=loaded.get(oldName);if(e?.pages){const r=await _sqlWCallWorker({type:'rename-live',old:oldName,neu:newName});if(!r.ok)throw Error(r.error);}rename(oldName,newName);}
+  async function remove(nativeId){if(!nativeId)return;for(const [n,e]of loaded)if(e.nativeId===nativeId){if(e.pages)await _sqlWCallWorker({type:'close',name:n});loaded.delete(n);}const r=await request({type:'remove',nativeId});if(!r.ok)throw Error(r.error);}
   async function clear(){if(available()){const r=await request({type:'clear'});if(!r.ok)throw Error(r.error);}loaded.clear();}
-  root.NativeOfflineMaps={available,request,reply,handle,rename,remove,clear};
+  root.NativeOfflineMaps={available,request,reply,handle,rename,activate,remove,clear};
 })(typeof window!=='undefined'?window:globalThis);
