@@ -1,23 +1,37 @@
 'use strict';
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-const elements=new Map(),calls=[],timers=new Map();let seq=0,state={ok:true,state:'idle'},rows=[],imports=0,shows=0;
-for(const id of ['download','status','progress','cancel'])elements.set('loadmap-unsko-'+id,{dataset:{}});
-const root={document:{getElementById:id=>elements.get(id)},navigator:{onLine:true}};
-const box={window:root,Map,Promise,Error,setTimeout:(f,t)=>{const id=++seq;timers.set(id,{f,t});return id;},clearTimeout:id=>timers.delete(id),
- _sqlWCall:async()=>({ok:true,rows}),sqlmapLoadFile:async f=>{imports++;rows=[{name:'Unsko_2021-2031',meta:{_nativeId:f.nativeId}}];},_loadmapShow:async()=>{shows++;}};
+const elements=new Map(),calls=[],timers=new Map(),nodes=[];let seq=0,rows=[],imports=[],shows=0;
+class Node {
+ constructor(){this.dataset={};this.selectors=new Map();this.children=[];nodes.push(this);}
+ set id(v){this._id=v;elements.set(v,this);}get id(){return this._id;}
+ querySelector(s){if(!this.selectors.has(s))this.selectors.set(s,new Node());return this.selectors.get(s);}
+ appendChild(c){this.children.push(c);}remove(){this.removed=true;}
+}
+for(const id of ['cards','refresh','message'])elements.set('loadmap-download-'+id,new Node());
+const root={document:{getElementById:id=>elements.get(id),createElement:()=>new Node()},navigator:{onLine:true}};
+const A='source-file-A-252',B='source-file-B-252';let files=[{id:A,name:'KARTA_špd.mbtiles',size:2144841728},{id:B,name:'Druga.mbtiles',size:30000000}];
+const states=new Map(files.map(s=>[s.id,{ok:true,state:'idle'}]));
+const box={window:root,Map,Set,Promise,Error,Number,setTimeout:(f,t)=>{const id=++seq;timers.set(id,{f,t});return id;},clearTimeout:id=>timers.delete(id),
+ _sqlWCall:async()=>({ok:true,rows}),sqlmapLoadFile:async f=>{imports.push(f);rows.push({name:f.name.replace(/\.[^.]+$/,''),meta:{_nativeId:f.nativeId}});},_loadmapShow:async()=>{shows++;}};
 vm.runInNewContext(fs.readFileSync('static/js/map-downloads.js','utf8'),box);const api=root.MapDownloads;
-root.AndroidMapDownloads={request:(id,text)=>{const m=JSON.parse(text);calls.push(m);if(m.type==='start')state={ok:true,state:'downloading',bytes:42,total:100};if(m.type==='installed')state={...state,state:'installed'};if(m.type==='cancel')state={ok:true,state:'idle'};queueMicrotask(()=>api.reply(id,state));}};
+root.AndroidMapDownloads={request:(id,text)=>{const m=JSON.parse(text);calls.push(m);let r;
+ if(m.type==='list')r={ok:true,files};else if(m.type==='statuses')r={ok:true,files:files.map(s=>({...s,status:states.get(s.id)||{state:'idle'}}))};
+ else {r=states.get(m.sourceId);if(m.type==='start')r={ok:true,state:'downloading',bytes:42,total:100};if(m.type==='installed')r={...r,state:'installed'};if(m.type==='cancel')r={ok:true,state:'idle'};states.set(m.sourceId,r);}
+ queueMicrotask(()=>api.reply(id,r));}};
+const card=id=>nodes.find(n=>n.dataset.sourceId===id&&!n.removed),status=id=>card(id).querySelector('.lm-download-status');
 (async()=>{
- await api.resume();root.navigator.onLine=false;await api.start();assert.equal(calls.filter(m=>m.type==='start').length,0);
- root.navigator.onLine=true;await api.start();assert.equal(elements.get('loadmap-unsko-progress').value,42);
- state={...state,state:'paused'};await api.resume();assert.match(elements.get('loadmap-unsko-status').textContent,/Čekam vezu/);
- await api.cancel();assert.equal(elements.get('loadmap-unsko-progress').hidden,true);
- state={ok:true,state:'ready',file:{name:'Unsko_2021-2031.sqlitedb',nativeId:'map-id',size:100}};
- await Promise.all([api.resume(),api.resume()]);assert.equal(imports,1);assert.equal(calls.filter(m=>m.type==='installed').length,1);
- await api.resume();assert.equal(imports,1);await api.start();assert.equal(shows,1);
- // Crash after catalogue commit, before ack: same native ID under a user-renamed title must survive.
- state={...state,state:'ready'};rows=[{name:'Moja preimenovana karta',meta:{_nativeId:'map-id'}}];await api.resume();assert.equal(imports,1);assert.equal(rows[0].name,'Moja preimenovana karta');
- state={ok:true,state:'ready',file:{nativeId:'other-id'}};box.sqlmapLoadFile=async()=>{throw Error('Baza nije rasterska karta');};await api.resume();assert.match(elements.get('loadmap-unsko-status').textContent,/nije dodana/);assert.equal(elements.get('loadmap-unsko-download').disabled,false);
- assert.equal([...timers.values()].filter(t=>t.t===30000).length,0);
- console.log('Download: offline gate, progress, pause/cancel, automatic installation once, restart/rename reconciliation, invalid-file failure — OK');
+ await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'2,14 GB');
+ root.navigator.onLine=false;await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
+ root.navigator.onLine=true;await Promise.all([api.start(A),api.start(B)]);assert.equal(card(A).querySelector('.lm-download-progress').value,42);
+ states.set(A,{...states.get(A),state:'paused'});await api.resume();assert.match(status(A).textContent,/Čekam vezu/);
+ await api.cancel(A);assert.equal(card(A).querySelector('.lm-download-progress').hidden,true);assert.equal(states.get(B).state,'downloading');
+ // Both completions must install sequentially, exactly once; manual same-name map is retained.
+ rows=[{name:'KARTA_špd',meta:{_nativeId:'manual-map'}}];states.set(A,{ok:true,state:'ready',file:{name:files[0].name,nativeId:'map-A',size:files[0].size}});states.set(B,{ok:true,state:'ready',file:{name:files[1].name,nativeId:'map-B',size:files[1].size}});
+ await Promise.all([api.resume(),api.resume()]);assert.equal(imports.length,2);assert.equal(rows[0].meta._nativeId,'manual-map');assert.notEqual(imports[0].name,files[0].name);
+ await api.resume();assert.equal(imports.length,2);await api.start(A);assert.equal(shows,1);
+ states.set(A,{...states.get(A),state:'ready'});rows.find(r=>r.meta._nativeId==='map-A').name='Preimenovana';await api.resume();assert.equal(imports.length,2);assert.equal(rows.find(r=>r.meta._nativeId==='map-A').name,'Preimenovana');
+ files.push({id:'source-file-new-252',name:'Treća.mbtiles',size:32});await api.refresh();assert.ok(card('source-file-new-252'));files.pop();await api.refresh();assert.equal(card('source-file-new-252'),undefined);
+ states.set(A,{ok:true,state:'ready',file:{nativeId:'bad-map'}});box.sqlmapLoadFile=async()=>{throw Error('Baza nije rasterska karta');};await api.resume();assert.match(status(A).textContent,/nije dodana/);assert.equal(card(A).querySelector('.lm-download-button').disabled,false);
+ assert.equal([...timers.values()].filter(t=>t.t===30000||t.t===60000).length,0);
+ console.log('Folder downloads: new/removed maps, per-map pause/cancel, parallel transfers, serialized auto-install, same-title protection, restart/rename and invalid-file failure — OK');
 })().catch(e=>{console.error(e);process.exitCode=1;});

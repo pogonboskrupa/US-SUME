@@ -64,6 +64,19 @@ public class MapDownloadsTest {
   public org.json.JSONObject query(long id)throws Exception{return new org.json.JSONObject().put("state",state).put("bytes",bytes.length/2).put("total",bytes.length);}
   public void remove(long id){removes++;if(file!=null)file.delete();}
  }
+ @Test public void publicFolderParserAcceptsUnicodeAndLongSizesWithoutExecutingScripts() throws Exception {
+  org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
+  row.put(0,"1mExFpUJgOAROwPSumemnnbzFH74GWHXv").put(1,new org.json.JSONArray().put(MapDownloadCatalog.FOLDER_ID)).put(2,"KARTA_špd.mbtiles").put(3,"application/octet-stream").put(13,2144841728L);
+  org.json.JSONArray rows=new org.json.JSONArray().put(row);String json=new org.json.JSONArray().put(rows).put(org.json.JSONObject.NULL).toString();
+  String html="<script>window['_DRIVE_ivd'] = '"+json.replace("\\","\\\\").replace("'","\\'")+"';throw Error('Never execute');</script>";
+  java.util.List<MapDownloadCatalog.Source> files=MapDownloadCatalog.parse(html);assertEquals(1,files.size());assertEquals("KARTA_špd.mbtiles",files.get(0).name);assertEquals(2144841728L,files.get(0).size);
+  String hex=html.replace("[","\\x5b").replace("]","\\x5d");
+  // Escape only payload delimiters, leaving the marker syntax intact.
+  hex=hex.replace("window\\x5b'_DRIVE_ivd'\\x5d","window['_DRIVE_ivd']");assertEquals(1,MapDownloadCatalog.parse(hex).size());
+  try{MapDownloadCatalog.parse("<html>Google Sign-in</html>");fail("Prijava prihvaćena kao katalog");}catch(java.io.IOException expected){}
+  row.put(1,new org.json.JSONArray().put("foreign-folder"));json=new org.json.JSONArray().put(new org.json.JSONArray().put(row)).put(org.json.JSONObject.NULL).toString();
+  assertTrue(MapDownloadCatalog.parse("window['_DRIVE_ivd'] = '"+json+"';").isEmpty());
+ }
  @Test(timeout=90000) public void automaticDownloadInstallOfflineReloadAndDelete() throws Exception {
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertFalse("Emulator bez interneta",ReferenceOcrBridge.hasInternet(context));
@@ -71,6 +84,7 @@ public class MapDownloadsTest {
   // Only the fixed Drive file may be accepted; downloaded HTML and truncated files cannot become maps.
   String form="<form action=\"https://drive.usercontent.google.com/download\" method=\"get\"><input name=\"id\" value=\""+MapDownloads.FILE_ID+"\"><input name=\"export\" value=\"download\"><input name=\"confirm\" value=\"t\"><input name=\"uuid\" value=\"fixture\"></form>";
   assertTrue(MapDownloads.confirmation(form).contains("confirm=t"));
+  String newId="1mExFpUJgOAROwPSumemnnbzFH74GWHXv";assertTrue(MapDownloads.confirmation(form.replace(MapDownloads.FILE_ID,newId),newId).contains(newId));
   try{MapDownloads.confirmation(form.replace(MapDownloads.FILE_ID,"another-file"));fail("Pogrešan izvor prihvaćen");}catch(java.io.IOException expected){}
   assertFalse(MapDownloads.allowed(new java.net.URL("http://drive.google.com/download")));
   assertFalse(MapDownloads.allowed(new java.net.URL("https://drive.google.com.attacker.test/download")));
@@ -84,20 +98,27 @@ public class MapDownloadsTest {
    assertTrue(resumed.await(15,TimeUnit.SECONDS));WebView view=ref.get();pageLoaded(view);until(view,"document.readyState==='complete'&&!!window.MapDownloads&&typeof sqlmapLoadFile==='function'");
    Field f=MainActivity.class.getDeclaredField("offlineMaps");f.setAccessible(true);OfflineMaps maps=(OfflineMaps)f.get(null);
    download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");download.cancel();
-   MapDownloads attached=download;CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
+   MapDownloadCatalog.Source source=new MapDownloadCatalog.Source(MapDownloads.FILE_ID,MapDownloads.NAME,bytes.length);
+   MapDownloads attachedJob=download;
+   MapDownloadCatalog attached=new MapDownloadCatalog(context,()->java.util.Collections.singletonList(source),item->attachedJob,"map-catalog-test");
+   attached.list(true);
+   try{attached.action(new JSONObject().put("type","start").put("sourceId","foreign-map-file-id"));fail("Karta izvan foldera prihvaćena");}catch(java.io.IOException expected){}
+   assertEquals(0,transport.enqueues);
+   CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');window.workBefore=JSON.stringify([vlake,_tacke,_tragRegistry]);Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});openLoadMapScreen();void 0");
-   until(view,"document.getElementById('loadmap-unsko-download').textContent==='Skini kartu'&&!document.getElementById('loadmap-unsko-download').disabled");
-   eval(view,"document.getElementById('loadmap-unsko-download').click();void 0");
-   assertEquals("true",eval(view,"document.getElementById('loadmap-unsko-status').textContent.includes('uključi internet')"));assertEquals(0,transport.enqueues);
-   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-unsko-download').click();void 0");
-   until(view,"document.getElementById('loadmap-unsko-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
+   until(view,"document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').disabled");
+   eval(view,"document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').click();void 0");
+   assertEquals("true",eval(view,"document.querySelector('.lm-download-status').textContent.includes('uključi internet')"));assertEquals(0,transport.enqueues);
+   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').click();void 0");
+   until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
    // Recreate native download controller and reload JS: job ID and progress survive.
-   download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");MapDownloads recovered=download;
+   download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");MapDownloads recoveredJob=download;
+   MapDownloadCatalog recovered=new MapDownloadCatalog(context,()->java.util.Collections.singletonList(source),item->recoveredJob,"map-catalog-test");
    assertEquals("paused",download.status().getString("state"));
    CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
-   eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.getElementById('loadmap-unsko-status').textContent.includes('Čekam vezu')");
+   eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
-   until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.getElementById('loadmap-unsko-status').textContent.includes('Spremna')");
+   until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
    JSONObject status=download.status();String nativeId=status.getJSONObject("file").getString("nativeId");assertEquals("installed",status.getString("state"));
    assertFalse("Bez duple kopije",new java.io.File(context.getFilesDir(),"offline-maps/"+nativeId+".sqlite").exists());
    eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2021-2031',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");

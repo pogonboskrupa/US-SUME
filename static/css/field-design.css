@@ -496,12 +496,19 @@ body.explorer-crowded #ex-gps-start {font-size:11px;padding:6px;max-width:65px}
 .lm-download-button {display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:11px;border-radius:11px;background:#166534;color:#fff;text-decoration:none;font:700 14px/1.5 system-ui;}
 .lm-download-button>span {margin-left:auto;}
 .lm-download-button .ic {margin:0;width:20px;height:20px;}
-#loadmap-unsko-status {font:12px/1.7 system-ui;color:var(--field-muted);margin-top:10px;overflow-wrap:anywhere;}
-#loadmap-unsko-status[data-state=installed] {color:var(--lm-good);}
-#loadmap-unsko-status[data-state=failed] {color:var(--lm-danger);}
-#loadmap-unsko-progress {width:100%;height:9px;margin-top:14px;accent-color:#29996c;}
+.lm-download-status {font:12px/1.7 system-ui;color:var(--field-muted);margin-top:10px;overflow-wrap:anywhere;}
+.lm-download-status[data-state=installed] {color:var(--lm-good);}
+.lm-download-status[data-state=failed] {color:#fca5a5;}
+.lm-download-progress {width:100%;height:9px;margin-top:14px;accent-color:#29996c;}
 .lm-download-button {width:100%;border:0;cursor:pointer;box-sizing:border-box;}
 .lm-download-button:disabled {opacity:.7;cursor:default;}
-#loadmap-unsko-cancel {margin-top:10px;width:100%;}
+.lm-download-cancel {margin-top:10px;width:100%;}
 .lm-download-card [hidden] {display:none!important;}
 .lm-download-card button:focus-visible {outline:3px solid var(--lm-accent);outline-offset:3px;}
+
+#loadmap-downloads {margin:0 0 18px;}
+#loadmap-downloads>.lm-section-heading {margin:0 0 12px;gap:8px;}
+#loadmap-download-refresh {width:44px;min-height:44px;flex-shrink:0;font-size:22px;padding:0;}
+#loadmap-download-message {font:12px/1.65 system-ui;color:var(--field-muted);margin-bottom:12px;overflow-wrap:anywhere;}
+#loadmap-download-message:empty {display:none;}
+html[data-field-theme=day] .lm-download-status[data-state=failed] {color:#991b1b;}

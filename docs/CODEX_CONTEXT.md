@@ -2732,3 +2732,22 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   ba.spd.uss.vlake.debug, 2.5.1-debug/521, isti stabilni certifikat i svih
   61 assets hashova. Puni DownloadManager transfer/fizički Xiaomi i produkcijski
   Supabase nisu testirani. Detalji docs/PREUZIMANJE_UNSKO_2026-10-07.md.
+
+## 2026-10-07 — v2.5.2: dostupne karte iz javnog foldera KARTA APP
+- Novi javni folder 1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0 potvrđen anonimnim
+  svježim GET-om, uključujući Dalvik user agent. KARTA_špd.mbtiles,
+  ID 1mExFpUJgOAROwPSumemnnbzFH74GWHXv, 2.144.841.728 B; Range/header i
+  metadata/tiles schema potvrđeni. Cijeli fajl nije preuzet u cloudu.
+- MapDownloadCatalog daje živu/cached listu podržanih raster fajlova direktno
+  iz tog foldera. ID/name/size/parent se provjeravaju; ne izvršava se Drive
+  script, nema API ključa/Google prijave u APK-u. Svaki izvor ima svoj
+  downloader/status/cancel/retry. Novi fajlovi vidljivi nakon otvaranja ili
+  Osvježi; sačuvan popis odmah, offline karte u postojećem katalogu.
+- Instalacije su serijalizirane i čuvaju istoimene/preimenovane lokalne
+  karte. Stari Unsko posao/reference v2.5.1 se migriraju bez brisanja.
+  Googleov javni JSON/HTML pregled nije stabilan API; promjena strukture
+  može blokirati osvježavanje, ali ne briše sačuvane karte/popis.
+- Lokalno 100 JS grupa, simulacija, 5 inline sintaksi i LoadMap browser
+  prošli. Novi Android parser/folder controller testovi; CI/APK u toku.
+  Detalji docs/FOLDER_KARATA_2026-10-07.md. Fizički Xiaomi, puni transfer i
+  produkcijski Supabase nisu testirani; Drive dozvole/fajlovi nisu mijenjani.

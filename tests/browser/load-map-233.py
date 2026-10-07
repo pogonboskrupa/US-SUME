@@ -99,29 +99,37 @@ async def main():
         assert await page.locator('#loadmap-file-input').get_attribute('accept') is None
         assert await page.locator('#loadmap-file-input').get_attribute('multiple') is not None
         assert await page.locator('.lm-src-btn').count() == 0
-        # Bez ručnog Drive taba/uputa. Android bridge kontroliše preuzimanje;
-        # stvarna instalacija/SQLite/tiles/reload provjeravaju se na emulatoru.
-        download=page.locator('#loadmap-unsko-download')
-        assert await page.locator('#loadmap-unsko-title').inner_text()=='Unsko_2021-2031'
+        # Dinamički javni folder: više karata, nova karta nakon refresh-a,
+        # nazivi su tekst; nema Drive taba niti ručnog uvoza.
+        file_id='1mExFpUJgOAROwPSumemnnbzFH74GWHXv'
+        download_fixture = "window.downloadFiles=[{id:'1mExFpUJgOAROwPSumemnnbzFH74GWHXv',name:'KARTA_špd.mbtiles',size:2144841728}];window.downloadState={ok:true,state:'idle'};window.downloadCalls=[];window.AndroidMapDownloads={request:(id,text)=>{const msg=JSON.parse(text);downloadCalls.push(msg);let result=downloadState;if(msg.type==='list')result={ok:true,files:downloadFiles};else if(msg.type==='statuses')result={ok:true,files:[{...downloadFiles[0],status:downloadState}]};else if(msg.type==='start')result=downloadState={ok:true,state:'downloading',bytes:400000000,total:2144841728};else if(msg.type==='cancel')result=downloadState={ok:true,state:'idle'};queueMicrotask(()=>MapDownloads.reply(id,result));}};MapDownloads.refresh()"
+        await page.evaluate(download_fixture)
+        download=page.locator('#loadmap-download-'+file_id)
+        await download.wait_for()
+        assert await page.locator('.lm-download-title').inner_text()=='KARTA_špd'
         assert await download.get_attribute('href') is None
         assert await page.locator('.lm-download-card ol,.lm-download-source').count()==0
-        await page.evaluate("window.downloadState={ok:true,state:'idle'};window.downloadCalls=[];window.AndroidMapDownloads={request:(id,text)=>{const msg=JSON.parse(text);downloadCalls.push(msg.type);if(msg.type==='start')downloadState={ok:true,state:'downloading',bytes:400000000,total:1567670272};if(msg.type==='cancel')downloadState={ok:true,state:'idle'};queueMicrotask(()=>MapDownloads.reply(id,downloadState));}};MapDownloads.resume()")
-        await page.wait_for_function("!document.getElementById('loadmap-unsko-download').disabled")
         await ctx.set_offline(True)
         await download.click()
-        assert 'uključi internet' in await page.locator('#loadmap-unsko-status').inner_text()
-        assert await page.evaluate("!downloadCalls.includes('start')")
+        assert 'uključi internet' in await page.locator('.lm-download-status').inner_text()
+        assert await page.evaluate("!downloadCalls.some(m=>m.type==='start')")
         await ctx.set_offline(False)
         await download.click()
-        await page.wait_for_function("document.getElementById('loadmap-unsko-progress').value===400000000")
+        await page.wait_for_function("document.querySelector('.lm-download-progress').value===400000000")
         assert len(ctx.pages)==1 and page.url=='https://ui.test/'
-        await page.evaluate("downloadState={ok:true,state:'paused',bytes:400000000,total:1567670272};MapDownloads.resume()")
-        await page.wait_for_function("document.getElementById('loadmap-unsko-status').textContent.includes('Čekam vezu')")
+        await page.evaluate("downloadState={ok:true,state:'paused',bytes:400000000,total:2144841728};MapDownloads.resume()")
+        await page.wait_for_function("document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')")
         await download.scroll_into_view_if_needed()
-        await page.screenshot(path=str(OUT/'download-unsko-251.png'))
-        await page.locator('#loadmap-unsko-cancel').click()
-        await page.wait_for_function("document.getElementById('loadmap-unsko-progress').hidden&&!document.getElementById('loadmap-unsko-download').disabled")
-        assert await page.evaluate("downloadCalls.includes('cancel')")
+        await page.screenshot(path=str(OUT/'download-folder-252.png'))
+        await page.locator('.lm-download-cancel').click()
+        await page.wait_for_function("document.querySelector('.lm-download-progress').hidden&&!document.querySelector('.lm-download-button').disabled")
+        assert await page.evaluate("downloadCalls.some(m=>m.type==='cancel')")
+        await page.evaluate("downloadFiles.push({id:'fixture-second-file-252',name:'KARTA_<img src=x onerror=alert(1)>.mbtiles',size:30000000});MapDownloads.refresh()")
+        await page.wait_for_function("document.querySelectorAll('.lm-download-card').length===2")
+        assert await page.locator('.lm-download-title img').count()==0
+        assert '<img' in await page.locator('.lm-download-title').nth(1).inner_text()
+        await page.evaluate("downloadFiles.pop();MapDownloads.refresh()")
+        await page.wait_for_function("document.querySelectorAll('.lm-download-card').length===1")
 
         # Mješoviti izbor: samo prava SQLite zaglavlja mogu biti potvrđena.
         name = 'Topo Čuvar <105> & "sjever".mbtiles'
@@ -178,6 +186,8 @@ async def main():
         await page.wait_for_function('document.querySelector(".lm-card")')
         await page.fill('#loadmap-search', '')
 
+        await page.evaluate(download_fixture)
+        await page.wait_for_function("document.querySelectorAll('.lm-download-card').length===1")
         for theme in ['day', 'dark']:
             await page.evaluate('t=>document.documentElement.dataset.fieldTheme=t', theme)
             for width, height in [(320,568), (390,800), (568,320), (800,600)]:

@@ -1,0 +1,120 @@
+package ba.spd.uss.vlake;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.regex.*;
+
+/** Only raster files listed in the user's fixed public folder may start a new download. */
+final class MapDownloadCatalog {
+    static final String FOLDER_ID="1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0";
+    static final class Source {
+        final String id,name;final long size;
+        Source(String id,String name,long size) throws IOException {
+            if(id==null||!id.matches("[\\w-]{10,100}")||name==null||name.length()>240||name.matches("(?s).*[\\p{Cntrl}/\\\\].*")||!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)")||size<16||size>64L*1024*1024*1024)throw new IOException("Nevažeća karta u folderu");
+            this.id=id;this.name=name;this.size=size;
+        }
+        JSONObject json() throws Exception {return new JSONObject().put("id",id).put("name",name).put("size",size);}
+    }
+    interface Provider {List<Source> fetch() throws Exception;}
+    interface Factory {MapDownloads create(Source source) throws Exception;}
+    private final SharedPreferences prefs;
+    private final Provider provider;
+    private final Factory factory;
+    private volatile List<Source> catalog;
+    private final Map<String,MapDownloads> jobs=new HashMap<>();
+    private final java.util.concurrent.ExecutorService commands=Executors.newFixedThreadPool(2);
+    MapDownloadCatalog(Context c,OfflineMaps maps) throws Exception {
+        this(c.getApplicationContext(),MapDownloadCatalog::fetchFolder,productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
+        // v2.5.1 transfers remain resumable even though the source folder has changed.
+        if(c.getSharedPreferences("unsko-download-v1",Context.MODE_PRIVATE).contains("file"))remember(new Source(MapDownloads.FILE_ID,MapDownloads.NAME,MapDownloads.SIZE));
+    }
+    private static Factory productionFactory(Context app,OfflineMaps maps){
+        return source->new MapDownloads(app,maps,source,source.id.equals(MapDownloads.FILE_ID)?"unsko-download-v1":"drive-map-"+source.id);
+    }
+    MapDownloadCatalog(Context c,Provider provider,Factory factory,String storage) throws Exception {
+        prefs=c.getSharedPreferences(storage,Context.MODE_PRIVATE);this.provider=provider;this.factory=factory;
+        try{catalog=decode(prefs.getString("catalog","[]"));}catch(Exception corruptCache){catalog=new ArrayList<>();}
+    }
+    private static List<Source> decode(String raw) throws Exception {List<Source> out=new ArrayList<>();JSONArray a=new JSONArray(raw);if(a.length()>300)throw new IOException("Popis karata je prevelik");for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);out.add(new Source(o.getString("id"),o.getString("name"),o.getLong("size")));}return out;}
+    private static JSONArray encode(List<Source> files) throws Exception {JSONArray a=new JSONArray();for(Source s:files)a.put(s.json());return a;}
+    JSONObject list(boolean refresh) throws Exception {
+        String error="";
+        if(refresh)try{List<Source> files=provider.fetch();if(!prefs.edit().putString("catalog",encode(files).toString()).putLong("updated",System.currentTimeMillis()).commit())throw new IOException();catalog=files;}
+        catch(Exception e){error="Pregled foldera trenutno nije dostupan. Provjeri internet i javni pristup folderu.";}
+        return new JSONObject().put("ok",error.isEmpty()||!catalog.isEmpty()).put("files",encode(catalog)).put("stale",!error.isEmpty()).put("error",error).put("updated",prefs.getLong("updated",0));
+    }
+    private synchronized void remember(Source source) throws Exception {JSONObject all=new JSONObject(prefs.getString("jobs","{}"));all.put(source.id,source.json());if(!prefs.edit().putString("jobs",all.toString()).commit())throw new IOException("Ne mogu sačuvati posao preuzimanja");}
+    private synchronized MapDownloads job(Source source) throws Exception {MapDownloads j=jobs.get(source.id);if(j==null){j=factory.create(source);jobs.put(source.id,j);}return j;}
+    private Source activeSource(String id) throws Exception {JSONObject s=new JSONObject(prefs.getString("jobs","{}")).optJSONObject(id);if(s==null)throw new IOException("Karta nema pokrenuto preuzimanje");return new Source(id,s.getString("name"),s.getLong("size"));}
+    JSONObject statuses() throws Exception {
+        JSONObject all=new JSONObject(prefs.getString("jobs","{}"));JSONArray out=new JSONArray();
+        for(Iterator<String> keys=all.keys();keys.hasNext();){String id=keys.next();Source source=activeSource(id);JSONObject state=job(source).status();
+            boolean listed=catalog.stream().anyMatch(s->s.id.equals(id));
+            if(listed||Arrays.asList("resolving","downloading","paused","ready").contains(state.optString("state")))out.put(source.json().put("status",state));
+        }
+        return new JSONObject().put("ok",true).put("files",out);
+    }
+    JSONObject action(JSONObject msg) throws Exception {
+        String type=msg.getString("type");if(type.equals("list"))return list(msg.optBoolean("refresh"));if(type.equals("statuses"))return statuses();
+        String id=msg.getString("sourceId");MapDownloads j;
+        if(type.equals("start")){
+            Source source=null;for(Source s:catalog)if(s.id.equals(id))source=s;
+            if(source==null)throw new IOException("Karta nije u javnom folderu KARTA APP. Osvježi popis.");
+            // Existing jobs use their original immutable size/name until removed. Never reinterpret a partial file after a Drive edit.
+            JSONObject all=new JSONObject(prefs.getString("jobs","{}"));Source saved=all.has(id)?activeSource(id):source;
+            j=job(saved);String state=j.status().optString("state");
+            if((state.equals("idle")||state.equals("failed"))&&(!saved.name.equals(source.name)||saved.size!=source.size)){
+                synchronized(this){jobs.remove(id);}saved=source;j=job(saved);
+            }
+            remember(saved);return j.start().put("ok",true);
+        }
+        j=job(activeSource(id));JSONObject result;
+        if(type.equals("cancel"))result=j.cancel();else if(type.equals("installed"))result=j.installed(msg.getString("nativeId"));else throw new IOException("Nepoznata radnja preuzimanja");return result.put("ok",true);
+    }
+    final class Bridge {
+        private final WebView view;Bridge(WebView view){this.view=view;}
+        @JavascriptInterface public void request(long id,String raw){commands.execute(()->{
+            JSONObject result;try{result=action(new JSONObject(raw));}catch(Exception e){result=new JSONObject();try{result.put("ok",false).put("error",e.getMessage());}catch(Exception ignored){}}
+            final String text=result.toString();view.post(()->view.evaluateJavascript("window.MapDownloads&&MapDownloads.reply("+id+","+text+")",null));
+        });}
+    }
+    static List<Source> parse(String html) throws Exception {
+        // Decode a JSON payload, never execute Google's script or file names.
+        Matcher m=Pattern.compile("_DRIVE_ivd(?:['\"]\\]|\\s*)\\s*=\\s*'((?:\\\\.|[^'\\\\])*)'",Pattern.DOTALL).matcher(html);
+        if(!m.find())throw new IOException("Nije dostupan javni pregled foldera");
+        JSONArray data=new JSONArray(unescape(m.group(1)));if(data.length()<1||!(data.get(0) instanceof JSONArray))throw new IOException("Nepoznat pregled foldera");
+        if(data.length()>1&&!data.isNull(1))throw new IOException("Google nije vratio cijeli popis karata");
+        JSONArray rows=data.getJSONArray(0);if(rows.length()>300)throw new IOException("Popis karata je prevelik");
+        List<Source> out=new ArrayList<>();Set<String> ids=new HashSet<>();
+        for(int i=0;i<rows.length();i++){
+            JSONArray row=rows.getJSONArray(i);if(row.length()<14)throw new IOException("Nepotpun pregled karte");
+            JSONArray parents=row.optJSONArray(1);boolean own=false;if(parents!=null)for(int k=0;k<parents.length();k++)if(FOLDER_ID.equals(parents.optString(k)))own=true;
+            String name=row.optString(2);if(row.optString(3).startsWith("application/vnd.google-apps."))continue;if(!own||!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)"))continue;
+            Source s=new Source(row.getString(0),name,row.getLong(13));if(ids.add(s.id))out.add(s);
+        }
+        out.sort(Comparator.comparing(s->s.name.toLowerCase(Locale.ROOT)));return out;
+    }
+    private static String unescape(String s) throws Exception {
+        StringBuilder out=new StringBuilder();for(int i=0;i<s.length();i++){
+            char c=s.charAt(i);if(c!='\\'){out.append(c);continue;}if(++i>=s.length())throw new IOException("Nepotpuni podaci foldera");c=s.charAt(i);
+            if(c=='x'||c=='u'){int len=c=='x'?2:4;if(i+len>=s.length())throw new IOException("Nepotpuni podaci foldera");out.append((char)Integer.parseInt(s.substring(i+1,i+len+1),16));i+=len;}
+            else if(c=='\\'||c=='\''||c=='"'||c=='/')out.append(c);
+            else if(c=='n')out.append('\n');else if(c=='r')out.append('\r');else if(c=='t')out.append('\t');else if(c=='b')out.append('\b');else if(c=='f')out.append('\f');else throw new IOException("Nepoznat zapis foldera");
+        }return out.toString();
+    }
+    private static List<Source> fetchFolder() throws Exception {
+        String url="https://drive.google.com/drive/folders/"+FOLDER_ID+"?hl=en&catalog="+System.currentTimeMillis();HttpURLConnection c=MapDownloads.connection(url,false);
+        try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] b=new byte[8192];int n;while((n=in.read(b))>0){if(out.size()+n>4*1024*1024)throw new IOException("Pregled foldera je prevelik");out.write(b,0,n);}return parse(out.toString("UTF-8"));
+        }finally{c.disconnect();}
+    }
+}
