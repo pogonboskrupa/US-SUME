@@ -2777,7 +2777,7 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   potvrđuje da raniji P1/P2 server problemi još postoje; nisu prepravljani
   funkcionalni serverski tokovi. Nema produkcijskog SQL-a ili mjerenja na
   telefonu. Nalazi/preporuke: OBAVIJESTI_TEREN_SERVER_2026-10-07.md.
-- Web/SW/Android 2.5.4/code524. CI i APK provjera u toku.
+- Web/SW/Android 2.5.4/code524. Android test pao; APK nije objavljen, vidi završnu 2.5.6.
 
 ## 2026-10-07 — v2.5.5: Rad na terenu za ostale korisnike + Explorer
 - Korisnik je proširio zadatak tokom CI-ja: ostalim profilima dodati Teren
@@ -2790,7 +2790,7 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   izbjegava Android 12+ podrazumijevanu odgodu prikaza. Pri otkazivanju se
   ne šalje lažna završna obavijest za prazan spisak. Isti test se ponavlja.
 - Teren browser provjerava i običnog projektanta, redoslijed, Explorer
-  navođenje/checkbox i male ekrane u oba moda. Novi APK 2.5.5/code525 u toku.
+  navođenje/checkbox i male ekrane u oba moda. Android završna obavijest nije prošla u 2.5.5; objava je završena u 2.5.6 ispod.
 
 ## 2026-10-07 — v2.5.6: završna obavijest preživljava gašenje servisa
 - CI v2.5.5 37643608548 potvrdio je vidljivost, tihi kanal, čekanje veze
@@ -2799,4 +2799,11 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   zatim završni prikaz i stopSelfResult. Provjera startId čuva noviji posao.
   Raniji poziv stopSelfResult prije odvajanja mogao je ukloniti obavijest.
 - Isti Android test dodatno provjerava ugašen servis i zadržanu završnu
-  obavijest bez ongoing zastavice. Web/SW/Android 2.5.6/code526; CI u toku.
+  obavijest bez ongoing zastavice. CI 37682600563 uspješan: 100 JS grupa, puni browser/SQL skup i šest
+  Android testova, uključujući stvarnu tihu obavijest. Objavljen APK:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.6/app-debug.apk
+  24,108,420 B; SHA256 8c03fd927caf218097dea8303f2e3efefb9cd567ba8cf49d0d9d710b51e27f26.
+  Izvor 69af8bdc2384b61c1bce7f1d7f9ae337e1fea55b, manifest
+  ba.spd.uss.vlake.debug/2.5.6-debug/526, isti certifikat i svih 61 assets
+  potvrđeni. Dostupan u Meni → Ažuriraj aplikaciju. Fizički Xiaomi, puni
+  mrežni download i produkcijski Supabase nisu testirani.

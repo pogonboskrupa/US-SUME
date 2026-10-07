@@ -1,4 +1,4 @@
-# Obavijesti, Rad na terenu i server — v2.5.5
+# Obavijesti, Rad na terenu i server — v2.5.6
 
 Korisnik prijavljuje nevidljive pozadinske obavijesti tokom preuzimanja
 karte. Na fizičkom Xiaomiju nije reproduciran tačan zvuk/izgled. Potvrđeno
@@ -49,7 +49,8 @@ prijema, doznake i map download native/JS veze. Pokrenuto:
   test nije dobio vidljivu obavijest u roku 10 s; APK nije objavljen.
   Android zapis potvrđuje dozvoljen start servisa, bez izuzetka. U 2.5.5
   traži se FOREGROUND_SERVICE_IMMEDIATE umjesto podrazumijevane odgode
-  Androida 12+, uz očuvanje istog testa vidljivosti. Konačni CI još čeka.
+  Androida 12+, uz očuvanje istog testa vidljivosti. Završni CI 37682600563 za v2.5.6 prošao, uključujući istu provjeru
+  vidljive obavijesti, tihog kanala, napretka i završetka.
 
 ## Server — ponovo potvrđeno, odvojeno od popravke obavijesti
 
@@ -98,7 +99,7 @@ Detalji: PREGLED_SERVERA_2026-10-07.md.
 - Preglednije zaglavlje s imenom, šumarijom i aktivnim projektom, te nova
   Explorer kartica: izbor odredišta, nastavak navođenja i checkbox koji
   pamti uključivanje perspektive. Ranije pravilo ostaje: Explorer uz cilj
-  navigacije. Opcionalno pitanje o slobodnom Exploreru čeka odgovor.
+  navigacije. Za ovu objavu zadržano je ranije korisnikovo pravilo: Explorer uz navođenje.
 - Proširen browser test provjerava običnog projektanta, redoslijed Menija,
   checkbox i nastavak stvarne Explorer kamere, dnevni/tamni mod i širine
   320/390/800 px. Lokalno prošao; prikazi outputs/ui-preview/rad-na-terenu-255-*.
@@ -108,4 +109,18 @@ Detalji: PREGLED_SERVERA_2026-10-07.md.
 CI v2.5.5 je potvrdio napredak i čekanje veze, ali završna obavijest nije
 ostala vidljiva. Gašenje servisa sada prvo odvaja obavijest, objavljuje
 završni status pa zaustavlja servis na glavnoj niti. Instrumentacijski
-test provjerava da obavijest ostaje i nakon gašenja. Završni CI u toku.
+test provjerava da obavijest ostaje i nakon gašenja. Završni CI 37682600563 prošao; završna obavijest ostaje nakon gašenja servisa.
+
+## Završena objava
+
+- APK v2.5.6: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.6/app-debug.apk
+- CI 37682600563: uspješan, 100 JS grupa, puni browser/SQL skup i svih
+  šest Android testova bez grešaka/preskakanja. Izvor
+  69af8bdc2384b61c1bce7f1d7f9ae337e1fea55b.
+- 24,108,420 B; SHA256 8c03fd927caf218097dea8303f2e3efefb9cd567ba8cf49d0d9d710b51e27f26.
+- Paket ba.spd.uss.vlake.debug, 2.5.6-debug/526. Isti certifikat
+  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+  i SHA-256 svih 61 web resursa potvrđeni na preuzetom APK-u.
+- Dostupan kroz postojeće Meni → Ažuriraj aplikaciju. Fizički Xiaomi i
+  puni mrežni transfer 2,14 GB nisu testirani. Serverski nalazi ostaju
+  otvoreni; nisu mijenjana prava/SQL/produkcijski podaci.
