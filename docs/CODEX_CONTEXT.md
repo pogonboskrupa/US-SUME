@@ -2791,3 +2791,12 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   ne šalje lažna završna obavijest za prazan spisak. Isti test se ponavlja.
 - Teren browser provjerava i običnog projektanta, redoslijed, Explorer
   navođenje/checkbox i male ekrane u oba moda. Novi APK 2.5.5/code525 u toku.
+
+## 2026-10-07 — v2.5.6: završna obavijest preživljava gašenje servisa
+- CI v2.5.5 37643608548 potvrdio je vidljivost, tihi kanal, čekanje veze
+  i 50% napretka. Pao je tek završni prikaz nakon skidanja; APK nije objavljen.
+- Završetak servisa sada ide na glavnoj niti: prvo odvajanje obavijesti,
+  zatim završni prikaz i stopSelfResult. Provjera startId čuva noviji posao.
+  Raniji poziv stopSelfResult prije odvajanja mogao je ukloniti obavijest.
+- Isti Android test dodatno provjerava ugašen servis i zadržanu završnu
+  obavijest bez ongoing zastavice. Web/SW/Android 2.5.6/code526; CI u toku.

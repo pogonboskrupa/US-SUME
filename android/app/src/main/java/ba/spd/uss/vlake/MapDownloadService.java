@@ -45,9 +45,20 @@ public final class MapDownloadService extends Service {
                 if(watched.contains(id)&&!state.equals("idle"))visible.put(row);
             }
             String next=visible.toString();
-            if((active||visible.length()>0)&&!next.equals(last)){getSystemService(NotificationManager.class).notify(NOTICE,notice(this,visible,active));last=next;}
-            if(!active&&startId>0&&stopSelfResult(startId))
-                stopForeground(visible.length()==0?STOP_FOREGROUND_REMOVE:STOP_FOREGROUND_DETACH);
+            if(active){
+                if(!next.equals(last)){getSystemService(NotificationManager.class).notify(NOTICE,notice(this,visible,true));last=next;}
+            }else if(startId>0){
+                // Detach BEFORE stopping: stopSelfResult may destroy the service and
+                // cancel its foreground notification before a worker can detach it.
+                // Serialize with onStartCommand so a newer download keeps its service.
+                final Notification finished=visible.length()==0?null:notice(this,visible,false);
+                new Handler(Looper.getMainLooper()).post(()->{
+                    if(startId!=lastStartId)return;
+                    stopForeground(finished==null?STOP_FOREGROUND_REMOVE:STOP_FOREGROUND_DETACH);
+                    if(finished!=null)getSystemService(NotificationManager.class).notify(NOTICE,finished);
+                    stopSelfResult(startId);
+                });
+            }
         } catch(Exception e) { // A temporary query failure must not cancel the downloaded bytes.
             getSystemService(NotificationManager.class).notify(NOTICE,notice(this,new JSONArray(),true));
         }

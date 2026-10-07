@@ -57,11 +57,12 @@ public class MapDownloadsTest {
  }
 
  private android.app.Notification waitNotice(Context c,String content) throws Exception {
-  long end=System.currentTimeMillis()+10000;
-  do{for(android.service.notification.StatusBarNotification n:c.getSystemService(android.app.NotificationManager.class).getActiveNotifications())
-   if(n.getId()==MapDownloadService.NOTICE&&String.valueOf(n.getNotification().extras.getCharSequence(android.app.Notification.EXTRA_TEXT)).contains(content))return n.getNotification();
+  long end=System.currentTimeMillis()+10000;String last="";
+  do{last="";for(android.service.notification.StatusBarNotification n:c.getSystemService(android.app.NotificationManager.class).getActiveNotifications()){
+   String text=String.valueOf(n.getNotification().extras.getCharSequence(android.app.Notification.EXTRA_TEXT));last+=n.getId()+":"+text+"; ";
+   if(n.getId()==MapDownloadService.NOTICE&&text.contains(content))return n.getNotification();}
    Thread.sleep(100);
-  }while(System.currentTimeMillis()<end);throw new AssertionError("Nema vidljive obavijesti: "+content);
+  }while(System.currentTimeMillis()<end);throw new AssertionError("Nema vidljive obavijesti: "+content+"; aktivne="+last);
  }
  private static final class FixtureBackend implements MapDownloads.Backend {
   volatile String state="paused";volatile int enqueues=0,removes=0;volatile java.io.File file;volatile byte[] bytes;
@@ -141,6 +142,9 @@ public class MapDownloadsTest {
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
    until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
    waitNotice(context,"Otvori aplikaciju");
+   long stopped=System.currentTimeMillis()+5000;while(MapDownloadService.isRunning()&&System.currentTimeMillis()<stopped)Thread.sleep(100);
+   assertFalse("Servis završenog preuzimanja je ugašen",MapDownloadService.isRunning());
+   assertFalse("Završna obavijest ostaje nakon gašenja servisa",(waitNotice(context,"Otvori aplikaciju").flags&android.app.Notification.FLAG_ONGOING_EVENT)!=0);
    JSONObject status=download.status();String nativeId=status.getJSONObject("file").getString("nativeId");assertEquals("installed",status.getString("state"));
    assertFalse("Bez duple kopije",new java.io.File(context.getFilesDir(),"offline-maps/"+nativeId+".sqlite").exists());
    eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2021-2031',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");

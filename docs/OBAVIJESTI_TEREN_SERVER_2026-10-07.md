@@ -102,3 +102,10 @@ Detalji: PREGLED_SERVERA_2026-10-07.md.
 - Proširen browser test provjerava običnog projektanta, redoslijed Menija,
   checkbox i nastavak stvarne Explorer kamere, dnevni/tamni mod i širine
   320/390/800 px. Lokalno prošao; prikazi outputs/ui-preview/rad-na-terenu-255-*.
+
+## Dopuna v2.5.6
+
+CI v2.5.5 je potvrdio napredak i čekanje veze, ali završna obavijest nije
+ostala vidljiva. Gašenje servisa sada prvo odvaja obavijest, objavljuje
+završni status pa zaustavlja servis na glavnoj niti. Instrumentacijski
+test provjerava da obavijest ostaje i nakon gašenja. Završni CI u toku.
