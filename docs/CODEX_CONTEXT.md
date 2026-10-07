@@ -2757,4 +2757,11 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   uvijek vraća i završene/otkazane poslove izvan foldera, da JS ne zadrži
   stari napredak. Failed neinstalirani posao izvan foldera otkazuje se i
   uklanja svoju parcijalnu kopiju. Proširen stvarni Android/controller test
-  i JS provjera; završni CI/APK u toku.
+  i JS provjera. CI 37624238570 uspješan: svi JS/browser/SQL testovi i šest
+  Android instrumentacijskih testova bez grešaka/preskakanja. Objavljen APK:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.3/app-debug.apk
+  24,096,358 B, SHA256 e3b686975868a4809df0e242c368dad80be4f308be97e45c77e8c9dfce68b364; izvor
+  d5a56b0721108bdd494576f58a72d600bf5e43f6. Manifest
+  ba.spd.uss.vlake.debug/2.5.3-debug/523, stabilni certifikat i svih 61 assets
+  hashova provjereni. Puni 2,14 GB mrežni transfer i fizički Xiaomi nisu
+  testirani; javni fajl potvrđen anonimnom Range/header/schema provjerom.

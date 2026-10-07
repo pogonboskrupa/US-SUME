@@ -57,6 +57,19 @@ instaliranih bajtova istog Drive ID-a nije automatski update karte.
   SQLite/HTML/native bridge/IDB/Leaflet su stvarni. CI 37621884715 za v2.5.2 prošao: puni browser/JS/SQL skup i šest Android
   testova. Završna v2.5.3 provjerava i nestanak izvora tokom transfera:
   terminalno stanje se vraća UI-ju, ne ostaje stari napredak; neuspješan
-  posao izvan foldera briše svoju djelimičnu kopiju. CI/APK v2.5.3 u toku.
+  posao izvan foldera briše svoju djelimičnu kopiju. CI 37624238570 za v2.5.3 uspješan: 100 JS grupa, simulacija,
+  puni browser/SQL skup i svih šest Android testova bez grešaka/preskakanja.
+  Izvor d5a56b0721108bdd494576f58a72d600bf5e43f6.
 - Fizički Xiaomi, puni DownloadManager transfer 2,14 GB na stvarnoj mreži,
   OEM pozadinska ograničenja i produkcijski Supabase nisu testirani.
+
+## Objavljeni APK
+
+- v2.5.3: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.3/app-debug.apk
+- 24,096,358 B (24.10 MB); SHA256 e3b686975868a4809df0e242c368dad80be4f308be97e45c77e8c9dfce68b364.
+- Manifest ba.spd.uss.vlake.debug, 2.5.3-debug/523; isti stabilni certifikat
+  SHA256 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+- Svih 61 web assets potvrđeno SHA-256 poređenjem sa završnim izvorom.
+- Probni Android transfer koristi malu kontrolisanu kartu. Javni izvor
+  potvrđen zasebno Range/header/schema provjerom; puni 2,14 GB transfer na
+  fizičkom telefonu nije izveden.
