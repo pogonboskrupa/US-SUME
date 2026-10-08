@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.6';
+const APP_VER = 'v2.6.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -14338,11 +14338,11 @@ async function _crashCheck() {
       }
       _dozGpsOn = true;
       const dbtn = document.getElementById('doz-gps-btn');
-      if (dbtn) { dbtn.textContent = '⏹ Zaustavi GPS'; dbtn.style.background = '#2d0a0a'; dbtn.style.color = '#f87171'; dbtn.style.borderColor = '#7f1d1d'; }
+      if (dbtn) { dbtn.textContent = '📍 Kontrole snimanja'; dbtn.style.background = '#052e16'; dbtn.style.color = '#4ade80'; dbtn.style.borderColor = '#166534'; }
       const dpause = document.getElementById('doz-gps-pause');
       if (dpause) { dpause.style.display = ''; dpause.textContent = '⏸'; dpause.style.background = '#422006'; dpause.style.borderColor = '#92400e'; dpause.style.color = '#fbbf24'; }
       const dstatus = document.getElementById('doz-gps-status');
-      if (dstatus) dstatus.style.display = 'block';
+      if (dstatus) { dstatus.style.display='block'; dstatus.textContent='● Snimanje aktivno'; dstatus.style.color='#4ade80'; }
       _dozUpdGpsStats(null);
       _bgRecStart('pojas doznake');
       _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
@@ -14359,6 +14359,7 @@ async function _crashCheck() {
         catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
       }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+      if (typeof dozOpenGPSControls === 'function') dozOpenGPSControls();
       // Isti princip kao vlaka/trag: dopuni fiksovima koje je native servis
       // prikupio POSLIJE zadnjeg snimka stanja (snapD.ts), uklj. cijeli period
       // dok je proces bio mrtav.
@@ -20100,7 +20101,8 @@ function _recBarSync() {
 
 function _recBarGo() {
   const s = _recBarStanje();
-  if (s) switchTab(s.tab);
+  if (s?.tip === 'doznaka' && typeof dozOpenGPSControls === 'function') dozOpenGPSControls();
+  else if (s) switchTab(s.tab);
 }
 function _recBarPauza() {
   const s = _recBarStanje();
@@ -20120,7 +20122,7 @@ function _recBarKraj() {
   setTimeout(() => {
     if (s.tip === 'vlaka')      _krajVlake();
     else if (s.tip === 'trag')  fabSnimTrag();
-    else                        dozToggleGPS();
+    else if (_dozGpsOn)      dozStopGPS();
   }, 80);
 }
 
@@ -38763,7 +38765,76 @@ function dozRenderDetail() {
 
 // ─── GPS Tracking ─────────────────────────────────────────────────
 function dozToggleGPS() {
-  _dozGpsOn ? dozStopGPS() : dozStartGPS();
+  _dozGpsOn ? dozOpenGPSControls() : dozStartGPS();
+}
+
+// Kontrole su samo prikaz postojećeg GPS dnevnika. Sklanjanje ne prekida watch.
+let _dozGpsControlsTimer = null, _dozGpsControlsFocus = null;
+let _dozGpsControlsAccuracy = null, _dozGpsControlsAccuracyTs = 0;
+let _dozGpsControlsBusy = false;
+function dozOpenGPSControls() {
+  const modal = document.getElementById('doz-gps-modal');
+  if (!_dozGpsOn || !modal) return;
+  if (modal.hidden) _dozGpsControlsFocus = document.activeElement;
+  modal.hidden = false;
+  _dozGpsControlsSync();
+  if (!_dozGpsControlsTimer) _dozGpsControlsTimer = setInterval(_dozGpsControlsSync, 1000);
+  document.getElementById('doz-gps-modal-pause')?.focus({preventScroll:true});
+}
+function dozCloseGPSControls(showMap) {
+  const modal = document.getElementById('doz-gps-modal');
+  if (modal) modal.hidden = true;
+  if (_dozGpsControlsTimer) clearInterval(_dozGpsControlsTimer);
+  _dozGpsControlsTimer = null;
+  if (typeof _recBarSync === 'function') _recBarSync();
+  if (showMap && typeof switchTab === 'function') switchTab('karta');
+  else if (_dozGpsControlsFocus?.isConnected) _dozGpsControlsFocus.focus({preventScroll:true});
+  _dozGpsControlsFocus = null;
+}
+function dozGPSControlsKey(e) {
+  if(e.key==='Escape') { e.preventDefault(); e.stopPropagation(); dozCloseGPSControls(); return; }
+  if(e.key!=='Tab') return;
+  const buttons=Array.from(document.querySelectorAll('#doz-gps-modal button:not(:disabled)')).filter(el=>el.getClientRects().length);
+  const first=buttons[0],last=buttons[buttons.length-1];
+  if(first && ((!e.shiftKey && document.activeElement===last) || (e.shiftKey && document.activeElement===first))) {
+    e.preventDefault(); (e.shiftKey ? last : first).focus();
+  }
+}
+function _dozGpsControlsSync(acc) {
+  if (acc !== undefined) {
+    _dozGpsControlsAccuracy = Number.isFinite(acc) ? acc : null;
+    _dozGpsControlsAccuracyTs = Date.now();
+  }
+  const modal = document.getElementById('doz-gps-modal');
+  if (!modal || modal.hidden || document.hidden) return;
+  if (!_dozGpsOn) { dozCloseGPSControls(); return; }
+  const put = (id, value) => { const el=document.getElementById(id); if(el) el.textContent=value; };
+  const project = _dozOdjeli.find(p=>p.id===_dozGpsProjId);
+  put('doz-gps-modal-project', project?.name || 'Odjel doznake');
+  put('doz-gps-modal-user', typeof getIme==='function' ? getIme() : 'Projektant');
+  const busy=_dozGpsControlsBusy || _dozGpsStopping;
+  put('doz-gps-modal-state', busy ? 'Spremam završetak…' : _dozGpsPaused ? 'Snimanje pauzirano' : 'Snimanje aktivno');
+  modal.classList.toggle('is-paused', _dozGpsPaused);
+  put('doz-gps-modal-length', fmtL(_dozGpsLen));
+  const pauseMs=_dozGpsPausedTime+(_dozGpsPaused && _dozGpsPauseStart ? Date.now()-_dozGpsPauseStart : 0);
+  const seconds=Math.max(0,Math.floor((Date.now()-_dozGpsStartTs-pauseMs)/1000));
+  put('doz-gps-modal-time', [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(n=>String(n).padStart(2,'0')).join(':'));
+  put('doz-gps-modal-points', _dozGpsPts.length);
+  const fresh=Date.now()-_dozGpsControlsAccuracyTs < 15000;
+  const accuracy=fresh ? _dozGpsControlsAccuracy : null;
+  put('doz-gps-modal-signal', accuracy===null ? 'Čekam GPS signal' : accuracy>20 ? 'Slab signal · ±'+Math.round(accuracy)+' m' : 'GPS preciznost · ±'+Math.round(accuracy)+' m');
+  put('doz-gps-modal-note', _dozGpsPaused ? 'Kretanje tokom pauze ne dodaje se u trag. Pritisni Nastavi za nastavak doznake.' : 'Trag se čuva na telefonu. Podatke šalješ kroz Pošalji na server.');
+  const pause=document.getElementById('doz-gps-modal-pause'),stop=document.getElementById('doz-gps-modal-stop');
+  if(pause) { pause.textContent=_dozGpsPaused ? '▶ Nastavi' : '⏸ Pauza'; pause.disabled=busy; }
+  if(stop) stop.disabled=busy;
+}
+async function dozFinishGPSControls() {
+  if (!_dozGpsOn || _dozGpsControlsBusy || _dozGpsStopping) return;
+  _dozGpsControlsBusy=true;
+  _dozGpsControlsSync();
+  try { await dozStopGPS(); }
+  catch(e) { console.warn('Završetak GPS doznake',e); showToast('⚠ Završetak nije potvrđen — ponovi ili izvezi trag'); }
+  finally { _dozGpsControlsBusy=false; _dozGpsControlsSync(); }
 }
 
 let _dozGpsSent = 0, _dozGpsBuffered = 0, _dozGpsLen = 0, _dozGpsStartTs = 0;
@@ -38782,7 +38853,7 @@ let _dozGpsExportContext = null;
 let _dozLastLiveFixTs = 0;
 
 function dozPauseGPS() {
-  if (!_dozGpsOn) return;
+  if (!_dozGpsOn || _dozGpsStopping || (typeof _dozGpsControlsBusy !== 'undefined' && _dozGpsControlsBusy)) return;
   _dozGpsPaused = !_dozGpsPaused;
   if (_dozGpsPaused) _pauziOtvoriProzor(_dozPauseWin); else _pauziZatvoriProzor(_dozPauseWin);
   const btn = document.getElementById('doz-gps-pause');
@@ -38797,6 +38868,8 @@ function dozPauseGPS() {
     if (btn) { btn.textContent = '⏸'; btn.style.background = '#422006'; btn.style.borderColor = '#92400e'; btn.style.color = '#fbbf24'; }
     if (st) { st.textContent = '● Snimanje aktivno'; st.style.color = '#4ade80'; }
   }
+  _dozGpsControlsSync();
+  if (typeof _recBarUpdate === 'function') _recBarUpdate();
 }
 
 function _dozUpdGpsStats(acc) {
@@ -38814,6 +38887,7 @@ function _dozUpdGpsStats(acc) {
     });
     return;
   }
+  if (typeof _dozGpsControlsSync === 'function') _dozGpsControlsSync(acc);
   const el = document.getElementById('doz-gps-stats');
   if (!el) return;
   el.style.display = 'block';
@@ -39186,10 +39260,11 @@ async function _dozStartGPSBegin() {
   _dozGpsTrackLayer = L.layerGroup().addTo(map);
   _dozGpsPoly = null;
   const btn = document.getElementById('doz-gps-btn');
-  if (btn) { btn.textContent = '⏹ Zaustavi GPS'; btn.style.background='#2d0a0a'; btn.style.color='#f87171'; btn.style.borderColor='#7f1d1d'; }
+  if (btn) { btn.textContent = '📍 Kontrole snimanja'; btn.style.background='#052e16'; btn.style.color='#4ade80'; btn.style.borderColor='#166534'; }
   const pauseBtn = document.getElementById('doz-gps-pause');
   if (pauseBtn) { pauseBtn.style.display = ''; pauseBtn.textContent = '⏸'; pauseBtn.style.background='#422006'; pauseBtn.style.borderColor='#92400e'; pauseBtn.style.color='#fbbf24'; }
-  document.getElementById('doz-gps-status').style.display = 'block';
+  const gpsStatus=document.getElementById('doz-gps-status');
+  if(gpsStatus) { gpsStatus.style.display='block'; gpsStatus.textContent='● Snimanje aktivno'; gpsStatus.style.color='#4ade80'; }
   document.getElementById('doz-gps-export').style.display = 'none';
   document.getElementById('doz-gps-elev').style.display = 'none';
   _dozUpdGpsStats(null);
@@ -39212,6 +39287,8 @@ async function _dozStartGPSBegin() {
     catch(e) { console.warn('Doznaka GPS tačka', e); _dozUpdGpsStats(acc); }
   }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
   { enableHighAccuracy:true, maximumAge:3000, timeout:15000 });
+  dozOpenGPSControls();
+  if (typeof _recBarSync === 'function') _recBarSync();
 }
 
 // Obrada jedne GPS tačke za pojas doznake — dijeljeno između uživo
@@ -39472,6 +39549,7 @@ function _dozSaveLivePts() {
 }
 
 async function dozStopGPS() {
+  if (!_dozGpsOn) return;
   if (typeof FieldStore !== 'undefined') {
     if (_dozGpsStopping) return;
     _dozGpsStopping = true;
@@ -39487,6 +39565,7 @@ async function dozStopGPS() {
   _dozGpsProjId = null; _dozGpsUserId = null;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
   _pauziZavrsi(_dozPauseWin);    // stop usred pauze bi inače ostavio vječno otvoren interval
+  if (typeof dozCloseGPSControls === 'function') dozCloseGPSControls();
   _bgRecStopIfIdle();  // otpusti pozadinski servis/lock ako ništa drugo ne snima
   try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch {}
   const btn = document.getElementById('doz-gps-btn');
@@ -40521,7 +40600,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div class="help-row"><div class="help-txt"><b>GPS skače ili ne snima</b><span>Provjeri lokaciju i dozvole, izađi na otvoreniji prostor i sačekaj stabilan položaj. Bez interneta GPS radi, ali preciznost zavisi od prijema satelita. Za snimanje u pozadini provjeri dozvole i ograničenja baterije.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Ne vidiš kartu ili koleginu vlaku</b><span>Provjeri područje i aktivni projekat, zatim vidljivost slojeva. Za nov rad kolege oboje trebate obaviti razmjenu sa serverom.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Upozorenje da rad nije sačuvan</b><span>Provjeri slobodan prostor. Ponovi spremanje i napravi izvoz/sigurnosnu kopiju; prije toga nemoj brisati podatke aplikacije.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Pauza i Stop nisu isto</b><span>Pauza privremeno prekida bilježenje tačaka; Nastavi vraća snimanje. Stop ili Zaustavi GPS završava trenutno snimanje.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Pauza i Stop nisu isto</b><span>Pauza privremeno prekida bilježenje tačaka; Nastavi vraća snimanje. Završi snimanje završava trenutni trag ili pojas.</span></div></div>
 
 </div></section>
 </div>
@@ -40587,9 +40666,9 @@ if (typeof AndroidDownload !== 'undefined') {
 <section class="help-start"><span class="help-eyebrow">Kratke upute</span><h3>Snimi prvi pojas doznake</h3><p>Odjel je granica rada. GPS trag je tvoja putanja, a pojas je procijenjena površina rada oko nje.</p><ol class="help-steps">
 <li data-n="1.">Otvori <b>Doznaka</b> i dodirni pravi odjel. Ako ga nema, napravi ga opcijom <b>+ Novi</b> (upute ispod).</li>
 <li data-n="2.">Dogovori s kolegama raspored. U ujednačenom odjelu radite <b>jedan iznad drugog po izohipsama</b>, od nižeg dijela prema višem.</li>
-<li data-n="3.">Dođi na početak svog pojasa, pritisni <b>Počni GPS</b> i sačekaj stabilan položaj.</li>
+<li data-n="3.">Dođi na početak svog pojasa, pritisni <b>Počni GPS</b> i sačekaj stabilan položaj. Otvara se prozor s dužinom, trajanjem i GPS preciznošću. <b>Pauza</b> prekida dodavanje tačaka, a <b>Nastavi</b> vraća snimanje. Uz <b>Prikaži kartu</b> trag se nastavlja snimati; kontrole ponovo otvori iz trake snimanja.</li>
 <li data-n="4.">Hodaj pojasom uz što manje penjanja i obavljaj doznaku. Za zastoj koristi <b>⏸</b>, zatim <b>▶</b> za nastavak.</li>
-<li data-n="5.">Na kraju pritisni <b>Zaustavi GPS</b>. Za sljedeći pojas ponovo pokreni <b>Počni GPS</b> tek kad stigneš na njegov početak.</li>
+<li data-n="5.">Na kraju pritisni <b>Završi snimanje</b>. Za sljedeći pojas ponovo pokreni <b>Počni GPS</b> tek kad stigneš na njegov početak.</li>
 <li data-n="6.">Pregledaj pojaseve i površine. Uz internet otvori ovaj odjel i koristi <b>Pošalji i primi</b> za rad kolega.</li>
 </ol></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Napravi odjel i nacrtaj granicu</button><div class="help-sec-body">
@@ -41512,6 +41591,21 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
   </div>
 </div>
+
+<!-- DOZ GPS CONTROLS -->
+<div id="doz-gps-modal" hidden onclick="if(event.target===this)dozCloseGPSControls()" onkeydown="dozGPSControlsKey(event)">
+  <section class="doz-gps-sheet" role="dialog" aria-modal="true" aria-labelledby="doz-gps-modal-title" tabindex="-1">
+    <header><div><small>DOZNAKA · GPS TRAG</small><h3 id="doz-gps-modal-title">Snimanje kretanja</h3></div><button type="button" onclick="dozCloseGPSControls()" aria-label="Skloni kontrole snimanja">✕</button></header>
+    <div class="doz-gps-context"><strong id="doz-gps-modal-project"></strong><span id="doz-gps-modal-user"></span></div>
+    <div class="doz-gps-state" id="doz-gps-modal-state" role="status"></div>
+    <div class="doz-gps-metrics"><div><small>Dužina traga</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme snimanja</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>GPS tačke</small><strong id="doz-gps-modal-points">0</strong></div></div>
+    <p class="doz-gps-signal" id="doz-gps-modal-signal"></p><p class="doz-gps-note" id="doz-gps-modal-note"></p>
+    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi snimanje</button></div>
+    <button class="doz-gps-map" type="button" onclick="dozCloseGPSControls(true)"><svg class="ic"><use href="#ic-karta"/></svg> Prikaži kartu</button>
+    <small class="doz-gps-hint">Sklanjanje prozora ne prekida snimanje. Kontrole ponovo otvaraš iz trake snimanja.</small>
+  </section>
+</div>
+<!-- END DOZ GPS CONTROLS -->
 
 <!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
 <!-- Traka snimanja — vidljiva na svim panelima dok nešto snima (v3.116.0).

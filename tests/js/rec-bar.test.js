@@ -70,7 +70,7 @@ function make({ recOn = false, tragOn = false, dozOn = false,
     dozPauseGPS:    () => { zvano.pauza.push('doznaka'); },
     _krajVlake:  () => { zvano.kraj.push('vlaka'); },
     fabSnimTrag: () => { zvano.kraj.push('trag'); },
-    dozToggleGPS:() => { zvano.kraj.push('doznaka'); },
+    dozStopGPS:() => { zvano.kraj.push('doznaka'); },
     _recBarUpdate: () => {},
     setTimeout: (fn) => { fn(); return 1; },   // izvrši odmah da se rutiranje može provjeriti
     document: { getElementById: () => null, body: { classList: { toggle(){} } } },

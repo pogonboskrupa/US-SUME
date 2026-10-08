@@ -3155,3 +3155,38 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Android MBTiles fixture sada ima 256x256 raster s linijama (isti koordinatni
   redovi/schema); native uslov provjerava v3 cache. Ista fizička baza uključena
   i u browser preflight stvarnog SQL workera/pregleda. Proizvodni kod ne mijenjan.
+
+### 2026-10-08 — potvrđen 2.6.6 APK i Doznaka GPS kontrole (2.6.7)
+
+- CI 37830420608/source4f222931 završio uspješno. 2.6.6/code536 APK:
+  24.171.180 B, SHA256 81a99adee24c8c9da7e3bc0079fd884dc45e0131e09d3056aa3a37ec0e78ab72.
+  Lokalno provjeren binary manifest, stabilni potpis
+  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d,
+  61 sadržajnih web hashova prema tačnom 2.6.6 izvoru i XML svih 14 Android
+  testova (0 grešaka/padova/preskakanja). Release s APK-om javno dostupan.
+- Dodatni korisnički zahtjev: Počni GPS u Doznaci otvara kontrolni prozor
+  nakon stabilizacije/starta postojećeg watch-a. Odjel/projektant, status,
+  dužina, vrijeme bez pauze, broj tačaka i preciznost; Pauza/Nastavi i Završi.
+  Skloni/Prikaži kartu/Escape ne prekidaju snimanje. Traka snimanja otvara
+  isti prozor bez drugog watch-a; njeno Završi poziva dozStopGPS direktno.
+- GPS pohrana ostaje postojeći FieldStore dnevnik: tačka tek nakon trajnog
+  upisa, stop čeka red/retry/finish. Prozor blokira dupli završetak i pauzu
+  tokom završavanja, ostaje otvoren za retry ako trajni finish ne uspije.
+  Uspješan stop gasi UI timer; novo snimanje vraća tačan status i nakon pauze.
+  Crash oporavak također otvara kontrole. Nema automatskog slanja na server.
+- Prikaz koristi iste day/dark boje i zaseban dijalog izvan Doznaka panela,
+  pa se može skloniti radi prikaza karte. Kontrolni tasteri min44px, skrol
+  na niskom ekranu, fokus kruži unutar prozora; Explorer ga već prepoznaje
+  kroz postojeći role=dialog/aria-modal nadzor. Upute ažurirane za ove kontrole.
+- Novi browser test koristi stvarni Doznaka kod/Leaflet/FieldStore IndexedDB,
+  sintetičke GPS fikseve bez mreže: početak, pauza bez tačaka/bez povećanja
+  trajanja, nastavak, slab signal, sklanjanje/nastavak snimanja/reopen,
+  keyboard, 8 rasporeda, neuspjeli finish/retry i zaštita od duplog stopa,
+  stop usred pauze, drugi pojas, stop iz zajedničke trake, reload šest trajnih
+  tačaka. Produkcijski GPS/Supabase i fizički telefon nisu korišteni.
+- Web/SW/Android 2.6.7/code537. Završna provjera i APK objava u toku.
+- Lokalno 2.6.7 prošlo svih 100 JS grupa, Doznaka šestodnevna simulacija,
+  pet inline sintaksi, novi GPS modal browser test, Doznaka restore, overlay
+  test, preferences i thematic-files; puni offline app test sa CPU4x i ubrzanih
+  pet sati: 3564 prihvaćena fiksa vlake, 1723 doznake i 1723 vraćene iz IDB,
+  bez mrežnih upisa. Ovo nije mjerenje baterije niti fizičkog Redmi telefona.

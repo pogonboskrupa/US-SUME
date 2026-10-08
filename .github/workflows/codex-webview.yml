@@ -84,6 +84,7 @@ jobs:
           python tests/browser/reference-vlake-224.py
           python tests/browser/project-arrows-226.py
           python tests/browser/doznaka-restore-227.py
+          python tests/browser/doznaka-gps-controls-267.py
           python tests/browser/field-offline-5400.py
       - uses: actions/upload-artifact@v4
         if: always()
