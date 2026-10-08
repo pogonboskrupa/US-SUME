@@ -2880,4 +2880,10 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   CODEX-US-SUME / (root). Lokalni terenski podaci nisu brisani.
 - Lokalno prošli Teren browser (ŠPD/admin/projektant), Menu tools (osam
   kombinacija širina i tema), Teren JS i pet inline sintaksi.
-- Web/SW/Android 2.6.0/code530. APK provjere i objava u toku.
+- Web/SW/Android 2.6.0/code530. CI 37742689245 uspješan: svi JS/browser/SQL testovi i sedam Android testova. Fizički telefon nije testiran.
+
+- APK v2.6.0 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.0/app-debug.apk
+  24,114,116 B; SHA256 ccc95253505f61da495f498c34b1245fec23b1abfaeb828db155a019fb6cf9fb. Izvor
+  acbbe87e0510b135d351d4648073afa3ba54d5e2. Manifest
+  ba.spd.uss.vlake.debug/2.6.0-debug/530, isti certifikat i svih 61 assets
+  potvrđeni. Updater releases?per_page=1 vraća v2.6.0.
