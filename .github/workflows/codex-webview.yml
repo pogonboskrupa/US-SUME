@@ -67,6 +67,9 @@ jobs:
           python tests/browser/server-confirm-234.py
           python tests/browser/load-map-233.py
           python tests/browser/labels-offline-265.py
+          python tests/browser/thematic-files-266.py
+          python tests/browser/offline-preview-266.py
+          python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py
           python tests/browser/print-styles-232.py
           python tests/browser/dem-winter-232.py

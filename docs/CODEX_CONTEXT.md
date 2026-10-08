@@ -3103,3 +3103,41 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   objavljenom assetu. Updater releases?per_page=1 vraća v2.6.5 sa APK-om.
   Pages sada koristi CODEX-US-SUME/root; živi sw.js potvrđuje 2.6.5.
   Fizički Xiaomi i produkcijska Supabase baza nisu testirani niti mijenjani.
+
+
+## 2026-10-08 — v2.6.6: Tematski fajlovi, raster pregledi i trajni izbori
+- Korisnik prijavio nestajanje GPKG prikaza/tabova i preklapanje u modalu;
+  zatražio listing i kontrolu više fajlova, stvarne offline slike i pamćenje
+  izbora pri ponovnom pokretanju. Novi APK izričito zatražen.
+- Tematski modal ima stalnu glavu/tabove/footer, zaseban skrol i jedan editor
+  izabranog fajla. Listing svih sačuvanih GPKG (uključujući neotvorene zapise),
+  pojedinačni/grupni prikaz, tabela, zoom i potvrđeno uklanjanje. Višestruki
+  import ide serijski; veliki MiniSqlite scan daje UI-u vrijeme za crtanje.
+  Import ne pomjera kartu. Draft/fokus/skrol ostaju pri pozadinskom učitavanju.
+- Novi fajl se objavljuje tek nakon potvrđenog IDB i registra. Greška prostora
+  ne pravi lažni uspjeh; legacy sadržaj se ne briše prije potvrđene migracije.
+  Registar čuva i neotvorene fajlove, restore sprječava duplikate/obrisani fajl
+  i zakašnjelo objavljivanje nakon promjene naloga.
+- Raster pregled uzima stvarne lokalne pločice; bijeli/transparentni/ravni
+  uzorak se preskače. Najviše 24 čitanja, bez skeniranja cijele baze ili mreže;
+  320x180 JPEG i negativni cache. Ista slika u Offline, Instalirane i Omiljene,
+  široke kartice, jasno označena ilustracija kad sadržaj nije dostupan.
+- Offline izbor pamti izričito sakrivanje (last_map none), providnost i zIndex
+  po fajlu; odgođeni restore ne gazi noviji izbor. Isključeni nagib se ne vraća
+  preko stale quick-map zapisa. Podtab slojeva i filter/pretraga/sort preglednika
+  se pamte. Bafer pamti zajedničku širinu, boju i providnost.
+- KML save spaja postojeće server overrides i ne gazi ih placeholderima.
+  Server KML/SHP loader čuva ispunu, pattern, opacity i tag; stil se spušta
+  kroz SHP GeoJSON grupe na stvarne poligone. Preuzeti server KML/SHP vraćaju
+  se iz IDB bez mreže, sa stilom i vidljivošću, dedup i provjerom naloga.
+  Lokalni KML/SHP, fotografije/tragovi/tačke/grupni prikaz, projekat/poligon,
+  smjerovi i map-center već imaju trajnu pohranu; postojeći tokovi sačuvani.
+- Tri nova browser testa koriste stvarni Leaflet, IDB, MiniSqlite i SQL.js
+  worker: 3000 GPKG poligona/više fajlova, quota/account/legacy/race slučajevi,
+  16 rasporeda; raster pločice i reload sa providnošću/redoslijedom/sakrivanjem;
+  lokalni/server KML i stvarni SHP/DBF sa punim stilom nakon reload-a bez mreže.
+  Proširen library test za novi JS kontekst/isti store i odvojene naloge.
+- Lokalno prošlo svih 100 JS grupa, pet inline sintaksi i novi browser testovi.
+  Produkcijska Supabase baza nije mijenjana. Fizički Xiaomi i stvarna karta
+  od 1,85 GB nisu testirani; raster slike u testu su sintetičke pločice.
+- Web/SW/Android 2.6.6/code536. Build i objava u provjeri.

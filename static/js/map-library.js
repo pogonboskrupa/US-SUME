@@ -4,7 +4,9 @@
   const labels={all:'Sve',local:'Učitani fajlovi',photos:'Fotografije',tracks:'Tragovi',server:'Server fajlovi'};
   let owner='',category='all',query='',sort='department',limit=40,opened='',meta={};
   const el=id=>document.getElementById(id),esc=s=>_escHtml(String(s??''));
-  function sync(){const uid=sbUser?.id||'guest';if(owner===uid)return;owner=uid;category='all';query='';limit=40;opened='';try{const v=JSON.parse(localStorage.getItem('tvlake_library_meta_'+uid)||'{}');meta=v&&typeof v==='object'&&!Array.isArray(v)?v:{};}catch(e){meta={};}}
+  function sync(){const uid=sbUser?.id||'guest';if(owner===uid)return;owner=uid;category='all';query='';limit=40;opened='';try{const v=JSON.parse(localStorage.getItem('tvlake_library_meta_'+uid)||'{}');meta=v&&typeof v==='object'&&!Array.isArray(v)?v:{};}catch(e){meta={};}
+    sort='department';try{const p=JSON.parse(localStorage.getItem('tvlake_library_view_'+uid)||'{}');category=Object.hasOwn(labels,p.category)?p.category:'all';query=typeof p.query==='string'?p.query.slice(0,160):'';sort=['department','date','proximity','name'].includes(p.sort)?p.sort:'department';}catch(e){}}
+  function saveView(){try{localStorage.setItem('tvlake_library_view_'+owner,JSON.stringify({category,query,sort}));}catch(e){showToast('Izbor preglednika nije sačuvan — provjeri prostor.');}}
   function key(type,id){return JSON.stringify([type,String(id)]);}
   function date(value){const n=typeof value==='number'?value:Date.parse(value);return Number.isFinite(n)&&n>0?n:0;}
   function department(value){const s=String(value||'').trim();return s||'Bez odjela';}
@@ -87,8 +89,8 @@
     render();
   }
   Object.assign(window,{_libraryRender:render,_libraryModel:model,_libraryRows:filtered,_libraryAction:action,_libraryEdit:edit,
-    _libraryFilter(value){sync();category=Object.hasOwn(labels,value)?value:'all';limit=40;opened='';render();},
-    _librarySearch(value){sync();query=String(value);limit=40;render();},_librarySort(value){sync();sort=['department','date','proximity','name'].includes(value)?value:'department';limit=40;render();},
+    _libraryFilter(value){sync();category=Object.hasOwn(labels,value)?value:'all';limit=40;opened='';saveView();render();},
+    _librarySearch(value){sync();query=String(value).slice(0,160);limit=40;saveView();render();},_librarySort(value){sync();sort=['department','date','proximity','name'].includes(value)?value:'department';limit=40;saveView();render();},
     _libraryGroup(on,group){visible(filtered().filter(r=>!group||JSON.stringify([r.gj,r.odjel])===group),!!on);},_libraryMore(){limit+=40;render();}});
   map.on('moveend',()=>{if(sort==='proximity'&&el('oznake-panel')?.style.display!=='none')render();});
 })();

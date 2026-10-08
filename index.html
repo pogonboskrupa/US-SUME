@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.5';
+const APP_VER = 'v2.6.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7464,7 +7464,7 @@ function _startupRestore() {
     korak('tacke',     () => _restoreTacke());
     korak('fotos',     () => _restoreFotos());
     korak('localKml',  () => _localKmlRestore());
-    korak('kmlcInit',  () => _kmlcInit());   // lista IDB ključeva za offline bedž
+    korak('kmlcInit',  async () => { await _kmlcInit(); await _serverKmlRestore(); });   // lista IDB ključeva za offline bedž
     korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
     korak('temRestore',() => _temRestore()); // tematska .gpkg karta iz IDB (async)
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
@@ -15628,6 +15628,7 @@ window.addEventListener('pagehide', e => _appLifecycleDebug('pagehide', !!e.pers
   let restoredKey = '⛰ Topo';
   try {
     const saved = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (saved?.type === 'none') return;
     if (saved?.type === 'sqlite') {
       _mapRestoreIndicatorShow(saved.sqlId);
       // Ne ostavljaj sivu kartu 10–20 s dok se veliki OPFS/SQLite fajl otvara.
@@ -15639,7 +15640,8 @@ window.addEventListener('pagehide', e => _appLifecycleDebug('pagehide', !!e.pers
     if (saved?.type === 'tl' && saved.key === '_nagib') {
       restoredKey = '⛰ Topo';
       setTimeout(() => {
-        if (_OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
+        let stillSelected=false;try{const latest=JSON.parse(localStorage.getItem('tvlake_last_map'));stillSelected=latest?.type==='tl'&&latest.key==='_nagib';}catch(e){}
+        if (stillSelected && _OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
       }, 500);
     } else if (saved?.type === 'tl' && saved.key === '_granice') restoredKey = '⛰ Topo';
     else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
@@ -15737,7 +15739,8 @@ function _openLayerSheet() {
   if (typeof closeOznakePanel === 'function') closeOznakePanel();
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
-  _lsTab('karte');
+  let lastTab='karte';try { lastTab=localStorage.getItem('tvlake_layer_sheet_tab')||lastTab; } catch(e) {}
+  _lsTab(lastTab);
   ['elev','slope','nv','ekspo','kont'].forEach(id => {
     const cb = document.getElementById('inst-' + id + '-cb');
     if (cb) cb.checked = !!_ovlState[id];
@@ -16080,6 +16083,8 @@ function setLayerSqlite(i) {
   if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer && map.hasLayer(_geojsonLayer)) {
     map.removeLayer(_geojsonLayer);
   }
+  if(typeof _geojsonVisible!=='undefined')_geojsonVisible=false;
+  try { localStorage.setItem('tvlake_granice_visible','0'); } catch(e) {}
   // Prikaži samo ovu SQLite kartu, sakrij ostale
   _sqlLayers.forEach((s, j) => {
     if (j === i) { s.visible = true; if (!map.hasLayer(s.layer)) s.layer.addTo(map); }
@@ -16102,7 +16107,8 @@ function _tileThumbUrl(tpl, _unused, x, y, arcgis) {
 function _mapFavThumbHtml(fav) {
   if(fav.type!=='sqlite'&&!fav.tileUrl)return '<div class="mfav-thumb-placeholder">🗺</div>';
   if (fav.type === 'sqlite') {
-    return `<div class="mfav-thumb-placeholder">🗄</div>`;
+    const data=_loadmapThumbData(fav.sqliteId);
+    return `<img class="mfav-thumb" data-map-preview="${_escHtml(fav.sqliteId)}" loading="lazy" decoding="async" src="${_escHtml(data||'static/img/map-previews/local.svg')}" alt="${_escHtml(data?'Isječak karte '+fav.name:'Ilustracija lokalne karte')}">`;
   }
   const c = map.getCenter();
   // Prikaži 2×2 grid tile-a za realističniji preview
@@ -24109,9 +24115,10 @@ function _graniceStatus(msg, type) {
 
 // Save user personal overrides to localStorage
 function saveKmlStyles() {
-  const userMap = {};
+  const stored=JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY)||'{}');
+  const userMap=stored&&typeof stored==='object'&&!Array.isArray(stored)?{...stored}:{};
   kmlLs.forEach(k => {
-    if (!k._key) return;
+    if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
       tag: k.tag || '' };
@@ -24170,7 +24177,9 @@ function applyKmlStyle(i) {
     patUrl = _ensureKmlPattern(i);
   }
 
-  k.grp.eachLayer(l => {
+  const styleLayer = l => {
+    // SHP GeoJSON i MultiGeometry sadrže dodatne grupe; stilizuj stvarne elemente.
+    if (l.eachLayer && !l._kmlIsPolygon && !l._kmlIsPoint) { l.eachLayer(styleLayer); return; }
     if (!l.setStyle) return;
     const lo = {...base};
     if (l._kmlIsPolygon) {
@@ -24190,7 +24199,8 @@ function applyKmlStyle(i) {
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
     }
     l.setStyle(lo);
-  });
+  };
+  k.grp?.eachLayer(styleLayer);
 }
 
 function _ensureKmlPattern(i) {
@@ -24575,6 +24585,8 @@ function _ozTogTrag(id) {
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
 function _lsTab(name) {
   const panes = ['karte','offline','inst','granice'];
+  if (!panes.includes(name)) name = 'karte';
+  try { localStorage.setItem('tvlake_layer_sheet_tab',name); } catch(e) {}
   panes.forEach(p => {
     const pane = document.getElementById('ls-pane-' + p);
     const btn  = document.getElementById('ls-tab-' + p);
@@ -24596,6 +24608,7 @@ function _instToggle(id, on) {
   else map.removeLayer(_OVL[id]);
   _ovlState[id] = on;
   localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState));
+  if(id==='slope'&&!on){try{const last=JSON.parse(localStorage.getItem(_LASTMAP_KEY)||'null');if(last?.type==='tl'&&last.key==='_nagib')_saveLastMap('tl','⛰ Topo');}catch(e){}}
   _demLegendUpdate();
 }
 
@@ -25385,6 +25398,8 @@ function onBufChange() {
 // ponavljati istu promjenu na dva različita mjesta, sa rizikom da se rasinhronizuju
 // (npr. stabla se broje sa 80m dok je Vlake alat već promijenjen na 100m).
 function _syncBufRadiusEverywhere(meters) {
+  if (![60,80,100,120].includes(meters)) return;
+  _bufSavePrefs({width:meters});
   bufRadius = meters / 2;
   _dozBufRadius = meters / 2;
   const mainSel = document.getElementById('buf-sel');
@@ -25398,10 +25413,28 @@ function _syncBufRadiusEverywhere(meters) {
   if (typeof _dozTreePts !== 'undefined' && _dozTreePts.length) dozTreesAnalyze();
 }
 
+function _bufSavePrefs(change) {
+  try { const prefs=JSON.parse(localStorage.getItem('tvlake_buffer_style')||'{}'); localStorage.setItem('tvlake_buffer_style',JSON.stringify({...prefs,...change})); }
+  catch(e) { showToast('Postavke bafera nisu sačuvane — provjeri prostor.'); }
+}
+function _bufRestorePrefs() {
+  try {
+    const p=JSON.parse(localStorage.getItem('tvlake_buffer_style')||'{}');
+    if ([60,80,100,120].includes(p.width)) _syncBufRadiusEverywhere(p.width);
+    const col=document.getElementById('buf-col-pick'), op=document.getElementById('buf-opacity');
+    if (col && /^#[0-9a-f]{6}$/i.test(p.color||'')) col.value=p.color;
+    if (op && Number.isFinite(p.opacity)) op.value=Math.max(5,Math.min(60,p.opacity));
+    if (col) _bufColChange(col.value);
+    if (op) _bufOpacityChange(op.value);
+  } catch(e) {}
+}
+
 function _bufGetColor()   { return document.getElementById('buf-col-pick')?.value   || '#60a5fa'; }
 function _bufGetOpacity() { return (parseInt(document.getElementById('buf-opacity')?.value || 18) / 100); }
 
 function _bufColChange(col) {
+  if (!/^#[0-9a-f]{6}$/i.test(col)) return;
+  _bufSavePrefs({color:col});
   const sw = document.getElementById('buf-col-swatch');
   const op = _bufGetOpacity();
   if (sw) sw.style.background = `rgba(${_hexToRgbCsv(col)},${op})`;
@@ -25410,6 +25443,8 @@ function _bufColChange(col) {
 }
 
 function _bufOpacityChange(val) {
+  val = Math.max(5,Math.min(60,+val || 18));
+  _bufSavePrefs({opacity:val});
   document.getElementById('buf-opacity-lbl').textContent = val + '%';
   const col = _bufGetColor();
   const sw = document.getElementById('buf-col-swatch');
@@ -30906,6 +30941,29 @@ function _routeToVlaka() {
 // Crash-guard: ako učitavanje sruši tab, sljedeće otvaranje automatski briše IDB.
 // ─────────────────────────────────────────────────────────────────────────────
 let _sqlLayers = [];
+// Izbor podloge je u tvlake_last_map; providnost se čuva po fizičkoj karti.
+function _sqlMapPrefs() {
+  try { const v=JSON.parse(localStorage.getItem('tvlake_sqlmap_prefs_v1')||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}; } catch(e) { return {}; }
+}
+function _sqlMapZIndex(name) { const v=_sqlMapPrefs()[name]?.zIndex;return Number.isFinite(v)?v:1; }
+function _sqlMapOpacity(name) { const v=_sqlMapPrefs()[name]?.opacity;return Number.isFinite(v)&&v>=0&&v<=1?v:1; }
+function _sqlMapSetOpacity(sl, value) {
+  if(!sl)return false;const v=Number(value);if(!Number.isFinite(v))return false;
+  const opacity=Math.max(0,Math.min(100,v))/100,prefs=_sqlMapPrefs();
+  prefs[sl.name]={...prefs[sl.name],opacity};
+  try { localStorage.setItem('tvlake_sqlmap_prefs_v1',JSON.stringify(prefs)); }
+  catch(e) { showToast('Providnost nije sačuvana — provjeri prostor');return false; }
+  sl.layer.setOpacity(opacity);return true;
+}
+function _sqlMapRememberHidden(sl) {
+  try {
+    const last=JSON.parse(localStorage.getItem('tvlake_last_map')||'null');
+    if(last?.type!=='sqlite'||last.sqlId!==sl.name)return;
+    const base=Object.entries(TL).find(([,l])=>map.hasLayer(l));
+    _saveLastMap(base?'tl':'none',base?.[0]||null,null);
+  } catch(e) { showToast('Izbor prikaza nije sačuvan — provjeri prostor'); }
+}
+
 const _SQL_LARGE     = 20 * 1024 * 1024;
 const _SQL_CRASH_KEY = 'tvlake_sqlmap_loading';
 const _SQLJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
@@ -31019,7 +31077,8 @@ class MiniSqlite {
     if(t>=12)return undefined;
     return MiniSqlite._ri(d,p,sz);
   }
-  async _scanLeaves(root,cb,filter) {
+  async _scanLeaves(root,cb,filter,yieldEvery=0) {
+    let scanned=0;
     const go=async(n)=>{
       const d=await this._pg(n); const ho=n===1?100:0; const t=d[ho];
       const nc=MiniSqlite._u16(d,ho+3); const cpo=ho+(t===5?12:8);
@@ -31032,6 +31091,8 @@ class MiniSqlite {
         const[pL,pLS]=MiniSqlite._vi(d,p);p+=pLS;const[rid,rS]=MiniSqlite._vi(d,p);p+=rS;
         if(filter&&!filter(d,p,pL))continue;
         if(cb(rid,await this._rec(d,p,pL))===true)return true;
+        // Samo glavni GPKG čitač traži pauzu za paint; raster/worker tok ostaje isti.
+        if(yieldEvery && ++scanned % yieldEvery === 0) await new Promise(r=>setTimeout(r,0));
       }
       return false;
     };
@@ -32741,7 +32802,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return img;
     }
   }));
-  const layer = new MTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative}));
+  const layer = new MTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative,opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
   return layer;
 }
 
@@ -32850,7 +32911,7 @@ async function sqlmapRestoreAll() {
     const _skipNow = _sqlSkipList();
     const _kandidati = rows.filter(e => !_skipNow.includes(e.name));
     const showName = (lastSqlId && _kandidati.some(e => e.name === lastSqlId))
-      ? lastSqlId : (lastMap?.type==='tl' ? null : (_kandidati[0]?.name || null));
+      ? lastSqlId : (['tl','none'].includes(lastMap?.type) ? null : (_kandidati[0]?.name || null));
     _mapLoadDiagName(showName);
     rows.sort((a,b) => Number(b.name === showName) - Number(a.name === showName));
     const preskoci = _sqlSkipList();
@@ -33006,6 +33067,7 @@ function _sqlEnsureBaseLayer(brojSacuvanih) {
   let key = '⛰ Topo';
   try {
     const lm = JSON.parse(localStorage.getItem('tvlake_last_map'));
+    if (lm?.type === 'none') return;
     if (lm?.type === 'tl' && TL[lm.key]) key = lm.key;
   } catch(e) {}
   TL[key].addTo(map);
@@ -33371,7 +33433,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       return img;
     }
   }));
-  const layer = new WTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative}));
+  const layer = new WTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative,opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
   return layer;
 }
 
@@ -33419,6 +33481,7 @@ function sqlmapToggle(i) {
     _saveLastMap('sqlite', null, sl.name);
   } else {
     if (map.hasLayer(sl.layer)) map.removeLayer(sl.layer);
+    _sqlMapRememberHidden(sl);
   }
   _sqlmapRenderLayers(); _lsRenderSqlite();
 }
@@ -33499,7 +33562,7 @@ async function _sqlmapTestTile(i) {
 }
 function sqlmapSetOpacity(i, val) {
   const sl = _sqlLayers[i];
-  sl.layer.setOpacity(val/100);
+  if(!_sqlMapSetOpacity(sl,val))return;
   const lbl = document.getElementById('sqlmap-op-'+i);
   if (lbl) lbl.textContent = val+'%';
 }
@@ -33720,6 +33783,7 @@ async function _mapMgrRename(i) {
     const r = await _sqlWCall({ type: 'idb-rename', old: name, neu: nn });
     if (!r?.ok) throw new Error(r?.error || 'rename-fail');
   } catch(e) { showToast('❌ Preimenovanje nije uspjelo: ' + (e.message || e)); return; }
+  try { const prefs=_sqlMapPrefs();if(prefs[name]){prefs[nn]=prefs[name];delete prefs[name];localStorage.setItem('tvlake_sqlmap_prefs_v1',JSON.stringify(prefs));} } catch(e) { showToast('Providnost pri preimenovanju nije sačuvana'); }
   // Ažuriraj in-memory reference
   const sl = _sqlLayers.find(l => l.name === name);
   if (sl) sl.name = nn;
@@ -33902,54 +33966,90 @@ function loadmapHandleDrop(e) {
   if (e.dataTransfer?.files?.length) loadmapHandleFiles(e.dataTransfer.files);
 }
 
-// Read one real raster tile; never download imagery or scan a whole map for a preview.
+// Pregled iz stvarnih lokalnih pločica: ograničen broj čitanja, bez mreže i bez skeniranja cijele karte.
 const _loadmapThumbJobs=new Map();
 let _loadmapThumbQueue=Promise.resolve();
 function _loadmapThumbData(name){
   try{const d=localStorage.getItem('lm_thumb_'+name)||'';return /^data:image\/(png|jpeg|webp);base64,[a-z\d+/=]+$/i.test(d)?d:'';}catch(e){return '';}
 }
 function _loadmapThumbRefresh(name){
-  const data=_loadmapThumbData(name);if(!data)return;
-  for(const img of document.querySelectorAll('#loadmap-modal img[data-map-preview]'))if(img.dataset.mapPreview===name){
-    img.src=data;img.alt='Isječak karte '+name;
-    const tag=img.parentElement.querySelector('.lm-preview-caption');if(tag)tag.textContent='Isječak karte';
+  const data=_loadmapThumbData(name);
+  for(const img of document.querySelectorAll('img[data-map-preview]'))if(img.dataset.mapPreview===name){
+    img.src=data||'static/img/map-previews/local.svg';img.alt=data?'Isječak karte '+name:'Ilustracija lokalne karte';
+    const tag=img.parentElement.querySelector('.lm-preview-caption,.installed-preview-tag');
+    if(tag)tag.textContent=data?'Isječak karte':'Otvori za pregled';
   }
+}
+// Prazna/bijela/prozirna pločica nije koristan pregled. Ocjena gleda mali uzorak.
+function _loadmapThumbScore(bitmap){
+  const c=document.createElement('canvas');c.width=64;c.height=64;
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,64,64);
+  const px=ctx.getImageData(0,0,64,64).data;let n=0,ink=0,sum=0,sq=0;
+  for(let i=0;i<px.length;i+=4){if(px[i+3]<32)continue;n++;
+    const v=(px[i]+px[i+1]+px[i+2])/3;sum+=v;sq+=v*v;
+    if(v<238||Math.max(px[i],px[i+1],px[i+2])-Math.min(px[i],px[i+1],px[i+2])>20)ink++;
+  }
+  if(n<205||ink/n<.02)return 0;
+  return Math.sqrt(Math.max(0,sq/n-(sum/n)**2))*Math.min(1,ink/n*3);
 }
 function _loadmapThumb(name,force=false){
   if(_loadmapThumbJobs.has(name))return _loadmapThumbJobs.get(name);
   const sl=_sqlLayers.find(l=>l.name===name);if(!sl)return Promise.resolve();
-  try{if(!force&&localStorage.getItem('lm_thumb_v2_'+name)==='1'&&_loadmapThumbData(name))return Promise.resolve();}catch(e){}
+  try{const stamp=localStorage.getItem('lm_thumb_v3_'+name);if(!force&&(stamp==='empty'||stamp==='1'&&_loadmapThumbData(name)))return Promise.resolve();}catch(e){}
   const work=_loadmapThumbQueue.catch(()=>{}).then(async()=>{
+    let best=null,bestScore=1;
     try{
       if(!_sqlLayers.includes(sl))return;
       const m=sl.meta||{},c=String(m.center||'').split(',').map(Number),b=String(m.bounds||'').split(',').map(Number);
-      const coords=[];const sample=m._preview;
-      if(Array.isArray(sample)&&sample.length===3&&sample.every(Number.isInteger))coords.push(sample);
-      const lng=c.length>=2&&c.every(Number.isFinite)?c[0]:b.length===4&&b.every(Number.isFinite)?(b[0]+b[2])/2:NaN;
-      const lat=c.length>=2&&c.every(Number.isFinite)?c[1]:b.length===4&&b.every(Number.isFinite)?(b[1]+b[3])/2:NaN;
-      if(Number.isFinite(lat)&&Math.abs(lat)<=85.051129&&Number.isFinite(lng)&&Math.abs(lng)<=180){
-        const lo=Number(m.minzoom),hi=Number(m.maxzoom),z=Number.isInteger(c[2])?c[2]:Number.isInteger(lo)?lo:12;
-        for(const zoom of [...new Set([z,Number.isInteger(lo)?lo:z,Number.isInteger(hi)?Math.min(hi,z+2):z])]){
-          if(zoom<0||zoom>22)continue;const n=2**zoom,r=lat*Math.PI/180;
-          coords.push([zoom,Math.min(n-1,Math.floor((lng+180)/360*n)),Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n)]);
-        }
+      const lo=Number(m.minzoom),hi=Number(m.maxzoom),sample=m._preview,coords=[],seen=new Set();
+      const add=(z,x,y)=>{const k=[z,x,y].join('/');if(Number.isInteger(z)&&z>=0&&z<=22&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<2**z&&y<2**z&&!seen.has(k)){seen.add(k);coords.push([z,x,y]);}};
+      if(Array.isArray(sample)&&sample.length===3) add(...sample);
+      const centers=[];
+      if(c.length>=2&&c.every(Number.isFinite)&&Math.abs(c[1])<=85)centers.push([c[0],c[1],c[2]]);
+      if(b.length===4&&b.every(Number.isFinite)){
+        centers.push([(b[0]+b[2])/2,(b[1]+b[3])/2]);
+        if(typeof map!=='undefined'){const p=map.getCenter();if(p.lng>=b[0]&&p.lng<=b[2]&&p.lat>=b[1]&&p.lat<=b[3])centers.push([p.lng,p.lat,map.getZoom()]);}
       }
-      for(const [z,x,y]of coords.slice(0,4)){
-        if(z<0||z>22||x<0||y<0||x>=2**z||y>=2**z)continue;
+      if(!centers.length&&Array.isArray(sample)){
+        const [z,x,y]=sample,n=2**z;
+        centers.push([(x+.5)/n*360-180,Math.atan(Math.sinh(Math.PI*(1-2*(y+.5)/n)))*180/Math.PI,z]);
+      }
+      for(const [lng,lat,cz]of centers){
+        if(!Number.isFinite(lng)||!Number.isFinite(lat)||Math.abs(lat)>85||Math.abs(lng)>180)continue;
+        const z=Number.isInteger(cz)?cz:Number.isInteger(lo)?lo:12;
+        const zooms=[z,Number.isInteger(hi)?Math.min(hi,z+2):z,Number.isInteger(hi)?hi:z,Number.isInteger(lo)?lo:z];
+        for(const zoom of [...new Set(zooms)]){const n=2**zoom,r=lat*Math.PI/180;add(zoom,Math.floor((lng+180)/360*n),Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n));}
+      }
+      // Susjedne pločice pomažu kad je sredina ili rub karte bijel.
+      for(const [z,x,y]of coords.slice())for(const [dx,dy]of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1]])add(z,x+dx,y+dy);
+      const started=performance.now();
+      for(const [z,x,y]of coords.slice(0,24)){
+        if(performance.now()-started>5000||!_sqlLayers.includes(sl))break;
         const data=_mainMiniDbs[name]?await _mainMiniDbs[name].mini.tile(z,x,y):(await _sqlWCall({type:'tile',name,z,x,y},null,4000))?.data;
         if(!data?.length||!_sqlLayers.includes(sl))continue;
         let bmp;
         try{
           bmp=await createImageBitmap(new Blob([data],{type:_tileMime(data)}));
-          if(!_sqlLayers.includes(sl))return;
-          const cv=document.createElement('canvas');cv.width=320;cv.height=180;
-          const scale=Math.max(cv.width/bmp.width,cv.height/bmp.height),w=bmp.width*scale,h=bmp.height*scale;
-          const ctx=cv.getContext('2d');ctx.fillStyle='#e5ecdf';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(bmp,(cv.width-w)/2,(cv.height-h)/2,w,h);
-          localStorage.setItem('lm_thumb_'+name,cv.toDataURL('image/jpeg',.82));localStorage.setItem('lm_thumb_v2_'+name,'1');
-          _loadmapThumbRefresh(name);return;
+          const score=_loadmapThumbScore(bmp);
+          if(score>bestScore){if(best)best.close();best=bmp;bmp=null;bestScore=score;}
+          if(bestScore>=12)break;
         }catch(e){}finally{if(bmp)bmp.close();}
       }
-    }catch(e){}
+      if(!_sqlLayers.includes(sl))return;
+      if(best){
+        const cv=document.createElement('canvas');cv.width=320;cv.height=180;
+        const scale=Math.max(cv.width/best.width,cv.height/best.height),w=best.width*scale,h=best.height*scale;
+        const ctx=cv.getContext('2d');ctx.fillStyle='#e5ecdf';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(best,(cv.width-w)/2,(cv.height-h)/2,w,h);
+        localStorage.setItem('lm_thumb_'+name,cv.toDataURL('image/jpeg',.82));
+        localStorage.setItem('lm_thumb_v2_'+name,'1');localStorage.setItem('lm_thumb_v3_'+name,'1');
+      }else{
+        // Ne ostavljaj ranije sačuvanu bijelu sliku kao navodni pregled.
+        const old=_loadmapThumbData(name);let bmp;
+        try{if(old){bmp=await createImageBitmap(await (await fetch(old)).blob());if(_loadmapThumbScore(bmp)<=1)localStorage.removeItem('lm_thumb_'+name);}}finally{if(bmp)bmp.close();}
+        localStorage.setItem('lm_thumb_v3_'+name,'empty');
+      }
+      _loadmapThumbRefresh(name);
+    }catch(e){}finally{if(best)best.close();}
   });
   _loadmapThumbQueue=work;_loadmapThumbJobs.set(name,work);work.finally(()=>_loadmapThumbJobs.delete(name));return work;
 }
@@ -33979,7 +34079,7 @@ async function _loadmapRecentDel(i) {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
   else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
-  try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name); } catch (e) {}
+  try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name);localStorage.removeItem('lm_thumb_v3_' + m.name); } catch (e) {}
   showToast('🗑 Obrisano: ' + m.name);
   _loadmapRenderRecent(); _loadmapRenderManage();
 }
@@ -34003,18 +34103,22 @@ async function _loadmapActivate(i) { const m=_loadmapManageShown[i];if(m)await _
 function _loadmapDeactivate(i) {
   const m = _loadmapManageShown[i]; if (!m) return;
   const sl = _sqlLayers.find(l => l.name === m.name);
-  if (sl) { sl.visible = false; if (map.hasLayer(sl.layer)) map.removeLayer(sl.layer); _sqlmapRenderLayers(); _lsRenderSqlite(); }
+  if (sl) { sl.visible = false; if (map.hasLayer(sl.layer)) map.removeLayer(sl.layer); _sqlMapRememberHidden(sl); _sqlmapRenderLayers(); _lsRenderSqlite(); }
   _loadmapRenderManage(); _loadmapRenderRecent();
 }
 function _loadmapSetOpacity(i, val) {
   const m = _loadmapManageShown[i]; if (!m) return;
   const sl = _sqlLayers.find(l => l.name === m.name);
-  if (sl) { sl.layer.setOpacity(val / 100); const lbl = document.getElementById('lm-op-' + i); if (lbl) lbl.textContent = val + '%'; }
+  if (sl && _sqlMapSetOpacity(sl,val)) { const lbl = document.getElementById('lm-op-' + i); if (lbl) lbl.textContent = val + '%'; }
 }
 function _loadmapZ(i, dir) {
   const m = _loadmapManageShown[i]; if (!m) return;
   const sl = _sqlLayers.find(l => l.name === m.name);
-  if (sl && sl.layer.setZIndex) { const cur = sl.layer.options.zIndex || 0; sl.layer.setZIndex(cur + dir); showToast('Z-index sloja: ' + (cur + dir)); }
+  if (sl && sl.layer.setZIndex) {
+    const next=(sl.layer.options.zIndex||0)+dir,prefs=_sqlMapPrefs();prefs[sl.name]={...prefs[sl.name],zIndex:next};
+    try { localStorage.setItem('tvlake_sqlmap_prefs_v1',JSON.stringify(prefs)); } catch(e) { showToast('Redoslijed nije sačuvan — provjeri prostor');return; }
+    sl.layer.setZIndex(next);showToast('Redoslijed sloja: '+next);
+  }
 }
 async function _loadmapDelete(i) {
   const m = _loadmapManageShown[i]; if (!m) return;
@@ -34022,7 +34126,7 @@ async function _loadmapDelete(i) {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
   else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
-  try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name); } catch (e) {}
+  try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name);localStorage.removeItem('lm_thumb_v3_' + m.name); } catch (e) {}
   const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === m.name);
   if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
   showToast('🗑 Obrisano: ' + m.name);
@@ -35085,6 +35189,9 @@ const _TEM_RAMP      = ['#1a9641','#a6d96a','#ffffbf','#fdae61','#d7191c'];
 let _temMaps     = [];
 let _temRenderer = null;   // L.canvas — hiljade poligona, SVG bi gušio
 let _temEdOpenId = null;   // karta čiji je editor klasa otvoren u modalu
+let _temSelectedId = null, _temView = 'files';
+let _temQueue = Promise.resolve(), _temRestorePending = null, _temEpoch = 0;
+let _temLoadStatus = '';
 let _temEdDraft  = {};     // { [mapId]: {colors:[...], edges:[...]} } — nesačuvano stanje editora dok je otvoren
 
 // Palete za brojčane teme (sekvencijalne/divergentne). 'zc' je zadana (isto kao ranije).
@@ -35252,12 +35359,18 @@ function _temDraftIz(cls, pal) {
   return { colors: cls.colors.slice(0, nK), edges: [cls.min, ...cls.breaks.slice(0, nK - 1), cls.max], pal: pal || cls.pal || 'zc' };
 }
 
-function _temRegSave() {
+function _temRegSave(maps = _temMaps, removedId = null) {
   try {
-    localStorage.setItem(_TEM_REG_KEY, JSON.stringify(_temMaps.map(m =>
-      ({ id: m.id, name: m.name, theme: m.theme, visible: m.visible,
-         opacity: m.opacity, styles: m.styles || {}, colLabels: m.colLabels || {} }))));
-  } catch(e) {}
+    // Sačuvaj i zapise čiji se fajl još otvara ili trenutno nije dostupan.
+    const old = JSON.parse(localStorage.getItem(_TEM_REG_KEY) || '[]');
+    const rows = maps.map(m => ({ id: m.id, name: m.name, theme: m.theme,
+      visible: m.visible, opacity: m.opacity, styles: m.styles || {}, colLabels: m.colLabels || {} }));
+    if (Array.isArray(old)) old.forEach(m => {
+      if (m.id !== removedId && !rows.some(r => r.id === m.id)) rows.push(m);
+    });
+    localStorage.setItem(_TEM_REG_KEY, JSON.stringify(rows));
+    return true;
+  } catch(e) { console.warn('Tematske karte: registar nije sačuvan', e); return false; }
 }
 function _temById(id) { return _temMaps.find(m => m.id === id); }
 // Prikazni naziv atributa — ručno preimenovan (colLabels) ili auto (_ → razmak)
@@ -35329,20 +35442,60 @@ function _temResolveTr(srsId, srsDefs) {
   return ([x, y]) => { const [lng, lat] = proj4(src, 'WGS84', [x, y]); return [lat, lng]; };
 }
 
-async function _gpkgLoadFile(file) {
-  if (!file) return;
-  showToast('⏳ Učitavam ' + file.name + '...');
-  try {
-    const buf = await file.arrayBuffer();
-    const entry = await _gpkgParseBuf(buf, file.name, { fit: true });
-    if (entry) {
-      _kmlcSave(_TEM_IDB_PFX + entry.id, buf).catch(() => {});
-      _temRegSave();
+function _temCurrent(epoch, owner) {
+  return epoch === _temEpoch && owner === (typeof sbUser !== 'undefined' ? sbUser?.id : null);
+}
+function _temStatus(text) {
+  _temLoadStatus = text;
+  const el = document.getElementById('tem-load-status');
+  if (el) el.textContent = text;
+}
+function _gpkgLoadFile(file) { return _gpkgLoadFiles(file ? [file] : []); }
+function _gpkgLoadFiles(files) {
+  const list = Array.from(files || []);
+  if (!list.length) return Promise.resolve();
+  const epoch = _temEpoch, owner = typeof sbUser !== 'undefined' ? sbUser?.id : null;
+  const current = () => _temCurrent(epoch, owner);
+  const run = async () => {
+    if (!current()) return;
+    showTemModal();
+    let done = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (!current()) break;
+      const file = list[i];
+      _temStatus(`Učitavanje ${i + 1}/${list.length}: ${file.name}`);
+      let key = null;
+      try {
+        if (!/\.gpkg$/i.test(file.name)) throw new Error('Odaberi GPKG fajl');
+        const buf = await file.arrayBuffer();
+        if (!current()) break;
+        const entry = await _gpkgParseBuf(buf, file.name, { stage: true, isCurrent: current });
+        if (!entry) throw new Error('Fajl nema čitljive poligone');
+        if (!current()) break;
+        _temStatus(`Čuvanje ${i + 1}/${list.length}: ${file.name}`);
+        key = _TEM_IDB_PFX + entry.id;
+        if (!await _kmlcSave(key, buf)) throw new Error('Nema dovoljno prostora ili čuvanje fajla nije uspjelo');
+        if (!current()) { await _kmlcDelete(key); break; }
+        if (!_temRegSave([..._temMaps, entry])) throw new Error('Registar nije sačuvan — oslobodi prostor i pokušaj ponovo');
+        _temMaps.push(entry);
+        key = null; // Odavde fajl ima potvrđen registar; greška UI-a ne briše izvornik.
+        if (entry.visible) entry.grp.addTo(map);
+        if (!_temSelectedId) _temSelectedId = entry.id;
+        done++;
+        _temModalRender(true);
+        if (typeof _lsRenderTem === 'function') _lsRenderTem();
+      } catch(e) {
+        if (key) await _kmlcDelete(key);
+        if (!current()) break;
+        console.warn('GPKG učitavanje:', e);
+        showToast('GPKG: ' + file.name + ' — ' + (e.message || 'učitavanje nije uspjelo'));
+      }
     }
-  } catch(e) {
-    console.error('_gpkgLoadFile:', e);
-    showToast('❌ GPKG greška: ' + (e.message || 'nepoznato'));
-  }
+    if (current()) _temStatus(`Učitano ${done}/${list.length} fajlova. Sačuvane karte rade bez interneta.`);
+  };
+  const task = _temQueue.then(run);
+  _temQueue = task.catch(e => { if (current()) _temStatus('Učitavanje nije uspjelo. Pokušaj ponovo.'); console.warn(e); });
+  return _temQueue;
 }
 
 // Parsira buf i registruje novu kartu. `saved` = zapis iz registra (restore poslije
@@ -35453,8 +35606,9 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
       try { const b = poly.getBounds(); if (b.isValid()) allBounds = allBounds ? allBounds.extend(b) : L.latLngBounds(b.getSouthWest(), b.getNorthEast()); } catch {}
       cnt++;
     }
+    if (opts?.isCurrent && !opts.isCurrent()) throw new Error('Učitavanje prekinuto');
     if (f.polys.length) entry.features.push(f);
-  });
+  }, null, 64);
 
   if (!cnt) { showToast('⚠ GPKG: nije parsiran nijedan poligon'); return null; }
   entry.cols = Object.keys(numStats).filter(n => {
@@ -35472,6 +35626,10 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
     return s.vals.size >= 2 || (s.txt && s.vals.size === 1 && s.tot < nF);
   }).sort();
   entry._bounds = allBounds;
+  if (opts?.isCurrent && !opts.isCurrent()) return null;
+  if (opts?.canPublish && !opts.canPublish()) return null;
+  if (opts?.stage) { entry.theme = saved?.theme || null; return entry; }
+  if (_temById(entry.id)) return _temById(entry.id);
   _temMaps.push(entry);
   if (entry.visible) entry.grp.addTo(map);
 
@@ -35481,7 +35639,7 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
   // Vrati zapamćenu temu (restore poslije restarta)
   if (saved?.theme && (entry.cols.includes(saved.theme) || entry.catCols.includes(saved.theme))) _temApplyTheme(entry.id, saved.theme);
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
-  if (typeof _temModalRender === 'function') _temModalRender();
+  if (typeof _temModalRender === 'function') _temModalRender(true);
   return entry;
 }
 
@@ -35539,6 +35697,7 @@ function _temQuantiles(vals, n = 5) {
 function _temApplyTheme(id, col) {
   const entry = _temById(id);
   if (!entry) return;
+  if (_temEdOpenId !== id) delete _temEdDraft[id];
   if (!col) {
     entry.theme = null;
     entry._cls = null;
@@ -35642,9 +35801,11 @@ function _temLegendUpd() {
 function _temSetVisible(id, on) {
   const entry = _temById(id);
   if (!entry) return;
+  const was = entry.visible;
   entry.visible = !!on;
+  if (!_temRegSave()) { entry.visible = was; showToast('Vidljivost nije sačuvana: oslobodi prostor'); _temModalRender(true); return; }
   try { if (on) entry.grp.addTo(map); else map.removeLayer(entry.grp); } catch(e) {}
-  _temRegSave(); _temLegendUpd(); _temModalRender();
+  _temLegendUpd(); _temModalRender(true);
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
 }
 
@@ -35666,7 +35827,7 @@ async function _temRenameCol(id) {
   entry.colLabels = entry.colLabels || {};
   entry.colLabels[entry.theme] = trimmed;
   _temRegSave();
-  _temModalRender();
+  _temModalRender(true);
   _temLegendUpd();
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
   showToast('💾 Naziv zapisan — ostaje sačuvan i poslije odjave');
@@ -35674,21 +35835,25 @@ async function _temRenameCol(id) {
 
 // Ukloni JEDNU kartu (trajno — briše i IDB i registar)
 async function _temRemoveMap(id) {
-  const entry = _temById(id);
+  const entry = _temFileRows().find(m => m.id === id);
   if (!entry) return;
+  const epoch = _temEpoch, owner = typeof sbUser !== 'undefined' ? sbUser?.id : null;
   if (!await _dlgConfirm(`Ukloniti tematsku kartu "${entry.name}"?`, { danger: true })) return;
+  if (!_temCurrent(epoch, owner)) return;
+  if (!_temRegSave(_temMaps.filter(m => m.id !== id), id)) { showToast('Karta nije uklonjena: čuvanje nije uspjelo'); return; }
   try { map.removeLayer(entry.grp); } catch(e) {}
   _temMaps = _temMaps.filter(m => m.id !== id);
   if (_temEdOpenId === id) _temEdOpenId = null;
   delete _temEdDraft[id];
   _kmlcDelete(_TEM_IDB_PFX + id).catch(() => {});
-  _temRegSave(); _temLegendUpd(); _temModalRender();
+  _temLegendUpd(); _temModalRender(true);
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
   showToast('🗑 Tematska karta uklonjena');
 }
 
 // In-memory reset SVIH karata (odjava) — IDB + registar OSTAJU (isti korisnik ih vraća)
 function _temRemoveAll(silent) {
+  _temEpoch++; _temRestorePending = null; _temSelectedId = null; _temEdDraft = {}; _temLoadStatus = '';
   _temMaps.forEach(m => { try { map.removeLayer(m.grp); } catch(e) {} });
   _temMaps = [];
   _temEdOpenId = null;
@@ -35697,47 +35862,54 @@ function _temRemoveAll(silent) {
 }
 
 // Restore poslije restarta/prijave (poziva se iz showApp, iza prvog painta)
-async function _temRestore() {
-  if (_temMaps.length) return;
-  // Legacy migracija (v3.11.0 single-map format)
-  try {
-    const legacyName = localStorage.getItem(_TEM_NAME_KEY);
-    if (legacyName) {
-      const c = await _kmlcGet(_TEM_IDB_KEY);
-      if (c) {
-        const buf = c instanceof ArrayBuffer ? c : c.buffer;
-        const legacyTheme = localStorage.getItem(_TEM_THEME_KEY);
-        const entry = await _gpkgParseBuf(buf, legacyName, { fit: false },
-          { id: 'legacy1', theme: legacyTheme, visible: true, styles: {} });
-        if (entry) { _kmlcSave(_TEM_IDB_PFX + entry.id, buf).catch(() => {}); _temRegSave(); }
-      }
-      localStorage.removeItem(_TEM_NAME_KEY);
-      localStorage.removeItem(_TEM_THEME_KEY);
-      _kmlcDelete(_TEM_IDB_KEY).catch(() => {});
-    }
-  } catch(e) { console.warn('_temRestore legacy:', e); }
-  // Registar
-  let reg = [];
-  try { reg = JSON.parse(localStorage.getItem(_TEM_REG_KEY) || '[]'); } catch { reg = []; }
-  for (const saved of reg) {
-    if (_temById(saved.id)) continue;
+function _temRestore() {
+  if (_temRestorePending) return _temRestorePending;
+  const epoch = _temEpoch, owner = typeof sbUser !== 'undefined' ? sbUser?.id : null;
+  const current = () => _temCurrent(epoch, owner);
+  const run = async () => {
+    if (!current()) return;
+    // Legacy izvornik ostaje dok obje nove kopije nisu potvrđene.
     try {
-      const c = await _kmlcGet(_TEM_IDB_PFX + saved.id);
-      if (!c) continue;
-      const buf = c instanceof ArrayBuffer ? c : c.buffer;
-      await _gpkgParseBuf(buf, saved.name, { fit: false }, saved);
-    } catch(e) { console.warn('_temRestore:', saved.name, e); }
-  }
+      const name = localStorage.getItem(_TEM_NAME_KEY);
+      if (name && !_temById('legacy1')) {
+        const buf = await _kmlcGet(_TEM_IDB_KEY);
+        if (buf && current()) {
+          const entry = await _gpkgParseBuf(buf, name, { stage: true, isCurrent: current },
+            { id: 'legacy1', theme: localStorage.getItem(_TEM_THEME_KEY), visible: true, styles: {} });
+          if (entry && current() && await _kmlcSave(_TEM_IDB_PFX + entry.id, buf) && current() && _temRegSave([..._temMaps, entry])) {
+            localStorage.removeItem(_TEM_NAME_KEY); localStorage.removeItem(_TEM_THEME_KEY);
+            await _kmlcDelete(_TEM_IDB_KEY);
+          }
+        }
+      }
+    } catch(e) { console.warn('GPKG legacy:', e); }
+    for (const saved of _temFileRows()) {
+      if (!current()) break;
+      if (_temById(saved.id)) continue;
+      try {
+        const buf = await _kmlcGet(_TEM_IDB_PFX + saved.id);
+        if (buf && current()) await _gpkgParseBuf(buf, saved.name, { fit: false, isCurrent: current, canPublish: () => _temFileRows().some(m => m.id === saved.id) }, saved);
+      } catch(e) { console.warn('GPKG ponovno otvaranje:', saved.name, e); }
+    }
+    if (current()) _temModalRender(true);
+  };
+  const task = _temQueue.then(run);
+  _temQueue = task.catch(e => console.warn('GPKG restore:', e));
+  _temRestorePending = _temQueue;
+  const pending = _temRestorePending;
+  pending.finally(() => { if (_temRestorePending === pending) _temRestorePending = null; });
+  return _temRestorePending;
 }
 
 // ── Panel "Tematska karta" (meni) — pregled, teme, klase/boje, brisanje ───────
 function showTemModal() {
+  if (typeof closeLayerSheet === 'function') closeLayerSheet();
   document.getElementById('tem-modal').style.display = 'flex';
-  _temModalRender();
+  _temModalRender(true);
 }
 function closeTemModal() {
+  _temCaptureDraft();
   document.getElementById('tem-modal').style.display = 'none';
-  _temEdOpenId = null;
 }
 
 // ── Tabela atributa (QGIS-style) ──────────────────────────────────────────────
@@ -36196,10 +36368,46 @@ async function _temTblExport() {
   }
 }
 
-function _temModalRender() {
+function _temFileRows() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(_TEM_REG_KEY) || '[]'); } catch(e) {}
+  return [..._temMaps, ...(Array.isArray(saved) ? saved : []).filter(m => !_temById(m.id)).map(m => ({ ...m, unavailable: true }))];
+}
+function _temCaptureDraft() {
+  const ed = document.querySelector('#tem-modal-body .tem-ed');
+  if (ed?.dataset.temMapId === _temEdOpenId && _temEdDraft[_temEdOpenId]) _temEdPovuci(_temEdDraft[_temEdOpenId]);
+}
+function _temChoose(id) {
+  _temCaptureDraft(); _temSelectedId = id; _temView = 'style'; _temModalRender();
+  document.getElementById('tem-modal-body').scrollTop = 0;
+}
+function _temSwitchView(view) {
+  _temCaptureDraft(); _temView = view; _temModalRender();
+  document.getElementById('tem-modal-body').scrollTop = 0;
+}
+function _temSetAllVisible(on) {
+  const old = _temMaps.map(m => m.visible);
+  _temMaps.forEach(m => { m.visible = !!on; });
+  if (!_temRegSave()) { _temMaps.forEach((m, i) => { m.visible = old[i]; }); showToast('Vidljivost nije sačuvana: oslobodi prostor'); _temModalRender(true); return; }
+  _temMaps.forEach(m => { if (on) m.grp.addTo(map); else map.removeLayer(m.grp); });
+  _temLegendUpd(); _temModalRender(true);
+  if (typeof _lsRenderTem === 'function') _lsRenderTem();
+}
+function _temModalRender(preserveDraft = false) {
   const body = document.getElementById('tem-modal-body');
   if (!body || document.getElementById('tem-modal').style.display === 'none') return;
-  const cards = _temMaps.map(m => {
+  if (preserveDraft) _temCaptureDraft();
+  const scroll = body.scrollTop, focus = document.activeElement;
+  const focusId = body.contains(focus) ? focus.id : null;
+  const rows = _temFileRows();
+  if (!_temById(_temSelectedId)) _temSelectedId = _temMaps[0]?.id || null;
+  document.getElementById('tem-file-count').textContent = `${rows.length} fajlova · ${_temMaps.filter(m => m.visible).length} prikazano`;
+  document.querySelectorAll('[data-tem-view]').forEach(el => {
+    const on = el.dataset.temView === _temView;
+    el.setAttribute('aria-selected', String(on)); el.classList.toggle('active', on);
+  });
+  _temStatus(_temLoadStatus);
+  const cards = _temMaps.filter(m => m.id === _temSelectedId).map(m => {
     const opt = c => `<option value="${_escHtml(c)}"${c === m.theme ? ' selected' : ''}>${_escHtml(_temColLabel(m, c))}</option>`;
     const kat = m.catCols || [];
     const opts = '<option value="">— Bez teme —</option>'
@@ -36217,8 +36425,7 @@ function _temModalRender() {
           <div class="nm">${_escHtml(m.name)}</div>
           <div class="sub">${m.features.length} odsjeka · ${_temHa(ukHa)} · ${m.cols.length + kat.length} tema</div>
         </div>
-        <button class="tem-sw${m.visible ? ' on' : ''}" onclick="_temSetVisible('${jid}', ${m.visible ? 'false' : 'true'})"
-          title="${m.visible ? 'Sakrij sa karte' : 'Prikaži na karti'}" aria-label="Vidljivo na karti"><i></i></button>
+        <label class="tem-file-check"><input type="checkbox" ${m.visible ? 'checked' : ''} onchange="_temSetVisible('${jid}',this.checked)" aria-label="Prikaži ${_escHtml(m.name)}"><span>Prikaži</span></label>
       </div>
       <div class="tem-lbl">Tema (boji odsjeke po atributu)</div>
       <div class="tem-row">
@@ -36242,20 +36449,30 @@ function _temModalRender() {
       ${edOpen ? _temClassEdHtml(m) : ''}
     </div>`;
   }).join('');
-  body.innerHTML = `
-    ${cards || `<div class="tem-prazno">
-      <div class="ico">📊</div>
-      <div class="t">Nema učitanih tematskih karata</div>
-      <div class="d">Učitaj .gpkg sa odjelima/odsjecima. Brojčane kolone (visina, zaliha, starost…) i kolone sa nekoliko vrijednosti (uređajni razred, vrsta…) postaju teme za bojenje. Sve radi i bez interneta.</div>
-    </div>`}
-    <button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">
-      <svg class="ic"><use href="#ic-folder"/></svg> Učitaj .gpkg
-    </button>`;
+  const listing = rows.map(m => {
+    const id = _jsAttr(m.id);
+    return `<article class="tem-file${m.visible && !m.unavailable ? ' shown' : ''}">
+      <div class="tem-file-top"><span class="tem-file-icon">GPKG</span><div class="tem-file-info">
+        <b>${_escHtml(m.name)}</b><small>${m.unavailable ? 'Sačuvan zapis · fajl nije otvoren' : `${m.features.length} odsjeka · ${m.visible ? 'Prikazano' : 'Sakriveno'} · ${m.theme ? _escHtml(_temColLabel(m, m.theme)) : 'Bez teme'}`}</small>
+      </div>${!m.unavailable ? `<label class="tem-file-check"><input type="checkbox" ${m.visible ? 'checked' : ''} onchange="_temSetVisible('${id}',this.checked)" aria-label="Prikaži ${_escHtml(m.name)}"><span>Prikaži</span></label>` : ''}</div>
+      <div class="tem-file-actions">${m.unavailable
+        ? '<button onclick="_temRestore()">Pokušaj otvoriti</button>'
+        : `<button onclick="_temChoose('${id}')">Tema i stil</button><button onclick="_temZoom('${id}')">Na karti</button><button onclick="showTemTable('${id}')">Tabela</button>`}
+        <button class="del" onclick="_temRemoveMap('${id}')" aria-label="Ukloni ${_escHtml(m.name)}">Ukloni</button>
+      </div></article>`;
+  }).join('');
+  const empty = `<div class="tem-prazno"><div class="ico">📊</div><div class="t">Nema učitanih tematskih karata</div><div class="d">Odaberi jedan ili više .gpkg fajlova sa odjelima i odsjecima. Sačuvani fajlovi dostupni su bez interneta.</div></div>`;
+  body.innerHTML = _temView === 'files'
+    ? `${rows.length ? '<div class="tem-bulk"><button onclick="_temSetAllVisible(true)">Prikaži sve</button><button onclick="_temSetAllVisible(false)">Sakrij sve</button></div>' : ''}${listing || empty}`
+    : `${_temMaps.length ? `<label class="tem-picker">Postavke fajla<select class="tem-sel" onchange="_temChoose(this.value)">${_temMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || empty}`;
+  body.scrollTop = scroll;
+  if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+
 }
 
 const _TEM_PG_MAX = 12;
 const _temPgSve = new Set();   // karte kojima je u pregledu otvorena puna lista kategorija
-function _temPgSveToggle(id) { if (_temPgSve.has(id)) _temPgSve.delete(id); else _temPgSve.add(id); _temModalRender(); }
+function _temPgSveToggle(id) { if (_temPgSve.has(id)) _temPgSve.delete(id); else _temPgSve.add(id); _temModalRender(true); }
 
 // Pregled teme: po klasi boja, raspon/vrijednost, broj odsjeka, površina i udio (traka).
 function _temPregledHtml(m) {
@@ -36299,9 +36516,10 @@ function _temPregledHtml(m) {
 
 function _temEdToggle(id) {
   if (_temEdOpenId === id) { _temEdOpenId = null; delete _temEdDraft[id]; _temModalRender(); return; }
+  _temCaptureDraft();
   _temEdOpenId = id;
   const entry = _temById(id);
-  if (entry?._cls) _temEdDraft[id] = _temDraftIz(entry._cls);
+  if (entry?._cls && !_temEdDraft[id]) _temEdDraft[id] = _temDraftIz(entry._cls);
   _temModalRender();
 }
 
@@ -36329,7 +36547,7 @@ function _temClassEdHtml(m) {
       <span class="kat">${_escHtml(v)}</span>
       <span class="n">${st?.klase[i]?.n ?? 0} odsj.</span>
     </div>`).join('');
-    return `<div class="tem-ed">${naslov}${rows}${dugmad}</div>`;
+    return `<div class="tem-ed" data-tem-map-id="${_escHtml(m.id)}">${naslov}${rows}${dugmad}</div>`;
   }
   const colors = d.colors, edges = d.edges, n = colors.length;
   const fmtN = v => (v == null || !Number.isFinite(v)) ? '' : (+(+v).toFixed(2));
@@ -36354,7 +36572,7 @@ function _temClassEdHtml(m) {
   const addBtn = n < _TEM_MAX_CLASSES
     ? `<button class="tem-ed-add" onclick="_temEdAddClass('${jid}')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj klasu</button>`
     : `<div class="tem-ed-max">Maksimalno ${_TEM_MAX_CLASSES} klasa</div>`;
-  return `<div class="tem-ed">${naslov}
+  return `<div class="tem-ed" data-tem-map-id="${_escHtml(m.id)}">${naslov}
     <div class="tem-ed-sek">Paleta</div>
     <div class="tem-pals">${palete}</div>
     <div class="tem-ed-sek">Automatske klase</div>
@@ -36533,11 +36751,13 @@ async function _kmlcSave(key, data) {
     await new Promise((resolve, reject) => {
       const tx = db.transaction(_KMLC_STORE, 'readwrite');
       tx.objectStore(_KMLC_STORE).put(data, key);
+      tx.onabort = () => reject(tx.error || new Error('Čuvanje prekinuto'));
       tx.oncomplete = resolve;
       tx.onerror    = e => reject(e.target.error);
     });
     _kmlcKeys.add(key);
-  } catch(e) { console.warn('_kmlcSave err', key, e); }
+    return true;
+  } catch(e) { console.warn('_kmlcSave err', key, e); return false; }
 }
 
 async function _kmlcGet(key) {
@@ -36621,6 +36841,32 @@ async function _kmlcDeleteGroup(items) {
       for (const ext of ['.dbf', '.prj']) await _kmlcDelete('file:' + base + ext);
     }
   }
+}
+
+// Samo već preuzeti server fajlovi: obnovi iz IDB bez listinga i mrežnih poziva.
+async function _serverKmlRestore() {
+  if (_serverKmlRestore._pending) return _serverKmlRestore._pending;
+  const owner=sbUser?.id;
+  const work=(async()=>{
+    for(const cacheKey of [..._kmlcKeys]) {
+      if(sbUser?.id!==owner)return;
+      if(typeof cacheKey!=='string'||!cacheKey.startsWith('file:')||! /\.(kml|shp)$/i.test(cacheKey))continue;
+      const key=cacheKey.slice(5),slash=key.indexOf('/');if(slash<1)continue;
+      const bucket=key.slice(0,slash),path=key.slice(slash+1);
+      if(kmlLs.some(k=>k._key===key&&k.grp))continue;
+      const placeholder=kmlLs.find(k=>k._key===key&&!k.grp);
+      if(placeholder)kmlLs.splice(kmlLs.indexOf(placeholder),1);
+      const file={path,name:path.split('/').pop(),folder:path.includes('/')?path.slice(0,path.lastIndexOf('/')):''};
+      try {
+        if(/\.shp$/i.test(path))await _loadOneShp(bucket,file,placeholder?._srvOpts||{color:'#22c55e'},false,null,true);
+        else await _loadOneKml(bucket,file,placeholder?._srvOpts||{color:'#22c55e'},false,true);
+      } catch(e) { console.warn('Server fajl: lokalna obnova nije uspjela',key,e); }
+      if(sbUser?.id===owner&&!kmlLs.some(k=>k._key===key)&&placeholder)kmlLs.push(placeholder);
+    }
+    if(sbUser?.id===owner){if(typeof rndKml==='function')rndKml();_rndOznakePanel();}
+  })();
+  _serverKmlRestore._pending=work;
+  try { await work; } finally { _serverKmlRestore._pending=null; }
 }
 
 // ── OPT-IN server fajlovi ────────────────────────────────────────────────────
@@ -36714,7 +36960,8 @@ async function _srvDelete(keysArg) {
 }
 
 // ── Fetch helper ──────────────────────────────────────────────────────────────
-async function _fetchBucketFile(bucketName, filePath, type = 'text') {
+async function _fetchBucketFile(bucketName, filePath, type = 'text', cacheOnly = false) {
+  if (cacheOnly) return _kmlcGet('file:' + bucketName + '/' + filePath);
   const cacheKey = 'file:' + bucketName + '/' + filePath;
   try {
     const r = await _fetchT(_bucketFileUrl(bucketName, filePath), 15000, { headers: { 'apikey': SUPA_KEY } });
@@ -36729,10 +36976,12 @@ async function _fetchBucketFile(bucketName, filePath, type = 'text') {
 }
 
 // ── Učitaj jedan KML fajl ────────────────────────────────────────────────────
-async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
+async function _loadOneKml(bucketName, file, opts, extractOdjeli, cacheOnly=false) {
+  const owner=sbUser?.id;
   const key = bucketName + '/' + file.path;
   if (kmlLs.find(k => k._key === key)) return null; // dedup
-  const txt = await _fetchBucketFile(bucketName, file.path, 'text');
+  const txt = await _fetchBucketFile(bucketName, file.path, 'text',cacheOnly);
+  if (sbUser?.id!==owner || (cacheOnly && !_kmlcKeys.has('file:'+key))) return null;
   if (!txt) { console.warn('KML fetch fail:', file.path); return null; }
   const doc = new DOMParser().parseFromString(txt, 'text/xml');
   if (extractOdjeli) _extractGraniceOdjeli(doc);
@@ -36746,15 +36995,17 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli) {
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
-    fill: false, fillCol: _fc, fillPattern: 'solid', fillOpacity: 0.35,
-    tag: '', _loadedAt: Date.now(), _downloaded: true });
+    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35,
+    tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
+  applyKmlStyle(kmlLs.length-1);
   // Apply visibility
   if (finalOpts.vis === false) map.removeLayer(grp);
   return grp;
 }
 
 // ── Učitaj jedan SHP fajl (+ .dbf + .prj ako postoje) ───────────────────────
-async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths) {
+async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths, cacheOnly=false) {
+  const owner=sbUser?.id;
   if (typeof shapefile === 'undefined') { console.warn('shapefile.js nije učitan'); return null; }
   const key = bucketName + '/' + file.path;
   if (kmlLs.find(k => k._key === key)) return null; // dedup
@@ -36771,10 +37022,11 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths)
   const dbfPath = _companion('.dbf');
   const prjPath = _companion('.prj');
   const [shpBuf, dbfBuf, prjTxt] = await Promise.all([
-    _fetchBucketFile(bucketName, file.path, 'arraybuffer'),
-    dbfPath ? _fetchBucketFile(bucketName, dbfPath, 'arraybuffer') : Promise.resolve(null),
-    prjPath ? _fetchBucketFile(bucketName, prjPath, 'text') : Promise.resolve(null),
+    _fetchBucketFile(bucketName, file.path, 'arraybuffer',cacheOnly),
+    dbfPath ? _fetchBucketFile(bucketName, dbfPath, 'arraybuffer',cacheOnly) : Promise.resolve(null),
+    prjPath ? _fetchBucketFile(bucketName, prjPath, 'text',cacheOnly) : Promise.resolve(null),
   ]);
+  if(sbUser?.id!==owner || (cacheOnly && !_kmlcKeys.has('file:'+key))) return null;
   if (!shpBuf) { console.warn('SHP fetch fail:', file.path); return null; }
 
   // Odredi projekciju iz .prj
@@ -36784,6 +37036,8 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths)
   try {
     geojson = await shapefile.read(shpBuf, dbfBuf || undefined);
   } catch(e) { console.warn('SHP parse error:', file.name, e.message); return null; }
+
+  if(sbUser?.id!==owner || (cacheOnly && !_kmlcKeys.has('file:'+key))) return null;
 
   // Fallback: ako nema .prj a koordinate su očito projecirane (metri, van
   // lat/lon opsega), pretpostavi MGI Zone 6 (najčešći CRS za BiH katastar).
@@ -36866,7 +37120,8 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths)
   kmlLs.push({ name: label, _key: key, _bucket: bucketName, _folder: file.folder || '', grp,
     col: shpStyle.color, dash: shpStyle.dashArray || '',
     weight: shpStyle.weight, opacity: shpStyle.opacity,
-    vis: finalOptsShp.vis !== false, _downloaded: true });
+    vis: finalOptsShp.vis !== false, fill: finalOptsShp.fill===true,fillCol:finalOptsShp.fillCol||shpStyle.color,fillPattern:finalOptsShp.fillPattern||'solid',fillOpacity:finalOptsShp.fillOpacity??0.35,tag:finalOptsShp.tag||'',_downloaded: true });
+  applyKmlStyle(kmlLs.length-1);
   return grp;
 }
 
@@ -37799,6 +38054,7 @@ let _dozVlakeIdxs = [];
 let _dozBufLayers = [];
 let _dozBufDeadLayers = [];
 let _dozBufRadius = 40;
+setTimeout(_bufRestorePrefs,0);
 let _dozLinkedProjektId = null;
 
 function _dozFindVlakeInBoundary(odjel) {
@@ -40767,15 +41023,13 @@ if (typeof AndroidDownload !== 'undefined') {
 </div>
 
 <!-- TEMATSKE KARTE PANEL -->
-<div id="tem-modal" style="display:none;position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:16px;"
-  onclick="if(event.target===this)closeTemModal()">
-  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;width:100%;max-width:440px;max-height:86vh;max-height:86dvh;overflow-y:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,0.7);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="margin:0;font-size:15px;color:#4ade80;">📊 Tematske karte</h3>
-      <button onclick="closeTemModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
-    </div>
-    <div id="tem-modal-body"></div>
-  </div>
+<div id="tem-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tem-title" onclick="if(event.target===this)closeTemModal()">
+  <section class="tem-panel">
+    <header class="tem-panel-head"><div><h3 id="tem-title">Tematske karte</h3><small id="tem-file-count">GPKG fajlovi</small></div><button onclick="closeTemModal()" aria-label="Zatvori tematske karte">✕</button></header>
+    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button></nav>
+    <div id="tem-modal-body" role="tabpanel"></div>
+    <footer class="tem-panel-foot"><button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">＋ Učitaj GPKG fajlove</button><small id="tem-load-status" role="status" aria-live="polite"></small></footer>
+  </section>
 </div>
 
 <!-- TEMATSKA KARTA — TABELA ATRIBUTA (attribute table) -->
@@ -41624,8 +41878,8 @@ if (typeof AndroidDownload !== 'undefined') {
     <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
       <h3 style="margin-bottom:10px;">📊 Tematska karta</h3>
       <div id="ls-tem-box"></div>
-      <input type="file" id="tem-file-input" accept=".gpkg" style="display:none;"
-        onchange="_gpkgLoadFile(this.files[0]);this.value=''">
+      <input type="file" id="tem-file-input" accept=".gpkg" multiple style="display:none;"
+        onchange="_gpkgLoadFiles(this.files);this.value=''">
     </div>
 
     <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
