@@ -3054,3 +3054,38 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   certifikat i svih 61 web assets potvrđeni; veličina/digest odgovaraju
   objavljenom assetu. Updater releases?per_page=1 vraća v2.6.4 sa APK-om.
   Fizički Xiaomi, stvarna SIM/mobile mreža i cijeli javni fajl nisu testirani.
+
+## 2026-10-08 — v2.6.5: Brisanje oznaka i zasebne offline karte
+- Korisnik ne može obrisati tekst oznake iz editora; tražio provjeru sličnih
+  mjesta i posebno izdvajanje offline karata u Podloge i slojevi.
+- Potvrđeno u kodu: label_id iz starog server/cache zapisa može biti string,
+  dok ga inline onclick emitira bez navodnika kao broj (ili neispravan JS za
+  nebrojčani ID). Strict lookup onda ne nalazi oznaku pri brisanju/uređivanju.
+  ID se sada poredi kao string, a dugmad dobijaju closure s izvornim ID-em,
+  bez interpolacije u JavaScript. Nema migracije/brisanja starih oznaka.
+- Brisanje traži vidljivu potvrdu; sprječava dupli klik/promjenu naloga tokom
+  potvrde. Primarni _OL.LABELS zapis mora uspjeti prije izmjene liste/markera.
+  Dodavanje/edit imaju isti uslov; neuspjeh pri upisu čuva oznaku i editor.
+  Legacy ogledalo tvlake_textlabels ostaje kompatibilno. Oznake ostaju lokalne;
+  prazna sačuvana lista ne vraća stare server oznake pri ponovnom ulasku.
+- Pregledana slična dugmad: tačke/fotografije koriste indekse/numeričke
+  timestampove, KML/SHP već potvrđuje lokalni upis. U sačuvanoj ruti popup je
+  pogrešno koristio nedefinisani t umjesto r; ispravljen ID i Vodi me, uklonjen
+  native confirm iz list/popup brisanja u korist zajedničkog _dlgConfirm.
+  Ruta ne prijavljuje uspješno brisanje ako localStorage upis ne uspije.
+- sqlmapConfirmDelete sada nakon potvrde traži isti uhvaćeni layer objekat;
+  promjena indeksa liste tokom čekanja ne briše susjednu kartu.
+- Novi podtab Offline u Podloge i slojevi: samo sačuvane raster karte;
+  puni nazivi, postojeći thumbnail ili jasno označena ilustracija lokalnog
+  fajla, status aktivna/sačuvana/neotvorena, siguran naziv kroz data atribut,
+  otvaranje odgođenih karata i pristup Učitaj/skini/Upravljaj. Online podloge
+  i keš ostaju u Karte, DEM u Instalirane. Zajednički localRows ima active:false
+  za odgođene zapise, da abecedno ranija odgođena karta ne pretekne aktivnu.
+- Novi stvarni Leaflet/browser test: broj/string/nebrojčani ID, edit, odustajanje,
+  brisanje i pravi page reload, puna kvota, promjena naloga, popup rute,
+  promjena indeksa tokom potvrde, odgođene/aktivne/prazne offline karte i
+  16 rasporeda u Dnevnom/tamnom modu (320/390/568/1200). Dodan u puni CI.
+  Lokalno 100 JS grupa i pet inline sintaksi prošli; instalirane/omiljene,
+  DEM i projekat browser te Menu/KML/SHP browser također prošli.
+- Web/SW/Android 2.6.5/code535. Puni CI i APK provjera u toku. Fizički Xiaomi
+  i produkcijska Supabase baza nisu testirani niti mijenjani.

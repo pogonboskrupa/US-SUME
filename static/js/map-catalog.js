@@ -12,13 +12,19 @@
   }
   function localRows(){
     const rows=new Map(local().map(sl=>[sl.name,{name:sl.name,sl,active:!!sl.visible&&map.hasLayer(sl.layer)}]));
-    for(const item of deferred())if(!rows.has(item.name))rows.set(item.name,{name:item.name,deferred:!!item.deferred,error:!item.deferred});
+    for(const item of deferred())if(!rows.has(item.name))rows.set(item.name,{name:item.name,active:false,deferred:!!item.deferred,error:!item.deferred});
     return [...rows.values()].sort((a,b)=>Number(b.active)-Number(a.active)||a.name.localeCompare(b.name,'bs',{numeric:true}));
   }
   function renderInstalled(){
     const el=document.getElementById('installed-local-list');if(!el)return;
     const rows=localRows(),count=document.getElementById('installed-local-count');if(count)count.textContent=rows.length+' karata na telefonu';
     el.innerHTML=rows.length?rows.map(row=>'<article class="installed-map'+(row.active?' is-active':'')+'">'+localPreview(row.name)+'<div class="catalog-copy"><b>'+esc(row.name)+'</b><small>'+esc(row.sl?String(row.sl.fmt||'SQLite').toUpperCase()+' · lokalni fajl':row.error?'Otvaranje nije uspjelo':'Sačuvana · trenutno nije učitana')+'</small><span class="catalog-status">'+(row.active?'✓ Aktivna karta':row.error?'Potrebno ponovno otvaranje':'Dostupna na telefonu')+'</span></div><button type="button" data-map-action="open" data-map-name="'+esc(row.name)+'">'+(row.active?'Prikaži':row.error?'Pokušaj':'Otvori')+'</button></article>').join(''):'<div class="catalog-empty"><b>Nema lokalnih karata</b><p>Učitaj MBTiles, SQLite ili raster GeoPackage za cijelo područje rada bez interneta.</p><button type="button" onclick="closeLayerSheet();openLoadMapScreen()">Učitaj kartu</button></div>';
+  }
+  function renderOffline(){
+    const el=document.getElementById('ls-sqlite-in-grid');if(!el)return;
+    const rows=localRows(),count=document.getElementById('ls-offline-count');
+    if(count)count.textContent=rows.length+' '+(rows.length===1?'karta':'karata')+' na uređaju';
+    el.innerHTML=rows.length?rows.map(row=>'<article class="offline-map-card'+(row.active?' is-active':'')+'">'+localPreview(row.name)+'<div class="catalog-copy"><span class="catalog-status">'+(row.active?'✓ Aktivna karta':row.error?'⚠ Nije otvorena':'Bez interneta')+'</span><b>'+esc(row.name)+'</b><small>'+esc(row.sl?String(row.sl.fmt||'SQLite').toUpperCase()+' · sačuvana na uređaju':row.error?'Pokušaj ponovno otvaranje':'Sačuvana · otvara se na zahtjev')+'</small></div><button type="button" data-map-action="open" data-map-name="'+esc(row.name)+'" aria-label="'+esc('Prikaži kartu '+row.name)+'" aria-pressed="'+row.active+'">'+(row.active?'Prikaži':row.error?'Pokušaj ponovo':'Otvori kartu')+'</button></article>').join(''):'<div class="catalog-empty"><b>Još nema offline karata</b><p>Učitaj MBTiles / SQLite fajl ili skini kartu za svoje područje rada.</p></div>';
   }
   async function openLocal(name){
     let i=local().findIndex(sl=>sl.name===name);
@@ -51,7 +57,7 @@
     if(fav.type==='sqlite')await openLocal(fav.sqliteId);else setLayer(fav.tlKey);
     closeMapFavs();
   }
-  root.MapCatalog={renderInstalled,renderFavorites,openLocal,localRows,favoriteState,identity};
+  root.MapCatalog={renderInstalled,renderOffline,renderFavorites,openLocal,localRows,favoriteState,identity};
   document.addEventListener('click',e=>{
     const button=e.target.closest('[data-map-action],[data-fav-action]');if(!button)return;
     if(button.dataset.mapAction==='open')openLocal(button.dataset.mapName);

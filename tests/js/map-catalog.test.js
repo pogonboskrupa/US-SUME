@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const nodes={'installed-local-list':{},'installed-local-count':{},'mapfav-grid':{},'mapfav-count':{}};
+const nodes={'installed-local-list':{},'installed-local-count':{},'mapfav-grid':{},'mapfav-count':{},'ls-sqlite-in-grid':{},'ls-offline-count':{}};
 const layerA={},layerB={},base={};const active=new Set([layerB,base]);
 const c={window:{},document:{getElementById:id=>nodes[id],addEventListener:()=>{}},map:{hasLayer:l=>active.has(l)},
  _sqlLayers:[{name:'Odjel 10 <test>',fmt:'mbtiles',visible:false,layer:layerA},{name:'Odjel 2',fmt:'gpkg',visible:true,layer:layerB}],
@@ -15,3 +15,9 @@ api.renderFavorites();assert(nodes['mapfav-grid'].innerHTML.includes('Karta &lt;
 assert(nodes['mapfav-grid'].innerHTML.includes('offline samo sačuvani dijelovi'));
 assert.equal(c._sqlLayers.length,2);assert.equal(c._sqlRestoreFailed.length,3);
 console.log('OK: lokalne/odgođene karte, sortiranje, aktivnost, sigurna imena i offline oznake omiljenih');
+
+c._sqlRestoreFailed.push({name:'A — odgođena',deferred:true});
+assert.equal(api.localRows()[0].name,'Odjel 2','Aktivna karta mora biti prva i ispred abecedno ranijih odgođenih karata');
+api.renderOffline();assert(nodes['ls-sqlite-in-grid'].innerHTML.includes('aria-pressed="true"'));
+assert(nodes['ls-sqlite-in-grid'].innerHTML.includes('Odjel 10 &lt;test&gt;'));
+assert(nodes['ls-sqlite-in-grid'].innerHTML.includes('data-map-name="A — odgođena"'));

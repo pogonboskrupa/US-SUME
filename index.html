@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.4';
+const APP_VER = 'v2.6.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -11334,15 +11334,15 @@ async function sbLoadTextLabelsDB() {
   });
 }
 
-async function sbSaveTextLabels() {
-  if (!sbUser || !sbProfile) return;
-  const rows = textLabels.map(l => ({
+function sbSaveTextLabels(labels = textLabels) {
+  if (!sbUser || !sbProfile) return false;
+  const rows = labels.map(l => ({
     korisnik_id: sbUser.id, sumarija: sbProfile.sumarija || '',
     label_id: l.id, lat: l.lat, lng: l.lng,
     tekst: l.text, velicina: l.size, boja: l.color
   }));
   // v1.9.6: tekstualne oznake ostaju samo na telefonu — lokalni zapis je sve.
-  _OL.save(_OL.LABELS, rows);
+  return _OL.save(_OL.LABELS, rows);
 }
 
 // ─── TAČKE (GPS oznake na mapi) ──────────────────────────────────────────────
@@ -15696,6 +15696,7 @@ function _activeLayerKey() {
 
 // ── Layer switcher sheet ─────────────────────────────────────────────────────
 function _lsRenderSqlite() {
+  if (typeof MapCatalog !== 'undefined') { MapCatalog.renderOffline(); return; }
   const grid = document.getElementById('ls-sqlite-in-grid');
   if (!grid) return;
   // Karte sačuvane na uređaju koje se nisu učitale pri pokretanju. Bez ovoga je
@@ -24573,7 +24574,7 @@ function _ozTogTrag(id) {
 
 // ── Layer sheet sub-tab switcher ──────────────────────────────────────────────
 function _lsTab(name) {
-  const panes = ['karte','inst','granice'];
+  const panes = ['karte','offline','inst','granice'];
   panes.forEach(p => {
     const pane = document.getElementById('ls-pane-' + p);
     const btn  = document.getElementById('ls-tab-' + p);
@@ -24586,6 +24587,7 @@ function _lsTab(name) {
     btn.style.color       = active ? '#e2e8f0' : '#64748b';
   });
   if (name === 'inst') _instUpdateStats();
+  if (name === 'offline') _lsRenderSqlite();
 }
 
 function _instToggle(id, on) {
@@ -29002,7 +29004,7 @@ function toggleTextTool() {
 }
 
 function openTextDialog(lat, lng, existingId) {
-  const existing = existingId != null ? textLabels.find(l => l.id === existingId) : null;
+  const existing = existingId != null ? textLabels.find(l => String(l.id) === String(existingId)) : null;
 
   // Remove old dialog if any
   const old = document.getElementById('text-dialog');
@@ -29010,6 +29012,10 @@ function openTextDialog(lat, lng, existingId) {
 
   const dlg = document.createElement('div');
   dlg.id = 'text-dialog';
+  dlg.className = 'text-label-dialog';
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.setAttribute('aria-label', existing ? 'Uredi tekst oznake' : 'Dodaj tekst oznake');
   dlg.style.cssText = `
     position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     background:#16213e;border:1px solid #0f3460;border-radius:10px;
@@ -29047,14 +29053,17 @@ function openTextDialog(lat, lng, existingId) {
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
-      <button class="btn g" style="margin:0;flex:1;" onclick="confirmTextLabel(${lat},${lng},${existingId??'null'})">
+      <button type="button" id="tl-save" class="btn g" style="margin:0;flex:1;">
         ${existing ? '<svg class="ic"><use href="#ic-potvrdi"/></svg> Spremi' : '<svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj'}
       </button>
-      ${existing ? `<button class="btn r" style="margin:0;width:auto;padding:10px 14px;" onclick="deleteTextLabel(${existingId})"><svg class="ic"><use href="#ic-obrisi"/></svg></button>` : ''}
-      <button class="btn gr" style="margin:0;width:auto;padding:10px 14px;" onclick="closeTextDialog()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+      ${existing ? `<button type="button" id="tl-delete" class="btn r" aria-label="Obriši tekst oznake" style="margin:0;width:auto;padding:10px 14px;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>` : ''}
+      <button type="button" class="btn gr" aria-label="Zatvori uređivanje teksta" style="margin:0;width:auto;padding:10px 14px;" onclick="closeTextDialog()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </div>
   `;
   document.body.appendChild(dlg);
+  document.getElementById('tl-save').onclick = () => confirmTextLabel(lat, lng, existing ? existing.id : null);
+  const remove = document.getElementById('tl-delete');
+  if (remove) remove.onclick = () => deleteTextLabel(existing.id);
   document.getElementById('tl-text').focus();
   document.getElementById('tl-text').select();
   window._tlSelColor = existing ? existing.color : '#ffffff';
@@ -29079,19 +29088,20 @@ function confirmTextLabel(lat, lng, existingId) {
   const color = window._tlSelColor || '#ffffff';
 
   if (existingId != null) {
-    const lbl = textLabels.find(l => l.id === existingId);
+    const lbl = textLabels.find(l => String(l.id) === String(existingId));
     if (lbl) {
+      const next = textLabels.map(l => l === lbl ? { ...l, text, size, color } : l);
+      if (!saveTextLabels(next)) return;
       lbl.text = text; lbl.size = size; lbl.color = color;
       if (lbl.marker) { map.removeLayer(lbl.marker); }
       lbl.marker = createTextMarker(lbl);
-      saveTextLabels();
     }
   } else {
     const id = Date.now();
     const lbl = { id, lat, lng, text, size, color };
+    if (!saveTextLabels([...textLabels, lbl])) return;
     lbl.marker = createTextMarker(lbl);
     textLabels.push(lbl);
-    saveTextLabels();
   }
   closeTextDialog();
 }
@@ -29116,20 +29126,32 @@ function createTextMarker(lbl) {
   return mk;
 }
 
-function deleteTextLabel(id) {
-  const idx = textLabels.findIndex(l => l.id === id);
-  if (idx !== -1) {
-    if (textLabels[idx].marker) map.removeLayer(textLabels[idx].marker);
-    textLabels.splice(idx, 1);
-    saveTextLabels();
-  }
-  closeTextDialog();
+async function deleteTextLabel(id) {
+  const label = textLabels.find(l => String(l.id) === String(id));
+  if (!label) return;
+  const owner = sbUser?.id, editor = document.getElementById('text-dialog');
+  const button = document.getElementById('tl-delete');
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+  try {
+    if (!await _dlgConfirm('Obrisati tekst oznake „' + label.text + '“?', { title: 'Obriši tekst oznake', danger: true })) return;
+    if (sbUser?.id !== owner || !textLabels.includes(label)) return;
+    const next = textLabels.filter(l => l !== label);
+    if (!saveTextLabels(next)) return;
+    if (label.marker) map.removeLayer(label.marker);
+    textLabels = next;
+    if (document.getElementById('text-dialog') === editor) closeTextDialog();
+    showToast('Tekst oznake obrisan');
+  } finally { if (button) button.disabled = false; }
 }
 
-function saveTextLabels() {
-  const data = textLabels.map(l => ({id:l.id,lat:l.lat,lng:l.lng,text:l.text,size:l.size,color:l.color}));
-  localStorage.setItem('tvlake_textlabels', JSON.stringify(data));
-  sbSaveTextLabels();
+function saveTextLabels(labels = textLabels) {
+  const data = labels.map(l => ({id:l.id,lat:l.lat,lng:l.lng,text:l.text,size:l.size,color:l.color}));
+  const signedIn = !!(sbUser && sbProfile);
+  if (signedIn && !sbSaveTextLabels(labels)) return false;
+  try { localStorage.setItem('tvlake_textlabels', JSON.stringify(data)); }
+  catch(e) { if (!signedIn) { showToast('Lokalno spremanje oznake nije uspjelo'); return false; } }
+  return true;
 }
 
 function loadTextLabels() {
@@ -30287,7 +30309,8 @@ function _guideRoutesLoad() {
   try { return JSON.parse(localStorage.getItem(_GUIDE_ROUTES_KEY) || '[]') || []; } catch { return []; }
 }
 function _guideRoutesStore(arr) {
-  try { localStorage.setItem(_GUIDE_ROUTES_KEY, JSON.stringify(arr)); } catch(e) {}
+  try { localStorage.setItem(_GUIDE_ROUTES_KEY, JSON.stringify(arr)); return true; }
+  catch(e) { showToast('Lokalno spremanje ruta nije uspjelo'); return false; }
 }
 function _guideSaveRoute(route) {
   const arr = _guideRoutesLoad();
@@ -30296,10 +30319,15 @@ function _guideSaveRoute(route) {
   _guideRoutesStore(arr);
 }
 function _guideDeleteRoute(id) {
-  _guideRoutesStore(_guideRoutesLoad().filter(r => r.id !== id));
+  if (!_guideRoutesStore(_guideRoutesLoad().filter(r => r.id !== id))) return;
   if (id === _guideActiveRouteId) { _guideClearResult(); try { map.closePopup(); } catch(e) {} }
   _guideRenderRoutes();
   showToast('🗑 Ruta obrisana');
+}
+async function _guideAskDeleteRoute(id) {
+  const route = _guideRoutesLoad().find(r => r.id === id), owner = sbUser?.id;
+  if (!route || !await _dlgConfirm('Obrisati rutu „' + (route.name || 'Ruta') + '“?', { title: 'Obriši rutu', danger: true })) return;
+  if (sbUser?.id === owner) _guideDeleteRoute(id);
 }
 function _guideExploreRoute(id) {
   const r = _guideRoutesLoad().find(x => x.id === id);
@@ -30337,7 +30365,7 @@ function _guideRenderRoutes() {
     const durMin = r.durS != null ? Math.round(r.durS / 60) : null;
     const meta = `${fmtL(r.distM || 0)}${durMin != null ? ' · 🚙 ' + (durMin >= 60 ? Math.floor(durMin / 60) + ' h ' + (durMin % 60) + ' min' : durMin + ' min') : ''}${r.osrm ? '' : ' · zračna'}`;
     return `<article class="guide-route"><button type="button" class="guide-route-main" data-id="${_escHtml(String(r.id))}" onclick="_guideViewRoute(this.dataset.id)"><b>${_escHtml(r.name || 'Ruta')}</b><small>${meta}</small><span>Prikaži rutu →</span></button>
-      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)">Vodi me</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="if(confirm('Obrisati rutu?'))_guideDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
+      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)">Vodi me</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="_guideAskDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
   }).join('');
 }
 
@@ -30349,9 +30377,9 @@ function _guideRoutePopupHtml(r) {
     <b>${_escHtml(r.name || 'Ruta')}</b>
     <div class="trag-popup-meta">${meta}</div>
     <div class="trag-popup-btns">
-      <button type="button" data-id="${_escHtml(String(t.id))}" onclick="_tragRegVodi(this.dataset.id)"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
-      <button onclick="_guideShareRoute('${r.id}')"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
-      <button onclick="if(confirm('Obrisati rutu?'))_guideDeleteRoute('${r.id}')" style="color:#f87171;border-color:#7f1d1d;"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
+      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
+      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
+      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideAskDeleteRoute(this.dataset.id)" style="color:#f87171;border-color:#7f1d1d;"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
     </div>
   </div>`;
 }
@@ -33494,7 +33522,8 @@ async function sqlmapConfirmDelete(i) {
   const sl = _sqlLayers[i];
   if (!sl) return;
   if (!await _dlgConfirm(`Trajno obrisati kartu "${sl.name}"?`, { danger: true })) return;
-  await sqlmapRemove(i);
+  const current = _sqlLayers.indexOf(sl);
+  if (current >= 0) await sqlmapRemove(current);
 }
 async function sqlmapClearAll() {
   await Promise.all(Array.from(_sqlImports.keys()).map(_sqlImportCancel));
@@ -41504,6 +41533,7 @@ if (typeof AndroidDownload !== 'undefined') {
       style="flex:1;padding:7px 4px;background:#1e3a5f;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;">
       <svg class="ic"><use href="#ic-karta"/></svg> Karte
     </button>
+    <button type="button" id="ls-tab-offline" onclick="_lsTab('offline')"><svg class="ic"><use href="#ic-arhiva"/></svg> Offline</button>
     <button id="ls-tab-inst" onclick="_lsTab('inst')"
       style="flex:1;padding:7px 4px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;">
       <svg class="ic"><use href="#ic-podloga"/></svg> Instalirane
@@ -41514,9 +41544,15 @@ if (typeof AndroidDownload !== 'undefined') {
     </button>
   </div>
 
+  <div id="ls-pane-offline" style="display:none;">
+    <section class="catalog-hero offline-hero"><span>SAČUVANO NA UREĐAJU</span><h3>Offline karte</h3><p>Učitane i preuzete karte spremne za teren bez interneta.</p><b id="ls-offline-count"></b></section>
+    <div id="ls-sqlite-in-grid" class="offline-map-list"></div>
+    <div class="offline-map-actions"><button type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj ili skini kartu</button><button type="button" onclick="closeLayerSheet();openLoadMapScreen();_loadmapTab('maps')">Upravljaj kartama</button></div>
+    <p class="catalog-intro">Online podloge i njihov keš nalaze se u tabu Karte. Nagib i ekspozicija su u Instalirane.</p>
+  </div>
   <!-- Tab: Karte -->
   <div id="ls-pane-karte">
-    <h3>Pozadinska karta</h3>
+    <h3>Online podloge</h3><p class="catalog-intro">Bez interneta prikazuju samo ranije sačuvane dijelove. Za cijelo područje izaberi Offline karte.</p>
     <!-- Zauzeće memorije online karata (satelit/topo/google) + brisanje -->
     <div id="ls-cache-box" style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
       <div id="ls-cache-info" style="font-size:12px;color:#94a3b8;line-height:1.5;">💾 …</div>
@@ -41540,8 +41576,6 @@ if (typeof AndroidDownload !== 'undefined') {
       <button class="layer-opt" id="lo-nagib" onclick="setLayer('_nagib')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>Nagib<span class="lopt-sub">Topo + nagibi</span>
       </button>
-      <!-- SQLite karte se renderuju dinamički, teku u isti grid -->
-      <div id="ls-sqlite-in-grid" style="display:contents;"></div>
     </div>
     <!-- Granice odjela — sakriven dok nema podataka -->
     <div id="ls-granice-row" style="display:none;margin-top:10px;">
