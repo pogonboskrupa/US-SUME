@@ -3041,5 +3041,16 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Prvi CI 37769360020: proizvodni APK kompajliran, Android test build
   stao na sukobu lokalnog latch naziva sa inherited Response.closed
   boolean poljem. Testni naziv ispravljen; puni native testovi ponovljeni.
-- Web/SW/Android 2.6.4/code534. Puni CI i APK provjera u toku. Fizički
-  Xiaomi, stvarna SIM/mobile mreža i cijeli javni fajl nisu testirani.
+- Web/SW/Android 2.6.4/code534. CI 37770637372 uspješan na izvoru
+  aa0f285b7736a65e92b324b42d5cf37a2ec21ef3: 100 JS grupa, browser/SQL/
+  teren/performance provjere i svih 14 Android testova bez grešaka ili
+  preskoka. Četiri nova transfer testa i stvarni WebView MBTiles uvoz
+  potvrđeni na API34 emulatoru; native mreža u testu simulirana.
+- APK objavljen:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.4/app-debug.apk
+  24.139.532 B; SHA256
+  7391af496c81d539bb1268e7a1689b0b2f7240f1fe1905793e98232604feba0c.
+  Stvarni manifest ba.spd.uss.vlake.debug/2.6.4-debug/534, isti potpisni
+  certifikat i svih 61 web assets potvrđeni; veličina/digest odgovaraju
+  objavljenom assetu. Updater releases?per_page=1 vraća v2.6.4 sa APK-om.
+  Fizički Xiaomi, stvarna SIM/mobile mreža i cijeli javni fajl nisu testirani.
