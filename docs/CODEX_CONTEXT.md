@@ -2914,5 +2914,11 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Prvi Android CI 37745667727: KML/WebView import i offline reload prošli,
   jedan novi validator test otkrio prihvatanje neispravnog XML-a. Validator
   sada izričito broji otvaranja/zatvaranja i odbija DTD pri čitanju bajtova,
-  nezavisno od razlika Android pull parsera. Ponovna CI provjera u toku.
-- Web/SW/Android 2.6.1/code531. Završni CI/APK u toku.
+  nezavisno od razlika Android pull parsera. Ponovni CI 37747136444 prošao: svih osam Android testova.
+- Web/SW/Android 2.6.1/code531. CI 37747136444 uspješan: JS/browser/SQL i osam Android testova. Fizički telefon nije testiran; uvoz stvarnih javnih KML fajlova nije potvrđen zbog Drive quota.
+
+- APK v2.6.1 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.1/app-debug.apk
+  24,129,080 B; SHA256 6ce6dec189205342a2d62ba6985e8f4f2b7dae7e29fa8031e3af2abefea40fdf. Izvor
+  e8b5d7c64d364540ada5c88744e39925b7545809. Manifest
+  ba.spd.uss.vlake.debug/2.6.1-debug/531, isti certifikat i svih 61 assets
+  potvrđeni. Updater releases?per_page=1 vraća v2.6.1.
