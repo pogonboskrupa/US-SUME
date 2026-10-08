@@ -2843,3 +2843,22 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   1ebe49a4f63df7e9c3dd2dd2362568de38f55eaa. Manifest
   ba.spd.uss.vlake.debug/2.5.8-debug/528, isti certifikat i svih 61 assets
   potvrđeni; ažuriranje dostupno kroz Meni → Ažuriraj aplikaciju.
+
+## 2026-10-08 — v2.5.9: Drive quota prepoznata prije skidanja
+- Korisnik javlja „nepotpuna/neispravna“ nekoliko sekundi nakon Skini kartu.
+  Direktni javni fajl 1mExFpUJgOAROwPSumemnnbzFH74GWHXv provjeren anonimno:
+  Range 0–15 vraća SQLite/206, ukupno 2.144.841.728 B, dok puni GET vraća
+  HTML/200 od 2.040 B „Google Drive - Quota exceeded“. Isto za Dalvik i
+  AndroidDownloadManager. Google navodi do 24h čekanja; nije potvrđena
+  puna dostupnost fajla niti izvršen transfer 2,14 GB.
+- Raniji preflight provjeravao je samo Range i zatim pokretao downloader
+  nad HTML odgovorom. Sada se provjerava puni GET: prvih 16 bajtova i
+  veličina, HTML potvrda/quota/pristup i odbijanje neočekivanog 206.
+  Ne preuzima se cijela karta tokom preflighta. DM zadržava nastavak, uz
+  identity/no-cache zaglavlja. Nema zaobilaženja Drive ograničenja.
+- Poznata Drive greška prolazi do aplikacije. Stari završeni HTML poslovi
+  također dobijaju tačan quota razlog. Novi test reprodukuje uspješan
+  Range i blokiran full GET, dugi size >2 GB, 16-byte čitanje, djelimičan
+  odgovor i HTML iz starog posla. JS downloader i pet inline sintaksi prošli.
+- Web/SW/Android 2.5.9/code529. Završni CI/APK u toku; fizički telefon i
+  puni download nisu testirani, javni fajl je sada blokiran na Googleu.

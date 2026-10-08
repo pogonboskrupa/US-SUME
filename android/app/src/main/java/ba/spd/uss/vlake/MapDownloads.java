@@ -31,6 +31,11 @@ final class MapDownloads {
     private final java.util.concurrent.ExecutorService network=Executors.newSingleThreadExecutor();
     private long generation;
     private boolean resolving;
+    static final class DriveException extends IOException {
+        final String code;
+        DriveException(String code,String message){super(message);this.code=code;}
+    }
+    interface ConnectionFactory {HttpURLConnection open(String url,boolean range) throws Exception;}
     interface Backend {
         String resolve() throws Exception;
         long enqueue(String url,File file) throws Exception;
@@ -66,7 +71,7 @@ final class MapDownloads {
                     maps.discardDownload(descriptor.getString("nativeId"));throw new IOException("Ne mogu sačuvati kartu");
                 }
                 return new JSONObject().put("state","ready").put("file",descriptor);
-            }catch(Exception e){backend.remove(id);if(f!=null)f.delete();prefs.edit().remove("id").putString("error","Preuzeta karta nije potpuna ili ispravna. Pokušaj ponovo.").commit();return status();}
+            }catch(Exception e){backend.remove(id);if(f!=null)f.delete();prefs.edit().remove("id").putString("error",e instanceof DriveException?e.getMessage():"Preuzeta karta nije potpuna ili ispravna. Pokušaj ponovo.").commit();return status();}
         }
         return s;
     }
@@ -84,7 +89,7 @@ final class MapDownloads {
                 synchronized(this){if(token!=generation)return;long id=backend.enqueue(url,target);
                     if(!prefs.edit().putLong("id",id).commit()){backend.remove(id);throw new IOException("Ne mogu sačuvati preuzimanje");}resolving=false;}
             }catch(Exception e){synchronized(this){if(token!=generation)return;resolving=false;
-                prefs.edit().putString("error","Preuzimanje nije započelo. Provjeri internet i pokušaj ponovo.").commit();}}
+                prefs.edit().putString("error",e instanceof DriveException?e.getMessage():"Preuzimanje nije započelo. Provjeri internet i pokušaj ponovo.").commit();}}
         });
         return new JSONObject().put("state","resolving");
     }
@@ -99,7 +104,14 @@ final class MapDownloads {
         File f=file();if(f!=null)f.delete();prefs.edit().clear().commit();
     }
     static void validate(File f,long expected) throws Exception {
-        if(f==null||!f.isFile()||f.length()!=expected)throw new IOException("Nepotpuna karta");
+        if(f==null||!f.isFile())throw new IOException("Nepotpuna karta");
+        // Older queued jobs can complete with Google's tiny quota/access HTML page.
+        if(f.length()>0&&f.length()<=262144)try(InputStream in=new FileInputStream(f)){
+            byte[] h=new byte[(int)f.length()];int n=in.read(h);
+            String text=new String(h,0,Math.max(0,n),StandardCharsets.UTF_8).trim();
+            if(text.startsWith("<"))throw driveError(text);
+        }
+        if(f.length()!=expected)throw new IOException("Nepotpuna karta");
         try(InputStream in=new FileInputStream(f)){byte[] h=new byte[16];int p=0,n;while(p<16&&(n=in.read(h,p,16-p))>0)p+=n;
             if(p!=16||!Arrays.equals(h,"SQLite format 3\0".getBytes(StandardCharsets.US_ASCII)))throw new IOException("Preuzet je pogrešan fajl");}
     }
@@ -109,6 +121,7 @@ final class MapDownloads {
         public long enqueue(String url,File file){return manager.enqueue(new DownloadManager.Request(Uri.parse(url))
             .setTitle("Dendro Map · "+source.name).setDescription("Offline karta — preuzimanje")
             .setDestinationUri(Uri.fromFile(file)).setMimeType("application/octet-stream")
+            .addRequestHeader("Accept-Encoding","identity").addRequestHeader("Cache-Control","no-cache")
             .setAllowedOverMetered(true).setAllowedOverRoaming(false).setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN));}
         public JSONObject query(long id) throws Exception {
             try(Cursor c=manager.query(new DownloadManager.Query().setFilterById(id))){
@@ -130,7 +143,10 @@ final class MapDownloads {
             HttpURLConnection c=(HttpURLConnection)u.openConnection();c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setInstanceFollowRedirects(false);c.setRequestProperty("Cache-Control","no-cache");
             if(range)c.setRequestProperty("Range","bytes=0-15");c.setRequestProperty("Accept-Encoding","identity");
             int code=c.getResponseCode();if(code>=300&&code<400){String location=c.getHeaderField("Location");c.disconnect();if(location==null)throw new IOException("Nedostaje izvor karte");url=new URL(u,location).toString();continue;}
-            if(code!=200&&code!=206){c.disconnect();throw new IOException("Izvor karte nije dostupan");}return c;
+            if(code!=200&&code!=206){
+                try{if(code==429)throw driveError("quota exceeded");if(String.valueOf(c.getContentType()).contains("text/html"))throw driveError(readHtml(c));throw new IOException("Izvor karte nije dostupan");}
+                finally{c.disconnect();}
+            }return c;
         }throw new IOException("Previše preusmjeravanja");
     }
     static String confirmation(String html) throws Exception {return confirmation(html,FILE_ID);}
@@ -146,22 +162,38 @@ final class MapDownloads {
         }throw new IOException("Izvor nije potvrdio preuzimanje karte");
     }
     private static Map<String,String> attributes(String text){Map<String,String> out=new HashMap<>();Matcher m=Pattern.compile("([\\w-]+)\\s*=\\s*(['\"])(.*?)\\2",Pattern.DOTALL).matcher(text);while(m.find())out.put(m.group(1).toLowerCase(Locale.ROOT),m.group(3).replace("&amp;","&").replace("&quot;","\""));return out;}
-    private static String resolveDrive(String fileId,long expectedSize) throws Exception {
-        String initial="https://drive.google.com/uc?export=download&id="+fileId;String download;
-        HttpURLConnection c=connection(initial,false);
-        try{
-            if(!String.valueOf(c.getContentType()).toLowerCase(Locale.ROOT).contains("text/html"))download=c.getURL().toString();
-            else try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
-                byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))>0){if(out.size()+n>262144)throw new IOException("Odgovor izvora je prevelik");out.write(buffer,0,n);}
-                download=confirmation(out.toString("UTF-8"),fileId);
-            }
-        }finally{c.disconnect();}
-        c=connection(download,true);
-        try{
-            String range=c.getHeaderField("Content-Range");long total=range!=null&&range.matches("bytes 0-15/\\d+")?Long.parseLong(range.substring(range.lastIndexOf('/')+1)):c.getContentLengthLong();
-            if(total!=expectedSize)throw new IOException("Izvorna karta je promijenjena");
-            try(InputStream in=c.getInputStream()){byte[] h=new byte[16];int p=0,n;while(p<16&&(n=in.read(h,p,16-p))>0)p+=n;if(p!=16||!Arrays.equals(h,"SQLite format 3\0".getBytes(StandardCharsets.US_ASCII)))throw new IOException("Izvor nije SQLite karta");}
-            return c.getURL().toString();
-        }finally{c.disconnect();}
+    private static String resolveDrive(String fileId,long expectedSize) throws Exception {return resolveDrive(fileId,expectedSize,MapDownloads::connection);}
+    static String resolveDrive(String fileId,long expectedSize,ConnectionFactory transport) throws Exception {
+        String download="https://drive.google.com/uc?export=download&id="+fileId;
+        for(int attempt=0;attempt<3;attempt++){
+            // A Range probe can succeed while a full GET returns quota HTML.
+            // Check the SAME request shape as DownloadManager, reading only 16 bytes.
+            HttpURLConnection c=transport.open(download,false);
+            try{
+                if(String.valueOf(c.getContentType()).toLowerCase(Locale.ROOT).contains("text/html")){
+                    String html=readHtml(c);String lower=html.toLowerCase(Locale.ROOT);
+                    if(lower.contains("quota exceeded")||lower.contains("too many users")||lower.contains("downloadquotaexceeded"))throw driveError(html);
+                    try{download=confirmation(html,fileId);}catch(Exception unavailable){throw driveError(html);}
+                    continue;
+                }
+                if(c.getResponseCode()!=200||c.getHeaderField("Content-Range")!=null)throw new DriveException("partial_response","Drive je vratio samo dio fajla. Pokušaj ponovo kasnije.");
+                long total=c.getContentLengthLong();if(total>=0&&total!=expectedSize)throw new DriveException("source_changed","Veličina karte na Driveu se promijenila. Osvježi dostupne karte pa pokušaj ponovo.");
+                try(InputStream in=c.getInputStream()){byte[] h=new byte[16];int p=0,n;while(p<16&&(n=in.read(h,p,16-p))>0)p+=n;if(p!=16||!Arrays.equals(h,"SQLite format 3\0".getBytes(StandardCharsets.US_ASCII)))throw new DriveException("invalid_source","Drive nije vratio SQLite kartu. Provjeri izvorni fajl.");}
+                return c.getURL().toString();
+            }finally{c.disconnect();}
+        }
+        throw new DriveException("confirmation","Drive nije završio potvrdu preuzimanja. Pokušaj ponovo kasnije.");
+    }
+    private static String readHtml(HttpURLConnection c) throws Exception {
+        InputStream stream=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream();if(stream==null)return "";
+        try(InputStream in=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))>0){if(out.size()+n>262144)throw new IOException("Odgovor izvora je prevelik");out.write(buffer,0,n);}return out.toString("UTF-8");
+        }
+    }
+    static DriveException driveError(String html){
+        String text=html.toLowerCase(Locale.ROOT);
+        if(text.contains("quota exceeded")||text.contains("too many users")||text.contains("downloadquotaexceeded"))
+            return new DriveException("drive_quota","Google Drive je privremeno ograničio preuzimanje ove karte zbog velikog broja pristupa. Pokušaj kasnije; Google navodi da ograničenje može trajati do 24 sata.");
+        return new DriveException("drive_access","Google Drive nije omogućio preuzimanje. Provjeri javni pristup fajlu i dozvolu za preuzimanje.");
     }
 }

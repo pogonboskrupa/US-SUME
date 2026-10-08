@@ -72,6 +72,40 @@ public class MapDownloadsTest {
   public org.json.JSONObject query(long id)throws Exception{return new org.json.JSONObject().put("state",state).put("bytes",bytes.length/2).put("total",bytes.length);}
   public void remove(long id){removes++;if(file!=null)file.delete();}
  }
+ private static final class DriveResponse extends java.net.HttpURLConnection {
+  final byte[] body;final long size;final String type,range;final int status;int bytesRead;boolean closed;
+  DriveResponse(byte[] body,long size,String type,int status,String range)throws Exception{
+   super(new java.net.URL("https://drive.usercontent.google.com/download"));this.body=body;this.size=size;this.type=type;this.status=status;this.range=range;
+  }
+  public int getResponseCode(){return status;}
+  public String getContentType(){return type;}
+  public long getContentLengthLong(){return size;}
+  public String getHeaderField(String name){return name.equalsIgnoreCase("Content-Range")?range:null;}
+  public java.io.InputStream getInputStream(){return new java.io.ByteArrayInputStream(body){public synchronized int read(byte[] b,int off,int len){int n=super.read(b,off,len);if(n>0)bytesRead+=n;return n;}};}
+  public java.io.InputStream getErrorStream(){return getInputStream();}
+  public void connect(){}
+  public void disconnect(){closed=true;}
+  public boolean usingProxy(){return false;}
+ }
+ @Test public void fullDriveGetDetectsQuotaBeforeEnqueueAndRejectsPartialResponses() throws Exception {
+  long size=2144841728L;byte[] header="SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+  String form="<form action=\"https://drive.usercontent.google.com/download\" method=\"get\"><input name=\"id\" value=\""+MapDownloads.FILE_ID+"\"><input name=\"export\" value=\"download\"><input name=\"confirm\" value=\"t\"><input name=\"uuid\" value=\"fixture\"></form>";
+  byte[] quota="<html><title>Google Drive - Quota exceeded</title>Too many users have viewed or downloaded this file recently.</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  DriveResponse first=new DriveResponse(form.getBytes(java.nio.charset.StandardCharsets.UTF_8),form.length(),"text/html",200,null),blocked=new DriveResponse(quota,quota.length,"text/html",200,null);
+  final int[] calls={0};
+  try{MapDownloads.resolveDrive(MapDownloads.FILE_ID,size,(url,range)->{assertFalse("Full GET, ne uspješan Range za blokirani download",range);return calls[0]++==0?first:blocked;});fail("Quota HTML prihvaćen kao karta");}
+  catch(MapDownloads.DriveException e){assertEquals("drive_quota",e.code);assertTrue(e.getMessage().contains("Google Drive"));}
+  assertEquals(2,calls[0]);assertTrue(first.closed&&blocked.closed);
+  DriveResponse valid=new DriveResponse(header,size,"application/octet-stream",200,null);
+  assertTrue(MapDownloads.resolveDrive(MapDownloads.FILE_ID,size,(url,range)->{assertFalse(range);return valid;}).startsWith("https://drive.usercontent.google.com/"));
+  assertEquals("Preflight čita samo zaglavlje, ne 2 GB",16,valid.bytesRead);assertTrue(valid.closed);
+  DriveResponse partial=new DriveResponse(header,16,"application/octet-stream",206,"bytes 0-15/2144841728");
+  try{MapDownloads.resolveDrive(MapDownloads.FILE_ID,size,(url,range)->partial);fail("Djelimični odgovor prihvaćen");}catch(MapDownloads.DriveException e){assertEquals("partial_response",e.code);}
+  java.io.File oldJob=java.io.File.createTempFile("drive-quota-", ".html",InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());
+  try{try(java.io.FileOutputStream out=new java.io.FileOutputStream(oldJob)){out.write(quota);}
+   try{MapDownloads.validate(oldJob,size);fail("Stari posao sakrio Drive quota razlog");}catch(MapDownloads.DriveException e){assertEquals("drive_quota",e.code);}
+  }finally{oldJob.delete();}
+ }
  @Test public void publicFolderParserAcceptsUnicodeAndLongSizesWithoutExecutingScripts() throws Exception {
   org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
   row.put(0,"1mExFpUJgOAROwPSumemnnbzFH74GWHXv").put(1,new org.json.JSONArray().put(MapDownloadCatalog.FOLDER_ID)).put(2,"KARTA_špd.mbtiles").put(3,"application/octet-stream").put(13,2144841728L);
