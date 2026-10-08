@@ -2833,6 +2833,13 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   sačuvan offline preview i širine/dnevni/tamni mod. Read-only VFS test
   dodatno potvrđuje da koordinata isječka vraća stvarnu raster pločicu.
 - Android test preuzimanja proširen stvarnim native preview/Canvas prikazom.
-  Web/SW/Android 2.5.8/code528. Konačni CI/APK u toku; fizički Xiaomi nije
+  Web/SW/Android 2.5.8/code528. CI 37732308857 uspješan: sve JS/browser/SQL provjere i šest Android
+  testova, uključujući native isječak u Mojim kartama. Fizički Xiaomi nije
   testiran. Novi preview sačuvanih karata bez otvorenog handle-a nastaje
   kada se karta otvori; već sačuvan isječak radi bez otvaranja fajla.
+
+- APK v2.5.8 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.8/app-debug.apk
+  24,112,784 B; SHA256 a126295aebcfdbed5a956109f1d85ebbc9a456fc12297377916a6990b3a05013. Izvor
+  1ebe49a4f63df7e9c3dd2dd2362568de38f55eaa. Manifest
+  ba.spd.uss.vlake.debug/2.5.8-debug/528, isti certifikat i svih 61 assets
+  potvrđeni; ažuriranje dostupno kroz Meni → Ažuriraj aplikaciju.
