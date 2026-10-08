@@ -2947,5 +2947,16 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   ograničeno čitanje, stabilni URL i odbijanje loših izvora. Postojeći
   WebView/DownloadManager test sada koristi stvarni mali MBTiles fixture
   sa TMS koordinatama; legacy Drive i KML provjere zadržane.
-- Web/SW/Android 2.6.2/code532. Puni CI i APK provjera u toku; fizički
-  telefon i cijeli javni download od 1,98 GB nisu testirani.
+- Web/SW/Android 2.6.2/code532. CI 37757939724 uspješan: 100 JS grupa,
+  SQL fixture, browser provjere i devet Android testova bez grešaka/preskoka.
+  Android API34 emulator bez interneta potvrdio je MBTiles download lifecycle,
+  obavijesti, uvoz, stvarne pločice/preview, offline reload, brisanje i KML.
+  Fizički telefon i cijeli javni download od 1,98 GB nisu testirani.
+- APK v2.6.2 objavljen:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.2/app-debug.apk
+  24.130.400 B; SHA256
+  6954cc10582512f131791c4f0dfca24b817def0dbc80f2e60033a845cb7b2347.
+  Izvor e52441fd097b96de19d3be3f0b4a278173ae3de7. Provjeren stvarni
+  manifest ba.spd.uss.vlake.debug/2.6.2-debug/532, isti certifikat i svih
+  61 web assets. APK hash/veličina odgovaraju objavljenom Release assetu;
+  updater releases?per_page=1 vraća v2.6.2 sa app-debug.apk.
