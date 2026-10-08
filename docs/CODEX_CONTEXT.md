@@ -2811,4 +2811,10 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 ## 2026-10-08 — v2.5.7: naziv Šumski mod
 - Na korisnikov zahtjev, Moja lokacija sada prikazuje „Šumski mod“ umjesto
   „Šumski“. Isti prekidač i GPS filtriranje. Web/SW/Android 2.5.7/code527.
-- Provjera prikaza i konačni CI/APK u toku.
+- Prikaz na 320 px i pet inline sintaksi prošli. CI 37730783935 uspješan:
+  JS/browser/testni SQL i šest Android testova bez grešaka/preskakanja.
+- Objavljen APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.7/app-debug.apk
+  24.108.424 B; SHA256 6d884ef7edf1fc381cb2125fc6a6e73ff12a366f01a060e3c471e4555c498a84.
+  Izvor 2314e7c92123077c3fbff7dba5e14b4d9a7ed619; manifest
+  ba.spd.uss.vlake.debug/2.5.7-debug/527, isti potpis i svih 61 assets
+  potvrđeni na preuzetom APK-u. Fizički telefon nije testiran.
