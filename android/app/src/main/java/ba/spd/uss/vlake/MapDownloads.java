@@ -70,7 +70,7 @@ final class MapDownloads {
         JSONObject s=backend.query(id);
         if(s.optString("state").equals("complete")){
             try{
-                validate(f,expectedSize,!source.id.equals(GITHUB_ID));
+                validate(f,expectedSize,!source.isGithub());
                 JSONObject descriptor=maps.registerDownload(f,source.name);
                 if(!prefs.edit().putString("nativeId",descriptor.getString("nativeId")).putBoolean("installed",false).commit()){
                     maps.discardDownload(descriptor.getString("nativeId"));throw new IOException("Ne mogu sačuvati kartu");
@@ -123,7 +123,7 @@ final class MapDownloads {
     }
     private static final class SystemBackend implements Backend {
         private final DownloadManager manager;private final MapDownloadCatalog.Source source;SystemBackend(Context c,MapDownloadCatalog.Source source){this.source=source;manager=(DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);}
-        public String resolve() throws Exception {return source.id.equals(GITHUB_ID)?resolveGithub(source.size,MapDownloads::githubConnection):resolveDrive(source.id,source.size);}
+        public String resolve() throws Exception {return source.isGithub()?resolveGithub(source.url,source.size,MapDownloads::githubConnection):resolveDrive(source.id,source.size);}
         public long enqueue(String url,File file){return manager.enqueue(new DownloadManager.Request(Uri.parse(url))
             .setTitle("Dendro Map · "+source.name).setDescription("Offline karta — preuzimanje")
             .setDestinationUri(Uri.fromFile(file)).setMimeType("application/octet-stream")
@@ -143,7 +143,8 @@ final class MapDownloads {
         public void remove(long id){manager.remove(id);}
     }
     static boolean allowed(URL u){String h=u.getHost().toLowerCase(Locale.ROOT);return u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&(h.equals("drive.google.com")||h.equals("drive.usercontent.google.com")||h.endsWith(".googleusercontent.com"));}
-    static boolean githubAllowed(URL u){return u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&(u.getHost().equalsIgnoreCase("github.com")&&u.getPath().equals("/pogonboskrupa/KARTE/releases/download/v1.0.0/KARTA_spd_GitHub.mbtiles")||u.getHost().equalsIgnoreCase("release-assets.githubusercontent.com"));}
+    static boolean githubAssetURL(URL u){return u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&u.getQuery()==null&&u.getRef()==null&&u.getHost().equalsIgnoreCase("github.com")&&u.getPath().matches("/pogonboskrupa/KARTE/releases/download/[^/]+/[^/]+")&&!u.getPath().contains("/../")&&!u.getPath().contains("/./");}
+    static boolean githubAllowed(URL u){return githubAssetURL(u)||(u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&u.getHost().equalsIgnoreCase("release-assets.githubusercontent.com"));}
     static HttpURLConnection githubConnection(String url,boolean range) throws Exception {
         for(int i=0;i<6;i++){
             URL u=new URL(url);if(!githubAllowed(u))throw new SourceException("unknown_source","Nepoznat GitHub izvor karte");
@@ -156,17 +157,21 @@ final class MapDownloads {
         }throw new SourceException("redirects","Previše preusmjeravanja za GitHub kartu");
     }
     static String resolveGithub(long expected,ConnectionFactory transport) throws Exception {
-        HttpURLConnection c=transport.open(GITHUB_URL,false);
+        return resolveGithub(GITHUB_URL,expected,transport);
+    }
+    static String resolveGithub(String url,long expected,ConnectionFactory transport) throws Exception {
+        if(!githubAssetURL(new URL(url)))throw new SourceException("unknown_source","Nepoznat GitHub izvor karte");
+        HttpURLConnection c=transport.open(url,false);
         try{
             if(c.getResponseCode()!=200||c.getHeaderField("Content-Range")!=null)throw new SourceException("partial_response","GitHub je vratio samo dio karte. Pokušaj ponovo.");
             if(String.valueOf(c.getContentType()).toLowerCase(Locale.ROOT).contains("text/html"))throw new SourceException("invalid_source","GitHub nije vratio fajl karte. Pokušaj kasnije.");
-            if(c.getContentLengthLong()!=expected)throw new SourceException("source_changed","Veličina GitHub karte se promijenila. Provjeri novu verziju aplikacije.");
+            if(c.getContentLengthLong()!=expected)throw new SourceException("source_changed","Veličina GitHub karte se promijenila. Osvježi dostupne karte pa pokušaj ponovo.");
             try(InputStream in=c.getInputStream()){
                 byte[] h=new byte[16];int p=0,n;while(p<16&&(n=in.read(h,p,16-p))>0)p+=n;
                 if(p!=16||!Arrays.equals(h,"SQLite format 3\0".getBytes(StandardCharsets.US_ASCII)))throw new SourceException("invalid_source","GitHub nije vratio ispravnu SQLite kartu.");
             }
             // Keep the public URL: its temporary CDN signature must be renewed after a long pause.
-            return GITHUB_URL;
+            return url;
         }finally{c.disconnect();}
     }
     static HttpURLConnection connection(String url,boolean range) throws Exception {

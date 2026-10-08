@@ -8,12 +8,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.regex.*;
 
-/** Fixed GitHub raster catalogue; existing Drive jobs stay resumable. */
+/** Published GitHub raster assets; existing Drive jobs stay resumable. */
 final class MapDownloadCatalog {
     private static MapDownloadCatalog instance;
     private Context notificationContext;
@@ -23,12 +24,19 @@ final class MapDownloadCatalog {
     }
     static final String FOLDER_ID="1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0";
     static final class Source {
-        final String id,name;final long size;
+        final String id,name,url,release;final long size;
         Source(String id,String name,long size) throws IOException {
-            if(id==null||!id.matches("[\\w-]{10,100}")||name==null||name.length()>240||name.matches("(?s).*[\\p{Cntrl}/\\\\].*")||!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)")||size<16||size>64L*1024*1024*1024)throw new IOException("Nevažeća karta u folderu");
-            this.id=id;this.name=name;this.size=size;
+            this(id,name,size,MapDownloads.GITHUB_ID.equals(id)?MapDownloads.GITHUB_URL:"","");
         }
-        JSONObject json() throws Exception {return new JSONObject().put("id",id).put("name",name).put("size",size).put("provider",id.equals(MapDownloads.GITHUB_ID)?"GitHub":"Google Drive");}
+        Source(String id,String name,long size,String url,String release) throws IOException {
+            if(id==null||!id.matches("[\\w-]{10,100}")||name==null||name.length()>240||name.matches("(?s).*[\\p{Cntrl}/\\\\].*")||!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)")||size<16||size>64L*1024*1024*1024)throw new IOException("Nevažeća karta u folderu");
+            boolean github=MapDownloads.GITHUB_ID.equals(id)||id.matches("github-asset-[1-9][0-9]{0,18}");
+            if(url==null||release==null||release.length()>240||release.matches("(?s).*[\\p{Cntrl}].*")||github!=(!url.isEmpty())||(!url.isEmpty()&&!MapDownloads.githubAssetURL(new URL(url))))throw new IOException("Nevažeći izvor karte");
+            this.id=id;this.name=name;this.size=size;this.url=url;this.release=release;
+        }
+        boolean isGithub(){return !url.isEmpty();}
+        static Source fromJSON(JSONObject o) throws Exception {String id=o.getString("id");return new Source(id,o.getString("name"),o.getLong("size"),o.optString("url",MapDownloads.GITHUB_ID.equals(id)?MapDownloads.GITHUB_URL:""),o.optString("release",""));}
+        JSONObject json() throws Exception {return new JSONObject().put("id",id).put("name",name).put("size",size).put("url",url).put("release",release).put("provider",isGithub()?"GitHub":"Google Drive");}
     }
     interface Provider {List<Source> fetch() throws Exception;}
     interface Factory {MapDownloads create(Source source) throws Exception;}
@@ -39,8 +47,10 @@ final class MapDownloadCatalog {
     private final Map<String,MapDownloads> jobs=new HashMap<>();
     private final java.util.concurrent.ExecutorService commands=Executors.newFixedThreadPool(2);
     MapDownloadCatalog(Context c,OfflineMaps maps) throws Exception {
-        this(c.getApplicationContext(),()->Collections.singletonList(new Source(MapDownloads.GITHUB_ID,MapDownloads.GITHUB_NAME,MapDownloads.GITHUB_SIZE)),productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
-        list(true);
+        this(c.getApplicationContext(),MapDownloadCatalog::fetchGithub,productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
+        // Never fetch on activity/service construction. Cached sources work offline;
+        // a fresh install can display the known public map before its first refresh.
+        if(catalog.stream().noneMatch(Source::isGithub))catalog=Collections.singletonList(new Source(MapDownloads.GITHUB_ID,MapDownloads.GITHUB_NAME,MapDownloads.GITHUB_SIZE));
         notificationContext=c.getApplicationContext();
         // v2.5.1 transfers remain resumable even though the source folder has changed.
         if(c.getSharedPreferences("unsko-download-v1",Context.MODE_PRIVATE).contains("file"))remember(new Source(MapDownloads.FILE_ID,MapDownloads.NAME,MapDownloads.SIZE));
@@ -52,17 +62,17 @@ final class MapDownloadCatalog {
         prefs=c.getSharedPreferences(storage,Context.MODE_PRIVATE);this.provider=provider;this.factory=factory;
         try{catalog=decode(prefs.getString("catalog","[]"));}catch(Exception corruptCache){catalog=new ArrayList<>();}
     }
-    private static List<Source> decode(String raw) throws Exception {List<Source> out=new ArrayList<>();JSONArray a=new JSONArray(raw);if(a.length()>300)throw new IOException("Popis karata je prevelik");for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);out.add(new Source(o.getString("id"),o.getString("name"),o.getLong("size")));}return out;}
+    private static List<Source> decode(String raw) throws Exception {List<Source> out=new ArrayList<>();JSONArray a=new JSONArray(raw);if(a.length()>300)throw new IOException("Popis karata je prevelik");for(int i=0;i<a.length();i++)out.add(Source.fromJSON(a.getJSONObject(i)));return out;}
     private static JSONArray encode(List<Source> files) throws Exception {JSONArray a=new JSONArray();for(Source s:files)a.put(s.json());return a;}
     JSONObject list(boolean refresh) throws Exception {
         String error="";
         if(refresh)try{List<Source> files=provider.fetch();if(!prefs.edit().putString("catalog",encode(files).toString()).putLong("updated",System.currentTimeMillis()).commit())throw new IOException();catalog=files;}
-        catch(Exception e){error="Pregled dostupnih karata trenutno nije dostupan. Pokušaj ponovo.";}
+        catch(Exception e){error="GitHub popis trenutno nije dostupan. Prikazujem sačuvane karte; pokušaj osvježiti kasnije.";}
         return new JSONObject().put("ok",error.isEmpty()||!catalog.isEmpty()).put("files",encode(catalog)).put("stale",!error.isEmpty()).put("error",error).put("updated",prefs.getLong("updated",0));
     }
     private synchronized void remember(Source source) throws Exception {JSONObject all=new JSONObject(prefs.getString("jobs","{}"));all.put(source.id,source.json());if(!prefs.edit().putString("jobs",all.toString()).commit())throw new IOException("Ne mogu sačuvati posao preuzimanja");}
     private synchronized MapDownloads job(Source source) throws Exception {MapDownloads j=jobs.get(source.id);if(j==null){j=factory.create(source);jobs.put(source.id,j);}return j;}
-    private Source activeSource(String id) throws Exception {JSONObject s=new JSONObject(prefs.getString("jobs","{}")).optJSONObject(id);if(s==null)throw new IOException("Karta nema pokrenuto preuzimanje");return new Source(id,s.getString("name"),s.getLong("size"));}
+    private Source activeSource(String id) throws Exception {JSONObject s=new JSONObject(prefs.getString("jobs","{}")).optJSONObject(id);if(s==null)throw new IOException("Karta nema pokrenuto preuzimanje");return Source.fromJSON(s);}
     JSONObject statuses() throws Exception {
         JSONObject all=new JSONObject(prefs.getString("jobs","{}"));JSONArray out=new JSONArray();
         for(Iterator<String> keys=all.keys();keys.hasNext();){String id=keys.next();Source source=activeSource(id);JSONObject state=job(source).status();
@@ -85,13 +95,51 @@ final class MapDownloadCatalog {
             // Existing jobs use their original immutable size/name until removed. Never reinterpret a partial file after a Drive edit.
             JSONObject all=new JSONObject(prefs.getString("jobs","{}"));Source saved=all.has(id)?activeSource(id):source;
             j=job(saved);String state=j.status().optString("state");
-            if((state.equals("idle")||state.equals("failed"))&&(!saved.name.equals(source.name)||saved.size!=source.size)){
+            if((state.equals("idle")||state.equals("failed"))&&(!saved.name.equals(source.name)||saved.size!=source.size||!saved.url.equals(source.url))){
                 synchronized(this){jobs.remove(id);}saved=source;j=job(saved);
             }
             remember(saved);JSONObject started=j.start().put("ok",true);if(notificationContext!=null&&MapDownloadService.isActive(started.optString("state")))MapDownloadService.ensure(notificationContext);return started;
         }
         j=job(activeSource(id));JSONObject result;
         if(type.equals("cancel"))result=j.cancel();else if(type.equals("installed"))result=j.installed(msg.getString("nativeId"));else throw new IOException("Nepoznata radnja preuzimanja");return result.put("ok",true);
+    }
+    static List<Source> parseGithub(JSONArray releases) throws Exception {
+        List<Source> out=new ArrayList<>();Set<String> ids=new HashSet<>();
+        for(int i=0;i<releases.length();i++){
+            JSONObject r=releases.getJSONObject(i);if(r.optBoolean("draft"))continue;
+            String tag=r.getString("tag_name"),title=r.optString("name",tag);if(title.isEmpty())title=tag;
+            JSONArray assets=r.getJSONArray("assets");
+            for(int k=0;k<assets.length();k++){
+                JSONObject a=assets.getJSONObject(k);String name=a.getString("name");
+                if(!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)")||!"uploaded".equals(a.optString("state","uploaded")))continue;
+                long asset=a.getLong("id");if(asset<=0)throw new IOException("Nevažeći GitHub asset");
+                String url=a.getString("browser_download_url"),id="github-asset-"+asset;
+                if(MapDownloads.GITHUB_URL.equals(url)){id=MapDownloads.GITHUB_ID;name=MapDownloads.GITHUB_NAME;}
+                else if(tag.equals("stara_verzija"))name="Unsko_2010-2020"+(assets.length()>1?" · "+name.substring(0,name.lastIndexOf('.')):"")+name.substring(name.lastIndexOf('.'));
+                Source s=new Source(id,name,a.getLong("size"),url,title);if(ids.add(id))out.add(s);
+                if(out.size()>300)throw new IOException("Popis karata je prevelik");
+            }
+        }
+        // Current period first, old period next; generic future maps retain API order.
+        out.sort(Comparator.comparingInt(s->s.id.equals(MapDownloads.GITHUB_ID)?0:s.name.startsWith("Unsko_2010-2020")?1:2));return out;
+    }
+    private static List<Source> fetchGithub() throws Exception {
+        JSONArray releases=new JSONArray();long deadline=System.currentTimeMillis()+45000;
+        for(int page=1;page<=3;page++){
+            if(System.currentTimeMillis()>=deadline)throw new IOException("GitHub katalog nije odgovorio");
+            HttpURLConnection c=(HttpURLConnection)new URL("https://api.github.com/repos/pogonboskrupa/KARTE/releases?per_page=100&page="+page).openConnection();
+            int timeout=(int)Math.min(10000,Math.max(1,(deadline-System.currentTimeMillis())/2));
+            c.setConnectTimeout(timeout);c.setReadTimeout(timeout);c.setInstanceFollowRedirects(false);c.setRequestProperty("Accept","application/vnd.github+json");c.setRequestProperty("User-Agent","DendroMap");
+            try{
+                if(c.getResponseCode()!=200)throw new IOException("GitHub katalog nije dostupan");
+                try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                    byte[] b=new byte[8192];int n;while((n=in.read(b))>0){if(System.currentTimeMillis()>=deadline)throw new IOException("GitHub katalog nije odgovorio");if(out.size()+n>4*1024*1024)throw new IOException("Pregled karata je prevelik");out.write(b,0,n);}
+                    JSONArray rows=new JSONArray(out.toString("UTF-8"));for(int i=0;i<rows.length();i++)releases.put(rows.getJSONObject(i));
+                }
+                if(!String.valueOf(c.getHeaderField("Link")).contains("rel=\"next\""))return parseGithub(releases);
+            }finally{c.disconnect();}
+        }
+        throw new IOException("GitHub katalog nije potpun");
     }
     final class Bridge {
         private final WebView view;Bridge(WebView view){this.view=view;}

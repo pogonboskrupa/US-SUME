@@ -119,6 +119,41 @@ public class MapDownloadsTest {
   assertFalse(MapDownloads.githubAllowed(new java.net.URL("https://github.com/foreign/repo/releases/download/map.mbtiles")));
   assertFalse(MapDownloads.githubAllowed(new java.net.URL("https://release-assets.githubusercontent.com.attacker.test/file")));
   assertFalse(MapDownloads.githubAllowed(new java.net.URL("http://release-assets.githubusercontent.com/file")));
+  String oldUrl="https://github.com/pogonboskrupa/KARTE/releases/download/stara_verzija/Stara.mbtiles";
+  DriveResponse old=new DriveResponse(header,16,"application/octet-stream",200,null);
+  assertEquals(oldUrl,MapDownloads.resolveGithub(oldUrl,16,(url,range)->{assertEquals(oldUrl,url);return old;}));
+  assertFalse(MapDownloads.githubAssetURL(new java.net.URL("https://github.com/pogonboskrupa/KARTE/releases/download/stara_verzija/Stara.mbtiles?redirect=other")));
+ }
+ private JSONObject githubRelease(String tag,long asset,String name,long size,String url) throws Exception {
+  JSONObject file=new JSONObject().put("id",asset).put("name",name).put("size",size).put("state","uploaded").put("browser_download_url",url);
+  return new JSONObject().put("tag_name",tag).put("name",tag.equals("stara_verzija")?"Karta 2010:2020":"Karta ŠPD").put("draft",false).put("assets",new org.json.JSONArray().put(file));
+ }
+ @Test public void publishedGithubMapsKeepBothPeriodsAndRecoverCachedJobsOffline() throws Exception {
+  String url="https://github.com/pogonboskrupa/KARTE/releases/download/stara_verzija/Stara.mbtiles";
+  JSONObject old=githubRelease("stara_verzija",2630001,"Stara.mbtiles",1500000000L,url);
+  JSONObject current=githubRelease("v1.0.0",621256172,"KARTA_spd_GitHub.mbtiles",MapDownloads.GITHUB_SIZE,MapDownloads.GITHUB_URL);
+  org.json.JSONArray releases=new org.json.JSONArray().put(old).put(current).put(githubRelease("draft",2630002,"Nacrt.mbtiles",64,url).put("draft",true));
+  java.util.List<MapDownloadCatalog.Source> parsed=MapDownloadCatalog.parseGithub(releases);
+  assertEquals(2,parsed.size());assertEquals(MapDownloads.GITHUB_ID,parsed.get(0).id);
+  MapDownloadCatalog.Source source=parsed.get(1);assertEquals("github-asset-2630001",source.id);assertEquals("Unsko_2010-2020.mbtiles",source.name);assertEquals(url,source.url);assertEquals("Karta 2010:2020",source.release);
+  assertEquals(MapDownloads.GITHUB_URL,MapDownloadCatalog.Source.fromJSON(new JSONObject().put("id",MapDownloads.GITHUB_ID).put("name",MapDownloads.GITHUB_NAME).put("size",MapDownloads.GITHUB_SIZE)).url);
+  JSONObject future=githubRelease("v2",2630003,"Buduća.sqlitedb",64,"https://github.com/pogonboskrupa/KARTE/releases/download/v2/Buduca.sqlitedb");
+  assertEquals(3,MapDownloadCatalog.parseGithub(new org.json.JSONArray().put(old).put(current).put(future)).size());
+  JSONObject foreign=githubRelease("bad",2630004,"Tuđa.mbtiles",64,"https://github.com/foreign/repo/releases/download/v1/file.mbtiles");
+  try{MapDownloadCatalog.parseGithub(new org.json.JSONArray().put(foreign));fail("Foreign asset accepted");}catch(java.io.IOException expected){}
+  Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();String storage="github-catalog-test-263";c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().clear().commit();
+  MapDownloadCatalog.Source small=new MapDownloadCatalog.Source(source.id,source.name,16,source.url,source.release);
+  FixtureBackend backend=new FixtureBackend("SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII));OfflineMaps maps=new OfflineMaps(c);AtomicReference<MapDownloadCatalog.Source> restored=new AtomicReference<>();
+  MapDownloadCatalog.Factory factory=s->{restored.set(s);return new MapDownloads(c,maps,s,backend,"github-job-test-263");};
+  MapDownloadCatalog catalog=new MapDownloadCatalog(c,()->java.util.Arrays.asList(parsed.get(0),small),factory,storage);catalog.list(true);
+  try{
+   catalog.action(new JSONObject().put("type","start").put("sourceId",source.id));
+   long limit=System.currentTimeMillis()+5000;while(backend.enqueues==0&&System.currentTimeMillis()<limit)Thread.sleep(10);assertEquals(1,backend.enqueues);
+   MapDownloadCatalog recovered=new MapDownloadCatalog(c,()->{throw new java.io.IOException("offline/rate limit");},factory,storage);
+   JSONObject cache=recovered.list(true);assertTrue(cache.getBoolean("stale"));assertEquals(2,cache.getJSONArray("files").length());assertEquals(url,cache.getJSONArray("files").getJSONObject(1).getString("url"));
+   JSONObject state=recovered.statuses().getJSONArray("files").getJSONObject(0);assertEquals("paused",state.getJSONObject("status").getString("state"));assertEquals(url,restored.get().url);
+   recovered.action(new JSONObject().put("type","cancel").put("sourceId",source.id));
+  }finally{catalog.action(new JSONObject().put("type","cancel").put("sourceId",source.id));c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().clear().commit();}
  }
  @Test public void publicFolderParserAcceptsUnicodeAndLongSizesWithoutExecutingScripts() throws Exception {
   org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
@@ -183,7 +218,7 @@ public class MapDownloadsTest {
   try{
    assertTrue(resumed.await(15,TimeUnit.SECONDS));WebView view=ref.get();pageLoaded(view);until(view,"document.readyState==='complete'&&!!window.MapDownloads&&typeof sqlmapLoadFile==='function'");
    Field f=MainActivity.class.getDeclaredField("offlineMaps");f.setAccessible(true);OfflineMaps maps=(OfflineMaps)f.get(null);
-   MapDownloadCatalog.Source source=new MapDownloadCatalog.Source(MapDownloads.GITHUB_ID,MapDownloads.GITHUB_NAME,bytes.length);
+   MapDownloadCatalog.Source source=new MapDownloadCatalog.Source("github-asset-2630001","Unsko_2010-2020.mbtiles",bytes.length,"https://github.com/pogonboskrupa/KARTE/releases/download/stara_verzija/Stara.mbtiles","Karta 2010:2020");
    download=new MapDownloads(context,maps,source,transport,"unsko-download-test");download.cancel();
    MapDownloads attachedJob=download;java.util.List<MapDownloadCatalog.Source> sources=new java.util.ArrayList<>();sources.add(source);
    MapDownloadCatalog attached=new MapDownloadCatalog(context,()->sources,item->attachedJob,"map-catalog-test");
@@ -192,10 +227,10 @@ public class MapDownloadsTest {
    assertEquals(0,transport.enqueues);
    CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');window.workBefore=JSON.stringify([vlake,_tacke,_tragRegistry]);Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});openLoadMapScreen();void 0");
-   until(view,"document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').disabled");
-   eval(view,"document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').click();void 0");
+   until(view,"document.getElementById('loadmap-download-"+source.id+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+source.id+"').disabled");
+   eval(view,"document.getElementById('loadmap-download-"+source.id+"').click();void 0");
    assertEquals("true",eval(view,"document.querySelector('.lm-download-status').textContent.includes('uključi internet')"));assertEquals(0,transport.enqueues);
-   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').click();void 0");
+   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+source.id+"').click();void 0");
    until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
    // Recreate native download controller and reload JS: job ID and progress survive.
    download=new MapDownloads(context,maps,source,transport,"unsko-download-test");MapDownloads recoveredJob=download;
@@ -217,22 +252,22 @@ public class MapDownloadsTest {
    CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
-   until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
+   until(view,"_sqlLayers.some(l=>l.name==='Unsko_2010-2020'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
    eval(view,"_loadmapTab('maps');_loadmapRenderManage();void 0");
-   until(view,"localStorage.getItem('lm_thumb_v2_Unsko_2021-2031')==='1'&&document.querySelector('.lm-map-preview .lm-thumb').src.startsWith('data:image/jpeg')");
-   assertEquals("true",eval(view,"Array.isArray(_sqlLayers.find(l=>l.name==='Unsko_2021-2031').meta._preview)"));
+   until(view,"localStorage.getItem('lm_thumb_v2_Unsko_2010-2020')==='1'&&document.querySelector('.lm-map-preview .lm-thumb').src.startsWith('data:image/jpeg')");
+   assertEquals("true",eval(view,"Array.isArray(_sqlLayers.find(l=>l.name==='Unsko_2010-2020').meta._preview)"));
    waitNotice(context,"Otvori aplikaciju");
    long stopped=System.currentTimeMillis()+5000;while(MapDownloadService.isRunning()&&System.currentTimeMillis()<stopped)Thread.sleep(100);
    assertFalse("Servis završenog preuzimanja je ugašen",MapDownloadService.isRunning());
    assertFalse("Završna obavijest ostaje nakon gašenja servisa",(waitNotice(context,"Otvori aplikaciju").flags&android.app.Notification.FLAG_ONGOING_EVENT)!=0);
    JSONObject status=download.status();String nativeId=status.getJSONObject("file").getString("nativeId");assertEquals("installed",status.getString("state"));
    assertFalse("Bez duple kopije",new java.io.File(context.getFilesDir(),"offline-maps/"+nativeId+".sqlite").exists());
-   eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2021-2031',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");
+   eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2010-2020',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");
    java.io.File saved=transport.file;assertTrue(saved.isFile());
    ui.post(()->view.reload());Thread.sleep(300);pageLoaded(view);
-   eval(view,"_revealApp();switchTab('karta');sqlmapRestoreAll().then(()=>MapDownloads.resume());void 0");until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)");
-   assertEquals(1,transport.enqueues);eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2021-2031',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");
-   eval(view,"sqlmapRemove(_sqlLayers.findIndex(l=>l.name==='Unsko_2021-2031'));void 0");until(view,"!_sqlLayers.some(l=>l.name==='Unsko_2021-2031')");assertFalse(saved.exists());assertEquals("idle",download.status().getString("state"));
+   eval(view,"_revealApp();switchTab('karta');sqlmapRestoreAll().then(()=>MapDownloads.resume());void 0");until(view,"_sqlLayers.some(l=>l.name==='Unsko_2010-2020'&&l.saved)");
+   assertEquals(1,transport.enqueues);eval(view,"window.downloadTile=false;_sqlWCall({type:'tile',name:'Unsko_2010-2020',z:13,x:4463,y:2940}).then(r=>downloadTile=!!r.data&&r.data[0]===137);void 0");until(view,"downloadTile");
+   eval(view,"sqlmapRemove(_sqlLayers.findIndex(l=>l.name==='Unsko_2010-2020'));void 0");until(view,"!_sqlLayers.some(l=>l.name==='Unsko_2010-2020')");assertFalse(saved.exists());assertEquals("idle",download.status().getString("state"));
    // Transfer marked complete but containing HTML must fail before catalogue registration.
    transport.bytes=new byte[bytes.length];transport.state="complete";download.start();long end=System.currentTimeMillis()+5000;while(transport.enqueues<2&&System.currentTimeMillis()<end)Thread.sleep(50);
    assertEquals("failed",download.status().getString("state"));assertFalse(transport.file.exists());

@@ -2960,3 +2960,31 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   manifest ba.spd.uss.vlake.debug/2.6.2-debug/532, isti certifikat i svih
   61 web assets. APK hash/veličina odgovaraju objavljenom Release assetu;
   updater releases?per_page=1 vraća v2.6.2 sa app-debug.apk.
+
+## 2026-10-08 — v2.6.3: Više GitHub karata i period 2010–2020
+- Na zahtjev korisnika raster katalog sada čita objavljene release assets
+  samo iz pogonboskrupa/KARTE. Pri otvaranju/Osvježi pojavljuju se dodatne
+  podržane SQLite karte, bez novog APK-a za svaku buduću kartu. Nacrti i
+  nedovršeni uploadi se preskaču. KML/Drive katalog nije mijenjan.
+- Tag stara_verzija prikazuje Unsko_2010-2020; postojeći v1.0.0 zadržava
+  Unsko_2021-2031 i isti ID ranijeg download posla. Trenutni period je
+  prvi, stari drugi. Kartice prikazuju GitHub, veličinu i naziv objave.
+- Source metadata sada trajno čuva javni URL i naslov objave uz ID asseta.
+  Stari v2.6.2 i Drive upisi dekodiraju se kompatibilno. Svaki transfer
+  ima zaseban ID/progress i automatski uvoz; nema zamjene bajtova ili
+  brisanja postojeće karte kad se dodaje druga karta u katalog.
+- Katalog se dohvaća van UI threada, bez mreže pri konstrukciji aktivnosti
+  ili servisa; offline/rate limit zadržava sačuvani popis. Paginacija je
+  ograničena na tri stranice/300 karata i 4 MB po odgovoru; nepotpuni ili
+  neispravni odgovori ne zamjenjuju popis. Izvori i redirecti ograničeni
+  su na release assets ovog repoa i zvanični GitHub CDN. SQLite preflight
+  provjerava puni odgovor/veličinu i čita samo 16 B, ne cijelu kartu.
+- Prilikom početne provjere stara_verzija je još draft bez assets; kod
+  ne objavljuje niti mijenja korisnikov KARTE release. Pravo preuzimanje
+  stare karte provjerit će se nakon njene javne objave; puni fajl i
+  fizički telefon nisu testirani.
+- Lokalno svih 100 JS grupa, inline sintakse i LoadMap browser prošli.
+  Native testovi prošireni za oba perioda, nacrte, budući asset, odbijanje
+  stranog izvora, kompatibilan stari ID, cached katalog i recovery posla
+  offline; stvarni APK/WebView MBTiles test koristi novi dinamički source.
+- Web/SW/Android 2.6.3/code533. Puni CI i APK provjera u toku.

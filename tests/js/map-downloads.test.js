@@ -9,7 +9,7 @@ class Node {
 }
 for(const id of ['cards','refresh','message'])elements.set('loadmap-download-'+id,new Node());
 const root={document:{getElementById:id=>elements.get(id),createElement:()=>new Node()},navigator:{onLine:true}};
-const A='github-karte-v1-0-0',B='source-file-B-252';let files=[{id:A,name:'Unsko_2021-2031.mbtiles',size:1982578688,provider:'GitHub'},{id:B,name:'Druga.mbtiles',size:30000000}];
+const A='github-karte-v1-0-0',B='github-asset-2630001';let files=[{id:A,name:'Unsko_2021-2031.mbtiles',size:1982578688,provider:'GitHub'},{id:B,name:'Unsko_2010-2020.mbtiles',size:30000000,provider:'GitHub',release:'Karta 2010:2020'}];
 const known=files.slice(),states=new Map(files.map(s=>[s.id,{ok:true,state:'idle'}]));
 const box={window:root,Map,Set,Promise,Error,Number,setTimeout:(f,t)=>{const id=++seq;timers.set(id,{f,t});return id;},clearTimeout:id=>timers.delete(id),
  _sqlWCall:async()=>({ok:true,rows}),sqlmapLoadFile:async f=>{imports.push(f);rows.push({name:f.name.replace(/\.[^.]+$/,''),meta:{_nativeId:f.nativeId}});},_loadmapShow:async()=>{shows++;}};
@@ -22,7 +22,8 @@ const card=id=>nodes.find(n=>n.dataset.sourceId===id&&!n.removed),status=id=>car
 (async()=>{
  box.sbUser={id:'tester'};let opened=0;box.openLoadMapScreen=()=>opened++;root.noticeOpen=true;await api.openFromNotification();await api.openFromNotification();assert.equal(opened,1);
  await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'1,98 GB · GitHub');
- root.navigator.onLine=false;await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
+ assert.equal(card(B).querySelector('.lm-download-title').textContent,'Unsko_2010-2020');assert.equal(card(B).querySelector('.lm-download-release').textContent,'Karta 2010:2020');assert.equal(card(B).querySelector('.lm-download-release').hidden,false);assert.equal(card(A).querySelector('.lm-download-release').hidden,true);
+ root.navigator.onLine=false;await api.refresh();assert.match(elements.get('loadmap-download-message').textContent,/Sačuvan popis/);await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
  root.navigator.onLine=true;await Promise.all([api.start(A),api.start(B)]);assert.equal(card(A).querySelector('.lm-download-progress').value,42);assert.match(card(A).querySelector('.lm-download-button').textContent,/42%/);
  states.set(A,{...states.get(A),state:'paused'});await api.resume();assert.match(status(A).textContent,/Čekam vezu/);
  await api.cancel(A);assert.equal(card(A).querySelector('.lm-download-progress').hidden,true);assert.equal(states.get(B).state,'downloading');
