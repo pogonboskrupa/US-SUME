@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.3';
+const APP_VER = 'v2.6.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -40683,7 +40683,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <section id="loadmap-pane-add" role="tabpanel" aria-labelledby="loadmap-tab-add">
       <div class="lm-hero"><img src="static/img/map-previews/local.svg" alt="Ilustracija topografske karte"><div class="lm-hero-copy"><span>LOKALNA PODLOGA</span><h3>Karta spremna za teren</h3><p>Učitaj kartu iz fajla i koristi njeno područje bez interneta.</p></div><span class="lm-offline-tag"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Offline</span></div>
       <section id="loadmap-downloads" aria-labelledby="loadmap-download-title">
-        <div class="lm-section-heading"><div><h3 id="loadmap-download-title">Dostupne karte</h3><small>GitHub · preuzmi i koristi offline</small></div><button type="button" id="loadmap-download-refresh" class="lm-secondary" onclick="MapDownloads.refresh()" aria-label="Osvježi dostupne karte">↻</button></div>
+        <div class="lm-section-heading"><div><h3 id="loadmap-download-title">Dostupne karte</h3><small>GitHub · Wi-Fi i mobilni podaci · koristi offline</small></div><button type="button" id="loadmap-download-refresh" class="lm-secondary" onclick="MapDownloads.refresh()" aria-label="Osvježi dostupne karte">↻</button></div>
         <div id="loadmap-download-message" role="status" aria-live="polite"></div>
         <div id="loadmap-download-notification-note" hidden>Android obavijesti su isključene. Napredak preuzimanja vidiš ovdje.<button type="button" class="lm-secondary" onclick="MapDownloads.notificationSettings()">Uključi obavijesti</button></div>
         <div id="loadmap-download-cards"></div>

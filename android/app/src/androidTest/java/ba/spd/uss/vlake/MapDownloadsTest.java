@@ -72,15 +72,15 @@ public class MapDownloadsTest {
   public org.json.JSONObject query(long id)throws Exception{return new org.json.JSONObject().put("state",state).put("bytes",bytes.length/2).put("total",bytes.length);}
   public void remove(long id){removes++;if(file!=null)file.delete();}
  }
- private static final class DriveResponse extends java.net.HttpURLConnection {
-  final byte[] body;final long size;final String type,range;final int status;int bytesRead;boolean closed;
+ private static class DriveResponse extends java.net.HttpURLConnection {
+  final byte[] body;final long size;final String type,range;final int status;String etag;int bytesRead;boolean closed;
   DriveResponse(byte[] body,long size,String type,int status,String range)throws Exception{
    super(new java.net.URL("https://drive.usercontent.google.com/download"));this.body=body;this.size=size;this.type=type;this.status=status;this.range=range;
   }
   public int getResponseCode(){return status;}
   public String getContentType(){return type;}
   public long getContentLengthLong(){return size;}
-  public String getHeaderField(String name){return name.equalsIgnoreCase("Content-Range")?range:null;}
+  public String getHeaderField(String name){return name.equalsIgnoreCase("Content-Range")?range:name.equalsIgnoreCase("ETag")?etag:null;}
   public java.io.InputStream getInputStream(){return new java.io.ByteArrayInputStream(body){public synchronized int read(byte[] b,int off,int len){int n=super.read(b,off,len);if(n>0)bytesRead+=n;return n;}};}
   public java.io.InputStream getErrorStream(){return getInputStream();}
   public void connect(){}
@@ -213,7 +213,7 @@ public class MapDownloadsTest {
   ActivityLifecycleCallback callback=(a,stage)->{if(a instanceof MainActivity&&stage==Stage.RESUMED){try{Field f=MainActivity.class.getDeclaredField("webView");f.setAccessible(true);ref.set((WebView)f.get(a));activityRef.set((MainActivity)a);resumed.countDown();}catch(Exception e){throw new AssertionError(e);}}};
   Handler ui=new Handler(Looper.getMainLooper());ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(callback);registered.countDown();});assertTrue(registered.await(5,TimeUnit.SECONDS));
   context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-  MapDownloads download=null;
+  MapDownloads download=null;java.util.concurrent.atomic.AtomicBoolean mobileAvailable=new java.util.concurrent.atomic.AtomicBoolean(false);
   Field singleton=MapDownloadCatalog.class.getDeclaredField("instance");singleton.setAccessible(true);Object originalCatalog=singleton.get(null);
   try{
    assertTrue(resumed.await(15,TimeUnit.SECONDS));WebView view=ref.get();pageLoaded(view);until(view,"document.readyState==='complete'&&!!window.MapDownloads&&typeof sqlmapLoadFile==='function'");
@@ -225,12 +225,13 @@ public class MapDownloadsTest {
    attached.list(true);
    try{attached.action(new JSONObject().put("type","start").put("sourceId","foreign-map-file-id"));fail("Karta izvan foldera prihvaćena");}catch(java.io.IOException expected){}
    assertEquals(0,transport.enqueues);
-   CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
+   CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view,mobileAvailable::get),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');window.workBefore=JSON.stringify([vlake,_tacke,_tragRegistry]);Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});openLoadMapScreen();void 0");
    until(view,"document.getElementById('loadmap-download-"+source.id+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+source.id+"').disabled");
    eval(view,"document.getElementById('loadmap-download-"+source.id+"').click();void 0");
    assertEquals("true",eval(view,"document.querySelector('.lm-download-status').textContent.includes('uključi internet')"));assertEquals(0,transport.enqueues);
-   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+source.id+"').click();void 0");
+   mobileAvailable.set(true); // Native mobile connection must override stale WebView navigator.onLine=false.
+   eval(view,"document.getElementById('loadmap-download-"+source.id+"').click();void 0");
    until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
    // Recreate native download controller and reload JS: job ID and progress survive.
    download=new MapDownloads(context,maps,source,transport,"unsko-download-test");MapDownloads recoveredJob=download;
@@ -249,7 +250,7 @@ public class MapDownloadsTest {
    assertEquals(50,progress.extras.getInt(android.app.Notification.EXTRA_PROGRESS));
    transport.state="paused";waitNotice(context,"Čekam internet");
 
-   CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
+   CountDownLatch reload=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(recovered.new Bridge(view,mobileAvailable::get),"AndroidMapDownloads");view.reload();reload.countDown();});assertTrue(reload.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
    until(view,"_sqlLayers.some(l=>l.name==='Unsko_2010-2020'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");

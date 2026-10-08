@@ -6,6 +6,7 @@
   const sizeText=b=>b>=1e9?(b/1e9).toFixed(2).replace('.',',')+' GB':(Math.max(0,b)/1e6).toFixed(1).replace('.',',')+' MB';
   const active=s=>['resolving','downloading','paused','ready'].includes(s?.state);
   const available=()=>!!root.AndroidMapDownloads?.request;
+  function online(){try{if(typeof root.AndroidMapDownloads?.networkAvailable==='function')return !!root.AndroidMapDownloads.networkAvailable();}catch(e){}return root.navigator?.onLine!==false;}
   const el=id=>root.document?.getElementById(id);
   function request(msg){
     if(!available())return Promise.resolve({ok:false,error:'Preuzimanje karata dostupno je u Android aplikaciji.'});
@@ -45,7 +46,7 @@
       else if(status.state==='resolving'){label='Pripremam preuzimanje…';message='Povezujem se s kartom…';}
       else if(['downloading','paused'].includes(status.state)){
         const total=status.total>0?status.total:s.size,bytes=Math.max(0,status.bytes||0),percent=Math.min(100,Math.floor(bytes/total*100));
-        label=status.state==='paused'?'Čekam internet…':'Preuzimanje · '+percent+'%';message=(status.state==='paused'?'Čekam vezu — preuzimanje će se nastaviti. ':'')+sizeText(bytes)+' / '+sizeText(total)+' · Možeš nastaviti koristiti aplikaciju.';
+        label=status.state==='paused'?'Preuzimanje pauzirano':'Preuzimanje · '+percent+'%';message=(status.state==='paused'?(status.message||'Čekam vezu — preuzimanje će se nastaviti.')+' ':'')+sizeText(bytes)+' / '+sizeText(total)+' · Možeš nastaviti koristiti aplikaciju.';
       }else if(status.state==='installed'){label='Prikaži kartu';message='✓ Spremna za korištenje bez interneta';}
       else if(status.state==='failed'){label='Pokušaj ponovo';message=status.error||'Preuzimanje nije uspjelo. Pokušaj ponovo.';}
       button.textContent=label;button.disabled=busy.has(id)||active(status)||installing||!available();
@@ -92,7 +93,7 @@
     try{
       const cached=await request({type:'list',refresh:false});
       if(cached.ok){catalog=(cached.files||[]).filter(valid);render();}
-      const offline=root.navigator?.onLine===false;
+      const offline=!online();
       const r=offline?cached:await request({type:'list',refresh:true});
       if(r.ok){catalog=(r.files||[]).filter(valid);if(message)message.textContent=r.stale?r.error:offline?(catalog.length?'Sačuvan popis karata · preuzimanje treba internet.':'Za pregled dostupnih karata uključi internet.') :!catalog.length?'Trenutno nema dostupnih karata.':'';}
       else if(message)message.textContent=r.error||'Pregled karata nije dostupan.';
@@ -107,7 +108,7 @@
       if(map){await _loadmapShow(map.name);return;}
       remember(s,await install(s,{state:'ready',file:previous.file}));return;
     }
-    if(root.navigator?.onLine===false){remember(s,{state:'failed',error:'Za skidanje karte uključi internet.'});return;}
+    if(!online()){remember(s,{state:'failed',error:'Za skidanje karte uključi internet.'});return;}
     busy.add(id);remember(s,{state:'resolving'});
     try{let r=await request({type:'start',sourceId:id});if(!r.ok)r={state:'failed',error:r.error};if(r.state==='ready'&&r.file?.nativeId)r=await install(s,r);remember(s,r);}
     finally{busy.delete(id);schedule();render();}

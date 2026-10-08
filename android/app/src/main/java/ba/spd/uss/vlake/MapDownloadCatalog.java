@@ -142,7 +142,10 @@ final class MapDownloadCatalog {
         throw new IOException("GitHub katalog nije potpun");
     }
     final class Bridge {
-        private final WebView view;Bridge(WebView view){this.view=view;}
+        private final WebView view;private final MapHttpTransfer.Network network;
+        Bridge(WebView view){this(view,()->MapHttpTransfer.hasNetwork(view.getContext()));}
+        Bridge(WebView view,MapHttpTransfer.Network network){this.view=view;this.network=network;}
+        @JavascriptInterface public boolean networkAvailable(){return network.available();}
         @JavascriptInterface public boolean notificationsEnabled(){
             if(notificationContext==null)return true;
             if(!androidx.core.app.NotificationManagerCompat.from(notificationContext).areNotificationsEnabled())return false;

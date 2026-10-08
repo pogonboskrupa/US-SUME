@@ -24,8 +24,9 @@ const card=id=>nodes.find(n=>n.dataset.sourceId===id&&!n.removed),status=id=>car
  await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'1,98 GB · GitHub');
  assert.equal(card(B).querySelector('.lm-download-title').textContent,'Unsko_2010-2020');assert.equal(card(B).querySelector('.lm-download-release').textContent,'Karta 2010:2020');assert.equal(card(B).querySelector('.lm-download-release').hidden,false);assert.equal(card(A).querySelector('.lm-download-release').hidden,true);
  root.navigator.onLine=false;await api.refresh();assert.match(elements.get('loadmap-download-message').textContent,/Sačuvan popis/);await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
- root.navigator.onLine=true;await Promise.all([api.start(A),api.start(B)]);assert.equal(card(A).querySelector('.lm-download-progress').value,42);assert.match(card(A).querySelector('.lm-download-button').textContent,/42%/);
- states.set(A,{...states.get(A),state:'paused'});await api.resume();assert.match(status(A).textContent,/Čekam vezu/);
+ root.AndroidMapDownloads.networkAvailable=()=>true; // Mobile network overrides stale navigator.onLine=false.
+ await Promise.all([api.start(A),api.start(B)]);root.navigator.onLine=true;delete root.AndroidMapDownloads.networkAvailable;assert.equal(card(A).querySelector('.lm-download-progress').value,42);assert.match(card(A).querySelector('.lm-download-button').textContent,/42%/);
+ states.set(A,{...states.get(A),state:'paused',message:'Server trenutno čeka. Nastavak je automatski.'});await api.resume();assert.match(status(A).textContent,/Server trenutno čeka/);assert.doesNotMatch(status(A).textContent,/Čekam internet/);
  await api.cancel(A);assert.equal(card(A).querySelector('.lm-download-progress').hidden,true);assert.equal(states.get(B).state,'downloading');
  // Both completions must install sequentially, exactly once; manual same-name map is retained.
  rows=[{name:'Unsko_2021-2031',meta:{_nativeId:'manual-map'}}];states.set(A,{ok:true,state:'ready',file:{name:files[0].name,nativeId:'map-A',size:files[0].size}});states.set(B,{ok:true,state:'ready',file:{name:files[1].name,nativeId:'map-B',size:files[1].size}});

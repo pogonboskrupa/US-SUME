@@ -67,7 +67,17 @@ final class MapDownloads {
         }
         long id=prefs.getLong("id",-1);
         if(id<0)return new JSONObject().put("state",resolving?"resolving":prefs.getString("error","").isEmpty()?"idle":"failed").put("error",prefs.getString("error",""));
+        if(prefs.contains("legacyId")){id=finishMobileHandoff(f);}
         JSONObject s=backend.query(id);
+        if(source.isGithub()&&s.optBoolean("legacyTransfer")&&s.optString("state").equals("paused")){
+            // Move the partial before removing the system job: DownloadManager
+            // deletes its original destination on remove(). Persist the handoff
+            // so interruption between these steps cannot lose the new file.
+            File next=new File(dir,UUID.randomUUID()+".sqlitedb");boolean moved=f!=null&&f.isFile();
+            if(moved&&!f.renameTo(next))return s;
+            if(!prefs.edit().putString("file",next.getName()).putLong("legacyId",id).commit()){if(moved)next.renameTo(f);throw new IOException("Ne mogu sačuvati nastavak preuzimanja");}
+            f=next;id=finishMobileHandoff(f);s=backend.query(id);
+        }
         if(s.optString("state").equals("complete")){
             try{
                 validate(f,expectedSize,!source.isGithub());
@@ -79,6 +89,11 @@ final class MapDownloads {
             }catch(Exception e){backend.remove(id);if(f!=null)f.delete();prefs.edit().remove("id").putString("error",e instanceof SourceException?e.getMessage():"Preuzeta karta nije potpuna ili ispravna. Pokušaj ponovo.").commit();return status();}
         }
         return s;
+    }
+    private long finishMobileHandoff(File target) throws Exception {
+        long legacy=prefs.getLong("legacyId",-1),id=backend.enqueue(source.url,target);
+        if(!prefs.edit().putLong("id",id).commit())throw new IOException("Ne mogu sačuvati preuzimanje");
+        if(legacy>=0)backend.remove(legacy);if(!prefs.edit().remove("legacyId").commit())throw new IOException("Ne mogu sačuvati preuzimanje");return id;
     }
     synchronized JSONObject start() throws Exception {
         JSONObject current=status();String state=current.optString("state");
@@ -105,6 +120,7 @@ final class MapDownloads {
     }
     private void reset() throws Exception {
         generation++;resolving=false;long id=prefs.getLong("id",-1);if(id>=0)backend.remove(id);
+        long legacy=prefs.getLong("legacyId",-1);if(legacy>=0&&legacy!=id)backend.remove(legacy);
         String nativeId=prefs.getString("nativeId","");if(!nativeId.isEmpty()&&maps.hasDocument(nativeId))maps.discardDownload(nativeId);
         File f=file();if(f!=null)f.delete();prefs.edit().clear().commit();
     }
@@ -122,25 +138,31 @@ final class MapDownloads {
             if(p!=16||!Arrays.equals(h,"SQLite format 3\0".getBytes(StandardCharsets.US_ASCII)))throw new IOException("Preuzet je pogrešan fajl");}
     }
     private static final class SystemBackend implements Backend {
-        private final DownloadManager manager;private final MapDownloadCatalog.Source source;SystemBackend(Context c,MapDownloadCatalog.Source source){this.source=source;manager=(DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);}
+        private final DownloadManager manager;private final MapDownloadCatalog.Source source;private final Context app;
+        SystemBackend(Context c,MapDownloadCatalog.Source source){app=c.getApplicationContext();this.source=source;manager=(DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);}
         public String resolve() throws Exception {return source.isGithub()?resolveGithub(source.url,source.size,MapDownloads::githubConnection):resolveDrive(source.id,source.size);}
-        public long enqueue(String url,File file){return manager.enqueue(new DownloadManager.Request(Uri.parse(url))
+        public long enqueue(String url,File file) throws Exception {
+            if(source.isGithub())return MapHttpTransfer.shared(app,source).enqueue(url,file);
+            return manager.enqueue(new DownloadManager.Request(Uri.parse(url))
             .setTitle("Dendro Map · "+source.name).setDescription("Offline karta — preuzimanje")
             .setDestinationUri(Uri.fromFile(file)).setMimeType("application/octet-stream")
             .addRequestHeader("Accept-Encoding","identity").addRequestHeader("Cache-Control","no-cache")
+            .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_MOBILE|DownloadManager.Request.NETWORK_WIFI)
             .setAllowedOverMetered(true).setAllowedOverRoaming(false).setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN));}
         public JSONObject query(long id) throws Exception {
+            if(id==MapHttpTransfer.JOB)return MapHttpTransfer.shared(app,source).query();
             try(Cursor c=manager.query(new DownloadManager.Query().setFilterById(id))){
                 if(c==null||!c.moveToFirst())return new JSONObject().put("state","failed").put("error","Preuzimanje je uklonjeno. Pokušaj ponovo.");
                 int state=c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
                 int reason=c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
                 String name=state==DownloadManager.STATUS_SUCCESSFUL?"complete":state==DownloadManager.STATUS_FAILED?"failed":state==DownloadManager.STATUS_PAUSED?"paused":"downloading";
                 String error=reason==DownloadManager.ERROR_INSUFFICIENT_SPACE?"Nema dovoljno prostora na telefonu.":"Preuzimanje nije uspjelo. Provjeri internet i pokušaj ponovo.";
-                return new JSONObject().put("state",name).put("bytes",c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)))
+                String message=reason==DownloadManager.PAUSED_QUEUED_FOR_WIFI?"Android čeka Wi-Fi za veliki fajl.":reason==DownloadManager.PAUSED_WAITING_TO_RETRY?"Veza ili server su prekinuli preuzimanje. Nastavak je automatski.":"Čekam vezu — nastavak je automatski.";
+                return new JSONObject().put("state",name).put("legacyTransfer",true).put("reason",reason).put("wifiOnly",state==DownloadManager.STATUS_PAUSED&&reason==DownloadManager.PAUSED_QUEUED_FOR_WIFI).put("message",state==DownloadManager.STATUS_PAUSED?message:"").put("bytes",c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)))
                     .put("total",c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))).put("error",state==DownloadManager.STATUS_FAILED?error:"");
             }
         }
-        public void remove(long id){manager.remove(id);}
+        public void remove(long id){if(id==MapHttpTransfer.JOB)MapHttpTransfer.shared(app,source).cancel();else manager.remove(id);}
     }
     static boolean allowed(URL u){String h=u.getHost().toLowerCase(Locale.ROOT);return u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&(h.equals("drive.google.com")||h.equals("drive.usercontent.google.com")||h.endsWith(".googleusercontent.com"));}
     static boolean githubAssetURL(URL u){return u.getProtocol().equals("https")&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null&&u.getQuery()==null&&u.getRef()==null&&u.getHost().equalsIgnoreCase("github.com")&&u.getPath().matches("/pogonboskrupa/KARTE/releases/download/[^/]+/[^/]+")&&!u.getPath().contains("/../")&&!u.getPath().contains("/./");}

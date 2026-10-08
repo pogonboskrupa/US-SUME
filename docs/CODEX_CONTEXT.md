@@ -3002,3 +3002,39 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   releases?per_page=1 vraća v2.6.3. Na završnoj provjeri stara_verzija
   još draft bez assets; pojavit će se nakon korisnikove javne objave.
   Cijela javna stara karta i fizički telefon nisu testirani.
+
+## 2026-10-08 — v2.6.4: Velike karte preko mobilnih podataka
+- Korisnik prijavio Čekam internet uz uključene/dopuštene mobilne podatke.
+  Kod je već imao setAllowedOverMetered(true), ali sve STATUS_PAUSED
+  razloge prikazivao kao nedostajući internet. AOSP DownloadInfo.java,
+  getRequiredNetworkType, dodatno nameće UNMETERED preko maksimalne ili
+  preporučene veličine čak i uz allowMetered; DownloadThread to prijavljuje
+  QUEUED_FOR_WIFI. Bez loga korisnikovog telefona konkretan reason nije
+  potvrđen. Sistemske postavke/limiti telefona nisu mijenjani.
+- GitHub rasteri sada koriste MapHttpTransfer, app-owned native HTTP stream
+  u postojećem foreground MapDownloadService, van UI threada. Koristi
+  dostupnu Android INTERNET mrežu bez uslova NOT_METERED/Wi-Fi. Dva workera,
+  buffer64 KiB, long size/progress, disk checkpoint i djelimični wakelock
+  tokom transfera. Ne učitava cijelu kartu u WebView/RAM; naziv/automatski
+  uvoz, preview, offline registry i KML put zadržani.
+- Stanje native posla i stabilni GitHub URL zapisani prije pokretanja.
+  Prekid/process recovery nastavlja Range/If-Range samo s poznatim jakim
+  ETag-om; provjerava Content-Range, početak/ukupnu/punu preostalu veličinu.
+  Puni 200 sigurno zamjenjuje partial, novi ETag veže se tek nakon upisa
+  i sync novog zaglavlja; nepotvrđen/strani/neispravan odgovor odbija se.
+  Partial bez validatora počinje od nule umjesto miješanja revizija.
+  Otkazivanje generacijom onemogućava naknadno stvaranje/upis fajla.
+- Raniji pauzirani GitHub DownloadManager poslovi prelaze na novi put:
+  partial prvo dobija novi UUID, pending handoff se sačuva, zatim se stari
+  sistemski posao ukloni. Recovery handoffa nakon prekida je idempotentan.
+  Stari Drive poslovi zadržani; oni izričito dopuštaju MOBILE|WIFI i metered.
+- Bridge networkAvailable čita stvarne Android capabilities; JS ne blokira
+  mobilni internet zbog zastarjelog navigator.onLine. Pauze u kartici i
+  obavijesti koriste stvarnu poruku (veza/server/Wi-Fi), ne uvijek internet.
+- Lokalno prošlo 100 JS grupa, pet inline sintaksi i LoadMap browser.
+  Android WebView test simulira native mobilnu vezu uz onLine=false.
+  Četiri nova native testa obuhvataju stream malog stvarnog MBTiles fajla,
+  offline početak, prekinuti body, Range recovery, 200/reviziju, pogrešan
+  range, cancellation race i čuvanje/recovery starog partial handoffa.
+- Web/SW/Android 2.6.4/code534. Puni CI i APK provjera u toku. Fizički
+  Xiaomi, stvarna SIM/mobile mreža i cijeli javni fajl nisu testirani.

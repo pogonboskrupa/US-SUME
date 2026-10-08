@@ -9,7 +9,7 @@ import org.json.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** One silent, readable notification; DownloadManager continues owning the actual transfer. */
+/** One silent notification for native mobile transfers and legacy system downloads. */
 public final class MapDownloadService extends Service {
     static final String CHANNEL="offline-map-downloads-v1";
     static final int NOTICE=2540;
@@ -71,16 +71,16 @@ public final class MapDownloadService extends Service {
             channel.setDescription("Tihi napredak skidanja karata, bez ponavljanja zvuka i vibracije");
             channel.setSound(null,null);channel.enableVibration(false);channel.setShowBadge(false);nm.createNotificationChannel(channel);
         }
-        int active=0,ready=0,failed=0;long bytes=0,total=0;String name="",state="";List<String> lines=new ArrayList<>();
+        int active=0,ready=0,failed=0;long bytes=0,total=0;String name="",state="",pause="";List<String> lines=new ArrayList<>();
         for(int i=0;i<rows.length();i++)try{
             JSONObject row=rows.getJSONObject(i),s=row.getJSONObject("status");String st=s.optString("state");
-            if(isActive(st)){active++;state=st;name=row.optString("name");long max=s.optLong("total",row.optLong("size"));if(max<=0)max=row.optLong("size");total+=Math.max(0,max);bytes+=Math.max(0,Math.min(s.optLong("bytes"),max));}
+            if(isActive(st)){active++;state=st;pause=s.optString("message","");name=row.optString("name");long max=s.optLong("total",row.optLong("size"));if(max<=0)max=row.optLong("size");total+=Math.max(0,max);bytes+=Math.max(0,Math.min(s.optLong("bytes"),max));}
             else if(st.equals("failed"))failed++;else if(st.equals("ready")||st.equals("installed"))ready++;
-            lines.add(row.optString("name")+" · "+(st.equals("paused")?"Čekam vezu":st.equals("resolving")?"Pripremam":st.equals("failed")?"Prekinuto — pokušaj ponovo":isActive(st)?format(s.optLong("bytes"))+" / "+format(row.optLong("size")):"Preuzeta"));
+            lines.add(row.optString("name")+" · "+(st.equals("paused")?s.optString("message","Čekam vezu"):st.equals("resolving")?"Pripremam":st.equals("failed")?"Prekinuto — pokušaj ponovo":isActive(st)?format(s.optLong("bytes"))+" / "+format(row.optLong("size")):"Preuzeta"));
         }catch(JSONException ignored){}
         int percent=total>0?(int)Math.min(100,bytes*100.0/total):0;
         String title=ongoing?(active==1?name:"Preuzimanje karata" ):failed>0?"Preuzimanje traži pažnju":"Karta je preuzeta";
-        String body=ongoing?(state.equals("paused")&&active==1?"Čekam internet — nastavak je automatski":active==0||state.equals("resolving")&&active==1?"Pripremam preuzimanje…":percent+"% · "+format(bytes)+" / "+format(total)):
+        String body=ongoing?(state.equals("paused")&&active==1?(pause.isEmpty()?"Čekam internet — nastavak je automatski":pause):active==0||state.equals("resolving")&&active==1?"Pripremam preuzimanje…":percent+"% · "+format(bytes)+" / "+format(total)):
             failed>0?failed+" prekinuto · "+ready+" preuzeto. Otvori pregled karata.":"Otvori aplikaciju da se karta doda u Moje karte.";
         Intent open=new Intent(c,MainActivity.class).setAction("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS").setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent tap=PendingIntent.getActivity(c,NOTICE,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
