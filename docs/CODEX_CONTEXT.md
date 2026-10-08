@@ -2860,5 +2860,11 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   također dobijaju tačan quota razlog. Novi test reprodukuje uspješan
   Range i blokiran full GET, dugi size >2 GB, 16-byte čitanje, djelimičan
   odgovor i HTML iz starog posla. JS downloader i pet inline sintaksi prošli.
-- Web/SW/Android 2.5.9/code529. Završni CI/APK u toku; fizički telefon i
+- Web/SW/Android 2.5.9/code529. CI 37740789291 uspješan: JS/browser/SQL i sedam Android testova. Fizički telefon i
   puni download nisu testirani, javni fajl je sada blokiran na Googleu.
+
+- APK v2.5.9 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.9/app-debug.apk
+  24,114,116 B; SHA256 585aa6a7f11b235d5c8c12577d7e5f5184e898e6ccd4e7fe256d517f9ebd1df6. Izvor
+  68fba48a5ce2939b8ae0dfbec97e64be183b9dd8. Manifest
+  ba.spd.uss.vlake.debug/2.5.9-debug/529, isti certifikat i svih 61 assets
+  potvrđeni; ažuriranje dostupno kroz Meni → Ažuriraj aplikaciju.
