@@ -113,7 +113,8 @@ async def main():
   assert await page.locator('#vlake-tab-btn').is_visible()
   await page.locator('#menu-btn').click();await page.wait_for_timeout(450)
   assert await page.locator('#menu-field-work').is_visible()
-  assert await page.locator('.mdrop-sections .mdrop-item').first.get_attribute('id')=='menu-field-work'
+  assert (await page.locator('.mdrop-sections .mdrop-hdr').all_text_contents())[:2]==['Karte i slojevi','Rad na terenu']
+  assert 'Učitaj kartu' in await page.locator('.mdrop-sections .mdrop-item').first.inner_text()
   assert await page.evaluate("!!(document.getElementById('menu-field-work').compareDocumentPosition(document.getElementById('field-theme-toggle'))&Node.DOCUMENT_POSITION_FOLLOWING)")
   await page.locator('#menu-field-work').click()
   assert await page.locator('#teren-panel').is_visible()

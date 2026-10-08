@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.5.9';
+const APP_VER = 'v2.6.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -40068,13 +40068,6 @@ if (typeof AndroidDownload !== 'undefined') {
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren');TerenWorkspace.search('');TerenWorkspace.jump('trn-records')">Moji zapisi</button>
   </div><div class="mdrop-sections"><section class="mdrop-section">
-  <div class="mdrop-hdr">Rad na terenu</div>
-  <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true">🧭</span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
-  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
-  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
-  </section><section class="mdrop-section">
   <div class="mdrop-hdr">Karte i slojevi</div>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
   <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico">🏔</span>Instalirane karte</button>
@@ -40082,6 +40075,13 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</button>
+  </section><section class="mdrop-section">
+  <div class="mdrop-hdr">Rad na terenu</div>
+  <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true">🧭</span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
+  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
+  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr">Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>

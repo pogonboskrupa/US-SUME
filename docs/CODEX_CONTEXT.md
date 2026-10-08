@@ -2868,3 +2868,16 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   68fba48a5ce2939b8ae0dfbec97e64be183b9dd8. Manifest
   ba.spd.uss.vlake.debug/2.5.9-debug/529, isti certifikat i svih 61 assets
   potvrđeni; ažuriranje dostupno kroz Meni → Ažuriraj aplikaciju.
+
+## 2026-10-08 — v2.6.0: Karte prije terenskih alata u Meniju
+- Na zahtjev korisnika cijela sekcija Karte i slojevi sada je prva redovna
+  sekcija Menija, odmah zatim Rad na terenu. RAD NA TERENU ostaje prije
+  Dnevnog moda u svojoj sekciji; postojeće dozvole i ŠPD prečice očuvane.
+- Read-only GitHub Pages API potvrđuje source CODEX-US-SUME-2026-10-01,
+  / (root); anonimni HTTP GET s no-cache vraća APP_VER v2.4.1. Stara
+  verzija u Chromeu dolazi iz stare objave, nije samo browser cache.
+  Pages postavke nisu mijenjane; za novo web izdanje source treba biti
+  CODEX-US-SUME / (root). Lokalni terenski podaci nisu brisani.
+- Lokalno prošli Teren browser (ŠPD/admin/projektant), Menu tools (osam
+  kombinacija širina i tema), Teren JS i pet inline sintaksi.
+- Web/SW/Android 2.6.0/code530. APK provjere i objava u toku.
