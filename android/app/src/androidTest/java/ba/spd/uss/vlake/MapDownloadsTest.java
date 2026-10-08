@@ -143,9 +143,9 @@ public class MapDownloadsTest {
   code.set(200);body.set(java.util.Arrays.copyOf(bytes,bytes.length-1));
   try{k.action(msg);fail("Truncated KML accepted");}catch(java.io.IOException expected){}
   java.io.File file=java.io.File.createTempFile("bad-kml-", ".kml",c.getCacheDir());
-  try{for(String text:new String[]{"<html><body>Sign in</body></html>","<kml><Placemark>","<!DOCTYPE kml [<!ENTITY x 'example'>]><kml>&x;</kml>"}){
+  try{for(String text:new String[]{"<html><body>Sign in</body></html>","<kml><Placemark>","<kml/><kml/>","<!DOCTYPE kml [<!ENTITY x 'example'>]><kml>&x;</kml>"}){
    byte[] data=text.getBytes();try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(data);}
-   try{KmlDownloads.validate(file,data.length);fail("Invalid XML accepted");}catch(java.io.IOException expected){}
+   try{KmlDownloads.validate(file,data.length);fail("Invalid XML accepted: "+text);}catch(java.io.IOException expected){}
   }}finally{file.delete();k.action(release);}
  }
  @Test(timeout=90000) public void automaticDownloadInstallOfflineReloadAndDelete() throws Exception {

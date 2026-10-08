@@ -2911,4 +2911,8 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   naknadno dodan fajl. Novi native test odbija HTML/partial/truncated/DTD/
   strani izvor; postojeći APK/WebView test proširen stvarnim lokalnim URL-om,
   KML bridge uvozom i offline reloadom.
+- Prvi Android CI 37745667727: KML/WebView import i offline reload prošli,
+  jedan novi validator test otkrio prihvatanje neispravnog XML-a. Validator
+  sada izričito broji otvaranja/zatvaranja i odbija DTD pri čitanju bajtova,
+  nezavisno od razlika Android pull parsera. Ponovna CI provjera u toku.
 - Web/SW/Android 2.6.1/code531. Završni CI/APK u toku.

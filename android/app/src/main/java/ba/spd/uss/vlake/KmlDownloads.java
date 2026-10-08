@@ -91,13 +91,29 @@ final class KmlDownloads implements WebViewAssetLoader.PathHandler {
     }
     static void validate(File file,long expected) throws Exception {
         if(file.length()!=expected||expected<=0||expected>MAX_BYTES)throw new IOException("Preuzeti KML nije potpun");
-        try(InputStream in=new FileInputStream(file)){
-            XmlPullParser xml=Xml.newPullParser();xml.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES,true);xml.setInput(in,null);boolean root=false;
+        // Some Android pull parsers end a truncated document without throwing, or skip DTD tokens.
+        // Check balanced structure ourselves and reject declarations while bytes are read (UTF-8/16/32).
+        try(InputStream in=new FilterInputStream(new FileInputStream(file)){
+            int match=0;final String declaration="<!DOCTYPE";
+            void inspect(int value) throws IOException {
+                if(value==0)return;
+                char c=Character.toUpperCase((char)(value&255));
+                match=c==declaration.charAt(match)?match+1:c=='<'?1:0;
+                if(match==declaration.length())throw new IOException("KML sa DTD zapisom nije podržan");
+            }
+            @Override public int read() throws IOException {int n=super.in.read();if(n>=0)inspect(n);return n;}
+            @Override public int read(byte[] b,int off,int len) throws IOException {int n=super.in.read(b,off,len);for(int i=0;i<n;i++)inspect(b[off+i]);return n;}
+        }){
+            XmlPullParser xml=Xml.newPullParser();xml.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES,true);xml.setInput(in,null);boolean root=false,closed=false;int depth=0;
             for(int event=xml.getEventType();event!=XmlPullParser.END_DOCUMENT;event=xml.nextToken()){
                 if(event==XmlPullParser.DOCDECL)throw new IOException("KML sa DTD zapisom nije podržan");
-                if(event==XmlPullParser.START_TAG&&!root){if(!"kml".equals(xml.getName()))throw new IOException("Drive nije vratio KML fajl");root=true;}
+                if(event==XmlPullParser.START_TAG){
+                    if(depth==0){if(root||!"kml".equals(xml.getName()))throw new IOException("Drive nije vratio KML fajl");root=true;}
+                    depth++;
+                }else if(event==XmlPullParser.END_TAG){if(--depth<0)throw new IOException("KML fajl nije ispravan");if(depth==0)closed=true;}
+                else if(event==XmlPullParser.TEXT&&depth==0&&!xml.getText().trim().isEmpty())throw new IOException("KML fajl nije ispravan");
             }
-            if(!root)throw new IOException("Prazan KML fajl");
+            if(!root||!closed||depth!=0)throw new IOException("KML fajl nije potpun");
         }catch(IOException e){throw e;}catch(Exception e){throw new IOException("KML fajl nije ispravan",e);}
     }
     @Override public WebResourceResponse handle(String path){
