@@ -7439,6 +7439,7 @@ function _startupRestore() {
 
   const korak = (ime, fn) => { try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } };
 
+  korak('bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); });
   korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
   korak('switchTab',   () => switchTab('karta'));
   korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(window.MapDownloads?.available()){await MapDownloads.resume();await MapDownloads.openFromNotification();} });
@@ -38054,7 +38055,6 @@ let _dozVlakeIdxs = [];
 let _dozBufLayers = [];
 let _dozBufDeadLayers = [];
 let _dozBufRadius = 40;
-setTimeout(_bufRestorePrefs,0);
 let _dozLinkedProjektId = null;
 
 function _dozFindVlakeInBoundary(odjel) {
