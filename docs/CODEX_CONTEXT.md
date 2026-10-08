@@ -2807,3 +2807,8 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   ba.spd.uss.vlake.debug/2.5.6-debug/526, isti certifikat i svih 61 assets
   potvrđeni. Dostupan u Meni → Ažuriraj aplikaciju. Fizički Xiaomi, puni
   mrežni download i produkcijski Supabase nisu testirani.
+
+## 2026-10-08 — v2.5.7: naziv Šumski mod
+- Na korisnikov zahtjev, Moja lokacija sada prikazuje „Šumski mod“ umjesto
+  „Šumski“. Isti prekidač i GPS filtriranje. Web/SW/Android 2.5.7/code527.
+- Provjera prikaza i konačni CI/APK u toku.
