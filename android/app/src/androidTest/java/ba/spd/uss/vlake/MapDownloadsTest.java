@@ -106,6 +106,20 @@ public class MapDownloadsTest {
    try{MapDownloads.validate(oldJob,size);fail("Stari posao sakrio Drive quota razlog");}catch(MapDownloads.DriveException e){assertEquals("drive_quota",e.code);}
   }finally{oldJob.delete();}
  }
+ @Test public void githubSourceChecksFullResponseAndKeepsStableUrlForResume() throws Exception {
+  byte[] header="SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+  DriveResponse good=new DriveResponse(header,MapDownloads.GITHUB_SIZE,"application/octet-stream",200,null);
+  assertEquals(MapDownloads.GITHUB_URL,MapDownloads.resolveGithub(MapDownloads.GITHUB_SIZE,(url,range)->{assertEquals(MapDownloads.GITHUB_URL,url);assertFalse(range);return good;}));
+  assertEquals(16,good.bytesRead);assertTrue(good.closed);
+  for(DriveResponse bad:new DriveResponse[]{new DriveResponse(header,MapDownloads.GITHUB_SIZE,"text/html",200,null),new DriveResponse(header,16,"application/octet-stream",206,"bytes 0-15/1982578688"),new DriveResponse(header,MapDownloads.GITHUB_SIZE-1,"application/octet-stream",200,null),new DriveResponse(new byte[16],MapDownloads.GITHUB_SIZE,"application/octet-stream",200,null)}){
+   try{MapDownloads.resolveGithub(MapDownloads.GITHUB_SIZE,(url,range)->bad);fail("Bad GitHub response accepted");}catch(MapDownloads.SourceException expected){}assertTrue(bad.closed);
+  }
+  assertTrue(MapDownloads.githubAllowed(new java.net.URL(MapDownloads.GITHUB_URL)));
+  assertTrue(MapDownloads.githubAllowed(new java.net.URL("https://release-assets.githubusercontent.com/github-production-release-asset/fixture")));
+  assertFalse(MapDownloads.githubAllowed(new java.net.URL("https://github.com/foreign/repo/releases/download/map.mbtiles")));
+  assertFalse(MapDownloads.githubAllowed(new java.net.URL("https://release-assets.githubusercontent.com.attacker.test/file")));
+  assertFalse(MapDownloads.githubAllowed(new java.net.URL("http://release-assets.githubusercontent.com/file")));
+ }
  @Test public void publicFolderParserAcceptsUnicodeAndLongSizesWithoutExecutingScripts() throws Exception {
   org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
   row.put(0,"1mExFpUJgOAROwPSumemnnbzFH74GWHXv").put(1,new org.json.JSONArray().put(MapDownloadCatalog.FOLDER_ID)).put(2,"KARTA_špd.mbtiles").put(3,"application/octet-stream").put(13,2144841728L);
@@ -151,8 +165,8 @@ public class MapDownloadsTest {
  @Test(timeout=90000) public void automaticDownloadInstallOfflineReloadAndDelete() throws Exception {
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertFalse("Emulator bez interneta",ReferenceOcrBridge.hasInternet(context));
-  byte[] bytes;try(java.io.InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("rmaps-mini.sqlitedb")){java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);bytes=out.toByteArray();}
-  // Only the fixed Drive file may be accepted; downloaded HTML and truncated files cannot become maps.
+  byte[] bytes;try(java.io.InputStream in=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("mbtiles-mini.mbtiles")){java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);bytes=out.toByteArray();}
+  // Drive compatibility remains; the transfer below uses a real MBTiles fixture and the GitHub source ID.
   String form="<form action=\"https://drive.usercontent.google.com/download\" method=\"get\"><input name=\"id\" value=\""+MapDownloads.FILE_ID+"\"><input name=\"export\" value=\"download\"><input name=\"confirm\" value=\"t\"><input name=\"uuid\" value=\"fixture\"></form>";
   assertTrue(MapDownloads.confirmation(form).contains("confirm=t"));
   String newId="1mExFpUJgOAROwPSumemnnbzFH74GWHXv";assertTrue(MapDownloads.confirmation(form.replace(MapDownloads.FILE_ID,newId),newId).contains(newId));
@@ -169,8 +183,8 @@ public class MapDownloadsTest {
   try{
    assertTrue(resumed.await(15,TimeUnit.SECONDS));WebView view=ref.get();pageLoaded(view);until(view,"document.readyState==='complete'&&!!window.MapDownloads&&typeof sqlmapLoadFile==='function'");
    Field f=MainActivity.class.getDeclaredField("offlineMaps");f.setAccessible(true);OfflineMaps maps=(OfflineMaps)f.get(null);
-   download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");download.cancel();
-   MapDownloadCatalog.Source source=new MapDownloadCatalog.Source(MapDownloads.FILE_ID,MapDownloads.NAME,bytes.length);
+   MapDownloadCatalog.Source source=new MapDownloadCatalog.Source(MapDownloads.GITHUB_ID,MapDownloads.GITHUB_NAME,bytes.length);
+   download=new MapDownloads(context,maps,source,transport,"unsko-download-test");download.cancel();
    MapDownloads attachedJob=download;java.util.List<MapDownloadCatalog.Source> sources=new java.util.ArrayList<>();sources.add(source);
    MapDownloadCatalog attached=new MapDownloadCatalog(context,()->sources,item->attachedJob,"map-catalog-test");
    attached.list(true);
@@ -178,13 +192,13 @@ public class MapDownloadsTest {
    assertEquals(0,transport.enqueues);
    CountDownLatch ready=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(attached.new Bridge(view),"AndroidMapDownloads");view.reload();ready.countDown();});assertTrue(ready.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
    eval(view,"_revealApp();switchTab('karta');window.workBefore=JSON.stringify([vlake,_tacke,_tragRegistry]);Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});openLoadMapScreen();void 0");
-   until(view,"document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').disabled");
-   eval(view,"document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').click();void 0");
+   until(view,"document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').textContent==='Skini kartu'&&!document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').disabled");
+   eval(view,"document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').click();void 0");
    assertEquals("true",eval(view,"document.querySelector('.lm-download-status').textContent.includes('uključi internet')"));assertEquals(0,transport.enqueues);
-   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+MapDownloads.FILE_ID+"').click();void 0");
+   eval(view,"Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});document.getElementById('loadmap-download-"+MapDownloads.GITHUB_ID+"').click();void 0");
    until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");assertEquals(1,transport.enqueues);
    // Recreate native download controller and reload JS: job ID and progress survive.
-   download=new MapDownloads(context,maps,transport,bytes.length,"unsko-download-test");MapDownloads recoveredJob=download;
+   download=new MapDownloads(context,maps,source,transport,"unsko-download-test");MapDownloads recoveredJob=download;
    MapDownloadCatalog recovered=new MapDownloadCatalog(context,()->sources,item->recoveredJob,"map-catalog-test");
    assertEquals("paused",download.status().getString("state"));
    if(Build.VERSION.SDK_INT>=33)InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.POST_NOTIFICATIONS);

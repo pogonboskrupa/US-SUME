@@ -1,4 +1,4 @@
-/* Public folder catalogue; Android owns all large downloads and SQLite bytes. */
+/* Raster catalogue; Android owns all large downloads and SQLite bytes. */
 (function(root){
   'use strict';
   const pending=new Map(),cards=new Map(),states=new Map(),busy=new Set(),installers=new Map();
@@ -37,7 +37,7 @@
     for(const [id,s]of visible){
       const c=card(s);if(!c)continue;const status=states.get(id)?.status||{state:'idle'},installing=installers.has(id);
       c.querySelector('.lm-download-title').textContent=s.name.replace(/\.[^.]+$/,'');
-      c.querySelector('.lm-download-size').textContent=sizeText(s.size);
+      c.querySelector('.lm-download-size').textContent=sizeText(s.size)+(s.provider?' · '+s.provider:'');
       const button=c.querySelector('.lm-download-button'),text=c.querySelector('.lm-download-status'),progress=c.querySelector('.lm-download-progress'),stop=c.querySelector('.lm-download-cancel');
       let label='Skini kartu',message='';
       if(installing||status.state==='ready'){label='Dodajem kartu…';message='Pripremam kartu za korištenje…';}
@@ -93,7 +93,7 @@
       if(cached.ok){catalog=(cached.files||[]).filter(valid);render();}
       const offline=root.navigator?.onLine===false;
       const r=offline?cached:await request({type:'list',refresh:true});
-      if(r.ok){catalog=(r.files||[]).filter(valid);if(message)message.textContent=r.stale?r.error:offline?(catalog.length?'Sačuvan popis karata · preuzimanje treba internet.':'Za pregled dostupnih karata uključi internet.') :!catalog.length?'U folderu trenutno nema dostupnih karata.':'';}
+      if(r.ok){catalog=(r.files||[]).filter(valid);if(message)message.textContent=r.stale?r.error:offline?(catalog.length?'Sačuvan popis karata · preuzimanje treba internet.':'Za pregled dostupnih karata uključi internet.') :!catalog.length?'Trenutno nema dostupnih karata.':'';}
       else if(message)message.textContent=r.error||'Pregled karata nije dostupan.';
     }finally{refreshing=false;render();}
     await resume();

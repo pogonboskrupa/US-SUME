@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.regex.*;
 
-/** Only raster files listed in the user's fixed public folder may start a new download. */
+/** Fixed GitHub raster catalogue; existing Drive jobs stay resumable. */
 final class MapDownloadCatalog {
     private static MapDownloadCatalog instance;
     private Context notificationContext;
@@ -28,7 +28,7 @@ final class MapDownloadCatalog {
             if(id==null||!id.matches("[\\w-]{10,100}")||name==null||name.length()>240||name.matches("(?s).*[\\p{Cntrl}/\\\\].*")||!name.toLowerCase(Locale.ROOT).matches(".*\\.(mbtiles|sqlitedb|sqlite|db|gpkg)")||size<16||size>64L*1024*1024*1024)throw new IOException("Nevažeća karta u folderu");
             this.id=id;this.name=name;this.size=size;
         }
-        JSONObject json() throws Exception {return new JSONObject().put("id",id).put("name",name).put("size",size);}
+        JSONObject json() throws Exception {return new JSONObject().put("id",id).put("name",name).put("size",size).put("provider",id.equals(MapDownloads.GITHUB_ID)?"GitHub":"Google Drive");}
     }
     interface Provider {List<Source> fetch() throws Exception;}
     interface Factory {MapDownloads create(Source source) throws Exception;}
@@ -39,7 +39,8 @@ final class MapDownloadCatalog {
     private final Map<String,MapDownloads> jobs=new HashMap<>();
     private final java.util.concurrent.ExecutorService commands=Executors.newFixedThreadPool(2);
     MapDownloadCatalog(Context c,OfflineMaps maps) throws Exception {
-        this(c.getApplicationContext(),MapDownloadCatalog::fetchFolder,productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
+        this(c.getApplicationContext(),()->Collections.singletonList(new Source(MapDownloads.GITHUB_ID,MapDownloads.GITHUB_NAME,MapDownloads.GITHUB_SIZE)),productionFactory(c.getApplicationContext(),maps),"drive-map-catalog-v1");
+        list(true);
         notificationContext=c.getApplicationContext();
         // v2.5.1 transfers remain resumable even though the source folder has changed.
         if(c.getSharedPreferences("unsko-download-v1",Context.MODE_PRIVATE).contains("file"))remember(new Source(MapDownloads.FILE_ID,MapDownloads.NAME,MapDownloads.SIZE));
@@ -56,7 +57,7 @@ final class MapDownloadCatalog {
     JSONObject list(boolean refresh) throws Exception {
         String error="";
         if(refresh)try{List<Source> files=provider.fetch();if(!prefs.edit().putString("catalog",encode(files).toString()).putLong("updated",System.currentTimeMillis()).commit())throw new IOException();catalog=files;}
-        catch(Exception e){error="Pregled foldera trenutno nije dostupan. Provjeri internet i javni pristup folderu.";}
+        catch(Exception e){error="Pregled dostupnih karata trenutno nije dostupan. Pokušaj ponovo.";}
         return new JSONObject().put("ok",error.isEmpty()||!catalog.isEmpty()).put("files",encode(catalog)).put("stale",!error.isEmpty()).put("error",error).put("updated",prefs.getLong("updated",0));
     }
     private synchronized void remember(Source source) throws Exception {JSONObject all=new JSONObject(prefs.getString("jobs","{}"));all.put(source.id,source.json());if(!prefs.edit().putString("jobs",all.toString()).commit())throw new IOException("Ne mogu sačuvati posao preuzimanja");}
@@ -80,7 +81,7 @@ final class MapDownloadCatalog {
         String id=msg.getString("sourceId");MapDownloads j;
         if(type.equals("start")){
             Source source=null;for(Source s:catalog)if(s.id.equals(id))source=s;
-            if(source==null)throw new IOException("Karta nije u javnom folderu KARTA APP. Osvježi popis.");
+            if(source==null)throw new IOException("Karta nije u katalogu dostupnih karata. Osvježi popis.");
             // Existing jobs use their original immutable size/name until removed. Never reinterpret a partial file after a Drive edit.
             JSONObject all=new JSONObject(prefs.getString("jobs","{}"));Source saved=all.has(id)?activeSource(id):source;
             j=job(saved);String state=j.status().optString("state");

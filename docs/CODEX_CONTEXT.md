@@ -2922,3 +2922,30 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   e8b5d7c64d364540ada5c88744e39925b7545809. Manifest
   ba.spd.uss.vlake.debug/2.6.1-debug/531, isti certifikat i svih 61 assets
   potvrđeni. Updater releases?per_page=1 vraća v2.6.1.
+
+## 2026-10-08 — v2.6.2: ŠPD karta sa GitHub Releases
+- Na zahtjev korisnika novi raster download koristi tačno javni asset
+  pogonboskrupa/KARTE, v1.0.0/KARTA_spd_GitHub.mbtiles. U aplikaciji naziv
+  ostaje Unsko_2021-2031; katalog prikazuje GitHub i veličinu. KML katalog
+  ostaje u javnom Drive folderu KARTA APP. KARTE repo nije mijenjan.
+- GitHub API potvrđuje 1.982.578.688 B i objavljeni digest
+  9065c71297f00b4e845909e98496eaa517b79ca362483c7b6b701f03ce5bfdd4.
+  Anonimni Range vraća 206, puni GET 200 sa tačnom veličinom i SQLite
+  zaglavljem; prvi 64 KiB potvrđuju metadata/tiles i unique tile_index.
+  Cijeli fajl nije preuzet: puni SHA256 i integrity_check nisu provjereni.
+- Native preflight čita samo 16 B, odbija HTML, djelimičan odgovor,
+  pogrešno zaglavlje/veličinu i strane redirect hostove. DownloadManager
+  dobija trajni GitHub asset URL, ne privremeni potpisani CDN URL, radi
+  obnove pristupa nakon pauze. Postojeći progress/obavijesti, pozadinski
+  download i automatsko dodavanje u Moje karte ostaju na istom putu.
+- Novi source ID odvaja GitHub fajl od starih Drive partial fajlova.
+  Legacy Drive poslovi/sačuvane karte ostaju dostupni, ne reinterpretiraju
+  se kao GitHub bajtovi. Katalog ove karte ne zahtijeva Drive ni prijavu.
+- Lokalno prošlo svih 100 JS test grupa, pet inline sintaksi i LoadMap
+  browser: stvarne pločice, worker/IDB, offline restart, neispravni fajlovi,
+  promjena izbora i brisanje. Novi Android test provjerava puni preflight,
+  ograničeno čitanje, stabilni URL i odbijanje loših izvora. Postojeći
+  WebView/DownloadManager test sada koristi stvarni mali MBTiles fixture
+  sa TMS koordinatama; legacy Drive i KML provjere zadržane.
+- Web/SW/Android 2.6.2/code532. Puni CI i APK provjera u toku; fizički
+  telefon i cijeli javni download od 1,98 GB nisu testirani.
