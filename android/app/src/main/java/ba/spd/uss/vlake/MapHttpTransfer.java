@@ -57,7 +57,13 @@ final class MapHttpTransfer {
         }
         return new JSONObject().put("state",state).put("bytes",bytes).put("total",source.size).put("message",prefs.getString("message","")).put("error",prefs.getString("error",""));
     }
-    synchronized void cancel(){generation++;running=false;retryAt=0;if(connection!=null)connection.disconnect();connection=null;prefs.edit().clear().commit();}
+    void cancel(){
+        HttpURLConnection old;
+        synchronized(this){generation++;running=false;retryAt=0;old=connection;connection=null;prefs.edit().clear().commit();}
+        // Persist cancellation before potentially slow socket teardown, and do
+        // not hold the state lock while interrupting the worker's network read.
+        if(old!=null)old.disconnect();
+    }
     private synchronized void check(long token) throws IOException {if(token!=generation)throw new IOException("Preuzimanje je otkazano");}
     private synchronized void finish(long token,String state,String text){
         if(token!=generation)return;running=false;connection=null;retryAt=state.equals("paused")?System.currentTimeMillis()+10000:0;
