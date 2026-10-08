@@ -3146,3 +3146,6 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   nepostojeću funkciju i prekida ostatak inicijalizacije testnog bloka.
   Obnova bafera premještena u osigurani startupRestore korak nakon spremnog
   DOM-a/provjere naloga; produkcijski i izdvojeni tokovi ne zavise od redoslijeda.
+- Drugi CI 37827480995: Doznaka i svi novi testovi prošli; project-terrain
+  fixture nije uključivao novi stvarni _loadmapThumbData helper za Omiljene.
+  Fixture dopunjen istom funkcijom iz aplikacije (bez zamjenskog mocka).
