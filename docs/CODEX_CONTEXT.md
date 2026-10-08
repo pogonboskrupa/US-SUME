@@ -2987,4 +2987,18 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Native testovi prošireni za oba perioda, nacrte, budući asset, odbijanje
   stranog izvora, kompatibilan stari ID, cached katalog i recovery posla
   offline; stvarni APK/WebView MBTiles test koristi novi dinamički source.
-- Web/SW/Android 2.6.3/code533. Puni CI i APK provjera u toku.
+- Web/SW/Android 2.6.3/code533. CI 37760530513 uspješan: svih 100 JS
+  grupa, SQL fixture, browser provjere i deset Android testova bez grešaka
+  ili preskoka. Stvarni API34 WebView sa malim MBTiles fixtureom potvrdio
+  je novi dinamički source, uvoz stare karte, obavijesti, tile/preview,
+  offline reload i brisanje; parser/cache/recovery oba perioda potvrđeni.
+- APK objavljen:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.3/app-debug.apk
+  24.132.712 B; SHA256
+  301bf38d2e3ca976a16186ab1acd3a86dd56bde0506c11d055e0b2b3407f9617.
+  Izvor b84e62753003d0d63ddb327e0d69101cb159bcf2. Stvarni manifest
+  ba.spd.uss.vlake.debug/2.6.3-debug/533, isti certifikat i svih 61 web
+  assets potvrđeni; digest/veličina odgovaraju Release assetu, updater
+  releases?per_page=1 vraća v2.6.3. Na završnoj provjeri stara_verzija
+  još draft bez assets; pojavit će se nakon korisnikove javne objave.
+  Cijela javna stara karta i fizički telefon nisu testirani.
