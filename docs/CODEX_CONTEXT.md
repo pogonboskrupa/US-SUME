@@ -3038,5 +3038,8 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Četiri nova native testa obuhvataju stream malog stvarnog MBTiles fajla,
   offline početak, prekinuti body, Range recovery, 200/reviziju, pogrešan
   range, cancellation race i čuvanje/recovery starog partial handoffa.
+- Prvi CI 37769360020: proizvodni APK kompajliran, Android test build
+  stao na sukobu lokalnog latch naziva sa inherited Response.closed
+  boolean poljem. Testni naziv ispravljen; puni native testovi ponovljeni.
 - Web/SW/Android 2.6.4/code534. Puni CI i APK provjera u toku. Fizički
   Xiaomi, stvarna SIM/mobile mreža i cijeli javni fajl nisu testirani.

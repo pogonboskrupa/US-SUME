@@ -62,12 +62,12 @@ public class MapMobileDownloadsTest {
         }
     }
     @Test public void cancelledTransferCannotRecreateFileAfterItsNetworkReadReturns() throws Exception {
-        Context c=context();byte[] bytes=raster();MapDownloadCatalog.Source s=source(bytes);File f=new File(c.getCacheDir(),UUID.randomUUID()+".sqlite");CountDownLatch reading=new CountDownLatch(1),release=new CountDownLatch(1),closed=new CountDownLatch(2);
+        Context c=context();byte[] bytes=raster();MapDownloadCatalog.Source s=source(bytes);File f=new File(c.getCacheDir(),UUID.randomUUID()+".sqlite");CountDownLatch reading=new CountDownLatch(1),release=new CountDownLatch(1),disconnects=new CountDownLatch(2);
         MapHttpTransfer t=new MapHttpTransfer(c,s,(url,offset,tag)->new Response(bytes,bytes.length,200,null,"\"v1\""){
             public InputStream getInputStream(){return new ByteArrayInputStream(bytes){public synchronized int read(byte[] b,int off,int len){reading.countDown();try{assertTrue(release.await(5,TimeUnit.SECONDS));}catch(InterruptedException e){throw new AssertionError(e);}return super.read(b,off,len);}};}
-            public void disconnect(){super.disconnect();closed.countDown();}
+            public void disconnect(){super.disconnect();disconnects.countDown();}
         },()->true,"mobile-cancel-test-264");
-        try{t.cancel();t.enqueue(s.url,f);t.query();assertTrue(reading.await(5,TimeUnit.SECONDS));t.cancel();f.delete();release.countDown();assertTrue(closed.await(5,TimeUnit.SECONDS));assertFalse(f.exists());assertEquals("idle",t.query().getString("state"));}finally{release.countDown();t.cancel();f.delete();}
+        try{t.cancel();t.enqueue(s.url,f);t.query();assertTrue(reading.await(5,TimeUnit.SECONDS));t.cancel();f.delete();release.countDown();assertTrue(disconnects.await(5,TimeUnit.SECONDS));assertFalse(f.exists());assertEquals("idle",t.query().getString("state"));}finally{release.countDown();t.cancel();f.delete();}
     }
     @Test public void legacyWifiWaitMovesPartialBeforeSystemJobDeletionAndRecoversHandoff() throws Exception {
         Context c=context();byte[] bytes=raster();MapDownloadCatalog.Source s=source(bytes);String storage="mobile-handoff-test-264";
