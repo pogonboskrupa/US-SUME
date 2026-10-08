@@ -73,6 +73,11 @@ async def main():
   assert await page.evaluate('_sqlLayers.every(sl=>!sl.visible)&&_sqlRestoreFailed.length===2')
   await page.evaluate('(name)=>_loadmapShow(name)',saved_name)
   assert await page.evaluate('_sqlLayers[0].layer.options.opacity===.35')
+  # Ista fizička raster baza koju koristi Android download/install test.
+  await page.evaluate('document.getElementById("preview-test").style.display="none";openLoadMapScreen()')
+  await page.locator('#loadmap-file-input').set_input_files({'name':'Android fixture.mbtiles','mimeType':'application/octet-stream','buffer':(ROOT/'android/app/src/androidTest/assets/mbtiles-mini.mbtiles').read_bytes()})
+  await page.wait_for_function('_loadmapPending.length===1');await page.locator('#loadmap-confirm').click();await page.wait_for_function('_sqlLayers.some(s=>s.name==="Android fixture")');await page.evaluate('_loadmapThumbQueue')
+  assert await page.evaluate('localStorage.getItem("lm_thumb_v3_Android fixture")==="1"&&_loadmapThumbData("Android fixture").startsWith("data:image/jpeg")')
   assert not errors,errors
   assert not external,external
   await browser.close()

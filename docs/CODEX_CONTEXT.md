@@ -3149,3 +3149,9 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Drugi CI 37827480995: Doznaka i svi novi testovi prošli; project-terrain
   fixture nije uključivao novi stvarni _loadmapThumbData helper za Omiljene.
   Fixture dopunjen istom funkcijom iz aplikacije (bez zamjenskog mocka).
+- Treći CI 37828390570: svi web/teren testovi i APK build/assets prošli;
+  13/14 Android testova prošlo. Download test je očekivao JPEG od stare
+  1x1 jednobojne PNG pločice, koju novi pregled pravilno preskače kao praznu.
+  Android MBTiles fixture sada ima 256x256 raster s linijama (isti koordinatni
+  redovi/schema); native uslov provjerava v3 cache. Ista fizička baza uključena
+  i u browser preflight stvarnog SQL workera/pregleda. Proizvodni kod ne mijenjan.
