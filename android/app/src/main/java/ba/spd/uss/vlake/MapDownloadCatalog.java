@@ -110,12 +110,19 @@ final class MapDownloadCatalog {
         });}
     }
     static List<Source> parse(String html) throws Exception {
+        JSONArray rows=folderRows(html);
+        return parseRows(rows);
+    }
+    static JSONArray folderRows(String html) throws Exception {
         // Decode a JSON payload, never execute Google's script or file names.
         Matcher m=Pattern.compile("_DRIVE_ivd(?:['\"]\\]|\\s*)\\s*=\\s*'((?:\\\\.|[^'\\\\])*)'",Pattern.DOTALL).matcher(html);
         if(!m.find())throw new IOException("Nije dostupan javni pregled foldera");
         JSONArray data=new JSONArray(unescape(m.group(1)));if(data.length()<1||!(data.get(0) instanceof JSONArray))throw new IOException("Nepoznat pregled foldera");
         if(data.length()>1&&!data.isNull(1))throw new IOException("Google nije vratio cijeli popis karata");
         JSONArray rows=data.getJSONArray(0);if(rows.length()>300)throw new IOException("Popis karata je prevelik");
+        return rows;
+    }
+    private static List<Source> parseRows(JSONArray rows) throws Exception {
         List<Source> out=new ArrayList<>();Set<String> ids=new HashSet<>();
         for(int i=0;i<rows.length();i++){
             JSONArray row=rows.getJSONArray(i);if(row.length()<14)throw new IOException("Nepotpun pregled karte");
@@ -133,10 +140,11 @@ final class MapDownloadCatalog {
             else if(c=='n')out.append('\n');else if(c=='r')out.append('\r');else if(c=='t')out.append('\t');else if(c=='b')out.append('\b');else if(c=='f')out.append('\f');else throw new IOException("Nepoznat zapis foldera");
         }return out.toString();
     }
-    private static List<Source> fetchFolder() throws Exception {
+    private static List<Source> fetchFolder() throws Exception {return parseRows(fetchFolderRows());}
+    static JSONArray fetchFolderRows() throws Exception {
         String url="https://drive.google.com/drive/folders/"+FOLDER_ID+"?hl=en&catalog="+System.currentTimeMillis();HttpURLConnection c=MapDownloads.connection(url,false);
         try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
-            byte[] b=new byte[8192];int n;while((n=in.read(b))>0){if(out.size()+n>4*1024*1024)throw new IOException("Pregled foldera je prevelik");out.write(b,0,n);}return parse(out.toString("UTF-8"));
+            byte[] b=new byte[8192];int n;while((n=in.read(b))>0){if(out.size()+n>4*1024*1024)throw new IOException("Pregled foldera je prevelik");out.write(b,0,n);}return folderRows(out.toString("UTF-8"));
         }finally{c.disconnect();}
     }
 }

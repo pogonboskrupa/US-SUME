@@ -85,6 +85,7 @@ public class MainActivity extends Activity {
     private WebViewAssetLoader assetLoader;
     private static OfflineMaps offlineMaps;
     private static MapDownloadCatalog mapDownloads;
+    private KmlDownloads kmlDownloads;
     private volatile boolean mapFilePicker;
     private BroadcastReceiver recActionReceiver;
 
@@ -197,9 +198,11 @@ public class MainActivity extends Activity {
         if (offlineMaps == null) offlineMaps = new OfflineMaps(this);
         if (mapDownloads == null) try { mapDownloads = MapDownloadCatalog.shared(this, offlineMaps); }
         catch (Exception e) { android.util.Log.w("MapCatalog", "Katalog karata nije dostupan"); }
+        kmlDownloads = new KmlDownloads(this);
         assetLoader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .addPathHandler("/offline-maps/", offlineMaps)
+                .addPathHandler("/drive-kml/", kmlDownloads)
                 .build();
 
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
@@ -210,6 +213,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new ReferenceOcrBridge(webView), "AndroidReferenceOcr");
         webView.addJavascriptInterface(offlineMaps.new Bridge(webView, () -> mapFilePicker = true), "AndroidOfflineMaps");
         if (mapDownloads != null) webView.addJavascriptInterface(mapDownloads.new Bridge(webView), "AndroidMapDownloads");
+        webView.addJavascriptInterface(kmlDownloads.new Bridge(webView), "AndroidKmlDownloads");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -1277,6 +1281,7 @@ public class MainActivity extends Activity {
         // koji ponovo iskoristi isti WebView.
         if (webView != null && !isRecordingActive) {
             if (offlineMaps != null) offlineMaps.closeAll();
+            if (kmlDownloads != null) kmlDownloads.close();
             webView.destroy();
             sWebView = null;
         }

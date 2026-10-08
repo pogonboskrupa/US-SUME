@@ -184,7 +184,7 @@ final class MapDownloads {
         }
         throw new DriveException("confirmation","Drive nije završio potvrdu preuzimanja. Pokušaj ponovo kasnije.");
     }
-    private static String readHtml(HttpURLConnection c) throws Exception {
+    static String readHtml(HttpURLConnection c) throws Exception {
         InputStream stream=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream();if(stream==null)return "";
         try(InputStream in=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))>0){if(out.size()+n>262144)throw new IOException("Odgovor izvora je prevelik");out.write(buffer,0,n);}return out.toString("UTF-8");

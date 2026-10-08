@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.0';
+const APP_VER = 'v2.6.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -24337,14 +24337,14 @@ function _ozZoomKml(i) {
 }
 
 // ── Lokalni KML persistence ───────────────────────────────────────────────────
-async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id) {
+async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id, driveSource=null) {
   const cacheKey='local-kml:'+_genUUID();
   try {
     await _kmlcSave(cacheKey,content);
     if(await _kmlcGet(cacheKey)!==content)throw new Error('IDB nije potvrdio upis');
     if(sbUser?.id!==owner) { await _kmlcDelete(cacheKey); return false; }
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
-    Object.defineProperty(store,origName,{value:{cacheKey,col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName,_loadedAt:Date.now()},enumerable:true,configurable:true,writable:true});
+    Object.defineProperty(store,origName,{value:{cacheKey,...(driveSource?{_driveSource:driveSource}:{}),col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName,_loadedAt:Date.now()},enumerable:true,configurable:true,writable:true});
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
     return true;
   } catch(e) { await _kmlcDelete(cacheKey); console.warn('KML nije sačuvan lokalno:',e); return false; }
@@ -41690,7 +41690,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <header class="guide-header"><div><span class="guide-eyebrow">Karte i slojevi</span><h2 id="layer-import-title">Dodaj fajl na kartu</h2></div><button type="button" onclick="closeLayerImport()" aria-label="Zatvori uvoz"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
     <div class="layer-body">
       <div class="layer-tabs" role="tablist" aria-label="Format fajla"><button type="button" id="layer-tab-kml" role="tab" aria-selected="true" aria-controls="layer-import-kml" onclick="layerImportTab('kml')">KML</button><button type="button" id="layer-tab-shp" role="tab" aria-selected="false" aria-controls="layer-import-shp" onclick="layerImportTab('shp')">SHP i prateći fajlovi</button></div>
-      <section id="layer-import-kml" role="tabpanel" aria-labelledby="layer-tab-kml"><h3>KML sloj</h3><p>Učitaj tačke, linije i granice. Sloj se prikazuje na karti i ostaje dostupan offline.</p><button type="button" class="layer-pick" onclick="document.getElementById('layer-file-kml').click()"><svg class="ic"><use href="#ic-uvezi"/></svg>Izaberi KML fajlove</button><input id="layer-file-kml" type="file" accept=".kml" multiple hidden onchange="layerImportFiles(this,'kml')"></section>
+      <section id="layer-import-kml" role="tabpanel" aria-labelledby="layer-tab-kml"><h3>KML sloj</h3><p>Učitaj tačke, linije i granice. Sloj se prikazuje na karti i ostaje dostupan offline.</p><button type="button" class="layer-pick" onclick="document.getElementById('layer-file-kml').click()"><svg class="ic"><use href="#ic-uvezi"/></svg>Izaberi KML fajlove</button><input id="layer-file-kml" type="file" accept=".kml" multiple hidden onchange="layerImportFiles(this,'kml')"><div class="kml-drive"><header><div><small>ZAJEDNIČKI FOLDER</small><h3>KML iz KARTA APP</h3></div><button type="button" id="kml-drive-refresh" onclick="KmlDownloads.refresh()" aria-label="Osvježi KML fajlove">↻ Osvježi</button></header><p>Preuzmi sloj i odmah ga prikaži na karti. Nakon dodavanja radi bez interneta.</p><input id="kml-drive-search" type="search" placeholder="Traži KML fajl…" aria-label="Pretraži KML fajlove iz foldera" oninput="KmlDownloads.render()"><div id="kml-drive-message" role="status" aria-live="polite"></div><div id="kml-drive-list"></div></div></section>
       <section id="layer-import-shp" role="tabpanel" aria-labelledby="layer-tab-shp" hidden><h3>Shapefile sloj</h3><p>Odaberi <b>.shp</b> i prateće fajlove istog naziva zajedno. Konverzija i prikaz na karti su automatski.</p><div class="layer-file-hint"><b>Primjer: odjeli.shp + odjeli.dbf + odjeli.prj</b><span>DBF čuva nazive i atribute, PRJ položaj na karti, CPG naša slova. Možeš dodati i SHX, SBN, SBX ili QIX.</span></div><label class="layer-crs-label" for="layer-shp-crs">Projekcija koordinata</label><select id="layer-shp-crs"><option value="auto">Automatski iz PRJ fajla</option><option value="EPSG:4326">WGS84 — GPS koordinate</option><option value="EPSG:31276">MGI zona 6 — BiH</option><option value="EPSG:31275">MGI zona 5</option></select><p class="guide-note">Ako nema PRJ-a, GPS koordinate se prepoznaju automatski. Za koordinate u metrima izaberi odgovarajuću projekciju.</p><button type="button" class="layer-pick" onclick="document.getElementById('layer-file-shp').click()"><svg class="ic"><use href="#ic-uvezi"/></svg>Izaberi SHP i prateće fajlove</button><input id="layer-file-shp" type="file" accept=".shp,.dbf,.prj,.shx,.cpg,.sbn,.sbx,.qix" multiple hidden onchange="layerImportFiles(this,'shp')"></section>
       <div id="layer-import-status" class="layer-status" role="status" aria-live="polite">Slojeve poslije pronađi u Granicama odjela / Oznakama.</div>
     </div>

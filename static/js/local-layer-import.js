@@ -5,6 +5,7 @@ let _layerCommitTail = Promise.resolve();
 function openLayerImport() {
   document.getElementById('layer-import-modal').style.display = 'flex';
   layerImportTab('kml');
+  if(typeof window!=='undefined')window.KmlDownloads?.refresh();
 }
 function closeLayerImport() { document.getElementById('layer-import-modal').style.display = 'none'; }
 function layerImportTab(tab) {
@@ -94,11 +95,11 @@ async function _layerReadShp(files,mode='auto') {
   }
   return result;
 }
-function _localLayerKml(name,content,owner=sbUser?.id) {
-  const operation=_layerCommitTail.catch(()=>{}).then(()=>_localLayerKmlImpl(name,content,owner));
+function _localLayerKml(name,content,owner=sbUser?.id,driveSource=null) {
+  const operation=_layerCommitTail.catch(()=>{}).then(()=>_localLayerKmlImpl(name,content,owner,driveSource));
   _layerCommitTail=operation;return operation;
 }
-async function _localLayerKmlImpl(name,content,owner) {
+async function _localLayerKmlImpl(name,content,owner,driveSource) {
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   const doc=new DOMParser().parseFromString(content,'text/xml');
   if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');
@@ -107,7 +108,7 @@ async function _localLayerKmlImpl(name,content,owner) {
   while(Object.prototype.hasOwnProperty.call(store,unique)||kmlLs.some(k=>!k._key&&(k._origName||k.name)===unique))unique=name.replace(/\.kml$/i,'')+' ('+(n++)+').kml';
   const col=KCOLS[kmlCI%KCOLS.length],grp=pkml(doc,col);
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
-  if(!await _localKmlSaveContent(unique,content,col,owner))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
+  if(!await _localKmlSaveContent(unique,content,col,owner,driveSource))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   kmlCI++;grp.addTo(map);
   kmlLs.push({name:unique,_origName:unique,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()});
@@ -176,3 +177,81 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   };
   const result=_layerCommitTail.catch(()=>{}).then(run);_layerCommitTail=result;return result;
 }
+
+// Public Drive catalogue. Native downloads stream through a local URL, not a huge JS bridge string.
+(function(root){
+  const pending=new Map(),messages=new Map();let files=[],refreshing=false;
+  const el=id=>document.getElementById(id),available=()=>!!root.AndroidKmlDownloads?.request;
+  const sizeText=n=>n<1e6?Math.ceil(n/1024)+' KB':(n/1e6).toFixed(1).replace('.',',')+' MB';
+  function request(msg){
+    if(!available())return Promise.resolve({ok:false,error:'Preuzimanje iz foldera dostupno je u Android aplikaciji.'});
+    return new Promise(resolve=>{
+      const id=crypto.randomUUID(),t=setTimeout(()=>{pending.delete(id);resolve({ok:false,error:'Veza je istekla. Pokušaj ponovo.'});},msg.type==='download'?300000:60000);
+      pending.set(id,{t,resolve});try{root.AndroidKmlDownloads.request(id,JSON.stringify(msg));}catch(e){reply(id,{ok:false,error:e.message});}
+    });
+  }
+  function reply(id,result){const p=pending.get(id);if(p){clearTimeout(p.t);pending.delete(id);p.resolve(result);}}
+  function local(id){try{return Object.entries(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}')).find(([name,s])=>s._driveSource?.id===id);}catch(e){return null;}}
+  function render(){
+    const list=el('kml-drive-list');if(!list)return;list.replaceChildren();
+    const query=(el('kml-drive-search')?.value||'').trim().toLocaleLowerCase('bs');
+    for(const s of files.filter(s=>s.name.toLocaleLowerCase('bs').includes(query))){
+      const saved=local(s.id),state=messages.get(s.id),row=document.createElement('article');row.className='kml-drive-row';
+      const icon=document.createElement('span');icon.className='kml-drive-icon';icon.textContent='KML';icon.setAttribute('aria-hidden','true');
+      const copy=document.createElement('div');copy.className='kml-drive-copy';const name=document.createElement('b');name.textContent=s.name;
+      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':'KARTA APP');
+      const status=document.createElement('span');status.className='kml-drive-status';status.setAttribute('role','status');status.textContent=state?.message||(saved?'✓ Dostupno bez interneta':s.tooLarge?'Veće od 32 MB — podijeli sloj':'');
+      copy.append(name,meta,status);const button=document.createElement('button');button.type='button';button.dataset.sourceId=s.id;
+      button.textContent=state?.busy?(state.phase||'Preuzimam…'):saved?'Prikaži':'Preuzmi i dodaj';button.disabled=_layerImportBusy||!!state?.busy||!!s.tooLarge||!available();button.onclick=()=>start(s.id);
+      row.append(icon,copy,button);list.append(row);
+    }
+    if(files.length&&!list.childElementCount){const p=document.createElement('p');p.textContent='Nema fajlova s tim nazivom.';list.append(p);}
+    if(el('kml-drive-refresh'))el('kml-drive-refresh').disabled=refreshing||!available()||_layerImportBusy;
+  }
+  async function refresh(){
+    if(refreshing)return;refreshing=true;render();const note=el('kml-drive-message');
+    if(note)note.textContent=available()?'Provjeravam KML fajlove…':'Preuzimanje iz foldera dostupno je u Android aplikaciji.';
+    try{
+      const cached=await request({type:'list',refresh:false});if(cached.ok){files=(cached.files||[]).filter(valid);render();}
+      const offline=navigator.onLine===false,r=offline?cached:await request({type:'list',refresh:true});
+      if(r.ok)files=(r.files||[]).filter(valid);
+      if(note)note.textContent=!r.ok?r.error:r.stale?r.error:offline?'Sačuvan popis · za nove fajlove uključi internet.':!files.length?'U folderu još nema KML fajlova. Dodaj ih na Drive i osvježi.':'';
+    }finally{refreshing=false;render();}
+  }
+  function valid(s){return s&&/^[\w-]{10,100}$/.test(s.id)&&typeof s.name==='string'&&Number.isSafeInteger(s.size)&&s.size>0;}
+  async function start(id){
+    const source=files.find(s=>s.id===id);if(!source||_layerImportBusy||!available())return;
+    const owner=sbUser?.id;if(!owner){showToast('Prijavi se prije dodavanja sloja');return;}
+    const saved=local(id);if(!saved&&navigator.onLine===false){messages.set(id,{message:'Za preuzimanje novog sloja uključi internet.'});render();return;}
+    _layerImportBusy=true;messages.set(id,{busy:true,message:saved?'Otvaram sačuvani sloj…':'Preuzimam '+source.name+'…'});
+    document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=true);render();
+    try{
+      if(saved){
+        const [name,data]=saved,content=data.cacheKey?await _kmlcGet(data.cacheKey):data.content;
+        if(typeof content!=='string')throw Error('Nedostaje sadržaj sloja. Ponovo učitaj KML fajl.');
+        if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; otvaranje je prekinuto');
+        let layer=kmlLs.find(k=>!k._key&&(k._origName||k.name)===name);
+        if(!layer){await _localKmlRestore();layer=kmlLs.find(k=>!k._key&&(k._origName||k.name)===name);}
+        if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; otvaranje je prekinuto');
+        if(!layer)throw Error('Sloj nije moguće prikazati');
+        layer.vis=true;layer.grp.addTo(map);_localKmlSaveAll(false);rndGraniceModal();
+        const bounds=layer.grp.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[20,20]});closeLayerImport();
+      }else{
+        const r=await request({type:'download',sourceId:id});if(!r.ok)throw Error(r.error||'Preuzimanje nije uspjelo');
+        if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
+        if(r.url!=='https://appassets.androidplatform.net/drive-kml/'+id+'.kml')throw Error('Nepoznat izvor KML fajla');
+        messages.set(id,{busy:true,phase:'Dodajem…',message:'Preuzeto · pripremam prikaz i čuvam sloj…'});render();
+        const response=await fetch(r.url);if(!response.ok)throw Error('Preuzeti KML nije dostupan');
+        const bytes=await response.arrayBuffer();if(bytes.byteLength!==source.size||bytes.byteLength>32*1024*1024)throw Error('Preuzeti KML nije potpun');
+        const encoding=bytes.byteLength>=2&&new Uint8Array(bytes)[0]===255&&new Uint8Array(bytes)[1]===254?'utf-16le':bytes.byteLength>=2&&new Uint8Array(bytes)[0]===254&&new Uint8Array(bytes)[1]===255?'utf-16be':'utf-8';
+        const content=new TextDecoder(encoding,{fatal:true}).decode(bytes);
+        await new Promise(r=>setTimeout(r,0));
+        await _localLayerKml(/\.kml$/i.test(source.name)?source.name:source.name+'.kml',content,owner,{id,size:source.size});
+        await request({type:'release',sourceId:id});
+      }
+      messages.delete(id);if(el('layer-import-status'))el('layer-import-status').textContent='✓ Sloj je na karti i sačuvan za offline rad.';showToast('✓ KML sloj je spreman za offline rad');
+    }catch(e){messages.set(id,{message:e.message||'KML nije dodan. Pokušaj ponovo.'});}
+    finally{_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);render();}
+  }
+  root.KmlDownloads={request,reply,refresh,render,start};
+})(typeof window!=='undefined'?window:globalThis);

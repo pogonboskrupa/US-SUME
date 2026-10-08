@@ -82,6 +82,8 @@ async def main():
         page=await browser.new_page();errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         async def route(r):
+            if r.request.url.startswith('https://appassets.androidplatform.net/drive-kml/'):
+                await r.fulfill(content_type='application/vnd.google-earth.kml+xml',headers={'Access-Control-Allow-Origin':'https://ui.test'},body='<kml><Placemark><name>Kamionski put</name><LineString><coordinates>16,44.9 16.001,44.901</coordinates></LineString></Placemark></kml>');return
             if not r.request.url.startswith('https://ui.test/'):
                 await r.abort();return
             path=r.request.url.split('ui.test',1)[1].split('?',1)[0]
@@ -220,7 +222,51 @@ async def main():
         await page.locator('#layer-file-kml').set_input_files([upload('point.kml',valid),upload('point.kml',valid)])
         await page.wait_for_function('!_layerImportBusy && kmlLs.length===3')
         assert await page.evaluate('kmlLs.map(k=>k.name)')==['Odjeli.kml','point.kml','point (2).kml']
-        await page.evaluate('closeLayerImport()')
+        await page.evaluate("""()=>{
+          window.kmlFetches=0;
+          const content='<kml><Placemark><name>Kamionski put</name><LineString><coordinates>16,44.9 16.001,44.901</coordinates></LineString></Placemark></kml>';
+          window.driveFiles=[{id:'fixture-drive-road-261',name:'Kamionski <img src=x> put.kml',size:new TextEncoder().encode(content).length},{id:'fixture-drive-boundary-261',name:'Granice odjela',size:13532522},{id:'fixture-drive-new-261',name:'Novi sloj.kml',size:100}];
+          window.driveFailure=false;
+          window.AndroidKmlDownloads={request:(id,raw)=>{const msg=JSON.parse(raw);let result={ok:true};
+            if(msg.type==='list')result={ok:true,files:driveFiles};
+            if(msg.type==='download'){if(window.driveHold){window.driveHeld={id,msg};return;}kmlFetches++;result=driveFailure?{ok:false,error:'Google Drive je ograničio preuzimanje'}:{ok:true,url:'https://appassets.androidplatform.net/drive-kml/'+msg.sourceId+'.kml'};}
+            queueMicrotask(()=>KmlDownloads.reply(id,result));
+          }};openLayerImport();
+        }""")
+        await page.wait_for_function("document.querySelectorAll('.kml-drive-row').length===3&&!document.querySelector('#kml-drive-refresh').disabled")
+        assert await page.locator('#kml-drive-list img').count()==0
+        for theme in ['day','dark']:
+            await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+            for width,height in [(320,568),(390,650),(768,800),(568,320)]:
+                await page.set_viewport_size({'width':width,'height':height})
+                await bounds(page,'.layer-sheet',width,height);await bounds(page,'.layer-body',width,height)
+                await page.locator('.kml-drive').scroll_into_view_if_needed()
+                await page.screenshot(path=str(OUT/f'kml-drive-{theme}-{width}-{height}.png'))
+        await page.fill('#kml-drive-search','Granice')
+        assert await page.locator('.kml-drive-row').count()==1
+        await page.fill('#kml-drive-search','')
+        await page.evaluate("Promise.all([KmlDownloads.start('fixture-drive-road-261'),KmlDownloads.start('fixture-drive-road-261')])")
+        assert await page.evaluate('kmlFetches')==1
+        assert await page.evaluate('kmlLs.length')==4
+        assert await page.locator('button[data-source-id="fixture-drive-road-261"]').inner_text()=='Prikaži'
+        assert await page.evaluate("Object.values(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))).filter(v=>v._driveSource?.id==='fixture-drive-road-261').length")==1
+        await page.evaluate("Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});KmlDownloads.start('fixture-drive-road-261')")
+        assert await page.evaluate('kmlFetches')==1
+        assert await page.evaluate('kmlLs.length')==4
+        await page.evaluate("openLayerImport();KmlDownloads.start('fixture-drive-new-261')")
+        assert 'uključi internet' in await page.locator('#kml-drive-list').inner_text()
+        await page.evaluate("Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});driveFailure=true;KmlDownloads.start('fixture-drive-new-261')")
+        assert await page.evaluate('kmlLs.length')==4
+        assert 'ograničio' in await page.locator('#kml-drive-list').inner_text()
+        await page.evaluate("driveFiles.push({id:'fixture-drive-added-261',name:'Naknadno dodan.kml',size:100});KmlDownloads.refresh()")
+        assert await page.locator('.kml-drive-row').count()==4
+        await page.evaluate("window.driveHold=true;KmlDownloads.start('fixture-drive-new-261');void 0")
+        await page.wait_for_function('!!window.driveHeld')
+        await page.evaluate("sbUser={id:'B'};KmlDownloads.reply(driveHeld.id,{ok:true,url:'https://appassets.androidplatform.net/drive-kml/'+driveHeld.msg.sourceId+'.kml'})")
+        await page.wait_for_function('!_layerImportBusy')
+        assert await page.evaluate('kmlLs.length')==4
+        assert 'Nalog je promijenjen' in await page.locator('#kml-drive-list').inner_text()
+        await page.evaluate("sbUser={id:'A'};closeLayerImport()")
         async with page.expect_file_chooser() as event:await page.click('#camera-test')
         chooser=await event.value;assert not chooser.is_multiple()
         assert await page.locator('#loc-photo-cam').get_attribute('capture')=='environment'
@@ -228,6 +274,6 @@ async def main():
         assert await page.locator('#loc-photo-gal').count()==0
         assert not errors,errors
         await browser.close()
-    print('OK: navigacija/SHP tab 8 veličina i tema; pravi SHP+DBF, rupa, Leaflet, IDB/reload, backup, greške, dupli fajlovi, kamera')
+    print('OK: navigacija/SHP tab 8 veličina i tema; pravi SHP+DBF, rupa, Leaflet, IDB/reload, backup, greške, dupli fajlovi, kamera; Drive KML katalog, import/IDB, dedup, offline i quota')
 
 if __name__=='__main__':asyncio.run(main())

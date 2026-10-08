@@ -119,6 +119,35 @@ public class MapDownloadsTest {
   row.put(1,new org.json.JSONArray().put("foreign-folder"));json=new org.json.JSONArray().put(new org.json.JSONArray().put(row)).put(org.json.JSONObject.NULL).toString();
   assertTrue(MapDownloadCatalog.parse("window['_DRIVE_ivd'] = '"+json+"';").isEmpty());
  }
+ private org.json.JSONArray kmlRow(String id,String name,byte[] bytes) throws Exception {
+  org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
+  return row.put(0,id).put(1,new org.json.JSONArray().put(MapDownloadCatalog.FOLDER_ID)).put(2,name).put(3,"application/vnd.google-earth.kml+xml").put(13,bytes.length);
+ }
+ @Test public void kmlFolderTransferRejectsHtmlPartialForeignAndMalformedFiles() throws Exception {
+  Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  byte[] bytes="<kml xmlns=\"http://www.opengis.net/kml/2.2\"><Placemark><name>Čuvar</name><Point><coordinates>16,44.9</coordinates></Point></Placemark></kml>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  String id="fixture-kml-source-261";org.json.JSONArray rows=new org.json.JSONArray().put(kmlRow(id,"Granice odjela ",bytes));
+  org.json.JSONArray raster=kmlRow("fixture-raster-261","Karta.mbtiles",bytes).put(3,"application/octet-stream");rows.put(raster);
+  assertEquals(1,KmlDownloads.parse(rows).length());assertEquals("Granice odjela",KmlDownloads.parse(rows).getJSONObject(0).getString("name"));
+  org.json.JSONArray foreign=kmlRow("fixture-foreign-261","Tuđe.kml",bytes).put(1,new org.json.JSONArray().put("foreign-folder"));rows.put(foreign);assertEquals(1,KmlDownloads.parse(rows).length());
+  AtomicReference<byte[]> body=new AtomicReference<>(bytes);AtomicReference<String> type=new AtomicReference<>("application/vnd.google-earth.kml+xml");AtomicReference<Integer> code=new AtomicReference<>(200);
+  KmlDownloads k=new KmlDownloads(c,()->rows,(url,range)->{assertFalse(range);return new DriveResponse(body.get(),body.get().length,type.get(),code.get(),code.get()==206?"bytes 0-15/200":null);},"fixture-kml-261");
+  k.action(new JSONObject().put("type","list").put("refresh",true));
+  try{k.action(new JSONObject().put("type","download").put("sourceId","foreign-source-261"));fail("Foreign KML accepted");}catch(java.io.IOException expected){}
+  JSONObject msg=new JSONObject().put("type","download").put("sourceId",id),release=new JSONObject().put("type","release").put("sourceId",id);
+  k.action(release);assertTrue(k.action(msg).getString("url").endsWith(id+".kml"));assertEquals(200,k.handle(id+".kml").getStatusCode());k.action(release);assertEquals(404,k.handle(id+".kml").getStatusCode());assertEquals(404,k.handle("../secret.kml").getStatusCode());
+  body.set("<html>Google Drive - Quota exceeded</html>".getBytes());type.set("text/html");
+  try{k.action(msg);fail("Quota HTML accepted");}catch(MapDownloads.DriveException e){assertEquals("drive_quota",e.code);}
+  body.set(bytes);type.set("application/octet-stream");code.set(206);
+  try{k.action(msg);fail("Partial KML accepted");}catch(java.io.IOException expected){}
+  code.set(200);body.set(java.util.Arrays.copyOf(bytes,bytes.length-1));
+  try{k.action(msg);fail("Truncated KML accepted");}catch(java.io.IOException expected){}
+  java.io.File file=java.io.File.createTempFile("bad-kml-", ".kml",c.getCacheDir());
+  try{for(String text:new String[]{"<html><body>Sign in</body></html>","<kml><Placemark>","<!DOCTYPE kml [<!ENTITY x 'example'>]><kml>&x;</kml>"}){
+   byte[] data=text.getBytes();try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(data);}
+   try{KmlDownloads.validate(file,data.length);fail("Invalid XML accepted");}catch(java.io.IOException expected){}
+  }}finally{file.delete();k.action(release);}
+ }
  @Test(timeout=90000) public void automaticDownloadInstallOfflineReloadAndDelete() throws Exception {
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertFalse("Emulator bez interneta",ReferenceOcrBridge.hasInternet(context));
@@ -197,6 +226,22 @@ public class MapDownloadsTest {
    transport.state="failed";download.start();end=System.currentTimeMillis()+5000;while(transport.enqueues<3&&System.currentTimeMillis()<end)Thread.sleep(50);
    assertTrue(transport.file.exists());sources.clear();recovered.list(true);
    JSONObject removedState=recovered.statuses().getJSONArray("files").getJSONObject(0).getJSONObject("status");assertEquals("idle",removedState.getString("state"));assertFalse(transport.file.exists());
+   // Native KML bridge + production local URL handler + Leaflet + IDB + offline reload.
+   byte[] kml="<kml xmlns=\"http://www.opengis.net/kml/2.2\"><Placemark><name>Odjel Čuvar</name><LineString><coordinates>16,44.9 16.001,44.901</coordinates></LineString></Placemark></kml>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+   String kmlId="fixture-kml-webview-261";int[] fetches={0};
+   KmlDownloads kmlController=new KmlDownloads(context,()->new org.json.JSONArray().put(kmlRow(kmlId,"KML proba 261",kml)),(url,range)->{fetches[0]++;return new DriveResponse(kml,kml.length,"application/vnd.google-earth.kml+xml",200,null);},"drive-kml-v1");
+   kmlController.action(new JSONObject().put("type","release").put("sourceId",kmlId));kmlController.action(new JSONObject().put("type","list").put("refresh",true));
+   CountDownLatch kmlReady=new CountDownLatch(1);ui.post(()->{view.addJavascriptInterface(kmlController.new Bridge(view),"AndroidKmlDownloads");view.reload();kmlReady.countDown();});assertTrue(kmlReady.await(5,TimeUnit.SECONDS));Thread.sleep(300);pageLoaded(view);
+   eval(view,"sbUser={id:'kml-fixture-user'};_revealApp();Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});openLayerImport();void 0");
+   until(view,"document.querySelector('#kml-drive-list button[data-source-id=\""+kmlId+"\"]')&&!document.querySelector('#kml-drive-list button').disabled");
+   eval(view,"KmlDownloads.start('"+kmlId+"');void 0");until(view,"!_layerImportBusy&&kmlLs.some(k=>k._origName==='KML proba 261.kml')");
+   assertEquals("true",eval(view,"!!JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))['KML proba 261.kml']._driveSource"));assertEquals(1,fetches[0]);
+   ui.post(()->view.reload());Thread.sleep(300);pageLoaded(view);
+   eval(view,"sbUser={id:'kml-fixture-user'};_revealApp();Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});_localKmlRestore().then(()=>openLayerImport());void 0");
+   until(view,"document.querySelector('#kml-drive-list button')?.textContent==='Prikaži'");
+   eval(view,"KmlDownloads.start('"+kmlId+"');void 0");until(view,"!_layerImportBusy&&document.getElementById('layer-import-modal').style.display==='none'");assertEquals(1,fetches[0]);
+   assertEquals("1",eval(view,"kmlLs.filter(k=>k._origName==='KML proba 261.kml').length"));
+   eval(view,"kmlLs=kmlLs.filter(k=>{if(k._origName==='KML proba 261.kml'){map.removeLayer(k.grp);return false;}return true;});_localKmlSaveAll();void 0");
   }finally{
    context.stopService(new Intent(context,MapDownloadService.class));Thread.sleep(200);singleton.set(null,originalCatalog);context.getSystemService(android.app.NotificationManager.class).cancel(MapDownloadService.NOTICE);
    if(download!=null)download.cancel();CountDownLatch removed=new CountDownLatch(1);ui.post(()->{ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback);if(activityRef.get()!=null)activityRef.get().finish();removed.countDown();});removed.await(5,TimeUnit.SECONDS);

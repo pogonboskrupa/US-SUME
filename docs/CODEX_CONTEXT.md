@@ -2887,3 +2887,28 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   acbbe87e0510b135d351d4648073afa3ba54d5e2. Manifest
   ba.spd.uss.vlake.debug/2.6.0-debug/530, isti certifikat i svih 61 assets
   potvrđeni. Updater releases?per_page=1 vraća v2.6.0.
+
+## 2026-10-08 — v2.6.1: KML iz javnog foldera KARTA APP
+- Na zahtjev korisnika KML dio Dodaj KML / SHP dobija katalog istog
+  javnog foldera 1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0: pretraga, naziv,
+  veličina, Osvježi i Preuzmi i dodaj / Prikaži. Naknadne KML stavke
+  pojavljuju se pri otvaranju ili osvježavanju; nije potreban novi APK
+  za svako dodavanje fajla. KML se prepoznaje po nastavku ili Drive MIME.
+- Anonimni folder potvrđuje Granice odjela (13.532.522 B, KML MIME, bez
+  nastavka) i KAMIONSKI PUTEVI.kml (396.070 B). Metadata potvrđena i Drive
+  konektorom. Javni full GET trenutno vraća Drive quota za oba fajla;
+  puna ispravnost njihovog XML-a nije potvrđena. Folder/podaci nisu mijenjani.
+- KmlDownloads native bridge čita samo ovaj katalog, provjerava Google
+  potvrdu/quota, puni odgovor, veličinu i XML/KML bez DTD. Download ide van
+  UI threada, max32 MB/240s transfer. WebView dobija lokalni streaming URL,
+  ne višemegabajtni evaluateJavascript string. Privremeni fajl se uklanja
+  nakon potvrđenog IDB uvoza; finalni sloj ostaje u postojećem registru.
+- _driveSource metadata čuva izvor atomskim početnim upisom; Prikaži koristi
+  postojeći sloj i stil, radi offline, bez ponovnog skidanja/dupliranja.
+  Čuvaju se zaštita naloga, SHP/lokalni uvoz i zaštita istog naziva.
+- Lokalno svih 100 JS test grupa i browser Menu tools prošli: 8 širina/tema,
+  kontrolisani Drive katalog/pretraga/import/IDB/dedup/offline/quota i
+  naknadno dodan fajl. Novi native test odbija HTML/partial/truncated/DTD/
+  strani izvor; postojeći APK/WebView test proširen stvarnim lokalnim URL-om,
+  KML bridge uvozom i offline reloadom.
+- Web/SW/Android 2.6.1/code531. Završni CI/APK u toku.
