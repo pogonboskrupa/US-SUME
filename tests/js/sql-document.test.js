@@ -18,6 +18,10 @@ c.commit();c.close()
   const fd=fs.openSync(file,'r');let calls=0,total=0;const size=fs.statSync(file).size;
   const source=SqlDocument.source(size,(offset,count)=>{calls++;total+=count;const bytes=new Uint8Array(count);assert.equal(fs.readSync(fd,bytes,0,count,offset),count);return bytes;});
   const start=performance.now(),db=SQL.openReadOnlyFile(source),meta=SqlDocument.metadata(db,fmt);
+  const [pz,px,py]=meta.meta._preview;
+  assert.ok(pz>=0&&pz<=22&&px>=0&&py>=0&&px<2**pz&&py<2**pz);
+  const preview=fmt==='rmaps'?db.exec('SELECT image FROM tiles WHERE x=? AND y=? AND z=?',[px,py,17-pz])[0].values[0][0]:db.exec('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[pz,px,2**pz-1-py])[0].values[0][0];
+  assert.equal(preview[0],137,'Preview coordinates point to an existing raster tile');
   const tile=fmt==='rmaps'?db.exec('SELECT image FROM tiles WHERE x=? AND y=2940 AND z=4',[x])[0].values[0][0]:db.exec('SELECT tile_data FROM tiles WHERE zoom_level=13 AND tile_column=? AND tile_row=5251',[x])[0].values[0][0];
   assert.equal(tile[0],137);if(fmt==='rmaps')assert.deepEqual([meta.meta.minzoom,meta.meta.maxzoom],[12,14]);else assert.equal(new DataView(tile.buffer,tile.byteOffset+4,4).getUint32(0),1023);
   assert.throws(()=>db.run('DELETE FROM '+(fmt==='rmaps'?'tiles':'images')),/readonly|read-only|read only/i);

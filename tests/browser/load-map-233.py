@@ -148,6 +148,14 @@ async def main():
         assert await page.evaluate('_sqlLayers[0].saved') is True
         await page.wait_for_function('localStorage.getItem("lm_thumb_"+_sqlLayers[0].name)')
         assert (await page.locator('.lm-card .lm-thumb').get_attribute('src')).startswith('data:image/jpeg')
+        # Real high resolution pixels, one concurrent read, cached for offline restart.
+        await page.wait_for_function('localStorage.getItem("lm_thumb_v2_"+_sqlLayers[0].name)==="1"')
+        preview=await page.evaluate('''async()=>{const bmp=await createImageBitmap(await (await fetch(localStorage.getItem('lm_thumb_'+_sqlLayers[0].name))).blob());const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;const ctx=c.getContext('2d');ctx.drawImage(bmp,0,0);const pixel=[...ctx.getImageData(160,90,1,1).data];const r={width:bmp.width,height:bmp.height,pixel};bmp.close();return r;}''')
+        assert [preview['width'],preview['height']]==[320,180],preview
+        assert preview['pixel'][1]>preview['pixel'][0] and preview['pixel'][1]>preview['pixel'][2],preview
+        assert await page.locator('.lm-preview-caption').inner_text()=='Isječak karte'
+        reads=await page.evaluate('''async()=>{const original=_sqlWCall;let reads=0;_sqlWCall=(msg,...args)=>{if(msg.type==='tile')reads++;return original(msg,...args)};try{await Promise.all([_loadmapThumb(_sqlLayers[0].name,true),_loadmapThumb(_sqlLayers[0].name,true),_loadmapThumb(_sqlLayers[0].name,true)]);const before=reads;await _loadmapThumb(_sqlLayers[0].name);return {before,after:reads};}finally{_sqlWCall=original}}''')
+        assert reads=={'before':1,'after':1},reads
         await page.locator('.lm-card-btns .lm-primary').click()
         await page.wait_for_function('!document.getElementById("loadmap-modal").classList.contains("show")')
         await page.wait_for_function('Object.values(_sqlLayers[0].layer._tiles).some(t=>t.loaded)', timeout=15000)
@@ -163,6 +171,7 @@ async def main():
         await page.evaluate('openLoadMapScreen();_loadmapTab("maps")')
         await page.wait_for_function('document.querySelector("#loadmap-manage .lm-card")')
         assert await page.evaluate('_sqlLayers.length') == 0
+        assert (await page.locator('.lm-map-preview .lm-thumb').get_attribute('src')).startswith('data:image/jpeg')
         assert 'Sačuvana na telefonu' in await page.locator('.lm-card').inner_text()
         await page.locator('.lm-card-btns .lm-primary').click()
         await page.wait_for_function('_sqlLayers.length===1 && _sqlLayers[0].visible', timeout=30000)
@@ -196,6 +205,7 @@ async def main():
                 await bounded(page, '#loadmap-modal', width, height)
                 assert await page.locator('.lm-download-card').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
                 await bounded(page, '#loadmap-body', width, height)
+                assert await page.locator('.lm-map-preview').evaluate('e=>Math.abs(e.getBoundingClientRect().width-e.parentElement.clientWidth)<=1')
                 assert await page.locator('#loadmap-pick').evaluate('e=>e.getBoundingClientRect().height') >= 44
                 await page.screenshot(path=str(OUT/f'loadmap-add-{theme}-{width}-{height}.png'))
                 await page.click('#loadmap-tab-maps')

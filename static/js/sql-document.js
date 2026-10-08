@@ -40,6 +40,7 @@
     const sample=one('SELECT '+[zcol,xcol,ycol].map(quote).join(',')+' FROM '+quote(table)+' LIMIT 1');
     if(rm&&sample){const inv=17-sample[0];if(inv<0||inv>22||sample[1]>=2**inv||sample[2]>=2**inv)zOff=0;hi=zOff||22;}
     const webZ=sample?(rm&&zOff?zOff-sample[0]:sample[0]):null;
+    if(sample&&webZ>=0&&webZ<=22)m._preview=[webZ,sample[1],fmt==='mbtiles'?2**webZ-1-sample[2]:sample[2]];
     if(rm&&exists('info')){
       const info=one('SELECT minzoom,maxzoom FROM info LIMIT 1');
       if(info){lo=Math.min(+info[0],+info[1]);hi=Math.max(+info[0],+info[1]);if(zOff&&sample&&sample[0]>=lo&&sample[0]<=hi&&(webZ<lo||webZ>hi)){const a=lo;lo=zOff-hi;hi=zOff-a;}}

@@ -2818,3 +2818,21 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Izvor 2314e7c92123077c3fbff7dba5e14b4d9a7ed619; manifest
   ba.spd.uss.vlake.debug/2.5.7-debug/527, isti potpis i svih 61 assets
   potvrđeni na preuzetom APK-u. Fizički telefon nije testiran.
+
+## 2026-10-08 — v2.5.8: Moje karte sa stvarnim isječkom
+- Korisnik traži vizuelnu nadogradnju i obaveznu APK objavu za update u Meniju.
+  Karte sada imaju veći isječak preko cijele kartice, naziv/stanje i odvojene
+  kontrole. Pregled je JPEG 320×180 iz stvarne pločice, sačuvan lokalno.
+- Android OfflineMaps i SqlDocument u metadata dodaju _preview XYZ iz već
+  pročitanog uzorka; MiniSqlite uzima jednu koordinatu indeksa. Nema cijelog
+  skeniranja velikog fajla zbog isječka. Generisanje ide serijski u pozadini,
+  ne blokira završetak uvoza. Dupli zahtjevi se spajaju, stari handle se
+  provjerava prije upisa; placeholder je izričito ilustracija.
+- Lokalno: svih 100 JS grupa, pet inline sintaksi i LoadMap browser prošli.
+  Provjereni stvarni pikseli/dimenzije, jedan dohvat za tri paralelna poziva,
+  sačuvan offline preview i širine/dnevni/tamni mod. Read-only VFS test
+  dodatno potvrđuje da koordinata isječka vraća stvarnu raster pločicu.
+- Android test preuzimanja proširen stvarnim native preview/Canvas prikazom.
+  Web/SW/Android 2.5.8/code528. Konačni CI/APK u toku; fizički Xiaomi nije
+  testiran. Novi preview sačuvanih karata bez otvorenog handle-a nastaje
+  kada se karta otvori; već sačuvan isječak radi bez otvaranja fajla.

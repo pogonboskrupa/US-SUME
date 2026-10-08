@@ -13,6 +13,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -171,6 +172,10 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         }
         if(e.fmt.equals("gpkg")&&table(db,"gpkg_tile_matrix"))try(Cursor c=db.rawQuery("SELECT MIN(zoom_level),MAX(zoom_level) FROM gpkg_tile_matrix WHERE table_name=?",new String[]{t})){if(c.moveToFirst()&&!c.isNull(0)){lo=c.getInt(0);hi=c.getInt(1);}}
         if(!e.meta.has("minzoom"))e.meta.put("minzoom",lo);if(!e.meta.has("maxzoom"))e.meta.put("maxzoom",hi);
+        if(sample){
+            int webZ=e.fmt.equals("rmaps")&&e.offset!=0?e.offset-sampleZ:sampleZ;
+            if(webZ>=0&&webZ<=22)e.meta.put("_preview",new JSONArray().put(webZ).put(sampleX).put(e.fmt.equals("mbtiles")?(1<<webZ)-1-sampleY:sampleY));
+        }
         if(sample&&!e.meta.has("center")&&!e.meta.has("bounds")){
             int webZ=e.fmt.equals("rmaps")&&e.offset!=0?e.offset-sampleZ:sampleZ;
             if(webZ>=0&&webZ<=22){double n=(double)(1L<<webZ);int yy=e.fmt.equals("mbtiles")?(int)n-1-sampleY:sampleY;

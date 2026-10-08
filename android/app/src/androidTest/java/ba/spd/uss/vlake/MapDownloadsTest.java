@@ -141,6 +141,9 @@ public class MapDownloadsTest {
    eval(view,"_revealApp();switchTab('karta');openLoadMapScreen();void 0");until(view,"document.querySelector('.lm-download-status').textContent.includes('Čekam vezu')");
    transport.state="complete";eval(view,"MapDownloads.resume();void 0");
    until(view,"_sqlLayers.some(l=>l.name==='Unsko_2021-2031'&&l.saved)&&document.querySelector('.lm-download-status').textContent.includes('Spremna')");
+   eval(view,"_loadmapTab('maps');_loadmapRenderManage();void 0");
+   until(view,"localStorage.getItem('lm_thumb_v2_Unsko_2021-2031')==='1'&&document.querySelector('.lm-map-preview .lm-thumb').src.startsWith('data:image/jpeg')");
+   assertEquals("true",eval(view,"Array.isArray(_sqlLayers.find(l=>l.name==='Unsko_2021-2031').meta._preview)"));
    waitNotice(context,"Otvori aplikaciju");
    long stopped=System.currentTimeMillis()+5000;while(MapDownloadService.isRunning()&&System.currentTimeMillis()<stopped)Thread.sleep(100);
    assertFalse("Servis završenog preuzimanja je ugašen",MapDownloadService.isRunning());
