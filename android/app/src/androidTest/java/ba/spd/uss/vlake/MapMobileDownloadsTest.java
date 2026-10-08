@@ -42,7 +42,11 @@ public class MapMobileDownloadsTest {
             first.cancel();assertEquals(MapHttpTransfer.JOB,first.enqueue(s.url,f));assertEquals("paused",first.query().getString("state"));assertEquals(0,requests.get());
             connected.set(true);JSONObject paused=until(first,"paused");assertEquals(cut,f.length());assertEquals(cut,paused.getLong("bytes"));assertTrue(paused.getString("message").contains("Veza je prekinuta"));
             AtomicLong resumedAt=new AtomicLong();MapHttpTransfer recovered=new MapHttpTransfer(c,s,(url,offset,tag)->{resumedAt.set(offset);assertEquals("\"v1\"",tag);return new Response(Arrays.copyOfRange(bytes,(int)offset,bytes.length),bytes.length-offset,206,"bytes "+offset+"-"+(bytes.length-1)+"/"+bytes.length,"\"v1\"");},connected::get,storage);
-            until(recovered,"complete");assertEquals(cut,resumedAt.get());assertArrayEquals(bytes,java.nio.file.Files.readAllBytes(f.toPath()));recovered.cancel();
+            until(recovered,"complete");assertEquals(cut,resumedAt.get());assertArrayEquals(bytes,java.nio.file.Files.readAllBytes(f.toPath()));
+            // Process died after the last synced bytes, before marking complete.
+            c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().putString("state","downloading").commit();connected.set(false);
+            MapHttpTransfer offline=new MapHttpTransfer(c,s,(url,offset,tag)->{throw new AssertionError("Complete offline map requested network");},connected::get,storage);
+            assertEquals("complete",offline.query().getString("state"));offline.cancel();recovered.cancel();
         }finally{first.cancel();f.delete();}
     }
     @Test public void serverRevisionRestartsSafelyAndWrongResumeRangeIsRejected() throws Exception {

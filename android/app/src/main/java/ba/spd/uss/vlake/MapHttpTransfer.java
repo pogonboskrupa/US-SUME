@@ -49,7 +49,10 @@ final class MapHttpTransfer {
         String path=prefs.getString("file",""),state=prefs.getString("state","idle");File f=path.isEmpty()?null:new File(path);
         long bytes=f!=null&&f.isFile()?f.length():0;
         if(!running&&(state.equals("downloading")||state.equals("paused"))){
-            if(!network.available()){state="paused";prefs.edit().putString("state",state).putString("message","Čekam vezu — nastavak je automatski.").apply();}
+            // Recovery may find all bytes durable before the final state commit.
+            // Validation/import must work offline without another server request.
+            if(bytes==source.size){state="complete";prefs.edit().putString("state",state).putString("message","").commit();}
+            else if(!network.available()){state="paused";prefs.edit().putString("state",state).putString("message","Čekam vezu — nastavak je automatski.").apply();}
             else if(System.currentTimeMillis()>=retryAt){running=true;state="downloading";prefs.edit().putString("state",state).putString("message","").apply();final long token=++generation;workers.execute(()->run(token));}
         }
         return new JSONObject().put("state",state).put("bytes",bytes).put("total",source.size).put("message",prefs.getString("message","")).put("error",prefs.getString("error",""));

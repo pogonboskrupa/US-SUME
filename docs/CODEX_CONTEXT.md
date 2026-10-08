@@ -3024,6 +3024,8 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   i sync novog zaglavlja; nepotvrđen/strani/neispravan odgovor odbija se.
   Partial bez validatora počinje od nule umjesto miješanja revizija.
   Otkazivanje generacijom onemogućava naknadno stvaranje/upis fajla.
+  Recovery potpuno upisanog fajla završava i bez interneta, ako se proces
+  prekinuo između zadnjeg sync upisa i commit završnog stanja.
 - Raniji pauzirani GitHub DownloadManager poslovi prelaze na novi put:
   partial prvo dobija novi UUID, pending handoff se sačuva, zatim se stari
   sistemski posao ukloni. Recovery handoffa nakon prekida je idempotentan.
