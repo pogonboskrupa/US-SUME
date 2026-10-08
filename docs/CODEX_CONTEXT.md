@@ -3087,5 +3087,19 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   16 rasporeda u Dnevnom/tamnom modu (320/390/568/1200). Dodan u puni CI.
   Lokalno 100 JS grupa i pet inline sintaksi prošli; instalirane/omiljene,
   DEM i projekat browser te Menu/KML/SHP browser također prošli.
-- Web/SW/Android 2.6.5/code535. Puni CI i APK provjera u toku. Fizički Xiaomi
-  i produkcijska Supabase baza nisu testirani niti mijenjani.
+- Reprodukcija na starom stvarnom deleteTextLabel kodu (lokalni 40cb400):
+  string label_id uz inline broj ostavlja oznaku i ne uklanja marker.
+- Web/SW/Android 2.6.5/code535. CI 37780669121 uspješan na izvoru
+  467f1299b68613ef6242f42be949b76fb0a3ecb8: svih 100 JS grupa, SQL testna
+  baza, sve browser/teren/performance provjere i 14 Android testova bez
+  grešaka/preskoka. Novi browser test koristi stvarni editor, dijalog,
+  Leaflet i trajni _OL zapis; SQL layeri simulirani za indeks/recovery.
+- APK objavljen:
+  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.5/app-debug.apk
+  24.146.416 B; SHA256
+  54cf1b6f4d7395bf1072f490bfbe741f659c30424d3acbec3cdc5616a1a8c7f7.
+  Stvarni manifest ba.spd.uss.vlake.debug/2.6.5-debug/535, isti potpisni
+  certifikat i svih 61 web assets potvrđeni; veličina/digest odgovaraju
+  objavljenom assetu. Updater releases?per_page=1 vraća v2.6.5 sa APK-om.
+  Pages sada koristi CODEX-US-SUME/root; živi sw.js potvrđuje 2.6.5.
+  Fizički Xiaomi i produkcijska Supabase baza nisu testirani niti mijenjani.
