@@ -3472,3 +3472,11 @@ staroj pretpostavci offline-preview o širokoj sličici (ratio >1.6), koju je
 korisnikov zahtjev za manjim karticama zamijenio kvadratom 84px. Test sada
 provjerava kompaktne dimenzije u svih 8 rasporeda; provjere stvarnih raster
 piksela, keša i obnove ostaju. Ponovljeni CI mora proći prije isporuke.
+
+Preostali browser skup lokalno provjeren do kraja nakon dopune izdvojenog
+Server/Leaflet fixturea stvarnom `_removeVlakaMapLayers` zavisnošću. Test
+preglednika bira novi tab Primljeno prije širenja grupe; test projekta
+provjerava novi traženi redoslijed s poligonom na dnu. Pozitivne provjere
+stvarnog bafera, mapa, boja, GPS doznake i terenske 5400m simulacije ostaju;
+sve prošle. CI 37964494791 namjerno prekinut radi ovih fixture dopuna;
+isporuku određuje naredni puni CI, ne prekinuti build.

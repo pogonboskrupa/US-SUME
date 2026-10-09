@@ -17,7 +17,7 @@ const _setupFotoPopup=()=>{},_fotoMarkerHtml=()=>'<b>Foto</b>',_tačkaIcon=()=>L
 const switchTab=()=>{},selI=()=>{},getIme=()=> 'Emina',fmtDate=String,todayStr=()=> '2026-10-03',isReadOnly=()=>false;
 sbProfile.sumarija='Test';kolegeMap.B.color='#38bdf8';
 '''
-names=['sbLoadKolegeVlake','attachPolyClick','_distToSegPx','showKolegeVlakaInfo','showVlakaPopup','closeVlakaPopup','_positionPopup','vpZoom','vpBuffer','_vpBufferLabel','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_tragRegAddLayer','_tragCalcLen','_tragFmtLen','_buildFotoMarker','_createTacka']
+names=['_removeVlakaMapLayers','sbLoadKolegeVlake','attachPolyClick','_distToSegPx','showKolegeVlakaInfo','showVlakaPopup','closeVlakaPopup','_positionPopup','vpZoom','vpBuffer','_vpBufferLabel','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_tragRegAddLayer','_tragCalcLen','_tragFmtLen','_buildFotoMarker','_createTacka']
 extra+='\n'.join(b.function(n) for n in names)
 extra+='\n'+b.section("map.on('click', e => {","map.on('dblclick'")
 extra+='\n'+(b.ROOT/'static/js/map-visibility.js').read_text()

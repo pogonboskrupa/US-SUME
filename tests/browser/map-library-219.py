@@ -61,6 +61,7 @@ async def main():
   await page.locator('#library-list .le-fields input').first.press('Tab')
   assert await page.evaluate("kmlLs.some(k=>k.name==='Nova granica')")
   await page.evaluate("closeOznakePanel();_serverProjektPreuzeto('P',fixtureRows);openSyncQueuePanel()")
+  await page.locator('#data-server-tabs button[data-direction=received]').click()
   assert await page.locator('#server-received-items details').count()==1
   assert not await page.locator('#server-received-items .sp-item-map').is_visible()
   await page.locator('#server-received-items summary').click()
