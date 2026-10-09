@@ -4489,7 +4489,7 @@ table.ttm-tbl tbody tr:nth-child(even) td.stick { background:#0e1626; }
 
 <script>
 window.onerror=function(m,s,l){const d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;right:0;background:red;color:#fff;padding:12px;z-index:999999;font-size:14px;word-break:break-all;';d.textContent='JS GREŠKA: '+m+' (linija '+l+')';document.body.appendChild(d);};
-const APP_VER = 'v3.52.0';
+const APP_VER = 'v3.52.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta)
 { const _authVerEl = document.getElementById('auth-app-ver'); if (_authVerEl) _authVerEl.textContent = APP_VER; }
 // =====================================================================
@@ -27788,6 +27788,23 @@ const _TEM_IDB_KEY   = 'tematska_gpkg_v1';        // legacy (v3.11.0 single-map)
 const _TEM_NAME_KEY  = 'tvlake_tem_name';         // legacy
 const _TEM_THEME_KEY = 'tvlake_tem_theme';        // legacy
 const _TEM_RAMP      = ['#1a9641','#a6d96a','#ffffbf','#fdae61','#d7191c'];
+// Sadnja: ista apsolutna skala za sve vrste; ne mijenja modelirane ocjene.
+const _TEM_SPECIES = { bukva: 'Bukva', jela: 'Jela', smrca: 'Smrča',
+  hrast_kitnjak: 'Hrast kitnjak', hrast_luznjak: 'Hrast lužnjak',
+  pitomi_kesten: 'Pitomi kesten', gorski_javor: 'Gorski javor' };
+const _TEM_PLANTING = { breaks: [60,70,80,90],
+  colors: ['#ebdff5','#c19cda','#935bbd','#6e329b','#48146e'],
+  labels: ['Uslovno','Umjereno povoljno','Povoljno','Vrlo povoljno','Najviša modelirana pogodnost'],
+  min: 50, max: 100 };
+function _temNumber(v) {
+  return v == null || (typeof v === 'string' && !v.trim()) ? NaN : Number(v);
+}
+function _temIsSpecies(entry, col) { return !!(entry.planting && _TEM_SPECIES[col]); }
+function _temFeatureShown(entry, f) {
+  if (!_temIsSpecies(entry, entry.theme)) return true;
+  const v = _temNumber(f.attrs[entry.theme]);
+  return Number.isFinite(v) && v >= 50 && v <= 100;
+}
 // Registar u memoriji: {id, name, grp, features:[{attrs,polys}], cols, theme, visible,
 //  styles:{kolona:{breaks:[4],colors:[5]}} (ručne klase/boje), colLabels:{kolona:'Naziv'}
 //  (ručno preimenovani atributi — samo prikaz, ne dira sirove podatke), _cls (za legendu)}
@@ -27822,7 +27839,8 @@ function _temById(id) { return _temMaps.find(m => m.id === id); }
 // Prikazni naziv atributa — ručno preimenovan (colLabels) ili auto (_ → razmak)
 function _temColLabel(entry, col) {
   if (!col) return '';
-  return (entry?.colLabels && entry.colLabels[col]) || col.replace(/_/g, ' ');
+  return (entry?.colLabels && entry.colLabels[col]) ||
+    (_temIsSpecies(entry, col) ? _TEM_SPECIES[col] : col.replace(/_/g, ' '));
 }
 
 // GPKG geometrija: 'GP' magic + flags + srs_id + envelope, pa standardni WKB.
@@ -28013,6 +28031,12 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
     const s = numStats[n];
     return s.tot >= 3 && s.num / s.tot >= 0.8;
   }).sort();
+  entry.planting = !!tables['model_audit'] || /sadnja|7_vrsta|purple/i.test(name);
+  if (entry.planting) {
+    entry.cols = Object.keys(_TEM_SPECIES).filter(c => colNames.includes(c));
+    if (!entry.cols.length) entry.planting = false;
+    else if (!saved) entry.opacity = 0.8;
+  }
   entry._bounds = allBounds;
   _temMaps.push(entry);
   if (entry.visible) entry.grp.addTo(map);
@@ -28022,6 +28046,7 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
 
   // Vrati zapamćenu temu (restore poslije restarta)
   if (saved?.theme && entry.cols.includes(saved.theme)) _temApplyTheme(entry.id, saved.theme);
+  else if (entry.planting) _temApplyTheme(entry.id, entry.cols[0]);
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
   if (typeof _temModalRender === 'function') _temModalRender();
   return entry;
@@ -28030,6 +28055,14 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
 // Popup kartica — moderna, tamna, jak kontrast. Zaglavlje istakne odjel/GJ,
 // aktivna tema karte je naglašena (kao QGIS identify).
 function _temPopupHtml(entry, f) {
+  if (_temIsSpecies(entry, entry.theme)) {
+    const v = _temNumber(f.attrs[entry.theme]);
+    const i = _TEM_PLANTING.breaks.filter(b => v >= b).length;
+    return `<div class="tem-card"><div class="tem-card-hd">${_escHtml(_temColLabel(entry, entry.theme))}</div>
+      <div class="tem-card-body"><div class="tem-card-row"><span class="k">Pogodnost</span>
+      <span class="v">${_TEM_PLANTING.labels[i]} · ${v.toFixed(1)}/100</span></div>
+      <div style="padding:10px;font-size:12px;color:#cbd5e1;">Modelirana procjena, nije vjerovatnoća preživljavanja. Prije sadnje provjeriti dubinu i drenažu tla${entry.theme === 'pitomi_kesten' ? ', kiselu podlogu i odsustvo slobodnih karbonata' : entry.theme === 'hrast_luznjak' ? ' i ljetnu dostupnost podzemne vode' : ''} na terenu.</div></div></div>`;
+  }
   const entries = Object.entries(f.attrs).filter(([, v]) => v != null && v !== '');
   // Prepoznaj odjel i GJ za zaglavlje (raw ili preimenovan naziv)
   const findKey = (...names) => entries.find(([k]) =>
@@ -28073,36 +28106,44 @@ function _temApplyTheme(id, col) {
   if (!entry) return;
   entry.theme = col || null;
   if (!col) {
-    entry.features.forEach(f => f.polys.forEach(p =>
-      p.setStyle({ color: '#94a3b8', fillColor: '#94a3b8', fillOpacity: 0.08, weight: 1 })));
+    entry.features.forEach(f => f.polys.forEach(p => {
+      if (!entry.grp.hasLayer(p)) entry.grp.addLayer(p);
+      p.setStyle({ color: '#94a3b8', fillColor: '#94a3b8', fillOpacity: 0.08, weight: 1 });
+    }));
     entry._cls = null;
     if (_temEdOpenId === id) { _temEdOpenId = null; delete _temEdDraft[id]; }   // editor bez teme nema šta prikazati
     _temRegSave(); _temLegendUpd();
     return;
   }
-  const vals = entry.features.map(f => Number(f.attrs[col])).filter(Number.isFinite).sort((a, b) => a - b);
-  if (vals.length < 2) { showToast('⚠ Premalo vrijednosti za temu "' + col + '"'); return; }
+  const planting = _temIsSpecies(entry, col);
+  const vals = entry.features.map(f => _temNumber(f.attrs[col])).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!planting && vals.length < 1) { showToast('⚠ Nema vrijednosti za temu "' + col + '"'); return; }
   const ov = entry.styles?.[col];
   // Broj klasa = proizvoljan (ručno podešen preko editora); default 5 kad nema override-a.
   const nDefault = 5;
-  const breaks = (ov?.breaks?.length ? ov.breaks.slice().sort((a, b) => a - b) : _temQuantiles(vals, nDefault));
-  const colors = (ov?.colors?.length >= 2 ? ov.colors : _temRampFor(nDefault));
+  const breaks = planting ? _TEM_PLANTING.breaks.slice() : (ov?.breaks?.length ? ov.breaks.slice().sort((a, b) => a - b) : _temQuantiles(vals, nDefault));
+  const colors = planting ? _TEM_PLANTING.colors.slice() : (ov?.colors?.length >= 2 ? ov.colors : _temRampFor(breaks.length + 1));
   const classOf = v => { let c = 0; for (const b of breaks) { if (v >= b) c++; else break; } return c; };
   const fo = Number.isFinite(entry.opacity) ? entry.opacity : 0.55;
   entry.features.forEach(f => {
-    const v = Number(f.attrs[col]);
+    const v = _temNumber(f.attrs[col]);
+    f.polys.forEach(p => {
+      if (!_temFeatureShown(entry, f)) { p.closePopup(); entry.grp.removeLayer(p); }
+      else if (!entry.grp.hasLayer(p)) entry.grp.addLayer(p);
+    });
+    if (!_temFeatureShown(entry, f)) return;
     if (!Number.isFinite(v)) {
       f.polys.forEach(p => p.setStyle({ color: '#64748b', fillColor: '#64748b', fillOpacity: Math.min(0.1, fo * 0.15), weight: 0.8 }));
       return;
     }
     const c = colors[Math.min(classOf(v), colors.length - 1)];
-    f.polys.forEach(p => p.setStyle({ color: c, fillColor: c, fillOpacity: fo, weight: 1 }));
+    f.polys.forEach(p => p.setStyle({ color: c, fillColor: c, fillOpacity: fo, weight: planting ? 0 : 1 }));
   });
   // lo/hi: ručno postavljene granice prve/zadnje klase (samo prikaz u legendi/editoru —
   // klasifikacija ostaje vođena isključivo sa 4 unutrašnje granice, kao i do sada).
-  const lo = Number.isFinite(ov?.lo) ? ov.lo : vals[0];
-  const hi = Number.isFinite(ov?.hi) ? ov.hi : vals[vals.length - 1];
-  entry._cls = { col, breaks, colors, min: lo, max: hi };
+  const lo = planting ? 50 : Number.isFinite(ov?.lo) ? ov.lo : vals[0];
+  const hi = planting ? 100 : Number.isFinite(ov?.hi) ? ov.hi : vals[vals.length - 1];
+  entry._cls = { col, breaks, colors, min: lo, max: hi, labels: planting ? _TEM_PLANTING.labels : null };
   // Editor otvoren za ovu kartu (npr. promjena teme iz dropdowna dok je editor
   // otvoren) — draft mora pratiti NOVU temu, inače ostaje na starim klasama.
   if (_temEdOpenId === id) _temEdDraft[id] = { colors: colors.slice(), edges: [lo, ...breaks, hi] };
@@ -28123,7 +28164,8 @@ function _temSetOpacity(id, val, commit) {
     const { col, breaks, colors } = entry._cls;
     const classOf = v => { let c = 0; for (const b of breaks) { if (v >= b) c++; else break; } return c; };
     entry.features.forEach(f => {
-      const v = Number(f.attrs[col]);
+      if (!_temFeatureShown(entry, f)) return;
+      const v = _temNumber(f.attrs[col]);
       if (!Number.isFinite(v)) { f.polys.forEach(p => p.setStyle({ fillOpacity: Math.min(0.1, fo * 0.15) })); return; }
       f.polys.forEach(p => p.setStyle({ fillOpacity: fo }));
     });
@@ -28146,18 +28188,18 @@ function _temLegendUpd() {
   }
   const fmtV = v => Math.abs(v) >= 100 ? Math.round(v).toLocaleString('bs') : (+(+v).toFixed(1)).toLocaleString('bs');
   el.innerHTML = active.map(m => {
-    const { col, breaks, colors, min, max } = m._cls;
+    const { col, breaks, colors, min, max, labels } = m._cls;
     const edges = [min, ...breaks, max];
     let rows = '';
     for (let i = 0; i < colors.length; i++) {
       const lo = edges[Math.min(i, edges.length - 1)], hi = edges[Math.min(i + 1, edges.length - 1)];
-      if (i > 0 && lo === hi && i < colors.length - 1) continue;
+      if (!labels && lo === hi && colors.length > 1) continue;
       rows += `<div style="display:flex;align-items:center;gap:7px;padding:1px 0;">
         <span style="width:14px;height:11px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></span>
-        <span style="font-size:10.5px;color:#cbd5e1;">${fmtV(lo)} – ${fmtV(hi)}</span>
+        <span style="font-size:10.5px;color:#cbd5e1;">${labels ? `${_escHtml(labels[i])}<br>${lo}–${i === colors.length - 1 ? '' : '&lt;'}${hi}` : `${fmtV(lo)} – ${fmtV(hi)}`}</span>
       </div>`;
     }
-    return `<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">📊 ${_escHtml(_temColLabel(m, col))}</div>${rows}`;
+    return `<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">📊 ${_escHtml(_temColLabel(m, col))}</div>${rows}${labels ? '<div style="font-size:10px;color:#cbd5e1;margin-top:6px;">Tamnije = povoljnije. Bez ocjene ili ispod praga: skriveno. Procjena zahtijeva terensku provjeru.</div>' : ''}`;
   }).join('<div style="height:7px;"></div>');
 }
 
@@ -28497,6 +28539,7 @@ function _temTblRowClick(i) {
   if (!entry) return;
   const f = entry.features[i];
   if (!f || !f.polys.length) return;
+  if (!_temFeatureShown(entry, f)) { showToast('Ova ćelija nije prikazana za izabranu vrstu.'); return; }
   closeTemTable();
   closeTemModal();
   if (!entry.visible) _temSetVisible(entry.id, true);
@@ -28575,6 +28618,7 @@ function _temModalRender() {
           style="flex:1;min-width:0;accent-color:#4ade80;height:22px;">
         <span id="tem-op-lbl-${m.id}" style="font-size:11px;color:#e2e8f0;width:34px;text-align:right;flex-shrink:0;">${Math.round((m.opacity ?? 0.55) * 100)}%</span>
       </div>` : ''}
+      ${m.planting ? '<div style="font-size:12px;color:#cbd5e1;margin-top:9px;">Izaberi vrstu. Prikazuju se samo ćelije s ocjenom 50–100 za tu vrstu. Tamnija ljubičasta znači veću modeliranu pogodnost; ocjena nije procenat uspjeha sadnje.</div>' : ''}
       ${edOpen ? _temClassEdHtml(m) : ''}
     </div>`;
   }).join('');
@@ -28588,6 +28632,10 @@ function _temModalRender() {
 }
 
 function _temEdToggle(id) {
+  const plantingEntry = _temById(id);
+  if (plantingEntry && _temIsSpecies(plantingEntry, plantingEntry.theme)) {
+    showToast('Sadnja koristi stalne razrede i ljubičaste boje za sve vrste.'); return;
+  }
   if (_temEdOpenId === id) { _temEdOpenId = null; delete _temEdDraft[id]; _temModalRender(); return; }
   _temEdOpenId = id;
   const entry = _temById(id);
