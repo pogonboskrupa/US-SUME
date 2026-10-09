@@ -3309,3 +3309,12 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   doznake, svih1723 vraćeno iz IDB, bez mrežnih upisa. Ovo nije fizički telefon
   ni mjerenje baterije; produkcijski Supabase nije korišten/mijenjan.
 - Web/SW/Android 2.7.0/code540. Završni APK build/objava u toku.
+
+- Konačna potvrda 2.7.0: CI 37921217459/source
+  1d33653848005a5ba9ad1388a279b9a4fb3ac928 uspješan. APK 24.192.288 B,
+  SHA256 f817f1188647749c897acf4b9519a6b8767cd1d8d83804c77ad68cbb1a082e16.
+  Stvarni preuzeti APK: ba.spd.uss.vlake.debug / 2.7.0-debug / code540;
+  stabilni certifikat 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+  Svih61 web resursa identični izvoru; release digest i veličina poklapaju se.
+  Android XML:14 testova,0 grešaka/padova/preskakanja. Updater popis vraća
+  v2.7.0 s javnim app-debug.apk. Pages uspješno objavljen s 2.7.0 i drag fixom.
