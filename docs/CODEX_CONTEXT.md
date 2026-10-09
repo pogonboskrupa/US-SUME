@@ -3325,7 +3325,8 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   prva dva dijela (bugovi/kod/dizajn). Podjela i detaljni nalazi u
   docs/APP_PREGLED_4_DIJELA.md. Dijelovi3/4 ostaju planirani.
 - Karte: stvarni zadani Leaflet Canvas nije crtao SVG url šrafure; dodan
-  mali ponovljivi CanvasPattern sa jačinom. SVG identitet grupe umjesto
+  mali ponovljivi CanvasPattern sa jačinom; nepreuzet KML bez grupe se ne
+  stilizuje prije preuzimanja (regresijski pokriveno). SVG identitet grupe umjesto
   indeksa uklanja koliziju pri del/add (novi test pada na2.7.0). Kasne pune
   fotografije vezane za objekat/nalog/pregled, ne promjenjiv indeks. Native
   odbijeno uklanjanje ne briše IDB metadata; baza se zatvara, UI ne prijavljuje

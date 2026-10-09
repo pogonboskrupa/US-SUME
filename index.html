@@ -24223,7 +24223,7 @@ function _kmlStyleToLeaflet(s) {
 
 function applyKmlStyle(i) {
   const k = kmlLs[i];
-  if (!k) return;
+  if (!k || !k.grp) return;
   const op = k.opacity ?? 0.9;
   const base = { color: k.col, weight: k.weight || 2, opacity: op };
   base.dashArray = k.dash || null;
@@ -24278,7 +24278,7 @@ function _kmlCanvasPattern(k){
 
 function _ensureKmlPattern(i) {
   const k = kmlLs[i];
-  if (!k) return null;
+  if (!k || !k.grp) return null;
   const svg = document.querySelector('.leaflet-overlay-pane svg');
   if (!svg) return null;
   let defs = svg.querySelector('defs');

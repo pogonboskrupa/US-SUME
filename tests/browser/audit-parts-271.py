@@ -35,6 +35,8 @@ async def main():
     delK(0);await _localKmlSaveContent('C.kml',data,'#16a34a');await _localKmlRestore();for(const l of kmlLs[1].grp.getLayers()){map.removeLayer(l);l.options.renderer=svgRenderer;l.addTo(map);}Object.assign(kmlLs[1],{fill:true,fillPattern:'vertical',fillCol:'#f97316'});applyKmlStyle(1);
   }''',KML)
   assert await page.evaluate('''()=>{const id=patternBefore.slice(5,-1);return remaining.grp.getLayers()[0].options.fillColor===patternBefore&&document.getElementById(id).querySelector('line').getAttribute('stroke')==='#2563eb';}'''),'Šrafura preostalog sloja promijenjena nakon del/add'
+  # Pending server files have saved styles but no geometry/Leaflet group yet.
+  assert await page.evaluate("""()=>{const k={_key:'bucket/pending.kml',grp:null,fill:true,fillPattern:'diagonal',fillCol:'#dc2626'};kmlLs.push(k);try{applyKmlStyle(kmlLs.length-1);return _ensureKmlPattern(kmlLs.length-1)===null;}finally{kmlLs.pop();}}"""),'Stil nepreuzetog KML fajla ruši pregled'
   # Actual default Canvas KML: hatching exists and respects opacity/changes.
   assert await page.evaluate('''async data=>{
     await _localKmlSaveContent('Canvas.kml',data,'#16a34a');await _localKmlRestore();const k=kmlLs.at(-1),l=k.grp.getLayers()[0];Object.assign(k,{fill:true,fillPattern:'diagonal',fillCol:'#dc2626',fillOpacity:.25});applyKmlStyle(kmlLs.length-1);
