@@ -8,8 +8,8 @@ u okviru navedenih tokova; to nije tvrdnja da cijela aplikacija nema bugova.
 | --- | --- | --- |
 | 1. Karte i slojevi | Online/offline podloge, SQLite/MBTiles uvoz i preuzimanje, instalirane/omiljene karte, KML/SHP, oznake/fotografije, tematski GPKG i Sadnja, stilovi/vidljivost/obnova | Završeno; CI i APK 2.7.1 potvrđeni |
 | 2. Projekti i vlake | Aktivni projekat, upravljanje projektima, vlastite/kolegine vlake, ručno crtanje, GPS/krakovi, brisanje, boje/outline/strelice/lager/baferi, trajno čuvanje | Završeno; CI i APK 2.7.1 potvrđeni |
-| 3. Doznaka i teren | Odjeli/poligoni/pojasevi, GPS/pauza/oporavak, zajedničke granice/površine, lokacija i Explorer | Pregled i popravke završeni; build 2.7.2 u pripremi |
-| 4. Server i ostatak | Prijava/probni pristup, slanje/primanje/članstvo, red čekanja/mreža/RLS, Meni/postavke/upute, štampa/izvoz/ažuriranje | Pregled i popravke završeni; build 2.7.2 u pripremi |
+| 3. Doznaka i teren | Odjeli/poligoni/pojasevi, GPS/pauza/oporavak, zajedničke granice/površine, lokacija i Explorer | Završeno i isporučeno u 2.7.2 |
+| 4. Server i ostatak | Prijava/probni pristup, slanje/primanje/članstvo, red čekanja/mreža/RLS, Meni/postavke/upute, štampa/izvoz/ažuriranje | Završeno i isporučeno u 2.7.2; SQL dopuna brisanja nije primijenjena na produkciji |
 
 Zajedničke funkcije provjerene su i regresijama drugih dijelova. Prednost imaju
 terenski zapisi, lokalno čuvanje, razdvajanje naloga/projekata i ručno slanje.
@@ -298,6 +298,28 @@ SQL ne mijenja postojeće RLS politike niti briše podatke pri instalaciji.
 
 ### Isporuka
 
-Izvor pripremljen za 2.7.2 / Android code542. CI, APK potpis/manifest,
-ugrađeni assets i dostupnost u **Meni → Ažuriraj aplikaciju** provjeravaju se
-poslije builda; konačni identitet APK-a dopuniti ispod.
+Verzija **2.7.2 / Android code542** izgrađena, objavljena i provjerena
+9. 10. 2026. Izvor: `2c3d1313ebf81eaa2734b8c5d8a09482f8ef37d6`.
+[CI 37933659942](https://github.com/pogonboskrupa/US-SUME/actions/runs/37933659942)
+uspješan: 101 JS grupa, PostgreSQL probni pristup i rollback brisanja,
+puni browser skup i **16 Android emulator testova; 0 grešaka, padova ili
+preskakanja**.
+
+Preuzet stvarni Actions APK, ne samo lokalni build:
+
+- Paket: `ba.spd.uss.vlake.debug`, verzija `2.7.2-debug`, code542.
+- Veličina: **24.209.980 B (24,21 MB)**.
+- SHA-256: `28945c54de77ad9a725770862697484deb46f9636e55b79ab91eb9aa55bcce05`.
+- Certifikat isti kao prethodni APK: SHA-256
+  `11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
+- Svih **61 web fajlova** u APK-u identično izvoru; web/SW/Android verzije
+  usklađene. Release asset ima istu veličinu i digest kao preuzeti APK.
+- Javni Pages `index.html`, `sw.js`, `server-panel.js`, `offline-layer.js`
+  i `field-design.css` identični izvoru. Pages CI 37933659357 uspješan.
+- Prvi rezultat endpointa koji koristi updater provjeren kao `v2.7.2`,
+  s javnim `app-debug.apk` za **Meni → Ažuriraj aplikaciju**.
+
+[Preuzmi APK 2.7.2](https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.2/app-debug.apk).
+SQL za brisanje cijelog odjela i dalje treba primijeniti administrator;
+APK ne izvršava produkcijske migracije. Fizički telefon i produkcijski
+Supabase nisu testirani niti mijenjani.

@@ -3380,4 +3380,16 @@ Native UpdateBridge provjerava Content-Range i GitHub SHA-256 kada postoji.
 transakcija za kreatora/aktivnog managera. Nije primijenjen na produkciji.
 Bez njega brisanje se sigurno zaustavlja; nema povratka na četiri DELETE-a.
 Novi puni browser test/JS test, izolovani PostgreSQL rollback test i dvije
-Android provjere sadržaja/raspona. Build/proof dopuniti nakon stvarnog CI-ja.
+Android provjere sadržaja/raspona.
+
+Konačna potvrda 2.7.2: CI 37933659942/source
+`2c3d1313ebf81eaa2734b8c5d8a09482f8ef37d6` uspješan. 101 JS grupa,
+PostgreSQL testovi, puni browser skup i 16 Android emulator testova bez
+grešaka/padova/preskakanja. Preuzet APK: 24.209.980 B, SHA-256
+`28945c54de77ad9a725770862697484deb46f9636e55b79ab91eb9aa55bcce05`;
+paket `ba.spd.uss.vlake.debug` / 2.7.2-debug / code542. Svih 61 web assets
+identično izvoru i isti stabilni certifikat kao 2.7.1. Release digest i
+veličina podudarni; updater prvi vraća v2.7.2/app-debug.apk. Pet javnih
+Pages fajlova identično izvoru; Pages CI 37933659357 uspješan. Sva četiri
+dijela pregleda završena. SQL brisanja nije primijenjen na produkciji;
+fizički telefon, baterija i produkcijska baza ostaju neprovjereni.
