@@ -615,27 +615,27 @@ html #tem-modal .tem-picker select {display:block;width:100%;}
 
 /* Doznaka GPS kontrole — prozor se sklanja, dnevnik nastavlja snimanje. */
 #doz-gps-modal[hidden]{display:none!important}
-#doz-gps-modal{--field-card-soft:#19283e;--field-accent:#4ade80;--field-accent-soft:#4ade801c;--field-warn:#fbbf24;--field-danger:#fca5a5;--field-danger-soft:#ef444420;position:fixed;inset:0;z-index:10000;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(5,15,20,.5)}
-.doz-gps-sheet{box-sizing:border-box;width:100%;max-width:430px;max-height:calc(100dvh - 24px);overflow:auto;padding:18px;border-radius:22px;border:1px solid var(--field-border);background:var(--field-card);color:var(--field-ink);box-shadow:0 18px 65px #0005;font-size:13px}
+#doz-gps-modal{--field-card-soft:#19283e;--field-accent:#4ade80;--field-accent-soft:#4ade801c;--field-warn:#fbbf24;--field-danger:#fca5a5;--field-danger-soft:#ef444420;position:absolute;bottom:8px;left:8px;right:8px;z-index:500;display:flex;justify-content:center;box-sizing:border-box;max-height:calc(100% - 16px)}
+body.doz-gps-controls-on #rec-banner,body.doz-gps-controls-on #action-bar{display:none!important}
+.doz-gps-sheet{box-sizing:border-box;width:100%;max-width:520px;max-height:100%;overflow:auto;padding:10px 12px;border-radius:14px;border:2px solid var(--field-accent);background:var(--field-card);color:var(--field-ink);box-shadow:0 6px 28px #0006;font-size:12px}
 .doz-gps-sheet header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .doz-gps-sheet header small{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--field-accent)}
-.doz-gps-sheet h3{margin:5px 0 12px;font-size:19px;color:var(--field-ink)}
+.doz-gps-sheet h3{margin:3px 0;font-size:15px;color:var(--field-ink)}
 .doz-gps-sheet button{min-height:44px;border-radius:12px;border:1px solid var(--field-border);font:inherit;font-weight:750;cursor:pointer;background:var(--field-card-soft);color:var(--field-ink)}
 .doz-gps-sheet header button{min-width:44px;flex-shrink:0;align-self:flex-start}
-.doz-gps-context{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;overflow-wrap:anywhere}
-.doz-gps-context strong{font-size:16px}.doz-gps-context span,.doz-gps-hint{color:var(--field-muted)}
-.doz-gps-state{padding:9px 12px;border-radius:10px;color:var(--field-accent);background:var(--field-accent-soft);font-weight:800}
+.doz-gps-context{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0;overflow-wrap:anywhere}
+.doz-gps-context strong{font-size:12px}.doz-gps-context span,.doz-gps-hint{color:var(--field-muted)}
+.doz-gps-state{padding:4px 8px;border-radius:7px;color:var(--field-accent);background:var(--field-accent-soft);font-weight:800}
 #doz-gps-modal.is-paused .doz-gps-state{background:#fbbf2420;color:var(--field-warn)}
-.doz-gps-metrics{display:grid;grid-template-columns:1fr 1.3fr .8fr;gap:8px;margin:14px 0}
-.doz-gps-metrics>div{min-width:0;padding:10px 8px;border-radius:12px;background:var(--field-card-soft)}
+.doz-gps-metrics{display:grid;grid-template-columns:1fr 1.3fr .8fr;gap:6px;margin:6px 0}
+.doz-gps-metrics>div{min-width:0;padding:6px;border-radius:8px;background:var(--field-card-soft)}
 .doz-gps-metrics small{display:block;font-size:10px;color:var(--field-muted)}
-.doz-gps-metrics strong{display:block;margin-top:6px;font-size:17px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.doz-gps-signal{margin:0 0 8px;color:var(--field-ink);font-weight:700}.doz-gps-note{line-height:1.5;color:var(--field-muted);min-height:40px;margin:0 0 14px}
+.doz-gps-metrics strong{display:block;margin-top:2px;font-size:16px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.doz-gps-signal{margin:4px 0 6px;color:var(--field-ink);font-weight:700}.doz-gps-note,.doz-gps-hint{display:none}
 .doz-gps-actions{display:grid;grid-template-columns:1fr 1.3fr;gap:10px}.doz-gps-actions button:first-child{background:var(--field-accent-soft);color:var(--field-accent)}
 .doz-gps-actions button:last-child{background:var(--field-danger-soft);color:var(--field-danger);border-color:var(--field-danger)}
-.doz-gps-sheet button:disabled{opacity:.55;cursor:wait}.doz-gps-map{width:100%;margin-top:10px}.doz-gps-hint{display:block;font-size:11px;line-height:1.5;margin-top:10px}
-@media(min-width:700px){#doz-gps-modal{align-items:center}}
-@media(max-height:420px){#doz-gps-modal{padding:6px}.doz-gps-sheet{max-height:calc(100dvh - 12px);padding:12px}}
+.doz-gps-sheet button:disabled{opacity:.55;cursor:wait}.doz-gps-map{width:100%;margin-top:6px}
+@media(max-height:420px){.doz-gps-context,.doz-gps-map,.doz-gps-sheet header small{display:none}.doz-gps-sheet{padding:6px 10px}.doz-gps-sheet header button{min-height:32px}.doz-gps-metrics{margin:4px 0}.doz-gps-state{padding:2px 6px}.doz-gps-signal{font-size:11px;margin:2px 0 4px}}
 
 html[data-field-theme=day] #doz-gps-modal{--field-card-soft:#f1f5f9;--field-accent:#166534;--field-accent-soft:#dcfce7;--field-warn:#92400e;--field-danger:#b91c1c;--field-danger-soft:#fee2e2}
 

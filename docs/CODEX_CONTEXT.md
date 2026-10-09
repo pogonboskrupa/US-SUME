@@ -3280,3 +3280,32 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   veličina/digest poklapaju APK. Updater releases?per_page=1 vraća v2.6.9
   i javni app-debug.apk. Release opis dopunjen izmjenama podtaba; javni Pages
   index.html je 2.6.9 i sadrži Sadnja podtab.
+
+### 2026-10-09 — ručno crtanje bez samostalnog produženja i GPS kontrole Doznake (2.7.0)
+
+- Korisnik prijavljuje završni segment oko200 m prema jugu pri ručnom crtanju
+  i traži GPS kontrole Doznake na karti, na mjestu kontrola snimanja vlake.
+- Uzrok reproduciran: ručni Crtaj i stariji Vuci slušaju Leaflet move, koji
+  se emituje i tokom inercije nakon puštanja prsta, GPS/programskog pan-a,
+  zoom-a i resize-a. Novi test nad stvarnim Leaflet-om pada na starom move
+  kodu već kod produženja nakon mouseup-a. Oba toka sada slušaju samo drag;
+  otkačivanje koristi isti događaj. Tačka i Undo zadržavaju postojeći tok.
+  Manual panel i Doznaka kontrole uključeni u zaštitu od propagacije
+  klikova/touchstart/scroll na kartu.
+- Doznaka kontrole premještene unutar glavnog prikaza, u kompaktan banner
+  iznad karte; bez full-screen backdrop-a ili blokiranja karte/fokus-trap-a.
+  Počni GPS/ponovno otvaranje prelazi na Kartu. Prikazani odjel, projektant,
+  aktivno/pauza stanje, dužina, vrijeme i signal; Pauza/Nastavi i Završi.
+  Dok je otvoren, banner vlake, obična donja akcijska traka i dupli rec-bar
+  su sklonjeni. Sklanjanje vraća trake i nastavlja isti GPS watch; završetak
+  i dalje čeka trajnu potvrdu, ne mijenja session/IDB/filtere/slanje.
+- Prošao novi browser test manual-draw-270 (miš i CDP touch, CPU4x, inercija,
+  simulirani200 m južni pomak, resize/zoom, finish, tačka/Undo, stariji Vuci).
+  GPS test potvrđuje Karta/poziciju unutar main-a, skrivene duple trake i
+  slobodnu kartu, osam day/dark rasporeda, pauzu/nastavak, minimiziranje,
+  ponovni ulaz, neuspjeli trajni finish/retry, stop u pauzi i IDB reload.
+  Prošlo svih100 JS grupa, pet inline sintaksi, Doznaka restore i overlay
+  test. Puni app test: CPU4x, ubrzanih5 h, 3564 prihvaćene tačke vlaka i1723
+  doznake, svih1723 vraćeno iz IDB, bez mrežnih upisa. Ovo nije fizički telefon
+  ni mjerenje baterije; produkcijski Supabase nije korišten/mijenjan.
+- Web/SW/Android 2.7.0/code540. Završni APK build/objava u toku.

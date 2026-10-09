@@ -5621,6 +5621,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
       </div>
 
+<!-- DOZ GPS CONTROLS -->
+<div id="doz-gps-modal" hidden onkeydown="dozGPSControlsKey(event)">
+  <section class="doz-gps-sheet" role="region" aria-labelledby="doz-gps-modal-title" tabindex="-1">
+    <header><div><small>DOZNAKA · GPS TRAG</small><h3 id="doz-gps-modal-title">Snimanje doznake</h3></div><button type="button" onclick="dozCloseGPSControls()" aria-label="Skloni kontrole snimanja">✕</button></header>
+    <div class="doz-gps-context"><strong id="doz-gps-modal-project"></strong><span id="doz-gps-modal-user"></span></div>
+    <div class="doz-gps-state" id="doz-gps-modal-state" role="status"></div>
+    <div class="doz-gps-metrics"><div><small>Dužina traga</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme snimanja</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>GPS tačke</small><strong id="doz-gps-modal-points">0</strong></div></div>
+    <p class="doz-gps-signal" id="doz-gps-modal-signal"></p><p class="doz-gps-note" id="doz-gps-modal-note"></p>
+    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi snimanje</button></div>
+    <button class="doz-gps-map" type="button" onclick="dozCloseGPSControls(true)"><svg class="ic"><use href="#ic-karta"/></svg> Skloni kontrole</button>
+    <small class="doz-gps-hint">Sklanjanje prozora ne prekida snimanje. Kontrole ponovo otvaraš iz trake snimanja.</small>
+  </section>
+</div>
+<!-- END DOZ GPS CONTROLS -->
+
       <!-- TRAG RECORDING BANNER -->
 
 
@@ -5738,7 +5753,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.9';
+const APP_VER = 'v2.7.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -9951,14 +9966,15 @@ function mdpToggleDrag(on) {
     // Jedan snimak za cijelu drag sesiju — Undo vraća sve drag tačke odjednom
     if (_mdpIdx !== null && vlake[_mdpIdx]) _mdpUndoStack.push(vlake[_mdpIdx].pts.map(p => ({...p})));
     main.classList.add('draw-drag-on');
-    map.on('move', _mdpOnMove);
+    // Samo korisnikov drag: GPS/zoom/resize i inercija ne crtaju vlaku.
+    map.on('drag', _mdpOnMove);
     // Odmah dodaj tačku na trenutnom centru — linija kreće iz centra
     const c = map.getCenter();
     if (_mdpIdx !== null) { addPt(_mdpIdx, c.lat, c.lng, 0); _mdpLastPt = { la: c.lat, lo: c.lng }; }
     _mdpUpdStats();
   } else {
     main.classList.remove('draw-drag-on');
-    map.off('move', _mdpOnMove);
+    map.off('drag', _mdpOnMove);
   }
 }
 
@@ -16240,7 +16256,7 @@ _mapFavLoad();
 _loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
-['ovl','rec-banner','draw-banner'].forEach(id => {
+['ovl','rec-banner','draw-banner','manual-draw-panel','doz-gps-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     L.DomEvent.disableClickPropagation(el);
@@ -16735,7 +16751,7 @@ function toggleDrawDrag() {
     btn.classList.add('active');
     btn.innerHTML = '<svg class="ic"><use href="#ic-crtaj"/></svg> Stop';
     document.getElementById('main').classList.add('draw-drag-on');
-    map.on('move', _onMapMoveDraw);
+    map.on('drag', _onMapMoveDraw);
   } else {
     _stopDrawDrag();
   }
@@ -16745,7 +16761,7 @@ function _stopDrawDrag() {
   if (!_drawDragOn) return;
   _drawDragOn = false;
   _drawDragLastPt = null;
-  map.off('move', _onMapMoveDraw);
+  map.off('drag', _onMapMoveDraw);
   const btn = document.getElementById('btn-draw-drag');
   if (btn) { btn.classList.remove('active'); btn.innerHTML = '<svg class="ic"><use href="#ic-crtaj"/></svg> Vuci'; }
   document.getElementById('main').classList.remove('draw-drag-on');
@@ -20087,7 +20103,8 @@ function _recBarSync() {
   // Na Karti donja traka (#action-bar) već nosi kontrole za vlaku i trag, pa bi
   // druga traka bila duplikat. Doznaka pojas je IZUZETAK: nju #action-bar ne
   // pokriva ni na Karti, pa tamo traka ostaje jedini način da se vidi i zaustavi.
-  const dupliraSe = _activeTab === 'karta' && s && s.tip !== 'doznaka';
+  const dozControls = document.getElementById('doz-gps-modal');
+  const dupliraSe = _activeTab === 'karta' && s && (s.tip !== 'doznaka' || (dozControls && !dozControls.hidden));
   const vidljiv = !!s && !dupliraSe;
   bar.style.display = vidljiv ? 'flex' : 'none';
   document.body.classList.toggle('recbar-on', vidljiv);
@@ -38885,6 +38902,10 @@ function dozOpenGPSControls() {
   if (!_dozGpsOn || !modal) return;
   if (modal.hidden) _dozGpsControlsFocus = document.activeElement;
   modal.hidden = false;
+  document.body.classList.add('doz-gps-controls-on');
+  if (typeof switchTab === 'function' && _activeTab !== 'karta') switchTab('karta');
+  if (typeof _abVisinaSync === 'function') _abVisinaSync();
+  if (typeof _recBarSync === 'function') _recBarSync();
   _dozGpsControlsSync();
   if (!_dozGpsControlsTimer) _dozGpsControlsTimer = setInterval(_dozGpsControlsSync, 1000);
   document.getElementById('doz-gps-modal-pause')?.focus({preventScroll:true});
@@ -38892,21 +38913,17 @@ function dozOpenGPSControls() {
 function dozCloseGPSControls(showMap) {
   const modal = document.getElementById('doz-gps-modal');
   if (modal) modal.hidden = true;
+  document.body.classList.remove('doz-gps-controls-on');
+  if (typeof _abVisinaSync === 'function') _abVisinaSync();
   if (_dozGpsControlsTimer) clearInterval(_dozGpsControlsTimer);
   _dozGpsControlsTimer = null;
   if (typeof _recBarSync === 'function') _recBarSync();
   if (showMap && typeof switchTab === 'function') switchTab('karta');
-  else if (_dozGpsControlsFocus?.isConnected) _dozGpsControlsFocus.focus({preventScroll:true});
+  else if (_dozGpsControlsFocus?.isConnected && _dozGpsControlsFocus.getClientRects().length) _dozGpsControlsFocus.focus({preventScroll:true});
   _dozGpsControlsFocus = null;
 }
 function dozGPSControlsKey(e) {
   if(e.key==='Escape') { e.preventDefault(); e.stopPropagation(); dozCloseGPSControls(); return; }
-  if(e.key!=='Tab') return;
-  const buttons=Array.from(document.querySelectorAll('#doz-gps-modal button:not(:disabled)')).filter(el=>el.getClientRects().length);
-  const first=buttons[0],last=buttons[buttons.length-1];
-  if(first && ((!e.shiftKey && document.activeElement===last) || (e.shiftKey && document.activeElement===first))) {
-    e.preventDefault(); (e.shiftKey ? last : first).focus();
-  }
 }
 function _dozGpsControlsSync(acc) {
   if (acc !== undefined) {
@@ -41700,20 +41717,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 
-<!-- DOZ GPS CONTROLS -->
-<div id="doz-gps-modal" hidden onclick="if(event.target===this)dozCloseGPSControls()" onkeydown="dozGPSControlsKey(event)">
-  <section class="doz-gps-sheet" role="dialog" aria-modal="true" aria-labelledby="doz-gps-modal-title" tabindex="-1">
-    <header><div><small>DOZNAKA · GPS TRAG</small><h3 id="doz-gps-modal-title">Snimanje kretanja</h3></div><button type="button" onclick="dozCloseGPSControls()" aria-label="Skloni kontrole snimanja">✕</button></header>
-    <div class="doz-gps-context"><strong id="doz-gps-modal-project"></strong><span id="doz-gps-modal-user"></span></div>
-    <div class="doz-gps-state" id="doz-gps-modal-state" role="status"></div>
-    <div class="doz-gps-metrics"><div><small>Dužina traga</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme snimanja</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>GPS tačke</small><strong id="doz-gps-modal-points">0</strong></div></div>
-    <p class="doz-gps-signal" id="doz-gps-modal-signal"></p><p class="doz-gps-note" id="doz-gps-modal-note"></p>
-    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi snimanje</button></div>
-    <button class="doz-gps-map" type="button" onclick="dozCloseGPSControls(true)"><svg class="ic"><use href="#ic-karta"/></svg> Prikaži kartu</button>
-    <small class="doz-gps-hint">Sklanjanje prozora ne prekida snimanje. Kontrole ponovo otvaraš iz trake snimanja.</small>
-  </section>
-</div>
-<!-- END DOZ GPS CONTROLS -->
+
 
 <!-- Action bar — Snimi vlaku / Snimi trag / Moja lokacija -->
 <!-- Traka snimanja — vidljiva na svim panelima dok nešto snima (v3.116.0).

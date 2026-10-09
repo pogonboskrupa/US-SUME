@@ -16,7 +16,7 @@ function switchTab(tab){_activeTab=tab;document.getElementById('doznaka-panel').
 _dozLiveRacunMozda=()=>{};
 async function fix(lat,lng=16,accuracy=5){await fixCallback({timestamp:Date.now(),coords:{latitude:lat,longitude:lng,altitude:480,accuracy,speed:1}});await new Promise(r=>requestAnimationFrame(r))}
 '''
-html=d.fixture.replace('</body>',modal+bar+'</body>').replace('<script>'+d.setup, '<script src="/static/js/field-store.js"></script><script>'+d.setup+'\n'+helpers+'\n'+extra)
+html=d.fixture.replace(d.html+'</div>',d.html+modal+'<div id="rec-banner" class="show">Vlaka</div><div id="action-bar">Snimi vlaku</div></div>').replace('</body>',bar+'</body>').replace('<script>'+d.setup, '<script src="/static/js/field-store.js"></script><script>'+d.setup+'\n'+helpers+'\n'+extra)
 async def main():
  b.OUT.mkdir(parents=True,exist_ok=True)
  async with async_playwright() as p:
@@ -32,6 +32,8 @@ async def main():
   await page.evaluate("dozSelectOdjel('D105')")
   await page.locator('#doz-gps-btn').click();await page.evaluate('startPromise')
   assert await page.locator('#doz-gps-modal').is_visible()
+  assert await page.evaluate('_activeTab==="karta" && document.getElementById("main").contains(document.getElementById("doz-gps-modal"))')
+  assert not await page.locator('#rec-banner').is_visible() and not await page.locator('#action-bar').is_visible() and not await page.locator('#rec-bar').is_visible()
   assert await page.locator('#doz-gps-modal-project').inner_text()=='Una · 105'
   assert await page.locator('#doz-gps-modal-user').inner_text()=='Emina Projektant'
   await page.evaluate('fix(44.9)');await page.evaluate('fix(44.9001)')
@@ -45,15 +47,17 @@ async def main():
   await page.locator('#doz-gps-modal-pause').click();await page.evaluate('fix(44.9002)')
   assert await page.evaluate('FieldStore.count("A")')==3
   # Minimize/reopen never starts a second watch, and points continue offline.
-  await page.get_by_role('button',name='Prikaži kartu',exact=True).click()
+  await page.get_by_role('button',name='Skloni kontrole',exact=True).click()
   assert not await page.locator('#doz-gps-modal').is_visible()
   assert await page.evaluate('_dozGpsOn && _activeTab==="karta" && watches===1 && clears===0 && _dozGpsControlsTimer===null')
   await page.evaluate('fix(44.9003)');await page.locator('#rb-go').click();assert await page.locator('#doz-gps-modal').is_visible()
   assert await page.locator('#doz-gps-modal-points').inner_text()=='4'
   await page.evaluate('fix(44.901,16,45)');assert await page.evaluate('FieldStore.count("A")')==4
   assert 'Slab signal' in await page.locator('#doz-gps-modal-signal').inner_text()
-  # Keyboard focus stays in modal; Escape only minimizes.
-  await page.locator('.doz-gps-map').focus();await page.keyboard.press('Tab');assert await page.evaluate('document.activeElement.getAttribute("aria-label")')=='Skloni kontrole snimanja'
+  # Map remains usable above the floating controls; Escape only minimizes.
+  assert await page.locator('.doz-gps-sheet').get_attribute('aria-modal') is None
+  assert await page.evaluate('document.elementFromPoint(190,90).closest("#map")!==null')
+  await page.locator('.doz-gps-map').focus()
   await page.keyboard.press('Escape');assert await page.evaluate('_dozGpsOn && !clears')
   await page.locator('#rb-go').click()
   for theme in ['day','dark']:
