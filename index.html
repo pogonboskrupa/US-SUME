@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.7';
+const APP_VER = 'v2.6.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -35213,7 +35213,7 @@ const _TEM_KAT_MAX = 20;   // tekstualna kolona sa više različitih vrijednosti
 // broj, ali kvantili nad šiframa nemaju smisla) — uvijek kategorija, i sa više vrijednosti.
 const _TEM_KAT_MAX_TXT = 80;
 const _TEM_POV_RE = /^povr[sš]ina(_ha)?$/i;
-const _TEM_ID_RE = /^(odjel|odsjek|odjel_odsjek|odsjek_id|napomena|opis)$/i;   // oznake/slobodan tekst — nikad tema
+const _TEM_ID_RE = /^(odjel|odsjek|odjel_odsjek|odsjek_id|napomena|opis|procjena_i_ogranicenja)$/i;   // oznake/slobodan tekst — nikad tema
 // Prikazni nazivi uobičajenih kolona šumarskog .gpkg-a (npr. granica taksacije) — samo prikaz.
 const _TEM_NAZIVI = { gj: 'GJ', odjel: 'Odjel', odsjek: 'Odsjek', gazdinska_klasa: 'Gazdinska klasa',
   gk_grupa: 'Grupa gazd. klase', povrsina_ha: 'Površina (ha)', ugrozenost: 'Ugroženost',
@@ -35297,6 +35297,7 @@ function _temKlasaIdx(cls, raw) {
   if (cls.cat) return (raw == null || raw === '') ? -1 : cls.vals.indexOf(String(raw));
   const v = _temNum(raw);
   if (!Number.isFinite(v)) return -1;
+  if(cls.ranges) return cls.ranges.findIndex(r=>v>=r.min && v<=r.max);
   let c = 0;
   for (const b of cls.breaks) { if (v >= b) c++; else break; }
   return Math.min(c, cls.colors.length - 1);
@@ -35310,6 +35311,7 @@ function _temBojaZa(cls, raw) {
 function _temKlaseOpis(cls) {
   if (!cls) return [];
   if (cls.cat) return cls.vals.map((v, i) => ({ i, boja: cls.colors[i], lbl: v }));
+  if(cls.ranges) return cls.ranges.map((r,i)=>({i,boja:cls.colors[i],lbl:_temBr(r.min)+' – '+_temBr(r.max)+(r.label ? ' · '+r.label : '')}));
   const nK = Math.min(cls.colors.length, cls.breaks.length + 1);
   const edges = [cls.min, ...cls.breaks.slice(0, nK - 1), cls.max];
   const out = [];
@@ -35359,7 +35361,9 @@ function _temDraftIz(cls, pal) {
   if (!cls) return null;
   if (cls.cat) return { cat: true, vals: cls.vals.slice(), colors: cls.colors.slice() };
   const nK = Math.min(cls.colors.length, cls.breaks.length + 1);
-  return { colors: cls.colors.slice(0, nK), edges: [cls.min, ...cls.breaks.slice(0, nK - 1), cls.max], pal: pal || cls.pal || 'zc' };
+  const edges=[cls.min,...cls.breaks.slice(0,nK-1),cls.max];
+  return {colors:cls.colors.slice(0,nK),edges,pal:pal || cls.pal || 'zc',
+    ...(cls.ranges ? {sourceRanges:cls.ranges.map(r=>({...r})),sourceEdges:edges.slice()} : {})};
 }
 
 function _temRegSave(maps = _temMaps, removedId = null) {
@@ -35445,6 +35449,75 @@ function _temResolveTr(srsId, srsDefs) {
   return ([x, y]) => { const [lng, lat] = proj4(src, 'WGS84', [x, y]); return [lat, lng]; };
 }
 
+// Ugrađene teme/legenda su podaci fajla, ne nove računice pogodnosti.
+// Čitaju se samo male metapodatkovne tabele; model_audit/ulazi se ne skeniraju.
+async function _temReadSourceStyles(mini, tables, entry, ft) {
+  const read = async name => {
+    const t=tables[name]; if(!t) return [];
+    const cols=(t.sql.match(/\(([\s\S]+)\)/)?.[1] || '').split(',').map(c=>c.trim().split(/\s+/)[0].replace(/["'`]/g,'').toLowerCase());
+    const rows=[];
+    try { await mini._scanLeaves(t.root,(rid,r)=>{
+      if(rows.length>=1000) throw {metadataLimit:true};
+      const row={};cols.forEach((c,i)=>{row[c]=r[i]});rows.push(row);
+    },null,64); } catch(e) { if(!e.metadataLimit) throw e; }
+    return rows;
+  };
+  const fields=new Set(entry.cols), source={}, order=[];
+  const add=(col,label,description)=>{
+    col=String(col || '').toLowerCase(); if(!fields.has(col)) return null;
+    if(!source[col]) { source[col]={label:String(label || col.replace(/_/g,' ')),description:String(description || ''),ranges:[],outline:false}; order.push(col); }
+    return source[col];
+  };
+  for(const r of await read('teme')) add(r.polje,r.naziv,r.opis);
+  const color=v=>/^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v) : null;
+  for(const r of await read('legenda')) {
+    const t=add(r.tema),lo=_temNum(r.min_vrijednost),hi=_temNum(r.max_vrijednost),c=color(r.boja);
+    if(!t || !Number.isFinite(lo) || !Number.isFinite(hi) || hi<lo || !c) continue;
+    const alpha=_temNum(r.alfa);
+    t.ranges.push({min:lo,max:hi,color:c,label:String(r.naziv || ''),opacity:Number.isFinite(alpha)?Math.max(0,Math.min(1,alpha/255)):1});
+  }
+  // QGIS graduated SimpleFill fallback ako fajl nema tabelu legenda.
+  // XML se samo parsira: ne izvršava se i ne preuzima nijedan vanjski resurs.
+  let defaultCol=null;
+  for(const r of await read('layer_styles')) {
+    if(String(r.f_table_name || '').toLowerCase()!==ft.name.toLowerCase() || !r.styleqml || String(r.styleqml).length>2000000) continue;
+    const xml=new DOMParser().parseFromString(String(r.styleqml),'application/xml');
+    if(xml.querySelector('parsererror')) continue;
+    const renderer=xml.querySelector('renderer-v2[type="graduatedSymbol"]');if(!renderer) continue;
+    const col=String(renderer.getAttribute('attr') || '').toLowerCase(),t=add(col,r.stylename,r.description);if(!t) continue;
+    if(Number(r.useasdefault)===1) defaultCol=col;
+    if(t.ranges.length) continue;
+    const symbols={};
+    xml.querySelectorAll('symbols > symbol').forEach(symbol=>{
+      const raw=symbol.querySelector('Option[name="color"],prop[k="color"]');
+      const parts=String(raw?.getAttribute('value') || raw?.getAttribute('v') || '').split(',').map(Number);
+      if(parts.length<3 || parts.some(v=>!Number.isFinite(v)||v<0||v>255)) return;
+      const c='#'+parts.slice(0,3).map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+      const alpha=_temNum(symbol.getAttribute('alpha'));
+      symbols[symbol.getAttribute('name')]={color:c,opacity:(Number.isFinite(alpha)?Math.max(0,Math.min(1,alpha)):1)*(parts.length>3?parts[3]/255:1)};
+    });
+    renderer.querySelectorAll('ranges > range').forEach(range=>{
+      if(range.getAttribute('render')==='false')return;
+      const lo=_temNum(range.getAttribute('lower')),hi=_temNum(range.getAttribute('upper')),symbol=symbols[range.getAttribute('symbol')];
+      if(symbol && Number.isFinite(lo) && Number.isFinite(hi) && hi>=lo)t.ranges.push({min:lo,max:hi,...symbol,label:range.getAttribute('label') || ''});
+    });
+  }
+  for(const col of Object.keys(source)) {
+    const t=source[col];t.ranges.sort((a,b)=>a.min-b.min);
+    if(!t.ranges.length || t.ranges.length>20 || t.ranges.some((r,i)=>i && r.min<t.ranges[i-1].max)) { delete source[col];continue; }
+    if(!entry.colLabels[col]) entry.colLabels[col]=t.label;
+  }
+  entry.sourceThemes=source;entry.sourceOrder=order.filter(c=>source[c]);
+  entry.sourceDefaultTheme=source[defaultCol] ? defaultCol : entry.sourceOrder[0] || null;
+}
+function _temSourceClass(entry,col,ranges) {
+  const source=entry.sourceThemes?.[col];if(!source)return null;
+  const rows=(ranges || source.ranges).map(r=>({...r}));
+  if(!rows.length || rows.some(r=>!Number.isFinite(r.min)||!Number.isFinite(r.max)||r.max<r.min||!/^#[0-9a-f]{6}$/i.test(r.color || '')))return null;
+  return {col,ranges:rows,breaks:rows.slice(1).map(r=>r.min),colors:rows.map(r=>r.color),
+    min:rows[0].min,max:rows[rows.length-1].max,pal:'source',hideMissing:true,outline:source.outline};
+}
+
 function _temCurrent(epoch, owner) {
   return epoch === _temEpoch && owner === (typeof sbUser !== 'undefined' ? sbUser?.id : null);
 }
@@ -35483,6 +35556,7 @@ function _gpkgLoadFiles(files) {
         _temMaps.push(entry);
         key = null; // Odavde fajl ima potvrđen registar; greška UI-a ne briše izvornik.
         if (entry.visible) entry.grp.addTo(map);
+        _temLegendUpd();
         if (!_temSelectedId) _temSelectedId = entry.id;
         done++;
         _temModalRender(true);
@@ -35603,7 +35677,7 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
         renderer: _temRenderer, color: '#94a3b8', weight: 1, opacity: 0.8,
         fillColor: '#94a3b8', fillOpacity: 0.08, interactive: true
       });
-      poly.bindPopup(() => _temPopupHtml(entry, f), { maxWidth: 280, className: 'tem-popup' });
+      poly.bindPopup(() => _temPopupHtml(entry, f), { minWidth: 240, maxWidth: 300, className: 'tem-popup' });
       f.polys.push(poly);
       entry.grp.addLayer(poly);
       try { const b = poly.getBounds(); if (b.isValid()) allBounds = allBounds ? allBounds.extend(b) : L.latLngBounds(b.getSouthWest(), b.getNorthEast()); } catch {}
@@ -35628,10 +35702,15 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
     if (s.tot < 3 || s.mnogo || _TEM_ID_RE.test(n) || !(s.txt || s.num / s.tot < 0.8)) return false;
     return s.vals.size >= 2 || (s.txt && s.vals.size === 1 && s.tot < nF);
   }).sort();
+  await _temReadSourceStyles(mini, tables, entry, ft);
+  if(entry.sourceOrder.length) entry.cols=[...entry.sourceOrder,...entry.cols.filter(c=>!entry.sourceOrder.includes(c))];
+  if(!saved && entry.sourceDefaultTheme) entry.opacity=entry.sourceThemes[entry.sourceDefaultTheme].ranges[0].opacity;
   entry._bounds = allBounds;
   if (opts?.isCurrent && !opts.isCurrent()) return null;
   if (opts?.canPublish && !opts.canPublish()) return null;
-  if (opts?.stage) { entry.theme = saved?.theme || null; return entry; }
+  entry.theme = saved ? saved.theme || null : entry.sourceDefaultTheme;
+  if(entry.theme && !entry.styles[entry.theme]) { entry._cls=_temSourceClass(entry,entry.theme); if(entry._cls)_temOboji(entry); }
+  if (opts?.stage) return entry;
   if (_temById(entry.id)) return _temById(entry.id);
   _temMaps.push(entry);
   if (entry.visible) entry.grp.addTo(map);
@@ -35640,7 +35719,7 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
   // Uspješno učitavanje prikazano je u panelu karata, bez obavijesti.
 
   // Vrati zapamćenu temu (restore poslije restarta)
-  if (saved?.theme && (entry.cols.includes(saved.theme) || entry.catCols.includes(saved.theme))) _temApplyTheme(entry.id, saved.theme);
+  if (entry.theme && (entry.cols.includes(entry.theme) || entry.catCols.includes(entry.theme))) _temApplyTheme(entry.id, entry.theme);
   if (typeof _lsRenderTem === 'function') _lsRenderTem();
   if (typeof _temModalRender === 'function') _temModalRender(true);
   return entry;
@@ -35653,7 +35732,7 @@ function _temPopupHtml(entry, f) {
   // Prepoznaj odjel i GJ za zaglavlje (raw ili preimenovan naziv)
   const findKey = (...names) => entries.find(([k]) =>
     names.includes(k.toLowerCase()) || names.includes(_temColLabel(entry, k).toLowerCase()))?.[0];
-  const kOdjel = findKey('odjel', 'odsjek', 'odjel/odsjek');
+  const kOdjel = findKey('odjel', 'odsjek', 'odjel/odsjek', 'naziv');
   let kOdsjek = findKey('odsjek');
   if (kOdsjek === kOdjel) kOdsjek = null;
   const kGj = findKey('gj', 'gazdinska jedinica');
@@ -35675,7 +35754,7 @@ function _temPopupHtml(entry, f) {
       const hot = k === entry.theme;
       const boja = hot ? _temBojaZa(cls, v) : null;
       const chip = boja ? `<i class="chip" style="background:${boja};"></i>` : '';
-      return `<div class="tem-card-row${hot ? ' hot' : ''}">
+      return `<div class="tem-card-row${hot ? ' hot' : ''}${typeof v==='string' && v.length>90 ? ' long' : ''}">
         <span class="k">${_escHtml(_temColLabel(entry, k))}</span>
         <span class="v">${chip}${_escHtml(_temFmtVal(v))}</span>
       </div>`;
@@ -35710,7 +35789,10 @@ function _temApplyTheme(id, col) {
     return;
   }
   const ov = entry.styles?.[col];
-  if ((entry.catCols || []).includes(col)) {
+  const source = entry.sourceThemes?.[col];
+  const sourceClass = source && (!ov || ov.ranges) ? _temSourceClass(entry,col,ov?.ranges) : null;
+  if(sourceClass) { entry.theme=col;entry._cls=sourceClass; }
+  else if ((entry.catCols || []).includes(col)) {
     const vidjeno = new Set();
     entry.features.forEach(f => { const v = f.attrs[col]; if (v != null && v !== '') vidjeno.add(String(v)); });
     if (!vidjeno.size) { showToast('⚠ Nema vrijednosti za temu "' + _temColLabel(entry, col) + '"'); return; }
@@ -35733,6 +35815,7 @@ function _temApplyTheme(id, col) {
     entry.theme = col;
     entry._cls = { col, breaks, colors, min: lo, max: hi, pal: ov?.pal || 'zc' };
   }
+  if(source && entry._cls) entry._cls.hideMissing=true;
   _temOboji(entry);
   // Editor otvoren za ovu kartu (npr. promjena teme iz dropdowna dok je editor
   // otvoren) — draft mora pratiti NOVU temu, inače ostaje na starim klasama.
@@ -35748,7 +35831,9 @@ function _temOboji(entry) {
   const bezPodatka = { color: '#64748b', fillColor: '#64748b', fillOpacity: Math.min(0.1, fo * 0.15), weight: 0.8 };
   entry.features.forEach(f => {
     const c = cls ? _temBojaZa(cls, f.attrs[cls.col]) : null;
-    const st = !cls ? bezTeme : c ? { color: c, fillColor: c, fillOpacity: fo, weight: 1 } : bezPodatka;
+    const st = !cls ? {...bezTeme,stroke:true,fill:true,interactive:true} : c
+      ? {color:c,fillColor:c,fillOpacity:fo,weight:cls.ranges && cls.outline===false ? 0 : 1,stroke:!(cls.ranges && cls.outline===false),fill:true,interactive:true}
+      : cls.hideMissing ? {stroke:false,fill:false,fillOpacity:0,weight:0,interactive:false} : {...bezPodatka,stroke:true,fill:true,interactive:true};
     f.polys.forEach(p => p.setStyle(st));
   });
 }
@@ -35795,7 +35880,7 @@ function _temLegendUpd() {
     if (skup) return naslov + `<div class="tem-leg-strip">${opis.map(k => `<i style="background:${k.boja};"></i>`).join('')}</div>`;
     const imaBez = m.features.some(f => _temKlasaIdx(m._cls, f.attrs[m._cls.col]) < 0);
     const rows = opis.map(k => `<div class="tem-leg-row"><i style="background:${k.boja};"></i><span>${_escHtml(k.lbl)}</span></div>`).join('')
-      + (imaBez ? `<div class="tem-leg-row bez"><i></i><span>bez podatka</span></div>` : '');
+      + (imaBez ? `<div class="tem-leg-row bez"><i></i><span>${m._cls.hideMissing ? 'bez prikazane ocjene · sakriveno' : 'bez podatka'}</span></div>` : '');
     return naslov + rows;
   }).join('<div style="height:7px;"></div>');
 }
@@ -36435,10 +36520,11 @@ function _temModalRender(preserveDraft = false) {
         <select class="tem-sel" onchange="_temApplyTheme('${jid}', this.value || null);_temModalRender()">${opts}</select>
         <button class="tem-ib" onclick="_temRenameCol('${jid}')" ${m.theme ? '' : 'disabled'} title="Preimenuj naziv atributa"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
       </div>
+      ${m.sourceThemes?.[m.theme] ? `<details class="tem-source-info"><summary>Legenda i opis iz fajla</summary><p>${_escHtml(m.sourceThemes[m.theme].description)}</p><p>Prazne ćelije nemaju prikazanu ocjenu i skrivene su na karti.</p></details>` : ''}
       ${m.theme ? _temPregledHtml(m) : ''}
       ${m.theme ? `<div class="tem-op">
         <span>Jačina boje</span>
-        <input type="range" min="5" max="100" step="5" value="${op}"
+        <input type="range" min="5" max="100" step="1" value="${op}"
           oninput="_temSetOpacity('${jid}', this.value / 100, false)"
           onchange="_temSetOpacity('${jid}', this.value / 100, true)">
         <b id="tem-op-lbl-${_escHtml(m.id)}">${op}%</b>
@@ -36694,6 +36780,8 @@ function _temClassEdApply(id) {
     if (edges[i] <= edges[i - 1]) { showToast('⚠ Vrijednosti moraju rasti (svaka "do" > prethodne "od")'); return; }
   }
   entry.styles[entry.theme] = { breaks: edges.slice(1, -1), colors, lo: edges[0], hi: edges[edges.length - 1], pal: d.pal || 'zc' };
+  if(d.sourceRanges?.length===n && d.sourceEdges?.length===edges.length && edges.every((v,i)=>v===d.sourceEdges[i]))
+    entry.styles[entry.theme].ranges=d.sourceRanges.map((r,i)=>({...r,color:colors[i]}));
   _temApplyTheme(id, entry.theme);   // ponovo boji poligone + _temRegSave() (trajno pamćenje)
   _temModalRender();
   showToast('💾 Zapisano (' + n + ' klasa) — ostaje sačuvano i poslije odjave');

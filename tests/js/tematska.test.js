@@ -46,7 +46,7 @@ const MiniSqlite = new Function(SRC.slice(SRC.indexOf('class MiniSqlite {'), SRC
 const KONST = ['_TEM_TBL_KORAK', '_temColl', '_TEM_KAT_MAX_TXT', '_TEM_POV_RE', '_TEM_ID_RE', '_TEM_NAZIVI', '_TEM_PG_MAX', '_temPgSve', '_TEM_HA_COL', '_TEM_TBL_KOL_KEY', '_TEM_REG_KEY', '_TEM_RAMP', '_TEM_PALETE', '_TEM_KAT_BOJE', '_TEM_KAT_MAX', '_TEM_LEG_KEY', '_TEM_MAX_CLASSES'];
 const FUNK = ['_temRampFor', '_temKatBoje', '_temNum', '_temBr', '_temHa', '_temPrstenM2', '_temPovrsinaHa',
   '_temKlasaIdx', '_temBojaZa', '_temKlaseOpis', '_temJednakiIntervali', '_temStatistika', '_temDraftIz',
-  '_temRegSave', '_temById', '_temColLabel', '_parseGpkgGeom', '_temResolveTr', '_gpkgParseBuf', '_temPopupHtml',
+  '_temReadSourceStyles', '_temSourceClass', '_temRegSave', '_temById', '_temColLabel', '_parseGpkgGeom', '_temResolveTr', '_gpkgParseBuf', '_temPopupHtml',
   '_temQuantiles', '_temApplyTheme', '_temOboji', '_temSetOpacity', '_temLegSkupljena', '_temLegToggle',
   '_temLegendUpd', '_temFmtVal', '_temPregledHtml', '_temClassEdHtml', '_temEdPovuci', '_temEdScrapeDom',
   '_temEdPaleta', '_temEdObrni', '_temEdAuto', '_temClassEdApply', '_temClassEdReset', '_escHtml', '_jsAttr',
@@ -259,7 +259,7 @@ t('_temBr: decimalni zarez i razmak za hiljade (WebView bez bs lokala)', () => {
 });
 
 t('restore: zapamćena KATEGORIJSKA tema se vraća poslije restarta', () => {
-  assert.ok(/saved\?\.theme && \(entry\.cols\.includes\(saved\.theme\) \|\| entry\.catCols\.includes\(saved\.theme\)\)/.test(extractFn('_gpkgParseBuf')));
+  assert.ok(/entry\.theme && \(entry\.cols\.includes\(entry\.theme\) \|\| entry\.catCols\.includes\(entry\.theme\)\)/.test(extractFn('_gpkgParseBuf')));
 });
 
 t('tabela atributa i opacity koriste ISTI klasifikator (_temBojaZa / _temOboji)', () => {

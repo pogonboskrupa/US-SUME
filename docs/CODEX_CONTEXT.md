@@ -3198,3 +3198,41 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   certifikat kao 2.6.6, svih 61 web resursa identični tačnom lokalnom izvoru.
   Release digest/veličina poklapaju build; updater releases?per_page=1 vraća
   v2.6.7 s javnim app-debug.apk. Release opis dopunjen stvarnim izmjenama.
+
+### 2026-10-09 — stvarni USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg (2.6.8)
+
+- Korisnik već ima 2.6.7 i prilaže konkretan GPKG; traži ispravan prikaz ovog
+  fajla i novo ažuriranje. Izvornik od 20.271.104 B ostaje samo u lokalnom
+  attachment prostoru; nije dodat u javni repo, CI, niti u APK resurse.
+- SQLite read-only quick_check OK. Jedan WGS84 MultiPolygon sloj odsjeci:
+  17.305 feature-a / 17.352 poligonska dijela; sedam REAL kolona vrsta.
+  Tabele teme/legenda i QGIS layer_styles nose ljubičastu paletu, raspone
+  50–59,9 / 60–69,9 / 70–79,9 / 80–89,9 / 90–100 i tekstualna značenja.
+- Stvarni baseline u browseru: geometrija se učita bez greške, ali tema nije
+  odabrana, metapodaci se ignorišu; izbor lužnjaka pogrešno pravi pet kvantila
+  i zeleno-crvenu skalu nad ocjenama 50–57,1, a 16.978 NULL ćelija ostaje sivo.
+- Uvoz sada čita isključivo male teme/legenda/layer_styles tabele (limit1000
+  zapisa, yield64); audit/model/ulazne tabele ne skenira. XML QML je podataka
+  parser bez izvršavanja/preuzimanja; podržan graduated SimpleFill fallback.
+  Provjera polja, numeričkih raspona i hex boja prije primjene. Poštuje izvorne
+  raspone/boje/tekst legende, uklanja NULL/out-of-range iz crtanja i hit-test-a.
+  Novo učitavanje bira ugrađenu zadanu temu Bukva, alfa210/255. Izbor korisnika
+  (uključujući Bez teme), ručni overrides, jačina i vidljivost imaju prednost.
+- Procjena_i_ogranicenja je informativni tekst, više se ne nudi kao dodatna
+  kategorijska tema. Pop-up koristi naziv ćelije i duge napomene u čitljivom
+  punom redu; opis/ograničenja iz teme se prikazuju kao escaped tekst.
+  Color-only editor čuva izvorne opsege/praznine i labels; izmjena granica pravi
+  ručne klase, Vrati zadano vraća izvorne klase. Sve se vraća iz IDB izvornika.
+- Lokalni test priloženog fajla: svih 17.305 feature-a; nezavisni Python SQLite
+  brojevi svake vrste/klase identični JS prikazu. Prikazane ćelije: bukva14850,
+  jela11644, smrča4801, kitnjak15156, lužnjak327, kesten4223, javor10572.
+  Skrivene NULL/out-of-range ćelije bez stroke/fill/interaktivnosti; ostale
+  vidljive. Provjereno 7 tema, 8 rasporeda, QML-only fallback, edit/reset boja,
+  stvarni popup, reload teme/boja/jačine/skrivanja i Bez teme; bez mreže.
+- Novi CI browser test generiše sintetički MultiPolygon GPKG s istom shemom
+  sedam vrsta/metapodataka (granične vrijednosti, NULL, vrijednosti izvan
+  raspona, praznine). GPKG_REAL omogućava lokalnu provjeru stvarnog attachmenta
+  bez njegove objave. Prošlo svih100 JS grupa, pet inline sintaksi i postojeći
+  thematic-files test (3000 feature-a/IDB/kvote/16 rasporeda); tematska29/29.
+- Web/SW/Android 2.6.8/code538. Završni Android build/objava u toku.
+  Fizički Xiaomi i GPS/produkcijska Supabase baza nisu testirani ni mijenjani.

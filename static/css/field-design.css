@@ -628,3 +628,9 @@ html #tem-modal .tem-picker select {display:block;width:100%;}
 @media(max-height:420px){#doz-gps-modal{padding:6px}.doz-gps-sheet{max-height:calc(100dvh - 12px);padding:12px}}
 
 html[data-field-theme=day] #doz-gps-modal{--field-card-soft:#f1f5f9;--field-accent:#166534;--field-accent-soft:#dcfce7;--field-warn:#92400e;--field-danger:#b91c1c;--field-danger-soft:#fee2e2}
+
+.tem-source-info{margin:10px 0;padding:10px;border:1px solid var(--field-border);border-radius:10px;color:var(--field-muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}.tem-source-info summary{min-height:30px;cursor:pointer;color:var(--field-ink);font-weight:700}.tem-source-info p{margin:8px 0 0}
+.tem-card-row .k{white-space:normal;flex:0 1 42%;overflow-wrap:anywhere}.tem-card-row .v{min-width:0;flex:1;overflow-wrap:anywhere}
+.tem-leg-row span{min-width:0;overflow-wrap:anywhere;line-height:1.4}
+
+.tem-card-row.long{flex-direction:column;gap:6px;align-items:stretch}.tem-card-row.long .k{flex:auto}.tem-card-row.long .v{text-align:left;font-size:12px;font-weight:500;line-height:1.5}
