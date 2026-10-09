@@ -6,8 +6,8 @@ u okviru navedenih tokova; to nije tvrdnja da cijela aplikacija nema bugova.
 
 | Dio | Obuhvat | Status |
 | --- | --- | --- |
-| 1. Karte i slojevi | Online/offline podloge, SQLite/MBTiles uvoz i preuzimanje, instalirane/omiljene karte, KML/SHP, oznake/fotografije, tematski GPKG i Sadnja, stilovi/vidljivost/obnova | Kod i lokalne provjere završeni; završni CI/APK slijedi |
-| 2. Projekti i vlake | Aktivni projekat, upravljanje projektima, vlastite/kolegine vlake, ručno crtanje, GPS/krakovi, brisanje, boje/outline/strelice/lager/baferi, trajno čuvanje | Kod i lokalne provjere završeni; završni CI/APK slijedi |
+| 1. Karte i slojevi | Online/offline podloge, SQLite/MBTiles uvoz i preuzimanje, instalirane/omiljene karte, KML/SHP, oznake/fotografije, tematski GPKG i Sadnja, stilovi/vidljivost/obnova | Završeno; CI i APK 2.7.1 potvrđeni |
+| 2. Projekti i vlake | Aktivni projekat, upravljanje projektima, vlastite/kolegine vlake, ručno crtanje, GPS/krakovi, brisanje, boje/outline/strelice/lager/baferi, trajno čuvanje | Završeno; CI i APK 2.7.1 potvrđeni |
 | 3. Doznaka i teren | Odjeli/poligoni/pojasevi, GPS/pauza/oporavak, zajedničke granice/površine, lokacija i Explorer | Podijeljeno; detaljan pregled tek slijedi |
 | 4. Server i ostatak | Prijava/probni pristup, slanje/primanje/članstvo, red čekanja/mreža/RLS, Meni/postavke/upute, štampa/izvoz/ažuriranje | Podijeljeno; detaljan pregled tek slijedi |
 
@@ -157,6 +157,20 @@ Izmijenjeni funkcionalni fajlovi: `index.html`, `static/js/tab-data.js`,
 `android/app/build.gradle`. Novi full-app test, prilagođene dvije izdvojene
 JS testne pripreme i zajednička browser priprema, dodatak CI workflow-u.
 
-Lokalne provjere su prošle. Konačni CI, APK sadržaj/potpis i link za ažuriranje
-upisati ovdje nakon provjere isporučenog fajla. Dijelovi 3 i 4 nisu označeni
-kao završeni ovim radom.
+Završni CI [37925233858](https://github.com/pogonboskrupa/US-SUME/actions/runs/37925233858)
+uspješan; izvor `3750ade6ca7ca5652dcd33852f00368f803ca452`.
+Preuzet stvarni APK i Android XML: **14 testova, 0 grešaka/padova/preskakanja**.
+Svih **61 web resursa** u APK-u identični izvoru. Binary manifest:
+`ba.spd.uss.vlake.debug`, `2.7.1-debug`, `versionCode 541`.
+Certifikat isti kao ranije:
+`11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
+
+APK **24.200.540 B** (24,2 MB); SHA256:
+`c747ec5a1c7209c9fed55d72e06b541abb8038cf975b7726196bce4d9b9cb6f3`.
+Release digest i veličina podudarni preuzetom APK-u. Updater popis vraća
+`v2.7.1` s javnim APK-om; ažuriranje kroz **Meni → Ažuriraj aplikaciju**.
+
+[Preuzmi APK 2.7.1](https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.1/app-debug.apk).
+Javni Pages `index.html`, `sw.js`, `tab-data.js` i `field-design.css` provjereni
+SHA256 poređenjem sa tačnim novim izvorom. Fizički telefon nije testiran.
+Dijelovi 3 i 4 nisu označeni kao završeni ovim radom.

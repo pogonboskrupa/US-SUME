@@ -3350,3 +3350,14 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Ubrzanih5hCPU4x:3564vlaka/1723Doznaka tačaka,1723IDBrestore,0vanjskihupisa.
   OriginalniGPKG nije u repou/APK-u; fizički telefon/produkcijskiSupabase
   nisu testirani. Web/SW/Android2.7.1/code541; završni CI/APK slijedi.
+
+- Konačna potvrda 2.7.1: CI 37925233858/source
+  3750ade6ca7ca5652dcd33852f00368f803ca452 uspješan. Preuzet APK 24.200.540 B;
+  SHA256 c747ec5a1c7209c9fed55d72e06b541abb8038cf975b7726196bce4d9b9cb6f3.
+  Android XML: 14 testova, 0 grešaka/padova/preskakanja. Manifest:
+  ba.spd.uss.vlake.debug / 2.7.1-debug / code541, isti certifikat
+  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+  Svih 61 assets identični izvoru; release digest/veličina podudarni. Updater
+  vraća prvi v2.7.1 s app-debug.apk; četiri izmijenjena javna Pages fajla
+  SHA256 poređenjem odgovaraju izvoru. Zapis dijelova 1/2 dopunjen isporukom;
+  dijelovi 3/4 ostaju planirani.
