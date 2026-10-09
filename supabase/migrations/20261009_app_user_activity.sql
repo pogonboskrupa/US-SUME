@@ -18,6 +18,16 @@ BEGIN
  ON CONFLICT(user_id) DO UPDATE SET last_active_at=greatest(public.app_user_activity.last_active_at,excluded.last_active_at)
  WHERE public.app_user_activity.last_active_at < excluded.last_active_at;
 END $$;
+-- Veži opažanje za nalog koji je započeo poziv. Auth sesija se može promijeniti
+-- prije nego što Supabase pošalje zahtjev; tada ga odbij, ne pripiši novom nalogu.
+CREATE OR REPLACE FUNCTION public.app_record_activity_for_user(p_user_id uuid,p_observed_at timestamptz)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+ IF auth.uid() IS NULL OR auth.uid() IS DISTINCT FROM p_user_id THEN
+  RAISE EXCEPTION 'Nalog je promijenjen' USING ERRCODE='42501';
+ END IF;
+ PERFORM public.app_record_activity(p_observed_at);
+END $$;
 CREATE OR REPLACE FUNCTION public.admin_get_user_activity()
 RETURNS TABLE(user_id uuid,last_active_at timestamptz)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -25,8 +35,10 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
  WHERE EXISTS(SELECT 1 FROM public.korisnici k WHERE k.id=auth.uid() AND k.is_admin IS TRUE);
 $$;
 REVOKE ALL ON FUNCTION public.app_record_activity(timestamptz) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.app_record_activity_for_user(uuid,timestamptz) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_get_user_activity() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.app_record_activity(timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.app_record_activity_for_user(uuid,timestamptz) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_user_activity() TO authenticated;
 NOTIFY pgrst, 'reload schema';
 COMMIT;

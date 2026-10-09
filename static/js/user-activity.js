@@ -11,7 +11,7 @@ async function flush(){
  let stamp;try{stamp=Number(localStorage.getItem(key(uid)));}catch(e){return;}if(!Number.isFinite(stamp)||stamp<=0)return;
  busy=true;lastTry=Date.now();
  const controller=new AbortController();let timer;
- try{const req=sb.rpc('app_record_activity',{p_observed_at:new Date(stamp).toISOString()});
+ try{const req=sb.rpc('app_record_activity_for_user',{p_user_id:uid,p_observed_at:new Date(stamp).toISOString()});
   const timeout=new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve({error:{code:'TIMEOUT'}});},12000);});
   const {error}=await Promise.race([req.abortSignal?req.abortSignal(controller.signal):req,timeout]);
   if(error){if(error.code==='PGRST202'||error.code==='42883')missingUntil=Date.now()+300000;return;}

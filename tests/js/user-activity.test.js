@@ -10,7 +10,7 @@ async function main(){
  assert.equal(calls.length,0,'Prijava/otvaranje ne označava aktivnost');listeners.pointerdown({isTrusted:false});assert.equal(store.size,0);
  listeners.pointerdown({isTrusted:true});assert.equal(calls.length,0);assert.equal(store.get('dendro_activity_pending_v1:A'),String(now));
  env.sbUser={id:'B'};env.navigator.onLine=true;await env.UserActivity.flush();assert.equal(calls.length,0,'Tuđa offline aktivnost nije poslana za novi nalog');
- env.sbUser={id:'A'};await env.UserActivity.flush();assert.equal(calls.length,1);assert.equal(Date.parse(calls[0].args.p_observed_at),now);assert.equal(store.size,0);
+ env.sbUser={id:'A'};await env.UserActivity.flush();assert.equal(calls.length,1);assert.equal(calls[0].name,'app_record_activity_for_user');assert.equal(calls[0].args.p_user_id,'A');assert.equal(Date.parse(calls[0].args.p_observed_at),now);assert.equal(store.size,0);
  now+=1000;listeners.keydown({isTrusted:true});await Promise.resolve();assert.equal(calls.length,1,'Slanje se ograničava na minutu');
  now+=61000;env.document.visibilityState='hidden';listeners.pointerdown({isTrusted:true});assert.equal(store.get('dendro_activity_pending_v1:A'),String(1001000));
  env.document.visibilityState='visible';env.recOn=true;env.recPaused=true;env._lastGpsFixTime=now;interval();await new Promise(resolve=>setImmediate(resolve));assert.equal(store.get('dendro_activity_pending_v1:A'),undefined,'Pauza nije nova aktivnost');

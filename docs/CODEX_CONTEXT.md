@@ -3480,3 +3480,9 @@ provjerava novi traženi redoslijed s poligonom na dnu. Pozitivne provjere
 stvarnog bafera, mapa, boja, GPS doznake i terenske 5400m simulacije ostaju;
 sve prošle. CI 37964494791 namjerno prekinut radi ovih fixture dopuna;
 isporuku određuje naredni puni CI, ne prekinuti build.
+
+Aktivnost dodatno veže opaženi nalog kroz `app_record_activity_for_user`:
+server provjerava da je isti kao auth.uid, pa promjena JWT sesije tokom
+slanja ne pripisuje opažanje drugom korisniku. Postojeća osnovna funkcija
+ostaje kompatibilna; novi klijent koristi provjereni wrapper. Lokalni JS i
+izolovani SQL test uključuju ID naloga i odbijanje pogrešnog identiteta.

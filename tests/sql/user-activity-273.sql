@@ -5,8 +5,9 @@ DO $$ BEGIN IF current_database()<>'codex_fixture' THEN RAISE EXCEPTION 'Samo te
 BEGIN;
 SET LOCAL ROLE authenticated;
 SET LOCAL request.jwt.claim.sub='00000000-0000-0000-0000-000000000003';
-SELECT public.app_record_activity(now()-interval '2 hours');
+SELECT public.app_record_activity_for_user('00000000-0000-0000-0000-000000000003',now()-interval '2 hours');
 DO $$ BEGIN
+ BEGIN PERFORM public.app_record_activity_for_user('00000000-0000-0000-0000-000000000005',now());RAISE EXCEPTION 'Aktivnost pripisana promijenjenom nalogu';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
  IF (SELECT count(*) FROM public.admin_get_user_activity())<>0 THEN RAISE EXCEPTION 'Projektant vidi tuđu aktivnost';END IF;
  BEGIN INSERT INTO public.app_user_activity VALUES('00000000-0000-0000-0000-000000000005',now());RAISE EXCEPTION 'Direktan upis dopušten';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
 END $$;
