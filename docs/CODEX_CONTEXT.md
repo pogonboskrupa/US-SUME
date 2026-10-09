@@ -3236,3 +3236,14 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   thematic-files test (3000 feature-a/IDB/kvote/16 rasporeda); tematska29/29.
 - Web/SW/Android 2.6.8/code538. Završni Android build/objava u toku.
   Fizički Xiaomi i GPS/produkcijska Supabase baza nisu testirani ni mijenjani.
+
+- Konačna potvrda 2.6.8: CI 37898776541/source3794f74cd1c3ba5a852f8a05e9c367a601f8f063
+  uspješan, uključujući novi sintetički GPKG test i sve regresije. Objavljen
+  v2.6.8/code538 APK 24.188.268 B; SHA256
+  e557384c88009ed6420bce0273974c6c72b1c412c492ecf096a021596f9ea5c8.
+  Preuzet stvarni CI APK i Android XML: svih 14 testova prošlo, bez skipova.
+  Binary manifest ba.spd.uss.vlake.debug / 2.6.8-debug / 538, isti stabilni
+  certifikat 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+  Svih 61 web resursa identični izvoru. Release digest/veličina poklapaju APK;
+  updater releases?per_page=1 vraća v2.6.8 i javni app-debug.apk. Release opis
+  dopunjen konkretnim GPKG izmjenama. Javni Pages index.html i sw.js su 2.6.8.
