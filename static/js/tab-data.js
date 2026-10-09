@@ -3,7 +3,7 @@
   'use strict';
   const panels = {vlake:'panel', projekat:'proj-panel', doznaka:'doznaka-panel', tragovi:'tragovi-panel'};
   const states = new Map();
-  let scope = '', state, serverTab = 'received', serverPage = 0, serverScope = '', pending = new Set(), lastRows = [];
+  let scope = '', state, serverTab = 'send', serverPage = 0, serverScope = '', pending = new Set(), lastRows = [];
   const size = 60;
   function key() { return (sbUser?.id || 'guest') + ':' + (_aktivniProjektId || 'none'); }
   function sync() {
@@ -121,7 +121,7 @@
     return rows.slice(state.colleaguePage*size,(state.colleaguePage+1)*size);
   }
   function serverCounts(q) {
-    if(serverScope !== (sbUser?.id || '')) {serverScope=sbUser?.id || '';serverTab='received';serverPage=0;}
+    if(serverScope !== (sbUser?.id || '')) {serverScope=sbUser?.id || '';serverTab='send';serverPage=0;}
     q=(q || _OL.loadQueue()).filter(o => (!o._uid || o._uid === sbUser?.id) && (typeof _SERVER_SAMO_LOKALNO==='undefined' || !_SERVER_SAMO_LOKALNO.has(o.type)));
     const problem = q.filter(o => o._blocked || o._lastErr || o._retries);
     const tabs = document.getElementById('data-server-tabs');
@@ -129,7 +129,7 @@
     const receivedCount = _serverPrimljenoUcitaj().filter(x => shared.has(x.projektId)).length;
     const sentCount=typeof _serverTransfers==='function'?_serverTransfers('sent').length:0;
     const newReceived=typeof _serverTransfers==='function'?_serverTransfers('received').length:receivedCount;
-    if (tabs) tabs.innerHTML = [['received','Primljeno',newReceived],['sent','Poslano',sentCount],['send','Za slanje',typeof _serverNaCekanju==='function'?_serverNaCekanju().stavki:q.length]].map(([id,label,n]) => '<button role="tab" data-direction="'+id+'" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')"><i aria-hidden="true">'+({received:'↓',sent:'↑',send:'◷'}[id])+'</i><span>'+label+' ('+n+')</span></button>').join('');
+    if (tabs) tabs.innerHTML = [['send','Za slanje',typeof _serverNaCekanju==='function'?_serverNaCekanju().stavki:q.length],['sent','Poslano',sentCount],['received','Primljeno',newReceived]].map(([id,label,n]) => '<button role="tab" data-direction="'+id+'" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')"><i aria-hidden="true">'+({received:'↓',sent:'↑',send:'◷'}[id])+'</i><span>'+label+' ('+n+')</span></button>').join('');
     return problem;
   }
   function serverPrepare(q) {

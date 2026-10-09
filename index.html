@@ -2536,7 +2536,7 @@ html #stampa-kontrole :is(button,input,textarea,summary):focus-visible { outline
   border-bottom:1px solid #1e293b;
 }
 .pm-tbl td { padding:7px 6px; border-bottom:1px solid #16213e; color:#cbd5e1; }
-.pm-tbl td.r, .pm-tbl th.r { text-align:right; }
+.pm-tbl td.r, .pm-tbl th.r { text-align:right; background:transparent; }
 .pm-tbl tr:last-child td { border-bottom:none; }
 .pm-day {
   background:#16213e; border:1px solid #1e3a5f; border-radius:8px;
@@ -4853,7 +4853,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <button class="btn" id="pd-share-code-btn" onclick="shareProjektCode()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;"><svg class="ic"><use href="#ic-kljuc"/></svg> Podijeli šifrom (teren)</button>
         <button class="btn" id="pd-transfer-btn" onclick="transferProjektUI()" style="display:none;width:100%;font-size:12px;padding:7px;margin-bottom:6px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;"><svg class="ic"><use href="#ic-zamijeni"/></svg> Predaj projekat</button>
         </div>
-        <details class="workflow-danger"><summary>Brisanje projekta</summary><p class="project-vl-note">Brisanje je trajna radnja. Prvo sačuvaj sigurnosnu kopiju.</p><button class="btn gr" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button></details>
+        <details class="workflow-danger" open><summary>Brisanje projekta</summary><p class="project-vl-note">Brisanje je trajna radnja. Prvo sačuvaj sigurnosnu kopiju.</p><button class="btn project-delete" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button></details>
       </div>
 
       <nav class="workflow-nav proj-akt-only" aria-label="Sekcije aktivnog projekta"><button type="button" onclick="document.getElementById('project-routes').scrollIntoView({block:'start'})">Vlake projekta</button><button type="button" onclick="document.getElementById('project-reports').scrollIntoView({block:'start'})">Izvještaji</button><button type="button" onclick="document.querySelector('.project-polygon').scrollIntoView({block:'start'})">Prikaz karte</button></nav>
@@ -4923,20 +4923,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
       </details>
 
 
-      <section class="sec proj-akt-only project-polygon">
-        <div class="sec-t">Poligon odjela i teren</div>
-        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
-        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
-        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
-        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
-        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
-          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
-          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
-          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
-          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
-          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
-        </div>
-      </section>
+
       <!-- BOJE VLAKA -->
       <div class="sec proj-akt-only project-colors">
         <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
@@ -4992,6 +4979,20 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka dvosmjera ne ulazi u broj strelica. Izgled i odabir dvosmjera čuvaju se na ovom telefonu.</p>
         <div class="arrow-route-edit"><label for="project-arrow-route">Smjer pojedine vlake i dvosmjer ↔</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
         <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
+      </section>
+      <section class="sec proj-akt-only project-polygon">
+        <div class="sec-t">Poligon odjela i teren</div>
+        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
+        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
+        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
+        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
+        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
+          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
+          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
+          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
+          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
+          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
+        </div>
       </section>
     </div><!-- /proj-panel -->
 
@@ -5144,37 +5145,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="trn-fix" id="trn-gps-dot">GPS isključen</div><div class="trn-position-actions"><button id="trn-gps-btn" class="trn-btn trn-btn-outline trn-btn-sm" onclick="toggleGPS()"><svg class="ic"><use href="#ic-gps"/></svg> <span id="trn-gps-btn-txt">Uključi GPS</span></button><button class="trn-btn trn-btn-outline" onclick="terenCopyCoords()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj koordinate</button></div>
         </section>
 
-        <section class="trn-card trn-explorer" id="trn-explorer">
-          <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
-          <div class="trn-section-label">Orijentacija i navođenje</div>
-          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
-          <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
-          <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
-          <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
-        </section>
-
-        <!-- BRZE RADNJE -->
-        <div class="trn-section-label">Brze radnje</div>
-        <div class="trn-quick" aria-label="Terenski alati">
-          <button onclick="switchTab('karta');fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg><span>Moja pozicija</span></button>
-          <button onclick="TerenWorkspace.measure('dist')"><svg class="ic"><use href="#ic-uglomjer"/></svg><span>Izmjeri dužinu</span></button>
-          <button onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg><span>Podijeli poziciju</span></button>
-          <button onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg><span>Zabilježi tačku</span></button>
-          <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg><span>Fotografija</span></button>
-          <button id="trn-q-trag" onclick="terenTogTrag()"><svg class="ic"><use href="#ic-trag"/></svg><span id="trn-q-trag-txt">Snimi trag</span></button>
-        </div>
-
-        <!-- SNIMANJE TRAGA UŽIVO (samo dok snima) -->
-        <section class="trn-card trn-live" id="trn-trag-active" style="display:none;">
+        <!-- DNEVNO SVJETLO -->
+        <section class="trn-card">
           <div class="trn-card-h">
-            <span><i class="trn-rec"></i> Snimanje traga</span>
-            <span id="trn-trag-status" class="trn-muted">snima</span>
+            <span><svg class="ic"><use href="#ic-sunce"/></svg> Dnevno svjetlo</span>
+            <span id="trn-sun-ostalo" class="trn-pill"></span>
           </div>
-          <div class="trn-live-stats" id="trn-trag-stats">0 tač. · 0 m</div>
-          <div class="trn-btn-row">
-            <button id="trn-trag-pause" class="trn-btn trn-btn-outline amber" onclick="terenPauseTrag()">⏸ Pauza</button>
-            <button class="trn-btn trn-btn-danger" onclick="terenStopTrag()"><svg class="ic"><use href="#ic-stop"/></svg> Završi</button>
-          </div>
+          <div class="trn-sun" id="trn-sun"></div>
         </section>
 
         <!-- KOMPAS -->
@@ -5215,13 +5192,37 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </section>
 
-        <!-- DNEVNO SVJETLO -->
-        <section class="trn-card">
+        <section class="trn-card trn-explorer" id="trn-explorer">
+          <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
+          <div class="trn-section-label">Orijentacija i navođenje</div>
+          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
+          <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
+          <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
+          <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
+        </section>
+
+        <!-- BRZE RADNJE -->
+        <div class="trn-section-label">Brze radnje</div>
+        <div class="trn-quick" aria-label="Terenski alati">
+          <button onclick="switchTab('karta');fabLokacija()"><svg class="ic"><use href="#ic-meta"/></svg><span>Moja pozicija</span></button>
+          <button onclick="TerenWorkspace.measure('dist')"><svg class="ic"><use href="#ic-uglomjer"/></svg><span>Izmjeri dužinu</span></button>
+          <button onclick="terenSendPos()"><svg class="ic"><use href="#ic-posalji"/></svg><span>Podijeli poziciju</span></button>
+          <button onclick="terenMarkHere()"><svg class="ic"><use href="#ic-pozicija"/></svg><span>Zabilježi tačku</span></button>
+          <button onclick="switchTab('karta');setTimeout(()=>startLocPhoto(),50);"><svg class="ic"><use href="#ic-kamera"/></svg><span>Fotografija</span></button>
+          <button id="trn-q-trag" onclick="terenTogTrag()"><svg class="ic"><use href="#ic-trag"/></svg><span id="trn-q-trag-txt">Snimi trag</span></button>
+        </div>
+
+        <!-- SNIMANJE TRAGA UŽIVO (samo dok snima) -->
+        <section class="trn-card trn-live" id="trn-trag-active" style="display:none;">
           <div class="trn-card-h">
-            <span><svg class="ic"><use href="#ic-sunce"/></svg> Dnevno svjetlo</span>
-            <span id="trn-sun-ostalo" class="trn-pill"></span>
+            <span><i class="trn-rec"></i> Snimanje traga</span>
+            <span id="trn-trag-status" class="trn-muted">snima</span>
           </div>
-          <div class="trn-sun" id="trn-sun"></div>
+          <div class="trn-live-stats" id="trn-trag-stats">0 tač. · 0 m</div>
+          <div class="trn-btn-row">
+            <button id="trn-trag-pause" class="trn-btn trn-btn-outline amber" onclick="terenPauseTrag()">⏸ Pauza</button>
+            <button class="trn-btn trn-btn-danger" onclick="terenStopTrag()"><svg class="ic"><use href="#ic-stop"/></svg> Završi</button>
+          </div>
         </section>
 
         <!-- MOJI PODACI -->
@@ -5754,7 +5755,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.2';
+const APP_VER = 'v2.7.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7423,7 +7424,7 @@ async function showApp() {
     return;
   }
   // Ako se na ovom uređaju prijavio DRUGI korisnik od posljednjeg puta — obriši prethodni
-  // lokalni sadržaj (offline karte, KML, granice, tačke...) PRIJE restore poziva ispod,
+  // privatni lokalni sadržaj (KML, granice, tačke...) PRIJE restore poziva ispod,
   // da ne dođe do curenja podataka između korisnika na dijeljenom uređaju.
   try { if (sbUser) await _checkDeviceUserSwitch(sbUser.id); }
   catch(e) { _showAuthScreen(); showAuthErr('Promjena naloga zaustavljena radi zaštite lokalnih podataka: ' + e.message); return; }
@@ -7453,22 +7454,27 @@ function _startupRestore() {
   }
   if (_startupRestore._done) return;   // idempotentno (showApp može doći dvaput)
   _startupRestore._done = true;
+  const owner = sbUser?.id;
+  const generation = (_startupRestore._generation || 0) + 1;
+  _startupRestore._generation = generation;
+  const alive = () => !!owner && sbUser?.id === owner && _startupRestore._generation === generation;
 
-  const korak = (ime, fn) => { try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } };
+  const korak = (ime, fn) => { if (!alive()) return; try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } };
 
   korak('bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); });
   korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
   korak('switchTab',   () => switchTab('karta'));
-  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(window.MapDownloads?.available()){await MapDownloads.resume();await MapDownloads.openFromNotification();} });
+  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(alive() && window.MapDownloads?.available()){await MapDownloads.resume();if(alive())await MapDownloads.openFromNotification();} });
   korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
   korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
-  if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); _updSyncBadge(); });
+  if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); });
   korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
   korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
   // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
 
   // Ostali nekritični restores iza prvog painta
   setTimeout(() => {
+    if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
@@ -7482,7 +7488,7 @@ function _startupRestore() {
     korak('tacke',     () => _restoreTacke());
     korak('fotos',     () => _restoreFotos());
     korak('localKml',  () => _localKmlRestore());
-    korak('kmlcInit',  async () => { await _kmlcInit(); await _serverKmlRestore(); });   // lista IDB ključeva za offline bedž
+    korak('kmlcInit',  async () => { await _kmlcInit(); if(alive())await _serverKmlRestore(); });   // lista IDB ključeva za offline bedž
     korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
     korak('temRestore',() => _temRestore()); // tematska .gpkg karta iz IDB (async)
     // Trajna pohrana: bez persist() browser pod pritiskom diska smije obrisati
@@ -7884,6 +7890,9 @@ async function doLogout() {
 
   if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
   sbUser = null; sbProfile = null;
+  _startupRestore._done = false;
+  _startupRestore._generation = (_startupRestore._generation || 0) + 1;
+  _appEntered = false;
   if(typeof SpdProfile!=='undefined')SpdProfile.sync();
 
   // Sve čišćenje ide u try/finally — GARANTOVANO se vraćamo na login ekran čak i ako
@@ -7895,18 +7904,14 @@ async function doLogout() {
 
   // Očisti mapu i stanje
   vlake.forEach(v => {
-    map.removeLayer(v.poly);
-    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
-    v.wpts.forEach(m => map.removeLayer(m));
-    if (v.labelMk) map.removeLayer(v.labelMk);
-    if (v.lagerMk) map.removeLayer(v.lagerMk);
-    (v.extraLabels || []).forEach(m => map.removeLayer(m));
+    _removeVlakaMapLayers(v);
   });
   vlake = []; actI = null;
 
   textLabels.forEach(l => { if (l.marker) map.removeLayer(l.marker); });
   textLabels = [];
 
+  Object.values(kolegeVlakeMap || {}).forEach(_removeVlakaMapLayers);
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
@@ -7984,12 +7989,13 @@ async function doLogout() {
   }
 }
 
-// Trajno briše SVE lokalno pohranjene per-korisnik podatke (offline karte, KML, granice,
+// Trajno briše privatne lokalno pohranjene per-korisnik podatke (KML, granice,
 // tačke, tragovi/mjerenja/fotke, kolege keš...). Poziva se SAMO iz _checkDeviceUserSwitch
 // kad se otkrije da se na uređaju prijavio DRUGI korisnik — NIKAD na običnu odjavu (vidi
 // napomenu u doLogout).
 async function _wipeAllLocalUserData() {
-  await sqlmapClearAll();  // offline karte — OPFS/IndexedDB, mogu biti više GB
+  // Raster offline karte pripadaju uređaju, ne nalogu. Ne briši OPFS/IDB/native
+  // katalog pri promjeni korisnika; eksplicitno brisanje karte ostaje dostupno.
   localStorage.removeItem(LOCAL_VLAKE_KEY);
   localStorage.removeItem('tvlake_local_vlake_uid');
   // _OL.PROFILE se NAMJERNO ne briše — showApp() ovo zove NAKON sbLoadProfile(), koji je već
@@ -8380,12 +8386,18 @@ async function adminLoadUsers() {
 
   _adminLoadStats(); // paralelno, ne blokira listu
 
-  const { data, error } = await sb.rpc('admin_get_all_users');
+  const owner=sbUser?.id,seq=(adminLoadUsers._seq||0)+1;adminLoadUsers._seq=seq;
+  const [{data,error},activity]=await Promise.all([
+    _withTimeout(sb.rpc('admin_get_all_users'),8000).catch(()=>({error:{message:'Server nije odgovorio. Pokušaj ponovo.'}})),
+    _withTimeout(sb.rpc('admin_get_user_activity'),8000).catch(()=>({error:true}))
+  ]);
+  if(sbUser?.id!==owner||!sbProfile?.is_admin||adminLoadUsers._seq!==seq)return;
   if (error) {
     el.innerHTML = `<p style="color:#f87171;font-size:12px;text-align:center;padding:16px 0;">Greška: ${_escHtml(error.message)}</p>`;
     return;
   }
-  _adminUsers = data || [];
+  const active=new Map((activity.error?[]:activity.data||[]).map(a=>[a.user_id,a.last_active_at]));
+  _adminUsers = (data || []).map(u=>({...u,last_active_at:activity.error?undefined:active.get(u.id)||null}));
   // Badge: broj neodobrenih — osvježi iz svježih podataka (bez dodatnog RPC-a)
   _notifCounts.admin = _adminUsers.filter(u => u.odobren === false).length;
   _notifRender('admin');
@@ -8418,13 +8430,13 @@ function _admStatus(u) {
   return 'odobren';   // migracija sa `odobren` još nije primijenjena
 }
 
-// Dana od zadnje prijave; null = nikad se nije prijavio, undefined = podatak
+// Dana od zadnje zabilježene aktivnosti; null = nema zapisa, undefined = podatak
 // ne postoji (starija migracija) — to dvoje se NE smije spojiti, jer "nikad"
 // je stvarna informacija a "ne znam" nije.
 function _admDanaNeaktivan(u, sada) {
-  if (!u || u.last_sign_in_at === undefined) return undefined;
-  if (!u.last_sign_in_at) return null;
-  const t = Date.parse(u.last_sign_in_at);
+  if (!u || u.last_active_at === undefined) return undefined;
+  if (!u.last_active_at) return null;
+  const t = Date.parse(u.last_active_at);
   if (!isFinite(t)) return undefined;
   return Math.floor(((sada || Date.now()) - t) / 86400000);
 }
@@ -8477,10 +8489,10 @@ function _admSortiraj(users, sort, sada) {
       if (ta !== tb) return ta - tb;
     }
     if (sort === 'aktivnost') {
-      // Nikad prijavljen ide na DNO ovog sorta, ne na vrh kao "0" —
+      // Bez aktivnosti ide na DNO ovog sorta, ne na vrh kao "0" —
       // Date.parse(null) je NaN i bez ovoga bi poredak bio nasumičan.
-      const ta = Date.parse(a.last_sign_in_at || '') || 0;
-      const tb = Date.parse(b.last_sign_in_at || '') || 0;
+      const ta = Date.parse(a.last_active_at || '') || 0;
+      const tb = Date.parse(b.last_active_at || '') || 0;
       if (ta !== tb) return tb - ta;
     } else if (sort === 'noviji') {
       const ta = Date.parse(a.created_at || '') || 0;
@@ -8592,7 +8604,7 @@ function _adminRenderUsers() {
       <span style="font-size:11px;color:#64748b;white-space:nowrap;">Poredaj:</span>
       <select onchange="_admPostaviSort(this.value)" style="flex:1;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#cbd5e1;font-size:12px;">
         <option value="ime"${_admSort==='ime'?' selected':''}>Po imenu</option>
-        <option value="aktivnost"${_admSort==='aktivnost'?' selected':''}>Zadnja prijava</option>
+        <option value="aktivnost"${_admSort==='aktivnost'?' selected':''}>Zadnja aktivnost</option>
         <option value="noviji"${_admSort==='noviji'?' selected':''}>Najnovija registracija</option>
       </select>
     </div>`;
@@ -8661,7 +8673,7 @@ function _admKarticaHtml(u) {
   // iz toga ne vidi ko godinu dana nije otvorio app.
   const neakt = !_admMozeSePrijaviti(u) ? ''
     : (dana === null)
-    ? ' <span style="color:#7f8ea3;font-size:10px;background:rgba(100,116,139,0.18);padding:1px 6px;border-radius:4px;">nije se prijavio</span>'
+    ? ' <span style="color:#7f8ea3;font-size:10px;background:rgba(100,116,139,0.18);padding:1px 6px;border-radius:4px;">nema zabilježene aktivnosti</span>'
     : (typeof dana === 'number' && dana >= _ADM_NEAKTIVAN_DANA)
     ? ` <span style="color:#94a3b8;font-size:10px;background:rgba(100,116,139,0.18);padding:1px 6px;border-radius:4px;">${dana} dana neaktivan</span>`
     : '';
@@ -8689,11 +8701,7 @@ function _admKarticaHtml(u) {
       <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin ? '0' : '8px'};">
         ${u.created_at ? fmtDateShort(u.created_at) : '—'}
         ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
-        ${u.last_sign_in_at !== undefined
-          ? '<br>' + (u.last_sign_in_at
-              ? '🕐 Zadnja prijava: ' + _fmtDateTime(u.last_sign_in_at)
-              : '<span style="color:#7f8ea3;">nije se još prijavio</span>')
-          : ''}
+        <br>🕐 Zadnja aktivnost: ${u.last_active_at ? _escHtml(_fmtDateTime(u.last_active_at)) : (u.last_active_at === null ? 'još nije zabilježena' : 'podatak nije dostupan')}
       </div>
       ${!u.is_admin ? `
       <div style="display:flex;gap:6px;align-items:center;">
@@ -9210,6 +9218,15 @@ function _sortByGjDatum(arr) {
   });
 }
 
+function _projektTimIds(p) {
+  return [...new Set([p?.korisnik_id, ...(p?.clanovi || []).map(c => c?.korisnik_id)]
+    .filter(id => typeof id === 'string' && id.trim()).map(id => id.trim()))];
+}
+function _projektIme(kid) {
+  if (kid === sbUser?.id) return [sbProfile?.ime, sbProfile?.prezime].filter(Boolean).join(' ').trim() || 'Ti';
+  return kolegeMap[kid]?.ime || 'Projektant (ime nije dostupno)';
+}
+
 function _renderProjGroup(list) {
   const byGj = new Map();
   for (const p of _sortByGjDatum(list)) {
@@ -9223,7 +9240,7 @@ function _renderProjGroup(list) {
     html += `<div class="proj-gj-header">${gj ? 'GJ ' + _escHtml(gj) : 'Bez GJ'}</div>`;
     for (const p of projekti) {
       const isAkt  = p.id === _aktivniProjektId;
-      const nClan  = (p.clanovi || []).length;
+      const nClan  = _projektTimIds(p).filter(kid => kid !== p.korisnik_id).length;
       // Statistike vlaka iz lokalno učitanih podataka (vlastite vlake)
       const pv = vlake.filter(v => v.projektId === p.id && v.pts.length >= 2);
       const totLen = _ukupnoVlakeM(pv);
@@ -9444,21 +9461,21 @@ function showProjektDetalji(id) {
     p.gj       ? `<b style="color:#e2e8f0;">G.J.:</b> ${_escHtml(p.gj)}` : '',
     p.povrsina ? `<b style="color:#e2e8f0;">Površina:</b> ${fmtHa(p.povrsina)}` : '',
     p.datum    ? `<b style="color:#e2e8f0;">Datum početka:</b> ${fmtDate(p.datum)}` : '',
-    `<b style="color:#e2e8f0;">Vlasnik:</b> ${isVlasnik ? 'Ti' : _escHtml(kolegeMap[p.korisnik_id]?.ime || String(p.korisnik_id || '').slice(0,8) || '—')}`,
+    `<b style="color:#e2e8f0;">Vlasnik:</b> ${_escHtml(_projektIme(p.korisnik_id))}`,
     pdVlake.length ? `<b style="color:#4ade80;">Vlake:</b> ${pdVlake.length} · ${fmtL(pdLen)}${pdGust ? ' · ' + pdGust : ''}` : '',
     isReadOnly() && p.sumarija ? `<b style="color:#fbbf24;">Šumarija:</b> ${_escHtml(p.sumarija)}` : ''
   ].filter(Boolean).join('<br>');
 
   // Clanovi
   const clanEl = document.getElementById('pd-clanovi');
-  const allMembers = [
-    { korisnik_id: p.korisnik_id, isVlasnik: true },
-    ...(p.clanovi || []).map(c => ({ korisnik_id: c.korisnik_id, isVlasnik: false, canDel: isVlasnik && c.korisnik_id !== sbUser.id }))
-  ];
+  const allMembers = _projektTimIds(p).map(kid => ({
+    korisnik_id: kid, isVlasnik: kid === p.korisnik_id,
+    canDel: isVlasnik && kid !== p.korisnik_id && kid !== sbUser.id
+  }));
   clanEl.innerHTML = allMembers.map(m => {
     const info = kolegeMap[m.korisnik_id];
-    const color = m.isVlasnik ? (sbProfile?.boja || '#4ade80') : (info?.color || '#94a3b8');
-    const name  = _escHtml(m.isVlasnik ? (sbProfile ? sbProfile.ime + ' ' + (sbProfile.prezime || '') : 'Ti') : (info?.ime || String(m.korisnik_id || '').slice(0,8) || 'Projektant'));
+    const color = m.korisnik_id === sbUser.id ? (sbProfile?.boja || '#4ade80') : (info?.color || '#94a3b8');
+    const name = _escHtml(_projektIme(m.korisnik_id));
     const tag   = m.korisnik_id === sbUser.id ? ' <span style="font-size:10px;color:#64748b;">(ti)</span>' : '';
     const del   = m.canDel ? `<button class="clan-del" onclick="removeProjektClan('${id}','${m.korisnik_id}')" title="Ukloni"><svg class="ic"><use href="#ic-zatvori"/></svg></button>` : '';
     return `<div class="clan-row"><div class="clan-dot" style="background:${color}"></div><div class="clan-name">${name}${tag}</div>${del}</div>`;
@@ -9513,7 +9530,7 @@ function showProjektDetalji(id) {
   document.getElementById('pd-add-clan-sec').style.display = (isVlasnik && !ro) ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = (isVlasnik && !ro) ? '' : 'none';
   document.getElementById('pd-share-code-btn').style.display = (isVlasnik && !ro) ? '' : 'none';
-  const hasClanovi = (p.clanovi || []).length > 0;
+  const hasClanovi = allMembers.some(m => !m.isVlasnik);
   document.getElementById('pd-transfer-btn').style.display = (isVlasnik && hasClanovi && !ro) ? '' : 'none';
 
   // Za ne-vlasnike: dugme za brisanje lokalno cachiranih kolega vlaka
@@ -9836,7 +9853,7 @@ async function startManualVlakaDraw() {
   }
   const nextBr = _nextMainBr();  // uključuje i brojeve zauzete od kolega na projektu
   const defaultNm = `T${nextBr}`;
-  const rawNm = await _dlgPrompt('Naziv vlake:', defaultNm, { title: 'Nova ručna vlaka' });
+  const rawNm = await _dlgPrompt('Naziv vlake:', defaultNm, { title: 'Nova ručna vlaka', vlakaKeyboard: true });
   if (!rawNm) return;
   const nm = _ensureTPrefix(rawNm.trim());
   const exists = vlake.findIndex(v => v.nm === nm && v.projektId === _aktivniProjektId);
@@ -10253,6 +10270,7 @@ async function impVlakaConfirm() {
   if (_aktivniProjektId!==projId) {
     _aktivniProjektId=projId;try{localStorage.setItem('tvlake_akt_proj',projId);}catch(e){}
     _applyProjektFields(_projekti.find(p=>p.id===projId));
+    Object.values(kolegeVlakeMap || {}).forEach(_removeVlakaMapLayers);
     kolegeVlake.forEach(p=>map.removeLayer(p));kolegeLabels.forEach(p=>map.removeLayer(p));
     kolegeVlake=[];kolegeLabels=[];kolegeVlakeMap={};
     rndProjektiList();_updFabVisibility();
@@ -10298,6 +10316,7 @@ function deaktivirajProjekt() {
   _aktivniProjektId = null;
   localStorage.removeItem('tvlake_akt_proj');
   _hideProjektOdjelHighlight();
+  Object.values(kolegeVlakeMap || {}).forEach(_removeVlakaMapLayers);
   kolegeVlake.forEach(p => map.removeLayer(p));
   kolegeLabels.forEach(m => map.removeLayer(m));
   kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
@@ -10378,7 +10397,7 @@ async function transferProjektUI() {
   const id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser.id) return;
-  const clanovi = (p.clanovi || []).filter(c => c.korisnik_id !== sbUser.id);
+  const clanovi = _projektTimIds(p).filter(kid => kid !== sbUser.id).map(korisnik_id => ({korisnik_id}));
   if (!clanovi.length) { showToast('Nema članova za prenos'); return; }
 
   const names = clanovi.map(c => {
@@ -10435,6 +10454,15 @@ async function _doTransferProjekt(projektId, noviVlasnikId) {
   }
 }
 
+function _removeVlakaMapLayers(v) {
+  if (!v) return;
+  const layers = new Set([v.poly, v.labelMk, v.lagerMk, ...(v.wpts || []),
+    ...(v.extraLabels || []), ...(v._directionMarkers || []), ...(v._steepPolys || []), ...(v.labels || [])]);
+  for (const layer of layers) if (layer) { try { map.removeLayer(layer); } catch(e) {} }
+  v.labelMk = null; v.lagerMk = null; v.extraLabels = []; v._directionMarkers = []; v._steepPolys = [];
+  if (v.labels) v.labels = [];
+}
+
 function _deleteVlakeByProjekt(projektId) {
   const toRemove = [];
   const brSet = new Set();
@@ -10443,12 +10471,7 @@ function _deleteVlakeByProjekt(projektId) {
   toRemove.sort((a, b) => b - a);
   for (const i of toRemove) {
     const v = vlake[i];
-    if (v.poly) map.removeLayer(v.poly);
-    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
-    (v.wpts || []).forEach(m => map.removeLayer(m));
-    if (v.labelMk) map.removeLayer(v.labelMk);
-    if (v.lagerMk) map.removeLayer(v.lagerMk);
-    (v.extraLabels || []).forEach(m => map.removeLayer(m));
+    _removeVlakaMapLayers(v);
     sbDeleteVlaka(v);
     clearTimeout(_vlakaSaveTimers[i]);
     vlake.splice(i, 1);
@@ -10463,12 +10486,7 @@ async function _deleteAllOrphanVlake() {
   if (!ok) return;
   for (let i = vlake.length - 1; i >= 0; i--) {
     const v = vlake[i];
-    if (v.poly) map.removeLayer(v.poly);
-    if (v._steepPolys) v._steepPolys.forEach(p => { try { map.removeLayer(p); } catch(e){} });
-    (v.wpts || []).forEach(m => map.removeLayer(m));
-    if (v.labelMk) map.removeLayer(v.labelMk);
-    if (v.lagerMk) map.removeLayer(v.lagerMk);
-    (v.extraLabels || []).forEach(m => map.removeLayer(m));
+    _removeVlakaMapLayers(v);
     sbDeleteVlaka(v);
     clearTimeout(_vlakaSaveTimers[i]);
   }
@@ -11093,6 +11111,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
   // raniji kod je čistio kartu PRIJE guardova/upita pa je tranzijentni mrežni
   // neuspjeh (ili prazan projekat) "pojeo" već nacrtane vlake kolega.
   const clearAll = () => {
+    Object.values(kolegeVlakeMap || {}).forEach(_removeVlakaMapLayers);
     kolegeVlake.forEach(p => { try { map.removeLayer(p); } catch(e) {} });
     kolegeLabels.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
     kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
@@ -16865,7 +16884,7 @@ function edpSetMode(m) {
 async function edpRename() {
   if (actI === null || !vlake[actI]) return;
   const i=actI, v = vlake[i], owner=sbUser?.id;
-  const nw = await _dlgPrompt('Novi naziv vlake (T5 = vlaka, T5.1 = krak):', v.nm, { title: 'Preimenuj vlaku' });
+  const nw = await _dlgPrompt('Novi naziv vlake (T5 = vlaka, T5.1 = krak):', v.nm, { title: 'Preimenuj vlaku', vlakaKeyboard: true });
   if (!nw || sbUser?.id!==owner || actI!==i || vlake[i]!==v) return;
   const nm = _impNormalName(nw);
   if (!nm || nm === v.nm) return;
@@ -17508,6 +17527,9 @@ function _appendVlakaRows(list, isTrag) {
 }
 
 function _closeVlakaPicker() {
+  VlakaKeyboard.unmount(document.getElementById('vpick-keyboard'));
+  document.getElementById('vpick-keyboard').hidden = true;
+  document.getElementById('vpick-input').blur();
   document.getElementById('vlaka-picker').classList.remove('open');
   document.getElementById('vpicker-overlay').style.display = 'none';
 }
@@ -17765,8 +17787,7 @@ function _refStartTrace() {
 function _dropEmptyVlaka(i) {
   const v = vlake[i];
   if (!v || (v.pts && v.pts.length >= 2)) return false;
-  [v.poly, v.labelMk, v.lagerMk, ...(v.extraLabels || []), ...(v.wpts || [])]
-    .filter(Boolean).forEach(l => { try { map.removeLayer(l); } catch(e) {} });
+  _removeVlakaMapLayers(v);
   vlake.splice(i, 1);
   if (actI === i) actI = null; else if (actI > i) actI--;
   _saveLocalVlake();
@@ -18161,6 +18182,23 @@ async function _releaseWakeLock() {
 // stvara prazninu koju bi replay popunio. Standardni Android API lijek je
 // izuzeće od Doze/App Standby (isIgnoringBatteryOptimizations) — ne rješava
 // svaki OEM specifično, ali stvarno pomaže na dobrom dijelu uređaja.
+async function showDeviceSettings() {
+  const bridge = window.AndroidDevice;
+  if (!bridge || typeof bridge.status !== 'function') {
+    await _dlg({title:'Baterija i automatsko pokretanje',msg:'Ove postavke su dostupne u Android APK aplikaciji. Na telefonu otvori Postavke → Aplikacije → Dendro Map.'});
+    return;
+  }
+  let status={}; try { status=JSON.parse(bridge.status()); } catch(e) {}
+  const labels = [
+    {label:'<b>🔋 Ograničenje baterije</b><small>'+ (status.batteryExempt ? 'Android izuzeće je uključeno · otvori postavke' : 'Dozvoli rad bez ograničenja baterije') +'</small>'},
+    {label:'<b>↻ Automatsko pokretanje</b><small>Otvori autostart i uključi Dendro Map</small>'},
+    {label:'<b>⚙ Postavke aplikacije</b><small>Xiaomi: Baterija → Bez ograničenja</small>'}
+  ];
+  const choice=await _dlg({title:'Baterija i automatsko pokretanje',mode:'actions',
+    msg:'Za GPS i preuzimanje dok je ekran ugašen. Promjene potvrđuješ u postavkama telefona. Autostart zavisi od proizvođača; ako nema zasebnog ekrana, otvorit će se postavke aplikacije.',actions:labels});
+  const method=['openBattery','openAutostart','openAppSettings'][choice];
+  if(method && typeof bridge[method] === 'function')try{bridge[method]();}catch(e){showToast('Otvori Postavke → Aplikacije → Dendro Map');}
+}
 const _BATT_HINT_KEY = 'tvlake_batt_hint_shown';
 async function _checkBatteryOptHint() {
   if (typeof AndroidGps === 'undefined' || typeof AndroidGps.hasBatteryOptExemption !== 'function') return;
@@ -18635,7 +18673,7 @@ async function noviKrakStranaPick(strana) {
   const predlog = _nextKrakNm(parentV.nm, strana);
   const val = await _dlgPrompt(
     'Broj kraka (redoslijed ne mora biti strog — npr. ' + parentV.nm + '.6 i prije .4):',
-    predlog, { title: '⊕ Krak — izbor broja' });
+    predlog, { title: '⊕ Krak — izbor broja', vlakaKeyboard: true });
   if (val == null) return;
   const pref = parentV.nm + '.';
   let s = val.trim();
@@ -22163,11 +22201,7 @@ function _delConfirm() {
   }
   _delCancel();
 
-  map.removeLayer(vlake[i].poly);
-  vlake[i].wpts.forEach(m=>map.removeLayer(m));
-  if (vlake[i].labelMk) map.removeLayer(vlake[i].labelMk);
-  if (vlake[i].lagerMk) map.removeLayer(vlake[i].lagerMk);
-  (vlake[i].extraLabels || []).forEach(m => map.removeLayer(m));
+  _removeVlakaMapLayers(vlake[i]);
   const _delV = vlake[i];
   sbDeleteVlaka(_delV);
   clearTimeout(_vlakaSaveTimers[i]);
@@ -25432,10 +25466,7 @@ function doMerge(a,b){
   updateVlakaLabel(a.vi);
   sbFlushVlaka(a.vi);
   // Remove vlaka b from map and array
-  map.removeLayer(vb.poly);
-  vb.wpts.forEach(m=>map.removeLayer(m));
-  if (vb.labelMk) map.removeLayer(vb.labelMk);
-  if (vb.lagerMk) map.removeLayer(vb.lagerMk);
+  _removeVlakaMapLayers(vb);
   sbDeleteVlaka(vb);
   clearTimeout(_vlakaSaveTimers[b.vi]);
   vlake.splice(b.vi,1);
@@ -26969,7 +27000,7 @@ function updProjStats() {
     ${sumarija ? `<div style="font-size:11px;color:#64748b;margin-bottom:8px;">${_escHtml(sumarija)}</div>` : ''}
     <div class="stat-card-title" style="margin-top:4px;">Projekt</div>
     <div class="stat-row"><span class="stat-name">Početak</span><span class="stat-val blue">${datum?fmtDate(datum):'—'}</span></div>
-    <div class="stat-row"><span class="stat-name">Projektanata</span><span class="stat-val">${aktP ? 1 + (aktP.clanovi || []).length : Object.keys(allP).length}</span></div>
+    <div class="stat-row"><span class="stat-name">Projektanata</span><span class="stat-val">${aktP ? _projektTimIds(aktP).length : Object.keys(allP).length}</span></div>
     <div class="stat-row"><span class="stat-name">Dana rada</span><span class="stat-val">${nDana}</span></div>
     <div class="stat-row"><span class="stat-name">Površina</span><span class="stat-val blue">${pov>0?fmtHa(pov)+(_pv.src==='KML'?' <span style="font-size:9px;color:#64748b;font-weight:normal;">(iz KML)</span>':''):'—'}</span></div>
     <div style="margin-top:10px;font-size:11px;color:#475569;text-align:center;">Dužine po projektantu i gustoća mreže → <b style="color:#64748b;">Terenske statistike</b> ispod</div>`;
@@ -29485,7 +29516,7 @@ function _stpSlojevi() {
   try { for (const [i,k] of kmlLs.entries()) {
     if (!k.grp || !map.hasLayer(k.grp)) continue;
     const t = String(k.tag || '') + ' ' + String(k.name || '');
-    const role = /privatn/i.test(t) ? 'gr_privat' : /odsjek/i.test(t) ? 'gr_odsjeka' : /odjel|granic/i.test(t) ? 'gr_odjela' : /potok/i.test(t) ? 'potok' : /kamionsk/i.test(t) ? 'kamput' : '';
+    const role = /privatn/i.test(t) ? 'gr_privat' : /odsjek/i.test(t) ? 'gr_odsjeka' : /odjel|granic/i.test(t) ? 'gr_odjela' : /potok/i.test(t) ? 'potok' : /kamionsk/i.test(t) ? 'kamput' : /traktor|vlak/i.test(t) ? 'vlaka' : '';
     add('kml:'+(k._key || k.name || i),k.name || 'Učitani sloj',role,_stpPutanje(k.grp));
   }} catch (e) {}
   try { for (const t of _tragRegistry) { const l=_tragLayers[t.id]; if(l && map.hasLayer(l)) add('trag:'+t.id,t.nm || t.name || 'Trag','', [l]); }} catch(e) {}
@@ -29502,7 +29533,8 @@ function _stpStilPrimijeni() {
   _stpStilVrati();
   for (const row of _stpSlojevi()) {
     const edit = _stp.styles[row.id] || {};
-    const style = row.role === 'gr_privat' ? {...edit,color:'#ff0000',dashArray:null,opacity:1} : edit;
+    const route = row.role === 'vlaka' || row.role === 'krak';
+    const style = row.role === 'gr_privat' ? {...edit,color:'#ff0000',dashArray:null,opacity:1} : route ? {weight:row.role==='krak'?1.2:1.4,dashArray:'6 4',lineCap:'butt',...edit,vlakaOutline:false} : edit;
     if (!Object.keys(style).length) continue;
     for (const l of row.layers) {
       const original = {};
@@ -29510,6 +29542,11 @@ function _stpStilPrimijeni() {
       _stp.originalStyles.set(l,original); l.setStyle(style);
     }
   }
+  try { for (const v of [...vlake,...Object.values(typeof kolegeVlakeMap==='undefined'?{}:kolegeVlakeMap)])
+    for (const l of v._steepPolys || []) if(map.hasLayer(l)) {
+      _stp.originalStyles.set(l,{opacity:l.options.opacity}); l.setStyle({opacity:0});
+    }
+  } catch(e) {}
 }
 function _stpStil(i,prop,value) {
   if (!_stp) return;
@@ -29545,14 +29582,14 @@ function _stpSimboli() {
   const bv = typeof getBojaVlake === 'function' ? getBojaVlake() : '#60a5fa';
   const bk = typeof getBojaKraka === 'function' ? getBojaKraka() : '#f87171';
   const sim = {
-    vlaka:{svg:ln(bv,3),label:'Traktorska vlaka'}, krak:{svg:ln(bk,2),label:'Krak'},
+    vlaka:{svg:ln(bv,1.4,'6 4','butt'),label:'Traktorska vlaka'}, krak:{svg:ln(bk,1.2,'6 4','butt'),label:'Krak'},
     lager:{svg:_stpLagerSvg(),label:'Lager'}, kamput:{svg:ln('#f97316',3.5),label:'Kamionski put'},
     gr_odjela:{svg:ln('#111',1.5,'6,3'),label:'Granica odjela'},
     gr_odsjeka:{svg:ln('#111',1,'2,3'),label:'Granica odsjeka'},
     potok:{svg:ln('#2563eb',1.5),label:'Potok'},
     gr_privat:{svg:ln('#ff0000',1.5),label:'Granica sa privatnim posjedom'},
     konture:{svg:ln('rgba(120,72,0,0.9)',1.2),label:'Izohipse (20 m)'},
-    nagib:{svg:'<svg viewBox="0 0 50 10"><rect x="8" y="1" width="34" height="8" fill="rgb(220,90,90)"/></svg>',label:'Nagib preko 30 %'}
+    nagib:{svg:'<svg viewBox="0 0 50 10"><polygon points="8,7 12,1 35,1 43,5 37,9 15,9" fill="#dc2626" fill-opacity=".6"/></svg>',label:'Nagib preko 30 %'}
   };
   const groups = new Map();
   for (const row of _stpSlojevi()) {
@@ -29570,6 +29607,7 @@ function _stpLegendaPodrazumijevano() {
   try { for (const v of [...vlake,...Object.values(typeof kolegeVlakeMap === 'undefined' ? {} : kolegeVlakeMap)])
     if (v.lagerMk && map.hasLayer(v.lagerMk)) out.add('lager'); } catch(e) {}
   try { if (_ovlState.kont) out.add('konture'); if (_ovlState.slope) out.add('nagib'); } catch(e) {}
+  try { const l=ProjectTerrain.slopeLayer(); if(l && map.hasLayer(l))out.add('nagib'); } catch(e) {}
   return out;
 }
 
@@ -29683,6 +29721,7 @@ function stampaOtvori() {
   };
   _stpStilPrimijeni();
   document.body.classList.add('stampa-on');
+  if(typeof PrintSlope!=='undefined')PrintSlope.start();
   map.options.zoomSnap = 0;
   // Mjerilo bira korisnik dugmadima — pinch bi ga tiho pokvario.
   ['touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard'].forEach(k => {
@@ -29711,6 +29750,7 @@ function _stpZatvoriInterno() {
   if (!_stp) return;
   const p = _stp.prev;
   _stpStilVrati();
+  if(typeof PrintSlope!=='undefined')PrintSlope.stop();
   _stp = null;
   window.removeEventListener('resize', _stpRaspored);
   document.body.classList.remove('stampa-on');
@@ -29888,6 +29928,7 @@ async function stampaStampaj() {
   try {
     _stpPageCss();
     await _stpCekajPlocice(8000);
+    if(typeof PrintSlope!=='undefined')PrintSlope.refresh();
     if (!_stp) return;
     const ime = (_stpNaslovTekst() || 'Karta').replace(/[\\/:*?"<>|]+/g, '-');
     if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
@@ -29901,7 +29942,7 @@ async function stampaStampaj() {
     _stpStampaUToku = false;
   }
 }
-map.on('moveend zoomend', () => { if (_stp) { _stpStilPrimijeni(); _stpOverlays(); } });
+map.on('moveend zoomend', () => { if (_stp) { _stpStilPrimijeni(); _stpOverlays(); requestAnimationFrame(()=>{if(_stp){_stpStilPrimijeni();if(typeof PrintSlope!=='undefined')PrintSlope.refresh();}}); } });
 
 // === OFFLINE MODAL ===
 function lngLatToTile(lat, lng, z) {
@@ -34455,23 +34496,20 @@ async function startOfflineDownload() {
 })();
 
 function showUpdateToast() {
-  let t = document.getElementById('update-toast');
-  if (t) return;
-  t = document.createElement('div');
-  t.id = 'update-toast';
-  t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-    background:#1e3a5f;border:1px solid #38bdf8;border-radius:12px;
-    padding:10px 16px;font-size:13px;color:#e2e8f0;z-index:99999;
-    display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5);
-    white-space:nowrap;`;
-  t.innerHTML = `🔄 Nova verzija dostupna
-    <button onclick="applyUpdate()" style="background:#38bdf8;color:#0f172a;border:none;
-      border-radius:6px;padding:5px 12px;font-size:12px;font-weight:bold;cursor:pointer;">
-      Ažuriraj
-    </button>
-    <button onclick="this.parentElement.remove()" style="background:none;border:none;
-      color:#64748b;font-size:16px;cursor:pointer;padding:0 2px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>`;
-  document.body.appendChild(t);
+  _updateNotice('', 'update-toast');
+}
+function _updateNotice(latest, id = 'ver-banner') {
+  if (document.getElementById('ver-banner') || document.getElementById('update-toast')) return;
+  const b = document.createElement('div'); b.id = id; b.className = 'update-notice';
+  b.setAttribute('role', 'status');
+  const action = document.createElement('button'); action.type = 'button'; action.className = 'update-notice-action';
+  action.innerHTML = '<span class="update-notice-icon" aria-hidden="true">↻</span><span class="update-notice-copy"><strong>Dostupno ažuriranje</strong><small></small><b>Ažuriraj aplikaciju →</b></span>';
+  action.querySelector('small').textContent = latest ? 'Nova verzija v' + latest : 'Nova verzija je spremna';
+  action.onclick = () => { azurirajAplikaciju(); };
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'update-notice-close';
+  close.textContent = '×'; close.setAttribute('aria-label', 'Sakrij obavijest o ažuriranju');
+  close.onclick = () => { if(latest)try{localStorage.setItem('tvlake_ver_dismissed',latest);}catch(e){} b.remove(); };
+  b.append(action,close); document.body.appendChild(b);
 }
 
 function applyUpdate() {
@@ -34764,14 +34802,21 @@ function _verCmp(a, b) {
 async function _checkLatestVersion() {
   try {
     const isAPK = location.hostname === 'appassets.androidplatform.net';
-    // Na webu se čita relativno (isti origin); u APK-u sa žive Pages objave.
-    const base = isAPK ? _LIVE_BASE : './';
-    const r = await _fetchT(base + 'sw.js?_v=' + Date.now(), 10000, { cache: 'no-store' });
-    if (!r.ok) return;
-    const txt = await r.text();
-    const m = txt.match(/APP_VERSION\s*=\s*['"]([\d.]+)['"]/);
-    if (!m) return;
-    const latest = m[1];
+    let latest;
+    if (isAPK) {
+      const r = await _fetchT('https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1', 10000, {cache:'no-store'});
+      if(!r.ok)return;
+      const release = (await r.json())?.[0];
+      if(!release || release.draft || !release.assets?.some(a => /\.apk$/i.test(a.name) && a.state === 'uploaded'))return;
+      latest = String(release.tag_name || '').replace(/^v/,'');
+      if(!/^\d+\.\d+\.\d+$/.test(latest))return;
+    } else {
+      const r = await _fetchT('./sw.js?_v=' + Date.now(), 10000, { cache: 'no-store' });
+      if (!r.ok) return;
+      const m = (await r.text()).match(/APP_VERSION\s*=\s*['"]([\d.]+)['"]/);
+      if (!m) return;
+      latest = m[1];
+    }
     const local = APP_VER.replace(/^v/, '');
     if (_verCmp(latest, local) <= 0) return;               // već na najnovijoj (ili novijoj lokalnoj)
     if (localStorage.getItem('tvlake_ver_dismissed') === latest) return; // korisnik odbio baš ovu verziju
@@ -34780,23 +34825,7 @@ async function _checkLatestVersion() {
 }
 
 function _showVersionBanner(latest, isAPK) {
-  if (document.getElementById('ver-banner')) return;
-  const b = document.createElement('div');
-  b.id = 'ver-banner';
-  b.style.cssText = `position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);
-    max-width:92vw;background:#1e3a5f;border:1px solid #38bdf8;border-radius:12px;
-    padding:9px 12px;font-size:12.5px;color:#e2e8f0;z-index:99999;
-    display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5);`;
-  const txt = isAPK
-    ? `🔄 Dostupna je novija verzija <b>v${latest}</b>. Preuzmi i instaliraj novi APK.`
-    : `🔄 Dostupna je novija verzija <b>v${latest}</b>.`;
-  const btn = isAPK
-    ? ''
-    : `<button onclick="applyUpdate()" style="background:#38bdf8;color:#0f172a;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:bold;cursor:pointer;flex-shrink:0;">Ažuriraj</button>`;
-  b.innerHTML = `<span style="flex:1;">${txt}</span>${btn}
-    <button onclick="try{localStorage.setItem('tvlake_ver_dismissed','${latest}')}catch(e){};this.parentElement.remove()"
-      style="background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>`;
-  document.body.appendChild(b);
+  _updateNotice(latest);
 }
 
 // Toast ne smije prekriti traku snimanja ni otvoren donji list (v1.9.0) —
@@ -34835,7 +34864,7 @@ function showToast(msg) {
 let _dlgResolve = null;
 let _dlgMode = null; // 'alert' | 'confirm' | 'prompt' | 'actions'
 
-function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType = 'text', inputMode = 'text', okLabel = 'OK', cancelLabel = 'Odustani', danger = false, actions = [] } = {}) {
+function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType = 'text', inputMode = 'text', okLabel = 'OK', cancelLabel = 'Odustani', danger = false, actions = [], vlakaKeyboard = false } = {}) {
   return new Promise(resolve => {
     _dlgResolve = resolve;
     _dlgMode = mode;
@@ -34862,10 +34891,15 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
     ok.className     = 'dlg-btn-ok' + (danger ? ' danger' : '');
     sh.style.borderTop = danger ? '3px solid #ef4444' : 'none';
 
+    if(typeof VlakaKeyboard!=='undefined')VlakaKeyboard.unmount(document.getElementById('dlg-vlaka-keyboard'));
+    sh.classList.toggle('dlg-vlaka', mode === 'prompt' && vlakaKeyboard);
+    let keyboardHost = document.getElementById('dlg-vlaka-keyboard');
+    if (!keyboardHost) { keyboardHost = document.createElement('div'); keyboardHost.id = 'dlg-vlaka-keyboard'; iw.after(keyboardHost); }
     if (mode === 'prompt') {
       inp.type      = inputType;
       inp.inputMode = inputMode;
       inp.value     = inputVal;
+      if(vlakaKeyboard && typeof VlakaKeyboard!=='undefined')VlakaKeyboard.mount(inp,keyboardHost);
     }
     if (mode === 'actions') {
       al.innerHTML = actions.map((a, i) =>
@@ -34873,6 +34907,8 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
       ).join('') + `<button class="dlg-btn-cancel" style="width:100%;margin-top:4px;" onclick="_dlgDismiss()">Odustani</button>`;
     }
 
+    sh._dlgEpoch = (sh._dlgEpoch || 0) + 1;
+    const dialogEpoch = sh._dlgEpoch;
     ov.classList.add('show');
     requestAnimationFrame(() => sh.classList.add('show'));
     if (mode === 'prompt') {
@@ -34881,7 +34917,7 @@ function _dlg({ title = '', msg = '', mode = 'alert', inputVal = '', inputType =
       inp.focus();
       try { inp.select(); } catch(e) {}
       // Retry after the sheet animation in case focus was lost to the overlay
-      setTimeout(() => { inp.focus(); try { inp.select(); } catch(e) {} }, 280);
+      setTimeout(() => { if(sh._dlgEpoch !== dialogEpoch || !_dlgResolve || _dlgMode !== mode || !sh.classList.contains('show') || document.activeElement === inp) return; inp.focus(); try { inp.select(); } catch(e) {} }, 280);
     }
   });
 }
@@ -34929,12 +34965,15 @@ function _dlgDismiss() {
 function _dlgClose() {
   const sh = document.getElementById('dlg-sheet');
   const ov = document.getElementById('dlg-overlay');
+  document.getElementById('dlg-input')?.blur?.();
+  if(typeof VlakaKeyboard!=='undefined')VlakaKeyboard.unmount(document.getElementById('dlg-vlaka-keyboard'));
+  const epoch = sh._dlgEpoch;
   sh.classList.remove('show');
   let done = false;
   const finish = () => {
     if (done) return;
     done = true;
-    ov.classList.remove('show');
+    if(sh._dlgEpoch === epoch && !sh.classList.contains('show'))ov.classList.remove('show');
     sh.removeEventListener('transitionend', finish);
   };
   sh.addEventListener('transitionend', finish);
@@ -34994,8 +35033,8 @@ async function _dlgConfirm(msg, { title = 'Potvrdi', danger = false, okLabel } =
   return _dlg({ title, msg, mode: 'confirm', danger, okLabel: okLabel || (danger ? 'Obriši' : 'Potvrdi') });
 }
 
-async function _dlgPrompt(msg, defaultVal = '', { title = 'Unos', inputType = 'text', inputMode = 'text', okLabel = 'OK' } = {}) {
-  return _dlg({ title, msg, mode: 'prompt', inputVal: defaultVal, inputType, inputMode, okLabel });
+async function _dlgPrompt(msg, defaultVal = '', { title = 'Unos', inputType = 'text', inputMode = 'text', okLabel = 'OK', vlakaKeyboard = false } = {}) {
+  return _dlg({ title, msg, mode: 'prompt', inputVal: defaultVal, inputType, inputMode, okLabel, vlakaKeyboard });
 }
 
 async function _dlgActions(title, actionList) {
@@ -38425,7 +38464,7 @@ async function _dozRenameVlaka(i) {
   // _dlgPrompt (HTML dijalog), NE native prompt() — WebView bi za native prompt()
   // prikazao "The page at appassets.androidplatform.net says:" (vidi onJsAlert/
   // onJsConfirm override u MainActivity.java; onJsPrompt namjerno NIJE override-ovan).
-  const nn = await _dlgPrompt('Novi naziv vlake/kraka:', v.nm, { title: 'Preimenuj vlaku' });
+  const nn = await _dlgPrompt('Novi naziv vlake/kraka:', v.nm, { title: 'Preimenuj vlaku', vlakaKeyboard: true });
   if (!nn || !nn.trim() || nn.trim() === v.nm) return;
   if (sbUser?.id!==owner || vlake[i]!==v || !await renameVlaka(i, nn.trim())) return;
   _dozRenderVlakeList();
@@ -40763,6 +40802,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico">🛠</span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</button>
   <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico">🔄</span>Ažuriraj aplikaciju</button>
+  <button type="button" class="mdrop-item" id="menu-device-settings" onclick="closeMenuDropdown();showDeviceSettings()"><span class="mdrop-ico">🔋</span>Baterija i automatsko pokretanje</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico">📖</span>Upute za korištenje</button>
   <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico">🚪</span>Odjava</button>
   </section></div>
@@ -41347,7 +41387,6 @@ if (typeof AndroidDownload !== 'undefined') {
   <div id="loadmap-body">
     <div id="loadmap-status" role="status" aria-live="polite"></div>
     <section id="loadmap-pane-add" role="tabpanel" aria-labelledby="loadmap-tab-add">
-      <div class="lm-hero"><img src="static/img/map-previews/local.svg" alt="Ilustracija topografske karte"><div class="lm-hero-copy"><span>LOKALNA PODLOGA</span><h3>Karta spremna za teren</h3><p>Učitaj kartu iz fajla i koristi njeno područje bez interneta.</p></div><span class="lm-offline-tag"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Offline</span></div>
       <section id="loadmap-downloads" aria-labelledby="loadmap-download-title">
         <div class="lm-section-heading"><div><h3 id="loadmap-download-title">Dostupne karte</h3><small>GitHub · Wi-Fi i mobilni podaci · koristi offline</small></div><button type="button" id="loadmap-download-refresh" class="lm-secondary" onclick="MapDownloads.refresh()" aria-label="Osvježi dostupne karte">↻</button></div>
         <div id="loadmap-download-message" role="status" aria-live="polite"></div>
@@ -41786,10 +41825,11 @@ if (typeof AndroidDownload !== 'undefined') {
     </div>
   </div>
   <div class="vpick-search-row">
-    <input id="vpick-input" type="text" placeholder="Upiši broj (npr. 14 → T14)" autocomplete="off" inputmode="decimal"
+    <input id="vpick-input" type="text" placeholder="Upiši broj (npr. 14 → T14)" autocomplete="off" inputmode="none" onfocus="VlakaKeyboard.picker()"
            oninput="_vpickFilter()" onkeydown="if(event.key==='Enter')_vpickGo()">
     <button id="vpick-go" onclick="_vpickGo()">Idi</button>
   </div>
+  <div id="vpick-keyboard" hidden></div>
   <div id="vpicker-list"></div>
 </div>
 
@@ -42310,8 +42350,8 @@ if (typeof AndroidDownload !== 'undefined') {
 
   <!-- Tab: Instalirane karte -->
   <div id="ls-pane-inst" style="display:none;">
-    <div class="catalog-hero"><span>RAD BEZ INTERNETA</span><h3>Instalirane karte</h3><p>Lokalni fajl pokriva područje koje sadrži. Online keš čuva samo ranije pregledane dijelove.</p></div>
-    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><p class="catalog-intro">Mapzen/Terrarium: u provjerenom području BiH EU-DEM, približno 30 m. Veći zum ne povećava preciznost. Nagibi i izohipse su procjena; za rad bez signala preuzmi teren.</p><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
+    <div class="catalog-hero"><h3>Instalirane karte</h3></div>
+    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
   </div><!-- /ls-pane-inst -->
 
   <!-- Tab: Granice -->
@@ -42383,14 +42423,19 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- Sync queue viewer panel -->
 <div id="syncq-bg" onclick="closeSyncQueuePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3999;"></div>
 <div id="syncq-panel" role="dialog" aria-modal="true" aria-label="Pošalji na server" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:4000;flex-direction:column;overflow:hidden;">
-  <div class="sp-header"><div class="sp-brand"><span class="sp-brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 17a4 4 0 0 1-1-7.8A7 7 0 0 1 18.5 8a4.5 4.5 0 0 1-.5 9M9 20V12m-3 3 3-3 3 3m3-5v8m-3-3 3 3 3-3"/></svg></span><div><b>Pošalji na server</b><small>Razmjena podataka s kolegama</small></div></div><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
+  <div class="sp-header"><b>Pošalji na server</b><button onclick="closeSyncQueuePanel()" aria-label="Zatvori Server">×</button></div>
   <div id="syncq-sum"></div>
-  <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
   <div id="data-server-tabs" class="data-controls" role="tablist" aria-label="Podaci na serveru"></div>
   <div id="server-scroll" style="overflow-y:auto;flex:1;min-height:0;">
     <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
+    <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
     <div id="server-send-preview"></div>
-    <div id="server-project-summary"></div>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeni podaci</h3><p class="sp-note">Posljednja 3 projekta. Dodirni projekat za stavke i projektante.</p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslani podaci</h3><p class="sp-note">Potvrđeno slanje s ovog telefona za posljednja 3 projekta.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
+    <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
+    <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
+    </details>
+    <details id="server-history-info" class="sp-recovery"><summary>Zadnje slanje i prijem</summary><div id="server-project-summary"></div><p id="server-doz-status" class="sp-note"></p></details>
     <details id="server-project-view"><summary>Vlake aktivnog projekta · pregled i ispis</summary>
       <h3 class="sp-section-heading">Podaci u projektu</h3>
       <div id="server-project-authors"></div>
@@ -42398,14 +42443,9 @@ if (typeof AndroidDownload !== 'undefined') {
       <input id="server-project-search" type="search" aria-label="Traži vlaku ili projektanta" placeholder="Traži vlaku ili projektanta…" oninput="_serverProjektSearch(this.value)">
       <div id="server-project-list"></div><div id="server-project-pager"></div>
     </details>
-    <section id="data-server-received" class="sp-transfer-section"><h3><span class="sp-heading-icon" aria-hidden="true">↓</span> Primljeno sa servera</h3><p class="sp-note">Posljednja 3 projekta prema razmjeni podataka. Proširi projekat ili dan za stavke i projektante.</p><p id="server-doz-status" class="sp-note"></p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><p class="sp-note">Čuva se do 500 posljednjih stavki pregleda. Preuzeti podaci ostaju u projektima.</p><div id="syncq-primljeno" hidden></div></section>
-    <section id="data-server-sent" class="sp-transfer-section" hidden><h3><span class="sp-heading-icon" aria-hidden="true">↑</span> Poslano na server</h3><p class="sp-note">Šta je server potvrdio, u koji projekat i ko je poslao. Do 500 posljednjih potvrda s ovog telefona.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
-    <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
-    <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
-    </details>
     <details class="sp-recovery"><summary>Sigurnosna kopija i red slanja</summary><div class="sp-bottom-actions sp-recovery-actions"><button onclick="_exportFieldRecovery()">Sigurnosna kopija</button><button onclick="_syncQueueClearAll()">Obriši red slanja</button></div></details>
   </div>
-  <div class="sp-bottom"><p>Šalje tvoje izmjene iz svih projekata, zatim prima vlake kolega i doznaku. Bez signala podaci ostaju na telefonu.</p>
+  <div class="sp-bottom"><p>Šalje izmjene iz svih projekata i prima podatke kolega.</p>
     <button id="syncq-posalji" onclick="_serverRazmjena()" style="width:100%;min-height:48px;padding:10px;border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">⇅ Pošalji i primi</button>
   </div>
 </div>
@@ -42556,6 +42596,9 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/doznaka-boundary.js"></script>
 <div id="direction-pick-toolbar" hidden><b id="direction-pick-title"></b><p>Dodirni ovu vlaku gdje određuješ razdvajanje prema dva izlaza na put. Položaj se veže za vlaku.</p><button type="button" onclick="VlakaDirection.cancelPick()">Odustani</button></div>
 <script src="static/js/vlaka-outline.js"></script>
+<script src="static/js/vlaka-keyboard.js"></script>
+<script src="static/js/print-slope.js"></script>
+<script src="static/js/user-activity.js"></script>
 <script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>

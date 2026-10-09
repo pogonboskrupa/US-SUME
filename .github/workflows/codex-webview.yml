@@ -50,6 +50,7 @@ jobs:
         run: |
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/probni-pristup-238.sql
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/doz-atomic-delete-272.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/user-activity-273.sql
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -74,6 +75,7 @@ jobs:
           python tests/browser/manual-draw-270.py
           python tests/browser/audit-parts-271.py
           python tests/browser/audit-parts-272.py
+          timeout 120s python tests/browser/device-workflow-273.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py

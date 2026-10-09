@@ -204,7 +204,7 @@
     const el=byId('server-send-preview');if(!el)return;
     const groups=pendingGroups();
     const loading=typeof FieldStore!=='undefined'&&!FieldStore.ready;
-    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Pošalji i primi šalje navedene izmjene iz svih projekata. Tragovi, dnevnik, tekstualne oznake i fotografije ostaju lokalno.</p>';
+    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
   }
   let exchange=null;
   function errorHint(error){
@@ -223,9 +223,15 @@
     if(!state)try{state=JSON.parse(localStorage.getItem(exchangeKey(owner))||'null');}catch(e){}
     const button=byId('syncq-posalji'),busy=!!_serverRazmjena.busy||_serverSaljem||!!serverPosalji._priprema||_serverPrimljenoBusy||!!_serverPreuzmiDoznaku.busy;
     if(button){button.disabled=busy;button.textContent=_serverRazmjena.busy?'⇅ '+(state?.phase||'Razmjena u toku…'):'⇅ Pošalji i primi';}
-    if(!state||state.owner!==owner){el.innerHTML='<p class="sp-note">Prvo šalje tvoje izmjene, zatim preuzima vlake dostupnih projekata i doznaku. Prijem ne briše neposlani rad.</p>';return;}
+    if(!state||state.owner!==owner){el.innerHTML='<p class="sp-note">Rad je sačuvan na telefonu i kad nema signala.</p>';return;}
     const symbols={waiting:'○',working:'↻',ok:'✓',partial:'!',error:'!'};
-    el.innerHTML='<div class="sp-exchange-steps">'+[['send','Slanje'],['vlake','Prijem vlaka'],['doz','Prijem doznake']].map(([key,label])=>{const step=state[key]||{state:'waiting',text:'Čeka'};return '<div data-state="'+esc(step.state)+'"><b>'+symbols[step.state]+' '+label+'</b><span>'+esc(step.text)+'</span></div>';}).join('')+'</div><small>'+(_serverRazmjena.busy?'Razmjena traje — sačekaj završetak.':'Posljednji pokušaj: '+esc(timestamp(state.ts)))+'</small>';
+    const steps=[['send','Slanje'],['vlake','Prijem vlaka'],['doz','Prijem doznake']];
+    const problem=steps.find(([key])=>['partial','error'].includes(state[key]?.state));
+    const complete=steps.every(([key])=>state[key]?.state==='ok');
+    const tone=problem?'partial':busy?'working':complete?'ok':'waiting';
+    const text=problem?problem[1]+': '+state[problem[0]].text:busy?(state.phase||'Razmjena u toku…'):complete?'Slanje i prijem završeni':'Razmjena nije završena';
+    const expanded=el.querySelector?.('details')?.open;
+    el.innerHTML='<details class="sp-exchange-details" data-state="'+tone+'" '+(expanded?'open':'')+'><summary><b>'+symbols[tone]+' '+esc(text)+'</b><span>Detalji razmjene</span></summary><div class="sp-exchange-steps">'+steps.map(([key,label])=>{const step=state[key]||{state:'waiting',text:'Čeka'};return '<div data-state="'+esc(step.state)+'"><b>'+symbols[step.state]+' '+label+'</b><span>'+esc(step.text)+'</span></div>';}).join('')+'</div><small>'+(_serverRazmjena.busy?'Razmjena traje — sačekaj završetak.':'Posljednji pokušaj: '+esc(timestamp(state.ts)))+'</small></details>';
   }
   async function exchangeData(){
     if(_serverRazmjena.busy||_serverSaljem||serverPosalji._priprema||_serverPrimljenoBusy||_serverPreuzmiDoznaku.busy)return;

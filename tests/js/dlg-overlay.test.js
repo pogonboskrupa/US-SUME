@@ -171,5 +171,11 @@ t('nedostajući #dlg-overlay element ne ruši poziv', () => {
   assert.strictEqual(fn(), false);
 });
 
+t('zakašnjelo zatvaranje starog dijaloga ne sklanja overlay novog dijaloga', () => {
+  const { fn, sh, ov, clock } = makeClose(); sh._dlgEpoch=1; fn();
+  sh._dlgEpoch=2; sh.classList.add('show'); clock.fireAll();
+  assert.ok(ov.classList.contains('show'));
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);

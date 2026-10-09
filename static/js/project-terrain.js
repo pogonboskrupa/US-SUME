@@ -158,7 +158,7 @@
   function reset(){cancel();removeLayers();mounted='';demCache.clear();}
   function invalidateDEM(){demCache.clear();for(const l of [slope,aspect])if(l){l._ready=l._missing=0;l.redraw();}status();}
   function dataFor(id){const s=scope();if(!s)return null;id=id||s.id;if(typeof _projekti==='undefined'||!_projekti.some(p=>p.id===id))return null;return read({...s,id,key:keyFor(s.uid,id)});}
-  root.ProjectTerrain={refresh,toggle,start,cancel,finish,del,view,reset,invalidateDEM,dataFor,keyFor,isDrawing:()=>!!draft,undo:()=>{if(draft){draft.points.pop();drawRender();}},cleanRing,validateRing,gradient,slopeRGBA,pixels};
+  root.ProjectTerrain={slopeLayer:()=>slope,refresh,toggle,start,cancel,finish,del,view,reset,invalidateDEM,dataFor,keyFor,isDrawing:()=>!!draft,undo:()=>{if(draft){draft.points.pop();drawRender();}},cleanRing,validateRing,gradient,slopeRGBA,pixels};
   if(typeof module!=='undefined'&&module.exports)module.exports=root.ProjectTerrain;
   if(typeof document!=='undefined'){
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&draft)cancel();});

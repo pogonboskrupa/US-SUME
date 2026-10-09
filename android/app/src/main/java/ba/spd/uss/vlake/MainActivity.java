@@ -209,6 +209,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
+        webView.addJavascriptInterface(new DeviceBridge(), "AndroidDevice");
         webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
         webView.addJavascriptInterface(new ReferenceOcrBridge(webView), "AndroidReferenceOcr");
         webView.addJavascriptInterface(offlineMaps.new Bridge(webView, () -> mapFilePicker = true), "AndroidOfflineMaps");
@@ -873,6 +874,30 @@ public class MainActivity extends Activity {
         if("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS".equals(intent.getAction()))MapDownloadService.openRequested=true;
         if("ba.spd.uss.vlake.OPEN_MAP_DOWNLOADS".equals(intent.getAction())&&webView!=null)
             webView.evaluateJavascript("window.MapDownloads&&MapDownloads.openFromNotification()",null);
+    }
+
+    class DeviceBridge {
+        @JavascriptInterface public String status() {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                return new org.json.JSONObject().put("manufacturer", Build.MANUFACTURER)
+                        .put("batteryExempt", pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()))
+                        .toString();
+            } catch (Exception ignored) { return "{}"; }
+        }
+        @JavascriptInterface public void openBattery() {
+            runOnUiThread(() -> open(DeviceSettings.batteryIntents(MainActivity.this)));
+        }
+        @JavascriptInterface public void openAutostart() {
+            runOnUiThread(() -> open(DeviceSettings.autostartIntents(MainActivity.this, Build.MANUFACTURER)));
+        }
+        @JavascriptInterface public void openAppSettings() {
+            runOnUiThread(() -> open(java.util.Collections.singletonList(DeviceSettings.appDetails(MainActivity.this))));
+        }
+        private void open(java.util.List<Intent> intents) {
+            if (!DeviceSettings.openFirst(MainActivity.this, intents))
+                Toast.makeText(MainActivity.this, "Otvori postavke telefona → Aplikacije → Dendro Map", Toast.LENGTH_LONG).show();
+        }
     }
 
     class GpsBridge {

@@ -56,9 +56,9 @@ function t(name, fn) {
 // ── Okruženje za _startupRestore ─────────────────────────────────────
 // `postojeci` = elementi koji VEĆ postoje u DOM-u; ostali vraćaju null,
 // kao dok se dokument još parsira.
-function makeEnv({ readyState = 'complete', pucaju = [] } = {}) {
+function makeEnv({ readyState = 'complete', pucaju = [], delayed = false } = {}) {
   const log = [];
-  const dcl = [];
+  const dcl = []; const pending = [];
   const step = n => () => { log.push(n); if (pucaju.includes(n)) throw new Error('pad u ' + n); };
   const sandbox = {
     document: {
@@ -68,7 +68,7 @@ function makeEnv({ readyState = 'complete', pucaju = [] } = {}) {
     },
     console: { warn: (...a) => log.push('warn:' + a[0]) },
     navigator: { onLine: true, storage: null },
-    setTimeout: (fn) => { fn(); },
+    setTimeout: (fn) => { if(delayed)pending.push(fn);else fn(); },
     sbUser: { id: 'u1' }, sbProfile: { ime: 'T' }, _tragRegistry: [],
     switchTab: step('switchTab'), loadProj: step('loadProj'), sbInitData: step('sbInitData'),
     _processOfflineQueue: step('queue'), sqlmapRestoreAll: step('sqlmapRestore'),
@@ -81,7 +81,7 @@ function makeEnv({ readyState = 'complete', pucaju = [] } = {}) {
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_STARTUP + '\nreturn { _startupRestore };')(...keys.map(k => sandbox[k]));
-  return { run: api._startupRestore, log, dcl,
+  return { run: api._startupRestore, log, dcl, pending, owner: sandbox.sbUser,
            docReady: () => { sandbox.document.readyState = 'interactive'; } };
 }
 
@@ -137,6 +137,15 @@ t('dvostruki poziv obnavlja samo jednom', () => {
   e.run(); const prvi = e.log.length;
   e.run();
   assert.strictEqual(e.log.length, prvi, 'drugi poziv ne smije ponoviti obnovu');
+});
+
+t('promjena naloga prije odgođene obnove ne prikazuje prethodni privatni sadržaj', () => {
+  const e = makeEnv({ delayed:true }); e.run();
+  e.owner.id='u2'; e.pending.shift()();
+  assert.ok(!e.log.includes('tacke') && !e.log.includes('fotos') && !e.log.includes('localKml'));
+  e.run._done=false; e.run._generation++;
+  e.run(); e.pending.shift()();
+  assert.ok(e.log.includes('tacke') && e.log.includes('fotos') && e.log.includes('localKml'));
 });
 
 console.log('switchTab — nedostajući paneli:');

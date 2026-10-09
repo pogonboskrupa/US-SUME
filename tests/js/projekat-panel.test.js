@@ -40,7 +40,7 @@ t('switchTab: svaki panel koji sakriva kartu spušta _mapFullScreen PRIJE msrSto
 
 t('kartica projekta escape-uje odjel i GJ (podaci dolaze sa servera, od kolega)', () => {
   const fn = new Function('_sortByGjDatum', 'isReadOnly', '_aktivniProjektId', 'vlake', '_ukupnoVlakeM', 'fmtL', 'fmtDate', 'fmtHa', '_escHtml',
-    extractFn('_renderProjGroup') + '\nreturn _renderProjGroup;');
+    extractFn('_projektTimIds') + '\n' + extractFn('_renderProjGroup') + '\nreturn _renderProjGroup;');
   const r = fn(a => a, () => false, null, [], () => 0, m => m + ' m', d => d, h => h + ' ha', esc);
   const h = r([{ id: 'x', odjel: '<img src=x>', gj: '<b>GJ</b>', clanovi: [] }]);
   assert.ok(!h.includes('<img') && !h.includes('<b>GJ'));
@@ -49,7 +49,7 @@ t('kartica projekta escape-uje odjel i GJ (podaci dolaze sa servera, od kolega)'
 t('Rekap čita zapis projekta, ne skriveno DOM polje (datum/odjel/broj projektanata)', () => {
   const f = extractFn('updProjStats');
   assert.ok(/aktP && aktP\.datum/.test(f) && /aktP && aktP\.odjel/.test(f));
-  assert.ok(/1 \+ \(aktP\.clanovi \|\| \[\]\)\.length/.test(f));
+  assert.ok(/_projektTimIds\(aktP\)\.length/.test(f));
 });
 
 t('getIme: bez p-ime polja koristi keširani profil umjesto "Nepoznat"', () => {

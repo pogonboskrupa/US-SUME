@@ -51,22 +51,22 @@ const iso = ms => new Date(ms).toISOString();
 const ceka = (ime, danaDoRoka) => ({
   id: 'u-' + ime, ime, prezime: 'Test', sumarija: 'ŠUMARIJA BIHAĆ',
   odobren: false, istice_at: iso(SADA + danaDoRoka * DAN),
-  created_at: iso(SADA - 2 * DAN), last_sign_in_at: null
+  created_at: iso(SADA - 2 * DAN), last_active_at: null
 });
 const opozvan = ime => ({
   id: 'u-' + ime, ime, prezime: 'Test', sumarija: 'ŠUMARIJA BIHAĆ',
   odobren: false, istice_at: null,
-  created_at: iso(SADA - 400 * DAN), last_sign_in_at: iso(SADA - 10 * DAN)
+  created_at: iso(SADA - 400 * DAN), last_active_at: iso(SADA - 10 * DAN)
 });
 const odobren = (ime, danaOdPrijave, sum) => ({
   id: 'u-' + ime, ime, prezime: 'Test', sumarija: sum || 'ŠUMARIJA BIHAĆ',
   odobren: true, istice_at: null, created_at: iso(SADA - 300 * DAN),
-  last_sign_in_at: danaOdPrijave === null ? null : iso(SADA - danaOdPrijave * DAN)
+  last_active_at: danaOdPrijave === null ? null : iso(SADA - danaOdPrijave * DAN)
 });
 const admin = ime => ({
   id: 'u-' + ime, ime, prezime: 'Test', sumarija: 'ŠPD US ŠUME',
   is_admin: true, odobren: true, istice_at: null,
-  created_at: iso(SADA - 500 * DAN), last_sign_in_at: iso(SADA - 1 * DAN)
+  created_at: iso(SADA - 500 * DAN), last_active_at: iso(SADA - 1 * DAN)
 });
 
 let pass = 0, fail = 0;
@@ -122,7 +122,7 @@ t('broji dane od zadnje prijave', () => {
 });
 
 t('neupotrebljiv datum ne baca i ne daje NaN dane', () => {
-  assert.strictEqual(_admDanaNeaktivan({ id: 'k', last_sign_in_at: 'ovo-nije-datum' }, SADA), undefined);
+  assert.strictEqual(_admDanaNeaktivan({ id: 'k', last_active_at: 'ovo-nije-datum' }, SADA), undefined);
 });
 
 // =====================================================================

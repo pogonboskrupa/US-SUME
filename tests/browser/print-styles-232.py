@@ -12,6 +12,7 @@ const vlake=[{kr:0,poly:L.polyline([[44.899,15.999],[44.901,16.001]],{color:'#11
 const kolegeVlakeMap={B:{kr:0,poly:L.polyline([[44.898,16],[44.902,16.002]],{color:'#aacc33',weight:3}).addTo(map)}};
 const privateLine=L.polyline([[44.898,15.998],[44.902,15.998]],{color:'#880088',weight:2,dashArray:'8 2 2 2',opacity:.7}).addTo(map);
 const otherLine=L.polyline([[44.897,15.997],[44.903,16.003]],{color:'#339977',weight:2,dashArray:'6 3'}).addTo(map);
+const DemFixture=L.GridLayer.extend({createTile(){const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');ctx.fillStyle='rgba(230,100,35,.8)';ctx.fillRect(40,40,140,120);ctx.clearRect(90,90,30,30);return c;}});const _OVL={slope:new DemFixture().addTo(map)};
 const hiddenLine=L.polyline([[44.9,16],[44.903,16.004]],{color:'#ee33ee'});
 const kmlLs=[{name:'Granica sa privatnim',_key:'private',grp:L.layerGroup([privateLine]).addTo(map)},{name:'Odjel 105',_key:'department',grp:L.layerGroup([otherLine]).addTo(map)},{name:'Sakriven sloj',grp:L.layerGroup([hiddenLine])}];
 '''
@@ -19,7 +20,7 @@ setup+=code+'''
 vlake[0].lagerMk=L.marker([44.899,15.999],{icon:L.divIcon({className:'vlaka-lager-mk',html:_stpLagerSvg()})}).addTo(map);
 stampaOtvori();_stpUredi();_stpLegStavka('lager',true);
 '''
-fixture='''<!doctype html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'''+b.styles+'''#wrapper{position:fixed;inset:0}#main{position:absolute;inset:0}#map{position:absolute;inset:0;background:#e4ecd9}</style></head><body><div id="wrapper"><div id="main"><div id="map"><div id="print-naslov" class="stp-el"></div><div id="print-legend" class="stp-el"></div><div id="print-scalebar" class="stp-el"><div id="psb-mj"></div><div id="psb-bar"></div><span id="psb-mid"></span><span id="psb-full"></span></div></div></div></div><div id="stampa-kontrole"></div><script src="/static/libs/leaflet.min.js"></script><script>'''+setup+'</script></body></html>'
+fixture='''<!doctype html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'''+b.styles+'''#wrapper{position:fixed;inset:0}#main{position:absolute;inset:0}#map{position:absolute;inset:0;background:#e4ecd9}</style></head><body><div id="wrapper"><div id="main"><div id="map"><div id="print-naslov" class="stp-el"></div><div id="print-legend" class="stp-el"></div><div id="print-scalebar" class="stp-el"><div id="psb-mj"></div><div id="psb-bar"></div><span id="psb-mid"></span><span id="psb-full"></span></div></div></div></div><div id="stampa-kontrole"></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/js/print-slope.js"></script><script>'''+setup+'</script></body></html>'
 async def main():
  b.OUT.mkdir(parents=True,exist_ok=True)
  async with async_playwright() as p:
@@ -33,9 +34,12 @@ async def main():
    else:await r.abort()
   await page.route('**/*',route);await page.goto('https://ui.test/');assert not errors,errors
   assert await page.evaluate("privateLine.options.color==='#ff0000' && privateLine.options.dashArray===null && otherLine.options.color==='#339977' && otherLine.options.dashArray==='6 3'")
+  await page.wait_for_function('document.querySelector(".stp-slope-polygon path")')
+  assert await page.evaluate("[...document.querySelectorAll('.stp-slope-polygon path')].every(p=>p.getAttribute('fill')==='#dc2626'&&p.getAttribute('fill-rule')==='evenodd')")
+  assert await page.evaluate("vlake[0].poly.options.weight===1.4 && vlake[0].poly.options.dashArray==='6 4' && vlake[0].poly.options.vlakaOutline===false")
   assert 'Sakriven sloj' not in await page.locator('#stk-uredi').inner_text()
   assert await page.evaluate("document.querySelector('.vlaka-lager-mk svg').innerHTML === [...document.querySelectorAll('#print-legend .pl-row')].find(r=>r.textContent==='Lager').querySelector('svg').innerHTML")
-  legend=await page.locator('#print-legend').inner_html();assert '#1122aa' in legend and '#aacc33' in legend and 'stroke-dasharray="8 4"' in legend
+  legend=await page.locator('#print-legend').inner_html();assert '#1122aa' in legend and '#aacc33' in legend and 'stroke-dasharray="6 4"' in legend
   # Stvarna UI promjena mijenja SVG kartu i legendu, a ne samo polje obrasca.
   await page.locator('details').first.evaluate('(e)=>e.open=true')
   await page.locator('[aria-label="Boja Vlake"]').evaluate("e=>{e.value='#aa1133';e.dispatchEvent(new Event('change',{bubbles:true}))}")
@@ -52,6 +56,9 @@ async def main():
   await page.pdf(path=str(b.OUT/'print-styles-232.pdf'),prefer_css_page_size=True)
   await page.emulate_media(media='screen');await page.evaluate('_stpZatvoriInterno()')
   assert await page.evaluate("privateLine.options.color==='#880088' && privateLine.options.dashArray==='8 2 2 2' && privateLine.options.opacity===.7 && vlake[0].poly.options.color==='#1122aa' && kolegeVlakeMap.B.poly.options.color==='#aacc33'")
+  assert await page.locator('.stp-slope-polygon').count()==0
+  assert await page.evaluate("[..._OVL.slope.getContainer().querySelectorAll('canvas')].every(c=>c.style.visibility!=='hidden')")
+  assert await page.evaluate('vlake[0].poly.options.weight===4')
   await page.evaluate('stampaOtvori()');assert await page.evaluate("vlake[0].poly.options.color==='#1122aa' && privateLine.options.color==='#ff0000'")
   assert not errors,errors;await browser.close()
  print('OK: Leaflet + PDF; isti lager, privatna crvena puna, stvarni stilovi kolega/KML, uređivanje i vraćanje karte, 320px bez prelijevanja')

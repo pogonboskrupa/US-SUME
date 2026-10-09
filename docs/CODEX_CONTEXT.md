@@ -3393,3 +3393,76 @@ veličina podudarni; updater prvi vraća v2.7.2/app-debug.apk. Pet javnih
 Pages fajlova identično izvoru; Pages CI 37933659357 uspješan. Sva četiri
 dijela pregleda završena. SQL brisanja nije primijenjen na produkciji;
 fizički telefon, baterija i produkcijska baza ostaju neprovjereni.
+
+## 9. 10. 2026 — jednostavniji Pošalji na server (2.7.3 / code543)
+
+Na zahtjev korisnika pojednostavljen prikaz Servera. Kraći header, tri
+kompaktna taba redom Za slanje / Poslano / Primljeno; Za slanje je početni
+tab pri prvom ulazu ili promjeni naloga. Manje obojenih površina i duplih
+opisa; jedan istaknut Pošalji i primi. Aktivni projekat i prijavljeni
+projektant ostaju jasno vidljivi, cilj i autor svake stavke u grupama.
+Vremena zadnje razmjene, ispis projekta i sigurnosna kopija sklopljeni su
+ispod glavnog pregleda. Status razmjene ima kratak sažetak i proširive
+korake; greška/RLS ostaje vidljiva u sažetku i kada su koraci sklopljeni.
+Otvoreni detalji razmjene ostaju otvoreni pri osvježavanju. Slanje, ACK,
+offline dnevnik, RLS, grupisanje tri projekta/dani i prikaz na karti koriste
+postojeće tokove; nema SQL dopune za ovaj dizajn.
+
+Lokalno: svih 101 JS grupa, 5 inline sintaksi; browser menu-tools i
+server-design (19 PNG, 320px/landscape/dan/tamni mod, upozorenje i toggle),
+stvarni kontrolisani Supabase HTTP server-confirm i puna audit-parts-272
+regresija. Testne pretpostavke početnog taba i sklopljenih vremena
+ažurirane da provjere novi korisnički tok. Produkcija nije korištena.
+Web/SW/Android 2.7.3/code543; CI/APK identitet dopuniti poslije builda.
+
+
+Dopune istog još neobjavljenog 2.7.3 na posljednje zahtjeve:
+- Raster SQLiteDB/MBTiles/GPKG podloge ostaju na uređaju pri promjeni naloga;
+  `_wipeAllLocalUserData` više ne poziva `sqlmapClearAll`. Privatni KML,
+  fotografije i terenski zapisi ostaju odvojeni/arhivirani po korisniku.
+  Logout resetuje startup generaciju; stari odgođeni restore ne prelazi u novi nalog.
+- Projektanti se dedupliciraju po ID-u, uključujući vlasnika u članovima.
+  Tuđi vlasnik ne preuzima ime trenutnog profila; broj članova i predaja koriste isti tim.
+- Tastatura Vlaka u postojećem dijalogu/listu: brojevi, T/ABC/BH slova, tačka,
+  brisanje i pomjeranje kursora; fizička tastatura ostaje upotrebljiva.
+  Zakašnjelo zatvaranje starog dijaloga ne uklanja overlay novog.
+- Kompaktne slike i kartice offline podloga, uklonjeni traženi opisni blokovi.
+  Teren redom pozicija/sunce/azimut; poligon i teren zadnji u Projektu.
+  Veliko crveno dugme brisanja; postojeće potvrde ostaju.
+- Jedinstveno uklanjanje svih slojeva vlake (lager, outline preko Leafleta,
+  strelice, oznake, nagib, wpts), uključujući spajanje i čišćenje kolega.
+  Ispravljen sudar globalne crvene `.r` klase s ćelijama statistike; neutralni pregled.
+- Štampa: vlaka/krak podrazumijevano 1.4/1.2 px, jedna isprekidana linija bez
+  outlinea. Ostaju podesivi boja/debljina/crtice. DEM >30% već vidljive maske
+  pretvaraju se u crvene SVG poligone za štampu (rupe ostaju prazne; bez
+  izmišljene geometrije ili novog preuzimanja). Izvorni stil i raster se vraćaju.
+- Admin aktivnost: zaseban zapis stvarnog UI/GPS rada, minutni ritam slanja,
+  opažanje offline vezano za vlasnika. Nema označavanja aktivnosti samom prijavom.
+  `supabase/migrations/20261009_app_user_activity.sql` mora korisnik izvršiti
+  u Supabase SQL Editoru da server čuva/pokazuje aktivnost; produkcija nije dirana.
+  Migracija je idempotentna; samo vlastiti zapis preko RPC-a, pregled samo admin.
+
+Lokalno: 103 JS grupe; novi puni device-workflow test sa stvarnim Leafletom,
+SQLite workerom/IDB rasterom, istim i drugim nalogom, hladnim restartom,
+tastaturom, markerima i admin datumom; print test generiše PDF i provjerava
+SVG poligone/vraćanje; pravi izolovani PostgreSQL test aktivnosti. Završni
+CI/APK dokaz dopuniti nakon builda. Fizički telefon i produkcijska baza nisu testirani.
+
+Posljednja dopuna istog builda: poruka nove verzije je cijela klikabilna,
+ima jasnu akciju Ažuriraj i zasebno zatvaranje; otvara isti postojeći tok
+Menija/AndroidUpdate. APK provjera koristi objavljeni GitHub release s APK
+assetom, umjesto Pages verzije koja može stići prije završetka builda.
+Meni → Baterija i automatsko pokretanje: standardno Android izuzeće, Xiaomi/
+Redmi/POCO autostart ekran s rezervnim putem u postavke ove aplikacije,
+plus prečica za OEM Baterija → Bez ograničenja. Korisnik potvrđuje postavke;
+Android ne nudi pouzdano čitanje autostarta i UI ne tvrdi da je uključen.
+Tri nova emulator testa provjeravaju stvarni package URI i fallback pri
+nepostojećoj/zabranjenoj OEM Activity, bez otvaranja stvarnih dozvola.
+Debeli segmentni nagib vlake privremeno se skriva pri štampi, da ostane
+samo jedna tanka isprekidana linija. Projektni DEM nagib uključuje legendu.
+
+Dodatna lokalna provjera: 104 JS grupe (novi test otkriva samo objavljeni
+APK i preskače draft/nedovršen asset), 5 inline sintaksi, device-workflow
+uključuje punu aplikaciju pri promjeni print razmjere, skrivanje/vraćanje
+segmentnih nagiba, klik/zatvaranje poruke verzije i sva tri native dugmeta
+preko kontrolisanog mosta. Print/PDF provjera ponovo uspješna.

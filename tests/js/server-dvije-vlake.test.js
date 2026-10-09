@@ -60,7 +60,7 @@ function setup(uid = 'member') {
     '_jsonKanon','_vlakaIstiSadrzaj','_vlakaSyncPayload','_sbFlushVlakaImpl','sbFlushVlaka','_flushAllPendingVlake','_retryOrphanVlake',
     '_syncVlakaOperation','_serverSlanjeDozvoljeno','serverPosalji',
     '_serverPrimljenoKljuc','_serverPrimljenoUcitaj','_serverPrimljenoZapamti','_serverPrimljenoRender',
-    '_kvcSave','_kvcLoad','_vlakePreuzmiStranice','sbLoadKolegeVlake','serverPreuzmiDijeljeno'
+    '_kvcSave','_kvcLoad','_vlakePreuzmiStranice','_removeVlakaMapLayers','sbLoadKolegeVlake','serverPreuzmiDijeljeno'
   ].map(fn).join('\n'),e);
   // Ručni gate i stvarna potvrda svake vlake; puni procesor ima zasebne regresije.
   e._processOfflineQueue=async()=>{
