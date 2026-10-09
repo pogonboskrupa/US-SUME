@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('project',Path(__file__).with_name('project-vlake-220.py'))
 u=importlib.util.module_from_spec(spec);spec.loader.exec_module(u);b=u.b
-code=Path('static/js/dem-quality.js').read_text()+'\n'+'\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_aspColor','_instUpdateStats','_instClear','_mapFavRender','openMapFavs','closeMapFavs','_loadmapThumbData','_mapFavThumbHtml','_tileThumbUrl','setLayerSqlite','_saveLastMap'])
+code=Path('static/js/dem-quality.js').read_text()+'\n'+'\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_aspColor','_instUpdateStats','_instClear','_mapFavRender','openMapFavs','closeMapFavs','_loadmapThumbData','_mapFavThumbHtml','_tileThumbUrl','setLayerSqlite','_saveLastMap','_sqlmapMetaAutoZoom','_sqlMapPrefs','_sqlMapSaveView'])
 code+='''
 const _TERR_CACHE='fixture-terr-222',_ELEV_CACHE='fixture-elev-222',_LASTMAP_KEY='fixture-last';
 activeTool='select'; // isto početno stanje kao aplikacija; osnovni popup fixture ima null

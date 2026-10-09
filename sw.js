@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '2.7.3';
+const APP_VERSION = '2.7.4';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -41,6 +41,7 @@ const APP_SHELL = [
   './static/js/doznaka-boundary.js',
   './static/js/vlaka-keyboard.js',
   './static/js/print-slope.js',
+  './static/js/print-slope-worker.js',
   './static/js/user-activity.js',
   './static/js/vlaka-direction.js',
   './static/js/vlaka-outline.js',

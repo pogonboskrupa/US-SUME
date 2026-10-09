@@ -31,6 +31,8 @@ async def main():
    await page.evaluate('openLoadMapScreen()');await page.locator('#loadmap-file-input').set_input_files(str(path))
    await page.wait_for_function('_loadmapPending.length===1');await page.locator('#loadmap-confirm').click()
    await page.wait_for_function('_sqlLayers.length===1',timeout=30000)
+   assert await page.evaluate("""()=>{const m=_sqlLayers[0].meta,b=String(m.bounds).split(',').map(Number),c=map.getCenter();return Math.abs(c.lat-(b[1]+b[3])/2)<.00001&&Math.abs(c.lng-(b[0]+b[2])/2)<.00001&&156543.03392*Math.cos(c.lat*Math.PI/180)/2**map.getZoom()/.0002646<=50000;}"""), 'First raster view must be centered and at most 1:50000'
+
    await page.wait_for_function('_sqlLayers[0].layer.getContainer()?.querySelector("img.leaflet-tile-loaded")',timeout=30000)
    await page.wait_for_function('document.querySelector("#loadmap-manage .lm-card")')
    assert await page.locator('.lm-hero').count()==0
@@ -122,10 +124,14 @@ async def main():
     await page.screenshot(path=str(OUT/f'keyboard-{width}-{height}.png'))
     await page.locator('#dlg-cancel').scroll_into_view_if_needed();await page.locator('#dlg-cancel').click();await page.wait_for_timeout(450)
    # Cold page restart restores genuine persisted raster locally, without another import.
+   await page.evaluate("()=>{map.setView([44.9015,16.0015],15,{animate:false});window.lastRasterView={lat:map.getCenter().lat,lng:map.getCenter().lng,z:map.getZoom()};}")
+   expectedView=await page.evaluate('lastRasterView')
    restored=await ctx.new_page();restored.on('pageerror',lambda e:errors.append(str(e)))
    await restored.goto('http://device.test/');await restored.wait_for_function('_sqlLayers.length===1',timeout=30000)
    await restored.wait_for_function('_sqlLayers[0].layer.getContainer()?.querySelector("img.leaflet-tile-loaded")',timeout=30000)
    assert await restored.evaluate('_sqlLayers[0].name')==await page.evaluate('originalMapName')
+   actualView=await restored.evaluate('({lat:map.getCenter().lat,lng:map.getCenter().lng,z:map.getZoom()})')
+   assert actualView['z']==expectedView['z'] and abs(actualView['lat']-expectedView['lat'])<.00005 and abs(actualView['lng']-expectedView['lng'])<.00005,(actualView,expectedView)
    assert not errors,errors
    assert not writes,writes
    await browser.close()

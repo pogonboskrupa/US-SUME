@@ -1,5 +1,4 @@
 // Lokalni terenski pregled i prenosiva kopija: bez mreže i automatskog slanja.
-let _fieldPanelToken=0;
 function _fieldJson(key,fallback) {
   const raw=localStorage.getItem(key);
   if(!raw)return fallback;
@@ -52,37 +51,6 @@ async function _fieldTileCoverage(bounds,z) {
     await new Promise(resolve=>setTimeout(resolve,0));
   }
   return {ok:found===total,text:key+' · zoom '+z+' · '+found+'/'+total+' pločica lokalno. Drugi zoom nivoi nisu provjereni.'};
-}
-function openFieldPanel() {
-  closeMenuDropdown();
-  const panel=document.getElementById('field-panel');panel.style.display='flex';
-  fieldCheckReady();
-}
-function closeFieldPanel() {_fieldPanelToken++;document.getElementById('field-panel').style.display='none';}
-async function fieldCheckReady() {
-  const token=++_fieldPanelToken,uid=sbUser?.id,scope=_fieldScope(),out=document.getElementById('field-check');
-  out.textContent='Provjeravam lokalne podatke…';
-  try {
-    if(!uid || !scope.p) {out.textContent='Prvo odaberi projekat ili odjel u tabu Doznaka.';return;}
-    await FieldStore.init();
-    const extent=_fieldBounds(scope),items=[];
-    const own=vlake.filter(v=>v.projektId===scope.vlakaId),others=_kvcLoad(scope.vlakaId);
-    const doz=_OL.load(_OL.DOZ_MEMBERS)?.[uid+':'+scope.id];
-    const pending=FieldStore.view(uid,scope.id);
-    const last=scope.doz ? doz?.ts : Math.max(0,..._serverPrimljenoUcitaj().filter(p=>p.projektId===scope.id).map(p=>p.ts));
-    items.push({ok:true,text:'Projekat: '+(scope.p.name || scope.p.gj || '')+' · '+(scope.p.odjel || '')});
-    items.push({ok:extent.exact,text:extent.exact?'Granica odjela dostupna lokalno.':'Granica nije potvrđena. Provjera podloge koristi samo obuhvat vlaka, ako postoji.'});
-    items.push({ok:true,text:own.length+' mojih vlaka · '+others.length+' vlaka kolega · '+pending.length+' GPS tačaka čeka ručno slanje.'});
-    if(scope.doz)items.push({ok:!!doz,text:doz?'Pojasevi, oznake i članovi u kešu: '+(doz.tracks?.length || 0)+' GPS tačaka.':'Podaci odjela nisu preuzeti u lokalni keš.'});
-    if(scope.p.korisnik_id!==uid && !scope.doz)items.push({ok:!!last,text:last?'Zadnji lokalni prijem: '+new Date(last).toLocaleString():'Nema potvrđenog prijema podataka kolega; osvježi panel Server dok imaš vezu.'});
-    if(localStorage.getItem(_OFFLINE_DL_INCOMPLETE_KEY))items.push({ok:false,text:'Jedno preuzimanje karte nije završeno; provjeri ga u Offline kartama.'});
-    const z=Number(document.getElementById('field-zoom').value);
-    if(extent.bounds)items.push(await _fieldTileCoverage(extent.bounds,z));
-    else items.push({ok:false,text:'Bez granice ili vlaka ne mogu potvrditi podlogu ovog projekta.'});
-    if(token!==_fieldPanelToken || sbUser?.id!==uid)return;
-    out.innerHTML=items.map(i=>'<div class="field-row '+(i.ok?'good':'warn')+'">'+(i.ok?'✓ ':'⚠ ')+_escHtml(i.text)+'</div>').join('')+
-      '<strong>'+ (items.every(i=>i.ok)?'Spremno za provjereni obuhvat i zoom.':'Priprema nije potpuno potvrđena — pogledaj upozorenja.')+'</strong>';
-  } catch(e) {if(token===_fieldPanelToken)out.textContent='⚠ Lokalna provjera nije uspjela: '+e.message;}
 }
 function _fieldRecordId(row) {return row._qid || row.id || (row.type?row.type+'::'+JSON.stringify(row.payload):row.nm+'::'+(row.projekt_id || row.projektId || ''));}
 function _fieldMerge(current,incoming) {
@@ -187,9 +155,9 @@ async function fieldImportBackup(file) {
     // bez mreže i bez diranja novijih objekata koji su već u memoriji.
     _applyVlakeRows(d.vlake.filter(row=>!vlake.some(v=>v.nm===row.nm && v.projektId===row.projekt_id)));
     loadProj();_tragRegLoad();_msrRegLoad();await _localKmlRestore();geojsonOdjeliRestore();_updSyncBadge();rndProjektiList();
-    showToast('✓ Kopija vraćena lokalno — ništa nije poslano na server');fieldCheckReady();
+    showToast('✓ Kopija vraćena lokalno — ništa nije poslano na server');
   }catch(e){showToast('⚠ Obnova nije završena: '+e.message+'. Izvorni fajl ostaje sačuvan.');}
-  finally{input.value='';}
+  finally{if(input)input.value='';}
 }
 function _fieldStatusUpdate() {
   const el=document.getElementById('field-status');if(!el)return;

@@ -64,11 +64,10 @@ const trace=message=>{if(process.env.US_SUME_TEST_TRACE)console.log(message);};
   const before=requests.length;
   const copy=await page.evaluate(async()=>{
    _activeTab='doznaka';_dozSelId='odjel-test';_dozOdjeli=[{id:'odjel-test',name:'TEST 105',created_by:sbUser.id}];
-   openFieldPanel();_fieldStatusUpdate();return _fieldMakeBackup();
+   _fieldStatusUpdate();return _fieldMakeBackup();
   });
   await page.waitForTimeout(150);assert.equal(requests.length,before);
   assert.match(await page.locator('#field-status').innerText(),/upis potvrđen/);
-  assert.match(await page.locator('#field-check').innerText(),/Granica nije potvrđena/);
   const integrity=await page.evaluate(async copy=>{
    await _fieldValidateBackup(copy);copy.data.createdAt='tampered';
    try{await _fieldValidateBackup(copy);return false;}catch(e){return e.message.includes('oštećena');}

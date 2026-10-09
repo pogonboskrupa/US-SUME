@@ -76,10 +76,12 @@ jobs:
           python tests/browser/audit-parts-271.py
           python tests/browser/audit-parts-272.py
           timeout 120s python tests/browser/device-workflow-273.py
+          timeout 120s python tests/browser/day-layout-274.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py
           python tests/browser/print-styles-232.py
+          timeout 90s python tests/browser/print-responsive-274.py
           python tests/browser/dem-winter-232.py
           python tests/browser/doznaka-sixdays-232.py
           python tests/browser/doznaka-boundary-231.py
@@ -104,7 +106,9 @@ jobs:
         if: always()
         with:
           name: UI-pregled-${{ github.sha }}
-          path: outputs/ui-preview/
+          path: |
+            outputs/ui-preview/
+            outputs/274/
           if-no-files-found: ignore
       - uses: android-actions/setup-android@v3
         with:

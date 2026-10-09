@@ -3506,3 +3506,45 @@ primjene i ažuriranja klijenata; prethodna istorija rada nije rekonstruisana.
 Fizički Xiaomi, OEM autostart i baterija nisu testirani; emulator provjerava
 package URI, odabir Xiaomi puta i fallback pri zabranjenom/nedostupnom ekranu.
 APK je objavljen i provjeren za ažuriranje postojeće CODEX debug instalacije.
+
+
+### 2.7.4 — kontrast, navigacija, štampa i prvi pogled rasterske karte
+
+Zahtjev korisnika: jači Dnevni mod, kontrole ispod koordinata, uklanjanje
+Spremno za teren/sigurnosna kopija, kraći izbor Vodi me, jedna tanka linija
+vlake u štampi, odziv štampe i centriran prvi pogled karte do 1:50.000.
+Pregled stvarnih computed stilova otkrio svijetla imena/uspone/nagibe na
+bijelom i tamne stare kartice sa tamnim tekstom. Tamniji dnevni tonovi,
+usklađene stare površine i kontrole; test kontrasta teksta >=4.5 na glavnim
+tabovima i 19 prozora/pregleda (fake podaci, vanjski upisi blokirani).
+ResizeObserver mjeri visinu nv-badge; zoom/slojevi/izbor razmjere imaju
+8 px razmaka i kad se koordinate prelome, na 320/390/568/1280 px.
+Uklonjeni oba ulaza i cijeli modal pripreme. KML izvoz i postojeći
+programski backup/restore podataka sačuvani; nema brisanja korisničkih podataka.
+Vođenje zadržava oba toka i sačuvane rute, uz dvije kratke opcije.
+
+Legenda vlake/kraka više ne umnožava SVG uzorke za svaku koleginu boju;
+jedan tanki uzorak, stvarne boje linija ostaju na karti. Stil štampe ne
+uključuje outline i ne radi vraćanje/primjenu identičnog stila na svaki
+pomak. DEM >30% maska obrađuje se izvan UI threada u lokalnom Workeru,
+sekvencijalno po pločici; i prazne maske su keširane. PDF čeka dovršetak;
+zatvaranje otkazuje posao i vraća izvor. CPU4 test guste maske: 22 poslova,
+10 poligona, 55 otkucaja UI tajmera, kontrole dostupne tokom obrade. To
+nije reprodukcija stvarnog prijavljenog zastajkivanja na Xiaomi telefonu.
+
+Prvi uvoz/izbor rasterske SQLiteDB/MBTiles/GPKG karte centriran na njen
+bounds (fallback center), zoom daje razmjeru najviše 1:50.000. Posljednji
+kadar čuva se u postojećim uređajskim sqlmap prefs po karti i globalno.
+Print privremeni kadar ne prepisuje posljednji terenski položaj. Stvarni
+IDB/raster test potvrđuje centar/razmjeru i hladni restart zadnjeg kadra,
+uz toleranciju jednog projekcijskog piksela. Nova karta ne ostavlja sve
+stare rastere uključene paralelno. Nije mijenjan Supabase niti server tok.
+Verzije web/SW/Android 2.7.4, Android code544; APK/CI dokaz slijedi.
+
+Lokale prije objave: 104 JS grupe i inline sintaksa uspješni; puni CI
+browser skup izvršen lokalno, uključujući nove day-layout/print-responsive
+provjere. Testni izrezi ažurirani za novu zavisnost auto-pogleda i kraći GPS
+status; SHP/KML uvoz, stvarni raster/IDB, pravila boja i outline i štampa
+ponovo provjereni. field-design.cjs: 320/360/412/768 px, tema se pamti,
+promjena teme ne zaustavlja snimanje, red ostaje identičan i nema JS grešaka.
+SQL/native kod nisu mijenjani; puni build ih ipak ponovo provjerava.

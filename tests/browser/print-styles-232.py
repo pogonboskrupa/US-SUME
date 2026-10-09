@@ -39,7 +39,8 @@ async def main():
   assert await page.evaluate("vlake[0].poly.options.weight===1.4 && vlake[0].poly.options.dashArray==='6 4' && vlake[0].poly.options.vlakaOutline===false")
   assert 'Sakriven sloj' not in await page.locator('#stk-uredi').inner_text()
   assert await page.evaluate("document.querySelector('.vlaka-lager-mk svg').innerHTML === [...document.querySelectorAll('#print-legend .pl-row')].find(r=>r.textContent==='Lager').querySelector('svg').innerHTML")
-  legend=await page.locator('#print-legend').inner_html();assert '#1122aa' in legend and '#aacc33' in legend and 'stroke-dasharray="6 4"' in legend
+  legend=await page.locator('#print-legend').inner_html();assert '#1122aa' in legend and 'stroke-dasharray="6 4"' in legend
+  assert await page.evaluate("[...document.querySelectorAll('#print-legend .pl-row')].find(r=>r.textContent==='Traktorska vlaka').querySelectorAll('line').length===1")
   # Stvarna UI promjena mijenja SVG kartu i legendu, a ne samo polje obrasca.
   await page.locator('details').first.evaluate('(e)=>e.open=true')
   await page.locator('[aria-label="Boja Vlake"]').evaluate("e=>{e.value='#aa1133';e.dispatchEvent(new Event('change',{bubbles:true}))}")

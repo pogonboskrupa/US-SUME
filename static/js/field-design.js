@@ -24,3 +24,12 @@
   apply(); // prije prvog crtanja, uključujući offline APK
   document.addEventListener('DOMContentLoaded',apply);
 })();
+// Koordinate mogu zauzeti dva reda. Kontrole slijede stvarnu visinu, i nakon rotacije.
+document.addEventListener('DOMContentLoaded',function () {
+  const badge=document.getElementById('nv-badge'),mapEl=document.getElementById('map');
+  if(!badge||!mapEl)return;
+  const place=()=>{if(badge.offsetHeight)mapEl.style.setProperty('--map-controls-top',(badge.offsetTop+badge.offsetHeight+8)+'px');};
+  place();
+  if(typeof ResizeObserver==='function')new ResizeObserver(place).observe(badge);
+  else window.addEventListener?.('resize',place);
+});

@@ -4913,13 +4913,12 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <!-- KML DIJELJENJE -->
       <details class="sec workflow-group" id="project-export">
-        <summary><b>Izvoz i sigurnosna kopija</b><small>KML fajl, dijeljenje i kopija za teren</small></summary>
+        <summary><b>Izvoz projekta</b><small>KML fajl i dijeljenje</small></summary>
         <button class="btn g" style="margin-bottom:8px;" onclick="kmlPodijeli()"><svg class="ic"><use href="#ic-posalji"/></svg> POŠALJI FAJL (Viber/Mail/Bluetooth...)</button>
         <button class="btn gr" style="margin-bottom:8px;" onclick="kmlNaMail()"><svg class="ic"><use href="#ic-mail"/></svg>️ Samo tekst na mail (bez fajla)</button>
         <button class="btn gr" style="margin-bottom:8px;" onclick="kmlPreuzmi()"><svg class="ic"><use href="#ic-sacuvaj"/></svg> Sačuvaj na uređaj</button>
         <button class="btn gr" onclick="kmlKopiraj()"><svg class="ic"><use href="#ic-kopiraj"/></svg> Kopiraj KML tekst</button>
         <div id="kml-share-info" style="margin-top:8px;font-size:11px;color:#64748b;line-height:1.5;display:none;"></div>
-        <button class="btn" onclick="openFieldPanel()">✓ Spremno za teren / sigurnosna kopija</button>
       </details>
 
 
@@ -5755,7 +5754,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.3';
+const APP_VER = 'v2.7.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -14753,7 +14752,7 @@ const CachedSat  = makeCachedTileLayer();
 let _initMapCenter = _defCenter, _initMapZoom = _defZoom;
 try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
-  if (_lp?.la && _lp?.lo && _lp?.z) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
+  if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=0 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
 const map = L.map('map',{
   maxZoom:22,
@@ -14787,7 +14786,10 @@ window.Explorer = ExplorerNavigation.create({
   toast: showToast
 });
 
-map.on('moveend', () => { const c = map.getCenter(); localStorage.setItem('tvlake_last_pos', JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()})); });
+map.on('moveend', () => {
+  if(document.body.classList.contains('stampa-on'))return;
+  try {const c=map.getCenter();localStorage.setItem('tvlake_last_pos',JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()}));const sl=_sqlLayers.find(s=>s.visible&&map.hasLayer(s.layer));if(sl)_sqlMapSaveView(sl.name);}catch(e){}
+});
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
 let _appStarted = false;
 setTimeout(() => { _appStarted = true; }, 4000);
@@ -16144,6 +16146,7 @@ function setLayerSqlite(i) {
     if (j === i) { s.visible = true; if (!map.hasLayer(s.layer)) s.layer.addTo(map); }
     else         { s.visible = false; if (map.hasLayer(s.layer)) map.removeLayer(s.layer); }
   });
+  _sqlmapMetaAutoZoom(sl.meta,sl.name);
   _saveLastMap('sqlite', null, sl.name);
   const btn = document.getElementById('layer-switch-btn');
   if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
@@ -29530,21 +29533,20 @@ function _stpStilVrati() {
 }
 function _stpStilPrimijeni() {
   if (!_stp) return;
-  _stpStilVrati();
   for (const row of _stpSlojevi()) {
     const edit = _stp.styles[row.id] || {};
     const route = row.role === 'vlaka' || row.role === 'krak';
     const style = row.role === 'gr_privat' ? {...edit,color:'#ff0000',dashArray:null,opacity:1} : route ? {weight:row.role==='krak'?1.2:1.4,dashArray:'6 4',lineCap:'butt',...edit,vlakaOutline:false} : edit;
     if (!Object.keys(style).length) continue;
     for (const l of row.layers) {
-      const original = {};
-      for (const k of Object.keys(style)) original[k] = l.options[k] ?? (k === 'dashArray' ? null : undefined);
-      _stp.originalStyles.set(l,original); l.setStyle(style);
+      const original = _stp.originalStyles.get(l) || {};
+      for (const k of Object.keys(style)) if(!Object.prototype.hasOwnProperty.call(original,k)) original[k] = l.options[k] ?? (k === 'dashArray' ? null : undefined);
+      _stp.originalStyles.set(l,original); if(Object.keys(style).some(k=>l.options[k]!==style[k]))l.setStyle(style);
     }
   }
   try { for (const v of [...vlake,...Object.values(typeof kolegeVlakeMap==='undefined'?{}:kolegeVlakeMap)])
     for (const l of v._steepPolys || []) if(map.hasLayer(l)) {
-      _stp.originalStyles.set(l,{opacity:l.options.opacity}); l.setStyle({opacity:0});
+      if(!_stp.originalStyles.has(l))_stp.originalStyles.set(l,{opacity:l.options.opacity}); if(l.options.opacity!==0)l.setStyle({opacity:0});
     }
   } catch(e) {}
 }
@@ -29553,6 +29555,7 @@ function _stpStil(i,prop,value) {
   const row = _stpSlojevi()[i]; if (!row) return;
   if (prop === 'role') {
     if (!['','vlaka','krak','kamput','gr_odjela','gr_odsjeka','potok','gr_privat'].includes(value)) return;
+    _stpStilVrati();
     _stp.roles[row.id] = value;
     if (value) _stp.leg.add(value);
   } else {
@@ -29594,12 +29597,13 @@ function _stpSimboli() {
   const groups = new Map();
   for (const row of _stpSlojevi()) {
     if (!sim[row.role] || row.role === 'gr_privat') continue;
+    if((row.role==='vlaka'||row.role==='krak')&&groups.has(row.role))continue;
     const variants = groups.get(row.role) || new Set();
-    for (const l of row.layers) { const o=l.options; variants.add(ln(o.color || '#111',o.weight || 2,o.dashArray,o.lineCap,o.vlakaOutline)); }
+    for (const l of (row.role==='vlaka'||row.role==='krak'?row.layers.slice(0,1):row.layers)) { const o=l.options; variants.add(ln(o.color || '#111',o.weight || 2,o.dashArray,o.lineCap,o.vlakaOutline)); }
     groups.set(row.role,variants);
   }
-  // Različite stvarne boje/stilovi ostaju vidljivi, uključujući vlake kolega.
-  for (const [role,variants] of groups) sim[role].svg = [...variants].join('');
+  // Jedan uzorak vlake/kraka u legendi; boje vlastitih i koleginih linija ostaju na karti.
+  for (const [role,variants] of groups) sim[role].svg = (role==='vlaka'||role==='krak') ? variants.values().next().value : [...variants].slice(0,8).join('');
   return sim;
 }
 function _stpLegendaPodrazumijevano() {
@@ -29928,7 +29932,7 @@ async function stampaStampaj() {
   try {
     _stpPageCss();
     await _stpCekajPlocice(8000);
-    if(typeof PrintSlope!=='undefined')PrintSlope.refresh();
+    if(typeof PrintSlope!=='undefined')await PrintSlope.ready();
     if (!_stp) return;
     const ime = (_stpNaslovTekst() || 'Karta').replace(/[\\/:*?"<>|]+/g, '-');
     if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
@@ -29942,7 +29946,11 @@ async function stampaStampaj() {
     _stpStampaUToku = false;
   }
 }
-map.on('moveend zoomend', () => { if (_stp) { _stpStilPrimijeni(); _stpOverlays(); requestAnimationFrame(()=>{if(_stp){_stpStilPrimijeni();if(typeof PrintSlope!=='undefined')PrintSlope.refresh();}}); } });
+let _stpMapFrame = null;
+map.on('moveend zoomend', () => {
+  if (!_stp || _stpMapFrame!==null) return;
+  _stpMapFrame=requestAnimationFrame(()=>{_stpMapFrame=null;if(!_stp)return;_stpStilPrimijeni();_stpOverlays();if(typeof PrintSlope!=='undefined')PrintSlope.refresh();});
+});
 
 // === OFFLINE MODAL ===
 function lngLatToTile(lat, lng, z) {
@@ -30222,7 +30230,7 @@ function showGuideChoice() {
   const search = document.getElementById('guide-routes-search');
   if (search) search.value = '';
   const status = document.getElementById('guide-location-status');
-  if (status) status.textContent = lastP ? 'GPS pozicija je spremna' : 'GPS će se pokrenuti ako izabereš svoju lokaciju';
+  if (status) status.textContent = lastP ? 'GPS spreman' : 'GPS se uključuje pri vođenju';
   _guideRenderRoutes();
 }
 function closeGuideChoice() {
@@ -32211,28 +32219,29 @@ function _sqlmapStatus(msg) {
   if (el) el.textContent = msg;
 }
 // Zoom map to tile bounds from MBTiles metadata.bounds or estimated from zoom centre
-function _sqlmapMetaAutoZoom(meta) {
+function _sqlmapMetaAutoZoom(meta,name) {
   try {
-    // PRIORITET: centriraj na POUZDANU pločicu (medijanska iz baze) → uvijek slijeće NA
-    // podatke. fitBounds(bbox) tek ako center fali (bbox iz uglova zna biti skewed pa
-    // promaši gusto područje — uzrok "prazno posvuda" kod MBTiles bez metadata.bounds).
-    if (meta?.center) {
-      const c = String(meta.center).split(',').map(Number);
-      if (c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1])) {
-        const z = Math.min(c[2] || parseInt(meta.maxzoom,10) || 14, 14);
-        map.setView([c[1],c[0]], z); return;
-      }
+    name=name || _sqlLayers.find(sl=>sl.visible&&map.hasLayer(sl.layer))?.name;
+    const saved=name?_sqlMapPrefs()[name]?.view:null;
+    if(saved && [saved.la,saved.lo,saved.z].every(Number.isFinite) && Math.abs(saved.la)<=85 && Math.abs(saved.lo)<=180 && saved.z>=0 && saved.z<=22) {
+      map.setView([saved.la,saved.lo],saved.z,{animate:false});return;
     }
-    if (meta?.bounds) {
-      const b = String(meta.bounds).split(',').map(Number);
-      if (b.length === 4 && b.every(v => !isNaN(v)) && (b[0]!==b[2] || b[1]!==b[3])) {
-        const mz = Math.min(parseInt(meta.maxzoom,10) || 16, 16);
-        map.fitBounds([[b[1],b[0]],[b[3],b[2]]], { maxZoom: mz, padding: [20,20] });
-        return;
-      }
-    }
+    let lat,lon;
+    const b=String(meta?.bounds||'').split(',').map(Number);
+    if(b.length===4&&b.every(Number.isFinite)&&b[0]<b[2]&&b[1]<b[3]) {lon=(b[0]+b[2])/2;lat=(b[1]+b[3])/2;}
+    else {const c=String(meta?.center||'').split(',').map(Number);if(c.length>=2&&c.every(Number.isFinite)){lon=c[0];lat=c[1];}}
+    if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>85||Math.abs(lon)>180)return;
+    // Prvi pogled: centar karte i razmjera najviše 1:50.000.
+    const z=Math.max(0,Math.min(22,Math.ceil(Math.log2(156543.03392*Math.cos(lat*Math.PI/180)/(50000*.0002646)))));
+    map.setView([lat,lon],z,{animate:false});
+    if(name)_sqlMapSaveView(name);
   } catch(e) {}
 }
+function _sqlMapSaveView(name) {
+  if(!name||document.body.classList.contains('stampa-on'))return;
+  try {const c=map.getCenter(),prefs=_sqlMapPrefs();prefs[name]={...prefs[name],view:{la:c.lat,lo:c.lng,z:map.getZoom()}};localStorage.setItem('tvlake_sqlmap_prefs_v1',JSON.stringify(prefs));}catch(e){}
+}
+
 function showSqlMapModal() {
   document.getElementById('sqlmap-modal').classList.add('show');
   _sqlmapRenderLayers();
@@ -32671,7 +32680,7 @@ async function _sqlmapLoadNative(file) {
   const layer=_sqlmapCreateLayerW(name,result.fmt,result.meta);
   _sqlLayers.push({name,fmt:result.fmt,meta:result.meta,layer,visible:false,saved:true,opfs:false});
   for(const [key,bmp]of _sqlTileBmpCache)if(key.startsWith(name+'/')){try{bmp.close?.();}catch(e){}_sqlTileBmpCache.delete(key);}
-  setLayerSqlite(_sqlLayers.length-1);_sqlmapMetaAutoZoom(result.meta);_sqlPrewarm(name);
+  setLayerSqlite(_sqlLayers.length-1);_sqlmapMetaAutoZoom(result.meta,name);_sqlPrewarm(name);
   _sqlmapRenderLayers();closeSqlMapModal();closeLoadMapScreen();switchTab('karta');
   _sqlmapStatus('✅ '+name+' · '+(result.meta._nativeCopy?'Lokalna kopija':'Direktno čitanje fajla'));_sqlmapWarnIfVector(name);
   if(previous.entry?.meta?._nativeId&&previous.entry.meta._nativeId!==file.nativeId)await NativeOfflineMaps.remove(previous.entry.meta._nativeId).catch(()=>{});
@@ -32718,10 +32727,10 @@ async function sqlmapLoadFile(file) {
       const r = await _sqlWCall({type:'load-buf', name, buffer:buf, save:true}, [buf]);
       if (!r.ok) throw new Error(r.error);
       const layer = _sqlmapCreateLayerW(name, r.fmt, r.meta);
-      layer.addTo(map);
-      _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:true, opfs:false});
+      _sqlLayers.push({name, fmt:r.fmt, layer, visible:false, meta:r.meta, saved:true, opfs:false});
+      setLayerSqlite(_sqlLayers.length-1);
       _sqlPrewarm(name);
-      _sqlmapMetaAutoZoom(r.meta);
+      _sqlmapMetaAutoZoom(r.meta,name);
       const zI=(r.meta?.minzoom!=null)?' · zoom '+r.meta.minzoom+'–'+r.meta.maxzoom:'';
       _sqlmapStatus('✅ Karta sačuvana: ' + name + zI);
     }
@@ -32763,10 +32772,10 @@ async function _sqlmapLoadDirect(file, name) {
   }
   const useMain = !!_mainMiniDbs[name];
   const layer = useMain ? _sqlmapCreateLayerMain(name, r.fmt, r.meta) : _sqlmapCreateLayerW(name, r.fmt, r.meta);
-  layer.addTo(map);
-  _sqlLayers.push({name, fmt:r.fmt, layer, visible:true, meta:r.meta, saved:false, opfs:false});
+  _sqlLayers.push({name, fmt:r.fmt, layer, visible:false, meta:r.meta, saved:false, opfs:false});
+  setLayerSqlite(_sqlLayers.length-1);
   _sqlPrewarm(name);
-  _sqlmapMetaAutoZoom(r.meta);
+  _sqlmapMetaAutoZoom(r.meta,name);
   const zI = (r.meta?.minzoom != null) ? ' · zoom ' + r.meta.minzoom + '–' + r.meta.maxzoom : '';
   const fmtLabel = r.fmt==='mbtiles'?'MBTiles':r.fmt==='gpkg'?'GeoPackage':r.fmt==='rmaps'?'SQLiteDB':r.fmt||'?';
   _sqlmapStatus('✅ ' + name + ' (' + (file.size/1024/1024|0) + ' MB, ' + fmtLabel + ')' + zI + (isAdmin() ? ' [' + eng + ']' : ''));
@@ -34208,7 +34217,7 @@ async function _loadmapShow(name) {
     let idx=_sqlLayers.findIndex(l=>l.name===name);
     if(idx<0){_loadmapStatus('⏳ Otvaram sačuvanu kartu: '+name);await sqlmapRetryOne(name);idx=_sqlLayers.findIndex(l=>l.name===name);}
     if(idx<0){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo ili učitaj izvorni fajl.');return false;}
-    setLayerSqlite(idx);_sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta);closeLoadMapScreen();return true;
+    setLayerSqlite(idx);_sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta,name);closeLoadMapScreen();return true;
   }catch(e){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo.');return false;}finally{_loadmapOpening=false;}
 }
 async function _loadmapRecentTap(i) { const m=_loadmapRecentShown[i];if(m)await _loadmapShow(m.name); }
@@ -40792,7 +40801,6 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr" id="menu-project-section-title">Projekti i izvoz</div>
-  <button type="button" class="mdrop-item" id="mdrop-readiness" onclick="openFieldPanel()"><span class="mdrop-ico">✓</span>Spremno za teren / sigurnosna kopija</button>
   <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</button>
   <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</button>
@@ -40894,7 +40902,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="1.">Prijavi se. U <b>Projekat</b> odaberi aktivni projekat za vlake; za doznaku otvori odgovarajući odjel u tabu <b>Doznaka</b>.</li>
 <li data-n="2.">Dok imaš internet, otvori <b>Meni → Pošalji na server → Pošalji i primi</b> i preuzmi rad kolega.</li>
 <li data-n="3.">U <b>Meni → Učitaj kartu</b> otvori kartu za rad bez interneta. Provjeri vidiš li cijeli odjel kada isključiš mrežu.</li>
-<li data-n="4.">Uključi lokaciju telefona i odobri GPS dozvole. U <b>Meni → Spremno za teren / sigurnosna kopija</b> provjeri spremnost i napravi kopiju.</li>
+<li data-n="4.">Uključi lokaciju telefona i odobri GPS dozvole. U <b>Meni → Učitaj kartu</b> otvori kartu koju ćeš koristiti na terenu.</li>
 <li data-n="5.">Otvori upute <b>Vlake</b> ili <b>Doznaka</b> iznad i prati korake za snimanje.</li>
 </ol></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Karta za rad bez interneta</button><div class="help-sec-body">
@@ -41777,14 +41785,13 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- VODI ME DO ODJELA/LOKACIJE — izbor moda -->
 <div id="guide-choice-modal" class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title" style="display:none;" onclick="if(event.target===this)closeGuideChoice()">
   <div class="guide-sheet">
-    <header class="guide-header"><div><span class="guide-eyebrow">Navigacija do terena</span><h2 id="guide-title">Vodi me do odjela/lokacije</h2></div><button type="button" onclick="closeGuideChoice()" aria-label="Zatvori navigaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+    <header class="guide-header"><div><h2 id="guide-title">Vodi me do odjela/lokacije</h2></div><button type="button" onclick="closeGuideChoice()" aria-label="Zatvori navigaciju"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
     <div class="guide-body">
-      <div class="guide-intro"><svg class="ic"><use href="#ic-kompas"/></svg><div><b>Istraži teren iz svoje pozicije</b><p>Nagnuta karta u 3D perspektivi prati tvoju GPS poziciju i pokazuje teren ispred tebe u smjeru u kojem gledaš. Cilj odaberi dodirom na kartu.</p><span id="guide-location-status" class="guide-status"></span></div></div>
+      <span id="guide-location-status" class="guide-status"></span>
       <div class="guide-choices">
-        <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Vodi me od moje lokacije</b><small>Odaberi cilj i kreni iz svoje GPS pozicije</small></span><span aria-hidden="true">›</span></button>
-        <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Pripremi rutu</b><small>Početak, međutačke i odredište na karti</small></span><span aria-hidden="true">›</span></button>
+        <button type="button" class="guide-choice" onclick="_guideStart(true)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-pozicija"/></svg></span><span><b>Vodi me do cilja</b><small>Dodirni odjel ili lokaciju na karti</small></span><span aria-hidden="true">›</span></button>
+        <button type="button" class="guide-choice" onclick="_guideStart(false)"><span class="guide-choice-icon"><svg class="ic"><use href="#ic-zabiljezi"/></svg></span><span><b>Pripremi rutu</b><small>Označi početak i odredište</small></span><span aria-hidden="true">›</span></button>
       </div>
-      <p class="guide-note">Explorer i sačuvane karte rade bez interneta. Smjer i zračna udaljenost vode prema cilju; izračun vožnje putevima u pripremi rute traži internet.</p>
       <section class="guide-saved"><div class="guide-saved-heading"><h3>Sačuvane rute</h3><span id="guide-routes-count"></span></div><input id="guide-routes-search" type="search" aria-label="Pretraži sačuvane rute" placeholder="Traži rutu po nazivu…" oninput="_guideRenderRoutes()"><div id="guide-routes-list"></div></section>
     </div>
   </div>
@@ -42514,28 +42521,7 @@ if (typeof AndroidDownload !== 'undefined') {
 #field-status.warn {background:#451a03;color:#fde68a;border-color:#f59e0b;}
 .field-recording #panel,.field-recording #proj-panel,.field-recording #doznaka-panel,.field-recording #teren-panel,.field-recording #tragovi-panel {padding-top:var(--field-status-height,44px);}
 .field-recording #map-ctrl-bar {top:calc(32px + var(--field-status-height,44px));}
-#field-panel {position:fixed;inset:0;z-index:90000;background:#070f1be6;align-items:center;justify-content:center;padding:12px;}
-.field-sheet {background:#101c30;border:1px solid #334155;border-radius:14px;width:100%;max-width:560px;max-height:90dvh;max-height:90vh;overflow:auto;padding:16px;color:#e2e8f0;}
-.field-sheet button,.field-sheet select {min-height:44px;padding:9px 12px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#e2e8f0;font-size:14px;}
-.field-row {padding:9px 0;border-bottom:1px solid #334155;font-size:13px;line-height:1.55;}
-.field-row.good {color:#bbf7d0;}.field-row.warn {color:#fde68a;}
-#field-check strong {display:block;padding:12px 0;font-size:14px;}
-.field-note {font-size:12px;color:#94a3b8;line-height:1.6;}
 </style>
-<div id="field-panel" role="dialog" aria-modal="true" aria-labelledby="field-title" style="display:none;" onclick="if(event.target===this)closeFieldPanel()">
-  <div class="field-sheet">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><h3 id="field-title">Spremno za teren</h3><button onclick="closeFieldPanel()" aria-label="Zatvori">✕</button></div>
-    <p class="field-note">Provjera aktivnog projekta; u tabu Doznaka provjerava odabrani odjel. Sve provjere su lokalne, bez mreže.</p>
-    <label>Zoom podloge <select id="field-zoom"><option value="14">14 — pregled</option><option value="15" selected>15 — radni</option><option value="16">16 — detalji</option><option value="17">17 — detalji+</option></select></label>
-    <button onclick="fieldCheckReady()">Provjeri ponovo</button>
-    <div id="field-check"></div>
-    <button onclick="closeFieldPanel();openLoadMapScreen()">Učitaj / provjeri offline kartu</button>
-    <h3>Sigurnosna kopija projekta</h3>
-    <p class="field-note">Vlake, tragovi, mjerenja, GPS dnevnik, pojasevi/stabla u kešu, red za slanje i lokalni KML ovog naloga. Stari tragovi/mjerenja se pridružuju po GJ i odjelu. Velike rasterske karte, fotografije i referentne slike nisu uključene — njihove fajlove sačuvaj zasebno. Kopiju sačuvaj izvan aplikacije; sadrži lokacije i projektne podatke.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;"><button onclick="fieldExportBackup()">↓ Izvezi sigurnosnu kopiju</button><button onclick="document.getElementById('field-backup-file').click()">↑ Vrati kopiju</button></div>
-    <input id="field-backup-file" type="file" accept="application/json,.json" style="display:none;" onchange="fieldImportBackup(this.files[0])">
-  </div>
-</div>
 <script src="static/js/field-tools.js"></script>
 <script src="static/js/terrain-workspace.js"></script>
 <div id="spd-profile" hidden onclick="if(event.target===this)SpdProfile.close()">

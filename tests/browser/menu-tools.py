@@ -101,7 +101,7 @@ async def main():
                 await page.set_viewport_size({'width':width,'height':height});await page.evaluate('showGuideChoice()')
                 await bounds(page,'.guide-sheet',width,height);await bounds(page,'.guide-body',width,height)
                 assert await page.locator('.guide-route').count()==18
-                assert await page.locator('#guide-location-status').inner_text()=='GPS pozicija je spremna'
+                assert await page.locator('#guide-location-status').inner_text()=='GPS spreman'
                 assert await page.locator('#guide-routes-list img').count()==0
                 await page.screenshot(path=str(OUT/f'guide-{theme}-{width}-{height}.png'))
                 await page.fill('#guide-routes-search','Čuvar');assert await page.locator('.guide-route').count()==1

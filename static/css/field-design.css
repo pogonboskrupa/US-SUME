@@ -1,6 +1,6 @@
 /* Terenski dizajn: sistemski fontovi, bez novih slika, filtera rastera i animacija. */
 html {--field-bg:#111c30;--field-card:#0f172a;--field-ink:#f1f5f9;--field-muted:#b0bfd2;--field-border:#475569;}
-html[data-field-theme=day] {--field-bg:#eef2f6;--field-card:#fff;--field-ink:#102033;--field-muted:#475569;--field-border:#94a3b8;color-scheme:light;}
+html[data-field-theme=day] {--field-bg:#e8edf3;--field-card:#fff;--field-ink:#102033;--field-muted:#334155;--field-border:#64748b;color-scheme:light;}
 html #tab-bar {box-shadow:none;}
 html .tab-btn {min-height:56px;min-width:56px;font-size:12px;gap:3px;}
 html .tab-btn.active {font-weight:800;}
@@ -706,3 +706,50 @@ html #pm-modal .pm-actions {padding:8px 0;margin-bottom:12px;}
 html[data-field-theme=day] .update-notice{background:#fff;color:#102033;border-color:#0284c7;}html[data-field-theme=day] .update-notice-copy b,html[data-field-theme=day] .update-notice-icon{color:#0369a1;}
 html #dlg-actions-list .dlg-action-btn:has(small){display:flex;flex-direction:column;align-items:flex-start;gap:5px;text-align:left;}html #dlg-actions-list .dlg-action-btn small{font-weight:400;font-size:12px;line-height:1.5;opacity:.85;}
 @media print{.update-notice{display:none!important;}}
+
+/* 2.7.4: svijetle radne površine i tamni brojevi, uključujući starije dijaloge. */
+html[data-field-theme=day] :is(.lbl,.clan-name,.acr-name,.std-avg-lbl,.name-desc) {color:#334155;}
+html[data-field-theme=day] :is(.eu,.vcard-elev,.vcard-elev .eu) {color:#14532d;}
+html[data-field-theme=day] :is(.vnag,.std-avg-val,.name-big) {color:#713f12;}
+html[data-field-theme=day] :is(#pd-info,.name-box,.std-avg,#ls-cache-box,#profil-box,#sqlmap-box,#mapmgr-box,#izv-box,#doz-create-box,#doz-save-box,#trag-reg-box,#tacka-modal,#stil-modal>div,#cachemgr-modal>div,#tem-table-modal>div) {background:#fff!important;color:#102033;border-color:#64748b!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#teren-panel,#layer-sheet,#profil-box,#sqlmap-box,#mapmgr-box,#izv-box,#doz-create-box,#doz-save-box,#trag-reg-box,#tacka-modal,#stil-modal,#cachemgr-modal,#tem-table-modal,#dlg-sheet,#ab-loc-popup) :is(input:not([type=color]):not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea) {background:#fff!important;color:#102033!important;border-color:#64748b;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#teren-panel,#layer-sheet,#profil-box,#sqlmap-box,#mapmgr-box,#izv-box,#doz-create-box,#doz-save-box,#trag-reg-box,#tacka-modal,#stil-modal,#cachemgr-modal,#tem-table-modal,#dlg-sheet,#ab-loc-popup) :is([style*="background:#0f172a"],[style*="background:rgba(15,23,42"],[style*="background:#1e293b"],[style*="background:#0f1f2e"]):not(button):not(svg):not(input[type=color]) {background:#f1f5f9!important;color:#102033!important;border-color:#64748b!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#teren-panel,#layer-sheet,#profil-box,#sqlmap-box,#mapmgr-box,#izv-box,#doz-create-box,#doz-save-box,#trag-reg-box,#tacka-modal,#stil-modal,#cachemgr-modal,#tem-table-modal,#dlg-sheet,#ab-loc-popup) :is([style*="color:#e2e8f0"],[style*="color:#f1f5f9"],[style*="color:#cbd5e1"],[style*="color:#eee"]):not(button):not(svg) {color:#102033!important;}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#teren-panel,#layer-sheet,#profil-box,#sqlmap-box,#mapmgr-box,#izv-box,#doz-create-box,#doz-save-box,#trag-reg-box,#tacka-modal,#stil-modal,#cachemgr-modal,#tem-table-modal,#dlg-sheet,#ab-loc-popup) :is([style*="color:#64748b"],[style*="color:#94a3b8"],[style*="color:#475569"]) {color:#334155!important;}
+html[data-field-theme=day] :is(#proj-panel,#panel,#layer-sheet) button[style*="background:#0f"] {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
+html[data-field-theme=day] #proj-panel button[onclick="backToProjList()"] {color:#1e40af!important;}
+html[data-field-theme=day] :is(.btn.g,#pd-draw-vlaka-btn) {background:#166534!important;color:#fff!important;}
+html[data-field-theme=day] .btn.o {background:#9a3412;color:#fff;}
+html[data-field-theme=day] :is(.btn.gr,#dlg-cancel) {background:#e2e8f0;color:#102033;border:1px solid #64748b;}
+html[data-field-theme=day] :is(#layer-sheet,#ab-loc-popup) label {color:#102033;}
+html[data-field-theme=day] #teren-panel .trn-sun>div:not(.trn-sun-bar) {background:#f1f5f9;border-color:#64748b;}
+html[data-field-theme=day] #teren-panel .trn-sun span {color:#334155;}
+html[data-field-theme=day] #teren-panel .trn-sun>div>b {color:#102033;}
+html[data-field-theme=day] #teren-panel .trn-pill.bad {background:#fee2e2;color:#991b1b;border-color:#b91c1c;}
+html[data-field-theme=day] #teren-panel .trn-pill.warn {background:#fef3c7;color:#78350f;border-color:#92400e;}
+html[data-field-theme=day] #teren-panel .trn-pill.ok {background:#dcfce7;color:#14532d;border-color:#166534;}
+html[data-field-theme=day] #teren-panel :is(#trn-tacke-cnt,#trn-trag-cnt,#trn-msr-cnt) {color:#102033!important;}
+html[data-field-theme=day] #teren-panel .trn-seg button.on :is(#trn-tacke-cnt,#trn-trag-cnt,#trn-msr-cnt) {color:#fff!important;}
+html[data-field-theme=day] #nv-badge {background:#fff;border-color:#64748b;color:#334155;backdrop-filter:none;}
+html[data-field-theme=day] #nv-badge :is(#nv-val,.nv-coord) {color:#102033;}
+html[data-field-theme=day] #nv-badge :is(#map-scale-val,.nv-lbl,.nv-sep) {color:#334155;}
+html[data-field-theme=day] :is(#map-zoom-btns,#scale-menu) {background:#fff;border-color:#64748b;backdrop-filter:none;}
+html[data-field-theme=day] :is(#map-zoom-btns button,#scale-menu button,#layer-switch-btn,#map-fav-btn,#oznake-btn) {background:#fff;color:#102033;border-color:#64748b;}
+html #map-ctrl-bar,html #scale-menu {top:var(--map-controls-top,44px);}
+html .field-recording #map-ctrl-bar {top:max(var(--map-controls-top,44px),calc(32px + var(--field-status-height,44px)));}
+.guide-choices {margin-top:8px;}.guide-choice {min-height:68px;padding:10px;}.guide-status {margin:0 0 8px;}.guide-saved {margin-top:12px;padding-top:12px;}
+html[data-field-theme=day] #proj-panel button[onclick="showProjektiList()"] {color:#1e40af!important;}
+html[data-field-theme=day] #proj-panel :is(.std-nm,.std-val) {color:#102033;}
+html[data-field-theme=day] #panel .vcard-elev .vnag {color:#713f12!important;}
+html[data-field-theme=day] #panel .vcard-elev :is(.vnag-bad,.ed) {color:#991b1b!important;}
+html[data-field-theme=day] #layer-sheet button[style*="background:#1e3a5f"] {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
+html[data-field-theme=day] :is(#stil-modal,#tacka-modal) h3 {color:#102033;}
+html[data-field-theme=day] #mapmgr-box h3 {color:#102033;}
+html[data-field-theme=day] #doz-create-box h3 {color:#14532d;}
+html[data-field-theme=day] #mapmgr-box button[onclick="_mapMgrClearAll()"] {color:#991b1b!important;}
+html[data-field-theme=day] #tacka-btn-confirm {background:#166534!important;color:#fff!important;}
+html[data-field-theme=day] #admin-panel :is([style*="color:#fbbf24"],[style*="color:#fde68a"],[style*="color:#a16207"]) {color:#713f12!important;}
+html[data-field-theme=day] #admin-panel :is([style*="color:#93c5fd"],[style*="color:#60a5fa"],[style*="color:#38bdf8"]):not(button) {color:#1e40af!important;}
+html[data-field-theme=day] #admin-panel :is([style*="color:#4ade80"],[style*="color:#bbf7d0"]):not(button) {color:#14532d!important;}
+html[data-field-theme=day] #admin-panel :is([style*="color:#f87171"],[style*="color:#fca5a5"]):not(button) {color:#991b1b!important;}
+html[data-field-theme=day] #admin-panel :is(button[style*="background:#0f172a"],button[style*="background:#93c5fd22"]) {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
