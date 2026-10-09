@@ -3247,3 +3247,25 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Svih 61 web resursa identični izvoru. Release digest/veličina poklapaju APK;
   updater releases?per_page=1 vraća v2.6.8 i javni app-debug.apk. Release opis
   dopunjen konkretnim GPKG izmjenama. Javni Pages index.html i sw.js su 2.6.8.
+
+### 2026-10-09 — poseban podtab za procjenu sadnje (2.6.9)
+
+- Korisnik traži poseban podtab unutar Tematske karte samo za priloženi
+  USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg. Dodan stalni Sadnja · 7 vrsta podtab,
+  s praznim stanjem/uputom za taj konkretni fajl i otvaranjem sačuvanog fajla.
+  Identitet je tačan naziv fajla (case insensitive); drugi GPKG-ovi se ne
+  pojavljuju u njegovim karticama, pickeru ili brojaču. Iz liste fajlova
+  dugme ovog fajla direktno otvara novi podtab.
+- Sedam vrsta bira se pristupačnim dugmadima (jedan aktivan izbor). Koristi
+  postojeću klasifikaciju, legendu, jačinu, editor, zoom, tabelu i vidljivost,
+  bez dodatne kopije geometrije/podataka. Izbor i stilovi ostaju u postojećem
+  registru/IDB; obični Tema i stil podtab zadržava univerzalne kontrole.
+- Tri podtaba imaju fiksni grid bez preklapanja na malim ekranima. Provjereno
+  stvarnim fajlom 17.305 ćelija, svih sedam dugmadi/SQLite brojeva, 8 rasporeda
+  novog podtaba u day/dark modu i 8 rasporeda editora. Drugi GPKG ne ulazi u
+  podtab; hide/reload, ulaz iz listinga, uklanjanje ciljnog fajla i prazno
+  stanje prošli. Postojeći thematic-files test prošao (3000 poligona, IDB,
+  greške prostora/naloga, 16 rasporeda), svih100 JS grupa i pet inline sintaksi.
+- Web/SW/Android 2.6.9/code539. Završni APK build/objava u toku. Originalni
+  attachment nije u repou/CI/APK-u; CI test i dalje generiše sintetički fajl.
+  Fizički telefon i produkcijski Supabase nisu testirani ni mijenjani.

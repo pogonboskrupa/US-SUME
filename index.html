@@ -5738,7 +5738,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.6.8';
+const APP_VER = 'v2.6.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -36465,6 +36465,19 @@ function _temCaptureDraft() {
   const ed = document.querySelector('#tem-modal-body .tem-ed');
   if (ed?.dataset.temMapId === _temEdOpenId && _temEdDraft[_temEdOpenId]) _temEdPovuci(_temEdDraft[_temEdOpenId]);
 }
+const _TEM_SADNJA_FILE = 'USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg';
+const _TEM_SADNJA_VRSTE = ['bukva','jela','smrca','hrast_kitnjak','hrast_luznjak','pitomi_kesten','gorski_javor'];
+function _temIsSadnja(m) { return String(m?.name || '').toLowerCase() === _TEM_SADNJA_FILE.toLowerCase(); }
+function _temOpenSadnja(id) {
+  _temCaptureDraft();
+  if (_temIsSadnja(_temById(id))) _temSelectedId = id;
+  _temSwitchView('sadnja');
+}
+function _temSadnjaTheme(id, col) {
+  const m = _temById(id);
+  if (!_temIsSadnja(m) || !_TEM_SADNJA_VRSTE.includes(col) || !m.cols.includes(col)) return;
+  _temCaptureDraft(); _temApplyTheme(id, col); _temModalRender();
+}
 function _temChoose(id) {
   _temCaptureDraft(); _temSelectedId = id; _temView = 'style'; _temModalRender();
   document.getElementById('tem-modal-body').scrollTop = 0;
@@ -36488,14 +36501,18 @@ function _temModalRender(preserveDraft = false) {
   const scroll = body.scrollTop, focus = document.activeElement;
   const focusId = body.contains(focus) ? focus.id : null;
   const rows = _temFileRows();
+  const sadnja = _temView === 'sadnja', sadnjaMaps = _temMaps.filter(_temIsSadnja);
+  if (sadnja && !_temIsSadnja(_temById(_temSelectedId))) _temSelectedId = sadnjaMaps[0]?.id || null;
   if (!_temById(_temSelectedId)) _temSelectedId = _temMaps[0]?.id || null;
-  document.getElementById('tem-file-count').textContent = `${rows.length} fajlova · ${_temMaps.filter(m => m.visible).length} prikazano`;
+  document.getElementById('tem-file-count').textContent = sadnja
+    ? `${rows.filter(_temIsSadnja).length} fajlova za sadnju · ${sadnjaMaps.filter(m => m.visible).length} prikazano`
+    : `${rows.length} fajlova · ${_temMaps.filter(m => m.visible).length} prikazano`;
   document.querySelectorAll('[data-tem-view]').forEach(el => {
     const on = el.dataset.temView === _temView;
     el.setAttribute('aria-selected', String(on)); el.classList.toggle('active', on);
   });
   _temStatus(_temLoadStatus);
-  const cards = _temMaps.filter(m => m.id === _temSelectedId).map(m => {
+  const cards = _temMaps.filter(m => m.id === _temSelectedId && (!sadnja || _temIsSadnja(m))).map(m => {
     const opt = c => `<option value="${_escHtml(c)}"${c === m.theme ? ' selected' : ''}>${_escHtml(_temColLabel(m, c))}</option>`;
     const kat = m.catCols || [];
     const opts = '<option value="">— Bez teme —</option>'
@@ -36511,15 +36528,15 @@ function _temModalRender(preserveDraft = false) {
       <div class="tem-mc-hd">
         <div class="tem-mc-ti">
           <div class="nm">${_escHtml(m.name)}</div>
-          <div class="sub">${m.features.length} odsjeka · ${_temHa(ukHa)} · ${m.cols.length + kat.length} tema</div>
+          <div class="sub">${m.features.length} ${sadnja ? 'ćelija' : 'odsjeka'} · ${_temHa(ukHa)} · ${m.cols.length + kat.length} tema</div>
         </div>
         <label class="tem-file-check"><input type="checkbox" ${m.visible ? 'checked' : ''} onchange="_temSetVisible('${jid}',this.checked)" aria-label="Prikaži ${_escHtml(m.name)}"><span>Prikaži</span></label>
       </div>
-      <div class="tem-lbl">Tema (boji odsjeke po atributu)</div>
+      ${sadnja ? `<div class="tem-lbl">Odaberi vrstu drveta</div><div class="tem-sadnja-species" role="group" aria-label="Vrste za procjenu sadnje">${_TEM_SADNJA_VRSTE.filter(c => m.cols.includes(c)).map(c => `<button data-sadnja-species="${c}" aria-pressed="${c === m.theme}" class="${c === m.theme ? 'active' : ''}" onclick="_temSadnjaTheme('${jid}','${c}')">${_escHtml(_temColLabel(m,c))}</button>`).join('')}</div>` : `<div class="tem-lbl">Tema (boji odsjeke po atributu)</div>
       <div class="tem-row">
         <select class="tem-sel" onchange="_temApplyTheme('${jid}', this.value || null);_temModalRender()">${opts}</select>
         <button class="tem-ib" onclick="_temRenameCol('${jid}')" ${m.theme ? '' : 'disabled'} title="Preimenuj naziv atributa"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
-      </div>
+      </div>`}
       ${m.sourceThemes?.[m.theme] ? `<details class="tem-source-info"><summary>Legenda i opis iz fajla</summary><p>${_escHtml(m.sourceThemes[m.theme].description)}</p><p>Prazne ćelije nemaju prikazanu ocjenu i skrivene su na karti.</p></details>` : ''}
       ${m.theme ? _temPregledHtml(m) : ''}
       ${m.theme ? `<div class="tem-op">
@@ -36546,13 +36563,16 @@ function _temModalRender(preserveDraft = false) {
       </div>${!m.unavailable ? `<label class="tem-file-check"><input type="checkbox" ${m.visible ? 'checked' : ''} onchange="_temSetVisible('${id}',this.checked)" aria-label="Prikaži ${_escHtml(m.name)}"><span>Prikaži</span></label>` : ''}</div>
       <div class="tem-file-actions">${m.unavailable
         ? '<button onclick="_temRestore()">Pokušaj otvoriti</button>'
-        : `<button onclick="_temChoose('${id}')">Tema i stil</button><button onclick="_temZoom('${id}')">Na karti</button><button onclick="showTemTable('${id}')">Tabela</button>`}
+        : `<button onclick="${_temIsSadnja(m) ? '_temOpenSadnja' : '_temChoose'}('${id}')">${_temIsSadnja(m) ? 'Sadnja · 7 vrsta' : 'Tema i stil'}</button><button onclick="_temZoom('${id}')">Na karti</button><button onclick="showTemTable('${id}')">Tabela</button>`}
         <button class="del" onclick="_temRemoveMap('${id}')" aria-label="Ukloni ${_escHtml(m.name)}">Ukloni</button>
       </div></article>`;
   }).join('');
   const empty = `<div class="tem-prazno"><div class="ico">📊</div><div class="t">Nema učitanih tematskih karata</div><div class="d">Odaberi jedan ili više .gpkg fajlova sa odjelima i odsjecima. Sačuvani fajlovi dostupni su bez interneta.</div></div>`;
+  const sadnjaIntro = `<header class="tem-sadnja-intro"><small>TEMATSKA PROCJENA</small><h4>Sadnja · Unsko-sanski kanton</h4><p>Izaberi jednu vrstu za prikaz ocjena na karti. Legenda prikazuje značenje boja iz fajla.</p></header>`;
+  const sadnjaEmpty = `<div class="tem-sadnja-empty"><b>${_escHtml(_TEM_SADNJA_FILE)}</b><p>${rows.some(_temIsSadnja) ? 'Fajl je sačuvan, ali još nije otvoren.' : 'Učitaj ovaj fajl da prikažeš procjenu za sedam vrsta drveta.'}</p>${rows.some(_temIsSadnja) ? '<button onclick="_temRestore()">Otvori sačuvani fajl</button>' : ''}<button onclick="document.getElementById('tem-file-input').click()">Učitaj fajl za sadnju</button></div>`;
   body.innerHTML = _temView === 'files'
     ? `${rows.length ? '<div class="tem-bulk"><button onclick="_temSetAllVisible(true)">Prikaži sve</button><button onclick="_temSetAllVisible(false)">Sakrij sve</button></div>' : ''}${listing || empty}`
+    : sadnja ? `${sadnjaIntro}${sadnjaMaps.length > 1 ? `<label class="tem-picker">Fajl za sadnju<select class="tem-sel" onchange="_temOpenSadnja(this.value)">${sadnjaMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || sadnjaEmpty}`
     : `${_temMaps.length ? `<label class="tem-picker">Postavke fajla<select class="tem-sel" onchange="_temChoose(this.value)">${_temMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || empty}`;
   body.scrollTop = scroll;
   if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
@@ -41193,7 +41213,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="tem-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tem-title" onclick="if(event.target===this)closeTemModal()">
   <section class="tem-panel">
     <header class="tem-panel-head"><div><h3 id="tem-title">Tematske karte</h3><small id="tem-file-count">GPKG fajlovi</small></div><button onclick="closeTemModal()" aria-label="Zatvori tematske karte">✕</button></header>
-    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button></nav>
+    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja · 7 vrsta</button></nav>
     <div id="tem-modal-body" role="tabpanel"></div>
     <footer class="tem-panel-foot"><button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">＋ Učitaj GPKG fajlove</button><small id="tem-load-status" role="status" aria-live="polite"></small></footer>
   </section>

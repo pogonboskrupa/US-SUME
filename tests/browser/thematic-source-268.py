@@ -35,7 +35,7 @@ def expected(path):
  c.close();return n,out
 async def main():
  with tempfile.TemporaryDirectory() as tmp:
-  provided=os.environ.get('GPKG_REAL');primary=Path(provided) if provided else Path(tmp)/'source.gpkg'
+  provided=os.environ.get('GPKG_REAL');primary=Path(provided) if provided else Path(tmp)/'USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg'
   if not provided:synthetic(primary)
   fallback=Path(tmp)/'qml.gpkg';synthetic(fallback,False);n,counts=expected(primary)
   async with async_playwright() as p:
@@ -46,16 +46,30 @@ async def main():
      f=ROOT/r.request.url.split('fixture.test/',1)[1];await r.fulfill(content_type=mimetypes.guess_type(f)[0] or 'text/plain',body=f.read_bytes())
     else:await r.abort()
    await page.route('**/*',route);await page.goto('https://fixture.test/');await page.evaluate('showTemModal()');start=time.time()
+   await page.locator('[data-tem-view=sadnja]').click()
+   assert await page.locator('.tem-sadnja-empty').count()==1 and await page.locator('.tem-mc').count()==0
+   await page.evaluate('window.sadnjaTab=document.querySelector("[data-tem-view=sadnja]")')
    await page.locator('#tem-file-input').set_input_files(str(primary));await page.evaluate('_temQueue')
+   assert await page.evaluate('_temView==="sadnja"&&sadnjaTab===document.querySelector("[data-tem-view=sadnja]")')
+   assert await page.locator('[data-sadnja-species]').count()==7
    assert await page.evaluate('_temMaps.length===1&&_temMaps[0].theme==="bukva"')
    assert await page.evaluate('_temMaps[0].features.length')==n
    assert await page.evaluate('_temMaps[0].sourceOrder')==[s.lower() for s in SPECIES]
    for col,want in counts.items():
-    await page.evaluate('col=>_temApplyTheme(_temMaps[0].id,col)',col)
+    await page.locator('[data-sadnja-species="'+col+'"]').click()
+    assert await page.locator('[data-sadnja-species][aria-pressed=true]').count()==1
+    assert await page.evaluate('_temMaps[0].theme')==col
     result=await page.evaluate('()=>{const m=_temMaps[0],c=m._cls,s=_temStatistika(m);return {colors:c.colors,ranges:c.ranges.map(r=>[r.min,r.max]),counts:s.klase.map(k=>k.n),without:s.bez.n,hidden:m.features.filter(f=>_temKlasaIdx(c,f.attrs[c.col])<0).every(f=>f.polys.every(p=>!p.options.fill&&!p.options.stroke&&!p.options.interactive)),visible:m.features.filter(f=>_temKlasaIdx(c,f.attrs[c.col])>=0).every(f=>f.polys.every(p=>p.options.fill&&p.options.interactive))}}')
     assert result['colors']==COLORS and result['ranges']==[list(r) for r in RANGES],result
     assert result['counts']==want['counts'] and result['without']==want['without'],(col,result,want)
     assert result['hidden'] and result['visible'],col
+   # Dedicated tab stays within mobile/landscape bounds, day and dark.
+   for theme in ['day','dark']:
+    for w,h in [(320,568),(390,800),(568,320),(1000,700)]:
+     await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+     for sel in ['.tem-panel','.tem-tabs','#tem-modal-body','.tem-panel-foot']:await b.b.bounds(page,sel,w,h)
+     assert await page.evaluate('(()=>{const b=document.getElementById("tem-modal-body");return b.scrollWidth<=b.clientWidth+1})()'),(theme,w,h)
+     await page.screenshot(path=str(ROOT/'outputs/ui-preview'/f'thematic-sadnja-{"user" if provided else "synthetic"}-{theme}-{w}-{h}.png'))
    # Independent SQLite counts match all features; no quantile recoloring.
    await page.evaluate('_temApplyTheme(_temMaps[0].id,"bukva");_temChoose(_temMaps[0].id);_temEdToggle(_temMaps[0].id)')
    assert await page.locator('.tem-row > .tem-sel').locator('option').count()==8
@@ -85,6 +99,22 @@ async def main():
    # QML fallback applies same palette without custom legenda table.
    await page.evaluate('showTemModal()');await page.locator('#tem-file-input').set_input_files(str(fallback));await page.evaluate('_temQueue')
    assert await page.evaluate('_temMaps[1].theme==="bukva"&&_temMaps[1]._cls.colors[2]==="#935bbd"&&_temMaps[1]._cls.hideMissing')
+   # Selecting another GPKG never shows it in the dedicated Sadnja tab.
+   await page.evaluate('_temChoose(_temMaps[1].id)');await page.locator('[data-tem-view=sadnja]').click()
+   assert await page.locator('.tem-mc').count()==1 and await page.locator('[data-sadnja-species]').count()==7
+   assert await page.evaluate('_temSelectedId===_temMaps[0].id')
+   await page.locator('.tem-file-check input').uncheck()
+   assert await page.evaluate('!_temMaps[0].visible&&_temMaps[1].visible')
+   await page.reload();await page.evaluate('_temRestore()');await page.evaluate('showTemModal();_temSwitchView("sadnja")')
+   assert await page.locator('.tem-file-check input').is_checked()==False
+   assert await page.evaluate('_temMaps[0].theme===null&&!_temMaps[0].visible')
+   await page.locator('[data-sadnja-species=jela]').click()
+   await page.locator('.tem-file-check input').check()
+   await page.locator('[data-tem-view=files]').click();await page.locator('.tem-file-actions button').first.click()
+   assert await page.evaluate('_temView==="sadnja"&&_temMaps[0].theme==="jela"')
+   await page.evaluate('confirm=true;_temRemoveMap(_temMaps[0].id)')
+   assert await page.locator('.tem-sadnja-empty').count()==1 and await page.locator('.tem-mc').count()==0
+   assert await page.evaluate('_temMaps.length===1&&_temMaps[0].name==="qml.gpkg"')
    assert not errors,errors
    print(json.dumps({'file':primary.name,'features':n,'speciesCounts':counts,'elapsedSeconds':round(time.time()-start,2),'qmlFallback':True,'physicalPhone':False},ensure_ascii=False))
    await browser.close()
