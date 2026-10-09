@@ -5753,7 +5753,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.0';
+const APP_VER = 'v2.7.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -9791,6 +9791,9 @@ async function aktivirajProjekt(id) {
   if (typeof id !== 'string') id = _pdProjektId;
   const p = _projekti.find(x => x.id === id);
   if (!p) return;
+  const owner = sbUser?.id;
+  const seq = aktivirajProjekt._seq = (aktivirajProjekt._seq || 0) + 1;
+  const current = () => _aktivniProjektId === id && sbUser?.id === owner && aktivirajProjekt._seq === seq;
   if (typeof _tabRemember === 'function') _tabRemember(_activeTab);
   _aktivniProjektId = id;
   localStorage.setItem('tvlake_akt_proj', id);
@@ -9807,6 +9810,7 @@ async function aktivirajProjekt(id) {
   if(typeof _rndBojaPresets==='function')_rndBojaPresets();
   if (p.odjel) _showProjektOdjelHighlight(p.odjel, p.gj);
   await sbLoadKolegeVlake();
+  if (!current()) return;
   sbStartRealtime();
   showToast('Projekat aktiviran: ' + p.odjel);
   if (p.odjel && graniceOdjeli.length) {
@@ -9814,6 +9818,7 @@ async function aktivirajProjekt(id) {
     const match = _findOdjelInList(list, p.odjel);
     if (match?.bounds) {
       setTimeout(() => {
+        if (!current()) return;
         switchTab('karta');
         map.fitBounds(match.bounds, { padding: [30, 30] });
       }, 400);
@@ -10590,6 +10595,13 @@ function _updVlakeMapVisibility() {
       } catch(e) {}
     });
   });
+  for(const kv of Object.values(kolegeVlakeMap||{})){
+    const show=(!kv.projektId || kv.projektId === _aktivniProjektId) && !hidden.has(kv.projektId);
+    for(const layer of [kv.poly,...(kv.labels||[])].filter(Boolean)){
+      if(show){if(!map.hasLayer(layer))map.addLayer(layer);}
+      else if(map.hasLayer(layer))map.removeLayer(layer);
+    }
+  }
   if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 
@@ -11083,7 +11095,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     kolegeLabels.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
     kolegeVlake = []; kolegeLabels = []; kolegeVlakeMap = {};
   };
-  const rndList = () => { if(typeof _vlakaStilApply==='function')_vlakaStilApply();if (typeof rndKolegeVlakeList === 'function') rndKolegeVlakeList(); };
+  const rndList = () => { if(typeof _updVlakeMapVisibility==='function')_updVlakeMapVisibility();else if(typeof _vlakaStilApply==='function')_vlakaStilApply();if (typeof rndKolegeVlakeList === 'function') rndKolegeVlakeList(); };
 
   // Admin/vodeći nadzorni pregled: prikaži SVE vlake aktivnog projekta (svih korisnika)
   if ((isAdmin() || isVodeci()) && akt) {
@@ -11981,32 +11993,33 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
 }
 
 // ─ Fullscreen ─
+let _fotoFullscreenEpoch = 0;
 async function openFotoFullscreen(tsKey, isShared) {
-  const f = isShared ? _sharedFotos.find(x => x.ts === tsKey) : _locFotos.find(x => x.ts === tsKey);
-  if (!f) return;
+  const list=isShared?_sharedFotos:_locFotos;
+  const f=list.find(x=>x.ts===tsKey);if(!f)return;
+  const epoch=++_fotoFullscreenEpoch,owner=sbUser?.id;
+  const current=()=>epoch===_fotoFullscreenEpoch&&sbUser?.id===owner&&(isShared?_sharedFotos:_locFotos).includes(f);
   map.closePopup();
-  const dt = new Date(f.ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
-  document.getElementById('foto-fullscreen-meta').textContent = `${dt} · ${f.la.toFixed(5)}, ${f.lo.toFixed(5)}`;
-  document.getElementById('foto-fullscreen').style.display = 'flex';
-  // Koristi full ako je u memoriji, inače prikaži thumb odmah pa fetchuj iz DB
-  if (f.full) {
-    document.getElementById('foto-fullscreen-img').src = f.full;
-  } else {
-    document.getElementById('foto-fullscreen-img').src = f.thumb; // placeholder
-    if (f.sbId && sbUser) {
-      try {
-        const { data } = await sb.from('loc_fotos').select('full_img').eq('id', f.sbId).single();
-        if (data?.full_img) {
-          f.full = data.full_img; // keširaj u memoriji
-          document.getElementById('foto-fullscreen-img').src = f.full;
-        }
-      } catch(e) {}
+  const dt=new Date(f.ts).toLocaleString('hr',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('foto-fullscreen-meta').textContent=`${dt} · ${f.la.toFixed(5)}, ${f.lo.toFixed(5)}`;
+  document.getElementById('foto-fullscreen').style.display='flex';
+  const img=document.getElementById('foto-fullscreen-img');img.src=f.full||f.thumb;
+  if(f.full)return;
+  try {
+    const local=isShared?null:await _kmlcGet('fotofull:'+f.ts);
+    if(!current())return;
+    if(local){f.full=local;img.src=local;return;}
+    if(f.sbId&&sbUser){
+      const {data}=await sb.from('loc_fotos').select('full_img').eq('id',f.sbId).single();
+      if(!current())return;
+      if(data?.full_img){f.full=data.full_img;img.src=f.full;}
     }
-  }
+  }catch(e){} // mali pregled ostaje dostupan kad izvor nije dostupan
 }
 function closeFotoFullscreen() {
-  document.getElementById('foto-fullscreen').style.display = 'none';
-  document.getElementById('foto-fullscreen-img').src = '';
+  ++_fotoFullscreenEpoch;
+  document.getElementById('foto-fullscreen').style.display='none';
+  document.getElementById('foto-fullscreen-img').src='';
 }
 
 // ─ Share dialog ─
@@ -12282,7 +12295,7 @@ async function _resizeImg(file, maxPx, q) {
 // ─ Persistencija ─
 function _saveFotos() {
   // Ne spremat full (base64 slika) — preveliko za localStorage, može prekoračiti kvotu
-  // full ostaje samo u memoriji; pri ponovnom otvaranju app-a uzima se iz Supabase
+  // Puna slika je u IndexedDB; server je rezerva za podijeljene fotografije.
   try {
     localStorage.setItem(_FOTO_KEY, JSON.stringify(
       _locFotos.map(({la,lo,ts,thumb,shared,sharedWith,sbId,odjel,gj}) =>
@@ -12293,16 +12306,13 @@ function _saveFotos() {
 
 function _restoreFotos() {
   try {
-    const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]');
+    const d = JSON.parse(localStorage.getItem(_FOTO_KEY) || '[]'),owner=sbUser?.id;
     d.forEach(({la,lo,ts,thumb,shared,sharedWith,sbId,odjel,gj}, i) => {
-      // full je null dok se ne učita iz Supabase (openFotoFullscreen ga fetchuje)
+      // Puna slika stiže iz IDB bez blokiranja pokretanja i bez mreže.
       const m = _buildFotoMarker(la, lo, thumb, thumb, i, ts, true, !!shared);
-      _locFotos.push({la, lo, ts, thumb, full: null, marker: m, shared: !!shared, sharedWith: sharedWith||null, sbId: sbId||null, odjel:odjel||'',gj:gj||''});
-      // OS-V2: foto slikan offline pa app restartovan — full čeka u IndexedDB
-      if (!sbId) {
-        const fi = _locFotos.length - 1;
-        _kmlcGet('fotofull:' + ts).then(full => { if (full && !_locFotos[fi]?.full) _locFotos[fi].full = full; }).catch(() => {});
-      }
+      const foto={la,lo,ts,thumb,full:null,marker:m,shared:!!shared,sharedWith:sharedWith||null,sbId:sbId||null,odjel:odjel||'',gj:gj||''};
+      _locFotos.push(foto);
+      _kmlcGet('fotofull:'+ts).then(full=>{if(full&&sbUser?.id===owner&&_locFotos.includes(foto)&&!foto.full)foto.full=full;}).catch(()=>{});
     });
   } catch(e) {}
 }
@@ -12435,7 +12445,9 @@ function _patchKolegaVlaka(row) {
     // Premjesti naziv-labelu na novu sredinu (inače ostane na staroj poziciji
     // dok kolega snima) — samo ako ovaj zapis ima svoje labele (ne-admin prikaz).
     if (e.labels) {
+      const oldLabels=new Set(e.labels);
       e.labels.forEach(m => { try { map.removeLayer(m); } catch(err) {} });
+      kolegeLabels=kolegeLabels.filter(m=>!oldLabels.has(m));
       e.labels = _placeLabelMarkers(row.pts, row.nm, 498);
       e.labels.forEach(m => kolegeLabels.push(m));
     }
@@ -12443,7 +12455,8 @@ function _patchKolegaVlaka(row) {
   } else {
     _schedKolegeFullSync(500);
   }
-  if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
+  if(typeof _updVlakeMapVisibility==='function')_updVlakeMapVisibility();
+  else if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 
 function _schedKolegeFullSync(delay = 4000) {
@@ -14062,12 +14075,14 @@ function _projektVlakePreviewClose() { if(_projektVlakePreview)map.removeLayer(_
 function _projektVlakeZoom(key) {
   const r=_projektVlakeRows().find(r=>_projektVlakeIdentity(r)===key);if(!r)return;
   const own=r.korisnik_id===sbUser?.id?vlake.find(v=>v.projektId===_aktivniProjektId&&(r.id?v.sbId===r.id:v.nm===r.nm)):null;
-  const shared=kolegeVlakeMap[r.korisnik_id+'::'+r.nm];
+  const candidate=kolegeVlakeMap[r.korisnik_id+'::'+r.nm];
+  const shared=candidate?.projektId===_aktivniProjektId?candidate:null;
   let layer=own?.poly||shared?.poly;
   try{
     _projektVlakePreviewClose();
     if(!layer){if(!r.pts?.length){showToast('Vlaka nema sačuvan položaj. Preuzmi podatke projekta.');return;}layer=L.polyline(r.pts.map(p=>[p.la,p.lo]),_vlakaPrikazStyle(r));_projektVlakePreview=layer;}
     const bounds=layer.getBounds();if(!bounds.isValid())return;
+    if(typeof _getHiddenProjektIds==='function'&&_getHiddenProjektIds().has(_aktivniProjektId)){_setProjektVlakeHidden(_aktivniProjektId,false);_updVlakeMapVisibility();_updPdVlakeBtn(_aktivniProjektId);}
     layer.addTo(map);switchTab('karta');map.invalidateSize();map.fitBounds(bounds,{padding:[40,40],maxZoom:18});
     if(own&&typeof showVlakaPopup==='function')showVlakaPopup(vlake.indexOf(own),bounds.getCenter());
     else if(shared&&typeof showKolegeVlakaInfo==='function')showKolegeVlakaInfo(r.korisnik_id+'::'+r.nm,bounds.getCenter());
@@ -17357,6 +17372,8 @@ function _nextMainBr() {
   // odmah okine dijalog o duplikatu (dva projektanta na istom odjelu).
   try {
     for (const key in kolegeVlakeMap) {
+      const kv = kolegeVlakeMap[key];
+      if (kv?.projektId && kv.projektId !== _aktivniProjektId) continue;
       const nm = key.slice(key.indexOf('::') + 2);
       if (nm.includes('.')) continue;
       const n = parseInt(String(nm).replace(/^T/i, ''), 10);
@@ -17769,6 +17786,8 @@ let _addVAfterCreate = null; // callback after vlaka is actually created
 function _kolegaVlakaDup(nm) {
   try {
     for (const key in kolegeVlakeMap) {
+      const kv = kolegeVlakeMap[key];
+      if (kv?.projektId && kv.projektId !== _aktivniProjektId) continue;
       const i = key.indexOf('::');
       if (i >= 0 && key.slice(i + 2) === nm) {
         return kolegeVlakeMap[key]?.ime || 'drugi projektant';
@@ -21961,8 +21980,8 @@ function rndList() {
       hdr.style.display = 'block';
       hdr.innerHTML = `
         <div class="vph-top">
-          <span class="vph-lbl">📁 <b>${lbl}</b></span>
-          <button class="vph-nav" onclick="document.getElementById('proj-list-sec')?.scrollIntoView({behavior:'smooth',block:'start'})" title="Na projekte">Projekti ▸</button>
+          <span class="vph-lbl">📁 <b>${_escHtml(lbl)}</b></span>
+          <button class="vph-nav" onclick="switchTab('projekat');showProjektiList();document.getElementById('proj-list-sec')?.scrollIntoView({block:'start'})" title="Na projekte">Projekti ▸</button>
         </div>
         <div class="vph-stats">
           <div class="vph-stat"><b style="color:#4ade80;">${fmtL(totalDist)}</b><span>ukupno</span></div>
@@ -22076,17 +22095,21 @@ function zmV(i) {
   if (v.pts.length>0) map.fitBounds(L.latLngBounds(v.pts.map(p=>[p.la,p.lo])),{padding:[30,30]});
 }
 let _delPendingIdx = null;
+let _delPendingRef = null;
 
 function dlV(i) {
   if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
   const v = vlake[i];
+  if (!v) return;
+  if (recOn) { showToast('Završi snimanje prije brisanja vlake'); return; }
   _delPendingIdx = i;
+  _delPendingRef = {v, nm:v.nm, projektId:v.projektId, owner:sbUser?.id, activeProject:_aktivniProjektId};
   const pts = v.pts ? v.pts.length : 0;
   const dist = pts > 1 ? fmtL(Math.round(calcL(v.pts))) : null;
 
   document.getElementById('del-modal-title').textContent = `Obriši ${v.nm}?`;
   document.getElementById('del-modal-meta').innerHTML =
-    `<b style="color:#e2e8f0;">${v.nm}</b>` +
+    `<b style="color:#e2e8f0;">${_escHtml(v.nm)}</b>` +
     (dist ? ` &nbsp;·&nbsp; ${dist}` : '') +
     (pts > 0 ? ` &nbsp;·&nbsp; ${pts} tačaka` : '');
   document.getElementById('del-modal-warn').textContent =
@@ -22110,20 +22133,31 @@ function dlV(i) {
 }
 
 function _delInputCheck() {
-  const v = _delPendingIdx !== null ? vlake[_delPendingIdx] : null;
-  if (!v) return;
+  const ref = _delPendingRef;
+  const valid = ref && vlake.includes(ref.v) && ref.v.nm === ref.nm &&
+    ref.v.projektId === ref.projektId && sbUser?.id === ref.owner &&
+    _aktivniProjektId === ref.activeProject && !isReadOnly() && !recOn;
   const inp = document.getElementById('del-modal-input').value.trim();
-  document.getElementById('del-confirm-btn').disabled = inp !== v.nm;
+  document.getElementById('del-confirm-btn').disabled = !valid || inp !== ref.nm;
 }
 
 function _delCancel() {
   document.getElementById('del-modal-bg').classList.remove('open');
   _delPendingIdx = null;
+  _delPendingRef = null;
 }
 
 function _delConfirm() {
-  const i = _delPendingIdx;
-  if (i === null || !vlake[i]) { _delCancel(); return; }
+  const ref = _delPendingRef;
+  const i = ref ? vlake.indexOf(ref.v) : -1;
+  if (i < 0 || ref.v.nm !== ref.nm || ref.v.projektId !== ref.projektId ||
+      sbUser?.id !== ref.owner || _aktivniProjektId !== ref.activeProject || isReadOnly() || recOn) {
+    _delCancel(); showToast('Stavka ili projekat su promijenjeni — ponovo otvori brisanje'); return;
+  }
+  // Validate inside the action too: Enter can call this while its button is disabled.
+  if (document.getElementById('del-modal-input').value.trim() !== ref.nm) {
+    _delInputCheck(); document.getElementById('del-modal-input').focus(); return;
+  }
   _delCancel();
 
   map.removeLayer(vlake[i].poly);
@@ -22239,6 +22273,7 @@ function showVlakaPopup(i, latlng) {
     </label>` : ''}
   `;
   if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(v));
+  _vpBufferLabel();
   _positionPopup(latlng);
 }
 
@@ -22278,6 +22313,7 @@ function showKolegeVlakaInfo(key, latlng) {
     <div class="vp-row">Preuzeto sa servera · pregled</div>`;
   if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(kv));
   document.getElementById('vlaka-popup-btns').style.display = 'none';
+  _vpBufferLabel();
   _positionPopup(latlng);
 }
 
@@ -24192,9 +24228,9 @@ function applyKmlStyle(i) {
   const base = { color: k.col, weight: k.weight || 2, opacity: op };
   base.dashArray = k.dash || null;
 
-  let patUrl = null;
-  if (k.fill && k.fillPattern && k.fillPattern !== 'solid') {
-    patUrl = _ensureKmlPattern(i);
+  let patUrl=null,canvasPattern=null;
+  if(k.fill&&k.fillPattern&&k.fillPattern!=='solid'){
+    patUrl=_ensureKmlPattern(i);canvasPattern=_kmlCanvasPattern(k);
   }
 
   const styleLayer = l => {
@@ -24204,7 +24240,8 @@ function applyKmlStyle(i) {
     const lo = {...base};
     if (l._kmlIsPolygon) {
       if (k.fill) {
-        if (patUrl) { lo.fillColor = patUrl; lo.fillOpacity = 1; }
+        const pattern=l._renderer instanceof L.Canvas?canvasPattern:patUrl;
+        if(pattern){lo.fillColor=pattern;lo.fillOpacity=1;}
         else { lo.fillColor = k.fillCol || k.col; lo.fillOpacity = k.fillOpacity ?? 0.35; }
       } else {
         // NE 0 — SVG fill-opacity:0 se u nekim WebView/Chromium verzijama tretira
@@ -24223,6 +24260,22 @@ function applyKmlStyle(i) {
   k.grp?.eachLayer(styleLayer);
 }
 
+// Leaflet Canvas ne razumije SVG url(#pattern). Mali ponovljivi raster ostaje
+// u postojećem rendereru, bez hiljada dodatnih SVG elemenata na terenu.
+function _kmlCanvasPattern(k){
+  const signature=JSON.stringify([k.fillPattern,k.fillCol||k.col,k.fillOpacity??.35]);
+  if(k._canvasPatternKey===signature&&k._canvasPattern)return k._canvasPattern;
+  const c=document.createElement('canvas');c.width=c.height=8;const ctx=c.getContext('2d');if(!ctx)return null;
+  ctx.strokeStyle=ctx.fillStyle=k.fillCol||k.col;ctx.globalAlpha=k.fillOpacity??.35;ctx.lineWidth=k.fillPattern==='crosshatch'?1.2:1.8;
+  const line=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
+  if(['diagonal','crosshatch'].includes(k.fillPattern)){line(0,8,8,0);line(-4,4,4,-4);line(4,12,12,4);}
+  if(['diagonal-rev','crosshatch'].includes(k.fillPattern)){line(0,0,8,8);line(-4,4,4,12);line(4,-4,12,4);}
+  if(k.fillPattern==='horizontal')line(0,4,8,4);
+  if(k.fillPattern==='vertical')line(4,0,4,8);
+  if(k.fillPattern==='dots'){ctx.beginPath();ctx.arc(4,4,1.6,0,Math.PI*2);ctx.fill();}
+  k._canvasPatternKey=signature;k._canvasPattern=ctx.createPattern(c,'repeat');return k._canvasPattern;
+}
+
 function _ensureKmlPattern(i) {
   const k = kmlLs[i];
   if (!k) return null;
@@ -24230,7 +24283,7 @@ function _ensureKmlPattern(i) {
   if (!svg) return null;
   let defs = svg.querySelector('defs');
   if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg','defs'); svg.prepend(defs); }
-  const patId = `kml-pat-${i}`;
+  const patId = k._patternId || (k._patternId = `kml-pat-${L.stamp(k.grp)}`);
   const old = defs.querySelector('#' + patId);
   if (old) old.remove();
   const col = k.fillCol || k.col;
@@ -24238,6 +24291,7 @@ function _ensureKmlPattern(i) {
   pat.setAttribute('id', patId);
   pat.setAttribute('patternUnits','userSpaceOnUse');
   pat.setAttribute('width','8'); pat.setAttribute('height','8');
+  pat.setAttribute('opacity',String(k.fillOpacity??.35));
   const inner = {
     'diagonal':     `<line x1="0" y1="8" x2="8" y2="0" stroke="${col}" stroke-width="1.8"/>
                      <line x1="-4" y1="4" x2="4" y2="-4" stroke="${col}" stroke-width="1.8"/>
@@ -24287,6 +24341,7 @@ function delK(i) {
     } catch(e) {showToast('Sloj nije obrisan — registar nije sačuvan');return false;}
   }
   if (k.grp) map.removeLayer(k.grp);
+  if(k._patternId)document.getElementById(k._patternId)?.remove();
   // Bucket fajl: sačuvaj vis:false da se ne auto-učita idući put (ostaje u panelu kao 🙈)
   if (k._key) _kmlPersistHidden(k._key);
   kmlLs.splice(i, 1);
@@ -25018,7 +25073,7 @@ function _projSveVlake() {
   try {
     for (const key in kolegeVlakeMap) {
       const kv = kolegeVlakeMap[key];
-      if (!kv?.pts || kv.pts.length < 2) continue;
+      if (!kv?.pts || kv.pts.length < 2 || (kv.projektId && kv.projektId !== _aktivniProjektId)) continue;
       const i = key.indexOf('::');
       const nm = i >= 0 ? key.slice(i + 2) : key;
       const krM = String(nm).match(/\.(\d+)$/);
@@ -27272,7 +27327,9 @@ function rndKolegeVlakeList() {
     const isKrak  = nm.includes('.');
     const arrow   = isKrak ? `<span style="color:#475569;font-size:9px;margin-right:2px;">↳</span>` : '';
     return `<div class="vrow${isKrak?' vrow-krak':''} vrow-kolega" data-key="${_escHtml(key)}"
-        onclick="const kv=kolegeVlakeMap[this.dataset.key];if(kv?.poly?.getBounds)map.fitBounds(kv.poly.getBounds(),{padding:[30,30]});switchTab('karta');">
+        role="button" tabindex="0" aria-label="${_escHtml('Prikaži '+nm+' · '+(kv.ime||'Projektant'))}"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+        onclick="const kv=kolegeVlakeMap[this.dataset.key];if(kv)_projektVlakeZoom(_projektVlakeIdentity({korisnik_id:kv.korisnikId||this.dataset.key.split('::')[0],id:kv.sbId||null,nm:kv.nm||this.dataset.key.split('::').slice(1).join('::')}));">
       <div class="vcard-stripe" style="background:${kv.poly?.options?.color||kv.color}"></div>
       <div class="vcard-info">
         <div class="vcard-top">
@@ -32038,9 +32095,22 @@ function _sqlIdbOpen() {
 }
 async function _sqlIdbDeleteDirect(name) {
   const idb=await _sqlIdbOpen();
-  const entry=await new Promise((res,rej)=>{const r=idb.transaction('maps','readonly').objectStore('maps').get(name);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
-  await new Promise((res,rej)=>{ const tx=idb.transaction(['maps','mapBufs'],'readwrite'); tx.objectStore('maps').delete(name); tx.objectStore('mapBufs').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
-  idb.close();if(entry?.meta?._nativeId)await NativeOfflineMaps.remove(entry.meta._nativeId);
+  try {
+    const entry=await new Promise((res,rej)=>{const r=idb.transaction('maps','readonly').objectStore('maps').get(name);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+    // Ne izgubi jedinu referencu ako Android odbije brisanje povezanog fajla.
+    if(entry?.meta?._nativeId)await NativeOfflineMaps.remove(entry.meta._nativeId);
+    await new Promise((res,rej)=>{const tx=idb.transaction(['maps','mapBufs'],'readwrite');tx.objectStore('maps').delete(name);tx.objectStore('mapBufs').delete(name);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error||Error('Brisanje karte prekinuto'));});
+    _sqlMapForget(name);
+  }finally{idb.close();}
+}
+function _sqlMapForget(name){
+  try {
+    for(const key of ['lm_thumb_','lm_thumb_v2_','lm_thumb_v3_','tvlake_sqlmap_fails_'])localStorage.removeItem(key+name);
+    const prefs=_sqlMapPrefs();delete prefs[name];localStorage.setItem('tvlake_sqlmap_prefs_v1',JSON.stringify(prefs));
+    _sqlSkipRemove(name);
+    const last=JSON.parse(localStorage.getItem('tvlake_last_map')||'null');if(last?.type==='sqlite'&&last.sqlId===name)_saveLastMap('none',null,null);
+    const next=_mapFavs.filter(f=>f.type!=='sqlite'||f.sqliteId!==name);if(next.length!==_mapFavs.length){_mapFavs=next;_mapFavSave();}
+  }catch(e){showToast('Karta je obrisana; postavke prikaza nisu potpuno očišćene.');}
 }
 async function _sqlIdbClearAll() {
   return new Promise((res,rej)=>{ const r=indexedDB.deleteDatabase('tvlake_sqlmaps'); r.onsuccess=res; r.onerror=()=>rej(r.error); });
@@ -33591,10 +33661,10 @@ async function sqlmapRemove(i) {
   if (!sl) return;
   await _sqlImportCancel(sl.name);
   const old=await _sqlWCall({type:'idb-meta',name:sl.name});
-  map.removeLayer(sl.layer);
   await _sqlWCall({type:'close', name:sl.name});
-  delete _mainMiniDbs[sl.name];
   await _sqlIdbDeleteDirect(sl.name);
+  map.removeLayer(sl.layer);
+  delete _mainMiniDbs[sl.name];
   if (sl.opfs||old.entry?.opfs) await _sqlImportDeleteFile(sl.opfsName || old.entry?.opfsName || sl.name+'.sqlmap');
   for (const [k, bmp] of _sqlTileBmpCache) { if (k.startsWith(sl.name+'/')) { if (bmp.close) try{bmp.close();}catch(e){} _sqlTileBmpCache.delete(k); } }
   const current=_sqlLayers.indexOf(sl);if(current>=0)_sqlLayers.splice(current, 1);
@@ -33753,15 +33823,18 @@ function closeMapManager() {
 }
 function _mapMgrSearch(q) { _mapMgrQ = q || ''; _mapMgrRender(); }
 
+function _loadmapToggleFav(i){const m=_loadmapManageShown[i];if(m){_mapToggleFavName(m.name);_loadmapRenderManage();}}
 function _mapMgrToggleFav(i) {
   const m = _mapMgrShown[i]; if (!m) return;
-  const name = m.name;
+  _mapToggleFavName(m.name);
+  _mapMgrRender();
+}
+function _mapToggleFavName(name) {
   const idx = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === name);
   if (idx >= 0) { _mapFavs.splice(idx, 1); showToast('Uklonjeno iz omiljenih'); }
   else { _mapFavs.push({ id: 'fav_' + Date.now(), name, type: 'sqlite', sqliteId: name }); showToast('⭐ Dodano u omiljene'); }
   _mapFavSave();
   if (document.getElementById('mapfav-modal')?.classList.contains('open')) _mapFavRender();
-  _mapMgrRender();
 }
 
 function _mapMgrActivate(i) {
@@ -33777,13 +33850,15 @@ async function _mapMgrDelete(i) {
   const m = _mapMgrShown[i]; if (!m) return;
   const name = m.name;
   if (!await _dlgConfirm(`Trajno obrisati kartu "${name}"?`, { danger: true })) return;
-  const idx = _sqlLayers.findIndex(l => l.name === name);
-  if (idx >= 0) {
-    await sqlmapRemove(idx);
-  } else {
-    try { await _sqlIdbDeleteDirect(name); } catch(e) {}
-    await _sqlImportDeleteFile(m.opfsName || name+'.sqlmap').catch(()=>{});
-  }
+  try {
+    const idx = _sqlLayers.findIndex(l => l.name === name);
+    if (idx >= 0) {
+      await sqlmapRemove(idx);
+    } else {
+      await _sqlIdbDeleteDirect(name);
+      await _sqlImportDeleteFile(m.opfsName || name+'.sqlmap').catch(()=>{});
+    }
+  } catch(e) { showToast('Karta nije obrisana: '+e.message); return; }
   // Ukloni eventualnu referencu iz omiljenih
   const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === name);
   if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
@@ -33881,7 +33956,7 @@ function _loadmapStatus(t) {
 }
 function _loadmapBadges(m) {
   const saving=_sqlImports.has(m.name);
-  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved&&!saving?'lm-badge-saved':'lm-badge-session')+'">'+(saving?'Čuvanje u toku…':m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
+  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved&&!saving?'lm-badge-saved':'lm-badge-session')+'">'+(saving?'Čuvanje u toku…':m.meta?._nativeId?'✓ Povezana s fajlom':m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
 }
 function _loadmapRenderStartupDiag() {
   const el = document.getElementById('loadmap-startup-debug');
@@ -34096,9 +34171,11 @@ async function _loadmapRecentTap(i) { const m=_loadmapRecentShown[i];if(m)await 
 async function _loadmapRecentDel(i) {
   const m = _loadmapRecentShown[i]; if (!m) return;
   if (!await _dlgConfirm('Obrisati kartu iz povijesti "' + m.name + '"?', { danger: true })) return;
+  try {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
   else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
+  }catch(e){showToast('Karta nije obrisana: '+e.message);return;}
   try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name);localStorage.removeItem('lm_thumb_v3_' + m.name); } catch (e) {}
   showToast('🗑 Obrisano: ' + m.name);
   _loadmapRenderRecent(); _loadmapRenderManage();
@@ -34114,7 +34191,7 @@ async function _loadmapRenderManage() {
   const q=_loadmapManageQ.trim().toLocaleLowerCase('bs');_loadmapManageShown=q?maps.filter(m=>m.name.toLocaleLowerCase('bs').includes(q)):maps;
   list.innerHTML=_loadmapManageShown.length?_loadmapManageShown.map((m,i)=>{
     const sl=_sqlLayers.find(l=>l.name===m.name),op=sl?Math.round((sl.layer.options.opacity??1)*100):100;
-    return '<article class="lm-card'+(m.visible?' active':'')+'">'+_loadmapThumbHtml(m.name,true)+'<div class="lm-card-top"><div class="lm-card-info"><div class="lm-card-nm">'+_escHtml(m.name)+'</div><div class="lm-card-meta">'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.size?' · '+_mapMgrFmtSize(m.size):'')+'</div>'+_loadmapBadges(m)+'</div></div><div class="lm-card-btns"><button class="lm-primary" onclick="_loadmapActivate('+i+')"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži na karti</button>'+(m.visible?'<button class="lm-secondary" onclick="_loadmapDeactivate('+i+')"><svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij</button>':'')+'</div><details class="lm-card-details"><summary>Detalji i podešavanja</summary>'+(m.savedAt?'<p>Dodana: '+_escHtml(_mapMgrFmtDate(m.savedAt))+'</p>':'')+(m.meta?.minzoom!=null?'<p>Uvećanje: '+_escHtml(String(m.meta.minzoom))+'–'+_escHtml(String(m.meta.maxzoom))+'</p>':'')+(sl?'<label class="lm-opacity"><span>Jačina prikaza <b id="lm-op-'+i+'">'+op+'%</b></span><input aria-label="'+_escHtml('Jačina prikaza '+m.name)+'" type="range" min="0" max="100" value="'+op+'" oninput="_loadmapSetOpacity('+i+',this.value)"></label><div class="lm-layer-order"><span>Redoslijed sloja</span><button onclick="_loadmapZ('+i+',-1)" aria-label="Pomjeri sloj ispod">↓ Ispod</button><button onclick="_loadmapZ('+i+',1)" aria-label="Pomjeri sloj iznad">↑ Iznad</button></div>':'<p>Karta je sačuvana. Prikaži je da otvoriš podešavanja.</p>')+'<div class="lm-details-actions"><button onclick="_loadmapInfo('+i+')">Informacije o karti</button><button class="lm-delete" onclick="_loadmapDelete('+i+')"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button></div></details></article>';
+    return '<article class="lm-card'+(m.visible?' active':'')+'">'+_loadmapThumbHtml(m.name,true)+'<div class="lm-card-top"><div class="lm-card-info"><div class="lm-card-nm">'+_escHtml(m.name)+'</div><div class="lm-card-meta">'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.size?' · '+_mapMgrFmtSize(m.size):'')+'</div>'+_loadmapBadges(m)+'</div><button type="button" class="lm-fav" aria-label="'+_escHtml('Omiljena karta '+m.name)+'" aria-pressed="'+_mapMgrIsFav(m.name)+'" onclick="_loadmapToggleFav('+i+')"><svg class="ic"><use href="#ic-zvijezda"/></svg></button></div><div class="lm-card-btns"><button class="lm-primary" onclick="_loadmapActivate('+i+')"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži na karti</button>'+(m.visible?'<button class="lm-secondary" onclick="_loadmapDeactivate('+i+')"><svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij</button>':'')+'</div><details class="lm-card-details"><summary>Detalji i podešavanja</summary>'+(m.savedAt?'<p>Dodana: '+_escHtml(_mapMgrFmtDate(m.savedAt))+'</p>':'')+(m.meta?.minzoom!=null?'<p>Uvećanje: '+_escHtml(String(m.meta.minzoom))+'–'+_escHtml(String(m.meta.maxzoom))+'</p>':'')+(sl?'<label class="lm-opacity"><span>Jačina prikaza <b id="lm-op-'+i+'">'+op+'%</b></span><input aria-label="'+_escHtml('Jačina prikaza '+m.name)+'" type="range" min="0" max="100" value="'+op+'" oninput="_loadmapSetOpacity('+i+',this.value)"></label><div class="lm-layer-order"><span>Redoslijed sloja</span><button onclick="_loadmapZ('+i+',-1)" aria-label="Pomjeri sloj ispod">↓ Ispod</button><button onclick="_loadmapZ('+i+',1)" aria-label="Pomjeri sloj iznad">↑ Iznad</button></div>':'<p>Karta je sačuvana. Prikaži je da otvoriš podešavanja.</p>')+'<div class="lm-details-actions"><button onclick="_loadmapInfo('+i+')">Informacije o karti</button><button class="lm-delete" onclick="_loadmapDelete('+i+')"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button></div></details></article>';
   }).join(''):'<div class="lm-empty"><svg class="ic"><use href="#ic-karta"/></svg><b>'+ (maps.length?'Nema karata s tim nazivom':'Tvoje karte na jednom mjestu')+'</b><p>'+(maps.length?'Promijeni ili obriši pretragu.':'Dodaj prvu kartu za korištenje njenog područja bez interneta.')+'</p>'+(maps.length?'':'<button class="lm-primary" onclick="_loadmapTab(\'add\')">Dodaj kartu</button>')+'</div>';
   for(const m of _loadmapManageShown)if(m.loaded)_loadmapThumb(m.name);
   try{if(navigator.storage?.estimate){const est=await navigator.storage.estimate();if(token!==_loadmapManageToken)return;const used=est.usage||0,quota=est.quota||0,bar=document.getElementById('loadmap-bar'),qt=document.getElementById('loadmap-quota');if(bar)bar.style.width=(quota?Math.min(100,used/quota*100):0)+'%';if(qt)qt.textContent=quota?_mapMgrFmtSize(used)+' / '+_mapMgrFmtSize(quota):_mapMgrFmtSize(used);}}catch(e){}
@@ -34143,9 +34220,11 @@ function _loadmapZ(i, dir) {
 async function _loadmapDelete(i) {
   const m = _loadmapManageShown[i]; if (!m) return;
   if (!await _dlgConfirm('Trajno obrisati kartu "' + m.name + '"?', { danger: true })) return;
+  try {
   const idx = _sqlLayers.findIndex(l => l.name === m.name);
   if (idx >= 0) await sqlmapRemove(idx);
   else { await _sqlIdbDeleteDirect(m.name);await _sqlImportDeleteFile(m.opfsName || m.name+'.sqlmap').catch(()=>{}); }
+  }catch(e){showToast('Karta nije obrisana: '+e.message);return;}
   try { localStorage.removeItem('lm_thumb_' + m.name);localStorage.removeItem('lm_thumb_v2_' + m.name);localStorage.removeItem('lm_thumb_v3_' + m.name); } catch (e) {}
   const fi = _mapFavs.findIndex(f => f.type === 'sqlite' && f.sqliteId === m.name);
   if (fi >= 0) { _mapFavs.splice(fi, 1); _mapFavSave(); }
@@ -34158,7 +34237,7 @@ async function _loadmapInfo(i) {
   let t = '📦 ' + m.name + '\n\n';
   t += 'Format: ' + _mapMgrFmtLabel(m.fmt) + '\n';
   t += 'Veličina: ' + _mapMgrFmtSize(m.size) + '\n';
-  t += 'Pohrana: ' + (m.saved ? (m.opfs ? 'OPFS (trajno)' : 'baza (trajno)') : 'sesija (privremeno)') + '\n';
+  t += 'Pohrana: ' + (m.meta?._nativeId?'Povezana s fajlom na telefonu — zadrži izvorni fajl':m.saved ? (m.opfs ? 'OPFS (trajno)' : 'baza (trajno)') : 'sesija (privremeno)') + '\n';
   if (meta.minzoom != null) t += 'Zoom: ' + meta.minzoom + '–' + meta.maxzoom + '\n';
   t += 'CRS: ' + (meta.crs || meta.srs || 'EPSG:3857 (pretpostavljeno)') + '\n';
   if (meta.bounds) {

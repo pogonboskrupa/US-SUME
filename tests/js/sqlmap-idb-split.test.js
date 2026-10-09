@@ -361,7 +361,7 @@ await t('briše i maps i mapBufs zapis (npr. otkazano preuzimanje/overwrite pri 
   await seedLegacyV1(indexedDB, 'tvlake_sqlmaps', [
     { name: 'karta1', buffer: buf, fmt: 'mbtiles', meta: {}, savedAt: 1, size: 8 }
   ]);
-  const sandbox = { indexedDB };
+  const sandbox = { indexedDB, _sqlMapForget:()=>{} };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_SQLIDBOPEN_MAIN + '\n' + SRC_SQLIDBDELETEDIRECT +
     '\nreturn { _sqlIdbOpen, _sqlIdbDeleteDirect };')(...keys.map(k => sandbox[k]));
@@ -375,7 +375,7 @@ await t('briše i maps i mapBufs zapis (npr. otkazano preuzimanje/overwrite pri 
 
 await t('brisanje nepostojećeg imena ne baca', async () => {
   const indexedDB = makeFakeIndexedDB();
-  const sandbox = { indexedDB };
+  const sandbox = { indexedDB, _sqlMapForget:()=>{} };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, SRC_SQLIDBOPEN_MAIN + '\n' + SRC_SQLIDBDELETEDIRECT +
     '\nreturn { _sqlIdbDeleteDirect };')(...keys.map(k => sandbox[k]));

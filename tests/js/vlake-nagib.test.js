@@ -371,7 +371,7 @@ function pokreniRndList(opts) {
     '_vlNagib', '_vlNagibLimit', '_projPovrsinaHa', 'fmtL', '_vlNagibTrakaRender',
     '_renderVlakaRow', 'updOvl', 'updProjStats', '_vlSamoStrme', 'clearTimeout',
     'setTimeout', 'localStorage',
-    ['_vlKrakRijec', '_vlTraziNorm', '_vlOdgovara', '_vlSkupKljuc'].map(extractFn).join('\n') +
+    ['_vlKrakRijec', '_vlTraziNorm', '_vlOdgovara', '_vlSkupKljuc', '_escHtml'].map(extractFn).join('\n') +
     `\nvar _vlSort = ${JSON.stringify(opts.sort || 'naziv')}, _vlTrazi = ${JSON.stringify(opts.trazi || '')}, _vlSkupljeni = new Set(${JSON.stringify(opts.skupljeni || [])});\n` +
     src + '\nrndList();'
   );

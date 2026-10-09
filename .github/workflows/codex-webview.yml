@@ -70,6 +70,7 @@ jobs:
           python tests/browser/thematic-files-266.py
           python tests/browser/thematic-source-268.py
           python tests/browser/manual-draw-270.py
+          python tests/browser/audit-parts-271.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py

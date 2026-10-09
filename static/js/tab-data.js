@@ -10,16 +10,24 @@
     const next = key();
     if (next === scope && state) return;
     scope = next;
-    state = states.get(next) || {search:'', sort:'naziv', steep:false, filter:'all', page:0, colleagueSearch:'', colleaguePage:0, scroll:{}};
+    state = states.get(next);
+    if(!state){
+      let saved={};try{saved=JSON.parse(localStorage.getItem('tvlake_tab_view_v1_'+next)||'{}')||{};}catch(e){}
+      state={search:typeof saved.search==='string'?saved.search.slice(0,160):'',sort:['naziv','duzina','nagib'].includes(saved.sort)?saved.sort:(_vlSort||'naziv'),steep:saved.steep===true,filter:saved.filter==='pending'?'pending':'all',page:0,colleagueSearch:typeof saved.colleagueSearch==='string'?saved.colleagueSearch.slice(0,160):'',colleaguePage:0,scroll:{}};
+    }
     states.set(next, state);
     _vlTrazi = state.search; _vlSort = state.sort; _vlSamoStrme = state.steep;
     const input = document.getElementById('vl-trazi'); if (input) input.value = state.search;
+  }
+  function persist(){
+    try{localStorage.setItem('tvlake_tab_view_v1_'+scope,JSON.stringify({search:state.search,sort:state.sort,steep:state.steep,filter:state.filter,colleagueSearch:state.colleagueSearch}));}
+    catch(e){showToast('Izbor liste nije sačuvan — provjeri prostor.');}
   }
   function remember(tab) {
     sync();
     const el = document.getElementById(panels[tab]);
     if (el) state.scroll[tab] = el.scrollTop;
-    state.search = _vlTrazi; state.sort = _vlSort; state.steep = _vlSamoStrme;
+    state.search = _vlTrazi; state.sort = _vlSort; state.steep = _vlSamoStrme;persist();
   }
   function context() {
     sync();
@@ -58,7 +66,7 @@
       controls = document.createElement('div'); controls.id = 'data-vl-controls'; controls.className = 'data-controls';
       document.getElementById('vl')?.before(controls);
     }
-    if (controls) controls.innerHTML = '<button onclick="_tabFilter(\'all\')" aria-pressed="' + (state.filter==='all') + '">Sve vlake</button><button onclick="_tabFilter(\'pending\')" aria-pressed="' + (state.filter==='pending') + '">Za slanje</button><small>Pretraga i filteri rade offline</small>';
+    if (controls) controls.innerHTML = '<button onclick="_tabFilter(\'all\')" aria-pressed="' + (state.filter==='all') + '">Sve vlake</button><button onclick="_tabFilter(\'pending\')" aria-pressed="' + (state.filter==='pending') + '">Za slanje</button>'+(state.search||state.steep||state.filter!=='all'?'<button class="data-reset" onclick="_tabReset()">Očisti filtere</button>':'')+'<small id="data-vl-summary">Pretraga i filteri rade offline</small>';
     return state.filter === 'pending';
   }
   function status(v) {
@@ -73,6 +81,8 @@
   function render(el, rows) {
     sync();
     lastRows=rows;
+    const summary=document.getElementById('data-vl-summary');
+    if(summary)summary.textContent=rows.length+' rezultata · '+(state.filter==='pending'?'za slanje':state.search||state.steep?'filter uključen':'sve vlastite vlake')+' · offline pregled';
     state.page = Math.max(0, Math.min(state.page, Math.ceil(rows.length / size)-1));
     rows.slice(state.page*size,(state.page+1)*size).forEach(args => _renderVlakaRow(el,...args));
     // Samo jedna stranica kartica u DOM-u; redovi i dalje nose stvarni vlake[] indeks.
@@ -83,9 +93,10 @@
       if (empty) { empty.style.display = 'block'; empty.textContent = 'Nema vlaka za slanje u ovom projektu.'; }
     }
   }
-  function filter(value) { sync(); state.filter = value==='pending'?'pending':'all'; state.page=0; rndList(); }
+  function filter(value) { sync(); state.filter = value==='pending'?'pending':'all'; state.page=0;persist(); rndList(); }
   function page(value) { sync(); state.page=Math.max(0,value|0); rndList(); document.getElementById('data-vl-controls')?.scrollIntoView({block:'start'}); }
-  function changed() { sync(); state.search=_vlTrazi; state.sort=_vlSort; state.steep=_vlSamoStrme; state.page=0; }
+  function changed() { sync(); state.search=_vlTrazi; state.sort=_vlSort; state.steep=_vlSamoStrme; state.page=0;persist(); }
+  function reset(){sync();_vlTrazi='';_vlSamoStrme=false;state.search='';state.steep=false;state.filter='all';state.page=0;const input=document.getElementById('vl-trazi');if(input)input.value='';persist();rndList();}
   function reveal(i) {
     sync();
     const index=lastRows.findIndex(args => args[1]===i);
@@ -99,7 +110,7 @@
     if (!controls && section) {
       controls = document.createElement('div'); controls.id='data-colleague-controls'; controls.className='data-controls';
       const input = document.createElement('input'); input.type='search'; input.placeholder='Traži vlaku ili kolegu…'; input.setAttribute('aria-label','Traži vlaku ili kolegu');
-      input.addEventListener('input',() => { sync(); state.colleagueSearch=input.value; state.colleaguePage=0; rndKolegeVlakeList(); });
+      input.addEventListener('input',() => { sync(); state.colleagueSearch=input.value.slice(0,160); state.colleaguePage=0;persist(); rndKolegeVlakeList(); });
       controls.append(input); document.getElementById('kolege-vl').before(controls);
     }
     if (controls) controls.querySelector('input').value=state.colleagueSearch;
@@ -140,7 +151,7 @@
     if (empty) { empty.hidden=serverTab!=='send'&&serverTab!=='problems'||!!rows.length; empty.textContent=serverTab==='problems'?'Nema zabilježenih problema pri slanju.':'Nema operacija u redu. GPS tačke doznake prikazane su u sažetku iznad.'; }
     return rows.slice(serverPage*size,(serverPage+1)*size);
   }
-  Object.assign(window, {_tabRemember:remember, _tabRestore:restore, _tabContext:context, _tabListPrepare:prepare, _tabPending:isPending, _tabRowStatus:status, _tabListRender:render, _tabFilter:filter, _tabPage:page, _tabChanged:changed, _tabServerPrepare:serverPrepare, _tabServerCounts:serverCounts, _tabColleagues:colleagues, _tabReveal:reveal,
+  Object.assign(window, {_tabRemember:remember, _tabRestore:restore, _tabContext:context, _tabListPrepare:prepare, _tabPending:isPending, _tabRowStatus:status, _tabListRender:render, _tabReset:reset, _tabFilter:filter, _tabPage:page, _tabChanged:changed, _tabServerPrepare:serverPrepare, _tabServerCounts:serverCounts, _tabColleagues:colleagues, _tabReveal:reveal,
     _tabColleaguePage(value) { sync(); state.colleaguePage=Math.max(0,value|0); rndKolegeVlakeList(); },
     _tabServer(value) { serverTab=value==='project'?'received':['send','received','sent','problems'].includes(value)?value:'received'; serverPage=0; openSyncQueuePanel(); },
     _tabServerPage(value) { serverPage=Math.max(0,value|0); openSyncQueuePanel(); }

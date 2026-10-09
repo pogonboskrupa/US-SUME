@@ -3318,3 +3318,34 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   Svih61 web resursa identični izvoru; release digest i veličina poklapaju se.
   Android XML:14 testova,0 grešaka/padova/preskakanja. Updater popis vraća
   v2.7.0 s javnim app-debug.apk. Pages uspješno objavljen s 2.7.0 i drag fixom.
+
+### 2026-10-09 — pregled u četiri dijela, popravke dijelova 1 i 2 (2.7.1)
+
+- Korisnik izričito traži podjelu u fajl prije pregleda i kompletne popravke
+  prva dva dijela (bugovi/kod/dizajn). Podjela i detaljni nalazi u
+  docs/APP_PREGLED_4_DIJELA.md. Dijelovi3/4 ostaju planirani.
+- Karte: stvarni zadani Leaflet Canvas nije crtao SVG url šrafure; dodan
+  mali ponovljivi CanvasPattern sa jačinom. SVG identitet grupe umjesto
+  indeksa uklanja koliziju pri del/add (novi test pada na2.7.0). Kasne pune
+  fotografije vezane za objekat/nalog/pregled, ne promjenjiv indeks. Native
+  odbijeno uklanjanje ne briše IDB metadata; baza se zatvara, UI ne prijavljuje
+  lažni uspjeh; uspjeh čisti samo ciljane prefs/thumbnail/last/fav. Moje karte
+  imaju direktnu zvjezdicu44px i razlikuju povezan od kopiranog fajla.
+- Vlake: Enter nije provjeravao upisan naziv, pa je zaobilazio deaktivirano
+  dugme za brisanje. Akcija sada provjerava tačan naziv i snapshot
+  objekta/naloga/projekta; promjenjiv indeks ne mijenja cilj; GPS mora biti
+  završen. Skrivanje projekta obuhvata kolegine linije/nazive i update, a
+  stari keš drugog projekta ne utiče na brojeve/duplikate/STD. Generacija
+  aktivacije štiti await i odgođeni zoom. Stari markeri naziva ne ostaju u
+  globalnoj listi. Kolegina kartica otvara isti popup/bafer, tipkovnica radi.
+  Sort/filter/search trajni po nalogu/projektu; sažetak i Očisti filtere;
+  Projekti link zaista otvara tab, naziv escape.
+- Novi full-app CPU4x browser test audit-parts-271 pokriva stvarni Canvas/SVG,
+  IDB/native refusal/cleanup, foto race, Enter/scope/reorder, kolege hide/
+  update/bafer, P→Q→P kasne aktivacije, restart/filtere/naloge i6layouta.
+  Prošlo100 JS grupa/5inline sintaksi, MBTiles pregled, KML/SHP restart,
+  26loadmap/24projekat prikaza, kolege/admin/Turf, strelice/outline, tematski
+  višeuvozni3000poligona i stvarni korisnikov GPKG17.305ćelija/svih7vrsta.
+  Ubrzanih5hCPU4x:3564vlaka/1723Doznaka tačaka,1723IDBrestore,0vanjskihupisa.
+  OriginalniGPKG nije u repou/APK-u; fizički telefon/produkcijskiSupabase
+  nisu testirani. Web/SW/Android2.7.1/code541; završni CI/APK slijedi.
