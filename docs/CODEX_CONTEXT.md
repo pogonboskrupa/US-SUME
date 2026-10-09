@@ -3486,3 +3486,23 @@ server provjerava da je isti kao auth.uid, pa promjena JWT sesije tokom
 slanja ne pripisuje opažanje drugom korisniku. Postojeća osnovna funkcija
 ostaje kompatibilna; novi klijent koristi provjereni wrapper. Lokalni JS i
 izolovani SQL test uključuju ID naloga i odbijanje pogrešnog identiteta.
+
+
+Konačna potvrda isporuke 2.7.3: CI 37965559455/source
+`a724b6ef423ba29a4fd40c2d73657dcfb3c7dc1f` uspješan. 104 JS grupe,
+izolovani SQL probni pristup/brisanje/aktivnost, puni browser skup i 19
+Android emulator testova bez padova, grešaka ili preskakanja. Preuzet APK
+24.222.776 B (24,22 MB), SHA-256
+`b8ea4e0263303979861ed7917dda5a5eddc96779aca4b9ad92719dad4f2951a9`;
+`ba.spd.uss.vlake.debug` / 2.7.3-debug / code543. Svih 64 web assets
+podudarno izvoru. Stabilni certifikat ostaje
+`11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
+GitHub release v2.7.3 (408169014), app-debug.apk digest/veličina identični;
+updaterov releases?per_page=1 prvi vraća v2.7.3 s uploaded APK-om. Pages
+37965557728 uspješan; šest provjerenih javnih fajlova identično izvoru.
+SQL 20261009_app_user_activity.sql korisnik mora izvršiti u Supabase SQL
+Editoru; produkcija nije mijenjana. Aktivnost se bilježi tek nakon SQL
+primjene i ažuriranja klijenata; prethodna istorija rada nije rekonstruisana.
+Fizički Xiaomi, OEM autostart i baterija nisu testirani; emulator provjerava
+package URI, odabir Xiaomi puta i fallback pri zabranjenom/nedostupnom ekranu.
+APK je objavljen i provjeren za ažuriranje postojeće CODEX debug instalacije.
