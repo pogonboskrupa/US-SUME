@@ -3190,3 +3190,11 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   test, preferences i thematic-files; puni offline app test sa CPU4x i ubrzanih
   pet sati: 3564 prihvaćena fiksa vlake, 1723 doznake i 1723 vraćene iz IDB,
   bez mrežnih upisa. Ovo nije mjerenje baterije niti fizičkog Redmi telefona.
+- Konačna potvrda: CI 37832465966/source9b59bbb706a8868f36dde4d63b87a0e277ec57fd
+  uspješan. Objavljen v2.6.7/code537 APK 24.181.100 B; SHA256
+  0d61a2d3a6236303977cb30533432d305f76071a12f2ad5e48c6d0db0041ed8c.
+  Preuzet stvarni CI APK i Android XML: svih 14 testova prošlo, bez skipova.
+  Binary manifest paket ba.spd.uss.vlake.debug / 2.6.7-debug / 537; stabilni
+  certifikat kao 2.6.6, svih 61 web resursa identični tačnom lokalnom izvoru.
+  Release digest/veličina poklapaju build; updater releases?per_page=1 vraća
+  v2.6.7 s javnim app-debug.apk. Release opis dopunjen stvarnim izmjenama.
