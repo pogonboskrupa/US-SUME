@@ -3466,3 +3466,9 @@ APK i preskače draft/nedovršen asset), 5 inline sintaksi, device-workflow
 uključuje punu aplikaciju pri promjeni print razmjere, skrivanje/vraćanje
 segmentnih nagiba, klik/zatvaranje poruke verzije i sva tri native dugmeta
 preko kontrolisanog mosta. Print/PDF provjera ponovo uspješna.
+
+Prvi CI 37963777309: JS/SQL i puni device-workflow uspješni; zaustavljen na
+staroj pretpostavci offline-preview o širokoj sličici (ratio >1.6), koju je
+korisnikov zahtjev za manjim karticama zamijenio kvadratom 84px. Test sada
+provjerava kompaktne dimenzije u svih 8 rasporeda; provjere stvarnih raster
+piksela, keša i obnove ostaju. Ponovljeni CI mora proći prije isporuke.

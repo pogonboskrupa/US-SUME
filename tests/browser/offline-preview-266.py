@@ -47,7 +47,8 @@ async def main():
    for width,height in [(320,568),(390,800),(568,320),(1200,800)]:
     await page.set_viewport_size({'width':width,'height':height})
     assert await page.locator('.offline-map-card').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
-    assert await page.locator('.offline-map-card .installed-preview').evaluate('(e)=>e.clientWidth/e.clientHeight>1.6')
+    # Kompaktna kvadratna sličica; stvarni rasterski sadržaj provjeren iznad.
+    assert await page.locator('.offline-map-card .installed-preview').evaluate('(e)=>e.clientWidth>=60&&e.clientWidth<=90&&e.clientHeight>=60&&e.clientHeight<=90')
     await page.screenshot(path=str(out/f'offline-real-preview-{theme}-{width}.png'))
   # Karta sa svim bijelim pločicama: jasan rezervni prikaz, bez bijelog thumbnaila.
   await page.evaluate('document.getElementById("preview-test").style.display="none";openLoadMapScreen()')
