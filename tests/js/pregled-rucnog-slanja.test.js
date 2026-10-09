@@ -34,7 +34,7 @@ function noviProjekt(kvota = false) {
 }
 function dozSlanje(realId) {
   const tree = { trees: [{ id: 1 }] };
-  const store = new Map([['q', JSON.stringify([{ type: 'insert_doz_project', _qid: 'q1', _uid: 'u1', payload: { id: 'local-id', _tempId: 'local-id' } }])], ['trees', JSON.stringify({ 'local-id': tree })]]);
+  const store = new Map([['q', JSON.stringify([{ type: 'insert_doz_project', _qid: 'q1', _uid: 'u1', payload: { id: realId, _tempId: 'local-id' } }])], ['trees', JSON.stringify({ 'local-id': tree })]]);
   const storage = { getItem: k => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
   const env = {
     sbUser: { id: 'u1' }, sbProfile: {}, _serverSaljem: true,
@@ -51,7 +51,7 @@ function dozSlanje(realId) {
     _isNetworkErr: () => false, _isAuthErr: () => false, _serverPrivremeno: () => null,
   };
   const pre = 'let _syncInProgress=false,_syncRerun=false,_syncMrezaPalaU=0,_syncOdgodaT=null; const _SYNC_PAUZA_MS=20000;';
-  return { run: bind('_processOfflineQueue', env, pre), store, tree };
+  return { run: bind('_processOfflineQueue', env, pre+fn('_serverPodaciJednaki')+fn('_serverInsertPotvrdjeno')), store, tree };
 }
 const tests = [];
 function test(name, f) { tests.push([name, f]); }

@@ -106,7 +106,8 @@ const _OL = {
       // uređaju, pa procesor MORA znati čije su op-e (tuđe preskače, wipe ih čisti).
       const uid = (typeof sbUser !== 'undefined' && sbUser?.id) || null;
       // OS-S2: klijentski ID za insert tipove bez prirodnog ključa — retry poslije
-      // izgubljenog odgovora postaje idempotentan (23505 = već upisano). NE za
+      // izgubljenog odgovora postaje idempotentan uz potvrdu sadržaja (23505
+      // sam nije dokaz uspjeha). NE za
       // upsert_trag: procesor po payload.id bira update-vs-insert granu (trag
       // idempotentnost se rješava pre-lookupom po korisnik+nm u procesoru).
       if (['insert_doz_marking', 'insert_projekt', 'insert_doz_project'].includes(op.type) && op.payload && !op.payload.id) {

@@ -99,9 +99,9 @@ test('promjena naloga zaustavlja naredni korak i ne pamti potvrdu drugom nalogu'
  const h=setup();h.e.serverPosalji=async()=>{h.e.sbUser={id:'other'};return {ok:true};};let n=0;h.e.serverPreuzmiDijeljeno=async()=>n++;
  await h.e._serverRazmjena();assert.equal(n,0);assert.ok(!h.store.has('tvlake_server_exchange_v1_other'));assert.ok(!h.store.has('tvlake_server_exchange_v1_me'));assert.equal(h.e._serverRazmjena.busy,false);
 });
-test('prijem doznake koristi odjel iz početka razmjene, promjena taba ne mijenja cilj',async()=>{
+test('promjena odjela tokom razmjene zaustavlja stari prijem bez prepisivanja novog odjela',async()=>{
  const h=setup();h.e._dozSelId='D';h.e._dozOdjeli=[{id:'D',name:'105'},{id:'E',name:'206'}];h.e.serverPosalji=async()=>{h.e._dozSelId='E';return {ok:true};};h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:0});h.e.dozLoadOdjeli=async()=>true;
- const ids=[];h.e.dozLoadLayers=async id=>{ids.push(id);return true;};await h.e._serverRazmjena();assert.deepEqual(ids,['D']);
+ const ids=[];h.e.dozLoadLayers=async id=>{ids.push(id);return true;};await h.e._serverRazmjena();assert.deepEqual(ids,[]);const saved=JSON.parse(h.store.get('tvlake_server_exchange_v1_me'));assert.equal(saved.doz.state,'partial');assert.match(saved.doz.text,/Promijenjen je odjel/);
 });
 test('bez otvorene doznake prijem liste odjela jasno razlikuje od prijema pojaseva',async()=>{
  const h=setup();h.e.serverPosalji=async()=>({ok:true});h.e.serverPreuzmiDijeljeno=async()=>({ok:true,count:0});h.e.dozLoadOdjeli=async()=>true;

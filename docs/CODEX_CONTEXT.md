@@ -3361,3 +3361,23 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
   vraća prvi v2.7.1 s app-debug.apk; četiri izmijenjena javna Pages fajla
   SHA256 poređenjem odgovaraju izvoru. Zapis dijelova 1/2 dopunjen isporukom;
   dijelovi 3/4 ostaju planirani.
+
+
+## 9. 10. 2026 — završetak pregleda dijelova 3/4, 2.7.2 / code542
+
+Na izričit zahtjev korisnika pregledani i popravljeni Doznaka/Teren, server,
+pristup i ažuriranje; obuhvat, nalazi i ograničenja su u
+[APP_PREGLED_4_DIJELA.md](APP_PREGLED_4_DIJELA.md).
+GPS finish/back ostaje na odjelu ako IDB upis ne uspije; ne mijenja se odjel
+tokom snimanja. QR kamera poništava kasne streamove. Geometrijski memo
+prepoznaje korekciju koordinata/vremena i bez promjene broja tačaka.
+GPS serije i pojedinačni put potvrđuju stvarne tačke prije ACK-a; projekat,
+Doznaka odjel/zona potvrđuju traženi sadržaj i vlasnika čak i pri 23505.
+Prijem i provjera odobrenja imaju dodatne zaštite od promjene odjela/naloga.
+Native UpdateBridge provjerava Content-Range i GitHub SHA-256 kada postoji.
+**Novi SQL potreban samo za brisanje cijelog odjela:**
+`supabase/migrations/20261009_doz_atomic_delete.sql` — autorizovana jedna
+transakcija za kreatora/aktivnog managera. Nije primijenjen na produkciji.
+Bez njega brisanje se sigurno zaustavlja; nema povratka na četiri DELETE-a.
+Novi puni browser test/JS test, izolovani PostgreSQL rollback test i dvije
+Android provjere sadržaja/raspona. Build/proof dopuniti nakon stvarnog CI-ja.

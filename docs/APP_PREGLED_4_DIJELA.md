@@ -8,8 +8,8 @@ u okviru navedenih tokova; to nije tvrdnja da cijela aplikacija nema bugova.
 | --- | --- | --- |
 | 1. Karte i slojevi | Online/offline podloge, SQLite/MBTiles uvoz i preuzimanje, instalirane/omiljene karte, KML/SHP, oznake/fotografije, tematski GPKG i Sadnja, stilovi/vidljivost/obnova | Završeno; CI i APK 2.7.1 potvrđeni |
 | 2. Projekti i vlake | Aktivni projekat, upravljanje projektima, vlastite/kolegine vlake, ručno crtanje, GPS/krakovi, brisanje, boje/outline/strelice/lager/baferi, trajno čuvanje | Završeno; CI i APK 2.7.1 potvrđeni |
-| 3. Doznaka i teren | Odjeli/poligoni/pojasevi, GPS/pauza/oporavak, zajedničke granice/površine, lokacija i Explorer | Podijeljeno; detaljan pregled tek slijedi |
-| 4. Server i ostatak | Prijava/probni pristup, slanje/primanje/članstvo, red čekanja/mreža/RLS, Meni/postavke/upute, štampa/izvoz/ažuriranje | Podijeljeno; detaljan pregled tek slijedi |
+| 3. Doznaka i teren | Odjeli/poligoni/pojasevi, GPS/pauza/oporavak, zajedničke granice/površine, lokacija i Explorer | Pregled i popravke završeni; build 2.7.2 u pripremi |
+| 4. Server i ostatak | Prijava/probni pristup, slanje/primanje/članstvo, red čekanja/mreža/RLS, Meni/postavke/upute, štampa/izvoz/ažuriranje | Pregled i popravke završeni; build 2.7.2 u pripremi |
 
 Zajedničke funkcije provjerene su i regresijama drugih dijelova. Prednost imaju
 terenski zapisi, lokalno čuvanje, razdvajanje naloga/projekata i ručno slanje.
@@ -174,3 +174,130 @@ Release digest i veličina podudarni preuzetom APK-u. Updater popis vraća
 Javni Pages `index.html`, `sw.js`, `tab-data.js` i `field-design.css` provjereni
 SHA256 poređenjem sa tačnim novim izvorom. Fizički telefon nije testiran.
 Dijelovi 3 i 4 nisu označeni kao završeni ovim radom.
+
+
+## Nastavak — dijelovi 3 i 4
+
+Zahtjev korisnika: 9. 10. 2026. Pregled počinje na potvrđenoj 2.7.1.
+Dio 3: Doznaka, poligoni/pojasevi i članovi, GPS/pauza/završetak/oporavak,
+terenski pregled, lokacija i Explorer. Dio 4: ručna razmjena, potvrde upisa i
+brisanja, red i neuspjela mreža, razdvajanje naloga/projekata, pristup,
+postavke/upute/štampa/izvoz i native ažuriranje. Produkcijska baza nije testna
+baza; lokalne reprodukcije ne smiju slati stvarne podatke.
+Nalazi, promjene i isporuka dopunjavaju se tokom rada.
+
+## Dio 3 — Doznaka i teren (2.7.2 / code542)
+
+### Pregledano i šta je dobro
+
+Pregledani su tokovi `dozSelectOdjel`, `dozLoadLayers`, GPS start/pauza/stop,
+QR kamera/razmjena, zone/poligoni, tragovi, obračun površine i pojaseva u
+`index.html`; moduli `field-store.js`, `doznaka-bands.js`,
+`doznaka-boundary.js`, `terrain-workspace.js` i `explorer-navigation.js`.
+Provjereni su prikaz GPS kontrola, obnova i izvoz odjela.
+
+- FieldStore zapisuje tačku, sesiju i red slanja zajedno u IDB transakciji;
+  potvrde se čuvaju odvojeno. Sam povrat mreže ne šalje terenski rad.
+- Susjedni monotoni pojasevi koriste sredinu kao zajedničku granicu, uz
+  obrezivanje na odjel. Preklop se računa unijom, bez uklanjanja GPS tačaka.
+- Prepoznavanje granice radi samo online, zadržava ručni poligon i traži
+  prihvatanje prijedloga; promjena karte/naloga poništava stari rezultat.
+- Explorer je vezan za aktivno navođenje; kontrole ostaju ravne, kamera
+  vraća Leaflet interakcije nakon isključivanja i poštuje otvorene modale.
+- Teren koristi lokalne registre, paginaciju i provjerava nalog poslije
+  čekanja na unos zapažanja. Ne dodaje mrežne zahtjeve za terenski pregled.
+
+### Šta nije bilo dobro i šta je popravljeno
+
+| Potvrđen problem | Popravka / provjera |
+| --- | --- |
+| Povratak na listu čistio je odjel i slojeve prije završetka trajnog GPS upisa. Greška pri završetku mogla je ostaviti snimanje bez konteksta/kontrola. | Povratak čeka završetak; neuspjeh ostavlja odjel i GPS kontrole. Pravi IDB test: pad, pauza, ponovni završetak i restart. |
+| Promjena odjela tokom aktivnog ili pauziranog GPS snimanja prikazivala je drugi kontekst dok se snimao prvi. | Drugi odjel se ne otvara dok snimanje nije završeno; kasna navigacija provjerava nalog i odjel. |
+| Isti broj tačaka i zadnji datum mogli su zadržati stari geometrijski memo nakon korekcije koordinata ili unutrašnjeg prekida. | Potpis uključuje koordinate i vrijeme svih tačaka; test mijenja geometriju i prekid bez promjene broja/zadnjeg vremena. |
+| Kasna dozvola kamere mogla je pokrenuti skeniranje poslije zatvaranja ili prepisati drugi zahtjev i ostaviti stream aktivan. | Generacija i nalog/odjel; kasni stream se zaustavlja, zatvaranje čisti video/frame, promjena naloga prekida skeniranje. Test koristi prave sintetičke MediaStream trackove. |
+
+### Dizajn i provjera
+
+Doznaka sada ima odvojenu karticu **GPS dnevnik · ovaj odjel**, s brojem
+vlastitih GPS tačaka i izmjena odjela/zona koje čekaju slanje, statusom
+učitavanja dnevnika i dugmetom **Pošalji i primi**. Boje prate Dnevni/tamni
+mod; nema tvrdnje da je nešto poslano samo zato što je lokalni spisak prazan.
+
+Puni app/Leaflet/IDB, CPU4×, bez produkcijskih upisa: novi
+`tests/browser/audit-parts-272.py`; postojeći GPS controls (8 rasporeda),
+Doznaka restore (16 prikaza), Teren, Explorer i online prepoznavanje granice.
+Simulacija 4 projektanta × 6 dana: 60 pojaseva, 12.060 tačaka, pokrivenost
+49,645 ha, izračunati preklop približno 0; prikaz oko 2,21 s na desktop
+Chromium CPU4×. Nije mjerenje stvarnog Xiaomi telefona niti stvarni DEM odjel.
+
+## Dio 4 — Server i ostatak (2.7.2 / code542)
+
+### Pregledano i šta je dobro
+
+Pregledani su ručno `serverPosalji`, procesor trajnog reda, upis/revizija i
+brisanje vlake, dohvat vlastitih/koleginih projekata, GPS serije i rezervni
+put, Doznaka upis/brisanje odjela/zona, `server-panel.js`, `offline-layer.js`,
+prijava/keš/probni timer/opoziv, Meni/postavke/upute, štampa/GPX i native
+`MainActivity.UpdateBridge` preuzimanje/instalacija.
+
+- Vlake koriste provjeru sadržaja/revizije; konflikt ne odbacuje lokalni rad.
+- Red odvaja vlasnika/projekat, čuva odbijene izmjene i razlikuje privremeni
+  pad servera od RLS-a. Oštećen red se ne prepisuje praznim redom.
+- Primanje čita sve stranice, ne prepisuje živo snimanje/debounce i čuva
+  zadnji keš ako mreža padne. Pregled potvrda odvaja Poslano/Primljeno.
+- Probni pristup ima serversku zaštitu roka i lokalni timer koji pauzira,
+  bez brisanja zahtjeva ili lokalnih GPS podataka. PostgreSQL test prolazi.
+- Štampa vraća originalne stilove, koristi isti lager i crvenu punu privatnu
+  granicu; custom opisi i izvoz su escapirani. Stvarni Leaflet/PDF test prolazi.
+
+### Šta nije bilo dobro i šta je popravljeno
+
+| Potvrđen problem | Popravka / provjera |
+| --- | --- |
+| GPS serija se cijela označavala poslanom čim insert nije imao grešku, bez vraćenih tačaka. Jednaki zapisi unutar serije nisu bili deduplicirani. | ACK samo tačaka koje server vrati ili već postoje; jedna logička tačka može potvrditi dvije lokalne kopije. Nepotvrđene ostaju u dnevniku. |
+| Pojedinačni void RPC/rezervni insert nisu provjeravali postojanje tačke prije ACK-a. | Čitanje prirodnog ključa korisnik/projekat/vrijeme/koordinate; rezervni insert traži vraćenu tačku. FK/RLS greška ostaje vidljiva u ishodu. |
+| Konflikt 23505 na novom projektu, odjelu ili zoni tretiran je kao uspjeh bez provjere vlasnika/projekta/sadržaja. | Zajednička potvrda inserta i ciljanog reda; konflikt prihvaćen samo ako traženi sadržaj odgovara serveru. 22P02 ne izbacuje ispravan UUID zbog neke druge neispravne kolone. |
+| Prijem starog odjela nakon promjene izbora mogao je zamijeniti globalne slojeve novog odjela. | Loader provjerava izabrani odjel prije i poslije await-a; razmjena prikazuje da je odjel promijenjen i traži ponovni prijem. |
+| Brisanje odjela išlo je kroz četiri odvojena zahtjeva: moguć djelimičan gubitak cijelog tima. | Jedan autorizovan transakcijski RPC, blokada dok postoje vlastiti neposlani podaci i provjera tačne potvrde. Bez RPC-a nema brisanja djece. SQL test dokazuje rollback, pristup/istekao rok, kreatora/aktivnog managera i odvajanje projekata. |
+| Kasna provjera odobrenja prethodnog naloga mogla je zamijeniti profil novog naloga. | Snimljen vlasnik i provjera `sbUser.id`/`data.id` prije zamjene profila/keša. Regresija u punoj aplikaciji. |
+| Nastavak APK preuzimanja prihvatao je 206 bez provjere Content-Range; jednaka veličina nije dokaz ispravnog sadržaja. | Provjera početka/ukupne dužine prije append-a i SHA-256 novog/već preuzetog APK-a kada GitHub objava ima digest. Neispravan dio se uklanja i ne šalje instalaciji. Dvije nove Android provjere. |
+
+### Server dizajn i obavezna serverska dopuna
+
+Tri koraka razmjene sada zadržavaju razumljivu poruku: nedostaje potvrda,
+RLS/pristup, nedostaje projekat, prekid veze ili promijenjen odjel. Tehnički
+kod i detalji pojedinačne stavke ostaju dostupni u **Za slanje**.
+
+**SQL za sigurno brisanje cijelog odjela:**
+`supabase/migrations/20261009_doz_atomic_delete.sql`. Pripremljen i testiran
+na izolovanom PostgreSQL-u; **nije izvršen na produkcijskom Supabaseu**.
+Dok ga admin ne primijeni, aplikacija zaustavlja brisanje cijelog odjela s
+jasnom porukom; slanje/primanje, GPS i zone rade bez ovog dodatka.
+SQL ne mijenja postojeće RLS politike niti briše podatke pri instalaciji.
+
+### Provjere, granice i preporuke
+
+- 101 grupa JS regresija, pet inline JS blokova i relevantne browser provjere.
+  Testne zamjene ažurirane su da vrate stvarne potvrde/profil/izabrani odjel;
+  ranija pretpostavka „23505 uvijek znači uspjeh” više se ne koristi.
+- Stvarni Supabase JS/PostgREST nad kontrolisanim HTTP servisom:
+  izgubljen odgovor, RLS/503, nedostajući cilj, migracija ID-ja i statusi.
+- 5 h ubrzanog GPS rada, CPU4×, bez mreže: 3.564 prihvaćene tačke vlake,
+  1.723 Doznake i svih 1.723 vraćeno iz IDB. GPS p95: vlaka 3 ms,
+  Doznaka 15,7 ms; promjena taba oko 365 ms. Bez stvarnog telefona,
+  Android mosta, baterije i višesatnog fizičkog mjerenja.
+- Preporuka: mjerenje na stvarnom Redmi Note 13 Pro s ugašenim ekranom,
+  slabim signalom i lokalnom kartom od ~2 GB; zatim produkcijska potvrda
+  članstva/RLS na posebnom testnom odjelu. Ne koristiti radne odjele za probe.
+- Native fajl i IDB katalog i dalje nisu jedna zajednička transakcija;
+  sljedeći korak je oporavak prekinutog uklanjanja, opisan u dijelu 1.
+- Offline odobrenje koristi prethodno potvrđeni profil i sat uređaja;
+  trenutni opoziv na serveru ne može stići bez veze. RLS ostaje autoritet online.
+- Starija GitHub objava bez digesta ima provjeru veličine/raspona i Android
+  provjeru potpisa; SHA-256 je dodatna provjera kada objava sadrži digest.
+
+### Isporuka
+
+Izvor pripremljen za 2.7.2 / Android code542. CI, APK potpis/manifest,
+ugrađeni assets i dostupnost u **Meni → Ažuriraj aplikaciju** provjeravaju se
+poslije builda; konačni identitet APK-a dopuniti ispod.

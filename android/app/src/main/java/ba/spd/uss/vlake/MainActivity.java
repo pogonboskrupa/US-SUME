@@ -510,6 +510,7 @@ public class MainActivity extends Activity {
 
             String apkUrl = null;
             long apkVelicina = -1;
+            String apkDigest = null;
             org.json.JSONArray assets = rel.optJSONArray("assets");
             if (assets != null) {
                 for (int i = 0; i < assets.length(); i++) {
@@ -517,6 +518,7 @@ public class MainActivity extends Activity {
                     if (a.optString("name", "").endsWith(".apk")) {
                         apkUrl = a.optString("browser_download_url", null);
                         apkVelicina = a.optLong("size", -1);
+                        apkDigest = a.isNull("digest") ? "" : a.optString("digest", "");
                         break;
                     }
                 }
@@ -534,7 +536,8 @@ public class MainActivity extends Activity {
 
             // Već preuzet i potpun (npr. korisnik je otkazao Android instalaciju pa
             // tapnuo "Instaliraj ponovo") — ne skida se ponovo.
-            boolean gotov = apk.exists() && (apkVelicina <= 0 || apk.length() == apkVelicina);
+            boolean gotov = apk.exists() && (apkVelicina <= 0 || apk.length() == apkVelicina)
+                    && UpdateFileValidation.matchesDigest(apk, apkDigest);
             if (!gotov) {
                 if (apk.exists()) //noinspection ResultOfMethodCallIgnored
                     apk.delete();
@@ -543,6 +546,10 @@ public class MainActivity extends Activity {
                 // njemu javi samo "greška pri parsiranju paketa" — zato provjera veličine.
                 if (apkVelicina > 0 && dio.length() != apkVelicina) {
                     throw new IOException("preuzet fajl nije potpun (" + dio.length() + " od " + apkVelicina + " B)");
+                }
+                if (!UpdateFileValidation.matchesDigest(dio, apkDigest)) {
+                    dio.delete();
+                    throw new IOException("APK nije ispravan: provjera sadržaja nije prošla. Pokušaj ponovo.");
                 }
                 if (!dio.renameTo(apk)) throw new IOException("ne mogu spremiti preuzeti fajl");
             }
@@ -599,6 +606,10 @@ public class MainActivity extends Activity {
                 int status = c.getResponseCode();
                 boolean nastavak;
                 if (status == 206) {
+                    if (!UpdateFileValidation.validRange(c.getHeaderField("Content-Range"), vec, ukupno)) {
+                        dio.delete();
+                        throw new IOException("Server nije potvrdio nastavak APK preuzimanja; pokušavam ispočetka");
+                    }
                     nastavak = true;
                 } else if (status == 200) {
                     // Server nije poslušao Range — kreće se ispočetka, bez miješanja

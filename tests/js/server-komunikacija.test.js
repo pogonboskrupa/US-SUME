@@ -299,7 +299,7 @@ function tacke(n, od) {
 }
 
 t('serija od 100 tačaka = 2 zahtjeva (provjera + jedan upis), ne 100–200', async () => {
-  const e = dozEnv(q => (q.op === 'select' ? { data: [], error: null } : { error: null }));
+  const e = dozEnv(q => (q.op === 'select' ? { data: [], error: null } : {data:q.tijelo,error: null }));
   const r = await e.api._dozPosaljiKomad(tacke(100, 0));
   assert.strictEqual(r.ok.length, 100);
   assert.strictEqual(e.log.length, 2);
@@ -311,7 +311,7 @@ t('tačke koje su već na serveru (izgubljen odgovor) se ne upisuju ponovo — i
   const sve = tacke(10, 0);
   const e = dozEnv(q => (q.op === 'select'
     ? { data: sve.slice(0, 6).map(p => ({ recorded_at: p.recorded_at.replace('Z', '+00:00'), latitude: p.latitude, longitude: p.longitude })), error: null }
-    : { error: null }));
+    : {data:q.tijelo,error: null }));
   const r = await e.api._dozPosaljiKomad(sve);
   assert.strictEqual(r.ok.length, 10, 'sve tačke smiju iz bafera');
   assert.strictEqual(e.log[1].tijelo.length, 4, 'upisano ' + e.log[1].tijelo.length + ' umjesto 4 nove');
@@ -346,11 +346,11 @@ t('privremeni pad servera prekida pojedinačno slanje GPS tačaka', async () => 
 t('pojedinačni rezervni put: loša tačka (FK) ostaje, dobre prolaze', async () => {
   const e = dozEnv(q => {
     if (q.op === 'select') return { data: [], error: null };
-    if (q.op === 'insert') return { error: q.tijelo.latitude === 44 ? { code: '23503', message: 'fk' } : null };
+    if (q.op === 'insert') return {data:[q.tijelo], error: q.tijelo.latitude === 44 ? { code: '23503', message: 'fk' } : null };
   });
   const r = await e.api._dozPosaljiPojedinacno(tacke(3, 0));
   assert.deepStrictEqual(r.ok, ['q1', 'q2']);
-  assert.strictEqual(r.error, null);
+  assert.strictEqual(r.error.code, '23503');
 });
 
 // =====================================================================

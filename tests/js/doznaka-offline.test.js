@@ -59,7 +59,7 @@ function loadLayersEnv(o) {
   const sb = { from: tab => upit(o.odg[tab] || { data: [], error: null }) };
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail',
     'showToast', 'console', '_dozUcitajTacke', '_dozPrimijeniRed',
-    "const sbUser={id:'me'};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n" + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
+    "const sbUser={id:'me'};let _dozSelId='o1', _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n" + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
     '\nreturn { run: (id, op) => dozLoadLayers(id, op), get: () => ({ _dozMembers, _dozMarkings, _dozTracks }) };');
   const api = fn(sb, () => o.kes || null,
     () => { st.keširano++; st.kes = api.get(); },
@@ -212,23 +212,23 @@ function upisEnv(odgovori) {
   const sb = { from: () => {
     const o = {}; let p;
     o.insert = x => { p = x; payloads.push(x); return o; };
-    o.select = () => o; o.single = () => o;
+    o.select = () => o; o.single = () => o; o.eq=()=>o; o.maybeSingle=()=>o;
     o.then = (res, rej) => Promise.resolve(odgovori.shift()).then(res, rej);
     return o;
   } };
-  return { fn: new Function('sb', extractFn('_dozUpisiZonu') + '\nreturn _dozUpisiZonu;')(sb), payloads };
+  return { fn: new Function('sb', "const sbUser={id:'me'};"+extractFn('_serverPodaciJednaki')+extractFn('_serverInsertPotvrdjeno')+extractFn('_dozUpisiZonu') + '\nreturn _dozUpisiZonu;')(sb), payloads };
 }
 console.log('Upis zone:');
 
 t('23505 sa klijentskim ID-jem = već upisano → uspjeh (bez duple zone)', async () => {
-  const { fn } = upisEnv([{ data: null, error: { code: '23505' } }]);
+  const { fn } = upisEnv([{ data: null, error: { code: '23505' } },{data:{id:'uu1',label:'A'},error:null}]);
   const r = await fn({ id: 'uu1', label: 'A' });
   assert.strictEqual(r.error, null);
   assert.strictEqual(r.data.id, 'uu1');
 });
 
 t('22P02 (kolona nije uuid) → ponovi BEZ id-a, zona ne propada', async () => {
-  const { fn, payloads } = upisEnv([{ data: null, error: { code: '22P02' } }, { data: { id: 77 }, error: null }]);
+  const { fn, payloads } = upisEnv([{ data: null, error: { code: '22P02' } }, { data: { id: 77, label:'A' }, error: null }]);
   const r = await fn({ id: 'uu1', label: 'A' });
   assert.strictEqual(r.data.id, 77);
   assert.ok(!('id' in payloads[1]));

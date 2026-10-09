@@ -76,7 +76,7 @@ t('otvaranje odjela: keš se prikaže PRIJE nego mreža odgovori', async () => {
   const st = { members: null, markings: null, gen: 0 };
   const src = extractFn('dozLoadLayers');
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail', 'showToast', 'console', 'S', '_dozUcitajTacke', '_dozPrimijeniRed',
-    'const sbUser={id:"me"};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+src +
+    'const sbUser={id:"me"};let _dozSelId="o1", _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+src +
     '\nreturn { run: (id, o) => dozLoadLayers(id, o), get: () => ({ _dozMembers, _dozMarkings, _dozTracks }) };');
   const api = fn({ from: q },
     () => ({ members: [{ user_id: 'u1' }], markings: [{ id: 'm1' }], tracks: [] }),
@@ -93,7 +93,7 @@ t('mrežna greška poslije keša ne briše već prikazane podatke', async () => 
   const q = () => { const o = { select: () => o, eq: () => o, order: () => o, in: () => o, range:()=>o, then: (res, rej) => Promise.reject(new Error('mreza')).then(res, rej) }; return o; };
   let poziv = 0;
   const fn = new Function('sb', '_dozLoadCachedLayers', '_dozCacheLayers', 'dozRenderMapLayers', 'dozRenderDetail', 'showToast', 'console', '_dozUcitajTacke', '_dozPrimijeniRed',
-    'const sbUser={id:"me"};let _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
+    'const sbUser={id:"me"};let _dozSelId="o1", _dozMembers, _dozMarkings, _dozTracks, _dozLoadGen = 0;\n' + extractFn('_vlakePreuzmiStranice')+extractFn('_dozReadList')+extractFn('dozLoadLayers') +
     '\nreturn { run: (id, o) => dozLoadLayers(id, o), get: () => ({ _dozMembers, _dozMarkings }) };');
   const api = fn({ from: q }, () => (poziv++ === 0 ? { members: [1, 2], markings: [3], tracks: [] } : null),
     () => {}, () => {}, () => {}, () => {}, { error() {} }, () => Promise.reject(new Error('mreza')), m => m);

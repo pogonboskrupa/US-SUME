@@ -26,7 +26,7 @@ showToast=t=>messages.push(t),dozRenderOdjeli=()=>{},_dozRenderOverview=()=>{},o
 _dlgConfirm=async t=>{dialogs.push(t);return confirmAnswer};
 const sb=supabase.createClient('https://server.fixture','fixture-public-key',
 {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-""" + '\n'.join(b.function(n) for n in ['_isNetworkErr', '_isAuthErr', '_serverPrivremeno', '_processOfflineQueue', '_redUkloni', 'sbDeleteVlaka', '_syncQueueDiscard', '_dozRenderStatusRow', 'dozSetStatus'])
+""" + '\n'.join(b.function(n) for n in ['_serverPodaciJednaki', '_serverInsertPotvrdjeno', '_isNetworkErr', '_isAuthErr', '_serverPrivremeno', '_processOfflineQueue', '_redUkloni', 'sbDeleteVlaka', '_syncQueueDiscard', '_dozRenderStatusRow', 'dozSetStatus'])
 js += '\n' + b.section('const _DOZ_STATUSES = [', 'function _dozRenderStatusRow()')
 fixture = ('<!DOCTYPE html><html lang="bs"><meta charset="utf-8">'
            '<meta name="viewport" content="width=device-width,initial-scale=1">'

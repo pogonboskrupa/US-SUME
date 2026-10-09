@@ -207,6 +207,15 @@
     el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Pošalji i primi šalje navedene izmjene iz svih projekata. Tragovi, dnevnik, tekstualne oznake i fotografije ostaju lokalno.</p>';
   }
   let exchange=null;
+  function errorHint(error){
+    const code=String(error?.code||''),message=String(error?.message||'');
+    if(code==='42501'||/row.level security|permission denied/i.test(message))return 'Server je odbio pristup. Provjeri odobrenje naloga i članstvo u projektu.';
+    if(code==='23503'||code==='TARGET_NOT_FOUND')return 'Ciljani projekat nije dostupan na serveru. Pošalji projekat i provjeri članstvo.';
+    if(code==='NO_CONFIRMATION')return 'Potvrda servera nedostaje. Podaci ostaju za ponovni pokušaj.';
+    if(code==='OWNER_CHANGED')return 'Nalog je promijenjen; ponovi razmjenu nakon prijave.';
+    if(/fetch|network|socket|timeout/i.test(message))return 'Veza je prekinuta ili prespora. Ponovi kada signal bude bolji.';
+    return message.slice(0,220);
+  }
   function exchangeKey(owner){return 'tvlake_server_exchange_v1_'+owner;}
   function renderExchange(){
     const el=byId('server-exchange-status');if(!el)return;
@@ -228,8 +237,10 @@
     const alive=()=>currentUid()===owner;
     async function run(key,phase,action,describe){
       if(!alive())return;exchange.phase=phase;exchange[key]={state:'working',text:phase};renderExchange();
-      let result;try{result=await action();}catch(e){result={ok:false};}
-      if(!alive())return;exchange[key]=describe(result);renderExchange();
+      let result;try{result=await action();}catch(e){result={ok:false,error:e};}
+      if(!alive())return;exchange[key]=describe(result);
+      if(!result?.ok&&result?.error){const hint=errorHint(result.error);if(hint)exchange[key].text+=' · '+hint;}
+      renderExchange();
     }
     try{
       renderExchange();
@@ -237,7 +248,7 @@
       if(!alive())return;
       await run('vlake','Preuzimam vlake…',()=>serverPreuzmiDijeljeno(),r=>r?.ok?{state:'ok',text:r.count+' vlaka · '+(r.projects||0)+' projekata'}:{state:'error',text:'Prijem nije završen — koristi lokalnu kopiju'});
       if(!alive())return;
-      await run('doz','Preuzimam doznaku…',()=>_serverPreuzmiDoznaku(selected),r=>r?.ok?{state:'ok',text:r.label+(r.open?'':' · za pojaseve otvori odjel')}:{state:'error',text:'Doznaka nije preuzeta — koristi lokalnu kopiju'});
+      await run('doz','Preuzimam doznaku…',()=>_serverPreuzmiDoznaku(selected),r=>r?.ok?{state:'ok',text:r.label+(r.open?'':' · za pojaseve otvori odjel')}:{state:r?.selectionChanged?'partial':'error',text:r?.selectionChanged?'Promijenjen je odjel tokom razmjene. Ponovi prijem za otvoreni odjel.':'Doznaka nije preuzeta — koristi lokalnu kopiju'});
       if(!alive())return;
       exchange.ts=Date.now();exchange.phase='Završeno';
       try{localStorage.setItem(exchangeKey(owner),JSON.stringify(exchange));}catch(e){}
@@ -301,6 +312,7 @@
         _mrezaSila(60000);
         if(await dozLoadOdjeli()!==true)throw Error('Odjeli nisu preuzeti');
         if(currentUid()!==uid)return {ok:false,ownerChanged:true};
+        if(selectedId!==_dozSelId)return {ok:false,selectionChanged:true};
         const id=selectedId,odjel=(_dozOdjeli||[]).find(o=>o.id===id);
         let label='Lista odjela';
         if(odjel){if(await dozLoadLayers(id,{strict:true})!==true)throw Error('Slojevi nisu preuzeti');label=odjel.name+' — zone, članovi i GPS pojasevi';}
@@ -309,7 +321,7 @@
         localStorage.setItem('tvlake_server_doz_received_'+uid,JSON.stringify({ts:Date.now(),label}));
         showToast(odjel?'✓ Doznaka preuzeta i sačuvana offline':'✓ Odjeli doznake preuzeti. Otvori odjel za njegove zone i pojaseve.');
         return {ok:true,label,open:!!odjel};
-      }catch(e){showToast('⚠ Preuzimanje doznake nije završeno — '+e.message);return {ok:false};}
+      }catch(e){showToast('⚠ Preuzimanje doznake nije završeno — '+e.message);return {ok:false,error:e};}
       finally{_serverPreuzmiDoznaku.busy=false;if(btn)btn.disabled=false;render();}
     },
     _serverPanelRender:render,_serverProjektModel:model,_serverProjektPreuzeto:downloaded,_serverOpContext:opContext,

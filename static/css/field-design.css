@@ -656,3 +656,9 @@ html[data-field-theme=day] #doz-gps-modal{--field-card-soft:#f1f5f9;--field-acce
 .vrow-kolega:hover {border-color:#3b82f6}
 html .data-controls .data-reset {border-style:dashed;color:var(--field-muted)}
 #data-vl-summary {flex-basis:100%;padding:3px 1px;line-height:1.5}
+/* Doznaka: lokalni rad je odvojen od potvrđenog slanja, u oba moda. */
+html .doz-local-card{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:4px 12px 12px;padding:12px;border:1px solid var(--field-border);border-left:4px solid #38bdf8;border-radius:12px;background:var(--field-card);color:var(--field-ink)}
+html .doz-local-card>div{flex:1 1 180px;min-width:0}
+html .doz-local-card b,html .doz-local-card span,html .doz-local-card small{display:block;line-height:1.6;overflow-wrap:anywhere}
+html .doz-local-card b{font-size:13px}html .doz-local-card span{font-size:12px}html .doz-local-card small{font-size:11px;color:var(--field-muted)}
+html .doz-local-card button{min-height:44px;padding:8px 12px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-bg);color:var(--field-ink);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
