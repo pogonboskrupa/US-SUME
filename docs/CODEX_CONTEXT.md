@@ -3269,3 +3269,14 @@ Završeno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3d
 - Web/SW/Android 2.6.9/code539. Završni APK build/objava u toku. Originalni
   attachment nije u repou/CI/APK-u; CI test i dalje generiše sintetički fajl.
   Fizički telefon i produkcijski Supabase nisu testirani ni mijenjani.
+
+- Konačna potvrda 2.6.9: CI 37900476733/source dfa64e9c8fca887cdf1ca79ee50a3474b0d60984
+  uspješan. Objavljen v2.6.9/code539 APK 24.192.080 B; SHA256
+  46cb54c49723060ce8487da9a0a8069ba7c5ff7772d37b39e9b16c9e55ff9225.
+  Preuzet stvarni CI APK i Android XML: svih14 testova prošlo, bez skipova.
+  Binary manifest ba.spd.uss.vlake.debug / 2.6.9-debug / 539; certifikat
+  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
+  isti kao prethodne verzije. Svih61 assets identični tačnom izvoru; release
+  veličina/digest poklapaju APK. Updater releases?per_page=1 vraća v2.6.9
+  i javni app-debug.apk. Release opis dopunjen izmjenama podtaba; javni Pages
+  index.html je 2.6.9 i sadrži Sadnja podtab.
