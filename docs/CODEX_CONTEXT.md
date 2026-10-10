@@ -3955,3 +3955,28 @@ komplet JS i inline sintaksa prošli. Dnevni audit: 144 prikaza, 0 slabog
 kontrasta; KML editor pun test prošao. Novi modal koristi 12 PNG prikaza,
 bez vanjskih upisa. Tok odjave u novom testu stvarno potvrđuje Odjavi se
 bez slanja kada postoje neposlane stavke; nije zaobiđen korisnički dijalog.
+
+
+Isporuka potvrđena 2026-10-10 18:32 UTC: izvor aa9f8225dbf857b87897f3334f0a77e711c774aa,
+stablo 7c7d439f1afd325a93a2c5b81ddd1dc33dc7ebf9. CI 38074429230, pokušaj 2,
+job 114281231551 SUCCESS: svi JS/SQL/browser koraci, svih 20 Android testova
+bez greške i preskakanja, analiza brzine i javni release. Prvi pokušaj:
+ExplorerNavigationTest eval/until na liniji 83 nije dobio JS callback u 5 s;
+log prikazuje spor OpenGL render i preskočene frameove na hladnom emulatoru.
+Ponovljeni ISTI kod i ISTI testovi prošli su (Explorer 17.688 s). Nije
+mijenjan timeout, proizvodni Explorer niti preskakan test. ZIP + metadata
+četiri izvještaja prvog pokušaja sačuvani i hash-provjereni u
+outputs/280-first-attempt prije uklanjanja njihovih CI kopija kako bi
+upload-artifact v4 mogao ponovo koristiti imena. Ponavljanje poslije
+uočenog pada, ne dodatno nepotrebno proširenje testova.
+Pages 38074428633 SUCCESS; javni index i SW pokazuju 2.8.0. Release v2.8.0,
+asset 628692349, javno preuzet APK 24,331,708 B:
+https://github.com/pogonboskrupa/US-SUME/releases/download/v2.8.0/app-debug.apk
+SHA256 59f75e0828867b3e4afdf101cbccb1fcf7e8fe578ecc6a40b2eb3ec4072b87bb.
+Provjereno svih 69 APK web resursa naspram radnog stabla; binarni manifest
+ba.spd.uss.vlake.debug / code550 / 2.8.0-debug; stabilni certifikat
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+API releases?per_page=1 vraća v2.8.0 s APK-om: postojeći Meni → Ažuriraj
+aplikaciju može pronaći novu verziju. Bez produkcijskih DB upisa i bez
+fizičkog Xiaomi mjerenja. Android dokaz outputs/280-android-passed;
+sažetak outputs/280/release-proof.json. Ova dopuna mijenja samo dokumentaciju.
