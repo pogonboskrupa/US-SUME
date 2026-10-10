@@ -3548,3 +3548,22 @@ status; SHP/KML uvoz, stvarni raster/IDB, pravila boja i outline i štampa
 ponovo provjereni. field-design.cjs: 320/360/412/768 px, tema se pamti,
 promjena teme ne zaustavlja snimanje, red ostaje identičan i nema JS grešaka.
 SQL/native kod nisu mijenjani; puni build ih ipak ponovo provjerava.
+
+
+Konačna potvrda isporuke 2.7.4 (provjera 10.10.2026): CI
+37974491481, source `76103c4409fad4e8c1981e24e584864cc027ada7`,
+sve faze uspješne: JS, izolovani SQL, puni browser skup, build, 19 Android
+emulator testova (0 failures/errors/skipped), objava i analiza brzine.
+Preuzet APK 24.227.396 B (24,23 MB), SHA-256
+`bfafbc86ac4932dbd3dfbe7172729293eeceba0b7848d1ee9b7a6e2d5604bcd7`;
+manifest ba.spd.uss.vlake.debug / 2.7.4-debug / code544. Svih 65 web assets
+podudarno lokalnom izvoru. Certifikat prethodne instalacije sačuvan:
+`11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
+Release v2.7.4 (408233386), uploaded app-debug.apk, isti digest i veličina;
+updaterov releases?per_page=1 vraća v2.7.4 na prvom mjestu. Pages
+37974490036 uspješan s istim source SHA; javni index.html, sw.js,
+field-design.js/CSS, print-slope.js i novi worker identični izvoru.
+APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.4/app-debug.apk
+Fizički Xiaomi i prijavljeno zastajkivanje na njemu nisu direktno testirani;
+provjera odziva je browser CPU4 simulacija, uz zasebne Android emulator provjere.
+Produkcijski Supabase nije mijenjan.
