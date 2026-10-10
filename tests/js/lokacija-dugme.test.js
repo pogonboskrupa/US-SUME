@@ -149,7 +149,8 @@ t('dugmad na karti nemaju ＋/－/⭐/⏸/▶/⊕ znakove fonta (OEM WebView ih 
 });
 
 t('bedž preciznosti postoji unutar ikone dugmeta Lokacija', () => {
-  assert.ok(/id="ab-loc"[\s\S]{0,200}id="ab-loc-acc"/.test(HTML));
+  const button = HTML.match(/<button\b[^>]*id="ab-loc"[^>]*>([\s\S]*?)<\/button>/);
+  assert.ok(button && /id="ab-loc-acc"/.test(button[1]));
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

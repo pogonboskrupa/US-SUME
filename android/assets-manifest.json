@@ -9,7 +9,9 @@
     "apple-touch-icon.png",
     "forwarder.svg",
     "GRANICE.kml",
-    "PUTEVI/putevi.geojson"
+    "PUTEVI/putevi.geojson",
+    "static/css/navigation-design.css",
+    "static/icons/navigation.svg"
   ],
   "directories": [
     "static"

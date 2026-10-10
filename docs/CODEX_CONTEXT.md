@@ -3794,3 +3794,36 @@ Supabase produkcija i fizički Xiaomi nisu mijenjani/testirani.
 Korisnik zatim traži isključivo vizuelni PLAN ikona: Meni/Karta/Projekat/
 Vlake i Snimi vlaku/Tragovi/Lokacija, plus sličice Menija. Prijedlog tek
 poslije APK isporuke; ikone NE mijenjati prije korisnikovog izbora.
+
+
+## 2026-10-10 — 2.7.8 / Android 548: odobrene ikone i rad vodećeg projektanta
+
+Korisnik je odobrio sve slike prijedloga navigacije/Menija isporučene uz 2.7.7.
+Implementirane su lokalne SVG ikone gornjeg/donjeg bara i 24 stavke Menija,
+sa šest različitih kartografskih sličica. Kompaktni barovi, zelena aktivna
+kartica i čitljiv dnevni/tamni prikaz. SVG i CSS su u SW precache-u i Android
+manifestu assets (69 fajlova); ne zahtijevaju internet. Dinamičko dugme Dnevni
+mod zadržava istu SVG ikonu poslije promjene prikaza. Launcher logo nije mijenjan.
+
+Korisnik je izričito potvrdio da vodeći radi svoje projekte i projekte u koje
+je dodan, kao ostali projektanti. `isReadOnly()` više ne blokira vodećeg,
+Projekat/Vlake/Doznaka su vidljivi, učitavanje i offline keš koriste vlasništvo
+ili članstvo. Vodeći se može dodati kao kolega i u Vlake i u Doznaku.
+`Meni → Izvještaj šumarije` otvara odvojene RPC agregate projekata vlaka i
+doznaka njegove šumarije; iz njega se otvara sedmični/mjesečni učinak.
+Izvještaj ne prepisuje `_projekti`, aktivni ID ni radni keš. Tuđi nadzorni
+projekat nema Aktiviraj. Zakasnjeli RPC se zanemaruje nakon promjene naloga,
+šumarije ili ponovnog otvaranja običnog spiska. Automatsko otvaranje nadzora
+pri prijavi je uklonjeno. Admin i ŠPD terenski nalog zadržavaju svoje uloge.
+Upute dopunjene za vodećeg. Produkcijski Supabase i RLS nisu mijenjani.
+
+Lokalno: 107 JS skupova prošlo, pet inline JS blokova sintaksno ispravno;
+`navigation-design-278.py`: lokalni SVG stvarno nacrtani, 12 mobilnih/tablet
+prikaza 320/390/800 px, dnevni kontrast, vlastiti/dijeljeni projekti, izdvojeni
+nadzor, odbacivanje druge šumarije i starih nadzornih projekata iz offline
+keša, promjena četiri uloge, zakasnjeli RPC. `day-all-panels-275.py`:
+144 prikaza, nula slabih kontrasta. Device workflow, KML editor i Izvještaj
+odjela prošli s pravim Leaflet/Canvas/IDB i lažnim servisima; nula vanjskih
+upisa i JS grešaka. APK build/Android emulator i objava slijede kroz CI;
+pravi Xiaomi i produkcijska baza nisu testirani. Python geo pytest se nije
+pokrenuo jer pytest nije instaliran; geo kod nije mijenjan.

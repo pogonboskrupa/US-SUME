@@ -11,7 +11,7 @@
     const button=document.getElementById('field-theme-toggle');
     if(button) {
       button.setAttribute('aria-pressed',String(theme==='day'));
-      button.innerHTML='<span class="mdrop-ico" aria-hidden="true">'+(theme==='day'?'☀':'☾')+'</span><span>'+(theme==='day'?'Dnevni mod — uključen':'Dnevni mod')+'</span>';
+      button.innerHTML='<span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span><span>'+(theme==='day'?'Dnevni mod — uključen':'Dnevni mod')+'</span>';
       button.title=theme==='day'?'Isključi Dnevni mod':'Uključi Dnevni mod';
     }
   }

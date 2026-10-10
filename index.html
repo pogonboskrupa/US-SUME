@@ -4221,6 +4221,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 /* === KRAJ TRAGOVI I MJERENJE === */
 </style>
 <link rel="stylesheet" href="static/css/field-design.css">
+<link rel="stylesheet" href="static/css/navigation-design.css">
 <link rel="stylesheet" href="static/css/server-panel.css">
 <link rel="stylesheet" href="static/css/map-library.css">
 <link rel="stylesheet" href="static/css/terrain-workspace.css">
@@ -4508,11 +4509,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
   <div id="field-status" role="status" style="display:none;"></div>
 
   <div id="tab-bar">
-    <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg> Meni</button>
-    <button class="tab-btn active" onclick="switchTab('karta')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,6 9,4 15,6 21,4 21,18 15,20 9,18 3,20"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/></svg> Karta</button>
-    <button class="tab-btn" onclick="switchTab('projekat')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="3,7 3,19 21,19 21,9 11,9 9,6 3,6"/></svg> Projekat</button>
-    <button type="button" class="tab-btn" id="vlake-tab-btn" onclick="switchTab('vlake')" title="Vlake projekta — snimljene i nacrtane"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v15"/><path d="M10 20v-4l4-4V8l-3-3"/><path d="M14 12l3 2"/><path d="M3 20h18"/></svg><span class="vlake-tab-label">Vlake</span><span class="tab-notif" id="notif-vlake"></span></button>
-    <button class="tab-btn" onclick="switchTab('doznaka')"><svg class="tbi" viewBox="0 0 24 24"><polygon points="12,3 6,11 18,11"/><polygon points="12,8 5,17 19,17"/><line x1="12" y1="17" x2="12" y2="21"/><circle cx="18" cy="6" r="3.2" stroke-width="1.6"/></svg> Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
+    <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-menu"/></svg> Meni</button>
+    <button class="tab-btn active" onclick="switchTab('karta')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-map"/></svg> Karta</button>
+    <button class="tab-btn" onclick="switchTab('projekat')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-project"/></svg> Projekat</button>
+    <button type="button" class="tab-btn" id="vlake-tab-btn" onclick="switchTab('vlake')" title="Vlake projekta — snimljene i nacrtane"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-vlake"/></svg><span class="vlake-tab-label">Vlake</span><span class="tab-notif" id="notif-vlake"></span></button>
+    <button class="tab-btn" onclick="switchTab('doznaka')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-tree"/></svg> Doznaka<span class="tab-notif" id="notif-doznaka"></span></button>
     <button class="tab-btn" id="admin-tab-btn" style="display:none;color:#fbbf24;" onclick="switchTab('admin')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="16.5" cy="8.5" r="2.6"/><path d="M11 21c0-3.6 2.5-6.3 5.5-6.3S22 17.4 22 21"/><circle cx="9" cy="8" r="3.3"/><path d="M2.5 21c0-4.3 3-7.5 6.5-7.5s6.5 3.2 6.5 7.5"/></svg> Korisnici<span class="tab-notif" id="notif-admin"></span></button>
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="12,5.5 15,12 12,18.5" stroke-width="1.2"/><polygon points="12,5.5 9,12 12,18.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> Teren</button>
     <span id="vodeci-badge" onclick="closeMenuDropdown();showProjectManagement()" title="Nadzorni nalog — pregled rada svih projektanata šumarije" style="display:none;background:#0e7490;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;">👔 VODEĆI PROJEKTANT</span>
@@ -5741,7 +5742,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.7';
+const APP_VER = 'v2.7.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7322,7 +7323,7 @@ async function sbLoadProfile() {
   document.getElementById('p-ime').value = fullName;
   if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
   const vodeciBadge = document.getElementById('vodeci-badge');
-  if (vodeciBadge) vodeciBadge.style.display = isVodeci() ? '' : 'none';
+  if (vodeciBadge) vodeciBadge.style.display = 'none';
   // ── Vidljivost UI po ulozi — DETERMINISTIČKI za sve uloge ──────────────────
   // SPA: odjava → prijava drugog korisnika ide BEZ reload-a stranice, pa svaki
   // element MORA biti eksplicitno postavljen u OBA smjera. Jednosmjerno sakrivanje
@@ -7330,7 +7331,7 @@ async function sbLoadProfile() {
   // ŠPD-terenskog naloga na istom uređaju ostane bez Projekat/Vlake/Doznaka tabova.
   const isAdm = !!data.is_admin;   // admin: nadzor i lokalni alati Terena
   const isFld = isSpdField();      // ŠPD terenski: samo navigacija/orijentacija
-  const isVod = isVodeci();        // vodeći projektant: read-only nadzor svoje šumarije
+  const isVod = isVodeci();        // projektant + zaseban izvještaj svoje šumarije
 
   // Tabovi
   const adminTabBtn    = document.getElementById('admin-tab-btn');
@@ -7343,11 +7344,10 @@ async function sbLoadProfile() {
   if (postavkeTabBtn) postavkeTabBtn.style.display = isAdm ? '' : 'none';
   if (terenBtn)    terenBtn.style.display    = (isFld || isAdm) ? '' : 'none';
   const terenMenu=document.getElementById('menu-field-work');if(terenMenu)terenMenu.hidden=isFld||isAdm;
-  // Vodeći projektant: samo Karta + Meni (nadzor kroz "Upravljanje projektima")
-  if (projBtn)     projBtn.style.display     = (isFld || isVod) ? 'none' : '';
-  if (vlkBtn)      vlkBtn.style.display      = (isFld || isVod) ? 'none' : '';
-  // Doznaka: vide šumarijski nalozi — nema je admin (nadzor), ŠPD terenski ni vodeći
-  if (dozTab)      dozTab.style.display      = (isAdm || isFld || isVod) ? 'none' : '';
+  // Vodeći radi svoje i dijeljene projekte kroz iste tabove kao projektant.
+  if (projBtn)     projBtn.style.display     = isFld ? 'none' : '';
+  if (vlkBtn)      vlkBtn.style.display      = isFld ? 'none' : '';
+  if (dozTab)      dozTab.style.display      = (isAdm || isFld) ? 'none' : '';
 
   // Meni stavke
   const adminItem = document.getElementById('menu-admin-item');
@@ -7358,7 +7358,13 @@ async function sbLoadProfile() {
   if (debugItem) debugItem.style.display = isAdm ? 'block' : 'none';
   // Izvještaji (sedmični/mjesečni po projektantu): nadzorni prikaz — admin + vodeći
   const izvItem = document.getElementById('mdrop-izvjestaji');
-  if (izvItem) izvItem.style.display = (isAdm || isVod) ? 'block' : 'none';
+  if (izvItem) izvItem.style.display = isAdm ? 'block' : 'none';
+  const schoolReport = document.getElementById('menu-school-report');
+  if (schoolReport) {
+    schoolReport.hidden = !isVod;
+    const scope = schoolReport.querySelector('small');
+    if (scope) scope.textContent = data.sumarija || 'Šumarija nije navedena';
+  }
 
   // Projektantski alati (admin nadzorni nalog ih nema)
   const noviBtn = document.querySelector('#proj-list-sec .btn.b[onclick="showNovProjektForm()"]');
@@ -7487,7 +7493,6 @@ function _startupRestore() {
       }
     });
     // Vodeći projektant: nalog služi isključivo nadzoru — odmah otvori pregled
-    if (isVodeci() && _mrezaProbaj()) korak('vodeci', () => showProjectManagement());
   }, 80);
 }
 
@@ -9085,26 +9090,8 @@ async function sbLoadProjekti() {
   if (!sbUser) return;
   // ŠPD terenski korisnik nema projekte — preskoči učitavanje
   if (isSpdField()) { _projekti = []; rndProjektiList(); return; }
-  // Vodeći projektant: SVI projekti njegove šumarije preko SECURITY DEFINER RPC-a
-  // (RLS običnom korisniku ne garantuje SELECT tuđih projekata). Minimalni objekti
-  // su dovoljni za "Upravljanje projektima" detalj i prikaz na karti.
-  if (isVodeci()) {
-    try {
-      const { data, error } = await sb.rpc('vodeci_projekti_pregled');
-      if (error) throw error;
-      _projekti = (data || []).map(r => ({
-        id: r.id, sumarija: r.sumarija, gj: r.gj, odjel: r.odjel, datum: r.datum,
-        povrsina: r.povrsina, korisnik_id: r.korisnik_id || null, clanovi: []
-      }));
-      _OL.save(_OL.PROJEKTI, _projekti);
-    } catch(e) {
-      const cached = _OL.load(_OL.PROJEKTI);
-      if (cached) _projekti = cached;
-    }
-    if (_aktivniProjektId && !_projekti.find(p => p.id === _aktivniProjektId)) _aktivniProjektId = null;
-    rndProjektiList();
-    return;
-  }
+  // Vodeći učitava svoje i dijeljene projekte istim putem kao kolege.
+  // Zbirni izvještaj šumarije ima zaseban RPC i nikad ne prepisuje radni spisak.
   const myGen = ++_projLoadGen;
   try {
     // Admin (SPD USSUME) — nadzorni pregled: vidi SVE projekte (read-only)
@@ -9163,6 +9150,9 @@ async function sbLoadProjekti() {
   }
   if (myGen !== _projLoadGen) return;
 
+  // Stari nadzorni keš vodećeg je sadržavao tuđe projekte bez članstva.
+  // U radni/offline spisak ulaze samo vlasništvo i potvrđeno članstvo.
+  if (!isAdmin()) _projekti = _projekti.filter(p => p.korisnik_id === sbUser.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser.id));
   _projekti = _projektiVratiNeposlane(_projekti);
   _OL.save(_OL.PROJEKTI, _projekti);
 
@@ -11129,8 +11119,8 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
   };
   const rndList = () => { if(typeof _updVlakeMapVisibility==='function')_updVlakeMapVisibility();else if(typeof _vlakaStilApply==='function')_vlakaStilApply();if (typeof rndKolegeVlakeList === 'function') rndKolegeVlakeList(); };
 
-  // Admin/vodeći nadzorni pregled: prikaži SVE vlake aktivnog projekta (svih korisnika)
-  if ((isAdmin() || isVodeci()) && akt) {
+  // Admin nadzorni pregled: prikaži SVE vlake aktivnog projekta (svih korisnika)
+  if (isAdmin() && akt) {
     let dbData = null;
     try {
       dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
@@ -11308,12 +11298,7 @@ async function sbLoadKolege() {
 
   kolegeMap = {};
   data.forEach((k, i) => {
-    // Vodeći Projektant je nadzorni nalog za pregled rada šumarije (vidi
-    // 20260706_vodeci_projektant.sql) — ne crta vlake, ne treba se nuditi
-    // kao kandidat za dodavanje u projekat. Od 20260727_pristup_odobrenje.sql
-    // uloga je prava kolona (je_vodeci); regex nad imenom ostaje samo kao
-    // fallback za keš/profil zapisan prije te migracije.
-    if (k.je_vodeci || /^vode[cć]i\s+projektant$/i.test((k.ime || '').trim())) return;
+    // Vodeći je i projektant: može biti član tima, kao ostale kolege.
     // Boja kolege bez upisane boje se računa DETERMINISTIČKI iz njegovog id-a,
     // ne indeksom u listi i bez upisa u bazu. Ranije se ovdje radio
     // `sb.from('korisnici').update({boja}).eq('id', id)` nad TUĐIM redom —
@@ -12808,11 +12793,8 @@ function isAdmin() { return !!sbProfile?.is_admin; }
 // ŠPD US ŠUME terenski korisnik (nije admin): samo navigacija/orijentacija, bez projekata
 function isSpdField() { return isSpd() && !isAdmin(); }
 
-// "Vodeći projektant" — po jedan nalog po šumariji (ime = "Vodeći Projektant",
-// prezime = naziv šumarije, npr. "Vodeći Projektant Bihać"). Registruje se kroz
-// normalnu registraciju; admin mu resetuje PIN kroz Admin panel. Nalog je ČISTO
-// nadzorni: read-only pregled rada svih projektanata SVOJE šumarije (vlake +
-// doznaka + statistike) kroz "Upravljanje projektima".
+// Vodeći radi svoje i dijeljene projekte kao ostali projektanti. U Meniju
+// ima dodatni, odvojen izvještaj vlaka/doznake i učinka svoje šumarije.
 // Uloga je od 20260727_pristup_odobrenje.sql PRAVA KOLONA (korisnici.je_vodeci),
 // koju postavlja samo admin (admin_set_vodeci). Ranije se izvodila iz regexa nad
 // IMENOM — i to su poštovale tri SECURITY DEFINER funkcije na serveru, pa je bilo
@@ -12826,7 +12808,7 @@ function isVodeci() {
   return /^vode[cć]i\s+projektant$/i.test((sbProfile.ime || '').trim());
 }
 // Bilo koji nalog koji ne smije uređivati projekte/vlake
-function isReadOnly() { return isSpd() || isAdmin() || isVodeci(); }
+function isReadOnly() { return isSpd() || isAdmin(); }
 
 function wgsToMGI(lat, lon) {
   try {
@@ -25612,52 +25594,45 @@ function _pmUserName(id) {
 let _pmAdminRows = null; // admin/vodeći: agregati projekata (RPC), {_err} na grešku
 let _pmDozRows   = null; // vodeći: doznaka odjeli šumarije (RPC)
 
-async function showProjectManagement() {
+let _pmNadzor = false, _pmRequestSeq = 0;
+async function showProjectManagement(nadzor = false) {
+  const request = ++_pmRequestSeq, owner = sbUser?.id, school = sbProfile?.sumarija;
+  const leading = isVodeci();
+  _pmNadzor = isAdmin() || (leading && nadzor === true);
+  const current = () => request === _pmRequestSeq && sbUser?.id === owner && sbProfile?.sumarija === school;
   _pmSearch='';_pmFilter='all';
   const search=document.getElementById('pm-search'),filter=document.getElementById('pm-filter');
-  if(search)search.value='';if(filter)filter.value='all';
+  if(search)search.value='';if(filter){filter.value='all';filter.hidden=_pmNadzor;}
+  const reports=document.getElementById('pm-school-actions');
+  if(reports)reports.hidden=!(_pmNadzor && leading);
   document.getElementById('pm-modal').classList.add('show');
-  if (sbProfile?.is_admin || isVodeci()) {
-    // Nadzor: in-memory `vlake` je prazan (read-only nalog) pa se brojevi po
-    // projektu računaju na serveru. Admin = sve šumarije; vodeći = SVOJA šumarija.
+  if (_pmNadzor) {
     _pmAdminRows = null; _pmDozRows = null;
-    _pmShowList(); // prikaže "učitavam" kroz admin granu _pmRenderList
-    const rpcName = sbProfile?.is_admin ? 'admin_projekti_pregled' : 'vodeci_projekti_pregled';
+    _pmShowList();
+    const rpcName = isAdmin() ? 'admin_projekti_pregled' : 'vodeci_projekti_pregled';
     try {
       const { data, error } = await sb.rpc(rpcName);
+      if (!current()) return;
       if (error) throw error;
-      _pmAdminRows = data || [];
-      // Vodeći: sigurnosni filter na klijentu — ISKLJUČIVO projekti svoje šumarije.
-      // RPC već filtrira server-side (WHERE p.sumarija = v_sum); ovo je
-      // defense-in-depth da tuđa šumarija nikad ne dospije u prikaz.
-      if (isVodeci() && sbProfile?.sumarija) {
-        _pmAdminRows = _pmAdminRows.filter(r => (r.sumarija || '') === sbProfile.sumarija);
-      }
-      // Vodeći: sinhronizuj _projekti iz RPC redova — _pmOpenDetail/_pmShowOnMap
-      // rade nad _projekti, a vodeći ih ne učitava klasičnim putem.
-      if (isVodeci()) {
-        _projekti = _pmAdminRows.map(r => ({
-          id: r.id, sumarija: r.sumarija, gj: r.gj, odjel: r.odjel, datum: r.datum,
-          povrsina: r.povrsina, korisnik_id: r.korisnik_id || null, clanovi: []
-        }));
-      }
-    } catch(e) {
-      _pmAdminRows = { _err: e };
-    }
-    // Vodeći: doznaka pregled šumarije (zasebna sekcija ispod projekata)
-    if (isVodeci()) {
+      // Nadzor je zaseban spisak: ne mijenja aktivni projekat, članstvo ni keš.
+      _pmAdminRows = (data || []).filter(r => !leading || (!!school && r.sumarija === school));
+    } catch(e) { if (!current()) return; _pmAdminRows = { _err:e }; }
+    if (leading) {
       try {
+        // Ovaj RPC vraća odjele samo šumarije prijavljenog korisnika.
         const { data, error } = await sb.rpc('vodeci_doznaka_pregled');
+        if (!current()) return;
         if (error) throw error;
-        _pmDozRows = data || [];
-      } catch(e) { _pmDozRows = []; }
+        _pmDozRows = school ? data || [] : [];
+      } catch(e) { if (!current()) return; _pmDozRows = []; }
     }
-    if (_pmDetailId === null) _pmRenderList(); // ne pregazi detalj ako je u međuvremenu otvoren
+    if (current() && _pmDetailId === null) _pmRenderList();
     return;
   }
   _pmShowList();
 }
 function closeProjectManagement() {
+  ++_pmRequestSeq;
   document.getElementById('pm-modal').classList.remove('show');
   _pmDetailId = null;
 }
@@ -25666,8 +25641,8 @@ function _pmShowList() {
   document.getElementById('pm-back-btn').style.display = 'none';
   document.getElementById('pm-detail').style.display = 'none';
   document.getElementById('pm-list-wrap').style.display = '';
-  document.getElementById('pm-title').textContent = (isVodeci() && sbProfile?.sumarija)
-    ? '📊 Nadzor — ' + sbProfile.sumarija
+  document.getElementById('pm-title').textContent = (_pmNadzor && isVodeci() && sbProfile?.sumarija)
+    ? 'Izvještaj šumarije — ' + sbProfile.sumarija
     : '📊 Upravljanje projektima';
   document.getElementById('pm-body').scrollTop = 0;
   _pmRenderList();
@@ -25675,7 +25650,7 @@ function _pmShowList() {
 
 function _pmRenderList() {
   let el = document.getElementById('pm-list');
-  if (sbProfile?.is_admin || isVodeci()) { _pmRenderAdminList(el); return; }
+  if (_pmNadzor) { _pmRenderAdminList(el); return; }
   if (!_projekti.length) {
     _pmListCaption(0,0);
     el.innerHTML = '<div class="pm-empty">Još nema projekata.<br>Napravi projekat u sekciji Projekti.</div>';
@@ -25879,7 +25854,7 @@ async function _enrichVlakeElevation(vlakeRows) {
 }
 
 async function _pmOpenDetail(id) {
-  const p = _projekti.find(x => x.id === id);
+  const p = (typeof _pmNadzor !== 'undefined' && _pmNadzor && Array.isArray(_pmAdminRows) ? _pmAdminRows : _projekti).find(x => x.id === id);
   if (!p) return;
   _pmDetailId = id;
   document.getElementById('pm-list-wrap').style.display = 'none';
@@ -25933,7 +25908,7 @@ async function _pmOpenDetail(id) {
 }
 
 function _pmShowOnMap() {
-  const p = _projekti.find(x => x.id === _pmDetailId);
+  const p = _pmNadzor && Array.isArray(_pmAdminRows) ? _pmAdminRows.find(x => x.id === _pmDetailId) : _projekti.find(x => x.id === _pmDetailId);
   if (!p) return;
   closeProjectManagement();
   switchTab('karta');
@@ -25951,7 +25926,7 @@ function _pmShowOnMap() {
 
 async function _pmAktiviraj() {
   const id = _pmDetailId;
-  if (!id) return;
+  if (!id || !_projekti.some(p => p.id === id)) return;
   closeProjectManagement();
   await aktivirajProjekt(id);
 }
@@ -26645,12 +26620,13 @@ function _pmBuildDetail(p, vlakeRows, logRows) {
   const row = (l, v) => `<div class="pm-row"><span class="pm-row-l">${l}</span><span class="pm-row-v">${v}</span></div>`;
 
   const isAkt = p.id === _aktivniProjektId;
+  const canActivate = _projekti.some(item => item.id === p.id);
   let html = `<div class="pm-detail-hero"><div><span class="pm-eyebrow">${isAkt ? 'Aktivni projekat' : 'Pregled projekta'}</span><h2>${_escHtml(/^odjel/i.test(p.odjel || '') ? p.odjel : 'Odjel '+(p.odjel || '—'))}</h2><p>${_escHtml(p.gj || 'Gospodarska jedinica nije unesena')}</p><small>Vlasnik: ${_escHtml(_pmUserName(p.korisnik_id))}</small></div><div class="pm-hero-length"><b>${fmtL(valid.reduce((n,r)=>n+calcL(r.pts),0))}</b><span>${valid.length} vlaka i krakova</span></div></div>`;
 
   // Akcije
   html += `<div class="pm-actions">
     <button class="pm-act-btn" onclick="_pmShowOnMap()"><svg class="ic"><use href="#ic-karta"/></svg> Prikaži na karti</button>
-    <button class="pm-act-btn ${isAkt ? 'dis' : 'g'}" ${isAkt ? 'disabled' : 'onclick="_pmAktiviraj()"'}>${isAkt ? '<svg class="ic"><use href="#ic-potvrdi"/></svg> Aktivan' : '<svg class="ic"><use href="#ic-brzo"/></svg> Aktiviraj'}</button>
+    ${canActivate ? `<button class="pm-act-btn ${isAkt ? 'dis' : 'g'}" ${isAkt ? 'disabled' : 'onclick="_pmAktiviraj()"'}>${isAkt ? '<svg class="ic"><use href="#ic-potvrdi"/></svg> Aktivan' : '<svg class="ic"><use href="#ic-brzo"/></svg> Aktiviraj'}</button>` : ''}
     <button class="pm-act-btn" onclick="_pmExportReport()"><svg class="ic"><use href="#ic-stampaj"/></svg> Izvještaj</button>
     <button class="pm-act-btn" onclick="_pmNagibAnaliza()"><svg class="ic"><use href="#ic-uglomjer"/></svg> Analiza nagiba</button>
   </div>`;
@@ -40386,12 +40362,7 @@ async function dozAddMember() {
     if (eUsers) throw eUsers;
     if (!users?.length) { showToast('Nema projektanata u šumariji'); return; }
     const vecClanovi = new Set(_dozMembers.map(m => m.user_id));
-    // Vodeći Projektant je nadzorni nalog (isti obrazac kao kod dodavanja u vlake
-    // projekat) — ne snima doznaku, ne treba se nuditi kao kandidat za tim.
-    // je_vodeci je prava kolona od 20260727_pristup_odobrenje.sql; regex nad
-    // imenom ostaje kao fallback za redove učitane prije migracije.
-    const dostupni = users.filter(u => !vecClanovi.has(u.id)
-      && !u.je_vodeci && !/^vode[cć]i\s+projektant$/i.test((u.ime || '').trim()));
+    const dostupni = users.filter(u => !vecClanovi.has(u.id));
     if (!dostupni.length) { showToast('Svi projektanti su već dodani'); return; }
     if(sbUser?.id!==owner||_dozSelId!==projectId)return;
     _dozShowMemberPicker(dostupni);
@@ -40530,38 +40501,39 @@ if (typeof AndroidDownload !== 'undefined') {
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren');TerenWorkspace.search('');TerenWorkspace.jump('trn-records')">Moji zapisi</button>
   </div><div class="mdrop-sections"><section class="mdrop-section">
-  <div class="mdrop-hdr">Karte i slojevi</div>
-  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico">🗺</span>Učitaj kartu</button>
-  <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico">🏔</span>Instalirane karte</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openLayerImport()"><span class="mdrop-ico">📂</span>Dodaj KML fajl / SHP</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico">🌲</span>Granice odjela</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico">📊</span>Tematska karta</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico">🖌</span>Stil linija</button>
+  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-map"/></svg>Karte i slojevi</div>
+  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();openLoadMapScreen()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span>Učitaj kartu</button>
+  <button type="button" class="mdrop-item" id="menu-installed-maps" onclick="closeMenuDropdown();_openLayerSheet();_lsTab('inst')"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-installed"/></svg></span>Instalirane karte</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openLayerImport()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-kml"/></svg></span>Dodaj KML fajl / SHP</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-boundaries"/></svg></span>Granice odjela</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-theme"/></svg></span>Tematska karta</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil linija</button>
   </section><section class="mdrop-section">
-  <div class="mdrop-hdr">Rad na terenu</div>
-  <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true">🧭</span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
-  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true">☀</span>Dnevni mod</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico">📷</span>Uslikaj lokaciju</button>
-  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico">🧭</span>Vodi me do odjela/lokacije</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico">📏</span>Mjerenja i tragovi</button>
+  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg>Rad na terenu</div>
+  <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
+  <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
+  <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
   </section><section class="mdrop-section">
-  <div class="mdrop-hdr">Server</div>
-  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
+  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
+  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
-  <div class="mdrop-hdr" id="menu-project-section-title">Projekti i izvoz</div>
-  <button type="button" class="mdrop-item" id="menu-department-report" onclick="closeMenuDropdown();DepartmentReport.open()"><span class="mdrop-ico">⛰</span>Izvještaj odjela</button>
-  <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</button>
-  <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</button>
+  <div class="mdrop-hdr" id="menu-project-section-title"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg>Projekti i izvoz</div>
+  <button type="button" class="mdrop-item" id="menu-department-report" onclick="closeMenuDropdown();DepartmentReport.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-report"/></svg></span>Izvještaj odjela</button>
+  <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Upravljanje projektima</button>
+  <button type="button" class="mdrop-item" id="menu-school-report" hidden onclick="closeMenuDropdown();showProjectManagement(true)"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-report"/></svg></span><span>Izvještaj šumarije<small>Projektanti i projekti</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
+  <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-calendar"/></svg></span>Sedmični / mjesečni izvještaji</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-printer"/></svg></span>Print / štampanje</button>
   </section><section class="mdrop-section">
-  <div class="mdrop-hdr">Račun i pomoć</div>
-  <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico">👥</span>Admin — korisnici</button>
-  <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico">🛠</span>DEBUG</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico">🔑</span>Promijeni PIN</button>
-  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico">🔄</span>Ažuriraj aplikaciju</button>
-  <button type="button" class="mdrop-item" id="menu-device-settings" onclick="closeMenuDropdown();showDeviceSettings()"><span class="mdrop-ico">🔋</span>Baterija i automatsko pokretanje</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico">📖</span>Upute za korištenje</button>
-  <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico">🚪</span>Odjava</button>
+  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg>Račun i pomoć</div>
+  <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
+  <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
+  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju</button>
+  <button type="button" class="mdrop-item" id="menu-device-settings" onclick="closeMenuDropdown();showDeviceSettings()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-battery"/></svg></span>Baterija i automatsko pokretanje</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-help"/></svg></span>Upute za korištenje</button>
+  <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-logout"/></svg></span>Odjava</button>
   </section></div>
   <footer class="mdrop-footer">
     <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
@@ -40604,7 +40576,7 @@ if (typeof AndroidDownload !== 'undefined') {
       <button id="pm-close-btn" aria-label="Zatvori upravljanje projektima" onclick="closeProjectManagement()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </div>
     <div id="pm-body">
-      <div id="pm-list-wrap"><div class="pm-intro"><b>Projekti na jednom mjestu</b><p>Odjel, gospodarska jedinica i projektanti, uz dužine i izvještaje.</p></div><div class="pm-toolbar"><input id="pm-search" type="search" aria-label="Pretraži projekte" placeholder="Odjel, G.J. ili projektant…" oninput="_pmFilterList(this.value)"><select id="pm-filter" aria-label="Filter projekata" onchange="_pmFilterList(undefined,this.value)"><option value="all">Svi projekti</option><option value="active">Aktivni projekat</option><option value="mine">Moji projekti</option><option value="shared">Dijeljeni sa mnom</option></select></div><p id="pm-list-caption" class="pm-caption"></p><div class="pm-data-note">Prikaz zadnjih dostupnih podataka. Zajedničke vlake osvježi u Serveru.</div><div id="pm-list"></div></div>
+      <div id="pm-list-wrap"><div id="pm-school-actions" class="pm-actions" hidden><button type="button" class="pm-act-btn" onclick="closeProjectManagement();showIzvjestaji()">Projektanti · sedmični i mjesečni učinak</button></div><div class="pm-intro"><b>Projekti na jednom mjestu</b><p>Odjel, gospodarska jedinica i projektanti, uz dužine i izvještaje.</p></div><div class="pm-toolbar"><input id="pm-search" type="search" aria-label="Pretraži projekte" placeholder="Odjel, G.J. ili projektant…" oninput="_pmFilterList(this.value)"><select id="pm-filter" aria-label="Filter projekata" onchange="_pmFilterList(undefined,this.value)"><option value="all">Svi projekti</option><option value="active">Aktivni projekat</option><option value="mine">Moji projekti</option><option value="shared">Dijeljeni sa mnom</option></select></div><p id="pm-list-caption" class="pm-caption"></p><div class="pm-data-note">Prikaz zadnjih dostupnih podataka. Zajedničke vlake osvježi u Serveru.</div><div id="pm-list"></div></div>
       <div id="pm-detail" style="display:none;"><div id="pm-detail-body"></div></div>
     </div>
   </div>
@@ -40666,6 +40638,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="4.">Uključi lokaciju telefona i odobri GPS dozvole. U <b>Meni → Učitaj kartu</b> otvori kartu koju ćeš koristiti na terenu.</li>
 <li data-n="5.">Otvori upute <b>Vlake</b> ili <b>Doznaka</b> iznad i prati korake za snimanje.</li>
 </ol></section>
+<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Vodeći projektant</button><div class="help-sec-body"><div class="help-row"><div class="help-txt"><b>Radi kao ostali projektanti</b><span>U tabovima <b>Projekat, Vlake i Doznaka</b> radi svoje projekte i projekte u koje te kolega dodao. Možeš snimati i crtati te slati svoj rad kroz Server.</span></div></div><div class="help-row"><div class="help-txt"><b>Pregled cijele šumarije</b><span>U <b>Meni → Izvještaj šumarije</b> pregledaj projekte vlaka i doznake svih projektanata svoje šumarije. Dugme <b>Projektanti · sedmični i mjesečni učinak</b> otvara izvještaj rada. Pregled ne mijenja tvoj aktivni projekat i ne dodaje te u tuđe projekte.</span></div></div></div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Karta za rad bez interneta</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. U <b>Dostupnim kartama</b> pritisni <b>Skini kartu</b> uz željenu kartu iz kataloga. Aplikacija je preuzima i automatski dodaje među <b>Moje karte</b>, spremnu za rad bez interneta. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Zadrži originalni fajl</b><span>Android može čitati kartu direktno iz izabranog fajla. Nemoj ga brisati ili premještati dok ga koristiš u aplikaciji. Neki izvori traže kopiranje; tada prati prikazani napredak.</span></div></div>
@@ -41738,12 +41711,12 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="action-bar">
   <!-- Normalni mod (snimanje nije aktivno) -->
   <button id="brec" onclick="togSnimVlaku()" title="Snimi GPS vlaku">
-    <span class="ab-ico"><img src="forwarder.svg" alt="🚜"></span>
+    <span class="ab-ico"><svg class="dm-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-tractor"/></svg></span>
     <span>Snimi vlaku</span>
     <span id="brec-nm">T1</span>
   </button>
   <button id="btragovi" onclick="switchTab('tragovi')" title="Tragovi — snimanje i baza tragova" style="display:none;">
-    <span class="ab-ico"><svg class="ic"><use href="#ic-trag"/></svg></span>
+    <span class="ab-ico"><svg class="dm-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-tracks"/></svg></span>
     <span>Tragovi</span>
   </button>
   <!-- Mod snimanja vlake (recOn) — krak gumbi + povratak -->
@@ -41822,7 +41795,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <div id="ab-loc-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
     <button id="ab-loc" onclick="_toggleLocPopup()" title="Moja lokacija">
-      <span class="ab-ico"><svg class="ic"><use href="#ic-gps"/></svg><span class="ab-acc" id="ab-loc-acc"></span></span>
+      <span class="ab-ico"><svg class="dm-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-location"/></svg><span class="ab-acc" id="ab-loc-acc"></span></span>
       <span>Lokacija</span>
     </button>
     <div id="ab-loc-popup" class="ab-pop" style="display:none;">

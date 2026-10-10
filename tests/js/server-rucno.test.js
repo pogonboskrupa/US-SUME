@@ -331,9 +331,11 @@ t('dupli tap ne pokreće dva slanja', async () => {
 sekcija('\nMeni i panel:');
 
 t('Meni ima sekciju "Server" koja otvara panel', () => {
-  const i = HTML.indexOf('<div class="mdrop-hdr">Server</div>');
-  assert.ok(i > 0, 'nema zaglavlja Server u meniju');
-  assert.ok(/id="mdrop-server"[^>]*onclick="closeMenuDropdown\(\);openSyncQueuePanel\(\)"/.test(HTML.slice(i, i + 600)));
+  const button = HTML.indexOf('id="mdrop-server"');
+  assert.ok(button > 0, 'nema Server stavke u meniju');
+  const section = HTML.slice(HTML.lastIndexOf('<section',button), HTML.indexOf('</section>',button));
+  assert.ok(section.includes('>Server</div>'), 'nema zaglavlja Server u meniju');
+  assert.ok(/id="mdrop-server"[^>]*onclick="closeMenuDropdown\(\);openSyncQueuePanel\(\)"/.test(section));
 });
 
 t('panel ima dugme "Pošalji na server" i sažetak', () => {
