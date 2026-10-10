@@ -59,6 +59,9 @@
     "static/js/spd-profile.js",
     "static/css/spd-profile.css",
     "static/js/department-report.js",
-    "static/js/department-report-worker.js"
+    "static/js/department-report-worker.js",
+    "static/js/doznaka-plan.js",
+    "static/js/doznaka-plan-worker.js",
+    "static/css/doznaka-plan.css"
   ]
 }

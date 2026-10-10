@@ -4221,6 +4221,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 /* === KRAJ TRAGOVI I MJERENJE === */
 </style>
 <link rel="stylesheet" href="static/css/field-design.css">
+<link rel="stylesheet" href="static/css/doznaka-plan.css">
 <link rel="stylesheet" href="static/css/navigation-design.css">
 <link rel="stylesheet" href="static/css/server-panel.css">
 <link rel="stylesheet" href="static/css/map-library.css">
@@ -5292,6 +5293,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="doz-local-card" id="doz-local-status" aria-live="polite"></div>
         <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS snimanje</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake i bafer</button><button onclick="dozGoSection('team')">Tim</button></nav>
         <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 4px;"></div>
+        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
         <div class="sec" id="doz-section-gps">
           <div class="sec-t">📍 GPS Trag projektanta</div>
@@ -5686,7 +5688,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.0';
+const APP_VER = 'v2.8.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7899,6 +7901,7 @@ async function doLogout() {
   if(typeof _serverPreviewClose==='function')_serverPreviewClose();
   if(typeof _projektVlakePreviewClose==='function')_projektVlakePreviewClose();
   if(window.DepartmentReport)DepartmentReport.reset();
+  if(typeof DoznakaPlan!=='undefined')DoznakaPlan.reset();
   if(typeof ProjectTerrain!=='undefined')ProjectTerrain.reset();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
   // dobija nazad kroz _temRestore; drugi nalog dobija vlastiti arhivirani registar)
@@ -37574,6 +37577,7 @@ async function dozSelectOdjel(id) {
   const selection=(dozSelectOdjel._generation||0)+1;dozSelectOdjel._generation=selection;
   if(_dozVlakeVisible)dozToggleVlake();
   _dozSelId = id;
+  if(typeof DoznakaPlan!=='undefined')DoznakaPlan.sync().catch(()=>{});
   _dozFitId = null;   // novo otvaranje (i istog odjela) → centriraj ponovo
   _OL.save(_OL.DOZ_SEL_ID, id);
   _dozClearOverview();
@@ -38778,6 +38782,7 @@ function dozGoSection(key) {
   document.getElementById('doz-section-'+key)?.scrollIntoView({block:'start',behavior:'smooth'});
 }
 function dozRenderDetail() {
+  if(typeof DoznakaPlan!=='undefined')DoznakaPlan.sync().catch(()=>{});
   if(typeof _dozLocalStatusRender==='function')_dozLocalStatusRender();
   // ── Statistika ──
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
@@ -40454,6 +40459,7 @@ async function dozBackToList() {
   closeDozQrScan();
   ++_dozLoadGen;
   _dozSelId = null;
+  if(typeof DoznakaPlan!=='undefined')DoznakaPlan.reset();
   _OL.save(_OL.DOZ_SEL_ID, null);
   _dozSubProject(null);
   dozCancelDraw();
@@ -40594,6 +40600,36 @@ if (typeof AndroidDownload !== 'undefined') {
     <div id="stil-pregled"></div>
     <div id="stil-sadrzaj"></div>
   </div>
+</div>
+
+<!-- PROJEKCIJA DOZNAKE: plan, bez upisa u GPS/zone -->
+<div id="doz-plan-modal" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dp-title" onclick="if(event.target===this)DoznakaPlan.close()">
+ <section class="dr-sheet"><header><div><small>PLAN RADA</small><h2 id="dp-title">Projekcija trajanja doznake</h2></div><button type="button" aria-label="Zatvori projekciju" onclick="DoznakaPlan.close()">×</button></header>
+ <div class="dr-body">
+  <div class="dr-current"><small>ODABRANI ODJEL</small><b id="dp-project">Odjel</b><span id="dp-boundary"></span></div>
+  <div class="dr-choose"><button type="button" onclick="DoznakaPlan.boundaryFromProject()">Granica projekta</button><button type="button" onclick="DoznakaPlan.choose()">Izaberi odsjeke iz Granica</button></div>
+  <div class="dp-config">
+   <label>Širina pojasa (m)<select id="dp-width-choice" onchange="DoznakaPlan.widthChoice(this.value)"><option value="10">10 m</option><option value="15">15 m</option><option value="20">20 m</option><option value="custom">Druga širina</option></select></label>
+   <label>Broj projektanata<input id="dp-crew" type="number" min="1" max="12" step="1" value="2" onchange="DoznakaPlan.change('crew',this.value)"></label>
+   <label id="dp-width-custom-row" hidden>Druga širina (5–100 m)<input id="dp-width" type="number" min="5" max="100" step="any" value="15" onchange="DoznakaPlan.change('width',this.value)"></label>
+   <label class="dp-full">Pojaseva / prolaza dnevno po projektantu<input id="dp-pace" type="number" min="1" max="30" step="1" value="3" onchange="DoznakaPlan.change('pace',this.value)"></label>
+  </div>
+  <p id="dp-pace-note">Jedan prolaz: ekipa ide paralelno po izohipsama, jedan iznad drugog. U dnevni broj ulazi i praćenje prethodnog pojasa.</p>
+  <label class="dp-leapfrog"><input id="dp-leapfrog" type="checkbox" checked onchange="DoznakaPlan.change('leapfrog',this.checked)"><span><b>Povratak uz svoj prethodni pojas</b><br>Najviši projektant prati svoj pojas. Ostali prelaze iznad njega na nove pojaseve i mijenjaju red.</span></label>
+  <h3>Projektanti i boje</h3><div id="dp-people" class="dp-people"></div>
+  <div class="dp-tools"><button type="button" class="dr-primary" id="dp-calculate" onclick="DoznakaPlan.calculate()">Izračunaj projekciju</button><button type="button" id="dp-cancel" hidden onclick="DoznakaPlan.cancel()">Prekini</button></div>
+  <p id="dp-status" role="status" aria-live="polite"></p>
+  <div id="dp-result" hidden>
+   <div class="dp-hero"><div><small>Radnih dana</small><b id="dp-days-needed">—</b></div><div><small>Novih pojaseva</small><b id="dp-total-bands">—</b></div><div><small>Površina</small><b id="dp-area">—</b></div></div>
+   <p id="dp-model"></p>
+   <div class="dr-map-options"><label>Prikaži dan<select id="dp-day" onchange="DoznakaPlan.change('day',this.value)"></select></label><label><input type="checkbox" id="dp-visible" checked onchange="DoznakaPlan.change('visible',this.checked)">Prikaži planirane pojaseve na karti</label></div>
+   <button type="button" class="dr-primary" id="dp-view" onclick="DoznakaPlan.view()">Prikaži na karti</button>
+   <h3>Raspored po danima</h3><div id="dp-days" class="dp-days"></div><button type="button" id="dp-more" hidden onclick="DoznakaPlan.more()">Prikaži još dana</button>
+   <h3>Red projektanata · od nižeg prema višem</h3><div id="dp-pass-list"></div>
+   <h3>Ukupno po projektantu</h3><div id="dp-totals"></div>
+   <p>Procjena koristi zadani dnevni učinak. Vrijeme za premještanje, pauze, pristup odjelu i stvarne uslove rada nije dodatno uračunato.</p>
+  </div>
+ </div></section>
 </div>
 
 <!-- STIL I BOJA VLAKA MODAL -->
@@ -40850,6 +40886,8 @@ if (typeof AndroidDownload !== 'undefined') {
 </div></section>
 </div>
     <div id="help-pane-doznaka" style="display:none;">
+<div class="help-row"><div class="help-txt"><b>Projekcija trajanja doznake</b><span>Otvori odjel pa <b>Projekcija trajanja doznake</b>. Koristi granicu projekta ili ručno izaberi više odsjeka iz Granica. Unesi širinu pojasa, broj projektanata i broj dnevnih prolaza. Plan prati DEM izohipse od nižeg prema višem. Na povratku najviši prati svoj prethodni pojas, a ostali rade iznad njega; praćenje ne povećava površinu. Pregledaj dane i boje na karti. To je lokalni plan cijelog odjela, odvojen od stvarnih GPS pojaseva; već izvršeni rad nije oduzet.</span></div></div>
+
 <section class="help-start"><span class="help-eyebrow">Kratke upute</span><h3>Snimi prvi pojas doznake</h3><p>Odjel je granica rada. GPS trag je tvoja putanja, a pojas je procijenjena površina rada oko nje.</p><ol class="help-steps">
 <li data-n="1.">Otvori <b>Doznaka</b> i dodirni pravi odjel. Ako ga nema, napravi ga opcijom <b>+ Novi</b> (upute ispod).</li>
 <li data-n="2.">Dogovori s kolegama raspored. U ujednačenom odjelu radite <b>jedan iznad drugog po izohipsama</b>, od nižeg dijela prema višem.</li>
@@ -42405,5 +42443,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
 <script src="static/js/department-report.js"></script>
+<script src="static/js/doznaka-plan.js"></script>
 </body>
 </html>

@@ -3980,3 +3980,49 @@ API releases?per_page=1 vraća v2.8.0 s APK-om: postojeći Meni → Ažuriraj
 aplikaciju može pronaći novu verziju. Bez produkcijskih DB upisa i bez
 fizičkog Xiaomi mjerenja. Android dokaz outputs/280-android-passed;
 sažetak outputs/280/release-proof.json. Ova dopuna mijenja samo dokumentaciju.
+
+## 2026-10-10 — 2.8.1 / code 551: izohipsna projekcija trajanja doznake
+
+Doznaka → odabrani odjel → Projekcija trajanja doznake. Širine 10/15/20 m
+ili vlastita 5–100 m, 1–12 planiranih projektanata s nazivima/bojama,
+1–30 dnevnih prolaza po projektantu. Korisnik opisuje povratak najvišeg
+po svom prethodnom pojasu, ostali prelaze iznad njega uz kružni red. Prvi
+prolaz daje N novih pojaseva, sljedeći N−1; praćenje prethodnog troši prolaz
+ali ne dodaje novu površinu. Za 2 i 3 provjeren tačan red. Checkbox dopušta
+alternativu bez praćenja. Dvije opcionalne tekstualne provjere dnevne
+jedinice/modela postavljene korisniku; do odgovora ovo je izričit UI default.
+Procjena cijelog odjela, bez oduzimanja ranije odrađenih GPS pojaseva;
+ne uključuje automatski dolazak, vremenske prilike ili neradne dane.
+
+Izbor koristi granicu projekta ili ručno više KML odsjeka iz Granica bez
+atributa/izmjene stvarnog projekta. DEM Terrarium zoom13, cache-first,
+3 istovremena čitanja, do81 pločice. Turf isobands/isolines u Workeru,
+obrezivanje na poligon, rupe i odvojeni odsjeci; od nižeg dijela naviše.
+Razmak približno po površini terena, DEM oko30 m: ne garantuje stvarni
+razmak 10/15 m na promjenjivim padinama. Ovo je jasno označeno u prikazu.
+Nedostajući DEM ne postaje lažni ravan teren; stvarno ravan DEM eksplicitno
+koristi dužu stranu. Ograničena mreža do30k čvorova/1200 visinskih pojaseva,
+60s Worker deadline, prekid/generation zaštita pri promjeni odjela/naloga.
+Centimetarski ispravak Turf lineSplit zaokruženja zadržava presjek unutar
+izvorne granice; ne pomjera velike greške. Površina mora biti obuhvaćena
+unutar0.3%, inače odbija izračun. Rezultat nije potvrda terenskog učinka.
+
+Lokalni per-user/project prefs i IDB rezultat; izbor dana, boje/nazivi,
+vidljivost i minimiziranje legende ostaju nakon restarta. Potpis geometrije
++ parametara odbija zastarjeli plan. Poseban Canvas sloj ne presreće KML/GPS
+klikove. Legenda, raspored dana i red od nižeg prema višem; novi puni i
+ponovljeni isprekidani tragovi. Raspored oznaka na karti izbjegava preklop
+na uskom telefonu i ponovo se računa nakon zooma. Ne upisuje GPS tragove,
+zone, server ili stvarnu obrađenu površinu. Logout čisti samo radnu memoriju.
+
+Lokalno: svih JS testova i šestodnevna simulacija prošli; 7 novih geometrijskih
+provjera ravnine, krivudavih izohipsi, razmaka po terenu, rupa/MultiPolygon,
+potpune/nepreklopljene površine, 1/2/3 inžinjera/rotacije i loših parametara.
+Puni browser stvarni DEM PNG→dekoder→Worker→Leaflet→IDB: 6 modal prikaza s
+kontrastom/bez horizontalnog preljeva, ručni KML izbor/cancel, offline cached
+ponovni izračun, restart/boje/sakrivanje/dan, Worker cancel, izdvajanje odjela
+i naloga, bez izmjene stvarne doznake i bez vanjskih upisa. GPS controls267
+(8 rasporeda) i project-boundary276 prošli. Inline JS sintaksa prošla.
+72 APK web resources u manifestu/SW. Upute Doznake u aplikaciji ažurirane.
+Fizički Xiaomi i produkcijski Supabase nisu testirani. Ranije izričito
+odobrena isporuka nove verzije ostaje; APK/release dokaz tek nakon CI.

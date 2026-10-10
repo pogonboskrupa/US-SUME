@@ -83,6 +83,7 @@ jobs:
           timeout 120s python tests/browser/department-report-277.py
           timeout 120s python tests/browser/navigation-design-278.py
           timeout 120s python tests/browser/style-library-280.py
+          timeout 180s python tests/browser/doznaka-plan-281.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py
@@ -121,6 +122,7 @@ jobs:
             outputs/278/
             outputs/279/
             outputs/280/
+            outputs/281/
           if-no-files-found: ignore
       - uses: android-actions/setup-android@v3
         with:
