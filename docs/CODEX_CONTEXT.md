@@ -3642,3 +3642,46 @@ veličina i digest podudarni lokalno preuzetom APK-u. Updaterov
 releases?per_page=1 vraća v2.7.5 na prvom mjestu.
 APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.5/app-debug.apk
 Fizički Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
+
+10.10.2026 — 2.7.6 / Android code546: novi projekat Doznaka odmah nudi
+Ucrtaj na karti ili Izaberi iz sloja, prije unosa GJ/odjela. Korisnik je
+izričito precizirao: SAMO ručni izbor, bez atributa fajla. Klik na opciju
+otvara kartu, pojedinačni dodiri biraju/uklanjaju poligone; moguće više
+odsjeka. Dodatna Lista poligona nudi geometrijsku površinu, izvor, položaj
+i grupni izbor samo poligona u trenutnom prikazu. Nema čitanja atributa
+GJ/odjel/odsjek, pretrage po atributima niti automatskog upisa naziva.
+GJ/odjel upisuje korisnik. Grupni izbor ograničen na 300, listanje prvih
+80 uz približavanje karte/ručni izbor na karti.
+Union susjednih/preklopljenih poligona i površina rade u offline workeru
+s postojećim lokalnim Turf-om; odvojeni dijelovi ostaju MultiPolygon,
+rupe se čuvaju. Nema produkcijske SQL promjene ili upisa u Supabase.
+Unos GJ nakon izbora ne briše granicu/odjel. Odustajanje od novog crteža
+ili izbora vraća prethodnu granicu i trajnu vidljivost/stil sloja.
+
+Granice → Prikaz slojeva: prekidači sada upravljaju istim GitHub KML
+grupama kao Preglednik oznaka, prozirnost upravlja preuzetim granicama.
+Izvor sačuvan u importu i vraćen pri IDB restore; podržani ranije
+preuzeti GitHub slojevi iz 2.7.5. Stari ugrađeni prikaz se uklanja kad
+stvarni GitHub sloj postoji, radi uklanjanja duplih linija. Kontrole bez
+preuzetog odgovarajućeg sloja su neaktivne, s porukom za preuzimanje.
+Preuzimanje pokrenuto iz novog projekta vraća na popunjeni obrazac,
+uz provjeru da nalog nije promijenjen.
+Upute u aplikaciji prepisane za novi redoslijed kreiranja, preuzimanje,
+ručni izbor više odsjeka bez atributa i kontrole GitHub slojeva.
+
+Lokalno: svih 105 JS grupa prošlo. Nova puna browser provjera: stvarni
+KML parser/IDB, skriveni izvor, ručni map klik za dva odsjeka uz worker
+union, površina bez dvostrukog brojanja, udaljen poligon nije ponuđen,
+bez automatskog unosa GJ/odjela, crtanje prije unosa GJ, cancel i offline
+enqueue bez vanjskih upisa, restart vidljivosti/prozirnosti/boje.
+Dnevni kontrast preglednika prošao na 390 i 320 px. Stvarni javni
+GRANICE.kml 13.250.101 B s 2.759 poligona: uvoz, ručni izbor, worker,
+površina 3,24138 ha provjereni lokalno, bez korištenja atributa.
+Širi browser skup prošao (tematske karte, prefs/IDB, manual draw CPU4x,
+Doznaka šest dana/četiri člana/60 pojaseva, GPS kontrole, offline restore,
+server/lageri/print, granica OCR, navigacija, bafer kolege, slaba mreža).
+Stari test strelica jednom pao na vremenu klika prije završetka map
+animacije; ciljano ponovno pokretanje prošlo bez promjene implementacije.
+Native transport u browser provjerama je izolovan; ne tvrditi da je
+fizički Xiaomi ili produkcijski Supabase testiran. APK/emulator/objavu
+potvrditi završnim CI rezultatom ispod.

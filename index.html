@@ -5755,7 +5755,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.5';
+const APP_VER = 'v2.7.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -22485,6 +22485,7 @@ function _loadPutevi() {
       if (!_puteviVisible) togglePutevi(false);
       const cb = document.getElementById('putevi-toggle');
       if (cb) cb.checked = _puteviVisible;
+      if(typeof window!=='undefined')window.GithubLayers?.render();
     })
     .catch(e => console.error('Putevi GeoJSON greška:', e));
 }
@@ -23665,7 +23666,7 @@ function _parseKmlExtData(pm) {
 // isti popup mora moći otvoriti i "izvana" — iz map.on('click') fallback-a
 // (_kmlHitTest), kad DOM klik uopšte ne stigne do sloja (vidi napomenu tamo).
 function _kmlOpenPopup(layer, latlng) {
-  if (_dozKmlSelMode && layer._kmlIsPolygon) { _dozKmlSelToggle(layer); return; }
+  if (_dozKmlSelMode) { const target=window.DoznakaProjectBoundary?.allows(layer)?layer:_kmlHitTest(latlng,true);if(target)_dozKmlSelToggle(target);return; }
   const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
   layer._kmlPopupId = uid;
   L.popup({ maxWidth: 300, minWidth: 200, keepInView: true, autoPanPaddingTopLeft: [12,56], autoPanPaddingBottomRight: [12,12], className: 'kml-info-popup' })
@@ -23725,7 +23726,7 @@ function _kmlHitTest(latlng, onlyPolygons) {
   // Unazad: kasnije uvezeni sloj je "iznad" i ima prednost, isto kao u canvasu.
   for (let i = kmlLs.length - 1; i >= 0; i--) {
     const k = kmlLs[i];
-    if (!k || !k.grp || k.vis === false) continue;
+    if (!k || !k.grp || (k.vis === false && (typeof _dozKmlSelMode==='undefined'||!_dozKmlSelMode))) continue;
     if (!map.hasLayer(k.grp)) continue;
     // SHP slojevi su ugniježđeni (featureGroup → L.geoJSON grupa → path), pa se
     // silazi kroz grupe dok se ne dođe do samih geometrija.
@@ -23738,6 +23739,7 @@ function _kmlHitTest(latlng, onlyPolygons) {
       const l = kids[j];
       if (l._kmlName === undefined) continue;   // labela ili nevezani sloj
       if (onlyPolygons && !l._kmlIsPolygon) continue;
+      if (typeof _dozKmlSelMode!=='undefined' && _dozKmlSelMode && typeof window!=='undefined' && window.DoznakaProjectBoundary && !DoznakaProjectBoundary.allows(l)) continue;
 
       if (l._kmlIsPoint) {
         if (onlyPolygons) continue;
@@ -24338,7 +24340,7 @@ async function _localKmlRestore() {
         grp.addTo(map);
         if (data.vis === false) map.removeLayer(grp);
         kmlLs.push({
-          name: data.displayName || origName, _origName: origName,
+          name: data.displayName || origName, _origName: origName, _driveSource: data._driveSource || null,
           grp, col, dash: data.dash || '', weight: data.weight || 2,
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
@@ -24668,6 +24670,7 @@ function togGlGroupVis(indices) {
 }
 
 function rndGraniceModal() {
+  if(typeof window!=='undefined')window.GithubLayers?.render();
   const el = document.getElementById('granice-list');
   if (!el) return;
   const isAdmin = sbProfile?.is_admin === true;
@@ -35084,6 +35087,7 @@ function _geojsonSetOpacity(val) {
 }
 
 function _lsRenderGranice() {
+  if(typeof window!=='undefined'&&window.GithubLayers){window.GithubLayers.render();return;}
   const cb = document.getElementById('granice-toggle');
   if (cb) cb.checked = _geojsonVisible;
   const slider = document.getElementById('ls-granice-opacity');
@@ -39841,7 +39845,9 @@ function dozCancelDraw() {
   document.getElementById('tab-bar').style.display = 'flex';
   document.getElementById('action-bar').style.display = '';
   if (wasBoundary) {
-    _dozCreateBoundary = null; _dozCreateAreaHa = null;
+    _dozCreateBoundary = _dozNewBoundaryPrevious?.boundary || null;
+    _dozCreateAreaHa = _dozNewBoundaryPrevious?.area ?? null;
+    _dozNewBoundaryPrevious = null;
     dozShowCreateOdjel(true);
   }
 }
@@ -39853,6 +39859,7 @@ function dozFinishDraw() {
 
 
   if (_dozDrawType === '__boundary__') {
+    _dozNewBoundaryPrevious = null;
     _dozCreateBoundary = { type:'Polygon', coordinates:[coords] };
     _dozCreateAreaHa   = _dozCalcArea(_dozDrawPts) / 10000;
     _dozDrawType = null; _dozDrawPts = [];
@@ -40067,7 +40074,7 @@ function dozShowCreateOdjel(restore) {
       document.getElementById('doz-create-no-poly').style.display = 'none';
       document.getElementById('doz-create-poly-ok').style.display = 'block';
       document.getElementById('doz-create-poly-area').textContent =
-        `${fmtHa(savedAreaHa)} ucrtano`;
+        fmtHa(savedAreaHa);
     } else {
       document.getElementById('doz-create-poly-ok').style.display = 'none';
       document.getElementById('doz-create-no-poly').style.display = savedOdjel ? 'block' : 'none';
@@ -40138,11 +40145,11 @@ function _dozCreateRenderGjField() {
 
 function _dozCreateOnGjChange() {
   _dozCreateGj     = (document.getElementById('doz-create-gj')?.value || '').trim();
-  _dozCreateOdjel  = '';
-  _dozCreateBoundary = null;
-  _dozCreateAreaHa   = null;
-  document.getElementById('doz-create-poly-ok').style.display = 'none';
-  _dozCreateRenderOdjelField();
+  if(_dozCreateFeatures.length)_dozCreateOdjel='';
+  else _dozCreateOdjel=(document.getElementById('doz-create-odjel')?.value||'').trim();
+  if(_dozCreateFeatures.length){_dozCreateBoundary=null;_dozCreateAreaHa=null;}
+  document.getElementById('doz-create-poly-ok').style.display = _dozCreateBoundary?'block':'none';
+  if(_dozCreateFeatures.length)_dozCreateRenderOdjelField();
 }
 
 function _dozCreateRenderOdjelField() {
@@ -40228,14 +40235,15 @@ function _dozCalcGeomAreaHa(geom) {
   return 0;
 }
 
+let _dozNewBoundaryPrevious = null;
 let _dozDrawEnabled = true;
 const DOZ_DRAG_MIN_M = 8;
 let _dozDragLastPt = null;
 
 function dozStartNewBoundaryDraw() {
+  _dozNewBoundaryPrevious = { boundary: _dozCreateBoundary, area: _dozCreateAreaHa };
   _dozNewOdjelDrawGj    = _dozCreateGj;
   _dozNewOdjelDrawOdjel = _dozCreateOdjel;
-  if (!_dozNewOdjelDrawOdjel) { document.getElementById('doz-create-error').textContent = 'Unesi odjel prvo'; return; }
   dozCloseCreateOdjel();
   // switchTab PRIJE stanja crtanja — isti razlog kao u dozStartDraw: doznaka-izlazni
   // dozCancelDraw() bi obrisao _dozDrawType='__boundary__' I _dozCreateBoundary,
@@ -40248,7 +40256,7 @@ function dozStartNewBoundaryDraw() {
   setTimeout(() => {
     document.getElementById('doz-draw-banner').style.display = 'flex';
     window.DoznakaBoundary?.invalidate();
-    document.getElementById('doz-draw-type-label').textContent = `📐 Granica — odjel ${_dozNewOdjelDrawOdjel}`;
+    document.getElementById('doz-draw-type-label').textContent = `📐 Granica — odjel ${_dozNewOdjelDrawOdjel || 'novi projekat'}`;
     document.getElementById('doz-draw-count').textContent = '0 tačaka';
     const dtb = document.getElementById('doz-draw-toggle');
     if (dtb) { dtb.classList.remove('on'); const _ci = document.getElementById('doz-draw-check'); if (_ci) _ci.textContent = '☐'; }
@@ -40262,79 +40270,13 @@ function dozStartNewBoundaryDraw() {
   }, 50);
 }
 
-function dozStartKmlSel() {
-  if (!_dozCreateOdjel) { document.getElementById('doz-create-error').textContent = 'Unesi odjel prvo'; return; }
-  if (!kmlLs || !kmlLs.length) { showToast('⚠ Nema učitanih KML slojeva'); return; }
-  const hasPolygons = kmlLs.some(k => {
-    let found = false;
-    k.grp.eachLayer(l => { if (l._kmlIsPolygon) found = true; });
-    return found;
-  });
-  if (!hasPolygons) { showToast('⚠ Nema KML poligona na mapi'); return; }
-  _dozKmlSelSavedGj    = _dozCreateGj;
-  _dozKmlSelSavedOdjel = _dozCreateOdjel;
-  _dozKmlSelMode       = true;
-  _dozKmlSelLayers     = [];
-  dozCloseCreateOdjel();
-  switchTab('karta');
-  setTimeout(() => {
-    document.getElementById('doz-kmlsel-banner').style.display = 'flex';
-    document.getElementById('doz-kmlsel-label').textContent = `📌 Odjel ${_dozKmlSelSavedOdjel} — izaberi poligone`;
-    _dozKmlSelUpdateInfo();
-    document.getElementById('action-bar').style.display = 'none';
-    document.getElementById('tab-bar').style.display = 'none';
-    map.invalidateSize();
-    showToast('Klikni na KML poligone za odabir površine');
-  }, 50);
-}
+function dozStartKmlSel() { return DoznakaProjectBoundary.start(); }
 
-function dozCancelKmlSel() {
-  _dozKmlSelMode = false;
-  _dozKmlSelLayers.forEach(l => { try { l.setStyle(l._kmlOrigStyle || {}); } catch(e){} });
-  _dozKmlSelLayers = [];
-  document.getElementById('doz-kmlsel-banner').style.display = 'none';
-  document.getElementById('action-bar').style.display = '';
-  document.getElementById('tab-bar').style.display = '';
-  map.invalidateSize();
-  _dozNewOdjelDrawGj    = _dozKmlSelSavedGj;
-  _dozNewOdjelDrawOdjel = _dozKmlSelSavedOdjel;
-  dozShowCreateOdjel(true);
-}
+function dozCancelKmlSel() { return DoznakaProjectBoundary.cancel(); }
 
-function _dozKmlSelToggle(layer) {
-  const idx = _dozKmlSelLayers.indexOf(layer);
-  if (idx >= 0) {
-    _dozKmlSelLayers.splice(idx, 1);
-    try { layer.setStyle(layer._kmlOrigStyle || { fillOpacity: 0.2, weight: 1 }); } catch(e) {}
-  } else {
-    if (!layer._kmlOrigStyle) {
-      layer._kmlOrigStyle = {
-        color:       layer.options.color       || '#3388ff',
-        fillColor:   layer.options.fillColor   || '#3388ff',
-        fillOpacity: layer.options.fillOpacity ?? 0.2,
-        weight:      layer.options.weight      || 1,
-        opacity:     layer.options.opacity     ?? 1
-      };
-    }
-    layer.setStyle({ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.4, weight: 3 });
-    _dozKmlSelLayers.push(layer);
-  }
-  _dozKmlSelUpdateInfo();
-}
+function _dozKmlSelToggle(layer) { return DoznakaProjectBoundary.toggle(layer); }
 
-function _dozKmlSelUpdateInfo() {
-  const n = _dozKmlSelLayers.length;
-  let ha = 0;
-  if (n > 0 && typeof turf !== 'undefined') {
-    _dozKmlSelLayers.forEach(l => {
-      try {
-        const gj = _dozKmlLayerToGeoJSON(l);
-        if (gj) ha += turf.area(gj) / 10000;
-      } catch(e) {}
-    });
-  }
-  document.getElementById('doz-kmlsel-info').textContent = `${n} poligon${n===1?'':'a'} · ${fmtHa(ha)}`;
-}
+function _dozKmlSelUpdateInfo() { return DoznakaProjectBoundary.update(); }
 
 function _dozKmlLayerToGeoJSON(layer) {
   if (typeof layer.toGeoJSON === 'function') return layer.toGeoJSON();
@@ -40349,38 +40291,7 @@ function _dozKmlLayerToGeoJSON(layer) {
   return null;
 }
 
-function dozConfirmKmlSel() {
-  if (!_dozKmlSelLayers.length) { showToast('⚠ Nijedan poligon nije izabran'); return; }
-  let merged = null;
-  let totalHa = 0;
-  if (typeof turf !== 'undefined') {
-    try {
-      const features = _dozKmlSelLayers.map(l => {
-        const gj = _dozKmlLayerToGeoJSON(l);
-        return gj && gj.type === 'Feature' ? gj : turf.feature(gj);
-      }).filter(Boolean);
-      merged = features.length === 1 ? features[0] : features.reduce((acc, f) => turf.union(acc, f));
-      totalHa = turf.area(merged) / 10000;
-    } catch(e) {
-      showToast('Greška pri spajanju poligona: ' + e.message); return;
-    }
-  } else {
-    const gj = _dozKmlLayerToGeoJSON(_dozKmlSelLayers[0]);
-    merged = gj; totalHa = 0;
-  }
-  _dozCreateBoundary = merged && merged.geometry ? merged.geometry : merged;
-  _dozCreateAreaHa   = totalHa;
-  _dozKmlSelMode = false;
-  _dozKmlSelLayers.forEach(l => { try { l.setStyle(l._kmlOrigStyle || {}); } catch(e){} });
-  _dozKmlSelLayers = [];
-  document.getElementById('doz-kmlsel-banner').style.display = 'none';
-  document.getElementById('action-bar').style.display = '';
-  document.getElementById('tab-bar').style.display = '';
-  map.invalidateSize();
-  _dozNewOdjelDrawGj    = _dozKmlSelSavedGj;
-  _dozNewOdjelDrawOdjel = _dozKmlSelSavedOdjel;
-  dozShowCreateOdjel(true);
-}
+function dozConfirmKmlSel() { return DoznakaProjectBoundary.confirm(); }
 
 function dozToggleDrawMode() {
   _dozDrawEnabled = !_dozDrawEnabled;
@@ -40433,7 +40344,7 @@ async function dozSaveOdjel() {
   const err   = document.getElementById('doz-create-error');
   if (!gj)    { err.textContent = 'Unesite GJ'; return; }
   if (!odjel) { err.textContent = 'Unesite odjel'; return; }
-  if (!_dozCreateBoundary) { err.textContent = 'Učitajte GeoJSON ili ucrtajte granicu odjela'; return; }
+  if (!_dozCreateBoundary) { err.textContent = 'Ucrtaj granicu ili izaberi jedan ili više poligona iz sloja'; return; }
   err.textContent = '';
 
   const payload = {
@@ -40743,7 +40654,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori upute <b>Vlake</b> ili <b>Doznaka</b> iznad i prati korake za snimanje.</li>
 </ol></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Karta za rad bez interneta</button><div class="help-sec-body">
-<div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. U <b>Dostupnim kartama</b> pritisni <b>Skini kartu</b> uz željenu kartu iz foldera KARTA APP. Aplikacija je preuzima i automatski dodaje među <b>Moje karte</b>, spremnu za rad bez interneta. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. U <b>Dostupnim kartama</b> pritisni <b>Skini kartu</b> uz željenu kartu iz kataloga. Aplikacija je preuzima i automatski dodaje među <b>Moje karte</b>, spremnu za rad bez interneta. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Zadrži originalni fajl</b><span>Android može čitati kartu direktno iz izabranog fajla. Nemoj ga brisati ili premještati dok ga koristiš u aplikaciji. Neki izvori traže kopiranje; tada prati prikazani napredak.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Instalirane karte</b><span>Tu pronađi učitane karte, nagib, ekspoziciju i ostale dostupne slojeve. Omiljene podloge otvaraš zvjezdicom na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Online podloga</b><span>Bez mreže mogu biti dostupni samo ranije sačuvani dijelovi. Za cijeli odjel unaprijed pripremi lokalnu kartu; teren za nagib i ekspoziciju preuzmi dok imaš vezu.</span></div></div>
@@ -40771,6 +40682,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div class="help-row"><div class="help-txt"><b>Preglednik oznaka</b><span>Otvori <b>Listu oznaka/KML</b>. Izaberi Sve, Učitani fajlovi, Fotografije, Tragovi ili Server fajlovi. Pretraži po nazivu, odjelu ili opisu.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Prikaži / Sakrij</b><span>Sakrivanje uklanja sadržaj s karte, ali ga ne briše. Koristi pojedinačne kontrole ili <b>Prikaži rezultate / Sakrij rezultate</b> za grupu. U Tragovima upravljaš cijelim grupama fotografija, tragova i tačaka.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Sortiranje i uređivanje</b><span>Sortiraj po odjelu, datumu, nazivu ili blizini sredine prikaza karte. Opcijom <b>Uredi</b> promijeni naziv, opis ili stil sloja.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Preuzmi granice odjela i kamionske puteve</b><span>Na karti otvori <b>Podloge i slojevi → Granice</b>. Pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz željeni GitHub fajl. U <b>Prikaz slojeva</b> uključi ili sakrij preuzete granice i puteve; klizačem podesi prozirnost granica. Za pojedinačni fajl koristi Preglednik oznaka. Vidljivost i stilovi ostaju sačuvani pri ponovnom ulasku.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>Za SHP zajedno izaberi odgovarajuće .shp, .dbf i .prj fajlove; priloži .shx/.cpg ako ih imaš. Nakon uvoza provjeri položaj na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Uslikaj lokaciju</b><span>Opcija u Meniju otvara kameru. Fotografiju poslije pronađi u Oznakama, dodaj opis ili podijeli. Server fajl prvo preuzmi za offline korištenje.</span></div></div>
 
@@ -40858,14 +40770,16 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Na kraju pritisni <b>Završi snimanje</b>. Za sljedeći pojas ponovo pokreni <b>Počni GPS</b> tek kad stigneš na njegov početak.</li>
 <li data-n="6.">Pregledaj pojaseve i površine. Uz internet otvori ovaj odjel i koristi <b>Pošalji i primi</b> za rad kolega.</li>
 </ol></section>
-<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Napravi odjel i nacrtaj granicu</button><div class="help-sec-body">
+<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Novi projekat: nacrtaj granicu ili izaberi odsjeke</button><div class="help-sec-body">
 <ol class="help-steps">
-<li data-n="1.">U <b>Doznaka</b> pritisni <b>+ Novi</b>. Izaberi GJ i broj odjela.</li>
-<li data-n="2.">Ako granica nije dostupna, izaberi <b>Ucrtaj granicu na mapi</b>. Možeš i učitati GeoJSON ili izabrati već učitane <b>KML poligon(e)</b>.</li>
-<li data-n="3.">Pri crtanju pomjeri kartu tako da je nišan na uglu granice i pritisni <b>Tačka</b>. Ponovi za najmanje tri tačke. <b>Crtaj</b> bilježi tačke dok pomjeraš kartu; <b>Undo</b> vraća zadnju.</li>
-<li data-n="4.">Pritisni <b>Završi</b> i provjeri granicu i površinu u hektarima. Zatim pritisni <b>Kreiraj projekat</b>.</li>
+<li data-n="1.">U <b>Doznaka</b> pritisni <b>+ Novi</b>. Odmah izaberi <b>Ucrtaj na karti</b> ili <b>Izaberi iz sloja</b>.</li>
+<li data-n="2.">Za ručno crtanje pomjeri nišan na granicu i pritisni <b>Tačka</b>. Dodaj najmanje tri tačke, pa <b>Završi</b>. <b>Crtaj</b> bilježi tačke dok pomjeraš kartu; <b>Undo</b> uklanja zadnju.</li>
+<li data-n="3.">Za izbor iz sloja dodirni svaki potreban poligon na karti. Ponovni dodir ga uklanja iz izbora. Za pregled otvori <b>Lista poligona</b>; tu možeš označiti <b>Odaberi sve prikazane</b> u trenutnom prikazu karte. Atributi fajla se ne koriste.</li>
+<li data-n="4.">Pritisni <b>Potvrdi granicu</b>. Susjedni odsjeci se spajaju u granicu projekta. Provjeri površinu, upiši GJ i broj odjela, pa pritisni <b>Kreiraj projekat</b>.</li>
 <li data-n="5.">Otvori novi odjel iz liste. Prije dodavanja kolega pošalji projekat na server uz internet.</li>
-</ol><div class="help-diagram"><b>Dva različita poligona</b><p>Poligon u tabu Projekat služi prikazu terena uz vlake. Granicu odjela za GPS pojaseve kreiraš ili biraš u Doznaci; provjeri je prije snimanja.</p></div>
+</ol><div class="help-row"><div class="help-txt"><b>Nema učitanih granica?</b><span>Dodirni <b>Preuzmi Granice odjela</b>. U katalogu pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz granice. Nakon uvoza vraćaš se na novi projekat. Jednom preuzeti sloj možeš koristiti bez interneta. Možeš koristiti i vlastiti KML/SHP ili GeoJSON.</span></div></div>
+<div class="help-diagram"><b>Provjeri odjel na karti</b><p>Približi kartu svom odjelu i ručno označi njegove odsjeke. GJ i broj odjela upisuješ sam, bez preuzimanja atributa iz fajla. Lista prvo nudi samo poligone u trenutnom prikazu karte.</p></div>
+<div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span>Poligon u tabu Projekat služi prikazu terena uz vlake. Granicu za GPS pojaseve kreiraš ili biraš u Doznaci.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pomoć pri granici s topografske podloge · online</button><div class="help-sec-body">
 <ol class="help-steps">
@@ -41530,9 +41444,9 @@ if (typeof AndroidDownload !== 'undefined') {
     <span id="doz-kmlsel-label">📌 Izaberi KML poligone</span>
     <span id="doz-kmlsel-info">0 poligona · 0.00 ha</span>
   </div>
-  <div id="doz-kmlsel-row2">
+  <div id="doz-kmlsel-row2"><button class="dks" type="button" onclick="DoznakaProjectBoundary.openPicker()">☷ Lista poligona</button>
     <button class="dks confirm" onclick="dozConfirmKmlSel()">
-      <span class="dks-ico"><svg class="ic"><use href="#ic-potvrdi"/></svg></span><span class="dks-lbl">Potvrdi</span>
+      <span class="dks-ico"><svg class="ic"><use href="#ic-potvrdi"/></svg></span><span class="dks-lbl">Potvrdi granicu</span>
     </button>
     <button class="dks cancel" onclick="dozCancelKmlSel()">
       <span class="dks-ico"><svg class="ic"><use href="#ic-zatvori"/></svg></span><span class="dks-lbl">Odustani</span>
@@ -41540,11 +41454,22 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
 </div>
 
+<div id="doz-boundary-picker" class="doz-picker" role="dialog" aria-modal="true" aria-labelledby="doz-picker-title" hidden>
+ <div class="doz-picker-box"><header><h3 id="doz-picker-title">Poligoni odjela</h3><button type="button" onclick="DoznakaProjectBoundary.showMap()" aria-label="Zatvori listu">×</button></header>
+ <label>Sloj<select id="doz-picker-source" onchange="DoznakaProjectBoundary.source(this.value)"></select></label>
+ <label class="doz-picker-scope"><input id="doz-picker-view" type="checkbox" checked onchange="DoznakaProjectBoundary.render()">Samo u trenutnom prikazu karte</label>
+ <p class="doz-boundary-hint">Poligone biraš ručno. Dodirni ih na karti ili označi u ovoj listi. Atributi fajla se ne koriste.</p>
+ <div class="doz-picker-actions"><button id="doz-picker-all" type="button" onclick="DoznakaProjectBoundary.selectVisible()">Odaberi sve prikazane</button><button type="button" onclick="DoznakaProjectBoundary.clear()">Poništi izbor</button></div>
+ <div id="doz-picker-list"></div><div id="doz-picker-count" role="status" aria-live="polite"></div>
+ <footer><button type="button" onclick="DoznakaProjectBoundary.showMap()">Izaberi na karti</button><button id="doz-picker-confirm" type="button" onclick="dozConfirmKmlSel()">✓ Potvrdi granicu</button><button type="button" onclick="dozCancelKmlSel()">Odustani</button></footer>
+ </div>
+</div>
 <!-- ═══ DOZNAKA — CREATE ODJEL MODAL ═══ -->
 <div id="doz-create-modal" onclick="if(event.target===this)dozCloseCreateOdjel()">
   <div id="doz-create-box">
     <h3>🌲 Novi doznaka projekat</h3>
 
+    <section class="doz-boundary-choice"><b>1. Granica projekta</b><p>Ucrtaj granicu ili izaberi odsjeke koji čine odjel.</p><div><button type="button" onclick="dozStartNewBoundaryDraw()"><span aria-hidden="true">✎</span> Ucrtaj na karti</button><button type="button" onclick="dozStartKmlSel()"><span aria-hidden="true">▱</span> Izaberi iz sloja</button></div><button type="button" class="doz-boundary-download" onclick="DoznakaProjectBoundary.download()">↓ Preuzmi Granice odjela</button></section>
     <!-- Opcioni GeoJSON loader -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px 10px;">
       <button class="btn" style="background:#1e3a5f;border:1px solid #1e3a5f;color:#38bdf8;font-size:11px;padding:5px 10px;margin:0;flex-shrink:0;" onclick="document.getElementById('doz-gjson-file').click()"><svg class="ic"><use href="#ic-folder"/></svg> Učitaj GeoJSON</button>
@@ -41560,16 +41485,11 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="lbl" style="margin-top:10px;display:block;">Odjel *</span>
     <div id="doz-create-odjel-wrap"><input class="pinput" id="doz-create-odjel" placeholder="npr. 78" oninput="_dozCreateOnOdjelChange()"></div>
 
-    <!-- Upozorenje — nema poligona -->
-    <div id="doz-create-no-poly" style="display:none;margin-top:10px;background:#2d1a00;border:1px solid #92400e;border-radius:8px;padding:9px 11px;">
-      <div style="font-size:12px;color:#fbbf24;margin-bottom:7px;">⚠ Odabrani odjel nema granicu u GeoJSON fajlu.<br>Učitaj GeoJSON ili ucrtaj granicu ručno na mapi.</div>
-      <button class="btn" style="background:#1e3a5f;border:1px solid #38bdf8;color:#38bdf8;font-size:12px;padding:7px 12px;margin:0;" onclick="dozStartNewBoundaryDraw()"><svg class="ic"><use href="#ic-crtaj"/></svg> Ucrtaj granicu na mapi</button>
-      <button class="btn" style="background:#3b2500;border:1px solid #f59e0b;color:#f59e0b;font-size:12px;padding:7px 12px;margin:4px 0 0 0;" onclick="dozStartKmlSel()"><svg class="ic"><use href="#ic-zabiljezi"/></svg> Izaberi KML poligon(e)</button>
-    </div>
+    <div id="doz-create-no-poly" class="doz-boundary-hint" style="display:none;">Izaberi granicu pomoću dugmadi iznad.</div>
 
     <!-- Potvrda — granica OK -->
     <div id="doz-create-poly-ok" style="display:none;margin-top:10px;background:#052e16;border:1px solid #166534;border-radius:8px;padding:8px 11px;font-size:12px;color:#4ade80;">
-      ✓ Granica ucrtana · <span id="doz-create-poly-area"></span>
+      ✓ Granica projekta · <span id="doz-create-poly-area"></span>
     </div>
 
     <div class="doz-create-error" id="doz-create-error"></div>
@@ -42138,28 +42058,28 @@ if (typeof AndroidDownload !== 'undefined') {
       <h3 style="margin-bottom:10px;">Prikaz slojeva</h3>
       <!-- Putevi -->
       <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
-        <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
+        <input type="checkbox" id="putevi-toggle" checked onchange="GithubLayers.toggle('roads',this.checked)"
           style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
         <span style="display:flex;align-items:center;gap:8px;">
           <span style="display:inline-block;width:28px;height:4px;background:#f97316;border-radius:2px;"></span>
-          Šumski kamionski putevi
+          Šumski kamionski putevi <small id="github-roads-status"></small>
         </span>
       </label>
       <!-- Granice odjela -->
       <div style="padding:6px 0 2px;">
         <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
-          <input type="checkbox" id="granice-toggle" onchange="_geojsonToggleVis(this.checked)"
+          <input type="checkbox" id="granice-toggle" onchange="GithubLayers.toggle('boundaries',this.checked)"
             style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;">
           <span style="display:flex;align-items:center;gap:8px;">
             <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #38bdf8;border-bottom:1px solid rgba(56,189,248,0.3);"></span>
-            Granice odjela
+            Granice odjela <small id="github-boundaries-status"></small>
           </span>
         </label>
         <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
           <span style="color:#64748b;font-size:11px;white-space:nowrap;">Prozirnost</span>
           <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
             style="flex:1;accent-color:#38bdf8;cursor:pointer;"
-            oninput="_geojsonSetOpacity(this.value)">
+            oninput="GithubLayers.opacity(this.value)">
         </div>
       </div>
       <!-- Nagib vlaka — boji vidljive vlake po strmini (v3.102.3). Snapshot na
@@ -42380,6 +42300,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/tab-data.js"></script>
 <script src="static/js/server-panel.js"></script>
 <script src="static/js/local-layer-import.js"></script>
+<script src="static/js/doznaka-project-boundary.js"></script>
 <script src="static/js/layer-editor.js"></script>
 <script src="static/js/map-visibility.js"></script>
 <script src="static/js/map-library.js"></script>

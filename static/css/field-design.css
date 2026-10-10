@@ -868,3 +868,22 @@ html[data-field-theme=day] .gl-btn.on {background:#dbeafe;color:#1e40af;border-c
 html[data-field-theme=day] .mfav-add-card span {color:#334155;}
 #kml-github-message {font-size:12px;line-height:1.6;color:var(--field-muted);overflow-wrap:anywhere;}
 html[data-field-theme=day] #ls-pane-granice button[style*="background:#1e293b"] {background:#e2e8f0!important;color:#334155!important;border-color:#64748b!important;}
+/* 2.7.6: granica novog doznaka projekta, više odsjeka i preuzeti slojevi. */
+.doz-boundary-choice{padding:12px;margin:12px 0;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg);color:var(--field-ink)}
+.doz-boundary-choice p,.doz-boundary-hint{font-size:12px;line-height:1.6;color:var(--field-muted)}
+.doz-boundary-choice>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.doz-boundary-choice button,.doz-picker button{min-height:44px;padding:9px 11px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-card);color:var(--field-ink);font:600 13px system-ui;cursor:pointer}
+.doz-boundary-choice .doz-boundary-download{width:100%;margin-top:8px;color:var(--field-ink)}
+#github-roads-status,#github-boundaries-status{display:block;font-size:11px;color:var(--field-muted)}
+.doz-picker{position:fixed;inset:0;z-index:99500;display:flex;align-items:center;justify-content:center;background:#020617b8;padding:12px;box-sizing:border-box}
+#doz-boundary-picker[hidden]{display:none!important}
+.doz-picker-box{width:100%;max-width:520px;max-height:calc(100dvh - 24px);display:flex;flex-direction:column;gap:10px;overflow:hidden;background:var(--field-card);color:var(--field-ink);border:1px solid var(--field-border);border-radius:16px;padding:14px;box-sizing:border-box}
+.doz-picker header{display:flex;align-items:center;justify-content:space-between;gap:12px}.doz-picker h3{font-size:17px;margin:0}.doz-picker header button{font-size:24px;min-width:44px}.doz-picker label{font-size:13px}
+.doz-picker select,.doz-picker input[type=search]{width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--field-border);border-radius:9px;padding:8px;background:var(--field-bg);color:var(--field-ink);font:16px system-ui}
+.doz-picker-scope{display:flex;align-items:center;gap:10px;min-height:32px}.doz-picker input[type=checkbox]{width:20px;height:20px;accent-color:#16a34a;flex-shrink:0}
+.doz-picker-actions{display:flex;gap:8px}.doz-picker-actions button{flex:1}.doz-picker p{margin:0}
+#doz-picker-list{overflow:auto;min-height:65px;flex:1;border-top:1px solid var(--field-border)}
+#doz-picker-list>label{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--field-border);min-height:44px;cursor:pointer}
+#doz-picker-list span{flex:1;min-width:0}#doz-picker-list b,#doz-picker-list small{display:block;overflow-wrap:anywhere}#doz-picker-list small{font-size:11px;line-height:1.6;color:var(--field-muted)}
+#doz-picker-count{font-size:13px;font-weight:700;color:var(--field-ink)}.doz-picker footer{display:flex;gap:8px;flex-wrap:wrap}.doz-picker footer button{flex:1}
+#doz-picker-confirm{background:#166534;color:#fff;border-color:#166534}.doz-picker button:disabled{opacity:.65;cursor:default}
+@media(max-height:620px){.doz-picker-box{gap:6px;padding:10px}.doz-picker .doz-boundary-hint{display:none}}

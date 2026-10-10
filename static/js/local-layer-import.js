@@ -111,7 +111,7 @@ async function _localLayerKmlImpl(name,content,owner,driveSource) {
   if(!await _localKmlSaveContent(unique,content,col,owner,driveSource))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   kmlCI++;grp.addTo(map);
-  kmlLs.push({name:unique,_origName:unique,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()});
+  kmlLs.push({name:unique,_origName:unique,_driveSource:driveSource,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()});
   _glCollapsed.delete('Lokalni / —');rndGraniceModal();
   try{const bounds=grp.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[20,20]});}catch(e){}
   return unique;
@@ -250,11 +250,11 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
         const encoding=bytes.byteLength>=2&&new Uint8Array(bytes)[0]===255&&new Uint8Array(bytes)[1]===254?'utf-16le':bytes.byteLength>=2&&new Uint8Array(bytes)[0]===254&&new Uint8Array(bytes)[1]===255?'utf-16be':'utf-8';
         const content=new TextDecoder(encoding,{fatal:true}).decode(bytes);
         await new Promise(r=>setTimeout(r,0));
-        await _localLayerKml(/\.kml$/i.test(source.name)?source.name:source.name+'.kml',content,owner,{id,size:source.size});
+        await _localLayerKml(/\.kml$/i.test(source.name)?source.name:source.name+'.kml',content,owner,{id,size:source.size,name:source.name,release:source.release||'',provider:id.startsWith('github-kml-')?'github':'drive'});
         await request({type:'release',sourceId:id});
         if(id.startsWith('github-kml-'))closeLayerSheet();
       }
-      messages.delete(id);if(el('layer-import-status'))el('layer-import-status').textContent='✓ Sloj je na karti i sačuvan za offline rad.';showToast('✓ KML sloj je spreman za offline rad');
+      messages.delete(id);if(el('layer-import-status'))el('layer-import-status').textContent='✓ Sloj je na karti i sačuvan za offline rad.';showToast('✓ KML sloj je spreman za offline rad');root.DoznakaProjectBoundary?.afterDownload();
     }catch(e){messages.set(id,{message:e.message||'KML nije dodan. Pokušaj ponovo.'});}
     finally{_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);render();}
   }
@@ -269,4 +269,34 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
     }finally{githubRefreshing=false;render();}
   }
   root.KmlDownloads={request,reply,refresh,refreshGithub,render,start};
+})(typeof window!=='undefined'?window:globalThis);
+
+// Prikaz preuzetih GitHub slojeva: koristi iste grupe i stanje kao preglednik oznaka.
+(function(root){
+  const normal=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  function role(k){
+    if(!k?._driveSource?.id?.startsWith('github-kml-'))return '';
+    const text=normal([k._driveSource.name,k._driveSource.release,k._origName,k.name].join(' '));
+    return /granice|granic[ae]|boundary/.test(text)?'boundaries':/kamionsk|putevi|roads/.test(text)?'roads':'';
+  }
+  function layers(type){return typeof kmlLs==='undefined'?[]:kmlLs.filter(k=>k.grp&&role(k)===type);}
+  function render(){
+    if(typeof map==='undefined')return;
+    for(const [type,id] of [['roads','putevi-toggle'],['boundaries','granice-toggle']]){
+      const all=layers(type),visible=all.filter(k=>k.vis!==false&&map.hasLayer(k.grp)),cb=document.getElementById(id);
+      if(cb){cb.disabled=!all.length;cb.checked=!!all.length&&visible.length===all.length;cb.indeterminate=visible.length>0&&visible.length<all.length;}
+      const status=document.getElementById('github-'+type+'-status');if(status)status.textContent=all.length?`${visible.length}/${all.length} prikazano`:'Preuzmi sloj iznad';
+      // Preuzeti sloj zamjenjuje stari ugrađeni prikaz, bez dvostrukih linija.
+      const old=type==='roads'?[typeof _puteviLayerBg!=='undefined'&&_puteviLayerBg,typeof _puteviLayerFg!=='undefined'&&_puteviLayerFg]:[typeof _geojsonLayer!=='undefined'&&_geojsonLayer];
+      if(all.length)old.filter(Boolean).forEach(l=>{if(map.hasLayer(l))map.removeLayer(l);});
+    }
+    const all=layers('boundaries'),slider=document.getElementById('ls-granice-opacity');if(slider){slider.disabled=!all.length;if(all.length)slider.value=all[0].opacity??.9;}
+  }
+  function toggle(type,show){
+    if(typeof _dozKmlSelMode!=='undefined'&&_dozKmlSelMode){showToast('Završi izbor granice prije promjene slojeva');return;}
+    for(const k of layers(type)){k.vis=!!show;if(show)k.grp.addTo(map);else map.removeLayer(k.grp);}
+    _localKmlSaveAll(false);saveKmlStyles();rndGraniceModal();
+  }
+  function opacity(value){for(const k of layers('boundaries')){k.opacity=Math.max(.05,Math.min(1,Number(value)));applyKmlStyle(kmlLs.indexOf(k));}_localKmlSaveAll(false);saveKmlStyles();render();}
+  root.GithubLayers={role,layers,render,toggle,opacity};render();
 })(typeof window!=='undefined'?window:globalThis);

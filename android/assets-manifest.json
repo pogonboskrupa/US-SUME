@@ -35,6 +35,7 @@
     "static/libs/sql-wasm.wasm",
     "static/js/server-panel.js",
     "static/js/local-layer-import.js",
+    "static/js/doznaka-project-boundary.js",
     "static/js/layer-editor.js",
     "static/js/map-visibility.js",
     "static/js/map-library.js",
