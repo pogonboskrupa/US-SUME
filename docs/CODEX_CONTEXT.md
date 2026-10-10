@@ -3624,3 +3624,21 @@ kontrasta, 0 JS grešaka i 0 vanjskih upisa. Stvarni javni KML uvoz i offline
 ponovno otvaranje kroz postojeći parser/spremište: 83 stavke puteva i
 2.759 stavki granica. Native transport u toj browser provjeri je zamijenjen
 fixture mostom; stvarni javni bajtovi i digest provjereni odvojeno.
+
+
+Konačna potvrda isporuke 2.7.5 (10.10.2026): CI 38032665499 uspješan,
+source 70138d2b652899e2358d7db2f00db38e74951439; JS, izolovani SQL,
+puni browser skup, native build, svih 64 web assets i manji APK, 20 Android
+emulator testova (0 failures/errors/skipped), uključujući novi GitHub KML
+native test, objava i analiza brzine. CI izvještaj dnevnog kontrasta: 144
+stanja, 0 nedostataka i 0 JS grešaka. Pages 38032665121 uspješan; javni
+index/SW/CSS/local-layer-import/vlaka-direction bajtovi identični izvoru.
+Preuzet javni APK 24.225.984 B (24,23 MB), SHA256
+727fb96bd3664a3377841e017a8eacc84226f2252fba52618878e2cdee2ce7ce.
+Manifest ba.spd.uss.vlake.debug / 2.7.5-debug / code545. Certifikat sačuvan:
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Release v2.7.5 (408758748), asset app-debug.apk (627272775), uploaded,
+veličina i digest podudarni lokalno preuzetom APK-u. Updaterov
+releases?per_page=1 vraća v2.7.5 na prvom mjestu.
+APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.5/app-debug.apk
+Fizički Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
