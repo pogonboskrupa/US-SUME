@@ -13,16 +13,16 @@
   importScripts('../libs/turf.min.js');root.onmessage=e=>{try{root.postMessage({ok:true,...merge(e.data,turf)});}catch(err){root.postMessage({ok:false,error:err.message});}};return;
  }
  const el=id=>document.getElementById(id);
- let sources=[],items=[],selectedSource=0,previous=null,shown=[],pendingDownload=false,busy=false,owner=null;
+ let sources=[],items=[],selectedSource=0,previous=null,shown=[],pendingDownload=false,busy=false,owner=null,client=null;
  const styles=new Map(),visibility=new Map();
  function getSources(){
   const result=[];for(const k of kmlLs){if(!k.grp)continue;const rows=[];const walk=g=>g.eachLayer(l=>{if(l._kmlIsPolygon)rows.push({layer:l});else if(l.eachLayer)walk(l);});walk(k.grp);if(rows.length)result.push({k,rows});}
   return result.sort((a,b)=>(GithubLayers.role(b.k)==='boundaries')-(GithubLayers.role(a.k)==='boundaries'));
  }
- function remember(){previous={boundary:_dozCreateBoundary,area:_dozCreateAreaHa};owner=sbUser?.id;_dozKmlSelSavedGj=_dozCreateGj;_dozKmlSelSavedOdjel=_dozCreateOdjel;}
+ function remember(){if(client){owner=sbUser?.id;client.hide();return;}previous={boundary:_dozCreateBoundary,area:_dozCreateAreaHa};owner=sbUser?.id;_dozKmlSelSavedGj=_dozCreateGj;_dozKmlSelSavedOdjel=_dozCreateOdjel;}
  function download(){remember();pendingDownload=true;dozCloseCreateOdjel();closeLayerImport();_openLayerSheet();_lsTab('granice');}
- function afterDownload(){if(!pendingDownload)return;pendingDownload=false;if(sbUser?.id!==owner)return;closeLayerSheet();_dozNewOdjelDrawGj=_dozKmlSelSavedGj;_dozNewOdjelDrawOdjel=_dozKmlSelSavedOdjel;dozShowCreateOdjel(true);}
- function start(){
+ function afterDownload(){if(!pendingDownload)return;pendingDownload=false;if(sbUser?.id!==owner){client=null;return;}closeLayerSheet();if(client){const c=client;client=null;c.cancel();return;}_dozNewOdjelDrawGj=_dozKmlSelSavedGj;_dozNewOdjelDrawOdjel=_dozKmlSelSavedOdjel;dozShowCreateOdjel(true);}
+ function startCore(){
   if(_dozGpsOn||_dozDrawType!==null){showToast('Završi snimanje ili crtanje prije izbora granice');return;}
   sources=getSources();if(!sources.length){download();showToast('Preuzmi Granice odjela pa izaberi poligone');return;}
   remember();selectedSource=0;items=sources[0].rows;_dozKmlSelLayers=[];styles.clear();visibility.clear();dozCloseCreateOdjel();switchTab('karta');map.closePopup();
@@ -79,19 +79,20 @@
   styles.clear();visibility.clear();_dozKmlSelMode=false;_dozKmlSelLayers=[];el('doz-boundary-picker').hidden=true;el('doz-kmlsel-banner').style.display='none';el('action-bar').style.display='';el('tab-bar').style.display='';map.invalidateSize();GithubLayers.render();
  }
  function restoreCreate(){_dozNewOdjelDrawGj=_dozKmlSelSavedGj;_dozNewOdjelDrawOdjel=_dozKmlSelSavedOdjel;dozShowCreateOdjel(true);}
- function cancel(){if(busy)return;finishUi();if(sbUser?.id!==owner)return;_dozCreateBoundary=previous?.boundary||null;_dozCreateAreaHa=previous?.area??null;restoreCreate();}
+ function cancel(){if(busy)return;finishUi();if(sbUser?.id!==owner){client=null;return;}if(client){const c=client;client=null;c.cancel();return;}_dozCreateBoundary=previous?.boundary||null;_dozCreateAreaHa=previous?.area??null;restoreCreate();}
  function calculate(features){
   if(!root.Worker)return Promise.resolve(merge(features,typeof turf==='undefined'?null:turf));
   return new Promise((resolve,reject)=>{const w=new Worker('static/js/doznaka-project-boundary.js');const timer=setTimeout(()=>{w.terminate();reject(Error('Spajanje traje predugo. Izaberi manje odsjeka.'));},30000);const done=()=>{clearTimeout(timer);w.terminate();};w.onmessage=e=>{done();e.data.ok?resolve(e.data):reject(Error(e.data.error));};w.onerror=()=>{done();reject(Error('Spajanje nije uspjelo; izbor je sačuvan.'));};w.postMessage(features);});
  }
  async function confirm(){
-  if(busy||!_dozKmlSelLayers.length)return;if(sbUser?.id!==owner){finishUi();return;}
+  if(busy||!_dozKmlSelLayers.length)return;if(sbUser?.id!==owner){client=null;finishUi();return;}
   const picked=[..._dozKmlSelLayers],features=picked.map(l=>l.toGeoJSON());busy=true;update();
   try{
-   const result=await calculate(features);if(sbUser?.id!==owner){finishUi();return;}
+   const result=await calculate(features);if(sbUser?.id!==owner){client=null;finishUi();return;}
+   if(client){const c=client,count=picked.length,sourceName=sources[selectedSource]?.k.name;client=null;finishUi();await c.confirmed(result.geometry,count,sourceName);return;}
    _dozCreateBoundary=result.geometry;_dozCreateAreaHa=result.areaHa??_dozCalcGeomAreaHa(result.geometry);finishUi();restoreCreate();
   }catch(e){showToast('⚠ '+e.message);}finally{busy=false;update();}
  }
- root.DoznakaProjectBoundary={start,allows,toggle,update,render,source,openPicker,showMap,selectVisible,clear,cancel,confirm,download,afterDownload};
+ root.DoznakaProjectBoundary={start:()=>{client=null;startCore();},startForReport:c=>{if(_dozKmlSelMode||busy){showToast('Završi postojeći izbor granice');return;}client=c;startCore();},allows,toggle,update,render,source,openPicker,showMap,selectVisible,clear,cancel,confirm,download,afterDownload};
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_dozKmlSelMode&&!busy){e.preventDefault();cancel();}});
 })(typeof self!=='undefined'?self:globalThis);

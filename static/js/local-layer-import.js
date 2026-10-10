@@ -297,6 +297,6 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
     for(const k of layers(type)){k.vis=!!show;if(show)k.grp.addTo(map);else map.removeLayer(k.grp);}
     _localKmlSaveAll(false);saveKmlStyles();rndGraniceModal();
   }
-  function opacity(value){for(const k of layers('boundaries')){k.opacity=Math.max(.05,Math.min(1,Number(value)));applyKmlStyle(kmlLs.indexOf(k));}_localKmlSaveAll(false);saveKmlStyles();render();}
+  function opacity(value){for(const k of layers('boundaries')){k.opacity=Math.max(0,Math.min(1,Number(value)));applyKmlStyle(kmlLs.indexOf(k));}_localKmlSaveAll(false);saveKmlStyles();render();}
   root.GithubLayers={role,layers,render,toggle,opacity};render();
 })(typeof window!=='undefined'?window:globalThis);

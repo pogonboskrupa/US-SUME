@@ -4856,7 +4856,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <details class="workflow-danger" open><summary>Brisanje projekta</summary><p class="project-vl-note">Brisanje je trajna radnja. Prvo sačuvaj sigurnosnu kopiju.</p><button class="btn project-delete" id="pd-delete-btn" onclick="deleteProjektUI()" style="width:100%;font-size:12px;padding:7px;"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši projekat</button></details>
       </div>
 
-      <nav class="workflow-nav proj-akt-only" aria-label="Sekcije aktivnog projekta"><button type="button" onclick="document.getElementById('project-routes').scrollIntoView({block:'start'})">Vlake projekta</button><button type="button" onclick="document.getElementById('project-reports').scrollIntoView({block:'start'})">Izvještaji</button><button type="button" onclick="document.querySelector('.project-polygon').scrollIntoView({block:'start'})">Prikaz karte</button></nav>
+      <nav class="workflow-nav proj-akt-only" aria-label="Sekcije aktivnog projekta"><button type="button" onclick="document.getElementById('project-routes').scrollIntoView({block:'start'})">Vlake projekta</button><button type="button" onclick="document.getElementById('project-reports').scrollIntoView({block:'start'})">Izvještaji</button><button type="button" onclick="DepartmentReport.open()">Izvještaj odjela</button></nav>
       <section class="sec proj-akt-only project-vlake" id="project-routes"><div class="sec-t">Vlake aktivnog projekta</div><p class="project-vl-note">Od manjeg ka većem broju · vlastite i kolegine vlake zajedno</p><small id="project-vlake-count"></small><div id="project-vlake-list"></div><button id="project-vlake-more" class="btn" onclick="_projektVlakeMore()" hidden>Prikaži još</button></section>
 
       <details class="sec proj-akt-only workflow-group" id="project-reports"><summary><b>Statistika i izvještaji</b><small>Dužine, površine, nagibi i transportna distanca</small></summary>
@@ -4979,20 +4979,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka dvosmjera ne ulazi u broj strelica. Izgled i odabir dvosmjera čuvaju se na ovom telefonu.</p>
         <div class="arrow-route-edit"><label for="project-arrow-route">Smjer pojedine vlake i dvosmjer ↔</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
         <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
-      </section>
-      <section class="sec proj-akt-only project-polygon">
-        <div class="sec-t">Poligon odjela i teren</div>
-        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
-        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
-        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
-        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
-        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
-          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
-          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
-          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
-          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
-          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
-        </div>
       </section>
     </div><!-- /proj-panel -->
 
@@ -5519,7 +5505,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
         <div class="sec">
           <button class="btn" id="doz-share-code-btn" style="display:none;background:#0f172a;border:1px solid #38bdf8;color:#38bdf8;font-size:12px;margin-bottom:6px;" onclick="shareDoznakaCode()"><svg class="ic"><use href="#ic-kljuc"/></svg> Podijeli šifrom (teren)</button>
-          <button class="btn" style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;font-size:12px;" onclick="dozDeleteOdjel()"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši odjel</button>
+          <button class="btn project-delete" id="doz-project-remove" style="background:#2d0a0a;border:1px solid #7f1d1d;color:#f87171;font-size:12px;" onclick="dozDeleteOdjel()"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši odjel</button>
         </div>
       </div>
 
@@ -5755,7 +5741,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.6';
+const APP_VER = 'v2.7.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7488,6 +7474,7 @@ function _startupRestore() {
     korak('tacke',     () => _restoreTacke());
     korak('fotos',     () => _restoreFotos());
     korak('localKml',  () => _localKmlRestore());
+    korak('departmentReport', () => window.DepartmentReport?.restore());
     korak('kmlcInit',  async () => { await _kmlcInit(); if(alive())await _serverKmlRestore(); });   // lista IDB ključeva za offline bedž
     korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
     korak('temRestore',() => _temRestore()); // tematska .gpkg karta iz IDB (async)
@@ -7655,11 +7642,13 @@ async function doLogin() {
   if (!sb || !_mrezaProbaj()) {
     if (prijavaIzKesa()) return;
     if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
-    if (_mrezaStanje() === 'nema') { showAuthErr('Nema veze — prva prijava na ovom telefonu traži internet'); return; }
+    if (navigator.onLine === false) { showAuthErr('Nema internet veze — ponovna prijava nakon odjave traži internet'); return; }
   }
 
   showAuthErr('Povezivanje sa serverom...');
   _authBusy(true);   // sakrij logo — slijede 4 mrežna poziva prije showApp()
+  // Ručni pokušaj prijave smije provjeriti vezu i kad je ranije izmjeren slab signal.
+  if(typeof _mrezaSila==='function'&&navigator.onLine!==false)_mrezaSila(60000);
 
   // Look up internal email by name (prezime može biti prazan za org naloge)
   let email, lookupErr;
@@ -7669,17 +7658,21 @@ async function doLogin() {
   } catch(e) {
     // Mreža pala usred prijave — isti korisnik sa keširanim profilom ulazi offline.
     if (prijavaIzKesa()) return;
-    showAuthErr('Server nedostupan: ' + e.message); return;
+    showAuthErr(_isNetworkErr(e)?'Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.':'Server nedostupan: '+e.message); return;
   }
-  if (lookupErr && _isNetworkErr(lookupErr) && prijavaIzKesa()) return;
-  if (lookupErr || !email) { showAuthErr('Korisnik nije pronađen: ' + (lookupErr?.message||'nema emaila')); return; }
+  if(lookupErr){
+    if(_isNetworkErr(lookupErr)){if(prijavaIzKesa())return;showAuthErr('Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.');}
+    else showAuthErr('Server nije mogao provjeriti nalog: '+lookupErr.message);
+    return;
+  }
+  if(!email){showAuthErr('Korisnik nije pronađen. Provjeri ime i prezime.');return;}
 
   const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
   if (error) {
     // D2-K: ne prikazuj "Pogrešan PIN" za mrežnu/server grešku — samo za stvarno
     // pogrešne kredencijale (Supabase invalid_grant, status 400).
     const wrongPin = error.status === 400 || /invalid.*(login|credential|grant)/i.test(error.message || '');
-    showAuthErr((wrongPin ? 'Pogrešan PIN' : 'Greška prijave') + ': ' + error.message);
+    showAuthErr(wrongPin?'Pogrešan PIN: '+error.message:_isNetworkErr(error)?'Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.':'Greška prijave: '+error.message);
     return;
   }
 
@@ -7955,6 +7948,7 @@ async function doLogout() {
   kmlLs = [];
   if(typeof _serverPreviewClose==='function')_serverPreviewClose();
   if(typeof _projektVlakePreviewClose==='function')_projektVlakePreviewClose();
+  if(window.DepartmentReport)DepartmentReport.reset();
   if(typeof ProjectTerrain!=='undefined')ProjectTerrain.reset();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
   // dobija nazad kroz _temRestore; promjena korisnika ih briše kroz _wipeAllLocalUserData)
@@ -9559,16 +9553,18 @@ function showProjektDetalji(id) {
     if (!leaveBtn) {
       leaveBtn = document.createElement('button');
       leaveBtn.id = 'pd-leave-btn';
-      leaveBtn.className = 'btn gr';
+      leaveBtn.className = 'btn project-delete';
       leaveBtn.style.cssText = 'width:100%;font-size:12px;padding:7px;margin-top:4px;color:#f87171;';
       document.getElementById('pd-delete-btn').parentNode.appendChild(leaveBtn);
     }
-    leaveBtn.innerHTML = '<svg class="ic"><use href="#ic-izlaz"/></svg> Napusti projekat';
+    leaveBtn.innerHTML = '<svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni sa mog spiska';
     leaveBtn.onclick = () => napustiProjekat(id);
     leaveBtn.style.display = '';
   } else if (leaveBtn) {
     leaveBtn.style.display = 'none';
   }
+  const removeSection=document.getElementById('pd-delete-btn').closest('details');
+  if(removeSection){removeSection.querySelector('summary').textContent=isVlasnik?'Brisanje projekta':'Uklanjanje iz mog spiska';removeSection.querySelector('p').textContent=isVlasnik?'Brisanje je trajna radnja. Prvo sačuvaj sigurnosnu kopiju.':'Uklanja samo tvoje članstvo. Projekat i podaci ostaju vlasniku i ostalim projektantima.';}
 }
 
 // Detaljna statistika projekta u Projekat tabu — isti prikaz kao admin
@@ -9726,27 +9722,40 @@ async function removeProjektClan(projekt_id, korisnik_id) {
 
 // Član (NE vlasnik) sam sebe uklanja iz projekta — vlasnik/ostali članovi i njihovi
 // podaci ostaju netaknuti. RLS (projekt_clanovi_delete) izričito dozvoljava ovo
-// (korisnik_id = auth.uid()), ali dosad nije postojalo nijedno dugme koje to zove.
+// (korisnik_id = auth.uid()). Doznaka koristi isto pravilo za vlastito članstvo.
+// Potvrđeno uklanjanje SAMO vlastitog članstva; prazni RLS odgovor nije uspjeh.
+async function _napustiClanPotvrdjeno(table,projectField,userField,id,owner) {
+  const {data,error}=await sb.from(table).delete().eq(projectField,id).eq(userField,owner).select(projectField);
+  if(error)throw error;
+  if(data?.some(r=>r[projectField]===id))return;
+  const check=await sb.from(table).select(projectField).eq(projectField,id).eq(userField,owner).maybeSingle();
+  if(check.error)throw check.error;
+  if(check.data)throw Error('Server nije potvrdio uklanjanje članstva');
+}
 async function napustiProjekat(projekt_id) {
-  if (isReadOnly()) { showToast('Pregledni nalog — samo čitanje'); return; }
-  const p = _projekti.find(x => x.id === projekt_id);
-  if (!p || !sbUser) return;
-  if (p.korisnik_id === sbUser.id) { showToast('Ti si vlasnik ovog projekta — koristi "Obriši projekat".'); return; }
-  const ok = await _dlgConfirm(`Napustiti projekat "${p.odjel || ''}"?\nVlasnik i ostali članovi zadržavaju pristup — samo ti gubiš vidljivost.`, { danger: true });
-  if (!ok) return;
-  const { error } = await sb.from('projekt_clanovi').delete()
-    .eq('projekt_id', projekt_id).eq('korisnik_id', sbUser.id);
-  if (error) { showToast('Greška: ' + error.message); return; }
-  if (_aktivniProjektId === projekt_id) {
-    _aktivniProjektId = null;
-    localStorage.removeItem('tvlake_akt_proj');
-    _updFabVisibility();
-  }
-  _pdProjektId = null;
-  showProjektiList();
-  await sbLoadProjekti();
-  await sbLoadKolegeVlake();
-  showToast('Napustio/la si projekat.');
+  if(napustiProjekat.busy)return;
+  if(isReadOnly()){showToast('Pregledni nalog — samo čitanje');return;}
+  const owner=sbUser?.id,p=_projekti.find(x=>x.id===projekt_id);
+  if(!p||!owner||p.korisnik_id===owner)return;
+  if(recOn||_tragOn||_dozGpsOn||_serverSaljem){showToast('Prvo završi snimanje');return;}
+  if(!_mrezaProbaj()){showToast('Uklanjanje članstva traži internet');return;}
+  let pending;
+  try{pending=_OL.loadQueue(true).some(o=>(!o._uid||o._uid===owner)&&o.payload?.projekt_id===projekt_id)||vlake.some(v=>v.projektId===projekt_id&&!v.sbId&&(v.pts||[]).length>0);}catch(e){showToast('Lokalni red nije provjeren — članstvo nije uklonjeno');return;}
+  if(pending){showToast('Prvo pošalji neposlane podatke ovog projekta: Pošalji i primi');return;}
+  if(!await _dlgConfirm('Ukloniti projekat „'+(p.odjel||'')+'” sa tvog spiska? Projekat i svi podaci ostaju kolegi i ostalim projektantima. Za povratak te vlasnik treba ponovo dodati.',{danger:true}))return;
+  if(sbUser?.id!==owner||napustiProjekat.busy)return;
+  if(recOn||_tragOn||_dozGpsOn||_serverSaljem){showToast('Prvo završi snimanje/slanje');return;}
+  napustiProjekat.busy=true;
+  try {
+    await _napustiClanPotvrdjeno('projekt_clanovi','projekt_id','korisnik_id',projekt_id,owner);
+    if(sbUser?.id!==owner)return;
+    ++_projLoadGen;_projekti=_projekti.filter(x=>x.id!==projekt_id);_OL.save(_OL.PROJEKTI,_projekti);
+    if(_aktivniProjektId===projekt_id)deaktivirajProjekt();
+    _kvcClear(projekt_id);_pdProjektId=null;showProjektiList();
+    await sbLoadProjekti();await sbLoadKolegeVlake();
+    if(sbUser?.id===owner)showToast('Projekat uklonjen sa tvog spiska. Podaci tima su sačuvani.');
+  }catch(e){if(sbUser?.id===owner)showToast('Uklanjanje nije uspjelo: '+e.message);}
+  finally{napustiProjekat.busy=false;}
 }
 
 // ─── DIJELJENJE PROJEKTA ŠIFROM (teren) ──────────────────────────────────────
@@ -16121,6 +16130,7 @@ let _dblClickGuard = false;
 map.on('click', e => {
   // Klik na mapu dok je panel otvoren — vrati se na kartu
   if (_activeTab !== 'karta') { switchTab('karta'); return; }
+  if(window.DepartmentReport?.isDrawing())return;
   if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.isDrawing())return;
   if(typeof ReferenceVlake!=='undefined'&&ReferenceVlake.isMarking())return;
   if(typeof VlakaDirection!=='undefined'&&VlakaDirection.isPicking())return;
@@ -23608,10 +23618,9 @@ function pkml(doc, col, op) {
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
-        // fillOpacity 0.001 (ne 0) — vizuelno nevidljivo, ali fill ostaje
-        // "painted" pa klik unutar poligona radi (vidi napomenu u applyKmlStyle).
+        // fill:true čuva hit-test i kad je površina potpuno prozirna.
         const holes = [...pg.querySelectorAll('innerBoundaryIs coordinates')].map(c=>pcs(c.textContent)).filter(r=>r.length>2);
-        const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fillOpacity:0.001});
+        const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fill:true, fillOpacity:0});
         l._kmlIsPolygon = true;
         l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(_escHtml(name), {sticky:true});
@@ -23666,6 +23675,7 @@ function _parseKmlExtData(pm) {
 // isti popup mora moći otvoriti i "izvana" — iz map.on('click') fallback-a
 // (_kmlHitTest), kad DOM klik uopšte ne stigne do sloja (vidi napomenu tamo).
 function _kmlOpenPopup(layer, latlng) {
+  if(window.DepartmentReport?.isDrawing()){DepartmentReport.addPoint(latlng);return;}
   if (_dozKmlSelMode) { const target=window.DoznakaProjectBoundary?.allows(layer)?layer:_kmlHitTest(latlng,true);if(target)_dozKmlSelToggle(target);return; }
   const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
   layer._kmlPopupId = uid;
@@ -23681,6 +23691,7 @@ function _bindKmlPopup(layer) {
     _kmlOpenPopup(layer, e.latlng);
   };
   layer.on('click', _onClick);
+  layer.on('add',()=>{if(layer._kmlIsPolygon&&layer._path)layer._path.style.pointerEvents='all';});
 
   // KML granice/linije su tanke i često isprekidane — bez šireg nevidljivog
   // hit-sloja tap prstom na terenu skoro nikad ne pogodi samu liniju (isti
@@ -23753,6 +23764,9 @@ function _kmlHitTest(latlng, onlyPolygons) {
       if (l._kmlIsPolygon) {
         let inside = false;
         try { inside = !!(l._containsPoint && l._containsPoint(lp)); } catch(e) {}
+        if (!inside && typeof turf!=='undefined' && l.getBounds?.().contains(latlng)) {
+          try { inside=turf.booleanPointInPolygon(turf.point([latlng.lng,latlng.lat]),l.toGeoJSON()); } catch(e) {}
+        }
         // Rezerva: prazan (nepopunjen) poligon u nekim slučajevima ne odgovara na
         // _containsPoint — provjeri i blizinu same granice.
         if (!inside) {
@@ -23800,7 +23814,7 @@ function _kmlPopFindLayer(uid) {
   let found = null;
   kmlLs.forEach(kl => {
     if (!kl.grp) return;
-    kl.grp.eachLayer(l => { if (l._kmlPopupId === uid) found = l; });
+    const walk=g=>g.eachLayer(l=>{if(l._kmlPopupId===uid)found=l;else if(l.eachLayer)walk(l);});walk(kl.grp);
   });
   return found;
 }
@@ -23809,7 +23823,7 @@ function _kmlPopFindIdx(uid) {
   for (let i = 0; i < kmlLs.length; i++) {
     if (!kmlLs[i].grp) continue;
     let hit = false;
-    kmlLs[i].grp.eachLayer(l => { if (l._kmlPopupId === uid) hit = true; });
+    const walk=g=>g.eachLayer(l=>{if(l._kmlPopupId===uid)hit=true;else if(l.eachLayer)walk(l);});walk(kmlLs[i].grp);
     if (hit) return i;
   }
   return -1;
@@ -23839,11 +23853,9 @@ async function _kmlPopSave(uid) {
   try {
     if(!k._key)await _localLayerPatchFeature(k,layer._kmlPmIndex,newName,newDesc);
     const change=l=>{l._kmlName=newName;l._kmlDesc=newDesc;if(l.getTooltip?.())l.unbindTooltip();if(newName)l.bindTooltip(_escHtml(newName),{sticky:true});};
-    if(!k._key)k.grp.eachLayer(l=>{if(l._kmlPmIndex===layer._kmlPmIndex)change(l);});else change(layer);
-    const nm=document.getElementById(uid+'-nm');if(nm)nm.textContent=newName||'Bez naziva';
-    const article=nm?.closest('.le-popup');let desc=article?.querySelector('.le-description');
-    if(!desc && newDesc && article){desc=document.createElement('p');desc.className='le-description';article.querySelector('header').after(desc);}
-    if(desc){desc.textContent=newDesc;desc.hidden=!newDesc;}
+    if(!k._key){const walk=g=>g.eachLayer(l=>{if(l.eachLayer&&!l._kmlIsPolygon)walk(l);else if(l._kmlPmIndex===layer._kmlPmIndex)change(l);});walk(k.grp);}else change(layer);
+    const article=document.getElementById(uid+'-nm')?.closest('.le-popup');
+    if(article){const wrapper=document.createElement('div');wrapper.innerHTML=_layerPopupHtml(layer,uid);article.replaceWith(wrapper.firstElementChild);_layerPopupLayout();}
     _kmlPopCancel(uid);showToast(k._key?'Primijenjeno u ovom prikazu':'✓ Naziv i opis sačuvani u lokalnom fajlu');
   }catch(e){showToast('⚠ Izmjena nije sačuvana: '+e.message);}
   finally{layer._saving=false;}
@@ -23875,9 +23887,9 @@ function _kmlPopStyleToggle(uid) {
 function _kmlPopStylePanel(uid, layer, idx) { return _layerStyleControls(idx!==undefined?idx:_kmlPopFindIdx(uid)); }
 
 function _kmlGrpHasPolygon(i) {
-  let has = false;
-  kmlLs[i]?.grp.eachLayer(l => { if (l._kmlIsPolygon) has = true; });
-  return has;
+  let has=false;
+  const walk=g=>g?.eachLayer?.(l=>{if(l._kmlIsPolygon)has=true;else if(l.eachLayer)walk(l);});
+  walk(kmlLs[i]?.grp);return has;
 }
 
 function _kpSetCol(uid, i, c)    { setKmlColor(i, c);   _kpRefreshStyle(uid, i); }
@@ -23924,12 +23936,9 @@ function pkmlStyled(doc, opts) {
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
-        // 0.001 umjesto 0 kad nema (ili je sačuvano kao) fill — vidi napomenu u
-        // applyKmlStyle: fill-opacity:0 u SVG-u zna ugasiti hit-test za klik
-        // unutar poligona u nekim WebView verzijama.
-        const fo = opts.fillOpacity;
-        const polyOpts = {...opts, fillOpacity: (fo === undefined || fo === 0) ? 0.001 : fo};
-        const l = L.polygon(cs, polyOpts);
+        const holes=[...pg.querySelectorAll('innerBoundaryIs coordinates')].map(c=>pcs(c.textContent)).filter(r=>r.length>2);
+        const polyOpts={...opts,fill:true,fillOpacity:opts.fill===false?0:(opts.fillOpacity??0)};
+        const l=L.polygon(holes.length?[cs,...holes]:cs,polyOpts);
         l._kmlIsPolygon = true;
         l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         l.addTo(g);
@@ -24083,7 +24092,7 @@ function applyKmlStyle(i) {
   base.dashArray = k.dash || null;
 
   let patUrl=null,canvasPattern=null;
-  if(k.fill&&k.fillPattern&&k.fillPattern!=='solid'){
+  if(k.fill&&(k.fillOpacity??.35)>0&&k.fillPattern&&k.fillPattern!=='solid'){
     patUrl=_ensureKmlPattern(i);canvasPattern=_kmlCanvasPattern(k);
   }
 
@@ -24093,23 +24102,19 @@ function applyKmlStyle(i) {
     if (!l.setStyle) return;
     const lo = {...base};
     if (l._kmlIsPolygon) {
-      if (k.fill) {
+      lo.fill = true; // hit-test cijele površine ostaje, neovisno o prozirnosti.
+      lo.fillOpacity = k.fill ? (k.fillOpacity ?? 0.35) : 0;
+      lo.fillColor = k.fillCol || k.col;
+      if (k.fill && lo.fillOpacity > 0) {
         const pattern=l._renderer instanceof L.Canvas?canvasPattern:patUrl;
         if(pattern){lo.fillColor=pattern;lo.fillOpacity=1;}
-        else { lo.fillColor = k.fillCol || k.col; lo.fillOpacity = k.fillOpacity ?? 0.35; }
-      } else {
-        // NE 0 — SVG fill-opacity:0 se u nekim WebView/Chromium verzijama tretira
-        // kao "nema fill uopšte" pa se hit-test za klik unutar poligona gasi
-        // (klik nikad ne stigne do layer-a). 0.001 je vizuelno identično
-        // nevidljivo, ali fill ostaje "painted" pa cijela unutrašnjost i dalje
-        // hvata klik (isti trik kao nevidljivi hit-sloj za linije).
-        lo.fillOpacity = 0.001;
       }
     } else {
       lo.fillColor = k.col;
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
     }
     l.setStyle(lo);
+    if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
   };
   k.grp?.eachLayer(styleLayer);
 }
@@ -24679,19 +24684,13 @@ function rndGraniceModal() {
     return;
   }
 
-  // Ako nijedna grupa još nije ni dodana ni uklonjena iz _glCollapsed,
-  // a ima grupa — defaultno ih sve sruši
-  const groupKeys = Object.keys(
-    kmlLs.reduce((acc, k) => {
-      if (!k.grp) return acc;   // preskoči neskinute server placeholdere
-      const bucket = k._bucket || 'Lokalni';
-      const folder = k.name.includes('/') ? k.name.split('/')[0] : '—';
-      acc[`${bucket} / ${folder}`] = true;
-      return acc;
-    }, {})
-  );
-  if (_glCollapsed.size === 0) groupKeys.forEach(gk => _glCollapsed.add(gk));
-
+  // Preuzete granice i putevi imaju zasebne, odmah otvorene grupe.
+  const groupKey=k=>{
+    const role=window.GithubLayers?.role(k);
+    if(role==='boundaries')return 'Granice odjela';
+    if(role==='roads')return 'Kamionski putevi';
+    return (k._bucket||'Lokalni')+' / '+(k.name.includes('/')?k.name.split('/')[0]:'Ostali fajlovi');
+  };
   // Admin global-save banner
   let html = isAdmin
     ? `<div style="background:rgba(251,191,36,0.1);border:1px solid #92400e;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
@@ -24704,15 +24703,12 @@ function rndGraniceModal() {
   const groups = {};
   kmlLs.forEach((k, i) => {
     if (!k.grp) return;
-    const bucket = k._bucket || 'Lokalni';
-    const nameParts = k.name.split('/');
-    const folder = nameParts.length > 1 ? nameParts[0] : '—';
-    const groupKey = `${bucket} / ${folder}`;
-    if (!groups[groupKey]) groups[groupKey] = [];
-    groups[groupKey].push({ k, i });
+    const key=groupKey(k);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ k, i });
   });
 
-  const WEIGHTS = [1, 1.5, 2, 3, 4, 5];
+  html+='<div class="le-library-heading"><h3>Učitani fajlovi</h3><span>'+Object.values(groups).flat().length+' fajlova · '+kmlLs.filter(k=>k.grp&&k.vis).length+' prikazano</span></div>';
 
   Object.entries(groups).forEach(([groupName, items]) => {
     const collapsed = _glCollapsed.has(groupName);
@@ -24721,47 +24717,20 @@ function rndGraniceModal() {
     const anyVis = indices.some(i => kmlLs[i].vis);
     const visIcon = allVis ? '👁' : anyVis ? '◑' : '🚫';
     const visTip  = allVis ? 'Sakrij cijeli folder' : 'Prikaži cijeli folder';
-    const gkEsc   = groupName.replace(/'/g, "\\'");
+    const gkEsc=_escHtml(JSON.stringify(groupName));
 
-    html += `<div class="gl-group-hdr" onclick="togGlGroup('${gkEsc}')">
+    html += `<div class="gl-group-hdr" onclick="togGlGroup(${gkEsc})">
       <span class="gl-fold-arrow">${collapsed ? '▶' : '▼'}</span>
-      <span class="gl-group-name">${groupName}</span>
+      <span class="gl-group-name">${_escHtml(groupName)}</span>
       <span class="gl-group-meta">${items.length} sloj${items.length===1?'':'a'}</span>
       <button class="gl-btn gl-grp-vis${allVis?' on':''}" onclick="event.stopPropagation();togGlGroupVis([${indices}])" title="${visTip}" style="margin-left:auto;font-size:13px;padding:1px 7px;">${visIcon}</button>
     </div>`;
 
     if (!collapsed) {
       items.forEach(({ k, i }) => {
-        const shortName = k.name.includes('/') ? k.name.split('/').slice(1).join('/') : k.name;
-        const cnt  = _kmlFeatureCount(k.grp);
-        const lenM = _kmlCalcLen(k.grp);
-        const lenS = lenM > 0 ? _tragFmtLen(lenM) : '';
-        const meta = [cnt + (cnt===1?' element':' elemenata'), lenS].filter(Boolean).join(' · ');
-        const hasGlobal = !!_globalKmlStyles[k._key];
-        // Detect if user has a local override vs global
-        let hasUserOverride = false;
-        try {
-          const um = JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY) || '{}');
-          hasUserOverride = !!um[k._key];
-        } catch {}
-        const isEdit = _kmlEditIdx === i;
+        html+=_layerCardHtml(i);
+        if(_kmlEditIdx===i)html+=_renderKmlEditor(i);
 
-        // Klik na red = otvori/zatvori info + editor stila (isti obrazac kao
-        // Oznake panel — _renderKmlEditor daje ime/tag/boju/debljinu/stil/
-        // providnost/punjenje na jednom mjestu umjesto uvijek-otvorenih
-        // kontrola za svaki učitani sloj, što je postajalo nepregledno kad
-        // ima puno slojeva u jednom folderu).
-        html += `<div class="oz-row${k.vis ? '' : ' hidden-layer'}" onclick="event.stopPropagation();_glKmlToggleEdit(${i})">
-          <div class="oz-row-color" style="background:${k.col};width:5px;height:38px;border-radius:3px;flex-shrink:0;"></div>
-          <div class="oz-row-info">
-            <div class="oz-row-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(shortName)}</div>
-            <div class="oz-row-meta">${meta}</div>
-          </div>
-          ${!isAdmin && hasGlobal && hasUserOverride ? `<button class="gl-btn" onclick="event.stopPropagation();resetLayerToGlobal(${i})" title="Vrati na admin default" style="font-size:10px;padding:1px 6px;flex-shrink:0;color:#fbbf24;border-color:#92400e;"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>` : ''}
-          <button class="oz-vis-btn${k.vis?' on':''}" onclick="event.stopPropagation();togK(${i})" title="${k.vis?'Sakrij':'Prikaži'}">${k.vis ? '<svg class="ic"><use href="#ic-prikazi"/></svg>' : '<svg class="ic"><use href="#ic-sakrij"/></svg>'}</button>
-          <span class="oz-expand-arrow${isEdit?' open':''}">›</span>
-        </div>
-        ${isEdit ? _renderKmlEditor(i) : ''}`;
       });
     }
   });
@@ -37623,6 +37592,8 @@ async function dozSelectOdjel(id) {
   // Šifru za teren smije napraviti samo vlasnik doznake (isto pravilo kao na serveru).
   const _dozShareBtn = document.getElementById('doz-share-code-btn');
   if (_dozShareBtn) _dozShareBtn.style.display = (odjel.created_by && odjel.created_by === sbUser?.id) ? '' : 'none';
+  const removeButton=document.getElementById('doz-project-remove');
+  if(removeButton)removeButton.innerHTML='<svg class="ic"><use href="#ic-obrisi"/></svg> '+(odjel.created_by===owner?'Obriši odjel':'Ukloni sa mog spiska');
   _dozQrRenderReceived();
   _dozRenderStatusRow();
   await dozLoadLayers(id, { odmahIzKesa: true });
@@ -40004,6 +39975,34 @@ async function dozDeleteMarking(id) {
   }
 }
 
+// Član napušta doznaku; nikad se ne poziva brisanje projekta/zona/GPS podataka.
+async function dozNapustiOdjel(projectId) {
+  if(dozNapustiOdjel.busy)return;
+  const owner=sbUser?.id,odjel=_dozOdjeli.find(o=>o.id===projectId);
+  if(!owner||!odjel||odjel.created_by===owner||isReadOnly())return;
+  if(_dozGpsOn||(_dozGpsStopping&&_dozGpsUserId)){showToast('Prvo završi GPS snimanje');return;}
+  if(!_mrezaProbaj()){showToast('Uklanjanje članstva traži internet');return;}
+  try {
+    if(typeof FieldStore!=='undefined')await FieldStore.init();
+    if(sbUser?.id!==owner||_dozSelId!==projectId)return;
+    const points=typeof FieldStore!=='undefined'?FieldStore.view(owner):JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY)||'[]');
+    const pending=points.some(p=>p.user_id===owner&&p.project_id===projectId)||_OL.loadQueue(true).some(o=>(!o._uid||o._uid===owner)&&(o.payload?.project_id===projectId||o.type==='upsert_doz_status'&&o.payload?.id===projectId));
+    if(pending){showToast('Prvo pošalji neposlane pojaseve i izmjene: Pošalji i primi');return;}
+    if(!await _dlgConfirm('Ukloniti doznaku „'+odjel.name+'” sa tvog spiska? Pojasevi, zone i projekat ostaju kolegi i ostalim projektantima. Za povratak te vlasnik treba ponovo dodati.',{danger:true}))return;
+    if(sbUser?.id!==owner||_dozSelId!==projectId||dozNapustiOdjel.busy)return;
+    if(_dozGpsOn||(_dozGpsStopping&&_dozGpsUserId)||_serverSaljem){showToast('Prvo završi snimanje/slanje');return;}
+    dozNapustiOdjel.busy=true;
+    await _napustiClanPotvrdjeno('doz_project_members','project_id','user_id',projectId,owner);
+    if(sbUser?.id!==owner)return;
+    dozLoadOdjeli._gen=(dozLoadOdjeli._gen||0)+1;
+    _dozOdjeli=_dozOdjeli.filter(o=>o.id!==projectId);_OL.save(_OL.DOZ_ODJELI,_dozOdjeli);
+    if(_dozSelId===projectId)await dozBackToList();
+    dozRenderOdjeli();_dozRenderOverview();await dozLoadOdjeli();
+    if(sbUser?.id===owner)showToast('Doznaka uklonjena sa tvog spiska. Podaci tima su sačuvani.');
+  }catch(e){if(sbUser?.id===owner)showToast('Uklanjanje nije uspjelo: '+e.message);}
+  finally{dozNapustiOdjel.busy=false;}
+}
+
 // ─── Delete Odjel ──────────────────────────────────────────────────
 async function dozDeleteOdjel() {
   if(dozDeleteOdjel.busy)return;
@@ -40011,6 +40010,7 @@ async function dozDeleteOdjel() {
   if(_dozGpsOn||(_dozGpsStopping&&_dozGpsUserId)){showToast('Prvo završi GPS snimanje');return;}
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   if (!odjel) return;
+  if(odjel.created_by!==owner)return dozNapustiOdjel(projectId);
   // Samo kreator ili manager smije brisati — briše podatke cijelog tima
   const myRole = _dozMembers.find(m => m.user_id === sbUser?.id)?.role;
   const canDelete = odjel.created_by === sbUser?.id || myRole === 'manager';
@@ -40549,6 +40549,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico">☁</span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr" id="menu-project-section-title">Projekti i izvoz</div>
+  <button type="button" class="mdrop-item" id="menu-department-report" onclick="closeMenuDropdown();DepartmentReport.open()"><span class="mdrop-ico">⛰</span>Izvještaj odjela</button>
   <button type="button" class="mdrop-item" id="mdrop-upravljanje" onclick="closeMenuDropdown();showProjectManagement()"><span class="mdrop-ico">📁</span>Upravljanje projektima</button>
   <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico">📅</span>Sedmični / mjesečni izvještaji</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico">🖨</span>Print / štampanje</button>
@@ -40568,6 +40569,18 @@ if (typeof AndroidDownload !== 'undefined') {
   </footer>
   </div>
 </div>
+
+<div id="department-report" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title" onclick="if(event.target===this)DepartmentReport.close()">
+  <section class="dr-sheet"><header><div><small>TEREN ODJELA</small><h2 id="dr-title">Izvještaj odjela</h2></div><button type="button" aria-label="Zatvori izvještaj odjela" onclick="DepartmentReport.close()">×</button></header>
+  <div class="dr-body"><label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
+  <div class="dr-choose"><button type="button" onclick="DepartmentReport.draw()">Nacrtaj granicu</button><button type="button" onclick="DepartmentReport.choose()">Izaberi iz Granica</button></div>
+  <details class="dr-legacy"><summary>Već nacrtan poligon projekta</summary><button type="button" onclick="DepartmentReport.legacy()">Koristi poligon aktivnog projekta</button></details>
+  <p id="dr-selection"></p><div class="dr-choose"><button type="button" class="dr-primary" id="dr-calculate" onclick="DepartmentReport.calculate()">Izračunaj teren</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button><p id="dr-status" role="status" aria-live="polite"></p>
+  <section id="dr-result" hidden><h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div><p id="dr-terrain-summary"></p><h3>Nagib terena</h3><div id="dr-slopes"></div><h3>Ekspozicija · četiri strane svijeta</h3><div id="dr-aspects"></div><p id="dr-coverage"></p></section>
+  <section class="dr-map-options"><h3>Prikaz na karti</h3><label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label><label><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label><label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label></section>
+  <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Ukloni granicu i izvještaj</button></div></section>
+</div>
+<div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span>Dodirni kartu uz granicu odjela</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" onclick="DepartmentReport.finish()">Sačuvaj granicu</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
 <div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;">
@@ -40662,6 +40675,7 @@ if (typeof AndroidDownload !== 'undefined') {
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projekat: odjel, vlake, boje i strelice</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Provjeri aktivni projekat</b><span>Naziv GJ (gospodarske jedinice) i odjel trebaju odgovarati mjestu gdje radiš. Projekat vlaka i odjel u Doznaci imaju zasebne izbore.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Projekat koji je dodao kolega</b><span>Otvori projekat u tabu <b>Projekat</b> ili odjel u <b>Doznaci</b> i na dnu pritisni <b>Ukloni sa mog spiska</b>. Potreban je internet. Prvo završi snimanje i pošalji neposlane podatke. Uklanja se samo tvoje članstvo; vlake, pojasevi i podaci ostaju cijelom timu. Za povratak te vlasnik ponovo dodaje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Zajednički spisak prikazuje tvoje i kolegine vlake po broju, s dužinom i projektantom. Dodirni stavku za pregled na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Poligon odjela i teren</b><span>Poligon je zatvorena granica odjela. Nacrtaj najmanje tri tačke i sačuvaj. Uključi nagib preko 30% ili ekspoziciju za to područje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Boje vlaka i Strelice</b><span>Na dnu Projekta mijenjaš boje, debljinu, crtice/tačke i sitni obrub opcijom <b>Dodaj outline</b>. Strelice mogu biti na vlaci ili pored nje. Izbor prikaza važi i za kolegine vlake u tom projektu, na tvom telefonu.</span></div></div>
@@ -40779,7 +40793,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori novi odjel iz liste. Prije dodavanja kolega pošalji projekat na server uz internet.</li>
 </ol><div class="help-row"><div class="help-txt"><b>Nema učitanih granica?</b><span>Dodirni <b>Preuzmi Granice odjela</b>. U katalogu pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz granice. Nakon uvoza vraćaš se na novi projekat. Jednom preuzeti sloj možeš koristiti bez interneta. Možeš koristiti i vlastiti KML/SHP ili GeoJSON.</span></div></div>
 <div class="help-diagram"><b>Provjeri odjel na karti</b><p>Približi kartu svom odjelu i ručno označi njegove odsjeke. GJ i broj odjela upisuješ sam, bez preuzimanja atributa iz fajla. Lista prvo nudi samo poligone u trenutnom prikazu karte.</p></div>
-<div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span>Poligon u tabu Projekat služi prikazu terena uz vlake. Granicu za GPS pojaseve kreiraš ili biraš u Doznaci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pomoć pri granici s topografske podloge · online</button><div class="help-sec-body">
 <ol class="help-steps">
@@ -40922,11 +40936,11 @@ if (typeof AndroidDownload !== 'undefined') {
         <div class="help-sec-body">
           <div class="help-row">
             <div class="help-icon" style="border:3px solid #60a5fa;background:transparent;">&nbsp;</div>
-            <div class="help-txt"><b>Boja linije/obruba</b><span>Svaki KML sloj ima boju linije koja se mijenja u editoru oznake (tapnite na sloj u Oznake panelu).</span></div>
+            <div class="help-txt"><b>Boja linije/obruba</b><span>Otvori <b>Podloge i slojevi → Granice → Učitani fajlovi</b> ili <b>Preglednik oznaka</b>. Uz fajl izaberi <b>Uredi stil</b>: boja, debljina, puna/isprekidana linija i vidljivost. Oko prikazuje ili skriva cijeli fajl.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon" style="background:#60a5fa55;border:2px solid #60a5fa;">&nbsp;</div>
-            <div class="help-txt"><b>Puno punjenje (solid)</b><span>Poligon sa punom bojom punjenja — providnost se podešava klizačem.</span></div>
+            <div class="help-txt"><b>Puno punjenje (solid)</b><span>Za granice izaberi boju i jačinu ispune. <b>Samo obrub</b> ili <b>Jačina ispune 0%</b> ostavlja podlogu potpuno vidljivom. Poligon ostaje klikabilan: dodir unutar granice otvara naziv, površinu i podatke iz fajla. <b>Stil fajla</b> mijenja cijeli sloj, a <b>Naziv i opis</b> samo izabrani objekt. Izbori se pamte nakon ponovnog pokretanja.</span></div>
           </div>
           <div class="help-row">
             <div class="help-icon" style="background:repeating-linear-gradient(45deg,#60a5fa55 0,#60a5fa55 2px,transparent 2px,transparent 6px);border:2px solid #60a5fa;">&nbsp;</div>
@@ -42076,8 +42090,8 @@ if (typeof AndroidDownload !== 'undefined') {
           </span>
         </label>
         <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
-          <span style="color:#64748b;font-size:11px;white-space:nowrap;">Prozirnost</span>
-          <input type="range" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
+          <span style="color:#64748b;font-size:11px;white-space:nowrap;">Vidljivost obruba</span>
+          <input type="range" aria-label="Vidljivost obruba granica" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
             style="flex:1;accent-color:#38bdf8;cursor:pointer;"
             oninput="GithubLayers.opacity(this.value)">
         </div>
@@ -42315,5 +42329,6 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
+<script src="static/js/department-report.js"></script>
 </body>
 </html>

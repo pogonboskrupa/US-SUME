@@ -20,7 +20,7 @@ map.setView(pixelToLL(128,128),14,{animate:false});
 window.terrainReady=new Promise(resolve=>window.addEventListener('DOMContentLoaded',async()=>{await fixtureReady;document.querySelector('#fixture-project').innerHTML=document.querySelector('#terrain-markup').innerHTML;ProjectTerrain.refresh();resolve();},{once:true}));
 window.tileAlphas=pane=>{let result=null;map.eachLayer(layer=>{if(layer.options?.pane===pane){for(const tile of Object.values(layer._tiles||{})){if(tile.coords.x===TERR_COORDS.x&&tile.coords.y===TERR_COORDS.y){const ctx=tile.el.getContext('2d');result=[ctx.getImageData(80,128,1,1).data[3],ctx.getImageData(160,128,1,1).data[3],ctx.getImageData(220,128,1,1).data[3],ctx.getImageData(160,20,1,1).data[3]];}}}});return result;};
 '''
-poly=b.section('      <section class="sec proj-akt-only project-polygon">','    </div><!-- /proj-panel -->')
+poly=(b.ROOT/'tests/browser/fixtures/project-terrain-legacy.html').read_text()
 favs=b.section('<div id="mapfav-modal"','<!-- === Registar tragova === -->')
 bar=b.section('<div id="project-draw-toolbar"','<script src="static/js/map-catalog.js">')
 markup='<template id="terrain-markup">'+poly+'</template>'+favs+bar+'<script>'+code+'</script><script src="/static/js/map-catalog.js"></script><script src="/static/js/project-terrain.js"></script>'

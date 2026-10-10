@@ -55,6 +55,8 @@
     "static/js/terrain-workspace.js",
     "static/css/terrain-workspace.css",
     "static/js/spd-profile.js",
-    "static/css/spd-profile.css"
+    "static/css/spd-profile.css",
+    "static/js/department-report.js",
+    "static/js/department-report-worker.js"
   ]
 }

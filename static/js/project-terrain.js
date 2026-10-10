@@ -104,6 +104,7 @@
     const legend=node('project-terrain-legend');if(legend){legend.hidden=!(d.ring&&(d.slope||d.aspect));legend.children[0].style.display=d.slope?'block':'none';legend.children[1].style.display=d.aspect?'block':'none';}status();
   }
   function refresh(){
+    if(!node('project-polygon-context')){removeLayers();mounted='';return;}
     const s=scope(),d=s?read(s):{ring:null,slope:false,aspect:false,visible:false};
     if(draft&&draft.scope.key!==s?.key)cancel();
     const signature=s?s.key+JSON.stringify(d):'';

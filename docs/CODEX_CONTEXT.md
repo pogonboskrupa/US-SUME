@@ -3701,3 +3701,65 @@ Release v2.7.6 (408784579), app-debug.apk (627356388), uploaded;
 veličina/digest podudarni. Updater releases?per_page=1 vraća v2.7.6 prvo.
 APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.6/app-debug.apk
 Fizički Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
+
+## 2.7.7 / Android547 — KML, vlastito članstvo i Izvještaj odjela
+
+Na zahtjev korisnika: KML/SHP kartice imaju stvarni vektorski pregled,
+pregledniji urednik boje/debljine/isprekidanosti/vidljivosti obruba i boje/
+jačine ispune. Granice i Kamionski putevi su jasno razdvojeni. Stvarna
+ispuna 0% ostaje klikabilna na Canvas/SVG; rupe poligona nisu klikabilne.
+Klik daje čitljive podatke HTML-tabele iz fajla (sigurno kao tekst), površinu/
+dužinu, opis i uređivanje naziva/stila. Stilovi se pamte putem postojećeg
+IDB/local/server mehanizma; nested SHP geometrije se pravilno obrađuju.
+
+Član može ukloniti kolegin projekat sa svog spiska Vlaka i Doznake.
+Briše se isključivo vlastito članstvo, uz potvrdu ciljanog reda i provjeru
+RLS praznog odgovora. Greška/izostanak potvrde čuva spisak i lokalni keš.
+Snimanje/slanje i neposlani podaci blokiraju izlazak radi očuvanja rada.
+Projekat i svi timski podaci ostaju vlasniku i drugim članovima. Povratak
+traži da vlasnik ponovo doda člana. Postojeće DELETE-own-member politike
+iz 20260713_dijeljenje_popravka.sql podržavaju ovo; nova SQL migracija se
+ne uvodi i produkcijska baza nije mijenjana.
+
+Poligon odjela i teren uklonjeni iz Projekat panela. Meni → Izvještaj
+odjela je odvojena sekcija: nacrt granice sa undo/cancel/validacijom ili
+ručni izbor više odsjeka iz preuzetog sloja Granice odjela. Ne koristi
+atribute za automatski izbor/naziv; Doznaka obrazac se ne mijenja. Stari
+poligon aktivnog projekta može se preuzeti u novi izvještaj; stari zapisi
+ostaju za kompatibilnost sa štampom. Shared union Worker i izbor privremeno
+prikazuju skriveni izvor pa vrate prethodni stil/vidljivost na završetku.
+
+DEM report Worker računa šest razreda isključivo u procentima: 0–<10,
+10–<20, 20–<30, 30–<40, 40–<50, ≥50; površina u ha i udio cijelog poligona;
+četiri ekspozicije S/I/J/Z; raspon/prosjek visina, prosjek/maksimum nagiba,
+pokrivenost uzorcima. WebMercator ground-scale, centralne derivacije sa
+susjednim pločicama, četiri poduzorka rubnih ćelija, rupe/MultiPolygon.
+Nedostajući uzorci nisu ravni teren. DEM je Mapzen/EU-DEM procjena oko 30 m
+na USK, ne geodetsko mjerenje. Z12 se po potrebi smanjuje za velika područja;
+ograničenje 160.000 ćelija / 81 pločica, tri paralelna dohvata, obrada van UI niti.
+Karta: obojeni razredi, linije među razredima, izbor ekspozicije/samo granice,
+prikaži/sakrij. Izračun i izbori se čuvaju lokalno po korisniku i vraćaju
+pri pokretanju; već izračunat rezultat radi bez mreže, novi izračun radi
+iz DEM keša ili online. Prekid/odjava terminiraju Worker, završavaju Promise
+bez starog tajmera koji bi ubio novu obradu. Kvota ne briše staru granicu.
+
+Zadnja prijava korisnika: „AbortError: Failed to fetch” pogrešno prikazivano
+kao „Korisnik nije pronađen”. Lookup mrežna/timeout greška sada daje jasnu
+poruku o vezi i ponovnom pokušaju, DB greška zasebnu serversku poruku;
+„Korisnik nije pronađen” samo kad RPC uspije i ne vrati email. Ručno tražena
+prijava smije probati vezu poslije izmjerenog slabog signala. Nema promjene
+provjere PIN-a, prava pristupa niti offline bypass-a nakon izričite odjave.
+
+Lokalno: KML editor full-app (Canvas/SVG, rupa, HTML-info, putevi/stilovi,
+6 prikaza/kontrast, IDB restart, Vlake/Doznaka own-membership/RLS/socket/
+unsent guard) prošao. Novi report full-app: stvarni Terrarium PNG dekoder,
+worker union i DEM worker, višestruki ručni izbor bez Doznaka mutacije,
+map overlay/linije, 6 prikaza, IDB restart, offline cache, cancel novog
+Workera, quota očuvanje i izdvojeni nalozi prošli. DEM core test provjerava
+pragove, četiri smjera, površine/rupe/disjoint/nedostajuće uzorke i visine.
+Auth core test razlikuje fetch/Abort/timeout, missing user, RLS, pogrešan PIN,
+ručni weak-signal retry i siguran keš. Audit 144 prikaza: 0 kontrastnih/JS/upis
+grešaka; prefs/KML/SHP IDB, Doznaka selection276 i legacy terrain222 prošli.
+67 assets uključuju novi report i DEM Worker. Upute ažurirane za sve tokove.
+APK/emulator/objava će biti potvrđeni rezultatima CI-ja ispod; fizički Xiaomi
+Redmi Note 13 Pro i produkcijski Supabase nisu testirani/mijenjani.

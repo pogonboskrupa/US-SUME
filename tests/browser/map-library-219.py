@@ -57,6 +57,7 @@ async def main():
     await page.screenshot(path=str(b.OUT/f'library-{theme}-{w}-{h}.png'))
   await page.set_viewport_size({'width':390,'height':800})
   await page.locator('#library-list button[data-action="edit"]').first.click()
+  await page.locator('#library-list .le-file-details summary').first.click()
   await page.locator('#library-list .le-fields input').first.fill('Nova granica')
   await page.locator('#library-list .le-fields input').first.press('Tab')
   assert await page.evaluate("kmlLs.some(k=>k.name==='Nova granica')")
