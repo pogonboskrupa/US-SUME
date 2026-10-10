@@ -10,24 +10,51 @@ android {
         applicationId "ba.spd.uss.vlake"
         minSdk 24
         targetSdk 34
-        versionCode 131
-        versionName "3.27.2"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        versionCode 551
+        versionName "2.8.1"
     }
 
+    // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.
+    def releaseStore = System.getenv('US_SUME_KEYSTORE')
     signingConfigs {
         release {
-            // Popunite prije generisanja release APK-a:
-            // storeFile     file('keystore.jks')
-            // storePassword 'STORE_PASSWORD'
-            // keyAlias      'KEY_ALIAS'
-            // keyPassword   'KEY_PASSWORD'
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('US_SUME_STORE_PASSWORD')
+                keyAlias System.getenv('US_SUME_KEY_ALIAS')
+                keyPassword System.getenv('US_SUME_KEY_PASSWORD')
+            }
+        }
+        // FIKSAN debug ključ, commit-ovan u repo (dendromap-debug.keystore).
+        // Android dozvoljava update APK-a PREKO postojećeg SAMO ako je potpis
+        // ISTI. Podrazumijevani AGP debug ključ se generiše po MAŠINI
+        // (~/.android/debug.keystore) — na GitHub Actions runneru to znači NOV,
+        // nasumičan ključ pri SVAKOM build-u, pa bi "Ažuriraj aplikaciju"
+        // (UpdateBridge) preuzeo APK i tek na kraju pao sa "App not installed",
+        // bez ijednog objašnjenja korisniku. Sa fiksnim ključem svaki CI build
+        // nosi isti potpis i update se instalira preko starog, bez gubitka
+        // lokalnih podataka (deinstalacija briše offline karte, tragove, red
+        // čekanja — sve ono zbog čega app uopšte radi na terenu).
+        //
+        // Lozinka je javna i to je U REDU: debug ključ NE potpisuje ništa što
+        // ide na Play Store (release ključ je zaseban, ostaje van repoa i traži
+        // US_SUME_* env varijable — vidi gore). Rizik je uzak i svjesno
+        // prihvaćen: neko sa ovim ključem bi mogao napraviti APK koji Android
+        // prihvata kao update OVE debug instalacije, ali samo ako korisnika
+        // navede da ga ručno instalira iz nepoznatog izvora.
+        debug {
+            storeFile file('dendromap-debug.keystore')
+            storePassword 'dendromap'
+            keyAlias 'dendromap-debug'
+            keyPassword 'dendromap'
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            // signingConfig signingConfigs.release
+            if (releaseStore) signingConfig signingConfigs.release
         }
         debug {
             applicationIdSuffix ".debug"
@@ -41,7 +68,7 @@ android {
     }
 
     aaptOptions {
-        noCompress "html", "js", "css", "json", "png", "svg", "kml", "geojson"
+        noCompress "html", "js", "css", "json", "png", "svg", "kml", "geojson", "wasm"
     }
 }
 
@@ -54,6 +81,10 @@ configurations.all {
 }
 
 dependencies {
+    // Model nije dio APK-a; Google Play servisi ga preuzimaju uz internet.
+    implementation "com.google.android.gms:play-services-mlkit-text-recognition:19.0.1"
+    androidTestImplementation "androidx.test:runner:1.5.2"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
     implementation('androidx.core:core:1.12.0') {
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
@@ -67,3 +98,37 @@ dependencies {
         exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
     }
 }
+
+// Nikad ne prijavi nepotpisan release kao spreman APK za korisnika.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name == 'assembleRelease' || it.name == 'bundleRelease' }) {
+        ['US_SUME_KEYSTORE', 'US_SUME_STORE_PASSWORD', 'US_SUME_KEY_ALIAS', 'US_SUME_KEY_PASSWORD'].each {
+            if (!System.getenv(it)) throw new GradleException("Nedostaje release konfiguracija: " + it)
+        }
+    }
+}
+
+// Android Studio i direktni Gradle build također moraju nositi svjež web kod.
+def webRoot = rootProject.projectDir.parentFile
+def assetSpec = new groovy.json.JsonSlurper().parse(new File(webRoot, 'android/assets-manifest.json'))
+def syncWebAssets = tasks.register('syncWebAssets', Sync) {
+    from(webRoot) {
+        assetSpec.files.each { include it }
+        assetSpec.directories.each { include it + '/**' }
+    }
+    into(layout.projectDirectory.dir('src/main/assets'))
+    // Validacija se mora izvršiti i kad Gradle smatra izlaz ažurnim.
+    outputs.upToDateWhen { false }
+    doFirst {
+        (assetSpec.files + assetSpec.required).each { name ->
+            def f = new File(webRoot, name)
+            if (!f.isFile() || f.length() == 0) throw new GradleException('Nedostaje obavezni web fajl: ' + name)
+        }
+        def html = new File(webRoot, 'index.html').getText('UTF-8') =~ /APP_VER\s*=\s*'v([0-9.]+)'/
+        def sw = new File(webRoot, 'sw.js').getText('UTF-8') =~ /APP_VERSION\s*=\s*'([0-9.]+)'/
+        if (!html.find() || !sw.find() || html.group(1) != android.defaultConfig.versionName || sw.group(1) != android.defaultConfig.versionName) {
+            throw new GradleException('Web/SW/Android verzije nisu usklađene')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn(syncWebAssets) }

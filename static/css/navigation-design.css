@@ -1,0 +1,52 @@
+/* Approved DENDRO MAP navigation: compact vector icons, no online assets. */
+html #tab-bar{background:linear-gradient(180deg,#142b38,#102131);gap:2px;padding-left:5px;padding-right:5px;}
+html #tab-bar .tab-btn{min-width:0;min-height:54px;font-size:11px;gap:3px;color:#d2dde5;font-weight:700;}
+html #tab-bar .tab-btn .tbi{width:24px;height:24px;padding:3px 10px;border:0;border-radius:14px;background:transparent;box-shadow:none;color:inherit;--dm-accent:#71c7a7;}
+html #tab-bar .tab-btn.active{color:#f0f8f4;}
+html #tab-bar .tab-btn.active .tbi{background:#08734f;color:white;--dm-accent:white;box-shadow:inset 0 1px 0 #ffffff24;}
+html #tab-bar .tab-btn:focus-visible,html #action-bar button:focus-visible{outline:2px solid #67cfa8;outline-offset:-2px;border-radius:10px;}
+html #action-bar{background:linear-gradient(180deg,#142b38,#102131);}
+html #action-bar :is(#brec,#btragovi,#ab-loc){min-height:54px;font-size:11px;color:#e0eaf0;}
+html #action-bar :is(#brec,#btragovi,#ab-loc) .ab-ico{width:42px;height:30px;border:0;background:transparent;color:#d9e5ed;box-shadow:none;animation:none;--dm-accent:#71c7a7;}
+html #action-bar .dm-action-icon{display:block;width:25px;height:25px;overflow:visible;}
+html #action-bar #brec .ab-ico::after{content:"";position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px #132635;opacity:0;}
+html #action-bar #brec.active .ab-ico::after{opacity:1;}
+html #action-bar #brec.active{color:#fca5a5;}
+html #action-bar #brec.active .ab-ico{color:#f0f8f4;--dm-accent:#8bd2b4;}
+html #action-bar #ab-loc.gps-ok .ab-ico{color:#f0f8f4;--dm-accent:#75d7ad;}
+html #action-bar #ab-loc.gps-trazi .ab-ico{color:#f8d68c;--dm-accent:#f8d68c;}
+html #action-bar #brec-nm{left:calc(50% + 12px);top:0;font-size:9px;border-color:#77ae96;color:#194c39;background:#edf7f0;}
+html #action-bar .ab-acc{right:-10px;top:-5px;}
+html #menu-dropdown .mdrop-sections{grid-template-columns:minmax(0,1fr);gap:12px;padding:10px;}
+html #menu-dropdown .mdrop-section{background:var(--field-card);border-radius:14px;padding:5px;}
+html #menu-dropdown .mdrop-section:last-child{display:block;grid-column:auto;}
+html #menu-dropdown .mdrop-hdr{display:flex;align-items:center;gap:8px;padding:9px 8px;margin:0 0 4px;border-radius:9px;background:#83b69a16;color:var(--field-ink)!important;font:750 12px/1.35 system-ui;text-transform:none;letter-spacing:0;}
+html #menu-dropdown .mdrop-hdr svg{width:21px;height:21px;color:#77bc9f;flex:0 0 auto;}
+html #menu-dropdown .mdrop-item{display:flex;align-items:center;gap:11px;padding:7px 8px;min-height:62px;font:650 13px/1.45 system-ui;border-radius:10px;color:var(--field-ink)!important;}
+html #menu-dropdown .mdrop-item[hidden]{display:none!important;}
+html #menu-dropdown .mdrop-item:focus-visible{outline:2px solid #26916a;outline-offset:-2px;}
+html #menu-dropdown .mdrop-item:hover,html #menu-dropdown .mdrop-item:active{background:#7daf9418;}
+html #menu-dropdown .mdrop-ico{display:flex;align-items:center;justify-content:center;flex:0 0 46px;width:46px;height:46px;margin:0;border-radius:11px;overflow:hidden;background:#e2efe8;color:#173d45;box-shadow:inset 0 0 0 1px #173d4512;--dm-accent:#207d60;}
+html #menu-dropdown .dm-menu-svg{width:30px;height:30px;display:block;}
+html #menu-dropdown .dm-map-art .dm-menu-svg{width:46px;height:46px;}
+html #menu-dropdown #menu-field-work small{color:var(--field-muted);font-size:10px;}
+html #menu-dropdown #menu-school-report small{display:block;font-size:10px;color:var(--field-muted);}
+html[data-field-theme=day] #tab-bar,html[data-field-theme=day] #action-bar{background:#f6faf8!important;}
+html[data-field-theme=day] #tab-bar .tab-btn{color:#18313d!important;}
+html[data-field-theme=day] #tab-bar .tab-btn.active{color:#14513b!important;}
+html[data-field-theme=day] #tab-bar .tab-btn .tbi{background:transparent;color:#18313d;--dm-accent:#08734f;}
+html[data-field-theme=day] #tab-bar .tab-btn.active .tbi{background:#08734f;color:white;--dm-accent:white;}
+html[data-field-theme=day] #action-bar :is(#brec,#btragovi,#ab-loc){color:#18313d;}
+html[data-field-theme=day] #action-bar :is(#brec,#btragovi,#ab-loc) .ab-ico{background:transparent;color:#18313d;--dm-accent:#08734f;box-shadow:none;}
+html[data-field-theme=day] #action-bar #brec.active{color:#991b1b;}
+html[data-field-theme=day] #action-bar #brec.active .ab-ico{color:#18313d;--dm-accent:#08734f;}
+html[data-field-theme=day] #action-bar #brec .ab-ico::after{box-shadow:0 0 0 2px #f6faf8;}
+html[data-field-theme=day] #action-bar #ab-loc.gps-ok .ab-ico{color:#18313d;--dm-accent:#08734f;}
+html[data-field-theme=day] #action-bar #ab-loc.gps-trazi .ab-ico{color:#80510d;--dm-accent:#80510d;}
+html[data-field-theme=day] #menu-dropdown .mdrop-section{background:#fcfdfb;border-color:#b8cdc5;}
+html[data-field-theme=day] #menu-dropdown .mdrop-hdr{background:#e6f0e9;color:#183a33!important;}
+html[data-field-theme=day] #menu-dropdown .mdrop-hdr svg{color:#207d60;}
+@media(min-width:700px){html #menu-dropdown .mdrop-section:first-child{display:grid;grid-template-columns:1fr 1fr;}html #menu-dropdown .mdrop-section:first-child .mdrop-hdr{grid-column:1/-1;}html #menu-dropdown .mdrop-section:last-child{display:grid;grid-template-columns:1fr 1fr;}html #menu-dropdown .mdrop-section:last-child .mdrop-hdr{grid-column:1/-1;}}
+@media(max-width:360px){html #tab-bar .tab-btn{font-size:10.5px;}html #tab-bar .tab-btn .tbi{padding-left:8px;padding-right:8px;}html #menu-dropdown .mdrop-item{font-size:12px;gap:9px;}}
+
+#pm-school-actions[hidden],#pm-filter[hidden]{display:none!important;}

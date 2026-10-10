@@ -1,0 +1,14 @@
+      <section class="sec proj-akt-only project-polygon">
+        <div class="sec-t">Poligon odjela i teren</div>
+        <b id="project-polygon-context"></b><p class="project-vl-note">Nacrtaj granicu aktivnog odjela. Poligon i izbor slojeva čuvaju se na ovom telefonu po projektu i nalogu.</p>
+        <div id="project-polygon-summary" class="catalog-status">Poligon još nije nacrtan.</div>
+        <div class="polygon-actions"><button id="project-polygon-draw" type="button" onclick="ProjectTerrain.start()">Nacrtaj poligon odjela</button><button id="project-polygon-view" type="button" onclick="ProjectTerrain.view()">Na karti ↗</button><button id="project-polygon-delete" type="button" onclick="ProjectTerrain.del()">Ukloni poligon</button></div>
+        <label class="terrain-check"><input id="project-polygon-visible" type="checkbox" onchange="ProjectTerrain.toggle('visible',this.checked)"><span><b>Prikaži granicu</b><small>Nacrtani poligon ovog projekta</small></span></label>
+        <div class="project-terrain-controls"><p class="project-vl-note">Projektni prikaz zamjenjuje isti sloj preko cijele karte. Za opći prikaz koristi Instalirane karte.</p>
+          <label class="terrain-check"><input id="project-terrain-slope" type="checkbox" onchange="ProjectTerrain.toggle('slope',this.checked)"><span><b>Nagib preko 30%</b><small>Samo strmiji teren unutar poligona</small></span><i class="terrain-swatch slope"></i></label>
+          <label class="terrain-check"><input id="project-terrain-aspect" type="checkbox" onchange="ProjectTerrain.toggle('aspect',this.checked)"><span><b>Ekspozicija</b><small>Smjer padine unutar poligona</small></span><i class="terrain-swatch aspect"></i></label>
+          <div id="project-terrain-legend" hidden><span>🟥 Nagib &gt;30%</span><span class="aspect-key">🔵 Sjever · 🟢 Istok · 🟠 Jug · 🟣 Zapad</span></div>
+          <p id="project-terrain-status" role="status" class="project-vl-note"></p>
+          <button type="button" class="terrain-download" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button>
+        </div>
+      </section>

@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),r=require('../../static/js/reference-vlake.js');
+for(const s of ['T1','T 12','t - 3'])assert(r.nameOf(s));for(const s of ['105','7 12','OT12','T0','T12.1','T12m','Granica T12'])assert.equal(r.nameOf(s),null,s);
+const w=(text,x,y,line='a')=>({text,x0:x,y0:y,x1:x+12,y1:y+20,line});
+let labels=r.labelsFromWords([w('T',10,10),w('12',25,10),w('105',100,10),w('T9',200,20),w('T9',201,21)]);assert.deepEqual(labels.map(l=>l.nm),['T12','T9']);
+assert.equal(r.labelsFromWords([w('T',10,10),w('12',100,10)]).length,0);assert.equal(r.labelsFromWords([w('T',10,10,'a'),w('12',25,10,'b')]).length,0);
+const line=[[10,80],[200,80]],boundary=[[5,190],[210,190]],label={nm:'T12',x0:90,x1:125,y0:50,y1:70};
+let rows=r.linkPaths([line,boundary],[label],240,240);assert.equal(rows.length,1);assert.equal(rows[0].index,0);assert(rows[0].selected);
+assert.equal(r.linkPaths([boundary],[label],240,240).length,0);assert.equal(r.linkPaths([line],[],240,240).length,0);
+rows=r.linkPaths([line,[[10,45],[200,45]]],[label],240,240);assert.equal(rows.length,2);assert(rows.every(r=>r.ambiguous&&!r.selected));
+rows=r.linkPaths([line],[label,{...label,nm:'T4'}],240,240);assert(rows.every(r=>!r.selected));
+assert.equal(r.linkPaths([[[0,0],[30,0],[30,30],[0,0]]],[{...label,x0:5,x1:15,y0:5,y1:15}],240,240).length,0);
+console.log('OK: mandatory T + number, split OCR words, dedup, no unlabelled lines/borders, ambiguous candidates not selected');

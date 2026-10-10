@@ -1,0 +1,267 @@
+name: CODEX WebView provjera i APK
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - CODEX-US-SUME
+      - CODEX-US-SUME-2026-10-01
+concurrency:
+  group: codex-webview-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  apk:
+    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: codex_test
+          POSTGRES_DB: codex_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # Testovi idu PRIJE Android SDK setupa: oni ne trebaju ni SDK ni Gradle, a
+      # kad setup-android padne (kao 2026-09-14 na uklonjenom 'tools' paketu)
+      # ovaj korak se preskakao pa se iz CI-ja nije vidjelo ni da li kod valja.
+      - name: Lokalni JavaScript testovi
+        run: |
+          for f in tests/js/*.test.js; do node "$f" || exit 1; done
+          node tests/simulation/doznaka-sixdays.js
+      - name: PostgreSQL probni pristup i RLS (samo testna baza)
+        env:
+          PGPASSWORD: codex_test
+        run: |
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/probni-pristup-238.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/doz-atomic-delete-272.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/user-activity-273.sql
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pregled Menija, projekata, Dnevnog moda i štampe
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+          timeout 120s python tests/browser/terrain-workspace-243.py
+          timeout 240s python tests/browser/field-five-hours.py
+          timeout 180s python tests/browser/offline-import-240.py
+          timeout 90s python tests/browser/explorer-full-239.py
+          python tests/browser/explorer-239.py
+          python tests/browser/access-238.py
+          python tests/browser/overlays-237.py
+          python tests/browser/explorer-236.py
+          python tests/browser/measurements-235.py
+          python tests/browser/server-confirm-234.py
+          python tests/browser/load-map-233.py
+          python tests/browser/labels-offline-265.py
+          python tests/browser/thematic-files-266.py
+          python tests/browser/thematic-source-268.py
+          python tests/browser/manual-draw-270.py
+          python tests/browser/audit-parts-271.py
+          python tests/browser/audit-parts-272.py
+          timeout 120s python tests/browser/device-workflow-273.py
+          timeout 120s python tests/browser/day-layout-274.py
+          timeout 180s python tests/browser/day-all-panels-275.py
+          timeout 120s python tests/browser/doznaka-project-boundary-276.py
+          timeout 120s python tests/browser/kml-editor-277.py
+          timeout 120s python tests/browser/department-report-277.py
+          timeout 120s python tests/browser/navigation-design-278.py
+          timeout 120s python tests/browser/style-library-280.py
+          timeout 180s python tests/browser/doznaka-plan-281.py
+          python tests/browser/offline-preview-266.py
+          python tests/browser/preferences-266.py
+          python tests/browser/server-design-232.py
+          python tests/browser/print-styles-232.py
+          timeout 90s python tests/browser/print-responsive-274.py
+          python tests/browser/dem-winter-232.py
+          python tests/browser/doznaka-sixdays-232.py
+          python tests/browser/doznaka-boundary-231.py
+          python tests/browser/menu-print-day.py
+          python tests/browser/menu-tools.py
+          python tests/browser/server-map-218.py
+          python tests/browser/map-library-219.py
+          python tests/browser/project-vlake-220.py
+          python tests/browser/project-terrain-222.py
+          python tests/browser/reference-vlake-224.py
+          python tests/browser/project-arrows-226.py
+          python tests/browser/doznaka-restore-227.py
+          python tests/browser/doznaka-gps-controls-267.py
+          python tests/browser/field-offline-5400.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Teren-5400-${{ github.sha }}
+          path: outputs/field-simulation/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: UI-pregled-${{ github.sha }}
+          path: |
+            outputs/ui-preview/
+            outputs/274/
+            outputs/275/
+            outputs/276/
+            outputs/277/
+            outputs/278/
+            outputs/279/
+            outputs/280/
+            outputs/281/
+          if-no-files-found: ignore
+      - uses: android-actions/setup-android@v3
+        with:
+          # Podrazumijevano instalira 'tools platform-tools', a legacy 'tools'
+          # paket je uklonjen iz Google repozitorija — sdkmanager tad pada sa
+          # "Failed to find package 'tools'" i cijeli build stane prije ijednog
+          # koraka koji je stvarno naš.
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+          # Podrazumijevano setup-gradle keš SPREMA samo na default grani repoa;
+          # CODEX-US-SUME to nije, pa je keš bio read-only i svaki build je
+          # ponovo skidao sve Gradle/AGP zavisnosti sa Maven Centrala — što je
+          # 2026-09-24 palo na "429 Too Many Requests" prije ijednog kompajliranja.
+          cache-read-only: false
+      - name: Assets i WebView debug APK
+        run: |
+          bash android/copy-assets.sh
+          # Više pokušaja sa dužim razmakom za dohvat zavisnosti (podrazumijevano
+          # 3 pokušaja / 1 s) — za prvi build bez keša kad Maven vrati 429.
+          gradle -p android --no-daemon \
+            -Dorg.gradle.internal.repository.max.retries=6 \
+            -Dorg.gradle.internal.repository.initial.backoff=3000 \
+            assembleDebug
+      - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
+        # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
+        # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
+        # ipak fali ključni sadržaj (mala, tiho nepotpuna karta na terenu).
+        # Provjera raspakuje STVARNI APK i gleda šta je unutra, ne pretpostavlja
+        # na osnovu toga da je gradle vratio exit 0.
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "GRESKA: APK fajl nije pronađen u outputs/apk/debug/"
+            exit 1
+          fi
+          echo "APK fajl: $APK_PATH"
+          echo "Veličina APK fajla (kompresovan): $(du -h "$APK_PATH" | cut -f1)"
+
+          rm -rf /tmp/apk-check
+          mkdir -p /tmp/apk-check
+          unzip -q "$APK_PATH" -d /tmp/apk-check
+          echo "Veličina raspakovanog APK-a: $(du -sh /tmp/apk-check | cut -f1)"
+
+          MISSING=0
+          for f in assets/index.html assets/GRANICE.kml; do
+            if [ ! -s "/tmp/apk-check/$f" ]; then
+              echo "NEDOSTAJE ili je prazan: $f"
+              MISSING=1
+            else
+              echo "OK: $f ($(du -h "/tmp/apk-check/$f" | cut -f1))"
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "GRESKA: APK ne sadrži očekivane asset fajlove — build se prekida,"
+            echo "artefakt se NE objavljuje (bolje bez APK-a nego sa tiho nepotpunim)."
+            exit 1
+          fi
+      - name: Provjeri SHA-256 svih web assets u APK-u
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          python3 android/assets.py verify --apk "$APK_PATH"
+      - name: Provjeri manji APK bez ugrađenog OCR modela
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          from zipfile import ZipFile
+          apk=next(Path('android/app/build/outputs/apk/debug').glob('*.apk'))
+          with ZipFile(apk) as z:
+              assert not any('libmlkit_google_ocr_pipeline.so' in n or 'mlkit-google-ocr-models/' in n for n in z.namelist()), 'Ugrađeni OCR je ostao u APK-u'
+          size=apk.stat().st_size
+          print(f'APK: {size:,} B = {size/1000000:.2f} MB; prethodni 65.14 MB')
+          assert size < 30_000_000, 'APK nije smanjen ispod 30 MB'
+          PYCODE
+      - name: Pripremi KVM za provjeru OCR mrežnog uslova
+        run: sudo chmod 666 /dev/kvm
+      - name: Android Explorer WebView i OCR bez interneta
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disable-animations: true
+          script: bash tests/android/explorer-offline.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-provjera-${{ github.sha }}
+          path: |
+            outputs/android-test/
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: US-SUME-CODEX-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      # Actions artifact (gore) traži GitHub login za preuzimanje i ističe za
+      # 90 dana — korisnik je morao ručno naći run, ući u nalog, skinuti .zip,
+      # raspakovati, instalirati. GitHub Release asset je JAVNO dostupan preko
+      # stabilnog URL-a bez prijave — to omogućava "Ažuriraj aplikaciju" u Meniju
+      # (AndroidUpdate.checkAndInstall, MainActivity.java) da automatski nađe
+      # najnoviju verziju preko /releases?per_page=1 i preuzme APK direktno.
+      - name: Izvuci versionName iz build.gradle
+        id: verzija
+        run: |
+          V=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
+          if [ -z "$V" ]; then echo "GRESKA: versionName nije pronađen"; exit 1; fi
+          echo "verzija=$V" >> "$GITHUB_OUTPUT"
+      - name: Objavi/ažuriraj GitHub Release sa APK-om (za auto-update u app-u)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.verzija.outputs.verzija }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ steps.verzija.outputs.verzija }} (debug)
+          prerelease: true
+          body: |
+            APK za ažuriranje kroz Meni → Ažuriraj aplikaciju.
+            Izvor: ${{ github.sha }}
+            JavaScript testovi i provjera SHA-256 web resursa u APK-u izvršavaju se prije objave.
+            Za pravilo „7 dana probnog pristupa“ administrator Supabase baze treba jednom primijeniti [SQL migraciju](https://github.com/pogonboskrupa/US-SUME/blob/${{ github.sha }}/supabase/migrations/20261005_probni_pristup_7_dana.sql). APK samostalno ne mijenja serverska pravila.
+          files: android/app/build/outputs/apk/debug/*.apk
+          # Ako glob gore ne pogodi nijedan fajl (npr. build output struktura
+          # se promijeni), akcija MORA pasti — bolje nego tiho objaviti release
+          # bez APK-a, što bi auto-update u app-u pronašao ali ne mogao skinuti.
+          fail_on_unmatched_files: true
+          # softprops/action-gh-release je idempotentan po tag_name-u — isti
+          # versionName u više commit-ova (npr. popravka bez bump-a verzije)
+          # samo AŽURIRA postojeći release/asset, ne pada na "tag already exists".
+
+      - name: Analiza brzine poslije objave APK-a
+        run: python tests/browser/performance-redmi.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Analiza-brzine-${{ github.sha }}
+          path: outputs/performance/
+          if-no-files-found: ignore

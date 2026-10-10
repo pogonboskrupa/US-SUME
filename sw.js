@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '3.27.2';
+const APP_VERSION = '2.8.1';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -10,14 +10,78 @@ const ELEV_CACHE  = 'tvlake-elev-v1';
 const SLOPE_CACHE = 'tvlake-slope-v1';
 const TERR_CACHE  = 'tvlake-terr-v1';
 const NV_CACHE    = 'tvlake-nv-v1';     // Open-Meteo elevation (statički, može se keširati)
+const WC_CACHE    = 'tvlake-wcover-v1'; // ESA WorldCover pokrivenost zemljišta (v3.103.0)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
   './',
   './index.html',
+  './static/js/offline-layer.js',
+  './static/js/offline-import.js',
+  './static/js/native-offline-maps.js',
+  './static/js/map-downloads.js',
+  './static/js/sql-document.js',
+  './static/js/field-store.js',
+  './static/js/field-tools.js',
+  './static/js/terrain-workspace.js',
+  './static/css/terrain-workspace.css',
+  './static/js/spd-profile.js',
+  './static/css/spd-profile.css',
+  './static/js/explorer-navigation.js',
+  './static/js/access-policy.js',
+  './static/js/tab-data.js',
+  './static/js/server-panel.js',
+  './static/js/local-layer-import.js',
+  './static/js/doznaka-project-boundary.js',
+  './static/js/layer-editor.js',
+  './static/js/map-visibility.js',
+  './static/js/map-library.js',
+  './static/js/map-catalog.js',
+  './static/js/reference-vlake.js',
+  './static/js/doznaka-boundary.js',
+  './static/js/vlaka-keyboard.js',
+  './static/js/print-slope.js',
+  './static/js/print-slope-worker.js',
+  './static/js/user-activity.js',
+  './static/js/vlaka-direction.js',
+  './static/js/vlaka-outline.js',
+  './static/js/project-terrain.js',
+  './static/js/department-report.js',
+  './static/js/department-report-worker.js',
+  './static/js/dem-quality.js',
+  './static/js/doznaka-bands.js',
+  './static/js/doznaka-plan.js',
+  './static/js/doznaka-plan-worker.js',
+  './static/css/doznaka-plan.css',
+  './static/data/usk-boundary.geojson',
+  './static/css/map-library.css',
+  './static/css/server-panel.css',
+  './static/js/field-design.js',
+  './static/css/field-design.css',
+  './static/css/navigation-design.css',
+  './static/icons/navigation.svg',
+  './static/js/reliable-fetch.js',
+  './static/libs/leaflet.min.js',
+  './static/libs/leaflet.min.css',
+  './static/libs/proj4.js',
+  './static/libs/turf.min.js',
+  './static/libs/supabase.min.js',
+  './static/libs/shapefile.min.js',
+  './static/libs/qrcode-gen.js',
+  './static/libs/jsQR.js',
+  './static/libs/sql-wasm.js',
+  './static/libs/sql-wasm.wasm',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable.png',
+  './static/img/map-previews/slope.svg',
+  './static/img/map-previews/ekspo.svg',
+  './static/img/map-previews/elev.svg',
+  './static/img/map-previews/nv.svg',
+  './static/img/map-previews/kont.svg',
+  './static/img/map-previews/local.svg',
+  './apple-touch-icon.png',
   './forwarder.svg',
   './PUTEVI/putevi.geojson',
   './.well-known/assetlinks.json'
@@ -60,6 +124,9 @@ self.addEventListener('activate', event => {
 // kroz "Offline podaci po karti". Protiv browser evikcije pri punom disku se
 // štitimo sa navigator.storage.persist() (traži se iz aplikacije pri startu);
 // na stvarno punom disku cache.put baci QuotaExceededError i tiho se preskoči.
+// Rok za mrežu prije nego se stranica/statički fajl posluže iz keša (v1.8.8).
+const _APP_ROK_MS = 3500;
+
 function _tileRespond(event, cacheName) {
   event.respondWith(
     caches.open(cacheName).then(async cache => {
@@ -80,6 +147,7 @@ function _tileRespond(event, cacheName) {
 
 self.addEventListener('fetch', event => {
   const url = event.request.url;
+  if(new URL(url).pathname.startsWith('/offline-maps/'))return;
 
   // Terrarium DEM tiles (elevation-tiles-prod S3 bucket)
   if (url.includes('elevation-tiles-prod')) {
@@ -96,7 +164,13 @@ self.addEventListener('fetch', event => {
     _tileRespond(event, SLOPE_CACHE);
     return;
   }
-
+  // ESA WorldCover (pokrivenost zemljišta) — isti "specific BEFORE generic"
+  // princip, svoj keš bucket. Zamijenio je EOX Sentinel-2 cloudless na istom
+  // mjestu u layer-sheetu, pa je 'tiles.maps.eox.at' ovdje uklonjen.
+  if (url.includes('services.terrascope.be')) {
+    _tileRespond(event, WC_CACHE);
+    return;
+  }
   if (
     url.includes('tile.opentopomap.org') ||
     url.includes('tile.openstreetmap.org') ||
@@ -113,7 +187,8 @@ self.addEventListener('fetch', event => {
     return;
   }
   // Ostali API pozivi — nikad ne keširati
-  if (url.includes('supabase.co') || url.includes('api.open-meteo.com')) {
+  if (url.includes('supabase.co') || url.includes('api.open-meteo.com') ||
+      url.includes('identity.dataspace.copernicus.eu')) {
     return;
   }
 
@@ -147,16 +222,29 @@ self.addEventListener('fetch', event => {
     // verziju do isteka max-age (~10 min) pa update kasni. Ostalo: normalan network-first.
     const isNav = event.request.mode === 'navigate';
     const req = isNav ? new Request(event.request, { cache: 'no-store' }) : event.request;
-    event.respondWith(
-      fetch(req)
-        .then(resp => {
-          if (resp.ok) {
-            try { const rc = resp.clone(); caches.open(APP_CACHE).then(c => c.put(event.request, rc)); } catch(e) {}
-          }
-          return resp;
-        })
-        .catch(() => caches.match(event.request))
-    );
+    // v1.8.8: mreža prva, ali NE bez roka. Ranije je fetch bez roka na mrtvoj
+    // vezi (navigator.onLine laže 'true') držao pokretanje app-a dok browser sam
+    // ne odustane — desetine sekundi praznog ekrana, a ispravna kopija je
+    // sve vrijeme bila u kešu. Sad: ako mreža ne odgovori za _APP_ROK_MS i keš
+    // ima kopiju, služi se keš; mreža se pusti da završi u pozadini i osvježi
+    // keš za sljedeće pokretanje (nova verzija i dalje stiže, samo kasnije).
+    const mreza = fetch(req).then(resp => {
+      if (resp.ok) {
+        const rc = resp.clone();
+        return caches.open(APP_CACHE).then(c => c.put(event.request, rc)).catch(() => {}).then(() => resp);
+      }
+      return resp;
+    });
+    mreza.catch(() => {});
+    event.waitUntil(mreza.catch(() => {}));
+    event.respondWith((async () => {
+      const kes = await caches.match(event.request);
+      if (!kes) return mreza.catch(() => caches.match(event.request));
+      return Promise.race([
+        mreza.then(r => r.ok ? r : kes).catch(() => kes),
+        new Promise(r => setTimeout(() => r(kes), _APP_ROK_MS))
+      ]);
+    })());
   }
 });
 
@@ -218,6 +306,22 @@ self.addEventListener('message', event => {
     self.registration.getNotifications({ tag: 'gps-recording' })
       .then(ns => ns.forEach(n => n.close()));
     _stopRecLock();
+    return;
+  }
+  // Upozorenje na nov požar u blizini (v3.107.0). requireInteraction: korisnik
+  // je na terenu i telefon mu je u džepu — obavještenje o požaru ne smije samo
+  // proći i nestati kao obična poruka.
+  if (event.data?.type === 'show-pozar-notification') {
+    const { naslov, tijelo, la, lo } = event.data;
+    self.registration.showNotification(naslov || '🔥 Nov požar u blizini', {
+      body: tijelo,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      tag: 'pozar-blizu',
+      data: { la, lo },
+      requireInteraction: true,
+      vibrate: [300, 120, 300]
+    });
     return;
   }
   // Notifikacija dijeljene lokacije
