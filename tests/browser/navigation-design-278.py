@@ -65,7 +65,7 @@ async def main():
     await page.locator('#menu-btn').click();await page.locator('#menu-dropdown').wait_for(state='visible')
     assert await page.locator('#menu-school-report').is_visible()
     assert await page.locator('#menu-school-report small').inner_text()=='Krupa'
-    assert await page.locator('#menu-dropdown .dm-map-art').count()==6
+    assert await page.locator('#menu-dropdown .dm-map-art').count()==7
     if theme=='day':assert not await page.evaluate(day.AUDIT,'#menu-dropdown'),await page.evaluate(day.AUDIT,'#menu-dropdown')
     boxes=await page.locator('#menu-dropdown .dm-menu-svg:visible use').evaluate_all('(es)=>es.map(e=>e.getBBox().width)');assert len(boxes)>=20 and all(w>0 for w in boxes),boxes
     assert await page.locator('#menu-dropdown .mdrop-scroll').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')

@@ -82,6 +82,7 @@ jobs:
           timeout 120s python tests/browser/kml-editor-277.py
           timeout 120s python tests/browser/department-report-277.py
           timeout 120s python tests/browser/navigation-design-278.py
+          timeout 120s python tests/browser/style-library-280.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py
@@ -119,6 +120,7 @@ jobs:
             outputs/277/
             outputs/278/
             outputs/279/
+            outputs/280/
           if-no-files-found: ignore
       - uses: android-actions/setup-android@v3
         with:

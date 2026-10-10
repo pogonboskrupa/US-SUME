@@ -3909,3 +3909,49 @@ Produkcijska baza nije mijenjana; fizički Xiaomi nije testiran.
 Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.9
 APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.9/app-debug.apk
 Ažuriranje kroz Meni → Ažuriraj aplikaciju; javni APK dostupan bez prijave.
+
+
+## 2026-10-10 — 2.8.0 / code 550: stil vlaka u Meniju i trajna biblioteka uređaja
+
+Korisnik traži da Granice odjela i Kamionski putevi ostanu na uređaju nakon
+jednog preuzimanja, uz postavke/vidljivost, te novi Meni → Stil i boja vlaka
+odmah ispod Stil linija. Boje i smjerovi premješteni iz Projekta u novi
+modal. Naziv: Smjer izvlačenja DS (drvni sortimenti). Zajednički stil po
+nalogu za postojeće/buduće dostupne projekte, poseban odjel/projekat i
+povratak na zajednički. Stari posebni stilovi ostaju do eksplicitnog
+Ujednači (potvrda). Uređivanje prikaza drugog projekta ne aktivira ga;
+ručni dvosmjer uređuje se tek u aktivnom projektu. Geometrija, server boja,
+GPS i postojeći pojedinačni smjerovi nisu mijenjani. Pregled linije/kraka,
+outline i strelice, dnevni/tamni stil, kontrola za zatvaranje pri skrolanju.
+
+Potvrđen bug: _wipeAllLocalUserData pri promjeni naloga uklanjao je cijeli
+_LOCAL_KML_KEY. Sada javni github-kml-* registri/content reference i stil/
+vis/onlyPolygon ostaju na uređaju. Privatni KML, GeoJSON, .gpkg registri,
+rute i aktivni projekat/polja/dnevnik idu u potvrđenu postojeću arhivu
+naloga PRIJE čišćenja. IDB .gpkg sadržaj se više ne briše pri promjeni
+naloga. Povratak vlasnika spaja privatni registar s aktuelnim javnim,
+čuva oba sloja pri istoimenom konfliktu, vraća njegov aktivni projekat.
+Rasterske karte/favoriti/uređajne postavke već preživljavaju odjavu i
+promjenu naloga; njihovo eksplicitno brisanje ostaje. Nema produkcijske
+migracije. Korisnik je ranije izričito odobrio build/isporuku ažuriranja;
+novi zahtjevi su nastavak iste autorizovane implementacije.
+
+Lokalni testovi: svi postojeći JS skupovi prošli, projektne boje proširene
+na 10 semantičkih provjera. Puni novi style-library-280: zajednički i
+posebni stilovi, svoje/kolegine vlake, 12 uskih/tablet dnevnih/tamnih
+prikaza s kontrastom i skrolanjem, stvarni IDB KML restart, nalog A → B → A,
+javni KML bez ponovnog preuzimanja, izolacija/vraćanje ličnog KML i aktivnog
+projekta, zajednički stil bez brisanja pojedinačnog smjera. Sačuvani su
+favoriti i opći stil. Prošli device-workflow-273, preferences-266,
+project-vlake-220, project-arrows-226 i navigation-design-278. CI uključuje
+novi puni browser test i outputs/280. Upute unutar app ažurirane.
+Fizički Xiaomi i produkcijski Supabase nisu testirani. Build/release dokaz
+slijedi nakon CI; ne proglašavati APK objavljenim prije provjere.
+
+Dopuna provjere: posebni novi stilovi čuvaju samo izmijenjene osobine, pa
+odjel s posebnom bojom i dalje nasljeđuje zajedničku debljinu linije i
+neizmijenjene postavke strelica. Puni test to izričito potvrđuje. Ponovljeni
+komplet JS i inline sintaksa prošli. Dnevni audit: 144 prikaza, 0 slabog
+kontrasta; KML editor pun test prošao. Novi modal koristi 12 PNG prikaza,
+bez vanjskih upisa. Tok odjave u novom testu stvarno potvrđuje Odjavi se
+bez slanja kada postoje neposlane stavke; nije zaobiđen korisnički dijalog.

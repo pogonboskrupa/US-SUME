@@ -3,7 +3,7 @@ import asyncio,importlib.util,mimetypes,os
 from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('project',Path(__file__).with_name('project-vlake-220.py'));u=importlib.util.module_from_spec(spec);spec.loader.exec_module(u);b=u.b
-panel=b.section('      <section class="sec proj-akt-only project-arrows">','    </div><!-- /proj-panel -->')
+panel=b.section('      <!-- SMJER IZVLACENJA DS -->','      <!-- /SMJER IZVLACENJA DS -->')
 toolbar=b.section('<div id="direction-pick-toolbar"','<script src="static/js/vlaka-outline.js">')
 extra='''
 let actI=null,recPaused=false,_puteviLayerFg=null;

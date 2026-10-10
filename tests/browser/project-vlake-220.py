@@ -116,7 +116,8 @@ async def main():
     await page.evaluate("([markup,theme])=>{document.documentElement.dataset.fieldTheme=theme;const root=document.querySelector('#fixture-project');root.innerHTML=markup;root.style.display='block';root.scrollTop=0;const p=document.querySelector('#proj-panel');p.style.cssText='display:block;width:100%;height:auto;position:static;overflow:visible';document.querySelector('#projekti-list').textContent='Odjel 105 · Gornja Una';_rndBojaPresets()}",[full_project,theme])
     ids=await page.locator('#proj-panel>*').evaluate_all("es=>es.map(e=>e.id||e.className)")
     assert ids.index('project-routes')<ids.index('project-reports')<ids.index('project-export')
-    assert ids.index('project-export')<ids.index('sec proj-akt-only project-colors')<ids.index('sec proj-akt-only project-arrows')
+    assert not await page.locator('#proj-panel .project-colors,#proj-panel .project-arrows').count()
+    assert 'Stil i boja vlaka' in b.section('<!-- STIL I BOJA VLAKA MODAL -->','<!-- /STIL I BOJA VLAKA MODAL -->')
     assert 'sec proj-akt-only project-polygon' not in ids
     assert not await page.locator('#project-reports').evaluate('e=>e.open')
     await page.screenshot(path=str(b.OUT/f'project-workflow-{theme}-{w}-{h}.png'))

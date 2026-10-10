@@ -4925,62 +4925,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
 
 
-      <!-- BOJE VLAKA -->
-      <div class="sec proj-akt-only project-colors">
-        <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
-        <p id="boja-project-context"></p><p class="project-vl-note">Boje i stil svih glavnih vlaka i krakova ovog projekta, uključujući kolege. Postavke prikaza pamte se na tvom telefonu.</p>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span style="font-size:13px;color:#e2e8f0;">Glavna vlaka</span>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <div id="boja-vl-presets" style="display:flex;gap:4px;"></div>
-              <input type="color" id="boja-vl-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaVlChange(this.value)" onchange="_bojaVlChange(this.value)">
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span style="font-size:13px;color:#e2e8f0;">Krak</span>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <div id="boja-kr-presets" style="display:flex;gap:4px;"></div>
-              <input type="color" id="boja-kr-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaKrChange(this.value)" onchange="_bojaKrChange(this.value)">
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span style="font-size:13px;color:#e2e8f0;">Debljina linije</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <input type="range" min="2" max="8" step="1" value="4" id="boja-weight" oninput="_bojaWChange(+this.value)" style="width:90px;">
-              <b id="boja-weight-v" style="font-size:12px;color:#94a3b8;min-width:14px;">4</b>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span style="font-size:13px;color:#e2e8f0;">Vrsta linije</span>
-            <div style="display:flex;gap:4px;">
-              <button class="boja-dash-btn" data-d="solid" onclick="_bojaDashChange('solid')"><svg class="ic"><use href="#ic-puna"/></svg> Puna</button>
-              <button class="boja-dash-btn" data-d="dash" onclick="_bojaDashChange('dash')"><svg class="ic"><use href="#ic-crtkana"/></svg> Crtice</button>
-              <button class="boja-dash-btn" data-d="dot" onclick="_bojaDashChange('dot')">· Tačke</button>
-            </div>
-          </div>
-          <label class="arrow-check outline-choice"><input id="boja-outline" type="checkbox" onchange="_bojaChange('outline',this.checked)"><span>Dodaj outline<small>Sitni bijeli / crni obrub prema glavnoj boji · ukupno proširenje 14%</small></span></label>
-        </div>
-      </div>
-      <!-- /BOJE VLAKA -->
-      <section class="sec proj-akt-only project-arrows">
-        <div class="sec-t">Strelice prema putu</div>
-        <b id="project-arrow-context"></b>
-        <p class="project-vl-note">Vlastite i kolegine vlake ovog projekta. Dva smjera koristi samo za vlaku s izlazom na put na oba kraja; mjesto razdvajanja određuje projektant.</p>
-        <label class="terrain-check"><input id="project-arrow-visible" type="checkbox" checked onchange="VlakaDirection.change('visible',this.checked)"><span><b>Prikaži strelice</b><small>Sakrij / prikaži sve strelice projekta</small></span><span id="project-arrow-preview" aria-hidden="true"></span></label>
-        <label class="arrow-placement">Položaj strelica<select id="project-arrow-placement" onchange="VlakaDirection.change('placement',this.value)"><option value="on">Na vlaci</option><option value="beside">Pored vlake</option></select></label><p class="project-vl-note">Jedan položaj za sve strelice i dvosmjer projekta. Pored vlake razmak prati debljinu linije i veličinu znaka. Za 1:10.000 preporučen je automatski broj i veličina 30 px.</p>
-        <div class="arrow-style-grid">
-          <label>Debljina poteza <output id="project-arrow-width-value">2.5 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2.5" oninput="VlakaDirection.change('width',this.value)"></label>
-          <label>Veličina strelice <output id="project-arrow-size-value">30 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="2" value="30" oninput="VlakaDirection.change('size',this.value)"></label>
-          <label>Strelice po vlaci<select id="project-arrow-count" onchange="VlakaDirection.change('count',this.value)"><option value="0">Automatski: 1 / 2 preko 300 m</option><option value="1">1 strelica</option><option value="2">2 strelice</option><option value="3">3 strelice</option><option value="4">4 strelice</option><option value="6">6 strelica</option><option value="8">8 strelica</option></select></label>
-          <label>Boja strelica<input id="project-arrow-color" type="color" value="#2563eb" onchange="VlakaDirection.change('color',this.value)"></label>
-        </div>
-        <label class="arrow-check"><input id="project-arrow-inherit" type="checkbox" checked onchange="VlakaDirection.change('inherit',this.checked)"> Koristi boju vlake / kraka</label>
-        <label class="arrow-check"><input id="project-arrow-separator" type="checkbox" checked onchange="VlakaDirection.change('separator',this.checked)"> Prikaži dvosmjer ↔</label>
-        <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka dvosmjera ne ulazi u broj strelica. Izgled i odabir dvosmjera čuvaju se na ovom telefonu.</p>
-        <div class="arrow-route-edit"><label for="project-arrow-route">Smjer pojedine vlake i dvosmjer ↔</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
-        <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
-      </section>
     </div><!-- /proj-panel -->
 
 
@@ -5029,7 +4973,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
          sadržavao SAMO email obavještenja o registraciji. Prikazna podešavanja
          NAMJERNO nisu premještena ovamo — ovaj tab je vidljiv isključivo
          adminu (id=postavke-tab-btn, display:none dok !isAdm), a stil linija/
-         boje koristi SVAKI projektant svakodnevno (žive u Projekat tabu,
+         boje koristi SVAKI projektant svakodnevno (Meni → Stil i boja vlaka,
          sekcija "Boje vlaka" ~3928). Premještanje bi ih sakrilo od svih koji
          nisu admin — labela je popravljena da odgovara sadržaju, umjesto da
          se sadržaj krivo premjesti da odgovori labeli. -->
@@ -5742,7 +5686,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.9';
+const APP_VER = 'v2.8.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7887,6 +7831,7 @@ async function doLogout() {
   try { stopTackaNav(); } catch(e) {}
 
   if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
+  if(typeof closeVlakaStyle==='function')closeVlakaStyle();
   sbUser = null; sbProfile = null;
   _startupRestore._done = false;
   _startupRestore._generation = (_startupRestore._generation || 0) + 1;
@@ -7956,7 +7901,7 @@ async function doLogout() {
   if(window.DepartmentReport)DepartmentReport.reset();
   if(typeof ProjectTerrain!=='undefined')ProjectTerrain.reset();
   // Tematske .gpkg karte — in-memory reset (IDB + registar ostaju: isti korisnik ih
-  // dobija nazad kroz _temRestore; promjena korisnika ih briše kroz _wipeAllLocalUserData)
+  // dobija nazad kroz _temRestore; drugi nalog dobija vlastiti arhivirani registar)
   try { _temRemoveAll(true); } catch(e) {}
 
   if (typeof _geojsonLayer !== 'undefined' && _geojsonLayer) { try { map.removeLayer(_geojsonLayer); } catch(e) {} }
@@ -8008,7 +7953,9 @@ async function _wipeAllLocalUserData() {
   localStorage.removeItem(_TRAG_REG_KEY);
   localStorage.removeItem(_MSR_REG_KEY);
   localStorage.removeItem(_FOTO_KEY);
-  localStorage.removeItem(_LOCAL_KML_KEY);
+  // Javni preuzeti GitHub slojevi pripadaju uređaju. Privatni slojevi su u arhivi naloga.
+  const deviceKml=_deviceKmlEntries();
+  localStorage.setItem(_LOCAL_KML_KEY,JSON.stringify(deviceKml));
   localStorage.removeItem(_GEOJSON_LS_KEY);
   localStorage.removeItem(_TACKE_KEY);
   localStorage.removeItem(_KVC_KEY);
@@ -8024,16 +7971,10 @@ async function _wipeAllLocalUserData() {
   localStorage.removeItem('tvlake_wx_places');
   localStorage.removeItem('tvlake_weather_cache');
   localStorage.removeItem(_GUIDE_ROUTES_KEY);  // sačuvane rute "Vodi me do odjela/lokacije"
-  // Tematske .gpkg karte — lokalni per-korisnik sadržaj (ista klasa kao KML):
-  // obriši sve IDB fajlove iz registra + registar + legacy ključeve
-  try {
-    const reg = JSON.parse(localStorage.getItem(_TEM_REG_KEY) || '[]');
-    reg.forEach(m => { try { _kmlcDelete(_TEM_IDB_PFX + m.id); } catch(e) {} });
-  } catch(e) {}
+  // Sadržaj .gpkg ostaje u IDB; potvrđena arhiva čuva njegov registar i stilove.
   localStorage.removeItem(_TEM_REG_KEY);
   localStorage.removeItem(_TEM_NAME_KEY);
   localStorage.removeItem(_TEM_THEME_KEY);
-  try { _kmlcDelete(_TEM_IDB_KEY); } catch(e) {}
   // Tuđe operacije ostaju za sljedeću prijavu vlasnika. Procesor ih preskače.
   if (typeof _updSyncBadge === 'function') _updSyncBadge();
 
@@ -8055,6 +7996,7 @@ async function _checkDeviceUserSwitch(uid) {
     localStorage.setItem(_OL.QUEUE, JSON.stringify(q));
     await _wipeAllLocalUserData();
     await _restoreFieldData(uid);
+    _aktivniProjektId=localStorage.getItem('tvlake_akt_proj')||null;
     showToast('🔄 Lokalni snimci prethodnog naloga sačuvani u njegovoj arhivi');
   }
   localStorage.setItem(_DEVICE_LAST_USER_KEY, uid);
@@ -8062,9 +8004,15 @@ async function _checkDeviceUserSwitch(uid) {
 
 function _fieldArchiveKeys() {
   return [LOCAL_VLAKE_KEY, 'tvlake_local_vlake_uid', _TRAG_REG_KEY, _MSR_REG_KEY,
+    _LOCAL_KML_KEY, _GEOJSON_LS_KEY, _GUIDE_ROUTES_KEY, _TEM_REG_KEY, _TEM_NAME_KEY, _TEM_THEME_KEY,
+    'tvlake_akt_proj', 'tvlake_proj', 'tvlake_log', 'tvlake_kolege',
     _FOTO_KEY, _TACKE_KEY, _CRASH_VLAKA_KEY, _CRASH_TRAG_KEY, _DOZ_LIVE_KEY,
     'tvlake_native_journal', 'tvlake_native_damaged', _DOZ_TRACK_BUF_KEY,
     ...Object.values(_OL).filter(k => typeof k === 'string' && k !== _OL.PROFILE && k !== _OL.QUEUE)];
+}
+function _deviceKmlEntries() {
+  const stored=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}');
+  return Object.fromEntries(Object.entries(stored).filter(([,data])=>String(data?._driveSource?.id||'').startsWith('github-kml-')));
 }
 function _fieldArchiveDb() {
   return new Promise((resolve, reject) => {
@@ -8077,6 +8025,8 @@ function _fieldArchiveDb() {
 async function _archiveFieldData(uid) {
   const values = {};
   for (const key of _fieldArchiveKeys()) values[key] = localStorage.getItem(key);
+  // Sadržaj javnih slojeva i njihov prikaz dijele se na uređaju, bez dupliranja arhiva.
+  if(values[_LOCAL_KML_KEY])values[_LOCAL_KML_KEY]=JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(values[_LOCAL_KML_KEY])).filter(([,data])=>!String(data?._driveSource?.id||'').startsWith('github-kml-'))));
   const db = await _fieldArchiveDb();
   try {
     await new Promise((resolve,reject) => {
@@ -8099,6 +8049,14 @@ async function _restoreFieldData(uid) {
     const own = points.filter(pt => pt.user_id !== uid).concat(archivedPoints.filter(pt => pt.user_id === uid));
     for (const key of _fieldArchiveKeys()) {
       if (key === _DOZ_TRACK_BUF_KEY) continue;
+      if(key===_LOCAL_KML_KEY){
+        const device=_deviceKmlEntries(),privateKml=JSON.parse(values[key]||'{}');
+        // Ne vraćaj stare kopije javnih slojeva preko novijeg prikaza na uređaju.
+        const own=Object.fromEntries(Object.entries(privateKml).filter(([,data])=>!String(data?._driveSource?.id||'').startsWith('github-kml-')));
+        const merged={...device};
+        for(const [name,data] of Object.entries(own)){let unique=name,n=2;while(Object.hasOwn(merged,unique))unique=name+' (lično '+(n++)+')';Object.defineProperty(merged,unique,{value:data,enumerable:true,configurable:true,writable:true});}
+        localStorage.setItem(key,JSON.stringify(merged));continue;
+      }
       if (values[key] != null) localStorage.setItem(key, values[key]);
       else localStorage.removeItem(key);
     }
@@ -13998,10 +13956,13 @@ let selC = PAL[0], cIdx = 0; // PAL[0] = #60a5fa (plava)
 // Boje i stil prikaza po projektu i prijavljenom korisniku.
 const _BOJA_KEY = 'tvlake_boje_v1';
 const _BOJA_PRESETS = ['#60a5fa','#4ade80','#fbbf24','#f87171','#a78bfa','#fb923c','#38bdf8','#e2e8f0'];
+let _vlakaStyleEditor=false, _vlakaStyleScope='project', _vlakaStyleProject=null;
+function _bojaGlobalKey() { return 'tvlake_boje_global_v3_'+(sbUser?.id||'guest'); }
+function _vlakaStyleTarget() { return _vlakaStyleEditor?(_vlakaStyleScope==='all'?'__all__':_vlakaStyleProject):_aktivniProjektId; }
 function _bojaProjektKey(id) { return 'tvlake_projekt_boje_v2_'+(sbUser?.id||'guest')+'_'+id; }
 function _loadBoje(id = typeof _aktivniProjektId==='undefined' ? null : _aktivniProjektId) {
   const read=key=>{try{const b=JSON.parse(localStorage.getItem(key)||'{}');return b&&typeof b==='object'&&!Array.isArray(b)?b:{};}catch(e){return {};}};
-  const b={...read(_BOJA_KEY),...(id?read(_bojaProjektKey(id)):{})};
+  const b={...read(_BOJA_KEY),...read(_bojaGlobalKey()),...(id&&id!=='__all__'?read(_bojaProjektKey(id)):{})};
   for(const k of ['vlaka','krak'])if(!/^#[a-f\d]{6}$/i.test(b[k]||''))delete b[k];
   if(!Number.isFinite(b.weight)||b.weight<2||b.weight>8)delete b.weight;
   if(!['solid','dash','dot'].includes(b.dash))delete b.dash;
@@ -14009,8 +13970,9 @@ function _loadBoje(id = typeof _aktivniProjektId==='undefined' ? null : _aktivni
   return b;
 }
 function _saveBoje(b) {
-  if(!_aktivniProjektId){showToast('Prvo aktiviraj projekat za boje vlaka.');return false;}
-  try{localStorage.setItem(_bojaProjektKey(_aktivniProjektId),JSON.stringify(b));return true;}
+  const target=_vlakaStyleTarget();
+  if(!target){showToast('Odaberi projekat ili zajednički stil.');return false;}
+  try{localStorage.setItem(target==='__all__'?_bojaGlobalKey():_bojaProjektKey(target),JSON.stringify(b));return true;}
   catch(e){showToast('Boje nisu sačuvane — provjeri memoriju telefona.');return false;}
 }
 function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
@@ -14039,7 +14001,9 @@ function _bojaChange(prop,value) {
   if(prop==='dash'&&!['solid','dash','dot'].includes(value))return;
   if(prop==='outline'&&typeof value!=='boolean')return;
   if(!['vlaka','krak','weight','dash','outline'].includes(prop))return;
-  const b={vlaka:getBojaVlake(),krak:getBojaKraka(),..._loadBoje(),[prop]:value};
+  const target=_vlakaStyleTarget();let overrides={};
+  if(target&&target!=='__all__')try{const old=JSON.parse(localStorage.getItem(_bojaProjektKey(target))||'{}');if(old&&typeof old==='object'&&!Array.isArray(old))overrides=old;}catch(e){}
+  const b=target==='__all__'?{vlaka:'#60a5fa',krak:'#f87171',..._loadBoje(target),[prop]:value}:{...overrides,[prop]:value};
   if(!_saveBoje(b))return;
   _vlakaStilApply();_rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
@@ -14053,19 +14017,72 @@ function _vlakaStilApply() {
   _projektVlakeRender();
 }
 function _rndBojaPresets() {
-  const vlCol=getBojaVlake(),krCol=getBojaKraka(),disabled=!_aktivniProjektId;
-  const outline=document.getElementById('boja-outline');if(outline){outline.checked=getVlakaOutline();outline.disabled=disabled;}
+  const target=_vlakaStyleTarget(),b=_loadBoje(target),vlCol=b.vlaka||'#60a5fa',krCol=b.krak||'#f87171',disabled=!target;
+  const outline=document.getElementById('boja-outline');if(outline){outline.checked=b.outline===true;outline.disabled=disabled;}
   const context=document.getElementById('boja-project-context');
-  if(context){const p=(_projekti||[]).find(p=>p.id===_aktivniProjektId);context.textContent=p?[p.gj,p.odjel?'Odjel '+p.odjel:''].filter(Boolean).join(' · '):'Aktiviraj projekat da podesiš njegove boje.';}
+  if(context){const p=(_projekti||[]).find(p=>p.id===target);context.textContent=target==='__all__'?'Zajednički stil svih mojih projekata':p?[p.gj,p.odjel?'Odjel '+p.odjel:''].filter(Boolean).join(' · '):'Odaberi projekat ili zajednički stil.';}
   for(const [type,col,handler]of [['vl',vlCol,'_bojaVlChange'],['kr',krCol,'_bojaKrChange']]){
     const pick=document.getElementById('boja-'+type+'-pick'),presets=document.getElementById('boja-'+type+'-presets');
     if(pick){pick.value=col;pick.disabled=disabled;}
     if(presets)presets.innerHTML=_BOJA_PRESETS.map(c=>'<button type="button" aria-label="Boja '+c+'" aria-pressed="'+(c===col)+'" '+(disabled?'disabled ':'')+'onclick="'+handler+'(\''+c+'\')" style="--boja:'+c+'"></button>').join('');
   }
   const w=document.getElementById('boja-weight'),wv=document.getElementById('boja-weight-v');
-  if(w){w.value=getVlakaWeight();w.disabled=disabled;}if(wv)wv.textContent=getVlakaWeight();
-  document.querySelectorAll('.boja-dash-btn').forEach(btn=>{btn.classList.toggle('on',btn.dataset.d===getVlakaDash());btn.disabled=disabled;});
+  if(w){w.value=b.weight||4;w.disabled=disabled;}if(wv)wv.textContent=b.weight||4;
+  document.querySelectorAll('.boja-dash-btn').forEach(btn=>{btn.classList.toggle('on',btn.dataset.d===(b.dash||'solid'));btn.disabled=disabled;});
+  if(_vlakaStyleEditor)_vlakaStyleRender();
   _projektVlakeRender();
+}
+function openVlakaStyle() {
+  closeStilLinija();
+  const id=sbUser?.id||'guest';let prefs={};try{const old=JSON.parse(localStorage.getItem('tvlake_style_editor_'+id)||'{}');if(old&&typeof old==='object'&&!Array.isArray(old))prefs=old;}catch(e){}
+  _vlakaStyleScope=prefs.scope==='project'?'project':'all';
+  _vlakaStyleProject=(_projekti||[]).some(p=>p.id===prefs.project)?prefs.project:_aktivniProjektId;
+  _vlakaStyleEditor=true;document.getElementById('vlaka-style-modal').hidden=false;
+  _rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refreshPanel();
+  document.getElementById('vlaka-style-all').focus();
+}
+function closeVlakaStyle() { _vlakaStyleEditor=false;const e=document.getElementById('vlaka-style-modal');if(e)e.hidden=true; }
+function _vlakaStyleChoose(scope,project) {
+  if(!['all','project'].includes(scope))return;
+  _vlakaStyleScope=scope;
+  if(project!==undefined){if(!(_projekti||[]).some(p=>p.id===project))return;_vlakaStyleProject=project;}
+  if(scope==='project'&&!(_projekti||[]).some(p=>p.id===_vlakaStyleProject))_vlakaStyleProject=_aktivniProjektId||_projekti?.[0]?.id||null;
+  try{localStorage.setItem('tvlake_style_editor_'+(sbUser?.id||'guest'),JSON.stringify({scope,project:_vlakaStyleProject}));}catch(e){showToast('Izbor nije sačuvan. Provjeri memoriju uređaja.');}
+  _rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refreshPanel();
+}
+function _vlakaStyleRender() {
+  const target=_vlakaStyleTarget(),all=target==='__all__',select=document.getElementById('vlaka-style-project-select');if(!select)return;
+  const projects=(_projekti||[]).slice().sort((a,b)=>String(a.gj||'').localeCompare(String(b.gj||''),'bs')||String(a.odjel||'').localeCompare(String(b.odjel||''),'bs',{numeric:true}));
+  const signature=JSON.stringify(projects.map(p=>[p.id,p.gj,p.odjel,p.korisnik_id]));
+  if(select.dataset.projects!==signature){select.replaceChildren();for(const p of projects){const o=document.createElement('option');o.value=p.id;o.textContent=[p.gj,p.odjel?'Odjel '+p.odjel:p.id,p.korisnik_id&&p.korisnik_id!==sbUser?.id?'Dijeljen':'Moj projekat'].filter(Boolean).join(' · ');select.append(o);}select.dataset.projects=signature;}
+  if(_vlakaStyleProject)select.value=_vlakaStyleProject;select.disabled=all||!projects.length;
+  document.getElementById('vlaka-style-project-row').hidden=all;
+  document.getElementById('vlaka-style-all').checked=all;document.getElementById('vlaka-style-project').checked=!all;
+  const has=p=>localStorage.getItem(_bojaProjektKey(p.id))!==null||(typeof VlakaDirection!=='undefined'&&localStorage.getItem(VlakaDirection.prefsKey(p.id))!==null),n=projects.filter(has).length;
+  document.getElementById('vlaka-style-status').textContent=all?'Zajednički izgled za postojeće i buduće projekte. '+(n?n+' projekata ima poseban stil.':'Svi projekti koriste ovaj izgled.'):target?'Izmjena ovdje postavlja poseban izgled odabranog projekta.':'Nema dostupnih projekata. Zajednički stil možeš postaviti unaprijed.';
+  const inherit=document.getElementById('vlaka-style-inherit');inherit.hidden=all;inherit.disabled=!target;
+  document.getElementById('vlaka-style-unify').hidden=!all||!n;
+  _vlakaStylePreview();
+}
+function _vlakaStylePreview() {
+  const e=document.getElementById('vlaka-style-preview-svg');if(!e)return;
+  const target=_vlakaStyleTarget(),b=_loadBoje(target),w=b.weight||4,d=_vlakaStroke(b.dash||'solid',w,15),col=b.vlaka||'#60a5fa',kr=b.krak||'#f87171';
+  const path=(line,color)=>'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="'+d.lineCap+'" '+(d.dashArray?'stroke-dasharray="'+d.dashArray+'"':'')+'/>';
+  e.innerHTML='<path d="M0 80Q70 0 130 50T340 25 M0 95Q100 30 180 75T340 60" fill="none" stroke="var(--field-border)"/><text x="12" y="20" fill="var(--field-ink)" font-size="12">Glavna vlaka</text><text x="220" y="92" fill="var(--field-ink)" font-size="12">Krak</text>'+path('M20 70 L130 48 L305 34',col)+path('M130 48 L220 78',kr);
+  if(b.outline)for(const p of [...e.querySelectorAll('path')].slice(2)){const outline=p.cloneNode();outline.setAttribute('stroke',typeof VlakaOutline!=='undefined'?VlakaOutline.colorFor?.(p.getAttribute('stroke'))||'#fff':'#fff');outline.setAttribute('stroke-width',w*1.14);p.before(outline);}
+  if(typeof VlakaDirection!=='undefined'){const a=VlakaDirection.settingsFor(target);if(a.visible)e.innerHTML+='<g transform="translate(85 '+(a.placement==='beside'?42:57)+') rotate(169) scale('+(a.size/30)+')"><path d="M-9 0H9 M4 -5L9 0L4 5" fill="none" stroke="'+(a.inherit?col:a.color)+'" stroke-width="'+a.width+'"/></g>';}
+}
+function _vlakaStyleInherit() {
+  const target=_vlakaStyleTarget();if(!target||target==='__all__')return;
+  try{localStorage.removeItem(_bojaProjektKey(target));if(typeof VlakaDirection!=='undefined')localStorage.removeItem(VlakaDirection.prefsKey(target));}catch(e){showToast('Stil nije sačuvan.');return;}
+  _vlakaStilApply();_rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
+}
+async function _vlakaStyleUnify() {
+  const owner=sbUser?.id,projects=(_projekti||[]).map(p=>p.id);
+  if(!await _dlgConfirm('Posebni stilovi ovih projekata zamijenit će se zajedničkim. Smjer i dvosmjer pojedine vlake ostaju sačuvani.',{title:'Ujednači stil svih projekata',okLabel:'Ujednači'}))return;
+  if(sbUser?.id!==owner)return;
+  try{for(const id of projects){localStorage.removeItem(_bojaProjektKey(id));if(typeof VlakaDirection!=='undefined')localStorage.removeItem(VlakaDirection.prefsKey(id));}}catch(e){showToast('Stil nije sačuvan.');return;}
+  _vlakaStilApply();_rndBojaPresets();if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
 }
 let _projektVlakeLimit=40,_projektVlakeScope='',_projektVlakePreview=null;
 function _projektVlakeRows() {
@@ -20280,6 +20297,7 @@ function _stilPregled() {
 function _stilTab(id) { _stilTabAkt = id; _stilRender(); }
 
 function openStilLinija() {
+  if(typeof closeVlakaStyle==='function')closeVlakaStyle();
   _stilRender();
   document.getElementById('stil-modal').style.display = '';
 }
@@ -40515,6 +40533,8 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-boundaries"/></svg></span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-theme"/></svg></span>Tematska karta</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil linija</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openVlakaStyle()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil i boja vlaka</button>
+
   </section><section class="mdrop-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg>Rad na terenu</div>
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
@@ -40575,6 +40595,78 @@ if (typeof AndroidDownload !== 'undefined') {
     <div id="stil-sadrzaj"></div>
   </div>
 </div>
+
+<!-- STIL I BOJA VLAKA MODAL -->
+<div id="vlaka-style-modal" onkeydown="if(event.key==='Escape'){event.stopPropagation();closeVlakaStyle()}" role="dialog" aria-modal="true" aria-labelledby="vlaka-style-title" hidden onclick="if(event.target===this)closeVlakaStyle()">
+ <div class="vlaka-style-sheet">
+  <header class="vlaka-style-head"><div><small>PRIKAZ NA TVOM UREĐAJU</small><h3 id="vlaka-style-title">Stil i boja vlaka</h3></div><button type="button" aria-label="Zatvori stil i boju vlaka" onclick="closeVlakaStyle()">✕</button></header>
+  <fieldset class="vlaka-style-scope"><legend>Na koje projekte primijeniti?</legend><label><input type="radio" name="vlaka-style-scope" id="vlaka-style-all" value="all" onchange="_vlakaStyleChoose('all')">Svi moji projekti</label><label><input type="radio" name="vlaka-style-scope" id="vlaka-style-project" value="project" onchange="_vlakaStyleChoose('project')">Poseban odjel / projekat</label></fieldset>
+  <label id="vlaka-style-project-row" class="vlaka-style-project">Odjel / projekat<select id="vlaka-style-project-select" onchange="_vlakaStyleChoose('project',this.value)"></select></label>
+  <p id="vlaka-style-status" role="status"></p>
+  <button type="button" id="vlaka-style-inherit" class="vlaka-style-inherit" onclick="_vlakaStyleInherit()">Koristi zajednički stil za ovaj projekat</button>
+  <button type="button" id="vlaka-style-unify" class="vlaka-style-inherit" onclick="_vlakaStyleUnify()">Ujednači i projekte s posebnim stilom</button>
+  <figure class="vlaka-style-preview"><svg id="vlaka-style-preview-svg" viewBox="0 0 340 100" role="img" aria-label="Pregled glavne vlake, kraka i smjera izvlačenja"></svg><figcaption>Pregled glavne vlake i kraka · izmjene se odmah pamte</figcaption></figure>
+      <!-- BOJE VLAKA -->
+      <div class="sec project-colors">
+        <div class="sec-t" style="margin-bottom:10px;">🎨 Boje vlaka</div>
+        <p id="boja-project-context"></p><p class="project-vl-note">Glavna vlaka i krak imaju zasebnu boju. Izgled obuhvata i kolegine vlake u odabranom projektu.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Glavna vlaka</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div id="boja-vl-presets" style="display:flex;gap:4px;"></div>
+              <input type="color" id="boja-vl-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaVlChange(this.value)" onchange="_bojaVlChange(this.value)">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Krak</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div id="boja-kr-presets" style="display:flex;gap:4px;"></div>
+              <input type="color" id="boja-kr-pick" style="width:30px;height:26px;border:1px solid #334155;border-radius:5px;cursor:pointer;padding:0;background:none;" oninput="_bojaKrChange(this.value)" onchange="_bojaKrChange(this.value)">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Debljina linije</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="range" min="2" max="8" step="1" value="4" id="boja-weight" oninput="_bojaWChange(+this.value)" style="width:90px;">
+              <b id="boja-weight-v" style="font-size:12px;color:#94a3b8;min-width:14px;">4</b>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="font-size:13px;color:#e2e8f0;">Vrsta linije</span>
+            <div style="display:flex;gap:4px;">
+              <button class="boja-dash-btn" data-d="solid" onclick="_bojaDashChange('solid')"><svg class="ic"><use href="#ic-puna"/></svg> Puna</button>
+              <button class="boja-dash-btn" data-d="dash" onclick="_bojaDashChange('dash')"><svg class="ic"><use href="#ic-crtkana"/></svg> Crtice</button>
+              <button class="boja-dash-btn" data-d="dot" onclick="_bojaDashChange('dot')">· Tačke</button>
+            </div>
+          </div>
+          <label class="arrow-check outline-choice"><input id="boja-outline" type="checkbox" onchange="_bojaChange('outline',this.checked)"><span>Dodaj outline<small>Sitni bijeli / crni obrub prema glavnoj boji · ukupno proširenje 14%</small></span></label>
+        </div>
+      </div>
+      <!-- /BOJE VLAKA -->
+      <!-- SMJER IZVLACENJA DS -->
+      <section class="sec project-arrows">
+        <div class="sec-t">Smjer izvlačenja DS</div>
+        <b id="project-arrow-context"></b>
+        <p class="project-vl-note">DS = drvni sortimenti. Dvosmjer postavi ručno samo kada vlaka izlazi na put na oba kraja.</p>
+        <label class="terrain-check"><input id="project-arrow-visible" type="checkbox" checked onchange="VlakaDirection.change('visible',this.checked)"><span><b>Prikaži strelice</b><small>Sakrij / prikaži smjer izvlačenja u odabranim projektima</small></span><span id="project-arrow-preview" aria-hidden="true"></span></label>
+        <label class="arrow-placement">Položaj strelica<select id="project-arrow-placement" onchange="VlakaDirection.change('placement',this.value)"><option value="on">Na vlaci</option><option value="beside">Pored vlake</option></select></label><p class="project-vl-note">Jedan položaj za strelice i dvosmjer odabranih projekata. Pored vlake razmak prati debljinu linije i veličinu znaka. Za 1:10.000 preporučen je automatski broj i veličina 30 px.</p>
+        <div class="arrow-style-grid">
+          <label>Debljina poteza <output id="project-arrow-width-value">2.5 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2.5" oninput="VlakaDirection.change('width',this.value)"></label>
+          <label>Veličina strelice <output id="project-arrow-size-value">30 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="2" value="30" oninput="VlakaDirection.change('size',this.value)"></label>
+          <label>Strelice po vlaci<select id="project-arrow-count" onchange="VlakaDirection.change('count',this.value)"><option value="0">Automatski: 1 / 2 preko 300 m</option><option value="1">1 strelica</option><option value="2">2 strelice</option><option value="3">3 strelice</option><option value="4">4 strelice</option><option value="6">6 strelica</option><option value="8">8 strelica</option></select></label>
+          <label>Boja strelica<input id="project-arrow-color" type="color" value="#2563eb" onchange="VlakaDirection.change('color',this.value)"></label>
+        </div>
+        <label class="arrow-check"><input id="project-arrow-inherit" type="checkbox" checked onchange="VlakaDirection.change('inherit',this.checked)"> Koristi boju vlake / kraka</label>
+        <label class="arrow-check"><input id="project-arrow-separator" type="checkbox" checked onchange="VlakaDirection.change('separator',this.checked)"> Prikaži dvosmjer ↔</label>
+        <p class="project-vl-note">Kod dva izlaza najmanje jedna strelica prema svakom putu. Oznaka dvosmjera ne ulazi u broj strelica. Izgled i odabir dvosmjera čuvaju se na ovom telefonu.</p>
+        <div class="arrow-route-edit"><label for="project-arrow-route">Smjer pojedine vlake i dvosmjer ↔</label><select id="project-arrow-route"></select><button id="project-arrow-edit" type="button" onclick="VlakaDirection.focusRoute()">Prikaži i uredi smjer ↗</button></div>
+        <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
+      </section>
+      <!-- /SMJER IZVLACENJA DS -->
+ </div>
+</div>
+<!-- /STIL I BOJA VLAKA MODAL -->
 
 <!-- ─── UPRAVLJANJE PROJEKTIMA MODAL ──────────────────────────────────── -->
 <div id="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-title" onclick="if(event.target===this)closeProjectManagement()">
@@ -40660,7 +40752,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div class="help-row"><div class="help-txt"><b>Projekat koji je dodao kolega</b><span>Otvori projekat u tabu <b>Projekat</b> ili odjel u <b>Doznaci</b> i na dnu pritisni <b>Ukloni sa mog spiska</b>. Potreban je internet. Prvo završi snimanje i pošalji neposlane podatke. Uklanja se samo tvoje članstvo; vlake, pojasevi i podaci ostaju cijelom timu. Za povratak te vlasnik ponovo dodaje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Zajednički spisak prikazuje tvoje i kolegine vlake po broju, s dužinom i projektantom. Dodirni stavku za pregled na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Poligon odjela i teren</b><span>Poligon je zatvorena granica odjela. Nacrtaj najmanje tri tačke i sačuvaj. Uključi nagib preko 30% ili ekspoziciju za to područje.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Boje vlaka i Strelice</b><span>Na dnu Projekta mijenjaš boje, debljinu, crtice/tačke i sitni obrub opcijom <b>Dodaj outline</b>. Strelice mogu biti na vlaci ili pored nje. Izbor prikaza važi i za kolegine vlake u tom projektu, na tvom telefonu.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Stil i boja vlaka</b><span>Otvori <b>Meni → Stil i boja vlaka</b>. Izaberi zajednički izgled za sve svoje projekte ili poseban odjel/projekat. Tu podesi boje glavne vlake i kraka, debljinu, crtice/tačke i obrub. <b>Smjer izvlačenja DS</b> uređuje strelice na vlaci ili pored nje. Poseban projekat možeš vratiti na zajednički stil; postavke se pamte.</span></div></div>
 
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pošalji svoj rad i primi rad kolega</button><div class="help-sec-body">
