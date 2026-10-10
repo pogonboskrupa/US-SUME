@@ -3827,3 +3827,19 @@ odjela prošli s pravim Leaflet/Canvas/IDB i lažnim servisima; nula vanjskih
 upisa i JS grešaka. APK build/Android emulator i objava slijede kroz CI;
 pravi Xiaomi i produkcijska baza nisu testirani. Python geo pytest se nije
 pokrenuo jer pytest nije instaliran; geo kod nije mijenjan.
+
+Isporuka 2.7.8 završena: source `e4f48df5cdb2eb7329f7e867ec9c856100a49c14`,
+tree `2a042b45568d1d9419bb782961ca9c8112dfda65`, CI `38056881156` SUCCESS,
+Pages `38056880850` SUCCESS. Android emulator: 20 testova, 0 grešaka,
+0 padova i 0 preskočenih. Preuzet javni release APK: 24.305.608 B,
+SHA-256 `cfc146b2578742d3841b899259db99d045ba4ff9ca2bd47a9d9907c8857a0d06`.
+Binary manifest potvrđen: `ba.spd.uss.vlake.debug`, `2.7.8-debug`, code 548.
+Certifikat ostaje `11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`;
+69 assets u stvarnom APK-u odgovara source-u. Javni SVG na Pages identičan
+lokalnom. CI JSON potvrđuje nove ikone/četiri uloge/12 prikaza, KML editor,
+izvještaj odjela i 144 dnevna prikaza bez kontrastnih grešaka; nula JS grešaka
+ili vanjskih upisa. Fizički Xiaomi i produkcijska baza nisu testirani.
+Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.8
+APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.8/app-debug.apk
+Ažuriranje kroz Meni → Ažuriraj aplikaciju; updater koristi releases listu,
+a ne /latest, jer su APK izdanja označena kao prerelease.
