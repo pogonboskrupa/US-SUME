@@ -53,6 +53,7 @@ async def main():
   assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
   # Stvarni map klik i undo; odustajanje i nedostatak prostora čuvaju staru granicu.
   await page.get_by_role('button',name='Nacrtaj granicu',exact=True).click()
+  assert not await page.locator('#action-bar').is_visible() and not await page.locator('#tab-bar').is_visible(),'Crtanje ne smije istovremeno pokrenuti GPS alat'
   await page.locator('#map').click(position={'x':100,'y':180});assert '1 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.get_by_role('button',name='Vrati tačku',exact=True).click();assert '0 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.evaluate("()=>{[[44.9,16],[44.9,16.003],[44.903,16.003]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)));window.realSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k.startsWith('tvlake_department_report'))throw Error('full');return realSet.call(this,k,v)} }")
@@ -60,6 +61,7 @@ async def main():
   assert await page.evaluate('DepartmentReport.isDrawing()');assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
   await page.evaluate('Storage.prototype.setItem=realSet;DepartmentReport.cancelDraw()')
   await page.locator('#department-report').wait_for(state='visible')
+  assert await page.locator('#action-bar').is_visible() and await page.locator('#tab-bar').is_visible()
   # Pravi PNG dekoder i Worker, bez blokiranja UI; svi DEM fetch upisi su izolovani.
   await page.evaluate('_mrezaProbaj=()=>true;_netDozvoliZahtjev=()=>true;window.framesWhileReport=0;window.frameReport=true;requestAnimationFrame(function frame(){if(frameReport){framesWhileReport++;requestAnimationFrame(frame)}})')
   await page.locator('#dr-calculate').click();await page.wait_for_function('!DepartmentReport.snapshot().busy');assert await page.evaluate('!!DepartmentReport.snapshot().result'),{'status':await page.locator('#dr-status').inner_text(),'errors':errors}
@@ -71,6 +73,7 @@ async def main():
   assert stats['min']<stats['mean']<stats['max']
   assert await page.locator('#dr-view').is_enabled() and await page.locator('#dr-remove').is_enabled()
   assert await page.evaluate('DepartmentReport.snapshot().result.edges.length')>0
+  assert await page.evaluate("Number(map.getPane('departmentReport').style.zIndex)>Number(getComputedStyle(map.getPane('overlayPane')).zIndex)&&map.getPane('departmentReport').style.pointerEvents==='none'")
   assert '%' in await page.locator('#dr-terrain-summary').inner_text() and '°' not in await page.locator('#dr-result').inner_text()
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(800,480)]:

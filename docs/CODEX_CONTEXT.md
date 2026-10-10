@@ -3763,3 +3763,8 @@ grešaka; prefs/KML/SHP IDB, Doznaka selection276 i legacy terrain222 prošli.
 67 assets uključuju novi report i DEM Worker. Upute ažurirane za sve tokove.
 APK/emulator/objava će biti potvrđeni rezultatima CI-ja ispod; fizički Xiaomi
 Redmi Note 13 Pro i produkcijski Supabase nisu testirani/mijenjani.
+Završna provjera izvještaja: DEM pane je iznad KML overlay-a (445), pa
+izračun ostaje vidljiv i uz punu KML ispunu; pointer-events:none ostavlja
+klik izvornim geometrijama. Crtanje privremeno sakrije GPS alatnu traku i
+tabove, a cancel/save vrate prethodni prikaz; novi puni browser test prošao.
+Svih 107 JS grupa i sintaksa pet inline blokova/static JS prošli lokalno.
