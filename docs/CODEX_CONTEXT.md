@@ -3685,3 +3685,19 @@ animacije; ciljano ponovno pokretanje prošlo bez promjene implementacije.
 Native transport u browser provjerama je izolovan; ne tvrditi da je
 fizički Xiaomi ili produkcijski Supabase testiran. APK/emulator/objavu
 potvrditi završnim CI rezultatom ispod.
+
+Konačna potvrda 2.7.6 (10.10.2026): CI 38035204574 uspješan, izvor
+ e31bd9c1751bbfb629263beb59ed01b727758180. Svih 105 JS grupa, izolovani
+SQL, puni browser skup s novim ručnim izborom bez atributa, native build,
+65 assets, 20 Android emulator testova (0 failures/errors/skipped), objava
+i analiza brzine prošli. CI audit: 144 prikaza, 0 slabih kontrasta,
+0 JS grešaka, 0 vanjskih upisa. Pages 38035204658 uspješan; javni
+index/SW/new-boundary-module/local-layer-import/CSS identični izvoru.
+Preuzet javni APK 24.240.822 B (24,24 MB), SHA256
+5688d9a286cada2ced3feab635c774a53d07412ce2d8027164af6ec67fe057ea;
+manifest ba.spd.uss.vlake.debug / 2.7.6-debug / code546. Certifikat isti:
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Release v2.7.6 (408784579), app-debug.apk (627356388), uploaded;
+veličina/digest podudarni. Updater releases?per_page=1 vraća v2.7.6 prvo.
+APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.6/app-debug.apk
+Fizički Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
