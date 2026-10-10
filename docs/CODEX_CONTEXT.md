@@ -3768,3 +3768,7 @@ izračun ostaje vidljiv i uz punu KML ispunu; pointer-events:none ostavlja
 klik izvornim geometrijama. Crtanje privremeno sakrije GPS alatnu traku i
 tabove, a cancel/save vrate prethodni prikaz; novi puni browser test prošao.
 Svih 107 JS grupa i sintaksa pet inline blokova/static JS prošli lokalno.
+CI 38051624882 stao prije APK-a na zastarjelom device-workflow273 assertu
+koji je tražio project-polygon na dnu Projekta. Taj assert i raspored u
+project-vlake220 usklađeni su s korisnikovim premještanjem u Meni; oba puna
+ciljana testa prošla lokalno. App kod je ostao isti. Završni CI ponoviti.

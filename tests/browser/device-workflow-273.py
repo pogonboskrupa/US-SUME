@@ -61,7 +61,7 @@ async def main():
    assert await page.locator('#pd-clanovi .clan-row').count()==3
    assert await page.locator('#pd-delete-btn').is_visible()
    assert await page.locator('#pd-delete-btn').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(185, 28, 28)'
-   assert await page.evaluate("document.querySelector('#proj-panel').lastElementChild.classList.contains('project-polygon')")
+   assert await page.evaluate("!document.querySelector('#proj-panel .project-polygon')&&document.querySelector('#menu-department-report')&&document.querySelector('#department-report')"), 'Teren je premješten u Meni → Izvještaj odjela'
    # Existing modal gains keypad, preserves caret and selection; cancel does not change vlaka.
    await page.evaluate("()=>{window.promptResult='pending';_dlgPrompt('Naziv vlake','T14',{title:'Nova ručna vlaka',vlakaKeyboard:true}).then(v=>window.promptResult=v)}")
    await page.wait_for_function('document.querySelector("#dlg-sheet.show")')
