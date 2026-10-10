@@ -3875,3 +3875,10 @@ odsjeka prošli; 144 dnevna prikaza bez slabog kontrasta, navigacija i četiri
 uloge prošli. Pet inline blokova sintaksno ispravno; 69 assets pripremljeno.
 Produkcijska baza nije mijenjana; fizički Xiaomi nije testiran. APK/CI
 isporuka i provjera javnog fajla slijede.
+
+Prvi CI 38071338797 stao u novom browser testu ručnog crtanja Doznake:
+pozicija poznatog KML poligona nakon restarta bila je izvan vidljive karte,
+pa stvarni klik nije mogao biti izvršen. Test sada čeka vidljiv banner,
+postavlja kartu na fixture odjel i ponovo računa piksel; stvarni klik i
+assert jedne tačke ostaju. Funkcionalni kod nije mijenjan; APK nije bio
+objavljen. Ponovljeni lokalni puni test prošao. CI se ponavlja.

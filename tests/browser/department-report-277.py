@@ -157,7 +157,9 @@ async def main():
   assert 'Nema sačuvanog DEM-a' in await page.locator('#dr-status').inner_text()
   # Ručno crtanje granice Doznake: KML klik dodaje jednu tačku, ne otvara info.
   await page.evaluate("()=>{DepartmentReport.hide();window.oldCreate=dozShowCreateOdjel;dozShowCreateOdjel=()=>{};dozStartNewBoundaryDraw()}")
-  await page.wait_for_timeout(200);assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
+  await page.locator('#doz-draw-banner').wait_for(state='visible')
+  await page.evaluate('()=>{map.invalidateSize({animate:false});map.setView([44.902,16.004],16,{animate:false});}')
+  assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   pos=await page.evaluate("()=>{const p=map.latLngToContainerPoint([44.902,16.006]);return {x:p.x,y:p.y}}")
   await page.locator('#map').click(position=pos);assert await page.evaluate('_dozDrawPts.length')==1
   await page.evaluate('dozCancelDraw();dozShowCreateOdjel=oldCreate;DepartmentReport.open()')
