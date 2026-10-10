@@ -21,12 +21,18 @@ final class KmlDownloads implements WebViewAssetLoader.PathHandler {
     interface Provider {JSONArray fetch() throws Exception;}
     private final Provider provider;
     private final MapDownloads.ConnectionFactory transport;
+    private final Provider githubProvider;
+    private final MapDownloads.ConnectionFactory githubTransport;
     private final SharedPreferences prefs;
     private final File dir;
     private final java.util.concurrent.ExecutorService commands=Executors.newSingleThreadExecutor();
     private JSONArray catalog;
     KmlDownloads(Context c){this(c,MapDownloadCatalog::fetchFolderRows,MapDownloads::connection,"drive-kml-v1");}
     KmlDownloads(Context c,Provider provider,MapDownloads.ConnectionFactory transport,String storage){
+        this(c,provider,transport,storage,MapDownloadCatalog::fetchGithubReleases,MapDownloads::githubConnection);
+    }
+    KmlDownloads(Context c,Provider provider,MapDownloads.ConnectionFactory transport,String storage,Provider githubProvider,MapDownloads.ConnectionFactory githubTransport){
+        this.githubProvider=githubProvider;this.githubTransport=githubTransport;
         this.provider=provider;this.transport=transport;this.prefs=c.getSharedPreferences(storage,Context.MODE_PRIVATE);
         dir=new File(c.getCacheDir(),storage);dir.mkdirs();
         try{catalog=new JSONArray(prefs.getString("catalog","[]"));}catch(Exception e){catalog=new JSONArray();}
@@ -47,35 +53,39 @@ final class KmlDownloads implements WebViewAssetLoader.PathHandler {
     }
     synchronized JSONObject action(JSONObject msg) throws Exception {
         String type=msg.getString("type");
+        boolean github="github".equals(msg.optString("provider"))||msg.optString("sourceId").startsWith("github-kml-");
+        String catalogKey=github?"github-catalog":"catalog",updatedKey=github?"github-updated":"updated";
+        JSONArray selected=github?new JSONArray(prefs.getString(catalogKey,"[]")):catalog;
         if(type.equals("list")){
             String error="";
             if(msg.optBoolean("refresh"))try{
-                JSONArray fresh=parse(provider.fetch());
-                if(!prefs.edit().putString("catalog",fresh.toString()).putLong("updated",System.currentTimeMillis()).commit())throw new IOException();catalog=fresh;
-            }catch(Exception e){error="Ne mogu osvježiti KML fajlove. Provjeri internet i javni pristup folderu.";}
-            return new JSONObject().put("ok",error.isEmpty()||catalog.length()>0).put("files",catalog).put("updated",prefs.getLong("updated",0)).put("stale",!error.isEmpty()).put("error",error);
+                JSONArray fresh=github?parseGithub(githubProvider.fetch()):parse(provider.fetch());
+                if(!prefs.edit().putString(catalogKey,fresh.toString()).putLong(updatedKey,System.currentTimeMillis()).commit())throw new IOException();selected=fresh;if(!github)catalog=fresh;
+            }catch(Exception e){error="Ne mogu osvježiti KML fajlove. Provjeri internet i javni pristup "+(github?"GitHub repozitoriju KARTE.":"folderu.");}
+            return new JSONObject().put("ok",error.isEmpty()||selected.length()>0).put("files",selected).put("updated",prefs.getLong(updatedKey,0)).put("stale",!error.isEmpty()).put("error",error);
         }
         String id=msg.getString("sourceId");if(!id.matches("[\\w-]{10,100}"))throw new IOException("Nevažeći fajl");
         File saved=new File(dir,id+".kml");
         if(type.equals("release")){saved.delete();return new JSONObject().put("ok",true);}
         if(!type.equals("download"))throw new IOException("Nepoznata radnja");
-        JSONObject source=null;for(int i=0;i<catalog.length();i++)if(id.equals(catalog.getJSONObject(i).optString("id")))source=catalog.getJSONObject(i);
-        if(source==null)throw new IOException("KML nije u folderu KARTA APP. Osvježi popis.");
+        JSONObject source=null;for(int i=0;i<selected.length();i++)if(id.equals(selected.getJSONObject(i).optString("id")))source=selected.getJSONObject(i);
+        if(source==null)throw new IOException("KML nije u katalogu. Osvježi popis.");
         long size=source.getLong("size");if(size>MAX_BYTES)throw new IOException("KML je veći od 32 MB. Podijeli ga na manje slojeve.");
         if(saved.isFile())try{validate(saved,size);}catch(Exception e){saved.delete();}
         if(!saved.isFile()){
-            File partial=new File(dir,id+".part");String url="https://drive.google.com/uc?export=download&id="+id;
+            File partial=new File(dir,id+".part");String url=github?source.getString("url"):"https://drive.google.com/uc?export=download&id="+id;
             try{
                 boolean complete=false;
                 for(int attempt=0;attempt<3;attempt++){
-                    HttpURLConnection c=transport.open(url,false);
+                    HttpURLConnection c=(github?githubTransport:transport).open(url,false);
                     try{
                         if(String.valueOf(c.getContentType()).toLowerCase(Locale.ROOT).contains("text/html")){
+                            if(github)throw new IOException("GitHub nije vratio KML fajl. Osvježi popis i pokušaj ponovo.");
                             String html=MapDownloads.readHtml(c),lower=html.toLowerCase(Locale.ROOT);
                             if(lower.contains("quota exceeded")||lower.contains("too many users")||lower.contains("downloadquotaexceeded"))throw MapDownloads.driveError(html);
                             try{url=MapDownloads.confirmation(html,id);}catch(Exception e){throw MapDownloads.driveError(html);}continue;
                         }
-                        if(c.getResponseCode()!=200||c.getHeaderField("Content-Range")!=null)throw new IOException("Drive je vratio nepotpun KML. Pokušaj ponovo.");
+                        if(c.getResponseCode()!=200||c.getHeaderField("Content-Range")!=null)throw new IOException("Izvor je vratio nepotpun KML. Pokušaj ponovo.");
                         if(c.getContentLengthLong()>=0&&c.getContentLengthLong()!=size)throw new IOException("Fajl je promijenjen. Osvježi popis i pokušaj ponovo.");
                         try(InputStream in=c.getInputStream();OutputStream out=new FileOutputStream(partial)){
                             byte[] buffer=new byte[65536];long bytes=0,deadline=android.os.SystemClock.elapsedRealtime()+240000;int n;
@@ -88,6 +98,22 @@ final class KmlDownloads implements WebViewAssetLoader.PathHandler {
             }finally{partial.delete();}
         }
         return new JSONObject().put("ok",true).put("url","https://appassets.androidplatform.net/drive-kml/"+id+".kml");
+    }
+    static JSONArray parseGithub(JSONArray releases) throws Exception {
+        JSONArray files=new JSONArray();Set<String> ids=new HashSet<>();
+        for(int i=0;i<releases.length();i++){
+            JSONObject release=releases.getJSONObject(i);if(release.optBoolean("draft"))continue;
+            JSONArray assets=release.getJSONArray("assets");
+            for(int j=0;j<assets.length();j++){
+                JSONObject a=assets.getJSONObject(j);String name=a.optString("name");
+                if(!name.toLowerCase(Locale.ROOT).endsWith(".kml")||!"uploaded".equals(a.optString("state","uploaded")))continue;
+                long asset=a.getLong("id"),size=a.getLong("size");String url=a.getString("browser_download_url");
+                if(asset<=0||size<=0||name.length()>240||name.matches("(?s).*[\\p{Cntrl}/\\\\].*")||!MapDownloads.githubAssetURL(new java.net.URL(url)))throw new IOException("Nevažeći GitHub KML izvor");
+                String id="github-kml-"+asset;if(ids.add(id))files.put(new JSONObject().put("id",id).put("name",name).put("size",size).put("url",url).put("release",release.optString("name",release.optString("tag_name"))).put("tooLarge",size>MAX_BYTES));
+                if(files.length()>300)throw new IOException("Popis KML fajlova je prevelik");
+            }
+        }
+        return files;
     }
     static void validate(File file,long expected) throws Exception {
         if(file.length()!=expected||expected<=0||expected>MAX_BYTES)throw new IOException("Preuzeti KML nije potpun");
@@ -108,7 +134,7 @@ final class KmlDownloads implements WebViewAssetLoader.PathHandler {
             for(int event=xml.getEventType();event!=XmlPullParser.END_DOCUMENT;event=xml.nextToken()){
                 if(event==XmlPullParser.DOCDECL)throw new IOException("KML sa DTD zapisom nije podržan");
                 if(event==XmlPullParser.START_TAG){
-                    if(depth==0){if(root||!"kml".equals(xml.getName()))throw new IOException("Drive nije vratio KML fajl");root=true;}
+                    if(depth==0){if(root||!"kml".equals(xml.getName()))throw new IOException("Izvor nije vratio KML fajl");root=true;}
                     depth++;
                 }else if(event==XmlPullParser.END_TAG){if(--depth<0)throw new IOException("KML fajl nije ispravan");if(depth==0)closed=true;}
                 else if(event==XmlPullParser.TEXT&&depth==0&&!xml.getText().trim().isEmpty())throw new IOException("KML fajl nije ispravan");

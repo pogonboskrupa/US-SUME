@@ -3567,3 +3567,60 @@ APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.4/app-debug
 Fizički Xiaomi i prijavljeno zastajkivanje na njemu nisu direktno testirani;
 provjera odziva je browser CPU4 simulacija, uz zasebne Android emulator provjere.
 Produkcijski Supabase nije mijenjan.
+
+
+## 2.7.5 — dnevni kontrast, dnevnik projekta, Granice i dvosmjer (10.10.2026)
+
+Zahtjevi korisnika: provjera Dnevnog moda na admin/projektant panelima;
+ispravna pripadnost dnevnika projektu; uklanjanje vremenske trake i tematske
+karte iz Podloge i slojevi; premještanje dodatnih slojeva u Granice; klikom
+odabrani dvosmjer završene ručne vlake/kraka. Potvrđen izvor novih KML:
+pogonboskrupa/KARTE → Releases, korisnik je već objavio Granice odjela i
+Kamionski putevi. Verzije: index/SW 2.7.5, Android code545.
+
+Dnevni tekst koristi tamnu boju i svijetle površine i u ugniježđenim
+prozorima: stvarni GPKG klasni prikaz/tabela/kolone/popup, KML i karte,
+admin korisnici/projekti, snimanje, doznaka, navigacija, štampa, autentikacija.
+Boje geometrije, rastera i paleta ostaju. Onemogućena dugmad nisu aktivirana.
+Novi browser test day-all-panels-275.py provjerava 144 stanja za obje uloge,
+sa popunjenim dnevnicima, KML/photo/tragovima i stvarnim sintetičkim GPKG.
+
+Dnevnik sada filtrira projektId i autora; novi lokalni zapisi sadrže ID
+projekta/korisnika/šumariju/GJ. Stari zapisi bez ID-a prikazuju se samo kad
+odjel/GJ/šumarija jednoznačno odgovaraju projektu i projektant pripada timu.
+Dvosmisleni zapisi nisu obrisani niti pogrešno pripisani. Brisanje dnevnika
+briše samo aktivni lokalni projekat; nema poziva za globalno brisanje servera.
+Admin detalji, statistika, PDF/KML dnevnika koriste isti projektni filter.
+Novi dnevnici kolega i dalje se ne šalju serveru; jasno označeno u prikazu.
+Nema produkcijske migracije ili promjene Supabase podataka.
+
+Vremenska traka: uklonjeni UI, runtime, SW rute/asset i winter-imagery.js.
+DEM i keš/offline testovi ostaju. Tematska karta je u vlastitoj sekciji Menija;
+njen jedini file picker je unutar tog modala. Granice sadrže postojeće
+prekidače puteva/granica/nagiba vlaka i katalog javnih GitHub KML assets.
+Native KmlDownloads koristi postojeći strogo ograničen GitHub transport,
+odvojene kataloge Drive/GitHub, validaciju veličine i XML-a, bez UI thread
+preuzimanja. Nakon uvoza KML ostaje u postojećem trajnom lokalnom spremištu
+korisnika; prikaz/sakrivanje/stilovi ostaju u pregledniku oznaka.
+
+Dvosmjer: u popupu završene vlake jasno dugme Odredi/Pomjeri dvosmjer,
+korisnik bira tačku. Prije nje smjer ide ka početku, poslije ka kraju;
+jedan ↔ znak na tački. Bez automatskog postavljanja na polovinu.
+Testirana završena ručna vlaka i krak s tačkom na 20% odnosno 80%.
+
+Lokalno prošlo 104 JS grupe i puni workflow browser skup, uključujući
+3.000 m svojih + 2.400 m koleginih vlaka, 1.360/5.410 tačaka, CPU1x/4x,
+online/offline i mrtvu/slabu mrežu. Novi emulator test provjerava GitHub KML
+katalog/preuzimanje/sačuvani fajl bez produkcijske mreže.
+Stvarni javni fajlovi provjereni read-only: KAMIONSKI.PUTEVI.kml 396.070 B,
+SHA256 d3122a19db88f01102f9f6e988116d3ebbf0e8e20fa3452de83a56c60c91cb14;
+GRANICE.kml 13.250.101 B,
+SHA256 758d1847c0f138622fedba50950b507f9981581a1d621372dd2fa5999774200c.
+Veličine/digest podudarni objavljenim GitHub assets. Fizički Xiaomi nije
+korišten; APK/emulator i objavu još treba potvrditi završnim CI rezultatom.
+
+Završna lokalna potvrda: 144 stanja × širine 320/390/1280 px, 0 slabih
+kontrasta, 0 JS grešaka i 0 vanjskih upisa. Stvarni javni KML uvoz i offline
+ponovno otvaranje kroz postojeći parser/spremište: 83 stavke puteva i
+2.759 stavki granica. Native transport u toj browser provjeri je zamijenjen
+fixture mostom; stvarni javni bajtovi i digest provjereni odvojeno.

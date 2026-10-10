@@ -2,7 +2,7 @@
 // Service Worker — ŠPD Unsko-sanske šume
 // Promijeni APP_VERSION pri svakom deploymentu → okida update
 // =====================================================================
-const APP_VERSION = '2.7.4';
+const APP_VERSION = '2.7.5';
 const APP_CACHE   = 'tvlake-app-v' + APP_VERSION;
 const TILE_CACHE  = 'tvlake-tiles-v1';
 const LIB_CACHE   = 'tvlake-lib-v1';
@@ -11,7 +11,6 @@ const SLOPE_CACHE = 'tvlake-slope-v1';
 const TERR_CACHE  = 'tvlake-terr-v1';
 const NV_CACHE    = 'tvlake-nv-v1';     // Open-Meteo elevation (statički, može se keširati)
 const WC_CACHE    = 'tvlake-wcover-v1'; // ESA WorldCover pokrivenost zemljišta (v3.103.0)
-const WB_CACHE    = 'tvlake-wayback-v1';// Esri World Imagery Wayback — vremenska traka (v3.111.0)
 
 // App shell koji se uvijek precachira
 const APP_SHELL = [
@@ -48,7 +47,6 @@ const APP_SHELL = [
   './static/js/project-terrain.js',
   './static/js/dem-quality.js',
   './static/js/doznaka-bands.js',
-  './static/js/winter-imagery.js',
   './static/data/usk-boundary.geojson',
   './static/css/map-library.css',
   './static/css/server-panel.css',
@@ -163,14 +161,6 @@ self.addEventListener('fetch', event => {
   // mjestu u layer-sheetu, pa je 'tiles.maps.eox.at' ovdje uklonjen.
   if (url.includes('services.terrascope.be')) {
     _tileRespond(event, WC_CACHE);
-    return;
-  }
-  // Esri World Imagery Wayback — stariji snimci iste podloge kao "Satelit"
-  // (v3.111.0). Config JSON (waybackconfig.json, s3-us-west-2.amazonaws.com)
-  // se NAMJERNO ne kešira ovdje — ima svoj localStorage keš (_wbUcitajReleases),
-  // jer je to lista release-a, ne pločica.
-  if (url.includes('wayback.maptiles.arcgis.com')) {
-    _tileRespond(event, WB_CACHE);
     return;
   }
   if (

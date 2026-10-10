@@ -44,7 +44,7 @@ pm_start=SOURCE.index('<div id="pm-modal"')
 pm_html=SOURCE[pm_start:SOURCE.index('<!-- ─── IZVJEŠTAJI',pm_start)]
 pm_code=SOURCE[SOURCE.index('let _pmDetailId ='):SOURCE.index('function _isManualVlaka(')]
 javascript += "\nconst kolegeMap={B:{ime:'Amir Kolega'}};let dnevniLog=[],serverRows=[];const _OL={VLAKE:'vlake',load:()=>serverRows,loadQueue:()=>[]};const _kvcLoad=()=>[];const _mrezaProbaj=()=>false;const _enrichVlakeElevation=async()=>{};"
-javascript += '\n'+'\n'.join(function(n) for n in ['dst','calcL','calcElev','fmtL','fmtHa','fmtDate','fmtDateShort','_esc','_pmOpenDetail','_pmBuildDetail','_vlakeStatsSecsHtml','_pmTime'])+'\n'+pm_code
+javascript += '\n'+'\n'.join(function(n) for n in ['dst','calcL','calcElev','fmtL','fmtHa','fmtDate','fmtDateShort','_esc','_projektTimIds','_projektIme','_logEntryMatchesProject','_pmOpenDetail','_pmBuildDetail','_vlakeStatsSecsHtml','_pmTime'])+'\n'+pm_code
 javascript += '\n'+(ROOT/'static/js/server-panel.js').read_text()
 fixture = '<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color"><style>' + styles + '''
 #tab-bar{position:fixed;left:0;right:0;top:0;z-index:900}

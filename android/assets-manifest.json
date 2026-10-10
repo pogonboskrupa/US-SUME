@@ -44,7 +44,6 @@
     "static/js/project-terrain.js",
     "static/js/dem-quality.js",
     "static/js/doznaka-bands.js",
-    "static/js/winter-imagery.js",
     "static/data/usk-boundary.geojson",
     "static/js/reference-vlake.js",
     "static/js/doznaka-boundary.js",

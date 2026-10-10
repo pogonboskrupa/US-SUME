@@ -4896,8 +4896,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <!-- DNEVNIK RADOVA -->
       <div class="sec">
-        <div class="sec-t">📅 Dnevnik Radova</div>
-        <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <div class="sec-t">📅 Dnevnik ovog projekta</div>
+        <p class="project-vl-note">Lokalna evidencija rada. Novi dnevnici kolega se ne šalju na server.</p>
+        <div id="project-log-actions" style="display:flex;gap:6px;margin-bottom:10px;">
           <button class="btn b" style="margin:0;flex:1;font-size:12px;padding:8px;" onclick="logDan()"><svg class="ic"><use href="#ic-zabiljezi"/></svg> Zabilježi danas</button>
           <button class="btn gr" style="margin:0;width:auto;padding:8px 12px;font-size:13px;" onclick="clearLog()" title="Obriši log"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
         </div>
@@ -5754,7 +5755,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.4';
+const APP_VER = 'v2.7.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8245,7 +8246,7 @@ function _netDebugRender() {
     'prijava sa keširanim profilom · mjerenja · novi projekat · N.V. i profil iz preuzetog ' +
     'modela terena · sve izmjene idu u red i čekaju' +
     '<div style="color:#f59e0b;font-weight:700;margin:7px 0 2px;">Traži vezu (do tada keš ili prazno)</div>' +
-    'sinkronizacija sa serverom · vlake kolega · ruta putem · Sentinel-2 i Vremenska traka' +
+    'sinkronizacija sa serverom · vlake kolega · ruta putem' +
     '<div style="color:#f59e0b;font-weight:700;margin:7px 0 2px;">Traži DOBRU vezu (na slaboj čeka)</div>' +
     'slanje fotografija · preuzimanje terena (pita) · novi projekat direktno na server' +
     '</div>';
@@ -9440,6 +9441,7 @@ function showProjektiList() {
   document.getElementById('nov-proj-sec').style.display = 'none';
   document.getElementById('proj-list-sec').style.display = '';
   rndProjektiList();
+  rndLog();
 }
 
 function showProjektDetalji(id) {
@@ -9523,6 +9525,7 @@ function showProjektDetalji(id) {
   // Export KML — uvijek vidljiv (i admin može exportovati)
   // Sakrij/Prikaži vlake dugme
   _updPdVlakeBtn(id);
+  rndLog();
 
   // Samo vlasnik projekta može dodavati/uklanjati članove i brisati projekat (ne admin/ŠPD)
   const ro = isReadOnly();
@@ -11216,6 +11219,9 @@ function _applyLogRows(rows) {
     if (!grouped[row.datum]) grouped[row.datum] = { date: row.datum, entries: [] };
     grouped[row.datum].entries.push({
       projektant: row.projektant,
+      projektId: row.projekt_id || null,
+      korisnikId: row.korisnik_id || null,
+      sumarija: row.sumarija || '', gj: row.gj || '',
       meters:     row.meters,
       odjel:      row.odjel || '',
       vlake:      row.vlake_snapshot || [],
@@ -11231,7 +11237,10 @@ function _applyLogRows(rows) {
     if (!d || !d.date) return;
     const g = grouped[d.date] || (grouped[d.date] = { date: d.date, entries: [] });
     (d.entries || []).forEach(e => {
-      const i = g.entries.findIndex(x => x.projektant === e.projektant);
+      const i = g.entries.findIndex(x => x.projektant === e.projektant
+        && (x.projektId || '') === (e.projektId || '')
+        && (x.projektId ? !(x.korisnikId && e.korisnikId) || x.korisnikId === e.korisnikId
+          : (x.odjel || '') === (e.odjel || '') && (x.gj || '') === (e.gj || '') && (x.sumarija || '') === (e.sumarija || '')));
       if (i >= 0) g.entries[i] = e; else g.entries.push(e);
     });
   });
@@ -14992,7 +15001,7 @@ function _addGradePoly(v, seg) {
 // admin ekrana i tuđe elevation-enrichment/statistike koje regularni
 // projektant ne treba. Ovo je laka verzija: oboji SVE trenutno vidljive vlake
 // na karti bojom po nagibu (ista skala kao Analiza nagiba), checkbox u 🗄
-// Slojevi karte → Dodatni slojevi.
+// Podloge i slojevi → Granice → Prikaz slojeva.
 //
 // NAMJERNO nije "živ" prikaz (ne prati GPS snimanje ni izmjene uživo) — isti
 // obrazac kao admin verzija, koja je i sama snapshot analiza na klik, ne
@@ -15358,152 +15367,6 @@ Object.entries(_ovlState).forEach(([k,v]) => { if (v && _OVL[k]) _OVL[k].addTo(m
 setTimeout(_demLegendUpdate, 0); // after DOM ready
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VREMENSKA TRAKA — Esri World Imagery Wayback (v3.111.0)
-// ---------------------------------------------------------------------------
-// Google Earth samo nema besplatan API bez ključa za istorijske snimke, ali
-// Esri besplatno i bez ključa nudi ISTO: arhivu prošlih verzija SVOJE World
-// Imagery podloge (koju ova app već koristi kao "🛰 Satelit") — jedan snimak
-// po "release"-u, unazad do 2014, novi release otprilike mjesečno. Ovo NIJE
-// dnevni snimak za bilo koju tačku na Zemlji (mozaik se ažurira po dijelovima
-// svijeta u različitim intervalima) — za konkretnu lokaciju izabrani datum
-// znači "ovo je bilo najnovije dostupno u tom trenutku", ne garantovano BAŠ
-// taj dan. Bitno za korisnika: ZIMSKI snimak (bez lišća na lišćarima) mnogo
-// jasnije pokazuje četinare, šumske puteve i prosjeke nego ljetni.
-//
-// Config JSON (potvrđeno, javan, bez ključa — vidi waybackconfig.json) daje
-// listu release-a; svaki već nosi PUN tile URL template (ne treba ručno
-// slagati {z}/{x}/{y}, samo string-zamjena {level}/{row}/{col}, standardni
-// Web Mercator XYZ). CORS na wayback.maptiles.arcgis.com NIJE bilo moguće
-// potvrditi iz sandboxa (isti domen-egress limit kao za sve nove mrežne
-// slojeve, vidi CLAUDE.md) — ista ArcGIS Server infrastruktura kao već
-// dokazano radeći server.arcgisonline.com, pa je razumna pretpostavka, ali
-// treba potvrdu na uređaju. makeCachedTileLayer već tretira pali fetch kao
-// praznu providnu pločicu, ne rušenje.
-const _WB_CONFIG_URL = 'https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
-const _WB_CACHE_KEY  = 'tvlake_wayback_releases'; // keš liste release-a za offline/pao fetch
-const _WB_TILE_CACHE = 'tvlake-wayback-v1';
-const CachedWayback  = makeCachedTileLayer(_WB_TILE_CACHE);
-const _wbTileLayer = new CachedWayback('', {
-  maxNativeZoom: 19, maxZoom: 22, keepBuffer: 6,
-  updateWhenZooming: false, updateWhenIdle: true, updateInterval: 150
-});
-let _wbOn = false;
-let _wbPrevKey = null;      // koji je TL bio aktivan prije uključivanja Wayback-a
-let _wbReleases = null;     // [{date:'YYYY-MM-DD', url:'...'}], najnoviji prvi
-let _wbCurUrl = null;       // trenutno prikazan release (za obnovu pri ponovnom otvaranju sheeta)
-
-// Parsira waybackconfig.json u [{date,url}] — datum je ugniježđen u itemTitle
-// ("World Imagery (Wayback 2026-08-05)"), ne poseban JSON field (potvrđeno
-// fetch-om configa uživo — vidi CLAUDE.md za detalje istraživanja).
-function _wbParsiraj(json) {
-  return Object.values(json || {})
-    .map(rel => {
-      const m = /(\d{4}-\d{2}-\d{2})\)/.exec(rel.itemTitle || '');
-      return (m && rel.itemURL) ? { date: m[1], url: rel.itemURL, ...(rel.metadataLayerUrl?{metadataUrl:rel.metadataLayerUrl}:{}) } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.date.localeCompare(a.date));
-}
-
-async function _wbUcitajReleases(tiho) {
-  try {
-    const r = await _fetchT(_WB_CONFIG_URL, 15000);
-    if (r && r.ok) {
-      const out = _wbParsiraj(await r.json());
-      if (out.length) {
-        _wbReleases = out;
-        try { localStorage.setItem(_WB_CACHE_KEY, JSON.stringify(out)); } catch(e) {}
-        return true;
-      }
-    }
-  } catch(e) {}
-  // Mreža pala/nema je — probaj zadnji uspješan keš (offline-first).
-  try {
-    const cached = JSON.parse(localStorage.getItem(_WB_CACHE_KEY) || 'null');
-    if (Array.isArray(cached) && cached.length) { _wbReleases = cached; return true; }
-  } catch(e) {}
-  if (!tiho) showToast('⚠ Ne mogu dohvatiti listu starih snimaka — provjeri internet');
-  return false;
-}
-
-function _wbNajblizaZima() {
-  return (_wbReleases || []).find(r => {
-    const mo = parseInt(r.date.slice(5, 7), 10);
-    return mo === 12 || mo === 1 || mo === 2;
-  }) || null;
-}
-
-// Sakrij OBIČNE bazne (TL) slojeve dok je Wayback aktivan — NE dira _saveLastMap
-// niti stanja _nagib/_granice/sqlite: Wayback je privremen prikaz, ne treba da
-// postane trajno zapamćena "zadnja karta" (korisnik bi se vratio u app i
-// slučajno gledao snimak iz 2019. umjesto trenutnog stanja).
-function _wbHideBase() {
-  _wbPrevKey = (typeof _activeLayerKey === 'function') ? _activeLayerKey() : null;
-  Object.values(TL).forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
-}
-
-function _wbRestoreBase() {
-  const key = (_wbPrevKey && TL[_wbPrevKey]) ? _wbPrevKey : '⛰ Topo';
-  TL[key].addTo(map);
-  _wbPrevKey = null;
-}
-
-function _wbPostaviDatum(url,winterGeometry) {
-  if (!url) return;
-  if(typeof WbWinter!=='undefined'){WbWinter.cancel();if(winterGeometry)WbWinter.apply(winterGeometry);}
-  _wbCurUrl = url;
-  _wbTileLayer.setUrl(url);
-  if (!map.hasLayer(_wbTileLayer)) _wbTileLayer.addTo(map);
-  const rel = (_wbReleases || []).find(r => r.url === url);
-  const st = document.getElementById('wb-status');
-  if (st && rel) {
-    const zima = ['12','01','02'].includes(rel.date.slice(5,7));
-    st.textContent = 'Objava arhive: ' + rel.date
-      + ' · datum je release-a, ne garantovano tačan datum snimka na tvojoj lokaciji';
-  }
-}
-
-async function _wbToggle(on) {
-  const cb = document.getElementById('wb-toggle');
-  const picker = document.getElementById('wb-picker');
-  if (!on) {
-    _wbOn = false;
-    if (map.hasLayer(_wbTileLayer)) map.removeLayer(_wbTileLayer);
-    _wbRestoreBase();
-    if (picker) picker.style.display = 'none';
-    _lsRenderSqlite();
-    return;
-  }
-  if (!_wbReleases) {
-    const st = document.getElementById('wb-status');
-    if (st) st.textContent = 'Učitavam listu snimaka…';
-    const ok = await _wbUcitajReleases();
-    if (!ok) { if (cb) cb.checked = false; return; }
-  }
-  _wbOn = true;
-  _wbHideBase();
-  if (picker) picker.style.display = '';
-  const sel = document.getElementById('wb-datum');
-  if (sel) {
-    sel.innerHTML = _wbReleases.map(r =>
-      `<option value="${_escHtml(r.url)}">Objava ${r.date}</option>`
-    ).join('');
-    sel.value = _wbReleases[0].url;
-  }
-  _wbPostaviDatum(_wbReleases[0].url);
-  _lsRenderSqlite();
-}
-
-function _wbTrazZimu() {
-  if(typeof WbWinter!=='undefined')return WbWinter.search();
-  const zima = _wbNajblizaZima();
-  if (!zima) { showToast('⚠ Nema zimskog snimka u arhivi'); return; }
-  const sel = document.getElementById('wb-datum');
-  if (sel) sel.value = zima.url;
-  _wbPostaviDatum(zima.url);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Uklonjeni Sentinel-2 pristup: izbriši ranije sačuvane klijentske tajne.
 try { localStorage.removeItem('tvlake_sentinel2_kljucevi_kes'); } catch(e) {}
 if (typeof caches !== 'undefined') caches.delete('tvlake-sentinel2-v1').catch(() => {});
@@ -15801,24 +15664,6 @@ function _openLayerSheet() {
     const cb = document.getElementById('inst-' + id + '-cb');
     if (cb) cb.checked = !!_ovlState[id];
   });
-  // Vremenska traka (Wayback) — obnovi checkbox/picker ako je bila aktivna dok je
-  // sheet bio zatvoren (npr. korisnik otišao na Kartu pa se vratio na Slojeve).
-  const wbCb = document.getElementById('wb-toggle');
-  const wbPicker = document.getElementById('wb-picker');
-  if (wbCb) wbCb.checked = _wbOn;
-  if (wbPicker) wbPicker.style.display = _wbOn ? '' : 'none';
-  if (_wbOn && _wbReleases) {
-    const sel = document.getElementById('wb-datum');
-    if (sel) {
-      if (!sel.options.length) {
-        sel.innerHTML = _wbReleases.map(r =>
-          `<option value="${_escHtml(r.url)}">${['12','01','02'].includes(r.date.slice(5,7)) ? '🌨 ' : ''}${r.date}</option>`
-        ).join('');
-      }
-      sel.value = _wbCurUrl || _wbReleases[0].url;
-    }
-  }
-  // Sentinel-2 — isti princip, ali cijela sekcija (uklj. admin polja) se
   _instUpdateStats();
   // Granice odjela dugme — prikaži samo ako ima učitanih granica
   const grRow = document.getElementById('ls-granice-row');
@@ -15838,38 +15683,6 @@ function _openLayerSheet() {
   }
   _lsRenderGranice();
   _lsRenderCache();
-  _lsRenderTem();
-}
-
-// Tematske karte (.gpkg) — brza sekcija u modalu karte; puno upravljanje u tem-modal panelu
-function _lsRenderTem() {
-  const box = document.getElementById('ls-tem-box');
-  if (!box) return;
-  if (!_temMaps.length) {
-    box.innerHTML = `
-      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Učitaj .gpkg s odjelima/odsjecima — brojčane kolone (visina, zaliha, starost...) i kolone sa nekoliko vrijednosti (uređajni razred...) postaju teme za bojenje. Klik na poligon daje karticu s atributima.</div>
-      <button onclick="document.getElementById('tem-file-input').click()"
-        style="width:100%;padding:10px;background:#1e3a5f;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;cursor:pointer;">
-        <svg class="ic"><use href="#ic-folder"/></svg> Učitaj .gpkg (tematska karta)
-      </button>`;
-    return;
-  }
-  const rows = _temMaps.map(m => {
-    const traka = m._cls ? `<span style="display:flex;width:46px;height:8px;border-radius:3px;overflow:hidden;flex-shrink:0;">${m._cls.colors.map(c => `<i style="flex:1;background:${c};"></i>`).join('')}</span>` : '';
-    return `
-    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-      <button onclick="_temSetVisible('${_jsAttr(m.id)}', ${m.visible ? 'false' : 'true'})" title="${m.visible ? 'Sakrij' : 'Prikaži'}"
-        style="width:34px;height:30px;flex-shrink:0;background:#1e293b;border:1px solid #334155;border-radius:7px;color:${m.visible ? '#4ade80' : '#64748b'};cursor:pointer;padding:0;"><svg class="ic"><use href="#ic-${m.visible ? 'prikazi' : 'sakrij'}"/></svg></button>
-      <span style="flex:1;font-size:12px;color:${m.visible ? '#e2e8f0' : '#64748b'};min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escHtml(m.name)}</span>
-      <span style="font-size:10px;color:#64748b;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis;">${m.theme ? _escHtml(_temColLabel(m, m.theme)) : 'bez teme'}</span>
-      ${traka}
-    </div>`;
-  }).join('');
-  box.innerHTML = `${rows}
-    <button onclick="closeLayerSheet();showTemModal();"
-      style="width:100%;margin-top:6px;padding:9px;background:#1e3a5f;border:1px solid #334155;border-radius:8px;color:#93c5fd;font-size:12px;font-weight:600;cursor:pointer;">
-      <svg class="ic"><use href="#ic-statistika"/></svg> Upravljaj tematskim kartama
-    </button>`;
 }
 
 // Prikaz zauzeća memorije online karata (keširane pločice) + brisanje — u modalu karte
@@ -15908,7 +15721,6 @@ const _CMGR_ROWS = [
   { id: 'slope', ico: '📐',  name: 'Nagib terena',    sub: 'Shaded relief',    cache: 'tvlake-slope-v1' },
   { id: 'terr',  ico: '🗻',  name: 'Teren (DEM)',     sub: 'Visinski podaci · N.V. offline',  cache: 'tvlake-terr-v1' },
   { id: 'nv',    ico: '🏷',  name: 'Nadmorske visine', sub: 'Open-Meteo keš',  cache: 'tvlake-nv-v1' },
-  { id: 'wayback', ico: '📅', name: 'Vremenska traka', sub: 'Esri Wayback',    cache: _WB_TILE_CACHE },
 ];
 let _cmgrData = null;   // zadnji scan: {id: {count, bytes}}
 
@@ -24715,6 +24527,7 @@ function _lsTab(name) {
   });
   if (name === 'inst') _instUpdateStats();
   if (name === 'offline') _lsRenderSqlite();
+  if (name === 'granice' && typeof KmlDownloads !== 'undefined') KmlDownloads.refreshGithub();
 }
 
 function _instToggle(id, on) {
@@ -25200,10 +25013,10 @@ function _downloadKml(filename, content) {
 }
 
 function exportDnevniKml(date) {
-  const day=dnevniLog.find(d=>d.date===date);
+  const day=_projectLog(_logViewProjectId()).find(d=>d.date===date);
   if (!day) return;
   const names=new Set(day.entries.flatMap(e=>(e.vlakeNm||(e.vlake||[]).map(v=>v.nm))));
-  const toExp=vlake.filter(v=>names.has(v.nm));
+  const toExp=vlake.filter(v=>v.projektId===_logViewProjectId() && names.has(v.nm));
   if (toExp.length===0){showToast('Nema geometrije za ovaj dan u memoriji.');return;}
   const kml=_makeKml(`Vlake ${fmtDate(date)}`,toExp);
   const fname=`vlake_${date}.kml`;
@@ -26116,10 +25929,10 @@ async function _pmOpenDetail(id) {
     } catch(e) {}
     try {
       const { data } = await sb.from('dnevni_log')
-        .select('datum,projektant,meters,active_min,work_start,work_end,odjel')
+        .select('*')
         .eq('sumarija', p.sumarija || sbProfile?.sumarija || '')
         .eq('odjel', p.odjel || '');
-      if (data) logRows = data;
+      if (data) logRows = data.filter(e=>_logEntryMatchesProject(e,p));
     } catch(e) {}
   }
   // Fallback na lokalne podatke ako server ne vrati ništa (offline)
@@ -26131,7 +25944,7 @@ async function _pmOpenDetail(id) {
   }
   if (!logRows.length && typeof dnevniLog !== 'undefined') {
     dnevniLog.forEach(day => (day.entries || []).forEach(e => {
-      if ((e.odjel || '') === (p.odjel || '')) logRows.push({
+      if (_logEntryMatchesProject(e,p)) logRows.push({
         datum: day.date, projektant: e.projektant, meters: e.meters,
         active_min: e.activeMin, work_start: e.workStart, work_end: e.workEnd
       });
@@ -26975,7 +26788,7 @@ function updProjStats() {
 
   // aggregate all projektanti across entire log history
   const allP = {};
-  dnevniLog.forEach(day => {
+  _projectLog().forEach(day => {
     day.entries.forEach(e => {
       if (!allP[e.projektant]) allP[e.projektant] = {meters:0, days:new Set()};
       // take the maximum snapshot value across days (last/highest)
@@ -26988,7 +26801,7 @@ function updProjStats() {
   if (!allP[myIme]) allP[myIme] = {meters:0, days:new Set()};
   allP[myIme].meters = Math.round(myTotal);
 
-  const nDana = dnevniLog.length;
+  const nDana = _projectLog().length;
 
   // Dužine po projektantu, Ukupno i Gustoća mreže su NAMJERNO uklonjene odavde
   // (v3.102.3) — "Terenske statistike" odmah ispod (updTerenStats) prikazuje
@@ -27112,7 +26925,7 @@ function _calcTerenStats() {
   // Stats po projektantu (kombinirano iz dnevnog loga + aktivni projektant)
   const myIme = getIme();
   const allP  = {};
-  dnevniLog.forEach(day => {
+  _projectLog().forEach(day => {
     day.entries.forEach(e => {
       if (!allP[e.projektant]) allP[e.projektant] = { meters: 0, days: new Set(), activeMin: 0, workDates: [] };
       if (e.meters > allP[e.projektant].meters) allP[e.projektant].meters = e.meters;
@@ -27380,7 +27193,33 @@ function rndKolegeVlakeList() {
 }
 
 // === DNEVNIK ===
+function _logEntryMatchesProject(e, p) {
+  if (!e || !p) return false;
+  const pid = e.projektId || e.projekt_id;
+  if (pid) return pid === p.id;
+  const norm = v => String(v || '').trim().toLocaleLowerCase('bs');
+  if (!norm(e.odjel) || norm(e.odjel) !== norm(p.odjel)) return false;
+  const candidates = _projekti.filter(x => norm(x.odjel) === norm(e.odjel)
+    && (!e.sumarija || norm(x.sumarija) === norm(e.sumarija))
+    && (!e.gj || norm(x.gj) === norm(e.gj)));
+  if (candidates.length !== 1 || candidates[0].id !== p.id) return false;
+  const members = _projektTimIds(p), author = e.korisnikId || e.korisnik_id;
+  if (author) return members.includes(author);
+  return members.some(kid => norm(_projektIme(kid)) === norm(e.projektant));
+}
+function _projectLog(id = _aktivniProjektId) {
+  const p = _projekti.find(x => x.id === id);
+  if (!p) return [];
+  return dnevniLog.map(day => ({...day, entries:(day.entries || []).filter(e => _logEntryMatchesProject(e,p))}))
+    .filter(day => day.entries.length);
+}
+function _logViewProjectId() {
+  const detail = document.getElementById('proj-detalji-sec');
+  return detail && detail.style.display !== 'none' && _pdProjektId ? _pdProjektId : _aktivniProjektId;
+}
 function logDan() {
+  const p = _projekti.find(x => x.id === _aktivniProjektId);
+  if (!p || isReadOnly()) { showToast('Aktiviraj svoj projekat za evidenciju rada.'); return; }
   const date=todayStr(), ime=getIme(), odjel=getOdjel();
   const logVlake = _aktivniProjektId ? vlake.filter(v => v.projektId === _aktivniProjektId) : vlake;
   const totalM=Math.round(_ukupnoVlakeM(logVlake));
@@ -27395,8 +27234,8 @@ function logDan() {
   const activeMin = Math.round(activeMs / 60000);
   let day=dnevniLog.find(d=>d.date===date);
   if (!day) { day={date,entries:[]}; dnevniLog.unshift(day); }
-  const entry=day.entries.find(e=>e.projektant===ime);
-  const timingObj = { workStart, workEnd, activeMin };
+  const entry=day.entries.find(e=>e.projektId===p.id && (e.korisnikId===sbUser?.id || !e.korisnikId && e.projektant===ime));
+  const timingObj = { workStart, workEnd, activeMin, projektId:p.id, korisnikId:sbUser?.id, sumarija:p.sumarija || sbProfile?.sumarija || '', gj:p.gj || '' };
   if (entry) { Object.assign(entry, { meters:totalM, odjel, vlake:vSnap, vlakeNm:vSnap.map(v=>v.nm), ...timingObj }); }
   else        { day.entries.push({ projektant:ime, meters:totalM, odjel, vlake:vSnap, vlakeNm:vSnap.map(v=>v.nm), ...timingObj }); }
   localStorage.setItem('tvlake_log', JSON.stringify(dnevniLog));   // v1.9.6: dnevnik ostaje samo na telefonu
@@ -27405,28 +27244,33 @@ function logDan() {
   if(b){const t=b.textContent;b.textContent='✅ Zabilježeno!';setTimeout(()=>b.textContent=t,1800);}
 }
 async function clearLog() {
-  if (!await _dlgConfirm('Obrisati cijeli dnevnik radova?', { danger: true })) return;
-  dnevniLog=[]; localStorage.removeItem('tvlake_log');
-  sbClearLog();
+  const p = _projekti.find(x => x.id === _logViewProjectId());
+  if (!p || !_projectLog(p.id).length) return;
+  if (!await _dlgConfirm('Obrisati lokalni dnevnik ovog projekta?', { danger: true })) return;
+  dnevniLog=dnevniLog.map(day=>({...day,entries:(day.entries||[]).filter(e=>!_logEntryMatchesProject(e,p))})).filter(day=>day.entries.length);
+  localStorage.setItem('tvlake_log',JSON.stringify(dnevniLog));
   rndLog(); updProjStats(); rndOdjeliRekap();
 }
 
 function rndLog() {
   const el=document.getElementById('dnevni-log');
-  if (dnevniLog.length===0) {
+  const log = _projectLog(_logViewProjectId());
+  const controls = document.getElementById('project-log-actions');
+  if (controls) controls.hidden = isReadOnly() || _logViewProjectId() !== _aktivniProjektId;
+  if (log.length===0) {
     el.innerHTML=`<div style="font-size:12px;color:#475569;text-align:center;padding:16px;line-height:1.9;">
-      Nema evidentiranih radova.<br>Klikni <b style="color:#60a5fa;">Zabilježi danas</b><br>na kraju radnog dana.</div>`;
+      Nema lokalno evidentiranih radova za ovaj projekat.</div>`;
     return;
   }
   // cumulative (oldest→newest)
   let cum=0;
   const cumMap={};
-  [...dnevniLog].reverse().forEach(day=>{
+  [...log].reverse().forEach(day=>{
     cum+=day.entries.reduce((s,e)=>s+e.meters,0);
     cumMap[day.date]=cum;
   });
 
-  el.innerHTML=dnevniLog.map(day=>{
+  el.innerHTML=log.map(day=>{
     const dayTotal=day.entries.reduce((s,e)=>s+e.meters,0);
     const dayName=fmtDate(day.date);
 
@@ -27454,11 +27298,11 @@ function rndLog() {
     const entries=day.entries.map(e=>{
       const vRows=(e.vlake||[]).filter(v=>v.m>0).map(v=>
         `<div style="display:flex;justify-content:space-between;padding:1px 0 1px 10px;color:#64748b;font-size:11px;">
-          <span>${v.nm}</span><span style="font-family:monospace;">${fmtL(v.m)}</span></div>`).join('');
+          <span>${_escHtml(v.nm)}</span><span style="font-family:monospace;">${fmtL(v.m)}</span></div>`).join('');
       const eTime = (e.workStart||e.activeMin) ? `<span style="font-size:10px;color:#475569;margin-left:6px;">${e.workStart?e.workStart+(e.workEnd?' – '+e.workEnd:''):''}${e.activeMin>0?' · 🔴'+_fmtDur(e.activeMin):''}</span>` : '';
       return `<div style="padding:4px 0;border-bottom:1px solid #1e293b;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
-          <span><b style="color:#e2e8f0;font-size:12px;">${e.projektant}</b>${eTime}</span>
+          <span><b style="color:#e2e8f0;font-size:12px;">${_escHtml(e.projektant)}</b>${eTime}</span>
           <span style="color:#4ade80;font-family:monospace;">${fmtL(e.meters)}</span>
         </div>${vRows}</div>`;
     }).join('');
@@ -27511,7 +27355,7 @@ function exportProjektPDF() {
 
   // ── rekap po projektantu (iz loga + live) ──
   const byProj = {};
-  dnevniLog.forEach(day => {
+  _projectLog().forEach(day => {
     day.entries.forEach(e => {
       if (!byProj[e.projektant]) byProj[e.projektant] = { meters: 0, days: new Set() };
       if (e.meters > byProj[e.projektant].meters) byProj[e.projektant].meters = e.meters;
@@ -27554,7 +27398,7 @@ function exportProjektPDF() {
   }).join('');
 
   // ── dnevni log ──
-  const logRows = [...dnevniLog]
+  const logRows = [..._projectLog()]
     .sort((a, b) => a.date.localeCompare(b.date))
     .flatMap(day => day.entries.map(e => `
       <tr>
@@ -27616,7 +27460,7 @@ tbody tr:nth-child(even) td{background:#f9fafb}
   <tbody>
     ${Object.entries(byProj).map(([ime, d]) => `
     <tr><td>${ime}</td><td style="text-align:right">${fmtM(d.meters)}</td><td style="text-align:right">${d.days.size}</td></tr>`).join('')}
-    <tr class="tot"><td>UKUPNO</td><td style="text-align:right">${fmtM(totalAllM)}</td><td style="text-align:right">${dnevniLog.length} dana</td></tr>
+    <tr class="tot"><td>UKUPNO</td><td style="text-align:right">${fmtM(totalAllM)}</td><td style="text-align:right">${_projectLog().length} dana</td></tr>
   </tbody>
 </table>
 
@@ -27660,7 +27504,7 @@ function rndOdjeliRekap() {
 
   // Grupiši sve log unose po odjelu
   const byOdjel = {};
-  dnevniLog.forEach(day => {
+  _projectLog().forEach(day => {
     day.entries.forEach(e => {
       const od = e.odjel || '—';
       if (!byOdjel[od]) byOdjel[od] = { vlake: {}, byProjektant: {}, dates: new Set() };
@@ -35707,7 +35551,6 @@ function _gpkgLoadFiles(files) {
         if (!_temSelectedId) _temSelectedId = entry.id;
         done++;
         _temModalRender(true);
-        if (typeof _lsRenderTem === 'function') _lsRenderTem();
       } catch(e) {
         if (key) await _kmlcDelete(key);
         if (!current()) break;
@@ -35867,7 +35710,6 @@ async function _gpkgParseBuf(buf, name, opts, saved) {
 
   // Vrati zapamćenu temu (restore poslije restarta)
   if (entry.theme && (entry.cols.includes(entry.theme) || entry.catCols.includes(entry.theme))) _temApplyTheme(entry.id, entry.theme);
-  if (typeof _lsRenderTem === 'function') _lsRenderTem();
   if (typeof _temModalRender === 'function') _temModalRender(true);
   return entry;
 }
@@ -36041,7 +35883,6 @@ function _temSetVisible(id, on) {
   if (!_temRegSave()) { entry.visible = was; showToast('Vidljivost nije sačuvana: oslobodi prostor'); _temModalRender(true); return; }
   try { if (on) entry.grp.addTo(map); else map.removeLayer(entry.grp); } catch(e) {}
   _temLegendUpd(); _temModalRender(true);
-  if (typeof _lsRenderTem === 'function') _lsRenderTem();
 }
 
 function _temZoom(id) {
@@ -36064,7 +35905,6 @@ async function _temRenameCol(id) {
   _temRegSave();
   _temModalRender(true);
   _temLegendUpd();
-  if (typeof _lsRenderTem === 'function') _lsRenderTem();
   showToast('💾 Naziv zapisan — ostaje sačuvan i poslije odjave');
 }
 
@@ -36082,7 +35922,6 @@ async function _temRemoveMap(id) {
   delete _temEdDraft[id];
   _kmlcDelete(_TEM_IDB_PFX + id).catch(() => {});
   _temLegendUpd(); _temModalRender(true);
-  if (typeof _lsRenderTem === 'function') _lsRenderTem();
   showToast('🗑 Tematska karta uklonjena');
 }
 
@@ -36093,7 +35932,6 @@ function _temRemoveAll(silent) {
   _temMaps = [];
   _temEdOpenId = null;
   _temLegendUpd();
-  if (!silent && typeof _lsRenderTem === 'function') _lsRenderTem();
 }
 
 // Restore poslije restarta/prijave (poziva se iz showApp, iza prvog painta)
@@ -36639,7 +36477,6 @@ function _temSetAllVisible(on) {
   if (!_temRegSave()) { _temMaps.forEach((m, i) => { m.visible = old[i]; }); showToast('Vidljivost nije sačuvana: oslobodi prostor'); _temModalRender(true); return; }
   _temMaps.forEach(m => { if (on) m.grp.addTo(map); else map.removeLayer(m.grp); });
   _temLegendUpd(); _temModalRender(true);
-  if (typeof _lsRenderTem === 'function') _lsRenderTem();
 }
 function _temModalRender(preserveDraft = false) {
   const body = document.getElementById('tem-modal-body');
@@ -41456,6 +41293,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <header class="tem-panel-head"><div><h3 id="tem-title">Tematske karte</h3><small id="tem-file-count">GPKG fajlovi</small></div><button onclick="closeTemModal()" aria-label="Zatvori tematske karte">✕</button></header>
     <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja · 7 vrsta</button></nav>
     <div id="tem-modal-body" role="tabpanel"></div>
+    <input type="file" id="tem-file-input" accept=".gpkg" multiple style="display:none;" onchange="_gpkgLoadFiles(this.files);this.value=''">
     <footer class="tem-panel-foot"><button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">＋ Učitaj GPKG fajlove</button><small id="tem-load-status" role="status" aria-live="polite"></small></footer>
   </section>
 </div>
@@ -42270,32 +42108,6 @@ if (typeof AndroidDownload !== 'undefined') {
       </div>
     </div>
 
-    <!-- Vremenska traka (Esri World Imagery Wayback, v3.111.0) — stariji snimci
-         iste satelitske podloge, bez ključa. Zimski snimak (bez lišća) mnogo
-         jasnije pokazuje četinare, puteve i prosjeke. -->
-    <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
-      <h3 style="margin-bottom:6px;">📅 Vremenska traka</h3>
-      <div style="font-size:11px;color:#64748b;line-height:1.5;margin-bottom:8px;">
-        Stariji satelitski snimci (Esri Wayback, bez ključa) — zimski snimak bez
-        lišća najbolje pokazuje četinare, puteve i prosjeke. Datum je release-a,
-        ne garantovano tačan datum snimka baš na tvojoj lokaciji.
-      </div>
-      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
-        <input type="checkbox" id="wb-toggle" onchange="_wbToggle(this.checked)"
-          style="width:18px;height:18px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0;">
-        <span>Prikaži stariji snimak</span>
-      </label>
-      <div id="wb-picker" style="display:none;margin-top:8px;">
-        <div style="display:flex;gap:6px;">
-          <select id="wb-datum" onchange="_wbPostaviDatum(this.value)"
-            style="flex:1;min-width:0;padding:8px 10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0;font-size:13px;"></select>
-          <button id="wb-winter-search" onclick="WbWinter.search()" style="padding:8px 12px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#c4b5fd;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🌨 Zima · USK</button>
-        </div>
-        <div id="wb-status" style="font-size:10.5px;color:#64748b;margin-top:6px;line-height:1.4;">—</div>
-        <div id="wb-winter-status" style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5;" role="status">Zima · USK provjerava stvarni datum snimanja na sredini karte. Stariji snimak nije prikaz trenutnog stanja šume.</div>
-      </div>
-    </div>
-
     <!-- Učitaj offline kartu -->
     <div style="margin-top:14px;">
       <button onclick="closeLayerSheet();showSqlMapModal();"
@@ -42304,16 +42116,26 @@ if (typeof AndroidDownload !== 'undefined') {
       </button>
     </div>
 
-    <!-- Tematska karta (.gpkg) -->
-    <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
-      <h3 style="margin-bottom:10px;">📊 Tematska karta</h3>
-      <div id="ls-tem-box"></div>
-      <input type="file" id="tem-file-input" accept=".gpkg" multiple style="display:none;"
-        onchange="_gpkgLoadFiles(this.files);this.value=''">
-    </div>
 
+  </div>
+
+  <!-- Tab: Instalirane karte -->
+  <div id="ls-pane-inst" style="display:none;">
+    <div class="catalog-hero"><h3>Instalirane karte</h3></div>
+    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
+  </div><!-- /ls-pane-inst -->
+
+  <!-- Tab: Granice -->
+  <div id="ls-pane-granice" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h3 style="margin:0;">🗂 Granice i putevi</h3>
+      <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Osvježi slojeve" style="font-size:13px;padding:4px 10px;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
+    </div>
+    <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 10px;border-radius:6px;text-align:center;background:rgba(0,0,0,0.3);margin-bottom:8px;"></div>
+
+    <section class="kml-drive"><header><div><small>GITHUB · KARTE</small><h3>Preuzmi granice i puteve</h3></div><button type="button" id="kml-github-refresh" onclick="KmlDownloads.refreshGithub()">↻ Osvježi</button></header><p>Objavljeni KML slojevi iz repozitorija KARTE. Preuzmi i dodaj na kartu za offline rad.</p><div id="kml-github-message" role="status" aria-live="polite"></div><div id="kml-github-list"></div></section>
     <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
-      <h3 style="margin-bottom:10px;">Dodatni slojevi</h3>
+      <h3 style="margin-bottom:10px;">Prikaz slojeva</h3>
       <!-- Putevi -->
       <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
         <input type="checkbox" id="putevi-toggle" checked onchange="togglePutevi(this.checked)"
@@ -42353,22 +42175,6 @@ if (typeof AndroidDownload !== 'undefined') {
         </label>
       </div>
     </div>
-  </div>
-
-  <!-- Tab: Instalirane karte -->
-  <div id="ls-pane-inst" style="display:none;">
-    <div class="catalog-hero"><h3>Instalirane karte</h3></div>
-    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
-  </div><!-- /ls-pane-inst -->
-
-  <!-- Tab: Granice -->
-  <div id="ls-pane-granice" style="display:none;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <h3 style="margin:0;">🗂 Granice Odjela</h3>
-      <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Ponovo učitaj iz bucketa" style="font-size:13px;padding:4px 10px;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Reload</button>
-    </div>
-    <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 10px;border-radius:6px;text-align:center;background:rgba(0,0,0,0.3);margin-bottom:8px;"></div>
-
     <!-- GeoJSON odjeli -->
     <div style="padding:10px 0 8px;border-bottom:1px solid #1e293b;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
@@ -42588,6 +42394,5 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/vlaka-direction.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
-<script src="static/js/winter-imagery.js"></script>
 </body>
 </html>

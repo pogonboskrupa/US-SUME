@@ -1,15 +1,15 @@
-"""Stvarni PNG/Cache Storage + UI zimskih snimaka, bez produkcijskih servisa."""
+"""Stvarni PNG/Cache Storage, bez produkcijskih servisa."""
 import asyncio,importlib.util,mimetypes,os,json,struct,zlib
 from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('base',Path(__file__).with_name('menu-tools.py'));b=importlib.util.module_from_spec(spec);spec.loader.exec_module(b)
-functions='\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_nvDemOcitaj','_wbParsiraj','_wbPostaviDatum'])
+functions='\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_nvDemOcitaj'])
 setup='''
-let online=true,_wbOn=true,_wbCurUrl='https://tiles.test/base/{z}/{x}/{y}.png',_wbReleases=[{date:'2026-08-05',url:_wbCurUrl,metadataUrl:'https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata_2026_r07/MapServer'}];
+let online=true;
 const map=L.map('map').setView([44.815,15.868],16),_TERR_CACHE='fixture-dem-232',_mrezaProbaj=()=>online,_fetchT=(u,t,o)=>fetch(u,o);
-const _wbTileLayer=L.tileLayer(_wbCurUrl,{maxZoom:22}).addTo(map);const _wbUcitajReleases=async()=>true;
 '''+functions
-fixture='''<!doctype html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>body{margin:0;font:14px sans-serif;color:#173E30}#map{height:65vh}#controls{padding:16px;line-height:1.5}button{padding:12px;font-size:16px}#wb-winter-status{padding-top:12px}canvas{display:none}</style></head><body><div id="map"></div><div id="controls"><b>Vremenska traka · USK</b><p id="wb-status"></p><select id="wb-datum"></select><button id="wb-winter-search" onclick="WbWinter.search()">Zima · USK</button><div id="wb-winter-status"></div></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/turf.min.js"></script><script src="/static/js/dem-quality.js"></script><script>'''+setup+'''</script><script src="/static/js/winter-imagery.js"></script></body></html>'''
+fixture='<html><head><link rel="stylesheet" href="/static/libs/leaflet.min.css"></head><body><div id="map" style="height:600px"></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/js/dem-quality.js"></script><script>'+setup+'</script></body></html>'
+
 def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
 raw=bytearray()
 for y in range(256):
@@ -43,13 +43,6 @@ async def main():
   await page.evaluate('Cache.prototype.put=oldPut;online=false')
   assert await page.evaluate("async()=>{const a=await _getTerrariumTile(12,1,1);const ok=!!a;a?.close();return ok;}")
   assert await page.evaluate('async()=>await _getTerrariumTile(12,9,9)===null')
-  await page.evaluate('online=true');await page.click('#wb-winter-search');await page.wait_for_function("document.querySelector('#wb-winter-status').textContent.includes('2019-01-14')")
-  assert not await page.locator('#wb-winter-search').is_disabled()
-  assert await page.evaluate("_wbTileLayer.getContainer().querySelector('img')?.style.clipPath.startsWith('polygon')")
-  assert 'Zimski snimak' not in await page.locator('#wb-status').inner_text()
-  await page.screenshot(path=str(b.OUT/'winter-usk-232.png'))
-  await page.evaluate("_wbPostaviDatum(_wbCurUrl);map.setView([43.85,18.4],14)");await page.click('#wb-winter-search');await page.wait_for_function("document.querySelector('#wb-winter-status').textContent.includes('samo za Unsko')")
-  assert await page.evaluate("_wbTileLayer.getContainer().querySelector('img')?.style.clipPath===''")
   assert not errors,errors;await browser.close()
- print('OK: stvarni Terrarium PNG, transparentni/NoData pikseli, popravka keša, kvota, offline, datum akvizicije i maska USK; UI PNG')
+ print('OK: stvarni Terrarium PNG, transparentni/NoData pikseli, popravka keša, kvota, offline')
 if __name__=='__main__':asyncio.run(main())

@@ -123,7 +123,8 @@ final class MapDownloadCatalog {
         // Current period first, old period next; generic future maps retain API order.
         out.sort(Comparator.comparingInt(s->s.id.equals(MapDownloads.GITHUB_ID)?0:s.name.startsWith("Unsko_2010-2020")?1:2));return out;
     }
-    private static List<Source> fetchGithub() throws Exception {
+    private static List<Source> fetchGithub() throws Exception { return parseGithub(fetchGithubReleases()); }
+    static JSONArray fetchGithubReleases() throws Exception {
         JSONArray releases=new JSONArray();long deadline=System.currentTimeMillis()+45000;
         for(int page=1;page<=3;page++){
             if(System.currentTimeMillis()>=deadline)throw new IOException("GitHub katalog nije odgovorio");
@@ -136,7 +137,7 @@ final class MapDownloadCatalog {
                     byte[] b=new byte[8192];int n;while((n=in.read(b))>0){if(System.currentTimeMillis()>=deadline)throw new IOException("GitHub katalog nije odgovorio");if(out.size()+n>4*1024*1024)throw new IOException("Pregled karata je prevelik");out.write(b,0,n);}
                     JSONArray rows=new JSONArray(out.toString("UTF-8"));for(int i=0;i<rows.length();i++)releases.put(rows.getJSONObject(i));
                 }
-                if(!String.valueOf(c.getHeaderField("Link")).contains("rel=\"next\""))return parseGithub(releases);
+                if(!String.valueOf(c.getHeaderField("Link")).contains("rel=\"next\""))return releases;
             }finally{c.disconnect();}
         }
         throw new IOException("GitHub katalog nije potpun");

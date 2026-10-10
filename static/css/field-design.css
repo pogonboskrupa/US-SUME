@@ -753,3 +753,118 @@ html[data-field-theme=day] #admin-panel :is([style*="color:#93c5fd"],[style*="co
 html[data-field-theme=day] #admin-panel :is([style*="color:#4ade80"],[style*="color:#bbf7d0"]):not(button) {color:#14532d!important;}
 html[data-field-theme=day] #admin-panel :is([style*="color:#f87171"],[style*="color:#fca5a5"]):not(button) {color:#991b1b!important;}
 html[data-field-theme=day] #admin-panel :is(button[style*="background:#0f172a"],button[style*="background:#93c5fd22"]) {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
+
+/* 2.7.5: puni Dnevni mod — uključuje popunjene liste i sekundarne prozore.
+   Oznake statusa ostaju obojene; korisničke boje geometrije i uzorci nisu mijenjani. */
+html[data-field-theme=day] :is(#offline-box,#offline-modal>div,#doz-qr-show-modal>div,#imv-modal,#text-dialog,#mjtrg-panel,#tem-table-modal>div,#tem-table-modal #ttm-toolbar) {
+  background:#fff!important;color:#102033;border-color:#64748b!important;backdrop-filter:none;
+}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#debug-panel,#teren-panel,#tragovi-panel,#dlg-sheet,#text-dialog,#layer-sheet,#offline-modal,#profil-modal,#sqlmap-modal,#mapmgr-modal,#mapfav-modal,#izv-modal,#cachemgr-modal,#tem-modal,#tem-table-modal,#doz-create-modal,#doz-save-modal,#doz-qr-show-modal,#imv-modal,#trag-reg-modal,#mjtrg-panel,#vlaka-popup,#tacka-modal,#nagib-panel,#share-foto-box,#syncq-panel) {
+  color:var(--field-ink);
+}
+html[data-field-theme=day] :is(input:not([type=color]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),select,textarea) {
+  background-color:#fff!important;color:#102033!important;border-color:#64748b!important;color-scheme:light;
+}
+html[data-field-theme=day] :is(input,textarea)::placeholder {color:#475569!important;opacity:1;}
+html[data-field-theme=day] :is(#dlg-ok,#imv-ok,.stk-stampaj,.mdp-btn.done) {background:#166534!important;color:#fff!important;border-color:#166534;}
+html[data-field-theme=day] #dlg-ok.danger {background:#b91c1c!important;border-color:#b91c1c;}
+html[data-field-theme=day] :is(.mdp-btn.point,.mdp-btn.edpmode.active) {background:#1e40af!important;color:#fff!important;}
+html[data-field-theme=day] .mdp-btn.edpmode.del.active {background:#b91c1c!important;color:#fff!important;}
+html[data-field-theme=day] :is(.mdp-ico,#edp-hint) {color:#334155!important;}
+html[data-field-theme=day] :is(.proj-gj-header,#sqlmap-box h3,#izv-title,#cachemgr-modal h3) {color:#1e40af!important;}
+html[data-field-theme=day] :is(#izv-period-label,#ttm-name,.tv-title) {color:#102033;}
+html[data-field-theme=day] :is(.tv-toolbar-lbl,.tv-grp,.tv-grp>span,#tv-sum,#imv-hint,#msr-hint) {color:#334155;}
+html[data-field-theme=day] .doz-marking-chip {background:#f1f5f9;color:#102033!important;}
+html[data-field-theme=day] :is(.vsync-icon,.clan-name span[style*="opacity"],.tv-card.skriven) {opacity:1!important;}
+html[data-field-theme=day] .tv-card.skriven {border-style:dashed;}
+/* Neaktivne kontrole su i dalje onemogućene, ali tekst ne blijedi na suncu. */
+html[data-field-theme=day] :is(button:disabled,input:disabled,select:disabled,textarea:disabled) {
+  opacity:1!important;color:#475569!important;background:#e2e8f0!important;border-color:#94a3b8!important;box-shadow:none;
+}
+html[data-field-theme=day] #rb-kraj {background:#b91c1c;color:#fff;border-color:#b91c1c;}
+html[data-field-theme=day] #rec-banner {background:#fff;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] #rec-banner :is(.rec-info,#rec-nm,#rec-stats,#rec-slope) {color:#102033!important;}
+html[data-field-theme=day] #rec-banner [style*="color:#64748b"] {color:#334155!important;opacity:1!important;}
+html[data-field-theme=day] #msr-main-val {color:#102033;}
+html[data-field-theme=day] #btn-msr-add {background:#1e40af;color:#fff;}
+html[data-field-theme=day] #vlaka-popup button[style*="background:#92400e"] {background:#fef3c7!important;color:#713f12!important;}
+/* Pozadine starih inline kartica normalizuju se prije boja njihovog teksta. */
+html[data-field-theme=day] :is(#debug-panel,#offline-modal,#doz-qr-show-modal,#tem-table-modal,#imv-modal,#izv-modal,#profil-modal,#sqlmap-modal,#cachemgr-modal,#mapmgr-modal,#tragovi-panel,#trag-reg-modal,#mjtrg-panel,#text-dialog) :is([style*="background:#0f172a" i],[style*="background:#1e293b" i],[style*="background:#080f1e" i],[style*="background:#16213e" i]) {
+  background:#f1f5f9!important;color:#102033!important;border-color:#64748b!important;
+}
+html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#postavke-panel,#debug-panel,#teren-panel,#tragovi-panel,#offline-modal,#doz-qr-show-modal,#tem-table-modal,#imv-modal,#izv-modal,#profil-modal,#sqlmap-modal,#cachemgr-modal,#mapmgr-modal,#trag-reg-modal,#mjtrg-panel,#text-dialog,#rec-banner) :is([style*="color:#64748b" i],[style*="color:#94a3b8" i],[style*="color:#7f8ea3" i],[style*="color:#8492a6" i],[style*="color:#cbd5e1" i],[style*="color:#e2e8f0" i],[style*="color:#f1f5f9" i]) {
+  color:#334155!important;
+}
+html[data-field-theme=day] #debug-panel :is([style*="color:#f87171"],[style*="color:#fca5a5"]) {color:#991b1b!important;}
+html[data-field-theme=day] #admin-panel button[style*="background:#3a1e1e"] {background:#fef3c7!important;color:#713f12!important;border-color:#92400e!important;}
+html[data-field-theme=day] #admin-panel button[style*="background:#14532d"] {background:#166534!important;color:#fff!important;}
+html[data-field-theme=day] #admin-panel button[style*="background:#1e3a5f"] {background:#dbeafe!important;color:#1e40af!important;}
+html[data-field-theme=day] #admin-panel button[style*="background:#2d1b0e"] {background:#fef3c7!important;color:#713f12!important;}
+html[data-field-theme=day] .proj-stat-cell.nm>span {opacity:1!important;color:#334155;}
+html[data-field-theme=day] #debug-panel [style*="color:#22c55e"] {color:#14532d!important;}
+html[data-field-theme=day] #debug-panel [style*="color:#ef4444"] {color:#991b1b!important;}
+html[data-field-theme=day] #debug-panel [style*="color:#f59e0b"] {color:#713f12!important;}
+html[data-field-theme=day] #offline-modal h3 {color:#1e40af;}
+html[data-field-theme=day] .ttm-search {background:#f1f5f9;border-color:#64748b;}
+html[data-field-theme=day] #rec-banner .st-snima {color:#991b1b;}
+html[data-field-theme=day] #rec-banner .st-pauza {color:#713f12;}
+html[data-field-theme=day] #rec-banner #rec-time {color:#102033;}
+html[data-field-theme=day] :is(#msr-main-sub,#mjtrg-panel .msr-mode-check) {color:#334155;}
+/* Tematske vrijednosti i tabele: uzorak boje ostaje, tekst je zaseban. */
+html[data-field-theme=day] :is(.mapmgr-card,.tred-row,#doz-type-picker,.ttm-head,.ttm-foot,#ttm-cols-menu,.ttm-chip) {background:#f1f5f9!important;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] :is(.mapmgr-card-nm,.mapmgr-card-meta,.mapmgr-card-meta .mm-on,#sqlmap-status,.sqlmap-layer,.sqlmap-layer span,.sqlmap-layer label,.tred-row label,.tred-row span,#ttm-sub,.ttm-foot .leg,.ttm-chip b) {color:#334155!important;}
+html[data-field-theme=day] #mapmgr-box button[style*="color:#f87171"] {color:#991b1b!important;}
+html[data-field-theme=day] #tem-modal :is(.tem-pg-row em,.tem-op span) {color:#334155;}
+html[data-field-theme=day] .ttm-tbl {color:#102033;}
+html[data-field-theme=day] table.ttm-tbl thead th {background:#e2e8f0;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] table.ttm-tbl :is(thead th.hot,td.hot) {background:#dcfce7;color:#14532d;}
+html[data-field-theme=day] table.ttm-tbl tbody td {color:#102033;border-color:#cbd5e1;background:#fff;}
+html[data-field-theme=day] table.ttm-tbl tbody tr:nth-child(even) td {background:#f1f5f9;}
+html[data-field-theme=day] table.ttm-tbl tbody td.hot {color:#14532d;font-weight:800;}
+html[data-field-theme=day] table.ttm-tbl tbody :is(td.stick,tr:nth-child(even) td.stick) {background:#e2e8f0;color:#102033;}
+html[data-field-theme=day] table.ttm-tbl :is(thead th:hover,thead th .arw) {color:#14532d;}
+html[data-field-theme=day] table.ttm-tbl tbody :is(tr:hover,tr:active) td {background:#dbeafe;color:#102033;}
+html[data-field-theme=day] :is(.ttm-csv,.ttm-colsbtn,.ttm-sx,#ttm-cols-menu .ttm-cm-hd button,.ttm-col-item,.ttm-col-item.off,.ttm-reset) {background:#f1f5f9;color:#334155;border-color:#64748b;}
+html[data-field-theme=day] :is(.ttm-col-item.on .cb,.ttm-col-item.off .cb) {color:#14532d;}
+html[data-field-theme=day] :is(.tem-popup .leaflet-popup-content-wrapper,.tem-popup .leaflet-popup-tip,.tem-card,.tem-card-hd,.tem-leg) {background:#fff;color:#102033;border-color:#64748b;}
+html[data-field-theme=day] :is(.tem-card-hd .odjel,.tem-card-row .v,.tem-leg-hd) {color:#102033;}
+html[data-field-theme=day] :is(.tem-card-hd .gj,.tem-card-hd .ods,.tem-card-hd .ha,.tem-card-row .k,.tem-leg-row,.tem-leg-row.bez span,.tem-leg-hd .car) {color:#334155;}
+html[data-field-theme=day] .tem-card-hd .ha {background:#e2e8f0;}
+html[data-field-theme=day] .tem-card-row.hot {background:#dcfce7;border-color:#166534;}
+html[data-field-theme=day] .tem-card-row.hot :is(.k,.v) {color:#14532d;}
+html[data-field-theme=day] .tem-popup .leaflet-popup-close-button {color:#334155;}
+html[data-field-theme=day] :is(#doz-type-picker h4,.doz-type-btn) {color:#102033!important;}
+html[data-field-theme=day] .doz-type-btn {background:#fff;}
+html[data-field-theme=day] .doz-type-btn small {color:#334155;opacity:1;}
+html[data-field-theme=day] #doz-type-picker button[style] {background:#e2e8f0!important;color:#334155!important;}
+html[data-field-theme=day] :is(#share-foto-ok,#share-foto-box .btn.b) {background:#1e40af;color:#fff;}
+html[data-field-theme=day] #help-modal .help-icon[style] {color:#334155!important;}
+html[data-field-theme=day] #mjtrg-dropdown .mt-slope {--mt-accent:#713f12;}
+html[data-field-theme=day] #mjtrg-panel .msr-draw {color:#334155;}
+/* Ekran prijave zadržava tamnu zelenu marku, sa čitljivim pomoćnim tekstom. */
+html[data-field-theme=day] #auth-screen :is(#auth-divlabel,.auth-field-hint,.auth-or-txt,.auth-foot-lnk,a[style*="color:#64748b"]) {color:#d1e8d5;}
+html[data-field-theme=day] :is(.ttm-colsbtn b,.ttm-foot b,#ttm-cols-menu .ttm-col-item em) {color:#334155;}
+html[data-field-theme=day] .tred-row button.active {background:#166534;color:#fff;border-color:#166534;}
+html[data-field-theme=day] #auth-screen a[style*="color:#64748b"] {color:#d1e8d5!important;}
+html[data-field-theme=day] .sqlmap-layer-row {background:#f1f5f9;border-color:#64748b;}
+html[data-field-theme=day] :is(.sqlmap-layer-name,.sqlmap-layer-meta,.sqlmap-opacity-row,.sqlmap-opacity-row span) {color:#334155;}
+html[data-field-theme=day] #profil-box :is(h3 span,#profil-stats b) {color:#713f12!important;}
+html[data-field-theme=day] .sqlmap-layer-meta span {color:#334155;}
+html[data-field-theme=day] #sqlmap-box [style*="color:#4ade80"] {color:#14532d!important;}
+html[data-field-theme=day] #tem-modal .tem-ed-r .crt {color:#334155;}
+html[data-field-theme=day] #vlaka-popup :is(#vp-nm>span,.vp-row b) {color:#102033!important;}
+
+html[data-field-theme=day] table.ttm-tbl tfoot td { background:#e2e8f0; color:#102033; border-color:#94a3b8; }
+html[data-field-theme=day] table.ttm-tbl tfoot td.stick { color:#334155; }
+html[data-field-theme=day] table.ttm-tbl tfoot td em { color:#14532d; }
+.vp-direction-pick { width:100%;min-height:44px;margin:6px 0;padding:10px;border:1px solid #3b82f6;border-radius:8px;background:#1d4ed8;color:#fff;font-weight:700;cursor:pointer; }
+html[data-field-theme=day] .vp-direction-pick { background:#1d4ed8!important;color:#fff!important; }
+html[data-field-theme=day] #proj-panel .day-row { background:#f1f5f9; border-color:#64748b; }
+html[data-field-theme=day] #proj-panel .day-date { color:#334155; border-color:#64748b; }
+html[data-field-theme=day] .gmhdr button[style] {background:#e2e8f0!important;color:#334155!important;border-color:#64748b!important;}
+html[data-field-theme=day] .gl-group-hdr {background:#e2e8f0;border-color:#64748b;color:#1e40af;}
+html[data-field-theme=day] .gl-group-name {color:#1e40af;}
+html[data-field-theme=day] .gl-btn.on {background:#dbeafe;color:#1e40af;border-color:#1e40af;}
+html[data-field-theme=day] .mfav-add-card span {color:#334155;}
+#kml-github-message {font-size:12px;line-height:1.6;color:var(--field-muted);overflow-wrap:anywhere;}
+html[data-field-theme=day] #ls-pane-granice button[style*="background:#1e293b"] {background:#e2e8f0!important;color:#334155!important;border-color:#64748b!important;}

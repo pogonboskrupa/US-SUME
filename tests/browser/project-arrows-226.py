@@ -29,7 +29,7 @@ async def main():
   # Stara dvosmjerna postavka ne smije ponovo stvarati matematičku polovinu.
   await page.evaluate("localStorage.setItem(VlakaDirection.storeKey('P'),JSON.stringify({[VlakaDirection.identity(testV)]:'both'}));VlakaDirection.draw(testV)")
   assert await page.evaluate('testV._directionMarkers.length')==0
-  await page.evaluate("showVlakaPopup(vlake.indexOf(testV),testV.poly.getBounds().getCenter())");await page.select_option('#vp-direction-mode','both');assert await page.evaluate('VlakaDirection.isPicking()')
+  await page.evaluate("testV._manual=true;showVlakaPopup(vlake.indexOf(testV),testV.poly.getBounds().getCenter())");await page.get_by_role('button',name='↔ Odredi dvosmjer',exact=True).click();assert await page.evaluate('VlakaDirection.isPicking()')
   # Dodir prolazi kroz postojeći klikabilni marker i hit sloj vlake.
   await page.evaluate("()=>{const p=ptAtFrac(testV.pts,.2);window.blockClicks=0;window.block=L.marker([p.la,p.lo],{icon:L.divIcon({className:'block',html:'<b style=\"display:block;width:40px;height:40px;background:red\">X</b>',iconSize:[40,40],iconAnchor:[20,20]}),bubblingMouseEvents:false}).on('click',()=>blockClicks++).addTo(map)}")
   await tap_fraction(page,.2);assert await page.evaluate('blockClicks')==0;assert not await page.evaluate('VlakaDirection.isPicking()');assert await page.evaluate("!map.getContainer().classList.contains('direction-picking')")
@@ -60,6 +60,13 @@ async def main():
   # Prekid/otkaz ne mijenjaju prethodnu razdjelnicu; tačka van vlake odbijena.
   await page.evaluate('VlakaDirection.startPick(testV)');await page.keyboard.press('Escape');assert not await page.evaluate('VlakaDirection.isPicking()');assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02
   await page.evaluate("VlakaDirection.startPick(testV);map.fire('click',{latlng:L.latLng(45,17)})");assert await page.evaluate('VlakaDirection.isPicking()');await page.evaluate("_aktivniProjektId='Q';VlakaDirection.refresh()");assert not await page.evaluate('VlakaDirection.isPicking()');await page.evaluate("_aktivniProjektId='P'")
+  # Završeni ručni krak: direktno dugme, izbor na 80%, jedan ↔ i smjerovi prema krajevima.
+  await page.evaluate("()=>{window.mainV=testV;window.branch={nm:'T10.1',kr:1,projektId:'P',pts:testV.pts.map(p=>({...p})),color:'#2563eb',extraLabels:[],poly:L.polyline(testV.pts.map(p=>[p.la,p.lo]),{weight:4}).addTo(map)};vlake.push(branch);testV=branch;showVlakaPopup(vlake.indexOf(branch),branch.poly.getBounds().getCenter())}")
+  await page.get_by_role('button',name='↔ Odredi dvosmjer',exact=True).click();await tap_fraction(page,.8)
+  assert abs(await page.evaluate('VlakaDirection.splitFor(branch).f')-.8)<.02
+  assert await page.evaluate('branch._directionMarkers.map(m=>m._directionSign)')==[-1,0,1]
+  assert abs(await page.evaluate('VlakaDirection.splitFor(mainV).f')-.2)<.02
+  await page.evaluate('testV=mainV;VlakaDirection.clear(branch);map.removeLayer(branch.poly);vlake.splice(vlake.indexOf(branch),1)')
   await page.context.set_offline(True)
   # Čuvanje po nalogu/projektu; prilagodbe rade i za kolegine vlake.
   await page.evaluate("VlakaDirection.change('color','#dc2626');VlakaDirection.change('width',4);VlakaDirection.change('size',40);VlakaDirection.change('count',4)")

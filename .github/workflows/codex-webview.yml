@@ -77,6 +77,7 @@ jobs:
           python tests/browser/audit-parts-272.py
           timeout 120s python tests/browser/device-workflow-273.py
           timeout 120s python tests/browser/day-layout-274.py
+          timeout 180s python tests/browser/day-all-panels-275.py
           python tests/browser/offline-preview-266.py
           python tests/browser/preferences-266.py
           python tests/browser/server-design-232.py
@@ -109,6 +110,7 @@ jobs:
           path: |
             outputs/ui-preview/
             outputs/274/
+            outputs/275/
           if-no-files-found: ignore
       - uses: android-actions/setup-android@v3
         with:

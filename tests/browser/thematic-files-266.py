@@ -16,7 +16,6 @@ code+='\n'+b.function('_escHtml')+'\n'+b.function('_jsAttr')
 # Include exactly both real thematic dialogs, no unrelated menu content.
 start=b.SOURCE.index('<div id="tem-table-modal"');end=b.SOURCE.index('\n</div>',start)+len('\n</div>')
 body=b.section('<div id="tem-modal"','<!-- TEMATSKA KARTA — TABELA ATRIBUTA')+b.SOURCE[start:end]
-body+=re.search(r'<input type="file" id="tem-file-input"[\s\S]*?>',b.SOURCE).group()
 html='<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'\n#map{position:fixed;inset:0;background:#dae8ce}</style></head><body>'+b.sprite+'<div id="map"></div>'+body+'<script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/proj4.js"></script><script>'+code+'</script></body></html>'
 small=(ROOT/'tests/fixtures/tematska-mini.gpkg').read_bytes()
 def upload(name,data=small):return {'name':name,'mimeType':'application/geopackage+sqlite3','buffer':data}

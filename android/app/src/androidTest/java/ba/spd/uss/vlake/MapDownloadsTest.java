@@ -168,6 +168,28 @@ public class MapDownloadsTest {
   row.put(1,new org.json.JSONArray().put("foreign-folder"));json=new org.json.JSONArray().put(new org.json.JSONArray().put(row)).put(org.json.JSONObject.NULL).toString();
   assertTrue(MapDownloadCatalog.parse("window['_DRIVE_ivd'] = '"+json+"';").isEmpty());
  }
+ @Test public void githubKmlCatalogueTransferAndOfflineCacheRemainSeparateFromDrive() throws Exception {
+  Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();String storage="fixture-github-kml-275";
+  c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().clear().commit();
+  byte[] bytes="<kml xmlns=\"http://www.opengis.net/kml/2.2\"><Placemark><name>Granice odjela</name><LineString><coordinates>16,44.9 16.01,44.91</coordinates></LineString></Placemark></kml>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  String url="https://github.com/pogonboskrupa/KARTE/releases/download/v2/Granice.kml";
+  JSONObject asset=new JSONObject().put("id",27501).put("name","Granice.kml").put("size",bytes.length).put("state","uploaded").put("browser_download_url",url);
+  org.json.JSONArray releases=new org.json.JSONArray().put(new JSONObject().put("tag_name","v2").put("name","Granice i putevi").put("assets",new org.json.JSONArray().put(asset).put(new JSONObject().put("name","Karta.mbtiles"))));
+  assertEquals(1,KmlDownloads.parseGithub(releases).length());
+  JSONObject foreign=new JSONObject(asset.toString()).put("browser_download_url","https://github.com/foreign/KARTE/releases/download/v2/Granice.kml");
+  try{KmlDownloads.parseGithub(new org.json.JSONArray().put(new JSONObject().put("assets",new org.json.JSONArray().put(foreign))));fail("Tuđi URL je prihvaćen");}catch(java.io.IOException expected){}
+  AtomicReference<Boolean> offline=new AtomicReference<>(false);int[] fetches={0};
+  KmlDownloads k=new KmlDownloads(c,()->new org.json.JSONArray(),(u,r)->{throw new java.io.IOException("Drive transport nije dozvoljen u GitHub testu");},storage,()->{if(offline.get())throw new java.io.IOException("offline");return releases;},(u,r)->{assertEquals(url,u);assertFalse(r);fetches[0]++;return new DriveResponse(bytes,bytes.length,"application/vnd.google-earth.kml+xml",200,null);});
+  try{
+   JSONObject list=new JSONObject().put("type","list").put("provider","github").put("refresh",true);
+   assertEquals(1,k.action(list).getJSONArray("files").length());assertEquals(0,k.action(new JSONObject().put("type","list").put("refresh",false)).getJSONArray("files").length());
+   JSONObject download=new JSONObject().put("type","download").put("sourceId","github-kml-27501");
+   JSONObject result=k.action(download);assertTrue(result.getBoolean("ok"));assertEquals(200,k.handle("github-kml-27501.kml").getStatusCode());
+   offline.set(true);assertTrue(k.action(list).getBoolean("stale"));assertTrue(k.action(download).getBoolean("ok"));assertEquals(1,fetches[0]);
+   try{k.action(new JSONObject().put("type","download").put("sourceId","github-kml-27502"));fail("Nepoznati izvor");}catch(java.io.IOException expected){}
+   k.action(new JSONObject().put("type","release").put("sourceId","github-kml-27501"));assertEquals(404,k.handle("github-kml-27501.kml").getStatusCode());
+  }finally{k.close();c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().clear().commit();}
+ }
  private org.json.JSONArray kmlRow(String id,String name,byte[] bytes) throws Exception {
   org.json.JSONArray row=new org.json.JSONArray();for(int i=0;i<14;i++)row.put(org.json.JSONObject.NULL);
   return row.put(0,id).put(1,new org.json.JSONArray().put(MapDownloadCatalog.FOLDER_ID)).put(2,name).put(3,"application/vnd.google-earth.kml+xml").put(13,bytes.length);
