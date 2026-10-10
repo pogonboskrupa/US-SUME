@@ -5742,7 +5742,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.7.8';
+const APP_VER = 'v2.7.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -16195,6 +16195,7 @@ map.on('click', e => {
       showVlakaPopup(bestI, e.latlng);
       return;
     }
+    if(window.DepartmentReport?.openAt(e.latlng))return;
     // Uvezeni KML/SHP — isti razlog kao proximity fallback iznad: klik do sloja
     // najčešće uopšte ne stigne jer ga gornji canvas (vlake/tragovi) pokupi.
     // Vlake imaju prednost (provjerene su gore), pa tek onda uvezeni slojevi.
@@ -23658,7 +23659,9 @@ function _parseKmlExtData(pm) {
 // (_kmlHitTest), kad DOM klik uopšte ne stigne do sloja (vidi napomenu tamo).
 function _kmlOpenPopup(layer, latlng) {
   if(window.DepartmentReport?.isDrawing()){DepartmentReport.addPoint(latlng);return;}
+  if(_dozDrawType==='__boundary__'){if(!_dozDrawEnabled)dozAddDrawPoint(latlng);return;}
   if (_dozKmlSelMode) { const target=window.DoznakaProjectBoundary?.allows(layer)?layer:_kmlHitTest(latlng,true);if(target)_dozKmlSelToggle(target);return; }
+  if(window.DepartmentReport?.openAt(latlng))return;
   const uid = '_kp_' + Math.random().toString(36).slice(2, 8);
   layer._kmlPopupId = uid;
   L.popup({ maxWidth: 300, minWidth: 200, keepInView: true, autoPanPaddingTopLeft: [12,56], autoPanPaddingBottomRight: [12,12], className: 'kml-info-popup' })
@@ -24022,7 +24025,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '' };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -24290,6 +24293,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].weight       = k.weight;
       store[origName].opacity      = k.opacity ?? 0.9;
       store[origName].vis          = k.vis;
+      store[origName].onlyPolygon  = k.onlyPolygon===true;
       store[origName].fill         = k.fill || false;
       store[origName].fillCol      = k.fillCol || k.col;
       store[origName].fillPattern  = k.fillPattern || 'solid';
@@ -24332,7 +24336,7 @@ async function _localKmlRestore() {
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
           fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
-          tag: data.tag || '', _loadedAt: data._loadedAt || 0
+          onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         });
         applyKmlStyle(kmlLs.length - 1);
       } catch(e) { console.warn('KML restore greška:', origName, e); }
@@ -37040,7 +37044,7 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli, cacheOnly=fals
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
     fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35,
-    tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
+    onlyPolygon: finalOpts.onlyPolygon===true, tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
   applyKmlStyle(kmlLs.length-1);
   // Apply visibility
   if (finalOpts.vis === false) map.removeLayer(grp);
@@ -39785,6 +39789,7 @@ function dozUndoDrawPt() {
 function dozCancelDraw() {
   const wasBoundary = _dozDrawType === '__boundary__';
   _dozDrawType = null; _dozDrawPts = [];
+  window.GithubLayers?.sync();
   _dozDrawCleanup();
   if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
   document.getElementById('doz-draw-banner').style.display = 'none';
@@ -39810,6 +39815,7 @@ function dozFinishDraw() {
     _dozCreateBoundary = { type:'Polygon', coordinates:[coords] };
     _dozCreateAreaHa   = _dozCalcArea(_dozDrawPts) / 10000;
     _dozDrawType = null; _dozDrawPts = [];
+    window.GithubLayers?.sync();
     _dozDrawCleanup();
     if (_dozDrawLayer) { map.removeLayer(_dozDrawLayer); _dozDrawLayer = null; }
     document.getElementById('doz-draw-banner').style.display = 'none';
@@ -40226,6 +40232,7 @@ function dozStartNewBoundaryDraw() {
   // pa čak i ponovo otvorio create modal preko karte.
   switchTab('karta');
   _dozDrawType = '__boundary__';
+  window.GithubLayers?.sync();
   _dozDrawPts  = [];
   _dozDrawEnabled = false;
   _dozDragLastPt = null;
@@ -40548,9 +40555,11 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="dr-choose"><button type="button" onclick="DepartmentReport.draw()">Nacrtaj granicu</button><button type="button" onclick="DepartmentReport.choose()">Izaberi iz Granica</button></div>
   <details class="dr-legacy"><summary>Već nacrtan poligon projekta</summary><button type="button" onclick="DepartmentReport.legacy()">Koristi poligon aktivnog projekta</button></details>
   <p id="dr-selection"></p><div class="dr-choose"><button type="button" class="dr-primary" id="dr-calculate" onclick="DepartmentReport.calculate()">Izračunaj teren</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button><p id="dr-status" role="status" aria-live="polite"></p>
+  <section class="dr-current"><small>IZABRANI ODJEL</small><b id="dr-map-summary"></b><span>Sačuvan na ovom uređaju · naziv i prikaz možeš izmijeniti</span></section>
+  <section class="dr-map-options"><h3>Prikaz na karti</h3><label><input type="checkbox" id="dr-legend-visible" checked onchange="DepartmentReport.change('legendVisible',this.checked)">Prikaži legendu</label><p>Pomjeri legendu povlačenjem naziva. − je minimizira, × je gasi.</p><label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label><label><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label><label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label></section>
   <section id="dr-result" hidden><h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div><p id="dr-terrain-summary"></p><h3>Nagib terena</h3><div id="dr-slopes"></div><h3>Ekspozicija · četiri strane svijeta</h3><div id="dr-aspects"></div><p id="dr-coverage"></p></section>
-  <section class="dr-map-options"><h3>Prikaz na karti</h3><label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label><label><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label><label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label></section>
-  <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Ukloni granicu i izvještaj</button></div></section>
+
+  <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Obriši izvještaj i njegov poligon</button></div></section>
 </div>
 <div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span>Dodirni kartu uz granicu odjela</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" onclick="DepartmentReport.finish()">Sačuvaj granicu</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
 
@@ -40766,7 +40775,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori novi odjel iz liste. Prije dodavanja kolega pošalji projekat na server uz internet.</li>
 </ol><div class="help-row"><div class="help-txt"><b>Nema učitanih granica?</b><span>Dodirni <b>Preuzmi Granice odjela</b>. U katalogu pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz granice. Nakon uvoza vraćaš se na novi projekat. Jednom preuzeti sloj možeš koristiti bez interneta. Možeš koristiti i vlastiti KML/SHP ili GeoJSON.</span></div></div>
 <div class="help-diagram"><b>Provjeri odjel na karti</b><p>Približi kartu svom odjelu i ručno označi njegove odsjeke. GJ i broj odjela upisuješ sam, bez preuzimanja atributa iz fajla. Lista prvo nudi samo poligone u trenutnom prikazu karte.</p></div>
-<div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Samo za poligon</b><span>U <b>Podloge i slojevi → Granice</b> uključi <b>Samo za poligon</b>. Učitane granice će biti vidljive samo dok biraš ili crtaš odjel za Doznaku ili Izvještaj odjela. Izbor se pamti. Za pojedinačni fajl ovu opciju mijenjaš u Uredi stil.</span></div></div><div class="help-row"><div class="help-txt"><b>Izvještaj i legenda na karti</b><span>Dodirni poligon izvještaja za pregled. U <b>Meni → Izvještaj odjela</b> prikaži ga, sakrij ili obriši. Pomjeri legendu povlačenjem naziva; − je minimizira, × je gasi. Ponovo je uključi kroz <b>Prikaži legendu</b>. Položaj i izbori se pamte. Brisanje izvještaja ne briše učitane granice ni projekte.</span></div></div><div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pomoć pri granici s topografske podloge · online</button><div class="help-sec-body">
 <ol class="help-steps">
@@ -42062,6 +42071,7 @@ if (typeof AndroidDownload !== 'undefined') {
             Granice odjela <small id="github-boundaries-status"></small>
           </span>
         </label>
+        <label class="boundary-only-option"><input type="checkbox" id="granice-only-polygon" onchange="GithubLayers.onlyPolygon(this.checked)"><span><b>Samo za poligon</b><small>Granice se prikazuju tokom izbora odjela za Doznaku ili Izvještaj.</small></span></label>
         <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
           <span style="color:#64748b;font-size:11px;white-space:nowrap;">Vidljivost obruba</span>
           <input type="range" aria-label="Vidljivost obruba granica" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"

@@ -118,6 +118,7 @@ jobs:
             outputs/276/
             outputs/277/
             outputs/278/
+            outputs/279/
           if-no-files-found: ignore
       - uses: android-actions/setup-android@v3
         with:

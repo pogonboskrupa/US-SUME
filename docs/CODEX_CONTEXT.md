@@ -3843,3 +3843,35 @@ Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.8
 APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.8/app-debug.apk
 Ažuriranje kroz Meni → Ažuriraj aplikaciju; updater koristi releases listu,
 a ne /latest, jer su APK izdanja označena kao prerelease.
+
+## 2026-10-10 — 2.7.9 / Android 549: granice samo za poligon i izvještaj na karti
+
+Korisnik traži checkbox Samo za poligon za učitane Granice odjela. Dodan
+u Podloge i slojevi → Granice i u stil svakog prepoznatog fajla granica s
+poligonima (lokalni/server/GitHub). Postavka je privatna, čuva se uz stil i
+lokalni registar, ne mijenja originalnu geometriju ni uobičajeni `vis` izbor.
+Granice se privremeno prikazuju tokom ručnog crtanja ili izbora odsjeka za
+Doznaku/Izvještaj; potvrda i odustajanje ponovo ih sakrivaju. Isključivanje
+opcije vraća običnu vidljivost. Kamionski putevi zadržavaju svoj prikaz.
+KML klik tokom crtanja granice Doznake dodaje jednu tačku umjesto info popupa.
+
+Izvještaj odjela ima klikabilan poligon i jasnije kontrole prikaza, sakrivanja
+te potvrđenog trajnog brisanja. Raster/linije ostaju bez presretanja klikova;
+hit poligon koristi jedan ponovo korišten SVG renderer ispod radnih slojeva.
+Proximity izbor vlaka i mjerenja ima prednost nad izvještajem. Izbor/crtanje
+odsjeka privremeno isključuje hit poligon izvještaja. Transparentna ispuna,
+rupe i više odsjeka zadržavaju geometriju, DEM rezultat i površine.
+Legenda nagiba/ekspozicije: udio površine i iste boje kao raster, povlačenje
+naziva, pomjeranje tastaturom, minimiziranje/proširivanje, gašenje i ponovno
+uključivanje u izvještaju. Položaj i izbori pamte se po nalogu; kartica je
+ograničena vidljivim dijelom karte iznad donjeg bara. Upute dopunjene.
+
+Lokalni puni browser test izvještaja proširen stvarnim klikovima na SVG/KML,
+povlačenjem legende bez pomjeranja karte, vlaka unutar izvještaja, šest
+prikaza 320/390/800 px u oba moda, izbor/odustajanje/ručno crtanje Doznake,
+restart svih izbora/rezultata, trajno brisanje bez brisanja KML-a i DEM
+offline/worker prekid. Nema JS grešaka ni vanjskih upisa. KML editor i izbor
+odsjeka prošli; 144 dnevna prikaza bez slabog kontrasta, navigacija i četiri
+uloge prošli. Pet inline blokova sintaksno ispravno; 69 assets pripremljeno.
+Produkcijska baza nije mijenjana; fizički Xiaomi nije testiran. APK/CI
+isporuka i provjera javnog fajla slijede.

@@ -26,7 +26,7 @@
   if(_dozGpsOn||_dozDrawType!==null){showToast('Završi snimanje ili crtanje prije izbora granice');return;}
   sources=getSources();if(!sources.length){download();showToast('Preuzmi Granice odjela pa izaberi poligone');return;}
   remember();selectedSource=0;items=sources[0].rows;_dozKmlSelLayers=[];styles.clear();visibility.clear();dozCloseCreateOdjel();switchTab('karta');map.closePopup();
-  _dozKmlSelMode=true;source(0);el('doz-kmlsel-banner').style.display='flex';el('action-bar').style.display='none';el('tab-bar').style.display='none';
+  _dozKmlSelMode=true;root.GithubLayers?.sync();source(0);el('doz-kmlsel-banner').style.display='flex';el('action-bar').style.display='none';el('tab-bar').style.display='none';
   el('doz-kmlsel-label').textContent='Dodirni poligone svog odjela';
   el('doz-picker-view').checked=true;map.invalidateSize();showMap();
  }
