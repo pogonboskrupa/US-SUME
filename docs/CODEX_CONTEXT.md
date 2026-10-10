@@ -3780,3 +3780,17 @@ ServiceRecord foreground snapshot. Sada prije detach-a startForeground
 prima istu završnu obavijest, pa odgođeno uklanjanje flag-a ne može vratiti
 stari napredak. Postojeći puni test i dalje traži završni tekst, ugašen servis,
 bez ongoing flag-a, offline tile/reload/delete; kriteriji nisu oslabljeni.
+Završna isporuka v2.7.7: CI 38052922997, izvor
+ e3828ddc77a78914d9eb877246d4f5fceadeb418; svi koraci uspješni, uključujući
+107 JS grupa, izolovani SQL, browser provjere, 20 Android API34 emulator
+ testova (0 failure/error/skipped), 67 web assets SHA i analizu brzine.
+Pages 38052922905 uspješan. Javni Release v2.7.7 / app-debug.apk,
+24.280.851 B, SHA256
+502a2a0e0ca20f69e340373e224fcf245937d9ebbe494499314423534240c3de.
+Preuzeti javni APK: ba.spd.uss.vlake.debug, 2.7.7-debug/code547, svih67
+asset hash-eva identično izvoru. Potpis kao prethodni APK:
+11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
+Supabase produkcija i fizički Xiaomi nisu mijenjani/testirani.
+Korisnik zatim traži isključivo vizuelni PLAN ikona: Meni/Karta/Projekat/
+Vlake i Snimi vlaku/Tragovi/Lokacija, plus sličice Menija. Prijedlog tek
+poslije APK isporuke; ikone NE mijenjati prije korisnikovog izbora.
