@@ -3772,3 +3772,11 @@ CI 38051624882 stao prije APK-a na zastarjelom device-workflow273 assertu
 koji je tražio project-polygon na dnu Projekta. Taj assert i raspored u
 project-vlake220 usklađeni su s korisnikovim premještanjem u Meni; oba puna
 ciljana testa prošla lokalno. App kod je ostao isti. Završni CI ponoviti.
+CI 38052011809 prošao JS/SQL/browser i build/67 SHA assets, ali Android
+20 testova: 19 prošlo, 1 pao na završnoj obavijesti preuzimanja. MBTiles je
+već instaliran, stvarna sličica prikazana; obavijest ostala „Čekam internet”.
+Android stopForeground(DETACH) asinkrono ponovo objavljuje posljednji
+ServiceRecord foreground snapshot. Sada prije detach-a startForeground
+prima istu završnu obavijest, pa odgođeno uklanjanje flag-a ne može vratiti
+stari napredak. Postojeći puni test i dalje traži završni tekst, ugašen servis,
+bez ongoing flag-a, offline tile/reload/delete; kriteriji nisu oslabljeni.

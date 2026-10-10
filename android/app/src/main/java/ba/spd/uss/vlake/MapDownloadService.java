@@ -54,6 +54,13 @@ public final class MapDownloadService extends Service {
                 final Notification finished=visible.length()==0?null:notice(this,visible,false);
                 new Handler(Looper.getMainLooper()).post(()->{
                     if(startId!=lastStartId)return;
+                    // Android strips the foreground flag asynchronously using
+                    // ServiceRecord's last foreground notification. Update that
+                    // snapshot first: otherwise a stale "Čekam internet" can
+                    // overwrite the completion notice after notify() returns.
+                    if(finished!=null){
+                        if(Build.VERSION.SDK_INT>=29)startForeground(NOTICE,finished,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);else startForeground(NOTICE,finished);
+                    }
                     stopForeground(finished==null?STOP_FOREGROUND_REMOVE:STOP_FOREGROUND_DETACH);
                     if(finished!=null)getSystemService(NotificationManager.class).notify(NOTICE,finished);
                     stopSelfResult(startId);
