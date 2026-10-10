@@ -3882,3 +3882,13 @@ pa stvarni klik nije mogao biti izvršen. Test sada čeka vidljiv banner,
 postavlja kartu na fixture odjel i ponovo računa piksel; stvarni klik i
 assert jedne tačke ostaju. Funkcionalni kod nije mijenjan; APK nije bio
 objavljen. Ponovljeni lokalni puni test prošao. CI se ponavlja.
+Ponovljeni CI 38071856159 prošao puni novi izvještaj, izbor odsjeka,
+KML editor i četiri uloge. Stao kasnije u historijskom izdvojenom fixture-u
+menu-tools: KML popup sada čita stanje crtanja granice Doznake, a fixture
+nije učitavao taj modul. Dodani su window defaulti null/false, tako da ne
+prave duplu let deklaraciju u testovima koji uvezu stvarni Doznaka kod.
+Fixture dodatno bilježi stack JS greške. Produkcijski kod nije mijenjan.
+Menu, kolegine vlake/server, oznake, projekti/teren, referentna karta,
+strelice, Doznaka restore/GPS kontrole i 5.400 m online/offline CPU1x/4x
+prošli lokalno s dopunjenim fixture-om. APK još nije objavljen; puni CI
+se ponavlja s istim funkcionalnim izvorom.

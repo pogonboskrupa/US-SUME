@@ -27,7 +27,7 @@ server_html=section('<div id="syncq-bg"','<!-- Share foto')
 body=section('<div id="guide-choice-modal"','<!-- PROFIL VISINA MODAL -->')+section('<div id="layer-import-modal"','<!-- ══ OZNAKE PANEL')
 js='''
 let sbUser={id:'A'},sbProfile={ime:'Emina',prezime:'Projektant'},lastP={la:44.9,lo:16},_fotoSnapPos=null;
-const _LOCAL_KML_KEY='fixture_local',_GUIDE_ROUTES_KEY='fixture_routes',_KML_USER_STYLES_KEY='fixture_styles';let _dozKmlSelMode=false;
+const _LOCAL_KML_KEY='fixture_local',_GUIDE_ROUTES_KEY='fixture_routes',_KML_USER_STYLES_KEY='fixture_styles';let _dozKmlSelMode=false;window._dozDrawType=null;window._dozDrawEnabled=false;
 const _KMLC_DB='fixture_cache',_KMLC_STORE='files';let _kmlcDB=null,_kmlcKeys=new Set();
 let kmlLs=[],kmlCI=0;const KCOLS=['#16a34a','#2563eb'],_glCollapsed=new Set();
 const map=L.map('map').setView([44.9,16],13),_genUUID=()=>crypto.randomUUID();
@@ -80,7 +80,7 @@ async def main():
     async with async_playwright() as p:
         browser=await p.chromium.launch(headless=True,**({'executable_path':os.environ['UI_CHROMIUM']} if os.environ.get('UI_CHROMIUM') else {}))
         page=await browser.new_page();errors=[]
-        page.on('pageerror',lambda e:errors.append(str(e)))
+        page.on('pageerror',lambda e:errors.append(str(e)+' '+e.stack))
         async def route(r):
             if r.request.url.startswith('https://appassets.androidplatform.net/drive-kml/'):
                 await r.fulfill(content_type='application/vnd.google-earth.kml+xml',headers={'Access-Control-Allow-Origin':'https://ui.test'},body='<kml><Placemark><name>Kamionski put</name><LineString><coordinates>16,44.9 16.001,44.901</coordinates></LineString></Placemark></kml>');return
