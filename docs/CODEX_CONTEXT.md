@@ -3892,3 +3892,20 @@ Menu, kolegine vlake/server, oznake, projekti/teren, referentna karta,
 strelice, Doznaka restore/GPS kontrole i 5.400 m online/offline CPU1x/4x
 prošli lokalno s dopunjenim fixture-om. APK još nije objavljen; puni CI
 se ponavlja s istim funkcionalnim izvorom.
+
+Isporuka 2.7.9 završena: source `33600f58f17f59b022783088a20e162dbae4c1ea`,
+tree `741a8809bf551cdf5ed729b101466e89f53847fd`, CI `38072592178` SUCCESS,
+Pages `38072592014` SUCCESS. Svi JS/SQL/browser/build/Android koraci prošli.
+Preuzet javni release APK: 24.317.508 B, SHA-256
+`ec78f270c020b76b84d47893e88b246da8aa1c1b95b9a75077fc1b7e28138df9`.
+Binary manifest: `ba.spd.uss.vlake.debug`, `2.7.9-debug`, code 549.
+Potpis ostaje `11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
+Svih 69 web assets u preuzetom APK-u identično je izvoru. Preuzet JUnit:
+20 Android testova, 0 failure/error/skipped. CI JSON potvrđuje novi izvještaj
+(279), KML editor (277), četiri uloge/navigaciju (278) i svih 144 dnevna
+prikaza (275), bez JS grešaka/slabog kontrasta/vanjskih upisa. Lokalni
+artefakti su u outputs/279-apk i outputs/279-ci; ne pratiti ih Gitom.
+Produkcijska baza nije mijenjana; fizički Xiaomi nije testiran.
+Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.9
+APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.9/app-debug.apk
+Ažuriranje kroz Meni → Ažuriraj aplikaciju; javni APK dostupan bez prijave.
