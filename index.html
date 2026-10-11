@@ -11946,7 +11946,7 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
     html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
   const m = L.marker([la, lo], {icon: ico});
-  if(!_prevHideFT&&(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos')))m.addTo(map);
+  if((typeof _prevHideFT==='undefined'||!_prevHideFT)&&(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos')))m.addTo(map);
   _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }

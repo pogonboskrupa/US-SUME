@@ -4069,3 +4069,11 @@ bez promjene verzije prije prve isporuke. Lokalni Chromium140 ne prima
 CDP tekstualni unos čak ni u praznom probnom inputu, zato se ispravnost
 interakcije potvrđuje u normalnom Chromium151 i u stvarnom CI140; ne
 proglašavati izolovanu DOM/layout dijagnostiku punim interakcijskim testom.
+
+CI dopuna: 38117135633 / 114404165420 za ba9ab3c prošao oba nova puna
+browser testa (plan i fotografije), uski kontrast/layout i sve starije
+provjere do server-map-218. Taj izolovani fixture izvlači _buildFotoMarker
+bez globalnog scale stanja, pa je novi direktni _prevHideFT uslov bacio
+ReferenceError. Marker sada koristi isti typeof fallback kao map-visibility:
+bez inicijaliziranog stanja ponaša se kao prije; stvarna karta i dalje
+poštuje razmjeru i korisnikovo skrivanje. Test nije preskočen ili ublažen.
