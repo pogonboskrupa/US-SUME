@@ -5688,7 +5688,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.2';
+const APP_VER = 'v2.8.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -40544,7 +40544,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-boundaries"/></svg></span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-theme"/></svg></span>Tematska karta</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil linija</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openVlakaStyle()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil i boja vlaka</button>
+  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openVlakaStyle()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-vlaka-style"/></svg></span>Stil i boja vlaka</button>
 
   </section><section class="mdrop-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg>Rad na terenu</div>

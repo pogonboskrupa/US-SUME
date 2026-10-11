@@ -4119,3 +4119,16 @@ ove provjere nisu fizički Xiaomi niti produkcijski Supabase.
 Source `bbd3d366c4d5f845088d778b52af89804a82399f`, tree `04f704fc6ed0ce5a0c62cbebbbb574e33104b259`. CI `38120768317`, drugi pokušaj / job `114415552173`: SUCCESS. Novi Izvještaj prošao tri podtaba/18 rasporeda, tastaturu, proširene postavke, stvarni DEM PNG Worker, ručne odsjeke, IDB/restart/offline i prikaze karte; puni skup i 144 dnevna pregleda takođe prošli. JUnit potvrđuje 20 Android testova bez padova/grešaka/preskoka. Javni APK preuzet: 24.374.699 B, SHA-256 `c63702f16f8ff5ef955305edfac9e777a6b964a284559ff49f20c8a7be3dd418`, package debug / code552 / 2.8.2-debug, isti certifikat i svih72 resursa identično izvoru. Updater vidi 2.8.2; Pages četiri resursa odgovaraju izvoru.
 
 Prvi CI pokušaj `114414899122` pao je u ranijem offline-import-240 pri otkazivanju drugog uvoza: zaključani privremeni OPFS fajl (`NoModificationAllowedError`). Isti test lokalno i u drugom CI pokušaju prošao je bez izmjene testa ili offline produkcijskog koda. Nalaz NIJE proglašen otklonjenim; ostaje za zaseban pregled. Dokaz i tri artefakta prvog pokušaja sačuvani su uz SHA prije uklanjanja samo CI kopija radi v4 rerun-a. Puni dokaz/ograničenja u `docs/ISPORUKA_2_8_2.md`.
+
+### 2026-10-11 — posebna ikona stila vlaka, 2.8.3 / 553
+Na zahtjev korisnika „Stil i boja vlaka” više ne koristi dm-lines. Dodan
+je zaseban lokalni SVG simbol dm-vlaka-style: prikaz odozgo s glavnom
+vlakom zelenom, spojenim krakom narandžastim i jednim znakom lijevo/desno
+dvosmjera pored trase. Isti thumbnail okvir/viewBox64 i dimenzije46px kao
+ranije. „Stil linija” zadržava svoju ikonu; logika stilizacije nije mijenjana.
+Lokalno prošao postojeći navigation-design-278: 12 mobilnih/tablet prikaza,
+dnevni kontrast, offline SVG i prava svih uloga. Nova ikona vizuelno
+pregledana u stvarnom Meniju; SVG XML ispravan s 32 jedinstvena simbola,
+field-design JS provjera i pet inline blokova prošli. Assets prepare72.
+Nova ikona je mali vektorski dodatak postojećem spriteu, nema nove
+bitmap slike niti zavisnosti. APK potvrditi nakon zajedničkog CI-a.
