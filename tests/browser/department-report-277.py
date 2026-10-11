@@ -44,21 +44,23 @@ async def main():
   assert await page.evaluate('kmlLs[0].onlyPolygon&&kmlLs[0].vis&&!map.hasLayer(kmlLs[0].grp)')
   assert await page.evaluate("JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))['GRANICE.kml'].onlyPolygon")
   await page.locator('#menu-btn').click();await page.locator('#menu-department-report').click();await page.locator('#department-report').wait_for(state='visible')
-  await page.get_by_role('button',name='Izaberi iz Granica',exact=True).click()
+  await page.get_by_role('button',name='Izaberi poligon',exact=True).click()
   assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   assert not await page.locator('#department-report').is_visible()
   await page.evaluate("map.fire('click',{latlng:L.latLng(44.902,16.002)});map.fire('click',{latlng:L.latLng(44.902,16.006)});DoznakaProjectBoundary.openPicker()")
   assert await page.evaluate('_dozKmlSelLayers.length')==2
   await page.locator('#doz-picker-confirm').click();await page.wait_for_function('DepartmentReport.snapshot().state.count===2')
-  await page.locator('#department-report').wait_for(state='visible')
+  await page.locator('#department-report').wait_for(state='visible');await page.wait_for_function('!DepartmentReport.snapshot().busy')
+  assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='error','Potvrda granice mora automatski pokušati DEM analizu'
+  assert await page.locator('#dr-calculate').is_visible() and await page.locator('#dr-calculate').inner_text()=='Pokušaj ponovo'
   assert await page.evaluate('!map.hasLayer(kmlLs[0].grp)')
   assert await page.evaluate("_dozCreateBoundary===null&&_dozCreateGj==='Doznaka nije mijenjana'&&_dozCreateOdjel==='987'")
   await page.locator('#dr-name').fill('Odjel 105 · ručni izbor');await page.locator('#dr-name').dispatch_event('change')
   old=await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')
-  await page.get_by_role('button',name='Izaberi iz Granica',exact=True).click();await page.evaluate('DoznakaProjectBoundary.cancel()')
+  await page.get_by_role('button',name='Izaberi poligon',exact=True).click();await page.evaluate('DoznakaProjectBoundary.cancel()')
   assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
   # Stvarni map klik i undo; odustajanje i nedostatak prostora čuvaju staru granicu.
-  await page.get_by_role('button',name='Nacrtaj granicu',exact=True).click()
+  await page.get_by_role('button',name='Nacrtaj poligon',exact=True).click()
   assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   assert not await page.locator('#action-bar').is_visible() and not await page.locator('#tab-bar').is_visible(),'Crtanje ne smije istovremeno pokrenuti GPS alat'
   await page.locator('#map').click(position={'x':100,'y':180});assert '1 tačaka' in await page.locator('#dr-draw-count').inner_text()
@@ -185,7 +187,7 @@ async def main():
   assert not await page.locator('#department-report').is_visible()
   await page.evaluate('map.removeLayer(testRoute.poly);vlake.splice(vlake.indexOf(testRoute),1);selI=oldSel;showVlakaPopup=oldVlPopup')
   # Izbor odsjeka prolazi kroz poligon izvještaja; report ne presreće KML dodire.
-  await page.evaluate('DepartmentReport.open()');await page.locator('#dr-selection-editor>summary').click();await page.get_by_role('button',name='Izaberi iz Granica',exact=True).click()
+  await page.evaluate('DepartmentReport.open()');await page.locator('#dr-selection-editor>summary').click();await page.get_by_role('button',name='Izaberi poligon',exact=True).click()
   assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   pos=await page.evaluate("()=>{const p=map.latLngToContainerPoint([44.902,16.006]);return {x:p.x,y:p.y}}")
   await page.locator('#map').click(position=pos);assert await page.evaluate('_dozKmlSelLayers.length')==1

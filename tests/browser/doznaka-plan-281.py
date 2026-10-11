@@ -39,10 +39,10 @@ async def main():
   before=await page.evaluate('JSON.stringify({tracks:_dozTracks,marks:_dozMarkings,boundary:_dozOdjeli[0].boundary_geojson})')
   await page.evaluate('window.planFrames=0;window.planFrameOn=true;requestAnimationFrame(function frame(){if(planFrameOn){planFrames++;requestAnimationFrame(frame)}})')
   await page.locator('#dp-calculate').click();await page.wait_for_function('!DoznakaPlan.snapshot().busy');r=await page.evaluate('planFrameOn=false;DoznakaPlan.snapshot().result');assert r,await page.locator('#dp-status').inner_text();assert await page.evaluate('planFrames')>2
-  assert not r['stats']['flat'] and len(r['bands'])>10 and r['daysNeeded']>=3,r['stats'];assert r['passes'][1]['slots'][0]['person']==2 and r['passes'][1]['slots'][0]['guide']
+  assert not r['stats']['flat'] and len(r['bands'])>10 and r['daysNeeded']==1 and r['partialDay'] and r['averageHaPerPersonDay']>=2,r;assert r['passes'][1]['slots'][0]['person']==2 and r['passes'][1]['slots'][0]['guide']
   assert abs(r['stats']['areaHa']-r['stats']['coveredHa'])<1e-7
   assert await page.evaluate('JSON.stringify({tracks:_dozTracks,marks:_dozMarkings,boundary:_dozOdjeli[0].boundary_geojson})')==before
-  assert 'praćenja' in (await page.locator('#dp-days').inner_text()).lower();assert 'prethodni pojas' in await page.locator('#dp-pass-list').inner_text()
+  assert 'praćenja' in (await page.locator('#dp-days').inner_text()).lower();assert 'prethodni pojas' in await page.locator('#dp-pass-list').inner_text();assert 'dio radnog dana' in await page.locator('#dp-productivity').inner_text()
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(800,480)]:
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
@@ -50,7 +50,7 @@ async def main():
     assert await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1'),await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>({theme:document.documentElement.dataset.fieldTheme,width:innerWidth,body:[e.clientWidth,e.scrollWidth],overflow:[...e.querySelectorAll("*")].filter(x=>x.getBoundingClientRect().right>e.getBoundingClientRect().right).map(x=>({id:x.id,cls:x.className,w:x.getBoundingClientRect().width}))})')
     await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>e.scrollTop=0');await page.screenshot(path=str(OUT/f'plan-{theme}-{w}.png'))
     await page.locator('#dp-result').scroll_into_view_if_needed();await page.screenshot(path=str(OUT/f'plan-result-{theme}-{w}.png'))
-  await page.set_viewport_size({'width':390,'height':800});await page.locator('#dp-day').select_option('2');await page.locator('#dp-view').click();assert await page.locator('.dp-map-legend').is_visible()
+  await page.set_viewport_size({'width':390,'height':800});await page.locator('#dp-day').select_option('1');await page.locator('#dp-view').click();assert await page.locator('.dp-map-legend').is_visible()
   assert await page.evaluate("Object.values(map._layers).some(l=>l.options?.pane==='doznakaPlan'&&l.options.dashArray)")
   await page.wait_for_timeout(150)
   assert await page.locator('.dp-band-label').evaluate_all('(els)=>{const b=els.map(e=>e.getBoundingClientRect());return b.every((p,i)=>b.slice(i+1).every(q=>p.right<=q.left||q.right<=p.left||p.bottom<=q.top||q.bottom<=p.top))}')
@@ -61,7 +61,7 @@ async def main():
   await page.get_by_role('button',name='Minimiziraj ili proširi legendu plana',exact=True).click();assert not await page.locator('.dp-map-legend .dr-legend-body').is_visible()
   await page.get_by_role('button',name='Sakrij plan s karte',exact=True).click();assert await page.locator('.dp-map-legend').count()==0
   calls=len(dem);await page.reload();await page.wait_for_function('_startupRestore._done&&!!window.DoznakaPlan');await page.evaluate(SETUP);assert await page.evaluate('!!DoznakaPlan.snapshot().result')
-  saved=await page.evaluate('DoznakaPlan.snapshot().prefs');assert saved['day']==2 and not saved['visible'] and saved['legendMin'] and saved['people']['0']['name']=='Projektant A' and saved['people']['0']['color']=='#a32132',saved
+  saved=await page.evaluate('DoznakaPlan.snapshot().prefs');assert saved['day']==1 and not saved['visible'] and saved['legendMin'] and saved['people']['0']['name']=='Projektant A' and saved['people']['0']['color']=='#a32132',saved
   assert len(dem)==calls;assert await page.locator('.dp-map-legend').count()==0
   # Stvarni odsjeci iz KML-a, bez upisa ili izmjene granice projekta.
   await page.evaluate("""async()=>{const poly=(a,c)=>`<Placemark><name>Atribut ne koristimo</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${a},44.9 ${c},44.9 ${c},44.9015 ${a},44.9015 ${a},44.9</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;const kml='<kml><Document>'+poly(16,16.002)+poly(16.002,16.004)+'</Document></kml>';await _localLayerKml('GRANICE.kml',kml,sbUser.id,{id:'github-kml-281',size:kml.length});GithubLayers.onlyPolygon(true);map.setView([44.9007,16.002],17,{animate:false});await DoznakaPlan.open();}""")

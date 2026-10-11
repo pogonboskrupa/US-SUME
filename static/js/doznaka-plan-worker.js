@@ -2,6 +2,7 @@
 (function(root){
 'use strict';
 const COLORS=['#2563eb','#b45309','#15803d','#9333ea','#be123c','#0e7490','#a16207','#4f46e5','#047857','#c2410c','#7e22ce','#475569'];
+const MIN_HA_PER_PERSON_DAY=2;
 function fitTrace(coords,polygon,t){
  const line=coords.map(p=>p.slice()),cos=Math.cos(line[0][1]*Math.PI/180);
  for(let i=0;i<line.length;i++){
@@ -28,19 +29,26 @@ function schedule(bands,value){
  let queue=people.map(p=>p.id),anchor=null,lastComponent=null,cursor=0;
  while(cursor<bands.length){
   const first=bands[cursor];if(first.component!==lastComponent){queue=people.map(p=>p.id);anchor=null;lastComponent=first.component;}
-  const pass={number:passes.length+1,day:Math.floor(passes.length/o.pace)+1,direction:passes.length%2?'nazad':'naprijed',slots:[]};
+  const pass={number:passes.length+1,day:0,direction:passes.length%2?'nazad':'naprijed',slots:[]};
   const guide=o.leapfrog&&o.crew>1&&anchor!==null;
   if(guide){const person=people[queue[0]];pass.slots.push({person:person.id,band:anchor,guide:true});person.guides++;person.walks++;person.lengthM+=bands[anchor].lengthM;}
   for(let slot=guide?1:0;slot<o.crew&&cursor<bands.length&&bands[cursor].component===lastComponent;slot++){
-   const b=bands[cursor],person=people[queue[slot]];b.person=person.id;b.day=pass.day;b.pass=pass.number;b.color=person.color;
+   const b=bands[cursor],person=people[queue[slot]];b.person=person.id;b.pass=pass.number;b.color=person.color;
    pass.slots.push({person:person.id,band:cursor,guide:false});person.bands++;person.walks++;person.areaHa+=b.areaHa;person.lengthM+=b.lengthM;anchor=cursor++;
   }
   passes.push(pass);
   // Najviši prati svoj prethodni pojas; ostali iznad njega kružno mijenjaju red.
   const top=pass.slots.at(-1)?.person;if(top!==undefined)queue=[top,...queue.filter(id=>id!==top)];
  }
+ const areaHa=bands.reduce((sum,b)=>sum+b.areaHa,0),crewDayTarget=o.crew*MIN_HA_PER_PERSON_DAY;
+ // Korisnički tempo je početna vrijednost. Ako bi njime prosjek pao ispod
+ // 2 ha po projektantu/dan, sabij raspored u najmanji potreban dnevni tempo.
+ // Odjel manji od učinka cijele ekipe označava se kao djelimičan radni dan.
+ const maxFullDays=Math.max(1,Math.floor(areaHa/crewDayTarget+1e-9)),effectivePace=Math.max(o.pace,Math.ceil(passes.length/maxFullDays));
+ for(let i=0;i<passes.length;i++){const pass=passes[i];pass.day=Math.floor(i/effectivePace)+1;for(const slot of pass.slots)if(!slot.guide)bands[slot.band].day=pass.day;}
  const days=Array.from({length:passes.at(-1)?.day||0},(_,i)=>{const rows=passes.filter(p=>p.day===i+1),ids=rows.flatMap(p=>p.slots.filter(s=>!s.guide).map(s=>s.band));return {day:i+1,passes:rows.length,bands:ids.length,guides:rows.reduce((n,p)=>n+p.slots.filter(s=>s.guide).length,0),areaHa:ids.reduce((n,id)=>n+bands[id].areaHa,0),bandIds:ids};});
- return {options:o,bands,passes,people,days,daysNeeded:days.length};
+ const partialDay=areaHa+1e-9<crewDayTarget,effectiveDays=partialDay?areaHa/crewDayTarget:days.length,averageHaPerPersonDay=areaHa/(o.crew*(effectiveDays||1));
+ return {options:o,bands,passes,people,days,daysNeeded:days.length,effectiveDays,partialDay,effectivePace,paceAdjusted:effectivePace>o.pace,minimumHaPerPersonDay:MIN_HA_PER_PERSON_DAY,averageHaPerPersonDay};
 }
 function calculate(input,t){
  const o=options(input.options),g=input.geometry?.type==='Feature'?input.geometry.geometry:input.geometry;
@@ -82,6 +90,6 @@ function calculate(input,t){
  bands.sort((a,b)=>componentMin.get(a.component)-componentMin.get(b.component)||a.component-b.component||a.level-b.level);
  const result=schedule(bands,o);result.stats={areaHa,coveredHa,min:Math.min(...heights),max:Math.max(...heights),flat,gridStep:Math.max(dx,dy),demResolution:Math.max(30,cos*156543.03392/2**input.z),components:originals.length};return result;
 }
-if(typeof module!=='undefined'&&module.exports){module.exports={calculate,schedule,options,COLORS};return;}
+if(typeof module!=='undefined'&&module.exports){module.exports={calculate,schedule,options,COLORS,MIN_HA_PER_PERSON_DAY};return;}
 importScripts('../libs/turf.min.js');root.onmessage=e=>{try{root.postMessage({ok:true,result:calculate(e.data,turf)});}catch(err){root.postMessage({ok:false,error:err.message});}};
 })(typeof self!=='undefined'?self:globalThis);

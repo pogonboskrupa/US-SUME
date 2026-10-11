@@ -2,12 +2,12 @@
 (function(root){
 'use strict';
 const node=id=>document.getElementById(id),setValue=(id,value)=>{const el=node(id);if(document.activeElement!==el)el.value=value;},uid=()=>sbUser?.id,project=()=>_dozOdjeli.find(p=>p.id===_dozSelId),scope=()=>uid()&&project()?uid()+':'+project().id:null;
-const COLORS=['#2563eb','#b45309','#15803d','#9333ea','#be123c','#0e7490','#a16207','#4f46e5','#047857','#c2410c','#7e22ce','#475569'];
+const COLORS=['#2563eb','#b45309','#15803d','#9333ea','#be123c','#0e7490','#a16207','#4f46e5','#047857','#c2410c','#7e22ce','#475569'],MODEL=2;
 let current=null,prefs={},result=null,resultSignature=null,busy=false,worker=null,cancelWorker=null,token=0,loaded=false,layer=null,legend=null,limit=30,message='';
 const key=()=> 'tvlake_doznaka_plan_v1_'+encodeURIComponent(current||''),n=(v,d=1)=>Number.isFinite(v)?v.toLocaleString('bs',{maximumFractionDigits:d}):'—';
 function geometry(){const b=_dozGetBoundaryGeoJSON(project());return prefs.geometry||b?.geometry||null;}
 const config=()=>({width:Number(prefs.width??15),crew:Number(prefs.crew??2),pace:Number(prefs.pace??3),leapfrog:prefs.leapfrog!==false});
-const signature=()=>JSON.stringify({geometry:geometry(),options:config()});
+const signature=()=>JSON.stringify({model:MODEL,geometry:geometry(),options:config()});
 const valid=()=>current&&current===scope();
 function save(){if(!valid())return false;try{localStorage.setItem(key(),JSON.stringify(prefs));return true;}catch(e){showToast('Plan nije sačuvan — provjeri memoriju uređaja');return false;}}
 function clearMap(){if(layer)map.removeLayer(layer);layer=null;legend?.remove();legend=null;}
@@ -34,16 +34,17 @@ function choose(){if(!valid()||busy)return;const owner=current;clearMap();Doznak
 function selectDay(day){change('day',day);}
 function render(){
  const p=project(),g=valid()?geometry():null,o=config(),entry=node('doz-plan-summary');
- if(entry)entry.textContent=!p?'Odaberi odjel':result?n(result.daysNeeded,0)+' radnih dana · '+result.bands.length+' novih pojaseva':g?'Izohipsni pojasevi i procjena radnih dana':'Prvo odredi poligon odjela';
+ if(entry)entry.textContent=!p?'Odaberi odjel':result?(result.partialDay?'Manje od 1 radnog dana':n(result.daysNeeded,0)+' radnih dana')+' · '+result.bands.length+' novih pojaseva':g?'Izohipsni pojasevi i procjena radnih dana':'Prvo odredi poligon odjela';
  node('dp-project').textContent=p?.name||'Odjel';node('dp-boundary').textContent=g?(prefs.count?prefs.count+' odsjeka · ':'')+n(turf.area(turf.feature(g))/10000,2)+' ha'+(prefs.source?' · '+prefs.source:' · granica projekta'):'Odjel nema poligon. Izaberi odsjeke iz Granica.';
  const custom=prefs.custom||![10,15,20].includes(o.width);setValue('dp-width-choice',custom?'custom':String(o.width));node('dp-width-custom-row').hidden=!custom;setValue('dp-width',o.width);setValue('dp-crew',o.crew);setValue('dp-pace',o.pace);node('dp-leapfrog').checked=o.leapfrog;node('dp-visible').checked=prefs.visible!==false;
  node('dp-calculate').disabled=busy||!g;node('dp-calculate').textContent=busy?'Planiram pojaseve…':'Izračunaj projekciju';node('dp-cancel').hidden=!busy;node('dp-view').disabled=!result;node('dp-result').hidden=!result;node('dp-status').textContent=message||(busy?'Učitavam DEM i obrađujem izohipse…':'DEM iz memorije koristi se i bez interneta. Ako nedostaje, preuzima se uz internet.');
  const people=node('dp-people');if(people.dataset.crew!==String(o.crew)||people.dataset.scope!==String(current)){people.replaceChildren();for(let id=0;id<Math.min(12,Math.max(1,o.crew));id++){const row=document.createElement('label'),color=document.createElement('input'),name=document.createElement('input');color.type='color';color.setAttribute('aria-label','Boja projektanta '+(id+1));color.onchange=()=>setPerson(id,'color',color.value);name.type='text';name.maxLength=60;name.setAttribute('aria-label','Naziv projektanta '+(id+1));name.onchange=()=>setPerson(id,'name',name.value);row.append(color,name);people.append(row);}people.dataset.crew=o.crew;people.dataset.scope=current;}
  [...people.children].forEach((row,id)=>{const value=person(id);if(document.activeElement!==row.children[0])row.children[0].value=value.color;if(document.activeElement!==row.children[1])row.children[1].value=value.name;});
  if(!result)return;
- node('dp-days-needed').textContent=n(result.daysNeeded,0);node('dp-total-bands').textContent=result.bands.length;node('dp-area').textContent=n(result.stats.areaHa,2)+' ha';
+ node('dp-days-needed').textContent=result.partialDay?'< 1':n(result.daysNeeded,0);node('dp-total-bands').textContent=result.bands.length;node('dp-area').textContent=n(result.stats.areaHa,2)+' ha';
+ node('dp-productivity').textContent=result.partialDay?'Odjel je manji od '+n(result.options.crew*result.minimumHaPerPersonDay,1)+' ha potrebnih za cijeli dan ekipe; planiran je dio radnog dana.':result.paceAdjusted?'Za najmanje 2 ha po projektantu plan koristi '+result.effectivePace+' prolaza dnevno umjesto unesenih '+result.options.pace+'.':'Procijenjeni prosjek '+n(result.averageHaPerPersonDay,2)+' ha dnevno po projektantu.';
  node('dp-model').textContent=result.stats.flat?'Ravan DEM: pojasevi prate dužu stranu odjela.':`Pojasevi prate DEM izohipse, od nižeg dijela prema višem. DEM uzorak oko ${n(result.stats.demResolution,0)} m; zadana širina je približna na promjenjivim padinama.`;
- node('dp-model').textContent+=' Plan cijelog odjela; već odrađeni GPS pojasevi nisu oduzeti. Povratak po istom pojasu ne povećava površinu.';
+ node('dp-model').textContent+=' Plan cijelog odjela; već odrađeni GPS pojasevi nisu oduzeti. Povratak po istom pojasu ne povećava površinu. Dnevni raspored se po potrebi automatski ubrza da ukupni prosjek ne padne ispod 2 ha po projektantu.';
  const select=node('dp-day');select.replaceChildren();const all=document.createElement('option');all.value='0';all.textContent='Cijeli plan';select.append(all);for(const day of result.days){const option=document.createElement('option');option.value=day.day;option.textContent='Dan '+day.day+' · '+day.bands+' novih pojaseva';select.append(option);}select.value=String(prefs.day??1);
  const days=node('dp-days');days.replaceChildren();for(const d of result.days.slice(0,limit)){const button=document.createElement('button');button.type='button';button.className='dp-day-row';button.setAttribute('aria-pressed',String(Number(prefs.day??1)===d.day));button.onclick=()=>selectDay(d.day);const title=document.createElement('b'),copy=document.createElement('span');title.textContent='Dan '+d.day;copy.textContent=d.bands+' novih · '+d.guides+' praćenja · '+n(d.areaHa,2)+' ha';button.append(title,copy);days.append(button);}node('dp-more').hidden=result.days.length<=limit;
  const rows=node('dp-pass-list');rows.replaceChildren();const day=Number(prefs.day??1)||1;

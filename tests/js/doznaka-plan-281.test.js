@@ -13,22 +13,23 @@ function input(geometry,height,options={width:15,crew:2,pace:3}){
 let tests=0;function test(name,fn){fn();tests++;console.log('OK:',name);}
 const plane=input(rect,(_,y)=>420+.3*y),result=api.calculate(plane,turf);
 test('Planarni DEM: površina bez dupliranja, izohipse i približan razmak po terenu',()=>{
- assert.equal(result.bands.length,9);assert.equal(result.daysNeeded,3);assert(Math.abs(result.stats.areaHa-result.stats.coveredHa)<1e-8);
+ assert.equal(result.bands.length,9);assert.equal(result.daysNeeded,1);assert(result.partialDay);assert.equal(result.averageHaPerPersonDay,2);assert(result.paceAdjusted);assert(Math.abs(result.stats.areaHa-result.stats.coveredHa)<1e-8);
  assert(result.bands.every(b=>b.lines.length>0),'Prva izohipsa se ne smije izgubiti u Turf 6');
  for(const b of result.bands)for(const line of b.lines)for(const p of line){assert(turf.booleanPointInPolygon(turf.point(p),turf.feature(rect)));assert(Math.abs(420+.3*xy(p)[1]-b.elevation)<.05);}
  const centers=result.bands.slice(1,-1).map(b=>xy(b.lines[0][0])[1]);for(let i=1;i<centers.length;i++)assert(Math.abs((centers[i]-centers[i-1])*Math.sqrt(1+.3**2)-15)<.03);
 });
 test('Dva projektanta: najviši prati svoj pojas, zatim mijenjaju red',()=>{
  assert.deepEqual(result.passes.slice(0,3).map(p=>p.slots.map(s=>[s.person,s.band,s.guide])),[[[0,0,false],[1,1,false]],[[1,1,true],[0,2,false]],[[0,2,true],[1,3,false]]]);
- assert.equal(result.days[0].bands,4);assert.equal(result.days[0].guides,2);assert.equal(result.people.reduce((n,p)=>n+p.bands,0),9);
+ assert.equal(result.days[0].bands,9);assert.equal(result.days[0].guides,7);assert.equal(result.people.reduce((n,p)=>n+p.bands,0),9);
  const assigned=result.passes.flatMap(p=>p.slots.filter(s=>!s.guide).map(s=>s.band));assert.equal(new Set(assigned).size,9);
- for(const day of result.days)assert(day.passes<=3);assert(Math.abs(result.people.reduce((n,p)=>n+p.areaHa,0)-result.stats.areaHa)<1e-8);
+ for(const day of result.days)assert(day.passes<=result.effectivePace);assert(result.partialDay||result.averageHaPerPersonDay>=api.MIN_HA_PER_PERSON_DAY);assert(Math.abs(result.people.reduce((n,p)=>n+p.areaHa,0)-result.stats.areaHa)<1e-8);
 });
 test('Tri projektanta i jedan projektant: kružni red, ograničen dnevni učinak',()=>{
  const bands=Array.from({length:15},()=>({component:0,areaHa:.5,lengthM:100}));const r=api.schedule(bands,{width:10,crew:3,pace:3});
- assert.deepEqual(r.passes.slice(0,4).map(p=>p.slots.map(s=>s.person)),[[0,1,2],[2,0,1],[1,2,0],[0,1,2]]);assert.equal(r.daysNeeded,3);assert.equal(r.bands.length,15);assert(r.people.every(p=>p.bands===5));
- const single=api.schedule(Array.from({length:7},()=>({component:0,areaHa:1,lengthM:100})),{crew:1,pace:2});assert.equal(single.daysNeeded,4);assert(single.passes.every(p=>p.slots.length===1&&!p.slots[0].guide));
- const fresh=api.schedule(Array.from({length:7},()=>({component:0,areaHa:1,lengthM:100})),{crew:3,pace:2,leapfrog:false});assert.equal(fresh.daysNeeded,2);assert(fresh.passes.every(p=>p.slots.every(s=>!s.guide)));
+ assert.deepEqual(r.passes.slice(0,4).map(p=>p.slots.map(s=>s.person)),[[0,1,2],[2,0,1],[1,2,0],[0,1,2]]);assert.equal(r.daysNeeded,1);assert.equal(r.bands.length,15);assert(r.people.every(p=>p.bands===5));assert(r.averageHaPerPersonDay>=2);
+ const single=api.schedule(Array.from({length:7},()=>({component:0,areaHa:1,lengthM:100})),{crew:1,pace:2});assert.equal(single.daysNeeded,3);assert(single.paceAdjusted);assert(single.averageHaPerPersonDay>=2);assert(single.passes.every(p=>p.slots.length===1&&!p.slots[0].guide));
+ const fresh=api.schedule(Array.from({length:7},()=>({component:0,areaHa:1,lengthM:100})),{crew:3,pace:2,leapfrog:false});assert.equal(fresh.daysNeeded,1);assert(fresh.paceAdjusted);assert(fresh.passes.every(p=>p.slots.every(s=>!s.guide)));
+ const sixDays=api.schedule(Array.from({length:48},()=>({component:0,areaHa:1,lengthM:100})),{crew:4,pace:2});assert.equal(sixDays.daysNeeded,6);assert.equal(sixDays.averageHaPerPersonDay,2);assert(sixDays.paceAdjusted);
 });
 test('Odvojeni odsjeci počinju novim nizom, bez povratka preko drugog odsjeka',()=>{
  const r=api.schedule([{component:0,areaHa:1,lengthM:50},{component:0,areaHa:1,lengthM:50},{component:1,areaHa:1,lengthM:50},{component:1,areaHa:1,lengthM:50}],{crew:2,pace:2});assert(r.passes.every(p=>p.slots.every(s=>!s.guide)));assert.equal(r.daysNeeded,1);

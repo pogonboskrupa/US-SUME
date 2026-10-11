@@ -5688,7 +5688,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.7';
+const APP_VER = 'v2.8.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -40687,10 +40687,15 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <div id="department-report" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title" onclick="if(event.target===this)DepartmentReport.close()">
   <section class="dr-sheet"><header><div><small>TEREN ODJELA</small><h2 id="dr-title">Izvještaj odjela</h2></div><button type="button" aria-label="Zatvori izvještaj odjela" onclick="DepartmentReport.close()">×</button></header>
-  <div class="dr-body"><details id="dr-selection-editor" class="dr-selection-editor" open><summary>Granica i naziv odjela</summary><label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
-  <div class="dr-choose"><button type="button" onclick="DepartmentReport.draw()">Nacrtaj granicu</button><button type="button" onclick="DepartmentReport.choose()">Izaberi iz Granica</button></div>
+  <div class="dr-body"><details id="dr-selection-editor" class="dr-selection-editor" open><summary><span class="dr-step-number">1</span> Odaberi granicu odjela</summary>
+  <p class="dr-step-copy">Odaberi način. Nakon potvrde granice analiza terena pokreće se automatski.</p>
+  <div class="dr-methods"><button type="button" aria-label="Nacrtaj poligon" onclick="DepartmentReport.draw()"><span aria-hidden="true">✎</span><b>Nacrtaj poligon</b><small>Označi granicu tačkama na karti</small></button><button type="button" aria-label="Izaberi poligon" onclick="DepartmentReport.choose()"><span aria-hidden="true">▱</span><b>Izaberi poligon</b><small>Odaberi jedan ili više poligona iz Granica</small></button></div>
+  <label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
   <details class="dr-legacy"><summary>Već nacrtan poligon projekta</summary><button type="button" onclick="DepartmentReport.legacy()">Koristi poligon aktivnog projekta</button></details>
-  </details><p id="dr-selection"></p><div class="dr-choose"><button type="button" class="dr-primary" id="dr-calculate" onclick="DepartmentReport.calculate()">Izračunaj teren</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button><p id="dr-status" role="status" aria-live="polite"></p>
+  </details>
+  <div id="dr-selection" class="dr-current" hidden></div>
+  <section id="dr-analysis-state" class="dr-analysis-state" aria-labelledby="dr-analysis-title"><span id="dr-analysis-icon" aria-hidden="true">1</span><div><b id="dr-analysis-title">Odaberi granicu</b><p id="dr-status" role="status" aria-live="polite">Nacrtaj ili izaberi poligon odjela.</p></div></section>
+  <div class="dr-actions"><button type="button" class="dr-primary" id="dr-calculate" hidden onclick="DepartmentReport.calculate()">Pokušaj ponovo</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button>
   <section id="dr-result" hidden>
     <nav class="dr-tabs" role="tablist" aria-label="Analiza odjela">
       <button type="button" id="dr-tab-overview" role="tab" aria-selected="true" aria-controls="dr-panel-overview" onclick="DepartmentReport.selectTab('overview')" onkeydown="DepartmentReport.tabKey(event,'overview')">Pregled</button>
@@ -40757,6 +40762,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <p id="dp-status" role="status" aria-live="polite"></p>
   <div id="dp-result" hidden>
    <div class="dp-hero"><div><small>Radnih dana</small><b id="dp-days-needed">—</b></div><div><small>Novih pojaseva</small><b id="dp-total-bands">—</b></div><div><small>Površina</small><b id="dp-area">—</b></div></div>
+   <div class="dp-productivity"><b>Minimalni učinak · 2 ha dnevno po projektantu</b><span id="dp-productivity"></span></div>
    <p id="dp-model"></p>
    <div class="dr-map-options"><label>Prikaži dan<select id="dp-day" onchange="DoznakaPlan.change('day',this.value)"></select></label><label><input type="checkbox" id="dp-visible" checked onchange="DoznakaPlan.change('visible',this.checked)">Prikaži planirane pojaseve na karti</label></div>
    <button type="button" class="dr-primary" id="dp-view" onclick="DoznakaPlan.view()">Prikaži na karti</button>
