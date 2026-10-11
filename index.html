@@ -11946,7 +11946,7 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
     html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
   const m = L.marker([la, lo], {icon: ico});
-  if(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos'))m.addTo(map);
+  if(!_prevHideFT&&(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos')))m.addTo(map);
   _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }
@@ -16313,11 +16313,13 @@ function _updMapScale() {
     const hideFT = closest > 25000;
     if (hideFT !== _prevHideFT) {
       _prevHideFT = hideFT;
-      [...(_locFotos||[]), ...(_sharedFotos||[])].forEach(f => {
-        if (!f.marker) return;
-        if (hideFT && map.hasLayer(f.marker)) map.removeLayer(f.marker);
-        else if (!hideFT && !map.hasLayer(f.marker)) map.addLayer(f.marker);
-      });
+      // Zoom samo privremeno sklanja oznake; nikad ne poništava korisnikov Sakrij.
+      for(const [list,shared] of [[_locFotos||[],false],[_sharedFotos||[],true]])for(const f of list){
+        if(!f.marker)continue;
+        const visible=!hideFT&&(typeof _tvPhotoVisible!=='function'||_tvPhotoVisible(f,shared));
+        if(!visible&&map.hasLayer(f.marker))map.removeLayer(f.marker);
+        else if(visible&&!map.hasLayer(f.marker))map.addLayer(f.marker);
+      }
       (_tragRegistry||[]).forEach(t => {
         const layer = (_tragLayers||{})[t.id];
         if (!layer) return;
@@ -40527,7 +40529,10 @@ if (typeof AndroidDownload !== 'undefined') {
 <!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
   <div class="mdrop-top"><div><b>Meni</b><small id="menu-context">Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
-  <div class="mdrop-scroll"><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
+  <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
+  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
+  <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
+</section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren');TerenWorkspace.search('');TerenWorkspace.jump('trn-records')">Moji zapisi</button>
@@ -40548,9 +40553,6 @@ if (typeof AndroidDownload !== 'undefined') {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
-  </section><section class="mdrop-section">
-  <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
-  <button type="button" class="mdrop-item" id="mdrop-server" style="color:#60a5fa;display:flex;align-items:center;" onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr" id="menu-project-section-title"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg>Projekti i izvoz</div>
   <button type="button" class="mdrop-item" id="menu-department-report" onclick="closeMenuDropdown();DepartmentReport.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-report"/></svg></span>Izvještaj odjela</button>

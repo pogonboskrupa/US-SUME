@@ -50,3 +50,6 @@ html[data-field-theme=day] #menu-dropdown .mdrop-hdr svg{color:#207d60;}
 @media(max-width:360px){html #tab-bar .tab-btn{font-size:10.5px;}html #tab-bar .tab-btn .tbi{padding-left:8px;padding-right:8px;}html #menu-dropdown .mdrop-item{font-size:12px;gap:9px;}}
 
 #pm-school-actions[hidden],#pm-filter[hidden]{display:none!important;}
+
+/* Prva radnja Menija: server je jasan i u dnevnom i u tamnom prikazu. */
+html #menu-dropdown #mdrop-server{background:#173b59;border:1px solid #467ca2;color:#f0f8ff!important;margin:4px 0;padding:11px 10px;min-height:64px;box-shadow:inset 3px 0 #66c6ec}html #menu-dropdown #mdrop-server .mdrop-ico{background:#225475;color:#d6f1ff}html #menu-dropdown #mdrop-server:hover{background:#204c6b}html[data-field-theme=day] #menu-dropdown #mdrop-server{background:#e0f2fe;border-color:#6b8eac;color:#123651!important;box-shadow:inset 3px 0 #087aa6}html[data-field-theme=day] #menu-dropdown #mdrop-server .mdrop-ico{background:#c5e7fa;color:#123651}html[data-field-theme=day] #menu-dropdown #mdrop-server:hover{background:#cceafd}

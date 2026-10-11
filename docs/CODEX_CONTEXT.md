@@ -3989,8 +3989,8 @@ ili vlastita 5–100 m, 1–12 planiranih projektanata s nazivima/bojama,
 po svom prethodnom pojasu, ostali prelaze iznad njega uz kružni red. Prvi
 prolaz daje N novih pojaseva, sljedeći N−1; praćenje prethodnog troši prolaz
 ali ne dodaje novu površinu. Za 2 i 3 provjeren tačan red. Checkbox dopušta
-alternativu bez praćenja. Dvije opcionalne tekstualne provjere dnevne
-jedinice/modela postavljene korisniku; do odgovora ovo je izričit UI default.
+alternativu bez praćenja. Korisnik naknadno izričito potvrđuje da se dnevni broj računa po projektantu.
+Opis smjene/praćenja vlastitog prethodnog pojasa ostaje izričit UI model.
 Procjena cijelog odjela, bez oduzimanja ranije odrađenih GPS pojaseva;
 ne uključuje automatski dolazak, vremenske prilike ili neradne dane.
 
@@ -4026,3 +4026,46 @@ i naloga, bez izmjene stvarne doznake i bez vanjskih upisa. GPS controls267
 72 APK web resources u manifestu/SW. Upute Doznake u aplikaciji ažurirane.
 Fizički Xiaomi i produkcijski Supabase nisu testirani. Ranije izričito
 odobrena isporuka nove verzije ostaje; APK/release dokaz tek nakon CI.
+
+Dopuna prije isporuke: prvi CI 38077732898 / 114288117645 za izvor78b65f9
+prošao JS/SQL i postojeće browser provjere do novog plana, ali novi audit
+otkrio horizontalni preljev na prvom uskom prikazu. Brojčani inputi nisu
+imali eksplicitni width/min-width/box-sizing kao tekstualni inputi; stariji
+Chromium140 (Playwright1.55) zadržava drugačiju unutrašnju širinu od lokalnog
+151. Novi CSS postavlja dimenzije/tokens za brojeve i select, male kontrole
+Prikaži dan slaže vertikalno. Audit ostaje strog, dodana dijagnostika.
+Sačuvan i SHA-provjeren CI UI ZIP u outputs/281-first-attempt/ui.zip
+(4ca5acdf095b76a773e6eb6efefe1dec3bf2f6022424aaca8a29c841d93e64a6).
+Nije objavljen APK iz neuspješnog pokušaja; verzija ostaje2.8.1 za popravljeni
+izvor prije prve isporuke. Nema zaobilaženja provjere ili proširenja tolerancije.
+
+
+## 2026-10-11 — dopuna istog 2.8.1 prije prve APK isporuke
+
+Korisnik traži završetak svih promptova prije objave: sve postavke ostaju
+nakon restarta, fotografije se ne smiju vratiti iz Sakrij u Prikazano;
+Pošalji na server prvi u Meniju s posebnom bojom. Potvrdio dnevni broj
+pojaseva po projektantu. Potvrđen stvarni bug _updMapScale: prelazak sa
+>1:25000 na manju razmjeru dodavao je SVE foto markere bez _tvPhotoVisible.
+Sada zoom poštuje i grupnu i pojedinačnu trajnu vidljivost za vlastite i
+primljene fotografije. Map-visibility apply i stvaranje/učitavanje markera
+poštuju privremeno skrivanje zbog razmjere, bez izmjene postavke. Postojeći
+per-user pref ključ ostaje, nema migracije ili gubitka ranijih izbora.
+Server prije ŠPD prečica i ostalih sekcija, plava karta s jakim kontrastom
+u oba moda. Klik i dalje otvara postojeći server, bez automatskog slanja.
+
+Dodane dvije semantičke provjere u restore-doznaka-227: zoom ciklusi ne
+vraćaju skrivene vlastite/primljene slike, odloženi marker poštuje pref i
+razmjeru. Novi puni photo-settings-281: vlastite2/primljena1 fotografija,
+stvarni library Sakrij, grupni i pojedinačni izbori, 5 zoom ciklusa, dva
+restarta, shared refresh, svih5 grupa ostaje skriveno; prvih6 Menija s
+bojom/kontrastom i stvarnim otvaranjem servera, bez vanjskih upisa. Lokalno
+prošli doznaka-plan-281, style-library-280 (karte/favoriti/stilovi/aktivni
+projekat i A→B→A), preferences-266 (KML/SHP IDB stilovi/bafer/podtab),
+cijeli JS skup i inline sintaksa. Brojčani unos/select planiranja imaju
+izričite dimenzije; osvježenje plana ne prepisuje fokusirani unos/naziv.
+Prvi CI pad zadržan kao dokaz; popravljeni izvor ima novo stablo i novi CI,
+bez promjene verzije prije prve isporuke. Lokalni Chromium140 ne prima
+CDP tekstualni unos čak ni u praznom probnom inputu, zato se ispravnost
+interakcije potvrđuje u normalnom Chromium151 i u stvarnom CI140; ne
+proglašavati izolovanu DOM/layout dijagnostiku punim interakcijskim testom.

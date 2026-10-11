@@ -17,6 +17,18 @@ test('visibility survives a new app instance, account change and delayed point l
  const again=visibility(store);assert.equal(again.window._tvTrackVisible({id:'one',visible:true}),true);
  assert.equal(visibility(store,'B').window._tvCategoryOn('points'),true);
 });
+test('zoom ne vraća pojedinačno ili grupno sakrivene vlastite/primljene fotografije',()=>{
+ const store=storage(),s=visibility(store);const marker=()=>({visible:true,addTo(){this.visible=true;}});
+ s._locFotos=[{la:44.9,lo:16,ts:1,marker:marker()},{la:44.9,lo:16.01,ts:2,marker:marker()}];s._sharedFotos=[{la:44.9,lo:16.02,ts:3,marker:marker()}];
+ Object.assign(s,s.window);s._tvPhotoSet(s._locFotos[0],false,false);s._tvPhotoSet(s._sharedFotos[0],true,false);
+ let zoom=8;Object.assign(s.map,{getZoom:()=>zoom,getCenter:()=>({lat:44.9}),getPane:()=>({style:{}}),getContainer:()=>({classList:{toggle(){}}}),addLayer:l=>l.visible=true});s.document.getElementById=()=>({textContent:''});s._prevHideFT=false;vm.runInContext(fn('_updMapScale'),s);
+ s._updMapScale();assert(s._locFotos.every(f=>!f.marker.visible));zoom=16;s._updMapScale();assert(!s._locFotos[0].marker.visible&&s._locFotos[1].marker.visible&&!s._sharedFotos[0].marker.visible);
+ s._tvVisibilitySet('photos',false);zoom=8;s._updMapScale();zoom=16;s._updMapScale();assert([...s._locFotos,...s._sharedFotos].every(f=>!f.marker.visible));
+ const again=visibility(store);assert(!again.window._tvPhotoVisible(s._locFotos[1],false));
+});
+test('odloženo učitana fotografija poštuje i razmjeru i trajni izbor',()=>{
+ const s=visibility(storage());s._prevHideFT=true;const f={la:44.9,lo:16,ts:1,marker:{visible:false,addTo(){this.visible=true;}}};s._locFotos=[f];s.window._tvVisibilityRestore();assert(!f.marker.visible);s._prevHideFT=false;s.window._tvVisibilityRestore();assert(f.marker.visible);s.window._tvPhotoSet(f,false,false);s._prevHideFT=true;s.window._tvVisibilityRestore();s._prevHideFT=false;s.window._tvVisibilityRestore();assert(!f.marker.visible);
+});
 test('chosen online base is never replaced by a saved SQL map',async()=>{
  const s=environment({_sqlLayers:[],_sqlRestoreFailed:[],_SQL_CRASH_KEY:'crash',_mapRestoreIndicatorShownAt:null,TL:{},map:{hasLayer:()=>false,removeLayer(){}},document:{getElementById:()=>null},_sqlSkipList:()=>[],_sqlCrashCheck:async()=>false,_mapLoadDiagStep(){},_mapLoadDiagFinish(){},_mapLoadDiagName(){},_mapRestoreIndicatorHide(){},_sqlEnsureBaseLayer(){},_sqlmapRenderLayers(){},_lsRenderSqlite(){},_sqlPrewarm(){},_sqlFailKey:n=>n});
  s.localStorage.setItem('tvlake_last_map',JSON.stringify({type:'tl',key:'🛰 Satelit'}));let loads=0;

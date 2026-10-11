@@ -26,7 +26,7 @@
     return _tragRegistry.flatMap(t=>[_tragLayers[t.id],_tragHitLayers[t.id],_tragLenMk[t.id]]).filter(Boolean);
   }
   function apply(category){if(category==='tracks'){for(const t of _tragRegistry)_tragRegAddLayer(t);return;}
-    if(category==='photos'){for(const [list,shared]of [[_locFotos,false],[_sharedFotos,true]])for(const f of list){if(!f.marker)continue;if(photoVisible(f,shared)){if(!map.hasLayer(f.marker))f.marker.addTo(map);}else if(map.hasLayer(f.marker))map.removeLayer(f.marker);}return;}
+    if(category==='photos'){for(const [list,shared]of [[_locFotos,false],[_sharedFotos,true]])for(const f of list){if(!f.marker)continue;if(photoVisible(f,shared)&&(typeof _prevHideFT==='undefined'||!_prevHideFT)){if(!map.hasLayer(f.marker))f.marker.addTo(map);}else if(map.hasLayer(f.marker))map.removeLayer(f.marker);}return;}
     for(const layer of layers(category)){if(enabled(category)){if(!map.hasLayer(layer))layer.addTo(map);}else if(map.hasLayer(layer))map.removeLayer(layer);}}
   function set(category,on){
     sync();if(category!=='all'&&!Object.hasOwn(categories,category))return;

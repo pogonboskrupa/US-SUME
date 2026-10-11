@@ -47,7 +47,7 @@ async def main():
    for w,h in [(320,568),(390,800),(800,480)]:
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
     assert not await page.evaluate(b.AUDIT,'#doz-plan-modal'),await page.evaluate(b.AUDIT,'#doz-plan-modal')
-    assert await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+    assert await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1'),await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>({theme:document.documentElement.dataset.fieldTheme,width:innerWidth,body:[e.clientWidth,e.scrollWidth],overflow:[...e.querySelectorAll("*")].filter(x=>x.getBoundingClientRect().right>e.getBoundingClientRect().right).map(x=>({id:x.id,cls:x.className,w:x.getBoundingClientRect().width}))})')
     await page.locator('#doz-plan-modal .dr-body').evaluate('(e)=>e.scrollTop=0');await page.screenshot(path=str(OUT/f'plan-{theme}-{w}.png'))
     await page.locator('#dp-result').scroll_into_view_if_needed();await page.screenshot(path=str(OUT/f'plan-result-{theme}-{w}.png'))
   await page.set_viewport_size({'width':390,'height':800});await page.locator('#dp-day').select_option('2');await page.locator('#dp-view').click();assert await page.locator('.dp-map-legend').is_visible()
