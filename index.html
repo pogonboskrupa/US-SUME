@@ -5688,7 +5688,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.1';
+const APP_VER = 'v2.8.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -40579,13 +40579,38 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <div id="department-report" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title" onclick="if(event.target===this)DepartmentReport.close()">
   <section class="dr-sheet"><header><div><small>TEREN ODJELA</small><h2 id="dr-title">Izvještaj odjela</h2></div><button type="button" aria-label="Zatvori izvještaj odjela" onclick="DepartmentReport.close()">×</button></header>
-  <div class="dr-body"><label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
+  <div class="dr-body"><details id="dr-selection-editor" class="dr-selection-editor" open><summary>Granica i naziv odjela</summary><label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
   <div class="dr-choose"><button type="button" onclick="DepartmentReport.draw()">Nacrtaj granicu</button><button type="button" onclick="DepartmentReport.choose()">Izaberi iz Granica</button></div>
   <details class="dr-legacy"><summary>Već nacrtan poligon projekta</summary><button type="button" onclick="DepartmentReport.legacy()">Koristi poligon aktivnog projekta</button></details>
-  <p id="dr-selection"></p><div class="dr-choose"><button type="button" class="dr-primary" id="dr-calculate" onclick="DepartmentReport.calculate()">Izračunaj teren</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button><p id="dr-status" role="status" aria-live="polite"></p>
-  <section class="dr-current"><small>IZABRANI ODJEL</small><b id="dr-map-summary"></b><span>Sačuvan na ovom uređaju · naziv i prikaz možeš izmijeniti</span></section>
-  <section class="dr-map-options"><h3>Prikaz na karti</h3><label><input type="checkbox" id="dr-legend-visible" checked onchange="DepartmentReport.change('legendVisible',this.checked)">Prikaži legendu</label><p>Pomjeri legendu povlačenjem naziva. − je minimizira, × je gasi.</p><label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label><label><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label><label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label></section>
-  <section id="dr-result" hidden><h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div><p id="dr-terrain-summary"></p><h3>Nagib terena</h3><div id="dr-slopes"></div><h3>Ekspozicija · četiri strane svijeta</h3><div id="dr-aspects"></div><p id="dr-coverage"></p></section>
+  </details><p id="dr-selection"></p><div class="dr-choose"><button type="button" class="dr-primary" id="dr-calculate" onclick="DepartmentReport.calculate()">Izračunaj teren</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button><p id="dr-status" role="status" aria-live="polite"></p>
+  <section id="dr-result" hidden>
+    <nav class="dr-tabs" role="tablist" aria-label="Analiza odjela">
+      <button type="button" id="dr-tab-overview" role="tab" aria-selected="true" aria-controls="dr-panel-overview" onclick="DepartmentReport.selectTab('overview')" onkeydown="DepartmentReport.tabKey(event,'overview')">Pregled</button>
+      <button type="button" id="dr-tab-slope" role="tab" tabindex="-1" aria-selected="false" aria-controls="dr-panel-slope" onclick="DepartmentReport.selectTab('slope')" onkeydown="DepartmentReport.tabKey(event,'slope')">Nagib</button>
+      <button type="button" id="dr-tab-aspect" role="tab" tabindex="-1" aria-selected="false" aria-controls="dr-panel-aspect" onclick="DepartmentReport.selectTab('aspect')" onkeydown="DepartmentReport.tabKey(event,'aspect')">Ekspozicija</button>
+    </nav>
+    <section id="dr-panel-overview" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-overview" tabindex="0">
+      <div class="dr-area"><span>Površina odjela</span><b id="dr-area"></b></div>
+      <h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div><p id="dr-terrain-summary"></p>
+      <details class="dr-source"><summary>O podacima i preciznosti</summary><p id="dr-coverage"></p></details>
+    </section>
+    <section id="dr-panel-slope" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-slope" tabindex="0" hidden>
+      <h3>Nagib terena</h3><div class="dr-metrics dr-metrics-two"><div><small>Prosječan nagib</small><b id="dr-slope-mean"></b></div><div><small>Najveći nagib</small><b id="dr-slope-max"></b></div></div>
+      <p>Udio i površina po razredima nagiba, izraženim u procentima.</p><div id="dr-slopes"></div>
+      <button type="button" id="dr-slope-map" class="dr-map-action" onclick="DepartmentReport.viewMode('slope')">Prikaži nagib na karti ↗</button>
+    </section>
+    <section id="dr-panel-aspect" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-aspect" tabindex="0" hidden>
+      <h3>Ekspozicija</h3><div class="dr-metrics dr-metrics-two"><div><small>Najzastupljenija strana</small><b id="dr-aspect-main"></b></div><div><small>Ravno / bez ekspozicije</small><b id="dr-aspect-flat"></b></div></div>
+      <p>Udio i površina za četiri glavne strane svijeta.</p><div id="dr-aspects"></div>
+      <button type="button" id="dr-aspect-map" class="dr-map-action" onclick="DepartmentReport.viewMode('aspect')">Prikaži ekspoziciju na karti ↗</button>
+    </section>
+  </section>
+  <details id="dr-map-settings" class="dr-map-options"><summary>Prikaz na karti <span id="dr-map-summary"></span></summary>
+    <label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label>
+    <label id="dr-lines-option"><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label>
+    <label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label>
+    <label><input type="checkbox" id="dr-legend-visible" checked onchange="DepartmentReport.change('legendVisible',this.checked)">Prikaži legendu</label><p>Legendu pomjeri povlačenjem naziva; − je smanji, × zatvori.</p>
+  </details>
 
   <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Obriši izvještaj i njegov poligon</button></div></section>
 </div>
@@ -40907,7 +40932,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori novi odjel iz liste. Prije dodavanja kolega pošalji projekat na server uz internet.</li>
 </ol><div class="help-row"><div class="help-txt"><b>Nema učitanih granica?</b><span>Dodirni <b>Preuzmi Granice odjela</b>. U katalogu pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz granice. Nakon uvoza vraćaš se na novi projekat. Jednom preuzeti sloj možeš koristiti bez interneta. Možeš koristiti i vlastiti KML/SHP ili GeoJSON.</span></div></div>
 <div class="help-diagram"><b>Provjeri odjel na karti</b><p>Približi kartu svom odjelu i ručno označi njegove odsjeke. GJ i broj odjela upisuješ sam, bez preuzimanja atributa iz fajla. Lista prvo nudi samo poligone u trenutnom prikazu karte.</p></div>
-<div class="help-row"><div class="help-txt"><b>Samo za poligon</b><span>U <b>Podloge i slojevi → Granice</b> uključi <b>Samo za poligon</b>. Učitane granice će biti vidljive samo dok biraš ili crtaš odjel za Doznaku ili Izvještaj odjela. Izbor se pamti. Za pojedinačni fajl ovu opciju mijenjaš u Uredi stil.</span></div></div><div class="help-row"><div class="help-txt"><b>Izvještaj i legenda na karti</b><span>Dodirni poligon izvještaja za pregled. U <b>Meni → Izvještaj odjela</b> prikaži ga, sakrij ili obriši. Pomjeri legendu povlačenjem naziva; − je minimizira, × je gasi. Ponovo je uključi kroz <b>Prikaži legendu</b>. Položaj i izbori se pamte. Brisanje izvještaja ne briše učitane granice ni projekte.</span></div></div><div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Samo za poligon</b><span>U <b>Podloge i slojevi → Granice</b> uključi <b>Samo za poligon</b>. Učitane granice će biti vidljive samo dok biraš ili crtaš odjel za Doznaku ili Izvještaj odjela. Izbor se pamti. Za pojedinačni fajl ovu opciju mijenjaš u Uredi stil.</span></div></div><div class="help-row"><div class="help-txt"><b>Izvještaj i legenda na karti</b><span>Dodirni poligon izvještaja za pregled. U <b>Meni → Izvještaj odjela</b> podtab <b>Pregled</b> daje površinu i visine, <b>Nagib</b> šest razreda u procentima, a <b>Ekspozicija</b> četiri strane svijeta. Dugme u podtabu prikazuje odgovarajuće boje na karti. U <b>Prikaz na karti</b> mijenjaj vidljivost, linije i legendu. Zadnji podtab se pamti. Pomjeri legendu povlačenjem naziva; − je minimizira, × je gasi. Ponovo je uključi kroz <b>Prikaz na karti → Prikaži legendu</b>. Položaj i izbori se pamte. Brisanje izvještaja ne briše učitane granice ni projekte.</span></div></div><div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pomoć pri granici s topografske podloge · online</button><div class="help-sec-body">
 <ol class="help-steps">

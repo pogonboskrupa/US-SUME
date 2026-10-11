@@ -4092,3 +4092,25 @@ CI `38119128475` za `aac0cbf5ad6971bd062c6d854331eba186c2e8e0` stao je prije nov
 
 ### 2026-10-11 — isporuka 2.8.1 potvrđena
 Završni source `94ff900a19825bae223a4dd8a4ac8a63f592de88`, tree `c6d7e22e99c61db25732a95870d6eda8e38da8c3`, CI `38119500745` SUCCESS. Cijeli JS/Postgres/browser skup i 20 Android testova prošli su; JUnit potvrđuje 0 padova/grešaka/preskoka. Javni 2.8.1 APK preuzet: 24.367.767 B, SHA-256 `13c6917f183e2755e49c9b8b3f0d94c284577680a2a1bd43f3b596a1cdaf217e`, paket `ba.spd.uss.vlake.debug`, versionCode551 / 2.8.1-debug, isti certifikat kao 2.8.0 i svih 72 resursa identično izvoru. Native updaterov `/releases?per_page=1` vidi novu objavu i ovaj APK. Završni Pages index/sw takođe odgovaraju sourceu. Foto test dodatno lokalno prolazi Chromium140/Playwright1.55 bez globalnog typing problema drugih lokalnih proba. Nova SQL migracija nije potrebna. Puni dokaz, ograničenja DEM procjene i fizički/produkcijski neprovjereni tokovi zapisani su u `docs/ISPORUKA_2_8_1.md`.
+
+### 2026-10-11 — Izvještaj odjela u podtabovima, 2.8.2 / 552
+Korisnik traži jednostavniji Izvještaj odjela, posebno Nagib i Ekspoziciju.
+Rezultati su razdvojeni u tri prava ARIA podtaba: Pregled (površina i
+min/prosjek/max visine), Nagib (šest razreda, udjeli/ha i prosjek/maksimum),
+Ekspozicija (četiri strane, dominantna strana i ravni dio). Skriveni paneli
+ne učestvuju u rasporedu. Zadnji podtab se pamti u postojećem per-user
+ključu, bez migracije i prepisivanja geometrije/izračuna/postavki karte.
+Pregledanje podtabova ne mijenja kartu i ne preuzima DEM ponovo. Izričita
+dugmad u Nagibu i Ekspoziciji otvaraju odgovarajući sloj na karti. Granica
+i naziv sklopljeni su poslije izračuna; izbor odjela i naziv ostaju vidljivi
+u sažetku. Postavke karte/legende su u zasebnom sklopivom dijelu. Linije
+razreda se ne nude za ekspoziciju ili prikaz samo granice. Stilovi su
+scoped na #department-report, jer plan doznake koristi zajedničke dr klase.
+Upute su ažurirane. DEM worker i izračun nisu mijenjani.
+
+Lokalno: cijeli JS skup, pet inline JS blokova, pravi DEM PNG/Worker/Leaflet
+izvještaj (ručni odsjeci/crtanje/IDB/restart/offline/cancel/brisanje i izolacija
+naloga), tri podtaba × šest rasporeda i kontrast, tastatura/ARIA i eksplicitni
+prikazi karte; plan doznake s istim shared CSS-om prošao. Assets prepare
+potvrdio 72 resursa. Objavu i javni APK potvrditi nakon uspješnog CI-a;
+ove provjere nisu fizički Xiaomi niti produkcijski Supabase.

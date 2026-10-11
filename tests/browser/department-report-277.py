@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('boundary',Path(__file__).with_name('doznaka-project-boundary-276.py'));b=importlib.util.module_from_spec(spec);spec.loader.exec_module(b)
-OUT=ROOT/'outputs/279';OUT.mkdir(parents=True,exist_ok=True)
+OUT=ROOT/'outputs/282';OUT.mkdir(parents=True,exist_ok=True)
 A='11111111-1111-4111-8111-111111111111';B='22222222-2222-4222-8222-222222222222'
 def tile(z,x,y):
  n=256*2**z;origin=(16+180)/360*n;split=.004/360*n
@@ -83,12 +83,46 @@ async def main():
   assert await page.evaluate('DepartmentReport.snapshot().result.edges.length')>0
   assert await page.evaluate("Number(map.getPane('departmentReport').style.zIndex)>Number(getComputedStyle(map.getPane('overlayPane')).zIndex)&&map.getPane('departmentReport').style.pointerEvents==='none'")
   assert '%' in await page.locator('#dr-terrain-summary').inner_text() and '°' not in await page.locator('#dr-result').inner_text()
+  # Podtabovi skrivaju ostale rezultate, ne mijenjaju prikaz karte i ne računaju ponovo.
+  assert not await page.locator('#dr-selection-editor').evaluate('(e)=>e.open')
+  assert await page.locator('#dr-panel-overview').is_visible()
+  assert 'Odjel 105' in await page.locator('#dr-selection').inner_text()
+  assert not await page.locator('#dr-slopes').is_visible() and not await page.locator('#dr-aspects').is_visible()
+  before_tabs=await page.evaluate('({mode:DepartmentReport.snapshot().state.mode,result:JSON.stringify(DepartmentReport.snapshot().result)})');tab_calls=len(dem)
+  await page.locator('#dr-tab-slope').click()
+  assert await page.locator('#dr-slopes .dr-stat-row').count()==6 and await page.locator('#dr-slopes').is_visible()
+  assert not await page.locator('#dr-aspects').is_visible() and not await page.locator('#dr-elevation').is_visible()
+  await page.evaluate("()=>{Storage.prototype.setItem=function(k,v){if(k.startsWith('tvlake_department_report'))throw Error('full');return realSet.call(this,k,v)}}")
+  await page.locator('#dr-tab-aspect').click();assert await page.locator('#dr-panel-slope').is_visible(),'Ako nema prostora, zadrži prethodni sačuvani podtab'
+  await page.evaluate('()=>{Storage.prototype.setItem=realSet}')
+  await page.locator('#dr-tab-slope').press('ArrowRight')
+  assert await page.locator('#dr-tab-aspect').evaluate('(e)=>e===document.activeElement&&e.tabIndex===0&&e.getAttribute("aria-selected")==="true"')
+  assert await page.locator('#dr-aspects .dr-stat-row').count()==4 and await page.locator('#dr-aspects').is_visible()
+  await page.locator('#dr-tab-aspect').press('Home');assert await page.locator('#dr-panel-overview').is_visible()
+  await page.locator('#dr-tab-overview').press('ArrowLeft');assert await page.locator('#dr-panel-aspect').is_visible()
+  await page.locator('#dr-tab-aspect').press('End');assert await page.locator('#dr-panel-aspect').is_visible()
+  assert len(dem)==tab_calls and await page.evaluate('JSON.stringify(DepartmentReport.snapshot().result)')==before_tabs['result']
+  assert await page.evaluate('DepartmentReport.snapshot().state.mode')==before_tabs['mode']
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(800,480)]:
-    await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>{document.documentElement.dataset.fieldTheme=t}',theme);await page.wait_for_timeout(100)
-    bad=await page.evaluate(b.AUDIT,'#department-report');assert not bad,{'theme':theme,'bad':bad}
-    assert await page.evaluate("document.querySelector('.dr-body').scrollWidth<=document.querySelector('.dr-body').clientWidth+1")
-    await page.screenshot(path=str(OUT/f'department-report-{theme}-{w}.png'))
+    await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>{document.documentElement.dataset.fieldTheme=t}',theme)
+    for tab in ['overview','slope','aspect']:
+     await page.locator('#dr-tab-'+tab).click()
+     bad=await page.evaluate(b.AUDIT,'#department-report');assert not bad,{'theme':theme,'tab':tab,'bad':bad}
+     assert await page.locator('#department-report .dr-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+     assert await page.locator('#department-report [role=tabpanel]:visible').count()==1
+     if tab=='overview':
+      await page.locator('#dr-selection-editor>summary').click();await page.locator('#dr-map-settings>summary').click();await page.locator('.dr-source>summary').click()
+      assert not await page.evaluate(b.AUDIT,'#department-report'),{'theme':theme,'expanded':await page.evaluate(b.AUDIT,'#department-report')}
+      assert await page.locator('#department-report .dr-body').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+      await page.locator('.dr-source>summary').click();await page.locator('#dr-map-settings>summary').click();await page.locator('#dr-selection-editor>summary').click()
+     await page.locator('#dr-tab-'+tab).scroll_into_view_if_needed();await page.screenshot(path=str(OUT/f'department-report-{tab}-{theme}-{w}.png'))
+  # Svaki podtab može izričito prikazati svoj sloj s odgovarajućom legendom.
+  await page.locator('#dr-aspect-map').click();assert await page.evaluate('DepartmentReport.snapshot().state.mode')=='aspect'
+  assert await page.locator('.dr-legend-body>div').count()==4
+  await page.evaluate('DepartmentReport.open()');await page.locator('#dr-tab-slope').click();await page.locator('#dr-slope-map').click()
+  assert await page.evaluate('DepartmentReport.snapshot().state.mode')=='slope' and await page.locator('.dr-legend-body>div').count()==6
+  await page.evaluate('DepartmentReport.open()')
   await page.set_viewport_size({'width':390,'height':800});await page.locator('#dr-view').click();await page.wait_for_timeout(300)
   assert await page.evaluate("Object.keys(map._layers).map(i=>map._layers[i]).some(l=>l.options?.pane==='departmentReport'&&l._tiles&&Object.values(l._tiles).some(t=>{const data=t.el.getContext('2d').getImageData(0,0,256,256).data;return data.some((v,i)=>i%4===3&&v>0)}))")
   assert await page.locator('#dr-map-legend').is_visible()
@@ -108,7 +142,7 @@ async def main():
   await page.get_by_role('button',name='Minimiziraj legendu',exact=True).click();assert not await page.locator('.dr-legend-body').is_visible()
   await page.get_by_role('button',name='Proširi legendu',exact=True).click();assert await page.locator('.dr-legend-body').is_visible()
   await page.get_by_role('button',name='Ugasi legendu',exact=True).click();assert await page.locator('#dr-map-legend').count()==0
-  await click_report();await page.locator('#dr-legend-visible').check();await page.locator('#dr-visible').uncheck()
+  await click_report();await page.locator('#dr-map-settings>summary').click();await page.locator('#dr-legend-visible').check();await page.locator('#dr-visible').uncheck()
   assert await page.locator('#dr-map-legend').count()==0
   assert await page.evaluate("!Object.values(map._layers).some(l=>l.options?.pane==='departmentReportHit'&&l.getLatLngs)")
   await page.locator('#dr-visible').check();await page.locator('#dr-view').click()
@@ -119,7 +153,7 @@ async def main():
   assert not await page.locator('#department-report').is_visible()
   await page.evaluate('map.removeLayer(testRoute.poly);vlake.splice(vlake.indexOf(testRoute),1);selI=oldSel;showVlakaPopup=oldVlPopup')
   # Izbor odsjeka prolazi kroz poligon izvještaja; report ne presreće KML dodire.
-  await page.evaluate('DepartmentReport.open()');await page.get_by_role('button',name='Izaberi iz Granica',exact=True).click()
+  await page.evaluate('DepartmentReport.open()');await page.locator('#dr-selection-editor>summary').click();await page.get_by_role('button',name='Izaberi iz Granica',exact=True).click()
   assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   pos=await page.evaluate("()=>{const p=map.latLngToContainerPoint([44.902,16.006]);return {x:p.x,y:p.y}}")
   await page.locator('#map').click(position=pos);assert await page.evaluate('_dozKmlSelLayers.length')==1
@@ -135,7 +169,7 @@ async def main():
   await page.set_viewport_size({'width':390,'height':800});await page.wait_for_timeout(100)
   await page.screenshot(path=str(OUT/'department-report-map.png'))
   # Snimljen izračun i opcije dostupni su odmah poslije restarta, bez DEM zahtjeva.
-  await page.evaluate("async()=>{await DepartmentReport.open();DepartmentReport.change('mode','aspect');DepartmentReport.change('lines',false);DepartmentReport.change('visible',false);DepartmentReport.change('legendMin',true);DepartmentReport.change('legendVisible',false)}")
+  await page.evaluate("async()=>{await DepartmentReport.open();DepartmentReport.selectTab('aspect');DepartmentReport.change('mode','aspect');DepartmentReport.change('lines',false);DepartmentReport.change('visible',false);DepartmentReport.change('legendMin',true);DepartmentReport.change('legendVisible',false)}")
   calls=len(dem);await page.reload();await page.wait_for_function('_startupRestore._done&&!!window.DepartmentReport')
   await page.wait_for_function('!!DepartmentReport.snapshot().result')
   await page.evaluate('DepartmentReport.open()')
@@ -143,6 +177,9 @@ async def main():
   assert await page.evaluate('!!DepartmentReport.snapshot().state.legendPosition')
   assert len(dem)==calls,'Ponovno otvaranje izvještaja ne smije zahtijevati mrežu'
   saved=await page.evaluate('DepartmentReport.snapshot().state');assert saved['mode']=='aspect' and not saved['lines'] and not saved['visible'] and saved['name']=='Odjel 105 · ručni izbor' and saved['legendMin'] and not saved['legendVisible'],saved
+  assert await page.locator('#dr-tab-aspect').get_attribute('aria-selected')=='true' and await page.locator('#dr-panel-aspect').is_visible()
+  assert not await page.locator('#dr-slopes').is_visible() and not await page.locator('#dr-panel-overview').is_visible()
+  assert saved['tab']=='aspect'
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean']
   # Prekid za vrijeme rada Workera mora odmah osloboditi novi izračun.
   await page.evaluate("""()=>{_mrezaProbaj=()=>false;window.NativeWorker=Worker;window.stalled=[];window.Worker=class{constructor(){stalled.push(this)}postMessage(){}terminate(){this.stopped=true}};window.cancelledReport=DepartmentReport.calculate();}""")
@@ -173,7 +210,7 @@ async def main():
   await page.evaluate("DepartmentReport.reset();sbUser={id:'22222222-2222-4222-8222-222222222222'};DepartmentReport.open()")
   assert await page.evaluate('!DepartmentReport.snapshot().state.geometry&&!DepartmentReport.snapshot().result')
   assert not errors,errors;assert not writes,writes
-  (OUT/'department-report.json').write_text(json.dumps({'passed':True,'stats':stats,'dem_requests':calls,'errors':errors,'external_writes':writes},indent=2))
+  (OUT/'department-report.json').write_text(json.dumps({'passed':True,'tabs':['overview','slope','aspect'],'layouts':18,'tab_restart':True,'stats':stats,'dem_requests':calls,'errors':errors,'external_writes':writes},indent=2))
   await ctx.close();await browser.close()
- print('PASS: Izvještaj odjela, ručni odsjeci/crtanje, 6 razreda/4 strane/DEM PNG Worker, karta/linije, 6 prikaza, IDB restart/offline/cancel i izdvajanje naloga')
+ print('PASS: Izvještaj odjela, ručni odsjeci/crtanje, 6 razreda/4 strane/DEM PNG Worker, karta/linije, 3 podtaba/18 prikaza/tastatura, IDB restart/offline/cancel i izdvajanje naloga')
 if __name__=='__main__':asyncio.run(main())
