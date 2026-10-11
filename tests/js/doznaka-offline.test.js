@@ -254,9 +254,9 @@ function odjeliEnv(o) {
   const sb = { from: tab => { st.mreza.push(tab); return upit(o.odg[tab]); } };
   const fn = new Function('sb', 'sbUser', '_OL', 'document', 'dozRenderOdjeli', '_dozRenderOverview', 'showToast',
     '_mrezaProbaj', '_isNetworkErr', '_escHtml',
-    'let _dozOdjeli = [];\n' + extractFn('dozLoadOdjeli') + '\nreturn { run: dozLoadOdjeli, get: () => _dozOdjeli };');
+    'let _dozOdjeli = [];\n' + extractFn('_dozVratiNeposlane') + '\n' + extractFn('dozLoadOdjeli') + '\nreturn { run: dozLoadOdjeli, get: () => _dozOdjeli };');
   const api = fn(sb, { id: 'me' },
-    { DOZ_ODJELI: 'k', load: () => o.kes, save: (k, v) => { st.sacuvano = v; } },
+    { DOZ_ODJELI: 'k', loadQueue: () => o.queue || [], load: () => o.kes, save: (k, v) => { st.sacuvano = v; } },
     { getElementById: () => lista },
     () => st.render.push(api.get().length), () => {}, m => st.toast.push(m),
     () => o.mreza !== false, e => !e.code, x => String(x));
@@ -351,7 +351,7 @@ console.log('Radnje koje traže vezu:');
 
 t('brisanje odjela / dodavanje člana ne počinju bez veze', () => {
   for (const f of ['dozDeleteOdjel', 'dozAddMember', '_dozPickMember']) {
-    assert.ok(/if \(!_mrezaProbaj\(\)\) \{ showToast\(/.test(extractFn(f)), f + ' bez provjere veze');
+    assert.ok(/if \(!_mrezaProbaj\(\)\) \{ showToast\(|!await _projektServerSpreman\(/.test(extractFn(f)), f + ' bez provjere veze/projekta');
   }
   const d = extractFn('dozDeleteOdjel');
   assert.ok(d.indexOf('_mrezaProbaj') < d.indexOf('_dlgConfirm'),

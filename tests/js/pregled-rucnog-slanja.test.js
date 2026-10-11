@@ -27,6 +27,7 @@ function noviProjekt(kvota = false) {
     localStorage: { setItem() {} }, rndProjektiList() {}, updProjStats() {},
     showToast: msg => poruke.push(msg), _mrezaProbaj: () => true,
     sb: { from: () => { calls.push('server'); throw Error('mrežni upis nije dozvoljen'); } },
+    _autoPosaljiNoveProjekte: () => { assert.equal(red.length,1); assert.equal(projekti.length,1); calls.push('auto-project'); },
     _isNetworkErr: () => false, console: { error() {} },
   };
   return { run: bind('saveNovProjekt', env, 'let _npSaveInFlight=false, _aktivniProjektId=null;'),
@@ -55,9 +56,9 @@ function dozSlanje(realId) {
 }
 const tests = [];
 function test(name, f) { tests.push([name, f]); }
-test('novi projekat na dobroj vezi ostaje lokalno i u redu', async () => {
+test('novi projekat trajno sačuva lokalni zapis i red prije automatskog slanja', async () => {
   const h = noviProjekt(); await h.run();
-  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.calls, ['auto-project']);
   assert.equal(h.red.length, 1); assert.equal(h.projekti.length, 1);
   assert.equal(h.red[0].payload.id, h.projekti[0].id);
   assert.equal(h.red[0].payload._tempId, h.projekti[0].id);

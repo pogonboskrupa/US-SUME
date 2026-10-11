@@ -92,7 +92,7 @@
     try {const h=JSON.parse(localStorage.getItem('tvlake_server_transfers_v1_'+currentUid())||'{}');return h&&typeof h==='object'&&!Array.isArray(h)?h:{};}catch(e){return {};}
   }
   function confirmed(op,owner) {
-    if(!_serverSaljem || owner!==currentUid())return;
+    if(owner!==currentUid() || (!_serverSaljem && !['insert_projekt','insert_doz_project'].includes(op.type)))return;
     try {
       const dest=destination(op),h=history();
       h[dest.key]={ts:Date.now(),uid:owner,ime:name(owner),label:dest.label};
