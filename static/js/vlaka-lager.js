@@ -37,7 +37,7 @@ function refresh(){
  renderPanel();
 }
 function renderPanel(){
- if(!node('lager-scale'))return;
+ if(!node('lager-scale')||node('vlaka-style-modal')?.hidden!==false)return;
  const target=typeof _vlakaStyleTarget==='function'?_vlakaStyleTarget():null,s=styleFor({projektId:target});
  for(const [id,value]of [['lager-scale',s.scale],['lager-label',s.font]]){node(id).value=value;node(id).disabled=!target;}
  node('lager-scale-value').textContent=s.scale+' %';node('lager-label-value').textContent=s.font+' px';

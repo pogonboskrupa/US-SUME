@@ -34,6 +34,8 @@ async def main():
    assert await page.locator('#vp-direction-mode').count()==1
    await page.get_by_role('button',name='↔ Odredi dvosmjer',exact=True).click()
    assert await page.evaluate('VlakaDirection.isPicking()')
+   await page.wait_for_function("getComputedStyle(map.getPane('vlakeLabels')).visibility==='visible'")
+   await page.wait_for_function("()=>{const m=Object.values(map._layers).find(l=>l instanceof L.CircleMarker&&l.options.fillColor==='#1d4ed8'),r=m?._renderer;if(!r?._ctx)return false;const at=m._point.subtract(r._bounds.min),p=r._ctx.getImageData(Math.round(at.x),Math.round(at.y),1,1).data;return p[3]>200&&p[2]>150&&p[0]<80}")
    await page.screenshot(path=str(OUT/f'direction-points-{i}.png'))
    assert await page.evaluate("Object.values(map._layers).filter(l=>l instanceof L.CircleMarker&&l.options.fillColor==='#1d4ed8').length")==5
    point=await page.evaluate('([i,n])=>vlake[i].pts[n]',[i,vertex]);await tap(page,point)
