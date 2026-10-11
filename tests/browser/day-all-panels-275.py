@@ -52,7 +52,7 @@ async def main():
     kolegeMap={'22222222-2222-4222-8222-222222222222':{ime:'Kolega Projektant',color:'#4ade80'}};
     _projekti[0].clanovi=[{korisnik_id:'22222222-2222-4222-8222-222222222222'}];
     dnevniLog=[{date:'2026-10-10',entries:[{projektId:'P',korisnikId:sbUser.id,projektant:'Adnan Mahmic',odjel:'105',meters:500,activeMin:120,workStart:'08:00',workEnd:'11:00',vlake:[{nm:'T1',m:500}],vlakeNm:['T1']}]}];
-    _tragRegistry=[{id:'tr1',name:'Terenski trag',date:new Date().toISOString(),color:'#fbbf24',visible:true,gj:'Test',odjel:'105',pts:[{la:44.9,lo:16,al:400},{la:44.901,lo:16.001,al:420}]}];
+    _tragRegistry=[{id:'tr1',name:'Terenski trag',date:new Date().toISOString(),color:'#fbbf24',visible:true,gj:'Test',odjel:'105',pts:[[44.9,16,400],[44.901,16.001,420]]}];
     _dozSelId='d1';_dozMembers=[{user_id:sbUser.id,role:'manager',_korisnik:{ime:'Adnan',prezime:'Mahmic',boja:'#4ade80'}}];
     _dozMarkings=Object.keys(DOZ_TYPES).map((k,i)=>({id:'m'+i,marking_type:k,label:DOZ_TYPES[k].label,area_ha:1.2,created_at:new Date().toISOString(),geometry:{type:'Polygon',coordinates:[[[16,44.9],[16.001,44.9],[16.001,44.901],[16,44.9]]]}}));
     window.dayUsers=[{id:sbUser.id,ime:'Admin',prezime:'Test',odobren:true,is_admin:true,sumarija:'TEST',last_active_at:new Date().toISOString()},
@@ -73,7 +73,7 @@ async def main():
    assert await page.evaluate('_temMaps.length===1&&_temMaps[0].features.length===98')
    await page.evaluate("""()=>{
     closeTemModal();const pts=[{lat:44.9,lng:16,elev:400},{lat:44.901,lng:16.001,elev:420},{lat:44.9,lng:16.001,elev:425}];
-    _tragRegistry[0].pts=pts;_tragRegistry.push({..._tragRegistry[0],id:'tr2',name:'Sakriveni trag',visible:false});
+    _tragRegistry[0].pts=pts.map(p=>[p.lat,p.lng,p.elev]);_tragRegistry.push({..._tragRegistry[0],id:'tr2',name:'Sakriveni trag',visible:false});
     _msrRegistry=['dist','area','nagib'].map(mode=>({id:'msr-'+mode,name:'Mjerenje '+mode,date:new Date().toISOString(),mode,pts,gj:'Test',odjel:'105'}));
     textLabels=[{id:'test-text',text:'105',lat:44.9,lng:16,size:18,color:'#ffffff'}];
     sbLoadKolege=async()=>{};
