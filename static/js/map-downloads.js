@@ -23,7 +23,7 @@
     let c=cards.get(s.id);if(c)return c;
     const container=el('loadmap-download-cards');if(!container)return null;
     c=root.document.createElement('section');c.className='lm-download-card';c.dataset.sourceId=s.id;
-    c.innerHTML='<div class="lm-download-heading"><span class="lm-download-icon" aria-hidden="true"><svg class="ic"><use href="#ic-uvezi"/></svg></span><div><small>KARTA ZA PREUZIMANJE</small><h3 class="lm-download-title"></h3></div></div><div class="lm-download-meta"><span class="lm-download-size"></span><span class="lm-download-release" hidden></span><span>Offline nakon preuzimanja</span></div><button type="button" class="lm-download-button">Skini kartu</button><progress class="lm-download-progress" aria-label="Napredak preuzimanja karte" hidden></progress><div class="lm-download-status" role="status" aria-live="polite"></div><button type="button" class="lm-secondary lm-download-cancel" hidden>Otkaži preuzimanje</button>';
+    c.innerHTML='<div class="lm-download-heading"><span class="lm-download-icon" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><div><small>OFFLINE KARTA</small><h3 class="lm-download-title"></h3></div></div><div class="lm-download-meta"><span class="lm-download-size"></span><span class="lm-download-release" hidden></span></div><button type="button" class="lm-download-button">Skini kartu</button><progress class="lm-download-progress" aria-label="Napredak preuzimanja karte" hidden></progress><div class="lm-download-status" role="status" aria-live="polite"></div><button type="button" class="lm-secondary lm-download-cancel" hidden>Otkaži preuzimanje</button>';
     c.querySelector('.lm-download-button').id='loadmap-download-'+s.id;
     c.querySelector('.lm-download-button').onclick=()=>start(s.id);
     c.querySelector('.lm-download-cancel').onclick=()=>cancel(s.id);
@@ -37,9 +37,10 @@
     for(const [id,c]of cards)if(!visible.has(id)){c.remove();cards.delete(id);}
     for(const [id,s]of visible){
       const c=card(s);if(!c)continue;const status=states.get(id)?.status||{state:'idle'},installing=installers.has(id);
-      c.querySelector('.lm-download-title').textContent=s.name.replace(/\.[^.]+$/,'');
-      c.querySelector('.lm-download-size').textContent=sizeText(s.size)+(s.provider?' · '+s.provider:'');
-      const release=c.querySelector('.lm-download-release');release.textContent=s.release||'';release.hidden=!s.release;
+      c.querySelector('.lm-download-title').textContent=s.name.replace(/\.[^.]+$/,'').replace(/[_\s-]*github\b/ig,'').trim();
+      c.querySelector('.lm-download-size').textContent=sizeText(s.size);
+      const release=c.querySelector('.lm-download-release');release.textContent=(s.release||'').replace(/\bgithub\b/ig,'').replace(/^[\s·-]+|[\s·-]+$/g,'');release.hidden=!release.textContent;
+      c.dataset.state=status.state;
       const button=c.querySelector('.lm-download-button'),text=c.querySelector('.lm-download-status'),progress=c.querySelector('.lm-download-progress'),stop=c.querySelector('.lm-download-cancel');
       let label='Skini kartu',message='';
       if(installing||status.state==='ready'){label='Dodajem kartu…';message='Pripremam kartu za korištenje…';}

@@ -4135,3 +4135,25 @@ bitmap slike niti zavisnosti. APK potvrditi nakon zajedničkog CI-a.
 
 ### 2026-10-11 — isporuka 2.8.3 potvrđena
 Source `9453af018add01a86479362019d688fa5d78b5ae`, tree `010b8dd77bb1aeb996d3110bbcb5c340c521c031`. CI `38126831936`, job `114432834261`: SUCCESS iz prvog pokušaja. Browser navigacija12 i dnevni audit144 prošli; nova ikona pregledana na CI slici Menija. JUnit20 Android testova bez padova/grešaka/preskoka. Javni APK stvarno preuzet: 24.375.535 B, SHA-256 `1e2df200f3df2fc55ccc0e312077653c0310e9debe559388dac432a6d6e0d2ad`, debug paket / code553 / 2.8.3-debug, isti certifikat, svih72 resursa identično izvoru. Updater vidi2.8.3; Pages index/sw/SVG identični izvoru. UI i Android artefakti preuzeti uz provjerene SHA. Dokaz u `docs/ISPORUKA_2_8_3.md`; raniji OPFS nalaz nije proglašen riješenim. Fizički Xiaomi nije testiran.
+
+
+### 2026-10-11 — granice, učitavanje karata i azimut, 2.8.4 / 554
+Na izričit zahtjev korisnika preuzeti lokalni KML poligoni Granica (_driveSource)
+počinju s onlyPolygon=true pri prvom dodavanju i svakoj obnovi u novom ulasku.
+Isključivanje vrijedi tokom iste sesije; rerender ga ne poništava. Vis, boje,
+debljine i ispune ostaju sačuvani, kao i normalne postavke kamionskih puteva
+ili ličnih lokalnih KML fajlova. Granice se ne dodaju na kartu prije ove odluke;
+postojeći Doznaka/Izvještaj izbor privremeno ih prikazuje. Upute su usklađene.
+Učitaj kartu ima odvojene cjeline Dostupne karte i Učitaj sa uređaja, dvije
+kolone na većim ekranima, kompaktne kartice i lokalne vektorske ikonice.
+GitHub nije u naslovu/veličini/oznaci objave prikazane karte; izvorna imena,
+ID-evi, preuzimanje i upis na uređaj nisu mijenjani. Azimut kartica proširena:
+kompas112→134.4px (+20% po širini i visini), igla/cilj/središte razmjerno;
+padding14→17px i min-visina170.4px. Promjena CSS-a ograničena na ovaj prikaz.
+Prošao cijeli lokalni JS skup i pet inline blokova. Stvarni browser: LoadMap
+raster/Worker/IDB, Canvas/SVG KML editor, Doznaka višestruki odsjeci i restart,
+Izvještaj DEM Worker/18 podtab prikaza, javni KML uređaja/privatna arhiva i
+restart sa sačuvanim onlyPolygon=false koji se vraća na true bez promjene
+stilova. 12 dodatnih punih previewa (320/390/800, dan/tamno) bez overflow,
+GitHub natpisa, JS grešaka/upisa; dnevni kontrast prošao, kompas izmjeren134.4.
+Assets prepare72. Javni APK/objavu potvrditi nakon CI-a; fizički telefon nije testiran.

@@ -110,8 +110,11 @@ async function _localLayerKmlImpl(name,content,owner,driveSource) {
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
   if(!await _localKmlSaveContent(unique,content,col,owner,driveSource))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
-  kmlCI++;grp.addTo(map);
-  kmlLs.push({name:unique,_origName:unique,_driveSource:driveSource,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()});
+  kmlCI++;
+  const layer={name:unique,_origName:unique,_driveSource:driveSource,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
+  layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)===true;
+  kmlLs.push(layer);
+  if(!layer.onlyPolygon||globalThis.GithubLayers?.selecting())grp.addTo(map);
   _glCollapsed.delete('Lokalni / —');rndGraniceModal();
   try{const bounds=grp.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[20,20]});}catch(e){}
   return unique;
@@ -281,6 +284,9 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   }
   function layers(type){return typeof kmlLs==='undefined'?[]:kmlLs.filter(k=>k.grp&&role(k)===type);}
   function isBoundary(k){if(!k?.grp||!(role(k)==='boundaries'||/granic|boundary/.test(normal([k._origName,k.name].join(' ')))))return false;let found=false;const walk=g=>g.eachLayer?.(l=>{if(l._kmlIsPolygon)found=true;else if(l.eachLayer)walk(l);});walk(k.grp);return found;}
+  // Preuzete granice počinju u režimu izbora poligona pri svakom učitavanju aplikacije.
+  // Promjena tokom iste sesije ostaje na snazi; ostali slojevi pamte svoj izbor.
+  function defaultOnlyPolygon(k){return !!k?._driveSource?.id&&isBoundary(k)?true:k?.onlyPolygon===true;}
   function selecting(){return !!(root.DepartmentReport?.isDrawing()||(typeof _dozKmlSelMode!=='undefined'&&_dozKmlSelMode)||(typeof _dozDrawType!=='undefined'&&_dozDrawType==='__boundary__'));}
   function sync(){
     if(typeof map==='undefined'||typeof kmlLs==='undefined')return;
@@ -320,7 +326,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
     _localKmlSaveAll(false);saveKmlStyles();rndGraniceModal();
   }
   function opacity(value){for(const k of layers('boundaries')){k.opacity=Math.max(0,Math.min(1,Number(value)));applyKmlStyle(kmlLs.indexOf(k));}_localKmlSaveAll(false);saveKmlStyles();render();}
-  root.GithubLayers={role,layers,render,toggle,opacity,isBoundary,onlyPolygon,selecting,sync};
+  root.GithubLayers={role,layers,render,toggle,opacity,isBoundary,defaultOnlyPolygon,onlyPolygon,selecting,sync};
   // Druge liste imaju svoje dugme Prikaži; ista postavka vrijedi i za njih.
   map.on?.('layeradd',e=>{if(typeof kmlLs!=='undefined'&&kmlLs.some(k=>k.grp===e.layer&&k.onlyPolygon))queueMicrotask(sync);});render();
 })(typeof window!=='undefined'?window:globalThis);

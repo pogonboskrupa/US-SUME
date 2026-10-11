@@ -58,6 +58,8 @@ async def main():
     await _localLayerKml('KAMIONSKI.PUTEVI.kml',road,sbUser.id,{id:'github-kml-27602',size:road.length});
     map.setView([44.9005,16.001],16);GithubLayers.render();_openLayerSheet();_lsTab('granice');
    }""")
+   assert await page.locator('#granice-only-polygon').is_checked()
+   await page.locator('#granice-only-polygon').uncheck() # Testiranje ručnog stalnog prikaza.
    assert await page.evaluate("!document.getElementById('granice-toggle').disabled&&!document.getElementById('putevi-toggle').disabled")
    await page.locator('#granice-toggle').uncheck();await page.locator('#putevi-toggle').uncheck()
    assert await page.evaluate("kmlLs.filter(k=>GithubLayers.role(k)).every(k=>!k.vis&&!map.hasLayer(k.grp))")
@@ -105,7 +107,8 @@ async def main():
    await page.evaluate("sbUser={id:'11111111-1111-4111-8111-111111111111'};sbProfile={odobren:true,sumarija:'TEST'}")
    await page.evaluate("async()=>{await _localKmlRestore();GithubLayers.render()}")
    state=await page.evaluate("({b:GithubLayers.layers('boundaries').map(k=>({vis:k.vis,on:map.hasLayer(k.grp),opacity:k.opacity,col:k.col})),r:GithubLayers.layers('roads').map(k=>({vis:k.vis,on:map.hasLayer(k.grp)}))})")
-   assert len(state['b'])==1 and state['b'][0]=={'vis':True,'on':True,'opacity':.45,'col':'#dc2626'},state
+   assert len(state['b'])==1 and state['b'][0]=={'vis':True,'on':False,'opacity':.45,'col':'#dc2626'},state
+   assert await page.locator('#granice-only-polygon').is_checked()
    assert len(state['r'])==1 and state['r'][0]=={'vis':False,'on':False},state
    assert not errors,errors
    assert not writes,writes

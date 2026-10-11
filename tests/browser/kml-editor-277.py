@@ -28,6 +28,8 @@ async def main():
   await page.evaluate("""()=>{sbUser={id:'11111111-1111-4111-8111-111111111111'};sbProfile={id:sbUser.id,odobren:true,sumarija:'TEST'};_revealApp();sbLoadProfile=async()=>{};sbInitData=async()=>{};sbLoadProjekti=async()=>{};sb={auth:{signOut:async()=>({error:null})}};}""")
   await page.evaluate("""async([poly,road])=>{if(!crypto.randomUUID)crypto.randomUUID=()=>Math.random().toString(16).slice(2);
    await _localLayerKml('GRANICE.kml',poly,sbUser.id,{id:'github-kml-27701',size:poly.length});await _localLayerKml('KAMIONSKI.PUTEVI.kml',road,sbUser.id,{id:'github-kml-27702',size:road.length});map.setView([44.902,16.002],16,{animate:false});openGraniceModal();}""",[KML,ROAD])
+  assert await page.evaluate('kmlLs[0].onlyPolygon&&!map.hasLayer(kmlLs[0].grp)')
+  await page.evaluate('GithubLayers.onlyPolygon(false)') # Uređivanje stalno vidljivog poligona.
   assert await page.locator('.le-layer-card').count()==2
   assert await page.locator('.gl-group-name').all_text_contents()==['Granice odjela','Kamionski putevi']
   await page.locator('.le-library-heading').scroll_into_view_if_needed();await page.screenshot(path=str(OUT/'kml-files.png'))

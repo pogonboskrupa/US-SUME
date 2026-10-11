@@ -427,6 +427,33 @@ html #doznaka-panel .pm-kpi-val,html #doznaka-panel .pm-kpi-lbl {overflow-wrap:a
 #doz-boundary-keep{flex:1}#doz-boundary-accept:not([hidden])+#doz-boundary-keep{max-width:100px}
 
 /* Učitaj kartu: lokalne podloge, pregled fajla i biblioteka bez interneta. */
+.lm-add-layout {display:grid;gap:20px;align-items:start}
+#loadmap-downloads {min-width:0;padding:14px;border:1px solid var(--field-border);border-radius:16px;background:var(--lm-good-bg)}
+#loadmap-downloads .lm-section-heading {margin-bottom:12px}
+#loadmap-download-cards {display:grid;gap:10px}
+#loadmap-download-cards .lm-download-card {margin:0;padding:13px;border:1px solid var(--field-border);border-radius:12px;box-shadow:none;min-width:0}
+#loadmap-download-cards .lm-download-heading {gap:10px}
+#loadmap-download-cards .lm-download-icon {width:48px;height:48px;border-radius:10px;overflow:hidden}
+#loadmap-download-cards .lm-download-icon svg {display:block;width:100%;height:100%}
+#loadmap-download-cards .lm-download-title {font-size:16px;line-height:1.35}
+#loadmap-download-cards .lm-download-meta {margin:12px 0;gap:5px}
+#loadmap-download-cards .lm-download-button {min-height:46px;border-radius:9px}
+#loadmap-download-cards .lm-download-status:empty {display:none}
+#loadmap-download-cards .lm-download-card[data-state=installed] {border-color:var(--lm-good)}
+#loadmap-download-cards .lm-download-card[data-state=failed] {border-color:var(--lm-warn)}
+.lm-local-import {min-width:0}
+.lm-upload-heading {display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.lm-upload-heading h3 {margin:2px 0 0}
+.lm-upload-heading small {font:700 10px/1.5 system-ui;letter-spacing:.5px;color:var(--field-muted)}
+.lm-upload-icon {width:42px;height:42px;display:grid;place-items:center;border-radius:10px;background:var(--lm-tone);color:var(--lm-accent);flex-shrink:0}
+.lm-upload-icon .ic {width:24px;height:24px;margin:0}
+@media(min-width:740px) {.lm-add-layout {grid-template-columns:1.1fr 1fr;gap:18px}}
+#trn-azimuth-card {padding:17px;min-height:170.4px}
+#trn-azimuth-card .trn-kompas {gap:20px;min-height:134.4px}
+#trn-azimuth-card .trn-rose {width:134.4px;height:134.4px}
+#trn-azimuth-card .trn-needle {height:52.8px;width:4.8px}
+#trn-azimuth-card .trn-target {border-left-width:8.4px;border-right-width:8.4px;border-bottom-width:48px}
+#trn-azimuth-card .trn-hub {width:10.8px;height:10.8px}
 html #loadmap-modal {--lm-accent:#93c5fd;--lm-tone:#172c47;--lm-good:#86efac;--lm-good-bg:#153529;--lm-warn:#fcd34d;background:var(--field-bg);color:var(--field-ink);}
 html[data-field-theme=day] #loadmap-modal {--lm-accent:#1d4ed8;--lm-tone:#eff6ff;--lm-good:#166534;--lm-good-bg:#ecfdf5;--lm-warn:#92400e;}
 html #loadmap-hdr {background:var(--field-card);border-color:var(--field-border);padding:12px max(16px,calc((100% - 760px)/2));gap:11px;padding-top:calc(12px + env(safe-area-inset-top,0px));}

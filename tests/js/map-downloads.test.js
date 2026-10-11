@@ -21,7 +21,7 @@ root.AndroidMapDownloads={request:(id,text)=>{const m=JSON.parse(text);calls.pus
 const card=id=>nodes.find(n=>n.dataset.sourceId===id&&!n.removed),status=id=>card(id).querySelector('.lm-download-status');
 (async()=>{
  box.sbUser={id:'tester'};let opened=0;box.openLoadMapScreen=()=>opened++;root.noticeOpen=true;await api.openFromNotification();await api.openFromNotification();assert.equal(opened,1);
- await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'1,98 GB · GitHub');
+ await api.refresh();assert.equal(card(A).querySelector('.lm-download-size').textContent,'1,98 GB');
  assert.equal(card(B).querySelector('.lm-download-title').textContent,'Unsko_2010-2020');assert.equal(card(B).querySelector('.lm-download-release').textContent,'Karta 2010:2020');assert.equal(card(B).querySelector('.lm-download-release').hidden,false);assert.equal(card(A).querySelector('.lm-download-release').hidden,true);
  root.navigator.onLine=false;await api.refresh();assert.match(elements.get('loadmap-download-message').textContent,/Sačuvan popis/);await api.start(A);assert.equal(calls.filter(m=>m.type==='start').length,0);
  root.AndroidMapDownloads.networkAvailable=()=>true; // Mobile network overrides stale navigator.onLine=false.
