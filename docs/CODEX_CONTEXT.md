@@ -4132,3 +4132,6 @@ pregledana u stvarnom Meniju; SVG XML ispravan s 32 jedinstvena simbola,
 field-design JS provjera i pet inline blokova prošli. Assets prepare72.
 Nova ikona je mali vektorski dodatak postojećem spriteu, nema nove
 bitmap slike niti zavisnosti. APK potvrditi nakon zajedničkog CI-a.
+
+### 2026-10-11 — isporuka 2.8.3 potvrđena
+Source `9453af018add01a86479362019d688fa5d78b5ae`, tree `010b8dd77bb1aeb996d3110bbcb5c340c521c031`. CI `38126831936`, job `114432834261`: SUCCESS iz prvog pokušaja. Browser navigacija12 i dnevni audit144 prošli; nova ikona pregledana na CI slici Menija. JUnit20 Android testova bez padova/grešaka/preskoka. Javni APK stvarno preuzet: 24.375.535 B, SHA-256 `1e2df200f3df2fc55ccc0e312077653c0310e9debe559388dac432a6d6e0d2ad`, debug paket / code553 / 2.8.3-debug, isti certifikat, svih72 resursa identično izvoru. Updater vidi2.8.3; Pages index/sw/SVG identični izvoru. UI i Android artefakti preuzeti uz provjerene SHA. Dokaz u `docs/ISPORUKA_2_8_3.md`; raniji OPFS nalaz nije proglašen riješenim. Fizički Xiaomi nije testiran.
