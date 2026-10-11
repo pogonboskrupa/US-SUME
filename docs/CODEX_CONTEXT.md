@@ -4233,3 +4233,7 @@ prošli; dnevni audit svih panela 144 bez loših elemenata. Test dodira u staroj
 izolovanoj fixture razdvaja namjerne dodire >200ms (Leaflet double-tap).
 Produkcijski Supabase nije mijenjan, fizički Xiaomi nije testiran. CI/APK dokaz
 upisati nakon uspješnog builda i provjere javnog fajla.
+
+
+### 2026-10-11 — isporuka 2.8.6 potvrđena
+Source b45bebfd4d627f889ad76653baa23db2724ed8e6, tree eaeede0115a24f492ab5fc09691d60e031d52834. CI38137657357 pokušaj2/job114465954419 SUCCESS; prvi pokušaj audit-parts-271 popup nije prošao, isti SHA na ponovljenom punom CI-u prošao (bez tvrdnje da je izvor mijenjan radi toga). Preuzete i hash-potvrđene UI/Android arhive: novi tok dvosmjera/lagera i6 rasporeda, dnevni audit144 bez nalaza; Android20 bez padova/grešaka/preskoka. Javni APK24.406.688B, SHA78102cfcb8e698987c571ca71b3bcc670d98d09d7fd75339ea6f60e44581c9bc, debugpaket/code556/2.8.6-debug, isti certifikat i73 identična resursa. Updater stvarno vraća2.8.6, Pages5 ključnih resursa identično izvoru. Dokaz/ograničenja docs/ISPORUKA_2_8_6.md; fizički Xiaomi/produkcijski Supabase nisu testirani/mijenjani.
