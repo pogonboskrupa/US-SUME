@@ -4193,3 +4193,7 @@ synthetic benchmark: 1.170,28 ha / 391 profil / oko102ms na cloud procesoru;
 to NIJE mjerenje na fizičkom telefonu. DEM ostaje procjena rezolucije oko30m
 (ili slabije kod velikih odjela), ne terenska geodetska izmjera. Assets72.
 CI 2.8.4/38128182006 završen SUCCESS; 2.8.5 APK objavu potvrditi poslije CI-a.
+
+
+### 2026-10-11 — isporuka 2.8.5 potvrđena
+Source `afa7bde0dc00037d20026d2fd122918f60e7c204`, tree `20a570f9ddb9ebda16298de974375096d8597015`. CI38135238777/job114457649249 SUCCESS iz prvog pokušaja. Potvrđena UI arhiva: 10 novih profila za28,09ha, popup/Δh/dužina, restart/offline/stari keš,18 rasporeda; dnevni audit144 i navigacija12. Android JUnit20 bez padova/grešaka/preskoka. Javni APK24.392.371B, SHA774b9d0c43bcaacfbc25ae7945a96be06b12f24fcc82c31408810f694a00d47b, debugpaket/code555/2.8.5-debug, isti certifikat,72 resursa identično izvoru. Updater vraća2.8.5; Pages5 ključnih resursa identično izvoru. Uključene promjene2.8.4. Dokaz i ograničenja u docs/ISPORUKA_2_8_5.md; fizički Xiaomi/produkcijski Supabase nisu testirani/mijenjani.
