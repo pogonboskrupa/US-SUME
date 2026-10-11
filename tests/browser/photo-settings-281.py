@@ -18,8 +18,11 @@ async def main():
    elif f.is_file():await r.fulfill(content_type=mimetypes.guess_type(str(f))[0] or 'application/octet-stream',body=f.read_bytes())
    else:await r.fulfill(status=404,body='fixture')
   await ctx.route('**/*',route);await ctx.route_web_socket('**/*',lambda ws:ws.close())
-  await ctx.add_init_script("""Object.defineProperty(navigator,'onLine',{get:()=>false,configurable:true});navigator.geolocation.watchPosition=()=>1;navigator.geolocation.clearWatch=()=>{};const id='11111111-1111-4111-8111-111111111111';localStorage.setItem('tvlake_ol_profile',JSON.stringify({ts:Date.now(),data:{id,odobren:true,sumarija:'TEST',ime:'Adnan',prezime:'Mahmic'}}));localStorage.setItem('tvlake_device_last_user',id);""")
-  page=await ctx.new_page();page.on('pageerror',lambda e:errors.append(str(e)));await page.goto('https://device.test/');await page.wait_for_function('_startupRestore._done&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP)
+  await ctx.add_init_script("""Object.defineProperty(navigator,'onLine',{get:()=>false,configurable:true});navigator.geolocation.watchPosition=()=>1;navigator.geolocation.clearWatch=()=>{};const id='11111111-1111-4111-8111-111111111111';localStorage.setItem('tvlake_ol_profile',JSON.stringify({ts:Date.now(),data:{id,odobren:true,sumarija:'TEST',ime:'Adnan',prezime:'Mahmic'}}));localStorage.setItem('tvlake_device_last_user',id);
+   // _done označava početak obnove; fotografije se stvarno obnavljaju iza painta.
+   // Posmatraj stvarni poziv, bez preskakanja obnove ili proizvoljnog sleepa.
+   window.testFotoRestoreDone=false;document.addEventListener('DOMContentLoaded',()=>{const original=_restoreFotos;window._restoreFotos=function(...args){const r=original.apply(this,args);window.testFotoRestoreDone=true;return r;};});""")
+  page=await ctx.new_page();page.on('pageerror',lambda e:errors.append(str(e)));await page.goto('https://device.test/');await page.wait_for_function('testFotoRestoreDone&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP)
   await page.evaluate("async()=>{for(let i=0;i<2;i++){const f={la:44.902,lo:16.001+i*.002,ts:100+i,thumb:photoRow.thumb,full:photoRow.thumb};f.marker=_buildFotoMarker(f.la,f.lo,f.thumb,f.full,i,f.ts,true);_locFotos.push(f)}_saveFotos();await sbLoadSharedFotos();}")
   assert await page.evaluate('_locFotos.length===2&&_sharedFotos.length===1&&[..._locFotos,..._sharedFotos].every(f=>map.hasLayer(f.marker))')
   await page.evaluate("openOznakePanel();_libraryFilter('photos')");await page.locator('.ml-card').first.get_by_role('button',name='Sakrij',exact=True).click()
@@ -32,9 +35,9 @@ async def main():
   # Grupa se pamti; eksplicitno prikazivanje jedne slike ne vraća druge.
   await page.evaluate("_tvVisibilitySet('photos',false);_tvPhotoSet(_locFotos[0],false,true)");await zoom(8);await zoom(16)
   assert await page.evaluate('map.hasLayer(_locFotos[0].marker)&&!map.hasLayer(_locFotos[1].marker)&&!map.hasLayer(_sharedFotos[0].marker)')
-  await page.reload();await page.wait_for_function('_startupRestore._done&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP);await page.evaluate('sbLoadSharedFotos()');await zoom(8);await zoom(16)
+  await page.reload();await page.wait_for_function('testFotoRestoreDone&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP);await page.evaluate('sbLoadSharedFotos()');await zoom(8);await zoom(16)
   assert await page.evaluate('_locFotos.length===2&&map.hasLayer(_locFotos[0].marker)&&!map.hasLayer(_locFotos[1].marker)&&!map.hasLayer(_sharedFotos[0].marker)')
-  await page.evaluate("_tvVisibilitySet('all',false)");await page.reload();await page.wait_for_function('_startupRestore._done&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP);await page.evaluate('sbLoadSharedFotos()');await zoom(8);await zoom(16)
+  await page.evaluate("_tvVisibilitySet('all',false)");await page.reload();await page.wait_for_function('testFotoRestoreDone&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP);await page.evaluate('sbLoadSharedFotos()');await zoom(8);await zoom(16)
   assert await page.evaluate("['photos','tracks','points','measurements','labels'].every(k=>!_tvCategoryOn(k))&&[..._locFotos,..._sharedFotos].every(f=>!map.hasLayer(f.marker))")
   # Nova primljena slika pri velikoj razmjeri ostaje izvan prikaza i uz uključen foto sloj.
   await page.evaluate("_tvVisibilitySet('photos',true)");await zoom(8);await page.evaluate('sbLoadSharedFotos()');assert await page.evaluate('[..._locFotos,..._sharedFotos].every(f=>!map.hasLayer(f.marker))');await zoom(16);assert await page.evaluate('[..._locFotos,..._sharedFotos].every(f=>map.hasLayer(f.marker))')
