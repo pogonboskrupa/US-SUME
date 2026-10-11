@@ -1,7 +1,7 @@
 """Pregled 1/2: puni app, stvarni Leaflet/IDB; lažni korisnici, bez server upisa."""
 import asyncio,json,mimetypes,os,subprocess
 from pathlib import Path
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright,expect
 ROOT=Path(__file__).resolve().parents[2]
 KML='<kml><Placemark><name>Odjel</name><Polygon><outerBoundaryIs><LinearRing><coordinates>16,44.9 16.01,44.9 16.01,44.91 16,44.91 16,44.9</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></kml>'
 SEED="""()=>{sbUser={id:'11111111-1111-4111-8111-111111111111'};sbProfile={id:sbUser.id,odobren:true,sumarija:'TEST',ime:'Test',prezime:'Pregled'};_revealApp();_projekti=[{id:'P',odjel:'105',gj:'Test',korisnik_id:sbUser.id},{id:'Q',odjel:'206',gj:'Drugi',korisnik_id:sbUser.id}];_aktivniProjektId='P';switchTab('karta');}"""
@@ -81,8 +81,10 @@ async def main():
   }''')
   assert await page.evaluate("!map.hasLayer(vlake[0].poly)&&!map.hasLayer(kolegeVlakeMap['B::T2'].poly)&&kolegeVlakeMap['B::T2'].labels.every(l=>!map.hasLayer(l))")
   await page.evaluate("switchTab('vlake');rndKolegeVlakeList()")
-  await page.locator('#kolege-vl .vrow').focus();await page.keyboard.press('Enter')
-  assert await page.locator('#vlaka-popup').is_visible()
+  # Ciljani locator zadržava Enter na stvarnom redu i čeka prikaz rezultata.
+  # Odvojeni focus/keyboard + trenutni is_visible() utrkivali su se s renderom.
+  await page.locator('#kolege-vl .vrow').press('Enter')
+  await expect(page.locator('#vlaka-popup')).to_be_visible()
   assert 'Amir Kolega' in await page.locator('#vp-info').inner_text()
   await page.locator('#vp-buffer').click();assert await page.evaluate('bufLayers.length>0')
   assert await page.evaluate("!_getHiddenProjektIds().has('P')&&map.hasLayer(kolegeVlakeMap['B::T2'].poly)")
