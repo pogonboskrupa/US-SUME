@@ -4197,3 +4197,39 @@ CI 2.8.4/38128182006 završen SUCCESS; 2.8.5 APK objavu potvrditi poslije CI-a.
 
 ### 2026-10-11 — isporuka 2.8.5 potvrđena
 Source `afa7bde0dc00037d20026d2fd122918f60e7c204`, tree `20a570f9ddb9ebda16298de974375096d8597015`. CI38135238777/job114457649249 SUCCESS iz prvog pokušaja. Potvrđena UI arhiva: 10 novih profila za28,09ha, popup/Δh/dužina, restart/offline/stari keš,18 rasporeda; dnevni audit144 i navigacija12. Android JUnit20 bez padova/grešaka/preskoka. Javni APK24.392.371B, SHA774b9d0c43bcaacfbc25ae7945a96be06b12f24fcc82c31408810f694a00d47b, debugpaket/code555/2.8.5-debug, isti certifikat,72 resursa identično izvoru. Updater vraća2.8.5; Pages5 ključnih resursa identično izvoru. Uključene promjene2.8.4. Dokaz i ograničenja u docs/ISPORUKA_2_8_5.md; fizički Xiaomi/produkcijski Supabase nisu testirani/mijenjani.
+
+
+### 2026-10-11 — 2.8.6: dvosmjer i lageri (priprema isporuke)
+Početni prikaz vlake: 2 px, crtice, obrub uključen; strelice: potez 2 px i
+veličina 25 px. Eksplicitne stare postavke ostaju sačuvane. Popup bez stvarnog
+smjera ima izbor „Smjer izvlačenja DS” i „Odredi dvosmjer”; kad stvarni smjer
+postoji, ostaje samo „Promijeni mjesto dvosmjera”. Projektantski izbor i dalje
+određuje tačku, bez automatskog dijeljenja na pola. Izbor sada prikazuje stvarne
+vrhove vlake/kraka u zasebnom Canvas rendereru, prima dodir kroz hit slojeve i
+prianja uz vrh unutar 12 px. Omogućen je i aktivan legacy zapis bez projekta.
+Skriveni/drugi projekat, aktivno snimanje/crtanje/izbor poligona odbijaju izbor;
+Escape, promjena taba/naloga/projekta i uklanjanje linije čiste prikaz tačaka.
+
+Novi static/js/vlaka-lager.js: odvojena veličina oblika (50–250%) i oznake
+(8–28px), u postojećem zajedničkom/projektnom stilu. Stari lagerScale iz Stil
+linija je fallback dok nema nove eksplicitne postavke; promjena oblika ne
+mijenja font. Sklopivi listing lagera vodi na individualno pomjeranje na karti.
+Vlastiti lagerPt mijenja se tek nakon uspješnog lokalnog upisa, bez izmjene pts;
+podatak lager_pt sada ulazi u postojeći upsert_vlaka outbox (ranije je nedostajao
+u _vlakaSyncPayload). Kolona je iz postojeće migracije 20260709, nova migracija
+nije potrebna. Kolegini lageri učitavaju lager/lager_pt i prikazuju se kao dio
+postojećih labela: skrivanje/brisanje uklanja ih. Realtime ažurira metapodatke.
+Pomjeranje koleginog lagera čuva isključivo per-user/per-project lokalni prikaz,
+ne mijenja kolegine podatke i ne šalje upsert u njegovo ime. Pozicije i veličine
+su dostupne offline poslije restarta; greška memorije ne mijenja stari položaj.
+Module je u SW precache-u; APK assets 73. Upute ažurirane.
+
+Lokalno: cijeli JS skup, 5 inline blokova, puni app/browser dodir glavne vlake,
+kraka i legacy zapisa, stvarne tačke, promjena dvosmjera/cancel, nezavisne
+veličine vlastitih/koleginih lagera, projektni izuzetak, lokalni cache i outbox,
+restart, quota rollback, skrivanje i izolacija naloga, 6 novih rasporeda bez
+prelijevanja/lošeg kontrasta. Postojeći stil/arhiva naloga, Server/bafer i štampa
+prošli; dnevni audit svih panela 144 bez loših elemenata. Test dodira u staroj
+izolovanoj fixture razdvaja namjerne dodire >200ms (Leaflet double-tap).
+Produkcijski Supabase nije mijenjan, fizički Xiaomi nije testiran. CI/APK dokaz
+upisati nakon uspješnog builda i provjere javnog fajla.

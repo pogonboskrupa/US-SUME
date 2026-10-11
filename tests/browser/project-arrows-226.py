@@ -12,6 +12,8 @@ window.directionReady=new Promise(resolve=>window.addEventListener('DOMContentLo
 '''
 fixture=u.fixture.replace('</body>','<div id="fixture-arrows" style="display:none;position:fixed;inset:12px 0 88px;overflow:auto;background:var(--field-card);z-index:1800;padding:12px">'+panel+'</div>'+toolbar+b.section('      <!-- ═══ GPS SNIMANJE BANNER ═══ -->','      <!-- TRAG RECORDING BANNER -->')+'<script>'+extra+'</script><script src="/static/js/vlaka-outline.js"></script><script src="/static/js/vlaka-direction.js"></script></body>')
 async def tap_fraction(page,f):
+ # Razdvoji namjerne dodire: Leaflet unutar 200 ms prepoznaje dvostruki dodir.
+ await page.wait_for_timeout(250)
  xy=await page.evaluate('f=>{const p=ptAtFrac(testV.pts,f),xy=map.latLngToContainerPoint([p.la,p.lo]),r=map.getContainer().getBoundingClientRect();return {x:r.left+xy.x,y:r.top+xy.y}}',f)
  await page.touchscreen.tap(xy['x'],xy['y'])
 async def main():
@@ -77,7 +79,7 @@ async def main():
   assert await page.evaluate('peer._directionMarkers[0].options.icon.options.iconSize[0]')==40
   await page.evaluate("VlakaDirection.change('visible',false)");assert await page.evaluate('testV._directionMarkers.length+peer._directionMarkers.length')==0
   await page.evaluate("VlakaDirection.change('visible',true);VlakaDirection.change('separator',false)");assert await page.evaluate('testV._directionMarkers.length')==4
-  await page.evaluate("_aktivniProjektId='Q'");assert await page.evaluate("VlakaDirection.settingsFor('Q').size")==30;await page.evaluate("_aktivniProjektId='P';sbUser={id:'C'}");assert await page.evaluate("VlakaDirection.modeFor(testV)==='auto'&&VlakaDirection.settingsFor('P').size===30");await page.evaluate("sbUser={id:'A'}")
+  await page.evaluate("_aktivniProjektId='Q'");assert await page.evaluate("VlakaDirection.settingsFor('Q').size")==25;await page.evaluate("_aktivniProjektId='P';sbUser={id:'C'}");assert await page.evaluate("VlakaDirection.modeFor(testV)==='auto'&&VlakaDirection.settingsFor('P').size===25");await page.evaluate("sbUser={id:'A'}")
   # Quota ne smije potvrditi postavku ili novi položaj razdjelnice.
   await page.evaluate("()=>{window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('full','QuotaExceededError')};}")
   await page.evaluate("VlakaDirection.change('size',48);VlakaDirection.startPick(testV)");await tap_fraction(page,.8);assert await page.evaluate('VlakaDirection.isPicking()');assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02;assert await page.evaluate("VlakaDirection.settingsFor('P').size")==40

@@ -5688,7 +5688,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.5';
+const APP_VER = 'v2.8.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10585,6 +10585,7 @@ function _updVlakeMapVisibility() {
     }
   }
   if(typeof VlakaDirection!=='undefined')VlakaDirection.refresh();
+  if(typeof VlakaLager!=='undefined')VlakaLager.refresh();
 }
 
 async function sbLoadVlake(osvjeziSamo) {
@@ -10695,7 +10696,7 @@ function _vlakaSyncPayload(v) {
     odjel: getOdjel() || '',
     projekt_id: v.projektId || null,
     nm:v.nm, br:v.br, kr:v.kr, strana:v.strana || null, boja:v.color,
-    lager:v.lager || null, na_putu:v.naPutu || false,
+    lager:v.lager || null, lager_pt:v.lagerPt || null, na_putu:v.naPutu || false,
     projektant_ime:v.projektantIme || null, pts:v.pts,
     updated_at:new Date().toISOString()
   };
@@ -11085,7 +11086,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     let dbData = null;
     try {
       dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
-        .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev')
+        .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev, lager, lager_pt')
         .eq('projekt_id', akt.id), owner);
     } catch(e) {}
     if (!josAktivan() || dbData === null) return; // mrežni neuspjeh — zadrži postojeći prikaz
@@ -11100,7 +11101,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
         { color, weight: 3, opacity: 0.7, dashArray: kid === sbUser?.id ? null : '10,6', interactive: true }).addTo(map);
       poly.bindTooltip(_escHtml(`${info.ime}: ${row.nm}`), { sticky: true, opacity: 0.85 });
       kolegeVlake.push(poly);
-      kolegeVlakeMap[mapKey] = { poly, color, pts: row.pts, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, na_putu: !!row.na_putu };
+      kolegeVlakeMap[mapKey] = { poly, color, pts: row.pts, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, lager:row.lager||'', lagerPt:row.lager_pt||null, na_putu: !!row.na_putu };
       attachPolyClick(poly, mapKey);
     });
     rndList();
@@ -11116,7 +11117,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     // Pristup je ograničen projektom i RLS-om. Zastarjela lokalna lista
     // članova ne smije sakriti novu vlaku drugog člana istog projekta.
     dbData = Array.isArray(preuzeteVlake) ? preuzeteVlake : await _vlakePreuzmiStranice(() => sb.from('vlake')
-      .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev')
+      .select('id, updated_at, nm, korisnik_id, pts, boja, br, kr, na_putu, projektant_ime, rev, lager, lager_pt')
       .neq('korisnik_id',owner).eq('projekt_id',akt.id), owner);
   } catch(e) {} // offline — koristimo samo cache
   if (!josAktivan()) return;
@@ -11162,7 +11163,7 @@ async function sbLoadKolegeVlake(preuzeteVlake) {
     kolegeVlake.push(poly);
     const labels = _placeLabelMarkers(row.pts, row.nm, 498);
     labels.forEach(m => kolegeLabels.push(m));
-    kolegeVlakeMap[mapKey] = { poly, color, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, pts: row.pts || [], labels, na_putu: !!row.na_putu };
+    kolegeVlakeMap[mapKey] = { poly, color, nm: row.nm, ime: row.projektant_ime || info.ime, projektId: akt.id, korisnikId:kid, sbId:row.id, br:row.br, kr:row.kr, pts: row.pts || [], labels, lager:row.lager||'', lagerPt:row.lager_pt||null, na_putu: !!row.na_putu };
   });
   rndList();
 }
@@ -12423,6 +12424,8 @@ function _patchKolegaVlaka(row) {
     e.pts = row.pts;
     if(row.boja)e.color=row.boja;
     e.br=row.br??e.br;e.kr=row.kr??e.kr;e.sbId=row.id||e.sbId;
+    if('lager' in row)e.lager=row.lager||'';if('lager_pt' in row)e.lagerPt=row.lager_pt||null;
+    if('na_putu' in row)e.na_putu=!!row.na_putu;
     if(row.projektant_ime)e.ime=row.projektant_ime;
     e.poly.setStyle(typeof _vlakaPrikazStyle==='function'?_vlakaPrikazStyle(e):{color:e.color});
     if(typeof _projektVlakeRender==='function')_projektVlakeRender();
@@ -13970,6 +13973,8 @@ function _loadBoje(id = typeof _aktivniProjektId==='undefined' ? null : _aktivni
   if(!Number.isFinite(b.weight)||b.weight<2||b.weight>8)delete b.weight;
   if(!['solid','dash','dot'].includes(b.dash))delete b.dash;
   if(typeof b.outline!=='boolean')delete b.outline;
+  if(!Number.isFinite(b.lagerScale)||b.lagerScale<50||b.lagerScale>250)delete b.lagerScale;
+  if(!Number.isFinite(b.lagerLabel)||b.lagerLabel<8||b.lagerLabel>28)delete b.lagerLabel;
   return b;
 }
 function _saveBoje(b) {
@@ -13980,12 +13985,12 @@ function _saveBoje(b) {
 }
 function getBojaVlake() { return _loadBoje().vlaka || '#60a5fa'; }
 function getBojaKraka() { return _loadBoje().krak || '#f87171'; }
-function getVlakaWeight() { return _loadBoje().weight || 4; }
+function getVlakaWeight() { return _loadBoje().weight || 2; }
 function getVlakaLineCap() { return getVlakaDash()==='dash'?'butt':'round'; }
-function getVlakaOutline() { return _loadBoje().outline===true; }
-function getVlakaDash() { return _loadBoje().dash || 'solid'; }
+function getVlakaOutline() { return _loadBoje().outline!==false; }
+function getVlakaDash() { return _loadBoje().dash || 'dash'; }
 function _vlakaStroke(d,weight,zoom) {
- const w=weight||4,z=Number.isFinite(zoom)?zoom:15,f=Math.max(.55,Math.min(1,Math.pow(2,(z-15)*.2)));
+ const w=weight||2,z=Number.isFinite(zoom)?zoom:15,f=Math.max(.55,Math.min(1,Math.pow(2,(z-15)*.2)));
  return d==='dot'?{dashArray:'0.01 '+Math.max(w+2,8*f).toFixed(2),lineCap:'round'}:d==='dash'?{dashArray:Math.max(w*1.6,9*f).toFixed(2)+' '+Math.max(1.5,Math.min(3,w*.6)*f).toFixed(2),lineCap:'butt'}:{dashArray:null,lineCap:'round'};
 }
 function getVlakaDashArray() { return _vlakaStroke(getVlakaDash(),getVlakaWeight(),typeof map!=='undefined'?map.getZoom():15).dashArray; }
@@ -13995,15 +14000,17 @@ function _vlakaPrikazColor(v) {
   const base=v.color||v.boja;return b[kr?'krak':'vlaka']||(/^#[a-f\d]{6}$/i.test(base||'')?base:'#60a5fa');
 }
 function _vlakaPrikazStyle(v) {
-  const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId),d=b.dash||'solid';
-  return {color:_vlakaPrikazColor(v),weight:b.weight||4,vlakaOutline:b.outline===true,..._vlakaStroke(d,b.weight||4,typeof map!=='undefined'?map.getZoom():15)};
+  const b=_loadBoje(v.projektId??v.projekt_id??_aktivniProjektId),d=b.dash||'dash';
+  return {color:_vlakaPrikazColor(v),weight:b.weight||2,vlakaOutline:b.outline!==false,..._vlakaStroke(d,b.weight||2,typeof map!=='undefined'?map.getZoom():15)};
 }
 function _bojaChange(prop,value) {
   if(['vlaka','krak'].includes(prop)&&!/^#[a-f\d]{6}$/i.test(value))return;
   if(prop==='weight'&&(!Number.isFinite(value)||value<2||value>8))return;
   if(prop==='dash'&&!['solid','dash','dot'].includes(value))return;
   if(prop==='outline'&&typeof value!=='boolean')return;
-  if(!['vlaka','krak','weight','dash','outline'].includes(prop))return;
+  if(prop==='lagerScale'&&(!Number.isFinite(value)||value<50||value>250))return;
+  if(prop==='lagerLabel'&&(!Number.isFinite(value)||value<8||value>28))return;
+  if(!['vlaka','krak','weight','dash','outline','lagerScale','lagerLabel'].includes(prop))return;
   const target=_vlakaStyleTarget();let overrides={};
   if(target&&target!=='__all__')try{const old=JSON.parse(localStorage.getItem(_bojaProjektKey(target))||'{}');if(old&&typeof old==='object'&&!Array.isArray(old))overrides=old;}catch(e){}
   const b=target==='__all__'?{vlaka:'#60a5fa',krak:'#f87171',..._loadBoje(target),[prop]:value}:{...overrides,[prop]:value};
@@ -14017,11 +14024,12 @@ function _bojaDashChange(val) { _bojaChange('dash',val); }
 function _vlakaStilApply() {
   for(const v of vlake||[])if(v.poly)v.poly.setStyle(_vlakaPrikazStyle(v));
   for(const v of Object.values(kolegeVlakeMap||{}))if(v.poly)v.poly.setStyle(_vlakaPrikazStyle(v));
+  if(typeof VlakaLager!=='undefined')VlakaLager.refresh();
   _projektVlakeRender();
 }
 function _rndBojaPresets() {
   const target=_vlakaStyleTarget(),b=_loadBoje(target),vlCol=b.vlaka||'#60a5fa',krCol=b.krak||'#f87171',disabled=!target;
-  const outline=document.getElementById('boja-outline');if(outline){outline.checked=b.outline===true;outline.disabled=disabled;}
+  const outline=document.getElementById('boja-outline');if(outline){outline.checked=b.outline!==false;outline.disabled=disabled;}
   const context=document.getElementById('boja-project-context');
   if(context){const p=(_projekti||[]).find(p=>p.id===target);context.textContent=target==='__all__'?'Zajednički stil svih mojih projekata':p?[p.gj,p.odjel?'Odjel '+p.odjel:''].filter(Boolean).join(' · '):'Odaberi projekat ili zajednički stil.';}
   for(const [type,col,handler]of [['vl',vlCol,'_bojaVlChange'],['kr',krCol,'_bojaKrChange']]){
@@ -14030,8 +14038,8 @@ function _rndBojaPresets() {
     if(presets)presets.innerHTML=_BOJA_PRESETS.map(c=>'<button type="button" aria-label="Boja '+c+'" aria-pressed="'+(c===col)+'" '+(disabled?'disabled ':'')+'onclick="'+handler+'(\''+c+'\')" style="--boja:'+c+'"></button>').join('');
   }
   const w=document.getElementById('boja-weight'),wv=document.getElementById('boja-weight-v');
-  if(w){w.value=b.weight||4;w.disabled=disabled;}if(wv)wv.textContent=b.weight||4;
-  document.querySelectorAll('.boja-dash-btn').forEach(btn=>{btn.classList.toggle('on',btn.dataset.d===(b.dash||'solid'));btn.disabled=disabled;});
+  if(w){w.value=b.weight||2;w.disabled=disabled;}if(wv)wv.textContent=b.weight||2;
+  document.querySelectorAll('.boja-dash-btn').forEach(btn=>{btn.classList.toggle('on',btn.dataset.d===(b.dash||'dash'));btn.disabled=disabled;});
   if(_vlakaStyleEditor)_vlakaStyleRender();
   _projektVlakeRender();
 }
@@ -14066,13 +14074,14 @@ function _vlakaStyleRender() {
   const inherit=document.getElementById('vlaka-style-inherit');inherit.hidden=all;inherit.disabled=!target;
   document.getElementById('vlaka-style-unify').hidden=!all||!n;
   _vlakaStylePreview();
+  if(typeof VlakaLager!=='undefined')VlakaLager.renderPanel();
 }
 function _vlakaStylePreview() {
   const e=document.getElementById('vlaka-style-preview-svg');if(!e)return;
-  const target=_vlakaStyleTarget(),b=_loadBoje(target),w=b.weight||4,d=_vlakaStroke(b.dash||'solid',w,15),col=b.vlaka||'#60a5fa',kr=b.krak||'#f87171';
+  const target=_vlakaStyleTarget(),b=_loadBoje(target),w=b.weight||2,d=_vlakaStroke(b.dash||'dash',w,15),col=b.vlaka||'#60a5fa',kr=b.krak||'#f87171';
   const path=(line,color)=>'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="'+d.lineCap+'" '+(d.dashArray?'stroke-dasharray="'+d.dashArray+'"':'')+'/>';
   e.innerHTML='<path d="M0 80Q70 0 130 50T340 25 M0 95Q100 30 180 75T340 60" fill="none" stroke="var(--field-border)"/><text x="12" y="20" fill="var(--field-ink)" font-size="12">Glavna vlaka</text><text x="220" y="92" fill="var(--field-ink)" font-size="12">Krak</text>'+path('M20 70 L130 48 L305 34',col)+path('M130 48 L220 78',kr);
-  if(b.outline)for(const p of [...e.querySelectorAll('path')].slice(2)){const outline=p.cloneNode();outline.setAttribute('stroke',typeof VlakaOutline!=='undefined'?VlakaOutline.colorFor?.(p.getAttribute('stroke'))||'#fff':'#fff');outline.setAttribute('stroke-width',w*1.14);p.before(outline);}
+  if(b.outline!==false)for(const p of [...e.querySelectorAll('path')].slice(2)){const outline=p.cloneNode();outline.setAttribute('stroke',typeof VlakaOutline!=='undefined'?VlakaOutline.colorFor?.(p.getAttribute('stroke'))||'#fff':'#fff');outline.setAttribute('stroke-width',w*1.14);p.before(outline);}
   if(typeof VlakaDirection!=='undefined'){const a=VlakaDirection.settingsFor(target);if(a.visible)e.innerHTML+='<g transform="translate(85 '+(a.placement==='beside'?42:57)+') rotate(169) scale('+(a.size/30)+')"><path d="M-9 0H9 M4 -5L9 0L4 5" fill="none" stroke="'+(a.inherit?col:a.color)+'" stroke-width="'+a.width+'"/></g>';}
 }
 function _vlakaStyleInherit() {
@@ -16136,6 +16145,7 @@ map.on('click', e => {
   if(typeof ProjectTerrain!=='undefined'&&ProjectTerrain.isDrawing())return;
   if(typeof ReferenceVlake!=='undefined'&&ReferenceVlake.isMarking())return;
   if(typeof VlakaDirection!=='undefined'&&VlakaDirection.isPicking())return;
+  if(typeof VlakaLager!=='undefined'&&VlakaLager.isPicking())return;
   if (_msrOn) return; // izmjera preuzima klikove
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
@@ -22266,6 +22276,7 @@ let _lagerPlaceBanner = null;
 function vpLager() {
   if (_vpIdx === null) return;
   const i = _vpIdx;
+  if(vlake[i]?.lager&&typeof VlakaLager!=='undefined'){VlakaLager.startPlace('own:'+i);return;}
   closeVlakaPopup();
   _lagerPlaceIdx = i;
   const v = vlake[i];
@@ -22443,13 +22454,8 @@ function updateVlakaLabel(i) {
     // Matična vlaka: lager na početku (pts[0]). Krak "na putu": lager na KRAJU
     // (zadnja tačka = izlaz na kamionski put), osim ako je ručno postavljen (lagerPt).
     const pFirst = v.lagerPt || (v.naPutu && v.kr > 0 ? v.pts[v.pts.length - 1] : v.pts[0]);
-    const _lgS = (_lineStyle.lagerScale || 100) / 100;
-    const LW = Math.round(28 * _lgS), LH = Math.round(13 * _lgS); // pravougaon, plosnat
-    // Font ne smije padati linearno sa simbolom ispod praga čitljivosti — pri npr.
-    // 60% simbol (LW/LH) i dalje ima smisla, ali round(9*0.6)=5px tekst postaje
-    // praktično nevidljiv (i "pojede" ga vlastiti text-shadow). Donji prag 8px
-    // drži oznaku čitljivom bez obzira koliko je simbol smanjen.
-    const fontPx = Math.max(8, Math.round(9 * _lgS));
+    const dims = typeof VlakaLager!=='undefined'?VlakaLager.styleFor(v):{width:Math.round(28*(_lineStyle.lagerScale||100)/100),height:Math.round(13*(_lineStyle.lagerScale||100)/100),font:Math.max(8,Math.round(9*(_lineStyle.lagerScale||100)/100))};
+    const LW=dims.width, LH=dims.height, fontPx=dims.font;
     const extraH = fontPx + 5; // prostor za red teksta ispod simbola, prati font
     const svgSym = _stpLagerSvg(LW, LH, true) + `
     <div style="color:#fbbf24;font-weight:bold;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>`;
@@ -27813,6 +27819,7 @@ function _abVisinaSync() {
 function switchTab(tab) {
   if(tab==='postavke')tab='teren'; // stari sačuvani odabir Obavještenja otvara Teren
   if(tab!=='karta'&&typeof VlakaDirection!=='undefined')VlakaDirection.cancelPick();
+  if(tab!=='karta'&&typeof VlakaLager!=='undefined')VlakaLager.cancelPick();
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
   if (typeof _tabRemember === 'function') _tabRemember(prev);
@@ -40693,8 +40700,8 @@ if (typeof AndroidDownload !== 'undefined') {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <span style="font-size:13px;color:#e2e8f0;">Debljina linije</span>
             <div style="display:flex;align-items:center;gap:8px;">
-              <input type="range" min="2" max="8" step="1" value="4" id="boja-weight" oninput="_bojaWChange(+this.value)" style="width:90px;">
-              <b id="boja-weight-v" style="font-size:12px;color:#94a3b8;min-width:14px;">4</b>
+              <input type="range" min="2" max="8" step="1" value="2" id="boja-weight" oninput="_bojaWChange(+this.value)" style="width:90px;">
+              <b id="boja-weight-v" style="font-size:12px;color:#94a3b8;min-width:14px;">2</b>
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -40715,10 +40722,10 @@ if (typeof AndroidDownload !== 'undefined') {
         <b id="project-arrow-context"></b>
         <p class="project-vl-note">DS = drvni sortimenti. Dvosmjer postavi ručno samo kada vlaka izlazi na put na oba kraja.</p>
         <label class="terrain-check"><input id="project-arrow-visible" type="checkbox" checked onchange="VlakaDirection.change('visible',this.checked)"><span><b>Prikaži strelice</b><small>Sakrij / prikaži smjer izvlačenja u odabranim projektima</small></span><span id="project-arrow-preview" aria-hidden="true"></span></label>
-        <label class="arrow-placement">Položaj strelica<select id="project-arrow-placement" onchange="VlakaDirection.change('placement',this.value)"><option value="on">Na vlaci</option><option value="beside">Pored vlake</option></select></label><p class="project-vl-note">Jedan položaj za strelice i dvosmjer odabranih projekata. Pored vlake razmak prati debljinu linije i veličinu znaka. Za 1:10.000 preporučen je automatski broj i veličina 30 px.</p>
+        <label class="arrow-placement">Položaj strelica<select id="project-arrow-placement" onchange="VlakaDirection.change('placement',this.value)"><option value="on">Na vlaci</option><option value="beside">Pored vlake</option></select></label><p class="project-vl-note">Jedan položaj za strelice i dvosmjer odabranih projekata. Pored vlake razmak prati debljinu linije i veličinu znaka. Za 1:10.000 preporučen je automatski broj i veličina 25 px.</p>
         <div class="arrow-style-grid">
-          <label>Debljina poteza <output id="project-arrow-width-value">2.5 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2.5" oninput="VlakaDirection.change('width',this.value)"></label>
-          <label>Veličina strelice <output id="project-arrow-size-value">30 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="2" value="30" oninput="VlakaDirection.change('size',this.value)"></label>
+          <label>Debljina poteza <output id="project-arrow-width-value">2 px</output><input id="project-arrow-width" type="range" min="1" max="6" step="0.5" value="2" oninput="VlakaDirection.change('width',this.value)"></label>
+          <label>Veličina strelice <output id="project-arrow-size-value">25 px</output><input id="project-arrow-size" type="range" min="18" max="48" step="1" value="25" oninput="VlakaDirection.change('size',this.value)"></label>
           <label>Strelice po vlaci<select id="project-arrow-count" onchange="VlakaDirection.change('count',this.value)"><option value="0">Automatski: 1 / 2 preko 300 m</option><option value="1">1 strelica</option><option value="2">2 strelice</option><option value="3">3 strelice</option><option value="4">4 strelice</option><option value="6">6 strelica</option><option value="8">8 strelica</option></select></label>
           <label>Boja strelica<input id="project-arrow-color" type="color" value="#2563eb" onchange="VlakaDirection.change('color',this.value)"></label>
         </div>
@@ -40729,6 +40736,7 @@ if (typeof AndroidDownload !== 'undefined') {
         <button class="arrow-reset" type="button" onclick="VlakaDirection.resetStyle()">Vrati početni izgled strelica</button>
       </section>
       <!-- /SMJER IZVLACENJA DS -->
+      <section class="sec lager-style"><div class="sec-t">Veličina i položaj lagera</div><p class="project-vl-note">Tekst oznake i oblik lagera podešavaju se odvojeno.</p><div class="arrow-style-grid"><label>Veličina oblika <output id="lager-scale-value"></output><input id="lager-scale" type="range" min="50" max="250" step="10" oninput="_bojaChange('lagerScale',+this.value)"></label><label>Veličina oznake <output id="lager-label-value"></output><input id="lager-label" type="range" min="8" max="28" step="1" oninput="_bojaChange('lagerLabel',+this.value)"></label></div><div id="lager-style-preview" aria-label="Pregled veličine lagera"></div><details id="lager-position-list" ontoggle="VlakaLager.renderPanel()"><summary>Lageri · <span id="lager-position-count">0</span></summary><p class="project-vl-note">Izaberi lager, pa dodirni novo mjesto na karti. Položaj koleginih lagera uređuješ za svoj prikaz.</p><div id="lager-position-rows"></div></details></section>
  </div>
 </div>
 <!-- /STIL I BOJA VLAKA MODAL -->
@@ -40817,7 +40825,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <div class="help-row"><div class="help-txt"><b>Projekat koji je dodao kolega</b><span>Otvori projekat u tabu <b>Projekat</b> ili odjel u <b>Doznaci</b> i na dnu pritisni <b>Ukloni sa mog spiska</b>. Potreban je internet. Prvo završi snimanje i pošalji neposlane podatke. Uklanja se samo tvoje članstvo; vlake, pojasevi i podaci ostaju cijelom timu. Za povratak te vlasnik ponovo dodaje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Zajednički spisak prikazuje tvoje i kolegine vlake po broju, s dužinom i projektantom. Dodirni stavku za pregled na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Poligon odjela i teren</b><span>Poligon je zatvorena granica odjela. Nacrtaj najmanje tri tačke i sačuvaj. Uključi nagib preko 30% ili ekspoziciju za to područje.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Stil i boja vlaka</b><span>Otvori <b>Meni → Stil i boja vlaka</b>. Izaberi zajednički izgled za sve svoje projekte ili poseban odjel/projekat. Tu podesi boje glavne vlake i kraka, debljinu, crtice/tačke i obrub. <b>Smjer izvlačenja DS</b> uređuje strelice na vlaci ili pored nje. Poseban projekat možeš vratiti na zajednički stil; postavke se pamte.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Stil i boja vlaka</b><span>Otvori <b>Meni → Stil i boja vlaka</b>. Izaberi zajednički izgled za sve svoje projekte ili poseban odjel/projekat. Tu podesi boje glavne vlake i kraka, debljinu, crtice/tačke i obrub. Početni izgled je 2 px, crtice i obrub; strelice su 25 px s potezom 2 px. Veličinu simbola lagera i njegovog teksta podešavaj odvojeno. U sklopivom pregledu lagera izaberi <b>Pomjeri lager</b> i dodirni njegovo novo mjesto na karti. <b>Smjer izvlačenja DS</b> uređuje strelice na vlaci ili pored nje. Poseban projekat možeš vratiti na zajednički stil; postavke se pamte.</span></div></div>
 
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pošalji svoj rad i primi rad kolega</button><div class="help-sec-body">
@@ -40882,7 +40890,7 @@ if (typeof AndroidDownload !== 'undefined') {
 </ol>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Dvosmjer i strelice prema putu</button><div class="help-sec-body">
-<div class="help-row"><div class="help-txt"><b>Kada koristiš dvosmjer?</b><span>Samo kada vlaka ima izlaz na put na oba kraja. Strelice pokazuju prema kojem izlazu treba privlačiti drvo.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Kada koristiš dvosmjer?</b><span>Samo kada vlaka ima izlaz na put na oba kraja. Dodirni vlaku ili krak, izaberi <b>Odredi dvosmjer</b> i dodirni jednu od prikazanih tačaka ili mjesto između njih. Prije dvosmjera strelice vode prema početku, a poslije prema kraju vlake. Kada je smjer već određen, koristi <b>Promijeni mjesto dvosmjera</b>. Izbor se pamti na ovom telefonu.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Ti biraš mjesto promjene</b><span>Tokom snimanja pritisni <b>Dvosmjer</b> na zadnjoj sačuvanoj GPS tački. Na završenoj vlaci postavi ga u njenim detaljima. Jedan znak ↔ pokazuje dva pravca; položaj nije automatski na polovini dužine.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Jedan izlaz na put</b><span>U detaljima vlake odaberi smjer prema početku, kraju ili automatski prema najbližem učitanom putu. Ako put nije prepoznat, izaberi smjer ručno.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Prikaz u mjerilu 1:10.000</b><span>U <b>Projekat → Strelice</b> izaberi <b>Na vlaci</b> ili <b>Pored vlake</b>. Podesi prikaz, boju, veličinu, debljinu i broj. Za početak koristi automatski broj: jedna strelica do 300 m, dvije za dužu vlaku.</span></div></div>
@@ -42467,12 +42475,14 @@ if (typeof AndroidDownload !== 'undefined') {
 <div id="project-draw-toolbar" hidden><div><b>Crtanje poligona odjela</b><small id="project-draw-count"></small></div><div class="project-draw-actions"><button id="project-draw-undo" type="button" onclick="ProjectTerrain.undo()">↶ Vrati tačku</button><button id="project-draw-save" type="button" onclick="ProjectTerrain.finish()">✓ Sačuvaj</button><button type="button" onclick="ProjectTerrain.cancel()">Odustani</button></div></div>
 <script src="static/js/reference-vlake.js"></script>
 <script src="static/js/doznaka-boundary.js"></script>
-<div id="direction-pick-toolbar" hidden><b id="direction-pick-title"></b><p>Dodirni ovu vlaku gdje određuješ razdvajanje prema dva izlaza na put. Položaj se veže za vlaku.</p><button type="button" onclick="VlakaDirection.cancelPick()">Odustani</button></div>
+<div id="direction-pick-toolbar" hidden><b id="direction-pick-title"></b><p>Dodirni ovu vlaku gdje određuješ razdvajanje prema dva izlaza na put. Dodirni prikazanu tačku ili mjesto između tačaka. Položaj se veže za vlaku.</p><button type="button" onclick="VlakaDirection.cancelPick()">Odustani</button></div>
 <script src="static/js/vlaka-outline.js"></script>
 <script src="static/js/vlaka-keyboard.js"></script>
 <script src="static/js/print-slope.js"></script>
 <script src="static/js/user-activity.js"></script>
 <script src="static/js/vlaka-direction.js"></script>
+<div id="lager-position-toolbar" hidden><b id="lager-position-title"></b><p>Dodirni novo mjesto lagera na karti.</p><button type="button" onclick="VlakaLager.cancelPick()">Odustani</button></div>
+<script src="static/js/vlaka-lager.js"></script>
 <script src="static/js/map-catalog.js"></script>
 <script src="static/js/project-terrain.js"></script>
 <script src="static/js/department-report.js"></script>
