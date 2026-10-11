@@ -6,6 +6,64 @@
  const ASPECTS=['Sjever','Istok','Jug','Zapad'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
  const slopeIndex=p=>Number.isFinite(p)&&p>=0?Math.min(5,Math.floor(p/10)):-1;
  const aspectIndex=(bearing,percent)=>Number.isFinite(bearing)&&Number.isFinite(percent)&&percent>.01?Math.floor(((bearing+45)%360)/90):-1;
+ function profiles(input,t,sample,lng,lat,mask,areaHa){
+  const {geometry,z,x0,y0,width,height}=input,feature=t.feature(geometry),world=256*2**z;
+  const valid=h=>Number.isFinite(h)&&h>-12000&&h<10000;
+  const metres=y=>Math.cos(lat(y)*Math.PI/180)*156543.03392/2**z;
+  const point=(x,y)=>[lng(x),lat(y)],inside=p=>t.booleanPointInPolygon(t.point(point(...p)),feature);
+  const heightAt=p=>{const x=p[0]-.5,y=p[1]-.5,a=Math.floor(x),b=Math.floor(y),fx=x-a,fy=y-b;
+   const hs=[sample(a,b),sample(a+1,b),sample(a,b+1),sample(a+1,b+1)];if(!hs.every(valid))return NaN;
+   return hs[0]*(1-fx)*(1-fy)+hs[1]*fx*(1-fy)+hs[2]*(1-fx)*fy+hs[3]*fx*fy;
+  };
+  const gradient=p=>{const m=metres(p[1]),r=Math.max(1,Math.round(30/m)),hs=[heightAt([p[0]-r,p[1]]),heightAt([p[0]+r,p[1]]),heightAt([p[0],p[1]-r]),heightAt([p[0],p[1]+r])];
+   return hs.every(valid)?[(hs[1]-hs[0])/(2*r*m),(hs[3]-hs[2])/(2*r*m)]:null;
+  };
+  // Prva presječena granica zaustavlja profil: segment ne preskače ni usku rupu.
+  const pixel=p=>[(p[0]+180)/360*world,(1-Math.asinh(Math.tan(p[1]*Math.PI/180))/Math.PI)/2*world];
+  const boundaries=[],polys=geometry.type==='Polygon'?[geometry.coordinates]:geometry.coordinates;
+  for(const poly of polys)for(const ring of poly)for(let i=1;i<ring.length;i++)boundaries.push([pixel(ring[i-1]),pixel(ring[i])]);
+  const cross=(a,b)=>a[0]*b[1]-a[1]*b[0];
+  function clipped(a,b){const v=[b[0]-a[0],b[1]-a[1]];let fraction=1;
+   for(const [c,d]of boundaries){const w=[d[0]-c[0],d[1]-c[1]],den=cross(v,w);if(Math.abs(den)<1e-12)continue;const q=[c[0]-a[0],c[1]-a[1]],u=cross(q,w)/den,s=cross(q,v)/den;if(u>1e-8&&u<=fraction&&s>=-1e-9&&s<=1+1e-9)fraction=Math.max(0,u-1e-6);}
+   const p=[a[0]+v[0]*fraction,a[1]+v[1]*fraction];return inside(p)?{p,end:fraction<1}:null;
+  }
+  const weights=Array.from({length:height},(_,y)=>metres(y0+y+.5)**2),weight=i=>mask[i]*weights[Math.floor(i/width)];
+  const xy=i=>[x0+i%width+.5,y0+Math.floor(i/width)+.5],seen=new Uint8Array(mask.length),groups=[];let total=0;
+  // Odvojeni odsjeci dobijaju svoje profile; praznine i nedostajući DEM nisu ravne površine.
+  for(let seed=0;seed<mask.length;seed++){if(!mask[seed]||seen[seed])continue;const ids=[seed];seen[seed]=1;let sum=0;
+   for(let k=0;k<ids.length;k++){const i=ids[k],x=i%width,y=Math.floor(i/width);sum+=weight(i);
+    for(const j of [x>0?i-1:-1,x+1<width?i+1:-1,y>0?i-width:-1,y+1<height?i+width:-1])if(j>=0&&mask[j]&&!seen[j]){seen[j]=1;ids.push(j);}
+   }groups.push({ids,weight:sum});total+=sum;
+  }
+  const target=groups.reduce((n,g)=>n+Math.max(1,Math.ceil(areaHa*g.weight/total/3-1e-9)),0),info={areaPerLineHa:3,target,available:0,unavailable:0,short:0};
+  if(target>1200){info.unavailable=target;info.reason='Za linije na svaka 3 ha odaberi manje područje (najviše 1.200 linija).';return {slopeProfiles:[],profileInfo:info};}
+  const leaves=[];
+  function split(ids,count){if(count<=1||ids.length<2){leaves.push(ids);return;}
+   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,sum=0;
+   for(const i of ids){const [x,y]=xy(i);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);sum+=weight(i);}
+   const axis=maxX-minX>=maxY-minY?0:1,ordered=ids.slice().sort((a,b)=>xy(a)[axis]-xy(b)[axis]),left=Math.floor(count/2),goal=sum*left/count;let acc=0,cut=1;
+   for(;cut<ordered.length;cut++){acc+=weight(ordered[cut-1]);if(acc>=goal)break;}
+   cut=Math.min(ordered.length-1,cut);split(ordered.slice(0,cut),left);split(ordered.slice(cut),count-left);
+  }
+  for(const g of groups)split(g.ids,Math.max(1,Math.ceil(areaHa*g.weight/total/3-1e-9)));
+  const lines=[];
+  for(const ids of leaves){let sum=0,cx=0,cy=0;for(const i of ids){const [x,y]=xy(i),w=weight(i);sum+=w;cx+=x*w;cy+=y*w;}cx/=sum;cy/=sum;
+   let anchor=null,best=Infinity,grad=null;for(const i of ids){const p=xy(i),d=(p[0]-cx)**2+(p[1]-cy)**2;if(d>=best||!inside(p)||!valid(heightAt(p)))continue;const g=gradient(p);if(!g)continue;anchor=p;grad=g;best=d;}
+   if(!anchor){info.unavailable++;continue;}const flat=Math.hypot(...grad)<.0001;
+   function trace(sign){const pts=[anchor];let length=0;
+    for(let step=0;step<20&&length<60;step++){const a=pts.at(-1),g=flat?[1,0]:gradient(a);if(!g)break;const norm=Math.hypot(...g);if(norm<.0001)break;
+     const distance=Math.min(15,60-length),scale=distance/metres(a[1]),next=clipped(a,[a[0]-sign*g[0]/norm*scale,a[1]-sign*g[1]/norm*scale]);if(!next)break;
+     const h0=heightAt(a),h1=heightAt(next.p);if(!valid(h1)||(!flat&&sign*(h0-h1)<-.02))break;
+     const d=t.distance(t.point(point(...a)),t.point(point(...next.p)),{units:'kilometers'})*1000;if(d<.5)break;pts.push(next.p);length+=d;if(next.end)break;
+    }return pts;
+   }
+   let path=[...trace(-1).reverse(),...trace(1).slice(1)];if(path.length<2){info.unavailable++;continue;}
+   if(heightAt(path[0])<heightAt(path.at(-1)))path.reverse();const coords=path.map(p=>point(...p)),distance=t.length(t.lineString(coords),{units:'kilometers'})*1000;
+   if(distance<1){info.unavailable++;continue;}const top=heightAt(path[0]),bottom=heightAt(path.at(-1)),drop=Math.max(0,top-bottom),percent=drop/distance*100;
+   lines.push({id:lines.length+1,points:coords.map(p=>[p[1],p[0]]),topElevation:top,bottomElevation:bottom,distance,drop,percent,areaHa:areaHa*sum/total,flat});if(distance<30)info.short++;
+  }
+  info.available=lines.length;info.unavailable=target-lines.length;return {slopeProfiles:lines,profileInfo:info};
+ }
  function calculate(input,t){
   const {geometry,z,x0,y0,width,height}=input;
   if(!Number.isInteger(z)||z<4||z>14||!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width*height>160000)throw Error('Preveliko područje za izvještaj');
@@ -38,7 +96,7 @@
    if(x+1<width&&classes[i+1]>=0&&classes[i]!==classes[i+1])edges.push([[lat(y0+y),lng(x0+x+1)],[lat(y0+y+1),lng(x0+x+1)]]);
    if(y+1<height&&classes[i+width]>=0&&classes[i]!==classes[i+width])edges.push([[lat(y0+y+1),lng(x0+x)],[lat(y0+y+1),lng(x0+x+1)]]);
   }
-  return {z,x0,y0,width,height,classes,aspects,mask,edges,stats:{areaHa,min,max,mean:sum/valid,slopeMean:knownSlope?slopeSum/knownSlope:null,slopeMax:knownSlope?slopeMax:null,coverage:share(valid),slopeCoverage:share(knownSlope),flat:share(flat),resolution:Math.max(30,Math.cos(lat(y0+height/2)*Math.PI/180)*156543.03392/2**z),slope:rows(SLOPES,COLORS,bands),aspect:rows(ASPECTS,ACOLORS,directions)}};
+  return {z,x0,y0,width,height,classes,aspects,mask,edges,...profiles(input,t,sample,lng,lat,mask,areaHa),stats:{areaHa,min,max,mean:sum/valid,slopeMean:knownSlope?slopeSum/knownSlope:null,slopeMax:knownSlope?slopeMax:null,coverage:share(valid),slopeCoverage:share(knownSlope),flat:share(flat),resolution:Math.max(30,Math.cos(lat(y0+height/2)*Math.PI/180)*156543.03392/2**z),slope:rows(SLOPES,COLORS,bands),aspect:rows(ASPECTS,ACOLORS,directions)}};
  }
  if(typeof module!=='undefined'&&module.exports){module.exports={calculate,slopeIndex,aspectIndex,SLOPES,COLORS,ASPECTS,ACOLORS};return;}
  importScripts('../libs/turf.min.js');

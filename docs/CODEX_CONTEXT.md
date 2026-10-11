@@ -4157,3 +4157,39 @@ restart sa sačuvanim onlyPolygon=false koji se vraća na true bez promjene
 stilova. 12 dodatnih punih previewa (320/390/800, dan/tamno) bez overflow,
 GitHub natpisa, JS grešaka/upisa; dnevni kontrast prošao, kompas izmjeren134.4.
 Assets prepare72. Javni APK/objavu potvrditi nakon CI-a; fizički telefon nije testiran.
+
+### 2026-10-11 — profili nagiba u Izvještaju odjela, 2.8.5 / 555
+Nastavak korisnikovog zahtjeva za dodatnu provjeru nagiba preko Δh i udaljenosti.
+Postojeći lokalni DEM nagib već koristi centralne razlike visina i horizontalnu
+udaljenost; šest razreda i četiri ekspozicije nisu zamijenjeni prosjekom linije.
+Worker sada prostorno raspoređuje približno jedan kontrolni profil na 3 ha;
+svaki odvojeni odsjek dobija svoje profile. Prostorna podjela koristi ponderisanu
+površinu, isključuje rupe i traži validnu DEM visinu/gradijent. Oba kraka profila
+prate gradijent, ukupno oko 120 m ili do prve granice/nedostajućeg uzorka.
+Presjek segmenta sa svim prstenovima zaustavlja liniju i kod rupa užih od koraka.
+Δh je razlika gornje/donje interpolirane DEM visine; vodoravna dužina je zbir
+2D geodetskih dužina segmenata. Prosječan nagib profila je Δh / dužina × 100.
+Nedostajući uzorci se prijavljuju; ne dodaju se lažni ravni profili. Najviše
+1.200 profila: veći izbor izričito traži manje područje, bez tihog prorjeđivanja.
+
+Nagib podtab ima checkbox prikaza, brojač i sklopivi pregled profila. Dodir
+linije ili stavke otvara P broj, procenat, visine, razliku, vodoravnu dužinu i
+formulu. Karta koristi zaseban neinteraktivni Canvas GridLayer s konstantnom
+veličinom linije/strelice, oznakama pri prikladnoj razmjeri i bez preklapanja
+teksta. Klik vodi kroz postojeći prioritet vlaka/alata/izbora poligona. Legenda
+pojašnjava profile; brisanje/sakrivanje/promjena naloga uklanja i sloj/popup.
+Checkbox i rezultat su u postojećem per-user localStorage/IDB toku, dostupni
+offline; stari keš ostaje čitljiv i traži izričit novi izračun za profile.
+Upute ažurirane. 2.8.5 uključuje i sve promjene 2.8.4 (Granice/Učitaj kartu/kompas).
+
+Provjere: cijeli JS skup i 5 inline blokova; analitičke ravni u šest smjerova,
+Δh/dužina, ravni i promjenjivi teren, konkavna granica, odvojeni odsjeci, rupe
+uključujući sub-pikselnu, nedostajući DEM i prostorna pokrivenost. Puni browser
+s pravim DEM PNG dekoderom/Workerom/Leafletom: 10 profila za 28,09 ha, popup,
+prikaz/sakrivanje, 18 rasporeda/podtabova, dnevni kontrast, IDB restart i stari
+keš bez profila, offline/cancel/brisanje/izolacija naloga, bez eksternih upisa.
+Dnevni audit144 prošao; plan doznake sa zajedničkim CSS-om prošao. Lokalni
+synthetic benchmark: 1.170,28 ha / 391 profil / oko102ms na cloud procesoru;
+to NIJE mjerenje na fizičkom telefonu. DEM ostaje procjena rezolucije oko30m
+(ili slabije kod velikih odjela), ne terenska geodetska izmjera. Assets72.
+CI 2.8.4/38128182006 završen SUCCESS; 2.8.5 APK objavu potvrditi poslije CI-a.

@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
- let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,worker=null,cancelWorker=null,generation=0,busy=false,loaded=null,legend=null,hitRenderer=null;
+ let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,loaded=null,legend=null,hitRenderer=null;
  const uid=()=>typeof sbUser!=='undefined'?sbUser?.id:null,key=()=>SKEY+encodeURIComponent(owner||''),valid=()=>owner&&uid()===owner;
  const toast=s=>showToast(s),number=(n,d=1)=>Number.isFinite(n)?n.toLocaleString('bs',{maximumFractionDigits:d}):'—';
  function save(){if(!valid())return false;try{localStorage.setItem(key(),JSON.stringify(state));return true;}catch(e){toast('Izbor nije sačuvan — provjeri memoriju uređaja');return false;}}
@@ -22,7 +22,7 @@
  function hide(){node('department-report').hidden=true;}
  function close(){hide();cancelDraw(false);}
  function geometryBounds(g){return L.geoJSON(g).getBounds();}
- function clearLayers(){for(const l of [boundary,terrain,edges])if(l)map.removeLayer(l);boundary=terrain=edges=null;legend?.remove();legend=null;}
+ function clearLayers(){if(map.getContainer().querySelector('.dr-profile-popup'))map.closePopup();for(const l of [boundary,terrain,edges,profileLayer])if(l)map.removeLayer(l);boundary=terrain=edges=profileLayer=null;legend?.remove();legend=null;}
  const selecting=()=>!!draft||root.GithubLayers?.selecting();
  function refreshSelection(){
   const active=selecting();if(boundary?.getPane())boundary.getPane().style.pointerEvents=active?'none':'';
@@ -47,7 +47,9 @@
   const heading=document.createElement('b');heading.textContent=state.mode==='aspect'?'Ekspozicija · '+number(result.stats.areaHa,2)+' ha':'Nagib terena (%) · '+number(result.stats.areaHa,2)+' ha';body.append(heading);
   const rows=state.mode==='aspect'?result.stats.aspect:result.stats.slope;
   for(const row of rows){const line=document.createElement('div'),swatch=document.createElement('i'),name=document.createElement('span'),share=document.createElement('b');swatch.style.background=row.color;name.textContent=row.name;share.textContent=number(row.percent)+'%';line.append(swatch,name,share);body.append(line);}
-  const note=document.createElement('small');note.textContent='DEM procjena · udio površine';body.append(note);legend.append(header,body);map.getContainer().append(legend);
+  const note=document.createElement('small');note.textContent='DEM procjena · udio površine';body.append(note);
+  if(state.mode==='slope'&&state.profiles!==false&&result.slopeProfiles?.length){const hint=document.createElement('small');hint.textContent='P1, P2…: nagib profila niz padinu · 1 na približno 3 ha';body.append(hint);}
+  legend.append(header,body);map.getContainer().append(legend);
   L.DomEvent.disableClickPropagation(legend);L.DomEvent.disableScrollPropagation(legend);
   let drag=null;
   title.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();const p=legendPosition();drag={x0:e.clientX,y0:e.clientY,x:p.x,y:p.y};title.setPointerCapture(e.pointerId);};
@@ -55,6 +57,32 @@
   const end=()=>{if(drag){state.legendPosition=legendPosition();save();drag=null;}};title.onpointerup=end;title.onpointercancel=end;
   title.onkeydown=e=>{const delta={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[e.key];if(!delta)return;e.preventDefault();const p=legendPosition();state.legendPosition={x:p.x+delta[0],y:p.y+delta[1]};state.legendPosition=legendPosition();save();};
   legendPosition();refreshSelection();
+ }
+ function showProfiles(){
+  const profiles=result?.slopeProfiles;if(state.mode!=='slope'||state.profiles===false||!profiles?.length)return;
+  const geometry=state.geometry,polys=geometry.type==='Polygon'?[geometry.coordinates]:geometry.coordinates,layouts=new Map();
+  const project=(p,z)=>L.CRS.EPSG3857.latLngToPoint(L.latLng(p[0],p[1]),z);
+  function layout(z){if(layouts.has(z))return layouts.get(z);const occupied=[],rows=profiles.map(p=>{const points=p.points.map(ll=>project(ll,z)),mid=points[Math.floor(points.length/2)],mpp=156543.03392*Math.cos(p.points[0][0]*Math.PI/180)/2**z;
+    const label=mpp<=4&&!occupied.some(b=>Math.abs(mid.x-b.x)<72&&Math.abs(mid.y-b.y)<26);if(label)occupied.push(mid);return {p,points,mid,label,xMin:Math.min(...points.map(p=>p.x)),xMax:Math.max(...points.map(p=>p.x)),yMin:Math.min(...points.map(p=>p.y)),yMax:Math.max(...points.map(p=>p.y))};});layouts.set(z,rows);return rows;}
+  const Layer=L.GridLayer.extend({createTile(coords){const canvas=document.createElement('canvas');canvas.width=canvas.height=256;canvas.className='dr-profile-tile';const c=canvas.getContext('2d'),ox=coords.x*256,oy=coords.y*256;
+   c.beginPath();for(const poly of polys)for(const ring of poly){ring.forEach((ll,i)=>{const p=project([ll[1],ll[0]],coords.z);i?c.lineTo(p.x-ox,p.y-oy):c.moveTo(p.x-ox,p.y-oy);});c.closePath();}c.clip('evenodd');
+   for(const row of layout(coords.z)){const {p,points,mid,label}=row;
+    if(row.xMax<ox-50||row.xMin>ox+306||row.yMax<oy-30||row.yMin>oy+286)continue;
+    c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x-ox,q.y-oy):c.moveTo(q.x-ox,q.y-oy));c.lineJoin=c.lineCap='round';c.strokeStyle='#fff';c.lineWidth=4;c.stroke();c.strokeStyle='#172f3c';c.lineWidth=2;c.stroke();
+    const n=Math.floor(points.length*.65),a=points[Math.max(0,n-1)],b=points[Math.min(points.length-1,n)];
+    if(!p.flat&&a&&b){const angle=Math.atan2(b.y-a.y,b.x-a.x);c.save();c.translate(b.x-ox,b.y-oy);c.rotate(angle);c.beginPath();c.moveTo(-7,-4);c.lineTo(0,0);c.lineTo(-7,4);c.strokeStyle='#fff';c.lineWidth=4;c.stroke();c.strokeStyle='#172f3c';c.lineWidth=2;c.stroke();c.restore();}
+    if(label){const text='P'+p.id+' · '+number(p.percent,0)+'%';c.font='700 12px system-ui';c.textAlign='center';c.textBaseline='middle';c.strokeStyle='#fff';c.lineWidth=4;c.strokeText(text,mid.x-ox,mid.y-oy-10);c.fillStyle='#172f3c';c.fillText(text,mid.x-ox,mid.y-oy-10);}
+   }return canvas;
+  }});
+  profileLayer=new Layer({pane:'departmentReport',bounds:geometryBounds(geometry),maxZoom:22,keepBuffer:1,updateWhenIdle:true}).addTo(map);
+ }
+ function profilePopup(p){const mid=p.points[Math.floor(p.points.length/2)];L.popup({maxWidth:280,className:'dr-profile-shell'}).setLatLng(mid).setContent('<div class="dr-profile-popup"><b>Profil P'+p.id+' · '+number(p.percent)+'%</b><span>Visine: '+number(p.topElevation,1)+' → '+number(p.bottomElevation,1)+' m</span><span>Visinska razlika: '+number(p.drop,1)+' m</span><span>Vodoravna dužina: '+number(p.distance,1)+' m</span><small>Nagib = '+number(p.drop,1)+' ÷ '+number(p.distance,1)+' × 100</small><small>Prosjek duž linije · DEM procjena'+(p.distance<30?' · kratak profil':'')+'</small><button type="button" onclick="DepartmentReport.open()">Pregled odjela</button></div>').openOn(map);}
+ function viewProfile(id){if(!valid()||!result)return;const p=result.slopeProfiles?.find(p=>p.id===id);if(!p)return;state.visible=true;state.mode='slope';state.profiles=true;if(!save())return;render();hide();switchTab('karta');showLayers();map.fitBounds(L.latLngBounds(p.points),{padding:[45,45],maxZoom:17});profilePopup(p);}
+ function renderProfiles(){const toggle=node('dr-profile-toggle'),info=result?.profileInfo,rows=result?.slopeProfiles||[];
+  toggle.checked=state.profiles!==false;toggle.disabled=busy||!rows.length;node('dr-profile-info').textContent=!info?'Za linije nagiba ponovi izračun terena.':info.reason||('Profili: '+info.available+'/'+info.target+' · približno jedan na 3 ha.'+(info.unavailable?' Za '+info.unavailable+' mjesta nema dovoljno DEM uzoraka.':'')+(info.short?' Kratki profili: '+info.short+'.':''));
+  const list=node('dr-profile-list');list.hidden=!rows.length;node('dr-profile-count').textContent=rows.length;
+  const body=node('dr-profile-rows');body.replaceChildren();if(!list.open)return;
+  for(const p of rows){const button=document.createElement('button');button.type='button';button.onclick=()=>viewProfile(p.id);const title=document.createElement('b'),meta=document.createElement('span');title.textContent='P'+p.id+' · '+number(p.percent)+'%';meta.textContent='Vodoravno '+number(p.distance,1)+' m · Δh '+number(p.drop,1)+' m';button.append(title,meta);body.append(button);}
  }
  function showLayers(){
   clearLayers();if(!valid()||!state.geometry||state.visible===false)return;
@@ -74,10 +102,13 @@
   }});
   terrain=new Layer({pane:'departmentReport',bounds:geometryBounds(geometry),maxNativeZoom:r.z,maxZoom:22,keepBuffer:1,updateWhenIdle:true}).addTo(map);
   if(state.lines!==false&&state.mode!=='aspect'&&r.edges?.length)edges=L.polyline(r.edges,{pane:'departmentReport',color:'#243646',weight:.8,opacity:.8,interactive:false}).addTo(map);
+  showProfiles();
   boundary.bringToFront?.();
   showLegend();
  }
- function openAt(ll){if(!valid()||selecting()||!state.geometry||state.visible===false||activeTool!=='select'||_msrOn||_guideOn||recOn||_tragOn||_dozGpsOn||_dozDrawType!==null||textToolOn||_tackaPlaceMode)return false;if(!turf.booleanPointInPolygon(turf.point([ll.lng,ll.lat]),turf.feature(state.geometry)))return false;open();return true;}
+ function openAt(ll){if(!valid()||selecting()||!state.geometry||state.visible===false||activeTool!=='select'||_msrOn||_guideOn||recOn||_tragOn||_dozGpsOn||_dozDrawType!==null||textToolOn||_tackaPlaceMode)return false;if(!turf.booleanPointInPolygon(turf.point([ll.lng,ll.lat]),turf.feature(state.geometry)))return false;
+  if(profileLayer){const at=map.latLngToLayerPoint(ll);let nearest=null,best=10;for(const p of result.slopeProfiles)for(let i=1;i<p.points.length;i++){const d=L.LineUtil.pointToSegmentDistance(at,map.latLngToLayerPoint(p.points[i-1]),map.latLngToLayerPoint(p.points[i]));if(d<best){best=d;nearest=p;}}if(nearest){profilePopup(nearest);return true;}}
+  open();return true;}
  const tabs=['overview','slope','aspect'];
  function renderTabs(){
   const selected=tabs.includes(state.tab)?state.tab:'overview';
@@ -102,6 +133,7 @@
   node('dr-result').hidden=!s;
   const editor=node('dr-selection-editor');if(editor.dataset.calculated!==String(!!s)){editor.open=!s;editor.dataset.calculated=String(!!s);}
   renderTabs();node('dr-lines-option').hidden=state.mode==='aspect'||state.mode==='none';
+  renderProfiles();
   for(const id of ['dr-slope-map','dr-aspect-map'])node(id).disabled=busy||!s;
   node('dr-status').textContent=busy?'Računam teren… Možeš zatvoriti ovaj prozor.':s?'Izračunato · '+new Date(state.calculatedAt||Date.now()).toLocaleString('bs'):'Izaberi odjel pa izračunaj teren. Za prvi izračun može biti potreban internet.';
   if(!s)return;
@@ -130,7 +162,7 @@
  async function finish(){if(!draft||!valid())return;const r=ProjectTerrain.validateRing(draft.points);if(r.error){toast(r.error);return;}const ring=r.ring.map(p=>[p[1],p[0]]);ring.push(ring[0]);const geometry={type:'Polygon',coordinates:[ring]};if(await setGeometry(geometry))cancelDraw(false);}
  function view(){if(!valid()||!state.geometry)return;state.visible=true;save();render();hide();switchTab('karta');map.invalidateSize();map.fitBounds(geometryBounds(state.geometry),{padding:[35,35],maxZoom:17});showLayers();}
  async function remove(){if(!valid()||busy||!state.geometry)return;const current=owner,persistKey=key(),g=state.geometry;if(!await _dlgConfirm('Ukloniti granicu i izvještaj? Učitani fajlovi i projekti ostaju sačuvani.',{danger:true}))return;if(uid()!==current||g!==state.geometry)return;const old=state;state={};if(!save()){state=old;return;}result=null;clearLayers();render();await _kmlcDelete(persistKey);}
- function change(field,value){if(!valid())return;if(field==='name')state.name=String(value).slice(0,120);else if(field==='mode'){if(!['slope','aspect','none'].includes(value))return;state.mode=value;}else if(['lines','visible','legendVisible','legendMin'].includes(field))state[field]=!!value;else return;if(save()){render();if(field==='legendVisible'||field==='legendMin'){legend?.remove();legend=null;if(state.visible!==false)showLegend();}else showLayers();}}
+ function change(field,value){if(!valid())return;if(field==='name')state.name=String(value).slice(0,120);else if(field==='mode'){if(!['slope','aspect','none'].includes(value))return;state.mode=value;}else if(['lines','profiles','visible','legendVisible','legendMin'].includes(field))state[field]=!!value;else return;if(save()){render();if(field==='legendVisible'||field==='legendMin'){legend?.remove();legend=null;if(state.visible!==false)showLegend();}else showLayers();}}
  async function calculate(){
   if(busy||!valid()||!state.geometry)return;const current=owner,persistKey=key(),token=++generation,geometry=state.geometry;let errorText='';busy=true;render();
   if(navigator.onLine!==false)_mrezaSila(60000);
@@ -150,7 +182,7 @@
   finally{if(check()){busy=false;render();if(errorText)node('dr-status').textContent=errorText;}}
  }
  function reset(){++generation;cancelWorker?.();worker=null;busy=false;cancelDraw(false);clearLayers();owner=null;loaded=null;state={};result=null;hide();}
- root.DepartmentReport={open,restore,close,hide,choose,legacy,draw,addPoint,finish,cancelDraw,calculate,cancelCalculation,view,viewMode,selectTab,tabKey,remove,change,reset,isDrawing:()=>!!draft,undo:()=>{draft?.points.pop();drawRender();},refreshSelection,openAt,snapshot:()=>({state,result,busy})};
+ root.DepartmentReport={open,restore,close,hide,choose,legacy,draw,addPoint,finish,cancelDraw,calculate,cancelCalculation,view,viewMode,viewProfile,renderProfiles,selectTab,tabKey,remove,change,reset,isDrawing:()=>!!draft,undo:()=>{draft?.points.pop();drawRender();},refreshSelection,openAt,snapshot:()=>({state,result,busy})};
  map.on('resize',legendPosition);
  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(draft)cancelDraw();else if(!node('department-report').hidden)close();}});
 })(typeof window!=='undefined'?window:globalThis);

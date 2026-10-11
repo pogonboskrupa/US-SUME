@@ -964,6 +964,20 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 #department-report .dr-metrics b{overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 #department-report #dr-aspect-main{font-size:16px}
 #department-report .dr-map-action{width:100%;margin-top:14px;color:var(--field-ink);border-color:#3b82f6}
+#department-report .dr-profiles {margin-top:16px;padding:12px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
+#department-report .dr-profiles h3 {margin:0 0 8px}
+#department-report .dr-profiles label {display:flex;align-items:center;gap:10px;min-height:44px;font-size:12px}
+#department-report .dr-profiles input {width:22px;height:22px;flex-shrink:0;accent-color:#2563eb}
+#department-report .dr-profiles summary {min-height:44px;display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer}
+#dr-profile-rows {display:grid;gap:6px;max-height:300px;overflow:auto}
+#department-report #dr-profile-rows button {display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;text-align:left}
+#dr-profile-rows span {font-size:11px;color:var(--field-muted)}
+.dr-profile-shell .leaflet-popup-content-wrapper,.dr-profile-shell .leaflet-popup-tip {background:var(--field-card);color:var(--field-ink)}
+.dr-profile-shell .leaflet-popup-content {margin:12px 16px}
+.dr-profile-shell a.leaflet-popup-close-button {color:var(--field-muted)}
+.dr-profile-popup {display:grid;gap:6px;font:12px/1.5 system-ui;color:var(--field-ink);background:var(--field-card)}
+.dr-profile-popup b {font-size:15px}.dr-profile-popup small {font-size:11px;color:var(--field-muted)}
+.dr-profile-popup button {min-height:44px;color:var(--field-ink);background:var(--field-bg);border:1px solid var(--field-border);border-radius:9px;margin-top:4px;font:600 12px system-ui}
 #department-report .dr-map-options{padding-bottom:0}
 #department-report .dr-map-options[open]{padding-bottom:8px}
 #department-report #dr-map-summary{display:block;color:var(--field-muted);font-size:11px;font-weight:400;margin-top:3px}
