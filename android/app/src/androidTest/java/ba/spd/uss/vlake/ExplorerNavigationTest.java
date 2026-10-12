@@ -31,6 +31,11 @@ public class ExplorerNavigationTest {
   new Handler(Looper.getMainLooper()).post(()->view.evaluateJavascript(script,v->{result.set(v);latch.countDown();}));
   assertTrue("WebView JS callback",latch.await(5,TimeUnit.SECONDS));return result.get();
  }
+ private <T> T onUi(java.util.concurrent.Callable<T> c) throws Exception {
+  AtomicReference<T> r=new AtomicReference<>();AtomicReference<Exception> err=new AtomicReference<>();CountDownLatch latch=new CountDownLatch(1);
+  new Handler(Looper.getMainLooper()).post(()->{try{r.set(c.call());}catch(Exception e){err.set(e);}latch.countDown();});
+  assertTrue("UI callback",latch.await(5,TimeUnit.SECONDS));if(err.get()!=null)throw err.get();return r.get();
+ }
  private void pageLoaded(WebView view) throws Exception {
   // Cold WebView navigacija može odbaciti JS callback za prethodni about:blank.
   // Ne mijenjamo proizvodni WebViewClient/assetLoader; čitamo native progress.
@@ -70,7 +75,13 @@ public class ExplorerNavigationTest {
   context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
   try {
    assertTrue("MainActivity RESUMED",resumed.await(15,TimeUnit.SECONDS));
-   WebView view=ref.get();assertNotNull(view);assertEquals(View.LAYER_TYPE_HARDWARE,view.getLayerType());
+   WebView view=ref.get();assertNotNull(view);
+   // 3D Explorer traži hardverski ubrzan prozor (manifest), ne dodatni View sloj:
+   // LAYER_TYPE_HARDWARE je sav WebView slao kroz još jednu ekransku GPU teksturu
+   // i na slabijim telefonima davao prazne dijelove (v2.8.10). Ostatak testa
+   // (matrix3d + DOM marker <3px) dokazuje da 3D prikaz radi i bez njega.
+   assertTrue("Hardverski ubrzan WebView",onUi(view::isHardwareAccelerated));
+   assertEquals(View.LAYER_TYPE_NONE,(int)onUi(view::getLayerType));
    pageLoaded(view);
    until(view,"document.readyState==='complete'&&!!window.Explorer&&typeof onP==='function'");
    // Samo testni auth ulaz i GPS senzor su kontrolisani; sav proizvodni JS se izvršava.
