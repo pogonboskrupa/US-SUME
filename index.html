@@ -5752,7 +5752,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.4';
+const APP_VER = 'v2.9.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -13685,19 +13685,24 @@ function terenRenderTragovi() {
     list.innerHTML = '<div class="trn-empty">Nema snimljenih tragova — dugme "Snimi trag" gore počinje snimanje.</div>';
     return;
   }
+  // Dnevni zbir: šumar na kraju dana pita "koliko sam danas prešao", a ne
+  // dužinu svakog traga posebno.
+  const danas = _tragRegistry.filter(t => _tvPeriod(_tvTragMs(t)) === 'Danas');
+  const danasHtml = danas.length ? `<div class="trn-trag-danas"><b>Danas</b> ${danas.length} ${danas.length % 10 === 1 && danas.length % 100 !== 11 ? 'trag' : danas.length % 10 >= 2 && danas.length % 10 <= 4 && (danas.length % 100 < 12 || danas.length % 100 > 14) ? 'traga' : 'tragova'} · ${_tragFmtLen(danas.reduce((s, t) => s + _tragCalcLen(t.pts), 0))}</div>` : '';
   const redovi = (typeof TerenWorkspace!=='undefined'?TerenWorkspace.rows(_tragRegistry,'trag',_tragIme):_tragRegistry.slice(0,20)).map(t => {
     const len = _tragFmtLen(_tragCalcLen(t.pts));
+    const traj = String(_tragVrijeme(t)).split(' · ')[1] || '';
     return `<div class="trn-row">
       <div style="width:4px;align-self:stretch;border-radius:2px;background:${_escHtml(t.color || '#f97316')};flex-shrink:0;"></div>
       <div class="trn-row-main" onclick="_tragRegZoom('${t.id}')">
         <div class="trn-row-t">${_escHtml(_tragIme(t))}</div>
-        <div class="trn-row-s">${_trnKad(t.date)} · ${len} · ${t.pts.length} tač.</div>
+        <div class="trn-row-s">${_trnKad(t.date)} · ${len} · ${traj || t.pts.length + ' tač.'}${t.odjel ? ' · Odj. ' + _escHtml(t.odjel) : ''}</div>
       </div>
       <button class="trn-row-btn green" onclick="_tragKmlMeni('${t.id}')" title="Izvezi kao KML / podijeli"><svg class="ic"><use href="#ic-posalji"/></svg> KML</button>
       <button class="trn-row-btn red" onclick="terenObrisiTrag('${t.id}')" title="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     </div>`;
   }).join('');
-  list.innerHTML = redovi + `<button class="trn-link" onclick="switchTab('tragovi')">Svi tragovi (${_tragRegistry.length}) →</button>`;
+  list.innerHTML = danasHtml + redovi + `<button class="trn-link" onclick="switchTab('tragovi')">Svi tragovi (${_tragRegistry.length}) →</button>`;
 }
 
 async function terenObrisiTrag(id) {
@@ -21052,18 +21057,43 @@ function _tragoviRender() {
   if (_tragoviGrpBy === 'none') {
     groups = [{ label: null, items: izvor }];
   } else {
-    const map2 = new Map();
-    izvor.forEach(t => {
-      const k = _tragoviGrpBy === 'gj' ? (t.gj ? 'GJ ' + t.gj : 'Bez GJ') : fmtDateShort(t.date);
+    const map2 = new Map(), now = new Date();
+    // Po datumu: najnovije prvo, bez obzira kojim redom su tragovi sačuvani.
+    const red = _tragoviGrpBy === 'date' ? [...izvor].sort((a, b) => _tvTragMs(b) - _tvTragMs(a)) : izvor;
+    red.forEach(t => {
+      const k = _tragoviGrpBy === 'gj' ? (t.gj ? 'GJ ' + t.gj : 'Bez GJ') : _tvPeriod(_tvTragMs(t), now);
       if (!map2.has(k)) map2.set(k, []);
       map2.get(k).push(t);
     });
     groups = [...map2.entries()].map(([k, v]) => ({ label: k, items: v }));
   }
+  // Zaglavlje grupe nosi i ukupnu dužinu — "koliko sam prešao ove sedmice"
+  // bez sabiranja kartica napamet.
   el.innerHTML = groups.map(g => `
-    ${g.label ? `<div class="tv-grp"><span>${_escHtml(g.label)}</span><span class="tv-grp-n">${g.items.length}</span></div>` : ''}
+    ${g.label ? `<div class="tv-grp"><span>${_escHtml(g.label)}</span><span class="tv-grp-n">${g.items.length} · ${_tragFmtLen(g.items.reduce((s, t) => s + _tragCalcLen(t.pts), 0))}</span></div>` : ''}
     ${g.items.map(t => _tragoviRowHtml(t)).join('')}
   `).join('');
+}
+
+// Grupisanje po PERIODU (v2.9.5): ranije je svaki dan bio svoja grupa, pa je
+// sedmica sa po jednim tragom dnevno davala 7 zaglavlja za 7 kartica — duplo
+// duža lista. Sad: Danas / Jučer / Ova sedmica (zadnjih 7 dana) / mjesec.
+var _TV_MJESECI = ['Januar','Februar','Mart','April','Maj','Juni','Juli','August','Septembar','Oktobar','Novembar','Decembar'];
+function _tvTragMs(t) {
+  const p0 = t && t.pts && t.pts[0] && t.pts[0][3];
+  if (isFinite(p0) && p0 > 0) return +p0;
+  const d = Date.parse(t && t.date);
+  return isFinite(d) ? d : 0;
+}
+function _tvPeriod(ms, now) {
+  if (!ms) return 'Bez datuma';
+  const d = new Date(ms), n = now || new Date();
+  const dan = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const razlika = Math.round((dan(n) - dan(d)) / 86400000);
+  if (razlika <= 0) return 'Danas';
+  if (razlika === 1) return 'Jučer';
+  if (razlika < 7) return 'Ova sedmica';
+  return _TV_MJESECI[d.getMonth()] + ' ' + d.getFullYear();
 }
 
 // ─── Tragovi — kartice (v1.7.7) ─────────────────────────────────────────────
@@ -21104,8 +21134,9 @@ function _tragoviRowHtml(t) {
   const vis = typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false;
   const otvoren = _tvOtvoren === t.id;
   const bezImena = !String(t.name || '').trim();
-  // Datum se ne ponavlja na kartici kad je već naslov grupe iznad nje.
-  const meta = [_tragoviGrpBy === 'date' ? '' : dt, _tragVrijeme(t), t.pts.length + ' tač.', t.odjel ? 'Odj. ' + _escHtml(t.odjel) : '', t.gj && _tragoviGrpBy !== 'gj' ? 'GJ ' + _escHtml(t.gj) : ''].filter(Boolean).join(' · ');
+  // Datum se izostavlja samo kad ga zaglavlje grupe već jednoznačno kaže (Danas/Jučer).
+  const per = _tragoviGrpBy === 'date' ? _tvPeriod(_tvTragMs(t)) : '';
+  const meta = [per === 'Danas' || per === 'Jučer' ? '' : dt, _tragVrijeme(t), t.pts.length + ' tač.', t.odjel ? 'Odj. ' + _escHtml(t.odjel) : '', t.gj && _tragoviGrpBy !== 'gj' ? 'GJ ' + _escHtml(t.gj) : ''].filter(Boolean).join(' · ');
   return `<div class="tv-card tv-trg${vis ? '' : ' skriven'}${otvoren ? ' otvoren' : ''}" style="--tv-c:${_tvBoja(t.color)};">
     <div class="tv-card-top" onclick="_tvOdaberi('${t.id}')" title="${otvoren ? 'Prikaži na karti' : 'Otvori radnje'}">
       <span class="tv-bar"></span>

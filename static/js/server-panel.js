@@ -4,6 +4,8 @@
   let scope = '', active = '', search = '', author = '', page = 0;
   const size = 60, byId = id => document.getElementById(id), esc = s => _escHtml(String(s ?? ''));
   const currentUid = () => sbUser?.id || '';
+  // Na ekranu zadnjih 30 razmjena; čuva se više da broj ponavljanja ("poslano N×") ostane tačan.
+  const TRANSFER_SHOW_MAX = 30, TRANSFER_STORE_MAX = 200;
   // Sklonidba: 1 stavka, 2–4 stavke, 5+ stavki (11–14 uvijek "stavki").
   const broj = (n, jed, dva, mn) => { const d = n % 10, h = n % 100; return n + ' ' + (d === 1 && h !== 11 ? jed : d >= 2 && d <= 4 && (h < 12 || h > 14) ? dva : mn); };
   const stavke = n => broj(n, 'stavka', 'stavke', 'stavki'), tacke = n => broj(n, 'GPS tačka', 'GPS tačke', 'GPS tačaka');
@@ -117,7 +119,7 @@
   function saveTransfers(direction,rows,replaceProject) {
     const old=transfers(direction).filter(r=>!replaceProject||r.projectKey!==replaceProject);
     // Samo potvrde i mali opis, bez geometrije, fotografija ili GPS dnevnika.
-    try {localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify([...rows,...old].sort((a,b)=>b.ts-a.ts).slice(0,500)));}
+    try {localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify([...rows,...old].sort((a,b)=>b.ts-a.ts).slice(0,TRANSFER_STORE_MAX)));}
     catch(e){console.warn('Pregled razmjene nije sačuvan',e);}
   }
   function dozReceived(id,markings,tracks,members,owner) {
@@ -147,8 +149,12 @@
       if(same){same.times=(same.times||1)+1;if((r.ts||0)>(same.ts||0))Object.assign(same,{...r,index,times:same.times});}
       else g.rows.push({...r,index,times:1});
     });
-    for(const g of groups.values())g.rows.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    return [...groups.values()].sort((a,b)=>b.ts-a.ts);
+    // Prikazuje se samo zadnjih TRANSFER_SHOW_MAX razmjena (poslije spajanja
+    // ponavljanja) — starije potvrde nikome na terenu ne trebaju, a duga lista
+    // samo usporava crtanje panela i skrol.
+    const keep=new Set([...groups.values()].flatMap(g=>g.rows).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,TRANSFER_SHOW_MAX));
+    for(const g of groups.values()){g.rows=g.rows.filter(r=>keep.has(r)).sort((a,b)=>(b.ts||0)-(a.ts||0));g.ts=g.rows.reduce((m,r)=>Math.max(m,r.ts||0),0);}
+    return [...groups.values()].filter(g=>g.rows.length).sort((a,b)=>b.ts-a.ts);
   }
   function sameItem(a,b){return a.projectKey===b.projectKey&&a.uid===b.uid&&a.item===b.item&&JSON.stringify(target(a)||null)===JSON.stringify(target(b)||null);}
   function identity(r){return JSON.stringify([r.projectKey,r.uid,r.ts,r.item,r.target||null]);}
@@ -165,7 +171,7 @@
         const who=(direction==='received'?'Od: ':'Poslao: ')+authors.slice(0,3).join(', ')+(authors.length>3?' · još '+(authors.length-3):'');
         return '<details class="sp-transfer-group" data-direction="'+direction+'" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><div class="sp-group-title"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+esc(g.title)+'</b><em>'+stavke(g.rows.length)+'</em></div><span class="sp-group-people">'+esc(who)+'</span><span>'+ (g.ts?'Posljednja razmjena: '+esc(timestamp(g.ts)):'Lokalna kopija · prijem nije evidentiran')+'</span></summary>'+g.rows.map(r=>
           '<article class="sp-transfer-item" data-direction="'+direction+'"><span class="sp-direction-badge">'+(direction==='received'?'↓ Primljeno':'↑ Potvrđeno slanje')+'</span><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><dl class="sp-item-context"><div><dt>Projekat</dt><dd>'+esc(r.project)+'</dd></div><div><dt>'+(direction==='received'?'Poslao':'Šalje')+'</dt><dd>'+esc(r.author)+(r.uid===currentUid()?' · ti':'')+'</dd></div></dl><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+(r.times>1?' · '+(direction==='received'?'primljeno ':'poslano ')+r.times+'×':'')+'</small></article>').join('')+'</details>';
-      }).join(''):'<div class="sp-empty"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+ (direction==='received'?'Još nema primljenih stavki':'Još nema potvrđenog slanja')+'</b><span>'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Nakon uspješnog slanja ovdje će biti potvrde za posljednja tri projekta.')+'</span></div>';
+      }).join('')+(groups.reduce((n,g)=>n+g.rows.length,0)>=TRANSFER_SHOW_MAX?'<p class="sp-note">Prikazano zadnjih '+TRANSFER_SHOW_MAX+' razmjena.</p>':''):'<div class="sp-empty"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+ (direction==='received'?'Još nema primljenih stavki':'Još nema potvrđenog slanja')+'</b><span>'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Nakon uspješnog slanja ovdje će biti potvrde za posljednja tri projekta.')+'</span></div>';
 
     }
   }

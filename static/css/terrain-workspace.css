@@ -41,3 +41,7 @@ html[data-field-theme=day] #teren-panel .trn-explorer {background:linear-gradien
 html[data-field-theme=day] .trn-explorer :is(p,#trn-explorer-state) {color:#385949;}
 html[data-field-theme=day] .trn-explorer-switch {background:#ffffffb0;border-color:#9bbfae;}
 html[data-field-theme=day] .trn-explorer-art {color:#307a60;}
+/* v2.9.5: zaglavlje se skroluje sa sadržajem — ljepljivo je zauzimalo trećinu ekrana; GPS/veza su i u kartici pozicije. */
+#teren-panel .trn-head{position:static}
+#teren-panel .trn-trag-danas{display:flex;gap:8px;align-items:baseline;padding:8px 12px;margin-bottom:8px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg,#0b1220);color:var(--field-muted,#94a3b8);font-size:13px}
+#teren-panel .trn-trag-danas b{color:var(--field-ink,#e2e8f0)}

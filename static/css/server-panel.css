@@ -72,3 +72,11 @@ html #vlaka-popup{max-width:calc(100vw - 16px);max-height:calc(100dvh - 80px);ov
 .sp-send-group li .sp-item-map{min-height:40px;}
 .sp-all-sent>i{display:block!important;font-style:normal;font-size:22px;color:#4ade80;}
 html[data-field-theme=day] .sp-all-sent>i{color:#166534;}
+/* Tragovi: "Prikaz na karti" je sklopiv (v2.9.5) i poravnat sa ostalim karticama panela. */
+#tragovi-panel #tv-visibility{margin:12px 0;padding:0 14px}
+.tv-vis-det>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;cursor:pointer;list-style:none;font-size:14px}
+.tv-vis-det>summary::-webkit-details-marker{display:none}
+.tv-vis-det>summary span{margin-left:auto;color:var(--field-muted,#94a3b8);font-size:12px}
+.tv-vis-det>summary::after{content:'';width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin:-4px 2px 0 0;opacity:.7;transition:transform .15s}
+.tv-vis-det[open]>summary::after{transform:rotate(225deg);margin-top:4px}
+.tv-vis-det[open]{padding-bottom:12px}

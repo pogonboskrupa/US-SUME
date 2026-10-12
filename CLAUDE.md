@@ -2832,6 +2832,16 @@ namjerno, prije nego se jave.
     UČITANE poligone po nazivu i atributima (offline), `105.000000` iz SHP-a
     = 105, rezultat se istakne žutim obrubom i kad je sloj sakriven/"Samo za
     poligon". Novi fajl je u `assets-manifest.json` required i u `sw.js`.
+- **Teren, Tragovi i limit na Serveru (v2.9.5)**: "Prikaz na karti" u
+  Tragovima je SKLOPIV (`<details class="tv-vis-det">`, `tvlake_tv_vis_otvoreno`)
+  samo unutar `#tragovi-panel` — pet redova prekidača je guralo listu ispod
+  ruba; drugdje (`#tv-visibility` van panela) ostaje otvoren. Grupisanje "Po
+  datumu" ide po PERIODU (`_tvPeriod`: Danas/Jučer/Ova sedmica/mjesec, vrijeme
+  iz prve GPS tačke `_tvTragMs`), najnovije prvo, zaglavlje nosi zbir dužine.
+  Teren: zaglavlje nije više ljepljivo (`terrain-workspace.css`), trag nosi
+  trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
+  prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
+  čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
 - **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
   `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
   ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),
@@ -4594,7 +4604,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.4, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.5, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.
