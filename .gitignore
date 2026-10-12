@@ -4,3 +4,7 @@ node_modules/
 package.json
 package-lock.json
 backups/
+
+# Izlazi lokalnih browser testova (CI ih čuva kao artefakte)
+outputs/
+__pycache__/
