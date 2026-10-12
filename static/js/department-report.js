@@ -1,8 +1,8 @@
 /* Izvještaj odjela: nezavisna granica, ručni izbor odsjeka i lokalni DEM rezultat. */
 (function(root){
  'use strict';
- const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
- let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null;
+ const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=2,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
+ let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null,autoTimer=null,autoOnline=null,autoAttempts=0;
  const uid=()=>typeof sbUser!=='undefined'?sbUser?.id:null,key=()=>SKEY+encodeURIComponent(owner||''),valid=()=>owner&&uid()===owner;
  const toast=s=>showToast(s),number=(n,d=1)=>Number.isFinite(n)?n.toLocaleString('bs',{maximumFractionDigits:d}):'—';
  function save(){if(!valid())return false;try{localStorage.setItem(key(),JSON.stringify(state));return true;}catch(e){toast('Izbor nije sačuvan — provjeri memoriju uređaja');return false;}}
@@ -10,7 +10,7 @@
   if(!uid()){toast('Prijavi se za izvještaj odjela');return;}
   if(owner!==uid()){reset();owner=uid();}
   if(loaded!==owner){const current=owner;try{state=JSON.parse(localStorage.getItem(key())||'{}');}catch(e){state={};}
-   const stored=await _kmlcGet(key());if(uid()!==current||owner!==current)return false;if(stored&&state.geometry&&stored.signature===JSON.stringify(state.geometry))result=stored.result;loaded=owner;
+   const stored=await _kmlcGet(key());if(uid()!==current||owner!==current)return false;if(stored?.model===MODEL&&state.geometry&&stored.signature===JSON.stringify(state.geometry))result=stored.result;loaded=owner;
   }
   showLayers();return true;
  }
@@ -18,6 +18,7 @@
   if(!await restore())return;
   if(draft){toast('Završi crtanje granice');return;}
   closeMenuDropdown();closeLayerSheet();closeOznakePanel();map.closePopup();node('department-report').hidden=false;render();showLayers();
+  if(state.geometry&&!result&&!busy)await calculate(true);
  }
  function hide(){node('department-report').hidden=true;}
  function close(){hide();cancelDraw(false);}
@@ -101,7 +102,12 @@
    c.clip('evenodd');c.imageSmoothingEnabled=false;const scale=2**(coords.z-r.z);c.drawImage(image,r.x0*scale-coords.x*256,r.y0*scale-coords.y*256,r.width*scale,r.height*scale);return canvas;
   }});
   terrain=new Layer({pane:'departmentReport',bounds:geometryBounds(geometry),maxNativeZoom:r.z,maxZoom:22,keepBuffer:1,updateWhenIdle:true}).addTo(map);
-  if(state.lines!==false&&state.mode!=='aspect'&&r.edges?.length)edges=L.polyline(r.edges,{pane:'departmentReport',color:'#243646',weight:.8,opacity:.8,interactive:false}).addTo(map);
+  if(state.lines!==false&&state.mode!=='aspect'){
+   if(r.edgeBands?.some(b=>b.paths?.length)){
+    edges=L.featureGroup().addTo(map);
+    for(const band of r.edgeBands)if(band.paths?.length)L.polyline(band.paths,{pane:'departmentReport',color:band.color,weight:1.35,opacity:.95,lineCap:'round',lineJoin:'round',smoothFactor:.35,interactive:false}).addTo(edges);
+   }else if(r.edges?.length)edges=L.polyline(r.edges,{pane:'departmentReport',color:'#243646',weight:.8,opacity:.8,interactive:false}).addTo(map);
+  }
   showProfiles();
   boundary.bringToFront?.();
   showLegend();
@@ -149,10 +155,17 @@
   node('dr-slopes').innerHTML=rows(s.slope);node('dr-aspects').innerHTML=rows(s.aspect);
   node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
  }
- function cancelCalculation(manual=true){++generation;cancelWorker?.();worker=null;busy=false;if(manual)lastError='Izračun je prekinut. Poligon je sačuvan; možeš pokušati ponovo.';render();}
+ function clearAutoRetry(){if(autoTimer){clearTimeout(autoTimer);autoTimer=null;}if(autoOnline){root.removeEventListener?.('online',autoOnline);autoOnline=null;}}
+ function scheduleAutoRetry(delay=1600){
+  clearAutoRetry();if(!valid()||!state.geometry||result)return;
+  const geometry=state.geometry,retry=()=>{clearAutoRetry();if(!valid()||state.geometry!==geometry||result)return;if(busy){scheduleAutoRetry(500);return;}calculate(true);};
+  if(navigator.onLine===false){autoOnline=retry;root.addEventListener?.('online',autoOnline,{once:true});return;}
+  autoTimer=setTimeout(retry,delay);
+ }
+ function cancelCalculation(manual=true){++generation;cancelWorker?.();worker=null;busy=false;if(manual){clearAutoRetry();autoAttempts=0;lastError='Izračun je prekinut. Poligon je sačuvan; možeš pokušati ponovo.';}render();}
  async function setGeometry(geometry,count=0,source=''){
-  if(!valid())return false;cancelCalculation(false);lastError='';
-  const current=owner,persistKey=key(),candidate={...state,geometry,count,source,visible:true,mode:'slope',tab:'overview',legendVisible:true,calculatedAt:null};const old=state;state=candidate;if(!save()){state=old;return false;}result=null;cancelDraw(false);await _kmlcDelete(persistKey);if(uid()!==current||owner!==current)return false;showLayers();await open();if(uid()!==current||owner!==current)return false;await calculate();return true;
+  if(!valid())return false;cancelCalculation(false);clearAutoRetry();autoAttempts=0;lastError='';
+  const current=owner,persistKey=key(),candidate={...state,geometry,count,source,visible:true,mode:'slope',tab:'overview',legendVisible:true,calculatedAt:null};const old=state;state=candidate;if(!save()){state=old;return false;}result=null;cancelDraw(false);await _kmlcDelete(persistKey);if(uid()!==current||owner!==current)return false;showLayers();await open();return uid()===current&&owner===current&&!!result;
  }
  function choose(){if(!valid()||busy)return;if(recOn||_tragOn||_dozGpsOn||activeTool!=='select'){toast('Završi snimanje ili crtanje prije izbora odjela');return;}cancelDraw(false);DoznakaProjectBoundary.startForReport({hide,confirmed:async(g,count,source)=>{if(valid())await setGeometry(g,count,source);},cancel:()=>{if(valid())open();}});}
  function legacy(){const d=ProjectTerrain.dataFor();if(!d?.ring){toast('Aktivni projekat nema sačuvan nacrt');return;}const ring=d.ring.map(p=>[p[1],p[0]]);ring.push(ring[0]);setGeometry({type:'Polygon',coordinates:[ring]},0,'Poligon aktivnog projekta');}
@@ -163,11 +176,11 @@
  function cancelDraw(reopen=true){if(draft){map.off('click',drawClick);if(draft.doubleZoom)map.doubleClickZoom.enable();node('action-bar').style.display=draft.actionDisplay;node('tab-bar').style.display=draft.tabDisplay;map.invalidateSize();}draft=null;if(draftLayer)map.removeLayer(draftLayer);draftLayer=null;node('dr-draw-toolbar').hidden=true;root.GithubLayers?.sync();if(reopen&&valid())open();}
  async function finish(){if(!draft||!valid())return;const r=ProjectTerrain.validateRing(draft.points);if(r.error){toast(r.error);return;}const ring=r.ring.map(p=>[p[1],p[0]]);ring.push(ring[0]);const geometry={type:'Polygon',coordinates:[ring]};await setGeometry(geometry);}
  function view(){if(!valid()||!state.geometry)return;state.visible=true;save();render();hide();switchTab('karta');map.invalidateSize();map.fitBounds(geometryBounds(state.geometry),{padding:[35,35],maxZoom:17});showLayers();}
- async function remove(){if(!valid()||busy||!state.geometry)return;const current=owner,persistKey=key(),g=state.geometry;if(!await _dlgConfirm('Ukloniti granicu i izvještaj? Učitani fajlovi i projekti ostaju sačuvani.',{danger:true}))return;if(uid()!==current||g!==state.geometry)return;const old=state;state={};if(!save()){state=old;return;}result=null;clearLayers();render();await _kmlcDelete(persistKey);}
+ async function remove(){if(!valid()||busy||!state.geometry)return;const current=owner,persistKey=key(),g=state.geometry;if(!await _dlgConfirm('Ukloniti granicu i izvještaj? Učitani fajlovi i projekti ostaju sačuvani.',{danger:true}))return;if(uid()!==current||g!==state.geometry)return;const old=state;state={};if(!save()){state=old;return;}clearAutoRetry();autoAttempts=0;result=null;clearLayers();render();await _kmlcDelete(persistKey);}
  function change(field,value){if(!valid())return;if(field==='name')state.name=String(value).slice(0,120);else if(field==='mode'){if(!['slope','aspect','none'].includes(value))return;state.mode=value;}else if(['lines','profiles','visible','legendVisible','legendMin'].includes(field))state[field]=!!value;else return;if(save()){render();if(field==='legendVisible'||field==='legendMin'){legend?.remove();legend=null;if(state.visible!==false)showLegend();}else showLayers();}}
- async function calculate(){
-  if(busy||!valid()||!state.geometry)return;const current=owner,persistKey=key(),token=++generation,geometry=state.geometry;busy=true;lastError='';render();
-  if(navigator.onLine!==false)_mrezaSila(60000);
+ async function calculate(automatic=false){
+  if(busy||!valid()||!state.geometry)return false;if(!automatic){clearAutoRetry();autoAttempts=0;}else autoAttempts++;const current=owner,persistKey=key(),token=++generation,geometry=state.geometry;busy=true;lastError='';render();
+  _mrezaSila(60000);
   const check=()=>valid()&&owner===current&&token===generation&&state.geometry===geometry;
   try{
    const bounds=geometryBounds(geometry);let z=12,x0,y0,width,height;
@@ -178,12 +191,13 @@
    const tiles=[];let cursor=0,done=0;await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length&&check()){const job=jobs[cursor++],src=await _getTerrariumTile(z,job.x,job.y);if(src){try{tiles.push({...job,elev:_terrariumDecodeTile(src)});}finally{src.close?.();}}done++;if(check())node('dr-status').textContent='DEM '+done+'/'+jobs.length+' pločica';}}));
    if(!check())return;if(!tiles.length)throw Error('Nema sačuvanog DEM-a. Poveži internet pa ponovi izračun.');
    const next=await new Promise((resolve,reject)=>{const w=new Worker('static/js/department-report-worker.js');worker=w;const stop=()=>{clearTimeout(timer);w.terminate();if(worker===w){worker=null;cancelWorker=null;}};const timer=setTimeout(()=>{stop();reject(Error('Obrada traje predugo. Izaberi manje područje.'));},45000);cancelWorker=()=>{stop();reject(Error('Izračun prekinut'));};w.onmessage=e=>{stop();e.data.ok?resolve(e.data.result):reject(Error(e.data.error));};w.onerror=()=>{stop();reject(Error('DEM obrada nije uspjela'));};try{w.postMessage({geometry,z,x0,y0,width,height,tiles},tiles.map(t=>t.elev.buffer));}catch(e){stop();reject(e);}});
-   if(!check())return;result=next;lastError='';state.calculatedAt=Date.now();save();if(!await _kmlcSave(persistKey,{signature:JSON.stringify(geometry),result:next})&&check())toast('Izvještaj prikazan, ali nije sačuvan za ponovno otvaranje');
+   if(!check())return false;result=next;lastError='';clearAutoRetry();autoAttempts=0;state.calculatedAt=Date.now();save();if(!await _kmlcSave(persistKey,{model:MODEL,signature:JSON.stringify(geometry),result:next})&&check())toast('Izvještaj prikazan, ali nije sačuvan za ponovno otvaranje');
    if(check()){render();showLayers();}
-  }catch(e){if(check()){lastError=e.message;toast(e.message);}}
+   return true;
+  }catch(e){if(check()){lastError=navigator.onLine===false?'Nema DEM podataka u memoriji. Kad se internet pojavi, analiza će se sama nastaviti.':e.message;let retrying=false;if(automatic&&!result&&(navigator.onLine===false||autoAttempts<3)){retrying=true;scheduleAutoRetry(1200*Math.max(1,autoAttempts));}if(!retrying)toast(lastError);}return false;}
   finally{if(check()){busy=false;render();}}
  }
- function reset(){++generation;cancelWorker?.();worker=null;busy=false;lastError='';cancelDraw(false);clearLayers();owner=null;loaded=null;state={};result=null;hide();}
+ function reset(){++generation;cancelWorker?.();clearAutoRetry();autoAttempts=0;worker=null;busy=false;lastError='';cancelDraw(false);clearLayers();owner=null;loaded=null;state={};result=null;hide();}
  root.DepartmentReport={open,restore,close,hide,choose,legacy,draw,addPoint,finish,cancelDraw,calculate,cancelCalculation,view,viewMode,viewProfile,renderProfiles,selectTab,tabKey,remove,change,reset,isDrawing:()=>!!draft,undo:()=>{draft?.points.pop();drawRender();},refreshSelection,openAt,snapshot:()=>({state,result,busy})};
  map.on('resize',legendPosition);
  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(draft)cancelDraw();else if(!node('department-report').hidden)close();}});

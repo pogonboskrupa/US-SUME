@@ -4251,3 +4251,35 @@ Lokalno: cijeli JS skup i 5 inline blokova; stvarna puna app + Supabase JS nad k
 
 ### 2026-10-11 — isporuka 2.8.7 potvrđena
 Source5e396eaa32860e54b9d126ddf44165a7a1a05075, tree61803b831d080cb75f5ef0bba7697316a34f0bde. CI38140008957/job114471750184 SUCCESS iz prvog pokušaja. Preuzete/hash-potvrđene UI i Android arhive: novi puni app/Supabase JS test9 scenarija, dnevni audit144 bez nalaza; Android20 bez padova/grešaka/preskoka. Javni APK24.411.772B, SHAf5621e0ea97e627e4db60952ebfcd49dd40d22f3a46919535aeb7c53e5e387b3, debugpaket/code557/2.8.7-debug, isti certifikat i73 identična resursa. Updater vraća2.8.7; Pages3 promijenjena resursa identično izvoru. Dokaz/ograničenja docs/ISPORUKA_2_8_7.md. Fizički Xiaomi nije testiran; produkcijski Supabase nije mijenjan; nova SQL migracija nije potrebna.
+
+
+### 2026-10-12 — 2.8.9: automatski Izvještaj odjela i stabilni prikaz sporijih telefona
+Izvještaj odjela sada odmah pokreće DEM obradu nakon potvrde nacrtanog ili
+izabranog poligona. Ručno dugme ostaje samo kao oporavak poslije konačne greške;
+offline nedostatak DEM-a čeka `online` događaj, a prolazne online greške imaju
+ograničen automatski retry. Keš rezultata nosi model/signaturu geometrije, pa se
+stari pravougaoni rezultat ne vraća. Granice pet razreda nagiba nastaju marching
+squares interpolacijom stvarnih vrijednosti 10/20/30/40/50% i spajaju se u
+kontinuirane putanje obojene bojom višeg razreda.
+
+Za prijavljeno nestajanje dijelova prikaza utvrđena su tri sabirajuća troška:
+`keepBuffer:6` je na mobilnom prikazu mogao držati više od 200 pločica po sloju,
+offline dekodirani canvas keš je držao do 300 dodatnih pločica (oko 75 MiB sirovih
+piksela), a blur/content-visibility su pravili dodatne compositor slojeve. Novi
+`render-health.js` u APK-u čita stvarni Android RAM/low-RAM signal i za uređaje
+sa 4 GB ili manje uključuje stabilni profil: tile buffer 2, overlay buffer 1,
+keš 72, manje paralelnih čitanja, bez zoom animacije/blura i bez rizičnog
+`content-visibility` preskakanja. Jači uređaji koriste umjeren buffer 4 i keš
+160. Android `onTrimMemory`/`onLowMemory` oslobađa samo izvedeni tile keš i šalje
+signal za prune/repaint; originalne karte, projekti i GPS podaci ostaju netaknuti.
+Povratak aplikacije u prvi plan ponovo kompozituje vidljivu kartu i UI.
+
+Lokalno: svih 109 JS testova; puni app na 360×740/dpr3, 4 GB profilu i CPU 6×;
+simuliran memory-pressure čisti 100 izvedenih canvas pločica, razrješava redove i
+ostavlja kartu/trake/panele vidljivim. Terenska simulacija 5,4 km na CPU1×/4×,
+Redmi sintetički benchmark 36 prolaza, audit dijelova 3/4, dnevni audit 144,
+pravi MBTiles/worker/IDB pregled i GPKG 3.000 poligona prošli. Izvještaj je prošao
+ručni/izabrani poligon, Worker, automatski restart, offline retry i obojene
+konture. Lokalni Android build nije završen jer okruženje nema Android SDK;
+CI/APK potvrdu upisati poslije workflowa. Fizički telefon i produkcijski Supabase
+nisu testirani niti mijenjani.

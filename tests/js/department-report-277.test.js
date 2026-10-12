@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),turf=require('../../static/libs/turf.min.js');
-const {calculate,slopeIndex,aspectIndex}=require('../../static/js/department-report-worker.js');
+const {calculate,slopeIndex,aspectIndex,contourSegments,joinSegments,COLORS}=require('../../static/js/department-report-worker.js');
 for(const [p,c]of [[0,0],[9.999,0],[10,1],[19.999,1],[20,2],[30,3],[40,4],[50,5],[180,5],[-1,-1],[NaN,-1]])assert.equal(slopeIndex(p),c);
 for(const [b,c]of [[0,0],[44.9,0],[45,1],[134.9,1],[135,2],[224.9,2],[225,3],[314.9,3],[315,0]])assert.equal(aspectIndex(b,20),c);
 assert.equal(aspectIndex(0,0),-1);
@@ -20,7 +20,11 @@ const flat=calculate(input(0,0),turf);assert.equal(flat.stats.flat,100);assert.e
 const partial=calculate(input(.35,0,true),turf);assert(partial.stats.coverage<100&&partial.stats.coverage>0);assert(partial.stats.slopeCoverage<partial.stats.coverage);assert.equal(partial.stats.slope[0].percent,0,'Nedostajući DEM se ne prikazuje kao ravan teren');
 const pieces=input(.15,0);pieces.geometry={type:'MultiPolygon',coordinates:[[rect(x0,y0,8,8)],[rect(x0+40,y0+24,8,8)]]};const p=calculate(pieces,turf);assert.equal(p.mask[16*width+24],0);assert.equal(p.stats.coverage,100);
 const mixed=input(0,0);for(const tile of mixed.tiles)for(let i=0;i<65536;i++){const gx=tile.x*256+i%256-x0;tile.elev[i]=600+metres*(Math.min(gx,24)*.15+Math.max(0,gx-24)*.45);}
-const m=calculate(mixed,turf);assert(m.edges.length>0);assert(m.stats.slope[1].percent>20&&m.stats.slope[4].percent>20);
+const m=calculate(mixed,turf);assert(m.edgeBands.some(b=>b.paths.length));assert(m.stats.slope[1].percent>20&&m.stats.slope[4].percent>20);
+assert.deepEqual(m.edgeBands.map(b=>b.color),COLORS.slice(1),'Svaka prijelazna linija prati boju višeg razreda');
+assert(m.edgeBands.some(b=>b.paths.length),'Interpolirane granice razreda moraju postojati');
+const diagonal=contourSegments(0,20,30,0,10,0,0)[0];assert(diagonal[0][0]!==diagonal[1][0]&&diagonal[0][1]!==diagonal[1][1],'Marching-squares linija nije pravougaoni rub ćelije');
+const joined=joinSegments([[[0,0],[1,1]],[[2,1],[1,1]]]);assert.equal(joined.length,1);assert.equal(joined[0].length,3,'Susjedni segmenti se spajaju u kontinuiranu liniju');
 const unavailable=input(.2,0);unavailable.tiles.forEach(t=>t.elev.fill(NaN));assert.throws(()=>calculate(unavailable,turf),/nije dostupan/);
 assert.throws(()=>calculate({...input(0,0),width:160001},turf),/Preveliko/);
 

@@ -81,6 +81,7 @@ jobs:
           timeout 120s python tests/browser/doznaka-project-boundary-276.py
           timeout 120s python tests/browser/kml-editor-277.py
           timeout 120s python tests/browser/department-report-277.py
+          timeout 120s python tests/browser/slow-render-289.py
           timeout 120s python tests/browser/navigation-design-278.py
           timeout 120s python tests/browser/style-library-280.py
           timeout 120s python tests/browser/vlaka-style-286.py

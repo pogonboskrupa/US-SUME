@@ -27,6 +27,7 @@
 <script src="static/js/explorer-navigation.js"></script>
 <script src="static/js/access-policy.js"></script>
 <script src="static/js/doznaka-bands.js"></script>
+<script src="static/js/render-health.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded',function(){
   if(!_libErrNames.length)return;
@@ -692,6 +693,16 @@ input:focus { outline:none; border-color:#3b82f6; }
 .vrow { content-visibility:auto; contain-intrinsic-size:auto 64px; }
 .treg-row { content-visibility:auto; contain-intrinsic-size:auto 90px; }
 .doz-odjel-card { content-visibility:auto; contain-intrinsic-size:auto 74px; }
+/* Na WebView uređajima sa 4 GB RAM-a ili manje compositor zna odbaciti dio
+   panela čim se istovremeno spoje content-visibility, blur i veliki tile sloj.
+   Liste su već ograničene na 60 redova, pa lite profil bira pouzdan prikaz. */
+html.render-lite :is(.vrow,.treg-row,.doz-odjel-card,.tv-card) {
+  content-visibility:visible!important; contain-intrinsic-size:none!important;
+}
+html.render-lite * {-webkit-backdrop-filter:none!important;backdrop-filter:none!important;}
+html.render-lite .auth-bg-glow,html.render-lite .auth-logo-box::before {filter:none!important;animation:none!important;}
+html.render-lite .auth-bg-grid {animation:none!important;}
+html.render-lite .leaflet-zoom-animated {will-change:auto;}
 .vcard-stripe { width:4px; flex-shrink:0; }
 .vcard-info { flex:1; padding:7px 10px; min-width:0; }
 /* v1.7.1: ime lijevo (uz ↳ i L/D oznaku), dužina desno. space-between je
@@ -5688,7 +5699,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.8';
+const APP_VER = 'v2.8.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -14867,6 +14878,10 @@ try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
   if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=0 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
+const _renderCfg = window.DendroRender?.state || {
+  tileBuffer:4,overlayBuffer:2,sqlCache:160,mainTileConcurrency:8,
+  workerTileConcurrency:5,animations:true
+};
 const map = L.map('map',{
   maxZoom:22,
   zoomControl:false,
@@ -14877,7 +14892,7 @@ const map = L.map('map',{
   // (potvrđeno Debug PRO-om: 12 ispravno poredanih content-pločica nevidljivih). Bez
   // fade-a pločice se prikažu odmah na punoj vidljivosti.
   fadeAnimation:false,
-  zoomAnimation:true,
+  zoomAnimation:_renderCfg.animations,
   zoomAnimationThreshold:4,
   markerZoomAnimation:false,
   inertia:true,
@@ -15178,10 +15193,10 @@ const _WC_CACHE    = 'tvlake-wcover-v1';
 // napomenu kod makeCachedTileLayer) — bbox GetMap zahtjev umjesto XYZ predloška.
 const CachedWCover = makeCachedTileLayer(_WC_CACHE, L.TileLayer.WMS);
 const TL = {
-  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxNativeZoom:17,maxZoom:22,subdomains:['a','b','c'],keepBuffer:6,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:19,maxZoom:22,keepBuffer:6,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxNativeZoom:19,maxZoom:22,keepBuffer:6,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
-  '📡 Google':  new CachedSat('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxNativeZoom:20,maxZoom:22,subdomains:['0','1','2','3'],keepBuffer:6,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '⛰ Topo':    new CachedTopo('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxNativeZoom:17,maxZoom:22,subdomains:['a','b','c'],keepBuffer:_renderCfg.tileBuffer,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🛰 Satelit': new CachedSat('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:19,maxZoom:22,keepBuffer:_renderCfg.tileBuffer,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '🗺 Karta':   new CachedOsm('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxNativeZoom:19,maxZoom:22,keepBuffer:_renderCfg.tileBuffer,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
+  '📡 Google':  new CachedSat('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxNativeZoom:20,maxZoom:22,subdomains:['0','1','2','3'],keepBuffer:_renderCfg.tileBuffer,updateWhenZooming:false,updateWhenIdle:true,updateInterval:150}),
   // v3.103.0: EOX Sentinel-2 true-color cloudless ZAMIJENJEN ESA WorldCover-om
   // (pokrivenost zemljišta — šuma/nije šuma/voda/naselje, 10m). Korisnik već ima
   // pravu Sentinel-2 satelitsku podlogu (ranije ovdje) i tražio je nešto DRUGAČIJE
@@ -15199,7 +15214,7 @@ const TL = {
   // na terenskom uređaju prije oslanjanja.
   '🌍 Sentinel': new CachedWCover('https://services.terrascope.be/wms/v2', {
     layers: 'WORLDCOVER_2021_MAP', format: 'image/png', transparent: false,
-    version: '1.1.1', maxNativeZoom: 12, maxZoom: 22, keepBuffer: 6,
+    version: '1.1.1', maxNativeZoom: 12, maxZoom: 22, keepBuffer: _renderCfg.tileBuffer,
     updateWhenZooming: false, updateWhenIdle: true, updateInterval: 150
   })
 };
@@ -15458,11 +15473,11 @@ const DemSlopeClass = L.GridLayer.extend({
 });
 
 const _OVL = {
-  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'', keepBuffer:6 }),
-  slope: new DemSlopeClass({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:1.0, attribution:'', keepBuffer:6 }),
-  nv:    new DemNV(   { pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.75, attribution:'', keepBuffer:6 }),
-  ekspo: new DemEkspo({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.80, attribution:'', keepBuffer:6 }),
-  kont:  new DemContour({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.9, attribution:'', keepBuffer:6 }),
+  elev:  new CachedElev('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', { pane:'demOverlay', maxZoom:18, opacity:0.7, attribution:'', keepBuffer:_renderCfg.overlayBuffer }),
+  slope: new DemSlopeClass({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:1.0, attribution:'', keepBuffer:_renderCfg.overlayBuffer }),
+  nv:    new DemNV(   { pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.75, attribution:'', keepBuffer:_renderCfg.overlayBuffer }),
+  ekspo: new DemEkspo({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.80, attribution:'', keepBuffer:_renderCfg.overlayBuffer }),
+  kont:  new DemContour({ pane:'demOverlay', maxNativeZoom:14, maxZoom:22, opacity:0.9, attribution:'', keepBuffer:_renderCfg.overlayBuffer }),
 };
 let _ovlState = { elev: false, slope: false, nv: false, ekspo: false, kont: false };
 try { Object.assign(_ovlState, JSON.parse(localStorage.getItem('tvlake_ovl_state') || '{}')); } catch {}
@@ -32701,6 +32716,7 @@ let _mapInteracting = false;
 let _mainTileActive = 0;
 const _mainTileQueue = [];
 let _mainTileGen = 0;
+let _MAIN_TILE_MAX_INFLIGHT = typeof _renderCfg!=='undefined'?_renderCfg.mainTileConcurrency:8;
 function _mainTileSchedule(fn, gen, pri) {
   return new Promise((resolve, reject) => {
     const run = () => {
@@ -32713,7 +32729,7 @@ function _mainTileSchedule(fn, gen, pri) {
       });
     };
     run._pri = pri; run._odustani = () => resolve(null);
-    if (_mainTileActive < 12) run(); else _mainTileQueue.push(run);
+    if (_mainTileActive < _MAIN_TILE_MAX_INFLIGHT) run(); else _mainTileQueue.push(run);
   });
 }
 function _mainTileFlush() {
@@ -32730,7 +32746,7 @@ function _mainTileFlush() {
 // cache, korisno za placeholder). Konkurentnost sprječava zagušenje workera.
 let _wTileActive = 0;
 const _wTileStack = [];                 // red čekanja — bira se po _tileUzmiSljedeci
-const _W_TILE_MAX_INFLIGHT = 6;
+let _W_TILE_MAX_INFLIGHT = typeof _renderCfg!=='undefined'?_renderCfg.workerTileConcurrency:5;
 
 // ── Pločice offline karte dok se karta vuče (v1.8.9) ─────────────────────────
 // Terenska prijava: "dok skrolam nema tileova na perifernim mjestima". Izmjereno
@@ -32749,7 +32765,7 @@ const _sqlGridObruc = {
     return L.bounds(b.min.subtract(p), b.max.add(p));
   }
 };
-const _SQL_GRID_OPC = { tileSize:256, opacity:1, maxZoom:22, keepBuffer:6,
+const _SQL_GRID_OPC = { tileSize:256, opacity:1, maxZoom:22, keepBuffer:(typeof _renderCfg!=='undefined'?_renderCfg.tileBuffer:4),
   updateWhenZooming:false, updateWhenIdle:false, updateInterval:150 };
 
 // Obruč znači više zahtjeva odjednom, pa redoslijed postaje bitan: bira se
@@ -33136,7 +33152,7 @@ function _sqlEnsureBaseLayer(brojSacuvanih) {
 // ── Worker tile layer ─────────────────────────────────────────────────────────
 // Detektuj MIME iz magic bytes — Android WebView traži ispravan tip na blobu
 const _sqlTileBmpCache = new Map();
-const _SQL_TILE_BMP_MAX = 300;
+let _SQL_TILE_BMP_MAX = typeof _renderCfg!=='undefined'?_renderCfg.sqlCache:160;
 // D1-16: upiši bitmapu/canvas u keš. NE zatvaramo prethodnu eksplicitno — pri zoom
 // in/out ima puno createTile churn-a pa drugi poziv može upravo CRTATI staru bitmapu
 // iz keša; zatvaranje usred crtanja daje praznu pločicu (use-after-close). GC oslobađa.
@@ -33158,6 +33174,47 @@ function _sqlTileBmpEvict() {
     _sqlTileBmpCache.delete(k);
   }
 }
+
+// Android javlja pritisak na memoriju prije nego WebView/GPU počne odbacivati
+// teksture. Oslobodi samo izvedene tile kopije (izvorna karta i podaci ostaju),
+// smanji buduće redove i ponovo nacrtaj vidljivi kadar/panele.
+let _renderRecoverPending = false;
+function _renderRecover(releaseMemory=false) {
+  if (_renderRecoverPending) return;
+  _renderRecoverPending = true;
+  requestAnimationFrame(() => {
+    _renderRecoverPending = false;
+    const cfg=typeof _renderCfg!=='undefined'?_renderCfg:{tileBuffer:4,sqlCache:160,mainTileConcurrency:8,workerTileConcurrency:5};
+    if (releaseMemory) {
+      _SQL_TILE_BMP_MAX = Math.min(_SQL_TILE_BMP_MAX, cfg.sqlCache);
+      _MAIN_TILE_MAX_INFLIGHT = Math.min(_MAIN_TILE_MAX_INFLIGHT, cfg.mainTileConcurrency);
+      _W_TILE_MAX_INFLIGHT = Math.min(_W_TILE_MAX_INFLIGHT, cfg.workerTileConcurrency);
+      for (const [,src] of _sqlTileBmpCache) { try { src?.close?.(); } catch(e) {} }
+      _sqlTileBmpCache.clear();
+      for (const queue of [_mainTileQueue,_wTileStack]) {
+        while (queue.length) { try { queue.shift()?._odustani?.(); } catch(e) {} }
+      }
+    }
+    try {
+      map._stop?.();
+      map.eachLayer(layer => {
+        if (!(layer instanceof L.GridLayer)) return;
+        const current=Number(layer.options.keepBuffer);
+        layer.options.keepBuffer = Math.min(Number.isFinite(current)?current:cfg.tileBuffer,cfg.tileBuffer);
+        layer._update?.(map.getCenter());
+        layer._pruneTiles?.();
+      });
+      map.invalidateSize({pan:false,debounceMoveend:true});
+      _sqlNudgeVisibleTiles?.();
+    } catch(e) {}
+    // Pored karte prisili i fixed/flex UI na novi compositor kadar. Ovo je
+    // namjerno opacity nudge, bez promjene rasporeda ili stanja formulara.
+    const wrapper=document.getElementById('wrapper');
+    if(wrapper){wrapper.style.opacity='0.999';requestAnimationFrame(()=>{wrapper.style.opacity='';});}
+  });
+}
+window.DendroRender?.onPressure(() => _renderRecover(true));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(()=>_renderRecover(false),60);});
 
 function _tileMime(data) {
   const b = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -40709,7 +40766,7 @@ if (typeof AndroidDownload !== 'undefined') {
     </section>
     <section id="dr-panel-slope" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-slope" tabindex="0" hidden>
       <h3>Nagib terena</h3><div class="dr-metrics dr-metrics-two"><div><small>Prosječan nagib</small><b id="dr-slope-mean"></b></div><div><small>Najveći nagib</small><b id="dr-slope-max"></b></div></div>
-      <p>Udio i površina po razredima nagiba, izraženim u procentima.</p><div id="dr-slopes"></div>
+      <p>Udio i površina po razredima nagiba, izraženim u procentima. Granice prate stvarni prijelaz boja kroz teren, bez pravougaonih DEM ćelija.</p><div id="dr-slopes"></div>
       <section class="dr-profiles" aria-labelledby="dr-profile-title"><h3 id="dr-profile-title">Profili niz padinu</h3><p>Jedna kontrolna linija na približno 3 ha, raspoređena kroz cijeli odjel. Nagib (%) = visinska razlika ÷ vodoravna dužina × 100.</p><label><input type="checkbox" id="dr-profile-toggle" checked onchange="DepartmentReport.change('profiles',this.checked)">Prikaži linije i nagib na karti</label><p id="dr-profile-info" role="status"></p><details id="dr-profile-list" ontoggle="DepartmentReport.renderProfiles()" hidden><summary>Pregled profila · <span id="dr-profile-count">0</span></summary><div id="dr-profile-rows"></div></details></section>
       <button type="button" id="dr-slope-map" class="dr-map-action" onclick="DepartmentReport.viewMode('slope')">Prikaži nagib na karti ↗</button>
     </section>
@@ -40721,7 +40778,7 @@ if (typeof AndroidDownload !== 'undefined') {
   </section>
   <details id="dr-map-settings" class="dr-map-options"><summary>Prikaz na karti <span id="dr-map-summary"></span></summary>
     <label>Obojeni prikaz<select id="dr-mode" onchange="DepartmentReport.change('mode',this.value)"><option value="slope">Razredi nagiba</option><option value="aspect">Ekspozicija</option><option value="none">Samo granica</option></select></label>
-    <label id="dr-lines-option"><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Linije između razreda nagiba</label>
+    <label id="dr-lines-option"><input type="checkbox" id="dr-lines" checked onchange="DepartmentReport.change('lines',this.checked)">Obojene linije koje prate razrede nagiba</label>
     <label><input type="checkbox" id="dr-visible" checked onchange="DepartmentReport.change('visible',this.checked)">Prikaži izvještaj na karti</label>
     <label><input type="checkbox" id="dr-legend-visible" checked onchange="DepartmentReport.change('legendVisible',this.checked)">Prikaži legendu</label><p>Legendu pomjeri povlačenjem naziva; − je smanji, × zatvori.</p>
   </details>
@@ -41048,7 +41105,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <li data-n="5.">Otvori novi odjel iz liste. Projekat se automatski šalje na server; nakon potvrde možeš dodati kolege uz internet.</li>
 </ol><div class="help-row"><div class="help-txt"><b>Nema učitanih granica?</b><span>Dodirni <b>Preuzmi Granice odjela</b>. U katalogu pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz granice. Nakon uvoza vraćaš se na novi projekat. Jednom preuzeti sloj možeš koristiti bez interneta. Možeš koristiti i vlastiti KML/SHP ili GeoJSON.</span></div></div>
 <div class="help-diagram"><b>Provjeri odjel na karti</b><p>Približi kartu svom odjelu i ručno označi njegove odsjeke. GJ i broj odjela upisuješ sam, bez preuzimanja atributa iz fajla. Lista prvo nudi samo poligone u trenutnom prikazu karte.</p></div>
-<div class="help-row"><div class="help-txt"><b>Samo za poligon</b><span>U <b>Podloge i slojevi → Granice</b> uključi <b>Samo za poligon</b>. Preuzete granice su tako uključene pri svakom novom ulasku u aplikaciju. Vide se dok biraš ili crtaš odjel za Doznaku ili Izvještaj odjela. Tokom rada možeš isključiti ovu opciju za stalni prikaz; pri ponovnom ulasku opet je uključena. Za pojedinačni fajl ovu opciju mijenjaš u Uredi stil.</span></div></div><div class="help-row"><div class="help-txt"><b>Izvještaj i legenda na karti</b><span>Dodirni poligon izvještaja za pregled. U <b>Meni → Izvještaj odjela</b> podtab <b>Pregled</b> daje površinu i visine, <b>Nagib</b> šest razreda u procentima, a <b>Ekspozicija</b> četiri strane svijeta. Dugme u podtabu prikazuje odgovarajuće boje na karti. U <b>Nagib → Profili niz padinu</b> uključi kontrolne linije, približno jednu na svaka 3 ha. Dodirni liniju ili je izaberi u <b>Pregled profila</b>: vidiš gornju i donju visinu, njihovu razliku, vodoravnu dužinu i nagib u %. Linije prate padinu i ostaju unutar odjela. To je prosječan nagib duž linije iz DEM-a, a obojene površine prikazuju lokalne razrede nagiba. Za ranije sačuvani izvještaj jednom ponovi <b>Izračunaj teren</b> da dobiješ profile. U <b>Prikaz na karti</b> mijenjaj vidljivost, linije i legendu. Zadnji podtab se pamti. Pomjeri legendu povlačenjem naziva; − je minimizira, × je gasi. Ponovo je uključi kroz <b>Prikaz na karti → Prikaži legendu</b>. Položaj i izbori se pamte. Brisanje izvještaja ne briše učitane granice ni projekte.</span></div></div><div class="help-row"><div class="help-txt"><b>Poligon projekta vlaka i granica doznake</b><span><b>Meni → Izvještaj odjela</b> koristi nacrtanu granicu ili ručno izabrane odsjeke iz Granica. Izračunaj nagib u šest razreda (%), četiri glavne ekspozicije, raspon i prosjek visina. <b>Na kartu</b> prikazuje boje i linije razreda. Izračunati izvještaj se pamti za offline pregled. Granicu za GPS pojaseve kreiraš ili biraš zasebno u Doznaci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Samo za poligon</b><span>U <b>Podloge i slojevi → Granice</b> uključi <b>Samo za poligon</b>. Preuzete granice se tada vide samo dok biraš odjel za Doznaku ili Izvještaj odjela.</span></div></div><div class="help-row"><div class="help-txt"><b>Izvještaj odjela</b><span>Izaberi <b>Nacrtaj poligon</b> ili <b>Izaberi poligon</b>. Čim potvrdiš granicu, aplikacija automatski računa površinu, visine, šest razreda nagiba, četiri ekspozicije i profile niz padinu. Nije potreban dodatni klik. Ako DEM nije u memoriji i nema interneta, analiza se sama nastavlja kad se veza vrati.</span></div></div><div class="help-row"><div class="help-txt"><b>Prikaz i legenda</b><span>Podtabovi <b>Pregled</b>, <b>Nagib</b> i <b>Ekspozicija</b> odvajaju rezultate. Obojene linije prate interpolirane prijelaze razreda nagiba, bez pravougaonih rubova DEM ćelija. Profili P1, P2… ostaju unutar odjela i prikazuju visinsku razliku, vodoravnu dužinu i nagib. Legendu možeš pomjeriti, minimizirati ili ugasiti; izbori i rezultat pamte se za offline pregled.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pomoć pri granici s topografske podloge · online</button><div class="help-sec-body">
 <ol class="help-steps">

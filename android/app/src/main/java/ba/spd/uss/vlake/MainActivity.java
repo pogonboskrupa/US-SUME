@@ -3,6 +3,7 @@ package ba.spd.uss.vlake;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.ContentValues;
@@ -880,8 +881,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String status() {
             try {
                 PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
+                if (am != null) am.getMemoryInfo(memory);
+                double gib = 1024d * 1024d * 1024d;
                 return new org.json.JSONObject().put("manufacturer", Build.MANUFACTURER)
                         .put("batteryExempt", pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()))
+                        .put("memoryGb", memory.totalMem > 0 ? Math.round(memory.totalMem / gib * 10d) / 10d : 0)
+                        .put("availableMemoryGb", memory.availMem > 0 ? Math.round(memory.availMem / gib * 10d) / 10d : 0)
+                        .put("lowRam", am != null && am.isLowRamDevice())
                         .toString();
             } catch (Exception ignored) { return "{}"; }
         }
@@ -1277,6 +1285,36 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         webView.saveState(outState);
+    }
+
+    private void notifyWebViewMemoryPressure(int level) {
+        final WebView current = webView;
+        if (current == null) return;
+        current.post(() -> {
+            try {
+                current.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('dendro-memory-pressure',{detail:{level:"
+                                + level + "}}))", null);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        // UI_HIDDEN znači samo da je korisnik otišao u drugu aplikaciju; tada ne
+        // prekidamo tile red jer GPS snimanje može biti aktivno. RUNNING_LOW/
+        // CRITICAL i pozadinski nivoi stvarnog pritiska oslobađaju izvedene tileove.
+        if (level != android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                && level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            notifyWebViewMemoryPressure(level);
+        }
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        notifyWebViewMemoryPressure(100);
     }
 
     @Override

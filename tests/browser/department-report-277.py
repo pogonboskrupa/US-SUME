@@ -44,18 +44,19 @@ async def main():
   assert await page.evaluate('kmlLs[0].onlyPolygon&&kmlLs[0].vis&&!map.hasLayer(kmlLs[0].grp)')
   assert await page.evaluate("JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))['GRANICE.kml'].onlyPolygon")
   await page.locator('#menu-btn').click();await page.locator('#menu-department-report').click();await page.locator('#department-report').wait_for(state='visible')
+  await page.evaluate('_mrezaProbaj=()=>true;_netDozvoliZahtjev=()=>true;window.framesWhileReport=0;window.frameReport=true;requestAnimationFrame(function frame(){if(frameReport){framesWhileReport++;requestAnimationFrame(frame)}})')
   await page.get_by_role('button',name='Izaberi poligon',exact=True).click()
   assert await page.evaluate('map.hasLayer(kmlLs[0].grp)')
   assert not await page.locator('#department-report').is_visible()
   await page.evaluate("map.fire('click',{latlng:L.latLng(44.902,16.002)});map.fire('click',{latlng:L.latLng(44.902,16.006)});DoznakaProjectBoundary.openPicker()")
   assert await page.evaluate('_dozKmlSelLayers.length')==2
   await page.locator('#doz-picker-confirm').click();await page.wait_for_function('DepartmentReport.snapshot().state.count===2')
-  await page.locator('#department-report').wait_for(state='visible');await page.wait_for_function('!DepartmentReport.snapshot().busy')
-  assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='error','Potvrda granice mora automatski pokušati DEM analizu'
-  assert await page.locator('#dr-calculate').is_visible() and await page.locator('#dr-calculate').inner_text()=='Pokušaj ponovo'
+  await page.locator('#department-report').wait_for(state='visible');await page.wait_for_function('!DepartmentReport.snapshot().busy&&!!DepartmentReport.snapshot().result')
+  assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='done','Potvrda izabranog poligona mora automatski završiti DEM analizu'
+  assert not await page.locator('#dr-calculate').is_visible(),'Uspješan automatski izračun ne smije tražiti dodatni klik'
   assert await page.evaluate('!map.hasLayer(kmlLs[0].grp)')
   assert await page.evaluate("_dozCreateBoundary===null&&_dozCreateGj==='Doznaka nije mijenjana'&&_dozCreateOdjel==='987'")
-  await page.locator('#dr-name').fill('Odjel 105 · ručni izbor');await page.locator('#dr-name').dispatch_event('change')
+  await page.locator('#dr-selection-editor>summary').click();await page.locator('#dr-name').fill('Odjel 105 · ručni izbor');await page.locator('#dr-name').dispatch_event('change')
   old=await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')
   await page.get_by_role('button',name='Izaberi poligon',exact=True).click();await page.evaluate('DoznakaProjectBoundary.cancel()')
   assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
@@ -72,9 +73,13 @@ async def main():
   await page.locator('#department-report').wait_for(state='visible')
   assert await page.evaluate('!map.hasLayer(kmlLs[0].grp)')
   assert await page.locator('#action-bar').is_visible() and await page.locator('#tab-bar').is_visible()
-  # Pravi PNG dekoder i Worker, bez blokiranja UI; svi DEM fetch upisi su izolovani.
-  await page.evaluate('_mrezaProbaj=()=>true;_netDozvoliZahtjev=()=>true;window.framesWhileReport=0;window.frameReport=true;requestAnimationFrame(function frame(){if(frameReport){framesWhileReport++;requestAnimationFrame(frame)}})')
-  await page.locator('#dr-calculate').click();await page.wait_for_function('!DepartmentReport.snapshot().busy');assert await page.evaluate('!!DepartmentReport.snapshot().result'),{'status':await page.locator('#dr-status').inner_text(),'errors':errors}
+  # I uspješno ručno crtanje odmah pokreće pravi PNG dekoder i Worker, bez dodatnog klika.
+  before_manual=await page.evaluate('DepartmentReport.snapshot().state.calculatedAt')
+  await page.get_by_role('button',name='Nacrtaj poligon',exact=True).click()
+  await page.evaluate("()=>{[[44.9,16],[44.9,16.008],[44.904,16.008],[44.904,16]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)))}")
+  await page.get_by_role('button',name='Sačuvaj granicu',exact=True).click()
+  await page.wait_for_function('(old)=>DepartmentReport.snapshot().state.calculatedAt!==old&&!DepartmentReport.snapshot().busy&&!!DepartmentReport.snapshot().result',arg=before_manual)
+  assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='done' and not await page.locator('#dr-calculate').is_visible()
   stats=await page.evaluate('frameReport=false;DepartmentReport.snapshot().result.stats')
   assert await page.evaluate('framesWhileReport')>2
   assert stats['coverage']==100 and stats['slopeCoverage']==100,stats
@@ -82,7 +87,8 @@ async def main():
   assert stats['aspect'][3]['percent']>99 and len(stats['aspect'])==4,stats
   assert stats['min']<stats['mean']<stats['max']
   assert await page.locator('#dr-view').is_enabled() and await page.locator('#dr-remove').is_enabled()
-  assert await page.evaluate('DepartmentReport.snapshot().result.edges.length')>0
+  assert await page.evaluate('DepartmentReport.snapshot().result.edgeBands.some(b=>b.paths.length)')
+  assert await page.evaluate("DepartmentReport.snapshot().result.edgeBands.some(b=>b.paths.length)&&DepartmentReport.snapshot().result.edgeBands.every((b,i)=>b.color===['#789a39','#c2a036','#cf7532','#b94c4f','#78456e'][i])")
   assert await page.evaluate("Number(map.getPane('departmentReport').style.zIndex)>Number(getComputedStyle(map.getPane('overlayPane')).zIndex)&&map.getPane('departmentReport').style.pointerEvents==='none'")
   assert '%' in await page.locator('#dr-terrain-summary').inner_text() and '°' not in await page.locator('#dr-result').inner_text()
   profiles=await page.evaluate('DepartmentReport.snapshot().result.slopeProfiles')
@@ -136,6 +142,7 @@ async def main():
   await page.evaluate('DepartmentReport.open()')
   await page.set_viewport_size({'width':390,'height':800});await page.locator('#dr-view').click();await page.wait_for_timeout(300)
   assert await page.evaluate("Object.keys(map._layers).map(i=>map._layers[i]).some(l=>l.options?.pane==='departmentReport'&&l._tiles&&Object.values(l._tiles).some(t=>{const data=t.el.getContext('2d').getImageData(0,0,256,256).data;return data.some((v,i)=>i%4===3&&v>0)}))")
+  assert await page.evaluate("()=>{const expected=new Set(['#789a39','#c2a036','#cf7532','#b94c4f','#78456e']),lines=Object.values(map._layers).filter(l=>l.options?.pane==='departmentReport'&&l.getLatLngs);return lines.length>0&&lines.every(l=>expected.has(l.options.color))&&!lines.some(l=>l.options.color==='#243646')}")
   assert await page.locator('#dr-map-legend').is_visible()
   assert await page.locator('.dr-legend-body>div').count()==6
   # Dodir profila otvara visine, vodoravnu dužinu i provjerljivu formulu.
@@ -217,11 +224,11 @@ async def main():
   assert await page.evaluate('DepartmentReport.snapshot().result.slopeProfiles')==profiles
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean']
   # Stari keš bez profila ostaje upotrebljiv offline; ne izmišlja se novi rezultat.
-  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:2,signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
   assert 'ponovi izračun' in await page.locator('#dr-profile-info').text_content()
   assert await page.locator('#dr-profile-toggle').is_disabled()
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean'] and len(dem)==calls
-  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:2,signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
   # Prekid za vrijeme rada Workera mora odmah osloboditi novi izračun.
   await page.evaluate("""()=>{_mrezaProbaj=()=>false;window.NativeWorker=Worker;window.stalled=[];window.Worker=class{constructor(){stalled.push(this)}postMessage(){}terminate(){this.stopped=true}};window.cancelledReport=DepartmentReport.calculate();}""")
   await page.wait_for_function('stalled.length===1');await page.evaluate('DepartmentReport.cancelCalculation();Worker=NativeWorker;cancelledReport')
@@ -232,7 +239,7 @@ async def main():
   # Nedostajući DEM čuva zadnji ispravan rezultat i ne pretvara teren u ravan.
   await page.evaluate("window.getTileOriginal=_getTerrariumTile;_getTerrariumTile=async()=>null;DepartmentReport.calculate()")
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean']
-  assert 'Nema sačuvanog DEM-a' in await page.locator('#dr-status').inner_text()
+  assert 'Nema DEM podataka u memoriji' in await page.locator('#dr-status').inner_text()
   # Ručno crtanje granice Doznake: KML klik dodaje jednu tačku, ne otvara info.
   await page.evaluate("()=>{DepartmentReport.hide();window.oldCreate=dozShowCreateOdjel;dozShowCreateOdjel=()=>{};dozStartNewBoundaryDraw()}")
   await page.locator('#doz-draw-banner').wait_for(state='visible')
