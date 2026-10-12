@@ -37,11 +37,13 @@ function extractConst(name) {
 }
 
 const NAMES = ['_admStatus', '_admDanaNeaktivan', '_admMozeSePrijaviti', '_admJeNeaktivan',
-               '_admFiltriraj', '_admSortiraj', '_admSazetak', '_jsAttr', '_escHtml'];
-const SRC = extractConst('_ADM_NEAKTIVAN_DANA') + '\n' + NAMES.map(extractFn).join('\n');
+               '_admFiltriraj', '_admSortiraj', '_admSazetak', '_jsAttr', '_escHtml',
+               '_admAktivnostGrupa', '_admGrupisiPoAktivnosti', '_admRelativno', '_admGrupisiPoSumariji'];
+const SRC = extractConst('_ADM_NEAKTIVAN_DANA') + '\n' + extractConst('_ADM_AKT_GRUPE') + '\n' + NAMES.map(extractFn).join('\n');
 const M = new Function(SRC + '\nreturn {' + NAMES.join(',') + ', _ADM_NEAKTIVAN_DANA};')();
 const { _admStatus, _admDanaNeaktivan, _admJeNeaktivan, _admFiltriraj, _admSortiraj,
-        _admSazetak, _jsAttr } = M;
+        _admSazetak, _jsAttr, _admAktivnostGrupa, _admGrupisiPoAktivnosti, _admRelativno,
+        _admGrupisiPoSumariji } = M;
 
 const DAN = 86400000;
 const SADA = Date.parse('2026-09-09T12:00:00Z');
@@ -247,6 +249,56 @@ t('prazna lista daje nule, ne baca', () => {
   const s = _admSazetak([], SADA);
   assert.strictEqual(s.ukupno, 0);
   assert.strictEqual(s.ceka, 0);
+});
+
+// =====================================================================
+console.log('\nPrikaz po aktivnosti / po šumarijama:');
+
+// Ponoć po LOKALNOM vremenu dana SADA — grupe su kalendarske.
+const PONOC = (() => { const d = new Date(SADA); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+const sAkt = (ime, sum, t) => ({ id: 'a-' + ime, ime, prezime: 'X', sumarija: sum, odobren: true,
+  created_at: iso(SADA - 300 * DAN), last_active_at: t === undefined ? undefined : t === null ? null : iso(t) });
+
+t('grupa aktivnosti: danas / 7 dana / 30 dana / ranije / nikad / nepoznato', () => {
+  assert.strictEqual(_admAktivnostGrupa(sAkt('a', 'S', PONOC + 60000), SADA), 'danas');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('b', 'S', PONOC - 60000), SADA), 'sedmica', 'jučer navečer nije "danas"');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('c', 'S', PONOC - 5 * DAN), SADA), 'sedmica');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('d', 'S', PONOC - 20 * DAN), SADA), 'mjesec');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('e', 'S', PONOC - 100 * DAN), SADA), 'ranije');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('f', 'S', null), SADA), 'nikad');
+  assert.strictEqual(_admAktivnostGrupa(sAkt('g', 'S', undefined), SADA), 'nepoznato',
+    '"ne znam" (stara migracija) se ne smije prikazati kao "nikad"');
+});
+
+t('po aktivnosti: SVE šumarije u jednoj listi, najsvježiji prvi, prazne grupe izostavljene', () => {
+  const us = [sAkt('Stari', 'B', PONOC - 50 * DAN), sAkt('Danas2', 'A', PONOC + 2 * 3600000),
+              sAkt('Nikad', 'C', null), sAkt('Danas1', 'C', PONOC + 5 * 3600000), sAkt('Juce', 'B', PONOC - 3600000)];
+  const g = _admGrupisiPoAktivnosti(us, SADA);
+  assert.deepStrictEqual(g.map(x => x.id), ['danas', 'sedmica', 'ranije', 'nikad']);
+  assert.deepStrictEqual(g[0].users.map(u => u.ime), ['Danas1', 'Danas2'], 'različite šumarije u istoj grupi, najnoviji prvi');
+});
+
+t('relativno vrijeme', () => {
+  assert.strictEqual(_admRelativno(iso(SADA - 20000), SADA), 'upravo');
+  assert.strictEqual(_admRelativno(iso(SADA - 12 * 60000), SADA), 'prije 12 min');
+  assert.strictEqual(_admRelativno(iso(SADA - 3 * 3600000), SADA), 'prije 3 h');
+  assert.strictEqual(_admRelativno(iso(PONOC - 30 * 3600000), SADA), 'prije 2 dana');
+  assert.strictEqual(_admRelativno('', SADA), '');
+});
+
+t('po šumarijama: abecedno, "—" zadnja, broji aktivne u 7 dana', () => {
+  const us = [sAkt('a', 'ŠUMARIJA KRUPA', PONOC + 3600000), sAkt('b', null, null),
+              sAkt('c', 'ŠUMARIJA BIHAĆ', PONOC - 40 * DAN), sAkt('d', 'ŠUMARIJA KRUPA', PONOC - 2 * DAN)];
+  const g = _admGrupisiPoSumariji(us, SADA);
+  assert.deepStrictEqual(g.map(x => x.sum), ['ŠUMARIJA BIHAĆ', 'ŠUMARIJA KRUPA', '—']);
+  assert.strictEqual(g[1].aktivni, 2);
+  assert.strictEqual(g[0].aktivni, 0);
+});
+
+t('sažetak broji aktivne danas i u 7 dana', () => {
+  const s = _admSazetak([sAkt('a', 'S', PONOC + 60000), sAkt('b', 'S', PONOC - 2 * DAN), sAkt('c', 'S', PONOC - 40 * DAN)], SADA);
+  assert.strictEqual(s.danas, 1);
+  assert.strictEqual(s.sedmica, 2);
 });
 
 // =====================================================================

@@ -5739,7 +5739,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.0';
+const APP_VER = 'v2.9.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8587,14 +8587,73 @@ function _admSortiraj(users, sort, sada) {
 }
 
 function _admSazetak(users, sada) {
-  const s = { ukupno: 0, ceka: 0, odobren: 0, opozvan: 0, admin: 0, neaktivni: 0 };
+  const s = { ukupno: 0, ceka: 0, odobren: 0, opozvan: 0, admin: 0, neaktivni: 0, danas: 0, sedmica: 0 };
   (users || []).forEach(u => {
     s.ukupno++;
     const st = _admStatus(u);
     if (s[st] !== undefined) s[st]++;
     if (_admJeNeaktivan(u, sada)) s.neaktivni++;
+    const g = _admAktivnostGrupa(u, sada);
+    if (g === 'danas') { s.danas++; s.sedmica++; } else if (g === 'sedmica') s.sedmica++;
   });
   return s;
+}
+
+// Prikaz "Po aktivnosti" (zadano): admin najčešće pita "ko je radio danas /
+// ove sedmice", a grupisanje po šumariji je to razbijalo na 7 lista — isti
+// dan aktivnosti je bio razbacan po cijelom ekranu. Grupe su KALENDARSKE
+// ("danas" = od ponoći po lokalnom vremenu), ne "zadnja 24 h", jer tako ih
+// admin i izgovara.
+const _ADM_AKT_GRUPE = [
+  { id: 'danas',     naziv: 'Danas' },
+  { id: 'sedmica',   naziv: 'Zadnjih 7 dana' },
+  { id: 'mjesec',    naziv: 'Zadnjih 30 dana' },
+  { id: 'ranije',    naziv: 'Ranije' },
+  { id: 'nikad',     naziv: 'Bez zabilježene aktivnosti' },
+  { id: 'nepoznato', naziv: 'Aktivnost nije dostupna' },
+];
+function _admAktivnostGrupa(u, sada) {
+  if (!u || u.last_active_at === undefined) return 'nepoznato';
+  if (!u.last_active_at) return 'nikad';
+  const t = Date.parse(u.last_active_at);
+  if (!isFinite(t)) return 'nepoznato';
+  const now = sada || Date.now();
+  const ponoc = new Date(now); ponoc.setHours(0, 0, 0, 0);
+  if (t >= ponoc.getTime()) return 'danas';
+  const dana = (ponoc.getTime() - t) / 86400000;
+  if (dana < 6) return 'sedmica';     // danas + 6 prethodnih dana = 7 dana
+  if (dana < 29) return 'mjesec';
+  return 'ranije';
+}
+// Redoslijed unutar grupe: najsvježija aktivnost prva; bez aktivnosti po imenu.
+function _admGrupisiPoAktivnosti(users, sada) {
+  const sorted = _admSortiraj(users, 'aktivnost', sada);
+  const mapa = new Map(_ADM_AKT_GRUPE.map(g => [g.id, []]));
+  sorted.forEach(u => mapa.get(_admAktivnostGrupa(u, sada)).push(u));
+  return _ADM_AKT_GRUPE.map(g => ({ ...g, users: mapa.get(g.id) })).filter(g => g.users.length);
+}
+// "prije 12 min" čita se brže od punog datuma; pun datum ostaje pored.
+function _admRelativno(iso, sada) {
+  const t = Date.parse(iso || '');
+  if (!isFinite(t)) return '';
+  const now = sada || Date.now(), min = Math.floor((now - t) / 60000);
+  if (min < 1) return 'upravo';
+  if (min < 60) return 'prije ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 24) return 'prije ' + h + ' h';
+  const ponoc = new Date(now); ponoc.setHours(0, 0, 0, 0);
+  const dana = Math.ceil((ponoc.getTime() - t) / 86400000);
+  if (dana <= 1) return 'jučer';
+  return 'prije ' + dana + ' dana';
+}
+// Po šumarijama: grupe po nazivu (bs), uz broj aktivnih u zadnjih 7 dana.
+function _admGrupisiPoSumariji(users, sada) {
+  const g = new Map();
+  (users || []).forEach(u => { const k = u.sumarija || '—'; if (!g.has(k)) g.set(k, []); g.get(k).push(u); });
+  return [...g.entries()]
+    .sort((a, b) => a[0] === '—' ? 1 : b[0] === '—' ? -1 : a[0].localeCompare(b[0], 'bs'))
+    .map(([sum, us]) => ({ sum, users: us,
+      aktivni: us.filter(u => ['danas', 'sedmica'].includes(_admAktivnostGrupa(u, sada))).length }));
 }
 
 // Ime korisnika ide u onclick="...('IME')" — `_escHtml` NE escape-uje
@@ -8610,12 +8669,25 @@ function _jsAttr(s) {
 function _admLS(k, zadano) { try { return localStorage.getItem(k) || zadano; } catch(e) { return zadano; } }
 let _admStatusFilter = _admLS('tvlake_adm_status', 'sve');
 let _admSort         = _admLS('tvlake_adm_sort',   'ime');
+let _admPrikaz       = _admLS('tvlake_adm_prikaz', 'aktivnost');   // 'aktivnost' | 'sumarije'
+const _admSumZatvorene = new Set((() => { try { return JSON.parse(localStorage.getItem('tvlake_adm_sum_zatvorene') || '[]'); } catch(e) { return []; } })());
 const _admOtvorene   = new Set();   // kartice kojima su otvorene dodatne kontrole
 
 function _admPostaviStatus(v) {
   _admStatusFilter = v;
   try { localStorage.setItem('tvlake_adm_status', v); } catch(e) {}
   _adminRenderUsers();
+}
+function _admPostaviPrikaz(v) {
+  _admPrikaz = v === 'sumarije' ? 'sumarije' : 'aktivnost';
+  try { localStorage.setItem('tvlake_adm_prikaz', _admPrikaz); } catch(e) {}
+  _adminRenderUsers();
+}
+// Sklapanje grupe šumarije bez ponovnog crtanja (isti razlog kao kartica).
+function _admSumToggle(det) {
+  const k = det.dataset.sum;
+  if (det.open) _admSumZatvorene.delete(k); else _admSumZatvorene.add(k);
+  try { localStorage.setItem('tvlake_adm_sum_zatvorene', JSON.stringify([..._admSumZatvorene])); } catch(e) {}
 }
 function _admPostaviSort(v) {
   _admSort = v;
@@ -8673,6 +8745,12 @@ function _adminRenderUsers() {
       ${s.ceka ? ` · <span style="color:#fbbf24;font-weight:700;">${s.ceka} ${s.ceka===1?'čeka':'čekaju'} odobrenje</span>` : ''}
       ${s.opozvan ? ` · <span style="color:#f87171;">${s.opozvan} opozvano</span>` : ''}
       ${s.neaktivni ? ` · <span style="color:#7f8ea3;">${s.neaktivni} neaktivnih</span>` : ''}
+      <br><span style="color:#4ade80;">● ${s.danas} aktivno danas</span> · <span style="color:#93c5fd;">${s.sedmica} u zadnjih 7 dana</span>
+    </div>
+    <div role="tablist" style="display:flex;gap:0;margin-bottom:8px;border:1px solid #334155;border-radius:8px;overflow:hidden;">
+      ${[['aktivnost','🕐 Po aktivnosti'],['sumarije','🌲 Po šumarijama']].map(([id,txt]) =>
+        `<button role="tab" aria-selected="${_admPrikaz===id}" onclick="_admPostaviPrikaz('${id}')" style="flex:1;padding:7px 6px;font-size:12px;cursor:pointer;border:0;
+          background:${_admPrikaz===id?'#1e3a5f':'#0f172a'};color:${_admPrikaz===id?'#e2e8f0':'#94a3b8'};font-weight:${_admPrikaz===id?'700':'400'};">${txt}</button>`).join('')}
     </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
       ${chip('sve','Svi ('+s.ukupno+')','#93c5fd')}
@@ -8682,7 +8760,7 @@ function _adminRenderUsers() {
       ${s.neaktivni ? chip('neaktivni','Neaktivni ('+s.neaktivni+')','#94a3b8') : ''}
       ${s.admin ? chip('admin','★ Admini ('+s.admin+')','#fbbf24') : ''}
     </div>
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;">
+    <div style="display:${_admPrikaz==='sumarije'?'flex':'none'};gap:6px;align-items:center;margin-bottom:12px;">
       <span style="font-size:11px;color:#64748b;white-space:nowrap;">Poredaj:</span>
       <select onchange="_admPostaviSort(this.value)" style="flex:1;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#cbd5e1;font-size:12px;">
         <option value="ime"${_admSort==='ime'?' selected':''}>Po imenu</option>
@@ -8702,26 +8780,38 @@ function _adminRenderUsers() {
   const ceka   = rows.filter(u => _admStatus(u) === 'ceka');
   const ostali = rows.filter(u => _admStatus(u) !== 'ceka');
 
-  const groups = {};
-  ostali.forEach(u => { const s2 = u.sumarija || '—'; (groups[s2] = groups[s2] || []).push(u); });
 
   const blokCeka = ceka.length ? `
     <div style="margin-bottom:20px;border:1px solid #d97706;border-radius:10px;padding:10px;background:rgba(217,119,6,0.07);">
       <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:8px;">
         ⏳ Čeka odobrenje (${ceka.length}) <span style="color:#a16207;font-weight:400;">· probni pristup 7 dana; zahtjev ostaje</span>
       </div>
-      ${ceka.map(u => _admKarticaHtml(u)).join('')}
+      ${ceka.map(u => _admKarticaHtml(u, true)).join('')}
     </div>` : '';
 
-  el.innerHTML = traka + blokCeka + Object.entries(groups).map(([sum, users]) => `
-    <div style="margin-bottom:20px;">
-      <div style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:0.5px;
-                  padding:4px 0 6px;border-bottom:1px solid #1e3a5f;margin-bottom:8px;">
-        ${_escHtml(sum)} <span style="color:#475569;">(${users.length})</span>
-      </div>
-      ${users.map(u => _admKarticaHtml(u)).join('')}
-    </div>
-  `).join('');
+  const zaglavlje = (naslov, desno) => `<div style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:0.5px;
+      padding:4px 0 6px;border-bottom:1px solid #1e3a5f;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;">
+      <span>${naslov}</span><span style="color:#475569;font-weight:400;">${desno}</span></div>`;
+
+  let lista;
+  if (_admPrikaz === 'sumarije') {
+    const sorted = _admSortiraj(ostali, _admSort);
+    lista = _admGrupisiPoSumariji(sorted).map(g => `
+      <details data-sum="${_escHtml(g.sum)}" ${_admSumZatvorene.has(g.sum) ? '' : 'open'} ontoggle="_admSumToggle(this)" style="margin-bottom:14px;">
+        <summary style="cursor:pointer;list-style:none;font-size:12px;color:#cbd5e1;font-weight:700;padding:6px 0;border-bottom:1px solid #1e3a5f;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;">
+          <span>🌲 ${_escHtml(g.sum)} <span style="color:#64748b;font-weight:400;">(${g.users.length})</span></span>
+          <span style="color:${g.aktivni?'#4ade80':'#475569'};font-weight:400;font-size:11px;">${g.aktivni} aktivno u 7 dana</span>
+        </summary>
+        ${g.users.map(u => _admKarticaHtml(u, false)).join('')}
+      </details>`).join('');
+  } else {
+    lista = _admGrupisiPoAktivnosti(ostali).map(g => `
+      <div style="margin-bottom:18px;">
+        ${zaglavlje(g.naziv, _admBrojRijec(g.users.length, 'korisnik', 'korisnika'))}
+        ${g.users.map(u => _admKarticaHtml(u, true)).join('')}
+      </div>`).join('');
+  }
+  el.innerHTML = traka + blokCeka + lista;
 }
 
 // Kartica jednog korisnika. Do v3.121.0 su SVE kontrole (Odobri/Opozovi,
@@ -8730,7 +8820,7 @@ function _adminRenderUsers() {
 // ime jedva nazire, a sve osim odobravanja se koristi jednom u par mjeseci.
 // Sad je vidljivo ono zbog čega admin otvara listu (ko je, u kakvom je
 // stanju, kad je zadnji put bio), a ostalo je iza prekidača po kartici.
-function _admKarticaHtml(u) {
+function _admKarticaHtml(u, saSumarijom) {
   const nm     = (_escHtml(u.ime || '') + ' ' + _escHtml(u.prezime || '')).trim();
   const nmJs   = _jsAttr(((u.ime || '') + ' ' + (u.prezime || '')).trim());
   const uid    = u.id;
@@ -8780,10 +8870,11 @@ function _admKarticaHtml(u) {
       <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:2px;">
         ${nm || '<span style="color:#64748b;">(bez imena)</span>'}${statusChip}${neakt}
       </div>
+      ${saSumarijom ? `<div style="font-size:11px;color:#4ade80;margin-bottom:2px;">🌲 ${_escHtml(u.sumarija || '—')}</div>` : ''}
       <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin ? '0' : '8px'};">
         ${u.created_at ? fmtDateShort(u.created_at) : '—'}
         ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
-        <br>🕐 Zadnja aktivnost: ${u.last_active_at ? _escHtml(_fmtDateTime(u.last_active_at)) : (u.last_active_at === null ? 'još nije zabilježena' : 'podatak nije dostupan')}
+        <br>🕐 Zadnja aktivnost: ${u.last_active_at ? '<b style="color:#cbd5e1;">' + _escHtml(_admRelativno(u.last_active_at)) + '</b> · ' + _escHtml(_fmtDateTime(u.last_active_at)) : (u.last_active_at === null ? 'još nije zabilježena' : 'podatak nije dostupan')}
       </div>
       ${!u.is_admin ? `
       <div style="display:flex;gap:6px;align-items:center;">
