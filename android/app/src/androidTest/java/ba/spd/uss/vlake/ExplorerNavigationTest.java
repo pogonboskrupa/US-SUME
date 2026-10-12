@@ -26,10 +26,19 @@ import static org.junit.Assert.*;
 /** Stvarni APK/MainActivity/WebView/HTML/Leaflet; kontrolisani GPS, emulator bez mreže. */
 @RunWith(AndroidJUnit4.class)
 public class ExplorerNavigationTest {
+ private MainActivity activity;
  private String eval(WebView view,String script) throws Exception {
   AtomicReference<String> result=new AtomicReference<>();CountDownLatch latch=new CountDownLatch(1);
   new Handler(Looper.getMainLooper()).post(()->view.evaluateJavascript(script,v->{result.set(v);latch.countDown();}));
-  assertTrue("WebView JS callback",latch.await(5,TimeUnit.SECONDS));return result.get();
+  // Cold emulator zna držati renderer >5 s dok izvršava startup JS; 15 s je isti
+  // red veličine kao pageLoaded. Ako callback ipak izostane, poruka razlikuje
+  // spor renderer od ZAMIJENJENOG (onRenderProcessGone napravi novi WebView,
+  // pa stari nikad ne odgovori) — to drugo je stvarna greška, ne spor emulator.
+  if(latch.await(15,TimeUnit.SECONDS))return result.get();
+  String state=onUi(()->{Field f=MainActivity.class.getDeclaredField("webView");f.setAccessible(true);Object cur=activity==null?null:f.get(activity);
+   return "zamijenjen="+(cur!=view)+" progress="+view.getProgress()+" url="+view.getUrl();});
+  fail("WebView JS callback nije stigao za 15 s; "+state+"; skripta="+script.substring(0,Math.min(80,script.length())));
+  return null;
  }
  private <T> T onUi(java.util.concurrent.Callable<T> c) throws Exception {
   AtomicReference<T> r=new AtomicReference<>();AtomicReference<Exception> err=new AtomicReference<>();CountDownLatch latch=new CountDownLatch(1);
@@ -75,7 +84,7 @@ public class ExplorerNavigationTest {
   context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
   try {
    assertTrue("MainActivity RESUMED",resumed.await(15,TimeUnit.SECONDS));
-   WebView view=ref.get();assertNotNull(view);
+   WebView view=ref.get();assertNotNull(view);activity=activityRef.get();
    // 3D Explorer traži hardverski ubrzan prozor (manifest), ne dodatni View sloj:
    // LAYER_TYPE_HARDWARE je sav WebView slao kroz još jednu ekransku GPU teksturu
    // i na slabijim telefonima davao prazne dijelove (v2.8.10). Ostatak testa

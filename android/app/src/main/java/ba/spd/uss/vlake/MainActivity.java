@@ -1306,6 +1306,8 @@ public class MainActivity extends Activity {
     }
 
     private void zamijeniMrtviWebView(WebView mrtav, boolean pad) {
+        android.util.Log.w("DendroRender", "WebView renderer " + (pad ? "pao" : "ugašen zbog memorije")
+                + " — pravim novi WebView");
         ViewGroup parent = (ViewGroup) mrtav.getParent();
         if (parent != null) parent.removeView(mrtav);
         try { mrtav.destroy(); } catch (Exception ignored) {}
