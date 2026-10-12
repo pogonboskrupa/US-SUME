@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync('index.html','utf8');
+const start=html.indexOf('function _menuIdentityRender('),end=html.indexOf('\nfunction toggleMenuDropdown(',start);
+const elements=new Map(['menu-user-label','menu-user-role','menu-app-ver'].map(id=>[id,{textContent:''}]));
+const e={APP_VER:'v2.1.3',sbUser:{id:'A'},sbProfile:{id:'A',ime:'Emina',prezime:'Projektant',sumarija:'Bos.Krupa'},document:{getElementById:id=>elements.get(id)},isVodeci:()=>false,isSpdField:()=>false};
+vm.createContext(e);vm.runInContext(html.slice(start,end),e);e._menuIdentityRender();
+assert.equal(elements.get('menu-user-label').textContent,'Emina Projektant');
+assert.equal(elements.get('menu-app-ver').textContent,'Verzija v2.1.3');
+assert.equal(elements.get('menu-user-role').textContent,'Projektant · Bos.Krupa');
+e.sbUser={id:'B'};e._menuIdentityRender();assert.equal(elements.get('menu-user-label').textContent,'Profil nije dostupan');assert.equal(elements.get('menu-user-role').textContent,'');
+e.sbProfile={id:'B',ime:'<img src=x>',prezime:'Prezime',is_admin:true};e._menuIdentityRender();assert.equal(elements.get('menu-user-label').textContent,'<img src=x> Prezime');assert.equal(elements.get('menu-user-role').textContent,'Administrator');
+e.sbUser=null;e._menuIdentityRender();assert.equal(elements.get('menu-user-label').textContent,'Nije prijavljen');assert.equal(elements.get('menu-user-role').textContent,'');
+console.log('Meni: ime/prezime, verzija, uloga i promjena naloga — OK');

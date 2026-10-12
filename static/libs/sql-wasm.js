@@ -89,7 +89,27 @@ z,-1,h,N));var L=m(h,"i32");z=m(N,"i32");if(0!==L){var K=null;w=new c(L,this);fo
 this.handleError(H(this.db,g,-1,h,0));g=m(h,"i32");if(0===g)throw"Nothing to prepare";var n=new c(g,this);null!=l&&n.bind(l);return this.Za[g]=n};e.prototype.iterateStatements=function(g){return new d(g,this)};e.prototype["export"]=function(){Object.values(this.Za).forEach(function(l){l.free()});Object.values(this.Na).forEach(ua);this.Na={};this.handleError(y(this.db));var g=va(this.filename);this.handleError(r(this.filename,h));this.db=m(h,"i32");ob(this.db);return g};e.prototype.close=function(){null!==
 this.db&&(Object.values(this.Za).forEach(function(g){g.free()}),Object.values(this.Na).forEach(ua),this.Na={},this.handleError(y(this.db)),wa("/"+this.filename),this.db=null)};e.prototype.handleError=function(g){if(0===g)return null;g=Bc(this.db);throw Error(g);};e.prototype.getRowsModified=function(){return F(this.db)};e.prototype.create_function=function(g,l){Object.prototype.hasOwnProperty.call(this.Na,g)&&(ua(this.Na[g]),delete this.Na[g]);var n=xa(function(t,w,z){w=b(w,z);try{var N=l.apply(null,
 w)}catch(L){Aa(t,L,-1);return}a(t,N)},"viii");this.Na[g]=n;this.handleError(tb(this.db,g,l.length,1,0,n,0,0,0));return this};e.prototype.create_aggregate=function(g,l){var n=l.init||function(){return null},t=l.finalize||function(K){return K},w=l.step;if(!w)throw"An aggregate function must have a step function in "+g;var z={};Object.hasOwnProperty.call(this.Na,g)&&(ua(this.Na[g]),delete this.Na[g]);l=g+"__finalize";Object.hasOwnProperty.call(this.Na,l)&&(ua(this.Na[l]),delete this.Na[l]);var N=xa(function(K,
-O,Ua){var X=ub(K,1);Object.hasOwnProperty.call(z,X)||(z[X]=n());O=b(O,Ua);O=[z[X]].concat(O);try{z[X]=w.apply(null,O)}catch(Nc){delete z[X],Aa(K,Nc,-1)}},"viii"),L=xa(function(K){var O=ub(K,1);try{var Ua=t(z[O])}catch(X){delete z[O];Aa(K,X,-1);return}a(K,Ua);delete z[O]},"vi");this.Na[g]=N;this.Na[l]=L;this.handleError(tb(this.db,g,w.length-1,1,0,0,N,L,0));return this};f.Database=e};
+O,Ua){var X=ub(K,1);Object.hasOwnProperty.call(z,X)||(z[X]=n());O=b(O,Ua);O=[z[X]].concat(O);try{z[X]=w.apply(null,O)}catch(Nc){delete z[X],Aa(K,Nc,-1)}},"viii"),L=xa(function(K){var O=ub(K,1);try{var Ua=t(z[O])}catch(X){delete z[O];Aa(K,X,-1);return}a(K,Ua);delete z[O]},"vi");this.Na[g]=N;this.Na[l]=L;this.handleError(tb(this.db,g,w.length-1,1,0,0,N,L,0));return this};f.Database=e;
+f.openReadOnlyFile=function(source){
+  if(!source||!Number.isSafeInteger(source.size)||source.size<16||typeof source.readAt!=="function")throw Error("Invalid read-only SQLite source");
+  var name="readonly_"+(4294967295*Math.random()>>>0),node=ja("/"+name,32768|292,0);
+  node.Ma=source.size;
+  node.Ha=Object.assign({},node.Ha,{
+    read:function(stream,heap,offset,length,position){
+      var count=Math.max(0,Math.min(length,source.size-position));
+      return count?source.readAt(heap,offset,count,position):0;
+    },
+    write:function(){throw new P(2);},
+    bb:function(){throw new P(43);}
+  });
+  var db=Object.create(e.prototype);db.filename=name;db.Za={};db.Na={};
+  try{
+    var code=r(name,h);db.db=m(h,"i32");db.handleError(code);ob(db.db);
+    db.exec("PRAGMA query_only=ON; PRAGMA cache_size=-4096; PRAGMA mmap_size=0");
+    return db;
+  }catch(error){if(db.db)try{db.close();}catch(ignore){}else try{wa("/"+name);}catch(ignore){}throw error;}
+};
+};
 var ya=Object.assign({},f),za="./this.program",Ba="object"==typeof window,Ca="function"==typeof importScripts,Da="object"==typeof process&&"object"==typeof process.versions&&"string"==typeof process.versions.node,A="",Ea,Fa,Ga;
 if(Da){var fs=require("fs"),Ha=require("path");A=Ca?Ha.dirname(A)+"/":__dirname+"/";Ea=(a,b)=>{a=Ia(a)?new URL(a):Ha.normalize(a);return fs.readFileSync(a,b?void 0:"utf8")};Ga=a=>{a=Ea(a,!0);a.buffer||(a=new Uint8Array(a));return a};Fa=(a,b,c,d=!0)=>{a=Ia(a)?new URL(a):Ha.normalize(a);fs.readFile(a,d?void 0:"utf8",(e,h)=>{e?c(e):b(d?h.buffer:h)})};!f.thisProgram&&1<process.argv.length&&(za=process.argv[1].replace(/\\/g,"/"));process.argv.slice(2);"undefined"!=typeof module&&(module.exports=f);f.inspect=
 ()=>"[Emscripten Module object]"}else if(Ba||Ca)Ca?A=self.location.href:"undefined"!=typeof document&&document.currentScript&&(A=document.currentScript.src),A=0!==A.indexOf("blob:")?A.substr(0,A.replace(/[?#].*/,"").lastIndexOf("/")+1):"",Ea=a=>{var b=new XMLHttpRequest;b.open("GET",a,!1);b.send(null);return b.responseText},Ca&&(Ga=a=>{var b=new XMLHttpRequest;b.open("GET",a,!1);b.responseType="arraybuffer";b.send(null);return new Uint8Array(b.response)}),Fa=(a,b,c)=>{var d=new XMLHttpRequest;d.open("GET",
