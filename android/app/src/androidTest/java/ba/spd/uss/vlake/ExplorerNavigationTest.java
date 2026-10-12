@@ -89,7 +89,11 @@ public class ExplorerNavigationTest {
    // LAYER_TYPE_HARDWARE je sav WebView slao kroz još jednu ekransku GPU teksturu
    // i na slabijim telefonima davao prazne dijelove (v2.8.10). Ostatak testa
    // (matrix3d + DOM marker <3px) dokazuje da 3D prikaz radi i bez njega.
-   assertTrue("Hardverski ubrzan WebView",onUi(view::isHardwareAccelerated));
+   // Zastavica PROZORA (manifest hardwareAccelerated), ne view.isHardwareAccelerated():
+   // ta je true tek kad je WebView priključen na prozor, a na RESUMED to zna
+   // kasniti — CI run 38270489428 je baš tu pao iako je prozor ubrzan.
+   assertTrue("Hardverski ubrzan prozor",onUi(()->(activity.getWindow().getAttributes().flags
+     &android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)!=0));
    assertEquals(View.LAYER_TYPE_NONE,(int)onUi(view::getLayerType));
    pageLoaded(view);
    until(view,"document.readyState==='complete'&&!!window.Explorer&&typeof onP==='function'");
