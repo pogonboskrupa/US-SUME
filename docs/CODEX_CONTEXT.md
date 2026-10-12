@@ -1,4285 +1,1 @@
-# US-SUME â€” tehniÄki kontekst i poÄetno stanje
-
-Datum pregleda: 2026-09-11. Repozitorij: `pogonboskrupa/US-SUME`.
-Radna grana: `CODEX-US-SUME`. Pregledani poÄetni commit:
-`c780d3a51c162de4e0ce677b6892139263f2758f`.
-Verzije: web `v1.1.7`, SW `1.1.7`, Android `1.1.7`, `versionCode 343`.
-
-Ovo je ciljani poÄetni pregled, NE kompletan audit 41.821 reda `index.html`,
-sigurnosni certifikat niti potvrda rada na telefonu. Funkcionalni kod nije
-mijenjan. Dokumentacija razlikuje potvrÄ‘eno ponaÅ¡anje izvornog koda,
-izolovane reprodukcije i historijske tvrdnje koje nisu ponovo provjerene.
-
-**Napomena (v1.5.6+)**: sekcija PoÅ¾ari i Projektovanje Å¡umskog puta su od
-verzije v1.5.6 uklonjene iz ove aplikacije i izdvojene u posebnu app â€”
-opisi i nalazi o njima ispod su historijski (opisuju stanje PRIJE izdvajanja),
-kod na koji upuÄ‡uju viÅ¡e ne postoji u ovom repozitoriju.
-
-## 1. Identitet i arhitektura â€” potvrÄ‘eno u kodu
-
-Glavni proizvod je Dendro Map / US-SUME: HTML/JavaScript terenska GIS
-aplikacija upakovana u Java Android WebView. Python CLI i Flutter doznaka
-projekat su zasebne cjeline u istom repozitoriju, ne izvrÅ¡no jezgro tog APK-a.
-
-| Cjelina | Izvor / ulazne funkcije | Uloga |
-|---|---|---|
-| Glavni frontend | `index.html`, 41.821 red, 2.149.640 bajtova | UI, veÄ‡ina poslovne logike, CSS i globalno stanje; 5 nepraznih inline JS blokova |
-| Biblioteke | zaglavlje `index.html`, `static/libs/` | Leaflet 1.9.4, proj4 2.9.0, Turf 6.5.0, Supabase JS `@2`, shapefile 0.6.6; CDN put i lokalni APK fallback |
-| Pokretanje/prijava | `initAuth`, `_ulazNaKesu`, `showApp`, `_startupRestore` | KeÅ¡irani profil omoguÄ‡ava rani ulazak; prava sesija se obnavlja u pozadini; restore Äeka DOM |
-| Offline podaci | `static/js/offline-layer.js`, `_OL`; `index.html` `_saveLocalVlake`, `_processOfflineQueue` | localStorage keÅ¡evi i red operacija, oznaka vlasnika, dedup, retry i server sync |
-| Projekti/vlake | `addV`, `_doCreateVlaka`, `sbFlushVlaka`, `_sbFlushVlakaImpl`, `loadProj` | Aktivni projekat, numeracija, crtanje/snimanje, lokalno spremanje i Supabase |
-| GPS | `_vlakaProcessGpsPoint`, `_addTragPoint`, `_dozProcessGpsPoint` | RazliÄiti tokovi vlake/traga/doznake; native bafer se dopunjava pri povratku |
-| Crash recovery | `_crashSaveVlaka`, `_crashSaveTrag`, `_crashCheck`, `_nativeBufUzmi` | Snapshot na 30 s i dopuna iz native fajla; potvrÄ‘eni nedostaci ispod |
-| Offline karte | `makeCachedTileLayer`, `_SQL_WORKER_SRC`, `sqlmapRestoreAll` | Cache Storage ploÄice; SQLite/MBTiles kroz worker, IndexedDB i OPFS |
-| Doznaka | `dozSaveOdjel`, `dozVlakeLoadKml`, `_dozProcessGpsPoint` | Odjeli/projekti, granice, Älanovi, pojasevi, stabla i povezane vlake |
-| Satelitski slojevi | `_s2KljucUcitaj`, `_s2TokenUzmi`, Wayback funkcije, SW routing | CDSE OAuth/WMS, historijski Esri slojevi; runtime dostupnost nije provjerena |
-| Android | `android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java`, `GpsService.java` | WebViewAssetLoader, Å¾ivotni ciklus, foreground GPS, native mostovi. `NetBridge`/`AppNotifBridge` su otkako je PoÅ¾ari izdvojena NEISKORIÅ TENI iz JS-a (namjerno netaknuti, vidi CLAUDE.md) |
-| Backend | `supabase/migrations/`, `supabase/functions/handle-registration-action/index.ts` | Auth, RLS, poslovne tabele, RPC i potpisani linkovi za odobrenje |
-| Python | `main.py`, `geo/` | CLI udaljenost, azimut, nagib, povrÅ¡ina i lokalni server; 45 testova |
-| Flutter | `doznaka/`, `.github/workflows/build.yml` | Odvojen Forestry Tracker build iz Dart fragmenata; nije Java WebView APK |
-
-### Pokretanje, pohrana i prava
-
-- `initAuth` Äita `_OL.PROFILE`. KeÅ¡irani korisnik nosi `_cachedStub`; to NIJE
-  potvrÄ‘ena online sesija. `showApp` blokira eksplicitno neodobren profil,
-  uz izuzetak admina. `_startupRestore` je idempotentan i Äeka DOMContentLoaded.
-- `korak()` u `_startupRestore` hvata sinhrone greÅ¡ke; ne hvata automatski
-  odbijene Promise rezultate. Ne tumaÄiti komentar o izolaciji svih koraka
-  kao dokaz potpune async zaÅ¡tite.
-- `_checkDeviceUserSwitch` pri drugom korisniku poziva `_wipeAllLocalUserData`:
-  briÅ¡e lokalne karte/registre i filtrira red prethodnog korisnika. To je
-  namjerna izolacija korisnika, ali moÅ¾e izgubiti nesinhronizovan rad.
-- Vlaka ima `nm/br/kr/color/pts/poly/sbId/projektId/...`; `addPt` zapisuje
-  taÄku kao `{la, lo, al}`. Tragovi koriste nizove `[la, lo, alt, ts, acc]`.
-  Ne prepravljati ove modele bez migracije i roundtrip testova.
-- `_sbFlushVlakaImpl` prvo poziva `_saveLocalVlake`; `_OL` operacije su JSON
-  u localStorage. Red sadrÅ¾i `_qid`, `_uid`, payload i po potrebi broj pokuÅ¡aja.
-- `_processOfflineQueue` serijalizuje prolaze i obraÄ‘uje vlake, projekte,
-  tragove, oznake, dnevni log, doznaku i arhivu poÅ¾ara. Nisu sve putanje
-  potpuno offline-first: doznaka GPS pokuÅ¡ava server prije fallback buffera.
-- Cache Storage je za ploÄice/shell; `tvlake_sqlmaps` IndexedDB v2 odvaja
-  metapodatke `maps` od `mapBufs`; veÄ‡e karte imaju OPFS put. Migraciju v2
-  provjeravaju mock-testovi, ne pravi Android IndexedDB tokom ovog pregleda.
-- `MainActivity` uÄitava appassets origin i izlaÅ¾e `AndroidDownload`,
-  `AndroidGps`, `AndroidShare`, `AndroidNet`, `AndroidNotif`. Vanjske navigacije
-  preusmjerava u Android Intent. `NetBridge` ograniÄava poÄetni HTTPS host na
-  NASA/GFW, ima rokove i limit odgovora 12 MiB; redirects su ukljuÄeni.
-- `GpsService` prikuplja GPS fiksove u `gps_native_buffer.jsonl`, koristi
-  foreground notifikaciju i wake lock. `START_STICKY` je namjera oporavka
-  servisa, NE garancija da OEM neÄ‡e ubiti proces ili da neÄ‡e biti prekida.
-- Migracije 20260727/20260728 definiÅ¡u `je_odobren`, restriktivne
-  `zzz_odobren` politike i zaÅ¡titu povlaÅ¡tenih kolona korisnika. Stvarne
-  primijenjene politike u produkciji nisu pregledane; migracija u Git-u nije
-  dokaz da je izvrÅ¡ena. RPC/SECURITY DEFINER zahtijeva zasebnu provjeru prava.
-- `_poziLoad` razlikuje mreÅ¾ni neuspjeh, keÅ¡ i svjeÅ¾ odgovor, filtrira blizinu,
-  grupiÅ¡e detekcije i dopunjava arhivu. Projekcije povrÅ¡ine i buduÄ‡eg rasta
-  nisu terenski izmjerena granica niti validiran model ponaÅ¡anja poÅ¾ara.
-- Od v1.3.2 projekcija poÅ¾ara koristi zaseban `pozariPovrsPane` izmeÄ‘u
-  referentne karte i markera poÅ¾ara. Klik na pojas otvara detalje poÅ¾ara
-  direktno na karti, a dnevni replay kumulativno prikazuje samo taÄke i
-  procijenjenu geometriju odabranog poÅ¾ara; ostali poÅ¾ari se ne filtriraju.
-- Od v1.3.3 admin DEBUG ima zaseban zapis za GFW smetnje vegetacije. BiljeÅ¾i
-  period, referencu, prisutnost kljuÄa, native/browser put, HTTP status,
-  veliÄinu i oÄiÅ¡Ä‡eni isjeÄak greÅ¡ke, broj primljenih/filtriranih/grupisanih
-  alarma i koriÅ¡tenje lokalnog keÅ¡a. Vrijednost API kljuÄa se ne zapisuje.
-- v1.3.4 popravlja GFW `HTTP 422`: `gfw_integrated_alerts` je raster-only
-  dataset i ne prihvata raniji GET SQL bbox bez geometrije. Aplikacija sada
-  Å¡alje POST JSON (`sql` + zatvoren GeoJSON Polygon od 32 segmenta za 50 km),
-  kroz browser ili proÅ¡ireni Android native most.
-- v1.3.5 ukljuÄuje satelitske taÄke poÅ¾ara po zadanom (ruÄno iskljuÄivanje se
-  i dalje poÅ¡tuje), zadrÅ¾ava svaku taÄku vidljivom i grupu s viÅ¡e detekcija
-  oznaÄava jednim glavnim trokutom. Popup trokuta prikazuje period poÅ¾ara i
-  pokreÄ‡e dnevni replay direktno na karti. Kartica â€Operativni incidentâ€œ i
-  njeni lokalni zapisi su uklonjeni. Admin DEBUG sada biljeÅ¾i broj taÄaka,
-  trokuta, grupa s periodom odâ€“do te stanje i broj koraka simulacije.
-- v1.3.6 dodaje lifecycle debug koji razlikuje novi WebView dokument od obiÄnog
-  povratka iz pozadine i blokira paralelno otvaranje iste SQLite karte. PoÅ¾arne
-  taÄke se crtaju jednim Canvas rendererom umjesto stotinama DOM elemenata,
-  postojeÄ‡i sloj se pri povratku u tab ponovo koristi, a Turf projekcije imaju
-  ograniÄen cache koji preÅ¾ivljava mreÅ¾no osvjeÅ¾avanje. DEBUG PoÅ¾ari mjeri
-  dohvat, filtriranje/keÅ¡, grupisanje, crtanje i naknadnu obradu zasebno.
-
-## 2. Pet prioritetnih nalaza
-
-### R1 â€” VISOK: nepouzdan oporavak vlake nakon prekida
-
-Izvori: `index.html:11730` `_crashSaveVlaka`, `:11762` `_crashCheck`,
-`:11822` poziv `saveV`, `:11826` brisanje snapshota; `addPt` i `addV`.
-
-- `saveV` nema definiciju u pregledanom aplikacijskom kodu; jedini poziv je
-  u `_crashCheck`. PostojeÄ‡i `gps-bg-buffer.test.js` ga mockuje kao uspjeÅ¡an
-  no-op (`saveV: async () => {}`), pa ne otkriva problem integracije.
-- Izolovan Node VM test stvarnog `_crashCheck`, uz uspjeÅ¡no mockovano
-  kreiranje vlake i bez izmiÅ¡ljenog `saveV`, dobio je poruku
-  `saveV is not defined`; crash snapshot je ipak obrisan. TaÄke ostanu u
-  memoriji tog testa, ali trajno spremanje tim putem nije potvrÄ‘eno.
-- `_crashSaveVlaka` Äita `p.elev`, dok `addPt` piÅ¡e `p.al`. Reprodukcija s
-  visinama 600/610 dala je `null/null` u snapshotu. Recovery takoÄ‘er upisuje
-  `elev`, a ne standardni `al`.
-- `snapV.projektId` se sprema, ali recovery ga ne primjenjuje na novu vlaku.
-  `addV()` moÅ¾e otvoriti dijalog i zavrÅ¡iti kasnije ili bez kreiranja;
-  `_crashCheck` ga ne Äeka prije pristupa `vlake[newI]`. Posljedice tih grana
-  treba pokriti integracijskim testovima, ne pretpostaviti ispravan rezultat.
-- Dodatno: Java `GpsBridge.drainNativeBuffer` briÅ¡e fajl prije JS potvrde
-  trajnog upisa, Äak i poslije uhvaÄ‡enog IOException. `_nativeBufUzmi` na
-  neispravan JSON vraÄ‡a `[]`. Prekinut posljednji JSONL red moÅ¾e zato oboriti
-  parsiranje cijelog spojenog niza. To je statiÄki rizik, ne Android repro.
-
-Preporuka: prvo siguran read/ack oporavak, oÄuvanje snapshota na greÅ¡ku,
-standardni model visine/projekta i test sa stvarnim kreiranjem/spremanjem.
-
-### R2 â€” VISOK: red moÅ¾e nepovratno izgubiti operacije
-
-Izvori: `static/js/offline-layer.js:44,103,127` (`save`, `enqueue`,
-`bumpRetry`); `index.html:5530` `_processOfflineQueue`; `:6481` wipe.
-
-Na 501. operaciji najstarija se izbacuje; nakon pet nemreÅ¾nih greÅ¡aka
-operacija se briÅ¡e. PostojeÄ‡i testovi to eksplicitno potvrÄ‘uju. `_OL.save`
-i `enqueue` ne vraÄ‡aju pozivaocu potvrdu uspjeÅ¡nog trajnog upisa; puna kvota
-daje toast, ne pouzdanu transakciju. Promjena korisnika filtrira prethodni red.
-`_retryOrphanVlake` ublaÅ¾ava dio sluÄajeva za vlake bez `sbId`, ali ne vraÄ‡a
-sve odbaÄene izmjene/brisanja/arhivske operacije. Ne tvrditi da nestane baÅ¡
-svaki lokalni objekat: potvrÄ‘en je gubitak operacije u redu.
-
-Preporuka: trajni registar neuspjelih operacija, izvoz/oporavak i eksplicitna
-potvrda upisa; ne automatsko odbacivanje nesinhronizovanog rada.
-
-### R3 â€” VISOK: viseÄ‡i zahtjev moÅ¾e blokirati sinhronizaciju
-
-Izvori: `index.html:5291` `_processOfflineQueue`, Supabase fetch adapter
-oko `:5053`, `:38532` `_dozProcessGpsPoint`, `:39293` `dozSaveOdjel`.
-
-Queue handler ima direktne `await` pozive bez lokalnog timeouta/abort-a.
-Globalni Supabase fetch adapter postavlja `cache: no-store`, ne rok.
-Izolovana reprodukcija s Promise zahtjevom koji se ne razrijeÅ¡i ostavlja
-`_syncInProgress=true`; naredni poziv postavlja samo `_syncRerun=true`.
-Ovo dokazuje ponaÅ¡anje na takvom transportu, ne mjeri rok stvarne mreÅ¾e.
-Doznaka GPS stavlja taÄku u sync buffer tek u catch grani poslije inserta;
-postojeÄ‡i live snapshot nije isto Å¡to i potvrÄ‘en pending upis za server.
-
-Preporuka: lokalno durable enqueue prije zahtjeva, ograniÄen transport,
-idempotentni retry. Sam Promise.race bez zaustavljanja zahtjeva moÅ¾e ostaviti
-kasni upis u letu â€” obavezno testirati izgubljen odgovor i duplikate.
-
-### R4 â€” VISOK, uslovan na konfiguraciju: CDSE client secret na klijentima
-
-Izvori: `supabase/migrations/20260910_sentinel2_kljucevi.sql`,
-`index.html:12942â€“13012` `_s2KljucKesUcitaj`, `_s2KljucUcitaj`, `_s2TokenUzmi`.
-
-RLS SELECT je dozvoljen svakom odobrenom korisniku; kod Äita `client_secret`
-i sprema ga u localStorage. Skrivanje admin polja ne Äini tajnu nedostupnom
-odobrenom klijentu. Ako je pristup konfigurisan, kompromitovan/izgubljen
-ureÄ‘aj ili zloupotreba odobrenog naloga izlaÅ¾e zajedniÄki pristup. Nisu
-Äitane stvarne vrijednosti niti je potvrÄ‘eno da je produkcija konfigurirana.
-
-Preporuka: server-side razmjena/posredovanje s provjerom korisnika i kvotama;
-rotaciju planirati s vlasnikom ako se potvrdi postojeÄ‡a izloÅ¾enost.
-
-### R5 â€” VISOK za isporuku: build put ne odgovara novoj radnoj grani
-
-Izvori: `android/build-apk.ps1` parametar Branch i checkout/pull;
-`android/gradlew`, `.github/workflows/build.yml`, `android/app/build.gradle`.
-
-- PowerShell build po defaultu prelazi na `claude/branch-072026-sa9wz0`.
-  Bez eksplicitne grane moÅ¾e napraviti APK bez naÅ¡ih izmjena.
-- Gradle wrapper JAR nije tracked/prisutan. `sh android/gradlew --offline
-  --version` pada sa `ClassNotFoundException: org.gradle.wrapper.GradleWrapperMain`.
-  Nije se stiglo do kompajliranja Android koda. Java 17 postoji; nema `adb`
-  ni samostalne `gradle` komande. Instalirani Android SDK nije potvrÄ‘en.
-- Workflow pod imenom Build Android APK gradi Flutter `doznaka/`, NE
-  `android/` WebView. Nema automatizovanog test workflowa u pregledanoj grani.
-- Release potpis nije konfigurisan u build.gradle; debug ima `.debug`
-  applicationIdSuffix. FileProvider authority je fiksan, Å¡to je kandidat za
-  konflikt paralelne instalacije debug/release; nije testirano na ureÄ‘aju.
-
-Preporuka: reproducibilan WebView build vezan za taÄan commit/granu i postojeÄ‡i
-potpis. Ne deinstalirati korisnikovu aplikaciju radi zaobilaÅ¾enja potpisa bez
-backup-a: to moÅ¾e obrisati jedinu kopiju terenskog rada.
-
-## 3. Dodatni rizici i nepoznanice
-
-- OdrÅ¾avanje/performance â€” SREDNJI: veliki `index.html` i zajedniÄki globalni
-  scope oteÅ¾avaju integracijske provjere. `sqlmapRestoreAll` redom uÄitava sve
-  nepriskoÄene karte, ne samo aktivnu. Struktura potvrÄ‘ena; stvarno trajanje
-  i memorija na korisnikovom telefonu nisu izmjereni. Prvo pribaviti postojeÄ‡i
-  red `â±` iz Offline karte, posebno dio `PRIJE poziva`, pa odluÄiti o popravci.
-- Arhiva poÅ¾ara â€” SREDNJI: `_povArhServerSinkOpp` postavlja jednokratnu
-  zastavicu prije provjere konekcije i ne vraÄ‡a je na greÅ¡ku; `.limit(50000)`
-  bez paginacije nije dokaz kompletnosti server rezultata. Serverov stvarni
-  maksimalni broj redova nije provjeren. Potrebni retry/reconnect i pagination testovi.
-- Android hardening â€” za dodatni pregled: ukljuÄeni file/universal file access,
-  mixed content i cleartext; native mostovi proÅ¡iruju posljedice eventualnog
-  XSS-a. Vanjske navigacije jesu ograniÄene; nije demonstrirana eksploatacija.
-- Supabase CDN zavisnost `@2` nije taÄno pinovana; lokalna kopija i mreÅ¾na
-  verzija mogu se razlikovati. Ne mijenjati bez kompatibilnosti/offline testa.
-- Nisu provjereni produkcijski RLS, stvarni korisnici, potpis instaliranog APK-a,
-  puni Android lifecycle, OEM battery manager, stvarna kvota/evikcija pohrane,
-  mreÅ¾ni CORS i satelitski endpointi, realne granice/KML/SHP podaci ni UI na telefonu.
-- Historijske tvrdnje `CLAUDE.md` o ranijim Playwright/terenskim rezultatima
-  nisu ponovljene ovim pregledom. Npr. opÄ‡a tvrdnja o pouzdanom crash recoveryju
-  ima konkretne izuzetke iz R1; ne prenositi je kao garanciju.
-
-## 4. IzvrÅ¡ene provjere
-
-Node `v24.19.0`, Python `3.12.14`, Java OpenJDK `17.0.20`.
-Svaki JS test fajl izvrÅ¡en je u zasebnom Node procesu (rok 60 s), bez mreÅ¾nih
-upisa. Python testovi su Äista geometrija. Aplikacija nije pokrenuta s pravom
-Supabase sesijom; nisu pokretane migracije, workflowi, deployment ni instalacija.
-
-| JS test fajl u tests/js | ProÅ¡lo | Palo |
-|---|---:|---:|
-| admin-korisnici | 30 | 0 |
-| auth-offline-first | 17 | 0 |
-| boje-nagiba | 12 | 0 |
-| dem-contours | 7 | 0 |
-| dem-terrarium | 5 | 0 |
-| dlg-overlay | 9 | 0 |
-| gps-bg-buffer | 13 | 0 |
-| kml-click | 14 | 0 |
-| loc-popup-trag | 5 | 0 |
-| map-restore-indicator | 12 | 0 |
-| offline-layer | 13 | 0 |
-| rec-bar | 15 | 0 |
-| sentinel2 | 20 | 0 |
-| sqlmap-idb-split | 16 | 0 |
-| startup-restore | 7 | 0 |
-| tile-bloburl | 9 | 0 |
-| ugladi | 18 | 0 |
-| vlake-list | 8 | 0 |
-| vlake-nagib | 29 | 0 |
-| wayback | 10 | 0 |
-| **Ukupno** | **517** | **0** |
-
-Python: **45 proÅ¡lo**, 0 palo. PoÄetni direktni poziv nije imao pytest;
-izolovano `uv --with` okruÅ¾enje je zatim uspjeÅ¡no pokrenulo testove.
-Sintaksa: svih **5 nepraznih inline JS blokova** prolazi Node `vm.Script`;
-to nije browser E2E niti provjera svih referenci na funkcije.
-Dodatne izolovane Node VM reprodukcije R1/R3 su izvrÅ¡ene nad izvuÄenim
-stvarnim funkcijama, sa sintetiÄkim podacima i stubovima â€” bez novog test
-fajla u ovom dokumentacijskom commitu.
-
-### Komande za ponavljanje (iz korijena repozitorija)
-
-```bash
-git branch --show-current
-git status --short
-for f in tests/js/*.test.js; do node "$f" || exit 1; done
-PYTHONDONTWRITEBYTECODE=1 uv run --with pytest --with geographiclib --with rich --no-project python -m pytest -q -p no:cacheprovider tests
-```
-
-Syntax-only provjera (ne izvrÅ¡ava aplikaciju ili mreÅ¾ne pozive):
-
-```bash
-node - <<'JS'
-const fs = require('fs'), vm = require('vm');
-const html = fs.readFileSync('index.html', 'utf8');
-let count = 0;
-for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-  if (/\bsrc\s*=/.test(m[1]) || !m[2].trim()) continue;
-  new vm.Script(m[2]); count++;
-}
-console.log(count + ' inline blokova: sintaksa OK');
-JS
-```
-
-Build procedura za buduÄ‡i odobreni zadatak (NIJE izvrÅ¡ena ovim pregledom):
-
-1. Provjeri Äistu granu `CODEX-US-SUME`, taÄan commit i postojeÄ‡i potpis APK-a.
-2. Osiguraj Android SDK 34, JDK 17 i ispravan Gradle wrapper/alat. Trenutni
-   checkout nema wrapper JAR; to je konkretan blocker reprodukcije.
-3. Iz korijena `bash android/copy-assets.sh`, pa u `android/` pokreni
-   `./gradlew assembleDebug` nakon rjeÅ¡enja wrappera. Ne koristiti install task.
-4. Alternativno na Windowsu eksplicitno navedi granu:
-   `powershell -ExecutionPolicy Bypass -File android\build-apk.ps1 -Branch CODEX-US-SUME -BuildType debug`.
-   Skripta radi fetch/checkout/pull i Äisti generisani assets direktorij;
-   ne pokretati je usred lokalnih nezavrÅ¡enih izmjena.
-5. Provjeri sadrÅ¾aj assets-a i usklaÄ‘enost verzija prije i nakon builda.
-   Native izmjene trebaju pun rebuild. Debug i release nisu zamjenjivi.
-
-Push dokumentacije na CODEX-US-SUME ne odgovara `deploy.yml` push filteru
-(`main`, `claude/**`). Build workflow je samo workflow_dispatch. Ne mijenjati
-te filtere niti pokretati workflow u ovoj fazi.
-
-## 5. Obim Äitanja i plan
-
-ProÄitan cijeli `CLAUDE.md`; AGENTS.md nije postojao u poÄetnom checkoutu.
-ProÄitan cijeli offline-layer, build-apk.ps1, copy-assets.sh, build.gradle,
-Android README, oba GitHub workflowa i docs/MODULARIZACIJA.md. Pregledani
-su navedeni segmenti index.html (auth/startup, wipe, save/queue, crash,
-native replay, doznaka, satelitski kljuÄevi, poÅ¾ari i SQLite restore),
-Android setup/most/GPS buffer dijelovi, odabrane RLS migracije, testni
-harnessi, Python/Flutter ulazi i road-design parametri/pretraga.
-Ostatak UI-ja, svi import/export tokovi, sve migracije, native kamera/share
-detalji, minificirane biblioteke i cjelokupan Flutter kod nisu linijski auditirani.
-
-Naredni zadaci, tek poslije korisnikovog izbora:
-
-1. **ZaÅ¡tita oporavka i podataka (R1/R2):** crveni regresijski testovi koji
-   koriste stvarni model vlake, pad spremanja, punu kvotu, >500 stavki,
-   prekid JSONL reda i promjenu korisnika; zatim mali ciljano odobreni fix.
-2. **Pouzdan offline sync (R3):** durable enqueue, transportni rokovi,
-   idempotentnost i reconnect; potvrditi da kasni odgovor ne duplicira upis.
-3. **Kontrolisana APK isporuka i sigurnosna provjera (R4/R5):** reproducibilan
-   WebView build/test gate, postojeÄ‡i potpis i test na telefonu; read-only
-   potvrda RLS/config stanja pa zasebno odobreno uklanjanje client secreta s ureÄ‘aja.
-
-Prvo R1: dodatna provjera je veÄ‡ pokazala konkretan kvar na najskupljem
-scenariju â€” spaÅ¡avanju snimka s terena. Modularizacija dolazi postepeno,
-tek kad stabilizujemo te tokove; 41k redova samo po sebi nije razlog za rewrite.
-
-## 6. Promjene nakon poÄetnog pregleda â€” v1.1.8
-
-Ovaj odjel opisuje kod pripremljen na `CODEX-US-SUME` nakon poÄetnog audita.
-Raniji nalazi R1â€“R5 ostaju historijski dokaz poÄetnog stanja.
-
-### BrÅ¾i prvi prikaz karte
-
-- `index.html` sada uÄitava kljuÄne biblioteke iz lokalnog `static/libs`, a
-  Google font je neblokirajuÄ‡i dodatak. PoÄetak viÅ¡e ne Äeka CDN timeout.
-- `_startupRestore` pokreÄ‡e `sqlmapRestoreAll` odmah nakon prikaza poÄetnog
-  taba; SQL worker koristi lokalni sql.js bez CDN pokuÅ¡aja.
-- Pri pokretanju se obnavlja samo aktivna offline karta. Ostale saÄuvane karte
-  su odgoÄ‘ene dok ih korisnik ne izabere, umjesto serijskog uÄitavanja svih
-  velikih MBTiles/SQLite fajlova prije prvog korisnog prikaza.
-- `tests/browser/codex-startup.cjs` pokriva sintetiÄki IndexedDB/MBTiles
-  scenario, ali nije izvrÅ¡en jer ovom okruÅ¾enju nedostaje Playwright Chromium.
-  PoboljÅ¡anje treba potvrditi cold-start mjerenjem stvarnog APK-a.
-
-### OÄuvanje podataka i sync
-
-- `static/js/offline-layer.js` viÅ¡e ne reÅ¾e red na 500 operacija i ne briÅ¡e
-  operaciju poslije pet neuspjeha. Ostaje blokirana za ruÄni retry/izvoz.
-- Vlake i doznaka projekti prvo dobijaju lokalni zapis/UUID pa tek onda
-  pokuÅ¡avaju server. `static/js/reliable-fetch.js` ograniÄava Äekanje odgovora
-  i njegovog tijela, bez automatskog ponavljanja upisa.
-- Sync vlake veÅ¾e server ID/reviziju na novije lokalne operacije, prepoznaje
-  konflikt i utrku duplog inserta. Server red viÅ¡e ne prepisuje izmjenu koja
-  joÅ¡ Äeka sync.
-- Doznaka GPS ide prvo u lokalni bafer. Migracija
-  `supabase/migrations/20260911_codex_gps_idempotent.sql` je pripremljena, ali
-  **nije izvrÅ¡ena**; dodaje RLS-respecting idempotentni RPC uz klijentski
-  fallback dok RPC ne postoji.
-- Promjena korisnika arhivira lokalne terenske zapise po vlasniku prije
-  ÄiÅ¡Ä‡enja prikaza, a queue se ne briÅ¡e. Offline karte se ne arhiviraju zbog
-  veliÄine i izolacije korisnika; po potrebi se ponovo uvoze.
-
-### GPS oporavak i Android
-
-- Crash snapshot vlake Äuva `al`, projekt i krak, te se briÅ¡e tek nakon
-  potvrÄ‘enog lokalnog upisa.
-- `NativeGpsBuffer.java`, `GpsService.java` i `MainActivity.java` uvode
-  read/ack: native fajl se ne briÅ¡e dok JavaScript prvo ne upiÅ¡e sirovi
-  journal. OÅ¡teÄ‡en red ne odbacuje zdrave redove.
-- WebView zabranjuje file/universal-file pristup, mixed content i cleartext
-  HTTP; FileProvider koristi `applicationId`, a GPS broadcast je paketni.
-- Android kod nije kompajliran ni testiran na ureÄ‘aju u ovom okruÅ¾enju.
-  Promjene traÅ¾e puni APK build i lifecycle test na telefonu.
-
-### Sentinel i build
-
-- Uklonjeni su CDSE OAuth/WMS kod, UI, SW ruta i cache manager za svjeÅ¾i
-  Sentinel-2 snimak. Pri pokretanju se briÅ¡u stari klijentski secret i cache.
-  Preostali sloj `ğŸŒ Sentinel` je javni ESA WorldCover, bez kljuÄa.
-- Historijska migracija `20260910_sentinel2_kljucevi.sql` ostaje radi historije.
-  Nije pokrenuta destruktivna migracija za server tabelu/funkciju.
-- Verzija je usklaÄ‘ena: web/SW `1.1.8`, Android `versionCode 344` i
-  `versionName 1.1.8`.
-- `android/build-apk.ps1` prihvata samo `CODEX-US-SUME`; bootstrap provjerava
-  sluÅ¾beni Gradle 8.4 wrapper checksum. Manualni workflow
-  `.github/workflows/codex-webview.yml` gradi Java WebView APK, ali nije
-  pokrenut niti je APK objavljen.
-
-### Provjere v1.1.8
-
-Svih 24 `tests/js/*.test.js` fajlova prolazi (**516 provjera, 0 padova**),
-Python **45/45**, pet inline i Äetiri izdvojena JS fajla prolaze sintaksnu
-provjeru, a manifest XML parser. Nisu provjereni produkcijski Supabase, nova
-migracija, Android kompilacija/instalacija, background lifecycle ni stvarna
-brzina cold starta.
-
-## 7. Terenska provjera i startup podloga â€” v1.1.9
-
-Na debug APK-u v1.1.8 potvrÄ‘eno je oko **15 s** do prikaza ranije uÄitane
-SQLiteDB karte od pribliÅ¾no **950 MB**, jednako online i u avionskom reÅ¾imu.
-Za vrijeme Äekanja bila je vidljiva samo siva podloga i indikator. To potvrÄ‘uje
-da preostalo vrijeme pripada otvaranju velike lokalne baze, a ne mreÅ¾nom CDN-u.
-
-U v1.1.9 `_restoreLastMap` odmah dodaje laganu Topo podlogu, zatim otvara
-SQLite u workeru i zamjenjuje podlogu tek kada je baza spremna. Indikator je
-pomjeren na vrh da ne blokira koriÅ¡tenje karte. Online Ä‡e Topo biti vidljiv
-odmah; u avionskom reÅ¾imu zavisi od toga postoje li odgovarajuÄ‡e Topo ploÄice
-u service-worker cache-u. Sama SQLite karta od 950 MB i dalje moÅ¾e trebati oko
-15 s za otvaranje â€” ova izmjena uklanja sivu/neupotrebljivu poÄetnu fazu, ali
-ne tvrdi da je 950 MB baza otvorena trenutno.
-
-## 8. PoÅ¾arni prikaz â€” v1.2.0
-
-- Svaki novi ulazak u sekciju `PoÅ¾ari` resetuje samo vidljive poÅ¾arne slojeve;
-  podaci, keÅ¡evi i postavka obavjeÅ¡tenja se ne briÅ¡u. Nema automatskog dohvata
-  dok korisnik ne izabere prikaz.
-- Dugme `PrikaÅ¾i sve` na vrhu ukljuÄuje aktivne FIRMS detekcije, heatmap,
-  okvirni smjer, projekciju/prognozu, tekuÄ‡u godinu, lokalnu historiju,
-  dostupne arhivske godine te EFFIS opoÅ¾arene povrÅ¡ine i FWI. ObavjeÅ¡tenja se
-  ne ukljuÄuju automatski jer zahtijevaju svjestan izbor i sistemsku dozvolu.
-- Aktivni poÅ¾ari zadrÅ¾avaju postojeÄ‡u narandÅ¾asto-crvenu paletu po starosti.
-  Detekcije i arhivske povrÅ¡ine tekuÄ‡e godine koriste 12 boja po mjesecima;
-  sve ranije godine koriste istu priguÅ¡enu boju.
-- Verzije: web/SW `1.2.0`, Android `versionCode 346`, `versionName 1.2.0`.
-
-## 9. RuÄno aÅ¾uriranje â€” v1.2.1
-
-- U glavnom meniju, neposredno iznad odjave, nalazi se `ğŸ”„ AÅ¾uriraj aplikaciju`.
-  Web verzija pokreÄ‡e provjeru Service Workera i osvjeÅ¾ava aplikaciju.
-- APK moÅ¾e provjeriti je li novija verzija objavljena i otvoriti CODEX GitHub
-  build, ali Android ne dopuÅ¡ta tihu samostalnu instalaciju novog APK-a.
-  Korisnik i dalje ruÄno potvrÄ‘uje preuzimanje i instalaciju.
-
-## 10. GitHub Pages prijava â€” v1.2.2
-
-- GitHub Pages URL mora biti `https://pogonboskrupa.github.io/US-SUME/`;
-  mala slova u putanji vraÄ‡aju 404.
-- `doLogin()` sada hvata i startup greÅ¡ku prije normalne obrade prijave, pa
-  korisnik dobija poruku umjesto neaktivnog dugmeta.
-
-## 11. PoÅ¾ari â€” zapamÄ‡en prikaz (v1.2.3)
-
-- Ulazak u sekciju PoÅ¾ari viÅ¡e ne gasi checkbox-e niti uklanja slojeve.
-  Posljednje uspjeÅ¡no uÄitane detekcije vraÄ‡aju se iz lokalnog keÅ¡a odmah,
-  ukljuÄujuÄ‡i offline, pa se tek zatim mogu osvjeÅ¾iti mreÅ¾om.
-- GodiÅ¡nji prikaz i opoÅ¾arene povrÅ¡ine prikazuju sezonu martâ€“novembar;
-  januar, februar i decembar se ne crtaju niti se nude u legendi.
-
-## 12. Slab signal â€” v1.9.7 (2026-10-01)
-
-Na zahtjev korisnika rad se nastavlja na novoj grani
-`CODEX-US-SUME-2026-10-01`, od `0eba708`, umjesto historijske radne grane.
-
-- PotvrÄ‘eno testom: pozadinski `sbLoadVlake` na neuspjeÅ¡an dohvat ponovo
-  Äita lokalne vlake i serverski keÅ¡ te dvaput poziva obradu/prikaz vlaka.
-  `_reloadCoreData` sada koristi osvjeÅ¾avanje bez obnove lokalnog keÅ¡a;
-  mreÅ¾ni neuspjeh zadrÅ¾ava postojeÄ‡e objekte i prikaz. Prvi ulazak i dalje
-  obnavlja lokalne podatke, a uspjeÅ¡an dohvat primjenjuje serverske izmjene.
-- Dva uzastopna mreÅ¾na pada zatvaraju automatski mreÅ¾ni pristup i kada
-  postoje raniji uspjeÅ¡ni uzorci. Neuspjela proba odmah zatvara svoj prozor.
-  Povremena proba i povratak veze ostaju podrÅ¾ani.
-- Regresijski testovi nad izvornim funkcijama: prije izmjene pet padova,
-  poslije izmjene `slab-signal.test.js` 32/32. Ovo potvrÄ‘uje uklanjanje
-  nepotrebnog rada, ne trajanje zamrzavanja na stvarnom ureÄ‘aju.
-- Web/SW/Android verzija 1.9.7, Android versionCode 467. APK nije izgraÄ‘en
-  niti instaliran; potreban je terenski test slabog signala na novom APK-u.
-
-## 13. Pregled ruÄnog slanja â€” v1.9.8
-
-Na korisnikov zahtjev za Å¡irim pregledom i uz odobren sljedeÄ‡i push,
-`saveNovProjekt` sada uvijek Äuva projekat u redu prije potvrde uspjeha.
-OsvjeÅ¾avanje projekata vraÄ‡a neposlane iz reda prije validacije aktivnog
-projekta, a potvrda doznake Äuva keÅ¡ stabala kada UUID ostaje isti.
-Detalji, testovi i otvoreni nalazi: `docs/PREGLED_KODA_2026-10-01.md`.
-Slanje terenskog reda ostaje ruÄno; pozadinsko preuzimanje nije ukinuto.
-
-## 14. RuÄno slanje i offline odziv â€” v1.9.9 (2026-10-01)
-
-Korisnik je razjasnio cilj: ruÄno slanje ostaje; prioritet su brzina i
-zamrzavanje na osrednjim ureÄ‘ajima bez interneta. Automatsko slanje nije cilj.
-
-- `_retryOrphanVlake` je pri svakom init-u ponovo obraÄ‘ivao sve vlake bez
-  server ID-a, Äak i identiÄne veÄ‡ spremljenim operacijama. Svaki flush
-  serijalizuje cijeli lokalni registar, keÅ¡ i queue. Sada jedan pregled reda
-  pronalazi identiÄne operacije; one se ne prepisuju i zadrÅ¾avaju blocked/retry
-  status. Novija geometrija/metapodaci i vlake bez operacije se i dalje Äuvaju.
-- Oporavak prepuÅ¡ta glavnu nit izmeÄ‘u vlaka; nakon pauze ponovo provjerava
-  vlasnika, prisutnost i brisanje vlake. Ovo ne odgaÄ‘a izvorni terenski upis:
-  radi se o naknadnom oporavku veÄ‡ lokalno saÄuvanih podataka.
-- RuÄno slanje GPS serije na privremenom server/SQL kvaru viÅ¡e ne prelazi na
-  stotinu pojedinaÄnih pokuÅ¡aja niti nastavlja ostale serije. NepotvrÄ‘ene
-  taÄke ostaju u baferu. PojedinaÄni put ostaje za FK/RLS greÅ¡ke; prekida se
-  ako server tokom tog puta postane nedostupan.
-- Regresije: 40 identiÄnih vlaka bez ponovnog flush-a, novija geometrija i
-  metapodaci, promjena korisnika/brisanje tokom pauze, oÅ¡teÄ‡en red; 220 GPS
-  taÄaka i privremeni pad daju jedan serijski pokuÅ¡aj, nula pojedinaÄnih,
-  nepromijenjen bafer. RuÄni reÅ¾im ostaje pokriven postojeÄ‡im testovima.
-- Verzije: web/SW/Android 1.9.9, versionCode 469. Nije izvrÅ¡en Android build,
-  instalacija ni mjerenje na telefonu. Ovo uklanja konkretan nepotreban rad,
-  ne dokazuje da su svi uzroci zamrzavanja uklonjeni. Sinhroni localStorage
-  velikih GPS registara i native disk sync ostaju kandidati za profiliranje.
-
-## 15. Prvi dio pregleda â€” 2.0.0 / Android 470
-
-Korisnik traÅ¾i pregled i testiranje u tri cjeline, poÄevÅ¡i od lokalnog rada.
-Popravljena su dva reproducirana propusta pri padu lokalnog upisa: doznaka
-viÅ¡e ne pomjera memorijsku geometriju prije potvrde bafera; zavrÅ¡avanje traga
-ne briÅ¡e crash snapshot niti gasi snimanje kad registar nije saÄuvan.
-Oporavak doznake crta jednu liniju umjesto jednog sloja po segmentu.
-Detalji i preostali rizici: docs/PREGLED_DIO_1_OFFLINE_2026-10-01.md.
-
-## 16. Drugi dio pregleda â€” 2.0.1 / Android 471
-
-RuÄno slanje: nepoznate operacije se zadrÅ¾avaju uz objaÅ¡njenje; UPDATE
-statusa/zone zahtijeva potvrÄ‘en ciljani ID; zakaÅ¡njeli odgovor projekta/zone
-ne mijenja lokalne podatke novog naloga. Cijeli ruÄni ciklus se zaustavlja
-pri promjeni vlasnika. Osam novih regresijskih provjera prolazi.
-Obim i otvoreni nalazi: docs/PREGLED_DIO_2_RUCNO_SUPABASE_2026-10-01.md.
-
-## 17. TreÄ‡i dio pregleda â€” 2.0.2 / Android 472
-
-Tile bitmap cache ima tvrdu granicu. Dodan je manifest assets, atomarna Python priprema, Gradle `syncWebAssets` prije `preBuild`, stroge kopije i SHA-256 provjera APK-a. Svih 62 JS + 6 Python assets provjera prolaze. Wrapper JAR je vraÄ‡en i provjeren; lokalni build je sada blokiran nedostupnom Gradle 8.4 distribucijom (`UnknownHostException`).
-
-## 18. Oporavak zadnjeg commita â€” 2.0.3 / Android 473
-
-Otkriveno je da je `index.html` u commitu 2.0.2 sadrÅ¾avao umetnutu poruku
-alata o skraÄ‡enom izlazu i da je zbog toga nedostajala veÄ‡ina aplikacijskog
-koda. VraÄ‡ena je posljednja cjelovita verzija i ponovo su primijenjene
-provjerene izmjene iz pregleda 1â€“3: rad bez mreÅ¾e, ruÄno slanje, trajni GPS
-upis, oporavak traga/doznake, zaÅ¡tita promjene naloga i ograniÄen bitmap keÅ¡.
-PowerShell priprema assets-a viÅ¡e nema znak koji Windows PowerShell pogreÅ¡no
-tumaÄi bez UTF-8 BOM-a. `.well-known` ostaje u web repozitoriju, ali nije u
-APK manifestu jer Androidov `aapt` izostavlja skrivene direktorije. Iz
-`PUTEVI/` se pakuje samo koriÅ¡teni `putevi.geojson`; izvorni shapefile s
-dijakritiÄkim nazivom nije runtime asset i `aapt` mu je mijenjao ime. Python
-paket `geo/` i zasebni Flutter izvor `doznaka/` takoÄ‘er nisu WebView runtime
-assets i viÅ¡e se ne umeÄ‡u u APK. ÄŒisti `assembleDebug` je uspjeÅ¡an; Python
-alat je zatim SHA-256 provjerio svih 22 runtime fajlova u APK-u. Prolaze svih
-63 JS testnih fajlova, 51 Python provjera i sintaksa pet inline JS blokova.
-APK nije instaliran niti testiran na stvarnom telefonu.
-
-## 19. Slab signal, GPS prikaz i primljeni podaci â€” 2.0.4 / Android 474
-
-Slaba izmjerena veza sada zaustavlja pozadinske HTTP/Realtime tokove i
-uÄitavanje ploÄica; lokalni rad nastavlja odmah. RuÄna mreÅ¾na radnja otvara
-ograniÄen prozor, a periodiÄna proba provjerava oporavak veze. Slanje terenskih
-podataka ostaje ruÄno. KeÅ¡irana ploÄica ili roditelj prikazuju se bez Äekanja;
-rok obuhvata i tijelo odgovora. Iskrcana ploÄica odbacuje zakaÅ¡njeli odgovor.
-GPS doznaka koristi Canvas i linije do 128 segmenata, ne zaseban sloj po fiksu.
-
-Panel â€PoÅ¡alji podatke na serverâ€ prikazuje nove/aÅ¾urirane vlake drugih Älanova
-projekata Äiji je vlasnik drugi projektant. RuÄno osvjeÅ¾avanje provjerava
-Älanstvo i preuzima podatke u postojeÄ‡i geometrijski keÅ¡. Odvojeni saÅ¾etak ima
-najviÅ¡e 200 stavki, izolovan je po nalogu i dostupan offline. Realtime izmjene
-se grupiÅ¡u prije upisa; zakaÅ¡njeli odgovor ne prelazi na novi nalog.
-
-Prolazi svih 65 JS testnih fajlova, 51 Python test, sintaksa pet inline blokova i obje browser
-provjere. Simulacija Chrome CPU 4Ã—: 40 vlaka / 32.000 taÄaka lokalno dostupno
-za 1,8 s; 1.500 GPS segmenata koristi 12 slojeva umjesto 1.500. Slaba veza daje
-nula pozadinskih zahtjeva u provjeri; pregled preuzetog projekta radi offline
-i ne Å¡alje podatke. Lokalni assembleDebug uspjeÅ¡an; SHA-256 svih 22 runtime
-fajlova u APK-u potvrÄ‘en. Ovo nisu mjerenja na stvarnom telefonu niti provjera
-produkcijskih Supabase prava. Offline podloge moraju biti ranije uvezene ili
-keÅ¡irane. Nema migracije baze.
-
-## 20. Terenski upgrade â€” 2.0.5 / Android 475
-
-Na zahtjev â€ODRADI 1â€ uveden je lokalni `tvlake-field-journal` IndexedDB
-dnevnik (`static/js/field-store.js`). Doznaka svaki prihvaÄ‡eni fix upisuje u
-pending, geometriju sesije i mali opis sesije u JEDNOJ transakciji. UI se
-pomjera tek nakon complete; podrÅ¾ani WebView koristi strict durability.
-Nema serijalizacije cijelog GPS bafera niti live niza po fiksu. Vlaka i trag
-zadrÅ¾avaju postojeÄ‡u pohranu/native zaÅ¡titu i snapshot na 30 s â€” nisu masovno
-migrirani. Serijski commit sprjeÄava preklop live/native callbacka; neuspjela
-taÄka se ponavlja prije novije. ZavrÅ¡etak Äeka upis u letu i ne gasi snimanje
-ako zavrÅ¡etak nije potvrÄ‘en. ZakaÅ¡njeli startup recovery ne prepisuje Å¾ivi
-snimak. TaÄke i potvrde slanja su odvojene po vlasniku; manual sync ostaje.
-
-Stari GPS bafer se prenosi, ponovo Äita i provjerava prije brisanja originala.
-OÅ¡teÄ‡en original ostaje netaknut. Stabilni legacy identiteti i receipts
-sprjeÄavaju ponovno slanje potvrÄ‘enih taÄaka iz stare kopije/arhive. Aktivna
-sesija vraÄ‡a pune koordinate, visine i vremena; legacy snapshot Äuva oznaku
-nepoznatog vremena umjesto izmiÅ¡ljanja. Journal ostaje pri promjeni naloga,
-ali drugi nalog ga ne vidi niti Å¡alje. Nema produkcijske SQL migracije.
-
-Meni i Projekat imaju â€Spremno za teren / sigurnosna kopijaâ€:
-- provjera projekta, granica, lokalnih podataka/kolega i outbox-a;
-- ograniÄena iscrpna Cache Storage provjera odabranog obuhvata i zoom-a,
-  najviÅ¡e 2048 ploÄica, bez mreÅ¾e; drugi zoom nije time potvrÄ‘en;
-- SQLite podloga se navodi kao otvorena, ali metapodaci nisu dokaz odsustva
-  rupa, zato se ne daje laÅ¾no zeleno â€spremnoâ€; obuhvat vlaka bez granice je
-  takoÄ‘er nepotpuna potvrda;
-- stalni status snimanja kroz tabove: taÄnost GPS-a, trajanje, taÄke,
-  potvrÄ‘en upis/greÅ¡ka, veza i broj stavki za ruÄno slanje;
-- JSON izvoz s SHA-256 i lokalna obnova samo istog naloga, bez prepisivanja
-  postojeÄ‡ih ID-jeva. UkljuÄuje projektne vlake/kolege, doznaka keÅ¡/GPS sesije,
-  red za slanje, tragove/mjerenja i lokalni KML/GeoJSON naloga. Doznaka moÅ¾e
-  ukljuÄiti povezani projekat vlaka. Stari tragovi/mjerenja bez projektId se
-  pridruÅ¾uju po GJ/odjelu; novi ga pamte eksplicitno. Rasteri, fotografije i
-  referentne slike su jasno ISKLJUÄŒENI i Äuvaju se zasebno. Uvoz ima limit
-  30 MB, potvrdu korisnika i preflight kopiju; nema automatskog slanja.
-
-Provjere: svih 66 JS testnih fajlova (10 novih ciljanih provjera), tri browser
-skripte, 51 Python test i sintaksa. Stvarni Chromium IndexedDB + CPU 4Ã—:
-1200 sintetiÄkih taÄaka s vremenskim oznakama Å¡est sati snimanja, nula upisa
-starog velikog bafera; simulirani QuotaExceededError ne pomjera liniju,
-naknadni oporavak vraÄ‡a 1202 taÄke. Provjerena i obnova na Äistom profilu,
-ponovljeni uvoz, vlasniÄka izolacija, oÅ¡teÄ‡ena kopija i zabrana ponovnog
-stavljanja potvrÄ‘enih taÄaka u outbox. Ovo nije Å¡est sati rada na stvarnom
-Android telefonu, logcat/ANR mjerenje, gubitak fiziÄkog napajanja niti
-produkcijska Supabase provjera. To ostaje terenski korak provjere APK-a.
-
-### Dopuna 2.0.6 / Android 476
-
-ZavrÅ¡na provjera obnove normalnog projekta pokazala je da `loadProj()` vraÄ‡a
-samo formulare, ne vlake. Uvoz sada odmah crta samo nedostajuÄ‡e vlake iz
-kopije, bez mreÅ¾e i bez zamjene novijih objekata u memoriji. Dodana je provjera
-geometrije normalnog projekta u Äistom profilu i ponovljenog uvoza.
-
-## 21. Pregled podataka po tabovima â€” 2.0.7 / Android 477
-
-Korisnik je izabrao upgrade broj 2. Novi `static/js/tab-data.js` koristi samo
-lokalne podatke: nema novih mreÅ¾nih zahtjeva ni automatskog slanja. Aktivni
-projekat je vidljiv u panelima, dok je zasebni odjel doznake jasno oznaÄen
-kao povezan ili zaseban; navigacija ne mijenja odjel niti zaustavlja GPS.
-
-Pretraga, sort, filter neposlanih vlaka, stranica i poloÅ¾aj panela pamte se
-po korisniku/projektu tokom otvorene sesije. Nije trajna postavka nakon
-restarta. VeÄ‡e liste vlaka, kolega i reda slanja crtaju po 60 kartica na
-stranici (nije virtualni beskonaÄni scroll). Hijerarhijski redoslijed krakova
-i stvarni `data-vi` indeks su oÄuvani; izbor s karte otvara odgovarajuÄ‡u
-stranicu ako vlaka nije skrivena pretragom/filterom. Kartice razlikuju lokalne
-izmjene u redu od potvrÄ‘ene serverske kopije. Kolege imaju lokalnu pretragu
-po nazivu vlake/imenu. Panel Server ima Za slanje / Primljeno / Problemi;
-problematiÄne operacije ostaju i u redu za slanje, niÅ¡ta se ne odbacuje.
-BrojaÄi i primljeni feed ostaju ograniÄeni na trenutnog korisnika/Älanstvo.
-
-Provjere: svih 66 JS testnih fajlova, 51 Python test i Äetiri browser skripte.
-Novi `tests/browser/tab-data.cjs` testira 240 vlaka/180 vlaka kolega, 60 DOM
-kartica, izbor druge stranice, pretragu i povratak poloÅ¾aja, izolaciju stanja
-projekata, neposlanu izmjenu veÄ‡ potvrÄ‘ene vlake, filtre server panela i tuÄ‘i
-red. Chromium s CPU 4Ã— prikazuje stranicu za pribliÅ¾no 28â€“72 ms (sintetiÄki mali
-tragovi, ne mjerenje fiziÄkog telefona); pregled ne pravi vanjske zahtjeve.
-Regresijske provjere ruÄnog slanja, slabog signala, IndexedDB GPS oporavka i
-sigurnosnih kopija su oÄuvane. Novi modul je u SW shellu i obaveznim Android
-assetima. Pravi srednjerangirani Android i produkcijski Supabase nisu testirani.
-
-## 22. Dizajn za teren â€” 2.0.8 / Android 478
-
-Korisnik je odabrao broj 3 iz prethodnog prijedloga: Äitljivost, dodirne
-povrÅ¡ine i dnevni prikaz. `static/css/field-design.css` je zaseban sloj nad
-postojeÄ‡im izgledom, bez prepisivanja navigacije ili GPS/pohrana/sync koda.
-Tekst navigacije je 11.5â€“12 px (prethodno 10.5 px), dodirna visina 56 px;
-osnovna dugmad i dijalozi imaju najmanje 48 px. Kartice, statusi, pretraga i
-saÅ¾eci imaju Äitljiviji tekst i ujednaÄene rubove. Akcije ostaju tekstualno
-oznaÄene Snimi / Pauza / Nastavi / ZavrÅ¡i, bez premjeÅ¡tanja ili novih radnji.
-Traka aktivnog snimanja ostaje dostupna; vrh je usklaÄ‘en s viÅ¡om navigacijom.
-
-U Meni â†’ Teren dodano je dugme â€Dnevni prikaz za sunceâ€. Tamni prikaz ostaje
-zadani; izbor se pamti kao postavka ureÄ‘aja `tvlake_field_theme_v1` i primjenjuje
-prije prvog crtanja. JS modul `field-design.js` ne pristupa projektu, GPS-u,
-redu slanja ni mreÅ¾i. Puna memorija ne ruÅ¡i promjenu teme, nego upozori da
-postavka nije trajno upisana. Dnevna tema koristi svijetle povrÅ¡ine i tamni
-tekst, semantiÄke statuse i jasno oznaÄene radnje; ne mijenja rastere, boje
-vlaka ili geometriju. Nema novih fontova, slika, mreÅ¾nih biblioteka ili filtera
-nad kartom. Oba fajla su u SW shellu i obaveznim APK runtime assetima (27).
-
-Provjere: svih 67 JS testnih fajlova, 51 Python test, inline sintaksa i pet
-browser skripti. Novi unit test provjerava lokalnu postavku/obnovu, ARIA stanje,
-nepoznatu vrijednost i punu memoriju. Browser provjerava 320/360/412/768 px,
-obnovu teme nakon reload-a, kontrast boje naslova i primarnog dugmeta, dodirne
-visine, modale i odsustvo horizontalnog prelijevanja. Promjena teme ne gasi
-simulirano aktivno snimanje, ne mijenja red niti pokreÄ‡e vanjske zahtjeve.
-Vizuelno pregledane screenshot slike listi vlaka/projekata/doznake i panela
-Server/Spremno za teren. Dnevni prikaz nije provjeren na fiziÄkom telefonu
-pod suncem; stvarni Android GPS i produkcijski Supabase ostaju neprovjereni.
-
-## 23. KML vlake vezane za projekat â€” 2.0.9 / Android 479
-
-U detaljima projekta dodano je â€Uvezi vlake (KML)â€. Ciljni projekat i korisnik
-zakljuÄavaju se pri otvaranju; dopuÅ¡teni su vlastiti projekti i Älanstvo, ne
-pregledni nalozi. KML LineString/MultiGeometry i gx:Track postaju normalni
-lokalni objekti vlaka s projektom, taÄkama/visinama, brojem, krakom i stranom.
-PostojeÄ‡i klik/popup/Edituj i editor geometrije ostaju isti kao za snimane
-vlake. GPX kompatibilnost je zadrÅ¾ana. Poligoni se viÅ¡e ne upisuju pri samom
-pregledu fajla: granice imaju odvojeni postojeÄ‡i â€Dodaj KML fajlâ€ tok.
-
-Pregled ne mijenja podatke; odustajanje i zakaÅ¡njelo Äitanje iz prethodnog
-modala ne preusmjeravaju uvoz. Nazivi su normalizovani i jedinstveni u
-projektu, ukljuÄujuÄ‡i batch; T5.1 zahtijeva T5, a ugnijeÅ¾Ä‘eni krak svog
-roditelja. XML nazivi se escapiraju. Neispravne KML koordinate ne smiju
-tiho spojiti preostale taÄke preko preskoÄenog dijela. Za telefon je uvoz
-ograniÄen na 20 MB, 1000 linija i 200000 taÄaka; prevelik fajl se odbija,
-ne skraÄ‡uje. Cijeli uvoz se prvo trajno lokalno snimi; puna memorija
-odustaje bez dodavanja na kartu/red. Slanje ostaje iskljuÄivo ruÄno.
-Red i keÅ¡ se pripremaju jednim batch zapisom, bez ponovnog serijalizovanja
-svih GPS taÄaka za svaku pojedinu liniju. Ako red ne stane u memoriju,
-trajna lokalna kopija ostaje i poruka ne tvrdi da je pripremljen za slanje.
-
-Preimenovanje sada aÅ¾urira i postojeÄ‡u neposlanu operaciju za istog
-korisnika/projekat, umjesto da stari naziv kasnije napravi dupli red.
-Editor i Doznaka Äuvaju identitet vlake/korisnika preko async dijaloga.
-Roditeljsko preimenovanje ne preimenuje automatski sve potomke (postojeÄ‡e
-ponaÅ¡anje); krakovi imaju zasebno preimenovanje u editoru.
-
-Provjere: 68 JS testnih fajlova, 51 Python test, pet inline JS blokova,
-browser testovi KML/ruÄno slanje/tabovi/slab signal/dizajn. Novi browser
-test stvarno bira KML fajl, provjerava ciljni projekat uprkos drugom aktivnom,
-roditeljski krak, popup/editor, preimenovanje bez stare queue stavke,
-punu memoriju, promjenu korisnika, escaping, prefiksirane namespaceove,
-MultiGeometry/gx:Track, zakaÅ¡njeli FileReader i obnovu nakon reload-a.
-Lokalni debug APK je izgraÄ‘en i svih 27 runtime assets SHA-256 provjereno.
-Pravi Android biraÄ fajlova, GPS i produkcijski Supabase nisu testirani.
-
-## 24. Vidljivija Android ikona â€” 2.1.0 / Android 480
-
-Na zahtjev korisnika poveÄ‡an je samo unutarnji grb (~10.2% linearno), bez
-redizajna, raster obrade, promjene boja, vanjskog okvira ili login/splash
-grafike. Manifest koristi nove `ic_launcher_visible` i `round_visible`
-resurse. Android 8+ adaptivna maska zadrÅ¾ava postojeÄ‡u zelenu pozadinu;
-foreground XML proÅ¡iruje postojeÄ‡i providni bitmap simetriÄno za 5.5dp
-na 108dp platnu. Android 7 ima zaseban 48dp fallback s 53dp grbom, zelenom
-podlogom i oÄuvanim ovalnim okvirom za roundIcon. PWA PNG ikone nisu
-mijenjane; ovaj zahvat odnosi se na instaliranu Android aplikaciju.
-
-Novi Node test Äita stvarne PNG alpha piksele u pet density varijanti i
-provjerava da poveÄ‡ani grb (uz rub piksela/interpolaciju) stane u centralni
-66dp sigurni krug i da dijagonala crteÅ¾a ostane <=61% platna. Provjerava i
-manifest/XML veze i odvojeni fallback. Browser preview uporeÄ‘uje stare/nove
-kruÅ¾ne, zaobljene i kvadratne maske, ukljuÄujuÄ‡i prikaz na 48px; to je
-simulacija, ne Android launcher screenshot. Prolazi 69 JS testnih fajlova,
-Gradle debug build i SHA-256 provjera svih 27 web runtime assets u APK-u.
-Nije izvrÅ¡ena instalacija niti provjera na stvarnim Android launcherima.
-
-
-## 25. Slanje i preuzimanje vlaka u zajedniÄkom projektu â€” 2.1.1 / Android 481
-
-Korisnik je izriÄito otvorio najnoviju granu `CODEX-US-SUME-2026-10-01`
-i prijavio da druga vlaka ne stiÅ¾e drugom projektantu u verziji 2.1.0.
-Ovaj zadatak koristi taj izabrani izvor (`8887494`), umjesto historijske
-radne grane 1.9.6 iz uvodnih uputa. Git clone nije dostupan zbog nedostupnog
-proxyja; taÄni izvorni fajlovi i testni resursi preuzeti su GitHub konektorom.
-Lokalni Git snapshot sluÅ¾i za diff, nije kopija udaljene commit historije.
-
-PotvrÄ‘eni klijentski propusti i popravke:
-- RuÄni pritisak ranije provjerava samo postojeÄ‡i red, prije debounce upisa
-  nove vlake. Sada Äeka lokalno spremanje odgoÄ‘enih vlaka i oporavlja vlake
-  bez serverskog ID-ja prije otvaranja kapije slanja. Prazan red viÅ¡e ne
-  onemoguÄ‡ava dugme; priprema moÅ¾e otkriti neposlanu lokalnu vlaku. Dupli tap,
-  promjena naloga, oÅ¡teÄ‡en red i puna memorija ne daju laÅ¾nu potvrdu slanja.
-- Pregled/preuzimanje primljenih vlaka ranije iskljuÄuje vlastite projekte,
-  pa vlasnik ne preuzima doprinos Älana. Sada obuhvata vlasniÅ¡tvo i Älanstvo,
-  uz iskljuÄenje vlastitih vlaka iz pregleda kolega.
-- RuÄno preuzimanje ranije samo sprema geometriju u keÅ¡. Sada istim odgovorom
-  osvjeÅ¾ava i aktivnu kartu, bez ponovnog upita.
-- UÄitavanje kolega ne filtrira autore po zastarjeloj lokalnoj listi Älanova:
-  projekat i postojeÄ‡i server RLS ostaju autoritet za Äitanje. Sve stranice
-  vlaka se preuzimaju prije primjene. ZakaÅ¡njeli odgovor ne precrtava drugi
-  nalog/projekat niti noviji paralelni dohvat. Pad druge stranice zadrÅ¾ava
-  raniju kartu/keÅ¡. Neuspjelo trajno keÅ¡iranje ne javlja uspjeh preuzimanja.
-
-Regresijska provjera `tests/js/server-dvije-vlake.test.js`: 14/14, sa
-stvarnim izvornim funkcijama i laÅ¾nim serverom/kartom. Na izvornom 2.1.0
-reproducirano: poslije prvog slanja T1, drugi pritisak prije debouncea ne
-Å¡alje T2; vlasnik ne preuzima vlake Älana; ruÄno preuzimanje ne crta novu
-vlaku u aktivnom projektu. Testovi pokrivaju i 201 vlaku kroz tri stranice,
-pad stranice, promjenu naloga/projekta, paralelne odgovore i lokalnu kvotu.
-Prolaze svih 70 JS testnih fajlova i sintaksa pet inline JS blokova.
-
-Nema SQL migracije ni pristupa stvarnim podacima/proizvodnoj Supabase bazi.
-Ovo nije potvrda stvarnih produkcijskih RLS pravila, WebSocket isporuke niti
-ponaÅ¡anja dva fiziÄka Android telefona. APK nije izgraÄ‘en ni instaliran.
-Commit koristi `[skip ci]` jer postojeÄ‡i push workflow automatski objavljuje
-APK, a ovaj zahtjev je popravka koda. Potreban je naknadni puni APK build iz
-2.1.1 i terenska provjera: poÅ¡iljalac ruÄno poÅ¡alje T1 pa T2; primalac
-osvjeÅ¾i panel Server i provjeri obje vlake na karti, kao vlasnik i kao Älan.
-
-## 26. Server: zajedniÄki pregled projekta â€” 2.1.2 / Android 482
-
-Korisnik traÅ¾i zavrÅ¡etak popravke, jasniji Server, projekat/projektanta,
-zajedniÄki ispis svih vlaka sa duÅ¾inama, zatim izriÄito novu verziju za
-aÅ¾uriranje unutar aplikacije. Taj posljednji zahtjev autorizuje puni APK
-build i objavu kroz postojeÄ‡i push workflow odabrane grane
-`CODEX-US-SUME-2026-10-01`; ovaj commit nema `[skip ci]`.
-
-`server-panel.js` i pripadajuÄ‡i CSS uvode poÄetni tab Vlake projekta:
-izbor dostupnog projekta, prijavljeni projektant, broj vlaka, zbir zasebnih
-duÅ¾ina, pregled i filter po projektantima, pretragu i paginaciju 60 redova.
-Puni HTML ispis obuhvata sve vlake odabranog projekta i zbir po autorima,
-nezavisno od pretrage/stranice/filtera. Iste oznake kod razliÄitih autora
-ostaju zasebne; isti serverski ID nakon preimenovanja ne duplicira red.
-Geometrija bez dvije validne taÄke nema laÅ¾nu nultu duÅ¾inu.
-
-RuÄni refresh preuzima sve dozvoljene vlake odabranog projekta, ukljuÄujuÄ‡i
-vlastite sa drugih ureÄ‘aja. Preuzimanje Äuva lokalni debounce, queue i
-aktivno GPS snimanje. Izbor projekta u Serveru sam ne mijenja aktivnu kartu.
-Pregled ne Å¡alje podatke automatski. Neposlane/stare kopije imaju vidljiv
-status; postojeÄ‡e kopije koje nedostaju u novom odgovoru se ne briÅ¡u.
-Zadnje potpuno preuzimanje pamti se po nalogu/projektu, ne po globalnom
-telefonu; neispravni metapodaci ne ruÅ¡e panel. Red slanja pokazuje kontekst
-projekta i autora, tekst i kljuÄ u HTML-u su escapirani. BrojaÄ Primljeno
-ukljuÄuje i vlastite projekte, lokalne operacije ne poveÄ‡avaju broj slanja.
-
-Svi novi runtime resursi dodani su u SW i Android assets manifest.
-Objava APK-a koristi postojeÄ‡i fiksni debug potpis; release tag sada
-izriÄito pokazuje commit koji je izgraÄ‘en umjesto default grane.
-Prolazi 71/71 JS testnih fajlova, ukljuÄujuÄ‡i 23 provjere novog panela,
-14 regresija slanja/preuzimanja, sintaksa pet inline blokova i tri modula.
-Pripremljen je browser fixture za dva izgleda i Äetiri Å¡irine; Chromium
-lokalno blokira sandbox i vizuelna provjera nije zavrÅ¡ena. Nema pristupa
-produkcijskoj Supabase bazi, migracije ni instalacije na stvarni telefon.
-Ishod GitHub APK builda/objave provjerava se odvojeno nakon pusha.
-
-PotvrÄ‘eno 2026-10-02: workflow `37047479985`, job `110972380755`, uspjeÅ¡an.
-IzgraÄ‘en commit `7bda9b0b5a7446af29a6eb32545d92c9e119a30e`, 71 JS
-testnih fajlova i APK SHA-256 provjera 29 web resursa prolaze. Najnoviji
-nedraft release `v2.1.2` sadrÅ¾i `app-debug.apk` (21.617.963 bajta), stanje
-`uploaded`; tag pokazuje taÄan izgraÄ‘eni commit. APK SHA-256:
-`b6201d75b3b3ab68a5a2de6b8b11580646299d05bb70aeae43a89d537b6d7edc`.
-Native updaterov `/releases?per_page=1` vraÄ‡a ovu objavu; korisnik moÅ¾e
-pokrenuti Meni â†’ AÅ¾uriraj aplikaciju. Stvarna instalacija, vizuelni izgled
-i saradnja na dva fiziÄka telefona nisu potvrÄ‘eni ovom CI provjerom.
-
-## 27. Å tampa, Dnevni mod i glavni Meni â€” 2.1.3 / Android 483
-
-Korisnik traÅ¾i prilagodljiv opis gore u sredini Å¡tampanog lista umjesto
-automatske Å¡umarije, opis legende, bolji pregled Å¡tampe, popravku svijetlog
-teksta u dnevnom prikazu i novi dizajn Menija s jasno vidljivim korisnikom,
-logom, nazivom aplikacije i verzijom na dnu. Sve ide u isti naredni APK.
-
-Å tampa ima dva viÅ¡eredna opisa (do 300 znakova) i opcionalno preimenovanje
-standardnih simbola (do 80 znakova), uz oÄuvanje boje/crteÅ¾a simbola. Opisi i
-nazivi se pamte lokalno u postojeÄ‡im postavkama; odjel/G.J. i dalje dolaze
-iz aktivnog projekta. Å umarija se automatski viÅ¡e ne ispisuje u zaglavlju.
-Datum ostaje, dugi naslov/opis/legenda se prelamaju. Vlastite stavke su
-ograniÄene na 12 i dobile dostupno dugme uklanjanja. VeÄ‡i pregled sklapa
-postavke bez mijenjanja mjerila, formata ili podataka. Native PrintManager
-i dimenzije lista/mjerilo ostaju postojeÄ‡i tok.
-
-Meni ima pet sekcija u karticama, stvarna dugmad sa postojeÄ‡im akcijama i
-ID-jevima za dozvole. Skroluju se samo sekcije, footer ostaje vidljiv:
-ime/prezime iz profila prijavljenog korisnika, uloga/Å¡umarija, centriran
-postojeÄ‡i logo `icon-192.png`, US Å UME Â· Vlake i verzija. Otvaranje ponovo
-provjerava nalog; stari profil drugog naloga ne prikazuje tuÄ‘e ime.
-Postavka teme je preimenovana u Dnevni mod. Ispravljeni Lokacija/Izmjeri
-u omotaÄima donje trake, ugaÅ¡ena GPS ikona, statusi i preostali svijetli
-natpisi u statistici/slojevima/oznakama. Kontrole Å¡tampe prate obje teme.
-
-Lokalno prolazi 72/72 JS testnih fajlova, pet inline blokova i sintaksa
-field-design.js. Å tampa sada ima 17 provjera, dodana je promjena identiteta
-Menija kroz razliÄite naloge. Browser fixture koristi stvarni HTML/CSS i
-funkcije uz laÅ¾ni projekat/kartu: Meni 320/390/768 i pejzaÅ¾ 568Ã—320 u dvije
-teme, vidljiv footer, boje Lokacija/Izmjeri, opise, legendu i PDF. PokreÄ‡e se
-na GitHub runneru prije APK-a jer lokalni Chromium blokira sandbox.
-Stvarno Å¡tampanje/instalacija na fiziÄkom Android ureÄ‘aju nisu potvrÄ‘eni.
-
-APK 2.1.3 je objavljen: workflow `37049513747` uspjeÅ¡an, tag na
-`e5408b23b86f272b0b5ab7742725e22faef2b39f`. Naknadno je ispravljen UTF-8
-samo u browser fixtureu i dodata provjera naÅ¡ih slova/uÄitanog loga;
-workflow `37049836057` za `f1d96b15e28cf121727e71face0675cca6373164`
-takoÄ‘e uspjeÅ¡an. Runtime APK resursi nisu promijenjeni tim testnim commitom.
-
-## 28. Upravljanje projektima â€” 2.1.4 / Android 484
-
-Na dodatni korisnikov zahtjev redizajnirani lista i detalj sekcije unutar
-Menija. Pretraga odjela/G.J./vlasnika i filter svih/aktivnog/vlastitih/
-dijeljenih projekata rade lokalno; zbirni pregled ostaje za cijeli skup.
-Kartice kao dostupna dugmad imaju odjel, G.J., vlasnika, aktivni status,
-broj glavnih vlaka/krakova, ukupnu duÅ¾inu, datum i povrÅ¡inu. ID prolazi
-kroz escapirani data atribut, ne interpolaciju u JavaScript string.
-
-Kartice obiÄnog projektanta sada koriste isti zadnji dostupni zajedniÄki
-skup kao Server (ukljuÄujuÄ‡i preuzete vlake kolega). Model prihvata opcionalni
-ID projekta bez mijenjanja izabranog projekta u Serveru ili na karti.
-Offline detalj koristi isti skup; taÄke su kopirane prije obogaÄ‡ivanja
-visina tako da pregled ne mijenja keÅ¡ ili Å¾ivo snimanje. Novi mreÅ¾ni upiti
-nisu uvedeni; admin/vodeÄ‡i zadrÅ¾avaju postojeÄ‡e RPC agregate i filter Å¡umarije.
-
-Detalj ima istaknut odjel/G.J./vlasnika/duÅ¾inu, jasne postojeÄ‡e akcije,
-kartice osnovnih podataka/statistike/projektanata/radnih dana, Äitljive
-veliÄine slova i tabele sa horizontalnim skrolom. Stilovi su ograniÄeni
-na PM modal, koriste obje teme i prilagoÄ‘avaju se telefonu/pejzaÅ¾u/tabletu.
-Granice/geo podaci, podloge, dozvole i postojeÄ‡i izvjeÅ¡taj ostaju isti.
-
-Krakovi se grupiÅ¡u po autoru i oznaci: dva projektanta sa T1 viÅ¡e ne
-prikazuju isti krak dvaput u zajedniÄkoj tabeli.
-Lokalno prolazi 73 JS testna fajla, ukljuÄujuÄ‡i osam novih regresija PM-a,
-pet inline blokova i server-panel.js. Browser fixture proÅ¡iren stvarnim PM
-funkcijama i laÅ¾nim projektima, zajedniÄkim keÅ¡om i kartom: lista i detalj
-na Äetiri veliÄine u obje teme, filteri i tabele; ostaju provjere Menija,
-naÅ¡ih slova, Dnevnog moda i Å¡tampe/PDF-a. APK objavljuje postojeÄ‡i workflow
-po zahtjevu za aÅ¾uriranje unutar aplikacije. Stvarni telefoni/Supabase i
-fiziÄka Å¡tampa nisu testirani.
-
-PotvrÄ‘eno 2026-10-02: prva browser provjera otkrila je postojeÄ‡i skriveni
-povratak iz detalja (prazan inline display ponovo aktivira CSS display:none).
-Detalj sada izriÄito postavlja inline-flex; regresija i stvarni klik u
-browseru prolaze. Popravka ukljuÄena prije prve objave APK-a 2.1.4.
-
-Workflow `37052260164`, job `110988276766`, uspjeÅ¡an za commit
-`8a41e1a2479a6a9b8e16ecd6f25d54204275df2d`: 73/73 JS testna fajla,
-browser pregled Menija i projekata na Äetiri veliÄine u obje teme,
-filteri/povratak, opisi Å¡tampe/PDF i provjera 29 APK web resursa.
-SaÄuvano 25 PNG pregleda i jedan PDF; vizuelno provjereni lista/detalj
-projekata, oba moda i footer Menija. Fixture koristi laÅ¾ne lokalne podatke
-i zamjenu karte; ne potvrÄ‘uje stvarno crtanje geometrije ili native Å¡tampu.
-
-Nedraft javna debug objava `v2.1.4` sadrÅ¾i `app-debug.apk` (21.640.363
-bajta), stanje uploaded. Tag pokazuje navedeni izgraÄ‘eni commit; native
-updaterov `/releases?per_page=1` vraÄ‡a ovu objavu. APK SHA-256:
-`63a50be05efe308e810291649b54ea23a9cba2fc1fc1030074ce9c5fc1e86625`.
-Android versionCode 484, postojeÄ‡i fiksni debug potpis. Korisnik pokreÄ‡e
-Meni â†’ AÅ¾uriraj aplikaciju; instalacija i saradnja na dva fiziÄka telefona
-nisu potvrÄ‘ene u ovom okruÅ¾enju.
-
-## 29. Provjera slanja vlaka/doznake i naziv DENDRO MAP â€” 2.1.5 / Android 485
-
-Korisnik traÅ¾i provjeru slanja nacrtanih i GPS snimljenih vlaka i pojaseva
-doznake, naziv DENDRO MAP u Meniju i bolji dizajn dugmeta Vlake.
-Slanje ostaje iskljuÄivo ruÄno preko Meni â†’ Server â†’ PoÅ¡alji na server.
-Oba naÄina unosa vlake prolaze kroz addPt/scheduleVlakaSave/sbFlushVlaka i
-upsert_vlaka â†’ tabelu vlake. GPS pojas ide kroz trajni FieldStore dnevnik
-i serije doz_track_points; obojeni poligon pojasa raÄuna se iz tih taÄaka
-i granice odjela. Nacrtane zone Å¡alju boundary_geojson u doz_area_markings.
-
-NaÄ‘en i ponovljen problem hladnog pokretanja: brojaÄ prije uÄitanog IDB-a
-moÅ¾e prijaviti nula GPS taÄaka i serverPosalji kaÅ¾e da je sve veÄ‡ poslano.
-Priprema sada Äeka FieldStore.init i provjerava vlasnika nakon await-a;
-greÅ¡ka dnevnika prekida slanje bez laÅ¾nog uspjeha. DjelimiÄni uspjeh mjeri
-i smanjenje broja GPS taÄaka, jer je pojas u zbirnom brojaÄu jedna stavka.
-Kod pune memorije nacrtana zona ne zatvara modal niti gubi geometriju ako
-enqueue nije potvrdio upis; prikazuje poruku i ostavlja ponovni pokuÅ¡aj.
-
-Novi server-vlake-doznaka.test.js koristi izvorne funkcije, cijeli procesor
-reda i laÅ¾ni server/dnevnik. Deset provjera: oba naÄina unosa vlake preko
-addPt, zona i 205 GPS taÄaka jednim pritiskom, bez automatskih upisa;
-hladni dnevnik, greÅ¡ka IDB-a, pad veze, RLS sa djelimiÄnim potvrdama,
-izgubljen odgovor bez duplikata, promjena naloga, nova taÄka tokom slanja,
-legacy bafer/tuÄ‘i podaci i puna memorija zone. Na izvornoj 2.1.4 pada pet
-ovih provjera; na 2.1.5 prolazi svih deset. Supabase je laÅ¾an: ne potvrÄ‘uje
-trenutne produkcijske dozvole/RLS ili razmjenu na dva stvarna telefona.
-
-Meni zadrÅ¾ava korisnika/logo/verziju, naziv i alt loga sada DENDRO MAP.
-Glavni tab Vlake dobio identitet vlake/kraka, obrubljenu ikonu, Äitljiv
-natpis i zelenu odabranu ikonu u oba moda. Callback i notif-vlake ostaju
-postojeÄ‡i. Browser fixture sada koristi stvarnu gornju traku i SVG sprite,
-provjerava klik/aktivno stanje/kontrast/veliÄinu dugmeta i novi naziv na
-Äetiri veliÄine u dvije teme uz ranije provjere projekata/Å¡tampe.
-Lokalno prolazi 74 JS testna fajla, pet inline blokova i Python sintaksa.
-Objava i ishod GitHub APK/browser workflowa provjeravaju se nakon pusha.
-
-PotvrÄ‘eno 2026-10-02: workflow `37054954895`, job `110997263293`, uspjeÅ¡an
-za commit `e1b485b1a7a5872b1a9ec4b76362e8d656eb880c`. Prvi pregled je
-provjeravao boju tokom postojeÄ‡eg CSS prijelaza (180 ms); fixture sada Äeka
-konaÄnu boju. Runtime nije mijenjan tim testnim commitom. Prolaze 74/74 JS
-fajla, browser provjere u oba moda/Äetiri veliÄine i SHA-256 provjera 29
-resursa u APK-u. SaÄuvana 33 PNG pregleda i jedan PDF; vizuelno pregledani
-DENDRO MAP footer i aktivno/neaktivno dugme Vlake na telefonu u oba moda.
-
-Javni nedraft debug release `v2.1.5` sadrÅ¾i `app-debug.apk` (21.641.695
-bajta), stanje uploaded; tag pokazuje izgraÄ‘eni commit. `/releases?per_page=1`
-vraÄ‡a v2.1.5, dostupnu preko Meni â†’ AÅ¾uriraj aplikaciju. Android versionCode
-485 i postojeÄ‡i fiksni debug potpis. SHA-256 APK-a:
-`733255e7de3eab7206617f3309dc2f8f87aba70e71bf28b5d1d38da7e14b1faf`.
-Stvarni telefoni, produkcijska Supabase baza/RLS i fiziÄka Å¡tampa nisu
-provjereni; nijedna produkcijska migracija ili instalacija nije izvrÅ¡ena.
-
-## 30. Skrol Menija, navigacija, kamera i lokalni SHP uvoz â€” 2.1.6 / Android 486
-
-Korisnik traÅ¾i da se identitet/logo/verzija Menija vidi na kraju skrola,
-bolji pregled Vodi me do odjela/lokacije, direktnu kameru bez galerije i
-SHP podtab u Dodaj KML fajl. Footer sada ide unutar mdrop-scroll zajedno
-sa sekcijama, zaglavlje ostaje iznad skrola; svaki novi otvor poÄinje od
-vrha. Naziv DENDRO MAP, korisnik, logo i verzija ostaju u podnoÅ¾ju.
-
-Navigacija ima zasebno zaglavlje i jedan skrol, jasna dva izbora polaska,
-GPS status, upute za odrediÅ¡te i meÄ‘utaÄke, pretragu saÄuvanih ruta i
-odvojene radnje prikaza/dijeljenja/brisanja. Brisanje i dalje traÅ¾i potvrdu,
-nazivi/ID ruta escapirani. IzraÄun rute, profil i saÄuvani podaci ostaju
-postojeÄ‡i. Boje prate oba moda, dugmad imaju najmanje 44 px dodirne visine.
-
-Uslikaj lokaciju direktno klikne capture=environment input nakon GPS
-provjere, uz snapshot pozicije prije snimanja. Galerija input uklonjen.
-Native WebChromeClient viÅ¡e nema fallback na galeriju pri odbijenoj dozvoli
-ili nedostupnoj kameri: zavrÅ¡i callback i javi razlog. Kamera i puna
-rezolucija preko FileProvider-a ostaju postojeÄ‡e. ObiÄni file chooser sada
-izriÄito postavlja EXTRA_ALLOW_MULTIPLE za prateÄ‡e SHP fajlove.
-
-Novi local-layer-import.js i modal imaju KML/SHP podtabove. VeÄ‡ ukljuÄene
-shapefile/proj4 biblioteke Äitaju stvarni SHP/DBF, grupiÅ¡u prateÄ‡e fajlove
-po nazivu, Äitaju PRJ i CPG, konvertuju u WGS84 KML, zadrÅ¾avaju atribute,
-nazive i unutraÅ¡nje rupe poligona. SHX/SBN/SBX/QIX se mogu izabrati uz
-SHP, parser ne zahtijeva njihove indekse. ViÅ¡e SHP slojeva po odabiru je
-podrÅ¾ano; svaki fajl do 32 MB i do 50.000 geometrija po sloju. Bez PRJ-a
-GPS koordinate se prepoznaju, koordinate u metrima zahtijevaju izbor MGI
-zone 5/6 ili odgovarajuÄ‡i PRJ; ne pretpostavlja se poloÅ¾aj. UTM PRJ koji
-sadrÅ¾i WGS84 pravilno se projektuje, ne proglaÅ¡ava GPS koordinatama.
-
-Sloj se dodaje na Leaflet kartu tek nakon potvrÄ‘enog IDB upisa i malog
-localStorage registra; time se veliki geometrijski sadrÅ¾aj ne duplira u
-localStorage. I stari inline KML i novi IDB sadrÅ¾aj se obnavljaju offline.
-Upisi su serijalizovani, dupli nazivi dobijaju broj i ne briÅ¡u prethodni
-sloj. Promjena naloga prekida novi prikaz. Brisanje sadrÅ¾aja Äeka uspjeÅ¡an
-upis registra; puna memorija ne moÅ¾e dati laÅ¾nu potvrdu. Terenska kopija
-materijalizuje sav KML iz IDB-a i obnova ga vraÄ‡a u IDB prije uÄitavanja.
-Novi modul je u service-worker shellu i obaveznim Android assets.
-
-Lokalno prolazi 75 JS testnih fajlova, svih pet inline skripti i Python
-sintaksa browser fixture-a. Petnaest novih regresija koristi stvarni
-binary SHP/DBF parser i proj4; persistence/failover testovi koriste laÅ¾ne
-IDB/DOM objekte. Browser provjere ukljuÄuju stvarni modal/CSS, Leaflet,
-DOMParser i IndexedDB sa lokalnim SHP/DBF, uvoz/obnovu/backup i greÅ¡ke,
-uz ranije Meni/projekti/Å¡tampa provjere. Workflow ishod, APK i slike se
-provjeravaju nakon pusha. Produkcijska baza, GPS/rutiranje i fiziÄka
-Android kamera nisu testirani ovim lokalnim fixture-ima.
-
-Dodatni zahtjev u istom radu: Server Â· vlake projekta preimenovan u
-PoÅ¡alji na server. Uklonjen izbor projekta i tri zbirne kartice (vlake,
-ukupna duÅ¾ina, broj projektanata). Pregled prati aktivni dostupan projekat;
-Äitati drugi projekat za PM izvjeÅ¡taj ne mijenja kontekst. Bez aktivnog
-projekta nema tihog izbora prvog drugog projekta. ZajedniÄka lista i puni
-ispis ostaju dostupni, uz pojedinaÄnu duÅ¾inu i jasno Å alje/Poslao ime.
-
-Å ta Ä‡e biti poslano grupiÅ¡e sve vlastite stavke po stvarnom odrediÅ¡tu,
-ukljuÄujuÄ‡i nacrtane/GPS vlake, zone doznake i GPS taÄke iz FieldStore-a.
-Prikazuje projekat, ime poÅ¡iljaoca i vrstu/naziv; preko 40 stavki grupe
-upuÄ‡uje na paginirani Za slanje. I dalje se Å¡alje cijeli vlastiti red iz
-svih projekata; prikaz to izriÄito navodi. Otvaranje uÄitava hladni GPS
-IDB bez mreÅ¾e; ne prikazuje laÅ¾no prazan GPS dnevnik dok nije spreman.
-
-Precizno vrijeme posljednjeg slanja na telefonu Äuva se po nalogu tek
-nakon potvrÄ‘ene operacije/serije u _processOfflineQueue, sa odrediÅ¡tem i
-imenom. Neuspjeh, promjena naloga, lokalno odbacivanje ili otvaranje panela
-ne piÅ¡u vrijeme slanja. DjelimiÄni uspjeh biljeÅ¾i samo potvrÄ‘ene stavke.
-Posljednji prijem aktivnog projekta koristi veÄ‡ potvrÄ‘eni datum punog
-serverskog preuzimanja, i kad lista nije mijenjana. Novi registar slanja
-poÄinje od ove verzije: staro globalno vrijeme bez vlasnika se ne pripisuje
-nalogu/projektu. Browser fixture proÅ¡iren stvarnim Server pregledom na
-Äetiri veliÄine u oba moda; JS regresije provjeravaju scope, grupe i
-potvrde slanja kroz cijeli laÅ¾ni serverski tok, uz prethodnih 75 fajlova.
-
-PotvrÄ‘eno 2026-10-02: workflow `37059980041`, job `111013969207`,
-uspjeÅ¡an za commit `1cf07611375ac39ff95f257fbc90076d850342e8`. Prolazi
-75/75 JS testnih fajlova, oba browser fixture-a i SHA-256 provjera 30
-APK web resursa, ukljuÄujuÄ‡i novi lokalni SHP modul. SaÄuvano 75 PNG
-pregleda i jedan PDF; pregledani skrol Menija/identitet, dnevna/tamna
-navigacija, SHP podtab, novi Server i konvertovani poligon na Leaflet karti.
-Server zadrÅ¾ava svoj poloÅ¾aj skrola izmeÄ‘u otvaranja, zato neke slike
-prikazuju listu na dnu; prva slika pokazuje projekat i grupe za slanje.
-
-Javni nedraft debug release `v2.1.6` sadrÅ¾i `app-debug.apk` (21.663.663
-bajta), uploaded. Tag pokazuje taÄno izgraÄ‘eni commit, a updaterov
-`/releases?per_page=1` vraÄ‡a v2.1.6. Android versionCode 486; postojeÄ‡i
-fiksni debug potpis. SHA-256 APK-a:
-`2a2874e481d2f078a5d5b9b778e5a4f9294d2b6e825381984f8672664acfde1e`.
-AÅ¾uriranje: Meni â†’ AÅ¾uriraj aplikaciju. Browser je provjerio capture input
-i GPS snapshot; stvarni Android senzor/kamera i dozvole na fiziÄkom
-telefonu nisu pokrenuti. Supabase/RLS i Å¾ivo GPS/rutiranje nisu provjereni
-ovim fixture-ima; produkcijska baza i ureÄ‘aji nisu mijenjani.
-
-## 31. Server, ureÄ‘ivanje KML-a i povratak na roditelja â€” 2.1.7
-
-Web/SW/Android 2.1.7, versionCode 487. Preuzimanje vlaka i
-Älanova/zona doznake ide do prazne stranice, s pomakom po stvarnom broju
-redova. KraÄ‡a stranica viÅ¡e ne znaÄi kraj ako je serverski max-rows manji
-od traÅ¾enog. Dostizanje sigurnosnog limita vraÄ‡a greÅ¡ku, ne nepotpun uspjeh.
-Filtrirani prazan odgovor jednog projekta ne briÅ¡e Älanstvo drugih.
-Brisanje vlake traÅ¾i vraÄ‡eni ciljani ID; nula redova ostaje u redu bez
-laÅ¾nog vremena slanja. Ako je prethodno brisanje proÅ¡lo, ali je odgovor
-izgubljen, ponavljanje ostaje nepotvrÄ‘eno i zahtijeva provjeru.
-
-Doznaka provjerava nalog i generaciju odgovora prije zamjene prikaza/keÅ¡a,
-ukljuÄujuÄ‡i dodatni dohvat imena projektanata. Red drugog naloga ne
-primjenjuje se na zone. NeuspjeÅ¡an trajni upis slojeva vraÄ‡a stari keÅ¡.
-Dugme Preuzmi doznaku potvrÄ‘uje listu dostupnih odjela i slojeve trenutno
-otvorenog odjela; ako odjel nije otvoren, jasno traÅ¾i otvaranje odjela za
-slojeve. Ne tvrdi da je preuzelo sve zone svih odjela. Vrijeme potvrÄ‘enog
-prijema doznake odvojeno je od prijema vlaka i vezano za nalog.
-
-ZajedniÄki KML/SHP editor: naziv i oznaka fajla, pregled linije, paleta,
-prilagoÄ‘ena boja, debljina, vrsta linije, vidljivost, ispuna i Å¡rafure.
-Popup ima odvojene Naziv i opis / Stil fajla / PribliÅ¾i te atribute.
-Naziv/opis lokalnog objekta mijenjaju odgovarajuÄ‡i Placemark u IDB KML-u:
-novi sadrÅ¾aj se potvrÄ‘uje prije zamjene registra i uklanjanja starog.
-Geometrija i ostali atributi se Äuvaju. Za server fajl tekst izriÄito kaÅ¾e
-da je izmjena naziva/opisa samo u tom prikazu; liÄni stil ostaje lokalno.
-Stil lokalnog fajla se sada Äuva i kroz popup, a povratak sa isprekidane
-na punu liniju zaista uklanja Leaflet dashArray. SaÄuvaj stil ne briÅ¡e
-registar joÅ¡ neuÄitanog lokalnog fajla. Nazivi tooltips su HTML-escaped.
-
-Uklonjeni Nastavi krak i stari picker; postoje Lijevi/Desni krak i izbor
-postojeÄ‡e vlake. Vrati na [naziv roditelja] odmah Äuva dijete, bira
-roditelja i pauzira GPS. Sada otvara i historijski interval pauze, da
-native bafer ne ubaci hodanje nazad po kasnijem praÅ¾njenju. Nastavi navodi
-aktivnu vlaku; zavrÅ¡etak briÅ¡e zaostale oznake povratka. VeÄ‡i prikaz:
-nadmorska visina 14 px, koordinate 12 px, uz prelamanje na uskom ekranu.
-
-Regresije koriste stvarne funkcije uz laÅ¾an server/GPS: ograniÄenje stranice
-na 40, greÅ¡ka kasnije stranice, promjena naloga tokom imena, nepotvrÄ‘eno
-brisanje, dijete-roditelj-djed, pauza i oÄuvanje taÄaka/registra. Browser
-fixture proÅ¡iren pravim Leaflet popupom, stilom i lokalnim DOMParser/IDB
-Äuvanjem naziva/opisa, obnovom i provjerom osam veliÄina/tema. Ishod CI-ja,
-APK i vizuelni pregled bit Ä‡e dopisani nakon izgradnje. Produkcijski
-Supabase/RLS i fiziÄki Android GPS nisu testirani ovim provjerama.
-
-PotvrÄ‘eno 2026-10-03: finalni commit 2.1.7
-`703d3d6acbf331abe5f3f6f88e6bd4adf401b1fa`, workflow `37100908878`, job
-`111140090410` uspjeÅ¡an. 76 JS fajlova, browser provjere i provjera 31 APK
-resursa prolaze. U toku provjere ispravljeno ponovno postavljanje popup
-HTML-a, preklapanje s koordinatama i animacija pri uvozu; web/SW/Android
-verzije su provjerene na 2.1.7. SaÄuvano 83 PNG + PDF artefakta; vizuelno
-pregledani kljuÄni KML/Server prikazi i PDF.
-Release v2.1.7 sadrÅ¾i uploaded app-debug.apk, 21.663.365 bajta, code 487;
-tag pokazuje finalni commit, updater vidi novu verziju. SHA-256:
-`fdce2c3f2457731bf3769c7fcaa99c8c2caf5432804c81ce584e3ff7615b9ec3`.
-Nakon objave zapoÄet je korisnikov odvojeni pregled u tri uzastopna dijela:
-`docs/ANALIZA_KODA_2026-10-03.md`. Novi nalazi u tom izvjeÅ¡taju nisu
-samoinicijativno popravljani.
-
-## 32. ZavrÅ¡en pregled koda u tri dijela â€” 2026-10-03
-
-`docs/ANALIZA_KODA_2026-10-03.md` sadrÅ¾i redom zavrÅ¡ene dijelove: lokalni
-podaci/GPS, server/saradnja, karte/UI/aÅ¾uriranja. Za svaki su navedeni
-pregledani tokovi, dobro ponaÅ¡anje, problemi, preporuke i granice provjere.
-`node docs/audit/reprodukcije.cjs` potvrÄ‘uje 9 nalaza nad stvarnim izdvojenim
-funkcijama uz laÅ¾ne zavisnosti. Argument 1, 2 ili 3 bira pojedinaÄni dio.
-Skripta oÄekuje postojeÄ‡e kvarove; nije dokaz da su popravljeni.
-
-P1: A1 zavrÅ¡etak vlake ignorira false potvrdu upisa i briÅ¡e snapshot;
-A2 nastavak od sredine odmah odsijeca ostatak; B1 23505 nekritiÄki potvrÄ‘uje
-ID zone; C1 drugi poziv `_localKmlSaveAll()` iz settera briÅ¡e neuÄitan sloj;
-C4 IDB kvar pune fotografije ostaje skriven iza poruke dodavanja.
-P2: B2 poÄetne liste projekata/Älanstva nisu paginirane (paginacija vlaka
-ne pokriva te upite); B3 max-rows manji od 1000 moÅ¾e zaobiÄ‡i detekciju
-postojeÄ‡e GPS taÄke; C2 cache.put odbijanje nije uhvaÄ‡eno; C3 stari rezultat
-rute poniÅ¡ti novi izbor nakon otkazivanja. B1/B3 uticaj u produkciji zavisi
-i od constraint-a baze. Kasnije SQL migracije zatvaraju raniji samoupis
-Älanstva; stara politika nije prijavljena kao aktuelan kvar.
-
-Funkcionalni kod nije mijenjan tokom ovog pregleda, prema uputi AGENTS.md.
-Verzija ostaje 2.1.7 / 487. Produkcijski Supabase i fiziÄki Android ureÄ‘aj
-nisu koriÅ¡teni za reprodukcije. IzvjeÅ¡taj nije revizija svake linije niti
-zasebnih Flutter/Python proizvoda u repozitoriju.
-
-
-## 33. Jednostavniji Server, kolegine vlake i grupni prikaz â€” 2.1.8
-
-Web/SW/Android 2.1.8, versionCode 488. Korisnik je izriÄito zadao ova tri
-funkcionalna zadatka nakon analize; nalazi audita nisu paketno popravljani.
-
-Server ima Primljeno / Poslano / Za slanje. PotvrÄ‘ene stavke nose projekat,
-projektanta, sadrÅ¾aj, duÅ¾inu/broj GPS taÄaka i vrijeme. Evidencija je odvojena
-po nalogu i smjeru, do 500 malih zapisa, bez kopiranja geometrije. Prethodne
-server kopije vlaka ostaju pregledne i bez nove evidencije; nepoznato vrijeme
-je tako oznaÄeno. Detalji ranijih slanja ne izmiÅ¡ljaju se. Zona/GPS prijem
-se biljeÅ¾i nakon potvrde lokalnog keÅ¡a, iz sirovog serverskog odgovora prije
-mijeÅ¡anja neposlanih zona. Prikaz doznake grupiÅ¡e GPS po projektantu. RuÄni
-reÅ¾im slanja, puni ispis vlaka aktivnog projekta i izvoz kopije ostaju.
-Detalji reda/greÅ¡ke i alati kopije su sklopivi da ne dupliraju glavni pregled.
-
-Kolegine vlake u obiÄnom i admin/vodeÄ‡em prikazu dobijaju isti 24px dodirni
-sloj i fallback najbliÅ¾e vidljive linije kao vlastite. Popup prikazuje
-projekat/projektanta, duÅ¾inu i bafer/pribliÅ¾avanje, bez editovanja/brisanja
-tuÄ‘eg rada. Nazivi se escapiraju. Bafer moÅ¾e biti za jednu odabranu vlaku;
-zajedniÄki prikaz ukljuÄuje kolege aktivnog projekta i izostavlja adminovu
-duplu kopiju vlastitih vlaka. Hit-sloj prati geometriju i uklanjanje linije.
-
-Tragovi dobijaju PrikaÅ¾i sve / Sakrij sve i zasebne kontrole fotografija
-(vlastite i podijeljene), tragova, taÄaka, mjerenja i tekstualnih oznaka.
-Postavke fotografija/taÄaka/mjerenja/oznaka pamte se po korisniku i primjenjuju
-na nove/obnovljene markere. Tragovi koriste postojeÄ‡i visible po zapisu,
-ukljuÄujuÄ‡i hit-sloj i oznaku duÅ¾ine. Aktivno GPS snimanje i aktivna izmjera
-nisu sakriveni; podaci se ne briÅ¡u i ove radnje ne Å¡alju niÅ¡ta na server.
-Skrivena saÄuvana mjerenja iskljuÄena su i iz fallback klika.
-
-Lokalno 76/76 JS fajlova i pet inline skripti prolaze. ProÅ¡irene regresije
-pokrivaju potvrde, naloge, projekte, doznaku, escaping i granicu evidencije.
-Nova browser provjera server-map-218.py koristi pravi Leaflet/Turf za obiÄni
-i admin klik, fallback, bafer i grupnu vidljivost. CI/build/release ishod
-slijedi nakon izgradnje. Nema produkcijskih upisa niti fiziÄke instalacije.
-
-2.1.8 potvrÄ‘eno objavljena: workflow 37133223351, commit/tag
-f219ea71186018ff4b7aecec4c2bca80ce73c70a, app-debug.apk 21.677.793 B,
-SHA256 a241f1c03822f2275e13e12b1169158ec1d454e8492b08b11009fa972657c2d9.
-CI browseri i izgradnja proÅ¡li. Pregledane slike uskog Dnevnog moda, Servera
-i kolegine vlake s baferom. Dvije prethodne CI korekcije bile su samo fixture
-(divIcon bez nedostajuÄ‡eg PNG-a; test ne pita Leaflet za uklonjeni undefined sloj).
-
-## 34. Preglednik Oznake i grupisani Server â€” 2.1.9
-
-Web/SW/Android 2.1.9, versionCode 489. Korisnik je zadao preglednik sa
-pojedinaÄnim i grupnim kontrolama, sortiranje, uklanjanje obavijesti o
-uÄitanoj tematskoj karti i saÅ¾imanje Servera na posljednja tri projekta.
-
-Oznake: Sve / UÄitani fajlovi / Fotografije / Tragovi / Server fajlovi,
-pretraga, sortiranje po odjelu, datumu, udaljenosti od SREDINE prikaza karte
-(ne GPS poloÅ¾aja) ili nazivu. Grupe po odjelu razlikuju gospodarske jedinice.
-Grupne radnje ukljuÄuju sve filtrirane rezultate, i nakon prve stranice.
-Prikaz/sakrivanje, pribliÅ¾avanje, ureÄ‘ivanje, izvoz lokalnog KML-a/traga,
-fotografija i postojeÄ‡e dijeljenje, potvrda pojedinaÄnog brisanja.
-Server placeholder se preuzima samo izriÄitom radnjom. Podijeljena fotografija
-se ovdje uklanja samo s telefona. Opisi fotografija/napomene su lokalni po
-nalogu. Fotografije iz kamere pamte odjel/projekat u trenutku otvaranja kamere;
-stare bez odjela/datuma ostaju oznaÄene kao nepoznate. Vidljivost pojedinaÄnih
-fotografija radi i nakon grupnog skrivanja, odvojena po nalogu.
-
-Usko popravljeni nalaz C1 audita: setter-i viÅ¡e ne pruniraju neuÄitane
-lokalne fajlove. Brisanje prvo potvrÄ‘uje upis registra i uklanja samo odabrani
-fajl, ne ostale neuÄitane. GreÅ¡ka upisa registra zadrÅ¾ava sloj/podatke.
-Stabilan identitet i ponovna provjera naloga nakon potvrde brisanja.
-Historijska reprodukcija docs/audit/reprodukcije.cjs opisuje 2.1.7 i nije
-regresijski test za ispravljeni C1; novi test je tests/js/map-library.test.js.
-
-Server: Primljeno/Poslano grupiÅ¡u se po projektu ili datumu razmjene
-(Europe/Sarajevo). Ista posljednja tri projekta po najnovijoj potvrÄ‘enoj
-razmjeni u oba taba; grupe poÄetno zatvorene, svi evidentirani redovi unutar
-grupe dostupni proÅ¡irenjem. Evidencija i dalje ima granicu 500 po smjeru.
-Ne briÅ¡u se stariji projekti ni podaci. Klik vlake/zone/GPS pojasa koristi
-stabilan identitet potvrde i lokalni keÅ¡ geometrije, prikaÅ¾e privremeno
-istaknuti sloj na karti. Ne mijenja aktivni projekat niti prekida snimanje.
-Zatvaranje pregleda/odjava uklanja taj sloj. NedostajuÄ‡i keÅ¡ daje jasnu poruku,
-bez pogaÄ‘anja druge vlake istog imena. GPS pojasevi odvojeni na prekidima >5min.
-Lokalni Tragovi se i dalje ne Å¡alju serveru; ovo ne mijenja protokol slanja.
-Ukinut uspjeÅ¡ni GPKG toast (ukljuÄujuÄ‡i restore), greÅ¡ke uÄitavanja ostaju.
-
-Lokalno 77/77 JS test fajlova i pet inline skripti proÅ¡li. Nove regresije:
-filtrirane grupne radnje preko 40 stavki, foto izolacija, C1 i quota,
-brisanje uz promjenu naloga, tri projekta/dani/timezone/identiteti.
-Browser map-library-219.py provjerava pravi Leaflet, filter/grupni prikaz,
-KML ureÄ‘ivanje, Server proÅ¡irenje i klik te osam veliÄina/tema.
-CI/APK ishod slijedi nakon izgradnje. Produkcijski Supabase i stvarni Android
-ureÄ‘aj nisu koriÅ¡teni za ove provjere.
-
-2.1.9 potvrÄ‘eno objavljena: workflow **37151708190** (svi koraci uspjeÅ¡ni),
-release/tag v2.1.9 na **d535e0fc86917d73f074e7c32c794a6a7a2d10f3**.
-app-debug.apk **21.694.789 B**, SHA256
-**0eea77d11dfd032ac728ea45beae287373ab55e000b2b0912c657acd2f862cd6**.
-Javni APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.1.9/app-debug.apk
-CI proÅ¡li 77 JS test fajlova, Äetiri browser skripte, build i SHA256 provjera
-svih **34** web assets. UI artefakt **11284028702**, 108 PNG i print PDF.
-Pregledani library-day-320-568, library-dark-568-320 i server-grouped-day-390.
-Dva prethodna pokuÅ¡aja stala su na starim browser oÄekivanjima: sadrÅ¾aj
-zatvorenih grupa je skriven; veÄ‡ otvorena grupa se pri sljedeÄ‡oj temi ne
-smije klikom zatvoriti prije provjere. Ispravke su samo u browser testu;
-isti funkcionalni kod je proÅ¡ao konaÄnu provjeru i izgradnju.
-Nije testirana fiziÄka instalacija na Androidu niti produkcijski Supabase.
-
-## 35. Boje i zajedniÄki pregled aktivnog projekta, Meni i upute â€” 2.2.0
-
-Web/SW/Android 2.2.0, versionCode 490 (prelaz poslije 2.1.9).
-Korisnik traÅ¾i da postavke Boje vlaka za aktivni projekat odmah vaÅ¾e i za
-vlastite i kolegine glavne/krake, zajedniÄki numeriÄki spisak s projektantom,
-novi dizajn Snimi vlaku, ulaz Instalirane karte u Meniju i aÅ¾urirane upute.
-
-Postavke su lokalne po korisniku/projektu (`tvlake_projekt_boje_v2_...`), sa
-Äitanjem legacy stilova kao osnovom. Promjena odmah stilizira veÄ‡ uÄitane
-polilinije; primjenjuje se i nakon obnove/aktivacije/preuzimanja/realtime-a.
-Izvorna boja/koordinate vlake i kolegini serverski podaci se ne prepisuju.
-Glavne/kraci imaju odvojene boje; debljina/dash vaÅ¾e i za kolege. Bez aktivnog
-projekta kontrole su onemoguÄ‡ene; greÅ¡ka memorije ne daje laÅ¾an uspjeh.
-ZajedniÄki spisak u Projekat tabu spaja serverski lokalni model i Å¾ivi prikaz
-kolega, razlikuje autore kod istog naziva, izostavlja adminovu duplu vlastitu
-kopiju i sortira T1.2/T1.10/T2/T10 numeriÄki. Svaki red ima projektanta,
-duÅ¾inu i klik na kartu; duÅ¾i spisak ima PrikaÅ¾i joÅ¡. Kolegina lista takoÄ‘er
-numeriÄki sortira i ispisuje escapiranog projektanta na svakom redu.
-
-Snimi vlaku je primarno dugme sa ikonom, opisom GPS snimanje i oznakom vlake,
-uz isti postojeÄ‡i tok biranja/snimanja. Instalirane karte otvaraju postojeÄ‡i
-Instalirane podtab prozora slojeva, bez dupliranja mehanizma karata.
-Upute aÅ¾uriraju DENDRO MAP, pripremu terena, Boje i spisak, novi preglednik,
-KML/SHP, ruÄno slanje/prijem, GPS doznaku, kameru, Dnevni mod i print opise.
-Uklonjene pogreÅ¡ne tvrdnje o automatskom slanju ruÄnih vlaka/GPS doznake.
-
-Lokalno proÅ¡lo 78 JS test fajlova i pet inline skripti. Nova browser skripta
-provjerava stvarni Leaflet stil vlastitih/koleginih linija, realtime, lokalne
-preferencije na reloadu bez mreÅ¾e, numeraciju, Snimi dugme, instalirani tab i
-upute kroz 8 kombinacija veliÄine/teme. Fixture reload je lokalni test preferencija,
-ne dokaz kompletnog startup-a APK-a. CI/APK ishod slijedi.
-
-Nakon objave korisnik traÅ¾i analizu brzine za Redmi Note 13 Pro (online/offline).
-`tests/browser/performance-redmi.py` se izvrÅ¡ava POSLIJE objave APK-a i biljeÅ¾i
-realni Leaflet Canvas, aktualne boje/listu i _saveLocalVlake, 100/500 vlaka i
-10k/50k/100k taÄaka, 3 ponavljanja, CPU 1x/4x, navigator online/offline.
-CPU 4x nije emulacija Redmi procesora. Ne mjeri GPS, backend, ploÄice, pun
-startup, sve labele niti native most. Zaseban JSON artefakt sluÅ¾i kao dokaz,
-a analiza mora navesti ove granice i ne izmiÅ¡ljati vremena stvarnog telefona.
-
-### ZavrÅ¡ni kontrast i verzija 2.2.1
-
-2.2.0 objavljena i sintetiÄko mjerenje zavrÅ¡eno na workflow 37155897278.
-Vizuelni pregled otkrio svijetle inline natpise Boje vlaka u Dnevnom modu.
-Uska CSS ispravka koristi field-ink i Äitljiv odabrani stil. Web/SW/Android
-2.2.1, code 491. Browser dodaje provjeru istog kontrasta naziva i konteksta;
-fixture i mjerenje Äitaju stvarnu verziju iz izvora. Funkcionalni tokovi boja
-i slanja nisu mijenjani ovom zavrÅ¡nom ispravkom. KonaÄni CI ishod slijedi.
-
-2.2.1 potvrÄ‘eno objavljena: workflow **37156338599**, svi koraci uspjeÅ¡ni,
-release/tag na **5e8163dee7aa39382aca3b78ae7e82185019c758**. APK
-**21.707.777 B**, SHA256
-**c044c74abc052e60632ee61e7f068089227f5bc40a28d0ad8d1b5e9b6deaecf8**.
-https://github.com/pogonboskrupa/US-SUME/releases/download/v2.2.1/app-debug.apk
-78 JS fajlova, pet browser skripti, 34 web assets SHA256 i APK build proÅ¡li.
-UI artefakt **11285907703**; pregledan project-colors-day-320-568 i potvrÄ‘en
-kontrast, prethodno pregledani spisak i horizontalne upute 2.2.0.
-Prvi 2.2.0 CI zastao na zaostaloj vlaci T1 iz reda slanja osnovnog fixture-a;
-izolacija testnog reda dala uspjeÅ¡an 37155897278. Funkcionalni kod boja ostao isti.
-
-Analiza nakon objave: artefakt **11285492647**, svih 36 uzoraka u
-`docs/performance/redmi-note-13-pro-2.2.1.json`, tumaÄenje u
-`docs/ANALIZA_BRZINE_REDMI_NOTE_13_PRO_2026-10-03.md`. CPU 4x: uÄitavanje
-10k taÄaka 54.9/59.4ms online/offline, 50k 220.4/226.2ms, 100k 353.4/360.9ms.
-Bez stvarne mreÅ¾e/GPS-a/ploÄica/punog startup-a/native mosta/telefona. CPU4x
-je usporavanje desktopa, nije emulacija Redmi procesora.
-VaÅ¾an potvrÄ‘en nalaz: generisani JSON 100k taÄaka ~5.4MB, prikaz uspijeva,
-_saveLocalVlake ne uspijeva ni u jednom ponavljanju (quota). 10k i 50k prolaze.
-To nije univerzalni limit broja taÄaka niti dokaz server greÅ¡ke; dokumentovan
-prioritet preseljenja velikog lokalnog keÅ¡a u IndexedDB, bez neodobrene migracije.
-FiziÄki Android i produkcijski Supabase nisu koriÅ¡teni.
-
-
-## 36. Karte i nacrtani poligon odjela â€” 2.2.3
-
-Korisnik traÅ¾i raniju veliÄinu Snimi vlaku, unapreÄ‘enje Instaliranih i
-Omiljenih karata, crtanje poligona odjela u projektu i checkbox-e za
-nagib strogo preko 30% i ekspoziciju ograniÄene na taj poligon u dnu taba.
-Web/SW/Android 2.2.2, code 492. Odobrenje novih APK izdanja ostaje iz sesije.
-
-Snimi: vraÄ‡en raniji markup/dimenzije i uklonjena proÅ¡irena primarna kartica.
-Karte: zajedniÄki naslov/prozraÄan prikaz oba moda, Lokalni fajlovi i Slojevi
-terena odvojeni u Instaliranim. Puni nazivi, aktivna karta, spremljena ali
-neuÄitana karta i ponovni pokuÅ¡aj kroz postojeÄ‡i sqlmapRetryOne; nema novog
-mehanizma uvoza. Broj keÅ¡iranih ploÄica ne predstavlja kompletnu pokrivenost.
-Omiljene: pristupaÄno dugme aktivacije i zasebno Uredi, aktivnost/dostupnost,
-lokalni fajl nasuprot online podlozi, puni nazivi i responsive kartice.
-Akcije preko stabilnih naziva/identiteta, ne inline imena u JavaScriptu.
-Topo + Nagib se moÅ¾e dodati u favorite kao postojeÄ‡i sloÅ¾eni prikaz.
-Brisanje zajedniÄkog DEM keÅ¡a traÅ¾i potvrdu s opisom Äetiri pogoÄ‘ena sloja.
-
-Novi static/js/project-terrain.js: poligon po nalogu/projektu u lokalnom
-kljuÄu tvlake_project_polygon_v1_<uid>_<pid>. NE Å¡alje geometriju na server,
-ne dodaje produkcijsku kolonu/migraciju. UI i upute jasno kaÅ¾u da je lokalno.
-Tapkanje karte, Vrati taÄku, SaÄuvaj, Odustani. 3â€“500 taÄaka, koordinatne
-provjere, odbijanje samopresjeka i degenerisanog poligona. Stara granica se
-zamijeni tek nakon uspjeÅ¡nog upisa; quota ostavlja nacrt i stari zapis.
-Promjena projekta/naloga, odjava i drugi alat otkazuju nacrt. Aktivno
-snimanje/alat blokira ulaz. VraÄ‡a prethodno stanje doubleClickZoom.
-Privremeno iskljuÄuje feature hit-test dok mapa prima taÄke poligona.
-Prikaz/sakrivanje granice, povrÅ¡ina/taÄke, Na karti, potvrÄ‘eno uklanjanje.
-Nacrtana granica zamjenjuje automatski highlight; brisanje vraÄ‡a postojeÄ‡i.
-PovrÅ¡ina projekta i dalje poÅ¡tuje ruÄni unos, zatim nacrtani poligon/KML.
-
-Checkbox-i na kraju Projekat taba: Nagib preko 30%, Ekspozicija. Posebni
-Canvas GridLayer slojevi u pane 260/261, ispod vlaka, sa stvarnim polygon
-clip-om. Procenti iz elevacijskih gradijenata i geografske veliÄine piksela;
-percent <=30 potpuno transparentan. Ekspozicija je smjer N/E/S/W niz padinu.
-DEM je postojeÄ‡i Terrarium/cache; dijeljeni decoded cache do 24 ploÄice,
-prikaz do native zoom 14 kao postojeÄ‡i teren. Granica nije izmijenjena
-ukljuÄivanjem slojeva. NedostajuÄ‡a DEM ploÄica daje poruku o nepotpunom
-terenu, ne laÅ¾no "ravno". Lokalna raster podloga sama ne sadrÅ¾i DEM.
-Preuzimanje terena nudi nacrtani poligon kao prvi obuhvat i paket sa
-z12â€“14 za nagib/ekspoziciju. Brisanje/dopuna DEM-a invalidira novi cache.
-
-Poligon ulazi u terensku sigurnosnu kopiju kao optional projectPolygon;
-stare kopije su kompatibilne. Obnova validira, ne prepisuje noviji postojeÄ‡i
-poligon i ukljuÄena je u postojeÄ‡i localStorage stage/rollback. Granica
-se koristi i za provjeru pokrivenosti offline podloge aktivnog projekta.
-Upute opisuju crtanje, lokalni status, prag >30% i preuzimanje DEM-a.
-SW shell i Android required manifest ukljuÄuju oba nova modula.
-
-Lokalno: 81 JS test fajl; novi testovi geometrije/procenata/smjerova,
-kataloga i backup roundtrip-a, stare kopije i quota rollback-a. Inline i
-novi browser fixture JS proÅ¡li syntax-check. Browser project-terrain-222.py
-koristi pravi Leaflet, Terrarium PNG decode/Cache Storage, strogu masku
-nagiba i polygon clip, tap/undo/cancel/quota, odvajanje projekta/naloga,
-reload bez mreÅ¾e i 24 prikaza kartica/projekta u obje teme/Äetiri veliÄine.
-CI izvrÅ¡ava Å¡est browser skripti prije APK-a; ishod slijedi. Stvarni Android
-ureÄ‘aj i produkcijski Supabase nisu koriÅ¡teni za ove provjere.
-
-Projektni nagib/ekspozicija iskljuÄuju odgovarajuÄ‡i globalni DEM sloj da
-izvan poligona ne ostane globalno bojenje. UkljuÄivanje opÄ‡eg nagiba/ekspozicije
-u Instaliranim ili Topo+Nagib iskljuÄuje odgovarajuÄ‡i projektni checkbox.
-UI opisuje ovu zamjenu; geometrija i vlake ostaju iste.
-
-2.2.2 je objavljena kroz CI 37158931360 (svi koraci uspjeÅ¡ni), APK 21.740.571 B.
-Prvi testni pokuÅ¡aj 37158716053 imao je fixture activeTool=null umjesto
-produkcijskog select; ispravljen fixture, bez izmjene funkcije crtanja.
-Pregled PNG artefakta otkrio je CSS skupljanje redova omiljenih karata u
-maloj visini ekrana. ZavrÅ¡no izdanje 2.2.3/code 493 dodaje max-content
-redove u skrolajuÄ‡em gridu i uvijek vidljivo Uredi, bez naslijeÄ‘enog left.
-Browser dodatno provjerava minimalnu visinu i cijeli sadrÅ¾aj kartica te
-vidljivost Uredi u obje teme/sve Äetiri veliÄine.
-
-ZavrÅ¡ni CI 37159324242, commit a90d97cc3e17b6ebe52608b7d9d0a0a3a490eb7b:
-81 lokalni JS test fajl + svih Å¡est Chromium/Leaflet browser provjera
-uspjeÅ¡ni. PNG artefakt 11287002109 (24 nova prikaza) pregledan; omiljene
-kartice se viÅ¡e ne skupljaju/odsijecaju i Uredi je vidljiv bez hover-a.
-APK build i provjera sadrÅ¾aja/SHA-256 web assets uspjeÅ¡ni; GitHub v2.2.3
-objavljen, app-debug.apk uploaded, 21.740.659 B (~20,73 MiB),
-SHA-256 8b78107991485dcd7d586d6152dc5c7f94f22e8dd03eb51bb84fa8731b553a88.
-Native updater Äita releases?per_page=1 i vidi v2.2.3 kao prvo izdanje.
-Nije izvrÅ¡ena fiziÄka instalacija na telefon ni izmjena Supabase-a.
-
-
-## 37. Referentna karta, T oznake i smjer vlaka â€” 2.2.4
-
-Korisnik traÅ¾i prepoznavanje vlaka na papirnoj topo karti samo uz T + broj,
-brzo prikaÅ¾i/sakrij; potvrdio crne/plave linije. Dodao popravku crtica/taÄaka
-i 1 strelicu do 300 m / 2 preko 300 m, dvosmjerno s razdvajanjem na polovini
-(potvrda â€daâ€œ). Web/SW/Android 2.2.4, code 494. PostojeÄ‡e odobrenje APK izdanja.
-
-static/js/reference-vlake.js + Android ReferenceOcrBridge.java, bundled
-com.google.mlkit:text-recognition:16.0.1: OCR na ureÄ‘aju bez slanja slike/
-preuzimanja modela. ÄŒetiri rotacije slike, bbox vraÄ‡en u izvorne piksele.
-Obavezna stroga oznaka T + pozitivan cijeli broj (bez nagaÄ‘anja 7/I kao T/1);
-spajanje T i broja samo blizu/u istom OCR redu. Prvo Äitanje teksta, zatim
-uklanjanje textbox-ova iz maske linija, filtriranje/join postojeÄ‡eg skeleta.
-NajbliÅ¾i put uz oznaku; bez oznake i zatvorene konture nisu prijedlog.
-Nejasne veze nisu automatski odabrane. Spisak izbora i Na karti; uvoz Äuva
-izvorni T broj, odbija postojeÄ‡i broj u istom projektu i prvo potvrÄ‘uje lokalni
-upis; quota vraÄ‡a promjene u memoriji i zadrÅ¾ava rezultat, bez slanja.
-Stari async OCR odgovor ne vrijedi za drugu sliku/projekat/nalog/poravnanje.
-RuÄna potvrda: upis T broja, dodir stvarnog natpisa, ponovno detektovanje.
-Web bez native mosta nudi taj put, nema fallback uvoz neoznaÄenih linija.
-Afino poravnanje se koristi i za detekciju/masku/pipetu.
-
-Brzo dugme na karti skriva refKarte pane (aktivna + serverske uÄitane slike),
-ne briÅ¡e poravnanje/providnost; ponovno fitovanje poÅ¡tuje skriveno stanje.
-Novi uÄitani fajl uklanja stari rezultat/oznaku, stale onload ne zamijeni novi
-fajl, blob URL se oslobaÄ‘a. Ref otkrivene linije u posebnom neinteraktivnom
-pane-u 625; oznake/kalibracija bez Leaflet canvas-a koji bi gutao klikove.
-
-static/js/vlaka-direction.js: lokalna postavka prikaza po korisniku/projektu/
-autoru+nazivu vlake, bez Supabase kolona/migracija. Auto poredi krajeve s
-najbliÅ¾im segmentom uÄitanih puteva (prostorni grid; do 250 m), ili lagerom/
-krakom â€na putuâ€œ. Bez pouzdanog puta nema izmiÅ¡ljenog auto smjera. RuÄno
-poÄetak/kraj/dvosmjerno/sakrij, i za vlake kolega. Dvosmjerno: kratka vlaka
-jedna â†” na sredini, duÅ¾a dvije spoljne strelice + â†” mjesto razdvajanja.
-Neinteraktivni SVG markeri uz liniju, obnova zoom/geometrija/sakrivanje,
-lokalni prikaz smjera nije nova promjena geometrije ni serverski atribut.
-Stil: crtice butt kapice (vidljiv ravni potez/gusta praznina), taÄke 0.01px
-round (stvarni krug), debljina/zoom prilagoÄ‘eni CSS px.
-
-Lokalno proÅ¡la 83 JS test fajla i svih 5 inline JS sintaksi. GitHub CI run
-37184286191, commit 2dc3f6eb78868353a4a31626aafa124defa7cd8b: svi JS testovi,
-svih 7 browser skripti, Android build/provjera asset SHA-256 i stvarni
-Android OCR na emulatoru bez aktivne mreÅ¾e proÅ¡li. Browser OCR je fixture;
-instrumentacijski test odvojeno koristi stvarni ML Kit i crne T12/plave T3
-natpise, provjerava broj i vraÄ‡ene koordinate. 16 referentnih PNG prikaza,
-pregledani dnevni panel 320x568 i brzo dugme 390x800. v2.2.4 objavljena
-2026-10-04; APK 65.120.508 B,
-SHA-256 52aac8e8d761966e7bd7dafd9499ec0e2c6043fdb5ceaa2645b05d5ea6c65c38.
-Raniji CI pokuÅ¡aji popravili su fixture pane, povrat funkcije iz evaluate,
-otvoreni fixture panel i provjeru OCR rijeÄi po redu; nisu preskoÄeni testovi.
-FiziÄka korisniÄka karta/telefon i produkcijski Supabase nisu koriÅ¡teni.
-NeÄitljiv rukopis i oznaka uz dvije linije traÅ¾e provjeru.
-
-## 38. RuÄna oznaka referentne karte â€” zavrÅ¡na 2.2.5
-
-KonaÄna provjera naÅ¡la presretanje dodira postojeÄ‡im klikabilnim vlakama/
-markerima pri ruÄnom oznaÄavanju natpisa T. Privremena CSS klasa
-reference-marking iskljuÄuje hit-test Leaflet canvas/markera/interaktivnih
-putanja samo dok se bira natpis. ZavrÅ¡etak, Escape, skrivanje, nova slika i
-poniÅ¡tavanje vraÄ‡aju normalne dodire. Browser test sada koristi stvarni
-touchscreen.tap preko markera (bez map.fire), provjerava da marker ne dobije
-klik tokom oznaÄavanja, a dobije ga poslije; provjerava i Escape.
-Web/SW/Android 2.2.5, code 495. JS provjere referentne karte, smjerova i
-projekata te Python sintaksa proÅ¡le. GitHub CI 37184791115 na
-85c5c7a9c99684932a4358645c4ad6562eee5dd2 uspjeÅ¡an: svih 83 JS test fajla,
-svih 7 browser skripti (ukljuÄujuÄ‡i stvarni dodir), 38 web asset SHA-256
-provjera, Android build i stvarni instrumentacijski offline OCR. SintetiÄka
-analiza brzine online/offline takoÄ‘er proÅ¡la; nije mjerenje fiziÄkog Redmi
-telefona. v2.2.5 objavljena 2026-10-04, latest /releases?per_page=1 vraÄ‡a
-v2.2.5 sa app-debug.apk (65.120.728 B). Artefakt preuzet i APK SHA-256 lokalno
-izraÄunat te uporeÄ‘en s GitHub Release digestom:
-8c09fe04123bc39a2e432ece17c400b581caadfec3670281c35cac54c8dab99a.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.5
-AÅ¾uriranje: Meni â†’ AÅ¾uriraj aplikaciju; postojeÄ‡i isti debug potpis.
-2.2.4 se ne prepisuje drugim APK-om istog broja verzije. FiziÄki telefon i
-stvarna korisniÄka papirna karta nisu testirani; smjer je lokalna postavka
-prikaza na telefonu, bez promjene serverske Å¡eme.
-
-Napomena za nastavak: lokalni workspace je djelimiÄna rekonstrukcija, sa
-nedostajuÄ‡im ikonama/GRANICE.kml/putevima i nekim starijim kopijama biblioteka,
-manifest.json i drugih helpera. Lokalni assets.py verify staje veÄ‡ na
-icon-192.png; puni CI checkout je provjerio 38 fajlova. Ne zamjenjivati remote
-baseline tim lokalnim kopijama. Direktna provjera preuzetog APK-a potvrdila
-je prisustvo svih 35 eksplicitnih/lokalno pronaÄ‘enih asset putanja, podudaranje
-18 raspoloÅ¾ivih lokalnih izvora i novu verziju/klasu reference-marking;
-autoritet za puni sadrÅ¾aj ostaje CI SHA provjera i jednaki release/APK digest.
-
-
-## 39. Projektantska razdjelnica, strelice projekta i outline â€” 2.2.6
-
-Korisnik je pojasnio da â€polovicaâ€œ nije 50% duÅ¾ine: projektant odluÄuje gdje
-je bliÅ¾i jedan ili drugi izlaz na put, samo ako vlaka ima dva izlaza. Ova
-uputa zamjenjuje ranije tumaÄenje iz 37/38. Dodan izbor dodirom na vlaku i
-GPS dugme â€Dva izlaza na put Â· Razdjelnica ovdjeâ€œ na zadnjoj prihvaÄ‡enoj
-taÄki; pauza onemoguÄ‡ava oznaÄavanje â€ovdjeâ€œ. PoÄetak/kraj/Auto i dalje nude
-jednosmjerni prikaz. Nema automatskog dvosmjera niti matematiÄke sredine.
-Stari string both bez taÄke viÅ¡e ne crta strelice dok projektant ne odabere
-razdjelnicu. Korisnik izborom dva izlaza potvrÄ‘uje odgovarajuÄ‡i sluÄaj;
-program ne nagaÄ‘a drugi izlaz iz topografske blizine puta.
-
-Smjer zapis ostaje u lokalnom korisnik/projekat/autor+naziv kljuÄu v1,
-ali both zapis sada ima split {la,lo,atM}. TaÄka se projicira na geometriju,
-atM razlikuje ponovni prolaz kroz isto mjesto, nastavak vlake ne pomjera
-razdjelnicu na novu polovinu. Izbor s karte mora biti unutar 40 m i izmeÄ‘u
-krajeva. Tokom snimanja dozvoljen kraj Äeka nastavak prema drugom putu.
-Map hit-test se privremeno iskljuÄuje klasom direction-picking; zavrÅ¡etak,
-Escape, drugi tab/projekat/nalog i uklanjanje vlake vraÄ‡aju normalne dodire.
-Upis prvo potvrÄ‘uje localStorage, quota zadrÅ¾ava stari poloÅ¾aj/postavke.
-
-Na samom dnu Projekta poslije poligona: Strelice prema putu, checkbox za
-prikaÅ¾i/sakrij, debljina 1â€“6 px, veliÄina 18â€“48 px, boja ili boja vlake/kraka,
-broj Auto (1/2 preko 300 m) ili 1â€“8, izbor prikaza oznake razdjelnice,
-lista vlastitih/koleginih vlaka za ureÄ‘ivanje i reset samo izgleda. Kod dva
-izlaza najmanje po jedna strelica na svakoj strani; oznaka razdjelnice se ne
-broji u koliÄinu strelica. Postavke izgleda odvojene po nalogu/projektu u
-kljuÄu tvlake_direction_style_v1. Prikaz ukljuÄuje kolegine linije. Sve ove
-postavke su lokalne; nema nove Supabase Å¡eme/upisa i promjene geometrije.
-
-Dodatni korisniÄki zahtjev: Boje vlaka â†’ Dodaj outline. Opt-in checkbox,
-projektno polje outline, bijela/crna prema relativnoj luminanciji glavne
-boje. Ukupna debljina 1.14Ã— glavne (14% proÅ¡irenja, tj. 7% sa svake strane).
-static/js/vlaka-outline.js dodaje drugi Canvas stroke prije glavnog s istim
-dash/dot uzorkom/kapicama; SVG fallback zaseban neinteraktivni path prati
-geometriju/stil i uklanja se s linijom. Ne dodaje zaseban Leaflet/GIS sloj.
-Vlastite/kolegine vlake i kraci odmah dobijaju isti stil; nove linije takoÄ‘er.
-PWA i APK manifest ukljuÄuju novi modul. Upute dopunjene.
-
-Web/SW/Android 2.2.6, code 496. Lokalno proÅ¡la 84 JS test fajla, 5 inline JS
-sintaksi i module/Python sintakse. Pure testovi provjeravaju 20%/80%
-razdjelnicu, stabilnost pri produÅ¾avanju/povratku, bez legacy sredine,
-kontrast obruba i <15% Å¡irine. Novi browser test project-arrows-226.py
-provjerava stvarni dodir preko markera, stale/cancel/quota, GPS nastavak,
-projektne/naloÅ¾ne postavke, vlastite/kolegine strelice, stvarni SVG/Canvas
-outline i 16 PNG prikaza. GitHub CI 37186507598 na
-0f0533900eb78223327c19156d213306c099fafd uspjeÅ¡an: svih 84 JS test fajla,
-8 browser skripti, build i svih 39 web asset SHA-256 provjera, Android offline
-OCR instrumentacijski test te sintetiÄka analiza brzine online/offline.
-Pregledani PNG: projektne strelice day 320x568 i dark 390x800, popup day
-320x568. Nove kontrole su Äitljive i bez horizontalnog prelivanja.
-
-v2.2.6 objavljena 2026-10-04; latest /releases?per_page=1 vraÄ‡a v2.2.6 i
-app-debug.apk 65.143.787 B. Preuzet CI artefakt, uporeÄ‘eni svi 6 promijenjenih
-web asset fajlova s lokalnim izvorima i izraÄunat APK SHA-256 koji je jednak
-Release digestu:
-c264df8804f97c733dfd37f71ec4fe391ac32494e2e8955316626c26902cc19e.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.6
-Meni â†’ AÅ¾uriraj aplikaciju, Android code 496, isti postojeÄ‡i debug potpis.
-Nije koriÅ¡ten fiziÄki telefon, pravi GPS/putevi niti produkcijski Supabase.
-
-PrimijeÄ‡en postojeÄ‡i izgled izvan novih kontrola: metapodaci u gornjem dijelu
-vlaka popupa u Dnevnom modu su presvijetli na bijeloj podlozi (PNG day 320).
-Nije mijenjan taj postojeÄ‡i stil u ovom zadatku; prema AGENTS korisnik bira
-narednu zasebnu popravku. Nove kontrole smjera u istom popupu imaju dobar
-kontrast.
-
-## 40. Doznaka, pamÄ‡enje prikaza i manji APK â€” 2.2.7 (2026-10-04)
-
-Korisnik traÅ¾io detaljan pregled/popravke Doznake, zatim objasnio da OCR
-ne treba raditi bez interneta i traÅ¾io pamÄ‡enje skrivenih tragova/drugih
-slojeva te izabrane instalirane podloge. APK 2.2.6 65.143.787 B, od Äega
-41.033.660 B Äetiri OCR native biblioteke. Zamjena na Google Play
-play-services-mlkit-text-recognition 19.0.1, manifest ocr model download,
-JS onLine i native validated network uslov. Nema modela u APK-u; prvi
-put model preuzimaju Play servisi i moÅ¾e trebati ponoviti nakon preuzimanja.
-IzriÄit korisniÄki zahtjev za OCR uz internet ima prednost nad opÄ‡om
-offline smjernicom; GPS, lokalni podaci, karte i uvoz prethodnog rezultata
-ostaju offline.
-
-map-visibility: grupni tragovi imaju trajni izbor po nalogu i individualne
-izuzetke; hladna obnova se primjenjuje nakon autha i uÄitavanja podataka.
-Prikaz novih/obnovljenih oznaka poÅ¡tuje izbor, aktivno snimanje je zasebno.
-Referentna karta quick-hide pamti se po nalogu. sqlmapRestoreAll ne bira
-najnoviji SQL fajl preko spremljene online podloge; async odgovor ne
-prepisuje noviji izbor. Topo+Granice Äuva izbor i stanje granica.
-
-Doznaka: stale select i Älan/file-picker context, taÄan GJ/odjel link,
-atomski lokalni red za statuse, Äuvanje zone kad brisanje nije zapisano,
-uhvaÄ‡eni odjel/nalog za brisanje; GPX/QR pravilnog odjela/naloga i neposlane
-taÄke, XML, visina, 5-min segmenti; validacija GPS/QR koordinata i upisa.
-PovrÅ¡ina oduzima rupe i koristi zajedniÄki lokalni raÄun. GPS prvi,
-pretraga odjela, identitet, preÄice/kartice i Äitljiviji day UI.
-Pregled sve tri cjeline i ograniÄenja: docs/PREGLED_DOZNAKE_2026-10-04.md.
-VaÅ¾no: Äetiri postojeÄ‡a brisanja odjela joÅ¡ nisu DB transakcija;
-Doznaka analiza stabala trenutno koristi vlastite povezane vlake.
-Nema produkcijske migracije/upisa. Lokalno 85 JS test fajlova i pet inline
-sintaksi proÅ¡lo. Browser/native/build rezultati slijede u istoj biljeÅ¡ci.
-Web/SW/Android 2.2.7, versionCode 497.
-
-
-CI 37188603263 objavio 2.2.7: APK 22.621.388 B, nema ugraÄ‘enog OCR modela,
-39 asset SHA i browser/native mreÅ¾ni uslov proÅ¡li. PNG Doznaka day320
-pokazao tamno zaglavlje/tamne KPI kartice s day slovima. Dopunjene tematske
-boje zaglavlja/KPI/Älanova/neaktivnih statusa i browser assertions. ZavrÅ¡ni
-build 2.2.8/code498; ne prepisivati veÄ‡ objavljeni APK istim brojem verzije.
-
-ZAVRÅ ENO 2.2.8: CI 37189273730 / 1abf830b7debac1d5e35bd809d4a0b2de4a0020a
-uspjeÅ¡an. 85 JS test fajlova, 9 browser skripti, 39 asset SHA, build,
-Android instrumentacijski uslov bez interneta i sintetiÄka analiza brzine.
-Statistika minmax kolone + na 320 px dvije; PNG day320/dark390 pregledani.
-Release v2.2.8, latest API potvrÄ‘en, APK 22.622.560 B (22,62 MB), code498.
-Preuzet CI APK, Å¡est promijenjenih web asseta identiÄno lokalnom izvoru,
-GRANICE.kml ostao, nema ugraÄ‘enog OCR pipeline/modela. IzraÄunati SHA-256
-jednak release digestu:
-2b321b7af9d350ea1417dd342033ef92e57d87ab1968e570a40205b03069c4e0.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.8
-Nema fiziÄkog ureÄ‘aja/GPS/produkcijskog Supabase testa; online Äitanje
-novim Play modelom nije instrumentacijski potvrÄ‘eno (testira se zabrana
-bez validiranog interneta). Prvi model moÅ¾e traÅ¾iti Äekanje i ponovni tap.
-
-## 41. Nova DENDRO MAP ikona i terenski scenarij 5.400 m â€” 2.2.9
-
-Korisnik dostavio novu Å¡umsku Dendro map ikonu, zamjena svih brend resursa,
-login JPEG â†’ icon-512.png, pet Android gustoÄ‡a/adaptive/round/fallback,
-PWA/favicon/Menu/Apple/notifikacije. Novi icon-maskable.png u SW i Android
-asset manifestu; master docs/DENDRO_MAP_ICON.png i android/generate-icons.py.
-Nativni splash prethodno bez slike ostaje takav; samo promjena resursa/boje.
-Web/SW/Android 2.2.9, versionCode499.
-
-Korisnik traÅ¾i provjeru 3 km vlastitih + 2,4 km kolege na osrednjem telefonu,
-bez/slabog signala. tests/js/teren-5400.test.js: osam integritet scenarija,
-756+604 taÄke, offline GPS zapis/keÅ¡/red, restart/crash snapshot, 10 timeouta,
-izgubljena potvrda upisa, ruÄno slanje/preuzimanje/idempotentnost, kolegin
-offline keÅ¡ i stvarni gate kvaliteta mreÅ¾e. ProÅ¡lo i na assetima objavljenog
-APK-a 2.2.8 i na sadaÅ¡njem izvoru. Mocks nisu produkcijski dokaz.
-tests/browser/field-offline-5400.py dodan u CI PRIJE builda: Leaflet/Turf,
-CPU1x/4x, 393x851, 1.360 i 5.410 taÄaka, 24 ponavljanja i testni weak/dead
-transport. CPU4x nije emulacija Redmi ureÄ‘aja. Ne mijenjati GPS/server kod
-samo zbog pregleda; stvarni telefon/baterija/background/prod nisu testirani.
-Detalji: docs/TEREN_5400_I_IKONA_2026-10-04.md. CI/objava slijede.
-
-Tokom rada korisnik traÅ¾io da Instalirane karte prvo prikazuju nagib,
-ekspoziciju i ostale terenske slojeve kao slike. Pet ilustrativnih slikovnih
-kartica ispred lokalnih karata, lokalni fajlovi sa stvarnim spremljenim
-lm_thumb_* thumbnailom ili SVG fallbackom; Å¡est lokalnih SVG-a u SW precache.
-PostojeÄ‡e radnje/checkbox/pamÄ‡enje izbora ostaju. Dopunjen postojeÄ‡i browser
-project-terrain-222.py za redoslijed, slike i day/dark responsive pregled.
-Dodatna deveta integritet provjera: jedna vlaka 3 km / 751 taÄka, odbijanje
-GPS taÄnosti 40m, oznaÄen 2-min GPS prekid i p95 obrade fiksa u Node cloudu.
-
-
-ZAVRÅ ENO 2.2.9: CI 37193603513 na e26121a349f69e9ce83a6286bd93366d460df1cc
-uspjeÅ¡an: 86 JS fajlova, 10 browser skripti, Android build, web asset SHA,
-OCR offline network instrumentacija i sintetiÄka analiza brzine. Teren
-artefakt 11300107120: 9 integritet scenarija i 24 browser mjerenja.
-CPU4x offline 1.360/5.410 taÄaka: prikaz 23,6/34,6ms, upis 1,4/4,9ms;
-requestAnimationFrame mjerenje nije FPS niti stvarni Redmi. Pregledani PNG
-Instalirane day320/dark390. Release v2.2.9/API latest potvrÄ‘en, APK
-23.878.221 B (23,88 MB), code499. Preuzet APK, 15 web fajlova byte-identiÄno,
-16 nativnih PNG-a piksel-identiÄno, GRANICE ostao, nema OCR modela, stvarni
-signing cert isti kao 2.2.8 (v2 signing block provjera).
-APK SHA256: 5d3479e281f94d308a161f2e6c3dc061882d33bc5c117ece478c25abc19a673f.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.2.9
-Bez fiziÄkog ureÄ‘aja/GPS/Xiaomi baterije i produkcijskog Supabase testa.
-
-## 42. Server jednom radnjom, reorganizacija panela i dvosmjer â€” 2.3.0
-
-Korisnik proÅ¡irio zahtjev: jedno dugme slanje+prijem, pregledati/reorganizovati
-Projekat i Vlake, jedan dvosmjer â†” umjesto razdjelnice, poloÅ¾aj Na vlaci ili
-Pored vlake (iskljuÄivo), saÅ¾eti snimanje bez precizne taÄke/slobodnog pogleda.
-Implementirano u postojeÄ‡im server-panel/vlaka-direction/tab-data modulima i
-HTML/CSS; 2.3.0/code500 u sva tri izvora. Dvosmjer u action-bar izmeÄ‘u desnog
-kraka i pauze, baner bez praznog drugog reda. Projektantska taÄka/stari kljuÄevi
-saÄuvani. Server wrapper rezultat po koraku i nalogu, ruÄna write kapija samo
-tokom slanja, prijem poslije zatvaranja kapije, Å¾iv lokalni rad zaÅ¡tiÄ‡en.
-Doznaka prijem: dostupna lista odjela + trenutno otvoren odjel, izriÄito na UI.
-Detalji: docs/DENDRO_SERVER_PROJEKAT_DVOSMJER_2026-10-04.md.
-Lokalnih 86 JS fajlova proÅ¡lo; proÅ¡ireni 4 postojeÄ‡a browser pregleda. CI/objava
-i provjera APK-a slijede. Bez fiziÄkog Android/prod Supabase testiranja.
-
-
-ZAVRÅ ENO 2.3.0: CI 37203728695 na 2f8750bdb4f2fc4651098dafa106659716bf62b5
-uspjeÅ¡an: 86 JS, 10 browser pregleda, Android build/SHA/OCR offline gate.
-APK 23.890.289 B, code500, objavljen v2.3.0. Preuzet APK: sedam promijenjenih
-web asseta identiÄno HEAD prije novih 2.3.1 izmjena, GRANICE ostao, cert isti
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-SHA256 0f9bb3239c578a36d41ee7fd29f882e0929e482bb9867903de423622901b3ce8.
-Pregledani Server/Projekat/recording 320px i odjel+strelice 1:10.000 PNG.
-
-## 43. Online prijedlog granice odjela sa aktivne topo karte â€” 2.3.1
-
-Korisnik izriÄito potvrdio izvor: topografska podloga u aplikaciji, ne
-referentna slika. Novi static/js/doznaka-boundary.js, worker samog modula,
-Doznaka __boundary__ workflow dugme i mali status/prihvati/zadrÅ¾i ruÄnu,
-crna/plava/auto, koridor20/50/100m. UgraÄ‘eni Topo ili trenutno ukljuÄena
-lokalna raster karta; Äita veÄ‡ prikazane tile slike/canvase, samo basemap,
-nikad snimak vectora/liÄnih vlaka ili javni OCR servis. Navigator/native
-validated online gate i provjera poslije await. OCR postojeÄ‡im Play mostom
-iskljuÄuje natpise; detektor piksela klasificira odvojene debele izduÅ¾ene
-crtice uz sve stranice ruÄnog crteÅ¾a. Tanke/pune/nepotpune/dvosmislene linije
-ne daju automatsku granicu. Worker max1,5MP/15s, georeferencija zamrznuta pri
-snimku. Bez novog modela/biblioteke ili native/Supabase migracije.
-RuÄne taÄke ne mijenjaju se do eksplicitnog prihvata zelene geometrije;
-ZavrÅ¡i ostaje postojeÄ‡e vraÄ‡anje granice u obrazac odjela. Potez/undo/cancel/
-finish/izvor/identitet Å¡tite od zakasnjelog odgovora. Fajl je u SW i Android
-manifestu, online-only pomoÄ‡ uz offline-normalno crtanje.
-2.3.1/code501 sva tri mjesta. 87 lokalnih JS fajlova proÅ¡lo (13 novih
-geometrijskih scenarija), sva JS/inline/Python sintaksa. Novi stvarni Leaflet
-raster/worker browser test u CI prije APK-a. Detalji:
-docs/DOZNAKA_TOPO_GRANICA_2026-10-04.md. CI/objava slijede.
-Korisnik pitao Xiaomi/Nova smeÄ‘i okvir ikone: source background tamnozelen
-#002B18, foreground ranije scaled .42, nema smeÄ‘e u podeÅ¡enoj pozadini.
-Odgovoreno da veliÄinu objaÅ¡njava app padding, boju moÅ¾e launcher/theme;
-bez screenshot/fiziÄkog ureÄ‘aja uzrok nije potvrÄ‘en. Ikona nije ponovo
-mijenjana samo na osnovu pitanja.
-
-
-ZAVRÅ ENO 2.3.1: CI37206197933 na b3ac6e888af3c47c43c1707488b55baad5f05d66
-uspjeÅ¡an (87JS,11browser,Android build,47assetSHA,emulator offline OCR gate,
-36 sintetiÄkih CPU1x/4x scenarija poslije objave). UI239 PNG; pregledani
-Doznaka day320/dark landscape i dvosmjer uz poligon1:10.000. Release v2.3.1
-latest API potvrÄ‘en. Preuzet APK23.908.299B, nativeManifest dekodiran
-ba.spd.uss.vlake.debug / 2.3.1-debug / code501. 47 svih repo web asseta prema
-udaljenom Git stablu identiÄno;9 izmijenjenih web fajlova lokalno identiÄno;
-15 launcher PNG-a identiÄno2.3.0, GRANICE ostao, OCR bez velikog modela.
-Stvarni cert isti kao prethodni, SHA256release:
-c10d1828780dc75dab0a15ddf8bdb5a6ff6252854b951eb055b3d7d778828ec5.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.1
-
-Popravljen minimalni fixture/offline event bez Doznaka DOM-a, raster scale
-sada po koridoru20/50/100m, OCR '---' ne maskira prave crtice. Browser test
-zakasnjelog rezultata ispravljen (assignment Promise ranije Äekao odgovor
-prije simulacije), CI37205646511 otkazan. BuduÄ‡i workflow concurrency+20min,
-jednokratni cancel/actionswrite uklonjeni. Testni red marker vrati se nakon
-PNG-a. Bez fiziÄkog Xiaomi/produkcijskog Supabase/stvarne Å¡umarske topo
-karte; ne tvrditi postotak OCR/linijske uspjeÅ¡nosti ili brzinu pravog telefona.
-Lokalni neki netaknuti fajlovi razlikuju se od udaljene rekonstruisane baze:
-APK sva47 provjerenih asseta odgovara UDALJENOM branch stablu. I dalje samo
-explicit modified paths na remote base tree, nikad Å¡iroki git push.
-
-## 44. DEM, potvrÄ‘ena zima USK, spojeni pojasevi i pregled razmjene/Å¡tampe â€” 2.3.2
-
-2.3.2/code502 sva tri mjesta. DEM na stvarnom uzorku Bos.Krupe iz
-EUDEM izvora (AWS metadata, pribliÅ¾no30m); bilinearno sa centrima piksela,
-Å¡avovima ploÄica i NoData, gradient sa30m stencilom, strogo >30%, potpuni
-grid/OpenMeteo provjera, neispravan cache/decode/kvota i offline profil.
-Ne tvrditi RMSE ili LiDAR kvalitet. Copernicus GLO30 COG39.47MB bezCORS,
-Mapterhorn403; nije neprovjereno zamijenjen izvor. DemQuality modul uSW/APK.
-WinterImagery modul: Esri metadata SRC_DATE, ne datum objave, â‰¤2m, online,
-bounded pretraga i maska geoBoundaries USK. Stvarni BihaÄ‡14.01.2019,
-WV03 native.31m/sampled.30m potvrÄ‘en HTTP/tile; ne tvrditi cijeliUSK
-pokriven zimom. Sentinel2 stvarni Feb2026/10m preslab za pojedinaÄnevlake.
-DozBands: susjedni paralelni izohipsni tragovi sa identiÄnom meÄ‘ugranicom,
-obrezani odjelom. Dvosmisleni/ukrÅ¡teni/udaljeni tragovi GPSfallback,
-bez izmiÅ¡ljanja obrade rupa ili promjene GPS-a. Uklonjeno izbacivanje
-vlastitih GPS taÄaka kod kolege i Å¡irenje preko radijusa; granica u memo.
-Proba4Ã—6danaÃ—2/3pojasa=60/12.060taÄaka,57.08ha,49.65procjena,7.43ostatak,
-0.00preklop. Jedan iznad drugog; alternativa2ekipepo2zasebna. PNG/PDF
-outputs/doznaka-sixdays; Node i Leaflet isti obraÄun, CPU4x1.77s,
-offline reload. Nije stvarni Xiaomi niti produkcijska doznaka.
-Å tampa: zajedniÄki SVG lagera, privatna crvena puna, stvarni stilovi karte
-i kolega u legendi, privremeni print editor po vidljivom sloju +Vrsta;
-Zatvori/Reset vraÄ‡a stilove, PDF provjeren. Server novi3akcenta, autora
-i projekat u zatvorenoj grupi/stavci, stvarne potvrde i ista3projekta;
-jedno dugme/nema novih slanja. Sourced izvjeÅ¡taj:
-docs/DEM_ZIMA_DOZNAKA_2026-10-04.md. CI/APK provjera slijedi.
-
-ZAVRÅ ENO 2.3.2: remote43178508823829c6b781edb1ddb9dcf660855c04,
-CI37223342175/job111497896539success;90JS i15 stvarnih browser programa,
-Android build +51assetSHA +manjiAPK +emulator offlineOCR gate,
-analiza brzine poslije objave. Pregledani CI Server day/dark i Å¡tampaPDF.
-APK23.947.824B (23.95MB), ba.spd.uss.vlake.debug/2.3.2-debug/code502.
-Svih51webresursa jednako remoteGitTree b3e4262cb13cfe0ac528f2d7acedc514d9961c37;
-izmijenjeni web fajlovi jednako lokalno;15launcherPNG nepromijenjeno,
-GRANICE>10MB, nema velikogOCRmodela. Potpis cert11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d isti2.3.1.
-Release/API prvi v2.3.2, digest istog preuzetogAPK-a:
-d98a1b8389e06e3e672658da7d71a4ae5700e32bf41e6de4c6cfc3636e33e010.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.2
-Local484a23e razliÄit remoteparent; ponovo samoexplicitpaths atopremote.
-Bez fiziÄkogXiaomi/produkcijskogSupabase/mjerenjaLiDARgreÅ¡ke.
-
-## 45. UÄitaj kartu: novi raspored i pregled lokalnih karata â€” 2.3.3
-
-2.3.3/code503 sva tri mjesta. Prva sekcija Menija dobila dva jasna podtaba:
-Dodaj kartu / Moje karte. Jedan sistemski izbor viÅ¡e fajlova umjesto tri
-dugmeta za isti picker; slikovni uvod, podrÅ¾ani raster formati, KML/SHP
-preÄica i jasna dva koraka. SaÄuvane karte: horizontalni brzi pristup,
-pretraga, stvarna keÅ¡irana minijatura ili oznaÄena ilustracija, status
-vidljivosti i Äuvanja, veliko PrikaÅ¾i na karti / Sakrij, sklopivi detalji,
-prozirnost, redoslijed, informacije i eksplicitno brisanje uz potvrdu.
-ZauzeÄ‡e karata odvojeno od browser kvote prostora aplikacije; kvota nije
-slobodna memorija telefona. Dnevni/tamni/landscape, 44px dugmad i mali ekran.
-
-Pregled prije dodavanja: zaglavlje SQLite, veliÄina, format, neispravni
-fajlovi preskoÄeni, potvrda blokirana tokom provjere ili bez valjanih
-fajlova. Zaglavlje ne potvrÄ‘uje da baza sadrÅ¾i raster: to provjerava engine.
-ZakaÅ¡njela provjera ne nadjaÄava novi/otkazan izbor; kasna pretraga/popisi
-ne prepisuju novije rezultate. UI broj uspjeha provjerava stvarno otvoreni
-sloj jer postojeÄ‡i sqlmapLoadFile interno hvata greÅ¡ke bez return rezultata.
-SaÄuvana a neotvorena karta sada koristi postojeÄ‡i sqlmapRetryOne preko
-IDB/OPFS umjesto zahtjeva za ponovnim izborom izvornog fajla. SQLite engine,
-formati, baze i native kod nisu mijenjani; nema novih biblioteka/resursa.
-
-Lokalno: 90JS programa + inline sintaksa; stvarni Leaflet/SQL.js Worker/
-IndexedDB i sintetiÄka MBTiles PNG karta, uÄitavanje i offline restart,
-pretraga, prozirnost, z-index, skrivanje, odbijeno/potvrÄ‘eno brisanje,
-SQLite bez raster tabela, neispravno zaglavlje i zakaÅ¡njeli izbor. Bez
-vanjskih mreÅ¾nih poziva. 26 PNG na 320/390/568/800px u dva moda, pregledani
-day390, dark320 i landscape pregled. Novi browser test u CI-u (ukupno16).
-CI/APK provjera slijedi. Nije testirano na fiziÄkom Xiaomi ureÄ‘aju.
-
-ZAVRÅ ENO 2.3.3: remote b66c3a2c98a2f1eed7cd46d2ad7ca62dbaa1ffa0,
-CI37229255029/job111515257513success (90JS,16browser,Android build,
-51assetSHA,emulator offlineOCR gate,analiza brzine nakon objave).
-CI26novihPNG; day390/dark320/landscape pregledani. APK23.962.716B,
-ba.spd.uss.vlake.debug / 2.3.3-debug / code503; svih51webassetGitSHA
-isto remote tree9ff3b8a72d9e0f094e721f3ab73c23ed72d1c684,
-izmijenjeniwebfajloviisto lokalno,15launcherPNGisto2.3.2,GRANICEsaÄuvan.
-CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
-isto2.3.2; SHA256preuzetogAPK-a istoReleaseAPI digest:
-15fff7e3a51a923f0ae577a740ea84d42e6b1e67591f187fd406052f10e20b5d.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.3
-Objavljeno za Meni â†’ AÅ¾uriraj aplikaciju; fiziÄki Xiaomi nije testiran.
-
-## 46. Potvrda brisanja vlake i statusa odjela â€” 2.3.4
-
-Korisnik prijavio NO_CONFIRMATION za ciljani odjel i brisanje vlake.
-Reprodukovano kontrolisanim HTTP-om preko stvarnog Supabase JS SDK-a:
-DELETE nakon izgubljenog odgovora vraÄ‡a [] jer je red veÄ‡ obrisan; prethodni
-procesor je svako [] smatrao greÅ¡kom. Sada je DELETE ograniÄen ID-jem i
-vlasnikom, a prazan uspjeÅ¡an odgovor prati SELECT id,korisnik_id. Odsustvo
-potvrÄ‘uje konaÄno stanje; postojeÄ‡i red/nepotpuni odgovor/neuspjelo Äitanje
-ne uklanjaju zahtjev. Prije potvrde odsustva auth.getUser provjerava stvarnu
-prijavu vlasnika (jednom po prolazu); anonimni RLS [] uz keÅ¡irani profil
-ne potvrÄ‘uje brisanje. TuÄ‘a vidljiva vlaka daje WRITE_FORBIDDEN. RLS ostaje
-autoritet; odsustvo se potvrÄ‘uje u opsegu prijavljenog korisnika (politika
-repoa daje vlasniku SELECT vlastite vlake), bez zaobilaÅ¾enja prava.
-sbDeleteVlaka koristi trajni red i tokom ruÄnog slanja, bez zasebnog
-nepotvrÄ‘enog DELETE-a; vlasnik se provjeri poslije in-flight upisa. Novi
-zahtjev nosi ime/projekat/vlasnika radi smislenog prikaza potvrde i greÅ¡ke.
-
-Doznaka: dozSetStatus automatski pauzirao SVE aktivne odjele, ukljuÄujuÄ‡i
-kolegine. Repo migracije20260611/20260713 doz_projects_update dozvoljavaju
-iskljuÄivo created_by=auth.uid(). UI sada status mijenja samo kreatoru, a
-pauzira samo njegove druge odjele. ÄŒlan nastavlja snimati/slati pojaseve.
-UPDATE ograniÄen kreatorom, potvrda zahtijeva ID i traÅ¾eni status. Na praznu
-mutaciju SELECT status/created_by: jednako Å¾eljenom = zavrÅ¡ena operacija;
-razliÄito/tuÄ‘e/nedostupno = saÄuvan zahtjev uz preciznu greÅ¡ku. Migracija
-legacy privremenog ID-ja sada obuhvata i payload.id upsert_doz_status.
-Stari odbijeni status se NE briÅ¡e automatski: u detaljima greÅ¡aka korisnik
-moÅ¾e ukloniti samo taj zahtjev uz potvrdu koja jasno kaÅ¾e da pojasevi/zone/
-vlake ostaju. Odbijena potvrda i promjena naloga ga ne uklanjaju. Poruke
-greÅ¡aka viÅ¡e nisu odsjeÄene jednim redom. Nema produkcijske SQL migracije.
-
-Lokalno90JS programa + inline sintaksa; novi browserserver-confirm-234
-sa stvarnim Supabase klijentom i _OL, kontrolisanim PostgREST HTTP-om:
-izgubljen odgovor nakon izvrÅ¡enog DELETE-a, ponavljanje i SELECT odsustva,
-RLS bez izmjene, tuÄ‘i vlasnik, anoniman keÅ¡irani profil, 503 na Äitanju, Å¾eljeni/razliÄiti/nedostupni
-status, legacy ID, kreator/kolega i selektivno uklanjanje statusa uz oÄuvan
-GPS bafer i zonu. PostojeÄ‡i mock-lanci aÅ¾urirani za dodatni filter vlasnika,
-bez slabljenja provjera. Novi test u CI (ukupno17browser). 2.3.4/code504 sva
-tri mjesta. CI/APK provjera slijedi. Produkcijski Supabase i fiziÄki Xiaomi
-nisu testirani; ne tvrditi da su Å¾iva RLS pravila izmijenjena ili provjerena.
-
-ZAVRÅ ENO 2.3.4: remote1eb11d8196ebf704d635bbf899c9804761bd2bff,
-CI37275977639/job111652970113success (90JS,17browser,Android build,
-51assetSHA,offlineOCR emulator,analiza brzine36ponavljanja). Novi HTTP test
-proÅ¡ao i lokalno sa stvarnom Supabase bibliotekom iz prethodnog APK-a
-(rekonstruisana lokalna biblioteka ima drugi SHA; nisu mijenjane biblioteke).
-APK23.966.552B, ba.spd.uss.vlake.debug/2.3.4-debug/code504. Svih51webasset
-isto remoteTree a825f442117cc84d2bbfb7580b03c32ce79a766e; izmijenjeniweb
-isto lokalno;15launcherPNGisto2.3.3,GRANICEsaÄuvan,nema velikogOCRmodela.
-CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
-isto2.3.3. Preuzeti APK SHA256 jednak ReleaseAPI digest:
-85eb009cc83fe777f70267e8a1b6137817888a7d9e2f4f764f1a5f59686b3e6d.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.4
-Korisnik aÅ¾urira i ponavlja PoÅ¡alji i primi. Stari zabranjeni status kolege
-uklanja pojedinaÄno u detaljima greÅ¡aka; ne brisati cijeli red/bafer.
-
-## 47. Mjerenja i tragovi â€” modal 2.3.5
-
-Korisnik je traÅ¾io profesionalni izgled Meni â†’ Mjerenja i tragovi te novu
-verziju za aÅ¾uriranje. ÄŒetiri sitne ploÄice zamijenjene su karticama 2Ã—2 sa
-postojeÄ‡im SVG ikonama, opisom i jedinicama; njihove postojeÄ‡e radnje
-Udaljenost/PovrÅ¡ina/Nagib/Tragovi su saÄuvane. Zaglavlje, aktivni projekat
-(odjel/GJ), stanje snimanja GPS traga, brojaÄi lokalnih saÄuvanih mjerenja i
-tragova i dvije preÄice do postojeÄ‡ih tabova registra. BrojaÄi izriÄito
-navode svi projekti na ureÄ‘aju; nije dodan pogreÅ¡an filter aktivnog projekta.
-Nazivi preko textContent, bez HTML umetanja ili mreÅ¾nih zahtjeva. Samo
-otvaranje/zatvaranje modala ne mijenja snimanje ili zapise.
-
-Scoped field-design.css, Dnevni/tamni prikaz, 44px kontrole, ograniÄena visina
-i zasebno skrolanje tijela uz stalno dostupno zatvaranje. Fokus, Tab ciklus,
-Escape i povratak fokusa na vidljivi okidaÄ/menu dugme. Modal nema nove
-biblioteke/slike/animacije, ne obraÄ‘uje geometriju ili GPS taÄke.
-
-Lokalno proÅ¡lo svih90JS testova i inlineJS syntax; novi
-tests/browser/measurements-235.py sa stvarnim markupom/CSS/funkcijama modala
-i postojeÄ‡om _tragoviSetTab, ali kontrolisanim navigacijskim pozivima. Osam
-prikaza (320Ã—568,390Ã—800,568Ã—320,800Ã—600,oba moda), offline, Äetiri stara
-alata/dva registra, prazni brojaÄi, dugi/zlonamjerni nazivi, fokus/overlay,
-stanje snimanja/pauze i oÄuvani registri pri otvaranju. Osam PNG u outputs.
-Test dodan u CI (ukupno18browser). Web/SW/Android2.3.5/code505. CI/APK
-provjera slijedi. FiziÄki Xiaomi nije testiran.
-
-CI37284217727: prvi pokuÅ¡aj proÅ¡ao90JS/18browser/Android build/51asset,
-ali emulator izaÅ¡ao137 na svc data disable prije testa. Drugi pokuÅ¡aj
-pokrenuo Android test, ali assertFalse(hasInternet) pao: emulator i nakon
-Wi-Fi/mobile disable imao VALIDATED internet. Emulator37.2.12 moÅ¾e imati
-virtualni Ethernet. CI fixture sada adb root + airplane mode + Wi-Fi/data
-disable + ako postoji eth0, ip link set eth0 down. Testni assert i native
-OCR uslov nisu oslabljeni/promijenjeni. Novi CI slijedi sa istim2.3.5/code505
-koji joÅ¡ nije objavljen; nije mijenjan funkcionalni kod zbog CI problema.
-
-ZAVRÅ ENO2.3.5: remote fca9faefff7712548744292d1ab88ca02d857208,
-tree ab0d2a5ca49fbc4c0225264856dbf0f580e2299c. CI37286799402/
-job111687501267success:90JS,18browser,Android build,51assetSHA,
-stvarni Android offlineOCR test sa izolovanom mreÅ¾om,36ponavljanja analize
-brzine. Ranija dva neuspjeha CI37284217727 nisu zaobiÄ‘ena; ispravljena
-je izolacija mreÅ¾e fixturea i kompletan novi CI proÅ¡ao.
-
-Preuzeti APK outputs/app-debug-2.3.5.apk:23.974.488B (23,97MB),
-ba.spd.uss.vlake.debug/2.3.5-debug/code505. Svih51webasset isto remote
-tree; izmijenjeni web fajlovi isto lokalno. GRANICE saÄuvan,15launcherPNG
-isto2.3.4, bez velikog offlineOCRmodela. CertSHA256
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
-isto2.3.4; APK SHA256 isti ReleaseAPI digest:
-17ab5feeb10723b520a80e84b11fc76f95628a11de99f32dde64b8bf2df1ef40.
-/releases?per_page=1 vraÄ‡a v2.3.5 sa javnim app-debug.apk.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.5
-Korisnik aÅ¾urira preko Meni â†’ AÅ¾uriraj aplikaciju. FiziÄki Xiaomi nije
-testiran. Nema izmjena produkcijskog Supabase-a.
-
-
-## 48. Explorer navigacija i checkbox â€” 2.3.6 / code506
-
-Korisnik traÅ¾i Vodi me do taÄke/lokacije iz vlastite pozicije, pro dizajn,
-te checkbox za ukljuÄivanje/iskljuÄivanje Explorer prikaza. Oba ulaza
-koriste isti novi static/js/explorer-navigation.js. SaÄuvana taÄka ili
-jedan dodir cilja na karti pokreÄ‡u GPS navigaciju; privremeni cilj ne
-upisuje novu terensku taÄku. SaÄuvane rute imaju Explorer za krajnji cilj;
-Pripremi rutu ostavlja postojeÄ‡i planer/rutu/profil.
-
-Explorer je 2D karta okrenuta prema kompasu/smjeru kretanja, korisnik niÅ¾e
-u vidljivom polju, uspravne kontrole i panel sa ciljem, zraÄnom udaljenoÅ¡Ä‡u,
-smjerom, preciznoÅ¡Ä‡u/starosti GPS-a i dostupnim visinskim razlikama. Nije
-3D teren/AR niti novo skretanje-po-skretanje rutiranje. Bez kompasa koristi
-pouzdan smjer kretanja; bez signala/novog fixa ne izmiÅ¡lja smjer/udaljenost.
-Dolazak samo <=15m, preciznost<=15m, GPSfix mlaÄ‘i5s. Offline radi GPS i
-navigacija, za podlogu treba prethodno saÄuvana karta.
-
-Checkbox Explorer prikaz (dodirna povrÅ¡ina>=44px) pamti samo izbor prikaza
-u tvlake_explorer_view_v1, bez automatskog pokretanja GPS-a/cilja pri ulasku.
-IskljuÄen vraÄ‡a sjever gore i gestu karte, cilj/GPS/terenski podaci ostaju.
-Pregled privremeno oslobaÄ‘a mapu; checkbox vraÄ‡a praÄ‡enje. Adapter privremeno
-omota mapPane i proÅ¡iri viewport na dijagonalu kako rotacija ne otkriva
-prazne uglove; obnavlja metode/gestu/DOM prije pregleda, alata, Å¡tampe,
-promjene taba i zavrÅ¡etka. Kontrole snimanja ostaju dostupne. Kamera max4Hz
-uz pragove promjene; nepomiÄni GPS ne pomjera kartu stalno. GPS obrada i
-snimanje geometrije nisu izmijenjeni; automatski pan snimanja tokom aktivne
-navigacije na karti prepuÅ¡ta se Exploreru/pregledu. Kasni OSRM/profil
-odbaÄen nakon izbora novog cilja. Brisanje/preimenovanje aktivne taÄke
-odrÅ¾ava cilj/index; potvrÄ‘ena odjava gasi navigaciju.
-
-Lokalno:90JS skupova i5inlineJSblokova sintaksa proÅ¡li. Novi browser test
-sa stvarnim Leaflet/canvas/ploÄicama, offline, kontrolisani GPS/kompas,
-8prikaza/6smjerova, oba ulaza, checkbox i pamÄ‡enje, taÄne koordinate nakon
-obnove, kontrole snimanja, slab/star GPS, dolazak, GPS kurs, tabovi, ruta,
-zlonamjerni naziv, kasni OSRM/profil. Ranije u istom zadatku proÅ¡li
-menu-tools.py i print-styles-232.py. CI dodan19.browser. Novi JS je u
-SWshell i requiredAPKassets; web/SW/Android2.3.6/code506. Nema novih
-biblioteka niti promjena nativeGPS/proizvodneSupabase baze. CI/APKprovjera
-slijedi; fiziÄki Xiaomi/kompas na ureÄ‘aju nisu testirani.
-
-
-ZAVRÅ ENO2.3.6: remote0580d572454e72f6d28124be52dde932af400b94,
-treefe1c3ea3c591fd065c6a365074f1eb8de480534c. CI37312651657/
-job111771592449success:90JS,19browser (ukljuÄujuÄ‡i Explorer offline sa
-checkboxom),Android build/52assetSHA,stvarni Android offlineOCRtest,
-36ponavljanja sintetiÄke online/offlineCPU1x/4xanalize. Bez preskoÄenih
-obaveznih provjera/reruna.
-
-Preuzeti APK outputs/app-debug-2.3.6.apk:23.999.077B (24,00MB),
-ba.spd.uss.vlake.debug/2.3.6-debug/code506. Svih52webasset identiÄno
-remote tree; izmijenjeni webfajlovi identiÄno lokalno. GRANICE saÄuvan,
-15launcherPNG isto2.3.5, bez velikog offlineOCRmodela. CertSHA256
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
-isti za update. APK SHA256 i ReleaseAPI digest:
-309e036dbbffe7f8b64cd5f533950bc286270307c1d561d6046685332654c71b.
-/releases?per_page=1 vraÄ‡a v2.3.6 sa javnim app-debug.apk iste veliÄine.
-https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.3.6
-Korisnik aÅ¾urira Meni â†’ AÅ¾uriraj aplikaciju. FiziÄki Xiaomi/kompas na
-ureÄ‘aju nisu testirani; sintetiÄka analiza nije mjerenje na telefonu.
-
-
-## 49. Preklapanje Explorera i prozora â€” 2.3.7 / code507
-
-Korisnik prijavio preklapanje modala, traÅ¾i novi APK. Dodatno precizira:
-Explorer samo kroz Vodi me do taÄke/traga i Vodi me do lokacije iz Menija.
-Nova kamera se ne pokreÄ‡e otvaranjem app/GPS/snimanjem. Checkbox bez aktivnog
-cilja ne aktivira navigaciju. Izbor se pamti, prikaz je vezan za cilj.
-Nazivi akcija su Vodi me; Explorer checkbox ostaje samo u aktivnoj navigaciji.
-Trag dobiva Vodi me u popupu/listi: najbliÅ¾a vaÅ¾eÄ‡a snimljena taÄka prema
-poznatoj poziciji, bez pozicije poÄetak. Cilj je snapshot; nema izmjena traga,
-vidljivosti registra ili upisa laÅ¾nih taÄaka. Ovo nije rutiranje duÅ¾ traga.
-
-UtvrÄ‘en uzrok: layout Explorera uzimao samo map rect, zanemarivao action-bar,
-rec-banner/rec-bar. Footer z1800 pokrivao snimanje/donju traku, a mjerenja/
-GPS/kratki prozori imali odvojen Å¾ivotni ciklus. Novi layout rezerviÅ¡e stvarne
-rects donjih traka. Pri malom prostoru saÅ¾eti footer (udaljenost/checkbox/stop),
-bez sudara s trakom; puni prikaz se vraÄ‡a kad ima prostora. Ekstremno malo
-polje sakrije pozicioni puck ako bi prekrio kontrole. Overlay/popup privremeno
-sakrije HUD i obnovi obiÄnu mapu (metode/gestu), Äuva cilj/izbor/GPS, pa vraÄ‡a
-navigaciju tek kad su svi prozori zatvoreni i Karta vidljiva. MutationObserver
-prati postojeÄ‡e overlay roots/roditelje; ResizeObserver rezervisane trake.
-Nema posmatranja cijelog DOM subtree niti novih poziva u GPS obradi.
-Guide/Mjerenja zatvaraju kratke GPS/Izmjeri popupove. Ne otkazuje se snimanje
-ili neÄiji nacrt radi uklanjanja preklapanja.
-
-Lokalno90JS skupova/5inline syntax proÅ¡li. Browser launch lokalno blokiran
-sandbox socket/setsockopt pravilom; test se nije izvrÅ¡io, nema laÅ¾nog lokalnog
-prolaza. Nova tests/browser/overlays-237.py provjerava stvarni markup traka,
-24kombinacije rasporeda/snimanje-pauza/modovi,6prozora, nested prozore,
-Äuvanje cilja, checkbox, tab/stop, navigaciju do traga i saÄuvanu geometriju.
-CI ukljuÄen prije APK builda, uz postojeÄ‡i Explorer/regresijski skup (20browser).
-Web/SW/Android2.3.7/code507. CI/APKprovjera slijede. FiziÄki Xiaomi nije testiran.
-
-CI37328696203 test je reproducirao i drugi sudar:320Ã—568, pauzirano snimanje,
-footer273.8px ody100.3, headerdo130px. Prvobitni prag240px bio premalen za
-puni portrait footer uz pauzu. SaÅ¾eti raspored sada kad je slobodno polje
-<400px portrait/<280px landscape. APK nije objavljen jer browser provjera
-pala prije builda. Ispravka i ponovni CI slijede.
-
-
-ZavrÅ¡ena provjera preklapanja2.3.7: remote8697fe1dcbb6917ff959c6a3be8a1ed40dd574e1,
-tree10567de4c9ac2ea49b1e6af57f518d202c3c15cf,CI37329500118/job111828681998success.
-90JS/20browser/Android build i offlineOCR/52assetSHA/36perf. Releasev2.3.7
-app-debug.apk24.004.473B,digest471dcba6cc8e221a03a71a321b2f08f88137ebf600f16555f4486799ce1e5a63.
-Release metadata provjerena; APK nije dodatno preuzet jer je korisnik za vrijeme
-CI-ja zatraÅ¾io sljedeÄ‡i upgrade (2.3.8). FiziÄki Xiaomi nije testiran.
-
-## 50. Explorer 3D perspektiva i probni pristup â€” 2.3.8 / code508
-
-Novi zahtjev: pogled ispred u3D i7dana od registracije za novog korisnika;
-po isteku Äekanje odobrenja, bez automatskog brisanja. Aktivni task ukljuÄuje
-prethodnu popravku preklapanja i zavrÅ¡ni novi APK.
-
-Explorer sada CSS3Dperspektiva48Â° uz projekciju/inverziju stvarnih Leaflet
-koordinata, heading gore i korisnika niÅ¾e u slobodnom polju. VeÄ‡i viewport
-izraÄunat iz inverzije uglova, bez praznih uglova. Ovo je perspektiva ravne
-kartografske podloge; nije novi DEMmesh/izmiÅ¡ljeni reljef/ARkamera. TaÄnost
-ciljeva/GPS-a ostaje ista; stop/pregled/modal obnavljaju obiÄnu mapu. Nema
-novih velikih biblioteka/modela. Novi unit test projekcije i browser assert
-uporeÄ‘uju matematiÄki ekran sa stvarnim DOMmarkerom u Å¡est smjerova.
-
-Probni pristup: static/js/access-policy.js koristi serverom postavljen
-probni_do; prvo_odobren_at razlikuje opozvani nalog od novog. Rok iskljuÄiv:
-now>=probni_do blokira. Admin/odobreni nastavljaju. Bez kolone/modula ostaje
-postojeÄ‡e Äekanje, nema klijentskog otkljuÄavanja stare baze. Pokretanje,
-recheck, nadogradnja sesije, provjera opoziva, odjava poÅ¡tuju isto pravilo.
-Timer/visibility pauziraju aktivnu vlaku/trag/doznaku po isteku (bez brisanja
-snapshot/registara/naloga), Äuvaju sesiju za adminovo naknadno odobrenje.
-Novi APK ne poziva stari destruktivni check_own_pending_expiry. Admin UI viÅ¡e
-ne piÅ¡e brisanje; prikazuje kraj probnog roka i saÄuvan zahtjev.
-
-supabase/migrations/20261005_probni_pristup_7_dana.sql: atomarna/idempotentna,
-probni rok sidri na auth.users.created_at+7dana, Å¡titi created_at/probni_do/
-prvo_odobren_at od klijentskog produÅ¾enja. je_odobren ukljuÄuje vaÅ¾eÄ‡i probni
-rok uz postojeÄ‡e RLS/Älanstva/uloge. Obje stare funkcije brisanja neutralizovane
-za stare APK/admin pozive; admin_get_all_users zadrÅ¾ava povratni potpis i sve
-zahtjeve. PostojeÄ‡i Äekatelji dobijaju samo preostali dio izvornog roka, ne
-novih7dana od migracije. Opozvani ne dobijaju probni rok. SQL nije primijenjen
-na produkcijsku bazu: nema Supabase/adminSQL alata ili kredencijala u ovom
-okruÅ¾enju. Aktiviranje servera zahtijeva SQL Editor vlasnika baze. Ne tvrditi
-da7dana radi u produkciji samo zbog promjene APK-a. Server je autoritet za
-mreÅ¾ni pristup; klijentski offline timer koristi sat ureÄ‘aja/keÅ¡ zaÅ¡tiÄ‡enog
-roka i nije sigurnosna zaÅ¡tita protiv ureÄ‘aja kojim napadaÄ upravlja.
-
-Lokalno92JS skupova/5inlineJSsyntax proÅ¡li. Novi accessbrowser test stvarnog
-gate/timera/recheck, pauza bez brisanja, naknadno odobrenje/opoziv. CI21browser.
-Novi PostgreSQL16service iskljuÄivo testna baza; tests/sql/probni-pristup-238.sql
-primjenjuje stvarnu migraciju dvaput, provjerava RLS pod authenticated,
-vaÅ¾eÄ‡i/istekli/opozvani nalog, pokuÅ¡aj produÅ¾enja datuma/samoodobrenja, stare
-RPCpozive bez brisanja, naknadno odobrenje/adminpregled svih zahtjeva.
-AccessPolicy uSWshell/requiredAPKassets. Web/SW/Android2.3.8/code508.
-CI/APKprovjera slijede; fiziÄki Xiaomi i produkcijska Supabase nisu testirani.
-
-Prvi CI238 37332202726/job111837842818:92JS proÅ¡li; stvarna SQL migracija i
-RLS/protected rok/bezbrisanja scenariji proÅ¡li do admin liste. SQLfixture je
-nepotpuno imitirao auth.users (nedostaje last_sign_in_at, postojeÄ‡a Supabase
-kolona). Dopunjena testna tabela; produkcijska migracija nije mijenjana.
-Nijedan browser/APK korak nije izvrÅ¡en u ovom neuspjelom pokuÅ¡aju.
-
-### ZavrÅ¡na provjera i isporuka 2.3.8 â€” 2026-10-05
-
-Finalni kod d7f1cc752b88db0f70a87a5d719121e18cc62663; tree
-cijelost web sadrÅ¾aja potvrÄ‘ena kroz GitHub tree i stvarni APK. CI
-37332567063/job111839507922 SUCCESS:92JS skupova, PostgreSQL16 stvarna
-migracija dvaput +RLS/protected rok/istek/opoziv/bezbrisanja/adminodobrenje,
-21browser provjera, 24 rasporeda preklapanja, 8 Explorer pregleda i 6smjerova
-sa stvarnim DOMmarkerom u 3Dperspektivi, Android izrada i 1instrumentation
-mreÅ¾niuslovOCR test, 53SHA256assets, 36sintetiÄkih perf ponavljanja.
-Raniji CI37332464645 sa istim proizvodnim kodom je otkazan radi dodavanja
-obaveznog SQL uputstva u release biljeÅ¡ku; kompletan finalni CI nije otkazan.
-
-Preuzet artifact11355141993, provjeren stvarni APK:
-outputs/app-debug-2.3.8.apk, 24.006.916bytes (~22,89MiB).
-SHA256 c35fabcff697dc2812b8782df7a6ac50e4a9506e0107381006488991ed3fb66e.
-CertSHA256 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Binary AndroidManifest ba.spd.uss.vlake.debug/2.3.8-debug/code508.
-53webassets identiÄna finalnom remoteGitTreeu, izmijenjeni webassets i
-lokalnom kodu; GRANICE>10MB saÄuvan, offlineOCRmodel ne postoji.
-15launcherPNG identiÄna prethodnom stvarnom APK2.3.6. Releasev2.3.8
-asset24.006.916/digest identiÄni preuzetom i provjerenom APK-u; Meni
-AÅ¾uriraj aplikaciju koristi objavljeni release. U release opisu eksplicitna
-jednokratna SQLaktivacija probnogpristupa.
-
-UIartifact11355146630 (~16,35MB) preuzet i pregledane stvarne CI slike
-Explorerday390Ã—800 i recordingpausedday320Ã—568: nagnuta kartografska
-perspektiva, Äitljiv GPS/cilj/checkbox, kompaktan footer iznad snimanja.
-Testna topografska podloga je kontrolisani raster, ne stvarni DEMreljef.
-FiziÄki Xiaomi nije testiran. Produkcijski Supabase SQL nije izvrÅ¡en jer
-nema administrativne veze u ovom okruÅ¾enju. Potrebno jednom pokrenuti
-supabase/migrations/20261005_probni_pristup_7_dana.sql u SQL Editoru;
-APK sam ne otkljuÄava sedmodnevni rad/stare serverske funkcije brisanja.
-
-
-## 51. Explorer ostaje standardan â€” 2.3.9, 2026-10-05
-
-Korisnik prijavio da 2.3.8 ne ukljuÄuje 3D i prikazuje obiÄnu kartu. Stvarna
-integracijska greÅ¡ka: Explorer overlaySelector obuhvata [role=dialog], a
-stalni #dlg-sheet ima display:block i transform:translateY(100%) i kad nije
-otvoren. getClientRects().length>0 i visibility!=hidden zato uvijek true;
-blocked ostaje true, paint vraÄ‡a obiÄnu kameru i sakriva navigaciju. Stari
-browser testovi nisu ukljuÄivali cijeli DOM (posebno taj zatvoren dijalog).
-Prolaz 2.3.8 izolovanih scenarija nije bio dokaz ove stvarne integracije.
-
-shown sada zahtijeva stvarni pravougaonik koji presijeca ekran. Otvoren
-modal i dalje suspenduje kameru; transitionend/cancel osvjeÅ¾avaju provjeru
-kad zatvoreni sheet izaÄ‘e iz ekrana. Novo body childList praÄ‡enje otkriva
-naknadno dodane dijaloge aÅ¾uriranja, bez subtree praÄ‡enja GPS/Leaflet DOM-a.
-Atributi se i dalje prate samo na prozorima/trakama i njihovim roditeljima.
-
-Checkbox Explorer 3D ukljuÄuje nagnutu perspektivu odmah, i dok se Äeka
-prvi fix ili je GPS pozicija zastarjela. U Äekanju centar je trenutna karta
-ili zamrznuta prethodna kamera, a naslov kaÅ¾e ÄŒEKAM GPS. Bez svjeÅ¾eg GPS-a
-nema oznake TI, udaljenosti ili dolaska. SvjeÅ¾i fix vraÄ‡a stvarno praÄ‡enje;
-pregled/stop/tab/modal i checkbox vraÄ‡aju originalne Leaflet interakcije.
-48Â° perspektiva i geografska projekcija nisu mijenjane. Terenski podaci,
-GPS snimanje/filteri, SQL/trial pravila i podloge nisu mijenjani.
-
-Novi tests/browser/explorer-239.py koristi CI Chromium, CI stvarni Leaflet,
-cijelo tijelo i CSS index.html, sve statiÄne dijaloge, toÄan proizvodni
-Explorer getPosition/getCompass adapter. Auth/GPS/kompas su kontrolisani,
-bootstrap ostalih servisa nije izvrÅ¡en; nema produkcijskih zahtjeva.
-Provjerava stari pogreÅ¡an predicate na stvarno zatvorenom dlg-sheet,
-aktivaciju prije GPS-a, stvarni DOMmarker vs projekcija u 4 veliÄine,
-animirano zatvaranje/naknadni dialog, gubitak GPS-a i checkbox/stop.
-To nije test na fiziÄkom Xiaomiju niti punom stvarnom Supabase loginu.
-U CI dodan prvi browser korak (ukupno22). Web/SW/Android2.3.9/code509.
-Lokalni Chromium je ranije blokiran sandbox socket pravilima; ne ponavljati
-stale permission launch. Relevantna browser/Android provjera ide na CI.
-Provjera i APK objava slijede; ne tvrditi isporuku prije uspjeÅ¡nog CI/APK-a.
-
-Lokalno92JS i5inline sintaksi proÅ¡li. Browser239 proÅ¡iren i na stvarni
-switchTab (ostale auth/snimanje hooks kontrolisane), da se zatvore stvarni
-poÄetni tab paneli i provjere granice navigacije uz stvarnu action-bar traku.
-
-CI37336482087/job111852728618 zaustavio objavu: novi test sa stvarnim
-switchTab je uhvatio pomak DOMmarkera ~15px pri resize na320Ã—568. Stvarni
-bug: measure mijenja depth/size, a world.transform ostaje na staroj dubini
-ako camera.y/zoom/GPS nisu promijenjeni. Sada measure aÅ¾urira CSStransform,
-a revision kamere prisiljava novi anchor i kad y ostane isti. Test nije
-olabavljen; zahtjev <3px ostaje. Raniji CI37335873115 je otkazan radi
-jaÄeg testa taba/rasporeda, nije objavio APK. Proizvodni2.3.9 joÅ¡ nije objavljen.
-
-Dodana Android instrumentation ExplorerNavigationTest: lansira stvarnu
-MainActivity i njen hardverski WebView, Äita kompletan APK index.html i
-proizvodni JS (bez rezanja skripti), sve uz ugaÅ¡enu emulator mreÅ¾u. Kontrolisan
-ulaz authUI i GPS senzor, stvarni switchTab/onP/getPosition/Leaflet/3Dmatrix,
-zatvoren i animirani dijalog/checkbox/stop; provjera <3px DOMgeografije i
-neizmijenjenih registara. Ovo je emulator, nije fiziÄki Xiaomi.
-CI connectedDebugAndroidTest sada treba izvrÅ¡iti2 instrumentacije; nema
-novih runtime biblioteka/assets/Supabase migracija/izmjena native produkcije.
-
-CI37338061983/job111857774666:92JS/SQL/22browser/53assets/Android APK build
-proÅ¡li; dvije Android instrumentacije zapoÄele16:11:26UTC i nisu zavrÅ¡ile.
-Job prekoraÄio20min i otkazan; APK nije objavljen. Nema dokaza da je taj
-native test proÅ¡ao. Dodat kompletan proizvodni browser bootstrap test
-(explorer-full-239.py, svi stvarni JS blokovi, kontrolisan authUI/GPS,
-vanjska mreÅ¾a blokirana i GRANICE za ovaj test mali fixture). Ukupno23.
-Native test uklanja ActivityScenario/runOnMainSync Äekanje UIidleness;
-koristi stvarnu Activity sa lifecycle signalom i asinhroni UIpost+5srok.
-@Test90s i gradle180s spreÄavaju neograniÄeno Äekanje. Logcat i JUnitreport
-se Äuvaju kao artifact na uspjeh/neuspjeh. Ne preskakati Explorer provjeru
-radi zelenog CI-ja; prvo dobiti konkretan rezultat/zapis i popraviti uzrok.
-
-CI37342337991/37342809445: kompletan proizvodni bootstrap, 3D prije GPS-a,
-stvarni onP i <3px DOMprojekcija potvrÄ‘eni kroz test. Evaluacija koja vraÄ‡a
-Leaflet marker ili map pokuÅ¡ava serijalizirati cijeli cikliÄni graf aplikacije
-i Playwright javlja uniÅ¡ten executioncontext; mutirajuÄ‡e testne evaluacije
-sada zavrÅ¡avaju void0. Kontrolne boolean/JSON evaluacije ostaju iste, nema
-olabavljenja niti izmjena proizvodnog GPS koda. Native marker eval isto void0.
-
-CI37343121439/job111874916980:92JS/SQL/23browser/build/53assetSHA proÅ¡li.
-Native faza nije pokrenula testove: emulator-runner izvrÅ¡ava svaku script
-liniju u zasebnom sh procesu, pa cd android nije preÅ¾ivio i gradle je prijavio
-repo root bez settings.gradle. Popravka: jedan bash tests/android/explorer-offline.sh
-sa gradle -p android, istim offline uslovom, timeout180s i logcat artefaktom.
-Za stvarni WebView test izabran API34/google_apis (Android14/moderna JS podrÅ¡ka);
-novi test uslovno odobrava POST_NOTIFICATIONS na33+. Produkcija/minSDK/GPS
-nije mijenjana. Nema dokaza da API29 engine uzrokuje bug; ovo je izbor
-reprezentativnije platforme za trenutne telefone. APK joÅ¡ nije objavljen.
-
-CI37344207039/job111878587027:92JS/SQL/23browser/Androidbuild/53SHA proÅ¡li.
-Android14/WebView113.0.5672.136: Explorer test istekao na prvoj JS evaluaciji
-dok se APK stranica joÅ¡ uÄitavala (RESUMED16:59:35.7, test fail42.0, prvi
-paint8.62s/console SW47.2). OCR offline proÅ¡ao. Uveden native getProgress==100
-+ taÄan APK URL signal (rok30s) prije JS evaluacije, bez zamjene proizvodnog
-WebViewClient/assetLoader-a. JS uslovi/5s callback/90s ukupno ostaju.
-Diag artifact11360436331 sadrÅ¾i stvarni logcat i JUnit2test/1failure/0skipped.
-APK nije objavljen prije uspjeÅ¡ne Explorer instrumentacije.
-
-## 52. ViÅ¡esatni teren i boja Preglednika â€” 2.4.0 / code510
-
-Zahtjev: pet sati naizmjeniÄnih vlaka i rada u aplikaciji, od toga sat
-doznake, uz nestajanje mobilnih podataka; zatim nova verzija za aÅ¾uriranje
-u aplikaciji i Å¾uÄ‡kast donji dio Preglednika oznaka.
-
-Native dopuna vlake je obraÄ‘ivala cijeli bafer bez predaha za UI. Sada
-svakih 16 fikseva vraÄ‡a event loop i provjerava nalog/sesiju/aktivnu vlaku.
-Promjena tokom predaha prekida prolaz bez potvrde journala. Trajni upis,
-GPS filteri, historijske pauze i ruÄno slanje ostaju autoritet.
-
-Doznaka je za svaku dopunjenu taÄku crtala statistiku i dva puna prolaza
-visinskog profila. Prikaz sada spaja pozive u jedan animation frame,
-preskaÄe skriven dokument/profil; raÄunica uspona obraÄ‘uje samo nove visine.
-Nova ili skraÄ‡ena serija resetuje memo. Originalne visine i izvozi ostaju puni.
-Regresija sa 1800 fikseva: 1 canvas crtanje umjesto 1799, bez gubitka taÄaka.
-
-Novi field-five-hours.test.js simulira Äetiri puta 30 min vlake i 30 min
-Äitanja/raÄunica, zatim 60 min doznake sa pauzom i slabim GPS-om. 3600
-fikseva vlake ->3564 prihvaÄ‡ena; 1800 fikseva doznake ->1723 prihvaÄ‡ena.
-Nema automatskih serverskih upisa. To je Node sa kontrolisanom pohranom,
-GPS-om i Leafletom, nije mjerenje baterije ni pravog telefona.
-ÄŒetiri nove regresije padaju na prethodnom kodu. Test panela tragova je
-normalizovao CRLF pri Äitanju izvora (Windows fixture je traÅ¾io samo LF).
-
-Novi browser field-five-hours.py izvrÅ¡ava puni proizvodni bootstrap,
-stvarni Leaflet/Canvas i IndexedDB uz CPU4x, kontrolisane GPS vremenske
-oznake i blokirane vanjske zahtjeve. Dodan u CI prije objave APK-a.
-CPU4x nije emulacija konkretnog Redmi modela; pet sati vremenskih oznaka
-nije pet sati stvarnog rada. CI/browser/Android rezultat treba dopisati
-poslije izvrÅ¡enja. Lokalni browser launch odbijen spawn EPERM; nije proÅ¡ao.
-ADB nema povezanog telefona. Baterija, zagrijavanje i Xiaomi OEM ubijanje
-procesa nisu potvrÄ‘eni. Produkcijski Supabase nije mijenjan.
-
-Preglednik dobiva zasebnu folder sekciju: topla Å¾uta #f3dfa2, svijetle
-kartice, tamna slova i dugmad najmanje44px. Pretraga, kategorije, grupne
-radnje, ureÄ‘ivanje i paginacija koriste iste postojeÄ‡e identitete/pozive.
-Oba prikaza (dnevni/tamni) zadrÅ¾avaju istu boju foldera.
-
-
-## 2026-10-05 â€” Explorer 2.3.9 zavrÅ¡en i APK potvrÄ‘en
-
-CI37345450553/job111882751205 zavrÅ¡en SUCCESS. Objavljeni izvor
-a8168b2d9e887b91d1956d6fb40cde3d27ab24a9. ProÅ¡li92JS grupe, testna
-PostgreSQL migracija/RLS,23browser provjere (ukljuÄuje kompletan stvarni
-JS bootstrap sa onP), Android build,53webassetSHA i oba Android testa.
-Native report: Android14/API34, WebView113.0.5672.136,2tests/0failures/
-0errors/0skipped. Explorer13.777s, OCR0.104s. Cijeli APK/proizvodni
-MainActivity/WebView/DOM/JS; kontrolisan authUI/GPS/kompas, mreÅ¾a iskljuÄena.
-Provjereni poÄetni3D bez GPS-a, svjeÅ¾i onP/oznaka/udaljenost, stvarni
-DOMmarker naspram projekcije <3px, dialogpause/resume, checkbox i stop,
-neizmijenjeni vlake/taÄke/tragovi registri. Native progress je preÅ¡ao100
-u17:08:15.595 prije JS; nema preskoÄenih testova ni oslabljenih uslova.
-36 analiza brzine proÅ¡le u CI-ju; nisu fiziÄka mjerenja Redmi telefona.
-
-Preuzet stvarni CI APK i poreÄ‘en sa javnim release assetom v2.3.9:
-https://github.com/pogonboskrupa/US-SUME/releases/download/v2.3.9/app-debug.apk
-24,008,156B (24.01MB), SHA256
-1cf52ce2f1361ef6f2ccba1a525702ccd2fd000d4b7d100f677aa27b9f8785c9.
-Paket ba.spd.uss.vlake.debug;2.3.9-debug/code509. CertSHA256 identiÄan238:
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-53assets identiÄni remote izvoru, GRANICE>10MB oÄuvan, bez offlineOCRmodela,
-15launcherPNG identiÄni238. Lokalni verify_apk_239.py i verify_native_239.py
-proÅ¡li; release veliÄina/digest/commit odgovaraju preuzetom APK-u. Artifact
-APK11360766710, Android11360412163, UI11360118443, teren11359948802.
-Potpis/paket omoguÄ‡uju aÅ¾uriranje postojeÄ‡e debug aplikacije kroz Meni.
-
-Popravljen stvarni blokator: zatvoren dlg-sheet je display:block ali izvan
-viewporta; stari shown ga je smatrao otvorenim i gasio perspektivu. Sada
-se provjerava vidljivi pravougaonik, zavrÅ¡etak transform animacije i novi
-dialog. Kamera se ukljuÄuje bez GPS-a bez laÅ¾nih metrika; resize osvjeÅ¾ava
-depth/transform/anchor revision. 48Â° nagnuta Leaflet karta, bez DEMmesha
-i bez novih runtime biblioteka. Explorer samo tokom voÄ‘enja do cilja,
-checkbox izbor pamÄ‡en. FiziÄki Xiaomi/GPU/senzori nisu testirani.
-Supabase trial SQL status ostaje kao238: pripremljen/testiran, nije
-primijenjen na produkciji; ovaj zadatak ne mijenja serverska pravila.
-
-## 2026-10-06 â€” v2.4.0 / code510: prvi uvoz velikih SQLite karata
-
-Korisnik je precizirao: oko 40 s traje PRVI uvoz .sqlitedb/.db od 1,5 GB.
-Stari sqlmapLoadFile prvo je Äekao kompletnu OPFS kopiju, zatim otvarao
-SQLite i raÄunao dodatnu dijagnostiku. Novi tok Äita potrebne SQLite
-stranice iz izvornog File objekta i prikazuje sloj prije zavrÅ¡etka kopije.
-Posebni offline-import.js worker kopira u blokovima od 4 MB, odvojeno od
-workera za ploÄice. Banner prikazuje napredak i traÅ¾i da app ostane otvoren.
-Prikaz nije potvrda trajnosti: saved postaje true tek nakon zatvaranja,
-provjere veliÄine OPFS fajla i uspjeÅ¡ne IDB transakcije. ZavrÅ¡etak Äuvanja
-ne mijenja podlogu koju je korisnik u meÄ‘uvremenu odabrao.
-
-Zamjena koristi jedinstveni fiziÄki naziv: prethodni IDB zapis i prethodna
-kopija ostaju dok nova kopija nije potvrÄ‘ena. OPFS naziv je u metapodacima
-i zadnjem izboru; restore, preimenovanje i brisanje koriste taj naziv.
-Prekid/brisanjem tokom uvoza zaustavlja se copy worker, Äeka ÄiÅ¡Ä‡enje i
-spreÄava naknadno objavljivanje obrisane karte. GreÅ¡ka kvote ostavlja
-trenutni izvorni prikaz samo za sesiju i Äuva ranije saÄuvanu kopiju.
-Fajl se ne uÄitava cijeli u RAM. Manje karte zadrÅ¾avaju postojeÄ‡i SQL.js tok.
-Ovo skraÄ‡uje Äekanje na PRIKAZ; ne uklanja fiziÄko kopiranje 1,5 GB.
-
-Lokalno: sintaksa svih inline blokova i modula; postojeÄ‡e 92 JS grupe i
-nova offline-import grupa (7 scenarija) proÅ¡le. Novi CI test koristi
-stvarni proizvodni bootstrap/Leaflet/worker/OPFS/IDB i sintetiÄku RMaps
-bazu proÅ¡irenu nultim bajtovima do 1.500.000.000 B. Mjeri prvi sloj,
-vidljivu ploÄicu, cijelu kopiju i offline ponovno otvaranje; nije fiziÄki
-Redmi benchmark niti velika baza s mnogo razliÄitih ploÄica. Dodatni
-Android test koristi stvarni APK/MainActivity/WebView bez interneta,
-21 MB File iz iste male testne baze i ponovo uÄitava stranicu iz APK-a.
-CI, APK i izmjerena vremena joÅ¡ nisu potvrÄ‘eni; dopuniti poslije provjere.
-
-
-## 54. UsklaÄ‘en Preglednik oznaka â€” 2.4.1 / code511
-
-Korisnik je primijenio probni SQL, zatim zatraÅ¾io manji kontrast izmeÄ‘u
-gornjeg i donjeg dijela Preglednika. Primjena SQL-a je korisnikova potvrda,
-nije nezavisna produkcijska provjera.
-
-CSS dobiva lokalnu, jedinstvenu toplu paletu: tamni maslinasto/sivi panel
-#282e25 i donji dio #33382b; dnevni krem panel #f6f3e9 i pjeÅ¡Äani #eee7d3.
-Kartice, filteri, oznake i fokus prate tu paletu. Nema jarke Å¾ute povrÅ¡ine
-uz tamnoplavo zaglavlje. Tekst ostaje kontrastan. Funkcije Preglednika
-nisu mijenjane. PostojeÄ‡i browser test prati paletu oba reÅ¾ima.
-
-Objavljeni v2.4.0 u meÄ‘uvremenu cilja f1c3dff, koji donosi offline uvoz
-karata sa zasebnim workerom i Android provjerom. Njegove promjene su
-usklaÄ‘ene u CODEX-US-SUME sa saÄuvanim terenskim doradama c4482b2; nijedna
-druga grana nije mijenjana. CI izvrÅ¡ava i field-five-hours i offline-import.
-SQL/produkcijski server nisu mijenjani ovom doradom; potvrÄ‘eni nalaz429
-ostaje zaseban zadatak. CI i APK objavu dopuniti rezultatom nakon zavrÅ¡etka.
-
-
-## 55. BrÅ¾i prvi prikaz i zavrÅ¡etak otvaranja karte â€” 2.4.2 / code512
-
-Novi zahtjev tokom builda 2.4.1: karta djeluje sporije i prikazuje dug
-pozadinski uvoz. sqlmapLoadFile je Äekao cijeli _sqlImportSave iako je
-sloj veÄ‡ dodan; biraÄ/batch je zato ostao u fazi otvaranja. Sada vraÄ‡a
-kontrolu poslije otvaranja, dok zaseban job pouzdano objavljuje kopiju.
-Traka jasno kaÅ¾e da je karta otvorena i da sprema kopiju za naredni start.
-
-MiniSqlite worker koristi FileReaderSync za male SQLite stranice iz File-a,
-uz postojeÄ‡i async fallback i OPFS sync put. Posebni copier koristi 16MB
-blokove preko FileReaderSync, a bez podrÅ¡ke ostaje na 4MB async blokovima.
-Provjerava taÄan broj proÄitanih bajtova. Ne uÄitava cijelu kartu u RAM.
-Obje operacije i dalje rade izvan UI niti. Nalog/podaci GPS nisu dirani.
-
-Regresije: stvarni MBTiles/RMaps fajlovi proÄitani sync putem bez async
-poziva; 21MB copier Äita dva ograniÄena bloka i Äuva sve bajtove; Android
-WebView i 1,5GB browser test traÅ¾e da se otvaranje zavrÅ¡i PRIJE zavrÅ¡etka
-zadrÅ¾ane kopije. Copy/quota/cancel/atomic publish provjere ostaju.
-Mjerenja CI treba dopisati. Brzina nije potvrÄ‘ena na fiziÄkom Xiaomiju;
-punih 1,5GB mora biti kopirano prije trajnog ponovnog otvaranja.
-
-Dodatna provjera mijeÅ¡anih verzija: stvarne izdvojene funkcije slanja iz
-2.3.8, objavljene2.4.0 i radne2.4.2, zajedniÄki laÅ¾ni Supabase, ukupno6vlaka
-+615GPS taÄaka; sve potvrÄ‘eno bez duplikata. To nije test tri APK-a ni
-produkcijskog RLS-a. ÄŒlanstvo projekta vlaka i Älanstvo odjela doznake su
-odvojene tabele; recentni odobreni Älanovi ne trebaju identiÄne verzije.
-Stariji APK bez probnog AccessPolicy moÅ¾e lokalno blokirati neodobrenog
-korisnika iako server daje probni rok; takav APK treba aÅ¾urirati.
-
-
-## 56. Å PD i administratorski Teren â€” 2.4.3 / code513
-
-Korisnik je proÅ¡irio zadatak: znaÄajno unaprijediti Teren za Å PD US Å UME,
-a adminu zamijeniti ObavjeÅ¡tenja tabom Teren. Uklonjeni su tab i Meni
-preÄica ObavjeÅ¡tenja; stari tab odabir postavke vodi na Teren. Admin vidi
-Teren i moÅ¾e koristiti liÄne taÄke, fotografije, tragove i mjerenja.
-Projektna prava/RLS nisu proÅ¡irena. Ostali projektantski tabovi zadrÅ¾avaju
-postojeÄ‡e uslove; role UI je i dalje deterministiÄki nakon promjene profila.
-
-Teren dobiva lokalni radni pregled GPS svjeÅ¾ine, podloge i snimanja,
-sekcijsku navigaciju, GPS/kopiranje uz koordinatnu karticu, veÄ‡e kontrole,
-pretragu svih vrsta zapisa i paginaciju20. Stvarni indeks taÄke se Äuva
-nakon sortiranja/pretrage. Novo imenovano zapaÅ¾anje hvata poziciju i nalog
-PRIJE dijaloga, ponovo provjerava nalog prije spremanja i koristi postojeÄ‡i
-lokalni _createTacka. UgraÄ‘ene preÄice duÅ¾ina/povrÅ¡ina koriste postojeÄ‡e
-mjerenje. Kartice/tekst prate Dnevni mod. Novi JS/CSS su u SW i APK manifestu.
-
-Nema novih serverskih poziva ni automatskog dijeljenja/slanja. Dashboard
-radi lagano na GPS renderu i postojeÄ‡em5s otkucaju; nema novog intervala.
-Paginacija/pretraga ne mijenjaju originalne nizove. Testovi provjeravaju
-identitet, paginaciju, promjenu naloga tokom zapaÅ¾anja i stari GPS.
-Novi puni browser test: Å PD/admin/projektant,320/390/800px, oba moda,
-imenovana taÄka, povrÅ¡ina, bez vanjskih upisa. CI rezultat tek dopisati.
-
-
-## 57. ZavrÅ¡na vizuelna provjera Terena â€” 2.4.4 / code514
-
-Korisnik je ponovo odobrio objavu nakon odbijenog GitHub update_ref poziva.
-0901b4ef je objavljen na CODEX-US-SUME; CI37495958703 potvrÄ‘uje95JS,
-PostgreSQL i sve browser provjere, ukljuÄujuÄ‡i puni Teren. Prvi vizuelni
-pregled PNG-a pokazao je slab kontrast zelenog/Å¾utog GPS teksta u dnevnom
-modu. Tamnije boje prate iste pragove kvalitetÃ¢, a bar ostaje indikator.
-Naslov glasi Pregled terenskog rada umjesto poruke Spremno sa nepoznatim
-GPS-om/podlogom. Browser provjerava kontrast teksta>=4.5 za6/18/40m i Äeka
-kraj poruke potvrde prije screenshots. Potrebni zavrÅ¡ni CI/APK rezultat
-ovog izdanja dopisati nakon zavrÅ¡etka. Produkcijski server nije mijenjan.
-
-
-## 58. ZavrÅ¡ena objava 2.4.4 â€” 2026-10-06
-
-Korisnik je izriÄito ponovio odobrenje nakon drugog odbijenog update_ref.
-CODEX-US-SUME i release v2.4.4 ciljaju b38e3ffc98519ab5b6a3519ca5c3dc9c1173778a.
-CI37503395807 je success:95JS, PostgreSQL/RLS, browser Teren/role/kontrast,
-petosatni ubrzani teren,1.5GB offline import, ostali browser testovi,
-APK SHA assets i Android instrumentacija3testa/0failure/0error.
-Vizuelno pregledani dnevni390px i adminski tamni320px PNG: neutralan naslov,
-tamniji Äitljiv GPS tekst/statusi, Teren umjesto ObavjeÅ¡tenja.
-
-APK code514/versionName2.4.4-debug, ba.spd.uss.vlake.debug,24,037,000B.
-SHA2564000d9c410cd9ef3750a74f99dec6205cf1efb43a11404d2d0b5330e5c8ec46e.
-CertSHA25611fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Preuzeti APK dodatno provjeren:56Git blobova odgovara commit-u, GRANICE oÄuvan.
-Updaterski releases?per_page=1 vraÄ‡a v2.4.4, draftfalse/prereleasetrue.
-
-Finalna 1.5GB sintetiÄka karta: sloj81ms, prva ploÄica116ms, puna kopija10742ms,
-offline restart356ms; kopija taÄne veliÄine, sigurno brisanje tokom uvoza.
-Pet sati ubrzanih oznaka CPU4x:3564vlaka/1723doznaka, IDB vraÄ‡a1723/1723,
-p95vlaka1.2ms/doznaka4.6ms, najveÄ‡i prelazak taba102.9ms,0vanjskih upisa.
-Ovo nije pet sati baterije/termike niti fiziÄko mjerenje Xiaomija. ADB nema ureÄ‘aja.
-Produkcijski Supabase nije dodatno provjeravan/mijenjan; nalaz429 ostaje zaseban.
-Ovaj zavrÅ¡ni zapis je saÄuvan lokalno poslije objave, bez nove CI/objave istog APK-a.
-
-
-## 59. Uklonjeni Vozilo i Tvoj obilazak iz Terena â€” 2.4.5 / code515
-
-Po izriÄitom zahtjevu korisnika uklonjene su obje kartice iz Terena za Å PD
- i admina: Vozilo i cijeli gornji Tvoj obilazak (statusi/preÄice). Tab sada
-poÄinje karticom pozicije. Uklonjeno je osvjeÅ¾avanje nepostojeÄ‡ih statusa
-iz terrain-workspace modula i nepotrebni poziv rendera kartice vozila.
-PostojeÄ‡a korisniÄka taÄka imena Vozilo ostaje obiÄna saÄuvana taÄka;
-zahtjev uklanja UI opciju, ne briÅ¡e terenske podatke.
-PostojeÄ‡i browser test potvrÄ‘uje odsustvo oba bloka i poziciju prve
-kartice za oba profila. Snimanje traga, GPS, kompas, pretraga, imenovana
-zapaÅ¾anja i mjerenja ostaju funkcionalni. Nema serverskih promjena.
-CI uspjeÅ¡an: https://github.com/pogonboskrupa/US-SUME/actions/runs/37508515822
-Commit: 68089fd927c220818ed6023a113f8a80ad924de1; izmjene samo CODEX-US-SUME.
-Browser provjere oba profila i oba naÄina boja prolaze; slike 390 px Å PD
-i 320 px admin pregledane, prva kartica je pozicija, bez oba uklonjena bloka.
-Android XML: 3 testa, 0 greÅ¡aka/padova. APK assets: svih 56 Git blobova
-odgovara ovom commit-u, GRANICE.kml oÄuvan. Paket ba.spd.uss.vlake.debug,
-versionName 2.4.5-debug / versionCode515, potpis identiÄan ranijim izdanjima.
-APK 24.032.876 B; SHA256:
-0841ac4324466c09bae17daf80ddf2f9d39924631db1abec13202f2f97104468
-Release https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.4.5
-Updaterski /releases?per_page=1 potvrÄ‘uje v2.4.5 i app-debug.apk.
-Lokalni izlaz: outputs/app-debug-2.4.5.apk; slike Teren-dnevni-2.4.5.png
-i Teren-admin-2.4.5.png. ZavrÅ¡ni zapis je lokalno dopisan poslije objave.
-
-## 60. Detaljniji Å PD korisniÄki profil â€” 2.4.6 / code516
-
-Zahtjev korisnika obuhvaÄ‡en liÄnim Å PD profilom iz Menija i zaglavlja Terena.
-Meni dobiva Å PD preÄice za profil, Teren i Moje zapise; naziv konteksta po ulozi.
-Å PD Meni skriva Upravljanje projektima i projektnu provjeru Spremno za teren,
-jer taj profil nema projekat za tu provjeru; kopija zapisa dostupna je u novom
-profilu. Elementi se ponovo prikazuju po promjeni na druge uloge.
-Profil prikazuje identitet, dostupni pristup ili taÄan probni rok, brojeve taÄaka,
-tragova, mjerenja i fotografija na telefonu, aktivnu lokalnu kartu i status kopije,
-broj projekata uÄitanih Å¡ifrom, GPS/vezu/snimanje/dijeljenje i red slanja.
-PreÄice vode u taÄne postojeÄ‡e liste (pretraga resetovana), fotografije koriste
-Preglednik oznaka sa filterom Fotografije. Tu su Dnevni mod, postojeÄ‡i izvoz
-_exportFieldRecovery za sigurnosnu kopiju zapisa, PIN, aÅ¾uriranje i Å PD upute.
-Kopija nema raster karte; nije obeÄ‡ana provjera pokrivenosti lokalne karte.
-
-Novi spd-profile.js/css su u SW i required Android assets. Nema novog timera,
-automatskog GPS/snimanja/dijeljenja ili mreÅ¾nog upita. Pregled je vremenski oznaÄen
-i ruÄno se osvjeÅ¾ava; prati online/offline i povratak u aplikaciju. Status pristupa
-koristi postojeÄ‡i AccessPolicy. Profil je samo za trenutni odobreni/probni Å PD nalog;
-promjena korisnika, uloge, odjava ili istek probnog roka zatvara i Äisti prikaz.
-Modal ima trap fokusa/Escape i inert pozadinu. UÄitani projekti u Terenu prate
-boje oba moda, duÅ¾a imena se lome, prazna lista daje jasnu uputu. Uklonjeni Vozilo
-i Tvoj obilazak nisu vraÄ‡eni. Projektna prava/produkcijski Supabase nisu mijenjani.
-
-Lokalno 96 JS skupova prolazi; svih 5 inline JS blokova sintaktiÄki ispravno.
-Puni browser test prolazi na lokalnom Edge-u, s laÅ¾nim serverom: Å PD/admin/projektant,
-320/390/800px, oba moda, profil/rok/pripadnost nalogu, preÄice, pretraga i mjerenje;
-0 vanjskih upisa. Slike profila dnevni390/tamni320 i postavke vizuelno pregledane.
-CI i APK rezultat dopisati nakon objave. FiziÄki Redmi nije testiran.
-
-
-## 2026-10-07 â€” Preglednik oznaka: mirniji kontrast â€” 2.4.7 / code517
-
-Korisnik traÅ¾i ujednaÄen dizajn tamnog zaglavlja i Å¾uÄ‡kastog donjeg pregleda.
-Osnova je posljednja objavljena2.4.6, commit90979eed, CODEX-US-SUME.
-Paleta je lokalno ograniÄena na preglednik: bliske sivozelene povrÅ¡ine,
-neutralni folderi, priguÅ¡ene oznake KML/fotografija/GPS/servera. Donja
-ml-folder-area prati istu paletu uz blaÅ¾u razliku kartica i grupnih redova.
-Dnevni mod ima svijetlu paletu. Kategorije se prelamaju bez boÄnog skrola,
-kontrole najmanje44px, vidljiv fokus, Na karti blago istaknuto.
-KML editor nasljeÄ‘uje paletu samo unutar preglednika. Normalni/sekundarni
-tekst najmanje5.06:1u tamnom i4.93:1u dnevnom modu.
-
-Promjena samo CSS/prezentacijski markup (data-category i SVG folder),
-bez promjene modela, slanja, Äuvanja ili geometrije.2.4.7/code517 na3mjesta.
-Lokalni browser preglednik proÅ¡ao8kombinacija320/390/568/800px i day/dark
-sa grupnim radnjama preko paginacije, sortiranjem, foto i KML editorom.
-Sintaksa5inlineblokova OK. APK/CI rezultat dopisati nakon objave.
-
-Prvi rad je poÄeo iz prethodne radne grane CODEX-US-SUME-2026-10-01
-i pripremio2.4.1, prije nego je zavrÅ¡na provjera otkrila noviji CODEX-US-SUME
-sa2.4.6. Ispravljeno: dizajn prenesen na aktualni kod bez gubitka novijih
-izmjena. Raniji release2.4.1 treba vratiti na izvorni APK iz uspjeÅ¡nogCI37485155170
-i izvorni target/bodya2e668618a365574134bbf56085caa8e18637bb9.
-Ne koristiti novi dizajn u tom starom izdanju; konaÄna objava je2.4.7.
-
-CI37574648644 je zaustavljen jer field-five-hours.py hardkodira stare
-Å¾ute nijanse. Provjera aÅ¾urirana na novu neutralnu paletu bez slabljenja
-GPS/IDB/bez-upisa uslova; lokalni puni5h/CPU4x test prolazi.
-Izvorni2.4.1 APK iz CI-ja preuzet i potvrÄ‘en SHA256da312d1447061f7799fccfe1840f0044edbebc0f3216fbeb39b5456cf8a6beb7.
-Direktni binary upload kroz cloud proxy vraÄ‡a Bad Content-Length; metadata
-ranije objave vraÄ‡ena, asset Äeka obnovu. Jednokratni korak u CI-ju
-preuzima originalni artifact i provjerava taÄanSHA prije upload-a;
-ukloniti poslije uspjeÅ¡ne obnove. Produkcijski Supabase nije mijenjan.
-
-
-Obnova starog2.4.1 zavrÅ¡ena u CI37574969641 prije JS testova.
-GitHub release dodatno provjeren: targeta2e668618a365574134bbf56085caa8e18637bb9,
-app-debug.apk24,021,344B i digestda312d1447061f7799fccfe1840f0044edbebc0f3216fbeb39b5456cf8a6beb7
-identiÄni originalnomartifactu. Jednokratni workflow korak i actions:read
-scope uklonjeni; workflow vraÄ‡en identiÄno prethodnoj2.4.6 verziji.
-Cleanup commit[skipci] ne mijenja aplikacijske resurse ni verziju;
-izrada2.4.7 iz cbacaf577b721449aedc89417e09c5b2ae99b0c1 nastavlja.
-
-
-## ZavrÅ¡ena objava Preglednika â€” 2.4.7, 2026-10-07
-
-CI37574969641 izcbacaf577b721449aedc89417e09c5b2ae99b0c1:96JS grupa,
-PostgreSQL/RLS testna baza, sve browser provjere (ukljuÄuju novi izgled
-i puni5h/CPU4x teren), APK build i58assetSHA provjera proÅ¡li.
-Android14/API34, stvarni MainActivity/WebView,3testa/0greÅ¡aka/0preskoÄenih:
-Explorer21.566s, offlineSQLite11.546s, OCRoffline0.234s.
-Job je FAILED samo na kreiranju Release-a403 Resource not accessible by
-integration: tag bi pokazivao commit sa privremenim workflow korakom.
-Release kreiran na oÄiÅ¡Ä‡enom stablud012440625d9b6f12b95c3df30f2ee4cbddbfa80,
-sa istim aplikacijskim resursima; sourceAPK ostaje cbacaf577b721449aedc89417e09c5b2ae99b0c1.
-Objava veÄ‡ provjerenog APK-a zavrÅ¡ena zasebnimCI37576008962SUCCESS.
-Jednokratni publish job/input uklonjeni; workflow opet identiÄan2.4.6.
-
-JavniAPKpreuzet i identiÄan artefaktu:24,055,016B (~24.06MB),
-SHA2563b00b46a7eed60fa44c7ebe1a2ba815aeb45654f135eb4e0456a57ba9f26fd0c.
-Paketba.spd.uss.vlake.debug,2.4.7-debug/code517, certSHA256
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Sva58webasseta identiÄna2.4.6 osim index/sw/novogCSS/JS preglednika.
-15launcherPNG i GRANICE>10MB oÄuvani, nema offlineOCRmodela.
-Updaterski /releases?per_page=1 potvrÄ‘uje v2.4.7/app-debug.apk.
-https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.7/app-debug.apk
-FiziÄki Xiaomi nije testiran; produkcijski Supabase nije mijenjan.
-Aktualni worktree /workspace/US-SUME-current, grana CODEX-US-SUME.
-Stariji /workspace/US-SUME je saÄuvan sa njegovim nepoznatim/untracked
-fajlovima i starom granom; naredni rad poÄeti od aktualnog worktree-a
-i provjeriti najnoviji Release i branch ref PRIJE izbora verzije.
-
-## Detaljan pregled Servera â€” 2026-10-07, aplikacija ostaje 2.4.7
-
-Novi zahtjev: provjeriti slanje/prijem, naroÄito nove korisnike; prijavljeni
-SocketException i `new row violates row-level security policy for table
-"projekt_clanovi"`. Ovo je pregled, ne aplikacijska/produkcijska popravka.
-Nalazi: docs/PREGLED_SERVERA_2026-10-07.md. Remote CODEX-US-SUME decd0e8 i
-lokalni HEAD imali su isti tree192a51af prije pregleda; najnoviji Release2.4.7.
-
-Reproducirano: confirmDodajClanove ne provjerava _pendingSync i neposlani
-projekat dobiva isti42501; nakon INSERT-a projekta isti Älan prolazi.
-sbLoadProjekti zanemaruje greÅ¡ke Älanstva/dijeljenih projekata, zamjenjuje
-keÅ¡, deaktivira aktivni dijeljeni projekat i _kvcPurgeStale briÅ¡e kolegine
-vlake iz lokalnog keÅ¡a. serverPreuzmiDijeljeno dopuÅ¡ta _cachedStub i prazan
-RLS SELECT tumaÄi kao uspjeÅ¡nu nultu listu, bez potvrde serverskog pristupa.
-Catch prijema vraÄ‡a samo ok:false; pojedinaÄni GPS fallback preÅ¡uti42501
-u error:null iako taÄke ostaju u baferu. Ovo nisu rijeÅ¡eni bugovi.
-
-SQL test sa stvarnim politikama20260713 + restrictive je_odobren i
-migracijom20261005: vaÅ¾eÄ‡i probni vlasnik/Älan radi, neposlani/tuÄ‘i projekt
-odbija Älanstvo; vraÄ‡en stari gate blokira probnog korisnika i SELECT
-vraÄ‡a[]; istekao Älan takoÄ‘er dobiva[]. Â§54 veÄ‡ biljeÅ¾i korisnikovu potvrdu
-probnog SQL-a; stanje produkcijske funkcije nije nezavisno provjereno.
-Ne pokretati staru konsolidovanu migraciju naslijepo:20260713 briÅ¡e
-naknadne restrictive politike;20260727 vraÄ‡a stari gate i grandfathering.
-
-Supabase koristi WebView fetch/reliableFetch. Eksplicitni Java tretman
-SocketException je u GitHub APK updateru, ne projektnoj sinhronizaciji;
-bez loga/taÄnog ekrana ne zakljuÄivati koji se prenos prekinuo.
-
-IsporuÄeno: read-only supabase/dijagnostika_server_20261007.sql (pravila,
-funkcije, triggeri, brojevi novih naloga bez e-maila/tajni),
-tests/audit/server-247.cjs (7 namjernih reprodukcija postojeÄ‡ih problema,
-izvan regresijskog tests/js skupa), tests/sql/server-clanstvo-247.sql
-(iskljuÄivo prazna lokalna baza; uvozi stari probni fixture).
-14 relevantnih postojeÄ‡ihJS grupa proÅ¡lo; oba PostgreSQL fixturea
-proÅ¡la u izolovanomPG16 containeru bez mreÅ¾e; dijagnostika radi i bez
-probni_do kolone. Browser server-confirm-234 proÅ¡ao sa stvarnim Supabase
-klijentom i kontrolisanimHTTP, UI_CHROMIUM=/usr/bin/chromium.
-FiziÄki Xiaomi/mobilni signal/produkcijski Supabase nisu provjereni.
-Nema izmjene runtimea, verzije, workflowa, releasea ili produkcijskih podataka.
-
-### Dopuna: SQL ispis dostavljen od korisnika, 2026-10-07
-
-Korisnik dostavio svih8 projektnih/doznaka politika i4 definicije:
-je_odobren, je_clan_projekta, je_doz_clan, korisnici_probni_rok_zastita.
-Prikazane politike odgovaraju oÄekivanim pravilima i imaju restrictive
-zzz_odobren. Gate veÄ‡ prihvata vaÅ¾eÄ‡i probni_do uz prvo_odobren_at IS NULL;
-Älanstvo prepoznaje vlasnika/kreatora i Älanove, trigger-funkcija odgovara
-migraciji. Hipoteza starog gatea ovim ispisom nije potvrÄ‘ena. Nije potrebna
-izmjena prikazanih funkcija ili politika na osnovu dostupnih rezultata.
-Ovo nije nezavisno izvrÅ¡en produkcijski test niti provjera profilnih
-redova, aktivnog probnog triggera, ciljanog projekta/vlasnika ili JWT
-identiteta pri greÅ¡ci. Ne proglaÅ¡avati sedmodnevni pristup svakog naloga
-provjerenim i ne tvrditi da je aplikacijski pending-project bug dokazano
-uzrok korisnikovog incidenta bez tog konteksta. Aplikacija ostaje2.4.7.
-
-Naknadni profilni SELECT iz SQL Editora: svih20 prikazanih naloga trenutno
-odobren=true, probni_do=null, prvo_odobren_at upisan. NULL roka nije
-problem kod odobrenih; gate dopuÅ¡ta pristup tim profilima kada je JWT
-identitet odgovarajuÄ‡i. Nema osnove za SQL izmjenu probnog roka/odobrenja
-iz ovog ispisa. Nisu poznati pogoÄ‘eni nalog/projekat/korak ni stanje u
-trenutku ranije greÅ¡ke; zatraÅ¾eno jedno pojaÅ¡njenje (ime, odjel/projekat,
-dodavanje/predaja ili PoÅ¡alji i primi). Nastaviti provjerom ciljane sesije
-i server-projekta/vlasnika, ne traÅ¾iti ponovo iste funkcije/profilni spisak.
-Dokumentovati samo zbirni nalaz; imena i redovi korisnika nisu potrebni
-u repozitoriju. SQL/runtime/Release nisu mijenjani.
-
-Korisnik zatim identificirao pogoÄ‘eni nalog i potvrÄ‘uje: projekat
-vjerovatno nije bio poslan i vlaka je veÄ‡ bila napravljena; sada sve radi.
-Aktivni incident smatra se prestalim prema toj potvrdi, bez nezavisnog
-dokaza izvorne sesije/server-logova. To odgovara reproduciranom pending
-projektnom toku; ne traÅ¾iti dalje iste SQL rezultate niti uvoditi SQL
-izmjene. Snimanje vlake prije slanja je normalan podrÅ¾ani offline rad;
-Älanstvo zahtijeva prethodno potvrÄ‘en serverski projekat. NedostajuÄ‡a
-_pendingSync zaÅ¡tita dodavanja kolege ostaje neimplementirana popravka.
-Ovim pregledom runtime nije mijenjan; APK ostaje2.4.7.
-
-## 2026-10-07 â€” ponovno ubrzanje SQLite karata / v2.4.8 (518)
-
-Aktuelni zadatak je iskljuÄivo sporo uÄitavanje SQLiteDB/MBTiles. Server incident je korisnik potvrdio kao rijeÅ¡en; nisu mijenjani server ni produkcijski SQL. Detalji i mjerljivi troÅ¡kovi: `docs/UCITAVANJE_SQLITE_2026-10-07.md`.
-
-MiniSqlite pretraÅ¾uje kljuÄeve binarno bez nepotrebnih BLOB-ova i zaustavlja skeniranje na pronaÄ‘enoj ploÄici. APK ima zaseban read-only SAF/Android SQLite tok (`OfflineMaps.java`, `native-offline-maps.js`); source fajl ostaje na izabranom mjestu, a Android pamti read dozvolu. Samo izvori bez direktnog pristupa koriste privatnu kopiju. Legacy OPFS/IDB restore ostaje. Nova baza se validira prije zamjene stare; remove briÅ¡e referencu/kopiju, nikada original. Verzije web/SW/Android su 2.4.8/518. Lokalno 98 JS grupa i relevantni stvarni browser testovi prolaze; native instrumentation/build u CI su sljedeÄ‡a obavezna provjera prije isporuke.
-
-Android test je dokazao da /proc/self/fd SQLite otvor vodi nazad na nedostupnu privatnu provider putanju i tada je prvi pristup kopirao fajl. Seekable zaÅ¡tiÄ‡eni dokumenti sada se Äitaju preko istog FD-a i read-only SQL.js VFS-a (vendor dodatak `openReadOnlyFile`, `sql-document.js`, Os.pread binarni blokovi), bez kopije i uz 4 MB LRU. Pokriva normalizovani MBTiles, za razliku od MiniSqlite ograniÄenja na tiles tabele. Pri zamjeni se nova baza prvo otvara pod privremenim nazivom, validira i tek zatim aktivira. Native cilj testa bez kopije ostaje obavezan, nije ublaÅ¾en. Lokalna nova VFS provjera Äita 64 KB za 1,5 GB probnu bazu i oko 1,43 MB za zadnju ploÄicu normalizovane 34 MB baze; readonly upis odbijen.
-
-ZavrÅ¡eno i objavljeno v2.4.8/518: CI 37598268848 na source 0dae134b79a2c14a3c3df434b735062fbd2d65bb success; 99 JS grupa, puni browser skup, 4 Android offline testa (0 greÅ¡aka). Native 1,5 GB content:// proba otvorena za 3.070 ms bez kopije, normalizovani MBTiles/rename/reload/neispravna zamjena/pipe/original svi potvrÄ‘eni. Kontrolisani URI/grant i sintetiÄki fajlovi; fiziÄki Xiaomi nije testiran. APK 24.083.687 B, SHA-256 6dd857625a5079bae0afd870045414ea53d2ab93e732ad27272e1695a0874f70, isti debug cert, 60 assets provjereno. Detalji u izvjeÅ¡taju. Ponovo izabrati original kroz UÄitaj kartu za novi direktni FD tok; stari OPFS importi ostaju. ZavrÅ¡na dokumentacija ne mijenja APK ni zahtijeva ponovno izvrÅ¡avanje punog CI-ja.
-
-## 2026-10-07 â€” v2.4.9: razumljive upute za Vlake i Doznaku
-
-- Korisnik traÅ¾i jednostavne upute s naglaskom na vlake i doznaku. UgraÄ‘eni
-  help-modal je prepisan prema stvarnim kontrolama; brzi poÄetak je odmah
-  vidljiv, dodatne teme se proÅ¡iruju. Dodane lokalne SVG sheme krakova i
-  Äetiri projektanta po izohipsama. Upute ne traÅ¾e mreÅ¾u.
-- Ispravljeni zastarjeli nazivi i suprotni opisi povratka s kraka. Razlikuju
-  procjenu pokrivenosti od stvarno zavrÅ¡ene doznake, ukupnu Å¡irinu bafera od
-  vanjskog ruba, QR lokalni pregled od servera, odjel doznake od aktivnog
-  projekta vlaka i lokalno spremanje od potvrÄ‘enog slanja.
-- Izgled u postojeÄ‡em field-design.css: 14 px tekst/koraci, dnevni i tamni
-  mod, teme kao dugmad s aria-expanded, promjena taba vraÄ‡a skrol. Nema
-  promjena GPS/pohrane/servera/geometrije.
-- Lokalno proÅ¡lo 99 JS grupa, 5 inline sintaksnih provjera, simulacija Å¡est
-  dana i proÅ¡ireni project-vlake-220.py (svi help tabovi, tastatura, mali
-  ekrani, offline pristup). Dokument: UPUTE_KORISTENJE_2026-10-07.md.
-- Web/SW/Android 2.4.9, versionCode 519. CI 37602046578 uspjeÅ¡an (99 JS
-  grupa, svi browser testovi, probni SQL/RLS, 4 Android 14 instrumentacijska
-  testa bez padova). Izvor e8e778afe22360c3513e56f53bf59532dc3194a8.
-- APK v2.4.9 objavljen za postojeÄ‡i in-app updater; provjeren paket
-  ba.spd.uss.vlake.debug, 2.4.9-debug/519, stabilni certifikat i svih 60
-  assets hashova. VeliÄina 24.071.423 B, SHA256
-  59a588d1450218b6df925d6ac462ca6e546a222b1173bfb08c35dc26ea6d255d.
-  Link: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.4.9/app-debug.apk
-  FiziÄki Xiaomi/produkcijski Supabase nisu testirani; poslovni tokovi nisu
-  mijenjani ovim zadatkom.
-
-## 2026-10-07 â€” v2.5.0 (520): Skini kartu / Unsko_2021-2031
-
-- Korisnik daje Drive folder 16oB-Fu0oZLd7gH45O25UhsnGK5cp525_ i traÅ¾i
-  opciju Skini kartu u UÄitaj kartu. Read-only Drive listanje identificira
-  jedini fajl â€Karta Unskoâ€, ID 1rVmI9heO_Y8eV-IrGkcGH3ajhEIZ-Kny,
-  1.567.670.272 B; anyone/reader dozvola. Nisu mijenjani naziv/dozvole/fajl
-  na Driveu. Naziv kartice u aplikaciji je Unsko_2021-2031.
-- Kartica ima Skini kartu, veliÄinu, upute za Googleovu potvrdu velikog fajla
-  i povratak na Odaberi fajlove; izvorni folder ostaje dodatni link.
-  Javni download endpoint vraÄ‡a HTTP 200 HTML â€Virus scan warningâ€ sa
-  download-form. Nije preuzet cijeli 1,57 GB fajl niti zaobiÄ‘ena potvrda.
-- Preuzimanje obavlja Drive/preglednik; APK klik koristi postojeÄ‡i Android
-  ACTION_VIEW handler bez zamjene WebView stranice, web link novi tab s
-  noopener/noreferrer. Bez mreÅ¾e status objaÅ¡njava da preuzimanje treba vezu;
-  postojeÄ‡i lokalni uvoz ostaje dostupan. GPS/server/SQLite tok nije mijenjan.
-- Lokalno proÅ¡lo 99 JS grupa, 5 inline sintaksi i proÅ¡ireni load-map-233.py:
-  taÄan link, novi tab, oÄuvana aplikacija, offline poruka, stvarni SQLite
-  uvoz/reload/brisanje i mali ekrani u oba moda. Android OfflineImportTest
-  proÅ¡iren monitorom vanjskog Intent-a (blokira stvarno otvaranje Drivea;
-  kontrolisan navigator.onLine, emulator ostaje offline), stanje WebView-a
-  i uÄitana karta ostaju saÄuvani. CI 37607948974 uspjeÅ¡an: 99 JS grupa,
-  puni browser skup, probni SQL/RLS i 4 Android 14 instrumentacijska testa
-  (bez greÅ¡aka/preskakanja). Izvor 938406f78dda83f6d1fabbbe4cc0b9be150c823b.
-- APK v2.5.0 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.0/app-debug.apk
-  PotvrÄ‘eni package ba.spd.uss.vlake.debug, 2.5.0-debug/520, isti stabilni
-  certifikat i svih 60 assets hashova. VeliÄina 24.075.715 B; SHA256
-  cafe2b08134ae50be3eed18876a738095613082f46cc852b779edf57f784295b.
-  Dostupan u Meni â†’ AÅ¾uriraj aplikaciju. FiziÄki Xiaomi, stvarno skidanje
-  cijelog 1,57 GB fajla na telefonu i produkcijski Supabase nisu testirani.
-
-## 2026-10-07 â€” v2.5.1: Unsko karta se sama preuzima i dodaje
-- Korisnik je zamijenio v2.5.0 vanjski Drive/ruÄni import: samo Skini kartu,
-  nakon zavrÅ¡etka dostupna u Mojim kartama. Nova MapDownloads native/JS
-  funkcija rjeÅ¡ava javnu Drive potvrdu, Android DownloadManager pozadinski
-  posao/napredak/nastavak, app-owned fajl i postojeÄ‡i native atomski import.
-  OfflineMaps otvara preuzetu SQLite bazu direktno, bez druge kopije.
-- PotvrÄ‘en stvarni HTTP 206 Range 0â€“15 i SQLite header izvornog fajla od
-  1.567.670.272 B; cijeli fajl nije preuzet u cloudu. Novo je ograniÄeni
-  native downloader; nema promjena produkcijskog servera/SQL-a.
-- Lokalno 100 JS grupa, simulacija, 5 inline sintaksi, LoadMap browser suite
-  proÅ¡li. Novi MapDownloadsTest: kontrolisani transport, stvarni APK/native
-  file/SQLite/IDB/WebView/Leaflet, restart i offline tile/delete/invalid HTML.
-  CI 37610697691 uspjeÅ¡an: 100 JS grupa, browseri, SQL/RLS i 5 Android
-  instrumentacijskih testova bez greÅ¡aka/preskakanja. Prvih 64 KB javnog
-  fajla potvrÄ‘uje stvarni MBTiles schema; puni GET prihvata AndroidDownloadManager
-  user agent bez cookies (proÄitan samo header, ne cijeli fajl).
-- Objavljen APK v2.5.1: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.1/app-debug.apk
-  24.087.350 B, SHA256 dfb2df911029d25fcf848db1e1eda5e41fc8e2ac7721a9ba890b020318af3fda.
-  Izvor 9796c6bd1e7af89bdec2c1c73157a767c64193d3; manifest
-  ba.spd.uss.vlake.debug, 2.5.1-debug/521, isti stabilni certifikat i svih
-  61 assets hashova. Puni DownloadManager transfer/fiziÄki Xiaomi i produkcijski
-  Supabase nisu testirani. Detalji docs/PREUZIMANJE_UNSKO_2026-10-07.md.
-
-## 2026-10-07 â€” v2.5.2: dostupne karte iz javnog foldera KARTA APP
-- Novi javni folder 1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0 potvrÄ‘en anonimnim
-  svjeÅ¾im GET-om, ukljuÄujuÄ‡i Dalvik user agent. KARTA_Å¡pd.mbtiles,
-  ID 1mExFpUJgOAROwPSumemnnbzFH74GWHXv, 2.144.841.728 B; Range/header i
-  metadata/tiles schema potvrÄ‘eni. Cijeli fajl nije preuzet u cloudu.
-- MapDownloadCatalog daje Å¾ivu/cached listu podrÅ¾anih raster fajlova direktno
-  iz tog foldera. ID/name/size/parent se provjeravaju; ne izvrÅ¡ava se Drive
-  script, nema API kljuÄa/Google prijave u APK-u. Svaki izvor ima svoj
-  downloader/status/cancel/retry. Novi fajlovi vidljivi nakon otvaranja ili
-  OsvjeÅ¾i; saÄuvan popis odmah, offline karte u postojeÄ‡em katalogu.
-- Instalacije su serijalizirane i Äuvaju istoimene/preimenovane lokalne
-  karte. Stari Unsko posao/reference v2.5.1 se migriraju bez brisanja.
-  Googleov javni JSON/HTML pregled nije stabilan API; promjena strukture
-  moÅ¾e blokirati osvjeÅ¾avanje, ali ne briÅ¡e saÄuvane karte/popis.
-- Lokalno 100 JS grupa, simulacija, 5 inline sintaksi i LoadMap browser
-  proÅ¡li. Novi Android parser/folder controller testovi; CI/APK u toku.
-  Detalji docs/FOLDER_KARATA_2026-10-07.md. FiziÄki Xiaomi, puni transfer i
-  produkcijski Supabase nisu testirani; Drive dozvole/fajlovi nisu mijenjani.
-
-- CI v2.5.2 37621884715 uspjeÅ¡an i APK objavljen. ZavrÅ¡na v2.5.3/523
-  ukljuÄuje uoÄeni sluÄaj nestanka izvora tokom transfera: native status
-  uvijek vraÄ‡a i zavrÅ¡ene/otkazane poslove izvan foldera, da JS ne zadrÅ¾i
-  stari napredak. Failed neinstalirani posao izvan foldera otkazuje se i
-  uklanja svoju parcijalnu kopiju. ProÅ¡iren stvarni Android/controller test
-  i JS provjera. CI 37624238570 uspjeÅ¡an: svi JS/browser/SQL testovi i Å¡est
-  Android instrumentacijskih testova bez greÅ¡aka/preskakanja. Objavljen APK:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.3/app-debug.apk
-  24,096,358 B, SHA256 e3b686975868a4809df0e242c368dad80be4f308be97e45c77e8c9dfce68b364; izvor
-  d5a56b0721108bdd494576f58a72d600bf5e43f6. Manifest
-  ba.spd.uss.vlake.debug/2.5.3-debug/523, stabilni certifikat i svih 61 assets
-  hashova provjereni. Puni 2,14 GB mreÅ¾ni transfer i fiziÄki Xiaomi nisu
-  testirani; javni fajl potvrÄ‘en anonimnom Range/header/schema provjerom.
-
-## 2026-10-07 â€” v2.5.4: tihe obavijesti preuzimanja i ponovni terenski pregled
-- Korisnik prijavljuje nevidljive obavijesti. Novi MapDownloadService prati
-  DownloadManager kroz zajedniÄki singleton katalog, daje jedan tihi LOW
-  kanal/progres/dodir za pregled karata. Novi DM poslovi su notification-hidden;
-  starim poslovima se ne mijenjaju bajtovi ni status. Vidljiv razlog ako su
-  Android obavijesti iskljuÄene. ProÅ¡iren stvarni instrumentacijski test.
-- 100 JS grupa, pet inline sintaksi, LoadMap browser, 5h CPU4x simulacija,
-  3+2,4 km simulacija i Å¡est dana doznake proÅ¡li. Sedam audit reprodukcija
-  potvrÄ‘uje da raniji P1/P2 server problemi joÅ¡ postoje; nisu prepravljani
-  funkcionalni serverski tokovi. Nema produkcijskog SQL-a ili mjerenja na
-  telefonu. Nalazi/preporuke: OBAVIJESTI_TEREN_SERVER_2026-10-07.md.
-- Web/SW/Android 2.5.4/code524. Android test pao; APK nije objavljen, vidi zavrÅ¡nu 2.5.6.
-
-## 2026-10-07 â€” v2.5.5: Rad na terenu za ostale korisnike + Explorer
-- Korisnik je proÅ¡irio zadatak tokom CI-ja: ostalim profilima dodati Teren
-  u Meni, prvo i iznad Dnevnog moda, poboljÅ¡ati sekciju i ukljuÄiti Explorer.
-  Menu entry vidljiv za projektante/vodeÄ‡e; Å PD/admin zadrÅ¾avaju svoj tab.
-  Lokalni alati, novi projektni kontekst i Explorer kartica. Ranije pravilo
-  Explorer samo uz odrediÅ¡te zadrÅ¾ano; pitanje o slobodnom modu Äeka odgovor.
-- CI 37642301405 v2.5.4 nije objavio APK: novi test Äekanja obavijesti
-  nije proÅ¡ao (10 s). FGS start dozvoljen; sada FOREGROUND_SERVICE_IMMEDIATE
-  izbjegava Android 12+ podrazumijevanu odgodu prikaza. Pri otkazivanju se
-  ne Å¡alje laÅ¾na zavrÅ¡na obavijest za prazan spisak. Isti test se ponavlja.
-- Teren browser provjerava i obiÄnog projektanta, redoslijed, Explorer
-  navoÄ‘enje/checkbox i male ekrane u oba moda. Android zavrÅ¡na obavijest nije proÅ¡la u 2.5.5; objava je zavrÅ¡ena u 2.5.6 ispod.
-
-## 2026-10-07 â€” v2.5.6: zavrÅ¡na obavijest preÅ¾ivljava gaÅ¡enje servisa
-- CI v2.5.5 37643608548 potvrdio je vidljivost, tihi kanal, Äekanje veze
-  i 50% napretka. Pao je tek zavrÅ¡ni prikaz nakon skidanja; APK nije objavljen.
-- ZavrÅ¡etak servisa sada ide na glavnoj niti: prvo odvajanje obavijesti,
-  zatim zavrÅ¡ni prikaz i stopSelfResult. Provjera startId Äuva noviji posao.
-  Raniji poziv stopSelfResult prije odvajanja mogao je ukloniti obavijest.
-- Isti Android test dodatno provjerava ugaÅ¡en servis i zadrÅ¾anu zavrÅ¡nu
-  obavijest bez ongoing zastavice. CI 37682600563 uspjeÅ¡an: 100 JS grupa, puni browser/SQL skup i Å¡est
-  Android testova, ukljuÄujuÄ‡i stvarnu tihu obavijest. Objavljen APK:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.6/app-debug.apk
-  24,108,420 B; SHA256 8c03fd927caf218097dea8303f2e3efefb9cd567ba8cf49d0d9d710b51e27f26.
-  Izvor 69af8bdc2384b61c1bce7f1d7f9ae337e1fea55b, manifest
-  ba.spd.uss.vlake.debug/2.5.6-debug/526, isti certifikat i svih 61 assets
-  potvrÄ‘eni. Dostupan u Meni â†’ AÅ¾uriraj aplikaciju. FiziÄki Xiaomi, puni
-  mreÅ¾ni download i produkcijski Supabase nisu testirani.
-
-## 2026-10-08 â€” v2.5.7: naziv Å umski mod
-- Na korisnikov zahtjev, Moja lokacija sada prikazuje â€Å umski modâ€œ umjesto
-  â€Å umskiâ€œ. Isti prekidaÄ i GPS filtriranje. Web/SW/Android 2.5.7/code527.
-- Prikaz na 320 px i pet inline sintaksi proÅ¡li. CI 37730783935 uspjeÅ¡an:
-  JS/browser/testni SQL i Å¡est Android testova bez greÅ¡aka/preskakanja.
-- Objavljen APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.7/app-debug.apk
-  24.108.424 B; SHA256 6d884ef7edf1fc381cb2125fc6a6e73ff12a366f01a060e3c471e4555c498a84.
-  Izvor 2314e7c92123077c3fbff7dba5e14b4d9a7ed619; manifest
-  ba.spd.uss.vlake.debug/2.5.7-debug/527, isti potpis i svih 61 assets
-  potvrÄ‘eni na preuzetom APK-u. FiziÄki telefon nije testiran.
-
-## 2026-10-08 â€” v2.5.8: Moje karte sa stvarnim isjeÄkom
-- Korisnik traÅ¾i vizuelnu nadogradnju i obaveznu APK objavu za update u Meniju.
-  Karte sada imaju veÄ‡i isjeÄak preko cijele kartice, naziv/stanje i odvojene
-  kontrole. Pregled je JPEG 320Ã—180 iz stvarne ploÄice, saÄuvan lokalno.
-- Android OfflineMaps i SqlDocument u metadata dodaju _preview XYZ iz veÄ‡
-  proÄitanog uzorka; MiniSqlite uzima jednu koordinatu indeksa. Nema cijelog
-  skeniranja velikog fajla zbog isjeÄka. Generisanje ide serijski u pozadini,
-  ne blokira zavrÅ¡etak uvoza. Dupli zahtjevi se spajaju, stari handle se
-  provjerava prije upisa; placeholder je izriÄito ilustracija.
-- Lokalno: svih 100 JS grupa, pet inline sintaksi i LoadMap browser proÅ¡li.
-  Provjereni stvarni pikseli/dimenzije, jedan dohvat za tri paralelna poziva,
-  saÄuvan offline preview i Å¡irine/dnevni/tamni mod. Read-only VFS test
-  dodatno potvrÄ‘uje da koordinata isjeÄka vraÄ‡a stvarnu raster ploÄicu.
-- Android test preuzimanja proÅ¡iren stvarnim native preview/Canvas prikazom.
-  Web/SW/Android 2.5.8/code528. CI 37732308857 uspjeÅ¡an: sve JS/browser/SQL provjere i Å¡est Android
-  testova, ukljuÄujuÄ‡i native isjeÄak u Mojim kartama. FiziÄki Xiaomi nije
-  testiran. Novi preview saÄuvanih karata bez otvorenog handle-a nastaje
-  kada se karta otvori; veÄ‡ saÄuvan isjeÄak radi bez otvaranja fajla.
-
-- APK v2.5.8 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.8/app-debug.apk
-  24,112,784 B; SHA256 a126295aebcfdbed5a956109f1d85ebbc9a456fc12297377916a6990b3a05013. Izvor
-  1ebe49a4f63df7e9c3dd2dd2362568de38f55eaa. Manifest
-  ba.spd.uss.vlake.debug/2.5.8-debug/528, isti certifikat i svih 61 assets
-  potvrÄ‘eni; aÅ¾uriranje dostupno kroz Meni â†’ AÅ¾uriraj aplikaciju.
-
-## 2026-10-08 â€” v2.5.9: Drive quota prepoznata prije skidanja
-- Korisnik javlja â€nepotpuna/neispravnaâ€œ nekoliko sekundi nakon Skini kartu.
-  Direktni javni fajl 1mExFpUJgOAROwPSumemnnbzFH74GWHXv provjeren anonimno:
-  Range 0â€“15 vraÄ‡a SQLite/206, ukupno 2.144.841.728 B, dok puni GET vraÄ‡a
-  HTML/200 od 2.040 B â€Google Drive - Quota exceededâ€œ. Isto za Dalvik i
-  AndroidDownloadManager. Google navodi do 24h Äekanja; nije potvrÄ‘ena
-  puna dostupnost fajla niti izvrÅ¡en transfer 2,14 GB.
-- Raniji preflight provjeravao je samo Range i zatim pokretao downloader
-  nad HTML odgovorom. Sada se provjerava puni GET: prvih 16 bajtova i
-  veliÄina, HTML potvrda/quota/pristup i odbijanje neoÄekivanog 206.
-  Ne preuzima se cijela karta tokom preflighta. DM zadrÅ¾ava nastavak, uz
-  identity/no-cache zaglavlja. Nema zaobilaÅ¾enja Drive ograniÄenja.
-- Poznata Drive greÅ¡ka prolazi do aplikacije. Stari zavrÅ¡eni HTML poslovi
-  takoÄ‘er dobijaju taÄan quota razlog. Novi test reprodukuje uspjeÅ¡an
-  Range i blokiran full GET, dugi size >2 GB, 16-byte Äitanje, djelimiÄan
-  odgovor i HTML iz starog posla. JS downloader i pet inline sintaksi proÅ¡li.
-- Web/SW/Android 2.5.9/code529. CI 37740789291 uspjeÅ¡an: JS/browser/SQL i sedam Android testova. FiziÄki telefon i
-  puni download nisu testirani, javni fajl je sada blokiran na Googleu.
-
-- APK v2.5.9 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.5.9/app-debug.apk
-  24,114,116 B; SHA256 585aa6a7f11b235d5c8c12577d7e5f5184e898e6ccd4e7fe256d517f9ebd1df6. Izvor
-  68fba48a5ce2939b8ae0dfbec97e64be183b9dd8. Manifest
-  ba.spd.uss.vlake.debug/2.5.9-debug/529, isti certifikat i svih 61 assets
-  potvrÄ‘eni; aÅ¾uriranje dostupno kroz Meni â†’ AÅ¾uriraj aplikaciju.
-
-## 2026-10-08 â€” v2.6.0: Karte prije terenskih alata u Meniju
-- Na zahtjev korisnika cijela sekcija Karte i slojevi sada je prva redovna
-  sekcija Menija, odmah zatim Rad na terenu. RAD NA TERENU ostaje prije
-  Dnevnog moda u svojoj sekciji; postojeÄ‡e dozvole i Å PD preÄice oÄuvane.
-- Read-only GitHub Pages API potvrÄ‘uje source CODEX-US-SUME-2026-10-01,
-  / (root); anonimni HTTP GET s no-cache vraÄ‡a APP_VER v2.4.1. Stara
-  verzija u Chromeu dolazi iz stare objave, nije samo browser cache.
-  Pages postavke nisu mijenjane; za novo web izdanje source treba biti
-  CODEX-US-SUME / (root). Lokalni terenski podaci nisu brisani.
-- Lokalno proÅ¡li Teren browser (Å PD/admin/projektant), Menu tools (osam
-  kombinacija Å¡irina i tema), Teren JS i pet inline sintaksi.
-- Web/SW/Android 2.6.0/code530. CI 37742689245 uspjeÅ¡an: svi JS/browser/SQL testovi i sedam Android testova. FiziÄki telefon nije testiran.
-
-- APK v2.6.0 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.0/app-debug.apk
-  24,114,116 B; SHA256 ccc95253505f61da495f498c34b1245fec23b1abfaeb828db155a019fb6cf9fb. Izvor
-  acbbe87e0510b135d351d4648073afa3ba54d5e2. Manifest
-  ba.spd.uss.vlake.debug/2.6.0-debug/530, isti certifikat i svih 61 assets
-  potvrÄ‘eni. Updater releases?per_page=1 vraÄ‡a v2.6.0.
-
-## 2026-10-08 â€” v2.6.1: KML iz javnog foldera KARTA APP
-- Na zahtjev korisnika KML dio Dodaj KML / SHP dobija katalog istog
-  javnog foldera 1iOjb0jeu6IYAx9XG-w8UfDeaZ-Bpm2H0: pretraga, naziv,
-  veliÄina, OsvjeÅ¾i i Preuzmi i dodaj / PrikaÅ¾i. Naknadne KML stavke
-  pojavljuju se pri otvaranju ili osvjeÅ¾avanju; nije potreban novi APK
-  za svako dodavanje fajla. KML se prepoznaje po nastavku ili Drive MIME.
-- Anonimni folder potvrÄ‘uje Granice odjela (13.532.522 B, KML MIME, bez
-  nastavka) i KAMIONSKI PUTEVI.kml (396.070 B). Metadata potvrÄ‘ena i Drive
-  konektorom. Javni full GET trenutno vraÄ‡a Drive quota za oba fajla;
-  puna ispravnost njihovog XML-a nije potvrÄ‘ena. Folder/podaci nisu mijenjani.
-- KmlDownloads native bridge Äita samo ovaj katalog, provjerava Google
-  potvrdu/quota, puni odgovor, veliÄinu i XML/KML bez DTD. Download ide van
-  UI threada, max32 MB/240s transfer. WebView dobija lokalni streaming URL,
-  ne viÅ¡emegabajtni evaluateJavascript string. Privremeni fajl se uklanja
-  nakon potvrÄ‘enog IDB uvoza; finalni sloj ostaje u postojeÄ‡em registru.
-- _driveSource metadata Äuva izvor atomskim poÄetnim upisom; PrikaÅ¾i koristi
-  postojeÄ‡i sloj i stil, radi offline, bez ponovnog skidanja/dupliranja.
-  ÄŒuvaju se zaÅ¡tita naloga, SHP/lokalni uvoz i zaÅ¡tita istog naziva.
-- Lokalno svih 100 JS test grupa i browser Menu tools proÅ¡li: 8 Å¡irina/tema,
-  kontrolisani Drive katalog/pretraga/import/IDB/dedup/offline/quota i
-  naknadno dodan fajl. Novi native test odbija HTML/partial/truncated/DTD/
-  strani izvor; postojeÄ‡i APK/WebView test proÅ¡iren stvarnim lokalnim URL-om,
-  KML bridge uvozom i offline reloadom.
-- Prvi Android CI 37745667727: KML/WebView import i offline reload proÅ¡li,
-  jedan novi validator test otkrio prihvatanje neispravnog XML-a. Validator
-  sada izriÄito broji otvaranja/zatvaranja i odbija DTD pri Äitanju bajtova,
-  nezavisno od razlika Android pull parsera. Ponovni CI 37747136444 proÅ¡ao: svih osam Android testova.
-- Web/SW/Android 2.6.1/code531. CI 37747136444 uspjeÅ¡an: JS/browser/SQL i osam Android testova. FiziÄki telefon nije testiran; uvoz stvarnih javnih KML fajlova nije potvrÄ‘en zbog Drive quota.
-
-- APK v2.6.1 objavljen: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.1/app-debug.apk
-  24,129,080 B; SHA256 6ce6dec189205342a2d62ba6985e8f4f2b7dae7e29fa8031e3af2abefea40fdf. Izvor
-  e8b5d7c64d364540ada5c88744e39925b7545809. Manifest
-  ba.spd.uss.vlake.debug/2.6.1-debug/531, isti certifikat i svih 61 assets
-  potvrÄ‘eni. Updater releases?per_page=1 vraÄ‡a v2.6.1.
-
-## 2026-10-08 â€” v2.6.2: Å PD karta sa GitHub Releases
-- Na zahtjev korisnika novi raster download koristi taÄno javni asset
-  pogonboskrupa/KARTE, v1.0.0/KARTA_spd_GitHub.mbtiles. U aplikaciji naziv
-  ostaje Unsko_2021-2031; katalog prikazuje GitHub i veliÄinu. KML katalog
-  ostaje u javnom Drive folderu KARTA APP. KARTE repo nije mijenjan.
-- GitHub API potvrÄ‘uje 1.982.578.688 B i objavljeni digest
-  9065c71297f00b4e845909e98496eaa517b79ca362483c7b6b701f03ce5bfdd4.
-  Anonimni Range vraÄ‡a 206, puni GET 200 sa taÄnom veliÄinom i SQLite
-  zaglavljem; prvi 64 KiB potvrÄ‘uju metadata/tiles i unique tile_index.
-  Cijeli fajl nije preuzet: puni SHA256 i integrity_check nisu provjereni.
-- Native preflight Äita samo 16 B, odbija HTML, djelimiÄan odgovor,
-  pogreÅ¡no zaglavlje/veliÄinu i strane redirect hostove. DownloadManager
-  dobija trajni GitHub asset URL, ne privremeni potpisani CDN URL, radi
-  obnove pristupa nakon pauze. PostojeÄ‡i progress/obavijesti, pozadinski
-  download i automatsko dodavanje u Moje karte ostaju na istom putu.
-- Novi source ID odvaja GitHub fajl od starih Drive partial fajlova.
-  Legacy Drive poslovi/saÄuvane karte ostaju dostupni, ne reinterpretiraju
-  se kao GitHub bajtovi. Katalog ove karte ne zahtijeva Drive ni prijavu.
-- Lokalno proÅ¡lo svih 100 JS test grupa, pet inline sintaksi i LoadMap
-  browser: stvarne ploÄice, worker/IDB, offline restart, neispravni fajlovi,
-  promjena izbora i brisanje. Novi Android test provjerava puni preflight,
-  ograniÄeno Äitanje, stabilni URL i odbijanje loÅ¡ih izvora. PostojeÄ‡i
-  WebView/DownloadManager test sada koristi stvarni mali MBTiles fixture
-  sa TMS koordinatama; legacy Drive i KML provjere zadrÅ¾ane.
-- Web/SW/Android 2.6.2/code532. CI 37757939724 uspjeÅ¡an: 100 JS grupa,
-  SQL fixture, browser provjere i devet Android testova bez greÅ¡aka/preskoka.
-  Android API34 emulator bez interneta potvrdio je MBTiles download lifecycle,
-  obavijesti, uvoz, stvarne ploÄice/preview, offline reload, brisanje i KML.
-  FiziÄki telefon i cijeli javni download od 1,98 GB nisu testirani.
-- APK v2.6.2 objavljen:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.2/app-debug.apk
-  24.130.400 B; SHA256
-  6954cc10582512f131791c4f0dfca24b817def0dbc80f2e60033a845cb7b2347.
-  Izvor e52441fd097b96de19d3be3f0b4a278173ae3de7. Provjeren stvarni
-  manifest ba.spd.uss.vlake.debug/2.6.2-debug/532, isti certifikat i svih
-  61 web assets. APK hash/veliÄina odgovaraju objavljenom Release assetu;
-  updater releases?per_page=1 vraÄ‡a v2.6.2 sa app-debug.apk.
-
-## 2026-10-08 â€” v2.6.3: ViÅ¡e GitHub karata i period 2010â€“2020
-- Na zahtjev korisnika raster katalog sada Äita objavljene release assets
-  samo iz pogonboskrupa/KARTE. Pri otvaranju/OsvjeÅ¾i pojavljuju se dodatne
-  podrÅ¾ane SQLite karte, bez novog APK-a za svaku buduÄ‡u kartu. Nacrti i
-  nedovrÅ¡eni uploadi se preskaÄu. KML/Drive katalog nije mijenjan.
-- Tag stara_verzija prikazuje Unsko_2010-2020; postojeÄ‡i v1.0.0 zadrÅ¾ava
-  Unsko_2021-2031 i isti ID ranijeg download posla. Trenutni period je
-  prvi, stari drugi. Kartice prikazuju GitHub, veliÄinu i naziv objave.
-- Source metadata sada trajno Äuva javni URL i naslov objave uz ID asseta.
-  Stari v2.6.2 i Drive upisi dekodiraju se kompatibilno. Svaki transfer
-  ima zaseban ID/progress i automatski uvoz; nema zamjene bajtova ili
-  brisanja postojeÄ‡e karte kad se dodaje druga karta u katalog.
-- Katalog se dohvaÄ‡a van UI threada, bez mreÅ¾e pri konstrukciji aktivnosti
-  ili servisa; offline/rate limit zadrÅ¾ava saÄuvani popis. Paginacija je
-  ograniÄena na tri stranice/300 karata i 4 MB po odgovoru; nepotpuni ili
-  neispravni odgovori ne zamjenjuju popis. Izvori i redirecti ograniÄeni
-  su na release assets ovog repoa i zvaniÄni GitHub CDN. SQLite preflight
-  provjerava puni odgovor/veliÄinu i Äita samo 16 B, ne cijelu kartu.
-- Prilikom poÄetne provjere stara_verzija je joÅ¡ draft bez assets; kod
-  ne objavljuje niti mijenja korisnikov KARTE release. Pravo preuzimanje
-  stare karte provjerit Ä‡e se nakon njene javne objave; puni fajl i
-  fiziÄki telefon nisu testirani.
-- Lokalno svih 100 JS grupa, inline sintakse i LoadMap browser proÅ¡li.
-  Native testovi proÅ¡ireni za oba perioda, nacrte, buduÄ‡i asset, odbijanje
-  stranog izvora, kompatibilan stari ID, cached katalog i recovery posla
-  offline; stvarni APK/WebView MBTiles test koristi novi dinamiÄki source.
-- Web/SW/Android 2.6.3/code533. CI 37760530513 uspjeÅ¡an: svih 100 JS
-  grupa, SQL fixture, browser provjere i deset Android testova bez greÅ¡aka
-  ili preskoka. Stvarni API34 WebView sa malim MBTiles fixtureom potvrdio
-  je novi dinamiÄki source, uvoz stare karte, obavijesti, tile/preview,
-  offline reload i brisanje; parser/cache/recovery oba perioda potvrÄ‘eni.
-- APK objavljen:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.3/app-debug.apk
-  24.132.712 B; SHA256
-  301bf38d2e3ca976a16186ab1acd3a86dd56bde0506c11d055e0b2b3407f9617.
-  Izvor b84e62753003d0d63ddb327e0d69101cb159bcf2. Stvarni manifest
-  ba.spd.uss.vlake.debug/2.6.3-debug/533, isti certifikat i svih 61 web
-  assets potvrÄ‘eni; digest/veliÄina odgovaraju Release assetu, updater
-  releases?per_page=1 vraÄ‡a v2.6.3. Na zavrÅ¡noj provjeri stara_verzija
-  joÅ¡ draft bez assets; pojavit Ä‡e se nakon korisnikove javne objave.
-  Cijela javna stara karta i fiziÄki telefon nisu testirani.
-
-## 2026-10-08 â€” v2.6.4: Velike karte preko mobilnih podataka
-- Korisnik prijavio ÄŒekam internet uz ukljuÄene/dopuÅ¡tene mobilne podatke.
-  Kod je veÄ‡ imao setAllowedOverMetered(true), ali sve STATUS_PAUSED
-  razloge prikazivao kao nedostajuÄ‡i internet. AOSP DownloadInfo.java,
-  getRequiredNetworkType, dodatno nameÄ‡e UNMETERED preko maksimalne ili
-  preporuÄene veliÄine Äak i uz allowMetered; DownloadThread to prijavljuje
-  QUEUED_FOR_WIFI. Bez loga korisnikovog telefona konkretan reason nije
-  potvrÄ‘en. Sistemske postavke/limiti telefona nisu mijenjani.
-- GitHub rasteri sada koriste MapHttpTransfer, app-owned native HTTP stream
-  u postojeÄ‡em foreground MapDownloadService, van UI threada. Koristi
-  dostupnu Android INTERNET mreÅ¾u bez uslova NOT_METERED/Wi-Fi. Dva workera,
-  buffer64 KiB, long size/progress, disk checkpoint i djelimiÄni wakelock
-  tokom transfera. Ne uÄitava cijelu kartu u WebView/RAM; naziv/automatski
-  uvoz, preview, offline registry i KML put zadrÅ¾ani.
-- Stanje native posla i stabilni GitHub URL zapisani prije pokretanja.
-  Prekid/process recovery nastavlja Range/If-Range samo s poznatim jakim
-  ETag-om; provjerava Content-Range, poÄetak/ukupnu/punu preostalu veliÄinu.
-  Puni 200 sigurno zamjenjuje partial, novi ETag veÅ¾e se tek nakon upisa
-  i sync novog zaglavlja; nepotvrÄ‘en/strani/neispravan odgovor odbija se.
-  Partial bez validatora poÄinje od nule umjesto mijeÅ¡anja revizija.
-  Otkazivanje generacijom onemoguÄ‡ava naknadno stvaranje/upis fajla.
-  Recovery potpuno upisanog fajla zavrÅ¡ava i bez interneta, ako se proces
-  prekinuo izmeÄ‘u zadnjeg sync upisa i commit zavrÅ¡nog stanja.
-- Raniji pauzirani GitHub DownloadManager poslovi prelaze na novi put:
-  partial prvo dobija novi UUID, pending handoff se saÄuva, zatim se stari
-  sistemski posao ukloni. Recovery handoffa nakon prekida je idempotentan.
-  Stari Drive poslovi zadrÅ¾ani; oni izriÄito dopuÅ¡taju MOBILE|WIFI i metered.
-- Bridge networkAvailable Äita stvarne Android capabilities; JS ne blokira
-  mobilni internet zbog zastarjelog navigator.onLine. Pauze u kartici i
-  obavijesti koriste stvarnu poruku (veza/server/Wi-Fi), ne uvijek internet.
-- Lokalno proÅ¡lo 100 JS grupa, pet inline sintaksi i LoadMap browser.
-  Android WebView test simulira native mobilnu vezu uz onLine=false.
-  ÄŒetiri nova native testa obuhvataju stream malog stvarnog MBTiles fajla,
-  offline poÄetak, prekinuti body, Range recovery, 200/reviziju, pogreÅ¡an
-  range, cancellation race i Äuvanje/recovery starog partial handoffa.
-- Prvi CI 37769360020: proizvodni APK kompajliran, Android test build
-  stao na sukobu lokalnog latch naziva sa inherited Response.closed
-  boolean poljem. Testni naziv ispravljen; puni native testovi ponovljeni.
-- Web/SW/Android 2.6.4/code534. CI 37770637372 uspjeÅ¡an na izvoru
-  aa0f285b7736a65e92b324b42d5cf37a2ec21ef3: 100 JS grupa, browser/SQL/
-  teren/performance provjere i svih 14 Android testova bez greÅ¡aka ili
-  preskoka. ÄŒetiri nova transfer testa i stvarni WebView MBTiles uvoz
-  potvrÄ‘eni na API34 emulatoru; native mreÅ¾a u testu simulirana.
-- APK objavljen:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.4/app-debug.apk
-  24.139.532 B; SHA256
-  7391af496c81d539bb1268e7a1689b0b2f7240f1fe1905793e98232604feba0c.
-  Stvarni manifest ba.spd.uss.vlake.debug/2.6.4-debug/534, isti potpisni
-  certifikat i svih 61 web assets potvrÄ‘eni; veliÄina/digest odgovaraju
-  objavljenom assetu. Updater releases?per_page=1 vraÄ‡a v2.6.4 sa APK-om.
-  FiziÄki Xiaomi, stvarna SIM/mobile mreÅ¾a i cijeli javni fajl nisu testirani.
-
-## 2026-10-08 â€” v2.6.5: Brisanje oznaka i zasebne offline karte
-- Korisnik ne moÅ¾e obrisati tekst oznake iz editora; traÅ¾io provjeru sliÄnih
-  mjesta i posebno izdvajanje offline karata u Podloge i slojevi.
-- PotvrÄ‘eno u kodu: label_id iz starog server/cache zapisa moÅ¾e biti string,
-  dok ga inline onclick emitira bez navodnika kao broj (ili neispravan JS za
-  nebrojÄani ID). Strict lookup onda ne nalazi oznaku pri brisanju/ureÄ‘ivanju.
-  ID se sada poredi kao string, a dugmad dobijaju closure s izvornim ID-em,
-  bez interpolacije u JavaScript. Nema migracije/brisanja starih oznaka.
-- Brisanje traÅ¾i vidljivu potvrdu; sprjeÄava dupli klik/promjenu naloga tokom
-  potvrde. Primarni _OL.LABELS zapis mora uspjeti prije izmjene liste/markera.
-  Dodavanje/edit imaju isti uslov; neuspjeh pri upisu Äuva oznaku i editor.
-  Legacy ogledalo tvlake_textlabels ostaje kompatibilno. Oznake ostaju lokalne;
-  prazna saÄuvana lista ne vraÄ‡a stare server oznake pri ponovnom ulasku.
-- Pregledana sliÄna dugmad: taÄke/fotografije koriste indekse/numeriÄke
-  timestampove, KML/SHP veÄ‡ potvrÄ‘uje lokalni upis. U saÄuvanoj ruti popup je
-  pogreÅ¡no koristio nedefinisani t umjesto r; ispravljen ID i Vodi me, uklonjen
-  native confirm iz list/popup brisanja u korist zajedniÄkog _dlgConfirm.
-  Ruta ne prijavljuje uspjeÅ¡no brisanje ako localStorage upis ne uspije.
-- sqlmapConfirmDelete sada nakon potvrde traÅ¾i isti uhvaÄ‡eni layer objekat;
-  promjena indeksa liste tokom Äekanja ne briÅ¡e susjednu kartu.
-- Novi podtab Offline u Podloge i slojevi: samo saÄuvane raster karte;
-  puni nazivi, postojeÄ‡i thumbnail ili jasno oznaÄena ilustracija lokalnog
-  fajla, status aktivna/saÄuvana/neotvorena, siguran naziv kroz data atribut,
-  otvaranje odgoÄ‘enih karata i pristup UÄitaj/skini/Upravljaj. Online podloge
-  i keÅ¡ ostaju u Karte, DEM u Instalirane. ZajedniÄki localRows ima active:false
-  za odgoÄ‘ene zapise, da abecedno ranija odgoÄ‘ena karta ne pretekne aktivnu.
-- Novi stvarni Leaflet/browser test: broj/string/nebrojÄani ID, edit, odustajanje,
-  brisanje i pravi page reload, puna kvota, promjena naloga, popup rute,
-  promjena indeksa tokom potvrde, odgoÄ‘ene/aktivne/prazne offline karte i
-  16 rasporeda u Dnevnom/tamnom modu (320/390/568/1200). Dodan u puni CI.
-  Lokalno 100 JS grupa i pet inline sintaksi proÅ¡li; instalirane/omiljene,
-  DEM i projekat browser te Menu/KML/SHP browser takoÄ‘er proÅ¡li.
-- Reprodukcija na starom stvarnom deleteTextLabel kodu (lokalni 40cb400):
-  string label_id uz inline broj ostavlja oznaku i ne uklanja marker.
-- Web/SW/Android 2.6.5/code535. CI 37780669121 uspjeÅ¡an na izvoru
-  467f1299b68613ef6242f42be949b76fb0a3ecb8: svih 100 JS grupa, SQL testna
-  baza, sve browser/teren/performance provjere i 14 Android testova bez
-  greÅ¡aka/preskoka. Novi browser test koristi stvarni editor, dijalog,
-  Leaflet i trajni _OL zapis; SQL layeri simulirani za indeks/recovery.
-- APK objavljen:
-  https://github.com/pogonboskrupa/US-SUME/releases/download/v2.6.5/app-debug.apk
-  24.146.416 B; SHA256
-  54cf1b6f4d7395bf1072f490bfbe741f659c30424d3acbec3cdc5616a1a8c7f7.
-  Stvarni manifest ba.spd.uss.vlake.debug/2.6.5-debug/535, isti potpisni
-  certifikat i svih 61 web assets potvrÄ‘eni; veliÄina/digest odgovaraju
-  objavljenom assetu. Updater releases?per_page=1 vraÄ‡a v2.6.5 sa APK-om.
-  Pages sada koristi CODEX-US-SUME/root; Å¾ivi sw.js potvrÄ‘uje 2.6.5.
-  FiziÄki Xiaomi i produkcijska Supabase baza nisu testirani niti mijenjani.
-
-
-## 2026-10-08 â€” v2.6.6: Tematski fajlovi, raster pregledi i trajni izbori
-- Korisnik prijavio nestajanje GPKG prikaza/tabova i preklapanje u modalu;
-  zatraÅ¾io listing i kontrolu viÅ¡e fajlova, stvarne offline slike i pamÄ‡enje
-  izbora pri ponovnom pokretanju. Novi APK izriÄito zatraÅ¾en.
-- Tematski modal ima stalnu glavu/tabove/footer, zaseban skrol i jedan editor
-  izabranog fajla. Listing svih saÄuvanih GPKG (ukljuÄujuÄ‡i neotvorene zapise),
-  pojedinaÄni/grupni prikaz, tabela, zoom i potvrÄ‘eno uklanjanje. ViÅ¡estruki
-  import ide serijski; veliki MiniSqlite scan daje UI-u vrijeme za crtanje.
-  Import ne pomjera kartu. Draft/fokus/skrol ostaju pri pozadinskom uÄitavanju.
-- Novi fajl se objavljuje tek nakon potvrÄ‘enog IDB i registra. GreÅ¡ka prostora
-  ne pravi laÅ¾ni uspjeh; legacy sadrÅ¾aj se ne briÅ¡e prije potvrÄ‘ene migracije.
-  Registar Äuva i neotvorene fajlove, restore sprjeÄava duplikate/obrisani fajl
-  i zakaÅ¡njelo objavljivanje nakon promjene naloga.
-- Raster pregled uzima stvarne lokalne ploÄice; bijeli/transparentni/ravni
-  uzorak se preskaÄe. NajviÅ¡e 24 Äitanja, bez skeniranja cijele baze ili mreÅ¾e;
-  320x180 JPEG i negativni cache. Ista slika u Offline, Instalirane i Omiljene,
-  Å¡iroke kartice, jasno oznaÄena ilustracija kad sadrÅ¾aj nije dostupan.
-- Offline izbor pamti izriÄito sakrivanje (last_map none), providnost i zIndex
-  po fajlu; odgoÄ‘eni restore ne gazi noviji izbor. IskljuÄeni nagib se ne vraÄ‡a
-  preko stale quick-map zapisa. Podtab slojeva i filter/pretraga/sort preglednika
-  se pamte. Bafer pamti zajedniÄku Å¡irinu, boju i providnost.
-- KML save spaja postojeÄ‡e server overrides i ne gazi ih placeholderima.
-  Server KML/SHP loader Äuva ispunu, pattern, opacity i tag; stil se spuÅ¡ta
-  kroz SHP GeoJSON grupe na stvarne poligone. Preuzeti server KML/SHP vraÄ‡aju
-  se iz IDB bez mreÅ¾e, sa stilom i vidljivoÅ¡Ä‡u, dedup i provjerom naloga.
-  Lokalni KML/SHP, fotografije/tragovi/taÄke/grupni prikaz, projekat/poligon,
-  smjerovi i map-center veÄ‡ imaju trajnu pohranu; postojeÄ‡i tokovi saÄuvani.
-- Tri nova browser testa koriste stvarni Leaflet, IDB, MiniSqlite i SQL.js
-  worker: 3000 GPKG poligona/viÅ¡e fajlova, quota/account/legacy/race sluÄajevi,
-  16 rasporeda; raster ploÄice i reload sa providnoÅ¡Ä‡u/redoslijedom/sakrivanjem;
-  lokalni/server KML i stvarni SHP/DBF sa punim stilom nakon reload-a bez mreÅ¾e.
-  ProÅ¡iren library test za novi JS kontekst/isti store i odvojene naloge.
-- Lokalno proÅ¡lo svih 100 JS grupa, pet inline sintaksi i novi browser testovi.
-  Produkcijska Supabase baza nije mijenjana. FiziÄki Xiaomi i stvarna karta
-  od 1,85 GB nisu testirani; raster slike u testu su sintetiÄke ploÄice.
-- Web/SW/Android 2.6.6/code536. Build i objava u provjeri.
-- Prvi CI 37826656349 stao u doznaka-sixdays fixture-u: izdvojeni Doznaka
-  blok nije sadrÅ¾avao novi buffer helper, pa direktni setTimeout referencira
-  nepostojeÄ‡u funkciju i prekida ostatak inicijalizacije testnog bloka.
-  Obnova bafera premjeÅ¡tena u osigurani startupRestore korak nakon spremnog
-  DOM-a/provjere naloga; produkcijski i izdvojeni tokovi ne zavise od redoslijeda.
-- Drugi CI 37827480995: Doznaka i svi novi testovi proÅ¡li; project-terrain
-  fixture nije ukljuÄivao novi stvarni _loadmapThumbData helper za Omiljene.
-  Fixture dopunjen istom funkcijom iz aplikacije (bez zamjenskog mocka).
-- TreÄ‡i CI 37828390570: svi web/teren testovi i APK build/assets proÅ¡li;
-  13/14 Android testova proÅ¡lo. Download test je oÄekivao JPEG od stare
-  1x1 jednobojne PNG ploÄice, koju novi pregled pravilno preskaÄe kao praznu.
-  Android MBTiles fixture sada ima 256x256 raster s linijama (isti koordinatni
-  redovi/schema); native uslov provjerava v3 cache. Ista fiziÄka baza ukljuÄena
-  i u browser preflight stvarnog SQL workera/pregleda. Proizvodni kod ne mijenjan.
-
-### 2026-10-08 â€” potvrÄ‘en 2.6.6 APK i Doznaka GPS kontrole (2.6.7)
-
-- CI 37830420608/source4f222931 zavrÅ¡io uspjeÅ¡no. 2.6.6/code536 APK:
-  24.171.180 B, SHA256 81a99adee24c8c9da7e3bc0079fd884dc45e0131e09d3056aa3a37ec0e78ab72.
-  Lokalno provjeren binary manifest, stabilni potpis
-  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d,
-  61 sadrÅ¾ajnih web hashova prema taÄnom 2.6.6 izvoru i XML svih 14 Android
-  testova (0 greÅ¡aka/padova/preskakanja). Release s APK-om javno dostupan.
-- Dodatni korisniÄki zahtjev: PoÄni GPS u Doznaci otvara kontrolni prozor
-  nakon stabilizacije/starta postojeÄ‡eg watch-a. Odjel/projektant, status,
-  duÅ¾ina, vrijeme bez pauze, broj taÄaka i preciznost; Pauza/Nastavi i ZavrÅ¡i.
-  Skloni/PrikaÅ¾i kartu/Escape ne prekidaju snimanje. Traka snimanja otvara
-  isti prozor bez drugog watch-a; njeno ZavrÅ¡i poziva dozStopGPS direktno.
-- GPS pohrana ostaje postojeÄ‡i FieldStore dnevnik: taÄka tek nakon trajnog
-  upisa, stop Äeka red/retry/finish. Prozor blokira dupli zavrÅ¡etak i pauzu
-  tokom zavrÅ¡avanja, ostaje otvoren za retry ako trajni finish ne uspije.
-  UspjeÅ¡an stop gasi UI timer; novo snimanje vraÄ‡a taÄan status i nakon pauze.
-  Crash oporavak takoÄ‘er otvara kontrole. Nema automatskog slanja na server.
-- Prikaz koristi iste day/dark boje i zaseban dijalog izvan Doznaka panela,
-  pa se moÅ¾e skloniti radi prikaza karte. Kontrolni tasteri min44px, skrol
-  na niskom ekranu, fokus kruÅ¾i unutar prozora; Explorer ga veÄ‡ prepoznaje
-  kroz postojeÄ‡i role=dialog/aria-modal nadzor. Upute aÅ¾urirane za ove kontrole.
-- Novi browser test koristi stvarni Doznaka kod/Leaflet/FieldStore IndexedDB,
-  sintetiÄke GPS fikseve bez mreÅ¾e: poÄetak, pauza bez taÄaka/bez poveÄ‡anja
-  trajanja, nastavak, slab signal, sklanjanje/nastavak snimanja/reopen,
-  keyboard, 8 rasporeda, neuspjeli finish/retry i zaÅ¡tita od duplog stopa,
-  stop usred pauze, drugi pojas, stop iz zajedniÄke trake, reload Å¡est trajnih
-  taÄaka. Produkcijski GPS/Supabase i fiziÄki telefon nisu koriÅ¡teni.
-- Web/SW/Android 2.6.7/code537. ZavrÅ¡na provjera i APK objava u toku.
-- Lokalno 2.6.7 proÅ¡lo svih 100 JS grupa, Doznaka Å¡estodnevna simulacija,
-  pet inline sintaksi, novi GPS modal browser test, Doznaka restore, overlay
-  test, preferences i thematic-files; puni offline app test sa CPU4x i ubrzanih
-  pet sati: 3564 prihvaÄ‡ena fiksa vlake, 1723 doznake i 1723 vraÄ‡ene iz IDB,
-  bez mreÅ¾nih upisa. Ovo nije mjerenje baterije niti fiziÄkog Redmi telefona.
-- KonaÄna potvrda: CI 37832465966/source9b59bbb706a8868f36dde4d63b87a0e277ec57fd
-  uspjeÅ¡an. Objavljen v2.6.7/code537 APK 24.181.100 B; SHA256
-  0d61a2d3a6236303977cb30533432d305f76071a12f2ad5e48c6d0db0041ed8c.
-  Preuzet stvarni CI APK i Android XML: svih 14 testova proÅ¡lo, bez skipova.
-  Binary manifest paket ba.spd.uss.vlake.debug / 2.6.7-debug / 537; stabilni
-  certifikat kao 2.6.6, svih 61 web resursa identiÄni taÄnom lokalnom izvoru.
-  Release digest/veliÄina poklapaju build; updater releases?per_page=1 vraÄ‡a
-  v2.6.7 s javnim app-debug.apk. Release opis dopunjen stvarnim izmjenama.
-
-### 2026-10-09 â€” stvarni USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg (2.6.8)
-
-- Korisnik veÄ‡ ima 2.6.7 i prilaÅ¾e konkretan GPKG; traÅ¾i ispravan prikaz ovog
-  fajla i novo aÅ¾uriranje. Izvornik od 20.271.104 B ostaje samo u lokalnom
-  attachment prostoru; nije dodat u javni repo, CI, niti u APK resurse.
-- SQLite read-only quick_check OK. Jedan WGS84 MultiPolygon sloj odsjeci:
-  17.305 feature-a / 17.352 poligonska dijela; sedam REAL kolona vrsta.
-  Tabele teme/legenda i QGIS layer_styles nose ljubiÄastu paletu, raspone
-  50â€“59,9 / 60â€“69,9 / 70â€“79,9 / 80â€“89,9 / 90â€“100 i tekstualna znaÄenja.
-- Stvarni baseline u browseru: geometrija se uÄita bez greÅ¡ke, ali tema nije
-  odabrana, metapodaci se ignoriÅ¡u; izbor luÅ¾njaka pogreÅ¡no pravi pet kvantila
-  i zeleno-crvenu skalu nad ocjenama 50â€“57,1, a 16.978 NULL Ä‡elija ostaje sivo.
-- Uvoz sada Äita iskljuÄivo male teme/legenda/layer_styles tabele (limit1000
-  zapisa, yield64); audit/model/ulazne tabele ne skenira. XML QML je podataka
-  parser bez izvrÅ¡avanja/preuzimanja; podrÅ¾an graduated SimpleFill fallback.
-  Provjera polja, numeriÄkih raspona i hex boja prije primjene. PoÅ¡tuje izvorne
-  raspone/boje/tekst legende, uklanja NULL/out-of-range iz crtanja i hit-test-a.
-  Novo uÄitavanje bira ugraÄ‘enu zadanu temu Bukva, alfa210/255. Izbor korisnika
-  (ukljuÄujuÄ‡i Bez teme), ruÄni overrides, jaÄina i vidljivost imaju prednost.
-- Procjena_i_ogranicenja je informativni tekst, viÅ¡e se ne nudi kao dodatna
-  kategorijska tema. Pop-up koristi naziv Ä‡elije i duge napomene u Äitljivom
-  punom redu; opis/ograniÄenja iz teme se prikazuju kao escaped tekst.
-  Color-only editor Äuva izvorne opsege/praznine i labels; izmjena granica pravi
-  ruÄne klase, Vrati zadano vraÄ‡a izvorne klase. Sve se vraÄ‡a iz IDB izvornika.
-- Lokalni test priloÅ¾enog fajla: svih 17.305 feature-a; nezavisni Python SQLite
-  brojevi svake vrste/klase identiÄni JS prikazu. Prikazane Ä‡elije: bukva14850,
-  jela11644, smrÄa4801, kitnjak15156, luÅ¾njak327, kesten4223, javor10572.
-  Skrivene NULL/out-of-range Ä‡elije bez stroke/fill/interaktivnosti; ostale
-  vidljive. Provjereno 7 tema, 8 rasporeda, QML-only fallback, edit/reset boja,
-  stvarni popup, reload teme/boja/jaÄine/skrivanja i Bez teme; bez mreÅ¾e.
-- Novi CI browser test generiÅ¡e sintetiÄki MultiPolygon GPKG s istom shemom
-  sedam vrsta/metapodataka (graniÄne vrijednosti, NULL, vrijednosti izvan
-  raspona, praznine). GPKG_REAL omoguÄ‡ava lokalnu provjeru stvarnog attachmenta
-  bez njegove objave. ProÅ¡lo svih100 JS grupa, pet inline sintaksi i postojeÄ‡i
-  thematic-files test (3000 feature-a/IDB/kvote/16 rasporeda); tematska29/29.
-- Web/SW/Android 2.6.8/code538. ZavrÅ¡ni Android build/objava u toku.
-  FiziÄki Xiaomi i GPS/produkcijska Supabase baza nisu testirani ni mijenjani.
-
-- KonaÄna potvrda 2.6.8: CI 37898776541/source3794f74cd1c3ba5a852f8a05e9c367a601f8f063
-  uspjeÅ¡an, ukljuÄujuÄ‡i novi sintetiÄki GPKG test i sve regresije. Objavljen
-  v2.6.8/code538 APK 24.188.268 B; SHA256
-  e557384c88009ed6420bce0273974c6c72b1c412c492ecf096a021596f9ea5c8.
-  Preuzet stvarni CI APK i Android XML: svih 14 testova proÅ¡lo, bez skipova.
-  Binary manifest ba.spd.uss.vlake.debug / 2.6.8-debug / 538, isti stabilni
-  certifikat 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-  Svih 61 web resursa identiÄni izvoru. Release digest/veliÄina poklapaju APK;
-  updater releases?per_page=1 vraÄ‡a v2.6.8 i javni app-debug.apk. Release opis
-  dopunjen konkretnim GPKG izmjenama. Javni Pages index.html i sw.js su 2.6.8.
-
-### 2026-10-09 â€” poseban podtab za procjenu sadnje (2.6.9)
-
-- Korisnik traÅ¾i poseban podtab unutar Tematske karte samo za priloÅ¾eni
-  USK_SADNJA_7_VRSTA_PROCJENA_V3.gpkg. Dodan stalni Sadnja Â· 7 vrsta podtab,
-  s praznim stanjem/uputom za taj konkretni fajl i otvaranjem saÄuvanog fajla.
-  Identitet je taÄan naziv fajla (case insensitive); drugi GPKG-ovi se ne
-  pojavljuju u njegovim karticama, pickeru ili brojaÄu. Iz liste fajlova
-  dugme ovog fajla direktno otvara novi podtab.
-- Sedam vrsta bira se pristupaÄnim dugmadima (jedan aktivan izbor). Koristi
-  postojeÄ‡u klasifikaciju, legendu, jaÄinu, editor, zoom, tabelu i vidljivost,
-  bez dodatne kopije geometrije/podataka. Izbor i stilovi ostaju u postojeÄ‡em
-  registru/IDB; obiÄni Tema i stil podtab zadrÅ¾ava univerzalne kontrole.
-- Tri podtaba imaju fiksni grid bez preklapanja na malim ekranima. Provjereno
-  stvarnim fajlom 17.305 Ä‡elija, svih sedam dugmadi/SQLite brojeva, 8 rasporeda
-  novog podtaba u day/dark modu i 8 rasporeda editora. Drugi GPKG ne ulazi u
-  podtab; hide/reload, ulaz iz listinga, uklanjanje ciljnog fajla i prazno
-  stanje proÅ¡li. PostojeÄ‡i thematic-files test proÅ¡ao (3000 poligona, IDB,
-  greÅ¡ke prostora/naloga, 16 rasporeda), svih100 JS grupa i pet inline sintaksi.
-- Web/SW/Android 2.6.9/code539. ZavrÅ¡ni APK build/objava u toku. Originalni
-  attachment nije u repou/CI/APK-u; CI test i dalje generiÅ¡e sintetiÄki fajl.
-  FiziÄki telefon i produkcijski Supabase nisu testirani ni mijenjani.
-
-- KonaÄna potvrda 2.6.9: CI 37900476733/source dfa64e9c8fca887cdf1ca79ee50a3474b0d60984
-  uspjeÅ¡an. Objavljen v2.6.9/code539 APK 24.192.080 B; SHA256
-  46cb54c49723060ce8487da9a0a8069ba7c5ff7772d37b39e9b16c9e55ff9225.
-  Preuzet stvarni CI APK i Android XML: svih14 testova proÅ¡lo, bez skipova.
-  Binary manifest ba.spd.uss.vlake.debug / 2.6.9-debug / 539; certifikat
-  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d
-  isti kao prethodne verzije. Svih61 assets identiÄni taÄnom izvoru; release
-  veliÄina/digest poklapaju APK. Updater releases?per_page=1 vraÄ‡a v2.6.9
-  i javni app-debug.apk. Release opis dopunjen izmjenama podtaba; javni Pages
-  index.html je 2.6.9 i sadrÅ¾i Sadnja podtab.
-
-### 2026-10-09 â€” ruÄno crtanje bez samostalnog produÅ¾enja i GPS kontrole Doznake (2.7.0)
-
-- Korisnik prijavljuje zavrÅ¡ni segment oko200 m prema jugu pri ruÄnom crtanju
-  i traÅ¾i GPS kontrole Doznake na karti, na mjestu kontrola snimanja vlake.
-- Uzrok reproduciran: ruÄni Crtaj i stariji Vuci sluÅ¡aju Leaflet move, koji
-  se emituje i tokom inercije nakon puÅ¡tanja prsta, GPS/programskog pan-a,
-  zoom-a i resize-a. Novi test nad stvarnim Leaflet-om pada na starom move
-  kodu veÄ‡ kod produÅ¾enja nakon mouseup-a. Oba toka sada sluÅ¡aju samo drag;
-  otkaÄivanje koristi isti dogaÄ‘aj. TaÄka i Undo zadrÅ¾avaju postojeÄ‡i tok.
-  Manual panel i Doznaka kontrole ukljuÄeni u zaÅ¡titu od propagacije
-  klikova/touchstart/scroll na kartu.
-- Doznaka kontrole premjeÅ¡tene unutar glavnog prikaza, u kompaktan banner
-  iznad karte; bez full-screen backdrop-a ili blokiranja karte/fokus-trap-a.
-  PoÄni GPS/ponovno otvaranje prelazi na Kartu. Prikazani odjel, projektant,
-  aktivno/pauza stanje, duÅ¾ina, vrijeme i signal; Pauza/Nastavi i ZavrÅ¡i.
-  Dok je otvoren, banner vlake, obiÄna donja akcijska traka i dupli rec-bar
-  su sklonjeni. Sklanjanje vraÄ‡a trake i nastavlja isti GPS watch; zavrÅ¡etak
-  i dalje Äeka trajnu potvrdu, ne mijenja session/IDB/filtere/slanje.
-- ProÅ¡ao novi browser test manual-draw-270 (miÅ¡ i CDP touch, CPU4x, inercija,
-  simulirani200 m juÅ¾ni pomak, resize/zoom, finish, taÄka/Undo, stariji Vuci).
-  GPS test potvrÄ‘uje Karta/poziciju unutar main-a, skrivene duple trake i
-  slobodnu kartu, osam day/dark rasporeda, pauzu/nastavak, minimiziranje,
-  ponovni ulaz, neuspjeli trajni finish/retry, stop u pauzi i IDB reload.
-  ProÅ¡lo svih100 JS grupa, pet inline sintaksi, Doznaka restore i overlay
-  test. Puni app test: CPU4x, ubrzanih5 h, 3564 prihvaÄ‡ene taÄke vlaka i1723
-  doznake, svih1723 vraÄ‡eno iz IDB, bez mreÅ¾nih upisa. Ovo nije fiziÄki telefon
-  ni mjerenje baterije; produkcijski Supabase nije koriÅ¡ten/mijenjan.
-- Web/SW/Android 2.7.0/code540. ZavrÅ¡ni APK build/objava u toku.
-
-- KonaÄna potvrda 2.7.0: CI 37921217459/source
-  1d33653848005a5ba9ad1388a279b9a4fb3ac928 uspjeÅ¡an. APK 24.192.288 B,
-  SHA256 f817f1188647749c897acf4b9519a6b8767cd1d8d83804c77ad68cbb1a082e16.
-  Stvarni preuzeti APK: ba.spd.uss.vlake.debug / 2.7.0-debug / code540;
-  stabilni certifikat 11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-  Svih61 web resursa identiÄni izvoru; release digest i veliÄina poklapaju se.
-  Android XML:14 testova,0 greÅ¡aka/padova/preskakanja. Updater popis vraÄ‡a
-  v2.7.0 s javnim app-debug.apk. Pages uspjeÅ¡no objavljen s 2.7.0 i drag fixom.
-
-### 2026-10-09 â€” pregled u Äetiri dijela, popravke dijelova 1 i 2 (2.7.1)
-
-- Korisnik izriÄito traÅ¾i podjelu u fajl prije pregleda i kompletne popravke
-  prva dva dijela (bugovi/kod/dizajn). Podjela i detaljni nalazi u
-  docs/APP_PREGLED_4_DIJELA.md. Dijelovi3/4 ostaju planirani.
-- Karte: stvarni zadani Leaflet Canvas nije crtao SVG url Å¡rafure; dodan
-  mali ponovljivi CanvasPattern sa jaÄinom; nepreuzet KML bez grupe se ne
-  stilizuje prije preuzimanja (regresijski pokriveno). SVG identitet grupe umjesto
-  indeksa uklanja koliziju pri del/add (novi test pada na2.7.0). Kasne pune
-  fotografije vezane za objekat/nalog/pregled, ne promjenjiv indeks. Native
-  odbijeno uklanjanje ne briÅ¡e IDB metadata; baza se zatvara, UI ne prijavljuje
-  laÅ¾ni uspjeh; uspjeh Äisti samo ciljane prefs/thumbnail/last/fav. Moje karte
-  imaju direktnu zvjezdicu44px i razlikuju povezan od kopiranog fajla.
-- Vlake: Enter nije provjeravao upisan naziv, pa je zaobilazio deaktivirano
-  dugme za brisanje. Akcija sada provjerava taÄan naziv i snapshot
-  objekta/naloga/projekta; promjenjiv indeks ne mijenja cilj; GPS mora biti
-  zavrÅ¡en. Skrivanje projekta obuhvata kolegine linije/nazive i update, a
-  stari keÅ¡ drugog projekta ne utiÄe na brojeve/duplikate/STD. Generacija
-  aktivacije Å¡titi await i odgoÄ‘eni zoom. Stari markeri naziva ne ostaju u
-  globalnoj listi. Kolegina kartica otvara isti popup/bafer, tipkovnica radi.
-  Sort/filter/search trajni po nalogu/projektu; saÅ¾etak i OÄisti filtere;
-  Projekti link zaista otvara tab, naziv escape.
-- Novi full-app CPU4x browser test audit-parts-271 pokriva stvarni Canvas/SVG,
-  IDB/native refusal/cleanup, foto race, Enter/scope/reorder, kolege hide/
-  update/bafer, Pâ†’Qâ†’P kasne aktivacije, restart/filtere/naloge i6layouta.
-  ProÅ¡lo100 JS grupa/5inline sintaksi, MBTiles pregled, KML/SHP restart,
-  26loadmap/24projekat prikaza, kolege/admin/Turf, strelice/outline, tematski
-  viÅ¡euvozni3000poligona i stvarni korisnikov GPKG17.305Ä‡elija/svih7vrsta.
-  Ubrzanih5hCPU4x:3564vlaka/1723Doznaka taÄaka,1723IDBrestore,0vanjskihupisa.
-  OriginalniGPKG nije u repou/APK-u; fiziÄki telefon/produkcijskiSupabase
-  nisu testirani. Web/SW/Android2.7.1/code541; zavrÅ¡ni CI/APK slijedi.
-
-- KonaÄna potvrda 2.7.1: CI 37925233858/source
-  3750ade6ca7ca5652dcd33852f00368f803ca452 uspjeÅ¡an. Preuzet APK 24.200.540 B;
-  SHA256 c747ec5a1c7209c9fed55d72e06b541abb8038cf975b7726196bce4d9b9cb6f3.
-  Android XML: 14 testova, 0 greÅ¡aka/padova/preskakanja. Manifest:
-  ba.spd.uss.vlake.debug / 2.7.1-debug / code541, isti certifikat
-  11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-  Svih 61 assets identiÄni izvoru; release digest/veliÄina podudarni. Updater
-  vraÄ‡a prvi v2.7.1 s app-debug.apk; Äetiri izmijenjena javna Pages fajla
-  SHA256 poreÄ‘enjem odgovaraju izvoru. Zapis dijelova 1/2 dopunjen isporukom;
-  dijelovi 3/4 ostaju planirani.
-
-
-## 9. 10. 2026 â€” zavrÅ¡etak pregleda dijelova 3/4, 2.7.2 / code542
-
-Na izriÄit zahtjev korisnika pregledani i popravljeni Doznaka/Teren, server,
-pristup i aÅ¾uriranje; obuhvat, nalazi i ograniÄenja su u
-[APP_PREGLED_4_DIJELA.md](APP_PREGLED_4_DIJELA.md).
-GPS finish/back ostaje na odjelu ako IDB upis ne uspije; ne mijenja se odjel
-tokom snimanja. QR kamera poniÅ¡tava kasne streamove. Geometrijski memo
-prepoznaje korekciju koordinata/vremena i bez promjene broja taÄaka.
-GPS serije i pojedinaÄni put potvrÄ‘uju stvarne taÄke prije ACK-a; projekat,
-Doznaka odjel/zona potvrÄ‘uju traÅ¾eni sadrÅ¾aj i vlasnika Äak i pri 23505.
-Prijem i provjera odobrenja imaju dodatne zaÅ¡tite od promjene odjela/naloga.
-Native UpdateBridge provjerava Content-Range i GitHub SHA-256 kada postoji.
-**Novi SQL potreban samo za brisanje cijelog odjela:**
-`supabase/migrations/20261009_doz_atomic_delete.sql` â€” autorizovana jedna
-transakcija za kreatora/aktivnog managera. Nije primijenjen na produkciji.
-Bez njega brisanje se sigurno zaustavlja; nema povratka na Äetiri DELETE-a.
-Novi puni browser test/JS test, izolovani PostgreSQL rollback test i dvije
-Android provjere sadrÅ¾aja/raspona.
-
-KonaÄna potvrda 2.7.2: CI 37933659942/source
-`2c3d1313ebf81eaa2734b8c5d8a09482f8ef37d6` uspjeÅ¡an. 101 JS grupa,
-PostgreSQL testovi, puni browser skup i 16 Android emulator testova bez
-greÅ¡aka/padova/preskakanja. Preuzet APK: 24.209.980 B, SHA-256
-`28945c54de77ad9a725770862697484deb46f9636e55b79ab91eb9aa55bcce05`;
-paket `ba.spd.uss.vlake.debug` / 2.7.2-debug / code542. Svih 61 web assets
-identiÄno izvoru i isti stabilni certifikat kao 2.7.1. Release digest i
-veliÄina podudarni; updater prvi vraÄ‡a v2.7.2/app-debug.apk. Pet javnih
-Pages fajlova identiÄno izvoru; Pages CI 37933659357 uspjeÅ¡an. Sva Äetiri
-dijela pregleda zavrÅ¡ena. SQL brisanja nije primijenjen na produkciji;
-fiziÄki telefon, baterija i produkcijska baza ostaju neprovjereni.
-
-## 9. 10. 2026 â€” jednostavniji PoÅ¡alji na server (2.7.3 / code543)
-
-Na zahtjev korisnika pojednostavljen prikaz Servera. KraÄ‡i header, tri
-kompaktna taba redom Za slanje / Poslano / Primljeno; Za slanje je poÄetni
-tab pri prvom ulazu ili promjeni naloga. Manje obojenih povrÅ¡ina i duplih
-opisa; jedan istaknut PoÅ¡alji i primi. Aktivni projekat i prijavljeni
-projektant ostaju jasno vidljivi, cilj i autor svake stavke u grupama.
-Vremena zadnje razmjene, ispis projekta i sigurnosna kopija sklopljeni su
-ispod glavnog pregleda. Status razmjene ima kratak saÅ¾etak i proÅ¡irive
-korake; greÅ¡ka/RLS ostaje vidljiva u saÅ¾etku i kada su koraci sklopljeni.
-Otvoreni detalji razmjene ostaju otvoreni pri osvjeÅ¾avanju. Slanje, ACK,
-offline dnevnik, RLS, grupisanje tri projekta/dani i prikaz na karti koriste
-postojeÄ‡e tokove; nema SQL dopune za ovaj dizajn.
-
-Lokalno: svih 101 JS grupa, 5 inline sintaksi; browser menu-tools i
-server-design (19 PNG, 320px/landscape/dan/tamni mod, upozorenje i toggle),
-stvarni kontrolisani Supabase HTTP server-confirm i puna audit-parts-272
-regresija. Testne pretpostavke poÄetnog taba i sklopljenih vremena
-aÅ¾urirane da provjere novi korisniÄki tok. Produkcija nije koriÅ¡tena.
-Web/SW/Android 2.7.3/code543; CI/APK identitet dopuniti poslije builda.
-
-
-Dopune istog joÅ¡ neobjavljenog 2.7.3 na posljednje zahtjeve:
-- Raster SQLiteDB/MBTiles/GPKG podloge ostaju na ureÄ‘aju pri promjeni naloga;
-  `_wipeAllLocalUserData` viÅ¡e ne poziva `sqlmapClearAll`. Privatni KML,
-  fotografije i terenski zapisi ostaju odvojeni/arhivirani po korisniku.
-  Logout resetuje startup generaciju; stari odgoÄ‘eni restore ne prelazi u novi nalog.
-- Projektanti se dedupliciraju po ID-u, ukljuÄujuÄ‡i vlasnika u Älanovima.
-  TuÄ‘i vlasnik ne preuzima ime trenutnog profila; broj Älanova i predaja koriste isti tim.
-- Tastatura Vlaka u postojeÄ‡em dijalogu/listu: brojevi, T/ABC/BH slova, taÄka,
-  brisanje i pomjeranje kursora; fiziÄka tastatura ostaje upotrebljiva.
-  ZakaÅ¡njelo zatvaranje starog dijaloga ne uklanja overlay novog.
-- Kompaktne slike i kartice offline podloga, uklonjeni traÅ¾eni opisni blokovi.
-  Teren redom pozicija/sunce/azimut; poligon i teren zadnji u Projektu.
-  Veliko crveno dugme brisanja; postojeÄ‡e potvrde ostaju.
-- Jedinstveno uklanjanje svih slojeva vlake (lager, outline preko Leafleta,
-  strelice, oznake, nagib, wpts), ukljuÄujuÄ‡i spajanje i ÄiÅ¡Ä‡enje kolega.
-  Ispravljen sudar globalne crvene `.r` klase s Ä‡elijama statistike; neutralni pregled.
-- Å tampa: vlaka/krak podrazumijevano 1.4/1.2 px, jedna isprekidana linija bez
-  outlinea. Ostaju podesivi boja/debljina/crtice. DEM >30% veÄ‡ vidljive maske
-  pretvaraju se u crvene SVG poligone za Å¡tampu (rupe ostaju prazne; bez
-  izmiÅ¡ljene geometrije ili novog preuzimanja). Izvorni stil i raster se vraÄ‡aju.
-- Admin aktivnost: zaseban zapis stvarnog UI/GPS rada, minutni ritam slanja,
-  opaÅ¾anje offline vezano za vlasnika. Nema oznaÄavanja aktivnosti samom prijavom.
-  `supabase/migrations/20261009_app_user_activity.sql` mora korisnik izvrÅ¡iti
-  u Supabase SQL Editoru da server Äuva/pokazuje aktivnost; produkcija nije dirana.
-  Migracija je idempotentna; samo vlastiti zapis preko RPC-a, pregled samo admin.
-
-Lokalno: 103 JS grupe; novi puni device-workflow test sa stvarnim Leafletom,
-SQLite workerom/IDB rasterom, istim i drugim nalogom, hladnim restartom,
-tastaturom, markerima i admin datumom; print test generiÅ¡e PDF i provjerava
-SVG poligone/vraÄ‡anje; pravi izolovani PostgreSQL test aktivnosti. ZavrÅ¡ni
-CI/APK dokaz dopuniti nakon builda. FiziÄki telefon i produkcijska baza nisu testirani.
-
-Posljednja dopuna istog builda: poruka nove verzije je cijela klikabilna,
-ima jasnu akciju AÅ¾uriraj i zasebno zatvaranje; otvara isti postojeÄ‡i tok
-Menija/AndroidUpdate. APK provjera koristi objavljeni GitHub release s APK
-assetom, umjesto Pages verzije koja moÅ¾e stiÄ‡i prije zavrÅ¡etka builda.
-Meni â†’ Baterija i automatsko pokretanje: standardno Android izuzeÄ‡e, Xiaomi/
-Redmi/POCO autostart ekran s rezervnim putem u postavke ove aplikacije,
-plus preÄica za OEM Baterija â†’ Bez ograniÄenja. Korisnik potvrÄ‘uje postavke;
-Android ne nudi pouzdano Äitanje autostarta i UI ne tvrdi da je ukljuÄen.
-Tri nova emulator testa provjeravaju stvarni package URI i fallback pri
-nepostojeÄ‡oj/zabranjenoj OEM Activity, bez otvaranja stvarnih dozvola.
-Debeli segmentni nagib vlake privremeno se skriva pri Å¡tampi, da ostane
-samo jedna tanka isprekidana linija. Projektni DEM nagib ukljuÄuje legendu.
-
-Dodatna lokalna provjera: 104 JS grupe (novi test otkriva samo objavljeni
-APK i preskaÄe draft/nedovrÅ¡en asset), 5 inline sintaksi, device-workflow
-ukljuÄuje punu aplikaciju pri promjeni print razmjere, skrivanje/vraÄ‡anje
-segmentnih nagiba, klik/zatvaranje poruke verzije i sva tri native dugmeta
-preko kontrolisanog mosta. Print/PDF provjera ponovo uspjeÅ¡na.
-
-Prvi CI 37963777309: JS/SQL i puni device-workflow uspjeÅ¡ni; zaustavljen na
-staroj pretpostavci offline-preview o Å¡irokoj sliÄici (ratio >1.6), koju je
-korisnikov zahtjev za manjim karticama zamijenio kvadratom 84px. Test sada
-provjerava kompaktne dimenzije u svih 8 rasporeda; provjere stvarnih raster
-piksela, keÅ¡a i obnove ostaju. Ponovljeni CI mora proÄ‡i prije isporuke.
-
-Preostali browser skup lokalno provjeren do kraja nakon dopune izdvojenog
-Server/Leaflet fixturea stvarnom `_removeVlakaMapLayers` zavisnoÅ¡Ä‡u. Test
-preglednika bira novi tab Primljeno prije Å¡irenja grupe; test projekta
-provjerava novi traÅ¾eni redoslijed s poligonom na dnu. Pozitivne provjere
-stvarnog bafera, mapa, boja, GPS doznake i terenske 5400m simulacije ostaju;
-sve proÅ¡le. CI 37964494791 namjerno prekinut radi ovih fixture dopuna;
-isporuku odreÄ‘uje naredni puni CI, ne prekinuti build.
-
-Aktivnost dodatno veÅ¾e opaÅ¾eni nalog kroz `app_record_activity_for_user`:
-server provjerava da je isti kao auth.uid, pa promjena JWT sesije tokom
-slanja ne pripisuje opaÅ¾anje drugom korisniku. PostojeÄ‡a osnovna funkcija
-ostaje kompatibilna; novi klijent koristi provjereni wrapper. Lokalni JS i
-izolovani SQL test ukljuÄuju ID naloga i odbijanje pogreÅ¡nog identiteta.
-
-
-KonaÄna potvrda isporuke 2.7.3: CI 37965559455/source
-`a724b6ef423ba29a4fd40c2d73657dcfb3c7dc1f` uspjeÅ¡an. 104 JS grupe,
-izolovani SQL probni pristup/brisanje/aktivnost, puni browser skup i 19
-Android emulator testova bez padova, greÅ¡aka ili preskakanja. Preuzet APK
-24.222.776 B (24,22 MB), SHA-256
-`b8ea4e0263303979861ed7917dda5a5eddc96779aca4b9ad92719dad4f2951a9`;
-`ba.spd.uss.vlake.debug` / 2.7.3-debug / code543. Svih 64 web assets
-podudarno izvoru. Stabilni certifikat ostaje
-`11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
-GitHub release v2.7.3 (408169014), app-debug.apk digest/veliÄina identiÄni;
-updaterov releases?per_page=1 prvi vraÄ‡a v2.7.3 s uploaded APK-om. Pages
-37965557728 uspjeÅ¡an; Å¡est provjerenih javnih fajlova identiÄno izvoru.
-SQL 20261009_app_user_activity.sql korisnik mora izvrÅ¡iti u Supabase SQL
-Editoru; produkcija nije mijenjana. Aktivnost se biljeÅ¾i tek nakon SQL
-primjene i aÅ¾uriranja klijenata; prethodna istorija rada nije rekonstruisana.
-FiziÄki Xiaomi, OEM autostart i baterija nisu testirani; emulator provjerava
-package URI, odabir Xiaomi puta i fallback pri zabranjenom/nedostupnom ekranu.
-APK je objavljen i provjeren za aÅ¾uriranje postojeÄ‡e CODEX debug instalacije.
-
-
-### 2.7.4 â€” kontrast, navigacija, Å¡tampa i prvi pogled rasterske karte
-
-Zahtjev korisnika: jaÄi Dnevni mod, kontrole ispod koordinata, uklanjanje
-Spremno za teren/sigurnosna kopija, kraÄ‡i izbor Vodi me, jedna tanka linija
-vlake u Å¡tampi, odziv Å¡tampe i centriran prvi pogled karte do 1:50.000.
-Pregled stvarnih computed stilova otkrio svijetla imena/uspone/nagibe na
-bijelom i tamne stare kartice sa tamnim tekstom. Tamniji dnevni tonovi,
-usklaÄ‘ene stare povrÅ¡ine i kontrole; test kontrasta teksta >=4.5 na glavnim
-tabovima i 19 prozora/pregleda (fake podaci, vanjski upisi blokirani).
-ResizeObserver mjeri visinu nv-badge; zoom/slojevi/izbor razmjere imaju
-8 px razmaka i kad se koordinate prelome, na 320/390/568/1280 px.
-Uklonjeni oba ulaza i cijeli modal pripreme. KML izvoz i postojeÄ‡i
-programski backup/restore podataka saÄuvani; nema brisanja korisniÄkih podataka.
-VoÄ‘enje zadrÅ¾ava oba toka i saÄuvane rute, uz dvije kratke opcije.
-
-Legenda vlake/kraka viÅ¡e ne umnoÅ¾ava SVG uzorke za svaku koleginu boju;
-jedan tanki uzorak, stvarne boje linija ostaju na karti. Stil Å¡tampe ne
-ukljuÄuje outline i ne radi vraÄ‡anje/primjenu identiÄnog stila na svaki
-pomak. DEM >30% maska obraÄ‘uje se izvan UI threada u lokalnom Workeru,
-sekvencijalno po ploÄici; i prazne maske su keÅ¡irane. PDF Äeka dovrÅ¡etak;
-zatvaranje otkazuje posao i vraÄ‡a izvor. CPU4 test guste maske: 22 poslova,
-10 poligona, 55 otkucaja UI tajmera, kontrole dostupne tokom obrade. To
-nije reprodukcija stvarnog prijavljenog zastajkivanja na Xiaomi telefonu.
-
-Prvi uvoz/izbor rasterske SQLiteDB/MBTiles/GPKG karte centriran na njen
-bounds (fallback center), zoom daje razmjeru najviÅ¡e 1:50.000. Posljednji
-kadar Äuva se u postojeÄ‡im ureÄ‘ajskim sqlmap prefs po karti i globalno.
-Print privremeni kadar ne prepisuje posljednji terenski poloÅ¾aj. Stvarni
-IDB/raster test potvrÄ‘uje centar/razmjeru i hladni restart zadnjeg kadra,
-uz toleranciju jednog projekcijskog piksela. Nova karta ne ostavlja sve
-stare rastere ukljuÄene paralelno. Nije mijenjan Supabase niti server tok.
-Verzije web/SW/Android 2.7.4, Android code544; APK/CI dokaz slijedi.
-
-Lokale prije objave: 104 JS grupe i inline sintaksa uspjeÅ¡ni; puni CI
-browser skup izvrÅ¡en lokalno, ukljuÄujuÄ‡i nove day-layout/print-responsive
-provjere. Testni izrezi aÅ¾urirani za novu zavisnost auto-pogleda i kraÄ‡i GPS
-status; SHP/KML uvoz, stvarni raster/IDB, pravila boja i outline i Å¡tampa
-ponovo provjereni. field-design.cjs: 320/360/412/768 px, tema se pamti,
-promjena teme ne zaustavlja snimanje, red ostaje identiÄan i nema JS greÅ¡aka.
-SQL/native kod nisu mijenjani; puni build ih ipak ponovo provjerava.
-
-
-KonaÄna potvrda isporuke 2.7.4 (provjera 10.10.2026): CI
-37974491481, source `76103c4409fad4e8c1981e24e584864cc027ada7`,
-sve faze uspjeÅ¡ne: JS, izolovani SQL, puni browser skup, build, 19 Android
-emulator testova (0 failures/errors/skipped), objava i analiza brzine.
-Preuzet APK 24.227.396 B (24,23 MB), SHA-256
-`bfafbc86ac4932dbd3dfbe7172729293eeceba0b7848d1ee9b7a6e2d5604bcd7`;
-manifest ba.spd.uss.vlake.debug / 2.7.4-debug / code544. Svih 65 web assets
-podudarno lokalnom izvoru. Certifikat prethodne instalacije saÄuvan:
-`11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
-Release v2.7.4 (408233386), uploaded app-debug.apk, isti digest i veliÄina;
-updaterov releases?per_page=1 vraÄ‡a v2.7.4 na prvom mjestu. Pages
-37974490036 uspjeÅ¡an s istim source SHA; javni index.html, sw.js,
-field-design.js/CSS, print-slope.js i novi worker identiÄni izvoru.
-APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.4/app-debug.apk
-FiziÄki Xiaomi i prijavljeno zastajkivanje na njemu nisu direktno testirani;
-provjera odziva je browser CPU4 simulacija, uz zasebne Android emulator provjere.
-Produkcijski Supabase nije mijenjan.
-
-
-## 2.7.5 â€” dnevni kontrast, dnevnik projekta, Granice i dvosmjer (10.10.2026)
-
-Zahtjevi korisnika: provjera Dnevnog moda na admin/projektant panelima;
-ispravna pripadnost dnevnika projektu; uklanjanje vremenske trake i tematske
-karte iz Podloge i slojevi; premjeÅ¡tanje dodatnih slojeva u Granice; klikom
-odabrani dvosmjer zavrÅ¡ene ruÄne vlake/kraka. PotvrÄ‘en izvor novih KML:
-pogonboskrupa/KARTE â†’ Releases, korisnik je veÄ‡ objavio Granice odjela i
-Kamionski putevi. Verzije: index/SW 2.7.5, Android code545.
-
-Dnevni tekst koristi tamnu boju i svijetle povrÅ¡ine i u ugnijeÅ¾Ä‘enim
-prozorima: stvarni GPKG klasni prikaz/tabela/kolone/popup, KML i karte,
-admin korisnici/projekti, snimanje, doznaka, navigacija, Å¡tampa, autentikacija.
-Boje geometrije, rastera i paleta ostaju. OnemoguÄ‡ena dugmad nisu aktivirana.
-Novi browser test day-all-panels-275.py provjerava 144 stanja za obje uloge,
-sa popunjenim dnevnicima, KML/photo/tragovima i stvarnim sintetiÄkim GPKG.
-
-Dnevnik sada filtrira projektId i autora; novi lokalni zapisi sadrÅ¾e ID
-projekta/korisnika/Å¡umariju/GJ. Stari zapisi bez ID-a prikazuju se samo kad
-odjel/GJ/Å¡umarija jednoznaÄno odgovaraju projektu i projektant pripada timu.
-Dvosmisleni zapisi nisu obrisani niti pogreÅ¡no pripisani. Brisanje dnevnika
-briÅ¡e samo aktivni lokalni projekat; nema poziva za globalno brisanje servera.
-Admin detalji, statistika, PDF/KML dnevnika koriste isti projektni filter.
-Novi dnevnici kolega i dalje se ne Å¡alju serveru; jasno oznaÄeno u prikazu.
-Nema produkcijske migracije ili promjene Supabase podataka.
-
-Vremenska traka: uklonjeni UI, runtime, SW rute/asset i winter-imagery.js.
-DEM i keÅ¡/offline testovi ostaju. Tematska karta je u vlastitoj sekciji Menija;
-njen jedini file picker je unutar tog modala. Granice sadrÅ¾e postojeÄ‡e
-prekidaÄe puteva/granica/nagiba vlaka i katalog javnih GitHub KML assets.
-Native KmlDownloads koristi postojeÄ‡i strogo ograniÄen GitHub transport,
-odvojene kataloge Drive/GitHub, validaciju veliÄine i XML-a, bez UI thread
-preuzimanja. Nakon uvoza KML ostaje u postojeÄ‡em trajnom lokalnom spremiÅ¡tu
-korisnika; prikaz/sakrivanje/stilovi ostaju u pregledniku oznaka.
-
-Dvosmjer: u popupu zavrÅ¡ene vlake jasno dugme Odredi/Pomjeri dvosmjer,
-korisnik bira taÄku. Prije nje smjer ide ka poÄetku, poslije ka kraju;
-jedan â†” znak na taÄki. Bez automatskog postavljanja na polovinu.
-Testirana zavrÅ¡ena ruÄna vlaka i krak s taÄkom na 20% odnosno 80%.
-
-Lokalno proÅ¡lo 104 JS grupe i puni workflow browser skup, ukljuÄujuÄ‡i
-3.000 m svojih + 2.400 m koleginih vlaka, 1.360/5.410 taÄaka, CPU1x/4x,
-online/offline i mrtvu/slabu mreÅ¾u. Novi emulator test provjerava GitHub KML
-katalog/preuzimanje/saÄuvani fajl bez produkcijske mreÅ¾e.
-Stvarni javni fajlovi provjereni read-only: KAMIONSKI.PUTEVI.kml 396.070 B,
-SHA256 d3122a19db88f01102f9f6e988116d3ebbf0e8e20fa3452de83a56c60c91cb14;
-GRANICE.kml 13.250.101 B,
-SHA256 758d1847c0f138622fedba50950b507f9981581a1d621372dd2fa5999774200c.
-VeliÄine/digest podudarni objavljenim GitHub assets. FiziÄki Xiaomi nije
-koriÅ¡ten; APK/emulator i objavu joÅ¡ treba potvrditi zavrÅ¡nim CI rezultatom.
-
-ZavrÅ¡na lokalna potvrda: 144 stanja Ã— Å¡irine 320/390/1280 px, 0 slabih
-kontrasta, 0 JS greÅ¡aka i 0 vanjskih upisa. Stvarni javni KML uvoz i offline
-ponovno otvaranje kroz postojeÄ‡i parser/spremiÅ¡te: 83 stavke puteva i
-2.759 stavki granica. Native transport u toj browser provjeri je zamijenjen
-fixture mostom; stvarni javni bajtovi i digest provjereni odvojeno.
-
-
-KonaÄna potvrda isporuke 2.7.5 (10.10.2026): CI 38032665499 uspjeÅ¡an,
-source 70138d2b652899e2358d7db2f00db38e74951439; JS, izolovani SQL,
-puni browser skup, native build, svih 64 web assets i manji APK, 20 Android
-emulator testova (0 failures/errors/skipped), ukljuÄujuÄ‡i novi GitHub KML
-native test, objava i analiza brzine. CI izvjeÅ¡taj dnevnog kontrasta: 144
-stanja, 0 nedostataka i 0 JS greÅ¡aka. Pages 38032665121 uspjeÅ¡an; javni
-index/SW/CSS/local-layer-import/vlaka-direction bajtovi identiÄni izvoru.
-Preuzet javni APK 24.225.984 B (24,23 MB), SHA256
-727fb96bd3664a3377841e017a8eacc84226f2252fba52618878e2cdee2ce7ce.
-Manifest ba.spd.uss.vlake.debug / 2.7.5-debug / code545. Certifikat saÄuvan:
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Release v2.7.5 (408758748), asset app-debug.apk (627272775), uploaded,
-veliÄina i digest podudarni lokalno preuzetom APK-u. Updaterov
-releases?per_page=1 vraÄ‡a v2.7.5 na prvom mjestu.
-APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.5/app-debug.apk
-FiziÄki Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
-
-10.10.2026 â€” 2.7.6 / Android code546: novi projekat Doznaka odmah nudi
-Ucrtaj na karti ili Izaberi iz sloja, prije unosa GJ/odjela. Korisnik je
-izriÄito precizirao: SAMO ruÄni izbor, bez atributa fajla. Klik na opciju
-otvara kartu, pojedinaÄni dodiri biraju/uklanjaju poligone; moguÄ‡e viÅ¡e
-odsjeka. Dodatna Lista poligona nudi geometrijsku povrÅ¡inu, izvor, poloÅ¾aj
-i grupni izbor samo poligona u trenutnom prikazu. Nema Äitanja atributa
-GJ/odjel/odsjek, pretrage po atributima niti automatskog upisa naziva.
-GJ/odjel upisuje korisnik. Grupni izbor ograniÄen na 300, listanje prvih
-80 uz pribliÅ¾avanje karte/ruÄni izbor na karti.
-Union susjednih/preklopljenih poligona i povrÅ¡ina rade u offline workeru
-s postojeÄ‡im lokalnim Turf-om; odvojeni dijelovi ostaju MultiPolygon,
-rupe se Äuvaju. Nema produkcijske SQL promjene ili upisa u Supabase.
-Unos GJ nakon izbora ne briÅ¡e granicu/odjel. Odustajanje od novog crteÅ¾a
-ili izbora vraÄ‡a prethodnu granicu i trajnu vidljivost/stil sloja.
-
-Granice â†’ Prikaz slojeva: prekidaÄi sada upravljaju istim GitHub KML
-grupama kao Preglednik oznaka, prozirnost upravlja preuzetim granicama.
-Izvor saÄuvan u importu i vraÄ‡en pri IDB restore; podrÅ¾ani ranije
-preuzeti GitHub slojevi iz 2.7.5. Stari ugraÄ‘eni prikaz se uklanja kad
-stvarni GitHub sloj postoji, radi uklanjanja duplih linija. Kontrole bez
-preuzetog odgovarajuÄ‡eg sloja su neaktivne, s porukom za preuzimanje.
-Preuzimanje pokrenuto iz novog projekta vraÄ‡a na popunjeni obrazac,
-uz provjeru da nalog nije promijenjen.
-Upute u aplikaciji prepisane za novi redoslijed kreiranja, preuzimanje,
-ruÄni izbor viÅ¡e odsjeka bez atributa i kontrole GitHub slojeva.
-
-Lokalno: svih 105 JS grupa proÅ¡lo. Nova puna browser provjera: stvarni
-KML parser/IDB, skriveni izvor, ruÄni map klik za dva odsjeka uz worker
-union, povrÅ¡ina bez dvostrukog brojanja, udaljen poligon nije ponuÄ‘en,
-bez automatskog unosa GJ/odjela, crtanje prije unosa GJ, cancel i offline
-enqueue bez vanjskih upisa, restart vidljivosti/prozirnosti/boje.
-Dnevni kontrast preglednika proÅ¡ao na 390 i 320 px. Stvarni javni
-GRANICE.kml 13.250.101 B s 2.759 poligona: uvoz, ruÄni izbor, worker,
-povrÅ¡ina 3,24138 ha provjereni lokalno, bez koriÅ¡tenja atributa.
-Å iri browser skup proÅ¡ao (tematske karte, prefs/IDB, manual draw CPU4x,
-Doznaka Å¡est dana/Äetiri Älana/60 pojaseva, GPS kontrole, offline restore,
-server/lageri/print, granica OCR, navigacija, bafer kolege, slaba mreÅ¾a).
-Stari test strelica jednom pao na vremenu klika prije zavrÅ¡etka map
-animacije; ciljano ponovno pokretanje proÅ¡lo bez promjene implementacije.
-Native transport u browser provjerama je izolovan; ne tvrditi da je
-fiziÄki Xiaomi ili produkcijski Supabase testiran. APK/emulator/objavu
-potvrditi zavrÅ¡nim CI rezultatom ispod.
-
-KonaÄna potvrda 2.7.6 (10.10.2026): CI 38035204574 uspjeÅ¡an, izvor
- e31bd9c1751bbfb629263beb59ed01b727758180. Svih 105 JS grupa, izolovani
-SQL, puni browser skup s novim ruÄnim izborom bez atributa, native build,
-65 assets, 20 Android emulator testova (0 failures/errors/skipped), objava
-i analiza brzine proÅ¡li. CI audit: 144 prikaza, 0 slabih kontrasta,
-0 JS greÅ¡aka, 0 vanjskih upisa. Pages 38035204658 uspjeÅ¡an; javni
-index/SW/new-boundary-module/local-layer-import/CSS identiÄni izvoru.
-Preuzet javni APK 24.240.822 B (24,24 MB), SHA256
-5688d9a286cada2ced3feab635c774a53d07412ce2d8027164af6ec67fe057ea;
-manifest ba.spd.uss.vlake.debug / 2.7.6-debug / code546. Certifikat isti:
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Release v2.7.6 (408784579), app-debug.apk (627356388), uploaded;
-veliÄina/digest podudarni. Updater releases?per_page=1 vraÄ‡a v2.7.6 prvo.
-APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.6/app-debug.apk
-FiziÄki Xiaomi i produkcijski Supabase nisu testirani/mijenjani.
-
-## 2.7.7 / Android547 â€” KML, vlastito Älanstvo i IzvjeÅ¡taj odjela
-
-Na zahtjev korisnika: KML/SHP kartice imaju stvarni vektorski pregled,
-pregledniji urednik boje/debljine/isprekidanosti/vidljivosti obruba i boje/
-jaÄine ispune. Granice i Kamionski putevi su jasno razdvojeni. Stvarna
-ispuna 0% ostaje klikabilna na Canvas/SVG; rupe poligona nisu klikabilne.
-Klik daje Äitljive podatke HTML-tabele iz fajla (sigurno kao tekst), povrÅ¡inu/
-duÅ¾inu, opis i ureÄ‘ivanje naziva/stila. Stilovi se pamte putem postojeÄ‡eg
-IDB/local/server mehanizma; nested SHP geometrije se pravilno obraÄ‘uju.
-
-ÄŒlan moÅ¾e ukloniti kolegin projekat sa svog spiska Vlaka i Doznake.
-BriÅ¡e se iskljuÄivo vlastito Älanstvo, uz potvrdu ciljanog reda i provjeru
-RLS praznog odgovora. GreÅ¡ka/izostanak potvrde Äuva spisak i lokalni keÅ¡.
-Snimanje/slanje i neposlani podaci blokiraju izlazak radi oÄuvanja rada.
-Projekat i svi timski podaci ostaju vlasniku i drugim Älanovima. Povratak
-traÅ¾i da vlasnik ponovo doda Älana. PostojeÄ‡e DELETE-own-member politike
-iz 20260713_dijeljenje_popravka.sql podrÅ¾avaju ovo; nova SQL migracija se
-ne uvodi i produkcijska baza nije mijenjana.
-
-Poligon odjela i teren uklonjeni iz Projekat panela. Meni â†’ IzvjeÅ¡taj
-odjela je odvojena sekcija: nacrt granice sa undo/cancel/validacijom ili
-ruÄni izbor viÅ¡e odsjeka iz preuzetog sloja Granice odjela. Ne koristi
-atribute za automatski izbor/naziv; Doznaka obrazac se ne mijenja. Stari
-poligon aktivnog projekta moÅ¾e se preuzeti u novi izvjeÅ¡taj; stari zapisi
-ostaju za kompatibilnost sa Å¡tampom. Shared union Worker i izbor privremeno
-prikazuju skriveni izvor pa vrate prethodni stil/vidljivost na zavrÅ¡etku.
-
-DEM report Worker raÄuna Å¡est razreda iskljuÄivo u procentima: 0â€“<10,
-10â€“<20, 20â€“<30, 30â€“<40, 40â€“<50, â‰¥50; povrÅ¡ina u ha i udio cijelog poligona;
-Äetiri ekspozicije S/I/J/Z; raspon/prosjek visina, prosjek/maksimum nagiba,
-pokrivenost uzorcima. WebMercator ground-scale, centralne derivacije sa
-susjednim ploÄicama, Äetiri poduzorka rubnih Ä‡elija, rupe/MultiPolygon.
-NedostajuÄ‡i uzorci nisu ravni teren. DEM je Mapzen/EU-DEM procjena oko 30 m
-na USK, ne geodetsko mjerenje. Z12 se po potrebi smanjuje za velika podruÄja;
-ograniÄenje 160.000 Ä‡elija / 81 ploÄica, tri paralelna dohvata, obrada van UI niti.
-Karta: obojeni razredi, linije meÄ‘u razredima, izbor ekspozicije/samo granice,
-prikaÅ¾i/sakrij. IzraÄun i izbori se Äuvaju lokalno po korisniku i vraÄ‡aju
-pri pokretanju; veÄ‡ izraÄunat rezultat radi bez mreÅ¾e, novi izraÄun radi
-iz DEM keÅ¡a ili online. Prekid/odjava terminiraju Worker, zavrÅ¡avaju Promise
-bez starog tajmera koji bi ubio novu obradu. Kvota ne briÅ¡e staru granicu.
-
-Zadnja prijava korisnika: â€AbortError: Failed to fetchâ€ pogreÅ¡no prikazivano
-kao â€Korisnik nije pronaÄ‘enâ€. Lookup mreÅ¾na/timeout greÅ¡ka sada daje jasnu
-poruku o vezi i ponovnom pokuÅ¡aju, DB greÅ¡ka zasebnu serversku poruku;
-â€Korisnik nije pronaÄ‘enâ€ samo kad RPC uspije i ne vrati email. RuÄno traÅ¾ena
-prijava smije probati vezu poslije izmjerenog slabog signala. Nema promjene
-provjere PIN-a, prava pristupa niti offline bypass-a nakon izriÄite odjave.
-
-Lokalno: KML editor full-app (Canvas/SVG, rupa, HTML-info, putevi/stilovi,
-6 prikaza/kontrast, IDB restart, Vlake/Doznaka own-membership/RLS/socket/
-unsent guard) proÅ¡ao. Novi report full-app: stvarni Terrarium PNG dekoder,
-worker union i DEM worker, viÅ¡estruki ruÄni izbor bez Doznaka mutacije,
-map overlay/linije, 6 prikaza, IDB restart, offline cache, cancel novog
-Workera, quota oÄuvanje i izdvojeni nalozi proÅ¡li. DEM core test provjerava
-pragove, Äetiri smjera, povrÅ¡ine/rupe/disjoint/nedostajuÄ‡e uzorke i visine.
-Auth core test razlikuje fetch/Abort/timeout, missing user, RLS, pogreÅ¡an PIN,
-ruÄni weak-signal retry i siguran keÅ¡. Audit 144 prikaza: 0 kontrastnih/JS/upis
-greÅ¡aka; prefs/KML/SHP IDB, Doznaka selection276 i legacy terrain222 proÅ¡li.
-67 assets ukljuÄuju novi report i DEM Worker. Upute aÅ¾urirane za sve tokove.
-APK/emulator/objava Ä‡e biti potvrÄ‘eni rezultatima CI-ja ispod; fiziÄki Xiaomi
-Redmi Note 13 Pro i produkcijski Supabase nisu testirani/mijenjani.
-ZavrÅ¡na provjera izvjeÅ¡taja: DEM pane je iznad KML overlay-a (445), pa
-izraÄun ostaje vidljiv i uz punu KML ispunu; pointer-events:none ostavlja
-klik izvornim geometrijama. Crtanje privremeno sakrije GPS alatnu traku i
-tabove, a cancel/save vrate prethodni prikaz; novi puni browser test proÅ¡ao.
-Svih 107 JS grupa i sintaksa pet inline blokova/static JS proÅ¡li lokalno.
-CI 38051624882 stao prije APK-a na zastarjelom device-workflow273 assertu
-koji je traÅ¾io project-polygon na dnu Projekta. Taj assert i raspored u
-project-vlake220 usklaÄ‘eni su s korisnikovim premjeÅ¡tanjem u Meni; oba puna
-ciljana testa proÅ¡la lokalno. App kod je ostao isti. ZavrÅ¡ni CI ponoviti.
-CI 38052011809 proÅ¡ao JS/SQL/browser i build/67 SHA assets, ali Android
-20 testova: 19 proÅ¡lo, 1 pao na zavrÅ¡noj obavijesti preuzimanja. MBTiles je
-veÄ‡ instaliran, stvarna sliÄica prikazana; obavijest ostala â€ÄŒekam internetâ€.
-Android stopForeground(DETACH) asinkrono ponovo objavljuje posljednji
-ServiceRecord foreground snapshot. Sada prije detach-a startForeground
-prima istu zavrÅ¡nu obavijest, pa odgoÄ‘eno uklanjanje flag-a ne moÅ¾e vratiti
-stari napredak. PostojeÄ‡i puni test i dalje traÅ¾i zavrÅ¡ni tekst, ugaÅ¡en servis,
-bez ongoing flag-a, offline tile/reload/delete; kriteriji nisu oslabljeni.
-ZavrÅ¡na isporuka v2.7.7: CI 38052922997, izvor
- e3828ddc77a78914d9eb877246d4f5fceadeb418; svi koraci uspjeÅ¡ni, ukljuÄujuÄ‡i
-107 JS grupa, izolovani SQL, browser provjere, 20 Android API34 emulator
- testova (0 failure/error/skipped), 67 web assets SHA i analizu brzine.
-Pages 38052922905 uspjeÅ¡an. Javni Release v2.7.7 / app-debug.apk,
-24.280.851 B, SHA256
-502a2a0e0ca20f69e340373e224fcf245937d9ebbe494499314423534240c3de.
-Preuzeti javni APK: ba.spd.uss.vlake.debug, 2.7.7-debug/code547, svih67
-asset hash-eva identiÄno izvoru. Potpis kao prethodni APK:
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-Supabase produkcija i fiziÄki Xiaomi nisu mijenjani/testirani.
-Korisnik zatim traÅ¾i iskljuÄivo vizuelni PLAN ikona: Meni/Karta/Projekat/
-Vlake i Snimi vlaku/Tragovi/Lokacija, plus sliÄice Menija. Prijedlog tek
-poslije APK isporuke; ikone NE mijenjati prije korisnikovog izbora.
-
-
-## 2026-10-10 â€” 2.7.8 / Android 548: odobrene ikone i rad vodeÄ‡eg projektanta
-
-Korisnik je odobrio sve slike prijedloga navigacije/Menija isporuÄene uz 2.7.7.
-Implementirane su lokalne SVG ikone gornjeg/donjeg bara i 24 stavke Menija,
-sa Å¡est razliÄitih kartografskih sliÄica. Kompaktni barovi, zelena aktivna
-kartica i Äitljiv dnevni/tamni prikaz. SVG i CSS su u SW precache-u i Android
-manifestu assets (69 fajlova); ne zahtijevaju internet. DinamiÄko dugme Dnevni
-mod zadrÅ¾ava istu SVG ikonu poslije promjene prikaza. Launcher logo nije mijenjan.
-
-Korisnik je izriÄito potvrdio da vodeÄ‡i radi svoje projekte i projekte u koje
-je dodan, kao ostali projektanti. `isReadOnly()` viÅ¡e ne blokira vodeÄ‡eg,
-Projekat/Vlake/Doznaka su vidljivi, uÄitavanje i offline keÅ¡ koriste vlasniÅ¡tvo
-ili Älanstvo. VodeÄ‡i se moÅ¾e dodati kao kolega i u Vlake i u Doznaku.
-`Meni â†’ IzvjeÅ¡taj Å¡umarije` otvara odvojene RPC agregate projekata vlaka i
-doznaka njegove Å¡umarije; iz njega se otvara sedmiÄni/mjeseÄni uÄinak.
-IzvjeÅ¡taj ne prepisuje `_projekti`, aktivni ID ni radni keÅ¡. TuÄ‘i nadzorni
-projekat nema Aktiviraj. Zakasnjeli RPC se zanemaruje nakon promjene naloga,
-Å¡umarije ili ponovnog otvaranja obiÄnog spiska. Automatsko otvaranje nadzora
-pri prijavi je uklonjeno. Admin i Å PD terenski nalog zadrÅ¾avaju svoje uloge.
-Upute dopunjene za vodeÄ‡eg. Produkcijski Supabase i RLS nisu mijenjani.
-
-Lokalno: 107 JS skupova proÅ¡lo, pet inline JS blokova sintaksno ispravno;
-`navigation-design-278.py`: lokalni SVG stvarno nacrtani, 12 mobilnih/tablet
-prikaza 320/390/800 px, dnevni kontrast, vlastiti/dijeljeni projekti, izdvojeni
-nadzor, odbacivanje druge Å¡umarije i starih nadzornih projekata iz offline
-keÅ¡a, promjena Äetiri uloge, zakasnjeli RPC. `day-all-panels-275.py`:
-144 prikaza, nula slabih kontrasta. Device workflow, KML editor i IzvjeÅ¡taj
-odjela proÅ¡li s pravim Leaflet/Canvas/IDB i laÅ¾nim servisima; nula vanjskih
-upisa i JS greÅ¡aka. APK build/Android emulator i objava slijede kroz CI;
-pravi Xiaomi i produkcijska baza nisu testirani. Python geo pytest se nije
-pokrenuo jer pytest nije instaliran; geo kod nije mijenjan.
-
-Isporuka 2.7.8 zavrÅ¡ena: source `e4f48df5cdb2eb7329f7e867ec9c856100a49c14`,
-tree `2a042b45568d1d9419bb782961ca9c8112dfda65`, CI `38056881156` SUCCESS,
-Pages `38056880850` SUCCESS. Android emulator: 20 testova, 0 greÅ¡aka,
-0 padova i 0 preskoÄenih. Preuzet javni release APK: 24.305.608 B,
-SHA-256 `cfc146b2578742d3841b899259db99d045ba4ff9ca2bd47a9d9907c8857a0d06`.
-Binary manifest potvrÄ‘en: `ba.spd.uss.vlake.debug`, `2.7.8-debug`, code 548.
-Certifikat ostaje `11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`;
-69 assets u stvarnom APK-u odgovara source-u. Javni SVG na Pages identiÄan
-lokalnom. CI JSON potvrÄ‘uje nove ikone/Äetiri uloge/12 prikaza, KML editor,
-izvjeÅ¡taj odjela i 144 dnevna prikaza bez kontrastnih greÅ¡aka; nula JS greÅ¡aka
-ili vanjskih upisa. FiziÄki Xiaomi i produkcijska baza nisu testirani.
-Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.8
-APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.8/app-debug.apk
-AÅ¾uriranje kroz Meni â†’ AÅ¾uriraj aplikaciju; updater koristi releases listu,
-a ne /latest, jer su APK izdanja oznaÄena kao prerelease.
-
-## 2026-10-10 â€” 2.7.9 / Android 549: granice samo za poligon i izvjeÅ¡taj na karti
-
-Korisnik traÅ¾i checkbox Samo za poligon za uÄitane Granice odjela. Dodan
-u Podloge i slojevi â†’ Granice i u stil svakog prepoznatog fajla granica s
-poligonima (lokalni/server/GitHub). Postavka je privatna, Äuva se uz stil i
-lokalni registar, ne mijenja originalnu geometriju ni uobiÄajeni `vis` izbor.
-Granice se privremeno prikazuju tokom ruÄnog crtanja ili izbora odsjeka za
-Doznaku/IzvjeÅ¡taj; potvrda i odustajanje ponovo ih sakrivaju. IskljuÄivanje
-opcije vraÄ‡a obiÄnu vidljivost. Kamionski putevi zadrÅ¾avaju svoj prikaz.
-KML klik tokom crtanja granice Doznake dodaje jednu taÄku umjesto info popupa.
-
-IzvjeÅ¡taj odjela ima klikabilan poligon i jasnije kontrole prikaza, sakrivanja
-te potvrÄ‘enog trajnog brisanja. Raster/linije ostaju bez presretanja klikova;
-hit poligon koristi jedan ponovo koriÅ¡ten SVG renderer ispod radnih slojeva.
-Proximity izbor vlaka i mjerenja ima prednost nad izvjeÅ¡tajem. Izbor/crtanje
-odsjeka privremeno iskljuÄuje hit poligon izvjeÅ¡taja. Transparentna ispuna,
-rupe i viÅ¡e odsjeka zadrÅ¾avaju geometriju, DEM rezultat i povrÅ¡ine.
-Legenda nagiba/ekspozicije: udio povrÅ¡ine i iste boje kao raster, povlaÄenje
-naziva, pomjeranje tastaturom, minimiziranje/proÅ¡irivanje, gaÅ¡enje i ponovno
-ukljuÄivanje u izvjeÅ¡taju. PoloÅ¾aj i izbori pamte se po nalogu; kartica je
-ograniÄena vidljivim dijelom karte iznad donjeg bara. Upute dopunjene.
-
-Lokalni puni browser test izvjeÅ¡taja proÅ¡iren stvarnim klikovima na SVG/KML,
-povlaÄenjem legende bez pomjeranja karte, vlaka unutar izvjeÅ¡taja, Å¡est
-prikaza 320/390/800 px u oba moda, izbor/odustajanje/ruÄno crtanje Doznake,
-restart svih izbora/rezultata, trajno brisanje bez brisanja KML-a i DEM
-offline/worker prekid. Nema JS greÅ¡aka ni vanjskih upisa. KML editor i izbor
-odsjeka proÅ¡li; 144 dnevna prikaza bez slabog kontrasta, navigacija i Äetiri
-uloge proÅ¡li. Pet inline blokova sintaksno ispravno; 69 assets pripremljeno.
-Produkcijska baza nije mijenjana; fiziÄki Xiaomi nije testiran. APK/CI
-isporuka i provjera javnog fajla slijede.
-
-Prvi CI 38071338797 stao u novom browser testu ruÄnog crtanja Doznake:
-pozicija poznatog KML poligona nakon restarta bila je izvan vidljive karte,
-pa stvarni klik nije mogao biti izvrÅ¡en. Test sada Äeka vidljiv banner,
-postavlja kartu na fixture odjel i ponovo raÄuna piksel; stvarni klik i
-assert jedne taÄke ostaju. Funkcionalni kod nije mijenjan; APK nije bio
-objavljen. Ponovljeni lokalni puni test proÅ¡ao. CI se ponavlja.
-Ponovljeni CI 38071856159 proÅ¡ao puni novi izvjeÅ¡taj, izbor odsjeka,
-KML editor i Äetiri uloge. Stao kasnije u historijskom izdvojenom fixture-u
-menu-tools: KML popup sada Äita stanje crtanja granice Doznake, a fixture
-nije uÄitavao taj modul. Dodani su window defaulti null/false, tako da ne
-prave duplu let deklaraciju u testovima koji uvezu stvarni Doznaka kod.
-Fixture dodatno biljeÅ¾i stack JS greÅ¡ke. Produkcijski kod nije mijenjan.
-Menu, kolegine vlake/server, oznake, projekti/teren, referentna karta,
-strelice, Doznaka restore/GPS kontrole i 5.400 m online/offline CPU1x/4x
-proÅ¡li lokalno s dopunjenim fixture-om. APK joÅ¡ nije objavljen; puni CI
-se ponavlja s istim funkcionalnim izvorom.
-
-Isporuka 2.7.9 zavrÅ¡ena: source `33600f58f17f59b022783088a20e162dbae4c1ea`,
-tree `741a8809bf551cdf5ed729b101466e89f53847fd`, CI `38072592178` SUCCESS,
-Pages `38072592014` SUCCESS. Svi JS/SQL/browser/build/Android koraci proÅ¡li.
-Preuzet javni release APK: 24.317.508 B, SHA-256
-`ec78f270c020b76b84d47893e88b246da8aa1c1b95b9a75077fc1b7e28138df9`.
-Binary manifest: `ba.spd.uss.vlake.debug`, `2.7.9-debug`, code 549.
-Potpis ostaje `11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d`.
-Svih 69 web assets u preuzetom APK-u identiÄno je izvoru. Preuzet JUnit:
-20 Android testova, 0 failure/error/skipped. CI JSON potvrÄ‘uje novi izvjeÅ¡taj
-(279), KML editor (277), Äetiri uloge/navigaciju (278) i svih 144 dnevna
-prikaza (275), bez JS greÅ¡aka/slabog kontrasta/vanjskih upisa. Lokalni
-artefakti su u outputs/279-apk i outputs/279-ci; ne pratiti ih Gitom.
-Produkcijska baza nije mijenjana; fiziÄki Xiaomi nije testiran.
-Release: https://github.com/pogonboskrupa/US-SUME/releases/tag/v2.7.9
-APK: https://github.com/pogonboskrupa/US-SUME/releases/download/v2.7.9/app-debug.apk
-AÅ¾uriranje kroz Meni â†’ AÅ¾uriraj aplikaciju; javni APK dostupan bez prijave.
-
-
-## 2026-10-10 â€” 2.8.0 / code 550: stil vlaka u Meniju i trajna biblioteka ureÄ‘aja
-
-Korisnik traÅ¾i da Granice odjela i Kamionski putevi ostanu na ureÄ‘aju nakon
-jednog preuzimanja, uz postavke/vidljivost, te novi Meni â†’ Stil i boja vlaka
-odmah ispod Stil linija. Boje i smjerovi premjeÅ¡teni iz Projekta u novi
-modal. Naziv: Smjer izvlaÄenja DS (drvni sortimenti). ZajedniÄki stil po
-nalogu za postojeÄ‡e/buduÄ‡e dostupne projekte, poseban odjel/projekat i
-povratak na zajedniÄki. Stari posebni stilovi ostaju do eksplicitnog
-UjednaÄi (potvrda). UreÄ‘ivanje prikaza drugog projekta ne aktivira ga;
-ruÄni dvosmjer ureÄ‘uje se tek u aktivnom projektu. Geometrija, server boja,
-GPS i postojeÄ‡i pojedinaÄni smjerovi nisu mijenjani. Pregled linije/kraka,
-outline i strelice, dnevni/tamni stil, kontrola za zatvaranje pri skrolanju.
-
-PotvrÄ‘en bug: _wipeAllLocalUserData pri promjeni naloga uklanjao je cijeli
-_LOCAL_KML_KEY. Sada javni github-kml-* registri/content reference i stil/
-vis/onlyPolygon ostaju na ureÄ‘aju. Privatni KML, GeoJSON, .gpkg registri,
-rute i aktivni projekat/polja/dnevnik idu u potvrÄ‘enu postojeÄ‡u arhivu
-naloga PRIJE ÄiÅ¡Ä‡enja. IDB .gpkg sadrÅ¾aj se viÅ¡e ne briÅ¡e pri promjeni
-naloga. Povratak vlasnika spaja privatni registar s aktuelnim javnim,
-Äuva oba sloja pri istoimenom konfliktu, vraÄ‡a njegov aktivni projekat.
-Rasterske karte/favoriti/ureÄ‘ajne postavke veÄ‡ preÅ¾ivljavaju odjavu i
-promjenu naloga; njihovo eksplicitno brisanje ostaje. Nema produkcijske
-migracije. Korisnik je ranije izriÄito odobrio build/isporuku aÅ¾uriranja;
-novi zahtjevi su nastavak iste autorizovane implementacije.
-
-Lokalni testovi: svi postojeÄ‡i JS skupovi proÅ¡li, projektne boje proÅ¡irene
-na 10 semantiÄkih provjera. Puni novi style-library-280: zajedniÄki i
-posebni stilovi, svoje/kolegine vlake, 12 uskih/tablet dnevnih/tamnih
-prikaza s kontrastom i skrolanjem, stvarni IDB KML restart, nalog A â†’ B â†’ A,
-javni KML bez ponovnog preuzimanja, izolacija/vraÄ‡anje liÄnog KML i aktivnog
-projekta, zajedniÄki stil bez brisanja pojedinaÄnog smjera. SaÄuvani su
-favoriti i opÄ‡i stil. ProÅ¡li device-workflow-273, preferences-266,
-project-vlake-220, project-arrows-226 i navigation-design-278. CI ukljuÄuje
-novi puni browser test i outputs/280. Upute unutar app aÅ¾urirane.
-FiziÄki Xiaomi i produkcijski Supabase nisu testirani. Build/release dokaz
-slijedi nakon CI; ne proglaÅ¡avati APK objavljenim prije provjere.
-
-Dopuna provjere: posebni novi stilovi Äuvaju samo izmijenjene osobine, pa
-odjel s posebnom bojom i dalje nasljeÄ‘uje zajedniÄku debljinu linije i
-neizmijenjene postavke strelica. Puni test to izriÄito potvrÄ‘uje. Ponovljeni
-komplet JS i inline sintaksa proÅ¡li. Dnevni audit: 144 prikaza, 0 slabog
-kontrasta; KML editor pun test proÅ¡ao. Novi modal koristi 12 PNG prikaza,
-bez vanjskih upisa. Tok odjave u novom testu stvarno potvrÄ‘uje Odjavi se
-bez slanja kada postoje neposlane stavke; nije zaobiÄ‘en korisniÄki dijalog.
-
-
-Isporuka potvrÄ‘ena 2026-10-10 18:32 UTC: izvor aa9f8225dbf857b87897f3334f0a77e711c774aa,
-stablo 7c7d439f1afd325a93a2c5b81ddd1dc33dc7ebf9. CI 38074429230, pokuÅ¡aj 2,
-job 114281231551 SUCCESS: svi JS/SQL/browser koraci, svih 20 Android testova
-bez greÅ¡ke i preskakanja, analiza brzine i javni release. Prvi pokuÅ¡aj:
-ExplorerNavigationTest eval/until na liniji 83 nije dobio JS callback u 5 s;
-log prikazuje spor OpenGL render i preskoÄene frameove na hladnom emulatoru.
-Ponovljeni ISTI kod i ISTI testovi proÅ¡li su (Explorer 17.688 s). Nije
-mijenjan timeout, proizvodni Explorer niti preskakan test. ZIP + metadata
-Äetiri izvjeÅ¡taja prvog pokuÅ¡aja saÄuvani i hash-provjereni u
-outputs/280-first-attempt prije uklanjanja njihovih CI kopija kako bi
-upload-artifact v4 mogao ponovo koristiti imena. Ponavljanje poslije
-uoÄenog pada, ne dodatno nepotrebno proÅ¡irenje testova.
-Pages 38074428633 SUCCESS; javni index i SW pokazuju 2.8.0. Release v2.8.0,
-asset 628692349, javno preuzet APK 24,331,708 B:
-https://github.com/pogonboskrupa/US-SUME/releases/download/v2.8.0/app-debug.apk
-SHA256 59f75e0828867b3e4afdf101cbccb1fcf7e8fe578ecc6a40b2eb3ec4072b87bb.
-Provjereno svih 69 APK web resursa naspram radnog stabla; binarni manifest
-ba.spd.uss.vlake.debug / code550 / 2.8.0-debug; stabilni certifikat
-11fcd020c703053324ae26baf7a8207373711341f503277a90ec08a8468f286d.
-API releases?per_page=1 vraÄ‡a v2.8.0 s APK-om: postojeÄ‡i Meni â†’ AÅ¾uriraj
-aplikaciju moÅ¾e pronaÄ‡i novu verziju. Bez produkcijskih DB upisa i bez
-fiziÄkog Xiaomi mjerenja. Android dokaz outputs/280-android-passed;
-saÅ¾etak outputs/280/release-proof.json. Ova dopuna mijenja samo dokumentaciju.
-
-## 2026-10-10 â€” 2.8.1 / code 551: izohipsna projekcija trajanja doznake
-
-Doznaka â†’ odabrani odjel â†’ Projekcija trajanja doznake. Å irine 10/15/20 m
-ili vlastita 5â€“100 m, 1â€“12 planiranih projektanata s nazivima/bojama,
-1â€“30 dnevnih prolaza po projektantu. Korisnik opisuje povratak najviÅ¡eg
-po svom prethodnom pojasu, ostali prelaze iznad njega uz kruÅ¾ni red. Prvi
-prolaz daje N novih pojaseva, sljedeÄ‡i Nâˆ’1; praÄ‡enje prethodnog troÅ¡i prolaz
-ali ne dodaje novu povrÅ¡inu. Za 2 i 3 provjeren taÄan red. Checkbox dopuÅ¡ta
-alternativu bez praÄ‡enja. Korisnik naknadno izriÄito potvrÄ‘uje da se dnevni broj raÄuna po projektantu.
-Opis smjene/praÄ‡enja vlastitog prethodnog pojasa ostaje izriÄit UI model.
-Procjena cijelog odjela, bez oduzimanja ranije odraÄ‘enih GPS pojaseva;
-ne ukljuÄuje automatski dolazak, vremenske prilike ili neradne dane.
-
-Izbor koristi granicu projekta ili ruÄno viÅ¡e KML odsjeka iz Granica bez
-atributa/izmjene stvarnog projekta. DEM Terrarium zoom13, cache-first,
-3 istovremena Äitanja, do81 ploÄice. Turf isobands/isolines u Workeru,
-obrezivanje na poligon, rupe i odvojeni odsjeci; od niÅ¾eg dijela naviÅ¡e.
-Razmak pribliÅ¾no po povrÅ¡ini terena, DEM oko30 m: ne garantuje stvarni
-razmak 10/15 m na promjenjivim padinama. Ovo je jasno oznaÄeno u prikazu.
-NedostajuÄ‡i DEM ne postaje laÅ¾ni ravan teren; stvarno ravan DEM eksplicitno
-koristi duÅ¾u stranu. OgraniÄena mreÅ¾a do30k Ävorova/1200 visinskih pojaseva,
-60s Worker deadline, prekid/generation zaÅ¡tita pri promjeni odjela/naloga.
-Centimetarski ispravak Turf lineSplit zaokruÅ¾enja zadrÅ¾ava presjek unutar
-izvorne granice; ne pomjera velike greÅ¡ke. PovrÅ¡ina mora biti obuhvaÄ‡ena
-unutar0.3%, inaÄe odbija izraÄun. Rezultat nije potvrda terenskog uÄinka.
-
-Lokalni per-user/project prefs i IDB rezultat; izbor dana, boje/nazivi,
-vidljivost i minimiziranje legende ostaju nakon restarta. Potpis geometrije
-+ parametara odbija zastarjeli plan. Poseban Canvas sloj ne presreÄ‡e KML/GPS
-klikove. Legenda, raspored dana i red od niÅ¾eg prema viÅ¡em; novi puni i
-ponovljeni isprekidani tragovi. Raspored oznaka na karti izbjegava preklop
-na uskom telefonu i ponovo se raÄuna nakon zooma. Ne upisuje GPS tragove,
-zone, server ili stvarnu obraÄ‘enu povrÅ¡inu. Logout Äisti samo radnu memoriju.
-
-Lokalno: svih JS testova i Å¡estodnevna simulacija proÅ¡li; 7 novih geometrijskih
-provjera ravnine, krivudavih izohipsi, razmaka po terenu, rupa/MultiPolygon,
-potpune/nepreklopljene povrÅ¡ine, 1/2/3 inÅ¾injera/rotacije i loÅ¡ih parametara.
-Puni browser stvarni DEM PNGâ†’dekoderâ†’Workerâ†’Leafletâ†’IDB: 6 modal prikaza s
-kontrastom/bez horizontalnog preljeva, ruÄni KML izbor/cancel, offline cached
-ponovni izraÄun, restart/boje/sakrivanje/dan, Worker cancel, izdvajanje odjela
-i naloga, bez izmjene stvarne doznake i bez vanjskih upisa. GPS controls267
-(8 rasporeda) i project-boundary276 proÅ¡li. Inline JS sintaksa proÅ¡la.
-72 APK web resources u manifestu/SW. Upute Doznake u aplikaciji aÅ¾urirane.
-FiziÄki Xiaomi i produkcijski Supabase nisu testirani. Ranije izriÄito
-odobrena isporuka nove verzije ostaje; APK/release dokaz tek nakon CI.
-
-Dopuna prije isporuke: prvi CI 38077732898 / 114288117645 za izvor78b65f9
-proÅ¡ao JS/SQL i postojeÄ‡e browser provjere do novog plana, ali novi audit
-otkrio horizontalni preljev na prvom uskom prikazu. BrojÄani inputi nisu
-imali eksplicitni width/min-width/box-sizing kao tekstualni inputi; stariji
-Chromium140 (Playwright1.55) zadrÅ¾ava drugaÄiju unutraÅ¡nju Å¡irinu od lokalnog
-151. Novi CSS postavlja dimenzije/tokens za brojeve i select, male kontrole
-PrikaÅ¾i dan slaÅ¾e vertikalno. Audit ostaje strog, dodana dijagnostika.
-SaÄuvan i SHA-provjeren CI UI ZIP u outputs/281-first-attempt/ui.zip
-(4ca5acdf095b76a773e6eb6efefe1dec3bf2f6022424aaca8a29c841d93e64a6).
-Nije objavljen APK iz neuspjeÅ¡nog pokuÅ¡aja; verzija ostaje2.8.1 za popravljeni
-izvor prije prve isporuke. Nema zaobilaÅ¾enja provjere ili proÅ¡irenja tolerancije.
-
-
-## 2026-10-11 â€” dopuna istog 2.8.1 prije prve APK isporuke
-
-Korisnik traÅ¾i zavrÅ¡etak svih promptova prije objave: sve postavke ostaju
-nakon restarta, fotografije se ne smiju vratiti iz Sakrij u Prikazano;
-PoÅ¡alji na server prvi u Meniju s posebnom bojom. Potvrdio dnevni broj
-pojaseva po projektantu. PotvrÄ‘en stvarni bug _updMapScale: prelazak sa
->1:25000 na manju razmjeru dodavao je SVE foto markere bez _tvPhotoVisible.
-Sada zoom poÅ¡tuje i grupnu i pojedinaÄnu trajnu vidljivost za vlastite i
-primljene fotografije. Map-visibility apply i stvaranje/uÄitavanje markera
-poÅ¡tuju privremeno skrivanje zbog razmjere, bez izmjene postavke. PostojeÄ‡i
-per-user pref kljuÄ ostaje, nema migracije ili gubitka ranijih izbora.
-Server prije Å PD preÄica i ostalih sekcija, plava karta s jakim kontrastom
-u oba moda. Klik i dalje otvara postojeÄ‡i server, bez automatskog slanja.
-
-Dodane dvije semantiÄke provjere u restore-doznaka-227: zoom ciklusi ne
-vraÄ‡aju skrivene vlastite/primljene slike, odloÅ¾eni marker poÅ¡tuje pref i
-razmjeru. Novi puni photo-settings-281: vlastite2/primljena1 fotografija,
-stvarni library Sakrij, grupni i pojedinaÄni izbori, 5 zoom ciklusa, dva
-restarta, shared refresh, svih5 grupa ostaje skriveno; prvih6 Menija s
-bojom/kontrastom i stvarnim otvaranjem servera, bez vanjskih upisa. Lokalno
-proÅ¡li doznaka-plan-281, style-library-280 (karte/favoriti/stilovi/aktivni
-projekat i Aâ†’Bâ†’A), preferences-266 (KML/SHP IDB stilovi/bafer/podtab),
-cijeli JS skup i inline sintaksa. BrojÄani unos/select planiranja imaju
-izriÄite dimenzije; osvjeÅ¾enje plana ne prepisuje fokusirani unos/naziv.
-Prvi CI pad zadrÅ¾an kao dokaz; popravljeni izvor ima novo stablo i novi CI,
-bez promjene verzije prije prve isporuke. Lokalni Chromium140 ne prima
-CDP tekstualni unos Äak ni u praznom probnom inputu, zato se ispravnost
-interakcije potvrÄ‘uje u normalnom Chromium151 i u stvarnom CI140; ne
-proglaÅ¡avati izolovanu DOM/layout dijagnostiku punim interakcijskim testom.
-
-CI dopuna: 38117135633 / 114404165420 za ba9ab3c proÅ¡ao oba nova puna
-browser testa (plan i fotografije), uski kontrast/layout i sve starije
-provjere do server-map-218. Taj izolovani fixture izvlaÄi _buildFotoMarker
-bez globalnog scale stanja, pa je novi direktni _prevHideFT uslov bacio
-ReferenceError. Marker sada koristi isti typeof fallback kao map-visibility:
-bez inicijaliziranog stanja ponaÅ¡a se kao prije; stvarna karta i dalje
-poÅ¡tuje razmjeru i korisnikovo skrivanje. Test nije preskoÄen ili ublaÅ¾en.
-
-### 2026-10-11 â€” zavrÅ¡na provjera 2.8.1: format testnog traga
-TreÄ‡i CI pokuÅ¡aj `38117617025` za source `08fa3a91d9e64c834450828aa1bcde53983e0ab4` stao je u postojeÄ‡em dnevnom audit testu pri otvaranju Å¡tampe: Leaflet `_projectLatlngs` Äitao je nedostajuÄ‡i element. Pregled fixturea pokazao je da je `_tragRegistry` dobivao objekte `{la,lo}` pa `{lat,lng}`, dok stvarni `_tragRegAddLayer` Äita nizove `[lat,lng,...]`. Zavisno od trenutka obnove slojeva ti pogreÅ¡ni podaci mogli su ostaviti neispravnu poliliniju. Lokalni audit sa istim sourceom sluÄajno je proÅ¡ao svih 144 prikaza, Å¡to potvrÄ‘uje da jedan prolaz ne uklanja greÅ¡ku u fixtureu. Fixture je ispravljen u oba mjesta na pravi niz koordinata; mjerenja zadrÅ¾avaju svoje ispravne objekte. Nije mijenjan renderer aplikacije niti oslabljen audit. APK 2.8.1 joÅ¡ nije objavljen; verzija/code ostaju 2.8.1/551 do uspjeÅ¡nog zajedniÄkog builda.
-
-### 2026-10-11 â€” Doznaka GPS prioritet u 2.8.1
-CI `38118232752` za `23b002474b2e5365d141502ed2a12b622f500749` proÅ¡ao je novi plan, fotografije, puni dnevni audit, print/worker, offline/KML/server provjere i dosadaÅ¡nji stil, ali je postojeÄ‡i test Doznaka obnove odbio novi redoslijed: prva `.sec` bila je plan umjesto GPS-a. ZadrÅ¾an je provjereni terenski red: GPS snimanje prvo, nova projekcija odmah ispod GPS sekcije. Nije mijenjan stari test da bi prihvatio izmijenjeni prioritet snimanja. APK joÅ¡ nije objavljen, zato se dovrÅ¡ava ista 2.8.1/551.
-
-### 2026-10-11 â€” foto test Äeka stvarnu obnovu
-CI `38118750942` za `d9572966d1a38e210286ca7003ba8392bf4946eb` proÅ¡ao je 144 dnevna prikaza i novi DEM plan, ali je foto test povremeno pao na poÄetnom broju/vidljivosti fotografija. Test je pogreÅ¡no tretirao `_startupRestore._done` kao kraj: kod ga postavlja prije `setTimeout(...,80)` u kojem `_restoreFotos()` sinhrono uÄitava saÄuvane redove. Ako fixture prije tog koraka doda i saÄuva dvije fotografije, obnova ih ponovo doda. Test sada posmatra stvarni `_restoreFotos` poziv putem DOMContentLoaded omotaÄa koji izvrÅ¡ava original, te Äeka taj zavrÅ¡etak prije seed-a i nakon svakog reload-a. Nijedan restore nije preskoÄen, nema proizvoljnog sleep-a, a sve provjere sakrivanja/zoom-a/primanja ostaju. Ovo mijenja samo testnu sinhronizaciju; produkcijski foto kod nije mijenjan ovim korakom.
-
-### 2026-10-11 â€” provjera Enter otvaranja kolegine vlake
-CI `38119128475` za `aac0cbf5ad6971bd062c6d854331eba186c2e8e0` stao je prije novih testova na postojeÄ‡em `audit-parts-271.py`: trenutni `is_visible()` nakon odvojenih `focus()` i globalnog `keyboard.press('Enter')` nije vidio popup. Isti app source je u prethodnim CI pokuÅ¡ajima prolazio taj test; lokalni puni CPU4x audit sa ovom verzijom takoÄ‘e je proÅ¡ao neizmijenjen. Aplikacijski kod nije promijenjen zbog ovog nalaza. Test sada pritiska Enter na ciljanom locatoru reda i koristi Playwright `expect(...).to_be_visible()` za Äekanje stvarnog prikaza, umjesto trenutnog upita bez Äekanja. Provjere imena kolege, stvarnog bafera, skidanja Sakrij projekta i daljih akcija ostaju. Ovo nije dokaz rada na fiziÄkom telefonu niti razlog za preskakanje testova.
-
-### 2026-10-11 â€” isporuka 2.8.1 potvrÄ‘ena
-ZavrÅ¡ni source `94ff900a19825bae223a4dd8a4ac8a63f592de88`, tree `c6d7e22e99c61db25732a95870d6eda8e38da8c3`, CI `38119500745` SUCCESS. Cijeli JS/Postgres/browser skup i 20 Android testova proÅ¡li su; JUnit potvrÄ‘uje 0 padova/greÅ¡aka/preskoka. Javni 2.8.1 APK preuzet: 24.367.767 B, SHA-256 `13c6917f183e2755e49c9b8b3f0d94c284577680a2a1bd43f3b596a1cdaf217e`, paket `ba.spd.uss.vlake.debug`, versionCode551 / 2.8.1-debug, isti certifikat kao 2.8.0 i svih 72 resursa identiÄno izvoru. Native updaterov `/releases?per_page=1` vidi novu objavu i ovaj APK. ZavrÅ¡ni Pages index/sw takoÄ‘e odgovaraju sourceu. Foto test dodatno lokalno prolazi Chromium140/Playwright1.55 bez globalnog typing problema drugih lokalnih proba. Nova SQL migracija nije potrebna. Puni dokaz, ograniÄenja DEM procjene i fiziÄki/produkcijski neprovjereni tokovi zapisani su u `docs/ISPORUKA_2_8_1.md`.
-
-### 2026-10-11 â€” IzvjeÅ¡taj odjela u podtabovima, 2.8.2 / 552
-Korisnik traÅ¾i jednostavniji IzvjeÅ¡taj odjela, posebno Nagib i Ekspoziciju.
-Rezultati su razdvojeni u tri prava ARIA podtaba: Pregled (povrÅ¡ina i
-min/prosjek/max visine), Nagib (Å¡est razreda, udjeli/ha i prosjek/maksimum),
-Ekspozicija (Äetiri strane, dominantna strana i ravni dio). Skriveni paneli
-ne uÄestvuju u rasporedu. Zadnji podtab se pamti u postojeÄ‡em per-user
-kljuÄu, bez migracije i prepisivanja geometrije/izraÄuna/postavki karte.
-Pregledanje podtabova ne mijenja kartu i ne preuzima DEM ponovo. IzriÄita
-dugmad u Nagibu i Ekspoziciji otvaraju odgovarajuÄ‡i sloj na karti. Granica
-i naziv sklopljeni su poslije izraÄuna; izbor odjela i naziv ostaju vidljivi
-u saÅ¾etku. Postavke karte/legende su u zasebnom sklopivom dijelu. Linije
-razreda se ne nude za ekspoziciju ili prikaz samo granice. Stilovi su
-scoped na #department-report, jer plan doznake koristi zajedniÄke dr klase.
-Upute su aÅ¾urirane. DEM worker i izraÄun nisu mijenjani.
-
-Lokalno: cijeli JS skup, pet inline JS blokova, pravi DEM PNG/Worker/Leaflet
-izvjeÅ¡taj (ruÄni odsjeci/crtanje/IDB/restart/offline/cancel/brisanje i izolacija
-naloga), tri podtaba Ã— Å¡est rasporeda i kontrast, tastatura/ARIA i eksplicitni
-prikazi karte; plan doznake s istim shared CSS-om proÅ¡ao. Assets prepare
-potvrdio 72 resursa. Objavu i javni APK potvrditi nakon uspjeÅ¡nog CI-a;
-ove provjere nisu fiziÄki Xiaomi niti produkcijski Supabase.
-
-### 2026-10-11 â€” isporuka 2.8.2 potvrÄ‘ena
-Source `bbd3d366c4d5f845088d778b52af89804a82399f`, tree `04f704fc6ed0ce5a0c62cbebbbb574e33104b259`. CI `38120768317`, drugi pokuÅ¡aj / job `114415552173`: SUCCESS. Novi IzvjeÅ¡taj proÅ¡ao tri podtaba/18 rasporeda, tastaturu, proÅ¡irene postavke, stvarni DEM PNG Worker, ruÄne odsjeke, IDB/restart/offline i prikaze karte; puni skup i 144 dnevna pregleda takoÄ‘e proÅ¡li. JUnit potvrÄ‘uje 20 Android testova bez padova/greÅ¡aka/preskoka. Javni APK preuzet: 24.374.699 B, SHA-256 `c63702f16f8ff5ef955305edfac9e777a6b964a284559ff49f20c8a7be3dd418`, package debug / code552 / 2.8.2-debug, isti certifikat i svih72 resursa identiÄno izvoru. Updater vidi 2.8.2; Pages Äetiri resursa odgovaraju izvoru.
-
-Prvi CI pokuÅ¡aj `114414899122` pao je u ranijem offline-import-240 pri otkazivanju drugog uvoza: zakljuÄani privremeni OPFS fajl (`NoModificationAllowedError`). Isti test lokalno i u drugom CI pokuÅ¡aju proÅ¡ao je bez izmjene testa ili offline produkcijskog koda. Nalaz NIJE proglaÅ¡en otklonjenim; ostaje za zaseban pregled. Dokaz i tri artefakta prvog pokuÅ¡aja saÄuvani su uz SHA prije uklanjanja samo CI kopija radi v4 rerun-a. Puni dokaz/ograniÄenja u `docs/ISPORUKA_2_8_2.md`.
-
-### 2026-10-11 â€” posebna ikona stila vlaka, 2.8.3 / 553
-Na zahtjev korisnika â€Stil i boja vlakaâ€ viÅ¡e ne koristi dm-lines. Dodan
-je zaseban lokalni SVG simbol dm-vlaka-style: prikaz odozgo s glavnom
-vlakom zelenom, spojenim krakom narandÅ¾astim i jednim znakom lijevo/desno
-dvosmjera pored trase. Isti thumbnail okvir/viewBox64 i dimenzije46px kao
-ranije. â€Stil linijaâ€ zadrÅ¾ava svoju ikonu; logika stilizacije nije mijenjana.
-Lokalno proÅ¡ao postojeÄ‡i navigation-design-278: 12 mobilnih/tablet prikaza,
-dnevni kontrast, offline SVG i prava svih uloga. Nova ikona vizuelno
-pregledana u stvarnom Meniju; SVG XML ispravan s 32 jedinstvena simbola,
-field-design JS provjera i pet inline blokova proÅ¡li. Assets prepare72.
-Nova ikona je mali vektorski dodatak postojeÄ‡em spriteu, nema nove
-bitmap slike niti zavisnosti. APK potvrditi nakon zajedniÄkog CI-a.
-
-### 2026-10-11 â€” isporuka 2.8.3 potvrÄ‘ena
-Source `9453af018add01a86479362019d688fa5d78b5ae`, tree `010b8dd77bb1aeb996d3110bbcb5c340c521c031`. CI `38126831936`, job `114432834261`: SUCCESS iz prvog pokuÅ¡aja. Browser navigacija12 i dnevni audit144 proÅ¡li; nova ikona pregledana na CI slici Menija. JUnit20 Android testova bez padova/greÅ¡aka/preskoka. Javni APK stvarno preuzet: 24.375.535 B, SHA-256 `1e2df200f3df2fc55ccc0e312077653c0310e9debe559388dac432a6d6e0d2ad`, debug paket / code553 / 2.8.3-debug, isti certifikat, svih72 resursa identiÄno izvoru. Updater vidi2.8.3; Pages index/sw/SVG identiÄni izvoru. UI i Android artefakti preuzeti uz provjerene SHA. Dokaz u `docs/ISPORUKA_2_8_3.md`; raniji OPFS nalaz nije proglaÅ¡en rijeÅ¡enim. FiziÄki Xiaomi nije testiran.
-
-
-### 2026-10-11 â€” granice, uÄitavanje karata i azimut, 2.8.4 / 554
-Na izriÄit zahtjev korisnika preuzeti lokalni KML poligoni Granica (_driveSource)
-poÄinju s onlyPolygon=true pri prvom dodavanju i svakoj obnovi u novom ulasku.
-IskljuÄivanje vrijedi tokom iste sesije; rerender ga ne poniÅ¡tava. Vis, boje,
-debljine i ispune ostaju saÄuvani, kao i normalne postavke kamionskih puteva
-ili liÄnih lokalnih KML fajlova. Granice se ne dodaju na kartu prije ove odluke;
-postojeÄ‡i Doznaka/IzvjeÅ¡taj izbor privremeno ih prikazuje. Upute su usklaÄ‘ene.
-UÄitaj kartu ima odvojene cjeline Dostupne karte i UÄitaj sa ureÄ‘aja, dvije
-kolone na veÄ‡im ekranima, kompaktne kartice i lokalne vektorske ikonice.
-GitHub nije u naslovu/veliÄini/oznaci objave prikazane karte; izvorna imena,
-ID-evi, preuzimanje i upis na ureÄ‘aj nisu mijenjani. Azimut kartica proÅ¡irena:
-kompas112â†’134.4px (+20% po Å¡irini i visini), igla/cilj/srediÅ¡te razmjerno;
-padding14â†’17px i min-visina170.4px. Promjena CSS-a ograniÄena na ovaj prikaz.
-ProÅ¡ao cijeli lokalni JS skup i pet inline blokova. Stvarni browser: LoadMap
-raster/Worker/IDB, Canvas/SVG KML editor, Doznaka viÅ¡estruki odsjeci i restart,
-IzvjeÅ¡taj DEM Worker/18 podtab prikaza, javni KML ureÄ‘aja/privatna arhiva i
-restart sa saÄuvanim onlyPolygon=false koji se vraÄ‡a na true bez promjene
-stilova. 12 dodatnih punih previewa (320/390/800, dan/tamno) bez overflow,
-GitHub natpisa, JS greÅ¡aka/upisa; dnevni kontrast proÅ¡ao, kompas izmjeren134.4.
-Assets prepare72. Javni APK/objavu potvrditi nakon CI-a; fiziÄki telefon nije testiran.
-
-### 2026-10-11 â€” profili nagiba u IzvjeÅ¡taju odjela, 2.8.5 / 555
-Nastavak korisnikovog zahtjeva za dodatnu provjeru nagiba preko Î”h i udaljenosti.
-PostojeÄ‡i lokalni DEM nagib veÄ‡ koristi centralne razlike visina i horizontalnu
-udaljenost; Å¡est razreda i Äetiri ekspozicije nisu zamijenjeni prosjekom linije.
-Worker sada prostorno rasporeÄ‘uje pribliÅ¾no jedan kontrolni profil na 3 ha;
-svaki odvojeni odsjek dobija svoje profile. Prostorna podjela koristi ponderisanu
-povrÅ¡inu, iskljuÄuje rupe i traÅ¾i validnu DEM visinu/gradijent. Oba kraka profila
-prate gradijent, ukupno oko 120 m ili do prve granice/nedostajuÄ‡eg uzorka.
-Presjek segmenta sa svim prstenovima zaustavlja liniju i kod rupa uÅ¾ih od koraka.
-Î”h je razlika gornje/donje interpolirane DEM visine; vodoravna duÅ¾ina je zbir
-2D geodetskih duÅ¾ina segmenata. ProsjeÄan nagib profila je Î”h / duÅ¾ina Ã— 100.
-NedostajuÄ‡i uzorci se prijavljuju; ne dodaju se laÅ¾ni ravni profili. NajviÅ¡e
-1.200 profila: veÄ‡i izbor izriÄito traÅ¾i manje podruÄje, bez tihog prorjeÄ‘ivanja.
-
-Nagib podtab ima checkbox prikaza, brojaÄ i sklopivi pregled profila. Dodir
-linije ili stavke otvara P broj, procenat, visine, razliku, vodoravnu duÅ¾inu i
-formulu. Karta koristi zaseban neinteraktivni Canvas GridLayer s konstantnom
-veliÄinom linije/strelice, oznakama pri prikladnoj razmjeri i bez preklapanja
-teksta. Klik vodi kroz postojeÄ‡i prioritet vlaka/alata/izbora poligona. Legenda
-pojaÅ¡njava profile; brisanje/sakrivanje/promjena naloga uklanja i sloj/popup.
-Checkbox i rezultat su u postojeÄ‡em per-user localStorage/IDB toku, dostupni
-offline; stari keÅ¡ ostaje Äitljiv i traÅ¾i izriÄit novi izraÄun za profile.
-Upute aÅ¾urirane. 2.8.5 ukljuÄuje i sve promjene 2.8.4 (Granice/UÄitaj kartu/kompas).
-
-Provjere: cijeli JS skup i 5 inline blokova; analitiÄke ravni u Å¡est smjerova,
-Î”h/duÅ¾ina, ravni i promjenjivi teren, konkavna granica, odvojeni odsjeci, rupe
-ukljuÄujuÄ‡i sub-pikselnu, nedostajuÄ‡i DEM i prostorna pokrivenost. Puni browser
-s pravim DEM PNG dekoderom/Workerom/Leafletom: 10 profila za 28,09 ha, popup,
-prikaz/sakrivanje, 18 rasporeda/podtabova, dnevni kontrast, IDB restart i stari
-keÅ¡ bez profila, offline/cancel/brisanje/izolacija naloga, bez eksternih upisa.
-Dnevni audit144 proÅ¡ao; plan doznake sa zajedniÄkim CSS-om proÅ¡ao. Lokalni
-synthetic benchmark: 1.170,28 ha / 391 profil / oko102ms na cloud procesoru;
-to NIJE mjerenje na fiziÄkom telefonu. DEM ostaje procjena rezolucije oko30m
-(ili slabije kod velikih odjela), ne terenska geodetska izmjera. Assets72.
-CI 2.8.4/38128182006 zavrÅ¡en SUCCESS; 2.8.5 APK objavu potvrditi poslije CI-a.
-
-
-### 2026-10-11 â€” isporuka 2.8.5 potvrÄ‘ena
-Source `afa7bde0dc00037d20026d2fd122918f60e7c204`, tree `20a570f9ddb9ebda16298de974375096d8597015`. CI38135238777/job114457649249 SUCCESS iz prvog pokuÅ¡aja. PotvrÄ‘ena UI arhiva: 10 novih profila za28,09ha, popup/Î”h/duÅ¾ina, restart/offline/stari keÅ¡,18 rasporeda; dnevni audit144 i navigacija12. Android JUnit20 bez padova/greÅ¡aka/preskoka. Javni APK24.392.371B, SHA774b9d0c43bcaacfbc25ae7945a96be06b12f24fcc82c31408810f694a00d47b, debugpaket/code555/2.8.5-debug, isti certifikat,72 resursa identiÄno izvoru. Updater vraÄ‡a2.8.5; Pages5 kljuÄnih resursa identiÄno izvoru. UkljuÄene promjene2.8.4. Dokaz i ograniÄenja u docs/ISPORUKA_2_8_5.md; fiziÄki Xiaomi/produkcijski Supabase nisu testirani/mijenjani.
-
-
-### 2026-10-11 â€” 2.8.6: dvosmjer i lageri (priprema isporuke)
-PoÄetni prikaz vlake: 2 px, crtice, obrub ukljuÄen; strelice: potez 2 px i
-veliÄina 25 px. Eksplicitne stare postavke ostaju saÄuvane. Popup bez stvarnog
-smjera ima izbor â€Smjer izvlaÄenja DSâ€ i â€Odredi dvosmjerâ€; kad stvarni smjer
-postoji, ostaje samo â€Promijeni mjesto dvosmjeraâ€. Projektantski izbor i dalje
-odreÄ‘uje taÄku, bez automatskog dijeljenja na pola. Izbor sada prikazuje stvarne
-vrhove vlake/kraka u zasebnom Canvas rendereru, prima dodir kroz hit slojeve i
-prianja uz vrh unutar 12 px. OmoguÄ‡en je i aktivan legacy zapis bez projekta.
-Skriveni/drugi projekat, aktivno snimanje/crtanje/izbor poligona odbijaju izbor;
-Escape, promjena taba/naloga/projekta i uklanjanje linije Äiste prikaz taÄaka.
-
-Novi static/js/vlaka-lager.js: odvojena veliÄina oblika (50â€“250%) i oznake
-(8â€“28px), u postojeÄ‡em zajedniÄkom/projektnom stilu. Stari lagerScale iz Stil
-linija je fallback dok nema nove eksplicitne postavke; promjena oblika ne
-mijenja font. Sklopivi listing lagera vodi na individualno pomjeranje na karti.
-Vlastiti lagerPt mijenja se tek nakon uspjeÅ¡nog lokalnog upisa, bez izmjene pts;
-podatak lager_pt sada ulazi u postojeÄ‡i upsert_vlaka outbox (ranije je nedostajao
-u _vlakaSyncPayload). Kolona je iz postojeÄ‡e migracije 20260709, nova migracija
-nije potrebna. Kolegini lageri uÄitavaju lager/lager_pt i prikazuju se kao dio
-postojeÄ‡ih labela: skrivanje/brisanje uklanja ih. Realtime aÅ¾urira metapodatke.
-Pomjeranje koleginog lagera Äuva iskljuÄivo per-user/per-project lokalni prikaz,
-ne mijenja kolegine podatke i ne Å¡alje upsert u njegovo ime. Pozicije i veliÄine
-su dostupne offline poslije restarta; greÅ¡ka memorije ne mijenja stari poloÅ¾aj.
-Module je u SW precache-u; APK assets 73. Upute aÅ¾urirane.
-
-Lokalno: cijeli JS skup, 5 inline blokova, puni app/browser dodir glavne vlake,
-kraka i legacy zapisa, stvarne taÄke, promjena dvosmjera/cancel, nezavisne
-veliÄine vlastitih/koleginih lagera, projektni izuzetak, lokalni cache i outbox,
-restart, quota rollback, skrivanje i izolacija naloga, 6 novih rasporeda bez
-prelijevanja/loÅ¡eg kontrasta. PostojeÄ‡i stil/arhiva naloga, Server/bafer i Å¡tampa
-proÅ¡li; dnevni audit svih panela 144 bez loÅ¡ih elemenata. Test dodira u staroj
-izolovanoj fixture razdvaja namjerne dodire >200ms (Leaflet double-tap).
-Produkcijski Supabase nije mijenjan, fiziÄki Xiaomi nije testiran. CI/APK dokaz
-upisati nakon uspjeÅ¡nog builda i provjere javnog fajla.
-
-
-### 2026-10-11 â€” isporuka 2.8.6 potvrÄ‘ena
-Source b45bebfd4d627f889ad76653baa23db2724ed8e6, tree eaeede0115a24f492ab5fc09691d60e031d52834. CI38137657357 pokuÅ¡aj2/job114465954419 SUCCESS; prvi pokuÅ¡aj audit-parts-271 popup nije proÅ¡ao, isti SHA na ponovljenom punom CI-u proÅ¡ao (bez tvrdnje da je izvor mijenjan radi toga). Preuzete i hash-potvrÄ‘ene UI/Android arhive: novi tok dvosmjera/lagera i6 rasporeda, dnevni audit144 bez nalaza; Android20 bez padova/greÅ¡aka/preskoka. Javni APK24.406.688B, SHA78102cfcb8e698987c571ca71b3bcc670d98d09d7fd75339ea6f60e44581c9bc, debugpaket/code556/2.8.6-debug, isti certifikat i73 identiÄna resursa. Updater stvarno vraÄ‡a2.8.6, Pages5 kljuÄnih resursa identiÄno izvoru. Dokaz/ograniÄenja docs/ISPORUKA_2_8_6.md; fiziÄki Xiaomi/produkcijski Supabase nisu testirani/mijenjani.
-
-
-### 2026-10-11 â€” 2.8.7: automatsko slanje novog projekta prije Älanstva
-Na izriÄit novi zahtjev korisnika, insert_projekt i insert_doz_project sada idu automatski nakon trajnog lokalnog enqueue-a. _processOfflineQueue bez ruÄne kapije filtrira iskljuÄivo te roditeljske operacije; vlake, zone, status, lokalni tragovi i GPS bafer ostaju u postojeÄ‡em toku. Za automatski upis treba prava sesija (ne _cachedStub), vlasniÄki red i veza; backoff/blocked ostaju vaÅ¾eÄ‡i i na sila=true. Start, online/povratak veze, foreground i periodiÄna provjera 60s ponavljaju roditelje. BrojaÄ koristi postojeÄ‡i memo reda da ne parsira terenski dan pri svakom GPS fiksu. Potvrda auto projekta sada ulazi u Poslano i vrijeme slanja, bez laÅ¾nog otvaranja _serverSaljem.
-
-Paralelni pozivalac reda Äeka isti prolaz preko resolvera na funkciji; rerun obraÄ‘uje novododani zapis. _projektServerSpreman Äeka pending parent, zatim SELECT potvrÄ‘uje ciljani ID i vlasnika prije projekt_clanovi/doz_project_members. MreÅ¾na/RLS/missing greÅ¡ka spreÄava member INSERT; promjena naloga ili izabranog projekta prekida nastavak. ÄŒlanstvo ima in-flight guard; kod vlaka se identitet provjerava i nakon ponovnog uÄitavanja spiska. Offline Älanstvo nije izmiÅ¡ljeno niti automatski zakazano: korisnik ponavlja dodavanje uz internet. UUID/insert potvrda iz postojeÄ‡eg toka Äuvaju idempotentnost pri izgubljenom odgovoru.
-
-Doznaka lista vraÄ‡a pending projekte iz trajnog reda i kad keÅ¡ nije upisan. Neuspjela potvrda lokalnog keÅ¡a nakon server INSERT-a ne uklanja roditelja iz reda. Kod vlaka uspjeÅ¡an enqueue ostaje saÄuvan projekat i ako pomoÄ‡ni keÅ¡ ne uspije, tako da se ne nudi ponovno kreiranje istog projekta. Upute aÅ¾urirane. Nova SQL migracija nije potrebna; produkcijski Supabase nije mijenjan.
-
-Lokalno: cijeli JS skup i 5 inline blokova; stvarna puna app + Supabase JS nad kontrolisanim HTTP-om: odgoÄ‘en parent i istovremeno Älanstvo, offline/restart/online retry, izgubljen odgovor/same UUID, RLS parent blokira Älana, doznaka kreiranje i Älan, parent SELECT nedostaje, keÅ¡irana sesija i izolacija vlasnika, puna kvota keÅ¡a/retry, auto historija i terenski queue/GPS ostaju lokalno; bez vanjskih upisa. Testni HTTP server poÅ¡tuje offset/limit za paginaciju Älanova. PostojeÄ‡i server-confirm-234 proÅ¡ao; dnevni audit144 bez nalaza. Assets73. Verzije2.8.7/code557; CI/APK potvrdu upisati nakon zavrÅ¡etka builda. FiziÄki Xiaomi nije testiran.
-
-
-### 2026-10-11 â€” isporuka 2.8.7 potvrÄ‘ena
-Source5e396eaa32860e54b9d126ddf44165a7a1a05075, tree61803b831d080cb75f5ef0bba7697316a34f0bde. CI38140008957/job114471750184 SUCCESS iz prvog pokuÅ¡aja. Preuzete/hash-potvrÄ‘ene UI i Android arhive: novi puni app/Supabase JS test9 scenarija, dnevni audit144 bez nalaza; Android20 bez padova/greÅ¡aka/preskoka. Javni APK24.411.772B, SHAf5621e0ea97e627e4db60952ebfcd49dd40d22f3a46919535aeb7c53e5e387b3, debugpaket/code557/2.8.7-debug, isti certifikat i73 identiÄna resursa. Updater vraÄ‡a2.8.7; Pages3 promijenjena resursa identiÄno izvoru. Dokaz/ograniÄenja docs/ISPORUKA_2_8_7.md. FiziÄki Xiaomi nije testiran; produkcijski Supabase nije mijenjan; nova SQL migracija nije potrebna.
-
-
-### 2026-10-12 â€” 2.8.9: automatski IzvjeÅ¡taj odjela i stabilni prikaz sporijih telefona
-IzvjeÅ¡taj odjela sada odmah pokreÄ‡e DEM obradu nakon potvrde nacrtanog ili
-izabranog poligona. RuÄno dugme ostaje samo kao oporavak poslije konaÄne greÅ¡ke;
-offline nedostatak DEM-a Äeka `online` dogaÄ‘aj, a prolazne online greÅ¡ke imaju
-ograniÄen automatski retry. KeÅ¡ rezultata nosi model/signaturu geometrije, pa se
-stari pravougaoni rezultat ne vraÄ‡a. Granice pet razreda nagiba nastaju marching
-squares interpolacijom stvarnih vrijednosti 10/20/30/40/50% i spajaju se u
-kontinuirane putanje obojene bojom viÅ¡eg razreda.
-
-Za prijavljeno nestajanje dijelova prikaza utvrÄ‘ena su tri sabirajuÄ‡a troÅ¡ka:
-`keepBuffer:6` je na mobilnom prikazu mogao drÅ¾ati viÅ¡e od 200 ploÄica po sloju,
-offline dekodirani canvas keÅ¡ je drÅ¾ao do 300 dodatnih ploÄica (oko 75 MiB sirovih
-piksela), a blur/content-visibility su pravili dodatne compositor slojeve. Novi
-`render-health.js` u APK-u Äita stvarni Android RAM/low-RAM signal i za ureÄ‘aje
-sa 4 GB ili manje ukljuÄuje stabilni profil: tile buffer 2, overlay buffer 1,
-keÅ¡ 72, manje paralelnih Äitanja, bez zoom animacije/blura i bez riziÄnog
-`content-visibility` preskakanja. JaÄi ureÄ‘aji koriste umjeren buffer 4 i keÅ¡
-160. Android `onTrimMemory`/`onLowMemory` oslobaÄ‘a samo izvedeni tile keÅ¡ i Å¡alje
-signal za prune/repaint; originalne karte, projekti i GPS podaci ostaju netaknuti.
-Povratak aplikacije u prvi plan ponovo kompozituje vidljivu kartu i UI.
-
-Lokalno: svih 109 JS testova; puni app na 360Ã—740/dpr3, 4 GB profilu i CPU 6Ã—;
-simuliran memory-pressure Äisti 100 izvedenih canvas ploÄica, razrjeÅ¡ava redove i
-ostavlja kartu/trake/panele vidljivim. Terenska simulacija 5,4 km na CPU1Ã—/4Ã—,
-Redmi sintetiÄki benchmark 36 prolaza, audit dijelova 3/4, dnevni audit 144,
-pravi MBTiles/worker/IDB pregled i GPKG 3.000 poligona proÅ¡li. IzvjeÅ¡taj je proÅ¡ao
-ruÄni/izabrani poligon, Worker, automatski restart, offline retry i obojene
-konture. Lokalni Android build nije zavrÅ¡en jer okruÅ¾enje nema Android SDK;
-CI/APK potvrdu upisati poslije workflowa. FiziÄki telefon i produkcijski Supabase
-nisu testirani niti mijenjani.
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí÷õİ:-jZ.¶›­–)Ş³R2U2Õ5TÔR(	BFV†æœHÖ¶’¶öçFV·7B’üHÖWFæò7Fæ¦P ¤FGVÒ&VvÆVF¢##bÓ’Óâ&W÷¦—F÷&–£¢övöæ&÷6·'WõU2Õ5TÔVà¥&Fæw&æ¢4ôDU‚ÕU2Õ5TÔVâ&VvÆVFæ’üHÖWFæ’6öÖÖ—C ¦3sƒC6S3c&FSFS6Scsv#cƒ“#3“#c6c#sS†fà¥fW'¦–¦S¢vV"cããvÂ5rããvÂæG&ö–BããvÂfW'6–öä6öFR3C6à ¤÷fò¦R6–Æ¦æ’üHÖWFæ’&VvÆVBÂäR¶ö×ÆWFâVF—BCãƒ#&VF–æFW‚æ‡FÖÆÀ§6–wW&æ÷6æ’6W'F–f–¶Bæ—F’÷Gg&F&FæFVÆVföçRâgVæ¶6–öæÆæ’¶öBæ–¦P¦Ö–¦Væ¦ââFö·VÖVçF6–¦&¦Æ–·V¦R÷Gg,IVæòöæZæ¦R—§f÷&æör¶öFÀ¦—¦öÆ÷fæR&W&öGV¶6–¦R’†—7F÷&–§6¶RGg&Fæ¦R¶ö¦Ræ—7Röæ÷fò&÷f¦W&VæRà ¢¢¤æöÖVæ‡cãRãb²’¢£¢6V¶6–¦ü[æ&’’&ö¦V·F÷fæ¦RZV×6¶örWF7Rö@§fW'¦–¦RcãRãbV¶Æöæ¦VæR—¢÷fRÆ–¶6–¦R’—¦Gfö¦VæRR÷6V&çR(	@¦÷—6’’æÆ¦’òæ¦–Ö—7öB7R†—7F÷&–§6¶’†÷—7V§R7Fæ¦R$”¤R—¦Gf¦æ¦’À¦¶öBæ¶ö¦’W\HwV§RfœZRæR÷7Fö¦’R÷föÒ&W÷¦—F÷&–§Rà ¢22â–FVçF—FWB’&†—FV·GW&(	B÷Gg,IVæòR¶öGP ¤vÆfæ’&ö—§föB¦RFVæG&òÖòU2Õ5TÔS¢…DÔÂô¦f67&—BFW&Vç6¶t•0¦Æ–¶6–¦W¶÷fæR¦fæG&ö–BvV%f–Wrâ—F†öâ4Ä’’fÇWGFW"F÷¦æ¶§&ö¦V¶B7R¦6V&æR6¦VÆ–æRR—7FöÒ&W÷¦—F÷&–§RÂæR—§g,Zæò¦W¦w&òFör²Öà §Â6¦VÆ–æÂ—§f÷"òVÆ¦æRgVæ¶6–¦RÂVÆövÀ§ÂÒÒ×ÂÒÒ×ÂÒÒ×À§ÂvÆfæ’g&öçFVæBÂ–æFW‚æ‡FÖÆÂCãƒ#&VBÂ"ãC’ãcC&§F÷fÂT’Âf\Hv–æ÷6Æ÷fæRÆöv–¶RÂ552’vÆö&Ææò7Fæ¦S²RæW&¦æ–‚–æÆ–æR¥2&Æö¶÷fÀ§Â&–&Æ–÷FV¶RÂ¦vÆfÆ¦R–æFW‚æ‡FÖÆÂ7FF–2öÆ–'2öÂÆVfÆWBã’ãBÂ&ö£B"ã’ãÂGW&bbãRãÂ7W&6R¥2&Â6†Vf–ÆRãbãc²4DâWB’Æö¶Ææ’²fÆÆ&6²À§Âö·&WFæ¦R÷&–¦fÂ–æ—DWF†Â÷VÆ¤æ¶W7VÂ6†÷tÂ÷7F'GW&W7F÷&VÂ¶\Z—&æ’&öf–ÂöÖöw\Hvf&æ’VÆ¦³²&f6W6–¦6Rö&æfÆ¦R÷¦F–æ“²&W7F÷&RHÖV¶DôÒÀ§ÂöffÆ–æRöF6’Â7FF–2ö§2ööffÆ–æRÖÆ–W"æ§6ÂôôÆ²–æFW‚æ‡FÖÆ÷6fTÆö6ÅfÆ¶VÂ÷&ö6W74öffÆ–æUVWVVÂÆö6Å7F÷&vR¶\ZWf’’&VB÷W&6–¦Â÷¦æ¶fÆ6æ–¶ÂFVGWÂ&WG'’’6W'fW"7–æ2À§Â&ö¦V·F’÷fÆ¶RÂFEfÂöFô7&VFUfÆ¶Â6$fÇW6…fÆ¶Â÷6$fÇW6…fÆ¶–×ÆÂÆöE&ö¦Â·F—fæ’&ö¦V¶BÂçVÖW&6–¦Â7'Fæ¦R÷6æ–Öæ¦RÂÆö¶Ææò7&VÖæ¦R’7W&6RÀ§Âu2Â÷fÆ¶&ö6W74w5ö–çFÂöFEG&uö–çFÂöF÷¥&ö6W74w5ö–çFÂ&¦ÆœHÖ—F’Fö¶÷f’fÆ¶R÷G&vöF÷¦æ¶S²æF—fR&fW"6RF÷Væ¦f&’÷g&F·RÀ§Â7&6‚&V6÷fW'’Âö7&6…6fUfÆ¶Âö7&6…6fUG&vÂö7&6„6†V6¶ÂöæF—fT'VeW¦Ö–Â6æ6†÷Bæ32’F÷Væ—¢æF—fRf¦Æ²÷Gg,IVæ’æVF÷7F6’—7öBÀ§ÂöffÆ–æR¶'FRÂÖ¶T66†VEF–ÆTÆ–W&Âõ5Åõtõ$´U%õ5$6Â7ÆÖ&W7F÷&TÆÆÂ66†R7F÷&vRÆüHÖ–6S²5Æ—FRôÔ%F–ÆW2·&÷¢v÷&¶W"Â–æFW†VDD"’õe2À§ÂF÷¦æ¶ÂF÷¥6fTöF¦VÆÂF÷¥fÆ¶TÆöD¶ÖÆÂöF÷¥&ö6W74w5ö–çFÂöF¦VÆ’÷&ö¦V·F’Âw&æ–6RÂHÖÆæ÷f’Âö¦6Wf’Â7F&Æ’÷fW¦æRfÆ¶RÀ§Â6FVÆ—G6¶’6Æö¦Wf’Â÷3$¶Æ§V5V6—F¦Â÷3%Fö¶VåW¦Ö–Âv–&6²gVæ¶6–¦RÂ5r&÷WF–ærÂ4E4RôWF‚õtÕ2Â†—7F÷&–§6¶’W7&’6Æö¦Wf“²'VçF–ÖRF÷7GWæ÷7Bæ–¦R&÷f¦W&VæÀ§ÂæG&ö–BÂæG&ö–Bö÷7&2öÖ–âö¦fö&÷7B÷W72÷fÆ¶RôÖ–ä7F—f—G’æ¦fÂw56W'f–6Ræ¦fÂvV%f–Wt76WDÆöFW"Â[æ—f÷Fæ’6–¶ÇW2Âf÷&Vw&÷VæBu2ÂæF—fRÖ÷7F÷f’âæWD'&–FvVöæ÷F–d'&–FvV7R÷F¶¶ò¦Rü[æ&’—¦Gfö¦VæäT•4´õ$œZDTä’—¢¥2Ö†æÖ¦W&æòæWF¶çWF’Âf–F’4ÄTDRæÖB’À§Â&6¶VæBÂ7W&6RöÖ–w&F–öç2öÂ7W&6RögVæ7F–öç2ö†æFÆR×&Vv—7G&F–öâÖ7F–öâö–æFW‚çG6ÂWF‚Â$Å2Â÷6Æ÷fæRF&VÆRÂ%2’÷G—6æ’Æ–æ¶÷f’¦öFö'&Væ¦RÀ§Â—F†öâÂÖ–âç–ÂvVòöÂ4Ä’VFÆ¦Væ÷7BÂ¦–×WBÂæv–"Â÷g,Z–æ’Æö¶Ææ’6W'fW#²CRFW7F÷fÀ§ÂfÇWGFW"ÂF÷¦æ¶öÂæv—F‡V"÷v÷&¶fÆ÷w2ö'V–ÆBç–ÖÆÂöGfö¦Vâf÷&W7G'’G&6¶W"'V–ÆB—¢F'Bg&vÖVæF²æ–¦R¦fvV%f–Wr²À ¢222ö·&WFæ¦RÂö‡&æ’&f ¢Ò–æ—DWF†HÖ—FôôÂå$ôd”ÄVâ¶\Z—&æ’¶÷&—6æ–²æ÷6’ö66†VE7GV&²Fòä”¤P¢÷Gg,IVæöæÆ–æR6W6–¦â6†÷t&Æö¶—&V·7Æ–6—FæòæVöFö'&Vâ&öf–ÂÀ¢W¢—§W¦WF²FÖ–æâ÷7F'GW&W7F÷&V¦R–FV×÷FVçFâ’HÖV¶DôÔ6öçFVçDÆöFVBà¢Ò¶÷&²‚–R÷7F'GW&W7F÷&V‡fF6–æ‡&öæRw&\Z¶S²æR‡fFWFöÖG6¶¢öF&–¦VæR&öÖ—6R&W§VÇFFRâæRGVÖHÖ—F’¶öÖVçF"ò—¦öÆ6–¦’7f–‚¶÷&¶¢¶òFö¶¢÷GVæR7–æ2¦ZF—FRà¢Òö6†V6´FWf–6UW6W%7v—F6†&’G'VvöÒ¶÷&—6æ–·R÷¦—f÷v—TÆÄÆö6ÅW6W$FF ¢'&œZRÆö¶ÆæR¶'FR÷&Vv—7G&R’f–ÇG&—&&VB&WF†öFæör¶÷&—6æ–¶âFò¦P¢æÖ¦W&æ—¦öÆ6–¦¶÷&—6æ–¶ÂÆ’Öü[æR—¦wV&—F’æW6–æ‡&öæ—¦÷fâ&Bà¢ÒfÆ¶–ÖæÒö'"ö·"ö6öÆ÷"÷G2÷öÇ’÷6$–B÷&ö¦V·D–Bòââæ²FEF¦—7V¦P¢FHÖ·R¶ò¶ÆÂÆòÂÇÖâG&v÷f’¶÷&—7FRæ—¦÷fR¶ÆÂÆòÂÇBÂG2Â65Öà¢æR&W&fÆ¦F’÷fRÖöFVÆR&W¢Ö–w&6–¦R’&÷VæGG&—FW7F÷fà¢Ò÷6$fÇW6…fÆ¶–×Æ'fò÷¦—f÷6fTÆö6ÅfÆ¶V²ôôÆ÷W&6–¦R7R¥4ôà¢RÆö6Å7F÷&vRâ&VB6G,[æ’÷–FÂ÷V–FÂ–ÆöB’ò÷G&V&’'&ö¢ö·\Z¦à¢Ò÷&ö6W74öffÆ–æUVWVV6W&–¦Æ—§V¦R&öÆ¦R’ö'&IV¦RfÆ¶RÂ&ö¦V·FRÀ¢G&v÷fRÂ÷¦æ¶RÂFæWfæ’ÆörÂF÷¦æ·R’&†—gRü[æ&âæ—7R7fRWFæ¦P¢÷GVæòöffÆ–æRÖf—'7C¢F÷¦æ¶u2ö·\Zf6W'fW"&–¦RfÆÆ&6²'VffW&à¢Ò66†R7F÷&vR¦R¦ÆüHÖ–6R÷6†VÆÃ²GfÆ¶U÷7ÆÖ6–æFW†VDD"c"öGf¦¢ÖWFöFF¶RÖ6öBÖ'Vg6²f\HvR¶'FR–Ö§Rõe2WBâÖ–w&6–§Rc ¢&÷f¦W&f§RÖö6²×FW7F÷f’ÂæR&f’æG&ö–B–æFW†VDD"Fö¶öÒ÷för&VvÆVFà¢ÒÖ–ä7F—f—G–\HÖ—Ff76WG2÷&–v–â’—¦Æ[æRæG&ö–DF÷væÆöFÀ¢æG&ö–Dw6ÂæG&ö–E6†&VÂæG&ö–DæWFÂæG&ö–Dæ÷F–fâfæ§6¶Ræf–v6–¦P¢&WW6Ö¦W&fRæG&ö–B–çFVçBâæWD'&–FvVöw&æœHÖfüHÖWFæ’…EE2†÷7Bæ¢ä4ôterÂ–Ö&ö¶÷fR’Æ–Ö—BöFv÷f÷&"Ö”#²&VF—&V7G27RV¶Æ§\HÖVæ’à¢Òw56W'f–6V&–·WÆ¦u2f–·6÷fRRw5öæF—fUö'VffW"æ§6öæÆÂ¶÷&—7F¢f÷&Vw&÷VæBæ÷F–f–¶6–§R’v¶RÆö6²â5D%Eõ5D”4µ–¦RæÖ¦W&÷÷&f¶¢6W'f—6ÂäRv&æ6–¦FôTÒæ\HvRV&—F’&ö6W2–Æ’Fæ\HvR&—F’&V¶–Fà¢ÒÖ–w&6–¦R##cs#ró##cs#‚FVf–æœZR¦UööFö'&VæÂ&W7G&–·F—fæP¢§§¥ööFö'&VæöÆ—F–¶R’¦ZF—GR÷fÆZFVæ–‚¶öÆöæ¶÷&—6æ–¶â7Gf&æP¢&–Ö–¦Væ¦VæRöÆ—F–¶RR&öGV¶6–¦’æ—7R&VvÆVFæS²Ö–w&6–¦Rv—B×Ræ–¦P¢Fö¶¢F¦R—§g,ZVæâ%2õ4T5U$•E’DTd”äU"¦‡F–¦Wf¦6V&çR&÷f¦W'R&fà¢Ò÷÷¦”ÆöF&¦Æ–·V¦R×&\[ææ’æWW7¦V‚Â¶\Z’7f¦\[âöFv÷f÷"Âf–ÇG&—&&Æ—¦–çRÀ¢w'WœZRFWFV¶6–¦R’F÷Væ¦f&†—gRâ&ö¦V¶6–¦R÷g,Z–æR’'VG\HvVr&7F¢æ—7RFW&Vç6¶’—¦Ö¦W&Væw&æ–6æ—F’fÆ–F—&âÖöFVÂöæZæ¦ü[æ&à¢ÒöBcã2ã"&ö¦V¶6–¦ü[æ&¶÷&—7F’¦6V&â÷¦&•÷g'5æV—¦Ö\IP¢&VfW&VçFæR¶'FR’Ö&¶W&ü[æ&â¶Æ–²æö¦2÷Gf&FWFÆ¦Rü[æ&¢F—&V·Fæòæ¶'F’ÂFæWfæ’&WÆ’·V×VÆF—fæò&–¶§V¦R6ÖòFHÖ¶R¢&ö6–¦Væ¦VçRvVöÖWG&–§RöF'&æörü[æ&²÷7FÆ’ü[æ&’6RæRf–ÇG&—&§Rà¢ÒöBcã2ã2FÖ–âDT%Tr–Ö¦6V&â¦—2¦ter6ÖWFæ¦RfVvWF6–¦Râ&–Æ¦\[æ¢W&–öBÂ&VfW&Væ7RÂ&—7WFæ÷7B¶Æ§\HÖÂæF—fRö'&÷w6W"WBÂ…EE7FGW2À¢fVÆœHÖ–çR’üHÖœZHvVæ’—6¦\HÖ²w&\Z¶RÂ'&ö¢&–ÖÆ¦Væ–‚öf–ÇG&—&æ–‚öw'W—6æ–€¢Æ&Ö’¶÷&œZFVæ¦RÆö¶Ææör¶\Zâg&–¦VFæ÷7B’¶Æ§\HÖ6RæR¦—7V¦Rà¢Òcã2ãB÷&fÆ¦ter…EEC#&¢vguö–çFVw&FVEöÆW'G6¦R&7FW"ÖöæÇ¢FF6WB’æR&–‡fF&æ–¦’tUB5Â&&÷‚&W¢vVöÖWG&–¦RâÆ–¶6–¦6F¢ZÆ¦Rõ5B¥4ôâ†7Æ²¦Gf÷&VâvVô¥4ôâöÇ–vöâöB3"6VvÖVçF¦S¶Ò’À¢·&÷¢'&÷w6W"–Æ’&üZ—&Væ’æG&ö–BæF—fRÖ÷7Bà¢Òcã2ãRV¶Æ§\H×V¦R6FVÆ—G6¶RFHÖ¶Rü[æ&ò¦FæöÒ‡'\HÖæò—6¶Æ§\HÖ—fæ¦R6P¢’FÆ¦RüZGV¦R’Â¦G,[æf7f·RFHÖ·Rf–FÆ¦—föÒ’w'WR2fœZRFWFV¶6–¦¢÷¦æHÖf¦VFæ–ÒvÆfæ–ÒG&ö·WFöÒâ÷WG&ö·WF&–¶§V¦RW&–öBü[æ&¢ö·&\HvRFæWfæ’&WÆ’F—&V·Fæòæ¶'F’â¶'F–6(	ä÷W&F—fæ’–æ6–FVçN(	Â¢æ¦Væ’Æö¶Ææ’¦—6’7RV¶Æöæ¦Væ’âFÖ–âDT%Tr6F&–Æ¦\[æ’'&ö¢FHÖ¶À¢G&ö·WFÂw'W2W&–öFöÒöN(	6FòFR7Fæ¦R’'&ö¢¶÷&¶6–×VÆ6–¦Rà¢Òcã2ãbFöF¦RÆ–fV7–6ÆRFV'Vr¶ö¦’&¦Æ–·V¦Ræ÷f’vV%f–WrFö·VÖVçBöBö&œHÖæöp¢÷g&F¶—¢÷¦F–æR’&Æö¶—&&ÆVÆæò÷Gf&æ¦R—7FR5Æ—FR¶'FRâü[æ&æP¢FHÖ¶R6R7'F§R¦VFæ–Ò6çf2&VæFW&W&öÒVÖ¦W7Fò7F÷F–æÖDôÒVÆVÖVæFÀ¢÷7Fö¦\Hv’6Æö¢6R&’÷g&F·RRF"öæ÷fò¶÷&—7F’ÂGW&b&ö¦V¶6–¦R–Ö§P¢öw&æœHÖVâ66†R¶ö¦’&\[æ—fÆ¦f×&\[ææò÷7f¦\[æfæ¦RâDT%Trü[æ&’Ö¦W&¢Fö‡fBÂf–ÇG&—&æ¦Rö¶\ZÂw'W—6æ¦RÂ7'Fæ¦R’æ¶æFçRö'&GR¦6V&æòà ¢22"âWB&–÷&—FWFæ–‚æÆ¦ ¢222#(	Bd•4ô³¢æW÷W¦Fâ÷÷&f²fÆ¶Ræ¶öâ&V¶–F ¤—§f÷&“¢–æFW‚æ‡FÖÃ£s3ö7&6…6fUfÆ¶Â£sc&ö7&6„6†V6¶À¦£ƒ#&÷¦—b6fUfÂ£ƒ#f'&—6æ¦R6æ6†÷F²FEF’FEfà ¢Ò6fUfæVÖFVf–æ–6–§RR&VvÆVFæöÒÆ–¶6–§6¶öÒ¶öGS²¦VF–æ’÷¦—b¦P¢Rö7&6„6†V6¶â÷7Fö¦\Hv’w2Ö&rÖ'VffW"çFW7Bæ§6vÖö6·V¦R¶òW7¦\Zà¢æòÖ÷†6fUc¢7–æ2‚’Óâ·Ö’ÂæR÷F·&—f&ö&ÆVÒ–çFVw&6–¦Rà¢Ò—¦öÆ÷fâæöFRdÒFW7B7Gf&æörö7&6„6†V6¶ÂW¢W7¦\ZæòÖö6¶÷fæğ¢·&V—&æ¦RfÆ¶R’&W¢—¦ÖœZÆ¦Væör6fUfÂFö&–ò¦R÷'V·P¢6fUb—2æ÷BFVf–æVF²7&6‚6æ6†÷B¦R—²ö'&—6ââFHÖ¶R÷7FçRP¢ÖVÖ÷&–¦’FörFW7FÂÆ’G&¦æò7&VÖæ¦RF–ÒWFVÒæ–¦R÷Gg,IVæòà¢Òö7&6…6fUfÆ¶HÖ—FæVÆWfÂFö²FEFœZRæÆâ&W&öGV¶6–¦0¢f—6–æÖcócFÆ¦RçVÆÂöçVÆÆR6æ6†÷GRâ&V6÷fW'’F¶üIW"W—7V¦P¢VÆWfÂæR7FæF&Fæ’Æà¢Ò6æbç&ö¦V·D–F6R7&VÖÂÆ’&V6÷fW'’væR&–Ö¦Væ§V¦Rææ÷gRfÆ·Rà¢FEb‚–Öü[æR÷Gf÷&—F’F–¦Æör’¦g,Z—F’¶6æ–¦R–Æ’&W¢·&V—&æ¦°¢ö7&6„6†V6¶væRHÖV¶&–¦R&—7GWfÆ¶U¶æWt•Öâ÷6Æ¦VF–6RF–‚w&æ¢G&V&ö·&—F’–çFVw&6–§6¶–ÒFW7F÷f–ÖÂæR&WG÷7Ff—F’—7&fâ&W§VÇFBà¢ÒFöFFæó¢¦fw4'&–FvRæG&–äæF—fT'VffW&'&œZRf¦Â&–¦R¥2÷Gg&FP¢G&¦æörW—6ÂHÖ²’÷6Æ–¦RV‡fHvVæör”ôW†6WF–öââöæF—fT'VeW¦Ö–æ¢æV—7&fâ¥4ôâg&HvµÖâ&V¶–çWB÷6Æ¦VFæ¦’¥4ôäÂ&VBÖü[æR¦Fòö&÷&—F¢'6—&æ¦R6–¦VÆör7ö¦Væöræ—¦âFò¦R7FFœHÖ¶’&—¦–²ÂæRæG&ö–B&W&òà ¥&W÷'V¶¢'fò6–wW&â&VBö6²÷÷&f²ÂüH×Wfæ¦R6æ6†÷Fæw&\Z·RÀ§7FæF&Fæ’ÖöFVÂf—6–æR÷&ö¦V·F’FW7B67Gf&æ–Ò·&V—&æ¦VÒ÷7&VÖæ¦VÒà ¢222#"(	Bd•4ô³¢&VBÖü[æRæW÷g&Fæò—¦wV&—F’÷W&6–¦P ¤—§f÷&“¢7FF–2ö§2ööffÆ–æRÖÆ–W"æ§3£CBÃ2Ã#v†6fVÂVçVWVVÀ¦'V×&WG'–“²–æFW‚æ‡FÖÃ£SS3÷&ö6W74öffÆ–æUVWVV²£cCƒv—Rà ¤æSâ÷W&6–¦’æ§7F&–¦6R—¦&7V¦S²æ¶öâWBæV×&\[ææ–‚w&\Z¶¦÷W&6–¦6R'&œZRâ÷7Fö¦\Hv’FW7F÷f’FòV·7Æ–6—Fæò÷Gg,IV§RâôôÂç6fV ¦’VçVWVVæRg&Hv§R÷¦—fö7R÷Gg&GRW7¦\ZæörG&¦æörW—6²Væ·f÷F¦F¦RFö7BÂæR÷W¦FçRG&ç6¶6–§Râ&öÖ¦Væ¶÷&—6æ–¶f–ÇG&—&&WF†öFæ’&VBà¦÷&WG'”÷'†åfÆ¶VV&Æ[æfF–ò6Ç\HÖ¦Wf¦fÆ¶R&W¢6$–FÂÆ’æRg&Hv§7fRöF&HÖVæR—¦Ö¦VæRö'&—6æ¦ö&†—g6¶R÷W&6–¦RâæRGg&F—F’FæW7FæR&Z§7f¶’Æö¶Ææ’ö&¦V¶C¢÷Gg,IVâ¦RwV&—F²÷W&6–¦RR&VGRà ¥&W÷'V¶¢G&¦æ’&Vv—7F"æWW7¦VÆ–‚÷W&6–¦Â—§f÷¢ö÷÷&f²’V·7Æ–6—Fæ§÷Gg&FW—6²æRWFöÖG6¶òöF&6—fæ¦RæW6–æ‡&öæ—¦÷fæör&Fà ¢222#2(	Bd•4ô³¢f—6\Hv’¦‡F¦WbÖü[æR&Æö¶—&F’6–æ‡&öæ—¦6–§P ¤—§f÷&“¢–æFW‚æ‡FÖÃ£S#“÷&ö6W74öffÆ–æUVWVVÂ7W&6RfWF6‚FFW ¦ö¶ò£SS6Â£3ƒS3&öF÷¥&ö6W74w5ö–çFÂ£3“#“6F÷¥6fTöF¦VÆà ¥VWVR†æFÆW"–ÖF—&V·FæRv—F÷¦—fR&W¢Æö¶ÆæörF–ÖV÷WFö&÷'BÖà¤vÆö&Ææ’7W&6RfWF6‚FFW"÷7FfÆ¦66†S¢æò×7F÷&VÂæR&ö²à¤—¦öÆ÷fæ&W&öGV¶6–¦2&öÖ—6R¦‡F¦WföÒ¶ö¦’6RæR&§&–¦\Z’÷7FfÆ¦¦÷7–æ4–å&öw&W73×G'VV²æ&VFæ’÷¦—b÷7FfÆ¦6Öò÷7–æ5&W'Vã×G'VVà¤÷fòFö¶§V¦RöæZæ¦RæF·föÒG&ç7÷'GRÂæRÖ¦W&’&ö²7Gf&æR×&\[æRà¤F÷¦æ¶u27FfÆ¦FHÖ·RR7–æ2'VffW"FV²R6F6‚w&æ’÷6Æ–¦R–ç6W'F°§÷7Fö¦\Hv’Æ—fR6æ6†÷Bæ–¦R—7FòZFò’÷Gg,IVâVæF–ærW—2¦6W'fW"à ¥&W÷'V¶¢Æö¶ÆæòGW&&ÆRVçVWVR&–¦R¦‡F¦WfÂöw&æœHÖVâG&ç7÷'BÀ¦–FV×÷FVçFæ’&WG'’â6Ò&öÖ—6Rç&6R&W¢¦W7FfÆ¦æ¦¦‡F¦WfÖü[æR÷7Ff—F¦¶6æ’W—2RÆWGR(	Bö&fW¦æòFW7F—&F’—¦wV&Æ¦VâöFv÷f÷"’GWÆ–¶FRà ¢222#B(	Bd•4ô²ÂW6Æ÷fâæ¶öæf–wW&6–§S¢4E4R6Æ–VçB6V7&WBæ¶Æ–¦VçF–Ö ¤—§f÷&“¢7W&6RöÖ–w&F–öç2ó##c“÷6VçF–æVÃ%ö¶Æ§V6Wf’ç7ÆÀ¦–æFW‚æ‡FÖÃ£#“C.(	33&÷3$¶Æ§V4¶W5V6—F¦Â÷3$¶Æ§V5V6—F¦Â÷3%Fö¶VåW¦Ö–à ¥$Å24TÄT5B¦RF÷§föÆ¦Vâ7f¶öÒöFö'&VæöÒ¶÷&—6æ–·S²¶öBHÖ—F6Æ–VçE÷6V7&WF ¦’7&VÖvRÆö6Å7F÷&vRâ6·&—fæ¦RFÖ–âöÆ¦æRHÖ–æ’F¦çRæVF÷7GWæöĞ¦öFö'&VæöÒ¶Æ–¦VçGRâ¶ò¦R&—7GW¶öæf–wW&—6âÂ¶ö×&öÖ—F÷fâö—¦wV&Æ¦Và§W&\I¢–Æ’¦Æ÷W÷G&V&öFö'&VæöræÆöv—¦Æ[æR¦¦VFæœHÖ¶’&—7GWâæ—7P¬HÖ—FæR7Gf&æRg&–¦VFæ÷7F’æ—F’¦R÷Gg,IVæòF¦R&öGV¶6–¦¶öæf–wW&—&æà ¥&W÷'V¶¢6W'fW"×6–FR&¦Ö¦Væ÷÷7&VF÷fæ¦R2&÷f¦W&öÒ¶÷&—6æ–¶’·f÷FÖ°§&÷F6–§RÆæ—&F’2fÆ6æ–¶öÒ¶ò6R÷Gg&F’÷7Fö¦\Hv—¦Æü[æVæ÷7Bà ¢222#R(	Bd•4ô²¦—7÷'V·S¢'V–ÆBWBæRöFv÷f&æ÷fö¢&Fæö¢w&æ ¤—§f÷&“¢æG&ö–Bö'V–ÆBÖ²ç3&ÖWF"'&æ6‚’6†V6¶÷WB÷VÆÃ°¦æG&ö–Böw&FÆWvÂæv—F‡V"÷v÷&¶fÆ÷w2ö'V–ÆBç–ÖÆÂæG&ö–Böö'V–ÆBæw&FÆVà ¢Ò÷vW%6†VÆÂ'V–ÆBòFVfVÇGR&VÆ¦’æ6ÆVFRö'&æ6‚Ós##b×6—w£à¢&W¢V·7Æ–6—FæRw&æRÖü[æRæ&f—F’²&W¢æZ–‚—¦Ö¦Væà¢Òw&FÆRw&W"¤"æ–¦RG&6¶VB÷&—7WFââ6‚æG&ö–Böw&FÆWrÒÖöffÆ–æP¢Ò×fW'6–öæF66Æ74æ÷Df÷VæDW†6WF–öã¢÷&ræw&FÆRçw&W"äw&FÆUw&W$Ö–æà¢æ–¦R6R7F–vÆòFò¶ö×¦Æ—&æ¦æG&ö–B¶öFâ¦fr÷7Fö¦“²æVÖF& ¢æ’6Ö÷7FÆæRw&FÆV¶öÖæFRâ–ç7FÆ—&æ’æG&ö–B4D²æ–¦R÷Gg,IVâà¢Òv÷&¶fÆ÷röB–ÖVæöÒ'V–ÆBæG&ö–B²w&F’fÇWGFW"F÷¦æ¶öÂäP¢æG&ö–BövV%f–WrâæVÖWFöÖF—¦÷fæörFW7Bv÷&¶fÆ÷vR&VvÆVFæö¢w&æ’à¢Ò&VÆV6R÷G—2æ–¦R¶öæf–wW&—6âR'V–ÆBæw&FÆS²FV'Vr–ÖæFV'Vv ¢Æ–6F–öä–E7Vff—‚âf–ÆU&÷f–FW"WF†÷&—G’¦Rf–·6âÂZFò¦R¶æF–FB¦¢¶öæfÆ–·B&ÆVÆæR–ç7FÆ6–¦RFV'Vr÷&VÆV6S²æ–¦RFW7F—&æòæW&\I§Rà ¥&W÷'V¶¢&W&öGV6–&–ÆâvV%f–Wr'V–ÆBfW¦â¦FHÖâ6öÖÖ—Böw&çR’÷7Fö¦\Hv§÷G—2âæRFV–ç7FÆ—&F’¶÷&—6æ–¶÷gRÆ–¶6–§R&F’¦ö&–Æ[æVæ¦÷G—6&W ¦&6·WÖ¢FòÖü[æRö'&—6F’¦VF–çR¶÷–§RFW&Vç6¶ör&Fà ¢222âFöFFæ’&—¦–6’’æW÷¦ææ–6P ¢ÒöG,[æfæ¦R÷W&f÷&Öæ6R(	B5$TDä¤“¢fVÆ–¶’–æFW‚æ‡FÖÆ’¦¦VFæœHÖ¶’vÆö&Ææ¢66÷R÷F\[æf§R–çFVw&6–§6¶R&÷f¦W&Râ7ÆÖ&W7F÷&TÆÆ&VFöÒ\HÖ—Ff7fP¢æW&—6¶üHÖVæR¶'FRÂæR6Öò·F—fçRâ7G'V·GW&÷Gg,IVæ²7Gf&æòG&¦æ¦P¢’ÖVÖ÷&–¦æ¶÷&—6æ–¶÷föÒFVÆVföçRæ—7R—¦Ö¦W&Væ’â'fò&–&f—F’÷7Fö¦\Hv¢&VB(û—¢öffÆ–æR¶'FRÂ÷6V&æòF–ò$”¤R÷¦—fÂöFÇ\HÖ—F’ò÷&f6’à¢Ò&†—fü[æ&(	B5$TDä¤“¢÷÷d&…6W'fW%6–æ´÷÷7FfÆ¦¦VFæö·&FçP¢¦7Ff–7R&–¦R&÷f¦W&R¶öæV¶6–¦R’æRg&Hv¦Ræw&\Z·S²æÆ–Ö—BƒS– ¢&W¢v–æ6–¦Ræ–¦RFö¶¢¶ö×ÆWFæ÷7F’6W'fW"&W§VÇFFâ6W'fW&÷b7Gf&æ¢Ö·6–ÖÆæ’'&ö¢&VF÷fæ–¦R&÷f¦W&Vââ÷G&V&æ’&WG'’÷&V6öææV7B’v–æF–öâFW7F÷f’à¢ÒæG&ö–B†&FVæ–ær(	B¦FöFFæ’&VvÆVC¢V¶Æ§\HÖVæ’f–ÆR÷Væ—fW'6Âf–ÆR66W72À¢Ö—†VB6öçFVçB’6ÆV'FW‡C²æF—fRÖ÷7F÷f’&üZ—'V§R÷6Æ¦VF–6RWfVçGVÆæöp¢…52Öâfæ§6¶Ræf–v6–¦R¦W7Röw&æœHÖVæS²æ–¦RFVÖöç7G&—&æV·7ÆöF6–¦à¢Ò7W&6R4Dâ¦f—6æ÷7B&æ–¦RFHÖæò–æ÷fæ²Æö¶Ææ¶÷–¦’×&\[ææ¢fW'¦–¦ÖöwR6R&¦Æ–¶÷fF’âæRÖ–¦Væ¦F’&W¢¶ö×F–&–Ææ÷7F’ööffÆ–æRFW7Fà¢Òæ—7R&÷f¦W&Væ’&öGV¶6–§6¶’$Å2Â7Gf&æ’¶÷&—6æ–6’Â÷G—2–ç7FÆ—&æör²ÖÀ¢Væ’æG&ö–BÆ–fV7–6ÆRÂôTÒ&GFW'’ÖævW"Â7Gf&æ·f÷FöWf–¶6–¦ö‡&æRÀ¢×&\[ææ’4õ%2’6FVÆ—G6¶’VæGö–çF’Â&VÆæRw&æ–6Rô´ÔÂõ4…öF6’æ’T’æFVÆVföçRà¢Ò†—7F÷&–§6¶RGg&Fæ¦R4ÄTDRæÖFò&æ–¦–ÒÆ—w&–v‡B÷FW&Vç6¶–Ò&W§VÇFF–Ö¢æ—7Röæ÷fÆ¦VæR÷f–Ò&VvÆVFöÒâç"â÷HvGg&Fæ¦ò÷W¦FæöÒ7&6‚&V6÷fW'–§P¢–Ö¶öæ·&WFæR—§W¦WF¶R—¢#²æR&Væ÷6—F’¦R¶òv&æ6–§Rà ¢22Bâ—§g,ZVæR&÷f¦W&P ¤æöFRc#Bã’ãÂ—F†öâ2ã"ãFÂ¦f÷Vä¤D²rãã#à¥7f¶’¥2FW7Bf¦Â—§g,ZVâ¦RR¦6V&æöÒæöFR&ö6W7R‡&ö²c2’Â&W¢×&\[ææ–€§W—6â—F†öâFW7F÷f’7RHÖ—7FvVöÖWG&–¦âÆ–¶6–¦æ–¦Rö·&VçWF2&föĞ¥7W&6R6W6–¦öÓ²æ—7Rö·&WFæRÖ–w&6–¦RÂv÷&¶fÆ÷v’ÂFWÆ÷–ÖVçBæ’–ç7FÆ6–¦à §Â¥2FW7Bf¦ÂRFW7G2ö§2Â&üZÆòÂÆòÀ§ÂÒÒ×ÂÒÒÓ§ÂÒÒÓ§À§ÂFÖ–âÖ¶÷&—6æ–6’Â3ÂÀ§ÂWF‚ÖöffÆ–æRÖf—'7BÂrÂÀ§Â&ö¦RÖæv–&Â"ÂÀ§ÂFVÒÖ6öçF÷W'2ÂrÂÀ§ÂFVÒ×FW'&&—VÒÂRÂÀ§ÂFÆrÖ÷fW&Æ’Â’ÂÀ§Âw2Ö&rÖ'VffW"Â2ÂÀ§Â¶ÖÂÖ6Æ–6²ÂBÂÀ§ÂÆö2×÷W×G&rÂRÂÀ§ÂÖ×&W7F÷&RÖ–æF–6F÷"Â"ÂÀ§ÂöffÆ–æRÖÆ–W"Â2ÂÀ§Â&V2Ö&"ÂRÂÀ§Â6VçF–æVÃ"Â#ÂÀ§Â7ÆÖÖ–F"×7Æ—BÂbÂÀ§Â7F'GW×&W7F÷&RÂrÂÀ§ÂF–ÆRÖ&Æö'W&ÂÂ’ÂÀ§ÂVvÆF’Â‚ÂÀ§ÂfÆ¶RÖÆ—7BÂ‚ÂÀ§ÂfÆ¶RÖæv–"Â#’ÂÀ§Âv–&6²ÂÂÀ§Â¢¥V·Wæò¢¢Â¢£Sr¢¢Â¢£¢¢À ¥—F†öã¢¢£CR&üZÆò¢¢ÂÆòâüHÖWFæ’F—&V·Fæ’÷¦—bæ–¦R–Öò—FW7C°¦—¦öÆ÷fæòWbÒ×v—F†ö·'\[æVæ¦R¦R¦F–ÒW7¦\Zæòö·&VçVÆòFW7F÷fRà¥6–çF·6¢7f–‚¢£RæW&¦æ–‚–æÆ–æR¥2&Æö¶÷f¢¢&öÆ¦’æöFRfÒå67&—F°§Fòæ–¦R'&÷w6W"S$Ræ—F’&÷f¦W&7f–‚&VfW&Væ6’ægVæ¶6–¦Rà¤FöFFæR—¦öÆ÷fæRæöFRdÒ&W&öGV¶6–¦R#õ#27R—§g,ZVæRæB—§g\HÖVæ–Ğ§7Gf&æ–ÒgVæ¶6–¦ÖÂ66–çFWFœHÖ¶–ÒöF6–Ö’7GV&÷f–Ö(	B&W¢æ÷förFW7@¦f¦ÆR÷föÒFö·VÖVçF6–§6¶öÒ6öÖÖ—GRà ¢222¶öÖæFR¦öæfÆ¦æ¦R†—¢¶÷&–¦Væ&W÷¦—F÷&–¦ ¦&6€¦v—B'&æ6‚Ò×6†÷rÖ7W'&Vç@¦v—B7FGW2Ò×6†÷'@¦f÷"b–âFW7G2ö§2ò¢çFW7Bæ§3²FòæöFR"Fb"ÇÂW†—B²FöæP¥•D„ôäDôåEu$•DT%•DT4ôDSÓWb'VâÒ×v—F‚—FW7BÒ×v—F‚vVöw&†–6Æ–"Ò×v—F‚&–6‚ÒÖæò×&ö¦V7B—F†öâÖÒ—FW7B××æó¦66†W&÷f–FW"FW7G0¦  ¥7–çF‚ÖöæÇ’&÷f¦W&†æR—§g,ZfÆ–¶6–§R–Æ’×&\[ææR÷¦—fR“  ¦&6€¦æöFRÒÃÂt¥2p¦6öç7Bg2Ò&WV—&R‚vg2r’ÂfÒÒ&WV—&R‚wfÒr“°¦6öç7B‡FÖÂÒg2ç&VDf–ÆU7–æ2‚v–æFW‚æ‡FÖÂrÂwWFc‚r“°¦ÆWB6÷VçBÒ°¦f÷"†6öç7BÒöb‡FÖÂæÖF6„ÆÂ‚óÇ67&—EÆ"…µãåÒ¢“â…µÇ5Å5Ò£ò“ÅÂ÷67&—EÇ2£âöv’’’°¢–b‚õÆ'7&5Ç2£ÒòçFW7B†Õ³Ò’ÇÂÕ³%ÒçG&–Ò‚’’6öçF–çVS°¢æWrfÒå67&—B†Õ³%Ò“²6÷VçB²³°§Ğ¦6öç6öÆRæÆör†6÷VçB²r–æÆ–æR&Æö¶÷f¢6–çF·6ô²r“°¤¥0¦  ¤'V–ÆB&ö6VGW&¦'VG\Hv’öFö'&Væ’¦FF²„ä”¤R—§g,ZVæ÷f–Ò&VvÆVFöÒ“  £â&÷f¦W&’HÖ—7GRw&çR4ôDU‚ÕU2Õ5TÔVÂFHÖâ6öÖÖ—B’÷7Fö¦\Hv’÷G—2²Öà£"â÷6–wW&¢æG&ö–B4D²3BÂ¤D²r’—7&fâw&FÆRw&W"öÆBâG&VçWFæ¢6†V6¶÷WBæVÖw&W"¤#²Fò¦R¶öæ·&WFâ&Æö6¶W"&W&öGV¶6–¦Rà£2â—¢¶÷&–¦Væ&6‚æG&ö–Bö6÷’Ö76WG2ç6†ÂRæG&ö–Böö·&Væ¢âöw&FÆWr76VÖ&ÆTFV'Vvæ¶öâ&¦\ZVæ¦w&W&âæR¶÷&—7F—F’–ç7FÆÂF6²à£BâÇFW&æF—fæòæv–æF÷w7RV·7Æ–6—FæòæfVF’w&çS ¢÷vW'6†VÆÂÔW†V7WF–öåöÆ–7’'—72Ôf–ÆRæG&ö–EÆ'V–ÆBÖ²ç3Ô'&æ6‚4ôDU‚ÕU2Õ5TÔRÔ'V–ÆEG—RFV'Vvà¢6·&—F&F’fWF6‚ö6†V6¶÷WB÷VÆÂ’HÖ—7F’vVæW&—6æ’76WG2F—&V·F÷&–£°¢æRö·&WFF’¦RW7&VBÆö¶Ææ–‚æW¦g,ZVæ–‚—¦Ö¦Væà£Râ&÷f¦W&’6G,[æ¢76WG2Ö’W6¶ÆIVæ÷7BfW'¦–¦&–¦R’æ¶öâ'V–ÆFà¢æF—fR—¦Ö¦VæRG&V&§RVâ&V'V–ÆBâFV'Vr’&VÆV6Ræ—7R¦Ö¦Væ¦—f’à ¥W6‚Fö·VÖVçF6–¦Ræ4ôDU‚ÕU2Õ5TÔRæRöFv÷f&FWÆ÷’ç–ÖÆW6‚f–ÇFW'P¢†Ö–æÂ6ÆVFRò¢¦’â'V–ÆBv÷&¶fÆ÷r¦R6Öòv÷&¶fÆ÷uöF—7F6‚âæRÖ–¦Væ¦F§FRf–ÇFW&Ræ—F’ö·&WFF’v÷&¶fÆ÷rR÷fö¢f¦’à ¢22Râö&–ÒHÖ—Fæ¦’Æà ¥&üHÖ—Fâ6–¦VÆ’4ÄTDRæÖF²tTåE2æÖBæ–¦R÷7Fö¦òRüHÖWFæöÒ6†V6¶÷WGRà¥&üHÖ—Fâ6–¦VÆ’öffÆ–æRÖÆ–W"Â'V–ÆBÖ²ç3Â6÷’Ö76WG2ç6‚Â'V–ÆBæw&FÆRÀ¤æG&ö–B$TDÔRÂö&v—D‡V"v÷&¶fÆ÷v’Fö72ôÔôETÄ$•¤4”¤æÖBâ&VvÆVFæ§7RæfVFVæ’6VvÖVçF’–æFW‚æ‡FÖÂ†WF‚÷7F'GWÂv—RÂ6fR÷VWVRÂ7&6‚À¦æF—fR&WÆ’ÂF÷¦æ¶Â6FVÆ—G6¶’¶Æ§\HÖWf’Âü[æ&’’5Æ—FR&W7F÷&R’À¤æG&ö–B6WGWöÖ÷7Bôu2'VffW"F–¦VÆ÷f’ÂöF'&æR$Å2Ö–w&6–¦RÂFW7Fæ¦†&æW76’Â—F†öâôfÇWGFW"VÆ¦’’&öBÖFW6–vâ&ÖWG&’÷&WG&và¤÷7FF²T’Ö¦Â7f’–×÷'BöW‡÷'BFö¶÷f’Â7fRÖ–w&6–¦RÂæF—fR¶ÖW&÷6†&P¦FWFÆ¦’ÂÖ–æ–f–6—&æR&–&Æ–÷FV¶R’6¦VÆö·WâfÇWGFW"¶öBæ—7RÆ–æ–§6¶’VF—F—&æ’à ¤æ&VFæ’¦F6’ÂFV²÷6Æ–¦R¶÷&—6æ–¶÷för—¦&÷&  £â¢¥¦ZF—F÷÷&f¶’öFF¶…#õ#"“¢¢¢7'fVæ’&Vw&W6–§6¶’FW7F÷f’¶ö¦¢¶÷&—7FR7Gf&æ’ÖöFVÂfÆ¶RÂB7&VÖæ¦ÂVçR·f÷GRÂãS7Ff¶’À¢&V¶–B¥4ôäÂ&VF’&öÖ¦VçR¶÷&—6æ–¶²¦F–ÒÖÆ’6–Æ¦æòöFö'&Væ’f—‚à£"â¢¥÷W¦FâöffÆ–æR7–æ2…#2“¢¢¢GW&&ÆRVçVWVRÂG&ç7÷'Fæ’&ö¶÷f’À¢–FV×÷FVçFæ÷7B’&V6öææV7C²÷Gg&F—F’F¶6æ’öFv÷f÷"æRGWÆ–6—&W—2à£2â¢¤¶öçG&öÆ—6æ²—7÷'V¶’6–wW&æ÷6æ&÷f¦W&…#Bõ#R“¢¢¢&W&öGV6–&–Æà¢vV%f–Wr'V–ÆB÷FW7BvFRÂ÷7Fö¦\Hv’÷G—2’FW7BæFVÆVföçS²&VBÖöæÇ¢÷Gg&F$Å2ö6öæf–r7Fæ¦¦6V&æòöFö'&VæòV¶Ææ¦æ¦R6Æ–VçB6V7&WF2W&\I¦à ¥'fò#¢FöFFæ&÷f¦W&¦Rf\Hrö¶¦Æ¶öæ·&WFâ·f"ææ§6·WÆ¦VĞ§66Væ&–§R(	B7Zfæ§R6æ–Ö¶2FW&VæâÖöGVÆ&—¦6–¦FöÆ¦’÷7FWVæòÀ§FV²¶B7F&–Æ—§V¦VÖòFRFö¶÷fS²C²&VF÷f6Öòò6V&’æ–¦R&¦Æör¦&Ww&—FRà ¢22bâ&öÖ¦VæRæ¶öâüHÖWFæör&VvÆVF(	Bcãã€ ¤÷f¢öF¦VÂ÷—7V¦R¶öB&—&VÖÆ¦Vâæ4ôDU‚ÕU2Õ5TÔVæ¶öâüHÖWFæörVF—Fà¥&æ–¦’æÆ¦’#(	5#R÷7F§R†—7F÷&–§6¶’Fö¶¢üHÖWFæör7Fæ¦à ¢222',[æ’'f’&–¶¢¶'FP ¢Ò–æFW‚æ‡FÖÆ6F\HÖ—Ff¶Æ§\HÖæR&–&Æ–÷FV¶R—¢Æö¶Ææör7FF–2öÆ–'6Â¢vöövÆRföçB¦RæV&Æö¶—&§\Hv’FöFF²âüHÖWF²fœZRæRHÖV¶4DâF–ÖV÷WBà¢Ò÷7F'GW&W7F÷&Vö·&\HvR7ÆÖ&W7F÷&TÆÆöFÖ‚æ¶öâ&–¶¦üHÖWFæöp¢F&²5Âv÷&¶W"¶÷&—7F’Æö¶Ææ’7Âæ§2&W¢4Dâö·\Z¦à¢Ò&’ö·&WFæ§R6Rö&æfÆ¦6Öò·F—fæöffÆ–æR¶'Fâ÷7FÆR6H×WfæR¶'FP¢7RöFvüIVæRFö²–‚¶÷&—6æ–²æR—¦&W&RÂVÖ¦W7Fò6W&–§6¶ör\HÖ—Ffæ¦7f–€¢fVÆ–¶–‚Ô%F–ÆW2õ5Æ—FRf¦Æ÷f&–¦R'för¶÷&—6æör&–¶¦à¢ÒFW7G2ö'&÷w6W"ö6öFW‚×7F'GWæ6§6ö·&—f6–çFWFœHÖ¶’–æFW†VDD"ôÔ%F–ÆW0¢66Væ&–òÂÆ’æ–¦R—§g,ZVâ¦W"÷föÒö·'\[æVæ§RæVF÷7F¦RÆ—w&–v‡B6‡&öÖ—VÒà¢ö&öÆ¬Zæ¦RG&V&÷Gg&F—F’6öÆB×7F'BÖ¦W&Væ¦VÒ7Gf&æör²Öà ¢222üH×Wfæ¦RöFF¶’7–æ0 ¢Ò7FF–2ö§2ööffÆ–æRÖÆ–W"æ§6fœZRæR&\[æR&VBæS÷W&6–¦’æR'&œZP¢÷W&6–§R÷6Æ–¦RWBæWW7¦V†â÷7F¦R&Æö¶—&æ¦'\HÖæ’&WG'’ö—§f÷¢à¢ÒfÆ¶R’F÷¦æ¶&ö¦V·F’'fòFö&–¦§RÆö¶Ææ’¦—2õUT”BFV²öæF¢ö·\Zf§R6W'fW"â7FF–2ö§2÷&VÆ–&ÆRÖfWF6‚æ§6öw&æœHÖfHÖV¶æ¦RöFv÷f÷&¢’æ¦Vv÷förF–¦VÆÂ&W¢WFöÖG6¶öröæfÆ¦æ¦W—6à¢Ò7–æ2fÆ¶Rf\[æR6W'fW"”B÷&Wf—¦–§Rææ÷f–¦RÆö¶ÆæR÷W&6–¦RÂ&W÷¦æ¦P¢¶öæfÆ–·B’WG&·RGWÆör–ç6W'Fâ6W'fW"&VBfœZRæR&W—7V¦R—¦Ö¦VçR¶ö¦¢¦üZHÖV¶7–æ2à¢ÒF÷¦æ¶u2–FR'fòRÆö¶Ææ’&fW"âÖ–w&6–¦¢7W&6RöÖ–w&F–öç2ó##c“ö6öFW…öw5ö–FV×÷FVçBç7Æ¦R&—&VÖÆ¦VæÂÆ¢¢¦æ–¦R—§g,ZVæ¢£²FöF¦R$Å2×&W7V7F–ær–FV×÷FVçFæ’%2W¢¶Æ–¦VçG6¶¢fÆÆ&6²Fö²%2æR÷7Fö¦’à¢Ò&öÖ¦Væ¶÷&—6æ–¶&†—f—&Æö¶ÆæRFW&Vç6¶R¦—6RòfÆ6æ–·R&–¦P¢HÖœZHvVæ¦&–¶¦ÂVWVR6RæR'&œZRâöffÆ–æR¶'FR6RæR&†—f—&§R¦&öp¢fVÆœHÖ–æR’—¦öÆ6–¦R¶÷&—6æ–¶²ò÷G&V&’6Röæ÷fòWf÷¦Rà ¢222u2÷÷&f²’æG&ö–@ ¢Ò7&6‚6æ6†÷BfÆ¶RH×WfÆÂ&ö¦V·B’·&²ÂFR6R'&œZRFV²æ¶öà¢÷Gg,IVæörÆö¶ÆæörW—6à¢ÒæF—fTw4'VffW"æ¦fÂw56W'f–6Ræ¦f’Ö–ä7F—f—G’æ¦fWföFP¢&VBö6³¢æF—fRf¦Â6RæR'&œZRFö²¦f67&—B'fòæRWœZR6—&÷f¢¦÷W&æÂâüZF\HvVâ&VBæRöF&7V¦R¦G&fR&VF÷fRà¢ÒvV%f–Wr¦'&æ§V¦Rf–ÆR÷Væ—fW'6ÂÖf–ÆR&—7GWÂÖ—†VB6öçFVçB’6ÆV'FW‡@¢…EE²f–ÆU&÷f–FW"¶÷&—7F’Æ–6F–öä–FÂu2'&öF67B¦R¶WFæ’à¢ÒæG&ö–B¶öBæ–¦R¶ö×¦Æ—&âæ’FW7F—&âæW&\I§RR÷föÒö·'\[æVæ§Rà¢&öÖ¦VæRG&[æRVæ’²'V–ÆB’Æ–fV7–6ÆRFW7BæFVÆVföçRà ¢2226VçF–æVÂ’'V–Æ@ ¢ÒV¶Æöæ¦Væ’7R4E4RôWF‚õtÕ2¶öBÂT’Â5r'WF’66†RÖævW"¦7f¦\[æ¢6VçF–æVÂÓ"6æ–Ö²â&’ö·&WFæ§R6R'&œZR7F&’¶Æ–¦VçG6¶’6V7&WB’66†Rà¢&V÷7FÆ’6Æö¢	øÈÒ6VçF–æVÆ¦R¦fæ’U4v÷&ÆD6÷fW"Â&W¢¶Æ§\HÖà¢Ò†—7F÷&–§6¶Ö–w&6–¦##c“÷6VçF–æVÃ%ö¶Æ§V6Wf’ç7Æ÷7F¦R&F’†—7F÷&–¦Rà¢æ–¦Rö·&VçWFFW7G'V·F—fæÖ–w&6–¦¦6W'fW"F&VÇRögVæ¶6–§Rà¢ÒfW'¦–¦¦RW6¶ÆIVæ¢vV"õ5rãã†ÂæG&ö–BfW'6–öä6öFR3CF¢fW'6–öäæÖRãã†à¢ÒæG&ö–Bö'V–ÆBÖ²ç3&–‡fF6Öò4ôDU‚ÕU2Õ5TÔV²&ö÷G7G&&÷f¦W&f¢6Ç\[æ&Væ’w&FÆR‚ãBw&W"6†V6·7VÒâÖçVÆæ’v÷&¶fÆ÷p¢æv—F‡V"÷v÷&¶fÆ÷w2ö6öFW‚×vV'f–Wrç–ÖÆw&F’¦fvV%f–Wr²ÂÆ’æ–¦P¢ö·&VçWBæ—F’¦R²ö&¦fÆ¦Vâà ¢222&÷f¦W&Rcãã€ ¥7f–‚#BFW7G2ö§2ò¢çFW7Bæ§6f¦Æ÷f&öÆ¦’‚¢£Sb&÷f¦W&ÂF÷f¢¢’À¥—F†öâ¢£CRóCR¢¢ÂWB–æÆ–æR’HÖWF—&’—¦Gfö¦Væ¥2f¦Æ&öÆ¦R6–çF·6çP§&÷f¦W'RÂÖæ–fW7B„ÔÂ'6W"âæ—7R&÷f¦W&Væ’&öGV¶6–§6¶’7W&6RÂæ÷f¦Ö–w&6–¦ÂæG&ö–B¶ö×–Æ6–¦ö–ç7FÆ6–¦Â&6¶w&÷VæBÆ–fV7–6ÆRæ’7Gf&æ¦''¦–æ6öÆB7F'Fà ¢22râFW&Vç6¶&÷f¦W&’7F'GWöFÆöv(	Bcãã ¤æFV'Vr²×Rcãã‚÷Gg,IVæò¦Rö¶ò¢£R2¢¢Fò&–¶¦&æ–¦R\HÖ—FæP¥5Æ—FTD"¶'FRöB&–&Æœ[ææò¢£“SÔ"¢¢Â¦VFæ¶òöæÆ–æR’Rf–öç6¶öÒ&\[æ–×Rà¥¦g&–¦VÖRHÖV¶æ¦&–Æ¦Rf–FÆ¦—f6Öò6—föFÆöv’–æF–¶F÷"âFò÷Gg,IV¦P¦F&V÷7FÆòg&–¦VÖR&—F÷Gf&æ§RfVÆ–¶RÆö¶ÆæR&¦RÂæR×&\[ææöÒ4Dâ×Rà ¥Rcãã’÷&W7F÷&TÆ7DÖöFÖ‚FöF¦RÆvçRF÷òöFÆöwRÂ¦F–Ò÷Gf&¥5Æ—FRRv÷&¶W'R’¦Ö¦Væ§V¦RöFÆöwRFV²¶F¦R&¦7&VÖæâ–æF–¶F÷"¦P§öÖ¦W&Vâæg&‚FæR&Æö¶—&¶÷&œZFVæ¦R¶'FRâöæÆ–æRHvRF÷ò&—F’f–FÆ¦—`¦öFÖƒ²Rf–öç6¶öÒ&\[æ–×R¦f—6’öBFöv÷7Fö¦RÆ’öFv÷f&§\HvRF÷òÆüHÖ–6P§R6W'f–6R×v÷&¶W"66†R×Râ6Ö5Æ—FR¶'FöB“SÔ"’FÆ¦RÖü[æRG&V&F’ö¶ğ£R2¦÷Gf&æ¦R(	B÷f—¦Ö¦VæV¶Ææ¦6—gRöæWW÷G&V&Æ¦—gRüHÖWFçRf§RÂÆ¦æRGg&F’F¦R“SÔ"&¦÷Gf÷&VæG&VçWFæòà ¢22‚âü[æ&æ’&–¶¢(	Bcã"ã  ¢Ò7f¶’æ÷f’VÆ¦²R6V¶6–§Rü[æ&–&W6WGV¦R6Öòf–FÆ¦—fRü[æ&æR6Æö¦WfS°¢öF6’Â¶\ZWf’’÷7Ff¶ö&f¦\ZFVæ¦6RæR'&œZRâæVÖWFöÖG6¶örFö‡fF¢Fö²¶÷&—6æ–²æR—¦&W&R&–¶¢à¢ÒGVvÖR&–¶[æ’7fVæg&‡RV¶Æ§\H×V¦R·F—fæRd•$Õ2FWFV¶6–¦RÂ†VFÖÀ¢ö·f—&æ’6Ö¦W"Â&ö¦V¶6–§R÷&övæ÷§RÂFV·\HwRvöF–çRÂÆö¶ÆçR†—7F÷&–§RÀ¢F÷7GWæR&†—g6¶RvöF–æRFRTdd•2÷ü[æ&VæR÷g,Z–æR’et’âö&f¦\ZFVæ¦6P¢æRV¶Æ§\H×V§RWFöÖG6¶’¦W"¦‡F–¦Wf§R7f¦W7Fâ—¦&÷"’6—7FV×6·RF÷§föÇRà¢Ò·F—fæ’ü[æ&’¦G,[æf§R÷7Fö¦\HwRæ&æL[æ7FòÖ7'fVçRÆWGRò7F&÷7F’à¢FWFV¶6–¦R’&†—g6¶R÷g,Z–æRFV·\HvRvöF–æR¶÷&—7FR"&ö¦òÖ¦W6V6–Ö°¢7fR&æ–¦RvöF–æR¶÷&—7FR—7GR&–w\ZVçR&ö§Rà¢ÒfW'¦–¦S¢vV"õ5rã"ãÂæG&ö–BfW'6–öä6öFR3CfÂfW'6–öäæÖRã"ãà ¢22’â'\HÖæò[çW&—&æ¦R(	Bcã"ã ¢ÒRvÆfæöÒÖVæ–§RÂæW÷7&VFæò—¦æBöF¦fRÂæÆ¦’6R	ùHB[çW&—&¢Æ–¶6–§Và¢vV"fW'¦–¦ö·&\HvR&÷f¦W'R6W'f–6Rv÷&¶W&’÷7f¦\[æfÆ–¶6–§Rà¢Ò²Öü[æR&÷f¦W&—F’¦RÆ’æ÷f–¦fW'¦–¦ö&¦fÆ¦Væ’÷Gf÷&—F’4ôDU‚v—D‡V ¢'V–ÆBÂÆ’æG&ö–BæRF÷\ZFF–‡R6Ö÷7FÆçR–ç7FÆ6–§Ræ÷för²Öà¢¶÷&—6æ–²’FÆ¦R'\HÖæò÷Gg,IV¦R&WW¦–Öæ¦R’–ç7FÆ6–§Rà ¢22âv—D‡V"vW2&–¦f(	Bcã"ã  ¢Òv—D‡V"vW2U$ÂÖ÷&&—F’‡GG3¢ò÷övöæ&÷6·'Wæv—F‡V"æ–òõU2Õ5TÔRö°¢ÖÆ6Æ÷fRWFæ¦’g&Hv§RCBà¢ÒFôÆöv–â‚–6F‡fF’7F'GWw&\Z·R&–¦Ræ÷&ÖÆæRö'&FR&–¦fRÂ¢¶÷&—6æ–²Fö&–¦÷'V·RVÖ¦W7FòæV·F—fæörGVvÖWFà ¢22âü[æ&’(	B¦ÜHvVâ&–¶¢‡cã"ã2 ¢ÒVÆ¦²R6V¶6–§Rü[æ&’fœZRæRv6’6†V6¶&÷‚ÖRæ—F’V¶Ææ¦6Æö¦WfRà¢÷6Æ¦VFæ¦RW7¦\Zæò\HÖ—FæRFWFV¶6–¦Rg&Hv§R6R—¢Æö¶Ææör¶\ZöFÖ‚À¢V¶Æ§\H×V§\Hv’öffÆ–æRÂ6RFV²¦F–ÒÖöwR÷7f¦\[æ—F’×&\[æöÒà¢ÒvöFœZæ¦’&–¶¢’÷ü[æ&VæR÷g,Z–æR&–¶§V§R6W¦öçRÖ'N(	6æ÷fVÖ&#°¢¦çV"ÂfV''V"’FV6VÖ&"6RæR7'F§Ræ—F’6RçVFRRÆVvVæF’à ¢22"â6Æ"6–væÂ(	Bcã’ãrƒ##bÓÓ ¤æ¦‡F¦Wb¶÷&—6æ–¶&B6Ræ7FfÆ¦ææ÷fö¢w&æ¦4ôDU‚ÕU2Õ5TÔRÓ##bÓÓÂöBV&s†ÂVÖ¦W7Fò†—7F÷&–§6¶R&FæRw&æRà ¢Ò÷Gg,IVæòFW7FöÓ¢÷¦F–ç6¶’6$ÆöEfÆ¶VææWW7¦\ZâFö‡fBöæ÷fğ¢HÖ—FÆö¶ÆæRfÆ¶R’6W'fW'6¶’¶\ZFRGfWB÷¦—fö'&GR÷&–¶¢fÆ¶à¢÷&VÆöD6÷&TFF6F¶÷&—7F’÷7f¦\[æfæ¦R&W¢ö&æ÷fRÆö¶Ææör¶\Z°¢×&\[ææ’æWW7¦V‚¦G,[æf÷7Fö¦\HvRö&¦V·FR’&–¶¢â'f’VÆ¦²’FÆ¦P¢ö&æfÆ¦Æö¶ÆæRöFF¶RÂW7¦\ZâFö‡fB&–Ö¦Væ§V¦R6W'fW'6¶R—¦Ö¦VæRà¢ÒGfW¦7F÷æ×&\[ææF¦Gf&§RWFöÖG6¶’×&\[ææ’&—7GW’¶F¢÷7Fö¦R&æ–¦’W7¦\Zæ’W¦÷&6’âæWW7¦VÆ&ö&öFÖ‚¦Gf&7fö¢&÷¦÷"à¢÷g&VÖVæ&ö&’÷g&F²fW¦R÷7F§RöG,[ææ’à¢Ò&Vw&W6–§6¶’FW7F÷f’æB—§f÷&æ–ÒgVæ¶6–¦Ö¢&–¦R—¦Ö¦VæRWBF÷fÀ¢÷6Æ–¦R—¦Ö¦VæR6Æ"×6–væÂçFW7Bæ§63"ó3"â÷fò÷Gg,IV¦RV¶Ææ¦æ¦P¢æW÷G&V&æör&FÂæRG&¦æ¦R¦×'¦fæ¦æ7Gf&æöÒW&\I§Rà¢ÒvV"õ5rôæG&ö–BfW'¦–¦ã’ãrÂæG&ö–BfW'6–öä6öFRCcrâ²æ–¦R—¦w&IVà¢æ—F’–ç7FÆ—&ã²÷G&V&â¦RFW&Vç6¶’FW7B6Æ&ör6–væÆææ÷föÒ²×Rà ¢222â&VvÆVB'\HÖæör6Ææ¦(	Bcã’ã€ ¤æ¶÷&—6æ–¶÷b¦‡F¦Wb¦Z—&–Ò&VvÆVFöÒ’W¢öFö'&Vâ6Æ¦VF\Hv’W6‚À¦6fTæ÷e&ö¦V·F6FWf–¦V²H×Wf&ö¦V¶BR&VGR&–¦R÷Gg&FRW7¦V†à¤÷7f¦\[æfæ¦R&ö¦V¶Fg&HvæW÷6ÆæR—¢&VF&–¦RfÆ–F6–¦R·F—fæöp§&ö¦V·FÂ÷Gg&FF÷¦æ¶RH×Wf¶\Z7F&Æ¶FUT”B÷7F¦R—7F’à¤FWFÆ¦’ÂFW7F÷f’’÷Gf÷&Væ’æÆ¦“¢Fö72õ$TtÄTEô´ôDó##bÓÓæÖFà¥6Ææ¦RFW&Vç6¶ör&VF÷7F¦R'\HÖæó²÷¦F–ç6¶ò&WW¦–Öæ¦Ræ–¦RV¶–çWFòà ¢22Bâ'\HÖæò6Ææ¦R’öffÆ–æRöG¦—b(	Bcã’ã’ƒ##bÓÓ ¤¶÷&—6æ–²¦R&¦¦6æ–ò6–Æ£¢'\HÖæò6Ææ¦R÷7F¦S²&–÷&—FWB7R''¦–æ§¦×'¦fæ¦Ræ÷7&VFæ¦–ÒW&\I¦–Ö&W¢–çFW&æWFâWFöÖG6¶ò6Ææ¦Ræ–¦R6–Æ¢à ¢Ò÷&WG'”÷'†åfÆ¶V¦R&’7f¶öÒ–æ—B×Röæ÷fòö'&I—fò7fRfÆ¶R&W ¢6W'fW"”BÖÂHÖ²’–FVçFœHÖæRf\Hr7&VÖÆ¦Væ–Ò÷W&6–¦Öâ7f¶’fÇW6€¢6W&–¦Æ—§V¦R6–¦VÆ’Æö¶Ææ’&Vv—7F"Â¶\Z’VWVRâ6F¦VFâ&VvÆVB&VF¢&öæÆ¦’–FVçFœHÖæR÷W&6–¦S²öæR6RæR&W—7V§R’¦G,[æf§R&Æö6¶VB÷&WG'¢7FGW2âæ÷f–¦vVöÖWG&–¦öÖWFöF6’’fÆ¶R&W¢÷W&6–¦R6R’FÆ¦RH×Wf§Rà¢Ò÷÷&f²&W\ZFvÆfçRæ—B—¦Ö\IRfÆ¶²æ¶öâW¦Röæ÷fò&÷f¦W&f¢fÆ6æ–¶Â&—7WFæ÷7B’'&—6æ¦RfÆ¶Râ÷fòæRöFvI—§f÷&æ’FW&Vç6¶’W—3 ¢&F’6Ròæ¶æFæöÒ÷÷&f·Rf\HrÆö¶Ææò6H×Wfæ–‚öFF¶à¢Ò'\HÖæò6Ææ¦Ru26W&–¦Ræ&—g&VÖVæöÒ6W'fW"õ5Â·f'RfœZRæR&VÆ¦’æ¢7F÷F–çRö¦VF–æHÖæ–‚ö·\Z¦æ—F’æ7FfÆ¦÷7FÆR6W&–¦RâæW÷Gg,IVæP¢FHÖ¶R÷7F§RR&fW'Râö¦VF–æHÖæ’WB÷7F¦R¦d²õ$Å2w&\Z¶S²&V¶–F6P¢¶ò6W'fW"Fö¶öÒFörWF÷7FæRæVF÷7GWâà¢Ò&Vw&W6–¦S¢C–FVçFœHÖæ–‚fÆ¶&W¢öæ÷fæörfÇW6‚ÖÂæ÷f–¦vVöÖWG&–¦¢ÖWFöF6’Â&öÖ¦Væ¶÷&—6æ–¶ö'&—6æ¦RFö¶öÒW¦RÂüZF\HvVâ&VC²##u0¢FHÖ¶’&—g&VÖVæ’BF§R¦VFâ6W&–§6¶’ö·\Z¢ÂçVÆö¦VF–æHÖæ–‚À¢æW&öÖ–¦Væ¦Vâ&fW"â'\HÖæ’&\[æ–Ò÷7F¦Rö·&—fVâ÷7Fö¦\Hv–ÒFW7F÷f–Öà¢ÒfW'¦–¦S¢vV"õ5rôæG&ö–Bã’ã’ÂfW'6–öä6öFRCc’âæ–¦R—§g,ZVâæG&ö–B'V–ÆBÀ¢–ç7FÆ6–¦æ’Ö¦W&Væ¦RæFVÆVföçRâ÷fòV¶Ææ¦¶öæ·&WFâæW÷G&V&â&BÀ¢æRFö¶§V¦RF7R7f’W§&ö6’¦×'¦fæ¦V¶Æöæ¦Væ’â6–æ‡&öæ’Æö6Å7F÷&vP¢fVÆ–¶–‚u2&Vv—7F&’æF—fRF—6²7–æ2÷7F§R¶æF–FF’¦&öf–Æ—&æ¦Rà ¢22Râ'f’F–ò&VvÆVF(	B"ããòæG&ö–BCs  ¤¶÷&—6æ–²G&[æ’&VvÆVB’FW7F—&æ¦RRG&’6¦VÆ–æRÂüHÖWlZ’öBÆö¶Ææör&Fà¥÷&fÆ¦Væ7RGf&W&öGV6—&æ&÷W7F&’GRÆö¶ÆæörW—6¢F÷¦æ¶§fœZRæRöÖ¦W&ÖVÖ÷&–§6·RvVöÖWG&–§R&–¦R÷Gg&FR&fW&²¦g,Zfæ¦RG&v¦æR'&œZR7&6‚6æ6†÷Bæ—F’v6’6æ–Öæ¦R¶B&Vv—7F"æ–¦R6H×Wfâà¤÷÷&f²F÷¦æ¶R7'F¦VFçRÆ–æ–§RVÖ¦W7Fò¦VFæör6Æö¦ò6VvÖVçGRà¤FWFÆ¦’’&V÷7FÆ’&—¦–6“¢Fö72õ$TtÄTEôD”õóôôddÄ”äUó##bÓÓæÖBà ¢22bâG'Vv’F–ò&VvÆVF(	B"ããòæG&ö–BCs ¥'\HÖæò6Ææ¦S¢æW÷¦æFR÷W&6–¦R6R¦G,[æf§RW¢ö&¦Zæ¦Væ¦S²UDDP§7FGW6÷¦öæR¦‡F–¦Wf÷Gg,IVâ6–Æ¦æ’”C²¦¶Zæ¦VÆ’öFv÷f÷"&ö¦V·F÷¦öæP¦æRÖ–¦Væ¦Æö¶ÆæRöFF¶Ræ÷föræÆövâ6–¦VÆ’'\HÖæ’6–¶ÇW26R¦W7FfÆ¦§&’&öÖ¦Væ’fÆ6æ–¶â÷6Òæ÷f–‚&Vw&W6–§6¶–‚&÷f¦W&&öÆ¦’à¤ö&–Ò’÷Gf÷&Væ’æÆ¦“¢Fö72õ$TtÄTEôD”õó%õ%T4äõõ5U$4Uó##bÓÓæÖBà ¢22râG&\Hv’F–ò&VvÆVF(	B"ãã"òæG&ö–BCs  ¥F–ÆR&—FÖ66†R–ÖGg&GRw&æ–7RâFöFâ¦RÖæ–fW7B76WG2ÂFöÖ&æ—F†öâ&—&VÖÂw&FÆR7–æ5vV$76WG6&–¦R&T'V–ÆFÂ7G&övR¶÷–¦R’4„Ó#Sb&÷f¦W&²Öâ7f–‚c"¥2²b—F†öâ76WG2&÷f¦W&&öÆ¦Râw&W"¤"¦Rg&HvVâ’&÷f¦W&Vã²Æö¶Ææ’'V–ÆB¦R6F&Æö¶—&âæVF÷7GWæöÒw&FÆR‚ãBF—7G&–'V6–¦öÒ†Væ¶æ÷vä†÷7DW†6WF–öæ’à ¢22‚â÷÷&f²¦Fæ¦Vr6öÖÖ—F(	B"ãã2òæG&ö–BCs0 ¤÷F·&—fVæò¦RF¦R–æFW‚æ‡FÖÆR6öÖÖ—GR"ãã"6G,[æfòVÖWFçWGR÷'V·P¦ÆFò6·&HvVæöÒ—¦Æ§R’F¦R¦&örFövæVF÷7F¦Æf\Hv–æÆ–¶6–§6¶öp¦¶öFâg&HvVæ¦R÷6Æ¦VFæ¦6¦VÆ÷f—FfW'¦–¦’öæ÷fò7R&–Ö–¦Væ¦VæP§&÷f¦W&VæR—¦Ö¦VæR—¢&VvÆVF(	33¢&B&W¢×&\[æRÂ'\HÖæò6Ææ¦RÂG&¦æ’u0§W—2Â÷÷&f²G&vöF÷¦æ¶RÂ¦ZF—F&öÖ¦VæRæÆöv’öw&æœHÖVâ&—FÖ¶\Zà¥÷vW%6†VÆÂ&—&VÖ76WG2ÖfœZRæVÖ¦æ²¶ö¦’v–æF÷w2÷vW%6†VÆÂöw&\Zæğ§GVÖHÖ’&W¢UDbÓ‚$ôÒÖâçvVÆÂÖ¶æ÷væ÷7F¦RRvV"&W÷¦—F÷&–§RÂÆ’æ–¦RP¤²Öæ–fW7GR¦W"æG&ö–F÷bF—¦÷7FfÆ¦6·&—fVæRF—&V·F÷&–¦Râ— ¦UDUd’ö6R·V¦R6Öò¶÷&œZFVæ’WFWf’ævVö§6öæ²—§f÷&æ’6†Vf–ÆR0¦F–¦·&—FœHÖ¶–Òæ¦—föÒæ–¦R'VçF–ÖR76WB’F×R¦RÖ–¦Væ¦ò–ÖRâ—F†öà§¶WBvVòö’¦6V&æ’fÇWGFW"—§f÷"F÷¦æ¶öF¶üIW"æ—7RvV%f–Wr'VçF–ÖP¦76WG2’fœZR6RæRVÖ\HwRR²âHÆ—7F’76VÖ&ÆTFV'Vv¦RW7¦\Zã²—F†öà¦ÆB¦R¦F–Ò4„Ó#Sb&÷f¦W&–ò7f–‚#"'VçF–ÖRf¦Æ÷fR²×Râ&öÆ¦R7f–€£c2¥2FW7Fæ–‚f¦Æ÷fÂS—F†öâ&÷f¦W&’6–çF·6WB–æÆ–æR¥2&Æö¶÷fà¤²æ–¦R–ç7FÆ—&âæ—F’FW7F—&âæ7Gf&æöÒFVÆVföçRà ¢22’â6Æ"6–væÂÂu2&–¶¢’&–ÖÆ¦Væ’öF6’(	B"ããBòæG&ö–BCs@ ¥6Æ&—¦Ö¦W&VæfW¦6F¦W7FfÆ¦÷¦F–ç6¶R…EEõ&VÇF–ÖRFö¶÷fR§\HÖ—Ffæ¦RÆüHÖ–6²Æö¶Ææ’&Bæ7FfÆ¦öFÖ‚â'\HÖæ×&\[ææ&Fæ¦÷Gf&¦öw&æœHÖVâ&÷¦÷"ÂW&–öFœHÖæ&ö&&÷f¦W&f÷÷&f²fW¦Râ6Ææ¦RFW&Vç6¶–€§öFF¶÷7F¦R'\HÖæòâ¶\Z—&æÆüHÖ–6–Æ’&öF—FVÆ¢&–¶§V§R6R&W¢HÖV¶æ¦°§&ö²ö'V‡fF’F–¦VÆòöFv÷f÷&â—6·&6æÆüHÖ–6öF&7V¦R¦¶Zæ¦VÆ’öFv÷f÷"à¤u2F÷¦æ¶¶÷&—7F’6çf2’Æ–æ–¦RFò#‚6VvÖVæFÂæR¦6V&â6Æö¢òf–·7Rà ¥æVÂ(	åüZÆ¦’öFF¶Ræ6W'fW.(	Ò&–¶§V¦Ræ÷fRö[çW&—&æRfÆ¶RG'Vv–‚HÖÆæ÷f§&ö¦V¶FHÖ–¦’¦RfÆ6æ–²G'Vv’&ö¦V·FçBâ'\HÖæò÷7f¦\[æfæ¦R&÷f¦W&f¬HÖÆç7Gfò’&WW¦–ÖöFF¶RR÷7Fö¦\Hv’vVöÖWG&–§6¶’¶\ZâöGfö¦Væ’6[æWF²–Ö¦æ§fœZR#7Ff¶’Â—¦öÆ÷fâ¦RòæÆöwR’F÷7GWâöffÆ–æRâ&VÇF–ÖR—¦Ö¦VæP§6Rw'WœZR&–¦RW—6²¦¶Zæ¦VÆ’öFv÷f÷"æR&VÆ¦’ææ÷f’æÆörà ¥&öÆ¦’7f–‚cR¥2FW7Fæ–‚f¦Æ÷fÂS—F†öâFW7BÂ6–çF·6WB–æÆ–æR&Æö¶÷f’ö&¦R'&÷w6W §&÷f¦W&Râ6–×VÆ6–¦6‡&öÖR5RL9s¢CfÆ¶ò3"ãFHÖ¶Æö¶ÆæòF÷7GWæğ§¦Ã‚3²ãSu26VvÖVæF¶÷&—7F’"6Æö¦WfVÖ¦W7FòãSâ6Æ&fW¦F¦P¦çVÆ÷¦F–ç6¶–‚¦‡F¦WfR&÷f¦W&“²&VvÆVB&WW¦WFör&ö¦V·F&F’öffÆ–æP¦’æRZÆ¦RöFF¶RâÆö¶Ææ’76VÖ&ÆTFV'VrW7¦\Zã²4„Ó#Sb7f–‚#"'VçF–ÖP¦f¦Æ÷fR²×R÷Gg,IVââ÷fòæ—7RÖ¦W&Væ¦æ7Gf&æöÒFVÆVföçRæ—F’&÷f¦W&§&öGV¶6–§6¶–‚7W&6R&fâöffÆ–æRöFÆövRÖ÷&§R&—F’&æ–¦RWfW¦VæR–Æ¦¶\Z—&æRâæVÖÖ–w&6–¦R&¦Rà ¢22#âFW&Vç6¶’Ww&FR(	B"ããRòæG&ö–BCsP ¤æ¦‡F¦Wb(	äôE$D’(	ÒWfVFVâ¦RÆö¶Ææ’GfÆ¶RÖf–VÆBÖ¦÷W&æÆ–æFW†VDD ¦FæWfæ–²†7FF–2ö§2öf–VÆB×7F÷&Ræ§6’âF÷¦æ¶7f¶’&–‡fHvVæ’f—‚W—7V¦RP§VæF–ærÂvVöÖWG&–§R6W6–¦R’ÖÆ’÷—26W6–¦RR¤TDäô¢G&ç6¶6–¦’âT’6P§öÖ¦W&FV²æ¶öâ6ö×ÆWFS²öG,[ææ’vV%f–Wr¶÷&—7F’7G&–7BGW&&–Æ—G’à¤æVÖ6W&–¦Æ—¦6–¦R6–¦VÆöru2&fW&æ—F’Æ—fRæ—¦òf–·7RâfÆ¶’G&p§¦G,[æf§R÷7Fö¦\HwRö‡&çRöæF—fR¦ZF—GR’6æ6†÷Bæ32(	Bæ—7RÖ6÷fæğ¦Ö–w&—&æ’â6W&–§6¶’6öÖÖ—B7&¦\HÖf&V¶Æ÷Æ—fRöæF—fR6ÆÆ&6¶²æWW7¦VÆ§FHÖ¶6RöæfÆ¦&–¦Ræ÷f–¦Râ¦g,ZWF²HÖV¶W—2RÆWGR’æRv6’6æ–Öæ¦P¦¶ò¦g,ZWF²æ–¦R÷Gg,IVââ¦¶Zæ¦VÆ’7F'GW&V6÷fW'’æR&W—7V¦R[æ—f§6æ–Ö²âFHÖ¶R’÷Gg&FR6Ææ¦7RöGfö¦VæRòfÆ6æ–·S²ÖçVÂ7–æ2÷7F¦Rà ¥7F&’u2&fW"6R&Væ÷6’Âöæ÷fòHÖ—F’&÷f¦W&f&–¦R'&—6æ¦÷&–v–æÆà¤üZF\HvVâ÷&–v–æÂ÷7F¦RæWF¶çWBâ7F&–Ææ’ÆVv7’–FVçF—FWF’’&V6V—G0§7&¦\HÖf§Röæ÷fæò6Ææ¦R÷Gg,IVæ–‚FHÖ¶—¢7F&R¶÷–¦Rö&†—fRâ·F—fæ§6W6–¦g&HvVæR¶ö÷&F–æFRÂf—6–æR’g&VÖVæ²ÆVv7’6æ6†÷BH×Wf÷¦æ·P¦æW÷¦æFörg&VÖVæVÖ¦W7Fò—¦ÖœZÆ¦æ¦â¦÷W&æÂ÷7F¦R&’&öÖ¦Væ’æÆövÀ¦Æ’G'Vv’æÆörvæRf–F’æ—F’ZÆ¦RâæVÖ&öGV¶6–§6¶R5ÂÖ–w&6–¦Rà ¤ÖVæ’’&ö¦V¶B–Ö§R(	å7&VÖæò¦FW&Vâò6–wW&æ÷6æ¶÷–¦(	Ó ¢Ò&÷f¦W&&ö¦V·FÂw&æ–6ÂÆö¶Ææ–‚öFF¶ö¶öÆVv’÷WF&÷‚Ö°¢Òöw&æœHÖVæ—67'æ66†R7F÷&vR&÷f¦W&öF'&æörö'V‡fF’¦ööÒÖÀ¢æ§fœZR#C‚ÆüHÖ–6Â&W¢×&\[æS²G'Vv’¦ööÒæ–¦RF–ÖR÷Gg,IVã°¢Ò5Æ—FRöFÆöv6RæföF’¶ò÷Gf÷&VæÂÆ’ÖWFöF6’æ—7RFö¶¢öG7W7Gf¢'WÂ¦Fò6RæRF¦RÆ[ææò¦VÆVæò(	ç7&VÖæş(	Ó²ö'V‡fBfÆ¶&W¢w&æ–6R¦P¢F¶üIW"æW÷GVæ÷Gg&F°¢Ò7FÆæ’7FGW26æ–Öæ¦·&÷¢F&÷fS¢FHÖæ÷7Bu2ÖÂG&¦æ¦RÂFHÖ¶RÀ¢÷Gg,IVâW—2öw&\Z¶ÂfW¦’'&ö¢7Ff¶’¦'\HÖæò6Ææ¦S°¢Ò¥4ôâ—§f÷¢24„Ó#Sb’Æö¶Ææö&æ÷f6Öò—7FöræÆövÂ&W¢&W—6—fæ¦¢÷7Fö¦\Hv–‚”BÖ¦WfâV¶Æ§\H×V¦R&ö¦V·FæRfÆ¶Rö¶öÆVvRÂF÷¦æ¶¶\Zôu26W6–¦RÀ¢&VB¦6Ææ¦RÂG&v÷fRöÖ¦W&Væ¦’Æö¶Ææ’´ÔÂôvVô¥4ôâæÆövâF÷¦æ¶Öü[æP¢V¶Æ§\HÖ—F’÷fW¦æ’&ö¦V¶BfÆ¶â7F&’G&v÷f’öÖ¦W&Væ¦&W¢&ö¦V·D–B6P¢&–G'\[çV§Ròt¢ööF¦VÇS²æ÷f’v×FRV·7Æ–6—Fæòâ&7FW&’Âf÷Föw&f–¦R¢&VfW&VçFæR6Æ–¶R7R¦6æò•4´Ä¥\HÄTä’’H×Wf§R6R¦6V&æòâWf÷¢–ÖÆ–Ö—@¢3Ô"Â÷Gg&GR¶÷&—6æ–¶’&VfÆ–v‡B¶÷–§S²æVÖWFöÖG6¶ör6Ææ¦à ¥&÷f¦W&S¢7f–‚cb¥2FW7Fæ–‚f¦Æ÷fƒæ÷f–‚6–Æ¦æ–‚&÷f¦W&’ÂG&’'&÷w6W §6·&—FRÂS—F†öâFW7B’6–çF·6â7Gf&æ’6‡&öÖ—VÒ–æFW†VDD"²5RL9s £#6–çFWFœHÖ¶–‚FHÖ¶2g&VÖVç6¶–Ò÷¦æ¶ÖZW7B6F’6æ–Öæ¦ÂçVÆW—6§7F&örfVÆ–¶ör&fW&²6–×VÆ—&æ’V÷FW†6VVFVDW'&÷"æRöÖ¦W&Æ–æ–§RÀ¦æ¶æFæ’÷÷&f²g&Hv#"FHÖ¶Râ&÷f¦W&Væ’ö&æ÷fæHÖ—7FöÒ&öf–ÇRÀ§öæ÷fÆ¦Væ’Wf÷¢ÂfÆ6æœHÖ¶—¦öÆ6–¦ÂüZF\HvVæ¶÷–¦’¦'&æöæ÷fæöp§7FfÆ¦æ¦÷Gg,IVæ–‚FHÖ¶R÷WF&÷‚â÷fòæ–¦RZW7B6F’&Fæ7Gf&æöĞ¤æG&ö–BFVÆVföçRÂÆöv6Bôå"Ö¦W&Væ¦RÂwV&—F²f—¦œHÖ¶öræ¦æ¦æ—F§&öGV¶6–§6¶7W&6R&÷f¦W&âFò÷7F¦RFW&Vç6¶’¶÷&²&÷f¦W&R²Öà ¢222F÷Væ"ããbòæG&ö–BCs` ¥¦g,Zæ&÷f¦W&ö&æ÷fRæ÷&ÖÆæör&ö¦V·Fö¶¦Æ¦RFÆöE&ö¢‚–g&Hv§6Öòf÷&×VÆ&RÂæRfÆ¶RâWf÷¢6FöFÖ‚7'F6ÖòæVF÷7F§\HvRfÆ¶R— ¦¶÷–¦RÂ&W¢×&\[æR’&W¢¦Ö¦VæRæ÷f–¦–‚ö&¦V¶FRÖVÖ÷&–¦’âFöFæ¦R&÷f¦W&¦vVöÖWG&–¦Ræ÷&ÖÆæör&ö¦V·FRHÖ—7FöÒ&öf–ÇR’öæ÷fÆ¦VæörWf÷¦à ¢22#â&VvÆVBöFF¶òF&÷f–Ö(	B"ããròæG&ö–BCsp ¤¶÷&—6æ–²¦R—¦'&òWw&FR'&ö¢"âæ÷f’7FF–2ö§2÷F"ÖFFæ§6¶÷&—7F’6Öğ¦Æö¶ÆæRöFF¶S¢æVÖæ÷f–‚×&\[ææ–‚¦‡F¦Wfæ’WFöÖG6¶ör6Ææ¦â·F—fæ§&ö¦V¶B¦Rf–FÆ¦—bRæVÆ–ÖÂFö²¦R¦6V&æ’öF¦VÂF÷¦æ¶R¦6æò÷¦æHÖVà¦¶ò÷fW¦â–Æ’¦6V&ã²æf–v6–¦æRÖ–¦Væ¦öF¦VÂæ—F’¦W7FfÆ¦u2à ¥&WG&vÂ6÷'BÂf–ÇFW"æW÷6Ææ–‚fÆ¶Â7G&æ–6’öÆü[æ¢æVÆ×FR6P§ò¶÷&—6æ–·R÷&ö¦V·GRFö¶öÒ÷Gf÷&VæR6W6–¦Râæ–¦RG&¦æ÷7Ff¶æ¶öà§&W7F'Fâf\HvRÆ—7FRfÆ¶Â¶öÆVv’&VF6Ææ¦7'F§Ròc¶'F–6æ§7G&æ–6’†æ–¦Rf—'GVÆæ’&W6¶öæHÖæ’67&öÆÂ’â†–¦W&&†–§6¶’&VF÷6Æ–¦VB·&¶÷f¦’7Gf&æ’FF×f––æFV·27RüH×Wfæ“²—¦&÷"2¶'FR÷Gf&öFv÷f&§\HwP§7G&æ–7R¶òfÆ¶æ–¦R6·&—fVæ&WG&vöÒöf–ÇFW&öÒâ¶'F–6R&¦Æ–·V§RÆö¶ÆæP¦—¦Ö¦VæRR&VGRöB÷Gg,IVæR6W'fW'6¶R¶÷–¦Râ¶öÆVvR–Ö§RÆö¶ÆçR&WG&wP§òæ¦—gRfÆ¶Rö–ÖVçRâæVÂ6W'fW"–Ö¦6Ææ¦Rò&–ÖÆ¦Væòò&ö&ÆVÖ“°§&ö&ÆVÖFœHÖæR÷W&6–¦R÷7F§R’R&VGR¦6Ææ¦RÂæœZF6RæRöF&7V¦Rà¤'&ö¦HÖ’’&–ÖÆ¦Væ’fVVB÷7F§Röw&æœHÖVæ’æG&VçWFæör¶÷&—6æ–¶üHÖÆç7Gfòà ¥&÷f¦W&S¢7f–‚cb¥2FW7Fæ–‚f¦Æ÷fÂS—F†öâFW7B’HÖWF—&’'&÷w6W"6·&—FRà¤æ÷f’FW7G2ö'&÷w6W"÷F"ÖFFæ6§6FW7F—&#CfÆ¶óƒfÆ¶¶öÆVvÂcDôĞ¦¶'F–6Â—¦&÷"G'VvR7G&æ–6RÂ&WG&wR’÷g&F²öÆü[æ¦Â—¦öÆ6–§R7Fæ¦§&ö¦V¶FÂæW÷6ÆçR—¦Ö¦VçRf\Hr÷Gg,IVæRfÆ¶RÂf–ÇG&R6W'fW"æVÆ’G\I§&VBâ6‡&öÖ—VÒ25RL9r&–¶§V¦R7G&æ–7R¦&–&Æœ[ææò#(	3s"×2‡6–çFWFœHÖ¶’ÖÆ§G&v÷f’ÂæRÖ¦W&Væ¦Rf—¦œHÖ¶örFVÆVföæ“²&VvÆVBæR&f’fæ§6¶R¦‡F¦WfRà¥&Vw&W6–§6¶R&÷f¦W&R'\HÖæör6Ææ¦Â6Æ&ör6–væÆÂ–æFW†VDD"u2÷÷&f¶§6–wW&æ÷6æ–‚¶÷–¦7RüH×WfæRâæ÷f’ÖöGVÂ¦RR5r6†VÆÇR’ö&fW¦æ–ÒæG&ö–@¦76WF–Öâ&f’7&VFæ¦W&æv—&æ’æG&ö–B’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’à ¢22#"âF—¦¦â¦FW&Vâ(	B"ãã‚òæG&ö–BCs€ ¤¶÷&—6æ–²¦RöF'&ò'&ö¢2—¢&WF†öFæör&–¦VFÆöv¢HÖ—FÆ¦—f÷7BÂFöF—&æP§÷g,Z–æR’FæWfæ’&–¶¢â7FF–2ö772öf–VÆBÖFW6–vâæ776¦R¦6V&â6Æö¢æ@§÷7Fö¦\Hv–Ò—¦vÆVFöÒÂ&W¢&W—6—fæ¦æf–v6–¦R–Æ’u2÷ö‡&æ÷7–æ2¶öFà¥FV·7Bæf–v6–¦R¦Rã^(	3"‚‡&WF†öFæòãR‚’ÂFöF—&æf—6–æSbƒ°¦÷6æ÷fæGVvÖB’F–¦Æ÷¦’–Ö§Ræ¦Öæ¦RC‚‚â¶'F–6RÂ7FGW6’Â&WG&v§6[æV6’–Ö§RHÖ—FÆ¦—f–¦’FV·7B’V¦VFæHÖVæR'V&÷fRâ¶6–¦R÷7F§RFV·7GVÆæğ¦÷¦æHÖVæR6æ–Ö’òW¦òæ7Ff’ò¦g,Z’Â&W¢&VÖ¦\ZFæ¦–Æ’æ÷f–‚&Fæ¦’à¥G&¶·F—fæör6æ–Öæ¦÷7F¦RF÷7GWæ²g&‚¦RW6¶ÆIVâ2fœZöÒæf–v6–¦öÒà ¥RÖVæ’(i"FW&VâFöFæò¦RGVvÖR(	äFæWfæ’&–¶¢¦7Væ6^(	ÒâFÖæ’&–¶¢÷7F¦P§¦Fæ“²—¦&÷"6R×F’¶ò÷7Ff¶W&\I¦GfÆ¶Uöf–VÆE÷F†VÖU÷c’&–Ö¦Væ§V¦P§&–¦R'för7'Fæ¦â¥2ÖöGVÂf–VÆBÖFW6–vâæ§6æR&—7GW&ö¦V·GRÂu2×RÀ§&VGR6Ææ¦æ’×&\[æ’âVæÖVÖ÷&–¦æR'\Z’&öÖ¦VçRFVÖRÂæVvòW÷¦÷&’F§÷7Ff¶æ–¦RG&¦æòW—6æâFæWfæFVÖ¶÷&—7F’7f–¦WFÆR÷g,Z–æR’FÖæ§FV·7BÂ6VÖçFœHÖ¶R7FGW6R’¦6æò÷¦æHÖVæR&Fæ¦S²æRÖ–¦Væ¦&7FW&RÂ&ö¦P§fÆ¶–Æ’vVöÖWG&–§RâæVÖæ÷f–‚föçF÷fÂ6Æ–¶Â×&\[ææ–‚&–&Æ–÷FV¶–Æ’f–ÇFW&¦æB¶'FöÒâö&f¦Æ7RR5r6†VÆÇR’ö&fW¦æ–Ò²'VçF–ÖR76WF–Öƒ#r’à ¥&÷f¦W&S¢7f–‚cr¥2FW7Fæ–‚f¦Æ÷fÂS—F†öâFW7BÂ–æÆ–æR6–çF·6’W@¦'&÷w6W"6·&—F’âæ÷f’Væ—BFW7B&÷f¦W&fÆö¶ÆçR÷7Ff·Röö&æ÷gRÂ$”7Fæ¦RÀ¦æW÷¦æGRg&–¦VFæ÷7B’VçRÖVÖ÷&–§Râ'&÷w6W"&÷f¦W&f3#ó3cóC"ósc‚‚À¦ö&æ÷gRFVÖRæ¶öâ&VÆöBÖÂ¶öçG&7B&ö¦Ræ6Æ÷f’&–Ö&æörGVvÖWFÂFöF—&æP§f—6–æRÂÖöFÆR’öG7W7Gfò†÷&—¦öçFÆæör&VÆ–¦Wfæ¦â&öÖ¦VæFVÖRæRv6§6–×VÆ—&æò·F—fæò6æ–Öæ¦RÂæRÖ–¦Væ¦&VBæ—F’ö·&\HvRfæ§6¶R¦‡F¦WfRà¥f—§VVÆæò&VvÆVFæR67&VVç6†÷B6Æ–¶RÆ—7F’fÆ¶÷&ö¦V¶FöF÷¦æ¶R’æVÆ¥6W'fW"õ7&VÖæò¦FW&VââFæWfæ’&–¶¢æ–¦R&÷f¦W&Vâæf—¦œHÖ¶öÒFVÆVföçP§öB7Væ6VÓ²7Gf&æ’æG&ö–Bu2’&öGV¶6–§6¶’7W&6R÷7F§RæW&÷f¦W&Væ’à ¢22#2â´ÔÂfÆ¶RfW¦æR¦&ö¦V¶B(	B"ãã’òæG&ö–BCs ¥RFWFÆ¦–Ö&ö¦V·FFöFæò¦R(	åWfW¦’fÆ¶R„´ÔÂ(	Òâ6–Æ¦æ’&ö¦V¶B’¶÷&—6æ–°§¦¶Æ§\HÖf§R6R&’÷Gf&æ§S²F÷\ZFVæ’7RfÆ7F—F’&ö¦V·F’’HÖÆç7GfòÂæP§&VvÆVFæ’æÆ÷¦’â´ÔÂÆ–æU7G&–ærô×VÇF”vVöÖWG'’’wƒ¥G&6²÷7F§Ræ÷&ÖÆæ¦Æö¶Ææ’ö&¦V·F’fÆ¶2&ö¦V·FöÒÂFHÖ¶Ö÷f—6–æÖÂ'&ö¦VÒÂ·&¶öÒ’7G&æöÒà¥÷7Fö¦\Hv’¶Æ–²÷÷WôVF—GV¢’VF—F÷"vVöÖWG&–¦R÷7F§R—7F’¶ò¦6æ–ÖæP§fÆ¶Râu‚¶ö×F–&–Ææ÷7B¦R¦G,[ææâöÆ–vöæ’6RfœZRæRW—7V§R&’6ÖöĞ§&VvÆVGRf¦Æ¢w&æ–6R–Ö§RöGfö¦Væ’÷7Fö¦\Hv’(	äFöF¢´ÔÂf¦Î(	ÒFö²à ¥&VvÆVBæRÖ–¦Væ¦öFF¶S²öGW7F¦æ¦R’¦¶Zæ¦VÆòHÖ—Fæ¦R—¢&WF†öFæöp¦ÖöFÆæR&WW6Ö¦W&f§RWf÷¢âæ¦—f’7Ræ÷&ÖÆ—¦÷fæ’’¦VF–ç7GfVæ’P§&ö¦V·GRÂV¶Æ§\H×V§\Hv’&F6ƒ²CRã¦‡F–¦WfCRÂVvæ–¦\[ìIVæ’·&²7föp§&öF—FVÆ¦â„ÔÂæ¦—f’6RW66—&§RâæV—7&fæR´ÔÂ¶ö÷&F–æFRæR6Ö–§P§F–†ò7ö¦—F’&V÷7FÆRFHÖ¶R&V¶ò&W6¶üHÖVæörF–¦VÆâ¦FVÆVföâ¦RWf÷ ¦öw&æœHÖVâæ#Ô"ÂÆ–æ–¦’#FHÖ¶²&WfVÆ–²f¦Â6RöF&–¦À¦æR6·&HwV¦Râ6–¦VÆ’Wf÷¢6R'fòG&¦æòÆö¶Ææò6æ–Ö“²VæÖVÖ÷&–¦¦öGW7F¦R&W¢FöFfæ¦æ¶'GR÷&VBâ6Ææ¦R÷7F¦R—6¶Æ§\HÖ—fò'\HÖæòà¥&VB’¶\Z6R&—&VÖ§R¦VFæ–Ò&F6‚¦—6öÒÂ&W¢öæ÷fæör6W&–¦Æ—¦÷fæ¦§7f–‚u2FHÖ¶¦7f·Rö¦VF–çRÆ–æ–§Râ¶ò&VBæR7FæRRÖVÖ÷&–§RÀ§G&¦æÆö¶Ææ¶÷–¦÷7F¦R’÷'V¶æRGg&F’F¦R&—&VÖÆ¦Vâ¦6Ææ¦Rà ¥&V–ÖVæ÷fæ¦R6F[çW&—&’÷7Fö¦\HwRæW÷6ÆçR÷W&6–§R¦—7Föp¦¶÷&—6æ–¶÷&ö¦V¶BÂVÖ¦W7FòF7F&’æ¦—b¶6æ–¦Ræ&f’GWÆ’&VBà¤VF—F÷"’F÷¦æ¶H×Wf§R–FVçF—FWBfÆ¶Rö¶÷&—6æ–¶&V¶ò7–æ2F–¦Æövà¥&öF—FVÆ§6¶ò&V–ÖVæ÷fæ¦RæR&V–ÖVçV¦RWFöÖG6¶’7fR÷FöÖ¶R‡÷7Fö¦\HvP§öæZæ¦R“²·&¶÷f’–Ö§R¦6V&æò&V–ÖVæ÷fæ¦RRVF—F÷'Rà ¥&÷f¦W&S¢c‚¥2FW7Fæ–‚f¦Æ÷fÂS—F†öâFW7BÂWB–æÆ–æR¥2&Æö¶÷fÀ¦'&÷w6W"FW7F÷f’´ÔÂ÷'\HÖæò6Ææ¦R÷F&÷f’÷6Æ"6–væÂöF—¦¦ââæ÷f’'&÷w6W §FW7B7Gf&æò&—&´ÔÂf¦ÂÂ&÷f¦W&f6–Æ¦æ’&ö¦V¶BW&¶÷2G'VvöÒ·F—fæöÒÀ§&öF—FVÆ§6¶’·&²Â÷WöVF—F÷"Â&V–ÖVæ÷fæ¦R&W¢7F&RVWVR7Ff¶RÀ§VçRÖVÖ÷&–§RÂ&öÖ¦VçR¶÷&—6æ–¶ÂW66–ærÂ&Vf–·6—&æRæÖW76V÷fRÀ¤×VÇF”vVöÖWG'’öwƒ¥G&6²Â¦¶Zæ¦VÆ’f–ÆU&VFW"’ö&æ÷gRæ¶öâ&VÆöBÖà¤Æö¶Ææ’FV'Vr²¦R—¦w&IVâ’7f–‚#r'VçF–ÖR76WG24„Ó#Sb&÷f¦W&Væòà¥&f’æG&ö–B&—&HÒf¦Æ÷fÂu2’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’à ¢22#Bâf–FÆ¦—f–¦æG&ö–B–¶öæ(	B"ããòæG&ö–BCƒ  ¤æ¦‡F¦Wb¶÷&—6æ–¶÷f\Hvâ¦R6ÖòVçWF&æ¦’w&"‡ãã"RÆ–æV&æò’Â&W §&VF—¦¦æÂ&7FW"ö'&FRÂ&öÖ¦VæR&ö¦Âfæ§6¶örö·f—&–Æ’Æöv–â÷7Æ6€¦w&f–¶RâÖæ–fW7B¶÷&—7F’æ÷fR–5öÆVæ6†W%÷f—6–&ÆV’&÷VæE÷f—6–&ÆV §&W7W'6RâæG&ö–B‚²FF—fæÖ6¶¦G,[æf÷7Fö¦\HwR¦VÆVçR÷¦F–çS°¦f÷&Vw&÷VæB„ÔÂ&üZ—'V¦R÷7Fö¦\Hv’&÷f–Fæ’&—FÖ6–ÖWG&œHÖæò¦RãVG ¦æ†GÆFçRâæG&ö–Br–Ö¦6V&âC†GfÆÆ&6²2S6Gw&&öÒÂ¦VÆVæöĞ§öFÆövöÒ’üH×Wfæ–Ò÷fÆæ–Òö·f—&öÒ¦&÷VæD–6öââtär–¶öæRæ—7P¦Ö–¦Væ¦æS²÷f¢¦‡fBöFæ÷6’6Ræ–ç7FÆ—&çRæG&ö–BÆ–¶6–§Rà ¤æ÷f’æöFRFW7BHÖ—F7Gf&æRärÇ†–·6VÆRRWBFVç6—G’f&–¦çF’§&÷f¦W&fF÷f\Hvæ’w&"‡W¢'V"–·6VÆö–çFW'öÆ6–§R’7FæRR6VçG&Ææ£cfG6–wW&æ’·'Vr’FF–¦vöæÆ7'F\[æ÷7FæRÃÓcRÆFæâ&÷f¦W&f¦Öæ–fW7Bõ„ÔÂfW¦R’öGfö¦Væ’fÆÆ&6²â'&÷w6W"&Wf–WrW÷&\IV¦R7F&Röæ÷fP¦·'\[ææRÂ¦ö&Æ¦VæR’·fG&FæRÖ6¶RÂV¶Æ§\H×V§\Hv’&–¶¢æC‡ƒ²Fò¦P§6–×VÆ6–¦ÂæRæG&ö–BÆVæ6†W"67&VVç6†÷Bâ&öÆ¦’c’¥2FW7Fæ–‚f¦Æ÷fÀ¤w&FÆRFV'Vr'V–ÆB’4„Ó#Sb&÷f¦W&7f–‚#rvV"'VçF–ÖR76WG2R²×Rà¤æ–¦R—§g,ZVæ–ç7FÆ6–¦æ—F’&÷f¦W&æ7Gf&æ–ÒæG&ö–BÆVæ6†W&–Öà  ¢22#Râ6Ææ¦R’&WW¦–Öæ¦RfÆ¶R¦¦VFæœHÖ¶öÒ&ö¦V·GR(	B"ããòæG&ö–BCƒ ¤¶÷&—6æ–²¦R—§&œHÖ—Fò÷Gf÷&–òæ¦æ÷f–§Rw&çR4ôDU‚ÕU2Õ5TÔRÓ##bÓÓ ¦’&–¦f–òFG'VvfÆ¶æR7Fœ[æRG'VvöÒ&ö¦V·FçGRRfW'¦–¦’"ããà¤÷f¢¦FF²¶÷&—7F’F¢—¦'&æ’—§f÷"†ƒƒƒsC“F’ÂVÖ¦W7Fò†—7F÷&–§6¶P§&FæRw&æRã’ãb—¢WföFæ–‚WWFâv—B6ÆöæRæ–¦RF÷7GWâ¦&öræVF÷7GWæöp§&÷‡–¦²FHÖæ’—§f÷&æ’f¦Æ÷f’’FW7Fæ’&W7W'6’&WW¦WF’7Rv—D‡V"¶öæV·F÷&öÒà¤Æö¶Ææ’v—B6æ6†÷B6Ç\[æ’¦F–fbÂæ–¦R¶÷–¦VFÆ¦VæR6öÖÖ—B†—7F÷&–¦Rà ¥÷Gg,IVæ’¶Æ–¦VçG6¶’&÷W7F’’÷&f¶S ¢Ò'\HÖæ’&—F—6²&æ–¦R&÷f¦W&f6Öò÷7Fö¦\Hv’&VBÂ&–¦RFV&÷Væ6RW—6¢æ÷fRfÆ¶Râ6FHÖV¶Æö¶Ææò7&VÖæ¦RöFvüIVæ–‚fÆ¶’÷÷&fÆ¦fÆ¶P¢&W¢6W'fW'6¶ör”BÖ¦&–¦R÷Gf&æ¦¶–¦R6Ææ¦â&¦â&VBfœZRæP¢öæVÖöw\HvfGVvÖS²&—&VÖÖü[æR÷F·&—F’æW÷6ÆçRÆö¶ÆçRfÆ·RâGWÆ’FÀ¢&öÖ¦VææÆövÂüZF\HvVâ&VB’VæÖVÖ÷&–¦æRF§RÆ[æçR÷Gg&GR6Ææ¦à¢Ò&VvÆVB÷&WW¦–Öæ¦R&–ÖÆ¦Væ–‚fÆ¶&æ–¦R—6¶Æ§\H×V¦RfÆ7F—FR&ö¦V·FRÀ¢fÆ6æ–²æR&WW¦–ÖF÷&–æ÷2HÖÆæâ6Fö'V‡fFfÆ6æœZGfò’HÖÆç7GfòÀ¢W¢—6¶Æ§\HÖVæ¦RfÆ7F—F–‚fÆ¶—¢&VvÆVF¶öÆVvà¢Ò'\HÖæò&WW¦–Öæ¦R&æ–¦R6Öò7&VÖvVöÖWG&–§RR¶\Zâ6F—7F–ÒöFv÷f÷&öĞ¢÷7f¦\[æf’·F—fçR¶'GRÂ&W¢öæ÷fæörW—Fà¢Ò\HÖ—Ffæ¦R¶öÆVvæRf–ÇG&—&WF÷&Rò¦7F&¦VÆö¢Æö¶Ææö¢Æ—7F’HÖÆæ÷f ¢&ö¦V¶B’÷7Fö¦\Hv’6W'fW"$Å2÷7F§RWF÷&—FWB¦HÖ—Fæ¦Râ7fR7G&æ–6P¢fÆ¶6R&WW¦–Ö§R&–¦R&–Ö¦VæRâ¦¶Zæ¦VÆ’öFv÷f÷"æR&V7'FfG'Vv¢æÆör÷&ö¦V¶Bæ—F’æ÷f–¦’&ÆVÆæ’Fö‡fBâBG'VvR7G&æ–6R¦G,[æf¢&æ–§R¶'GRö¶\ZâæWW7¦VÆòG&¦æò¶\Z—&æ¦RæR¦fÆ¦W7¦V‚&WW¦–Öæ¦à ¥&Vw&W6–§6¶&÷f¦W&FW7G2ö§2÷6W'fW"ÖGf–¦R×fÆ¶RçFW7Bæ§6¢BóBÂ6§7Gf&æ–Ò—§f÷&æ–ÒgVæ¶6–¦Ö’Æ[ææ–Ò6W'fW&öÒö¶'FöÒâæ—§f÷&æöÒ"ãã §&W&öGV6—&æó¢÷6Æ–¦R'för6Ææ¦CÂG'Vv’&—F—6²&–¦RFV&÷Væ6VæP¬ZÆ¦RC#²fÆ6æ–²æR&WW¦–ÖfÆ¶RHÖÆæ²'\HÖæò&WW¦–Öæ¦RæR7'Fæ÷gP§fÆ·RR·F—fæöÒ&ö¦V·GRâFW7F÷f’ö·&—f§R’#fÆ·R·&÷¢G&’7G&æ–6RÀ§B7G&æ–6RÂ&öÖ¦VçRæÆöv÷&ö¦V·FÂ&ÆVÆæRöFv÷f÷&R’Æö¶ÆçR·f÷GRà¥&öÆ¦R7f–‚s¥2FW7Fæ–‚f¦Æ÷f’6–çF·6WB–æÆ–æR¥2&Æö¶÷fà ¤æVÖ5ÂÖ–w&6–¦Ræ’&—7GW7Gf&æ–ÒöF6–Ö÷&ö—§föFæö¢7W&6R&¦’à¤÷fòæ–¦R÷Gg&F7Gf&æ–‚&öGV¶6–§6¶–‚$Å2&f–ÆÂvV%6ö6¶WB—7÷'V¶Ræ—F§öæZæ¦Gff—¦œHÖ¶æG&ö–BFVÆVföæâ²æ–¦R—¦w&IVâæ’–ç7FÆ—&âà¤6öÖÖ—B¶÷&—7F’·6¶—6•Ö¦W"÷7Fö¦\Hv’W6‚v÷&¶fÆ÷rWFöÖG6¶’ö&¦fÆ§V¦P¤²Â÷f¢¦‡F¦Wb¦R÷&f¶¶öFâ÷G&V&â¦Ræ¶æFæ’Væ’²'V–ÆB— £"ãã’FW&Vç6¶&÷f¦W&¢üZ–Æ¦Æ2'\HÖæòüZÆ¦RCC#²&–ÖÆ0¦÷7f¦\[æ’æVÂ6W'fW"’&÷f¦W&’ö&¦RfÆ¶Ræ¶'F’Â¶òfÆ6æ–²’¶òHÖÆâà ¢22#bâ6W'fW#¢¦¦VFæœHÖ¶’&VvÆVB&ö¦V·F(	B"ãã"òæG&ö–BCƒ  ¤¶÷&—6æ–²G&[æ’¦g,ZWF²÷&f¶RÂ¦6æ–¦’6W'fW"Â&ö¦V¶B÷&ö¦V·FçFÀ§¦¦VFæœHÖ¶’—7—27f–‚fÆ¶6G\[æ–æÖÂ¦F–Ò—§&œHÖ—Fòæ÷gRfW'¦–§R¦¦[çW&—&æ¦RVçWF"Æ–¶6–¦RâF¢÷6Æ¦VFæ¦’¦‡F¦WbWF÷&—§V¦RVæ’°¦'V–ÆB’ö&¦gR·&÷¢÷7Fö¦\Hv’W6‚v÷&¶fÆ÷röF'&æRw&æP¦4ôDU‚ÕU2Õ5TÔRÓ##bÓÓ²÷f¢6öÖÖ—BæVÖ·6¶—6•Öà ¦6W'fW"×æVÂæ§6’&—F§\Hv’552WföFRüHÖWFæ’F"fÆ¶R&ö¦V·F ¦—¦&÷"F÷7GWæör&ö¦V·FÂ&–¦fÆ¦Væ’&ö¦V·FçBÂ'&ö¢fÆ¶Â¦&—"¦6V&æ–€¦G\[æ–æÂ&VvÆVB’f–ÇFW"ò&ö¦V·FçF–ÖÂ&WG&wR’v–æ6–§Rc&VF÷fà¥Væ’…DÔÂ—7—2ö'V‡fF7fRfÆ¶RöF'&æör&ö¦V·F’¦&—"òWF÷&–ÖÀ¦æW¦f—6æòöB&WG&vR÷7G&æ–6Röf–ÇFW&â—7FR÷¦æ¶R¶öB&¦ÆœHÖ—F–‚WF÷&¦÷7F§R¦6V&æS²—7F’6W'fW'6¶’”Bæ¶öâ&V–ÖVæ÷fæ¦æRGWÆ–6—&&VBà¤vVöÖWG&–¦&W¢Gf–¦RfÆ–FæRFHÖ¶RæVÖÆ[æçRçVÇGRG\[æ–çRà ¥'\HÖæ’&Vg&W6‚&WW¦–Ö7fRF÷§föÆ¦VæRfÆ¶RöF'&æör&ö¦V·FÂV¶Æ§\H×V§\Hv§fÆ7F—FR6G'Vv–‚W&\I¦â&WW¦–Öæ¦RH×WfÆö¶Ææ’FV&÷Væ6RÂVWVR¦·F—fæòu26æ–Öæ¦Râ—¦&÷"&ö¦V·FR6W'fW'R6ÒæRÖ–¦Væ¦·F—fçR¶'GRà¥&VvÆVBæRZÆ¦RöFF¶RWFöÖG6¶’âæW÷6ÆæR÷7F&R¶÷–¦R–Ö§Rf–FÆ¦—`§7FGW3²÷7Fö¦\HvR¶÷–¦R¶ö¦RæVF÷7F§RRæ÷föÒöFv÷f÷'R6RæR'&œZRà¥¦Fæ¦R÷GVæò&WW¦–Öæ¦R×F’6RòæÆöwR÷&ö¦V·GRÂæRòvÆö&ÆæöĞ§FVÆVföçS²æV—7&fæ’ÖWFöF6’æR'\ZRæVÂâ&VB6Ææ¦ö¶§V¦R¶öçFV·7@§&ö¦V·F’WF÷&ÂFV·7B’¶Æ§\HÒR…DÔÂ×R7RW66—&æ’â'&ö¦HÒ&–ÖÆ¦Væğ§V¶Æ§\H×V¦R’fÆ7F—FR&ö¦V·FRÂÆö¶ÆæR÷W&6–¦RæR÷f\Hvf§R'&ö¢6Ææ¦à ¥7f’æ÷f’'VçF–ÖR&W7W'6’FöFæ’7RR5r’æG&ö–B76WG2Öæ–fW7Bà¤ö&¦f²Ö¶÷&—7F’÷7Fö¦\Hv’f–·6æ’FV'Vr÷G—3²&VÆV6RFr6F¦—§&œHÖ—Fòö¶§V¦R6öÖÖ—B¶ö¦’¦R—¦w&IVâVÖ¦W7FòFVfVÇBw&æRà¥&öÆ¦’sós¥2FW7Fæ–‚f¦Æ÷fÂV¶Æ§\H×V§\Hv’#2&÷f¦W&Ræ÷föræVÆÀ£B&Vw&W6–¦6Ææ¦÷&WW¦–Öæ¦Â6–çF·6WB–æÆ–æR&Æö¶÷f’G&’ÖöGVÆà¥&—&VÖÆ¦Vâ¦R'&÷w6W"f—‡GW&R¦Gf—¦vÆVF’HÖWF—&’Z—&–æS²6‡&öÖ—VĞ¦Æö¶Ææò&Æö¶—&6æF&÷‚’f—§VVÆæ&÷f¦W&æ–¦R¦g,ZVæâæVÖ&—7GW§&öGV¶6–§6¶ö¢7W&6R&¦’ÂÖ–w&6–¦Ræ’–ç7FÆ6–¦Ræ7Gf&æ’FVÆVföâà¤—6†öBv—D‡V"²'V–ÆFöö&¦fR&÷f¦W&f6RöGfö¦Væòæ¶öâW6†à ¥÷Gg,IVæò##bÓÓ#¢v÷&¶fÆ÷r3sCsCs““ƒVÂ¦ö"“s#3ƒsSVÂW7¦\Zâà¤—¦w&IVâ6öÖÖ—Bv&F–##VsCCfc#–fV#3#SCVC“&3–S–3VÂs¥0§FW7Fæ–‚f¦Æ÷f’²4„Ó#Sb&÷f¦W&#’vV"&W7W'6&öÆ¦Râæ¦æ÷f–¦¦æVG&gB&VÆV6Rc"ãã&6G,[æ’ÖFV'Vræ¶ƒ#ãcrã“c2&§F’Â7Fæ¦P¦WÆöFVF²Frö¶§V¦RFHÖâ—¦w&IVæ’6öÖÖ—Bâ²4„Ó#Sc ¦#c#CsV#6#6#c†V&FSf#†#SƒcCc#“–CV&#sVSC6ƒ–CS3v#fCvVF6à¤æF—fRWFFW&÷b÷&VÆV6W3÷W%÷vSÓg&Hv÷gRö&¦gS²¶÷&—6æ–²Öü[æP§ö·&VçWF’ÖVæ’(i"[çW&—&¢Æ–¶6–§Râ7Gf&æ–ç7FÆ6–¦Âf—§VVÆæ’—¦vÆV@¦’6&Fæ¦æGff—¦œHÖ¶FVÆVföææ—7R÷Gg,IVæ’÷föÒ4’&÷f¦W&öÒà ¢22#râZF×ÂFæWfæ’ÖöB’vÆfæ’ÖVæ’(	B"ãã2òæG&ö–BCƒ0 ¤¶÷&—6æ–²G&[æ’&–ÆvöFÆ¦—b÷—2v÷&RR7&VF–æ’ZF×æörÆ—7FVÖ¦W7Fğ¦WFöÖG6¶RZVÖ&–¦RÂ÷—2ÆVvVæFRÂ&öÆ¦’&VvÆVBZF×RÂ÷&f·R7f–¦WFÆöp§FV·7FRFæWfæöÒ&–¶§R’æ÷f’F—¦¦âÖVæ–¦2¦6æòf–FÆ¦—f–Ò¶÷&—6æ–¶öÒÀ¦ÆövöÒÂæ¦—föÒÆ–¶6–¦R’fW'¦–¦öÒæFçRâ7fR–FRR—7F’æ&VFæ’²à ¬ZF×–ÖGffœZW&VFæ÷—6†Fò3¦æ¶÷f’’÷6–öæÆæò&V–ÖVæ÷fæ¦P§7FæF&Fæ–‚6–Ö&öÆ†Fòƒ¦æ¶÷f’ÂW¢üH×Wfæ¦R&ö¦Rö7'F\[æ6–Ö&öÆâ÷—6’¦æ¦—f’6R×FRÆö¶ÆæòR÷7Fö¦\Hv–Ò÷7Ff¶Ö²öF¦VÂôrä¢â’FÆ¦RFöÆ¦P¦—¢·F—fæör&ö¦V·FâZVÖ&–¦6RWFöÖG6¶’fœZRæR—7—7V¦RR¦vÆfÆ§Rà¤FGVÒ÷7F¦RÂGVv’æ6Æ÷bö÷—2öÆVvVæF6R&VÆÖ§RâfÆ7F—FR7Ff¶R7P¦öw&æœHÖVæRæ"’Fö&–ÆRF÷7GWæòGVvÖRV¶Ææ¦æ¦âf\Hv’&VvÆVB6¶Æ§÷7Ff¶R&W¢Ö–¦Væ¦æ¦Ö¦W&–ÆÂf÷&ÖF–Æ’öFF¶âæF—fR&–çDÖævW ¦’F–ÖVç¦–¦RÆ—7FöÖ¦W&–Æò÷7F§R÷7Fö¦\Hv’Fö²à ¤ÖVæ’–ÖWB6V¶6–¦R¶'F–6ÖÂ7Gf&æGVvÖB6÷7Fö¦\Hv–Ò¶6–¦Ö¤”BÖ¦Wf–Ö¦F÷§föÆRâ6·&öÇV§R6R6Öò6V¶6–¦RÂfö÷FW"÷7F¦Rf–FÆ¦—c ¦–ÖR÷&W¦–ÖR—¢&öf–Æ&–¦fÆ¦Væör¶÷&—6æ–¶ÂVÆövüZVÖ&–¦Â6VçG&—&à§÷7Fö¦\Hv’Æövò–6öâÓ“"çævÂU2ZTÔR+rfÆ¶R’fW'¦–¦â÷Gf&æ¦Röæ÷fğ§&÷f¦W&fæÆös²7F&’&öf–ÂG'VvöræÆövæR&–¶§V¦RG\IR–ÖRà¥÷7Ff¶FVÖR¦R&V–ÖVæ÷fæRFæWfæ’ÖöBâ—7&fÆ¦Væ’Æö¶6–¦ô—¦Ö¦W&§RöÖ÷FHÖ–ÖFöæ¦RG&¶RÂVvZVæu2–¶öæÂ7FGW6’’&V÷7FÆ’7f–¦WFÆ¦æG—6’R7FF—7F–6’÷6Æö¦Wf–Öö÷¦æ¶Öâ¶öçG&öÆRZF×R&FRö&¦RFVÖRà ¤Æö¶Ææò&öÆ¦’s"ós"¥2FW7Fæ–‚f¦Æ÷fÂWB–æÆ–æR&Æö¶÷f’6–çF·6¦f–VÆBÖFW6–vâæ§2âZF×6F–Ör&÷f¦W&ÂFöFæ¦R&öÖ¦Væ–FVçF—FWF¤ÖVæ–¦·&÷¢&¦ÆœHÖ—FRæÆövRâ'&÷w6W"f—‡GW&R¶÷&—7F’7Gf&æ’…DÔÂô552¦gVæ¶6–¦RW¢Æ[ææ’&ö¦V¶Bö¶'GS¢ÖVæ’3#ó3“ósc‚’V§¦[âScŒ9s3#RGf–¦P§FVÖRÂf–FÆ¦—bfö÷FW"Â&ö¦RÆö¶6–¦ô—¦Ö¦W&’Â÷—6RÂÆVvVæGR’Dbâö·&\HvR6P¦æv—D‡V"'VææW'R&–¦R²Ö¦W"Æö¶Ææ’6‡&öÖ—VÒ&Æö¶—&6æF&÷‚à¥7Gf&æòZF×æ¦Rö–ç7FÆ6–¦æf—¦œHÖ¶öÒæG&ö–BW&\I§Ræ—7R÷Gg,IVæ’à ¤²"ãã2¦Rö&¦fÆ¦Vã¢v÷&¶fÆ÷r3sC“S3sCvW7¦\ZâÂFræ¦SSC†##6#ƒfc#s&##V#ssC#s#VS#&fVc&#3–fâæ¶æFæò¦R—7&fÆ¦VâUDbÓ€§6ÖòR'&÷w6W"f—‡GW&WR’FöFF&÷f¦W&æZ–‚6Æ÷f÷\HÖ—FæörÆöv°§v÷&¶fÆ÷r3sC“ƒ3cSv¦cC“f#VS#†6c#s#vSsf6ScsV66c3s3cF §F¶üIRW7¦\Zââ'VçF–ÖR²&W7W'6’æ—7R&öÖ–¦Væ¦Væ’F–ÒFW7Fæ–Ò6öÖÖ—FöÒà ¢22#‚âW&fÆ¦æ¦R&ö¦V·F–Ö(	B"ããBòæG&ö–BCƒ@ ¤æFöFFæ’¶÷&—6æ–¶÷b¦‡F¦Wb&VF—¦¦æ—&æ’Æ—7F’FWFÆ¢6V¶6–¦RVçWF ¤ÖVæ–¦â&WG&vöF¦VÆôrä¢â÷fÆ6æ–¶’f–ÇFW"7f–‚ö·F—fæör÷fÆ7F—F–‚ğ¦F–¦VÆ¦Væ–‚&ö¦V¶F&FRÆö¶Ææó²¦&—&æ’&VvÆVB÷7F¦R¦6–¦VÆ’6·Wà¤¶'F–6R¶òF÷7GWæGVvÖB–Ö§RöF¦VÂÂrä¢âÂfÆ6æ–¶Â·F—fæ’7FGW2À¦'&ö¢vÆfæ–‚fÆ¶ö·&¶÷fÂV·WçRG\[æ–çRÂFGVÒ’÷g,Z–çRâ”B&öÆ¦¦·&÷¢W66—&æ’FFG&–'WBÂæR–çFW'öÆ6–§RR¦f67&—B7G&–ærà ¤¶'F–6Rö&œHÖæör&ö¦V·FçF6F¶÷&—7FR—7F’¦Fæ¦’F÷7GWæ’¦¦VFæœHÖ¶§6·W¶ò6W'fW"‡V¶Æ§\H×V§\Hv’&WW¦WFRfÆ¶R¶öÆVv’âÖöFVÂ&–‡fF÷6–öæÆæ¤”B&ö¦V·F&W¢Ö–¦Væ¦æ¦—¦'&æör&ö¦V·FR6W'fW'R–Æ’æ¶'F’à¤öffÆ–æRFWFÆ¢¶÷&—7F’—7F’6·W²FHÖ¶R7R¶÷—&æR&–¦Rö&övHv—fæ¦§f—6–æF¶òF&VvÆVBæRÖ–¦Væ¦¶\Z–Æ’[æ—fò6æ–Öæ¦Râæ÷f’×&\[ææ’W—F¦æ—7RWfVFVæ“²FÖ–â÷föF\Hv’¦G,[æf§R÷7Fö¦\HvR%2w&VvFR’f–ÇFW"ZVÖ&–¦Rà ¤FWFÆ¢–Ö—7F¶çWBöF¦VÂôrä¢â÷fÆ6æ–¶öG\[æ–çRÂ¦6æR÷7Fö¦\HvR¶6–¦RÀ¦¶'F–6R÷6æ÷fæ–‚öFF¶÷7FF—7F–¶R÷&ö¦V·FæF÷&Fæ–‚FæÂHÖ—FÆ¦—fP§fVÆœHÖ–æR6Æ÷f’F&VÆR6†÷&—¦öçFÆæ–Ò6·&öÆöÒâ7F–Æ÷f’7Röw&æœHÖVæ¦æÒÖöFÂÂ¶÷&—7FRö&¦RFVÖR’&–ÆvüIf§R6RFVÆVföçR÷V§¦[çR÷F&ÆWGRà¤w&æ–6RövVòöF6’ÂöFÆövRÂF÷§föÆR’÷7Fö¦\Hv’—§f¦\ZF¢÷7F§R—7F’à ¤·&¶÷f’6Rw'WœZRòWF÷'R’÷¦æ6“¢Gf&ö¦V·FçF6CfœZRæP§&–¶§V§R—7F’·&²GfWBR¦¦VFæœHÖ¶ö¢F&VÆ’à¤Æö¶Ææò&öÆ¦’s2¥2FW7Fæf¦ÆÂV¶Æ§\H×V§\Hv’÷6Òæ÷f–‚&Vw&W6–¦ÒÖÀ§WB–æÆ–æR&Æö¶÷f’6W'fW"×æVÂæ§2â'&÷w6W"f—‡GW&R&üZ—&Vâ7Gf&æ–ÒĞ¦gVæ¶6–¦Ö’Æ[ææ–Ò&ö¦V·F–ÖÂ¦¦VFæœHÖ¶–Ò¶\ZöÒ’¶'FöÓ¢Æ—7F’FWFÆ ¦æHÖWF—&’fVÆœHÖ–æRRö&¦RFVÖRÂf–ÇFW&’’F&VÆS²÷7F§R&÷f¦W&RÖVæ–¦À¦æZ–‚6Æ÷fÂFæWfæörÖöF’ZF×RõDbÖâ²ö&¦fÆ§V¦R÷7Fö¦\Hv’v÷&¶fÆ÷p§ò¦‡F¦WgR¦[çW&—&æ¦RVçWF"Æ–¶6–¦Râ7Gf&æ’FVÆVföæ’õ7W&6R¦f—¦œHÖ¶ZF×æ—7RFW7F—&æ’à ¥÷Gg,IVæò##bÓÓ#¢'f'&÷w6W"&÷f¦W&÷F·&–Æ¦R÷7Fö¦\Hv’6·&—fVæ§÷g&F²—¢FWFÆ¦‡&¦â–æÆ–æRF—7Æ’öæ÷fò·F—f—&552F—7Æ“¦æöæR’à¤FWFÆ¢6F—§&œHÖ—Fò÷7FfÆ¦–æÆ–æRÖfÆWƒ²&Vw&W6–¦’7Gf&æ’¶Æ–²P¦'&÷w6W'R&öÆ¦Râ÷&f¶V¶Æ§\HÖVæ&–¦R'fRö&¦fR²Ö"ããBà ¥v÷&¶fÆ÷r3sS##ccFÂ¦ö"“ƒƒ#scscfÂW7¦\Zâ¦6öÖÖ—@¦†CS#Cs–f–#†SfV6Cfc#VCSC#C#sVFc&F¢s2ós2¥2FW7Fæf¦ÆÀ¦'&÷w6W"&VvÆVBÖVæ–¦’&ö¦V¶FæHÖWF—&’fVÆœHÖ–æRRö&¦RFVÖRÀ¦f–ÇFW&’÷÷g&F²Â÷—6’ZF×RõDb’&÷f¦W&#’²vV"&W7W'6à¥6H×Wfæò#Rär&VvÆVF’¦VFâDc²f—§VVÆæò&÷f¦W&Væ’Æ—7FöFWFÆ §&ö¦V¶FÂö&ÖöF’fö÷FW"ÖVæ–¦âf—‡GW&R¶÷&—7F’Æ[ææRÆö¶ÆæRöFF¶P¦’¦Ö¦VçR¶'FS²æR÷Gg,IV¦R7Gf&æò7'Fæ¦RvVöÖWG&–¦R–Æ’æF—fRZF×Rà ¤æVG&gB¦fæFV'Vrö&¦fc"ããF6G,[æ’ÖFV'Vræ¶ƒ#ãcCã3c0¦&§F’Â7Fæ¦RWÆöFVBâFrö¶§V¦RæfVFVæ’—¦w&IVæ’6öÖÖ—C²æF—fP§WFFW&÷b÷&VÆV6W3÷W%÷vSÓg&Hv÷gRö&¦gRâ²4„Ó#Sc ¦c6S&SVVfS3†Sƒ#“cC–#SFV#6–6&&f3f33sF6S–3Vf3Sƒcc#Và¤æG&ö–BfW'6–öä6öFRCƒBÂ÷7Fö¦\Hv’f–·6æ’FV'Vr÷G—2â¶÷&—6æ–²ö·&\HvP¤ÖVæ’(i"[çW&—&¢Æ–¶6–§S²–ç7FÆ6–¦’6&Fæ¦æGff—¦œHÖ¶FVÆVföæ¦æ—7R÷Gg,IVæRR÷föÒö·'\[æVæ§Rà ¢22#’â&÷f¦W&6Ææ¦fÆ¶öF÷¦æ¶R’æ¦—bDTäE$òÔ(	B"ããRòæG&ö–BCƒP ¤¶÷&—6æ–²G&[æ’&÷f¦W'R6Ææ¦æ7'Fæ–‚’u26æ–ÖÆ¦Væ–‚fÆ¶’ö¦6Wf¦F÷¦æ¶RÂæ¦—bDTäE$òÔRÖVæ–§R’&öÆ¦’F—¦¦âGVvÖWFfÆ¶Rà¥6Ææ¦R÷7F¦R—6¶Æ§\HÖ—fò'\HÖæò&V¶òÖVæ’(i"6W'fW"(i"üZÆ¦’æ6W'fW"à¤ö&æHÖ–æVæ÷6fÆ¶R&öÆ¦R·&÷¢FEB÷66†VGVÆUfÆ¶6fR÷6$fÇW6…fÆ¶§W6W'E÷fÆ¶(i"F&VÇRfÆ¶Râu2ö¦2–FR·&÷¢G&¦æ’f–VÆE7F÷&RFæWfæ–°¦’6W&–¦RF÷¥÷G&6µ÷ö–çG3²ö&ö¦Væ’öÆ–vöâö¦6&H×Væ6R—¢F–‚FHÖ¶¦’w&æ–6RöF¦VÆâæ7'FæR¦öæRZÆ§R&÷VæF'•övVö§6öâRF÷¥ö&VöÖ&¶–æw2à ¤æIVâ’öæ÷fÆ¦Vâ&ö&ÆVÒ†ÆFæörö·&WFæ¦¢'&ö¦HÒ&–¦R\HÖ—Fæör”D"Ö¦Öü[æR&–¦f—F’çVÆu2FHÖ¶’6W'fW%÷6Æ¦’¶[æRF¦R7fRf\Hr÷6Ææòà¥&—&VÖ6FHÖV¶f–VÆE7F÷&Ræ–æ—B’&÷f¦W&ffÆ6æ–¶æ¶öâv—BÖ°¦w&\Z¶FæWfæ–¶&V¶–F6Ææ¦R&W¢Æ[ææörW7¦V†âF¦VÆ–ÖœHÖæ’W7¦V‚Ö¦W&¦’6Öæ¦Væ¦R'&ö¦u2FHÖ¶Â¦W"¦Rö¦2R¦&—&æöÒ'&ö¦H×R¦VFæ7Ff¶à¤¶öBVæRÖVÖ÷&–¦Ræ7'Fæ¦öææR¦Gf&ÖöFÂæ—F’wV&’vVöÖWG&–§R¶ğ¦VçVWVRæ–¦R÷Gg&F–òW—3²&–¶§V¦R÷'V·R’÷7FfÆ¦öæ÷fæ’ö·\Z¢à ¤æ÷f’6W'fW"×fÆ¶RÖF÷¦æ¶çFW7Bæ§2¶÷&—7F’—§f÷&æRgVæ¶6–¦RÂ6–¦VÆ’&ö6W6÷ §&VF’Æ[ææ’6W'fW"öFæWfæ–²âFW6WB&÷f¦W&¢ö&æHÖ–æVæ÷6fÆ¶R&V¶ğ¦FEBÂ¦öæ’#Ru2FHÖ¶¦VFæ–Ò&—F—6¶öÒÂ&W¢WFöÖG6¶–‚W—6°¦†ÆFæ’FæWfæ–²Âw&\Z¶”D"ÖÂBfW¦RÂ$Å26F¦VÆ–ÖœHÖæ–Ò÷Gg&FÖÀ¦—¦wV&Æ¦VâöFv÷f÷"&W¢GWÆ–¶FÂ&öÖ¦VææÆövÂæ÷fFHÖ¶Fö¶öÒ6Ææ¦À¦ÆVv7’&fW"÷G\I’öF6’’VæÖVÖ÷&–¦¦öæRâæ—§f÷&æö¢"ããBFW@¦÷f–‚&÷f¦W&²æ"ããR&öÆ¦’7f–‚FW6WBâ7W&6R¦RÆ[æã¢æR÷Gg,IV¦P§G&VçWFæR&öGV¶6–§6¶RF÷§föÆRõ$Å2–Æ’&¦Ö¦VçRæGf7Gf&æFVÆVföæà ¤ÖVæ’¦G,[æf¶÷&—6æ–¶öÆövò÷fW'¦–§RÂæ¦—b’ÇBÆöv6FDTäE$òÔà¤vÆfæ’F"fÆ¶RFö&–ò–FVçF—FWBfÆ¶Rö·&¶Âö''V&Æ¦VçR–¶öçRÂHÖ—FÆ¦—`¦æG—2’¦VÆVçRöF'&çR–¶öçRRö&ÖöFâ6ÆÆ&6²’æ÷F–b×fÆ¶R÷7F§P§÷7Fö¦\Hv’â'&÷w6W"f—‡GW&R6F¶÷&—7F’7Gf&çRv÷&æ§RG&·R’5dr7&—FRÀ§&÷f¦W&f¶Æ–²ö·F—fæò7Fæ¦Rö¶öçG&7B÷fVÆœHÖ–çRGVvÖWF’æ÷f’æ¦—bæ¬HÖWF—&’fVÆœHÖ–æRRGf–¦RFVÖRW¢&æ–¦R&÷f¦W&R&ö¦V¶FüZF×Rà¤Æö¶Ææò&öÆ¦’sB¥2FW7Fæf¦ÆÂWB–æÆ–æR&Æö¶÷f’—F†öâ6–çF·6à¤ö&¦f’—6†öBv—D‡V"²ö'&÷w6W"v÷&¶fÆ÷v&÷f¦W&f§R6Ræ¶öâW6†à ¥÷Gg,IVæò##bÓÓ#¢v÷&¶fÆ÷r3sSC“SCƒ“VÂ¦ö"““s#c3#“6ÂW7¦\Zà§¦6öÖÖ—BS#CƒV#vSƒs&#–V3F#sc3c&S†CcSfV#ƒƒ6â'f’&VvÆVB¦P§&÷f¦W&fò&ö§RFö¶öÒ÷7Fö¦\HvVr552&–¦VÆ¦ƒƒ×2“²f—‡GW&R6FHÖV¶¦¶öæHÖçR&ö§Râ'VçF–ÖRæ–¦RÖ–¦Væ¦âF–ÒFW7Fæ–Ò6öÖÖ—FöÒâ&öÆ¦RsBósB¥0¦f¦ÆÂ'&÷w6W"&÷f¦W&RRö&ÖöFüHÖWF—&’fVÆœHÖ–æR’4„Ó#Sb&÷f¦W&#§&W7W'6R²×Râ6H×Wfæ32är&VvÆVF’¦VFâDc²f—§VVÆæò&VvÆVFæ¤DTäE$òÔfö÷FW"’·F—fæòöæV·F—fæòGVvÖRfÆ¶RæFVÆVföçRRö&ÖöFà ¤¦fæ’æVG&gBFV'Vr&VÆV6Rc"ããV6G,[æ’ÖFV'Vræ¶ƒ#ãcCãc“P¦&§F’Â7Fæ¦RWÆöFVC²Frö¶§V¦R—¦w&IVæ’6öÖÖ—Bâ÷&VÆV6W3÷W%÷vSÓ §g&Hvc"ããRÂF÷7GWçR&V¶òÖVæ’(i"[çW&—&¢Æ–¶6–§RâæG&ö–BfW'6–öä6öFP£CƒR’÷7Fö¦\Hv’f–·6æ’FV'Vr÷G—2â4„Ó#Sb²Ö ¦s33#SVSvFS6V#s#ccvc33–F3&c†cƒv&sSs&c#†#VCC3†FvSF#ffà¥7Gf&æ’FVÆVföæ’Â&öGV¶6–§6¶7W&6R&¦õ$Å2’f—¦œHÖ¶ZF×æ—7P§&÷f¦W&Væ“²æ–¦VFæ&öGV¶6–§6¶Ö–w&6–¦–Æ’–ç7FÆ6–¦æ–¦R—§g,ZVæà ¢223â6·&öÂÖVæ–¦Âæf–v6–¦Â¶ÖW&’Æö¶Ææ’4…Wf÷¢(	B"ããbòæG&ö–BCƒ` ¤¶÷&—6æ–²G&[æ’F6R–FVçF—FWBöÆövò÷fW'¦–¦ÖVæ–¦f–F’æ·&§R6·&öÆÀ¦&öÆ¦’&VvÆVBföF’ÖRFòöF¦VÆöÆö¶6–¦RÂF—&V·FçR¶ÖW'R&W¢vÆW&–¦R¥4…öGF"RFöF¢´ÔÂf¦Ââfö÷FW"6F–FRVçWF"ÖG&÷×67&öÆÂ¦¦VFæğ§66V¶6–¦ÖÂ¦vÆfÆ¦R÷7F¦R—¦æB6·&öÆ²7f¶’æ÷f’÷Gf÷"üHÖ–æ¦Rö@§g&†âæ¦—bDTäE$òÔÂ¶÷&—6æ–²ÂÆövò’fW'¦–¦÷7F§RRöFæü[æ§Rà ¤æf–v6–¦–Ö¦6V&æò¦vÆfÆ¦R’¦VFâ6·&öÂÂ¦6æGf—¦&÷&öÆ6¶À¤u27FGW2ÂWWFR¦öG&VFœZFR’Ö\IWFHÖ¶RÂ&WG&wR6H×Wfæ–‚'WF¦öGfö¦VæR&Fæ¦R&–¶¦öF–¦VÆ¦Væ¦ö'&—6æ¦â'&—6æ¦R’FÆ¦RG&[æ’÷Gg&GRÀ¦æ¦—f’ô”B'WFW66—&æ’â—§&H×Vâ'WFRÂ&öf–Â’6H×Wfæ’öF6’÷7F§P§÷7Fö¦\Hv’â&ö¦R&FRö&ÖöFÂGVvÖB–Ö§Ræ¦Öæ¦RCB‚FöF—&æRf—6–æRà ¥W6Æ–¶¢Æö¶6–§RF—&V·Fæò¶Æ–¶æR6GW&SÖVçf—&öæÖVçB–çWBæ¶öâu0§&÷f¦W&RÂW¢6æ6†÷B÷¦–6–¦R&–¦R6æ–Öæ¦âvÆW&–¦–çWBV¶Æöæ¦Vâà¤æF—fRvV$6‡&öÖT6Æ–VçBfœZRæVÖfÆÆ&6²ævÆW&–§R&’öF&–¦Væö¢F÷§föÆ¦–Æ’æVF÷7GWæö¢¶ÖW&“¢¦g,Z’6ÆÆ&6²’¦f’&¦Æörâ¶ÖW&’Væ§&W¦öÇV6–¦&V¶òf–ÆU&÷f–FW"Ö÷7F§R÷7Fö¦\HvRâö&œHÖæ’f–ÆR6†ö÷6W"6F¦—§&œHÖ—Fò÷7FfÆ¦U…E$ôÄÄõuôÕTÅD•ÄR¦&F\HvR4…f¦Æ÷fRà ¤æ÷f’Æö6ÂÖÆ–W"Ö–×÷'Bæ§2’ÖöFÂ–Ö§R´ÔÂõ4…öGF&÷fRâf\HrV¶Æ§\HÖVæP§6†Vf–ÆR÷&ö£B&–&Æ–÷FV¶RHÖ—F§R7Gf&æ’4…ôD$bÂw'WœZR&F\HvRf¦Æ÷fP§òæ¦—gRÂHÖ—F§R$¢’5rÂ¶öçfW'GV§RRtu3ƒB´ÔÂÂ¦G,[æf§RG&–'WFRÀ¦æ¦—fR’VçWG&Zæ¦R'WRöÆ–vöæâ4…‚õ4$âõ4%‚õ•‚6RÖöwR—¦'&F’W ¥4…Â'6W"æR¦‡F–¦Wfæ¦–†÷fR–æFV·6RâfœZR4…6Æö¦WfòöF&—'R¦P§öG,[ææó²7f¶’f¦ÂFò3"Ô"’FòSãvVöÖWG&–¦ò6Æö§Râ&W¢$¢Ö¤u2¶ö÷&F–æFR6R&W÷¦æ§RÂ¶ö÷&F–æFRRÖWG&–Ö¦‡F–¦Wf§R—¦&÷"Ôt§¦öæRRób–Æ’öFv÷f&§\Hv’$£²æR&WG÷7FfÆ¦6RöÆü[æ¢âUDÒ$¢¶ö¦§6G,[æ’tu3ƒB&f–Ææò6R&ö¦V·GV¦RÂæR&övÆZfu2¶ö÷&F–æFÖà ¥6Æö¢6RFöF¦RæÆVfÆWB¶'GRFV²æ¶öâ÷Gg,IVæör”D"W—6’ÖÆöp¦Æö6Å7F÷&vR&Vv—7G&²F–ÖR6RfVÆ–¶’vVöÖWG&–§6¶’6G,[æ¢æRGWÆ—&P¦Æö6Å7F÷&vRâ’7F&’–æÆ–æR´ÔÂ’æ÷f’”D"6G,[æ¢6Rö&æfÆ¦§RöffÆ–æRà¥W—6’7R6W&–¦Æ—¦÷fæ’ÂGWÆ’æ¦—f’Fö&–¦§R'&ö¢’æR'&œZR&WF†öFæ§6Æö¢â&öÖ¦VææÆöv&V¶–Fæ÷f’&–¶¢â'&—6æ¦R6G,[æ¦HÖV¶W7¦\Zà§W—2&Vv—7G&²VæÖVÖ÷&–¦æRÖü[æRFF’Æ[æçR÷Gg&GRâFW&Vç6¶¶÷–¦¦ÖFW&–¦Æ—§V¦R6b´ÔÂ—¢”D"Ö’ö&æ÷fvg&HvR”D"&–¦R\HÖ—Ffæ¦à¤æ÷f’ÖöGVÂ¦RR6W'f–6R×v÷&¶W"6†VÆÇR’ö&fW¦æ–ÒæG&ö–B76WG2à ¤Æö¶Ææò&öÆ¦’sR¥2FW7Fæ–‚f¦Æ÷fÂ7f–‚WB–æÆ–æR6·&—F’’—F†öà§6–çF·6'&÷w6W"f—‡GW&RÖâWFæW7Bæ÷f–‚&Vw&W6–¦¶÷&—7F’7Gf&æ¦&–æ'’4…ôD$b'6W"’&ö£C²W'6—7FVæ6Röf–Æ÷fW"FW7F÷f’¶÷&—7FRÆ[ææP¤”D"ôDôÒö&¦V·FRâ'&÷w6W"&÷f¦W&RV¶Æ§\H×V§R7Gf&æ’ÖöFÂô552ÂÆVfÆWBÀ¤DôÕ'6W"’–æFW†VDD"6Æö¶Ææ–Ò4…ôD$bÂWf÷¢öö&æ÷gRö&6·W’w&\Z¶RÀ§W¢&æ–¦RÖVæ’÷&ö¦V·F’üZF×&÷f¦W&Râv÷&¶fÆ÷r—6†öBÂ²’6Æ–¶R6P§&÷f¦W&f§Ræ¶öâW6†â&öGV¶6–§6¶&¦Âu2÷'WF—&æ¦R’f—¦œHÖ¶¤æG&ö–B¶ÖW&æ—7RFW7F—&æ’÷f–ÒÆö¶Ææ–Òf—‡GW&RÖ–Öà ¤FöFFæ’¦‡F¦WbR—7FöÒ&GS¢6W'fW"+rfÆ¶R&ö¦V·F&V–ÖVæ÷fâP¥üZÆ¦’æ6W'fW"âV¶Æöæ¦Vâ—¦&÷"&ö¦V·F’G&’¦&—&æR¶'F–6R‡fÆ¶RÀ§V·WæG\[æ–æÂ'&ö¢&ö¦V·FæF’â&VvÆVB&F’·F—fæ’F÷7GWâ&ö¦V¶C°¬HÖ—FF’G'Vv’&ö¦V¶B¦Ò—§f¦\ZF¢æRÖ–¦Væ¦¶öçFV·7Bâ&W¢·F—fæöp§&ö¦V·FæVÖF–†ör—¦&÷&'förG'Vvör&ö¦V·Fâ¦¦VFæœHÖ¶Æ—7F’Væ¦—7—2÷7F§RF÷7GWæ’ÂW¢ö¦VF–æHÖçRG\[æ–çR’¦6æòZÆ¦Rõ÷6Æò–ÖRà ¬ZFHvR&—F’÷6Ææòw'WœZR7fRfÆ7F—FR7Ff¶Rò7Gf&æöÒöG&VFœZGRÀ§V¶Æ§\H×V§\Hv’æ7'FæRôu2fÆ¶RÂ¦öæRF÷¦æ¶R’u2FHÖ¶R—¢f–VÆE7F÷&RÖà¥&–¶§V¦R&ö¦V¶BÂ–ÖRüZ–Æ¦ö6’g'7GRöæ¦—c²&V¶òC7Ff¶’w'WP§W\HwV¦Ræv–æ—&æ’¦6Ææ¦Râ’FÆ¦R6RZÆ¦R6–¦VÆ’fÆ7F—F’&VB— §7f–‚&ö¦V¶F²&–¶¢Fò—§&œHÖ—FòæföF’â÷Gf&æ¦R\HÖ—Ff†ÆFæ’u0¤”D"&W¢×&\[æS²æR&–¶§V¦RÆ[ææò&¦âu2FæWfæ–²Fö²æ–¦R7&VÖâà ¥&V6—¦æòg&–¦VÖR÷6Æ¦VFæ¦Vr6Ææ¦æFVÆVföçRH×Wf6RòæÆöwRFV°¦æ¶öâ÷Gg,IVæR÷W&6–¦R÷6W&–¦RR÷&ö6W74öffÆ–æUVWVRÂ6öG&VFœZFVÒ¦–ÖVæöÒâæWW7¦V‚Â&öÖ¦VææÆövÂÆö¶ÆæòöF&6—fæ¦R–Æ’÷Gf&æ¦RæVÆ¦æRœZRg&–¦VÖR6Ææ¦âF¦VÆ–ÖœHÖæ’W7¦V‚&–Æ¦\[æ’6Öò÷Gg,IVæR7Ff¶Rà¥÷6Æ¦VFæ¦’&–¦VÒ·F—fæör&ö¦V·F¶÷&—7F’f\Hr÷Gg,IVæ’FGVÒVæöp§6W'fW'6¶ör&WW¦–Öæ¦Â’¶BÆ—7Fæ–¦RÖ–¦Væ¦æâæ÷f’&Vv—7F"6Ææ¦§üHÖ–æ¦RöB÷fRfW'¦–¦S¢7F&òvÆö&Ææòg&–¦VÖR&W¢fÆ6æ–¶6RæR&——7V¦P¦æÆöwR÷&ö¦V·GRâ'&÷w6W"f—‡GW&R&üZ—&Vâ7Gf&æ–Ò6W'fW"&VvÆVFöÒæ¬HÖWF—&’fVÆœHÖ–æRRö&ÖöF²¥2&Vw&W6–¦R&÷f¦W&f§R66÷RÂw'WR§÷Gg&FR6Ææ¦·&÷¢6–¦VÆ’Æ[ææ’6W'fW'6¶’Fö²ÂW¢&WF†öFæ–‚sRf¦Æ÷fà ¥÷Gg,IVæò##bÓÓ#¢v÷&¶fÆ÷r3sS““ƒCÂ¦ö"3“c“#vÀ§W7¦\Zâ¦6öÖÖ—B6csc3sV33–fc“Vc#Svf&3“sfCƒS3C&S†â&öÆ¦£sRósR¥2FW7Fæ–‚f¦Æ÷fÂö&'&÷w6W"f—‡GW&RÖ’4„Ó#Sb&÷f¦W&3 ¤²vV"&W7W'6ÂV¶Æ§\H×V§\Hv’æ÷f’Æö¶Ææ’4…ÖöGVÂâ6H×WfæòsRäp§&VvÆVF’¦VFâDc²&VvÆVFæ’6·&öÂÖVæ–¦ö–FVçF—FWBÂFæWfæ÷FÖæ¦æf–v6–¦Â4…öGF"Âæ÷f’6W'fW"’¶öçfW'F÷fæ’öÆ–vöâæÆVfÆWB¶'F’à¥6W'fW"¦G,[æf7fö¢öÆü[æ¢6·&öÆ—¦Ö\IR÷Gf&æ¦Â¦FòæV¶R6Æ–¶P§&–¶§V§RÆ—7GRæFçS²'f6Æ–¶ö¶§V¦R&ö¦V¶B’w'WR¦6Ææ¦Rà ¤¦fæ’æVG&gBFV'Vr&VÆV6Rc"ããf6G,[æ’ÖFV'Vræ¶ƒ#ãcc2ãcc0¦&§F’ÂWÆöFVBâFrö¶§V¦RFHÖæò—¦w&IVæ’6öÖÖ—BÂWFFW&÷`¦÷&VÆV6W3÷W%÷vSÓg&Hvc"ããbâæG&ö–BfW'6–öä6öFRCƒc²÷7Fö¦\Hv¦f–·6æ’FV'Vr÷G—2â4„Ó#Sb²Ö ¦&#ƒsFSCƒC&cs†VCV#–#ss†SVFc“#“FC&#fSƒ#S3ƒ“ƒFcƒcs#ccF6fFSVà¤[çW&—&æ¦S¢ÖVæ’(i"[çW&—&¢Æ–¶6–§Râ'&÷w6W"¦R&÷f¦W&–ò6GW&R–çW@¦’u26æ6†÷C²7Gf&æ’æG&ö–B6Vç¦÷"ö¶ÖW&’F÷§föÆRæf—¦œHÖ¶öĞ§FVÆVföçRæ—7Rö·&VçWF’â7W&6Rõ$Å2’[æ—fòu2÷'WF—&æ¦Ræ—7R&÷f¦W&Væ¦÷f–Òf—‡GW&RÖ–Ö²&öGV¶6–§6¶&¦’W&\I¦’æ—7RÖ–¦Væ¦æ’à ¢223â6W'fW"ÂW&\I—fæ¦R´ÔÂÖ’÷g&F²æ&öF—FVÆ¦(	B"ããp ¥vV"õ5rôæG&ö–B"ããrÂfW'6–öä6öFRCƒrâ&WW¦–Öæ¦RfÆ¶¬HÖÆæ÷f÷¦öæF÷¦æ¶R–FRFò&¦æR7G&æ–6RÂ2öÖ¶öÒò7Gf&æöÒ'&ö§P§&VF÷fâ·&Hv7G&æ–6fœZRæR¦æHÖ’·&¢¶ò¦R6W'fW'6¶’Ö‚×&÷w2Öæ¦¦öBG&[æVæörâF÷7F—¦æ¦R6–wW&æ÷6æörÆ–Ö—Fg&Hvw&\Z·RÂæRæW÷GVâW7¦V‚à¤f–ÇG&—&æ’&¦âöFv÷f÷"¦VFæör&ö¦V·FæR'&œZRHÖÆç7GfòG'Vv–‚à¤'&—6æ¦RfÆ¶RG&[æ’g&HvVæ’6–Æ¦æ’”C²çVÆ&VF÷f÷7F¦RR&VGR&W ¦Æ[ææörg&VÖVæ6Ææ¦â¶ò¦R&WF†öFæò'&—6æ¦R&üZÆòÂÆ’¦RöFv÷f÷ ¦—¦wV&Æ¦VâÂöæfÆ¦æ¦R÷7F¦RæW÷Gg,IVæò’¦‡F–¦Wf&÷f¦W'Rà ¤F÷¦æ¶&÷f¦W&fæÆör’vVæW&6–§RöFv÷f÷&&–¦R¦Ö¦VæR&–¶¦ö¶\ZÀ§V¶Æ§\H×V§\Hv’FöFFæ’Fö‡fB–ÖVæ&ö¦V·FæFâ&VBG'VvöræÆövæP§&–Ö¦Væ§V¦R6Ræ¦öæRâæWW7¦\ZâG&¦æ’W—26Æö¦Wfg&Hv7F&’¶\Zà¤GVvÖR&WW¦Ö’F÷¦æ·R÷Gg,IV¦RÆ—7GRF÷7GWæ–‚öF¦VÆ’6Æö¦WfRG&VçWFæğ¦÷Gf÷&VæöröF¦VÆ²¶òöF¦VÂæ–¦R÷Gf÷&VâÂ¦6æòG&[æ’÷Gf&æ¦RöF¦VÆ¦§6Æö¦WfRâæRGg&F’F¦R&WW¦VÆò7fR¦öæR7f–‚öF¦VÆâg&–¦VÖR÷Gg,IVæöp§&–¦VÖF÷¦æ¶RöGfö¦Væò¦RöB&–¦VÖfÆ¶’fW¦æò¦æÆörà ¥¦¦VFæœHÖ¶’´ÔÂõ4…VF—F÷#¢æ¦—b’÷¦æ¶f¦ÆÂ&VvÆVBÆ–æ–¦RÂÆWFÀ§&–ÆvüIVæ&ö¦ÂFV&Æ¦–æÂg'7FÆ–æ–¦RÂf–FÆ¦—f÷7BÂ—7Væ’Z&gW&Rà¥÷W–ÖöGfö¦VæRæ¦—b’÷—2ò7F–Âf¦Æò&–&Æœ[æ’FRG&–'WFRà¤æ¦—bö÷—2Æö¶Ææörö&¦V·FÖ–¦Væ¦§RöFv÷f&§\Hv’Æ6VÖ&²R”D"´ÔÂ×S ¦æ÷f’6G,[æ¢6R÷Gg,IV¦R&–¦R¦Ö¦VæR&Vv—7G&’V¶Ææ¦æ¦7F&örà¤vVöÖWG&–¦’÷7FÆ’G&–'WF’6RH×Wf§Râ¦6W'fW"f¦ÂFV·7B—§&œHÖ—Fò¶[æP¦F¦R—¦Ö¦Vææ¦—fö÷—66ÖòRFöÒ&–¶§S²ÆœHÖæ’7F–Â÷7F¦RÆö¶Ææòà¥7F–ÂÆö¶Ææörf¦Æ6R6FH×Wf’·&÷¢÷WÂ÷g&F²6—7&V¶–FæP¦æVçRÆ–æ–§R¦—7FV¶Ææ¦ÆVfÆWBF6„'&’â6H×Wf¢7F–ÂæR'&œZP§&Vv—7F"¦üZæW\HÖ—FæörÆö¶Ææörf¦Æâæ¦—f’FööÇF—27R…DÔÂÖW66VBà ¥V¶Æöæ¦Væ’æ7Ff’·&²’7F&’–6¶W#²÷7Fö¦RÆ–¦Wf’ôFW6æ’·&²’—¦&÷ §÷7Fö¦\HvRfÆ¶Râg&F’æ¶æ¦—b&öF—FVÆ¦ÒöFÖ‚H×WfF–¦WFRÂ&—&§&öF—FVÆ¦’W¦—&u2â6F÷Gf&’†—7F÷&–§6¶’–çFW'fÂW¦RÂF¦æF—fR&fW"æRV&6’†öFæ¦Ræ¦Bò¶6æ–¦VÒ&[ææ¦Væ§Râæ7Ff’æföF¦·F—fçRfÆ·S²¦g,ZWF²'&œZR¦÷7FÆR÷¦æ¶R÷g&F¶âf\Hv’&–¶£ ¦æFÖ÷'6¶f—6–æB‚Â¶ö÷&F–æFR"‚ÂW¢&VÆÖæ¦RæW6¶öÒV·&çRà ¥&Vw&W6–¦R¶÷&—7FR7Gf&æRgVæ¶6–¦RW¢Æ[æâ6W'fW"ôu3¢öw&æœHÖVæ¦R7G&æ–6P¦æCÂw&\Z¶¶6æ–¦R7G&æ–6RÂ&öÖ¦VææÆövFö¶öÒ–ÖVæÂæW÷Gg,IVæğ¦'&—6æ¦RÂF–¦WFR×&öF—FVÆ¢ÖF¦VBÂW¦’üH×Wfæ¦RFHÖ¶÷&Vv—7G&â'&÷w6W ¦f—‡GW&R&üZ—&Vâ&f–ÒÆVfÆWB÷WöÒÂ7F–ÆöÒ’Æö¶Ææ–ÒDôÕ'6W"ô”D ¬H×Wfæ¦VÒæ¦—fö÷—6Âö&æ÷föÒ’&÷f¦W&öÒ÷6ÒfVÆœHÖ–æ÷FVÖâ—6†öB4’Ö¦À¤²’f—§VVÆæ’&VvÆVB&—BHvRF÷—6æ’æ¶öâ—¦w&Fæ¦Râ&öGV¶6–§6¶¥7W&6Rõ$Å2’f—¦œHÖ¶’æG&ö–Bu2æ—7RFW7F—&æ’÷f–Ò&÷f¦W&Öà ¥÷Gg,IVæò##bÓÓ3¢f–æÆæ’6öÖÖ—B"ããp¦s6C6Cf6&c33&SVc6cfcƒ†Sf&CFFcC#fÂv÷&¶fÆ÷r3s“ƒƒs†Â¦ö ¦C“CW7¦\Zââsb¥2f¦Æ÷fÂ'&÷w6W"&÷f¦W&R’&÷f¦W&3°§&W7W'6&öÆ¦RâRFö·R&÷f¦W&R—7&fÆ¦Væòöæ÷fæò÷7FfÆ¦æ¦R÷W ¤…DÔÂÖÂ&V¶Ææ¦R2¶ö÷&F–æFÖ’æ–Ö6–¦&’Wf÷§S²vV"õ5rôæG&ö–@§fW'¦–¦R7R&÷f¦W&VæRæ"ããrâ6H×Wfæòƒ2är²Db'FVf·F²f—§VVÆæğ§&VvÆVFæ’¶Æ§\HÖæ’´ÔÂõ6W'fW"&–¶¦’’Dbà¥&VÆV6Rc"ããr6G,[æ’WÆöFVBÖFV'Vræ²Â#ãcc2ã3cR&§FÂ6öFRCƒs°§Frö¶§V¦Rf–æÆæ’6öÖÖ—BÂWFFW"f–F’æ÷gRfW'¦–§Râ4„Ó#Sc ¦fF6S&36c#CSss3&c3sc–3vf6“–3†3&6cSC3#ƒF3ƒ6SSƒFS6fcscV#–V36à¤æ¶öâö&¦fR¦üHÖWB¦R¶÷&—6æ–¶÷böGfö¦Væ’&VvÆVBRG&’W¦7F÷æF–¦VÆ ¦Fö72ôäÄ•¤ô´ôDó##bÓÓ2æÖFâæ÷f’æÆ¦’RFöÒ—§f¦\ZF§Ræ—7P§6Öö–æ–6–¦F—fæò÷&fÆ¦æ’à ¢223"â¦g,ZVâ&VvÆVB¶öFRG&’F–¦VÆ(	B##bÓÓ0 ¦Fö72ôäÄ•¤ô´ôDó##bÓÓ2æÖF6G,[æ’&VFöÒ¦g,ZVæRF–¦VÆ÷fS¢Æö¶Ææ§öF6’ôu2Â6W'fW"÷6&Fæ¦Â¶'FRõT’ö[çW&—&æ¦â¦7f¶’7RæfVFVæ§&VvÆVFæ’Fö¶÷f’ÂFö'&òöæZæ¦RÂ&ö&ÆVÖ’Â&W÷'V¶R’w&æ–6R&÷f¦W&Rà¦æöFRFö72öVF—B÷&W&öGV¶6–¦Ræ6§6÷Gg,IV¦R’æÆ¦æB7Gf&æ–Ò—¦Gfö¦Væ–Ğ¦gVæ¶6–¦ÖW¢Æ[ææR¦f—6æ÷7F’â&wVÖVçBÂ"–Æ’2&—&ö¦VF–æHÖæ’F–òà¥6·&—FüHÖV·V¦R÷7Fö¦\HvR·f&÷fS²æ–¦RFö¶¢F7R÷&fÆ¦Væ’à ¥¢¦g,ZWF²fÆ¶R–væ÷&—&fÇ6R÷Gg&GRW—6’'&œZR6æ6†÷C°¤"æ7Ff²öB7&VF–æRöFÖ‚öG6–¦V6÷7FF³²##3SRæV·&—FœHÖ¶’÷Gg,IV¦P¤”B¦öæS²3G'Vv’÷¦—böÆö6Ä¶ÖÅ6fTÆÂ‚–—¢6WGFW&'&œZRæW\HÖ—Fâ6Æö£°¤3B”D"·f"VæRf÷Föw&f–¦R÷7F¦R6·&—fVâ—¦÷'V¶RFöFfæ¦à¥#¢#"üHÖWFæRÆ—7FR&ö¦V¶FüHÖÆç7Gfæ—7Rv–æ—&æR‡v–æ6–¦fÆ¶¦æRö·&—fFRW—FR“²#2Ö‚×&÷w2Öæ¦’öBÖü[æR¦ö&œHv’FWFV¶6–§P§÷7Fö¦\HvRu2FHÖ¶S²3"66†RçWBöF&–¦æ¦Ræ–¦RV‡fHvVæó²327F&’&W§VÇF@§'WFRöæœZF’æ÷f’—¦&÷"æ¶öâ÷F¶¦—fæ¦â#ô#2WF–6¢R&öGV¶6–¦’¦f—6¦’öB6öç7G&–çBÖ&¦Râ¶6æ–¦R5ÂÖ–w&6–¦R¦Gf&§R&æ–¦’6Ö÷W—0¬HÖÆç7Gf²7F&öÆ—F–¶æ–¦R&–¦fÆ¦Væ¶ò·GVVÆâ·f"à ¤gVæ¶6–öæÆæ’¶öBæ–¦RÖ–¦Væ¦âFö¶öÒ÷för&VvÆVFÂ&VÖWWF’tTåE2æÖBà¥fW'¦–¦÷7F¦R"ããròCƒrâ&öGV¶6–§6¶’7W&6R’f—¦œHÖ¶’æG&ö–BW&\I ¦æ—7R¶÷&œZFVæ’¦&W&öGV¶6–¦Râ—§f¦\ZF¢æ–¦R&Wf—¦–¦7f¶RÆ–æ–¦Ræ—F§¦6V&æ–‚fÇWGFW"õ—F†öâ&ö—§föFR&W÷¦—F÷&–§Rà  ¢2232â¦VFæ÷7Ffæ–¦’6W'fW"Â¶öÆVv–æRfÆ¶R’w'Wæ’&–¶¢(	B"ãã€ ¥vV"õ5rôæG&ö–B"ãã‚ÂfW'6–öä6öFRCƒ‚â¶÷&—6æ–²¦R—§&œHÖ—Fò¦Fò÷fG&¦gVæ¶6–öæÆæ¦FF¶æ¶öâæÆ—¦S²æÆ¦’VF—Fæ—7R¶WFæò÷&fÆ¦æ’à ¥6W'fW"–Ö&–ÖÆ¦Væòò÷6Ææòò¦6Ææ¦Râ÷Gg,IVæR7Ff¶Ræ÷6R&ö¦V¶BÀ§&ö¦V·FçFÂ6G,[æ¢ÂG\[æ–çRö'&ö¢u2FHÖ¶’g&–¦VÖRâWf–FVæ6–¦¦RöGfö¦Væ§òæÆöwR’6Ö¦W'RÂFòSÖÆ–‚¦—6Â&W¢¶÷—&æ¦vVöÖWG&–¦Râ&WF†öFæP§6W'fW"¶÷–¦RfÆ¶÷7F§R&VvÆVFæR’&W¢æ÷fRWf–FVæ6–¦S²æW÷¦æFòg&–¦VÖP¦¦RF¶ò÷¦æHÖVæòâFWFÆ¦’&æ–¦–‚6Ææ¦æR—¦ÖœZÆ¦§R6Râ¦öæôu2&–¦VĞ§6R&–Æ¦\[æ’æ¶öâ÷Gg&FRÆö¶Ææör¶\ZÂ—¢6—&÷för6W'fW'6¶öröFv÷f÷&&–¦P¦Ö–¦\Zæ¦æW÷6Ææ–‚¦öæâ&–¶¢F÷¦æ¶Rw'WœZRu2ò&ö¦V·FçGRâ'\HÖæ§&\[æ–Ò6Ææ¦ÂVæ’—7—2fÆ¶·F—fæör&ö¦V·F’—§f÷¢¶÷–¦R÷7F§Rà¤FWFÆ¦’&VFöw&\Z¶R’ÆF’¶÷–¦R7R6¶Æ÷—f’FæRGWÆ—&§RvÆfæ’&VvÆVBà ¤¶öÆVv–æRfÆ¶RRö&œHÖæöÒ’FÖ–â÷föF\HvVÒ&–¶§RFö&–¦§R—7F’#G‚FöF—&æ§6Æö¢’fÆÆ&6²æ¦&Æœ[æRf–FÆ¦—fRÆ–æ–¦R¶òfÆ7F—FRâ÷W&–¶§V¦P§&ö¦V¶B÷&ö¦V·FçFÂG\[æ–çR’&fW"÷&–&Æœ[æfæ¦RÂ&W¢VF—F÷fæ¦ö'&—6æ¦§G\IVr&Fâæ¦—f’6RW66—&§Râ&fW"Öü[æR&—F’¦¦VFçRöF'&çRfÆ·S°§¦¦VFæœHÖ¶’&–¶¢V¶Æ§\H×V¦R¶öÆVvR·F—fæör&ö¦V·F’—¦÷7FfÆ¦FÖ–æ÷gP¦GWÇR¶÷–§RfÆ7F—F–‚fÆ¶â†—B×6Æö¢&F’vVöÖWG&–§R’V¶Ææ¦æ¦RÆ–æ–¦Rà ¥G&v÷f’Fö&–¦§R&–¶[æ’7fRò6·&–¢7fR’¦6V&æR¶öçG&öÆRf÷Föw&f–¦¢‡fÆ7F—FR’öF–¦VÆ¦VæR’ÂG&v÷fÂFHÖ¶ÂÖ¦W&Væ¦’FV·7GVÆæ–‚÷¦æ¶à¥÷7Ff¶Rf÷Föw&f–¦÷FHÖ¶öÖ¦W&Væ¦ö÷¦æ¶×FR6Rò¶÷&—6æ–·R’&–Ö¦Væ§V§P¦ææ÷fRöö&æ÷fÆ¦VæRÖ&¶W&RâG&v÷f’¶÷&—7FR÷7Fö¦\Hv’f—6–&ÆRò¦—7RÀ§V¶Æ§\H×V§\Hv’†—B×6Æö¢’÷¦æ·RG\[æ–æRâ·F—fæòu26æ–Öæ¦R’·F—fæ—¦Ö¦W&¦æ—7R6·&—fVæ“²öF6’6RæR'&œZR’÷fR&Fæ¦RæRZÆ§RæœZFæ6W'fW"à¥6·&—fVæ6H×WfæÖ¦W&Væ¦—6¶Æ§\HÖVæ7R’—¢fÆÆ&6²¶Æ–¶à ¤Æö¶Ææòsbósb¥2f¦Æ÷f’WB–æÆ–æR6·&—F’&öÆ¦Râ&üZ—&VæR&Vw&W6–¦P§ö·&—f§R÷Gg&FRÂæÆövRÂ&ö¦V·FRÂF÷¦æ·RÂW66–ær’w&æ–7RWf–FVæ6–¦Rà¤æ÷f'&÷w6W"&÷f¦W&6W'fW"ÖÖÓ#‚ç’¶÷&—7F’&f’ÆVfÆWBõGW&b¦ö&œHÖæ¦’FÖ–â¶Æ–²ÂfÆÆ&6²Â&fW"’w'WçRf–FÆ¦—f÷7Bâ4’ö'V–ÆB÷&VÆV6R—6†ö@§6Æ–¦VF’æ¶öâ—¦w&Fæ¦RâæVÖ&öGV¶6–§6¶–‚W—6æ—F’f—¦œHÖ¶R–ç7FÆ6–¦Rà £"ãã‚÷Gg,IVæòö&¦fÆ¦Væ¢v÷&¶fÆ÷r3s33##33SÂ6öÖÖ—B÷Fp¦c#–Vsƒc†fcF#vV6V3F3&&6ƒ6Ss63sÂÖFV'Vræ²#ãcsrãs“2"À¥4„#Sb#Cc33ƒ#&c##sVS6S&#c“S†V3CCSFSƒC“&#†#–f“s#cSv3&C’à¤4’'&÷w6W&’’—¦w&Fæ¦&üZÆ’â&VvÆVFæR6Æ–¶RW6¶örFæWfæörÖöFÂ6W'fW&¦’¶öÆVv–æRfÆ¶R2&fW&öÒâGf–¦R&WF†öFæR4’¶÷&V¶6–¦R&–ÆR7R6Öòf—‡GW&P¢†F—d–6öâ&W¢æVF÷7F§\HvVrärÖ²FW7BæR—FÆVfÆWB¦V¶Æöæ¦Væ’VæFVf–æVB6Æö¢’à ¢223Bâ&VvÆVFæ–²÷¦æ¶R’w'W—6æ’6W'fW"(	B"ãã ¥vV"õ5rôæG&ö–B"ãã’ÂfW'6–öä6öFRCƒ’â¶÷&—6æ–²¦R¦Fò&VvÆVFæ–²6§ö¦VF–æHÖæ–Ò’w'Wæ–Ò¶öçG&öÆÖÂ6÷'F—&æ¦RÂV¶Ææ¦æ¦Rö&f–¦W7F’ğ§\HÖ—Fæö¢FVÖG6¶ö¢¶'F’’6[æ–Öæ¦R6W'fW&æ÷6Æ¦VFæ¦G&’&ö¦V·Fà ¤÷¦æ¶S¢7fRò\HÖ—Fæ’f¦Æ÷f’òf÷Föw&f–¦RòG&v÷f’ò6W'fW"f¦Æ÷f’À§&WG&vÂ6÷'F—&æ¦RòöF¦VÇRÂFGV×RÂVFÆ¦Væ÷7F’öB5$TD”äR&–¶¦¶'FP¢†æRu2öÆü[æ¦’–Æ’æ¦—gRâw'WRòöF¦VÇR&¦Æ–·V§Rv÷7öF'6¶R¦VF–æ–6Rà¤w'WæR&Fæ¦RV¶Æ§\H×V§R7fRf–ÇG&—&æR&W§VÇFFRÂ’æ¶öâ'fR7G&æ–6Rà¥&–¶¢÷6·&—fæ¦RÂ&–&Æœ[æfæ¦RÂW&\I—fæ¦RÂ—§f÷¢Æö¶Ææör´ÔÂÖ÷G&vÀ¦f÷Föw&f–¦’÷7Fö¦\HvRF–¦VÆ¦Væ¦RÂ÷Gg&Fö¦VF–æHÖæör'&—6æ¦à¥6W'fW"Æ6V†öÆFW"6R&WW¦–Ö6Öò—§&œHÖ—FöÒ&Fæ¦öÒâöF–¦VÆ¦Væf÷Föw&f–¦§6R÷fF¦RV¶Ææ¦6Öò2FVÆVföæâ÷—6’f÷Föw&f–¦öæöÖVæR7RÆö¶Ææ’ğ¦æÆöwRâf÷Föw&f–¦R—¢¶ÖW&R×FRöF¦VÂ÷&ö¦V¶BRG&VçWF·R÷Gf&æ¦¶ÖW&S°§7F&R&W¢öF¦VÆöFGVÖ÷7F§R÷¦æHÖVæR¶òæW÷¦æFRâf–FÆ¦—f÷7Bö¦VF–æHÖæ–€¦f÷Föw&f–¦&F’’æ¶öâw'Wæör6·&—fæ¦ÂöGfö¦VæòæÆöwRà ¥W6¶ò÷&fÆ¦Væ’æÆ¢3VF—F¢6WGFW"Ö’fœZRæR'Væ—&§RæW\HÖ—FæP¦Æö¶ÆæRf¦Æ÷fRâ'&—6æ¦R'fò÷Gg,IV¦RW—2&Vv—7G&’V¶Ææ¦6ÖòöF'&æ¦f¦ÂÂæR÷7FÆRæW\HÖ—FæRâw&\Z¶W—6&Vv—7G&¦G,[æf6Æö¢÷öFF¶Rà¥7F&–Æâ–FVçF—FWB’öæ÷fæ&÷f¦W&æÆövæ¶öâ÷Gg&FR'&—6æ¦à¤†—7F÷&–§6¶&W&öGV¶6–¦Fö72öVF—B÷&W&öGV¶6–¦Ræ6§2÷—7V¦R"ããr’æ–¦P§&Vw&W6–§6¶’FW7B¦—7&fÆ¦Væ’3²æ÷f’FW7B¦RFW7G2ö§2öÖÖÆ–'&'’çFW7Bæ§2à ¥6W'fW#¢&–ÖÆ¦Væòõ÷6Ææòw'WœZR6Rò&ö¦V·GR–Æ’FGV×R&¦Ö¦VæP¢„WW&÷Rõ6&¦Wfò’â—7F÷6Æ¦VFæ¦G&’&ö¦V·Fòæ¦æ÷f–¦ö¢÷Gg,IVæö §&¦Ö¦Væ’Rö&F&²w'WRüHÖWFæò¦Gf÷&VæRÂ7f’Wf–FVçF—&æ9ï]í¢G§²ÚîÆ­yÖÒFæ7F&öÒÖ÷fP¢¶öGRf\Hr¶öB&öG\[æVæ¦æ¶öâÖ÷W6WWÖâö&Fö¶6F6Ç\Z§R6ÖòG&s°¢÷F¶HÖ—fæ¦R¶÷&—7F’—7F’FövI¢âFHÖ¶’VæFò¦G,[æf§R÷7Fö¦\Hv’Fö²à¢ÖçVÂæVÂ’F÷¦æ¶¶öçG&öÆRV¶Æ§\HÖVæ’R¦ZF—GRöB&÷v6–¦P¢¶Æ–¶÷f÷F÷V6‡7F'B÷67&öÆÂæ¶'GRà¢ÒF÷¦æ¶¶öçG&öÆR&VÖ¦\ZFVæRVçWF"vÆfæör&–¶¦ÂR¶ö×·Fâ&ææW ¢—¦æB¶'FS²&W¢gVÆÂ×67&VVâ&6¶G&÷Ö–Æ’&Æö¶—&æ¦¶'FRöfö·W2×G&Öà¢üHÖæ’u2÷öæ÷fæò÷Gf&æ¦R&VÆ¦’æ¶'GRâ&–¶¦æ’öF¦VÂÂ&ö¦V·FçBÀ¢·F—fæò÷W¦7Fæ¦RÂG\[æ–æÂg&–¦VÖR’6–væÃ²W¦ôæ7Ff’’¦g,Z’à¢Fö²¦R÷Gf÷&VâÂ&ææW"fÆ¶RÂö&œHÖæFöæ¦¶6–§6¶G&¶’GWÆ’&V2Ö& ¢7R6¶Æöæ¦Væ’â6¶Ææ¦æ¦Rg&HvG&¶R’æ7FfÆ¦—7F’u2vF6ƒ²¦g,ZWF°¢’FÆ¦RHÖV¶G&¦çR÷Gg&GRÂæRÖ–¦Væ¦6W76–öâô”D"öf–ÇFW&R÷6Ææ¦Rà¢Ò&üZòæ÷f’'&÷w6W"FW7BÖçVÂÖG&rÓ#s†ÖœZ’4EF÷V6‚Â5SG‚Â–æW&6–¦À¢6–×VÆ—&æ“#Ò§\[ææ’öÖ²Â&W6—¦R÷¦ööÒÂf–æ—6‚ÂFHÖ¶õVæFòÂ7F&–¦’gV6’’à¢u2FW7B÷Gg,IV¦R¶'F÷÷¦–6–§RVçWF"Ö–âÖÂ6·&—fVæRGWÆRG&¶R¢6Æö&öFçR¶'GRÂ÷6ÒF’öF&²&7÷&VFÂW§Röæ7Ff²ÂÖ–æ–Ö—¦—&æ¦RÀ¢öæ÷fæ’VÆ¢ÂæWW7¦VÆ’G&¦æ’f–æ—6‚÷&WG'’Â7F÷RW¦’’”D"&VÆöBà¢&üZÆò7f–ƒ¥2w'WÂWB–æÆ–æR6–çF·6’ÂF÷¦æ¶&W7F÷&R’÷fW&Æ¢FW7BâVæ’FW7C¢5SG‚ÂV''¦æ–ƒR‚Â3ScB&–‡fHvVæRFHÖ¶RfÆ¶“s#0¢F÷¦æ¶RÂ7f–ƒs#2g&HvVæò—¢”D"Â&W¢×&\[ææ–‚W—6â÷fòæ–¦Rf—¦œHÖ¶’FVÆVföà¢æ’Ö¦W&Væ¦R&FW&–¦S²&öGV¶6–§6¶’7W&6Ræ–¦R¶÷&œZFVâöÖ–¦Væ¦âà¢ÒvV"õ5rôæG&ö–B"ãrãö6öFSSCâ¦g,Zæ’²'V–ÆBöö&¦fRFö·Rà ¢Ò¶öæHÖæ÷Gg&F"ãrã¢4’3s“##sCS’÷6÷W&6P¢C33cS3ƒCƒVV&–C3ƒ†#s–#–Ff#63“#‚W7¦\Zââ²#Bã“"ã#ƒ‚"À¢4„#SbcƒvcƒƒcCssC–3ƒ“v6cF#“S–f#ƒscv6CC†Cƒ3ƒF3svCc†6&#ƒ&Sbà¢7Gf&æ’&WW¦WF’³¢&ç7BçW72çfÆ¶RæFV'Vrò"ãrãÖFV'Vrò6öFSSC°¢7F&–Ææ’6W'F–f–¶Bf6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¢7f–ƒcvV"&W7W'6–FVçFœHÖæ’—§f÷'S²&VÆV6RF–vW7B’fVÆœHÖ–æö¶Æ§R6Rà¢æG&ö–B„ÔÃ£BFW7F÷fÃw&\Z¶÷F÷f÷&W6¶¶æ¦âWFFW"÷—2g&Hv¢c"ãrã2¦fæ–ÒÖFV'Vræ²âvW2W7¦\Zæòö&¦fÆ¦Vâ2"ãrã’G&rf—†öÒà ¢222##bÓÓ’(	B&VvÆVBRHÖWF—&’F–¦VÆÂ÷&f¶RF–¦VÆ÷f’"ƒ"ãrã ¢Ò¶÷&—6æ–²—§&œHÖ—FòG&[æ’öF¦VÇRRf¦Â&–¦R&VvÆVF’¶ö×ÆWFæR÷&f¶P¢'fGfF–¦VÆ†'Vv÷f’ö¶öBöF—¦¦â’âöF¦VÆ’FWFÆ¦æ’æÆ¦’P¢Fö72ôõ$TtÄTEóEôD”¤TÄæÖBâF–¦VÆ÷f“2óB÷7F§RÆæ—&æ’à¢Ò¶'FS¢7Gf&æ’¦Fæ’ÆVfÆWB6çf2æ–¦R7'Fò5drW&ÂZ&gW&S²FöFà¢ÖÆ’öæ÷fÆ¦—f’6çf5GFW&â6¦HÖ–æöÓ²æW&WW¦WB´ÔÂ&W¢w'WR6RæP¢7F–Æ—§V¦R&–¦R&WW¦–Öæ¦‡&Vw&W6–§6¶’ö·&—fVæò’â5dr–FVçF—FWBw'WRVÖ¦W7Fğ¢–æFV·6V¶Ææ¦¶öÆ—¦–§R&’FVÂöFB†æ÷f’FW7BFæ"ãrã’â¶6æRVæP¢f÷Föw&f–¦RfW¦æR¦ö&¦V¶BöæÆör÷&VvÆVBÂæR&öÖ¦Væ¦—b–æFV·2âæF—fP¢öF&–¦VæòV¶Ææ¦æ¦RæR'&œZR”D"ÖWFFF²&¦6R¦Gf&ÂT’æR&–¦fÆ§V¦P¢Æ[ææ’W7¦Vƒ²W7¦V‚HÖ—7F’6Öò6–Æ¦æR&Vg2÷F‡VÖ&æ–ÂöÆ7BöfbâÖö¦R¶'FP¢–Ö§RF—&V·FçR§f¦W¦F–7SCG‚’&¦Æ–·V§R÷fW¦âöB¶÷—&æörf¦Æà¢ÒfÆ¶S¢VçFW"æ–¦R&÷f¦W&fòW—6âæ¦—bÂ¦R¦ö&–Æ¦–òFV·F—f—&æğ¢GVvÖR¦'&—6æ¦Râ¶6–¦6F&÷f¦W&fFHÖâæ¦—b’6æ6†÷@¢ö&¦V·FöæÆöv÷&ö¦V·F²&öÖ¦Væ¦—b–æFV·2æRÖ–¦Væ¦6–Æ£²u2Ö÷&&—F¢¦g,ZVââ6·&—fæ¦R&ö¦V·Fö'V‡fF¶öÆVv–æRÆ–æ–¦Röæ¦—fR’WFFRÂ¢7F&’¶\ZG'Vvör&ö¦V·FæRWFœHÖRæ'&ö¦WfRöGWÆ–¶FRõ5DBâvVæW&6–¦¢·F—f6–¦RZF—F’v—B’öFvüIVæ’¦ööÒâ7F&’Ö&¶W&’æ¦—fæR÷7F§RP¢vÆö&Ææö¢Æ—7F’â¶öÆVv–æ¶'F–6÷Gf&—7F’÷Wö&fW"ÂF—¶÷fæ–6&F’à¢6÷'Böf–ÇFW"÷6V&6‚G&¦æ’òæÆöwR÷&ö¦V·GS²6[æWF²’üHÖ—7F’f–ÇFW&S°¢&ö¦V·F’Æ–æ²¦—7F÷Gf&F"Âæ¦—bW66Rà¢Òæ÷f’gVÆÂÖ5SG‚'&÷w6W"FW7BVF—B×'G2Ó#sö·&—f7Gf&æ’6çf2õ5drÀ¢”D"öæF—fR&VgW6Âö6ÆVçWÂf÷Fò&6RÂVçFW"÷66÷R÷&V÷&FW"Â¶öÆVvR†–FRğ¢WFFRö&fW"Â(i%(i%¶6æR·F—f6–¦RÂ&W7F'Böf–ÇFW&RöæÆövR“fÆ–÷WFà¢&üZÆó¥2w'WóV–æÆ–æR6–çF·6’ÂÔ%F–ÆW2&VvÆVBÂ´ÔÂõ4…&W7F'BÀ¢#fÆöFÖó#G&ö¦V¶B&–¶¦Â¶öÆVvRöFÖ–âõGW&bÂ7G&VÆ–6Rö÷WFÆ–æRÂFVÖG6¶¢fœZWWf÷¦æ“3öÆ–vöæ’7Gf&æ’¶÷&—6æ–¶÷bu´srã3\HvVÆ–¦÷7f–ƒwg'7Fà¢V''¦æ–ƒV„5SGƒ£3ScGfÆ¶ós#4F÷¦æ¶FHÖ¶Ãs#4”D'&W7F÷&RÃfæ§6¶–‡W—6à¢÷&–v–æÆæ”u´ræ–¦RR&W÷Rô²×S²f—¦œHÖ¶’FVÆVföâ÷&öGV¶6–§6¶•7W&6P¢æ—7RFW7F—&æ’âvV"õ5rôæG&ö–C"ãrãö6öFSSC²¦g,Zæ’4’ô²6Æ–¦VF’à ¢Ò¶öæHÖæ÷Gg&F"ãrã¢4’3s“#S#33ƒS‚÷6÷W&6P¢3sSFSf6v6ScS&F6C33ƒS&c3c†cƒ66CS"W7¦\Zââ&WW¦WB²#Bã#ãSC#°¢4„#Sb3sCvV3V3s#–3–fVCSVCs&Sf#SC&#ƒ3†6c“sV#ss#c“f&6SFC–#–6#fc2à¢æG&ö–B„ÔÃ¢BFW7F÷fÂw&\Z¶÷F÷f÷&W6¶¶æ¦âÖæ–fW7C ¢&ç7BçW72çfÆ¶RæFV'Vrò"ãrãÖFV'Vrò6öFSSCÂ—7F’6W'F–f–¶@¢f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¢7f–‚c76WG2–FVçFœHÖæ’—§f÷'S²&VÆV6RF–vW7B÷fVÆœHÖ–æöGVF&æ’âWFFW ¢g&Hv'f’c"ãrã2ÖFV'Vræ³²HÖWF—&’—¦Ö–¦Væ¦Væ¦fævW2f¦Æ¢4„#Sb÷&\IVæ¦VÒöFv÷f&§R—§f÷'Râ¦—2F–¦VÆ÷fó"F÷Væ¦Vâ—7÷'V¶öÓ°¢F–¦VÆ÷f’2óB÷7F§RÆæ—&æ’à  ¢22’ââ##b(	B¦g,ZWF²&VvÆVFF–¦VÆ÷f2óBÂ"ãrã"ò6öFSSC  ¤æ—§&œHÖ—B¦‡F¦Wb¶÷&—6æ–¶&VvÆVFæ’’÷&fÆ¦Væ’F÷¦æ¶õFW&VâÂ6W'fW"À§&—7GW’[çW&—&æ¦S²ö'V‡fBÂæÆ¦’’öw&æœHÖVæ¦7RP¥´õ$TtÄTEóEôD”¤TÄæÖEÒ„õ$TtÄTEóEôD”¤TÄæÖB’à¤u2f–æ—6‚ö&6²÷7F¦RæöF¦VÇR¶ò”D"W—2æRW7–¦S²æRÖ–¦Væ¦6RöF¦VÀ§Fö¶öÒ6æ–Öæ¦â"¶ÖW&öæœZFf¶6æR7G&VÖ÷fRâvVöÖWG&–§6¶’ÖVÖğ§&W÷¦æ¦R¶÷&V¶6–§R¶ö÷&F–æF÷g&VÖVæ’&W¢&öÖ¦VæR'&ö¦FHÖ¶à¤u26W&–¦R’ö¦VF–æHÖæ’WB÷Gg,IV§R7Gf&æRFHÖ¶R&–¦R4²Ö²&ö¦V¶BÀ¤F÷¦æ¶öF¦VÂ÷¦öæ÷Gg,IV§RG&[æVæ’6G,[æ¢’fÆ6æ–¶HÖ²’&’#3SRà¥&–¦VÒ’&÷f¦W&öFö'&Væ¦–Ö§RFöFFæR¦ZF—FRöB&öÖ¦VæRöF¦VÆöæÆövà¤æF—fRWFFT'&–FvR&÷f¦W&f6öçFVçBÕ&ævR’v—D‡V"4„Ó#Sb¶F÷7Fö¦’à¢¢¤æ÷f’5Â÷G&V&â6Öò¦'&—6æ¦R6–¦VÆöröF¦VÆ¢¢ ¦7W&6RöÖ–w&F–öç2ó##c•öF÷¥öFöÖ–5öFVÆWFRç7Æ(	BWF÷&—¦÷fæ¦VFæ§G&ç6¶6–¦¦·&VF÷&ö·F—fæörÖævW&âæ–¦R&–Ö–¦Væ¦Vâæ&öGV¶6–¦’à¤&W¢æ¦Vv'&—6æ¦R6R6–wW&æò¦W7FfÆ¦²æVÖ÷g&F¶æHÖWF—&’DTÄUDRÖà¤æ÷f’Væ’'&÷w6W"FW7Bô¥2FW7BÂ—¦öÆ÷fæ’÷7Fw&U5Â&öÆÆ&6²FW7B’Gf–¦P¤æG&ö–B&÷f¦W&R6G,[æ¦÷&7öæà ¤¶öæHÖæ÷Gg&F"ãrã#¢4’3s“33cS““C"÷6÷W&6P¦&36C36V&cƒV#s3F#†3VC†“Cƒ&c†Vc3vCfW7¦\Zââ¥2w'WÀ¥÷7Fw&U5ÂFW7F÷f’ÂVæ’'&÷w6W"6·W’bæG&ö–BV×VÆF÷"FW7F÷f&W ¦w&\Z¶÷F÷f÷&W6¶¶æ¦â&WW¦WB³¢#Bã#’ã“ƒ"Â4„Ó#S`¦#ƒ“CV3SFFSsvC–s#Sssƒc#c“sCƒFFV#Cfc“c3fSSV#s–#“V#–SV&66SV°§¶WB&ç7BçW72çfÆ¶RæFV'Vvò"ãrã"ÖFV'Vrò6öFSSC"â7f–‚cvV"76WG0¦–FVçFœHÖæò—§f÷'R’—7F’7F&–Ææ’6W'F–f–¶B¶ò"ãrãâ&VÆV6RF–vW7B§fVÆœHÖ–æöGVF&æ“²WFFW"'f’g&Hvc"ãrã"öÖFV'Vræ²âWB¦fæ–€¥vW2f¦Æ÷f–FVçFœHÖæò—§f÷'S²vW24’3s“33cS“3SrW7¦\Zââ7fHÖWF—&¦F–¦VÆ&VvÆVF¦g,ZVæâ5Â'&—6æ¦æ–¦R&–Ö–¦Væ¦Vâæ&öGV¶6–¦“°¦f—¦œHÖ¶’FVÆVföâÂ&FW&–¦’&öGV¶6–§6¶&¦÷7F§RæW&÷f¦W&Væ’à ¢22’ââ##b(	B¦VFæ÷7Ffæ–¦’üZÆ¦’æ6W'fW"ƒ"ãrã2ò6öFSSC2 ¤æ¦‡F¦Wb¶÷&—6æ–¶ö¦VFæ÷7FfÆ¦Vâ&–¶¢6W'fW&â·&Hv’†VFW"ÂG&¦¶ö×·FæF&&VFöÒ¦6Ææ¦Rò÷6Ææòò&–ÖÆ¦Væó²¦6Ææ¦R¦RüHÖWFæ§F"&’'föÒVÆ§R–Æ’&öÖ¦Væ’æÆövâÖæ¦Rö&ö¦Væ–‚÷g,Z–æ’GWÆ–€¦÷—6²¦VFâ—7F¶çWBüZÆ¦’’&–Ö’â·F—fæ’&ö¦V¶B’&–¦fÆ¦Væ§&ö¦V·FçB÷7F§R¦6æòf–FÆ¦—f’Â6–Æ¢’WF÷"7f¶R7Ff¶RRw'WÖà¥g&VÖVæ¦Fæ¦R&¦Ö¦VæRÂ—7—2&ö¦V·F’6–wW&æ÷6æ¶÷–¦6¶Æ÷Æ¦Væ’7P¦—7öBvÆfæör&VvÆVFâ7FGW2&¦Ö¦VæR–Ö·&F²6[æWF²’&üZ—&—fP¦¶÷&¶S²w&\Z¶õ$Å2÷7F¦Rf–FÆ¦—fR6[æWF·R’¶F7R¶÷&6’6¶Æ÷Æ¦Væ’à¤÷Gf÷&Væ’FWFÆ¦’&¦Ö¦VæR÷7F§R÷Gf÷&Væ’&’÷7f¦\[æfæ§Râ6Ææ¦RÂ4²À¦öffÆ–æRFæWfæ–²Â$Å2Âw'W—6æ¦RG&’&ö¦V·FöFæ’’&–¶¢æ¶'F’¶÷&—7FP§÷7Fö¦\HvRFö¶÷fS²æVÖ5ÂF÷VæR¦÷f¢F—¦¦âà ¤Æö¶Ææó¢7f–‚¥2w'WÂR–æÆ–æR6–çF·6“²'&÷w6W"ÖVçR×FööÇ2§6W'fW"ÖFW6–vâƒ’ärÂ3#‚öÆæG66RöFâ÷FÖæ’ÖöBÂW÷¦÷&Væ¦R’FövvÆR’À§7Gf&æ’¶öçG&öÆ—6æ’7W&6R…EE6W'fW"Ö6öæf—&Ò’VæVF—B×'G2Ó#s §&Vw&W6–¦âFW7FæR&WG÷7Ff¶RüHÖWFæörF&’6¶Æ÷Æ¦Væ–‚g&VÖVæ¦[çW&—&æRF&÷f¦W&Ræ÷f’¶÷&—6æœHÖ¶’Fö²â&öGV¶6–¦æ–¦R¶÷&œZFVæà¥vV"õ5rôæG&ö–B"ãrã2ö6öFSSC3²4’ô²–FVçF—FWBF÷Væ—F’÷6Æ–¦R'V–ÆFà  ¤F÷VæR—7För¦üZæVö&¦fÆ¦Væör"ãrã2æ÷6Æ¦VFæ¦R¦‡F¦WfS ¢Ò&7FW"5Æ—FTD"ôÔ%F–ÆW2ôu´röFÆövR÷7F§RæW&\I§R&’&öÖ¦Væ’æÆöv°¢÷v—TÆÄÆö6ÅW6W$FFfœZRæR÷¦—f7ÆÖ6ÆV$ÆÆâ&—fFæ’´ÔÂÀ¢f÷Föw&f–¦R’FW&Vç6¶’¦—6’÷7F§RöGfö¦Væ’ö&†—f—&æ’ò¶÷&—6æ–·Rà¢Æöv÷WB&W6WGV¦R7F'GWvVæW&6–§S²7F&’öFvüIVæ’&W7F÷&RæR&VÆ¦’Ræ÷f’æÆörà¢Ò&ö¦V·FçF’6RFVGWÆ–6—&§Rò”B×RÂV¶Æ§\H×V§\Hv’fÆ6æ–¶RHÖÆæ÷f–Öà¢G\I’fÆ6æ–²æR&WW¦–Ö–ÖRG&VçWFæör&öf–Æ²'&ö¢HÖÆæ÷f’&VF¦¶÷&—7FR—7F’F–Òà¢ÒF7FGW&fÆ¶R÷7Fö¦\HvVÒF–¦ÆöwRöÆ—7GS¢'&ö¦Wf’ÂBô$2ô$‚6Æ÷fÂFHÖ¶À¢'&—6æ¦R’öÖ¦W&æ¦R·W'6÷&²f—¦œHÖ¶F7FGW&÷7F¦RW÷G&V&Æ¦—fà¢¦¶Zæ¦VÆò¦Gf&æ¦R7F&örF–¦ÆövæRV¶Ææ¦÷fW&Æ’æ÷förà¢Ò¶ö×·FæR6Æ–¶R’¶'F–6RöffÆ–æRöFÆövÂV¶Æöæ¦Væ’G&[æVæ’÷—6æ’&Æö¶÷f’à¢FW&Vâ&VFöÒ÷¦–6–¦÷7Væ6Rö¦–×WC²öÆ–vöâ’FW&Vâ¦Fæ¦’R&ö¦V·GRà¢fVÆ–¶ò7'fVæòGVvÖR'&—6æ¦²÷7Fö¦\HvR÷Gg&FR÷7F§Rà¢Ò¦VF–ç7GfVæòV¶Ææ¦æ¦R7f–‚6Æö¦WffÆ¶R†ÆvW"Â÷WFÆ–æR&V¶òÆVfÆWFÀ¢7G&VÆ–6RÂ÷¦æ¶RÂæv–"ÂwG2’ÂV¶Æ§\H×V§\Hv’7¦æ¦R’HÖœZHvVæ¦R¶öÆVvà¢—7&fÆ¦Vâ7VF"vÆö&ÆæR7'fVæRç&¶Æ6R2HvVÆ–¦Ö7FF—7F–¶S²æWWG&Ææ’&VvÆVBà¢ÒZF×¢fÆ¶ö·&²öG&§VÖ–¦WfæòãBóã"‚Â¦VFæ—7&V¶–FæÆ–æ–¦&W ¢÷WFÆ–æVâ÷7F§RöFW6—f’&ö¦öFV&Æ¦–æö7'F–6RâDTÒã3Rf\Hrf–FÆ¦—fRÖ6¶P¢&WGf&§R6RR7'fVæR5dröÆ–vöæR¦ZF×R‡'WR÷7F§R&¦æS²&W ¢—¦ÖœZÆ¦VæRvVöÖWG&–¦R–Æ’æ÷för&WW¦–Öæ¦’â—§f÷&æ’7F–Â’&7FW"6Rg&Hv§Rà¢ÒFÖ–â·F—fæ÷7C¢¦6V&â¦—27Gf&æörT’ôu2&FÂÖ–çWFæ’&—FÒ6Ææ¦À¢÷[ææ¦RöffÆ–æRfW¦æò¦fÆ6æ–¶âæVÖ÷¦æHÖfæ¦·F—fæ÷7F’6ÖöÒ&–¦föÒà¢7W&6RöÖ–w&F–öç2ó##c•ö÷W6W%ö7F—f—G’ç7ÆÖ÷&¶÷&—6æ–²—§g,Z—F¢R7W&6R5ÂVF—F÷'RF6W'fW"H×Wf÷ö¶§V¦R·F—fæ÷7C²&öGV¶6–¦æ–¦RF—&æà¢Ö–w&6–¦¦R–FV×÷FVçFæ²6ÖòfÆ7F—F’¦—2&V¶ò%2ÖÂ&VvÆVB6ÖòFÖ–âà ¤Æö¶Ææó¢2¥2w'WS²æ÷f’Væ’FWf–6R×v÷&¶fÆ÷rFW7B67Gf&æ–ÒÆVfÆWFöÒÀ¥5Æ—FRv÷&¶W&öÒô”D"&7FW&öÒÂ—7F–Ò’G'Vv–ÒæÆövöÒÂ†ÆFæ–Ò&W7F'FöÒÀ§F7FGW&öÒÂÖ&¶W&–Ö’FÖ–âFGVÖöÓ²&–çBFW7BvVæW&œZRDb’&÷f¦W&f¥5dröÆ–vöæR÷g&Hvæ¦S²&f’—¦öÆ÷fæ’÷7Fw&U5ÂFW7B·F—fæ÷7F’â¦g,Zæ¤4’ô²Fö¶¢F÷Væ—F’æ¶öâ'V–ÆFâf—¦œHÖ¶’FVÆVföâ’&öGV¶6–§6¶&¦æ—7RFW7F—&æ’à ¥÷6Æ¦VFæ¦F÷Væ—7För'V–ÆF¢÷'V¶æ÷fRfW'¦–¦R¦R6–¦VÆ¶Æ–¶&–ÆæÀ¦–Ö¦6çR¶6–§R[çW&—&¢’¦6V&æò¦Gf&æ¦S²÷Gf&—7F’÷7Fö¦\Hv’Fö°¤ÖVæ–¦ôæG&ö–EWFFRâ²&÷f¦W&¶÷&—7F’ö&¦fÆ¦Væ’v—D‡V"&VÆV6R2°¦76WFöÒÂVÖ¦W7FòvW2fW'¦–¦R¶ö¦Öü[æR7FœHv’&–¦R¦g,ZWF¶'V–ÆFà¤ÖVæ’(i"&FW&–¦’WFöÖG6¶òö·&WFæ¦S¢7FæF&FæòæG&ö–B—§W¦\HvRÂ†–öÖ’ğ¥&VFÖ’õô4òWF÷7F'BV·&â2&W¦W'fæ–ÒWFVÒR÷7Ff¶R÷fRÆ–¶6–¦RÀ§ÇW2&\HÖ–6¦ôTÒ&FW&–¦(i"&W¢öw&æœHÖVæ¦â¶÷&—6æ–²÷Gg,IV¦R÷7Ff¶S°¤æG&ö–BæRçVF’÷W¦FæòHÖ—Fæ¦RWF÷7F'F’T’æRGg&F’F¦RV¶Æ§\HÖVâà¥G&’æ÷fV×VÆF÷"FW7F&÷f¦W&f§R7Gf&æ’6¶vRU$’’fÆÆ&6²&¦æW÷7Fö¦\Hvö¢÷¦'&æ¦Væö¢ôTÒ7F—f—G’Â&W¢÷Gf&æ¦7Gf&æ–‚F÷§föÆà¤FV&VÆ’6VvÖVçFæ’æv–"fÆ¶R&—g&VÖVæò6R6·&—f&’ZF×’ÂF÷7FæP§6Öò¦VFæFæ¶—7&V¶–FæÆ–æ–¦â&ö¦V·Fæ’DTÒæv–"V¶Æ§\H×V¦RÆVvVæGRà ¤FöFFæÆö¶Ææ&÷f¦W&¢B¥2w'WR†æ÷f’FW7B÷F·&—f6Öòö&¦fÆ¦Væ¤²’&W6¶HÖRG&gBöæVF÷g,ZVâ76WB’ÂR–æÆ–æR6–çF·6’ÂFWf–6R×v÷&¶fÆ÷p§V¶Æ§\H×V¦RVçRÆ–¶6–§R&’&öÖ¦Væ’&–çB&¦Ö¦W&RÂ6·&—fæ¦R÷g&Hvæ¦P§6VvÖVçFæ–‚æv–&Â¶Æ–²÷¦Gf&æ¦R÷'V¶RfW'¦–¦R’7fG&’æF—fRGVvÖWF§&V¶ò¶öçG&öÆ—6æörÖ÷7Fâ&–çBõDb&÷f¦W&öæ÷fòW7¦\Zæà ¥'f’4’3s“c3sss3“¢¥2õ5Â’Væ’FWf–6R×v÷&¶fÆ÷rW7¦\Zæ“²¦W7FfÆ¦Vâæ§7F&ö¢&WG÷7Ff6’öffÆ–æR×&Wf–WròZ—&ö¶ö¢6ÆœHÖ–6’‡&F–òããb’Â¶ö§R¦P¦¶÷&—6æ–¶÷b¦‡F¦Wb¦Öæ¦–Ò¶'F–6Ö¦Ö–¦Væ–ò·fG&FöÒƒG‚âFW7B6F§&÷f¦W&f¶ö×·FæRF–ÖVç¦–¦RR7f–‚‚&7÷&VF²&÷f¦W&R7Gf&æ–‚&7FW §–·6VÆÂ¶\Z’ö&æ÷fR÷7F§Râöæ÷fÆ¦Væ’4’Ö÷&&üHv’&–¦R—7÷'V¶Rà ¥&V÷7FÆ’'&÷w6W"6·WÆö¶Ææò&÷f¦W&VâFò·&¦æ¶öâF÷VæR—¦Gfö¦Væöp¥6W'fW"ôÆVfÆWBf—‡GW&V7Gf&æöÒ÷&VÖ÷fUfÆ¶ÖÆ–W'6¦f—6æüZHwRâFW7@§&VvÆVFæ–¶&—&æ÷f’F"&–ÖÆ¦Væò&–¦RZ—&Væ¦w'WS²FW7B&ö¦V·F§&÷f¦W&fæ÷f’G&[æVæ’&VF÷6Æ–¦VB2öÆ–vöæöÒæFçRâ÷¦—F—fæR&÷f¦W&P§7Gf&æör&fW&ÂÖÂ&ö¦Âu2F÷¦æ¶R’FW&Vç6¶RSCÒ6–×VÆ6–¦R÷7F§S°§7fR&üZÆRâ4’3s“cCC“Cs“æÖ¦W&æò&V¶–çWB&F’÷f–‚f—‡GW&RF÷Væ°¦—7÷'V·RöG&\IV¦Ræ&VFæ’Væ’4’ÂæR&V¶–çWF’'V–ÆBà ¤·F—fæ÷7BFöFFæòf\[æR÷[æVæ’æÆör·&÷¢÷&V6÷&Eö7F—f—G•öf÷%÷W6W& §6W'fW"&÷f¦W&fF¦R—7F’¶òWF‚çV–BÂ&öÖ¦Væ¥uB6W6–¦RFö¶öĞ§6Ææ¦æR&——7V¦R÷[ææ¦RG'VvöÒ¶÷&—6æ–·Râ÷7Fö¦\Hv÷6æ÷fægVæ¶6–¦¦÷7F¦R¶ö×F–&–Ææ²æ÷f’¶Æ–¦VçB¶÷&—7F’&÷f¦W&Væ’w&W"âÆö¶Ææ’¥2¦—¦öÆ÷fæ’5ÂFW7BV¶Æ§\H×V§R”BæÆöv’öF&–¦æ¦Röw&\Zæör–FVçF—FWFà  ¤¶öæHÖæ÷Gg&F—7÷'V¶R"ãrã3¢4’3s“cSSS“CSR÷6÷W&6P¦s#F#fVcC#6&#–FfCC3&Cs3cSvF6f#63vF3fW7¦\ZââB¥2w'WRÀ¦—¦öÆ÷fæ’5Â&ö&æ’&—7GWö'&—6æ¦Rö·F—fæ÷7BÂVæ’'&÷w6W"6·W’¤æG&ö–BV×VÆF÷"FW7F÷f&W¢F÷fÂw&\Z¶–Æ’&W6¶¶æ¦â&WW¦WB°£#Bã##"ãssb"ƒ#BÃ#"Ô"’Â4„Ó#S`¦#†VFS#c333“s“ƒcVCs“vFFVVVFF3“css–6F#–C“#s–FCFc#“S–°¦&ç7BçW72çfÆ¶RæFV'Vvò"ãrã2ÖFV'Vrò6öFSSC2â7f–‚cBvV"76WG0§öGVF&æò—§f÷'Râ7F&–Ææ’6W'F–f–¶B÷7F¦P¦f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfFà¤v—D‡V"&VÆV6Rc"ãrã2ƒCƒc“B’ÂÖFV'Vræ²F–vW7B÷fVÆœHÖ–æ–FVçFœHÖæ“°§WFFW&÷b&VÆV6W3÷W%÷vSÓ'f’g&Hvc"ãrã22WÆöFVB²ÖöÒâvW0£3s“cSSSss#‚W7¦\Zã²ZW7B&÷f¦W&Væ–‚¦fæ–‚f¦Æ÷f–FVçFœHÖæò—§f÷'Rà¥5Â##c•ö÷W6W%ö7F—f—G’ç7Â¶÷&—6æ–²Ö÷&—§g,Z—F’R7W&6R5À¤VF—F÷'S²&öGV¶6–¦æ–¦RÖ–¦Væ¦æâ·F—fæ÷7B6R&–Æ¦\[æ’FV²æ¶öâ5À§&–Ö¦VæR’[çW&—&æ¦¶Æ–¦VæF²&WF†öFæ—7F÷&–¦&Fæ–¦R&V¶öç7G'V—6æà¤f—¦œHÖ¶’†–öÖ’ÂôTÒWF÷7F'B’&FW&–¦æ—7RFW7F—&æ“²V×VÆF÷"&÷f¦W&f§6¶vRU$’ÂöF&—"†–öÖ’WF’fÆÆ&6²&’¦'&æ¦VæöÒöæVF÷7GWæöÒV·&çRà¤²¦Rö&¦fÆ¦Vâ’&÷f¦W&Vâ¦[çW&—&æ¦R÷7Fö¦\HvR4ôDU‚FV'Vr–ç7FÆ6–¦Rà  ¢222"ãrãB(	B¶öçG&7BÂæf–v6–¦ÂZF×’'f’övÆVB&7FW'6¶R¶'FP ¥¦‡F¦Wb¶÷&—6æ–¶¢¦HÖ’FæWfæ’ÖöBÂ¶öçG&öÆR—7öB¶ö÷&F–æFÂV¶Ææ¦æ¦P¥7&VÖæò¦FW&Vâ÷6–wW&æ÷6æ¶÷–¦Â·&Hv’—¦&÷"föF’ÖRÂ¦VFæFæ¶Æ–æ–¦§fÆ¶RRZF×’ÂöG¦—bZF×R’6VçG&—&â'f’övÆVB¶'FRFò£Sãà¥&VvÆVB7Gf&æ–‚6ö×WFVB7F–Æ÷f÷F·&–ò7f–¦WFÆ–ÖVæ÷W7öæRöæv–&Ræ¦&–¦VÆöÒ’FÖæR7F&R¶'F–6R6FÖæ–ÒFV·7FöÒâFÖæ–¦’FæWfæ’Föæ÷f’À§W6¶ÆIVæR7F&R÷g,Z–æR’¶öçG&öÆS²FW7B¶öçG&7FFV·7FãÓBãRævÆfæ–Ğ§F&÷f–Ö’’&÷¦÷&÷&VvÆVF†f¶RöF6’Âfæ§6¶’W—6’&Æö¶—&æ’’à¥&W6—¦Tö'6W'fW"Ö¦W&’f—6–çRçbÖ&FvS²¦ööÒ÷6Æö¦Wf’ö—¦&÷"&¦Ö¦W&R–Ö§P£‚‚&¦Ö¶’¶B6R¶ö÷&F–æFR&VÆöÖRÂæ3#ó3“óSc‚ó#ƒ‚à¥V¶Æöæ¦Væ’ö&VÆ¦’6–¦VÆ’ÖöFÂ&—&VÖRâ´ÔÂ—§f÷¢’÷7Fö¦\Hv§&öw&×6¶’&6·W÷&W7F÷&RöFF¶6H×Wfæ“²æVÖ'&—6æ¦¶÷&—6æœHÖ¶–‚öFF¶à¥füIVæ¦R¦G,[æfö&Fö¶’6H×WfæR'WFRÂW¢Gf–¦R·&F¶R÷6–¦Rà ¤ÆVvVæFfÆ¶Rö·&¶fœZRæRVÖæü[æf5drW¦÷&¶R¦7f·R¶öÆVv–çR&ö§S°¦¦VFâFæ¶’W¦÷&²Â7Gf&æR&ö¦RÆ–æ–¦÷7F§Ræ¶'F’â7F–ÂZF×RæP§V¶Æ§\H×V¦R÷WFÆ–æR’æR&F’g&Hvæ¦R÷&–Ö¦VçR–FVçFœHÖæör7F–Ææ7f¶§öÖ²âDTÒã3RÖ6¶ö'&IV¦R6R—§fâT’F‡&VFRÆö¶ÆæöÒv÷&¶W'RÀ§6V·fVæ6–¦ÆæòòÆüHÖ–6“²’&¦æRÖ6¶R7R¶\Z—&æRâDbHÖV¶F÷g,ZWF³°§¦Gf&æ¦R÷F¶§V¦R÷6ò’g&Hv—§f÷"â5SBFW7BwW7FRÖ6¶S¢#"÷6Æ÷fÀ£öÆ–vöæÂSR÷F·V6¦T’F¦ÖW&Â¶öçG&öÆRF÷7GWæRFö¶öÒö'&FRâFğ¦æ–¦R&W&öGV¶6–¦7Gf&æör&–¦fÆ¦Væör¦7F¦¶—fæ¦æ†–öÖ’FVÆVföçRà ¥'f’Wf÷¢ö—¦&÷"&7FW'6¶R5Æ—FTD"ôÔ%F–ÆW2ôu´r¶'FR6VçG&—&âææ¦Và¦&÷VæG2†fÆÆ&6²6VçFW"’Â¦ööÒF¦R&¦Ö¦W'Ræ§fœZR£Sãâ÷6Æ¦VFæ¦¦¶F"H×Wf6RR÷7Fö¦\Hv–ÒW&\I§6¶–Ò7ÆÖ&Vg2ò¶'F’’vÆö&Ææòà¥&–çB&—g&VÖVæ’¶F"æR&W—7V¦R÷6Æ¦VFæ¦’FW&Vç6¶’öÆü[æ¢â7Gf&æ¤”D"÷&7FW"FW7B÷Gg,IV¦R6VçF"÷&¦Ö¦W'R’†ÆFæ’&W7F'B¦Fæ¦Vr¶G&À§W¢FöÆW&æ6–§R¦VFæör&ö¦V¶6–§6¶ör–·6VÆâæ÷f¶'FæR÷7FfÆ¦7fP§7F&R&7FW&RV¶Æ§\HÖVæR&ÆVÆæòâæ–¦RÖ–¦Væ¦â7W&6Ræ—F’6W'fW"Fö²à¥fW'¦–¦RvV"õ5rôæG&ö–B"ãrãBÂæG&ö–B6öFSSCC²²ô4’Fö¶¢6Æ–¦VF’à ¤Æö¶ÆR&–¦Rö&¦fS¢B¥2w'WR’–æÆ–æR6–çF·6W7¦\Zæ“²Væ’4¦'&÷w6W"6·W—§g,ZVâÆö¶ÆæòÂV¶Æ§\H×V§\Hv’æ÷fRF’ÖÆ–÷WB÷&–çB×&W7öç6—fP§&÷f¦W&RâFW7Fæ’—§&W¦’[çW&—&æ’¦æ÷gR¦f—6æ÷7BWFò×övÆVF’·&Hv’u0§7FGW3²4…ô´ÔÂWf÷¢Â7Gf&æ’&7FW"ô”D"Â&f–Æ&ö¦’÷WFÆ–æR’ZF×§öæ÷fò&÷f¦W&Væ’âf–VÆBÖFW6–vâæ6§3¢3#ó3cóC"ósc‚‚ÂFVÖ6R×F’À§&öÖ¦VæFVÖRæR¦W7FfÆ¦6æ–Öæ¦RÂ&VB÷7F¦R–FVçFœHÖâ’æVÖ¥2w&\Z¶à¥5ÂöæF—fR¶öBæ—7RÖ–¦Væ¦æ“²Væ’'V–ÆB–‚—²öæ÷fò&÷f¦W&fà  ¤¶öæHÖæ÷Gg&F—7÷'V¶R"ãrãB‡&÷f¦W&ãã##b“¢4£3s“sCC“CƒÂ6÷W&6Rsc63CC–fCFS†3“ƒS#FSSƒCƒcF63#vFvÀ§7fRf¦RW7¦\ZæS¢¥2Â—¦öÆ÷fæ’5ÂÂVæ’'&÷w6W"6·WÂ'V–ÆBÂ’æG&ö–@¦V×VÆF÷"FW7F÷fƒf–ÇW&W2öW'&÷'2÷6¶—VB’Âö&¦f’æÆ—¦''¦–æRà¥&WW¦WB²#Bã##rã3“b"ƒ#BÃ#2Ô"’Â4„Ó#S`¦&ff&3ƒf3C“3&F&C6Ff&Sss#s#“#“6VV6V&#sƒC†CVS–#vfS&CScF&6Cv°¦Öæ–fW7B&ç7BçW72çfÆ¶RæFV'Vrò"ãrãBÖFV'Vrò6öFSSCBâ7f–‚cRvV"76WG0§öGVF&æòÆö¶ÆæöÒ—§f÷'Râ6W'F–f–¶B&WF†öFæR–ç7FÆ6–¦R6H×Wfã ¦f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfFà¥&VÆV6Rc"ãrãBƒCƒ#333ƒb’ÂWÆöFVBÖFV'Vræ²Â—7F’F–vW7B’fVÆœHÖ–æ°§WFFW&÷b&VÆV6W3÷W%÷vSÓg&Hvc"ãrãBæ'föÒÖ¦W7GRâvW0£3s“sCC“3bW7¦\Zâ2—7F–Ò6÷W&6R4„²¦fæ’–æFW‚æ‡FÖÂÂ7ræ§2À¦f–VÆBÖFW6–vâæ§2ô552Â&–çB×6Æ÷Ræ§2’æ÷f’v÷&¶W"–FVçFœHÖæ’—§f÷'Rà¤³¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ãrãBöÖFV'Vræ°¤f—¦œHÖ¶’†–öÖ’’&–¦fÆ¦Væò¦7F¦¶—fæ¦Rææ¦V×Ræ—7RF—&V·FæòFW7F—&æ“°§&÷f¦W&öG¦—f¦R'&÷w6W"5SB6–×VÆ6–¦ÂW¢¦6V&æRæG&ö–BV×VÆF÷"&÷f¦W&Rà¥&öGV¶6–§6¶’7W&6Ræ–¦RÖ–¦Væ¦âà  ¢22"ãrãR(	BFæWfæ’¶öçG&7BÂFæWfæ–²&ö¦V·FÂw&æ–6R’Gf÷6Ö¦W"ƒãã##b ¥¦‡F¦Wf’¶÷&—6æ–¶¢&÷f¦W&FæWfæörÖöFæFÖ–â÷&ö¦V·FçBæVÆ–Ö°¦—7&fæ&—Fæ÷7BFæWfæ–¶&ö¦V·GS²V¶Ææ¦æ¦Rg&VÖVç6¶RG&¶R’FVÖG6¶P¦¶'FR—¢öFÆövR’6Æö¦Wf“²&VÖ¦\ZFæ¦RFöFFæ–‚6Æö¦WfRw&æ–6S²¶Æ–¶öĞ¦öF'&æ’Gf÷6Ö¦W"¦g,ZVæR'\HÖæRfÆ¶Rö·&¶â÷Gg,IVâ—§f÷"æ÷f–‚´ÔÃ §övöæ&÷6·'Wô´%DR(i"&VÆV6W2Â¶÷&—6æ–²¦Rf\Hrö&¦f–òw&æ–6RöF¦VÆ¤¶Ö–öç6¶’WFWf’âfW'¦–¦S¢–æFW‚õ5r"ãrãRÂæG&ö–B6öFSSCRà ¤FæWfæ’FV·7B¶÷&—7F’FÖçR&ö§R’7f–¦WFÆR÷g,Z–æR’RVvæ–¦\[ìIVæ–Ğ§&÷¦÷&–Ö¢7Gf&æ’u´r¶Æ6æ’&–¶¢÷F&VÆö¶öÆöæR÷÷WÂ´ÔÂ’¶'FRÀ¦FÖ–â¶÷&—6æ–6’÷&ö¦V·F’Â6æ–Öæ¦RÂF÷¦æ¶Âæf–v6–¦ÂZF×ÂWFVçF–¶6–¦à¤&ö¦RvVöÖWG&–¦RÂ&7FW&’ÆWF÷7F§RâöæVÖöw\HvVæGVvÖBæ—7R·F—f—&æà¤æ÷f’'&÷w6W"FW7BF’ÖÆÂ×æVÇ2Ó#sRç’&÷f¦W&fCB7Fæ¦¦ö&¦RVÆövRÀ§6÷Væ¦Væ–ÒFæWfæ–6–ÖÂ´ÔÂ÷†÷Fò÷G&v÷f–Ö’7Gf&æ–Ò6–çFWFœHÖ¶–Òu´rà ¤FæWfæ–²6Ff–ÇG&—&&ö¦V·D–B’WF÷&²æ÷f’Æö¶Ææ’¦—6’6G,[æR”@§&ö¦V·Fö¶÷&—6æ–¶üZVÖ&–§Rôt¢â7F&’¦—6’&W¢”BÖ&–¶§V§R6R6Öò¶@¦öF¦VÂôt¢üZVÖ&–¦¦VFæ÷¦æHÖæòöFv÷f&§R&ö¦V·GR’&ö¦V·FçB&—FF–×Rà¤Gf÷6Ö—6ÆVæ’¦—6’æ—7Rö'&—6æ’æ—F’öw&\Zæò&——6æ’â'&—6æ¦RFæWfæ–¶¦'&œZR6Öò·F—fæ’Æö¶Ææ’&ö¦V¶C²æVÖ÷¦—f¦vÆö&Ææò'&—6æ¦R6W'fW&à¤FÖ–âFWFÆ¦’Â7FF—7F–¶ÂDbô´ÔÂFæWfæ–¶¶÷&—7FR—7F’&ö¦V·Fæ’f–ÇFW"à¤æ÷f’FæWfæ–6’¶öÆVv’FÆ¦R6RæRZÆ§R6W'fW'S²¦6æò÷¦æHÖVæòR&–¶§Rà¤æVÖ&öGV¶6–§6¶RÖ–w&6–¦R–Æ’&öÖ¦VæR7W&6RöFF¶à ¥g&VÖVç6¶G&¶¢V¶Æöæ¦Væ’T’Â'VçF–ÖRÂ5r'WFRö76WB’v–çFW"Ö–ÖvW'’æ§2à¤DTÒ’¶\ZööffÆ–æRFW7F÷f’÷7F§RâFVÖG6¶¶'F¦RRfÆ7F—Fö¢6V¶6–¦’ÖVæ–¦°¦æ¦Vâ¦VF–æ’f–ÆR–6¶W"¦RVçWF"FörÖöFÆâw&æ–6R6G,[æR÷7Fö¦\HvP§&V¶–FHÖRWFWföw&æ–6öæv–&fÆ¶’¶FÆör¦fæ–‚v—D‡V"´ÔÂ76WG2à¤æF—fR¶ÖÄF÷væÆöG2¶÷&—7F’÷7Fö¦\Hv’7G&övòöw&æœHÖVâv—D‡V"G&ç7÷'BÀ¦öGfö¦VæR¶FÆövRG&—fRôv—D‡V"ÂfÆ–F6–§RfVÆœHÖ–æR’„ÔÂÖÂ&W¢T’F‡&V@§&WW¦–Öæ¦âæ¶öâWf÷¦´ÔÂ÷7F¦RR÷7Fö¦\HvVÒG&¦æöÒÆö¶ÆæöÒ7&VÖœZGP¦¶÷&—6æ–¶²&–¶¢÷6·&—fæ¦R÷7F–Æ÷f’÷7F§RR&VvÆVFæ–·R÷¦æ¶à ¤Gf÷6Ö¦W#¢R÷WR¦g,ZVæRfÆ¶R¦6æòGVvÖRöG&VF’õöÖ¦W&’Gf÷6Ö¦W"À¦¶÷&—6æ–²&—&FHÖ·Râ&–¦Ræ¦R6Ö¦W"–FR¶üHÖWF·RÂ÷6Æ–¦R¶·&§S°¦¦VFâ(iB¦æ²æFHÖ¶’â&W¢WFöÖG6¶ör÷7FfÆ¦æ¦æöÆ÷f–çRà¥FW7F—&æ¦g,ZVæ'\HÖæfÆ¶’·&²2FHÖ¶öÒæ#RöFæ÷6æòƒRà ¤Æö¶Ææò&üZÆòB¥2w'WR’Væ’v÷&¶fÆ÷r'&÷w6W"6·WÂV¶Æ§\H×V§\Hv£2ãÒ7fö¦–‚²"ãCÒ¶öÆVv–æ–‚fÆ¶Âã3cóRãCFHÖ¶Â5S‚óG‚À¦öæÆ–æRööffÆ–æR’×'GgR÷6Æ'R×&\[çRâæ÷f’V×VÆF÷"FW7B&÷f¦W&fv—D‡V"´ÔÀ¦¶FÆör÷&WW¦–Öæ¦R÷6H×Wfæ’f¦Â&W¢&öGV¶6–§6¶R×&\[æRà¥7Gf&æ’¦fæ’f¦Æ÷f’&÷f¦W&Væ’&VBÖöæÇ“¢´Ô”ôå4´’åUDUd’æ¶ÖÂ3“bãs"À¥4„#SbC3#&–F#ƒ†c&c–cfS“ƒƒfC6V&&cS†S#f3CS&FSƒ6Sf3c3“6#C°¤u$ä”4Ræ¶ÖÂ2ã#Sã"À¥4„#SbsS†CƒCv3c3ƒc#&fVF&S“S#Svc““ƒSƒCc#3s&FC&fS“““ssC#2à¥fVÆœHÖ–æRöF–vW7BöGVF&æ’ö&¦fÆ¦Væ–Òv—D‡V"76WG2âf—¦œHÖ¶’†–öÖ’æ–¦P¦¶÷&œZFVã²²öV×VÆF÷"’ö&¦gR¦üZG&V&÷Gg&F—F’¦g,Zæ–Ò4’&W§VÇFFöÒà ¥¦g,ZæÆö¶Ææ÷Gg&F¢CB7Fæ¦9rZ—&–æR3#ó3“ó#ƒ‚Â6Æ&–€¦¶öçG&7FÂ¥2w&\Z¶’fæ§6¶–‚W—6â7Gf&æ’¦fæ’´ÔÂWf÷¢’öffÆ–æP§öæ÷fæò÷Gf&æ¦R·&÷¢÷7Fö¦\Hv’'6W"÷7&VÖœZFS¢ƒ27Ff¶RWFWf£"ãsS’7Ff¶’w&æ–6âæF—fRG&ç7÷'BRFö¢'&÷w6W"&÷f¦W&’¦R¦Ö–¦Væ¦Và¦f—‡GW&RÖ÷7FöÓ²7Gf&æ’¦fæ’&§F÷f’’F–vW7B&÷f¦W&Væ’öGfö¦Væòà  ¤¶öæHÖæ÷Gg&F—7÷'V¶R"ãrãRƒãã##b“¢4’3ƒ3#ccSC“’W7¦\ZâÀ§6÷W&6Rs3†C&#cS#ƒ“–S#3S†CvF#&cF#3†SsC“SC3“²¥2Â—¦öÆ÷fæ’5ÂÀ§Væ’'&÷w6W"6·WÂæF—fR'V–ÆBÂ7f–‚cBvV"76WG2’Öæ¦’²Â#æG&ö–@¦V×VÆF÷"FW7F÷fƒf–ÇW&W2öW'&÷'2÷6¶—VB’ÂV¶Æ§\H×V§\Hv’æ÷f’v—D‡V"´ÔÀ¦æF—fRFW7BÂö&¦f’æÆ—¦''¦–æRâ4’—§f¦\ZF¢FæWfæör¶öçG&7F¢C@§7Fæ¦ÂæVF÷7FF¶’¥2w&\Z¶âvW23ƒ3#ccS#W7¦\Zã²¦fæ¦–æFW‚õ5rô552öÆö6ÂÖÆ–W"Ö–×÷'B÷fÆ¶ÖF—&V7F–öâ&§F÷f’–FVçFœHÖæ’—§f÷'Rà¥&WW¦WB¦fæ’²#Bã##Rã“ƒB"ƒ#BÃ#2Ô"’Â4„#S`£s#vf#“f&C3ccF33ssƒCSv†V63ƒC##fc##S&f&S#cƒƒs†S&6FVS&6Sv6Rà¤Öæ–fW7B&ç7BçW72çfÆ¶RæFV'Vrò"ãrãRÖFV'Vrò6öFSSCRâ6W'F–f–¶B6H×Wfã £f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¥&VÆV6Rc"ãrãRƒCƒsSƒsC‚’Â76WBÖFV'Vræ²ƒc#s#s#ssR’ÂWÆöFVBÀ§fVÆœHÖ–æ’F–vW7BöGVF&æ’Æö¶Ææò&WW¦WFöÒ²×RâWFFW&÷`§&VÆV6W3÷W%÷vSÓg&Hvc"ãrãRæ'föÒÖ¦W7GRà¤³¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ãrãRöÖFV'Vræ°¤f—¦œHÖ¶’†–öÖ’’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’öÖ–¦Væ¦æ’à £ãã##b(	B"ãrãbòæG&ö–B6öFSSCc¢æ÷f’&ö¦V¶BF÷¦æ¶öFÖ‚çVF¥V7'F¢æ¶'F’–Æ’—¦&W&’—¢6Æö¦Â&–¦RVæ÷6t¢ööF¦VÆâ¶÷&—6æ–²¦P¦—§&œHÖ—Fò&V6—¦—&ó¢4Ôò'\HÖæ’—¦&÷"Â&W¢G&–'WFf¦Æâ¶Æ–²æ÷6–§P¦÷Gf&¶'GRÂö¦VF–æHÖæ’FöF—&’&—&§R÷V¶Ææ¦§RöÆ–vöæS²Ööw\HvRfœZP¦öG6¦V¶âFöFFæÆ—7FöÆ–vöæçVF’vVöÖWG&–§6·R÷g,Z–çRÂ—§f÷"ÂöÆü[æ ¦’w'Wæ’—¦&÷"6ÖòöÆ–vöæRG&VçWFæöÒ&–¶§RâæVÖHÖ—Fæ¦G&–'WF¤t¢ööF¦VÂööG6¦V²Â&WG&vRòG&–'WF–Öæ—F’WFöÖG6¶örW—6æ¦—fà¤t¢ööF¦VÂW—7V¦R¶÷&—6æ–²âw'Wæ’—¦&÷"öw&æœHÖVâæ3ÂÆ—7Fæ¦R'f–€£ƒW¢&–&Æœ[æfæ¦R¶'FR÷'\HÖæ’—¦&÷"æ¶'F’à¥Væ–öâ7W6¦VFæ–‚÷&V¶Æ÷Æ¦Væ–‚öÆ–vöæ’÷g,Z–æ&FRRöffÆ–æRv÷&¶W'P§2÷7Fö¦\Hv–ÒÆö¶Ææ–ÒGW&bÖöÓ²öGfö¦Væ’F–¦VÆ÷f’÷7F§R×VÇF•öÇ–vöâÀ§'WR6RH×Wf§RâæVÖ&öGV¶6–§6¶R5Â&öÖ¦VæR–Æ’W—6R7W&6Rà¥Væ÷2t¢æ¶öâ—¦&÷&æR'&œZRw&æ–7RööF¦VÂâöGW7F¦æ¦RöBæ÷för7'F\[æ¦–Æ’—¦&÷&g&Hv&WF†öFçRw&æ–7R’G&¦çRf–FÆ¦—f÷7B÷7F–Â6Æö¦à ¤w&æ–6R(i"&–¶¢6Æö¦Wf¢&V¶–FHÖ’6FW&fÆ¦§R—7F–Òv—D‡V"´ÔÀ¦w'WÖ¶ò&VvÆVFæ–²÷¦æ¶Â&÷¦—&æ÷7BW&fÆ¦&WW¦WF–Òw&æ–6Öà¤—§f÷"6H×WfâR–×÷'GR’g&HvVâ&’”D"&W7F÷&S²öG,[ææ’&æ–¦P§&WW¦WF’v—D‡V"6Æö¦Wf’—¢"ãrãRâ7F&’Vw&IVæ’&–¶¢6RV¶Ææ¦¶@§7Gf&æ’v—D‡V"6Æö¢÷7Fö¦’Â&F’V¶Ææ¦æ¦GWÆ–‚Æ–æ–¦â¶öçG&öÆR&W §&WW¦WFöröFv÷f&§\HvVr6Æö¦7RæV·F—fæRÂ2÷'V¶öÒ¦&WW¦–Öæ¦Rà¥&WW¦–Öæ¦Rö·&VçWFò—¢æ÷för&ö¦V·Fg&Hvæ÷Væ¦Væ’ö'&¦2À§W¢&÷f¦W'RFæÆöræ–¦R&öÖ–¦Væ¦Vâà¥WWFRRÆ–¶6–¦’&W—6æR¦æ÷f’&VF÷6Æ–¦VB·&V—&æ¦Â&WW¦–Öæ¦RÀ§'\HÖæ’—¦&÷"fœZRöG6¦V¶&W¢G&–'WF’¶öçG&öÆRv—D‡V"6Æö¦Wfà ¤Æö¶Ææó¢7f–‚R¥2w'W&üZÆòâæ÷fVæ'&÷w6W"&÷f¦W&¢7Gf&æ¤´ÔÂ'6W"ô”D"Â6·&—fVæ’—§f÷"Â'\HÖæ’Ö¶Æ–²¦GföG6¦V¶W¢v÷&¶W §Væ–öâÂ÷g,Z–æ&W¢Gf÷7G'V¶ör'&ö¦æ¦ÂVFÆ¦VâöÆ–vöâæ–¦Röç\IVâÀ¦&W¢WFöÖG6¶örVæ÷6t¢ööF¦VÆÂ7'Fæ¦R&–¦RVæ÷6t¢Â6æ6VÂ’öffÆ–æP¦VçVWVR&W¢fæ§6¶–‚W—6Â&W7F'Bf–FÆ¦—f÷7F’÷&÷¦—&æ÷7F’ö&ö¦Rà¤FæWfæ’¶öçG&7B&VvÆVFæ–¶&üZòæ3“’3#‚â7Gf&æ’¦fæ¤u$ä”4Ræ¶ÖÂ2ã#Sã"2"ãsS’öÆ–vöæ¢Wf÷¢Â'\HÖæ’—¦&÷"Âv÷&¶W"À§÷g,Z–æ2Ã#C3‚†&÷f¦W&Væ’Æö¶ÆæòÂ&W¢¶÷&œZFVæ¦G&–'WFà¬Z—&’'&÷w6W"6·W&üZò‡FVÖG6¶R¶'FRÂ&Vg2ô”D"ÂÖçVÂG&r5SG‚À¤F÷¦æ¶ZW7BFæüHÖWF—&’HÖÆæócö¦6WfÂu2¶öçG&öÆRÂöffÆ–æR&W7F÷&RÀ§6W'fW"öÆvW&’÷&–çBÂw&æ–6ô5"Âæf–v6–¦Â&fW"¶öÆVvRÂ6Æ&×&\[æ’à¥7F&’FW7B7G&VÆ–6¦VFæöÒòæg&VÖVçR¶Æ–¶&–¦R¦g,ZWF¶Ö ¦æ–Ö6–¦S²6–Æ¦æòöæ÷fæòö·&WFæ¦R&üZÆò&W¢&öÖ¦VæR–×ÆVÖVçF6–¦Rà¤æF—fRG&ç7÷'BR'&÷w6W"&÷f¦W&Ö¦R—¦öÆ÷fã²æRGg&F—F’F¦P¦f—¦œHÖ¶’†–öÖ’–Æ’&öGV¶6–§6¶’7W&6RFW7F—&ââ²öV×VÆF÷"öö&¦gP§÷Gg&F—F’¦g,Zæ–Ò4’&W§VÇFFöÒ—7öBà ¤¶öæHÖæ÷Gg&F"ãrãbƒãã##b“¢4’3ƒ3S#CSsBW7¦\ZâÂ—§f÷ ¢S3&C–3sS&&f#c#“#c6&V#S–VC#s#ssSƒƒâ7f–‚R¥2w'WÂ—¦öÆ÷fæ¥5ÂÂVæ’'&÷w6W"6·W2æ÷f–Ò'\HÖæ–Ò—¦&÷&öÒ&W¢G&–'WFÂæF—fR'V–ÆBÀ£cR76WG2Â#æG&ö–BV×VÆF÷"FW7F÷fƒf–ÇW&W2öW'&÷'2÷6¶—VB’Âö&¦f¦’æÆ—¦''¦–æR&üZÆ’â4’VF—C¢CB&–¶¦Â6Æ&–‚¶öçG&7FÀ£¥2w&\Z¶Âfæ§6¶–‚W—6âvW23ƒ3S#CcS‚W7¦\Zã²¦fæ¦–æFW‚õ5röæWrÖ&÷VæF'’ÖÖöGVÆRöÆö6ÂÖÆ–W"Ö–×÷'Bô552–FVçFœHÖæ’—§f÷'Rà¥&WW¦WB¦fæ’²#Bã#Cãƒ#""ƒ#BÃ#BÔ"’Â4„#S`£Scƒ†C–#ƒf6F&6VC6fV#c3V3ssFS6CsC&6S&Cƒ#scFcfV3cvfSSvV°¦Öæ–fW7B&ç7BçW72çfÆ¶RæFV'Vrò"ãrãbÖFV'Vrò6öFSSCbâ6W'F–f–¶B—7F“ £f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¥&VÆV6Rc"ãrãbƒCƒsƒCSs’’ÂÖFV'Vræ²ƒc#s3Sc3ƒ‚’ÂWÆöFVC°§fVÆœHÖ–æöF–vW7BöGVF&æ’âWFFW"&VÆV6W3÷W%÷vSÓg&Hvc"ãrãb'fòà¤³¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ãrãböÖFV'Vræ°¤f—¦œHÖ¶’†–öÖ’’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’öÖ–¦Væ¦æ’à ¢22"ãrãròæG&ö–CSCr(	B´ÔÂÂfÆ7F—FòHÖÆç7Gfò’—§f¦\ZF¢öF¦VÆ ¤æ¦‡F¦Wb¶÷&—6æ–¶¢´ÔÂõ4…¶'F–6R–Ö§R7Gf&æ’fV·F÷'6¶’&VvÆVBÀ§&VvÆVFæ–¦’W&VFæ–²&ö¦RöFV&Æ¦–æRö—7&V¶–Fæ÷7F’÷f–FÆ¦—f÷7F’ö''V&’&ö¦Rğ¦¦HÖ–æR—7VæRâw&æ–6R’¶Ö–öç6¶’WFWf’7R¦6æò&¦Gfö¦Væ’â7Gf&æ¦—7VæR÷7F¦R¶Æ–¶&–Æææ6çf2õ5ds²'WRöÆ–vöææ—7R¶Æ–¶&–ÆæRà¤¶Æ–²F¦RHÖ—FÆ¦—fRöFF¶R…DÔÂ×F&VÆR—¢f¦Æ‡6–wW&æò¶òFV·7B’Â÷g,Z–çRğ¦G\[æ–çRÂ÷—2’W&\I—fæ¦Ræ¦—f÷7F–Æâ7F–Æ÷f’6R×FRWFVÒ÷7Fö¦\HvVp¤”D"öÆö6Â÷6W'fW"ÖV†æ—¦Ö²æW7FVB4…vVöÖWG&–¦R6R&f–Ææòö'&IV§Rà ¬HÆÆâÖü[æRV¶Æöæ—F’¶öÆVv–â&ö¦V¶B67för7—6¶fÆ¶’F÷¦æ¶Rà¤'&œZR6R—6¶Æ§\HÖ—fòfÆ7F—FòHÖÆç7GfòÂW¢÷Gg&GR6–Æ¦æör&VF’&÷f¦W'P¥$Å2&¦æöröFv÷f÷&âw&\Z¶ö—¦÷7Fæ²÷Gg&FRH×Wf7—6²’Æö¶Ææ’¶\Zà¥6æ–Öæ¦R÷6Ææ¦R’æW÷6Ææ’öF6’&Æö¶—&§R—¦Æ¦²&F’üH×Wfæ¦&Fà¥&ö¦V¶B’7f’F–×6¶’öF6’÷7F§RfÆ6æ–·R’G'Vv–ÒHÖÆæ÷f–Öâ÷g&F°§G&[æ’FfÆ6æ–²öæ÷fòFöFHÖÆæâ÷7Fö¦\HvRDTÄUDRÖ÷vâÖÖVÖ&W"öÆ—F–¶P¦—¢##cs5öF–¦VÆ¦Væ¦U÷÷&f¶ç7ÂöG,[æf§R÷fó²æ÷f5ÂÖ–w&6–¦6P¦æRWföF’’&öGV¶6–§6¶&¦æ–¦RÖ–¦Væ¦æà ¥öÆ–vöâöF¦VÆ’FW&VâV¶Æöæ¦Væ’—¢&ö¦V¶BæVÆâÖVæ’(i"—§f¦\ZF ¦öF¦VÆ¦RöGfö¦Væ6V¶6–¦¢æ7'Bw&æ–6R6VæFòö6æ6VÂ÷fÆ–F6–¦öÒ–Æ§'\HÖæ’—¦&÷"fœZRöG6¦V¶—¢&WW¦WFör6Æö¦w&æ–6RöF¦VÆâæR¶÷&—7F¦G&–'WFR¦WFöÖG6¶’—¦&÷"öæ¦—c²F÷¦æ¶ö'&¦26RæRÖ–¦Væ¦â7F&§öÆ–vöâ·F—fæör&ö¦V·FÖü[æR6R&WW¦WF’Ræ÷f’—§f¦\ZF£²7F&’¦—6¦÷7F§R¦¶ö×F–&–Ææ÷7B6ZF×öÒâ6†&VBVæ–öâv÷&¶W"’—¦&÷"&—g&VÖVæğ§&–¶§V§R6·&—fVæ’—§f÷"g&FR&WF†öFæ’7F–Â÷f–FÆ¦—f÷7Bæ¦g,ZWF·Rà ¤DTÒ&W÷'Bv÷&¶W"&H×VæZW7B&§&VF—6¶Æ§\HÖ—fòR&ö6VçF–Ö¢(	3ÃÀ£(	3Ã#Â#(	3Ã3Â3(	3ÃCÂC(	3ÃSÂ(šSS²÷g,Z–æR†’VF–ò6–¦VÆöröÆ–vöæ°¬HÖWF—&’V·7÷¦–6–¦R2ô’ô¢õ£²&7öâ÷&÷6¦V²f—6–æÂ&÷6¦V²öÖ·6–×VÒæv–&À§ö·&—fVæ÷7BW¦÷&6–ÖâvV$ÖW&6F÷"w&÷VæB×66ÆRÂ6VçG&ÆæRFW&—f6–¦R6§7W6¦VFæ–ÒÆüHÖ–6ÖÂHÖWF—&’öGW¦÷&¶'V&æ–‚HvVÆ–¦Â'WRô×VÇF•öÇ–vöâà¤æVF÷7F§\Hv’W¦÷&6’æ—7R&fæ’FW&VââDTÒ¦RÖ¦VâôURÔDTÒ&ö6¦Væö¶ò3Ğ¦æU4²ÂæRvVöFWG6¶òÖ¦W&Væ¦Râ£"6Rò÷G&V&’6Öæ§V¦R¦fVÆ–¶öG'\HÖ¦°¦öw&æœHÖVæ¦RcãHvVÆ–¦òƒÆüHÖ–6ÂG&’&ÆVÆæFö‡fFÂö'&FfâT’æ—F’à¤¶'F¢ö&ö¦Væ’&§&VF’ÂÆ–æ–¦RÖ\IR&§&VF–ÖÂ—¦&÷"V·7÷¦–6–¦R÷6Öòw&æ–6RÀ§&–¶[æ’÷6·&–¢â—§&H×Vâ’—¦&÷&’6RH×Wf§RÆö¶Ææòò¶÷&—6æ–·R’g&Hv§P§&’ö·&WFæ§S²f\Hr—§&H×VæB&W§VÇFB&F’&W¢×&\[æRÂæ÷f’—§&H×Vâ&F¦—¢DTÒ¶\Z–Æ’öæÆ–æRâ&V¶–BööF¦fFW&Ö–æ—&§Rv÷&¶W"Â¦g,Zf§R&öÖ—6P¦&W¢7F&örF¦ÖW&¶ö¦’&’V&–òæ÷gRö'&GRâ·f÷FæR'&œZR7F'Rw&æ–7Rà ¥¦Fæ¦&–¦f¶÷&—6æ–¶¢(	ä&÷'DW'&÷#¢f–ÆVBFòfWF6(	Òöw&\Zæò&–¶¦—fæğ¦¶ò(	ä¶÷&—6æ–²æ–¦R&öæIVî(	ÒâÆöö·W×&\[ææ÷F–ÖV÷WBw&\Z¶6FF¦R¦6çP§÷'V·RòfW¦’’öæ÷fæöÒö·\Z§RÂD"w&\Z¶¦6V&çR6W'fW'6·R÷'V·S°®(	ä¶÷&—6æ–²æ–¦R&öæIVî(	Ò6Öò¶B%2W7–¦R’æRg&F’VÖ–Ââ'\HÖæòG&[æVæ§&–¦f6Ö–¦R&ö&F’fW§R÷6Æ–¦R—¦Ö¦W&Væör6Æ&ör6–væÆâæVÖ&öÖ¦VæP§&÷f¦W&R”âÖÂ&f&—7GWæ—F’öffÆ–æR'—72Öæ¶öâ—§&œHÖ—FRöF¦fRà ¤Æö¶Ææó¢´ÔÂVF—F÷"gVÆÂÖ„6çf2õ5drÂ'WÂ…DÔÂÖ–æfòÂWFWf’÷7F–Æ÷f’À£b&–¶¦ö¶öçG&7BÂ”D"&W7F'BÂfÆ¶RôF÷¦æ¶÷vâÖÖVÖ&W'6†—õ$Å2÷6ö6¶WBğ§Vç6VçBwV&B’&üZòâæ÷f’&W÷'BgVÆÂÖ¢7Gf&æ’FW'&&—VÒärFV¶öFW"À§v÷&¶W"Væ–öâ’DTÒv÷&¶W"ÂfœZW7G'V¶’'\HÖæ’—¦&÷"&W¢F÷¦æ¶×WF6–¦RÀ¦Ö÷fW&Æ’öÆ–æ–¦RÂb&–¶¦Â”D"&W7F'BÂöffÆ–æR66†RÂ6æ6VÂæ÷föp¥v÷&¶W&ÂV÷FüH×Wfæ¦R’—¦Gfö¦Væ’æÆ÷¦’&üZÆ’âDTÒ6÷&RFW7B&÷f¦W&f§&v÷fRÂHÖWF—&’6Ö¦W&Â÷g,Z–æR÷'WRöF—6¦ö–çBöæVF÷7F§\HvRW¦÷&¶R’f—6–æRà¤WF‚6÷&RFW7B&¦Æ–·V¦RfWF6‚ô&÷'B÷F–ÖV÷WBÂÖ—76–ærW6W"Â$Å2Âöw&\Zâ”âÀ§'\HÖæ’vV²×6–væÂ&WG'’’6–wW&â¶\ZâVF—BCB&–¶¦¢¶öçG&7Fæ–‚ô¥2÷W—0¦w&\Z¶²&Vg2ô´ÔÂõ4…”D"ÂF÷¦æ¶6VÆV7F–öã#sb’ÆVv7’FW'&–ã##"&üZÆ’à£cr76WG2V¶Æ§\H×V§Ræ÷f’&W÷'B’DTÒv÷&¶W"âWWFR[çW&—&æR¦7fRFö¶÷fRà¤²öV×VÆF÷"öö&¦fHvR&—F’÷Gg,IVæ’&W§VÇFF–Ö4’Ö¦—7öC²f—¦œHÖ¶’†–öÖ¥&VFÖ’æ÷FR2&ò’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’öÖ–¦Væ¦æ’à¥¦g,Zæ&÷f¦W&—§f¦\ZF¦¢DTÒæR¦R—¦æB´ÔÂ÷fW&Æ’ÖƒCCR’Â¦—§&H×Vâ÷7F¦Rf–FÆ¦—b’W¢VçR´ÔÂ—7VçS²ö–çFW"ÖWfVçG3¦æöæR÷7FfÆ¦¦¶Æ–²—§f÷&æ–ÒvVöÖWG&–¦Öâ7'Fæ¦R&—g&VÖVæò6·&–¦Ru2ÆFçRG&·R§F&÷fRÂ6æ6VÂ÷6fRg&FR&WF†öFæ’&–¶£²æ÷f’Væ’'&÷w6W"FW7B&üZòà¥7f–‚r¥2w'W’6–çF·6WB–æÆ–æR&Æö¶÷f÷7FF–2¥2&üZÆ’Æö¶Ææòà¤4’3ƒSc#Cƒƒ"7Fò&–¦R²Öæ¦7F&¦VÆöÒFWf–6R×v÷&¶fÆ÷s#s276W'GP¦¶ö¦’¦RG&[æ–ò&ö¦V7B×öÇ–vöâæFçR&ö¦V·FâF¢76W'B’&7÷&VBP§&ö¦V7B×fÆ¶S##W6¶ÆIVæ’7R2¶÷&—6æ–¶÷f–Ò&VÖ¦\ZFæ¦VÒRÖVæ“²ö&Væ¦6–Æ¦æFW7F&üZÆÆö¶Ææòâ¶öB¦R÷7Fò—7F’â¦g,Zæ’4’öæ÷f—F’à¤4’3ƒS#ƒ’&üZò¥2õ5Âö'&÷w6W"’'V–ÆBócr4„76WG2ÂÆ’æG&ö–@£#FW7F÷f¢’&üZÆòÂòæ¦g,Zæö¢ö&f–¦W7F’&WW¦–Öæ¦âÔ%F–ÆW2¦P§f\Hr–ç7FÆ—&âÂ7Gf&æ6ÆœHÖ–6&–¶¦æ²ö&f–¦W7B÷7FÆ(	ìHÆV¶Ò–çFW&æWN(	Òà¤æG&ö–B7F÷f÷&Vw&÷VæB„DUD4‚’6–æ·&öæòöæ÷fòö&¦fÆ§V¦R÷6Æ¦VFæ¦¥6W'f–6U&V6÷&Bf÷&Vw&÷VæB6æ6†÷Bâ6F&–¦RFWF6‚Ö7F'Df÷&Vw&÷Væ@§&–Ö—7GR¦g,ZçRö&f–¦W7BÂöFvüIVæòV¶Ææ¦æ¦RfÆrÖæRÖü[æRg&F—F§7F&’æ&VF²â÷7Fö¦\Hv’Væ’FW7B’FÆ¦RG&[æ’¦g,Zæ’FV·7BÂVvZVâ6W'f—2À¦&W¢öævö–ærfÆrÖÂöffÆ–æRF–ÆR÷&VÆöBöFVÆWFS²·&—FW&–¦’æ—7R÷6Æ&Æ¦Væ’à¥¦g,Zæ—7÷'V¶c"ãrãs¢4’3ƒS#“##““rÂ—§f÷ ¢S3ƒ#†FF3svsƒ“FC–V#ƒss#CfCFcVf6VFV#Cƒ²7f’¶÷&6’W7¦\Zæ’ÂV¶Æ§\H×V§\Hv£r¥2w'WÂ—¦öÆ÷fæ’5ÂÂ'&÷w6W"&÷f¦W&RÂ#æG&ö–B“3BV×VÆF÷ ¢FW7F÷fƒf–ÇW&RöW'&÷"÷6¶—VB’ÂcrvV"76WG24„’æÆ—§R''¦–æRà¥vW23ƒS#“##“RW7¦\Zââ¦fæ’&VÆV6Rc"ãrãròÖFV'Vræ²À£#Bã#ƒãƒS"Â4„#S`£S&&S6#cc–S3C3s6S##Ff6c#CS“3vC–V&&SC“CC““3CC#3S3C#C36FRà¥&WW¦WF’¦fæ’³¢&ç7BçW72çfÆ¶RæFV'VrÂ"ãrãrÖFV'Vrö6öFSSCrÂ7f–ƒcp¦76WB†6‚ÖWf–FVçFœHÖæò—§f÷'Râ÷G—2¶ò&WF†öFæ’³ £f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¥7W&6R&öGV¶6–¦’f—¦œHÖ¶’†–öÖ’æ—7RÖ–¦Væ¦æ’÷FW7F—&æ’à¤¶÷&—6æ–²¦F–ÒG&[æ’—6¶Æ§\HÖ—fòf—§VVÆæ’Äâ–¶öæ¢ÖVæ’ô¶'Fõ&ö¦V¶Bğ¥fÆ¶R’6æ–Ö’fÆ·RõG&v÷f’ôÆö¶6–¦ÂÇW26ÆœHÖ–6RÖVæ–¦â&–¦VFÆörFV°§÷6Æ–¦R²—7÷'V¶S²–¶öæRäRÖ–¦Væ¦F’&–¦R¶÷&—6æ–¶÷för—¦&÷&à  ¢22##bÓÓ(	B"ãrã‚òæG&ö–BSCƒ¢öFö'&VæR–¶öæR’&BföF\HvVr&ö¦V·FçF ¤¶÷&—6æ–²¦RöFö'&–ò7fR6Æ–¶R&–¦VFÆövæf–v6–¦RôÖVæ–¦—7÷'\HÖVæRW¢"ãrãrà¤–×ÆVÖVçF—&æR7RÆö¶ÆæR5dr–¶öæRv÷&æ¦VröFöæ¦Vr&&’#B7Ff¶RÖVæ–¦À§6ZW7B&¦ÆœHÖ—F–‚¶'Föw&g6¶–‚6ÆœHÖ–6â¶ö×·Fæ’&&÷f’Â¦VÆVæ·F—fæ¦¶'F–6’HÖ—FÆ¦—bFæWfæ’÷FÖæ’&–¶¢â5dr’5527RR5r&V66†R×R’æG&ö–@¦Öæ–fW7GR76WG2ƒc’f¦Æ÷f“²æR¦‡F–¦Wf§R–çFW&æWBâF–æÖœHÖ¶òGVvÖRFæWfæ¦ÖöB¦G,[æf—7GR5dr–¶öçR÷6Æ–¦R&öÖ¦VæR&–¶¦âÆVæ6†W"Æövòæ–¦RÖ–¦Væ¦âà ¤¶÷&—6æ–²¦R—§&œHÖ—Fò÷Gg&F–òFföF\Hv’&F’7fö¦R&ö¦V·FR’&ö¦V·FRR¶ö¦P¦¦RFöFâÂ¶ò÷7FÆ’&ö¦V·FçF’â—5&VDöæÇ’‚–fœZRæR&Æö¶—&föF\HvVrÀ¥&ö¦V¶BõfÆ¶RôF÷¦æ¶7Rf–FÆ¦—f’Â\HÖ—Ffæ¦R’öffÆ–æR¶\Z¶÷&—7FRfÆ6æœZGfğ¦–Æ’HÖÆç7GfòâföF\Hv’6RÖü[æRFöFF’¶ò¶öÆVv’RfÆ¶R’RF÷¦æ·Rà¦ÖVæ’(i"—§f¦\ZF¢ZVÖ&–¦V÷Gf&öGfö¦VæR%2w&VvFR&ö¦V¶FfÆ¶¦F÷¦æ¶æ¦Vv÷fRZVÖ&–¦S²—¢æ¦Vv6R÷Gf&6VFÖœHÖæ’öÖ¦W6\HÖæ’\HÖ–æ²à¤—§f¦\ZF¢æR&W—7V¦R÷&ö¦V·F–Â·F—fæ’”Bæ’&Fæ’¶\ZâG\I’æG¦÷&æ§&ö¦V¶BæVÖ·F—f—&¢â¦¶6æ¦VÆ’%26R¦æVÖ'V¦Ræ¶öâ&öÖ¦VæRæÆövÀ¬ZVÖ&–¦R–Æ’öæ÷fæör÷Gf&æ¦ö&œHÖæör7—6¶âWFöÖG6¶ò÷Gf&æ¦RæG¦÷&§&’&–¦f’¦RV¶Æöæ¦VæòâFÖ–â’ZBFW&Vç6¶’æÆör¦G,[æf§R7fö¦RVÆövRà¥WWFRF÷Væ¦VæR¦föF\HvVrâ&öGV¶6–§6¶’7W&6R’$Å2æ—7RÖ–¦Væ¦æ’à ¤Æö¶Ææó¢r¥26·W÷f&üZÆòÂWB–æÆ–æR¥2&Æö¶÷f6–çF·6æò—7&fæó°¦æf–vF–öâÖFW6–vâÓ#s‚ç–¢Æö¶Ææ’5dr7Gf&æòæ7'Fæ’Â"Öö&–Ææ–‚÷F&ÆW@§&–¶¦3#ó3“óƒ‚ÂFæWfæ’¶öçG&7BÂfÆ7F—F’öF–¦VÆ¦Væ’&ö¦V·F’Â—¦Gfö¦Væ¦æG¦÷"ÂöF&6—fæ¦RG'VvRZVÖ&–¦R’7F&–‚æG¦÷&æ–‚&ö¦V¶F—¢öffÆ–æP¦¶\ZÂ&öÖ¦VæHÖWF—&’VÆövRÂ¦¶6æ¦VÆ’%2âF’ÖÆÂ×æVÇ2Ó#sRç– £CB&–¶¦ÂçVÆ6Æ&–‚¶öçG&7FâFWf–6Rv÷&¶fÆ÷rÂ´ÔÂVF—F÷"’—§f¦\ZF ¦öF¦VÆ&üZÆ’2&f–ÒÆVfÆWBô6çf2ô”D"’Æ[ææ–Ò6W'f—6–Ö²çVÆfæ§6¶–€§W—6’¥2w&\Z¶â²'V–ÆBôæG&ö–BV×VÆF÷"’ö&¦f6Æ–¦VFR·&÷¢4“°§&f’†–öÖ’’&öGV¶6–§6¶&¦æ—7RFW7F—&æ’â—F†öâvVò—FW7B6Ræ–¦P§ö·&VçVò¦W"—FW7Bæ–¦R–ç7FÆ—&ã²vVò¶öBæ–¦RÖ–¦Væ¦âà ¤—7÷'V¶"ãrã‚¦g,ZVæ¢6÷W&6RSFcC†FcV6F#&V#s3#–cvSƒcvV3–3ƒScC–3FÀ§G&VR&C&#CSSc†CC“C–&#sƒ#“c6–3ƒ&FfFcVÂ4’3ƒScƒƒSf5T44U52À¥vW23ƒScƒƒƒS5T44U52âæG&ö–BV×VÆF÷#¢#FW7F÷fÂw&\Z¶À£F÷f’&W6¶üHÖVæ–‚â&WW¦WB¦fæ’&VÆV6R³¢#Bã3Rãc‚"À¥4„Ó#Sb6f3Cf##SsƒsC&C3ƒC#ƒ““#S–F#“–CCV&Ffc–6&&CCv–C““v3ƒƒSvCfà¤&–æ'’Öæ–fW7B÷Gg,IVã¢&ç7BçW72çfÆ¶RæFV'VvÂ"ãrã‚ÖFV'VvÂ6öFRSC‚à¤6W'F–f–¶B÷7F¦Rf6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfF°£c’76WG2R7Gf&æöÒ²×RöFv÷f&6÷W&6R×Râ¦fæ’5drævW2–FVçFœHÖà¦Æö¶ÆæöÒâ4’¥4ôâ÷Gg,IV¦Ræ÷fR–¶öæRüHÖWF—&’VÆövRó"&–¶¦Â´ÔÂVF—F÷"À¦—§f¦\ZF¢öF¦VÆ’CBFæWfæ&–¶¦&W¢¶öçG&7Fæ–‚w&\Z¶²çVÆ¥2w&\Z¶¦–Æ’fæ§6¶–‚W—6âf—¦œHÖ¶’†–öÖ’’&öGV¶6–§6¶&¦æ—7RFW7F—&æ’à¥&VÆV6S¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2÷Fr÷c"ãrã€¤³¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ãrã‚öÖFV'Vræ°¤[çW&—&æ¦R·&÷¢ÖVæ’(i"[çW&—&¢Æ–¶6–§S²WFFW"¶÷&—7F’&VÆV6W2Æ—7GRÀ¦æRöÆFW7BÂ¦W"7R²—¦Fæ¦÷¦æHÖVæ¶ò&W&VÆV6Rà ¢22##bÓÓ(	B"ãrã’òæG&ö–BSC“¢w&æ–6R6Öò¦öÆ–vöâ’—§f¦\ZF¢æ¶'F ¤¶÷&—6æ–²G&[æ’6†V6¶&÷‚6Öò¦öÆ–vöâ¦\HÖ—FæRw&æ–6RöF¦VÆâFöFà§RöFÆövR’6Æö¦Wf’(i"w&æ–6R’R7F–Â7f¶ör&W÷¦æFörf¦Æw&æ–60§öÆ–vöæ–Ö†Æö¶Ææ’÷6W'fW"ôv—D‡V"’â÷7Ff¶¦R&—fFæÂH×Wf6RW¢7F–Â¦Æö¶Ææ’&Vv—7F"ÂæRÖ–¦Væ¦÷&–v–æÆçRvVöÖWG&–§Ræ’Vö&œHÖ¦Væ’f—6—¦&÷"à¤w&æ–6R6R&—g&VÖVæò&–¶§V§RFö¶öÒ'\HÖæör7'Fæ¦–Æ’—¦&÷&öG6¦V¶¦¤F÷¦æ·Rô—§f¦\ZF£²÷Gg&F’öGW7F¦æ¦Röæ÷fò–‚6·&—f§Râ—6¶Æ§\HÖ—fæ¦P¦÷6–¦Rg&Hvö&œHÖçRf–FÆ¦—f÷7Bâ¶Ö–öç6¶’WFWf’¦G,[æf§R7fö¢&–¶¢à¤´ÔÂ¶Æ–²Fö¶öÒ7'Fæ¦w&æ–6RF÷¦æ¶RFöF¦R¦VFçRFHÖ·RVÖ¦W7Fò–æfò÷Wà ¤—§f¦\ZF¢öF¦VÆ–Ö¶Æ–¶&–ÆâöÆ–vöâ’¦6æ–¦R¶öçG&öÆR&–¶¦Â6·&—fæ¦§FR÷Gg,IVæörG&¦æör'&—6æ¦â&7FW"öÆ–æ–¦R÷7F§R&W¢&W7&WFæ¦¶Æ–¶÷f°¦†—BöÆ–vöâ¶÷&—7F’¦VFâöæ÷fò¶÷&œZFVâ5dr&VæFW&W"—7öB&Fæ–‚6Æö¦Wfà¥&÷†–Ö—G’—¦&÷"fÆ¶’Ö¦W&Væ¦–Ö&VFæ÷7BæB—§f¦\ZF¦VÒâ—¦&÷"ö7'Fæ¦P¦öG6¦V¶&—g&VÖVæò—6¶Æ§\H×V¦R†—BöÆ–vöâ—§f¦\ZF¦âG&ç7&VçFæ—7VæÀ§'WR’fœZRöG6¦V¶¦G,[æf§RvVöÖWG&–§RÂDTÒ&W§VÇFB’÷g,Z–æRà¤ÆVvVæFæv–&öV·7÷¦–6–¦S¢VF–ò÷g,Z–æR’—7FR&ö¦R¶ò&7FW"Â÷fÆHÖVæ¦P¦æ¦—fÂöÖ¦W&æ¦RF7FGW&öÒÂÖ–æ–Ö—¦—&æ¦R÷&üZ—&—fæ¦RÂvZVæ¦R’öæ÷fæğ§V¶Æ§\HÖ—fæ¦RR—§f¦\ZF§RâöÆü[æ¢’—¦&÷&’×FR6RòæÆöwS²¶'F–6¦P¦öw&æœHÖVæf–FÆ¦—f–ÒF–¦VÆöÒ¶'FR—¦æBFöæ¦Vr&&âWWFRF÷Væ¦VæRà ¤Æö¶Ææ’Væ’'&÷w6W"FW7B—§f¦\ZF¦&üZ—&Vâ7Gf&æ–Ò¶Æ–¶÷f–Öæ5drô´ÔÂÀ§÷fÆHÖVæ¦VÒÆVvVæFR&W¢öÖ¦W&æ¦¶'FRÂfÆ¶VçWF"—§f¦\ZF¦ÂZW7@§&–¶¦3#ó3“óƒ‚Rö&ÖöFÂ—¦&÷"ööGW7F¦æ¦R÷'\HÖæò7'Fæ¦RF÷¦æ¶RÀ§&W7F'B7f–‚—¦&÷&÷&W§VÇFFÂG&¦æò'&—6æ¦R&W¢'&—6æ¦´ÔÂÖ’DTĞ¦öffÆ–æR÷v÷&¶W"&V¶–BâæVÖ¥2w&\Z¶æ’fæ§6¶–‚W—6â´ÔÂVF—F÷"’—¦&÷ ¦öG6¦V¶&üZÆ“²CBFæWfæ&–¶¦&W¢6Æ&ör¶öçG&7FÂæf–v6–¦’HÖWF—&§VÆövR&üZÆ’âWB–æÆ–æR&Æö¶÷f6–çF·6æò—7&fæó²c’76WG2&—&VÖÆ¦Væòà¥&öGV¶6–§6¶&¦æ–¦RÖ–¦Væ¦æ²f—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&ââ²ô4¦—7÷'V¶’&÷f¦W&¦fæörf¦Æ6Æ–¦VFRà ¥'f’4’3ƒs33ƒs“r7FòRæ÷föÒ'&÷w6W"FW7GR'\HÖæör7'Fæ¦F÷¦æ¶S §÷¦–6–¦÷¦æFör´ÔÂöÆ–vöææ¶öâ&W7F'F&–Æ¦R—§fâf–FÆ¦—fR¶'FRÀ§7Gf&æ’¶Æ–²æ–¦RÖövò&—F’—§g,ZVââFW7B6FHÖV¶f–FÆ¦—b&ææW"À§÷7FfÆ¦¶'GRæf—‡GW&RöF¦VÂ’öæ÷fò&H×Væ–·6VÃ²7Gf&æ’¶Æ–²¦76W'B¦VFæRFHÖ¶R÷7F§RâgVæ¶6–öæÆæ’¶öBæ–¦RÖ–¦Væ¦ã²²æ–¦R&–ğ¦ö&¦fÆ¦Vââöæ÷fÆ¦Væ’Æö¶Ææ’Væ’FW7B&üZòâ4’6RöæfÆ¦à¥öæ÷fÆ¦Væ’4’3ƒsƒScS’&üZòVæ’æ÷f’—§f¦\ZF¢Â—¦&÷"öG6¦V¶À¤´ÔÂVF—F÷"’HÖWF—&’VÆövRâ7Fò¶6æ–¦RR†—7F÷&–§6¶öÒ—¦Gfö¦VæöÒf—‡GW&R×P¦ÖVçR×FööÇ3¢´ÔÂ÷W6FHÖ—F7Fæ¦R7'Fæ¦w&æ–6RF÷¦æ¶RÂf—‡GW&P¦æ–¦R\HÖ—FfòF¢ÖöGVÂâFöFæ’7Rv–æF÷rFVfVÇF’çVÆÂöfÇ6RÂF¶òFæP§&fRGWÇRÆWBFV¶Æ&6–§RRFW7F÷f–Ö¶ö¦’WfW§R7Gf&æ’F÷¦æ¶¶öBà¤f—‡GW&RFöFFæò&–Æ¦\[æ’7F6²¥2w&\Z¶Râ&öGV¶6–§6¶’¶öBæ–¦RÖ–¦Væ¦âà¤ÖVçRÂ¶öÆVv–æRfÆ¶R÷6W'fW"Â÷¦æ¶RÂ&ö¦V·F’÷FW&VâÂ&VfW&VçFæ¶'FÀ§7G&VÆ–6RÂF÷¦æ¶&W7F÷&Rôu2¶öçG&öÆR’RãCÒöæÆ–æRööffÆ–æR5S‚óG€§&üZÆ’Æö¶Ææò2F÷Væ¦Væ–Òf—‡GW&RÖöÒâ²¦üZæ–¦Rö&¦fÆ¦Vã²Væ’4§6RöæfÆ¦2—7F–ÒgVæ¶6–öæÆæ–Ò—§f÷&öÒà ¤—7÷'V¶"ãrã’¦g,ZVæ¢6÷W&6R33ccS†cvcS–###sƒ3ƒ†#Sc&F&SF3VÀ§G&VRsCƒƒ–&cSS6FcVVCs#–#CcfSƒ–cS3ƒCvfFÂ4’3ƒs#S“#s†5T44U52À¥vW23ƒs#S“#F5T44U52â7f’¥2õ5Âö'&÷w6W"ö'V–ÆBôæG&ö–B¶÷&6’&üZÆ’à¥&WW¦WB¦fæ’&VÆV6R³¢#Bã3rãS‚"Â4„Ó#S`¦V3s†c#s3##sf#ƒFCCsƒ“6Sƒ†##CfF†3#“V#–sSsvf3#vS#ƒ3†Fc–à¤&–æ'’Öæ–fW7C¢&ç7BçW72çfÆ¶RæFV'VvÂ"ãrã’ÖFV'VvÂ6öFRSC’à¥÷G—2÷7F¦Rf6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfFà¥7f–‚c’vV"76WG2R&WW¦WFöÒ²×R–FVçFœHÖæò¦R—§f÷'Râ&WW¦WB¥Væ—C £#æG&ö–BFW7F÷fÂf–ÇW&RöW'&÷"÷6¶—VBâ4’¥4ôâ÷Gg,IV¦Ræ÷f’—§f¦\ZF ¢ƒ#s’’Â´ÔÂVF—F÷"ƒ#sr’ÂHÖWF—&’VÆövRöæf–v6–§Rƒ#s‚’’7f–‚CBFæWfæ§&–¶¦ƒ#sR’Â&W¢¥2w&\Z¶÷6Æ&ör¶öçG&7F÷fæ§6¶–‚W—6âÆö¶Ææ¦'FVf·F’7RR÷WGWG2ó#s’Ö²’÷WGWG2ó#s’Ö6“²æR&F—F’–‚v—FöÒà¥&öGV¶6–§6¶&¦æ–¦RÖ–¦Væ¦æ²f—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&âà¥&VÆV6S¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2÷Fr÷c"ãrã¤³¢‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ãrã’öÖFV'Vræ°¤[çW&—&æ¦R·&÷¢ÖVæ’(i"[çW&—&¢Æ–¶6–§S²¦fæ’²F÷7GWâ&W¢&–¦fRà  ¢22##bÓÓ(	B"ã‚ãò6öFRSS¢7F–ÂfÆ¶RÖVæ–§R’G&¦æ&–&Æ–÷FV¶W&\I¦ ¤¶÷&—6æ–²G&[æ’Fw&æ–6RöF¦VÆ’¶Ö–öç6¶’WFWf’÷7FçRæW&\I§Ræ¶öà¦¦VFæör&WW¦–Öæ¦ÂW¢÷7Ff¶R÷f–FÆ¦—f÷7BÂFRæ÷f’ÖVæ’(i"7F–Â’&ö¦fÆ¶¦öFÖ‚—7öB7F–ÂÆ–æ–¦â&ö¦R’6Ö¦W&÷f’&VÖ¦\ZFVæ’—¢&ö¦V·FRæ÷f¦ÖöFÂâæ¦—c¢6Ö¦W"—§fÆHÖVæ¦E2†G'fæ’6÷'F–ÖVçF’’â¦¦VFæœHÖ¶’7F–Âğ¦æÆöwR¦÷7Fö¦\HvRö'VG\HvRF÷7GWæR&ö¦V·FRÂ÷6V&âöF¦VÂ÷&ö¦V¶B§÷g&F²æ¦¦VFæœHÖ¶’â7F&’÷6V&æ’7F–Æ÷f’÷7F§RFòV·7Æ–6—Fæöp¥V¦VFæHÖ’‡÷Gg&F’âW&\I—fæ¦R&–¶¦G'Vvör&ö¦V·FæR·F—f—&v°§'\HÖæ’Gf÷6Ö¦W"W&\IV¦R6RFV²R·F—fæöÒ&ö¦V·GRâvVöÖWG&–¦Â6W'fW"&ö¦À¤u2’÷7Fö¦\Hv’ö¦VF–æHÖæ’6Ö¦W&÷f’æ—7RÖ–¦Væ¦æ’â&VvÆVBÆ–æ–¦Rö·&¶À¦÷WFÆ–æR’7G&VÆ–6RÂFæWfæ’÷FÖæ’7F–ÂÂ¶öçG&öÆ¦¦Gf&æ¦R&’6·&öÆæ§Rà ¥÷Gg,IVâ'Vs¢÷v—TÆÄÆö6ÅW6W$FF&’&öÖ¦Væ’æÆövV¶Ææ¦ò¦R6–¦VÆ¥ôÄô4Åô´ÔÅô´U’â6F¦fæ’v—F‡V"Ö¶ÖÂÒ¢&Vv—7G&’ö6öçFVçB&VfW&Væ6R’7F–Âğ§f—2ööæÇ•öÇ–vöâ÷7F§RæW&\I§Râ&—fFæ’´ÔÂÂvVô¥4ôâÂæw¶r&Vv—7G&’À§'WFR’·F—fæ’&ö¦V¶B÷öÆ¦öFæWfæ–²–GRR÷Gg,IVçR÷7Fö¦\HwR&†—gP¦æÆöv$”¤RHÖœZHvVæ¦â”D"æw¶r6G,[æ¢6RfœZRæR'&œZR&’&öÖ¦Væ¦æÆövâ÷g&F²fÆ6æ–¶7¦&—fFæ’&Vv—7F"2·GVVÆæ–Ò¦fæ–ÒÀ¬H×Wfö&6Æö¦&’—7Fö–ÖVæöÒ¶öæfÆ–·GRÂg&Hvæ¦Vv÷b·F—fæ’&ö¦V¶Bà¥&7FW'6¶R¶'FRöff÷&—F’÷W&\I¦æR÷7Ff¶Rf\Hr&\[æ—fÆ¦f§RöF¦gR§&öÖ¦VçRæÆöv²æ¦–†÷fòV·7Æ–6—Fæò'&—6æ¦R÷7F¦RâæVÖ&öGV¶6–§6¶P¦Ö–w&6–¦Râ¶÷&—6æ–²¦R&æ–¦R—§&œHÖ—FòöFö'&–ò'V–ÆBö—7÷'V·R[çW&—&æ¦°¦æ÷f’¦‡F¦Wf’7Ræ7Ff²—7FRWF÷&—¦÷fæR–×ÆVÖVçF6–¦Rà ¤Æö¶Ææ’FW7F÷f“¢7f’÷7Fö¦\Hv’¥26·W÷f’&üZÆ’Â&ö¦V·FæR&ö¦R&üZ—&VæP¦æ6VÖçFœHÖ¶–‚&÷f¦W&âVæ’æ÷f’7G–ÆRÖÆ–'&'’Ó#ƒ¢¦¦VFæœHÖ¶’§÷6V&æ’7F–Æ÷f’Â7fö¦Rö¶öÆVv–æRfÆ¶RÂ"W6¶–‚÷F&ÆWBFæWfæ–‚÷FÖæ–€§&–¶¦2¶öçG&7FöÒ’6·&öÆæ¦VÒÂ7Gf&æ’”D"´ÔÂ&W7F'BÂæÆör(i""(i"À¦¦fæ’´ÔÂ&W¢öæ÷fæör&WW¦–Öæ¦Â—¦öÆ6–¦÷g&Hvæ¦RÆœHÖæör´ÔÂ’·F—fæöp§&ö¦V·FÂ¦¦VFæœHÖ¶’7F–Â&W¢'&—6æ¦ö¦VF–æHÖæör6Ö¦W&â6H×Wfæ’7P¦ff÷&—F’’÷Hv’7F–Ââ&üZÆ’FWf–6R×v÷&¶fÆ÷rÓ#s2Â&VfW&Væ6W2Ó#cbÀ§&ö¦V7B×fÆ¶RÓ##Â&ö¦V7BÖ'&÷w2Ó##b’æf–vF–öâÖFW6–vâÓ#s‚â4’V¶Æ§\H×V¦P¦æ÷f’Væ’'&÷w6W"FW7B’÷WGWG2ó#ƒâWWFRVçWF"[çW&—&æRà¤f—¦œHÖ¶’†–öÖ’’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’â'V–ÆB÷&VÆV6RFö¶ §6Æ–¦VF’æ¶öâ4“²æR&övÆZfF’²ö&¦fÆ¦Væ–Ò&–¦R&÷f¦W&Rà ¤F÷Væ&÷f¦W&S¢÷6V&æ’æ÷f’7F–Æ÷f’H×Wf§R6Öò—¦Ö–¦Væ¦VæR÷6ö&–æRÂ¦öF¦VÂ2÷6V&æöÒ&ö¦öÒ’FÆ¦Ræ6Æ¦\IV¦R¦¦VFæœHÖ·RFV&Æ¦–çRÆ–æ–¦R¦æV—¦Ö–¦Væ¦VæR÷7Ff¶R7G&VÆ–6âVæ’FW7BFò—§&œHÖ—Fò÷Gg,IV¦Râöæ÷fÆ¦Væ¦¶ö×ÆWB¥2’–æÆ–æR6–çF·6&üZÆ’âFæWfæ’VF—C¢CB&–¶¦Â6Æ&öp¦¶öçG&7F²´ÔÂVF—F÷"VâFW7B&üZòâæ÷f’ÖöFÂ¶÷&—7F’"är&–¶¦À¦&W¢fæ§6¶–‚W—6âFö²öF¦fRRæ÷föÒFW7GR7Gf&æò÷Gg,IV¦RöF¦f’6P¦&W¢6Ææ¦¶F÷7Fö¦RæW÷6ÆæR7Ff¶S²æ–¦R¦ö&œIVâ¶÷&—6æœHÖ¶’F–¦Æörà  ¤—7÷'V¶÷Gg,IVæ##bÓÓƒ£3"UD3¢—§f÷"–cƒ##VF&cƒSv#ƒsƒ“vc333FcsvSs3ssFÀ§7F&Æòv3vCC3–cfC3#V“6&3V#ƒFFCF336F3vV&c’â4’3ƒsCC#“#3Âö·\Z¢"À¦¦ö"C#ƒ#3SS5T44U53¢7f’¥2õ5Âö'&÷w6W"¶÷&6’Â7f–‚#æG&ö–BFW7F÷f¦&W¢w&\Z¶R’&W6¶¶æ¦ÂæÆ—¦''¦–æR’¦fæ’&VÆV6Râ'f’ö·\Z£ ¤W‡Æ÷&W$æf–vF–öåFW7BWfÂ÷VçF–ÂæÆ–æ–¦’ƒ2æ–¦RFö&–ò¥26ÆÆ&6²RR3°¦Æör&–¶§V¦R7÷"÷VätÂ&VæFW"’&W6¶üHÖVæRg&ÖV÷fRæ†ÆFæöÒV×VÆF÷'Rà¥öæ÷fÆ¦Væ’•5D’¶öB’•5D’FW7F÷f’&üZÆ’7R„W‡Æ÷&W"rãcƒ‚2’âæ–¦P¦Ö–¦Væ¦âF–ÖV÷WBÂ&ö—§föFæ’W‡Æ÷&W"æ—F’&W6¶¶âFW7Bâ¤•²ÖWFFF¬HÖWF—&’—§f¦\ZF¦'förö·\Z¦6H×Wfæ’’†6‚×&÷f¦W&Væ’P¦÷WGWG2ó#ƒÖf—'7BÖGFV×B&–¦RV¶Ææ¦æ¦æ¦–†÷f–‚4’¶÷–¦¶¶ò&§WÆöBÖ'F–f7BcBÖövòöæ÷fò¶÷&—7F—F’–ÖVæâöæfÆ¦æ¦R÷6Æ–¦P§VüHÖVæörFÂæRFöFFæòæW÷G&V&æò&üZ—&Væ¦RFW7F÷fà¥vW23ƒsCC#ƒc325T44U53²¦fæ’–æFW‚’5rö¶§V§R"ã‚ãâ&VÆV6Rc"ã‚ãÀ¦76WBc#ƒc“#3C’Â¦fæò&WW¦WB²#BÃ33Ãs‚# ¦‡GG3¢òöv—F‡V"æ6öÒ÷övöæ&÷6·'WõU2Õ5TÔR÷&VÆV6W2öF÷væÆöB÷c"ã‚ãöÖFV'Vræ°¥4„#SbS–csVSƒ#ƒƒcv#6SFfFc6&66#f6cvS†fSSs†V63fC#&V#6V3Cs&#ƒv&"à¥&÷f¦W&Væò7f–‚c’²vV"&W7W'6æ7&Ò&Fæör7F&Æ²&–æ&æ’Öæ–fW7@¦&ç7BçW72çfÆ¶RæFV'Vrò6öFSSSò"ã‚ãÖFV'Vs²7F&–Ææ’6W'F–f–¶@£f6C#3s3S33#FS#f&cvƒ#s3s3s3CcS3#sv“V3†ƒCc†c#ƒfBà¤’&VÆV6W3÷W%÷vSÓg&Hvc"ã‚ã2²ÖöÓ¢÷7Fö¦\Hv’ÖVæ’(i"[çW&—& ¦Æ–¶6–§RÖü[æR&öæHv’æ÷gRfW'¦–§Râ&W¢&öGV¶6–§6¶–‚D"W—6’&W ¦f—¦œHÖ¶ör†–öÖ’Ö¦W&Væ¦âæG&ö–BFö¶¢÷WGWG2ó#ƒÖæG&ö–B×76VC°§6[æWF²÷WGWG2ó#ƒ÷&VÆV6R×&ööbæ§6öââ÷fF÷VæÖ–¦Væ¦6ÖòFö·VÖVçF6–§Rà ¢22##bÓÓ(	B"ã‚ãò6öFRSS¢—¦ö†—6æ&ö¦V¶6–¦G&¦æ¦F÷¦æ¶P ¤F÷¦æ¶(i"öF'&æ’öF¦VÂ(i"&ö¦V¶6–¦G&¦æ¦F÷¦æ¶RâZ—&–æRóRó#Ğ¦–Æ’fÆ7F—F^(	3ÒÂ(	3"Ææ—&æ–‚&ö¦V·FæF2æ¦—f–Öö&ö¦ÖÀ£(	33FæWfæ–‚&öÆ¦ò&ö¦V·FçGRâ¶÷&—6æ–²÷—7V¦R÷g&F²æ§fœZVp§ò7föÒ&WF†öFæöÒö¦7RÂ÷7FÆ’&VÆ¦R—¦æBæ¦VvW¢·'\[ææ’&VBâ'f§&öÆ¢F¦Râæ÷f–‚ö¦6WfÂ6Æ¦VF\Hv’î(‰#²&HvVæ¦R&WF†öFæörG&üZ’&öÆ ¦Æ’æRFöF¦Ræ÷gR÷g,Z–çRâ¦"’2&÷f¦W&VâFHÖâ&VBâ6†V6¶&÷‚F÷\ZF¦ÇFW&æF—gR&W¢&HvVæ¦â¶÷&—6æ–²æ¶æFæò—§&œHÖ—Fò÷Gg,IV¦RF6RFæWfæ’'&ö¢&H×Væò&ö¦V·FçGRà¤÷—26Ö¦VæR÷&HvVæ¦fÆ7F—För&WF†öFæörö¦6÷7F¦R—§&œHÖ—BT’ÖöFVÂà¥&ö6¦Væ6–¦VÆöröF¦VÆÂ&W¢öGW¦–Öæ¦&æ–¦RöG&IVæ–‚u2ö¦6Wf°¦æRV¶Æ§\H×V¦RWFöÖG6¶’FöÆ¦²Âg&VÖVç6¶R&–Æ–¶R–Æ’æW&FæRFæRà ¤—¦&÷"¶÷&—7F’w&æ–7R&ö¦V·F–Æ’'\HÖæòfœZR´ÔÂöG6¦V¶—¢w&æ–6&W ¦G&–'WFö—¦Ö¦VæR7Gf&æör&ö¦V·FâDTÒFW'&&—VÒ¦ööÓ2Â66†RÖf—'7BÀ£2—7F÷g&VÖVæHÖ—Fæ¦ÂFóƒÆüHÖ–6RâGW&b—6ö&æG2ö—6öÆ–æW2Rv÷&¶W'RÀ¦ö'&W¦—fæ¦RæöÆ–vöâÂ'WR’öGfö¦Væ’öG6¦V6“²öBæœ[æVrF–¦VÆæfœZRà¥&¦Ö²&–&Æœ[ææòò÷g,Z–æ’FW&VæÂDTÒö¶ó3Ó¢æRv&çGV¦R7Gf&æ§&¦Ö²óRÒæ&öÖ¦Væ¦—f–ÒF–æÖâ÷fò¦R¦6æò÷¦æHÖVæòR&–¶§Rà¤æVF÷7F§\Hv’DTÒæR÷7F¦RÆ[ææ’&fâFW&Vã²7Gf&æò&fâDTÒV·7Æ–6—Fæğ¦¶÷&—7F’G\[çR7G&çRâöw&æœHÖVæ×&\[æFó3²H×f÷&÷fó#f—6–ç6¶–‚ö¦6WfÀ£c2v÷&¶W"FVFÆ–æRÂ&V¶–BövVæW&F–öâ¦ZF—F&’&öÖ¦Væ’öF¦VÆöæÆövà¤6VçF–ÖWF'6¶’—7&f²GW&bÆ–æU7Æ—B¦ö·'\[æVæ¦¦G,[æf&W6¦V²VçWF ¦—§f÷&æRw&æ–6S²æRöÖ¦W&fVÆ–¶Rw&\Z¶Râ÷g,Z–æÖ÷&&—F’ö'V‡fHvVæ§VçWF#ã2RÂ–æHÖRöF&–¦—§&H×Vââ&W§VÇFBæ–¦R÷Gg&FFW&Vç6¶ör\HÖ–æ¶à ¤Æö¶Ææ’W"×W6W"÷&ö¦V7B&Vg2’”D"&W§VÇFC²—¦&÷"FæÂ&ö¦Röæ¦—f’À§f–FÆ¦—f÷7B’Ö–æ–Ö—¦—&æ¦RÆVvVæFR÷7F§Ræ¶öâ&W7F'Fâ÷G—2vVöÖWG&–¦P¢²&ÖWF&öF&–¦¦7F&¦VÆ’Æââ÷6V&â6çf26Æö¢æR&W7&\HvR´ÔÂôu0¦¶Æ–¶÷fRâÆVvVæFÂ&7÷&VBFæ’&VBöBæœ[æVr&VÖfœZVÓ²æ÷f’Væ’§öæ÷fÆ¦Væ’—7&V¶–Fæ’G&v÷f’â&7÷&VB÷¦æ¶æ¶'F’—¦&¦Vvf&V¶Æ÷ ¦æW6¶öÒFVÆVföçR’öæ÷fò6R&H×Vææ¶öâ¦ööÖâæRW—7V¦Ru2G&v÷fRÀ§¦öæRÂ6W'fW"–Æ’7Gf&çRö'&IVçR÷g,Z–çRâÆöv÷WBHÖ—7F’6Öò&FçRÖVÖ÷&–§Rà ¤Æö¶Ææó¢7f–‚¥2FW7F÷f’ZW7FöFæWfæ6–×VÆ6–¦&üZÆ“²ræ÷f–‚vVöÖWG&–§6¶–€§&÷f¦W&&fæ–æRÂ·&—gVFf–‚—¦ö†—6’Â&¦Ö¶òFW&VçRÂ'Wô×VÇF•öÇ–vöâÀ§÷GVæRöæW&V¶Æ÷Æ¦VæR÷g,Z–æRÂó"ó2–ì[æ–æ¦W&÷&÷F6–¦R’ÆüZ–‚&ÖWF&à¥Væ’'&÷w6W"7Gf&æ’DTÒä~(i&FV¶öFW.(i%v÷&¶W.(i$ÆVfÆWN(i$”D#¢bÖöFÂ&–¶¦0¦¶öçG&7FöÒö&W¢†÷&—¦öçFÆæör&VÆ¦WfÂ'\HÖæ’´ÔÂ—¦&÷"ö6æ6VÂÂöffÆ–æR66†V@§öæ÷fæ’—§&H×VâÂ&W7F'Bö&ö¦R÷6·&—fæ¦RöFâÂv÷&¶W"6æ6VÂÂ—¦Gf¦æ¦RöF¦VÆ¦’æÆövÂ&W¢—¦Ö¦VæR7Gf&æRF÷¦æ¶R’&W¢fæ§6¶–‚W—6âu26öçG&öÇ3#cp¢ƒ‚&7÷&VF’’&ö¦V7BÖ&÷VæF'“#sb&üZÆ’â–æÆ–æR¥26–çF·6&üZÆà£s"²vV"&W6÷W&6W2RÖæ–fW7GRõ5râWWFRF÷¦æ¶RRÆ–¶6–¦’[çW&—&æRà¤f—¦œHÖ¶’†–öÖ’’&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’â&æ–¦R—§&œHÖ—Fğ¦öFö'&Væ—7÷'V¶æ÷fRfW'¦–¦R÷7F¦S²²÷&VÆV6RFö¶¢FV²æ¶öâ4’à ¤F÷Væ&–¦R—7÷'V¶S¢'f’4’3ƒsss3#ƒ“‚òC#ƒƒscCR¦—§f÷#s†#cVc§&üZò¥2õ5Â’÷7Fö¦\HvR'&÷w6W"&÷f¦W&RFòæ÷förÆæÂÆ’æ÷f’VF—@¦÷F·&–ò†÷&—¦öçFÆæ’&VÆ¦Wbæ'föÒW6¶öÒ&–¶§Râ'&ö¬HÖæ’–çWF’æ—7P¦–ÖÆ’V·7Æ–6—Fæ’v–GF‚öÖ–â×v–GF‚ö&÷‚×6—¦–ær¶òFV·7GVÆæ’–çWF“²7F&–¦¤6‡&öÖ—VÓC…Æ—w&–v‡CãSR’¦G,[æfG'VvHÖ–§RVçWG&Zæ§RZ—&–çRöBÆö¶Ææöp£Sâæ÷f’552÷7FfÆ¦F–ÖVç¦–¦R÷Fö¶Vç2¦'&ö¦WfR’6VÆV7BÂÖÆR¶öçG&öÆP¥&–¶[æ’Fâ6Æ[æRfW'F–¶ÆæòâVF—B÷7F¦R7G&örÂFöFæF–¦væ÷7F–¶à¥6H×Wfâ’4„×&÷f¦W&Vâ4’T’¤•R÷WGWG2ó#ƒÖf—'7BÖGFV×B÷V’ç¦— ¢ƒF6V6Fc“V#sfss6SfV#fVfVfSFV36&c&cc##C#F6†#–3ƒCC“6ScFb’à¤æ–¦Rö&¦fÆ¦Vâ²—¢æWW7¦\Zæörö·\Z¦²fW'¦–¦÷7F¦S"ã‚ã¦÷&fÆ¦Væ¦—§f÷"&–¦R'fR—7÷'V¶RâæVÖ¦ö&–Æ[æVæ¦&÷f¦W&R–Æ’&üZ—&Væ¦FöÆW&æ6–¦Rà  ¢22##bÓÓ(	BF÷Væ—7För"ã‚ã&–¦R'fR²—7÷'V¶P ¤¶÷&—6æ–²G&[æ’¦g,ZWF²7f–‚&ö×F÷f&–¦Rö&¦fS¢7fR÷7Ff¶R÷7F§P¦æ¶öâ&W7F'FÂf÷Föw&f–¦R6RæR6Ö–§Rg&F—F’—¢6·&–¢R&–¶¦æó°¥üZÆ¦’æ6W'fW"'f’RÖVæ–§R2÷6V&æöÒ&ö¦öÒâ÷Gg&F–òFæWfæ’'&ö §ö¦6Wfò&ö¦V·FçGRâ÷Gg,IVâ7Gf&æ’'Vr÷WDÖ66ÆS¢&VÆ¦²6£ã£#SæÖæ§R&¦Ö¦W'RFöFfò¦R5dRf÷FòÖ&¶W&R&W¢÷Ge†÷Fõf—6–&ÆRà¥6F¦ööÒüZGV¦R’w'WçR’ö¦VF–æHÖçRG&¦çRf–FÆ¦—f÷7B¦fÆ7F—FR§&–ÖÆ¦VæRf÷Föw&f–¦RâÖ×f—6–&–Æ—G’Ç’’7Gf&æ¦R÷\HÖ—Ffæ¦RÖ&¶W&§üZGV§R&—g&VÖVæò6·&—fæ¦R¦&ör&¦Ö¦W&RÂ&W¢—¦Ö¦VæR÷7Ff¶Râ÷7Fö¦\Hv§W"×W6W"&Vb¶Æ§\HÒ÷7F¦RÂæVÖÖ–w&6–¦R–Æ’wV&—F¶&æ–¦–‚—¦&÷&à¥6W'fW"&–¦RZB&\HÖ–6’÷7FÆ–‚6V¶6–¦ÂÆf¶'F2¦¶–Ò¶öçG&7FöĞ§Rö&ÖöFâ¶Æ–²’FÆ¦R÷Gf&÷7Fö¦\Hv’6W'fW"Â&W¢WFöÖG6¶ör6Ææ¦à ¤FöFæRGf–¦R6VÖçFœHÖ¶R&÷f¦W&RR&W7F÷&RÖF÷¦æ¶Ó##s¢¦ööÒ6–¶ÇW6’æP§g&Hv§R6·&—fVæRfÆ7F—FR÷&–ÖÆ¦VæR6Æ–¶RÂöFÆü[æVæ’Ö&¶W"üZGV¦R&Vb§&¦Ö¦W'Râæ÷f’Væ’†÷Fò×6WGF–æw2Ó#ƒ¢fÆ7F—FS"÷&–ÖÆ¦Væf÷Föw&f–¦À§7Gf&æ’Æ–'&'’6·&–¢Âw'Wæ’’ö¦VF–æHÖæ’—¦&÷&’ÂR¦ööÒ6–¶ÇW6ÂGf§&W7F'FÂ6†&VB&Vg&W6‚Â7f–ƒRw'W÷7F¦R6·&—fVæó²'f–ƒbÖVæ–¦0¦&ö¦öÒö¶öçG&7FöÒ’7Gf&æ–Ò÷Gf&æ¦VÒ6W'fW&Â&W¢fæ§6¶–‚W—6âÆö¶Ææğ§&üZÆ’F÷¦æ¶×ÆâÓ#ƒÂ7G–ÆRÖÆ–'&'’Ó#ƒ†¶'FRöff÷&—F’÷7F–Æ÷f’ö·F—fæ§&ö¦V¶B’(i$.(i$’Â&VfW&Væ6W2Ó#cb„´ÔÂõ4…”D"7F–Æ÷f’ö&fW"÷öGF"’À¦6–¦VÆ’¥26·W’–æÆ–æR6–çF·6â'&ö¬HÖæ’Væ÷2÷6VÆV7BÆæ—&æ¦–Ö§P¦—§&œHÖ—FRF–ÖVç¦–¦S²÷7f¦\[æVæ¦RÆææR&W—7V¦Rfö·W6—&æ’Væ÷2öæ¦—bà¥'f’4’B¦G,[æâ¶òFö¶£²÷&fÆ¦Væ’—§f÷"–Öæ÷fò7F&Æò’æ÷f’4’À¦&W¢&öÖ¦VæRfW'¦–¦R&–¦R'fR—7÷'V¶RâÆö¶Ææ’6‡&öÖ—VÓCæR&–Ö¤4EFV·7GVÆæ’Væ÷2HÖ²æ’R&¦æöÒ&ö&æöÒ–çWGRÂ¦Fò6R—7&fæ÷7@¦–çFW&¶6–¦R÷Gg,IV¦RRæ÷&ÖÆæöÒ6‡&öÖ—VÓS’R7Gf&æöÒ4“C²æP§&övÆZfF’—¦öÆ÷fçRDôÒöÆ–÷WBF–¦væ÷7F–·RVæ–Ò–çFW&¶6–§6¶–ÒFW7FöÒà ¤4’F÷Væ¢3ƒs3Sc32òCCCcSC#¦&–#62&üZòö&æ÷fVæ¦'&÷w6W"FW7F‡Æâ’f÷Föw&f–¦R’ÂW6¶’¶öçG&7BöÆ–÷WB’7fR7F&–¦P§&÷f¦W&RFò6W'fW"ÖÖÓ#‚âF¢—¦öÆ÷fæ’f—‡GW&R—§fÆHÖ’ö'V–ÆDf÷FôÖ&¶W ¦&W¢vÆö&Ææör66ÆR7Fæ¦Â¦Ræ÷f’F—&V·Fæ’÷&Wd†–FTeBW6Æ÷b&6–ğ¥&VfW&Væ6TW'&÷"âÖ&¶W"6F¶÷&—7F’—7F’G—VöbfÆÆ&6²¶òÖ×f—6–&–Æ—G“ ¦&W¢–æ–6–¦Æ—¦—&æör7Fæ¦öæZ6R¶ò&–¦S²7Gf&æ¶'F’FÆ¦P§üZGV¦R&¦Ö¦W'R’¶÷&—6æ–¶÷fò6·&—fæ¦RâFW7Bæ–¦R&W6¶üHÖVâ–Æ’V&Æ[æVâà ¢222##bÓÓ(	B¦g,Zæ&÷f¦W&"ã‚ã¢f÷&ÖBFW7FæörG&v¥G&\Hv’4’ö·\Z¢3ƒscs#V¦6÷W&6R†f6“C–ScF3ƒ3CCSƒ#†&6FSS3“ƒ6S#F7Fò¦RR÷7Fö¦\HvVÒFæWfæöÒVF—BFW7GR&’÷Gf&æ§RZF×S¢ÆVfÆWB÷&ö¦V7DÆFÆæw6HÖ—Fò¦RæVF÷7F§\Hv’VÆVÖVçBâ&VvÆVBf—‡GW&Vö¶¦ò¦RF¦R÷G&u&Vv—7G'–Fö&—fòö&¦V·FR¶ÆÆÆ÷Ö¶ÆBÆÆæwÖÂFö²7Gf&æ’÷G&u&VtFDÆ–W&HÖ—Fæ—¦÷fR¶ÆBÆÆærÂââåÖâ¦f—6æòöBG&VçWF¶ö&æ÷fR6Æö¦WfF’öw&\Zæ’öF6’ÖövÆ’7R÷7Ff—F’æV—7&fçRöÆ–Æ–æ–§RâÆö¶Ææ’VF—B6—7F–Ò6÷W&6VöÒ6Ç\HÖ¦æò¦R&üZò7f–‚CB&–¶¦ÂZFò÷Gg,IV¦RF¦VFâ&öÆ¢æRV¶Ææ¦w&\Z·RRf—‡GW&WRâf—‡GW&R¦R—7&fÆ¦VâRö&Ö¦W7Fæ&f’æ—¢¶ö÷&F–æF²Ö¦W&Væ¦¦G,[æf§R7fö¦R—7&fæRö&¦V·FRâæ–¦RÖ–¦Væ¦â&VæFW&W"Æ–¶6–¦Ræ—F’÷6Æ&Æ¦VâVF—Bâ²"ã‚ã¦üZæ–¦Rö&¦fÆ¦Vã²fW'¦–¦ö6öFR÷7F§R"ã‚ãóSSFòW7¦\Zæör¦¦VFæœHÖ¶ör'V–ÆFà ¢222##bÓÓ(	BF÷¦æ¶u2&–÷&—FWBR"ã‚ã¤4’3ƒƒ#3#sS&¦#6##CsF#&SS3cVCCS&VC&&#c#&cSsC–&üZò¦Ræ÷f’ÆâÂf÷Föw&f–¦RÂVæ’FæWfæ’VF—BÂ&–çB÷v÷&¶W"ÂöffÆ–æRô´ÔÂ÷6W'fW"&÷f¦W&R’F÷6FZæ¦’7F–ÂÂÆ’¦R÷7Fö¦\Hv’FW7BF÷¦æ¶ö&æ÷fRöF&–òæ÷f’&VF÷6Æ–¦VC¢'fç6V6&–Æ¦RÆâVÖ¦W7Fòu2Öâ¦G,[æâ¦R&÷f¦W&Væ’FW&Vç6¶’&VC¢u26æ–Öæ¦R'fòÂæ÷f&ö¦V¶6–¦öFÖ‚—7öBu26V¶6–¦Râæ–¦RÖ–¦Væ¦â7F&’FW7BF&’&–‡fF–ò—¦Ö–¦Væ¦Væ’&–÷&—FWB6æ–Öæ¦â²¦üZæ–¦Rö&¦fÆ¦VâÂ¦Fò6RF÷g,Zf—7F"ã‚ãóSSà ¢222##bÓÓ(	Bf÷FòFW7BHÖV¶7Gf&çRö&æ÷gP¤4’3ƒƒsS“C&¦C“Ss#“cfC3†S##ƒf6s6&ƒ3“&&cC“CfV&&üZò¦RCBFæWfæ&–¶¦’æ÷f’DTÒÆâÂÆ’¦Rf÷FòFW7B÷g&VÖVæòòæüHÖWFæöÒ'&ö§R÷f–FÆ¦—f÷7F’f÷Föw&f–¦âFW7B¦Röw&\ZæòG&WF—&ò÷7F'GW&W7F÷&RåöFöæV¶ò·&£¢¶öBv÷7FfÆ¦&–¦R6WEF–ÖV÷WB‚âââÃƒ–R¶ö¦VÒ÷&W7F÷&Tf÷F÷2‚–6–æ‡&öæò\HÖ—Ff6H×WfæR&VF÷fRâ¶òf—‡GW&R&–¦RFör¶÷&¶FöF’6H×WfGf–¦Rf÷Föw&f–¦RÂö&æ÷f–‚öæ÷fòFöFâFW7B6F÷6ÖG&7Gf&æ’÷&W7F÷&Tf÷F÷6÷¦—bWFVÒDôÔ6öçFVçDÆöFVBöÖ÷FHÖ¶ö¦’—§g,Zf÷&–v–æÂÂFRHÖV¶F¢¦g,ZWF²&–¦R6VVBÖ’æ¶öâ7f¶ör&VÆöBÖâæ–¦VFâ&W7F÷&Ræ–¦R&W6¶üHÖVâÂæVÖ&ö—§föÆ¦æör6ÆVWÖÂ7fR&÷f¦W&R6·&—fæ¦÷¦ööÒÖ÷&–Öæ¦÷7F§Râ÷fòÖ–¦Væ¦6ÖòFW7FçR6–æ‡&öæ—¦6–§S²&öGV¶6–§6¶’f÷Fò¶öBæ–¦RÖ–¦Væ¦â÷f–Ò¶÷&¶öÒà ¢222##bÓÓ(	B&÷f¦W&VçFW"÷Gf&æ¦¶öÆVv–æRfÆ¶P¤4’3ƒ“#ƒCsV¦36&cVCc“s&Cc&3fCƒSC33V&ƒf3&S†S7Fò¦R&–¦Ræ÷f–‚FW7F÷fæ÷7Fö¦\HvVÒVF—B×'G2Ó#sç–¢G&VçWFæ’—5÷f—6–&ÆR‚–æ¶öâöGfö¦Væ–‚fö7W2‚–’vÆö&Ææör¶W–&ö&Bç&W72‚tVçFW"r–æ–¦Rf–F–ò÷Wâ—7F’6÷W&6R¦RR&WF†öFæ–Ò4’ö·\Z¦–Ö&öÆ¦–òF¢FW7C²Æö¶Ææ’Væ’5SG‚VF—B6÷föÒfW'¦–¦öÒF¶üIR¦R&üZòæV—¦Ö–¦Væ¦VââÆ–¶6–§6¶’¶öBæ–¦R&öÖ–¦Væ¦Vâ¦&ör÷föræÆ¦âFW7B6F&—F—6¶VçFW"æ6–Æ¦æöÒÆö6F÷'R&VF’¶÷&—7F’Æ—w&–v‡BW‡V7B‚âââ’çFõö&U÷f—6–&ÆR‚–¦HÖV¶æ¦R7Gf&æör&–¶¦ÂVÖ¦W7FòG&VçWFæörW—F&W¢HÖV¶æ¦â&÷f¦W&R–ÖVæ¶öÆVvRÂ7Gf&æör&fW&Â6¶–Fæ¦6·&–¢&ö¦V·F’FÆ¦–‚¶6–¦÷7F§Râ÷fòæ–¦RFö¶¢&Fæf—¦œHÖ¶öÒFVÆVföçRæ—F’&¦Æör¦&W6¶¶æ¦RFW7F÷fà ¢222##bÓÓ(	B—7÷'V¶"ã‚ã÷Gg,IVæ¥¦g,Zæ’6÷W&6R“Ffc““ƒ#V&S##6FFC†F3†c6cS“&FSƒ†ÂG&VR3fCvS#&S“–3cF##Ss3&“SƒsCfVF†S3†F†36Â4’3ƒ“SsCV5T44U52â6–¦VÆ’¥2õ÷7Fw&W2ö'&÷w6W"6·W’#æG&ö–BFW7F÷f&üZÆ’7S²¥Væ—B÷Gg,IV¦RF÷föw&\Z¶÷&W6¶ö¶â¦fæ’"ã‚ã²&WW¦WC¢#Bã3crãscr"Â4„Ó#Sb63c“vcƒ6S#sSVSC–3–#†#6cC“F3#ƒCSsscƒ&&CC6c6#S“f6Fc#vVÂ¶WB&ç7BçW72çfÆ¶RæFV'VvÂfW'6–öä6öFSSSò"ã‚ãÖFV'VrÂ—7F’6W'F–f–¶B¶ò"ã‚ã’7f–‚s"&W7W'6–FVçFœHÖæò—§f÷'RâæF—fRWFFW&÷b÷&VÆV6W3÷W%÷vSÓf–F’æ÷gRö&¦gR’÷f¢²â¦g,Zæ’vW2–æFW‚÷7rF¶üIRöFv÷f&§R6÷W&6WRâf÷FòFW7BFöFFæòÆö¶Ææò&öÆ¦’6‡&öÖ—VÓCõÆ—w&–v‡CãSR&W¢vÆö&ÆæörG—–ær&ö&ÆVÖG'Vv–‚Æö¶Ææ–‚&ö&âæ÷f5ÂÖ–w&6–¦æ–¦R÷G&V&æâVæ’Fö¶¢Âöw&æœHÖVæ¦DTÒ&ö6¦VæR’f—¦œHÖ¶’÷&öGV¶6–§6¶’æW&÷f¦W&Væ’Fö¶÷f’¦—6æ’7RRFö72ô•5õ%T´ó%ó…óæÖFà ¢222##bÓÓ(	B—§f¦\ZF¢öF¦VÆRöGF&÷f–ÖÂ"ã‚ã"òSS ¤¶÷&—6æ–²G&[æ’¦VFæ÷7Ffæ–¦’—§f¦\ZF¢öF¦VÆÂ÷6V&æòæv–"’V·7÷¦–6–§Rà¥&W§VÇFF’7R&¦Gfö¦Væ’RG&’&f$”öGF&¢&VvÆVB‡÷g,Z–æ¦Ö–â÷&÷6¦V²öÖ‚f—6–æR’Âæv–"ŒZW7B&§&VFÂVF¦VÆ’ö†’&÷6¦V²öÖ·6–×VÒ’À¤V·7÷¦–6–¦ŒHÖWF—&’7G&æRÂFöÖ–æçFæ7G&æ’&fæ’F–ò’â6·&—fVæ’æVÆ¦æR\HÖW7GgV§RR&7÷&VGRâ¦Fæ¦’öGF"6R×F’R÷7Fö¦\HvVÒW"×W6W ¦¶Æ§\H×RÂ&W¢Ö–w&6–¦R’&W—6—fæ¦vVöÖWG&–¦Rö—§&H×Væ÷÷7Ff¶’¶'FRà¥&VvÆVFæ¦RöGF&÷fæRÖ–¦Væ¦¶'GR’æR&WW¦–ÖDTÒöæ÷fòâ—§&œHÖ—F¦GVvÖBRæv–'R’V·7÷¦–6–¦’÷Gf&§RöFv÷f&§\Hv’6Æö¢æ¶'F’âw&æ–6¦’æ¦—b6¶Æ÷Æ¦Væ’7R÷6Æ–¦R—§&H×Væ²—¦&÷"öF¦VÆ’æ¦—b÷7F§Rf–FÆ¦—f§R6[æWF·Râ÷7Ff¶R¶'FRöÆVvVæFR7RR¦6V&æöÒ6¶Æ÷—föÒF–¦VÇRâÆ–æ–¦P§&§&VF6RæRçVFR¦V·7÷¦–6–§R–Æ’&–¶¢6Öòw&æ–6Râ7F–Æ÷f’7P§66÷VBæ6FW'FÖVçB×&W÷'BÂ¦W"ÆâF÷¦æ¶R¶÷&—7F’¦¦VFæœHÖ¶RG"¶Æ6Rà¥WWFR7R[çW&—&æRâDTÒv÷&¶W"’—§&H×Vâæ—7RÖ–¦Væ¦æ’à ¤Æö¶Ææó¢6–¦VÆ’¥26·WÂWB–æÆ–æR¥2&Æö¶÷fÂ&f’DTÒärõv÷&¶W"ôÆVfÆW@¦—§f¦\ZF¢‡'\HÖæ’öG6¦V6’ö7'Fæ¦Rô”D"÷&W7F'BööffÆ–æRö6æ6VÂö'&—6æ¦R’—¦öÆ6–¦¦æÆöv’ÂG&’öGF&9rZW7B&7÷&VF’¶öçG&7BÂF7FGW&ô$”’V·7Æ–6—Fæ§&–¶¦’¶'FS²ÆâF÷¦æ¶R2—7F–Ò6†&VB552ÖöÒ&üZòâ76WG2&W&P§÷Gg&F–òs"&W7W'6âö&¦gR’¦fæ’²÷Gg&F—F’æ¶öâW7¦\Zæör4’Ö°¦÷fR&÷f¦W&Ræ—7Rf—¦œHÖ¶’†–öÖ’æ—F’&öGV¶6–§6¶’7W&6Rà ¢222##bÓÓ(	B—7÷'V¶"ã‚ã"÷Gg,IVæ¥6÷W&6R&&C6C3cf3FCVcƒCSƒ†Css†#S&cƒ“ƒFƒ#3“–fÂG&VRFcsFf3fVC6SV3c&6&V&&&#SsFS33F##S–â4’3ƒ#scƒ3vÂG'Vv’ö·\Z¢ò¦ö"CCSSS#s6¢5T44U52âæ÷f’—§f¦\ZF¢&üZòG&’öGF&ó‚&7÷&VFÂF7FGW'RÂ&üZ—&VæR÷7Ff¶RÂ7Gf&æ’DTÒärv÷&¶W"Â'\HÖæRöG6¦V¶RÂ”D"÷&W7F'BööffÆ–æR’&–¶¦R¶'FS²Væ’6·W’CBFæWfæ&VvÆVFF¶üIR&üZÆ’â¥Væ—B÷Gg,IV¦R#æG&ö–BFW7F÷f&W¢F÷föw&\Z¶÷&W6¶ö¶â¦fæ’²&WW¦WC¢#Bã3sBãc“’"Â4„Ó#Sb3c3s&cfc†fcVVc“SS3VVFf3–Sssvf#“cF#ƒCSS–fcC–c#3†v&S6FCC†Â6¶vRFV'Vrò6öFSSS"ò"ã‚ã"ÖFV'VrÂ—7F’6W'F–f–¶B’7f–ƒs"&W7W'6–FVçFœHÖæò—§f÷'RâWFFW"f–F’"ã‚ã#²vW2HÖWF—&’&W7W'6öFv÷f&§R—§f÷'Rà ¥'f’4’ö·\Z¢CCCƒ““#&ò¦RR&æ–¦VÒöffÆ–æRÖ–×÷'BÓ#C&’÷F¶¦—fæ§RG'VvörWf÷¦¢¦¶Æ§\HÖæ’&—g&VÖVæ’õe2f¦Â†æôÖöF–f–6F–öäÆÆ÷vVDW'&÷&’â—7F’FW7BÆö¶Ææò’RG'VvöÒ4’ö·\Z§R&üZò¦R&W¢—¦Ö¦VæRFW7F–Æ’öffÆ–æR&öGV¶6–§6¶ör¶öFâæÆ¢ä”¤R&övÆZVâ÷F¶Æöæ¦Væ–Ó²÷7F¦R¦¦6V&â&VvÆVBâFö¶¢’G&’'FVf·F'förö·\Z¦6H×Wfæ’7RW¢4„&–¦RV¶Ææ¦æ¦6Öò4’¶÷–¦&F’cB&W'VâÖâVæ’Fö¶¢ööw&æœHÖVæ¦RFö72ô•5õ%T´ó%ó…ó"æÖFà ¢222##bÓÓ(	B÷6V&æ–¶öæ7F–ÆfÆ¶Â"ã‚ã2òSS0¤æ¦‡F¦Wb¶÷&—6æ–¶(	å7F–Â’&ö¦fÆ¶(	ÒfœZRæR¶÷&—7F’FÒÖÆ–æW2âFöFà¦¦R¦6V&âÆö¶Ææ’5dr6–Ö&öÂFÒ×fÆ¶×7G–ÆS¢&–¶¢öF÷¦vò2vÆfæöĞ§fÆ¶öÒ¦VÆVæöÒÂ7ö¦Væ–Ò·&¶öÒæ&æL[æ7F–Ò’¦VFæ–Ò¦æ¶öÒÆ–¦WfòöFW6æğ¦Gf÷6Ö¦W&÷&VBG&6Râ—7F’F‡VÖ&æ–Âö·f—"÷f–Wt&÷ƒcB’F–ÖVç¦–¦SCg‚¶ğ§&æ–¦Râ(	å7F–ÂÆ–æ–¦(	Ò¦G,[æf7fö§R–¶öçS²Æöv–¶7F–Æ—¦6–¦Ræ–¦RÖ–¦Væ¦æà¤Æö¶Ææò&üZò÷7Fö¦\Hv’æf–vF–öâÖFW6–vâÓ#sƒ¢"Öö&–Ææ–‚÷F&ÆWB&–¶¦À¦FæWfæ’¶öçG&7BÂöffÆ–æR5dr’&f7f–‚VÆövâæ÷f–¶öæf—§VVÆæğ§&VvÆVFæR7Gf&æöÒÖVæ–§S²5dr„ÔÂ—7&fâ23"¦VF–ç7GfVæ6–Ö&öÆÀ¦f–VÆBÖFW6–vâ¥2&÷f¦W&’WB–æÆ–æR&Æö¶÷f&üZÆ’â76WG2&W&Ss"à¤æ÷f–¶öæ¦RÖÆ’fV·F÷'6¶’FöFF²÷7Fö¦\HvVÒ7&—FWRÂæVÖæ÷fP¦&—FÖ6Æ–¶Ræ—F’¦f—6æ÷7F’â²÷Gg&F—F’æ¶öâ¦¦VFæœHÖ¶ör4’Öà ¢222##bÓÓ(	B—7÷'V¶"ã‚ã2÷Gg,IVæ¥6÷W&6R“CS6c†FCƒcCs“3c#–Ccƒ†fVCs†#VVÂG&VR#†FCsv&#V#““fC3&&6#V33C3S#33â4’3ƒ#cƒ3“3fÂ¦ö"CC3#ƒ3C#c¢5T44U52—¢'förö·\Z¦â'&÷w6W"æf–v6–¦"’FæWfæ’VF—CCB&üZÆ“²æ÷f–¶öæ&VvÆVFææ4’6Æ–6’ÖVæ–¦â¥Væ—C#æG&ö–BFW7F÷f&W¢F÷föw&\Z¶÷&W6¶ö¶â¦fæ’²7Gf&æò&WW¦WC¢#Bã3sRãS3R"Â4„Ó#SbS&Fc#c6Fc&f3SV663S3#sscS633S–FV&SSS“3ƒ†F3C3&fCfSC&FÂFV'Vr¶WBò6öFSSS2ò"ã‚ã2ÖFV'VrÂ—7F’6W'F–f–¶BÂ7f–ƒs"&W7W'6–FVçFœHÖæò—§f÷'RâWFFW"f–F“"ã‚ã3²vW2–æFW‚÷7rõ5dr–FVçFœHÖæ’—§f÷'RâT’’æG&ö–B'FVf·F’&WW¦WF’W¢&÷f¦W&VæR4„âFö¶¢RFö72ô•5õ%T´ó%ó…ó2æÖF²&æ–¦’õe2æÆ¢æ–¦R&övÆZVâ&–¦\ZVæ–Òâf—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&âà  ¢222##bÓÓ(	Bw&æ–6RÂ\HÖ—Ffæ¦R¶&F’¦–×WBÂ"ã‚ãBòSS@¤æ—§&œHÖ—B¦‡F¦Wb¶÷&—6æ–¶&WW¦WF’Æö¶Ææ’´ÔÂöÆ–vöæ’w&æ–6…öG&—fU6÷W&6R§üHÖ–æ§R2öæÇ•öÇ–vöã×G'VR&’'föÒFöFfæ§R’7f¶ö¢ö&æ÷f’Ræ÷föÒVÆ6·Rà¤—6¶Æ§\HÖ—fæ¦Rg&–¦VF’Fö¶öÒ—7FR6W6–¦S²&W&VæFW"væRöæœZFfâf—2Â&ö¦RÀ¦FV&Æ¦–æR’—7VæR÷7F§R6H×Wfæ’Â¶ò’æ÷&ÖÆæR÷7Ff¶R¶Ö–öç6¶–‚WFWf¦–Æ’ÆœHÖæ–‚Æö¶Ææ–‚´ÔÂf¦Æ÷fâw&æ–6R6RæRFöF§Ræ¶'GR&–¦R÷fRöFÇV¶S°§÷7Fö¦\Hv’F÷¦æ¶ô—§f¦\ZF¢—¦&÷"&—g&VÖVæò–‚&–¶§V¦RâWWFR7RW6¶ÆIVæRà¥\HÖ—F¢¶'GR–ÖöGfö¦VæR6¦VÆ–æRF÷7GWæR¶'FR’\HÖ—F¢6W&\I¦ÂGf–¦P¦¶öÆöæRæf\Hv–ÒV·&æ–ÖÂ¶ö×·FæR¶'F–6R’Æö¶ÆæRfV·F÷'6¶R–¶öæ–6Rà¤v—D‡V"æ–¦RRæ6Æ÷gR÷fVÆœHÖ–æ’ö÷¦æ6’ö&¦fR&–¶¦æR¶'FS²—§f÷&æ–ÖVæÀ¤”BÖWf’Â&WW¦–Öæ¦R’W—2æW&\I¢æ—7RÖ–¦Væ¦æ’â¦–×WB¶'F–6&üZ—&Væ ¦¶ö×3.(i#3BãG‚‚³#RòZ—&–æ’’f—6–æ’’Â–vÆö6–Æ¢÷7&VFœZFR&¦Ö¦W&æó°§FF–æsN(i#w‚’Ö–â×f—6–æsãG‚â&öÖ¦Væ552Ööw&æœHÖVææ÷f¢&–¶¢à¥&üZò6–¦VÆ’Æö¶Ææ’¥26·W’WB–æÆ–æR&Æö¶÷fâ7Gf&æ’'&÷w6W#¢ÆöDÖ §&7FW"õv÷&¶W"ô”D"Â6çf2õ5dr´ÔÂVF—F÷"ÂF÷¦æ¶fœZW7G'V¶’öG6¦V6’’&W7F'BÀ¤—§f¦\ZF¢DTÒv÷&¶W"ó‚öGF"&–¶¦Â¦fæ’´ÔÂW&\I¦÷&—fFæ&†—f§&W7F'B66H×Wfæ–ÒöæÇ•öÇ–vöãÖfÇ6R¶ö¦’6Rg&HvæG'VR&W¢&öÖ¦VæP§7F–Æ÷fâ"FöFFæ–‚Væ–‚&Wf–Wvƒ3#ó3“óƒÂFâ÷FÖæò’&W¢÷fW&fÆ÷rÀ¤v—D‡V"æG—6Â¥2w&\Z¶÷W—6²FæWfæ’¶öçG&7B&üZòÂ¶ö×2—¦Ö¦W&Vã3BãBà¤76WG2&W&Ss"â¦fæ’²öö&¦gR÷Gg&F—F’æ¶öâ4’Ö²f—¦œHÖ¶’FVÆVföâæ–¦RFW7F—&âà ¢222##bÓÓ(	B&öf–Æ’æv–&R—§f¦\ZF§RöF¦VÆÂ"ã‚ãRòSSP¤æ7Ff²¶÷&—6æ–¶÷för¦‡F¦Wf¦FöFFçR&÷f¦W'Ræv–&&V¶òéF‚’VFÆ¦Væ÷7F’à¥÷7Fö¦\Hv’Æö¶Ææ’DTÒæv–"f\Hr¶÷&—7F’6VçG&ÆæR&¦Æ–¶Rf—6–æ’†÷&—¦öçFÆçP§VFÆ¦Væ÷7C²ZW7B&§&VF’HÖWF—&’V·7÷¦–6–¦Ræ—7R¦Ö–¦Væ¦Væ’&÷6¦V¶öÒÆ–æ–¦Rà¥v÷&¶W"6F&÷7F÷&æò&7÷&\IV¦R&–&Æœ[ææò¦VFâ¶öçG&öÆæ’&öf–Âæ2†°§7f¶’öGfö¦Væ’öG6¦V²Fö&–¦7fö¦R&öf–ÆRâ&÷7F÷&æöF¦VÆ¶÷&—7F’öæFW&—6çP§÷g,Z–çRÂ—6¶Æ§\H×V¦R'WR’G&[æ’fÆ–FçRDTÒf—6–çRöw&F–¦VçBâö&·&¶&öf–Æ§&FRw&F–¦VçBÂV·Wæòö¶ò#Ò–Æ’Fò'fRw&æ–6RöæVF÷7F§\HvVrW¦÷&¶à¥&W6¦V²6VvÖVçF67f–Ò'7FVæ÷f–Ö¦W7FfÆ¦Æ–æ–§R’¶öB'W\[æ–‚öB¶÷&¶à¬éF‚¦R&¦Æ–¶v÷&æ¦RöFöæ¦R–çFW'öÆ—&æRDTÒf—6–æS²föF÷&fæG\[æ–æ¦R¦&— £$BvVöFWG6¶–‚G\[æ–æ6VvÖVæFâ&÷6¦\HÖâæv–"&öf–Æ¦RéF‚òG\[æ–æ9rà¤æVF÷7F§\Hv’W¦÷&6’6R&–¦fÆ§V§S²æRFöF§R6RÆ[ææ’&fæ’&öf–Æ’âæ§fœZP£ã#&öf–Æ¢f\Hv’—¦&÷"—§&œHÖ—FòG&[æ’Öæ¦RöG'\HÖ¦RÂ&W¢F–†ör&÷&¦\I—fæ¦à ¤æv–"öGF"–Ö6†V6¶&÷‚&–¶¦Â'&ö¦HÒ’6¶Æ÷—f’&VvÆVB&öf–ÆâFöF— ¦Æ–æ–¦R–Æ’7Ff¶R÷Gf&'&ö¢Â&ö6VæBÂf—6–æRÂ&¦Æ–·RÂföF÷&fçRG\[æ–çR¦f÷&×VÇRâ¶'F¶÷&—7F’¦6V&âæV–çFW&·F—fæ’6çf2w&–DÆ–W"2¶öç7FçFæöĞ§fVÆœHÖ–æöÒÆ–æ–¦R÷7G&VÆ–6RÂ÷¦æ¶Ö&’&–¶ÆFæö¢&¦Ö¦W&’’&W¢&V¶Ææ¦§FV·7Fâ¶Æ–²föF’·&÷¢÷7Fö¦\Hv’&–÷&—FWBfÆ¶öÆFö—¦&÷&öÆ–vöæâÆVvVæF§ö¦Zæ¦f&öf–ÆS²'&—6æ¦R÷6·&—fæ¦R÷&öÖ¦VææÆövV¶Ææ¦’6Æö¢÷÷Wà¤6†V6¶&÷‚’&W§VÇFB7RR÷7Fö¦\HvVÒW"×W6W"Æö6Å7F÷&vRô”D"Fö·RÂF÷7GWæ¦öffÆ–æS²7F&’¶\Z÷7F¦RHÖ—FÆ¦—b’G&[æ’—§&œHÖ—Bæ÷f’—§&H×Vâ¦&öf–ÆRà¥WWFR[çW&—&æRâ"ã‚ãRV¶Æ§\H×V¦R’7fR&öÖ¦VæR"ã‚ãB„w&æ–6Rõ\HÖ—F¢¶'GRö¶ö×2’à ¥&÷f¦W&S¢6–¦VÆ’¥26·W’R–æÆ–æR&Æö¶÷f²æÆ—FœHÖ¶R&fæ’RZW7B6Ö¦W&÷fÀ¬éF‚öG\[æ–æÂ&fæ’’&öÖ¦Væ¦—f’FW&VâÂ¶öæ¶fæw&æ–6ÂöGfö¦Væ’öG6¦V6’Â'WP§V¶Æ§\H×V§\Hv’7V"×–·6VÆçRÂæVF÷7F§\Hv’DTÒ’&÷7F÷&æö·&—fVæ÷7BâVæ’'&÷w6W §2&f–ÒDTÒärFV¶öFW&öÒõv÷&¶W&öÒôÆVfÆWFöÓ¢&öf–Æ¦#‚Ã’†Â÷WÀ§&–¶¢÷6·&—fæ¦RÂ‚&7÷&VF÷öGF&÷fÂFæWfæ’¶öçG&7BÂ”D"&W7F'B’7F&¦¶\Z&W¢&öf–ÆÂöffÆ–æRö6æ6VÂö'&—6æ¦Rö—¦öÆ6–¦æÆövÂ&W¢V·7FW&æ–‚W—6à¤FæWfæ’VF—CCB&üZó²ÆâF÷¦æ¶R6¦¦VFæœHÖ¶–Ò552ÖöÒ&üZòâÆö¶Ææ§7–çF†WF–2&Væ6†Ö&³¢ãsÃ#‚†ò3“&öf–Âòö¶ó&×2æ6Æ÷VB&ö6W6÷'S°§Fòä”¤RÖ¦W&Væ¦Ræf—¦œHÖ¶öÒFVÆVföçRâDTÒ÷7F¦R&ö6¦Væ&W¦öÇV6–¦Rö¶ó3Ğ¢†–Æ’6Æ&–¦R¶öBfVÆ–¶–‚öF¦VÆ’ÂæRFW&Vç6¶vVöFWG6¶—¦Ö¦W&â76WG3s"à¤4’"ã‚ãBó3ƒ#ƒƒ#b¦g,ZVâ5T44U53²"ã‚ãR²ö&¦gR÷Gg&F—F’÷6Æ–¦R4’Öà  ¢222##bÓÓ(	B—7÷'V¶"ã‚ãR÷Gg,IVæ¥6÷W&6Rfv&FSF33vC##fC&fC##“†ccSv3#FÂG&VR#Ssc–FF#–V&Fc#“†FS“sC3sS“fCƒS“sVâ4“3ƒ3S#3ƒssrö¦ö#CCSscC“#C’5T44U52—¢'förö·\Z¦â÷Gg,IVæT’&†—f¢æ÷f–‚&öf–Æ¦#‚Ã–†Â÷WüéF‚öG\[æ–æÂ&W7F'BööffÆ–æR÷7F&’¶\ZÃ‚&7÷&VF²FæWfæ’VF—CCB’æf–v6–¦"âæG&ö–B¥Væ—C#&W¢F÷föw&\Z¶÷&W6¶ö¶â¦fæ’³#Bã3“"ã3s"Â4„ssF#–C3C6&66f&3#VSs“CV“f&Sf#&c#Ff63ƒ&33Cƒƒcc“FCCv"ÂFV'Vw¶WBö6öFSSSRó"ã‚ãRÖFV'VrÂ—7F’6W'F–f–¶BÃs"&W7W'6–FVçFœHÖæò—§f÷'RâWFFW"g&Hv"ã‚ãS²vW3R¶Æ§\HÖæ–‚&W7W'6–FVçFœHÖæò—§f÷'RâV¶Æ§\HÖVæR&öÖ¦VæS"ã‚ãBâFö¶¢’öw&æœHÖVæ¦RFö72ô•5õ%T´ó%ó…óRæÖC²f—¦œHÖ¶’†–öÖ’÷&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’öÖ–¦Væ¦æ’à  ¢222##bÓÓ(	B"ã‚ãc¢Gf÷6Ö¦W"’ÆvW&’‡&—&VÖ—7÷'V¶R¥üHÖWFæ’&–¶¢fÆ¶S¢"‚Â7'F–6RÂö''V"V¶Æ§\HÖVã²7G&VÆ–6S¢÷FW¢"‚§fVÆœHÖ–æ#R‚âV·7Æ–6—FæR7F&R÷7Ff¶R÷7F§R6H×WfæRâ÷W&W¢7Gf&æöp§6Ö¦W&–Ö—¦&÷"(	å6Ö¦W"—§fÆHÖVæ¦E>(	Ò’(	äöG&VF’Gf÷6Ö¦W.(	Ó²¶B7Gf&æ’6Ö¦W §÷7Fö¦’Â÷7F¦R6Öò(	å&öÖ–¦Væ’Ö¦W7FòGf÷6Ö¦W&(	Òâ&ö¦V·FçG6¶’—¦&÷"’FÆ¦P¦öG&\IV¦RFHÖ·RÂ&W¢WFöÖG6¶örF–¦VÆ¦Væ¦æöÆâ—¦&÷"6F&–¶§V¦R7Gf&æP§g&†÷fRfÆ¶Rö·&¶R¦6V&æöÒ6çf2&VæFW&W'RÂ&–ÖFöF—"·&÷¢†—B6Æö¦WfR§&–æ¦W¢g&‚VçWF""‚âöÖöw\HvVâ¦R’·F—fâÆVv7’¦—2&W¢&ö¦V·Fà¥6·&—fVæ’öG'Vv’&ö¦V¶BÂ·F—fæò6æ–Öæ¦Rö7'Fæ¦Rö—¦&÷"öÆ–vöæöF&–¦§R—¦&÷#°¤W66RÂ&öÖ¦VæF&öæÆöv÷&ö¦V·F’V¶Ææ¦æ¦RÆ–æ–¦RHÖ—7FR&–¶¢FHÖ¶à ¤æ÷f’7FF–2ö§2÷fÆ¶ÖÆvW"æ§3¢öGfö¦VæfVÆœHÖ–æö&Æ–¶ƒS(	3#SR’’÷¦æ¶P¢ƒ(	3#‡‚’ÂR÷7Fö¦\HvVÒ¦¦VFæœHÖ¶öÒ÷&ö¦V·FæöÒ7F–ÇRâ7F&’ÆvW%66ÆR—¢7F–À¦Æ–æ–¦¦RfÆÆ&6²Fö²æVÖæ÷fRV·7Æ–6—FæR÷7Ff¶S²&öÖ¦Væö&Æ–¶æP¦Ö–¦Væ¦föçBâ6¶Æ÷—f’Æ—7F–ærÆvW&föF’æ–æF—f–GVÆæòöÖ¦W&æ¦Ræ¶'F’à¥fÆ7F—F’ÆvW%BÖ–¦Væ¦6RFV²æ¶öâW7¦\ZæörÆö¶ÆæörW—6Â&W¢—¦Ö¦VæRG3°§öFF²ÆvW%÷B6FVÆ¦’R÷7Fö¦\Hv’W6W'E÷fÆ¶÷WF&÷‚‡&æ–¦R¦RæVF÷7F¦ğ§R÷fÆ¶7–æ5–ÆöB’â¶öÆöæ¦R—¢÷7Fö¦\HvRÖ–w&6–¦R##cs’Âæ÷fÖ–w&6–¦¦æ–¦R÷G&V&æâ¶öÆVv–æ’ÆvW&’\HÖ—Ff§RÆvW"öÆvW%÷B’&–¶§V§R6R¶òF–ğ§÷7Fö¦\Hv–‚Æ&VÆ¢6·&—fæ¦Rö'&—6æ¦RV¶Ææ¦–‚â&VÇF–ÖR[çW&—&ÖWFöFF¶Rà¥öÖ¦W&æ¦R¶öÆVv–æörÆvW&H×Wf—6¶Æ§\HÖ—fòW"×W6W"÷W"×&ö¦V7BÆö¶Ææ’&–¶¢À¦æRÖ–¦Væ¦¶öÆVv–æRöFF¶R’æRZÆ¦RW6W'BRæ¦Vv÷fò–ÖRâ÷¦–6–¦R’fVÆœHÖ–æP§7RF÷7GWæRöffÆ–æR÷6Æ–¦R&W7F'F²w&\Z¶ÖVÖ÷&–¦RæRÖ–¦Væ¦7F&’öÆü[æ¢à¤ÖöGVÆR¦RR5r&V66†R×S²²76WG2s2âWWFR[çW&—&æRà ¤Æö¶Ææó¢6–¦VÆ’¥26·WÂR–æÆ–æR&Æö¶÷fÂVæ’ö'&÷w6W"FöF—"vÆfæRfÆ¶RÀ¦·&¶’ÆVv7’¦—6Â7Gf&æRFHÖ¶RÂ&öÖ¦VæGf÷6Ö¦W&ö6æ6VÂÂæW¦f—6æP§fVÆœHÖ–æRfÆ7F—F–‚ö¶öÆVv–æ–‚ÆvW&Â&ö¦V·Fæ’—§W¦WF²ÂÆö¶Ææ’66†R’÷WF&÷‚À§&W7F'BÂV÷F&öÆÆ&6²Â6·&—fæ¦R’—¦öÆ6–¦æÆövÂbæ÷f–‚&7÷&VF&W §&VÆ–¦Wfæ¦öÆüZVr¶öçG&7Fâ÷7Fö¦\Hv’7F–Âö&†—fæÆövÂ6W'fW"ö&fW"’ZF×§&üZÆ“²FæWfæ’VF—B7f–‚æVÆCB&W¢ÆüZ–‚VÆVÖVæFâFW7BFöF—&R7F&ö ¦—¦öÆ÷fæö¢f—‡GW&R&¦Gf¦æÖ¦W&æRFöF—&Rã#×2„ÆVfÆWBF÷V&ÆR×F’à¥&öGV¶6–§6¶’7W&6Ræ–¦RÖ–¦Væ¦âÂf—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&ââ4’ô²Fö¶ §W—6F’æ¶öâW7¦\Zæör'V–ÆF’&÷f¦W&R¦fæörf¦Æà  ¢222##bÓÓ(	B—7÷'V¶"ã‚ãb÷Gg,IVæ¥6÷W&6R#CV&V&fCFCc#vcƒƒ–CsccS6&#6F##s#FVC†SbÂG&VRVVVFSV#FcC“&#Vf3“c“CcS3CS#ƒ3Bâ4“3ƒ3scSs3Srö·\Z£"ö¦ö#CCcS“SCC’5T44U53²'f’ö·\Z¢VF—B×'G2Ó#s÷Wæ–¦R&üZòÂ—7F’4„æöæ÷fÆ¦VæöÒVæöÒ4’×R&üZò†&W¢Gg&Fæ¦RF¦R—§f÷"Ö–¦Væ¦â&F’Föv’â&WW¦WFR’†6‚×÷Gg,IVæRT’ôæG&ö–B&†—fS¢æ÷f’Fö²Gf÷6Ö¦W&öÆvW&“b&7÷&VFÂFæWfæ’VF—CCB&W¢æÆ¦²æG&ö–C#&W¢F÷föw&\Z¶÷&W6¶ö¶â¦fæ’³#BãCbãcƒ„"Â4„sƒ&6f6#†Sc“ƒ“ƒv3Ss6s#6&63csC“†C–CvfCsS33–VfccSCCSƒ3–&2ÂFV'Vw¶WBö6öFSSSbó"ã‚ãbÖFV'VrÂ—7F’6W'F–f–¶B“s2–FVçFœHÖæ&W7W'6âWFFW"7Gf&æòg&Hv"ã‚ãbÂvW3R¶Æ§\HÖæ–‚&W7W'6–FVçFœHÖæò—§f÷'RâFö¶¢ööw&æœHÖVæ¦Fö72ô•5õ%T´ó%ó…óbæÖC²f—¦œHÖ¶’†–öÖ’÷&öGV¶6–§6¶’7W&6Ræ—7RFW7F—&æ’öÖ–¦Væ¦æ’à  ¢222##bÓÓ(	B"ã‚ãs¢WFöÖG6¶ò6Ææ¦Ræ÷för&ö¦V·F&–¦RHÖÆç7Gf¤æ—§&œHÖ—Bæ÷f’¦‡F¦Wb¶÷&—6æ–¶Â–ç6W'E÷&ö¦V·B’–ç6W'EöF÷¥÷&ö¦V7B6F–GRWFöÖG6¶’æ¶öâG&¦æörÆö¶ÆæörVçVWVRÖâ÷&ö6W74öffÆ–æUVWVR&W¢'\HÖæR¶–¦Rf–ÇG&—&—6¶Æ§\HÖ—fòFR&öF—FVÆ§6¶R÷W&6–¦S²fÆ¶RÂ¦öæRÂ7FGW2ÂÆö¶Ææ’G&v÷f’’u2&fW"÷7F§RR÷7Fö¦\HvVÒFö·Râ¦WFöÖG6¶’W—2G&V&&f6W6–¦†æRö66†VE7GV"’ÂfÆ6æœHÖ¶’&VB’fW¦²&6¶öfbö&Æö6¶VB÷7F§Rf[æ\Hv’’æ6–Æ×G'VRâ7F'BÂöæÆ–æR÷÷g&F²fW¦RÂf÷&Vw&÷VæB’W&–öFœHÖæ&÷f¦W&c2öæfÆ¦§R&öF—FVÆ¦Râ'&ö¦HÒ¶÷&—7F’÷7Fö¦\Hv’ÖVÖò&VFFæR'6—&FW&Vç6¶’Fâ&’7f¶öÒu2f–·7Râ÷Gg&FWFò&ö¦V·F6FVÆ¦’R÷6Ææò’g&–¦VÖR6Ææ¦Â&W¢Æ[ææör÷Gf&æ¦÷6W'fW%6Æ¦VÒà ¥&ÆVÆæ’÷¦—fÆ2&VFHÖV¶—7F’&öÆ¢&V¶ò&W6öÇfW&ægVæ¶6–¦“²&W'Vâö'&IV¦Ræ÷föFöFæ’¦—2â÷&ö¦V·E6W'fW%7&VÖâHÖV¶VæF–ær&VçBÂ¦F–Ò4TÄT5B÷Gg,IV¦R6–Æ¦æ’”B’fÆ6æ–¶&–¦R&ö¦V·Eö6Ææ÷f’öF÷¥÷&ö¦V7EöÖVÖ&W'2â×&\[ææõ$Å2öÖ—76–ærw&\Z¶7&\HÖfÖVÖ&W"”å4U%C²&öÖ¦VææÆöv–Æ’—¦'&æör&ö¦V·F&V¶–Fæ7Ff²âHÆÆç7Gfò–Ö–âÖfÆ–v‡BwV&C²¶öBfÆ¶6R–FVçF—FWB&÷f¦W&f’æ¶öâöæ÷fæör\HÖ—Ffæ¦7—6¶âöffÆ–æRHÖÆç7Gfòæ–¦R—¦ÖœZÆ¦Væòæ—F’WFöÖG6¶’¦¶¦æó¢¶÷&—6æ–²öæfÆ¦FöFfæ¦RW¢–çFW&æWBâUT”Bö–ç6W'B÷Gg&F—¢÷7Fö¦\HvVrFö¶H×Wf§R–FV×÷FVçFæ÷7B&’—¦wV&Æ¦VæöÒöFv÷f÷'Rà ¤F÷¦æ¶Æ—7Fg&HvVæF–ær&ö¦V·FR—¢G&¦æör&VF’¶B¶\Zæ–¦RW—6ââæWW7¦VÆ÷Gg&FÆö¶Ææör¶\Zæ¶öâ6W'fW"”å4U%BÖæRV¶Ææ¦&öF—FVÆ¦—¢&VFâ¶öBfÆ¶W7¦\ZâVçVWVR÷7F¦R6H×Wfâ&ö¦V¶B’¶òöÖüHvæ’¶\ZæRW7–¦RÂF¶òF6RæRçVF’öæ÷fæò·&V—&æ¦R—7För&ö¦V·FâWWFR[çW&—&æRâæ÷f5ÂÖ–w&6–¦æ–¦R÷G&V&æ²&öGV¶6–§6¶’7W&6Ræ–¦RÖ–¦Væ¦âà ¤Æö¶Ææó¢6–¦VÆ’¥26·W’R–æÆ–æR&Æö¶÷f²7Gf&æVæ²7W&6R¥2æB¶öçG&öÆ—6æ–Ò…EEÖöÓ¢öFvüIVâ&VçB’—7F÷g&VÖVæòHÖÆç7GfòÂöffÆ–æR÷&W7F'BööæÆ–æR&WG'’Â—¦wV&Æ¦VâöFv÷f÷"÷6ÖRUT”BÂ$Å2&VçB&Æö¶—&HÖÆæÂF÷¦æ¶·&V—&æ¦R’HÖÆâÂ&VçB4TÄT5BæVF÷7F¦RÂ¶\Z—&æ6W6–¦’—¦öÆ6–¦fÆ6æ–¶ÂVæ·f÷F¶\Z÷&WG'’ÂWFò†—7F÷&–¦’FW&Vç6¶’VWVRôu2÷7F§RÆö¶Ææó²&W¢fæ§6¶–‚W—6âFW7Fæ’…EE6W'fW"üZGV¦Röfg6WBöÆ–Ö—B¦v–æ6–§RHÖÆæ÷fâ÷7Fö¦\Hv’6W'fW"Ö6öæf—&ÒÓ#3B&üZó²FæWfæ’VF—CCB&W¢æÆ¦â76WG3s2âfW'¦–¦S"ã‚ãrö6öFSSSs²4’ô²÷Gg&GRW—6F’æ¶öâ¦g,ZWF¶'V–ÆFâf—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&âà  ¢222##bÓÓ(	B—7÷'V¶"ã‚ãr÷Gg,IVæ¥6÷W&6SVS3“fV3#ƒcSSF#–C#fFFcCCcVvSsRÂG&VScƒ6#ƒ3Cƒ6#sVcVVc&&sc“s3f3Fc&FRâ4“3ƒCƒ“Srö¦ö#CCssSƒB5T44U52—¢'förö·\Z¦â&WW¦WFRö†6‚×÷Gg,IVæRT’’æG&ö–B&†—fS¢æ÷f’Væ’õ7W&6R¥2FW7C’66Væ&–¦ÂFæWfæ’VF—CCB&W¢æÆ¦²æG&ö–C#&W¢F÷föw&\Z¶÷&W6¶ö¶â¦fæ’³#BãCãss$"Â4„cSc#SV“vSc#vSFF#c“S&V&f6CC–FCCC#&c6Cc““S3VV#v3S6SVS3ƒv#2ÂFV'Vw¶WBö6öFSSSró"ã‚ãrÖFV'VrÂ—7F’6W'F–f–¶B“s2–FVçFœHÖæ&W7W'6âWFFW"g&Hv"ã‚ãs²vW32&öÖ–¦Væ¦Væ&W7W'6–FVçFœHÖæò—§f÷'RâFö¶¢ööw&æœHÖVæ¦Fö72ô•5õ%T´ó%ó…óræÖBâf—¦œHÖ¶’†–öÖ’æ–¦RFW7F—&ã²&öGV¶6–§6¶’7W&6Ræ–¦RÖ–¦Væ¦ã²æ÷f5ÂÖ–w&6–¦æ–¦R÷G&V&æà  ¢222##bÓÓ"(	B"ã‚ã“¢WFöÖG6¶’—§f¦\ZF¢öF¦VÆ’7F&–Ææ’&–¶¢7÷&–¦–‚FVÆVföæ¤—§f¦\ZF¢öF¦VÆ6FöFÖ‚ö·&\HvRDTÒö'&GRæ¶öâ÷Gg&FRæ7'Fæör–Æ¦—¦'&æöröÆ–vöæâ'\HÖæòGVvÖR÷7F¦R6Öò¶ò÷÷&f²÷6Æ–¦R¶öæHÖæRw&\Z¶S°¦öffÆ–æRæVF÷7FF²DTÒÖHÖV¶öæÆ–æVFövI¢Â&öÆ¦æRöæÆ–æRw&\Z¶R–Ö§P¦öw&æœHÖVâWFöÖG6¶’&WG'’â¶\Z&W§VÇFFæ÷6’ÖöFVÂ÷6–væGW'RvVöÖWG&–¦RÂ6P§7F&’&f÷Vvöæ’&W§VÇFBæRg&Hvâw&æ–6RWB&§&VFæv–&æ7F§RÖ&6†–æp§7V&W2–çFW'öÆ6–¦öÒ7Gf&æ–‚g&–¦VFæ÷7F’ó#ó3óCóSR’7¦§R6RP¦¶öçF–çV—&æRWFæ¦Rö&ö¦VæR&ö¦öÒfœZVr&§&VFà ¥¦&–¦fÆ¦VæòæW7F¦æ¦RF–¦VÆ÷f&–¶¦WGg,IVæ7RG&’6&—&§\HvG&üZ¶ ¦¶VW'VffW#£f¦RæÖö&–ÆæöÒ&–¶§RÖövòG,[æF’fœZRöB#ÆüHÖ–6ò6Æö§RÀ¦öffÆ–æRFV¶öF—&æ’6çf2¶\Z¦RG,[æòFò3FöFFæ–‚ÆüHÖ–6†ö¶òsRÖ”"6—&÷f–€§–·6VÆ’Â&ÇW"ö6öçFVçB×f—6–&–Æ—G’7R&f–Æ’FöFFæR6ö×÷6—F÷"6Æö¦WfRâæ÷f¦&VæFW"Ö†VÇF‚æ§6R²×RHÖ—F7Gf&æ’æG&ö–B$ÒöÆ÷rÕ$Ò6–væÂ’¦W&\I¦P§6Bt"–Æ’Öæ¦RV¶Æ§\H×V¦R7F&–Ææ’&öf–Ã¢F–ÆR'VffW""Â÷fW&Æ’'VffW"À¦¶\Zs"ÂÖæ¦R&ÆVÆæ–‚HÖ—Fæ¦Â&W¢¦ööÒæ–Ö6–¦Rö&ÇW&’&W¢&—¦œHÖæöp¦6öçFVçB×f—6–&–Æ—G–&W6¶¶æ¦â¦HÖ’W&\I¦’¶÷&—7FRVÖ¦W&Vâ'VffW"B’¶\Z£câæG&ö–BöåG&–ÔÖVÖ÷'–ööäÆ÷tÖVÖ÷'–÷6Æö&I6Öò—§fVFVæ’F–ÆR¶\Z’ZÆ¦P§6–væÂ¦'VæR÷&W–çC²÷&–v–æÆæR¶'FRÂ&ö¦V·F’’u2öF6’÷7F§RæWF¶çWF’à¥÷g&F²Æ–¶6–¦RR'f’Æâöæ÷fò¶ö×÷¦—GV¦Rf–FÆ¦—gR¶'GR’T’à ¤Æö¶Ææó¢7f–‚’¥2FW7F÷f²Væ’æ3c9ssCöG#2ÂBt"&öf–ÇR’5Rl9s°§6–×VÆ—&âÖVÖ÷'’×&W77W&RHÖ—7F’—§fVFVæ–‚6çf2ÆüHÖ–6Â&§&¦\Zf&VF÷fR¦÷7FfÆ¦¶'GR÷G&¶R÷æVÆRf–FÆ¦—f–ÒâFW&Vç6¶6–×VÆ6–¦RÃB¶Òæ5S9róL9rÀ¥&VFÖ’6–çFWFœHÖ¶’&Væ6†Ö&²3b&öÆ¦ÂVF—BF–¦VÆ÷f2óBÂFæWfæ’VF—BCBÀ§&f’Ô%F–ÆW2÷v÷&¶W"ô”D"&VvÆVB’u´r2ãöÆ–vöæ&üZÆ’â—§f¦\ZF¢¦R&üZğ§'\HÖæ’ö—¦'&æ’öÆ–vöâÂv÷&¶W"ÂWFöÖG6¶’&W7F'BÂöffÆ–æR&WG'’’ö&ö¦VæP¦¶öçGW&RâÆö¶Ææ’æG&ö–B'V–ÆBæ–¦R¦g,ZVâ¦W"ö·'\[æVæ¦RæVÖæG&ö–B4D³°¤4’ô²÷Gg&GRW—6F’÷6Æ–¦Rv÷&¶fÆ÷vâf—¦œHÖ¶’FVÆVföâ’&öGV¶6–§6¶’7W&6P¦æ—7RFW7F—&æ’æ—F’Ö–¦Væ¦æ’à  ¢222##bÓÓ"(	B—7÷'V¶"ã‚ã’÷Gg,IVæ¥6÷W&6R36CV6Vc3f#F&Cv6fC3†6fC3ccC†cSS†v&S–ÂG&VP¦CƒC3CSCƒS##c†&C†6F3cƒƒ33ccs66Fc&C#CCFâ4’3ƒ#s“3“c"ò¦ö £CcsSCSc’5T44U52—¢'förö·\Z¦¢¥3’ÂFW7Fæ’÷7Fw&U5Âõ$Å2Â6–¦VÆ¦'&÷w6W"¶WBÂw&FÆR’æG&ö–CBV×VÆF÷"â÷6V&â7÷&–¦’&öf–Â3c9ssCöG#2À£Dt"ô5Sl9r÷7Ff–ò¦R¶'GR’ö&¦RG&¶R÷æVÂf–FÆ¦—f–Ò÷6Æ–¦R6–×VÆ—&æöp¦ÖVÖ÷'’×&W77W&S²FW&Vç6¶6–×VÆ6–¦2Ã³"ÃF¶Ò’FæWfæ’VF—CCB&üZÆ’â¦fæ¤²#BãC#rã3"Â4„3†336Fc–C36663SSv3ƒsV3f3#6ƒS##C&&SFcs†CS3FSCCS“CÀ¦6öFSSS’ó"ã‚ã’ÖFV'Vs²6G,[æ’æ÷fRÖöGVÆRâWFFW"g&Hv"ã‚ã’ÂvW2HÖWF—&’¶Æ§\HÖæ§&W7W'6–FVçFœHÖæ—§f÷'RâFö¶¢ööw&æœHÖVæ¦RFö72ô•5õ%T´ó%ó…ó’æÖBâf—¦œHÖ¶¥†–öÖ’÷7÷&–¦’FVÆVföâæ—7RFW7F—&æ“²&öGV¶6–§6¶’7W&6Ræ–¦RÖ–¦Væ¦âà
