@@ -19,7 +19,38 @@
 <link rel="stylesheet" href="static/libs/leaflet.min.css">
 <script src="static/libs/leaflet.min.js" onerror="_libErr('Leaflet')"></script>
 <script src="static/libs/proj4.js" onerror="_libErr('proj4')"></script>
-<script src="static/libs/turf.min.js" onerror="_libErr('Turf')"></script>
+<script>
+// turf.min.js (604 KB) je pri svakom pokretanju trošio ~200 ms glavne niti na
+// sporijem telefonu, a treba tek za doznaku/izvještaj/uglačavanje. Učitava se
+// u pozadini kad pokretanje završi. Do tada window.turf je Proxy: ako ga neki
+// sinhroni poziv dotakne ranije, biblioteka se učita SINHRONO iz lokalnog fajla
+// baš tada (isti trošak kao ranije, samo kasnije) — nijedan poziv ne dobije
+// undefined. UMD omotač sam postavi globalThis.turf i time zamijeni Proxy.
+(function(){
+  var SRC='static/libs/turf.min.js',async=false;
+  function sync(){
+    if(window.turf&&!window.turf.__turfStub)return window.turf;
+    var x=new XMLHttpRequest();x.open('GET',SRC,false);x.send(null);
+    if(x.status&&x.status!==200)throw new Error('Turf nije učitan: HTTP '+x.status);
+    (0,eval)(x.responseText+'\n//# sourceURL='+SRC);
+    return window.turf;
+  }
+  window.turf=new Proxy({},{
+    get:function(t,k){if(k==='__turfStub')return true;return sync()[k];},
+    has:function(t,k){return k in sync();}
+  });
+  window._turfUcitajPozadinski=function(){
+    if(async||!window.turf.__turfStub)return;async=true;
+    var s=document.createElement('script');s.src=SRC;
+    s.onerror=function(){async=false;_libErr('Turf');};
+    document.head.appendChild(s);
+  };
+  window.addEventListener('load',function(){
+    var go=function(){window._turfUcitajPozadinski();};
+    if(window.requestIdleCallback)requestIdleCallback(go,{timeout:2500});else setTimeout(go,1200);
+  });
+})();
+</script>
 <script src="static/libs/supabase.min.js" onerror="_libErr('Supabase')"></script>
 <script src="static/libs/shapefile.min.js" onerror="_libErr('Shapefile')"></script>
 <script src="static/js/reliable-fetch.js"></script>
@@ -703,6 +734,15 @@ html.render-lite * {-webkit-backdrop-filter:none!important;backdrop-filter:none!
 html.render-lite .auth-bg-glow,html.render-lite .auth-logo-box::before {filter:none!important;animation:none!important;}
 html.render-lite .auth-bg-grid {animation:none!important;}
 html.render-lite .leaflet-zoom-animated {will-change:auto;}
+/* Beskonačni ukrasni pulsevi indikatora snimanja/GPS-a rade satima tokom
+   terenskog rada; box-shadow varijante (abPuls*, trnPuls) iscrtavaju na glavnoj
+   niti u svakom frame-u. U lite profilu stanje nosi boja, ne pokret. Spinneri
+   učitavanja (mriSpin, gstabspin, updIndet) NAMJERNO ostaju — oni javljaju da
+   app radi. */
+html.render-lite :is(#rb-dot,#ab-trag-stats .ab-ts-lbl,.trn-rec,.live-dot,.btn.rec,.rsb-dot,.vrec-badge.rec,
+  .sync-dot--err,.rdot,#ab-loc.gps-trazi .ab-ico,#ab-centar.odmaknuto .ab-ico,#brec.active .ab-ico,
+  .tv-act-trag.on .tv-act-ico,.action-btn.btn-record.recording .btn-icon,.upd-step.active .upd-dot),
+html.render-lite #ab-trag-stats .ab-ts-lbl::before {animation:none!important;}
 .vcard-stripe { width:4px; flex-shrink:0; }
 .vcard-info { flex:1; padding:7px 10px; min-width:0; }
 /* v1.7.1: ime lijevo (uz ↳ i L/D oznaku), dužina desno. space-between je
@@ -5699,7 +5739,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.10';
+const APP_VER = 'v2.9.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
