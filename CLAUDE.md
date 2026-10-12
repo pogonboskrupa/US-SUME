@@ -39,9 +39,13 @@ regenerisati prije svakog builda — inače APK sadrži staru (keširanu) verzij
 web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 - **PowerShell (Windows)**: `powershell -ExecutionPolicy Bypass -File android\build-apk.ps1`
-  (pull + copy-assets + gradle build u jednom potezu; provjeri `-Branch` default
-  u skripti prije pokretanja ako grana nije `CODEX-US-SUME` — to je trenutni
-  default u `build-apk.ps1`).
+  (pull + copy-assets + gradle build u jednom potezu). **Zadana `-Branch` u
+  skripti je i dalje stara `CODEX-US-SUME-2026-10-01`** — za trenutni kod
+  pokreni sa `-Branch claude/elegant-mayer-4lxj53`.
+- **Uobičajeni put od 2.8.10 nije lokalni build nego CI**: push na
+  `claude/elegant-mayer-4lxj53` pokreće `codex-webview.yml` (testovi → APK →
+  emulator → GitHub Release `vX.Y.Z`), a telefon ga preuzima kroz
+  **Meni → Ažuriraj aplikaciju**. Release nastaje SAMO ako CI prođe zeleno.
 - Ili ručno: `android/copy-assets.ps1` / `.sh` pa build kroz Android Studio.
 - Kad se mijenja `AndroidManifest.xml` ili bilo koji `.java` fajl (nova
   dozvola, native most i sl.) — **treba pun rebuild u Android Studiju**, samo
@@ -1973,6 +1977,19 @@ način provjere."
 
 ## Admin — sekcija Korisnici
 
+- **Dva prikaza (v2.9.1)**, na zahtjev "admin da vidi sve zadnje aktivne a ne
+  po šumarijama". Zadani **"Po aktivnosti"**: svi korisnici u jednoj listi,
+  KALENDARSKE grupe (Danas od lokalne ponoći / 7 / 30 dana / Ranije / Bez
+  aktivnosti / Nije dostupno), kartica nosi šumariju i relativno vrijeme.
+  **"Po šumarijama"**: abecedno, "aktivno u 7 dana" po grupi, `<details>` se
+  sklapa (`tvlake_adm_sum_zatvorene`); sort važi samo ovdje. Izbor u
+  `tvlake_adm_prikaz`. Čiste funkcije `_admAktivnostGrupa`,
+  `_admGrupisiPoAktivnosti`, `_admRelativno`, `_admGrupisiPoSumariji`.
+  `last_active_at === undefined` ("ne znam") se NIKAD ne prikazuje kao "nikad".
+  Nove boje u admin listi uzimati iz palete koju Dnevni mod već mapira
+  (`#4ade80`, `#fbbf24`…, `field-design.css`) — `#86efac` je pala na
+  kontrastu (day-layout-274/day-all-panels-275).
+
 - **Preuređeno zbog preglednosti (v3.121.0)**, na zahtjev. Lista je dotad
   crtala SVE za svakog korisnika odjednom i grupisala isključivo po šumariji.
   Izmjereno na 35 korisnika: lista je poslije **28% kraća** uz nepromijenjen
@@ -2763,6 +2780,40 @@ namjerno, prije nego se jave.
   `_WC_CACHE`/`CachedWCover` morali biti pomjereni ISPRED `const TL = {`).
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
+
+- **Slabiji telefoni — WebView renderer i memorija (v2.8.10)**:
+  - **Nikad `webView.setLayerType(LAYER_TYPE_HARDWARE)`** — tjera cijeli WebView
+    kroz dodatnu ekransku GPU teksturu; na slabom GPU-u daje prazne dijelove
+    panela/karte. Prozor je već ubrzan (manifest). Test to čuva
+    (`ExplorerNavigationTest`: `FLAG_HARDWARE_ACCELERATED` prozora +
+    `LAYER_TYPE_NONE`). **Ne provjeravati `view.isHardwareAccelerated()` na
+    RESUMED** — true je tek kad je view priključen, pa test bude povremen.
+  - **`onRenderProcessGone`** pravi novi WebView i ponovo učita stranicu
+    (najviše 3× u 2 min, log `DendroRender`); bez njega OOM renderera ruši
+    CIJELI app. Snimanje vraća postojeći `_crashCheck` + native bafer.
+  - **`_renderRecover` pri memorijskom pritisku samo prazni bitmap keš i smanjuje
+    limite** — ne `close()` (D1-16) i NE prazni redove pločica: red drži
+    VIDLJIVE pločice, `_odustani` bi ih ostavio praznim do pomaka karte.
+  - Lite profil (`render-health.js`, ≤4 GB/`lowRam`) gasi beskonačne ukrasne
+    pulseve indikatora (box-shadow animacije = paint u svakom frame-u satima).
+    Spinneri učitavanja ostaju.
+- **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
+  `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
+  ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),
+  a UMD omotač sam zamijeni Proxy. Izmjereno CPU 4×: load ~3,8 s → ~2,4 s.
+  Novi kod smije zvati `turf.*` sinhrono kao i prije; `typeof turf` je sad
+  uvijek `'object'`. Workeri i dalje `importScripts` — nisu dirani.
+- **Izmjereno a NE isplati se (v2.9.0)**: premještanje rijetkih modala (Pomoć,
+  723 elementa) u `<template>` smanji DOM 16 % ali NE ubrzava start ni promjenu
+  taba (u šumu mjerenja) — skriveni `display:none` elementi su jeftini. Ne
+  raditi bez novog mjerenja. Sljedeći stvarni trošak pri startu je glavni JS
+  blok (1,68 MB inline, ~0,6 s blokiranja na CPU 4×) — izdvajanje traži
+  prepravku ~57 testova koji čitaju funkcije iz `index.html`.
+- **Mjerenje performansi** (scratchpad skripte, ne repo): Playwright 360×740,
+  keširan profil, `navigator.onLine=false`, `Emulation.setCPUThrottlingRate 4`,
+  CDP Tracing (`ParseHTML`/`EvaluateScript`/`v8.compile`) i Profiler; uvijek
+  2–3 ponavljanja jer je šum ±300 ms. Paralelno pokrenuti browser testovi
+  (dva Chromiuma) izazivaju lažne isteke roka.
 
 - **N.V. (nadmorska visina) iz DEM-a, uživo i offline (v1.7.8)**: prijava
   "kako idem po karti želim da se mijenja nadmorska visina". Tri uzroka:
@@ -4484,8 +4535,21 @@ namjerno, prije nego se jave.
 3. Podigni sve tri verzije (vidi gore). Izmjene samo dokumentacije (ovaj fajl,
    README) ne traže bump verzije.
 4. Commit poruka na bosanskom, objašnjava UZROK ne samo šta je promijenjeno.
-5. Push na `CODEX-US-SUME` (PR #32 se sam ažurira). Grana `claude/branch-072026-sa9wz0`
-   i PR #30 su ZATVORENO poglavlje — ne gurati tamo.
+5. **Push na `claude/elegant-mayer-4lxj53`** (od 2026-10-12). Ta grana:
+   - pokreće `codex-webview.yml` (push okidač I `if:` uslov joba `apk` — oba
+     moraju sadržavati granu, inače je job "skipped" bez greške) i objavljuje
+     GitHub Release koji koristi **Meni → Ažuriraj aplikaciju**;
+   - je izvor za **GitHub Pages** (deploy.yml, `claude/**`; korisnik je
+     prebacio Pages na nju).
+   `CODEX-US-SUME` (Codex, do v2.8.9) i `claude/branch-072026-sa9wz0` / PR #30
+   su ZATVORENO poglavlje — ne gurati tamo.
+   - Iz Claude sesije `workflow_dispatch` i "re-run failed jobs" vraćaju 403 —
+     CI se pokreće samo novim pushem (nikad prazan commit; popravka mora biti
+     stvarna). Artefakt sa punim logcatom proxy ne pušta (blob.core.windows.net),
+     pa `tests/android/explorer-offline.sh` na padu sam ispisuje ključne
+     TestRunner/ExplorerCI/chromium/DendroRender redove u job log.
+   - Verzija prati šemu gore (Z 0→9): 2.8.10 je bila greška (trebalo je 2.9.0);
+     updater poredi segmente numerički pa nije štetila, ali se ne ponavlja.
 6. **Terminologija je bosanska, ne srbijanska/hrvatska** ("historija" ne
    "istorija", "sistem" ne "sustav", i slično) — u NOVOM tekstu koji se piše
    (komentari, UI, commit poruke, CLAUDE.md). Ne prepravljati postojeći kod
@@ -4495,7 +4559,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.1, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.
