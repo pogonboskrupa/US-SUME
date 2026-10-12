@@ -213,6 +213,11 @@ html[data-field-theme=day] .layer-status[data-ton=ok] {color:#14532d;}html[data-
 .layer-row-actions .layer-del {color:#f87171;border-color:rgba(248,113,113,.5);}
 html[data-field-theme=day] .layer-row-actions .layer-del {color:#991b1b;border-color:#fca5a5;}
 .layer-more {width:100%;margin-top:10px;}
+.layer-row.is-editing {border-color:#16a34a;}
+.layer-row-style {grid-column:1/-1;margin-top:4px;}
+.layer-row-style .le-style>.le-section:first-of-type {margin-top:8px;}
+.kml-drive-row button.kml-drive-saved {background:var(--field-card,transparent);color:#4ade80;border-color:rgba(74,222,128,.5);}
+html[data-field-theme=day] .kml-drive-row button.kml-drive-saved {background:#fff;color:#166534;border-color:#16a34a;}
 .kml-drive{margin-top:20px;padding-top:18px;border-top:1px solid var(--field-border)}
 .kml-drive header{display:flex;align-items:center;justify-content:space-between;gap:10px}.kml-drive header small{font-size:10px;letter-spacing:.08em;color:var(--field-muted)}.kml-drive header h3{margin:4px 0}
 .kml-drive button{min-height:44px;padding:9px 12px;border-radius:10px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui;cursor:pointer}.kml-drive button:disabled{opacity:.55;cursor:default}

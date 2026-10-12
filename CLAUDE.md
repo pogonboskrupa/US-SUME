@@ -2805,6 +2805,16 @@ namjerno, prije nego se jave.
   KML. Poruka uspjeha je "N sloj(a) učitan(o)" (test `menu-tools` je čeka).
   Brisanje ide kroz `_dlgConfirm` i ponovo traži indeks (`kmlLs.indexOf`) jer
   se lista može promijeniti dok je dijalog otvoren.
+- **Katalog KML-a: preuzet sloj se prepoznaje i po NAZIVU (v2.9.3)**: GitHub
+  `/releases` vraća SVE releaseove KARTE, a id je `github-kml-<asset id>` — isti
+  fajl iz starijeg releasea je bio zaseban red sa "Preuzmi i dodaj" iako je
+  sloj već na telefonu. Sad GitHub lista nudi samo najnoviji primjerak naziva
+  (`newestOnly`), a sloj sačuvan pod drugim id-jem istog naziva/izvora
+  (`localByName`) daje "Ažuriraj"; zamjena (`replaceOlder`) briše staru verziju
+  tek POSLIJE trajnog upisa nove i prenosi naziv/stil/vidljivost. Bez interneta
+  "Ažuriraj" otvara sačuvanu staru verziju. Lista "Na ovom uređaju" ima
+  "Linija i ispuna" (`layerImportStil`) — isti `_layerStyleControls` kao
+  Granice/popup, otvoreni editor se pamti po objektu sloja, ne po indeksu.
 - **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
   `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
   ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),

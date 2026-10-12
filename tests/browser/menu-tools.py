@@ -47,7 +47,7 @@ const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},server
 let exchangeCalls=[],exchangeHold=false,exchangeRelease=null;
 const _mrezaSila=()=>{},serverPreuzmiDijeljeno=async()=>{exchangeCalls.push('vlake');return {ok:true,count:1,projects:1}},dozLoadOdjeli=async()=>{exchangeCalls.push('doz');return true},dozLoadLayers=async id=>{exchangeCalls.push('doz-'+id);return true};
 '''
-js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
+js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','delK','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
 js+='\n'+(ROOT/'static/js/layer-editor.js').read_text()
 js+='\n'+'\n'.join(re.findall(r"proj4.defs\('EPSG:3127[56]', [^\n]+",SOURCE))
 js+='\n'+(ROOT/'static/js/local-layer-import.js').read_text()+'\n'+(ROOT/'static/js/tab-data.js').read_text()+'\n'+(ROOT/'static/js/server-panel.js').read_text()
@@ -269,6 +269,31 @@ async def main():
         assert await page.evaluate('kmlLs.length')==4
         assert 'Nalog je promijenjen' in await page.locator('#kml-drive-list').inner_text()
         await page.evaluate("sbUser={id:'A'};closeLayerImport()")
+        # Nova verzija istog fajla (nov id, isti naziv): stara je prepoznata kao preuzeta, nudi se Ažuriraj, a zamjena čuva stil.
+        await page.evaluate("const k=kmlLs.find(k=>k._driveSource?.id==='fixture-drive-road-261');k.col='#06b6d4';k.weight=5;saveKmlStyles();driveFailure=false;driveHold=false;driveFiles.push({...driveFiles[0],id:'fixture-drive-road-v2-261'});openLayerImport();KmlDownloads.refresh()")
+        await page.wait_for_function("document.querySelectorAll('.kml-drive-row').length===5")
+        assert await page.locator('button[data-source-id="fixture-drive-road-v2-261"]').inner_text()=='Ažuriraj'
+        await page.evaluate("KmlDownloads.start('fixture-drive-road-v2-261')");await page.wait_for_function('!_layerImportBusy')
+        upd=await page.evaluate("(()=>{const r=kmlLs.filter(k=>k._driveSource?.name==='Kamionski <img src=x> put.kml');return {n:r.length,id:r[0]?._driveSource.id,col:r[0]?.col,w:r[0]?.weight,name:r[0]?.name,len:kmlLs.length,stored:Object.values(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))).filter(v=>v._driveSource?.name==='Kamionski <img src=x> put.kml').length}})()")
+        assert upd=={'n':1,'id':'fixture-drive-road-v2-261','col':'#06b6d4','w':5,'name':'Kamionski <img src=x> put.kml','len':4,'stored':1},upd
+        assert await page.locator('button[data-source-id="fixture-drive-road-v2-261"]').inner_text()=='Prikaži'
+        assert await page.evaluate("KmlDownloads.newestOnly([{name:'Granice.kml',id:'a'},{name:'granice.kml',id:'b'},{name:'Putevi.kml',id:'c'}]).map(s=>s.id).join()")=='a,c'
+        # Linija i ispuna direktno u listi "Na ovom uređaju".
+        await page.evaluate("layerImportStil(kmlLs.findIndex(k=>k.name==='Odjeli.kml'))")
+        row=page.locator('#layer-loaded-list .layer-row.is-editing')
+        assert await row.count()==1 and await row.locator('.le-section').count()==2
+        await row.locator('.le-swatch[aria-label="Boja #ef4444"]').click()
+        assert await page.evaluate("kmlLs.find(k=>k.name==='Odjeli.kml').col")=='#ef4444'
+        assert 'rgb(239, 68, 68)' in await page.locator('#layer-loaded-list .layer-row.is-editing .layer-swatch').evaluate('e=>e.style.background')
+        await row.locator('.le-section .le-switch input[type=checkbox]').check()
+        assert await page.evaluate("kmlLs.find(k=>k.name==='Odjeli.kml').fill")==True
+        assert await row.locator('.le-fill-controls').is_visible()
+        await page.locator('#layer-loaded-list .layer-row.is-editing').scroll_into_view_if_needed()
+        for theme in ['day','dark']:
+            await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+            await page.set_viewport_size({'width':390,'height':800});await bounds(page,'.layer-sheet',390,800)
+            await page.screenshot(path=str(OUT/f'layer-list-style-{theme}.png'))
+        await page.evaluate("closeLayerImport()")
         async with page.expect_file_chooser() as event:await page.click('#camera-test')
         chooser=await event.value;assert not chooser.is_multiple()
         assert await page.locator('#loc-photo-cam').get_attribute('capture')=='environment'
