@@ -167,7 +167,7 @@ async def main():
 
         await page.set_viewport_size({'width':390,'height':800});await page.evaluate('document.documentElement.dataset.fieldTheme="day";openLayerImport();layerImportTab("shp")')
         await page.locator('#layer-file-shp').set_input_files([upload('Odjeli.SHP',polygon()),upload('odjeli.DBF',dbf()),upload('odjeli.cpg',b'65001'),upload('odjeli.shx',b'')])
-        await page.wait_for_function('!_layerImportBusy && document.querySelector("#layer-import-status").textContent.includes("Učitano 1")')
+        await page.wait_for_function('!_layerImportBusy && document.querySelector("#layer-import-status").textContent.includes("1 sloj učitan")')
         data=await page.evaluate('''async()=>{const k=kmlLs[0],p=k.grp.getLayers()[0],s=await _localLayerSnapshot();return {count:kmlLs.length,rings:p.getLatLngs().length,name:p._kmlName,attr:p._kmlExtData.NAZIV,bounds:k.grp.getBounds().toBBoxString(),backup:s,meta:JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))}}''')
         assert data['count']==1 and data['rings']==2 and data['name']=='Odjel Čuvar & <105>' and data['attr']==data['name'],data
         assert data['bounds']=='16,44.9,16.01,44.91',data

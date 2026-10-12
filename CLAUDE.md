@@ -2797,6 +2797,14 @@ namjerno, prije nego se jave.
   - Lite profil (`render-health.js`, ≤4 GB/`lowRam`) gasi beskonačne ukrasne
     pulseve indikatora (box-shadow animacije = paint u svakom frame-u satima).
     Spinneri učitavanja ostaju.
+- **Dodaj fajl na kartu (KML/SHP) — pregled u samom prozoru (v2.9.2)**: lista
+  "Na ovom uređaju" (`layerImportRenderList`, `static/js/local-layer-import.js`)
+  radi nad `kmlLs` (lokalni = bez `_key`) i poziva postojeće `togK`/`delK` —
+  ne dodavati paralelno stanje. Uvezeni sloj nosi opcionalno `fmt:'shp'` (u
+  `_LOCAL_KML_KEY` i na sloju) samo za oznaku izvora; stari zapisi bez polja =
+  KML. Poruka uspjeha je "N sloj(a) učitan(o)" (test `menu-tools` je čeka).
+  Brisanje ide kroz `_dlgConfirm` i ponovo traži indeks (`kmlLs.indexOf`) jer
+  se lista može promijeniti dok je dijalog otvoren.
 - **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
   `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
   ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),

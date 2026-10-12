@@ -183,6 +183,36 @@ html #guide-choice-modal .guide-sheet,html #layer-import-modal .layer-sheet {dis
 .layer-pick {display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;background:#166534;color:#fff;border:1px solid #166534;border-radius:12px;padding:12px;font:700 14px system-ui;cursor:pointer;}.layer-pick:disabled {opacity:.55;cursor:wait;}
 .layer-file-hint {padding:13px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:12px;margin:13px 0;overflow-wrap:anywhere;}.layer-file-hint b {display:block;font-size:13px;line-height:1.6;}.layer-file-hint span {display:block;font-size:12px;line-height:1.7;color:var(--field-muted);margin-top:4px;}.layer-crs-label {font-size:12px;font-weight:700;}
 .layer-status {margin-top:18px;border-top:1px solid var(--field-border);padding-top:13px;font-size:13px;line-height:1.7;color:var(--field-muted);overflow-wrap:anywhere;}
+/* v2.9.2: tabovi sa oznakom formata, izbor fajla kao kartica, pregled uvezenih slojeva. */
+.layer-tabs button {display:flex;align-items:center;gap:10px;text-align:left;min-height:58px;}
+.layer-tabs button>span:last-child {display:flex;flex-direction:column;min-width:0;}
+.layer-tabs button small {font:500 11px system-ui;opacity:.8;margin-top:2px;}
+.layer-tab-ico {display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:9px;background:#1e40af;color:#fff;font:800 10px system-ui;letter-spacing:.04em;}
+.layer-tab-ico.shp {background:#7c2d12;}
+.layer-tabs button[aria-selected=true] .layer-tab-ico {background:rgba(255,255,255,.18);}
+.layer-drop {flex-wrap:wrap;justify-content:flex-start;text-align:left;min-height:76px;padding:14px 16px;border-style:dashed;border-width:2px;border-color:#22c55e;margin-top:4px;}
+.layer-drop>.ic {width:26px;height:26px;flex:0 0 26px;}
+.layer-drop>span:nth-of-type(1) {display:flex;flex-direction:column;flex:1;min-width:0;}
+.layer-drop small {font:500 12px system-ui;opacity:.9;margin-top:3px;line-height:1.4;}
+.layer-ext {display:flex;flex-wrap:wrap;gap:5px;width:100%;padding-left:34px;}
+.layer-ext i {font:700 11px ui-monospace,monospace;font-style:normal;background:rgba(255,255,255,.16);border-radius:6px;padding:2px 7px;}
+.layer-status[data-ton=ok] {color:#4ade80;}.layer-status[data-ton=greska] {color:#f87171;}
+html[data-field-theme=day] .layer-status[data-ton=ok] {color:#14532d;}html[data-field-theme=day] .layer-status[data-ton=greska] {color:#991b1b;}
+.layer-loaded {margin-top:20px;padding-top:16px;border-top:1px solid var(--field-border);}
+.layer-loaded header h3 {margin:0;font-size:15px;}.layer-loaded header h3 span {color:var(--field-muted);font-weight:600;}
+.layer-loaded header small {display:block;font-size:11px;color:var(--field-muted);margin:3px 0 10px;}
+.layer-empty {font-size:13px;line-height:1.6;color:var(--field-muted);padding:12px;border:1px dashed var(--field-border);border-radius:12px;margin:0;}
+.layer-row {display:grid;grid-template-columns:12px minmax(0,1fr);gap:4px 10px;align-items:start;padding:11px 12px;margin-top:8px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg);}
+.layer-row.is-hidden .layer-swatch {opacity:.35;}.layer-row.is-hidden {border-style:dashed;}
+.layer-swatch {width:12px;height:12px;border-radius:4px;margin-top:4px;box-shadow:0 0 0 1px rgba(255,255,255,.25);}
+.layer-row-copy b {display:block;font-size:13px;line-height:1.45;overflow-wrap:anywhere;color:var(--field-ink);}
+.layer-row-copy small {display:block;font-size:11px;line-height:1.6;color:var(--field-muted);}
+.layer-src {font-style:normal;font-weight:800;font-size:10px;letter-spacing:.04em;border:1px solid var(--field-border);border-radius:5px;padding:0 5px;margin-right:6px;}
+.layer-row-actions {grid-column:2;display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.layer-row-actions button,.layer-more {min-height:40px;padding:7px 12px;border-radius:9px;border:1px solid var(--field-border);background:var(--field-card,transparent);color:var(--field-ink);font:600 12px system-ui;cursor:pointer;}
+.layer-row-actions .layer-del {color:#f87171;border-color:rgba(248,113,113,.5);}
+html[data-field-theme=day] .layer-row-actions .layer-del {color:#991b1b;border-color:#fca5a5;}
+.layer-more {width:100%;margin-top:10px;}
 .kml-drive{margin-top:20px;padding-top:18px;border-top:1px solid var(--field-border)}
 .kml-drive header{display:flex;align-items:center;justify-content:space-between;gap:10px}.kml-drive header small{font-size:10px;letter-spacing:.08em;color:var(--field-muted)}.kml-drive header h3{margin:4px 0}
 .kml-drive button{min-height:44px;padding:9px 12px;border-radius:10px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui;cursor:pointer}.kml-drive button:disabled{opacity:.55;cursor:default}
