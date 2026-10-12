@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),outline=require('../../static/js/vlaka-outline.js');
+assert.equal(outline.colorFor('#000000'),'#ffffff');assert.equal(outline.colorFor('#fff'),'#000000');assert.equal(outline.colorFor('#1e40af'),'#ffffff');assert.equal(outline.colorFor('#fbbf24'),'#000000');
+for(const w of [2,4,8]){const delta=outline.widthFor(w)-w;assert(delta>0&&delta<w*.15);assert(Math.abs(delta-w*.14)<.00001);}
+const calls=[],ctx={save(){calls.push('save')},restore(){calls.push('restore')},setLineDash(v){calls.push(v)},stroke(){calls.push({width:this.lineWidth,color:this.strokeStyle,cap:this.lineCap})}},Canvas=function(){};Canvas.prototype._fillStroke=function(){calls.push('main')};Canvas.include=o=>Object.assign(Canvas.prototype,o);
+const sandbox={L:{Canvas},window:null};sandbox.window=sandbox;vm.createContext(sandbox);vm.runInContext(fs.readFileSync('static/js/vlaka-outline.js','utf8'),sandbox);
+new Canvas()._fillStroke(ctx,{options:{stroke:true,vlakaOutline:true,weight:4,color:'#000000',opacity:.9,lineCap:'round',lineJoin:'round',_dashArray:[.01,8]}});assert.equal(calls.at(-1),'main');assert.deepEqual(calls[1],[.01,8]);assert.equal(calls[2].color,'#ffffff');assert.equal(calls[2].width,4*1.14);assert.equal(calls[2].cap,'round');calls.length=0;new Canvas()._fillStroke(ctx,{options:{stroke:true,vlakaOutline:false,weight:4}});assert.deepEqual(calls,['main']);
+console.log('OK: automatic black/white contrast, <15% total width, same dot/dash pattern, outline before main and opt-in');

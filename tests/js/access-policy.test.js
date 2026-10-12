@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+let now=Date.parse('2026-10-05T10:00:00Z'),fn=null,delay=null,blocked=0,listener=null;
+const root={Date:{now:()=>now},setTimeout:(cb,ms)=>{fn=cb;delay=ms;return 1;},clearTimeout:()=>{fn=null;},document:{addEventListener:(e,cb)=>listener=cb,removeEventListener:()=>listener=null}};
+const ctx={window:root,Date:class extends Date {static now(){return now;}}};vm.runInNewContext(fs.readFileSync('static/js/access-policy.js','utf8'),ctx);
+const A=root.AccessPolicy,expiry=now+7*86400000;
+const p={id:'self',odobren:false,is_admin:false,prvo_odobren_at:null,probni_do:new Date(expiry).toISOString()};
+assert(A.canUse(p,now));assert(A.canUse(p,expiry-1));assert(!A.canUse(p,expiry));assert(!A.canUse(p,expiry+1));
+assert(!A.canUse({...p,probni_do:'invalid'}));assert(!A.canUse({...p,probni_do:undefined}));assert(!A.canUse({...p,prvo_odobren_at:new Date(now).toISOString()}));
+assert(A.canUse({...p,odobren:true},expiry+1));assert(A.canUse({...p,is_admin:true},expiry+1));assert(!A.canUse(null));
+const snapshot=JSON.stringify(p);let profile=p;A.watch(()=>profile,()=>blocked++);assert(delay===60000);assert(listener);
+now=expiry;fn();assert.equal(blocked,1);assert.equal(JSON.stringify(p),snapshot);assert.equal(listener,null);
+now=expiry-1000;A.watch(()=>p,()=>blocked++);assert.equal(delay,1000);now=expiry+2000;listener();assert.equal(blocked,2);
+now=expiry-1000;A.watch(()=>profile,()=>blocked++);profile={...p,odobren:true};now=expiry;fn();assert.equal(blocked,2);
+console.log('Probni pristup: granica roka, opoziv, odobrenje, offline timer i očuvani profil — OK');

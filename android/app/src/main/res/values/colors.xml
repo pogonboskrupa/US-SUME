@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema aplikacije — identično manifest.json theme_color i background_color -->
     <color name="colorPrimary">#16213e</color>
     <color name="colorBackground">#0f172a</color>
-    <!-- Splash pozadina = zelena iz logoa -->
-    <color name="colorSplash">#376638</color>
-    <!-- Adaptive icon background -->
-    <color name="ic_launcher_background">#376638</color>
+    <!-- Tamnozelena pozadina nove korisničke DENDRO MAP ikonice. -->
+    <color name="colorSplash">#002B18</color>
+    <color name="ic_launcher_background">#002B18</color>
 </resources>
