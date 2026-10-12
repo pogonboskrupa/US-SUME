@@ -14,7 +14,7 @@ permissions:
   contents: write
 jobs:
   apk:
-    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01'
+    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01' || github.ref == 'refs/heads/claude/elegant-mayer-4lxj53'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
