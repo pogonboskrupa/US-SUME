@@ -5,6 +5,8 @@ on:
     branches:
       - CODEX-US-SUME
       - CODEX-US-SUME-2026-10-01
+      # Claude Code radna grana — isti build/testovi/release za Meni → Ažuriraj aplikaciju.
+      - claude/elegant-mayer-4lxj53
 concurrency:
   group: codex-webview-${{ github.ref }}
   cancel-in-progress: true
