@@ -2816,6 +2816,7 @@ namjerno, prije nego se jave.
   "Linija i ispuna" (`layerImportStil`) — isti `_layerStyleControls` kao
   Granice/popup, otvoreni editor se pamti po objektu sloja, ne po indeksu.
 - **Vodi me / Server / Granice (v2.9.4)**:
+  - **Novi `*HitTest` u `map.on('click')` mora dobiti stub u `tests/browser/server-map-218.py`** (red sa `_msrHitTest=()=>null`) — taj harness izvlači handler klika bez ostalih funkcija; v2.9.4 je pao na CI-ju baš zbog `_guideHitTest`.
   - **Klik na rutu "Vodi me" nije stizao** — ruta je u podrazumijevanom canvasu
     (overlayPane), a vlake/mjerenja u canvasima iznad (zamka v3.101.0). Sad
     `_guideHitTest` u `map.on('click')` (prije vlaka, poslije mjerenja); popup
