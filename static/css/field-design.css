@@ -1055,3 +1055,35 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 
 /* Lager: odvojeni simbol/tekst i sklopivi pregled pojedinačnih položaja. */
 .lager-style{color:var(--field-ink)}#lager-style-preview{display:grid;justify-content:center;justify-items:center;padding:18px;min-height:56px;overflow:hidden;background:#142132;border:1px solid var(--field-border);border-radius:12px}#lager-position-list{margin-top:14px}#lager-position-list>summary{cursor:pointer;min-height:44px;line-height:44px;color:var(--field-ink);font-weight:650}#lager-position-rows{display:grid;gap:8px;max-height:260px;overflow:auto}.lager-position-row{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:12px;border:1px solid var(--field-border);border-radius:11px;background:var(--field-bg);overflow-wrap:anywhere}.lager-position-row>b{font-size:13px;color:var(--field-ink)}.lager-position-row>span{font-size:12px;color:var(--field-muted)}.lager-position-row>button{min-height:44px;border:1px solid var(--field-border);border-radius:9px;color:var(--field-ink);background:var(--field-card);font:600 12px system-ui;cursor:pointer}.lager-position-row>button:disabled{opacity:.5;cursor:default}#lager-position-toolbar{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:99031;padding:12px;box-sizing:border-box;border:1px solid var(--field-border);border-radius:13px;background:var(--field-card);color:var(--field-ink);box-shadow:0 4px 24px #0004}#lager-position-toolbar[hidden]{display:none!important}#lager-position-toolbar>b{font-size:13px}#lager-position-toolbar>p{font-size:12px;line-height:1.5;margin:7px 0}#lager-position-toolbar>button{width:100%;min-height:44px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui}#map.lager-positioning :is(canvas,.leaflet-marker-icon,.leaflet-interactive){pointer-events:none!important}
+.guide-route.is-active {border-color:#8b5cf6;box-shadow:inset 3px 0 0 #8b5cf6;}
+/* Granice i putevi (v2.9.4): kartice umjesto inline stilova; ID-jevi i handleri nepromijenjeni. */
+#ls-pane-granice{font-family:system-ui,sans-serif;color:var(--field-ink);}
+.gp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.gp-head h3{margin:0;font:700 17px/1.3 system-ui;}.gp-head small{display:block;font-size:12px;color:var(--field-muted);margin-top:3px;}
+.gp-btn{flex-shrink:0;min-width:44px;min-height:44px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);color:var(--field-ink);cursor:pointer;display:grid;place-items:center;}
+.gp-card{margin:12px 0;padding:12px;border:1px solid var(--field-border);border-radius:14px;background:var(--field-bg);}
+.gp-label{display:block;margin:0 0 8px;font:700 11px/1.4 system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--field-muted);}
+.gp-find input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);color:var(--field-ink);font:15px system-ui;}
+#granice-trazi-rez:not(:empty){margin-top:8px;display:grid;gap:6px;}
+.gt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;align-items:center;width:100%;min-height:48px;padding:8px 12px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);color:var(--field-ink);text-align:left;cursor:pointer;font-family:inherit;}
+.gt-row b{font-size:14px;overflow-wrap:anywhere;}.gt-row small{grid-column:1;font-size:11px;color:var(--field-muted);overflow-wrap:anywhere;}.gt-row span{grid-row:1/3;grid-column:2;font-size:20px;color:var(--field-muted);}
+.gt-empty{margin:4px 0 0;font-size:12px;color:var(--field-muted);}
+.gp-row{display:grid;grid-template-columns:24px 30px minmax(0,1fr);align-items:center;gap:10px;min-height:48px;cursor:pointer;}
+.gp-row input{width:22px;height:22px;margin:0;cursor:pointer;}.gp-swatch{display:block;width:28px;border-radius:2px;}
+.gp-row-txt b{display:block;font-size:14px;font-weight:600;}.gp-row-txt small{display:block;font-size:11px;color:var(--field-muted);}
+.gp-sub{margin:0 0 6px 34px;}.gp-sub .boundary-only-option{margin:4px 0 8px;}
+.gp-range{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--field-muted);min-height:40px;}.gp-range input{flex:1;min-width:0;}
+.gp-own{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+#ls-pane-granice #kml-drop,.gp-own-btn{display:flex;align-items:center;gap:10px;margin:0;min-height:60px;padding:10px 12px;border:1.5px dashed var(--field-border);border-radius:12px;background:var(--field-card);color:var(--field-ink);text-align:left;font:13px/1.4 system-ui;cursor:pointer;}
+.gp-own-btn{border-style:solid;}
+#ls-pane-granice #kml-drop .ic,.gp-own-btn .ic{width:22px;height:22px;flex-shrink:0;margin:0;}
+#ls-pane-granice #kml-drop b,.gp-own-btn b{display:block;font-size:13px;}#ls-pane-granice #kml-drop small,.gp-own-btn small{display:block;font-size:11px;color:var(--field-muted);}
+#ls-pane-granice #kml-drop.over{border-color:#3b82f6;}
+.gp-own-info{margin-top:8px;font-size:12px;color:var(--field-muted);}
+.gp-link{margin-top:8px;padding:8px 0;min-height:40px;border:0;background:transparent;color:#7dd3fc;font:600 13px system-ui;cursor:pointer;text-align:left;}
+html[data-field-theme=day] .gp-link{color:#1e40af;}
+@media(max-width:360px){.gp-own{grid-template-columns:1fr;}}
+#ls-pane-granice .kml-drive{margin:12px 0;padding:12px;border:1px solid var(--field-border);border-radius:14px;background:var(--field-bg);}
+#ls-pane-granice .kml-drive header h3{font:700 15px/1.3 system-ui;color:var(--field-ink);}
+#ls-pane-granice .kml-drive>p{margin:6px 0 0;font:13px/1.5 system-ui;color:var(--field-muted);}
+#ls-pane-granice #kml-github-message:not(:empty){margin-top:6px;font:12px/1.5 system-ui;color:var(--field-muted);}

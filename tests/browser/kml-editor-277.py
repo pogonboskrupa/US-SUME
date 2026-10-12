@@ -33,6 +33,16 @@ async def main():
   assert await page.locator('.le-layer-card').count()==2
   assert await page.locator('.gl-group-name').all_text_contents()==['Granice odjela','Kamionski putevi']
   await page.locator('.le-library-heading').scroll_into_view_if_needed();await page.screenshot(path=str(OUT/'kml-files.png'))
+  # Pronađi odjel: offline pretraga učitanih poligona po nazivu i atributu.
+  await page.locator('#ls-pane-granice').evaluate('e=>e.scrollTop=0');await page.fill('#granice-trazi','105')
+  assert await page.locator('#granice-trazi-rez .gt-row').count()==1
+  assert 'ha' in await page.locator('#granice-trazi-rez .gt-row small').inner_text()
+  await page.screenshot(path=str(OUT/'granice-trazi.png'))
+  await page.fill('#granice-trazi','nepostojeci');assert 'Nema odjela' in await page.locator('#granice-trazi-rez').inner_text()
+  await page.fill('#granice-trazi','odjel 105');await page.locator('#granice-trazi-rez .gt-row').first.click()
+  await page.wait_for_selector('.kml-info-popup');assert await page.evaluate("document.getElementById('layer-sheet').style.display")=='none'
+  await page.screenshot(path=str(OUT/'granice-trazi-karta.png'))
+  await page.evaluate('map.closePopup()');await page.wait_for_timeout(50);await page.evaluate('openGraniceModal()')
   await page.locator('.le-layer-card[data-layer="0"]').get_by_role('button',name='Uredi stil',exact=True).click()
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(800,480)]:

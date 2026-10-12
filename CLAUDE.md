@@ -2815,6 +2815,23 @@ namjerno, prije nego se jave.
   "Ažuriraj" otvara sačuvanu staru verziju. Lista "Na ovom uređaju" ima
   "Linija i ispuna" (`layerImportStil`) — isti `_layerStyleControls` kao
   Granice/popup, otvoreni editor se pamti po objektu sloja, ne po indeksu.
+- **Vodi me / Server / Granice (v2.9.4)**:
+  - **Klik na rutu "Vodi me" nije stizao** — ruta je u podrazumijevanom canvasu
+    (overlayPane), a vlake/mjerenja u canvasima iznad (zamka v3.101.0). Sad
+    `_guideHitTest` u `map.on('click')` (prije vlaka, poslije mjerenja); popup
+    ima i markere START/ODREDIŠTE, čita rutu iz registra pri svakom otvaranju
+    (preimenovanje), nudi Profil, Preimenuj, Skloni sa karte. `_guideResultLayer`
+    je sad `[obrub, linija, start, kraj]` — linija je indeks 1.
+  - **Server**: ponovljeno slanje iste stavke je JEDAN red sa "poslano N×"
+    (`sameItem` u `grouped`), broj na tabu = broj prikazanih redova
+    (`_serverTransferCount`); sklonidba stavka/stavke/stavki i GPS tačka/e;
+    vlaka koja čeka slanje otvara se na karti iz lokalnih podataka
+    (`_serverPendingMap`, radi bez mreže).
+  - **Granice**: kartice (`.gp-*`) umjesto inline stilova, svi stari ID-jevi
+    ostaju; **Pronađi odjel** (`static/js/granice-trazi.js`) pretražuje
+    UČITANE poligone po nazivu i atributima (offline), `105.000000` iz SHP-a
+    = 105, rezultat se istakne žutim obrubom i kad je sloj sakriven/"Samo za
+    poligon". Novi fajl je u `assets-manifest.json` required i u `sw.js`.
 - **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
   `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
   ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),
@@ -4577,7 +4594,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.1, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.4, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

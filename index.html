@@ -1042,6 +1042,19 @@ html.render-lite #ab-trag-stats .ab-ts-lbl::before {animation:none!important;}
 }
 /* Trag popup on map */
 .trag-popup { min-width:180px; }
+.guide-pop { min-width:220px; font-family:system-ui,sans-serif; }
+.guide-pop small { display:block; font-size:10px; font-weight:800; letter-spacing:.06em; color:#7c3aed; }
+.guide-pop-name { display:block; font-size:15px; color:#0f172a; margin:2px 0 8px; overflow-wrap:anywhere; }
+.guide-pop-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(64px,1fr)); gap:6px; }
+.guide-pop-stats div { background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:5px 7px; }
+.guide-pop-stats span { display:block; font-size:10px; color:#6b7280; }
+.guide-pop-stats b { font-size:13px; color:#1e1b4b; }
+.guide-pop-date { font-size:11px; color:#6b7280; margin-top:6px; }
+.guide-pop-main { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+.guide-pop-main button,.guide-pop-more button { min-height:40px; border-radius:9px; border:1px solid #cbd5e1; background:#fff; color:#1e293b; font:600 12px system-ui; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:5px; }
+.guide-pop-main .guide-pop-go { background:#6d28d9; border-color:#6d28d9; color:#fff; }
+.guide-pop-more { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; }
+.guide-pop-more .guide-pop-del { color:#b91c1c; border-color:#fecaca; }
 .trag-popup b { font-size:14px; font-weight:700; color:#0f172a; }
 .trag-popup-meta { font-size:11px; color:#888; margin:4px 0 8px; }
 .trag-popup-btns { display:flex; gap:6px; flex-wrap:wrap; }
@@ -5739,7 +5752,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.3';
+const APP_VER = 'v2.9.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -16449,6 +16462,8 @@ map.on('click', e => {
       const mm = _msrHitTest(e.latlng);
       if (mm) { _msrOpenPopupNa(mm, e.latlng); return; }
     }
+    // Ruta "Vodi me" — ista zamka kao mjerenja (vidi _guideHitTest).
+    if (_guideHitTest(e.latlng)) { _guideOpenPopupNa(e.latlng); return; }
     if (bestKey && bestD <= HIT_PX) { showKolegeVlakaInfo(bestKey,e.latlng); return; }
     if (bestI >= 0 && bestD <= HIT_PX) {
       selI(bestI);
@@ -30420,15 +30435,71 @@ async function _guideOsrmRoute(pts) {
 function _guideDrawResult(routePts, routeMeta) {
   _guideClearResult();
   const ll = routePts.map(p => [p.la, p.lo]);
-  const line   = L.polyline(ll, { color: '#a78bfa', weight: 4, opacity: 0.9 }).addTo(map);
+  // Tamni obrub ispod ljubičaste linije — ruta ide preko puteva i satelita,
+  // a sama ljubičasta se na tamnoj podlozi gubi.
+  const casing = L.polyline(ll, { color: '#1e1b4b', weight: 8, opacity: 0.55, interactive: false }).addTo(map);
+  const line   = L.polyline(ll, { color: '#a78bfa', weight: 5, opacity: 0.95 }).addTo(map);
+  const mStart = L.circleMarker(ll[0], { radius: 7, color: '#fff', weight: 2, fillColor: '#4ade80', fillOpacity: 1 }).addTo(map).bindTooltip('START', { permanent: true, direction: 'top' });
+  const mEnd   = L.circleMarker(ll[ll.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: '#f87171', fillOpacity: 1 }).addTo(map).bindTooltip('ODREDIŠTE', { permanent: true, direction: 'top' });
   if (routeMeta) {
-    line.bindPopup(() => _guideRoutePopupHtml(routeMeta), { maxWidth: 260 });
+    // Popup čita rutu iz registra pri SVAKOM otvaranju — poslije preimenovanja
+    // ne smije pokazati staro ime iz objekta zatvorenog u closure.
+    const html = () => _guideRoutePopupHtml(_guideRoutesLoad().find(r => r.id === routeMeta.id) || routeMeta);
+    [line, mStart, mEnd].forEach(l => l.bindPopup(html, { maxWidth: 280, className: 'guide-popup' }));
     _guideActiveRouteId = routeMeta.id;
   }
-  const mStart = L.circleMarker(ll[0], { radius: 7, color: '#4ade80', fillColor: '#4ade80', fillOpacity: 1 }).addTo(map).bindTooltip('START', { permanent: true, direction: 'top' });
-  const mEnd   = L.circleMarker(ll[ll.length - 1], { radius: 7, color: '#f87171', fillColor: '#f87171', fillOpacity: 1 }).addTo(map).bindTooltip('ODREDIŠTE', { permanent: true, direction: 'top' });
-  _guideResultLayer = [line, mStart, mEnd];
+  _guideResultLayer = [casing, line, mStart, mEnd];
   map.fitBounds(line.getBounds(), { padding: [40, 40] });
+}
+
+// Klik do linije rute najčešće NE STIGNE: ruta je u podrazumijevanom canvasu
+// (overlayPane, z 400), a vlake/mjerenja crtaju u vlastitim canvasima ISTOG ili
+// višeg z-indexa preko cijele karte (zamka v3.101.0). Zato map.on('click')
+// pita i ovu provjeru — u pikselima, jer je meta prst na ekranu.
+const _GUIDE_HIT_PX = 22;
+function _guideHitTest(latlng) {
+  if (!_guideResultLayer || !_guideActiveRouteId || !window.map) return false;
+  const line = _guideResultLayer[1];
+  if (!line || !map.hasLayer(line)) return false;
+  let k, px;
+  try { k = map.latLngToContainerPoint(latlng); px = line.getLatLngs().map(p => map.latLngToContainerPoint(p)); } catch(e) { return false; }
+  for (let i = 0; i < px.length - 1; i++) if (_distToSegPx(k, px[i], px[i + 1]) <= _GUIDE_HIT_PX) return true;
+  for (const m of [_guideResultLayer[2], _guideResultLayer[3]]) {
+    try { const c = map.latLngToContainerPoint(m.getLatLng()); if (Math.hypot(c.x - k.x, c.y - k.y) <= _GUIDE_HIT_PX) return true; } catch(e) {}
+  }
+  return false;
+}
+function _guideOpenPopupNa(latlng) {
+  const line = _guideResultLayer?.[1];
+  if (line) line.openPopup(latlng);
+}
+function _guideHideResult() {
+  _guideClearResult();
+  try { map.closePopup(); } catch(e) {}
+  showToast('Ruta sklonjena sa karte — ostaje sačuvana u spisku');
+}
+async function _guideRenameRoute(id) {
+  const arr = _guideRoutesLoad(), r = arr.find(x => x.id === id), owner = sbUser?.id;
+  if (!r) return;
+  const nm = await _dlgPrompt('Novi naziv rute', r.name || 'Ruta', { title: 'Preimenuj rutu', okLabel: 'Sačuvaj' });
+  if (nm == null || sbUser?.id !== owner) return;
+  const clean = String(nm).trim().slice(0, 80);
+  if (!clean) { showToast('⚠ Naziv ne može biti prazan'); return; }
+  const fresh = _guideRoutesLoad(), cur = fresh.find(x => x.id === id);
+  if (!cur) return;
+  cur.name = clean;
+  if (!_guideRoutesStore(fresh)) return;
+  try { map.closePopup(); } catch(e) {}
+  _guideRenderRoutes();
+  showToast('✓ Ruta preimenovana');
+}
+function _guideProfilRoute(id) {
+  const r = _guideRoutesLoad().find(x => x.id === id);
+  if (!r || !r.pts?.length) return;
+  try { map.closePopup(); } catch(e) {}
+  const hasElev = !!(r.alts && r.profPts);
+  const eta = _guideEtaHtml(r.distM, r.durS, r.alts || [], hasElev, r.osrm);
+  _renderElevProfile(r.name, hasElev ? r.profPts : r.pts, hasElev ? r.alts : r.pts.map(() => 0), hasElev ? 'model terena' : 'nedostupno', eta.html);
 }
 
 async function _guideFinish() {
@@ -30584,24 +30655,44 @@ function _guideRenderRoutes() {
   if (count) count.textContent = filtered.length + ' / ' + arr.length;
   if (!filtered.length) { el.innerHTML = '<div class="guide-empty">' + (arr.length ? 'Nema ruta za ovu pretragu.' : 'Još nema sačuvanih ruta. Izaberi polazak i napravi prvu rutu.') + '</div>'; return; }
   el.innerHTML = filtered.map(r => {
-    const durMin = r.durS != null ? Math.round(r.durS / 60) : null;
-    const meta = `${fmtL(r.distM || 0)}${durMin != null ? ' · 🚙 ' + (durMin >= 60 ? Math.floor(durMin / 60) + ' h ' + (durMin % 60) + ' min' : durMin + ' min') : ''}${r.osrm ? '' : ' · zračna'}`;
-    return `<article class="guide-route"><button type="button" class="guide-route-main" data-id="${_escHtml(String(r.id))}" onclick="_guideViewRoute(this.dataset.id)"><b>${_escHtml(r.name || 'Ruta')}</b><small>${meta}</small><span>Prikaži rutu →</span></button>
-      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)">Vodi me</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="_guideAskDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
+    const dur = _guideTrajanjeTxt(r.durS);
+    const meta = `${fmtL(r.distM || 0)}${dur ? ' · 🚙 ' + dur : ''}${r.osrm ? '' : ' · zračna'}`;
+    return `<article class="guide-route${r.id === _guideActiveRouteId ? ' is-active' : ''}"><button type="button" class="guide-route-main" data-id="${_escHtml(String(r.id))}" onclick="_guideViewRoute(this.dataset.id)"><b>${_escHtml(r.name || 'Ruta')}</b><small>${meta}</small><span>${r.id === _guideActiveRouteId ? '● Na karti' : 'Prikaži rutu →'}</span></button>
+      <div class="guide-route-actions"><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg>Podijeli</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)">Vodi me</button><button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideRenameRoute(this.dataset.id)" aria-label="Preimenuj rutu"><svg class="ic"><use href="#ic-crtaj"/></svg>Naziv</button><button type="button" class="guide-delete" data-id="${_escHtml(String(r.id))}" onclick="_guideAskDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg>Obriši</button></div></article>`;
   }).join('');
 }
 
 // Popup na klik na iscrtanu liniju rute (na karti) — isti obrazac kao trag/vlaka popup.
+function _guideTrajanjeTxt(durS) {
+  if (durS == null || !Number.isFinite(durS)) return '';
+  const min = Math.max(1, Math.round(durS / 60));
+  return min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60) + ' min' : min + ' min';
+}
+function _guideUspon(alts) {
+  let up = 0;
+  if (Array.isArray(alts)) for (let i = 1; i < alts.length; i++) { const d = alts[i] - alts[i - 1]; if (d > 0) up += d; }
+  return up;
+}
 function _guideRoutePopupHtml(r) {
-  const durMin = r.durS != null ? Math.round(r.durS / 60) : null;
-  const meta = `${fmtL(r.distM || 0)}${durMin != null ? ' · 🚙 ' + (durMin >= 60 ? Math.floor(durMin / 60) + ' h ' + (durMin % 60) + ' min' : durMin + ' min') : ''}${r.osrm ? '' : ' · zračna linija'}`;
-  return `<div class="trag-popup">
-    <b>${_escHtml(r.name || 'Ruta')}</b>
-    <div class="trag-popup-meta">${meta}</div>
-    <div class="trag-popup-btns">
-      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideExploreRoute(this.dataset.id)"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
-      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg> Pošalji</button>
-      <button type="button" data-id="${_escHtml(String(r.id))}" onclick="_guideAskDeleteRoute(this.dataset.id)" style="color:#f87171;border-color:#7f1d1d;"><svg class="ic"><use href="#ic-zatvori"/></svg> Briši</button>
+  const id = _escHtml(String(r.id)), dur = _guideTrajanjeTxt(r.durS);
+  const kad = r.ts ? new Date(r.ts) : null, p2 = n => String(n).padStart(2, '0');
+  const datum = kad ? p2(kad.getDate()) + '.' + p2(kad.getMonth() + 1) + '.' + kad.getFullYear() + ' ' + p2(kad.getHours()) + ':' + p2(kad.getMinutes()) : '';
+  const uspon = r.alts ? Math.round(_guideUspon(r.alts)) : null;
+  const stat = (lbl, val) => `<div><span>${lbl}</span><b>${val}</b></div>`;
+  return `<div class="guide-pop">
+    <small>${r.osrm ? 'RUTA PUTEM' : 'ZRAČNA LINIJA'}</small>
+    <b class="guide-pop-name">${_escHtml(r.name || 'Ruta')}</b>
+    <div class="guide-pop-stats">${stat('Dužina', fmtL(r.distM || 0))}${dur ? stat('Vožnja', dur) : ''}${uspon != null ? stat('Uspon', uspon + ' m') : ''}</div>
+    ${datum ? `<div class="guide-pop-date">Napravljena ${datum}</div>` : ''}
+    <div class="guide-pop-main">
+      <button type="button" class="guide-pop-go" data-id="${id}" onclick="_guideExploreRoute(this.dataset.id)"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
+      <button type="button" data-id="${id}" onclick="_guideProfilRoute(this.dataset.id)">Profil terena</button>
+    </div>
+    <div class="guide-pop-more">
+      <button type="button" data-id="${id}" onclick="_guideShareRoute(this.dataset.id)"><svg class="ic"><use href="#ic-posalji"/></svg> Podijeli</button>
+      <button type="button" data-id="${id}" onclick="_guideRenameRoute(this.dataset.id)"><svg class="ic"><use href="#ic-crtaj"/></svg> Preimenuj</button>
+      <button type="button" onclick="_guideHideResult()">Skloni sa karte</button>
+      <button type="button" class="guide-pop-del" data-id="${id}" onclick="_guideAskDeleteRoute(this.dataset.id)"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>
     </div>
   </div>`;
 }
@@ -42508,82 +42599,69 @@ if (typeof AndroidDownload !== 'undefined') {
 
   <!-- Tab: Granice -->
   <div id="ls-pane-granice" style="display:none;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <h3 style="margin:0;">🗂 Granice i putevi</h3>
-      <button class="gl-btn" onclick="reloadGraniceSlojevi()" title="Osvježi slojeve" style="font-size:13px;padding:4px 10px;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
-    </div>
+    <header class="gp-head">
+      <div><h3>Granice i putevi</h3><small>Odjeli, kamionski putevi i vlastiti slojevi · rade bez interneta</small></div>
+      <button class="gp-btn" onclick="reloadGraniceSlojevi()" title="Ponovo učitaj slojeve" aria-label="Ponovo učitaj slojeve"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
+    </header>
     <div id="granice-status" style="display:none;font-size:12px;font-weight:bold;padding:6px 10px;border-radius:6px;text-align:center;background:rgba(0,0,0,0.3);margin-bottom:8px;"></div>
 
-    <section class="kml-drive"><header><div><small>GITHUB · KARTE</small><h3>Preuzmi granice i puteve</h3></div><button type="button" id="kml-github-refresh" onclick="KmlDownloads.refreshGithub()">↻ Osvježi</button></header><p>Objavljeni KML slojevi iz repozitorija KARTE. Preuzmi i dodaj na kartu za offline rad.</p><div id="kml-github-message" role="status" aria-live="polite"></div><div id="kml-github-list"></div></section>
-    <div style="margin-top:14px;border-top:1px solid #1e3a5f;padding-top:14px;">
-      <h3 style="margin-bottom:10px;">Prikaz slojeva</h3>
-      <!-- Putevi -->
-      <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;padding:4px 0;">
-        <input type="checkbox" id="putevi-toggle" checked onchange="GithubLayers.toggle('roads',this.checked)"
-          style="width:18px;height:18px;accent-color:#f97316;cursor:pointer;">
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="display:inline-block;width:28px;height:4px;background:#f97316;border-radius:2px;"></span>
-          Šumski kamionski putevi <small id="github-roads-status"></small>
-        </span>
+    <!-- Pronađi odjel: pretražuje SAMO već učitane poligone (offline), vidi static/js/granice-trazi.js -->
+    <section class="gp-card gp-find">
+      <label for="granice-trazi" class="gp-label">Pronađi odjel</label>
+      <input id="granice-trazi" type="search" inputmode="search" autocomplete="off" placeholder="Broj odjela, odsjek ili naziv…" oninput="GraniceTrazi.render()">
+      <div id="granice-trazi-rez" role="list"></div>
+    </section>
+
+    <section class="gp-card">
+      <h4 class="gp-label">Prikaz na karti</h4>
+      <label class="gp-row">
+        <input type="checkbox" id="putevi-toggle" checked onchange="GithubLayers.toggle('roads',this.checked)" style="accent-color:#f97316;">
+        <span class="gp-swatch" style="height:4px;background:#f97316;"></span>
+        <span class="gp-row-txt"><b>Šumski kamionski putevi</b><small id="github-roads-status"></small></span>
       </label>
-      <!-- Granice odjela -->
-      <div style="padding:6px 0 2px;">
-        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
-          <input type="checkbox" id="granice-toggle" onchange="GithubLayers.toggle('boundaries',this.checked)"
-            style="width:18px;height:18px;accent-color:#38bdf8;cursor:pointer;">
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="display:inline-block;width:28px;height:0;border-top:2px dashed #38bdf8;border-bottom:1px solid rgba(56,189,248,0.3);"></span>
-            Granice odjela <small id="github-boundaries-status"></small>
-          </span>
-        </label>
+      <label class="gp-row">
+        <input type="checkbox" id="granice-toggle" onchange="GithubLayers.toggle('boundaries',this.checked)" style="accent-color:#38bdf8;">
+        <span class="gp-swatch" style="height:0;border-top:2px dashed #38bdf8;"></span>
+        <span class="gp-row-txt"><b>Granice odjela</b><small id="github-boundaries-status"></small></span>
+      </label>
+      <div class="gp-sub">
         <label class="boundary-only-option"><input type="checkbox" id="granice-only-polygon" onchange="GithubLayers.onlyPolygon(this.checked)"><span><b>Samo za poligon</b><small>Granice se prikazuju tokom izbora odjela za Doznaku ili Izvještaj.</small></span></label>
-        <div style="display:flex;align-items:center;gap:8px;padding:4px 0 0 30px;">
-          <span style="color:#64748b;font-size:11px;white-space:nowrap;">Vidljivost obruba</span>
-          <input type="range" aria-label="Vidljivost obruba granica" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1"
-            style="flex:1;accent-color:#38bdf8;cursor:pointer;"
-            oninput="GithubLayers.opacity(this.value)">
-        </div>
+        <label class="gp-range"><span>Vidljivost obruba</span>
+          <input type="range" aria-label="Vidljivost obruba granica" id="ls-granice-opacity" min="0" max="1" step="0.05" value="1" style="accent-color:#38bdf8;" oninput="GithubLayers.opacity(this.value)">
+        </label>
       </div>
       <!-- Nagib vlaka — boji vidljive vlake po strmini (v3.102.3). Snapshot na
            klik, ne prati GPS uživo — vidi napomenu kod _vlNagibToggle. -->
-      <div style="padding:6px 0 2px;">
-        <label style="display:flex;align-items:center;gap:12px;cursor:pointer;color:#cbd5e1;font-size:14px;">
-          <input type="checkbox" id="vl-nagib-toggle" onchange="_vlNagibToggle(this.checked)"
-            style="width:18px;height:18px;accent-color:#f59e0b;cursor:pointer;">
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="display:inline-block;width:28px;height:4px;border-radius:2px;background:linear-gradient(90deg,#22c55e,#facc15,#ef4444);"></span>
-            Nagib vlaka <span style="color:#64748b;font-size:11px;">(boja po strmini)</span>
-          </span>
-        </label>
-      </div>
-    </div>
-    <!-- GeoJSON odjeli -->
-    <div style="padding:10px 0 8px;border-bottom:1px solid #1e293b;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-        <span style="font-size:13px;font-weight:600;color:#e2e8f0;">📁 GeoJSON odjeli</span>
-        <button onclick="document.getElementById('geojson-odjeli-input').click()"
-                style="margin-left:auto;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;">
-          <svg class="ic"><use href="#ic-folder"/></svg> Učitaj .geojson
-        </button>
-        <input type="file" id="geojson-odjeli-input" accept=".geojson,.json"
-               style="display:none" onchange="loadGeoJSONOdjeli(this.files[0]);this.value=''">
-      </div>
-      <div id="geojson-odjeli-info" style="font-size:11px;color:#64748b;">Nije učitan GeoJSON fajl.</div>
-    </div>
+      <label class="gp-row">
+        <input type="checkbox" id="vl-nagib-toggle" onchange="_vlNagibToggle(this.checked)" style="accent-color:#f59e0b;">
+        <span class="gp-swatch" style="height:4px;background:linear-gradient(90deg,#22c55e,#facc15,#ef4444);"></span>
+        <span class="gp-row-txt"><b>Nagib vlaka</b><small>boja po strmini</small></span>
+      </label>
+    </section>
 
-    <!-- KML upload -->
-    <div style="margin-bottom:10px;">
-      <div id="kml-drop"
-           onclick="document.getElementById('kf').click()"
-           ondragover="event.preventDefault();this.classList.add('over')"
-           ondragleave="this.classList.remove('over')"
-           ondrop="dropK(event)">
-        📂 DODAJ KML FAJL<br>
-        <small style="font-size:11px;">Kliknite ovdje ili povucite .kml fajl</small>
+    <section class="kml-drive"><header><div><small>GITHUB · KARTE</small><h3>Preuzmi granice i puteve</h3></div><button type="button" id="kml-github-refresh" onclick="KmlDownloads.refreshGithub()">↻ Osvježi</button></header><p>Objavljeni KML slojevi iz repozitorija KARTE. Preuzmi i dodaj na kartu za offline rad.</p><div id="kml-github-message" role="status" aria-live="polite"></div><div id="kml-github-list"></div></section>
+
+    <section class="gp-card">
+      <h4 class="gp-label">Vlastiti fajlovi</h4>
+      <div class="gp-own">
+        <div id="kml-drop" role="button" tabindex="0"
+             onclick="document.getElementById('kf').click()"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+             ondragover="event.preventDefault();this.classList.add('over')"
+             ondragleave="this.classList.remove('over')"
+             ondrop="dropK(event)">
+          <svg class="ic" aria-hidden="true"><use href="#ic-uvezi"/></svg><span><b>Dodaj KML</b><small>Dodirni ili prevuci .kml</small></span>
+        </div>
+        <button type="button" class="gp-own-btn" onclick="document.getElementById('geojson-odjeli-input').click()">
+          <svg class="ic" aria-hidden="true"><use href="#ic-folder"/></svg><span><b>GeoJSON odjeli</b><small>Učitaj .geojson</small></span>
+        </button>
       </div>
+      <div id="geojson-odjeli-info" class="gp-own-info">Nije učitan GeoJSON fajl.</div>
       <input type="file" id="kf" accept=".kml" multiple style="display:none" onchange="fileK(event)">
+      <input type="file" id="geojson-odjeli-input" accept=".geojson,.json" style="display:none" onchange="loadGeoJSONOdjeli(this.files[0]);this.value=''">
+      <button type="button" class="gp-link" onclick="closeLayerSheet();openLayerImport()">Shapefile (SHP) ili više fajlova odjednom →</button>
       <div id="kl"></div>
-    </div>
+    </section>
 
     <div id="granice-list">
       <div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Učitavam slojeve...</div>
@@ -42765,6 +42843,7 @@ if (typeof AndroidDownload !== 'undefined') {
 <script src="static/js/local-layer-import.js"></script>
 <script src="static/js/doznaka-project-boundary.js"></script>
 <script src="static/js/layer-editor.js"></script>
+<script src="static/js/granice-trazi.js"></script>
 <script src="static/js/map-visibility.js"></script>
 <script src="static/js/map-library.js"></script>
 <div id="project-draw-toolbar" hidden><div><b>Crtanje poligona odjela</b><small id="project-draw-count"></small></div><div class="project-draw-actions"><button id="project-draw-undo" type="button" onclick="ProjectTerrain.undo()">↶ Vrati tačku</button><button id="project-draw-save" type="button" onclick="ProjectTerrain.finish()">✓ Sačuvaj</button><button type="button" onclick="ProjectTerrain.cancel()">Odustani</button></div></div>

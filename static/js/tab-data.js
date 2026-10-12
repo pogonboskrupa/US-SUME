@@ -127,8 +127,9 @@
     const tabs = document.getElementById('data-server-tabs');
     const shared = new Set((_projekti || []).filter(p => p.korisnik_id === sbUser?.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser?.id)).map(p => p.id));
     const receivedCount = _serverPrimljenoUcitaj().filter(x => shared.has(x.projektId)).length;
-    const sentCount=typeof _serverTransfers==='function'?_serverTransfers('sent').length:0;
-    const newReceived=typeof _serverTransfers==='function'?_serverTransfers('received').length:receivedCount;
+    // Broj na tabu = broj redova koji se u tabu stvarno vide (ponovljena slanja iste stavke su jedan red).
+    const sentCount=typeof _serverTransferCount==='function'?_serverTransferCount('sent'):typeof _serverTransfers==='function'?_serverTransfers('sent').length:0;
+    const newReceived=typeof _serverTransferCount==='function'?_serverTransferCount('received'):typeof _serverTransfers==='function'?_serverTransfers('received').length:receivedCount;
     if (tabs) tabs.innerHTML = [['send','Za slanje',typeof _serverNaCekanju==='function'?_serverNaCekanju().stavki:q.length],['sent','Poslano',sentCount],['received','Primljeno',newReceived]].map(([id,label,n]) => '<button role="tab" data-direction="'+id+'" aria-selected="'+(id===serverTab)+'" onclick="_tabServer(\''+id+'\')"><i aria-hidden="true">'+({received:'↓',sent:'↑',send:'◷'}[id])+'</i><span>'+label+' ('+n+')</span></button>').join('');
     return problem;
   }

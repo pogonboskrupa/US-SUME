@@ -4,6 +4,9 @@
   let scope = '', active = '', search = '', author = '', page = 0;
   const size = 60, byId = id => document.getElementById(id), esc = s => _escHtml(String(s ?? ''));
   const currentUid = () => sbUser?.id || '';
+  // Sklonidba: 1 stavka, 2–4 stavke, 5+ stavki (11–14 uvijek "stavki").
+  const broj = (n, jed, dva, mn) => { const d = n % 10, h = n % 100; return n + ' ' + (d === 1 && h !== 11 ? jed : d >= 2 && d <= 4 && (h < 12 || h > 14) ? dva : mn); };
+  const stavke = n => broj(n, 'stavka', 'stavke', 'stavki'), tacke = n => broj(n, 'GPS tačka', 'GPS tačke', 'GPS tačaka');
   function allowed() {
     const uid = currentUid();
     if (!uid) return [];
@@ -98,7 +101,7 @@
       h[dest.key]={ts:Date.now(),uid:owner,ime:name(owner),label:dest.label};
       const entries=Object.entries(h).sort((a,b)=>(b[1]?.ts||0)-(a[1]?.ts||0)).slice(0,100);
       localStorage.setItem('tvlake_server_transfers_v1_'+owner,JSON.stringify(Object.fromEntries(entries)));
-      saveTransfers('sent',[{projectKey:dest.key,project:dest.label,uid:owner,author:name(owner),target:op.type==='upsert_vlaka'?{kind:'vlaka',id:op.payload?.id,nm:op.payload?.nm}:op.type==='doz_track_points'?{kind:'doz-track'}:op.type==='insert_doz_marking'?{kind:'zone',id:op.payload?.id}:null,item:operationLabel(op),detail:op.type==='upsert_vlaka'?metres(length(op.payload?.pts)):op._count?op._count+' GPS tačaka':'Potvrđeno na serveru',ts:Date.now()}]);
+      saveTransfers('sent',[{projectKey:dest.key,project:dest.label,uid:owner,author:name(owner),target:op.type==='upsert_vlaka'?{kind:'vlaka',id:op.payload?.id,nm:op.payload?.nm}:op.type==='doz_track_points'?{kind:'doz-track'}:op.type==='insert_doz_marking'?{kind:'zone',id:op.payload?.id}:null,item:operationLabel(op),detail:op.type==='upsert_vlaka'?metres(length(op.payload?.pts)):op._count?tacke(op._count):'Potvrđeno na serveru',ts:Date.now()}]);
     }catch(e){console.warn('Vrijeme slanja nije sačuvano',e);}
   }
   function timestamp(ts) {return Number.isFinite(ts)&&ts>0?new Date(ts).toLocaleString('bs-BA',{timeZone:'Europe/Sarajevo'}):'Još nije potvrđeno';}
@@ -123,7 +126,7 @@
     const who=uid=>{const k=(members||[]).find(m=>m.user_id===uid)?._korisnik;return k?[k.ime,k.prezime].filter(Boolean).join(' '):name(uid);};
     const rows=markings.map(r=>({projectKey,project,uid:r.user_id||r.created_by,author:who(r.user_id||r.created_by),target:{kind:'zone',id:r.id},item:'Zona doznake'+(r.name?' · '+r.name:''),detail:'Nacrtana zona / oznaka',ts}));
     const groups=new Map();for(const pt of tracks){const uid=pt.user_id;groups.set(uid,(groups.get(uid)||0)+1);}
-    for(const [uid,count] of groups)rows.push({projectKey,project,uid,author:who(uid),target:{kind:'doz-track'},item:'Snimljeni pojas doznake',detail:count+' GPS tačaka',ts});
+    for(const [uid,count] of groups)rows.push({projectKey,project,uid,author:who(uid),target:{kind:'doz-track'},item:'Snimljeni pojas doznake',detail:tacke(count),ts});
     saveTransfers('received',rows,projectKey);
   }
   let groupMode='project',groupOwner='',previewLayer=null;
@@ -137,10 +140,17 @@
       const day=r.ts?new Date(r.ts).toLocaleDateString('bs-BA',{timeZone:'Europe/Sarajevo'}):'Datum nije evidentiran';
       const key=groupMode==='day'?day:r.projectKey;
       if(!groups.has(key))groups.set(key,{key,title:groupMode==='day'?day:r.project,ts:0,rows:[]});
-      const g=groups.get(key);g.ts=Math.max(g.ts,r.ts||0);g.rows.push({...r,index});
+      const g=groups.get(key);g.ts=Math.max(g.ts,r.ts||0);
+      // Ista vlaka poslana tri puta (svaka izmjena je novo slanje) bila je tri
+      // identična reda jedan ispod drugog. Ostaje najnoviji, uz broj ponavljanja.
+      const same=g.rows.find(x=>sameItem(x,r));
+      if(same){same.times=(same.times||1)+1;if((r.ts||0)>(same.ts||0))Object.assign(same,{...r,index,times:same.times});}
+      else g.rows.push({...r,index,times:1});
     });
+    for(const g of groups.values())g.rows.sort((a,b)=>(b.ts||0)-(a.ts||0));
     return [...groups.values()].sort((a,b)=>b.ts-a.ts);
   }
+  function sameItem(a,b){return a.projectKey===b.projectKey&&a.uid===b.uid&&a.item===b.item&&JSON.stringify(target(a)||null)===JSON.stringify(target(b)||null);}
   function identity(r){return JSON.stringify([r.projectKey,r.uid,r.ts,r.item,r.target||null]);}
   function target(r){return r.target || (r.item?.startsWith('Vlaka · ')?{kind:'vlaka',nm:r.item.slice(8)}:null);}
   function renderTransfers() {
@@ -153,8 +163,8 @@
       el.innerHTML=groups.length?groups.map(g=>{
         const authors=[...new Set(g.rows.map(r=>r.author).filter(Boolean))];
         const who=(direction==='received'?'Od: ':'Poslao: ')+authors.slice(0,3).join(', ')+(authors.length>3?' · još '+(authors.length-3):'');
-        return '<details class="sp-transfer-group" data-direction="'+direction+'" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><div class="sp-group-title"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+esc(g.title)+'</b><em>'+g.rows.length+' stavki</em></div><span class="sp-group-people">'+esc(who)+'</span><span>'+ (g.ts?'Posljednja razmjena: '+esc(timestamp(g.ts)):'Lokalna kopija · prijem nije evidentiran')+'</span></summary>'+g.rows.map(r=>
-          '<article class="sp-transfer-item" data-direction="'+direction+'"><span class="sp-direction-badge">'+(direction==='received'?'↓ Primljeno':'↑ Potvrđeno slanje')+'</span><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><dl class="sp-item-context"><div><dt>Projekat</dt><dd>'+esc(r.project)+'</dd></div><div><dt>'+(direction==='received'?'Poslao':'Šalje')+'</dt><dd>'+esc(r.author)+(r.uid===currentUid()?' · ti':'')+'</dd></div></dl><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+'</small></article>').join('')+'</details>';
+        return '<details class="sp-transfer-group" data-direction="'+direction+'" data-group="'+esc(g.key)+'" '+(opened.has(g.key)?'open':'')+'><summary><div class="sp-group-title"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+esc(g.title)+'</b><em>'+stavke(g.rows.length)+'</em></div><span class="sp-group-people">'+esc(who)+'</span><span>'+ (g.ts?'Posljednja razmjena: '+esc(timestamp(g.ts)):'Lokalna kopija · prijem nije evidentiran')+'</span></summary>'+g.rows.map(r=>
+          '<article class="sp-transfer-item" data-direction="'+direction+'"><span class="sp-direction-badge">'+(direction==='received'?'↓ Primljeno':'↑ Potvrđeno slanje')+'</span><div>'+(target(r)?'<button class="sp-item-map" data-direction="'+direction+'" data-item="'+esc(identity(r))+'" onclick="_serverTransferMap(this.dataset.direction,this.dataset.item)">'+esc(r.item)+' ↗</button>':'<b>'+esc(r.item)+'</b>')+'<strong>'+esc(r.detail)+'</strong></div><dl class="sp-item-context"><div><dt>Projekat</dt><dd>'+esc(r.project)+'</dd></div><div><dt>'+(direction==='received'?'Poslao':'Šalje')+'</dt><dd>'+esc(r.author)+(r.uid===currentUid()?' · ti':'')+'</dd></div></dl><small>'+(r.ts?(direction==='received'?'Primljeno: ':'Poslano: ')+esc(timestamp(r.ts)):'Vrijeme prijema nije evidentirano')+(r.times>1?' · '+(direction==='received'?'primljeno ':'poslano ')+r.times+'×':'')+'</small></article>').join('')+'</details>';
       }).join(''):'<div class="sp-empty"><i aria-hidden="true">'+(direction==='received'?'↓':'↑')+'</i><b>'+ (direction==='received'?'Još nema primljenih stavki':'Još nema potvrđenog slanja')+'</b><span>'+(direction==='received'?'Pritisni Pošalji i primi za podatke kolega.':'Nakon uspješnog slanja ovdje će biti potvrde za posljednja tri projekta.')+'</span></div>';
 
     }
@@ -181,30 +191,44 @@
           layer=L.featureGroup(segments.map(p=>p.length>1?L.polyline(p,{color:'#f97316',weight:6}):L.circleMarker(p[0],{radius:6,color:'#f97316'})));
         }
       }
-      const bounds=layer.getBounds();if(!bounds.isValid())throw Error('Stavka nema ispravan položaj.');
-      if(previewLayer)map.removeLayer(previewLayer);previewLayer=layer.addTo(map);
-      layer.bindPopup('<b>'+esc(r.item)+'</b><br>'+esc(r.project)+'<br>'+esc(r.author)+'<br><button onclick="_serverPreviewClose()">Zatvori pregled</button>');
-      closeSyncQueuePanel();switchTab('karta');map.invalidateSize();map.fitBounds(bounds,{padding:[40,40],maxZoom:18});layer.openPopup();
+      showPreview(layer,r.item,esc(r.project)+'<br>'+esc(r.author));
     }catch(e){showToast(e.message||'Stavka nije dostupna na karti.');}
+  }
+  function showPreview(layer,title,sub){
+    const bounds=layer.getBounds();if(!bounds.isValid())throw Error('Stavka nema ispravan položaj.');
+    if(previewLayer)map.removeLayer(previewLayer);previewLayer=layer.addTo(map);
+    layer.bindPopup('<b>'+esc(title)+'</b><br>'+sub+'<br><button onclick="_serverPreviewClose()">Zatvori pregled</button>');
+    closeSyncQueuePanel();switchTab('karta');map.invalidateSize();map.fitBounds(bounds,{padding:[40,40],maxZoom:18});layer.openPopup();
+  }
+  // Vlaka koja tek čeka slanje: geometrija je lokalna (red ili vlake[]), pa se
+  // vidi i bez mreže — korisnik provjeri šta šalje PRIJE nego pritisne dugme.
+  function pendingMap(projectId,nm){
+    try{
+      const v=model(projectId).rows.find(r=>r.korisnik_id===currentUid()&&r.nm===nm&&length(r.pts)!=null);
+      if(!v)throw Error('Vlaka nije pronađena u lokalnim podacima.');
+      showPreview(L.polyline(v.pts.map(p=>[p.la,p.lo]),{color:'#facc15',weight:6}),'Vlaka · '+nm,esc(metres(length(v.pts)))+' · čeka slanje');
+    }catch(e){showToast(e.message||'Vlaka nije dostupna na karti.');}
   }
   function pendingGroups() {
     const uid=currentUid(),groups=new Map(),q=_OL.loadQueue().filter(o=>(!o._uid||o._uid===uid)&&!_SERVER_SAMO_LOKALNO.has(o.type));
-    const add=(op,text)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[]});groups.get(d.key).items.push(text);};
+    const add=(op,text,nm)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[]});groups.get(d.key).items.push({text,nm:nm||null});};
     const labels={upsert_vlaka:'Vlaka',delete_vlaka:'Brisanje vlake',insert_projekt:'Novi projekat',upsert_odjel:'Podaci odjela',insert_doz_project:'Novi odjel doznake',insert_doz_marking:'Nacrtana zona / oznaka doznake',delete_doz_marking:'Brisanje zone doznake',upsert_doz_status:'Status doznake',insert_pozari_arhiva:'Arhiva požara'};
-    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''));}
+    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''),op.type==='upsert_vlaka'&&length(r.pts)!=null?r.nm:null);}
     (vlake||[]).forEach((v,i)=>{if(v._deleted||!v.projektId||v.sbId&&!(typeof _vlakaSaveTimers!=='undefined'&&_vlakaSaveTimers[i]))return;
-      if(!q.some(o=>o.type==='upsert_vlaka'&&o.payload?.nm===v.nm&&o.payload?.projekt_id===v.projektId))add({payload:{projekt_id:v.projektId,korisnik_id:uid}},'Vlaka · '+v.nm+' · '+metres(length(v.pts)));});
+      if(!q.some(o=>o.type==='upsert_vlaka'&&o.payload?.nm===v.nm&&o.payload?.projekt_id===v.projektId))add({payload:{projekt_id:v.projektId,korisnik_id:uid}},'Vlaka · '+v.nm+' · '+metres(length(v.pts)),length(v.pts)!=null?v.nm:null);});
     let points=[];
     try {points=typeof FieldStore!=='undefined'&&FieldStore.ready?FieldStore.view(uid):JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY)||'[]').filter(p=>p.user_id===uid);}catch(e){}
     const gps=new Map();for(const p of points){const id=p.project_id;gps.set(id,(gps.get(id)||0)+1);}
-    for(const [id,count] of gps)add({payload:{project_id:id,user_id:uid}},'Snimljeni pojas doznake · '+count+' GPS tačaka');
+    for(const [id,count] of gps)add({payload:{project_id:id,user_id:uid}},'Snimljeni pojas doznake · '+tacke(count));
     return [...groups.values()];
   }
   function renderPending() {
     const el=byId('server-send-preview');if(!el)return;
     const groups=pendingGroups();
     const loading=typeof FieldStore!=='undefined'&&!FieldStore.ready;
-    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"><summary><b>'+esc(g.label)+'</b> · '+g.items.length+' stavki</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul>'+(g.items.length>40?'<span>Još '+(g.items.length-40)+' stavki — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<p class="sp-note">Nema novih podataka za slanje.</p>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
+    const total=groups.reduce((n,g)=>n+g.items.length,0);
+    const item=(g,s)=>s.nm&&g.key.startsWith('project:')?'<li><button type="button" class="sp-item-map" data-project="'+esc(g.key.slice(8))+'" data-nm="'+esc(s.nm)+'" onclick="_serverPendingMap(this.dataset.project,this.dataset.nm)">'+esc(s.text)+' ↗</button></li>':'<li>'+esc(s.text)+'</li>';
+    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano'+(total?' <span class="sp-count">'+stavke(total)+'</span>':'')+'</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"'+(groups.length===1?' open':'')+'><summary><b>'+esc(g.label)+'</b> · '+stavke(g.items.length)+'</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>item(g,s)).join('')+'</ul>'+(g.items.length>40?'<span>Još '+stavke(g.items.length-40)+' — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<div class="sp-empty sp-all-sent"><i aria-hidden="true">✓</i><b>Sve je poslano</b><span>Na telefonu nema izmjena koje čekaju server.</span></div>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
   }
   let exchange=null;
   function errorHint(error){
@@ -250,7 +274,7 @@
     }
     try{
       renderExchange();
-      await run('send','Šaljem izmjene…',()=>serverPosalji(),r=>r?.ok?{state:'ok',text:'Sve pripremljene izmjene su potvrđene'}:{state:r?.partial?'partial':'error',text:r?.pending? r.pending+' stavki čeka — ponovi razmjenu':'Slanje nije završeno — rad ostaje na telefonu'});
+      await run('send','Šaljem izmjene…',()=>serverPosalji(),r=>r?.ok?{state:'ok',text:'Sve pripremljene izmjene su potvrđene'}:{state:r?.partial?'partial':'error',text:r?.pending? stavke(r.pending)+' čeka — ponovi razmjenu':'Slanje nije završeno — rad ostaje na telefonu'});
       if(!alive())return;
       await run('vlake','Preuzimam vlake…',()=>serverPreuzmiDijeljeno(),r=>r?.ok?{state:'ok',text:r.count+' vlaka · '+(r.projects||0)+' projekata'}:{state:'error',text:'Prijem nije završen — koristi lokalnu kopiju'});
       if(!alive())return;
@@ -307,7 +331,7 @@
     _serverRazmjena:exchangeData,_serverRazmjenaStatus:renderExchange,
     _serverPanelSazetak(n,st){renderPending();renderExchange();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
     _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,_serverTransfers:transfers,_serverDozReceived:dozReceived,
-    _serverTransferGroups:grouped,_serverTransferMap:transferMap,
+    _serverTransferGroups:grouped,_serverTransferCount:direction=>grouped(direction).reduce((n,g)=>n+g.rows.length,0),_serverTransferMap:transferMap,_serverPendingMap:pendingMap,
     _serverTransferGroup(value){groupMode=value==='day'?'day':'project';groupOwner=currentUid();renderTransfers();},
     _serverPreviewClose(){if(previewLayer)map.removeLayer(previewLayer);previewLayer=null;},
     async _serverPreuzmiDoznaku(selectedId=typeof _dozSelId!=='undefined'?_dozSelId:null){
