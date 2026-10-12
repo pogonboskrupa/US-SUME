@@ -82,6 +82,8 @@ public class MainActivity extends Activity {
     // (dupli receiver = svaka notifikacijska akcija bi se izvršila dvaput).
     private static BroadcastReceiver sRecActionReceiver;
     private boolean reusedWebView = false;
+    private FrameLayout webRoot;
+    private final java.util.ArrayDeque<Long> rendererRestarts = new java.util.ArrayDeque<>();
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assetLoader;
     private static OfflineMaps offlineMaps;
@@ -133,8 +135,11 @@ public class MainActivity extends Activity {
             ViewGroup oldParent = (ViewGroup) webView.getParent();
             if (oldParent != null) oldParent.removeView(webView);
         } else {
+            // Bez setLayerType(LAYER_TYPE_HARDWARE): WebView već crta kroz
+            // hardverski ubrzan prozor; dodatni View sloj tjera cijeli sadržaj kroz
+            // još jednu ekransku GPU teksturu. Na slabijem GPU-u/4 GB RAM-a to je
+            // davalo prazne dijelove panela i karte kad compositor ostane bez memorije.
             webView = new WebView(this);
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
             sWebView = webView;
         }
         // WebView ide u omotač kojem se donji padding podešava na visinu
@@ -143,6 +148,7 @@ public class MainActivity extends Activity {
         // ostaje pune visine i sve što je prikačeno za dno (donji listovi,
         // dijalozi) završi ISPOD tastature.
         FrameLayout root = new FrameLayout(this);
+        webRoot = root;
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
@@ -234,6 +240,18 @@ public class MainActivity extends Activity {
                     Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                     startActivity(intent);
                 } catch (Exception ignored) {}
+                return true;
+            }
+
+            // Na telefonima sa malo RAM-a Android ubija WebView renderer proces
+            // (OOM) — bez ovog override-a (API 26+) WebView tad ruši CIJELU
+            // aplikaciju. Ovako se pravi novi WebView i stranica se učita ispočetka;
+            // GpsService i NativeGpsBuffer rade dalje, a _crashCheck pri startu
+            // vraća snimanje iz 30 s snapshota + native bafera.
+            @android.annotation.TargetApi(Build.VERSION_CODES.O)
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                zamijeniMrtviWebView(view, detail != null && detail.didCrash());
                 return true;
             }
 
@@ -1274,7 +1292,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView.canGoBack()) {
+        if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
@@ -1284,7 +1302,42 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        webView.saveState(outState);
+        if (webView != null) webView.saveState(outState);
+    }
+
+    private void zamijeniMrtviWebView(WebView mrtav, boolean pad) {
+        ViewGroup parent = (ViewGroup) mrtav.getParent();
+        if (parent != null) parent.removeView(mrtav);
+        try { mrtav.destroy(); } catch (Exception ignored) {}
+        if (sWebView == mrtav) sWebView = null;
+        if (webView == mrtav) webView = null;
+        // Nova stranica nema aktivno JS snimanje (isto kao onPageStarted) dok ga
+        // _crashCheck ne vrati i ponovo ne javi preko GpsBridge-a.
+        isRecordingActive = false;
+        if (isFinishing() || isDestroyed() || webRoot == null) return;
+
+        // Renderer koji pada odmah pri učitavanju ne smije vrtiti beskonačnu petlju.
+        long sad = System.currentTimeMillis();
+        while (!rendererRestarts.isEmpty() && sad - rendererRestarts.peekFirst() > 120_000L) {
+            rendererRestarts.pollFirst();
+        }
+        if (rendererRestarts.size() >= 3) {
+            Toast.makeText(this, "Prikaz se ne može obnoviti — ponovo otvori aplikaciju.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        rendererRestarts.addLast(sad);
+
+        webView = new WebView(this);
+        sWebView = webView;
+        webRoot.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setupWebView();
+        webView.loadUrl(APP_URL);
+        Toast.makeText(this, pad
+                ? "Prikaz je pao i ponovo je pokrenut. Podaci su sačuvani."
+                : "Telefon je oslobodio memoriju — prikaz je ponovo učitan. Podaci su sačuvani.",
+                Toast.LENGTH_LONG).show();
     }
 
     private void notifyWebViewMemoryPressure(int level) {
@@ -1320,7 +1373,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        webView.onResume();
+        if (webView != null) webView.onResume();
         hideSystemUI();
     }
 
@@ -1331,7 +1384,7 @@ public class MainActivity extends Activity {
         // geolocation, što bi prekinulo watchPosition() čim korisnik izađe iz
         // app-a. Foreground servis (GpsService) + partial wake lock drže CPU
         // budnim, a nepauzirani WebView drži JS/GPS watch živim u pozadini.
-        if (!isRecordingActive) {
+        if (!isRecordingActive && webView != null) {
             webView.onPause();
         }
         super.onPause();

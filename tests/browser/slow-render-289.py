@@ -57,10 +57,13 @@ async def main():
    let released=0;const queued=()=>{};queued._odustani=()=>released++;_mainTileQueue.push(queued);_wTileStack.push(queued);
    DendroRender.pressure(15);await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
    const mapBox=document.getElementById('map').getBoundingClientRect(),bar=document.getElementById('tab-bar').getBoundingClientRect();
-   return {cache:_sqlTileBmpCache.size,max:_SQL_TILE_BMP_MAX,main:_MAIN_TILE_MAX_INFLIGHT,worker:_W_TILE_MAX_INFLIGHT,released,map:[mapBox.width,mapBox.height],bar:[bar.width,bar.height],opacity:getComputedStyle(document.getElementById('wrapper')).opacity};
+   // Vidljive pločice u redu NE smiju biti odbačene (ostale bi prazne do pomaka karte).
+   const kept=_mainTileQueue.includes(queued)&&_wTileStack.includes(queued);
+   for(const q of [_mainTileQueue,_wTileStack]){const i=q.indexOf(queued);if(i>=0)q.splice(i,1);}
+   return {cache:_sqlTileBmpCache.size,max:_SQL_TILE_BMP_MAX,main:_MAIN_TILE_MAX_INFLIGHT,worker:_W_TILE_MAX_INFLIGHT,released,kept,map:[mapBox.width,mapBox.height],bar:[bar.width,bar.height],opacity:getComputedStyle(document.getElementById('wrapper')).opacity};
   }""")
   assert pressure['cache']==0 and pressure['max']==48 and pressure['main']<=3 and pressure['worker']<=2,pressure
-  assert pressure['released']==2 and min(pressure['map'])>300 and pressure['bar'][0]>300 and pressure['bar'][1]>40 and pressure['opacity']=='1',pressure
+  assert pressure['released']==0 and pressure['kept'] and min(pressure['map'])>300 and pressure['bar'][0]>300 and pressure['bar'][1]>40 and pressure['opacity']=='1',pressure
   await page.screenshot(path=str(out/'slow-phone-stable.png'),full_page=True)
   assert not errors,errors
   await browser.close()

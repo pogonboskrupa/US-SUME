@@ -5699,7 +5699,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.8.9';
+const APP_VER = 'v2.8.10';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -33189,11 +33189,11 @@ function _renderRecover(releaseMemory=false) {
       _SQL_TILE_BMP_MAX = Math.min(_SQL_TILE_BMP_MAX, cfg.sqlCache);
       _MAIN_TILE_MAX_INFLIGHT = Math.min(_MAIN_TILE_MAX_INFLIGHT, cfg.mainTileConcurrency);
       _W_TILE_MAX_INFLIGHT = Math.min(_W_TILE_MAX_INFLIGHT, cfg.workerTileConcurrency);
-      for (const [,src] of _sqlTileBmpCache) { try { src?.close?.(); } catch(e) {} }
+      // Bez close() (vidi D1-16: pločica može upravo crtati bitmapu iz keša) i
+      // bez pražnjenja redova — red drži VIDLJIVE pločice; _odustani bi ih
+      // razriješio sa null i ostale bi prazne do sljedećeg pomaka karte.
+      // Van-ekranske pločice red već sam odbacuje u _tileUzmiSljedeci.
       _sqlTileBmpCache.clear();
-      for (const queue of [_mainTileQueue,_wTileStack]) {
-        while (queue.length) { try { queue.shift()?._odustani?.(); } catch(e) {} }
-      }
     }
     try {
       map._stop?.();
