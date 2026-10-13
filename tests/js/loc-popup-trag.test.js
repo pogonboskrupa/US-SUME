@@ -45,7 +45,8 @@ function t(name, fn) {
 }
 
 function makeEl() {
-  return { style: {}, classList: { toggle(){} }, textContent: '' };
+  const cls = new Set();
+  return { style: {}, cls, classList: { toggle(c, on) { on ? cls.add(c) : cls.delete(c); } }, textContent: '' };
 }
 
 // _locPopupSnimiTrag zove document.getElementById('ab-loc-popup').style.display
@@ -99,16 +100,19 @@ function makeSwitch({ tragOn }) {
   return els;
 }
 
-t('trag NE snima → "Snimi trag", narandžasta paleta', () => {
+// v2.9.8: boje nosi CSS (.abp-trag / .abp-trag.on) da prate dnevni i tamni
+// prikaz — funkcija samo prebacuje klasu, inline boje više ne postavlja.
+t('trag NE snima → "Snimi trag", bez klase on (narandžasta paleta iz CSS-a)', () => {
   const els = makeSwitch({ tragOn: false });
   assert.strictEqual(els['ab-loc-trag-txt'].textContent, 'Snimi trag');
-  assert.strictEqual(els['ab-loc-trag'].style.color, '#c2410c');
+  assert.ok(!els['ab-loc-trag'].cls.has('on'));
+  assert.strictEqual(els['ab-loc-trag'].style.color, undefined);
 });
 
 t('trag SNIMA (started elsewhere, npr. Tragovi tab) → "Završi trag", crvena paleta', () => {
   const els = makeSwitch({ tragOn: true });
   assert.strictEqual(els['ab-loc-trag-txt'].textContent, 'Završi trag');
-  assert.strictEqual(els['ab-loc-trag'].style.color, '#dc2626');
+  assert.ok(els['ab-loc-trag'].cls.has('on'));
 });
 
 t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne bacaju', () => {

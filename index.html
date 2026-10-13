@@ -5619,15 +5619,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
-        <span class="nv-icon">⛰</span>
-        <span id="nv-val">— m</span>
-        <span class="nv-sep">|</span>
-        <span class="nv-lbl">Y</span>&nbsp;<span id="omgi-y" class="nv-coord">—</span>
-        <span class="nv-sep">·</span>
-        <span class="nv-lbl">X</span>&nbsp;<span id="omgi-x" class="nv-coord">—</span>
-        <span class="nv-sep">|</span>
-        <span id="map-scale-click" onclick="toggleScaleMenu(event)" title="Odaberi razmjeru">
-          <span class="nv-lbl">1:</span><span id="map-scale-val">—</span><span style="color:#475569;font-size:8px;margin-left:2px;">▾</span>
+        <span class="nv-cell"><span class="nv-lbl">N.V.</span><span id="nv-val">— m</span></span>
+        <span class="nv-cell nv-cell-xy" id="nv-koord" onclick="_nvKopirajKoord()" title="Dodirni za kopiranje koordinata" role="button" aria-label="Kopiraj koordinate">
+          <span class="nv-lbl">Y · X (MGI) <span class="nv-kop">⧉</span></span>
+          <span class="nv-xy"><span id="omgi-y" class="nv-coord">—</span><span class="nv-sep">·</span><span id="omgi-x" class="nv-coord">—</span></span>
+        </span>
+        <span id="map-scale-click" class="nv-cell" onclick="toggleScaleMenu(event)" title="Odaberi razmjeru">
+          <span class="nv-lbl">Razmjera ▾</span><span class="nv-sc">1:<span id="map-scale-val">—</span></span>
         </span>
       </div>
       <!-- Meni za izbor razmjere -->
@@ -5821,7 +5819,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.7';
+const APP_VER = 'v2.9.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -13132,6 +13130,23 @@ const DEFAULT_VIEW_MGI = { y: 6354662, x: 4972300, scale: 50000 };
 const _defCenter = mgiToWgs(DEFAULT_VIEW_MGI.y, DEFAULT_VIEW_MGI.x);
 const _defZoom   = Math.round(zoomForScale(DEFAULT_VIEW_MGI.scale, _defCenter[0]));
 
+// Dodir na koordinate kopira "Y X" (MGI) — za poruku kolegi ili zapisnik.
+async function _nvKopirajKoord() {
+  const y = (document.getElementById('omgi-y')?.textContent || '').trim();
+  const x = (document.getElementById('omgi-x')?.textContent || '').trim();
+  if (!y || y === '—') { showToast('Koordinate još nisu poznate'); return; }
+  const txt = 'Y ' + y + '  X ' + x;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(txt);
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px;';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    showToast('📋 Kopirano: ' + txt);
+  } catch (e) { showToast('⚠ Kopiranje nije uspjelo'); }
+}
+
 function updMGI(lat, lon) {
   const c = wgsToMGI(lat, lon);
   if (c) {
@@ -15159,6 +15174,9 @@ const map = L.map('map',{
   tapTolerance:15,
   preferCanvas:true
 }).setView(_initMapCenter, _initMapZoom);
+// Grafičko mjerilo (v2.9.8): "1:50 000" u traci je broj, a na terenu se udaljenost
+// procjenjuje okom — traka "0–200 m" je za to brža. Štampa ga sakriva (ima svoje).
+try { L.control.scale({ metric: true, imperial: false, position: 'bottomright', maxWidth: 110 }).addTo(map); } catch (e) {}
 window.Explorer = ExplorerNavigation.create({
   map,
   getPosition: () => lastP ? {...lastP,ts:_onPLastFixTs || 0} : null,
@@ -16061,6 +16079,7 @@ function _openLayerSheet() {
 // Prikaz zauzeća memorije online karata (keširane pločice) + brisanje — u modalu karte
 async function _lsRenderCache() {
   const el = document.getElementById('ls-cache-info');
+  // Bez Cache API-ja kutija ostaje skrivena — ranije je trajno pisalo "💾 …".
   if (!el || !('caches' in window)) return;
   let count = 0;
   try { const c = await caches.open(TILE_CACHE_NAME); count = (await c.keys()).length; } catch(e) {}
@@ -16069,12 +16088,11 @@ async function _lsRenderCache() {
     try { const est = await navigator.storage.estimate(); mbTxt = ` · ≈ ${Math.round((est.usage || 0) / 1048576)} MB ukupno`; } catch(e) {}
   }
   el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div style="flex:1;min-width:0;font-size:12px;color:#94a3b8;">💾 Offline pločice: <b style="color:#4ade80">${count.toLocaleString()}</b>${mbTxt}</div>
-      <button onclick="showCacheMgr()" style="flex-shrink:0;background:#14233c;border:1px solid #1e3a5f;color:#7dd3fc;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-postavke"/></svg> Upravljaj</button>
-    </div>
-    <div style="font-size:11px;color:#64748b;margin-top:4px;">Sve što pogledaš online automatski se čuva za offline — po karti posebno.</div>
-    <button onclick="nvDemPreuzmiUi()" style="width:100%;margin-top:8px;padding:8px;background:#14233c;border:1px solid #1e3a5f;border-radius:8px;color:#fcd34d;font-size:12px;font-weight:600;cursor:pointer;"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi teren za offline (N.V., nagib, konture)</button>`;
+    <div class="lsc-row"><span>💾 Sačuvano za offline: <b>${count.toLocaleString()}</b> pločica${mbTxt}</span>
+      <button type="button" onclick="showCacheMgr()">Upravljaj</button></div>
+    <button type="button" class="lsc-teren" onclick="nvDemPreuzmiUi()"><svg class="ic"><use href="#ic-uvezi"/></svg> Preuzmi teren za offline (N.V., nagib, konture)</button>`;
+  const box = document.getElementById('ls-cache-box');
+  if (box) box.hidden = false;
   _lsFillCardBadges();
 }
 
@@ -19230,12 +19248,9 @@ function _updGpsSwitch() {
   // trag" ovdje TIHO drugi put pokrenulo/prekinulo snimanje da tekst laže.
   const tt = document.getElementById('ab-loc-trag-txt');
   if (tt) tt.textContent = _tragOn ? 'Završi trag' : 'Snimi trag';
+  // Boje nosi CSS (.abp-trag / .on) — prate dnevni i tamni prikaz.
   const tbtn = document.getElementById('ab-loc-trag');
-  if (tbtn) {
-    tbtn.style.background   = _tragOn ? '#fee2e2' : '#fff7ed';
-    tbtn.style.borderColor  = _tragOn ? '#fca5a5' : '#fdba74';
-    tbtn.style.color        = _tragOn ? '#dc2626' : '#c2410c';
-  }
+  if (tbtn) tbtn.classList.toggle('on', !!_tragOn);
 }
 
 // ─── GPS SIGNAL INDIKATOR u recording banneru ──────────────────────────
@@ -35162,10 +35177,12 @@ function _showVersionBanner(latest, isAPK) {
 
 // Toast ne smije prekriti traku snimanja ni otvoren donji list (v1.9.0) —
 // "T1.1 sačuvana…" je stajao preko liste "Šta dalje" i preko statistike.
+// v2.9.8: ni donju traku Karte ni prozorčiće iznad nje — "Offline pristup"
+// je pri pokretanju stajao preko dugmadi Tragovi/Izmjeri i "Snimi trag".
 function _toastDno() {
   let dno = 70;
   const vis = window.innerHeight || 0;
-  for (const id of ['rec-banner', 'sto-dalje-sheet', 'krak-izbor', 'lager-dlg']) {
+  for (const id of ['rec-banner', 'sto-dalje-sheet', 'krak-izbor', 'lager-dlg', 'action-bar', 'rec-bar', 'ab-loc-popup', 'ab-izmjeri-menu']) {
     const el = document.getElementById(id);
     if (!el || getComputedStyle(el).display === 'none') continue;
     const r = el.getBoundingClientRect();
@@ -35189,7 +35206,11 @@ function showToast(msg) {
   try { t.style.bottom = _toastDno() + 'px'; } catch(e) {}
   t.style.opacity = '1';
   clearTimeout(t._to);
-  t._to = setTimeout(() => t.style.opacity = '0', 2500);
+  // Dok je vidljiv, toast prati ono što se otvori ispod njega (npr. popup
+  // lokacije otvoren sekundu poslije "Offline pristup") — inače ga prekrije.
+  clearInterval(t._pr);
+  t._pr = setInterval(() => { try { t.style.bottom = _toastDno() + 'px'; } catch(e) {} }, 300);
+  t._to = setTimeout(() => { t.style.opacity = '0'; clearInterval(t._pr); }, 2500);
 }
 
 // ─── Custom dialog system (replaces all native alert/confirm/prompt) ─────────
@@ -42559,9 +42580,9 @@ if (typeof AndroidDownload !== 'undefined') {
         </div>
       </div>
       <div class="abp-acts">
-        <button id="ab-loc-trag" class="abp-act" onclick="_locPopupSnimiTrag()" style="background:#fff7ed;border-color:#fdba74;color:#c2410c;">
+        <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
-        <button class="abp-act" onclick="_locPopupCentriraj()" style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;">
+        <button class="abp-act abp-centar" onclick="_locPopupCentriraj()">
           <svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
       </div>
     </div>
@@ -42719,11 +42740,6 @@ if (typeof AndroidDownload !== 'undefined') {
   </div>
   <!-- Tab: Karte -->
   <div id="ls-pane-karte">
-    <h3>Online podloge</h3><p class="catalog-intro">Bez interneta prikazuju samo ranije sačuvane dijelove. Za cijelo područje izaberi Offline karte.</p>
-    <!-- Zauzeće memorije online karata (satelit/topo/google) + brisanje -->
-    <div id="ls-cache-box" style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
-      <div id="ls-cache-info" style="font-size:12px;color:#94a3b8;line-height:1.5;">💾 …</div>
-    </div>
     <div class="layer-grid" id="ls-basemap-grid">
       <button class="layer-opt" id="lo-topo" onclick="setLayer('⛰ Topo')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-podloga"/></svg></span>Topo<span class="lopt-sub">OpenTopoMap</span>
@@ -42743,6 +42759,11 @@ if (typeof AndroidDownload !== 'undefined') {
       <button class="layer-opt" id="lo-nagib" onclick="setLayer('_nagib')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>Nagib<span class="lopt-sub">Topo + nagibi</span>
       </button>
+    </div>
+    <p class="ls-online-note">Bez interneta online podloge prikazuju samo ranije pregledane dijelove — za cijelo područje koristi tab <b>Offline</b>.</p>
+    <!-- Zauzeće memorije online karata — ispod podloga, jer se rijetko gleda -->
+    <div id="ls-cache-box" hidden>
+      <div id="ls-cache-info"></div>
     </div>
     <!-- Granice odjela — sakriven dok nema podataka -->
     <div id="ls-granice-row" style="display:none;margin-top:10px;">

@@ -2843,6 +2843,21 @@ namjerno, prije nego se jave.
   trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
   prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
   čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Karta — toast, popup lokacije, koordinate, mjerilo, Slojevi (v2.9.8)**:
+  `_toastDno` računa i `#action-bar`/`#rec-bar`/`#ab-loc-popup`/
+  `#ab-izmjeri-menu`, a vidljiv toast se preračunava svakih 300 ms (popup
+  otvoren poslije toasta ga više ne prekriva). `.ab-pop` (Lokacija, Izmjeri)
+  nosi boje teme (`--field-*`); "Snimi trag" boju dobija klasom
+  (`.abp-trag.on`), ne inline stilom. `#nv-badge` su ćelije sa natpisom
+  (N.V. / Y · X (MGI) / Razmjera), ID-jevi isti; dodir na koordinate
+  (`_nvKopirajKoord`) kopira "Y … X …" — badge je `pointer-events:none`, pa
+  ćelija mora imati svoj `pointer-events:auto`. Grafičko mjerilo je
+  `L.control.scale` DOLJE DESNO (lijevo je `#dem-legend`), iznad donje trake
+  preko `--ab-h`; štampa ga sakriva kroz `.leaflet-control-container`.
+  `#sync-status-dot` je bio sitna siva tačka bez značenja — sad je skriven
+  osim kad je realtime aktivan ("● uživo"). Slojevi → Karte: podloge prve,
+  memorija (`#ls-cache-box`) ispod i `hidden` dok `_lsRenderCache` ne izračuna
+  (bez Cache API-ja je trajno pisalo "💾 …"). Test: `tests/js/karta-ui.test.js`.
 - **Login: prvo uloga, šumarija padajućom listom (v2.9.7)**: v2.9.6 je nudio
   terenski profil i 6 šumarija kao 7 kartica jednu do druge — terenac bi
   dodirnuo "svoju" šumariju i registrovao se kao projektant. Sad se bira
@@ -4639,7 +4654,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.7, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.8, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

@@ -1124,3 +1124,60 @@ html .doz-post-grupa+.doz-post-grupa {border-top:1px solid var(--field-border);p
 html .doz-sazetak .doz-filt {min-height:40px;padding:6px 10px;border:1px solid var(--field-border);border-radius:20px;background:var(--field-card);color:var(--field-muted);font:inherit;font-size:12px;cursor:pointer;}
 html .doz-sazetak .doz-filt.on {border-width:2px;font-weight:700;}
 html .doz-sazetak .doz-filt.sve.on {color:var(--field-ink);border-color:var(--field-ink);}
+
+/* Karta 2.9.8: prozorčići donje trake prate temu, čitljiva traka koordinata,
+   grafičko mjerilo iznad donje trake, realtime oznaka samo kad nešto znači. */
+html .ab-pop {background:var(--field-card);border:1px solid var(--field-border);color:var(--field-ink);}
+html .abp-title,html .abp-opt-lbl {color:var(--field-ink);}
+html #ab-loc-popup #gps-info {color:var(--field-muted);font-size:12px;}
+html .abp-opt,html .abp-tile {background:var(--field-bg);border-color:var(--field-border);color:var(--field-ink);}
+html .abp-opt {min-height:64px;justify-content:center;}
+html .abp-opt-lbl {white-space:normal;text-align:center;line-height:1.3;}
+html:not([data-field-theme=day]) .ab-pop .gps-switch:not(.on) {background:#475569;}
+html .abp-act {min-height:48px;}
+html .abp-trag {background:rgba(249,115,22,.16);border-color:#fb923c;color:#fdba74;}
+html .abp-trag.on {background:rgba(239,68,68,.16);border-color:#f87171;color:#fca5a5;}
+html .abp-centar {background:rgba(59,130,246,.16);border-color:#60a5fa;color:#93c5fd;}
+html[data-field-theme=day] .abp-trag {background:#fff7ed;border-color:#fdba74;color:#c2410c;}
+html[data-field-theme=day] .abp-trag.on {background:#fee2e2;border-color:#fca5a5;color:#b91c1c;}
+html[data-field-theme=day] .abp-centar {background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;}
+
+html #nv-badge {display:flex;flex-wrap:nowrap;align-items:stretch;gap:0;padding:4px 4px;font-family:system-ui,-apple-system,sans-serif;white-space:nowrap;}
+html #nv-badge .nv-cell {display:flex;flex-direction:column;justify-content:center;min-width:0;padding:0 8px;border-left:1px solid rgba(148,163,184,.25);}
+html #nv-badge .nv-cell:first-child {border-left:0;}
+html #nv-badge .nv-cell-xy {flex:1;pointer-events:auto;cursor:pointer;border-radius:6px;}
+html #nv-badge .nv-cell-xy:active {background:rgba(148,163,184,.2);}
+html #nv-badge .nv-lbl {font-size:10px;font-weight:600;letter-spacing:.02em;color:#94a3b8;line-height:1.3;}
+html #nv-badge .nv-kop {opacity:.8;}
+html #nv-badge #nv-val {font-size:14px;line-height:1.3;}
+html #nv-badge .nv-xy {display:flex;gap:5px;overflow:hidden;line-height:1.3;}
+html #nv-badge .nv-coord {font-size:13px;}
+html #nv-badge .nv-sep {margin:0;color:#64748b;}
+html #nv-badge .nv-sc {font-size:13px;font-weight:700;color:#fbbf24;line-height:1.3;}
+html #nv-badge #map-scale-val {font-size:13px;}
+@media(max-width:359px){html #nv-badge .nv-cell{padding:0 5px}html #nv-badge .nv-coord{font-size:12px}}
+html[data-field-theme=day] #nv-badge .nv-lbl {color:#334155;}
+html[data-field-theme=day] #nv-badge .nv-sc {color:#854d0e;}
+html[data-field-theme=day] #nv-badge .nv-cell {border-left-color:#cbd5e1;}
+
+html #map .leaflet-control-scale {margin:0 10px 10px 0;}
+body.ab-on #map .leaflet-bottom.leaflet-right .leaflet-control-scale {margin-bottom:calc(var(--ab-h,64px) + 10px);}
+html #map .leaflet-control-scale-line {background:rgba(255,255,255,.85);color:#111;border-color:#111;font:600 11px system-ui;line-height:1.4;padding:0 5px;}
+
+html #sync-status-dot {display:none;}
+html #sync-status-dot.sync-dot--ok {display:inline-flex;align-items:center;gap:3px;width:auto;height:auto;margin:6px 0 0!important;padding:2px 5px;border-radius:9px;background:var(--field-card);border:1px solid var(--field-border);color:#4ade80;font:700 9px system-ui;}
+html #sync-status-dot.sync-dot--ok::before {content:'';width:6px;height:6px;border-radius:50%;background:#22c55e;}
+html #sync-status-dot.sync-dot--ok::after {content:'uživo';}
+html[data-field-theme=day] #sync-status-dot.sync-dot--ok {color:#15803d;}
+
+html .ls-online-note {font-size:12px;line-height:1.55;color:var(--field-muted);margin:10px 2px 0;}
+html #ls-cache-box {margin-top:10px;padding:10px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);}
+html #ls-cache-box[hidden] {display:none;}
+html .lsc-row {display:flex;align-items:center;gap:8px;font-size:12px;color:var(--field-ink);}
+html .lsc-row>span {flex:1;min-width:0;line-height:1.5;}
+html .lsc-row button,html .lsc-teren {min-height:44px;padding:6px 12px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-card);color:var(--field-ink);font:600 12px system-ui;cursor:pointer;}
+html .lsc-teren {width:100%;margin-top:8px;}
+html #ls-basemap-grid {gap:8px;}
+html #ls-basemap-grid .layer-opt {padding:9px 4px 8px;gap:3px;min-height:72px;font-size:12.5px;}
+html #ls-basemap-grid .layer-opt span.layer-ico {font-size:20px;}
+html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
