@@ -5826,7 +5826,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.0';
+const APP_VER = 'v3.0.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6359,17 +6359,38 @@ function _serverPodsjetnik() {
 // fotografija bez punog snimka nigdje se ne broji — nikad se ne bi mogla poslati.
 // qZadan: red koji pozivalac već ima u ruci (_OL.enqueue ga je upravo upisao) —
 // bez njega bi se isti red odmah parsirao još jednom.
+// GPS tačke pojasa za odjel koji na serveru više ne postoji (obrisan, a nema
+// ni upisa u redu koji bi ga napravio). Nikad ne mogu proći — ostaju sačuvane
+// na telefonu, ali se ne šalju i ne broje u "čeka slanje" (inače "Sve
+// poslano" ne bi došlo nikad). Ključ je po korisniku.
+function _dozSirocadKljuc() { return 'tvlake_doz_sirocad_' + (typeof sbUser !== 'undefined' && sbUser?.id || ''); }
+function _dozSirocad() {
+  try { const a = JSON.parse(localStorage.getItem(_dozSirocadKljuc()) || '[]'); return new Set(Array.isArray(a) ? a : []); }
+  catch(e) { return new Set(); }
+}
+function _dozSirocadDodaj(pid) {
+  const s = _dozSirocad(); s.add(pid);
+  try { localStorage.setItem(_dozSirocadKljuc(), JSON.stringify([...s])); } catch(e) {}
+}
 function _serverNaCekanju(qZadan) {
   const uid = typeof sbUser !== 'undefined' ? sbUser?.id : null;
-  const r = { red: 0, blok: 0, doz: 0, stavki: 0 };
+  const r = { red: 0, blok: 0, doz: 0, siroce: 0, stavki: 0 };
   let q = null;
   try { q = Array.isArray(qZadan) ? qZadan : _lsJsonMemo(_OL.QUEUE); } catch(e) {}
   if (!Array.isArray(q)) q = [];
   const moji = q.filter(op => (!op._uid || op._uid === uid) && !_SERVER_SAMO_LOKALNO.has(op.type));
   r.red = moji.length; r.blok = moji.filter(op => op._blocked).length;
   try {
-    if(typeof FieldStore !== 'undefined' && FieldStore.ready) r.doz=FieldStore.count(uid);
-    else {const b=_lsJsonMemo(_DOZ_TRACK_BUF_KEY);r.doz=Array.isArray(b)?b.filter(p=>p.user_id===uid).length:0;}
+    const sir = typeof _dozSirocad === 'function' ? _dozSirocad() : new Set();
+    if(typeof FieldStore !== 'undefined' && FieldStore.ready) {
+      r.doz=FieldStore.count(uid);
+      for (const pid of sir) r.siroce += FieldStore.view(uid, pid).length;
+    } else {
+      const b=_lsJsonMemo(_DOZ_TRACK_BUF_KEY);
+      const moje = Array.isArray(b) ? b.filter(p=>p.user_id===uid) : [];
+      r.doz = moje.length; r.siroce = moje.filter(p => sir.has(p.project_id)).length;
+    }
+    r.doz = Math.max(0, r.doz - r.siroce);
   } catch(e) {}
   r.stavki = r.red + (r.doz ? 1 : 0);
   return r;
@@ -6401,6 +6422,7 @@ function _updSyncBadgeUskoro() {
 const _OP_LABELS = {
   upsert_vlaka:       '↑ Snimaj vlaku',
   delete_vlaka:       '✕ Briši vlaku',
+  delete_projekt:     '✕ Briši projekat',
   upsert_log:         '↑ Dnevni log',
   insert_projekt:     '+ Novi projekat',
   upsert_odjel:       '↑ Odjel',
@@ -6518,6 +6540,8 @@ function _serverSazetakRender() {
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
+  if (n.siroce) el.innerHTML += '<div style="font-size:11px;color:#94a3b8;margin-top:6px">📍 ' + n.siroce +
+    ' GPS tačaka pripada odjelu koji je obrisan sa servera — ostaju na telefonu (izvoz pojasa), ne šalju se.</div>';
   const b = document.getElementById('syncq-posalji');
   if (b) { b.disabled = _serverSaljem || !!serverPosalji._priprema || _serverPrimljenoBusy || (typeof _serverRazmjena==='function' && !!_serverRazmjena.busy); b.style.opacity = b.disabled ? '0.5' : '1'; }
 }
@@ -6905,6 +6929,16 @@ async function _processOfflineQueue(sila) {
   let synced = 0;
   let _authRefreshed = false;   // D2-D: osvježi sesiju najviše jednom po prolazu
   let _deleteAuthConfirmed = false;
+  // "Nema reda na serveru" smije značiti "već obrisano" samo uz potvrđenu
+  // prijavu — anonimni RLS SELECT također vraća prazno.
+  const potvrdiPrijavu = async () => {
+    if (_deleteAuthConfirmed) return null;
+    const a = await sb.auth.getUser();
+    const e = a.error || (a.data?.user?.id === syncOwner ? null : {
+      code:'AUTH_REQUIRED', status:401, message:'Prijava nije potvrđena; brisanje čeka ponovni pokušaj' });
+    _deleteAuthConfirmed = !e;
+    return e;
+  };
   for (const op of [...q]) {
     if (sbUser?.id !== syncOwner) break;
     // OS-K1: operacija pripada DRUGOM korisniku (red preživljava promjenu naloga na
@@ -6926,8 +6960,45 @@ async function _processOfflineQueue(sila) {
     if (!_tren) continue;
     try {
       Object.assign(op, _tren);
-      let err = null;
-      if (op.type === 'upsert_vlaka') {
+      if (!op._pokusano && (op.type === 'insert_doz_marking' || op.type === 'insert_projekt' ||
+          (op.type === 'upsert_vlaka' && !op.payload?.id))) {
+        op._pokusano = true; _OL.oznaciPokusano?.(op._qid ?? op.ts);
+      }
+      let err = null, vecCisto = false;
+      if (op.type === 'delete_vlaka' && !op.payload?.id) {
+        // Vlaka obrisana prije nego je dobila ID, a njen upis je možda stigao
+        // (izgubljen odgovor) — pronađi je po ključu; nema je = već čisto.
+        let look = sb.from('vlake').select('id').eq('korisnik_id', syncOwner).eq('nm', op.payload?.nm ?? '');
+        look = op.payload?.projekt_id ? look.eq('projekt_id', op.payload.projekt_id) : look.is('projekt_id', null);
+        const found = await look.maybeSingle();
+        if (sbUser?.id !== syncOwner) break;
+        if (found.error) err = found.error;
+        else if (found.data?.id) op.payload.id = found.data.id;
+        else { err = await potvrdiPrijavu(); vecCisto = !err; }
+      }
+      if (err || vecCisto) { /* greška ide kroz zajedničku obradu niže, vecCisto kao uspjeh */ }
+      else if (op.type === 'delete_projekt') {
+        // Projekat obrisan lokalno dok je njegov upis bio u letu (v3.0.1) —
+        // upis je možda stigao. Nema reda na serveru = već čisto.
+        const pid = op.payload?.id;
+        if (!pid) err = {code:'INVALID_OPERATION',message:'Brisanje nema ID projekta; stavka je sačuvana za pregled'};
+        else {
+          const cl = await sb.from('projekt_clanovi').delete().eq('projekt_id', pid);
+          if (sbUser?.id !== syncOwner) break;
+          err = cl.error;
+          if (!err) {
+            const { data, error } = await sb.from('projekti').delete().eq('id', pid).eq('korisnik_id', syncOwner).select('id');
+            if (sbUser?.id !== syncOwner) break;
+            err = error;
+            if (!err && !(data || []).some(r => String(r.id) === String(pid))) {
+              const check = await sb.from('projekti').select('id').eq('id', pid).maybeSingle();
+              if (sbUser?.id !== syncOwner) break;
+              err = check.error || (check.data === null ? await potvrdiPrijavu() : {code:'NO_CONFIRMATION',message:'Projekat je i dalje na serveru; brisanje čeka ponovni pokušaj'});
+            }
+          }
+        }
+      }
+      else if (op.type === 'upsert_vlaka') {
         err = await _syncVlakaOperation(op);
       } else if (op.type === 'delete_vlaka') {
         if (!op.payload?.id) err = {code:'INVALID_OPERATION',message:'Brisanje nema ID vlake; stavka je sačuvana za pregled'};
@@ -7063,8 +7134,18 @@ async function _processOfflineQueue(sila) {
         }
       } else if (op.type === 'delete_doz_marking') {
         const { data, error } = await sb.from('doz_area_markings').update({ is_visible: false }).eq('id', op.payload.id).select('id');
-        err = error || (data || []).some(r => String(r.id) === String(op.payload.id))
-          ? error : { code:'NO_CONFIRMATION', message:'Server nije potvrdio ciljanu zonu' };
+        err = error;
+        if (!err && !(data || []).some(r => String(r.id) === String(op.payload.id))) {
+          // Zona čiji upis nikad nije stigao, ili je cijeli odjel u međuvremenu
+          // obrisan (atomarno brisanje odjela briše i zone): cilja nema, a to je
+          // upravo ono što brisanje traži. Ranije je takva stavka zauvijek
+          // stajala u "čeka slanje" uz NO_CONFIRMATION.
+          const check = await sb.from('doz_area_markings').select('id,is_visible').eq('id', op.payload.id).maybeSingle();
+          if (sbUser?.id !== syncOwner) break;
+          err = check.error || (check.data?.is_visible === false ? null
+            : check.data === null ? await potvrdiPrijavu()
+            : { code:'NO_CONFIRMATION', message:'Server nije potvrdio ciljanu zonu' });
+        }
       } else if (op.type === 'upsert_doz_status') {
         if (!op.payload?.id || !['active','paused','completed'].includes(op.payload.status)) {
           err = {code:'INVALID_OPERATION',message:'Neispravan ID ili status odjela; stavka je sačuvana za pregled'};
@@ -7077,6 +7158,12 @@ async function _processOfflineQueue(sila) {
             if (sbUser?.id !== syncOwner) break;
             if (check.error) err = check.error;
             else if (check.data?.id === op.payload.id && check.data.status === op.payload.status) err = null;
+            else if (check.data === null && !_OL.loadQueue(true).some(o => o.type === 'insert_doz_project' && o.payload?.id === op.payload.id)) {
+              // Odjel je obrisan (ili nikad neće stići): status nečega što ne
+              // postoji nema šta promijeniti — ranije je stajao u "čeka slanje"
+              // zauvijek i "Sve poslano" se nikad nije pojavilo.
+              err = await potvrdiPrijavu();
+            }
             else if (check.data === null) err = {code:'TARGET_NOT_FOUND',message:'Odjel nije dostupan na serveru. Pošalji novi odjel ili provjeri članstvo; status je sačuvan'};
             else if (check.data?.created_by && check.data.created_by !== syncOwner) err = {code:'WRITE_FORBIDDEN',message:'Status odjela može mijenjati samo njegov kreator; snimljeni pojasevi šalju se zasebno'};
             else err = {code:'NO_CONFIRMATION',message:'Status odjela nije promijenjen na serveru; provjeri pravo upisa i pokušaj ponovo'};
@@ -7148,7 +7235,8 @@ async function _processOfflineQueue(sila) {
     if (typeof FieldStore === 'undefined') localStorage.setItem(_DOZ_TRACK_BUF_KEY, JSON.stringify(all));
     // v1.9.2: u SERIJAMA po odjelu (vidi _dozPosaljiKomad), ne tačka po tačka.
     const grupe = {};
-    all.filter(p => p.user_id === syncOwner).forEach(p => { (grupe[p.project_id] = grupe[p.project_id] || []).push(p); });
+    const sirocad = typeof _dozSirocad === 'function' ? _dozSirocad() : new Set();
+    all.filter(p => p.user_id === syncOwner && !sirocad.has(p.project_id)).forEach(p => { (grupe[p.project_id] = grupe[p.project_id] || []).push(p); });
     _processOfflineQueue._gpsError=null;
     vanjska: for (const g of Object.values(grupe)) {
       g.sort((a, b) => Date.parse(a.recorded_at) - Date.parse(b.recorded_at));
@@ -7160,6 +7248,18 @@ async function _processOfflineQueue(sila) {
         // pojedinačno, pa dobre prođu, a loša ostaje sačuvana.
         if (r.error && !_isNetworkErr(r.error) && !_isAuthErr(r.error) && !_serverPrivremeno(r.error)) {
           r = await _dozPosaljiPojedinacno(komad);
+          // Nijedna tačka nije prošla na stranom ključu: postoji li odjel uopšte?
+          // Ako ne (i ne čeka upis u redu), grupa se više ne šalje.
+          if (!r.ok.length && String(r.error?.code) === '23503') {
+            const pid = komad[0].project_id;
+            const ch = await sb.from('doz_projects').select('id').eq('id', pid).maybeSingle();
+            if (sbUser?.id !== syncOwner) break vanjska;
+            const ceka = _OL.loadQueue(true).some(o => o.type === 'insert_doz_project' && o.payload?.id === pid);
+            if (!ch.error && ch.data === null && !ceka && !(await potvrdiPrijavu())) {
+              _dozSirocadDodaj(pid);
+              continue vanjska;
+            }
+          }
         }
         if(r.error)_processOfflineQueue._gpsError=r.error;
         if (r.ok.length) {
@@ -9369,6 +9469,7 @@ function _projektiVratiNeposlane(rows) {
   const out = [...(rows || [])];
   let q;
   try { q = _OL.loadQueue(true); } catch(e) { return out; }
+  for (const op of q) if (op.type === 'delete_projekt' && op.payload?.id) _deletedProjektIds.add(op.payload.id);
   for (const op of q) {
     if (op.type !== 'insert_projekt' || (op._uid && op._uid !== sbUser?.id)) continue;
     const p = op.payload || {};
@@ -9446,7 +9547,7 @@ async function sbLoadProjekti() {
   // Stari nadzorni keš vodećeg je sadržavao tuđe projekte bez članstva.
   // U radni/offline spisak ulaze samo vlasništvo i potvrđeno članstvo.
   if (!isAdmin()) _projekti = _projekti.filter(p => p.korisnik_id === sbUser.id || (p.clanovi || []).some(c => c.korisnik_id === sbUser.id));
-  _projekti = _projektiVratiNeposlane(_projekti);
+  _projekti = _projektiVratiNeposlane(_projekti).filter(p => !_deletedProjektIds.has(p.id));
   _OL.save(_OL.PROJEKTI, _projekti);
 
   // Validate _aktivniProjektId still exists
@@ -10672,8 +10773,16 @@ async function deleteProjektUI() {
     // strict: oštećen red ne smije biti pročitan kao prazan pa prepisan sa []
     // — to bi tiho obrisalo SVE što čeka slanje, ne samo ovaj projekat.
     try {
-      const lq = _OL.loadQueue(true).filter(o => !(o.type === 'insert_projekt' && o.payload?._tempId === id));
+      const sviRed = _OL.loadQueue(true);
+      const ins = sviRed.find(o => o.type === 'insert_projekt' && o.payload?._tempId === id);
+      const lq = sviRed.filter(o => o !== ins);
       localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+      // Upis je već krenuo: projekat je možda na serveru (izgubljen odgovor)
+      // i sbLoadProjekti bi ga vratio. Brisanje ide kroz red, po UUID-u.
+      if (ins?._pokusano && ins.payload?.id) {
+        _deletedProjektIds.add(ins.payload.id);
+        _OL.enqueue({ type: 'delete_projekt', payload: { id: ins.payload.id } });
+      }
     } catch(e) { console.warn('Red za slanje nije čitljiv — ostaje netaknut', e); }
     _OL.save(_OL.PROJEKTI, _projekti);
     _setProjektVlakeHidden(id, false);
@@ -11148,6 +11257,13 @@ async function _syncVlakaOperation(op) {
       const srv = await sb.from('vlake').select('*').eq('id', target).maybeSingle();
       if (srv.error) return srv.error;
       if (srv.data && _vlakaIstiSadrzaj(payload, srv.data)) result = { data: [srv.data], error: null };
+      else if (srv.data && (op._prevPayloads || []).some(pp => _vlakaIstiSadrzaj({ ...pp, id: target }, srv.data))) {
+        // Na serveru je NAŠA ranija verzija (njen odgovor se izgubio, pa je
+        // lokalna revizija ostala stara) — nije tuđa izmjena. Upiši preko nje,
+        // uz njenu stvarnu reviziju da se ne pregazi nešto novije od toga.
+        result = await sb.from('vlake').update(payload).eq('id', target).eq('rev', srv.data.rev).select('id,rev,updated_at');
+        if (result.error) return result.error;
+      }
     }
     if (!result.error && !result.data?.length) return {
       code:'LOCAL_CONFLICT', message:'Vlaka je promijenjena na serveru ili nemaš pravo upisa. Lokalna izmjena je sačuvana za pregled/izvoz.'
@@ -11268,11 +11384,24 @@ async function sbDeleteVlaka(v) {
   if (v._flushing) { try { await v._flushing; } catch(e) {} }  // sačekaj in-flight insert da dobijemo sbId
   if (sbUser?.id !== owner) return;
   // Neposlana verzija ove vlake u redu više ne smije otići — inače bi "Pošalji" napravilo obrisanu vlaku.
-  if (sbUser) _redUkloni(o => o.type === 'upsert_vlaka' && (v.sbId
+  const ovaVlaka = o => o.type === 'upsert_vlaka' && (v.sbId
     ? o.payload?.id === v.sbId
     : (!o.payload?.id && o.payload?.nm === v.nm && o.payload?.korisnik_id === sbUser.id &&
-       (o.payload?.projekt_id ?? null) === (v.projektId || null))));
-  if (!v.sbId || !sbUser) return;
+       (o.payload?.projekt_id ?? null) === (v.projektId || null)));
+  let bioPoslan = false;
+  if (sbUser) {
+    try { bioPoslan = _OL.loadQueue(true).some(o => ovaVlaka(o) && o._pokusano); } catch(e) {}
+    _redUkloni(ovaVlaka);
+  }
+  if (!sbUser) return;
+  if (!v.sbId) {
+    // Upis je krenuo na server, a odgovor (sa ID-jem) nije stigao — vlaka je
+    // možda tamo i vratila bi se pri sljedećem učitavanju, i kod kolega.
+    // Brisanje bez ID-ja procesor razriješi po ključu (nema je = čisto).
+    if (!bioPoslan) return;
+    return _OL.enqueue({ type: 'delete_vlaka', payload: {
+      id: null, korisnik_id: owner, projekt_id: v.projektId || null, nm: v.nm || null } });
+  }
   const cached = _OL.load(_OL.VLAKE) || [];
   _OL.save(_OL.VLAKE, cached.filter(r => r.id !== v.sbId));
   // I tokom ručnog slanja koristi isti trajni red i provjeru potvrde.
@@ -14557,16 +14686,20 @@ let _crashSaveTimer = null;
 let _crashUpisPaoV = false;
 let _crashUpisPaoT = false;
 
-function _crashSaveVlaka() {
-  if (!recOn || recPaused || actI === null) return;
+// sila: upiši i prije druge tačke i u pauzi — snimak odmah pri startu znači da
+// oporavak postoji i kad WebView ne dobije nijedan fiks (ekran ugašen od
+// početka), a native servis je sve vrijeme punio bafer.
+function _crashSaveVlaka(sila) {
+  if (!recOn || (recPaused && !sila) || actI === null) return;
   const v = vlake[actI];
-  if (!v || v.pts.length < 2) return;
+  if (!v || (!sila && v.pts.length < 2)) return;
   let tekst;
   try {
     tekst = JSON.stringify({
       pts: v.pts.map(p => [p.la, p.lo, p.al ?? p.elev ?? null]),
       nm: v.nm, br: v.br, kr: v.kr, color: v.color,
       projektId: v.projektId || _aktivniProjektId,
+      sbId: v.sbId || null,
       ts: Date.now()
     });
   } catch(e) { return; }   // neserijalizovan snimak nije stvar kvote
@@ -14619,6 +14752,35 @@ function _crashStopIfIdle() {
 function _crashClearVlaka() { try { localStorage.removeItem(_CRASH_VLAKA_KEY); } catch {} }
 function _crashClearTrag()  { try { localStorage.removeItem(_CRASH_TRAG_KEY);  } catch {} }
 
+// Vlaka koja se snimala u trenutku prekida — po sbId-u (pouzdano), inače po
+// imenu/broju/kraku u istom projektu. Kopije "ime ↩ vrijeme" se ne biraju.
+function _vlakaZaOporavak(snap) {
+  if (snap.sbId) {
+    const i = vlake.findIndex(v => v.sbId === snap.sbId);
+    if (i >= 0) return i;
+  }
+  const pid = snap.projektId || null;
+  return vlake.findIndex(v => v.nm === snap.nm && (v.projektId || null) === pid &&
+    (v.br || 1) === (snap.br || 1) && (v.kr || 0) === (snap.kr || 0));
+}
+// Tačke native bafera za dopunu oporavljene vlake. lokalniRep = dio lokalne
+// vlake noviji od snimka: te fiksove bafer ima ponovo, pa se dopuna nastavlja
+// tek iza tačke najbliže njegovom kraju — inače bi isti komad trase ušao dvaput.
+function _vlakaOporavakKandidati(bufPts, snapTs, pauzeWin, lokalniRep) {
+  let kand = bufPts.filter(p => p.t > snapTs && !_uPauziIntervalu(pauzeWin || [], p.t) && !(p.ac > 50));
+  if (lokalniRep && lokalniRep.length && kand.length) {
+    const kraj = lokalniRep[lokalniRep.length - 1];
+    // Prva tačka unutar 10 m (kasniji povratak na isto mjesto ne smije odsjeći
+    // stvarno pređeno), a ako je nema, najbliža.
+    let best = kand.findIndex(p => dst(kraj.la, kraj.lo, p.la, p.lo) <= 10);
+    if (best < 0) {
+      let bestD = Infinity;
+      kand.forEach((p, k) => { const d = dst(kraj.la, kraj.lo, p.la, p.lo); if (d < bestD) { bestD = d; best = k; } });
+    }
+    kand = kand.slice(best + 1);
+  }
+  return kand;
+}
 function _recoverVlakaSnapshot(snap) {
   const nm = (snap.nm || 'Oporavljena vlaka') + ' ↩ ' + snap.ts;
   const pid = snap.projektId || null;
@@ -14690,34 +14852,49 @@ async function _crashCheck() {
   // bi bilo načina razlikovati "sve je spremljeno" od "grana je pala i tačke
   // postoje samo u memoriji" — a potvrda u drugom slučaju znači trajan gubitak.
   let _svePersistirano = true;
+  const pauze = _pauziUcitajSnimljene();
 
   if (snapV) {
     try {
-      const newI = _recoverVlakaSnapshot(snapV);
-      vlake[newI].pts = snapV.pts.map(([la, lo, el]) => ({ la, lo, al: el ?? 0 }));
+      // Vlaka koja se snimala je obično VEĆ u lokalnoj listi (sbFlushVlaka/
+      // _saveLocalVlake tokom snimanja). Nova "ime ↩ vrijeme" kopija bi istu
+      // trasu brojala dvaput u dužini i gustoći mreže — oporavak ide u nju.
+      const postojeci = _vlakaZaOporavak(snapV);
+      const newI = postojeci >= 0 ? postojeci : _recoverVlakaSnapshot(snapV);
+      const snapPts = snapV.pts.map(([la, lo, el]) => ({ la, lo, al: el ?? 0 }));
+      let lokalniRep = [];
+      if (postojeci < 0 || snapPts.length >= vlake[newI].pts.length) vlake[newI].pts = snapPts;
+      else lokalniRep = vlake[newI].pts.slice(snapPts.length);  // lokalno je novije od snimka
       vlake[newI].poly.setLatLngs(vlake[newI].pts.map(q => [q.la, q.lo]));
       // Dopuni onim što je native servis snimio POSLIJE zadnjeg snimka stanja.
       // Snimak se piše na 30 s, a bafer ima svaki fiks — bez ovoga se gubi sve
       // od zadnjeg auto-save-a do trenutka kad je proces ubijen, plus cijeli
       // period dok je app bio zatvoren. Prag je snapV.ts (vrijeme snimka), jer
       // tačke u snimku nemaju vlastiti timestamp.
+      const kand = _vlakaOporavakKandidati(bufPts, snapV.ts || 0, pauze.vlaka, lokalniRep);
       let dodato = 0;
-      for (const p of bufPts) {
-        if (p.t <= (snapV.ts || 0)) continue;
-        if (p.ac > 50) continue;                     // isti prag kao živi put
+      for (const p of kand) {
         const zadnja = vlake[newI].pts[vlake[newI].pts.length - 1];
         if (zadnja && dst(zadnja.la, zadnja.lo, p.la, p.lo) < 0.5) continue;
         vlake[newI].pts.push({ la: p.la, lo: p.lo, al: p.al ?? 0 });
         dodato++;
       }
       if (dodato) vlake[newI].poly.setLatLngs(vlake[newI].pts.map(q => [q.la, q.lo]));
+      if (postojeci < 0 && !vlake[newI].pts.length) {
+        // Snimak sa starta bez ijedne upotrebljive tačke — prazna vlaka u
+        // listi bi bila samo smeće.
+        map.removeLayer(vlake[newI].poly); vlake.splice(newI, 1);
+        _crashClearVlaka();
+        showToast('Prekinuta vlaka nije imala snimljenih tačaka');
+        throw { _prazno: true };
+      }
       selI(newI);
       if (!_saveLocalVlake()) throw new Error('Lokalni upis nije uspio; snimak ostaje za oporavak');
       _crashClearVlaka();
       sbFlushVlaka(newI).catch(() => {});
       showToast(`✅ Oporavljena vlaka: ${vlake[newI].pts.length} tačaka`
         + (dodato ? ` (${dodato} iz pozadinskog snimanja)` : ''));
-    } catch(e) { _svePersistirano = false; showToast('⚠ Greška pri oporavku vlake: ' + e.message); }
+    } catch(e) { if (!e?._prazno) { _svePersistirano = false; showToast('⚠ Greška pri oporavku vlake: ' + e.message); } }
   }
 
   if (snapT) {
@@ -14739,7 +14916,10 @@ async function _crashCheck() {
       // trenutne pozicije bez obzira na commit), ali ništa se stvarno ne bi
       // upisivalo — pri "Završi" bi ostao spašen samo dio prije prekida.
       const lastPt = _tragPts[_tragPts.length - 1];
-      _tragLastT = (lastPt && lastPt[3]) || Date.now();
+      // Bez vremena na tački (stari snimak) ili bez ijedne tačke (snimak upisan
+      // odmah pri startu) granica je trenutak snimka — "sada" bi odbacilo
+      // cijelo pozadinsko snimanje.
+      _tragLastT = (lastPt && lastPt[3]) || snapT.ts || Date.now();
       _tragLastMoveT = Date.now();
       const b = document.getElementById('btrag');
       if (b) b.classList.add('active');
@@ -14755,7 +14935,7 @@ async function _crashCheck() {
       for (const p of bufPts) {
         // bypassPauzu: auto-pauza okinuta usred dopune ne smije odbaciti ostatak
         // pozadinskog snimanja (hladan start nema zabilježenih pauza).
-        if (p.t > _tragLastT) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t, true);
+        if (p.t > _tragLastT && !_uPauziIntervalu(pauze.trag, p.t)) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t, true);
       }
       const dodatoT = _tragPts.length - prijeDopune;
       _updTragStats();
@@ -14825,13 +15005,15 @@ async function _crashCheck() {
       try {
         for (const p of bufPts) {
           if (p.t <= (snapD.ts || 0)) continue;
+          if (_uPauziIntervalu(pauze.doznaka, p.t)) continue;
           if (p.ac > 20) continue; // isti prag kao _dozProcessGpsPoint
           await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t, true);
         }
       } catch(e) { _svePersistirano = false; console.warn('Doznaka dopuna', e); }
       _dozUpdGpsStats(null);
       _bgRecStart('pojas doznake');
-      _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
+      _dozGpsWatchId = navigator.geolocation.watchPosition(async function dozLive(pos) {
+        if (_drainNativeGpsBuffer._busy) { _drainLiveQ.push({ fn: dozLive, arg: pos }); return; }
         if (_dozGpsStopping) return;
         const fixTs = pos.timestamp || Date.now();
         if (!_dozGpsOn || !_dozGpsProjId || !_dozGpsUserId) return;
@@ -18500,12 +18682,14 @@ document.addEventListener('visibilitychange', async () => {
     try { _dlgHealOrphanedOverlay(); } catch(e) {}
     // Ponovo uzmi wake lock (browser ga otpušta kad app ide u pozadinu)
     // Sva tri tipa snimanja (vlaka / trag / doznaka pojas) trebaju wake lock.
-    if (_anyRecOn() && !_wakeLock) await _acquireWakeLock();
-    _updWakeLockIcon();
     // Native GPS bafer (vlaka + trag + doznaka pojas) — popuni prazninu koja
     // je nastala dok je app bio zatvoren/u pozadini (vidi _drainNativeGpsBuffer
-    // i GpsService.java).
-    try { await _drainNativeGpsBuffer(); } catch(e) {}
+    // i GpsService.java). Pokreće se PRIJE čekanja na wake lock: dopuna
+    // sinhrono zauzme _busy, pa živi fiks pristigao tokom tog await-a čeka nju.
+    const dopuna = _drainNativeGpsBuffer().catch(() => {});
+    if (_anyRecOn() && !_wakeLock) await _acquireWakeLock();
+    _updWakeLockIcon();
+    await dopuna;
     // Je li admin u međuvremenu opozvao pristup ovom nalogu?
     _provjeriOpozivOdobrenja();
     // Ako sam ja admin — ima li novih registracija koje čekaju odobrenje?
@@ -18668,6 +18852,7 @@ function _togRecBegin() {
     _startGpsWatchdog();
     _updFabVisibility();
     _crashStartTimer();   // auto-save svakih 30s
+    _crashSaveVlaka(true);
     // dodiISnimi: lager se imenuje na startu (kamionski put) — sad kad je snimanje
     // stvarno počelo (poslije stabilizacije signala), a ne na fiksni tajmer poslije klika.
     if (_pendingLagerIdx != null) {
@@ -18757,6 +18942,7 @@ function toggleRecPause() {
   if (!recOn) return;
   recPaused = !recPaused;
   if (recPaused) _pauziOtvoriProzor(_recPauseWin); else _pauziZatvoriProzor(_recPauseWin);
+  if (recPaused) _crashSaveVlaka(true);  // tačke do pauze — periodični upis u pauzi stoji
   _kfReset(); _lastRecTime = 0; _lastPtAcceptedAt = 0;
   if (recPaused && _precizActive) _precizReset();  // D3-Q: ne ostavljaj dugme zaglavljeno na "n/10"
   if (recPaused) {
@@ -19872,6 +20058,11 @@ function _simplifyRecordedPts(pts, toleranceM) {
 }
 
 function onP(p) {
+  // Dok dopuna iz native bafera traje (ima predahe — await), živi fiks čeka da
+  // ona završi. Inače bi pomjerio _onPLastFixTs na "sada", pa bi dopuna ostatak
+  // pozadinskog perioda preskočila kao "već viđen" i potvrdila (obrisala)
+  // journal — a i ono što prođe ušlo bi IZA novije žive tačke (cik-cak).
+  if (_drainNativeGpsBuffer._busy) { _drainLiveQ.push({ fn: onP, arg: p }); return; }
   const { latitude: la, longitude: lo, altitude: al, accuracy: ac,
           speed: gpsSpeed, heading: gpsHeading } = p.coords;
   // Zabilježi SIROVI fix ODMAH (prije filtriranja) — _drainNativeGpsBuffer po
@@ -20215,6 +20406,7 @@ function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs, bypassPauzu) {
   _lastPtAcceptedAt = nowMs;
 }
 let _lastGpsFixTime = 0;  // timestamp zadnjeg uspješnog GPS fixa
+let _drainLiveQ = [];  // živi fiksovi pristigli tokom native dopune (vidi onP)
 let _onPLastFixTs   = 0;  // timestamp zadnjeg SIROVOG fiksa iz glavnog watch-a (za native bafer dedup)
 let _gpsWatchdogTimer = null;
 let _heartbeatTimer   = null;
@@ -20362,16 +20554,36 @@ const _dozPauseWin  = [];
 function _uPauziIntervalu(win, t) {
   return win.some(w => t >= w.start && (w.end === null || t < w.end));
 }
-function _pauziOtvoriProzor(win) { win.push({ start: Date.now(), end: null }); }
+// Intervali pauze su do sada živjeli samo u memoriji — poslije ubijenog
+// procesa (hladan start) ih nije bilo, pa je oporavak dopunio i sve što je
+// native servis snimio TOKOM pauze (npr. šetnju do vozila). Zato se svaka
+// promjena odmah upisuje i _crashCheck ih čita (_pauziUcitajSnimljene).
+const _PAUZE_KEY = 'tvlake_crash_pauze';
+function _pauziSnimi() {
+  try { localStorage.setItem(_PAUZE_KEY, JSON.stringify({ vlaka: _recPauseWin, trag: _tragPauseWin, doznaka: _dozPauseWin })); } catch(e) {}
+}
+function _pauziUcitajSnimljene() {
+  const out = { vlaka: [], trag: [], doznaka: [] };
+  try {
+    const o = JSON.parse(localStorage.getItem(_PAUZE_KEY) || 'null');
+    for (const k of Object.keys(out)) {
+      if (Array.isArray(o?.[k])) out[k] = o[k].filter(w => w && Number.isFinite(w.start) && (w.end === null || Number.isFinite(w.end)));
+    }
+  } catch(e) {}
+  return out;
+}
+function _pauziOtvoriProzor(win, t) { win.push({ start: t || Date.now(), end: null }); _pauziSnimi(); }
 function _pauziZatvoriProzor(win) {
   const last = win[win.length - 1];
   if (last && last.end === null) last.end = Date.now();
+  _pauziSnimi();
 }
 // Nakon uspješnog drain-a prošli intervali više nisu potrebni (journal koji
 // su opisivali je obrisan) — zadrži SAMO eventualno još otvoren (tekući)
 // interval, inače bi niz rastao neograničeno tokom dugog terenskog dana.
 function _pauziOcistiZatvorene(win) {
   for (let i = win.length - 1; i >= 0; i--) if (win[i].end !== null) win.splice(i, 1);
+  _pauziSnimi();
 }
 // Snimanje zaustavljeno DOK JE PAUZIRANO ostavlja interval sa `end:null`, a
 // takav interval _uPauziIntervalu smatra "traje i dalje" za SVAKO buduće
@@ -20383,7 +20595,7 @@ function _pauziOcistiZatvorene(win) {
 // odbacuje sve zaostalo iz prethodne sesije (_pauziResetuj): tačke nove sesije
 // po definiciji ne mogu pripadati pauzi one prethodne.
 function _pauziZavrsi(win) { _pauziZatvoriProzor(win); }
-function _pauziResetuj(win) { win.length = 0; }
+function _pauziResetuj(win) { win.length = 0; _pauziSnimi(); }
 function _bgRecStart(label) {
   const now = Date.now();
   if (recOn && !_nativeSessionSince.vlaka) _nativeSessionSince.vlaka = now;
@@ -20412,6 +20624,12 @@ function _recBarStanje() {
   if (typeof _tragOn   !== 'undefined' && _tragOn)   aktivni.push('trag');
   if (typeof _dozGpsOn !== 'undefined' && _dozGpsOn) aktivni.push('doznaka');
   if (!aktivni.length) return null;
+  // Na Karti #action-bar već nosi vlaku i trag — doznaka je tamo jedina bez
+  // kontrola, pa ona ide naprijed. Inače bi uz istovremenu vlaku traka bila
+  // sakrivena kao "duplikat" i pojas ne bi imao ni oznaku ni Završi.
+  if (_activeTab === 'karta' && aktivni.length > 1 && aktivni.includes('doznaka')) {
+    aktivni.splice(aktivni.indexOf('doznaka'), 1); aktivni.unshift('doznaka');
+  }
   const ostalih = aktivni.length - 1;
   const tip = aktivni[0];
   if (tip === 'vlaka') {
@@ -21709,6 +21927,7 @@ function _fabSnimTragBegin() {
     if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     _updTragStats();
     _crashStartTimer();   // auto-save svakih 30s
+    _crashSaveTrag(true);
     _bgRecStart('trag');  // pozadinsko snimanje — nastavi i kad app ode u pozadinu
 }
 
@@ -21716,6 +21935,7 @@ function togTragPause() {
   if (!_tragOn) return;
   _tragPaused = !_tragPaused;
   if (_tragPaused) _pauziOtvoriProzor(_tragPauseWin); else _pauziZatvoriProzor(_tragPauseWin);
+  if (_tragPaused) _crashSaveTrag(true);  // tačke do pauze — periodični upis u pauzi stoji
   const ico = document.getElementById('ab-trag-pauza-ico');
   const txt = document.getElementById('ab-trag-pauza-txt');
   const btn = document.getElementById('ab-trag-pauza');
@@ -21969,7 +22189,8 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
     // prozora bi ih sljedeća dopuna (bypassPauzu) ubacila u trag kao da pauze
     // nije ni bilo. Početak je vrijeme fiksa koji je pauzu okinuo (zna biti
     // historijsko pri dopuni), ne "sada".
-    _tragPauseWin.push({ start: now, end: null });
+    _pauziOtvoriProzor(_tragPauseWin, now);
+    if (!bypassPauzu) _crashSaveTrag(true);
     _tragLiveClear();
     _tragBuf = [];
     _tragLastT = 0;
@@ -22115,7 +22336,12 @@ async function _drainNativeGpsBuffer() {
   _pauziOcistiZatvorene(_recPauseWin);
   _pauziOcistiZatvorene(_dozPauseWin);
   } catch(e) { showToast('⚠ GPS dopuna čeka sigurno spremanje: ' + e.message); }
-  finally { _drainNativeGpsBuffer._busy = false; }
+  finally {
+    _drainNativeGpsBuffer._busy = false;
+    // Zadržani živi fiksovi tek sad, POSLIJE starijih tačaka iz bafera.
+    const q = _drainLiveQ.splice(0);
+    for (const x of q) { try { x.fn(x.arg); } catch(e) { console.warn('Živi fiks poslije dopune', e); } }
+  }
 
 }
 
@@ -40153,6 +40379,14 @@ async function _dozStartGPSBegin() {
   _dozGpsSessionId = _genUUID(); _dozGpsStopping = false;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
   _pauziResetuj(_dozPauseWin);   // zaostala pauza prethodne sesije ne smije suditi novim tačkama
+  // Sesija postoji od prvog trenutka, ne tek od prve tačke koju WebView primi —
+  // inače ubijen proces prije prvog fiksa nema šta oporaviti iz native bafera.
+  // Čeka se (await): sjeme poslije prve tačke bi vratilo vrijeme sesije unazad.
+  try {
+    if (typeof FieldStore !== 'undefined') await FieldStore.seedSession({ id: _dozGpsSessionId, uid: _dozGpsUserId,
+      projId: _dozGpsProjId, len: 0, ts: Date.now() }, []);
+    else localStorage.setItem(_DOZ_LIVE_KEY, JSON.stringify({ projId: _dozGpsProjId, pts: [], len: 0, ts: Date.now() }));
+  } catch(e) { console.warn('Doznaka početni snimak', e); }
   _dozGpsMaxSpd = 0; _dozGpsSpdSum = 0; _dozGpsSpdCnt = 0;
   _dozGpsElevData = []; _dozGpsFullPts = [];
   _dozLastLiveFixTs = 0;
@@ -40178,7 +40412,8 @@ async function _dozStartGPSBegin() {
   // dva paralelna watch-a. (Ako je korisnik i inače imao GPS marker uključen, ostaje.)
   if (!_gpsStabWasOn) stopGPS();
 
-  _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
+  _dozGpsWatchId = navigator.geolocation.watchPosition(async function dozLive(pos) {
+    if (_drainNativeGpsBuffer._busy) { _drainLiveQ.push({ fn: dozLive, arg: pos }); return; }
     // Native dopuna smije preskočiti fix tek poslije uspješnog trajnog upisa.
     const fixTs = pos.timestamp || Date.now();
     if (_dozGpsStopping) return;
@@ -40709,10 +40944,17 @@ async function dozDeleteMarking(id) {
   // na server, pa "brisanje" mora otkazati red čekanja umjesto da gađa nepostojeći ID.
   if (String(id).startsWith('local_')) {
     let q;try{q=_OL.loadQueue(true);}catch(e){showToast('⚠ Red za slanje nije čitljiv — zona nije uklonjena');return;}
-    const hasQueued = q.some(o => o.type === 'insert_doz_marking' && o._localId === id && (!o._uid||o._uid===owner));
+    const queued = q.find(o => o.type === 'insert_doz_marking' && o._localId === id && (!o._uid||o._uid===owner));
+    const hasQueued = !!queued;
     if (hasQueued) {
       try{localStorage.setItem(_OL.QUEUE, JSON.stringify(q.filter(o => !(o.type === 'insert_doz_marking' && o._localId === id && (!o._uid||o._uid===owner)))));}
       catch(e){showToast('⚠ Brisanje nije sačuvano — zona ostaje dostupna');return;}
+      // Upis je već krenuo (možda stigao uz izgubljen odgovor) — zona ima
+      // klijentski UUID, pa se briše tačno ona; nema je na serveru = čisto.
+      if (queued._pokusano && queued.payload?.id &&
+          !_OL.enqueue({ type: 'delete_doz_marking', payload: { id: queued.payload.id, project_id: projectId } })) {
+        showToast('⚠ Brisanje nije sačuvano u redu — zona ostaje dostupna'); return;
+      }
     }
     _dozMarkings = _dozMarkings.filter(m => m.id !== id);
     // Keš mora pratiti — inače se zona vrati pri sljedećem otvaranju bez signala.

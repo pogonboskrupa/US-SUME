@@ -55,7 +55,7 @@ function pauzaApi() {
   const src = ['_uPauziIntervalu', '_pauziOtvoriProzor', '_pauziZatvoriProzor',
                '_pauziOcistiZatvorene', '_pauziZavrsi', '_pauziResetuj']
     .map(n => extractFn(n)).join('\n');
-  return new Function(src + '\nreturn { _uPauziIntervalu, _pauziOtvoriProzor, ' +
+  return new Function('function _pauziSnimi() {}\n' + src + '\nreturn { _uPauziIntervalu, _pauziOtvoriProzor, ' +
     '_pauziZatvoriProzor, _pauziOcistiZatvorene, _pauziZavrsi, _pauziResetuj };')();
 }
 

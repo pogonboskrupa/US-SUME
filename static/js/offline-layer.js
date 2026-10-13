@@ -63,7 +63,16 @@ const _OL = {
           o.payload.korisnik_id === op.payload.korisnik_id &&
           (o.payload.projekt_id ?? null) === (op.payload.projekt_id ?? null) &&
           (o.payload.id ?? null) === (op.payload.id ?? null));
-        if (idx >= 0) q.splice(idx, 1);
+        if (idx >= 0) {
+          // Zamijenjena verzija je možda već STIGLA na server (izgubljen
+          // odgovor na slaboj vezi) i podigla reviziju. Bez traga o njoj nova
+          // verzija bi sa starom revizijom zauvijek bila "konflikt" — ovako
+          // procesor prepozna da je red na serveru naša ranija verzija.
+          const old = q[idx];
+          op._prevPayloads = [...(old._prevPayloads || []), old.payload].slice(-5);
+          if (old._pokusano) op._pokusano = true;
+          q.splice(idx, 1);
+        }
       }
       // Deduplicate upsert_log by datum
       if (op.type === 'upsert_log') {
@@ -167,6 +176,19 @@ const _OL = {
       localStorage.setItem(this.QUEUE, JSON.stringify(q));
       return false;
     } catch(e) { return false; }
+  },
+
+  // Insert je krenuo na mrežu — možda je stigao na server iako odgovor nije.
+  // Lokalno brisanje takve stavke mora zato poslati i brisanje na server.
+  oznaciPokusano(key) {
+    try {
+      const k = String(key);
+      const q = this.loadQueue(true);
+      const op = q.find(o => String(o._qid ?? o.ts) === k);
+      if (!op || op._pokusano) return;
+      op._pokusano = true;
+      localStorage.setItem(this.QUEUE, JSON.stringify(q));
+    } catch(e) {}
   },
 
   razmakMs(n) { return Math.min(15 * 60000, 30000 * Math.pow(2, Math.max(0, n - 1))); },

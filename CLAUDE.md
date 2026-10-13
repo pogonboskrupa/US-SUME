@@ -1901,6 +1901,59 @@ način provjere."
   pa je cijela analiza na blagom terenu tvrdila da nagiba nema. `maxGrade` je
   izmješten izvan praga; `steepLen`/`steepSegs` ostaju vezani za 20%.
 
+## Oporavak snimanja i ručno slanje na slaboj vezi (v3.0.1)
+
+Nalazi iz pregleda bugova (GPS snimanje + sync), svi popravljeni u jednom
+izdanju. Testovi: `tests/js/gps-oporavak-nastavak.test.js`,
+`tests/js/sync-brisanje-revizija.test.js`, proširen `gps-bg-buffer.test.js`.
+
+- **Oporavljen trag nije stvarno snimao** — pisalo je "snimanje nastavljeno",
+  a nije pokretan ni GPS watch ni native servis. Sad `startGPS()` +
+  `_bgRecStart('trag')` POSLIJE dopune (da `_nativeSessionSince` ne odsiječe
+  tačke); dopuna ide sa `bypassPauzu` (auto-pauza usred dopune ne gubi ostatak).
+- **Auto-pauza otvara prozor pauze** (`_pauziOtvoriProzor(_tragPauseWin, now)`)
+  — bez toga je dopuna iz native bafera ubacivala fiksove iz pauze.
+- **Prozori pauze su TRAJNI** (`_PAUZE_KEY`, `_pauziSnimi` na svakoj promjeni,
+  `_pauziUcitajSnimljene` u `_crashCheck`) — poslije ubijenog procesa oporavak
+  je inače dopunjavao i šetnju do vozila snimljenu tokom pauze.
+- **Crash snimak se piše odmah pri startu** (`_crashSaveVlaka(true)`,
+  `_crashSaveTrag(true)`, `FieldStore.seedSession` za doznaku — UZ await, da
+  sjeme ne vrati vrijeme sesije unazad poslije prve tačke) i pri pauzi. Ranije
+  bez ≥2 tačke i 30 s nije bilo snimka, pa ni oporavka iz native bafera. Trag
+  bez tačke uzima `snapT.ts` kao granicu (ne "sada"); prazna oporavljena vlaka
+  se ne pravi.
+- **Oporavak vlake ide u POSTOJEĆU vlaku** (`_vlakaZaOporavak`: sbId, pa
+  nm/br/kr/projekat), ne u kopiju "ime ↩ vrijeme" koja je dvaput brojala dužinu
+  mreže. Kad je lokalna vlaka duža od snimka, dopuna iz bafera kreće tek iza
+  tačke najbliže kraju lokalnog repa (`_vlakaOporavakKandidati`, prva unutar
+  10 m, inače najbliža).
+- **Doznaka: dopuna PRIJE `watchPosition`** — živi fiks je ulazio između
+  starijih tačaka (cik-cak); pad dopune ne sprječava nastavak snimanja.
+- **Živi fiks tokom native dopune čeka njen kraj** (`_drainLiveQ`, u `onP` i
+  oba doznaka watch-a) — inače pomjeri `_onPLastFixTs` na "sada" i dopuna
+  ostatak pozadinskog perioda preskoči kao viđen pa potvrdi (obriše) journal.
+  `visibilitychange` zato pokreće dopunu PRIJE čekanja na wake lock.
+- **Stop iz notifikacije** gasi cijeli GpsService; ako drugo snimanje traje,
+  `_nativeRecAction` ponovo zove `AndroidGps.startRecording`.
+- **Traka snimanja na Karti** uz vlaku/trag pokazuje doznaku (#action-bar je
+  ne pokriva) — `_recBarStanje` je stavlja naprijed samo na Karti.
+- **Vječni LOCAL_CONFLICT**: zamjena `upsert_vlaka` u redu nosi
+  `_prevPayloads`; kad je red na serveru naša ranija verzija (izgubljen
+  odgovor), procesor upisuje preko nje uz STVARNU reviziju servera.
+- **Lokalno brisanje vraćalo zapis sa servera**: insert koji je krenuo na mrežu
+  dobija `_pokusano` (`_OL.oznaciPokusano`, prije poziva; dedup ga prenosi).
+  Brisanje takve stavke šalje i brisanje na server: vlaka bez ID-ja
+  (`delete_vlaka` sa `id:null` — procesor je nađe po ključu, nema je = čisto),
+  zona po klijentskom UUID-u, projekat novim tipom `delete_projekt` (ID-jevi u
+  redu se filtriraju i u `sbLoadProjekti`). "Nema reda" je uspjeh samo uz
+  potvrđenu prijavu (`potvrdiPrijavu` — anonimni RLS SELECT je isto prazan).
+- **Stavke koje nikad ne mogu proći** više ne stoje vječno u "čeka slanje":
+  brisanje nepostojeće/skrivene zone i status obrisanog odjela (bez upisa
+  odjela u redu) su gotovi; GPS tačke odjela koji ne postoji na serveru
+  (23503 + provjera) idu u `_dozSirocad` — ostaju na telefonu, ne šalju se,
+  ne broje se (panel Server ih navodi zasebno).
+- `deleteProjektUI` čita red STRIKTNO (oštećen red se ne prepisuje praznim).
+
 ## Uglačavanje snimljenog traga/vlake ("Ugladi")
 
 - **Douglas-Peucker NE MOŽE ukloniti vraćanje istim putem (v3.120.0)** — ovo je
