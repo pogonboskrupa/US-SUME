@@ -6,8 +6,11 @@
 -- ON DELETE pravilo. Umjesto nabrajanja tabela koje repo ne vidi, funkcija
 -- sama pronađe SVAKI strani ključ prema auth.users / public.korisnici koji
 -- bi blokirao brisanje i razriješi ga:
---   * kolona smije biti NULL  -> SET NULL (zajednički podaci ostaju timu)
---   * kolona je NOT NULL      -> red se briše (lični podaci tog korisnika)
+--   * lična tabela  -> red se briše (fotografije, tragovi, dnevnik, oznake,
+--     šifre — ne znače ništa bez svog vlasnika)
+--   * sve ostalo    -> vlasništvo prelazi na admina koji briše (projekti,
+--     vlake, doznaka... ostaju timu i ostaju nečiji — NULL vlasnik bi ih
+--     mogao sakriti od RLS-a, a brisanje bi kaskadno odnijelo podatke kolega)
 -- Ključevi koji već imaju CASCADE / SET NULL se ne diraju — baza ih sama
 -- obavi. Sve je u jednoj transakciji: pad bilo kojeg koraka ne ostavlja
 -- djelimično obrisanog korisnika.
@@ -21,6 +24,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_temp AS $$
 DECLARE
   fk record;
+  licne text[] := ARRAY['loc_fotos','tragovi','dnevni_log','text_labels','share_codes'];
   n bigint;
   ociscen jsonb := '{}'::jsonb;
 BEGIN
@@ -36,21 +40,22 @@ BEGIN
 
   FOR fk IN
     SELECT c.conrelid::regclass AS tabela,
-           a.attname            AS kolona,
-           a.attnotnull         AS obavezna
+           cl.relname           AS ime,
+           a.attname            AS kolona
     FROM pg_constraint c
     JOIN pg_attribute a
       ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    JOIN pg_class cl ON cl.oid = c.conrelid
     WHERE c.contype = 'f'
       AND array_length(c.conkey, 1) = 1
       AND c.confrelid IN ('auth.users'::regclass, 'public.korisnici'::regclass)
       AND c.conrelid <> 'public.korisnici'::regclass
       AND c.confdeltype IN ('a', 'r')          -- NO ACTION / RESTRICT
   LOOP
-    IF fk.obavezna THEN
+    IF fk.ime = ANY(licne) THEN
       EXECUTE format('DELETE FROM %s WHERE %I = $1', fk.tabela, fk.kolona) USING target_id;
     ELSE
-      EXECUTE format('UPDATE %s SET %I = NULL WHERE %I = $1', fk.tabela, fk.kolona, fk.kolona) USING target_id;
+      EXECUTE format('UPDATE %s SET %I = $2 WHERE %I = $1', fk.tabela, fk.kolona, fk.kolona) USING target_id, auth.uid();
     END IF;
     GET DIAGNOSTICS n = ROW_COUNT;
     IF n > 0 THEN

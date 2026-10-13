@@ -32,6 +32,18 @@ PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
 zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni
 nezavisno od toga kako se `X.Y.Z` mijenja.
 
+## "Ažuriraj aplikaciju" — release SAMO na izričit zahtjev (od v3.0.0)
+
+Korisnikov trajni zahtjev: verzija se podiže, a push na
+`claude/elegant-mayer-4lxj53` (koji pokreće CI → GitHub Release) radi se
+SAMO kad korisnik kaže **"ažuriraj aplikaciju"** (ili jasno isto). Na ostale
+promptove: izmjene, testovi i commit LOKALNO, bez bump-a verzije i bez push-a.
+Push bez bump-a je također pogrešan — CI bi pod istim tagom prepisao APK
+postojećeg releasea, a telefon (isti versionCode) ne bi ponudio update.
+Kad stigne "ažuriraj aplikaciju": jedan bump (sva tri mjesta), commit, push.
+Lokalni commiti nestaju ako se kontejner ugasi — upozoriti korisnika ako se
+nakupi puno neobjavljenog rada.
+
 ## APK build — assets se NE povlače sami
 
 `android/app/src/main/assets/` **nije git-tracked** i mora se ručno
@@ -2843,6 +2855,24 @@ namjerno, prije nego se jave.
   trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
   prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
   čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Uređivanje traga tokom snimanja + brisanje korisnika (v3.0.0)**: snimani
+  trag nije u registru dok se ne završi, pa naziv/boja/stil čekaju u
+  `_tragLiveMeta` (dodir na `#ab-trag-stats` → list `#trag-ured`) i prelaze na
+  sačuvani trag preko `_tragRegAdd(pts, meta)`. Crash snimak traga ima JEDNOG
+  pisca oblika (`_crashTragTekst`, nosi `meta`) — tajmer, oporavak i drain
+  povratka u prvi plan svi idu kroz njega. `_tragUkloniZadnje` piše snimak i u
+  pauzi (`_crashSaveTrag(true)`), a brzinsku kapiju vraća na VRIJEME nove zadnje
+  tačke (inače sljedeći fiks izgleda kao nemoguć skok). Izričito izabrana boja
+  traga (`t.colorRucno`) pobjeđuje globalnu `_lineStyle.tragCol`. Sačuvani trag
+  sad čuva vrijeme i tačnost tačaka (`fabSnimTrag` → `[la,lo,al,t,ac]`) — bez
+  toga kartica nije znala početak ni trajanje. Brisanje korisnika:
+  `admin_delete_user` (migracija `20261013_admin_delete_user_fk.sql`, ručno u
+  SQL Editoru) sam razriješi svaki blokirajući FK prema auth.users/korisnici —
+  lične tabele (`loc_fotos`, `tragovi`, `dnevni_log`, `text_labels`,
+  `share_codes`) se brišu, sve ostalo prelazi na admina koji briše (zajednički
+  podaci ne nestaju). Granice "Pronađi odjel": slušalac `popupclose` se skida u
+  `clear()` — `map.once` prethodnog rezultata je brisao obrub sljedećeg. Test:
+  `tests/js/trag-ured.test.js`.
 - **Traka koordinata i "Moja lokacija" (v2.9.9)**: traka je JEDAN nizak red
   (~34 px, `⛰ 208 m │ Y … X … │ 1:12 500 ▾`), pozadina 55 % providna uz
   `backdrop-filter`; ID-jevi (`nv-val`, `omgi-y/x`, `nv-koord`,
@@ -4666,7 +4696,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.9, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v3.0.0, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

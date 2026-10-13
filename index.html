@@ -9049,7 +9049,7 @@ async function adminDeleteUser(userId, name) {
     // Stara (ručno kreirana) verzija funkcije ne zna za tabele koje upućuju na
     // korisnika (loc_fotos...) — rješenje je migracija, ne ponovni pokušaj.
     const fk = /foreign key|23503/i.test((error.message || '') + ' ' + (error.code || ''));
-    showToast('Greška pri brisanju: ' + error.message + (fk ? ' — pokreni migraciju 20261013_admin_delete_user_fk.sql u Supabase SQL Editoru' : ''));
+    showToast('Greška pri brisanju: ' + error.message + (fk ? ' — ako migracija 20261013_admin_delete_user_fk.sql još nije pokrenuta u Supabase SQL Editoru, pokreni je' : ''));
     return;
   }
   showToast(`Korisnik "${name}" obrisan`);
@@ -14576,10 +14576,13 @@ function _crashSaveVlaka() {
   }
 }
 
-function _crashSaveTrag() {
-  if (!_tragOn || _tragPaused || _tragPts.length < 2) return;
+// Jedini oblik crash snimka traga — svi pisci (tajmer, oporavak, povratak u
+// prvi plan, uklanjanje tačaka) idu kroz ovo, da uređeni naziv/boja ne nestanu.
+function _crashTragTekst() { return JSON.stringify({ pts: _tragPts, ts: Date.now(), meta: _tragLiveMeta || null }); }
+function _crashSaveTrag(sila) {
+  if (!_tragOn || (!sila && (_tragPaused || _tragPts.length < 2))) return;
   let tekst;
-  try { tekst = JSON.stringify({ pts: _tragPts, ts: Date.now(), meta: _tragLiveMeta || null }); }
+  try { tekst = _crashTragTekst(); }
   catch(e) { return; }
   try {
     localStorage.setItem(_CRASH_TRAG_KEY, tekst);
@@ -14753,7 +14756,7 @@ async function _crashCheck() {
       showToast(`✅ Oporavljen trag: ${_tragPts.length} tačaka`
         + (dodatoT ? ` (${dodatoT} iz pozadinskog snimanja)` : '')
         + ' — snimanje nastavljeno');
-      localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts:_tragPts, ts:Date.now() }));
+      localStorage.setItem(_CRASH_TRAG_KEY, _crashTragTekst());
       _crashStartTimer();
     } catch(e) { _svePersistirano = false; showToast('⚠ Greška pri oporavku traga: ' + e.message); }
   }
@@ -20788,7 +20791,7 @@ function _tragRegAddLayer(t) {
   const dashArray = dash==='dot' ? '2 6' : (dash==='dash' ? '8 4' : null);
   const lls = t.pts.map(p => [p[0], p[1]]);
   const line = L.polyline(lls, {
-    color: _lineStyle.tragCol || t.color || '#f97316',
+    color: (t.colorRucno && t.color) || _lineStyle.tragCol || t.color || '#f97316',
     weight: t.weight || _lineStyle.tragW,
     opacity: (_lineStyle.tragOp || 85) / 100, dashArray, interactive: false,
     pane: 'tragMsrLines'
@@ -20900,7 +20903,7 @@ function _tragRegAdd(pts, meta) {
   // Naziv/boja/stil uređeni DOK je trag sniman (_tragLiveMeta) prelaze na sačuvani trag.
   if (meta) {
     if (String(meta.name || '').trim()) t.name = String(meta.name).trim();
-    if (meta.color) t.color = meta.color;
+    if (meta.color) { t.color = meta.color; t.colorRucno = true; }
     if (meta.weight) t.weight = meta.weight;
     if (meta.dashStyle) t.dashStyle = meta.dashStyle;
   }
@@ -21443,6 +21446,7 @@ function _tragoviSetColor(id, col) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   t.color = col;
+  t.colorRucno = true;
   const line = _tragLayers[id];
   if (line) line.setStyle({ color: col });
   _tragRegSave();
@@ -21611,7 +21615,7 @@ function fabLokacija() {
 function fabSnimTrag() {
   if (_tragOn) {
     if (_tragPts.length > 1) {
-      const pts3d = _tragPts.map(([la, lo, al]) => ({la, lo, al}));
+      const pts3d = _tragPts.map(([la, lo, al, t, ac]) => ({la, lo, al, t, ac}));
       // Blaga tolerancija (0.8 m) — čuva vrhove zavoja da se vijugav put ne
       // izravna; i dalje briše najsitniji jitter na ravnim dionicama.
       // try/catch: _rdpSimplify je REKURZIVAN (O(n) dubina na degenerisanom
@@ -21620,7 +21624,8 @@ function fabSnimTrag() {
       // wake lock cure). Vlaka ekvivalent (_simplifyRecordedPts) već ima guard.
       let simp;
       try { simp = _rdpSimplify(pts3d, 0.8); } catch(e) { simp = pts3d; }
-      const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
+      // Vrijeme i tačnost ostaju: bez njih kartica traga ne zna početak ni trajanje.
+      const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al, p.t, p.ac]);
       const saved = _tragRegAdd(final, _tragLiveMeta);
       if (!saved) { showToast('⚠ Trag nije sačuvan — oslobodi prostor i pokušaj ponovo'); return; }
       if (_activeTab === 'teren') {
@@ -21734,8 +21739,11 @@ let _tragLiveMeta = null;
 function _tragDashArr(d) { return d === 'dot' ? '2 6' : (d === 'dash' ? '8 4' : null); }
 function _tragLiveStil() {
   const m = _tragLiveMeta || {};
-  return { color: m.color || '#f97316', weight: m.weight || _lineStyle.tragW, opacity: 0.85,
-           dashArray: _tragDashArr(m.dashStyle), pane: 'tragMsrLines' };
+  // Ista pravila kao sačuvani trag (_tragRegAddLayer) — inače bi linija na
+  // "Završi" promijenila izgled.
+  return { color: m.color || _lineStyle.tragCol || '#f97316', weight: m.weight || _lineStyle.tragW,
+           opacity: (_lineStyle.tragOp || 85) / 100,
+           dashArray: _tragDashArr(m.dashStyle || _lineStyle.tragDash), pane: 'tragMsrLines' };
 }
 function _tragUrediOtvori() {
   if (!_tragOn) return;
@@ -21795,7 +21803,8 @@ function _tragUkloniZadnje(metri) {
   _tragLineSync();
   _updTragStats();
   if (_activeTab === 'teren' && typeof terenUpdTragStats === 'function') terenUpdTragStats();
-  if (!_tragPaused) { try { _crashSaveTrag(); } catch(e) {} }
+  // I u pauzi i sa jednom tačkom: snimak ne smije vratiti ono što je korisnik uklonio.
+  try { _crashSaveTrag(true); } catch(e) {}
   _tragUrediInfo();
   showToast('↶ Uklonjeno ' + n + ' tač. (' + _tragFmtLen(skinuto) + ')');
   return n;
@@ -22065,7 +22074,7 @@ async function _drainNativeGpsBuffer() {
     }
   }
   if (recOn && !_saveLocalVlake()) throw new Error('GPS lokalni upis nije uspio');
-  if (_tragOn) localStorage.setItem(_CRASH_TRAG_KEY, JSON.stringify({ pts:_tragPts, ts:Date.now() }));
+  if (_tragOn) localStorage.setItem(_CRASH_TRAG_KEY, _crashTragTekst());
   _nativeBufPotvrdi();
   // Zatvoreni intervali pauze su svoj posao obavili (odlučili sudbinu svih
   // tačaka do sada drenairanih) — brišu se da niz ne raste neograničeno kroz

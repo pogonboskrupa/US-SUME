@@ -67,7 +67,12 @@
     }).join('') + (all.length > MAX ? '<p class="gt-empty">Još ' + (all.length - MAX) + ' — suzi pretragu.</p>' : '');
     render._last = all;
   }
+  // Slušalac zatvaranja popupa se veže za JEDAN rezultat i skida se u clear():
+  // otvaranje drugog rezultata zatvara prethodni popup, pa bi stari slušalac
+  // (map.once) odmah obrisao žuti obrub NOVOG rezultata.
+  let onClose = null;
   function clear() {
+    if (onClose) { try { map.off('popupclose', onClose); } catch (e) {} onClose = null; }
     if (highlight) { try { map.removeLayer(highlight); } catch (e) {} highlight = null; }
   }
   // Odjel se istakne žutim obrubom i kad je sam sloj sakriven ili u režimu
@@ -86,7 +91,9 @@
       map.fitBounds(b, { padding: [40, 40], maxZoom: 17, animate: false });
       if (typeof _kmlOpenPopup === 'function') _kmlOpenPopup(c.l, b.getCenter());
     }
-    map.once('popupclose', () => setTimeout(clear, 0));
+    const mine = highlight;
+    onClose = () => setTimeout(() => { if (highlight === mine) clear(); }, 0);
+    map.on('popupclose', onClose);
   }
   root.GraniceTrazi = { search, render, open, clear, score, label };
 })(typeof window !== 'undefined' ? window : globalThis);
