@@ -382,6 +382,38 @@ window.addEventListener('DOMContentLoaded',function(){
   transition:border-color 0.2s,color 0.2s,background 0.2s;
 }
 .auth-btn-secondary:hover { border-color:rgba(74,163,90,0.5); color:#4eca65; background:rgba(58,158,80,0.05); }
+/* Registracija (v2.9.6): zlatna kao grb — uočljiva, ali i dalje ispod Prijave. */
+.auth-btn-reg {
+  width:100%; min-height:56px; display:flex; align-items:center; gap:12px; text-align:left;
+  padding:10px 14px; border-radius:12px; cursor:pointer;
+  background:linear-gradient(135deg,rgba(212,166,58,0.18),rgba(212,166,58,0.08));
+  border:1.5px solid #d4a63a; color:#f5d98b;
+  font-family:'DM Sans',Arial,Roboto,sans-serif;
+  box-shadow:0 2px 14px rgba(212,166,58,0.18);
+  transition:background .15s,transform .15s;
+}
+.auth-btn-reg:active { transform:translateY(1px); background:rgba(212,166,58,0.26); }
+.auth-btn-reg-ico { flex:0 0 36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#d4a63a; color:#1b2a17; }
+.auth-btn-reg-ico .ic { width:20px; height:20px; }
+.auth-btn-reg-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.auth-btn-reg-txt b { font-size:15px; font-weight:700; color:#fbe3a0; }
+.auth-btn-reg-txt small { font-size:12px; color:rgba(245,217,139,0.78); }
+.auth-btn-reg-arr .ic { width:18px; height:18px; }
+/* Izbor profila: terenski (narandžasto) jasno odvojen od šumarija (zeleno). */
+.reg-prof-grupa { display:flex; flex-direction:column; gap:8px; }
+.reg-prof { cursor:pointer; font-family:'DM Sans',Arial,Roboto,sans-serif; border-radius:10px; transition:background .15s,border-color .15s; }
+.reg-prof-teren { display:flex; align-items:center; gap:12px; width:100%; min-height:62px; padding:10px 12px; text-align:left;
+  background:rgba(249,115,22,0.10); border:1.5px solid rgba(249,115,22,0.55); color:#fed7aa; }
+.reg-prof-teren .reg-prof-ico { flex:0 0 36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#f97316; color:#fff; }
+.reg-prof-teren .reg-prof-txt { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.reg-prof-teren b { font-size:14px; color:#ffedd5; }
+.reg-prof-teren small { font-size:12px; line-height:1.4; color:rgba(254,215,170,0.82); }
+.reg-prof-teren.on { background:rgba(249,115,22,0.24); border-color:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.35); }
+.reg-prof-sep { margin-top:4px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:rgba(180,220,188,0.75); }
+.reg-prof-mreza { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.reg-prof-sum { min-height:46px; padding:8px 10px; font-size:14px; font-weight:600;
+  background:rgba(58,158,80,0.08); border:1.5px solid rgba(74,163,90,0.40); color:#cfe9d4; }
+.reg-prof-sum.on { background:#2e8b42; border-color:#4eca65; color:#fff; box-shadow:0 0 0 2px rgba(78,202,101,0.30); }
 /* Error */
 .auth-err {
   color:#f87171; font-size:12px; text-align:center;
@@ -4451,7 +4483,14 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-btn-primary-inner">Prijava <span><svg class="ic"><use href="#ic-naprijed"/></svg></span></div>
         </button>
         <div class="auth-or-sep"><span class="auth-or-txt">ILI</span></div>
-        <button class="auth-btn-secondary" onclick="authShowReg()">Registracija novog korisnika</button>
+        <!-- Registracija je ranije bila prozirno dugme sa blijedim tekstom, pa ga
+             novi korisnici nisu primjećivali ispod "Prijava". Sad je zlatna (boja
+             grba), sa ikonicom i objašnjenjem — a i dalje SEKUNDARNA prema Prijavi. -->
+        <button type="button" class="auth-btn-reg" onclick="authShowReg()">
+          <span class="auth-btn-reg-ico"><svg class="ic"><use href="#ic-korisnik"/></svg></span>
+          <span class="auth-btn-reg-txt"><b>Novi korisnik? Registruj se</b><small>Pristup odobrava administrator</small></span>
+          <span class="auth-btn-reg-arr" aria-hidden="true"><svg class="ic"><use href="#ic-naprijed"/></svg></span>
+        </button>
         <div style="text-align:center;margin-top:10px;">
           <a href="#" onclick="_zaboravljenPin(event)" style="color:#64748b;font-size:12px;text-decoration:none;">Zaboravljen PIN?</a>
         </div>
@@ -4476,24 +4515,35 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
         <div class="auth-field">
           <div class="auth-field-lbl">Profil / Šumarija *</div>
-          <select id="reg-sumarija">
+          <!-- Izbor profila kao kartice: native <select> se u Android WebView-u ne
+               može obojiti po opciji, a terenski profil (većina radnika) se morao
+               jasno odvojiti od šumarija (samo projektanti). Skriveni select ostaje
+               izvor vrijednosti za doRegister(). -->
+          <select id="reg-sumarija" hidden tabindex="-1" aria-hidden="true">
             <option value="">— Odaberi profil —</option>
-            <optgroup label="Terenski radnici">
-              <!-- value ostaje 'ŠPD US ŠUME' — isSpd() ga poredi tačno; mijenja se samo prikaz -->
-              <option value="ŠPD US ŠUME">ŠPD USŠ (TERENSKI PROFIL)</option>
-            </optgroup>
-            <optgroup label="Samo projektanti">
-              <option>ŠUMARIJA BOS.KRUPA</option>
-              <option>ŠUMARIJA BOS.PETROVAC</option>
-              <option>ŠUMARIJA SANSKI MOST</option>
-              <option>ŠUMARIJA BIHAĆ</option>
-              <option>ŠUMARIJA CAZIN</option>
-              <option>ŠUMARIJA KLJUČ</option>
-            </optgroup>
+            <!-- value ostaje 'ŠPD US ŠUME' — isSpd() ga poredi tačno; mijenja se samo prikaz -->
+            <option value="ŠPD US ŠUME">ŠPD USŠ (TERENSKI PROFIL)</option>
+            <option>ŠUMARIJA BOS.KRUPA</option>
+            <option>ŠUMARIJA BOS.PETROVAC</option>
+            <option>ŠUMARIJA SANSKI MOST</option>
+            <option>ŠUMARIJA BIHAĆ</option>
+            <option>ŠUMARIJA CAZIN</option>
+            <option>ŠUMARIJA KLJUČ</option>
           </select>
-          <div style="font-size:11px;color:#94a3b8;line-height:1.5;margin-top:6px;padding:7px 9px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.18);border-radius:6px;">
-            ℹ️ Imenovanim šumarijama (Bos. Krupa, Bihać, Cazin…) pristupaju <b>samo projektanti</b>.
-            Ostali radnici biraju <b>ŠPD USŠ (TERENSKI PROFIL)</b>.
+          <div class="reg-prof-grupa" role="radiogroup" aria-label="Profil ili šumarija">
+            <button type="button" class="reg-prof reg-prof-teren" role="radio" aria-checked="false" data-v="ŠPD US ŠUME" onclick="_regProfil(this.dataset.v)">
+              <span class="reg-prof-ico"><svg class="ic"><use href="#ic-kompas"/></svg></span>
+              <span class="reg-prof-txt"><b>Terenski profil · ŠPD USŠ</b><small>Za radnike na terenu — navigacija, tragovi, tačke, fotografije</small></span>
+            </button>
+            <div class="reg-prof-sep">Projektanti — šumarija</div>
+            <div class="reg-prof-mreza">
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BOS.KRUPA" onclick="_regProfil(this.dataset.v)">Bos. Krupa</button>
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BOS.PETROVAC" onclick="_regProfil(this.dataset.v)">Bos. Petrovac</button>
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA SANSKI MOST" onclick="_regProfil(this.dataset.v)">Sanski Most</button>
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BIHAĆ" onclick="_regProfil(this.dataset.v)">Bihać</button>
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA CAZIN" onclick="_regProfil(this.dataset.v)">Cazin</button>
+              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA KLJUČ" onclick="_regProfil(this.dataset.v)">Ključ</button>
+            </div>
           </div>
         </div>
         <div class="auth-field">
@@ -5752,7 +5802,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.5';
+const APP_VER = 'v2.9.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7670,6 +7720,18 @@ function authShowLogin() {
   }
 }
 
+// Izbor profila pri registraciji (v2.9.6): kartice pune skriveni #reg-sumarija,
+// koji doRegister() i dalje čita — jedan izvor vrijednosti.
+function _regProfil(v) {
+  const sel = document.getElementById('reg-sumarija');
+  if (sel) sel.value = v;
+  document.querySelectorAll('#auth-reg-form .reg-prof').forEach(b => {
+    const on = b.dataset.v === v;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+}
+
 function authShowReg() {
   document.getElementById('auth-login-form').style.display = 'none';
   document.getElementById('auth-reg-form').style.display = 'block';
@@ -9407,8 +9469,11 @@ function _renderProjGroup(list) {
   }
   const ro = typeof isReadOnly === 'function' && isReadOnly();
   let html = '';
+  // Zaglavlje GJ samo kad grupiše VIŠE projekata — iznad jedne kartice je bilo
+  // samo šum (i ista GJ dvaput: kod aktivnog i kod ostalih). Inače GJ ide u karticu.
+  const grupisi = [...byGj.values()].some(g => g.length > 1);
   for (const [gj, projekti] of byGj) {
-    html += `<div class="proj-gj-header">${gj ? 'GJ ' + _escHtml(gj) : 'Bez GJ'}</div>`;
+    if (grupisi) html += `<div class="proj-gj-header">${gj ? 'GJ ' + _escHtml(gj) : 'Bez GJ'}</div>`;
     for (const p of projekti) {
       const isAkt  = p.id === _aktivniProjektId;
       const nClan  = _projektTimIds(p).filter(kid => kid !== p.korisnik_id).length;
@@ -9427,7 +9492,7 @@ function _renderProjGroup(list) {
       html += `<div class="proj-card ${isAkt ? 'aktivan' : ''}" onclick="showProjektDetalji('${p.id}')">
         ${recBtn}${aktBtn}
         <div class="proj-card-title">
-          ${_escHtml(p.odjel || '—')}
+          <span class="proj-card-odjel">Odjel ${_escHtml(p.odjel || '—')}</span>${!grupisi && p.gj ? `<span class="proj-card-gj">GJ ${_escHtml(p.gj)}</span>` : ''}
           ${isAkt ? '<span class="proj-card-badge">AKTIVAN</span>' : ''}
           ${p._pendingSync ? '<span style="font-size:10px;color:#f59e0b;margin-left:4px;">⏳ čeka sync</span>' : ''}
         </div>
@@ -14359,8 +14424,15 @@ function _projektVlakeIdentity(r) { return JSON.stringify([r.korisnik_id,r.id||n
 function _projektVlakeRender() {
   const el=document.getElementById('project-vlake-list');if(!el)return;
   const scope=(sbUser?.id||'')+':'+(_aktivniProjektId||'');if(scope!==_projektVlakeScope){_projektVlakeScope=scope;_projektVlakeLimit=40;_projektVlakePreviewClose();}
-  const rows=_projektVlakeRows(),count=document.getElementById('project-vlake-count');if(count)count.textContent=rows.length+' vlaka / krakova';
-  el.innerHTML=rows.slice(0,_projektVlakeLimit).map(r=>'<button type="button" class="project-vl-row" data-item="'+_escHtml(_projektVlakeIdentity(r))+'" onclick="_projektVlakeZoom(this.dataset.item)"><span class="project-vl-dot" style="background:'+r.displayColor+'"></span><span><b>'+_escHtml(r.nm)+'</b><small>'+_escHtml(r.ime||'Projektant')+(r.korisnik_id===sbUser?.id?' · ti':' · kolega')+'</small></span><strong>'+fmtL(calcL(r.pts||[]))+' ↗</strong></button>').join('')||'<p class="project-vl-empty">'+(_aktivniProjektId?'Nema vlaka u lokalnom pregledu ovog projekta. Preuzmi zajedničke podatke kroz Server.':'Aktiviraj projekat za zajednički spisak vlaka.')+'</p>';
+  const rows=_projektVlakeRows(),count=document.getElementById('project-vlake-count');
+  // Zbir dužine po vlaci (ne flatMap tačaka — v3.118.0) i broj kolega u projektu.
+  const duz=new Map(rows.map(r=>[r,calcL(r.pts||[])])),ukupno=[...duz.values()].reduce((a,b)=>a+b,0);
+  const kolege=new Set(rows.filter(r=>r.korisnik_id!==sbUser?.id).map(r=>r.korisnik_id)).size;
+  if(count)count.textContent=rows.length+' vlaka / krakova · '+fmtL(ukupno)+(kolege?' · '+kolege+(kolege===1?' kolega':' kolege'):'');
+  // Krak (T1.1) je uvučen ispod svoje vlake; ime projektanta piše samo za
+  // kolegine vlake — "ti" na svakom redu je bio šum.
+  el.innerHTML=rows.slice(0,_projektVlakeLimit).map(r=>{const own=r.korisnik_id===sbUser?.id,krak=/\./.test(String(r.nm||'')),np=(r.pts||[]).length;
+    return '<button type="button" class="project-vl-row'+(krak?' krak':'')+(own?'':' kolega')+'" data-item="'+_escHtml(_projektVlakeIdentity(r))+'" onclick="_projektVlakeZoom(this.dataset.item)"><span class="project-vl-dot" style="background:'+r.displayColor+'"></span><span><b>'+(krak?'↳ ':'')+_escHtml(r.nm)+'</b><small>'+(own?(krak?'krak':'vlaka')+(np?' · '+np+' tač.':''):_escHtml(r.ime||'Kolega')+' · kolega')+'</small></span><strong>'+fmtL(duz.get(r))+' ↗</strong></button>';}).join('')||'<p class="project-vl-empty">'+(_aktivniProjektId?'Nema vlaka u lokalnom pregledu ovog projekta. Preuzmi zajedničke podatke kroz Server.':'Aktiviraj projekat za zajednički spisak vlaka.')+'</p>';
   const more=document.getElementById('project-vlake-more');if(more){more.hidden=rows.length<=_projektVlakeLimit;more.textContent='Prikaži još ('+Math.max(0,rows.length-_projektVlakeLimit)+')';}
 }
 function _projektVlakeMore() { _projektVlakeLimit+=40;_projektVlakeRender(); }
@@ -22138,11 +22210,7 @@ function rndList() {
       const densVal = (_pv.ha > 0 && totalDist > 0) ? Math.round(totalDist / _pv.ha) + ' m/ha' : '—';
       hdr.style.display = 'block';
       hdr.innerHTML = `
-        <div class="vph-top">
-          <span class="vph-lbl">📁 <b>${_escHtml(lbl)}</b></span>
-          <button class="vph-nav" onclick="switchTab('projekat');showProjektiList();document.getElementById('proj-list-sec')?.scrollIntoView({block:'start'})" title="Na projekte">Projekti ▸</button>
-        </div>
-        <div class="vph-stats">
+        <div class="vph-stats" aria-label="Mreža vlaka projekta ${_escHtml(lbl)}">
           <div class="vph-stat"><b style="color:#4ade80;">${fmtL(totalDist)}</b><span>ukupno</span></div>
           <div class="vph-stat" title="${densHtml ? 'Gustoća mreže vlaka (' + _pv.ha + ' ha' + (_pv.src==='KML' ? ' iz KML' : '') + ')' : 'Površina projekta nije poznata'}"><b style="color:#60a5fa;">${densVal}</b><span>gustoća</span></div>
           <div class="vph-stat"><b>${rootVlake.length}${krakCount ? ' + ' + krakCount : ''}</b><span>${krakCount ? 'vlake + kraci' : 'vlake'}</span></div>

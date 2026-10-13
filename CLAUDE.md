@@ -2843,6 +2843,20 @@ namjerno, prije nego se jave.
   trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
   prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
   čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Login, Projekat i Vlake (v2.9.6)**: registracija je zlatno dugme
+  (`.auth-btn-reg`, boja grba) — prozirno sekundarno dugme novi korisnici nisu
+  vidjeli. Izbor profila su kartice (`_regProfil`): terenski profil
+  narandžasto (`.reg-prof-teren`), šumarije zeleno u mreži 2×3; **native
+  `<select>` se u WebView-u ne može bojiti po opciji**, pa `#reg-sumarija`
+  ostaje SKRIVEN kao jedini izvor vrijednosti za `doRegister()` — nova
+  šumarija mora ući i u select i kao kartica (test `login-registracija`).
+  Projekat: GJ zaglavlje samo kad grupiše više projekata (inače GJ u kartici);
+  lista vlaka uvlači krak (`.project-vl-row.krak`), ime piše samo za kolegine
+  vlake, brojač nosi ukupnu dužinu. Vlake: uklonjen red `vph-top` (gornja
+  `.data-context` traka već nosi projekat i "Projekti"); "☁ Na serveru" se
+  više ne ispisuje na svakoj kartici — samo "⬆ Čeka slanje", a dugme "Za
+  slanje (N)" nosi broj. `tests/browser/tab-data.cjs` (nije u CI-ju) pada i
+  na starijem kodu (`metrics.rows` 0≠60) — zastario, ne mjerodavan.
 - **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
   `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
   ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),
@@ -4605,7 +4619,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-12: v2.9.5, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.6, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

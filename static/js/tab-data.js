@@ -66,11 +66,15 @@
       controls = document.createElement('div'); controls.id = 'data-vl-controls'; controls.className = 'data-controls';
       document.getElementById('vl')?.before(controls);
     }
-    if (controls) controls.innerHTML = '<button onclick="_tabFilter(\'all\')" aria-pressed="' + (state.filter==='all') + '">Sve vlake</button><button onclick="_tabFilter(\'pending\')" aria-pressed="' + (state.filter==='pending') + '">Za slanje</button>'+(state.search||state.steep||state.filter!=='all'?'<button class="data-reset" onclick="_tabReset()">Očisti filtere</button>':'')+'<small id="data-vl-summary">Pretraga i filteri rade offline</small>';
+    // Broj na dugmetu: koliko vlaka aktivnog projekta stvarno čeka slanje.
+    const nCeka = (typeof vlake !== 'undefined' ? vlake : []).filter(v => !v._deleted && v.projektId === _aktivniProjektId && isPending(v)).length;
+    if (controls) controls.innerHTML = '<button onclick="_tabFilter(\'all\')" aria-pressed="' + (state.filter==='all') + '">Sve vlake</button><button onclick="_tabFilter(\'pending\')" aria-pressed="' + (state.filter==='pending') + '">Za slanje' + (nCeka ? ' (' + nCeka + ')' : '') + '</button>'+(state.search||state.steep||state.filter!=='all'?'<button class="data-reset" onclick="_tabReset()">Očisti filtere</button>':'')+'<small id="data-vl-summary">Pretraga i filteri rade offline</small>';
     return state.filter === 'pending';
   }
   function status(v) {
-    return '<div class="data-row-status">' + (isPending(v) ? '✓ Lokalno · nije poslano' : '☁ Na serveru · lokalna kopija') + '</div>';
+    // Poslano je NORMALNO stanje: red "Na serveru" na svakoj kartici je samo
+    // šum. Kartica nosi oznaku tek kad vlaka stvarno čeka slanje.
+    return isPending(v) ? '<div class="data-row-status pending">⬆ Čeka slanje · sačuvano lokalno</div>' : '';
   }
   function pager(el, count, page, action) {
     if (count <= size) return;

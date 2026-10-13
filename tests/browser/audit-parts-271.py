@@ -139,7 +139,7 @@ async def main():
   # Header navigation must actually show the Projects tab and escaped project name.
   await page.evaluate(SEED);await page.evaluate("_projekti[0].gj='<img id=injected src=x>';_applyVlakeRows([{nm:'T1',br:1,kr:0,projekt_id:'P',pts:[{la:44.9,lo:16},{la:44.901,lo:16.001}]}]);switchTab('vlake');_tabReset()")
   assert await page.locator('#injected').count()==0
-  await page.locator('.vph-nav').click();assert await page.evaluate("_activeTab==='projekat'")
+  await page.locator('#panel .data-context button').click();assert await page.evaluate("_activeTab==='projekat'")
   # Small-screen design: actual filtered lists and map favorite control.
   await page.evaluate("_loadmapManageShown=[{name:'Native fixture'}];_loadmapToggleFav(0)")
   assert await page.evaluate("_mapFavs.some(f=>f.sqliteId==='Native fixture')")

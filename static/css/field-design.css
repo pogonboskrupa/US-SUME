@@ -1087,3 +1087,12 @@ html[data-field-theme=day] .gp-link{color:#1e40af;}
 #ls-pane-granice .kml-drive header h3{font:700 15px/1.3 system-ui;color:var(--field-ink);}
 #ls-pane-granice .kml-drive>p{margin:6px 0 0;font:13px/1.5 system-ui;color:var(--field-muted);}
 #ls-pane-granice #kml-github-message:not(:empty){margin-top:6px;font:12px/1.5 system-ui;color:var(--field-muted);}
+/* v2.9.6 Projekat/Vlake: krak uvučen ispod vlake, kolegine vlake označene,
+   GJ u kartici projekta, oznaka "Čeka slanje" samo kad je stvarno tako. */
+html .project-vl-row{min-height:52px;padding:9px 10px;margin:6px 0}
+html .project-vl-row.krak{margin-left:18px;width:calc(100% - 18px)}
+html .project-vl-row.kolega{border-style:dashed}
+.proj-card-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.proj-card-gj{font-size:12px;font-weight:600;color:var(--field-muted);background:var(--field-bg);border:1px solid var(--field-border);border-radius:999px;padding:1px 8px}
+html .data-row-status.pending{display:inline-block;color:#fbbf24;font-weight:600}
+html[data-field-theme=day] .data-row-status.pending{color:#92400e}
