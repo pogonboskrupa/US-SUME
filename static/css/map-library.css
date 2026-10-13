@@ -5,6 +5,8 @@ html #oznake-panel {
   --ml-accent:#abd2c5; --ml-selected:#2c4944; --ml-selected-border:#638f82;
   --ml-local:#aecbc4; --ml-local-bg:#2b4241; --ml-photo:#c9c0d7; --ml-photo-bg:#373b49;
   --ml-track:#b9cbaa; --ml-track-bg:#35423a; --ml-server:#b6c9dc; --ml-server-bg:#2d3e4c;
+  --ml-ochre:#e3c987; --ml-ochre-ink:#3b2e0c; --ml-ochre-line:#b89a4a;
+  --ml-photo-edge:#b7a2e0; --ml-track-edge:#8fc27a; --ml-local-edge:#6fb7a8; --ml-server-edge:#7aa8d8;
   --field-bg:var(--ml-control); --field-card:var(--ml-card); --field-ink:var(--ml-ink);
   --field-muted:var(--ml-muted); --field-border:var(--ml-border);
   max-width:850px; margin:auto; max-height:94vh; max-height:94dvh;
@@ -19,6 +21,8 @@ html[data-field-theme=day] #oznake-panel {
   --ml-accent:#255747; --ml-selected:#dcebe5; --ml-selected-border:#78988b;
   --ml-local:#355e54; --ml-local-bg:#e3eeea; --ml-photo:#665775; --ml-photo-bg:#eeeaf3;
   --ml-track:#4a6240; --ml-track-bg:#e8eee4; --ml-server:#3e5e7c; --ml-server-bg:#e6edf4;
+  --ml-ochre:#ecd596; --ml-ochre-ink:#4a3a0e; --ml-ochre-line:#c3a550;
+  --ml-photo-edge:#8d6fc4; --ml-track-edge:#5c9a45; --ml-local-edge:#3f8f7e; --ml-server-edge:#4a7fb8;
   background:var(--ml-bg)!important; color:var(--ml-ink); color-scheme:light;
 }
 #oznake-panel * {box-sizing:border-box;}
@@ -68,14 +72,14 @@ html #oznake-header .oz-close {
 #library-list {padding:0 16px;}
 .ml-group {
   display:flex; align-items:center; justify-content:space-between; gap:8px; margin:16px 0 8px;
-  padding:8px 10px; background:var(--ml-group); border:1px solid var(--ml-border);
-  border-radius:12px; overflow-wrap:anywhere;
+  padding:8px 10px; background:var(--ml-ochre); color:var(--ml-ochre-ink);
+  border:1px solid var(--ml-ochre-line); border-radius:12px; overflow-wrap:anywhere;
 }
 .ml-group-label {display:flex; align-items:center; gap:8px; min-width:0;}
-.ml-group-label>.ic {width:18px; height:18px; margin:0; flex-shrink:0; color:var(--ml-accent);}
+.ml-group-label>.ic {width:18px; height:18px; margin:0; flex-shrink:0; color:var(--ml-ochre-ink);}
 .ml-group-label b {font-size:13px; line-height:1.45;}
 .ml-group>div:last-child {display:flex; gap:6px; flex-shrink:0;}
-.ml-group button {padding:6px 8px; font-size:11px; background:transparent;}
+.ml-group button {padding:6px 8px; font-size:11px; background:transparent; color:var(--ml-ochre-ink); border-color:var(--ml-ochre-line);}
 .ml-card {
   border:1px solid var(--ml-border); background:var(--ml-card); border-radius:14px;
   margin:9px 0; padding:13px; overflow-wrap:anywhere;
@@ -141,3 +145,18 @@ html[data-field-theme=day] #oznake-panel .ml-danger {color:#9b3030;}
 .ml-folder-heading {display:flex; align-items:center; gap:10px; padding:0 16px 2px; font:700 14px system-ui;}
 .ml-folder-heading>.ic {width:22px; height:22px; margin:0; color:var(--ml-accent); flex-shrink:0;}
 .ml-folder-heading small {display:block; color:var(--ml-muted); font-size:11px; font-weight:400; margin-top:3px;}
+
+/* Vrste sadržaja se razlikuju oblikom, ne samo bojom: slika = okrugla značka i ljubičasta
+   ivica, trag = isprekidan okvir značke i zelena ivica, KML = tirkizna, server = plava. */
+.ml-card {border-left:5px solid var(--ml-local-edge);}
+.ml-card[data-category=photos] {border-left-color:var(--ml-photo-edge);}
+.ml-card[data-category=tracks] {border-left-color:var(--ml-track-edge);}
+.ml-card[data-category=server] {border-left-color:var(--ml-server-edge);}
+.ml-card[data-category=photos] .ml-kind,.ml-card[data-category=photos] .ml-thumbnail {border-radius:50%;}
+.ml-card[data-category=tracks] .ml-kind {border:2px dashed var(--ml-track-edge); border-radius:6px;}
+.ml-type {display:inline-block; padding:1px 8px; border-radius:999px; font-size:10px; letter-spacing:.4px; text-transform:uppercase;
+  background:var(--ml-local-bg); color:var(--ml-local);}
+.ml-card[data-category=photos] .ml-type {background:var(--ml-photo-bg); color:var(--ml-photo);}
+.ml-card[data-category=tracks] .ml-type {background:var(--ml-track-bg); color:var(--ml-track);}
+.ml-card[data-category=server] .ml-type {background:var(--ml-server-bg); color:var(--ml-server);}
+.ml-card>.ml-actions .ml-assign {background:var(--ml-ochre); color:var(--ml-ochre-ink); border-color:var(--ml-ochre-line);}

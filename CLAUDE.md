@@ -1954,6 +1954,23 @@ izdanju. Testovi: `tests/js/gps-oporavak-nastavak.test.js`,
   ne broje se (panel Server ih navodi zasebno).
 - `deleteProjektUI` čita red STRIKTNO (oštećen red se ne prepisuje praznim).
 
+## Preglednik oznaka — oker odjeli, vrste po obliku, dodjela odjelu (v3.0.2)
+
+Na zahtjev: zaglavlje odjela svijetlo oker, slike i tragovi se razaznaju, a odjel
+se može naknadno dodijeliti (`static/js/map-library.js`, `static/css/map-library.css`).
+- **Zaglavlje odjela** (`.ml-group`) je oker (`--ml-ochre`, tamna i dnevna tema
+  imaju svoje vrijednosti) sa tamnim tekstom i dugmadima.
+- **Vrsta se razlikuje OBLIKOM, ne samo bojom**: lijeva ivica kartice u boji vrste
+  (`--ml-*-edge`), slika = okrugla značka/sličica, trag = isprekidan okvir značke,
+  uz tekstualnu oznaku tipa (`.ml-type`: Slika / Trag / KML / Server) — boja sama
+  nije dovoljna na jakom suncu i za daltoniste.
+- **"Dodijeli odjelu"** (`assign`) se pokazuje samo na slici/tragu koji nema odjela;
+  otvara uređivač i fokusira polje Odjel. Polje nudi poznate odjele (`<datalist
+  id="ml-odjeli">`: već dodijeljeni + odjeli projekata) da se isti odjel ne
+  upisuje na tri načina ("105", "odj. 105"). KML nema dugme (ima oznaku odjela iz
+  fajla/Granica).
+- Test: `tests/js/map-library.test.js` (13).
+
 ## Uglačavanje snimljenog traga/vlake ("Ugladi")
 
 - **Douglas-Peucker NE MOŽE ukloniti vraćanje istim putem (v3.120.0)** — ovo je
