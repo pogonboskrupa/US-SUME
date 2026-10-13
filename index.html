@@ -10669,8 +10669,12 @@ async function deleteProjektUI() {
 
   // Ako projekat još nije sinhroniziran (kreiran offline), samo ukloni iz reda
   if (p._pendingSync) {
-    const lq = _OL.loadQueue().filter(o => !(o.type === 'insert_projekt' && o.payload._tempId === id));
-    localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+    // strict: oštećen red ne smije biti pročitan kao prazan pa prepisan sa []
+    // — to bi tiho obrisalo SVE što čeka slanje, ne samo ovaj projekat.
+    try {
+      const lq = _OL.loadQueue(true).filter(o => !(o.type === 'insert_projekt' && o.payload?._tempId === id));
+      localStorage.setItem(_OL.QUEUE, JSON.stringify(lq));
+    } catch(e) { console.warn('Red za slanje nije čitljiv — ostaje netaknut', e); }
     _OL.save(_OL.PROJEKTI, _projekti);
     _setProjektVlakeHidden(id, false);
     _deleteVlakeByProjekt(id);
@@ -14749,10 +14753,18 @@ async function _crashCheck() {
       // jedan ogroman skok i odbio sve.
       const prijeDopune = _tragPts.length;
       for (const p of bufPts) {
-        if (p.t > _tragLastT) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t);
+        // bypassPauzu: auto-pauza okinuta usred dopune ne smije odbaciti ostatak
+        // pozadinskog snimanja (hladan start nema zabilježenih pauza).
+        if (p.t > _tragLastT) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t, true);
       }
       const dodatoT = _tragPts.length - prijeDopune;
       _updTragStats();
+      // "Snimanje nastavljeno" mora biti istina: bez GPS watch-a i native
+      // servisa trag je stajao do kraja sesije, a sljedeće ubistvo procesa
+      // nije imalo šta oporaviti.
+      _pauziResetuj(_tragPauseWin);
+      if (!gpsOn) startGPS();
+      _bgRecStart('trag');
       showToast(`✅ Oporavljen trag: ${_tragPts.length} tačaka`
         + (dodatoT ? ` (${dodatoT} iz pozadinskog snimanja)` : '')
         + ' — snimanje nastavljeno');
@@ -14803,6 +14815,20 @@ async function _crashCheck() {
       if (dpause) { dpause.style.display = ''; dpause.textContent = '⏸'; dpause.style.background = '#422006'; dpause.style.borderColor = '#92400e'; dpause.style.color = '#fbbf24'; }
       const dstatus = document.getElementById('doz-gps-status');
       if (dstatus) { dstatus.style.display='block'; dstatus.textContent='● Snimanje aktivno'; dstatus.style.color='#4ade80'; }
+      // Isti princip kao vlaka/trag: dopuni fiksovima koje je native servis
+      // prikupio POSLIJE zadnjeg snimka stanja (snapD.ts), uklj. cijeli period
+      // dok je proces bio mrtav. Ide PRIJE watch-a: živi fiks koji stigne dok
+      // dopuna čeka (await) bi inače ušao prije starijih tačaka — cik-cak pojas.
+      const prijeDopune = _dozGpsPts.length;
+      // Pad upisa (puna kvota) ne smije spriječiti nastavak snimanja ispod —
+      // journal se tad samo ne potvrdi, pa tačke ostaju za sljedeći pokušaj.
+      try {
+        for (const p of bufPts) {
+          if (p.t <= (snapD.ts || 0)) continue;
+          if (p.ac > 20) continue; // isti prag kao _dozProcessGpsPoint
+          await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t, true);
+        }
+      } catch(e) { _svePersistirano = false; console.warn('Doznaka dopuna', e); }
       _dozUpdGpsStats(null);
       _bgRecStart('pojas doznake');
       _dozGpsWatchId = navigator.geolocation.watchPosition(async pos => {
@@ -14820,15 +14846,6 @@ async function _crashCheck() {
       }, err => { console.warn('Doznaka GPS', err); _dozUpdGpsStats(null); },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
       if (typeof dozOpenGPSControls === 'function') dozOpenGPSControls();
-      // Isti princip kao vlaka/trag: dopuni fiksovima koje je native servis
-      // prikupio POSLIJE zadnjeg snimka stanja (snapD.ts), uklj. cijeli period
-      // dok je proces bio mrtav.
-      const prijeDopune = _dozGpsPts.length;
-      for (const p of bufPts) {
-        if (p.t <= (snapD.ts || 0)) continue;
-        if (p.ac > 20) continue; // isti prag kao _dozProcessGpsPoint
-        await _dozProcessGpsPoint(p.la, p.lo, p.al, p.ac, p.sp, p.t, true);
-      }
       const dodatoD = _dozGpsPts.length - prijeDopune;
       showToast(`✅ Oporavljen pojas doznake: ${_dozGpsPts.length} tačaka`
         + (dodatoD ? ` (${dodatoD} iz pozadinskog snimanja)` : '')
@@ -20519,6 +20536,13 @@ async function _nativeRecAction(action) {
     if (recOn)          stopRec();
     else if (_tragOn)   fabSnimTrag();
     else if (_dozGpsOn) await dozStopGPS();
+    // GpsService se na "stop" iz notifikacije sam ugasi (native GPS + wake
+    // lock), a ovdje se završava samo JEDNO snimanje. Ako drugo i dalje traje,
+    // bez ponovnog starta bi ono do kraja išlo bez pozadinske zaštite.
+    if (_anyRecOn() && typeof AndroidGps !== 'undefined') {
+      const nm = recOn ? (vlake[actI]?.nm || 'GPS Snimanje') : _tragOn ? 'trag' : 'pojas doznake';
+      try { AndroidGps.startRecording(nm); } catch(e) {}
+    }
   } else if (action === 'pause') {
     if (recOn)          toggleRecPause();
     else if (_tragOn)   togTragPause();
@@ -21941,6 +21965,11 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
   if (_tragLastMoveT > 0 && (now - _tragLastMoveT) > _TRAG_AUTOPAUSE_MS) {
     _tragLastMoveT = 0; // reset da ne prikazujemo toast svaki fix
     _tragPaused = true;
+    // Native servis i dalje piše fiksove tokom auto-pauze — bez zabilježenog
+    // prozora bi ih sljedeća dopuna (bypassPauzu) ubacila u trag kao da pauze
+    // nije ni bilo. Početak je vrijeme fiksa koji je pauzu okinuo (zna biti
+    // historijsko pri dopuni), ne "sada".
+    _tragPauseWin.push({ start: now, end: null });
     _tragLiveClear();
     _tragBuf = [];
     _tragLastT = 0;

@@ -63,7 +63,7 @@ function env(opts) {
     'let _tragOn = true, _tragPaused = false, _tragPts = ' + JSON.stringify(opts.pocetne || []) +
     ', _tragBuf = [], _tragLastT = 0, _tragLastMoveT = 0, _tragLiveSeg = { setLatLngs() {} }, _tragRetrace = null, _tragRetraceBaza = ' +
     (opts.baza || 0) + ';\n' +
-    'const _activeTab = "karta", _lineStyle = { tragW: 3 };\n' +
+    'const _activeTab = "karta", _lineStyle = { tragW: 3 }, _tragPauseWin = [];\n' +
     'const _tragLine = { setLatLngs() {}, addLatLng() {} };\n' +
     'function _updTragStats() {} function terenUpdTragStats() {} function _tragLiveClear() {} function _terenUpdTragUI() {}\n' +
     imena.map(extractFn).join('\n') +

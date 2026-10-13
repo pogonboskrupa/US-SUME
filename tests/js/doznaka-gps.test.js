@@ -178,8 +178,9 @@ t('KLJUČNO: journal se potvrđuje TEK kad je svaka grana spremila svoje', () =>
   assert.ok(/if \(_svePersistirano\) _nativeBufPotvrdi\(\);/.test(src),
     'bez potvrde journal preživi oporavak; bez uslova bi pala grana izgubila tačke');
   const pali = (src.match(/_svePersistirano = false/g) || []).length;
-  assert.strictEqual(pali, 3,
-    'sve tri grane oporavka (vlaka, trag, doznaka) moraju oboriti zastavicu, nađeno: ' + pali);
+  // 3 grane + pala dopuna doznake (ona ne obara granu — snimanje se nastavlja).
+  assert.strictEqual(pali, 4,
+    'sve tri grane oporavka (vlaka, trag, doznaka) i dopuna doznake moraju oboriti zastavicu, nađeno: ' + pali);
 });
 
 t('oporavak obnavlja _dozGpsFullPts (inače izvoz GPX tiho gubi sve prije prekida)', () => {
