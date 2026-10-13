@@ -409,11 +409,15 @@ window.addEventListener('DOMContentLoaded',function(){
 .reg-prof-teren b { font-size:14px; color:#ffedd5; }
 .reg-prof-teren small { font-size:12px; line-height:1.4; color:rgba(254,215,170,0.82); }
 .reg-prof-teren.on { background:rgba(249,115,22,0.24); border-color:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.35); }
-.reg-prof-sep { margin-top:4px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:rgba(180,220,188,0.75); }
-.reg-prof-mreza { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-.reg-prof-sum { min-height:46px; padding:8px 10px; font-size:14px; font-weight:600;
-  background:rgba(58,158,80,0.08); border:1.5px solid rgba(74,163,90,0.40); color:#cfe9d4; }
-.reg-prof-sum.on { background:#2e8b42; border-color:#4eca65; color:#fff; box-shadow:0 0 0 2px rgba(78,202,101,0.30); }
+.reg-prof-proj { display:flex; align-items:center; gap:12px; width:100%; min-height:62px; padding:10px 12px; text-align:left;
+  background:rgba(58,158,80,0.08); border:1.5px solid rgba(74,163,90,0.45); color:#cfe9d4; }
+.reg-prof-proj .reg-prof-ico { flex:0 0 36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#2e8b42; color:#fff; }
+.reg-prof-proj .reg-prof-txt { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.reg-prof-proj b { font-size:14px; color:#e8f5ea; }
+.reg-prof-proj small { font-size:12px; line-height:1.4; color:rgba(207,233,212,0.8); }
+.reg-prof-proj.on { background:rgba(58,158,80,0.24); border-color:#4eca65; box-shadow:0 0 0 2px rgba(78,202,101,0.30); }
+.reg-sum-wrap { margin-top:4px; padding:10px 12px; border-radius:10px; border:1px solid rgba(74,163,90,0.35); background:rgba(58,158,80,0.06); }
+.reg-sum-wrap[hidden] { display:none; }
 /* Error */
 .auth-err {
   color:#f87171; font-size:12px; text-align:center;
@@ -4514,7 +4518,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </div>
         <div class="auth-field">
-          <div class="auth-field-lbl">Profil / Šumarija *</div>
+          <div class="auth-field-lbl">Uloga *</div>
           <!-- Izbor profila kao kartice: native <select> se u Android WebView-u ne
                može obojiti po opciji, a terenski profil (većina radnika) se morao
                jasno odvojiti od šumarija (samo projektanti). Skriveni select ostaje
@@ -4530,19 +4534,30 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <option>ŠUMARIJA CAZIN</option>
             <option>ŠUMARIJA KLJUČ</option>
           </select>
-          <div class="reg-prof-grupa" role="radiogroup" aria-label="Profil ili šumarija">
-            <button type="button" class="reg-prof reg-prof-teren" role="radio" aria-checked="false" data-v="ŠPD US ŠUME" onclick="_regProfil(this.dataset.v)">
+          <!-- v2.9.7: PRVO uloga, a šumarija se bira iz padajuće liste SAMO za
+               projektanta. U v2.9.6 su terenski profil i šumarije bili kartice
+               jedna do druge, pa bi terenac lako dodirnuo i "svoju" šumariju —
+               a šumarija znači PROJEKTANTSKI nalog. -->
+          <div class="reg-prof-grupa" role="radiogroup" aria-label="Uloga">
+            <button type="button" class="reg-prof reg-prof-teren" role="radio" aria-checked="false" data-uloga="teren" onclick="_regUloga('teren')">
               <span class="reg-prof-ico"><svg class="ic"><use href="#ic-kompas"/></svg></span>
-              <span class="reg-prof-txt"><b>Terenski profil · ŠPD USŠ</b><small>Za radnike na terenu — navigacija, tragovi, tačke, fotografije</small></span>
+              <span class="reg-prof-txt"><b>Terenski radnik</b><small>ŠPD USŠ · navigacija, tragovi, tačke, fotografije</small></span>
             </button>
-            <div class="reg-prof-sep">Projektanti — šumarija</div>
-            <div class="reg-prof-mreza">
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BOS.KRUPA" onclick="_regProfil(this.dataset.v)">Bos. Krupa</button>
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BOS.PETROVAC" onclick="_regProfil(this.dataset.v)">Bos. Petrovac</button>
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA SANSKI MOST" onclick="_regProfil(this.dataset.v)">Sanski Most</button>
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA BIHAĆ" onclick="_regProfil(this.dataset.v)">Bihać</button>
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA CAZIN" onclick="_regProfil(this.dataset.v)">Cazin</button>
-              <button type="button" class="reg-prof reg-prof-sum" role="radio" aria-checked="false" data-v="ŠUMARIJA KLJUČ" onclick="_regProfil(this.dataset.v)">Ključ</button>
+            <button type="button" class="reg-prof reg-prof-proj" role="radio" aria-checked="false" data-uloga="proj" onclick="_regUloga('proj')">
+              <span class="reg-prof-ico"><svg class="ic"><use href="#ic-crtaj"/></svg></span>
+              <span class="reg-prof-txt"><b>Projektant</b><small>Vlake, projekti i doznaka — za svoju šumariju</small></span>
+            </button>
+            <div id="reg-sum-wrap" class="reg-sum-wrap" hidden>
+              <label class="auth-field-lbl" for="reg-sum-izbor">Šumarija *</label>
+              <select id="reg-sum-izbor" onchange="_regProfil(this.value)">
+              <option value="">— Odaberi šumariju —</option>
+              <option value="ŠUMARIJA BOS.KRUPA">Šumarija Bos. Krupa</option>
+              <option value="ŠUMARIJA BOS.PETROVAC">Šumarija Bos. Petrovac</option>
+              <option value="ŠUMARIJA SANSKI MOST">Šumarija Sanski Most</option>
+              <option value="ŠUMARIJA BIHAĆ">Šumarija Bihać</option>
+              <option value="ŠUMARIJA CAZIN">Šumarija Cazin</option>
+              <option value="ŠUMARIJA KLJUČ">Šumarija Ključ</option>
+              </select>
             </div>
           </div>
         </div>
@@ -5404,9 +5419,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
         <div id="doz-context" class="doz-context"></div>
+        <div id="doz-pregled" class="doz-pregled" hidden></div>
         <div class="doz-local-card" id="doz-local-status" aria-live="polite"></div>
-        <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS snimanje</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake i bafer</button><button onclick="dozGoSection('team')">Tim</button></nav>
-        <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 4px;"></div>
+        <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS</button><button onclick="dozGoSection('stats')">Pregled</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake</button></nav>
+        <div class="doz-row-lbl">Status odjela</div>
+        <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 12px 4px;"></div>
         <div class="sec" id="doz-section-gps">
           <div class="sec-t">📍 GPS Trag projektanta</div>
           <div style="display:flex;gap:6px;margin-bottom:4px;">
@@ -5425,12 +5442,12 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
 
 
-        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
-        <div class="sec">
-          <div class="sec-t">📊 Statistika</div>
+        <div class="sec" id="doz-section-stats">
+          <div class="sec-t">📊 Pregled odjela</div>
           <div id="doz-stats-box" style="font-size:11px;color:#94a3b8;line-height:1.8;"></div>
         </div>
+
 
         <div class="sec" id="doz-section-team">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -5441,23 +5458,17 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
 
 
-        <div class="sec">
-          <div class="sec-t">📐 Pojasevi</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:11px;color:#94a3b8;">Vanjski rub:</span>
-            <select id="doz-band-outer" onchange="dozBandOuterChange()" style="flex:1;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
-              <option value="15">15 m</option>
-              <option value="20" selected>20 m (default)</option>
-              <option value="30">30 m</option>
-              <option value="40">40 m</option>
-            </select>
-            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozRefreshBands()"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
+        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
+
+        <div class="sec" id="doz-section-zones">
+          <div class="doz-sec-hdr">
+            <div class="sec-t" style="margin:0;">📐 Zone (<span id="doz-markings-count">0</span>)</div>
+            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozShowTypePicker()"><svg class="ic"><use href="#ic-crtaj"/></svg> Nacrtaj</button>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
-              <input type="checkbox" id="doz-cross-warn" checked onchange="dozCrossWarnToggle()" style="accent-color:#fbbf24;"> Upozorenje na prelaz pojasa
-            </label>
-          </div>
+          <div id="doz-markings-summary"><span class="doz-empty">Nema označenih zona</span></div>
+          <div id="doz-marked-area"></div>
+          <div id="doz-zones-list"></div>
+          <button class="btn" style="background:#0f172a;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;margin-top:8px;" onclick="dozLoadLayers(_dozSelId)"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi slojeve</button>
         </div>
 
         <div class="sec" id="doz-section-vlake">
@@ -5517,20 +5528,27 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div id="doz-trees-summary"></div>
         </div>
 
-        <div class="sec" id="doz-section-zones">
-          <div class="sec-t">📐 Obilježene zone (<span id="doz-markings-count">0</span>)</div>
-          <div id="doz-markings-summary"><span class="doz-empty">Nema označenih zona</span></div>
-          <div id="doz-marked-area"></div>
-          <div id="doz-zones-list"></div>
-          <button class="btn" style="background:#0f172a;border:1px solid #1e3a5f;color:#94a3b8;font-size:12px;margin-top:8px;" onclick="dozLoadLayers(_dozSelId)"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi slojeve</button>
+        <details class="sec doz-postavke" id="doz-postavke" ontoggle="_dozPostavkeToggle(this)">
+          <summary><span class="sec-t" style="margin:0;">⚙ Postavke prikaza</span><small>Pojasevi, upozorenje na prelaz, stil poligona</small></summary>
+        <div class="doz-post-grupa">
+          <div class="sec-t">📐 Pojasevi</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:11px;color:#94a3b8;">Vanjski rub:</span>
+            <select id="doz-band-outer" onchange="dozBandOuterChange()" style="flex:1;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
+              <option value="15">15 m</option>
+              <option value="20" selected>20 m (default)</option>
+              <option value="30">30 m</option>
+              <option value="40">40 m</option>
+            </select>
+            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozRefreshBands()"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
+              <input type="checkbox" id="doz-cross-warn" checked onchange="dozCrossWarnToggle()" style="accent-color:#fbbf24;"> Upozorenje na prelaz pojasa
+            </label>
+          </div>
         </div>
-
-        <div class="sec">
-          <div class="sec-t">🗺 Obilježi zonu na mapi</div>
-          <button class="btn b" onclick="dozShowTypePicker()" style="margin-bottom:0;"><svg class="ic"><use href="#ic-crtaj"/></svg> Nacrtaj plohu</button>
-        </div>
-
-        <div class="sec">
+        <div class="doz-post-grupa">
           <div class="sec-t">🎨 Stil poligona</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             <div style="display:flex;align-items:center;gap:5px;">
@@ -5556,6 +5574,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             </label>
           </div>
         </div>
+        </details>
 
         <div class="sec">
           <div class="sec-t">📶 Dijeljenje pojasa bez interneta</div>
@@ -5802,7 +5821,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.6';
+const APP_VER = 'v2.9.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7724,12 +7743,22 @@ function authShowLogin() {
 // koji doRegister() i dalje čita — jedan izvor vrijednosti.
 function _regProfil(v) {
   const sel = document.getElementById('reg-sumarija');
-  if (sel) sel.value = v;
+  if (sel) sel.value = v || '';
+}
+// Uloga određuje ŠTA se šalje: terenski = fiksno 'ŠPD US ŠUME' (isSpd() poredi
+// tačno), projektant = šumarija iz padajuće liste. Promjena uloge briše raniji
+// izbor, pa terenac ne može ostati "upisan" u šumariju koju je dodirnuo usput.
+function _regUloga(u) {
   document.querySelectorAll('#auth-reg-form .reg-prof').forEach(b => {
-    const on = b.dataset.v === v;
+    const on = b.dataset.uloga === u;
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', on ? 'true' : 'false');
   });
+  const wrap = document.getElementById('reg-sum-wrap');
+  const izbor = document.getElementById('reg-sum-izbor');
+  if (wrap) wrap.hidden = u !== 'proj';
+  if (u === 'teren') { if (izbor) izbor.value = ''; _regProfil('ŠPD US ŠUME'); }
+  else { _regProfil(izbor ? izbor.value : ''); }
 }
 
 function authShowReg() {
@@ -7855,7 +7884,11 @@ async function doRegister() {
   const pin2     = document.getElementById('reg-pin2').value.trim();
 
   document.getElementById('reg-err').style.display = 'none';
-  if (!ime || !prezime || !sumarija || !pin) { showAuthErr('Popunite sva obavezna polja', true); return; }
+  if (!sumarija) {
+    const proj = document.querySelector('#auth-reg-form .reg-prof-proj.on');
+    showAuthErr(proj ? 'Odaberite šumariju iz liste' : 'Odaberite ulogu: Terenski radnik ili Projektant', true); return;
+  }
+  if (!ime || !prezime || !pin) { showAuthErr('Popunite sva obavezna polja', true); return; }
   if (!/^\d+$/.test(pin))  { showAuthErr('PIN smije sadržavati samo cifre', true); return; }
   // 6 cifara umjesto dosadašnje 4: prijava ide preko IMENA (get_login_email je
   // namjerno dostupan i neprijavljenima jer je preduslov logina), pa je jedina
@@ -37908,17 +37941,22 @@ function dozRenderOdjeli() {
   const _red = { active: 0, paused: 1, completed: 2 };
   const prikaz = _dozOdjeli.slice().sort((a, b) => (_red[a.status || 'active'] ?? 3) - (_red[b.status || 'active'] ?? 3));
   const sz = document.getElementById('doz-odjeli-sazetak');
+  let filt = typeof _dozListaFilterGet === 'function' ? _dozListaFilterGet() : '';
   if (sz) {
     const n = st => _dozOdjeli.filter(o => (o.status || 'active') === st).length;
     const ha = _dozOdjeli.reduce((s, o) => s + (parseFloat(o.known_area_ha) || 0), 0);
-    sz.innerHTML = `<span><b>${_dozOdjeli.length}</b> ${_dozOdjeli.length === 1 ? 'odjel' : 'odjela'}</span>` +
-      (n('active') ? `<span class="a">● ${n('active')} aktivno</span>` : '') +
-      (n('paused') ? `<span class="p">● ${n('paused')} pauza</span>` : '') +
-      (n('completed') ? `<span class="c">● ${n('completed')} završeno</span>` : '') +
+    // Brojači su i filter: dodir prikaže samo taj status, ponovni dodir (ili
+    // "sve") vraća sve. Filter koji više nema šta prikazati se sam gasi.
+    if (filt && !n(filt)) filt = _dozListaFilterSet('');
+    const chip = (st, cls, txt) => `<button type="button" class="doz-filt ${cls}${filt === st ? ' on' : ''}" aria-pressed="${filt === st}" onclick="_dozListaFilterSet('${filt === st ? '' : st}');dozRenderOdjeli()">${txt}</button>`;
+    sz.innerHTML = chip('', 'sve', `<b>${_dozOdjeli.length}</b> ${_dozOdjeli.length === 1 ? 'odjel' : 'odjela'}`) +
+      (n('active') ? chip('active', 'a', `● ${n('active')} aktivno`) : '') +
+      (n('paused') ? chip('paused', 'p', `● ${n('paused')} pauza`) : '') +
+      (n('completed') ? chip('completed', 'c', `● ${n('completed')} završeno`) : '') +
       (ha > 0 ? `<span style="margin-left:auto;">${fmtHa(ha)}</span>` : '');
   }
   const query=(document.getElementById('doz-search')?.value||'').trim().toLocaleLowerCase('bs');
-  const results=prikaz.filter(o=>!query||String(o.name||'').toLocaleLowerCase('bs').includes(query));
+  const results=prikaz.filter(o=>(!filt||(o.status||'active')===filt)&&(!query||String(o.name||'').toLocaleLowerCase('bs').includes(query)));
   el.innerHTML = results.map(o => {
     const status = o.status || 'active';
     const label  = status === 'active' ? 'Aktivno' : status === 'completed' ? 'Završeno' : 'Pauza';
@@ -37936,6 +37974,18 @@ function dozRenderOdjeli() {
       </div>
     </div>`;
   }).join('')||'<div class="doz-empty">Nema odjela za uneseni naziv.</div>';
+}
+// var (ne let): dozRenderOdjeli zna biti pozvan pri pokretanju prije nego
+// izvršavanje stigne do ove linije — let bi tada bacio (TDZ).
+var _dozListaFilter;
+function _dozListaFilterGet() {
+  if (_dozListaFilter === undefined) { try { _dozListaFilter = localStorage.getItem('tvlake_doz_filter') || ''; } catch (e) { _dozListaFilter = ''; } }
+  return ['active', 'paused', 'completed'].includes(_dozListaFilter) ? _dozListaFilter : '';
+}
+function _dozListaFilterSet(v) {
+  _dozListaFilter = ['active', 'paused', 'completed'].includes(v) ? v : '';
+  try { localStorage.setItem('tvlake_doz_filter', _dozListaFilter); } catch (e) {}
+  return _dozListaFilter;
 }
 
 // Overview sloj — granice SVIH (ne-skrivenih) odjela istovremeno na karti, dok
@@ -39266,13 +39316,39 @@ function _dozTrackLenByUser(byUserIn) {
 function dozGoSection(key) {
   document.getElementById('doz-section-'+key)?.scrollIntoView({block:'start',behavior:'smooth'});
 }
+// Traka pregleda ispod zaglavlja: odgovor na prvo pitanje pri otvaranju odjela
+// ("koliko je urađeno") bez skrolanja do statistike. Brojevi dolaze iz ISTE
+// računice kao statistika (_dozPokrivenost), pa se dva mjesta ne mogu razići.
+function _dozPregledRender(d) {
+  const el = document.getElementById('doz-pregled');
+  if (!el) return;
+  if (!d || !(d.bndHa > 0)) { el.hidden = true; el.innerHTML = ''; return; }
+  const pct = Math.max(0, Math.min(100, d.bandPct || 0));
+  el.hidden = false;
+  el.innerHTML = `<div class="dpg-top"><b>${pct}%</b><span>pokriveno pojasevima<small>${fmtHa(d.bandHa)} od ${fmtHa(d.bndHa)} unutar granice</small></span></div>
+    <div class="dpg-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
+    <div class="dpg-meta"><span>${d.nZona} ${d.nZona === 1 ? 'zona' : (d.nZona % 10 >= 2 && d.nZona % 10 <= 4 && (d.nZona % 100 < 12 || d.nZona % 100 > 14)) ? 'zone' : 'zona'}</span><span>👣 ${fmtL(d.trag)}</span>${d.preklopHa >= 0.01 ? `<span class="w">preklop ${fmtHa(d.preklopHa)}</span>` : ''}</div>`;
+}
+// Postavke prikaza (pojasevi, stil) su rijetke — sklopljene, izbor se pamti.
+const _DOZ_POSTAVKE_KEY = 'tvlake_doz_postavke_otvoreno';
+function _dozPostavkeToggle(el) {
+  try { localStorage.setItem(_DOZ_POSTAVKE_KEY, el.open ? '1' : '0'); } catch (e) {}
+}
+function _dozPostavkeRestore() {
+  const el = document.getElementById('doz-postavke');
+  if (!el) return;
+  let o = false; try { o = localStorage.getItem(_DOZ_POSTAVKE_KEY) === '1'; } catch (e) {}
+  if (el.open !== o) el.open = o;
+}
 function dozRenderDetail() {
+  _dozPostavkeRestore();
   if(typeof DoznakaPlan!=='undefined')DoznakaPlan.sync().catch(()=>{});
   if(typeof _dozLocalStatusRender==='function')_dozLocalStatusRender();
   // ── Statistika ──
   const odjel = _dozOdjeli.find(o => o.id === _dozSelId);
   const context=document.getElementById('doz-context');
-  if(context&&odjel){const myName=typeof getIme==='function'?getIme():'Projektant';context.textContent=odjel.name+' · '+myName+(odjel._pendingSync?' · odjel čeka slanje':'')+' · Podatke šalješ kroz Meni → Server';}
+  // Ime odjela već stoji u zaglavlju (i u gornjoj traci) — ovdje bi bio treći put.
+  if(context&&odjel){const myName=typeof getIme==='function'?getIme():'Projektant';context.textContent=myName+(odjel._pendingSync?' · odjel čeka slanje':'')+' · šalješ kroz Meni → Server';}
   const statsEl = document.getElementById('doz-stats-box');
   if (statsEl && odjel) {
     const totalHa = parseFloat(odjel.known_area_ha) || 0;
@@ -39290,17 +39366,15 @@ function dozRenderDetail() {
     statsEl.innerHTML = `
       <div class="pm-kpi-grid" style="grid-template-columns:repeat(3,1fr);">
         ${kpi(fmtHa(totalHa || bndHa), 'Površina')}
-        ${kpi(fmtHa(bandHa), 'Pojasevi (' + bandPct + '%)', '#4ade80')}
-        ${kpi(_dozMarkings.length, 'Zone · ' + fmtHa(markedHa))}
-        ${kpi(_dozMembers.length, 'Projektanata')}
-        ${kpi(fmtL(totalTrackLen), 'GPS trag · ' + nPts + ' tač.')}
-        ${kpi(created, 'Kreiran')}
+        ${kpi(fmtHa(bandHa), 'Pojasevi', '#4ade80')}
+        ${kpi(_dozMarkings.length, 'Zone' + (markedHa > 0 ? ' · ' + fmtHa(markedHa) : ''))}
+        ${kpi(_dozMembers.length, 'Projektanti')}
+        ${kpi(fmtL(totalTrackLen), 'GPS trag')}
+        ${kpi(nPts, 'GPS tačaka')}
       </div>
-      ${bndHa > 0 ? `<div style="margin-top:8px;height:7px;background:#1e293b;border-radius:4px;overflow:hidden;">
-        <div style="height:100%;width:${Math.min(100, bandPct)}%;background:linear-gradient(90deg,#166534,#4ade80);border-radius:4px;transition:width 0.4s;"></div>
-      </div>
-      <div style="font-size:10px;color:#64748b;margin-top:3px;">Pokrivenost odjela pojasevima: ${bandPct}%${pokr.preklopHa >= 0.01 ? ` · <span style="color:#fbbf24;">preklapanje ${fmtHa(pokr.preklopHa)}</span>` : ''}</div>` : ''}`;
-  }
+      <div class="doz-kreiran">Kreiran ${created}</div>`;
+    _dozPregledRender({ bndHa, bandHa, bandPct, preklopHa: pokr.preklopHa, nZona: _dozMarkings.length, trag: totalTrackLen });
+  } else _dozPregledRender(null);
 
   // Members — sa dužinom pređenog GPS traga i pokrivenom površinom
   const trackLens = _dozTrackLenByUser();

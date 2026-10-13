@@ -2843,6 +2843,26 @@ namjerno, prije nego se jave.
   trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
   prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
   čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Login: prvo uloga, šumarija padajućom listom (v2.9.7)**: v2.9.6 je nudio
+  terenski profil i 6 šumarija kao 7 kartica jednu do druge — terenac bi
+  dodirnuo "svoju" šumariju i registrovao se kao projektant. Sad se bira
+  ULOGA (`_regUloga`: Terenski radnik / Projektant); `#reg-sum-wrap` sa
+  `#reg-sum-izbor` se pokaže samo za projektanta. Promjena uloge briše raniji
+  izbor. `#reg-sumarija` (skriven) ostaje jedini izvor za `doRegister()`, koji
+  sad imenuje šta nedostaje (uloga / šumarija). Nova šumarija mora ući i u
+  skriveni select i u `#reg-sum-izbor` (test `login-registracija`).
+- **Doznaka — pregled i raspored (v2.9.7)**: traka `#doz-pregled` ispod
+  zaglavlja (% pokrivenosti pojasevima, ha unutar granice, zone, trag, preklop)
+  računa se u `dozRenderDetail` iz ISTE `_dozPokrivenost` kao statistika.
+  Redoslijed: GPS → Pregled odjela (`doz-section-stats`) → Projektanti →
+  Projekcija → Zone (dugme Nacrtaj u zaglavlju; zasebna "Obilježi zonu"
+  kartica uklonjena) → Vlake → Stabla → `<details id="doz-postavke">`
+  (Pojasevi + Stil poligona, sklopljeno, `tvlake_doz_postavke_otvoreno`) → QR.
+  GPS mora ostati PRVI `.sec` (test 227) — pregled je zato `div`, ne `.sec`.
+  `doz-context` više ne ponavlja ime odjela. Brojači iznad liste odjela su
+  filter statusa (`_dozListaFilterGet/Set`, `tvlake_doz_filter`); **`var
+  _dozListaFilter`, ne `let`** — `dozRenderOdjeli` se zna pozvati pri
+  pokretanju prije te linije (TDZ). Test: `tests/js/doznaka-pregled.test.js`.
 - **Login, Projekat i Vlake (v2.9.6)**: registracija je zlatno dugme
   (`.auth-btn-reg`, boja grba) — prozirno sekundarno dugme novi korisnici nisu
   vidjeli. Izbor profila su kartice (`_regProfil`): terenski profil
@@ -4619,7 +4639,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.6, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.7, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

@@ -1096,3 +1096,31 @@ html .project-vl-row.kolega{border-style:dashed}
 .proj-card-gj{font-size:12px;font-weight:600;color:var(--field-muted);background:var(--field-bg);border:1px solid var(--field-border);border-radius:999px;padding:1px 8px}
 html .data-row-status.pending{display:inline-block;color:#fbbf24;font-weight:600}
 html[data-field-theme=day] .data-row-status.pending{color:#92400e}
+
+/* Doznaka 2.9.7: pregled odmah ispod zaglavlja, navigacija u jednom redu,
+   status sa natpisom, rijetke postavke sklopljene, brojači u listi su filter. */
+html .doz-nav {grid-template-columns:repeat(4,minmax(0,1fr));}
+html .doz-row-lbl {padding:10px 12px 0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--field-muted);}
+html .doz-pregled {margin:4px 12px 10px;padding:12px;border:1px solid var(--field-border);border-left:4px solid #22c55e;border-radius:12px;background:var(--field-card);color:var(--field-ink);}
+html .doz-pregled[hidden] {display:none;}
+html .doz-pregled .dpg-top {display:flex;align-items:center;gap:12px;}
+html .doz-pregled .dpg-top b {font-size:28px;line-height:1;font-weight:800;color:var(--field-ink);}
+html .doz-pregled .dpg-top span {font-size:13px;font-weight:600;line-height:1.4;}
+html .doz-pregled .dpg-top small {display:block;font-size:12px;font-weight:400;color:var(--field-muted);}
+html .doz-pregled .dpg-bar {height:8px;margin:10px 0 8px;border-radius:5px;background:var(--field-bg);overflow:hidden;border:1px solid var(--field-border);}
+html .doz-pregled .dpg-bar i {display:block;height:100%;background:linear-gradient(90deg,#166534,#22c55e);border-radius:5px;}
+html .doz-pregled .dpg-meta {display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--field-muted);}
+html .doz-pregled .dpg-meta .w {color:#fbbf24;}
+html[data-field-theme=day] .doz-pregled .dpg-meta .w {color:#854d0e;}
+html .doz-kreiran {margin-top:8px;font-size:12px;color:var(--field-muted);}
+html .doz-sec-hdr {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+html .doz-sec-hdr .btn {min-height:44px;}
+html #doz-panel-detail>details.doz-postavke {padding:0 12px;}
+html .doz-postavke>summary {cursor:pointer;min-height:52px;padding:12px 0;list-style-position:inside;}
+html .doz-postavke>summary small {display:block;margin:3px 0 0 18px;font-size:12px;color:var(--field-muted);}
+html .doz-postavke[open]>summary {border-bottom:1px solid var(--field-border);margin-bottom:10px;}
+html .doz-post-grupa {padding-bottom:14px;}
+html .doz-post-grupa+.doz-post-grupa {border-top:1px solid var(--field-border);padding-top:12px;}
+html .doz-sazetak .doz-filt {min-height:40px;padding:6px 10px;border:1px solid var(--field-border);border-radius:20px;background:var(--field-card);color:var(--field-muted);font:inherit;font-size:12px;cursor:pointer;}
+html .doz-sazetak .doz-filt.on {border-width:2px;font-weight:700;}
+html .doz-sazetak .doz-filt.sve.on {color:var(--field-ink);border-color:var(--field-ink);}
