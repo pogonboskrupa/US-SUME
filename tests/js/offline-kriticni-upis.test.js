@@ -223,7 +223,7 @@ function runCrash(tip, greskaUvijek) {
     getItem: (k) => store[k] ?? null, key: () => null, length: 0
   };
   const zajedno = [extractFn('_lsZauzetoKB'), extractFn('_localSetKriticno'),
-    'let _crashUpisPaoV=false, _crashUpisPaoT=false;',
+    'let _crashUpisPaoV=false, _crashUpisPaoT=false, _tragLiveMeta=null;',
     extractFn('_crashSaveVlaka'), extractFn('_crashSaveTrag')].join('\n');
   const keys = ['localStorage', 'showToast', '_debugUpsert', 'recOn', 'recPaused', 'actI',
     'vlake', '_aktivniProjektId', '_CRASH_VLAKA_KEY', '_tragOn', '_tragPaused', '_tragPts', '_CRASH_TRAG_KEY'];

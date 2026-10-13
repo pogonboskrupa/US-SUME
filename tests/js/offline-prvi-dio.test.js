@@ -37,7 +37,7 @@ function trag() {
     _pauziZavrsi(){},map:{removeLayer(){}},_tragLiveClear(){},document:{getElementById:()=>null},
     _updFabVisibility(){},_rdpSimplify:p=>p,terenRenderTragovi(){},
     showToast:m=>calls.push(m),_tragFmtLen:()=> '10 m',_tragCalcLen:()=>10,
-    _tragRetraceReset(){},_crashClearTrag:()=>store.delete('crash'),_bgRecStopIfIdle(){},_crashStopIfIdle(){} };
+    _tragRetraceReset(){},_crashClearTrag:()=>store.delete('crash'),_bgRecStopIfIdle(){},_crashStopIfIdle(){},_tragLiveMeta:null,_tragUrediZatvori(){} };
   vm.createContext(env);vm.runInContext(fn('_tragRegAdd')+'\n'+fn('fabSnimTrag'),env);
   return {env,calls,store,pts,recover:()=>{fail=false;}};
 }

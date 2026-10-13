@@ -1335,6 +1335,20 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
   font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #fdba74; }
 #ab-trag-stats .ab-ts-lbl::before { content: ''; width: 7px; height: 7px; border-radius: 50%;
   background: #ef4444; animation: rbPuls 1.4s ease-in-out infinite; }
+#ab-trag-stats { cursor: pointer; border-radius: 10px; }
+#ab-trag-stats:active { background: rgba(249,115,22,0.15); }
+#ab-trag-stats .ab-ts-ured { color: #fed7aa; font-weight: 700; letter-spacing: 0; text-decoration: underline; text-underline-offset: 2px; }
+#trag-ured .tu-lbl { display:block; font-size:12px; font-weight:700; color:#cbd5e1; margin:12px 2px 6px; }
+#trag-ured .tu-info { font-weight:500; color:#94a3b8; }
+#trag-ured input[type=text] { width:100%; box-sizing:border-box; min-height:46px; padding:10px 12px; border-radius:12px;
+  border:1px solid #334155; background:#1e293b; color:#f1f5f9; font-size:16px; font-family:inherit; }
+#trag-ured .tu-boje { display:flex; flex-wrap:wrap; gap:8px; }
+#trag-ured .tu-boja { width:34px; height:34px; border-radius:50%; border:3px solid transparent; cursor:pointer; box-shadow:0 0 0 1px rgba(255,255,255,0.15); }
+#trag-ured .tu-boja.on { border-color:#f8fafc; }
+#trag-ured .tu-stil { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+#trag-ured .tu-stil button { min-height:44px; border-radius:12px; border:1px solid #334155; background:#1e293b; color:#e2e8f0;
+  font:600 13px system-ui,sans-serif; cursor:pointer; }
+#trag-ured .tu-stil button.on { border-color:#f97316; background:rgba(249,115,22,0.18); color:#fed7aa; }
 #ab-trag-info { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 800; color: #f8fafc; font-variant-numeric: tabular-nums; }
 #action-bar #ab-trag-pauza.resuming .ab-ico { --c1:#4ade80; --c2:#16a34a; --sh:rgba(22,163,74,0.4); }
 
@@ -5812,7 +5826,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.9';
+const APP_VER = 'v3.0.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -9031,7 +9045,13 @@ async function adminDeleteUser(userId, name) {
   if (!sbProfile?.is_admin) return;
   if (!await _dlgConfirm(`Trajno obrisati korisnika "${name}"?\nOva radnja se ne može poništiti.`, { danger: true })) return;
   const { error } = await sb.rpc('admin_delete_user', { target_id: userId });
-  if (error) { showToast('Greška pri brisanju: ' + error.message); return; }
+  if (error) {
+    // Stara (ručno kreirana) verzija funkcije ne zna za tabele koje upućuju na
+    // korisnika (loc_fotos...) — rješenje je migracija, ne ponovni pokušaj.
+    const fk = /foreign key|23503/i.test((error.message || '') + ' ' + (error.code || ''));
+    showToast('Greška pri brisanju: ' + error.message + (fk ? ' — pokreni migraciju 20261013_admin_delete_user_fk.sql u Supabase SQL Editoru' : ''));
+    return;
+  }
   showToast(`Korisnik "${name}" obrisan`);
   adminLoadUsers();
 }
@@ -14559,7 +14579,7 @@ function _crashSaveVlaka() {
 function _crashSaveTrag() {
   if (!_tragOn || _tragPaused || _tragPts.length < 2) return;
   let tekst;
-  try { tekst = JSON.stringify({ pts: _tragPts, ts: Date.now() }); }
+  try { tekst = JSON.stringify({ pts: _tragPts, ts: Date.now(), meta: _tragLiveMeta || null }); }
   catch(e) { return; }
   try {
     localStorage.setItem(_CRASH_TRAG_KEY, tekst);
@@ -14696,10 +14716,10 @@ async function _crashCheck() {
   if (snapT) {
     try {
       _tragPts = snapT.pts;
+      _tragLiveMeta = (snapT.meta && typeof snapT.meta === 'object') ? snapT.meta : {};
       if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
       _tragLiveClear();
-      _tragLine = L.polyline(_tragPts.map(p => [p[0], p[1]]),
-        { color: '#f97316', weight: _lineStyle.tragW, opacity: 0.85, pane: 'tragMsrLines' }).addTo(map);
+      _tragLine = L.polyline(_tragPts.map(p => [p[0], p[1]]), _tragLiveStil()).addTo(map);
       _tragOn = true; _tragPaused = false;
       _tragBuf = [];
       // Tačke prije prekida su već snimljene — povratak ih ne smije skidati.
@@ -20860,7 +20880,7 @@ function _tragPopupRefresh(id) {
 
 function _escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function _tragRegAdd(pts) {
+function _tragRegAdd(pts, meta) {
   const id = 'trag_' + Date.now();
   const color = _TRAG_COLORS[_tragRegistry.length % _TRAG_COLORS.length];
   const aktP = _aktivniProjektId ? _projekti.find(p => p.id === _aktivniProjektId) : null;
@@ -20877,6 +20897,13 @@ function _tragRegAdd(pts) {
     // drugi trag tiho prepisao preko prvog (vidi upsert_trag u _processOfflineQueue).
     uuid: _genUUID()
   };
+  // Naziv/boja/stil uređeni DOK je trag sniman (_tragLiveMeta) prelaze na sačuvani trag.
+  if (meta) {
+    if (String(meta.name || '').trim()) t.name = String(meta.name).trim();
+    if (meta.color) t.color = meta.color;
+    if (meta.weight) t.weight = meta.weight;
+    if (meta.dashStyle) t.dashStyle = meta.dashStyle;
+  }
   _tragRegistry.unshift(t);
   if (!_tragRegSave()) { _tragRegistry.shift(); return null; }
   _tragRegAddLayer(t);
@@ -21594,7 +21621,7 @@ function fabSnimTrag() {
       let simp;
       try { simp = _rdpSimplify(pts3d, 0.8); } catch(e) { simp = pts3d; }
       const final = (simp.length >= 2 ? simp : pts3d).map(p => [p.la, p.lo, p.al]);
-      const saved = _tragRegAdd(final);
+      const saved = _tragRegAdd(final, _tragLiveMeta);
       if (!saved) { showToast('⚠ Trag nije sačuvan — oslobodi prostor i pokušaj ponovo'); return; }
       if (_activeTab === 'teren') {
         terenRenderTragovi();
@@ -21618,6 +21645,8 @@ function fabSnimTrag() {
     _tragBuf = [];
     _tragLastT = 0;
     _tragRetraceReset(0);
+    _tragLiveMeta = null;
+    _tragUrediZatvori();
     _crashClearTrag();  // normalno sačuvan
     _bgRecStopIfIdle(); // otpusti pozadinski servis ako ništa drugo ne snima
     _crashStopIfIdle(); // vlaka koja i dalje snima mora zadržati svoj auto-save
@@ -21638,7 +21667,8 @@ function _fabSnimTragBegin() {
     _tragRetraceReset(0);
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
     _tragLiveClear();
-    _tragLine = L.polyline([], { color: '#f97316', weight: _lineStyle.tragW, opacity: 0.85, pane: 'tragMsrLines' }).addTo(map);
+    _tragLiveMeta = {};
+    _tragLine = L.polyline([], _tragLiveStil()).addTo(map);
     const bt = document.getElementById('btrag');
     if (bt) bt.classList.add('active');
     // Ako je snimanje pokrenuto iz Tragovi panela, prebaci na kartu da se vidi trag uživo
@@ -21696,6 +21726,80 @@ function _updTragStats() {
 const _TRAG_RETRACE_MAX_M = 30;
 let _tragRetrace = null;     // { zadnja, sidro: tačke NA liniji, br } dok se hoda po snimljenom
 let _tragRetraceBaza = 0;    // tačke prije ovog indeksa se ne gledaju (i ne skidaju)
+// ─── Uređivanje traga TOKOM snimanja (v3.0.0) ────────────────────────────────
+// Snimani trag još nije u registru (upisuje ga tek "Završi"), pa naziv/boja/
+// stil čekaju u _tragLiveMeta i prelaze na sačuvani trag. Uklanjanje zadnjih
+// tačaka služi za pogrešan skretaj ili GPS odskok koji se vidi odmah na karti.
+let _tragLiveMeta = null;
+function _tragDashArr(d) { return d === 'dot' ? '2 6' : (d === 'dash' ? '8 4' : null); }
+function _tragLiveStil() {
+  const m = _tragLiveMeta || {};
+  return { color: m.color || '#f97316', weight: m.weight || _lineStyle.tragW, opacity: 0.85,
+           dashArray: _tragDashArr(m.dashStyle), pane: 'tragMsrLines' };
+}
+function _tragUrediOtvori() {
+  if (!_tragOn) return;
+  if (!_tragLiveMeta) _tragLiveMeta = {};
+  const m = _tragLiveMeta;
+  const el = document.getElementById('trag-ured-body');
+  if (el) {
+    const boja = m.color || '#f97316', stil = m.dashStyle || 'solid';
+    const boje = ['#f97316', ..._TRAG_COLORS.filter(c => c !== '#f97316')].slice(0, 8);
+    el.innerHTML = `
+      <label class="tu-lbl" for="tu-naziv">Naziv</label>
+      <input id="tu-naziv" type="text" value="${_escHtml(m.name || '')}" placeholder="Trag ${_escHtml(fmtDateShort(new Date().toISOString()))}" autocomplete="off" oninput="_tragUrediSet('name', this.value)">
+      <div class="tu-lbl">Boja</div>
+      <div class="tu-boje">${boje.map(c => `<button class="tu-boja${c === boja ? ' on' : ''}" style="background:${c}" onclick="_tragUrediSet('color','${c}')" aria-label="Boja ${c}"></button>`).join('')}</div>
+      <div class="tu-lbl">Stil linije</div>
+      <div class="tu-stil">${[['solid','Puna'],['dash','Iscrtkana'],['dot','Tačkasta']].map(([k, n]) => `<button class="${k === stil ? 'on' : ''}" onclick="_tragUrediSet('dashStyle','${k}')">${n}</button>`).join('')}</div>
+      <div class="tu-lbl">Ukloni zadnji dio <span class="tu-info" id="tu-info"></span></div>
+      <div class="tu-stil">
+        <button onclick="_tragUkloniZadnje(0)">Zadnju tačku</button>
+        <button onclick="_tragUkloniZadnje(20)">Zadnjih 20 m</button>
+        <button onclick="_tragUkloniZadnje(50)">Zadnjih 50 m</button>
+      </div>`;
+    _tragUrediInfo();
+  }
+  _rsList('trag-ured', true);
+}
+function _tragUrediZatvori() { try { _rsList('trag-ured', false); } catch(e) {} }
+function _tragUrediInfo() {
+  const i = document.getElementById('tu-info');
+  if (i) i.textContent = '· ' + _tragPts.length + ' tač. · ' + _tragFmtLen(_tragCalcLen(_tragPts));
+}
+function _tragUrediSet(k, v) {
+  if (!_tragOn) return;
+  if (!_tragLiveMeta) _tragLiveMeta = {};
+  _tragLiveMeta[k] = v;
+  if (_tragLine) _tragLine.setStyle(_tragLiveStil());
+  if (k !== 'name') _tragUrediOtvori();   // osvježi označeni izbor (naziv ne — fokus polja)
+}
+// Skida tačke s kraja: metri=0 → tačno jednu, inače dok se ne skine bar toliko
+// metara. Prva tačka ostaje uvijek (trag ne smije nestati ispod korisnika).
+function _tragUkloniZadnje(metri) {
+  if (!_tragOn || _tragPts.length < 2) { showToast('Nema šta ukloniti'); return 0; }
+  let skinuto = 0, n = 0;
+  while (_tragPts.length > 1) {
+    const a = _tragPts[_tragPts.length - 1], b = _tragPts[_tragPts.length - 2];
+    skinuto += dst(a[0], a[1], b[0], b[1]);
+    _tragPts.pop(); n++;
+    if (!metri || skinuto >= metri) break;
+  }
+  const last = _tragPts[_tragPts.length - 1];
+  // Brzinska kapija mjeri od nove zadnje tačke — sa njenim STVARNIM vremenom,
+  // inače bi sljedeći fiks izgledao kao nemoguć skok i trag bi stao.
+  _tragLastT = (last && last[3]) || 0;
+  _tragBuf = [];
+  _tragRetraceReset(Math.min(_tragRetraceBaza, _tragPts.length - 1));
+  _tragLiveClear();
+  _tragLineSync();
+  _updTragStats();
+  if (_activeTab === 'teren' && typeof terenUpdTragStats === 'function') terenUpdTragStats();
+  if (!_tragPaused) { try { _crashSaveTrag(); } catch(e) {} }
+  _tragUrediInfo();
+  showToast('↶ Uklonjeno ' + n + ' tač. (' + _tragFmtLen(skinuto) + ')');
+  return n;
+}
 function _tragRetraceReset(baza) { _tragRetrace = null; _tragRetraceBaza = baza > 0 ? baza : 0; }
 function _tragLineSync() { if (_tragLine) _tragLine.setLatLngs(_tragPts.map(p => [p[0], p[1]])); }
 // Vraća true kad se tačka upisuje normalno, false kad je hod po snimljenom.
@@ -35221,7 +35325,7 @@ function _showVersionBanner(latest, isAPK) {
 function _toastDno() {
   let dno = 70;
   const vis = window.innerHeight || 0;
-  for (const id of ['rec-banner', 'sto-dalje-sheet', 'krak-izbor', 'lager-dlg', 'action-bar', 'rec-bar', 'ab-loc-popup', 'ab-izmjeri-menu']) {
+  for (const id of ['rec-banner', 'sto-dalje-sheet', 'krak-izbor', 'lager-dlg', 'trag-ured', 'action-bar', 'rec-bar', 'ab-loc-popup', 'ab-izmjeri-menu']) {
     const el = document.getElementById(id);
     if (!el || getComputedStyle(el).display === 'none') continue;
     const r = el.getBoundingClientRect();
@@ -42030,6 +42134,16 @@ if (typeof AndroidDownload !== 'undefined') {
 
 <!-- LAGER DIALOG (v1.9.0: donji list — ranije okvir na vrhu preko kontrola
      karte, bez pozadine, a dugme "Preskoči" je izlazilo van okvira) -->
+<div id="trag-ured-bg" class="rs-bg" onclick="_tragUrediZatvori()"></div>
+<div id="trag-ured" class="rs-sheet" role="dialog" aria-labelledby="trag-ured-title">
+  <div class="rs-handle"></div>
+  <div class="rs-head">
+    <div class="rs-head-txt"><div class="rs-title" id="trag-ured-title">✎ Uredi trag</div><div class="rs-sub">Snimanje se nastavlja — izmjene važe i za sačuvani trag</div></div>
+    <button class="rs-x" onclick="_tragUrediZatvori()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+  </div>
+  <div id="trag-ured-body"></div>
+  <div class="rs-btns"><button class="rs-btn rs-btn--pri" onclick="_tragUrediZatvori()"><svg class="ic"><use href="#ic-potvrdi"/></svg> Gotovo</button></div>
+</div>
 <div id="lager-bg" class="rs-bg" onclick="lagerDlgSkip()"></div>
 <div id="lager-dlg" class="rs-sheet">
   <div class="rs-handle"></div>
@@ -42633,8 +42747,8 @@ if (typeof AndroidDownload !== 'undefined') {
     <span class="ab-ico"><svg class="ic"><use href="#ic-stop"/></svg></span>
     <span>Završi</span>
   </button>
-  <div id="ab-trag-stats" style="display:none;">
-    <div class="ab-ts-lbl">SNIMANJE TRAGA</div>
+  <div id="ab-trag-stats" style="display:none;" onclick="_tragUrediOtvori()" role="button" title="Uredi trag dok snimaš">
+    <div class="ab-ts-lbl">SNIMANJE TRAGA <span class="ab-ts-ured">✎ Uredi</span></div>
     <span id="ab-trag-info">0 tač. · 0 m</span>
   </div>
 </div>
