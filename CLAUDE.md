@@ -2843,6 +2843,18 @@ namjerno, prije nego se jave.
   trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
   prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
   čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Traka koordinata i "Moja lokacija" (v2.9.9)**: traka je JEDAN nizak red
+  (~34 px, `⛰ 208 m │ Y … X … │ 1:12 500 ▾`), pozadina 55 % providna uz
+  `backdrop-filter`; ID-jevi (`nv-val`, `omgi-y/x`, `nv-koord`,
+  `map-scale-click/val`) i kopiranje dodirom su isti. Popup lokacije: tačka u
+  boji preciznosti (≤5 m zelena, ≤15 žuta, više crvena, fiks stariji od 30 s =
+  "traži") i starost fiksa (`_locStatusRender`, svake sekunde dok je popup
+  otvoren — `_locPopTimerStart` sam staje kad se popup sakrije), dvije radnje
+  (Centriraj, Snimi trag) i čipovi Kompas/Radijus/Šumski (ID-jevi
+  `compass/radius/forest-switch` su sad na čipovima, `.on` ih boji). Bez GPS-a
+  klasa `gps-off` ostavlja samo "Uključi lokaciju". Dug dodir na Šumski
+  objašnjava mod (`_locLongPress`), a klik poslije njega se guta. `gps-info`
+  više nema prefiks "GPS:".
 - **Karta — toast, popup lokacije, koordinate, mjerilo, Slojevi (v2.9.8)**:
   `_toastDno` računa i `#action-bar`/`#rec-bar`/`#ab-loc-popup`/
   `#ab-izmjeri-menu`, a vidljiv toast se preračunava svakih 300 ms (popup
@@ -4654,7 +4666,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.8, grana claude/elegant-mayer-4lxj53)
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v2.9.9, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.

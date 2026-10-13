@@ -93,6 +93,7 @@ function makeSwitch({ tragOn }) {
     // v1.6.6: stanje dugmeta Lokacija je izdvojeno u _updLocBtn (vidi
     // lokacija-dugme.test.js) — ovdje se testira samo "Snimi trag".
     _updLocBtn: () => {},
+    _locStatusRender: () => {},
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, extractFn('_updGpsSwitch') + '\nreturn { _updGpsSwitch };')(...keys.map(k => sandbox[k]));
@@ -120,6 +121,7 @@ t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne b
     document: { getElementById: () => null },
     gpsOn: false, _compassConeOn: false, _radiusOn: false, _forestMode: false, _tragOn: false,
     _updLocBtn: () => {},
+    _locStatusRender: () => {},
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, extractFn('_updGpsSwitch') + '\nreturn { _updGpsSwitch };')(...keys.map(k => sandbox[k]));

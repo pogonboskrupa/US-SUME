@@ -3485,12 +3485,6 @@ body.recbar-on #main { padding-bottom: 54px; }
 .abp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 8px; }
 .abp-title { font-size: 14px; font-weight: 800; color: #1e293b; }
 #ab-loc-popup #gps-info { font-size: 11px; color: #64748b; max-width: none; margin-top: 1px; }
-.abp-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
-.abp-opt {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 8px 4px; border-radius: 12px; background: #f1f5f9; border: 1px solid #e2e8f0; cursor: pointer;
-}
-.abp-opt-lbl { font-size: 12px; font-weight: 700; color: #1e293b; white-space: nowrap; }
 .abp-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .abp-act {
   display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -5619,13 +5613,12 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
       <!-- N.V. + razmjera + MGI koordinate badge top-left (kompaktni horizontalni red) -->
       <div id="nv-badge">
-        <span class="nv-cell"><span class="nv-lbl">N.V.</span><span id="nv-val">— m</span></span>
-        <span class="nv-cell nv-cell-xy" id="nv-koord" onclick="_nvKopirajKoord()" title="Dodirni za kopiranje koordinata" role="button" aria-label="Kopiraj koordinate">
-          <span class="nv-lbl">Y · X (MGI) <span class="nv-kop">⧉</span></span>
-          <span class="nv-xy"><span id="omgi-y" class="nv-coord">—</span><span class="nv-sep">·</span><span id="omgi-x" class="nv-coord">—</span></span>
+        <span class="nv-cell nv-cell-nv" title="Nadmorska visina"><span class="nv-ic">⛰</span><span id="nv-val">— m</span></span>
+        <span class="nv-cell nv-cell-xy" id="nv-koord" onclick="_nvKopirajKoord()" title="MGI koordinate — dodirni za kopiranje" role="button" aria-label="Kopiraj koordinate">
+          <span class="nv-lbl">Y</span><span id="omgi-y" class="nv-coord">—</span><span class="nv-lbl">X</span><span id="omgi-x" class="nv-coord">—</span>
         </span>
         <span id="map-scale-click" class="nv-cell" onclick="toggleScaleMenu(event)" title="Odaberi razmjeru">
-          <span class="nv-lbl">Razmjera ▾</span><span class="nv-sc">1:<span id="map-scale-val">—</span></span>
+          <span class="nv-sc">1:<span id="map-scale-val">—</span></span><span class="nv-dd">▾</span>
         </span>
       </div>
       <!-- Meni za izbor razmjere -->
@@ -5819,7 +5812,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v2.9.8';
+const APP_VER = 'v2.9.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -19251,6 +19244,50 @@ function _updGpsSwitch() {
   // Boje nosi CSS (.abp-trag / .on) — prate dnevni i tamni prikaz.
   const tbtn = document.getElementById('ab-loc-trag');
   if (tbtn) tbtn.classList.toggle('on', !!_tragOn);
+  _locStatusRender();
+}
+
+// Status u "Moja lokacija" (v2.9.9): tačka u boji preciznosti i starost
+// zadnjeg fiksa — ispod krošnje fiks zna stati minutama, a ±3 m bez starosti
+// izgleda kao da je svjež. Zove se na fiks i svake sekunde dok je popup otvoren.
+function _locStatusRender() {
+  const p = document.getElementById('ab-loc-popup');
+  if (!p) return;
+  p.classList.toggle('gps-off', !gpsOn);
+  const dot = document.getElementById('abp-dot');
+  const age = document.getElementById('gps-age');
+  let fixT = 0;
+  try { fixT = _lastGpsFixTime || 0; } catch(e) {}
+  const s = (gpsOn && lastP && fixT) ? Math.max(0, Math.round((Date.now() - fixT) / 1000)) : null;
+  const ac = (s != null && isFinite(lastP.ac)) ? lastP.ac : null;
+  const ton = !gpsOn ? 'off' : (ac == null || s > 30) ? 'trazi' : ac <= 5 ? 'dobar' : ac <= 15 ? 'srednji' : 'slab';
+  if (dot) dot.className = 'abp-dot ' + ton;
+  if (age) age.textContent = s == null ? '' : ' · ' + (s < 3 ? 'sada' : s < 60 ? 'prije ' + s + ' s' : 'prije ' + Math.floor(s / 60) + ' min');
+}
+let _locPopTimer = null;
+function _locPopTimerStart() {
+  if (_locPopTimer) return;
+  _locPopTimer = setInterval(() => {
+    const p = document.getElementById('ab-loc-popup');
+    if (!p || p.style.display === 'none') { clearInterval(_locPopTimer); _locPopTimer = null; return; }
+    _locStatusRender();
+  }, 1000);
+}
+// Šumski mod nije samoobjašnjiv — dug dodir na čip kaže šta radi, a kratak
+// ga uključi/isključi. Poslije dugog dodira klik se ne smije okinuti.
+let _locLpT = null, _locLpBio = false;
+function _locLongPress(ev) {
+  _locLpBio = false;
+  clearTimeout(_locLpT);
+  _locLpT = setTimeout(() => {
+    _locLpBio = true;
+    showToast('🌲 Šumski mod: strožije filtrira GPS fiksove (odbacuje nepreciznije) — bolje pod krošnjom, ali tačke stižu rjeđe.');
+  }, 550);
+}
+function _locLongPressStop() { clearTimeout(_locLpT); _locLpT = null; }
+function _locChipSumski() {
+  if (_locLpBio) { _locLpBio = false; return; }
+  _togForestMode();
 }
 
 // ─── GPS SIGNAL INDIKATOR u recording banneru ──────────────────────────
@@ -19436,7 +19473,7 @@ function toggleGPS() {
 function startGPS() {
   if (!navigator.geolocation) { showToast('⚠ Uređaj ne podržava GPS!'); return; }
   gpsOn = true;
-  document.getElementById('gps-info').textContent = 'GPS: tražim signal...';
+  document.getElementById('gps-info').textContent = 'Tražim signal…';
   if (!_compassConeOn) togCompassCone();
   _updGpsSwitch();
   wid = navigator.geolocation.watchPosition(onP, onPE, {
@@ -19452,7 +19489,7 @@ function stopGPS() {
   try { const c = map.getCenter(); debouncedUpdElev(c.lat, c.lng, 100); } catch(e) {}
   if (_compassConeOn) togCompassCone();
   _clearRadiusRings(); _radiusOn = false;
-  document.getElementById('gps-info').textContent = 'GPS: isključen';
+  document.getElementById('gps-info').textContent = 'Isključen';
   _updGpsSwitch();
   _updMcdDist();
 }
@@ -19814,10 +19851,11 @@ function onP(p) {
   if (_activeTab === 'teren') terenRender();
 
   // Prikaz uvijek — pokaži brzinu ako je dostupna
-  const speedKmh = (gpsSpeed != null && gpsSpeed >= 0) ? ` ${Math.round(gpsSpeed * 3.6)}km/h` : '';
+  const speedKmh = (gpsSpeed != null && gpsSpeed >= 0) ? ` · ${Math.round(gpsSpeed * 3.6)} km/h` : '';
   const warmTxt  = (recOn && !recPaused && _gpsBuf.length > 0 && _gpsBuf.length < _gpsMedN())
     ? ` (GPS ${_gpsBuf.length}/${_gpsMedN()})` : '';
-  document.getElementById('gps-info').textContent = `GPS: ±${Math.round(ac)}m${speedKmh}${warmTxt}`;
+  document.getElementById('gps-info').textContent = `±${Math.round(ac)} m${speedKmh}${warmTxt}`;
+  _locStatusRender();
   document.getElementById('oacc').textContent = `±${Math.round(ac)}m`;
   _updRecSignal(ac);
   _precizCollect(la, lo, ac);
@@ -20162,13 +20200,13 @@ function _restartGpsWatch(reason) {
     enableHighAccuracy: true, maximumAge: 0, timeout: 20000
   });
   _lastGpsFixTime = now;
-  document.getElementById('gps-info').textContent = 'GPS: restart (' + reason + ')...';
+  document.getElementById('gps-info').textContent = 'Restart (' + reason + ')…';
   return true;
 }
 
 // ── GPS ERROR — auto-restart ─────────────────────────────────────────────────
 function onPE(e) {
-  document.getElementById('gps-info').textContent = 'GPS: greška — ' + e.message;
+  document.getElementById('gps-info').textContent = 'Greška — ' + e.message;
   _updLocBtn();
   if (recOn && gpsOn && _gpsRestartCount < 5) {
     setTimeout(() => {
@@ -21503,6 +21541,7 @@ function _toggleLocPopup() {
   p.style.display = opening ? 'block' : 'none';
   if (opening) {
     _updGpsSwitch();
+    _locPopTimerStart();
     const im = document.getElementById('ab-izmjeri-menu'); if (im) im.style.display = 'none';
   }
 }
@@ -42559,31 +42598,25 @@ if (typeof AndroidDownload !== 'undefined') {
     </button>
     <div id="ab-loc-popup" class="ab-pop" style="display:none;">
       <div class="abp-head">
-        <div style="min-width:0;">
-          <div class="abp-title">📡 Moja lokacija</div>
-          <div id="gps-info" class="abp-sub">isključen</div>
+        <span class="abp-dot" id="abp-dot"></span>
+        <div class="abp-stat">
+          <div class="abp-title">Moja lokacija</div>
+          <div class="abp-sub"><span id="gps-info">Isključen</span><span id="gps-age"></span></div>
         </div>
-        <span class="gps-switch" id="gps-switch" onclick="toggleGPS()"><span class="gps-switch-knob"></span></span>
+        <span class="gps-switch" id="gps-switch" onclick="toggleGPS()" title="GPS uključen / isključen"><span class="gps-switch-knob"></span></span>
       </div>
-      <div class="abp-opts">
-        <div class="abp-opt" onclick="_togCompassSwitch()">
-          <span class="abp-opt-lbl">🧭 Kompas</span>
-          <span class="gps-switch" id="compass-switch"><span class="gps-switch-knob"></span></span>
-        </div>
-        <div class="abp-opt" onclick="_togRadiusRings()">
-          <span class="abp-opt-lbl">⊚ Radijus</span>
-          <span class="gps-switch" id="radius-switch"><span class="gps-switch-knob"></span></span>
-        </div>
-        <div class="abp-opt" onclick="_togForestMode()" title="Strožije filtriranje za bolju preciznost pod krošnjom">
-          <span class="abp-opt-lbl">🌲 Šumski mod</span>
-          <span class="gps-switch" id="forest-switch"><span class="gps-switch-knob"></span></span>
-        </div>
-      </div>
+      <button class="abp-ukljuci" onclick="toggleGPS()">
+        <svg class="ic"><use href="#ic-meta"/></svg><span>Uključi lokaciju</span></button>
       <div class="abp-acts">
-        <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
-          <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
         <button class="abp-act abp-centar" onclick="_locPopupCentriraj()">
           <svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
+        <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
+          <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
+      </div>
+      <div class="abp-chips">
+        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
+        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
+        <button class="abp-chip" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje">🌲 Šumski</button>
       </div>
     </div>
   </div>

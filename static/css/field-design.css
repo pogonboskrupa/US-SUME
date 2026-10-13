@@ -1128,11 +1128,9 @@ html .doz-sazetak .doz-filt.sve.on {color:var(--field-ink);border-color:var(--fi
 /* Karta 2.9.8: prozorčići donje trake prate temu, čitljiva traka koordinata,
    grafičko mjerilo iznad donje trake, realtime oznaka samo kad nešto znači. */
 html .ab-pop {background:var(--field-card);border:1px solid var(--field-border);color:var(--field-ink);}
-html .abp-title,html .abp-opt-lbl {color:var(--field-ink);}
+html .abp-title {color:var(--field-ink);}
 html #ab-loc-popup #gps-info {color:var(--field-muted);font-size:12px;}
-html .abp-opt,html .abp-tile {background:var(--field-bg);border-color:var(--field-border);color:var(--field-ink);}
-html .abp-opt {min-height:64px;justify-content:center;}
-html .abp-opt-lbl {white-space:normal;text-align:center;line-height:1.3;}
+html .abp-tile {background:var(--field-bg);border-color:var(--field-border);color:var(--field-ink);}
 html:not([data-field-theme=day]) .ab-pop .gps-switch:not(.on) {background:#475569;}
 html .abp-act {min-height:48px;}
 html .abp-trag {background:rgba(249,115,22,.16);border-color:#fb923c;color:#fdba74;}
@@ -1142,23 +1140,55 @@ html[data-field-theme=day] .abp-trag {background:#fff7ed;border-color:#fdba74;co
 html[data-field-theme=day] .abp-trag.on {background:#fee2e2;border-color:#fca5a5;color:#b91c1c;}
 html[data-field-theme=day] .abp-centar {background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;}
 
-html #nv-badge {display:flex;flex-wrap:nowrap;align-items:stretch;gap:0;padding:4px 4px;font-family:system-ui,-apple-system,sans-serif;white-space:nowrap;}
-html #nv-badge .nv-cell {display:flex;flex-direction:column;justify-content:center;min-width:0;padding:0 8px;border-left:1px solid rgba(148,163,184,.25);}
+/* Karta 2.9.9: traka koordinata u JEDNOM niskom redu (~34 px), providna uz
+   zamućenje — karta ispod se vidi, a brojevi ostaju čitljivi. Oznake su
+   skraćene (⛰ / Y / X), ID-jevi i dodir-za-kopiranje su isti kao prije. */
+html #nv-badge {display:flex;flex-wrap:nowrap;align-items:center;gap:0;min-height:34px;padding:2px 2px;box-sizing:border-box;line-height:1.2;font-family:system-ui,-apple-system,sans-serif;white-space:nowrap;background:rgba(15,23,42,.55);border-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+html #nv-badge .nv-cell {display:flex;flex-direction:row;align-items:baseline;gap:4px;min-width:0;padding:4px 7px;border-left:1px solid rgba(148,163,184,.3);}
 html #nv-badge .nv-cell:first-child {border-left:0;}
-html #nv-badge .nv-cell-xy {flex:1;pointer-events:auto;cursor:pointer;border-radius:6px;}
-html #nv-badge .nv-cell-xy:active {background:rgba(148,163,184,.2);}
-html #nv-badge .nv-lbl {font-size:10px;font-weight:600;letter-spacing:.02em;color:#94a3b8;line-height:1.3;}
-html #nv-badge .nv-kop {opacity:.8;}
-html #nv-badge #nv-val {font-size:14px;line-height:1.3;}
-html #nv-badge .nv-xy {display:flex;gap:5px;overflow:hidden;line-height:1.3;}
-html #nv-badge .nv-coord {font-size:13px;}
-html #nv-badge .nv-sep {margin:0;color:#64748b;}
-html #nv-badge .nv-sc {font-size:13px;font-weight:700;color:#fbbf24;line-height:1.3;}
-html #nv-badge #map-scale-val {font-size:13px;}
-@media(max-width:359px){html #nv-badge .nv-cell{padding:0 5px}html #nv-badge .nv-coord{font-size:12px}}
-html[data-field-theme=day] #nv-badge .nv-lbl {color:#334155;}
-html[data-field-theme=day] #nv-badge .nv-sc {color:#854d0e;}
+html #nv-badge .nv-cell-xy {flex:1;justify-content:center;pointer-events:auto;cursor:pointer;border-radius:6px;overflow:hidden;}
+html #nv-badge .nv-cell-xy:active {background:rgba(148,163,184,.25);}
+html #nv-badge .nv-ic {font-size:12px;opacity:.9;}
+html #nv-badge .nv-lbl {font-size:11px;font-weight:600;color:#94a3b8;}
+html #nv-badge .nv-lbl+.nv-coord {margin-right:4px;}
+html #nv-badge .nv-coord:last-child {margin-right:0;}
+html #nv-badge #nv-val {font-size:13px;font-weight:700;color:#67e8f9;}
+html #nv-badge .nv-coord {font-size:13px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;}
+html #nv-badge .nv-sc,html #nv-badge #map-scale-val {font-size:13px;font-weight:700;color:#fbbf24;}
+html #nv-badge .nv-dd {font-size:10px;color:#94a3b8;}
+html #nv-badge, html #nv-badge * {text-shadow:0 1px 2px rgba(0,0,0,.45);}
+@media(max-width:379px){html #nv-badge .nv-cell{padding:4px 5px;gap:3px}html #nv-badge .nv-coord,html #nv-badge #nv-val,html #nv-badge .nv-sc,html #nv-badge #map-scale-val{font-size:12px}}
+html[data-field-theme=day] #nv-badge {background:rgba(255,255,255,.72);border-color:rgba(100,116,139,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+html[data-field-theme=day] #nv-badge, html[data-field-theme=day] #nv-badge * {text-shadow:none;}
+html[data-field-theme=day] #nv-badge .nv-coord {color:#102033;}
+html[data-field-theme=day] #nv-badge #nv-val {color:#0e7490;}
+html[data-field-theme=day] #nv-badge :is(.nv-lbl,.nv-dd) {color:#475569;}
+html[data-field-theme=day] #nv-badge :is(.nv-sc,#map-scale-val) {color:#854d0e;}
 html[data-field-theme=day] #nv-badge .nv-cell {border-left-color:#cbd5e1;}
+
+/* "Moja lokacija" 2.9.9: status (tačka u boji preciznosti + starost fiksa),
+   dvije glavne radnje, opcije kao čipovi. Bez GPS-a: samo "Uključi lokaciju". */
+html #ab-loc-popup .abp-head {justify-content:flex-start;gap:10px;padding:2px 2px 10px;}
+html #ab-loc-popup .abp-stat {flex:1;min-width:0;}
+html #ab-loc-popup #gps-info,html #ab-loc-popup #gps-age {font-family:system-ui,sans-serif;font-variant-numeric:tabular-nums;}
+html #ab-loc-popup .abp-sub {font-size:12.5px;color:var(--field-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+html #ab-loc-popup #gps-info {display:inline;max-width:none;overflow:visible;color:var(--field-ink);font-weight:600;}
+html .abp-dot {flex:0 0 auto;width:12px;height:12px;border-radius:50%;background:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.25);}
+html .abp-dot.dobar {background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25);}
+html .abp-dot.srednji {background:#eab308;box-shadow:0 0 0 3px rgba(234,179,8,.25);}
+html .abp-dot.slab {background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.25);}
+html .abp-dot.trazi {background:#eab308;animation:abpDot 1.2s ease-in-out infinite;}
+@keyframes abpDot {50% {opacity:.3;}}
+html #ab-loc-popup .abp-acts {margin-bottom:8px;}
+html .abp-chips {display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+html .abp-chip {min-height:44px;padding:6px 4px;border-radius:22px;border:1.5px solid var(--field-border);background:transparent;color:var(--field-muted);font:600 12.5px system-ui;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+html .abp-chip.on {background:rgba(34,197,94,.18);border-color:#4ade80;color:var(--field-ink);}
+html[data-field-theme=day] .abp-chip.on {background:#dcfce7;border-color:#16a34a;color:#14532d;}
+html .abp-ukljuci {display:none;width:100%;min-height:52px;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:0;background:#16a34a;color:#fff;font:700 15px system-ui;cursor:pointer;}
+html .abp-ukljuci .ic {width:20px;height:20px;margin:0;}
+html #ab-loc-popup.gps-off .abp-ukljuci {display:flex;}
+html #ab-loc-popup.gps-off :is(.abp-acts,.abp-chips) {display:none;}
+@media (prefers-reduced-motion:reduce) {html .abp-dot.trazi {animation:none;}}
 
 html #map .leaflet-control-scale {margin:0 10px 10px 0;}
 body.ab-on #map .leaflet-bottom.leaflet-right .leaflet-control-scale {margin-bottom:calc(var(--ab-h,64px) + 10px);}

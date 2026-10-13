@@ -46,7 +46,9 @@ t('bez poznatih koordinata ništa se ne kopira', async () => {
 t('traka koordinata: isti ID-jevi, natpisi, kopiranje dodirom', () => {
   const b = HTML.slice(HTML.indexOf('<div id="nv-badge">'), HTML.indexOf('<!-- Meni za izbor razmjere -->'));
   for (const id of ['nv-val', 'omgi-y', 'omgi-x', 'map-scale-click', 'map-scale-val']) assert.ok(b.includes('id="' + id + '"'), id);
-  assert.ok(/N\.V\./.test(b) && /Y · X \(MGI\)/.test(b) && /Razmjera/.test(b) && /onclick="_nvKopirajKoord\(\)"/.test(b));
+  assert.ok(/⛰/.test(b) && /class="nv-lbl">Y</.test(b) && /class="nv-lbl">X</.test(b) && /onclick="_nvKopirajKoord\(\)"/.test(b));
+  // 2.9.9: jedan nizak red, bez dugih natpisa i bez ⧉ znaka
+  assert.ok(!/Y · X \(MGI\)|Razmjera ▾|nv-kop/.test(b));
   assert.ok(/\.nv-cell-xy \{[^}]*pointer-events:auto/.test(CSS), 'ćelija koordinata mora primati dodir (badge je pointer-events:none)');
 });
 t('grafičko mjerilo postoji, štampa ga sakriva', () => {
@@ -68,4 +70,44 @@ t('Slojevi: podloge su prve, memorija ispod i skrivena dok se ne izračuna', () 
   assert.ok(/id="ls-cache-box" hidden/.test(k) && !/💾 …/.test(k) && !/<h3>Online podloge<\/h3>/.test(k));
   assert.ok(/box\.hidden = false/.test(extractFn('_lsRenderCache')));
 });
+t('traka koordinata 2.9.9: jedan red, providna, zamućena (i u dnevnom prikazu)', () => {
+  assert.ok(/html #nv-badge \{[^}]*flex-wrap:nowrap[^}]*background:rgba\(15,23,42,\.55\)[^}]*backdrop-filter:blur/.test(CSS));
+  assert.ok(/html #nv-badge \.nv-cell \{[^}]*flex-direction:row/.test(CSS));
+  assert.ok(/html\[data-field-theme=day\] #nv-badge \{background:rgba\(255,255,255,\.72\)/.test(CSS));
+});
+
+function locStatus(st) {
+  const els = {};
+  const el = () => ({ className: '', textContent: '', classList: { s: new Set(), toggle(c, v) { v ? this.s.add(c) : this.s.delete(c); }, has(c) { return this.s.has(c); } } });
+  ['ab-loc-popup', 'abp-dot', 'gps-age'].forEach(i => els[i] = el());
+  new Function('document', 'gpsOn', 'lastP', '_lastGpsFixTime', extractFn('_locStatusRender') + '; _locStatusRender();')(
+    { getElementById: id => els[id] || null }, st.gpsOn, st.lastP, st.fixT);
+  return els;
+}
+t('Moja lokacija: tačka u boji preciznosti i starost fiksa', () => {
+  const n = Date.now();
+  let e = locStatus({ gpsOn: true, lastP: { ac: 4 }, fixT: n - 1000 });
+  assert.strictEqual(e['abp-dot'].className, 'abp-dot dobar'); assert.strictEqual(e['gps-age'].textContent, ' · sada');
+  e = locStatus({ gpsOn: true, lastP: { ac: 12 }, fixT: n - 20000 });
+  assert.strictEqual(e['abp-dot'].className, 'abp-dot srednji'); assert.strictEqual(e['gps-age'].textContent, ' · prije 20 s');
+  e = locStatus({ gpsOn: true, lastP: { ac: 40 }, fixT: n - 5000 });
+  assert.strictEqual(e['abp-dot'].className, 'abp-dot slab');
+  e = locStatus({ gpsOn: true, lastP: { ac: 3 }, fixT: n - 120000 });
+  assert.strictEqual(e['abp-dot'].className, 'abp-dot trazi', 'zastario fiks nije "dobar"'); assert.strictEqual(e['gps-age'].textContent, ' · prije 2 min');
+});
+t('Moja lokacija: bez GPS-a popup nudi samo "Uključi lokaciju"', () => {
+  const e = locStatus({ gpsOn: false, lastP: null, fixT: 0 });
+  assert.ok(e['ab-loc-popup'].classList.has('gps-off')); assert.strictEqual(e['gps-age'].textContent, '');
+  assert.ok(/#ab-loc-popup\.gps-off :is\(\.abp-acts,\.abp-chips\) \{display:none;\}/.test(CSS));
+  const p = HTML.slice(HTML.indexOf('id="ab-loc-popup"'), HTML.indexOf('id="ab-centar"'));
+  assert.ok(/class="abp-ukljuci" onclick="toggleGPS\(\)"/.test(p));
+  for (const id of ['gps-switch', 'compass-switch', 'radius-switch', 'forest-switch', 'ab-loc-trag', 'ab-loc-trag-txt', 'gps-info']) assert.ok(p.includes('id="' + id + '"'), id);
+});
+t('Šumski čip: dug dodir objašnjava i NE prebacuje mod', () => {
+  let tog = 0;
+  // Prvi klik poslije dugog dodira se guta, drugi prebacuje mod.
+  const g = new Function('_togForestMode', 'let _locLpBio = true;' + extractFn('_locChipSumski') + '; _locChipSumski(); _locChipSumski(); return _locLpBio;');
+  assert.strictEqual(g(() => tog++), false); assert.strictEqual(tog, 1);
+});
+
 Promise.all(cekaj).then(() => { console.log(`karta-ui: ${ok} ok, ${fail} palo`); process.exit(fail ? 1 : 0); });
