@@ -16036,7 +16036,7 @@ function _lsRenderSqlite() {
       background:#2a1616;border:1px solid #7f1d1d;border-radius:8px;padding:8px 10px;">
       <span style="flex:1;min-width:0;font-size:11px;color:#fca5a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
         ${f.deferred ? '🗺' : '⚠'} ${_escHtml(f.name)} — ${f.deferred ? 'sačuvana na uređaju' : 'nije učitana'}</span>
-      <button onclick="event.stopPropagation();sqlmapRetryOne('${_escAttr(f.name)}')"
+      <button onclick="event.stopPropagation();sqlmapRetryOne('${_jsAttr(f.name)}')"
         style="flex-shrink:0;background:#1e3a5f;border:1px solid #2563eb;color:#93c5fd;border-radius:6px;
         padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;">${f.deferred ? 'Otvori' : 'Pokušaj ponovo'}</button>
     </div>`).join('');
@@ -21473,22 +21473,25 @@ function _tragoviSetStyle(id, s) {
   const ed = document.getElementById('tred-'+id);
   if (ed && ed.style.display !== 'none') {
     _tragoviRender();
+    // Novi red je prazan (editor se gradi tek pri otvaranju) — napuni ga prije
+    // prikaza, inače bi se panel sklopio u praznu kutiju.
     const edNew = document.getElementById('tred-'+id);
-    if (edNew) edNew.style.display = '';
+    if (edNew) { edNew.innerHTML = _tragoviEditHtml(t); edNew.style.display = ''; }
   }
 }
 function _tragoviDelPt(id, idx) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t || t.pts.length <= 2) { showToast('⚠ Trag mora imati min. 2 tačke'); return; }
   t.pts.splice(idx, 1);
-  const line = _tragLayers[id];
-  if (line) line.setLatLngs(t.pts.map(p => [p[0], p[1]]));
+  // Cijeli sloj iznova (linija, nevidljivi sloj za klik, oznaka dužine, popup)
+  // — samo setLatLngs je ostavljao klikabilan uklonjeni skok i staru dužinu.
+  _tragRegAddLayer(t);
   _tragRegSave();
   _tragoviRender();
-  // Ponovo otvori edit panel
+  // Ponovo otvori edit panel sa listom tačaka
   setTimeout(() => {
     const ed = document.getElementById('tred-'+id);
-    if (ed) { ed.style.display = ''; _tragoviTogglePts(id); }
+    if (ed) { ed.innerHTML = _tragoviEditHtml(t); ed.style.display = ''; _tragoviTogglePts(id); }
   }, 0);
 }
 
@@ -22214,7 +22217,7 @@ function _renderVlakaRow(el, v, i, depth, dPre, grana) {
   else if (isRecThis && recPaused) badge = `<span class="vrec-badge paused">⏸ pauzirano</span>`;
   else if (isPausedPar)            badge = `<span class="vrec-badge parent">⏸ čeka</span>`;
   const nasaviBtn = isPausedPar
-    ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()"><svg class="ic"><use href="#ic-pocni"/></svg> Nastavi ${v.nm}</button>`
+    ? `<button class="btn-nastavi" onclick="event.stopPropagation();vratiSeNaRoditelja()"><svg class="ic"><use href="#ic-pocni"/></svg> Nastavi ${_escHtml(v.nm)}</button>`
     : '';
   // Elev stats + distanca od puta za krakove
   const elvHtml = _elevHtml(v.pts);
@@ -29226,7 +29229,7 @@ function _msrPopupHtml(m) {
       const dateStr = m.date ? fmtDateShort(m.date) : '';
       let html = `<div style="min-width:180px;font-family:sans-serif;">
         <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px;">${_escHtml(m.name)}</div>`;
-      if (m.gj || m.odjel) html += `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${[m.gj, m.odjel].filter(Boolean).join(' · ')}</div>`;
+      if (m.gj || m.odjel) html += `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${_escHtml([m.gj, m.odjel].filter(Boolean).join(' · '))}</div>`;
       if (dateStr)          html += `<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">${dateStr}</div>`;
 
       if (mode === 'nagib' && m.pts.length >= 2) {
