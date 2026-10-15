@@ -56,7 +56,7 @@ t('grafičko mjerilo postoji, štampa ga sakriva', () => {
   assert.ok(/body\.stampa-on \.leaflet-control-container \{ display:none !important; \}/.test(HTML));
 });
 t('realtime tačkica: skrivena osim kad je sync stvarno aktivan', () => {
-  assert.ok(/html #sync-status-dot \{display:none;\}/.test(CSS) && /sync-dot--ok::after \{content:'uživo';\}/.test(CSS));
+  assert.ok(/html #sync-status-dot \{display:none;\}/.test(CSS) && !/sync-dot--ok::after/.test(CSS));
 });
 t('popup lokacije: bez svijetlih inline boja, boje iz teme', () => {
   const p = HTML.slice(HTML.indexOf('id="ab-loc-popup"'), HTML.indexOf('id="ab-centar"'));

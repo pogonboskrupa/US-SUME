@@ -4793,3 +4793,7 @@ ID-jeva/keša. Jedan ručni ciklus pripada nalogu koji ga je započeo.
 ### Karte i build — 2.0.2
 
 Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokreće `syncWebAssets`, provjerava verzije i required assets; CI SHA-256 poredi APK sa izvornim fajlovima. Wrapper JAR je sada vraćen i checksum-provjeren; lokalno okruženje nema DNS pristup Gradle distribuciji.
+
+### Karta i Dodaj fajl — natpis "uživo", tab "Sa servera" (nakon v3.0.2)
+- Pilula realtime sinhronizacije na karti više ne ispisuje "uživo" (CSS `::after` uklonjen); ostaje samo zelena tačka u pilulu kad je realtime aktivan.
+- "Dodaj fajl na kartu" ima treći tab **Sa servera** (`#layer-import-server`) u koji je prebačen katalog "KML iz KARTA APP" (`.kml-drive`, ID-jevi nepromijenjeni, pa `KmlDownloads` radi isto). Tab KML sada sadrži samo lokalni izbor fajla. `layerImportTab` zna tri taba; na ≤420 px tabovi su stupci bez podnatpisa da stanu u 320 px.

@@ -10,7 +10,7 @@ function openLayerImport() {
 }
 function closeLayerImport() { document.getElementById('layer-import-modal').style.display = 'none'; }
 function layerImportTab(tab) {
-  for (const type of ['kml','shp']) {
+  for (const type of ['kml','shp','server']) {
     document.getElementById('layer-import-'+type).hidden = type !== tab;
     document.getElementById('layer-tab-'+type).setAttribute('aria-selected',String(type===tab));
   }

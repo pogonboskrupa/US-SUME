@@ -235,6 +235,7 @@ async def main():
             queueMicrotask(()=>KmlDownloads.reply(id,result));
           }};openLayerImport();
         }""")
+        await page.click('#layer-tab-server')
         await page.wait_for_function("document.querySelectorAll('.kml-drive-row').length===3&&!document.querySelector('#kml-drive-refresh').disabled")
         assert await page.locator('#kml-drive-list img').count()==0
         for theme in ['day','dark']:
