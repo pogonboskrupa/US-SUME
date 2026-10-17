@@ -5826,7 +5826,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.4';
+const APP_VER = 'v3.0.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7586,6 +7586,13 @@ async function sbLoadProfile() {
 // Idempotentno — showApp() je zove za svaki ulaz, bez obzira kojim putem je došao.
 function _primijeniUlogeUI(data) {
   if (!data) return;
+  // Ime/šumarija i identitet u meniju: ista klasa propusta kao tabovi — offline ulaz
+  // na kešu ih nikad nije punio (autor vlake/izvještaja ostajao prazan).
+  const imeEl = document.getElementById('p-ime');
+  if (imeEl) imeEl.value = ((data.ime || '') + ' ' + (data.prezime || '')).trim();
+  const sumEl = document.getElementById('p-sumarija');
+  if (sumEl && data.sumarija) sumEl.value = data.sumarija;
+  if (typeof _menuIdentityRender === 'function') { try { _menuIdentityRender(); } catch(e) {} }
   const vodeciBadge = document.getElementById('vodeci-badge');
   if (vodeciBadge) vodeciBadge.style.display = 'none';
   // ── Vidljivost UI po ulozi — DETERMINISTIČKI za sve uloge ──────────────────

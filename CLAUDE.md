@@ -4800,3 +4800,4 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Admin bez taba Korisnici na slabom signalu (v3.0.4)
 - Vidljivost tabova i stavki menija po ulozi bila je SAMO u `sbLoadProfile()`. Offline-first ulaz na keširanom profilu (`_ulazNaKesu`, auto-login fallback) postavlja `sbProfile = cached` i zove `showApp()` bez `sbLoadProfile()`, a `#admin-tab-btn` je u markupu `display:none` — admin na lošem signalu nije dobijao tab Korisnici (ni Obavještenja/Teren/meni stavke). Izdvojeno u `_primijeniUlogeUI(data)` (idempotentno) i zove ga `showApp()` za SVAKI ulaz. Test: `tests/js/uloge-offline-ui.test.js`.
+- v3.0.5: `_primijeniUlogeUI` usput puni i `p-ime`/`p-sumarija` i `_menuIdentityRender()` — ista klasa propusta (offline ulaz na kešu nije zvao `sbLoadProfile`). Svaki novi UI koji zavisi od profila ide u tu funkciju, ne samo u `sbLoadProfile`.
