@@ -8698,6 +8698,10 @@ async function adminLoadUsers() {
 
   _adminLoadStats(); // paralelno, ne blokira listu
 
+  // Otvaranje taba / "Osvježi" je IZRIČITA radnja: vrata transporta ne smiju je
+  // odbiti zbog izmjerenog 'nema' (poslije ulaza na keširanom profilu stanje je
+  // često zaglavljeno na offline iako mobilni podaci rade).
+  _mrezaSila(30000);
   const owner=sbUser?.id,seq=(adminLoadUsers._seq||0)+1;adminLoadUsers._seq=seq;
   const [{data,error},activity]=await Promise.all([
     _withTimeout(sb.rpc('admin_get_all_users'),8000).catch(()=>({error:{message:'Server nije odgovorio. Pokušaj ponovo.'}})),
