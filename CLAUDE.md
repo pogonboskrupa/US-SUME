@@ -4797,3 +4797,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### Karta i Dodaj fajl — natpis "uživo", tab "Sa servera" (nakon v3.0.2)
 - Pilula realtime sinhronizacije na karti više ne ispisuje "uživo" (CSS `::after` uklonjen); ostaje samo zelena tačka u pilulu kad je realtime aktivan.
 - "Dodaj fajl na kartu" ima treći tab **KML sa servera** (`#layer-import-server`) u koji je prebačen katalog "KML iz KARTA APP" (`.kml-drive`, ID-jevi nepromijenjeni, pa `KmlDownloads` radi isto). Tab KML sada sadrži samo lokalni izbor fajla. `layerImportTab` zna tri taba; na ≤420 px tabovi su stupci bez podnatpisa da stanu u 320 px.
+
+### Admin bez taba Korisnici na slabom signalu (v3.0.4)
+- Vidljivost tabova i stavki menija po ulozi bila je SAMO u `sbLoadProfile()`. Offline-first ulaz na keširanom profilu (`_ulazNaKesu`, auto-login fallback) postavlja `sbProfile = cached` i zove `showApp()` bez `sbLoadProfile()`, a `#admin-tab-btn` je u markupu `display:none` — admin na lošem signalu nije dobijao tab Korisnici (ni Obavještenja/Teren/meni stavke). Izdvojeno u `_primijeniUlogeUI(data)` (idempotentno) i zove ga `showApp()` za SVAKI ulaz. Test: `tests/js/uloge-offline-ui.test.js`.

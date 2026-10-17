@@ -5826,7 +5826,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.3';
+const APP_VER = 'v3.0.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7577,6 +7577,15 @@ async function sbLoadProfile() {
   const fullName = ((data.ime || '') + ' ' + (data.prezime || '')).trim();
   document.getElementById('p-ime').value = fullName;
   if (data.sumarija) document.getElementById('p-sumarija').value = data.sumarija;
+  _primijeniUlogeUI(data);
+}
+
+// Vidljivost tabova/stavki menija po ulozi. Izdvojeno iz sbLoadProfile: offline-first
+// ulaz na keširanom profilu (_ulazNaKesu, auto-login fallback) NE zove sbLoadProfile,
+// pa admin na slabom signalu nikad nije dobio tab Korisnici (display:none po zadanom).
+// Idempotentno — showApp() je zove za svaki ulaz, bez obzira kojim putem je došao.
+function _primijeniUlogeUI(data) {
+  if (!data) return;
   const vodeciBadge = document.getElementById('vodeci-badge');
   if (vodeciBadge) vodeciBadge.style.display = 'none';
   // ── Vidljivost UI po ulozi — DETERMINISTIČKI za sve uloge ──────────────────
@@ -7675,6 +7684,7 @@ async function showApp() {
   // da ne dođe do curenja podataka između korisnika na dijeljenom uređaju.
   try { if (sbUser) await _checkDeviceUserSwitch(sbUser.id); }
   catch(e) { _showAuthScreen(); showAuthErr('Promjena naloga zaustavljena radi zaštite lokalnih podataka: ' + e.message); return; }
+  try { _primijeniUlogeUI(sbProfile); } catch(e) { console.warn('uloge UI', e); }
   _revealApp();   // idempotentno — ako je gore već otkriveno, ovo ne mijenja ništa
   _setOfflineMode(!navigator.onLine);
   _startupRestore();
