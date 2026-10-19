@@ -4819,3 +4819,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Izabrana vlaka s podignutom olovkom dobija **ručke** na tačkama (`_vsdHandlesBuild`, `.vsd-h`, najviše `_VSD_HANDLE_MAX`=800): povlačenje pomjera tačku (na kraju hvatanje za tuđe čvorove), desni klik briše tačku (min. 2; blokirano ako vlaka ima krakove jer bi se pomjerili `junctionOnParent` indeksi). **Leaflet Draggable ignoriše povlačenje uz Shift** — zato Shift ne vrijedi za ručke.
 - **F2 / ✎ Preimenuj** (`_vsdPreimenuj`, samo glavna vlaka bez krakova, ide kroz `renameVlaka`) i **Delete / 🗑 Obriši** (`_vsdObrisi`, `_dlgConfirm`, odbija vlaku s krakovima — prvo se brišu krakovi; reindeksira `_vlakaSaveTimers` kao standardno brisanje).
 - Test: `tests/browser/vlake-studio.py` (ručke, brisanje tačke, preimenovanje, brisanje).
+
+### Studio vlaka na telefonu (v3.0.11)
+- Na ≤700 px panel je `position:fixed` (z 3000), zadano SKLOPLJEN (`_vsdSkl`, `.vsd-skl` krije `.vsd-extra`: lista, opcije, pomoć) — tanka traka umjesto pola ekrana koji je prekrivao kartu. ✕ i ▾/▴ su mete 44 px; zaglavlje je sticky. Prije je panel (absolute, 48vh) mogao ostati nedostižan.

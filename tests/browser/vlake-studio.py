@@ -116,6 +116,14 @@ async def main():
   # --- slučajno napuštanje: nova vlaka sa jednom tačkom se odbacuje, prethodne ostaju
   await ev('vlakeStudioOpen()');await klik(800,200);await ev('vlakeStudioClose()')
   assert await ev('vlake.length')==0
+  # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
+  await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)
+  bb=await page.locator('#vsd-panel').bounding_box();assert bb['y']+bb['height']<=780 and bb['height']<780*0.45,bb
+  assert not await page.locator('#vsd-panel .vsd-list').is_visible()
+  x=await page.locator('#vsd-panel .vsd-x').bounding_box();assert x['width']>=44 and x['height']>=44 and x['y']>=0,x
+  await page.locator('#vsd-panel .vsd-tg').click();assert await page.locator('#vsd-panel .vsd-list').is_visible()
+  await page.locator('#vsd-panel .vsd-x').click();await page.wait_for_timeout(80)
+  assert await ev('_vsdOn')==False and await page.locator('#vsd-panel').count()==0
   assert not errors,errors
   await browser.close();print('Studio vlaka: miš klik/dvoklik/desni klik/Shift, hvatanje kraka na roditelja, tipkovnica, odabir klikom, zatvaranje: OK')
 if __name__=='__main__':asyncio.run(main())
