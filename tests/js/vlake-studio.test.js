@@ -18,8 +18,8 @@ t('jedna tačka (bez segmenta) hvata samo čvor', () => { const r = snap({ la: 0
 
 console.log('Studio vlaka — ožičenje:');
 t('klik karte i klik linije se gase dok je studio otvoren', () => {
-  if (!/if \(_vsdOn\) return; \/\/ studio vlaka/.test(src)) throw new Error('map click guard');
-  if ((src.match(/_dozDrawType !== null \|\| _vsdOn\) return;/g) || []).length !== 2) throw new Error('poly click guards');
+  if (!/if \(typeof _vsdOn !== 'undefined' && _vsdOn\) return; \/\/ studio vlaka/.test(src)) throw new Error('map click guard');
+  if ((src.match(/_dozDrawType !== null \|\| \(typeof _vsdOn !== 'undefined' && _vsdOn\)\) return;/g) || []).length !== 2) throw new Error('poly click guards');
 });
 t('napuštanje karte zatvara studio, donja traka se sakriva', () => {
   if (!/prev === 'karta' && tab !== 'karta' && typeof _vsdOn/.test(src)) throw new Error('switchTab');
