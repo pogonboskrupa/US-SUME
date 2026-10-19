@@ -1459,7 +1459,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 
 /* ═══ STUDIO VLAKA — "Nacrtaj vlake u odjelu" (desktop miš + dodir) ═══ */
 #vsd-panel {
-  position:absolute; top:176px; left:8px; bottom:12px; width:344px; z-index:950;
+  position:fixed; top:112px; left:12px; bottom:16px; width:330px; z-index:1500;
   display:flex; flex-direction:column; gap:8px; padding:10px;
   background:rgba(255,255,255,0.97); color:#0f172a;
   border:0.5px solid rgba(0,0,0,0.1); border-radius:16px;
@@ -1498,9 +1498,19 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-tot { color:#475569; font-size:12px; }
 #map.vsd-pen, #map.vsd-pen .leaflet-interactive { cursor:crosshair !important; }
 .vsd-tg { display:none; }
+.vsd-cur.pen { background:#ecfdf5; border-color:#6ee7b7; }
+.vsd-cur-top { display:flex; align-items:center; gap:8px; }
+.vsd-cur-top .dot { width:14px; height:14px; border-radius:50%; flex:none; border:1.5px solid rgba(0,0,0,.25); }
+.vsd-len { margin-left:auto; font-weight:700; }
+#vsd-seg { color:#0369a1; }
+.vsd-main .vsd-b { padding:11px 5px; font-size:13px; }
+.vsd-main .vsd-b kbd { display:none; }
 @media (max-width:700px) {
   /* fixed + iznad svega: panel se mora uvijek moći zatvoriti; sklopljen je tanka traka, ne pola ekrana */
-  #vsd-panel { position:fixed; top:auto; left:6px; right:6px; bottom:calc(6px + env(safe-area-inset-bottom,0px)); width:auto; max-height:44vh; z-index:3000; overflow-y:auto; gap:6px; padding:8px; }
+  #vsd-panel { position:fixed; top:auto; left:6px; right:6px; bottom:calc(6px + env(safe-area-inset-bottom,0px)); width:auto; max-height:50vh; z-index:3000; overflow-y:auto; gap:6px; padding:8px; }
+  .vsd-main { flex-wrap:nowrap; }
+  .vsd-main .vsd-b { min-height:48px; font-size:14px; }
+  .vsd-cur { padding:6px 8px; gap:3px; }
   #vsd-panel .vsd-head { position:sticky; top:-8px; background:inherit; z-index:2; padding:2px 0; }
   #vsd-panel .vsd-x, .vsd-tg { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border:none; border-radius:10px; background:#f1f5f9; color:#334155; font-size:18px; cursor:pointer; }
   #vsd-panel .vsd-x { background:#fee2e2; color:#b91c1c; font-weight:800; }
@@ -10676,8 +10686,19 @@ function _vsdMove(e) {
   if (segEl) segEl.textContent = '+ ' + fmtL(dst(last.la, last.lo, r.la, r.lo));
 }
 
+// Dodir na dugme panela na telefonu zna stići i do karte (panel je bio dijete #map-a,
+// a i "ghost click" poslije ponovnog crtanja panela) — tada bi Poništi/Završi dodali
+// tačku baš ispod dugmeta. Klik unutar panela ili odmah poslije dodira panela se ignoriše.
+var _vsdPanelT = 0;
+function _vsdIzPanela(e) {
+  const t = e && e.originalEvent && e.originalEvent.target;
+  const panel = document.getElementById('vsd-panel');
+  return (!!panel && !!t && panel.contains(t)) || (Date.now() - _vsdPanelT < 450);
+}
+
 function _vsdClick(e) {
   if (!_vsdOn) return;
+  if (_vsdIzPanela(e)) return;
   if (_vsdPid !== _aktivniProjektId) { vlakeStudioClose(); return; }
   const shift = e.originalEvent && e.originalEvent.shiftKey;
   const v = _vsdSel !== null ? vlake[_vsdSel] : null;
@@ -10704,6 +10725,7 @@ function _vsdClick(e) {
 
 function _vsdDbl(e) {
   if (!_vsdOn || !_vsdPen) return;
+  if (_vsdIzPanela(e)) return;
   if (e.originalEvent) { e.originalEvent.preventDefault(); }
   // Drugi klik dvoklika može ostaviti gotovo istu tačku (pomak miša od piksel-dva) — skini je.
   const v = vlake[_vsdSel];
@@ -10717,6 +10739,7 @@ function _vsdDbl(e) {
 function _vsdCtx(e) {
   if (!_vsdOn) return;
   if (e.originalEvent) e.originalEvent.preventDefault();
+  if (_vsdIzPanela(e)) return;
   _vsdUndo();
 }
 
@@ -10968,32 +10991,34 @@ function _vsdRender() {
   const lista = panel.querySelector('.vsd-list');
   const skrol = lista ? lista.scrollTop : 0;
   const kraciOk = !!v && v.pts.length >= 2;
-  const stanje = !v ? 'Nema izabrane vlake'
-    : _vsdPen ? '✏ Crtaš — klikni na kartu za tačku' : 'Pregled — pritisni „Nastavi" da dodaješ tačke';
+  const dodir = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+  const tapni = dodir ? 'Dodirni' : 'Klikni';
+  const stanje = !v ? (red.length ? tapni + ' liniju na karti ili vlaku u listi' : 'Pritisni ＋ Nova vlaka')
+    : _vsdPen ? '✏ ' + tapni + ' kartu za sljedeću tačku' + (v.kr > 0 && !v.pts.length ? ' (počni na ' + _escHtml((vlake[_parentOf(v)] || {}).nm || 'roditelju') + ')' : '')
+    : 'Izabrana — ▶ Nastavi crtanje ili dodaj krak';
+  const glavni = _vsdPen ? `
+      <button type="button" class="vsd-b" onclick="_vsdUndo()" ${v && v.pts.length > _vsdPenBase ? '' : 'disabled'} title="Poništi zadnju tačku (Backspace / desni klik)">↩ Poništi<kbd>⌫</kbd></button>
+      <button type="button" class="vsd-b ok" onclick="vlakeStudioFinish()" title="Završi ovu vlaku (Enter / dvoklik)">✓ Završi<kbd>↵</kbd></button>` : `
+      <button type="button" class="vsd-b pri" onclick="_vsdNova()" title="Nova vlaka (N)">＋ Nova<kbd>N</kbd></button>
+      ${v ? `<button type="button" class="vsd-b ok" onclick="_vsdPenDown()" title="Nastavi crtati izabranu (C)">▶ Nastavi<kbd>C</kbd></button>
+      <button type="button" class="vsd-b" onclick="_vsdKrak('L')" ${kraciOk ? '' : 'disabled'} title="Lijevi krak (L)">⊕ Krak L<kbd>L</kbd></button>
+      <button type="button" class="vsd-b" onclick="_vsdKrak('D')" ${kraciOk ? '' : 'disabled'} title="Desni krak (D)">⊕ Krak D<kbd>D</kbd></button>` : ''}`;
   panel.innerHTML = `
-    <div class="vsd-head"><b>✏ Nacrtaj vlake</b><span class="vsd-sub">${_escHtml([p && p.gj, p && p.odjel].filter(Boolean).join(' · '))}</span>
-      <button type="button" class="vsd-tg" onclick="_vsdSklopi()" title="Prikaži/sakrij listu i opcije">${_vsdSkl ? '▴' : '▾'}</button>
+    <div class="vsd-head"><b>✏ Vlake</b><span class="vsd-sub">${_escHtml([p && p.gj, p && p.odjel].filter(Boolean).join(' · '))}</span>
+      <button type="button" class="vsd-tg" onclick="_vsdSklopi()" title="Lista vlaka i opcije">${_vsdSkl ? '☰' : '▾'}</button>
       <button type="button" class="vsd-x" onclick="vlakeStudioClose()" title="Zatvori (Esc)">✕</button></div>
-    <div class="vsd-row">
-      <button type="button" class="vsd-b pri" onclick="_vsdNova()" title="Nova vlaka (N)">＋ Vlaka<kbd>N</kbd></button>
-      <button type="button" class="vsd-b" onclick="_vsdKrak('L')" ${kraciOk ? '' : 'disabled'} title="Lijevi krak izabrane vlake (L)">⊕ Krak L<kbd>L</kbd></button>
-      <button type="button" class="vsd-b" onclick="_vsdKrak('D')" ${kraciOk ? '' : 'disabled'} title="Desni krak izabrane vlake (D)">⊕ Krak D<kbd>D</kbd></button>
+    <div class="vsd-cur${_vsdPen ? ' pen' : ''}">
+      ${v ? `<div class="vsd-cur-top"><span class="dot" style="background:${_escHtml(v.color || '#64748b')}"></span>
+        <span class="vsd-nm">${_escHtml(v.nm)}</span><span class="vsd-st vsd-len">${fmtL(calcL(v.pts))} · ${v.pts.length} tač. <span id="vsd-seg"></span></span></div>` : '<span id="vsd-seg" hidden></span>'}
+      <div class="vsd-st${_vsdPen ? ' pen' : ''}">${stanje}</div>
     </div>
-    <div class="vsd-cur">
-      ${v ? `<div style="display:flex;align-items:center;gap:8px;"><span class="dot" style="width:12px;height:12px;border-radius:50%;background:${_escHtml(v.color || '#64748b')};border:1.5px solid rgba(0,0,0,.25)"></span>
-        <span class="vsd-nm">${_escHtml(v.nm)}</span><span class="vsd-st" style="margin-left:auto;">${fmtL(calcL(v.pts))} · ${v.pts.length} tač.</span></div>` : ''}
-      <div class="vsd-st${_vsdPen ? ' pen' : ''}">${stanje} <span id="vsd-seg" style="color:#0369a1;font-weight:700;"></span></div>
-      <div class="vsd-row">
-        <button type="button" class="vsd-b ${_vsdPen ? 'war' : 'ok'}" onclick="${_vsdPen ? 'vlakeStudioFinish()' : '_vsdPenDown()'}" ${v ? '' : 'disabled'}>${_vsdPen ? '✓ Završi<kbd>↵</kbd>' : '▶ Nastavi<kbd>C</kbd>'}</button>
-        <button type="button" class="vsd-b" onclick="_vsdUndo()" ${_vsdPen && v && v.pts.length > _vsdPenBase ? '' : 'disabled'} title="Poništi zadnju tačku (Backspace / desni klik)">↩ Poništi</button>
-        <button type="button" class="vsd-b" onclick="_vsdZoomSel()" ${v && v.pts.length ? '' : 'disabled'} title="Zumiraj na vlaku (F)">⌖<kbd>F</kbd></button>
-      </div>
-      <div class="vsd-row vsd-extra">
-        <button type="button" class="vsd-b" onclick="_vsdPreimenuj()" ${v && !_vsdPen && v.kr === 0 ? '' : 'disabled'} title="Preimenuj (F2)">✎ Preimenuj<kbd>F2</kbd></button>
-        <button type="button" class="vsd-b war" onclick="_vsdObrisi()" ${v && !_vsdPen ? '' : 'disabled'} title="Obriši vlaku (Delete)">🗑 Obriši<kbd>Del</kbd></button>
-      </div>
-      <label class="vsd-auto vsd-extra"><input type="checkbox" ${_vsdAutoNext ? 'checked' : ''} onchange="vlakeStudioAutoSet(this.checked)"> Poslije završene vlake odmah počni sljedeću</label>
+    <div class="vsd-row vsd-main">${glavni}</div>
+    <div class="vsd-row vsd-extra">
+      <button type="button" class="vsd-b" onclick="_vsdZoomSel()" ${v && v.pts.length ? '' : 'disabled'} title="Zumiraj na vlaku (F)">⌖ Zumiraj<kbd>F</kbd></button>
+      <button type="button" class="vsd-b" onclick="_vsdPreimenuj()" ${v && !_vsdPen && v.kr === 0 ? '' : 'disabled'} title="Preimenuj (F2)">✎ Ime<kbd>F2</kbd></button>
+      <button type="button" class="vsd-b war" onclick="_vsdObrisi()" ${v && !_vsdPen ? '' : 'disabled'} title="Obriši vlaku (Delete)">🗑 Obriši<kbd>Del</kbd></button>
     </div>
+    <label class="vsd-auto vsd-extra"><input type="checkbox" ${_vsdAutoNext ? 'checked' : ''} onchange="vlakeStudioAutoSet(this.checked)"> Poslije završene vlake odmah počni sljedeću</label>
     <div class="vsd-tot vsd-extra">Odjel: <b>${sz.n}</b> ${sz.n === 1 ? 'vlaka' : 'vlaka/krakova'} · <b>${fmtL(sz.m)}</b></div>
     <div class="vsd-list vsd-extra">${red.length ? red.map(({ i, depth }) => {
       const x = vlake[i];
@@ -11002,7 +11027,9 @@ function _vsdRender() {
         <span class="nm">${depth ? '<span style="color:#94a3b8;font-weight:400;">↳ </span>' : ''}${_escHtml(x.nm)}</span>
         <span class="meta">${x.pts.length ? fmtL(calcL(x.pts)) : 'prazna'}</span></button>`;
     }).join('') : '<div class="vsd-empty">Odjel još nema vlaka.<br>Pritisni <b>＋ Vlaka</b> (N) i klikaj po karti.</div>'}</div>
-    <div class="vsd-help vsd-extra"><b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Esc</b> izlaz</div>`;
+    <div class="vsd-help vsd-extra">${dodir
+      ? '<b>Dodir</b> tačka · <b>dvostruki dodir</b> ili <b>Završi</b> kraj · <b>dodir na liniju</b> bira vlaku · <b>povuci kružić</b> pomjera tačku'
+      : '<b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Esc</b> izlaz'}</div>`;
   const nova = panel.querySelector('.vsd-list');
   if (nova) nova.scrollTop = skrol;
   const akt = nova && nova.querySelector('.vsd-li.act');
@@ -11029,10 +11056,12 @@ function vlakeStudioOpen() {
   map.on('click', _vsdClick); map.on('dblclick', _vsdDbl);
   map.on('mousemove', _vsdMove); map.on('contextmenu', _vsdCtx);
   document.addEventListener('keydown', _vsdTipka, true);
-  const host = (document.getElementById('manual-draw-panel') || {}).parentNode || document.getElementById('main');
+  // NAMJERNO van #map-a: dijete Leaflet kontejnera dobija i njegove dodire (Poništi je dodavao tačku ispod dugmeta).
+  const host = document.body;
   const panel = document.createElement('div');
   panel.id = 'vsd-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Nacrtaj vlake u odjelu');
   host.appendChild(panel);
+  ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(ev => panel.addEventListener(ev, () => { _vsdPanelT = Date.now(); }, { passive: true }));
   try { L.DomEvent.disableClickPropagation(panel); L.DomEvent.disableScrollPropagation(panel); } catch(e) {}
   _updFabVisibility();
   // Pogled na odjel: postojeće vlake, pa granica odjela iz KML-a.

@@ -15,7 +15,7 @@ const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
 '''
 for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing']:js+='\n'+b.function(n)
 js+='\n'+b.section('var _vsdOn =','// ─── Uvoz vlake iz fajla')
-html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"></div><div id="manual-draw-panel" style="display:none"></div></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'
+html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'
 async def main():
  async with async_playwright() as p:
   browser=await p.chromium.launch(executable_path=os.environ.get('UI_CHROMIUM') or None,args=['--no-sandbox']);page=await browser.new_page(viewport={'width':1280,'height':800});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -124,6 +124,25 @@ async def main():
   await page.locator('#vsd-panel .vsd-tg').click();assert await page.locator('#vsd-panel .vsd-list').is_visible()
   await page.locator('#vsd-panel .vsd-x').click();await page.wait_for_timeout(80)
   assert await ev('_vsdOn')==False and await page.locator('#vsd-panel').count()==0
+  # --- dodir na Poništi/Završi NE smije dodati tačku ispod dugmeta (prijava sa terena)
+  ctx=await browser.new_context(viewport={'width':390,'height':780},has_touch=True,is_mobile=True);tp=await ctx.new_page()
+  await tp.route('**/*',route);await tp.goto('https://fixture.test/')
+  await tp.evaluate('_vsdSkl=true;vlakeStudioOpen()');await tp.wait_for_timeout(100)
+  for x,y in [(100,150),(200,200),(300,150)]:
+    await tp.touchscreen.tap(x,y);await tp.wait_for_timeout(350)
+  assert await tp.evaluate('vlake[0].pts.length')==3
+  assert await tp.evaluate('document.getElementById("vsd-panel").parentNode===document.body')
+  for txt,n in [('Poništi',2),('Poništi',1)]:
+    bb=await tp.locator('#vsd-panel .vsd-b',has_text=txt).bounding_box()
+    await tp.touchscreen.tap(bb['x']+bb['width']/2,bb['y']+bb['height']/2);await tp.wait_for_timeout(500)
+    assert await tp.evaluate('vlake[0].pts.length')==n,(txt,await tp.evaluate('vlake[0].pts.length'))
+  await tp.touchscreen.tap(200,300);await tp.wait_for_timeout(500)
+  assert await tp.evaluate('vlake[0].pts.length')==2
+  bb=await tp.locator('#vsd-panel .vsd-b',has_text='Završi').bounding_box()
+  await tp.touchscreen.tap(bb['x']+bb['width']/2,bb['y']+bb['height']/2);await tp.wait_for_timeout(500)
+  assert await tp.evaluate('[vlake[0].pts.length,vlake.length]')==[2,2],await tp.evaluate('[vlake[0].pts.length,vlake.length]')
+  if os.environ.get('VSD_SHOT'):await tp.screenshot(path=os.environ['VSD_SHOT'].replace('.png','-mob.png'))
+  await ctx.close()
   assert not errors,errors
   await browser.close();print('Studio vlaka: miš klik/dvoklik/desni klik/Shift, hvatanje kraka na roditelja, tipkovnica, odabir klikom, zatvaranje: OK')
 if __name__=='__main__':asyncio.run(main())

@@ -4822,3 +4822,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Studio vlaka na telefonu (v3.0.11)
 - Na ≤700 px panel je `position:fixed` (z 3000), zadano SKLOPLJEN (`_vsdSkl`, `.vsd-skl` krije `.vsd-extra`: lista, opcije, pomoć) — tanka traka umjesto pola ekrana koji je prekrivao kartu. ✕ i ▾/▴ su mete 44 px; zaglavlje je sticky. Prije je panel (absolute, 48vh) mogao ostati nedostižan.
+
+### Studio vlaka — Poništi je dodavao tačku ispod dugmeta (poslije v3.0.11)
+- Reprodukovano Playwright dodirom (390 px, has_touch): tap na "Poništi" je skinuo tačku i ODMAH dodao novu na mjestu dugmeta. Panel je bio dijete `#map` (host = roditelj `#manual-draw-panel`, koji je unutar `#map`), pa je dodir stizao i do Leafleta. Sad je `#vsd-panel` u `document.body` (fixed), a `_vsdIzPanela(e)` dodatno odbacuje klik/dvoklik/desni klik karte čiji je cilj u panelu ili koji stiže < 450 ms poslije dodira panela (`_vsdPanelT`). Test u `tests/browser/vlake-studio.py` (panel u harnessu je unutar `#map` kao u produkciji).
+- Panel pojednostavljen: jedna traka radnji koja se mijenja po stanju — crtanje: Poništi + Završi; inače: Nova, Nastavi, Krak L/D. Zumiraj/Ime/Obriši, lista i pomoć su "dodatno" (na telefonu iza ☰). Tekst pomoći razlikuje dodir i miš (`pointer:coarse`).
