@@ -785,6 +785,7 @@ html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#p
 html[data-field-theme=day] :is(#proj-panel,#panel,#layer-sheet) button[style*="background:#0f"] {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
 html[data-field-theme=day] #proj-panel button[onclick="backToProjList()"] {color:#1e40af!important;}
 html[data-field-theme=day] :is(.btn.g,#pd-draw-vlaka-btn) {background:#166534!important;color:#fff!important;}
+html[data-field-theme=day] #pd-studio-btn {background:#075985!important;color:#fff!important;}
 html[data-field-theme=day] .btn.o {background:#9a3412;color:#fff;}
 html[data-field-theme=day] :is(.btn.gr,#dlg-cancel) {background:#e2e8f0;color:#102033;border:1px solid #64748b;}
 html[data-field-theme=day] :is(#layer-sheet,#ab-loc-popup) label {color:#102033;}
