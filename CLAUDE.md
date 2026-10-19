@@ -4810,3 +4810,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Poslije završene glavne vlake (≥2 tačke) odmah počinje sljedeća (`tvlake_vsd_autonext`); prazna/jednotačkasta nova vlaka se odbacuje (`_dropEmptyVlaka`). Lager se u studiju NE pita (prekidao bi tok) — dodjeljuje se naknadno.
 - Svi `var _vsdOn` guardi (klik karte, klik linije, `switchTab`, `_updFabVisibility` — sakriva samo `#action-bar`, gornje kontrole ostaju) moraju ostati; napuštanje Karte zatvara studio.
 - Testovi: `tests/js/vlake-studio.test.js` (8), `tests/browser/vlake-studio.py` (stvaran miš nad stvarnim Leafletom i kodom). `menu-tools.py` pada i bez ovih izmjena (NaN LatLng) — nije povezano.
+
+### Login — autofill prekidao kucanje (nakon v3.0.9)
+- Na Androidu Google autofill nudi spremljene prijave ("Ćehić — appassets.androidplatform.net") preko polja PIN-a i prekida kucanje; `autocomplete="off"` ga NE zaustavlja. Sad: PIN `autocomplete="new-password"` (i oba PIN polja registracije), nekredencijalna `name="dm-*"`, `data-lpignore`/`data-1p-ignore`, i **Java** `webView.setImportantForAutofill(NO_EXCLUDE_DESCENDANTS)` (konačno rješenje — traži pun APK build, CI ga radi).
+- Enter vodi ime → prezime → PIN → prijava (`_authEnter`), tastatura pokazuje "Dalje"/"Idi"; dugme PRIKAŽI/SAKRIJ PIN (`_authPinPrikazi`, 44 px meta). Test: `tests/js/login-unos.test.js`.

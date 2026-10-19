@@ -304,6 +304,14 @@ window.addEventListener('DOMContentLoaded',function(){
 }
 #auth-screen input:focus + .auth-input-icon,
 .auth-input-wrap:focus-within .auth-input-icon { opacity:0.9; color:#4eca65; }
+#auth-pin { padding-right:84px !important; }
+.auth-eye {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  min-width:70px; height:44px; border:none; border-radius:8px; cursor:pointer;
+  background:rgba(74,163,90,0.14); color:#7dd68a; font-size:11px; font-weight:700;
+  letter-spacing:0.08em; font-family:'JetBrains Mono',monospace;
+}
+.auth-eye:active { background:rgba(74,163,90,0.3); }
 .auth-pin-input {
   font-family:'JetBrains Mono',monospace !important;
   letter-spacing:0.3em !important; font-size:17px !important;
@@ -4503,24 +4511,26 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-field-lbl">Ime</div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-korisnik"/></svg></span>
-            <input id="auth-ime" placeholder="Vaše ime" autocomplete="off">
+            <input id="auth-ime" name="dm-ime" type="text" placeholder="Vaše ime" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="next" data-lpignore="true" data-1p-ignore="true" onkeydown="_authEnter(event,'auth-prezime')">
           </div>
         </div>
         <div class="auth-field">
           <div class="auth-field-lbl">Prezime <span class="auth-field-hint">— prazno za org. naloge</span></div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-dokument"/></svg></span>
-            <input id="auth-prezime" placeholder="Vaše prezime" autocomplete="off">
+            <input id="auth-prezime" name="dm-prezime" type="text" placeholder="Vaše prezime" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="next" data-lpignore="true" data-1p-ignore="true" onkeydown="_authEnter(event,'auth-pin')">
           </div>
         </div>
         <div class="auth-field">
           <div class="auth-field-lbl">PIN</div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
-            <input id="auth-pin" type="password" inputmode="numeric"
+            <input id="auth-pin" name="dm-pin" type="password" inputmode="numeric"
               class="auth-pin-input" placeholder="• • • • • •" maxlength="8"
-              autocomplete="off"
+              autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+              enterkeyhint="go" data-lpignore="true" data-1p-ignore="true"
               onkeydown="if(event.key==='Enter')doLogin()">
+            <button type="button" class="auth-eye" id="auth-pin-eye" onclick="_authPinPrikazi()" aria-label="Prikaži PIN" tabindex="-1">PRIKAŽI</button>
           </div>
         </div>
 
@@ -4617,7 +4627,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
             <input id="reg-pin" type="password" inputmode="numeric"
-              class="auth-pin-input" placeholder="Odaberite PIN" maxlength="8">
+              class="auth-pin-input" placeholder="Odaberite PIN" maxlength="8" autocomplete="new-password">
           </div>
         </div>
         <div class="auth-field">
@@ -4625,7 +4635,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
             <input id="reg-pin2" type="password" inputmode="numeric"
-              class="auth-pin-input" placeholder="Ponovite PIN" maxlength="8"
+              class="auth-pin-input" placeholder="Ponovite PIN" maxlength="8" autocomplete="new-password"
               onkeydown="if(event.key==='Enter')doRegister()">
           </div>
         </div>
@@ -7880,6 +7890,25 @@ function _zaboravljenPin(e) {
 function _authBusy(on) {
   const box = document.querySelector('.auth-logo-box');
   if (box) box.style.display = on ? 'none' : '';
+}
+// Enter na polju prelazi na sljedeće polje (tastatura pokazuje "Dalje"), a tek
+// poslije PIN-a "Idi" prijavljuje — korisnik ne mora tražiti polje dodirom.
+function _authEnter(e, sljedece) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const el = document.getElementById(sljedece);
+  if (el) el.focus();
+}
+// Prikaži/sakrij PIN — na terenu se PIN često pogrešno otkuca, a tačkice ne
+// pokazuju gdje je greška. Tip se vraća na password čim se polje napusti.
+function _authPinPrikazi() {
+  const el = document.getElementById('auth-pin'), b = document.getElementById('auth-pin-eye');
+  if (!el || !b) return;
+  const prikazi = el.type === 'password';
+  el.type = prikazi ? 'text' : 'password';
+  b.textContent = prikazi ? 'SAKRIJ' : 'PRIKAŽI';
+  b.setAttribute('aria-label', prikazi ? 'Sakrij PIN' : 'Prikaži PIN');
+  el.focus();
 }
 function authShowLogin() {
   _authBusy(false);
