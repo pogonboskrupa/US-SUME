@@ -94,6 +94,11 @@ async def main():
   await page.wait_for_timeout(80)
   assert abs(await ev('vlake[0].pts[0].la')-before)>1e-6
   assert await ev('vlake[0].poly.getLatLngs()[0].lat')==await ev('vlake[0].pts[0].la')
+  # --- Ctrl+Z vraća i pomjeranje (olovka gore), ↩ dugme se vidi samo dok ima historije
+  assert await page.locator('#vsd-panel .vsd-undo').count()==1
+  await page.keyboard.press('Control+z');await page.wait_for_timeout(60)
+  assert await ev('vlake[0].pts[0].la')==before and await ev('vlake[0].poly.getLatLngs()[0].lat')==before
+  assert await page.locator('#vsd-panel .vsd-undo').count()==0
   n=await ev('vlake[0].pts.length')
   await page.locator('.vsd-h').nth(3).click(button='right');await page.wait_for_timeout(60)
   assert await ev('vlake[0].pts.length')==n,'T1 ima krak — brisanje tačke blokirano'
@@ -116,6 +121,14 @@ async def main():
   # --- slučajno napuštanje: nova vlaka sa jednom tačkom se odbacuje, prethodne ostaju
   await ev('vlakeStudioOpen()');await klik(800,200);await ev('vlakeStudioClose()')
   assert await ev('vlake.length')==0
+  # --- G / 📍 Ovdje: tačka na GPS poziciji (bez GPS-a dugmeta nema)
+  await ev('vlakeStudioOpen()');assert await page.locator('#vsd-panel .vsd-b',has_text='Ovdje').count()==0
+  await ev('window.lastP={la:44.9001,lo:16.0002,al:0,ac:4};_vsdRender()')
+  assert await page.locator('#vsd-panel .vsd-b',has_text='Ovdje').count()==1
+  await page.keyboard.press('g');await page.wait_for_timeout(60)
+  assert await ev('[vlake[0].pts.length,vlake[0].pts[0].la,vlake[0].pts[0].lo]')==[1,44.9001,16.0002]
+  await ev('window.lastP=null;vlakeStudioClose()')
+  assert await ev('vlake.length')==0
   # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
   await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)
   bb=await page.locator('#vsd-panel').bounding_box();assert bb['y']+bb['height']<=780 and bb['height']<780*0.45,bb
@@ -127,7 +140,9 @@ async def main():
   # --- dodir na Poništi/Završi NE smije dodati tačku ispod dugmeta (prijava sa terena)
   ctx=await browser.new_context(viewport={'width':390,'height':780},has_touch=True,is_mobile=True);tp=await ctx.new_page()
   await tp.route('**/*',route);await tp.goto('https://fixture.test/')
-  await tp.evaluate('_vsdSkl=true;vlakeStudioOpen()');await tp.wait_for_timeout(100)
+  await tp.evaluate('window.lastP={la:44.9,lo:16,al:0,ac:5};_vsdSkl=true;vlakeStudioOpen()');await tp.wait_for_timeout(100)
+  # tri dugmeta (Poništi, Ovdje, Završi) staju u red na 390 px
+  assert await tp.evaluate('(()=>{const r=document.querySelector("#vsd-panel .vsd-main");return r.scrollWidth<=r.clientWidth+1&&r.querySelectorAll(".vsd-b").length===3})()')
   for x,y in [(100,150),(200,200),(300,150)]:
     await tp.touchscreen.tap(x,y);await tp.wait_for_timeout(350)
   assert await tp.evaluate('vlake[0].pts.length')==3

@@ -1502,6 +1502,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-cur-top { display:flex; align-items:center; gap:8px; }
 .vsd-cur-top .dot { width:14px; height:14px; border-radius:50%; flex:none; border:1.5px solid rgba(0,0,0,.25); }
 .vsd-len { margin-left:auto; font-weight:700; }
+.vsd-undo { flex:none; min-width:36px; height:32px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:rgba(148,163,184,.15); color:inherit; font-size:16px; cursor:pointer; }
 #vsd-seg { color:#0369a1; }
 .vsd-main .vsd-b { padding:11px 5px; font-size:13px; }
 .vsd-main .vsd-b kbd { display:none; }
@@ -1520,6 +1521,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
   .vsd-help { display:none; }
   #vsd-panel.vsd-skl .vsd-extra { display:none; }
   #vsd-panel.vsd-skl { max-height:none; overflow:visible; }
+  .vsd-undo { min-width:44px; height:44px; }
 }
 
 /* ═══ EDIT PANEL — isti svijetli stil kao ručno crtanje ═══ */
@@ -5902,7 +5904,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.11';
+const APP_VER = 'v3.1.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10603,6 +10605,10 @@ function mdpFinish() {
 // ne smije slučajno produžiti već snimljenu vlaku. Nova vlaka/krak kreću sa olovkom.
 var _vsdOn = false, _vsdSel = null, _vsdPen = false, _vsdPenBase = 0, _vsdPid = null;
 var _vsdPrev = null, _vsdAutoNext = true, _vsdHandles = [];
+// Historija izmjena JEDNE vlake (zadnje uređivane): svaka tačka, pomjeranje i brisanje
+// se može vratiti — i kad je olovka gore (ranije je Poništi radio samo za nove tačke).
+var _vsdIst = [], _vsdIstV = null;
+const _VSD_IST_MAX = 200;
 const _VSD_SNAP_PX = 12;     // hvatanje za tuđu vlaku (Shift isključuje)
 const _VSD_KRAK_PX = 60;     // prva tačka kraka se lijepi na roditelja iz veće daljine
 const _VSD_HIT_PX = 10;      // odabir vlake klikom na liniju
@@ -10696,6 +10702,14 @@ function _vsdIzPanela(e) {
   return (!!panel && !!t && panel.contains(t)) || (Date.now() - _vsdPanelT < 450);
 }
 
+function _vsdZapamti(v) {
+  if (!v) return;
+  if (_vsdIstV !== v) { _vsdIst = []; _vsdIstV = v; }
+  _vsdIst.push({ pts: v.pts.map(p => Object.assign({}, p)), jp: v.junctionOnParent });
+  if (_vsdIst.length > _VSD_IST_MAX) _vsdIst.shift();
+}
+function _vsdImaIst(v) { return !!v && _vsdIstV === v && _vsdIst.length > 0; }
+
 function _vsdClick(e) {
   if (!_vsdOn) return;
   if (_vsdIzPanela(e)) return;
@@ -10709,8 +10723,25 @@ function _vsdClick(e) {
     else showToast('Izaberi vlaku u listi ili napravi novu (N)');
     return;
   }
-  const r = _vsdResolve(e.latlng, shift);
+  _vsdDodajTacku(e.latlng, shift);
+}
+
+// Tačka na trenutnoj GPS poziciji (šumar stoji na trasi) — hvatanje važi kao za dodir.
+function _vsdTackaGps() {
+  let p = null;
+  try { p = lastP; } catch(e) {}
+  if (!_vsdOn || !_vsdPen || _vsdSel === null) return;
+  if (!p) { showToast('Nema GPS pozicije — uključi lokaciju'); return; }
+  if (p.ac > 30) showToast('⚠ GPS tačnost ±' + Math.round(p.ac) + ' m');
+  _vsdDodajTacku(L.latLng(p.la, p.lo), false);
+}
+
+function _vsdDodajTacku(latlng, shift) {
+  const v = _vsdSel !== null ? vlake[_vsdSel] : null;
+  if (!v) return;
+  const r = _vsdResolve(latlng, shift);
   const prvaTacka = v.pts.length === 0;
+  _vsdZapamti(v);
   addPt(_vsdSel, r.la, r.lo, r.al || 0);
   if (prvaTacka && v.kr > 0 && v.pts.length) {
     const pi = _parentOf(v);
@@ -10731,7 +10762,7 @@ function _vsdDbl(e) {
   const v = vlake[_vsdSel];
   if (v && v.pts.length > _vsdPenBase + 1) {
     const a = v.pts[v.pts.length - 2], b = v.pts[v.pts.length - 1];
-    if (dst(a.la, a.lo, b.la, b.lo) < 2) { v.pts.pop(); v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo])); scheduleVlakaSave(_vsdSel); }
+    if (dst(a.la, a.lo, b.la, b.lo) < 2) { if (_vsdImaIst(v)) _vsdIst.pop(); v.pts.pop(); v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo])); scheduleVlakaSave(_vsdSel); }
   }
   vlakeStudioFinish();
 }
@@ -10762,6 +10793,7 @@ function _vsdHandlesBuild() {
   v.pts.forEach((p, k) => {
     const m = L.marker([p.la, p.lo], { icon, draggable: true, keyboard: false, zIndexOffset: 800, title: 'Povuci da pomjeriš · desni klik briše' }).addTo(map);
     _vsdHandles.push(m);
+    m.on('dragstart', () => _vsdZapamti(v));
     m.on('drag', () => {
       const ll = m.getLatLng(), t = v.pts[k]; if (!t) return;
       t.la = ll.lat; t.lo = ll.lng;
@@ -10785,6 +10817,7 @@ function _vsdBrisiTacku(k) {
   if (!v || _vsdPen) return;
   if (v.pts.length <= 2) { showToast('Vlaka mora imati bar 2 tačke'); return; }
   if (_vsdImaKrakove(_vsdSel)) { showToast('Vlaka ima krakove — tačke se mogu pomjerati, ne brisati'); return; }
+  _vsdZapamti(v);
   v.pts.splice(k, 1);
   v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
   scheduleVlakaSave(_vsdSel); updateVlakaLabel(_vsdSel); updOvl(); rndList(); updProjStats();
@@ -10821,6 +10854,7 @@ async function _vsdObrisi() {
   }
   vlake.splice(i, 1);
   _saveLocalVlake();
+  if (_vsdIstV === v) { _vsdIst = []; _vsdIstV = null; }
   _vsdSel = null; _vsdPen = false;
   actI = null;
   rndList(); updOvl(); updProjStats();
@@ -10845,6 +10879,7 @@ function _vsdTipka(e) {
   else if (k === 'd' || k === 'D') _vsdKrak('D');
   else if (k === 'c' || k === 'C') _vsdPenDown();
   else if (k === 'f' || k === 'F') _vsdZoomSel();
+  else if ((k === 'g' || k === 'G') && _vsdPen) _vsdTackaGps();
   else if (k === 'F2') _vsdPreimenuj();
   else if (k === 'Delete') _vsdObrisi();
   else done = false;
@@ -10887,12 +10922,20 @@ function _vsdZoomSel() {
 
 function _vsdUndo() {
   const v = _vsdSel !== null ? vlake[_vsdSel] : null;
-  if (!_vsdOn || !v || !_vsdPen || v.pts.length <= _vsdPenBase) { showToast('Nema šta poništiti'); return; }
-  v.pts.pop();
+  if (!_vsdOn || !v) { showToast('Nema šta poništiti'); return; }
+  if (_vsdImaIst(v)) {
+    const s = _vsdIst.pop();
+    v.pts = s.pts;
+    if (s.jp === undefined) delete v.junctionOnParent; else v.junctionOnParent = s.jp;
+    if (_vsdPen && v.pts.length < _vsdPenBase) _vsdPenBase = v.pts.length;
+  } else if (_vsdPen && v.pts.length > _vsdPenBase) {
+    v.pts.pop();
+  } else { showToast('Nema šta poništiti'); return; }
   v.poly.setLatLngs(v.pts.map(p => [p.la, p.lo]));
   scheduleVlakaSave(_vsdSel);
+  if (v.pts.length >= 2) updateVlakaLabel(_vsdSel);
   _vsdClearPreview();
-  updOvl(); rndList();
+  updOvl(); rndList(); updProjStats();
   _vsdRender();
 }
 
@@ -10993,11 +11036,14 @@ function _vsdRender() {
   const kraciOk = !!v && v.pts.length >= 2;
   const dodir = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
   const tapni = dodir ? 'Dodirni' : 'Klikni';
+  let imaGps = false;
+  try { imaGps = !!lastP; } catch(e) {}
   const stanje = !v ? (red.length ? tapni + ' liniju na karti ili vlaku u listi' : 'Pritisni ＋ Nova vlaka')
     : _vsdPen ? '✏ ' + tapni + ' kartu za sljedeću tačku' + (v.kr > 0 && !v.pts.length ? ' (počni na ' + _escHtml((vlake[_parentOf(v)] || {}).nm || 'roditelju') + ')' : '')
     : 'Izabrana — ▶ Nastavi crtanje ili dodaj krak';
   const glavni = _vsdPen ? `
-      <button type="button" class="vsd-b" onclick="_vsdUndo()" ${v && v.pts.length > _vsdPenBase ? '' : 'disabled'} title="Poništi zadnju tačku (Backspace / desni klik)">↩ Poništi<kbd>⌫</kbd></button>
+      <button type="button" class="vsd-b" onclick="_vsdUndo()" ${v && (v.pts.length > _vsdPenBase || _vsdImaIst(v)) ? '' : 'disabled'} title="Poništi zadnju izmjenu (Backspace / desni klik)">↩ Poništi<kbd>⌫</kbd></button>
+      ${imaGps ? `<button type="button" class="vsd-b" onclick="_vsdTackaGps()" title="Tačka na mojoj GPS poziciji (G)">📍 Ovdje<kbd>G</kbd></button>` : ''}
       <button type="button" class="vsd-b ok" onclick="vlakeStudioFinish()" title="Završi ovu vlaku (Enter / dvoklik)">✓ Završi<kbd>↵</kbd></button>` : `
       <button type="button" class="vsd-b pri" onclick="_vsdNova()" title="Nova vlaka (N)">＋ Nova<kbd>N</kbd></button>
       ${v ? `<button type="button" class="vsd-b ok" onclick="_vsdPenDown()" title="Nastavi crtati izabranu (C)">▶ Nastavi<kbd>C</kbd></button>
@@ -11009,7 +11055,8 @@ function _vsdRender() {
       <button type="button" class="vsd-x" onclick="vlakeStudioClose()" title="Zatvori (Esc)">✕</button></div>
     <div class="vsd-cur${_vsdPen ? ' pen' : ''}">
       ${v ? `<div class="vsd-cur-top"><span class="dot" style="background:${_escHtml(v.color || '#64748b')}"></span>
-        <span class="vsd-nm">${_escHtml(v.nm)}</span><span class="vsd-st vsd-len">${fmtL(calcL(v.pts))} · ${v.pts.length} tač. <span id="vsd-seg"></span></span></div>` : '<span id="vsd-seg" hidden></span>'}
+        <span class="vsd-nm">${_escHtml(v.nm)}</span><span class="vsd-st vsd-len">${fmtL(calcL(v.pts))} · ${v.pts.length} tač. <span id="vsd-seg"></span></span>
+        ${!_vsdPen && _vsdImaIst(v) ? `<button type="button" class="vsd-undo" onclick="_vsdUndo()" title="Vrati zadnju izmjenu (Ctrl+Z)">↩</button>` : ''}</div>` : '<span id="vsd-seg" hidden></span>'}
       <div class="vsd-st${_vsdPen ? ' pen' : ''}">${stanje}</div>
     </div>
     <div class="vsd-row vsd-main">${glavni}</div>
@@ -11028,8 +11075,8 @@ function _vsdRender() {
         <span class="meta">${x.pts.length ? fmtL(calcL(x.pts)) : 'prazna'}</span></button>`;
     }).join('') : '<div class="vsd-empty">Odjel još nema vlaka.<br>Pritisni <b>＋ Vlaka</b> (N) i klikaj po karti.</div>'}</div>
     <div class="vsd-help vsd-extra">${dodir
-      ? '<b>Dodir</b> tačka · <b>dvostruki dodir</b> ili <b>Završi</b> kraj · <b>dodir na liniju</b> bira vlaku · <b>povuci kružić</b> pomjera tačku'
-      : '<b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Esc</b> izlaz'}</div>`;
+      ? '<b>Dodir</b> tačka · <b>dvostruki dodir</b> ili <b>Završi</b> kraj · <b>dodir na liniju</b> bira vlaku · <b>povuci kružić</b> pomjera tačku · <b>↩</b> vraća i pomjeranje/brisanje · <b>📍 Ovdje</b> tačka na GPS poziciji'
+      : '<b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Ctrl+Z</b> vraća i pomjeranje · <b>G</b> tačka na GPS poziciji · <b>Esc</b> izlaz'}</div>`;
   const nova = panel.querySelector('.vsd-list');
   if (nova) nova.scrollTop = skrol;
   const akt = nova && nova.querySelector('.vsd-li.act');
@@ -11088,6 +11135,7 @@ function vlakeStudioClose() {
   if (mapEl) mapEl.classList.remove('vsd-pen');
   const sz = _vsdSazetak();
   _vsdSel = null; _vsdPen = false; _vsdPid = null;
+  _vsdIst = []; _vsdIstV = null;
   _updFabVisibility();
   rndList(); updOvl(); updProjStats();
   showToast('Studio zatvoren — ' + sz.n + ' vlaka/krakova, ' + fmtL(sz.m));
