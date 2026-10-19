@@ -5870,7 +5870,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.8';
+const APP_VER = 'v3.0.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -17182,7 +17182,7 @@ map.on('click', e => {
   if(typeof VlakaDirection!=='undefined'&&VlakaDirection.isPicking())return;
   if(typeof VlakaLager!=='undefined'&&VlakaLager.isPicking())return;
   if (_msrOn) return; // izmjera preuzima klikove
-  if (_vsdOn) return; // studio vlaka ima vlastiti handler (_vsdClick)
+  if (typeof _vsdOn !== 'undefined' && _vsdOn) return; // studio vlaka ima vlastiti handler (_vsdClick)
   if (_dblClickGuard) return; // suppress the 2nd click of a dblclick
   // Odabir odjela iz KML-a (doznaka) — mora prije svih alata; klik do samog
   // poligona često ne stigne jer ga gornji canvas pokupi (vidi _kmlHitTest).
@@ -23361,7 +23361,7 @@ function attachPolyClick(poly, colleagueKey) {
     _lastVlakaClickTs = now;
     if (recOn) return;
     if (['edit','delnode','merge','addline','addpoint'].includes(activeTool)) return;
-    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null || _vsdOn) return;
+    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null || (typeof _vsdOn !== 'undefined' && _vsdOn)) return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     if (colleagueKey) { showKolegeVlakaInfo(colleagueKey, e.latlng); return; }
@@ -23694,7 +23694,7 @@ function updateVlakaLabel(i) {
   const _junctionClick = (e) => {
     if (recOn) return;
     if (['edit','delnode','merge','addline','addpoint'].includes(activeTool)) return;
-    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null || _vsdOn) return;
+    if (_msrOn || _guideOn || _tackaPlaceMode || textToolOn || _dozDrawType !== null || (typeof _vsdOn !== 'undefined' && _vsdOn)) return;
     L.DomEvent.stopPropagation(e);
     if (e.originalEvent) e.originalEvent.stopPropagation();
     const idx = vlake.findIndex(vv => vv === v);
