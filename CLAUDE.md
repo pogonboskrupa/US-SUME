@@ -4814,3 +4814,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### Login — autofill prekidao kucanje (nakon v3.0.9)
 - Na Androidu Google autofill nudi spremljene prijave ("Ćehić — appassets.androidplatform.net") preko polja PIN-a i prekida kucanje; `autocomplete="off"` ga NE zaustavlja. Sad: PIN `autocomplete="new-password"` (i oba PIN polja registracije), nekredencijalna `name="dm-*"`, `data-lpignore`/`data-1p-ignore`, i **Java** `webView.setImportantForAutofill(NO_EXCLUDE_DESCENDANTS)` (konačno rješenje — traži pun APK build, CI ga radi).
 - Enter vodi ime → prezime → PIN → prijava (`_authEnter`), tastatura pokazuje "Dalje"/"Idi"; dugme PRIKAŽI/SAKRIJ PIN (`_authPinPrikazi`, 44 px meta). Test: `tests/js/login-unos.test.js`.
+
+### Studio vlaka — uređivanje (v3.0.10)
+- Izabrana vlaka s podignutom olovkom dobija **ručke** na tačkama (`_vsdHandlesBuild`, `.vsd-h`, najviše `_VSD_HANDLE_MAX`=800): povlačenje pomjera tačku (na kraju hvatanje za tuđe čvorove), desni klik briše tačku (min. 2; blokirano ako vlaka ima krakove jer bi se pomjerili `junctionOnParent` indeksi). **Leaflet Draggable ignoriše povlačenje uz Shift** — zato Shift ne vrijedi za ručke.
+- **F2 / ✎ Preimenuj** (`_vsdPreimenuj`, samo glavna vlaka bez krakova, ide kroz `renameVlaka`) i **Delete / 🗑 Obriši** (`_vsdObrisi`, `_dlgConfirm`, odbija vlaku s krakovima — prvo se brišu krakovi; reindeksira `_vlakaSaveTimers` kao standardno brisanje).
+- Test: `tests/browser/vlake-studio.py` (ručke, brisanje tačke, preimenovanje, brisanje).

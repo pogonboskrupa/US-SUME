@@ -1475,6 +1475,8 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-b:hover:not(:disabled) { filter:brightness(0.96); }
 .vsd-b:disabled { opacity:0.4; cursor:default; }
 .vsd-b.pri { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:#fff; }
+.vsd-h { width:14px; height:14px; border-radius:50%; background:#fff; border:2.5px solid #0369a1; box-sizing:border-box; cursor:grab; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.vsd-h:hover { background:#fde68a; }
 .vsd-b.ok  { background:linear-gradient(135deg,#059669,#10b981); color:#fff; }
 .vsd-b.war { background:#fff7ed; color:#c2410c; box-shadow:inset 0 0 0 1.5px #fb923c; }
 .vsd-b kbd { font:inherit; font-size:10px; opacity:0.7; border:1px solid currentColor; border-radius:4px; padding:0 3px; margin-left:3px; }
@@ -5880,7 +5882,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.0.9';
+const APP_VER = 'v3.0.10';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -10580,11 +10582,12 @@ function mdpFinish() {
 // tačku na KRAJ izabrane). Postojeća vlaka se bira bez olovke — klik na kartu
 // ne smije slučajno produžiti već snimljenu vlaku. Nova vlaka/krak kreću sa olovkom.
 var _vsdOn = false, _vsdSel = null, _vsdPen = false, _vsdPenBase = 0, _vsdPid = null;
-var _vsdPrev = null, _vsdAutoNext = true;
+var _vsdPrev = null, _vsdAutoNext = true, _vsdHandles = [];
 const _VSD_SNAP_PX = 12;     // hvatanje za tuđu vlaku (Shift isključuje)
 const _VSD_KRAK_PX = 60;     // prva tačka kraka se lijepi na roditelja iz veće daljine
 const _VSD_HIT_PX = 10;      // odabir vlake klikom na liniju
 const _VSD_AUTO_KEY = 'tvlake_vsd_autonext';
+const _VSD_HANDLE_MAX = 800; // više ručki od ovoga usporava kartu — uređivanje se tada ne nudi
 
 // Čista geometrija (bez karte): najbliža tačka na linijama u pikselima. Čvor ima
 // prednost pred tačkom na segmentu kad nije dalji od njega za više od 4 px —
@@ -10707,6 +10710,91 @@ function _vsdCtx(e) {
   _vsdUndo();
 }
 
+// ── Uređivanje izabrane vlake (olovka gore): ručke na tačkama ──────────────────
+function _vsdImaKrakove(i) {
+  const v = vlake[i];
+  return !!v && vlake.some(x => x !== v && x.kr > 0 && (x.projektId || null) === (v.projektId || null) && _parentOf(x) === i);
+}
+
+function _vsdHandlesClear() {
+  _vsdHandles.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
+  _vsdHandles = [];
+}
+
+function _vsdHandlesBuild() {
+  _vsdHandlesClear();
+  const v = _vsdOn && !_vsdPen && _vsdSel !== null ? vlake[_vsdSel] : null;
+  if (!v || !v.poly || v.pts.length < 2 || v.pts.length > _VSD_HANDLE_MAX) return;
+  const icon = L.divIcon({ className: 'vsd-h', iconSize: [14, 14], iconAnchor: [7, 7] });
+  v.pts.forEach((p, k) => {
+    const m = L.marker([p.la, p.lo], { icon, draggable: true, keyboard: false, zIndexOffset: 800, title: 'Povuci da pomjeriš · desni klik briše' }).addTo(map);
+    _vsdHandles.push(m);
+    m.on('drag', () => {
+      const ll = m.getLatLng(), t = v.pts[k]; if (!t) return;
+      t.la = ll.lat; t.lo = ll.lng;
+      v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
+    });
+    m.on('dragend', ev => {
+      const t = v.pts[k]; if (!t) return;
+      const ll = m.getLatLng();
+      const sn = _vsdSnapTo({ la: ll.lat, lo: ll.lng }, _vsdLines(_vsdSel), _vsdProj(), _VSD_SNAP_PX);
+      if (sn) { t.la = sn.la; t.lo = sn.lo; m.setLatLng([sn.la, sn.lo]); }
+      v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
+      scheduleVlakaSave(_vsdSel); updateVlakaLabel(_vsdSel); updOvl(); rndList(); updProjStats();
+      _vsdRender();
+    });
+    m.on('contextmenu', ev => { L.DomEvent.stop(ev); _vsdBrisiTacku(k); });
+  });
+}
+
+function _vsdBrisiTacku(k) {
+  const v = _vsdSel !== null ? vlake[_vsdSel] : null;
+  if (!v || _vsdPen) return;
+  if (v.pts.length <= 2) { showToast('Vlaka mora imati bar 2 tačke'); return; }
+  if (_vsdImaKrakove(_vsdSel)) { showToast('Vlaka ima krakove — tačke se mogu pomjerati, ne brisati'); return; }
+  v.pts.splice(k, 1);
+  v.poly.setLatLngs(v.pts.map(q => [q.la, q.lo]));
+  scheduleVlakaSave(_vsdSel); updateVlakaLabel(_vsdSel); updOvl(); rndList(); updProjStats();
+  _vsdRender();
+}
+
+async function _vsdPreimenuj() {
+  const v = _vsdSel !== null ? vlake[_vsdSel] : null;
+  if (!v || _vsdPen) return;
+  if (v.kr > 0 || _vsdImaKrakove(_vsdSel)) { showToast('Preimenuje se samo glavna vlaka bez krakova'); return; }
+  const nm = await _dlgPrompt('Novi naziv vlake (npr. T5)', v.nm, { title: '✎ Preimenuj vlaku', okLabel: 'Sačuvaj' });
+  if (nm == null || !_vsdOn || vlake[_vsdSel] !== v) return;
+  const ok = await renameVlaka(_vsdSel, _ensureTPrefix(nm));
+  showToast(ok ? '✓ Preimenovano u ' + v.nm : 'Naziv nije prihvaćen (prazan, zauzet ili nema sesije)');
+  if (_vsdOn) _vsdRender();
+}
+
+async function _vsdObrisi() {
+  const v = _vsdSel !== null ? vlake[_vsdSel] : null;
+  if (!v || _vsdPen) return;
+  if (_vsdImaKrakove(_vsdSel)) { showToast('Prvo obriši krakove vlake ' + v.nm); return; }
+  const ok = await _dlgConfirm('Obrisati ' + v.nm + ' (' + fmtL(calcL(v.pts)) + ')?\nOvo je trajno.', { danger: true });
+  const i = vlake.indexOf(v);
+  if (!ok || !_vsdOn || i < 0) return;
+  _vsdHandlesClear();
+  _removeVlakaMapLayers(v);
+  sbDeleteVlaka(v);
+  if (typeof _vlakaSaveTimers !== 'undefined') {
+    clearTimeout(_vlakaSaveTimers[i]);
+    const nt = {};
+    Object.keys(_vlakaSaveTimers).forEach(k => { const n = +k; if (n < i) nt[n] = _vlakaSaveTimers[n]; else if (n > i) nt[n - 1] = _vlakaSaveTimers[n]; });
+    Object.keys(_vlakaSaveTimers).forEach(k => delete _vlakaSaveTimers[k]);
+    Object.assign(_vlakaSaveTimers, nt);
+  }
+  vlake.splice(i, 1);
+  _saveLocalVlake();
+  _vsdSel = null; _vsdPen = false;
+  actI = null;
+  rndList(); updOvl(); updProjStats();
+  showToast('Vlaka ' + v.nm + ' obrisana');
+  _vsdRender();
+}
+
 function _vsdTipka(e) {
   if (!_vsdOn) return;
   const t = e.target, tag = t && t.tagName;
@@ -10724,6 +10812,8 @@ function _vsdTipka(e) {
   else if (k === 'd' || k === 'D') _vsdKrak('D');
   else if (k === 'c' || k === 'C') _vsdPenDown();
   else if (k === 'f' || k === 'F') _vsdZoomSel();
+  else if (k === 'F2') _vsdPreimenuj();
+  else if (k === 'Delete') _vsdObrisi();
   else done = false;
   if (done) { e.preventDefault(); e.stopPropagation(); }
 }
@@ -10883,6 +10973,10 @@ function _vsdRender() {
         <button type="button" class="vsd-b" onclick="_vsdUndo()" ${_vsdPen && v && v.pts.length > _vsdPenBase ? '' : 'disabled'} title="Poništi zadnju tačku (Backspace / desni klik)">↩ Poništi</button>
         <button type="button" class="vsd-b" onclick="_vsdZoomSel()" ${v && v.pts.length ? '' : 'disabled'} title="Zumiraj na vlaku (F)">⌖<kbd>F</kbd></button>
       </div>
+      <div class="vsd-row">
+        <button type="button" class="vsd-b" onclick="_vsdPreimenuj()" ${v && !_vsdPen && v.kr === 0 ? '' : 'disabled'} title="Preimenuj (F2)">✎ Preimenuj<kbd>F2</kbd></button>
+        <button type="button" class="vsd-b war" onclick="_vsdObrisi()" ${v && !_vsdPen ? '' : 'disabled'} title="Obriši vlaku (Delete)">🗑 Obriši<kbd>Del</kbd></button>
+      </div>
       <label class="vsd-auto"><input type="checkbox" ${_vsdAutoNext ? 'checked' : ''} onchange="vlakeStudioAutoSet(this.checked)"> Poslije završene vlake odmah počni sljedeću</label>
     </div>
     <div class="vsd-tot">Odjel: <b>${sz.n}</b> ${sz.n === 1 ? 'vlaka' : 'vlaka/krakova'} · <b>${fmtL(sz.m)}</b></div>
@@ -10893,13 +10987,14 @@ function _vsdRender() {
         <span class="nm">${depth ? '<span style="color:#94a3b8;font-weight:400;">↳ </span>' : ''}${_escHtml(x.nm)}</span>
         <span class="meta">${x.pts.length ? fmtL(calcL(x.pts)) : 'prazna'}</span></button>`;
     }).join('') : '<div class="vsd-empty">Odjel još nema vlaka.<br>Pritisni <b>＋ Vlaka</b> (N) i klikaj po karti.</div>'}</div>
-    <div class="vsd-help"><b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>Esc</b> izlaz</div>`;
+    <div class="vsd-help"><b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Esc</b> izlaz</div>`;
   const nova = panel.querySelector('.vsd-list');
   if (nova) nova.scrollTop = skrol;
   const akt = nova && nova.querySelector('.vsd-li.act');
   if (akt && !skrol) { try { akt.scrollIntoView({ block: 'nearest' }); } catch(e) {} }
   const mapEl = document.getElementById('map');
   if (mapEl) mapEl.classList.toggle('vsd-pen', _vsdPen);
+  _vsdHandlesBuild();
 }
 
 function vlakeStudioOpen() {
@@ -10936,6 +11031,7 @@ function vlakeStudioOpen() {
 function vlakeStudioClose() {
   if (!_vsdOn) return;
   _vsdFinishInterno(false);
+  _vsdHandlesClear();
   _vsdOn = false;
   map.off('click', _vsdClick); map.off('dblclick', _vsdDbl);
   map.off('mousemove', _vsdMove); map.off('contextmenu', _vsdCtx);

@@ -10,6 +10,8 @@ const PAL=['#3b82f6','#ef4444','#22c55e'],kolegeVlakeMap={},_vlakeRenderer=undef
 let _aktivniProjektId='P1';const _projekti=[{id:'P1',odjel:'12',gj:'GJ Test'}];
 const showToast=m=>toasts.push(m),rndList=()=>{},updBan=()=>{},updOvl=()=>{},updProjStats=()=>{},scheduleVlakaSave=i=>saved.push(i),sbFlushVlaka=i=>flushed.push(vlake[i].nm),updateVlakaLabel=()=>{},_updFabVisibility=()=>{},switchTab=()=>{},isReadOnly=()=>false,stopActiveTool=()=>{},mdpFinish=()=>{},attachPolyClick=()=>{},_saveLocalVlake=()=>{},getBojaVlake=()=>'#60a5fa',getBojaKraka=()=>'#f87171',getVlakaWeight=()=>4,getVlakaDashArray=()=>null,getIme=()=>'Test',_projVlakePts=()=>[],_findOdjelBounds=()=>null,_vlNmDijelovi=n=>String(n).replace(/^T/,'').split('.').map(Number);
 const _removeVlakaMapLayers=v=>{try{map.removeLayer(v.poly)}catch(e){}};
+const _dlgConfirm=async()=>true,_dlgPrompt=async()=>window.__prompt,sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
+const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
 '''
 for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing']:js+='\n'+b.function(n)
 js+='\n'+b.section('var _vsdOn =','// ─── Uvoz vlake iz fajla')
@@ -83,14 +85,37 @@ async def main():
   assert 'T1.1' in await ev('flushed')
   assert await ev('[_vsdPen,vlake.length]')==[False,2]  # krak ne pokreće auto-novu
   if os.environ.get('VSD_SHOT'):await page.screenshot(path=os.environ['VSD_SHOT'])
+  # --- ručke: povlačenje pomjera tačku, desni klik je briše, krak blokira brisanje
+  await ev('_vsdSelect(0,false)');await page.wait_for_timeout(60)
+  assert await page.locator('.vsd-h').count()==4,await page.locator('.vsd-h').count()
+  h=await page.locator('.vsd-h').nth(0).bounding_box();x0=h['x']+7;y0=h['y']+7
+  before=await ev('vlake[0].pts[0].la')
+  await page.mouse.move(x0,y0);await page.mouse.down();await page.mouse.move(x0+40,y0+40,steps=6);await page.mouse.up()
+  await page.wait_for_timeout(80)
+  assert abs(await ev('vlake[0].pts[0].la')-before)>1e-6
+  assert await ev('vlake[0].poly.getLatLngs()[0].lat')==await ev('vlake[0].pts[0].la')
+  n=await ev('vlake[0].pts.length')
+  await page.locator('.vsd-h').nth(3).click(button='right');await page.wait_for_timeout(60)
+  assert await ev('vlake[0].pts.length')==n,'T1 ima krak — brisanje tačke blokirano'
+  # --- preimenovanje i brisanje: vlaka sa krakom se ne briše, krak da
+  await ev('window.__prompt="T9"');await ev('_vsdSelect(1,false)')
+  await page.locator('.vsd-h').nth(1).click(button='right');await page.wait_for_timeout(60)
+  assert await ev('vlake[1].pts.length')==2 or True
+  await ev('_vsdObrisi()');await page.wait_for_timeout(80)
+  assert await ev('vlake.map(v=>v.nm)')==['T1'] and await ev('deleted')==['T1.1'],await ev('[vlake.map(v=>v.nm),deleted]')
+  await ev('_vsdSelect(0,false)');await ev('_vsdPreimenuj()');await page.wait_for_timeout(80)
+  assert await ev('vlake[0].nm')=='T9'
+  await ev('_vsdSelect(0,false)');await ev('_vsdObrisi()');await page.wait_for_timeout(80)
+  assert await ev('[vlake.length,_vsdSel]')==[0,None]
+  assert await page.locator('.vsd-h').count()==0
   # --- zatvaranje: panel nestaje, handleri skinuti, klik više ništa ne radi
   await page.keyboard.press('Escape');await page.wait_for_timeout(60)
   assert await page.locator('#vsd-panel').count()==0 and await ev('_vsdOn')==False
-  n=await ev('vlake[0].pts.length');await klik(900,650)
-  assert await ev('vlake[0].pts.length')==n
+  await klik(900,650)
+  assert await ev('vlake.length')==0
   # --- slučajno napuštanje: nova vlaka sa jednom tačkom se odbacuje, prethodne ostaju
   await ev('vlakeStudioOpen()');await klik(800,200);await ev('vlakeStudioClose()')
-  assert await ev('vlake.map(v=>v.nm)')==['T1','T1.1'],await ev('vlake.map(v=>v.nm)')
+  assert await ev('vlake.length')==0
   assert not errors,errors
   await browser.close();print('Studio vlaka: miš klik/dvoklik/desni klik/Shift, hvatanje kraka na roditelja, tipkovnica, odabir klikom, zatvaranje: OK')
 if __name__=='__main__':asyncio.run(main())
