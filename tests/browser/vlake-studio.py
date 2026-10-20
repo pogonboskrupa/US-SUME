@@ -10,10 +10,11 @@ const PAL=['#3b82f6','#ef4444','#22c55e'],kolegeVlakeMap={},_vlakeRenderer=undef
 let _aktivniProjektId='P1';const _projekti=[{id:'P1',odjel:'12',gj:'GJ Test'}];
 const showToast=m=>toasts.push(m),rndList=()=>{},updBan=()=>{},updOvl=()=>{},updProjStats=()=>{},scheduleVlakaSave=i=>saved.push(i),sbFlushVlaka=i=>flushed.push(vlake[i].nm),updateVlakaLabel=()=>{},_updFabVisibility=()=>{},switchTab=()=>{},isReadOnly=()=>false,stopActiveTool=()=>{},mdpFinish=()=>{},attachPolyClick=()=>{},_saveLocalVlake=()=>{},getBojaVlake=()=>'#60a5fa',getBojaKraka=()=>'#f87171',getVlakaWeight=()=>4,getVlakaDashArray=()=>null,getIme=()=>'Test',_projVlakePts=()=>[],_findOdjelBounds=()=>null,_vlNmDijelovi=n=>String(n).replace(/^T/,'').split('.').map(Number);
 const _removeVlakaMapLayers=v=>{try{map.removeLayer(v.poly)}catch(e){}};
-const _dlgConfirm=async()=>true,_dlgPrompt=async()=>window.__prompt,sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
+const _dlgConfirm=async()=>true,_dlgPrompt=async(m,d)=>(window.__prompt??d),sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
 const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
+const _lagerZauzeti=async()=>({used:new Set(['L1']),offline:false});
 '''
-for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing']:js+='\n'+b.function(n)
+for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka']:js+='\n'+b.function(n)
 js+='\n'+b.section('var _vsdOn =','// ─── Uvoz vlake iz fajla')
 html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'
 async def main():
@@ -84,6 +85,46 @@ async def main():
   await page.keyboard.press('Enter');await page.wait_for_timeout(60)
   assert 'T1.1' in await ev('flushed')
   assert await ev('[_vsdPen,vlake.length]')==[False,2]  # krak ne pokreće auto-novu
+  # --- izabran krak: roditelj istaknut i imenovan u panelu
+  assert await ev('_vsdSel')==1 and await ev('!!_vsdRodLayer')
+  assert (await page.locator('#vsd-panel .vsd-rod-b').inner_text())=='T1'
+  # --- početak kraka: zelena ručka se povlači, a pušta se uvijek NA roditelja
+  assert await page.locator('.vsd-h-start').count()==1
+  h=await page.locator('.vsd-h-start').bounding_box();x0=h['x']+9;y0=h['y']+9
+  await page.mouse.move(x0,y0);await page.mouse.down();await page.mouse.move(x0+70,y0-90,steps=6);await page.mouse.up();await page.wait_for_timeout(80)
+  dpx=await ev('''(()=>{const f=vlake[1].pts[0],c=map.latLngToContainerPoint([f.la,f.lo]);let best=1e9;const P=vlake[0].pts.map(p=>map.latLngToContainerPoint([p.la,p.lo]));
+    for(let k=1;k<P.length;k++){const a=P[k-1],b=P[k],dx=b.x-a.x,dy=b.y-a.y,L2=dx*dx+dy*dy;let t=L2?((c.x-a.x)*dx+(c.y-a.y)*dy)/L2:0;t=Math.max(0,Math.min(1,t));best=Math.min(best,Math.hypot(a.x+t*dx-c.x,a.y+t*dy-c.y));}return best})()''')
+  assert dpx<1,dpx
+  assert await ev('typeof vlake[1].junctionOnParent')=='number'
+  await page.locator('.vsd-h-start').click(button='right');await page.wait_for_timeout(60)
+  assert await ev('vlake[1].pts.length')==3,'početak kraka se ne briše'
+  # --- naziv: provjera unosa (broj, duplikat, krak sa parnošću strane)
+  assert await ev("!!_vsdImeProvjera('T1',null,'P1').greska") and await ev("_vsdImeProvjera('5',null,'P1').nm")=='T5'
+  assert await ev("[_vsdImeProvjera('T1.4',vlake[0],'P1').nm,_vsdImeProvjera('T1.4',vlake[0],'P1').strana,_vsdImeProvjera('3',vlake[0],'P1').strana]")==['T1.4','D','L']
+  assert await ev("!!_vsdImeProvjera('T1.1',vlake[0],'P1').greska")
+  # --- nova vlaka i krak dobijaju upisan naziv (dijalog), Esc odbacuje praznu
+  await ev('window.__prompt="7"');await page.keyboard.press('n');await page.wait_for_timeout(80)
+  assert await ev('[vlake.length,vlake[2].nm,vlake[2].br,_vsdPen]')==[3,'T7',7,True]
+  await page.keyboard.press('Escape');await page.wait_for_timeout(60)
+  assert await ev('vlake.length')==2
+  await ev('_vsdSelect(0,false)');await ev('window.__prompt="T1.6"');await page.keyboard.press('l');await page.wait_for_timeout(80)
+  assert await ev('[vlake[2].nm,vlake[2].strana,vlake[2].kr]')==['T1.6','D',1]
+  await page.keyboard.press('Escape');await page.wait_for_timeout(60)
+  await ev('window.__prompt=null')
+  assert await ev('vlake.length')==2
+  # --- lageri: L1 zauzet negdje drugo → T1 dobija L2; sačuvano i poslano
+  await ev('_vsdLagerOtvori()');await page.wait_for_timeout(60)
+  assert await page.locator('#vsd-panel .vsd-lg-in').count()==1
+  await page.locator('#vsd-panel .vsd-b',has_text='Popuni').click();await page.wait_for_timeout(80)
+  assert await page.locator('#vsd-panel .vsd-lg-in').input_value()=='L2'
+  await page.locator('#vsd-panel .vsd-lg-in').fill('L5')
+  n0=len(await ev('flushed'))
+  await page.locator('#vsd-panel .vsd-b',has_text='Sačuvaj').click();await page.wait_for_timeout(80)
+  assert await ev('[vlake[0].lager,_vsdLagerMod]')==['L5',False] and len(await ev('flushed'))==n0+1
+  # lageri ≤20 m jedan od drugog dobijaju isti broj
+  r=await ev('''(()=>{const k=[{nm:'T1',br:1,kr:0,pts:[{la:44.9,lo:16}]},{nm:'T2',br:2,kr:0,pts:[{la:44.90005,lo:16}]},{nm:'T3',br:3,kr:0,pts:[{la:44.91,lo:16}]}];
+    const f=_vsdLagerPopuni(k,new Map(),new Set());return k.map(v=>f.get(v))})()''')
+  assert r==['L1','L1','L3'],r
   if os.environ.get('VSD_SHOT'):await page.screenshot(path=os.environ['VSD_SHOT'])
   # --- ručke: povlačenje pomjera tačku, desni klik je briše, krak blokira brisanje
   await ev('_vsdSelect(0,false)');await page.wait_for_timeout(60)
@@ -110,6 +151,7 @@ async def main():
   assert await ev('vlake.map(v=>v.nm)')==['T1'] and await ev('deleted')==['T1.1'],await ev('[vlake.map(v=>v.nm),deleted]')
   await ev('_vsdSelect(0,false)');await ev('_vsdPreimenuj()');await page.wait_for_timeout(80)
   assert await ev('vlake[0].nm')=='T9'
+  await ev('window.__prompt=null')
   await ev('_vsdSelect(0,false)');await ev('_vsdObrisi()');await page.wait_for_timeout(80)
   assert await ev('[vlake.length,_vsdSel]')==[0,None]
   assert await page.locator('.vsd-h').count()==0
