@@ -5920,7 +5920,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.1.1';
+const APP_VER = 'v3.1.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -25335,10 +25335,15 @@ function ldK(file) {
 function pkml(doc, col, op) {
   op = op ?? 0.9;
   const g = L.featureGroup();
-  doc.querySelectorAll('Placemark').forEach((pm,pmIndex) => {
-    const name = pm.querySelector('name')?.textContent?.trim() || '';
-    const desc = pm.querySelector('description')?.textContent?.trim() || '';
-    const extData = _parseKmlExtData(pm);
+  g.on('click', _kmlGrpClick);   // tačke: jedan listener na grupi (vidi pkmlStyled)
+  g.on('mouseover', _kmlGrpTip);
+  const tag1 = (el, t) => el.getElementsByTagName(t)[0];
+  const pms = doc.getElementsByTagName('Placemark');
+  for (let pmIndex = 0; pmIndex < pms.length; pmIndex++) {
+    const pm = pms[pmIndex];
+    const name = tag1(pm, 'name')?.textContent?.trim() || '';
+    const desc = tag1(pm, 'description')?.textContent?.trim() || '';
+    const extData = pm.getElementsByTagName('ExtendedData').length ? _parseKmlExtData(pm) : {};
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
@@ -25362,18 +25367,16 @@ function pkml(doc, col, op) {
         l.addTo(g);
       }
     });
-    pm.querySelectorAll('Point').forEach(pt => {
-      const cs = pcs(pt.querySelector('coordinates')?.textContent);
+    for (const pt of pm.getElementsByTagName('Point')) {
+      const cs = pcs(tag1(pt, 'coordinates')?.textContent);
       if (cs.length > 0) {
         const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
         m._kmlIsPoint = true;
         m._kmlPmIndex=pmIndex;m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
-        if (name) m.bindTooltip(_escHtml(name));
-        _bindKmlPopup(m);
         m.addTo(g);
       }
-    });
-  });
+    }
+  }
   return g;
 }
 function pcs(s) {
@@ -25411,7 +25414,30 @@ function _kmlOpenPopup(layer, latlng) {
     .openOn(map);
 }
 
+// Jedan zajednički handler za tačke: KML sa desetinama hiljada tačaka inače pravi
+// zatvaranje + dva listenera po tački (izmjereno: ~0,5 s od 1,8 s građenja za 50 000).
+function _kmlPointClick(e) {
+  L.DomEvent.stopPropagation(e);
+  _kmlOpenPopup(e.target, e.latlng);
+}
+// Grupni handleri za tačke (vidi pkmlStyled). Tooltip se pravi tek pri prvom prelasku
+// preko tačke — bindTooltip po svakoj od 50 000 tačaka je najskuplji pojedinačni dio.
+function _kmlGrpClick(e) {
+  const l = e.layer;
+  if (!l || !l._kmlIsPoint) return;
+  L.DomEvent.stopPropagation(e);
+  _kmlOpenPopup(l, e.latlng);
+}
+function _kmlGrpTip(e) {
+  const l = e.layer;
+  if (!l || !l._kmlIsPoint || l._kmlTipDone || !l._kmlName) return;
+  l._kmlTipDone = true;
+  l.bindTooltip(_escHtml(l._kmlName), { sticky: true });
+  l.openTooltip(e.latlng);
+}
+
 function _bindKmlPopup(layer) {
+  if (layer._kmlIsPoint) { layer.on('click', _kmlPointClick); return; }
   const _onClick = function(e) {
     L.DomEvent.stopPropagation(e);
     _kmlOpenPopup(layer, e.latlng);
@@ -25655,10 +25681,18 @@ function _kmlLabelMarker(pos, text) {
 // Stilizovani KML parser — prima options za boju/debljinu/crtanje
 function pkmlStyled(doc, opts) {
   const g = L.featureGroup();
-  doc.querySelectorAll('Placemark').forEach(pm => {
-    const name = pm.querySelector('name')?.textContent?.trim() || '';
-    const desc = pm.querySelector('description')?.textContent?.trim() || '';
-    const extData = _parseKmlExtData(pm);
+  // Tačke dobijaju događaje JEDNIM listenerom na grupi (propagacija iz sloja), ne po
+  // tački: za 50 000 tačaka to je ~0,4 s i desetine MB manje (tooltip + klik po tački).
+  g.on('click', _kmlGrpClick);
+  g.on('mouseover', _kmlGrpTip);
+  // getElementsByTagName je višestruko brži od querySelector-a po Placemark-u.
+  const tag1 = (el, t) => el.getElementsByTagName(t)[0];
+  const pms = doc.getElementsByTagName('Placemark');
+  for (let pi = 0; pi < pms.length; pi++) {
+    const pm = pms[pi];
+    const name = tag1(pm, 'name')?.textContent?.trim() || '';
+    const desc = tag1(pm, 'description')?.textContent?.trim() || '';
+    const extData = pm.getElementsByTagName('ExtendedData').length ? _parseKmlExtData(pm) : {};
     pm.querySelectorAll('Polygon').forEach(pg => {
       const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
       if (cs.length > 2) {
@@ -25685,18 +25719,16 @@ function pkmlStyled(doc, opts) {
         l.addTo(g);
       }
     });
-    pm.querySelectorAll('Point').forEach(pt => {
-      const cs = pcs(pt.querySelector('coordinates')?.textContent);
+    for (const pt of pm.getElementsByTagName('Point')) {
+      const cs = pcs(tag1(pt, 'coordinates')?.textContent);
       if (cs.length > 0) {
         const m = L.circleMarker(cs[0], { radius: 4, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
         m._kmlIsPoint = true;
         m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
-        if (name) m.bindTooltip(_escHtml(name), { sticky: true });
-        _bindKmlPopup(m);
         m.addTo(g);
       }
-    });
-  });
+    }
+  }
   return g;
 }
 
