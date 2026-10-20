@@ -12,11 +12,12 @@ const showToast=m=>toasts.push(m),rndList=()=>{},updBan=()=>{},updOvl=()=>{},upd
 const _removeVlakaMapLayers=v=>{try{map.removeLayer(v.poly)}catch(e){}};
 const _dlgConfirm=async()=>true,_dlgPrompt=async(m,d)=>(window.__prompt??d),sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
 const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
+let bufRadius=40,deadLayers=[],_dozBufRadius=40,_vpBufferId=null,_dozBufLayers=[],_dozTreePts=[],sbUser=null;const _vpBufferLabel=()=>{},_bufSavePrefs=()=>{},dozDrawBuf=()=>{},dozTreesAnalyze=()=>{},_hexToRgb=h=>[96,165,250],_lastDlg=[];
 const _lagerZauzeti=async()=>({used:new Set(['L1']),offline:false});
 '''
-for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka']:js+='\n'+b.function(n)
+for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka','_bufGetColor','_bufGetOpacity','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_bufSirinaOk','_bufSelPostavi','_bufTrazi','_syncBufRadiusEverywhere']:js+='\n'+b.function(n)
 js+='\n'+b.section('var _vsdOn =','// ─── Uvoz vlake iz fajla')
-html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'
+html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/turf.min.js"></script><script>'+js+'</script></body></html>'
 async def main():
  async with async_playwright() as p:
   browser=await p.chromium.launch(executable_path=os.environ.get('UI_CHROMIUM') or None,args=['--no-sandbox']);page=await browser.new_page(viewport={'width':1280,'height':800});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -171,6 +172,36 @@ async def main():
   assert await ev('[vlake[0].pts.length,vlake[0].pts[0].la,vlake[0].pts[0].lo]')==[1,44.9001,16.0002]
   await ev('window.lastP=null;vlakeStudioClose()')
   assert await ev('vlake.length')==0
+  # --- bafer u Studiju: zadano ±40 m, uključi sa B, crta se oko vlaka, klik karte i dalje dodaje tačku
+  await ev('vlakeStudioOpen()');await ev('_vsdNova()');await page.wait_for_timeout(80)
+  await klik(500,300);await klik(700,320);await page.wait_for_timeout(60)
+  assert await ev('[_vsdBuf,bufRadius,bufLayers.length]')==[False,40,0]
+  await page.keyboard.press('b');await page.wait_for_timeout(100)
+  assert await ev('[_vsdBuf,bufLayers.length]')==[True,1]
+  assert await page.locator('.vsd-baf .vsd-b.ok').count()==1 and 'Bafer ±40 m' in await page.locator('.vsd-baf .vsd-b').inner_text()
+  await klik(760,380);await page.wait_for_timeout(350)
+  assert await ev('vlake[0].pts.length')==3,'klik preko bafera dodaje tačku'
+  # širina bafera se zaista dešava: ±40 m → širina oko 80 m (turf mjeri površinu poligona oko linije)
+  w=await ev('(()=>{const v=vlake[0];const g=buildBufPoly(v);return turf.area(g)/(turf.length(turf.lineString(v.pts.map(p=>[p.lo,p.la])),{units:"meters"}))})()')
+  assert 80<w<110,w   # 2×40 m + zaobljeni krajevi
+  if os.environ.get('VSD_SHOT'):await page.screenshot(path=os.environ['VSD_SHOT'].replace('.png','-baf.png'))
+  # brzi izbor 50 i prilagođeno 25 (ukupno 50 m) — jedan zajednički radijus
+  await page.locator('.vsd-chip',has_text='50').click();await page.wait_for_timeout(300)
+  assert await ev('[bufRadius,_dozBufRadius]')==[50,50]
+  await ev('window.__prompt="25"');await page.locator('.vsd-chip',has_text='✎').click();await page.wait_for_timeout(300)
+  assert await ev('[bufRadius,_dozBufRadius,_vsdBuf]')==[25,25,True]
+  assert 'Bafer ±25 m' in await page.locator('.vsd-baf .vsd-b').inner_text()
+  # nevažeći unos se odbija, radijus ostaje
+  await ev('window.__prompt="9999"');await page.locator('.vsd-chip',has_text='✎').click();await page.wait_for_timeout(200)
+  assert await ev('bufRadius')==25
+  await ev('window.__prompt=null')
+  # isključi i zatvori: nema zaostalih slojeva
+  await page.keyboard.press('b');await page.wait_for_timeout(100)
+  assert await ev('bufLayers.length')==0
+  await page.keyboard.press('b');await page.wait_for_timeout(100)
+  for _ in range(3):await page.keyboard.press('Escape');await page.wait_for_timeout(60)   # kraj vlake → prazna sljedeća se odbacuje → izlaz
+  assert await ev('[_vsdOn,bufLayers.length]')==[False,0],await ev('[_vsdOn,_vsdPen,bufLayers.length,_vsdBuf]')
+  await ev('_vsdBuf=false;try{localStorage.removeItem(_VSD_BUF_KEY)}catch(e){}')
   # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
   await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)
   bb=await page.locator('#vsd-panel').bounding_box();assert bb['y']+bb['height']<=780 and bb['height']<780*0.45,bb

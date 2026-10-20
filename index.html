@@ -1511,6 +1511,11 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-lg-row .nm { font-weight:700; min-width:48px; }
 .vsd-lg-row .meta { color:#64748b; font-size:12px; margin-left:auto; }
 .vsd-lg-in { width:72px; flex:none; padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; font-weight:700; text-transform:uppercase; }
+.vsd-baf { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.vsd-baf .vsd-b { flex:1 1 auto; }
+.vsd-chips { display:flex; gap:4px; }
+.vsd-chip { min-width:34px; height:30px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#334155; font-weight:700; cursor:pointer; }
+.vsd-chip.act { background:#0369a1; border-color:#0369a1; color:#fff; }
 .vsd-undo { flex:none; min-width:36px; height:32px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:rgba(148,163,184,.15); color:inherit; font-size:16px; cursor:pointer; }
 #vsd-seg { color:#0369a1; }
 .vsd-main .vsd-b { padding:11px 5px; font-size:13px; }
@@ -4825,6 +4830,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <option value="80" selected>80 m (40L + 40D) — default</option>
           <option value="100">100 m (50L + 50D)</option>
           <option value="120">120 m (60L + 60D)</option>
+          <option value="custom">✎ Prilagođeno…</option>
         </select>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
           <div style="display:flex;gap:6px;align-items:center;">
@@ -5587,6 +5593,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
               <option value="80" selected>80 m (40L + 40D)</option>
               <option value="100">100 m (50L + 50D)</option>
               <option value="120">120 m (60L + 60D)</option>
+              <option value="custom">✎ Prilagođeno…</option>
             </select>
             <div style="display:flex;gap:6px;margin-bottom:6px;">
               <button class="btn b" style="flex:1;font-size:11px;padding:6px;" onclick="dozDrawBuf()"><svg class="ic"><use href="#ic-buffer"/></svg> Bufferi</button>
@@ -10610,7 +10617,11 @@ var _vsdPrev = null, _vsdAutoNext = true, _vsdHandles = [];
 var _vsdIst = [], _vsdIstV = null;
 var _vsdPitam = false;                 // otvoren je dijalog za naziv nove vlake/kraka
 var _vsdRodLayer = null, _vsdRodZa = null; // istaknuta roditeljska vlaka izabranog kraka
-var _vsdLagerMod = false, _vsdLagerForma = new Map(); // popis lagera: vlaka → upisan broj
+var _vsdLagerMod = false, _vsdLagerForma = new Map();
+// Bafer oko vlaka u Studiju: koristi ZAJEDNIČKI radijus (bufRadius, zadano ±40 m) i crtanje drawBuffers.
+var _vsdBuf = false, _vsdBufNacrtan = false, _vsdBufT = null;
+const _VSD_BUF_KEY = 'tvlake_vsd_bafer';
+const _VSD_BUF_BRZI = [30, 40, 50, 60];   // ± metara po strani // popis lagera: vlaka → upisan broj
 const _VSD_IST_MAX = 200;
 const _VSD_SNAP_PX = 12;     // hvatanje za tuđu vlaku (Shift isključuje)
 const _VSD_KRAK_PX = 60;     // prva tačka kraka se lijepi na roditelja iz veće daljine
@@ -10897,6 +10908,7 @@ function _vsdTipka(e) {
   else if (k === 'd' || k === 'D') _vsdKrak('D');
   else if (k === 'c' || k === 'C') _vsdPenDown();
   else if (k === 'f' || k === 'F') _vsdZoomSel();
+  else if (k === 'b' || k === 'B') _vsdBufToggle();
   else if ((k === 'g' || k === 'G') && _vsdPen) _vsdTackaGps();
   else if (k === 'F2') _vsdPreimenuj();
   else if (k === 'Delete') _vsdObrisi();
@@ -11077,6 +11089,32 @@ function _vsdLagerPopuni(kand, forma, zauzeti) {
   return forma;
 }
 
+function _vsdBufOsvjezi(odmah) {
+  clearTimeout(_vsdBufT);
+  const radi = () => {
+    if (!_vsdOn) return;
+    if (_vsdBuf) { drawBuffers(); _vsdBufNacrtan = true; }
+    else if (_vsdBufNacrtan) { clearBuffers(); _vsdBufNacrtan = false; }
+  };
+  if (odmah) radi(); else _vsdBufT = setTimeout(radi, 200);   // geometrija se računa tek kad se crtanje primiri
+}
+
+function _vsdBufToggle() {
+  if (!_vsdOn) return;
+  _vsdBuf = !_vsdBuf;
+  try { localStorage.setItem(_VSD_BUF_KEY, _vsdBuf ? '1' : '0'); } catch(e) {}
+  _vsdBufOsvjezi(true);
+  _vsdRender();
+}
+
+function _vsdBufRadijus(m) {   // m = ± po strani
+  if (m == null) { _bufTrazi().then(() => { if (_vsdOn) { _vsdBuf = true; _vsdBufOsvjezi(true); _vsdRender(); } }); return; }
+  _syncBufRadiusEverywhere(m * 2);
+  if (!_vsdBuf) { _vsdBuf = true; try { localStorage.setItem(_VSD_BUF_KEY, '1'); } catch(e) {} }
+  _vsdBufOsvjezi(true);
+  _vsdRender();
+}
+
 function _vsdLagerOtvori() {
   if (!_vsdOn || _vsdPitam) return;
   if (_vsdPen) _vsdFinishInterno(true);
@@ -11246,6 +11284,10 @@ function _vsdRender() {
       <button type="button" class="vsd-b" onclick="_vsdLagerOtvori()" ${kandL.length ? '' : 'disabled'} title="Popis lagera za sve vlake">🏷 Lageri</button>
     </div>
     ${!_vsdPen && bezLagera ? `<button type="button" class="vsd-b vsd-lgbtn" onclick="_vsdLagerOtvori()">🏷 Popiši lagere — ${bezLagera} bez broja</button>` : ''}
+    <div class="vsd-baf vsd-extra">
+      <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
+      <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>
+    </div>
     <label class="vsd-auto vsd-extra"><input type="checkbox" ${_vsdAutoNext ? 'checked' : ''} onchange="vlakeStudioAutoSet(this.checked)"> Poslije završene vlake odmah počni sljedeću</label>
     <div class="vsd-tot vsd-extra">Odjel: <b>${sz.n}</b> ${sz.n === 1 ? 'vlaka' : 'vlaka/krakova'} · <b>${fmtL(sz.m)}</b></div>
     <div class="vsd-list vsd-extra">${red.length ? red.map(({ i, depth }) => {
@@ -11257,7 +11299,7 @@ function _vsdRender() {
     }).join('') : '<div class="vsd-empty">Odjel još nema vlaka.<br>Pritisni <b>＋ Vlaka</b> (N) i klikaj po karti.</div>'}</div>
     <div class="vsd-help vsd-extra">${dodir
       ? '<b>Dodir</b> tačka · <b>dvostruki dodir</b> ili <b>Završi</b> kraj · <b>dodir na liniju</b> bira vlaku · <b>povuci kružić</b> pomjera tačku · <b>↩</b> vraća i pomjeranje/brisanje · <b>📍 Ovdje</b> tačka na GPS poziciji · <b>zelena ručka kraka</b> pomjera njegov početak po roditelju'
-      : '<b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Ctrl+Z</b> vraća i pomjeranje · <b>G</b> tačka na GPS poziciji · <b>prva ručka kraka</b> pomjera početak po roditelju · <b>Esc</b> izlaz'}</div>`;
+      : '<b>Klik</b> tačka · <b>dvoklik / Enter</b> kraj · <b>desni klik / Backspace</b> poništi · <b>Shift</b> bez hvatanja · <b>klik na liniju</b> bira vlaku · <b>povuci ručku</b> pomjera tačku (desni klik briše) · <b>Ctrl+Z</b> vraća i pomjeranje · <b>G</b> tačka na GPS poziciji · <b>prva ručka kraka</b> pomjera početak po roditelju · <b>B</b> bafer · <b>Esc</b> izlaz'}</div>`;
   const nova = panel.querySelector('.vsd-list');
   if (nova) nova.scrollTop = skrol;
   const akt = nova && nova.querySelector('.vsd-li.act');
@@ -11267,6 +11309,7 @@ function _vsdRender() {
   panel.classList.toggle('vsd-skl', _vsdSkl);
   _vsdHandlesBuild();
   _vsdRoditeljPrikazi();
+  if (_vsdBuf || _vsdBufNacrtan) _vsdBufOsvjezi();
 }
 
 function vlakeStudioOpen() {
@@ -11279,6 +11322,7 @@ function vlakeStudioOpen() {
   const p = (_projekti || []).find(x => x.id === _aktivniProjektId);
   if (!p) { showToast('Projekat nije pronađen'); return; }
   try { _vsdAutoNext = localStorage.getItem(_VSD_AUTO_KEY) !== '0'; } catch(e) { _vsdAutoNext = true; }
+  try { _vsdBuf = localStorage.getItem(_VSD_BUF_KEY) === '1'; } catch(e) { _vsdBuf = false; }
   switchTab('karta');
   _vsdOn = true; _vsdPid = _aktivniProjektId; _vsdSel = null; _vsdPen = false; _vsdPenBase = 0;
   map.doubleClickZoom.disable();
@@ -11320,6 +11364,8 @@ function vlakeStudioClose() {
   _vsdSel = null; _vsdPen = false; _vsdPid = null;
   _vsdIst = []; _vsdIstV = null;
   _vsdLagerMod = false; _vsdLagerForma = new Map();
+  clearTimeout(_vsdBufT);
+  if (_vsdBufNacrtan) { clearBuffers(); _vsdBufNacrtan = false; }
   _vsdRoditeljPrikazi();
   _updFabVisibility();
   rndList(); updOvl(); updProjStats();
@@ -26967,8 +27013,44 @@ let bufRadius = 40; // meters half-width (default 80m total)
 let bufLayers = []; // L.polygon layers for buffers
 let deadLayers = []; // L.polygon layers for dead zones
 
-function onBufChange() {
-  _syncBufRadiusEverywhere(parseInt(document.getElementById('buf-sel').value));
+function onBufChange() { _bufIzbor(document.getElementById('buf-sel')); }
+
+// Dozvoljena ukupna širina bafera (m): cijeli broj, 20–600 (±10 do ±300 m po strani).
+function _bufSirinaOk(m) { return Number.isInteger(m) && m >= 20 && m <= 600; }
+
+// Izbor "Prilagođeno…" traži broj; sve ostalo ide pravo u zajednički radijus.
+async function _bufIzbor(sel) {
+  if (!sel) return;
+  if (sel.value === 'custom') {
+    await _bufTrazi();
+    _bufSelPostavi(sel, bufRadius * 2);   // vrati izbor na stvarnu vrijednost (i kad je korisnik odustao)
+    return;
+  }
+  _syncBufRadiusEverywhere(parseInt(sel.value));
+}
+
+// Radijus se unosi PO STRANI (lijevo = desno), jer je tako i bafer: ±N m oko linije.
+async function _bufTrazi() {
+  const val = await _dlgPrompt('Bafer sa svake strane vlake u metrima (10–300)', String(bufRadius), { title: '📏 Prilagođeni bafer', okLabel: 'Primijeni', inputMode: 'numeric' });
+  if (val == null) return false;
+  const n = Math.round(parseFloat(String(val).replace(',', '.')));
+  if (!(n >= 10 && n <= 300)) { showToast('⚠ Unesi broj od 10 do 300 m'); return false; }
+  _syncBufRadiusEverywhere(n * 2);
+  return true;
+}
+
+// Ako širine nema među ponuđenima, doda se jedna "prilagođena" opcija (uvijek najviše jedna).
+function _bufSelPostavi(sel, m) {
+  if (!sel) return;
+  sel.querySelectorAll('option[data-custom]').forEach(o => o.remove());
+  if (![...sel.options].some(o => +o.value === m)) {
+    const o = document.createElement('option');
+    o.value = String(m); o.dataset.custom = '1';
+    o.textContent = m + ' m (' + (m / 2) + 'L + ' + (m / 2) + 'D) — prilagođeno';
+    const c = sel.querySelector('option[value="custom"]');
+    sel.insertBefore(o, c);
+  }
+  sel.value = String(m);
 }
 
 // Jedan zajednički buffer radijus za: (1) "Vlake" alat na karti (bufRadius/buf-sel),
@@ -26977,19 +27059,18 @@ function onBufChange() {
 // ponavljati istu promjenu na dva različita mjesta, sa rizikom da se rasinhronizuju
 // (npr. stabla se broje sa 80m dok je Vlake alat već promijenjen na 100m).
 function _syncBufRadiusEverywhere(meters) {
-  if (![60,80,100,120].includes(meters)) return;
+  if (!_bufSirinaOk(meters)) return;
   _bufSavePrefs({width:meters});
   bufRadius = meters / 2;
   _dozBufRadius = meters / 2;
-  const mainSel = document.getElementById('buf-sel');
-  const dozSel  = document.getElementById('doz-buf-sel');
-  if (mainSel && +mainSel.value !== meters) mainSel.value = meters;
-  if (dozSel && +dozSel.value !== meters) dozSel.value = meters;
+  _bufSelPostavi(document.getElementById('buf-sel'), meters);
+  _bufSelPostavi(document.getElementById('doz-buf-sel'), meters);
   const lbl = document.getElementById('doz-trees-radius');
   if (lbl) lbl.textContent = meters;
   if (bufLayers.length > 0) drawBuffers();
   if (typeof _dozBufLayers !== 'undefined' && _dozBufLayers.length > 0) dozDrawBuf();
   if (typeof _dozTreePts !== 'undefined' && _dozTreePts.length) dozTreesAnalyze();
+  if (typeof _vsdOn !== 'undefined' && _vsdOn) _vsdRender();   // natpis "Bafer ±N m" u Studiju
 }
 
 function _bufSavePrefs(change) {
@@ -26999,7 +27080,7 @@ function _bufSavePrefs(change) {
 function _bufRestorePrefs() {
   try {
     const p=JSON.parse(localStorage.getItem('tvlake_buffer_style')||'{}');
-    if ([60,80,100,120].includes(p.width)) _syncBufRadiusEverywhere(p.width);
+    if (_bufSirinaOk(p.width)) _syncBufRadiusEverywhere(p.width);
     const col=document.getElementById('buf-col-pick'), op=document.getElementById('buf-opacity');
     if (col && /^#[0-9a-f]{6}$/i.test(p.color||'')) col.value=p.color;
     if (op && Number.isFinite(p.opacity)) op.value=Math.max(5,Math.min(60,p.opacity));
@@ -40230,9 +40311,7 @@ function dozVlakeLoadKml(ev) {
   r.readAsText(file);
 }
 
-function dozBufChange() {
-  _syncBufRadiusEverywhere(parseInt(document.getElementById('doz-buf-sel').value));
-}
+function dozBufChange() { _bufIzbor(document.getElementById('doz-buf-sel')); }
 
 function dozDrawBuf() {
   dozClearBuf();
