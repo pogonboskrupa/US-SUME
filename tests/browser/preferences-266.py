@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('menu',Path(__file__).with_name('menu-tools.py'));b=importlib.util.module_from_spec(spec);spec.loader.exec_module(b)
-names=['loadKmlStyleFor','_kmlStyleToLeaflet','pkmlStyled','_coordsCentroid','_kmlLabelMarker','_loadOneKml','_loadOneShp','_prjToProj4','_reprojectGeometry','_fetchBucketFile','_kmlcInit','_serverKmlRestore','_bufSavePrefs','_bufRestorePrefs','_syncBufRadiusEverywhere','_bufGetColor','_bufGetOpacity','_bufColChange','_bufOpacityChange','_hexToRgbCsv','_hexToRgb','_lsTab']
+names=['loadKmlStyleFor','_kmlStyleToLeaflet','pkmlStyled','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','_coordsCentroid','_kmlLabelMarker','_loadOneKml','_loadOneShp','_prjToProj4','_reprojectGeometry','_fetchBucketFile','_kmlcInit','_serverKmlRestore','_bufSavePrefs','_bufSirinaOk','_bufSelPostavi','_bufRestorePrefs','_syncBufRadiusEverywhere','_bufGetColor','_bufGetOpacity','_bufColChange','_bufOpacityChange','_hexToRgbCsv','_hexToRgb','_lsTab']
 extra='''let _globalKmlStyles={},bufRadius=40,_dozBufRadius=40,bufLayers=[],_dozBufLayers=[],_dozTreePts=[];
 const drawBuffers=()=>{},dozDrawBuf=()=>{},dozTreesAnalyze=()=>{},_instUpdateStats=()=>{},_lsRenderSqlite=()=>{};
 const SUPA_KEY='fixture',_fetchT=()=>{throw Error('Restoring must not fetch')};
