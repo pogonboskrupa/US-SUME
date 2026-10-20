@@ -5923,7 +5923,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.1.3';
+const APP_VER = 'v3.1.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7660,6 +7660,58 @@ function _clearSavedUser() {
   localStorage.removeItem(_SAVED_USER_KEY);
 }
 
+// ─── Offline prijava poslije ODJAVE (v3.1.4) ─────────────────────────────────
+// _clearSavedUser() pri odjavi briše ime/PIN iz `tvlake_saved_user` (da se PIN ne
+// pre-popunjava na dijeljenom telefonu), a offline prijava je provjeravala baš taj
+// zapis — pa je korisnik koji se odjavi NA TERENU bez signala ostajao zaključan
+// ("ponovna prijava nakon odjave traži internet") iako mu je profil i sav lokalni
+// rad bio na telefonu. Zato se pri svakoj uspješnoj prijavi čuva i odvojen zapis za
+// PROVJERU (ne za prikaz): SHA-256 sa solju umjesto otvorenog PIN-a, ključ je
+// ime+prezime. Odjava ga NE briše; polja za prijavu se i dalje ne pre-popunjavaju.
+const _OFFCRED_KEY = 'tvlake_offline_cred_v1';
+function _offCredKljuc(ime, prezime) {
+  return (String(ime||'').trim() + '|' + String(prezime||'').trim()).toLowerCase();
+}
+async function _offCredHash(kljuc, pin) {
+  const tekst = 'dm1|' + kljuc + '|' + pin;
+  try {
+    if (crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tekst));
+      return 's:' + Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch(e) {}
+  return 'p:' + btoa(unescape(encodeURIComponent(tekst)));   // WebView bez crypto.subtle
+}
+function _offCredLoad() {
+  try { const o = JSON.parse(localStorage.getItem(_OFFCRED_KEY)); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; }
+  catch(e) { return {}; }
+}
+async function _offCredSpremi(ime, prezime, pin, uid) {
+  if (!ime || !pin || !uid) return false;
+  try {
+    const m = _offCredLoad(), k = _offCredKljuc(ime, prezime);
+    m[k] = { uid, h: await _offCredHash(k, pin) };
+    localStorage.setItem(_OFFCRED_KEY, JSON.stringify(m));
+    return true;
+  } catch(e) { return false; }
+}
+// Uređaji prijavljeni PRIJE v3.2.0 imaju samo `saved` zapis: prepiši ga u trajni
+// oblik odmah pri učitavanju, da se i oni mogu offline vratiti poslije odjave.
+(function _offCredMigracija() {
+  try {
+    const sv = _loadSavedUser(), pr = _OL.load(_OL.PROFILE);
+    if (sv && sv.ime && sv.pin && pr && pr.id) _offCredSpremi(sv.ime, sv.prezime, sv.pin, pr.id);
+  } catch(e) {}
+})();
+// Vraća uid korisnika čiji ime+PIN odgovaraju, inače null.
+async function _offCredProvjeri(ime, prezime, pin) {
+  try {
+    const k = _offCredKljuc(ime, prezime), z = _offCredLoad()[k];
+    if (z && z.uid && z.h && z.h === await _offCredHash(k, pin)) return z.uid;
+  } catch(e) {}
+  return null;
+}
+
 async function sbLoadProfile() {
   let data = null;
   try {
@@ -8039,13 +8091,18 @@ async function doLogin() {
 
   // Offline login: keširani profil postoji i isti korisnik se prijavljuje —
   // pusti u app bez servera. Vraća false ako se nema na šta osloniti.
-  const prijavaIzKesa = () => {
-    const cached = _profileLoad();
+  const prijavaIzKesa = async () => {
+    // Provjera ime+PIN: odvojen zapis koji PREŽIVLJAVA odjavu (_offCredProvjeri),
+    // a stari `saved` zapis ostaje kao rezerva za uređaje prijavljene prije v3.1.4.
+    const uid = await _offCredProvjeri(ime, prezime, pin);
     const saved = _loadSavedUser();
-    if (!(cached && cached.id && saved && saved.ime === ime && saved.pin === pin)) return false;
+    const staro = !!(saved && saved.ime === ime && saved.pin === pin);
+    const cached = _profileLoad(uid || undefined);
+    if (!(cached && cached.id && (uid || staro))) return false;
     sbUser = { id: cached.id, email: cached.email || '', _cachedStub: true };
     sbProfile = cached;
-    localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+    if (document.getElementById('auth-zapamti')?.checked !== false) localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
+    _offCredSpremi(ime, prezime, pin, cached.id);
     _setOfflineMode(true);
     showApp();
     showToast('📴 Offline prijava — lokalni podaci');
@@ -8055,15 +8112,20 @@ async function doLogin() {
   // keš — ranije je čekala rok RPC-a pa javila "Server nedostupan" korisniku
   // čiji je profil sve vrijeme bio na telefonu.
   if (!sb || !_mrezaProbaj()) {
-    if (prijavaIzKesa()) return;
+    if (await prijavaIzKesa()) return;
     if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
-    if (navigator.onLine === false) { showAuthErr('Nema internet veze — ponovna prijava nakon odjave traži internet'); return; }
+    if (navigator.onLine === false) { showAuthErr('Nema internet veze, a na ovom telefonu nema sačuvane prijave za ove podatke. Provjeri ime i PIN ili se prijavi kad budeš imao internet.'); return; }
   }
 
   showAuthErr('Povezivanje sa serverom...');
   _authBusy(true);   // sakrij logo — slijede 4 mrežna poziva prije showApp()
   // Ručni pokušaj prijave smije provjeriti vezu i kad je ranije izmjeren slab signal.
-  if(typeof _mrezaSila==='function'&&navigator.onLine!==false)_mrezaSila(60000);
+  if(typeof _mrezaSila==='function'&&navigator.onLine!==false){
+    // Izričit pokušaj prijave sa mrežom: uzorci 'nema' sa terena (do 10 min stari)
+    // opisuju PRIJE, ne sad — brišu se da vrata/značka ne drže "server nedostupan".
+    try{ if(_netKvalitet()==='nema'||_netKvalitet()==='slaba')_netUzorci=[]; }catch(e){}
+    _mrezaSila(60000);
+  }
 
   // Look up internal email by name (prezime može biti prazan za org naloge)
   let email, lookupErr;
@@ -8072,11 +8134,11 @@ async function doLogin() {
     email = r.data; lookupErr = r.error;
   } catch(e) {
     // Mreža pala usred prijave — isti korisnik sa keširanim profilom ulazi offline.
-    if (prijavaIzKesa()) return;
+    if (await prijavaIzKesa()) return;
     showAuthErr(_isNetworkErr(e)?'Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.':'Server nedostupan: '+e.message); return;
   }
   if(lookupErr){
-    if(_isNetworkErr(lookupErr)){if(prijavaIzKesa())return;showAuthErr('Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.');}
+    if(_isNetworkErr(lookupErr)){if(await prijavaIzKesa())return;showAuthErr('Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.');}
     else showAuthErr('Server nije mogao provjeriti nalog: '+lookupErr.message);
     return;
   }
@@ -8092,6 +8154,7 @@ async function doLogin() {
   }
 
   // Zapamti korisnika ako je checkbox čekiran
+  await _offCredSpremi(ime, prezime, pin, (await sb.auth.getUser().catch(()=>({data:{}}))).data?.user?.id);
   if (document.getElementById('auth-zapamti').checked) {
     localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
   } else {
