@@ -312,6 +312,9 @@ window.addEventListener('DOMContentLoaded',function(){
   letter-spacing:0.08em; font-family:'JetBrains Mono',monospace;
 }
 .auth-eye:active { background:rgba(74,163,90,0.3); }
+/* PIN je polje tipa text maskirano CSS-om: svako input[type=password] Chrome/Google
+   upravitelj lozinki tretira kao lozinku ("Predloži jaku lozinku"), a PIN nije lozinka. */
+.pin-maska { -webkit-text-security: disc; text-security: disc; }
 .auth-pin-input {
   font-family:'JetBrains Mono',monospace !important;
   letter-spacing:0.3em !important; font-size:17px !important;
@@ -4563,9 +4566,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-field-lbl">PIN</div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
-            <input id="auth-pin" name="dm-pin" type="password" inputmode="numeric"
-              class="auth-pin-input" placeholder="• • • • • •" maxlength="8"
-              autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+            <input id="auth-pin" name="dm-pin" type="text" inputmode="numeric"
+              class="auth-pin-input pin-maska" placeholder="• • • • • •" maxlength="8"
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
               enterkeyhint="go" data-lpignore="true" data-1p-ignore="true"
               onkeydown="if(event.key==='Enter')doLogin()">
             <button type="button" class="auth-eye" id="auth-pin-eye" onclick="_authPinPrikazi()" aria-label="Prikaži PIN" tabindex="-1">PRIKAŽI</button>
@@ -4664,16 +4667,16 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="auth-field-lbl">PIN * <span class="auth-field-hint">(4–8 cifara)</span></div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
-            <input id="reg-pin" type="password" inputmode="numeric"
-              class="auth-pin-input" placeholder="Odaberite PIN" maxlength="8" autocomplete="new-password">
+            <input id="reg-pin" type="text" inputmode="numeric"
+              class="auth-pin-input pin-maska" placeholder="Odaberite PIN" maxlength="8" autocomplete="off" data-lpignore="true" data-1p-ignore="true">
           </div>
         </div>
         <div class="auth-field">
           <div class="auth-field-lbl">Potvrda PIN-a *</div>
           <div class="auth-input-wrap">
             <span class="auth-input-icon"><svg class="ic"><use href="#ic-kljuc"/></svg></span>
-            <input id="reg-pin2" type="password" inputmode="numeric"
-              class="auth-pin-input" placeholder="Ponovite PIN" maxlength="8" autocomplete="new-password"
+            <input id="reg-pin2" type="text" inputmode="numeric"
+              class="auth-pin-input pin-maska" placeholder="Ponovite PIN" maxlength="8" autocomplete="off" data-lpignore="true" data-1p-ignore="true"
               onkeydown="if(event.key==='Enter')doRegister()">
           </div>
         </div>
@@ -7944,8 +7947,8 @@ function _authEnter(e, sljedece) {
 function _authPinPrikazi() {
   const el = document.getElementById('auth-pin'), b = document.getElementById('auth-pin-eye');
   if (!el || !b) return;
-  const prikazi = el.type === 'password';
-  el.type = prikazi ? 'text' : 'password';
+  const prikazi = el.classList.contains('pin-maska');
+  el.classList.toggle('pin-maska', !prikazi);
   b.textContent = prikazi ? 'SAKRIJ' : 'PRIKAŽI';
   b.setAttribute('aria-label', prikazi ? 'Sakrij PIN' : 'Prikaži PIN');
   el.focus();

@@ -4856,3 +4856,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Node test `tests/js/kml-50000.test.js`: `_kmlHitTest` nad 50 000 slojeva (~40 ms) + invarijante koda; browser test je dodan u `codex-webview.yml`.
 - Sadržaj lokalno uvezenog KML-a ide u IndexedDB (`_kmlcSave`), ne u localStorage, pa kvota od ~5 MB ne ograničava veliki fajl.
 - Uz ovo izdanje idu i ranija dva lokalna commita: aktiviranje projekta više ne pomjera kartu, i bafer u Studiju vlaka.
+
+### Login — "Predloži jaku lozinku" na PIN-u (poslije v3.1.2)
+- `autocomplete="new-password"` (v3.0.9) je zaustavilo ponudu SPREMLJENIH prijava, ali je upravo zato Chrome/Google upravljač lozinki nudio "Predloži jaku lozinku" — svako `type="password"` polje se tretira kao lozinka. PIN nije lozinka, pa su `auth-pin`, `reg-pin` i `reg-pin2` sad `type="text"` + `inputmode="numeric"` + `autocomplete="off"`, maskirani CSS-om (`.pin-maska`, `-webkit-text-security: disc`). PRIKAŽI/SAKRIJ prebacuje klasu, ne `type`. **Ne vraćati `type="password"` na PIN polja.** Test: `tests/js/login-unos.test.js`.
