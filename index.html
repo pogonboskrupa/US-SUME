@@ -10372,17 +10372,8 @@ async function aktivirajProjekt(id) {
   if (!current()) return;
   sbStartRealtime();
   showToast('Projekat aktiviran: ' + p.odjel);
-  if (p.odjel && graniceOdjeli.length) {
-    const list = _odjeliForGj(p.gj);
-    const match = _findOdjelInList(list, p.odjel);
-    if (match?.bounds) {
-      setTimeout(() => {
-        if (!current()) return;
-        switchTab('karta');
-        map.fitBounds(match.bounds, { padding: [30, 30] });
-      }, 400);
-    }
-  }
+  // Pogled se NAMJERNO ne pomjera na odjel: korisnik ostaje tamo gdje jeste na karti
+  // (zum na odjel postoji kao izričito dugme "Zoom na odjel" u detaljima projekta).
 }
 
 async function startManualVlakaDraw() {
