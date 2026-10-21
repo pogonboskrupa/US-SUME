@@ -4906,3 +4906,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Studio vlaka — "Izvoz drvne mase" je sklopiv (poslije v3.1.7)
 - Blok je `<details class="vsd-dir">` (zadano SKLOPLJEN, u naslovu piše trenutni smjer). Stanje se pamti u `tvlake_vsd_dir_otvoreno` (`VlakaDirection.studioToggle`) jer `_vsdRender` cijeli panel crta iznova pri svakoj izmjeni — stanje u DOM-u bi se izgubilo. Kad je sklopljen, `inner_text()` ne vidi sadržaj (u testovima `text_content()`).
+
+### v3.1.8 — brojač stavki za slanje se lomio u dva reda
+- Kad je na čekanju 10+ stavki, druga cifra je skakala u novi red: `#mdrop-server-cnt` (Meni → "Pošalji na server") je flex-dijete koje se stišće, a ni bedž ni broj nisu imali `white-space:nowrap`. Dodano `nowrap` + `flex-shrink:0` na kontejner, bedž i broj u gornjoj traci (`#sync-badge-cnt`) i na broj u redovima panela Server. Novi brojač uz tekst mora imati `nowrap`.

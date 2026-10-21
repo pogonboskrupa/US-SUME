@@ -4791,7 +4791,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
     <button class="tab-btn" id="teren-tab-btn" style="display:none;color:#34d399;" onclick="switchTab('teren')"><svg class="tbi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="12,5.5 15,12 12,18.5" stroke-width="1.2"/><polygon points="12,5.5 9,12 12,18.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg> Teren</button>
     <span id="vodeci-badge" onclick="closeMenuDropdown();showProjectManagement()" title="Nadzorni nalog — pregled rada svih projektanata šumarije" style="display:none;background:#0e7490;color:#fff;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:auto;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;">👔 VODEĆI PROJEKTANT</span>
     <span id="offline-badge" title="Nema signala — radi lokalno" style="display:none;width:9px;height:9px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 2px rgba(220,38,38,0.3);margin-left:auto;flex-shrink:0;align-self:center;"></span>
-    <span id="sync-badge" onclick="openSyncQueuePanel()" style="display:none;background:#f59e0b;color:#000;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:4px;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;" title="Podaci čekaju slanje na server (Meni → Server)">⟳ <span id="sync-badge-cnt">0</span></span>
+    <span id="sync-badge" onclick="openSyncQueuePanel()" style="display:none;background:#f59e0b;color:#000;font-size:10px;font-weight:bold;padding:3px 8px;border-radius:10px;white-space:nowrap;margin-left:4px;flex-shrink:0;align-self:center;cursor:pointer;user-select:none;" title="Podaci čekaju slanje na server (Meni → Server)">⟳ <span id="sync-badge-cnt" style="white-space:nowrap;">0</span></span>
   </div>
 
   <!-- MAP TOOLBAR placeholder (stari toolbar uklonjen — funkcije u bottom panelima) -->
@@ -5964,7 +5964,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.1.7';
+const APP_VER = 'v3.1.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6666,7 +6666,7 @@ function _serverSazetakRender() {
     : st === 'slaba' ? '<span style="color:#fbbf24">slaba veza</span>'
     : '<span style="color:#4ade80">' + (st === 'dobra' ? 'veza u redu' : 'veza nije izmjerena') + '</span>';
   const z = _serverZadnje();
-  const red = (ikona, txt, br) => br ? '<div style="display:flex;justify-content:space-between;padding:3px 0"><span>' + ikona + ' ' + txt + '</span><b>' + br + '</b></div>' : '';
+  const red = (ikona, txt, br) => br ? '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>' + ikona + ' ' + txt + '</span><b style="white-space:nowrap;flex-shrink:0">' + br + '</b></div>' : '';
   const stavke = red('↑', 'Vlake, projekti i doznaka', n.red) + red('📍', 'Doznaka — GPS tačke pojasa', n.doz);
   el.innerHTML =
     '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">' + veza + ' · zadnje slanje: ' + (z ? _escHtml(_fmtAgo(z).toLowerCase()) : 'nikad') + '</div>' +
@@ -42981,7 +42981,7 @@ if (typeof AndroidDownload !== 'undefined') {
   <div class="mdrop-top"><div><b>Meni</b><small id="menu-context">Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
   <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
-  <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;"></span></span></button>
+  <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
 </section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
