@@ -1472,8 +1472,10 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
   display:flex; flex-direction:column; gap:8px; padding:10px;
   background:rgba(255,255,255,0.97); color:#0f172a;
   border:0.5px solid rgba(0,0,0,0.1); border-radius:16px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.22); overflow:hidden; font-size:13px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.22); overflow-x:hidden; overflow-y:auto; font-size:13px;
 }
+/* Sekcije se ne smiju stiskati jedna u drugu (preklapanje): panel se skrola, lista dobija rezervisanu visinu. */
+#vsd-panel > * { flex-shrink:0; }
 #vsd-panel .vsd-head { display:flex; align-items:center; gap:8px; }
 #vsd-panel .vsd-head b { font-size:15px; }
 #vsd-panel .vsd-sub { color:#64748b; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1495,7 +1497,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-cur .vsd-st { color:#475569; font-size:12px; font-variant-numeric:tabular-nums; }
 .vsd-cur .vsd-st.pen { color:#047857; font-weight:700; }
 .vsd-auto { display:flex; align-items:center; gap:6px; font-size:12px; color:#475569; cursor:pointer; }
-.vsd-list { flex:1; min-height:80px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }
+.vsd-list { flex:1 0 auto; min-height:80px; max-height:240px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }
 .vsd-li { display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent; cursor:pointer; text-align:left; padding:7px 10px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; }
 .vsd-li:hover { background:#f1f5f9; }
 .vsd-li.act { background:#e0f2fe; box-shadow:inset 3px 0 0 #0ea5e9; }

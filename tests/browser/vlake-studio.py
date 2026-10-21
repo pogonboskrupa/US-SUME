@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('base',Path(__file__).with_name('menu-tools.py'));b=importlib.util.module_from_spec(spec);spec.loader.exec_module(b)
 js='''
-const map=L.map('map',{zoomControl:false}).setView([44.9,16],17);map.createPane('vlakeLines');
+const map=L.map('map',{zoomControl:false}).setView([44.9,16],17);map.createPane('vlakeLines');map.createPane('vlakeLabels');
 let vlake=[],actI=null,recOn=false,_tragOn=false,activeTool='select',bufLayers=[],snapRingMk=null,snapTarget=null,cIdx=0,selC='#000',_activeTab='karta';
 const PAL=['#3b82f6','#ef4444','#22c55e'],kolegeVlakeMap={},_vlakeRenderer=undefined,_mdpIdx=null,toasts=[],saved=[],flushed=[];
 let _aktivniProjektId='P1';const _projekti=[{id:'P1',odjel:'12',gj:'GJ Test'}];
@@ -15,9 +15,9 @@ const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
 let bufRadius=40,deadLayers=[],_dozBufRadius=40,_vpBufferId=null,_dozBufLayers=[],_dozTreePts=[],sbUser=null;const _vpBufferLabel=()=>{},_bufSavePrefs=()=>{},dozDrawBuf=()=>{},dozTreesAnalyze=()=>{},_hexToRgb=h=>[96,165,250],_lastDlg=[];
 const _lagerZauzeti=async()=>({used:new Set(['L1']),offline:false});
 '''
-for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka','_bufGetColor','_bufGetOpacity','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_bufSirinaOk','_bufSelPostavi','_bufTrazi','_syncBufRadiusEverywhere']:js+='\n'+b.function(n)
+for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka','_bufGetColor','_bufGetOpacity','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_bufSirinaOk','_bufSelPostavi','_bufTrazi','_syncBufRadiusEverywhere','ptAtFrac','ptDist']:js+='\n'+b.function(n)
 js+='\n'+b.section('var _vsdOn =','// ─── Uvoz vlake iz fajla')
-html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/turf.min.js"></script><script>'+js+'</script></body></html>'
+html='<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#main{position:fixed;inset:0}#map{position:absolute;inset:0}</style></head><body>'+b.sprite+'<div id="main"><div id="map"><div id="manual-draw-panel" style="display:none"></div></div></div><script src="/static/libs/leaflet.min.js"></script><script src="/static/libs/turf.min.js"></script><script src="/static/js/vlaka-direction.js"></script><script>'+js+'</script></body></html>'
 async def main():
  async with async_playwright() as p:
   browser=await p.chromium.launch(executable_path=os.environ.get('UI_CHROMIUM') or None,args=['--no-sandbox']);page=await browser.new_page(viewport={'width':1280,'height':800});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -202,6 +202,18 @@ async def main():
   for _ in range(3):await page.keyboard.press('Escape');await page.wait_for_timeout(60)   # kraj vlake → prazna sljedeća se odbacuje → izlaz
   assert await ev('[_vsdOn,bufLayers.length]')==[False,0],await ev('[_vsdOn,_vsdPen,bufLayers.length,_vsdBuf]')
   await ev('_vsdBuf=false;try{localStorage.removeItem(_VSD_BUF_KEY)}catch(e){}')
+  # --- dvosmjer IZ Studija (stvarni vlaka-direction.js): sekcije se ne preklapaju, dugme je dostupno, klik na vlaku upisuje tačku
+  await page.set_viewport_size({'width':1280,'height':560});await ev('vlakeStudioOpen()');await page.wait_for_timeout(100)
+  await ev('_vsdSelect(0,false)');await page.wait_for_timeout(60)
+  await ev("(()=>{const s=document.querySelector('#vsd-panel .vsd-dir select');s.value='both';s.dispatchEvent(new Event('change'))})()");await page.wait_for_timeout(150)
+  assert await ev('VlakaDirection.isPicking()'),'studioMode(both) pokreće izbor tačke'
+  ov=await ev("""(()=>{const p=document.getElementById('vsd-panel');return [...p.children].filter(e=>e.offsetHeight>0&&e.tagName!=='BUTTON'&&!e.classList.contains('vsd-list')&&e.scrollHeight>e.clientHeight+1).map(e=>e.className)})()""")
+  assert ov==[],('sadržaj sekcije izlazi iz svoje kutije (preklapanje)',ov)
+  mid=await ev('(()=>{const a=vlake[0].pts[0],b=vlake[0].pts[1];const c=map.latLngToContainerPoint([(a.la+b.la)/2,(a.lo+b.lo)/2]);return [c.x,c.y]})()')
+  await klik(mid[0],mid[1])
+  assert not await ev('VlakaDirection.isPicking()') and await ev('!!VlakaDirection.splitFor(vlake[0])'),'klik na vlaku upisuje dvosmjer'
+  assert 'Pomjeri tačku dvosmjera' in await page.locator('#vsd-panel .vsd-dir').inner_text()
+  await ev('vlakeStudioClose()')
   # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
   await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)
   bb=await page.locator('#vsd-panel').bounding_box();assert bb['y']+bb['height']<=780 and bb['height']<780*0.45,bb
