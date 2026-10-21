@@ -1461,6 +1461,12 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .mdp-btn.done  { background:linear-gradient(135deg,#059669,#10b981); color:#fff; }
 
 /* ═══ STUDIO VLAKA — "Nacrtaj vlake u odjelu" (desktop miš + dodir) ═══ */
+.vsd-dir { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid #cbd5e1; border-radius:8px; }
+.vsd-dir>b { font-size:12.5px; }
+.vsd-dir label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:#475569; }
+.vsd-dir select { min-height:36px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#0f172a; font-size:13px; padding:0 8px; }
+.vsd-dir-n { font-size:11px; color:#475569; line-height:1.4; }
+.vsd-dir-pl { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#475569; }
 #vsd-panel {
   position:fixed; top:112px; left:12px; bottom:16px; width:330px; z-index:1500;
   display:flex; flex-direction:column; gap:8px; padding:10px;
@@ -2657,6 +2663,20 @@ html #stk-uredi ::placeholder { color:var(--field-muted,#b0bfd2);opacity:1; }
 html[data-field-theme=day] .stk-remove { color:#991b1b; }
 .stk-akcije { position:sticky;bottom:0;background:var(--field-card,#0f172a);padding:8px 0 2px; }
 html #stampa-kontrole :is(button,input,textarea,summary):focus-visible { outline:3px solid #3b82f6;outline-offset:2px; }
+/* Desktop (miš + široki ekran): kontrole su jedan zbijen pojas, pa karta dobije skoro cijelu visinu.
+   Telefon ostaje nepromijenjen (donji list). _stpRaspored mjeri stvarnu visinu panela. */
+@media (min-width:900px) and (hover:hover) {
+  html body.stampa-on #stampa-kontrole { display:flex; flex-wrap:wrap; align-items:center; gap:4px 16px; padding:6px 14px; max-height:30vh; max-height:30dvh; }
+  html body.stampa-on #stampa-kontrole .stk-head { margin:0; gap:10px; }
+  html body.stampa-on #stampa-kontrole .stk-head small { display:inline; margin:0 0 0 8px; }
+  html body.stampa-on #stampa-kontrole .stk-head b { display:inline; }
+  html body.stampa-on #stampa-kontrole .stk-red { margin:0; overflow:visible; flex-wrap:wrap; }
+  html body.stampa-on #stampa-kontrole .stk-chip, html body.stampa-on #stampa-kontrole .stk-leg label { min-height:30px; padding:4px 10px; }
+  html body.stampa-on #stampa-kontrole .stk-hint { display:none; }
+  html body.stampa-on #stampa-kontrole #stk-uredi { flex:1 1 100%; margin:0; padding-top:6px; }
+  html body.stampa-on #stampa-kontrole .stk-akcije { position:static; padding:0; margin-left:auto; }
+  html body.stampa-on #stampa-kontrole .stk-akcije button { flex:none !important; min-height:32px; padding:0 14px; font-size:13px; }
+}
 @media(max-width:420px) { #stk-uredi .stk-polja { flex-wrap:wrap; }#stk-uredi .stk-polja label { min-width:135px; }.stk-head .stk-chip { padding:8px;font-size:12px; } }
 
 /* === UPRAVLJANJE PROJEKTIMA === */
@@ -10817,6 +10837,7 @@ function _vsdImaIst(v) { return !!v && _vsdIstV === v && _vsdIst.length > 0; }
 
 function _vsdClick(e) {
   if (!_vsdOn || _vsdLagerMod || _vsdPitam) return;
+  if (typeof VlakaDirection !== 'undefined' && VlakaDirection.isPicking()) return; // bira se tačka dvosmjera
   if (_vsdIzPanela(e)) return;
   if (_vsdPid !== _aktivniProjektId) { vlakeStudioClose(); return; }
   const shift = e.originalEvent && e.originalEvent.shiftKey;
@@ -10874,6 +10895,7 @@ function _vsdDbl(e) {
 
 function _vsdCtx(e) {
   if (!_vsdOn) return;
+  if (typeof VlakaDirection !== 'undefined' && VlakaDirection.isPicking()) return;
   if (e.originalEvent) e.originalEvent.preventDefault();
   if (_vsdIzPanela(e)) return;
   _vsdUndo();
@@ -11369,6 +11391,8 @@ function _vsdRender() {
     </div>
     ${!_vsdPen && bezLagera ? `<button type="button" class="vsd-b vsd-lgbtn" onclick="_vsdLagerOtvori()">🏷 Popiši lagere — ${bezLagera} bez broja</button>` : ''}
     <div class="vsd-row vsd-extra"><button type="button" class="vsd-b${lblOn ? ' ok' : ''}" onclick="_lblEditToggle()" title="Povuci i zaokreni labele vlaka/kraka i lagera">🏷 ${lblOn ? 'Gotovo s labelama' : 'Pomjeri / zaokreni labele'}</button></div>
+    ${v && !_vsdLagerMod ? '<div class="vsd-extra">' + (typeof VlakaDirection !== 'undefined' ? VlakaDirection.studioHtml(v) : '') + '</div>' : ''}
+    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b" onclick="openStilLinija()" title="Boja, debljina i vrsta linije vlaka i kraka">🎨 Stil linija</button><button type="button" class="vsd-b" onclick="openVlakaStyle()" title="Boje vlaka i izgled strelica izvoza">🎨 Boje i strelice</button></div>
     <div class="vsd-baf vsd-extra">
       <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
       <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>

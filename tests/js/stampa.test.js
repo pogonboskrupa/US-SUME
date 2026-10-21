@@ -190,3 +190,13 @@ t('ograničenja teksta i 12 stavki sprečavaju legendu da nekontrolisano raste',
 
 console.log(`\n${pass} prošlo, ${fail} palo`);
 process.exit(fail ? 1 : 0);
+
+// Desktop: kontrole su zbijen pojas da karta dobije visinu (telefon nepromijenjen)
+{
+  const _a=require('node:assert/strict'),_s=require('node:fs').readFileSync('index.html','utf8');
+  const i=_s.indexOf('@media (min-width:900px) and (hover:hover) {\n  html body.stampa-on #stampa-kontrole');
+  _a(i>0,'desktop media blok za #stampa-kontrole');
+  const blok=_s.slice(i,_s.indexOf('\n}\n',i));
+  _a(/max-height:30vh/.test(blok)&&/\.stk-hint\s*\{\s*display:none/.test(blok));
+  console.log('OK: desktop kompaktne kontrole štampe');
+}

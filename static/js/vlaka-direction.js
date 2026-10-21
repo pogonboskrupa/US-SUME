@@ -77,7 +77,7 @@ function startPick(v,shared=false){
  cancelPick();if(typeof closeVlakaPopup==='function')closeVlakaPopup();if(typeof switchTab==='function')switchTab('karta');map.invalidateSize();map.fitBounds(v.poly.getBounds(),{padding:[40,110],maxZoom:18,animate:false});
  const cursor=map.getContainer().style.cursor;picking={v,shared,name:identity(v),scope:scopeStamp(),cursor,handler:null};picking.handler=e=>{
   if(!pickAlive()){cancelPick();return;}let point={la:e.latlng.lat,lo:e.latlng.lng},nearest=null,best=12;const at=map.latLngToContainerPoint(e.latlng);for(const pt of v.pts){const d=at.distanceTo(map.latLngToContainerPoint([pt.la,pt.lo]));if(d<best){best=d;nearest=pt;}}if(nearest)point=nearest;const p=routeProjection(v.pts,point);if(!p||p.distance>40){showToast('Dodirni ovu vlaku. Približi kartu za precizan izbor.');return;}if(p.atM<1||p.totalM-p.atM<1){showToast('Odaberi dvosmjer između dva kraja vlake.');return;}
-  if(!writeRecord(v,{mode:'both',split:{la:p.la,lo:p.lo,atM:p.atM}}))return;cancelPick();draw(v,shared);refreshPanel();refreshRecording();showToast('Dvosmjer sačuvan na '+Math.round(p.atM)+' m od početka vlake.');
+  if(!writeRecord(v,{mode:'both',split:{la:p.la,lo:p.lo,atM:p.atM}}))return;cancelPick();draw(v,shared);refreshPanel();refreshRecording();studioRefresh();showToast('Dvosmjer sačuvan na '+Math.round(p.atM)+' m od početka vlake.');
  };if(typeof L!=='undefined'&&L.canvas&&L.circleMarker){picking.renderer=L.canvas({pane:'vlakeLabels',padding:.3});picking.points=L.layerGroup(v.pts.filter(p=>[p.la,p.lo].every(Number.isFinite)).map(p=>L.circleMarker([p.la,p.lo],{renderer:picking.renderer,pane:'vlakeLabels',radius:4,weight:1.5,color:'#fff',fillColor:'#1d4ed8',fillOpacity:1,interactive:false}))).addTo(map);}map.on('click',picking.handler);map.getContainer().classList.add('direction-picking');map.getContainer().style.cursor='crosshair';
  const bar=node('direction-pick-toolbar');if(bar){bar.hidden=false;node('direction-pick-title').textContent=v.nm+' · dva izlaza na put';}showToast('Dodirni ovu vlaku gdje želiš dvosmjer. Prije oznake smjer je prema početku, poslije prema kraju.');
 }
@@ -100,7 +100,37 @@ function refreshPanel(){const context=node('project-arrow-context');if(!context)
   if(select.dataset.routes!==signature){const value=select.value;select.replaceChildren();for(const r of routes){const option=document.createElement('option');option.value=r.key;option.textContent=r.v.nm+' · '+(r.v.ime||r.v.projektantIme||(r.shared?'Kolega':typeof getIme==='function'?getIme():'Ti'));select.append(option);}if(routes.some(r=>r.key===value))select.value=value;select.dataset.routes=signature;}select.disabled=!active||!routes.length;if(node('project-arrow-edit'))node('project-arrow-edit').disabled=select.disabled||active!==_aktivniProjektId;const row=select.closest('.arrow-route-edit');if(row)row.hidden=active==='__all__';if(node('project-arrow-edit'))node('project-arrow-edit').textContent=active!==_aktivniProjektId?'Za dvosmjer prvo aktiviraj ovaj projekat':'Prikaži i uredi smjer ↗';
  }
 }
-root.VlakaDirection={markerPlan,segmentDistance,chooseEnd,routeProjection,cleanSettings,settingsFor,prefsKey,storeKey,identity,recordFor,modeFor,splitFor,actualMode,draw,refresh,popup,setPopup,clear,change,resetStyle,refreshPanel,startPick,pickPopup,cancelPick,isPicking:()=>!!picking,markRecording,refreshRecording,focusRoute};
+
+// ---- Studio vlaka: smjer izvoza, dvosmjer i položaj strelica (v3.1.6) ----
+function studioRefresh(){if(typeof _vsdOn!=='undefined'&&_vsdOn&&typeof _vsdRender==='function')_vsdRender();}
+function studioHtml(v){
+ if(!v||!(v.pts?.length>=2))return '<section class="vsd-dir"><b>↗ Izvoz drvne mase</b><span class="vsd-dir-n">Nacrtaj barem dvije tačke vlake.</span></section>';
+ const mode=modeFor(v),s=settingsFor(v.projektId),split=mode==='both'?splitFor(v):null;
+ const opts=[['auto','Automatski (prema najbližem putu)'],['start','Prema početku vlake'],['end','Prema kraju vlake'],['both','Dvosmjer — dva izlaza na put'],['off','Bez strelica']];
+ const pl=(val,txt)=>'<button type="button" class="vsd-chip'+(s.placement===val?' act':'')+'" onclick="VlakaDirection.studioPlacement(\''+val+'\')">'+txt+'</button>';
+ return '<section class="vsd-dir"><b>↗ Izvoz drvne mase</b>'
+  +'<label>Smjer izvoza<select onchange="VlakaDirection.studioMode(this.value)">'+opts.map(([k,t])=>'<option value="'+k+'"'+(mode===k?' selected':'')+'>'+t+'</option>').join('')+'</select></label>'
+  +(mode==='both'?'<button type="button" class="vsd-b'+(split?'':' pri')+'" onclick="VlakaDirection.studioPick()">↔ '+(split?'Pomjeri tačku dvosmjera ('+Math.round(split.atM)+' m)':'Odredi tačku dvosmjera')+'</button><span class="vsd-dir-n">'+(split?'Lijevo i desno od tačke strelice pokazuju prema putu.':'Klikni vlaku tamo gdje se razdvaja na dva puta.')+'</span>':'')
+  +'<div class="vsd-dir-pl"><span>Strelice</span><div class="vsd-chips">'+pl('on','Na vlaci')+pl('beside','Pored vlake')+'</div></div></section>';
+}
+function studioVlaka(){return typeof _vsdSel!=='undefined'&&_vsdSel!==null&&typeof vlake!=='undefined'?vlake[_vsdSel]:null;}
+function studioMode(mode){
+ const v=studioVlaka();if(!v||!modes.includes(mode))return;
+ if(mode==='both'){const had=splitFor(v);if(writeRecord(v,{mode:'both',...(had?{split:recordFor(v).split}:{})})){draw(v);studioRefresh();if(!had)studioPick();}return;}
+ if(!writeRecord(v,{mode}))return;draw(v);refreshPanel();studioRefresh();
+}
+function studioPick(){
+ const v=studioVlaka();if(!v)return;
+ if(typeof _vsdPen!=='undefined'&&_vsdPen){showToast('Prvo završi crtanje vlake (Enter).');return;}
+ startPick(v,false);
+}
+function studioPlacement(value){
+ if(!['on','beside'].includes(value)||typeof _aktivniProjektId==='undefined'||!_aktivniProjektId)return;
+ const key=prefsKey(_aktivniProjektId);
+ try{localStorage.setItem(key,JSON.stringify({...read(key),placement:value}));}catch(e){showToast('Izgled strelica nije sačuvan.');return;}
+ refresh(_aktivniProjektId);studioRefresh();
+}
+root.VlakaDirection={markerPlan,segmentDistance,chooseEnd,routeProjection,cleanSettings,settingsFor,prefsKey,storeKey,identity,recordFor,modeFor,splitFor,actualMode,draw,refresh,popup,setPopup,clear,change,resetStyle,refreshPanel,startPick,pickPopup,cancelPick,isPicking:()=>!!picking,markRecording,refreshRecording,focusRoute,studioHtml,studioMode,studioPick,studioPlacement,studioRefresh};
 if(typeof module!=='undefined'&&module.exports)module.exports=root.VlakaDirection;
 if(typeof document!=='undefined'){document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelPick();});document.addEventListener('DOMContentLoaded',()=>{if(typeof map==='undefined')return;map.on('layerremove',()=>{if(picking&&!pickAlive())cancelPick();});map.on('zoomend',()=>{if(typeof _vlakaStilApply==='function')_vlakaStilApply();refresh();});if(node('direction-pick-toolbar')&&typeof L!=='undefined')L.DomEvent.disableClickPropagation(node('direction-pick-toolbar'));refresh();},{once:true});}
 })(typeof window!=='undefined'?window:globalThis);

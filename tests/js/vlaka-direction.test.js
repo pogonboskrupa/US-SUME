@@ -11,3 +11,20 @@ for(const w of [2,4,8])for(const z of [11,13,15,18]){const dash=c._vlakaStroke('
 console.log('OK: designer split at 20%/80%, no legacy midpoint, stable split when route grows/returns, manual counts, settings validation and dash/dot patterns');
 
 assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.equal(d.cleanSettings({placement:'both'}).placement,'on');assert.equal(d.cleanSettings({}).placement,'on');
+
+// Studio vlaka: kontrole smjera izvoza, dvosmjera i položaja strelica
+{
+  const mem={};global.localStorage={getItem:k=>k in mem?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)}};
+  global.document={getElementById:()=>null,querySelector:()=>null};global._aktivniProjektId='P1';global.showToast=()=>{};global.vlake=[];global._vsdSel=null;global._vsdPen=false;global.map={hasLayer:()=>false};
+  const v={nm:'T1',projektId:'P1',pts:[{la:45,lo:16},{la:45,lo:16.01}]};global.vlake=[v];global._vsdSel=0;
+  assert(d.studioHtml(null).includes('barem dvije'));
+  let h=d.studioHtml(v);assert(h.includes('Izvoz drvne mase')&&h.includes('Na vlaci')&&h.includes('Pored vlake'));assert(!h.includes('studioPick'),'bez dvosmjera nema dugmeta');
+  d.studioMode('end');assert.equal(d.modeFor(v),'end');assert(d.studioHtml(v).includes('value="end" selected'));
+  d.studioMode('nepoznato');assert.equal(d.modeFor(v),'end');
+  d.studioPlacement('beside');assert.equal(d.settingsFor('P1').placement,'beside');assert(d.studioHtml(v).includes('vsd-chip act" onclick="VlakaDirection.studioPlacement(\'beside\')'));
+  d.studioPlacement('xx');assert.equal(d.settingsFor('P1').placement,'beside');
+  d.studioPlacement('on');assert.equal(d.settingsFor('P1').placement,'on');
+  d.studioMode('both');h=d.studioHtml(v);assert(h.includes('Odredi tačku dvosmjera'),'dvosmjer bez tačke nudi izbor');
+  global._vsdPen=true;let msg='';global.showToast=m=>msg=m;d.studioPick();assert(/završi crtanje/i.test(msg),'tokom crtanja se ne bira dvosmjer');
+  console.log('OK: Studio kontrole smjera izvoza/dvosmjera/položaja strelica');
+}
