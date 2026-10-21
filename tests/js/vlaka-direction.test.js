@@ -28,3 +28,14 @@ assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.eq
   global._vsdPen=true;let msg='';global.showToast=m=>msg=m;d.studioPick();assert(/završi crtanje/i.test(msg),'tokom crtanja se ne bira dvosmjer');
   console.log('OK: Studio kontrole smjera izvoza/dvosmjera/položaja strelica');
 }
+
+{
+  d.studioSetting('size',34);assert.equal(d.settingsFor('P1').size,34);
+  d.studioSetting('width',4);assert.equal(d.settingsFor('P1').width,4);
+  d.studioSetting('color','#ff0000');assert.equal(d.settingsFor('P1').color,'#ff0000');assert.equal(d.settingsFor('P1').inherit,false);
+  d.studioSetting('color','red');assert.equal(d.settingsFor('P1').color,'#ff0000');
+  d.studioSetting('size',999);assert.equal(d.settingsFor('P1').size,34);
+  d.studioSetting('nepoznato',1);
+  assert(d.studioHtml(global.vlake[0]).includes('Veličina'));
+  console.log('OK: Studio veličina/debljina/boja strelica');
+}

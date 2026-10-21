@@ -4890,3 +4890,5 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - **Studio vlaka — "↗ Izvoz drvne mase"** (`VlakaDirection.studioHtml/studioMode/studioPick/studioPlacement`): smjer (auto/početak/kraj/dvosmjer/bez), tačka dvosmjera (lijevo i desno strelice pokazuju prema putu — postojeći `markerPlan`) i položaj strelica **Na vlaci / Pored vlake** (`placement`, vrijedi za cijeli projekat, `prefsKey(projekat)`). Izbor tačke dvosmjera koristi POSTOJEĆI `startPick`; zato `_vsdClick`/`_vsdCtx` moraju vraćati ranije dok je `VlakaDirection.isPicking()` — inače bi isti klik dodao tačku vlake. Dugme je blokirano dok je olovka spuštena. Pick-handler poslije upisa zove `studioRefresh()` da se panel osvježi.
 - **Stil linija** u Studiju: dugmad otvaraju postojeće `openStilLinija()` i `openVlakaStyle()` (nema paralelnog stanja stila).
 - Testovi: `tests/js/vlaka-direction.test.js` (Studio kontrole), `tests/js/stampa.test.js` (desktop blok).
+
+### v3.1.6 — Studio: veličina/debljina/boja strelica (`VlakaDirection.studioSetting`, po projektu), uz položaj, dvosmjer i prečice na stil linija i pomjeranje labela/lagera.
