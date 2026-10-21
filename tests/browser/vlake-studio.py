@@ -212,7 +212,7 @@ async def main():
   mid=await ev('(()=>{const a=vlake[0].pts[0],b=vlake[0].pts[1];const c=map.latLngToContainerPoint([(a.la+b.la)/2,(a.lo+b.lo)/2]);return [c.x,c.y]})()')
   await klik(mid[0],mid[1])
   assert not await ev('VlakaDirection.isPicking()') and await ev('!!VlakaDirection.splitFor(vlake[0])'),'klik na vlaku upisuje dvosmjer'
-  assert 'Pomjeri tačku dvosmjera' in await page.locator('#vsd-panel .vsd-dir').inner_text()
+  assert 'Pomjeri tačku dvosmjera' in await page.locator('#vsd-panel .vsd-dir').text_content()
   await ev('vlakeStudioClose()')
   # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
   await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)

@@ -4903,3 +4903,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### v3.1.7 — brzina declutter-a labela
 - `_lblObbPresjek` prvo odbacuje parove čija su središta dalja od zbira poluDijagonala (jeftino, bez SAT osa) — u gustoj mreži labela većina parova se ne može dodirnuti, a `_declutterVlakaLabels` poredi svaku labelu sa svim zadržanim (O(n²)) na svaki zum/pomak. Ishod je identičan (samo ranije `false`); testovi labela prolaze. Mjerenje na uređaju nije rađeno — nema veće izmjene startupa (glavni inline JS blok ostaje zaseban, veliki posao).
+
+### Studio vlaka — "Izvoz drvne mase" je sklopiv (poslije v3.1.7)
+- Blok je `<details class="vsd-dir">` (zadano SKLOPLJEN, u naslovu piše trenutni smjer). Stanje se pamti u `tvlake_vsd_dir_otvoreno` (`VlakaDirection.studioToggle`) jer `_vsdRender` cijeli panel crta iznova pri svakoj izmjeni — stanje u DOM-u bi se izgubilo. Kad je sklopljen, `inner_text()` ne vidi sadržaj (u testovima `text_content()`).

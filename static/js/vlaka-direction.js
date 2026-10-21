@@ -102,19 +102,22 @@ function refreshPanel(){const context=node('project-arrow-context');if(!context)
 }
 
 // ---- Studio vlaka: smjer izvoza, dvosmjer i položaj strelica (v3.1.6) ----
+const DIR_OPEN_KEY='tvlake_vsd_dir_otvoreno';
+function dirOpen(){try{return localStorage.getItem(DIR_OPEN_KEY)==='1';}catch(e){return false;}}
+function studioToggle(open){try{localStorage.setItem(DIR_OPEN_KEY,open?'1':'0');}catch(e){}}
 function studioRefresh(){if(typeof _vsdOn!=='undefined'&&_vsdOn&&typeof _vsdRender==='function')_vsdRender();}
 function studioHtml(v){
  if(!v||!(v.pts?.length>=2))return '<section class="vsd-dir"><b>↗ Izvoz drvne mase</b><span class="vsd-dir-n">Nacrtaj barem dvije tačke vlake.</span></section>';
  const mode=modeFor(v),s=settingsFor(v.projektId),split=mode==='both'?splitFor(v):null;
  const opts=[['auto','Automatski (prema najbližem putu)'],['start','Prema početku vlake'],['end','Prema kraju vlake'],['both','Dvosmjer — dva izlaza na put'],['off','Bez strelica']];
  const pl=(val,txt)=>'<button type="button" class="vsd-chip'+(s.placement===val?' act':'')+'" onclick="VlakaDirection.studioPlacement(\''+val+'\')">'+txt+'</button>';
- return '<section class="vsd-dir"><b>↗ Izvoz drvne mase</b>'
+ return '<details class="vsd-dir"'+(dirOpen()?' open':'')+' ontoggle="VlakaDirection.studioToggle(this.open)"><summary>↗ Izvoz drvne mase <small>'+(opts.find(o=>o[0]===mode)?.[1].split(' (')[0]||'')+'</small></summary>'
   +'<label>Smjer izvoza<select onchange="VlakaDirection.studioMode(this.value)">'+opts.map(([k,t])=>'<option value="'+k+'"'+(mode===k?' selected':'')+'>'+t+'</option>').join('')+'</select></label>'
   +(mode==='both'?'<button type="button" class="vsd-b'+(split?'':' pri')+'" onclick="VlakaDirection.studioPick()">↔ '+(split?'Pomjeri tačku dvosmjera ('+Math.round(split.atM)+' m)':'Odredi tačku dvosmjera')+'</button><span class="vsd-dir-n">'+(split?'Lijevo i desno od tačke strelice pokazuju prema putu.':'Klikni vlaku tamo gdje se razdvaja na dva puta.')+'</span>':'')
   +'<div class="vsd-dir-pl"><span>Veličina</span><div class="vsd-chips">'+[[20,'S'],[26,'M'],[34,'L'],[44,'XL']].map(([n,t])=>'<button type="button" class="vsd-chip'+(Math.abs(s.size-n)<4?' act':'')+'" onclick="VlakaDirection.studioSetting(\'size\','+n+')">'+t+'</button>').join('')+'</div></div>'
   +'<div class="vsd-dir-pl"><span>Debljina</span><div class="vsd-chips">'+[[1.5,'Tanka'],[2.5,'Srednja'],[4,'Debela']].map(([n,t])=>'<button type="button" class="vsd-chip'+(Math.abs(s.width-n)<.6?' act':'')+'" onclick="VlakaDirection.studioSetting(\'width\','+n+')">'+t+'</button>').join('')+'</div></div>'
   +'<div class="vsd-dir-pl"><span>Boja strelica</span><input type="color" value="'+s.color+'" onchange="VlakaDirection.studioSetting(\'color\',this.value)" style="width:44px;height:30px;border:1px solid #cbd5e1;border-radius:6px;padding:0;"></div>'
-  +'<div class="vsd-dir-pl"><span>Strelice</span><div class="vsd-chips">'+pl('on','Na vlaci')+pl('beside','Pored vlake')+'</div></div></section>';
+  +'<div class="vsd-dir-pl"><span>Strelice</span><div class="vsd-chips">'+pl('on','Na vlaci')+pl('beside','Pored vlake')+'</div></div></details>';
 }
 function studioVlaka(){return typeof _vsdSel!=='undefined'&&_vsdSel!==null&&typeof vlake!=='undefined'?vlake[_vsdSel]:null;}
 function studioMode(mode){
@@ -142,7 +145,7 @@ function studioPlacement(value){
  try{localStorage.setItem(key,JSON.stringify({...read(key),placement:value}));}catch(e){showToast('Izgled strelica nije sačuvan.');return;}
  refresh(_aktivniProjektId);studioRefresh();
 }
-root.VlakaDirection={markerPlan,segmentDistance,chooseEnd,routeProjection,cleanSettings,settingsFor,prefsKey,storeKey,identity,recordFor,modeFor,splitFor,actualMode,draw,refresh,popup,setPopup,clear,change,resetStyle,refreshPanel,startPick,pickPopup,cancelPick,isPicking:()=>!!picking,markRecording,refreshRecording,focusRoute,studioHtml,studioMode,studioPick,studioPlacement,studioSetting,studioRefresh};
+root.VlakaDirection={markerPlan,segmentDistance,chooseEnd,routeProjection,cleanSettings,settingsFor,prefsKey,storeKey,identity,recordFor,modeFor,splitFor,actualMode,draw,refresh,popup,setPopup,clear,change,resetStyle,refreshPanel,startPick,pickPopup,cancelPick,isPicking:()=>!!picking,markRecording,refreshRecording,focusRoute,studioHtml,studioToggle,studioMode,studioPick,studioPlacement,studioSetting,studioRefresh};
 if(typeof module!=='undefined'&&module.exports)module.exports=root.VlakaDirection;
 if(typeof document!=='undefined'){document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelPick();});document.addEventListener('DOMContentLoaded',()=>{if(typeof map==='undefined')return;map.on('layerremove',()=>{if(picking&&!pickAlive())cancelPick();});map.on('zoomend',()=>{if(typeof _vlakaStilApply==='function')_vlakaStilApply();refresh();});if(node('direction-pick-toolbar')&&typeof L!=='undefined')L.DomEvent.disableClickPropagation(node('direction-pick-toolbar'));refresh();},{once:true});}
 })(typeof window!=='undefined'?window:globalThis);

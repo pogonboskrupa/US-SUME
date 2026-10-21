@@ -19,6 +19,7 @@ assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.eq
   const v={nm:'T1',projektId:'P1',pts:[{la:45,lo:16},{la:45,lo:16.01}]};global.vlake=[v];global._vsdSel=0;
   assert(d.studioHtml(null).includes('barem dvije'));
   let h=d.studioHtml(v);assert(h.includes('Izvoz drvne mase')&&h.includes('Na vlaci')&&h.includes('Pored vlake'));assert(!h.includes('studioPick'),'bez dvosmjera nema dugmeta');
+  assert(h.includes('<details')&&!/<details[^>]* open/.test(h),'zadano sklopljeno');d.studioToggle(true);assert(/<details[^>]* open/.test(d.studioHtml(v)),'otvoreno stanje se pamti');d.studioToggle(false);
   d.studioMode('end');assert.equal(d.modeFor(v),'end');assert(d.studioHtml(v).includes('value="end" selected'));
   d.studioMode('nepoznato');assert.equal(d.modeFor(v),'end');
   d.studioPlacement('beside');assert.equal(d.settingsFor('P1').placement,'beside');assert(d.studioHtml(v).includes('vsd-chip act" onclick="VlakaDirection.studioPlacement(\'beside\')'));

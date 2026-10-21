@@ -1462,7 +1462,9 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 
 /* ═══ STUDIO VLAKA — "Nacrtaj vlake u odjelu" (desktop miš + dodir) ═══ */
 .vsd-dir { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid #cbd5e1; border-radius:8px; }
-.vsd-dir>b { font-size:12.5px; }
+.vsd-dir>summary { font-size:12.5px; font-weight:700; cursor:pointer; min-height:32px; display:flex; align-items:center; gap:6px; }
+.vsd-dir>summary small { font-weight:400; color:#475569; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vsd-dir[open]>summary { margin-bottom:4px; }
 .vsd-dir label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:#475569; }
 .vsd-dir select { min-height:36px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#0f172a; font-size:13px; padding:0 8px; }
 .vsd-dir-n { font-size:11px; color:#475569; line-height:1.4; }
