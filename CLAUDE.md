@@ -4892,3 +4892,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Testovi: `tests/js/vlaka-direction.test.js` (Studio kontrole), `tests/js/stampa.test.js` (desktop blok).
 
 ### v3.1.6 — Studio: veličina/debljina/boja strelica (`VlakaDirection.studioSetting`, po projektu), uz položaj, dvosmjer i prečice na stil linija i pomjeranje labela/lagera.
+
+### Oznaka lagera — "L4" se čitao kao "l4" (nakon v3.1.6)
+- Na 9 px bold sans-serif velikom slovu L jedva se vidi stopa, pa liči na malo l. Tekst lagera sad ide u monospace fontu (stopa na L je široka), težina 900, mali razmak slova, a zadana veličina je 11 px (bilo 9; korisnikov izbor `lagerLabel` se i dalje poštuje). Font-familije u `static/js/vlaka-lager.js` pisati BEZ navodnika (višerječna imena nenavedena) — stil je unutar JS stringa pod jednostrukim navodnicima.

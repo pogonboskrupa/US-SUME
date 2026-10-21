@@ -14,7 +14,7 @@ function read(p){try{const x=JSON.parse(localStorage.getItem(prefsKey(p))||'{}')
 function styleFor(v){
  const b=typeof _loadBoje==='function'?_loadBoje(project(v)):{};
  const legacy=typeof _lineStyle!=='undefined'?bounded(_lineStyle.lagerScale,50,250,100):100;
- const scale=bounded(b.lagerScale,50,250,legacy),font=bounded(b.lagerLabel,8,28,Math.max(8,Math.round(9*legacy/100)));
+ const scale=bounded(b.lagerScale,50,250,legacy),font=bounded(b.lagerLabel,8,28,Math.max(11,Math.round(11*legacy/100)));
  return {scale,width:Math.round(28*scale/100),height:Math.round(13*scale/100),font};
 }
 function rows(){return [...(typeof vlake!=='undefined'?vlake:[]).map((v,i)=>({v,shared:false,key:'own:'+i})),...Object.entries(typeof kolegeVlakeMap!=='undefined'?kolegeVlakeMap:{}).map(([key,v])=>({v,shared:true,key:'peer:'+key}))].filter(r=>!r.v._deleted&&r.v.lager&&r.v.pts?.length&&(Number(r.v.kr||0)===0||r.v.naPutu||r.v.na_putu));}
@@ -22,7 +22,7 @@ function positionFor(v,shared=false){const saved=shared?read(project(v))[identit
 // Ručno zaokretanje lagera (labela uređivanje): ugao se čuva u lagerPt.rot i putuje sa
 // lager_pt na server (jsonb, bez migracije). Rotira se simbol + broj oko centra simbola.
 function rotOf(v){const r=Number(v&&v.lagerPt&&v.lagerPt.rot);return Number.isFinite(r)?Math.max(-90,Math.min(90,r)):0;}
-function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-weight:bold;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+_escHtml(v.lager)+'</div>';
+function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+_escHtml(v.lager)+'</div>';
  return rot?'<div style="width:'+s.width+'px;transform-origin:'+s.width/2+'px '+s.height/2+'px;transform:rotate('+rot+'deg)">'+inner+'</div>':inner;}
 function icon(v){const s=styleFor(v);return L.divIcon({className:'vlaka-lager-mk',iconSize:[s.width,s.height+s.font+5],iconAnchor:[s.width/2,s.height/2],html:content(v)});}
 function alive(){return picking&&picking.scope===stamp()&&rows().some(r=>r.v===picking.v)&&picking.v.poly&&map.hasLayer(picking.v.poly);}

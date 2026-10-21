@@ -24468,10 +24468,10 @@ function updateVlakaLabel(i) {
     let lagerIcon;
     if (typeof VlakaLager !== 'undefined' && VlakaLager.icon) lagerIcon = VlakaLager.icon(v);
     else {
-      const dims = {width:Math.round(28*(_lineStyle.lagerScale||100)/100),height:Math.round(13*(_lineStyle.lagerScale||100)/100),font:Math.max(8,Math.round(9*(_lineStyle.lagerScale||100)/100))};
+      const dims = {width:Math.round(28*(_lineStyle.lagerScale||100)/100),height:Math.round(13*(_lineStyle.lagerScale||100)/100),font:Math.max(11,Math.round(11*(_lineStyle.lagerScale||100)/100))};
       const LW=dims.width, LH=dims.height, fontPx=dims.font;
       lagerIcon = L.divIcon({ className: 'vlaka-lager-mk', iconSize: [LW, LH + fontPx + 5], iconAnchor: [LW/2, LH/2],
-        html: _stpLagerSvg(LW, LH, true) + `<div style="color:#fbbf24;font-weight:bold;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>` });
+        html: _stpLagerSvg(LW, LH, true) + `<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>` });
     }
     const ed = _lblEdit;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
