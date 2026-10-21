@@ -5962,7 +5962,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.1.6';
+const APP_VER = 'v3.1.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -12551,6 +12551,9 @@ function _lblObb(el) {
 }
 function _lblObbPresjek(a, b, pad) {
   const dx = b.cx - a.cx, dy = b.cy - a.cy;
+  // Jeftino odbacivanje: središta dalja od zbira poluDijagonala se ne mogu dodirnuti (većina parova u gustoj mreži labela).
+  const rr = Math.hypot(a.hw, a.hh) + Math.hypot(b.hw, b.hh) + pad;
+  if (dx * dx + dy * dy > rr * rr) return false;
   const axes = [[a.c, a.s], [-a.s, a.c], [b.c, b.s], [-b.s, b.c]];
   for (const [ux, uy] of axes) {
     const ra = a.hw * Math.abs(ux * a.c + uy * a.s) + a.hh * Math.abs(-ux * a.s + uy * a.c);
