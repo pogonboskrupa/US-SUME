@@ -2352,6 +2352,23 @@ select:focus { outline:none; border-color:#3b82f6; }
 #scale-menu button:active { background:#1e293b; }
 /* Lager oznaka — vidljiva samo ispod razmjere 1:17000 */
 .lager-hidden .vlaka-lager-mk { display:none !important; }
+/* Uređivanje labela vlaka/lagera (povuci + zarotiraj) */
+body.stampa-on { --vl-fs:13px; }
+.lbl-edit-lager { cursor:move; outline:1.5px dashed #fbbf24; outline-offset:2px; border-radius:3px; }
+.lbl-edit-lager.lbl-sel { outline:2px solid #fbbf24; filter:drop-shadow(0 0 4px #fbbf24); }
+.vlaka-lbl.lbl-sel { outline:2px solid #fbbf24 !important; }
+#lbl-edit-bar { position:fixed; left:8px; right:8px; top:calc(env(safe-area-inset-top,0px) + 52px); z-index:3100; max-width:460px; margin:0 auto;
+  background:rgba(15,23,42,0.96); color:#e2e8f0; border:1px solid #475569; border-radius:10px; padding:8px 10px; box-shadow:0 4px 16px rgba(0,0,0,0.5); font:13px/1.3 Arial,sans-serif; }
+#lbl-edit-bar[hidden] { display:none; }
+#lbl-edit-bar .lb-row { display:flex; align-items:center; gap:8px; }
+#lbl-edit-bar .lb-row + .lb-row { margin-top:6px; }
+#lbl-edit-bar .lb-ime { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fbbf24; font-weight:bold; }
+#lbl-edit-bar button { min-width:44px; min-height:44px; border:none; border-radius:8px; background:#334155; color:#fff; font-size:15px; font-weight:bold; cursor:pointer; padding:0 10px; }
+#lbl-edit-bar .lb-ok { background:#15803d; font-size:13px; }
+#lbl-edit-bar input[type=range] { flex:1; min-width:0; height:44px; }
+#lbl-edit-bar .lb-deg { min-width:38px; text-align:right; font-variant-numeric:tabular-nums; }
+#lbl-edit-bar .lb-hint { margin-top:4px; font-size:11px; color:#94a3b8; }
+body.stampa-on #lbl-edit-bar { display:none !important; }
 /* ── DEM legenda na mapi ─────────────────────────────────── */
 #dem-legend {
   position:absolute; bottom:70px; left:8px; z-index:850;
@@ -11324,6 +11341,7 @@ function _vsdRender() {
     : _vsdPen ? '✏ ' + tapni + ' kartu za sljedeću tačku'
     : v.kr > 0 ? 'Izabran krak — povuci zelenu ručku da pomjeriš njegov početak'
     : 'Izabrana — ▶ Nastavi crtanje ili dodaj krak';
+  const lblOn = typeof _lblEdit !== 'undefined' && _lblEdit;
   const kandL = _vsdLagerKandidati();
   const bezLagera = kandL.filter(x => !x.lager).length;
   const glavni = _vsdPen ? `
@@ -11350,6 +11368,7 @@ function _vsdRender() {
       <button type="button" class="vsd-b" onclick="_vsdLagerOtvori()" ${kandL.length ? '' : 'disabled'} title="Popis lagera za sve vlake">🏷 Lageri</button>
     </div>
     ${!_vsdPen && bezLagera ? `<button type="button" class="vsd-b vsd-lgbtn" onclick="_vsdLagerOtvori()">🏷 Popiši lagere — ${bezLagera} bez broja</button>` : ''}
+    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b${lblOn ? ' ok' : ''}" onclick="_lblEditToggle()" title="Povuci i zaokreni labele vlaka/kraka i lagera">🏷 ${lblOn ? 'Gotovo s labelama' : 'Pomjeri / zaokreni labele'}</button></div>
     <div class="vsd-baf vsd-extra">
       <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
       <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>
@@ -12381,8 +12400,109 @@ function ptDist(a, b) {
   const dy = (b.la - a.la) * 111320;
   return Math.sqrt(dx * dx + dy * dy);
 }
-function _labelHtml(nm) {
-  return `<div class="vlaka-lbl" style="color:#fff;font-size:12px;font-weight:bold;font-family:Arial,sans-serif;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${_escHtml(nm)}</div>`;
+// deg == undefined → stara labela desno od tačke (kolegine/dijeljene vlake).
+// deg je broj → labela PARALELNA liniji: centrirana na tačku, zarotirana, pomaknuta
+// _LBL_OFFS_PX iznad linije u svom (rotiranom) okviru da tekst ne leži preko linije.
+const _LBL_OFFS_PX = 9;
+function _labelHtml(nm, deg, opts) {
+  const o = opts || {};
+  const rot = Number.isFinite(deg);
+  const poz = rot
+    ? `position:absolute;left:0;top:0;transform:translate(-50%,-50%) rotate(${deg.toFixed(1)}deg) translateY(-${_LBL_OFFS_PX}px);`
+    : '';
+  const ed = o.edit
+    ? `pointer-events:auto;cursor:move;padding:0 3px;border-radius:3px;outline:1.5px dashed #fbbf24;outline-offset:2px;${o.sel ? 'background:rgba(251,191,36,0.35);' : ''}`
+    : 'pointer-events:none;';
+  return `<div class="vlaka-lbl${o.edit ? ' lbl-edit' : ''}${o.sel ? ' lbl-sel' : ''}"${rot ? ` data-rot="${deg.toFixed(1)}"` : ''}${o.pin ? ' data-pin="1"' : ''} style="${poz}color:#fff;font-size:var(--vl-fs,12px);font-weight:bold;font-family:Arial,sans-serif;${ed}white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${_escHtml(nm)}</div>`;
+}
+function _lblIcon(nm, deg, opts) {
+  return L.divIcon({ className: '', iconSize: [0,0], iconAnchor: Number.isFinite(deg) ? [0,0] : [-2,6], html: _labelHtml(nm, deg, opts) });
+}
+
+// ─── IDEALAN POLOŽAJ LABELE DUŽ VLAKE/KRAKA ──────────────────────────────────
+// Labela se NE stavlja na čvorište (početak kraka, mjesto odakle polaze krakovi,
+// krajevi) nego na najravniji dio linije, paralelno s njom, podalje od drugih labela.
+// Dužina labele u metrima računa se za RAZMJERU 1:10 000 (štampa): 1 px = 2,65 m.
+// Placement je zato nezavisan od trenutnog zuma (labele ne "skaču" pri zumiranju);
+// kad je zumirano daleko i labele se preklapaju, _declutterVlakaLabels sakrije višak.
+const _LBL_REF_MPP = 2.65;
+function _lblDuzinaM(nm) {
+  return Math.max(30, String(nm == null ? '' : nm).length * 7.4 + 8) * _LBL_REF_MPP;
+}
+// pts: [{la,lo}], junk: tačke gdje polaze krakovi, n: broj labela, zauzeti: [{la,lo,r}]
+// vraća [{la,lo,deg,win,s}] — deg je ugao teksta na ekranu, u (-90, 90].
+function _lblIdealno(pts, nm, junk, n, zauzeti) {
+  const out = [];
+  if (!pts || pts.length < 2) return out;
+  const la0 = pts[0].la, lo0 = pts[0].lo;
+  const kx = 111320 * Math.cos(la0 * Math.PI / 180), ky = 111320;
+  const toXY = p => ({ x: (p.lo - lo0) * kx, y: (p.la - la0) * ky });
+  const P = pts.map(toXY), S = [0];
+  for (let i = 1; i < P.length; i++) S.push(S[i-1] + Math.hypot(P[i].x - P[i-1].x, P[i].y - P[i-1].y));
+  const T = S[S.length - 1];
+  if (!(T > 0)) return out;
+  const at = s => {
+    s = Math.max(0, Math.min(T, s));
+    let i = 1;
+    while (i < S.length - 1 && S[i] < s) i++;
+    const d = S[i] - S[i-1], t = d > 0 ? (s - S[i-1]) / d : 0;
+    return { x: P[i-1].x + t * (P[i].x - P[i-1].x), y: P[i-1].y + t * (P[i].y - P[i-1].y) };
+  };
+  const projS = p => {
+    const q = toXY(p);
+    let best = Infinity, bs = 0;
+    for (let i = 1; i < P.length; i++) {
+      const ax = P[i-1].x, ay = P[i-1].y, dx = P[i].x - ax, dy = P[i].y - ay, l2 = dx*dx + dy*dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((q.x - ax) * dx + (q.y - ay) * dy) / l2)) : 0;
+      const d = Math.hypot(q.x - (ax + t * dx), q.y - (ay + t * dy));
+      if (d < best) { best = d; bs = S[i-1] + t * Math.sqrt(l2); }
+    }
+    return bs;
+  };
+  const J = [0, T].concat((junk || []).filter(p => p && Number.isFinite(p.la) && Number.isFinite(p.lo)).map(projS));
+  const Z = (zauzeti || []).filter(z => z && Number.isFinite(z.la) && Number.isFinite(z.lo)).map(z => Object.assign(toXY(z), { r: z.r || 40 }));
+  const win = Math.min(_lblDuzinaM(nm), T);
+  const margina = Math.min(win / 2 + 14, T / 2);
+  const korak = Math.max(6, T / 60);
+  const heading = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
+  const score = (c, trazeno) => {
+    // krivina u prozoru — ravan dio je čitljiviji i labela ostaje uz liniju
+    let curv = 0, prev = null, p0 = at(c - win / 2);
+    for (let k = 1; k <= 6; k++) {
+      const p1 = at(c - win / 2 + win * k / 6), h = heading(p0, p1);
+      if (prev !== null) { let d = Math.abs(h - prev); if (d > Math.PI) d = 2 * Math.PI - d; curv += d; }
+      prev = h; p0 = p1;
+    }
+    let pen = curv * 40;
+    const need = win / 2 + 30;   // čvorište + razmak da labela ne zaklopi početak kraka
+    for (const j of J) { const d = Math.abs(c - j); if (d < need) pen += (1 - d / need) * 150; }
+    const pc = at(c);
+    for (const z of Z) {
+      const lim = (win / 2 + z.r) * 0.9, d = Math.hypot(pc.x - z.x, pc.y - z.y);
+      if (d < lim) pen += (1 - d / lim) * 100;
+    }
+    return pen + Math.abs(c - trazeno) / T * 25;
+  };
+  const brojLabela = Math.max(1, n | 0);
+  for (let k = 0; k < brojLabela; k++) {
+    const mid = T * (k + 0.5) / brojLabela;
+    let lo = Math.max(margina, T * k / brojLabela), hi = Math.min(T - margina, T * (k + 1) / brojLabela);
+    if (hi < lo) lo = hi = Math.max(margina, Math.min(T - margina, mid));
+    let best = null;
+    for (let c = lo; c <= hi + 1e-6; c += korak) {
+      const cc = Math.min(c, hi), sc = score(cc, mid);
+      if (!best || sc < best.sc) best = { c: cc, sc };
+      if (cc >= hi) break;
+    }
+    if (!best) continue;
+    const pc = at(best.c), a = at(best.c - win / 2), b = at(best.c + win / 2);
+    let deg = Math.atan2(-(b.y - a.y), b.x - a.x) * 180 / Math.PI;
+    if (deg > 90) deg -= 180;
+    if (deg <= -90) deg += 180;
+    Z.push({ x: pc.x, y: pc.y, r: win * 1.5 });   // labele iste vlake drži razmaknutim
+    out.push({ la: la0 + pc.y / ky, lo: lo0 + pc.x / kx, deg, win, s: best.c });
+  }
+  return out;
 }
 
 // ─── SPRJEČAVANJE PREKLAPANJA LABELA ───────────────────────────────────────
@@ -12390,20 +12510,44 @@ function _labelHtml(nm) {
 // (koje moraju ostati tačne — labela ide na stvarnu tačku vlake), samo SAKRIJEMO
 // labele koje bi se preklopile sa već prikazanom (visibility:hidden — čuva layout
 // poziciju pa nema potrebe za posebnim "reset" prolazom prije mjerenja).
+// Rotirane labele se porede kao ORIJENTISANI pravougaonici (SAT), ne kao
+// getBoundingClientRect: AABB dijagonalne labele je znatno veći od teksta i
+// sakrivao bi labele koje se zapravo ne dodiruju.
+function _lblObb(el) {
+  const r = el.getBoundingClientRect();
+  const deg = parseFloat(el.dataset ? el.dataset.rot : '');
+  if (!Number.isFinite(deg)) return { cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, hw: r.width / 2, hh: r.height / 2, c: 1, s: 0, r };
+  const w = el.offsetWidth, h = el.offsetHeight, a = deg * Math.PI / 180;
+  const c = Math.cos(a), s = Math.sin(a);
+  const bw = Math.abs(w * c) + Math.abs(h * s) || 1;
+  const k = r.width / bw;   // skaliranje (npr. pregled štampe je umanjen transformom)
+  return { cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, hw: w * k / 2, hh: h * k / 2, c, s, r };
+}
+function _lblObbPresjek(a, b, pad) {
+  const dx = b.cx - a.cx, dy = b.cy - a.cy;
+  const axes = [[a.c, a.s], [-a.s, a.c], [b.c, b.s], [-b.s, b.c]];
+  for (const [ux, uy] of axes) {
+    const ra = a.hw * Math.abs(ux * a.c + uy * a.s) + a.hh * Math.abs(-ux * a.s + uy * a.c);
+    const rb = b.hw * Math.abs(ux * b.c + uy * b.s) + b.hh * Math.abs(-ux * b.s + uy * b.c);
+    if (Math.abs(dx * ux + dy * uy) > ra + rb + pad) return false;
+  }
+  return true;
+}
 function _declutterVlakaLabels() {
   const mapEl = map.getContainer();
   const mapRect = mapEl.getBoundingClientRect();
-  const labels = mapEl.querySelectorAll('.vlaka-lbl');
+  // ručno postavljene (pin) labele imaju prednost — korisnik ih je namjerno smjestio
+  const labels = Array.from(mapEl.querySelectorAll('.vlaka-lbl'))
+    .sort((x, y) => (y.dataset.pin ? 1 : 0) - (x.dataset.pin ? 1 : 0));
   const kept = [];
   labels.forEach(el => {
-    const r = el.getBoundingClientRect();
+    const o = _lblObb(el), r = o.r;
     // Van vidljivog dijela karte — Leaflet ga i onako klipuje, preskoči (perf).
     if (r.right < mapRect.left || r.left > mapRect.right || r.bottom < mapRect.top || r.top > mapRect.bottom) return;
     const PAD = 2; // mala margina da tekst ne bude zalijepljen ivica-uz-ivicu
-    const overlaps = kept.some(k =>
-      !(r.right < k.left - PAD || r.left > k.right + PAD || r.bottom < k.top - PAD || r.top > k.bottom + PAD));
+    const overlaps = !el.dataset.pin && kept.some(k => _lblObbPresjek(o, k, PAD));
     el.style.visibility = overlaps ? 'hidden' : '';
-    if (!overlaps) kept.push(r);
+    if (!overlaps) kept.push(o);
   });
 }
 let _declutterTimer = null;
@@ -12438,15 +12582,17 @@ function _labelFracs(pts, zoom) {
   if (total < 600) return [0.33, 0.67];
   return [0.25, 0.5, 0.75];
 }
-function _placeLabelMarkers(pts, nm, zOff, zoom) {
+// Kolegine/dijeljene vlake: isti idealan položaj i rotacija kao za vlastite
+// (bez znanja o krakovima — junk je prazan). opts: {junk, n, zauzeti}.
+function _placeLabelMarkers(pts, nm, zOff, zoom, opts) {
   const marks = [];
   try {
-    _labelFracs(pts, zoom).forEach(frac => {
-      const pt = ptAtFrac(pts, frac);
-      if (!pt || isNaN(pt.la) || isNaN(pt.lo)) return;
-      marks.push(L.marker([pt.la, pt.lo], {
-        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(nm) }),
-        interactive: false, zIndexOffset: zOff, pane: 'vlakeLabels'
+    const o = opts || {};
+    const n = o.n || _labelFracs(pts, zoom).length;
+    _lblIdealno(pts, nm, o.junk || [], n, o.zauzeti || []).forEach(pl => {
+      if (isNaN(pl.la) || isNaN(pl.lo)) return;
+      marks.push(L.marker([pl.la, pl.lo], {
+        icon: _lblIcon(nm, pl.deg), interactive: false, zIndexOffset: zOff, pane: 'vlakeLabels'
       }).addTo(map));
     });
   } catch(e) { console.warn('Label err:', nm, e); }
@@ -24151,6 +24297,67 @@ function izravnajVlaku(idx) {
 }
 
 // === VLAKA LABELE ===
+// Brojevi labela po vlaci/kraku. Krak dobije jednu labelu (dugačak dvije) — krakova ima
+// puno, a svaka dodatna labela je šum; matična vlaka prati _labelFracs.
+function _lblBroj(v, zoom) {
+  const f = _labelFracs(v.pts, zoom).length;
+  if (v.kr > 0) return f > 1 && calcL(v.pts) >= 600 ? 2 : 1;
+  return f;
+}
+// Tačke gdje polaze krakovi ove vlake — labela ne smije na čvorište.
+function _lblJunkcije(v) {
+  const pre = v.nm + '.', out = [];
+  for (const c of vlake) {
+    if (c === v || c.projektId !== v.projektId || !c.pts || !c.pts.length) continue;
+    const nm = String(c.nm);
+    if (nm.startsWith(pre) && nm.indexOf('.', pre.length) < 0) out.push(c.pts[0]);
+  }
+  return out;
+}
+function _lblZauzetoOd(v) {
+  const out = [];
+  for (const o of vlake) if (o !== v && o._lblBox) for (const b of o._lblBox) out.push(b);
+  return out;
+}
+// Ručno postavljena labela imena (sačuvana lokalno, po projektu+imenu vlake).
+// var (ne let/const): updateVlakaLabel se može pozvati prije nego izvršavanje stigne do ove linije (TDZ).
+var _lblOvrMem = null;
+function _lblOvrAll() {
+  if (_lblOvrMem) return _lblOvrMem;
+  try { _lblOvrMem = JSON.parse(localStorage.getItem('tvlake_lbl_ovr_v1') || '{}') || {}; } catch(e) { _lblOvrMem = {}; }
+  if (typeof _lblOvrMem !== 'object' || Array.isArray(_lblOvrMem)) _lblOvrMem = {};
+  return _lblOvrMem;
+}
+function _lblKljuc(v) { return (v.projektId || '') + '|' + v.nm; }
+function _lblOvrGet(v) {
+  const o = _lblOvrAll()[_lblKljuc(v)];
+  return o && Number.isFinite(o.la) && Number.isFinite(o.lo) ? o : null;
+}
+function _lblOvrSet(v, o) { _lblOvrAll()[_lblKljuc(v)] = { la: o.la, lo: o.lo, rot: Math.max(-90, Math.min(90, Math.round(o.rot || 0))) }; }
+function _lblOvrDel(v) { delete _lblOvrAll()[_lblKljuc(v)]; }
+function _lblOvrSnimi() {
+  try { localStorage.setItem('tvlake_lbl_ovr_v1', JSON.stringify(_lblOvrAll())); return true; }
+  catch(e) { showToast('⚠ Položaj labele nije sačuvan (memorija telefona)'); return false; }
+}
+
+var _lblEdit = false;      // način uređivanja: labele se mogu povući i zarotirati
+var _lblSel = null;       // {v, kind:'ime'|'lager'}
+function _lblNapraviPrimarni(v, pt, deg, pin) {
+  const ed = _lblEdit;
+  const sel = ed && _lblSel && _lblSel.v === v && _lblSel.kind === 'ime';
+  const mk = L.marker([pt.la, pt.lo], {
+    icon: _lblIcon(v.nm, deg, { edit: ed, sel, pin: pin || ed }),
+    interactive: ed, draggable: ed, zIndexOffset: 500, pane: 'vlakeLabels', bubblingMouseEvents: false
+  }).addTo(map);
+  mk._lblDeg = deg;
+  if (ed) {
+    mk.on('click', e => { L.DomEvent.stopPropagation(e); _lblSelect(v, 'ime'); });
+    mk.on('dragstart', () => _lblSelect(v, 'ime'));
+    mk.on('dragend', () => setTimeout(() => _lblDragKraj(v, mk), 0));
+  }
+  return mk;
+}
+
 function updateVlakaLabel(i) {
   const v = vlake[i];
   if (!v) return;
@@ -24158,43 +24365,45 @@ function updateVlakaLabel(i) {
   if (v.lagerMk) { map.removeLayer(v.lagerMk); v.lagerMk = null; }
   (v.extraLabels || []).forEach(m => map.removeLayer(m));
   v.extraLabels = [];
+  v._lblBox = [];
   if (!v.pts || v.pts.length < 1) return;
 
-  // Krak s jednom točkom — prikaži labelu odmah na spoju s vlakom
+  // Krak s jednom tačkom — nema još pravca linije, labela odmah uz spoj s vlakom
   if (v.kr > 0 && v.pts.length === 1) {
     v.labelMk = L.marker([v.pts[0].la, v.pts[0].lo], {
-      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
-      interactive: false, zIndexOffset: 500, pane: 'vlakeLabels'
+      icon: _lblIcon(v.nm), interactive: false, zIndexOffset: 500, pane: 'vlakeLabels'
     }).addTo(map);
     return;
   }
   if (v.pts.length < 2) return;
 
-  // Krak — labela uvijek na početku (pts[0]), + dodatni ako je dugačak
+  // Labela PARALELNO s linijom na idealnom mjestu (ne na čvorištu) — vidi _lblIdealno.
   const _zoom = map.getZoom();
-  if (v.kr > 0) {
-    v.labelMk = L.marker([v.pts[0].la, v.pts[0].lo], {
-      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
-      interactive: false, zIndexOffset: 500, pane: 'vlakeLabels'
-    }).addTo(map);
-    // Za duže krakove dodaj još labela — kraćim je dovoljna ona na početku
-    // (fracs.length===1 znači "kratak/daleko zumirano", nema smisla ponoviti
-    // isto ime tik do postojeće labele).
-    const fracs = _labelFracs(v.pts, _zoom);
-    const extraFracs = fracs.length > 1 ? fracs.filter(f => f > 0.1) : [];
-    const extra = [];
-    extraFracs.forEach(frac => {
-      const pt = ptAtFrac(v.pts, frac);
-      if (!pt || isNaN(pt.la) || isNaN(pt.lo)) return;
-      extra.push(L.marker([pt.la, pt.lo], {
-        icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [-2,6], html: _labelHtml(v.nm) }),
-        interactive: false, zIndexOffset: 498, pane: 'vlakeLabels'
-      }).addTo(map));
-    });
-    v.extraLabels = extra;
+  const ovr = _lblOvrGet(v);
+  v._lblJsig = _lblJunkcije(v).map(p => p.la.toFixed(5) + ',' + p.lo.toFixed(5)).join(';');
+  if (ovr) {
+    v.labelMk = _lblNapraviPrimarni(v, ovr, ovr.rot || 0, true);
+    v._lblBox = [{ la: ovr.la, lo: ovr.lo, r: _lblDuzinaM(v.nm) / 2 }];
   } else {
-    const mks = _placeLabelMarkers(v.pts, v.nm, 500, _zoom);
-    if (mks.length > 0) { v.labelMk = mks[0]; v.extraLabels = mks.slice(1); }
+    try {
+      const pl = _lblIdealno(v.pts, v.nm, _lblJunkcije(v), _lblBroj(v, _zoom), _lblZauzetoOd(v));
+      pl.forEach((p, k) => {
+        if (isNaN(p.la) || isNaN(p.lo)) return;
+        v._lblBox.push({ la: p.la, lo: p.lo, r: p.win / 2 });
+        if (k === 0) { v.labelMk = _lblNapraviPrimarni(v, p, p.deg, false); return; }
+        v.extraLabels.push(L.marker([p.la, p.lo], {
+          icon: _lblIcon(v.nm, p.deg), interactive: false, zIndexOffset: 498, pane: 'vlakeLabels'
+        }).addTo(map));
+      });
+    } catch(e) { console.warn('Label err:', v.nm, e); }
+  }
+  // Roditelju su se možda promijenila čvorišta (novi/pomjeren krak) — preračunaj njegovu labelu.
+  if (v.kr > 0) {
+    const pi = _parentOf(v), pv = pi >= 0 ? vlake[pi] : null;
+    if (pv && pv.pts && pv.pts.length > 1 && !_lblOvrGet(pv)) {
+      const sig = _lblJunkcije(pv).map(p => p.la.toFixed(5) + ',' + p.lo.toFixed(5)).join(';');
+      if (sig !== pv._lblJsig) updateVlakaLabel(pi);
+    }
   }
 
   // Start/kraj oznake — mala zelena/crvena tačkica direktno na karti da se odmah vidi
@@ -24232,21 +24441,180 @@ function updateVlakaLabel(i) {
     // Matična vlaka: lager na početku (pts[0]). Krak "na putu": lager na KRAJU
     // (zadnja tačka = izlaz na kamionski put), osim ako je ručno postavljen (lagerPt).
     const pFirst = v.lagerPt || (v.naPutu && v.kr > 0 ? v.pts[v.pts.length - 1] : v.pts[0]);
-    const dims = typeof VlakaLager!=='undefined'?VlakaLager.styleFor(v):{width:Math.round(28*(_lineStyle.lagerScale||100)/100),height:Math.round(13*(_lineStyle.lagerScale||100)/100),font:Math.max(8,Math.round(9*(_lineStyle.lagerScale||100)/100))};
-    const LW=dims.width, LH=dims.height, fontPx=dims.font;
-    const extraH = fontPx + 5; // prostor za red teksta ispod simbola, prati font
-    const svgSym = _stpLagerSvg(LW, LH, true) + `
-    <div style="color:#fbbf24;font-weight:bold;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>`;
+    let lagerIcon;
+    if (typeof VlakaLager !== 'undefined' && VlakaLager.icon) lagerIcon = VlakaLager.icon(v);
+    else {
+      const dims = {width:Math.round(28*(_lineStyle.lagerScale||100)/100),height:Math.round(13*(_lineStyle.lagerScale||100)/100),font:Math.max(8,Math.round(9*(_lineStyle.lagerScale||100)/100))};
+      const LW=dims.width, LH=dims.height, fontPx=dims.font;
+      lagerIcon = L.divIcon({ className: 'vlaka-lager-mk', iconSize: [LW, LH + fontPx + 5], iconAnchor: [LW/2, LH/2],
+        html: _stpLagerSvg(LW, LH, true) + `<div style="color:#fbbf24;font-weight:bold;font-size:${fontPx}px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap;">${_escHtml(v.lager)}</div>` });
+    }
+    const ed = _lblEdit;
     v.lagerMk = L.marker([pFirst.la, pFirst.lo], {
-      icon: L.divIcon({
-        className: 'vlaka-lager-mk', iconSize: [LW, LH + extraH], iconAnchor: [LW/2, LH/2],
-        html: svgSym
-      }),
-      interactive: false, zIndexOffset: 600, pane: 'vlakeLabels'
+      icon: lagerIcon, interactive: ed, draggable: ed, zIndexOffset: 600, pane: 'vlakeLabels', bubblingMouseEvents: false
     }).addTo(map);
+    if (ed) {
+      const el = v.lagerMk.getElement();
+      if (el) { el.classList.add('lbl-edit-lager'); if (_lblSel && _lblSel.v === v && _lblSel.kind === 'lager') el.classList.add('lbl-sel'); }
+      v.lagerMk.on('click', e => { L.DomEvent.stopPropagation(e); _lblSelect(v, 'lager'); });
+      v.lagerMk.on('dragstart', () => _lblSelect(v, 'lager'));
+      v.lagerMk.on('dragend', () => setTimeout(() => _lagerDragKraj(v), 0));
+    }
   }
   _scheduleDeclutterLabels();
   if(typeof VlakaDirection!=='undefined')VlakaDirection.draw(v);
+}
+
+// ─── UREĐIVANJE LABELA: povuci (pomjeri) i zarotiraj ─────────────────────────
+// Labela imena vlake/kraka se pamti lokalno (_LBL_OVR_KEY); lager putuje sa vlakom
+// (lagerPt {la,lo,rot,u} se šalje kao lager_pt — jsonb, bez migracije).
+function _lblIdx(v) { return vlake.indexOf(v); }
+function _lblClamp(d) { return Math.max(-90, Math.min(90, Math.round(Number(d) || 0))); }
+function _lblTrenutniUgao(sel) {
+  if (!sel) return 0;
+  if (sel.kind === 'lager') return typeof VlakaLager !== 'undefined' && VlakaLager.rotOf ? VlakaLager.rotOf(sel.v) : 0;
+  const o = _lblOvrGet(sel.v);
+  if (o) return o.rot || 0;
+  return sel.v.labelMk && Number.isFinite(sel.v.labelMk._lblDeg) ? Math.round(sel.v.labelMk._lblDeg) : 0;
+}
+function _lblMarkSel() {
+  vlake.forEach(v => {
+    const a = v.labelMk && v.labelMk.getElement && v.labelMk.getElement();
+    const l = v.lagerMk && v.lagerMk.getElement && v.lagerMk.getElement();
+    const lab = a && a.querySelector('.vlaka-lbl');
+    const sI = _lblSel && _lblSel.v === v && _lblSel.kind === 'ime';
+    const sL = _lblSel && _lblSel.v === v && _lblSel.kind === 'lager';
+    if (lab) { lab.classList.toggle('lbl-sel', sI); lab.style.background = sI ? 'rgba(251,191,36,0.35)' : ''; }
+    if (l) l.classList.toggle('lbl-sel', sL);
+  });
+}
+function _lblSelect(v, kind) {
+  if (!_lblEdit) return;
+  _lblSel = { v, kind };
+  _lblMarkSel();
+  _lblBarOsvjezi();
+}
+function _lblDragKraj(v, mk) {
+  if (!_lblEdit || !mk || vlake.indexOf(v) < 0) return;
+  const ll = mk.getLatLng();
+  _lblOvrSet(v, { la: ll.lat, lo: ll.lng, rot: Number.isFinite(mk._lblDeg) ? mk._lblDeg : 0 });
+  _lblOvrSnimi();
+  updateVlakaLabel(_lblIdx(v));
+  _lblMarkSel();
+  _lblBarOsvjezi();
+}
+function _lagerSnimi(v) {
+  const i = _lblIdx(v);
+  v.updatedAt = new Date().toISOString();
+  _saveLocalVlake();
+  if (i >= 0) sbFlushVlaka(i);
+}
+function _lagerDragKraj(v) {
+  if (!_lblEdit || !v.lagerMk || vlake.indexOf(v) < 0) return;
+  const ll = v.lagerMk.getLatLng();
+  v.lagerPt = { la: ll.lat, lo: ll.lng, rot: _lblTrenutniUgao({ v, kind: 'lager' }), u: 1 };
+  _lagerSnimi(v);
+  updateVlakaLabel(_lblIdx(v));
+  _lblMarkSel();
+}
+// Živa rotacija (slajder) — bez snimanja na svaki pomak, snimanje ide na `change`.
+function _lblRotiraj(deg) {
+  const s = _lblSel;
+  if (!s || !_lblEdit) return;
+  deg = _lblClamp(deg);
+  if (s.kind === 'ime') {
+    const mk = s.v.labelMk;
+    if (!mk) return;
+    const ll = mk.getLatLng();
+    _lblOvrSet(s.v, { la: ll.lat, lo: ll.lng, rot: deg });
+    mk._lblDeg = deg;
+    mk.setIcon(_lblIcon(s.v.nm, deg, { edit: true, sel: true, pin: true }));
+  } else {
+    const mk = s.v.lagerMk;
+    if (!mk) return;
+    const ll = mk.getLatLng();
+    s.v.lagerPt = { la: ll.lat, lo: ll.lng, rot: deg, u: 1 };
+    mk.setIcon(VlakaLager.icon(s.v));
+  }
+  _lblBarOsvjezi(true);
+  _scheduleDeclutterLabels();
+}
+function _lblSnimi() {
+  const s = _lblSel;
+  if (!s) return;
+  if (s.kind === 'ime') _lblOvrSnimi(); else _lagerSnimi(s.v);
+}
+function _lblKorak(d) { _lblRotiraj(_lblTrenutniUgao(_lblSel) + d); _lblSnimi(); }
+// "Auto": labela imena se vraća na idealan položaj; lager gubi rotaciju (i položaj,
+// ali samo ako ga je postavilo ovo uređivanje — ručno "Pomjeri lager" ostaje).
+function _lblAuto() {
+  const s = _lblSel;
+  if (!s) return;
+  if (s.kind === 'ime') { _lblOvrDel(s.v); _lblOvrSnimi(); }
+  else if (s.v.lagerPt) {
+    s.v.lagerPt = s.v.lagerPt.u ? null : { la: s.v.lagerPt.la, lo: s.v.lagerPt.lo };
+    _lagerSnimi(s.v);
+  }
+  updateVlakaLabel(_lblIdx(s.v));
+  _lblMarkSel();
+  _lblBarOsvjezi();
+}
+function _lblBarGradi() {
+  let b = document.getElementById('lbl-edit-bar');
+  if (b) return b;
+  b = document.createElement('div');
+  b.id = 'lbl-edit-bar';
+  b.hidden = true;
+  b.innerHTML = `
+    <div class="lb-row"><b>🏷 Labele</b><span id="lb-ime" class="lb-ime"></span><button type="button" class="lb-ok" onclick="_lblEditToggle(false)">✓ Gotovo</button></div>
+    <div class="lb-row" id="lb-ctl">
+      <button type="button" onclick="_lblKorak(-15)" title="Zaokreni −15°" aria-label="Zaokreni ulijevo">↺</button>
+      <input type="range" id="lb-rot" min="-90" max="90" step="1" value="0" oninput="_lblRotiraj(this.value)" onchange="_lblSnimi()" aria-label="Ugao labele">
+      <button type="button" onclick="_lblKorak(15)" title="Zaokreni +15°" aria-label="Zaokreni udesno">↻</button>
+      <span id="lb-deg" class="lb-deg">0°</span>
+      <button type="button" onclick="_lblAuto()" title="Vrati na automatski položaj">Auto</button>
+    </div>
+    <div class="lb-hint" id="lb-hint"></div>`;
+  document.body.appendChild(b);
+  try { L.DomEvent.disableClickPropagation(b); L.DomEvent.disableScrollPropagation(b); } catch(e) {}
+  return b;
+}
+function _lblBarOsvjezi(samoUgao) {
+  const b = document.getElementById('lbl-edit-bar');
+  if (!b) return;
+  const s = _lblSel, ctl = b.querySelector('#lb-ctl');
+  const ug = _lblTrenutniUgao(s);
+  b.querySelector('#lb-deg').textContent = ug + '°';
+  const r = b.querySelector('#lb-rot');
+  if (r && String(r.value) !== String(ug)) r.value = ug;
+  if (samoUgao) return;
+  ctl.style.display = s ? '' : 'none';
+  b.querySelector('#lb-ime').textContent = s ? (s.kind === 'lager' ? 'lager ' + (s.v.lager || '') + ' · ' + s.v.nm : s.v.nm) : '';
+  b.querySelector('#lb-hint').textContent = s
+    ? 'Povuci labelu da je pomjeriš, slajder je rotira.'
+    : 'Dodirni labelu vlake/kraka ili lager, pa je povuci ili zarotiraj.';
+}
+function _lblEditToggle(on, v) {
+  const nova = on === undefined ? !_lblEdit : !!on;
+  if (nova === _lblEdit) return;
+  if (nova && (typeof recOn !== 'undefined' && recOn)) { showToast('Završi snimanje vlake pa uređuj labele'); return; }
+  _lblEdit = nova;
+  if (!nova) _lblSel = null;
+  document.body.classList.toggle('lbl-edit-on', nova);
+  const b = _lblBarGradi();
+  b.hidden = !nova;
+  if (nova) _lblBarOsvjezi();
+  vlake.forEach((x, i) => updateVlakaLabel(i));
+  if (nova && v) _lblSelect(v, 'ime');
+  else _lblMarkSel();
+  if (typeof _vsdOn !== 'undefined' && _vsdOn && typeof _vsdRender === 'function') _vsdRender();
+  if (nova) showToast('🏷 Uređivanje labela: povuci labelu ili lager, slajder je zaokreće');
+}
+function vpLabele() {
+  const v = vlake[_vpIdx];
+  closeVlakaPopup();
+  if (_lblEdit) { if (v) _lblSelect(v, 'ime'); return; }
+  _lblEditToggle(true, v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29682,6 +30050,7 @@ function switchTab(tab) {
   if (tab !== prev) {
     if (typeof closeOznakePanel === 'function') closeOznakePanel();
     if (typeof closeLayerSheet === 'function') closeLayerSheet();
+    if (typeof _lblEditToggle === 'function' && tab !== 'karta' && _lblEdit) _lblEditToggle(false);
   }
   _activeTab = tab;
   if (typeof window !== 'undefined') window.Explorer?.setVisible(tab==='karta');
@@ -31375,6 +31744,7 @@ function stampaOtvori() {
   try { if (typeof _activeTab !== 'undefined' && _activeTab !== 'karta') switchTab('karta'); } catch (e) {}
   try { closeLayerSheet(); } catch (e) {}
   try { closeOznakePanel(); } catch (e) {}
+  try { if (_lblEdit) _lblEditToggle(false); } catch (e) {}   // pregled štampe ne smije imati ručke labela
   if (typeof window !== 'undefined') window.Explorer?.setVisible(false);
   const post = _stpPostavkeUcitaj();
   const ap = _stpAktivniProjekat();
@@ -43489,7 +43859,7 @@ if (typeof AndroidDownload !== 'undefined') {
     <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="vp-info"></div>
-  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()">Približi</button></div>
+  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()">Približi</button><button onclick="vpLabele()" title="Pomjeri i zaokreni labelu"><svg class="ic"><use href="#ic-oznaka"/></svg> Labela</button></div>
   <div class="vp-btns" id="vlaka-popup-btns">
     <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
     <button onclick="vpLager()" style="background:#92400e;color:#fbbf24;"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>

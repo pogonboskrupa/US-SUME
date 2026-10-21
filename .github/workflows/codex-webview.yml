@@ -62,6 +62,7 @@ jobs:
           python -m playwright install --with-deps chromium
           timeout 120s python tests/browser/terrain-workspace-243.py
           timeout 240s python tests/browser/kml-50000.py
+          timeout 240s python tests/browser/labele-vlaka.py
           timeout 240s python tests/browser/field-five-hours.py
           timeout 180s python tests/browser/offline-import-240.py
           timeout 90s python tests/browser/explorer-full-239.py
