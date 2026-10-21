@@ -27,9 +27,9 @@ function rotOf(v){const r=Number(v&&v.lagerPt&&v.lagerPt.rot);return Number.isFi
 function labelHtml(text,font){
  const t=String(text==null?'':text),m=/^[Ll]/.exec(t);
  if(!m)return _escHtml(t.toUpperCase());
- const h=font,w=Math.round(font*.66),sw=Math.max(2,Math.round(font*.24)),x=Math.round(sw/2)+1,y=h-Math.round(sw/2)-1;
+ const h=Math.max(7,Math.round(font*.62)),w=Math.max(5,Math.round(font*.46)),sw=Math.max(2,Math.round(font*.14)),x=sw/2+1,y=h-sw/2;
  const d='M'+x+' 1V'+y+'H'+(w-1);
- const g='<svg width="'+(w+2)+'" height="'+(h+2)+'" viewBox="-1 -1 '+(w+2)+' '+(h+2)+'" style="vertical-align:top;overflow:visible" aria-label="L"><path d="'+d+'" fill="none" stroke="#000" stroke-width="'+(sw+2)+'" stroke-linecap="square" stroke-linejoin="miter"/><path d="'+d+'" fill="none" stroke="#fbbf24" stroke-width="'+sw+'" stroke-linecap="square" stroke-linejoin="miter"/></svg>';
+ const g='<svg width="'+(w+2)+'" height="'+(h+2)+'" viewBox="-1 -1 '+(w+2)+' '+(h+2)+'" style="vertical-align:baseline;margin-bottom:-1px;overflow:visible" aria-label="L"><path d="'+d+'" fill="none" stroke="#000" stroke-width="'+(sw+1.5)+'" stroke-linecap="square" stroke-linejoin="miter"/><path d="'+d+'" fill="none" stroke="#fbbf24" stroke-width="'+sw+'" stroke-linecap="square" stroke-linejoin="miter"/></svg>';
  return g+_escHtml(t.slice(1).toUpperCase());
 }
 function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+labelHtml(v.lager,s.font)+'</div>';
