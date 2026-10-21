@@ -30261,6 +30261,8 @@ function switchTab(tab) {
     if (_mapFullScreen) { if (typeof _demLegendUpdate === 'function') _demLegendUpdate(); }
     else demLegendEl.style.display = 'none';
   }
+  // Grafičko mjerilo (metri) je dio #map i ostajalo je iznad panela Projekat/Vlake/Teren — van Karte se skriva.
+  document.querySelectorAll('#map .leaflet-control-scale').forEach(e => { e.style.display = _mapFullScreen ? '' : 'none'; });
   if (typeof _tabRestore === 'function') _tabRestore(tab);
 }
 
