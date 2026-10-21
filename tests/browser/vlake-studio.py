@@ -13,6 +13,7 @@ const _removeVlakaMapLayers=v=>{try{map.removeLayer(v.poly)}catch(e){}};
 const _dlgConfirm=async()=>true,_dlgPrompt=async(m,d)=>(window.__prompt??d),sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
 const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
 let bufRadius=40,deadLayers=[],_dozBufRadius=40,_vpBufferId=null,_dozBufLayers=[],_dozTreePts=[],sbUser=null;const _vpBufferLabel=()=>{},_bufSavePrefs=()=>{},dozDrawBuf=()=>{},dozTreesAnalyze=()=>{},_hexToRgb=h=>[96,165,250],_lastDlg=[];
+const __boje={lagerScale:100,lagerLabel:11},__place=[];const _loadBoje=()=>__boje,_bojaChange=(k,v)=>{__boje[k]=v};const VlakaLager={styleFor:()=>({scale:__boje.lagerScale,font:__boje.lagerLabel}),startPlace:k=>__place.push(k),isPicking:()=>false,cancelPick:()=>{}};
 const _lagerZauzeti=async()=>({used:new Set(['L1']),offline:false});
 '''
 for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka','_bufGetColor','_bufGetOpacity','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_bufSirinaOk','_bufSelPostavi','_bufTrazi','_syncBufRadiusEverywhere','ptAtFrac','ptDist']:js+='\n'+b.function(n)
@@ -119,9 +120,19 @@ async def main():
   await page.locator('#vsd-panel .vsd-b',has_text='Popuni').click();await page.wait_for_timeout(80)
   assert await page.locator('#vsd-panel .vsd-lg-in').input_value()=='L2'
   await page.locator('#vsd-panel .vsd-lg-in').fill('L5')
+  # veličina lagera + pomjeranje iz Studija (forma ostaje otvorena)
+  await page.locator('#vsd-panel .vsd-b',has_text='＋').click();await page.wait_for_timeout(50)
+  assert await ev('[__boje.lagerScale,__boje.lagerLabel]')==[110,13]
+  await page.locator('#vsd-panel .vsd-b',has_text='−').click();await page.locator('#vsd-panel .vsd-b',has_text='−').click();await page.wait_for_timeout(50)
+  assert await ev('[__boje.lagerScale,__boje.lagerLabel]')==[90,9]
+  assert await page.locator('#vsd-panel .vsd-lg-mv').is_disabled()  # lager bez sačuvanog broja se ne može pomjeriti
   n0=len(await ev('flushed'))
   await page.locator('#vsd-panel .vsd-b',has_text='Sačuvaj').click();await page.wait_for_timeout(80)
   assert await ev('[vlake[0].lager,_vsdLagerMod]')==['L5',False] and len(await ev('flushed'))==n0+1
+  await ev('_vsdLagerOtvori()');await page.wait_for_timeout(60)
+  await page.locator('#vsd-panel .vsd-lg-mv').click();await page.wait_for_timeout(50)
+  assert await ev('__place')==['own:0']
+  await ev('_vsdLagerZatvori()')
   # lageri ≤20 m jedan od drugog dobijaju isti broj
   r=await ev('''(()=>{const k=[{nm:'T1',br:1,kr:0,pts:[{la:44.9,lo:16}]},{nm:'T2',br:2,kr:0,pts:[{la:44.90005,lo:16}]},{nm:'T3',br:3,kr:0,pts:[{la:44.91,lo:16}]}];
     const f=_vsdLagerPopuni(k,new Map(),new Set());return k.map(v=>f.get(v))})()''')

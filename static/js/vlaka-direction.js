@@ -114,9 +114,6 @@ function studioHtml(v){
  return '<details class="vsd-dir"'+(dirOpen()?' open':'')+' ontoggle="VlakaDirection.studioToggle(this.open)"><summary>↗ Izvoz drvne mase <small>'+(opts.find(o=>o[0]===mode)?.[1].split(' (')[0]||'')+'</small></summary>'
   +'<label>Smjer izvoza<select onchange="VlakaDirection.studioMode(this.value)">'+opts.map(([k,t])=>'<option value="'+k+'"'+(mode===k?' selected':'')+'>'+t+'</option>').join('')+'</select></label>'
   +(mode==='both'?'<button type="button" class="vsd-b'+(split?'':' pri')+'" onclick="VlakaDirection.studioPick()">↔ '+(split?'Pomjeri tačku dvosmjera ('+Math.round(split.atM)+' m)':'Odredi tačku dvosmjera')+'</button><span class="vsd-dir-n">'+(split?'Lijevo i desno od tačke strelice pokazuju prema putu.':'Klikni vlaku tamo gdje se razdvaja na dva puta.')+'</span>':'')
-  +'<div class="vsd-dir-pl"><span>Veličina</span><div class="vsd-chips">'+[[20,'S'],[26,'M'],[34,'L'],[44,'XL']].map(([n,t])=>'<button type="button" class="vsd-chip'+(Math.abs(s.size-n)<4?' act':'')+'" onclick="VlakaDirection.studioSetting(\'size\','+n+')">'+t+'</button>').join('')+'</div></div>'
-  +'<div class="vsd-dir-pl"><span>Debljina</span><div class="vsd-chips">'+[[1.5,'Tanka'],[2.5,'Srednja'],[4,'Debela']].map(([n,t])=>'<button type="button" class="vsd-chip'+(Math.abs(s.width-n)<.6?' act':'')+'" onclick="VlakaDirection.studioSetting(\'width\','+n+')">'+t+'</button>').join('')+'</div></div>'
-  +'<div class="vsd-dir-pl"><span>Boja strelica</span><input type="color" value="'+s.color+'" onchange="VlakaDirection.studioSetting(\'color\',this.value)" style="width:44px;height:30px;border:1px solid #cbd5e1;border-radius:6px;padding:0;"></div>'
   +'<div class="vsd-dir-pl"><span>Strelice</span><div class="vsd-chips">'+pl('on','Na vlaci')+pl('beside','Pored vlake')+'</div></div></details>';
 }
 function studioVlaka(){return typeof _vsdSel!=='undefined'&&_vsdSel!==null&&typeof vlake!=='undefined'?vlake[_vsdSel]:null;}

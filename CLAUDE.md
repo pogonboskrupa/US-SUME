@@ -4909,3 +4909,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### v3.1.8 — brojač stavki za slanje se lomio u dva reda
 - Kad je na čekanju 10+ stavki, druga cifra je skakala u novi red: `#mdrop-server-cnt` (Meni → "Pošalji na server") je flex-dijete koje se stišće, a ni bedž ni broj nisu imali `white-space:nowrap`. Dodano `nowrap` + `flex-shrink:0` na kontejner, bedž i broj u gornjoj traci (`#sync-badge-cnt`) i na broj u redovima panela Server. Novi brojač uz tekst mora imati `nowrap`.
+
+### Studio vlaka — lageri: veličina, pomjeranje, slovo L; "Stil vlaka" (poslije v3.1.8)
+- Forma "🏷 Lageri" ima ± za veličinu (projektni `lagerScale` ±10 %, `lagerLabel` ±2 px, kroz `_bojaChange`, isti stil kao u Stil vlaka) i dugme ↗ po redu koje poziva postojeći `VlakaLager.startPlace('own:'+i)` (klik na kartu; aktivno samo za sačuvan lager).
+- Slovo L na lageru se crta kao SVG oblik (`VlakaLager.labelHtml`), ne fontom: na Androidu fallback fontovi na 9–12 px daju L bez vidljive stope pa se čita kao "l". Ostatak oznake je velikim slovima.
+- Studio: dugme "Stil linija" uklonjeno (ne odnosi se na vlake); jedno dugme "🎨 Stil vlaka" otvara `openVlakaStyle()` (boje, debljina, vrsta, strelice, lager). Iz Studija su uklonjene kontrole veličine/debljine/boje strelica (dupliciraju Stil vlaka); ostaju smjer izvoza, tačka dvosmjera i položaj strelica.

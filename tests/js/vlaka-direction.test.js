@@ -37,6 +37,6 @@ assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.eq
   d.studioSetting('color','red');assert.equal(d.settingsFor('P1').color,'#ff0000');
   d.studioSetting('size',999);assert.equal(d.settingsFor('P1').size,34);
   d.studioSetting('nepoznato',1);
-  assert(d.studioHtml(global.vlake[0]).includes('Veličina'));
+  assert(!d.studioHtml(global.vlake[0]).includes('Boja strelica'));
   console.log('OK: Studio veličina/debljina/boja strelica');
 }

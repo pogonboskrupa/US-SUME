@@ -22,7 +22,17 @@ function positionFor(v,shared=false){const saved=shared?read(project(v))[identit
 // Ručno zaokretanje lagera (labela uređivanje): ugao se čuva u lagerPt.rot i putuje sa
 // lager_pt na server (jsonb, bez migracije). Rotira se simbol + broj oko centra simbola.
 function rotOf(v){const r=Number(v&&v.lagerPt&&v.lagerPt.rot);return Number.isFinite(r)?Math.max(-90,Math.min(90,r)):0;}
-function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+_escHtml(v.lager)+'</div>';
+// Slovo L se crta kao SVG oblik (okomita crta + široka stopa), ne fontom: na Androidu monospace/sans
+// zamjene na 9-12 px daju L bez vidljive stope, pa se čita kao malo "l". Oblik ne zavisi od fonta.
+function labelHtml(text,font){
+ const t=String(text==null?'':text),m=/^[Ll]/.exec(t);
+ if(!m)return _escHtml(t.toUpperCase());
+ const h=font,w=Math.round(font*.66),sw=Math.max(2,Math.round(font*.24)),x=Math.round(sw/2)+1,y=h-Math.round(sw/2)-1;
+ const d='M'+x+' 1V'+y+'H'+(w-1);
+ const g='<svg width="'+(w+2)+'" height="'+(h+2)+'" viewBox="-1 -1 '+(w+2)+' '+(h+2)+'" style="vertical-align:top;overflow:visible" aria-label="L"><path d="'+d+'" fill="none" stroke="#000" stroke-width="'+(sw+2)+'" stroke-linecap="square" stroke-linejoin="miter"/><path d="'+d+'" fill="none" stroke="#fbbf24" stroke-width="'+sw+'" stroke-linecap="square" stroke-linejoin="miter"/></svg>';
+ return g+_escHtml(t.slice(1).toUpperCase());
+}
+function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+labelHtml(v.lager,s.font)+'</div>';
  return rot?'<div style="width:'+s.width+'px;transform-origin:'+s.width/2+'px '+s.height/2+'px;transform:rotate('+rot+'deg)">'+inner+'</div>':inner;}
 function icon(v){const s=styleFor(v);return L.divIcon({className:'vlaka-lager-mk',iconSize:[s.width,s.height+s.font+5],iconAnchor:[s.width/2,s.height/2],html:content(v)});}
 function alive(){return picking&&picking.scope===stamp()&&rows().some(r=>r.v===picking.v)&&picking.v.poly&&map.hasLayer(picking.v.poly);}
@@ -71,6 +81,6 @@ function startPlace(key){
  };
  map.on('click',picking.handler);map.getContainer().classList.add('lager-positioning');map.getContainer().style.cursor='crosshair';node('lager-position-title').textContent=r.v.lager+' · '+r.v.nm;node('lager-position-toolbar').hidden=false;
 }
-root.VlakaLager={styleFor,positionFor,icon,rotOf,prefsKey,refresh,renderPanel,startPlace,cancelPick,isPicking:()=>!!picking};
+root.VlakaLager={labelHtml,styleFor,positionFor,icon,rotOf,prefsKey,refresh,renderPanel,startPlace,cancelPick,isPicking:()=>!!picking};
 if(typeof document!=='undefined'){document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelPick();});document.addEventListener('DOMContentLoaded',()=>{if(typeof map==='undefined')return;L.DomEvent.disableClickPropagation(node('lager-position-toolbar'));map.on('layerremove',()=>{if(picking&&!alive())cancelPick();});refresh();},{once:true});}
 })(typeof window!=='undefined'?window:globalThis);

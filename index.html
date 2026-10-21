@@ -1523,6 +1523,8 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-lg-row .dot { width:10px; height:10px; border-radius:50%; flex:none; }
 .vsd-lg-row .nm { font-weight:700; min-width:48px; }
 .vsd-lg-row .meta { color:#64748b; font-size:12px; margin-left:auto; }
+.vsd-lg-mv { flex:none; min-width:40px; min-height:36px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; font-weight:700; }
+.vsd-lg-mv:disabled { opacity:.4; }
 .vsd-lg-in { width:72px; flex:none; padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; font-weight:700; text-transform:uppercase; }
 .vsd-baf { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .vsd-baf .vsd-b { flex:1 1 auto; }
@@ -11234,6 +11236,22 @@ function _vsdLagerOtvori() {
   _vsdRender();
 }
 
+// Veličina je projektni stil (isti kao Stil linija → Veličina lagera); korak 10 % oblika i 2 px oznake.
+function _vsdLagerVel(smjer) {
+  const st = VlakaLager.styleFor({ projektId: _vsdPid });
+  if (typeof _bojaChange !== 'function') return;
+  _bojaChange('lagerScale', Math.max(50, Math.min(250, st.scale + smjer * 10)));
+  _bojaChange('lagerLabel', Math.max(8, Math.min(28, st.font + smjer * 2)));
+  _vsdRender();
+}
+
+// Pomjeranje: forma ostaje u memoriji, klik na kartu postavlja novi položaj (postojeći VlakaLager tok).
+function _vsdLagerPomjeri(i) {
+  const v = vlake[i];
+  if (!v) return;
+  VlakaLager.startPlace('own:' + i);
+}
+
 function _vsdLagerUnos(i, val) { if (vlake[i]) _vsdLagerForma.set(vlake[i], val); }
 
 async function _vsdLagerAuto() {
@@ -11323,11 +11341,14 @@ function _vsdLagerHtml(glava) {
     const val = _vsdLagerForma.has(v) ? _vsdLagerForma.get(v) : (v.lager || '');
     return `<label class="vsd-lg-row"><span class="dot" style="background:${_escHtml(v.color || '#64748b')}"></span>
       <span class="nm">${_escHtml(v.nm)}</span><span class="meta">${fmtL(calcL(v.pts))}</span>
-      <input class="vsd-lg-in" data-vi="${i}" value="${_escHtml(val)}" placeholder="—" maxlength="12" autocomplete="off" oninput="_vsdLagerUnos(${i},this.value)"></label>`;
+      <input class="vsd-lg-in" data-vi="${i}" value="${_escHtml(val)}" placeholder="—" maxlength="12" autocomplete="off" oninput="_vsdLagerUnos(${i},this.value)"><button type="button" class="vsd-lg-mv" onclick="event.preventDefault();_vsdLagerPomjeri(${i})" title="Pomjeri lager na drugo mjesto" ${v.lager ? '' : 'disabled'}>↗</button></label>`;
   }).join('');
   return glava + `
     <div class="vsd-cur"><div class="vsd-cur-top"><b>🏷 Lageri odjela</b><span class="vsd-st vsd-len">${kand.length} ${kand.length === 1 ? 'vlaka' : 'vlaka'}</span></div>
       <div class="vsd-st">Upiši broj ili pritisni Popuni — vlake čiji su lageri ≤20 m jedan od drugog dobiju isti broj. Krakovi dobijaju lager samo kad izlaze na put.</div></div>
+    <div class="vsd-row"><span class="vsd-st" style="flex:1">Veličina lagera: ${_loadBoje(_vsdPid).lagerScale || 100} % · oznaka ${VlakaLager.styleFor({ projektId: _vsdPid }).font} px</span>
+      <button type="button" class="vsd-b" onclick="_vsdLagerVel(-1)" title="Smanji lager">−</button>
+      <button type="button" class="vsd-b" onclick="_vsdLagerVel(1)" title="Povećaj lager">＋</button></div>
     <div class="vsd-row vsd-main">
       <button type="button" class="vsd-b" onclick="_vsdLagerAuto()" title="Popuni prazna polja">⚡ Popuni</button>
       <button type="button" class="vsd-b ok" onclick="_vsdLagerSacuvaj()" title="Sačuvaj i prikaži na karti">✓ Sačuvaj</button>
@@ -11396,7 +11417,7 @@ function _vsdRender() {
     ${!_vsdPen && bezLagera ? `<button type="button" class="vsd-b vsd-lgbtn" onclick="_vsdLagerOtvori()">🏷 Popiši lagere — ${bezLagera} bez broja</button>` : ''}
     <div class="vsd-row vsd-extra"><button type="button" class="vsd-b${lblOn ? ' ok' : ''}" onclick="_lblEditToggle()" title="Povuci i zaokreni labele vlaka/kraka i lagera">🏷 ${lblOn ? 'Gotovo s labelama' : 'Pomjeri / zaokreni labele'}</button></div>
     ${v && !_vsdLagerMod ? '<div class="vsd-extra">' + (typeof VlakaDirection !== 'undefined' ? VlakaDirection.studioHtml(v) : '') + '</div>' : ''}
-    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b" onclick="openStilLinija()" title="Boja, debljina i vrsta linije vlaka i kraka">🎨 Stil linija</button><button type="button" class="vsd-b" onclick="openVlakaStyle()" title="Boje vlaka i izgled strelica izvoza">🎨 Boje i strelice</button></div>
+    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b" onclick="openVlakaStyle()" title="Boje, debljina i vrsta linije, strelice izvoza i veličina lagera">🎨 Stil vlaka</button></div>
     <div class="vsd-baf vsd-extra">
       <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
       <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>
