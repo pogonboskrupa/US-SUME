@@ -1467,6 +1467,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-dir[open]>summary { margin-bottom:4px; }
 .vsd-dir label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:#475569; }
 .vsd-dir select { min-height:36px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; color:#0f172a; font-size:13px; padding:0 8px; }
+.vsd-col { width:44px; height:30px; border:1px solid #cbd5e1; border-radius:6px; padding:0; }
 .vsd-dir-n { font-size:11px; color:#475569; line-height:1.4; }
 .vsd-dir-pl { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#475569; }
 #vsd-panel {
@@ -5966,7 +5967,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.1.8';
+const APP_VER = 'v3.1.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -11334,6 +11335,45 @@ function _vsdSazetak() {
 var _vsdSkl = (typeof matchMedia === 'function' && matchMedia('(max-width:700px)').matches);
 function _vsdSklopi() { _vsdSkl = !_vsdSkl; _vsdRender(); }
 
+
+// Sekcije Studija su <details> sa pamćenim stanjem (panel se crta iznova pri svakoj izmjeni).
+function _vsdSekOtvorena(k) { try { return localStorage.getItem('tvlake_vsd_sek_' + k) === '1'; } catch (e) { return false; } }
+function _vsdSekToggle(k, on) { try { localStorage.setItem('tvlake_vsd_sek_' + k, on ? '1' : '0'); } catch (e) {} }
+
+function _vsdChip(on, fn, txt) {
+  return `<button type="button" class="vsd-chip${on ? ' act' : ''}" onclick="${fn}">${txt}</button>`;
+}
+
+// Stil vlaka: isti projektni stil kao Meni → Stil i boja vlaka (_bojaChange), bez drugog stanja.
+function _vsdSekStilHtml() {
+  const b = _loadBoje(_vsdPid), w = b.weight || 2, d = b.dash || 'dash', ob = b.outline !== false;
+  const col = (c, d0) => /^#[a-f\d]{6}$/i.test(c || '') ? c : d0;
+  const t = [[2, 'Tanka'], [3, 'Srednja'], [5, 'Debela']];
+  const vr = [['solid', 'Puna'], ['dash', 'Crtkana'], ['dot', 'Tačkasta']];
+  return `<details class="vsd-dir vsd-extra" ${_vsdSekOtvorena('stil') ? 'open' : ''} ontoggle="_vsdSekToggle('stil',this.open)">
+    <summary>🎨 Stil vlaka <small>${w} px · ${vr.find(x => x[0] === d)?.[1] || ''}</small></summary>
+    <div class="vsd-dir-pl"><span>Boja vlake</span><input type="color" value="${col(b.vlaka, '#60a5fa')}" onchange="_bojaChange('vlaka',this.value);_vsdRender()" class="vsd-col"></div>
+    <div class="vsd-dir-pl"><span>Boja kraka</span><input type="color" value="${col(b.krak, '#f87171')}" onchange="_bojaChange('krak',this.value);_vsdRender()" class="vsd-col"></div>
+    <div class="vsd-dir-pl"><span>Debljina</span><div class="vsd-chips">${t.map(([n, x]) => _vsdChip(Math.abs(w - n) < 1, `_bojaChange('weight',${n});_vsdRender()`, x)).join('')}</div></div>
+    <div class="vsd-dir-pl"><span>Vrsta linije</span><div class="vsd-chips">${vr.map(([k, x]) => _vsdChip(d === k, `_bojaChange('dash','${k}');_vsdRender()`, x)).join('')}</div></div>
+    <div class="vsd-dir-pl"><span>Obris oko linije</span><div class="vsd-chips">${_vsdChip(ob, `_bojaChange('outline',true);_vsdRender()`, 'Da')}${_vsdChip(!ob, `_bojaChange('outline',false);_vsdRender()`, 'Ne')}</div></div>
+    <button type="button" class="vsd-b" onclick="openVlakaStyle()" title="Zajednički stil za sve projekte, strelice izvoza">⚙ Sve postavke stila…</button>
+  </details>`;
+}
+
+// Oznake vlaka i lageri: popis, pomjeranje/zaokretanje i veličina na jednom mjestu.
+function _vsdSekOznakeHtml(nKand, bezLagera, lblOn) {
+  const st = (typeof VlakaLager !== 'undefined') ? VlakaLager.styleFor({ projektId: _vsdPid }) : { scale: 100, font: 11 };
+  return `<details class="vsd-dir vsd-extra" ${_vsdSekOtvorena('oznake') ? 'open' : ''} ontoggle="_vsdSekToggle('oznake',this.open)">
+    <summary>🏷 Oznake vlaka i lageri <small>${bezLagera ? bezLagera + ' lagera bez broja' : 'lager ' + st.scale + ' %'}</small></summary>
+    <button type="button" class="vsd-b" onclick="_vsdLagerOtvori()" ${nKand ? '' : 'disabled'} title="Upiši brojeve lagera i pomjeri pojedinačni lager (↗)">🏷 Popis lagera${bezLagera ? ' — ' + bezLagera + ' bez broja' : ''}</button>
+    <button type="button" class="vsd-b${lblOn ? ' ok' : ''}" onclick="_lblEditToggle()" title="Povuci i zaokreni oznake vlaka/kraka i lagera na karti">${lblOn ? '✓ Gotovo s pomjeranjem' : '✥ Pomjeri / zaokreni oznake i lagere'}</button>
+    <div class="vsd-dir-pl"><span>Veličina lagera: ${st.scale} % · oznaka ${st.font} px</span><div class="vsd-chips">
+      <button type="button" class="vsd-chip" onclick="_vsdLagerVel(-1)" title="Smanji lager">−</button><button type="button" class="vsd-chip" onclick="_vsdLagerVel(1)" title="Povećaj lager">＋</button></div></div>
+    <div class="vsd-dir-n">Dok je "pomjeri" uključeno: dodir bira oznaku ili lager, povlačenjem se pomjera, klizač zaokreće. "Auto" vraća zadani položaj.</div>
+  </details>`;
+}
+
 function _vsdLagerHtml(glava) {
   const kand = _vsdLagerKandidati();
   const red = kand.map(v => {
@@ -11412,12 +11452,11 @@ function _vsdRender() {
       <button type="button" class="vsd-b" onclick="_vsdZoomSel()" ${v && v.pts.length ? '' : 'disabled'} title="Zumiraj na vlaku (F)">⌖ Zumiraj<kbd>F</kbd></button>
       <button type="button" class="vsd-b" onclick="_vsdPreimenuj()" ${v && !_vsdPen && v.kr === 0 ? '' : 'disabled'} title="Preimenuj (F2)">✎ Ime<kbd>F2</kbd></button>
       <button type="button" class="vsd-b war" onclick="_vsdObrisi()" ${v && !_vsdPen ? '' : 'disabled'} title="Obriši vlaku (Delete)">🗑 Obriši<kbd>Del</kbd></button>
-      <button type="button" class="vsd-b" onclick="_vsdLagerOtvori()" ${kandL.length ? '' : 'disabled'} title="Popis lagera za sve vlake">🏷 Lageri</button>
     </div>
     ${!_vsdPen && bezLagera ? `<button type="button" class="vsd-b vsd-lgbtn" onclick="_vsdLagerOtvori()">🏷 Popiši lagere — ${bezLagera} bez broja</button>` : ''}
-    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b${lblOn ? ' ok' : ''}" onclick="_lblEditToggle()" title="Povuci i zaokreni labele vlaka/kraka i lagera">🏷 ${lblOn ? 'Gotovo s labelama' : 'Pomjeri / zaokreni labele'}</button></div>
+    ${_vsdSekOznakeHtml(kandL.length, bezLagera, lblOn)}
     ${v && !_vsdLagerMod ? '<div class="vsd-extra">' + (typeof VlakaDirection !== 'undefined' ? VlakaDirection.studioHtml(v) : '') + '</div>' : ''}
-    <div class="vsd-row vsd-extra"><button type="button" class="vsd-b" onclick="openVlakaStyle()" title="Boje, debljina i vrsta linije, strelice izvoza i veličina lagera">🎨 Stil vlaka</button></div>
+    ${_vsdSekStilHtml()}
     <div class="vsd-baf vsd-extra">
       <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
       <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>

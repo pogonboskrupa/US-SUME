@@ -13,7 +13,7 @@ const _removeVlakaMapLayers=v=>{try{map.removeLayer(v.poly)}catch(e){}};
 const _dlgConfirm=async()=>true,_dlgPrompt=async(m,d)=>(window.__prompt??d),sbDeleteVlaka=v=>deleted.push(v.nm),_ensureTPrefix=n=>n,_vlakaSaveTimers={};const deleted=[];
 const renameVlaka=async(i,n)=>{vlake[i].nm=n;return true};
 let bufRadius=40,deadLayers=[],_dozBufRadius=40,_vpBufferId=null,_dozBufLayers=[],_dozTreePts=[],sbUser=null;const _vpBufferLabel=()=>{},_bufSavePrefs=()=>{},dozDrawBuf=()=>{},dozTreesAnalyze=()=>{},_hexToRgb=h=>[96,165,250],_lastDlg=[];
-const __boje={lagerScale:100,lagerLabel:11},__place=[];const _loadBoje=()=>__boje,_bojaChange=(k,v)=>{__boje[k]=v};const VlakaLager={styleFor:()=>({scale:__boje.lagerScale,font:__boje.lagerLabel}),startPlace:k=>__place.push(k),isPicking:()=>false,cancelPick:()=>{}};
+const __boje={lagerScale:100,lagerLabel:11,weight:2,dash:'dash'},__place=[];const _loadBoje=()=>__boje,_bojaChange=(k,v)=>{__boje[k]=v};const VlakaLager={styleFor:()=>({scale:__boje.lagerScale,font:__boje.lagerLabel}),startPlace:k=>__place.push(k),isPicking:()=>false,cancelPick:()=>{}};
 const _lagerZauzeti=async()=>({used:new Set(['L1']),offline:false});
 '''
 for n in ['dst','calcL','fmtL','_escHtml','addPt','_parentOf','_nextKrakNm','_nextMainBr','_findJunctionIdx','_vlCmpNm','_vlRedoslijed','_dropEmptyVlaka','showSnapRing','hideSnapRing','_lagerRefTacka','_bufGetColor','_bufGetOpacity','buildBufPoly','geoJsonToLeaflet','drawBuffers','clearBuffers','_bufSirinaOk','_bufSelPostavi','_bufTrazi','_syncBufRadiusEverywhere','ptAtFrac','ptDist']:js+='\n'+b.function(n)
@@ -114,6 +114,14 @@ async def main():
   await page.keyboard.press('Escape');await page.wait_for_timeout(60)
   await ev('window.__prompt=null')
   assert await ev('vlake.length')==2
+  # --- sekcije Stil vlaka i Oznake vlaka i lageri
+  txt=await page.locator('#vsd-panel').text_content()
+  assert 'Stil vlaka' in txt and 'Oznake vlaka i lageri' in txt and 'Stil linija' not in txt
+  await ev("document.querySelectorAll('#vsd-panel details.vsd-dir').forEach(d=>{if(!d.querySelector('select'))d.open=true})");await page.wait_for_timeout(60)
+  await page.locator('#vsd-panel .vsd-chip',has_text='Debela').click();await page.wait_for_timeout(60)
+  await page.locator('#vsd-panel .vsd-chip',has_text='Puna').click();await page.wait_for_timeout(60)
+  assert await ev('[__boje.weight,__boje.dash]')==[5,'solid']
+  assert await ev("localStorage.getItem('tvlake_vsd_sek_stil')")=='1'
   # --- lageri: L1 zauzet negdje drugo → T1 dobija L2; sačuvano i poslano
   await ev('_vsdLagerOtvori()');await page.wait_for_timeout(60)
   assert await page.locator('#vsd-panel .vsd-lg-in').count()==1
@@ -216,14 +224,14 @@ async def main():
   # --- dvosmjer IZ Studija (stvarni vlaka-direction.js): sekcije se ne preklapaju, dugme je dostupno, klik na vlaku upisuje tačku
   await page.set_viewport_size({'width':1280,'height':560});await ev('vlakeStudioOpen()');await page.wait_for_timeout(100)
   await ev('_vsdSelect(0,false)');await page.wait_for_timeout(60)
-  await ev("(()=>{const s=document.querySelector('#vsd-panel .vsd-dir select');s.value='both';s.dispatchEvent(new Event('change'))})()");await page.wait_for_timeout(150)
+  await ev("(()=>{const s=document.querySelector('#vsd-panel .vsd-dir:has(select) select');s.value='both';s.dispatchEvent(new Event('change'))})()");await page.wait_for_timeout(150)
   assert await ev('VlakaDirection.isPicking()'),'studioMode(both) pokreće izbor tačke'
   ov=await ev("""(()=>{const p=document.getElementById('vsd-panel');return [...p.children].filter(e=>e.offsetHeight>0&&e.tagName!=='BUTTON'&&!e.classList.contains('vsd-list')&&e.scrollHeight>e.clientHeight+1).map(e=>e.className)})()""")
   assert ov==[],('sadržaj sekcije izlazi iz svoje kutije (preklapanje)',ov)
   mid=await ev('(()=>{const a=vlake[0].pts[0],b=vlake[0].pts[1];const c=map.latLngToContainerPoint([(a.la+b.la)/2,(a.lo+b.lo)/2]);return [c.x,c.y]})()')
   await klik(mid[0],mid[1])
   assert not await ev('VlakaDirection.isPicking()') and await ev('!!VlakaDirection.splitFor(vlake[0])'),'klik na vlaku upisuje dvosmjer'
-  assert 'Pomjeri tačku dvosmjera' in await page.locator('#vsd-panel .vsd-dir').text_content()
+  assert 'Pomjeri tačku dvosmjera' in await page.locator('#vsd-panel .vsd-dir:has(select)').text_content()
   await ev('vlakeStudioClose()')
   # --- telefon: panel je tanka traka u cijelosti na ekranu, X je velika meta i stvarno zatvara
   await page.set_viewport_size({'width':390,'height':780});await ev('_vsdSkl=true;vlakeStudioOpen()');await page.wait_for_timeout(100)
