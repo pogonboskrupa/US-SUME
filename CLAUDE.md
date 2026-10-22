@@ -4921,3 +4921,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### CI je padao od v3.1.7 pa APK nije objavljivan (v3.2.2)
 - Release je stao na v3.1.6 jer je korak "Pregled Menija, projekata, Dnevnog moda i štampe" pao na `tests/browser/vlaka-style-286.py`: test je tražio zadanu veličinu oznake lagera 9 px, a od v3.1.6 zadano je 11 px (monospace, čitljivije "L"). Stranica je bila uredna (Pages deploy zeleno), samo APK/release job se preskakao. **Pravilo**: poslije svakog pusha provjeriti `actions_list` za "CODEX WebView provjera i APK" — zelen Pages deploy NE znači da je APK objavljen. Popravljen test (font 11).
+
+### CI emulator korak pao na trci u testu (v3.2.3)
+- Poslije ispravke browser testa (v3.2.2) APK je i dalje stajao: korak "Android Explorer WebView i OCR bez interneta" je pao na `MapDownloadsTest.publishedGithubMapsKeepBothPeriodsAndRecoverCachedJobsOffline` (`expected:<paused> but was:<idle>`). Test je čitao `recovered.statuses()` odmah poslije `enqueue()`, prije nego se posao upiše u prefs — trka u testu, Java aplikacije nije bila kriva. Sad ponavlja čitanje do 5 s.
+- **Kako naći uzrok bez Actions artefakta**: `get_job_logs` sa `return_content:true, tail_lines:760` sprema log u fajl; grep po `TestRunner|##\[error\]|expected` daje tačan test i red (log je inače 99 % logcat šuma). Skripta `explorer-offline.sh` ključne redove ispisuje tek pri padu.
+- Pad ovog koraka znači da su svi raniji koraci (JS, browser) prošli — gledati `steps[].conclusion` u `list_workflow_jobs`, ne samo ukupni ishod.
