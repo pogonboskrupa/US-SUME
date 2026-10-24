@@ -136,3 +136,31 @@ pokretanju — `androidResources { noCompress 'html','js','css' }` u
 se ne izvršava tokom parsiranja kao `defer` fajl ne blokira prvi `<script>`
 (ovo je ISTO izdvajanje, ali sa drugim, mnogo većim razlogom: bajtovi, ne
 compile). Obje se mjere poljem `re` instrumenta v3.
+
+## Korak 3 (izmijenjen): cijeli glavni blok u `static/js/app/glavni.js`, sinhrono na istom mjestu
+
+Hipoteza 1 (`noCompress`) je otpala bez mjerenja — `build.gradle` već ima
+`noCompress "html", "js", "css", …`. Hipoteza 2 (bajtovi HTML-a) je testirana
+premještanjem CIJELOG bloka (1709 KB) u vanjski fajl na isto mjesto, bez
+`defer`: semantika identična (jedan skript → jedan skript), `index.html`
+2271 KB → 561 KB.
+
+Desktop A/B naizmjenično (CPU 4×, 16 učitavanja po strani): `di` 1128 → 882
+(−22 %), `dcl` 1255 → 991, `restore` 1177 → 921, glavni blok na glavnoj niti
+392 → 230 ms (vanjski fajl se streama).
+
+Emulator, stvarni WebView (`docs/mjerenja/emulator-blok-run312.json`, 12 krugova):
+
+| | inline (run 310) | vanjski blok (run 312) | promjena |
+|---|---:|---:|---:|
+| `re` HTML stigao | 527 | 163 | −69 % |
+| `head` prvi skript | 561 | 367 | −35 % |
+| `di` | 846 | 551 | −35 % |
+| `dcl` | 873 | 566 | −35 % |
+| `doMain` (ne zavisi od izmjene → mjera brzine runnera) | 152 | 117 | −23 % |
+
+Uz korekciju na brzinu runnera (`doMain`) dobit do `di` je ~15–35 %, a pad `re`
+(−69 %) prati smanjenje HTML-a na 25 % — efekat je daleko iznad šuma između
+runnera. `fdStart` (291) > `re` (163): WebView prvi skript iz `<head>` traži
+tek kad stigne CIJELI HTML, pa je svaki bajt HTML-a na kritičnom putu.
+**Zadržano i objavljeno u v3.2.4.**
