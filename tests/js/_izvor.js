@@ -11,6 +11,9 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../..');
 const MARKER = /\/\* @izdvojeno (static\/js\/[\w./-]+\.js) \*\//g;
+// Cijeli inline blok premješten u vanjski fajl na ISTOM mjestu (sinhrono):
+// tag se vraća u <script>…</script> sa doslovnim sadržajem fajla.
+const BLOK = /<script src="(static\/js\/[\w./-]+\.js)" data-izdvojeno-blok><\/script>/g;
 
 // Izdvojeni fajl nosi zaglavlje (komentar) i završni prelom radi čitljivosti;
 // pri vraćanju se skida tačno ono što je izdvajanje dodalo, ništa više.
@@ -29,7 +32,9 @@ function izdvojeniFajl(rel, root = ROOT) {
 // Isti postupak nad drugim korijenom (npr. raspakovani APK assets — FIELD_APP_ROOT).
 function izvorIz(root) {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  return html.replace(MARKER, (_, rel) => izdvojeniFajl(rel, root));
+  // Prvo blokovi (marker dijela može stajati UNUTAR izdvojenog bloka), pa markeri.
+  return html.replace(BLOK, (_, rel) => '<script>' + izdvojeniFajl(rel, root) + '</script>')
+    .replace(MARKER, (_, rel) => izdvojeniFajl(rel, root));
 }
 
 let _kes = null;
@@ -41,7 +46,9 @@ function izvor() {
 // Spisak izdvojenih fajlova po redoslijedu markera (za provjere sw.js/manifest).
 function izdvojeni() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  return [...html.matchAll(MARKER)].map(m => m[1]);
+  const blokovi = [...html.matchAll(BLOK)].map(m => m[1]);
+  const sa = html.replace(BLOK, (_, rel) => izdvojeniFajl(rel));
+  return [...blokovi, ...[...sa.matchAll(MARKER)].map(m => m[1])];
 }
 
 module.exports = { izvor, izvorIz, izdvojeni, ROOT };

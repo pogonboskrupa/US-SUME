@@ -2840,6 +2840,14 @@ namjerno, prije nego se jave.
 
 Mjerenja i odluke: `docs/IZDVAJANJE_JS_2026-10-24.md`.
 
+- **Glavni JS (~1,7 MB) više NIJE u `index.html`** nego u
+  `static/js/app/glavni.js`, učitan SINHRONO na istom mjestu
+  (`<script src="…" data-izdvojeno-blok>`) — semantika identična, ali HTML je
+  561 KB umjesto 2,3 MB (u APK-u prvi `<script>` čeka CIJELI HTML). **Izmjene
+  JS koda idu u `glavni.js`**; `grep -n` po `index.html` ga više ne nalazi.
+  Helper ga vraća na mjesto za testove; `izdvoji.py`/`split-analiza.cjs` rade
+  samo nad inline blokom i za njega više ne važe.
+
 - **Testovi NE čitaju `index.html` direktno** — `require('./_izvor').izvor()`
   (Node) / `from _izvor import izvor` (Python, `tests/browser/_izvor.py`). Helper
   zamjenjuje marker `/* @izdvojeno static/js/app/X.js */` sadržajem fajla, pa je

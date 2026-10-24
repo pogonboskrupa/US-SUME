@@ -85,7 +85,7 @@ function sazmi(trace) {
       } if (process.env.DUMP) fs.writeFileSync(process.env.DUMP + load + '.json', buf);
       const red = { ...m, loadEnd: m.load, ...t, rep: rep + 1, load, wall: Date.now() - t0, errors: errors.slice(0, 3) };
       rezultati.push(red);
-      console.log(JSON.stringify({ rep: red.rep, load, rs: m.rs, re: m.re, head: m.head, doMain: m.doMain, main: m.main, poslije: m.poslije, scr: m.scr, scrMs: m.scrMs, scrMax: m.scrMax, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
+      console.log(JSON.stringify({ rep: red.rep, load, rs: m.rs, re: m.re, head: m.head, doMain: m.doMain, main: m.main, poslije: m.poslije, scr: m.scr, scrMs: m.scrMs, scrMax: m.scrMax, fdStart: m.fdStart, fdEnd: m.fdEnd, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
       await page.close();
     }
     await ctx.close(); fs.rmSync(dir, { recursive: true, force: true });

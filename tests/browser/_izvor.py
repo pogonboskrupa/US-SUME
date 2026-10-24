@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 _MARKER = re.compile(r'/\* @izdvojeno (static/js/[\w./-]+\.js) \*/')
+_BLOK = re.compile(r'<script src="(static/js/[\w./-]+\.js)" data-izdvojeno-blok></script>')
 _ZAGLAVLJE = re.compile(r'^// @izdvojeno-iz index\.html[^\n]*\n')
 
 
@@ -25,4 +26,6 @@ def _fajl(m):
 
 
 def izvor():
-    return _MARKER.sub(_fajl, (ROOT / 'index.html').read_text(encoding='utf-8'))
+    html = (ROOT / 'index.html').read_text(encoding='utf-8')
+    html = _BLOK.sub(lambda m: '<script>' + _fajl(m) + '</script>', html)
+    return _MARKER.sub(_fajl, html)
