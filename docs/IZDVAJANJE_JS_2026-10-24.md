@@ -64,5 +64,75 @@ Zapažanja koja određuju plan:
   (±30–100 ms ovdje, ±300 ms na telefonu). Korak 2 zato mjeri i vrijeme glavne
   niti za inline blok iz tracea (manji šum) i iz toga izvodi cijenu po KB.
 
-Emulator (CI) baseline: popuniti iz `startup-timing.txt` prvog CI runa sa
-instrumentom.
+Emulator (CI, API 34 x86_64, stvarni WebView kroz WebViewAssetLoader, bez
+keširanog profila → login put), `docs/mjerenja/emulator-*.json`:
+
+| run | kod | `main` | `di` | `dcl` | `main`/`di` |
+|---|---|---:|---:|---:|---:|
+| 307 (6 krugova, bez `main`) | baseline | — | 664 | 683 | — |
+| 308 (12 krugova) | baseline + instrument v2 | 69 [55–86] | 578 [521–668] | 587 | **12 %** |
+| 309 (12 krugova) | korak 2 (Tematska karta defer) | 109 [73–289] | 811 [708–1130] | 832 | **13 %** |
+
+(medijan toplih krugova 2–12, [raspon])
+
+## Korak 2 — Tematska karta u `static/js/app/tematska-karta.js` (defer)
+
+- Izdvojeno 82 KB (4,7 % bloka), linije `_TEM_RAMP` … kraj filtera tabele.
+  `split-analiza.cjs` je našao da `showApp → _checkDeviceUserSwitch →
+  _fieldArchiveKeys / _wipeAllLocalUserData` tokom parsiranja čita
+  `_TEM_REG_KEY`, `_TEM_NAME_KEY`, `_TEM_THEME_KEY` — ti ključevi su ostali u
+  glavnom bloku. (Na tom putu stoji `await DOMContentLoaded`, pa bi vjerovatno
+  prošlo i bez toga, ali zaštita košta ~400 B i ne zavisi od tog `await`-a.)
+- Desktop A/B naizmjenično u istoj sesiji (`docs/mjerenja/korak2/`):
+
+| | base | split | Δ |
+|---|---:|---:|---:|
+| glavni blok na glavnoj niti (trace, n=12) | 270 | 253 | **−17** |
+| `di` (bez tracea, n=20) | 1024 | 976 | −48 |
+| `dcl` (bez tracea, n=20) | 1094 | 1070 | −24 (IQR se preklapa) |
+| `restore` (bez tracea, n=20) | 1039 | 1012 | −27 |
+| ukupno EvaluateScript (trace) | 492 | 488 | −4 |
+
+  Cijena je linearna sa veličinom (~0,2 ms/KB na glavnoj niti uz 4×).
+  Ukupno izvršavanje skripti se gotovo ne mijenja: top-level izdvojenog fajla
+  se i dalje izvršava na glavnoj niti prije DCL; pomjera se samo parse/compile.
+- **Emulator: dobit se ne može ni potvrditi ni opovrgnuti.** Očekivano ~3–5 ms
+  (4,7 % od `main` ~70–110 ms), a razlika između DVA CI runnera je ~40–60 %
+  (u runu 309 je i `main` sporiji iako je blok manji). Upoređuju se samo omjeri
+  unutar istog runa.
+
+## Raščlamba `di` u stvarnom WebView-u (instrument v3, run 310, kod koraka 2)
+
+Medijan toplih krugova (n=11), ms; `docs/mjerenja/emulator-split-v3-run310.json`:
+
+| dio | ms | udio u `di` 846 |
+|---|---:|---:|
+| `re` — zadnji bajt `index.html` (2,4 MB) stigao kroz WebViewAssetLoader | 527 | **62 %** |
+| `head` — prvi inline skript u `<head>` izvršen | 561 | (≈ `re` + par ms) |
+| `doMain` — od `<head>` do glavnog bloka (leaflet, proj4, supabase, CSS/markup…) | 152 | 18 % |
+| `main` — glavni inline blok | 110 | 13 % |
+| `poslije` — ostatak dokumenta i kasniji sinhroni skripti | 37 | 4 % |
+| skripte do `di`: 40 dohvata, unija vremena dohvata | 234 | (paralelno sa parsiranjem) |
+
+Na desktopu (`tests/perf/startup.cjs`, 4×) isti `re` je ~60–90 ms. U APK-u
+dokument stiže ~6× sporije nego što bi stigao sa lokalnog servera, i parser
+prvi `<script>` u `<head>` izvrši tek kad je stigao CIJELI fajl — dakle
+dominantan trošak pokretanja u APK-u je dostava 2,4 MB HTML-a kroz
+`shouldInterceptRequest`, ne kompajliranje JS-a.
+
+## Zaključak poslije koraka 2
+
+U stvarnom WebView-u glavni inline blok nosi ~12–13 % od `domInteractive`.
+Gornja granica dobiti CIJELOG plana (kad bi se izbacio sav blok, što nije
+moguće — dobar dio koda `initAuth`/`showApp` doseže sinhrono) je ~70–110 ms na
+CI emulatoru; procjena 0,5–1 s nije potkrijepljena. Prema pravilu 5 plana:
+korak 3 (izdvajanje ostatka) se NE radi na osnovu ovih podataka.
+
+Novi kandidat koji su mjerenja otkrila (nije urađen, traži odluku): smanjiti
+trošak dostave `index.html` u APK-u. Hipoteze za provjeru u ISTOM CI runu:
+(1) assets su u APK-u deflate-komprimovani pa ih Java inflate-uje pri svakom
+pokretanju — `androidResources { noCompress 'html','js','css' }` u
+`build.gradle` (bez Java izmjene); (2) manje bajtova u samom HTML-u — JS koji
+se ne izvršava tokom parsiranja kao `defer` fajl ne blokira prvi `<script>`
+(ovo je ISTO izdvajanje, ali sa drugim, mnogo većim razlogom: bajtovi, ne
+compile). Obje se mjere poljem `re` instrumenta v3.
