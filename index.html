@@ -15,7 +15,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <!-- Biblioteke su dio APK-a i web repozitorija: bez mreže prije prve karte. -->
-<script>var _libErrNames = []; function _libErr(n) { _libErrNames.push(n); }</script>
+<script>window._tHead=performance.now();var _libErrNames = []; function _libErr(n) { _libErrNames.push(n); }</script>
 <link rel="stylesheet" href="static/libs/leaflet.min.css">
 <script src="static/libs/leaflet.min.js" onerror="_libErr('Leaflet')"></script>
 <script src="static/libs/proj4.js" onerror="_libErr('proj4')"></script>
@@ -7918,7 +7918,22 @@ function _startupMjeri() {
     const r = v => (typeof v === 'number' && v > 0) ? Math.round(v) : null;
     const m = { ver: APP_VER, di: r(n.domInteractive), dcl: r(n.domContentLoadedEventEnd), load: r(n.loadEventEnd),
       restore: r(_startupRestore._t), restoreSync: r(_startupRestore._tSync),
-      main: r(window._tMainB - window._tMainA), ts: Date.now() };
+      main: r(window._tMainB - window._tMainA),
+      // Raščlamba di: HTML stigao (rs prvi bajt, re zadnji), prvi inline skript u
+      // <head>, sinhrono od <head> do glavnog bloka, glavni blok, ostatak poslije.
+      rs: r(n.responseStart), re: r(n.responseEnd), head: r(window._tHead),
+      doMain: r(window._tMainA - window._tHead), poslije: r(n.domInteractive - window._tMainB), ts: Date.now() };
+    // Skripte do domInteractive (Resource Timing): broj, pokriveno vrijeme i najduži dohvat — u
+    // APK-u svaki prolazi kroz shouldInterceptRequest (Java), pa ovo mjeri tu cijenu.
+    const scr = performance.getEntriesByType('resource').filter(e => e.initiatorType === 'script' && e.startTime < n.domInteractive);
+    m.scr = scr.length;
+    // Unija intervala, ne zbir: dohvati idu paralelno pa bi zbir brojao isto vrijeme više puta.
+    let pokr = 0, kraj = -1;
+    for (const e of scr.map(e => [e.startTime, e.responseEnd || e.startTime + e.duration]).sort((x, y) => x[0] - y[0])) {
+      if (e[0] > kraj) { pokr += e[1] - e[0]; kraj = e[1]; } else if (e[1] > kraj) { pokr += e[1] - kraj; kraj = e[1]; }
+    }
+    m.scrMs = Math.round(pokr);
+    m.scrMax = Math.round(scr.reduce((a, e) => Math.max(a, e.duration), 0));
     window._startupTiming = m;
     try { localStorage.setItem('tvlake_startup_zadnje', JSON.stringify(m)); } catch (e) {}
     console.info('[DENDRO-START] ' + JSON.stringify(m));

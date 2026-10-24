@@ -85,7 +85,7 @@ function sazmi(trace) {
       } if (process.env.DUMP) fs.writeFileSync(process.env.DUMP + load + '.json', buf);
       const red = { ...m, loadEnd: m.load, ...t, rep: rep + 1, load, wall: Date.now() - t0, errors: errors.slice(0, 3) };
       rezultati.push(red);
-      console.log(JSON.stringify({ rep: red.rep, load, main: m.main, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
+      console.log(JSON.stringify({ rep: red.rep, load, rs: m.rs, re: m.re, head: m.head, doMain: m.doMain, main: m.main, poslije: m.poslije, scr: m.scr, scrMs: m.scrMs, scrMax: m.scrMax, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
       await page.close();
     }
     await ctx.close(); fs.rmSync(dir, { recursive: true, force: true });
@@ -96,7 +96,7 @@ function sazmi(trace) {
   const sazetak = {};
   for (const [ime, f] of [['hladno', r => r.load === 1], ['toplo', r => r.load >= 3]]) {
     const g = grupa(f); sazetak[ime] = { n: g.length };
-    for (const k of ['di', 'dcl', 'restore', 'restoreSync', 'main', 'ParseHTML', 'EvaluateScript', 'v8.compile', 'maxTask', 'inlineMain']) sazetak[ime][k] = med(g.map(r => r[k] != null ? Math.round(r[k]) : null));
+    for (const k of ['rs', 're', 'head', 'doMain', 'poslije', 'di', 'dcl', 'restore', 'restoreSync', 'main', 'ParseHTML', 'EvaluateScript', 'v8.compile', 'maxTask', 'inlineMain']) sazetak[ime][k] = med(g.map(r => r[k] != null ? Math.round(r[k]) : null));
   }
   console.log('MEDIJAN', JSON.stringify(sazetak));
   if (OUT) fs.writeFileSync(OUT, JSON.stringify({ uslovi: { viewport: '360x740', cpu: '4x', onLine: false, profil: 'keširan', ponavljanja: REP, ucitavanja: LOADS, chromium: chromium.name() }, sazetak, rezultati }, null, 1));
