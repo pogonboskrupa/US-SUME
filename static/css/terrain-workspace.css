@@ -45,3 +45,30 @@ html[data-field-theme=day] .trn-explorer-art {color:#307a60;}
 #teren-panel .trn-head{position:static}
 #teren-panel .trn-trag-danas{display:flex;gap:8px;align-items:baseline;padding:8px 12px;margin-bottom:8px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg,#0b1220);color:var(--field-muted,#94a3b8);font-size:13px}
 #teren-panel .trn-trag-danas b{color:var(--field-ink,#e2e8f0)}
+
+/* Pregled (v3.2.4): redoslijed pozicija → sunce → kompas je ranija izričita
+   odluka (CODEX_CONTEXT v2.8.x), kao i kompas 134,4 px; brze radnje idu odmah
+   iza njih, Explorer niže. Sunce i Explorer su sažeti. */
+#teren-panel .trn-odjel-ic{width:20px;height:20px;flex-shrink:0;color:#529e7b}
+html[data-field-theme=day] #teren-panel .trn-odjel-ic{color:#2b644c}
+#teren-panel .trn-hero .trn-section-label{margin-bottom:6px}
+#teren-panel .trn-odjel{padding:0 0 10px}
+#teren-panel .trn-quick{margin-top:-6px}
+#teren-panel .trn-quick button{min-height:68px}
+/* Dnevno svjetlo sažeto */
+#teren-panel .trn-sun{gap:6px}
+#teren-panel .trn-sun>div{padding:6px 4px;border-radius:9px;background:var(--field-bg);border-color:var(--field-border)}
+#teren-panel .trn-sun span{font-size:10px;color:var(--field-muted)}
+#teren-panel .trn-sun b{font-size:15px;color:var(--field-ink)}
+#teren-panel .trn-sun-bar i b{box-shadow:0 0 0 2px var(--field-card)}
+/* Brojčanik kompasa prati temu (u dnevnom modu je ostajao crn) */
+#teren-panel .trn-dial{fill:var(--field-bg);stroke:var(--field-border)}
+/* Explorer kao obična kartica, ne naslovna */
+#teren-panel .trn-explorer{padding:14px 16px}
+#teren-panel .trn-explorer-art{width:120px;opacity:.7}
+#teren-panel .trn-explorer h3{font-size:18px;margin:4px 0 6px}
+#teren-panel .trn-explorer p{font-size:12px;margin:0 0 10px;max-width:250px}
+#teren-panel #trn-explorer-state{padding:8px 0}
+/* "+ Zapažanje" uz naslov, ne preko cijele širine */
+#teren-panel .trn-card-h>.trn-btn{width:auto;min-width:0;padding:0 14px;flex-shrink:0}
+#teren-panel #trn-records .trn-card-h{flex-wrap:nowrap;justify-content:space-between;align-items:center;gap:10px}

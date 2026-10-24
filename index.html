@@ -4527,7 +4527,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 <symbol id="ic-pipeta" viewBox="0 0 24 24"><path d="M12 3.5s5 6 5 9.2a5 5 0 0 1-10 0C7 9.5 12 3.5 12 3.5z"/></symbol>
 <symbol id="ic-vozilo" viewBox="0 0 24 24"><path d="M3.5 16.5v-4.2l2-5.1a1.8 1.8 0 0 1 1.7-1.2h9.6a1.8 1.8 0 0 1 1.7 1.2l2 5.1v4.2"/><rect x="2.5" y="12.3" width="19" height="4.8" rx="1.2"/><circle cx="7" cy="14.7" r="1" fill="currentColor" stroke="none"/><circle cx="17" cy="14.7" r="1" fill="currentColor" stroke="none"/><line x1="5.2" y1="17.1" x2="5.2" y2="19.4"/><line x1="18.8" y1="17.1" x2="18.8" y2="19.4"/><line x1="5.6" y1="12.3" x2="18.4" y2="12.3"/></symbol>
 <symbol id="ic-sunce" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><line x1="12" y1="2.5" x2="12" y2="4.8"/><line x1="12" y1="19.2" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="4.8" y2="12"/><line x1="19.2" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="6.9" y2="6.9"/><line x1="17.1" y1="17.1" x2="18.7" y2="18.7"/><line x1="5.3" y1="18.7" x2="6.9" y2="17.1"/><line x1="17.1" y1="6.9" x2="18.7" y2="5.3"/></symbol>
-<symbol id="ic-kompas" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="15.6,8.4 13.2,13.2 8.4,15.6 10.8,10.8"/></symbol>
+<symbol id="ic-stablo" viewBox="0 0 24 24"><polygon points="12,2.5 17,9.5 14.6,9.5 19,15.5 13.2,15.5 13.2,21.5 10.8,21.5 10.8,15.5 5,15.5 9.4,9.5 7,9.5"/></symbol><symbol id="ic-kompas" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polygon points="15.6,8.4 13.2,13.2 8.4,15.6 10.8,10.8"/></symbol>
 <symbol id="ic-trag" viewBox="0 0 24 24"><path d="M3.5 20c1.6-4.4 4.6-6.8 8.2-7.4" stroke-dasharray="3 2.6"/><circle cx="3.5" cy="20" r="2.1" fill="currentColor" stroke="none"/><path d="M17.4 12.2s3.6-3.4 3.6-6a3.6 3.6 0 1 0-7.2 0c0 2.6 3.6 6 3.6 6z"/><circle cx="17.4" cy="6.1" r="1.35"/></symbol>
 <symbol id="ic-crtaj" viewBox="0 0 24 24"><path d="M4 20l1.2-4.4L16.1 4.7a2.3 2.3 0 0 1 3.2 3.2L8.4 18.8z"/><line x1="14.6" y1="6.2" x2="17.8" y2="9.4"/></symbol>
 <symbol id="ic-rucno" viewBox="0 0 24 24"><path d="M8.5 11.5V5.4a1.7 1.7 0 0 1 3.4 0v5.3"/><path d="M11.9 10.7V4.4a1.7 1.7 0 0 1 3.4 0v6.3"/><path d="M15.3 11.2V6.6a1.7 1.7 0 0 1 3.4 0v7.8c0 4-2.7 6.6-6.4 6.6-2.4 0-4-.9-5.4-2.9L4.6 14a1.6 1.6 0 0 1 2.6-1.9l1.3 1.8"/></symbol>
@@ -5368,7 +5368,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div class="trn-kompas">
             <div class="trn-rose">
               <svg viewBox="0 0 100 100" aria-hidden="true">
-                <circle cx="50" cy="50" r="46" fill="#0b1220" stroke="#334155" stroke-width="2"/>
+                <circle class="trn-dial" cx="50" cy="50" r="46" fill="#0b1220" stroke="#334155" stroke-width="2"/>
                 <g stroke="#475569" stroke-width="1.4">
                   <line x1="50" y1="6" x2="50" y2="13"/><line x1="50" y1="87" x2="50" y2="94"/>
                   <line x1="6" y1="50" x2="13" y2="50"/><line x1="87" y1="50" x2="94" y2="50"/>
@@ -5399,15 +5399,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             </div>
             <div id="trn-nav-dist" class="trn-nav-dist">— m</div>
           </div>
-        </section>
-
-        <section class="trn-card trn-explorer" id="trn-explorer">
-          <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
-          <div class="trn-section-label">Orijentacija i navođenje</div>
-          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
-          <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
-          <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
-          <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
         </section>
 
         <!-- BRZE RADNJE -->
@@ -5450,6 +5441,16 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <div id="trn-pane-msr" class="trn-list" style="display:none;"><div id="trn-msr-list"></div></div>
           <div class="trn-results"><span id="trn-result-count"></span><button id="trn-more" hidden class="trn-btn trn-btn-outline" onclick="TerenWorkspace.more()">Prikaži još 20</button></div>
           <div class="trn-grid2 trn-measure-actions"><button class="trn-btn trn-btn-outline" onclick="TerenWorkspace.measure('dist')">Izmjeri dužinu</button><button class="trn-btn trn-btn-outline" onclick="TerenWorkspace.measure('area')">Izmjeri površinu</button></div>
+        </section>
+
+        <!-- EXPLORER -->
+        <section class="trn-card trn-explorer" id="trn-explorer">
+          <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
+          <div class="trn-section-label">Orijentacija i navođenje</div>
+          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
+          <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
+          <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
+          <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
         </section>
 
         <!-- DIJELJENJE KRETANJA -->

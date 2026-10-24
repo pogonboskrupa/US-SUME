@@ -8470,10 +8470,12 @@ function _trnPozicijaRender() {
   const odEl = g('trn-odjel');
   if (odEl) {
     const nm = _trnCurOdjel ? String(_trnCurOdjel) : '';
-    if (!graniceOdjeli.length) odEl.innerHTML = '🌲 <small>Granice odjela nisu učitane</small>';
-    else if (!lastP)           odEl.innerHTML = '🌲 <small>Odjel — čekam GPS poziciju</small>';
-    else if (nm)               odEl.innerHTML = '🌲 ' + _escHtml(/^odjel/i.test(nm) ? nm : 'Odjel ' + nm);
-    else                       odEl.innerHTML = '🌲 <small>Izvan učitanih odjela</small>';
+    // SVG, ne emoji: emoji se na OEM WebView-ovima crta različito ili kao prazan kvadrat.
+    const ik = '<svg class="ic trn-odjel-ic" aria-hidden="true"><use href="#ic-stablo"/></svg>';
+    if (!graniceOdjeli.length) odEl.innerHTML = ik + '<small>Granice odjela nisu učitane</small>';
+    else if (!lastP)           odEl.innerHTML = ik + '<small>Odjel — čekam GPS poziciju</small>';
+    else if (nm)               odEl.innerHTML = ik + _escHtml(/^odjel/i.test(nm) ? nm : 'Odjel ' + nm);
+    else                       odEl.innerHTML = ik + '<small>Izvan učitanih odjela</small>';
   }
 }
 
