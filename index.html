@@ -6179,6 +6179,7 @@ function _loadLocalVlake() {
 <script src="static/js/native-offline-maps.js"></script>
 <script src="static/js/map-downloads.js"></script>
 <script src="static/js/field-store.js"></script>
+<script>window._tMainA=performance.now();</script>
 <script>
 
 let _isOfflineMode = false;
@@ -7908,13 +7909,16 @@ async function showApp() {
 // sinhroni skripti parsirani i izvršeni; dcl = + defer skripti; restore = početak
 // _startupRestore (karta/projekti se crtaju). Zapis ide u konzolu (emulator ga čita
 // iz logcata kao [DENDRO-START]) i u admin Debug "Terenski rad". Samo čita vrijeme.
+// main = vrijeme između oznaka _tMainA/_tMainB (mikro skripte neposredno prije i
+// poslije glavnog inline bloka): parse + compile + izvršavanje top-levela bloka.
 function _startupMjeri() {
   try {
     const n = performance.getEntriesByType('navigation')[0];
     if (!n) return;
     const r = v => (typeof v === 'number' && v > 0) ? Math.round(v) : null;
     const m = { ver: APP_VER, di: r(n.domInteractive), dcl: r(n.domContentLoadedEventEnd), load: r(n.loadEventEnd),
-      restore: r(_startupRestore._t), restoreSync: r(_startupRestore._tSync), ts: Date.now() };
+      restore: r(_startupRestore._t), restoreSync: r(_startupRestore._tSync),
+      main: r(window._tMainB - window._tMainA), ts: Date.now() };
     window._startupTiming = m;
     try { localStorage.setItem('tvlake_startup_zadnje', JSON.stringify(m)); } catch (e) {}
     console.info('[DENDRO-START] ' + JSON.stringify(m));
@@ -43062,6 +43066,7 @@ if (typeof AndroidDownload !== 'undefined') {
 }
 
 </script>
+<script>window._tMainB=performance.now();</script>
 
 <!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">

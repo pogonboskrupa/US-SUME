@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Mjerenje pokretanja u STVARNOM Android WebView-u (APK kroz WebViewAssetLoader).
 # Desktop Chromium ne dokazuje ništa o APK-u: tamo HTTP keš/code cache radi drugačije.
-# Svaki krug: force-stop (novi proces, kao hladan start na terenu) pa am start;
+# Svaki krug (12): force-stop (novi proces, kao hladan start na terenu) pa am start;
 # app sam ispiše [DENDRO-START] {di,dcl,restore...} u konzolu → logcat (chromium).
 # 1. krug je poslije pm clear (bez ikakvog keša), ostali "topli" (code cache ako ga
 # WebView za appassets uopšte pravi — upravo to poređenje 1. i ostalih krugova kaže).
@@ -17,7 +17,7 @@ adb install -r -g "$APK" >/dev/null 2>&1 || { echo "startup-timing: instalacija 
 adb shell pm clear "$PKG" >/dev/null 2>&1
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION >/dev/null 2>&1
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
-for i in 1 2 3 4 5 6; do
+for i in $(seq 1 12); do
   adb shell am force-stop "$PKG"
   sleep 2
   adb logcat -c

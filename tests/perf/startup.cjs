@@ -7,7 +7,7 @@
 // Upotreba: node tests/perf/startup.cjs [ponavljanja=3] [ucitavanja=4] [izlaz.json]
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const { chromium } = require('playwright');
-const ROOT = path.resolve(__dirname, '../..');
+const ROOT = path.resolve(process.env.START_ROOT || path.resolve(__dirname, '../..'));
 const REP = +process.argv[2] || 3, LOADS = +process.argv[3] || 4, OUT = process.argv[4];
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm', '.kml': 'application/xml', '.geojson': 'application/json' };
 const UID = '11111111-1111-4111-8111-111111111111';
@@ -85,7 +85,7 @@ function sazmi(trace) {
       } if (process.env.DUMP) fs.writeFileSync(process.env.DUMP + load + '.json', buf);
       const red = { ...m, loadEnd: m.load, ...t, rep: rep + 1, load, wall: Date.now() - t0, errors: errors.slice(0, 3) };
       rezultati.push(red);
-      console.log(JSON.stringify({ rep: red.rep, load, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
+      console.log(JSON.stringify({ rep: red.rep, load, main: m.main, di: m.di, dcl: m.dcl, restore: m.restore, restoreSync: m.restoreSync, parseHTML: t.ParseHTML, evalScript: t.EvaluateScript, compile: t['v8.compile'], maxTask: Math.round(t.maxTask || 0), inlineMain: t.inlineMain, cache: t.cacheConsumed + '/' + t.cacheProduced, err: errors.length }));
       await page.close();
     }
     await ctx.close(); fs.rmSync(dir, { recursive: true, force: true });
@@ -96,7 +96,7 @@ function sazmi(trace) {
   const sazetak = {};
   for (const [ime, f] of [['hladno', r => r.load === 1], ['toplo', r => r.load >= 3]]) {
     const g = grupa(f); sazetak[ime] = { n: g.length };
-    for (const k of ['di', 'dcl', 'restore', 'restoreSync', 'ParseHTML', 'EvaluateScript', 'v8.compile', 'maxTask', 'inlineMain']) sazetak[ime][k] = med(g.map(r => r[k] != null ? Math.round(r[k]) : null));
+    for (const k of ['di', 'dcl', 'restore', 'restoreSync', 'main', 'ParseHTML', 'EvaluateScript', 'v8.compile', 'maxTask', 'inlineMain']) sazetak[ime][k] = med(g.map(r => r[k] != null ? Math.round(r[k]) : null));
   }
   console.log('MEDIJAN', JSON.stringify(sazetak));
   if (OUT) fs.writeFileSync(OUT, JSON.stringify({ uslovi: { viewport: '360x740', cpu: '4x', onLine: false, profil: 'keširan', ponavljanja: REP, ucitavanja: LOADS, chromium: chromium.name() }, sazetak, rezultati }, null, 1));
