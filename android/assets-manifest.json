@@ -63,6 +63,7 @@
     "static/js/doznaka-plan.js",
     "static/js/doznaka-plan-worker.js",
     "static/css/doznaka-plan.css",
-    "static/js/granice-trazi.js"
+    "static/js/granice-trazi.js",
+    "static/js/app/tematska-karta.js"
   ]
 }

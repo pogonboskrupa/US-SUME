@@ -1,0 +1,223 @@
+{
+ "uslovi": {
+  "viewport": "360x740",
+  "cpu": "4x",
+  "onLine": false,
+  "profil": "keširan",
+  "ponavljanja": 1,
+  "ucitavanja": 4,
+  "chromium": "chromium"
+ },
+ "sazetak": {
+  "hladno": {
+   "n": 1,
+   "di": 1131,
+   "dcl": 1228,
+   "restore": 1166,
+   "restoreSync": 1187,
+   "ParseHTML": 582,
+   "EvaluateScript": 509,
+   "v8.compile": 107,
+   "maxTask": 295,
+   "inlineMain": 263
+  },
+  "toplo": {
+   "n": 2,
+   "di": 1031,
+   "dcl": 1134,
+   "restore": 1065,
+   "restoreSync": 1087,
+   "ParseHTML": 512,
+   "EvaluateScript": 481,
+   "v8.compile": 89,
+   "maxTask": 263,
+   "inlineMain": 234
+  }
+ },
+ "rezultati": [
+  {
+   "ver": "v3.2.3",
+   "di": 1131,
+   "dcl": 1228,
+   "load": 1,
+   "restore": 1166,
+   "restoreSync": 1187,
+   "ts": 1792869772843,
+   "loadEnd": 1257,
+   "maxTask": 295,
+   "ParseHTML": 582,
+   "longTasks": 9,
+   "v8.parseOnBackground": 124,
+   "EvaluateScript": 509,
+   "v8.compile": 107,
+   "v8.produceCache": 4,
+   "FunctionCall": 118,
+   "inlineMain": 263,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     263
+    ],
+    [
+     "static/libs/turf.min.js",
+     129
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     45
+    ],
+    [
+     "static/js/app/tematska-karta.js",
+     19
+    ],
+    [
+     ":5952",
+     16
+    ]
+   ],
+   "rep": 1,
+   "wall": 2067,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1026,
+   "dcl": 1122,
+   "load": 2,
+   "restore": 1060,
+   "restoreSync": 1081,
+   "ts": 1792869774854,
+   "loadEnd": 1150,
+   "maxTask": 265,
+   "ParseHTML": 478,
+   "longTasks": 7,
+   "v8.parseOnBackground": 135,
+   "EvaluateScript": 469,
+   "v8.compile": 88,
+   "v8.produceCache": 3,
+   "FunctionCall": 112,
+   "inlineMain": 235,
+   "cacheConsumed": 0,
+   "cacheProduced": 45,
+   "topScripts": [
+    [
+     ":6182",
+     235
+    ],
+    [
+     "static/libs/turf.min.js",
+     129
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     "static/js/app/tematska-karta.js",
+     18
+    ],
+    [
+     ":5952",
+     13
+    ]
+   ],
+   "rep": 1,
+   "wall": 1950,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1031,
+   "dcl": 1134,
+   "load": 3,
+   "restore": 1065,
+   "restoreSync": 1087,
+   "ts": 1792869776902,
+   "loadEnd": 1213,
+   "maxTask": 263,
+   "ParseHTML": 532,
+   "longTasks": 6,
+   "v8.parseOnBackground": 118,
+   "EvaluateScript": 481,
+   "v8.compile": 89,
+   "v8.produceCache": 8,
+   "FunctionCall": 128,
+   "inlineMain": 234,
+   "cacheConsumed": 0,
+   "cacheProduced": 47,
+   "topScripts": [
+    [
+     ":6182",
+     234
+    ],
+    [
+     "static/libs/turf.min.js",
+     137
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     "static/js/app/tematska-karta.js",
+     18
+    ],
+    [
+     ":5952",
+     12
+    ]
+   ],
+   "rep": 1,
+   "wall": 1996,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1116,
+   "dcl": 1225,
+   "load": 4,
+   "restore": 1153,
+   "restoreSync": 1178,
+   "ts": 1792869779030,
+   "loadEnd": 1297,
+   "maxTask": 270,
+   "ParseHTML": 512,
+   "longTasks": 7,
+   "v8.parseOnBackground": 149,
+   "EvaluateScript": 488,
+   "v8.compile": 92,
+   "v8.produceCache": 3,
+   "FunctionCall": 130,
+   "inlineMain": 241,
+   "cacheConsumed": 0,
+   "cacheProduced": 47,
+   "topScripts": [
+    [
+     ":6182",
+     241
+    ],
+    [
+     "static/libs/turf.min.js",
+     129
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     45
+    ],
+    [
+     "static/js/app/tematska-karta.js",
+     19
+    ],
+    [
+     ":5952",
+     13
+    ]
+   ],
+   "rep": 1,
+   "wall": 2094,
+   "errors": []
+  }
+ ]
+}

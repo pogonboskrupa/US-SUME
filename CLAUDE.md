@@ -2836,6 +2836,32 @@ namjerno, prije nego se jave.
   (van taba jedan poziv, na tabu dva), i invarijante nad markupom.
   **Provjereno da 18 od 21 pada na kodu prije izmjene.**
 
+## Izdvajanje glavnog inline bloka u `static/js/app/*.js` (grana `claude/inline-js-split`)
+
+Mjerenja i odluke: `docs/IZDVAJANJE_JS_2026-10-24.md`.
+
+- **Testovi NE čitaju `index.html` direktno** — `require('./_izvor').izvor()`
+  (Node) / `from _izvor import izvor` (Python, `tests/browser/_izvor.py`). Helper
+  zamjenjuje marker `/* @izdvojeno static/js/app/X.js */` sadržajem fajla, pa je
+  rekonstruisani izvor bajt-identičan stanju prije izdvajanja. Novi test koji
+  čita tekst izvora mora ići kroz helper, inače ne vidi izdvojeni kod.
+- **Izdvajanje samo kroz `tests/perf/izdvoji.py`** (doslovan rez, marker,
+  `<script defer>` iza glavnog bloka, `sw.js` APP_SHELL, `assets-manifest.json`
+  required) i **tek poslije `tests/perf/split-analiza.cjs <od> <do>`**: defer se
+  izvršava POSLIJE cijelog parsiranja, pa svako ime koje glavni blok koristi
+  sinhrono tokom parsiranja (top-level ili tranzitivno pozvana funkcija, npr.
+  `showApp → _checkDeviceUserSwitch → _fieldArchiveKeys`) mora ostati u glavnom
+  bloku. Zato su ključevi `_TEM_*_KEY` ostali inline iako je ostatak Tematske
+  karte izdvojen.
+- Izmjena koda u izdvojenom fajlu se radi U FAJLU; prvi red
+  `// @izdvojeno-iz index.html …` je obavezan (helper ga skida).
+- `tests/js/izvor-helper.test.js` pada ako izdvojeni fajl nije u APP_SHELL /
+  manifestu / nije učitan; `tests/browser/inline-split-startup.py` provjerava
+  pokretanje (keširan profil, login, promjena korisnika) bez ReferenceError-a.
+- Mjerenje: `tests/perf/startup.cjs` (desktop), `tests/android/startup-timing.sh`
+  (CI emulator, `startup-timing.txt` u artefaktu `Android-provjera-<sha>`),
+  `[DENDRO-START]` u konzoli i admin Debug → "Terenski rad" → "Zadnje pokretanje".
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni

@@ -64,6 +64,7 @@ jobs:
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
           timeout 120s python tests/browser/terrain-workspace-243.py
+          timeout 180s python tests/browser/inline-split-startup.py
           timeout 240s python tests/browser/kml-50000.py
           timeout 240s python tests/browser/labele-vlaka.py
           timeout 240s python tests/browser/field-five-hours.py

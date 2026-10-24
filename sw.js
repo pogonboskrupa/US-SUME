@@ -17,6 +17,7 @@ const APP_SHELL = [
   './',
   './index.html',
   './static/js/offline-layer.js',
+  './static/js/app/tematska-karta.js',
   './static/js/offline-import.js',
   './static/js/native-offline-maps.js',
   './static/js/map-downloads.js',
