@@ -1,7 +1,7 @@
 // KML sa 50 000 tačaka odjednom: hit-test ostaje brz, a tačke nemaju listener/tooltip po sloju.
 // Puni test (stvarni Leaflet + DOM parser): tests/browser/kml-50000.py
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const html=fs.readFileSync(require('node:path').join(__dirname,'../../index.html'),'utf8');
+const html=require('./_izvor').izvor();
 function fn(name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(html);assert.ok(m,name);let i=html.indexOf('{',m.index),d=0;for(;i<html.length;i++){if(html[i]==='{')d++;else if(html[i]==='}'&&--d===0)break;}return html.slice(m.index,i+1);}
 const N=50000;
 const pt=(x,y)=>({x,y,distanceTo(o){return Math.hypot(x-o.x,y-o.y)}});

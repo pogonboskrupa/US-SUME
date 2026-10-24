@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(n){const start=html.search(new RegExp('(?:async )?function '+n+'\\('));assert(start>=0,n);let d=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(start,i+1);}throw Error(n);}
 function setup(store=new Map()){const nodes=new Map(),shown=new Set(),deleted=[],messages=[];let center={lat:0,lng:0};
  const layer=(lat=0,lng=0)=>{const l={addTo(){shown.add(l);return l;},getBounds:()=>({isValid:()=>true,getCenter:()=>({lat,lng})}),getLayers:()=>[{}]};return l;};

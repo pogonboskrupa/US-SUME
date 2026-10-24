@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const SRC = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const SRC = require('./_izvor').izvor();
 
 let ok = 0, fail = 0;
 function t(ime, fn) {

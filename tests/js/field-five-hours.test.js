@@ -1,7 +1,7 @@
 'use strict';
 // Pet sati simuliranog vremena, ne pet sati baterije niti fizički Redmi.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync(process.env.FIELD_SOURCE||'index.html','utf8');
+const html=(process.env.FIELD_SOURCE ? require('node:fs').readFileSync(process.env.FIELD_SOURCE,'utf8') : require('./_izvor').izvor());
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));assert(start>=0,name);let d=0;
  for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&!--d)return html.slice(start,i+1);}}
 const tests=[];const test=(n,f)=>tests.push([n,f]);

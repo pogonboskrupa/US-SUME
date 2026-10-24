@@ -12,7 +12,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 const JAVA = fs.readFileSync(path.join(__dirname,
   '../../android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java'), 'utf8')
   .replace(/("(?:\\.|[^"\\])*")|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m, literal) => literal || '');
@@ -193,7 +193,7 @@ process.exit(fail ? 1 : 0);
 
 // Desktop: kontrole su zbijen pojas da karta dobije visinu (telefon nepromijenjen)
 {
-  const _a=require('node:assert/strict'),_s=require('node:fs').readFileSync('index.html','utf8');
+  const _a=require('node:assert/strict'),_s=require('./_izvor').izvor();
   const i=_s.indexOf('@media (min-width:900px) and (hover:hover) {\n  html body.stampa-on #stampa-kontrole');
   _a(i>0,'desktop media blok za #stampa-kontrole');
   const blok=_s.slice(i,_s.indexOf('\n}\n',i));

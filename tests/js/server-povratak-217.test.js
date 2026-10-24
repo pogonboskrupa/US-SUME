@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
-const src=fs.readFileSync('index.html','utf8');
+const src=require('./_izvor').izvor();
 function fn(name){const m=src.match(new RegExp('(?:async )?function '+name+'\\('));assert(m,name);let d=0;for(let i=src.indexOf('{',m.index);i<src.length;i++){d+=src[i]==='{';d-=src[i]==='}';if(!d)return src.slice(m.index,i+1);}throw Error(name);}
 const tests=[];const test=(n,f)=>tests.push([n,f]);
 function env(names,extra={}){const e={console,sbUser:{id:'A'},...extra};vm.createContext(e);vm.runInContext(names.map(fn).join('\n'),e);return e;}

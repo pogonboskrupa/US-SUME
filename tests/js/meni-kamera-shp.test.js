@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8'),shapefile=require('../../static/libs/shapefile.min.js'),proj4=require('../../static/libs/proj4.js');
+const html=require('./_izvor').izvor(),shapefile=require('../../static/libs/shapefile.min.js'),proj4=require('../../static/libs/proj4.js');
 function fn(n){const start=html.search(new RegExp('(?:async )?function '+n+'\\('));assert.ok(start>=0,n);let d=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(start,i+1);}throw Error(n);}
 function shp(type=1,rings=[[[16,44]]]) {
  const points=rings.flat(),parts=type!==1,body=parts?44+4*rings.length+16*points.length:20,b=Buffer.alloc(108+body);

@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(n){const m=html.match(new RegExp('(?:async )?function '+n+'\\('));assert.ok(m,n);let d=0;for(let i=html.indexOf('{',m.index);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(m.index,i+1);}throw Error(n);}
 const pts=[{la:44.9,lo:16,al:300},{la:44.903,lo:16,al:340}];
 const names=['_escHtml','_esc','dst','calcL','calcElev','fmtL','fmtHa','fmtDate','fmtDateShort','_pmFilterList','_pmMatchProject','_pmListCaption','_pmProjectRows','_pmCardHtml','_pmUserName','_pmRenderList','_pmRenderAdminList','_projektTimIds','_projektIme','_logEntryMatchesProject','_pmOpenDetail','_pmBuildDetail','_vlakeStatsSecsHtml','_pmTime'];

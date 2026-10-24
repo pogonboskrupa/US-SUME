@@ -12,7 +12,7 @@ p=detect({hardwareConcurrency:4},{memoryGb:8,lowRam:false});assert.equal(p.mode,
 p=detect({},{});assert.equal(p.mode,'full','bez dokaza se funkcionalnost ne degradira');
 p=detect({deviceMemory:8,hardwareConcurrency:8},{memoryGb:12,lowRam:true});assert.equal(p.mode,'lite');
 
-const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const html=require('./_izvor').izvor();
 assert(html.includes("zoomAnimation:_renderCfg.animations"));
 assert(!html.includes('keepBuffer:6'),'stari buffer je držao stotine 256px tekstura po sloju');
 assert(html.includes("window.DendroRender?.onPressure(() => _renderRecover(true))"));

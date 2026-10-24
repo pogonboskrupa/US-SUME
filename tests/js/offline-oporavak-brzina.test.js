@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
-const html = fs.readFileSync('index.html', 'utf8');
+const html = require('./_izvor').izvor();
 function fn(name) {
   const start = html.search(new RegExp('(?:async )?function ' + name + '\\('));
   let depth = 0;

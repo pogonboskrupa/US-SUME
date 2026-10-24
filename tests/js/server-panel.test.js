@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(start>=0,name);let d=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(start,i+1);}throw Error(name);}
 const ids=['server-exchange-status','syncq-posalji','server-doz-status','server-doz-refresh','server-received-items','server-sent-items','data-server-sent','server-project-label','server-send-preview','server-identity','server-project-view','server-project-summary','server-project-authors','server-project-search','server-project-list','server-project-pager','server-project-print','server-project-map','server-project-refresh','data-server-tabs','data-server-received','syncq-list','data-server-pager','data-server-empty'];
 const pts=[{la:44,lo:16},{la:44.001,lo:16}];

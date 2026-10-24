@@ -1,7 +1,7 @@
 // Uređivanje traga TOKOM snimanja (v3.0.0) + brisanje korisnika (FK).
 'use strict';
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
-const html = fs.readFileSync('index.html', 'utf8');
+const html = require('./_izvor').izvor();
 function fn(name) {
   const start = html.search(new RegExp('(?:async )?function ' + name + '\\('));
   assert.ok(start >= 0, name);

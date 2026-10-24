@@ -3,7 +3,7 @@
 // koja nikad ne može proći ne smije zauvijek stajati u "čeka slanje".
 'use strict';
 const fs = require('node:fs'), assert = require('node:assert/strict');
-const html = fs.readFileSync('index.html', 'utf8');
+const html = require('./_izvor').izvor();
 const _store = new Map();
 global.localStorage = { getItem: k => (_store.has(k) ? _store.get(k) : null), setItem: (k, v) => _store.set(k, String(v)),
   removeItem: k => _store.delete(k) };

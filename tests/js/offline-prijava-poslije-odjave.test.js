@@ -1,6 +1,6 @@
 // Offline prijava poslije ODJAVE: provjera ime+PIN ne smije zavisiti od `tvlake_saved_user` koji odjava briše.
 const assert = require('node:assert/strict'), fs = require('fs'), path = require('path'), vm = require('vm');
-const src = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const src = require('./_izvor').izvor();
 function blok(od, do_) { const a = src.indexOf(od); assert.ok(a > 0, od); const b = src.indexOf(do_, a); assert.ok(b > a, do_); return src.slice(a, b); }
 const kod = blok("const _OFFCRED_KEY", "(function _offCredMigracija") + blok("async function _offCredProvjeri", "\n}\n") + "\n}\n";
 const ls = {}; const localStorage = { getItem: k => k in ls ? ls[k] : null, setItem: (k, v) => { ls[k] = String(v); }, removeItem: k => { delete ls[k]; } };

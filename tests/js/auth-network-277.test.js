@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 const login=html.slice(html.indexOf('async function doLogin()'),html.indexOf('// --- Register ---'));
 const network=html.slice(html.indexOf('function _isNetworkErr('),html.indexOf('// Prolazna greška SERVERA'));
 async function run({online=true,quality='dobra',lookup={data:'test@example.invalid',error:null},signError=null,cached=null,saved=null}={}){

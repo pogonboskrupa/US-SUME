@@ -3,7 +3,7 @@
 // koju zove showApp() za SVAKI ulaz.
 const assert = require('assert');
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
+const src = require('./_izvor').izvor();
 function fn(name) {
   const i = src.indexOf('function ' + name + '(');
   assert.ok(i >= 0, name + ' postoji');

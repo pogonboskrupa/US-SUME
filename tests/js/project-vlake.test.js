@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const source=fs.readFileSync('index.html','utf8'),section=source.slice(source.indexOf('// Boje i stil prikaza po projektu'),source.indexOf('function buildC()',source.indexOf('// Boje i stil prikaza po projektu')));
+const source=require('./_izvor').izvor(),section=source.slice(source.indexOf('// Boje i stil prikaza po projektu'),source.indexOf('function buildC()',source.indexOf('// Boje i stil prikaza po projektu')));
 function setup(){const store=new Map(),notes=[],nodes=new Map(),layer=()=>({options:{},setStyle(s){Object.assign(this.options,s);}});
  const e={console,sbUser:{id:'A'},_aktivniProjektId:'P',_projekti:[{id:'P',gj:'Una',odjel:'105'},{id:'Q',odjel:'206'}],vlake:[],kolegeVlakeMap:{},localStorage:{getItem:k=>store.get(k)||null,removeItem:k=>store.delete(k),setItem(k,v){if(e.quota)throw Error('Quota');store.set(k,v);}},document:{getElementById:id=>nodes.get(id)||null,querySelectorAll:()=>[]},map:{removeLayer(){},getZoom:()=>15},showToast:m=>notes.push(m),getIme:()=> 'Emina Projektant',_escHtml:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),fmtL:n=>n+' m',calcL:p=>p.length*100};vm.createContext(e);vm.runInContext(section,e);return{e,store,notes,nodes,layer};}
 const tests=[];const test=(n,f)=>tests.push([n,f]);

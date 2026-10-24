@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8'),moduleSrc=fs.readFileSync('static/js/offline-import.js','utf8');
+const html=require('./_izvor').izvor(),moduleSrc=fs.readFileSync('static/js/offline-import.js','utf8');
 async function workerCase({short=false,quota=false,delay=false,syncRead=false}={}){
  let revoked=0,closed=0,flushed=false,written=[],terminated=false,progress=[];
  let input=new Blob([new Uint8Array((syncRead?21:5)*1024*1024).fill(73)]),reads=0;

@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(n){const m=html.match(new RegExp('(?:async )?function '+n+'\\('));assert(m,n);let d=0;for(let i=html.indexOf('{',m.index);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(m.index,i+1);}throw Error(n);}
 const project=(id,odjel,gj='Una',owner='A')=>({id,odjel,gj,sumarija:'Krupa',korisnik_id:owner,clanovi:[]});
 const store=new Map(),els=new Map(['proj-detalji-sec','dnevni-log','project-log-actions','proj-panel','pm-list-wrap','pm-detail','pm-back-btn','pm-title','pm-body','pm-detail-body'].map(id=>[id,{style:{display:'none'},innerHTML:'',textContent:'',querySelector:()=>null}]));

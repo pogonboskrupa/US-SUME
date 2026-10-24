@@ -3,7 +3,7 @@
 'use strict';
 const assert = require('node:assert');
 const fs = require('node:fs'), path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 const CSS = fs.readFileSync(path.join(__dirname, '../../static/css/field-design.css'), 'utf8');
 function extractFn(n) {
   let s = HTML.indexOf('async function ' + n + '('); if (s < 0) s = HTML.indexOf('function ' + n + '(');

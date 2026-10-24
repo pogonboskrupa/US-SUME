@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(name){let start=html.indexOf('async function '+name+'(');if(start<0)start=html.indexOf('function '+name+'(');assert(start>=0,name);let depth=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')depth++;if(html[i]==='}'&&!--depth)return html.slice(start,i+1);}}
 const tests=[];function test(n,f){tests.push([n,f]);}
 function storage(){const m=new Map();return {m,getItem:k=>m.get(k)||null,setItem(k,v){if(this.fail===k)throw Error('quota');m.set(k,String(v));},removeItem:k=>m.delete(k)};}

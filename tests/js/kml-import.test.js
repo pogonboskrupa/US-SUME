@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const html=fs.readFileSync(require('node:path').join(__dirname,'../../index.html'),'utf8');
+const html=require('./_izvor').izvor();
 const start=html.indexOf('function _impProjektDozvoljen('),end=html.indexOf('function impVlakaOpen(',start);
 const ctx={_projekti:[{id:'own',korisnik_id:'u'},{id:'shared',korisnik_id:'other',clanovi:[{korisnik_id:'u'}]},{id:'foreign',korisnik_id:'other'}],sbUser:{id:'u'},isReadOnly:()=>false};
 vm.createContext(ctx);vm.runInContext(html.slice(start,end),ctx);

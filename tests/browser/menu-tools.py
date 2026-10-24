@@ -2,9 +2,10 @@
 import asyncio, mimetypes, os, re, struct
 from pathlib import Path
 from playwright.async_api import async_playwright
+from _izvor import izvor  # index.html + izdvojeni fajlovi na izvornom mjestu
 
 ROOT=Path(__file__).resolve().parents[2]
-SOURCE=(ROOT/'index.html').read_text()
+SOURCE=izvor()
 OUT=ROOT/'outputs/ui-preview'
 
 def function(name):

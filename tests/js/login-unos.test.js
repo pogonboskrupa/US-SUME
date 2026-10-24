@@ -1,6 +1,6 @@
 // Prijava: Android autofill ne smije prekidati kucanje; Enter vodi kroz polja; PIN se može prikazati.
 const fs = require('fs'), path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const src = require('./_izvor').izvor();
 let pass = 0, fail = 0;
 const t = (n, f) => { try { f(); console.log('  ✔ ' + n); pass++; } catch (e) { console.log('  ✘ ' + n + '\n      ' + e.message); fail++; } };
 const ok = (c, m) => { if (!c) throw new Error(m); };

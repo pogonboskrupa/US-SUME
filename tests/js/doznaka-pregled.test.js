@@ -3,7 +3,7 @@
 'use strict';
 const assert = require('node:assert');
 const fs = require('node:fs'), path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 function extractFn(n) {
   const s = HTML.indexOf('function ' + n + '('); if (s < 0) throw new Error('nema ' + n);
   let d = 0; for (let i = HTML.indexOf('{', s); i < HTML.length; i++) { if (HTML[i] === '{') d++; else if (HTML[i] === '}' && !--d) return HTML.slice(s, i + 1); }

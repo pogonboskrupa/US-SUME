@@ -1,7 +1,7 @@
 'use strict';
 // Simulacija, ne produkcijski projekat. Računice su stvarne funkcije aplikacije.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),turf=require('../../static/libs/turf.min.js');
-const html=fs.readFileSync(path.join(__dirname,'../../index.html'),'utf8');
+const html=require('../js/_izvor').izvor();
 function fn(name){const start=html.indexOf('function '+name+'(');assert(start>=0);let i=html.indexOf('{',start),depth=0;for(;i<html.length;i++){if(html[i]==='{')depth++;else if(html[i]==='}'&&!--depth)return html.slice(start,i+1);}throw Error(name);}
 const twoTeams=process.argv.includes('--teams');
 const origin=[16,44.9],R=6371000,cos=Math.cos(origin[1]*Math.PI/180),toLL=(x,y)=>[origin[0]+x/(R*cos)*180/Math.PI,origin[1]+y/R*180/Math.PI];

@@ -1,6 +1,6 @@
 // Studio "Nacrtaj vlake u odjelu": čista geometrija hvatanja + invarijante ožičenja.
 const fs = require('fs'), path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const src = require('./_izvor').izvor();
 let pass = 0, fail = 0;
 const t = (n, f) => { try { f(); console.log('  ✔ ' + n); pass++; } catch (e) { console.log('  ✘ ' + n + '\n      ' + e.message); fail++; } };
 const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((m || '') + ' ' + JSON.stringify(a) + ' != ' + JSON.stringify(b)); };

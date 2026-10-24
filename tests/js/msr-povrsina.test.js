@@ -17,7 +17,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 // Stvarni turf iz repoa (isti fajl kao produkcija) — turf.min.js nije čist
 // CommonJS modul, pa se ručno izvršava kao UMD wrapper (isti obrazac kao

@@ -12,7 +12,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 const JAVA = fs.readFileSync(path.join(__dirname,
   '../../android/app/src/main/java/ba/spd/uss/vlake/MainActivity.java'), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');   // komentari objašnjavaju staro stanje

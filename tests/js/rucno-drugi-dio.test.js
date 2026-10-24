@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 function fn(n){const start=html.search(new RegExp('(?:async )?function '+n+'\\('));let d=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&--d===0)return html.slice(start,i+1);}throw Error(n);}
 function setup(type, result, switchOwner=false){
  const op={type,_qid:'q1',_uid:'u1',payload:{id:'id',_tempId:'id',status:'active'}};
