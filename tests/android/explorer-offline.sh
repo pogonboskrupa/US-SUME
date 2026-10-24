@@ -16,6 +16,10 @@ timeout 180s gradle -p android --no-daemon connectedDebugAndroidTest
 TEST_RC=$?
 set -e
 adb logcat -d > outputs/android-test/logcat.txt
+# Mjerenje pokretanja (izdvajanje inline JS-a) — poslije testova, jer
+# connectedAndroidTest na kraju deinstalira APK; skripta ga instalira sama.
+echo "=== Mjerenje pokretanja u WebView-u ==="
+timeout 420s bash tests/android/startup-timing.sh || true
 if [ "$TEST_RC" -ne 0 ]; then
   # Zadnjih 500 redova logcata počinje tek ~45 s poslije prvog pada (ostali
   # testovi nastave raditi), pa iz njih nije vidljivo ŠTA je palo. Prvo

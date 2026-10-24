@@ -7904,6 +7904,24 @@ async function showApp() {
 //
 // 2. SVAKI KORAK JE ZASEBNO OSIGURAN. Jedan pad (nedostajući element, prazan
 //    keš, izuzetak u biblioteci) više ne smije oboriti sve ostale obnove.
+// Mjerenje pokretanja (izdvajanje inline JS-a, 2026-10): domInteractive = svi
+// sinhroni skripti parsirani i izvršeni; dcl = + defer skripti; restore = početak
+// _startupRestore (karta/projekti se crtaju). Zapis ide u konzolu (emulator ga čita
+// iz logcata kao [DENDRO-START]) i u admin Debug "Terenski rad". Samo čita vrijeme.
+function _startupMjeri() {
+  try {
+    const n = performance.getEntriesByType('navigation')[0];
+    if (!n) return;
+    const r = v => (typeof v === 'number' && v > 0) ? Math.round(v) : null;
+    const m = { ver: APP_VER, di: r(n.domInteractive), dcl: r(n.domContentLoadedEventEnd), load: r(n.loadEventEnd),
+      restore: r(_startupRestore._t), restoreSync: r(_startupRestore._tSync), ts: Date.now() };
+    window._startupTiming = m;
+    try { localStorage.setItem('tvlake_startup_zadnje', JSON.stringify(m)); } catch (e) {}
+    console.info('[DENDRO-START] ' + JSON.stringify(m));
+  } catch (e) {}
+}
+window.addEventListener('load', () => setTimeout(_startupMjeri, 0), { once: true });
+
 function _startupRestore() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _startupRestore, { once: true });
@@ -7911,6 +7929,7 @@ function _startupRestore() {
   }
   if (_startupRestore._done) return;   // idempotentno (showApp može doći dvaput)
   _startupRestore._done = true;
+  _startupRestore._t = performance.now();   // samo mjerenje (_startupMjeri), bez uticaja na tok
   const owner = sbUser?.id;
   const generation = (_startupRestore._generation || 0) + 1;
   _startupRestore._generation = generation;
@@ -7927,6 +7946,7 @@ function _startupRestore() {
   if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); });
   korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
   korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
+  _startupRestore._tSync = performance.now();
   // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
 
   // Ostali nekritični restores iza prvog painta
@@ -8752,6 +8772,10 @@ function _netDebugRender() {
     h += _netRedHtml('Online radnje', 'lokalni rad — slanje i preuzimanje na ručni zahtjev', '#f59e0b');
   }
   h += _netRedHtml('Čeka u redu za sync', red == null ? '—' : String(red), red ? '#f59e0b' : '#22c55e');
+  let pok = null;
+  try { pok = JSON.parse(localStorage.getItem('tvlake_startup_zadnje') || 'null'); } catch (e) {}
+  if (pok && pok.dcl) h += _netRedHtml('Zadnje pokretanje', pok.dcl + ' ms do DOM spreman' + (pok.restore ? ' · karta ' + pok.restore + ' ms' : ''),
+    pok.dcl > 4000 ? '#f59e0b' : '#cbd5e1');
   h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
   // Ovo je jedina brojka koja pokazuje koliko još terenskog rada STANE. Pregled
   // offline karata mjeri origin kvotu (GB) i o localStorage-u ne govori ništa.
