@@ -2,10 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    # "!claude/inline-js-split": test grana NE smije zamijeniti živi webapp —
-    # Pages je jedan za sve, a sw.js bi test kod tiho podvalio svim korisnicima.
-    # Negacija mora stajati POSLIJE "claude/**" (GitHub čita obrasce redom).
-    branches: [main, "claude/**", "!claude/inline-js-split"]
+    branches: [main, "claude/**"]
   workflow_dispatch:
 
 permissions:

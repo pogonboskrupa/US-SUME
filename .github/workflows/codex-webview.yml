@@ -7,8 +7,7 @@ on:
       - CODEX-US-SUME-2026-10-01
       # Claude Code radna grana — isti build/testovi/release za Meni → Ažuriraj aplikaciju.
       - claude/elegant-mayer-4lxj53
-      # Test grana (izdvajanje inline JS-a): testovi + APK artefakt + emulator,
-      # ali BEZ GitHub Releasea (vidi uslov na koraku objave ispod).
+      # Produkcijska grana od v3.2.4 — jedina koja objavljuje Release.
       - claude/inline-js-split
 concurrency:
   group: codex-webview-${{ github.ref }}
@@ -252,11 +251,12 @@ jobs:
           if [ -z "$V" ]; then echo "GRESKA: versionName nije pronađen"; exit 1; fi
           echo "verzija=$V" >> "$GITHUB_OUTPUT"
       - name: Objavi/ažuriraj GitHub Release sa APK-om (za auto-update u app-u)
-        # SAMO produkcijske grane. Release je ono što UpdateBridge nudi SVIM
-        # telefonima kroz Meni → Ažuriraj aplikaciju (/releases?per_page=1), pa
-        # test grana bez ovog uslova bi svoj APK podvalila cijeloj firmi — a uz
-        # isti versionName bi PREPISALA asset postojećeg produkcijskog releasea.
-        if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01' || github.ref == 'refs/heads/claude/elegant-mayer-4lxj53'
+        # SAMO produkcijska grana. Release je ono što UpdateBridge nudi SVIM
+        # telefonima kroz Meni → Ažuriraj aplikaciju (/releases?per_page=1). Od
+        # v3.2.4 produkcija je claude/inline-js-split (odluka korisnika); ostale
+        # grane iz OVOG fajla više ne objavljuju (jedan izvor, inače "zadnji
+        # objavljen" pobjeđuje na svim telefonima).
+        if: github.ref == 'refs/heads/claude/inline-js-split'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.verzija.outputs.verzija }}
