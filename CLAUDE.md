@@ -35,7 +35,7 @@ nezavisno od toga kako se `X.Y.Z` mijenja.
 ## "Ažuriraj aplikaciju" — release SAMO na izričit zahtjev (od v3.0.0)
 
 Korisnikov trajni zahtjev: verzija se podiže, a push na
-`claude/elegant-mayer-4lxj53` (koji pokreće CI → GitHub Release) radi se
+`claude/inline-js-split` (koji pokreće CI → GitHub Release) radi se
 SAMO kad korisnik kaže **"ažuriraj aplikaciju"** (ili jasno isto). Na ostale
 promptove: izmjene, testovi i commit LOKALNO, bez bump-a verzije i bez push-a.
 Push bez bump-a je također pogrešan — CI bi pod istim tagom prepisao APK
@@ -53,9 +53,9 @@ web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 - **PowerShell (Windows)**: `powershell -ExecutionPolicy Bypass -File android\build-apk.ps1`
   (pull + copy-assets + gradle build u jednom potezu). **Zadana `-Branch` u
   skripti je i dalje stara `CODEX-US-SUME-2026-10-01`** — za trenutni kod
-  pokreni sa `-Branch claude/elegant-mayer-4lxj53`.
+  pokreni sa `-Branch claude/inline-js-split`.
 - **Uobičajeni put od 2.8.10 nije lokalni build nego CI**: push na
-  `claude/elegant-mayer-4lxj53` pokreće `codex-webview.yml` (testovi → APK →
+  `claude/inline-js-split` pokreće `codex-webview.yml` (testovi → APK →
   emulator → GitHub Release `vX.Y.Z`), a telefon ga preuzima kroz
   **Meni → Ažuriraj aplikaciju**. Release nastaje SAMO ako CI prođe zeleno.
 - Ili ručno: `android/copy-assets.ps1` / `.sh` pa build kroz Android Studio.
@@ -4776,14 +4776,18 @@ Mjerenja i odluke: `docs/IZDVAJANJE_JS_2026-10-24.md`.
 3. Podigni sve tri verzije (vidi gore). Izmjene samo dokumentacije (ovaj fajl,
    README) ne traže bump verzije.
 4. Commit poruka na bosanskom, objašnjava UZROK ne samo šta je promijenjeno.
-5. **Push na `claude/elegant-mayer-4lxj53`** (od 2026-10-12). Ta grana:
+5. **Push na `claude/inline-js-split`** (od v3.2.4, 2026-10-25 — nastavak
+   `claude/elegant-mayer-4lxj53`, koja više NE objavljuje; Release korak u
+   `codex-webview.yml` je gejtovan na `refs/heads/claude/inline-js-split`).
+   versionName se nastavlja (3.2.3 → 3.2.4 → …), a versionCode je skočio
+   596 → 700+ i ide dalje +1 (ne smije nazad). Ta grana:
    - pokreće `codex-webview.yml` (push okidač I `if:` uslov joba `apk` — oba
      moraju sadržavati granu, inače je job "skipped" bez greške) i objavljuje
      GitHub Release koji koristi **Meni → Ažuriraj aplikaciju**;
    - je izvor za **GitHub Pages** (deploy.yml, `claude/**`; korisnik je
      prebacio Pages na nju).
-   `CODEX-US-SUME` (Codex, do v2.8.9) i `claude/branch-072026-sa9wz0` / PR #30
-   su ZATVORENO poglavlje — ne gurati tamo.
+   `CODEX-US-SUME` (Codex, do v2.8.9), `claude/branch-072026-sa9wz0` / PR #30
+   i `claude/elegant-mayer-4lxj53` su ZATVORENO poglavlje — ne gurati tamo.
    - Iz Claude sesije `workflow_dispatch` i "re-run failed jobs" vraćaju 403 —
      CI se pokreće samo novim pushem (nikad prazan commit; popravka mora biti
      stvarna). Artefakt sa punim logcatom proxy ne pušta (blob.core.windows.net),
