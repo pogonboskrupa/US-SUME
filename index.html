@@ -1500,7 +1500,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-cur .vsd-st { color:#475569; font-size:12px; font-variant-numeric:tabular-nums; }
 .vsd-cur .vsd-st.pen { color:#047857; font-weight:700; }
 .vsd-auto { display:flex; align-items:center; gap:6px; font-size:12px; color:#475569; cursor:pointer; }
-.vsd-list { flex:1 0 auto; min-height:80px; max-height:240px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }
+.vsd-list { flex:none; min-height:44px; max-height:240px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }
 .vsd-li { display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent; cursor:pointer; text-align:left; padding:7px 10px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; }
 .vsd-li:hover { background:#f1f5f9; }
 .vsd-li.act { background:#e0f2fe; box-shadow:inset 3px 0 0 #0ea5e9; }
@@ -1534,6 +1534,41 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 .vsd-chip.act { background:#0369a1; border-color:#0369a1; color:#fff; }
 .vsd-undo { flex:none; min-width:36px; height:32px; border-radius:8px; border:1px solid rgba(148,163,184,.4); background:rgba(148,163,184,.15); color:inherit; font-size:16px; cursor:pointer; }
 #vsd-seg { color:#0369a1; }
+/* Pregled (v3.2.6): sažetak odjela, sekcije, lager u listi, radnje uz izabranu vlaku */
+#vsd-panel { width:344px; }
+#vsd-panel .vsd-head b { font-size:16px; letter-spacing:-.01em; }
+.vsd-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.vsd-kpi { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:5px 4px; text-align:center; min-width:0; }
+.vsd-kpi b { display:block; font-size:14px; font-weight:800; color:#0f172a; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vsd-kpi span { display:block; font-size:10px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vsd-kpi.war { background:#fff7ed; border-color:#fdba74; }
+.vsd-kpi.war b { color:#c2410c; }
+.vsd-sec { display:flex; align-items:baseline; gap:6px; margin-top:4px; padding:0 2px; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#475569; }
+.vsd-sec small { margin-left:auto; font-weight:500; letter-spacing:0; text-transform:none; color:#94a3b8; }
+.vsd-mini { display:flex; gap:5px; }
+.vsd-mini .vsd-b { padding:6px 4px; font-size:11.5px; background:#fff; box-shadow:inset 0 0 0 1px #e2e8f0; }
+.vsd-mini .vsd-b.war { background:#fff7ed; box-shadow:inset 0 0 0 1px #fdba74; }
+.vsd-lgz { flex:none; font-size:10.5px; font-weight:800; padding:1px 6px; border-radius:6px; background:#fef3c7; color:#92400e; border:1px solid #fcd34d; white-space:nowrap; }
+.vsd-lgz.no { background:#fff; color:#c2410c; border-color:#fdba74; font-weight:600; }
+.vsd-li.krak .nm { font-weight:600; }
+.vsd-ug { color:#94a3b8; font-weight:400; }
+.vsd-li .meta.war { color:#c2410c; }
+.vsd-dir > .vsd-b { display:block; width:100%; text-align:left; padding:9px 10px; }
+.vsd-dir-pl { flex-wrap:wrap; }
+.vsd-dir:not([open]) { gap:0; padding:2px 8px; }
+.vsd-dir > summary { list-style:none; }
+.vsd-dir > summary::-webkit-details-marker { display:none; }
+.vsd-dir > summary::after { content:'›'; margin-left:auto; padding-left:6px; font-size:18px; color:#94a3b8; transition:transform .15s; }
+.vsd-dir[open] > summary::after { transform:rotate(90deg); }
+details.vsd-help > summary { list-style:none; }
+details.vsd-help > summary::-webkit-details-marker { display:none; }
+details.vsd-help > summary::after { content:'›'; margin-left:6px; color:#94a3b8; }
+details.vsd-help[open] > summary::after { content:'⌄'; }
+.vsd-chips { flex-wrap:wrap; }
+.vsd-chip { padding:0 8px; }
+.vsd-baf { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:6px; }
+details.vsd-help > summary { cursor:pointer; font-weight:700; color:#334155; font-size:12px; min-height:28px; display:flex; align-items:center; }
+details.vsd-help > div { padding-top:4px; }
 .vsd-main .vsd-b { padding:11px 5px; font-size:13px; }
 .vsd-main .vsd-b kbd { display:none; }
 @media (max-width:700px) {
@@ -1548,10 +1583,12 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
   .vsd-b { padding:12px 4px; min-height:44px; font-size:13px; }
   .vsd-b kbd { display:none; }
   .vsd-list { flex:none; max-height:20vh; }
-  .vsd-help { display:none; }
   #vsd-panel.vsd-skl .vsd-extra { display:none; }
   #vsd-panel.vsd-skl { max-height:none; overflow:visible; }
   .vsd-undo { min-width:44px; height:44px; }
+  #vsd-panel { width:auto; }
+  .vsd-kpi b { font-size:13px; }
+  .vsd-mini .vsd-b { min-height:40px; }
 }
 
 /* ═══ EDIT PANEL — isti svijetli stil kao ručno crtanje ═══ */
