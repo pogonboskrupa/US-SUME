@@ -4960,3 +4960,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Poslije ispravke browser testa (v3.2.2) APK je i dalje stajao: korak "Android Explorer WebView i OCR bez interneta" je pao na `MapDownloadsTest.publishedGithubMapsKeepBothPeriodsAndRecoverCachedJobsOffline` (`expected:<paused> but was:<idle>`). Test je čitao `recovered.statuses()` odmah poslije `enqueue()`, prije nego se posao upiše u prefs — trka u testu, Java aplikacije nije bila kriva. Sad ponavlja čitanje do 5 s.
 - **Kako naći uzrok bez Actions artefakta**: `get_job_logs` sa `return_content:true, tail_lines:760` sprema log u fajl; grep po `TestRunner|##\[error\]|expected` daje tačan test i red (log je inače 99 % logcat šuma). Skripta `explorer-offline.sh` ključne redove ispisuje tek pri padu.
 - Pad ovog koraka znači da su svi raniji koraci (JS, browser) prošli — gledati `steps[].conclusion` u `list_workflow_jobs`, ne samo ukupni ishod.
+
+### Meni → "Preuzmi APK fajl" — samo admin (poslije v3.2.4)
+- Stavka `#menu-apk-download` ispod "Ažuriraj aplikaciju", u markupu `hidden`, a `_primijeniUlogeUI` je otkriva samo adminu (radi i pri offline ulazu na kešu). `preuzmiApkAdmin()` dodatno provjerava `sbProfile.is_admin`.
+- Čita `/releases?per_page=1` (kao `_checkLatestVersion` — `/releases/latest` isključuje prerelease), `_apkAssetIzReleasea` uzima `.apk` sa `state:'uploaded'` i `https` URL-om. Nudi Preuzmi / Kopiraj link; bez mreže nudi stranicu sa verzijama.
+- U APK-u preuzimanje je `location.href` na vanjski URL → postojeći `shouldOverrideUrlLoading` → `ACTION_VIEW` (preglednik preuzima), bez Java izmjene; u webapp-u `<a target=_blank>`. Test: `tests/js/apk-preuzmi-admin.test.js`.

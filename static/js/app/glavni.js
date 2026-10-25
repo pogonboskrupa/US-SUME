@@ -1638,6 +1638,8 @@ function _primijeniUlogeUI(data) {
   if (adminItem) adminItem.style.display = isAdm ? 'block' : 'none';
   const postavkeItem = document.getElementById('menu-postavke-item');
   if (postavkeItem) postavkeItem.style.display = isAdm ? 'block' : 'none';
+  const apkItem = document.getElementById('menu-apk-download');
+  if (apkItem) apkItem.hidden = !isAdm;
   const debugItem = document.getElementById('menu-debug-item');
   if (debugItem) debugItem.style.display = isAdm ? 'block' : 'none';
   // Izvještaji (sedmični/mjesečni po projektantu): nadzorni prikaz — admin + vodeći
@@ -30816,6 +30818,62 @@ function _updOtkazi() {
 }
 
 function _updPonovo() { azurirajAplikaciju(); }
+
+// ─── Admin: preuzmi APK fajl (najnoviji GitHub Release) ────────────────────
+// Admin dijeli APK kolegama čiji telefon nema ovu app ili ima stariju verziju bez
+// "Ažuriraj aplikaciju" mosta. Isti /releases?per_page=1 kao _checkLatestVersion
+// (/releases/latest isključuje prerelease, a svaki release je prerelease).
+// U APK-u navigacija na vanjski URL ide kroz shouldOverrideUrlLoading → ACTION_VIEW,
+// pa preuzimanje radi Android preglednik/DownloadManager — bez nove Java izmjene.
+const _APK_RELEASES_API = 'https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1';
+const _APK_RELEASES_STR = 'https://github.com/pogonboskrupa/US-SUME/releases';
+
+function _apkAssetIzReleasea(release) {
+  if (!release || release.draft) return null;
+  const a = (release.assets || []).find(x => /\.apk$/i.test(x?.name || '') && x.state === 'uploaded' && /^https:\/\//.test(x.browser_download_url || ''));
+  if (!a) return null;
+  return { ver: String(release.tag_name || '').replace(/^v/, ''), ime: a.name, url: a.browser_download_url, vel: Number(a.size) || 0 };
+}
+
+function _apkOtvoriUrl(url) {
+  if (location.hostname === 'appassets.androidplatform.net') { window.location.href = url; return; }
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function preuzmiApkAdmin() {
+  if (!sbProfile?.is_admin) { showToast('⚠ Samo za admina'); return; }
+  if (typeof _mrezaSila === 'function') _mrezaSila(60000);
+  showToast('🔄 Tražim najnoviji APK…');
+  let apk = null, greska = '';
+  try {
+    const r = await _fetchT(_APK_RELEASES_API, 10000, { cache: 'no-store' });
+    if (r.ok) apk = _apkAssetIzReleasea((await r.json())?.[0]);
+    else greska = 'GitHub je odgovorio ' + r.status + '.';
+  } catch (e) { greska = 'Nema veze sa GitHub-om.'; }
+  if (!apk) {
+    const izbor = await _dlgActions('Preuzmi APK fajl', [
+      { label: '🌐 Otvori stranicu sa verzijama' },
+      { label: 'Zatvori' },
+    ]);
+    if (izbor === 0) _apkOtvoriUrl(_APK_RELEASES_STR);
+    if (greska) showToast('⚠ ' + greska);
+    return;
+  }
+  const lokalna = APP_VER.replace(/^v/, '');
+  const vel = apk.vel ? ' · ' + _updMB(apk.vel) : '';
+  const izbor = await _dlg({
+    title: 'Preuzmi APK fajl', mode: 'actions',
+    msg: apk.ime + ' (v' + apk.ver + vel + ') — na ovom uređaju je v' + lokalna + '.',
+    actions: [{ label: '⬇ Preuzmi APK' }, { label: '📋 Kopiraj link' }, { label: 'Zatvori' }],
+  });
+  if (izbor === 0) _apkOtvoriUrl(apk.url);
+  else if (izbor === 1) {
+    try { await navigator.clipboard.writeText(apk.url); showToast('📋 Link kopiran'); }
+    catch (e) { showToast(apk.url); }
+  }
+}
 
 function _updDugme(tip, ico, tekst, akcija) {
   return '<button class="upd-btn' + (tip ? ' ' + tip : '') + '" onclick="' + akcija + '">' +
