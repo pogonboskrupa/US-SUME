@@ -4980,3 +4980,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Podtab Pregled: KPI pločice (površina `#dr-area`, prosječan/najveći nagib, pretežna strana), rečenica-tumačenje `#dr-terrain-summary` (`summaryText`: vrsta terena po prosjeku, udio strmiji od 30 %, strana, visinska razlika — bez ponavljanja površine; test traži `%`), nadmorska visina, i "Raspodjela terena" (`#dr-dist`, složene trake nagiba i ekspozicije — dodir otvara podtab). `#dr-slopes`/`#dr-aspects` ostaju SAMO u svojim podtabovima (test).
 - "Kopiraj sažetak izvještaja" (`DepartmentReport.copySummary`/`reportText`): tekst sa svim razredima, za poruku/izvještaj; clipboard pa `execCommand` rezerva.
 - Razredi sa 0 % (`.dr-stat-zero`) su zbijeni (bez trake i "0 ha"), ali red ostaje — test broji 6/4 `.dr-stat-row`.
+
+### CI: limit joba 45 min, Pages sa ove grane (v3.2.6)
+- Run 315 je prošao sve testove i APK provjere, ali `playwright install --with-deps` je 13 min čekao `azure.archive.ubuntu.com`, pa je job pogodio stari limit (25 min) usred emulator testa — "cancelled", Release nije objavljen. Limit je sad 45 min; zeleni run inače traje ~15–20 min. "cancelled" na ovom jobu prvo provjeriti trajanje koraka, ne kod.
+- "Deploy GitHub Pages" sa `claude/inline-js-split` pada za ~2 s bez runnera (najvjerovatnije pravilo okruženja `github-pages` ne dozvoljava tu granu); webapp se ažurira kad korisnik spoji granu u `main`. Popravka je u postavkama repoa (Environments → github-pages → Deployment branches), ne u kodu.
