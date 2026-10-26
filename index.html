@@ -6005,7 +6005,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.2.5';
+const APP_VER = 'v3.2.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6550,7 +6550,7 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Dnevni mod</b><span>Uključi u Meniju za tamna slova na svijetloj podlozi. Ponovni pritisak vraća tamni prikaz.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vodi me</b><span>Izaberi cilj na karti kroz <b>Vodi me do odjela/lokacije</b> ili <b>Vodi me</b> na sačuvanoj tački/tragu. Checkbox <b>Explorer prikaz</b> uključuje perspektivu i praćenje smjera. Udaljenost do cilja je zračna.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Print / štampanje</b><span>Prvo podesi sadržaj karte. Izaberi format i razmjeru, unesi svoj opis na vrhu i opis legende. Provjeri lager, linije i legendu u pregledu prije štampe ili PDF-a.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Ažuriranje i sigurnosna kopija</b><span>Koristi <b>Meni → Ažuriraj aplikaciju</b>. Korisnik i verzija su na kraju Menija. Sigurnosnu kopiju napravi prije promjene telefona ili uklanjanja aplikacije.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Ažuriranje i sigurnosna kopija</b><span>Koristi <b>Meni → Ažuriraj aplikaciju</b>. Administrator ima i <b>Preuzmi APK fajl</b> za instalaciju na drugom telefonu. Korisnik i verzija su na kraju Menija. Sigurnosnu kopiju napravi prije promjene telefona ili uklanjanja aplikacije.</span></div></div>
 
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Kad nešto nije kako očekuješ</button><div class="help-sec-body">
@@ -6608,6 +6608,26 @@ function _loadLocalVlake() {
 <li data-n="3.">Pritisni <b>Završi</b>, provjeri broj i trasu. Nacrtana vlaka se čuva lokalno kao i snimljena.</li>
 <li data-n="4.">Pošalji je kolegama kroz <b>Meni → Pošalji na server → Pošalji i primi</b>.</li>
 </ol>
+</div></section>
+<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Nacrtaj vlake u odjelu (Studio vlaka)</button><div class="help-sec-body">
+<ol class="help-steps">
+<li data-n="1.">U aktivnom <b>Projektu</b> pritisni <b>Nacrtaj vlake u odjelu</b>. Na vrhu panela je pregled odjela: broj vlaka i krakova, dužina mreže, gustoća (m/ha) i koliko vlaka ima lager.</li>
+<li data-n="2."><b>Nova</b> pravi glavnu vlaku, <b>Krak L/D</b> krak izabrane vlake. Naziv predlaže aplikacija, a možeš upisati svoj. Početak kraka se uvijek lijepi na matičnu vlaku.</li>
+<li data-n="3.">Dodiruj kartu za tačke. <b>Poništi</b> vraća zadnju izmjenu, <b>Završi</b> zatvara vlaku. <b>📍 Ovdje</b> dodaje tačku na tvojoj GPS poziciji.</li>
+<li data-n="4.">Izaberi vlaku u listi <b>Vlake u odjelu</b> da je pomjeraš tačku po tačku, preimenuješ, zumiraš ili obrišeš. Za postojeću vlaku <b>Nastavi</b> dodaje tačke na kraj.</li>
+</ol>
+<div class="help-row"><div class="help-txt"><b>Alati</b><span><b>Bafer</b> pokazuje doseg oko vlaka i crveno preklapanje. <b>Izvoz drvne mase</b> određuje smjer strelica i tačku dvosmjera. <b>Oznake vlaka i lageri</b> nude popis lagera, <b>Popuni</b> brojeve i pomjeranje/okretanje oznaka. <b>Stil vlaka</b> mijenja boju i debljinu.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Na računaru</b><span>Klik dodaje tačku, dvoklik ili Enter završava, desni klik ili Ctrl+Z poništava, Shift isključuje hvatanje, Esc izlazi. Sve prečice su u sekciji <b>Prečice i miš</b> na dnu panela.</span></div></div>
+</div></section>
+<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Izvještaj odjela (nagib, ekspozicija, visine)</button><div class="help-sec-body">
+<ol class="help-steps">
+<li data-n="1.">Otvori <b>Meni → Izvještaj odjela</b>. Nacrtaj poligon ili izaberi odsjeke iz učitanih <b>Granica</b>. Analiza terena kreće sama čim potvrdiš granicu.</li>
+<li data-n="2.">Gornja kartica pokazuje stanje analize i izabranu granicu. <b>Na kartu</b> prikazuje izvještaj na karti.</li>
+<li data-n="3.">U <b>Pregledu</b> su površina, prosječan i najveći nagib, pretežna strana i kratak opis terena (npr. koliko je površine strmije od 30%). Trake <b>Raspodjela terena</b> otvaraju detalje nagiba ili ekspozicije.</li>
+<li data-n="4."><b>Kopiraj sažetak izvještaja</b> kopira sve brojeve kao tekst za poruku ili izvještaj.</li>
+</ol>
+<div class="help-row"><div class="help-txt"><b>Nagib i profili</b><span>Podtab <b>Nagib</b> daje udio i površinu po razredima od 10%. Profili niz padinu (jedna linija na oko 3 ha) pokazuju visinsku razliku i vodoravnu dužinu.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Bez interneta</b><span>Za analizu treba preuzet teren (DEM) za to područje. Gotov izvještaj ostaje sačuvan na telefonu i radi offline.</span></div></div>
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Prenesi vlake s papirne karte</button><div class="help-sec-body">
 <ol class="help-steps">
