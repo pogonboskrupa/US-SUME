@@ -6282,9 +6282,8 @@ function _loadLocalVlake() {
   <label class="dr-name">Naziv odjela / izvještaja<input id="dr-name" type="text" maxlength="120" placeholder="npr. Risovac Krupa · Odjel 105" onchange="DepartmentReport.change('name',this.value)"></label>
   <details class="dr-legacy"><summary>Već nacrtan poligon projekta</summary><button type="button" onclick="DepartmentReport.legacy()">Koristi poligon aktivnog projekta</button></details>
   </details>
-  <div id="dr-selection" class="dr-current" hidden></div>
-  <section id="dr-analysis-state" class="dr-analysis-state" aria-labelledby="dr-analysis-title"><span id="dr-analysis-icon" aria-hidden="true">1</span><div><b id="dr-analysis-title">Odaberi granicu</b><p id="dr-status" role="status" aria-live="polite">Nacrtaj ili izaberi poligon odjela.</p></div></section>
-  <div class="dr-actions"><button type="button" class="dr-primary" id="dr-calculate" hidden onclick="DepartmentReport.calculate()">Pokušaj ponovo</button><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button>
+  <section id="dr-analysis-state" class="dr-analysis-state" aria-labelledby="dr-analysis-title"><span id="dr-analysis-icon" aria-hidden="true">1</span><div><b id="dr-analysis-title">Odaberi granicu</b><div id="dr-selection" class="dr-current" hidden></div><p id="dr-status" role="status" aria-live="polite">Nacrtaj ili izaberi poligon odjela.</p></div><button type="button" id="dr-view" onclick="DepartmentReport.view()">Na kartu ↗</button></section>
+  <div class="dr-actions"><button type="button" class="dr-primary" id="dr-calculate" hidden onclick="DepartmentReport.calculate()">Pokušaj ponovo</button></div><button type="button" id="dr-cancel-calc" hidden onclick="DepartmentReport.cancelCalculation()">Prekini izračun</button>
   <section id="dr-result" hidden>
     <nav class="dr-tabs" role="tablist" aria-label="Analiza odjela">
       <button type="button" id="dr-tab-overview" role="tab" aria-selected="true" aria-controls="dr-panel-overview" onclick="DepartmentReport.selectTab('overview')" onkeydown="DepartmentReport.tabKey(event,'overview')">Pregled</button>
@@ -6292,8 +6291,11 @@ function _loadLocalVlake() {
       <button type="button" id="dr-tab-aspect" role="tab" tabindex="-1" aria-selected="false" aria-controls="dr-panel-aspect" onclick="DepartmentReport.selectTab('aspect')" onkeydown="DepartmentReport.tabKey(event,'aspect')">Ekspozicija</button>
     </nav>
     <section id="dr-panel-overview" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-overview" tabindex="0">
-      <div class="dr-area"><span>Površina odjela</span><b id="dr-area"></b></div>
-      <h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div><p id="dr-terrain-summary"></p>
+      <div class="dr-kpis"><div class="dr-kpi-main"><small>Površina odjela</small><b id="dr-area"></b></div><div><small>Prosječan nagib</small><b id="dr-kpi-slope"></b></div><div><small>Najveći nagib</small><b id="dr-kpi-max"></b></div><div><small>Pretežna strana</small><b id="dr-kpi-aspect"></b></div></div>
+      <p id="dr-terrain-summary" class="dr-summary"></p>
+      <h3>Nadmorska visina</h3><div id="dr-elevation" class="dr-metrics"></div>
+      <h3>Raspodjela terena</h3><div id="dr-dist" class="dr-dist"></div>
+      <button type="button" id="dr-copy" class="dr-map-action" onclick="DepartmentReport.copySummary()">Kopiraj sažetak izvještaja</button>
       <details class="dr-source"><summary>O podacima i preciznosti</summary><p id="dr-coverage"></p></details>
     </section>
     <section id="dr-panel-slope" class="dr-tab-panel" role="tabpanel" aria-labelledby="dr-tab-slope" tabindex="0" hidden>

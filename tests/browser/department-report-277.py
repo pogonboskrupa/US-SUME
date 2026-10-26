@@ -100,6 +100,11 @@ async def main():
   assert await page.locator('#dr-panel-overview').is_visible()
   assert 'Odjel 105' in await page.locator('#dr-selection').inner_text()
   assert not await page.locator('#dr-slopes').is_visible() and not await page.locator('#dr-aspects').is_visible()
+  assert await page.locator('#dr-dist .dr-dist-row').count()==2 and 'Zapad' in await page.locator('#dr-kpi-aspect').inner_text()
+  assert 'Strmije od 30%' in await page.locator('#dr-terrain-summary').inner_text()
+  txt=await page.evaluate('DepartmentReport.reportText()');assert 'Odjel 105' in txt and txt.count('–')>=6 and '50% i više' in txt,txt
+  assert await page.locator('#dr-slopes .dr-stat-zero').count()>0,'Razredi sa 0% su zbijeni'
+  await page.locator('#dr-dist .dr-dist-row').first.click();assert await page.locator('#dr-panel-slope').is_visible();await page.locator('#dr-tab-overview').click()
   before_tabs=await page.evaluate('({mode:DepartmentReport.snapshot().state.mode,result:JSON.stringify(DepartmentReport.snapshot().result)})');tab_calls=len(dem)
   await page.locator('#dr-tab-slope').click()
   assert await page.locator('#dr-slopes .dr-stat-row').count()==6 and await page.locator('#dr-slopes').is_visible()

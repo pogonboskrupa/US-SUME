@@ -998,7 +998,6 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 #department-report .dr-methods small{font-size:10px;line-height:1.35;color:var(--field-muted);font-weight:500}
 #department-report .dr-legacy{border-bottom:0}
 #department-report .dr-legacy summary{font-weight:500;font-size:12px;color:var(--field-muted)}
-#department-report #dr-selection{color:var(--field-ink);font-weight:600;margin:12px 0 8px}
 #department-report .dr-analysis-state{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;padding:11px 12px;margin:8px 0;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
 #department-report #dr-analysis-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#334155;color:#fff;font-size:16px;font-weight:800}
 #department-report .dr-analysis-state[data-state=busy] #dr-analysis-icon{background:#2563eb;animation:drPulse 1.2s ease-in-out infinite}
@@ -1013,9 +1012,6 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 #department-report .dr-tabs>button{border-color:transparent;background:transparent;padding:10px 4px;font-size:12px;min-width:0}
 #department-report .dr-tabs>button[aria-selected=true]{background:#1e40af;border-color:#1e40af;color:#fff;box-shadow:0 2px 5px #0002}
 #department-report .dr-tab-panel{padding:4px 0 0;outline-offset:-3px}
-#department-report .dr-area{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 12px;margin-top:12px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
-#department-report .dr-area span{font-size:13px;color:var(--field-muted)}
-#department-report .dr-area b{font-size:24px;color:var(--field-ink);font-variant-numeric:tabular-nums}
 #department-report .dr-metrics-two{grid-template-columns:repeat(2,minmax(0,1fr))}
 #department-report .dr-metrics b{overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 #department-report #dr-aspect-main{font-size:16px}
@@ -1215,3 +1211,34 @@ html #ls-basemap-grid {gap:8px;}
 html #ls-basemap-grid .layer-opt {padding:9px 4px 8px;gap:3px;min-height:72px;font-size:12.5px;}
 html #ls-basemap-grid .layer-opt span.layer-ico {font-size:20px;}
 html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
+/* Izvještaj odjela — pregled (v3.2.6): stanje+granica u jednoj kartici, KPI pločice, raspodjela kao složena traka. */
+#department-report .dr-analysis-state{grid-template-columns:38px minmax(0,1fr) auto}
+#department-report .dr-analysis-state>#dr-view{min-height:40px;padding:8px 10px;white-space:nowrap;border-color:#3b82f6}
+#department-report .dr-analysis-state>#dr-view[hidden]{display:none}
+#department-report .dr-analysis-state #dr-selection{display:block;margin:2px 0 0;padding:0;border:0;background:none;font-size:12px;font-weight:600;color:var(--field-ink);overflow-wrap:anywhere}
+#department-report .dr-analysis-state #dr-selection[hidden]{display:none}
+#department-report .dr-actions:not(:has(button:not([hidden]))){display:none}
+#department-report .dr-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+#department-report .dr-kpis>div{min-width:0;padding:10px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
+#department-report .dr-kpis>.dr-kpi-main{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+#department-report .dr-kpis small{display:block;font-size:11px;color:var(--field-muted)}
+#department-report .dr-kpis b{display:block;font-size:17px;color:var(--field-ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:1.3}
+#department-report .dr-kpis>.dr-kpi-main b{font-size:24px}
+#department-report .dr-summary{margin:10px 0 0;padding:10px 12px;border-left:3px solid #3b82f6;border-radius:0 10px 10px 0;background:var(--field-bg);color:var(--field-ink);font-size:13px}
+#department-report .dr-dist{display:grid;gap:8px}
+#department-report .dr-dist-row{display:grid;gap:7px;width:100%;padding:10px 12px;text-align:left;background:var(--field-bg);font-weight:400}
+#department-report .dr-dist-head{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+#department-report .dr-dist-head>span{font-size:11px;color:var(--field-muted);font-weight:600}
+#department-report .dr-dist-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--field-card);border:1px solid var(--field-border)}
+#department-report .dr-dist-bar>i{display:block;height:100%;min-width:2px}
+#department-report .dr-dist-bar>.dr-dist-empty{width:100%;background:none}
+#department-report .dr-dist-keys{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--field-ink)}
+#department-report .dr-dist-keys>span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+#department-report .dr-dist-keys i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+#department-report .dr-stat-row.dr-stat-zero{padding:5px 0}
+#department-report .dr-stat-row.dr-stat-zero :is(progress,small){display:none}
+#department-report #dr-copy{margin-bottom:12px}
+#department-report .dr-stat-row.dr-stat-zero>span{color:var(--field-muted)}
+#department-report .dr-kpis b small{display:inline;font-size:12px;font-weight:600}
+@media(max-width:420px){#department-report .dr-analysis-state>#dr-view{grid-column:2/-1;justify-self:start}}
+@media(max-width:359px){#department-report .dr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#department-report .dr-kpis>div:last-child{grid-column:1/-1}}
