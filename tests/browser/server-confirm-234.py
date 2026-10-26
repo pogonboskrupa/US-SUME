@@ -147,8 +147,10 @@ async def main():
         state['doz_projects']['colleague']={'id':'colleague','created_by':'u2','status':'active'}
         await prepare({'type':'upsert_doz_status','payload':{'id':'colleague','status':'paused'}});await run()
         assert (await pending())[0]['_lastErr']['code']=='WRITE_FORBIDDEN'
+        # v3.0.1: status odjela koji ne postoji (obrisan, bez upisa u redu) je
+        # gotov — ranije je vječno stajao u "čeka slanje".
         await prepare({'type':'upsert_doz_status','payload':{'id':'missing','status':'paused'}});await run()
-        assert (await pending())[0]['_lastErr']['code']=='TARGET_NOT_FOUND'
+        assert await pending()==[]
         flags.clear()
 
         # Stari privremeni ID mora se migrirati i u statusu, ne samo zonama.

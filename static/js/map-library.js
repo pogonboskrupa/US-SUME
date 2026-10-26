@@ -22,19 +22,25 @@
   function filtered(){sync();const q=query.trim().toLocaleLowerCase('bs');const rows=model().filter(r=>(category==='all'||r.category===category)&&(!q||[r.title,r.odjel,r.gj,r.note,labels[r.category]].join(' ').toLocaleLowerCase('bs').includes(q)));
     return rows.sort((a,b)=>{let n=0;if(sort==='department')n=(a.odjel==='Bez odjela')-(b.odjel==='Bez odjela')||a.odjel.localeCompare(b.odjel,'bs',{numeric:true})||a.gj.localeCompare(b.gj,'bs');if(sort==='date')n=b.ts-a.ts;if(sort==='proximity')n=a.distance-b.distance;return (Number.isNaN(n)?0:n)||a.title.localeCompare(b.title,'bs',{numeric:true})||a.key.localeCompare(b.key);});}
   function btn(action,k,text,extra=''){return '<button type="button" data-action="'+action+'" data-key="'+esc(k)+'" onclick="_libraryAction(this.dataset.action,this.dataset.key)" '+extra+'>'+text+'</button>';}
+  // Odjeli poznati u pregledniku (već dodijeljeni + odjeli projekata) — nude se pri dodjeli
+  // da se isti odjel ne upisuje na tri načina ("105", "odj. 105", "105 ").
+  function knownDepartments(){const set=new Set();for(const r of model())if(r.odjel&&r.odjel!=='Bez odjela')set.add(r.odjel);
+    try{for(const p of (typeof _projekti!=='undefined'?_projekti:[]))if(p&&p.odjel)set.add(String(p.odjel).trim());}catch(e){}
+    return [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b,'bs',{numeric:true}));}
   function editor(r){
     if(r.category==='local'||r.category==='server'){_kmlEditIdx=r.index;return _layerEditorHtml(r.index);}
-    const field=(name,label,value,type='text')=>'<label>'+label+'<input type="'+type+'" maxlength="160" data-key="'+esc(r.key)+'" data-field="'+name+'" value="'+esc(value)+'" onchange="_libraryEdit(this.dataset.key,this.dataset.field,this.value)"></label>';
-    return '<section class="ml-editor"><div class="ml-fields">'+field('title','Naziv',r.title)+field('odjel','Odjel',r.odjel==='Bez odjela'?'':r.odjel)+field('gj','Gospodarska jedinica',r.gj)+(r.category==='tracks'?field('color','Boja traga',/^#[a-f\d]{6}$/i.test(r.ref.color)?r.ref.color:'#f97316','color'):'')+'</div>'+field('note','Opis / napomena',r.note)+(r.category==='tracks'?'<div class="ml-actions">'+btn('track-details',r.key,'Tačke i detaljno uređivanje')+'</div>':'')+'</section>';
+    const field=(name,label,value,type='text',attrs='')=>'<label>'+label+'<input type="'+type+'" '+attrs+' maxlength="160" data-key="'+esc(r.key)+'" data-field="'+name+'" value="'+esc(value)+'" onchange="_libraryEdit(this.dataset.key,this.dataset.field,this.value)"></label>';
+    return '<section class="ml-editor"><div class="ml-fields">'+field('title','Naziv',r.title)+field('odjel','Odjel',r.odjel==='Bez odjela'?'':r.odjel,'text','list="ml-odjeli"')+field('gj','Gospodarska jedinica',r.gj)+(r.category==='tracks'?field('color','Boja traga',/^#[a-f\d]{6}$/i.test(r.ref.color)?r.ref.color:'#f97316','color'):'')+'</div>'+field('note','Opis / napomena',r.note)+(r.category==='tracks'?'<div class="ml-actions">'+btn('track-details',r.key,'Tačke i detaljno uređivanje')+'</div>':'')+'<datalist id="ml-odjeli">'+knownDepartments().map(d=>'<option value="'+esc(d)+'">').join('')+'</datalist></section>';
   }
   function row(r){
     const when=r.ts?new Date(r.ts).toLocaleDateString('bs-BA'):'Datum nije poznat';
     const dist=Number.isFinite(r.distance)?_tragFmtLen(r.distance)+' od sredine karte':'Položaj nije učitan';
     const image=r.thumb&&/^(data:image\/|https:\/\/)/i.test(r.thumb)?'<img loading="lazy" src="'+esc(r.thumb)+'" alt="Fotografija">':'<span class="ml-kind">'+({local:'KML',server:'SRV',tracks:'GPS',photos:'FOTO'}[r.category])+'</span>';
     const main=r.category==='photos'?btn('open',r.key,image,'class="ml-thumbnail" aria-label="Otvori fotografiju"'):image;
-    const actions=r.ready?btn('zoom',r.key,'Na karti')+btn('visibility',r.key,r.visible?'Sakrij':'Prikaži','aria-pressed="'+r.visible+'"')+btn('edit',r.key,opened===r.key?'Zatvori uređivanje':'Uredi'):btn('download',r.key,'↓ Preuzmi za offline');
+    const bezOdjela=r.ready&&(r.category==='photos'||r.category==='tracks')&&r.odjel==='Bez odjela';
+    const actions=(bezOdjela?btn('assign',r.key,'Dodijeli odjelu','class="ml-assign"'):'')+(r.ready?btn('zoom',r.key,'Na karti')+btn('visibility',r.key,r.visible?'Sakrij':'Prikaži','aria-pressed="'+r.visible+'"')+btn('edit',r.key,opened===r.key?'Zatvori uređivanje':'Uredi'):btn('download',r.key,'↓ Preuzmi za offline'));
     const extras=(r.category==='photos'&&!r.shared?btn('share',r.key,'Podijeli fotografiju'):'')+(r.category==='local'?btn('export-file',r.key,'Sačuvaj KML fajl'):'')+(r.category==='tracks'?btn('export',r.key,'Izvezi / podijeli KML'):'')+btn('remove',r.key,r.category==='server'?'Ukloni offline kopiju':r.shared?'Ukloni s ovog telefona':'Obriši','class="ml-danger"');
-    return '<article class="ml-card'+(r.visible?'':' ml-hidden')+'" data-category="'+r.category+'" data-row-key="'+esc(r.key)+'"><div class="ml-card-head">'+main+'<div><small>'+labels[r.category]+' · '+(r.ready?(r.visible?'Vidljivo':'Skriveno'):'Na serveru')+'</small><h3>'+esc(r.title)+'</h3><p>'+esc(r.odjel)+(r.gj?' · '+esc(r.gj):'')+'</p><p>'+esc(r.detail)+'</p><small>'+esc(when)+' · '+esc(dist)+'</small></div></div>'+(r.note?'<p class="ml-note">'+esc(r.note)+'</p>':'')+'<div class="ml-actions">'+actions+'</div>'+(opened===r.key&&r.ready?editor(r):'')+(r.ready?'<details class="ml-more"><summary>Više radnji</summary><div class="ml-actions">'+extras+'</div></details>':'')+'</article>';
+    return '<article class="ml-card'+(r.visible?'':' ml-hidden')+'" data-category="'+r.category+'" data-row-key="'+esc(r.key)+'"><div class="ml-card-head">'+main+'<div><small><b class="ml-type">'+({local:'KML',server:'Server',tracks:'Trag',photos:'Slika'}[r.category])+'</b> · '+(r.ready?(r.visible?'Vidljivo':'Skriveno'):'Na serveru')+'</small><h3>'+esc(r.title)+'</h3><p>'+esc(r.odjel)+(r.gj?' · '+esc(r.gj):'')+'</p><p>'+esc(r.detail)+'</p><small>'+esc(when)+' · '+esc(dist)+'</small></div></div>'+(r.note?'<p class="ml-note">'+esc(r.note)+'</p>':'')+'<div class="ml-actions">'+actions+'</div>'+(opened===r.key&&r.ready?editor(r):'')+(r.ready?'<details class="ml-more"><summary>Više radnji</summary><div class="ml-actions">'+extras+'</div></details>':'')+'</article>';
   }
   function render(){
     if(!el('library-list'))return;const rows=filtered(),all=model();
@@ -59,6 +65,7 @@
     let r=model().find(x=>x.key===k);if(!r)return;
     if(actionName==='visibility'){visible([r],!r.visible);return;}
     if(actionName==='edit'){opened=opened===k?'':k;render();return;}
+    if(actionName==='assign'){opened=k;render();const inp=document.querySelector('#library-list [data-field=odjel]');if(inp){inp.focus();inp.scrollIntoView?.({block:'center'});}return;}
     if(actionName==='zoom'){
       visible([r],true);closeOznakePanel();if(r.category==='local'||r.category==='server')_ozZoomKml(r.index);else if(r.category==='tracks')_tragRegZoom(r.ref.id);else if(r.position){map.setView(r.position,Math.max(map.getZoom(),17));r.ref.marker?.openPopup();}return;
     }

@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
-const html = fs.readFileSync('index.html', 'utf8');
+const html = require('./_izvor').izvor();
 function fn(name) {
   const start = html.search(new RegExp('(?:async )?function ' + name + '\\('));
   assert.ok(start >= 0, name);
@@ -37,7 +37,7 @@ function trag() {
     _pauziZavrsi(){},map:{removeLayer(){}},_tragLiveClear(){},document:{getElementById:()=>null},
     _updFabVisibility(){},_rdpSimplify:p=>p,terenRenderTragovi(){},
     showToast:m=>calls.push(m),_tragFmtLen:()=> '10 m',_tragCalcLen:()=>10,
-    _tragRetraceReset(){},_crashClearTrag:()=>store.delete('crash'),_bgRecStopIfIdle(){},_crashStopIfIdle(){} };
+    _tragRetraceReset(){},_crashClearTrag:()=>store.delete('crash'),_bgRecStopIfIdle(){},_crashStopIfIdle(){},_tragLiveMeta:null,_tragUrediZatvori(){} };
   vm.createContext(env);vm.runInContext(fn('_tragRegAdd')+'\n'+fn('fabSnimTrag'),env);
   return {env,calls,store,pts,recover:()=>{fail=false;}};
 }

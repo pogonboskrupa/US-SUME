@@ -18,7 +18,7 @@ function seed(id){closeTextDialog();textLabels.forEach(l=>map.removeLayer(l.mark
 code+='\n'+(ROOT/'static/js/offline-layer.js').read_text()
 code+='\n'+b.section('let _dlgResolve = null;', 'function _tastaturaPoljeVidljivo(')
 code+='\n'+b.section('async function _dlgConfirm(', 'async function _dlgPrompt(')
-code+='\n'+'\n'.join(b.function(n) for n in ['openTextDialog','selectLabelColor','closeTextDialog','confirmTextLabel','createTextMarker','deleteTextLabel','saveTextLabels','sbSaveTextLabels','sbLoadTextLabelsDB','escHtml','_escHtml','_lsTab','_lsRenderSqlite','sqlmapConfirmDelete','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideAskDeleteRoute','_guideRoutePopupHtml'])
+code+='\n'+'\n'.join(b.function(n) for n in ['openTextDialog','selectLabelColor','closeTextDialog','confirmTextLabel','createTextMarker','deleteTextLabel','saveTextLabels','sbSaveTextLabels','sbLoadTextLabelsDB','escHtml','_escHtml','_lsTab','_lsRenderSqlite','sqlmapConfirmDelete','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideAskDeleteRoute','_guideRoutePopupHtml','_guideTrajanjeTxt','_guideUspon'])
 html='<!DOCTYPE html><html lang="bs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'\n#map{position:fixed;inset:0;background:#dae8ce}</style></head><body>'+b.sprite+'<div id="map"></div>'+b.section('<div id="dlg-overlay"','<!-- Fullscreen foto')+b.section('<div id="layer-sheet-bg"','<div id="syncq-bg"')+'<script src="/static/libs/leaflet.min.js"></script><script>'+code+'</script><script src="/static/js/map-catalog.js"></script></body></html>'
 async def main():
  out=ROOT/'outputs/ui-preview';out.mkdir(parents=True,exist_ok=True)
@@ -49,8 +49,9 @@ async def main():
   await page.evaluate("sbUser={id:'A'};closeTextDialog()")
   # Popup rute koristi vlastiti ID, bez undefined t i native confirm.
   await page.evaluate("_guideRoutesStore([{id:'route',name:'Ruta',pts:[]}]);L.popup().setLatLng([44.9,16]).setContent(_guideRoutePopupHtml({id:'route',name:'Ruta',pts:[]})).openOn(map)")
-  await page.locator('.trag-popup button').last.click();await page.locator('#dlg-cancel').click();await page.wait_for_timeout(450);assert await page.evaluate('_guideRoutesLoad().length')==1
-  await page.locator('.trag-popup button').last.click();await page.locator('#dlg-ok').click();await page.wait_for_timeout(450);assert await page.evaluate('_guideRoutesLoad().length')==0
+  await page.screenshot(path=str(out/'guide-route-popup.png'))
+  await page.locator('.guide-pop-del').click();await page.locator('#dlg-cancel').click();await page.wait_for_timeout(450);assert await page.evaluate('_guideRoutesLoad().length')==1
+  await page.locator('.guide-pop-del').click();await page.locator('#dlg-ok').click();await page.wait_for_timeout(450);assert await page.evaluate('_guideRoutesLoad().length')==0
   # Lista promijenjena tokom potvrde: briše se uhvaćena karta, ne susjedna.
   await page.evaluate("_sqlLayers=[{name:'A'},{name:'B'},{name:'C'}];window.deletePromise=sqlmapConfirmDelete(1);void 0")
   await page.evaluate('_sqlLayers.shift()');await page.locator('#dlg-ok').click();await page.wait_for_timeout(450)

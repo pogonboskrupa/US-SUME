@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 const start=html.indexOf('function _menuIdentityRender('),end=html.indexOf('\nfunction toggleMenuDropdown(',start);
 const elements=new Map(['menu-user-label','menu-user-role','menu-app-ver'].map(id=>[id,{textContent:''}]));
 const e={APP_VER:'v2.1.3',sbUser:{id:'A'},sbProfile:{id:'A',ime:'Emina',prezime:'Projektant',sumarija:'Bos.Krupa'},document:{getElementById:id=>elements.get(id)},isVodeci:()=>false,isSpdField:()=>false};

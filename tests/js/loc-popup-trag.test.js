@@ -22,7 +22,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 function extractFn(name) {
   const re = new RegExp('function ' + name + '\\(');
@@ -45,7 +45,8 @@ function t(name, fn) {
 }
 
 function makeEl() {
-  return { style: {}, classList: { toggle(){} }, textContent: '' };
+  const cls = new Set();
+  return { style: {}, cls, classList: { toggle(c, on) { on ? cls.add(c) : cls.delete(c); } }, textContent: '' };
 }
 
 // _locPopupSnimiTrag zove document.getElementById('ab-loc-popup').style.display
@@ -92,6 +93,7 @@ function makeSwitch({ tragOn }) {
     // v1.6.6: stanje dugmeta Lokacija je izdvojeno u _updLocBtn (vidi
     // lokacija-dugme.test.js) — ovdje se testira samo "Snimi trag".
     _updLocBtn: () => {},
+    _locStatusRender: () => {},
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, extractFn('_updGpsSwitch') + '\nreturn { _updGpsSwitch };')(...keys.map(k => sandbox[k]));
@@ -99,16 +101,19 @@ function makeSwitch({ tragOn }) {
   return els;
 }
 
-t('trag NE snima → "Snimi trag", narandžasta paleta', () => {
+// v2.9.8: boje nosi CSS (.abp-trag / .abp-trag.on) da prate dnevni i tamni
+// prikaz — funkcija samo prebacuje klasu, inline boje više ne postavlja.
+t('trag NE snima → "Snimi trag", bez klase on (narandžasta paleta iz CSS-a)', () => {
   const els = makeSwitch({ tragOn: false });
   assert.strictEqual(els['ab-loc-trag-txt'].textContent, 'Snimi trag');
-  assert.strictEqual(els['ab-loc-trag'].style.color, '#c2410c');
+  assert.ok(!els['ab-loc-trag'].cls.has('on'));
+  assert.strictEqual(els['ab-loc-trag'].style.color, undefined);
 });
 
 t('trag SNIMA (started elsewhere, npr. Tragovi tab) → "Završi trag", crvena paleta', () => {
   const els = makeSwitch({ tragOn: true });
   assert.strictEqual(els['ab-loc-trag-txt'].textContent, 'Završi trag');
-  assert.strictEqual(els['ab-loc-trag'].style.color, '#dc2626');
+  assert.ok(els['ab-loc-trag'].cls.has('on'));
 });
 
 t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne bacaju', () => {
@@ -116,6 +121,7 @@ t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne b
     document: { getElementById: () => null },
     gpsOn: false, _compassConeOn: false, _radiusOn: false, _forestMode: false, _tragOn: false,
     _updLocBtn: () => {},
+    _locStatusRender: () => {},
   };
   const keys = Object.keys(sandbox);
   const api = new Function(...keys, extractFn('_updGpsSwitch') + '\nreturn { _updGpsSwitch };')(...keys.map(k => sandbox[k]));

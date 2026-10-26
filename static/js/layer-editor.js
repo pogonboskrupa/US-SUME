@@ -53,6 +53,7 @@ function _layerStyleRefresh(i) {
     if(focus)Array.from(next.querySelectorAll('[aria-label]')).find(e=>e.getAttribute('aria-label')===focus)?.focus({preventScroll:true});
   });
   document.querySelectorAll('.le-layer-card[data-layer="'+i+'"]').forEach(el=>{el.outerHTML=_layerCardHtml(i);});
+  document.querySelectorAll('#layer-loaded-list .layer-row[data-layer="'+i+'"] .layer-swatch').forEach(el=>{el.style.background=_layerColor(kmlLs[i]?.col);});
   _layerPopupLayout();
 }
 function _layerStyleChange(i,prop,value,commit=true) {

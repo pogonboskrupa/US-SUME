@@ -1,0 +1,103 @@
+{
+ "uslovi": {
+  "viewport": "360x740",
+  "cpu": "4x",
+  "onLine": false,
+  "profil": "keširan",
+  "ponavljanja": 1,
+  "ucitavanja": 4,
+  "chromium": "chromium"
+ },
+ "sazetak": {
+  "hladno": {
+   "n": 1,
+   "di": 1014,
+   "dcl": 1084,
+   "restore": 1032,
+   "restoreSync": 1051,
+   "ParseHTML": null,
+   "EvaluateScript": null,
+   "v8.compile": null,
+   "maxTask": null,
+   "inlineMain": null
+  },
+  "toplo": {
+   "n": 2,
+   "di": 939,
+   "dcl": 1008,
+   "restore": 954,
+   "restoreSync": 973,
+   "ParseHTML": null,
+   "EvaluateScript": null,
+   "v8.compile": null,
+   "maxTask": null,
+   "inlineMain": null
+  }
+ },
+ "rezultati": [
+  {
+   "ver": "v3.2.3",
+   "di": 1014,
+   "dcl": 1084,
+   "load": 1,
+   "restore": 1032,
+   "restoreSync": 1051,
+   "ts": 1792869719991,
+   "loadEnd": 1134,
+   "cacheConsumed": 0,
+   "cacheProduced": 0,
+   "topScripts": [],
+   "rep": 1,
+   "wall": 1515,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 971,
+   "dcl": 1043,
+   "load": 2,
+   "restore": 985,
+   "restoreSync": 1005,
+   "ts": 1792869721481,
+   "loadEnd": 1069,
+   "cacheConsumed": 0,
+   "cacheProduced": 0,
+   "topScripts": [],
+   "rep": 1,
+   "wall": 1449,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 939,
+   "dcl": 1008,
+   "load": 3,
+   "restore": 954,
+   "restoreSync": 973,
+   "ts": 1792869722988,
+   "loadEnd": 1094,
+   "cacheConsumed": 0,
+   "cacheProduced": 0,
+   "topScripts": [],
+   "rep": 1,
+   "wall": 1455,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 973,
+   "dcl": 1043,
+   "load": 4,
+   "restore": 987,
+   "restoreSync": 1007,
+   "ts": 1792869724467,
+   "loadEnd": 1066,
+   "cacheConsumed": 0,
+   "cacheProduced": 0,
+   "topScripts": [],
+   "rep": 1,
+   "wall": 1463,
+   "errors": []
+  }
+ ]
+}

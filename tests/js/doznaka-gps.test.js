@@ -18,7 +18,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 // Komentari se izbacuju prije invarijantnih grepova — inače dokumentacija
 // izmjene obori test te iste izmjene (dokumentovana zamka iz v1.5.3).
@@ -55,7 +55,7 @@ function pauzaApi() {
   const src = ['_uPauziIntervalu', '_pauziOtvoriProzor', '_pauziZatvoriProzor',
                '_pauziOcistiZatvorene', '_pauziZavrsi', '_pauziResetuj']
     .map(n => extractFn(n)).join('\n');
-  return new Function(src + '\nreturn { _uPauziIntervalu, _pauziOtvoriProzor, ' +
+  return new Function('function _pauziSnimi() {}\n' + src + '\nreturn { _uPauziIntervalu, _pauziOtvoriProzor, ' +
     '_pauziZatvoriProzor, _pauziOcistiZatvorene, _pauziZavrsi, _pauziResetuj };')();
 }
 
@@ -178,8 +178,9 @@ t('KLJUČNO: journal se potvrđuje TEK kad je svaka grana spremila svoje', () =>
   assert.ok(/if \(_svePersistirano\) _nativeBufPotvrdi\(\);/.test(src),
     'bez potvrde journal preživi oporavak; bez uslova bi pala grana izgubila tačke');
   const pali = (src.match(/_svePersistirano = false/g) || []).length;
-  assert.strictEqual(pali, 3,
-    'sve tri grane oporavka (vlaka, trag, doznaka) moraju oboriti zastavicu, nađeno: ' + pali);
+  // 3 grane + pala dopuna doznake (ona ne obara granu — snimanje se nastavlja).
+  assert.strictEqual(pali, 4,
+    'sve tri grane oporavka (vlaka, trag, doznaka) i dopuna doznake moraju oboriti zastavicu, nađeno: ' + pali);
 });
 
 t('oporavak obnavlja _dozGpsFullPts (inače izvoz GPX tiho gubi sve prije prekida)', () => {

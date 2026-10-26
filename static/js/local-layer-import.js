@@ -5,11 +5,12 @@ let _layerCommitTail = Promise.resolve();
 function openLayerImport() {
   document.getElementById('layer-import-modal').style.display = 'flex';
   layerImportTab('kml');
+  layerImportRenderList();
   if(typeof window!=='undefined')window.KmlDownloads?.refresh();
 }
 function closeLayerImport() { document.getElementById('layer-import-modal').style.display = 'none'; }
 function layerImportTab(tab) {
-  for (const type of ['kml','shp']) {
+  for (const type of ['kml','shp','server']) {
     document.getElementById('layer-import-'+type).hidden = type !== tab;
     document.getElementById('layer-tab-'+type).setAttribute('aria-selected',String(type===tab));
   }
@@ -95,11 +96,11 @@ async function _layerReadShp(files,mode='auto') {
   }
   return result;
 }
-function _localLayerKml(name,content,owner=sbUser?.id,driveSource=null) {
-  const operation=_layerCommitTail.catch(()=>{}).then(()=>_localLayerKmlImpl(name,content,owner,driveSource));
+function _localLayerKml(name,content,owner=sbUser?.id,driveSource=null,fmt='') {
+  const operation=_layerCommitTail.catch(()=>{}).then(()=>_localLayerKmlImpl(name,content,owner,driveSource,fmt));
   _layerCommitTail=operation;return operation;
 }
-async function _localLayerKmlImpl(name,content,owner,driveSource) {
+async function _localLayerKmlImpl(name,content,owner,driveSource,fmt='') {
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   const doc=new DOMParser().parseFromString(content,'text/xml');
   if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');
@@ -108,10 +109,10 @@ async function _localLayerKmlImpl(name,content,owner,driveSource) {
   while(Object.prototype.hasOwnProperty.call(store,unique)||kmlLs.some(k=>!k._key&&(k._origName||k.name)===unique))unique=name.replace(/\.kml$/i,'')+' ('+(n++)+').kml';
   const col=KCOLS[kmlCI%KCOLS.length],grp=pkml(doc,col);
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
-  if(!await _localKmlSaveContent(unique,content,col,owner,driveSource))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
+  if(!await _localKmlSaveContent(unique,content,col,owner,driveSource,fmt))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   kmlCI++;
-  const layer={name:unique,_origName:unique,_driveSource:driveSource,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
+  const layer={name:unique,_origName:unique,_driveSource:driveSource,fmt,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
   layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)===true;
   kmlLs.push(layer);
   if(!layer.onlyPolygon||globalThis.GithubLayers?.selecting())grp.addTo(map);
@@ -123,16 +124,83 @@ async function layerImportFiles(input,type) {
   if(_layerImportBusy)return;
   const files=Array.from(input.files || []);input.value='';if(!files.length)return;
   const owner=sbUser?.id,status=document.getElementById('layer-import-status');
-  _layerImportBusy=true;status.textContent='Učitavam i pripremam sloj…';
+  _layerImportBusy=true;status.hidden=false;status.dataset.ton='rad';status.textContent='Učitavam i pripremam sloj…';
   document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=true);
   try {
     const rows=type==='shp'?await _layerReadShp(files,document.getElementById('layer-shp-crs').value):await Promise.all(files.map(async f=>({name:f.name,content:await f.text()})));
     if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
-    for(const row of rows)await _localLayerKml(row.name,row.content,owner);
-    status.textContent='✓ Učitano '+rows.length+' slojeva. Prikazani su na karti i sačuvani za offline rad.';
+    for(const row of rows)await _localLayerKml(row.name,row.content,owner,null,type==='shp'?'shp':'');
+    status.dataset.ton='ok';
+    status.textContent='✓ '+_layerBrojRijec(rows.length,'sloj učitan','sloja učitana','slojeva učitano')+' — prikazano na karti i sačuvano za offline rad.';
     showToast('✓ Slojevi su učitani i sačuvani na telefonu');
-  } catch(e) {status.textContent='⚠ '+e.message;showToast('⚠ Uvoz nije završen: '+e.message);}
-  finally {_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);}
+  } catch(e) {status.dataset.ton='greska';status.textContent='⚠ '+e.message;showToast('⚠ Uvoz nije završen: '+e.message);}
+  finally {_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);layerImportRenderList();}
+}
+
+// ── Pregled uvezenih slojeva u samom prozoru za uvoz ─────────────────────────
+// Ranije je na dnu pisalo samo "Slojeve poslije pronađi u Granicama odjela /
+// Oznakama" — korisnik nije mogao provjeriti da li je fajl stvarno dodan bez
+// odlaska na drugi ekran. Lista radi nad istim kmlLs i istim togK/delK kao
+// Granice i Preglednik oznaka, pa se stanje nigdje ne razilazi.
+function _layerBrojRijec(n,jed,dva,mn){const d=n%10,s=n%100;return n+' '+(d===1&&s!==11?jed:d>=2&&d<=4&&(s<12||s>14)?dva:mn);}
+function _layerIzvor(k){return k._driveSource?'KARTA APP':k.fmt==='shp'?'SHP':'KML';}
+function _layerVrijeme(ts){
+  if(!ts)return '';const d=new Date(ts),p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'.'+p(d.getMonth()+1)+'. '+p(d.getHours())+':'+p(d.getMinutes());
+}
+// Lokalni slojevi (bez _key = nisu serverski/bucket), najnoviji prvi; indeks
+// ostaje STVARNI indeks u kmlLs (pozicija u listi nije indeks — vidi CLAUDE.md).
+function _layerLokalni(){
+  if(typeof kmlLs==='undefined')return [];
+  return kmlLs.map((k,i)=>({k,i})).filter(x=>!x.k._key).sort((a,b)=>(b.k._loadedAt||0)-(a.k._loadedAt||0));
+}
+let _layerListSve=false;
+// Otvoreni editori stila se pamte po OBJEKTU sloja, ne po indeksu — indeks se
+// pomjeri čim se neki sloj ukloni.
+const _layerImportStil=new Set();
+function layerImportStil(i){
+  const k=kmlLs[i];if(!k)return;
+  _layerImportStil.has(k)?_layerImportStil.delete(k):_layerImportStil.add(k);
+  layerImportRenderList();
+  if(_layerImportStil.has(k))document.querySelector('#layer-loaded-list .layer-row[data-layer="'+i+'"]')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function layerImportRenderList(){
+  const list=document.getElementById('layer-loaded-list'),cnt=document.getElementById('layer-loaded-count');
+  if(!list)return;
+  const rows=_layerLokalni(),esc=typeof _escHtml==='function'?_escHtml:(v=>String(v));
+  if(cnt)cnt.textContent=rows.length?'('+rows.length+')':'';
+  if(!rows.length){list.innerHTML='<p class="layer-empty">Još nema uvezenih slojeva. Izaberi fajl iznad — pojavit će se ovdje i na karti.</p>';return;}
+  const MAX=6,vidljivi=_layerListSve?rows:rows.slice(0,MAX);
+  list.innerHTML=vidljivi.map(({k,i})=>{
+    const n=typeof _kmlFeatureCount==='function'?_kmlFeatureCount(k.grp):0,izv=_layerIzvor(k);
+    const stil=_layerImportStil.has(k)&&typeof _layerStyleControls==='function';
+    return '<div class="layer-row'+(k.vis?'':' is-hidden')+(stil?' is-editing':'')+'" data-layer="'+i+'">'
+      +'<span class="layer-swatch" style="background:'+esc(k.col||'#64748b')+'" aria-hidden="true"></span>'
+      +'<span class="layer-row-copy"><b>'+esc(k.name)+'</b><small><i class="layer-src">'+izv+'</i>'+_layerBrojRijec(n,'objekat','objekta','objekata')
+      +(k._loadedAt?' · '+_layerVrijeme(k._loadedAt):'')+(k.vis?'':' · sakriven')+'</small></span>'
+      +'<span class="layer-row-actions">'
+      +'<button type="button" onclick="layerImportStil('+i+')" aria-expanded="'+stil+'" aria-label="Linija i ispuna sloja '+esc(k.name)+'">'+(stil?'Zatvori stil':'Linija i ispuna')+'</button>'
+      +'<button type="button" onclick="layerImportToggle('+i+')" aria-label="'+(k.vis?'Sakrij':'Prikaži')+' sloj '+esc(k.name)+'">'+(k.vis?'Sakrij':'Prikaži')+'</button>'
+      +'<button type="button" onclick="layerImportZoom('+i+')" aria-label="Prikaži sloj '+esc(k.name)+' na karti">Na karti</button>'
+      +'<button type="button" class="layer-del" onclick="layerImportDelete('+i+')" aria-label="Ukloni sloj '+esc(k.name)+'">Ukloni</button>'
+      +'</span>'+(stil?'<div class="layer-row-style">'+_layerStyleControls(i)+'</div>':'')+'</div>';
+  }).join('')+(rows.length>MAX?'<button type="button" class="layer-more" onclick="_layerListSve=!_layerListSve;layerImportRenderList()">'+(_layerListSve?'Prikaži manje':'Prikaži sve ('+rows.length+')')+'</button>':'');
+}
+function layerImportToggle(i){if(typeof togK==='function'&&kmlLs[i])togK(i);layerImportRenderList();}
+function layerImportZoom(i){
+  const k=kmlLs[i];if(!k||!k.grp)return;
+  if(!k.vis&&typeof togK==='function')togK(i);
+  try{const b=k.grp.getBounds();if(b.isValid())map.fitBounds(b,{padding:[30,30]});}catch(e){}
+  closeLayerImport();
+}
+async function layerImportDelete(i){
+  const k=kmlLs[i];if(!k)return;
+  const ok=typeof _dlgConfirm==='function'?await _dlgConfirm('Ukloniti sloj „'+k.name+'“ sa ovog telefona? Original fajl ostaje tamo odakle si ga učitao.',{title:'Ukloni sloj',danger:true,okLabel:'Ukloni'}):true;
+  if(!ok)return;
+  const j=kmlLs.indexOf(k);if(j<0)return;   // lista se mogla promijeniti dok je dijalog bio otvoren
+  _layerImportStil.delete(k);
+  if(delK(j)!==false)showToast('Sloj uklonjen');
+  layerImportRenderList();window.KmlDownloads?.render?.();
 }
 async function _localLayerSnapshot() {
   const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}');
@@ -194,18 +262,26 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
     });
   }
   function reply(id,result){const p=pending.get(id);if(p){clearTimeout(p.t);pending.delete(id);p.resolve(result);}}
-  function local(id){try{return Object.entries(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}')).find(([name,s])=>s._driveSource?.id===id);}catch(e){return null;}}
+  function stored(){try{return Object.entries(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}'));}catch(e){return [];}}
+  function local(id){return stored().find(([name,s])=>s._driveSource?.id===id)||null;}
+  // Isti fajl objavljen u novijem releaseu ima NOV asset id. Bez poređenja po
+  // nazivu preuzet sloj bi izgledao nepreuzet čim se objavi nova verzija.
+  const githubId=id=>String(id||'').startsWith('github-kml-');
+  function localByName(s){return stored().find(([name,d])=>d._driveSource&&githubId(d._driveSource.id)===githubId(s.id)&&d._driveSource.name===s.name)||null;}
+  // GitHub vraća releaseove od najnovijeg; isti naziv iz starijih releaseova se
+  // ne nudi ponovo (stariji primjerak je izgledao kao nepreuzet sloj).
+  function newestOnly(items){const seen=new Set();return items.filter(s=>{const k=s.name.toLocaleLowerCase('bs');if(seen.has(k))return false;seen.add(k);return true;});}
   function renderList(id,items,github=false){
     const list=el(id);if(!list)return;list.replaceChildren();
     const query=(github?'':el('kml-drive-search')?.value||'').trim().toLocaleLowerCase('bs');
-    for(const s of items.filter(s=>s.name.toLocaleLowerCase('bs').includes(query))){
-      const saved=local(s.id),state=messages.get(s.id),row=document.createElement('article');row.className='kml-drive-row';
+    for(const s of (github?newestOnly(items):items).filter(s=>s.name.toLocaleLowerCase('bs').includes(query))){
+      const saved=local(s.id),older=!saved&&localByName(s),state=messages.get(s.id),row=document.createElement('article');row.className='kml-drive-row';
       const icon=document.createElement('span');icon.className='kml-drive-icon';icon.textContent='KML';icon.setAttribute('aria-hidden','true');
       const copy=document.createElement('div');copy.className='kml-drive-copy';const name=document.createElement('b');name.textContent=s.name;
-      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':github?'GitHub · '+(s.release||'KARTE'):'KARTA APP');
-      const status=document.createElement('span');status.className='kml-drive-status';status.setAttribute('role','status');status.textContent=state?.message||(saved?'✓ Dostupno bez interneta':s.tooLarge?'Veće od 32 MB — podijeli sloj':'');
+      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':older?'Na telefonu je starija verzija':github?'GitHub · '+(s.release||'KARTE'):'KARTA APP');
+      const status=document.createElement('span');status.className='kml-drive-status';status.setAttribute('role','status');status.textContent=state?.message||(saved?'✓ Preuzeto · dostupno bez interneta':older?'Objavljena je nova verzija'+(s.release?' ('+s.release+')':''):s.tooLarge?'Veće od 32 MB — podijeli sloj':'');
       copy.append(name,meta,status);const button=document.createElement('button');button.type='button';button.dataset.sourceId=s.id;
-      button.textContent=state?.busy?(state.phase||'Preuzimam…'):saved?'Prikaži':'Preuzmi i dodaj';button.disabled=_layerImportBusy||!!state?.busy||!!s.tooLarge||!available();button.onclick=()=>start(s.id);
+      button.textContent=state?.busy?(state.phase||'Preuzimam…'):saved?'Prikaži':older?'Ažuriraj':'Preuzmi i dodaj';if(saved)button.classList.add('kml-drive-saved');button.disabled=_layerImportBusy||!!state?.busy||!!s.tooLarge||!available();button.onclick=()=>start(s.id);
       row.append(icon,copy,button);list.append(row);
     }
     if(items.length&&!list.childElementCount){const p=document.createElement('p');p.textContent='Nema fajlova s tim nazivom.';list.append(p);}
@@ -229,7 +305,10 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   async function start(id){
     const source=[...files,...githubFiles].find(s=>s.id===id);if(!source||_layerImportBusy||!available())return;
     const owner=sbUser?.id;if(!owner){showToast('Prijavi se prije dodavanja sloja');return;}
-    const saved=local(id);if(!saved&&navigator.onLine===false){messages.set(id,{message:'Za preuzimanje novog sloja uključi internet.'});render();return;}
+    let saved=local(id);const older=!saved&&localByName(source);
+    // Bez interneta stara verzija je i dalje upotrebljiva — prikaži nju.
+    if(!saved&&older&&navigator.onLine===false)saved=older;
+    if(!saved&&navigator.onLine===false){messages.set(id,{message:'Za preuzimanje novog sloja uključi internet.'});render();return;}
     _layerImportBusy=true;messages.set(id,{busy:true,message:saved?'Otvaram sačuvani sloj…':'Preuzimam '+source.name+'…'});
     document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=true);render();
     try{
@@ -253,13 +332,25 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
         const encoding=bytes.byteLength>=2&&new Uint8Array(bytes)[0]===255&&new Uint8Array(bytes)[1]===254?'utf-16le':bytes.byteLength>=2&&new Uint8Array(bytes)[0]===254&&new Uint8Array(bytes)[1]===255?'utf-16be':'utf-8';
         const content=new TextDecoder(encoding,{fatal:true}).decode(bytes);
         await new Promise(r=>setTimeout(r,0));
-        await _localLayerKml(/\.kml$/i.test(source.name)?source.name:source.name+'.kml',content,owner,{id,size:source.size,name:source.name,release:source.release||'',provider:id.startsWith('github-kml-')?'github':'drive'});
+        const added=await _localLayerKml(/\.kml$/i.test(source.name)?source.name:source.name+'.kml',content,owner,{id,size:source.size,name:source.name,release:source.release||'',provider:id.startsWith('github-kml-')?'github':'drive'});
+        if(older)replaceOlder(older[0],added);
         await request({type:'release',sourceId:id});
         if(id.startsWith('github-kml-'))closeLayerSheet();
       }
-      messages.delete(id);if(el('layer-import-status'))el('layer-import-status').textContent='✓ Sloj je na karti i sačuvan za offline rad.';showToast('✓ KML sloj je spreman za offline rad');root.DoznakaProjectBoundary?.afterDownload();
+      messages.delete(id);{const st=el('layer-import-status');if(st){st.hidden=false;st.dataset.ton='ok';st.textContent='✓ Sloj je na karti i sačuvan za offline rad.';}}showToast('✓ KML sloj je spreman za offline rad');root.DoznakaProjectBoundary?.afterDownload();
     }catch(e){messages.set(id,{message:e.message||'KML nije dodan. Pokušaj ponovo.'});}
-    finally{_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);render();}
+    finally{_layerImportBusy=false;document.querySelectorAll('#layer-import-modal .layer-pick').forEach(b=>b.disabled=false);render();if(typeof layerImportRenderList==='function')layerImportRenderList();}
+  }
+  // Nova verzija zamjenjuje staru tek kad je trajno sačuvana; stil i naziv
+  // koje je korisnik podesio prelaze na nju.
+  function replaceOlder(oldName,newName){
+    const old=kmlLs.find(k=>!k._key&&(k._origName||k.name)===oldName),neu=kmlLs.find(k=>!k._key&&(k._origName||k.name)===newName);
+    if(!old||!neu||old===neu)return;
+    for(const p of ['name','col','dash','weight','opacity','fill','fillCol','fillPattern','fillOpacity','tag','onlyPolygon'])if(old[p]!==undefined)neu[p]=old[p];
+    if(old.vis===false){neu.vis=false;map.removeLayer(neu.grp);}
+    delK(kmlLs.indexOf(old));
+    const i=kmlLs.indexOf(neu);if(i>=0){applyKmlStyle(i);try{saveKmlStyles();}catch(e){}}
+    root.GithubLayers?.render();
   }
   async function refreshGithub(){
     if(githubRefreshing)return;githubRefreshing=true;render();const note=el('kml-github-message');
@@ -271,7 +362,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
       if(note)note.textContent=!r.ok?r.error:r.stale?r.error:offline?'Sačuvan popis · za nove fajlove uključi internet.':!githubFiles.length?'Još nema KML slojeva. Objavi ih u KARTE → Releases i osvježi.':'';
     }finally{githubRefreshing=false;render();}
   }
-  root.KmlDownloads={request,reply,refresh,refreshGithub,render,start};
+  root.KmlDownloads={request,reply,refresh,refreshGithub,render,start,newestOnly};
 })(typeof window!=='undefined'?window:globalThis);
 
 // Prikaz preuzetih GitHub slojeva: koristi iste grupe i stanje kao preglednik oznaka.

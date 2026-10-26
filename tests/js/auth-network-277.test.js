@@ -1,13 +1,13 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 const login=html.slice(html.indexOf('async function doLogin()'),html.indexOf('// --- Register ---'));
 const network=html.slice(html.indexOf('function _isNetworkErr('),html.indexOf('// Prolazna greška SERVERA'));
 async function run({online=true,quality='dobra',lookup={data:'test@example.invalid',error:null},signError=null,cached=null,saved=null}={}){
  const messages=[],calls=[];let entered=0;
  const fields={'auth-ime':{value:'Test'},'auth-prezime':{value:'K'},'auth-pin':{value:'123456'},'auth-err':{style:{}},'auth-zapamti':{checked:false}};
- const env={document:{getElementById:k=>fields[k]},navigator:{onLine:online},_profileLoad:()=>cached,_loadSavedUser:()=>saved,_mrezaProbaj:()=>quality==='dobra',_mrezaStanje:()=>quality,_mrezaSila:ms=>calls.push(['sila',ms]),_setOfflineMode:()=>{},showApp:()=>entered++,showToast:()=>{},showAuthErr:m=>messages.push(m),_authBusy:()=>{},_clearSavedUser:()=>{},localStorage:{setItem(){}},sbLoadProfile:async()=>{},sb:{rpc:async()=>{calls.push(['rpc']);if(lookup instanceof Error)throw lookup;return lookup},auth:{signInWithPassword:async()=>{calls.push(['signin']);return {error:signError}},getUser:async()=>({data:{user:{id:'u'}}})}}};
- const args=Object.keys(env),api=new Function(...args,`let _authInFlight=false,_appEntered=false,sbUser=null,sbProfile=null;const _SAVED_USER_KEY='saved';${network}${login};return {doLogin,locked:()=>_authInFlight}`)(...Object.values(env));
+ const env={document:{getElementById:k=>fields[k]},navigator:{onLine:online},_profileLoad:()=>cached,_loadSavedUser:()=>saved,_offCredProvjeri:async()=>null,_offCredSpremi:async()=>true,_netKvalitet:()=>quality==='dobra'?'dobra':'nema',_mrezaProbaj:()=>quality==='dobra',_mrezaStanje:()=>quality,_mrezaSila:ms=>calls.push(['sila',ms]),_setOfflineMode:()=>{},showApp:()=>entered++,showToast:()=>{},showAuthErr:m=>messages.push(m),_authBusy:()=>{},_clearSavedUser:()=>{},localStorage:{setItem(){}},sbLoadProfile:async()=>{},sb:{rpc:async()=>{calls.push(['rpc']);if(lookup instanceof Error)throw lookup;return lookup},auth:{signInWithPassword:async()=>{calls.push(['signin']);return {error:signError}},getUser:async()=>({data:{user:{id:'u'}}})}}};
+ const args=Object.keys(env),api=new Function(...args,`let _netUzorci=[],_authInFlight=false,_appEntered=false,sbUser=null,sbProfile=null;const _SAVED_USER_KEY='saved';${network}${login};return {doLogin,locked:()=>_authInFlight}`)(...Object.values(env));
  await api.doLogin();assert(!api.locked(),'Neuspjela prijava mora dozvoliti ponovni pokušaj');return {messages,calls,entered};
 }
 (async()=>{

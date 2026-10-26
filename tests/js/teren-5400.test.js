@@ -5,9 +5,9 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),asse
 const {performance}=require('node:perf_hooks');
 const app=process.env.FIELD_APP_ROOT||'.';
 const harness=fs.readFileSync('tests/js/server-dvije-vlake.test.js','utf8').split('const tests=[];')[0];
-const requireSource=name=>name==='node:fs'?{...fs,readFileSync:(p,...args)=>fs.readFileSync(path.join(app,p),...args)}:require(name);
+const requireSource=name=>name==='./_izvor'?{izvor:()=>require('./_izvor').izvorIz(path.resolve(app))}:name==='node:fs'?{...fs,readFileSync:(p,...args)=>fs.readFileSync(path.join(app,p),...args)}:require(name);
 const {setup,fn}=new Function('require',harness+'\nreturn {setup,fn};')(requireSource);
-const report={version:fs.readFileSync(path.join(app,'index.html'),'utf8').match(/const APP_VER = 'v([^']+)'/)[1],method:'Node, stvarni APK JS, simulirani GPS/server/Leaflet; nije telefon niti mjerenje WebView brzine',checks:[],timings:{}};
+const report={version:require('./_izvor').izvorIz(path.resolve(app)).match(/const APP_VER = 'v([^']+)'/)[1],method:'Node, stvarni APK JS, simulirani GPS/server/Leaflet; nije telefon niti mjerenje WebView brzine',checks:[],timings:{}};
 function source(e,names){vm.runInContext(names.map(fn).join('\n'),e);}
 function init(uid,store){
  const h=setup(uid),e=h.e;

@@ -1,6 +1,7 @@
 // Grupni prikaz terenskih oznaka. Vidljivost ne briše i ne šalje podatke.
 (function () {
   'use strict';
+  const OPEN_KEY='tvlake_tv_vis_otvoreno';
   const categories={photos:'Fotografije',tracks:'Tragovi',points:'Tačke',measurements:'Mjerenja',labels:'Tekstualne oznake'};
   let scope=null,prefs={};
   function sync(){const uid=sbUser?.id||'guest';if(scope===uid)return;scope=uid;try{const value=JSON.parse(localStorage.getItem('tvlake_map_visibility_'+uid)||'{}');prefs=value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch(e){prefs={};}}
@@ -52,8 +53,17 @@
   }
   function render(){
     const el=document.getElementById('tv-visibility');if(!el)return;
-    el.innerHTML='<div class="tv-visibility-head"><div><b>Prikaz na karti</b><small>Sačuvani podaci · aktivno snimanje ostaje vidljivo</small></div><div><button onclick="_tvVisibilitySet(\'all\',true)">Prikaži sve</button><button onclick="_tvVisibilitySet(\'all\',false)">Sakrij sve</button></div></div>'+model().map(r=>'<div class="tv-visibility-row"><div><b>'+r.label+'</b><small>'+r.visible+' / '+r.total+' vidljivo</small></div><button '+(!r.total?'disabled ':'')+'aria-pressed="'+(r.visible===r.total&&r.total>0)+'" onclick="_tvVisibilitySet(\''+r.key+'\','+(r.visible===0)+')">'+(r.visible?'Sakrij':'Prikaži')+'</button></div>').join('');
+    // U panelu Tragovi je kartica SKLOPLJENA dok je korisnik ne otvori: pet
+    // redova prekidača je guralo samu listu tragova ispod ruba ekrana. Sažetak
+    // i dalje kaže koliko je vidljivo, a izbor otvoreno/zatvoreno se pamti.
+    const rows=model(),vis=rows.reduce((n,r)=>n+r.visible,0),tot=rows.reduce((n,r)=>n+r.total,0);
+    const sklopivo=!!el.closest?.('#tragovi-panel');let otvoreno=false;
+    if(sklopivo){try{otvoreno=localStorage.getItem(OPEN_KEY)==='1';}catch(e){}}
+    const naslov=sklopivo?'<div><small>Aktivno snimanje ostaje vidljivo</small></div>':'<div><b>Prikaz na karti</b><small>Sačuvani podaci · aktivno snimanje ostaje vidljivo</small></div>';
+    const sadrzaj='<div class="tv-visibility-head">'+naslov+'<div><button onclick="_tvVisibilitySet(\'all\',true)">Prikaži sve</button><button onclick="_tvVisibilitySet(\'all\',false)">Sakrij sve</button></div></div>'+rows.map(r=>'<div class="tv-visibility-row"><div><b>'+r.label+'</b><small>'+r.visible+' / '+r.total+' vidljivo</small></div><button '+(!r.total?'disabled ':'')+'aria-pressed="'+(r.visible===r.total&&r.total>0)+'" onclick="_tvVisibilitySet(\''+r.key+'\','+(r.visible===0)+')">'+(r.visible?'Sakrij':'Prikaži')+'</button></div>').join('');
+    el.innerHTML=sklopivo?'<details class="tv-vis-det"'+(otvoreno?' open':'')+' ontoggle="_tvVisibilityOpen(this.open)"><summary><b>Prikaz na karti</b><span>'+vis+' / '+tot+' vidljivo</span></summary>'+sadrzaj+'</details>':sadrzaj;
   }
-  Object.assign(window,{_tvCategoryOn:enabled,_tvVisibilityRestore:restore,_tvTrackVisible:trackVisible,_tvTrackSet:trackSet,_tvVisibilitySet:set,_tvVisibilityRender:render,_tvVisibilityModel:model,_tvPhotoVisible:photoVisible,_tvPhotoSet:photoSet,_tvPhotosSet:photosSet,_tvPhotoKey:photoKey});
+  function openSet(on){try{localStorage.setItem(OPEN_KEY,on?'1':'0');}catch(e){}}
+  Object.assign(window,{_tvCategoryOn:enabled,_tvVisibilityRestore:restore,_tvTrackVisible:trackVisible,_tvTrackSet:trackSet,_tvVisibilitySet:set,_tvVisibilityRender:render,_tvVisibilityOpen:openSet,_tvVisibilityModel:model,_tvPhotoVisible:photoVisible,_tvPhotoSet:photoSet,_tvPhotosSet:photosSet,_tvPhotoKey:photoKey});
   for(const key of Object.keys(categories))apply(key);
 })();

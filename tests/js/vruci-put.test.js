@@ -15,7 +15,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 const BEZ_KOM = HTML.split('\n').map(r => r.replace(/^\s*\/\/.*$/, '')).join('\n');
 
 function extractFn(name, src) {

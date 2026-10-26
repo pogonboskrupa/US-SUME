@@ -1,7 +1,7 @@
 'use strict';
 // Stvarne funkcije potvrda, lažni odgovori: nema produkcijskih upisa.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const source=fs.readFileSync('index.html','utf8');
+const source=require('./_izvor').izvor();
 function fn(name){const start=source.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(start>=0,name);let depth=0;for(let i=source.indexOf('{',start);i<source.length;i++){if(source[i]==='{')depth++;if(source[i]==='}'&&--depth===0)return source.slice(start,i+1);}throw Error(name);}
 function setup(){const calls=[],responses=[],e={console,sbUser:{id:'A'}};e.sb={rpc:async()=>e.rpcResult||{data:null,error:null},from(table){const c={table},q=new Proxy({}, {get(_,key){if(key==='then')return (ok,bad)=>{calls.push(c);return Promise.resolve(responses.shift()||{data:null,error:null}).then(ok,bad);};return (...args)=>{c[key]=args;return q;};}});return q;}};vm.createContext(e);vm.runInContext(['_serverPodaciJednaki','_serverInsertPotvrdjeno','_dozUpisiZonu','_dozTackaKljuc','_dozPosaljiKomad','_sendDozTrackPoint'].map(fn).join('\n'),e);return {e,calls,responses};}
 (async()=>{

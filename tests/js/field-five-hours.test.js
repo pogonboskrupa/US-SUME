@@ -1,7 +1,7 @@
 'use strict';
 // Pet sati simuliranog vremena, ne pet sati baterije niti fizički Redmi.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync(process.env.FIELD_SOURCE||'index.html','utf8');
+const html=(process.env.FIELD_SOURCE ? require('node:fs').readFileSync(process.env.FIELD_SOURCE,'utf8') : require('./_izvor').izvor());
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));assert(start>=0,name);let d=0;
  for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')d++;if(html[i]==='}'&&!--d)return html.slice(start,i+1);}}
 const tests=[];const test=(n,f)=>tests.push([n,f]);
@@ -35,7 +35,7 @@ test('nova sesija i oporavljene visine resetuju računicu uspona',()=>{
 });
 function replay(change=false){let calls=0,acks=0,breaks=0;const pts=Array.from({length:1800},(_,i)=>({t:1000+i*2000,la:44+i/1e5,lo:16,ac:5,al:400,sp:1}));
  const e={AndroidGps:{readNativeBuffer(){}},sbUser:{id:'u'},recOn:true,actI:0,_tragOn:false,_dozGpsOn:false,
- _nativeSessionSince:{vlaka:0,trag:0,doznaka:0},_nativeReplayLast:{vlaka:0,trag:0,doznaka:0},_onPLastFixTs:0,
+ _nativeSessionSince:{vlaka:0,trag:0,doznaka:0},_nativeReplayLast:{vlaka:0,trag:0,doznaka:0},_onPLastFixTs:0,_drainLiveQ:[],
  _crashCheck(){},_nativeBufUzmi:()=>pts,_recPauseWin:[],_tragPauseWin:[],_dozPauseWin:[],
  _uPauziIntervalu:()=>false,_filteredAlt:x=>x,_vlakaProcessGpsPoint(){calls++;},_saveLocalVlake:()=>true,
  _nativeBufPotvrdi(){acks++;},_pauziOcistiZatvorene(){},showToast(){},

@@ -2,9 +2,10 @@
 import asyncio, json, mimetypes, os, re
 from pathlib import Path
 from playwright.async_api import async_playwright
+from _izvor import izvor  # index.html + izdvojeni fajlovi na izvornom mjestu
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = (ROOT / 'index.html').read_text()
+SOURCE = izvor()
 OUT = ROOT / 'outputs/ui-preview'
 VERSION = re.search(r"const APP_VER = '([^']+)'", SOURCE)[1]
 

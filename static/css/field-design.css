@@ -183,6 +183,45 @@ html #guide-choice-modal .guide-sheet,html #layer-import-modal .layer-sheet {dis
 .layer-pick {display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;background:#166534;color:#fff;border:1px solid #166534;border-radius:12px;padding:12px;font:700 14px system-ui;cursor:pointer;}.layer-pick:disabled {opacity:.55;cursor:wait;}
 .layer-file-hint {padding:13px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:12px;margin:13px 0;overflow-wrap:anywhere;}.layer-file-hint b {display:block;font-size:13px;line-height:1.6;}.layer-file-hint span {display:block;font-size:12px;line-height:1.7;color:var(--field-muted);margin-top:4px;}.layer-crs-label {font-size:12px;font-weight:700;}
 .layer-status {margin-top:18px;border-top:1px solid var(--field-border);padding-top:13px;font-size:13px;line-height:1.7;color:var(--field-muted);overflow-wrap:anywhere;}
+/* v2.9.2: tabovi sa oznakom formata, izbor fajla kao kartica, pregled uvezenih slojeva. */
+.layer-tabs button {display:flex;align-items:center;gap:10px;text-align:left;min-height:58px;}
+.layer-tabs button>span:last-child {display:flex;flex-direction:column;min-width:0;}
+.layer-tabs button small {font:500 11px system-ui;opacity:.8;margin-top:2px;}
+.layer-tab-ico {display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:9px;background:#1e40af;color:#fff;font:800 10px system-ui;letter-spacing:.04em;}
+.layer-tab-ico.shp {background:#7c2d12;}
+.layer-tab-ico.srv {background:#0f766e;}
+.layer-tabs button {min-width:0;padding:8px;gap:8px;}.layer-tabs button small {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.layer-tabs button b {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media (max-width:420px){.layer-tabs{gap:6px}.layer-tabs button{flex-direction:column;justify-content:center;text-align:center;gap:4px;padding:6px 4px}.layer-tabs button>span:last-child{align-items:center;max-width:100%}.layer-tabs button small{display:none}.layer-tab-ico{flex:0 0 auto;width:34px;height:30px}}
+.layer-tabs button[aria-selected=true] .layer-tab-ico {background:rgba(255,255,255,.18);}
+.layer-drop {flex-wrap:wrap;justify-content:flex-start;text-align:left;min-height:76px;padding:14px 16px;border-style:dashed;border-width:2px;border-color:#22c55e;margin-top:4px;}
+.layer-drop>.ic {width:26px;height:26px;flex:0 0 26px;}
+.layer-drop>span:nth-of-type(1) {display:flex;flex-direction:column;flex:1;min-width:0;}
+.layer-drop small {font:500 12px system-ui;opacity:.9;margin-top:3px;line-height:1.4;}
+.layer-ext {display:flex;flex-wrap:wrap;gap:5px;width:100%;padding-left:34px;}
+.layer-ext i {font:700 11px ui-monospace,monospace;font-style:normal;background:rgba(255,255,255,.16);border-radius:6px;padding:2px 7px;}
+.layer-status[data-ton=ok] {color:#4ade80;}.layer-status[data-ton=greska] {color:#f87171;}
+html[data-field-theme=day] .layer-status[data-ton=ok] {color:#14532d;}html[data-field-theme=day] .layer-status[data-ton=greska] {color:#991b1b;}
+.layer-loaded {margin-top:20px;padding-top:16px;border-top:1px solid var(--field-border);}
+.layer-loaded header h3 {margin:0;font-size:15px;}.layer-loaded header h3 span {color:var(--field-muted);font-weight:600;}
+.layer-loaded header small {display:block;font-size:11px;color:var(--field-muted);margin:3px 0 10px;}
+.layer-empty {font-size:13px;line-height:1.6;color:var(--field-muted);padding:12px;border:1px dashed var(--field-border);border-radius:12px;margin:0;}
+.layer-row {display:grid;grid-template-columns:12px minmax(0,1fr);gap:4px 10px;align-items:start;padding:11px 12px;margin-top:8px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg);}
+.layer-row.is-hidden .layer-swatch {opacity:.35;}.layer-row.is-hidden {border-style:dashed;}
+.layer-swatch {width:12px;height:12px;border-radius:4px;margin-top:4px;box-shadow:0 0 0 1px rgba(255,255,255,.25);}
+.layer-row-copy b {display:block;font-size:13px;line-height:1.45;overflow-wrap:anywhere;color:var(--field-ink);}
+.layer-row-copy small {display:block;font-size:11px;line-height:1.6;color:var(--field-muted);}
+.layer-src {font-style:normal;font-weight:800;font-size:10px;letter-spacing:.04em;border:1px solid var(--field-border);border-radius:5px;padding:0 5px;margin-right:6px;}
+.layer-row-actions {grid-column:2;display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.layer-row-actions button,.layer-more {min-height:40px;padding:7px 12px;border-radius:9px;border:1px solid var(--field-border);background:var(--field-card,transparent);color:var(--field-ink);font:600 12px system-ui;cursor:pointer;}
+.layer-row-actions .layer-del {color:#f87171;border-color:rgba(248,113,113,.5);}
+html[data-field-theme=day] .layer-row-actions .layer-del {color:#991b1b;border-color:#fca5a5;}
+.layer-more {width:100%;margin-top:10px;}
+.layer-row.is-editing {border-color:#16a34a;}
+.layer-row-style {grid-column:1/-1;margin-top:4px;}
+.layer-row-style .le-style>.le-section:first-of-type {margin-top:8px;}
+.kml-drive-row button.kml-drive-saved {background:var(--field-card,transparent);color:#4ade80;border-color:rgba(74,222,128,.5);}
+html[data-field-theme=day] .kml-drive-row button.kml-drive-saved {background:#fff;color:#166534;border-color:#16a34a;}
 .kml-drive{margin-top:20px;padding-top:18px;border-top:1px solid var(--field-border)}
 .kml-drive header{display:flex;align-items:center;justify-content:space-between;gap:10px}.kml-drive header small{font-size:10px;letter-spacing:.08em;color:var(--field-muted)}.kml-drive header h3{margin:4px 0}
 .kml-drive button{min-height:44px;padding:9px 12px;border-radius:10px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui;cursor:pointer}.kml-drive button:disabled{opacity:.55;cursor:default}
@@ -746,6 +785,7 @@ html[data-field-theme=day] :is(#panel,#proj-panel,#doznaka-panel,#admin-panel,#p
 html[data-field-theme=day] :is(#proj-panel,#panel,#layer-sheet) button[style*="background:#0f"] {background:#e2e8f0!important;color:#102033!important;border-color:#64748b!important;}
 html[data-field-theme=day] #proj-panel button[onclick="backToProjList()"] {color:#1e40af!important;}
 html[data-field-theme=day] :is(.btn.g,#pd-draw-vlaka-btn) {background:#166534!important;color:#fff!important;}
+html[data-field-theme=day] #pd-studio-btn {background:#075985!important;color:#fff!important;}
 html[data-field-theme=day] .btn.o {background:#9a3412;color:#fff;}
 html[data-field-theme=day] :is(.btn.gr,#dlg-cancel) {background:#e2e8f0;color:#102033;border:1px solid #64748b;}
 html[data-field-theme=day] :is(#layer-sheet,#ab-loc-popup) label {color:#102033;}
@@ -958,7 +998,6 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 #department-report .dr-methods small{font-size:10px;line-height:1.35;color:var(--field-muted);font-weight:500}
 #department-report .dr-legacy{border-bottom:0}
 #department-report .dr-legacy summary{font-weight:500;font-size:12px;color:var(--field-muted)}
-#department-report #dr-selection{color:var(--field-ink);font-weight:600;margin:12px 0 8px}
 #department-report .dr-analysis-state{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;padding:11px 12px;margin:8px 0;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
 #department-report #dr-analysis-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#334155;color:#fff;font-size:16px;font-weight:800}
 #department-report .dr-analysis-state[data-state=busy] #dr-analysis-icon{background:#2563eb;animation:drPulse 1.2s ease-in-out infinite}
@@ -973,9 +1012,6 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 #department-report .dr-tabs>button{border-color:transparent;background:transparent;padding:10px 4px;font-size:12px;min-width:0}
 #department-report .dr-tabs>button[aria-selected=true]{background:#1e40af;border-color:#1e40af;color:#fff;box-shadow:0 2px 5px #0002}
 #department-report .dr-tab-panel{padding:4px 0 0;outline-offset:-3px}
-#department-report .dr-area{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 12px;margin-top:12px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
-#department-report .dr-area span{font-size:13px;color:var(--field-muted)}
-#department-report .dr-area b{font-size:24px;color:var(--field-ink);font-variant-numeric:tabular-nums}
 #department-report .dr-metrics-two{grid-template-columns:repeat(2,minmax(0,1fr))}
 #department-report .dr-metrics b{overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 #department-report #dr-aspect-main{font-size:16px}
@@ -1020,3 +1056,189 @@ html[data-field-theme=day] .dr-modal button.dr-danger{background:#fff0f0;border-
 
 /* Lager: odvojeni simbol/tekst i sklopivi pregled pojedinačnih položaja. */
 .lager-style{color:var(--field-ink)}#lager-style-preview{display:grid;justify-content:center;justify-items:center;padding:18px;min-height:56px;overflow:hidden;background:#142132;border:1px solid var(--field-border);border-radius:12px}#lager-position-list{margin-top:14px}#lager-position-list>summary{cursor:pointer;min-height:44px;line-height:44px;color:var(--field-ink);font-weight:650}#lager-position-rows{display:grid;gap:8px;max-height:260px;overflow:auto}.lager-position-row{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:12px;border:1px solid var(--field-border);border-radius:11px;background:var(--field-bg);overflow-wrap:anywhere}.lager-position-row>b{font-size:13px;color:var(--field-ink)}.lager-position-row>span{font-size:12px;color:var(--field-muted)}.lager-position-row>button{min-height:44px;border:1px solid var(--field-border);border-radius:9px;color:var(--field-ink);background:var(--field-card);font:600 12px system-ui;cursor:pointer}.lager-position-row>button:disabled{opacity:.5;cursor:default}#lager-position-toolbar{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:99031;padding:12px;box-sizing:border-box;border:1px solid var(--field-border);border-radius:13px;background:var(--field-card);color:var(--field-ink);box-shadow:0 4px 24px #0004}#lager-position-toolbar[hidden]{display:none!important}#lager-position-toolbar>b{font-size:13px}#lager-position-toolbar>p{font-size:12px;line-height:1.5;margin:7px 0}#lager-position-toolbar>button{width:100%;min-height:44px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui}#map.lager-positioning :is(canvas,.leaflet-marker-icon,.leaflet-interactive){pointer-events:none!important}
+.guide-route.is-active {border-color:#8b5cf6;box-shadow:inset 3px 0 0 #8b5cf6;}
+/* Granice i putevi (v2.9.4): kartice umjesto inline stilova; ID-jevi i handleri nepromijenjeni. */
+#ls-pane-granice{font-family:system-ui,sans-serif;color:var(--field-ink);}
+.gp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.gp-head h3{margin:0;font:700 17px/1.3 system-ui;}.gp-head small{display:block;font-size:12px;color:var(--field-muted);margin-top:3px;}
+.gp-btn{flex-shrink:0;min-width:44px;min-height:44px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);color:var(--field-ink);cursor:pointer;display:grid;place-items:center;}
+.gp-card{margin:12px 0;padding:12px;border:1px solid var(--field-border);border-radius:14px;background:var(--field-bg);}
+.gp-label{display:block;margin:0 0 8px;font:700 11px/1.4 system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--field-muted);}
+.gp-find input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);color:var(--field-ink);font:15px system-ui;}
+#granice-trazi-rez:not(:empty){margin-top:8px;display:grid;gap:6px;}
+.gt-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;align-items:center;width:100%;min-height:48px;padding:8px 12px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);color:var(--field-ink);text-align:left;cursor:pointer;font-family:inherit;}
+.gt-row b{font-size:14px;overflow-wrap:anywhere;}.gt-row small{grid-column:1;font-size:11px;color:var(--field-muted);overflow-wrap:anywhere;}.gt-row span{grid-row:1/3;grid-column:2;font-size:20px;color:var(--field-muted);}
+.gt-empty{margin:4px 0 0;font-size:12px;color:var(--field-muted);}
+.gp-row{display:grid;grid-template-columns:24px 30px minmax(0,1fr);align-items:center;gap:10px;min-height:48px;cursor:pointer;}
+.gp-row input{width:22px;height:22px;margin:0;cursor:pointer;}.gp-swatch{display:block;width:28px;border-radius:2px;}
+.gp-row-txt b{display:block;font-size:14px;font-weight:600;}.gp-row-txt small{display:block;font-size:11px;color:var(--field-muted);}
+.gp-sub{margin:0 0 6px 34px;}.gp-sub .boundary-only-option{margin:4px 0 8px;}
+.gp-range{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--field-muted);min-height:40px;}.gp-range input{flex:1;min-width:0;}
+.gp-own{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+#ls-pane-granice #kml-drop,.gp-own-btn{display:flex;align-items:center;gap:10px;margin:0;min-height:60px;padding:10px 12px;border:1.5px dashed var(--field-border);border-radius:12px;background:var(--field-card);color:var(--field-ink);text-align:left;font:13px/1.4 system-ui;cursor:pointer;}
+.gp-own-btn{border-style:solid;}
+#ls-pane-granice #kml-drop .ic,.gp-own-btn .ic{width:22px;height:22px;flex-shrink:0;margin:0;}
+#ls-pane-granice #kml-drop b,.gp-own-btn b{display:block;font-size:13px;}#ls-pane-granice #kml-drop small,.gp-own-btn small{display:block;font-size:11px;color:var(--field-muted);}
+#ls-pane-granice #kml-drop.over{border-color:#3b82f6;}
+.gp-own-info{margin-top:8px;font-size:12px;color:var(--field-muted);}
+.gp-link{margin-top:8px;padding:8px 0;min-height:40px;border:0;background:transparent;color:#7dd3fc;font:600 13px system-ui;cursor:pointer;text-align:left;}
+html[data-field-theme=day] .gp-link{color:#1e40af;}
+@media(max-width:360px){.gp-own{grid-template-columns:1fr;}}
+#ls-pane-granice .kml-drive{margin:12px 0;padding:12px;border:1px solid var(--field-border);border-radius:14px;background:var(--field-bg);}
+#ls-pane-granice .kml-drive header h3{font:700 15px/1.3 system-ui;color:var(--field-ink);}
+#ls-pane-granice .kml-drive>p{margin:6px 0 0;font:13px/1.5 system-ui;color:var(--field-muted);}
+#ls-pane-granice #kml-github-message:not(:empty){margin-top:6px;font:12px/1.5 system-ui;color:var(--field-muted);}
+/* v2.9.6 Projekat/Vlake: krak uvučen ispod vlake, kolegine vlake označene,
+   GJ u kartici projekta, oznaka "Čeka slanje" samo kad je stvarno tako. */
+html .project-vl-row{min-height:52px;padding:9px 10px;margin:6px 0}
+html .project-vl-row.krak{margin-left:18px;width:calc(100% - 18px)}
+html .project-vl-row.kolega{border-style:dashed}
+.proj-card-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.proj-card-gj{font-size:12px;font-weight:600;color:var(--field-muted);background:var(--field-bg);border:1px solid var(--field-border);border-radius:999px;padding:1px 8px}
+html .data-row-status.pending{display:inline-block;color:#fbbf24;font-weight:600}
+html[data-field-theme=day] .data-row-status.pending{color:#92400e}
+
+/* Doznaka 2.9.7: pregled odmah ispod zaglavlja, navigacija u jednom redu,
+   status sa natpisom, rijetke postavke sklopljene, brojači u listi su filter. */
+html .doz-nav {grid-template-columns:repeat(4,minmax(0,1fr));}
+html .doz-row-lbl {padding:10px 12px 0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--field-muted);}
+html .doz-pregled {margin:4px 12px 10px;padding:12px;border:1px solid var(--field-border);border-left:4px solid #22c55e;border-radius:12px;background:var(--field-card);color:var(--field-ink);}
+html .doz-pregled[hidden] {display:none;}
+html .doz-pregled .dpg-top {display:flex;align-items:center;gap:12px;}
+html .doz-pregled .dpg-top b {font-size:28px;line-height:1;font-weight:800;color:var(--field-ink);}
+html .doz-pregled .dpg-top span {font-size:13px;font-weight:600;line-height:1.4;}
+html .doz-pregled .dpg-top small {display:block;font-size:12px;font-weight:400;color:var(--field-muted);}
+html .doz-pregled .dpg-bar {height:8px;margin:10px 0 8px;border-radius:5px;background:var(--field-bg);overflow:hidden;border:1px solid var(--field-border);}
+html .doz-pregled .dpg-bar i {display:block;height:100%;background:linear-gradient(90deg,#166534,#22c55e);border-radius:5px;}
+html .doz-pregled .dpg-meta {display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--field-muted);}
+html .doz-pregled .dpg-meta .w {color:#fbbf24;}
+html[data-field-theme=day] .doz-pregled .dpg-meta .w {color:#854d0e;}
+html .doz-kreiran {margin-top:8px;font-size:12px;color:var(--field-muted);}
+html .doz-sec-hdr {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+html .doz-sec-hdr .btn {min-height:44px;}
+html #doz-panel-detail>details.doz-postavke {padding:0 12px;}
+html .doz-postavke>summary {cursor:pointer;min-height:52px;padding:12px 0;list-style-position:inside;}
+html .doz-postavke>summary small {display:block;margin:3px 0 0 18px;font-size:12px;color:var(--field-muted);}
+html .doz-postavke[open]>summary {border-bottom:1px solid var(--field-border);margin-bottom:10px;}
+html .doz-post-grupa {padding-bottom:14px;}
+html .doz-post-grupa+.doz-post-grupa {border-top:1px solid var(--field-border);padding-top:12px;}
+html .doz-sazetak .doz-filt {min-height:40px;padding:6px 10px;border:1px solid var(--field-border);border-radius:20px;background:var(--field-card);color:var(--field-muted);font:inherit;font-size:12px;cursor:pointer;}
+html .doz-sazetak .doz-filt.on {border-width:2px;font-weight:700;}
+html .doz-sazetak .doz-filt.sve.on {color:var(--field-ink);border-color:var(--field-ink);}
+
+/* Karta 2.9.8: prozorčići donje trake prate temu, čitljiva traka koordinata,
+   grafičko mjerilo iznad donje trake, realtime oznaka samo kad nešto znači. */
+html .ab-pop {background:var(--field-card);border:1px solid var(--field-border);color:var(--field-ink);}
+html .abp-title {color:var(--field-ink);}
+html #ab-loc-popup #gps-info {color:var(--field-muted);font-size:12px;}
+html .abp-tile {background:var(--field-bg);border-color:var(--field-border);color:var(--field-ink);}
+html:not([data-field-theme=day]) .ab-pop .gps-switch:not(.on) {background:#475569;}
+html .abp-act {min-height:48px;}
+html .abp-trag {background:rgba(249,115,22,.16);border-color:#fb923c;color:#fdba74;}
+html .abp-trag.on {background:rgba(239,68,68,.16);border-color:#f87171;color:#fca5a5;}
+html .abp-centar {background:rgba(59,130,246,.16);border-color:#60a5fa;color:#93c5fd;}
+html[data-field-theme=day] .abp-trag {background:#fff7ed;border-color:#fdba74;color:#c2410c;}
+html[data-field-theme=day] .abp-trag.on {background:#fee2e2;border-color:#fca5a5;color:#b91c1c;}
+html[data-field-theme=day] .abp-centar {background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;}
+
+/* Karta 2.9.9: traka koordinata u JEDNOM niskom redu (~34 px), providna uz
+   zamućenje — karta ispod se vidi, a brojevi ostaju čitljivi. Oznake su
+   skraćene (⛰ / Y / X), ID-jevi i dodir-za-kopiranje su isti kao prije. */
+html #nv-badge {display:flex;flex-wrap:nowrap;align-items:center;gap:0;min-height:34px;padding:2px 2px;box-sizing:border-box;line-height:1.2;font-family:system-ui,-apple-system,sans-serif;white-space:nowrap;background:rgba(15,23,42,.55);border-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+html #nv-badge .nv-cell {display:flex;flex-direction:row;align-items:baseline;gap:4px;min-width:0;padding:4px 7px;border-left:1px solid rgba(148,163,184,.3);}
+html #nv-badge .nv-cell:first-child {border-left:0;}
+html #nv-badge .nv-cell-xy {flex:1;justify-content:center;pointer-events:auto;cursor:pointer;border-radius:6px;overflow:hidden;}
+html #nv-badge .nv-cell-xy:active {background:rgba(148,163,184,.25);}
+html #nv-badge .nv-ic {font-size:12px;opacity:.9;}
+html #nv-badge .nv-lbl {font-size:11px;font-weight:600;color:#94a3b8;}
+html #nv-badge .nv-lbl+.nv-coord {margin-right:4px;}
+html #nv-badge .nv-coord:last-child {margin-right:0;}
+html #nv-badge #nv-val {font-size:13px;font-weight:700;color:#67e8f9;}
+html #nv-badge .nv-coord {font-size:13px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;}
+html #nv-badge .nv-sc,html #nv-badge #map-scale-val {font-size:13px;font-weight:700;color:#fbbf24;}
+html #nv-badge .nv-dd {font-size:10px;color:#94a3b8;}
+html #nv-badge, html #nv-badge * {text-shadow:0 1px 2px rgba(0,0,0,.45);}
+@media(max-width:379px){html #nv-badge .nv-cell{padding:4px 5px;gap:3px}html #nv-badge .nv-coord,html #nv-badge #nv-val,html #nv-badge .nv-sc,html #nv-badge #map-scale-val{font-size:12px}}
+html[data-field-theme=day] #nv-badge {background:rgba(255,255,255,.72);border-color:rgba(100,116,139,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+html[data-field-theme=day] #nv-badge, html[data-field-theme=day] #nv-badge * {text-shadow:none;}
+html[data-field-theme=day] #nv-badge .nv-coord {color:#102033;}
+html[data-field-theme=day] #nv-badge #nv-val {color:#0e7490;}
+html[data-field-theme=day] #nv-badge :is(.nv-lbl,.nv-dd) {color:#475569;}
+html[data-field-theme=day] #nv-badge :is(.nv-sc,#map-scale-val) {color:#854d0e;}
+html[data-field-theme=day] #nv-badge .nv-cell {border-left-color:#cbd5e1;}
+
+/* "Moja lokacija" 2.9.9: status (tačka u boji preciznosti + starost fiksa),
+   dvije glavne radnje, opcije kao čipovi. Bez GPS-a: samo "Uključi lokaciju". */
+html #ab-loc-popup .abp-head {justify-content:flex-start;gap:10px;padding:2px 2px 10px;}
+html #ab-loc-popup .abp-stat {flex:1;min-width:0;}
+html #ab-loc-popup #gps-info,html #ab-loc-popup #gps-age {font-family:system-ui,sans-serif;font-variant-numeric:tabular-nums;}
+html #ab-loc-popup .abp-sub {font-size:12.5px;color:var(--field-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+html #ab-loc-popup #gps-info {display:inline;max-width:none;overflow:visible;color:var(--field-ink);font-weight:600;}
+html .abp-dot {flex:0 0 auto;width:12px;height:12px;border-radius:50%;background:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.25);}
+html .abp-dot.dobar {background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25);}
+html .abp-dot.srednji {background:#eab308;box-shadow:0 0 0 3px rgba(234,179,8,.25);}
+html .abp-dot.slab {background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.25);}
+html .abp-dot.trazi {background:#eab308;animation:abpDot 1.2s ease-in-out infinite;}
+@keyframes abpDot {50% {opacity:.3;}}
+html #ab-loc-popup .abp-acts {margin-bottom:8px;}
+html .abp-chips {display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+html .abp-chip {min-height:44px;padding:6px 4px;border-radius:22px;border:1.5px solid var(--field-border);background:transparent;color:var(--field-muted);font:600 12.5px system-ui;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+html .abp-chip.on {background:rgba(34,197,94,.18);border-color:#4ade80;color:var(--field-ink);}
+html[data-field-theme=day] .abp-chip.on {background:#dcfce7;border-color:#16a34a;color:#14532d;}
+html .abp-ukljuci {display:none;width:100%;min-height:52px;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:0;background:#16a34a;color:#fff;font:700 15px system-ui;cursor:pointer;}
+html .abp-ukljuci .ic {width:20px;height:20px;margin:0;}
+html #ab-loc-popup.gps-off .abp-ukljuci {display:flex;}
+html #ab-loc-popup.gps-off :is(.abp-acts,.abp-chips) {display:none;}
+@media (prefers-reduced-motion:reduce) {html .abp-dot.trazi {animation:none;}}
+
+html #map .leaflet-control-scale {margin:0 10px 10px 0;}
+body.ab-on #map .leaflet-bottom.leaflet-right .leaflet-control-scale {margin-bottom:calc(var(--ab-h,64px) + 10px);}
+html #map .leaflet-control-scale-line {background:rgba(255,255,255,.85);color:#111;border-color:#111;font:600 11px system-ui;line-height:1.4;padding:0 5px;}
+
+html #sync-status-dot {display:none;}
+html #sync-status-dot.sync-dot--ok {display:inline-flex;align-items:center;gap:3px;width:auto;height:auto;margin:6px 0 0!important;padding:2px 5px;border-radius:9px;background:var(--field-card);border:1px solid var(--field-border);color:#4ade80;font:700 9px system-ui;}
+html #sync-status-dot.sync-dot--ok::before {content:'';width:6px;height:6px;border-radius:50%;background:#22c55e;}
+html[data-field-theme=day] #sync-status-dot.sync-dot--ok {color:#15803d;}
+
+html .ls-online-note {font-size:12px;line-height:1.55;color:var(--field-muted);margin:10px 2px 0;}
+html #ls-cache-box {margin-top:10px;padding:10px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-bg);}
+html #ls-cache-box[hidden] {display:none;}
+html .lsc-row {display:flex;align-items:center;gap:8px;font-size:12px;color:var(--field-ink);}
+html .lsc-row>span {flex:1;min-width:0;line-height:1.5;}
+html .lsc-row button,html .lsc-teren {min-height:44px;padding:6px 12px;border:1px solid var(--field-border);border-radius:9px;background:var(--field-card);color:var(--field-ink);font:600 12px system-ui;cursor:pointer;}
+html .lsc-teren {width:100%;margin-top:8px;}
+html #ls-basemap-grid {gap:8px;}
+html #ls-basemap-grid .layer-opt {padding:9px 4px 8px;gap:3px;min-height:72px;font-size:12.5px;}
+html #ls-basemap-grid .layer-opt span.layer-ico {font-size:20px;}
+html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
+/* Izvještaj odjela — pregled (v3.2.6): stanje+granica u jednoj kartici, KPI pločice, raspodjela kao složena traka. */
+#department-report .dr-analysis-state{grid-template-columns:38px minmax(0,1fr) auto}
+#department-report .dr-analysis-state>#dr-view{min-height:40px;padding:8px 10px;white-space:nowrap;border-color:#3b82f6}
+#department-report .dr-analysis-state>#dr-view[hidden]{display:none}
+#department-report .dr-analysis-state #dr-selection{display:block;margin:2px 0 0;padding:0;border:0;background:none;font-size:12px;font-weight:600;color:var(--field-ink);overflow-wrap:anywhere}
+#department-report .dr-analysis-state #dr-selection[hidden]{display:none}
+#department-report .dr-actions:not(:has(button:not([hidden]))){display:none}
+#department-report .dr-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+#department-report .dr-kpis>div{min-width:0;padding:10px;border:1px solid var(--field-border);border-radius:12px;background:var(--field-bg)}
+#department-report .dr-kpis>.dr-kpi-main{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+#department-report .dr-kpis small{display:block;font-size:11px;color:var(--field-muted)}
+#department-report .dr-kpis b{display:block;font-size:17px;color:var(--field-ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:1.3}
+#department-report .dr-kpis>.dr-kpi-main b{font-size:24px}
+#department-report .dr-summary{margin:10px 0 0;padding:10px 12px;border-left:3px solid #3b82f6;border-radius:0 10px 10px 0;background:var(--field-bg);color:var(--field-ink);font-size:13px}
+#department-report .dr-dist{display:grid;gap:8px}
+#department-report .dr-dist-row{display:grid;gap:7px;width:100%;padding:10px 12px;text-align:left;background:var(--field-bg);font-weight:400}
+#department-report .dr-dist-head{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+#department-report .dr-dist-head>span{font-size:11px;color:var(--field-muted);font-weight:600}
+#department-report .dr-dist-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--field-card);border:1px solid var(--field-border)}
+#department-report .dr-dist-bar>i{display:block;height:100%;min-width:2px}
+#department-report .dr-dist-bar>.dr-dist-empty{width:100%;background:none}
+#department-report .dr-dist-keys{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--field-ink)}
+#department-report .dr-dist-keys>span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+#department-report .dr-dist-keys i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+#department-report .dr-stat-row.dr-stat-zero{padding:5px 0}
+#department-report .dr-stat-row.dr-stat-zero :is(progress,small){display:none}
+#department-report #dr-copy{margin-bottom:12px}
+#department-report .dr-stat-row.dr-stat-zero>span{color:var(--field-muted)}
+#department-report .dr-kpis b small{display:inline;font-size:12px;font-weight:600}
+@media(max-width:420px){#department-report .dr-analysis-state>#dr-view{grid-column:2/-1;justify-self:start}}
+@media(max-width:359px){#department-report .dr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#department-report .dr-kpis>div:last-child{grid-column:1/-1}}

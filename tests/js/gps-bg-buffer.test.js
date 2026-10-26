@@ -20,7 +20,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 function extractFn(name) {
   const re = new RegExp('function ' + name + '\\(');
@@ -118,18 +118,26 @@ const SRC_CRASH = [
   extractFn('_recoverVlakaSnapshot'),
   extractFn('_saveLocalVlake'),
   extractFn('_nativeBufPotvrdi'),
+  extractFn('_uPauziIntervalu'),
+  extractFn('_pauziUcitajSnimljene'),
+  extractFn('_vlakaZaOporavak'),
+  extractFn('_vlakaOporavakKandidati'),
 ].join('\n');
 
-function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
+function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true, pauze = null, vlake = [] }) {
   const store = {
+    'tvlake_crash_pauze': pauze ? JSON.stringify(pauze) : null,
     'tvlake_crash_vlaka_v2': snapV ? JSON.stringify(snapV) : null,
     'tvlake_crash_trag_v2':  snapT ? JSON.stringify(snapT) : null,
   };
-  const stanje = { vlake: [], dodane: [], toasts: [], drainPozvan: 0 };
+  const stanje = { vlake, dodane: [], toasts: [], drainPozvan: 0, bg: [] };
 
   const sandbox = {
     _CRASH_VLAKA_KEY: 'tvlake_crash_vlaka_v2',
     _CRASH_TRAG_KEY:  'tvlake_crash_trag_v2',
+    _PAUZE_KEY: 'tvlake_crash_pauze',
+    _pauziResetuj: w => { w.length = 0; }, _tragPauseWin: [],
+    gpsOn: true, startGPS: () => {}, _bgRecStart: l => stanje.bg.push(l), _crashTragTekst: () => '{}',
     localStorage: {
       getItem: k => (k in store ? store[k] : null),
       removeItem: k => { store[k] = null; },
@@ -153,6 +161,8 @@ function makeCrash({ snapV = null, snapT = null, buf = [], potvrdi = true }) {
     map: { removeLayer(){} },
     L: { polyline: () => ({ addTo(){return this;}, bindTooltip(){return this;}, addLatLng(){}, setLatLngs(){} }) },
     _tragLiveClear: () => {},
+    _tragLiveMeta: null,
+    _tragLiveStil: () => ({}),
     _tragRetraceReset: () => {},
     _lineStyle: { tragW: 3 },
     _updFabVisibility: () => {},
@@ -295,6 +305,61 @@ t('oporavak čuva al i projekt i stvarno piše lokalni keš', async () => {
   assert.equal(saved[0].pts[1].al,610);
   assert.equal(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'),null);
 });
+// ── v3.0.1: pauza, rani snimak, spajanje u postojeću vlaku ─────────────────
+t('PAUZA: oporavak ne dopunjava tačke snimljene tokom zabilježene pauze (trag i vlaka)', async () => {
+  const t0 = 1_000_000;
+  const { fn, stanje } = makeCrash({
+    snapT: { ts: t0, pts: [[44.900, 16.200, 300, t0]] },
+    snapV: { ts: t0, nm: 'T9', pts: [[44.900, 16.200, 300], [44.901, 16.201, 300]] },
+    pauze: { trag: [{ start: t0 + 1000, end: null }], vlaka: [{ start: t0 + 3000, end: null }] },
+    buf: [
+      { la: 44.902, lo: 16.202, ac: 6, al: 300, sp: 1, t: t0 + 2000 },  // trag: u pauzi; vlaka: prije pauze
+      { la: 44.903, lo: 16.203, ac: 6, al: 300, sp: 1, t: t0 + 4000 },  // oba u pauzi
+    ],
+  });
+  await fn();
+  assert.strictEqual(stanje.dodane.length, 0, 'trag: ništa iz pauze');
+  assert.strictEqual(stanje.vlake[0].pts.length, 3, 'vlaka: samo tačka prije pauze');
+});
+t('RANI SNIMAK: trag bez ijedne tačke se oporavi iz bafera (granica = vrijeme snimka, ne "sada")', async () => {
+  const t0 = Date.now() - 3600000;
+  const { fn, stanje } = makeCrash({
+    snapT: { ts: t0, pts: [] },
+    buf: [{ la: 44.902, lo: 16.202, ac: 6, al: 300, sp: 1, t: t0 + 2000 }],
+  });
+  await fn();
+  assert.strictEqual(stanje.dodane.length, 1);
+});
+t('RANI SNIMAK: vlaka bez tačaka i bez bafera ne ostavlja praznu vlaku', async () => {
+  const { fn, stanje, sandbox } = makeCrash({ snapV: { ts: 1_000_000, nm: 'T5', pts: [] } });
+  await fn();
+  assert.strictEqual(stanje.vlake.length, 0);
+  assert.strictEqual(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'), null);
+});
+t('DUPLIKAT: oporavak ide u vlaku koja je već u listi, ne pravi "ime ↩ vrijeme" kopiju', async () => {
+  const t0 = 1_000_000;
+  const postojeca = { nm: 'T1', br: 1, kr: 0, projektId: null, sbId: 's1',
+    pts: [{ la: 44.900, lo: 16.200, al: 300 }, { la: 44.901, lo: 16.201, al: 300 }], poly: { setLatLngs() {} } };
+  const { fn, stanje } = makeCrash({ vlake: [postojeca],
+    snapV: { ts: t0, nm: 'T1', sbId: 's1', pts: [[44.900, 16.200, 300], [44.901, 16.201, 300]] },
+    buf: [{ la: 44.902, lo: 16.202, ac: 6, al: 300, sp: 1, t: t0 + 2000 }] });
+  await fn();
+  assert.strictEqual(stanje.vlake.length, 1);
+  assert.strictEqual(stanje.vlake[0].pts.length, 3);
+});
+t('DUPLIKAT: lokalno noviji rep vlake se ne udvostručuje fiksovima iz bafera', async () => {
+  const t0 = 1_000_000;
+  const p = (la, lo) => ({ la, lo, al: 300 });
+  const postojeca = { nm: 'T1', br: 1, kr: 0, projektId: null,
+    pts: [p(44.900, 16.200), p(44.901, 16.201), p(44.902, 16.202)], poly: { setLatLngs() {} } };
+  const { fn, stanje } = makeCrash({ vlake: [postojeca],
+    snapV: { ts: t0, nm: 'T1', pts: [[44.900, 16.200, 300], [44.901, 16.201, 300]] },
+    buf: [{ la: 44.90201, lo: 16.20201, ac: 6, al: 300, sp: 1, t: t0 + 2000 },   // = lokalni rep
+          { la: 44.903, lo: 16.203, ac: 6, al: 300, sp: 1, t: t0 + 4000 }] });
+  await fn();
+  assert.deepStrictEqual(stanje.vlake[0].pts.map(q => q.la), [44.900, 44.901, 44.902, 44.903]);
+});
+
 t('neuspješan trajni upis zadržava crash snapshot', async () => {
   const {fn,sandbox,stanje} = makeCrash({snapV:{nm:'T1',ts:1,pts:[[44,16,600]]}});
   const original = sandbox.localStorage.setItem;

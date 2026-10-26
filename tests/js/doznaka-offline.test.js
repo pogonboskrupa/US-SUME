@@ -18,7 +18,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 function extractFn(name) {
   let start = HTML.indexOf('async function ' + name + '(');
@@ -243,7 +243,7 @@ t('dozConfirmSave šalje zonu SA klijentskim ID-jem, isti ide i u red', () => {
 });
 
 t('red čekanja koristi isti upis zone', () => {
-  const i = HTML.indexOf("op.type === 'insert_doz_marking'");
+  const i = HTML.indexOf("} else if (op.type === 'insert_doz_marking')");
   assert.ok(HTML.slice(i, i + 300).includes('_dozUpisiZonu(op.payload)'));
 });
 

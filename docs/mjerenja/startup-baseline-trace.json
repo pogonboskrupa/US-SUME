@@ -1,0 +1,591 @@
+{
+ "uslovi": {
+  "viewport": "360x740",
+  "cpu": "4x",
+  "onLine": false,
+  "profil": "keširan",
+  "ponavljanja": 3,
+  "ucitavanja": 4,
+  "chromium": "chromium"
+ },
+ "sazetak": {
+  "hladno": {
+   "n": 3,
+   "di": 1148,
+   "dcl": 1225,
+   "restore": 1164,
+   "restoreSync": 1184,
+   "ParseHTML": 590,
+   "EvaluateScript": 511,
+   "v8.compile": 98,
+   "maxTask": 319,
+   "inlineMain": 287
+  },
+  "toplo": {
+   "n": 6,
+   "di": 1079,
+   "dcl": 1133,
+   "restore": 1082,
+   "restoreSync": 1092,
+   "ParseHTML": 565,
+   "EvaluateScript": 498,
+   "v8.compile": 98,
+   "maxTask": 304,
+   "inlineMain": 276
+  }
+ },
+ "rezultati": [
+  {
+   "ver": "v3.2.3",
+   "di": 1148,
+   "dcl": 1225,
+   "load": 1,
+   "restore": 1164,
+   "restoreSync": 1184,
+   "ts": 1792868871806,
+   "loadEnd": 1253,
+   "maxTask": 319,
+   "ParseHTML": 590,
+   "longTasks": 7,
+   "v8.parseOnBackground": 114,
+   "EvaluateScript": 511,
+   "v8.compile": 103,
+   "v8.produceCache": 3,
+   "FunctionCall": 119,
+   "inlineMain": 287,
+   "cacheConsumed": 0,
+   "cacheProduced": 45,
+   "topScripts": [
+    [
+     ":6182",
+     287
+    ],
+    [
+     "static/libs/turf.min.js",
+     131
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     ":5952",
+     16
+    ],
+    [
+     "static/libs/proj4.js",
+     7
+    ]
+   ],
+   "rep": 1,
+   "wall": 2105,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1091,
+   "dcl": 1172,
+   "load": 2,
+   "restore": 1107,
+   "restoreSync": 1130,
+   "ts": 1792868873891,
+   "loadEnd": 1202,
+   "maxTask": 319,
+   "ParseHTML": 577,
+   "longTasks": 6,
+   "v8.parseOnBackground": 120,
+   "EvaluateScript": 504,
+   "v8.compile": 99,
+   "v8.produceCache": 1,
+   "FunctionCall": 125,
+   "inlineMain": 290,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     290
+    ],
+    [
+     "static/libs/turf.min.js",
+     128
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     42
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 1,
+   "wall": 2005,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1119,
+   "dcl": 1200,
+   "load": 3,
+   "restore": 1134,
+   "restoreSync": 1157,
+   "ts": 1792868875958,
+   "loadEnd": 1229,
+   "maxTask": 319,
+   "ParseHTML": 554,
+   "longTasks": 8,
+   "v8.parseOnBackground": 135,
+   "EvaluateScript": 520,
+   "v8.compile": 99,
+   "v8.produceCache": 5,
+   "FunctionCall": 127,
+   "inlineMain": 287,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     287
+    ],
+    [
+     "static/libs/turf.min.js",
+     136
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     42
+    ],
+    [
+     ":5952",
+     14
+    ],
+    [
+     "static/libs/proj4.js",
+     8
+    ]
+   ],
+   "rep": 1,
+   "wall": 2023,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1117,
+   "dcl": 1196,
+   "load": 4,
+   "restore": 1132,
+   "restoreSync": 1154,
+   "ts": 1792868878032,
+   "loadEnd": 1223,
+   "maxTask": 301,
+   "ParseHTML": 565,
+   "longTasks": 7,
+   "v8.parseOnBackground": 139,
+   "EvaluateScript": 490,
+   "v8.compile": 92,
+   "v8.produceCache": 4,
+   "FunctionCall": 122,
+   "inlineMain": 273,
+   "cacheConsumed": 0,
+   "cacheProduced": 47,
+   "topScripts": [
+    [
+     ":6182",
+     273
+    ],
+    [
+     "static/libs/turf.min.js",
+     131
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 1,
+   "wall": 2010,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1042,
+   "dcl": 1125,
+   "load": 1,
+   "restore": 1058,
+   "restoreSync": 1081,
+   "ts": 1792868880189,
+   "loadEnd": 1158,
+   "maxTask": 299,
+   "ParseHTML": 555,
+   "longTasks": 7,
+   "v8.parseOnBackground": 121,
+   "EvaluateScript": 490,
+   "v8.compile": 96,
+   "v8.produceCache": 3,
+   "FunctionCall": 125,
+   "inlineMain": 271,
+   "cacheConsumed": 0,
+   "cacheProduced": 45,
+   "topScripts": [
+    [
+     ":6182",
+     271
+    ],
+    [
+     "static/libs/turf.min.js",
+     131
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     42
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 2,
+   "wall": 1967,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1020,
+   "dcl": 1135,
+   "load": 2,
+   "restore": 1037,
+   "restoreSync": 1062,
+   "ts": 1792868882262,
+   "loadEnd": 1224,
+   "maxTask": 299,
+   "ParseHTML": 511,
+   "longTasks": 7,
+   "v8.parseOnBackground": 132,
+   "EvaluateScript": 493,
+   "v8.compile": 94,
+   "v8.produceCache": 6,
+   "FunctionCall": 153,
+   "inlineMain": 271,
+   "cacheConsumed": 0,
+   "cacheProduced": 44,
+   "topScripts": [
+    [
+     ":6182",
+     271
+    ],
+    [
+     "static/libs/turf.min.js",
+     134
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     42
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 2,
+   "wall": 2006,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1047,
+   "dcl": 1127,
+   "load": 3,
+   "restore": 1066,
+   "restoreSync": 1087,
+   "ts": 1792868884264,
+   "loadEnd": 1176,
+   "maxTask": 310,
+   "ParseHTML": 579,
+   "longTasks": 7,
+   "v8.parseOnBackground": 121,
+   "EvaluateScript": 498,
+   "v8.compile": 98,
+   "v8.produceCache": 3,
+   "FunctionCall": 111,
+   "inlineMain": 280,
+   "cacheConsumed": 0,
+   "cacheProduced": 47,
+   "topScripts": [
+    [
+     ":6182",
+     280
+    ],
+    [
+     "static/libs/turf.min.js",
+     133
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     ":5952",
+     14
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 2,
+   "wall": 1947,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1039,
+   "dcl": 1117,
+   "load": 4,
+   "restore": 1054,
+   "restoreSync": 1076,
+   "ts": 1792868886255,
+   "loadEnd": 1162,
+   "maxTask": 301,
+   "ParseHTML": 515,
+   "longTasks": 5,
+   "v8.parseOnBackground": 120,
+   "EvaluateScript": 492,
+   "v8.compile": 93,
+   "v8.produceCache": 4,
+   "FunctionCall": 118,
+   "inlineMain": 273,
+   "cacheConsumed": 0,
+   "cacheProduced": 44,
+   "topScripts": [
+    [
+     ":6182",
+     273
+    ],
+    [
+     "static/libs/turf.min.js",
+     128
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     43
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 2,
+   "wall": 1977,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1214,
+   "dcl": 1310,
+   "load": 1,
+   "restore": 1234,
+   "restoreSync": 1260,
+   "ts": 1792868888701,
+   "loadEnd": 1378,
+   "maxTask": 325,
+   "ParseHTML": 613,
+   "longTasks": 8,
+   "v8.parseOnBackground": 153,
+   "EvaluateScript": 533,
+   "v8.compile": 98,
+   "v8.produceCache": 6,
+   "FunctionCall": 149,
+   "inlineMain": 292,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     292
+    ],
+    [
+     "static/libs/turf.min.js",
+     137
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     45
+    ],
+    [
+     ":5952",
+     16
+    ],
+    [
+     "static/libs/proj4.js",
+     7
+    ]
+   ],
+   "rep": 3,
+   "wall": 2181,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1113,
+   "dcl": 1200,
+   "load": 2,
+   "restore": 1134,
+   "restoreSync": 1157,
+   "ts": 1792868890784,
+   "loadEnd": 1235,
+   "maxTask": 324,
+   "ParseHTML": 584,
+   "longTasks": 7,
+   "v8.parseOnBackground": 95,
+   "EvaluateScript": 513,
+   "v8.compile": 113,
+   "v8.produceCache": 4,
+   "FunctionCall": 130,
+   "inlineMain": 296,
+   "cacheConsumed": 0,
+   "cacheProduced": 45,
+   "topScripts": [
+    [
+     ":6182",
+     296
+    ],
+    [
+     "static/libs/turf.min.js",
+     130
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     41
+    ],
+    [
+     ":5952",
+     13
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 3,
+   "wall": 2023,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1079,
+   "dcl": 1133,
+   "load": 3,
+   "restore": 1082,
+   "restoreSync": 1092,
+   "ts": 1792868892766,
+   "loadEnd": 1159,
+   "maxTask": 304,
+   "ParseHTML": 570,
+   "longTasks": 8,
+   "v8.parseOnBackground": 127,
+   "EvaluateScript": 503,
+   "v8.compile": 98,
+   "v8.produceCache": 2,
+   "FunctionCall": 95,
+   "inlineMain": 276,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     276
+    ],
+    [
+     "static/libs/turf.min.js",
+     137
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     42
+    ],
+    [
+     ":5952",
+     15
+    ],
+    [
+     "static/libs/proj4.js",
+     6
+    ]
+   ],
+   "rep": 3,
+   "wall": 1967,
+   "errors": []
+  },
+  {
+   "ver": "v3.2.3",
+   "di": 1281,
+   "dcl": 1373,
+   "load": 4,
+   "restore": 1299,
+   "restoreSync": 1324,
+   "ts": 1792868895055,
+   "loadEnd": 1408,
+   "maxTask": 324,
+   "ParseHTML": 617,
+   "longTasks": 9,
+   "v8.parseOnBackground": 114,
+   "EvaluateScript": 536,
+   "v8.compile": 101,
+   "v8.produceCache": 2,
+   "FunctionCall": 151,
+   "inlineMain": 292,
+   "cacheConsumed": 0,
+   "cacheProduced": 46,
+   "topScripts": [
+    [
+     ":6182",
+     292
+    ],
+    [
+     "static/libs/turf.min.js",
+     146
+    ],
+    [
+     "static/libs/leaflet.min.js",
+     46
+    ],
+    [
+     ":5952",
+     15
+    ],
+    [
+     "static/libs/proj4.js",
+     8
+    ]
+   ],
+   "rep": 3,
+   "wall": 2240,
+   "errors": []
+  }
+ ]
+}

@@ -83,7 +83,17 @@ async def main():
   await page.evaluate("switchTab('vlake');rndKolegeVlakeList()")
   # Ciljani locator zadržava Enter na stvarnom redu i čeka prikaz rezultata.
   # Odvojeni focus/keyboard + trenutni is_visible() utrkivali su se s renderom.
-  await page.locator('#kolege-vl .vrow').press('Enter')
+  # switchTab/rndKolegeVlakeList mogu još jednom iscrtati listu u sljedećem
+  # frame-u; Enter tada ode na zamijenjen (odvojen) red i popup se ne otvori
+  # (CI run 38268122225). Sačekaj dva frame-a da se lista smiri i ponovi
+  # STVARNI Enter na svježem redu najviše 3 puta — provjera ishoda je ista.
+  for pokusaj in range(3):
+    await page.evaluate("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))")
+    await page.locator('#kolege-vl .vrow').press('Enter')
+    try:
+      await expect(page.locator('#vlaka-popup')).to_be_visible(timeout=2000);break
+    except AssertionError:
+      if pokusaj==2:raise
   await expect(page.locator('#vlaka-popup')).to_be_visible()
   assert 'Amir Kolega' in await page.locator('#vp-info').inner_text()
   await page.locator('#vp-buffer').click();assert await page.evaluate('bufLayers.length>0')
@@ -129,7 +139,7 @@ async def main():
   # Header navigation must actually show the Projects tab and escaped project name.
   await page.evaluate(SEED);await page.evaluate("_projekti[0].gj='<img id=injected src=x>';_applyVlakeRows([{nm:'T1',br:1,kr:0,projekt_id:'P',pts:[{la:44.9,lo:16},{la:44.901,lo:16.001}]}]);switchTab('vlake');_tabReset()")
   assert await page.locator('#injected').count()==0
-  await page.locator('.vph-nav').click();assert await page.evaluate("_activeTab==='projekat'")
+  await page.locator('#panel .data-context button').click();assert await page.evaluate("_activeTab==='projekat'")
   # Small-screen design: actual filtered lists and map favorite control.
   await page.evaluate("_loadmapManageShown=[{name:'Native fixture'}];_loadmapToggleFav(0)")
   assert await page.evaluate("_mapFavs.some(f=>f.sqliteId==='Native fixture')")

@@ -129,12 +129,25 @@
   let next=tabs.indexOf(tab);if(e.key==='ArrowRight')next=(next+1)%tabs.length;else if(e.key==='ArrowLeft')next=(next+tabs.length-1)%tabs.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=tabs.length-1;else return;e.preventDefault();selectTab(tabs[next],true);
  }
  function viewMode(mode){if(!result||busy||!['slope','aspect'].includes(mode))return;change('mode',mode);view();}
+ // Pregled: jedna rečenica koja tumači brojeve (strmina, udio preko 30 %, strana), bez ponavljanja površine.
+ function dominantAspect(s){const d=s.aspect.reduce((a,b)=>b.percent>a.percent?b:a);return d.percent>0?d:null;}
+ function steepShare(s){const rows=s.slope.slice(3);return {percent:rows.reduce((n,r)=>n+r.percent,0),ha:rows.reduce((n,r)=>n+r.ha,0)};}
+ function summaryText(s){const m=s.slopeMean,kind=!Number.isFinite(m)?'Teren':m<10?'Blag teren':m<20?'Umjereno nagnut teren':m<30?'Strm teren':'Vrlo strm teren',st=steepShare(s),dom=dominantAspect(s);
+  return kind+': prosječan nagib '+number(m)+'%, najveći '+number(s.slopeMax)+'%. Strmije od 30% je '+number(st.percent,0)+'% površine ('+number(st.ha,2)+' ha). '+(dom?'Pretežno okrenut prema strani '+dom.name+' ('+number(dom.percent,0)+'%).':'Bez izražene ekspozicije.')+' Visinska razlika '+number(s.max-s.min,0)+' m.';}
+ function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+ function distBar(title,tab,rows){const used=rows.filter(r=>r.percent>0);
+  return '<button type="button" class="dr-dist-row" onclick="DepartmentReport.selectTab(\''+tab+'\')" aria-label="'+esc(title)+': otvori detalje"><span class="dr-dist-head"><b>'+esc(title)+'</b><span>Detalji ›</span></span><span class="dr-dist-bar" aria-hidden="true">'+(used.length?used.map(r=>'<i style="width:'+r.percent.toFixed(2)+'%;background:'+r.color+'"></i>').join(''):'<i class="dr-dist-empty"></i>')+'</span><span class="dr-dist-keys">'+(used.length?used.map(r=>'<span><i style="background:'+r.color+'"></i>'+esc(r.name)+' <b>'+number(r.percent,0)+'%</b></span>').join(''):'<span>Ravno / bez podatka</span>')+'</span></button>';}
+ function reportText(){const s=result?.stats;if(!s)return '';const rows=arr=>arr.map(r=>'  '+r.name+': '+number(r.percent)+'% ('+number(r.ha,2)+' ha)').join('\n');
+  return ['Izvještaj odjela'+(state.name?' — '+state.name:''),'Površina: '+number(s.areaHa,2)+' ha','Nadmorska visina: '+number(s.min,0)+'–'+number(s.max,0)+' m (prosjek '+number(s.mean,0)+' m)','Nagib: prosjek '+number(s.slopeMean)+'%, najveći '+number(s.slopeMax)+'%',rows(s.slope),'Ekspozicija (ravno '+number(s.flat)+'%):',rows(s.aspect),summaryText(s),'Izvor: DEM Mapzen / EU-DEM, uzorak oko '+number(s.resolution,0)+' m · '+new Date(state.calculatedAt||Date.now()).toLocaleDateString('bs')].join('\n');}
+ async function copySummary(){const t=reportText();if(!t)return;
+  try{await navigator.clipboard.writeText(t);toast('Sažetak izvještaja je kopiran');return;}catch(e){}
+  try{const a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.position='fixed';a.style.opacity='0';document.body.append(a);a.select();const ok=document.execCommand('copy');a.remove();toast(ok?'Sažetak izvještaja je kopiran':'Kopiranje nije uspjelo');}catch(e){toast('Kopiranje nije uspjelo');}}
  function render(){
   const s=result?.stats,area=state.geometry?turf.area(turf.feature(state.geometry))/10000:null;
-  node('dr-name').value=state.name||'';node('dr-selection').hidden=!state.geometry;node('dr-selection').textContent=state.geometry?'Odabrana granica · '+(state.name?state.name+' · ':'')+number(area,2)+' ha · '+(state.count?state.count+' odsjeka / poligona':'ručno nacrtan poligon')+(state.source?' · '+state.source:''):'';
+  node('dr-name').value=state.name||'';node('dr-selection').hidden=!state.geometry;node('dr-selection').textContent=state.geometry?(state.name?state.name+' · ':'')+number(area,2)+' ha · '+(state.count?state.count+' odsjeka / poligona':'ručno nacrtan poligon')+(state.source?' · '+state.source:''):'';
   node('dr-mode').value=state.mode||'slope';node('dr-lines').checked=state.lines!==false;node('dr-visible').checked=state.visible!==false;
   node('dr-legend-visible').checked=state.legendVisible!==false;node('dr-map-summary').textContent=state.geometry?(state.visible===false?'Izvještaj je sakriven s karte':'Izvještaj je prikazan na karti'):'Odaberi granicu ili nacrtaj odjel';
-  for(const id of ['dr-calculate','dr-view','dr-remove'])node(id).disabled=busy||!state.geometry;
+  for(const id of ['dr-calculate','dr-view','dr-remove'])node(id).disabled=busy||!state.geometry;node('dr-view').hidden=!state.geometry;
   node('dr-calculate').hidden=busy||!state.geometry||!!s;node('dr-calculate').textContent=lastError?'Pokušaj ponovo':'Pokreni analizu';node('dr-cancel-calc').hidden=!busy;
   node('dr-result').hidden=!s;
   const editor=node('dr-selection-editor');if(editor.dataset.calculated!==String(!!s)){editor.open=!s;editor.dataset.calculated=String(!!s);}
@@ -143,15 +156,17 @@
   for(const id of ['dr-slope-map','dr-aspect-map'])node(id).disabled=busy||!s;
   const analysis=node('dr-analysis-state'),icon=node('dr-analysis-icon'),title=node('dr-analysis-title');analysis.dataset.state=busy?'busy':lastError?'error':s?'done':state.geometry?'ready':'empty';
   icon.textContent=busy?'⋯':lastError?'!':s?'✓':state.geometry?'2':'1';title.textContent=busy?'Analiziram teren':lastError?'Analiza nije završena':s?'Izvještaj je spreman':state.geometry?'Granica je sačuvana':'Odaberi granicu';
-  node('dr-status').textContent=busy?'Preuzimam DEM i računam nagib, ekspoziciju i visine…':lastError|| (s?'Izračunato · '+new Date(state.calculatedAt||Date.now()).toLocaleString('bs'):state.geometry?'Analiza će se pokrenuti automatski.':'Nacrtaj ili izaberi poligon odjela.');
+  node('dr-status').textContent=busy?'Preuzimam DEM i računam nagib, ekspoziciju i visine…':lastError|| (s?'Izračunato '+new Date(state.calculatedAt||Date.now()).toLocaleString('bs',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}):state.geometry?'Analiza će se pokrenuti automatski.':'Nacrtaj ili izaberi poligon odjela.');
   if(!s)return;
   node('dr-elevation').innerHTML='<div><small>Najniže</small><b>'+number(s.min,0)+' m</b></div><div><small>Prosjek</small><b>'+number(s.mean,0)+' m</b></div><div><small>Najviše</small><b>'+number(s.max,0)+' m</b></div>';
-  node('dr-terrain-summary').textContent='Površina '+number(s.areaHa,2)+' ha · prosječan nagib '+number(s.slopeMean)+'% · najveći nagib '+number(s.slopeMax)+'%';
-  node('dr-area').textContent=number(s.areaHa,2)+' ha';
+  node('dr-terrain-summary').textContent=summaryText(s);
+  node('dr-area').textContent=number(s.areaHa,2)+' ha';node('dr-kpi-slope').textContent=number(s.slopeMean)+'%';node('dr-kpi-max').textContent=number(s.slopeMax)+'%';
+  const dom=dominantAspect(s);node('dr-kpi-aspect').innerHTML=dom?esc(dom.name)+' <small>'+number(dom.percent,0)+'%</small>':'Ravno';
+  node('dr-dist').innerHTML=distBar('Nagib','slope',s.slope)+distBar('Ekspozicija','aspect',s.aspect);
   node('dr-slope-mean').textContent=number(s.slopeMean)+'%';node('dr-slope-max').textContent=number(s.slopeMax)+'%';
-  const dominant=s.aspect.reduce((a,b)=>b.percent>a.percent?b:a);node('dr-aspect-main').textContent=dominant.percent>0?dominant.name:'Ravno / bez ekspozicije';
+  node('dr-aspect-main').textContent=dom?dom.name:'Ravno / bez ekspozicije';
   node('dr-aspect-flat').textContent=number(s.flat)+'%';
-  const rows=arr=>arr.map(r=>'<div class="dr-stat-row"><span><i style="background:'+r.color+'"></i>'+r.name+'</span><div><b>'+number(r.percent)+'%</b><small>'+number(r.ha,2)+' ha</small></div><progress max="100" value="'+r.percent+'" aria-label="'+r.name+'" style="--dr-color:'+r.color+'"></progress></div>').join('');
+  const rows=arr=>arr.map(r=>'<div class="dr-stat-row'+(r.percent>0?'':' dr-stat-zero')+'"><span><i style="background:'+r.color+'"></i>'+r.name+'</span><div><b>'+number(r.percent)+'%</b><small>'+number(r.ha,2)+' ha</small></div><progress max="100" value="'+r.percent+'" aria-label="'+r.name+'" style="--dr-color:'+r.color+'"></progress></div>').join('');
   node('dr-slopes').innerHTML=rows(s.slope);node('dr-aspects').innerHTML=rows(s.aspect);
   node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
  }
@@ -198,7 +213,7 @@
   finally{if(check()){busy=false;render();}}
  }
  function reset(){++generation;cancelWorker?.();clearAutoRetry();autoAttempts=0;worker=null;busy=false;lastError='';cancelDraw(false);clearLayers();owner=null;loaded=null;state={};result=null;hide();}
- root.DepartmentReport={open,restore,close,hide,choose,legacy,draw,addPoint,finish,cancelDraw,calculate,cancelCalculation,view,viewMode,viewProfile,renderProfiles,selectTab,tabKey,remove,change,reset,isDrawing:()=>!!draft,undo:()=>{draft?.points.pop();drawRender();},refreshSelection,openAt,snapshot:()=>({state,result,busy})};
+ root.DepartmentReport={copySummary,reportText,open,restore,close,hide,choose,legacy,draw,addPoint,finish,cancelDraw,calculate,cancelCalculation,view,viewMode,viewProfile,renderProfiles,selectTab,tabKey,remove,change,reset,isDrawing:()=>!!draft,undo:()=>{draft?.points.pop();drawRender();},refreshSelection,openAt,snapshot:()=>({state,result,busy})};
  map.on('resize',legendPosition);
  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(draft)cancelDraw();else if(!node('department-report').hidden)close();}});
 })(typeof window!=='undefined'?window:globalThis);

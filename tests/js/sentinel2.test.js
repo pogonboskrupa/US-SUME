@@ -1,6 +1,6 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
-const html = fs.readFileSync(require('node:path').join(__dirname,'../../index.html'),'utf8');
+const html = require('./_izvor').izvor();
 assert.ok(!html.includes('function _s2TokenUzmi'));
 assert.ok(!html.includes('id="s2-section"'));
 assert.ok(!html.includes("from('sentinel2_kljucevi')"));

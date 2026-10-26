@@ -2,9 +2,10 @@
 import asyncio, mimetypes, os, re, struct
 from pathlib import Path
 from playwright.async_api import async_playwright
+from _izvor import izvor  # index.html + izdvojeni fajlovi na izvornom mjestu
 
 ROOT=Path(__file__).resolve().parents[2]
-SOURCE=(ROOT/'index.html').read_text()
+SOURCE=izvor()
 OUT=ROOT/'outputs/ui-preview'
 
 def function(name):
@@ -47,7 +48,7 @@ const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},server
 let exchangeCalls=[],exchangeHold=false,exchangeRelease=null;
 const _mrezaSila=()=>{},serverPreuzmiDijeljeno=async()=>{exchangeCalls.push('vlake');return {ok:true,count:1,projects:1}},dozLoadOdjeli=async()=>{exchangeCalls.push('doz');return true},dozLoadLayers=async id=>{exchangeCalls.push('doz-'+id);return true};
 '''
-js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','startLocPhoto','_firstCoord','pkml','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
+js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','_guideTrajanjeTxt','startLocPhoto','_firstCoord','pkml','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','delK','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
 js+='\n'+(ROOT/'static/js/layer-editor.js').read_text()
 js+='\n'+'\n'.join(re.findall(r"proj4.defs\('EPSG:3127[56]', [^\n]+",SOURCE))
 js+='\n'+(ROOT/'static/js/local-layer-import.js').read_text()+'\n'+(ROOT/'static/js/tab-data.js').read_text()+'\n'+(ROOT/'static/js/server-panel.js').read_text()
@@ -126,7 +127,7 @@ async def main():
                 await page.evaluate("_tabServer('send')")
                 assert await page.locator('.sp-send-group').count()==2
                 for summary in await page.locator('.sp-send-group summary').all():await summary.click()
-                assert '1 GPS tačaka' in await page.locator('#server-send-preview').inner_text()
+                assert '1 GPS tačka' in await page.locator('#server-send-preview').inner_text()
                 assert 'Amir Kolega' in await page.locator('#server-received-items .sp-item-context').text_content()
                 await page.locator('#server-history-info > summary').click()
                 assert 'Poslao: Emina Projektant' in await page.locator('#server-project-summary').inner_text()
@@ -167,7 +168,7 @@ async def main():
 
         await page.set_viewport_size({'width':390,'height':800});await page.evaluate('document.documentElement.dataset.fieldTheme="day";openLayerImport();layerImportTab("shp")')
         await page.locator('#layer-file-shp').set_input_files([upload('Odjeli.SHP',polygon()),upload('odjeli.DBF',dbf()),upload('odjeli.cpg',b'65001'),upload('odjeli.shx',b'')])
-        await page.wait_for_function('!_layerImportBusy && document.querySelector("#layer-import-status").textContent.includes("Učitano 1")')
+        await page.wait_for_function('!_layerImportBusy && document.querySelector("#layer-import-status").textContent.includes("1 sloj učitan")')
         data=await page.evaluate('''async()=>{const k=kmlLs[0],p=k.grp.getLayers()[0],s=await _localLayerSnapshot();return {count:kmlLs.length,rings:p.getLatLngs().length,name:p._kmlName,attr:p._kmlExtData.NAZIV,bounds:k.grp.getBounds().toBBoxString(),backup:s,meta:JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))}}''')
         assert data['count']==1 and data['rings']==2 and data['name']=='Odjel Čuvar & <105>' and data['attr']==data['name'],data
         assert data['bounds']=='16,44.9,16.01,44.91',data
@@ -235,6 +236,7 @@ async def main():
             queueMicrotask(()=>KmlDownloads.reply(id,result));
           }};openLayerImport();
         }""")
+        await page.click('#layer-tab-server')
         await page.wait_for_function("document.querySelectorAll('.kml-drive-row').length===3&&!document.querySelector('#kml-drive-refresh').disabled")
         assert await page.locator('#kml-drive-list img').count()==0
         for theme in ['day','dark']:
@@ -269,6 +271,31 @@ async def main():
         assert await page.evaluate('kmlLs.length')==4
         assert 'Nalog je promijenjen' in await page.locator('#kml-drive-list').inner_text()
         await page.evaluate("sbUser={id:'A'};closeLayerImport()")
+        # Nova verzija istog fajla (nov id, isti naziv): stara je prepoznata kao preuzeta, nudi se Ažuriraj, a zamjena čuva stil.
+        await page.evaluate("const k=kmlLs.find(k=>k._driveSource?.id==='fixture-drive-road-261');k.col='#06b6d4';k.weight=5;saveKmlStyles();driveFailure=false;driveHold=false;driveFiles.push({...driveFiles[0],id:'fixture-drive-road-v2-261'});openLayerImport();KmlDownloads.refresh()")
+        await page.wait_for_function("document.querySelectorAll('.kml-drive-row').length===5")
+        assert await page.locator('button[data-source-id="fixture-drive-road-v2-261"]').inner_text()=='Ažuriraj'
+        await page.evaluate("KmlDownloads.start('fixture-drive-road-v2-261')");await page.wait_for_function('!_layerImportBusy')
+        upd=await page.evaluate("(()=>{const r=kmlLs.filter(k=>k._driveSource?.name==='Kamionski <img src=x> put.kml');return {n:r.length,id:r[0]?._driveSource.id,col:r[0]?.col,w:r[0]?.weight,name:r[0]?.name,len:kmlLs.length,stored:Object.values(JSON.parse(localStorage.getItem(_LOCAL_KML_KEY))).filter(v=>v._driveSource?.name==='Kamionski <img src=x> put.kml').length}})()")
+        assert upd=={'n':1,'id':'fixture-drive-road-v2-261','col':'#06b6d4','w':5,'name':'Kamionski <img src=x> put.kml','len':4,'stored':1},upd
+        assert await page.locator('button[data-source-id="fixture-drive-road-v2-261"]').inner_text()=='Prikaži'
+        assert await page.evaluate("KmlDownloads.newestOnly([{name:'Granice.kml',id:'a'},{name:'granice.kml',id:'b'},{name:'Putevi.kml',id:'c'}]).map(s=>s.id).join()")=='a,c'
+        # Linija i ispuna direktno u listi "Na ovom uređaju".
+        await page.evaluate("layerImportStil(kmlLs.findIndex(k=>k.name==='Odjeli.kml'))")
+        row=page.locator('#layer-loaded-list .layer-row.is-editing')
+        assert await row.count()==1 and await row.locator('.le-section').count()==2
+        await row.locator('.le-swatch[aria-label="Boja #ef4444"]').click()
+        assert await page.evaluate("kmlLs.find(k=>k.name==='Odjeli.kml').col")=='#ef4444'
+        assert 'rgb(239, 68, 68)' in await page.locator('#layer-loaded-list .layer-row.is-editing .layer-swatch').evaluate('e=>e.style.background')
+        await row.locator('.le-section .le-switch input[type=checkbox]').check()
+        assert await page.evaluate("kmlLs.find(k=>k.name==='Odjeli.kml').fill")==True
+        assert await row.locator('.le-fill-controls').is_visible()
+        await page.locator('#layer-loaded-list .layer-row.is-editing').scroll_into_view_if_needed()
+        for theme in ['day','dark']:
+            await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
+            await page.set_viewport_size({'width':390,'height':800});await bounds(page,'.layer-sheet',390,800)
+            await page.screenshot(path=str(OUT/f'layer-list-style-{theme}.png'))
+        await page.evaluate("closeLayerImport()")
         async with page.expect_file_chooser() as event:await page.click('#camera-test')
         chooser=await event.value;assert not chooser.is_multiple()
         assert await page.locator('#loc-photo-cam').get_attribute('capture')=='environment'

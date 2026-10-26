@@ -2,8 +2,9 @@
 import asyncio, json, re
 from pathlib import Path
 from playwright.async_api import async_playwright
+from _izvor import izvor  # index.html + izdvojeni fajlovi na izvornom mjestu
 ROOT=Path(__file__).resolve().parents[2]
-HTML=(ROOT/'index.html').read_text()
+HTML=izvor()
 def fn(name):
     m=re.search(r'(?:async )?function '+re.escape(name)+r'\(',HTML)
     assert m,name

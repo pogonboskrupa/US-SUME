@@ -1,7 +1,7 @@
 'use strict';
 // Cijeli ručni tok: stvarni red, priprema, potvrde i GPS serije. Server/IDB su lažni.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const html=fs.readFileSync(process.env.US_SUME_TEST_SOURCE || 'index.html','utf8');
+const html=(process.env.US_SUME_TEST_SOURCE ? require('node:fs').readFileSync(process.env.US_SUME_TEST_SOURCE,'utf8') : require('./_izvor').izvor());
 function fn(name){const start=html.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(start>=0,name);let depth=0;for(let i=html.indexOf('{',start);i<html.length;i++){if(html[i]==='{')depth++;if(html[i]==='}'&&--depth===0)return html.slice(start,i+1);}throw Error(name);}
 const names=['dst','addPt','scheduleVlakaSave','_jsonKanon','_vlakaIstiSadrzaj','_vlakaSyncPayload','_sbFlushVlakaImpl','sbFlushVlaka','_flushAllPendingVlake','_retryOrphanVlake','_syncVlakaOperation','_serverSlanjeDozvoljeno','_serverNaCekanju','serverPosalji','_isNetworkErr','_isAuthErr','_serverPrivremeno','_processOfflineQueue','_dozTackaKljuc','_dozPosaljiKomad','_dozPosaljiPojedinacno','_sendDozTrackPoint','_dozBufferTrackPoint','_serverPodaciJednaki','_serverInsertPotvrdjeno','_dozUpisiZonu','dozConfirmSave'];
 function setup({legacy=false}={}){

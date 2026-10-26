@@ -17,7 +17,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 function extractFn(name) {
   let start = HTML.indexOf('async function ' + name + '(');
@@ -223,8 +223,8 @@ function runCrash(tip, greskaUvijek) {
     getItem: (k) => store[k] ?? null, key: () => null, length: 0
   };
   const zajedno = [extractFn('_lsZauzetoKB'), extractFn('_localSetKriticno'),
-    'let _crashUpisPaoV=false, _crashUpisPaoT=false;',
-    extractFn('_crashSaveVlaka'), extractFn('_crashSaveTrag')].join('\n');
+    'let _crashUpisPaoV=false, _crashUpisPaoT=false, _tragLiveMeta=null;',
+    extractFn('_crashSaveVlaka'), extractFn('_crashTragTekst'), extractFn('_crashSaveTrag')].join('\n');
   const keys = ['localStorage', 'showToast', '_debugUpsert', 'recOn', 'recPaused', 'actI',
     'vlake', '_aktivniProjektId', '_CRASH_VLAKA_KEY', '_tragOn', '_tragPaused', '_tragPts', '_CRASH_TRAG_KEY'];
   const vals = [localStorage, (m) => toasts.push(m), () => {},

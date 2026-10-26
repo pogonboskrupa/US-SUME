@@ -175,6 +175,12 @@ public class MainActivity extends Activity {
 
     @SuppressLint({"SetJavaScriptEnabled", "AllowAllHostsInWebView"})
     private void setupWebView() {
+        // Android autofill (Google) nudi spremljene prijave preko polja PIN-a i prekida
+        // kucanje; autocomplete="off" u HTML-u ga NE zaustavlja. Aplikacija ima vlastitu
+        // prijavu, pa autofill nema šta da nudi.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -1306,6 +1312,8 @@ public class MainActivity extends Activity {
     }
 
     private void zamijeniMrtviWebView(WebView mrtav, boolean pad) {
+        android.util.Log.w("DendroRender", "WebView renderer " + (pad ? "pao" : "ugašen zbog memorije")
+                + " — pravim novi WebView");
         ViewGroup parent = (ViewGroup) mrtav.getParent();
         if (parent != null) parent.removeView(mrtav);
         try { mrtav.destroy(); } catch (Exception ignored) {}

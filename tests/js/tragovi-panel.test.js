@@ -14,7 +14,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8').replace(/\r\n/g, '\n');
+const HTML = require('./_izvor').izvor().replace(/\r\n/g, '\n');
 
 function extractFn(name) {
   let start = HTML.indexOf('async function ' + name + '(');
@@ -67,10 +67,10 @@ function makeEnv(st) {
   };
   const src = [extractVar('_tragoviTab'), extractVar('_TV_GRP_LBL'), extractVar('_TV_MSR_MOD'),
     'var _tvOtvoren = ' + JSON.stringify(st.otvoren || null) + ', _tvTrazi = ' + JSON.stringify(st.trazi || '') + ';',
-    ['_tragIme', '_tragVrijeme', '_tvBoja'].map(extractFn).join('\n')].join('\n')
+    ['_tragIme', '_tragVrijeme', '_tvBoja', '_tvTragMs', '_tvPeriod'].map(extractFn).join('\n'), extractVar('_TV_MJESECI')].join('\n')
     .replace("var _tragoviTab = 'trg';", "var _tragoviTab = " + JSON.stringify(st.tab || 'trg') + ";")
     + '\n' + ['_tvMsrVrijednost', '_tragoviMsrRowHtml', '_tragoviRender', '_tragoviRowHtml', '_tragoviUpdBtn', '_msrBrojTacaka', '_msrUpdGlavni'].map(extractFn).join('\n')
-    + '\nreturn { _tvMsrVrijednost, _tragoviRender, _tragoviUpdBtn, _msrBrojTacaka, _msrUpdGlavni };';
+    + '\nreturn { _tvPeriod, _tvTragMs, _tvMsrVrijednost, _tragoviRender, _tragoviUpdBtn, _msrBrojTacaka, _msrUpdGlavni };';
   const keys = Object.keys(scope);
   const api = new Function(...keys, src)(...keys.map(k => scope[k]));
   return { api, els };
@@ -164,6 +164,29 @@ t('pretraga filtrira po nazivu/odjelu i kaže kad nema pogodaka', () => {
   assert.ok(e.els['tragovi-list'].innerHTML.includes('Obilazak') && !e.els['tragovi-list'].innerHTML.includes('Granica'));
   e = makeEnv({ trg: [A, B], trazi: 'xyz' }); e.api._tragoviRender();
   assert.ok(/Nijedan trag ne odgovara/.test(e.els['tragovi-list'].innerHTML));
+});
+
+t('grupisanje po periodu: Danas / Jučer / Ova sedmica / mjesec (v2.9.5)', () => {
+  const { api } = makeEnv({});
+  const now = new Date(2026, 9, 12, 15, 0);
+  const d = (dd, h = 10) => new Date(2026, 9, dd, h).getTime();
+  assert.strictEqual(api._tvPeriod(d(12, 1), now), 'Danas');
+  assert.strictEqual(api._tvPeriod(d(11, 23), now), 'Jučer');
+  assert.strictEqual(api._tvPeriod(d(6), now), 'Ova sedmica');
+  assert.strictEqual(api._tvPeriod(d(5), now), 'Oktobar 2026');
+  assert.strictEqual(api._tvPeriod(new Date(2026, 8, 30).getTime(), now), 'Septembar 2026');
+  assert.strictEqual(api._tvPeriod(0, now), 'Bez datuma');
+});
+
+t('sedam tragova sedam dana = najviše 3 zaglavlja, najnovije prvo, sa ukupnom dužinom', () => {
+  const now = Date.now();
+  const trg = Array.from({ length: 7 }, (_, k) => ({ ...TRG, id: 'd' + k, name: 'T' + k, pts: [[1, 1, 0, now - (6 - k) * 86400000, 5], [2, 2, 0, now - (6 - k) * 86400000 + 1000, 5]] }));
+  const { api, els } = makeEnv({ trg });
+  api._tragoviRender();
+  const h = els['tragovi-list'].innerHTML;
+  assert.ok((h.match(/class="tv-grp"/g) || []).length <= 3, 'previše zaglavlja');
+  assert.ok(h.indexOf('>T6<') < h.indexOf('>T0<'), 'najnoviji trag nije prvi');
+  assert.ok(/Danas<\/span><span class="tv-grp-n">1 · 0.20 km/.test(h), 'zaglavlje bez zbira dužine');
 });
 
 console.log('\nPanel mjerenja — rezultat uživo:');

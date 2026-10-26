@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
-const html=fs.readFileSync('index.html','utf8');
+const html=require('./_izvor').izvor();
 const start=html.indexOf('async function _checkLatestVersion()');
 const source=html.slice(start,html.indexOf('\nfunction _showVersionBanner',start));
 async function check(apk,response,dismissed){

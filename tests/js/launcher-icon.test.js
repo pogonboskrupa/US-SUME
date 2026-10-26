@@ -38,7 +38,7 @@ for(const density of ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']){
  assert.ok(diagonal<=.61,`${density}: bounding diagonal exceeds safe-zone rule (${diagonal})`);
  results.push({density,radius:Math.round(radius*100)/100,safeRadius:w*33/108});
 }
-const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const html=require('./_izvor').izvor();
 assert.ok(!html.includes('src="data:image/jpeg;base64,'));
 assert.ok(html.includes('src="icon-512.png"'));assert.ok(html.includes('src="icon-192.png"'));
 const web=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));

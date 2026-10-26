@@ -1,7 +1,7 @@
 const fs = require('fs');
 const assert = require('assert');
 
-const html = fs.readFileSync('index.html', 'utf8');
+const html = require('./_izvor').izvor();
 const start = html.indexOf('(function _restoreLastMap()');
 const end = html.indexOf('})();', start);
 assert.ok(start >= 0 && end > start, '_restoreLastMap mora postojati');

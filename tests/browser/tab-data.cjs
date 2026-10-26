@@ -39,8 +39,8 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'../..');
   await page.evaluate(()=>_tabPage(2));assert.equal(await page.locator('#vl .vrow').count(),60);
   await page.evaluate(()=>selI(vlake.findIndex(v=>v.nm==='T240')));assert.equal(await page.locator('#vl .vrow.act .vcard-name').textContent(),'T240');
   await page.evaluate(()=>_tabFilter('pending'));assert.equal(await page.locator('#vl .vrow').count(),1);
-  assert.match(await page.locator('#vl .data-row-status').textContent(),/nije poslano/);
-  await page.evaluate(()=>_tabFilter('all'));assert.match(await page.locator('#vl .data-row-status').nth(1).textContent(),/Na serveru/);
+  assert.match(await page.locator('#vl .data-row-status').textContent(),/Čeka slanje/);
+  await page.evaluate(()=>_tabFilter('all'));assert.equal(await page.locator('#vl .data-row-status').count(),1); // poslane vlake nemaju statusni red
   await page.locator('#vl-trazi').fill('T2');const filtered=await page.locator('#vl .vrow').count();assert.ok(filtered>0&&filtered<=60);
   await page.waitForTimeout(500); // završi prethodni smooth scroll od selI
   await page.evaluate(()=>document.getElementById('panel').scrollTop=600);const scroll=await page.evaluate(()=>document.getElementById('panel').scrollTop);assert.ok(scroll>0);

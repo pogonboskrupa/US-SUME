@@ -12,7 +12,7 @@ for name,n,size,tail in [('cover.mbtiles',1024,32768,' WITHOUT ROWID'),('scan.mb
  c.executemany('INSERT INTO tiles VALUES(?,?,?,?)',((14,8000+i,11000,b'\\x89PNG'+i.to_bytes(4,'big')+bytes(size-8)) for i in range(n)))
  c.commit();c.close()
 `,dir]);
-const html=fs.readFileSync(process.env.SQLMAP_HTML||path.join(__dirname,'../../index.html'),'utf8');
+const html=(process.env.SQLMAP_HTML ? require('node:fs').readFileSync(process.env.SQLMAP_HTML,'utf8') : require('./_izvor').izvor());
 const begin=html.indexOf('const _SQL_WORKER_SRC = `')+'const _SQL_WORKER_SRC = `'.length;let end=begin;
 for(;;){end=html.indexOf('`',end);if(html[end-1]!=='\\')break;end++;}
 const src=new Function('_SQLJS_CDN','_SQLJS_LOCAL','return `'+html.slice(begin,end)+'`;')('cdn/','local/');

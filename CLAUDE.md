@@ -32,6 +32,18 @@ PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
 zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni
 nezavisno od toga kako se `X.Y.Z` mijenja.
 
+## "Ažuriraj aplikaciju" — release SAMO na izričit zahtjev (od v3.0.0)
+
+Korisnikov trajni zahtjev: verzija se podiže, a push na
+`claude/inline-js-split` (koji pokreće CI → GitHub Release) radi se
+SAMO kad korisnik kaže **"ažuriraj aplikaciju"** (ili jasno isto). Na ostale
+promptove: izmjene, testovi i commit LOKALNO, bez bump-a verzije i bez push-a.
+Push bez bump-a je također pogrešan — CI bi pod istim tagom prepisao APK
+postojećeg releasea, a telefon (isti versionCode) ne bi ponudio update.
+Kad stigne "ažuriraj aplikaciju": jedan bump (sva tri mjesta), commit, push.
+Lokalni commiti nestaju ako se kontejner ugasi — upozoriti korisnika ako se
+nakupi puno neobjavljenog rada.
+
 ## APK build — assets se NE povlače sami
 
 `android/app/src/main/assets/` **nije git-tracked** i mora se ručno
@@ -39,9 +51,13 @@ regenerisati prije svakog builda — inače APK sadrži staru (keširanu) verzij
 web koda čak i kad `versionName` u `build.gradle` kaže da je nova.
 
 - **PowerShell (Windows)**: `powershell -ExecutionPolicy Bypass -File android\build-apk.ps1`
-  (pull + copy-assets + gradle build u jednom potezu; provjeri `-Branch` default
-  u skripti prije pokretanja ako grana nije `CODEX-US-SUME` — to je trenutni
-  default u `build-apk.ps1`).
+  (pull + copy-assets + gradle build u jednom potezu). **Zadana `-Branch` u
+  skripti je i dalje stara `CODEX-US-SUME-2026-10-01`** — za trenutni kod
+  pokreni sa `-Branch claude/inline-js-split`.
+- **Uobičajeni put od 2.8.10 nije lokalni build nego CI**: push na
+  `claude/inline-js-split` pokreće `codex-webview.yml` (testovi → APK →
+  emulator → GitHub Release `vX.Y.Z`), a telefon ga preuzima kroz
+  **Meni → Ažuriraj aplikaciju**. Release nastaje SAMO ako CI prođe zeleno.
 - Ili ručno: `android/copy-assets.ps1` / `.sh` pa build kroz Android Studio.
 - Kad se mijenja `AndroidManifest.xml` ili bilo koji `.java` fajl (nova
   dozvola, native most i sl.) — **treba pun rebuild u Android Studiju**, samo
@@ -1885,6 +1901,76 @@ način provjere."
   pa je cijela analiza na blagom terenu tvrdila da nagiba nema. `maxGrade` je
   izmješten izvan praga; `steepLen`/`steepSegs` ostaju vezani za 20%.
 
+## Oporavak snimanja i ručno slanje na slaboj vezi (v3.0.1)
+
+Nalazi iz pregleda bugova (GPS snimanje + sync), svi popravljeni u jednom
+izdanju. Testovi: `tests/js/gps-oporavak-nastavak.test.js`,
+`tests/js/sync-brisanje-revizija.test.js`, proširen `gps-bg-buffer.test.js`.
+
+- **Oporavljen trag nije stvarno snimao** — pisalo je "snimanje nastavljeno",
+  a nije pokretan ni GPS watch ni native servis. Sad `startGPS()` +
+  `_bgRecStart('trag')` POSLIJE dopune (da `_nativeSessionSince` ne odsiječe
+  tačke); dopuna ide sa `bypassPauzu` (auto-pauza usred dopune ne gubi ostatak).
+- **Auto-pauza otvara prozor pauze** (`_pauziOtvoriProzor(_tragPauseWin, now)`)
+  — bez toga je dopuna iz native bafera ubacivala fiksove iz pauze.
+- **Prozori pauze su TRAJNI** (`_PAUZE_KEY`, `_pauziSnimi` na svakoj promjeni,
+  `_pauziUcitajSnimljene` u `_crashCheck`) — poslije ubijenog procesa oporavak
+  je inače dopunjavao i šetnju do vozila snimljenu tokom pauze.
+- **Crash snimak se piše odmah pri startu** (`_crashSaveVlaka(true)`,
+  `_crashSaveTrag(true)`, `FieldStore.seedSession` za doznaku — UZ await, da
+  sjeme ne vrati vrijeme sesije unazad poslije prve tačke) i pri pauzi. Ranije
+  bez ≥2 tačke i 30 s nije bilo snimka, pa ni oporavka iz native bafera. Trag
+  bez tačke uzima `snapT.ts` kao granicu (ne "sada"); prazna oporavljena vlaka
+  se ne pravi.
+- **Oporavak vlake ide u POSTOJEĆU vlaku** (`_vlakaZaOporavak`: sbId, pa
+  nm/br/kr/projekat), ne u kopiju "ime ↩ vrijeme" koja je dvaput brojala dužinu
+  mreže. Kad je lokalna vlaka duža od snimka, dopuna iz bafera kreće tek iza
+  tačke najbliže kraju lokalnog repa (`_vlakaOporavakKandidati`, prva unutar
+  10 m, inače najbliža).
+- **Doznaka: dopuna PRIJE `watchPosition`** — živi fiks je ulazio između
+  starijih tačaka (cik-cak); pad dopune ne sprječava nastavak snimanja.
+- **Živi fiks tokom native dopune čeka njen kraj** (`_drainLiveQ`, u `onP` i
+  oba doznaka watch-a) — inače pomjeri `_onPLastFixTs` na "sada" i dopuna
+  ostatak pozadinskog perioda preskoči kao viđen pa potvrdi (obriše) journal.
+  `visibilitychange` zato pokreće dopunu PRIJE čekanja na wake lock.
+- **Stop iz notifikacije** gasi cijeli GpsService; ako drugo snimanje traje,
+  `_nativeRecAction` ponovo zove `AndroidGps.startRecording`.
+- **Traka snimanja na Karti** uz vlaku/trag pokazuje doznaku (#action-bar je
+  ne pokriva) — `_recBarStanje` je stavlja naprijed samo na Karti.
+- **Vječni LOCAL_CONFLICT**: zamjena `upsert_vlaka` u redu nosi
+  `_prevPayloads`; kad je red na serveru naša ranija verzija (izgubljen
+  odgovor), procesor upisuje preko nje uz STVARNU reviziju servera.
+- **Lokalno brisanje vraćalo zapis sa servera**: insert koji je krenuo na mrežu
+  dobija `_pokusano` (`_OL.oznaciPokusano`, prije poziva; dedup ga prenosi).
+  Brisanje takve stavke šalje i brisanje na server: vlaka bez ID-ja
+  (`delete_vlaka` sa `id:null` — procesor je nađe po ključu, nema je = čisto),
+  zona po klijentskom UUID-u, projekat novim tipom `delete_projekt` (ID-jevi u
+  redu se filtriraju i u `sbLoadProjekti`). "Nema reda" je uspjeh samo uz
+  potvrđenu prijavu (`potvrdiPrijavu` — anonimni RLS SELECT je isto prazan).
+- **Stavke koje nikad ne mogu proći** više ne stoje vječno u "čeka slanje":
+  brisanje nepostojeće/skrivene zone i status obrisanog odjela (bez upisa
+  odjela u redu) su gotovi; GPS tačke odjela koji ne postoji na serveru
+  (23503 + provjera) idu u `_dozSirocad` — ostaju na telefonu, ne šalju se,
+  ne broje se (panel Server ih navodi zasebno).
+- `deleteProjektUI` čita red STRIKTNO (oštećen red se ne prepisuje praznim).
+
+## Preglednik oznaka — oker odjeli, vrste po obliku, dodjela odjelu (v3.0.2)
+
+Na zahtjev: zaglavlje odjela svijetlo oker, slike i tragovi se razaznaju, a odjel
+se može naknadno dodijeliti (`static/js/map-library.js`, `static/css/map-library.css`).
+- **Zaglavlje odjela** (`.ml-group`) je oker (`--ml-ochre`, tamna i dnevna tema
+  imaju svoje vrijednosti) sa tamnim tekstom i dugmadima.
+- **Vrsta se razlikuje OBLIKOM, ne samo bojom**: lijeva ivica kartice u boji vrste
+  (`--ml-*-edge`), slika = okrugla značka/sličica, trag = isprekidan okvir značke,
+  uz tekstualnu oznaku tipa (`.ml-type`: Slika / Trag / KML / Server) — boja sama
+  nije dovoljna na jakom suncu i za daltoniste.
+- **"Dodijeli odjelu"** (`assign`) se pokazuje samo na slici/tragu koji nema odjela;
+  otvara uređivač i fokusira polje Odjel. Polje nudi poznate odjele (`<datalist
+  id="ml-odjeli">`: već dodijeljeni + odjeli projekata) da se isti odjel ne
+  upisuje na tri načina ("105", "odj. 105"). KML nema dugme (ima oznaku odjela iz
+  fajla/Granica).
+- Test: `tests/js/map-library.test.js` (13).
+
 ## Uglačavanje snimljenog traga/vlake ("Ugladi")
 
 - **Douglas-Peucker NE MOŽE ukloniti vraćanje istim putem (v3.120.0)** — ovo je
@@ -1972,6 +2058,19 @@ način provjere."
   ga nema i prati trasu.
 
 ## Admin — sekcija Korisnici
+
+- **Dva prikaza (v2.9.1)**, na zahtjev "admin da vidi sve zadnje aktivne a ne
+  po šumarijama". Zadani **"Po aktivnosti"**: svi korisnici u jednoj listi,
+  KALENDARSKE grupe (Danas od lokalne ponoći / 7 / 30 dana / Ranije / Bez
+  aktivnosti / Nije dostupno), kartica nosi šumariju i relativno vrijeme.
+  **"Po šumarijama"**: abecedno, "aktivno u 7 dana" po grupi, `<details>` se
+  sklapa (`tvlake_adm_sum_zatvorene`); sort važi samo ovdje. Izbor u
+  `tvlake_adm_prikaz`. Čiste funkcije `_admAktivnostGrupa`,
+  `_admGrupisiPoAktivnosti`, `_admRelativno`, `_admGrupisiPoSumariji`.
+  `last_active_at === undefined` ("ne znam") se NIKAD ne prikazuje kao "nikad".
+  Nove boje u admin listi uzimati iz palete koju Dnevni mod već mapira
+  (`#4ade80`, `#fbbf24`…, `field-design.css`) — `#86efac` je pala na
+  kontrastu (day-layout-274/day-all-panels-275).
 
 - **Preuređeno zbog preglednosti (v3.121.0)**, na zahtjev. Lista je dotad
   crtala SVE za svakog korisnika odjednom i grupisala isključivo po šumariji.
@@ -2737,6 +2836,40 @@ namjerno, prije nego se jave.
   (van taba jedan poziv, na tabu dva), i invarijante nad markupom.
   **Provjereno da 18 od 21 pada na kodu prije izmjene.**
 
+## Izdvajanje glavnog inline bloka u `static/js/app/*.js` (grana `claude/inline-js-split`)
+
+Mjerenja i odluke: `docs/IZDVAJANJE_JS_2026-10-24.md`.
+
+- **Glavni JS (~1,7 MB) više NIJE u `index.html`** nego u
+  `static/js/app/glavni.js`, učitan SINHRONO na istom mjestu
+  (`<script src="…" data-izdvojeno-blok>`) — semantika identična, ali HTML je
+  561 KB umjesto 2,3 MB (u APK-u prvi `<script>` čeka CIJELI HTML). **Izmjene
+  JS koda idu u `glavni.js`**; `grep -n` po `index.html` ga više ne nalazi.
+  Helper ga vraća na mjesto za testove; `izdvoji.py`/`split-analiza.cjs` rade
+  samo nad inline blokom i za njega više ne važe.
+
+- **Testovi NE čitaju `index.html` direktno** — `require('./_izvor').izvor()`
+  (Node) / `from _izvor import izvor` (Python, `tests/browser/_izvor.py`). Helper
+  zamjenjuje marker `/* @izdvojeno static/js/app/X.js */` sadržajem fajla, pa je
+  rekonstruisani izvor bajt-identičan stanju prije izdvajanja. Novi test koji
+  čita tekst izvora mora ići kroz helper, inače ne vidi izdvojeni kod.
+- **Izdvajanje samo kroz `tests/perf/izdvoji.py`** (doslovan rez, marker,
+  `<script defer>` iza glavnog bloka, `sw.js` APP_SHELL, `assets-manifest.json`
+  required) i **tek poslije `tests/perf/split-analiza.cjs <od> <do>`**: defer se
+  izvršava POSLIJE cijelog parsiranja, pa svako ime koje glavni blok koristi
+  sinhrono tokom parsiranja (top-level ili tranzitivno pozvana funkcija, npr.
+  `showApp → _checkDeviceUserSwitch → _fieldArchiveKeys`) mora ostati u glavnom
+  bloku. Zato su ključevi `_TEM_*_KEY` ostali inline iako je ostatak Tematske
+  karte izdvojen.
+- Izmjena koda u izdvojenom fajlu se radi U FAJLU; prvi red
+  `// @izdvojeno-iz index.html …` je obavezan (helper ga skida).
+- `tests/js/izvor-helper.test.js` pada ako izdvojeni fajl nije u APP_SHELL /
+  manifestu / nije učitan; `tests/browser/inline-split-startup.py` provjerava
+  pokretanje (keširan profil, login, promjena korisnika) bez ReferenceError-a.
+- Mjerenje: `tests/perf/startup.cjs` (desktop), `tests/android/startup-timing.sh`
+  (CI emulator, `startup-timing.txt` u artefaktu `Android-provjera-<sha>`),
+  `[DENDRO-START]` u konzoli i admin Debug → "Terenski rad" → "Zadnje pokretanje".
+
 ## Zamke specifične za dodavanje NOVOG mrežnog sloja karte
 
 - **Sandbox ne može provjeriti NIJEDAN vanjski tile server** — čak ni
@@ -2763,6 +2896,165 @@ namjerno, prije nego se jave.
   `_WC_CACHE`/`CachedWCover` morali biti pomjereni ISPRED `const TL = {`).
 
 ## Poznate zamke (naučeno na stvarnim bugovima)
+
+- **Slabiji telefoni — WebView renderer i memorija (v2.8.10)**:
+  - **Nikad `webView.setLayerType(LAYER_TYPE_HARDWARE)`** — tjera cijeli WebView
+    kroz dodatnu ekransku GPU teksturu; na slabom GPU-u daje prazne dijelove
+    panela/karte. Prozor je već ubrzan (manifest). Test to čuva
+    (`ExplorerNavigationTest`: `FLAG_HARDWARE_ACCELERATED` prozora +
+    `LAYER_TYPE_NONE`). **Ne provjeravati `view.isHardwareAccelerated()` na
+    RESUMED** — true je tek kad je view priključen, pa test bude povremen.
+  - **`onRenderProcessGone`** pravi novi WebView i ponovo učita stranicu
+    (najviše 3× u 2 min, log `DendroRender`); bez njega OOM renderera ruši
+    CIJELI app. Snimanje vraća postojeći `_crashCheck` + native bafer.
+  - **`_renderRecover` pri memorijskom pritisku samo prazni bitmap keš i smanjuje
+    limite** — ne `close()` (D1-16) i NE prazni redove pločica: red drži
+    VIDLJIVE pločice, `_odustani` bi ih ostavio praznim do pomaka karte.
+  - Lite profil (`render-health.js`, ≤4 GB/`lowRam`) gasi beskonačne ukrasne
+    pulseve indikatora (box-shadow animacije = paint u svakom frame-u satima).
+    Spinneri učitavanja ostaju.
+- **Dodaj fajl na kartu (KML/SHP) — pregled u samom prozoru (v2.9.2)**: lista
+  "Na ovom uređaju" (`layerImportRenderList`, `static/js/local-layer-import.js`)
+  radi nad `kmlLs` (lokalni = bez `_key`) i poziva postojeće `togK`/`delK` —
+  ne dodavati paralelno stanje. Uvezeni sloj nosi opcionalno `fmt:'shp'` (u
+  `_LOCAL_KML_KEY` i na sloju) samo za oznaku izvora; stari zapisi bez polja =
+  KML. Poruka uspjeha je "N sloj(a) učitan(o)" (test `menu-tools` je čeka).
+  Brisanje ide kroz `_dlgConfirm` i ponovo traži indeks (`kmlLs.indexOf`) jer
+  se lista može promijeniti dok je dijalog otvoren.
+- **Katalog KML-a: preuzet sloj se prepoznaje i po NAZIVU (v2.9.3)**: GitHub
+  `/releases` vraća SVE releaseove KARTE, a id je `github-kml-<asset id>` — isti
+  fajl iz starijeg releasea je bio zaseban red sa "Preuzmi i dodaj" iako je
+  sloj već na telefonu. Sad GitHub lista nudi samo najnoviji primjerak naziva
+  (`newestOnly`), a sloj sačuvan pod drugim id-jem istog naziva/izvora
+  (`localByName`) daje "Ažuriraj"; zamjena (`replaceOlder`) briše staru verziju
+  tek POSLIJE trajnog upisa nove i prenosi naziv/stil/vidljivost. Bez interneta
+  "Ažuriraj" otvara sačuvanu staru verziju. Lista "Na ovom uređaju" ima
+  "Linija i ispuna" (`layerImportStil`) — isti `_layerStyleControls` kao
+  Granice/popup, otvoreni editor se pamti po objektu sloja, ne po indeksu.
+- **Vodi me / Server / Granice (v2.9.4)**:
+  - **Novi `*HitTest` u `map.on('click')` mora dobiti stub u `tests/browser/server-map-218.py`** (red sa `_msrHitTest=()=>null`) — taj harness izvlači handler klika bez ostalih funkcija; v2.9.4 je pao na CI-ju baš zbog `_guideHitTest`.
+  - **Klik na rutu "Vodi me" nije stizao** — ruta je u podrazumijevanom canvasu
+    (overlayPane), a vlake/mjerenja u canvasima iznad (zamka v3.101.0). Sad
+    `_guideHitTest` u `map.on('click')` (prije vlaka, poslije mjerenja); popup
+    ima i markere START/ODREDIŠTE, čita rutu iz registra pri svakom otvaranju
+    (preimenovanje), nudi Profil, Preimenuj, Skloni sa karte. `_guideResultLayer`
+    je sad `[obrub, linija, start, kraj]` — linija je indeks 1.
+  - **Server**: ponovljeno slanje iste stavke je JEDAN red sa "poslano N×"
+    (`sameItem` u `grouped`), broj na tabu = broj prikazanih redova
+    (`_serverTransferCount`); sklonidba stavka/stavke/stavki i GPS tačka/e;
+    vlaka koja čeka slanje otvara se na karti iz lokalnih podataka
+    (`_serverPendingMap`, radi bez mreže).
+  - **Granice**: kartice (`.gp-*`) umjesto inline stilova, svi stari ID-jevi
+    ostaju; **Pronađi odjel** (`static/js/granice-trazi.js`) pretražuje
+    UČITANE poligone po nazivu i atributima (offline), `105.000000` iz SHP-a
+    = 105, rezultat se istakne žutim obrubom i kad je sloj sakriven/"Samo za
+    poligon". Novi fajl je u `assets-manifest.json` required i u `sw.js`.
+- **Teren, Tragovi i limit na Serveru (v2.9.5)**: "Prikaz na karti" u
+  Tragovima je SKLOPIV (`<details class="tv-vis-det">`, `tvlake_tv_vis_otvoreno`)
+  samo unutar `#tragovi-panel` — pet redova prekidača je guralo listu ispod
+  ruba; drugdje (`#tv-visibility` van panela) ostaje otvoren. Grupisanje "Po
+  datumu" ide po PERIODU (`_tvPeriod`: Danas/Jučer/Ova sedmica/mjesec, vrijeme
+  iz prve GPS tačke `_tvTragMs`), najnovije prvo, zaglavlje nosi zbir dužine.
+  Teren: zaglavlje nije više ljepljivo (`terrain-workspace.css`), trag nosi
+  trajanje i odjel, pane Tragovi ima red "Danas · N tragova · km". Server:
+  prikaz zadnjih 30 razmjena poslije spajanja ponavljanja (`TRANSFER_SHOW_MAX`),
+  čuva se 200 (`TRANSFER_STORE_MAX`, bilo 500) da "poslano N×" ostane tačno.
+- **Uređivanje traga tokom snimanja + brisanje korisnika (v3.0.0)**: snimani
+  trag nije u registru dok se ne završi, pa naziv/boja/stil čekaju u
+  `_tragLiveMeta` (dodir na `#ab-trag-stats` → list `#trag-ured`) i prelaze na
+  sačuvani trag preko `_tragRegAdd(pts, meta)`. Crash snimak traga ima JEDNOG
+  pisca oblika (`_crashTragTekst`, nosi `meta`) — tajmer, oporavak i drain
+  povratka u prvi plan svi idu kroz njega. `_tragUkloniZadnje` piše snimak i u
+  pauzi (`_crashSaveTrag(true)`), a brzinsku kapiju vraća na VRIJEME nove zadnje
+  tačke (inače sljedeći fiks izgleda kao nemoguć skok). Izričito izabrana boja
+  traga (`t.colorRucno`) pobjeđuje globalnu `_lineStyle.tragCol`. Sačuvani trag
+  sad čuva vrijeme i tačnost tačaka (`fabSnimTrag` → `[la,lo,al,t,ac]`) — bez
+  toga kartica nije znala početak ni trajanje. Brisanje korisnika:
+  `admin_delete_user` (migracija `20261013_admin_delete_user_fk.sql`, ručno u
+  SQL Editoru) sam razriješi svaki blokirajući FK prema auth.users/korisnici —
+  lične tabele (`loc_fotos`, `tragovi`, `dnevni_log`, `text_labels`,
+  `share_codes`) se brišu, sve ostalo prelazi na admina koji briše (zajednički
+  podaci ne nestaju). Granice "Pronađi odjel": slušalac `popupclose` se skida u
+  `clear()` — `map.once` prethodnog rezultata je brisao obrub sljedećeg. Test:
+  `tests/js/trag-ured.test.js`.
+- **Traka koordinata i "Moja lokacija" (v2.9.9)**: traka je JEDAN nizak red
+  (~34 px, `⛰ 208 m │ Y … X … │ 1:12 500 ▾`), pozadina 55 % providna uz
+  `backdrop-filter`; ID-jevi (`nv-val`, `omgi-y/x`, `nv-koord`,
+  `map-scale-click/val`) i kopiranje dodirom su isti. Popup lokacije: tačka u
+  boji preciznosti (≤5 m zelena, ≤15 žuta, više crvena, fiks stariji od 30 s =
+  "traži") i starost fiksa (`_locStatusRender`, svake sekunde dok je popup
+  otvoren — `_locPopTimerStart` sam staje kad se popup sakrije), dvije radnje
+  (Centriraj, Snimi trag) i čipovi Kompas/Radijus/Šumski (ID-jevi
+  `compass/radius/forest-switch` su sad na čipovima, `.on` ih boji). Bez GPS-a
+  klasa `gps-off` ostavlja samo "Uključi lokaciju". Dug dodir na Šumski
+  objašnjava mod (`_locLongPress`), a klik poslije njega se guta. `gps-info`
+  više nema prefiks "GPS:".
+- **Karta — toast, popup lokacije, koordinate, mjerilo, Slojevi (v2.9.8)**:
+  `_toastDno` računa i `#action-bar`/`#rec-bar`/`#ab-loc-popup`/
+  `#ab-izmjeri-menu`, a vidljiv toast se preračunava svakih 300 ms (popup
+  otvoren poslije toasta ga više ne prekriva). `.ab-pop` (Lokacija, Izmjeri)
+  nosi boje teme (`--field-*`); "Snimi trag" boju dobija klasom
+  (`.abp-trag.on`), ne inline stilom. `#nv-badge` su ćelije sa natpisom
+  (N.V. / Y · X (MGI) / Razmjera), ID-jevi isti; dodir na koordinate
+  (`_nvKopirajKoord`) kopira "Y … X …" — badge je `pointer-events:none`, pa
+  ćelija mora imati svoj `pointer-events:auto`. Grafičko mjerilo je
+  `L.control.scale` DOLJE DESNO (lijevo je `#dem-legend`), iznad donje trake
+  preko `--ab-h`; štampa ga sakriva kroz `.leaflet-control-container`.
+  `#sync-status-dot` je bio sitna siva tačka bez značenja — sad je skriven
+  osim kad je realtime aktivan ("● uživo"). Slojevi → Karte: podloge prve,
+  memorija (`#ls-cache-box`) ispod i `hidden` dok `_lsRenderCache` ne izračuna
+  (bez Cache API-ja je trajno pisalo "💾 …"). Test: `tests/js/karta-ui.test.js`.
+- **Login: prvo uloga, šumarija padajućom listom (v2.9.7)**: v2.9.6 je nudio
+  terenski profil i 6 šumarija kao 7 kartica jednu do druge — terenac bi
+  dodirnuo "svoju" šumariju i registrovao se kao projektant. Sad se bira
+  ULOGA (`_regUloga`: Terenski radnik / Projektant); `#reg-sum-wrap` sa
+  `#reg-sum-izbor` se pokaže samo za projektanta. Promjena uloge briše raniji
+  izbor. `#reg-sumarija` (skriven) ostaje jedini izvor za `doRegister()`, koji
+  sad imenuje šta nedostaje (uloga / šumarija). Nova šumarija mora ući i u
+  skriveni select i u `#reg-sum-izbor` (test `login-registracija`).
+- **Doznaka — pregled i raspored (v2.9.7)**: traka `#doz-pregled` ispod
+  zaglavlja (% pokrivenosti pojasevima, ha unutar granice, zone, trag, preklop)
+  računa se u `dozRenderDetail` iz ISTE `_dozPokrivenost` kao statistika.
+  Redoslijed: GPS → Pregled odjela (`doz-section-stats`) → Projektanti →
+  Projekcija → Zone (dugme Nacrtaj u zaglavlju; zasebna "Obilježi zonu"
+  kartica uklonjena) → Vlake → Stabla → `<details id="doz-postavke">`
+  (Pojasevi + Stil poligona, sklopljeno, `tvlake_doz_postavke_otvoreno`) → QR.
+  GPS mora ostati PRVI `.sec` (test 227) — pregled je zato `div`, ne `.sec`.
+  `doz-context` više ne ponavlja ime odjela. Brojači iznad liste odjela su
+  filter statusa (`_dozListaFilterGet/Set`, `tvlake_doz_filter`); **`var
+  _dozListaFilter`, ne `let`** — `dozRenderOdjeli` se zna pozvati pri
+  pokretanju prije te linije (TDZ). Test: `tests/js/doznaka-pregled.test.js`.
+- **Login, Projekat i Vlake (v2.9.6)**: registracija je zlatno dugme
+  (`.auth-btn-reg`, boja grba) — prozirno sekundarno dugme novi korisnici nisu
+  vidjeli. Izbor profila su kartice (`_regProfil`): terenski profil
+  narandžasto (`.reg-prof-teren`), šumarije zeleno u mreži 2×3; **native
+  `<select>` se u WebView-u ne može bojiti po opciji**, pa `#reg-sumarija`
+  ostaje SKRIVEN kao jedini izvor vrijednosti za `doRegister()` — nova
+  šumarija mora ući i u select i kao kartica (test `login-registracija`).
+  Projekat: GJ zaglavlje samo kad grupiše više projekata (inače GJ u kartici);
+  lista vlaka uvlači krak (`.project-vl-row.krak`), ime piše samo za kolegine
+  vlake, brojač nosi ukupnu dužinu. Vlake: uklonjen red `vph-top` (gornja
+  `.data-context` traka već nosi projekat i "Projekti"); "☁ Na serveru" se
+  više ne ispisuje na svakoj kartici — samo "⬆ Čeka slanje", a dugme "Za
+  slanje (N)" nosi broj. `tests/browser/tab-data.cjs` (nije u CI-ju) pada i
+  na starijem kodu (`metrics.rows` 0≠60) — zastario, ne mjerodavan.
+- **`turf` se učitava u POZADINI (v2.9.0)**: u zaglavlju više nema
+  `<script src=turf.min.js>`; `window.turf` je do učitavanja Proxy koji pri
+  ranom sinhronom pristupu učita lokalni fajl sinhrono (XHR + indirect eval),
+  a UMD omotač sam zamijeni Proxy. Izmjereno CPU 4×: load ~3,8 s → ~2,4 s.
+  Novi kod smije zvati `turf.*` sinhrono kao i prije; `typeof turf` je sad
+  uvijek `'object'`. Workeri i dalje `importScripts` — nisu dirani.
+- **Izmjereno a NE isplati se (v2.9.0)**: premještanje rijetkih modala (Pomoć,
+  723 elementa) u `<template>` smanji DOM 16 % ali NE ubrzava start ni promjenu
+  taba (u šumu mjerenja) — skriveni `display:none` elementi su jeftini. Ne
+  raditi bez novog mjerenja. Sljedeći stvarni trošak pri startu je glavni JS
+  blok (1,68 MB inline, ~0,6 s blokiranja na CPU 4×) — izdvajanje traži
+  prepravku ~57 testova koji čitaju funkcije iz `index.html`.
+- **Mjerenje performansi** (scratchpad skripte, ne repo): Playwright 360×740,
+  keširan profil, `navigator.onLine=false`, `Emulation.setCPUThrottlingRate 4`,
+  CDP Tracing (`ParseHTML`/`EvaluateScript`/`v8.compile`) i Profiler; uvijek
+  2–3 ponavljanja jer je šum ±300 ms. Paralelno pokrenuti browser testovi
+  (dva Chromiuma) izazivaju lažne isteke roka.
 
 - **N.V. (nadmorska visina) iz DEM-a, uživo i offline (v1.7.8)**: prijava
   "kako idem po karti želim da se mijenja nadmorska visina". Tri uzroka:
@@ -4484,8 +4776,25 @@ namjerno, prije nego se jave.
 3. Podigni sve tri verzije (vidi gore). Izmjene samo dokumentacije (ovaj fajl,
    README) ne traže bump verzije.
 4. Commit poruka na bosanskom, objašnjava UZROK ne samo šta je promijenjeno.
-5. Push na `CODEX-US-SUME` (PR #32 se sam ažurira). Grana `claude/branch-072026-sa9wz0`
-   i PR #30 su ZATVORENO poglavlje — ne gurati tamo.
+5. **Push na `claude/inline-js-split`** (od v3.2.4, 2026-10-25 — nastavak
+   `claude/elegant-mayer-4lxj53`, koja više NE objavljuje; Release korak u
+   `codex-webview.yml` je gejtovan na `refs/heads/claude/inline-js-split`).
+   versionName se nastavlja (3.2.3 → 3.2.4 → …), a versionCode je skočio
+   596 → 700+ i ide dalje +1 (ne smije nazad). Ta grana:
+   - pokreće `codex-webview.yml` (push okidač I `if:` uslov joba `apk` — oba
+     moraju sadržavati granu, inače je job "skipped" bez greške) i objavljuje
+     GitHub Release koji koristi **Meni → Ažuriraj aplikaciju**;
+   - je izvor za **GitHub Pages** (deploy.yml, `claude/**`; korisnik je
+     prebacio Pages na nju).
+   `CODEX-US-SUME` (Codex, do v2.8.9), `claude/branch-072026-sa9wz0` / PR #30
+   i `claude/elegant-mayer-4lxj53` su ZATVORENO poglavlje — ne gurati tamo.
+   - Iz Claude sesije `workflow_dispatch` i "re-run failed jobs" vraćaju 403 —
+     CI se pokreće samo novim pushem (nikad prazan commit; popravka mora biti
+     stvarna). Artefakt sa punim logcatom proxy ne pušta (blob.core.windows.net),
+     pa `tests/android/explorer-offline.sh` na padu sam ispisuje ključne
+     TestRunner/ExplorerCI/chromium/DendroRender redove u job log.
+   - Verzija prati šemu gore (Z 0→9): 2.8.10 je bila greška (trebalo je 2.9.0);
+     updater poredi segmente numerički pa nije štetila, ali se ne ponavlja.
 6. **Terminologija je bosanska, ne srbijanska/hrvatska** ("historija" ne
    "istorija", "sistem" ne "sustav", i slično) — u NOVOM tekstu koji se piše
    (komentari, UI, commit poruke, CLAUDE.md). Ne prepravljati postojeći kod
@@ -4495,7 +4804,7 @@ namjerno, prije nego se jave.
    ključeva TRAŽI migraciju starog ključa, jer inače tiho briše korisnikove
    već sačuvane podatke).
 
-## Važeći cilj — 2026-10-01, v1.9.9
+## Važeći cilj — 2026-10-01, v1.9.9 (stanje 2026-10-13: v3.0.0, grana claude/elegant-mayer-4lxj53)
 
 Slanje projekata/vlaka/doznake ostaje RUČNO kroz Meni → Server. Historijski
 uvodni opis „sync čim se pojavi internet” nije aktuelna politika slanja.
@@ -4522,3 +4831,152 @@ ID-jeva/keša. Jedan ručni ciklus pripada nalogu koji ga je započeo.
 ### Karte i build — 2.0.2
 
 Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokreće `syncWebAssets`, provjerava verzije i required assets; CI SHA-256 poredi APK sa izvornim fajlovima. Wrapper JAR je sada vraćen i checksum-provjeren; lokalno okruženje nema DNS pristup Gradle distribuciji.
+
+### Karta i Dodaj fajl — natpis "uživo", tab "Sa servera" (nakon v3.0.2)
+- Pilula realtime sinhronizacije na karti više ne ispisuje "uživo" (CSS `::after` uklonjen); ostaje samo zelena tačka u pilulu kad je realtime aktivan.
+- "Dodaj fajl na kartu" ima treći tab **KML sa servera** (`#layer-import-server`) u koji je prebačen katalog "KML iz KARTA APP" (`.kml-drive`, ID-jevi nepromijenjeni, pa `KmlDownloads` radi isto). Tab KML sada sadrži samo lokalni izbor fajla. `layerImportTab` zna tri taba; na ≤420 px tabovi su stupci bez podnatpisa da stanu u 320 px.
+
+### Admin bez taba Korisnici na slabom signalu (v3.0.4)
+- Vidljivost tabova i stavki menija po ulozi bila je SAMO u `sbLoadProfile()`. Offline-first ulaz na keširanom profilu (`_ulazNaKesu`, auto-login fallback) postavlja `sbProfile = cached` i zove `showApp()` bez `sbLoadProfile()`, a `#admin-tab-btn` je u markupu `display:none` — admin na lošem signalu nije dobijao tab Korisnici (ni Obavještenja/Teren/meni stavke). Izdvojeno u `_primijeniUlogeUI(data)` (idempotentno) i zove ga `showApp()` za SVAKI ulaz. Test: `tests/js/uloge-offline-ui.test.js`.
+- v3.0.5: `_primijeniUlogeUI` usput puni i `p-ime`/`p-sumarija` i `_menuIdentityRender()` — ista klasa propusta (offline ulaz na kešu nije zvao `sbLoadProfile`). Svaki novi UI koji zavisi od profila ide u tu funkciju, ne samo u `sbLoadProfile`.
+
+### Studio vlaka — "Nacrtaj vlake u odjelu" (v3.0.7)
+- Dugme u detaljima aktivnog projekta (uz "Nacrtaj vlaku ručno") otvara `#vsd-panel` (`vlakeStudioOpen/Close/Finish`, kod `_vsd*` ispred "Uvoz vlake iz fajla"): lista vlaka/krakova odjela, ＋ Vlaka (N), ⊕ Krak L/D (L/D) od izabrane, ▶ Nastavi (C), Poništi, Zumiraj (F).
+- **Namjerno NE koristi `addline` alat ni crosshair sredine karte** (to je dodirni tok za teren) — kursor miša bira tačku: klik = tačka, dvoklik/Enter = kraj, desni klik/Backspace/Ctrl+Z = poništi, Shift = bez hvatanja, Esc = olovka gore pa izlaz. Rubber-band linija sa dužinom segmenta.
+- **Model "olovka"**: `_vsdPen` — nova vlaka/krak kreću sa spuštenom olovkom; postojeća se bira bez nje (klik na liniju ili u listi), da je slučajan klik ne produži. Poništavanje ne ide ispod `_vsdPenBase` (tačke postojeće vlake su zaštićene).
+- Hvatanje (`_vsdSnapTo`, čista funkcija, čvor ima prednost za ≤4 px): prva tačka kraka se lijepi na roditelja do 60 px (+ `junctionOnParent`), ostale tačke na tuđe čvorove/segmente do 12 px. **Dvoklik**: drugi klik može ostaviti gotovo istu tačku (<2 m) — `_vsdDbl` je skida. Ne uvoditi "guard 300 ms" poslije dvoklika: guta prvi klik sljedeće vlake (uhvaćeno testom).
+- Poslije završene glavne vlake (≥2 tačke) odmah počinje sljedeća (`tvlake_vsd_autonext`); prazna/jednotačkasta nova vlaka se odbacuje (`_dropEmptyVlaka`). Lager se u studiju NE pita (prekidao bi tok) — dodjeljuje se naknadno.
+- Svi `var _vsdOn` guardi (klik karte, klik linije, `switchTab`, `_updFabVisibility` — sakriva samo `#action-bar`, gornje kontrole ostaju) moraju ostati; napuštanje Karte zatvara studio.
+- Testovi: `tests/js/vlake-studio.test.js` (8), `tests/browser/vlake-studio.py` (stvaran miš nad stvarnim Leafletom i kodom). `menu-tools.py` pada i bez ovih izmjena (NaN LatLng) — nije povezano.
+
+### Login — autofill prekidao kucanje (nakon v3.0.9)
+- Na Androidu Google autofill nudi spremljene prijave ("Ćehić — appassets.androidplatform.net") preko polja PIN-a i prekida kucanje; `autocomplete="off"` ga NE zaustavlja. Sad: PIN `autocomplete="new-password"` (i oba PIN polja registracije), nekredencijalna `name="dm-*"`, `data-lpignore`/`data-1p-ignore`, i **Java** `webView.setImportantForAutofill(NO_EXCLUDE_DESCENDANTS)` (konačno rješenje — traži pun APK build, CI ga radi).
+- Enter vodi ime → prezime → PIN → prijava (`_authEnter`), tastatura pokazuje "Dalje"/"Idi"; dugme PRIKAŽI/SAKRIJ PIN (`_authPinPrikazi`, 44 px meta). Test: `tests/js/login-unos.test.js`.
+
+### Studio vlaka — uređivanje (v3.0.10)
+- Izabrana vlaka s podignutom olovkom dobija **ručke** na tačkama (`_vsdHandlesBuild`, `.vsd-h`, najviše `_VSD_HANDLE_MAX`=800): povlačenje pomjera tačku (na kraju hvatanje za tuđe čvorove), desni klik briše tačku (min. 2; blokirano ako vlaka ima krakove jer bi se pomjerili `junctionOnParent` indeksi). **Leaflet Draggable ignoriše povlačenje uz Shift** — zato Shift ne vrijedi za ručke.
+- **F2 / ✎ Preimenuj** (`_vsdPreimenuj`, samo glavna vlaka bez krakova, ide kroz `renameVlaka`) i **Delete / 🗑 Obriši** (`_vsdObrisi`, `_dlgConfirm`, odbija vlaku s krakovima — prvo se brišu krakovi; reindeksira `_vlakaSaveTimers` kao standardno brisanje).
+- Test: `tests/browser/vlake-studio.py` (ručke, brisanje tačke, preimenovanje, brisanje).
+
+### Studio vlaka na telefonu (v3.0.11)
+- Na ≤700 px panel je `position:fixed` (z 3000), zadano SKLOPLJEN (`_vsdSkl`, `.vsd-skl` krije `.vsd-extra`: lista, opcije, pomoć) — tanka traka umjesto pola ekrana koji je prekrivao kartu. ✕ i ▾/▴ su mete 44 px; zaglavlje je sticky. Prije je panel (absolute, 48vh) mogao ostati nedostižan.
+
+### Studio vlaka — Poništi je dodavao tačku ispod dugmeta (poslije v3.0.11)
+- Reprodukovano Playwright dodirom (390 px, has_touch): tap na "Poništi" je skinuo tačku i ODMAH dodao novu na mjestu dugmeta. Panel je bio dijete `#map` (host = roditelj `#manual-draw-panel`, koji je unutar `#map`), pa je dodir stizao i do Leafleta. Sad je `#vsd-panel` u `document.body` (fixed), a `_vsdIzPanela(e)` dodatno odbacuje klik/dvoklik/desni klik karte čiji je cilj u panelu ili koji stiže < 450 ms poslije dodira panela (`_vsdPanelT`). Test u `tests/browser/vlake-studio.py` (panel u harnessu je unutar `#map` kao u produkciji).
+- Panel pojednostavljen: jedna traka radnji koja se mijenja po stanju — crtanje: Poništi + Završi; inače: Nova, Nastavi, Krak L/D. Zumiraj/Ime/Obriši, lista i pomoć su "dodatno" (na telefonu iza ☰). Tekst pomoći razlikuje dodir i miš (`pointer:coarse`).
+
+### Studio vlaka — historija izmjena i GPS tačka (v3.1.0)
+- **Poništi vraća SVAKU izmjenu izabrane vlake**, ne samo nove tačke: `_vsdZapamti(v)` pamti kopiju `pts` + `junctionOnParent` PRIJE svake izmjene (nova tačka, `dragstart` ručke, brisanje tačke), najviše `_VSD_IST_MAX`=200. Historija pripada JEDNOJ vlaci (`_vsdIstV`) — prva izmjena druge vlake je briše; povratak na vlaku bez izmjena je zadržava. Čisti se pri zatvaranju studija i brisanju vlake. Dok je olovka gore, uz ime stoji ↩ (`.vsd-undo`) samo ako historija postoji. Dvoklik koji skida duplu tačku skida i njen zapis (inače bi prvi ↩ bio prazan korak). Bez historije ostaje stari pad na `pts.pop()` iznad `_vsdPenBase`.
+- **📍 Ovdje / G** (`_vsdTackaGps`, samo dok je olovka spuštena i postoji `lastP`): tačka na GPS poziciji kroz isti put kao dodir (`_vsdDodajTacku` — hvatanje, spoj kraka na roditelja). Tačnost > 30 m daje upozorenje. `lastP` je `let` na ~15669, pa se čita u `try`.
+- Test: `tests/browser/vlake-studio.py` (Ctrl+Z vraća pomjerenu tačku, G dodaje GPS tačku, tri dugmeta staju na 390 px).
+
+### Studio vlaka — naziv po izboru, početak kraka, popis lagera (v3.1.1)
+- **Naziv nove vlake/kraka bira korisnik**: `_vsdNova`/`_vsdKrak` su `async` i pitaju kroz `_dlgPrompt` (prijedlog = sljedeći slobodan, Enter ga prihvata). Provjera je čista funkcija `_vsdImeProvjera(unos, roditelj, pid)`: vlaka "5"/"T5", krak "3"/"T1.3"; duplikat u odjelu se odbija i dijalog se ponavlja sa razlogom. Strana kraka ide iz PARNOSTI broja (kao `noviKrakStranaPick`), ne iz pritisnutog L/D. `_vsdPitam` blokira klik karte i tipke dok je dijalog otvoren; odustajanje ne pravi ništa.
+- **Početak kraka je UVIJEK na roditelju** (`_vsdKrakPocetak`, tolerancija bez granice — dodir bilo gdje bira najbližu tačku na roditelju; Shift tu ne važi). Postojećem kraku se početak pomjera zelenom ručkom (`.vsd-h-start`) — pušta se na roditelja i preračuna `junctionOnParent`; ta ručka se ne briše.
+- **Izabran krak pokazuje roditelja**: žuti obrub (`_vsdRodLayer`, `interactive:false`, isti renderer kao vlake — ne pravi novi canvas), karta zumira na roditelja+krak samo kad nisu u prikazu i samo pri PROMJENI izbora (`_vsdRodZa`), a panel piše "↳ krak vlake T1" (dugme bira roditelja).
+- **🏷 Lageri** (`_vsdLagerOtvori`): forma za sve glavne vlake + krakove "na putu" (`_vsdLagerKandidati`), "⚡ Popuni" (`_vsdLagerPopuni`, čista: lager ≤20 m od već upisanog dobija isti broj, inače L{br} ili prvi slobodan; zauzeti iz `_lagerZauzeti` — lokalno + šumarija na serveru, izdvojeno iz `nextLagerNum`), "✓ Sačuvaj" mijenja samo izmijenjene (`updateVlakaLabel` crta lager na karti + `sbFlushVlaka`). `_lagerRefTacka` je sad jedno mjesto za položaj lagera (koristi i `_showLagerDlg`). Kad postoje vlake bez lagera, pri dignutoj olovci stoji dugme "Popiši lagere — N bez broja", a toast pri zatvaranju studija ih broji.
+- Test: `tests/browser/vlake-studio.py` (naziv iz dijaloga, provjera imena, početak kraka ostaje na roditelju, popis/čuvanje lagera, isti lager ≤20 m).
+
+### Aktiviranje projekta ne pomjera kartu (poslije v3.1.1)
+- `aktivirajProjekt` je 400 ms poslije aktivacije prebacivao na Kartu i radio `fitBounds` na granicu odjela iz KML-a — korisnik koji stoji na terenu je izgubio svoj prikaz. Uklonjeno: pogled ostaje gdje jest. Zum na odjel postoji samo kao izričita radnja ("Zoom na odjel" u detaljima projekta, "Prikaži na karti" u upravljanju projektima, otvaranje Studija vlaka). Istaknuta granica odjela (`_showProjektOdjelHighlight`) se i dalje crta.
+
+### Studio vlaka — bafer (poslije v3.1.1)
+- **Bafer oko vlaka u Studiju** (🛡 / tipka **B**, `_vsdBufToggle`): koristi POSTOJEĆE `drawBuffers` (crvene zone = preklapanje vlaka) i ZAJEDNIČKI radijus `bufRadius` — nema novog nezavisnog radijusa (pravilo iz "Doznaka — analiza stabala"). Zadano ±40 m (lijevo 40 + desno 40), brzi izbor 30/40/50/60 i ✎ za svoj broj. Promjena u Studiju mijenja i "Bafer i preklapanje" i Doznaku/analizu stabala, i obrnuto.
+- **Radijus je sad slobodan 10–300 m po strani** (ukupno 20–600, `_bufSirinaOk`), ne samo 60/80/100/120: oba selecta (`buf-sel`, `doz-buf-sel`) imaju "✎ Prilagođeno…" (`_bufIzbor` → `_bufTrazi`, unos je PO STRANI jer je bafer simetričan), a nestandardna širina dobija jednu privremenu opciju (`_bufSelPostavi`). Sačuvana širina (`tvlake_buffer_style`) se vraća i za prilagođene vrijednosti. Asimetričan bafer (različito lijevo/desno) NIJE podržan — `turf.buffer` je simetričan.
+- Crta se tek 200 ms poslije zadnje izmjene (debounce u `_vsdBufOsvjezi`; `turf.intersect` po parovima je skup), a uključeno stanje se pamti (`tvlake_vsd_bafer`). Pri zatvaranju Studija se uklanja SAMO ono što je Studio nacrtao (`_vsdBufNacrtan`) — bafer koji je korisnik ranije upalio u alatu Vlake ostaje.
+- Test: `tests/browser/vlake-studio.py` (zadano ±40, klik preko bafera i dalje dodaje tačku, širina poligona, chip 50, ✎ 25 → zajednički radijus, nevažeći unos, čišćenje pri zatvaranju).
+
+### KML sa 50 000 tačaka odjednom (v3.1.2)
+- **Mjereno, ne nagađano** (`tests/browser/kml-50000.py`, stvarni Leaflet + stvarni `pkml`/`pkmlStyled`/`_kmlHitTest`): 50 000 tačaka je trajalo ~3,5 s (parse 0,8 + građenje 1,8 + dodavanje 0,35 + crtanje 0,6) uz ~125 MB heapa; sad ~2,3 s i ~84 MB. Na telefonu je to višestruko više, pa je svaki udio bitan.
+- **Najskuplje je bilo po-tački vezivanje**: `bindTooltip` + `_bindKmlPopup` (zatvaranje + 2 listenera) po svakoj tački. Tačke sad dobijaju JEDAN listener na `featureGroup`-u (`_kmlGrpClick`/`_kmlGrpTip`) — Leaflet propagira događaj sloja grupi kao `e.layer`. Tooltip se pravi tek pri prvom prelasku preko tačke (`_kmlTipDone`). **Nova tačka u KML grupi ne smije ponovo ići kroz `bindTooltip`/`_bindKmlPopup` po sloju** — test to čuva. Linije i poligoni su nepromijenjeni (njih je malo, a trebaju hit-sloj).
+- `querySelector` po Placemark-u zamijenjen `getElementsByTagName` (višestruko brži), `_parseKmlExtData` se preskače kad nema `ExtendedData`.
+- Pravi hover/klik mišem na tačku iz 50 000 provjeren u browser testu (`opened`, `.leaflet-tooltip`); hover traži barem jedan ranije `mousemove` (canvas hover je throttle-an) — test zato miče miš u koracima.
+- Node test `tests/js/kml-50000.test.js`: `_kmlHitTest` nad 50 000 slojeva (~40 ms) + invarijante koda; browser test je dodan u `codex-webview.yml`.
+- Sadržaj lokalno uvezenog KML-a ide u IndexedDB (`_kmlcSave`), ne u localStorage, pa kvota od ~5 MB ne ograničava veliki fajl.
+- Uz ovo izdanje idu i ranija dva lokalna commita: aktiviranje projekta više ne pomjera kartu, i bafer u Studiju vlaka.
+
+### Login — "Predloži jaku lozinku" na PIN-u (poslije v3.1.2)
+- `autocomplete="new-password"` (v3.0.9) je zaustavilo ponudu SPREMLJENIH prijava, ali je upravo zato Chrome/Google upravljač lozinki nudio "Predloži jaku lozinku" — svako `type="password"` polje se tretira kao lozinka. PIN nije lozinka, pa su `auth-pin`, `reg-pin` i `reg-pin2` sad `type="text"` + `inputmode="numeric"` + `autocomplete="off"`, maskirani CSS-om (`.pin-maska`, `-webkit-text-security: disc`). PRIKAŽI/SAKRIJ prebacuje klasu, ne `type`. **Ne vraćati `type="password"` na PIN polja.** Test: `tests/js/login-unos.test.js`.
+
+### Offline prijava poslije odjave na terenu (v3.1.4)
+- **Uzrok zaključavanja**: offline prijava (`prijavaIzKesa` u `doLogin`) je provjeravala ime+PIN iz `tvlake_saved_user`, a `doLogout` ga briše (`_clearSavedUser`, da se PIN ne pre-popunjava na dijeljenom telefonu). Korisnik koji se odjavi bez signala je zato ostajao izvan app-a ("ponovna prijava nakon odjave traži internet") iako mu je profil (`_profileLoad`) i sav lokalni rad ostao na telefonu.
+- **Rješenje**: odvojen zapis samo za PROVJERU, `tvlake_offline_cred_v1` (`_offCredSpremi/_offCredProvjeri`): ključ je ime+prezime (mala slova, bez razmaka na krajevima), vrijednost `{uid, h}` gdje je `h` SHA-256 sa solju — PIN se NE čuva otvoreno (bez `crypto.subtle` pada na slabiji `p:` oblik, ne gori od starog `saved`). Piše se pri SVAKOJ uspješnoj prijavi (i kad "Ostani prijavljen" nije označeno), **odjava ga NE briše**, a polja za prijavu se i dalje ne pre-popunjavaju. `_offCredMigracija` pri učitavanju prepiše postojeći `saved` zapis, pa i uređaji prijavljeni prije ovog izdanja rade bez nove online prijave. Stari `saved` provjera ostaje kao rezerva.
+- `prijavaIzKesa` je sad `async` (sva tri poziva u `doLogin` imaju `await`) i profil traži po `uid` iz provjere (`_profileLoad(uid)`), ne "zadnji profil na uređaju".
+- **"Nema interneta / server nije dostupan" kad net STVARNO postoji**: izmjereno stanje veze ('nema'/'slaba') iz uzoraka sa terena živi do 10 min i u memoriji preživi povratak signala. Izričita prijava sa mrežom sad briše te stare uzorke (`_netUzorci=[]`) prije `_mrezaSila`, pa vrata transporta i značka ne drže stanje od prije. Poruka kad nema ni mreže ni sačuvane prijave je sad tačna ("nema sačuvane prijave za ove podatke"), umjesto "traži internet".
+- Test: `tests/js/offline-prijava-poslije-odjave.test.js`; `auth-network-277.test.js` mock dopunjen. **Provjera na uređaju**: prijavi se s netom, odjavi se u avionskom modu, prijavi se ponovo istim imenom/PINom (treba "📴 Offline prijava"). Pogrešan PIN bez neta mora odbiti.
+
+### CI pad v3.1.2–v3.1.4 — browser testovi sa ručno nabrojanim funkcijama (v3.1.5)
+- Tri uzastopna CI pada (#293–#295), pa releasei v3.1.2–v3.1.4 NISU objavljeni. Uzrok nije bio app nego testovi `preferences-266.py` i `menu-tools.py`: izvlače iz `index.html` samo IMENOVANE funkcije, a `pkml`/`pkmlStyled` su dobili nove zavisnosti (`_kmlPointClick`, `_kmlGrpClick`, `_kmlGrpTip`), `_syncBufRadiusEverywhere` je dobio `_bufSirinaOk`/`_bufSelPostavi`/`_vsdOn`/`_vsdRender`. Tiha `ReferenceError` unutar try/catch → KML sloj se nije napravio → `kmlLs[0]` undefined.
+- **Pravilo**: kad funkcija dobije novu zavisnost, grep `tests/browser/*.py` za njeno ime i dopuni liste `names`. Prije push-a pokrenuti SVE browser testove iz workflowa, ne samo nove.
+- Lokalni Chromium: `UI_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
+
+### Labele vlaka/kraka i lagera — idealan položaj, rotacija, ručno uređivanje (nakon v3.1.5)
+- **Labela se više NE stavlja na čvorište.** Krak je ranije imao labelu na `pts[0]` (spoj s roditeljem), pa su se kod gustih krakova labele gomilale baš na spojevima. `_lblIdealno(pts, nm, junk, n, zauzeti)` je ČISTA funkcija (bez `map`/DOM, testabilna) koja bira položaj duž linije: kažnjava krivinu u prozoru labele, blizinu čvorišta (početak/kraj kraka, mjesta odakle polaze krakovi — `_lblJunkcije`), blizinu tuđih labela (`v._lblBox`, `_lblZauzetoOd`) i drugih labela iste vlake. Krak dobije jednu labelu (dvije ako je ≥ 600 m), matična vlaka 1–3 (`_labelFracs`).
+- **Paralelno s linijom**: labela je CSS-om zarotirana na ugao linije (`translate(-50%,-50%) rotate() translateY(-9px)`, iznad linije u rotiranom okviru), ugao je uvijek u (−90°, 90°] da tekst nikad nije naopako. Ugao se računa u lokalnim metrima (konformno = isti kao na Mercator ekranu), zato ne zavisi od zuma.
+- **Razmjera 1:10 000 (štampa)**: dužina labele u metrima računa se za 2,65 m/px (`_LBL_REF_MPP`) — placement je zato STABILAN pri zumiranju (labele ne skaču), a pri daljem zumu višak sakriva `_declutterVlakaLabels`. Za štampu `body.stampa-on{--vl-fs:13px}`. Nova dužina/font labele mora zadržati ovu referencu.
+- **Declutter rotiranih labela koristi orijentisane pravougaonike (SAT, `_lblObb`/`_lblObbPresjek`)**, ne `getBoundingClientRect`: AABB dijagonalne labele je znatno veći od teksta i sakrivao bi labele koje se ne dodiruju. Ručno postavljene (`data-pin`) labele se obrađuju prve i nikad se ne sakrivaju.
+- **Roditelj se preračunava kad se promijene čvorišta**: `updateVlakaLabel` kraka poredi potpis tačaka polaska krakova (`_lblJsig`) i ako se promijenio, ponovo crta labelu roditelja (potpis se upiše prije, pa nema beskonačne rekurzije).
+- **Ručno uređivanje** (`_lblEditToggle`; ulazi: dugme "Labela" u popupu vlake `vpLabele`, dugme "Pomjeri / zaokreni labele" u Studiju vlaka): u tom načinu labele i lager postaju `interactive`+`draggable`, traka `#lbl-edit-bar` ima slajder ugla (−90…90), ↺/↻ ±15° i "Auto". Dodir bira labelu, povlačenje je pomjera. Gasi se pri štampi (`stampaOtvori`) i napuštanju Karte (`switchTab`). Zabranjeno tokom snimanja vlake.
+  - **Labela imena** se pamti LOKALNO (`tvlake_lbl_ovr_v1`, ključ `projektId|nm`), ne šalje se na server (nema kolone, a migracije su ručne) — kolege vide automatski položaj. Preimenovanje vlake gubi ručni položaj. "Auto" ga briše.
+  - **Lager** putuje u postojeću `lager_pt` jsonb kolonu kao `{la,lo,rot,u:1}` (bez migracije) — rotacija se šalje i kolegama. `u:1` znači "postavilo ovo uređivanje": "Auto" tada vraća zadani položaj, a ručno postavljen lager ("Pomjeri lager") gubi samo rotaciju. `VlakaLager.content` rotira simbol+broj oko centra simbola (`rotOf`).
+  - U načinu uređivanja su SVE primarne labele `pin` (inače bi declutter sakrio labelu koju korisnik upravo hoće uhvatiti).
+- **Zamke**: `_lblEdit`/`_lblSel`/`_lblOvrMem` su `var` (ne `let`) jer se `updateVlakaLabel` zna pozvati prije nego izvršavanje stigne do deklaracije (TDZ); literal ključa localStorage u funkciji iz istog razloga. `_vsdRender` čita `_lblEdit` preko `typeof` (fixture testovi ga nemaju). Moje `@media print` pravilo NE smije stajati ispred pravog `@media print {` bloka (`stampa.test.js` traži prvi na koji naiđe) — koristi `body.stampa-on …`. `vlaka-lager.js` u fixture testu traži `#lager-position-toolbar`.
+- Testovi: `tests/js/labele-vlaka.test.js` (17: ne na čvorištu, krivina, ugao, zauzeti, n=3, OBB, lager rotacija), `tests/browser/labele-vlaka.py` (stvarni miš: klik, slajder, povlačenje labele i lagera, restart, Auto, pin prednost; u `codex-webview.yml`). Vizuelno provjereno na 4 vlake × 5 krakova pri 1:10 000.
+
+### Pregled štampe na desktopu + Studio: smjer izvoza, dvosmjer, stil linija (nakon v3.1.5)
+- **Desktop pregled štampe**: `@media (min-width:900px) and (hover:hover)` pretvara `#stampa-kontrole` u zbijen flex-pojas (max 30vh, bez `.stk-hint`, dugmad 30 px). `_stpRaspored` već mjeri stvarnu visinu panela (`kon.offsetHeight`), pa karta sama poraste. Telefon (donji list) nepromijenjen. Pravila moraju imati `html body.stampa-on` prefiks jer `html #stampa-kontrole .stk-chip` (min-height 44) ima visoku specifičnost.
+- **Studio vlaka — "↗ Izvoz drvne mase"** (`VlakaDirection.studioHtml/studioMode/studioPick/studioPlacement`): smjer (auto/početak/kraj/dvosmjer/bez), tačka dvosmjera (lijevo i desno strelice pokazuju prema putu — postojeći `markerPlan`) i položaj strelica **Na vlaci / Pored vlake** (`placement`, vrijedi za cijeli projekat, `prefsKey(projekat)`). Izbor tačke dvosmjera koristi POSTOJEĆI `startPick`; zato `_vsdClick`/`_vsdCtx` moraju vraćati ranije dok je `VlakaDirection.isPicking()` — inače bi isti klik dodao tačku vlake. Dugme je blokirano dok je olovka spuštena. Pick-handler poslije upisa zove `studioRefresh()` da se panel osvježi.
+- **Stil linija** u Studiju: dugmad otvaraju postojeće `openStilLinija()` i `openVlakaStyle()` (nema paralelnog stanja stila).
+- Testovi: `tests/js/vlaka-direction.test.js` (Studio kontrole), `tests/js/stampa.test.js` (desktop blok).
+
+### v3.1.6 — Studio: veličina/debljina/boja strelica (`VlakaDirection.studioSetting`, po projektu), uz položaj, dvosmjer i prečice na stil linija i pomjeranje labela/lagera.
+
+### Oznaka lagera — "L4" se čitao kao "l4" (nakon v3.1.6)
+- Na 9 px bold sans-serif velikom slovu L jedva se vidi stopa, pa liči na malo l. Tekst lagera sad ide u monospace fontu (stopa na L je široka), težina 900, mali razmak slova, a zadana veličina je 11 px (bilo 9; korisnikov izbor `lagerLabel` se i dalje poštuje). Font-familije u `static/js/vlaka-lager.js` pisati BEZ navodnika (višerječna imena nenavedena) — stil je unutar JS stringa pod jednostrukim navodnicima.
+
+### Studio vlaka — preklapanje sekcija i dvosmjer iz Studija (poslije v3.1.6)
+- `#vsd-panel` je fiksne visine (`top`/`bottom`) sa `overflow:hidden`, a sa dodatkom "↗ Izvoz drvne mase" sadržaj više nije stajao: flex-djeca su se stiskala (`flex-shrink:1`) pa im je sadržaj prelazio preko susjedne sekcije — dugme "Odredi tačku dvosmjera" je moglo završiti ISPOD druge sekcije i klik ga nije dostizao ("dvosmjer ne radi u Studiju"). Sad `overflow-y:auto`, `#vsd-panel > * {flex-shrink:0}`, a `.vsd-list` je `flex:1 0 auto` sa `max-height:240px` — panel se skrola umjesto da se sekcije gnječe.
+- Sama logika izbora tačke iz Studija (`studioMode/studioPick` → `VlakaDirection.startPick` → klik na vlaku) je provjerena stvarnim `vlaka-direction.js` u fixture-u `tests/browser/vlake-studio.py` i radi; fixture sad učitava taj fajl (+ pane `vlakeLabels`, `ptAtFrac`, `ptDist`). **Zamka**: bez pane-a `vlakeLabels` `L.canvas({pane})` baca PRIJE `map.on('click', handler)` — izbor tiho ne radi.
+- Nepotvrđeno na uređaju: ako se dvosmjer u Studiju i dalje ne može odrediti poslije ovoga, uzrok nije raspored panela nego stanje koje fixture ne oponaša (npr. `startPick` zaštite: `activeTool`/`_msrOn`/`recOn`) — pročitati toast, on kaže koja zaštita je okinula.
+
+### v3.1.7 — brzina declutter-a labela
+- `_lblObbPresjek` prvo odbacuje parove čija su središta dalja od zbira poluDijagonala (jeftino, bez SAT osa) — u gustoj mreži labela većina parova se ne može dodirnuti, a `_declutterVlakaLabels` poredi svaku labelu sa svim zadržanim (O(n²)) na svaki zum/pomak. Ishod je identičan (samo ranije `false`); testovi labela prolaze. Mjerenje na uređaju nije rađeno — nema veće izmjene startupa (glavni inline JS blok ostaje zaseban, veliki posao).
+
+### Studio vlaka — "Izvoz drvne mase" je sklopiv (poslije v3.1.7)
+- Blok je `<details class="vsd-dir">` (zadano SKLOPLJEN, u naslovu piše trenutni smjer). Stanje se pamti u `tvlake_vsd_dir_otvoreno` (`VlakaDirection.studioToggle`) jer `_vsdRender` cijeli panel crta iznova pri svakoj izmjeni — stanje u DOM-u bi se izgubilo. Kad je sklopljen, `inner_text()` ne vidi sadržaj (u testovima `text_content()`).
+
+### v3.1.8 — brojač stavki za slanje se lomio u dva reda
+- Kad je na čekanju 10+ stavki, druga cifra je skakala u novi red: `#mdrop-server-cnt` (Meni → "Pošalji na server") je flex-dijete koje se stišće, a ni bedž ni broj nisu imali `white-space:nowrap`. Dodano `nowrap` + `flex-shrink:0` na kontejner, bedž i broj u gornjoj traci (`#sync-badge-cnt`) i na broj u redovima panela Server. Novi brojač uz tekst mora imati `nowrap`.
+
+### Studio vlaka — lageri: veličina, pomjeranje, slovo L; "Stil vlaka" (poslije v3.1.8)
+- Forma "🏷 Lageri" ima ± za veličinu (projektni `lagerScale` ±10 %, `lagerLabel` ±2 px, kroz `_bojaChange`, isti stil kao u Stil vlaka) i dugme ↗ po redu koje poziva postojeći `VlakaLager.startPlace('own:'+i)` (klik na kartu; aktivno samo za sačuvan lager).
+- Slovo L na lageru se crta kao SVG oblik (`VlakaLager.labelHtml`), ne fontom: na Androidu fallback fontovi na 9–12 px daju L bez vidljive stope pa se čita kao "l". Ostatak oznake je velikim slovima.
+- Studio: dugme "Stil linija" uklonjeno (ne odnosi se na vlake); jedno dugme "🎨 Stil vlaka" otvara `openVlakaStyle()` (boje, debljina, vrsta, strelice, lager). Iz Studija su uklonjene kontrole veličine/debljine/boje strelica (dupliciraju Stil vlaka); ostaju smjer izvoza, tačka dvosmjera i položaj strelica.
+
+### Studio vlaka — sekcije "Stil vlaka" i "Oznake vlaka i lageri" (v3.1.9)
+- Dugmad "Stil vlaka" i "Pomjeri / zaokreni labele" zamijenjena sa dvije sklopive sekcije (`_vsdSekStilHtml`, `_vsdSekOznakeHtml`; stanje u `tvlake_vsd_sek_<ključ>` jer se panel crta iznova). **Stil vlaka**: boja vlake/kraka, debljina, vrsta linije, obris — direktno kroz `_bojaChange` (isti projektni stil kao Meni → Stil i boja vlaka, nema drugog stanja) + "Sve postavke stila…" (`openVlakaStyle`, zajednički stil i strelice). **Oznake vlaka i lageri**: popis lagera (sa ↗ po lageru), pomjeri/zaokreni oznake i lagere (`_lblEditToggle`), veličina lagera ±. Dugme "Stil linija" ne postoji u Studiju (trag/mjerenje, ne vlake).
+- Test locira blok smjera izvoza sa `.vsd-dir:has(select)` — u panelu su sada tri `.vsd-dir`.
+
+### CI je padao od v3.1.7 pa APK nije objavljivan (v3.2.2)
+- Release je stao na v3.1.6 jer je korak "Pregled Menija, projekata, Dnevnog moda i štampe" pao na `tests/browser/vlaka-style-286.py`: test je tražio zadanu veličinu oznake lagera 9 px, a od v3.1.6 zadano je 11 px (monospace, čitljivije "L"). Stranica je bila uredna (Pages deploy zeleno), samo APK/release job se preskakao. **Pravilo**: poslije svakog pusha provjeriti `actions_list` za "CODEX WebView provjera i APK" — zelen Pages deploy NE znači da je APK objavljen. Popravljen test (font 11).
+
+### CI emulator korak pao na trci u testu (v3.2.3)
+- Poslije ispravke browser testa (v3.2.2) APK je i dalje stajao: korak "Android Explorer WebView i OCR bez interneta" je pao na `MapDownloadsTest.publishedGithubMapsKeepBothPeriodsAndRecoverCachedJobsOffline` (`expected:<paused> but was:<idle>`). Test je čitao `recovered.statuses()` odmah poslije `enqueue()`, prije nego se posao upiše u prefs — trka u testu, Java aplikacije nije bila kriva. Sad ponavlja čitanje do 5 s.
+- **Kako naći uzrok bez Actions artefakta**: `get_job_logs` sa `return_content:true, tail_lines:760` sprema log u fajl; grep po `TestRunner|##\[error\]|expected` daje tačan test i red (log je inače 99 % logcat šuma). Skripta `explorer-offline.sh` ključne redove ispisuje tek pri padu.
+- Pad ovog koraka znači da su svi raniji koraci (JS, browser) prošli — gledati `steps[].conclusion` u `list_workflow_jobs`, ne samo ukupni ishod.
+
+### Meni → "Preuzmi APK fajl" — samo admin (poslije v3.2.4)
+- Stavka `#menu-apk-download` ispod "Ažuriraj aplikaciju", u markupu `hidden`, a `_primijeniUlogeUI` je otkriva samo adminu (radi i pri offline ulazu na kešu). `preuzmiApkAdmin()` dodatno provjerava `sbProfile.is_admin`.
+- Čita `/releases?per_page=1` (kao `_checkLatestVersion` — `/releases/latest` isključuje prerelease), `_apkAssetIzReleasea` uzima `.apk` sa `state:'uploaded'` i `https` URL-om. Nudi Preuzmi / Kopiraj link; bez mreže nudi stranicu sa verzijama.
+- U APK-u preuzimanje je `location.href` na vanjski URL → postojeći `shouldOverrideUrlLoading` → `ACTION_VIEW` (preglednik preuzima), bez Java izmjene; u webapp-u `<a target=_blank>`. Test: `tests/js/apk-preuzmi-admin.test.js`.
+
+### Studio vlaka — pregled i raspored (poslije v3.2.5)
+- Lista vlaka (glavni pregled odjela) je stajala na DNU panela, ispod Oznaka/Stila/Bafera, pa se bez skrolanja nije vidjela. Novi redoslijed: zaglavlje → sažetak odjela (`_vsdPregled`/`_vsdPregledHtml`: broj vlaka + krakova, dužina mreže, gustoća m/ha iz površine projekta, lageri sa brojem/ukupno — narandžasto kad fali) → izabrana vlaka sa svojim radnjama (Zumiraj/Ime/Obriši sada uz nju, `.vsd-mini`, umjesto reda tri onemogućena dugmeta) → glavne radnje → "Vlake u odjelu" (lista sa oznakom lagera po redu, `_vsdLagerZnak`) → "Alati" (bafer, izvoz, oznake, stil, auto) → sklopive prečice (`tvlake_vsd_sek_pomoc`).
+- Zatvorene `<details class="vsd-dir">` imaju `gap:0` i strelicu `›` — inače je zatvorena sekcija nosila prazan pojas ispod naslova (gap prema skrivenom sadržaju).
+- `.vsd-list` je `flex:none` (više ne raste u prazan prostor). Testovi i dalje traže `.vsd-main` sa tačno 3 dugmeta dok je olovka spuštena, `.vsd-baf .vsd-b`, `.vsd-dir:has(select)`.
+
+### Izvještaj odjela — pregled (poslije v3.2.5)
+- Stanje analize i izabrana granica su JEDNA kartica: `#dr-selection` je unutar `#dr-analysis-state` (bez prefiksa "Odabrana granica"), a `#dr-view` ("Na kartu") je u istoj kartici i skriven dok nema granice. `.dr-actions` se prikazuje samo kad je `#dr-calculate` vidljiv.
+- Podtab Pregled: KPI pločice (površina `#dr-area`, prosječan/najveći nagib, pretežna strana), rečenica-tumačenje `#dr-terrain-summary` (`summaryText`: vrsta terena po prosjeku, udio strmiji od 30 %, strana, visinska razlika — bez ponavljanja površine; test traži `%`), nadmorska visina, i "Raspodjela terena" (`#dr-dist`, složene trake nagiba i ekspozicije — dodir otvara podtab). `#dr-slopes`/`#dr-aspects` ostaju SAMO u svojim podtabovima (test).
+- "Kopiraj sažetak izvještaja" (`DepartmentReport.copySummary`/`reportText`): tekst sa svim razredima, za poruku/izvještaj; clipboard pa `execCommand` rezerva.
+- Razredi sa 0 % (`.dr-stat-zero`) su zbijeni (bez trake i "0 ha"), ali red ostaje — test broji 6/4 `.dr-stat-row`.

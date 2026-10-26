@@ -6,8 +6,37 @@ const pts=[{la:45,lo:16},{la:45,lo:16.01}],point={la:45,lo:16.002},chosen=d.rout
 const back=[pts[0],pts[1],pts[0]],last=d.routeProjection(back,pts[0],2000);assert.equal(last.f,1);assert.equal(d.routeProjection(back,pts[0],0).f,0);
 assert.deepEqual(d.cleanSettings(null),d.cleanSettings({}));assert.equal(d.cleanSettings({width:NaN,size:900,count:-1,color:'red',visible:'no'}).size,25);assert.equal(d.cleanSettings({color:'#000000',count:6,width:1,size:18,visible:false}).visible,false);
 assert.equal(d.chooseEnd(10,150),'start');assert.equal(d.chooseEnd(250,5),'end');assert.equal(d.chooseEnd(300,400),null);assert.equal(d.chooseEnd(Infinity,Infinity),null);assert(d.segmentDistance({la:45,lo:16},[45,15],[45,17])<.001);
-const s=fs.readFileSync('index.html','utf8'),code=s.slice(s.indexOf('function _vlakaStroke('),s.indexOf('function getVlakaDashArray(')),c={};vm.createContext(c);vm.runInContext(code,c);
+const s=require('./_izvor').izvor(),code=s.slice(s.indexOf('function _vlakaStroke('),s.indexOf('function getVlakaDashArray(')),c={};vm.createContext(c);vm.runInContext(code,c);
 for(const w of [2,4,8])for(const z of [11,13,15,18]){const dash=c._vlakaStroke('dash',w,z);assert.equal(dash.lineCap,'butt');const [ink,gap]=dash.dashArray.split(' ').map(Number);assert(ink>=gap*3);const dot=c._vlakaStroke('dot',w,z);assert.equal(dot.lineCap,'round');assert.equal(Number(dot.dashArray.split(' ')[0]),.01);assert(Number(dot.dashArray.split(' ')[1])>w);}
 console.log('OK: designer split at 20%/80%, no legacy midpoint, stable split when route grows/returns, manual counts, settings validation and dash/dot patterns');
 
 assert.equal(d.cleanSettings({placement:'beside'}).placement,'beside');assert.equal(d.cleanSettings({placement:'both'}).placement,'on');assert.equal(d.cleanSettings({}).placement,'on');
+
+// Studio vlaka: kontrole smjera izvoza, dvosmjera i položaja strelica
+{
+  const mem={};global.localStorage={getItem:k=>k in mem?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)}};
+  global.document={getElementById:()=>null,querySelector:()=>null};global._aktivniProjektId='P1';global.showToast=()=>{};global.vlake=[];global._vsdSel=null;global._vsdPen=false;global.map={hasLayer:()=>false};
+  const v={nm:'T1',projektId:'P1',pts:[{la:45,lo:16},{la:45,lo:16.01}]};global.vlake=[v];global._vsdSel=0;
+  assert(d.studioHtml(null).includes('barem dvije'));
+  let h=d.studioHtml(v);assert(h.includes('Izvoz drvne mase')&&h.includes('Na vlaci')&&h.includes('Pored vlake'));assert(!h.includes('studioPick'),'bez dvosmjera nema dugmeta');
+  assert(h.includes('<details')&&!/<details[^>]* open/.test(h),'zadano sklopljeno');d.studioToggle(true);assert(/<details[^>]* open/.test(d.studioHtml(v)),'otvoreno stanje se pamti');d.studioToggle(false);
+  d.studioMode('end');assert.equal(d.modeFor(v),'end');assert(d.studioHtml(v).includes('value="end" selected'));
+  d.studioMode('nepoznato');assert.equal(d.modeFor(v),'end');
+  d.studioPlacement('beside');assert.equal(d.settingsFor('P1').placement,'beside');assert(d.studioHtml(v).includes('vsd-chip act" onclick="VlakaDirection.studioPlacement(\'beside\')'));
+  d.studioPlacement('xx');assert.equal(d.settingsFor('P1').placement,'beside');
+  d.studioPlacement('on');assert.equal(d.settingsFor('P1').placement,'on');
+  d.studioMode('both');h=d.studioHtml(v);assert(h.includes('Odredi tačku dvosmjera'),'dvosmjer bez tačke nudi izbor');
+  global._vsdPen=true;let msg='';global.showToast=m=>msg=m;d.studioPick();assert(/završi crtanje/i.test(msg),'tokom crtanja se ne bira dvosmjer');
+  console.log('OK: Studio kontrole smjera izvoza/dvosmjera/položaja strelica');
+}
+
+{
+  d.studioSetting('size',34);assert.equal(d.settingsFor('P1').size,34);
+  d.studioSetting('width',4);assert.equal(d.settingsFor('P1').width,4);
+  d.studioSetting('color','#ff0000');assert.equal(d.settingsFor('P1').color,'#ff0000');assert.equal(d.settingsFor('P1').inherit,false);
+  d.studioSetting('color','red');assert.equal(d.settingsFor('P1').color,'#ff0000');
+  d.studioSetting('size',999);assert.equal(d.settingsFor('P1').size,34);
+  d.studioSetting('nepoznato',1);
+  assert(!d.studioHtml(global.vlake[0]).includes('Boja strelica'));
+  console.log('OK: Studio veličina/debljina/boja strelica');
+}

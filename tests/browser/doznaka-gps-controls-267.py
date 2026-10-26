@@ -5,8 +5,9 @@ from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('doz',Path(__file__).with_name('doznaka-restore-227.py'));d=importlib.util.module_from_spec(spec);spec.loader.exec_module(d);b=d.b
 modal=b.section('<!-- DOZ GPS CONTROLS -->','<!-- END DOZ GPS CONTROLS -->')
 bar=b.section('<div id="rec-bar">','<div id="action-bar">')
-helpers='\n'.join(b.function(n) for n in ['_pauziOtvoriProzor','_pauziZatvoriProzor','_pauziResetuj','_pauziZavrsi','_recBarStanje','_recBarUpdate','_recBarSync','_recBarGo','_recBarKraj','_recBarPauza'])
+helpers='\n'.join(b.function(n) for n in ['_pauziSnimi','_pauziOtvoriProzor','_pauziZatvoriProzor','_pauziResetuj','_pauziZavrsi','_recBarStanje','_recBarUpdate','_recBarSync','_recBarGo','_recBarKraj','_recBarPauza'])
 extra='''
+function _drainNativeGpsBuffer(){} let _drainLiveQ=[];
 let recOn=false,recPaused=false,_tragOn=false,_activeTab='doznaka',_recBarTimer=null,_dozPauseWin=[],_gpsStabWasOn=true;
 let watches=0,clears=0,fixCallback=null,startPromise=null;
 const _gpsStabilizeGate=f=>{startPromise=f()},_bgRecStart=()=>{},_bgRecStopIfIdle=()=>{},_crashCheck=async()=>{},stopGPS=()=>{};

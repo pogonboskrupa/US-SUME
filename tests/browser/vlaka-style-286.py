@@ -58,7 +58,7 @@ async def main():
   assert not await page.evaluate('VlakaDirection.isPicking()');await page.evaluate('()=>{vlake[0].poly.addTo(map)}')
   # Separate symbol and text, global inheritance and per-project exception.
   await page.evaluate('openVlakaStyle()');await page.locator('#lager-scale').fill('150');await page.locator('#lager-scale').dispatch_event('input')
-  assert await page.evaluate("VlakaLager.styleFor(vlake[2]).width===42&&VlakaLager.styleFor(vlake[2]).font===9")
+  assert await page.evaluate("VlakaLager.styleFor(vlake[2]).width===42&&VlakaLager.styleFor(vlake[2]).font===11")
   await page.locator('#lager-label').fill('14');await page.locator('#lager-label').dispatch_event('input')
   assert await page.evaluate("vlake[2].lagerMk.options.icon.options.iconSize[0]===42&&kolegeVlakeMap['B::T2'].lagerMk.options.icon.options.iconSize[0]===42&&VlakaLager.styleFor(vlake[2]).font===14")
   await page.locator('#vlaka-style-project').check();await page.locator('#vlaka-style-project-select').select_option('Q');await page.locator('#lager-scale').fill('200');await page.locator('#lager-scale').dispatch_event('input')

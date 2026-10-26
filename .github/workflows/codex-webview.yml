@@ -7,6 +7,8 @@ on:
       - CODEX-US-SUME-2026-10-01
       # Claude Code radna grana — isti build/testovi/release za Meni → Ažuriraj aplikaciju.
       - claude/elegant-mayer-4lxj53
+      # Produkcijska grana od v3.2.4 — jedina koja objavljuje Release.
+      - claude/inline-js-split
 concurrency:
   group: codex-webview-${{ github.ref }}
   cancel-in-progress: true
@@ -14,9 +16,9 @@ permissions:
   contents: write
 jobs:
   apk:
-    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01' || github.ref == 'refs/heads/claude/elegant-mayer-4lxj53'
+    if: github.ref == 'refs/heads/CODEX-US-SUME' || github.ref == 'refs/heads/CODEX-US-SUME-2026-10-01' || github.ref == 'refs/heads/claude/elegant-mayer-4lxj53' || github.ref == 'refs/heads/claude/inline-js-split'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -61,6 +63,9 @@ jobs:
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
           timeout 120s python tests/browser/terrain-workspace-243.py
+          timeout 180s python tests/browser/inline-split-startup.py
+          timeout 240s python tests/browser/kml-50000.py
+          timeout 240s python tests/browser/labele-vlaka.py
           timeout 240s python tests/browser/field-five-hours.py
           timeout 180s python tests/browser/offline-import-240.py
           timeout 90s python tests/browser/explorer-full-239.py
@@ -246,6 +251,12 @@ jobs:
           if [ -z "$V" ]; then echo "GRESKA: versionName nije pronađen"; exit 1; fi
           echo "verzija=$V" >> "$GITHUB_OUTPUT"
       - name: Objavi/ažuriraj GitHub Release sa APK-om (za auto-update u app-u)
+        # SAMO produkcijska grana. Release je ono što UpdateBridge nudi SVIM
+        # telefonima kroz Meni → Ažuriraj aplikaciju (/releases?per_page=1). Od
+        # v3.2.4 produkcija je claude/inline-js-split (odluka korisnika); ostale
+        # grane iz OVOG fajla više ne objavljuju (jedan izvor, inače "zadnji
+        # objavljen" pobjeđuje na svim telefonima).
+        if: github.ref == 'refs/heads/claude/inline-js-split'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.verzija.outputs.verzija }}

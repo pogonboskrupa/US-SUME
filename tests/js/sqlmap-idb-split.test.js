@@ -33,7 +33,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const HTML = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const HTML = require('./_izvor').izvor();
 
 // NAPOMENA: mora zadržati "async" prefiks u izvučenom tekstu ako postoji —
 // _sqlIdbDeleteDirect je async function; ranija verzija ovog helpera je

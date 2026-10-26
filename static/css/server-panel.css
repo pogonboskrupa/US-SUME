@@ -68,3 +68,15 @@ html #syncq-panel .sp-bottom #syncq-posalji{width:100%;min-height:48px;border:1p
 @media(max-height:420px){html #syncq-panel{max-height:96dvh!important;}html #syncq-panel .sp-header{padding:0 12px;}html #syncq-panel #syncq-sum{padding:4px 12px!important;}html #syncq-panel #data-server-tabs{padding-bottom:4px;}.sp-bottom{padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));}.sp-bottom p{display:none;}}
 html #vlaka-popup{max-width:calc(100vw - 16px);max-height:calc(100dvh - 80px);overflow:auto;background:var(--field-card,#102032);color:var(--field-ink,#eef4ff)}#vlaka-popup .vp-row{color:var(--field-ink,#eef4ff)}.vp-view-actions{display:flex;gap:8px;margin-top:10px}.vp-view-actions button{flex:1;min-height:44px;border:1px solid var(--field-border,#475569);border-radius:8px;background:var(--field-bg,#18283e);color:var(--field-ink,#eef4ff);font-weight:600}
 #tv-visibility{margin:12px 14px;padding:14px;border:1px solid var(--field-border,#334155);border-radius:14px;background:var(--field-card,#102032);color:var(--field-ink,#eef4ff)}.tv-visibility-head b{font-size:15px}.tv-visibility-head small,.tv-visibility-row small{display:block;margin-top:4px;color:var(--field-muted,#94a3b8);font-size:11px;line-height:1.5}.tv-visibility-head>div:last-child{display:flex;gap:8px;margin:10px 0}.tv-visibility-head button{flex:1}.tv-visibility-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--field-border,#334155)}.tv-visibility-row b{font-size:13px}#tv-visibility button{min-height:44px;padding:8px 12px;border:1px solid var(--field-border,#475569);border-radius:8px;background:var(--field-bg,#18283e);color:var(--field-ink,#eef4ff);font:600 12px system-ui}#tv-visibility button:disabled{opacity:.5}
+.sp-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;border:1px solid var(--sp-wait);background:var(--sp-wait-bg);color:var(--sp-wait);font:700 11px/1.7 system-ui;vertical-align:middle;}
+.sp-send-group li .sp-item-map{min-height:40px;}
+.sp-all-sent>i{display:block!important;font-style:normal;font-size:22px;color:#4ade80;}
+html[data-field-theme=day] .sp-all-sent>i{color:#166534;}
+/* Tragovi: "Prikaz na karti" je sklopiv (v2.9.5) i poravnat sa ostalim karticama panela. */
+#tragovi-panel #tv-visibility{margin:12px 0;padding:0 14px}
+.tv-vis-det>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;cursor:pointer;list-style:none;font-size:14px}
+.tv-vis-det>summary::-webkit-details-marker{display:none}
+.tv-vis-det>summary span{margin-left:auto;color:var(--field-muted,#94a3b8);font-size:12px}
+.tv-vis-det>summary::after{content:'';width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin:-4px 2px 0 0;opacity:.7;transition:transform .15s}
+.tv-vis-det[open]>summary::after{transform:rotate(225deg);margin-top:4px}
+.tv-vis-det[open]{padding-bottom:12px}

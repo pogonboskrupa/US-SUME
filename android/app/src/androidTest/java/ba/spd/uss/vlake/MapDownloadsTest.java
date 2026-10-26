@@ -151,7 +151,8 @@ public class MapDownloadsTest {
    long limit=System.currentTimeMillis()+5000;while(backend.enqueues==0&&System.currentTimeMillis()<limit)Thread.sleep(10);assertEquals(1,backend.enqueues);
    MapDownloadCatalog recovered=new MapDownloadCatalog(c,()->{throw new java.io.IOException("offline/rate limit");},factory,storage);
    JSONObject cache=recovered.list(true);assertTrue(cache.getBoolean("stale"));assertEquals(2,cache.getJSONArray("files").length());assertEquals(url,cache.getJSONArray("files").getJSONObject(1).getString("url"));
-   JSONObject state=recovered.statuses().getJSONArray("files").getJSONObject(0);assertEquals("paused",state.getJSONObject("status").getString("state"));assertEquals(url,restored.get().url);
+   JSONObject state=recovered.statuses().getJSONArray("files").getJSONObject(0);long until=System.currentTimeMillis()+5000;while(!"paused".equals(state.getJSONObject("status").getString("state"))&&System.currentTimeMillis()<until){Thread.sleep(50);state=recovered.statuses().getJSONArray("files").getJSONObject(0);}
+   assertEquals("paused",state.getJSONObject("status").getString("state"));assertEquals(url,restored.get().url);
    recovered.action(new JSONObject().put("type","cancel").put("sourceId",source.id));
   }finally{catalog.action(new JSONObject().put("type","cancel").put("sourceId",source.id));c.getSharedPreferences(storage,Context.MODE_PRIVATE).edit().clear().commit();}
  }

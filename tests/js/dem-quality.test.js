@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const q=require('../../static/js/dem-quality.js'),html=fs.readFileSync('index.html','utf8');
+const q=require('../../static/js/dem-quality.js'),html=require('./_izvor').izvor();
 function fn(name){const start=html.indexOf('function '+name+'(');assert(start>=0);let pos=html.indexOf('{',start),n=0;for(let i=pos;i<html.length;i++){if(html[i]==='{')n++;if(html[i]==='}'&&!--n)return html.slice(start,i+1);}throw Error(name);}
 assert.equal(q.bilinear([100,NaN,NaN,NaN],2,2,0,0),100);
 assert(Number.isNaN(q.bilinear([100,NaN,100,100],2,2,.1,.1)));

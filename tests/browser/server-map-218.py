@@ -12,7 +12,7 @@ let bufRadius=80,bufLayers=[],deadLayers=[],kolegeVlake=[],kolegeLabels=[],koleg
 let _locFotos=[],_sharedFotos=[],_tacke=[],textLabels=[],_msrRegistry=[],_msrSavedLayer=L.layerGroup().addTo(map),_tragRegistry=[],_tragLayers={},_tragHitLayers={},_tragLenMk={};
 const _lineStyle={tragDash:'solid',tragW:3,tragOp:85,tragLen:true};
 const _bufGetColor=()=> '#60a5fa',_bufGetOpacity=()=>.2,_kvcSave=()=>{},rndKolegeVlakeList=()=>{},_placeLabelMarkers=()=>[],KORISNIK_PAL=['#338855'];
-const _tragRegSave=()=>{},_tragPopupHtml=()=> 'Trag',_tragoviRender=()=>_tvVisibilityRender(),_msrHitTest=()=>null,_kmlHitTest=()=>null;
+const _tragRegSave=()=>{},_tragPopupHtml=()=> 'Trag',_tragoviRender=()=>_tvVisibilityRender(),_msrHitTest=()=>null,_kmlHitTest=()=>null,_guideHitTest=()=>false;
 const _setupFotoPopup=()=>{},_fotoMarkerHtml=()=>'<b>Foto</b>',_tačkaIcon=()=>L.divIcon({html:'Tačka'}),_setupTackaPopup=()=>{},_saveTacke=()=>{};
 const switchTab=()=>{},selI=()=>{},getIme=()=> 'Emina',fmtDate=String,todayStr=()=> '2026-10-03',isReadOnly=()=>false;
 sbProfile.sumarija='Test';kolegeMap.B.color='#38bdf8';
