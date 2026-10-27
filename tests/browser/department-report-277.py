@@ -67,7 +67,7 @@ async def main():
   await page.locator('#map').click(position={'x':100,'y':180});assert '1 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.get_by_role('button',name='Vrati tačku',exact=True).click();assert '0 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.evaluate("()=>{[[44.9,16],[44.9,16.003],[44.903,16.003]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)));window.realSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k.startsWith('tvlake_department_report'))throw Error('full');return realSet.call(this,k,v)} }")
-  await page.get_by_role('button',name='Sačuvaj granicu',exact=True).click()
+  await page.get_by_role('button',name='Završi',exact=True).click()
   assert await page.evaluate('DepartmentReport.isDrawing()');assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
   await page.evaluate('Storage.prototype.setItem=realSet;DepartmentReport.cancelDraw()')
   await page.locator('#department-report').wait_for(state='visible')
@@ -77,7 +77,7 @@ async def main():
   before_manual=await page.evaluate('DepartmentReport.snapshot().state.calculatedAt')
   await page.get_by_role('button',name='Nacrtaj poligon',exact=True).click()
   await page.evaluate("()=>{[[44.9,16],[44.9,16.008],[44.904,16.008],[44.904,16]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)))}")
-  await page.get_by_role('button',name='Sačuvaj granicu',exact=True).click()
+  await page.get_by_role('button',name='Završi',exact=True).click()
   await page.wait_for_function('(old)=>DepartmentReport.snapshot().state.calculatedAt!==old&&!DepartmentReport.snapshot().busy&&!!DepartmentReport.snapshot().result',arg=before_manual)
   assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='done' and not await page.locator('#dr-calculate').is_visible()
   stats=await page.evaluate('frameReport=false;DepartmentReport.snapshot().result.stats')

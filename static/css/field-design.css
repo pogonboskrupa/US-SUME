@@ -1242,3 +1242,4 @@ html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
 #department-report .dr-kpis b small{display:inline;font-size:12px;font-weight:600}
 @media(max-width:420px){#department-report .dr-analysis-state>#dr-view{grid-column:2/-1;justify-self:start}}
 @media(max-width:359px){#department-report .dr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#department-report .dr-kpis>div:last-child{grid-column:1/-1}}
+#dr-draw-toolbar #dr-draw-save{flex:1.6;font-weight:800;background:#16a34a;color:#fff;border-color:#15803d;min-height:44px;}#dr-draw-toolbar #dr-draw-save:disabled{opacity:.45;}

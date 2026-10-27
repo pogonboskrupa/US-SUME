@@ -6319,7 +6319,7 @@ function _loadLocalVlake() {
 
   <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Obriši izvještaj i njegov poligon</button></div></section>
 </div>
-<div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span>Dodirni kartu uz granicu odjela</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" onclick="DepartmentReport.finish()">Sačuvaj granicu</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
+<div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span id="dr-draw-hint">Dodirni kartu uz granicu odjela (najmanje 3 tačke)</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" class="dr-primary" onclick="DepartmentReport.finish()">Završi</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
 <div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;">

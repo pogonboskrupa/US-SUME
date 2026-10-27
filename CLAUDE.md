@@ -4984,3 +4984,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### CI: limit joba 45 min, Pages sa ove grane (v3.2.6)
 - Run 315 je prošao sve testove i APK provjere, ali `playwright install --with-deps` je 13 min čekao `azure.archive.ubuntu.com`, pa je job pogodio stari limit (25 min) usred emulator testa — "cancelled", Release nije objavljen. Limit je sad 45 min; zeleni run inače traje ~15–20 min. "cancelled" na ovom jobu prvo provjeriti trajanje koraka, ne kod.
 - "Deploy GitHub Pages" sa `claude/inline-js-split` pada za ~2 s bez runnera (najvjerovatnije pravilo okruženja `github-pages` ne dozvoljava tu granu); webapp se ažurira kad korisnik spoji granu u `main`. Popravka je u postavkama repoa (Environments → github-pages → Deployment branches), ne u kodu.
+
+### Izvještaj odjela — "Završi" i oznaka pada na kraju strelice (poslije v3.2.6)
+- Dugme u traci crtanja poligona je sad **"Završi"** (zeleno, uvijek vidljivo, onemogućeno ispod 3 tačke; hint `#dr-draw-hint` kaže šta fali) — "Sačuvaj granicu" nije bilo prepoznato kao kraj crtanja. Strelica profila pada i oznaka "P1 · 12%" crtaju se na KRAJU linije (nizbrdo), ne na sredini.
