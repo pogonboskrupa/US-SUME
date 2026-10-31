@@ -8226,16 +8226,29 @@ function _shareOpisPrimalaca() {
 function _updShareLiveIndicator() {
   let el = document.getElementById('share-live-ind');
   if (_shareLiveOn) {
+    const opis0 = _shareOpisPrimalaca();
+    if (!el && window._shareBanerOpis === opis0) { if (typeof _terenUpdShareUI === 'function') _terenUpdShareUI(); return; }
+    window._shareBanerOpis = opis0;
     if (!el) {
       el = document.createElement('div');
       el.id = 'share-live-ind';
-      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;max-width:92vw;';
+      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:3000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;max-width:92vw;';
       el.onclick = () => shareSheetOpen();
       document.body.appendChild(el);
     }
-    el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;flex-shrink:0;"></span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dijelim sa: ' + _escHtml(_shareOpisPrimalaca()) + '</span>';
+    // Baner se pokaže samo kratko (2 s) kad se dijeljenje pokrene ili promijeni;
+    // stalan baner je zaklanjao kartu. Stanje i zaustavljanje su u prozoru
+    // "Dijeljenje kretanja" (Meni / popup lokacije).
+    const opis = _shareOpisPrimalaca();
+    if (el._opis !== opis) {
+      el._opis = opis;
+      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;flex-shrink:0;"></span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dijelim sa: ' + _escHtml(opis) + '</span>';
+      clearTimeout(el._tm);
+      el._tm = setTimeout(() => { try { el.remove(); } catch (e) {} }, 2000);
+    }
   } else {
-    if (el) el.remove();
+    window._shareBanerOpis = null;
+    if (el) { clearTimeout(el._tm); el.remove(); }
   }
   // Sinhronizuj i Teren tab dugme (start/stop može doći i kroz meni tok)
   if (typeof _terenUpdShareUI === 'function') _terenUpdShareUI();
