@@ -1,7 +1,7 @@
 /* Izvještaj odjela: nezavisna granica, ručni izbor odsjeka i lokalni DEM rezultat. */
 (function(root){
  'use strict';
- const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=2,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
+ const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=3,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
  let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null,autoTimer=null,autoOnline=null,autoAttempts=0;
  const uid=()=>typeof sbUser!=='undefined'?sbUser?.id:null,key=()=>SKEY+encodeURIComponent(owner||''),valid=()=>owner&&uid()===owner;
  const toast=s=>showToast(s),number=(n,d=1)=>Number.isFinite(n)?n.toLocaleString('bs',{maximumFractionDigits:d}):'—';
@@ -65,15 +65,21 @@
   const project=(p,z)=>L.CRS.EPSG3857.latLngToPoint(L.latLng(p[0],p[1]),z);
   function layout(z){if(layouts.has(z))return layouts.get(z);const occupied=[],rows=profiles.map(p=>{const points=p.points.map(ll=>project(ll,z)),mid=points.at(-1),mpp=156543.03392*Math.cos(p.points[0][0]*Math.PI/180)/2**z;
     const label=mpp<=4&&!occupied.some(b=>Math.abs(mid.x-b.x)<72&&Math.abs(mid.y-b.y)<26);if(label)occupied.push(mid);return {p,points,mid,label,xMin:Math.min(...points.map(p=>p.x)),xMax:Math.max(...points.map(p=>p.x)),yMin:Math.min(...points.map(p=>p.y)),yMax:Math.max(...points.map(p=>p.y))};});layouts.set(z,rows);return rows;}
-  const Layer=L.GridLayer.extend({createTile(coords){const canvas=document.createElement('canvas');canvas.width=canvas.height=256;canvas.className='dr-profile-tile';const c=canvas.getContext('2d'),ox=coords.x*256,oy=coords.y*256;
-   c.beginPath();for(const poly of polys)for(const ring of poly){ring.forEach((ll,i)=>{const p=project([ll[1],ll[0]],coords.z);i?c.lineTo(p.x-ox,p.y-oy):c.moveTo(p.x-ox,p.y-oy);});c.closePath();}c.clip('evenodd');
+  const Layer=L.GridLayer.extend({createTile(coords){const canvas=document.createElement('canvas');canvas.width=canvas.height=256;canvas.className='dr-profile-tile';const c=canvas.getContext('2d'),ox=coords.x*256,oy=coords.y*256,labels=[];
+   c.save();c.beginPath();for(const poly of polys)for(const ring of poly){ring.forEach((ll,i)=>{const p=project([ll[1],ll[0]],coords.z);i?c.lineTo(p.x-ox,p.y-oy):c.moveTo(p.x-ox,p.y-oy);});c.closePath();}c.clip('evenodd');
    for(const row of layout(coords.z)){const {p,points,mid,label}=row;
     if(row.xMax<ox-50||row.xMin>ox+306||row.yMax<oy-30||row.yMin>oy+286)continue;
     c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x-ox,q.y-oy):c.moveTo(q.x-ox,q.y-oy));c.lineJoin=c.lineCap='round';c.strokeStyle='#fff';c.lineWidth=4;c.stroke();c.strokeStyle='#172f3c';c.lineWidth=2;c.stroke();
     const b=points.at(-1),a=points.at(-2)||b;
     if(!p.flat&&a&&b){const angle=Math.atan2(b.y-a.y,b.x-a.x);c.save();c.translate(b.x-ox,b.y-oy);c.rotate(angle);c.beginPath();c.moveTo(-7,-4);c.lineTo(0,0);c.lineTo(-7,4);c.strokeStyle='#fff';c.lineWidth=4;c.stroke();c.strokeStyle='#172f3c';c.lineWidth=2;c.stroke();c.restore();}
-    if(label){const text='P'+p.id+' · '+number(p.percent,0)+'%';c.font='700 12px system-ui';c.textAlign='center';c.textBaseline='middle';c.strokeStyle='#fff';c.lineWidth=4;const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,lx=mid.x-ox+dx/len*26,ly=mid.y-oy+dy/len*16-(Math.abs(dy)<4?10:0);c.strokeText(text,lx,ly);c.fillStyle='#172f3c';c.fillText(text,lx,ly);}
-   }return canvas;
+    if(label){const ux0=(b.x-a.x),uy0=(b.y-a.y),len=Math.hypot(ux0,uy0)||1;labels.push({text:'P'+p.id+' · '+number(p.percent,0)+'%',x:b.x-ox,y:b.y-oy,ux:ux0/len,uy:uy0/len});}
+   }
+   // Oznake se crtaju poslije c.restore() (bez isijecanja poligonom): profil završava na
+   // granici odjela, pa bi oznaka uz sam vrh strelice inače bila odsječena.
+   c.restore();c.font='700 12px system-ui';c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';
+   for(const l of labels){const w=c.measureText(l.text).width,back=Math.abs(l.ux)*(w/2+9)+Math.abs(l.uy)*14,x=l.x-l.ux*back,y=l.y-l.uy*back-(Math.abs(l.uy)<.7?11:0);
+    c.strokeStyle='#fff';c.lineWidth=4;c.strokeText(l.text,x,y);c.fillStyle='#172f3c';c.fillText(l.text,x,y);}
+   return canvas;
   }});
   profileLayer=new Layer({pane:'departmentReport',bounds:geometryBounds(geometry),maxZoom:22,keepBuffer:1,updateWhenIdle:true}).addTo(map);
  }
@@ -168,7 +174,7 @@
   node('dr-aspect-flat').textContent=number(s.flat)+'%';
   const rows=arr=>arr.map(r=>'<div class="dr-stat-row'+(r.percent>0?'':' dr-stat-zero')+'"><span><i style="background:'+r.color+'"></i>'+r.name+'</span><div><b>'+number(r.percent)+'%</b><small>'+number(r.ha,2)+' ha</small></div><progress max="100" value="'+r.percent+'" aria-label="'+r.name+'" style="--dr-color:'+r.color+'"></progress></div>').join('');
   node('dr-slopes').innerHTML=rows(s.slope);node('dr-aspects').innerHTML=rows(s.aspect);
-  node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
+  node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m, nagib se računa na ~30 m (Hornov 3×3 kernel); izvorni DEM ima oko 30 m i ±nekoliko m visinske greške, pa je nagib procjena a ne mjerenje na terenu. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
  }
  function clearAutoRetry(){if(autoTimer){clearTimeout(autoTimer);autoTimer=null;}if(autoOnline){root.removeEventListener?.('online',autoOnline);autoOnline=null;}}
  function scheduleAutoRetry(delay=1600){
@@ -198,12 +204,24 @@
   _mrezaSila(60000);
   const check=()=>valid()&&owner===current&&token===generation&&state.geometry===geometry;
   try{
-   const bounds=geometryBounds(geometry);let z=12,x0,y0,width,height;
-   do{x0=Math.floor(_termLon2x(bounds.getWest(),z)*256);y0=Math.floor(_termLat2y(bounds.getNorth(),z)*256);width=Math.ceil(_termLon2x(bounds.getEast(),z)*256)-x0;height=Math.ceil(_termLat2y(bounds.getSouth(),z)*256)-y0;if(width*height<=160000&&Math.ceil(width/256)*Math.ceil(height/256)<=36)break;z--;}while(z>=4);
-   if(z<4)throw Error('Izaberi manji prostor');
-   const jobs=[];for(let y=Math.floor(y0/256)-1;y<=Math.floor((y0+height)/256)+1;y++)for(let x=Math.floor(x0/256)-1;x<=Math.floor((x0+width)/256)+1;x++)jobs.push({x,y});
-   if(jobs.length>81)throw Error('Izaberi manji prostor');
-   const tiles=[];let cursor=0,done=0;await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length&&check()){const job=jobs[cursor++],src=await _getTerrariumTile(z,job.x,job.y);if(src){try{tiles.push({...job,elev:_terrariumDecodeTile(src)});}finally{src.close?.();}}done++;if(check())node('dr-status').textContent='DEM '+done+'/'+jobs.length+' pločica';}}));
+   // Najfiniji dostupan DEM: počinje od z14, a kad pločice tog zuma nisu sve
+   // dostupne (bez interneta, nije preuzeto unaprijed) pada na gruplji zum.
+   // z12 ima uzorak ~27 m, pa je mali odjel imao samo desetak ćelija.
+   const bounds=geometryBounds(geometry);let z=null,x0,y0,width,height,tiles=[],attempted=false;
+   for(let zz=14;zz>=4&&z===null;zz--){
+    const px0=Math.floor(_termLon2x(bounds.getWest(),zz)*256),py0=Math.floor(_termLat2y(bounds.getNorth(),zz)*256),pw=Math.ceil(_termLon2x(bounds.getEast(),zz)*256)-px0,ph=Math.ceil(_termLat2y(bounds.getSouth(),zz)*256)-py0;
+    if(pw*ph>160000||Math.ceil(pw/256)*Math.ceil(ph/256)>36)continue;
+    const jobs=[];for(let y=Math.floor(py0/256)-1;y<=Math.floor((py0+ph)/256)+1;y++)for(let x=Math.floor(px0/256)-1;x<=Math.floor((px0+pw)/256)+1;x++)jobs.push({x,y});
+    if(jobs.length>81)continue;
+    attempted=true;const got=[];let cursor=0,done=0;
+    await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length&&check()){const job=jobs[cursor++],src=await _getTerrariumTile(zz,job.x,job.y);if(src){try{got.push({...job,elev:_terrariumDecodeTile(src)});}finally{src.close?.();}}done++;if(check())node('dr-status').textContent='DEM '+done+'/'+jobs.length+' pločica (zum '+zz+')';}}));
+    if(!check())return;
+    // Pločice koje stvarno prekrivaju odjel moraju sve postojati; rubne (za susjedne ćelije) su dodatak.
+    const have=new Set(got.map(t=>t.x+':'+t.y));let complete=true;
+    for(let y=Math.floor(py0/256);y<=Math.floor((py0+ph-1)/256);y++)for(let x=Math.floor(px0/256);x<=Math.floor((px0+pw-1)/256);x++)if(!have.has(x+':'+y))complete=false;
+    if(complete||(zz<=12&&got.length)){z=zz;x0=px0;y0=py0;width=pw;height=ph;tiles=got;}
+   }
+   if(z===null)throw Error(!attempted?'Izaberi manji prostor':'Nema sačuvanog DEM-a. Poveži internet pa ponovi izračun.');
    if(!check())return;if(!tiles.length)throw Error('Nema sačuvanog DEM-a. Poveži internet pa ponovi izračun.');
    const next=await new Promise((resolve,reject)=>{const w=new Worker('static/js/department-report-worker.js');worker=w;const stop=()=>{clearTimeout(timer);w.terminate();if(worker===w){worker=null;cancelWorker=null;}};const timer=setTimeout(()=>{stop();reject(Error('Obrada traje predugo. Izaberi manje područje.'));},45000);cancelWorker=()=>{stop();reject(Error('Izračun prekinut'));};w.onmessage=e=>{stop();e.data.ok?resolve(e.data.result):reject(Error(e.data.error));};w.onerror=()=>{stop();reject(Error('DEM obrada nije uspjela'));};try{w.postMessage({geometry,z,x0,y0,width,height,tiles},tiles.map(t=>t.elev.buffer));}catch(e){stop();reject(e);}});
    if(!check())return false;result=next;lastError='';clearAutoRetry();autoAttempts=0;state.calculatedAt=Date.now();save();if(!await _kmlcSave(persistKey,{model:MODEL,signature:JSON.stringify(geometry),result:next})&&check())toast('Izvještaj prikazan, ali nije sačuvan za ponovno otvaranje');

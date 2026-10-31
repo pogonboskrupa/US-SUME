@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),turf=require('../../static/libs/turf.min.js');
-const {calculate,slopeIndex,aspectIndex,contourSegments,joinSegments,COLORS}=require('../../static/js/department-report-worker.js');
+const {calculate,horn,slopeIndex,aspectIndex,contourSegments,joinSegments,COLORS}=require('../../static/js/department-report-worker.js');
 for(const [p,c]of [[0,0],[9.999,0],[10,1],[19.999,1],[20,2],[30,3],[40,4],[50,5],[180,5],[-1,-1],[NaN,-1]])assert.equal(slopeIndex(p),c);
 for(const [b,c]of [[0,0],[44.9,0],[45,1],[134.9,1],[135,2],[224.9,2],[225,3],[314.9,3],[315,0]])assert.equal(aspectIndex(b,20),c);
 assert.equal(aspectIndex(0,0),-1);
@@ -63,3 +63,21 @@ verifyProfiles(calculate(concave,turf),concave.geometry,15);
 const hills=input(0,0);for(const tile of hills.tiles)for(let i=0;i<65536;i++){const x=tile.x*256+i%256-x0,y=tile.y*256+Math.floor(i/256)-y0;tile.elev[i]=700+metres*(2*Math.sin(x/9)+4*Math.cos(y/8));}
 verifyProfiles(calculate(hills,turf),geometry);
 console.log('OK: DEM razredi i ekspozicije; profili na 3 ha, Δh/udaljenost, ravni teren, obje strane odjela, rupe/uske rupe, konkavnost, odvojeni odsjeci i nedostajući DEM');
+
+// Hornov kernel: na ravni tačan; uz DEM šum manja greška i manje pristrasnosti od razlike samo po osi.
+{
+ const step=27,plane=(gx,gy)=>600+0.10*gx*step+0.05*gy*step; // 10 % istok, 5 % jug
+ const around=(f,gx,gy)=>{const h=[];for(const oy of [-1,0,1])for(const ox of [-1,0,1])if(ox||oy)h.push(f(gx+ox,gy+oy));return h;};
+ const [dx,dy]=horn(around(plane,5,5),step);assert(Math.abs(dx-.10)<1e-12&&Math.abs(dy-.05)<1e-12,'Horn je tačan na ravni');
+ let seed=12345;const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+ const gauss=()=>Math.sqrt(-2*Math.log(1-rnd()))*Math.cos(2*Math.PI*rnd());
+ const truth=Math.hypot(.10,.05)*100;let eH=0,eC=0,bH=0,bC=0,n=4000;
+ for(let i=0;i<n;i++){
+  const noise=new Map(),f=(x,y)=>{const k=x+':'+y;if(!noise.has(k))noise.set(k,plane(x,y)+2*gauss());return noise.get(k);};
+  const [hx,hy]=horn(around(f,5,5),step),sH=Math.hypot(hx,hy)*100;
+  const cx=(f(6,5)-f(4,5))/(2*step),cy=(f(5,6)-f(5,4))/(2*step),sC=Math.hypot(cx,cy)*100;
+  eH+=Math.abs(sH-truth);eC+=Math.abs(sC-truth);bH+=sH-truth;bC+=sC-truth;
+ }
+ assert(eH/n<eC/n*.8,`Horn greška ${(eH/n).toFixed(2)} naspram ${(eC/n).toFixed(2)} (razlika po osi)`);
+ assert(Math.abs(bH)<Math.abs(bC),'Horn manje precjenjuje nagib uz šum');
+}
