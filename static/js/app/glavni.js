@@ -1799,6 +1799,7 @@ function _startupRestore() {
     if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
+    korak('pratiKretanje', () => { _followObnovi(); _followIzUrla(); });
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
     if (_mrezaProbaj() && sbUser && sbProfile) {
   // v1.9.6: stavke koje više ne idu na server (tragovi, dnevnik, oznake) izbaci
@@ -6848,7 +6849,7 @@ async function sbLoadKolege() {
     // svako može sam sebi postaviti is_admin/odobren. Indeks `i` je usto bio i
     // nestabilan — ista osoba je dobijala različitu boju na različitim
     // uređajima, zavisno od redoslijeda u odgovoru.
-    kolegeMap[k.id] = { ime: k.ime + ' ' + k.prezime, color: k.boja || _bojaZaId(k.id) };
+    kolegeMap[k.id] = { ime: k.ime + ' ' + k.prezime, color: k.boja || _bojaZaId(k.id), sumarija: k.sumarija };
   });
 
   kolege = Object.values(kolegeMap);
@@ -7888,7 +7889,6 @@ let _rtShareChannel = null;
 let _shareLiveOn = false;
 let _shareLiveTimer = null;
 let _sharedLocMarkers = {}; // odKorisnikId → { mk, circle, timer }
-let _shareTargetIds = [];   // kome dijelim (prazno = svima)
 let _shareChannelReady = false;
 
 function _sbRemoveRtChannels() {
@@ -7900,7 +7900,7 @@ function _sbRemoveRtChannels() {
     try { if (ch) sb.removeChannel(ch); } catch(e) {}
   });
   _shareChannelReady = false;
-  _stopShareLive();
+  // Dijeljenje se NE gasi: _sendLivePos preskače otkucaje dok novi kanal nije spreman.
 }
 
 // Obnova realtime kanala (v1.9.2). Ranije je SVAKI 'CLOSED'/'TIMED_OUT' zakazivao
@@ -8047,42 +8047,180 @@ function _updKoleguLiveBar() {
   bar.innerHTML = `<span class="live-dot"></span>${active.join(', ')} snima${active.length > 1 ? 'ju' : ''}`;
 }
 
-// ─── DIJELJENJE KRETANJA (Teren → "Dijeli moje kretanje") ──────────────────
-// Meni "Podijeli lokaciju" (izbor kolega + "podijeli tačku") je uklonjen u
-// v1.8.1 na zahtjev; ostaje dijeljenje kretanja iz Terena i PRIJEM lokacija
-// kolega (kanal i dalje sluša loc-point, jer ga šalju stariji APK-ovi).
+// ─── DIJELJENJE KRETANJA ─────────────────────────────────────────────────────
+// Dva načina, oba preko Supabase Realtime broadcasta (bez tabela, bez migracije):
+//  1) KOLEGE IZ ISTE ŠUMARIJE — kanal šumarije; korisnik bira sa kim dijeli
+//     (svi ili pojedinci). Ako izabere SAMO JEDNU osobu, ta osoba dobija
+//     izričitu obavijest (baner + sistemska obavijest u pozadini).
+//  2) LINK / QR — kanal 'loc-kod-<ŠIFRA>'. Za terenski profil (nema kolega u
+//     "svojoj šumariji", pa mu birač kolega ništa ne znači) i za svakoga ko
+//     hoće dijeliti sa osobom van aplikacije: primalac skenira QR, otvori link
+//     ili ukuca šifru.
+// Primaoci se NE čuvaju na serveru: broadcast ne ostavlja trag, pa dijeljenje
+// traje tačno dok pošiljalac drži uključeno. Obavijest stiže dok je proces
+// aplikacije živ na telefonu primaoca — zatvorenu aplikaciju ne budi.
 
-function _startShareLive() {
-  if (_shareLiveOn) return;
-  _shareLiveOn = true;
-  _sendLivePos();
-  _shareLiveTimer = setInterval(_sendLivePos, 5000);
-  _updShareLiveIndicator();
+const _SHARE_TO_KEY = 'tvlake_share_to_v1';
+const _SHARE_KOD_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // bez I/L/O/0/1 (čitljivost)
+const _SHARE_KOD_LEN = 10;
+let _shareSid = null;          // jedna sesija dijeljenja (primaoci po njoj prepoznaju "novo")
+let _shareKolegeOn = false;
+let _shareKodOn = false;
+let _shareSvi = true;          // true = svi kolege iz šumarije
+let _shareIds = [];            // izabrani kolege kad _shareSvi === false
+let _shareKod = null, _shareKodChannel = null, _shareKodReady = false;
+let _shareViewers = {};        // uid → { ime, t } — ko je potvrdio da vidi moje kretanje
+let _shareNotified = {};       // uid pošiljaoca → sid za koji je obavijest već prikazana
+let _shareRtPokusaj = 0;
+
+(function _shareIzborUcitaj() {
+  try {
+    const v = JSON.parse(localStorage.getItem(_SHARE_TO_KEY) || '{}');
+    _shareSvi = v.svi !== false;
+    _shareIds = Array.isArray(v.ids) ? v.ids.filter(x => typeof x === 'string') : [];
+  } catch (e) {}
+})();
+function _shareIzborSacuvaj() {
+  try { localStorage.setItem(_SHARE_TO_KEY, JSON.stringify({ svi: _shareSvi, ids: _shareIds })); } catch (e) {}
 }
 
-function _stopShareLive() {
-  _shareLiveOn = false;
-  if (_shareLiveTimer) { clearInterval(_shareLiveTimer); _shareLiveTimer = null; }
+function _shareNoviKod() {
+  const b = new Uint8Array(_SHARE_KOD_LEN);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+  return Array.from(b, x => _SHARE_KOD_ABC[x % _SHARE_KOD_ABC.length]).join('');
+}
+// Prihvata čistu šifru, šifru sa razmacima ili cijeli link (?prati=ŠIFRA).
+function _shareKodIzUnosa(txt) {
+  const s = String(txt || '').trim();
+  const m = s.match(/[?&#]prati=([A-Za-z0-9]+)/i);
+  const raw = (m ? m[1] : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return raw.length === _SHARE_KOD_LEN ? raw : '';
+}
+function _shareLink(kod) { return _LIVE_BASE + '?prati=' + kod; }
+function _shareMojeIme() {
+  const n = ((sbProfile?.ime || '') + ' ' + (sbProfile?.prezime || '')).trim();
+  return n || 'Korisnik';
+}
+
+// Kolege kojima se SMIJE dijeliti: samo iz iste šumarije. sbLoadKolege to već
+// filtrira na serveru, ali pregledni nalog (ŠPD/admin) učitava SVE korisnike —
+// pa se šumarija provjerava i ovdje.
+function _shareKolege() {
+  const moja = sbProfile?.sumarija;
+  return Object.entries(kolegeMap || {})
+    .filter(([id, k]) => id !== sbUser?.id && (!k.sumarija || !moja || k.sumarija === moja))
+    .map(([id, k]) => ({ id, ime: k.ime, color: k.color }))
+    .sort((a, b) => a.ime.localeCompare(b.ime, 'bs'));
+}
+function _shareCiljevi() {
+  const sve = _shareKolege().map(k => k.id);
+  return _shareSvi ? sve : _shareIds.filter(id => sve.includes(id));
+}
+// Terenski profil nema "svoju" šumariju (svi su pod 'ŠPD US ŠUME') — njemu
+// kolege-birač ne nudimo, samo link/QR.
+function _shareImaKolege() { return !isSpdField(); }
+
+function _shareNoviSid() {
+  if (!_shareSid) _shareSid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function _shareSync() {
+  _shareLiveOn = _shareKolegeOn || _shareKodOn;
+  if (_shareLiveOn && !_shareLiveTimer) {
+    _shareLiveTimer = setInterval(_sendLivePos, 5000);
+    _sendLivePos();
+  } else if (!_shareLiveOn && _shareLiveTimer) {
+    clearInterval(_shareLiveTimer); _shareLiveTimer = null;
+    _shareSid = null; _shareViewers = {};
+  }
+  _updShareLiveIndicator();
+  _shareSheetRender();
+}
+
+function _startShareLive() {
+  if (_shareKolegeOn) return;
+  _shareNoviSid();
+  _shareKolegeOn = true;
+  _shareSync();
+}
+function _stopShareKolege() {
+  if (!_shareKolegeOn) return;
+  _shareKolegeOn = false;
   if (_rtShareChannel && sbUser && _shareChannelReady) {
     _rtShareChannel.send({
       type: 'broadcast', event: 'loc-stop',
-      payload: { uid: sbUser.id }
+      payload: { uid: sbUser.id, sid: _shareSid }
     });
   }
-  _updShareLiveIndicator();
+  _shareSync();
+}
+function _startShareKod() {
+  if (_shareKodOn) return _shareKod;
+  _shareKod = _shareNoviKod();
+  _shareNoviSid();
+  _shareKodReady = false;
+  _shareKodChannel = sb.channel('loc-kod-' + _shareKod, { config: { broadcast: { self: false, ack: true } } })
+    .on('broadcast', { event: 'loc-ack' }, ({ payload }) => _onShareAck(payload))
+    .subscribe(st => {
+      if (st === 'SUBSCRIBED') { _shareKodReady = true; _sendLivePos(); }
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') _shareKodReady = false;
+    });
+  _shareKodOn = true;
+  _shareSync();
+  return _shareKod;
+}
+function _stopShareKod() {
+  if (!_shareKodOn) return;
+  _shareKodOn = false;
+  const ch = _shareKodChannel;
+  try {
+    if (ch && _shareKodReady && sbUser) ch.send({ type: 'broadcast', event: 'loc-stop', payload: { uid: sbUser.id, sid: _shareSid } });
+  } catch (e) {}
+  _shareKodChannel = null; _shareKodReady = false; _shareKod = null;
+  setTimeout(() => { try { if (ch) sb.removeChannel(ch); } catch (e) {} }, 400);
+  _shareSync();
+}
+function _stopShareLive() { _stopShareKolege(); _stopShareKod(); }
+
+// Kanal šumarije se zna izgubiti (realtime se obnavlja); ne gasimo dijeljenje,
+// samo tražimo novi kanal — najviše jednom u ~30 s da ne napravimo petlju.
+function _shareObnoviRt() {
+  const now = Date.now();
+  if (now - _shareRtPokusaj < 30000) return;
+  _shareRtPokusaj = now;
+  if (sbProfile?.sumarija && typeof sbStartRealtime === 'function') sbStartRealtime();
 }
 
 function _sendLivePos() {
   if (!lastP || !sbUser) return;
-  if (!_rtShareChannel || !_shareChannelReady) {
-    console.warn('share-loc: kanal nije spreman, pokušavam reconnect...');
-    if (sbProfile?.sumarija) sbStartRealtime();
-    return;
+  const base = { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), sid: _shareSid };
+  if (_shareKolegeOn) {
+    const to = _shareCiljevi();
+    if (to.length) {
+      if (_rtShareChannel && _shareChannelReady) {
+        _rtShareChannel.send({ type: 'broadcast', event: 'loc-live', payload: { ...base, to, all: _shareSvi } })
+          .catch(e => console.warn('share-loc live send error:', e));
+      } else _shareObnoviRt();
+    }
   }
-  _rtShareChannel.send({
-    type: 'broadcast', event: 'loc-live',
-    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), to: _shareTargetIds }
-  }).catch(e => console.warn('share-loc live send error:', e));
+  if (_shareKodOn && _shareKodChannel && _shareKodReady) {
+    _shareKodChannel.send({
+      type: 'broadcast', event: 'loc-live',
+      payload: { ...base, ime: _shareMojeIme(), boja: sbProfile?.boja || _bojaZaId(sbUser.id) }
+    }).catch(e => console.warn('share-kod live send error:', e));
+  }
+}
+
+function _shareOpisPrimalaca() {
+  const parts = [];
+  if (_shareKolegeOn) {
+    const ci = _shareCiljevi();
+    const imena = ci.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+    if (_shareSvi) parts.push('svi iz šumarije (' + imena.length + ')');
+    else parts.push(imena.length <= 2 ? imena.join(', ') : imena.slice(0, 2).join(', ') + ' +' + (imena.length - 2));
+  }
+  if (_shareKodOn) parts.push('link / QR');
+  return parts.join(' · ');
 }
 
 function _updShareLiveIndicator() {
@@ -8091,13 +8229,11 @@ function _updShareLiveIndicator() {
     if (!el) {
       el = document.createElement('div');
       el.id = 'share-live-ind';
-      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;';
-      const tNames = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
-      const tLabel = tNames.length <= 2 ? tNames.join(', ') : tNames.slice(0,2).join(', ') + ' +' + (tNames.length-2);
-      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim sa: ' + tLabel;
-      el.onclick = () => switchTab('teren');
+      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;max-width:92vw;';
+      el.onclick = () => shareSheetOpen();
       document.body.appendChild(el);
     }
+    el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;flex-shrink:0;"></span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dijelim sa: ' + _escHtml(_shareOpisPrimalaca()) + '</span>';
   } else {
     if (el) el.remove();
   }
@@ -8107,9 +8243,10 @@ function _updShareLiveIndicator() {
 
 // --- Primanje dijeljene lokacije ---
 
+// Tačka (loc-point) šalju samo stariji APK-ovi; prima se kao i prije.
 function _onSharePoint(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
-  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
+  if (!_shareJeMeni(p)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
   _showSharedLocMarker(p.uid, p.la, p.lo, info, false, p.al);
@@ -8118,23 +8255,101 @@ function _onSharePoint(p) {
   _notifyShareLoc(name, 'je podijelio/la lokaciju 📍', p.la, p.lo);
 }
 
+// Poruka je za mene ako sam izričito na listi, ili ako je poslana "svima".
+// Prazna lista bez oznake "all" je zapis starijeg APK-a i znači "svima".
+function _shareJeMeni(p) {
+  const me = sbUser?.id;
+  if (!me || !p) return false;
+  if (p.all) return true;
+  if (Array.isArray(p.to) && p.to.length) return p.to.includes(me);
+  return true;
+}
+
 function _onShareLive(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
-  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
+  if (!_shareJeMeni(p)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
-  const isNew = !_sharedLocMarkers[p.uid];
+  _shareDolazna(p, info, 'kolege');
+}
+
+// Zajednički prijem žive pozicije (kolege i kod). Obavijest se prikaže JEDNOM po
+// sesiji pošiljaoca (sid) — marker nestaje poslije 30 s tišine pa bi se bez
+// toga "dijeli kretanje" ponavljalo na svaki prekid veze.
+function _shareDolazna(p, info, kanal) {
   _showSharedLocMarker(p.uid, p.la, p.lo, info, true, p.al);
-  if (isNew) {
-    const name = info.ime.split(' ')[0];
+  const sid = p.sid || '-';
+  if (_shareNotified[p.uid] === sid) return;
+  _shareNotified[p.uid] = sid;
+  const name = info.ime.split(' ')[0];
+  const samoMene = kanal === 'kolege' && !p.all && Array.isArray(p.to) && p.to.length === 1;
+  if (samoMene) _shareObavijestSamoMene(name, p);
+  else {
     showToast('🔴 ' + name + ' dijeli kretanje');
     _notifyShareLoc(name, 'dijeli kretanje sa tobom 🔴', p.la, p.lo);
   }
+  if (kanal === 'kolege') _shareAckKolege(p);
+}
+
+// Izabran si JEDINI primalac: baner koji ostaje dok ga ne zatvoriš, vibracija i
+// (kad je aplikacija u pozadini) sistemska obavijest.
+function _shareObavijestSamoMene(name, p) {
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+  _shareBaner(name, p.uid, p.la, p.lo);
+  _notifyShareLoc(name, 'dijeli kretanje samo s tobom 📍', p.la, p.lo);
+}
+function _shareBaner(name, uid, la, lo) {
+  let el = document.getElementById('share-pozivnica');
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.id = 'share-pozivnica';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = '<span class="shr-pz-txt"><b>' + _escHtml(name) + '</b> dijeli kretanje samo s tobom</span>'
+    + '<button type="button" class="shr-pz-go">Prikaži</button>'
+    + '<button type="button" class="shr-pz-x" aria-label="Zatvori">✕</button>';
+  el.querySelector('.shr-pz-go').onclick = () => { el.remove(); _sharePrikaziNaKarti(uid, la, lo); };
+  el.querySelector('.shr-pz-x').onclick = () => el.remove();
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 120000);
+}
+function _sharePrikaziNaKarti(uid, la, lo) {
+  switchTab('karta');
+  setTimeout(() => {
+    const m = _sharedLocMarkers[uid];
+    const ll = m && m.mk ? m.mk.getLatLng() : L.latLng(la, lo);
+    map.setView(ll, Math.max(map.getZoom(), 16));
+    if (m && m.mk) m.mk.openPopup();
+  }, 120);
+}
+
+function _shareAckKolege(p) {
+  if (!p.sid || !_rtShareChannel || !_shareChannelReady || !sbUser) return;
+  try {
+    _rtShareChannel.send({
+      type: 'broadcast', event: 'loc-ack',
+      payload: { uid: sbUser.id, sid: p.sid, to: p.uid, ime: _shareMojeIme() }
+    });
+  } catch (e) {}
+}
+function _onShareAck(p) {
+  if (!p || !_shareSid || p.sid !== _shareSid) return;
+  if (p.to && p.to !== sbUser?.id) return;
+  const key = p.uid || p.ime;
+  if (!key) return;
+  _shareViewers[key] = { ime: p.ime || kolegeMap[p.uid]?.ime || 'Kolega', t: Date.now() };
+  _shareSheetRender();
 }
 
 function _notifyShareLoc(name, body, la, lo) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible') return;
+  // Android WebView nema window.Notification — sistemska obavijest ide kroz most.
+  try {
+    if (window.AndroidNotif && typeof AndroidNotif.show === 'function') {
+      AndroidNotif.show('📍 ' + name, body);
+      return;
+    }
+  } catch (e) {}
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sw = navigator.serviceWorker?.controller;
   if (sw) {
     sw.postMessage({ type: 'show-share-notification', name, body, la, lo });
@@ -8143,9 +8358,268 @@ function _notifyShareLoc(name, body, la, lo) {
 
 function _onShareStop(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
+  delete _shareNotified[p.uid];
+  if (!_sharedLocMarkers[p.uid]) return;
   _removeSharedLocMarker(p.uid);
   const info = kolegeMap[p.uid];
-  if (info) showToast(info.ime.split(' ')[0] + ' je zaustavio/la dijeljenje');
+  showToast((info ? info.ime.split(' ')[0] : 'Korisnik') + ' je zaustavio/la dijeljenje');
+}
+
+// --- Praćenje preko šifre / linka / QR-a ---
+
+const _FOLLOW_KEY_PFX = 'tvlake_share_follow_v1:';
+let _follow = {};   // šifra → { ch, uid, ime, zadnje, ackSid }
+
+function _followKljuc() { return _FOLLOW_KEY_PFX + (sbUser?.id || '-'); }
+function _followLista() {
+  try {
+    const v = JSON.parse(localStorage.getItem(_followKljuc()) || '[]');
+    return Array.isArray(v) ? v.filter(e => e && typeof e.kod === 'string') : [];
+  } catch (e) { return []; }
+}
+function _followSpremi(arr) { try { localStorage.setItem(_followKljuc(), JSON.stringify(arr)); } catch (e) {} }
+
+function _followDodaj(unos, tiho) {
+  const kod = _shareKodIzUnosa(unos);
+  if (!kod) { showToast('⚠ Neispravna šifra ili link'); return false; }
+  const arr = _followLista();
+  if (!arr.some(e => e.kod === kod)) { arr.push({ kod, ime: '', t: Date.now() }); _followSpremi(arr); }
+  _followPokreni(kod);
+  if (!tiho) showToast('👁 Pratiš kretanje — pojavit će se na karti čim počne dijeliti');
+  _shareSheetRender();
+  return true;
+}
+function _followPokreni(kod) {
+  if (_follow[kod] || typeof sb === 'undefined' || !sb) return;
+  const st = { ch: null, uid: null, ime: '', zadnje: 0, ackSid: null };
+  _follow[kod] = st;
+  try {
+    st.ch = sb.channel('loc-kod-' + kod, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'loc-live' }, ({ payload }) => _followPrimi(kod, payload))
+      .on('broadcast', { event: 'loc-stop' }, ({ payload }) => _followStop(kod, payload))
+      .subscribe();
+  } catch (e) { delete _follow[kod]; }
+}
+function _followPrimi(kod, p) {
+  const st = _follow[kod];
+  if (!st || !p || !p.uid || p.uid === sbUser?.id) return;
+  st.uid = p.uid; st.zadnje = Date.now(); st.ime = p.ime || st.ime || 'Korisnik';
+  _shareDolazna(p, { ime: st.ime, color: p.boja || '#3b82f6' }, 'kod');
+  if (p.sid && st.ackSid !== p.sid && st.ch) {
+    st.ackSid = p.sid;
+    try { st.ch.send({ type: 'broadcast', event: 'loc-ack', payload: { uid: sbUser?.id, sid: p.sid, ime: _shareMojeIme() } }); } catch (e) {}
+  }
+  const arr = _followLista(), e = arr.find(x => x.kod === kod);
+  if (e && e.ime !== st.ime) { e.ime = st.ime; _followSpremi(arr); }
+  _shareSheetRender();
+}
+function _followStop(kod, p) {
+  const st = _follow[kod];
+  if (!st) return;
+  st.zadnje = 0; st.ackSid = null;
+  if (st.uid) { delete _shareNotified[st.uid]; if (_sharedLocMarkers[st.uid]) _removeSharedLocMarker(st.uid); }
+  showToast((st.ime || 'Korisnik').split(' ')[0] + ' je zaustavio/la dijeljenje');
+  _shareSheetRender();
+}
+function _followPrekini(kod) {
+  const st = _follow[kod];
+  if (st) {
+    try { if (st.ch) sb.removeChannel(st.ch); } catch (e) {}
+    if (st.uid && _sharedLocMarkers[st.uid]) _removeSharedLocMarker(st.uid);
+    delete _follow[kod];
+  }
+  _followSpremi(_followLista().filter(e => e.kod !== kod));
+  _shareSheetRender();
+}
+function _followObnovi() { _followLista().forEach(e => _followPokreni(e.kod)); }
+
+// Link ?prati=ŠIFRA: šifra se pamti i učitava tek kad je korisnik u aplikaciji.
+function _followIzUrla() {
+  let kod = '';
+  try { kod = _shareKodIzUnosa(location.search); } catch (e) {}
+  if (!kod) return;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  _followDodaj(kod);
+}
+
+async function sharePratiUkucaj() {
+  const raw = await _dlgPrompt('Ukucaj šifru ili zalijepi link koji si dobio:', '', { title: '👁 Prati kretanje', okLabel: 'Prati' });
+  if (raw === null) return;
+  _followDodaj(raw);
+}
+async function sharePratiSkeniraj() {
+  try { await _loadQrLibs(); } catch (e) { showToast('⚠ QR biblioteke nisu dostupne'); return; }
+  closeDozQrScan();
+  const video = document.getElementById('doz-qr-video');
+  const statusEl = document.getElementById('doz-qr-scan-status');
+  const title = document.getElementById('doz-qr-scan-title');
+  if (title) title.textContent = '📷 Skeniraj QR kretanja';
+  if (statusEl) statusEl.textContent = 'Usmjeri kameru na QR kod koji ti kolega pokaže...';
+  document.getElementById('doz-qr-scan-modal').style.display = 'flex';
+  const gen = ++_dozQrGeneration;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    if (gen !== _dozQrGeneration) { stream.getTracks().forEach(t => t.stop()); return; }
+    _dozQrStream = stream;
+  } catch (e) {
+    if (gen === _dozQrGeneration) { closeDozQrScan(); showToast('⚠ Nema pristupa kameri (provjeri dozvolu u postavkama)'); }
+    return;
+  }
+  video.srcObject = _dozQrStream;
+  await video.play().catch(() => {});
+  if (gen !== _dozQrGeneration) return;
+  _dozQrScanning = true;
+  const tick = () => {
+    if (!_dozQrScanning || gen !== _dozQrGeneration) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (!tick._c) { tick._c = document.createElement('canvas'); tick._x = tick._c.getContext('2d', { willReadFrequently: true }); }
+      tick._c.width = video.videoWidth; tick._c.height = video.videoHeight;
+      tick._x.drawImage(video, 0, 0, tick._c.width, tick._c.height);
+      try {
+        const img = tick._x.getImageData(0, 0, tick._c.width, tick._c.height);
+        const code = jsQR(img.data, img.width, img.height);
+        if (code && code.data) {
+          const kod = _shareKodIzUnosa(code.data);
+          closeDozQrScan();
+          if (kod) _followDodaj(kod); else showToast('⚠ Ovo nije QR za praćenje kretanja');
+          return;
+        }
+      } catch (e) {}
+    }
+    _dozQrFrame = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+// --- Prozor "Dijeljenje kretanja" ---
+
+function shareSheetOpen() {
+  _rsList('share-sheet', true);
+  _shareSheetRender();
+}
+function shareSheetClose() { _rsList('share-sheet', false); }
+
+function shareToggleSvi() {
+  _shareSvi = true; _shareIds = [];
+  _shareIzborSacuvaj(); _shareSync();
+}
+function shareToggleKolega(id) {
+  if (_shareSvi) { _shareSvi = false; _shareIds = _shareKolege().map(k => k.id); }
+  _shareIds = _shareIds.includes(id) ? _shareIds.filter(x => x !== id) : _shareIds.concat(id);
+  _shareIzborSacuvaj(); _shareSync();
+}
+function shareKolegeStartStop() {
+  if (_shareKolegeOn) { _stopShareKolege(); showToast('⏹ Dijeljenje sa kolegama zaustavljeno'); return; }
+  const ci = _shareCiljevi();
+  if (!ci.length) { showToast('⚠ Izaberi bar jednu osobu'); return; }
+  _startShareLive();
+  showToast(ci.length === 1
+    ? '🔴 Kretanje dijeliš sa: ' + (kolegeMap[ci[0]]?.ime || 'kolegom') + ' — dobit će obavijest'
+    : '🔴 Kretanje se dijeli sa ' + ci.length + ' kolega');
+}
+function shareKodStartStop() {
+  if (_shareKodOn) { _stopShareKod(); showToast('⏹ Link / QR više ne važi'); return; }
+  if (!lastP) { try { startGPS(); } catch (e) {} showToast('📡 Uključujem GPS — kretanje se šalje čim stigne pozicija'); }
+  _startShareKod();
+  _shareQrNacrtaj();
+}
+async function shareKodPodijeli() {
+  if (!_shareKod) return;
+  const txt = 'Prati moje kretanje (Dendro Map): ' + _shareLink(_shareKod) + '\nŠifra: ' + _shareKod
+    + '\nU aplikaciji: Dijeljenje kretanja → Prati → Ukucaj šifru.';
+  try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dijeljenje kretanja', txt); return; } } catch (e) {}
+  try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  shareKodKopiraj(txt);
+}
+function shareKodKopiraj(txt) {
+  const t = typeof txt === 'string' ? txt : _shareKod && _shareLink(_shareKod);
+  if (!t) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => showToast('📋 Kopirano'), () => showToast(t));
+  else showToast(t);
+}
+async function _shareQrNacrtaj() {
+  const box = document.getElementById('share-qr');
+  if (!box || !_shareKod) return;
+  try {
+    await _loadQrLibs();
+    const qr = qrcode(0, 'M');
+    qr.addData(_shareLink(_shareKod));
+    qr.make();
+    box.innerHTML = qr.createSvgTag(5, 8);
+  } catch (e) {
+    box.innerHTML = '<div class="shr-muted">QR nije dostupan — koristi šifru ili link.</div>';
+  }
+}
+
+function _shareSheetRender() {
+  const body = document.getElementById('share-sheet-body');
+  if (!body) return;
+  const sub = document.getElementById('share-sheet-sub');
+  const ime = (id) => _escHtml((kolegeMap[id]?.ime || 'Kolega'));
+  let h = '';
+
+  // 1) Kolege iz iste šumarije
+  if (_shareImaKolege()) {
+    const kol = _shareKolege();
+    const ci = _shareCiljevi();
+    h += '<div class="rs-sec">Kolege iz šumarije' + (sbProfile?.sumarija ? ' · ' + _escHtml(sbProfile.sumarija) : '') + '</div>';
+    if (!kol.length) {
+      h += '<div class="shr-muted">Nema kolega u tvojoj šumariji (provjeri vezu). Možeš dijeliti preko linka / QR koda.</div>';
+    } else {
+      h += '<label class="shr-row"><input type="checkbox" ' + (_shareSvi ? 'checked' : '') + ' onchange="shareToggleSvi()"><span class="shr-name"><b>Svi iz šumarije</b> <span class="shr-muted">(' + kol.length + ')</span></span></label>';
+      h += kol.map(k => {
+        const on = _shareSvi || _shareIds.includes(k.id);
+        const vidi = _shareViewers[k.id] ? '<span class="shr-ok" title="Potvrdio/la da vidi tvoje kretanje">✓ vidi te</span>' : '';
+        return '<label class="shr-row"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="shareToggleKolega(\'' + _jsAttr(k.id) + '\')">'
+          + '<span class="shr-dot" style="background:' + _escHtml(k.color || '#3b82f6') + '"></span>'
+          + '<span class="shr-name">' + _escHtml(k.ime) + '</span>' + vidi + '</label>';
+      }).join('');
+      let sazetak;
+      if (!ci.length) sazetak = 'Izaberi s kim dijeliš kretanje.';
+      else if (ci.length === 1) sazetak = '<b>' + ime(ci[0]) + '</b> dobija obavijest da dijeliš kretanje samo s njim/njom.';
+      else if (_shareSvi) sazetak = 'Kretanje vide svi kolege iz šumarije (' + ci.length + ').';
+      else sazetak = 'Kretanje vidi ' + ci.length + ' izabranih kolega.';
+      h += '<div class="shr-sum">' + sazetak + '</div>';
+      h += '<button type="button" class="rs-opt ' + (_shareKolegeOn ? 'rs-opt--stop' : 'rs-opt--go') + '" onclick="shareKolegeStartStop()"' + (!ci.length && !_shareKolegeOn ? ' disabled' : '') + '>'
+        + '<span class="rs-opt-txt"><b>' + (_shareKolegeOn ? '⏹ Zaustavi dijeljenje sa kolegama' : '🔴 Dijeli kretanje sa izabranima') + '</b>'
+        + '<span>' + (_shareKolegeOn ? 'Dijeli se uživo, svakih 5 s' : 'Vide te na karti dok ne zaustaviš') + '</span></span></button>';
+    }
+  }
+
+  // 2) Link / QR
+  h += '<div class="rs-sec">Link / QR kod' + (isSpdField() ? '' : ' · za nekoga van aplikacije') + '</div>';
+  if (isSpdField()) h += '<div class="shr-muted">Kretanje dijeliš tako što kolegi pokažeš QR kod ili pošalješ link. Ko ima šifru, vidi te uživo dok ne zaustaviš.</div>';
+  if (_shareKodOn && _shareKod) {
+    const stranci = Object.entries(_shareViewers).filter(([id]) => !_shareKolege().some(k => k.id === id)).map(([, v]) => _escHtml(v.ime));
+    h += '<div class="shr-kod"><div id="share-qr" class="shr-qr"></div>'
+      + '<div class="shr-kod-sifra">' + _escHtml(_shareKod) + '</div>'
+      + '<div class="shr-muted shr-link">' + _escHtml(_shareLink(_shareKod)) + '</div>'
+      + '<div class="shr-viewers">' + (stranci.length ? '👁 Prate te: ' + stranci.join(', ') : 'Još niko ne prati') + '</div></div>'
+      + '<div class="rs-row2"><button type="button" class="rs-opt" onclick="shareKodPodijeli()"><span class="rs-opt-txt"><b>Podijeli link</b></span></button>'
+      + '<button type="button" class="rs-opt" onclick="shareKodKopiraj()"><span class="rs-opt-txt"><b>Kopiraj</b></span></button></div>'
+      + '<button type="button" class="rs-opt rs-opt--stop" onclick="shareKodStartStop()"><span class="rs-opt-txt"><b>⏹ Zaustavi i poništi link</b><span>Šifra prestaje važiti</span></span></button>';
+  } else {
+    h += '<button type="button" class="rs-opt rs-opt--go" onclick="shareKodStartStop()"><span class="rs-opt-txt"><b>🔗 Napravi link i QR kod</b><span>Kolega skenira QR ili otvori link i vidi te uživo</span></span></button>';
+  }
+
+  // 3) Pratim
+  h += '<div class="rs-sec">Pratim kretanje</div>';
+  const pr = _followLista();
+  if (pr.length) {
+    h += pr.map(e => {
+      const st = _follow[e.kod];
+      const uzivo = st && st.zadnje && Date.now() - st.zadnje < 30000;
+      return '<div class="shr-row"><span class="shr-dot" style="background:' + (uzivo ? '#22c55e' : '#64748b') + '"></span>'
+        + '<span class="shr-name">' + _escHtml(e.ime || ('Šifra ' + e.kod)) + ' <span class="shr-muted">' + (uzivo ? 'uživo' : 'čeka dijeljenje') + '</span></span>'
+        + '<button type="button" class="shr-x" aria-label="Prestani pratiti" onclick="_followPrekini(\'' + _jsAttr(e.kod) + '\')">✕</button></div>';
+    }).join('');
+  } else h += '<div class="shr-muted">Ne pratiš nikoga.</div>';
+  h += '<div class="rs-row2"><button type="button" class="rs-opt" onclick="sharePratiSkeniraj()"><span class="rs-opt-txt"><b>📷 Skeniraj QR</b></span></button>'
+    + '<button type="button" class="rs-opt" onclick="sharePratiUkucaj()"><span class="rs-opt-txt"><b>⌨ Ukucaj šifru</b></span></button></div>';
+
+  body.innerHTML = h;
+  if (sub) sub.textContent = _shareLiveOn ? '🔴 ' + _shareOpisPrimalaca() : 'Isključeno';
+  if (_shareKodOn && _shareKod) _shareQrNacrtaj();
 }
 
 function _showSharedLocMarker(uid, la, lo, info, isLive, al) {
@@ -8314,6 +8788,7 @@ function sbStartRealtime() {
     .on('broadcast', { event: 'loc-point' }, ({ payload }) => _onSharePoint(payload))
     .on('broadcast', { event: 'loc-live' },  ({ payload }) => _onShareLive(payload))
     .on('broadcast', { event: 'loc-stop' },  ({ payload }) => _onShareStop(payload))
+    .on('broadcast', { event: 'loc-ack' },   ({ payload }) => _onShareAck(payload))
     .subscribe(status => {
       if (status === 'SUBSCRIBED') { _shareChannelReady = true; console.log('share-loc channel ready:', shareChanName); }
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { _shareChannelReady = false; console.warn('share-loc channel error:', status); }
@@ -8846,34 +9321,27 @@ function _trnSharedRestore() {
   } catch(e) {}
 }
 
-// ── Teren: dijeljenje kretanja — jedan tap, svi kolege ───────────────────────
+// ── Teren: dijeljenje kretanja — dugme otvara prozor (sa kim / link / QR) ────
 function terenTogShare() {
-  if (_shareLiveOn) {
-    _stopShareLive();
-    showToast('⏹ Dijeljenje kretanja zaustavljeno');
-  } else {
-    const ids = Object.keys(kolegeMap || {}).filter(id => id !== sbUser?.id);
-    if (!ids.length) { showToast('⚠ Nema kolega za dijeljenje (provjeri vezu)'); return; }
-    _shareTargetIds = ids;
-    _startShareLive();
-    showToast('🔴 Kretanje se dijeli — kolege te vide na karti');
-  }
-  _terenUpdShareUI();
+  shareSheetOpen();
 }
 
 function _terenUpdShareUI() {
   const btn = document.getElementById('trn-share-btn');
   const st  = document.getElementById('trn-share-status');
+  const who = document.getElementById('trn-share-who');
   if (!btn) return;
-  if(btn.dataset)btn.dataset.active=String(!!_shareLiveOn);
+  if (btn.dataset) btn.dataset.active = String(!!_shareLiveOn);
   if (_shareLiveOn) {
-    btn.textContent = '⏹ Zaustavi dijeljenje';
+    btn.innerHTML = '<svg class="ic"><use href="#ic-snimaj"/></svg> Dijeljenje: upravljaj';
     btn.style.background = 'linear-gradient(135deg,#7f1d1d,#ef4444)';
     if (st) { st.textContent = '🔴 uključeno'; st.style.color = '#f87171'; }
+    if (who) who.textContent = 'Dijeliš sa: ' + _shareOpisPrimalaca();
   } else {
     btn.innerHTML = '<svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje';
     btn.style.background = 'linear-gradient(135deg,#166534,#22c55e)';
     if (st) { st.textContent = 'isključeno'; st.style.color = '#64748b'; }
+    if (who) who.textContent = _shareImaKolege() ? 'Izaberi sa kim dijeliš ili napravi link / QR kod.' : 'Napravi link / QR kod koji kolega skenira ili otvori.';
   }
 }
 
@@ -16942,6 +17410,12 @@ function _locPopupCentriraj() {
 // zatvoriti ga i tražiti Tragovi tab da bi počeo snimati. fabSnimTrag() je
 // već TOGGLE (start kad ne snima, spremi/završi kad snima), pa se poziva
 // direktno — nema duple logike ovdje.
+function _locPopupDijeli() {
+  const pop = document.getElementById('ab-loc-popup');
+  if (pop) pop.style.display = 'none';
+  shareSheetOpen();
+}
+
 function _locPopupSnimiTrag() {
   document.getElementById('ab-loc-popup').style.display = 'none';
   fabSnimTrag();

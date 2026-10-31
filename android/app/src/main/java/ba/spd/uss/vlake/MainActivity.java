@@ -221,6 +221,7 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
         webView.addJavascriptInterface(new GpsBridge(), "AndroidGps");
         webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
+        webView.addJavascriptInterface(new AppNotifBridge(this), "AndroidNotif");
         webView.addJavascriptInterface(new UpdateBridge(), "AndroidUpdate");
         webView.addJavascriptInterface(new DeviceBridge(), "AndroidDevice");
         webView.addJavascriptInterface(new PrintBridge(), "AndroidPrint");
@@ -844,6 +845,24 @@ public class MainActivity extends Activity {
 
                 Intent chooser = Intent.createChooser(sendIntent,
                         title != null ? title : "Pošalji");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                runOnUiThread(() -> startActivity(chooser));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Greška pri dijeljenju: " + e.getMessage(),
+                        Toast.LENGTH_SHORT).show());
+            }
+        }
+
+        // Običan tekst (link, šifra) kroz sistemski chooser — navigator.share()
+        // u WebView-u ne radi, pa bi korisnik ostao samo sa kopiranjem.
+        @JavascriptInterface
+        public void shareText(String title, String text) {
+            try {
+                Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                sendIntent.setType("text/plain");
+                sendIntent.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
+                Intent chooser = Intent.createChooser(sendIntent, title != null ? title : "Pošalji");
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 runOnUiThread(() -> startActivity(chooser));
             } catch (Exception e) {

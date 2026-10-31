@@ -5496,7 +5496,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <span><svg class="ic"><use href="#ic-satelit"/></svg> Dijeljenje kretanja</span>
             <span id="trn-share-status" class="trn-muted">isključeno</span>
           </div>
-          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Kolege i nadzor vide tvoju poziciju na karti uživo dok je dijeljenje uključeno.</div>
+          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Kolege iz tvoje šumarije (ako izabereš samo jednu osobu, ona dobija obavijest) ili bilo ko preko linka / QR koda vide tvoju poziciju uživo dok je dijeljenje uključeno.</div>
+          <div id="trn-share-who" class="trn-muted" style="font-size:12px;margin-bottom:10px;font-weight:700;"></div>
           <button id="trn-share-btn" class="trn-btn trn-btn-share" onclick="terenTogShare()"><svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje</button>
         </section>
 
@@ -6246,6 +6247,7 @@ function _loadLocalVlake() {
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg>Rad na terenu</div>
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
@@ -7427,7 +7429,7 @@ function _loadLocalVlake() {
 <div id="doz-qr-scan-modal" style="display:none;position:fixed;inset:0;z-index:99040;background:#000;align-items:center;justify-content:center;">
   <video id="doz-qr-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
   <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(rgba(0,0,0,0.6),transparent);">
-    <div style="color:#fff;font-size:13px;font-weight:600;">📷 Skeniraj QR pojasa</div>
+    <div id="doz-qr-scan-title" style="color:#fff;font-size:13px;font-weight:600;">📷 Skeniraj QR pojasa</div>
     <button onclick="closeDozQrScan()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(70vw,280px);height:min(70vw,280px);border:3px solid rgba(255,255,255,0.7);border-radius:16px;pointer-events:none;"></div>
@@ -7722,6 +7724,7 @@ function _loadLocalVlake() {
         <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
       </div>
+      <button type="button" class="abp-chip abp-dijeli" id="ab-loc-dijeli" onclick="_locPopupDijeli()" title="Dijeli kretanje sa kolegama ili preko linka / QR koda">📍 Dijeli kretanje</button>
       <div class="abp-chips">
         <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
         <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
@@ -7830,6 +7833,15 @@ function _loadLocalVlake() {
 </div>
 
 <!-- Izbor kraka prije početka snimanja na postojećoj vlaci -->
+<div id="share-sheet-bg" class="rs-bg" onclick="shareSheetClose()"></div>
+<div id="share-sheet" class="rs-sheet shr" role="dialog" aria-labelledby="share-sheet-title">
+  <div class="rs-handle"></div>
+  <div class="rs-head">
+    <div class="rs-head-txt"><div class="rs-title" id="share-sheet-title">Dijeljenje kretanja</div><div class="rs-sub" id="share-sheet-sub">Isključeno</div></div>
+    <button class="rs-x" onclick="shareSheetClose()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+  </div>
+  <div id="share-sheet-body"></div>
+</div>
 <div id="krak-izbor-bg" class="rs-bg" onclick="_krakIzborClose()"></div>
 <div id="krak-izbor" class="rs-sheet" role="dialog" aria-labelledby="krak-izbor-title">
   <div class="rs-handle"></div>
@@ -8157,7 +8169,7 @@ function _loadLocalVlake() {
         <li><b>Pripremi podlogu.</b> Učitaj lokalnu kartu i provjeri područje koje pokriva prije rada bez signala.</li>
         <li><b>Pregledaj projekat.</b> Projektant ti može dati šifru za pregled vlaka ili doznake. Šifru prvi put učitaj dok imaš internet.</li>
         <li><b>Bilježi teren.</b> U Terenu uključi GPS, sačuvaj zapažanje, snimi trag ili izmjeri dužinu i površinu. GPS radi i bez mobilnih podataka.</li>
-        <li><b>Sačuvaj i provjeri.</b> Završi snimanje, provjeri Moje zapise i izvezi sigurnosnu kopiju. Dijeljenje kretanja uključi kada želiš da kolege vide tvoju poziciju i imaš vezu.</li>
+        <li><b>Sačuvaj i provjeri.</b> Završi snimanje, provjeri Moje zapise i izvezi sigurnosnu kopiju. Dijeljenje kretanja (Meni → Dijeljenje kretanja) uključi kada želiš da izabrani kolege ili neko preko linka / QR koda vide tvoju poziciju i imaš vezu.</li>
       </ol></details>
       <section class="spd-card"><h3>Nalog i aplikacija</h3><button type="button" class="spd-action" onclick="SpdProfile.action('pin')"><svg class="ic" aria-hidden="true"><use href="#ic-kljuc"/></svg><span>Promijeni PIN</span>›</button><button type="button" class="spd-action" onclick="SpdProfile.action('update')"><span>Ažuriraj aplikaciju<small>Trenutna verzija <span id="spd-version" data-spd-value></span></small></span>›</button></section>
       <div class="spd-bottom"><span id="spd-updated" data-spd-value></span><button type="button" id="spd-refresh" onclick="SpdProfile.action('refresh')">Osvježi pregled</button></div>
