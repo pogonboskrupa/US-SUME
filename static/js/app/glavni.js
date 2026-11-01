@@ -2795,6 +2795,19 @@ async function adminLoadUsers() {
   // odbiti zbog izmjerenog 'nema' (poslije ulaza na keširanom profilu stanje je
   // često zaglavljeno na offline iako mobilni podaci rade).
   _mrezaSila(30000);
+  // Admin RPC-ovi traže PRAVU Supabase sesiju (auth.uid() na serveru). Offline-first
+  // ulaz na keširanom profilu (_cachedStub) ima admin tab, ali server ga ne poznaje
+  // → "Pristup odbijen — samo admin". Prvo pokušaj preuzeti sačuvanu sesiju.
+  if (sbUser?._cachedStub) {
+    try {
+      const { data: ss } = await _withTimeout(sb.auth.getSession(), 4000);
+      if (ss?.session?.user && ss.session.user.id === sbUser.id) { sbUser = ss.session.user; try { await sbLoadProfile(); } catch (e) {} }
+    } catch (e) {}
+  }
+  const _nemaSesije = () => {
+    el.innerHTML = '<div style="text-align:center;padding:16px 8px;"><p style="color:#fbbf24;font-size:13px;line-height:1.5;margin:0 0 12px;">⚠ Nisi prijavljen na server (radiš na sačuvanom profilu), pa server ne prepoznaje admin pristup.<br>Odjavi se i prijavi ponovo dok imaš internet.</p><button type="button" class="btn" onclick="doLogout()" style="padding:10px 18px;">Odjavi se i prijavi ponovo</button></div>';
+  };
+  if (sbUser?._cachedStub) { _nemaSesije(); return; }
   const owner=sbUser?.id,seq=(adminLoadUsers._seq||0)+1;adminLoadUsers._seq=seq;
   const [{data,error},activity]=await Promise.all([
     _withTimeout(sb.rpc('admin_get_all_users'),8000).catch(()=>({error:{message:'Server nije odgovorio. Pokušaj ponovo.'}})),
@@ -2802,6 +2815,7 @@ async function adminLoadUsers() {
   ]);
   if(sbUser?.id!==owner||!sbProfile?.is_admin||adminLoadUsers._seq!==seq)return;
   if (error) {
+    if (/Pristup odbijen/i.test(error.message || '')) { _nemaSesije(); return; }
     el.innerHTML = `<p style="color:#f87171;font-size:12px;text-align:center;padding:16px 0;">Greška: ${_escHtml(error.message)}</p>`;
     return;
   }
