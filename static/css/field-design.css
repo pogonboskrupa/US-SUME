@@ -1268,3 +1268,21 @@ html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
 #share-pozivnica .shr-pz-x{width:44px;background:rgba(255,255,255,.1);color:#cbd5e1;}
 html .abp-dijeli{display:block;width:100%;margin-top:8px;}
 html #ab-loc-popup.gps-off .abp-dijeli{display:none;}
+
+/* Explorer: kompaktan panel (~170 px umjesto ~250 px) — Pregled je prešao u red
+   radnji, a ikona/oznaka odredišta i red smjera su skinuti da karta ostane vidljiva. */
+@media(min-height:481px){
+html #tacka-nav-panel{padding:8px 10px}
+html #tacka-nav-panel .ex-target-icon,html #tacka-nav-panel .ex-target small{display:none}
+html #tacka-nav-panel #tnp-name{font-size:13px;line-height:1.3;-webkit-line-clamp:1;max-height:18px}
+html #tacka-nav-panel .ex-guidance{margin:4px 0 2px}
+html #tacka-nav-panel #tnp-air{font-size:27px;line-height:1.1}
+html #tacka-nav-panel #ex-distance-label{margin-top:1px;font-size:10px;line-height:1.3}
+html #tacka-nav-panel .ex-direction{width:44px;height:44px;border-radius:12px}
+html #tacka-nav-panel #ex-direction-arrow{width:26px;height:26px}
+html #tacka-nav-panel .ex-live{padding-bottom:5px;gap:0 10px}
+html #tacka-nav-panel #ex-instruction{font-size:11px;line-height:1.4}
+html #tacka-nav-panel #ex-heading{display:none}
+html #tacka-nav-panel .ex-actions{margin-top:6px;gap:6px}
+html #tacka-nav-panel #ex-overview{flex:0 0 auto;min-height:44px;padding:0 12px}
+}
