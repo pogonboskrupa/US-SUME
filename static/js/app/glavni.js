@@ -24866,9 +24866,33 @@ function _withTimeout(promise, ms = 12000) {
   return Promise.race([promise, t]);
 }
 
+// Visina za mjerenje nagiba: Terrarium DEM na z14 (~7 m piksel, izvorni podaci
+// ~30 m). Open-Meteo je mreža od ~90 m — na dionici od 93 m obje tačke padnu u
+// iste/susjedne ćelije pa je nagib bio višestruko podcijenjen.
+const _msrDemTiles = new Map();
+async function _msrDemElev(lat, lng) {
+  const z = 14;
+  const fx = _termLon2x(lng, z), fy = _termLat2y(lat, z);
+  const tx = Math.floor(fx), ty = Math.floor(fy), k = tx + '/' + ty;
+  let elev = _msrDemTiles.get(k);
+  if (!elev) {
+    const img = await _getTerrariumTile(z, tx, ty).catch(() => null);
+    if (!img) return null;
+    try { elev = _terrariumDecodeTile(img); } finally { if (img.close) img.close(); }
+    if (_msrDemTiles.size >= 8) _msrDemTiles.delete(_msrDemTiles.keys().next().value);
+    _msrDemTiles.set(k, elev);
+  }
+  const v = _nvDemOcitaj(elev, fx, fy, tx, ty);
+  return (v != null && isFinite(v)) ? v : null;
+}
+
 async function _msrFetchElev(lat, lng) {
   const key = lat.toFixed(5)+','+lng.toFixed(5);
   if (_msrElevCache[key] != null) return _msrElevCache[key];
+  try {
+    const dv = await _msrDemElev(lat, lng);
+    if (dv != null) { _msrElevCache[key] = dv; return dv; }
+  } catch (e) {}
   try {
     const r = await _fetchT(`https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`, 8000);
     const d = await r.json();
