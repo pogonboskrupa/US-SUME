@@ -31217,12 +31217,14 @@ async function startOfflineDownload() {
     window.location.reload();
   });
 
-  // Provjeri postoji li novija objavljena verzija (nakon starta, da ne koči učitavanje).
-  setTimeout(_checkLatestVersion, 6000);
+  // Obavijest "Dostupno ažuriranje" je NAMJERNO ugašena na zahtjev korisnika: ne
+  // provjerava se objavljena verzija pri startu. Ažuriranje ostaje ručno
+  // (Meni → Ažuriraj aplikaciju), a web SW se i dalje sam primjenjuje kad app miruje.
 })();
 
 function showUpdateToast() {
-  _updateNotice('', 'update-toast');
+  // Ugašeno: tokom snimanja se ništa ne prikazuje; novi SW se primjenjuje pri
+  // sljedećem pokretanju. _updateNotice ostaje za ručni poziv (testovi, meni).
 }
 function _updateNotice(latest, id = 'ver-banner') {
   if (document.getElementById('ver-banner') || document.getElementById('update-toast')) return;
