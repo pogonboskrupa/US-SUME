@@ -34998,7 +34998,7 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   // Tačka je već trajno u baferu. Slanje pokreće samo Meni → Server.
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
-  _dozLiveSalji(lat, lng, acc);
+  try { if (typeof _dozLiveSalji === 'function') _dozLiveSalji(lat, lng, acc); } catch (e) {}   // uživo prikaz nikad ne smije oboriti snimanje
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
   };
   await commit();
@@ -35219,7 +35219,7 @@ async function dozStopGPS() {
   }
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   const wasOn = _dozGpsOn;
-  try { _dozLiveStop(); } catch (e) {}
+  try { if (typeof _dozLiveStop === 'function') _dozLiveStop(); } catch (e) {}
   _dozGpsOn = false;
   _dozGpsProjId = null; _dozGpsUserId = null;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
