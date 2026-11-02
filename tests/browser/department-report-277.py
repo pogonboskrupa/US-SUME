@@ -67,7 +67,7 @@ async def main():
   await page.locator('#map').click(position={'x':100,'y':180});assert '1 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.get_by_role('button',name='Vrati tačku',exact=True).click();assert '0 tačaka' in await page.locator('#dr-draw-count').inner_text()
   await page.evaluate("()=>{[[44.9,16],[44.9,16.003],[44.903,16.003]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)));window.realSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k.startsWith('tvlake_department_report'))throw Error('full');return realSet.call(this,k,v)} }")
-  await page.get_by_role('button',name='Sačuvaj granicu',exact=True).click()
+  await page.get_by_role('button',name='Završi',exact=True).click()
   assert await page.evaluate('DepartmentReport.isDrawing()');assert await page.evaluate('JSON.stringify(DepartmentReport.snapshot().state.geometry)')==old
   await page.evaluate('Storage.prototype.setItem=realSet;DepartmentReport.cancelDraw()')
   await page.locator('#department-report').wait_for(state='visible')
@@ -77,7 +77,7 @@ async def main():
   before_manual=await page.evaluate('DepartmentReport.snapshot().state.calculatedAt')
   await page.get_by_role('button',name='Nacrtaj poligon',exact=True).click()
   await page.evaluate("()=>{[[44.9,16],[44.9,16.008],[44.904,16.008],[44.904,16]].forEach(ll=>DepartmentReport.addPoint(L.latLng(ll)))}")
-  await page.get_by_role('button',name='Sačuvaj granicu',exact=True).click()
+  await page.get_by_role('button',name='Završi',exact=True).click()
   await page.wait_for_function('(old)=>DepartmentReport.snapshot().state.calculatedAt!==old&&!DepartmentReport.snapshot().busy&&!!DepartmentReport.snapshot().result',arg=before_manual)
   assert await page.locator('#dr-analysis-state').get_attribute('data-state')=='done' and not await page.locator('#dr-calculate').is_visible()
   stats=await page.evaluate('frameReport=false;DepartmentReport.snapshot().result.stats')
@@ -229,11 +229,11 @@ async def main():
   assert await page.evaluate('DepartmentReport.snapshot().result.slopeProfiles')==profiles
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean']
   # Stari keš bez profila ostaje upotrebljiv offline; ne izmišlja se novi rezultat.
-  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:2,signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:3,signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
   assert 'ponovi izračun' in await page.locator('#dr-profile-info').text_content()
   assert await page.locator('#dr-profile-toggle').is_disabled()
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean'] and len(dem)==calls
-  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:2,signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:3,signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
   # Prekid za vrijeme rada Workera mora odmah osloboditi novi izračun.
   await page.evaluate("""()=>{_mrezaProbaj=()=>false;window.NativeWorker=Worker;window.stalled=[];window.Worker=class{constructor(){stalled.push(this)}postMessage(){}terminate(){this.stopped=true}};window.cancelledReport=DepartmentReport.calculate();}""")
   await page.wait_for_function('stalled.length===1');await page.evaluate('DepartmentReport.cancelCalculation();Worker=NativeWorker;cancelledReport')

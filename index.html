@@ -5496,7 +5496,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <span><svg class="ic"><use href="#ic-satelit"/></svg> Dijeljenje kretanja</span>
             <span id="trn-share-status" class="trn-muted">isključeno</span>
           </div>
-          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Kolege i nadzor vide tvoju poziciju na karti uživo dok je dijeljenje uključeno.</div>
+          <div class="trn-muted" style="font-size:12px;margin-bottom:10px;">Kolege iz tvoje šumarije (ako izabereš samo jednu osobu, ona dobija obavijest) ili bilo ko preko linka / QR koda vide tvoju poziciju uživo dok je dijeljenje uključeno.</div>
+          <div id="trn-share-who" class="trn-muted" style="font-size:12px;margin-bottom:10px;font-weight:700;"></div>
           <button id="trn-share-btn" class="trn-btn trn-btn-share" onclick="terenTogShare()"><svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje</button>
         </section>
 
@@ -5631,6 +5632,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
         <div class="sec" id="doz-section-stats">
           <div class="sec-t">📊 Pregled odjela</div>
+          <button type="button" id="doz-pojas-quick" class="btn b" style="margin:0 0 8px;width:100%;min-height:44px;" onclick="dozPojasVidljivToggle()">👁 Sakrij poligone pojaseva</button>
           <div id="doz-stats-box" style="font-size:11px;color:#94a3b8;line-height:1.8;"></div>
         </div>
 
@@ -5733,6 +5735,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
               <input type="checkbox" id="doz-cross-warn" checked onchange="dozCrossWarnToggle()" style="accent-color:#fbbf24;"> Upozorenje na prelaz pojasa
             </label>
+          </div>
+        </div>
+        <div class="doz-post-grupa">
+          <div class="sec-t">🖌 Stil pojasa</div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+            <span style="font-size:11px;color:#94a3b8;">Boja:</span>
+            <select id="doz-pojas-nacin" onchange="dozPojasStilChange()" style="flex:1;min-height:36px;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:12px;"><option value="korisnik">Po projektantu</option><option value="jedna">Jedna boja</option></select>
+            <input type="color" id="doz-pojas-col" value="#4ade80" oninput="dozPojasStilChange()" style="width:44px;height:36px;padding:0;border:1px solid #374151;border-radius:5px;background:#0f172a;cursor:pointer;" aria-label="Boja pojasa">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="font-size:10px;color:#64748b;min-width:44px;">Ispuna</span><input type="range" id="doz-pojas-op" min="0" max="70" value="18" style="flex:1;accent-color:#4ade80;" oninput="dozPojasStilChange()"><span id="doz-pojas-op-lbl" style="font-size:10px;color:#94a3b8;min-width:26px;">18%</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="font-size:10px;color:#64748b;min-width:44px;">Obrub</span><input type="range" id="doz-pojas-wt" min="0" max="5" step="0.5" value="1.5" style="flex:1;accent-color:#4ade80;" oninput="dozPojasStilChange()"><span id="doz-pojas-wt-lbl" style="font-size:10px;color:#94a3b8;min-width:26px;">1,5</span></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="doz-pojas-dash" onchange="dozPojasStilChange()" style="accent-color:#4ade80;"> Crtkano</label>
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="doz-pojas-vidljiv" checked onchange="dozPojasVidljivToggle(this.checked)" style="accent-color:#4ade80;"> Prikaži poligone pojasa</label>
+            <button type="button" class="btn" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozPojasStilReset()">Zadano</button>
           </div>
         </div>
         <div class="doz-post-grupa">
@@ -5875,15 +5892,10 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
 <!-- DOZ GPS CONTROLS -->
 <div id="doz-gps-modal" hidden onkeydown="dozGPSControlsKey(event)">
-  <section class="doz-gps-sheet" role="region" aria-labelledby="doz-gps-modal-title" tabindex="-1">
-    <header><div><small>DOZNAKA · GPS TRAG</small><h3 id="doz-gps-modal-title">Snimanje doznake</h3></div><button type="button" onclick="dozCloseGPSControls()" aria-label="Skloni kontrole snimanja">✕</button></header>
-    <div class="doz-gps-context"><strong id="doz-gps-modal-project"></strong><span id="doz-gps-modal-user"></span></div>
-    <div class="doz-gps-state" id="doz-gps-modal-state" role="status"></div>
-    <div class="doz-gps-metrics"><div><small>Dužina traga</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme snimanja</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>GPS tačke</small><strong id="doz-gps-modal-points">0</strong></div></div>
-    <p class="doz-gps-signal" id="doz-gps-modal-signal"></p><p class="doz-gps-note" id="doz-gps-modal-note"></p>
-    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi snimanje</button></div>
-    <button class="doz-gps-map" type="button" onclick="dozCloseGPSControls(true)"><svg class="ic"><use href="#ic-karta"/></svg> Skloni kontrole</button>
-    <small class="doz-gps-hint">Sklanjanje prozora ne prekida snimanje. Kontrole ponovo otvaraš iz trake snimanja.</small>
+  <section class="doz-gps-sheet" role="region" aria-label="Snimanje doznake" tabindex="-1">
+    <div class="doz-gps-top"><strong id="doz-gps-modal-project"></strong><span class="doz-gps-state" id="doz-gps-modal-state" role="status"></span></div>
+    <div class="doz-gps-metrics"><div><small>Dužina</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>Signal</small><strong id="doz-gps-modal-signal"></strong></div></div>
+    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi</button><button class="doz-gps-map" type="button" aria-label="Skloni kontrole" title="Skloni — snimanje se ne prekida" onclick="dozCloseGPSControls(true)">▾</button></div>
   </section>
 </div>
 <!-- END DOZ GPS CONTROLS -->
@@ -6005,7 +6017,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.2.6';
+const APP_VER = 'v3.3.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6246,6 +6258,7 @@ function _loadLocalVlake() {
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg>Rad na terenu</div>
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
+  <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
@@ -6319,7 +6332,7 @@ function _loadLocalVlake() {
 
   <button type="button" id="dr-remove" class="dr-danger" onclick="DepartmentReport.remove()">Obriši izvještaj i njegov poligon</button></div></section>
 </div>
-<div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span>Dodirni kartu uz granicu odjela</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" onclick="DepartmentReport.finish()">Sačuvaj granicu</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
+<div id="dr-draw-toolbar" hidden role="dialog" aria-label="Crtanje granice za izvještaj"><b>Granica za izvještaj · <span id="dr-draw-count">0 tačaka</span></b><span id="dr-draw-hint">Dodirni kartu uz granicu odjela (najmanje 3 tačke)</span><div><button type="button" onclick="DepartmentReport.undo()">Vrati tačku</button><button type="button" id="dr-draw-save" class="dr-primary" onclick="DepartmentReport.finish()">Završi</button><button type="button" onclick="DepartmentReport.cancelDraw()">Odustani</button></div></div>
 
 <!-- ─── STIL LINIJA MODAL (globalni stil tragova/mjerenja/tačaka) ────────── -->
 <div id="stil-modal" onclick="if(event.target===this)closeStilLinija()" style="display:none;">
@@ -7427,7 +7440,7 @@ function _loadLocalVlake() {
 <div id="doz-qr-scan-modal" style="display:none;position:fixed;inset:0;z-index:99040;background:#000;align-items:center;justify-content:center;">
   <video id="doz-qr-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
   <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(rgba(0,0,0,0.6),transparent);">
-    <div style="color:#fff;font-size:13px;font-weight:600;">📷 Skeniraj QR pojasa</div>
+    <div id="doz-qr-scan-title" style="color:#fff;font-size:13px;font-weight:600;">📷 Skeniraj QR pojasa</div>
     <button onclick="closeDozQrScan()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(70vw,280px);height:min(70vw,280px);border:3px solid rgba(255,255,255,0.7);border-radius:16px;pointer-events:none;"></div>
@@ -7722,6 +7735,7 @@ function _loadLocalVlake() {
         <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
       </div>
+      <button type="button" class="abp-chip abp-dijeli" id="ab-loc-dijeli" onclick="_locPopupDijeli()" title="Dijeli kretanje sa kolegama ili preko linka / QR koda">📍 Dijeli kretanje</button>
       <div class="abp-chips">
         <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
         <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
@@ -7786,11 +7800,11 @@ function _loadLocalVlake() {
 <div id="explorer-you" hidden aria-hidden="true"><span></span><b>TI</b></div>
 <div id="tacka-nav-panel" role="region" aria-label="Explorer navigacija">
   <span id="tnp-arrow" hidden></span>
-  <div class="ex-target"><span class="ex-target-icon" aria-hidden="true">◎</span><div><small>ODREDIŠTE</small><div id="tnp-name">—</div></div><button id="ex-overview" type="button" onclick="Explorer.overview()" aria-label="Pregled cijelog puta do cilja">Pregled</button></div>
+  <div class="ex-target"><span class="ex-target-icon" aria-hidden="true">◎</span><div><small>ODREDIŠTE</small><div id="tnp-name">—</div></div></div>
   <div class="ex-guidance"><div><div id="tnp-air">—</div><small id="ex-distance-label">Do cilja · zračna udaljenost</small></div><div class="ex-direction"><svg id="ex-direction-arrow" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27V5M6 15L16 5l10 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
   <div class="ex-live"><b id="ex-instruction">Čekam GPS signal</b><span id="ex-heading">Smjer nije dostupan</span></div>
   <div id="tnp-road" hidden></div><div id="tnp-elev" style="display:none;"></div>
-  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer 3D</span></label><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
+  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer 3D</span></label><button id="ex-overview" type="button" onclick="Explorer.overview()" aria-label="Pregled cijelog puta do cilja">Pregled</button><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
 </div>
 
 <!-- Tačka modal — unos naziva -->
@@ -7830,6 +7844,15 @@ function _loadLocalVlake() {
 </div>
 
 <!-- Izbor kraka prije početka snimanja na postojećoj vlaci -->
+<div id="share-sheet-bg" class="rs-bg" onclick="shareSheetClose()"></div>
+<div id="share-sheet" class="rs-sheet shr" role="dialog" aria-labelledby="share-sheet-title">
+  <div class="rs-handle"></div>
+  <div class="rs-head">
+    <div class="rs-head-txt"><div class="rs-title" id="share-sheet-title">Dijeljenje kretanja</div><div class="rs-sub" id="share-sheet-sub">Isključeno</div></div>
+    <button class="rs-x" onclick="shareSheetClose()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+  </div>
+  <div id="share-sheet-body"></div>
+</div>
 <div id="krak-izbor-bg" class="rs-bg" onclick="_krakIzborClose()"></div>
 <div id="krak-izbor" class="rs-sheet" role="dialog" aria-labelledby="krak-izbor-title">
   <div class="rs-handle"></div>
@@ -8157,7 +8180,7 @@ function _loadLocalVlake() {
         <li><b>Pripremi podlogu.</b> Učitaj lokalnu kartu i provjeri područje koje pokriva prije rada bez signala.</li>
         <li><b>Pregledaj projekat.</b> Projektant ti može dati šifru za pregled vlaka ili doznake. Šifru prvi put učitaj dok imaš internet.</li>
         <li><b>Bilježi teren.</b> U Terenu uključi GPS, sačuvaj zapažanje, snimi trag ili izmjeri dužinu i površinu. GPS radi i bez mobilnih podataka.</li>
-        <li><b>Sačuvaj i provjeri.</b> Završi snimanje, provjeri Moje zapise i izvezi sigurnosnu kopiju. Dijeljenje kretanja uključi kada želiš da kolege vide tvoju poziciju i imaš vezu.</li>
+        <li><b>Sačuvaj i provjeri.</b> Završi snimanje, provjeri Moje zapise i izvezi sigurnosnu kopiju. Dijeljenje kretanja (Meni → Dijeljenje kretanja) uključi kada želiš da izabrani kolege ili neko preko linka / QR koda vide tvoju poziciju i imaš vezu.</li>
       </ol></details>
       <section class="spd-card"><h3>Nalog i aplikacija</h3><button type="button" class="spd-action" onclick="SpdProfile.action('pin')"><svg class="ic" aria-hidden="true"><use href="#ic-kljuc"/></svg><span>Promijeni PIN</span>›</button><button type="button" class="spd-action" onclick="SpdProfile.action('update')"><span>Ažuriraj aplikaciju<small>Trenutna verzija <span id="spd-version" data-spd-value></span></small></span>›</button></section>
       <div class="spd-bottom"><span id="spd-updated" data-spd-value></span><button type="button" id="spd-refresh" onclick="SpdProfile.action('refresh')">Osvježi pregled</button></div>

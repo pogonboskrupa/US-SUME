@@ -27,6 +27,12 @@
   }
   return paths;
  }
+ // Hornov 3×3 kernel (standard u GIS-u, isti kao QGIS/ArcGIS "Slope"): uzorci su
+ // redom a b c / d f / g h i (8 susjeda, sredina se ne koristi). Uzima tri reda
+ // umjesto jedne linije, pa slučajni šum DEM-a (SRTM ±nekoliko m) daje oko 40 %
+ // manju grešku nagiba nego razlika samo po osi. Na ravni daje isti rezultat.
+ // Vraća [dz/dx istok, dz/dy jug] u m/m; `step` je razmak susjeda u metrima.
+ const horn=(h,step)=>[((h[2]+2*h[4]+h[7])-(h[0]+2*h[3]+h[5]))/(8*step),((h[5]+2*h[6]+h[7])-(h[0]+2*h[1]+h[2]))/(8*step)];
  function profiles(input,t,sample,lng,lat,mask,areaHa){
   const {geometry,z,x0,y0,width,height}=input,feature=t.feature(geometry),world=256*2**z;
   const valid=h=>Number.isFinite(h)&&h>-12000&&h<10000;
@@ -36,8 +42,9 @@
    const hs=[sample(a,b),sample(a+1,b),sample(a,b+1),sample(a+1,b+1)];if(!hs.every(valid))return NaN;
    return hs[0]*(1-fx)*(1-fy)+hs[1]*fx*(1-fy)+hs[2]*(1-fx)*fy+hs[3]*fx*fy;
   };
-  const gradient=p=>{const m=metres(p[1]),r=Math.max(1,Math.round(30/m)),hs=[heightAt([p[0]-r,p[1]]),heightAt([p[0]+r,p[1]]),heightAt([p[0],p[1]-r]),heightAt([p[0],p[1]+r])];
-   return hs.every(valid)?[(hs[1]-hs[0])/(2*r*m),(hs[3]-hs[2])/(2*r*m)]:null;
+  const gradient=p=>{const m=metres(p[1]),r=Math.max(1,Math.round(30/m)),hs=[];
+   for(const oy of [-1,0,1])for(const ox of [-1,0,1])if(ox||oy)hs.push(heightAt([p[0]+ox*r,p[1]+oy*r]));
+   return hs.every(valid)?horn(hs,r*m):null;
   };
   // Prva presječena granica zaustavlja profil: segment ne preskače ni usku rupu.
   const pixel=p=>[(p[0]+180)/360*world,(1-Math.asinh(Math.tan(p[1]*Math.PI/180))/Math.PI)/2*world];
@@ -103,9 +110,9 @@
     if(!hits)continue;const w=weight*hits/4;mask[idx]=hits/4;total+=w;
     const h=sample(gx,gy);if(!Number.isFinite(h)||h<=-12000||h>=10000)continue;
     valid+=w;sum+=w*h;min=Math.min(min,h);max=Math.max(max,h);
-    const a=sample(gx-r,gy),b=sample(gx+r,gy),c=sample(gx,gy-r),d=sample(gx,gy+r);
-    if(![a,b,c,d].every(v=>Number.isFinite(v)&&v>-12000&&v<10000))continue;
-    const dx=(b-a)/(2*r*metres),dy=(d-c)/(2*r*metres),percent=Math.hypot(dx,dy)*100,bearing=(Math.atan2(-dx,dy)*180/Math.PI+360)%360;
+    const around=[];for(const oy of [-1,0,1])for(const ox of [-1,0,1])if(ox||oy)around.push(sample(gx+ox*r,gy+oy*r));
+    if(!around.every(v=>Number.isFinite(v)&&v>-12000&&v<10000))continue;
+    const [dx,dy]=horn(around,r*metres),percent=Math.hypot(dx,dy)*100,bearing=(Math.atan2(-dx,dy)*180/Math.PI+360)%360;
     const si=slopeIndex(percent),ai=aspectIndex(bearing,percent);slopes[idx]=percent;classes[idx]=si;aspects[idx]=ai;bands[si]+=w;knownSlope+=w;slopeSum+=w*percent;slopeMax=Math.max(slopeMax,percent);if(ai>=0)directions[ai]+=w;else flat+=w;
    }
   }
@@ -124,7 +131,7 @@
   for(const band of edgeBands){band.paths=joinSegments(band.segments).map(path=>path.map(p=>[lat(p[1]),lng(p[0])]));delete band.segments;}
   return {z,x0,y0,width,height,classes,aspects,mask,edgeBands,...profiles(input,t,sample,lng,lat,mask,areaHa),stats:{areaHa,min,max,mean:sum/valid,slopeMean:knownSlope?slopeSum/knownSlope:null,slopeMax:knownSlope?slopeMax:null,coverage:share(valid),slopeCoverage:share(knownSlope),flat:share(flat),resolution:Math.max(30,Math.cos(lat(y0+height/2)*Math.PI/180)*156543.03392/2**z),slope:rows(SLOPES,COLORS,bands),aspect:rows(ASPECTS,ACOLORS,directions)}};
  }
- if(typeof module!=='undefined'&&module.exports){module.exports={calculate,slopeIndex,aspectIndex,contourSegments,joinSegments,SLOPES,COLORS,ASPECTS,ACOLORS};return;}
+ if(typeof module!=='undefined'&&module.exports){module.exports={calculate,horn,slopeIndex,aspectIndex,contourSegments,joinSegments,SLOPES,COLORS,ASPECTS,ACOLORS};return;}
  importScripts('../libs/turf.min.js');
  root.onmessage=e=>{try{const result=calculate(e.data,turf);root.postMessage({ok:true,result},[result.classes.buffer,result.aspects.buffer,result.mask.buffer]);}catch(err){root.postMessage({ok:false,error:err.message});}};
 })(typeof self!=='undefined'?self:globalThis);

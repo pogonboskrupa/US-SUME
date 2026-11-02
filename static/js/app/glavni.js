@@ -1799,6 +1799,7 @@ function _startupRestore() {
     if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
+    korak('pratiKretanje', () => { _followObnovi(); _followIzUrla(); });
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
     if (_mrezaProbaj() && sbUser && sbProfile) {
   // v1.9.6: stavke koje više ne idu na server (tragovi, dnevnik, oznake) izbaci
@@ -2794,6 +2795,19 @@ async function adminLoadUsers() {
   // odbiti zbog izmjerenog 'nema' (poslije ulaza na keširanom profilu stanje je
   // često zaglavljeno na offline iako mobilni podaci rade).
   _mrezaSila(30000);
+  // Admin RPC-ovi traže PRAVU Supabase sesiju (auth.uid() na serveru). Offline-first
+  // ulaz na keširanom profilu (_cachedStub) ima admin tab, ali server ga ne poznaje
+  // → "Pristup odbijen — samo admin". Prvo pokušaj preuzeti sačuvanu sesiju.
+  if (sbUser?._cachedStub) {
+    try {
+      const { data: ss } = await _withTimeout(sb.auth.getSession(), 4000);
+      if (ss?.session?.user && ss.session.user.id === sbUser.id) { sbUser = ss.session.user; try { await sbLoadProfile(); } catch (e) {} }
+    } catch (e) {}
+  }
+  const _nemaSesije = () => {
+    el.innerHTML = '<div style="text-align:center;padding:16px 8px;"><p style="color:#fbbf24;font-size:13px;line-height:1.5;margin:0 0 12px;">⚠ Nisi prijavljen na server (radiš na sačuvanom profilu), pa server ne prepoznaje admin pristup.<br>Odjavi se i prijavi ponovo dok imaš internet.</p><button type="button" class="btn" onclick="doLogout()" style="padding:10px 18px;">Odjavi se i prijavi ponovo</button></div>';
+  };
+  if (sbUser?._cachedStub) { _nemaSesije(); return; }
   const owner=sbUser?.id,seq=(adminLoadUsers._seq||0)+1;adminLoadUsers._seq=seq;
   const [{data,error},activity]=await Promise.all([
     _withTimeout(sb.rpc('admin_get_all_users'),8000).catch(()=>({error:{message:'Server nije odgovorio. Pokušaj ponovo.'}})),
@@ -2801,6 +2815,7 @@ async function adminLoadUsers() {
   ]);
   if(sbUser?.id!==owner||!sbProfile?.is_admin||adminLoadUsers._seq!==seq)return;
   if (error) {
+    if (/Pristup odbijen/i.test(error.message || '')) { _nemaSesije(); return; }
     el.innerHTML = `<p style="color:#f87171;font-size:12px;text-align:center;padding:16px 0;">Greška: ${_escHtml(error.message)}</p>`;
     return;
   }
@@ -6848,7 +6863,7 @@ async function sbLoadKolege() {
     // svako može sam sebi postaviti is_admin/odobren. Indeks `i` je usto bio i
     // nestabilan — ista osoba je dobijala različitu boju na različitim
     // uređajima, zavisno od redoslijeda u odgovoru.
-    kolegeMap[k.id] = { ime: k.ime + ' ' + k.prezime, color: k.boja || _bojaZaId(k.id) };
+    kolegeMap[k.id] = { ime: k.ime + ' ' + k.prezime, color: k.boja || _bojaZaId(k.id), sumarija: k.sumarija };
   });
 
   kolege = Object.values(kolegeMap);
@@ -7888,7 +7903,6 @@ let _rtShareChannel = null;
 let _shareLiveOn = false;
 let _shareLiveTimer = null;
 let _sharedLocMarkers = {}; // odKorisnikId → { mk, circle, timer }
-let _shareTargetIds = [];   // kome dijelim (prazno = svima)
 let _shareChannelReady = false;
 
 function _sbRemoveRtChannels() {
@@ -7900,7 +7914,7 @@ function _sbRemoveRtChannels() {
     try { if (ch) sb.removeChannel(ch); } catch(e) {}
   });
   _shareChannelReady = false;
-  _stopShareLive();
+  // Dijeljenje se NE gasi: _sendLivePos preskače otkucaje dok novi kanal nije spreman.
 }
 
 // Obnova realtime kanala (v1.9.2). Ranije je SVAKI 'CLOSED'/'TIMED_OUT' zakazivao
@@ -8047,59 +8061,208 @@ function _updKoleguLiveBar() {
   bar.innerHTML = `<span class="live-dot"></span>${active.join(', ')} snima${active.length > 1 ? 'ju' : ''}`;
 }
 
-// ─── DIJELJENJE KRETANJA (Teren → "Dijeli moje kretanje") ──────────────────
-// Meni "Podijeli lokaciju" (izbor kolega + "podijeli tačku") je uklonjen u
-// v1.8.1 na zahtjev; ostaje dijeljenje kretanja iz Terena i PRIJEM lokacija
-// kolega (kanal i dalje sluša loc-point, jer ga šalju stariji APK-ovi).
+// ─── DIJELJENJE KRETANJA ─────────────────────────────────────────────────────
+// Dva načina, oba preko Supabase Realtime broadcasta (bez tabela, bez migracije):
+//  1) KOLEGE IZ ISTE ŠUMARIJE — kanal šumarije; korisnik bira sa kim dijeli
+//     (svi ili pojedinci). Ako izabere SAMO JEDNU osobu, ta osoba dobija
+//     izričitu obavijest (baner + sistemska obavijest u pozadini).
+//  2) LINK / QR — kanal 'loc-kod-<ŠIFRA>'. Za terenski profil (nema kolega u
+//     "svojoj šumariji", pa mu birač kolega ništa ne znači) i za svakoga ko
+//     hoće dijeliti sa osobom van aplikacije: primalac skenira QR, otvori link
+//     ili ukuca šifru.
+// Primaoci se NE čuvaju na serveru: broadcast ne ostavlja trag, pa dijeljenje
+// traje tačno dok pošiljalac drži uključeno. Obavijest stiže dok je proces
+// aplikacije živ na telefonu primaoca — zatvorenu aplikaciju ne budi.
 
-function _startShareLive() {
-  if (_shareLiveOn) return;
-  _shareLiveOn = true;
-  _sendLivePos();
-  _shareLiveTimer = setInterval(_sendLivePos, 5000);
-  _updShareLiveIndicator();
+const _SHARE_TO_KEY = 'tvlake_share_to_v1';
+const _SHARE_KOD_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // bez I/L/O/0/1 (čitljivost)
+const _SHARE_KOD_LEN = 10;
+let _shareSid = null;          // jedna sesija dijeljenja (primaoci po njoj prepoznaju "novo")
+let _shareKolegeOn = false;
+let _shareKodOn = false;
+let _shareSvi = true;          // true = svi kolege iz šumarije
+let _shareIds = [];            // izabrani kolege kad _shareSvi === false
+let _shareKod = null, _shareKodChannel = null, _shareKodReady = false;
+let _shareViewers = {};        // uid → { ime, t } — ko je potvrdio da vidi moje kretanje
+let _shareNotified = {};       // uid pošiljaoca → sid za koji je obavijest već prikazana
+let _shareRtPokusaj = 0;
+
+(function _shareIzborUcitaj() {
+  try {
+    const v = JSON.parse(localStorage.getItem(_SHARE_TO_KEY) || '{}');
+    _shareSvi = v.svi !== false;
+    _shareIds = Array.isArray(v.ids) ? v.ids.filter(x => typeof x === 'string') : [];
+  } catch (e) {}
+})();
+function _shareIzborSacuvaj() {
+  try { localStorage.setItem(_SHARE_TO_KEY, JSON.stringify({ svi: _shareSvi, ids: _shareIds })); } catch (e) {}
 }
 
-function _stopShareLive() {
-  _shareLiveOn = false;
-  if (_shareLiveTimer) { clearInterval(_shareLiveTimer); _shareLiveTimer = null; }
+function _shareNoviKod() {
+  const b = new Uint8Array(_SHARE_KOD_LEN);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+  return Array.from(b, x => _SHARE_KOD_ABC[x % _SHARE_KOD_ABC.length]).join('');
+}
+// Prihvata čistu šifru, šifru sa razmacima ili cijeli link (?prati=ŠIFRA).
+function _shareKodIzUnosa(txt) {
+  const s = String(txt || '').trim();
+  const m = s.match(/[?&#]prati=([A-Za-z0-9]+)/i);
+  const raw = (m ? m[1] : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return raw.length === _SHARE_KOD_LEN ? raw : '';
+}
+function _shareLink(kod) { return _LIVE_BASE + '?prati=' + kod; }
+function _shareMojeIme() {
+  const n = ((sbProfile?.ime || '') + ' ' + (sbProfile?.prezime || '')).trim();
+  return n || 'Korisnik';
+}
+
+// Kolege kojima se SMIJE dijeliti: samo iz iste šumarije. sbLoadKolege to već
+// filtrira na serveru, ali pregledni nalog (ŠPD/admin) učitava SVE korisnike —
+// pa se šumarija provjerava i ovdje.
+function _shareKolege() {
+  const moja = sbProfile?.sumarija;
+  return Object.entries(kolegeMap || {})
+    .filter(([id, k]) => id !== sbUser?.id && (!k.sumarija || !moja || k.sumarija === moja))
+    .map(([id, k]) => ({ id, ime: k.ime, color: k.color }))
+    .sort((a, b) => a.ime.localeCompare(b.ime, 'bs'));
+}
+function _shareCiljevi() {
+  const sve = _shareKolege().map(k => k.id);
+  return _shareSvi ? sve : _shareIds.filter(id => sve.includes(id));
+}
+// Terenski profil nema "svoju" šumariju (svi su pod 'ŠPD US ŠUME') — njemu
+// kolege-birač ne nudimo, samo link/QR.
+function _shareImaKolege() { return !isSpdField(); }
+
+function _shareNoviSid() {
+  if (!_shareSid) _shareSid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function _shareSync() {
+  _shareLiveOn = _shareKolegeOn || _shareKodOn;
+  if (_shareLiveOn && !_shareLiveTimer) {
+    _shareLiveTimer = setInterval(_sendLivePos, 5000);
+    _sendLivePos();
+  } else if (!_shareLiveOn && _shareLiveTimer) {
+    clearInterval(_shareLiveTimer); _shareLiveTimer = null;
+    _shareSid = null; _shareViewers = {};
+  }
+  _updShareLiveIndicator();
+  _shareSheetRender();
+}
+
+function _startShareLive() {
+  if (_shareKolegeOn) return;
+  _shareNoviSid();
+  _shareKolegeOn = true;
+  _shareSync();
+}
+function _stopShareKolege() {
+  if (!_shareKolegeOn) return;
+  _shareKolegeOn = false;
   if (_rtShareChannel && sbUser && _shareChannelReady) {
     _rtShareChannel.send({
       type: 'broadcast', event: 'loc-stop',
-      payload: { uid: sbUser.id }
+      payload: { uid: sbUser.id, sid: _shareSid }
     });
   }
-  _updShareLiveIndicator();
+  _shareSync();
+}
+function _startShareKod() {
+  if (_shareKodOn) return _shareKod;
+  _shareKod = _shareNoviKod();
+  _shareNoviSid();
+  _shareKodReady = false;
+  _shareKodChannel = sb.channel('loc-kod-' + _shareKod, { config: { broadcast: { self: false, ack: true } } })
+    .on('broadcast', { event: 'loc-ack' }, ({ payload }) => _onShareAck(payload))
+    .subscribe(st => {
+      if (st === 'SUBSCRIBED') { _shareKodReady = true; _sendLivePos(); }
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') _shareKodReady = false;
+    });
+  _shareKodOn = true;
+  _shareSync();
+  return _shareKod;
+}
+function _stopShareKod() {
+  if (!_shareKodOn) return;
+  _shareKodOn = false;
+  const ch = _shareKodChannel;
+  try {
+    if (ch && _shareKodReady && sbUser) ch.send({ type: 'broadcast', event: 'loc-stop', payload: { uid: sbUser.id, sid: _shareSid } });
+  } catch (e) {}
+  _shareKodChannel = null; _shareKodReady = false; _shareKod = null;
+  setTimeout(() => { try { if (ch) sb.removeChannel(ch); } catch (e) {} }, 400);
+  _shareSync();
+}
+function _stopShareLive() { _stopShareKolege(); _stopShareKod(); }
+
+// Kanal šumarije se zna izgubiti (realtime se obnavlja); ne gasimo dijeljenje,
+// samo tražimo novi kanal — najviše jednom u ~30 s da ne napravimo petlju.
+function _shareObnoviRt() {
+  const now = Date.now();
+  if (now - _shareRtPokusaj < 30000) return;
+  _shareRtPokusaj = now;
+  if (sbProfile?.sumarija && typeof sbStartRealtime === 'function') sbStartRealtime();
 }
 
 function _sendLivePos() {
   if (!lastP || !sbUser) return;
-  if (!_rtShareChannel || !_shareChannelReady) {
-    console.warn('share-loc: kanal nije spreman, pokušavam reconnect...');
-    if (sbProfile?.sumarija) sbStartRealtime();
-    return;
+  const base = { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), sid: _shareSid };
+  if (_shareKolegeOn) {
+    const to = _shareCiljevi();
+    if (to.length) {
+      if (_rtShareChannel && _shareChannelReady) {
+        _rtShareChannel.send({ type: 'broadcast', event: 'loc-live', payload: { ...base, to, all: _shareSvi } })
+          .catch(e => console.warn('share-loc live send error:', e));
+      } else _shareObnoviRt();
+    }
   }
-  _rtShareChannel.send({
-    type: 'broadcast', event: 'loc-live',
-    payload: { uid: sbUser.id, la: lastP.la, lo: lastP.lo, al: lastP.al, ac: lastP.ac, t: Date.now(), to: _shareTargetIds }
-  }).catch(e => console.warn('share-loc live send error:', e));
+  if (_shareKodOn && _shareKodChannel && _shareKodReady) {
+    _shareKodChannel.send({
+      type: 'broadcast', event: 'loc-live',
+      payload: { ...base, ime: _shareMojeIme(), boja: sbProfile?.boja || _bojaZaId(sbUser.id) }
+    }).catch(e => console.warn('share-kod live send error:', e));
+  }
+}
+
+function _shareOpisPrimalaca() {
+  const parts = [];
+  if (_shareKolegeOn) {
+    const ci = _shareCiljevi();
+    const imena = ci.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
+    if (_shareSvi) parts.push('svi iz šumarije (' + imena.length + ')');
+    else parts.push(imena.length <= 2 ? imena.join(', ') : imena.slice(0, 2).join(', ') + ' +' + (imena.length - 2));
+  }
+  if (_shareKodOn) parts.push('link / QR');
+  return parts.join(' · ');
 }
 
 function _updShareLiveIndicator() {
   let el = document.getElementById('share-live-ind');
   if (_shareLiveOn) {
+    const opis0 = _shareOpisPrimalaca();
+    if (!el && window._shareBanerOpis === opis0) { if (typeof _terenUpdShareUI === 'function') _terenUpdShareUI(); return; }
+    window._shareBanerOpis = opis0;
     if (!el) {
       el = document.createElement('div');
       el.id = 'share-live-ind';
-      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;';
-      const tNames = _shareTargetIds.map(id => (kolegeMap[id]?.ime || '').split(' ')[0]).filter(Boolean);
-      const tLabel = tNames.length <= 2 ? tNames.join(', ') : tNames.slice(0,2).join(', ') + ' +' + (tNames.length-2);
-      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:blinker 1s infinite;"></span> Dijelim sa: ' + tLabel;
-      el.onclick = () => switchTab('teren');
+      el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:3000;background:#dc2626;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px;max-width:92vw;';
+      el.onclick = () => shareSheetOpen();
       document.body.appendChild(el);
     }
+    // Baner se pokaže samo kratko (2 s) kad se dijeljenje pokrene ili promijeni;
+    // stalan baner je zaklanjao kartu. Stanje i zaustavljanje su u prozoru
+    // "Dijeljenje kretanja" (Meni / popup lokacije).
+    const opis = _shareOpisPrimalaca();
+    if (el._opis !== opis) {
+      el._opis = opis;
+      el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#fff;flex-shrink:0;"></span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dijelim sa: ' + _escHtml(opis) + '</span>';
+      clearTimeout(el._tm);
+      el._tm = setTimeout(() => { try { el.remove(); } catch (e) {} }, 2000);
+    }
   } else {
-    if (el) el.remove();
+    window._shareBanerOpis = null;
+    if (el) { clearTimeout(el._tm); el.remove(); }
   }
   // Sinhronizuj i Teren tab dugme (start/stop može doći i kroz meni tok)
   if (typeof _terenUpdShareUI === 'function') _terenUpdShareUI();
@@ -8107,9 +8270,10 @@ function _updShareLiveIndicator() {
 
 // --- Primanje dijeljene lokacije ---
 
+// Tačka (loc-point) šalju samo stariji APK-ovi; prima se kao i prije.
 function _onSharePoint(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
-  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
+  if (!_shareJeMeni(p)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
   _showSharedLocMarker(p.uid, p.la, p.lo, info, false, p.al);
@@ -8118,23 +8282,101 @@ function _onSharePoint(p) {
   _notifyShareLoc(name, 'je podijelio/la lokaciju 📍', p.la, p.lo);
 }
 
+// Poruka je za mene ako sam izričito na listi, ili ako je poslana "svima".
+// Prazna lista bez oznake "all" je zapis starijeg APK-a i znači "svima".
+function _shareJeMeni(p) {
+  const me = sbUser?.id;
+  if (!me || !p) return false;
+  if (p.all) return true;
+  if (Array.isArray(p.to) && p.to.length) return p.to.includes(me);
+  return true;
+}
+
 function _onShareLive(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
-  if (p.to?.length && !p.to.includes(sbUser?.id)) return;
+  if (!_shareJeMeni(p)) return;
   const info = kolegeMap[p.uid];
   if (!info) return;
-  const isNew = !_sharedLocMarkers[p.uid];
+  _shareDolazna(p, info, 'kolege');
+}
+
+// Zajednički prijem žive pozicije (kolege i kod). Obavijest se prikaže JEDNOM po
+// sesiji pošiljaoca (sid) — marker nestaje poslije 30 s tišine pa bi se bez
+// toga "dijeli kretanje" ponavljalo na svaki prekid veze.
+function _shareDolazna(p, info, kanal) {
   _showSharedLocMarker(p.uid, p.la, p.lo, info, true, p.al);
-  if (isNew) {
-    const name = info.ime.split(' ')[0];
+  const sid = p.sid || '-';
+  if (_shareNotified[p.uid] === sid) return;
+  _shareNotified[p.uid] = sid;
+  const name = info.ime.split(' ')[0];
+  const samoMene = kanal === 'kolege' && !p.all && Array.isArray(p.to) && p.to.length === 1;
+  if (samoMene) _shareObavijestSamoMene(name, p);
+  else {
     showToast('🔴 ' + name + ' dijeli kretanje');
     _notifyShareLoc(name, 'dijeli kretanje sa tobom 🔴', p.la, p.lo);
   }
+  if (kanal === 'kolege') _shareAckKolege(p);
+}
+
+// Izabran si JEDINI primalac: baner koji ostaje dok ga ne zatvoriš, vibracija i
+// (kad je aplikacija u pozadini) sistemska obavijest.
+function _shareObavijestSamoMene(name, p) {
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+  _shareBaner(name, p.uid, p.la, p.lo);
+  _notifyShareLoc(name, 'dijeli kretanje samo s tobom 📍', p.la, p.lo);
+}
+function _shareBaner(name, uid, la, lo) {
+  let el = document.getElementById('share-pozivnica');
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.id = 'share-pozivnica';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = '<span class="shr-pz-txt"><b>' + _escHtml(name) + '</b> dijeli kretanje samo s tobom</span>'
+    + '<button type="button" class="shr-pz-go">Prikaži</button>'
+    + '<button type="button" class="shr-pz-x" aria-label="Zatvori">✕</button>';
+  el.querySelector('.shr-pz-go').onclick = () => { el.remove(); _sharePrikaziNaKarti(uid, la, lo); };
+  el.querySelector('.shr-pz-x').onclick = () => el.remove();
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 120000);
+}
+function _sharePrikaziNaKarti(uid, la, lo) {
+  switchTab('karta');
+  setTimeout(() => {
+    const m = _sharedLocMarkers[uid];
+    const ll = m && m.mk ? m.mk.getLatLng() : L.latLng(la, lo);
+    map.setView(ll, Math.max(map.getZoom(), 16));
+    if (m && m.mk) m.mk.openPopup();
+  }, 120);
+}
+
+function _shareAckKolege(p) {
+  if (!p.sid || !_rtShareChannel || !_shareChannelReady || !sbUser) return;
+  try {
+    _rtShareChannel.send({
+      type: 'broadcast', event: 'loc-ack',
+      payload: { uid: sbUser.id, sid: p.sid, to: p.uid, ime: _shareMojeIme() }
+    });
+  } catch (e) {}
+}
+function _onShareAck(p) {
+  if (!p || !_shareSid || p.sid !== _shareSid) return;
+  if (p.to && p.to !== sbUser?.id) return;
+  const key = p.uid || p.ime;
+  if (!key) return;
+  _shareViewers[key] = { ime: p.ime || kolegeMap[p.uid]?.ime || 'Kolega', t: Date.now() };
+  _shareSheetRender();
 }
 
 function _notifyShareLoc(name, body, la, lo) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible') return;
+  // Android WebView nema window.Notification — sistemska obavijest ide kroz most.
+  try {
+    if (window.AndroidNotif && typeof AndroidNotif.show === 'function') {
+      AndroidNotif.show('📍 ' + name, body);
+      return;
+    }
+  } catch (e) {}
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sw = navigator.serviceWorker?.controller;
   if (sw) {
     sw.postMessage({ type: 'show-share-notification', name, body, la, lo });
@@ -8143,9 +8385,268 @@ function _notifyShareLoc(name, body, la, lo) {
 
 function _onShareStop(p) {
   if (!p?.uid || p.uid === sbUser?.id) return;
+  delete _shareNotified[p.uid];
+  if (!_sharedLocMarkers[p.uid]) return;
   _removeSharedLocMarker(p.uid);
   const info = kolegeMap[p.uid];
-  if (info) showToast(info.ime.split(' ')[0] + ' je zaustavio/la dijeljenje');
+  showToast((info ? info.ime.split(' ')[0] : 'Korisnik') + ' je zaustavio/la dijeljenje');
+}
+
+// --- Praćenje preko šifre / linka / QR-a ---
+
+const _FOLLOW_KEY_PFX = 'tvlake_share_follow_v1:';
+let _follow = {};   // šifra → { ch, uid, ime, zadnje, ackSid }
+
+function _followKljuc() { return _FOLLOW_KEY_PFX + (sbUser?.id || '-'); }
+function _followLista() {
+  try {
+    const v = JSON.parse(localStorage.getItem(_followKljuc()) || '[]');
+    return Array.isArray(v) ? v.filter(e => e && typeof e.kod === 'string') : [];
+  } catch (e) { return []; }
+}
+function _followSpremi(arr) { try { localStorage.setItem(_followKljuc(), JSON.stringify(arr)); } catch (e) {} }
+
+function _followDodaj(unos, tiho) {
+  const kod = _shareKodIzUnosa(unos);
+  if (!kod) { showToast('⚠ Neispravna šifra ili link'); return false; }
+  const arr = _followLista();
+  if (!arr.some(e => e.kod === kod)) { arr.push({ kod, ime: '', t: Date.now() }); _followSpremi(arr); }
+  _followPokreni(kod);
+  if (!tiho) showToast('👁 Pratiš kretanje — pojavit će se na karti čim počne dijeliti');
+  _shareSheetRender();
+  return true;
+}
+function _followPokreni(kod) {
+  if (_follow[kod] || typeof sb === 'undefined' || !sb) return;
+  const st = { ch: null, uid: null, ime: '', zadnje: 0, ackSid: null };
+  _follow[kod] = st;
+  try {
+    st.ch = sb.channel('loc-kod-' + kod, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'loc-live' }, ({ payload }) => _followPrimi(kod, payload))
+      .on('broadcast', { event: 'loc-stop' }, ({ payload }) => _followStop(kod, payload))
+      .subscribe();
+  } catch (e) { delete _follow[kod]; }
+}
+function _followPrimi(kod, p) {
+  const st = _follow[kod];
+  if (!st || !p || !p.uid || p.uid === sbUser?.id) return;
+  st.uid = p.uid; st.zadnje = Date.now(); st.ime = p.ime || st.ime || 'Korisnik';
+  _shareDolazna(p, { ime: st.ime, color: p.boja || '#3b82f6' }, 'kod');
+  if (p.sid && st.ackSid !== p.sid && st.ch) {
+    st.ackSid = p.sid;
+    try { st.ch.send({ type: 'broadcast', event: 'loc-ack', payload: { uid: sbUser?.id, sid: p.sid, ime: _shareMojeIme() } }); } catch (e) {}
+  }
+  const arr = _followLista(), e = arr.find(x => x.kod === kod);
+  if (e && e.ime !== st.ime) { e.ime = st.ime; _followSpremi(arr); }
+  _shareSheetRender();
+}
+function _followStop(kod, p) {
+  const st = _follow[kod];
+  if (!st) return;
+  st.zadnje = 0; st.ackSid = null;
+  if (st.uid) { delete _shareNotified[st.uid]; if (_sharedLocMarkers[st.uid]) _removeSharedLocMarker(st.uid); }
+  showToast((st.ime || 'Korisnik').split(' ')[0] + ' je zaustavio/la dijeljenje');
+  _shareSheetRender();
+}
+function _followPrekini(kod) {
+  const st = _follow[kod];
+  if (st) {
+    try { if (st.ch) sb.removeChannel(st.ch); } catch (e) {}
+    if (st.uid && _sharedLocMarkers[st.uid]) _removeSharedLocMarker(st.uid);
+    delete _follow[kod];
+  }
+  _followSpremi(_followLista().filter(e => e.kod !== kod));
+  _shareSheetRender();
+}
+function _followObnovi() { _followLista().forEach(e => _followPokreni(e.kod)); }
+
+// Link ?prati=ŠIFRA: šifra se pamti i učitava tek kad je korisnik u aplikaciji.
+function _followIzUrla() {
+  let kod = '';
+  try { kod = _shareKodIzUnosa(location.search); } catch (e) {}
+  if (!kod) return;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  _followDodaj(kod);
+}
+
+async function sharePratiUkucaj() {
+  const raw = await _dlgPrompt('Ukucaj šifru ili zalijepi link koji si dobio:', '', { title: '👁 Prati kretanje', okLabel: 'Prati' });
+  if (raw === null) return;
+  _followDodaj(raw);
+}
+async function sharePratiSkeniraj() {
+  try { await _loadQrLibs(); } catch (e) { showToast('⚠ QR biblioteke nisu dostupne'); return; }
+  closeDozQrScan();
+  const video = document.getElementById('doz-qr-video');
+  const statusEl = document.getElementById('doz-qr-scan-status');
+  const title = document.getElementById('doz-qr-scan-title');
+  if (title) title.textContent = '📷 Skeniraj QR kretanja';
+  if (statusEl) statusEl.textContent = 'Usmjeri kameru na QR kod koji ti kolega pokaže...';
+  document.getElementById('doz-qr-scan-modal').style.display = 'flex';
+  const gen = ++_dozQrGeneration;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    if (gen !== _dozQrGeneration) { stream.getTracks().forEach(t => t.stop()); return; }
+    _dozQrStream = stream;
+  } catch (e) {
+    if (gen === _dozQrGeneration) { closeDozQrScan(); showToast('⚠ Nema pristupa kameri (provjeri dozvolu u postavkama)'); }
+    return;
+  }
+  video.srcObject = _dozQrStream;
+  await video.play().catch(() => {});
+  if (gen !== _dozQrGeneration) return;
+  _dozQrScanning = true;
+  const tick = () => {
+    if (!_dozQrScanning || gen !== _dozQrGeneration) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (!tick._c) { tick._c = document.createElement('canvas'); tick._x = tick._c.getContext('2d', { willReadFrequently: true }); }
+      tick._c.width = video.videoWidth; tick._c.height = video.videoHeight;
+      tick._x.drawImage(video, 0, 0, tick._c.width, tick._c.height);
+      try {
+        const img = tick._x.getImageData(0, 0, tick._c.width, tick._c.height);
+        const code = jsQR(img.data, img.width, img.height);
+        if (code && code.data) {
+          const kod = _shareKodIzUnosa(code.data);
+          closeDozQrScan();
+          if (kod) _followDodaj(kod); else showToast('⚠ Ovo nije QR za praćenje kretanja');
+          return;
+        }
+      } catch (e) {}
+    }
+    _dozQrFrame = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+// --- Prozor "Dijeljenje kretanja" ---
+
+function shareSheetOpen() {
+  _rsList('share-sheet', true);
+  _shareSheetRender();
+}
+function shareSheetClose() { _rsList('share-sheet', false); }
+
+function shareToggleSvi() {
+  _shareSvi = true; _shareIds = [];
+  _shareIzborSacuvaj(); _shareSync();
+}
+function shareToggleKolega(id) {
+  if (_shareSvi) { _shareSvi = false; _shareIds = _shareKolege().map(k => k.id); }
+  _shareIds = _shareIds.includes(id) ? _shareIds.filter(x => x !== id) : _shareIds.concat(id);
+  _shareIzborSacuvaj(); _shareSync();
+}
+function shareKolegeStartStop() {
+  if (_shareKolegeOn) { _stopShareKolege(); showToast('⏹ Dijeljenje sa kolegama zaustavljeno'); return; }
+  const ci = _shareCiljevi();
+  if (!ci.length) { showToast('⚠ Izaberi bar jednu osobu'); return; }
+  _startShareLive();
+  showToast(ci.length === 1
+    ? '🔴 Kretanje dijeliš sa: ' + (kolegeMap[ci[0]]?.ime || 'kolegom') + ' — dobit će obavijest'
+    : '🔴 Kretanje se dijeli sa ' + ci.length + ' kolega');
+}
+function shareKodStartStop() {
+  if (_shareKodOn) { _stopShareKod(); showToast('⏹ Link / QR više ne važi'); return; }
+  if (!lastP) { try { startGPS(); } catch (e) {} showToast('📡 Uključujem GPS — kretanje se šalje čim stigne pozicija'); }
+  _startShareKod();
+  _shareQrNacrtaj();
+}
+async function shareKodPodijeli() {
+  if (!_shareKod) return;
+  const txt = 'Prati moje kretanje (Dendro Map): ' + _shareLink(_shareKod) + '\nŠifra: ' + _shareKod
+    + '\nU aplikaciji: Dijeljenje kretanja → Prati → Ukucaj šifru.';
+  try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dijeljenje kretanja', txt); return; } } catch (e) {}
+  try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  shareKodKopiraj(txt);
+}
+function shareKodKopiraj(txt) {
+  const t = typeof txt === 'string' ? txt : _shareKod && _shareLink(_shareKod);
+  if (!t) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => showToast('📋 Kopirano'), () => showToast(t));
+  else showToast(t);
+}
+async function _shareQrNacrtaj() {
+  const box = document.getElementById('share-qr');
+  if (!box || !_shareKod) return;
+  try {
+    await _loadQrLibs();
+    const qr = qrcode(0, 'M');
+    qr.addData(_shareLink(_shareKod));
+    qr.make();
+    box.innerHTML = qr.createSvgTag(5, 8);
+  } catch (e) {
+    box.innerHTML = '<div class="shr-muted">QR nije dostupan — koristi šifru ili link.</div>';
+  }
+}
+
+function _shareSheetRender() {
+  const body = document.getElementById('share-sheet-body');
+  if (!body) return;
+  const sub = document.getElementById('share-sheet-sub');
+  const ime = (id) => _escHtml((kolegeMap[id]?.ime || 'Kolega'));
+  let h = '';
+
+  // 1) Kolege iz iste šumarije
+  if (_shareImaKolege()) {
+    const kol = _shareKolege();
+    const ci = _shareCiljevi();
+    h += '<div class="rs-sec">Kolege iz šumarije' + (sbProfile?.sumarija ? ' · ' + _escHtml(sbProfile.sumarija) : '') + '</div>';
+    if (!kol.length) {
+      h += '<div class="shr-muted">Nema kolega u tvojoj šumariji (provjeri vezu). Možeš dijeliti preko linka / QR koda.</div>';
+    } else {
+      h += '<label class="shr-row"><input type="checkbox" ' + (_shareSvi ? 'checked' : '') + ' onchange="shareToggleSvi()"><span class="shr-name"><b>Svi iz šumarije</b> <span class="shr-muted">(' + kol.length + ')</span></span></label>';
+      h += kol.map(k => {
+        const on = _shareSvi || _shareIds.includes(k.id);
+        const vidi = _shareViewers[k.id] ? '<span class="shr-ok" title="Potvrdio/la da vidi tvoje kretanje">✓ vidi te</span>' : '';
+        return '<label class="shr-row"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="shareToggleKolega(\'' + _jsAttr(k.id) + '\')">'
+          + '<span class="shr-dot" style="background:' + _escHtml(k.color || '#3b82f6') + '"></span>'
+          + '<span class="shr-name">' + _escHtml(k.ime) + '</span>' + vidi + '</label>';
+      }).join('');
+      let sazetak;
+      if (!ci.length) sazetak = 'Izaberi s kim dijeliš kretanje.';
+      else if (ci.length === 1) sazetak = '<b>' + ime(ci[0]) + '</b> dobija obavijest da dijeliš kretanje samo s njim/njom.';
+      else if (_shareSvi) sazetak = 'Kretanje vide svi kolege iz šumarije (' + ci.length + ').';
+      else sazetak = 'Kretanje vidi ' + ci.length + ' izabranih kolega.';
+      h += '<div class="shr-sum">' + sazetak + '</div>';
+      h += '<button type="button" class="rs-opt ' + (_shareKolegeOn ? 'rs-opt--stop' : 'rs-opt--go') + '" onclick="shareKolegeStartStop()"' + (!ci.length && !_shareKolegeOn ? ' disabled' : '') + '>'
+        + '<span class="rs-opt-txt"><b>' + (_shareKolegeOn ? '⏹ Zaustavi dijeljenje sa kolegama' : '🔴 Dijeli kretanje sa izabranima') + '</b>'
+        + '<span>' + (_shareKolegeOn ? 'Dijeli se uživo, svakih 5 s' : 'Vide te na karti dok ne zaustaviš') + '</span></span></button>';
+    }
+  }
+
+  // 2) Link / QR
+  h += '<div class="rs-sec">Link / QR kod' + (isSpdField() ? '' : ' · za nekoga van aplikacije') + '</div>';
+  if (isSpdField()) h += '<div class="shr-muted">Kretanje dijeliš tako što kolegi pokažeš QR kod ili pošalješ link. Ko ima šifru, vidi te uživo dok ne zaustaviš.</div>';
+  if (_shareKodOn && _shareKod) {
+    const stranci = Object.entries(_shareViewers).filter(([id]) => !_shareKolege().some(k => k.id === id)).map(([, v]) => _escHtml(v.ime));
+    h += '<div class="shr-kod"><div id="share-qr" class="shr-qr"></div>'
+      + '<div class="shr-kod-sifra">' + _escHtml(_shareKod) + '</div>'
+      + '<div class="shr-muted shr-link">' + _escHtml(_shareLink(_shareKod)) + '</div>'
+      + '<div class="shr-viewers">' + (stranci.length ? '👁 Prate te: ' + stranci.join(', ') : 'Još niko ne prati') + '</div></div>'
+      + '<div class="rs-row2"><button type="button" class="rs-opt" onclick="shareKodPodijeli()"><span class="rs-opt-txt"><b>Podijeli link</b></span></button>'
+      + '<button type="button" class="rs-opt" onclick="shareKodKopiraj()"><span class="rs-opt-txt"><b>Kopiraj</b></span></button></div>'
+      + '<button type="button" class="rs-opt rs-opt--stop" onclick="shareKodStartStop()"><span class="rs-opt-txt"><b>⏹ Zaustavi i poništi link</b><span>Šifra prestaje važiti</span></span></button>';
+  } else {
+    h += '<button type="button" class="rs-opt rs-opt--go" onclick="shareKodStartStop()"><span class="rs-opt-txt"><b>🔗 Napravi link i QR kod</b><span>Kolega skenira QR ili otvori link i vidi te uživo</span></span></button>';
+  }
+
+  // 3) Pratim
+  h += '<div class="rs-sec">Pratim kretanje</div>';
+  const pr = _followLista();
+  if (pr.length) {
+    h += pr.map(e => {
+      const st = _follow[e.kod];
+      const uzivo = st && st.zadnje && Date.now() - st.zadnje < 30000;
+      return '<div class="shr-row"><span class="shr-dot" style="background:' + (uzivo ? '#22c55e' : '#64748b') + '"></span>'
+        + '<span class="shr-name">' + _escHtml(e.ime || ('Šifra ' + e.kod)) + ' <span class="shr-muted">' + (uzivo ? 'uživo' : 'čeka dijeljenje') + '</span></span>'
+        + '<button type="button" class="shr-x" aria-label="Prestani pratiti" onclick="_followPrekini(\'' + _jsAttr(e.kod) + '\')">✕</button></div>';
+    }).join('');
+  } else h += '<div class="shr-muted">Ne pratiš nikoga.</div>';
+  h += '<div class="rs-row2"><button type="button" class="rs-opt" onclick="sharePratiSkeniraj()"><span class="rs-opt-txt"><b>📷 Skeniraj QR</b></span></button>'
+    + '<button type="button" class="rs-opt" onclick="sharePratiUkucaj()"><span class="rs-opt-txt"><b>⌨ Ukucaj šifru</b></span></button></div>';
+
+  body.innerHTML = h;
+  if (sub) sub.textContent = _shareLiveOn ? '🔴 ' + _shareOpisPrimalaca() : 'Isključeno';
+  if (_shareKodOn && _shareKod) _shareQrNacrtaj();
 }
 
 function _showSharedLocMarker(uid, la, lo, info, isLive, al) {
@@ -8314,6 +8815,7 @@ function sbStartRealtime() {
     .on('broadcast', { event: 'loc-point' }, ({ payload }) => _onSharePoint(payload))
     .on('broadcast', { event: 'loc-live' },  ({ payload }) => _onShareLive(payload))
     .on('broadcast', { event: 'loc-stop' },  ({ payload }) => _onShareStop(payload))
+    .on('broadcast', { event: 'loc-ack' },   ({ payload }) => _onShareAck(payload))
     .subscribe(status => {
       if (status === 'SUBSCRIBED') { _shareChannelReady = true; console.log('share-loc channel ready:', shareChanName); }
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { _shareChannelReady = false; console.warn('share-loc channel error:', status); }
@@ -8846,34 +9348,27 @@ function _trnSharedRestore() {
   } catch(e) {}
 }
 
-// ── Teren: dijeljenje kretanja — jedan tap, svi kolege ───────────────────────
+// ── Teren: dijeljenje kretanja — dugme otvara prozor (sa kim / link / QR) ────
 function terenTogShare() {
-  if (_shareLiveOn) {
-    _stopShareLive();
-    showToast('⏹ Dijeljenje kretanja zaustavljeno');
-  } else {
-    const ids = Object.keys(kolegeMap || {}).filter(id => id !== sbUser?.id);
-    if (!ids.length) { showToast('⚠ Nema kolega za dijeljenje (provjeri vezu)'); return; }
-    _shareTargetIds = ids;
-    _startShareLive();
-    showToast('🔴 Kretanje se dijeli — kolege te vide na karti');
-  }
-  _terenUpdShareUI();
+  shareSheetOpen();
 }
 
 function _terenUpdShareUI() {
   const btn = document.getElementById('trn-share-btn');
   const st  = document.getElementById('trn-share-status');
+  const who = document.getElementById('trn-share-who');
   if (!btn) return;
-  if(btn.dataset)btn.dataset.active=String(!!_shareLiveOn);
+  if (btn.dataset) btn.dataset.active = String(!!_shareLiveOn);
   if (_shareLiveOn) {
-    btn.textContent = '⏹ Zaustavi dijeljenje';
+    btn.innerHTML = '<svg class="ic"><use href="#ic-snimaj"/></svg> Dijeljenje: upravljaj';
     btn.style.background = 'linear-gradient(135deg,#7f1d1d,#ef4444)';
     if (st) { st.textContent = '🔴 uključeno'; st.style.color = '#f87171'; }
+    if (who) who.textContent = 'Dijeliš sa: ' + _shareOpisPrimalaca();
   } else {
     btn.innerHTML = '<svg class="ic"><use href="#ic-snimaj"/></svg> Dijeli moje kretanje';
     btn.style.background = 'linear-gradient(135deg,#166534,#22c55e)';
     if (st) { st.textContent = 'isključeno'; st.style.color = '#64748b'; }
+    if (who) who.textContent = _shareImaKolege() ? 'Izaberi sa kim dijeliš ili napravi link / QR kod.' : 'Napravi link / QR kod koji kolega skenira ili otvori.';
   }
 }
 
@@ -14694,6 +15189,7 @@ function _gpsStabFinish(ok) {
   _gpsStabCb = null;
   const ov = document.getElementById('gstab-overlay');
   if (ov) ov.remove();
+  document.getElementById('gstab-pill')?.remove();
   const fn = _gpsStabBeginFn;
   _gpsStabBeginFn = null;
   if (ok) { if (fn) fn(); }
@@ -14712,6 +15208,7 @@ function _buildGpsStabOverlay() {
   d.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,23,0.74);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;';
   d.innerHTML = `
     <div style="background:#0f172a;border:1.5px solid #1e3a5f;border-radius:16px;padding:22px 20px 16px;max-width:330px;width:100%;box-shadow:0 14px 44px rgba(0,0,0,0.6);text-align:center;">
+      <button type="button" onclick="_gpsStabMin(true)" aria-label="Smanji — stabilizacija radi u pozadini" style="float:right;margin:-8px -6px 0 0;min-width:44px;min-height:44px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">▾</button>
       <div style="width:50px;height:50px;margin:2px auto 14px;border:4px solid #1e3a5f;border-top-color:#38bdf8;border-radius:50%;animation:gstabspin 0.9s linear infinite;"></div>
       <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:4px;">📡 Stabiliziram GPS signal…</div>
       <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">Sačekaj da signal prestane lutati — snimanje počinje čim se smiri.</div>
@@ -14728,7 +15225,32 @@ function _buildGpsStabOverlay() {
   document.body.appendChild(d);
 }
 
+// Smanjen prikaz: prozor ne blokira ekran, stabilizacija i dalje teče (isti
+// _gpsStabCb), a snimanje počinje samo čim se signal smiri.
+let _gpsStabZadnje = '';
+function _gpsStabMin(on) {
+  const ov = document.getElementById('gstab-overlay');
+  if (!ov) return;
+  let pill = document.getElementById('gstab-pill');
+  if (on) {
+    ov.style.display = 'none';
+    if (!pill) {
+      pill = document.createElement('button');
+      pill.id = 'gstab-pill'; pill.type = 'button';
+      pill.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;min-height:44px;max-width:92vw;padding:0 16px;border-radius:22px;border:1.5px solid #1e3a5f;background:#0f172a;color:#e2e8f0;font:700 12px system-ui;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      pill.onclick = () => _gpsStabMin(false);
+      document.body.appendChild(pill);
+    }
+    pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+  } else {
+    ov.style.display = 'flex';
+    pill?.remove();
+  }
+}
 function _updGpsStabOverlay(ac, spread, n, ready) {
+  _gpsStabZadnje = ' · ±' + Math.round(ac) + ' m · ' + Math.min(n, GPS_STAB_NEED) + '/' + GPS_STAB_NEED;
+  const _pill = document.getElementById('gstab-pill');
+  if (_pill) _pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
   const accEl = document.getElementById('gstab-acc');
   const sprEl = document.getElementById('gstab-spr');
   const cntEl = document.getElementById('gstab-cnt');
@@ -16942,6 +17464,12 @@ function _locPopupCentriraj() {
 // zatvoriti ga i tražiti Tragovi tab da bi počeo snimati. fabSnimTrag() je
 // već TOGGLE (start kad ne snima, spremi/završi kad snima), pa se poziva
 // direktno — nema duple logike ovdje.
+function _locPopupDijeli() {
+  const pop = document.getElementById('ab-loc-popup');
+  if (pop) pop.style.display = 'none';
+  shareSheetOpen();
+}
+
 function _locPopupSnimiTrag() {
   document.getElementById('ab-loc-popup').style.display = 'none';
   fabSnimTrag();
@@ -24379,9 +24907,33 @@ function _withTimeout(promise, ms = 12000) {
   return Promise.race([promise, t]);
 }
 
+// Visina za mjerenje nagiba: Terrarium DEM na z14 (~7 m piksel, izvorni podaci
+// ~30 m). Open-Meteo je mreža od ~90 m — na dionici od 93 m obje tačke padnu u
+// iste/susjedne ćelije pa je nagib bio višestruko podcijenjen.
+const _msrDemTiles = new Map();
+async function _msrDemElev(lat, lng) {
+  const z = 14;
+  const fx = _termLon2x(lng, z), fy = _termLat2y(lat, z);
+  const tx = Math.floor(fx), ty = Math.floor(fy), k = tx + '/' + ty;
+  let elev = _msrDemTiles.get(k);
+  if (!elev) {
+    const img = await _getTerrariumTile(z, tx, ty).catch(() => null);
+    if (!img) return null;
+    try { elev = _terrariumDecodeTile(img); } finally { if (img.close) img.close(); }
+    if (_msrDemTiles.size >= 8) _msrDemTiles.delete(_msrDemTiles.keys().next().value);
+    _msrDemTiles.set(k, elev);
+  }
+  const v = _nvDemOcitaj(elev, fx, fy, tx, ty);
+  return (v != null && isFinite(v)) ? v : null;
+}
+
 async function _msrFetchElev(lat, lng) {
   const key = lat.toFixed(5)+','+lng.toFixed(5);
   if (_msrElevCache[key] != null) return _msrElevCache[key];
+  try {
+    const dv = await _msrDemElev(lat, lng);
+    if (dv != null) { _msrElevCache[key] = dv; return dv; }
+  } catch (e) {}
   try {
     const r = await _fetchT(`https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(5)}&longitude=${lng.toFixed(5)}`, 8000);
     const d = await r.json();
@@ -32286,8 +32838,74 @@ function _dozRenderOverview() {
   if (any) { grp.addTo(map); _dozOverviewLayer = grp; }
 }
 
+// ─── Doznaka UŽIVO: tragovi kolega koji upravo snimaju ────────────────────
+// Slanje na server je ručno (Meni → Server), pa kolegin trag inače stiže tek
+// kad ga pošalje. Zato se položaj dok snima emituje i preko Realtime BROADCAST-a
+// (bez upisa u bazu): kanal 'doz-live-<odjel>' je zajednički svim članovima koji
+// imaju odjel otvoren. Trag je samo u memoriji i nestaje 2 min poslije zadnje
+// tačke ili kad kolega završi snimanje. Nije tajnost prema ne-članu (kao i
+// Dijeljenje kretanja) — prima se samo od korisnika sa liste članova odjela.
+let _dozLiveCh = null, _dozLiveProj = null, _dozLiveReady = false, _dozLiveLayer = null, _dozLiveGc = null, _dozLiveSendTs = 0;
+const _dozLiveTrails = {};
+const _DOZ_LIVE_MAX = 400, _DOZ_LIVE_TTL = 120000;
+function _dozLiveSub(projectId) {
+  if (_dozLiveProj === projectId && _dozLiveCh) return;
+  if (_dozLiveCh) { try { sb.removeChannel(_dozLiveCh); } catch (e) {} }
+  _dozLiveCh = null; _dozLiveReady = false; _dozLiveProj = null;
+  Object.keys(_dozLiveTrails).forEach(k => delete _dozLiveTrails[k]);
+  if (_dozLiveLayer) { try { map.removeLayer(_dozLiveLayer); } catch (e) {} _dozLiveLayer = null; }
+  if (_dozLiveGc) { clearInterval(_dozLiveGc); _dozLiveGc = null; }
+  if (!projectId || typeof sb === 'undefined' || !sb || !_mrezaProbaj(true)) return;
+  _dozLiveProj = projectId;
+  _dozLiveCh = sb.channel('doz-live-' + projectId, { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'pos' }, ({ payload }) => _dozLivePrimi(payload))
+    .on('broadcast', { event: 'stop' }, ({ payload }) => _dozLiveUkloni(payload?.uid))
+    .subscribe(st => { _dozLiveReady = st === 'SUBSCRIBED'; });
+  _dozLiveGc = setInterval(() => {
+    const sad = Date.now();
+    Object.keys(_dozLiveTrails).forEach(uid => { if (sad - _dozLiveTrails[uid].t > _DOZ_LIVE_TTL) _dozLiveUkloni(uid); });
+  }, 15000);
+}
+function _dozLiveUkloni(uid) {
+  const tr = _dozLiveTrails[uid];
+  if (!tr) return;
+  try { if (tr.line) _dozLiveLayer?.removeLayer(tr.line); if (tr.mk) _dozLiveLayer?.removeLayer(tr.mk); } catch (e) {}
+  delete _dozLiveTrails[uid];
+}
+function _dozLivePrimi(p) {
+  if (!p || !p.uid || p.uid === sbUser?.id || p.pid !== _dozLiveProj || !Number.isFinite(p.la) || !Number.isFinite(p.lo)) return;
+  const idx = _dozMembers.findIndex(m => m.user_id === p.uid);
+  if (idx < 0 || !window.map) return;
+  if (!_dozLiveLayer) _dozLiveLayer = L.layerGroup().addTo(map);
+  const col = DOZ_ENG_COLORS[idx % DOZ_ENG_COLORS.length];
+  let tr = _dozLiveTrails[p.uid];
+  if (!tr) tr = _dozLiveTrails[p.uid] = { pts: [], t: 0, line: null, mk: null };
+  tr.t = Date.now();
+  tr.pts.push([p.la, p.lo]);
+  if (tr.pts.length > _DOZ_LIVE_MAX) tr.pts.shift();
+  if (!tr.line) {
+    tr.line = L.polyline(tr.pts, { color: col, weight: 4, opacity: .9, dashArray: '2 6', interactive: false }).addTo(_dozLiveLayer);
+    tr.mk = L.circleMarker([p.la, p.lo], { radius: 7, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1, interactive: false }).addTo(_dozLiveLayer);
+    tr.mk.bindTooltip(_escHtml(_dozImeClana(p.uid).split(' ')[0]), { permanent: true, direction: 'top', opacity: .9 });
+  } else {
+    tr.line.setLatLngs(tr.pts);
+    tr.mk.setLatLng([p.la, p.lo]);
+  }
+}
+function _dozLiveSalji(lat, lng, acc) {
+  if (!_dozLiveCh || !_dozLiveReady || _dozLiveProj !== _dozGpsProjId || !sbUser) return;
+  const sad = Date.now();
+  if (sad - _dozLiveSendTs < 4000) return;
+  _dozLiveSendTs = sad;
+  try { _dozLiveCh.send({ type: 'broadcast', event: 'pos', payload: { uid: sbUser.id, pid: _dozGpsProjId, la: lat, lo: lng, ac: acc, t: sad } }); } catch (e) {}
+}
+function _dozLiveStop() {
+  try { if (_dozLiveCh && _dozLiveReady && sbUser) _dozLiveCh.send({ type: 'broadcast', event: 'stop', payload: { uid: sbUser.id, pid: _dozLiveProj } }); } catch (e) {}
+}
+
 // ─── Per-project realtime subscription ───────────────────────────
 function _dozSubProject(projectId) {
+  try { _dozLiveSub(projectId); } catch (e) {}
   if (_dozActiveChannel) { sb.removeChannel(_dozActiveChannel); _dozActiveChannel = null; }
   if (!projectId || !_mrezaProbaj(true)) return;
   _dozActiveChannel = sb.channel('doz-proj-' + projectId + '-' + Date.now())
@@ -32393,6 +33011,7 @@ async function dozSelectOdjel(id) {
   document.getElementById('doz-panel-list').style.display   = 'none';
   document.getElementById('doz-panel-detail').style.display = 'flex';
   _dozRestoreBoundaryStyleUI();
+  try { _dozPojasUI(); } catch (e) {}
   _dozRestoreTreesStyleUI();
   document.getElementById('doz-detail-name').textContent = odjel.name;
   document.getElementById('doz-detail-area').textContent =
@@ -32878,18 +33497,20 @@ function _dozImeClana(uid) {
 
 function _dozRenderBands(odjel) {
   if (!_dozBandsLayer) return;
+  if (!_dozPojasStil().vidljiv) return;   // skriveni poligoni: ni računica pojaseva se ne radi za prikaz
   const bands = _dozComputeBands(odjel);
   if (!bands.length) return;
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
   const dates=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',dateStyle:'short'}),times=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',timeStyle:'short'});
 
+  const pst = _dozPojasStil();
   bands.forEach(b => {
-    const col = DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length];
+    const col = _dozPojasBoja(pst, DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length]);
     const name = _escHtml(_dozImeClana(b.uid));
     const start=new Date(b.startedAt),end=new Date(b.endedAt),work=Number.isFinite(start.getTime())?dates.format(start)+' · '+times.format(start)+(Number.isFinite(end.getTime())?'–'+times.format(end):''):'—';
     const lyr = L.geoJSON(b.polygon, {
-      style: { color: col, weight: 1.5, fillColor: col, fillOpacity: 0.18 },
+      style: { color: col, weight: pst.wt, opacity: pst.wt > 0 ? 1 : 0, fillColor: col, fillOpacity: pst.op, dashArray: pst.dash ? '6,4' : null },
       interactive: true
     }).addTo(_dozBandsLayer);
     lyr.bindPopup(`<div style="min-width:150px;font-size:12px;color:#1e293b;">
@@ -32960,6 +33581,56 @@ function dozFillStyleChange() {
   }
   _setDozBoundaryStyle({ col, op, wt, dash });
 }
+
+// ─── Stil i vidljivost poligona pojasa ────────────────────────────────────
+const _DOZ_POJAS_KEY = 'tvlake_doz_pojas_style';
+const _DOZ_POJAS_DEF = { vidljiv: true, nacin: 'korisnik', col: '#4ade80', op: 0.18, wt: 1.5, dash: false };
+function _dozPojasStil() {
+  try {
+    const s = JSON.parse(localStorage.getItem(_DOZ_POJAS_KEY) || 'null');
+    if (s && typeof s === 'object') {
+      return {
+        vidljiv: s.vidljiv !== false,
+        nacin: s.nacin === 'jedna' ? 'jedna' : 'korisnik',
+        col: /^#[0-9a-f]{6}$/i.test(s.col) ? s.col : _DOZ_POJAS_DEF.col,
+        op: Number.isFinite(s.op) ? Math.min(0.7, Math.max(0, s.op)) : _DOZ_POJAS_DEF.op,
+        wt: Number.isFinite(s.wt) ? Math.min(5, Math.max(0, s.wt)) : _DOZ_POJAS_DEF.wt,
+        dash: !!s.dash
+      };
+    }
+  } catch (e) {}
+  return { ..._DOZ_POJAS_DEF };
+}
+function _dozPojasSnimi(st) { try { localStorage.setItem(_DOZ_POJAS_KEY, JSON.stringify(st)); } catch (e) {} }
+// Boja pojasa: po projektantu (zadano) ili jedna zajednička boja.
+function _dozPojasBoja(st, korisnikBoja) { return st.nacin === 'jedna' ? st.col : korisnikBoja; }
+function _dozPojasUI() {
+  const st = _dozPojasStil(), $ = id => document.getElementById(id);
+  if ($('doz-pojas-nacin')) $('doz-pojas-nacin').value = st.nacin;
+  if ($('doz-pojas-col')) { $('doz-pojas-col').value = st.col; $('doz-pojas-col').disabled = st.nacin !== 'jedna'; $('doz-pojas-col').style.opacity = st.nacin === 'jedna' ? 1 : .4; }
+  if ($('doz-pojas-op')) $('doz-pojas-op').value = Math.round(st.op * 100);
+  if ($('doz-pojas-wt')) $('doz-pojas-wt').value = st.wt;
+  if ($('doz-pojas-dash')) $('doz-pojas-dash').checked = st.dash;
+  if ($('doz-pojas-vidljiv')) $('doz-pojas-vidljiv').checked = st.vidljiv;
+  if ($('doz-pojas-op-lbl')) $('doz-pojas-op-lbl').textContent = Math.round(st.op * 100) + '%';
+  if ($('doz-pojas-wt-lbl')) $('doz-pojas-wt-lbl').textContent = String(st.wt).replace('.', ',');
+  if ($('doz-pojas-quick')) $('doz-pojas-quick').textContent = st.vidljiv ? '👁 Sakrij poligone pojaseva' : '👁 Prikaži poligone pojaseva';
+}
+function dozPojasStilChange() {
+  const $ = id => document.getElementById(id), st = _dozPojasStil();
+  st.nacin = $('doz-pojas-nacin')?.value === 'jedna' ? 'jedna' : 'korisnik';
+  st.col = $('doz-pojas-col')?.value || st.col;
+  st.op = (parseInt($('doz-pojas-op')?.value || 18, 10)) / 100;
+  st.wt = parseFloat($('doz-pojas-wt')?.value || 1.5);
+  st.dash = !!$('doz-pojas-dash')?.checked;
+  _dozPojasSnimi(st); _dozPojasUI(); dozRefreshBands();
+}
+function dozPojasVidljivToggle(on) {
+  const st = _dozPojasStil();
+  st.vidljiv = typeof on === 'boolean' ? on : !st.vidljiv;
+  _dozPojasSnimi(st); _dozPojasUI(); dozRefreshBands();
+}
+function dozPojasStilReset() { _dozPojasSnimi({ ..._DOZ_POJAS_DEF }); _dozPojasUI(); dozRefreshBands(); }
 
 function dozBandOuterChange() {
   _DOZ_BAND_OUTER_M = parseInt(document.getElementById('doz-band-outer')?.value || 20);
@@ -33639,7 +34310,7 @@ function dozRenderDetail() {
         ${kpi(_dozMarkings.length, 'Zone' + (markedHa > 0 ? ' · ' + fmtHa(markedHa) : ''))}
         ${kpi(_dozMembers.length, 'Projektanti')}
         ${kpi(fmtL(totalTrackLen), 'GPS trag')}
-        ${kpi(nPts, 'GPS tačaka')}
+        ${kpi(fmtHa(Math.max(0, (bndHa || totalHa) - bandHa)), 'Preostalo', '#fbbf24')}
       </div>
       <div class="doz-kreiran">Kreiran ${created}</div>`;
     _dozPregledRender({ bndHa, bandHa, bandPct, preklopHa: pokr.preklopHa, nZona: _dozMarkings.length, trag: totalTrackLen });
@@ -33653,7 +34324,8 @@ function dozRenderDetail() {
     ? _dozMembers.map((m, i) => {
         const k = m._korisnik;
         const name = k ? (`${k.ime||''} ${k.prezime||''}`.trim() || `Projektant ${i+1}`) : `Projektant ${i+1}`;
-        const color = k?.boja || DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length];
+        // Ista boja kao poligon pojasa na karti, da lista služi kao legenda.
+        const color = _dozPojasBoja(_dozPojasStil(), DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length]);
         const tl = trackLens[m.user_id];
         return `<div class="doz-member-row">
           <div class="doz-member-dot" style="background:${color};"></div>
@@ -33763,7 +34435,6 @@ function _dozGpsControlsSync(acc) {
   const put = (id, value) => { const el=document.getElementById(id); if(el) el.textContent=value; };
   const project = _dozOdjeli.find(p=>p.id===_dozGpsProjId);
   put('doz-gps-modal-project', project?.name || 'Odjel doznake');
-  put('doz-gps-modal-user', typeof getIme==='function' ? getIme() : 'Projektant');
   const busy=_dozGpsControlsBusy || _dozGpsStopping;
   put('doz-gps-modal-state', busy ? 'Spremam završetak…' : _dozGpsPaused ? 'Snimanje pauzirano' : 'Snimanje aktivno');
   modal.classList.toggle('is-paused', _dozGpsPaused);
@@ -33771,11 +34442,9 @@ function _dozGpsControlsSync(acc) {
   const pauseMs=_dozGpsPausedTime+(_dozGpsPaused && _dozGpsPauseStart ? Date.now()-_dozGpsPauseStart : 0);
   const seconds=Math.max(0,Math.floor((Date.now()-_dozGpsStartTs-pauseMs)/1000));
   put('doz-gps-modal-time', [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(n=>String(n).padStart(2,'0')).join(':'));
-  put('doz-gps-modal-points', _dozGpsPts.length);
   const fresh=Date.now()-_dozGpsControlsAccuracyTs < 15000;
   const accuracy=fresh ? _dozGpsControlsAccuracy : null;
-  put('doz-gps-modal-signal', accuracy===null ? 'Čekam GPS signal' : accuracy>20 ? 'Slab signal · ±'+Math.round(accuracy)+' m' : 'GPS preciznost · ±'+Math.round(accuracy)+' m');
-  put('doz-gps-modal-note', _dozGpsPaused ? 'Kretanje tokom pauze ne dodaje se u trag. Pritisni Nastavi za nastavak doznake.' : 'Trag se čuva na telefonu. Podatke šalješ kroz Pošalji na server.');
+  put('doz-gps-modal-signal', accuracy===null ? 'Čekam…' : accuracy>20 ? 'Slab signal ±'+Math.round(accuracy)+' m' : '±'+Math.round(accuracy)+' m');
   const pause=document.getElementById('doz-gps-modal-pause'),stop=document.getElementById('doz-gps-modal-stop');
   if(pause) { pause.textContent=_dozGpsPaused ? '▶ Nastavi' : '⏸ Pauza'; pause.disabled=busy; }
   if(stop) stop.disabled=busy;
@@ -34329,6 +34998,7 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   // Tačka je već trajno u baferu. Slanje pokreće samo Meni → Server.
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
+  try { if (typeof _dozLiveSalji === 'function') _dozLiveSalji(lat, lng, acc); } catch (e) {}   // uživo prikaz nikad ne smije oboriti snimanje
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
   };
   await commit();
@@ -34549,6 +35219,7 @@ async function dozStopGPS() {
   }
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   const wasOn = _dozGpsOn;
+  try { if (typeof _dozLiveStop === 'function') _dozLiveStop(); } catch (e) {}
   _dozGpsOn = false;
   _dozGpsProjId = null; _dozGpsUserId = null;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
