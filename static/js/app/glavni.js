@@ -29273,9 +29273,12 @@ function _sqlImportRender() {
 async function _sqlImportDeleteFile(path) {
   if(!path)return;
   const root=await navigator.storage.getDirectory();
-  for(let n=0;n<8;n++){
+  // Pisac kopije drži zaključan pristup dok se prekid ne završi; na sporom uređaju
+  // (i CI runneru) to traje duže od 1,4 s, pa nedovršena kopija od ~GB ostaje.
+  // Čekaj do ~10 s (razmak raste do 250 ms) prije nego što odustanemo.
+  for(let n=0;n<40;n++){
     try{await root.removeEntry(path);return;}
-    catch(e){if(e.name==='NotFoundError')return;if(n===7)throw e;await new Promise(r=>setTimeout(r,50*(n+1)));}
+    catch(e){if(e.name==='NotFoundError')return;if(n===39)throw e;await new Promise(r=>setTimeout(r,Math.min(250,50*(n+1))));}
   }
 }
 async function _sqlImportCancel(name) {
