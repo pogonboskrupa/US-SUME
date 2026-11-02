@@ -1286,3 +1286,8 @@ html #tacka-nav-panel #ex-heading{display:none}
 html #tacka-nav-panel .ex-actions{margin-top:6px;gap:6px}
 html #tacka-nav-panel #ex-overview{flex:0 0 auto;min-height:44px;padding:0 12px}
 }
+/* Karte za preuzimanje — admin: opis, uređivanje i sakrivene karte */
+#loadmap-download-cards .lm-download-opis{margin:0 0 10px;color:var(--field-muted);font:12px/1.5 system-ui}
+#loadmap-download-cards .lm-download-admin{display:flex;gap:8px;margin-top:10px}
+#loadmap-download-cards .lm-download-admin button{flex:1;min-height:44px}
+#loadmap-download-cards .lm-download-card.lm-skrivena{opacity:.55;border-style:dashed}
